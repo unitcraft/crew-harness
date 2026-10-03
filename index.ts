@@ -32,7 +32,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, w
 import os from "node:os"
 import path from "node:path"
 
-const POLL_MS = 15_000
+const POLL_MS = Number(process.env.NOVA_PEERS_POLL_MS) || 15_000 // переопределение — для самотеста
 const LIVE_MS = 15 * 60_000
 const STALE_CARD_MS = 7 * 24 * 3600_000
 const ROLE_RE = /^[a-z][a-z0-9-]{0,40}$/
@@ -110,6 +110,16 @@ function allCards(): Card[] {
 
 function saveCard(c: Card) {
   writeFileSync(cardFile(c.session), JSON.stringify(c, null, 1))
+}
+
+function pidAlive(pid: number): boolean {
+  if (!pid) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (e: any) {
+    return e?.code === "EPERM" // процесс есть, но не наш
+  }
 }
 
 function postLetter(to: string, letter: Letter) {
@@ -216,11 +226,17 @@ export default {
     }
 
     const timer = setInterval(() => {
-      for (const card of mine.values()) {
-        const fresh = readJson<Card>(cardFile(card.session))
-        if (fresh && fresh.pid !== process.pid) continue // сессию забрал другой процесс
-        if (fresh) mine.set(card.session, fresh)
-        void deliver(fresh ?? card)
+      // АДРЕСАТЫ — ИЗ ВИЗИТОК НА ДИСКЕ, а не из памяти (замер интегратора
+      // 2026-10-03): после перезагрузки плагина память пуста, а простаивающее
+      // окно не делает запросов и в неё не попадает — письма ему лежали в ящике
+      // вечно, ровно в том случае, ради которого доставка будит окно. Берутся
+      // визитки этого процесса и визитки умершего процесса (после перезапуска
+      // сервера сессии те же, процесс новый). Двойной доставки нет: письмо
+      // забирает тот экземпляр, чей rename в takeLetters прошёл первым.
+      for (const card of allCards()) {
+        if (subagents.has(card.session)) continue
+        if (card.pid !== process.pid && pidAlive(card.pid)) continue // окно живого чужого процесса
+        void deliver(card)
       }
     }, POLL_MS)
 
