@@ -169,7 +169,12 @@ export default {
     // Визитка сессии: создаётся при первом обращении, отметка жизни — при каждом.
     async function touch(sessionID: string): Promise<Card | undefined> {
       if (!sessionID || subagents.has(sessionID)) return undefined
-      let card = mine.get(sessionID) ?? readJson<Card>(cardFile(sessionID))
+      // ФАЙЛ ПЕРВЫМ, память — только запасом. Визитку правят и ДРУГИЕ сессии:
+      // `peer_role force` переписывает роль прежнего владельца. Брать её из памяти
+      // процесса значило на следующем ходу записать старую роль поверх — замер
+      // 2026-10-03: после передачи роли `integrator` прежнее окно снова числилось
+      // `integrator`, и письмо новому интегратору ушло старому.
+      let card = readJson<Card>(cardFile(sessionID)) ?? mine.get(sessionID)
       if (!card) {
         const info = await sessionInfo(sessionID)
         if (info?.parentID) {
