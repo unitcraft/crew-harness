@@ -1,0 +1,11 @@
+{
+    "name":  "nova-peers",
+    "version":  "0.1.0",
+    "private":  true,
+    "type":  "module",
+    "description":  "Letters between OpenCode windows on this machine, any repository, addressed by role",
+    "license":  "MIT OR Apache-2.0",
+    "exports":  {
+                    ".":  "./index.ts"
+                }
+}
