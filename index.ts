@@ -338,6 +338,13 @@ export default {
       try {
         const card = await touch(String(ev.sessionID ?? ""), ev)
         if (!card) return
+        // Живые соседи с моделями — в КАЖДОМ запросе, чтобы модель исполнителя была перед глазами без peer_list.
+        // Одна короткая строка на окно; молчащие (старше LIVE_MS) не подаются.
+        const now = Date.now()
+        const neighbours = allCards()
+          .filter((c) => c.session !== card.session && now - c.updated < LIVE_MS)
+          .map((c) => `${c.role} ${c.session} ${c.model || "?"}${c.title ? ` «${c.title.slice(0, 40)}»` : ""}`)
+        if (neighbours.length) ev.system.push({ type: "text", text: `nova-peers, живые соседи: ${neighbours.join("; ")}.` })
         ev.system.push({
           type: "text",
           text:
