@@ -70,8 +70,56 @@ const INBOX = path.join(BASE, "inbox")
 const READ = path.join(BASE, "read")
 for (const d of [CARDS, INBOX, READ]) mkdirSync(d, { recursive: true })
 
-type Card = { session: string; role: string; auto: boolean; title: string; directory: string; repo: string; pid: number; updated: number }
+type Card = { session: string; role: string; auto: boolean; title: string; directory: string; repo: string; model?: string; modelAt?: number; pid: number; updated: number }
 type Letter = { id: string; from_role: string; from_session: string; to: string; text: string; time: number }
+
+// Роли ИСКЛЮЧИТЕЛЬНЫЕ — у них ровно один держатель, занятая живым окном роль не отбирается без force.
+// Любая другая роль РАЗДЕЛЯЕМАЯ: peer_role присоединяет окно, а письмо на роль с несколькими живыми
+// держателями не доставляется наугад (см. peer_send).
+const EXCLUSIVE = new Set(["integrator", "carina"])
+
+// МОДЕЛЬ ОКНА — «провайдер/id#вариант». Окон одной роли бывает несколько, и у них РАЗНЫЕ модели; кто
+// выдаёт задание, обязан это видеть (слово владельца 2026-10-04). Источники по порядку: поле model
+// события/сессии, если V2 его отдаёт; иначе последнее сообщение assistant в таблице session_message
+// базы opencode.db — ТОЛЬКО ЧТЕНИЕ. Не нашли — пусто, а не выдумка.
+const MODEL_TTL_MS = 20_000
+const dbFile = () => process.env.NOVA_PEERS_DB || path.join(dataDir(), "opencode.db")
+
+function fmtModel(m: any): string {
+  if (!m) return ""
+  if (typeof m === "string") return m
+  const id = m.id ?? m.modelID ?? ""
+  if (!id) return ""
+  const prov = m.providerID ?? m.provider ?? ""
+  return `${prov ? prov + "/" : ""}${id}${m.variant ? "#" + m.variant : ""}`
+}
+
+async function modelFromDb(sessionID: string): Promise<string> {
+  let db: any
+  try {
+    try {
+      const { DatabaseSync } = await import("node:sqlite")
+      db = new DatabaseSync(dbFile(), { readOnly: true })
+    } catch {
+      const { Database } = await import("bun:sqlite" as string)
+      db = new Database(dbFile(), { readonly: true })
+    }
+    const rows = db
+      .prepare("select data from session_message where session_id = ? and type = 'assistant' order by seq desc limit 8")
+      .all(sessionID)
+    for (const r of rows) {
+      const m = fmtModel(JSON.parse(String(r.data))?.model)
+      if (m) return m
+    }
+  } catch (e) {
+    log(`model from db failed: ${e}`)
+  } finally {
+    try {
+      db?.close()
+    } catch {}
+  }
+  return ""
+}
 
 const hhmm = (t: number) => {
   const d = new Date(t)
@@ -175,8 +223,17 @@ export const HELP = `nova-peers — письма между окнами OpenCod
 кроме себя. Письмо роли, которую никто не держит, ждёт, пока её кто-нибудь возьмёт.
 
 РОЛИ. Окно без роли получает сама assistant-<6 знаков id сессии>. Своя — peer_role: строчные латинские буквы, цифры,
-дефис, первая буква. Роль, занятую ЖИВЫМ окном, не отбирается; передать — force: true (прежнее окно получает
-письмо и возвращается на авто-роль). Роль переживает перезапуск сессии с тем же id. У субагентов ролей и ящиков нет.
+дефис, первая буква. Роль переживает перезапуск сессии с тем же id. У субагентов ролей и ящиков нет.
+  ИСКЛЮЧИТЕЛЬНЫЕ роли — integrator и carina: один держатель; занятую ЖИВЫМ окном не отобрать, передать — force: true
+  (прежнее окно получает письмо и возвращается на авто-роль).
+  РАЗДЕЛЯЕМЫЕ — все остальные (assistant, ...): peer_role {role: "assistant"} при живом держателе не отказывает, а
+  ПРИСОЕДИНЯЕТ окно; force не нужен. Письмо на такую роль, у которой больше одного живого держателя, НЕ
+  доставляется наугад (получил бы случайный): отказ со списком держателей (сессия, модель, заголовок) — адресуй
+  id сессии. all идёт каждому живому окну; у разделяемой роли с несколькими держателями — по id каждого.
+
+МОДЕЛЬ. У окон одной роли модели бывают РАЗНЫЕ (Opus / Sonnet low / Kimi ...); peer_list печатает «модель
+провайдер/id#вариант» в строке окна — смотри её, выдавая задание: трудное — сильной модели, механическое —
+дешёвой. Модель берётся из последнего хода окна; «?» — ещё не известна.
 
 ДОСТАВКА. Письмо кладётся в сессию получателя очередным сообщением; простаивающее окно просыпается за один тик
 опроса (15 с), занятое прочтёт после текущего хода. Каждое письмо — ход у получателя и его лимит: «принято» и
@@ -208,7 +265,7 @@ export default {
     }
 
     // Визитка сессии: создаётся при первом обращении, отметка жизни — при каждом.
-    async function touch(sessionID: string): Promise<Card | undefined> {
+    async function touch(sessionID: string, ev?: any): Promise<Card | undefined> {
       if (!sessionID || subagents.has(sessionID)) return undefined
       // ФАЙЛ ПЕРВЫМ, память — только запасом. Визитку правят и ДРУГИЕ сессии:
       // `peer_role force` переписывает роль прежнего владельца. Брать её из памяти
@@ -236,6 +293,12 @@ export default {
         log(`card new ${sessionID} role=${card.role} repo=${card.repo}`)
       }
       if (!card.repo) card.repo = repoLabel(card.directory)
+      if (!card.model || Date.now() - (card.modelAt ?? 0) > MODEL_TTL_MS) {
+        const info = ev?.model ? undefined : await sessionInfo(sessionID)
+        const found = fmtModel(ev?.model) || fmtModel(info?.model) || (await modelFromDb(sessionID))
+        if (found) card.model = found
+        card.modelAt = Date.now()
+      }
       card.pid = process.pid
       card.updated = Date.now()
       saveCard(card)
@@ -273,7 +336,7 @@ export default {
 
     await ctx.session.hook("context", async (ev: any) => {
       try {
-        const card = await touch(String(ev.sessionID ?? ""))
+        const card = await touch(String(ev.sessionID ?? ""), ev)
         if (!card) return
         ev.system.push({
           type: "text",
@@ -299,7 +362,7 @@ export default {
           const rows = allCards().map((c) => {
             const age = Math.round((now - c.updated) / 60_000)
             const live = now - c.updated < LIVE_MS ? "жив" : "молчит"
-            return `${c.session === me?.session ? "* " : "  "}${c.role}${c.auto ? " (авто)" : ""} — ${c.repo || "?"}, ${live}, ${age} мин назад, сессия ${c.session}${c.title ? `, «${c.title}»` : ""}`
+            return `${c.session === me?.session ? "* " : "  "}${c.role}${c.auto ? " (авто)" : ""} — ${c.repo || "?"}, ${live}, ${age} мин назад, сессия ${c.session}, модель ${c.model || "?"}${c.title ? `, «${c.title}»` : ""}`
           })
           return { content: rows.length ? rows.join("\n") : "Окон с визитками нет." }
         },
@@ -322,10 +385,12 @@ export default {
           if (!ROLE_RE.test(role)) return { content: `Роль «${role}» не годится: строчные латинские буквы, цифры, дефис, первая — буква.` }
           const now = Date.now()
           const holder = allCards().find((c) => c.role === role && c.session !== me.session)
-          if (holder && now - holder.updated < LIVE_MS && !input.force) {
+          const shared = !EXCLUSIVE.has(role)
+          if (holder && now - holder.updated < LIVE_MS && !input.force && !shared) {
             return { content: `Роль «${role}» занята живым окном (сессия ${holder.session}, ${hhmm(holder.updated)}). Передать её — force: true.` }
           }
-          if (holder) {
+          // Разделяемая роль присоединяет окно: прежние держатели остаются при своей роли.
+          if (holder && !shared) {
             holder.role = autoRole(holder.session)
             holder.auto = true
             saveCard(holder)
@@ -343,7 +408,10 @@ export default {
           saveCard(me)
           mine.set(me.session, me)
           void deliver(me) // письма, ждавшие эту роль
-          return { content: `Твоя роль теперь «${role}».` }
+          const others = allCards().filter((c) => c.role === role && c.session !== me.session && now - c.updated < LIVE_MS)
+          return {
+            content: `Твоя роль теперь «${role}».` + (shared && others.length ? ` Роль разделяемая: уже держат ${others.length} (${others.map((c) => c.session).join(", ")}) — письма на неё без id сессии не доставляются, пока держателей больше одного.` : ""),
+          }
         },
       })
 
@@ -365,9 +433,26 @@ export default {
           if (!to || !text) return { content: "Нужны и адресат, и текст." }
           const now = Date.now()
           const cards = allCards()
+          const live = cards.filter((c) => now - c.updated < LIVE_MS)
+          // РАЗДЕЛЯЕМАЯ РОЛЬ С НЕСКОЛЬКИМИ ЖИВЫМИ ДЕРЖАТЕЛЯМИ — письмо не доставляется наугад: rename отдал
+          // бы его случайному окну, и одну задачу сделали бы не те или двое. Отказ со списком; адресовать id.
+          if (to !== "all" && !EXCLUSIVE.has(to)) {
+            const holders = live.filter((c) => c.role === to)
+            if (holders.length > 1) {
+              const rows = holders.map((c) => `  ${c.session} — модель ${c.model || "?"}${c.title ? `, «${c.title}»` : ""}, ${c.repo || "?"}`)
+              return { content: `Роль «${to}» держат ${holders.length} живых окна — письмо не доставлено. Адресуй id сессии:\n${rows.join("\n")}` }
+            }
+          }
+          // all — каждому живому соседу; у разделяемой роли с несколькими держателями — по id сессии каждого.
           const targets =
             to === "all"
-              ? [...new Set(cards.filter((c) => c.session !== context.sessionID && now - c.updated < LIVE_MS).map((c) => c.role))]
+              ? [
+                  ...new Set(
+                    live
+                      .filter((c) => c.session !== context.sessionID)
+                      .map((c) => (!EXCLUSIVE.has(c.role) && live.filter((x) => x.role === c.role).length > 1 ? c.session : c.role)),
+                  ),
+                ]
               : [to]
           if (!targets.length) return { content: "Живых соседей нет — отправлять некому." }
           for (const t of targets) {
