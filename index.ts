@@ -68,10 +68,11 @@ const BASE = path.join(dataDir(), "nova-peers")
 const CARDS = path.join(BASE, "cards")
 const INBOX = path.join(BASE, "inbox")
 const READ = path.join(BASE, "read")
-for (const d of [CARDS, INBOX, READ]) mkdirSync(d, { recursive: true })
+const QUEUE = path.join(BASE, "queue") // queue/<роль>/*.json — письма с tier, ждущие свободного окна нужной ступени
+for (const d of [CARDS, INBOX, READ, QUEUE]) mkdirSync(d, { recursive: true })
 
-type Card = { session: string; role: string; auto: boolean; title: string; directory: string; repo: string; model?: string; modelAt?: number; modelFrom?: "request" | "db"; modelCheckedAt?: number; pid: number; updated: number }
-type Letter = { id: string; from_role: string; from_session: string; to: string; text: string; time: number }
+type Card = { session: string; role: string; auto: boolean; title: string; directory: string; repo: string; model?: string; modelAt?: number; modelFrom?: "request" | "db"; modelCheckedAt?: number; busy?: boolean; busySince?: number; pid: number; updated: number }
+type Letter = { id: string; from_role: string; from_session: string; to: string; text: string; time: number; tier?: Tier }
 
 // КОНФИГ ПРОЕКТА — `.opencode/nova-peers.json` в дереве окна (ищется вверх от каталога окна):
 //   { "exclusive_roles": ["lead"], "help_extra": "текст, дописываемый к справке" }
@@ -79,7 +80,16 @@ type Letter = { id: string; from_role: string; from_session: string; to: string;
 // Роли ИСКЛЮЧИТЕЛЬНЫЕ (перечислены в конфиге) — у них ровно один держатель, занятая живым окном роль не
 // отбирается без force. Любая другая роль РАЗДЕЛЯЕМАЯ: peer_role присоединяет окно, а письмо на роль с
 // несколькими живыми держателями не доставляется наугад (см. peer_send).
-type PeersConfig = { exclusive: Set<string>; helpExtra: string }
+// БАЗОВЫЕ РОЛИ плагина (без конфига): `integrator` исключительная, остальные (`assistant`, ...) разделяемые;
+// конфиг проекта ДОБАВЛЯЕТ к ним свои. Ступени задачи heavy/medium/light — по семействам моделей (подстрока
+// id в нижнем регистре); конфиг проекта (`tiers`) заменяет список ступени целиком; неизвестная модель вне ступеней.
+const BASE_EXCLUSIVE = ["integrator"]
+const TIER_ORDER = ["light", "medium", "heavy"] as const
+type Tier = (typeof TIER_ORDER)[number]
+const DEFAULT_TIERS: Record<Tier, string[]> = { heavy: ["opus"], medium: ["sonnet"], light: ["haiku"] }
+const isTier = (t: any): t is Tier => TIER_ORDER.includes(t)
+
+type PeersConfig = { exclusive: Set<string>; helpExtra: string; tiers: Record<Tier, string[]> }
 function loadConfig(dir: string): PeersConfig {
   let d = dir ? path.resolve(dir) : ""
   for (let i = 0; d && i < 32; i++) {
@@ -87,13 +97,39 @@ function loadConfig(dir: string): PeersConfig {
     if (existsSync(file)) {
       const j = readJson<any>(file) ?? {}
       const roles = Array.isArray(j.exclusive_roles) ? j.exclusive_roles.map((r: any) => String(r)) : []
-      return { exclusive: new Set(roles), helpExtra: typeof j.help_extra === "string" ? j.help_extra : "" }
+      const tiers = { ...DEFAULT_TIERS }
+      for (const t of TIER_ORDER) if (Array.isArray(j.tiers?.[t])) tiers[t] = j.tiers[t].map((s: any) => String(s).toLowerCase())
+      return { exclusive: new Set([...BASE_EXCLUSIVE, ...roles]), helpExtra: typeof j.help_extra === "string" ? j.help_extra : "", tiers }
     }
     const up = path.dirname(d)
     if (up === d) break
     d = up
   }
-  return { exclusive: new Set(), helpExtra: "" }
+  return { exclusive: new Set(BASE_EXCLUSIVE), helpExtra: "", tiers: { ...DEFAULT_TIERS } }
+}
+
+// Ступень модели «провайдер/id#вариант»: проверяется от тяжёлой к лёгкой; нет совпадения — undefined (вне ступеней).
+function tierOf(model: string | undefined, cfg: PeersConfig): Tier | undefined {
+  const m = (model ?? "").toLowerCase()
+  if (!m) return undefined
+  for (const t of ["heavy", "medium", "light"] as const) if (cfg.tiers[t].some((s) => s && m.includes(s))) return t
+  return undefined
+}
+
+// Окно СВОБОДНО, если не занято ходом. busy ставится в хуке запроса и снимается событием простоя; занятость
+// старше BUSY_MAX_MS считается потерянным событием — окно свободно (иначе одно пропущенное событие вешало бы его навсегда).
+const BUSY_MAX_MS = 30 * 60_000
+const isFree = (c: Card, now = Date.now()) => now - c.updated < LIVE_MS && (!c.busy || now - (c.busySince ?? 0) > BUSY_MAX_MS)
+
+// Кандидаты письма с ступенью: СВОБОДНЫЕ живые держатели роли с моделью той же ступени; если таких нет — со
+// ступенью выше (ближайшей, затем дальше), ниже — никогда. Окно с моделью вне ступеней не кандидат.
+function pickHolder(holders: Card[], tier: Tier, cfg: PeersConfig, now = Date.now()): Card | undefined {
+  const free = holders.filter((c) => isFree(c, now))
+  for (let r = TIER_ORDER.indexOf(tier); r < TIER_ORDER.length; r++) {
+    const hit = free.filter((c) => tierOf(c.model, cfg) === TIER_ORDER[r]).sort((a, b) => (a.busySince ?? 0) - (b.busySince ?? 0))
+    if (hit.length) return hit[0]
+  }
+  return undefined
 }
 
 // МОДЕЛЬ ОКНА — «провайдер/id#вариант». Окон одной роли бывает несколько, и у них РАЗНЫЕ модели; кто
@@ -190,6 +226,29 @@ function saveCard(c: Card) {
   writeFileSync(cardFile(c.session), JSON.stringify(c, null, 1))
 }
 
+// Есть ли в базе строка простоя (`idle`) сессии позже момента `since` — запасной путь снятия busy, если
+// событие простоя до плагина не дошло. Только чтение; нет базы — нет ответа.
+async function idleAfter(sessionID: string, since: number): Promise<boolean> {
+  let db: any
+  try {
+    try {
+      const { DatabaseSync } = await import("node:sqlite")
+      db = new DatabaseSync(dbFile(), { readOnly: true })
+    } catch {
+      const { Database } = await import("bun:sqlite" as string)
+      db = new Database(dbFile(), { readonly: true })
+    }
+    const r = db.prepare("select max(time_created) as t from session_message where session_id = ? and type = 'idle'").get(sessionID)
+    return Number(r?.t ?? 0) > since
+  } catch {
+    return false
+  } finally {
+    try {
+      db?.close()
+    } catch {}
+  }
+}
+
 function pidAlive(pid: number): boolean {
   if (!pid) return false
   try {
@@ -254,8 +313,8 @@ export const HELP = `nova-peers — письма между окнами OpenCod
 
 РОЛИ. Окно без роли получает сама assistant-<6 знаков id сессии>. Своя — peer_role: строчные латинские буквы, цифры,
 дефис, первая буква. Роль переживает перезапуск сессии с тем же id. У субагентов ролей и ящиков нет.
-  ИСКЛЮЧИТЕЛЬНЫЕ роли — перечисленные в конфиге проекта (.opencode/nova-peers.json, ключ exclusive_roles; по
-  умолчанию НИ ОДНОЙ): один держатель; занятую ЖИВЫМ окном не отобрать, передать — force: true (прежнее окно
+  ИСКЛЮЧИТЕЛЬНЫЕ роли — integrator (базовая) и перечисленные в конфиге проекта (.opencode/nova-peers.json, ключ
+  exclusive_roles): один держатель; занятую ЖИВЫМ окном не отобрать, передать — force: true (прежнее окно
   получает письмо и возвращается на авто-роль).
   РАЗДЕЛЯЕМЫЕ — все остальные (worker, assistant, ...): peer_role {role: "worker"} при живом держателе не отказывает,
   а ПРИСОЕДИНЯЕТ окно; force не нужен. Письмо на такую роль, у которой больше одного живого держателя, НЕ
@@ -267,6 +326,15 @@ export const HELP = `nova-peers — письма между окнами OpenCod
 дешёвой. Модель берётся из ЗАПРОСА, который окно делает сейчас (при каждом запросе); пока окно не делало запросов
 после загрузки плагина — из базы с пометкой «последний ход HH:MM» (вкладку могли переключить после него); «?» — не
 известна.
+
+СТУПЕНЬ ЗАДАЧИ. peer_send {to, text, tier}: tier = heavy | medium | light — сложность оцениваешь ТЫ (плагин не
+угадывает). Письмо получит СВОБОДНЫЙ держатель роли с моделью этой ступени; нет такого — со ступенью выше
+(heavy может взять medium-задачу), ниже — никогда. Никого нет — не отказ, а очередь роли+ступени: письмо уйдёт
+первому освободившемуся держателю с подходящей моделью; в ответ — «в очереди, кандидаты: …». Ответ называет
+выбранное окно (сессия, модель, ступень). Ступень модели — по семейству (opus -> heavy, sonnet -> medium,
+haiku -> light), конфиг проекта (tiers) переопределяет; неизвестная модель вне ступеней. «Свободно» — окно не
+занято ходом: busy ставится запросом окна, снимается событием простоя сессии (session.idle). Без tier — прежнее
+поведение. tier с all не сочетается.
 
 ДОСТАВКА. Письмо кладётся в сессию получателя очередным сообщением; простаивающее окно просыпается за один тик
 опроса (15 с), занятое прочтёт после текущего хода. Каждое письмо — ход у получателя и его лимит: «принято» и
@@ -369,7 +437,72 @@ export default {
       }
     }
 
+    // ЗАНЯТОСТЬ. busy ставится в хуке запроса (context) и снимается событием простоя сессии V2 `session.idle`
+    // {sessionID} (имя найдено по бинарю V2); запас — строка `idle` в session_message после busySince (опрос в
+    // таймере). Без вызовов модели: только код плагина.
+    function setBusy(card: Card, busy: boolean) {
+      const fresh = readJson<Card>(cardFile(card.session)) ?? card
+      fresh.busy = busy
+      fresh.busySince = busy ? Date.now() : undefined
+      saveCard(fresh)
+      mine.set(fresh.session, fresh)
+    }
+
+    // ОЧЕРЕДЬ роли+ступени: письмо с tier, которому не нашлось свободного окна нужной ступени, ждёт здесь и уходит
+    // первому освободившемуся держателю с подходящей моделью. Забирается переименованием — второй процесс
+    // того же письма не получит.
+    function processQueue() {
+      for (const roleDir of readdirSync(QUEUE)) {
+        const dir = path.join(QUEUE, roleDir)
+        for (const f of readdirSync(dir).filter((f) => f.endsWith(".json")).sort()) {
+          const letter = readJson<Letter>(path.join(dir, f))
+          if (!letter?.tier) continue
+          const holders = allCards().filter((c) => safeKey(c.role) === roleDir && !children.has(c.session))
+          if (!holders.length) continue
+          const cfg = loadConfig(holders[0].directory)
+          const pick = pickHolder(holders, letter.tier, cfg)
+          if (!pick) continue
+          const claim = path.join(dir, `.${f}.claim`)
+          try {
+            renameSync(path.join(dir, f), claim)
+          } catch {
+            continue
+          }
+          postLetter(pick.session, { ...letter, to: pick.session })
+          rmSync(claim, { force: true })
+          if (mine.has(pick.session)) {
+            setBusy(pick, true) // письмо займёт окно: следующее с tier не должно уйти туда же
+            void deliver(mine.get(pick.session)!)
+          }
+          log(`queue ${f} -> ${pick.session} (${pick.role}, ${tierOf(pick.model, cfg)})`)
+        }
+      }
+    }
+
+    const clearIdle = (sessionID: string) => {
+      const c = readJson<Card>(cardFile(sessionID))
+      if (c?.busy) setBusy(c, false)
+      processQueue()
+    }
+    try {
+      const bus = (ctx as any).events ?? (ctx as any).event
+      const on = bus?.on?.bind(bus)
+      if (on) await on("session.idle", (ev: any) => clearIdle(String(ev?.properties?.sessionID ?? ev?.data?.sessionID ?? ev?.sessionID ?? "")))
+      else log("no event bus in plugin context: idle comes from the database fallback")
+    } catch (e) {
+      log(`session.idle subscribe failed: ${e}`)
+    }
+
     const timer = setInterval(() => {
+      // Запас снятия busy: строка простоя в базе после busySince (событие могло не дойти).
+      for (const c of allCards()) {
+        if (c.busy && c.pid === process.pid && !children.has(c.session)) {
+          void idleAfter(c.session, c.busySince ?? 0).then((done) => {
+            if (done) clearIdle(c.session)
+          })
+        }
+      }
+      processQueue()
       // АДРЕСАТЫ — ИЗ ВИЗИТОК НА ДИСКЕ, а не из памяти (замер 2026-10-03): после перезагрузки плагина память пуста, а простаивающее
       // окно не делает запросов и в неё не попадает — письма ему лежали в ящике
       // вечно, ровно в том случае, ради которого доставка будит окно. Берутся
@@ -387,6 +520,7 @@ export default {
       try {
         const card = await touch(String(ev.sessionID ?? ""), ev)
         if (!card) return
+        setBusy(card, true) // запрос окна: оно занято ходом до события простоя
         // Живые соседи с моделями — в КАЖДОМ запросе, чтобы модель исполнителя была перед глазами без peer_list.
         // Одна короткая строка на окно; молчащие (старше LIVE_MS) не подаются.
         const now = Date.now()
@@ -496,7 +630,11 @@ export default {
           "Send a letter to another window. `to` is a role (lead, worker, assistant-xxxxxx, ...), a session id, or `all`. A letter to a role nobody holds waits until a window takes it.",
         input: {
           type: "object",
-          properties: { to: str("Recipient role, session id, or `all`"), text: str("Letter text") },
+          properties: {
+            to: str("Recipient role, session id, or `all`"),
+            text: str("Letter text"),
+            tier: { type: "string", enum: ["heavy", "medium", "light"], description: "Optional task weight as judged by the sender: heavy (strongest model), medium, light. Only a FREE holder of the role whose model is of that tier or stronger gets the letter; none free -> the letter queues." },
+          },
           required: ["to", "text"],
           additionalProperties: false,
         },
@@ -511,7 +649,35 @@ export default {
           const live = cards.filter((c) => now - c.updated < LIVE_MS)
           // РАЗДЕЛЯЕМАЯ РОЛЬ С НЕСКОЛЬКИМИ ЖИВЫМИ ДЕРЖАТЕЛЯМИ — письмо не доставляется наугад: rename отдал
           // бы его случайному окну, и одну задачу сделали бы не те или двое. Отказ со списком; адресовать id.
-          const exclusive = configFor(me).exclusive
+          const cfg = configFor(me)
+          const exclusive = cfg.exclusive
+          // ПИСЬМО СО СТУПЕНЬЮ: сложность оценивает отправитель. Из живых держателей роли — свободный с моделью
+          // этой ступени, иначе ступенью выше, ниже никогда; никого — не отказ, а очередь роли+ступени.
+          if (input.tier !== undefined && input.tier !== null && input.tier !== "") {
+            if (!isTier(input.tier)) return { content: `Ступень «${input.tier}» не годится: heavy, medium или light.` }
+            if (to === "all") return { content: "tier не сочетается с all: ступень выбирает одного исполнителя роли." }
+            const holders = live.filter((c) => c.role === to && !children.has(c.session))
+            if (holders.length) {
+              const pick = pickHolder(holders, input.tier, cfg, now)
+              const letter: Letter = { id: `${now}-${safeKey(context.sessionID)}-${safeKey(to)}`, from_role: fromRole, from_session: context.sessionID, to: pick?.session ?? to, text, time: now, tier: input.tier }
+              if (pick) {
+                postLetter(pick.session, letter)
+                if (mine.has(pick.session)) {
+                  setBusy(pick, true)
+                  void deliver(mine.get(pick.session)!)
+                }
+                log(`send ${fromRole} -> ${pick.session} tier=${input.tier}`)
+                return { content: `Отправлено (${hhmm(now)}): ${to} -> сессия ${pick.session}, модель ${modelLabel(pick, now)}, ступень ${tierOf(pick.model, cfg) ?? "?"} (задача ${input.tier}).` }
+              }
+              const qdir = path.join(QUEUE, safeKey(to))
+              mkdirSync(qdir, { recursive: true })
+              writeFileSync(path.join(qdir, `${letter.id}.json`), JSON.stringify(letter, null, 1))
+              const cands = holders.map((c) => `${c.session} (${tierOf(c.model, cfg) ?? "вне ступеней"}, ${isFree(c, now) ? "свободно" : "занято"})`)
+              log(`queued ${fromRole} -> ${to} tier=${input.tier}`)
+              return { content: `В очереди (${hhmm(now)}): роль ${to}, ступень ${input.tier} — подходящего свободного окна нет, письмо уйдёт первому освободившемуся. Кандидаты: ${cands.join("; ")}.` }
+            }
+            // Роль никто не держит — как без ступени: письмо ждёт, пока её возьмут.
+          }
           if (to !== "all" && !exclusive.has(to)) {
             const holders = live.filter((c) => c.role === to)
             if (holders.length > 1) {
