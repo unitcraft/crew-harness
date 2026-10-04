@@ -44,7 +44,7 @@ cell("B takes the role with force", /integrator/.test(take.content), take.conten
 
 await turn("sesAAAAAA") // A's next turn must not write the old role back
 const list = (await call("peer_list", "sesBBBBBB")).content
-const holders = list.split("\n").filter((l) => /^\*?\s*integrator\b/.test(l.trim().replace(/^\*\s*/, "")))
+const holders = list.split("\n").filter((l) => /^\*?\s*[a-z0-9-]+\.integrator\b/.test(l.trim().replace(/^\*\s*/, "")))
 cell("exactly one window holds integrator", holders.length === 1, list)
 cell("the holder is B", holders.length === 1 && /sesBBBBBB/.test(holders[0]), list)
 

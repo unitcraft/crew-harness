@@ -53,7 +53,7 @@ const r2 = await call("peer_role", "sesBBBBBB", { role: "assistant" })
 cell("first window takes assistant", /assistant/.test(r1.content) && !/занята/.test(r1.content), r1.content)
 cell("second window joins assistant without force", /теперь «assistant»/.test(r2.content) && !/занята/.test(r2.content), r2.content)
 const l2 = (await call("peer_list", "sesCCCCCC")).content
-cell("both windows hold assistant", l2.split("\n").filter((l) => /^\s*assistant\b/.test(l)).length === 2, l2)
+cell("both windows hold assistant", l2.split("\n").filter((l) => /^\s*[a-z0-9-]+\.assistant\b/.test(l)).length === 2, l2)
 
 // 3. a letter to a shared role with two live holders is refused with the list; by id it reaches exactly one
 delivered.length = 0

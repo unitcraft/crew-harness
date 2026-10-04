@@ -12,7 +12,7 @@ process.env.NOVA_PEERS_POLL_MS = "100"
 const cards = path.join(tmp, "opencode", "nova-peers", "cards")
 mkdirSync(cards, { recursive: true })
 const card = (session, role, pid) =>
-  writeFileSync(path.join(cards, `${session}.json`), JSON.stringify({ session, role, auto: false, title: "", directory: "", repo: "nova", pid, updated: Date.now() }))
+  writeFileSync(path.join(cards, `${session}.json`), JSON.stringify({ session, role, auto: false, title: "", directory: process.cwd(), repo: "nova", pid, updated: Date.now() }))
 card("sesIDLE01", "carina", process.pid) // this process, plugin reloaded since
 card("sesDEAD01", "assistant", 999999) // a process that no longer exists (server restart)
 card("sesFORGN1", "foreign", process.ppid) // a live foreign process: not ours to deliver
