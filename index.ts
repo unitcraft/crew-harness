@@ -61,7 +61,10 @@ import {
   saveCard,
   pidAlive,
   postLetter,
-  takeLetters,
+  claimLetters,
+  confirmLetters,
+  releaseLetters,
+  recoverClaims,
   formatLetters,
   wakeBlocker,
   waitingIn,
@@ -176,14 +179,16 @@ export default {
       // Ящики окна: `<проект>.<роль>`, id сессии и прежний ящик роли без проекта (письма, отправленные до проектов).
       const keys = [keyOf(card), card.role, card.session]
       if (!waitingIn(keys) || !(await mayWake(card))) return
-      const letters = keys.flatMap((k) => takeLetters(k))
-      if (!letters.length) return
+      // в два шага (core.ts, «ДОСТАВКА В ДВА ШАГА»): захват -> prompt -> в read/; ошибка — обратно в inbox
+      const claimed = keys.flatMap((k) => claimLetters(k, `${process.pid}-${Date.now()}`))
+      if (!claimed.length) return
+      const letters = claimed.map((c) => c.letter)
       try {
         await ctx.session.prompt({ sessionID: card.session, text: formatLetters(letters, card), delivery: "queue" })
+        confirmLetters(claimed)
         log(`delivered ${letters.map((l) => l.id).join(",")} -> ${card.session} (${keyOf(card)})`)
       } catch (e) {
-        // Не доставилось — вернуть в ящик, чтобы не потерять.
-        for (const l of letters) postLetter(l.to === card.session ? card.session : keyOf(card), l)
+        releaseLetters(claimed)
         log(`deliver failed ${card.session}: ${e}`)
       }
     }
@@ -255,6 +260,7 @@ export default {
     }
 
     const timer = setInterval(() => {
+      recoverClaims() // захваты упавших процессов — обратно в ящики
       // Запас снятия busy: строка простоя в базе после busySince (событие могло не дойти).
       for (const c of allCards()) {
         if (c.busy && c.pid === process.pid && !children.has(c.session)) {
@@ -269,7 +275,7 @@ export default {
       // вечно, ровно в том случае, ради которого доставка будит окно. Берутся
       // визитки этого процесса и визитки умершего процесса (после перезапуска
       // сервера сессии те же, процесс новый). Двойной доставки нет: письмо
-      // забирает тот экземпляр, чей rename в takeLetters прошёл первым.
+      // забирает тот экземпляр, чей rename в claimLetters прошёл первым.
       for (const card of allCards()) {
         if (children.has(card.session)) continue
         if (card.pid !== process.pid && pidAlive(card.pid)) continue // окно живого чужого процесса

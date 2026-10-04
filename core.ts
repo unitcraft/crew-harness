@@ -98,7 +98,7 @@ export const CARDS = path.join(BASE, "cards")
 export const INBOX = path.join(BASE, "inbox")
 export const READ = path.join(BASE, "read")
 export const QUEUE = path.join(BASE, "queue") // queue/<роль>/*.json — письма с tier, ждущие свободного окна нужной ступени
-for (const d of [CARDS, INBOX, READ, QUEUE]) mkdirSync(d, { recursive: true })
+for (const d of [CARDS, INBOX, READ, QUEUE]) mkdirSync(d, { recursive: true }) // delivering/ — по мере надобности
 
 export type Card = { session: string; role: string; auto: boolean; title: string; directory: string; repo: string; project?: string; model?: string; modelAt?: number; modelFrom?: "request" | "db"; modelCheckedAt?: number; busy?: boolean; busySince?: number; pid: number; updated: number }
 export type Letter = { id: string; from_role: string; from_session: string; to: string; text: string; time: number; tier?: Tier }
@@ -407,25 +407,73 @@ export function postLetter(to: string, letter: Letter) {
   renameSync(tmp, path.join(dir, `${letter.id}.json`))
 }
 
-// Забрать письма адреса: перенос в read — и есть «доставлено». Кто первым
-// перенёс, тот и доставляет; второй процесс получит ENOENT и пропустит.
-export function takeLetters(key: string): Letter[] {
+// ДОСТАВКА В ДВА ШАГА (at-least-once; подсмотрено у flowition, «deliver or declare»). Раньше письмо переносилось
+// в read/ ДО session.prompt: упади процесс между ними — письмо числилось доставленным, а сессия его не видела.
+// Теперь: claimLetters переносит письмо в delivering/<pid>-<время>/<адрес>/, после успешного prompt —
+// confirmLetters в read/, при ошибке — releaseLetters обратно в inbox. Захват, который висит дольше
+// CLAIM_MAX_MS (процесс упал между шагами), recoverClaims возвращает в inbox — его доставит любой процесс.
+// Цена: в редком окне «prompt прошёл, процесс упал до confirm» письмо придёт дважды — лучше дубль, чем потеря.
+export const DELIVERING = path.join(BASE, "delivering")
+export const CLAIM_MAX_MS = 2 * 60_000
+export type Claimed = { key: string; file: string; claimDir: string; letter: Letter }
+
+export function claimLetters(key: string, claimId: string): Claimed[] {
   const dir = path.join(INBOX, safeKey(key))
   if (!existsSync(dir)) return []
-  const done = path.join(READ, safeKey(key))
-  mkdirSync(done, { recursive: true })
-  const out: Letter[] = []
+  const claimDir = path.join(DELIVERING, claimId, safeKey(key))
+  const out: Claimed[] = []
   for (const f of readdirSync(dir).filter((f) => f.endsWith(".json")).sort()) {
-    const dst = path.join(done, f)
+    mkdirSync(claimDir, { recursive: true })
     try {
-      renameSync(path.join(dir, f), dst)
+      renameSync(path.join(dir, f), path.join(claimDir, f))
     } catch {
-      continue
+      continue // другой процесс захватил первым
     }
-    const l = readJson<Letter>(dst)
-    if (l) out.push(l)
+    const letter = readJson<Letter>(path.join(claimDir, f))
+    if (letter) out.push({ key: safeKey(key), file: f, claimDir, letter })
   }
   return out
+}
+
+function moveClaimed(claimed: Claimed[], root: string) {
+  for (const c of claimed) {
+    const dst = path.join(root, c.key)
+    mkdirSync(dst, { recursive: true })
+    try {
+      renameSync(path.join(c.claimDir, c.file), path.join(dst, c.file))
+    } catch (e) {
+      log(`move claimed ${c.file} failed: ${e}`)
+    }
+  }
+  for (const d of new Set(claimed.map((c) => path.dirname(c.claimDir)))) rmSync(d, { recursive: true, force: true })
+}
+/** Отправка в сессию прошла: письма — в read/. */
+export const confirmLetters = (claimed: Claimed[]) => moveClaimed(claimed, READ)
+/** Не прошла: письма — обратно в inbox. */
+export const releaseLetters = (claimed: Claimed[]) => moveClaimed(claimed, INBOX)
+
+/** Захваты старше maxAgeMs (процесс упал между шагами) — обратно в inbox. Возвращает число писем. */
+export function recoverClaims(maxAgeMs = CLAIM_MAX_MS, now = Date.now()): number {
+  if (!existsSync(DELIVERING)) return 0
+  let n = 0
+  for (const claimId of readdirSync(DELIVERING)) {
+    const at = Number(claimId.split("-").pop())
+    if (Number.isFinite(at) && now - at < maxAgeMs) continue
+    const claimRoot = path.join(DELIVERING, claimId)
+    for (const key of existsSync(claimRoot) ? readdirSync(claimRoot) : []) {
+      const dir = path.join(claimRoot, key)
+      for (const f of readdirSync(dir).filter((f) => f.endsWith(".json"))) {
+        mkdirSync(path.join(INBOX, key), { recursive: true })
+        try {
+          renameSync(path.join(dir, f), path.join(INBOX, key, f))
+          n++
+        } catch {}
+      }
+    }
+    rmSync(claimRoot, { recursive: true, force: true })
+  }
+  if (n) log(`recovered ${n} letter(s) from stale delivery claims`)
+  return n
 }
 
 export function formatLetters(letters: Letter[], me: Card): string {
