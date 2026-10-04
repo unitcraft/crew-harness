@@ -74,6 +74,11 @@ writeFileSync(path.join(both, ".opencode", "opencode-peers.json"), JSON.stringif
 cell("the old name nova-peers.json is still read", mod.helpFor(legacy).includes("OLD-NAME-LINE"), "missing")
 cell("opencode-peers.json wins over the old name", mod.helpFor(both).includes("NEW-NAME-LINE") && !mod.helpFor(both).includes("OLD-NAME-LINE"), "wrong file")
 
+// A project config saved with a BOM (Notepad, PowerShell 5.1 "utf8") is read like any other.
+const bom = path.join(tmp, "bom")
+mkdirSync(path.join(bom, ".opencode"), { recursive: true })
+writeFileSync(path.join(bom, ".opencode", "opencode-peers.json"), "\uFEFF" + JSON.stringify({ help_extra: "BOM-LINE" }))
+cell("a config saved with a BOM is read", mod.helpFor(bom).includes("BOM-LINE"), "BOM file ignored")
 stop?.()
 rmSync(tmp, { recursive: true, force: true })
 console.log(fail ? `peers-config.test: FAIL ${fail}` : "peers-config.test ok")

@@ -240,7 +240,7 @@ export const safeKey = (k: string) => k.replace(/[^A-Za-z0-9_-]/g, "_")
 
 export function readJson<T>(file: string): T | undefined {
   try {
-    return JSON.parse(readFileSync(file, "utf8")) as T
+    return JSON.parse(readFileSync(file, "utf8").replace(/^\uFEFF/, "")) as T // BOM: Notepad, PowerShell 5.1
   } catch {
     return undefined
   }
