@@ -28,6 +28,26 @@ The system hint the plugin adds to each request is **constant** within a session
 before the whole history, and anything changing there re-bills the history on every request
 with Claude's prefix prompt cache); live neighbours and their models come from `peer_list`.
 
+## Windows on the `claude-code` provider (MCP)
+
+The [`claude-code` provider](https://github.com/unitcraft/opencode-claude-code-provider) hands
+every turn to the official Claude Code and drops OpenCode's tool list, so the plugin's `peer_*`
+tools do not reach those windows. `mcp.ts` is a stdio MCP server with the same five tools
+(`mcp__peers__peer_list`, ... in Claude Code), built on the same core (`core.ts`) as the plugin:
+
+```sh
+OPENCODE_PEERS_SESSION=<opencode session id> node mcp.ts   # node >= 24
+```
+
+- it acts for the one OpenCode session in `OPENCODE_PEERS_SESSION` (the provider sets it per
+  request) and writes to the same mailbox (`XDG_DATA_HOME` as for OpenCode);
+- the project list is not repeated: the plugin writes its `projects` option to
+  `<mailbox>/projects.json` at load, the server reads it (`OPENCODE_PEERS_PROJECTS`, a JSON object
+  of the same shape, overrides), so `project.role` addresses match;
+- it never takes over a window's card (`pid` stays the OpenCode process'): the plugin's timer
+  delivers letters, including those sent through MCP; receiving already works for these windows
+  because delivery goes through the OpenCode session.
+
 ## Install
 
 ```sh

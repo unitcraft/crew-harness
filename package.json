@@ -1,17 +1,18 @@
 {
   "name": "opencode-peers",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Letters between OpenCode windows on this machine, any repository, addressed by role",
   "license": "MIT OR Apache-2.0",
   "exports": {
-    ".": "./index.ts"
+    ".": "./index.ts",
+    "./mcp": "./mcp.ts"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/unitcraft/opencode-peers.git"
   },
   "scripts": {
-    "test": "node test/peers-project.test.mjs && node test/peers-config.test.mjs &&node test/peers-help.test.mjs && node test/peers-idle.test.mjs && node test/peers-model.test.mjs && node test/peers-role.test.mjs && node test/peers-shared.test.mjs && node test/peers-tier.test.mjs"
+    "test": "node test/peers-project.test.mjs && node test/peers-config.test.mjs &&node test/peers-help.test.mjs && node test/peers-idle.test.mjs && node test/peers-model.test.mjs && node test/peers-role.test.mjs && node test/peers-shared.test.mjs && node test/peers-tier.test.mjs && node test/peers-mcp.test.mjs"
   }
 }
