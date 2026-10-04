@@ -12,7 +12,7 @@ const bare = path.join(tmp, "bare")
 const proj = path.join(tmp, "proj")
 mkdirSync(bare, { recursive: true })
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
-writeFileSync(path.join(proj, ".opencode", "nova-peers.json"), JSON.stringify({ exclusive_roles: ["lead"], help_extra: "EXTRA-LINE-OF-THE-PROJECT" }))
+writeFileSync(path.join(proj, ".opencode", "opencode-peers.json"), JSON.stringify({ exclusive_roles: ["lead"], help_extra: "EXTRA-LINE-OF-THE-PROJECT" }))
 
 const dirOf = (sid) => (sid.startsWith("sesP") ? proj : bare)
 const mod = await import(process.env.PEERS_MODULE ?? "../index.ts")
@@ -61,6 +61,18 @@ const helpBare = (await call("peer_help", "sesB1")).content
 cell("help_extra is appended for the project", helpProj.includes("EXTRA-LINE-OF-THE-PROJECT"), helpProj.slice(-120))
 cell("help_extra is absent without a config", !helpBare.includes("EXTRA-LINE-OF-THE-PROJECT"), "present")
 cell("default help names neutral roles", /lead/.test(helpBare) && /worker/.test(helpBare), "missing")
+
+// The config is named after the package (opencode-peers.json); the old name nova-peers.json is still read when
+// the new one is absent, and the new one wins when both exist.
+const legacy = path.join(tmp, "legacy")
+const both = path.join(tmp, "both")
+mkdirSync(path.join(legacy, ".opencode"), { recursive: true })
+mkdirSync(path.join(both, ".opencode"), { recursive: true })
+writeFileSync(path.join(legacy, ".opencode", "nova-peers.json"), JSON.stringify({ help_extra: "OLD-NAME-LINE" }))
+writeFileSync(path.join(both, ".opencode", "nova-peers.json"), JSON.stringify({ help_extra: "OLD-NAME-LINE" }))
+writeFileSync(path.join(both, ".opencode", "opencode-peers.json"), JSON.stringify({ help_extra: "NEW-NAME-LINE" }))
+cell("the old name nova-peers.json is still read", mod.helpFor(legacy).includes("OLD-NAME-LINE"), "missing")
+cell("opencode-peers.json wins over the old name", mod.helpFor(both).includes("NEW-NAME-LINE") && !mod.helpFor(both).includes("OLD-NAME-LINE"), "wrong file")
 
 stop?.()
 rmSync(tmp, { recursive: true, force: true })

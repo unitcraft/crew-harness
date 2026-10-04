@@ -21,7 +21,8 @@ repository, addressed by role.
   ]
   ```
 - roles are shared by default; a project can make roles exclusive in
-  `.opencode/nova-peers.json` (`exclusive_roles`), with an optional `help_extra` paragraph;
+  `.opencode/opencode-peers.json` (`exclusive_roles`), with an optional `help_extra` paragraph
+  (the old name `.opencode/nova-peers.json` is still read when the new one is absent);
 - executor choice by task weight (`tier`) across free windows, with a queue.
 
 The system hint the plugin adds to each request is **constant** within a session (it sits
@@ -60,6 +61,14 @@ git clone https://github.com/unitcraft/opencode-peers C:/work/opencode-peers
 "plugins": ["C:/work/opencode-peers"]
 ```
 
+## Related
+
+Other OpenCode plugins of the same set (they work independently; together they are tested on one machine):
+
+- [opencode-windows-env](https://github.com/unitcraft/opencode-windows-env) — a sane command environment on Windows and a time stamp on agent messages
+- [opencode-claude-guards](https://github.com/unitcraft/opencode-claude-guards) — the repository's Claude Code rules (hooks, permissions) in OpenCode windows
+- [opencode-claude-code-provider](https://github.com/unitcraft/opencode-claude-code-provider) — OpenCode provider `claude-code` on top of the official Claude Code (private for now)
+
 ## Test
 
 ```sh
@@ -67,5 +76,8 @@ npm test   # node >= 24
 ```
 
 History: moved with its commits from `a private plugins repository of the nova project` (`plugins/nova-peers`).
-Internal names (`nova.peers` id, `nova-peers` data directory and config file) are kept so
-existing mailboxes and project configs keep working.
+Internal names (`nova.peers` id, `nova-peers` data directory) are kept so existing mailboxes keep
+working; the project config is now `.opencode/opencode-peers.json` (named after the package), the
+old `.opencode/nova-peers.json` is still read.
+
+License: MIT OR Apache-2.0 (see [LICENSE](LICENSE)).

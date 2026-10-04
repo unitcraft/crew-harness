@@ -103,7 +103,8 @@ for (const d of [CARDS, INBOX, READ, QUEUE]) mkdirSync(d, { recursive: true })
 export type Card = { session: string; role: string; auto: boolean; title: string; directory: string; repo: string; project?: string; model?: string; modelAt?: number; modelFrom?: "request" | "db"; modelCheckedAt?: number; busy?: boolean; busySince?: number; pid: number; updated: number }
 export type Letter = { id: string; from_role: string; from_session: string; to: string; text: string; time: number; tier?: Tier }
 
-// КОНФИГ ПРОЕКТА — `.opencode/nova-peers.json` в дереве окна (ищется вверх от каталога окна):
+// КОНФИГ ПРОЕКТА — `.opencode/opencode-peers.json` в дереве окна (ищется вверх от каталога окна; файл назван по
+// пакету). Прежнее имя `.opencode/nova-peers.json` читается, если нового рядом нет (в журнал — напоминание):
 //   { "exclusive_roles": ["lead"], "help_extra": "текст, дописываемый к справке" }
 // Плагин абстрактен: ни ролей, ни проектного текста в нём нет. По умолчанию исключительных ролей НЕТ.
 // Роли ИСКЛЮЧИТЕЛЬНЫЕ (перечислены в конфиге) — у них ровно один держатель, занятая живым окном роль не
@@ -118,12 +119,19 @@ export type Tier = (typeof TIER_ORDER)[number]
 const DEFAULT_TIERS: Record<Tier, string[]> = { heavy: ["opus"], medium: ["sonnet"], light: ["haiku"] }
 export const isTier = (t: any): t is Tier => TIER_ORDER.includes(t)
 
+export const CONFIG_NAMES = ["opencode-peers.json", "nova-peers.json"] // новое имя, прежнее
+const LEGACY_CONFIG = CONFIG_NAMES[1]
+const legacyNoted = new Set<string>()
 export type PeersConfig = { exclusive: Set<string>; helpExtra: string; tiers: Record<Tier, string[]> }
 export function loadConfig(dir: string): PeersConfig {
   let d = dir ? path.resolve(dir) : ""
   for (let i = 0; d && i < 32; i++) {
-    const file = path.join(d, ".opencode", "nova-peers.json")
-    if (existsSync(file)) {
+    const file = CONFIG_NAMES.map((n) => path.join(d, ".opencode", n)).find((f) => existsSync(f))
+    if (file) {
+      if (file.endsWith(LEGACY_CONFIG) && !legacyNoted.has(file)) {
+        legacyNoted.add(file)
+        log(`project config under the old name: ${file} -- rename it to ${CONFIG_NAMES[0]}`)
+      }
       const j = readJson<any>(file) ?? {}
       const roles = Array.isArray(j.exclusive_roles) ? j.exclusive_roles.map((r: any) => String(r)) : []
       const tiers = { ...DEFAULT_TIERS }
@@ -375,7 +383,7 @@ export const HELP = `nova-peers — письма между окнами OpenCod
 
 РОЛИ. Окно без роли получает сама assistant-<6 знаков id сессии>. Своя — peer_role: строчные латинские буквы, цифры,
 дефис, первая буква. Роль переживает перезапуск сессии с тем же id. У субагентов ролей и ящиков нет.
-  ИСКЛЮЧИТЕЛЬНЫЕ роли — integrator (базовая) и перечисленные в конфиге проекта (.opencode/nova-peers.json, ключ
+  ИСКЛЮЧИТЕЛЬНЫЕ роли — integrator (базовая) и перечисленные в конфиге проекта (.opencode/opencode-peers.json, ключ
   exclusive_roles): один держатель НА ПРОЕКТ; занятую ЖИВЫМ окном не отобрать, передать — force: true (прежнее окно
   получает письмо и возвращается на авто-роль).
   РАЗДЕЛЯЕМЫЕ — все остальные (worker, assistant, ...): peer_role {role: "worker"} при живом держателе не отказывает,
@@ -412,7 +420,7 @@ inbox/<адрес>/ — непрочитанные, read/<адрес>/ — до�
 является: «я lead проекта X». Остальные молчат — ответ на чужой вопрос это лишний ход у спрашивающего.
 Проверка связи: письмо с просьбой ответить одной строкой «дошло, время»; ответ — peer_send на роль отправителя.`
 
-// Справка с дописью проекта (help_extra из .opencode/nova-peers.json окна).
+// Справка с дописью проекта (help_extra из .opencode/opencode-peers.json окна).
 export const helpFor = (dir: string): string => {
   const extra = loadConfig(dir).helpExtra.trim()
   return extra ? `${HELP}\n\nПРОЕКТ. ${extra}` : HELP
@@ -501,7 +509,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
   const peerRole: PeerTool = {
     name: "peer_role",
     description:
-      "Set the caller window's role (lead, worker, ... -- lowercase, digits, hyphens). A role listed as exclusive in the project config (.opencode/nova-peers.json, exclusive_roles) and held by another live window is refused unless force=true, which moves the other window back to its automatic role. Any other role is shared: the window joins it.",
+      "Set the caller window's role (lead, worker, ... -- lowercase, digits, hyphens). A role listed as exclusive in the project config (.opencode/opencode-peers.json, exclusive_roles) and held by another live window is refused unless force=true, which moves the other window back to its automatic role. Any other role is shared: the window joins it.",
     input: {
       type: "object",
       properties: { role: str("New role"), force: { type: "boolean", description: "Take the role from a live window", default: false } },
