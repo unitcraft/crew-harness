@@ -8,6 +8,7 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "peers-tier-"))
 process.env.XDG_DATA_HOME = tmp
+process.env.NOVA_PEERS_VIEWERS ??= "open" // windows taken as open (the window rule has its own test)
 process.env.NOVA_PEERS_DB = path.join(tmp, "absent.db")
 process.env.NOVA_PEERS_POLL_MS = "60"
 const mod = await import(process.env.PEERS_MODULE ?? "../index.ts")

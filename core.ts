@@ -3,7 +3,7 @@
 // провайдера claude-code, которым инструменты плагина недоступны: одна реализация — одна семантика.
 // Отличия хозяев — в PeersHost (визитка своего окна, кандидаты, немедленная доставка в своём процессе).
 
-import { execFileSync } from "node:child_process"
+import { execFile, execFileSync } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync, appendFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -289,17 +289,27 @@ export async function idleAfter(sessionID: string, since: number): Promise<boole
 
 // Строка сессии из базы (session_v2, иначе прежняя session): каталог, заголовок, родитель, архив. Нет базы или
 // сессии — undefined. Нужна MCP-серверу: у него нет ctx.session.get плагина.
-export type SessionRow = { directory: string; title: string; parentID?: string; archived?: number }
+export type SessionRow = { directory: string; title: string; parentID?: string; archived?: number; idle?: number; viewed?: number }
 export async function sessionFromDb(sessionID: string): Promise<SessionRow | undefined> {
   if (!sessionID || !existsSync(dbFile())) return undefined
   let db: any
   try {
     db = await openDb()
-    for (const table of ["session_v2", "session"]) {
+    // session_v2 знает ещё конец последнего хода (time_idle) и его просмотр окном (time_viewed)
+    // старые схемы без этих столбцов — тот же запрос без них
+    for (const [table, extra] of [["session_v2", ", time_idle, time_viewed"], ["session_v2", ""], ["session", ""]]) {
       try {
-        const r = db.prepare(`select directory, title, parent_id, time_archived from ${table} where id = ?`).get(sessionID)
-        if (r) return { directory: String(r.directory ?? ""), title: String(r.title ?? ""), parentID: r.parent_id || undefined, archived: Number(r.time_archived) || undefined }
-      } catch {} // таблицы нет в этой версии OpenCode
+        const r = db.prepare(`select directory, title, parent_id, time_archived${extra} from ${table} where id = ?`).get(sessionID)
+        if (r)
+          return {
+            directory: String(r.directory ?? ""),
+            title: String(r.title ?? ""),
+            parentID: r.parent_id || undefined,
+            archived: Number(r.time_archived) || undefined,
+            idle: Number(r.time_idle) || undefined,
+            viewed: Number(r.time_viewed) || undefined,
+          }
+      } catch {} // таблицы (или столбцов) нет в этой версии OpenCode
     }
   } catch (e) {
     log(`session from db failed: ${e}`)
@@ -309,6 +319,74 @@ export async function sessionFromDb(sessionID: string): Promise<SessionRow | und
     } catch {}
   }
   return undefined
+}
+
+// КОМУ БУДИТЬ. Письмо будит сессию ходом модели, а сервис OpenCode работает и без окон: письмо закрытой
+// вкладке тратило ход, которого никто не увидит. Сигнала «окно показывает сессию» в OpenCode V2 нет (сервис
+// шлёт окнам события без ответа), поэтому два косвенных признака (решение владельца 2026-10-05):
+//   1. открыто ли хоть одно окно OpenCode (процесс opencode без подкоманды сервиса: serve, run, api, ...);
+//   2. видел ли кто-нибудь конец последнего хода сессии: окно отмечает его (time_viewed >= time_idle).
+// Не так — письмо ждёт в ящике и уйдёт, когда окно откроют. Фоновая вкладка, скорее всего, тоже «не видела»,
+// пока на неё не переключиться. Пробу процессов не удалось сделать — окна считаются открытыми (лучше лишний
+// ход, чем потерянная доставка).
+const VIEWER_TTL_MS = 10_000
+const NOT_A_WINDOW = new Set(["serve", "run", "api", "debug", "service", "models", "auth", "mcp", "plugin", "stats", "session", "upgrade", "update", "uninstall", "acp", "export", "import", "github", "web"])
+let viewerCache: { at: number; open: boolean } | undefined
+
+/** Командная строка процесса opencode — окно (интерфейс), а не сервис или разовая команда? */
+export function isWindowCommandLine(cmd: string): boolean {
+  const m = /^\s*(?:"[^"]*opencode(?:\.exe)?"|\S*opencode(?:\.exe)?)(.*)$/i.exec(cmd ?? "")
+  if (!m) return false
+  const first = m[1].trim().split(/\s+/)[0] ?? ""
+  return !NOT_A_WINDOW.has(first.toLowerCase())
+}
+
+function openCodeCommandLines(): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const NL = String.fromCharCode(10)
+    const lines = (out: string) => String(out).split(NL).map((l) => l.trim()).filter(Boolean)
+    const done = (err: any, list: string[]) => (err ? reject(err) : resolve(list))
+    const query = "Get-CimInstance Win32_Process -Filter \"Name='opencode.exe'\" | ForEach-Object { $_.CommandLine }"
+    if (process.platform === "win32")
+      execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", query], { windowsHide: true, timeout: 15_000 }, (e, out) => done(e, lines(out)))
+    else execFile("ps", ["-eo", "args"], { timeout: 15_000 }, (e, out) => done(e, lines(out).filter((l) => l.includes("opencode"))))
+  })
+}
+
+/** Открыто ли хоть одно окно OpenCode на машине. NOVA_PEERS_VIEWERS=open|none — для самотестов. */
+export async function windowsOpen(): Promise<boolean> {
+  const forced = process.env.NOVA_PEERS_VIEWERS
+  if (forced === "open") return true
+  if (forced === "none") return false
+  if (viewerCache && Date.now() - viewerCache.at < VIEWER_TTL_MS) return viewerCache.open
+  let open = true
+  try {
+    open = (await openCodeCommandLines()).some(isWindowCommandLine)
+  } catch (e) {
+    log(`window probe failed (windows taken as open): ${e}`)
+  }
+  viewerCache = { at: Date.now(), open }
+  return open
+}
+
+/** Конец последнего хода сессии никто не видел. */
+export const unseenIdle = (idle?: number, viewed?: number) => !!idle && (!viewed || viewed < idle)
+
+/** Почему письмо сейчас НЕ будит сессию: "no-window" | "unseen" | undefined (будить можно). */
+export async function wakeBlocker(idle?: number, viewed?: number): Promise<"no-window" | "unseen" | undefined> {
+  if (!(await windowsOpen())) return "no-window"
+  if (unseenIdle(idle, viewed)) return "unseen"
+  return undefined
+}
+
+/** Сколько писем ждёт в ящиках `keys`. */
+export function waitingIn(keys: string[]): number {
+  let n = 0
+  for (const k of keys) {
+    const d = path.join(INBOX, safeKey(k))
+    if (existsSync(d)) n += readdirSync(d).filter((f) => f.endsWith(".json")).length
+  }
+  return n
 }
 
 export function pidAlive(pid: number): boolean {
@@ -409,6 +487,9 @@ haiku -> light), конфиг проекта (tiers) переопределяе�
 ДОСТАВКА. Письмо кладётся в сессию получателя очередным сообщением; простаивающее окно просыпается за один тик
 опроса (15 с), занятое прочтёт после текущего хода. Каждое письмо — ход у получателя и его лимит: «принято» и
 «спасибо» без нужды не слать. Доставленное лежит в истории: peer_inbox.
+Письмо НЕ будит окно, которое никто не смотрит: если не открыто ни одно окно OpenCode или конец последнего хода
+получателя никто не видел (окно закрыто, вкладка не на виду), письмо ждёт в ящике и уйдёт, когда окно откроют;
+peer_send так и отвечает. Окно, которое больше не нужно, — в архив: архивное писем не получает.
 
 ГДЕ ЯЩИК: <XDG_DATA_HOME>/opencode/nova-peers (иначе ~/.local/share/opencode/nova-peers): cards/ — визитки,
 inbox/<адрес>/ — непрочитанные, read/<адрес>/ — доставленные. Он один на машину и не лежит ни в одном репозитории.
@@ -467,6 +548,8 @@ export type PeersHost = {
   posted(targets: string[]): void
   picked(pick: Card): void
   roleTaken(me: Card): void
+  // конец последнего хода сессии и его просмотр окном (для «письмо ждёт, окно не открыто»)
+  sessionTimes(sessionID: string): Promise<{ idle?: number; viewed?: number } | undefined>
 }
 
 export type PeerTool = { name: string; description: string; input: any; execute(input: any, sessionID: string): Promise<{ content: string }> }
@@ -642,10 +725,17 @@ export function makeTools(host: PeersHost): PeerTool[] {
         postLetter(t, { id: `${now}-${safeKey(sessionID)}-${safeKey(t)}`, from_role: fromRole, from_session: sessionID, to: t, text, time: now })
       }
       host.posted(targets)
-      const known = targets.map((t) => {
-        const c = cards.find((x) => keyOf(x) === t || x.session === t)
-        return c ? `${t} — ${now - c.updated < LIVE_MS ? "жив" : "молчит"}` : `${t} — такой роли сейчас нет, письмо ждёт`
-      })
+      const known = await Promise.all(
+        targets.map(async (t) => {
+          const c = cards.find((x) => keyOf(x) === t || x.session === t)
+          if (!c) return `${t} — такой роли сейчас нет, письмо ждёт`
+          const times = await host.sessionTimes(c.session).catch(() => undefined)
+          const why = await wakeBlocker(times?.idle, times?.viewed)
+          if (why === "no-window") return `${t} — ни одно окно OpenCode не открыто, письмо ждёт, пока откроют`
+          if (why === "unseen") return `${t} — последний ответ этого окна никто не видел (окно закрыто или вкладка не на виду), письмо ждёт, пока его откроют`
+          return `${t} — ${now - c.updated < LIVE_MS ? "жив" : "молчит"}`
+        }),
+      )
       log(`send ${fromRole} -> ${targets.join(",")}`)
       return { content: `Отправлено (${hhmm(now)}): ${known.join("; ")}.` }
     },

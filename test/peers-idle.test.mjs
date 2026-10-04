@@ -8,6 +8,7 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "peers-idle-"))
 process.env.XDG_DATA_HOME = tmp
+process.env.NOVA_PEERS_VIEWERS ??= "open" // windows taken as open (the window rule has its own test)
 process.env.NOVA_PEERS_POLL_MS = "100"
 const cards = path.join(tmp, "opencode", "nova-peers", "cards")
 mkdirSync(cards, { recursive: true })

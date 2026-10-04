@@ -13,6 +13,6 @@
     "url": "git+https://github.com/unitcraft/opencode-peers.git"
   },
   "scripts": {
-    "test": "node test/peers-project.test.mjs && node test/peers-config.test.mjs &&node test/peers-help.test.mjs && node test/peers-idle.test.mjs && node test/peers-model.test.mjs && node test/peers-role.test.mjs && node test/peers-shared.test.mjs && node test/peers-tier.test.mjs && node test/peers-mcp.test.mjs"
+    "test": "node test/peers-project.test.mjs && node test/peers-config.test.mjs &&node test/peers-help.test.mjs && node test/peers-idle.test.mjs && node test/peers-model.test.mjs && node test/peers-role.test.mjs && node test/peers-shared.test.mjs && node test/peers-tier.test.mjs && node test/peers-mcp.test.mjs && node test/peers-wake.test.mjs"
   }
 }

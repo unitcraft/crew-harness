@@ -13,6 +13,7 @@ import { DatabaseSync } from "node:sqlite"
 const here = path.dirname(fileURLToPath(import.meta.url))
 const tmp = mkdtempSync(path.join(os.tmpdir(), "peers-mcp-"))
 process.env.XDG_DATA_HOME = tmp
+process.env.NOVA_PEERS_VIEWERS ??= "open" // windows taken as open (the window rule has its own test)
 process.env.NOVA_PEERS_POLL_MS = "100"
 delete process.env.NOVA_PEERS_DB
 delete process.env.OPENCODE_PEERS_PROJECTS

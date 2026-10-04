@@ -25,6 +25,15 @@ repository, addressed by role.
   (the old name `.opencode/nova-peers.json` is still read when the new one is absent);
 - executor choice by task weight (`tier`) across free windows, with a queue.
 
+A letter **does not wake a session nobody watches**. OpenCode's server runs without any window,
+so a letter used to start a model turn (and spend limits) in a closed tab. OpenCode V2 has no
+"this window shows that session" signal (the server only pushes events to windows, with no
+reply), so two signs decide: an OpenCode window is open at all (an `opencode` process that is not
+`serve`, `run`, `api`, ...), and the end of the session's last turn was seen by a window
+(`time_viewed >= time_idle`). Otherwise the letter waits in the inbox and goes out once a window
+is open / the session is looked at; `peer_send` tells the sender which. A background tab probably
+counts as unseen until you switch to it. A window you no longer need: archive it.
+
 The system hint the plugin adds to each request is **constant** within a session (it sits
 before the whole history, and anything changing there re-bills the history on every request
 with Claude's prefix prompt cache); live neighbours and their models come from `peer_list`.

@@ -7,6 +7,7 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "peers-config-"))
 process.env.XDG_DATA_HOME = tmp
+process.env.NOVA_PEERS_VIEWERS ??= "open" // windows taken as open (the window rule has its own test)
 process.env.NOVA_PEERS_DB = path.join(tmp, "absent.db")
 const bare = path.join(tmp, "bare")
 const proj = path.join(tmp, "proj")

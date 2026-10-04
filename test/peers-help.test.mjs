@@ -8,6 +8,7 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "peers-help-"))
 process.env.XDG_DATA_HOME = tmp
+process.env.NOVA_PEERS_VIEWERS ??= "open" // windows taken as open (the window rule has its own test)
 const mod = await import("../index.ts")
 
 const hooks = {}

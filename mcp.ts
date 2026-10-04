@@ -61,6 +61,10 @@ const tools = makeTools({
   posted: () => {},
   picked: () => {},
   roleTaken: () => {},
+  sessionTimes: async (sessionID) => {
+    const row = await sessionFromDb(sessionID)
+    return row ? { idle: row.idle, viewed: row.viewed } : undefined
+  },
 })
 
 const INSTRUCTIONS =

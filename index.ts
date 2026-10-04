@@ -63,6 +63,8 @@ import {
   postLetter,
   takeLetters,
   formatLetters,
+  wakeBlocker,
+  waitingIn,
   helpFor,
   saveProjects,
   makeTools,
@@ -159,9 +161,22 @@ export default {
       return card
     }
 
+    // Ждущие письма не будят сессию, которую никто не смотрит (core.ts, «КОМУ БУДИТЬ»); в журнал — раз на причину.
+    const held = new Map<string, string>()
+    async function mayWake(card: Card): Promise<boolean> {
+      const info = await sessionInfo(card.session)
+      const why = await wakeBlocker(Number(info?.time?.idle) || undefined, Number(info?.time?.viewed) || undefined)
+      if (why && held.get(card.session) !== why) log(`hold letters for ${card.session} (${keyOf(card)}): ${why}`)
+      if (why) held.set(card.session, why)
+      else held.delete(card.session)
+      return !why
+    }
+
     async function deliver(card: Card) {
       // Ящики окна: `<проект>.<роль>`, id сессии и прежний ящик роли без проекта (письма, отправленные до проектов).
-      const letters = [...takeLetters(keyOf(card)), ...takeLetters(card.role), ...takeLetters(card.session)]
+      const keys = [keyOf(card), card.role, card.session]
+      if (!waitingIn(keys) || !(await mayWake(card))) return
+      const letters = keys.flatMap((k) => takeLetters(k))
       if (!letters.length) return
       try {
         await ctx.session.prompt({ sessionID: card.session, text: formatLetters(letters, card), delivery: "queue" })
@@ -315,6 +330,10 @@ export default {
           setBusy(pick, true)
           void deliver(mine.get(pick.session)!)
         }
+      },
+      sessionTimes: async (sessionID) => {
+        const info = await sessionInfo(sessionID)
+        return info ? { idle: Number(info.time?.idle) || undefined, viewed: Number(info.time?.viewed) || undefined } : undefined
       },
       roleTaken: (me) => {
         mine.set(me.session, me)
