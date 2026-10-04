@@ -521,13 +521,11 @@ export default {
         const card = await touch(String(ev.sessionID ?? ""), ev)
         if (!card) return
         setBusy(card, true) // запрос окна: оно занято ходом до события простоя
-        // Живые соседи с моделями — в КАЖДОМ запросе, чтобы модель исполнителя была перед глазами без peer_list.
-        // Одна короткая строка на окно; молчащие (старше LIVE_MS) не подаются.
-        const now = Date.now()
-        const neighbours = allCards()
-          .filter((c) => c.session !== card.session && now - c.updated < LIVE_MS)
-          .map((c) => `${c.role} ${c.session} ${modelLabel(c, now)}${c.title ? ` «${c.title.slice(0, 40)}»` : ""}`)
-        if (neighbours.length) ev.system.push({ type: "text", text: `nova-peers, живые соседи: ${neighbours.join("; ")}.` })
+        // ПОДСКАЗКА — НЕИЗМЕННАЯ, пока не сменилась роль. Строка «живые соседи» с их моделями
+        // (была до 2026-10-04) менялась на каждом ходе ЛЮБОГО соседа («последний ход HH:MM», окно
+        // ожило/замолчало), а системная часть стоит перед всей историей: кэш промпта Claude
+        // совпадает по префиксу, и каждое изменение заново оплачивало всю историю окна (замер
+        // владельца: 6 сбросов по 75–97 тыс. токенов за 40 шагов). Соседи и модели — peer_list.
         ev.system.push({
           type: "text",
           text:
