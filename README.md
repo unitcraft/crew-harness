@@ -6,6 +6,20 @@ repository, addressed by role.
 - tools `peer_list`, `peer_send`, `peer_inbox`, `peer_role`, `peer_help` (also `/peer_help`);
 - every window has a card on disk (role, repository, model, liveness); a letter to an idle
   window wakes it (delivered into the session as a message);
+- **projects**: every window belongs to a project and its address is `project.role`
+  (`nova.integrator`). A plain role means the sender's own project; `project.role` reaches another
+  project; `all` is every window of the own project, `project.all` of another one; `peer_list`
+  shows the own project (`all: true` — every project). Exclusive roles are exclusive per project.
+  Projects are one list in the plugin options; a window belongs to the project with the longest
+  matching root, a window outside the list to the project named after its repository:
+
+  ```jsonc
+  "plugins": [
+    { "package": "C:/work/opencode-peers",
+      "options": { "projects": { "nova": "C:/work/nova",
+                                 "claude-limits": "C:/work/nova/claude-limits" } } }
+  ]
+  ```
 - roles are shared by default; a project can make roles exclusive in
   `.opencode/nova-peers.json` (`exclusive_roles`), with an optional `help_extra` paragraph;
 - executor choice by task weight (`tier`) across free windows, with a queue.
