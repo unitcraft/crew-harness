@@ -119,7 +119,9 @@ function tierOf(model: string | undefined, cfg: PeersConfig): Tier | undefined {
 // Окно СВОБОДНО, если не занято ходом. busy ставится в хуке запроса и снимается событием простоя; занятость
 // старше BUSY_MAX_MS считается потерянным событием — окно свободно (иначе одно пропущенное событие вешало бы его навсегда).
 const BUSY_MAX_MS = 30 * 60_000
-const isFree = (c: Card, now = Date.now()) => now - c.updated < LIVE_MS && (!c.busy || now - (c.busySince ?? 0) > BUSY_MAX_MS)
+// Давность последней активности (`updated`) отбора НЕ делает — только показ в peer_list: простаивающее окно и есть
+// лучший исполнитель. Кандидат = процесс визитки жив И сессия существует и не архивирована (candidates()) И не занят.
+const isFree = (c: Card, now = Date.now()) => !c.busy || now - (c.busySince ?? 0) > BUSY_MAX_MS
 
 // Кандидаты письма с ступенью: СВОБОДНЫЕ живые держатели роли с моделью той же ступени; если таких нет — со
 // ступенью выше (ближайшей, затем дальше), ниже — никогда. Окно с моделью вне ступеней не кандидат.
@@ -371,6 +373,21 @@ export default {
       }
     }
 
+    // КАНДИДАТЫ: процесс визитки жив (kill -0) и сессия существует и не архивирована. Закрытая сессия — get падает или
+    // отдаёт архивную метку. Время последней активности не смотрится.
+    async function candidates(cards: Card[]): Promise<Card[]> {
+      const out: Card[] = []
+      for (const c of cards) {
+        if (children.has(c.session)) continue
+        if (c.pid !== process.pid && !pidAlive(c.pid)) continue
+        const info = await sessionInfo(c.session)
+        if (!info) continue
+        if (info.time?.archived || info.time_archived || info.archived) continue
+        out.push(c)
+      }
+      return out
+    }
+
     // Визитка сессии: создаётся при первом обращении, отметка жизни — при каждом.
     async function touch(sessionID: string, ev?: any): Promise<Card | undefined> {
       if (!sessionID || children.has(sessionID)) return undefined
@@ -451,13 +468,23 @@ export default {
     // ОЧЕРЕДЬ роли+ступени: письмо с tier, которому не нашлось свободного окна нужной ступени, ждёт здесь и уходит
     // первому освободившемуся держателю с подходящей моделью. Забирается переименованием — второй процесс
     // того же письма не получит.
-    function processQueue() {
+    let queueBusy = false
+    async function processQueue() {
+      if (queueBusy) return
+      queueBusy = true
+      try {
+        await processQueueOnce()
+      } finally {
+        queueBusy = false
+      }
+    }
+    async function processQueueOnce() {
       for (const roleDir of readdirSync(QUEUE)) {
         const dir = path.join(QUEUE, roleDir)
         for (const f of readdirSync(dir).filter((f) => f.endsWith(".json")).sort()) {
           const letter = readJson<Letter>(path.join(dir, f))
           if (!letter?.tier) continue
-          const holders = allCards().filter((c) => safeKey(c.role) === roleDir && !children.has(c.session))
+          const holders = await candidates(allCards().filter((c) => safeKey(c.role) === roleDir))
           if (!holders.length) continue
           const cfg = loadConfig(holders[0].directory)
           const pick = pickHolder(holders, letter.tier, cfg)
@@ -482,7 +509,7 @@ export default {
     const clearIdle = (sessionID: string) => {
       const c = readJson<Card>(cardFile(sessionID))
       if (c?.busy) setBusy(c, false)
-      processQueue()
+      void processQueue()
     }
     try {
       const bus = (ctx as any).events ?? (ctx as any).event
@@ -502,7 +529,7 @@ export default {
           })
         }
       }
-      processQueue()
+      void processQueue()
       // АДРЕСАТЫ — ИЗ ВИЗИТОК НА ДИСКЕ, а не из памяти (замер 2026-10-03): после перезагрузки плагина память пуста, а простаивающее
       // окно не делает запросов и в неё не попадает — письма ему лежали в ящике
       // вечно, ровно в том случае, ради которого доставка будит окно. Берутся
@@ -644,7 +671,8 @@ export default {
           if (!to || !text) return { content: "Нужны и адресат, и текст." }
           const now = Date.now()
           const cards = allCards()
-          const live = cards.filter((c) => now - c.updated < LIVE_MS)
+          // «Живой» получатель — КАНДИДАТ: процесс жив и сессия не архивирована; давность активности не смотрится.
+          const live = await candidates(cards)
           // РАЗДЕЛЯЕМАЯ РОЛЬ С НЕСКОЛЬКИМИ ЖИВЫМИ ДЕРЖАТЕЛЯМИ — письмо не доставляется наугад: rename отдал
           // бы его случайному окну, и одну задачу сделали бы не те или двое. Отказ со списком; адресовать id.
           const cfg = configFor(me)
@@ -654,8 +682,11 @@ export default {
           if (input.tier !== undefined && input.tier !== null && input.tier !== "") {
             if (!isTier(input.tier)) return { content: `Ступень «${input.tier}» не годится: heavy, medium или light.` }
             if (to === "all") return { content: "tier не сочетается с all: ступень выбирает одного исполнителя роли." }
-            const holders = live.filter((c) => c.role === to && !children.has(c.session))
-            if (holders.length) {
+            // Держатели роли по визиткам: среди них кандидаты (процесс жив, сессия есть и не архивирована).
+            // Кандидатов нет, а визитки есть — всё равно очередь: окно может вернуться; в старый путь не проваливаемся.
+            const roleAlive = cards.filter((c) => c.role === to && !children.has(c.session))
+            const holders = live.filter((c) => c.role === to)
+            if (roleAlive.length) {
               const pick = pickHolder(holders, input.tier, cfg, now)
               const letter: Letter = { id: `${now}-${safeKey(context.sessionID)}-${safeKey(to)}`, from_role: fromRole, from_session: context.sessionID, to: pick?.session ?? to, text, time: now, tier: input.tier }
               if (pick) {

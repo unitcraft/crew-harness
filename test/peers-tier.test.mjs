@@ -19,7 +19,11 @@ const delivered = []
 const ctx = {
   location: { directory: tmp },
   session: {
-    get: async ({ sessionID }) => ({ id: sessionID, title: sessionID, location: { directory: tmp } }),
+    get: async ({ sessionID }) => {
+      if (sessionID.startsWith("sesGONE")) throw new Error("session not found") // closed: the session no longer exists
+      if (sessionID.startsWith("sesARCH")) return { id: sessionID, title: sessionID, location: { directory: tmp }, time: { archived: Date.now() - 1000 } }
+      return { id: sessionID, title: sessionID, location: { directory: tmp } }
+    },
     prompt: async ({ sessionID, text }) => delivered.push({ sessionID, text }),
     hook: async (name, cb) => (hooks[name] = cb),
   },
@@ -111,6 +115,45 @@ delivered.length = 0
 const plain = await call("peer_send", sender, { to: "w7", text: "plain" })
 await wait()
 cell("without tier a shared role with two holders is still refused with the list", /держат 2/.test(plain.content) && got("plain").length === 0, plain.content)
+
+// 6b. liveness by last activity is NOT a criterion: a window silent for 2 hours whose process is alive and whose
+// session exists gets the heavy task; an archived session, a closed one and a dead process do not
+import { writeFileSync } from "node:fs"
+const cardsDir = path.join(tmp, "opencode", "nova-peers", "cards")
+const oldCard = (sid, model, role, pid = process.pid) =>
+  writeFileSync(path.join(cardsDir, `${sid}.json`), JSON.stringify({ session: sid, role, auto: false, title: "", directory: tmp, repo: "t", model, modelAt: Date.now() - 7200_000, modelFrom: "request", pid, updated: Date.now() - 7200_000 }))
+const OPUS_ID = "anthropic-sdk/claude-opus-5-5#medium"
+oldCard("sesQUIET1", OPUS_ID, "w8")
+delivered.length = 0
+const quiet = await call("peer_send", sender, { to: "w8", text: "quiet-heavy", tier: "heavy" })
+await wait()
+cell("a window silent for 2 hours with a live process and session gets the heavy task", JSON.stringify(got("quiet-heavy")) === '["sesQUIET1"]', quiet.content + JSON.stringify(got("quiet-heavy")))
+
+oldCard("sesARCH01", OPUS_ID, "w9")
+delivered.length = 0
+const arch = await call("peer_send", sender, { to: "w9", text: "arch-heavy", tier: "heavy" })
+await wait()
+cell("an archived session is not a candidate", got("arch-heavy").length === 0, arch.content)
+
+oldCard("sesGONE01", OPUS_ID, "w10")
+delivered.length = 0
+const gone = await call("peer_send", sender, { to: "w10", text: "gone-heavy", tier: "heavy" })
+await wait()
+cell("a closed session is not a candidate", got("gone-heavy").length === 0, gone.content)
+
+oldCard("sesDEAD01", OPUS_ID, "w11", 999999)
+delivered.length = 0
+const dead = await call("peer_send", sender, { to: "w11", text: "dead-heavy", tier: "heavy" })
+await wait()
+cell("a window whose process is dead is not a candidate", got("dead-heavy").length === 0, dead.content)
+
+// all: reaches the quiet window, skips the archived, the closed and the dead
+delivered.length = 0
+await call("peer_send", sender, { to: "all", text: "to-everyone" })
+await wait()
+const everyone = got("to-everyone")
+cell("all reaches the quiet window", everyone.includes("sesQUIET1"), JSON.stringify(everyone))
+cell("all skips the archived, the closed and the dead", !everyone.includes("sesARCH01") && !everyone.includes("sesGONE01") && !everyone.includes("sesDEAD01"), JSON.stringify(everyone))
 
 // 7. a bad tier is refused; tier with all is refused
 const bad = await call("peer_send", sender, { to: "w7", text: "x", tier: "huge" })
