@@ -4,7 +4,7 @@ OpenCode V2 plugin: **letters between OpenCode tabs** (sessions) on one machine,
 repository, addressed by role. A *window* is the OpenCode program in a terminal; a *tab* is a
 session inside it (one on screen, the rest in the background). Letters are addressed to tabs.
 
-- tools `peer_list`, `peer_send`, `peer_wait`, `peer_role`, `peer_inbox`, `peer_spawn`,
+- tools `peer_list`, `peer_send`, `peer_wait`, `peer_watch`, `peer_role`, `peer_inbox`, `peer_spawn`,
   `peer_task`, `peer_config`, `peer_doctor`, `peer_help` (also `/peer_help`);
 - **projects**: every tab belongs to a project and its address is `project.role`
   (`nova.integrator`). A plain role means the sender's own project; `project.role` reaches another
@@ -70,6 +70,15 @@ next message. So:
 - a question (`expect_reply`) gives a `qid`; the asker waits with `peer_wait` in the same turn and
   gets the answer there, not as a second wake;
 - an ack-only letter ("ok", "спасибо") is not sent.
+
+## Waiting for something long: `peer_watch`
+
+`peer_watch {command, note?, minutes?}` -- the plugin runs a waiting command (Git Bash, the tab's directory) in the
+OpenCode server, detached, and when it exits wakes the tab with a letter: exit code, duration, output tail. The tab
+ends its turn meanwhile. It survives the end of the turn and a service restart; a command gone without an exit code
+is reported as cut off; the time limit (default 120 min, up to 720) stops it with code 124. In a claude-code tab this
+is the only way: Claude Code's own background tasks (`run_in_background`, Monitor) die with the turn
+([plan 003](doc/plans/003-watch.md)).
 
 ## Obligations instead of a push controller
 

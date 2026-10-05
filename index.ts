@@ -91,7 +91,9 @@ import {
   formatTaskLetter,
   postExpected,
   propagateToParent,
+  PLUGIN_SENDER,
 } from "./core.ts"
+import { pollWatches } from "./watch.ts"
 import { type Task, byPriority, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { reviewLetter } from "./review.ts"
 
@@ -657,6 +659,8 @@ export default {
         await finishTasks()
         await syncTitles()
         await processQueue()
+        // наблюдения peer_watch (watch.ts): запустить новые, по концу — письмо окну с побудкой
+        pollWatches((w, text) => postLetter(w.session, { id: `watch-${w.id}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: w.session, time: Date.now(), text }), log)
         // АДРЕСАТЫ — ИЗ ВИЗИТОК НА ДИСКЕ (после перезагрузки плагина память пуста). Визитки этого процесса и умершего;
         // двойной доставки нет: письмо забирает тот, чей rename в claimLetters прошёл первым.
         for (const card of allCards()) {

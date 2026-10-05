@@ -13,6 +13,7 @@ export { PROJECT_RE, type Project, type Projects, settingsProblems } from "./set
 import { PROJECT_RE, settingsProblems } from "./settings.ts"
 import { type Task, WORKING_STATUSES, byPriority, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { cleanupDone, cleanupSteps, holdsMergeLock, isMerged, mergeHolder, releaseMergeLock, reworkLetter, takeMergeLock } from "./review.ts"
+import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, requestWatch, watchesOf } from "./watch.ts"
 
 export const POLL_MS = Number(process.env.NOVA_PEERS_POLL_MS) || 1_000 // переопределение — для самотеста
 export const LIVE_MS = 15 * 60_000
@@ -635,6 +636,9 @@ export const HELP = `opencode-peers — письма между вкладкам
        reply_to: "<qid>"      — это ответ на вопрос <qid>.
        tier: heavy|medium|light — задача свободной открытой вкладке роли с моделью этой ступени или сильнее.
   peer_wait {qid, seconds?}   — ждать ответа на свой вопрос в этом же ходе (до 300 с): без второго пробуждения.
+  peer_watch {command, note?, minutes?} — долгое ожидание без удержания хода: команду (ждёт и выходит) запускает плагин
+                              в сервере OpenCode, по её концу вкладку будит письмо с кодом и хвостом вывода. Во вкладке
+                              claude-code фон (run_in_background, Monitor) гибнет с концом хода — ждать только так.
   peer_role {role, force?}    — сменить роль: peer_role {role: "integrator"}.
   peer_inbox {limit?}         — доставленные письма и число ждущих.
   peer_spawn {goal, criteria, ...} — только интегратор: задача #N в новой сессии (работает и без окна).
@@ -1520,6 +1524,32 @@ export function makeTools(host: PeersHost): PeerTool[] {
     },
   }
 
+  // НАБЛЮДЕНИЯ (watch.ts): ожидание, которое переживает конец хода — фон Claude Code гибнет с ходом окна claude-code.
+  const peerWatch: PeerTool = {
+    name: "peer_watch",
+    description: `Wait for something long WITHOUT holding the turn: the opencode-peers plugin runs \`command\` (Git Bash, in the tab's directory) in the OpenCode server, detached -- it survives the end of your turn and a service restart -- and when it exits wakes this tab with a letter: exit code, duration, output tail. Use it instead of Bash run_in_background / Monitor for anything that must outlive the turn (a gate's verdict, a long build): in a claude-code tab background tasks are killed when the turn ends and no notification ever comes. The command should itself wait and finish, e.g. \`until [ -f /tmp/gate.done ]; do sleep 30; done; cat /tmp/gate.done\`. minutes: time limit (default ${WATCH_DEFAULT_MIN}, up to ${WATCH_MAX_MIN}), then it is stopped (exit 124). note: a short label for the letter. No command: list this tab's running watches. After calling it, end your turn -- the letter wakes you.`,
+    input: {
+      type: "object",
+      properties: {
+        command: str("A bash command that waits and exits when the thing is done"),
+        note: str("Short label for the letter, e.g. 'gate verdict'"),
+        minutes: { type: "number", description: `Time limit, default ${WATCH_DEFAULT_MIN}, up to ${WATCH_MAX_MIN}` },
+      },
+      additionalProperties: false,
+    },
+    execute: async (input: any, sessionID: string) => {
+      const me = await host.touch(sessionID)
+      if (!me) return { content: "Наблюдение ставит только вкладка, не субагент." }
+      const command = String(input.command ?? "").trim()
+      if (!command) {
+        const ws = watchesOf(me.session)
+        return { content: ws.length ? `Наблюдения вкладки:\n${ws.map((w) => `— ${w.note ? `«${w.note}» ` : ""}с ${hhmm(w.started ?? w.created)}, предел ${w.minutes} мин: ${w.command.slice(0, 200)}`).join("\n")}` : "Наблюдений нет." }
+      }
+      const w = requestWatch({ session: me.session, command, cwd: me.directory || host.defaultDir, note: String(input.note ?? "").trim() || undefined, minutes: input.minutes })
+      return { content: `Наблюдение ${w.note ? `«${w.note}» ` : ""}поставлено (${hhmm(w.created)}, предел ${w.minutes} мин). Плагин запустит команду в сервере OpenCode и разбудит эту вкладку письмом с результатом. Заканчивай ход — ждать не нужно.` }
+    },
+  }
+
   const peerHelp: PeerTool = {
     name: "peer_help",
     description: "Help for opencode-peers: the tools with examples, addressing, roles, delivery and presence, questions and answers, tasks for the integrator.",
@@ -1527,7 +1557,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
     execute: async (_input: any, sessionID: string) => ({ content: helpFor(readJson<Card>(cardFile(String(sessionID ?? "")))?.directory || host.defaultDir) }),
   }
 
-  return [peerList, peerRole, peerSend, peerWait, peerSpawn, peerTask, peerConfig, peerInbox, peerDoctor, peerHelp]
+  return [peerList, peerRole, peerSend, peerWait, peerWatch, peerSpawn, peerTask, peerConfig, peerInbox, peerDoctor, peerHelp]
 }
 
 /** Письмо с задачей исполнителю. */
