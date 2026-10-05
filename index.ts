@@ -43,7 +43,8 @@ import {
   BASE,
   DEFAULT_ROLE,
   normalizeRole,
-  NUDGE_MAX,
+  lastTurn,
+  hhmm,
   MODEL_TTL_MS,
   log,
   repoLabel,
@@ -236,16 +237,47 @@ export default {
       mine.set(fresh.session, fresh)
     }
 
-    // НАПОМИНАНИЯ (core.ts, «ОБЯЗАТЕЛЬСТВА»). Ход вкладки закончился, а на вопрос (или задачу) она не ответила —
-    // будить её напоминанием; после NUDGE_MAX — написать спросившему, что вкладка стоит.
-    function nudge(card: Card) {
+    // ПОДТАЛКИВАНИЕ (план 002, Ф.2; core.ts, «ОБЯЗАТЕЛЬСТВА»). Ход вкладки кончился, а ответа по вопросу или задаче
+    // нет — напоминание сразу. Различаем рабочий ход и пустой (lastTurn: были ли вызовы инструментов): рабочий
+    // обнуляет счётчик пустых, пустой его растит. push_empty_turns пустых подряд или push_max напоминаний всего —
+    // вкладка застряла: напоминаний больше нет, спросившему вызов (письмо и уведомление в окне). Ход, в котором писал
+    // владелец, — без напоминания (владелец ведёт вкладку сам), счётчик с нуля. Снимает застревание peer_task push.
+    async function nudge(card: Card) {
       const list = obligationsOf(card.session)
       if (!list.length) return
+      const cfg = loadConfig(card.directory)
+      const turn = await lastTurn(card.session, card.busySince ?? 0)
       const t = now()
+      let changed = false
       for (const o of list) {
-        if (o.nudges >= NUDGE_MAX) continue
+        if (o.stuck) continue
+        changed = true
+        if (turn?.owner) {
+          o.empty = 0
+          continue
+        }
+        // базы нет — ход считается рабочим (лишнее напоминание дешевле ложного «застряла»)
+        o.empty = turn && !turn.tools ? (o.empty ?? 0) + 1 : 0
+        const task = card.task ? loadTask(card.task.project, card.task.n) : undefined
+        const what = task && task.qid === o.qid ? `задача #${task.n} «${task.title}»` : `вопрос ${o.qid}${o.task ? ` («${o.task.slice(0, 200)}»)` : ""}`
+        if (o.empty >= cfg.pushEmptyTurns || o.nudges >= cfg.pushMax) {
+          o.stuck = true
+          const why = o.empty >= cfg.pushEmptyTurns ? `${o.empty} хода подряд остановилась без работы и без ответа` : `${o.nudges} напоминаний остались без ответа`
+          postLetter(o.from_session, {
+            id: `${t}-stuck-${safeKey(o.qid)}`,
+            from_role: "opencode-peers",
+            from_session: "opencode-peers",
+            to: o.from_session,
+            time: t,
+            text: `Вкладка ${keyOf(card)} (сессия ${card.session}) застряла: ${what} — ${why}. Напоминаний больше не будет. Подтолкни (peer_task {action: "push"${task ? `, n: ${task.n}` : ""}, text: "..."}), передай другой сессии (reassign) или загляни в неё сам.`,
+          })
+          const w = tabOf(o.from_session)
+          if (w?.window.pid) postNotice(w.window.pid, { sessionID: card.session, title: task ? `Задача #${task.n} застряла` : "Вкладка застряла", message: `${keyOf(card)}: ${why}` })
+          if (task && task.qid === o.qid) taskEvent(task, "opencode-peers", undefined, `застряла: ${why}`)
+          log(`stuck ${card.session} for ${o.qid} (empty ${o.empty}, pushes ${o.nudges})`)
+          continue
+        }
         o.nudges++
-        const left = NUDGE_MAX - o.nudges
         postLetter(card.session, {
           id: `${t}-nudge-${safeKey(o.qid)}`,
           from_role: "opencode-peers",
@@ -253,23 +285,47 @@ export default {
           to: card.session,
           time: t,
           text:
-            `Задача не завершена: вопрос ${o.qid} от ${o.from_role} (сессия ${o.from_session})${o.task ? `: «${o.task.slice(0, 200)}»` : ""}. ` +
-            `Ты остановился, не ответив. Продолжай работу. Закончил — отчёт: peer_send {to: "${o.from_session}", reply_to: "${o.qid}", text: "..."}. ` +
-            `Упёрся — тем же ответом напиши, что мешает. Напоминание ${o.nudges} из ${NUDGE_MAX}${left ? "" : " (последнее: дальше спросивший узнает, что вкладка стоит)"}.`,
+            `Не завершено: ${what} от ${o.from_role} (сессия ${o.from_session}). Ты остановился, не ответив. Продолжай работу. ` +
+            `Закончил — отчёт: peer_send {to: "${o.from_session}", reply_to: "${o.qid}", text: "..."}. Упёрся — тем же ответом напиши, что мешает.` +
+            (o.empty ? ` Ход без работы ${o.empty} из ${cfg.pushEmptyTurns}: дальше спросивший узнает, что вкладка стоит.` : ""),
         })
-        if (!left)
-          postLetter(o.from_session, {
-            id: `${t}-stuck-${safeKey(o.qid)}`,
-            from_role: "opencode-peers",
-            from_session: "opencode-peers",
-            to: o.from_session,
-            time: t,
-            text: `Вкладка ${keyOf(card)} (сессия ${card.session}) ${NUDGE_MAX} раза останавливалась, не ответив на ${o.qid}. Загляни в неё или переназначь задачу.`,
-          })
-        log(`nudge ${card.session} for ${o.qid} (${o.nudges}/${NUDGE_MAX})`)
+        log(`nudge ${card.session} for ${o.qid} (#${o.nudges}, empty ${o.empty})`)
       }
+      if (!changed) return
       saveObligations(card.session, list)
       void deliver(readJson<Card>(cardFile(card.session)) ?? card)
+    }
+
+    // ПРЕРВАННЫЙ ХОД (замер Ф.0, п. 3): сервер оборвали посреди хода — строки `idle` нет, у сессии осталась метка
+    // time_suspended, и сама OpenCode ход не продолжает. После старта плагин будит такие сессии, если у них есть
+    // невыполненный вопрос или задача, одним письмом (id письма — из сессии и метки: второго не будет).
+    const setupAt = now()
+    let interruptedChecked = 0
+    async function resumeInterrupted() {
+      if (now() - interruptedChecked < 30_000) return
+      interruptedChecked = now()
+      for (const c of allCards()) {
+        if (children.has(c.session) || !obligationsOf(c.session).some((o) => !o.stuck)) continue
+        const row = await sessionFromDb(c.session)
+        if (!row?.suspended || row.suspended >= setupAt || (row.idle ?? 0) >= row.suspended) continue
+        if (!(await sessionInfo(c.session))) continue // сессия другого сервера
+        const id = `resume-${safeKey(c.session)}-${row.suspended}`
+        if (letterExists(c.session, id)) continue
+        const task = c.task ? loadTask(c.task.project, c.task.n) : undefined
+        const open = obligationsOf(c.session)
+          .filter((o) => !o.stuck)
+          .map((o) => `— ${task && task.qid === o.qid ? `задача #${task.n} «${task.title}»` : `вопрос${o.task ? ` «${o.task.slice(0, 200)}»` : ""}`} от ${o.from_role}: отчёт — peer_send {to: "${o.from_session}", reply_to: "${o.qid}", text: "..."}`)
+          .join("\n")
+        postLetter(c.session, {
+          id,
+          from_role: "opencode-peers",
+          from_session: "opencode-peers",
+          to: c.session,
+          time: now(),
+          text: `Работа прервана перезапуском OpenCode (ход оборвался в ${hhmm(row.suspended)}). Продолжай с того места, где остановился: сначала проверь, что успело сделаться (файлы, коммиты, запущенные команды). Открыто:\n${open}`,
+        })
+        log(`resume interrupted ${c.session} (suspended ${row.suspended})`)
+      }
     }
 
     // КОНЕЦ ЗАДАЧИ. Сессия задачи ответила на qid задачи (core.ts: задача «сдана», визитка spawned «done»), её ход
@@ -409,7 +465,7 @@ export default {
       const c = readJson<Card>(cardFile(sessionID))
       if (!c?.busy) return
       setBusy(c, false)
-      nudge(c) // ход закончился: если есть невыполненное обязательство — напоминание
+      void nudge(c) // ход закончился: если есть невыполненное обязательство — напоминание
     }
 
     // Событие простоя сессии (если контекст плагина его даёт); запас — строка `idle` в базе (таймер).
@@ -439,6 +495,7 @@ export default {
         for (const w of liveWindows())
           for (const t of w.tabs ?? []) if (!existsSync(cardFile(t.sessionID)) && waitingIn([t.sessionID]) && (await sessionInfo(t.sessionID))) await touch(t.sessionID)
         await resumeTasks()
+        await resumeInterrupted()
         await finishTasks()
         await syncTitles()
         await processQueue()

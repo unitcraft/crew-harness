@@ -2,8 +2,8 @@
 // - an ack-only letter ("спасибо") is not sent: it would wake the recipient for nothing;
 // - a question (expect_reply) gives a qid; the asker waits with peer_wait in the same turn and gets the answer there,
 //   the answer is NOT delivered as a separate wake;
-// - a question is an obligation: the recipient stopped without answering -> a reminder letter, after NUDGE_MAX the
-//   asker is told the tab is stuck;
+// - a question is an obligation: the recipient stopped without answering -> a reminder letter after every such turn
+//   until it answers (empty turns and "stuck" — peers-push);
 // - the exclusive role is held by a lock: refused while the holder's tab is open, free at once when it closes;
 // - peer_spawn: integrator only, model by tier, limit per role; the task session gets the task without a window,
 //   its report (reply_to the task qid) closes it: a final line in its history (resume: false), a notice to the
@@ -97,16 +97,18 @@ cell("the answer settles the obligation", !core.obligationsOf("sesANSWR1").some(
 const asked2 = await call("peer_send", "sesASKER1", { to: "sesANSWR1", text: "проверь сборку", expect_reply: true })
 const qid2 = asked2.match(/qid: "([^"]+)"/)?.[1]
 await wait()
-for (let i = 1; i <= core.NUDGE_MAX; i++) {
+// no database here: every turn counts as a working one (empty turns and "stuck" are tested in peers-push)
+for (let i = 1; i <= 4; i++) {
   await turnEnds("sesANSWR1")
   await wait()
 }
-const nudges = delivered.filter((d) => d.sessionID === "sesANSWR1" && d.text.includes("Задача не завершена") && d.text.includes(qid2))
-cell(`the silent recipient got ${core.NUDGE_MAX} reminders`, nudges.length === core.NUDGE_MAX, nudges.length)
+const nudges = delivered.filter((d) => d.sessionID === "sesANSWR1" && d.text.includes("Не завершено") && d.text.includes(qid2))
+cell("a reminder after every turn that ended without the answer", nudges.length === 4, nudges.length)
+cell("working turns do not make the tab stuck", got("sesASKER1", "застряла").length === 0, JSON.stringify(delivered.filter((d) => d.sessionID === "sesASKER1")))
+await call("peer_send", "sesANSWR1", { to: "sesASKER1", text: "сборка зелёная", reply_to: qid2 })
 await turnEnds("sesANSWR1")
 await wait()
-cell("no reminder beyond the limit", delivered.filter((d) => d.sessionID === "sesANSWR1" && d.text.includes("Задача не завершена") && d.text.includes(qid2)).length === core.NUDGE_MAX, "more")
-cell("the asker is told the tab is stuck", got("sesASKER1", "останавливалась").length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "sesASKER1")))
+cell("after the answer no more reminders", delivered.filter((d) => d.sessionID === "sesANSWR1" && d.text.includes("Не завершено") && d.text.includes(qid2)).length === 4, "more")
 
 // 4. the exclusive role lock
 const take = await call("peer_role", "sesASKER1", { role: "integrator" })

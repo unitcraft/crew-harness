@@ -70,9 +70,19 @@ next message. So:
 
 ## Obligations instead of a push controller
 
-A question or a task is the recipient's obligation until it answers (`reply_to: qid`). A tab
-whose turn ended without the answer is woken with a reminder (up to 3); then the asker is told the
-tab is stuck. Windows on Claude often stop mid-task after writing a status; this keeps them going.
+A question or a task is the recipient's obligation until it answers (`reply_to: qid`). Windows on
+Claude often stop mid-task after writing a status; the plugin keeps them going — by the end of a
+turn, not by a timer. The turn's facts come from OpenCode's database (messages between the turn's
+start and its `idle` row): a turn with a tool call is a working one, a turn without one is empty.
+
+- a turn ended without the answer → a reminder right away; a working turn resets the empty counter;
+- `push_empty_turns` (3) empty turns in a row or `push_max` (20) reminders → the tab is stuck: no
+  more reminders, the asker gets a call (a letter and a notice in its window), the task's history
+  records it; `peer_task {action: "push"}` wakes it again and clears "stuck";
+- a turn with the owner's own message gets no reminder (the owner leads the tab) and resets the count;
+- a turn cut off by an OpenCode restart (the session keeps `time_suspended`, no `idle` row, OpenCode
+  does not resume it) is picked up by one letter that lists what is open and how to report;
+- service letters of the plugin say "do not answer"; a letter to `opencode-peers` itself is refused.
 
 ## Tasks
 
