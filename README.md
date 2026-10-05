@@ -102,7 +102,9 @@ letter says how long it waited. Ordinary watches and other projects do not wait 
 
 ## Who waits for what: `/peers` and "waiting for you"
 
-The window closes the tab of a task or review session two minutes after its task was accepted or cancelled, unless
+The window's right panel shows a "Peers" block under "Context": the sessions of the project of the tab on screen —
+the ones waiting for you first, who is working and how long, who waits for what — refreshed every 2 s
+([plan 010](doc/plans/010-sidebar.md)). The window closes the tab of a task or review session two minutes after its task was accepted or cancelled, unless
 the tab is on screen (the owner's own tabs are left alone; the session stays in the history). `/peers-config` shows the project's settings in effect, each with where it comes from (default, the committed file,
 `local`), like `peer_config show`. `/peers` in any window (also in the Ctrl+P palette) shows, without a model turn, every session of the projects:
 working, **waiting for you** (its last answer ends with a question and you have not written since), waiting for a

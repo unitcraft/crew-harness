@@ -18,7 +18,7 @@
 // ещё и attention.notify: системное уведомление, когда окно не в фокусе (настройка OpenCode attention.notifications).
 import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { NOTICES, WINDOWS, cardFile, configShowText, loadProjects, readJson } from "./core.ts"
+import { NOTICES, WINDOWS, cardFile, configShowText, loadProjects, log, readJson } from "./core.ts"
 import { formatStatuses, readStatuses } from "./status.ts"
 import { loadTask } from "./tasks.ts"
 
@@ -127,6 +127,10 @@ export default {
         api.keymap?.layer?.(() => ({ mode: "global", commands }))
       } catch {}
     }
+
+    // блок «Peers» в боковой панели (план 010): отдельным модулем и с защитой — JSX компилирует OpenCode; не вышло (другая
+    // версия, тест под Node) — блока нет, присутствие, уведомления и команды работают
+    if (api.ui?.slot && !process.env.NOVA_PEERS_NO_SIDEBAR) import("./sidebar.tsx").then((m) => (m.mountSidebar(api), log(`sidebar mounted pid=${process.pid}`))).catch((e) => log(`sidebar not drawn pid=${process.pid}: ${String(e).slice(0, 300)}`))
 
     beat()
     const timer = setInterval(beat, BEAT_MS)

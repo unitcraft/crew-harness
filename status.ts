@@ -184,3 +184,45 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
   out.push(`(${hm(now)}; обновляется раз в несколько секунд)`)
   return out.join("\n")
 }
+
+// БОКОВАЯ ПАНЕЛЬ ОКНА (план 010, 2026-10-06; владелец: «в этой области можно выводить активные сессии и обновлять в
+// реальном времени?»). Строки блока «Peers» под «Context»: кто чего ждёт в проекте вкладки на экране, ждущие владельца
+// первыми. Чистая функция — рисует sidebar.tsx, проверяет тест.
+export type SideRow = { mark: string; who: string; what: string; tone: "accent" | "base" | "muted" }
+const WORD_OF_TASK: Record<string, string> = { submitted: "✓ сдана", reviewing: "✓◐ приёмка", rework: "↻ доработка", accepted: "✓✓◐ влита", running: "в работе", starting: "запуск" }
+const SIDE_MAX = 9
+export function sidebarLines(list: Status[], now = Date.now(), project?: string): { title: string; rows: SideRow[]; foot: string } {
+  const mine = project ? list.filter((s) => (s.project ?? "?") === project) : list
+  const who = (s: Status) => (s.task ? `#${s.task.n} ${s.task.as === "reviewer" ? "приёмщик" : "исполнитель"}` : s.role === "integrator" ? "интегратор" : s.role)
+  const what = (s: Status): string => {
+    switch (s.state) {
+      case "owner":
+        return `ждёт вас ${hm(s.since)}`
+      case "question":
+        return "вопрос — ждёт ответа"
+      case "working":
+        return s.since ? `работает ${minutes(s.since, now)}` : "работает"
+      case "watch":
+        return `ждёт: ${(s.watches[0]?.note ?? "наблюдение").slice(0, 22)}`
+      case "reply":
+        return `ждёт ответа от ${s.asked[0]?.to ?? "?"}`
+      case "task":
+        return s.task ? (WORD_OF_TASK[s.task.status] ?? s.task.status) : "задача"
+      case "tasks":
+        return `ждёт задач (${s.tasks.length})`
+      default:
+        return "свободна"
+    }
+  }
+  const sorted = mine.slice().sort((a, b) => ORDER[a.state] - ORDER[b.state] || who(a).localeCompare(who(b)))
+  const rows = sorted.slice(0, SIDE_MAX).map((s) => ({
+    mark: s.state === "owner" ? "▶" : s.state === "question" ? "?" : s.state === "working" ? "•" : " ",
+    who: who(s),
+    what: what(s),
+    tone: (s.state === "owner" || s.state === "question" ? "accent" : s.state === "idle" ? "muted" : "base") as SideRow["tone"],
+  }))
+  const waiting = mine.filter((s) => s.state === "owner").length
+  const working = mine.filter((s) => s.state === "working").length
+  const more = sorted.length > SIDE_MAX ? `и ещё ${sorted.length - SIDE_MAX} · /peers` : "/peers — подробно"
+  return { title: `Peers${project ? ` · ${project}` : ""}${waiting ? ` — ждут вас: ${waiting}` : ""}`, rows, foot: `работают ${working} · ${more}` }
+}
