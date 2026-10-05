@@ -72,7 +72,7 @@ export default {
           const p = path.join(notices, f)
           const n = JSON.parse(readFileSync(p, "utf8"))
           rmSync(p, { force: true })
-          api.ui?.toast?.show?.({ title: n.title, message: n.message, variant: n.attention ? "warning" : "info", ...(n.sessionID ? { sessionID: n.sessionID } : {}) })
+          api.ui?.toast?.show?.({ title: n.title, message: n.message, variant: n.attention ? "warning" : "info", ...(n.duration ? { duration: n.duration } : {}), ...(n.sessionID ? { sessionID: n.sessionID } : {}) })
           if (n.attention) {
             try {
               api.attention?.notify?.({ title: n.title, message: n.message, notification: { when: "blurred" } })

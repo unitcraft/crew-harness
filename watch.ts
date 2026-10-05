@@ -193,6 +193,19 @@ export function pollWatches(post: (w: Watch, text: string) => void, log: (s: str
   return changed
 }
 
+/** Все незавершённые наблюдения, по сессиям — одним чтением папки (сводка состояния, план 009). */
+export function openWatchesBySession(): Map<string, Watch[]> {
+  const out = new Map<string, Watch[]>()
+  if (!existsSync(WATCHES)) return out
+  for (const f of readdirSync(WATCHES)) {
+    if (!f.endsWith(".json")) continue
+    const w = readJson<Watch>(path.join(WATCHES, f))
+    if (w && w.status !== "done") out.set(w.session, [...(out.get(w.session) ?? []), w])
+  }
+  for (const l of out.values()) l.sort((a, b) => a.created - b.created)
+  return out
+}
+
 /** Открытые наблюдения окна: запущенные и ждущие запуска (status requested — в очереди машины или ещё не взятые). */
 export function watchesOf(session: string): Watch[] {
   if (!existsSync(WATCHES)) return []

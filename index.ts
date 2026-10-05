@@ -83,6 +83,8 @@ import {
   isBusy,
   mayWakeCard,
   postNotice,
+  short,
+  sessionLabel,
   addObligation,
   obligationsOf,
   saveObligations,
@@ -97,7 +99,7 @@ import {
   propagateToParent,
   PLUGIN_SENDER,
 } from "./core.ts"
-import { pollWatches, watchesOf } from "./watch.ts"
+import { openWatchesBySession, pollWatches } from "./watch.ts"
 import { endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
 import { type Task, byPriority, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { ensureWorktree, gitTraces, leftoversOf, mergeHolder, reviewLetter } from "./review.ts"
@@ -189,7 +191,7 @@ export default {
       // будящее письмо в фоновую вкладку — уведомление её окну (кнопка Open)
       const loud = letters.find((l) => l.wake !== false)
       const t = tabOf(card.session, windows)
-      if (loud && t && !t.tab.active && t.window.pid) postNotice(t.window.pid, { sessionID: card.session, title: "Письмо", message: `${loud.from_role}: ${loud.text.split(/\r?\n/)[0].slice(0, 120)}` })
+      if (loud && t && !t.tab.active && t.window.pid) postNotice(t.window.pid, { sessionID: card.session, title: `✉ ${short(sessionLabel(loud.from_session, loud.from_role), 40)}`, message: short(loud.text.split(/\r?\n/)[0], 80), duration: 10_000 })
     }
     async function deliver(card: Card) {
       if (delivering.has(card.session)) return
@@ -328,7 +330,7 @@ export default {
             text: `Вкладка ${keyOf(card)} (сессия ${card.session}) застряла: ${what} — ${why}. Напоминаний больше не будет. Подтолкни (peer_task {action: "push"${task ? `, n: ${task.n}` : ""}, text: "..."}), передай другой сессии (reassign) или загляни в неё сам.`,
           })
           const w = tabOf(o.from_session)
-          if (w?.window.pid) postNotice(w.window.pid, { sessionID: card.session, title: task ? `Задача #${task.n} застряла` : "Вкладка застряла", message: `${keyOf(card)}: ${why}` })
+          if (w?.window.pid) postNotice(w.window.pid, { sessionID: card.session, title: task ? `#${task.n} застряла` : `${keyOf(card)} застряла`, message: short(why, 80), duration: 15_000 })
           if (task && task.qid === o.qid) taskEvent(task, "opencode-peers", undefined, `застряла: ${why}`)
           log(`stuck ${card.session} for ${o.qid} (empty ${o.empty}, pushes ${o.nudges})`)
           continue
@@ -445,7 +447,7 @@ export default {
           }
           if (sid === t.executor) {
             const w = tabOf(t.author)
-            if (w?.window.pid) postNotice(w.window.pid, { sessionID: sid, title: done ? `Задача #${t.n} принята ✓✓` : `Задача #${t.n} отменена`, message: t.title })
+            if (w?.window.pid) postNotice(w.window.pid, { sessionID: sid, title: done ? `#${t.n} ✓✓ готово` : `#${t.n} ✗ отменена`, message: short(t.title, 80), duration: 10_000 })
           }
           log(`task #${t.n} (${t.project}) ${t.status}: session ${sid} closed`)
         }
@@ -608,10 +610,12 @@ export default {
       // вопросы с ответом (expect_reply) — обязательства получателя перед спросившим; задачи и приёмки — не вопросы
       const asked = new Map<string, { qid: string; to: string; at: number }[]>()
       for (const c of cards) for (const o of obligationsOf(c.session)) if (!o.task && !o.stuck) asked.set(o.from_session, [...(asked.get(o.from_session) ?? []), { qid: o.qid, to: keyOf(c), at: o.at }])
+      const watchesBy = openWatchesBySession() // одно чтение папки наблюдений на проход (их сотни: завершённые хранятся сутки)
       for (const c of cards) {
         if (c.pid !== process.pid && pidAlive(c.pid)) continue // вкладка другого живого сервера
         const tab = tabOf(c.session, windows)
-        const live = !!tab || (!!c.spawned && c.spawned.status !== "closed") || watchesOf(c.session).length > 0 || listTasks(c.project).some((x) => x.author === c.session && isOpen(x))
+        const ws = watchesBy.get(c.session) ?? []
+        const live = !!tab || (!!c.spawned && c.spawned.status !== "closed") || ws.length > 0 || listTasks(c.project).some((x) => x.author === c.session && isOpen(x))
         if (!live) {
           removeStatus(c.session)
           continue
@@ -634,13 +638,13 @@ export default {
             ends.set(c.session, { at, end })
           }
         }
-        const s = statusOf({ card: c, busy, busySince: c.busySince, end, asked: asked.get(c.session) ?? [], now: t })
+        const s = statusOf({ card: c, busy, busySince: c.busySince, end, asked: asked.get(c.session) ?? [], now: t, watches: ws })
         const prev = saveStatus(s)
         if (s.state !== "owner") continue
         const fresh = !(prev?.state === "owner" && prev.since === s.since)
         const every = loadConfig(c.directory).ownerReminderMin * 60_000
         if (!fresh && !(every > 0 && t - (prev?.notified ?? 0) >= every)) continue
-        for (const w of windows) postNotice(w.pid, { sessionID: c.session, title: `${keyOf(c)} ждёт вашего ответа`, message: s.question ?? "", attention: true })
+        for (const w of windows) postNotice(w.pid, { sessionID: c.session, title: `${short(sessionLabel(c.session, keyOf(c)), 40)} ждёт вас`, message: short(s.question ?? "", 100), attention: true, duration: 30_000 })
         markNotified(c.session, t)
         log(`owner wanted by ${c.session}${fresh ? "" : " (reminder)"}`)
       }
@@ -718,7 +722,9 @@ export default {
         const MARK: Record<string, string> = { submitted: "✓", reviewing: "✓◐", rework: "↻", accepted: "✓✓◐", cleaned: "✓✓", closed: "✓", cancelled: "✗" }
         const replaced = asReviewer ? t.reviewer !== c.session : t.executor !== c.session
         const mark = replaced ? "↷" : asReviewer ? (t.status === "cleaned" ? "✓✓" : t.status === "cancelled" ? "✗" : "") : (MARK[t.status] ?? "")
-        const title = `#${t.n}${mark ? ` ${mark}` : ""} ${asReviewer ? "приёмка " : ""}${t.title}`
+        // значок и слово (план 009; владелец: «что значат две галочки и луна?» — значки оставить, слово рядом)
+        const WORD: Record<string, string> = { "✓": "сдана", "✓◐": "приёмка", "↻": "доработка", "✓✓◐": "влита", "✓✓": "готово", "✗": "отменена", "↷": "передана" }
+        const title = `#${t.n}${mark ? ` ${mark} ${WORD[mark]}` : ""} ${asReviewer ? "приёмка " : ""}${t.title}`
         if (c.titleShown === title) continue
         try {
           await ctx.session.update({ sessionID: c.session, title })
@@ -775,7 +781,7 @@ export default {
         taskEvent(t, "opencode-peers", "running", `сессия ${sid}`)
         void deliver(card)
         const w = tabOf(t.author)
-        if (w?.window.pid) postNotice(w.window.pid, { sessionID: sid, title: `Запущена задача #${t.n}`, message: t.title })
+        if (w?.window.pid) postNotice(w.window.pid, { sessionID: sid, title: `#${t.n} запущена`, message: short(t.title, 80), duration: 8_000 })
         log(`task #${t.n} (${t.project}) started: ${sid} model=${t.model}`)
         return { session: sid }
       } catch (e) {
@@ -1031,7 +1037,7 @@ export default {
       const problems = [...(await doctor()), ...commonDoctor()]
       if (!problems.length) return log("doctor: ok")
       log(`doctor: ${problems.join(" | ")}`)
-      for (const w of liveWindows()) postNotice(w.pid, { title: "opencode-peers: проблемы", message: problems.join("; ").slice(0, 300) })
+      for (const w of liveWindows()) postNotice(w.pid, { title: "peers: проблемы — peer_doctor", message: short(problems.join("; "), 100), duration: 15_000 })
     }, 10_000)
 
     log(`setup pid=${process.pid} base=${BASE}`)

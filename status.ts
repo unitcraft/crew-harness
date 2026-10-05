@@ -62,12 +62,14 @@ export type StatusInput = {
   /** Вопросы этой сессии, на которые ещё нет ответа (обязательства других перед ней). */
   asked: { qid: string; to: string; at: number }[]
   now: number
+  /** наблюдения сессии, прочитанные проходом один раз на всех (иначе — читаются здесь) */
+  watches?: Watch[]
 }
 
 /** Состояние одной сессии из её данных. Порядок важности: ход > вопрос владельцу > наблюдение > ответ > задачи. */
 export function statusOf(x: StatusInput): Status {
   const { card, now } = x
-  const watches: Watch[] = watchesOf(card.session)
+  const watches: Watch[] = x.watches ?? watchesOf(card.session)
   const ref = card.task ?? card.review
   const own: Task | undefined = ref ? loadTask(ref.project, ref.n) : undefined
   const authored = listTasks(card.project).filter((t) => t.author === card.session && isOpen(t))

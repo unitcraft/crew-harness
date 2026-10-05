@@ -98,7 +98,7 @@ cell("#3: the executor gets the rework letter with the remarks", got("sesEXEC3",
 cell("#3: the executor's obligation is there", core.obligationsOf("sesEXEC3").some((o) => o.qid === "q3"), JSON.stringify(core.obligationsOf("sesEXEC3")))
 cell("#3: the reviewer does not get the review letter again", got("sesREV3", "старое письмо").length + got("sesREV3", "ПРИЁМКА").length <= 1, JSON.stringify(got("sesREV3", "")))
 cell("#4: the integrator gets the summary quietly", got("sesINTEG1", "принята и влита").filter((d) => d.synthetic).length === 1, JSON.stringify(got("sesINTEG1", "принята")))
-cell("#4: the executor of the dead process gets its title ✓✓", titles.get("sesEXEC4") === "#4 ✓✓ t4", titles.get("sesEXEC4"))
+cell("#4: the executor of the dead process gets its title ✓✓", titles.get("sesEXEC4") === "#4 ✓✓ готово t4", titles.get("sesEXEC4"))
 cell("#4: the executor session is closed", core.allCards().find((c) => c.session === "sesEXEC4")?.spawned?.status === "closed", "open")
 cell("#5: the review session is created once with its letter", sessions.has("ses_restart5review") && got("ses_restart5review", "ПРИЁМКА задачи #5").length === 1, JSON.stringify([...sessions.keys()]))
 

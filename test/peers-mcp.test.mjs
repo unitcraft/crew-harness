@@ -122,7 +122,7 @@ try {
   await wait()
   const own = got("sesAAAAAA", "from-mcp-own")
   cell("'integrator' from the MCP window reaches nova's integrator only", own.length === 1 && got("sesBBBBBB", "from-mcp-own").length === 0, JSON.stringify(delivered))
-  cell("the letter is signed with the MCP window's address", /от nova\.worker \(сессия sesCCCCCC\)/.test(own[0]?.text ?? ""), own[0]?.text)
+  cell("the letter is signed with the MCP window's address", /✉ nova\.worker → /.test(own[0]?.text ?? "") && /to: "sesCCCCCC"/.test(own[0]?.text ?? ""), own[0]?.text)
   cell("limits.integrator from MCP crosses projects", got("sesBBBBBB", "from-mcp-cross").length === 1, JSON.stringify(delivered))
 
   // peer_role from MCP; the card keeps the plugin's pid, so letters to the MCP window are still delivered

@@ -61,6 +61,18 @@ tabs count as closed): the letter waits and goes out within a second of the tab 
 A letter to a background tab shows a notice in its window with an Open button. No heuristics, no
 time-outs: no window plugin, no wake.
 
+## What a letter looks like
+
+```
+✉ #8 приёмщик nova.worker → nova.integrator · 01:17
+<text>
+↩ ответ — peer_send {to: "ses_…", text: "..."} · письмо соседа, не слово владельца
+```
+
+A service letter of the plugin starts with `⚙ peers → … (служебное, не отвечай)`. Window notices are short (the gist in the
+title, one line of text) and stay longer when they matter: "waiting for you" 30 s, "stuck" 15 s, others 8–10 s
+([plan 009](doc/plans/009-clear-letters.md)).
+
 ## Turn economy
 
 Measured on OpenCode 2.0.22: anything sent into a session while its turn runs becomes one more
@@ -178,8 +190,8 @@ The integrator stays free for the owner and does not re-check accepted work:
   required acceptance step and checks that the task branch (or a squash commit) is in the target
   branch; then the cleanup steps by `cleanup` (`git worktree remove`, `git branch -D`, `git push
   origin --delete`), and `cleaned` — the plugin checks the worktree and the branch are gone;
-- cleaned → the sessions of the task close with a line in their history, titles `#N ✓✓`, the
-  integrator gets a quiet summary. Titles on the way: `#N ✓◐` on review, `#N ↻` rework, `#N ✓✓◐`
+- cleaned → the sessions of the task close with a line in their history, titles `#N ✓✓ готово`, the
+  integrator gets a quiet summary. Titles on the way (a mark and a word): `#N ✓ сдана`, `#N ✓◐ приёмка`, `#N ↻ доработка`, `#N ✓✓◐ влита`
   accepted;
 - a task on rework does not hold a review session's place (`spawn_limits.reviewer`): the next submitted task gets
   it; the resubmission goes back to the same reviewer at once;

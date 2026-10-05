@@ -95,7 +95,7 @@ cell("a busy tab is working", st("sesWORK01").state === "working", st("sesWORK01
 cell("a tab with a watch waits for it", st("sesWATCH1").state === "watch" && /«CI»/.test(st("sesWATCH1").detail), st("sesWATCH1").detail)
 cell("a tab with nothing open is idle", st("sesIDLE01").state === "idle", st("sesIDLE01").state)
 const n1 = notices().filter((n) => n.sessionID === "sesINTEG1")
-cell("the owner gets a notice with attention", n1.length === 1 && n1[0].attention === true && /ждёт вашего ответа/.test(n1[0].title), JSON.stringify(notices()))
+cell("the owner gets a notice with attention", n1.length === 1 && n1[0].attention === true && /ждёт вас$/.test(n1[0].title) && n1[0].duration === 30_000, JSON.stringify(notices()))
 cell("no notice for the others", notices().every((n) => n.sessionID === "sesINTEG1"), JSON.stringify(notices()))
 
 // the repeat: wait for it (a loaded machine stretches the pass), then check it came no sooner than the limit
