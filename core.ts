@@ -148,6 +148,7 @@ export type PeersConfig = {
   pushMax: number
   ownerReminderMin: number
   machineSlots: number
+  stallMin: number
   inbound: "integrator" | "any" | "none"
   root?: string
 }
@@ -191,6 +192,7 @@ export function loadConfig(dir: string): PeersConfig {
     pushMax: num(j.push_max, 20),
     ownerReminderMin: num(j.owner_reminder_min, 15),
     machineSlots: num(j.machine_slots, 1),
+    stallMin: num(j.stall_minutes, 30),
     inbound: oneOf(j.inbound, ["integrator", "any", "none"] as const, "integrator"),
     root,
   }
@@ -416,6 +418,24 @@ export async function userAfter(sessionID: string, at: number): Promise<boolean>
         return false
       }
     })
+  } catch {
+    return false
+  } finally {
+    try {
+      db?.close()
+    } catch {}
+  }
+}
+
+/** Ход открыт и живой: после последнего idle есть сообщения, обновлённые не раньше чем за fresh мс. */
+export async function openTurn(sessionID: string, now = Date.now(), fresh = 300_000): Promise<boolean> {
+  if (!sessionID || !existsSync(dbFile())) return false
+  let db: any
+  try {
+    db = await openDb()
+    const r = db.prepare("select max(case when type = 'idle' then time_created end) as idle, max(case when type <> 'idle' then time_updated end) as upd from session_message where session_id = ?").get(sessionID)
+    const upd = Number(r?.upd ?? 0)
+    return upd > Number(r?.idle ?? 0) && now - upd < fresh
   } catch {
     return false
   } finally {

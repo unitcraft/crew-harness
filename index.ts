@@ -48,6 +48,7 @@ import {
   lastTurn,
   turnEnd,
   idleAt,
+  openTurn,
   userAfter,
   hhmm,
   MODEL_TTL_MS,
@@ -97,9 +98,9 @@ import {
   PLUGIN_SENDER,
 } from "./core.ts"
 import { pollWatches, watchesOf } from "./watch.ts"
-import { markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
+import { endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
 import { type Task, byPriority, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
-import { ensureWorktree, reviewLetter } from "./review.ts"
+import { ensureWorktree, mergeHolder, reviewLetter } from "./review.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
 
@@ -271,6 +272,27 @@ export default {
       const cfg = loadConfig(card.directory)
       const turn = await lastTurn(card.session, card.busySince ?? 0)
       const t = now()
+      // СТОРОЖ ПОТОКА (план 007): ход сессии задачи кончился вопросом — это не «остановилась», а «упёрлась». Вместо
+      // «продолжай» (приёмщики #1 и #3 nova 2026-10-05 получили по 5–6 таких и стояли часами: вливать им было нельзя)
+      // вопрос уходит тому, кто поставил задачу или спросил, письмом с побудкой. Тот решает сам или спрашивает владельца
+      // («ждёт вас» у владельца) — цепочка доходит до владельца, только когда без него нельзя.
+      if (card.spawned && !turn?.owner) {
+        const end = await turnEnd(card.session)
+        const q = end && !end.ownerAfter ? endsWithQuestion(end.text) : undefined
+        if (q && end) {
+          const askers = [...new Set(list.filter((o) => !o.stuck).map((o) => o.from_session))]
+          const tail = end.text.replace(/\r/g, "").trim().slice(-700)
+          for (const to of askers) {
+            const id = `ask-${safeKey(card.session)}-${end.at}`
+            if (letterExists(to, id)) continue
+            const ref = card.task ?? card.review
+            const what = ref ? `${card.review && !card.task ? "приёмка задачи" : "задача"} #${ref.n}` : "вопрос"
+            postLetter(to, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to, time: t, text: `${what}: вкладка ${keyOf(card)} (сессия ${card.session}) остановилась с вопросом, работа стоит до ответа:\n«${q}»\n\nКонец её ответа:\n${tail}\n\nОтветь ей сам: peer_send {to: "${card.session}", text: "..."}. Решить без владельца нельзя — спроси владельца (вопросом в конце своего хода).` })
+            log(`question of ${card.session} forwarded to ${to}`)
+          }
+          if (askers.length) return // не «продолжай»: ждёт ответа
+        }
+      }
       let changed = false
       for (const o of list) {
         if (o.stuck) continue
@@ -582,7 +604,9 @@ export default {
           removeStatus(c.session)
           continue
         }
-        const busy = !!tab?.tab.busy || !!c.busy
+        // «работает» — ещё и по базе: ход открыт и обновляется (ход, продолженный самим OpenCode после перезапуска,
+        // плагин не доставлял — признака busy у карточки нет; сводка писала «стоит», а сессия работала, 2026-10-05)
+        const busy = !!tab?.tab.busy || !!c.busy || (await openTurn(c.session, t))
         let end: Awaited<ReturnType<typeof turnEnd>> = undefined
         if (!busy) {
           const at = await idleAt(c.session)
@@ -607,6 +631,42 @@ export default {
         for (const w of windows) postNotice(w.pid, { sessionID: c.session, title: `${keyOf(c)} ждёт вашего ответа`, message: s.question ?? "", attention: true })
         markNotified(c.session, t)
         log(`owner wanted by ${c.session}${fresh ? "" : " (reminder)"}`)
+      }
+    }
+
+    // СТОРОЖ ПОТОКА (план 007): раз в минуту — затянувшееся. Замок вливания держат дольше stall_minutes; сданная задача
+    // ждёт приёмщика дольше stall_minutes (места заняты) — письмо с побудкой поставившему задачу (интегратору): что
+    // стоит, кто держит, что можно сделать. Одно письмо на случай (id из проекта, номера и времени начала).
+    let flowAt = 0
+    function flowWatch() {
+      if (now() - flowAt < (Number(process.env.NOVA_PEERS_FLOW_MS) || 60_000)) return
+      flowAt = now()
+      const t = now()
+      const byProject = new Map<string, Task[]>()
+      for (const x of listTasks()) byProject.set(x.project, [...(byProject.get(x.project) ?? []), x])
+      for (const [project, list] of byProject) {
+        const any = list.find((x) => x.directory)
+        if (!any) continue
+        const stall = loadConfig(any.directory).stallMin * 60_000
+        if (!(stall > 0)) continue
+        const lock = mergeHolder(project)
+        const lockTask = lock ? list.find((x) => x.n === lock.n) : undefined
+        if (lock && lockTask && t - lock.at > stall) {
+          const id = `stall-lock-${safeKey(project)}-${lock.n}-${lock.at}`
+          if (!letterExists(lockTask.author, id)) {
+            postLetter(lockTask.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: lockTask.author, time: t, text: `Замок вливания проекта ${project} держит приёмка #${lock.n} «${lockTask.title}» (сессия ${lock.session}) с ${hhmm(lock.at)} — ${Math.round((t - lock.at) / 60_000)} мин; остальные вливания ждут. Узнай у приёмщика, что мешает (peer_send {to: "${lock.session}", text: "..."}), и помоги или реши; без владельца не решить — спроси владельца.` })
+            log(`stall: merge lock of ${project} #${lock.n} held since ${lock.at}`)
+          }
+        }
+        for (const x of list.filter((y) => y.status === "submitted" && !y.reviewer)) {
+          const since = [...(x.history ?? [])].reverse().find((h) => h.status === "submitted")?.at ?? 0
+          if (!since || t - since <= stall) continue
+          const id = `stall-review-${safeKey(project)}-${x.n}-${since}`
+          if (letterExists(x.author, id)) continue
+          const busy = list.filter((y) => y.review_kind === "spawn" && y.reviewer && isOpen(y) && y.status !== "rework" && y.n !== x.n)
+          postLetter(x.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.author, time: t, text: `Задача #${x.n} «${x.title}» сдана в ${hhmm(since)} и ${Math.round((t - since) / 60_000)} мин ждёт приёмщика: места приёмщиков (spawn_limits.reviewer) заняты — ${busy.map((y) => `#${y.n} ${statusRu(y.status)}`).join(", ") || "?"}. Разберись, почему те приёмки стоят (письмо приёмщику), или подними предел приёмщиков (peer_config).` })
+          log(`stall: #${x.n} of ${project} waits for a reviewer since ${since}`)
+        }
       }
     }
 
@@ -784,6 +844,7 @@ export default {
         await finishTasks()
         await syncTitles()
         await syncStatus()
+        flowWatch()
         await processQueue()
         // наблюдения peer_watch (watch.ts): запустить новые, по концу — письмо окну с побудкой
         pollWatches((w, text) => postLetter(w.session, { id: `watch-${w.id}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: w.session, time: Date.now(), text }), log, now(), (w) => loadConfig(w.cwd).machineSlots)

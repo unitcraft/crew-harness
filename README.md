@@ -129,6 +129,9 @@ start and its `idle` row): a turn with a tool call is a working one, a turn with
 - a turn with the owner's own message gets no reminder (the owner leads the tab) and resets the count;
 - a turn cut off by an OpenCode restart (the session keeps `time_suspended`, no `idle` row, OpenCode
   does not resume it) is picked up by one letter that lists what is open and how to report;
+- a task session whose turn ends with a question is not told "continue": the question goes to whoever set the
+  task (a letter that wakes it), who answers or asks the owner; a merge lock held longer than `stall_minutes` (30)
+  and a submitted task waiting for a reviewer that long are raised to the task's author ([plan 007](doc/plans/007-flow-watch.md));
 - service letters of the plugin say "do not answer"; a letter to `opencode-peers` itself is refused.
 
 ## Tasks
@@ -142,7 +145,8 @@ journal is `tasks/<project>/<N>.json` in the mailbox.
   goal and acceptance criteria (the project may require more: `task_fields`); model by tier
   (`claude-code/opus` / `sonnet` / `haiku`, `spawn_models` overrides); a limit of running tasks per
   role (`spawn_limits`, 3); priority `P0` (emergency) … `P3`, default `P2`. With `worktrees` set the
-  task letter names the worktree folder and the branch.
+  plugin creates the task's worktree and branch (from the target branch) and starts the session in it, so the
+  project's hooks see the task's branch, not the main copy ([plan 006](doc/plans/006-task-worktree.md)).
 - The start is repeatable: the session id is chosen and written to the journal **before**
   `session.create` (OpenCode accepts an own id starting with `ses` and returns the existing session
   on a repeat), the task letter's id comes from the number — a start cut off at any step is
