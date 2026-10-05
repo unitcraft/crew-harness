@@ -12,7 +12,7 @@ import { mkdirSync, writeFileSync } from "node:fs"
 // Project config: integrator is exclusive here (the plugin itself names no role).
 const proj = path.join(tmp, "proj")
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
-writeFileSync(path.join(proj, ".opencode", "nova-peers.json"), JSON.stringify({ exclusive_roles: ["integrator"] }))
+writeFileSync(path.join(proj, ".opencode", "opencode-peers.json"), JSON.stringify({ exclusive_roles: ["integrator"] }))
 const mod = await import("../index.ts")
 
 const hooks = {}

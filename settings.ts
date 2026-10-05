@@ -9,15 +9,14 @@
 // поле "branch"): незакоммиченная правка не действует, worktree и ветки кода на настройки не влияют.
 //
 // Прежняя форма опций `{ "nova": "C:/work/nova" }` читается дальше: имя → корень, а настройки — по-старому
-// из `.opencode/opencode-peers.json` вверх от каталога вкладки (рабочая копия; старое имя nova-peers.json — тоже,
-// пока nv-lang не перешёл на репозиторий настроек: ветка drop-legacy-config требует, чтобы все рабочие копии с
-// окнами сначала получили новое имя). Новая форма читает только новое имя из репозитория настроек.
+// из `.opencode/opencode-peers.json` вверх от каталога вкладки (рабочая копия). Старое имя nova-peers.json больше не
+// читается (решение №16 плана 002 выполнено: nv-lang перешёл на репозиторий настроек 2026-10-05).
 //
 // Машинно-зависимое (модели по ступеням) — необязательная поправка в опциях плагина:
 //   "options": { "projects": [...], "local": { "nova": { "spawn_models": { "light": "kimi/k3" } } } }
 
 import { execFileSync } from "node:child_process"
-import { existsSync, readFileSync, realpathSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs"
 import path from "node:path"
 
 export const SETTINGS_FILE = path.join(".opencode", "opencode-peers.json")
@@ -172,8 +171,8 @@ export function rawSettingsFor(dir: string, projects: Projects, local: Record<st
 function legacyWalk(dir: string): any {
   let d = dir ? path.resolve(dir) : ""
   for (let i = 0; d && i < 32; i++) {
-    const f = [SETTINGS_FILE, path.join(".opencode", "nova-peers.json")].map((n) => path.join(d, n)).find((x) => existsSync(x))
-    if (f) {
+    const f = path.join(d, SETTINGS_FILE)
+    if (existsSync(f)) {
       try {
         return JSON.parse(readFileSync(f, "utf8").replace(/^\uFEFF/, ""))
       } catch {
@@ -185,6 +184,31 @@ function legacyWalk(dir: string): any {
     d = up
   }
   return {}
+}
+
+/** Файл настроек в рабочей копии папки настроек (то, что правит peer_config set; действует после коммита). */
+export function workingSettings(folder: string): { file: string; raw: any } {
+  const file = path.join(path.resolve(folder), SETTINGS_FILE)
+  let raw: any = {}
+  try {
+    raw = JSON.parse(readFileSync(file, "utf8").replace(/^\uFEFF/, ""))
+  } catch {}
+  return { file, raw: raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {} }
+}
+
+/** Записать ключи в рабочую копию (null — удалить ключ); остальное в файле не трогается. Без BOM, атомарно. */
+export function writeSettings(folder: string, values: Record<string, any>): string {
+  const { file, raw } = workingSettings(folder)
+  for (const [k, v] of Object.entries(values)) {
+    if (v === null) delete raw[k]
+    else raw[k] = v
+  }
+  mkdirSync(path.dirname(file), { recursive: true })
+  const tmp = `${file}.${process.pid}.tmp`
+  writeFileSync(tmp, JSON.stringify(raw, null, 2) + "\n")
+  renameSync(tmp, file)
+  cache.delete(path.resolve(folder))
+  return file
 }
 
 /** Проблемы настроек всех проектов (peer_doctor). Вложенные корни — не проблема: вложенный проект побеждает. */

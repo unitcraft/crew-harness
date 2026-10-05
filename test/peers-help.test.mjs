@@ -36,7 +36,7 @@ const cell = (name, ok, detail) => {
 let help = (await tools.peer_help.execute({}, { sessionID: "sesHELP01" })).content
 const drop = process.env.NOVA_PEERS_HELP_DROP
 if (drop) help = help.split(drop).join("")
-for (const t of ["peer_list", "peer_role", "peer_send", "peer_inbox", "peer_wait", "peer_spawn", "peer_task", "peer_doctor"]) {
+for (const t of ["peer_list", "peer_role", "peer_send", "peer_inbox", "peer_wait", "peer_spawn", "peer_task", "peer_config", "peer_doctor"]) {
   cell(`help names ${t}`, help.includes(t), "missing")
 }
 for (const w of ["force", "all", "worker", "assistant — то же, что worker", "opencode-peers.json", "wake: false", "expect_reply", "reply_to", "через 3 с", "Open", "напоминанием", "spawn_limits", "#N", "P0", "assign", "reassign", "task_fields", "ДАННЫЕ ОТ СОСЕДА", "КОНТРОЛЬНЫЙ ВОПРОС", "кто тут integrator проекта X", "я integrator проекта X"]) {

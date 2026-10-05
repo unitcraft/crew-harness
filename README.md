@@ -5,7 +5,7 @@ repository, addressed by role. A *window* is the OpenCode program in a terminal;
 session inside it (one on screen, the rest in the background). Letters are addressed to tabs.
 
 - tools `peer_list`, `peer_send`, `peer_wait`, `peer_role`, `peer_inbox`, `peer_spawn`,
-  `peer_task`, `peer_doctor`, `peer_help` (also `/peer_help`);
+  `peer_task`, `peer_config`, `peer_doctor`, `peer_help` (also `/peer_help`);
 - **projects**: every tab belongs to a project and its address is `project.role`
   (`nova.integrator`). A plain role means the sender's own project; `project.role` reaches another
   project; `all` is every open tab of the own project, `project.all` of another one; a session id
@@ -31,9 +31,12 @@ session inside it (one on screen, the rest in the background). Letters are addre
   ```
 
   `local` holds machine-specific values on top of the file. The old options form
-  `{ "nova": "C:/work/nova" }` still works (settings are then walked up from the tab, the old
-  file name `nova-peers.json` included); `peer_doctor` suggests the new form. All keys:
-  [plan 002](doc/plans/002-tasks.md), «Настройки проекта»;
+  `{ "nova": "C:/work/nova" }` still works (settings are then walked up from the tab);
+  `peer_doctor` suggests the new form. **`peer_config`**: `guide` — a questionnaire for the owner on
+  every key (current value, options, recommendation, why; asked in text); `show` — what applies and
+  where from (default, the committed file, `local`), plus uncommitted edits; `set {values}` — the
+  integrator writes the working copy (every value checked, a wrong one writes nothing); it applies
+  once committed. The keys: `config-schema.ts`;
 - **roles**: a new tab is `worker` (shared: tabs within it differ by session id; `assistant` is an
   alias). `integrator` is exclusive, one holder per project, plus the project's `exclusive_roles`
   (and an optional `help_extra` paragraph for `peer_help`). An exclusive role
@@ -202,6 +205,7 @@ npm test   # node >= 24
 
 History: moved with its commits from `a private plugins repository of the nova project` (`plugins/nova-peers`).
 Internal names (`nova.peers` id, `nova-peers` data directory) are kept so existing mailboxes keep
-working; the settings file is `.opencode/opencode-peers.json` (named after the package).
+working; the settings file is `.opencode/opencode-peers.json` (named after the package; the old name
+`nova-peers.json` is no longer read).
 
 License: MIT OR Apache-2.0 (see [LICENSE](LICENSE)).

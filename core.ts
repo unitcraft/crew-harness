@@ -7,7 +7,8 @@ import { execFileSync } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync, appendFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { type Projects, parseProjects as parseProjectsWith, projectFor, rawSettingsFor } from "./settings.ts"
+import { type Projects, parseProjects as parseProjectsWith, projectFor, rawSettingsFor, readSettingsFolder, workingSettings, writeSettings } from "./settings.ts"
+import { SCHEMA, guideText, invalid } from "./config-schema.ts"
 export { PROJECT_RE, type Project, type Projects, settingsProblems } from "./settings.ts"
 import { PROJECT_RE, settingsProblems } from "./settings.ts"
 import { type Task, WORKING_STATUSES, byPriority, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
@@ -638,6 +639,8 @@ export const HELP = `opencode-peers — письма между вкладкам
   peer_inbox {limit?}         — доставленные письма и число ждущих.
   peer_spawn {goal, criteria, ...} — только интегратор: задача #N в новой сессии (работает и без окна).
   peer_task {action, n?}      — задачи по номеру: list, show; интегратору ещё assign, push, reassign, cancel, priority.
+  peer_config {action}        — настройки проекта: guide (опросник для владельца), show (что действует и откуда),
+                                set {values} (интегратор; пишет рабочую копию файла настроек, действует с коммита).
   peer_doctor                 — самопроверка: что сломано и что делать.
 
 АДРЕС (to): роль своего проекта (worker, integrator); «проект.роль» — в другом проекте; id сессии (ses_...); all —
@@ -1416,6 +1419,58 @@ export function makeTools(host: PeersHost): PeerTool[] {
     },
   }
 
+  // НАСТРОЙКИ ПРОЕКТА (план 002, Ф.6): опросник, показ, запись. Файл — в репозитории настроек (settings.ts);
+  // set пишет рабочую копию, действует значение с коммита.
+  const peerConfig: PeerTool = {
+    name: "peer_config",
+    description:
+      "The project's settings (.opencode/opencode-peers.json in its settings repository). guide — questions for the owner on every key (current value, options, recommendation, why): ask them in text and record the answers; show — effective values and where each comes from (default, the committed file, the local option of opencode.jsonc), plus uncommitted edits; set {values} — integrator only: checks every value and writes the working copy (null removes a key); it applies once committed to the settings branch.",
+    input: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["guide", "show", "set"] },
+        values: { type: "object", description: "set: {key: value}; null removes a key" },
+      },
+      required: ["action"],
+      additionalProperties: false,
+    },
+    execute: async (input: any, sessionID: string) => {
+      const me = await host.touch(sessionID)
+      if (!me) return { content: "Настройки видит только вкладка." }
+      const p = projectFor(me.directory, projects)
+      const committed = p?.dir ? readSettingsFolder(p.dir).raw : rawSettingsFor(me.directory, projects, {})
+      const local = (p && currentLocal[p.name]) || {}
+      const effective = { ...committed, ...local }
+      const sourceOf = (k: string) => (k in local ? "local в opencode.jsonc" : k in committed ? (p?.dir ? `файл, ветка ${p.branch}` : "файл (прежняя форма)") : "по умолчанию")
+      const action = String(input.action ?? "")
+      if (action === "guide") return { content: guideText(effective, sourceOf) }
+      if (action === "show") {
+        const rows = SCHEMA.map((s) => `  ${s.key} = ${JSON.stringify(effective[s.key] ?? s.default)} — ${sourceOf(s.key)}`)
+        const head = p?.dir ? `Проект ${p.name}: настройки ${path.join(p.dir, ".opencode", "opencode-peers.json")}, читается ветка ${p.branch} (${p.repo}).` : `Проект ${projOf(me)}: прежняя форма опций — настройки из рабочей копии вверх от каталога вкладки.`
+        let pending = ""
+        if (p?.dir) {
+          const work = workingSettings(p.dir).raw
+          const changed = [...new Set([...Object.keys(work), ...Object.keys(committed)])].filter((k) => JSON.stringify(work[k]) !== JSON.stringify(committed[k]))
+          if (changed.length) pending = `\nНезакоммичено (действует после коммита): ${changed.join(", ")}.`
+        }
+        return { content: `${head}\n${rows.join("\n")}${pending}` }
+      }
+      if (action === "set") {
+        if (!isIntegrator(me)) return notIntegrator(me)
+        if (!p?.dir) return { content: `Проект ${projOf(me)} задан прежней формой опций: записать некуда. Переведи его на репозиторий настроек — в opencode.jsonc "projects": ["<папка с .opencode/opencode-peers.json>"].` }
+        const values = input.values
+        if (!values || typeof values !== "object" || Array.isArray(values) || !Object.keys(values).length) return { content: "Нужно values: {ключ: значение}." }
+        const errors = Object.entries(values).filter(([, v]) => v !== null).map(([k, v]) => invalid(k, v)).filter(Boolean)
+        const unknown = Object.keys(values).filter((k) => !SCHEMA.some((s) => s.key === k)).map((k) => invalid(k, null))
+        const all = [...new Set([...errors, ...unknown])]
+        if (all.length) return { content: `Не записано (файл не тронут):\n${all.map((e) => `- ${e}`).join("\n")}` }
+        const file = writeSettings(p.dir, values)
+        return { content: `Записано в ${file}: ${Object.keys(values).join(", ")}. Действует после коммита в ветку ${p.branch} репозитория ${p.repo} (по методологии проекта); до коммита действуют прежние значения — peer_config {action: "show"} покажет незакоммиченное.` }
+      }
+      return { content: `Неизвестное действие «${action}».` }
+    },
+  }
+
   const peerInbox: PeerTool = {
     name: "peer_inbox",
     description: "The caller tab's letters: letters still waiting are handed over right here, in this turn (no separate wake), then the recent delivered ones (newest last).",
@@ -1472,7 +1527,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
     execute: async (_input: any, sessionID: string) => ({ content: helpFor(readJson<Card>(cardFile(String(sessionID ?? "")))?.directory || host.defaultDir) }),
   }
 
-  return [peerList, peerRole, peerSend, peerWait, peerSpawn, peerTask, peerInbox, peerDoctor, peerHelp]
+  return [peerList, peerRole, peerSend, peerWait, peerSpawn, peerTask, peerConfig, peerInbox, peerDoctor, peerHelp]
 }
 
 /** Письмо с задачей исполнителю. */
