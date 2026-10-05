@@ -9,7 +9,7 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "peers-model-"))
 process.env.XDG_DATA_HOME = tmp
-process.env.NOVA_PEERS_VIEWERS ??= "open" // windows taken as open (the window rule has its own test)
+process.env.NOVA_PEERS_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
 process.env.NOVA_PEERS_DB = path.join(tmp, "opencode.db")
 
 // A database whose last assistant turn of window Y ran on Kimi (the tab was switched afterwards).

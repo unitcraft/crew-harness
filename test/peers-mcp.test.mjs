@@ -13,7 +13,7 @@ import { DatabaseSync } from "node:sqlite"
 const here = path.dirname(fileURLToPath(import.meta.url))
 const tmp = mkdtempSync(path.join(os.tmpdir(), "peers-mcp-"))
 process.env.XDG_DATA_HOME = tmp
-process.env.NOVA_PEERS_VIEWERS ??= "open" // windows taken as open (the window rule has its own test)
+process.env.NOVA_PEERS_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
 process.env.NOVA_PEERS_POLL_MS = "100"
 delete process.env.NOVA_PEERS_DB
 delete process.env.OPENCODE_PEERS_PROJECTS
@@ -99,14 +99,14 @@ try {
   cell("initialize answers with tools capability", !!init.result?.capabilities?.tools, JSON.stringify(init))
   cell("instructions name the window's session", /sesCCCCCC/.test(init.result?.instructions ?? ""), init.result?.instructions)
   const listed = (await mcp.rpc("tools/list", {})).result?.tools?.map((t) => t.name).sort() ?? []
-  cell("five peer tools", JSON.stringify(listed) === JSON.stringify(["peer_help", "peer_inbox", "peer_list", "peer_role", "peer_send"]), JSON.stringify(listed))
+  cell("nine peer tools", JSON.stringify(listed) === JSON.stringify(["peer_close", "peer_doctor", "peer_help", "peer_inbox", "peer_list", "peer_role", "peer_send", "peer_spawn", "peer_wait"]), JSON.stringify(listed))
   const schema = (await mcp.rpc("tools/list", {})).result.tools.find((t) => t.name === "peer_send").inputSchema
   cell("peer_send schema requires to and text", JSON.stringify(schema.required) === JSON.stringify(["to", "text"]), JSON.stringify(schema))
 
   // peer_list: the same addresses as the plugin (projects come from the plugin's option list, longest root wins)
   const pl = (await mcp.call("peer_list")).text
-  cell("MCP peer_list marks the caller with its project.role address", /^\* nova\.assistant-cccccc/m.test(pl), pl)
-  cell("MCP peer_list shows the nova integrator, not the nested limits one", /nova\.integrator/.test(pl) && !/limits\.integrator/.test(pl) && /ещё 1 окон/.test(pl), pl)
+  cell("MCP peer_list marks the caller with its project.role address", /^\* nova\.worker/m.test(pl), pl)
+  cell("MCP peer_list shows the nova integrator, not the nested limits one", /nova\.integrator/.test(pl) && !/limits\.integrator/.test(pl) && /ещё 1 вкладок/.test(pl), pl)
   const plAll = (await mcp.call("peer_list", { all: true })).text
   cell("MCP peer_list all shows limits.integrator", /limits\.integrator/.test(plAll), plAll)
   const viaPlugin = (await tools.peer_list.execute({ all: true }, { sessionID: "sesCCCCCC" })).content
@@ -119,7 +119,7 @@ try {
   await wait()
   const own = got("sesAAAAAA", "from-mcp-own")
   cell("'integrator' from the MCP window reaches nova's integrator only", own.length === 1 && got("sesBBBBBB", "from-mcp-own").length === 0, JSON.stringify(delivered))
-  cell("the letter is signed with the MCP window's address", /от nova\.assistant-cccccc \(сессия sesCCCCCC\)/.test(own[0]?.text ?? ""), own[0]?.text)
+  cell("the letter is signed with the MCP window's address", /от nova\.worker \(сессия sesCCCCCC\)/.test(own[0]?.text ?? ""), own[0]?.text)
   cell("limits.integrator from MCP crosses projects", got("sesBBBBBB", "from-mcp-cross").length === 1, JSON.stringify(delivered))
 
   // peer_role from MCP; the card keeps the plugin's pid, so letters to the MCP window are still delivered
@@ -159,7 +159,7 @@ const fresh = startMcp("sesDDDDDD")
 try {
   await fresh.rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {} })
   const pl = (await fresh.call("peer_list")).text
-  cell("a window without a card gets project.role from the plugin's project list", /^\* limits\.assistant-dddddd/m.test(pl) && /limits\.integrator/.test(pl), pl)
+  cell("a window without a card gets project.role from the plugin's project list", /^\* limits\.worker/m.test(pl) && /limits\.integrator/.test(pl), pl)
   const card = JSON.parse(readFileSync(path.join(tmp, "opencode", "nova-peers", "cards", "sesDDDDDD.json"), "utf8"))
   cell("its card has pid 0 (delivered by the plugin's timer)", card.pid === 0 && card.project === "limits", JSON.stringify(card))
   await tools.peer_send.execute({ to: "sesDDDDDD", text: "to-a-fresh-window" }, { sessionID: "sesBBBBBB" })

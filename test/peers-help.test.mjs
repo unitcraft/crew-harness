@@ -8,7 +8,7 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "peers-help-"))
 process.env.XDG_DATA_HOME = tmp
-process.env.NOVA_PEERS_VIEWERS ??= "open" // windows taken as open (the window rule has its own test)
+process.env.NOVA_PEERS_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
 const mod = await import("../index.ts")
 
 const hooks = {}
@@ -36,10 +36,10 @@ const cell = (name, ok, detail) => {
 let help = (await tools.peer_help.execute({}, { sessionID: "sesHELP01" })).content
 const drop = process.env.NOVA_PEERS_HELP_DROP
 if (drop) help = help.split(drop).join("")
-for (const t of ["peer_list", "peer_role", "peer_send", "peer_inbox"]) {
+for (const t of ["peer_list", "peer_role", "peer_send", "peer_inbox", "peer_wait", "peer_spawn", "peer_close", "peer_doctor"]) {
   cell(`help names ${t}`, help.includes(t), "missing")
 }
-for (const w of ["force", "all", "assistant-", "15 с", "nova-peers", "read/", "ДАННЫЕ ОТ СОСЕДА", "КОНТРОЛЬНЫЙ ВОПРОС", "кто тут lead проекта X", "я lead проекта X"]) {
+for (const w of ["force", "all", "worker", "assistant — то же, что worker", "opencode-peers.json", "wake: false", "expect_reply", "reply_to", "через 3 с", "Open", "напоминанием", "spawn_limits", "ДАННЫЕ ОТ СОСЕДА", "КОНТРОЛЬНЫЙ ВОПРОС", "кто тут integrator проекта X", "я integrator проекта X"]) {
   cell(`help mentions «${w}»`, help.includes(w), "missing")
 }
 

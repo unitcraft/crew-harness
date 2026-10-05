@@ -9,7 +9,7 @@ const tmp = mkdtempSync(path.join(os.tmpdir(), "peers-delivery-"))
 process.env.XDG_DATA_HOME = tmp
 process.env.NOVA_PEERS_POLL_MS = "100"
 process.env.NOVA_PEERS_DB = path.join(tmp, "absent.db")
-process.env.NOVA_PEERS_VIEWERS = "open"
+process.env.NOVA_PEERS_PRESENCE = "all"
 const proj = path.join(tmp, "proj")
 mkdirSync(proj, { recursive: true })
 

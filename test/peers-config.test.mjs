@@ -7,7 +7,7 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "peers-config-"))
 process.env.XDG_DATA_HOME = tmp
-process.env.NOVA_PEERS_VIEWERS ??= "open" // windows taken as open (the window rule has its own test)
+process.env.NOVA_PEERS_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
 process.env.NOVA_PEERS_DB = path.join(tmp, "absent.db")
 const bare = path.join(tmp, "bare")
 const proj = path.join(tmp, "proj")
@@ -61,7 +61,7 @@ const helpProj = (await call("peer_help", "sesP1")).content
 const helpBare = (await call("peer_help", "sesB1")).content
 cell("help_extra is appended for the project", helpProj.includes("EXTRA-LINE-OF-THE-PROJECT"), helpProj.slice(-120))
 cell("help_extra is absent without a config", !helpBare.includes("EXTRA-LINE-OF-THE-PROJECT"), "present")
-cell("default help names neutral roles", /lead/.test(helpBare) && /worker/.test(helpBare), "missing")
+cell("default help names neutral roles", /integrator/.test(helpBare) && /worker/.test(helpBare), "missing")
 
 // The config is named after the package (opencode-peers.json); the old name nova-peers.json is still read when
 // the new one is absent, and the new one wins when both exist.

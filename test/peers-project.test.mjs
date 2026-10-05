@@ -7,7 +7,7 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "peers-project-"))
 process.env.XDG_DATA_HOME = tmp
-process.env.NOVA_PEERS_VIEWERS ??= "open" // windows taken as open (the window rule has its own test)
+process.env.NOVA_PEERS_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
 process.env.NOVA_PEERS_POLL_MS = "100"
 process.env.NOVA_PEERS_DB = path.join(tmp, "absent.db")
 const root = path.join(tmp, "src")
@@ -80,7 +80,7 @@ cell("limits.all reaches only limits", got("sesCCCCCC", "to-all-limits") === 1 &
 // peer_list: own project by default, every project with all
 const own = (await call("peer_list", "sesAAAAAA")).content
 const every = (await call("peer_list", "sesAAAAAA", { all: true })).content
-cell("peer_list shows own project only", /nova\.integrator/.test(own) && /nova\.worker/.test(own) && !/limits\./.test(own) && /ещё 1 окон/.test(own), own)
+cell("peer_list shows own project only", /nova\.integrator/.test(own) && /nova\.worker/.test(own) && !/limits\./.test(own) && /ещё 1 вкладок/.test(own), own)
 cell("peer_list all shows every project", /limits\.integrator/.test(every), every)
 
 // a bad address is refused, not delivered

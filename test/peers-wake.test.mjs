@@ -1,8 +1,9 @@
-// Self-test: a letter does not wake a session nobody watches (node >= 24):  node test/peers-wake.test.mjs
-// Two signs (core.ts "КОМУ БУДИТЬ"): an OpenCode window is open at all (NOVA_PEERS_VIEWERS forces it here), and
-// the end of the session's last turn was seen (time.viewed >= time.idle). Otherwise the letter waits in the inbox
-// and goes out once the window is open / the session is seen; peer_send says so.
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs"
+// Self-test: a letter wakes only a tab open in a live window (node >= 24):  node test/peers-wake.test.mjs
+// Presence comes from the window plugin (tui.ts): windows/<pid>.json with a heartbeat and the open tabs (core.ts
+// "ПРИСУТСТВИЕ"). A closed tab or a window whose heartbeat froze (closed with X, crashed) is not woken: the letter
+// waits and goes out once the tab is open again. A letter to a background tab leaves a notice for that window.
+// wake: false letters are queued with resume: false (no turn of their own).
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
@@ -10,68 +11,130 @@ const tmp = mkdtempSync(path.join(os.tmpdir(), "peers-wake-"))
 process.env.XDG_DATA_HOME = tmp
 process.env.NOVA_PEERS_POLL_MS = "100"
 process.env.NOVA_PEERS_DB = path.join(tmp, "absent.db")
-process.env.NOVA_PEERS_VIEWERS = "open"
+delete process.env.NOVA_PEERS_PRESENCE
 const proj = path.join(tmp, "proj")
 mkdirSync(proj, { recursive: true })
 
 const mod = await import(process.env.PEERS_MODULE ?? "../index.ts")
 const core = await import(process.env.PEERS_CORE ?? "../core.ts")
-const times = { sesWATCHED: { idle: 1000, viewed: 1000 }, sesUNSEEN: { idle: 2000, viewed: 1500 }, sesSENDER: {} }
+const sessions = ["sesFRONT1", "sesBACK01", "sesCLOSED", "sesSENDER"]
 const hooks = {}
 const tools = {}
 const delivered = []
 const ctx = {
   location: { directory: proj },
   session: {
-    get: async ({ sessionID }) => ({ id: sessionID, title: sessionID, location: { directory: proj }, time: times[sessionID] ?? {} }),
-    prompt: async ({ sessionID, text }) => delivered.push({ sessionID, text }),
+    get: async ({ sessionID }) => ({ id: sessionID, title: sessionID, location: { directory: proj }, time: {} }),
+    prompt: async ({ sessionID, text, resume }) => delivered.push({ sessionID, text, resume }),
+    synthetic: async ({ sessionID, text, resume }) => delivered.push({ sessionID, text, resume, synthetic: true }),
     hook: async (name, cb) => (hooks[name] = cb),
   },
   tool: { transform: async (fn) => fn({ add: (t) => (tools[t.name] = t) }) },
+  events: { on: async (name, cb) => (events[name] = cb) },
 }
+const events = {}
 const stop = await mod.default.setup(ctx)
 let fail = 0
 const cell = (name, ok, detail) => {
   console.log(`${ok ? "ok  " : "FAIL"} ${name}${ok ? "" : " :: " + detail}`)
   if (!ok) fail++
 }
-const wait = (ms = 400) => new Promise((r) => setTimeout(r, ms))
-const got = (s, t) => delivered.filter((d) => d.sessionID === s && d.text.includes(t)).length
-const send = async (to, text) => (await tools.peer_send.execute({ to, text }, { sessionID: "sesSENDER" })).content
+const wait = (ms = 500) => new Promise((r) => setTimeout(r, ms))
+const got = (s, t) => delivered.filter((d) => d.sessionID === s && d.text.includes(t))
+const send = async (to, text, extra = {}) => (await tools.peer_send.execute({ to, text, ...extra }, { sessionID: "sesSENDER" })).content
 
-for (const s of Object.keys(times)) await hooks.context({ sessionID: s, system: [], model: { id: "x", providerID: "y" } })
+// one live window: sesFRONT1 on screen, sesBACK01 in the background, sesSENDER in the background too
+const WPID = 424242
+const tabs = [
+  { sessionID: "sesFRONT1", active: true, busy: false },
+  { sessionID: "sesBACK01", active: false, busy: false },
+  { sessionID: "sesSENDER", active: false, busy: false },
+]
+mkdirSync(core.WINDOWS, { recursive: true })
+let frozen = false
+const beat = () => !frozen && writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now(), route: "sesFRONT1", tabs }))
+beat()
+const heart = setInterval(beat, 300)
 
-// which processes are windows
-const q = String.fromCharCode(34)
-cell("the OpenCode window process counts as a window", core.isWindowCommandLine(`${q}C:/x/opencode.exe${q}`), "no")
-cell("the service is not a window", !core.isWindowCommandLine("C:/x/opencode.exe serve --service"), "is")
-cell("opencode run is not a window", !core.isWindowCommandLine(`${q}C:/x/opencode.exe${q} run --server http://x hi`), "is")
+for (const s of sessions) await hooks.context({ sessionID: s, system: [], model: { id: "x", providerID: "y" } })
+for (const s of sessions) await events["session.idle"]?.({ properties: { sessionID: s } }) // their turns ended
 
-// a watched session is woken at once
-const r1 = await send("sesWATCHED", "to-watched")
+cell("liveWindows sees the window", core.liveWindows().some((w) => w.pid === WPID), JSON.stringify(core.liveWindows()))
+cell("tabOf finds a background tab", core.tabOf("sesBACK01")?.tab.active === false, "no")
+cell("tabOf: a tab in no window is closed", core.tabOf("sesCLOSED") === undefined, "found")
+
+// the tab on screen is woken at once
+const r1 = await send("sesFRONT1", "to-front")
 await wait()
-cell("a letter to a watched session is delivered", got("sesWATCHED", "to-watched") === 1, JSON.stringify(delivered))
-cell("peer_send says the window is alive", /жив/.test(r1), r1)
+cell("a letter to the tab on screen is delivered", got("sesFRONT1", "to-front").length === 1, JSON.stringify(delivered))
+cell("peer_send says it is being delivered", /доставляется сейчас/.test(r1), r1)
 
-// a session whose last answer nobody saw: the letter waits, peer_send says why
-const r2 = await send("sesUNSEEN", "to-unseen")
+// a background tab is woken too, and its window gets a notice with Open
+await send("sesBACK01", "to-back")
 await wait()
-cell("a letter to an unseen session waits", got("sesUNSEEN", "to-unseen") === 0, JSON.stringify(delivered))
-cell("peer_send says nobody saw its last answer", /никто не видел/.test(r2), r2)
-times.sesUNSEEN.viewed = 2500 // the owner opens it
-await wait()
-cell("once the session is seen, the letter goes out", got("sesUNSEEN", "to-unseen") === 1, JSON.stringify(delivered))
+cell("a letter to a background tab is delivered", got("sesBACK01", "to-back").length === 1, JSON.stringify(delivered))
+const noticeDir = path.join(core.NOTICES, String(WPID))
+const notices = existsSync(noticeDir) ? readdirSync(noticeDir).filter((f) => f.endsWith(".json")) : []
+cell("the window gets a notice for its background tab", notices.length >= 1, JSON.stringify(notices))
 
-// no OpenCode window at all: nothing is woken, then the letter goes out when a window opens
-process.env.NOVA_PEERS_VIEWERS = "none"
-const r3 = await send("sesWATCHED", "no-window-letter")
+// a closed tab: the letter waits, then goes out once the tab is opened
+const r2 = await send("sesCLOSED", "to-closed")
 await wait()
-cell("with no window open nothing is woken", got("sesWATCHED", "no-window-letter") === 0, JSON.stringify(delivered))
-cell("peer_send says no window is open", /ни одно окно OpenCode не открыто/.test(r3), r3)
-process.env.NOVA_PEERS_VIEWERS = "open"
+cell("a letter to a closed tab waits", got("sesCLOSED", "to-closed").length === 0, JSON.stringify(delivered))
+cell("peer_send says the tab is closed", /вкладка закрыта/.test(r2), r2)
+tabs.push({ sessionID: "sesCLOSED", active: false, busy: false })
 await wait()
-cell("a window opens -> the letter goes out", got("sesWATCHED", "no-window-letter") === 1, JSON.stringify(delivered))
+cell("the tab is opened -> the letter goes out", got("sesCLOSED", "to-closed").length === 1, JSON.stringify(delivered))
 
+// a tab open in the window that never made a request (no card yet) still gets a letter by its id
+tabs.push({ sessionID: "ses_FRESH1", active: false, busy: false })
+await send("ses_FRESH1", "to-fresh")
+await wait(600)
+cell("a fresh open tab without a card gets its letter", got("ses_FRESH1", "to-fresh").length === 1, JSON.stringify(delivered))
+
+// wake: false -> no turn of its own: written with synthetic (resume: false); OpenCode puts it before the tab's next
+// message in the same step
+const r3 = await send("sesFRONT1", "fyi-letter", { wake: false })
+await wait()
+const fyi = got("sesFRONT1", "fyi-letter")
+cell("a wake:false letter goes in with synthetic, resume:false", fyi.length === 1 && fyi[0].synthetic && fyi[0].resume === false, JSON.stringify(fyi))
+cell("peer_send says no wake", /без пробуждения/.test(r3), r3)
+cell("a waking letter is a prompt, not synthetic", got("sesFRONT1", "to-front").every((d) => !d.synthetic), JSON.stringify(got("sesFRONT1", "to-front")))
+// a closed tab gets a quiet letter too (it wakes nobody); a waking one waits
+await send("ses_GONE01", "quiet-to-closed", { wake: false })
+await wait()
+cell("a quiet letter waits for a tab with no card", got("ses_GONE01", "quiet-to-closed").length === 0, "delivered")
+
+// letters to a busy tab wait for the end of its turn (anything sent now would become an extra step), then go in one prompt
+tabs[0].busy = true // the window shows the turn running
+beat()
+const r4 = await send("sesFRONT1", "while-busy")
+await wait()
+cell("a busy tab is not prompted", got("sesFRONT1", "while-busy").length === 0, JSON.stringify(got("sesFRONT1", "while-busy")))
+cell("peer_send says the tab is busy", /занята/.test(r4), r4)
+await send("sesFRONT1", "after-last-step")
+await wait()
+cell("still busy: not prompted", got("sesFRONT1", "after-last-step").length === 0 && got("sesFRONT1", "while-busy").length === 0, "prompted")
+tabs[0].busy = false
+beat()
+await events["session.idle"]({ properties: { sessionID: "sesFRONT1" } })
+await wait()
+const woke = got("sesFRONT1", "after-last-step")
+cell("the turn ended -> one prompt with both letters", woke.length === 1 && !woke[0].synthetic && woke[0].text.includes("while-busy"), JSON.stringify(woke))
+
+// the window froze (closed with X / crashed): after 3 s its tabs count as closed
+frozen = true
+await wait(core.WINDOW_STALE_MS + 600)
+cell("a frozen window has no live tabs", core.tabOf("sesFRONT1") === undefined, "still open")
+await send("sesFRONT1", "after-freeze")
+await wait()
+cell("a tab of a frozen window is not woken", got("sesFRONT1", "after-freeze").length === 0, JSON.stringify(delivered))
+frozen = false
+beat()
+await wait()
+cell("the window comes back -> the letter goes out", got("sesFRONT1", "after-freeze").length === 1, JSON.stringify(delivered))
+
+clearInterval(heart)
 stop?.()
 rmSync(tmp, { recursive: true, force: true })
 console.log(fail ? `peers-wake.test: FAIL ${fail}` : "peers-wake.test ok")

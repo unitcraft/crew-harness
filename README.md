@@ -1,17 +1,17 @@
 # opencode-peers
 
-OpenCode V2 plugin: **letters between OpenCode windows** (sessions) on one machine, in any
-repository, addressed by role.
+OpenCode V2 plugin: **letters between OpenCode tabs** (sessions) on one machine, in any
+repository, addressed by role. A *window* is the OpenCode program in a terminal; a *tab* is a
+session inside it (one on screen, the rest in the background). Letters are addressed to tabs.
 
-- tools `peer_list`, `peer_send`, `peer_inbox`, `peer_role`, `peer_help` (also `/peer_help`);
-- every window has a card on disk (role, repository, model, liveness); a letter to an idle
-  window wakes it (delivered into the session as a message);
-- **projects**: every window belongs to a project and its address is `project.role`
+- tools `peer_list`, `peer_send`, `peer_wait`, `peer_role`, `peer_inbox`, `peer_spawn`,
+  `peer_close`, `peer_doctor`, `peer_help` (also `/peer_help`);
+- **projects**: every tab belongs to a project and its address is `project.role`
   (`nova.integrator`). A plain role means the sender's own project; `project.role` reaches another
-  project; `all` is every window of the own project, `project.all` of another one; `peer_list`
-  shows the own project (`all: true` — every project). Exclusive roles are exclusive per project.
-  Projects are one list in the plugin options; a window belongs to the project with the longest
-  matching root, a window outside the list to the project named after its repository:
+  project; `all` is every open tab of the own project, `project.all` of another one; a session id
+  (`ses_...`) reaches exactly that tab. Projects are one list in the plugin options; a tab belongs
+  to the project with the longest matching root, a tab outside the list to the project named
+  after its repository:
 
   ```jsonc
   "plugins": [
@@ -20,29 +20,69 @@ repository, addressed by role.
                                  "claude-limits": "C:/work/nova/claude-limits" } } }
   ]
   ```
-- roles are shared by default; a project can make roles exclusive in
-  `.opencode/opencode-peers.json` (`exclusive_roles`), with an optional `help_extra` paragraph
-  (the old name `.opencode/nova-peers.json` is still read when the new one is absent);
-- executor choice by task weight (`tier`) across free windows, with a queue.
+- **roles**: a new tab is `worker` (shared: tabs within it differ by session id; `assistant` is an
+  alias). `integrator` is exclusive, one holder per project, plus the project's `exclusive_roles`
+  in `.opencode/opencode-peers.json` (with an optional `help_extra` paragraph). An exclusive role
+  is held by an atomic lock: refused while the holder's tab is open (unless `force`), free the
+  moment it closes. A letter to a shared role with several open holders is refused with the list
+  (address a session id);
+- executor choice by task weight (`tier`: heavy / medium / light) across free open tabs, with a
+  queue.
 
-A letter **does not wake a session nobody watches**. OpenCode's server runs without any window,
-so a letter used to start a model turn (and spend limits) in a closed tab. OpenCode V2 has no
-"this window shows that session" signal (the server only pushes events to windows, with no
-reply), so two signs decide: an OpenCode window is open at all (an `opencode` process that is not
-`serve`, `run`, `api`, ...), and the end of the session's last turn was seen by a window
-(`time_viewed >= time_idle`). Otherwise the letter waits in the inbox and goes out once a window
-is open / the session is looked at; `peer_send` tells the sender which. A background tab probably
-counts as unseen until you switch to it. A window you no longer need: archive it.
+## Presence: only open tabs are woken
 
-The system hint the plugin adds to each request is **constant** within a session (it sits
-before the whole history, and anything changing there re-bills the history on every request
-with Claude's prefix prompt cache); live neighbours and their models come from `peer_list`.
+OpenCode's server runs without any window, and a letter that wakes a tab starts a model turn
+(and spends limits). The server has no "a window shows this session" signal, so the **window
+plugin** (`tui.ts`, loaded by every OpenCode window) writes `windows/<pid>.json` once a second:
+the open tabs, which one is on screen, which is running a turn. A letter wakes a tab only if it is
+open in a live window (on screen or in the background) or it is a task session started by the
+integrator. A closed tab, a window closed with X or crashed (its heartbeat freezes, after 3 s its
+tabs count as closed): the letter waits and goes out within a second of the tab being opened.
+A letter to a background tab shows a notice in its window with an Open button. No heuristics, no
+time-outs: no window plugin, no wake.
+
+## Turn economy
+
+Measured on OpenCode 2.0.22: anything sent into a session while its turn runs becomes one more
+model step after it, and `session.prompt({resume: false})` becomes a separate step before the
+next message. So:
+
+- a tab running a turn gets nothing; its letters go in one message when the turn ends;
+- `wake: false` letters (statuses, FYI) go in with `session.synthetic({resume: false})`: OpenCode
+  puts them right before the tab's next message, in the same step;
+- a question (`expect_reply`) gives a `qid`; the asker waits with `peer_wait` in the same turn and
+  gets the answer there, not as a second wake;
+- an ack-only letter ("ok", "спасибо") is not sent.
+
+## Obligations instead of a push controller
+
+A question or a task is the recipient's obligation until it answers (`reply_to: qid`). A tab
+whose turn ended without the answer is woken with a reminder (up to 3); then the asker is told the
+tab is stuck. Windows on Claude often stop mid-task after writing a status; this keeps them going.
+
+## Tasks of the integrator
+
+`peer_spawn {task, tier}` (the integrator only) starts a new session of role `worker` in the
+server, with or without a window: model by tier (`claude-code/opus` / `sonnet` / `haiku`, the
+project's `spawn_models` overrides), a limit of running tasks per role (`spawn_limits`, 3). The
+session must report as the answer to the task's qid; then the task closes: no more letters, the
+session's title gets "✓", a notice goes to the integrator's window. `peer_close` closes one by
+hand.
+
+## Self-check
+
+`peer_doctor` (and once at load, as a notice): the OpenCode features the plugin relies on, the
+mailbox, whether any window plugin is beating, whether the caller's tab is visible to a window.
+
+The system hint the plugin adds to each request is **constant** within a session (it sits before
+the whole history, and anything changing there re-bills the history with Claude's prefix prompt
+cache); neighbours and their models come from `peer_list`.
 
 ## Windows on the `claude-code` provider (MCP)
 
 The [`claude-code` provider](https://github.com/unitcraft/opencode-claude-code-provider) hands
 every turn to the official Claude Code and drops OpenCode's tool list, so the plugin's `peer_*`
-tools do not reach those windows. `mcp.ts` is a stdio MCP server with the same five tools
+tools do not reach those tabs. `mcp.ts` is a stdio MCP server with the same tools
 (`mcp__peers__peer_list`, ... in Claude Code), built on the same core (`core.ts`) as the plugin:
 
 ```sh
@@ -52,11 +92,10 @@ OPENCODE_PEERS_SESSION=<opencode session id> node mcp.ts   # node >= 24
 - it acts for the one OpenCode session in `OPENCODE_PEERS_SESSION` (the provider sets it per
   request) and writes to the same mailbox (`XDG_DATA_HOME` as for OpenCode);
 - the project list is not repeated: the plugin writes its `projects` option to
-  `<mailbox>/projects.json` at load, the server reads it (`OPENCODE_PEERS_PROJECTS`, a JSON object
-  of the same shape, overrides), so `project.role` addresses match;
-- it never takes over a window's card (`pid` stays the OpenCode process'): the plugin's timer
-  delivers letters, including those sent through MCP; receiving already works for these windows
-  because delivery goes through the OpenCode session.
+  `<mailbox>/projects.json` at load (`OPENCODE_PEERS_PROJECTS`, a JSON object of the same shape,
+  overrides);
+- delivery stays with the plugin (the letter goes into the OpenCode session); `peer_spawn` from MCP
+  is a request file the plugin carries out.
 
 ## Install
 
@@ -64,11 +103,20 @@ OPENCODE_PEERS_SESSION=<opencode session id> node mcp.ts   # node >= 24
 git clone https://github.com/unitcraft/opencode-peers C:/work/opencode-peers
 ```
 
-`~/.config/opencode/opencode.jsonc`:
+`~/.config/opencode/opencode.jsonc` (the server plugin):
 
 ```jsonc
 "plugins": ["C:/work/opencode-peers"]
 ```
+
+`~/.config/opencode/cli.json` (the window plugin; a folder, not a file — OpenCode loads `tui.ts`
+from it):
+
+```json
+{ "plugins": ["C:/work/opencode-peers"] }
+```
+
+Windows opened before the window plugin was added do not report their tabs: reopen them.
 
 ## Related
 
