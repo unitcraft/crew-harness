@@ -16,7 +16,7 @@ import { type Watch, watchesOf } from "./watch.ts"
 
 export const STATUS = path.join(dataDir(), "nova-peers", "status")
 
-export type State = "working" | "owner" | "watch" | "reply" | "task" | "tasks" | "idle"
+export type State = "working" | "owner" | "question" | "watch" | "reply" | "task" | "tasks" | "idle"
 export type Status = {
   session: string
   project?: string
@@ -85,10 +85,12 @@ export function statusOf(x: StatusInput): Status {
     updated: now,
   }
   if (x.busy) return { ...base, state: "working", since: x.busySince, detail: `работает${x.busySince ? ` (${minutes(x.busySince, now)})` : ""}` }
-  // сессию задачи ведёт интегратор, не владелец: её вопрос в конце хода — ему (письмом), а не «ждёт вас» (замер на
-  // живых данных: сдавший задачу воркер кончил отчёт вопросом интегратору)
-  const q = x.end && !x.end.ownerAfter && !card.spawned ? endsWithQuestion(x.end.text) : undefined
-  if (q) return { ...base, state: "owner", since: x.end!.at, question: q, detail: `ждёт вас с ${hm(x.end!.at)}: ${q}` }
+  // сессию задачи ведёт интегратор, и её вопрос в конце хода бывает ему (сдавший воркер спросил интегратора), а бывает
+  // владельцу (приёмщик просил «вливай?»): кому — по тексту не определить. Поэтому у сессии задачи — «question»: видно
+  // в /peers, но без уведомления; «owner» с уведомлением — только у вкладок владельца.
+  const q = x.end && !x.end.ownerAfter ? endsWithQuestion(x.end.text) : undefined
+  if (q && !card.spawned) return { ...base, state: "owner", since: x.end!.at, question: q, detail: `ждёт вас с ${hm(x.end!.at)}: ${q}` }
+  if (q) return { ...base, state: "question", since: x.end!.at, question: q, detail: `ждёт ответа (интегратора или вас) с ${hm(x.end!.at)}: ${q}` }
   if (watches.length) {
     const w = watches[0]
     return { ...base, state: "watch", since: w.started ?? w.created, detail: `ждёт наблюдения${w.note ? ` «${w.note}»` : ""} (с ${hm(w.started ?? w.created)}, предел ${w.minutes} мин)${watches.length > 1 ? ` и ещё ${watches.length - 1}` : ""}` }
@@ -156,7 +158,7 @@ export function readStatuses(): Status[] {
     .filter((s): s is Status => !!s)
 }
 
-const ORDER: Record<State, number> = { owner: 0, working: 1, watch: 2, reply: 3, task: 4, tasks: 5, idle: 6 }
+const ORDER: Record<State, number> = { owner: 0, question: 1, working: 2, watch: 3, reply: 4, task: 5, tasks: 6, idle: 7 }
 
 /** Текст сводки /peers: проекты (свой первым), в проекте — сначала ждущие владельца. */
 export function formatStatuses(list: Status[], now = Date.now(), first?: string): string {

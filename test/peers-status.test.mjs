@@ -98,8 +98,15 @@ const n1 = notices().filter((n) => n.sessionID === "sesINTEG1")
 cell("the owner gets a notice with attention", n1.length === 1 && n1[0].attention === true && /ждёт вашего ответа/.test(n1[0].title), JSON.stringify(notices()))
 cell("no notice for the others", notices().every((n) => n.sessionID === "sesINTEG1"), JSON.stringify(notices()))
 
-await wait(1600)
-cell("unanswered: the notice is repeated after owner_reminder_min", notices().filter((n) => n.sessionID === "sesINTEG1").length === 2, notices().length)
+// the repeat: wait for it (a loaded machine stretches the pass), then check it came no sooner than the limit
+const mine = () =>
+  readdirSync(path.join(core.NOTICES, String(WPID)))
+    .filter((f) => JSON.parse(readFileSync(path.join(core.NOTICES, String(WPID), f), "utf8")).sessionID === "sesINTEG1")
+    .map((f) => Number(f.split("-")[0]))
+    .sort()
+for (let i = 0; i < 80 && mine().length < 2; i++) await wait(100)
+const at = mine()
+cell("unanswered: the notice is repeated after owner_reminder_min, not sooner", at.length >= 2 && at[1] - at[0] >= 1_700, JSON.stringify(at))
 
 // the owner answers: a user message after the idle row
 msg("sesINTEG1", "user", { text: "да, пушь" })
@@ -107,7 +114,7 @@ await wait(600)
 cell("after the owner's answer it no longer waits for the owner", st("sesINTEG1").state !== "owner", st("sesINTEG1").state)
 
 const spawned = status.statusOf({ card: { session: "ses_task01", role: "worker", auto: false, title: "#9 x", directory: proj, repo: "proj", project: "proj", pid: process.pid, updated: Date.now(), spawned: { by: "sesINTEG1", task: "x", tier: "light", status: "running", at: Date.now(), qid: "q9" } }, busy: false, end: { at: Date.now(), text: "Сдал. Базу опустит интегратор или мне?", ownerAfter: false }, asked: [], now: Date.now() })
-cell("a task session's closing question is for the integrator, not 'waiting for you'", spawned.state !== "owner", spawned.state)
+cell("a task session's closing question: 'question' (integrator or owner), no notice", spawned.state === "question" && /интегратора или вас/.test(spawned.detail), JSON.stringify(spawned))
 const text = status.formatStatuses(status.readStatuses().concat([{ ...st("sesIDLE01"), session: "sesQ", state: "owner", detail: "ждёт вас с 10:00: Можно?", question: "Можно?" }]), Date.now(), "proj")
 cell("/peers text: the waiting first, the count in the project line", /ВАС ЖДУТ: 1/.test(text) && text.split("\n")[1].includes("▶"), text)
 

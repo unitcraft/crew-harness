@@ -101,7 +101,7 @@ provider puts `OPENCODE_SESSION_ID` into Claude Code's environment). `<mailbox>`
 
 ```jsonc
 { "session": "ses_…", "project": "nova", "role": "integrator", "title": "…", "model": "claude-code/opus",
-  "state": "working" | "owner" | "watch" | "reply" | "task" | "tasks" | "idle",
+  "state": "working" | "owner" | "question" | "watch" | "reply" | "task" | "tasks" | "idle",
   "since": 1791200000000, "detail": "a line for people", "question": "… (state owner)",
   "watches": [{ "id", "note", "started", "minutes" }],          // running peer_watch
   "asked": [{ "qid", "to", "at" }],                              // its questions without an answer
