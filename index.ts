@@ -332,7 +332,10 @@ export default {
       for (const c of allCards()) {
         if (children.has(c.session) || !obligationsOf(c.session).some((o) => !o.stuck)) continue
         const row = await sessionFromDb(c.session)
-        if (!row?.suspended || row.suspended >= setupAt || (row.idle ?? 0) >= row.suspended) continue
+        if (!row?.suspended || row.suspended >= setupAt || (row.idle ?? 0) >= row.suspended) {
+          await retryFailed(c)
+          continue
+        }
         if (!(await sessionInfo(c.session))) continue // сессия другого сервера
         // оборванный ход уже не кончится: отметку «занята» (её снимает только конец хода) снять, иначе письмо ниже
         // ждало бы конца хода вечно (замер в песочнице 2026-10-05)
@@ -354,6 +357,28 @@ export default {
         })
         log(`resume interrupted ${c.session} (suspended ${row.suspended})`)
       }
+    }
+
+    // УПАВШИЙ ХОД ДО СТАРТА ПЛАГИНА (замер Ф.7): последний ход вкладки с открытым обязательством кончился ошибкой
+    // (модель недоступна и т. п.), а плагина тогда не было или он ещё не видел такие ходы — никто её больше не будит.
+    // Одно письмо «продолжай»; упадёт снова — напоминания и вызов спросившему, как у любого хода без работы.
+    async function retryFailed(c: Card) {
+      if (c.busy) return
+      const turn = await lastTurn(c.session, 0)
+      if (turn?.outcome !== "failed" || turn.at >= setupAt) return
+      if (!(await sessionInfo(c.session))) return // сессия другого сервера
+      const id = `retry-${safeKey(c.session)}-${turn.at}`
+      if (letterExists(c.session, id)) return
+      const open = obligationsOf(c.session).filter((o) => !o.stuck).map((o) => `— ${o.task ?? `вопрос ${o.qid}`} от ${o.from_role}`).join("\n")
+      postLetter(c.session, {
+        id,
+        from_role: "opencode-peers",
+        from_session: "opencode-peers",
+        to: c.session,
+        time: now(),
+        text: `Прошлый ход (${hhmm(turn.at)}) кончился ошибкой, не дойдя до дела. Продолжай работу. Открыто:\n${open}`,
+      })
+      log(`retry failed turn ${c.session} (${turn.at})`)
     }
 
     // КОНЕЦ ЗАДАЧИ (план 002, Ф.3). Задача очищена или отменена — сессии задачи (исполнитель, приёмщик, прежние)

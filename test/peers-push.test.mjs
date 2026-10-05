@@ -25,7 +25,7 @@ db.exec("create table session_v2 (id text primary key, directory text, title tex
 db.exec("create table session_message (id text primary key, session_id text, type text, seq integer, time_created integer, time_updated integer, data text)")
 let seq = 0
 const msg = (session, type, data, at = Date.now()) => db.prepare("insert into session_message values (?, ?, ?, ?, ?, ?, ?)").run(`m${++seq}`, session, type, seq, at, at, JSON.stringify(data))
-for (const s of ["sesINTEG1", "sesWORK01", "sesINTER1", "ses_fail01"]) db.prepare("insert into session_v2 values (?, ?, ?, null, null, null, null, null)").run(s, proj, s)
+for (const s of ["sesINTEG1", "sesWORK01", "sesINTER1", "ses_fail01", "ses_retry1"]) db.prepare("insert into session_v2 values (?, ?, ?, null, null, null, null, null)").run(s, proj, s)
 // a turn of sesINTER1 cut off by a server restart a minute ago: time_suspended, no idle
 db.prepare("update session_v2 set time_suspended = ? where id = ?").run(Date.now() - 60_000, "sesINTER1")
 
@@ -36,6 +36,12 @@ const tasks = await import("../tasks.ts")
 // (a task session, no window: its "busy" comes from the card, not from a window)
 core.saveCard({ session: "sesINTER1", role: "worker", auto: false, title: "sesINTER1", directory: proj, repo: "proj", project: "proj", pid: 999999, updated: Date.now(), busy: true, busySince: Date.now() - 60_000, spawned: { by: "sesINTEG1", task: "old", tier: "light", status: "running", at: Date.now() - 120_000, qid: "qOLD" } })
 core.addObligation("sesINTER1", { qid: "qOLD", from_session: "sesINTEG1", from_role: "proj.integrator", at: Date.now() - 120_000, nudges: 0 })
+
+// ses_retry1 owes a review; its last turn, before this plugin started, failed before the model (no assistant row)
+core.saveCard({ session: "ses_retry1", role: "worker", auto: false, title: "ses_retry1", directory: proj, repo: "proj", project: "proj", pid: 999999, updated: Date.now() })
+core.addObligation("ses_retry1", { qid: "rqOLD", from_session: "sesINTEG1", from_role: "proj.integrator", at: Date.now() - 90_000, nudges: 0, task: "приёмка #7" })
+msg("ses_retry1", "user", { text: "[opencode-peers] ПРИЁМКА задачи #7" }, Date.now() - 60_000)
+msg("ses_retry1", "idle", { outcome: "failed" }, Date.now() - 60_000)
 
 const mod = await import("../index.ts")
 const hooks = {}
@@ -77,7 +83,7 @@ async function turn({ tools: withTool = false, owner = false } = {}) {
 }
 
 const WPID = 717171
-const tabs = ["sesINTEG1", "sesWORK01", "ses_fail01"].map((sessionID, i) => ({ sessionID, active: i === 0, busy: false }))
+const tabs = ["sesINTEG1", "sesWORK01", "ses_fail01", "ses_retry1"].map((sessionID, i) => ({ sessionID, active: i === 0, busy: false }))
 mkdirSync(core.WINDOWS, { recursive: true })
 const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now(), tabs }))
 beat()
@@ -94,6 +100,7 @@ await wait(800)
 cell("an interrupted turn gets one 'resume' letter", got("sesINTER1", "прервана перезапуском").length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "sesINTER1")))
 await wait(600)
 cell("and only one", got("sesINTER1", "прервана перезапуском").length === 1, got("sesINTER1", "прервана").length)
+cell("a turn that failed before the plugin started: one 'continue' letter", got("ses_retry1", "кончился ошибкой").length === 1 && got("ses_retry1", "приёмка #7").length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "ses_retry1").map((d) => d.text.slice(0, 200))))
 cell("the resume letter says how to report", got("sesINTER1", 'reply_to: "qOLD"').length === 1, got("sesINTER1", "прервана")[0]?.text)
 const toPlugin = await call("peer_send", "sesINTER1", { to: "opencode-peers", text: "принял, продолжаю" })
 cell("a letter to the plugin itself is refused with a hint", /это сам плагин/.test(toPlugin) && /reply_to/.test(toPlugin), toPlugin)
