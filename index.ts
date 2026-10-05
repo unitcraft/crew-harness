@@ -230,8 +230,13 @@ export default {
           // без метки конца такого хода не видно — ни напоминания, ни вызова, обязательство висит молча. Доставку
           // метка не держит (в отличие от busy).
           if (wake) markWoke(card, now())
-          if (wake) await ctx.session.prompt({ sessionID: card.session, text, delivery: "queue" })
-          else if (typeof ctx.session.synthetic === "function") await ctx.session.synthetic({ sessionID: card.session, text, resume: false })
+          // предел времени: зависшая отправка держала бы вкладку в delivering навсегда (письма ей больше не шли бы)
+          const capped = (p: Promise<any>) => {
+            let timer: any
+            return Promise.race([p, new Promise((_, rej) => (timer = setTimeout(() => rej(new Error("delivery took too long")), Number(process.env.NOVA_PEERS_STEP_MS) || 60_000)))]).finally(() => clearTimeout(timer))
+          }
+          if (wake) await capped(ctx.session.prompt({ sessionID: card.session, text, delivery: "queue" }))
+          else if (typeof ctx.session.synthetic === "function") await capped(ctx.session.synthetic({ sessionID: card.session, text, resume: false }))
           else await ctx.session.prompt({ sessionID: card.session, text, resume: false }) // OpenCode без synthetic: лишний шаг, но без хода
           confirmLetters(claimed)
           delivered(card, letters, windows)
@@ -813,9 +818,34 @@ export default {
 
     // Один проход доставки: зовут таймер (страховка, раз в POLL_MS = 1 с) и fs.watch ящиков (сразу).
     let passBusy = false
+    // ПРОХОД НЕ ЗАВИСАЕТ (2026-10-05): у владельца цикл встал на 47 мин (21:27–22:14) — один вызов OpenCode внутри
+    // прохода не вернулся, passBusy остался true, следующие проходы выходили сразу: ни доставки, ни подталкивания, ни
+    // сторожа, и всё молча. Теперь каждый шаг — с пределом времени (зависший или упавший шаг в журнал, остальные
+    // идут), а проход, висящий дольше PASS_STUCK_MS, следующий не ждёт (в журнале — шаг, на котором висит).
+    const STEP_MS = Number(process.env.NOVA_PEERS_STEP_MS) || 60_000
+    const PASS_STUCK_MS = Number(process.env.NOVA_PEERS_PASS_STUCK_MS) || 120_000
+    let passStage = ""
+    let passStartedAt = 0
+    let passId = 0
+    const step = async (name: string, fn: () => any) => {
+      passStage = name
+      let timer: any
+      try {
+        await Promise.race([Promise.resolve().then(fn), new Promise((_, rej) => (timer = setTimeout(() => rej(new Error(`step ${name} took over ${STEP_MS} ms`)), STEP_MS)))])
+      } catch (e) {
+        log(`pass step ${name} failed: ${e}`)
+      } finally {
+        clearTimeout(timer)
+      }
+    }
     async function pass() {
-      if (passBusy) return
+      if (passBusy) {
+        if (now() - passStartedAt < PASS_STUCK_MS) return
+        log(`pass stuck at ${passStage} for ${Math.round((now() - passStartedAt) / 1000)} s -- the next pass does not wait`)
+      }
       passBusy = true
+      passStartedAt = now()
+      const id = ++passId
       try {
         recoverClaims()
         for (const c of allCards()) {
@@ -835,19 +865,22 @@ export default {
         }
         // Вкладка открыта в окне, но ещё не делала запросов (визитки нет), а письмо по её id ждёт — завести визитку.
         // Чужая сессия (другого сервера) не найдётся в ctx.session.get — touch вернёт пусто.
-        for (const w of liveWindows())
-          for (const t of w.tabs ?? []) if (!existsSync(cardFile(t.sessionID)) && waitingIn([t.sessionID]) && (await sessionInfo(t.sessionID))) await touch(t.sessionID)
-        await resumeTasks()
-        await assignReviewers()
-        await reconcile()
-        await resumeInterrupted()
-        await finishTasks()
-        await syncTitles()
-        await syncStatus()
-        flowWatch()
-        await processQueue()
+        await step("cards", async () => {
+          for (const w of liveWindows())
+            for (const t of w.tabs ?? []) if (!existsSync(cardFile(t.sessionID)) && waitingIn([t.sessionID]) && (await sessionInfo(t.sessionID))) await touch(t.sessionID)
+        })
+        await step("resumeTasks", resumeTasks)
+        await step("assignReviewers", assignReviewers)
+        await step("reconcile", reconcile)
+        await step("resumeInterrupted", resumeInterrupted)
+        await step("finishTasks", finishTasks)
+        await step("syncTitles", syncTitles)
+        await step("syncStatus", syncStatus)
+        await step("flowWatch", flowWatch)
+        await step("processQueue", processQueue)
         // наблюдения peer_watch (watch.ts): запустить новые, по концу — письмо окну с побудкой
-        pollWatches((w, text) => postLetter(w.session, { id: `watch-${w.id}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: w.session, time: Date.now(), text }), log, now(), (w) => loadConfig(w.cwd).machineSlots)
+        await step("watches", () => pollWatches((w, text) => postLetter(w.session, { id: `watch-${w.id}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: w.session, time: Date.now(), text }), log, now(), (w) => loadConfig(w.cwd).machineSlots))
+        passStage = "deliver"
         // АДРЕСАТЫ — ИЗ ВИЗИТОК НА ДИСКЕ (после перезагрузки плагина память пуста). Визитки этого процесса и умершего;
         // двойной доставки нет: письмо забирает тот, чей rename в claimLetters прошёл первым.
         for (const card of allCards()) {
@@ -856,7 +889,7 @@ export default {
           void deliver(card)
         }
       } finally {
-        passBusy = false
+        if (id === passId) passBusy = false // зависший прежний проход, вернувшись, не снимает флаг идущего
       }
     }
     const timer = setInterval(() => void pass(), POLL_MS)
