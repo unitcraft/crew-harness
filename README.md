@@ -104,9 +104,29 @@ journal is `tasks/<project>/<N>.json` in the mailbox.
   (an owner's tab takes the task; it is woken while the task is open, even when closed), `push
   {n, text?}` (wake a stalled executor now), `reassign {n}` (a new session, the same number, a
   summary of what was done), `cancel {n}`, `priority {n, priority}`.
-- The executor reports as the answer to the task's qid; then the task is submitted, the task
-  session closes (title `#N ✓`), a notice goes to the integrator's window; a second report is
-  refused. Review and merge by another worker come next ([plan 002](doc/plans/002-tasks.md)).
+- The executor reports as the answer to the task's qid; the task is submitted (title `#N ✓`) — the
+  report does **not** wake the integrator; a second report is refused. The executor's session
+  stays open for rework until the task is cleaned.
+
+## Review and merge
+
+The integrator stays free for the owner and does not re-check accepted work:
+
+- a submitted task gets a reviewer by priority (`P0` first): with `reviewer: "integrator"` the
+  integrator itself, otherwise a free open `worker` tab (never the author or the executor), or a
+  new review session (`spawn_limits.reviewer`, 2); the reviewer gets the task, the report and the
+  project's `acceptance` steps;
+- the reviewer: `peer_task {action: "review"}` (started; the executor learns it quietly), `rework
+  {text}` (back to the executor with the remarks; the resubmission wakes the same reviewer;
+  over `rework_max` the integrator gets a call), `merge` (the project's merge lock: one merging
+  reviewer at a time), `accept {checks, commit?}` — the plugin requires a report for every
+  required acceptance step and checks that the task branch (or a squash commit) is in the target
+  branch; then the cleanup steps by `cleanup` (`git worktree remove`, `git branch -D`, `git push
+  origin --delete`), and `cleaned` — the plugin checks the worktree and the branch are gone;
+- cleaned → the sessions of the task close with a line in their history, titles `#N ✓✓`, the
+  integrator gets a quiet summary. Titles on the way: `#N ✓◐` on review, `#N ↻` rework, `#N ✓✓◐`
+  accepted;
+- `inflight_limit` (6) bounds the tasks running and in review; `P0` passes every limit.
 
 ## Self-check
 

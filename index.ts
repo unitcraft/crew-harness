@@ -43,6 +43,8 @@ import {
   BASE,
   DEFAULT_ROLE,
   normalizeRole,
+  holdsOpenTask,
+  DEFAULT_SPAWN_MODELS,
   lastTurn,
   hhmm,
   MODEL_TTL_MS,
@@ -88,7 +90,8 @@ import {
   sessionFromDb,
   formatTaskLetter,
 } from "./core.ts"
-import { type Task, letterExists, listTasks, loadTask, plannedSessionId, saveTask, taskEvent, taskLetterId } from "./tasks.ts"
+import { type Task, byPriority, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
+import { reviewLetter } from "./review.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
 
@@ -258,8 +261,13 @@ export default {
         }
         // базы нет — ход считается рабочим (лишнее напоминание дешевле ложного «застряла»)
         o.empty = turn && !turn.tools ? (o.empty ?? 0) + 1 : 0
-        const task = card.task ? loadTask(card.task.project, card.task.n) : undefined
-        const what = task && task.qid === o.qid ? `задача #${task.n} «${task.title}»` : `вопрос ${o.qid}${o.task ? ` («${o.task.slice(0, 200)}»)` : ""}`
+        const rv = card.review ? loadTask(card.review.project, card.review.n) : undefined
+        const isReview = !!rv && rv.review_qid === o.qid
+        const task = isReview ? rv : card.task ? loadTask(card.task.project, card.task.n) : undefined
+        const what = isReview ? `приёмка задачи #${rv!.n} «${rv!.title}» (${statusRu(rv!.status)})` : task && task.qid === o.qid ? `задача #${task.n} «${task.title}»` : `вопрос ${o.qid}${o.task ? ` («${o.task.slice(0, 200)}»)` : ""}`
+        const howTo = isReview
+          ? `Продолжай приёмку: peer_task {action: "review" | "rework" | "merge" | "accept" | "cleaned", n: ${rv!.n}} (что дальше — в письме с приёмкой).`
+          : `Закончил — отчёт: peer_send {to: "${o.from_session}", reply_to: "${o.qid}", text: "..."}. Упёрся — тем же ответом напиши, что мешает.`
         if (o.empty >= cfg.pushEmptyTurns || o.nudges >= cfg.pushMax) {
           o.stuck = true
           const why = o.empty >= cfg.pushEmptyTurns ? `${o.empty} хода подряд остановилась без работы и без ответа` : `${o.nudges} напоминаний остались без ответа`
@@ -285,8 +293,8 @@ export default {
           to: card.session,
           time: t,
           text:
-            `Не завершено: ${what} от ${o.from_role} (сессия ${o.from_session}). Ты остановился, не ответив. Продолжай работу. ` +
-            `Закончил — отчёт: peer_send {to: "${o.from_session}", reply_to: "${o.qid}", text: "..."}. Упёрся — тем же ответом напиши, что мешает.` +
+            `Не завершено: ${what} от ${o.from_role} (сессия ${o.from_session}). Ты остановился, не закончив. Продолжай работу. ` +
+            howTo +
             (o.empty ? ` Ход без работы ${o.empty} из ${cfg.pushEmptyTurns}: дальше спросивший узнает, что вкладка стоит.` : ""),
         })
         log(`nudge ${card.session} for ${o.qid} (#${o.nudges}, empty ${o.empty})`)
@@ -328,27 +336,129 @@ export default {
       }
     }
 
-    // КОНЕЦ ЗАДАЧИ. Сессия задачи ответила на qid задачи (core.ts: задача «сдана», визитка spawned «done»), её ход
-    // кончился — финальная строка в историю (без хода), задача закрыта, интегратору уведомление в окне. (Ф.3 плана
-    // 002 заменит «закрыта по отчёту» на приёмку.)
+    // КОНЕЦ ЗАДАЧИ (план 002, Ф.3). Задача очищена или отменена — сессии задачи (исполнитель, приёмщик, прежние)
+    // закрываются: строка в историю без хода, уведомление интегратору. Только когда ход сессии не идёт: строка,
+    // записанная посреди хода, стала бы ещё одним шагом модели (замер 2026-10-05).
     async function finishTasks() {
+      for (const t of listTasks()) {
+        if (t.status !== "cleaned" && t.status !== "cancelled") continue
+        const sessions = [t.executor, t.reviewer, ...t.executors, ...(t.reviewers ?? [])].filter(Boolean) as string[]
+        for (const sid of new Set(sessions)) {
+          const c = readJson<Card>(cardFile(sid))
+          if (!c?.spawned || c.spawned.status === "closed" || c.busy) continue
+          if (c.pid !== process.pid && pidAlive(c.pid)) continue
+          c.spawned.status = "closed"
+          saveCard(c)
+          const done = t.status === "cleaned"
+          try {
+            const note = { sessionID: sid, text: done ? `✓✓ Задача #${t.n} принята и влита. Сессия закрыта — письма больше не приходят.` : `✗ Задача #${t.n} отменена. Сессия закрыта — письма больше не приходят.`, resume: false }
+            await (typeof ctx.session.synthetic === "function" ? ctx.session.synthetic(note) : ctx.session.prompt(note)) // строка в историю, без хода
+          } catch (e) {
+            log(`final note failed ${sid}: ${e}`)
+          }
+          if (sid === t.executor) {
+            const w = tabOf(t.author)
+            if (w?.window.pid) postNotice(w.window.pid, { sessionID: sid, title: done ? `Задача #${t.n} принята ✓✓` : `Задача #${t.n} отменена`, message: t.title })
+          }
+          log(`task #${t.n} (${t.project}) ${t.status}: session ${sid} closed`)
+        }
+      }
+      // прежний путь (сессия под задачу без журнала): закрыть по отчёту
       for (const c of allCards()) {
-        if (c.spawned?.status !== "done" || (c.pid !== process.pid && pidAlive(c.pid))) continue
-        if (c.busy) continue // ход сессии ещё идёт: строка, записанная сейчас, стала бы ещё одним шагом модели (замер 2026-10-05)
+        if (c.task || c.review || c.spawned?.status !== "done" || c.busy || (c.pid !== process.pid && pidAlive(c.pid))) continue
         c.spawned.status = "closed"
         saveCard(c)
-        const t = c.task ? loadTask(c.task.project, c.task.n) : undefined
-        if (t && t.executor === c.session && t.status === "submitted") taskEvent(t, "opencode-peers", "closed", "закрыта по отчёту")
-        try {
-          const note = { sessionID: c.session, text: `✓ Задача${t ? ` #${t.n}` : ""} выполнена: отчёт отправлен интегратору (сессия ${c.spawned.by}). Сессия закрыта — письма больше не приходят.`, resume: false }
-          await (typeof ctx.session.synthetic === "function" ? ctx.session.synthetic(note) : ctx.session.prompt(note)) // строка в историю, без хода
-        } catch (e) {
-          log(`final note failed ${c.session}: ${e}`)
-        }
-        const w = tabOf(c.spawned.by)
-        if (w?.window.pid) postNotice(w.window.pid, { sessionID: c.session, title: t ? `Задача #${t.n} выполнена` : "Задача выполнена", message: t?.title || c.title || c.spawned.task.slice(0, 120) })
-        log(`task done ${c.session} (by ${c.spawned.by})`)
       }
+    }
+
+    // ПРИЁМЩИК (план 002, Ф.3). Сданная задача без приёмщика получает его по приоритету (P0 первым): при reviewer
+    // "integrator" — сам интегратор; иначе свободная открытая вкладка роли worker (не исполнитель, не автор, без своей
+    // задачи), а нет такой — новая сессия под приёмку (лимит spawn_limits.reviewer, по умолчанию 2). Сессия приёмки
+    // запускается так же повторяемо, как задача: id пишется в журнал до session.create.
+    const reviewStarting = new Set<string>()
+    async function startReviewer(t0: Task): Promise<void> {
+      const key = `${t0.project}#${t0.n}`
+      if (reviewStarting.has(key)) return
+      reviewStarting.add(key)
+      try {
+        const t = loadTask(t0.project, t0.n) ?? t0
+        if (!t.reviewer || t.review_kind !== "spawn" || readJson<Card>(cardFile(t.reviewer))) return
+        const cfg = loadConfig(t.directory)
+        const model = cfg.spawnModels[t.tier] ?? DEFAULT_SPAWN_MODELS[t.tier]
+        const [providerID, ...rest] = model.split("/")
+        await ctx.session.create({ id: t.reviewer, title: `#${t.n} приёмка ${t.title}`, location: { directory: t.directory }, metadata: { peersReview: { project: t.project, n: t.n } }, model: { providerID, id: rest.join("/") } })
+        const now = Date.now()
+        const card: Card = { session: t.reviewer, role: DEFAULT_ROLE, auto: false, title: `#${t.n} приёмка ${t.title}`, directory: t.directory, repo: repoLabel(t.directory), project: t.project, model, modelAt: now, modelFrom: "request", pid: process.pid, updated: now, spawned: { by: t.author, task: `приёмка #${t.n}`, tier: t.tier, status: "running", at: now, qid: t.review_qid ?? "" }, review: { project: t.project, n: t.n } }
+        saveCard(card)
+        mine.set(card.session, card)
+        await reviewerAssigned(t, card)
+        log(`task #${t.n} (${t.project}): reviewer session ${t.reviewer} started`)
+      } catch (e) {
+        log(`reviewer start #${t0.n} failed: ${e}`)
+      } finally {
+        reviewStarting.delete(key)
+      }
+    }
+    // Приёмщик назначен (вкладка или сессия): обязательство и письмо с приёмкой (id письма — из номера и попытки).
+    async function reviewerAssigned(t: Task, card: Card) {
+      const cfg = loadConfig(t.directory)
+      addObligation(card.session, { qid: t.review_qid!, from_session: t.author, from_role: t.author_role, at: Date.now(), nudges: 0, task: `приёмка #${t.n}` })
+      const id = `review-${safeKey(t.project)}-${t.n}-${(t.reviewers ?? []).length + 1}`
+      if (!letterExists(card.session, id)) postLetter(card.session, { id, from_role: t.author_role, from_session: t.author, to: card.session, time: Date.now(), text: reviewLetter(t, cfg) })
+      void deliver(card)
+    }
+    async function assignReviewers() {
+      const windows = liveWindows()
+      const queue = listTasks().filter((t) => t.status === "submitted" && !t.reviewer).sort(byPriority)
+      for (const t0 of queue) {
+        const t = loadTask(t0.project, t0.n)
+        if (!t || t.status !== "submitted" || t.reviewer) continue
+        const author = readJson<Card>(cardFile(t.author))
+        if (author && author.pid !== process.pid && pidAlive(author.pid)) continue // назначает процесс автора
+        const cfg = loadConfig(t.directory)
+        t.review_qid = `r${t.qid}`
+        if (cfg.reviewer === "integrator") {
+          t.reviewer = t.author
+          t.review_kind = "integrator"
+          taskEvent(t, "opencode-peers", undefined, "приёмщик — интегратор (настройка reviewer)")
+          const ac = author ?? (readJson<Card>(cardFile(t.author)) as Card)
+          if (ac) {
+            ac.review = { project: t.project, n: t.n }
+            saveCard(ac)
+            await reviewerAssigned(t, ac)
+          }
+          continue
+        }
+        const tab = allCards().find(
+          (c) =>
+            !c.spawned &&
+            (c.project ?? projectOf(c.directory, projects)) === t.project &&
+            normalizeRole(c.role) === DEFAULT_ROLE &&
+            c.session !== t.executor &&
+            c.session !== t.author &&
+            !holdsOpenTask(c) &&
+            !!tabOf(c.session, windows)?.window.pid &&
+            !tabOf(c.session, windows)?.tab.busy,
+        )
+        if (tab) {
+          t.reviewer = tab.session
+          t.review_kind = "tab"
+          taskEvent(t, "opencode-peers", undefined, `приёмщик — открытая вкладка ${tab.session}`)
+          tab.review = { project: t.project, n: t.n }
+          saveCard(tab)
+          await reviewerAssigned(t, tab)
+          continue
+        }
+        const limit = cfg.spawnLimits.reviewer ?? 2
+        const reviewing = listTasks(t.project).filter((x) => isOpen(x) && x.review_kind === "spawn" && x.reviewer && x.status !== "accepted").length
+        if (t.priority !== "P0" && reviewing >= limit) continue // ждёт: приёмщиков-сессий уже limit
+        t.reviewer = plannedSessionId()
+        t.review_kind = "spawn"
+        taskEvent(t, "opencode-peers", undefined, `приёмщик — новая сессия ${t.reviewer}`)
+        await startReviewer(t)
+      }
+      // сессия приёмки записана, но не создана (оборвался запуск) — повторить тем же id
+      for (const t of listTasks()) if (isOpen(t) && t.review_kind === "spawn" && t.reviewer && !readJson<Card>(cardFile(t.reviewer))) await startReviewer(t)
     }
 
     // ЗАГОЛОВКИ СЕССИЙ ЗАДАЧ — из журнала: «#N название», сдана/закрыта «#N ✓», отменена «#N ✗», передана другой
@@ -357,11 +467,15 @@ export default {
     async function syncTitles() {
       if (typeof ctx.session.update !== "function") return
       for (const c of allCards()) {
-        if (!c.spawned || !c.task || c.pid !== process.pid) continue
-        const t = loadTask(c.task.project, c.task.n)
+        if (!c.spawned || (!c.task && !c.review) || c.pid !== process.pid) continue
+        const asReviewer = !c.task && !!c.review
+        const ref = (c.task ?? c.review)!
+        const t = loadTask(ref.project, ref.n)
         if (!t) continue
-        const mark = t.executor !== c.session ? "↷" : t.status === "submitted" || t.status === "closed" ? "✓" : t.status === "cancelled" ? "✗" : ""
-        const title = `#${t.n}${mark ? ` ${mark}` : ""} ${t.title}`
+        const MARK: Record<string, string> = { submitted: "✓", reviewing: "✓◐", rework: "↻", accepted: "✓✓◐", cleaned: "✓✓", closed: "✓", cancelled: "✗" }
+        const replaced = asReviewer ? t.reviewer !== c.session : t.executor !== c.session
+        const mark = replaced ? "↷" : asReviewer ? (t.status === "cleaned" ? "✓✓" : t.status === "cancelled" ? "✗" : "") : (MARK[t.status] ?? "")
+        const title = `#${t.n}${mark ? ` ${mark}` : ""} ${asReviewer ? "приёмка " : ""}${t.title}`
         if (c.titleShown === title) continue
         try {
           await ctx.session.update({ sessionID: c.session, title })
@@ -495,6 +609,7 @@ export default {
         for (const w of liveWindows())
           for (const t of w.tabs ?? []) if (!existsSync(cardFile(t.sessionID)) && waitingIn([t.sessionID]) && (await sessionInfo(t.sessionID))) await touch(t.sessionID)
         await resumeTasks()
+        await assignReviewers()
         await resumeInterrupted()
         await finishTasks()
         await syncTitles()

@@ -14,9 +14,13 @@ import { INBOX, READ, type Priority, type Tier, dataDir, readJson, safeKey } fro
 // core.ts и tasks.ts импортируют друг друга: путь — из функции dataDir (объявления функций доступны сразу), не из BASE.
 export const TASKS = path.join(dataDir(), "nova-peers", "tasks")
 
-/** starting — записана, сессия создаётся; running — в работе; submitted — сдана (отчёт); closed — закрыта; cancelled — отменена. */
-export type TaskStatus = "starting" | "running" | "submitted" | "closed" | "cancelled"
-export const OPEN_STATUSES: TaskStatus[] = ["starting", "running", "submitted"]
+// starting — записана, сессия создаётся; running — в работе; submitted — сдана (отчёт), ждёт приёмщика;
+// reviewing — на приёмке; rework — на доработке; accepted — принята (влита), ждёт очистки; cleaned — очищена, всё
+// закрыто; closed — закрыта (прежний путь «по отчёту»); cancelled — отменена.
+export type TaskStatus = "starting" | "running" | "submitted" | "reviewing" | "rework" | "accepted" | "cleaned" | "closed" | "cancelled"
+export const OPEN_STATUSES: TaskStatus[] = ["starting", "running", "submitted", "reviewing", "rework", "accepted"]
+/** статусы, в которых исполнитель работает (может сдавать отчёт) */
+export const WORKING_STATUSES: TaskStatus[] = ["starting", "running", "rework"]
 export type TaskEvent = { at: number; by: string; status?: TaskStatus; note?: string }
 export type Task = {
   project: string
@@ -50,6 +54,18 @@ export type Task = {
   branch?: string
   /** сводка сделанного прежним исполнителем (reassign) — в письмо новому */
   handoff?: string
+  /** последний отчёт исполнителя */
+  report?: string
+  /** приёмщик (сессия) и как он выбран; qid его обязательства; прежние приёмщики */
+  reviewer?: string
+  review_kind?: "tab" | "spawn" | "integrator"
+  review_qid?: string
+  reviewers?: string[]
+  /** кругов доработки */
+  rework?: number
+  /** отчёт приёмщика по шагам приёмки и коммит вливания */
+  checks?: Record<string, string>
+  commit?: string
   history: TaskEvent[]
   created: number
   updated: number
@@ -134,5 +150,5 @@ export function letterExists(key: string, id: string): boolean {
 const PRIORITY_RANK: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3 }
 export const byPriority = (a: Task, b: Task) => (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9) || a.created - b.created
 
-const STATUS_RU: Record<TaskStatus, string> = { starting: "запускается", running: "в работе", submitted: "сдана", closed: "закрыта", cancelled: "отменена" }
+const STATUS_RU: Record<TaskStatus, string> = { starting: "запускается", running: "в работе", submitted: "сдана", reviewing: "на приёмке", rework: "на доработке", accepted: "принята", cleaned: "очищена", closed: "закрыта", cancelled: "отменена" }
 export const statusRu = (s: TaskStatus) => STATUS_RU[s] ?? s
