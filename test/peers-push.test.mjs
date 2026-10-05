@@ -186,6 +186,24 @@ await failedTurn()
 await failedTurn()
 cell("three failed turns: stuck, the call says the turns fail", got("sesINTEG1", "ход падает с ошибкой").length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "sesINTEG1").map((d) => d.text.slice(0, 200))))
 
+// 8. OpenCode loads the plugin again in the same process for a new directory: a turn running right now (its session
+// has time_suspended too, no idle yet) is not "cut off by a restart" for the new instance (found live 2026-10-05:
+// two working reviewers got "работа прервана перезапуском")
+db.prepare("insert into session_v2 values (?, ?, ?, null, null, null, null, ?)").run("ses_run1", proj, "ses_run1", Date.now())
+core.saveCard({ session: "ses_run1", role: "worker", auto: false, title: "ses_run1", directory: proj, repo: "proj", project: "proj", pid: process.pid, updated: Date.now() })
+core.addObligation("ses_run1", { qid: "rqRUN", from_session: "sesINTEG1", from_role: "proj.integrator", at: Date.now(), nudges: 0, task: "приёмка #8" })
+const stop2 = await mod.default.setup(ctx)
+await wait(1500)
+const resumes = ["inbox", "read"].flatMap((d) => {
+  try {
+    return readdirSync(path.join(core.BASE, d, "ses_run1")).filter((f) => f.startsWith("resume-"))
+  } catch {
+    return []
+  }
+})
+cell("a second plugin instance does not call a running turn interrupted", resumes.length === 0, JSON.stringify(resumes))
+stop2?.()
+
 clearInterval(heart)
 stop?.()
 db.close()
