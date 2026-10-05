@@ -20,8 +20,10 @@ import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync
 import path from "node:path"
 import { NOTICES, WINDOWS, cardFile, configShowText, loadProjects, readJson } from "./core.ts"
 import { formatStatuses, readStatuses } from "./status.ts"
+import { loadTask } from "./tasks.ts"
 
 const BEAT_MS = 1_000
+const AUTOCLOSE_MS = Number(process.env.NOVA_PEERS_AUTOCLOSE_MS) || 120_000
 
 export default {
   id: "opencode-peers.window",
@@ -30,6 +32,8 @@ export default {
     const file = path.join(WINDOWS, `${process.pid}.json`)
     const notices = path.join(NOTICES, String(process.pid))
 
+    let closeCheckedAt = 0
+    const closedTabs = new Set<string>()
     const beat = () => {
       let route: string | undefined
       let tabs: { sessionID: string; active: boolean; busy: boolean; title?: string }[] = []
@@ -47,6 +51,22 @@ export default {
         writeFileSync(tmp, JSON.stringify({ pid: process.pid, beat: Date.now(), route, tabs }))
         renameSync(tmp, file)
       } catch {}
+      // ВКЛАДКИ ЗАКРЫТЫХ ЗАДАЧ закрываются сами (владелец 2026-10-06: «#6 вкладка закроется автоматически?»): сессия
+      // задачи или приёмки, чья задача принята (cleaned) или отменена больше AUTOCLOSE_MS назад, — если вкладка не на
+      // экране. Вкладки владельца (задача assign) не трогаются. Сессия остаётся в истории (Ctrl+P → Switch session).
+      if (Date.now() - closeCheckedAt > 10_000) {
+        closeCheckedAt = Date.now()
+        for (const t of tabs) {
+          if (t.active || closedTabs.has(t.sessionID)) continue
+          try {
+            const card = readJson<any>(cardFile(t.sessionID))
+            const ref = card?.spawned ? (card.task ?? card.review) : undefined
+            const task = ref ? loadTask(ref.project, ref.n) : undefined
+            if (!task || (task.status !== "cleaned" && task.status !== "cancelled") || Date.now() - task.updated < AUTOCLOSE_MS) continue
+            if (api.ui?.tabs?.close?.(t.sessionID)) closedTabs.add(t.sessionID)
+          } catch {}
+        }
+      }
       try {
         for (const f of readdirSync(notices).filter((f) => f.endsWith(".json")).sort()) {
           const p = path.join(notices, f)
