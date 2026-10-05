@@ -4,7 +4,7 @@
 // удалены», письмо приёмщику, письмо на доработку, шаги очистки.
 
 import { execFile, execFileSync } from "node:child_process"
-import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { type Card, type PeersConfig, ROLES, cardFile, mayWakeCard, readJson, safeKey } from "./core.ts"
 import { type Task, isOpen, loadTask } from "./tasks.ts"
@@ -254,4 +254,27 @@ export async function leftoversOf(t: Task, cfg: PeersConfig, remote: boolean): P
       }
   } catch {}
   return [...left]
+}
+
+// СЛЕДЫ ОБОРВАННОЙ ОПЕРАЦИИ GIT (2026-10-06): ход оборвали посреди git (перезапуск сервиса) — в дереве может остаться
+// брошенный index.lock (любая команда git отказывает), незаконченное слияние, rebase или cherry-pick. Письмо «прервана
+// перезапуском» называет их конкретно — только по наличию файлов в git-каталоге, без запуска git.
+export function gitTraces(dir: string, now = Date.now()): string[] {
+  const out: string[] = []
+  try {
+    let gitDir = path.join(dir, ".git")
+    if (!existsSync(gitDir)) return out
+    if (!lstatSync(gitDir).isDirectory()) {
+      const m = /gitdir:\s*(.+)/.exec(readFileSync(gitDir, "utf8"))
+      if (!m) return out
+      gitDir = path.resolve(dir, m[1].trim())
+    }
+    const lock = path.join(gitDir, "index.lock")
+    if (existsSync(lock)) out.push(`брошенный ${lock} (${Math.round((now - statSync(lock).mtimeMs) / 60_000)} мин): если git сейчас не работает — удали его`)
+    if (existsSync(path.join(gitDir, "MERGE_HEAD"))) out.push(`незаконченное слияние в ${dir}: доведи (разреши конфликты, коммит) или git merge --abort`)
+    if (existsSync(path.join(gitDir, "rebase-merge")) || existsSync(path.join(gitDir, "rebase-apply"))) out.push(`незаконченный rebase в ${dir}: git rebase --continue или --abort`)
+    if (existsSync(path.join(gitDir, "CHERRY_PICK_HEAD"))) out.push(`незаконченный cherry-pick в ${dir}: --continue или --abort`)
+    if (existsSync(path.join(gitDir, "REVERT_HEAD"))) out.push(`незаконченный revert в ${dir}: --continue или --abort`)
+  } catch {}
+  return out
 }

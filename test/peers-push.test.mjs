@@ -29,6 +29,10 @@ for (const s of ["sesINTEG1", "sesWORK01", "sesINTER1", "ses_fail01", "ses_retry
 // a turn of sesINTER1 cut off by a server restart a minute ago: time_suspended, no idle
 db.prepare("update session_v2 set time_suspended = ? where id = ?").run(Date.now() - 60_000, "sesINTER1")
 
+// the interrupted session's tree has traces of a git operation cut off by the restart
+mkdirSync(path.join(proj, ".git"), { recursive: true })
+writeFileSync(path.join(proj, ".git", "MERGE_HEAD"), "abc")
+writeFileSync(path.join(proj, ".git", "index.lock"), "")
 const core = await import("../core.ts")
 const tasks = await import("../tasks.ts")
 // sesINTER1 owes an answer from before the restart
@@ -100,6 +104,20 @@ await wait(800)
 cell("an interrupted turn gets one 'resume' letter", got("sesINTER1", "прервана перезапуском").length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "sesINTER1")))
 await wait(600)
 cell("and only one", got("sesINTER1", "прервана перезапуском").length === 1, got("sesINTER1", "прервана").length)
+cell("the resume letter names the git traces: the stale index.lock and the merge in progress", /index.lock/.test(got("sesINTER1", "прервана")[0]?.text ?? "") && /незаконченное слияние/.test(got("sesINTER1", "прервана")[0]?.text ?? ""), got("sesINTER1", "прервана")[0]?.text)
+{
+  // a worktree: .git is a file pointing to its git dir
+  const { gitTraces } = await import("../review.ts")
+  const wt = path.join(tmp, "wt1")
+  const gd = path.join(tmp, "gitdirs", "wt1")
+  mkdirSync(wt, { recursive: true })
+  mkdirSync(path.join(gd, "rebase-merge"), { recursive: true })
+  writeFileSync(path.join(wt, ".git"), `gitdir: ${gd}
+`)
+  const tr = gitTraces(wt)
+  cell("gitTraces follows a worktree's .git file", tr.length === 1 && /rebase/.test(tr[0]), JSON.stringify(tr))
+  cell("gitTraces of a clean tree is empty", gitTraces(tmp + "/nowhere").length === 0, "not empty")
+}
 cell("a turn that failed before the plugin started: one 'continue' letter", got("ses_retry1", "кончился ошибкой").length === 1 && got("ses_retry1", "приёмка #7").length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "ses_retry1").map((d) => d.text.slice(0, 200))))
 cell("the resume letter says how to report", got("sesINTER1", 'reply_to: "qOLD"').length === 1, got("sesINTER1", "прервана")[0]?.text)
 const toPlugin = await call("peer_send", "sesINTER1", { to: "opencode-peers", text: "принял, продолжаю" })

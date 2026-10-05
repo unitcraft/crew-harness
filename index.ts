@@ -100,7 +100,7 @@ import {
 import { pollWatches, watchesOf } from "./watch.ts"
 import { endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
 import { type Task, byPriority, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
-import { ensureWorktree, leftoversOf, mergeHolder, reviewLetter } from "./review.ts"
+import { ensureWorktree, gitTraces, leftoversOf, mergeHolder, reviewLetter } from "./review.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
 
@@ -382,13 +382,20 @@ export default {
           .filter((o) => !o.stuck)
           .map((o) => `— ${task && task.qid === o.qid ? `задача #${task.n} «${task.title}»` : `вопрос${o.task ? ` «${o.task.slice(0, 200)}»` : ""}`} от ${o.from_role}: отчёт — peer_send {to: "${o.from_session}", reply_to: "${o.qid}", text: "..."}`)
           .join("\n")
+        // следы оборванной операции git в деревьях задачи (worktree исполнителя и главная копия) и замок вливания
+        const ref = c.task ?? c.review
+        const t = ref ? loadTask(ref.project, ref.n) : undefined
+        const dirs = [...new Set([t?.worktree, t?.directory, c.directory].filter((d): d is string => !!d && existsSync(d)))]
+        const traces = dirs.flatMap((d) => gitTraces(d))
+        const lock = t && mergeHolder(t.project)?.session === c.session ? `\nЗамок вливания проекта ${t.project} всё ещё твой (приёмка #${t.n}): доведи вливание или отпусти его.` : ""
+        const gitNote = traces.length ? `\nВ git осталось от оборванного хода:\n${traces.map((x) => `— ${x}`).join("\n")}` : ""
         postLetter(c.session, {
           id,
           from_role: "opencode-peers",
           from_session: "opencode-peers",
           to: c.session,
           time: now(),
-          text: `Работа прервана перезапуском OpenCode (ход оборвался в ${hhmm(row.suspended)}). Продолжай с того места, где остановился: сначала проверь, что успело сделаться (файлы, коммиты, запущенные команды). Открыто:\n${open}`,
+          text: `Работа прервана перезапуском OpenCode (ход оборвался в ${hhmm(row.suspended)}). Продолжай с того места, где остановился: сначала проверь, что успело сделаться (файлы, коммиты, запущенные команды; git status в деревьях задачи).${gitNote}${lock}\nОткрыто:\n${open}`,
         })
         log(`resume interrupted ${c.session} (suspended ${row.suspended})`)
       }
