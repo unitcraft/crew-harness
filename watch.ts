@@ -30,6 +30,9 @@ export type Watch = {
   minutes: number
   created: number
   status: "requested" | "running" | "done"
+  /** Команда грузит машину (гейт, сборка, прогон тестов): ждёт места в очереди машины проекта (план 005). */
+  machine?: boolean
+  project?: string
   pid?: number
   started?: number
   ended?: number
@@ -45,11 +48,11 @@ const forBash = (p: string) => p.replace(/\\/g, "/")
 const quote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`
 
 /** Задание наблюдения: только файл, запустит плагин. */
-export function requestWatch(w: { session: string; command: string; cwd: string; note?: string; minutes?: number }, now = Date.now()): Watch {
+export function requestWatch(w: { session: string; command: string; cwd: string; note?: string; minutes?: number; machine?: boolean; project?: string }, now = Date.now()): Watch {
   mkdirSync(WATCHES, { recursive: true })
   const minutes = Math.min(WATCH_MAX_MIN, Math.max(1, Math.round(Number(w.minutes) || WATCH_DEFAULT_MIN)))
   const id = `${now}-${Math.random().toString(36).slice(2, 8)}`
-  const watch: Watch = { id, session: w.session, command: w.command, cwd: w.cwd, ...(w.note ? { note: w.note } : {}), minutes, created: now, status: "requested" }
+  const watch: Watch = { id, session: w.session, command: w.command, cwd: w.cwd, ...(w.note ? { note: w.note } : {}), ...(w.machine ? { machine: true } : {}), ...(w.project ? { project: w.project } : {}), minutes, created: now, status: "requested" }
   writeAtomic(file(id, ".req.json"), watch)
   return watch
 }
@@ -111,22 +114,48 @@ export function watchLetter(w: Watch, output: string): string {
         ? `истекло время (${w.minutes} мин), команда остановлена`
         : `код выхода ${w.code}`
   const tail = tailOf(output)
+  const queued = w.machine && w.started && w.started - w.created > 60_000 ? ` (до запуска ждало очереди машины ${minutesText(w.started - w.created)})` : ""
   return (
-    `Наблюдение ${what} закончилось: ${how}, шло ${minutesText((w.ended ?? 0) - (w.started ?? w.created))}.\n` +
+    `Наблюдение ${what} закончилось: ${how}, шло ${minutesText((w.ended ?? 0) - (w.started ?? w.created))}${queued}.\n` +
     `Команда: ${w.command.length > 300 ? `${w.command.slice(0, 300)}…` : w.command}\n` +
     (tail ? `Хвост вывода:\n${tail}` : "Вывода нет.") +
     `\nПолный вывод: ${file(w.id, ".out")}`
   )
 }
 
-/** Проход плагина: запустить новые, закончить завершённые. post — письмо окну. */
-export function pollWatches(post: (w: Watch, text: string) => void, log: (s: string) => void = () => {}, now = Date.now()): number {
+// ОЧЕРЕДЬ МАШИНЫ (план 005, 2026-10-05): гейты трёх воркеров и приёмщиков шли разом с CI интегратора — машина
+// владельца захлёбывалась. Наблюдение с machine: true запускается, только пока в его проекте таких работает меньше
+// machine_slots (по умолчанию 1; 0 — без предела); остальные ждут по времени постановки (имя файла начинается
+// с него). Предел времени (minutes) считается от запуска, не от постановки.
+const runningMachine = (project: string | undefined) =>
+  readdirSync(WATCHES)
+    .filter((f) => f.endsWith(".json") && !f.endsWith(".req.json"))
+    .map((f) => readJson<Watch>(path.join(WATCHES, f)))
+    .filter((w) => w?.machine && w.status === "running" && w.project === project).length
+
+/** Ждущие в очереди машины проекта, по порядку. */
+export function machineQueue(project: string | undefined): Watch[] {
+  if (!existsSync(WATCHES)) return []
+  return readdirSync(WATCHES)
+    .filter((f) => f.endsWith(".req.json"))
+    .sort()
+    .map((f) => readJson<Watch>(path.join(WATCHES, f)))
+    .filter((w): w is Watch => !!w?.machine && w.project === project)
+}
+
+/** Проход плагина: запустить новые, закончить завершённые. post — письмо окну; slots — machine_slots проекта. */
+export function pollWatches(post: (w: Watch, text: string) => void, log: (s: string) => void = () => {}, now = Date.now(), slots: (w: Watch) => number = () => 1): number {
   if (!existsSync(WATCHES)) return 0
   let changed = 0
-  for (const f of readdirSync(WATCHES)) {
+  for (const f of readdirSync(WATCHES).sort()) {
     if (f.endsWith(".req.json")) {
       // захват переименованием: запускает один процесс, даже если плагинов два
       const id = f.slice(0, -".req.json".length)
+      const req = readJson<Watch>(path.join(WATCHES, f))
+      if (req?.machine) {
+        const limit = slots(req)
+        if (limit > 0 && runningMachine(req.project) >= limit) continue // ждёт места в очереди машины
+      }
       try {
         renameSync(path.join(WATCHES, f), file(id, ".claim"))
       } catch {
@@ -163,7 +192,7 @@ export function pollWatches(post: (w: Watch, text: string) => void, log: (s: str
   return changed
 }
 
-/** Открытые наблюдения окна (для справки и peer_watch list). */
+/** Открытые наблюдения окна: запущенные и ждущие запуска (status requested — в очереди машины или ещё не взятые). */
 export function watchesOf(session: string): Watch[] {
   if (!existsSync(WATCHES)) return []
   const out: Watch[] = []

@@ -83,6 +83,11 @@ is reported as cut off; the time limit (default 120 min, up to 720) stops it wit
 is the only way: Claude Code's own background tasks (`run_in_background`, Monitor) die with the turn
 ([plan 003](doc/plans/003-watch.md)).
 
+**The machine queue.** `machine: true` marks a command that loads the machine (a gate, a build, a full test run):
+it waits for a slot in the project's machine queue — `machine_slots` at a time (1; 0 — no limit), in the order they
+were set; the time limit counts from the start. `peer_watch` says how many are ahead, `/peers` shows it queued, the
+letter says how long it waited. Ordinary watches and other projects do not wait ([plan 005](doc/plans/005-machine-queue.md)).
+
 ## Who waits for what: `/peers` and "waiting for you"
 
 `/peers` in any window (also in the Ctrl+P palette) shows, without a model turn, every session of the projects:

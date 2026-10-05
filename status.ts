@@ -93,7 +93,8 @@ export function statusOf(x: StatusInput): Status {
   if (q) return { ...base, state: "question", since: x.end!.at, question: q, detail: `ждёт ответа (интегратора или вас) с ${hm(x.end!.at)}: ${q}` }
   if (watches.length) {
     const w = watches[0]
-    return { ...base, state: "watch", since: w.started ?? w.created, detail: `ждёт наблюдения${w.note ? ` «${w.note}»` : ""} (с ${hm(w.started ?? w.created)}, предел ${w.minutes} мин)${watches.length > 1 ? ` и ещё ${watches.length - 1}` : ""}` }
+    const queued = w.status === "requested" && w.machine ? `в очереди машины с ${hm(w.created)}` : `с ${hm(w.started ?? w.created)}, предел ${w.minutes} мин`
+    return { ...base, state: "watch", since: w.started ?? w.created, detail: `ждёт наблюдения${w.note ? ` «${w.note}»` : ""} (${queued})${watches.length > 1 ? ` и ещё ${watches.length - 1}` : ""}` }
   }
   if (x.asked.length) return { ...base, state: "reply", since: x.asked[0].at, detail: `ждёт ответа от ${x.asked.map((a) => a.to).join(", ")} (с ${hm(x.asked[0].at)})` }
   if (own && isOpen(own)) {
