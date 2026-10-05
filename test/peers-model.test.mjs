@@ -1,4 +1,4 @@
-// Self-test of nova-peers window model (node >= 24):  node test/peers-model.test.mjs
+// Self-test of opencode-peers window model (node >= 24):  node test/peers-model.test.mjs
 // The model is the one of the REQUEST the window makes now (hook model.request); the database is only a
 // fallback and is printed with the time of the last turn. Red probe: PEERS_MODULE=<copy of the plugin that
 // ignores the request model> -- the cell "request model wins" goes red.

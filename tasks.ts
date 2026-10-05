@@ -9,10 +9,11 @@
 
 import { existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { INBOX, READ, type Priority, type Tier, dataDir, readJson, safeKey } from "./core.ts"
+import { INBOX, READ, type Priority, type Tier, readJson, safeKey } from "./core.ts"
+import { BASE } from "./paths.ts"
 
-// core.ts и tasks.ts импортируют друг друга: путь — из функции dataDir (объявления функций доступны сразу), не из BASE.
-export const TASKS = path.join(dataDir(), "nova-peers", "tasks")
+// путь — из paths.ts (модуль без зависимостей: core и tasks импортируют друг друга, а BASE ядра здесь ещё не готов)
+export const TASKS = path.join(BASE, "tasks")
 
 // starting — записана, сессия создаётся; running — в работе; submitted — сдана (отчёт), ждёт приёмщика;
 // reviewing — на приёмке; rework — на доработке; accepted — принята (влита), ждёт очистки; cleaned — очищена, всё

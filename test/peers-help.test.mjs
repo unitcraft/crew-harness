@@ -1,4 +1,4 @@
-// Self-test of nova-peers help (node >= 24):  node test/peers-help.test.mjs
+// Self-test of opencode-peers help (node >= 24):  node test/peers-help.test.mjs
 // The help is served by the peer_help tool and by the /peer_help command, names all four tools,
 // and the context hook points at it. Red probe: NOVA_PEERS_HELP_DROP=<tool> strips one name from the
 // served text -- the cell naming that tool must go red.

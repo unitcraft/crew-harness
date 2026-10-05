@@ -7,6 +7,7 @@ import { execFileSync } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync, appendFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { BASE as PEERS_BASE, dataDir } from "./paths.ts"
 import { type Projects, parseProjects as parseProjectsWith, projectFor, rawSettingsFor, readSettingsFolder, workingSettings, writeSettings } from "./settings.ts"
 import { SCHEMA, guideText, invalid } from "./config-schema.ts"
 export { PROJECT_RE, type Project, type Projects, settingsProblems } from "./settings.ts"
@@ -27,10 +28,7 @@ export function log(line: string) {
   } catch {}
 }
 
-export function dataDir(): string {
-  const xdg = process.env.XDG_DATA_HOME
-  return xdg ? path.join(xdg, "opencode") : path.join(os.homedir(), ".local", "share", "opencode")
-}
+export { dataDir }
 
 // Имя репозитория окна — каталог главной рабочей копии (для дерева-ветки это
 // всё равно имя репозитория, а не дерева), плюс подкаталог дерева, если он другой.
@@ -122,7 +120,7 @@ export function parseAddr(to: string, home: string, isSession: (s: string) => bo
 // Ящик роли — `<проект>.<роль>` (имя каталога через safeKey: `nova_integrator`; ни в проекте, ни в роли `_` нет).
 export const roleKey = (project: string, role: string) => `${project}.${role}`
 
-export const BASE = path.join(dataDir(), "nova-peers")
+export const BASE = PEERS_BASE // paths.ts: opencode-peers (прежняя nova-peers переносится)
 export const CARDS = path.join(BASE, "cards")
 export const INBOX = path.join(BASE, "inbox")
 export const READ = path.join(BASE, "read")

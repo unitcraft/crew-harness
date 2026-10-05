@@ -1,4 +1,4 @@
-// Self-test of nova-peers delivery to an idle window (node >= 24):  node test/peers-idle.test.mjs
+// Self-test of opencode-peers delivery to an idle window (node >= 24):  node test/peers-idle.test.mjs
 // A window's card exists on disk (written by an earlier plugin instance), but the window
 // makes no request after the plugin (re)loads. A letter to its role must still be
 // delivered within one poll tick; a card of a live FOREIGN process must be left alone.
@@ -10,7 +10,7 @@ const tmp = mkdtempSync(path.join(os.tmpdir(), "peers-idle-"))
 process.env.XDG_DATA_HOME = tmp
 process.env.NOVA_PEERS_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
 process.env.NOVA_PEERS_POLL_MS = "100"
-const cards = path.join(tmp, "opencode", "nova-peers", "cards")
+const cards = path.join(tmp, "opencode", "opencode-peers", "cards")
 mkdirSync(cards, { recursive: true })
 const card = (session, role, pid) =>
   writeFileSync(path.join(cards, `${session}.json`), JSON.stringify({ session, role, auto: false, title: "", directory: process.cwd(), repo: "nova", pid, updated: Date.now() }))

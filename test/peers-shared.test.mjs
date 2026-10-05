@@ -1,4 +1,4 @@
-// Self-test of nova-peers shared roles and window models (node >= 24):  node test/peers-shared.test.mjs
+// Self-test of opencode-peers shared roles and window models (node >= 24):  node test/peers-shared.test.mjs
 // Red probe: NOVA_PEERS_NO_AMBIGUITY_GUARD=1 -- not supported by the plugin; the probe in the report removes the
 // guard line from a copy (see the commit message). This file asserts the behaviour.
 import { mkdtempSync, rmSync } from "node:fs"

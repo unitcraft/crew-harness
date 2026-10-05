@@ -15,7 +15,7 @@ mkdirSync(proj, { recursive: true })
 
 const mod = await import(process.env.PEERS_MODULE ?? "../index.ts")
 const core = await import(process.env.PEERS_CORE ?? "../core.ts")
-const base = path.join(tmp, "opencode", "nova-peers")
+const base = path.join(tmp, "opencode", "opencode-peers")
 const hooks = {}
 const tools = {}
 const delivered = []

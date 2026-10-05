@@ -1,4 +1,4 @@
-// Self-test of nova-peers project config (node >= 24):  node test/peers-config.test.mjs
+// Self-test of opencode-peers project config (node >= 24):  node test/peers-config.test.mjs
 // Base roles of the plugin: `integrator` exclusive, everything else shared. The project config ADDS exclusive
 // roles (exclusive_roles), appends help_extra and may override the tier lists (tiers).
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"

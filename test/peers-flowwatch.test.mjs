@@ -131,12 +131,12 @@ cell("a submitted task waiting for a reviewer is raised, once", wait2.length ===
 // 4. a turn continued by OpenCode itself counts as working
 await until(() => {
   try {
-    return JSON.parse(readFileSync(path.join(tmp, "opencode", "nova-peers", "status", "sesRUN01.json"), "utf8")).state === "working"
+    return JSON.parse(readFileSync(path.join(tmp, "opencode", "opencode-peers", "status", "sesRUN01.json"), "utf8")).state === "working"
   } catch {
     return false
   }
 })
-const run = JSON.parse(readFileSync(path.join(tmp, "opencode", "nova-peers", "status", "sesRUN01.json"), "utf8"))
+const run = JSON.parse(readFileSync(path.join(tmp, "opencode", "opencode-peers", "status", "sesRUN01.json"), "utf8"))
 cell("an open, fresh turn in the database is 'working'", run.state === "working", run.state)
 
 // 5. leftovers of an accepted task: one letter to the author listing them (not another task's branch)

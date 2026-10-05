@@ -10,11 +10,12 @@
 
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { type Card, dataDir, readJson, safeKey } from "./core.ts"
+import { type Card, readJson, safeKey } from "./core.ts"
+import { BASE } from "./paths.ts"
 import { type Task, isOpen, listTasks, loadTask } from "./tasks.ts"
 import { type Watch, watchesOf } from "./watch.ts"
 
-export const STATUS = path.join(dataDir(), "nova-peers", "status")
+export const STATUS = path.join(BASE, "status")
 
 export type State = "working" | "owner" | "question" | "watch" | "reply" | "task" | "tasks" | "idle"
 export type Status = {

@@ -18,7 +18,8 @@
 import { execFileSync } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { dataDir, log, safeKey } from "./core.ts"
+import { log, safeKey } from "./core.ts"
+import { BASE } from "./paths.ts"
 
 export const SETTINGS_FILE = path.join(".opencode", "opencode-peers.json")
 export const PROJECT_RE = /^[a-z0-9][a-z0-9-]{0,40}$/
@@ -127,7 +128,7 @@ export function readSettingsFolder(folder: string, now = Date.now()): { project:
   // nova пошла без worktree и ветки по настройкам, а приёмка решила «очистка не нужна» — ветки и worktree остались.
   // Чтение с проблемой при прежнем чтении без проблем — сбой, а не правка: берём последние хорошие (память, затем
   // диск — для MCP-процессов, они живут один ход) и пишем о сбое в журнал. Чтение без проблем их обновляет.
-  const goodFile = path.join(dataDir(), "nova-peers", "settings-good", `${safeKey(dir)}.json`)
+  const goodFile = path.join(BASE, "settings-good", `${safeKey(dir)}.json`)
   if (!problems.length) {
     good.set(dir, value)
     try {

@@ -128,7 +128,7 @@ try {
   // peer_role from MCP; the card keeps the plugin's pid, so letters to the MCP window are still delivered
   const r = (await mcp.call("peer_role", { role: "worker" })).text
   cell("MCP peer_role sets the role", /теперь «worker», адрес nova\.worker/.test(r), r)
-  const card = JSON.parse(readFileSync(path.join(tmp, "opencode", "nova-peers", "cards", "sesCCCCCC.json"), "utf8"))
+  const card = JSON.parse(readFileSync(path.join(tmp, "opencode", "opencode-peers", "cards", "sesCCCCCC.json"), "utf8"))
   cell("the card keeps the OpenCode process pid", card.pid === process.pid && card.role === "worker", JSON.stringify(card))
   const rx = (await mcp.call("peer_role", { role: "integrator" })).text
   cell("exclusive role held by a live window is refused through MCP too", /занята/.test(rx), rx)
@@ -147,8 +147,8 @@ try {
   cell("MCP peer_help is the plugin's help", help === (await tools.peer_help.execute({}, { sessionID: "sesCCCCCC" })).content, help.slice(0, 80))
   const bad = (await mcp.call("peer_send", { to: "No Such.x", text: "bad" })).text
   cell("invalid address is refused", /не годится/.test(bad), bad)
-  const inboxDirs = readdirSync(path.join(tmp, "opencode", "nova-peers", "inbox"))
-  cell("nothing stuck in the inbox", inboxDirs.every((d) => readdirSync(path.join(tmp, "opencode", "nova-peers", "inbox", d)).filter((f) => f.endsWith(".json")).length === 0), inboxDirs.join(","))
+  const inboxDirs = readdirSync(path.join(tmp, "opencode", "opencode-peers", "inbox"))
+  cell("nothing stuck in the inbox", inboxDirs.every((d) => readdirSync(path.join(tmp, "opencode", "opencode-peers", "inbox", d)).filter((f) => f.endsWith(".json")).length === 0), inboxDirs.join(","))
 } catch (e) {
   cell("mcp session", false, String(e?.stack ?? e))
 } finally {
@@ -163,7 +163,7 @@ try {
   await fresh.rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {} })
   const pl = (await fresh.call("peer_list")).text
   cell("a window without a card gets project.role from the plugin's project list", /^\* limits\.worker/m.test(pl) && /limits\.integrator/.test(pl), pl)
-  const card = JSON.parse(readFileSync(path.join(tmp, "opencode", "nova-peers", "cards", "sesDDDDDD.json"), "utf8"))
+  const card = JSON.parse(readFileSync(path.join(tmp, "opencode", "opencode-peers", "cards", "sesDDDDDD.json"), "utf8"))
   cell("its card has pid 0 (delivered by the plugin's timer)", card.pid === 0 && card.project === "limits", JSON.stringify(card))
   await tools.peer_send.execute({ to: "sesDDDDDD", text: "to-a-fresh-window" }, { sessionID: "sesBBBBBB" })
   await wait()

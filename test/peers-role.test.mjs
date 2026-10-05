@@ -1,4 +1,4 @@
-// Self-test of nova-peers role handover (node >= 24):  node test/peers-role.test.mjs
+// Self-test of opencode-peers role handover (node >= 24):  node test/peers-role.test.mjs
 // Two sessions in one process: A holds `integrator`, B takes it with force. After A's next
 // turn A must NOT hold `integrator` again, and a letter to `integrator` must reach B only.
 import { mkdtempSync, readdirSync, rmSync } from "node:fs"

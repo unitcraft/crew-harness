@@ -103,7 +103,8 @@ and repeats it every `owner_reminder_min` minutes (15; 0 — once) until you ans
 The service plugin keeps `<mailbox>/status/<session id>.json` for open tabs, task sessions and sessions with watches
 or open tasks of their own — an open contract for outside checks (e.g. a project's Stop hook; the claude-code
 provider puts `OPENCODE_SESSION_ID` into Claude Code's environment). `<mailbox>` is
-`$XDG_DATA_HOME/opencode/nova-peers` (OpenCode's data directory):
+`$XDG_DATA_HOME/opencode/opencode-peers` (OpenCode's data directory; the old `nova-peers` is moved there on the first
+start of this version and left as a link to it, so old paths keep working):
 
 ```jsonc
 { "session": "ses_…", "project": "nova", "role": "integrator", "title": "…", "model": "claude-code/opus",
@@ -257,8 +258,8 @@ npm test   # node >= 24
 ```
 
 History: moved with its commits from `a private plugins repository of the nova project` (`plugins/nova-peers`).
-Internal names (`nova.peers` id, `nova-peers` data directory) are kept so existing mailboxes keep
-working; the settings file is `.opencode/opencode-peers.json` (named after the package; the old name
+The plugin id `nova.peers` is kept; the mailbox moved from `nova-peers` to `opencode-peers` (the old name stays as a
+junction to it, so nothing is lost and old processes land in the same folder); the settings file is `.opencode/opencode-peers.json` (named after the package; the old name
 `nova-peers.json` is no longer read).
 
 License: MIT OR Apache-2.0 (see [LICENSE](LICENSE)).

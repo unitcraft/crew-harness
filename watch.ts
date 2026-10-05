@@ -12,9 +12,10 @@
 import { execFileSync, spawn } from "node:child_process"
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { dataDir, readJson } from "./core.ts"
+import { readJson } from "./core.ts"
+import { BASE } from "./paths.ts"
 
-export const WATCHES = path.join(dataDir(), "nova-peers", "watches")
+export const WATCHES = path.join(BASE, "watches")
 export const WATCH_MAX_MIN = 720
 export const WATCH_DEFAULT_MIN = 120
 const KEEP_DONE_MS = 24 * 3600_000
