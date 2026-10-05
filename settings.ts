@@ -18,6 +18,7 @@
 import { execFileSync } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs"
 import path from "node:path"
+import { dataDir, log, safeKey } from "./core.ts"
 
 export const SETTINGS_FILE = path.join(".opencode", "opencode-peers.json")
 export const PROJECT_RE = /^[a-z0-9][a-z0-9-]{0,40}$/
@@ -52,7 +53,7 @@ export type Project = {
 }
 export type Projects = Project[]
 
-const git = (cwd: string, args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"] })
+const git = (cwd: string, args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"], timeout: 20_000 })
 
 function defaultBranch(repo: string): string {
   try {
@@ -88,6 +89,7 @@ const parseJson = (text: string | undefined): any => {
 // Прочитанные файлы настроек — на несколько секунд (инструменты зовут настройки на каждое письмо, git — процесс).
 const CACHE_MS = Number(process.env.NOVA_PEERS_SETTINGS_TTL_MS) || 5_000
 const cache = new Map<string, { at: number; value: any }>()
+const good = new Map<string, any>() // последние настройки без проблем, по папке
 
 /** Папка настроек → проект (имя, корень, сырые настройки). */
 export function readSettingsFolder(folder: string, now = Date.now()): { project: Project; raw: any } {
@@ -120,7 +122,30 @@ export function readSettingsFolder(folder: string, now = Date.now()): { project:
   if (!PROJECT_RE.test(name)) problems.push(`имя проекта «${name}» не годится: строчные латинские буквы, цифры, дефис`)
   const rootAbs = path.resolve(dir, typeof raw.root === "string" && raw.root ? raw.root : ".")
   if (!existsSync(rootAbs)) problems.push(`корень проекта ${name} (${rootAbs}) не существует`)
-  const value = { project: { name, root: normPath(rootAbs), rootPath: canon(rootAbs), dir, repo, file, branch, problems }, raw }
+  let value = { project: { name, root: normPath(rootAbs), rootPath: canon(rootAbs), dir, repo, file, branch, problems }, raw }
+  // ПОСЛЕДНИЕ ХОРОШИЕ НАСТРОЙКИ (2026-10-05): под нагрузкой git не ответил — и плагин молча взял умолчания: задача #6
+  // nova пошла без worktree и ветки по настройкам, а приёмка решила «очистка не нужна» — ветки и worktree остались.
+  // Чтение с проблемой при прежнем чтении без проблем — сбой, а не правка: берём последние хорошие (память, затем
+  // диск — для MCP-процессов, они живут один ход) и пишем о сбое в журнал. Чтение без проблем их обновляет.
+  const goodFile = path.join(dataDir(), "nova-peers", "settings-good", `${safeKey(dir)}.json`)
+  if (!problems.length) {
+    good.set(dir, value)
+    try {
+      mkdirSync(path.dirname(goodFile), { recursive: true })
+      writeFileSync(`${goodFile}.tmp`, JSON.stringify(value))
+      renameSync(`${goodFile}.tmp`, goodFile)
+    } catch {}
+  } else {
+    let last = good.get(dir)
+    if (!last)
+      try {
+        last = JSON.parse(readFileSync(goodFile, "utf8"))
+      } catch {}
+    if (last && !last.project?.problems?.length) {
+      log(`settings of ${dir}: ${problems.join("; ")} -- using the last good ones`)
+      value = last
+    }
+  }
   cache.set(dir, { at: now, value })
   return value
 }

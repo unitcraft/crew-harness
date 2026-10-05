@@ -106,6 +106,16 @@ const fromBox = core.loadProjects()
 cell("MCP gets the same projects from the mailbox", fromBox.length === 1 && fromBox[0].name === "nova", JSON.stringify(fromBox))
 cell("MCP gets the local option too", core.loadConfig(tab).spawnModels.heavy === "x/y", JSON.stringify(core.loadConfig(tab).spawnModels))
 
+// git fails for a moment (a loaded machine, a lock): the last good settings stay, not the defaults (live 2026-10-05:
+// a task went without its worktree and was never cleaned up)
+const { readSettingsFolder } = await import("../settings.ts")
+const before = readSettingsFolder(cfgRepo, Date.now() + 60_000).raw
+const { renameSync } = await import("node:fs")
+renameSync(path.join(cfgRepo, ".git"), path.join(cfgRepo, ".git-off"))
+const during = readSettingsFolder(cfgRepo, Date.now() + 120_000)
+renameSync(path.join(cfgRepo, ".git-off"), path.join(cfgRepo, ".git"))
+cell("a failed git read keeps the last good settings", JSON.stringify(during.raw) === JSON.stringify(before) && Object.keys(before).length > 0 && during.project.name === "nova", JSON.stringify({ before, during: during.raw, problems: during.project.problems }))
+
 rmSync(tmp, { recursive: true, force: true })
 console.log(fail ? `peers-settings.test: FAIL ${fail}` : "peers-settings.test ok")
 process.exit(fail ? 1 : 0)
