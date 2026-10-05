@@ -25,7 +25,7 @@ db.exec("create table session_v2 (id text primary key, directory text, title tex
 db.exec("create table session_message (id text primary key, session_id text, type text, seq integer, time_created integer, time_updated integer, data text)")
 let seq = 0
 const msg = (session, type, data, at = Date.now()) => db.prepare("insert into session_message values (?, ?, ?, ?, ?, ?, ?)").run(`m${++seq}`, session, type, seq, at, at, JSON.stringify(data))
-for (const s of ["sesINTEG1", "sesWORK01", "sesINTER1"]) db.prepare("insert into session_v2 values (?, ?, ?, null, null, null, null, null)").run(s, proj, s)
+for (const s of ["sesINTEG1", "sesWORK01", "sesINTER1", "ses_fail01"]) db.prepare("insert into session_v2 values (?, ?, ?, null, null, null, null, null)").run(s, proj, s)
 // a turn of sesINTER1 cut off by a server restart a minute ago: time_suspended, no idle
 db.prepare("update session_v2 set time_suspended = ? where id = ?").run(Date.now() - 60_000, "sesINTER1")
 
@@ -77,7 +77,7 @@ async function turn({ tools: withTool = false, owner = false } = {}) {
 }
 
 const WPID = 717171
-const tabs = ["sesINTEG1", "sesWORK01"].map((sessionID, i) => ({ sessionID, active: i === 0, busy: false }))
+const tabs = ["sesINTEG1", "sesWORK01", "ses_fail01"].map((sessionID, i) => ({ sessionID, active: i === 0, busy: false }))
 mkdirSync(core.WINDOWS, { recursive: true })
 const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now(), tabs }))
 beat()
@@ -160,6 +160,24 @@ await call("peer_send", "sesWORK01", { to: "sesINTEG1", text: "парсер го
 const before = reminders()
 await turn()
 cell("after the report no reminders", reminders() === before && !obl(), `${reminders()} ${JSON.stringify(obl())}`)
+
+// 7. a turn that fails BEFORE any model request (the model is unavailable): no request hook, only a failed idle row.
+// The waking delivery marks the tab busy, so the end of such a turn is seen: a reminder; failing turns in a row ->
+// stuck, and the call says the turns fail with an error (found live in Ph.7: a reviewer on a model the server lacks).
+const failReminders = () => got("ses_fail01", "Не завершено").length
+await call("peer_send", "sesINTEG1", { to: "ses_fail01", text: "проверь сборку", expect_reply: true })
+await wait(800)
+cell("the question reached the tab", got("ses_fail01", "проверь сборку").length === 1, JSON.stringify(delivered.map((d) => d.sessionID)))
+async function failedTurn() {
+  msg("ses_fail01", "user", { text: "[opencode-peers] Письмо соседней вкладки" })
+  msg("ses_fail01", "idle", { outcome: "failed" })
+  await wait(800) // no idle event: the database fallback of the plugin's pass finds the idle row
+}
+await failedTurn()
+cell("a turn failed before the model: a reminder", failReminders() === 1, failReminders())
+await failedTurn()
+await failedTurn()
+cell("three failed turns: stuck, the call says the turns fail", got("sesINTEG1", "ход падает с ошибкой").length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "sesINTEG1").map((d) => d.text.slice(0, 200))))
 
 clearInterval(heart)
 stop?.()

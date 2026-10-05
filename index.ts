@@ -220,6 +220,11 @@ export default {
         const text = formatLetters(letters, card)
         const wake = loud && open
         try {
+          // будящее письмо начинает ход: метка wokeAt. Занятость ставит хук запроса к модели, а ход, упавший ДО запроса
+          // (модель недоступна — замер Ф.7: приёмщик на claude-code/sonnet, которой нет на сервере), его не вызывает:
+          // без метки конца такого хода не видно — ни напоминания, ни вызова, обязательство висит молча. Доставку
+          // метка не держит (в отличие от busy).
+          if (wake) markWoke(card, now())
           if (wake) await ctx.session.prompt({ sessionID: card.session, text, delivery: "queue" })
           else if (typeof ctx.session.synthetic === "function") await ctx.session.synthetic({ sessionID: card.session, text, resume: false })
           else await ctx.session.prompt({ sessionID: card.session, text, resume: false }) // OpenCode без synthetic: лишний шаг, но без хода
@@ -240,6 +245,13 @@ export default {
       const fresh = readJson<Card>(cardFile(card.session)) ?? card
       fresh.busy = busy
       fresh.busySince = busy ? now() : undefined
+      if (!busy) fresh.wokeAt = undefined // конец хода увиден обычным путём
+      saveCard(fresh)
+      mine.set(fresh.session, fresh)
+    }
+    function markWoke(card: Card, at: number | undefined) {
+      const fresh = readJson<Card>(cardFile(card.session)) ?? card
+      fresh.wokeAt = at
       saveCard(fresh)
       mine.set(fresh.session, fresh)
     }
@@ -274,7 +286,8 @@ export default {
           : `Закончил — отчёт: peer_send {to: "${o.from_session}", reply_to: "${o.qid}", text: "..."}. Упёрся — тем же ответом напиши, что мешает.`
         if (o.empty >= cfg.pushEmptyTurns || o.nudges >= cfg.pushMax) {
           o.stuck = true
-          const why = o.empty >= cfg.pushEmptyTurns ? `${o.empty} хода подряд остановилась без работы и без ответа` : `${o.nudges} напоминаний остались без ответа`
+          const failing = turn?.outcome === "failed" ? " (ход падает с ошибкой — посмотри модель и журнал сервера)" : ""
+        const why = (o.empty >= cfg.pushEmptyTurns ? `${o.empty} хода подряд остановилась без работы и без ответа` : `${o.nudges} напоминаний остались без ответа`) + failing
           postLetter(o.from_session, {
             id: `${t}-stuck-${safeKey(o.qid)}`,
             from_role: "opencode-peers",
@@ -646,6 +659,15 @@ export default {
           if (c.busy && c.pid === process.pid && !children.has(c.session))
             void idleAfter(c.session, c.busySince ?? 0).then((done) => {
               if (done) clearIdle(c.session)
+            })
+          // разбудили, а запроса к модели не было (ход упал раньше): конец хода — строка idle после побудки
+          else if (!c.busy && c.wokeAt && c.pid === process.pid)
+            void idleAfter(c.session, c.wokeAt).then((done) => {
+              if (!done) return
+              const fresh = readJson<Card>(cardFile(c.session))
+              if (!fresh?.wokeAt || fresh.busy) return
+              markWoke(fresh, undefined)
+              void nudge({ ...fresh, busySince: c.wokeAt })
             })
         }
         // Вкладка открыта в окне, но ещё не делала запросов (визитки нет), а письмо по её id ждёт — завести визитку.
