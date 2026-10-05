@@ -1247,7 +1247,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
 
   const peerInbox: PeerTool = {
     name: "peer_inbox",
-    description: "Show the caller tab's delivered letters (newest last) and how many are still waiting.",
+    description: "The caller tab's letters: letters still waiting are handed over right here, in this turn (no separate wake), then the recent delivered ones (newest last).",
     input: {
       type: "object",
       properties: { limit: { type: "number", description: "How many recent letters", default: 10 } },
@@ -1268,7 +1268,19 @@ export function makeTools(host: PeersHost): PeerTool[] {
         .sort((a, b) => a.time - b.time)
         .slice(-Math.max(1, Number(input.limit ?? 10)))
       const body = letters.map((l) => `${hhmm(l.time)} от ${l.from_role} → ${l.to}${l.qid ? ` [вопрос ${l.qid}]` : ""}${l.reply_to ? ` [ответ на ${l.reply_to}]` : ""}: ${l.text}`).join("\n")
-      return { content: `Адрес ${keyOf(me)}. Ждут доставки: ${waitingIn(keys)}.\n${body || "Доставленных писем нет."}` }
+      // ЖДУЩИЕ ПИСЬМА — отдаются здесь же, в этом ходе (вкладка сама спросила почту — будить её потом незачем); тот же
+      // захват, что у доставки: письмо забирает кто-то один. Ответ, которого ждёт peer_wait, не трогается.
+      const awaited = waitingFor(me.session)
+      const claimed = keys.flatMap((k) => claimLetters(k, `inbox-${process.pid}-${Date.now()}`))
+      const back = claimed.filter((c) => awaited && c.letter.reply_to === awaited)
+      if (back.length) releaseLetters(back)
+      const fresh = claimed.filter((c) => !back.includes(c))
+      if (fresh.length) {
+        confirmLetters(fresh)
+        for (const c of fresh) if (c.letter.qid) addObligation(me.session, { qid: c.letter.qid, from_session: c.letter.from_session, from_role: c.letter.from_role, at: c.letter.time, nudges: 0 })
+      }
+      const head = fresh.length ? `НОВЫЕ ПИСЬМА (${fresh.length}) — выданы здесь, отдельно не придут:\n${formatLetters(fresh.map((c) => c.letter), me)}\n\n` : ""
+      return { content: `${head}Адрес ${keyOf(me)}. Ждут доставки: ${waitingIn(keys)}.\nПрочитанные:\n${body || "Доставленных писем нет."}` }
     },
   }
 

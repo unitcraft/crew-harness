@@ -169,6 +169,21 @@ cell("peer_doctor reports a tab no window shows", /не видна ни одно
 const docOk = await call("peer_doctor", "sesOTHER1")
 cell("peer_doctor does not flag a visible tab", !/не видна ни одному окну/.test(docOk) && !/ни одно окно/.test(docOk), docOk)
 
+// 7. peer_inbox hands a waiting letter over in the same turn; it is not delivered again after the turn
+const other = tabs.find((t) => t.sessionID === "sesOTHER1")
+other.busy = true
+beat()
+await call("peer_send", "sesASKER1", { to: "sesOTHER1", text: "письмо-в-ящике" })
+await wait()
+cell("a busy tab does not get it yet", got("sesOTHER1", "письмо-в-ящике").length === 0, "delivered")
+const box = await call("peer_inbox", "sesOTHER1")
+cell("peer_inbox hands the waiting letter over", /НОВЫЕ ПИСЬМА \(1\)/.test(box) && box.includes("письмо-в-ящике"), box.slice(0, 300))
+other.busy = false
+beat()
+await events["session.idle"]({ properties: { sessionID: "sesOTHER1" } })
+await wait()
+cell("after the turn it is not delivered again", got("sesOTHER1", "письмо-в-ящике").length === 0, JSON.stringify(got("sesOTHER1", "письмо")))
+
 clearInterval(heart)
 stop?.()
 rmSync(tmp, { recursive: true, force: true })
