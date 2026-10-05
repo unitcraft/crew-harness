@@ -63,8 +63,9 @@ cell("help_extra is appended for the project", helpProj.includes("EXTRA-LINE-OF-
 cell("help_extra is absent without a config", !helpBare.includes("EXTRA-LINE-OF-THE-PROJECT"), "present")
 cell("default help names neutral roles", /integrator/.test(helpBare) && /worker/.test(helpBare), "missing")
 
-// The config is named after the package (opencode-peers.json); the old name nova-peers.json is still read when
-// the new one is absent, and the new one wins when both exist.
+// The config is named after the package (opencode-peers.json); with the old options form the old name
+// nova-peers.json is still read when the new one is absent (until nv-lang moves to a settings repository), and the
+// new one wins when both exist.
 const legacy = path.join(tmp, "legacy")
 const both = path.join(tmp, "both")
 mkdirSync(path.join(legacy, ".opencode"), { recursive: true })
@@ -72,7 +73,7 @@ mkdirSync(path.join(both, ".opencode"), { recursive: true })
 writeFileSync(path.join(legacy, ".opencode", "nova-peers.json"), JSON.stringify({ help_extra: "OLD-NAME-LINE" }))
 writeFileSync(path.join(both, ".opencode", "nova-peers.json"), JSON.stringify({ help_extra: "OLD-NAME-LINE" }))
 writeFileSync(path.join(both, ".opencode", "opencode-peers.json"), JSON.stringify({ help_extra: "NEW-NAME-LINE" }))
-cell("the old name nova-peers.json is still read", mod.helpFor(legacy).includes("OLD-NAME-LINE"), "missing")
+cell("the old name nova-peers.json is still read with the old options form", mod.helpFor(legacy).includes("OLD-NAME-LINE"), "missing")
 cell("opencode-peers.json wins over the old name", mod.helpFor(both).includes("NEW-NAME-LINE") && !mod.helpFor(both).includes("OLD-NAME-LINE"), "wrong file")
 
 // A project config saved with a BOM (Notepad, PowerShell 5.1 "utf8") is read like any other.

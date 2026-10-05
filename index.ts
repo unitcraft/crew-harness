@@ -37,12 +37,10 @@ import path from "node:path"
 import {
   type Card,
   type Letter,
-  type SpawnRequest,
   POLL_MS,
   QUEUE,
   INBOX,
   BASE,
-  SPAWN,
   DEFAULT_ROLE,
   normalizeRole,
   NUDGE_MAX,
@@ -84,9 +82,12 @@ import {
   commonDoctor,
   helpFor,
   saveProjects,
+  setProjects,
   makeTools,
   sessionFromDb,
+  formatTaskLetter,
 } from "./core.ts"
+import { type Task, letterExists, listTasks, loadTask, plannedSessionId, saveTask, taskEvent, taskLetterId } from "./tasks.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
 
@@ -96,6 +97,7 @@ export default {
     const mine = new Map<string, Card>() // сессии этого процесса
     const children = new Set<string>()
     const projects = parseProjects(ctx?.options)
+    setProjects(projects, ctx?.options?.local)
     saveProjects(ctx?.options) // для MCP-сервера вкладок claude-code: список проектов один
     // Проект визитки: записанный в ней (вкладка сама ставит его при каждом обращении) или вычисленный по каталогу.
     const projOf = (c: Card) => c.project ?? projectOf(c.directory, projects)
@@ -270,81 +272,101 @@ export default {
       void deliver(readJson<Card>(cardFile(card.session)) ?? card)
     }
 
-    // КОНЕЦ ЗАДАЧИ. Сессия под задачу ответила на qid задачи (core.ts ставит status "done"), её ход кончился —
-    // финальная строка в историю (без хода), заголовок «✓ …», задача закрыта, интегратору уведомление в окне.
+    // КОНЕЦ ЗАДАЧИ. Сессия задачи ответила на qid задачи (core.ts: задача «сдана», визитка spawned «done»), её ход
+    // кончился — финальная строка в историю (без хода), задача закрыта, интегратору уведомление в окне. (Ф.3 плана
+    // 002 заменит «закрыта по отчёту» на приёмку.)
     async function finishTasks() {
       for (const c of allCards()) {
         if (c.spawned?.status !== "done" || (c.pid !== process.pid && pidAlive(c.pid))) continue
         if (c.busy) continue // ход сессии ещё идёт: строка, записанная сейчас, стала бы ещё одним шагом модели (замер 2026-10-05)
         c.spawned.status = "closed"
         saveCard(c)
+        const t = c.task ? loadTask(c.task.project, c.task.n) : undefined
+        if (t && t.executor === c.session && t.status === "submitted") taskEvent(t, "opencode-peers", "closed", "закрыта по отчёту")
         try {
-          const note = { sessionID: c.session, text: `✓ Задача выполнена: отчёт отправлен интегратору (сессия ${c.spawned.by}). Сессия закрыта — письма больше не приходят.`, resume: false }
+          const note = { sessionID: c.session, text: `✓ Задача${t ? ` #${t.n}` : ""} выполнена: отчёт отправлен интегратору (сессия ${c.spawned.by}). Сессия закрыта — письма больше не приходят.`, resume: false }
           await (typeof ctx.session.synthetic === "function" ? ctx.session.synthetic(note) : ctx.session.prompt(note)) // строка в историю, без хода
         } catch (e) {
           log(`final note failed ${c.session}: ${e}`)
         }
-        // строка выше встанет в историю со следующим сообщением (показать сразу — значит потратить ход модели);
-        // видно сразу — заголовок сессии «✓ …» (вкладки, список сессий)
-        try {
-          await ctx.session.update?.({ sessionID: c.session, title: `✓ ${c.title || c.spawned.task.slice(0, 60)}` })
-        } catch (e) {
-          log(`title mark failed ${c.session}: ${e}`)
-        }
-        const t = tabOf(c.spawned.by)
-        if (t?.window.pid) postNotice(t.window.pid, { sessionID: c.session, title: "Задача выполнена", message: c.title || c.spawned.task.slice(0, 120) })
+        const w = tabOf(c.spawned.by)
+        if (w?.window.pid) postNotice(w.window.pid, { sessionID: c.session, title: t ? `Задача #${t.n} выполнена` : "Задача выполнена", message: t?.title || c.title || c.spawned.task.slice(0, 120) })
         log(`task done ${c.session} (by ${c.spawned.by})`)
       }
     }
 
-    // ЗАДАЧИ ИНТЕГРАТОРА: новая сессия (ctx.session.create), визитка с отметкой задачи, обязательство отчитаться,
-    // первое письмо — сама задача (с qid задачи). Заявки MCP-сервера (spawn/<id>.json) исполняет таймер.
-    async function spawn(req: SpawnRequest): Promise<{ session?: string; error?: string }> {
-      try {
-        const [providerID, ...rest] = req.model.split("/")
-        const created = await ctx.session.create({ title: req.title, location: { directory: req.directory }, model: { providerID, id: rest.join("/") } })
-        const info = created?.data ?? created
-        const sid = String(info?.id ?? "")
-        if (!sid) return { error: `session.create returned no id: ${JSON.stringify(info)?.slice(0, 200)}` }
-        const by = readJson<Card>(cardFile(req.by))
-        const fromRole = by ? keyOf(by) : "integrator"
-        const t = now()
-        const card: Card = { session: sid, role: req.role, auto: false, title: req.title, directory: req.directory, repo: repoLabel(req.directory), project: req.project, model: req.model, modelAt: t, modelFrom: "request", pid: process.pid, updated: t, spawned: { by: req.by, task: req.task.slice(0, 300), tier: req.tier, status: "running", at: t, qid: req.qid } }
-        saveCard(card)
-        mine.set(sid, card)
-        addObligation(sid, { qid: req.qid, from_session: req.by, from_role: fromRole, at: t, nudges: 0, task: req.task.slice(0, 200) })
-        postLetter(sid, {
-          id: `${t}-${safeKey(req.by)}-task`,
-          from_role: fromRole,
-          from_session: req.by,
-          to: sid,
-          time: t,
-          qid: req.qid,
-          text: `ЗАДАЧА от интегратора (ты — сессия под эту задачу, роль ${roleKey(req.project, req.role)}).\n\n${req.task}\n\nКогда закончишь — отчёт: peer_send {to: "${req.by}", reply_to: "${req.qid}", text: "что сделано, как проверено, что осталось"}. После отчёта сессия закроется.`,
-        })
-        void deliver(card)
-        const w = tabOf(req.by)
-        if (w?.window.pid) postNotice(w.window.pid, { sessionID: sid, title: "Запущена задача", message: req.title })
-        log(`spawn ${sid} by ${req.by} role=${req.role} model=${req.model}`)
-        return { session: sid }
-      } catch (e) {
-        log(`spawn failed: ${e}`)
-        return { error: String((e as any)?.message ?? e) }
+    // ЗАГОЛОВКИ СЕССИЙ ЗАДАЧ — из журнала: «#N название», сдана/закрыта «#N ✓», отменена «#N ✗», передана другой
+    // сессии «#N ↷». Сверяются каждый проход (то, что поменял MCP-сервер или другой процесс, тоже доходит), меняются
+    // через session.update — без хода модели. Вкладки владельца (assign) не переименовываются.
+    async function syncTitles() {
+      if (typeof ctx.session.update !== "function") return
+      for (const c of allCards()) {
+        if (!c.spawned || !c.task || c.pid !== process.pid) continue
+        const t = loadTask(c.task.project, c.task.n)
+        if (!t) continue
+        const mark = t.executor !== c.session ? "↷" : t.status === "submitted" || t.status === "closed" ? "✓" : t.status === "cancelled" ? "✗" : ""
+        const title = `#${t.n}${mark ? ` ${mark}` : ""} ${t.title}`
+        if (c.titleShown === title) continue
+        try {
+          await ctx.session.update({ sessionID: c.session, title })
+          const fresh = readJson<Card>(cardFile(c.session)) ?? c
+          fresh.titleShown = title
+          fresh.title = title
+          saveCard(fresh)
+        } catch (e) {
+          log(`title ${c.session} failed: ${e}`)
+        }
       }
     }
-    async function processSpawnRequests() {
-      if (!existsSync(SPAWN)) return
-      for (const f of readdirSync(SPAWN).filter((f) => f.endsWith(".request.json"))) {
-        const claim = path.join(SPAWN, f.replace(".request.json", ".claim"))
-        try {
-          renameSync(path.join(SPAWN, f), claim)
-        } catch {
-          continue
+
+    // ЗАПУСК ЗАДАЧИ (план 002, Ф.1). Журнал уже записан (статус starting, id сессии выбран заранее). Шаги повторяемы:
+    // session.create с тем же id возвращает уже созданную сессию (замер 2026-10-05), визитка перезаписывается тем же,
+    // письмо с задачей кладётся, только если его ещё нет (id письма — из номера и попытки). Оборвался процесс на
+    // любом шаге — следующий проход (resumeTasks) повторит запуск, второй сессии и второго письма не будет.
+    const startingNow = new Set<string>()
+    async function startTask(t0: Task): Promise<{ session?: string; error?: string }> {
+      const key = `${t0.project}#${t0.n}`
+      if (startingNow.has(key)) return { error: "запуск уже идёт" }
+      startingNow.add(key)
+      try {
+        const t = loadTask(t0.project, t0.n) ?? t0
+        if (t.status !== "starting") return { session: t.executor }
+        const sid = t.executor ?? plannedSessionId()
+        if (t.executor !== sid) {
+          t.executor = sid
+          saveTask(t)
         }
-        const req = readJson<SpawnRequest>(claim)
-        const r = req ? await spawn(req) : { error: "bad request" }
-        writeFileSync(path.join(SPAWN, f.replace(".request.json", ".result.json")), JSON.stringify(r))
-        rmSync(claim, { force: true })
+        const [providerID, ...rest] = String(t.model ?? "").split("/")
+        await ctx.session.create({ id: sid, title: `#${t.n} ${t.title}`, location: { directory: t.directory }, metadata: { peersTask: { project: t.project, n: t.n, attempt: t.attempt } }, ...(t.model ? { model: { providerID, id: rest.join("/") } } : {}) })
+        const now = Date.now()
+        const prev = readJson<Card>(cardFile(sid))
+        const card: Card = { ...(prev ?? {}), session: sid, role: t.role, auto: false, title: `#${t.n} ${t.title}`, directory: t.directory, repo: repoLabel(t.directory), project: t.project, model: t.model, modelAt: now, modelFrom: "request", pid: process.pid, updated: now, spawned: { by: t.author, task: t.goal.slice(0, 300), tier: t.tier, status: "running", at: now, qid: t.qid }, task: { project: t.project, n: t.n } }
+        saveCard(card)
+        mine.set(sid, card)
+        addObligation(sid, { qid: t.qid, from_session: t.author, from_role: t.author_role, at: now, nudges: 0, task: t.title })
+        const lid = taskLetterId(t)
+        if (!letterExists(sid, lid)) postLetter(sid, { id: lid, from_role: t.author_role, from_session: t.author, to: sid, time: now, qid: t.qid, text: formatTaskLetter(t) })
+        taskEvent(t, "opencode-peers", "running", `сессия ${sid}`)
+        void deliver(card)
+        const w = tabOf(t.author)
+        if (w?.window.pid) postNotice(w.window.pid, { sessionID: sid, title: `Запущена задача #${t.n}`, message: t.title })
+        log(`task #${t.n} (${t.project}) started: ${sid} model=${t.model}`)
+        return { session: sid }
+      } catch (e) {
+        log(`task #${t0.n} start failed: ${e}`)
+        return { error: String((e as any)?.message ?? e) }
+      } finally {
+        startingNow.delete(key)
+      }
+    }
+    // Задачи в статусе starting (запуск оборвался или задачу поставил MCP-сервер): запускает процесс, где живёт
+    // вкладка автора (её визитка), или любой, если процесса автора уже нет.
+    async function resumeTasks() {
+      for (const t of listTasks()) {
+        if (t.status !== "starting") continue
+        const author = readJson<Card>(cardFile(t.author))
+        if (author && author.pid !== process.pid && pidAlive(author.pid)) continue
+        await startTask(t)
       }
     }
 
@@ -416,8 +438,9 @@ export default {
         // Чужая сессия (другого сервера) не найдётся в ctx.session.get — touch вернёт пусто.
         for (const w of liveWindows())
           for (const t of w.tabs ?? []) if (!existsSync(cardFile(t.sessionID)) && waitingIn([t.sessionID]) && (await sessionInfo(t.sessionID))) await touch(t.sessionID)
-        await processSpawnRequests()
+        await resumeTasks()
         await finishTasks()
+        await syncTitles()
         await processQueue()
         // АДРЕСАТЫ — ИЗ ВИЗИТОК НА ДИСКЕ (после перезагрузки плагина память пуста). Визитки этого процесса и умершего;
         // двойной доставки нет: письмо забирает тот, чей rename в claimLetters прошёл первым.
@@ -501,7 +524,7 @@ export default {
         mine.set(me.session, me)
         void deliver(me)
       },
-      spawn,
+      startTask,
       doctor,
     })
     const toEditor = (t: (typeof tools)[number]) => ({ name: t.name, description: t.description, input: t.input, execute: (input: any, context: any) => t.execute(input, context?.sessionID) })

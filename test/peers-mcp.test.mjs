@@ -33,12 +33,15 @@ const mod = await import(process.env.PEERS_MODULE ?? "../index.ts")
 const hooks = {}
 const tools = {}
 const delivered = []
+const created = []
 const ctx = {
   location: { directory: root },
   options: { projects: { nova: path.join(root, "nova"), limits: dirs.B } },
   session: {
     get: async ({ sessionID }) => ({ id: sessionID, title: sessionID, location: { directory: dirOf[sessionID] } }),
     prompt: async ({ sessionID, text }) => delivered.push({ sessionID, text }),
+    create: async (req) => (created.push(req), { id: req.id }),
+    update: async () => {},
     hook: async (name, cb) => (hooks[name] = cb),
   },
   tool: { transform: async (fn) => fn({ add: (t) => (tools[t.name] = t) }) },
@@ -99,7 +102,7 @@ try {
   cell("initialize answers with tools capability", !!init.result?.capabilities?.tools, JSON.stringify(init))
   cell("instructions name the window's session", /sesCCCCCC/.test(init.result?.instructions ?? ""), init.result?.instructions)
   const listed = (await mcp.rpc("tools/list", {})).result?.tools?.map((t) => t.name).sort() ?? []
-  cell("nine peer tools", JSON.stringify(listed) === JSON.stringify(["peer_close", "peer_doctor", "peer_help", "peer_inbox", "peer_list", "peer_role", "peer_send", "peer_spawn", "peer_wait"]), JSON.stringify(listed))
+  cell("nine peer tools", JSON.stringify(listed) === JSON.stringify(["peer_doctor", "peer_help", "peer_inbox", "peer_list", "peer_role", "peer_send", "peer_spawn", "peer_task", "peer_wait"]), JSON.stringify(listed))
   const schema = (await mcp.rpc("tools/list", {})).result.tools.find((t) => t.name === "peer_send").inputSchema
   cell("peer_send schema requires to and text", JSON.stringify(schema.required) === JSON.stringify(["to", "text"]), JSON.stringify(schema))
 
@@ -181,6 +184,25 @@ try {
   cell("anonymous mcp session", false, String(e))
 } finally {
   anon.child.kill()
+}
+
+// Tasks through MCP: the integrator's claude-code window starts a task; the plugin (in this process) picks it up
+// from the journal; peer_task through MCP shows the same journal.
+const integ = startMcp("sesAAAAAA")
+try {
+  await integ.rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {} })
+  const refused = (await integ.call("peer_spawn", { goal: "без критериев" })).text
+  cell("MCP peer_spawn refuses a task without criteria", /нет полей критерии/.test(refused), refused)
+  const sp = (await integ.call("peer_spawn", { title: "через mcp", goal: "проверить", criteria: "зелёное", tier: "light" })).text
+  cell("MCP peer_spawn: the plugin starts the task", /Задача #1 запущена/.test(sp) && created.length === 1 && created[0].title === "#1 через mcp", sp + JSON.stringify(created))
+  const list = (await integ.call("peer_task", { action: "list" })).text
+  cell("MCP peer_task list shows the same journal", /#1 P2 в работе «через mcp»/.test(list), list)
+  const bad = (await integ.call("peer_task", { action: "push", n: 99 })).text
+  cell("MCP peer_task: an unknown number is refused", /Задачи #99/.test(bad), bad)
+} catch (e) {
+  cell("mcp tasks", false, String(e))
+} finally {
+  integ.child.kill()
 }
 
 stop?.()

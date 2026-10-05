@@ -39,7 +39,7 @@ const ctx = {
     synthetic: async ({ sessionID, text, resume }) => delivered.push({ sessionID, text, resume, synthetic: true }),
     create: async (req) => {
       created.push(req)
-      return { id: `sesTASK0${nextId++}` }
+      return { id: req.id ?? `sesTASK0${nextId++}` }
     },
     update: async (req) => updates.push(req),
     hook: async (name, cb) => (hooks[name] = cb),
@@ -113,43 +113,48 @@ const take = await call("peer_role", "sesASKER1", { role: "integrator" })
 cell("the first tab takes integrator", /теперь «integrator»/.test(take), take)
 const refused = await call("peer_role", "sesOTHER1", { role: "integrator" })
 cell("another tab is refused while the holder is open", /занята открытой вкладкой/.test(refused), refused)
-const noSpawn = await call("peer_spawn", "sesOTHER1", { task: "x" })
+const noSpawn = await call("peer_spawn", "sesOTHER1", { goal: "x", criteria: "y" })
 cell("a worker may not spawn", /только интегратор/.test(noSpawn), noSpawn)
 
 // 5. spawn
-const sp = await call("peer_spawn", "sesASKER1", { task: "почини тест X\nподробности", tier: "light" })
+const noCriteria = await call("peer_spawn", "sesASKER1", { goal: "без критериев" })
+cell("a task without acceptance criteria is not started", /нет полей критерии приёмки/.test(noCriteria) && created.length === 0, noCriteria)
+const sp = await call("peer_spawn", "sesASKER1", { goal: "почини тест X\nподробности", criteria: "тест X зелёный", tier: "light" })
+const TASK = sp.match(/сессия (ses_[A-Za-z0-9]+)/)?.[1] ?? "?"
 const tqid = sp.match(/peer_wait \{qid: "([^"]+)"/)?.[1]
-cell("the integrator spawns a task session", /Запущено/.test(sp) && /sesTASK01/.test(sp) && !!tqid, sp)
+cell("the integrator spawns task #1", /Задача #1 запущена/.test(sp) && TASK.startsWith("ses_") && !!tqid, sp)
+cell("the session is created with the id written to the journal first", created[0]?.id === TASK && core.allCards().some((c) => c.session === TASK && c.task?.n === 1), JSON.stringify(created[0]))
 cell("the model comes from the project's spawn_models", created[0]?.model?.providerID === "kimi" && created[0]?.model?.id === "k3", JSON.stringify(created[0]))
-cell("the title is the first line of the task", created[0]?.title === "почини тест X", JSON.stringify(created[0]))
+cell("the session title is #N and the first line of the goal", created[0]?.title === "#1 почини тест X", JSON.stringify(created[0]))
 await wait()
-const task = got("sesTASK01", "почини тест X")
+const task = got(TASK, "почини тест X")
 cell("the task session gets the task without any window", task.length === 1 && task[0].text.includes(tqid), JSON.stringify(task))
-const limit = await call("peer_spawn", "sesASKER1", { task: "вторая задача" })
-cell("the project's limit per role holds", /Лимит задач роли worker/.test(limit), limit)
+const limit = await call("peer_spawn", "sesASKER1", { goal: "вторая задача", criteria: "c" })
+cell("the project's limit per role holds", /Лимит работающих задач роли worker/.test(limit), limit)
 const list = await call("peer_list", "sesASKER1")
-cell("peer_list shows the running task", /sesTASK01/.test(list) &&/под задачу \(работает\)/.test(list), list)
-await hooks.context({ sessionID: "sesTASK01", system: [], model: { id: "x", providerID: "y" } }) // its turn is running
-await call("peer_send", "sesTASK01", { to: "sesASKER1", text: "готово: тест X зелёный", reply_to: tqid })
+cell("peer_list shows the running task", list.includes(TASK) && /задачи #1 \(в работе\)/.test(list) && /#1 P2 в работе «почини тест X»/.test(list), list)
+await hooks.context({ sessionID: TASK, system: [], model: { id: "x", providerID: "y" } }) // its turn is running
+await call("peer_send", TASK, { to: "sesASKER1", text: "готово: тест X зелёный", reply_to: tqid })
 await wait(600)
-cell("no final line while the task session's turn is running", got("sesTASK01", "Задача выполнена").length === 0, "written mid-turn")
-const dup = await call("peer_send", "sesTASK01", { to: "sesASKER1", text: "готово ещё раз", reply_to: tqid })
+cell("no final line while the task session's turn is running", got(TASK, "выполнена: отчёт отправлен").length === 0, "written mid-turn")
+const dup = await call("peer_send", TASK, { to: "sesASKER1", text: "готово ещё раз", reply_to: tqid })
 cell("a second report for a finished task is refused", /уже отправлен/.test(dup), dup)
-await events["session.idle"]({ properties: { sessionID: "sesTASK01" } })
+await events["session.idle"]({ properties: { sessionID: TASK } })
 await wait(600)
-const final = got("sesTASK01", "Задача выполнена")
+const final = got(TASK, "выполнена: отчёт отправлен")
 cell("the task session gets a final line without a turn", final.length === 1 && final[0].synthetic && final[0].resume === false, JSON.stringify(final))
-cell("the task session's title is marked done", updates.some((u) => u.sessionID === "sesTASK01" && u.title === "✓ почини тест X"), JSON.stringify(updates))
-const card = core.allCards().find((c) => c.session === "sesTASK01")
+cell("the task session's title is marked done", updates.some((u) => u.sessionID === TASK && u.title === "#1 ✓ почини тест X"), JSON.stringify(updates))
+cell("the journal says closed", core.allCards() && (await import("../tasks.ts")).loadTask("proj", 1)?.status === "closed", JSON.stringify((await import("../tasks.ts")).loadTask("proj", 1)?.history))
+const card = core.allCards().find((c) => c.session === TASK)
 cell("the task is closed", card?.spawned?.status === "closed", JSON.stringify(card?.spawned))
 const ndir = path.join(core.NOTICES, String(WPID))
 const notices = existsSync(ndir) ? readdirSync(ndir) : []
 cell("the integrator's window gets notices", notices.length >= 2, JSON.stringify(notices))
-await call("peer_send", "sesASKER1", { to: "sesTASK01", text: "after-close" })
+await call("peer_send", "sesASKER1", { to: TASK, text: "after-close" })
 await wait()
-cell("a closed task session gets no letters", got("sesTASK01", "after-close").length === 0, "delivered")
+cell("a closed task session gets no letters", got(TASK, "after-close").length === 0, "delivered")
 const list2 = await call("peer_list", "sesASKER1")
-cell("a closed task leaves peer_list", !/sesTASK01/.test(list2), list2)
+cell("a closed task leaves peer_list", !list2.includes(TASK), list2)
 
 // 6. the holder's tab closes -> the role is free at once; doctor sees a tab no window shows
 tabs.splice(0, 1)
