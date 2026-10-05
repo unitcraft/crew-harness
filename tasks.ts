@@ -61,11 +61,19 @@ export type Task = {
   review_kind?: "tab" | "spawn" | "integrator"
   review_qid?: string
   reviewers?: string[]
-  /** кругов доработки */
+  /** кругов доработки; замечания последнего круга (для письма исполнителю — и для сверки после перезапуска) */
   rework?: number
+  rework_note?: string
+  /** адреса приёмщика и исполнителя — подписи писем, которые кладёт сверка */
+  reviewer_role?: string
+  executor_role?: string
+  /** id письма с приёмкой (назначение приёмщика) */
+  review_letter?: string
   /** отчёт приёмщика по шагам приёмки и коммит вливания */
   checks?: Record<string, string>
   commit?: string
+  /** влитый коммит (его ветки и worktree проверяет очистка) */
+  merged_head?: string
   history: TaskEvent[]
   created: number
   updated: number

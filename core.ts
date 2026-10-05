@@ -988,12 +988,12 @@ export function makeTools(host: PeersHost): PeerTool[] {
         const t = myTask!
         const again = t.status === "rework"
         t.report = text
+        t.executor_role = fromRole
         taskEvent(t, sessionID, "submitted", again ? `доработка сдана (круг ${t.rework ?? 1})` : "отчёт")
         if (again && t.reviewer) {
           // приёмщик ждёт: будим его с отчётом о доработке, его обязательство — снова
           addObligation(t.reviewer, { qid: t.review_qid ?? t.qid, from_session: t.author, from_role: t.author_role, at: now, nudges: 0, task: `приёмка #${t.n}` })
-          postLetter(t.reviewer, { id: `review-again-${safeKey(t.project)}-${t.n}-${t.rework ?? 1}`, from_role: fromRole, from_session: sessionID, to: t.reviewer, time: now, text: `Доработка задачи #${t.n} «${t.title}» сдана (круг ${t.rework ?? 1}):\n${text}\nПроверь снова: peer_task {action: "review", n: ${t.n}}, дальше rework или merge → accept.` })
-          host.posted([t.reviewer])
+          host.posted(postExpected(t))
         }
       }
       if (replyTo && me?.spawned && !me.task && me.spawned.status === "running" && me.spawned.qid === replyTo) {
@@ -1110,13 +1110,10 @@ export function makeTools(host: PeersHost): PeerTool[] {
   // Задача очищена: всё закрыто. Интегратору и исполнителю — тихие сводки (без пробуждения); сессии задачи закроет
   // плагин (заголовок «#N ✓✓»).
   const finishCleaned = (t: Task, me: Card, note: string): string => {
+    t.reviewer_role = keyOf(me)
     taskEvent(t, me.session, "cleaned", note)
     if (t.review_qid) settleObligation(me.session, t.review_qid)
-    const now = Date.now()
-    const checks = Object.entries(t.checks ?? {}).map(([k, v]) => `${k}: ${v}`).join("; ")
-    postLetter(t.author, { id: `cleaned-${safeKey(t.project)}-${t.n}`, from_role: keyOf(me), from_session: me.session, to: t.author, time: now, wake: false, text: `Задача #${t.n} «${t.title}» принята и влита (${t.commit ? `коммит ${t.commit}` : `ветка ${t.branch ?? "?"}`}), очищена. Приёмщик ${keyOf(me)}. Шаги: ${checks || "—"}. Перепроверять не нужно.` })
-    if (t.executor) postLetter(t.executor, { id: `cleaned-ex-${safeKey(t.project)}-${t.n}`, from_role: keyOf(me), from_session: me.session, to: t.executor, time: now, wake: false, text: `Задача #${t.n} принята и влита. Работа закончена — сессия закрывается.` })
-    host.posted([t.author, ...(t.executor ? [t.executor] : [])])
+    host.posted(postExpected(t))
     return `Задача #${t.n} принята и очищена (${note}). Интегратору ушла сводка без пробуждения; сессии задачи закроются.`
   }
 
@@ -1265,13 +1262,14 @@ export function makeTools(host: PeersHost): PeerTool[] {
           if (!text) return { content: "Нужен text: что исправить." }
           if (t.status !== "reviewing" && t.status !== "submitted") return { content: `Задача #${t.n} ${statusRu(t.status)} — вернуть на доработку нельзя.` }
           t.rework = (t.rework ?? 0) + 1
+          t.rework_note = text
+          t.reviewer_role = keyOf(me)
           releaseMergeLock(project, me.session)
           if (t.review_qid) settleObligation(me.session, t.review_qid)
           taskEvent(t, me.session, "rework", `на доработку (круг ${t.rework}): ${text.slice(0, 300)}`)
           if (t.executor) {
             addObligation(t.executor, { qid: t.qid, from_session: t.author, from_role: t.author_role, at: now, nudges: 0, task: t.title })
-            postLetter(t.executor, { id: `rework-${safeKey(project)}-${t.n}-${t.rework}`, from_role: keyOf(me), from_session: me.session, to: t.executor, time: now, text: reworkLetter(t, text, keyOf(me)) })
-            host.posted([t.executor])
+            host.posted(postExpected(t))
           }
           if (t.rework > tcfg.reworkMax) {
             postLetter(t.author, { id: `rework-max-${safeKey(project)}-${t.n}-${t.rework}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: now, text: `Задача #${t.n} «${t.title}» уходит на доработку ${t.rework}-й раз (предел проекта rework_max ${tcfg.reworkMax}). Похоже, задача поставлена неясно или не по силам исполнителю — спроси владельца: уточнить задачу, передать другой сессии (peer_task reassign) или отменить.` })
@@ -1291,6 +1289,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
           if (!m.ok) return { content: `Не принято: ${m.how}. Влей и запушь, затем снова accept.` }
           t.checks = checks
           t.commit = commit
+          t.merged_head = m.head
           releaseMergeLock(project, me.session)
           taskEvent(t, me.session, "accepted", `принята: ${m.how}`)
           const steps = cleanupSteps(t, tcfg)
@@ -1426,7 +1425,7 @@ export function formatTaskLetter(t: Task): string {
     t.criteria ? `КРИТЕРИИ ПРИЁМКИ: ${t.criteria}` : "",
     t.boundaries ? `ГРАНИЦЫ (не делаем): ${t.boundaries}` : "",
     t.open_questions ? `ОТКРЫТЫЕ ВОПРОСЫ: ${t.open_questions}` : "",
-    t.worktree ? `РАБОТАЙ В worktree ${t.worktree}, ветка ${t.branch}.` : t.branch ? `ВЕТКА: ${t.branch}.` : "",
+    t.worktree ? `РАБОТАЙ В worktree ${t.worktree}, ветка ${t.branch}: создай его командой git worktree add "${t.worktree}" -b ${t.branch} (ровно этот путь и эта ветка — по ним приёмщик вливает и чистит; не инструментом EnterWorktree).` : t.branch ? `ВЕТКА: ${t.branch}.` : "",
     t.handoff ? `СДЕЛАНО ПРЕЖНИМ ИСПОЛНИТЕЛЕМ (задача передана тебе):\n${t.handoff}` : "",
     `Когда закончишь — отчёт: peer_send {to: "${t.author}", reply_to: "${t.qid}", text: "что сделано, как проверено, что осталось"}. Упрёшься — тем же ответом напиши, что мешает. Пока отчёта нет, задача открыта: остановишься без него — получишь напоминание.`,
   ]
@@ -1462,6 +1461,44 @@ export function handoffOf(t: Task, old: string): string {
     .slice(-3)
     .map((l) => `— ${hhmm(l.time)}: ${l.text.slice(0, 1500)}`)
     .join("\n")
+}
+
+// ПИСЬМА ЗАДАЧИ ПО ЕЁ СОСТОЯНИЮ (план 002, Ф.4). Какие письма должны существовать при нынешнем статусе задачи —
+// одно место для действий (кладут сразу после смены статуса) и для сверки после перезапуска (кладёт недостающие:
+// процесс мог оборваться между записью статуса и письмом). id письма постоянный — повтора не будет.
+export function expectedLetters(t: Task): Letter[] {
+  const out: Letter[] = []
+  const p = safeKey(t.project)
+  const at = t.updated
+  const reviewerRole = t.reviewer_role ?? "приёмщик"
+  if (t.status === "rework" && t.executor && t.rework_note)
+    out.push({ id: `rework-${p}-${t.n}-${t.rework ?? 1}`, from_role: reviewerRole, from_session: t.reviewer ?? PLUGIN_SENDER, to: t.executor, time: at, text: reworkLetter(t, t.rework_note, reviewerRole) })
+  if (t.status === "submitted" && (t.rework ?? 0) > 0 && t.reviewer && t.report)
+    out.push({ id: `review-again-${p}-${t.n}-${t.rework}`, from_role: t.executor_role ?? "исполнитель", from_session: t.executor ?? PLUGIN_SENDER, to: t.reviewer, time: at, text: `Доработка задачи #${t.n} «${t.title}» сдана (круг ${t.rework}):\n${t.report}\nПроверь снова: peer_task {action: "review", n: ${t.n}}, дальше rework или merge → accept.` })
+  if (t.status === "cleaned") {
+    const checks = Object.entries(t.checks ?? {}).map(([k, v]) => `${k}: ${v}`).join("; ")
+    out.push({ id: `cleaned-${p}-${t.n}`, from_role: reviewerRole, from_session: t.reviewer ?? PLUGIN_SENDER, to: t.author, time: at, wake: false, text: `Задача #${t.n} «${t.title}» принята и влита (${t.commit ? `коммит ${t.commit}` : `ветка ${t.branch ?? "?"}`}), очищена. Приёмщик ${reviewerRole}. Шаги: ${checks || "—"}. Перепроверять не нужно.` })
+    if (t.executor) out.push({ id: `cleaned-ex-${p}-${t.n}`, from_role: reviewerRole, from_session: t.reviewer ?? PLUGIN_SENDER, to: t.executor, time: at, wake: false, text: `Задача #${t.n} принята и влита. Работа закончена — сессия закрывается.` })
+  }
+  return out
+}
+/** Положить недостающие письма задачи; вернуть адресатов того, что положено. */
+export function postExpected(t: Task): string[] {
+  const sent: string[] = []
+  for (const l of expectedLetters(t)) {
+    if (letterExistsFor(l.to, l.id)) continue
+    postLetter(l.to, l)
+    sent.push(l.to)
+  }
+  return sent
+}
+const letterExistsFor = (key: string, id: string) => existsSync(path.join(INBOX, safeKey(key), `${id}.json`)) || existsSync(path.join(READ, safeKey(key), `${id}.json`)) || readdirSafe(DELIVERING).some((d) => existsSync(path.join(DELIVERING, d, safeKey(key), `${id}.json`)))
+const readdirSafe = (d: string) => {
+  try {
+    return readdirSync(d)
+  } catch {
+    return []
+  }
 }
 
 /** Проверки, общие для плагина и MCP-сервера. */

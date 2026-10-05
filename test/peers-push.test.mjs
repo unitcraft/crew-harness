@@ -32,7 +32,9 @@ db.prepare("update session_v2 set time_suspended = ? where id = ?").run(Date.now
 const core = await import("../core.ts")
 const tasks = await import("../tasks.ts")
 // sesINTER1 owes an answer from before the restart
-core.saveCard({ session: "sesINTER1", role: "worker", auto: true, title: "sesINTER1", directory: proj, repo: "proj", project: "proj", pid: 999999, updated: Date.now() })
+// its card still says "busy": the turn started, and only the end of the turn (never coming) would clear it
+// (a task session, no window: its "busy" comes from the card, not from a window)
+core.saveCard({ session: "sesINTER1", role: "worker", auto: false, title: "sesINTER1", directory: proj, repo: "proj", project: "proj", pid: 999999, updated: Date.now(), busy: true, busySince: Date.now() - 60_000, spawned: { by: "sesINTEG1", task: "old", tier: "light", status: "running", at: Date.now() - 120_000, qid: "qOLD" } })
 core.addObligation("sesINTER1", { qid: "qOLD", from_session: "sesINTEG1", from_role: "proj.integrator", at: Date.now() - 120_000, nudges: 0 })
 
 const mod = await import("../index.ts")
@@ -75,7 +77,7 @@ async function turn({ tools: withTool = false, owner = false } = {}) {
 }
 
 const WPID = 717171
-const tabs = ["sesINTEG1", "sesWORK01", "sesINTER1"].map((sessionID, i) => ({ sessionID, active: i === 0, busy: false }))
+const tabs = ["sesINTEG1", "sesWORK01"].map((sessionID, i) => ({ sessionID, active: i === 0, busy: false }))
 mkdirSync(core.WINDOWS, { recursive: true })
 const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now(), tabs }))
 beat()

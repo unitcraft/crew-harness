@@ -75,14 +75,21 @@ export const holdsMergeLock = (project: string, session: string) => mergeHolder(
 const repoDir = (t: Task) => (t.worktree && existsSync(t.worktree) ? t.worktree : t.directory)
 
 /** Влито ли: коммит (squash-слияние) или ветка задачи — предок целевой ветки (локальной или origin/). */
-export function isMerged(t: Task, target: string, commit?: string): { ok: boolean; how?: string } {
+export function isMerged(t: Task, target: string, commit?: string): { ok: boolean; how?: string; head?: string } {
   const dir = repoDir(t)
   const targets = [target, `origin/${target}`].filter((x) => gitOk(dir, ["rev-parse", "--verify", "--quiet", x]))
   if (!targets.length) return { ok: false, how: `целевой ветки ${target} в ${dir} нет` }
   const heads = commit ? [commit] : [t.branch, t.branch && `origin/${t.branch}`].filter(Boolean) as string[]
   for (const h of heads) {
     if (!gitOk(dir, ["rev-parse", "--verify", "--quiet", `${h}^{commit}`])) continue
-    for (const tg of targets) if (gitOk(dir, ["merge-base", "--is-ancestor", h, tg])) return { ok: true, how: `${h} в ${tg}` }
+    for (const tg of targets)
+      if (gitOk(dir, ["merge-base", "--is-ancestor", h, tg])) {
+        let head: string | undefined
+        try {
+          head = git(dir, ["rev-parse", `${h}^{commit}`]).trim()
+        } catch {}
+        return { ok: true, how: `${h} в ${tg}`, head }
+      }
   }
   return { ok: false, how: commit ? `коммита ${commit} нет в ${targets.join(" / ")}` : `ветка ${t.branch ?? "?"} не влита в ${targets.join(" / ")} (squash-слияние — передай commit: <хэш коммита в ${target}>)` }
 }
@@ -104,6 +111,22 @@ export function cleanupDone(t: Task, cfg: PeersConfig): { ok: boolean; left: str
   if (t.worktree && existsSync(t.worktree)) left.push(`worktree ${t.worktree} ещё есть`)
   const dir = existsSync(t.directory) ? t.directory : undefined
   if (dir && t.branch && gitOk(dir, ["rev-parse", "--verify", "--quiet", `refs/heads/${t.branch}`])) left.push(`локальная ветка ${t.branch} ещё есть`)
+  // ветки и worktree, которые исполнитель завёл сам, а не по письму (замер 2026-10-05: Claude Code создал worktree своим
+  // инструментом EnterWorktree с веткой worktree-task-…): всё, что указывает на влитый коммит, кроме целевой ветки
+  if (dir && t.merged_head) {
+    try {
+      for (const b of git(dir, ["for-each-ref", "--points-at", t.merged_head, "--format=%(refname:short)", "refs/heads"]).split(/\r?\n/).map((x) => x.trim()).filter(Boolean))
+        if (b !== cfg.targetBranch && b !== t.branch) left.push(`ветка ${b} (на влитом коммите) ещё есть`)
+      // блоки «worktree <путь> / HEAD <sha> / branch <ref>», разделённые пустой строкой
+      const blocks = git(dir, ["worktree", "list", "--porcelain"]).split(/\r?\n\r?\n/)
+      for (const b of blocks) {
+        const get = (k: string) => b.split(/\r?\n/).find((l) => l.startsWith(`${k} `))?.slice(k.length + 1)
+        const wt = get("worktree")
+        const branch = get("branch")?.replace("refs/heads/", "")
+        if (wt && get("HEAD") === t.merged_head && branch !== cfg.targetBranch) left.push(`worktree ${wt} (на влитом коммите) ещё есть`)
+      }
+    } catch {}
+  }
   if (dir && t.branch && cfg.cleanup === "local+remote") {
     try {
       if (git(dir, ["ls-remote", "--heads", "origin", t.branch], 20_000).trim()) left.push(`ветка ${t.branch} на origin ещё есть`)

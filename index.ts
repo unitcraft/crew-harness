@@ -89,6 +89,7 @@ import {
   makeTools,
   sessionFromDb,
   formatTaskLetter,
+  postExpected,
 } from "./core.ts"
 import { type Task, byPriority, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { reviewLetter } from "./review.ts"
@@ -317,6 +318,9 @@ export default {
         const row = await sessionFromDb(c.session)
         if (!row?.suspended || row.suspended >= setupAt || (row.idle ?? 0) >= row.suspended) continue
         if (!(await sessionInfo(c.session))) continue // сессия другого сервера
+        // оборванный ход уже не кончится: отметку «занята» (её снимает только конец хода) снять, иначе письмо ниже
+        // ждало бы конца хода вечно (замер в песочнице 2026-10-05)
+        if (c.busy) setBusy(c, false)
         const id = `resume-${safeKey(c.session)}-${row.suspended}`
         if (letterExists(c.session, id)) continue
         const task = c.task ? loadTask(c.task.project, c.task.n) : undefined
@@ -402,10 +406,46 @@ export default {
     // Приёмщик назначен (вкладка или сессия): обязательство и письмо с приёмкой (id письма — из номера и попытки).
     async function reviewerAssigned(t: Task, card: Card) {
       const cfg = loadConfig(t.directory)
-      addObligation(card.session, { qid: t.review_qid!, from_session: t.author, from_role: t.author_role, at: Date.now(), nudges: 0, task: `приёмка #${t.n}` })
-      const id = `review-${safeKey(t.project)}-${t.n}-${(t.reviewers ?? []).length + 1}`
+      if (!obligationsOf(card.session).some((o) => o.qid === t.review_qid)) addObligation(card.session, { qid: t.review_qid!, from_session: t.author, from_role: t.author_role, at: Date.now(), nudges: 0, task: `приёмка #${t.n}` })
+      const id = t.review_letter ?? `review-${safeKey(t.project)}-${t.n}-${(t.reviewers ?? []).length + 1}`
+      if (t.review_letter !== id) {
+        t.review_letter = id
+        saveTask(t)
+      }
       if (!letterExists(card.session, id)) postLetter(card.session, { id, from_role: t.author_role, from_session: t.author, to: card.session, time: Date.now(), text: reviewLetter(t, cfg) })
       void deliver(card)
+    }
+
+    // СВЕРКА ЖУРНАЛА (план 002, Ф.4). OpenCode могут закрыть посреди любого действия: статус записан, а письмо, отметка
+    // приёмщика или обязательство — нет. Каждые 2 с проход приводит всё к журналу: недостающие письма (постоянные id —
+    // без повторов), отметка приёмщика на его визитке, письмо с приёмкой, обязательства исполнителя и приёмщика (только
+    // если их нет совсем — счётчики напоминаний не сбрасываются).
+    let reconciledAt = 0
+    async function reconcile() {
+      if (now() - reconciledAt < 2_000) return
+      reconciledAt = now()
+      for (const t of listTasks()) {
+        const recent = t.status === "cleaned" && now() - t.updated < 24 * 3600_000
+        if (!isOpen(t) && !recent) continue
+        const author = readJson<Card>(cardFile(t.author))
+        if (author && author.pid !== process.pid && pidAlive(author.pid)) continue // сверяет процесс автора
+        postExpected(t)
+        if (t.status === "starting") continue // запуск доделает resumeTasks
+        const need = (session: string | undefined, qid: string | undefined, what: string) => {
+          if (session && qid && !obligationsOf(session).some((o) => o.qid === qid)) addObligation(session, { qid, from_session: t.author, from_role: t.author_role, at: now(), nudges: 0, task: what })
+        }
+        if (t.status === "running" || t.status === "rework") need(t.executor, t.qid, t.title)
+        if (t.reviewer && ["submitted", "reviewing", "accepted"].includes(t.status)) {
+          const rc = readJson<Card>(cardFile(t.reviewer))
+          if (!rc) continue // сессия приёмки ещё не создана — её запустит assignReviewers
+          if (!rc.review || rc.review.n !== t.n || rc.review.project !== t.project) {
+            rc.review = { project: t.project, n: t.n }
+            saveCard(rc)
+          }
+          if (!t.review_letter || !letterExists(t.reviewer, t.review_letter)) await reviewerAssigned(t, rc)
+          if (!(t.status === "submitted" && (t.rework ?? 0) > 0)) need(t.reviewer, t.review_qid, `приёмка #${t.n}`)
+        }
+      }
     }
     async function assignReviewers() {
       const windows = liveWindows()
@@ -610,6 +650,7 @@ export default {
           for (const t of w.tabs ?? []) if (!existsSync(cardFile(t.sessionID)) && waitingIn([t.sessionID]) && (await sessionInfo(t.sessionID))) await touch(t.sessionID)
         await resumeTasks()
         await assignReviewers()
+        await reconcile()
         await resumeInterrupted()
         await finishTasks()
         await syncTitles()
