@@ -18,7 +18,7 @@
 // ещё и attention.notify: системное уведомление, когда окно не в фокусе (настройка OpenCode attention.notifications).
 import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { NOTICES, WINDOWS } from "./core.ts"
+import { NOTICES, WINDOWS, cardFile, configShowText, loadProjects, readJson } from "./core.ts"
 import { formatStatuses, readStatuses } from "./status.ts"
 
 const BEAT_MS = 1_000
@@ -73,7 +73,27 @@ export default {
       const mine = list.find((s) => s.session === route)?.project
       api.ui?.dialog?.alert?.({ title: "opencode-peers — кто чего ждёт", message: formatStatuses(list, Date.now(), mine) })
     }
-    const commands = [{ id: "opencode-peers.status", title: "Peers: кто чего ждёт", group: "Peers", slash: { name: "peers" }, palette: true, run: showStatus }]
+    // /peers-config: действующие настройки проекта вкладки на экране — значение и откуда (как peer_config show)
+    const showConfig = () => {
+      let route: string | undefined
+      try {
+        const r = api.ui?.router?.current?.()
+        route = r?.type === "session" ? r.sessionID : undefined
+      } catch {}
+      const card = route ? readJson<any>(cardFile(route)) : undefined
+      let text: string
+      try {
+        loadProjects() // проекты — из ящика (их кладёт плагин сервиса)
+        text = configShowText(card?.directory || process.cwd(), card?.project, true)
+      } catch (e) {
+        text = `Не прочитать настройки: ${e}`
+      }
+      api.ui?.dialog?.alert?.({ title: "opencode-peers — настройки проекта", message: text })
+    }
+    const commands = [
+      { id: "opencode-peers.status", title: "Peers: кто чего ждёт", group: "Peers", slash: { name: "peers" }, palette: true, run: showStatus },
+      { id: "opencode-peers.config", title: "Peers: настройки проекта", group: "Peers", slash: { name: "peers-config" }, palette: true, run: showConfig },
+    ]
     try {
       api.ui.slot({
         append: "app",

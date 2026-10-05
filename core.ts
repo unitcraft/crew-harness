@@ -63,6 +63,30 @@ export function setProjects(projects: Projects, local: any = {}) {
   currentLocal = local && typeof local === "object" ? local : {}
 }
 
+/** Действующие настройки проекта каталога dir: значение и откуда оно (peer_config show и команда окна /peers-config). */
+export function configShowText(dir: string, fallbackName = "?", compact = false): string {
+  const p = projectFor(dir, currentProjects)
+  const committed = p?.dir ? readSettingsFolder(p.dir).raw : rawSettingsFor(dir, currentProjects, {})
+  const local = (p && currentLocal[p.name]) || {}
+  const effective = { ...committed, ...local }
+  const sourceOf = (k: string) => (k in local ? "local в opencode.jsonc" : k in committed ? (p?.dir ? `файл, ветка ${p.branch}` : "файл (прежняя форма)") : "по умолчанию")
+  // compact — для окна: у списков с id — число и имена, длинное обрезается (полное — peer_config show у модели)
+  const shown = (v: any) => {
+    if (compact && Array.isArray(v) && v.length && v.every((x) => x && typeof x === "object" && "id" in x)) return `${v.length}: ${v.map((x) => x.id).join(", ")}`
+    const j = JSON.stringify(v)
+    return compact && j.length > 120 ? `${j.slice(0, 117)}…` : j
+  }
+  const rows = SCHEMA.map((s) => `  ${s.key} = ${shown(effective[s.key] ?? s.default)} — ${sourceOf(s.key)}`)
+  const head = p?.dir ? `Проект ${p.name}: настройки ${path.join(p.dir, ".opencode", "opencode-peers.json")}, читается ветка ${p.branch} (${p.repo}).` : `Проект ${fallbackName}: прежняя форма опций — настройки из рабочей копии вверх от каталога вкладки.`
+  let pending = ""
+  if (p?.dir) {
+    const work = workingSettings(p.dir).raw
+    const changed = [...new Set([...Object.keys(work), ...Object.keys(committed)])].filter((k) => JSON.stringify(work[k]) !== JSON.stringify(committed[k]))
+    if (changed.length) pending = `\nНезакоммичено (действует после коммита): ${changed.join(", ")}.`
+  }
+  return `${head}\n${rows.join("\n")}${pending}`
+}
+
 // Имя репозитория каталога не меняется — git спрашиваем один раз на каталог (проход доставки идёт раз в секунду).
 const repoNames = new Map<string, string>()
 export const repoNameOf = (dir: string) => repoName(dir)
@@ -1558,17 +1582,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
       const sourceOf = (k: string) => (k in local ? "local в opencode.jsonc" : k in committed ? (p?.dir ? `файл, ветка ${p.branch}` : "файл (прежняя форма)") : "по умолчанию")
       const action = String(input.action ?? "")
       if (action === "guide") return { content: guideText(effective, sourceOf) }
-      if (action === "show") {
-        const rows = SCHEMA.map((s) => `  ${s.key} = ${JSON.stringify(effective[s.key] ?? s.default)} — ${sourceOf(s.key)}`)
-        const head = p?.dir ? `Проект ${p.name}: настройки ${path.join(p.dir, ".opencode", "opencode-peers.json")}, читается ветка ${p.branch} (${p.repo}).` : `Проект ${projOf(me)}: прежняя форма опций — настройки из рабочей копии вверх от каталога вкладки.`
-        let pending = ""
-        if (p?.dir) {
-          const work = workingSettings(p.dir).raw
-          const changed = [...new Set([...Object.keys(work), ...Object.keys(committed)])].filter((k) => JSON.stringify(work[k]) !== JSON.stringify(committed[k]))
-          if (changed.length) pending = `\nНезакоммичено (действует после коммита): ${changed.join(", ")}.`
-        }
-        return { content: `${head}\n${rows.join("\n")}${pending}` }
-      }
+      if (action === "show") return { content: configShowText(me.directory, projOf(me)) }
       if (action === "set") {
         if (!isIntegrator(me)) return notIntegrator(me)
         if (!p?.dir) return { content: `Проект ${projOf(me)} задан прежней формой опций: записать некуда. Переведи его на репозиторий настроек — в opencode.jsonc "projects": ["<папка с .opencode/opencode-peers.json>"].` }

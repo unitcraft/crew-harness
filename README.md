@@ -90,7 +90,8 @@ letter says how long it waited. Ordinary watches and other projects do not wait 
 
 ## Who waits for what: `/peers` and "waiting for you"
 
-`/peers` in any window (also in the Ctrl+P palette) shows, without a model turn, every session of the projects:
+`/peers-config` shows the project's settings in effect, each with where it comes from (default, the committed file,
+`local`), like `peer_config show`. `/peers` in any window (also in the Ctrl+P palette) shows, without a model turn, every session of the projects:
 working, **waiting for you** (its last answer ends with a question and you have not written since), waiting for a
 watch, for an answer to its question, for its task's review or rework, for its own tasks, or idle — your project
 first, the ones waiting for you on top. A session that starts waiting for you puts a notice into every live window
