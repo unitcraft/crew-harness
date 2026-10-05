@@ -146,6 +146,7 @@ export type PeersConfig = {
   reworkMax: number
   pushEmptyTurns: number
   pushMax: number
+  ownerReminderMin: number
   inbound: "integrator" | "any" | "none"
   root?: string
 }
@@ -187,6 +188,7 @@ export function loadConfig(dir: string): PeersConfig {
     reworkMax: num(j.rework_max, 3),
     pushEmptyTurns: num(j.push_empty_turns, 3),
     pushMax: num(j.push_max, 20),
+    ownerReminderMin: num(j.owner_reminder_min, 15),
     inbound: oneOf(j.inbound, ["integrator", "any", "none"] as const, "integrator"),
     root,
   }
@@ -378,6 +380,46 @@ export async function sessionFromDb(sessionID: string): Promise<SessionRow | und
 // старое сообщение владельца из оборванного хода засчитало новый ход «с владельцем»).
 export type TurnFacts = { tools: boolean; owner: boolean; outcome?: string; at: number }
 const TURN_SLACK_MS = 5_000 // сообщение владельца пишется чуть раньше запроса, с которого визитка занята
+// КОНЕЦ ПОСЛЕДНЕГО ХОДА (план 004): время строки idle, текст последнего ответа модели в этом ходе и было ли после
+// конца сообщение владельца. Нужен сводке /peers и признаку «ждёт вас». Нет базы или хода — undefined.
+export type TurnEnd = { at: number; text: string; ownerAfter: boolean }
+export async function turnEnd(sessionID: string): Promise<TurnEnd | undefined> {
+  if (!sessionID || !existsSync(dbFile())) return undefined
+  let db: any
+  try {
+    db = await openDb()
+    const rows = db.prepare("select type, data, time_created from session_message where session_id = ? order by seq desc limit 300").all(sessionID) as any[]
+    const first = rows.findIndex((r) => r.type === "idle")
+    if (first < 0) return undefined
+    const parse = (r: any) => {
+      try {
+        return JSON.parse(r.data)
+      } catch {
+        return undefined
+      }
+    }
+    const ownerAfter = rows.slice(0, first).some((r) => r.type === "user" && typeof parse(r)?.text === "string" && !parse(r).text.startsWith("[opencode-peers]"))
+    let text = ""
+    for (const r of rows.slice(first + 1)) {
+      if (r.type === "idle") break
+      if (r.type !== "assistant") continue
+      const t = (parse(r)?.content ?? []).filter((c: any) => c?.type === "text").map((c: any) => String(c.text ?? "")).join("\n").trim()
+      if (t) {
+        text = t
+        break
+      }
+    }
+    return { at: Number(rows[first].time_created) || 0, text, ownerAfter }
+  } catch (e) {
+    log(`turn end from db failed: ${e}`)
+    return undefined
+  } finally {
+    try {
+      db?.close()
+    } catch {}
+  }
+}
+
 export async function lastTurn(sessionID: string, since = 0): Promise<TurnFacts | undefined> {
   if (!sessionID || !existsSync(dbFile())) return undefined
   let db: any
@@ -463,7 +505,7 @@ export const holdsOpenTask = (c: Card) => {
 export const mayWakeCard = (c: Card, windows = liveWindows()) => !!tabOf(c.session, windows) || c.spawned?.status === "running" || c.spawned?.status === "done" || holdsOpenTask(c)
 
 /** Уведомление окну pid (покажет плагин окна): письмо пришло в его фоновую вкладку и т.п. */
-export function postNotice(pid: number, notice: { sessionID?: string; title: string; message: string }) {
+export function postNotice(pid: number, notice: { sessionID?: string; title: string; message: string; attention?: boolean }) {
   const dir = path.join(NOTICES, String(pid))
   mkdirSync(dir, { recursive: true })
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -647,6 +689,7 @@ export const HELP = `opencode-peers — письма между вкладкам
   peer_config {action}        — настройки проекта: guide (опросник для владельца), show (что действует и откуда),
                                 set {values} (интегратор; пишет рабочую копию файла настроек, действует с коммита).
   peer_doctor                 — самопроверка: что сломано и что делать.
+  /peers (команда окна)       — владельцу: кто чего ждёт, без хода модели; кто ждёт его — уведомление в окне.
 
 АДРЕС (to): роль своего проекта (worker, integrator); «проект.роль» — в другом проекте; id сессии (ses_...); all —
 всем открытым вкладкам своего проекта; «проект.all». Отправитель подписан полным адресом и сессией.

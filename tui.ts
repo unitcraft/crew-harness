@@ -11,9 +11,15 @@
 // Проверено на OpenCode 2.0.22 (2026-10-05): V2-модуль окна — default {id, setup(api)}; api.ui.router.current()
 // даёт {type: "session", sessionID}; api.ui.tabs.list() — [{sessionID, title, active, busy, ...}]; api.ui.toast.show
 // с sessionID чужой вкладки сам добавляет кнопку Open.
+//
+// СВОДКА /peers и «ЖДЁТ ВАС» (план 004). Команда окна — как встроенный модуль opencode.stats той же версии:
+// ui.slot({append: "app"}) + keymap.layer({commands: [{slash: {name}, palette: true, run}]}); run показывает
+// ui.dialog.alert со сводкой из status/ (пишет плагин сервиса) — в окне, без хода модели. Уведомление с attention —
+// ещё и attention.notify: системное уведомление, когда окно не в фокусе (настройка OpenCode attention.notifications).
 import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { NOTICES, WINDOWS } from "./core.ts"
+import { formatStatuses, readStatuses } from "./status.ts"
 
 const BEAT_MS = 1_000
 
@@ -46,9 +52,40 @@ export default {
           const p = path.join(notices, f)
           const n = JSON.parse(readFileSync(p, "utf8"))
           rmSync(p, { force: true })
-          api.ui?.toast?.show?.({ title: n.title, message: n.message, variant: "info", ...(n.sessionID ? { sessionID: n.sessionID } : {}) })
+          api.ui?.toast?.show?.({ title: n.title, message: n.message, variant: n.attention ? "warning" : "info", ...(n.sessionID ? { sessionID: n.sessionID } : {}) })
+          if (n.attention) {
+            try {
+              api.attention?.notify?.({ title: n.title, message: n.message, notification: { when: "blurred" } })
+            } catch {}
+          }
         }
       } catch {} // нет уведомлений — нет папки
+    }
+
+    // /peers: кто чего ждёт — свой проект первым
+    const showStatus = () => {
+      let route: string | undefined
+      try {
+        const r = api.ui?.router?.current?.()
+        route = r?.type === "session" ? r.sessionID : undefined
+      } catch {}
+      const list = readStatuses()
+      const mine = list.find((s) => s.session === route)?.project
+      api.ui?.dialog?.alert?.({ title: "opencode-peers — кто чего ждёт", message: formatStatuses(list, Date.now(), mine) })
+    }
+    const commands = [{ id: "opencode-peers.status", title: "Peers: кто чего ждёт", group: "Peers", slash: { name: "peers" }, palette: true, run: showStatus }]
+    try {
+      api.ui.slot({
+        append: "app",
+        render() {
+          api.keymap.layer(() => ({ mode: "global", commands }))
+          return null
+        },
+      })
+    } catch {
+      try {
+        api.keymap?.layer?.(() => ({ mode: "global", commands }))
+      } catch {}
     }
 
     beat()

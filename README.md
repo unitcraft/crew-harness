@@ -83,6 +83,33 @@ is reported as cut off; the time limit (default 120 min, up to 720) stops it wit
 is the only way: Claude Code's own background tasks (`run_in_background`, Monitor) die with the turn
 ([plan 003](doc/plans/003-watch.md)).
 
+## Who waits for what: `/peers` and "waiting for you"
+
+`/peers` in any window (also in the Ctrl+P palette) shows, without a model turn, every session of the projects:
+working, **waiting for you** (its last answer ends with a question and you have not written since), waiting for a
+watch, for an answer to its question, for its task's review or rework, for its own tasks, or idle — your project
+first, the ones waiting for you on top. A session that starts waiting for you puts a notice into every live window
+(with Open; a system notification when the window is not focused, if OpenCode's `attention.notifications` is on)
+and repeats it every `owner_reminder_min` minutes (15; 0 — once) until you answer ([plan 004](doc/plans/004-status.md)).
+
+### Session status
+
+The service plugin keeps `<mailbox>/status/<session id>.json` for open tabs, task sessions and sessions with watches
+or open tasks of their own — an open contract for outside checks (e.g. a project's Stop hook; the claude-code
+provider puts `OPENCODE_SESSION_ID` into Claude Code's environment). `<mailbox>` is
+`$XDG_DATA_HOME/opencode/nova-peers` (OpenCode's data directory):
+
+```jsonc
+{ "session": "ses_…", "project": "nova", "role": "integrator", "title": "…", "model": "claude-code/opus",
+  "state": "working" | "owner" | "watch" | "reply" | "task" | "tasks" | "idle",
+  "since": 1791200000000, "detail": "a line for people", "question": "… (state owner)",
+  "watches": [{ "id", "note", "started", "minutes" }],          // running peer_watch
+  "asked": [{ "qid", "to", "at" }],                              // its questions without an answer
+  "task": { "n", "status", "as": "executor" | "reviewer", "title" },
+  "tasks": [{ "n", "status", "priority", "title" }],             // open tasks it set
+  "updated": 1791200000000 }
+```
+
 ## Obligations instead of a push controller
 
 A question or a task is the recipient's obligation until it answers (`reply_to: qid`). Windows on

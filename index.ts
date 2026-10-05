@@ -46,6 +46,7 @@ import {
   holdsOpenTask,
   DEFAULT_SPAWN_MODELS,
   lastTurn,
+  turnEnd,
   hhmm,
   MODEL_TTL_MS,
   log,
@@ -93,7 +94,8 @@ import {
   propagateToParent,
   PLUGIN_SENDER,
 } from "./core.ts"
-import { pollWatches } from "./watch.ts"
+import { pollWatches, watchesOf } from "./watch.ts"
+import { markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
 import { type Task, byPriority, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { reviewLetter } from "./review.ts"
 
@@ -548,6 +550,43 @@ export default {
     // ЗАГОЛОВКИ СЕССИЙ ЗАДАЧ — из журнала: «#N название», сдана/закрыта «#N ✓», отменена «#N ✗», передана другой
     // сессии «#N ↷». Сверяются каждый проход (то, что поменял MCP-сервер или другой процесс, тоже доходит), меняются
     // через session.update — без хода модели. Вкладки владельца (assign) не переименовываются.
+    // СОСТОЯНИЕ СЕССИЙ (план 004, status.ts). Раз в STATUS_EVERY_MS — status/<сессия>.json (сводка /peers окна и внешние
+    // проверки, например хук проекта). Сессия закончила ход вопросом владельцу — уведомление во все живые окна (с
+    // кнопкой Open и системным уведомлением, когда окно не в фокусе); не ответил — повтор через owner_reminder_min.
+    // В сводке — открытые вкладки, сессии задач и те, у кого есть наблюдения или свои открытые задачи.
+    const STATUS_EVERY_MS = Number(process.env.NOVA_PEERS_STATUS_MS) || 5_000
+    let statusAt = 0
+    async function syncStatus() {
+      if (now() - statusAt < STATUS_EVERY_MS) return
+      statusAt = now()
+      const windows = liveWindows()
+      const t = now()
+      const cards = allCards()
+      // вопросы с ответом (expect_reply) — обязательства получателя перед спросившим; задачи и приёмки — не вопросы
+      const asked = new Map<string, { qid: string; to: string; at: number }[]>()
+      for (const c of cards) for (const o of obligationsOf(c.session)) if (!o.task && !o.stuck) asked.set(o.from_session, [...(asked.get(o.from_session) ?? []), { qid: o.qid, to: keyOf(c), at: o.at }])
+      for (const c of cards) {
+        if (c.pid !== process.pid && pidAlive(c.pid)) continue // вкладка другого живого сервера
+        const tab = tabOf(c.session, windows)
+        const live = !!tab || (!!c.spawned && c.spawned.status !== "closed") || watchesOf(c.session).length > 0 || listTasks(c.project).some((x) => x.author === c.session && isOpen(x))
+        if (!live) {
+          removeStatus(c.session)
+          continue
+        }
+        const busy = !!tab?.tab.busy || !!c.busy
+        const end = busy ? undefined : await turnEnd(c.session)
+        const s = statusOf({ card: c, busy, busySince: c.busySince, end, asked: asked.get(c.session) ?? [], now: t })
+        const prev = saveStatus(s)
+        if (s.state !== "owner") continue
+        const fresh = !(prev?.state === "owner" && prev.since === s.since)
+        const every = loadConfig(c.directory).ownerReminderMin * 60_000
+        if (!fresh && !(every > 0 && t - (prev?.notified ?? 0) >= every)) continue
+        for (const w of windows) postNotice(w.pid, { sessionID: c.session, title: `${keyOf(c)} ждёт вашего ответа`, message: s.question ?? "", attention: true })
+        markNotified(c.session, t)
+        log(`owner wanted by ${c.session}${fresh ? "" : " (reminder)"}`)
+      }
+    }
+
     async function syncTitles() {
       if (typeof ctx.session.update !== "function") return
       for (const c of allCards()) {
@@ -708,6 +747,7 @@ export default {
         await resumeInterrupted()
         await finishTasks()
         await syncTitles()
+        await syncStatus()
         await processQueue()
         // наблюдения peer_watch (watch.ts): запустить новые, по концу — письмо окну с побудкой
         pollWatches((w, text) => postLetter(w.session, { id: `watch-${w.id}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: w.session, time: Date.now(), text }), log)
