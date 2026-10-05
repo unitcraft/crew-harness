@@ -138,6 +138,8 @@ The integrator stays free for the owner and does not re-check accepted work:
 - cleaned → the sessions of the task close with a line in their history, titles `#N ✓✓`, the
   integrator gets a quiet summary. Titles on the way: `#N ✓◐` on review, `#N ↻` rework, `#N ✓✓◐`
   accepted;
+- a task on rework does not hold a review session's place (`spawn_limits.reviewer`): the next submitted task gets
+  it; the resubmission goes back to the same reviewer at once;
 - `inflight_limit` (6) bounds the tasks running and in review; `P0` passes every limit.
 
 ## Other projects

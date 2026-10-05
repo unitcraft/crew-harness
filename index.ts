@@ -532,7 +532,9 @@ export default {
           continue
         }
         const limit = cfg.spawnLimits.reviewer ?? 2
-        const reviewing = listTasks(t.project).filter((x) => isOpen(x) && x.review_kind === "spawn" && x.reviewer && x.status !== "accepted").length
+        // задача на доработке места не держит: следующий шаг — исполнителя, приёмщик ждёт без хода (правило «блокирует ли
+        // незакрытая задача новую» методологии: ждём чужого хода — не блокирует). Досданную будит прежний приёмщик сразу.
+        const reviewing = listTasks(t.project).filter((x) => isOpen(x) && x.review_kind === "spawn" && x.reviewer && x.status !== "accepted" && x.status !== "rework").length
         if (t.priority !== "P0" && reviewing >= limit) continue // ждёт: приёмщиков-сессий уже limit
         t.reviewer = plannedSessionId()
         t.review_kind = "spawn"
