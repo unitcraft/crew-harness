@@ -549,7 +549,8 @@ export default {
     async function syncTitles() {
       if (typeof ctx.session.update !== "function") return
       for (const c of allCards()) {
-        if (!c.spawned || (!c.task && !c.review) || c.pid !== process.pid) continue
+        // карточки умершего процесса (сервер перезапущен посреди задачи) — тоже наши; чужой живой процесс — нет
+        if (!c.spawned || (!c.task && !c.review) || (c.pid !== process.pid && pidAlive(c.pid))) continue
         const asReviewer = !c.task && !!c.review
         const ref = (c.task ?? c.review)!
         const t = loadTask(ref.project, ref.n)
