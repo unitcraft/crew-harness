@@ -72,10 +72,11 @@ cell("the letter is signed nova.worker", !!cross && /от nova\.worker/.test(cro
 
 // all = own project; project.all = that project
 await call("peer_send", "sesAAAAAA", { to: "all", text: "to-all-nova" })
-await call("peer_send", "sesAAAAAA", { to: "limits.all", text: "to-all-limits" })
+const allLimits = (await call("peer_send", "sesAAAAAA", { to: "limits.all", text: "to-all-limits" })).content
 await wait()
 cell("all stays inside the project", got("sesBBBBBB", "to-all-nova") === 1 && got("sesCCCCCC", "to-all-nova") === 0, JSON.stringify(delivered))
-cell("limits.all reaches only limits", got("sesCCCCCC", "to-all-limits") === 1 && got("sesBBBBBB", "to-all-limits") === 0, JSON.stringify(delivered))
+// another project's tabs are reached through its integrator only (inbound: integrator by default, plan 002 Ph.5)
+cell("limits.all from nova is refused by limits' inbound", /только интегратору/.test(allLimits) && got("sesCCCCCC", "to-all-limits") === 0, allLimits)
 
 // peer_list: own project by default, every project with all
 const own = (await call("peer_list", "sesAAAAAA")).content

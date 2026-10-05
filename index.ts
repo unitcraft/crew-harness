@@ -90,6 +90,7 @@ import {
   sessionFromDb,
   formatTaskLetter,
   postExpected,
+  propagateToParent,
 } from "./core.ts"
 import { type Task, byPriority, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { reviewLetter } from "./review.ts"
@@ -425,6 +426,7 @@ export default {
       if (now() - reconciledAt < 2_000) return
       reconciledAt = now()
       for (const t of listTasks()) {
+        if (t.parent && now() - t.updated < 24 * 3600_000) propagateToParent(t) // заказ другого проекта идёт за этой задачей
         const recent = t.status === "cleaned" && now() - t.updated < 24 * 3600_000
         if (!isOpen(t) && !recent) continue
         const author = readJson<Card>(cardFile(t.author))

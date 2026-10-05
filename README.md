@@ -128,6 +128,15 @@ The integrator stays free for the owner and does not re-check accepted work:
   accepted;
 - `inflight_limit` (6) bounds the tasks running and in review; `P0` passes every limit.
 
+## Other projects
+
+- **inbound** of the receiving project limits letters from other projects: `integrator` (default:
+  only to its integrator), `any`, `none`; a refused letter names the address to use;
+- **an order**: `peer_task {action: "order", to: "beta.integrator", goal, criteria, …}` records task
+  `#N` of kind order in the orderer's journal (no session, no title marks) and sends it to beta's
+  integrator, who does it with its own tasks: `peer_spawn {…, parent: "alpha#N"}`. The order follows
+  that task: cleaned → the order is done (a quiet summary to the orderer), cancelled → a call.
+
 ## Self-check
 
 `peer_doctor` (and once at load, as a notice): the OpenCode features the plugin relies on, the

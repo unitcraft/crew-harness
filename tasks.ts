@@ -41,8 +41,14 @@ export type Task = {
   /** qid отчёта: исполнитель отвечает peer_send {reply_to: qid} */
   qid: string
   status: TaskStatus
-  /** spawn — сессия создана плагином; assign — задачу взяла вкладка владельца */
-  kind: "spawn" | "assign"
+  /** spawn — сессия создана плагином; assign — задачу взяла вкладка владельца; order — заказ в другой проект (своей
+   *  сессии нет: делает интегратор проекта-исполнителя своими задачами, у них parent — этот заказ) */
+  kind: "spawn" | "assign" | "order"
+  /** order: проект-исполнитель и его задача, взявшая заказ */
+  order_to?: string
+  child?: { project: string; n: number }
+  /** задача-заказ другого проекта, которую выполняет эта задача */
+  parent?: { project: string; n: number }
   /** нынешний исполнитель; для spawn — id сессии, записанный до её создания */
   executor?: string
   /** прежние исполнители (reassign) */

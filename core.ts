@@ -672,6 +672,11 @@ push_empty_turns (3) пустых подряд или push_max (20) напоми
   peer_task {action: "push", n, text?} — подтолкнуть остановившегося исполнителя сейчас (счётчик напоминаний — с нуля).
   peer_task {action: "reassign", n} — передать задачу новой сессии под тем же номером со сводкой сделанного.
   peer_task {action: "cancel", n, text?} / {action: "priority", n, priority} / {action: "show", n} / {action: "list"}.
+  peer_task {action: "order", to: "<проект>.integrator", goal, criteria, ...} — заказ в другой проект: его интегратор
+    делает работу своими задачами (peer_spawn {parent: "<проект>#N"}); заказ идёт за ними: принята у него — заказ
+    выполнен (сводка без пробуждения), отменена — тебе вызов.
+ДРУГОЙ ПРОЕКТ. Писать в чужой проект можно только его интегратору (настройка проекта-получателя inbound: integrator
+по умолчанию; any — всем; none — никому). Работа для другого проекта — заказом, а не письмом его воркерам.
 Исполнитель обязан прислать отчёт ответом на qid задачи (reply_to); прислал — задача сдана (интегратора отчёт не
 будит), второй отчёт не отправляется. Сданную задачу проверяет и вливает ПРИЁМЩИК — свободная открытая вкладка worker
 (не автор, не исполнитель) или новая сессия; при reviewer: integrator — сам интегратор. Интегратор принятое не
@@ -973,6 +978,16 @@ export function makeTools(host: PeersHost): PeerTool[] {
       const target = addr.kind === "session" ? undefined : addr.project
       const cfg = configFor((target && cards.find((c) => projOf(c) === target)) || me)
       const exclusive = cfg.exclusive
+      // INBOUND (план 002, Ф.5): письма из чужого проекта ограничивает проект-получатель — integrator (по умолчанию:
+      // только его интегратору), any, none. Свой проект не ограничен.
+      const toProject = addr.kind === "session" ? (() => { const c = cards.find((x) => x.session === addr.session); return c ? projOf(c) : undefined })() : addr.project
+      if (toProject && toProject !== home) {
+        const tcfg = loadConfig(projectDir(toProject) ?? cards.find((c) => projOf(c) === toProject)?.directory ?? "")
+        const toRole = addr.kind === "role" ? addr.role : addr.kind === "session" ? normalizeRole(cards.find((x) => x.session === addr.session)?.role ?? "") : "all"
+        if (tcfg.inbound === "none") return { content: `Не отправлено: проект ${toProject} не принимает писем из других проектов (inbound: none).` }
+        if (tcfg.inbound === "integrator" && toRole !== "integrator")
+          return { content: `Не отправлено: из другого проекта в ${toProject} можно писать только интегратору (inbound: integrator). Пиши ${toProject}.integrator; работу в другой проект — заказом: peer_task {action: "order", to: "${toProject}.integrator", ...}.` }
+      }
       // ОТЧЁТ ПО ЗАДАЧЕ (план 002, Ф.3): ответ исполнителя на qid своей задачи — задача сдана и ждёт приёмщика.
       // Интегратора отчёт НЕ будит (письмо тихое: придёт с его следующим ходом; ждёт peer_wait — получит сразу);
       // сдача после доработки будит приёмщика. Сессия исполнителя остаётся открытой до очистки (на случай доработки).
@@ -1086,6 +1101,10 @@ export function makeTools(host: PeersHost): PeerTool[] {
   }
 
   // ЗАДАЧИ (план 002, Ф.1): журнал tasks.ts, номер #N, обязательные поля из настроек проекта (task_fields).
+  const projectDir = (name: string) => {
+    const p = projects.find((x) => x.name === name)
+    return p ? (p.rootPath ?? p.root) : undefined
+  }
   const isIntegrator = (me: Card) => me.role === "integrator" && holdsExclusive(roleKey(projOf(me), "integrator"), me.session)
   const notIntegrator = (me: Card) => ({ content: `Это может только интегратор проекта ${projOf(me)} (peer_role {role: "integrator"}).` })
   const taskInput = {
@@ -1113,7 +1132,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
     t.reviewer_role = keyOf(me)
     taskEvent(t, me.session, "cleaned", note)
     if (t.review_qid) settleObligation(me.session, t.review_qid)
-    host.posted(postExpected(t))
+    host.posted([...postExpected(t), ...propagateToParent(t)])
     return `Задача #${t.n} принята и очищена (${note}). Интегратору ушла сводка без пробуждения; сессии задачи закроются.`
   }
 
@@ -1128,6 +1147,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
         role: str("Role of the new session (default worker)"),
         tier: { type: "string", enum: ["heavy", "medium", "light"], description: "Task weight -> model", default: "medium" },
         task: str("Old name of goal"),
+        parent: str("The order of another project this task fulfils: \"project#N\" (from the order letter)"),
       },
       additionalProperties: false,
     },
@@ -1157,6 +1177,14 @@ export function makeTools(host: PeersHost): PeerTool[] {
         author: me.session, author_role: keyOf(me), qid: newQid(), status: "starting", kind: "spawn", executor: plannedSessionId(), directory: me.directory,
       })
       Object.assign(t, placeFor(me, cfg, t.n, t.slug, project))
+      const par = parseParent(input.parent)
+      if (par) {
+        const order = loadTask(par.project, par.n)
+        if (!order || order.kind !== "order" || order.order_to !== project) return { content: `Заказа ${input.parent} для проекта ${project} нет.` }
+        t.parent = par
+        order.child = { project, n: t.n }
+        taskEvent(order, me.session, undefined, `принят в работу в ${project}: #${t.n}`)
+      }
       saveTask(t)
       const r = await host.startTask(t)
       if (!r.session) return { content: `Задача #${t.n} записана, но сессия не запущена: ${r.error ?? "неизвестная ошибка"}. Плагин повторит запуск сам (тем же id сессии — второй не будет).` }
@@ -1167,11 +1195,12 @@ export function makeTools(host: PeersHost): PeerTool[] {
   const peerTask: PeerTool = {
     name: "peer_task",
     description:
-      "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), show {n} (details and history), and for the integrator: assign {session, goal, criteria, ...} (give a task to an existing tab instead of a new session), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done), cancel {n, text?}, priority {n, priority}; for the task's reviewer: review {n} (start), merge {n} (the project's merge lock), rework {n, text}, accept {n, checks, commit?} (the plugin checks the required steps and that it is merged), cleaned {n} (the plugin checks the worktree and branch are gone).",
+      "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), show {n} (details and history), and for the integrator: assign {session, goal, criteria, ...} (give a task to an existing tab instead of a new session), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done), cancel {n, text?}, priority {n, priority}, order {to: 'project.integrator', goal, criteria, ...} (work for another project: its integrator does it with its own tasks; the order follows them); for the task's reviewer: review {n} (start), merge {n} (the project's merge lock), rework {n, text}, accept {n, checks, commit?} (the plugin checks the required steps and that it is merged), cleaned {n} (the plugin checks the worktree and branch are gone).",
     input: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["list", "show", "assign", "push", "reassign", "cancel", "priority", "review", "merge", "rework", "accept", "cleaned"] },
+        action: { type: "string", enum: ["list", "show", "assign", "order", "push", "reassign", "cancel", "priority", "review", "merge", "rework", "accept", "cleaned"] },
+        to: str("order: the other project's integrator, \"project.integrator\""),
         checks: { type: "object", description: "accept: report per acceptance step {step id: what proves it}", additionalProperties: { type: "string" } },
         commit: str("accept: the commit in the target branch (squash merge); without it the task branch must be merged"),
         n: { type: "number", description: "Task number" },
@@ -1215,6 +1244,34 @@ export function makeTools(host: PeersHost): PeerTool[] {
         postLetter(target.session, { id: taskLetterId(t), from_role: keyOf(me), from_session: me.session, to: target.session, time: Date.now(), qid: t.qid, text: formatTaskLetter(t) })
         host.posted([target.session])
         return { content: `Задача #${t.n} «${t.title}» отдана вкладке ${target.session} (${tabStatus(target)}). Пока задача открыта, вкладку будят, даже если её закроют. Отчёт — ответом на ${t.qid}.` }
+      }
+      if (action === "order") {
+        if (!isIntegrator(me)) return notIntegrator(me)
+        const m = /^([a-z0-9][a-z0-9-]*)\.integrator$/.exec(String(input.to ?? "").trim())
+        if (!m || m[1] === project) return { content: `Заказ — интегратору другого проекта: to: "<проект>.integrator".` }
+        const cfg = configFor(me)
+        const missing = missingFields(input, cfg)
+        if (missing.length) return { content: `Заказ не отправлен: нет полей ${missing.map((f) => FIELD_RU[f] ?? f).join(", ")}.` }
+        const title = String(input.title ?? "").trim() || String(input.goal).split(/\r?\n/)[0].slice(0, 60)
+        const t = createTask({
+          project, title, goal: String(input.goal).trim(), criteria: input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(),
+          priority: isPriority(input.priority) ? input.priority : cfg.defaultPriority, tier: "medium", role: "integrator",
+          author: me.session, author_role: keyOf(me), qid: newQid(), status: "running", kind: "order", order_to: m[1], directory: me.directory,
+        })
+        const to = roleKey(m[1], "integrator")
+        postLetter(to, {
+          id: `order-${safeKey(project)}-${t.n}`, from_role: keyOf(me), from_session: me.session, to, time: Date.now(),
+          text: [
+            `ЗАКАЗ проекта ${project} #${t.n} «${t.title}» (приоритет ${t.priority}) — интегратору ${m[1]}. Сделай его по правилам своего проекта, своими задачами.`,
+            `ЦЕЛЬ: ${t.goal}`,
+            t.criteria ? `КРИТЕРИИ ПРИЁМКИ: ${t.criteria}` : "",
+            t.boundaries ? `ГРАНИЦЫ: ${t.boundaries}` : "",
+            t.open_questions ? `ОТКРЫТЫЕ ВОПРОСЫ: ${t.open_questions}` : "",
+            `Ставь задачу с parent: peer_spawn {..., parent: "${project}#${t.n}"} — тогда заказчик видит её ход сам: принята у тебя → заказ выполнен, отменена → заказчику вызов. Вопросы — peer_send {to: "${me.session}"}.`,
+          ].filter(Boolean).join("\n"),
+        })
+        host.posted([to])
+        return { content: `Заказ #${t.n} «${t.title}» отправлен интегратору ${m[1]}. Его ход виден в peer_task {action: "show", n: ${t.n}}; выполнен — придёт сводка.` }
       }
       const t = findTask(me, input.n)
       if (!t) return { content: `Задачи #${input.n} в проекте ${project} нет.` }
@@ -1329,6 +1386,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
       if (action === "cancel") {
         const why = String(input.text ?? "").trim()
         taskEvent(t, me.session, "cancelled", why || undefined)
+        host.posted(propagateToParent(t))
         if (t.reviewer) {
           releaseMergeLock(project, t.reviewer)
           if (t.review_qid) settleObligation(t.reviewer, t.review_qid)
@@ -1499,6 +1557,34 @@ const readdirSafe = (d: string) => {
   } catch {
     return []
   }
+}
+
+/** "проект#N" → {project, n}. */
+export function parseParent(v: any): { project: string; n: number } | undefined {
+  const m = /^([a-z0-9][a-z0-9-]*)#(\d+)$/.exec(String(v ?? "").trim())
+  return m ? { project: m[1], n: Number(m[2]) } : undefined
+}
+
+// ЗАКАЗ ИДЁТ ЗА ЗАДАЧЕЙ ИСПОЛНИТЕЛЯ (план 002, Ф.5): задача с parent очищена — заказ выполнен (заказчику тихая
+// сводка); отменена — заказчику вызов. Повторяемо: заказ уже закрыт — ничего; письма с постоянными id.
+export function propagateToParent(t: Task): string[] {
+  if (!t.parent || (t.status !== "cleaned" && t.status !== "cancelled")) return []
+  const order = loadTask(t.parent.project, t.parent.n)
+  if (!order || order.kind !== "order") return []
+  const sent: string[] = []
+  const done = t.status === "cleaned"
+  if (isOpen(order)) taskEvent(order, PLUGIN_SENDER, done ? "cleaned" : undefined, done ? `выполнен в ${t.project}: #${t.n} принята` : `задача ${t.project} #${t.n} отменена`)
+  const id = `order-${done ? "done" : "cancel"}-${safeKey(order.project)}-${order.n}-${safeKey(t.project)}-${t.n}`
+  if (!letterExistsFor(order.author, id)) {
+    postLetter(order.author, {
+      id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: order.author, time: Date.now(), ...(done ? { wake: false } : {}),
+      text: done
+        ? `Заказ #${order.n} «${order.title}» выполнен проектом ${t.project} (задача #${t.n} принята и влита${t.commit ? `, коммит ${t.commit}` : ""}).`
+        : `Заказ #${order.n} «${order.title}»: задачу ${t.project} #${t.n} отменили. Спроси интегратора ${t.project} (peer_send {to: "${t.project}.integrator"}) или отмени заказ (peer_task {action: "cancel", n: ${order.n}}).`,
+    })
+    sent.push(order.author)
+  }
+  return sent
 }
 
 /** Проверки, общие для плагина и MCP-сервера. */
