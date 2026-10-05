@@ -166,6 +166,7 @@ cell("a closed task leaves peer_list", !list2.includes(TASK), list2)
 
 // 6. the holder's tab closes -> the role is free at once; doctor sees a tab no window shows
 tabs.splice(0, 1)
+beat() // the window file now, not at the next 300 ms beat
 await wait(200)
 const take2 = await call("peer_role", "sesOTHER1", { role: "integrator" })
 cell("the holder's tab closed -> another tab takes the role without force", /теперь «integrator»/.test(take2), take2)
