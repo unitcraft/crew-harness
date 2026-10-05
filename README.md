@@ -1,8 +1,11 @@
 # opencode-peers
 
-OpenCode V2 plugin: **letters between OpenCode tabs** (sessions) on one machine, in any
-repository, addressed by role. A *window* is the OpenCode program in a terminal; a *tab* is a
-session inside it (one on screen, the rest in the background). Letters are addressed to tabs.
+OpenCode V2 plugin: **letters and tasks between OpenCode sessions on one machine** — across
+windows and projects, in any repository, addressed by `project.role`. The integrator hands out
+tasks, workers do them in their worktrees, reviewers accept and merge, long waits wake the session
+when done. A *window* is the OpenCode program in a terminal; a *tab* is a session inside it (one on
+screen, the rest in the background); a task session may run with no window at all. A *peer* is any
+such session.
 
 - tools `peer_list`, `peer_send`, `peer_wait`, `peer_watch`, `peer_role`, `peer_inbox`, `peer_spawn`,
   `peer_task`, `peer_config`, `peer_doctor`, `peer_help` (also `/peer_help`);
