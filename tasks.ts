@@ -57,6 +57,8 @@ export type Task = {
   attempt: number
   directory: string
   worktree?: string
+  /** worktree создал плагин, сессия исполнителя работает в нём (план 006) */
+  worktree_ready?: boolean
   branch?: string
   /** сводка сделанного прежним исполнителем (reassign) — в письмо новому */
   handoff?: string

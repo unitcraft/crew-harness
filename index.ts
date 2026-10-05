@@ -99,7 +99,7 @@ import {
 import { pollWatches, watchesOf } from "./watch.ts"
 import { markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
 import { type Task, byPriority, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
-import { reviewLetter } from "./review.ts"
+import { ensureWorktree, reviewLetter } from "./review.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
 
@@ -653,11 +653,24 @@ export default {
           t.executor = sid
           saveTask(t)
         }
+        // план 006: worktree и ветку задачи создаёт плагин, сессия работает в нём (хуки видят ветку задачи, не main)
+        let dir = t.directory
+        if (t.kind === "spawn" && t.worktree && t.branch) {
+          const w = ensureWorktree(t.directory, t.worktree, t.branch, loadConfig(t.directory).targetBranch)
+          if (w.ok) {
+            dir = t.worktree
+            if (!t.worktree_ready) {
+              t.worktree_ready = true
+              saveTask(t)
+              taskEvent(t, "opencode-peers", undefined, `worktree ${t.worktree}, ветка ${t.branch}${w.created ? " — создан плагином" : " — уже был"}`)
+            }
+          } else log(`task #${t.n} worktree not created (the worker creates it): ${w.error}`)
+        }
         const [providerID, ...rest] = String(t.model ?? "").split("/")
-        await ctx.session.create({ id: sid, title: `#${t.n} ${t.title}`, location: { directory: t.directory }, metadata: { peersTask: { project: t.project, n: t.n, attempt: t.attempt } }, ...(t.model ? { model: { providerID, id: rest.join("/") } } : {}) })
+        await ctx.session.create({ id: sid, title: `#${t.n} ${t.title}`, location: { directory: dir }, metadata: { peersTask: { project: t.project, n: t.n, attempt: t.attempt } }, ...(t.model ? { model: { providerID, id: rest.join("/") } } : {}) })
         const now = Date.now()
         const prev = readJson<Card>(cardFile(sid))
-        const card: Card = { ...(prev ?? {}), session: sid, role: t.role, auto: false, title: `#${t.n} ${t.title}`, directory: t.directory, repo: repoLabel(t.directory), project: t.project, model: t.model, modelAt: now, modelFrom: "request", pid: process.pid, updated: now, spawned: { by: t.author, task: t.goal.slice(0, 300), tier: t.tier, status: "running", at: now, qid: t.qid }, task: { project: t.project, n: t.n } }
+        const card: Card = { ...(prev ?? {}), session: sid, role: t.role, auto: false, title: `#${t.n} ${t.title}`, directory: dir, repo: repoLabel(dir), project: t.project, model: t.model, modelAt: now, modelFrom: "request", pid: process.pid, updated: now, spawned: { by: t.author, task: t.goal.slice(0, 300), tier: t.tier, status: "running", at: now, qid: t.qid }, task: { project: t.project, n: t.n } }
         saveCard(card)
         mine.set(sid, card)
         addObligation(sid, { qid: t.qid, from_session: t.author, from_role: t.author_role, at: now, nudges: 0, task: t.title })

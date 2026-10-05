@@ -1663,7 +1663,13 @@ export function formatTaskLetter(t: Task): string {
     t.criteria ? `КРИТЕРИИ ПРИЁМКИ: ${t.criteria}` : "",
     t.boundaries ? `ГРАНИЦЫ (не делаем): ${t.boundaries}` : "",
     t.open_questions ? `ОТКРЫТЫЕ ВОПРОСЫ: ${t.open_questions}` : "",
-    t.worktree ? `РАБОТАЙ В worktree ${t.worktree}, ветка ${t.branch}: создай его командой git worktree add "${t.worktree}" -b ${t.branch} (ровно этот путь и эта ветка — по ним приёмщик вливает и чистит; не инструментом EnterWorktree).` : t.branch ? `ВЕТКА: ${t.branch}.` : "",
+    t.worktree && t.worktree_ready
+      ? `WORKTREE ГОТОВ: эта сессия уже работает в ${t.worktree}, ветка ${t.branch} (создал плагин от целевой ветки). Правь и коммить здесь; другой worktree не создавай (по этому пути и ветке приёмщик вливает и чистит).`
+      : t.worktree
+        ? `РАБОТАЙ В worktree ${t.worktree}, ветка ${t.branch}: создай его командой git worktree add "${t.worktree}" -b ${t.branch} (ровно этот путь и эта ветка — по ним приёмщик вливает и чистит; не инструментом EnterWorktree).`
+        : t.branch
+          ? `ВЕТКА: ${t.branch}.`
+          : "",
     t.handoff ? `СДЕЛАНО ПРЕЖНИМ ИСПОЛНИТЕЛЕМ (задача передана тебе):\n${t.handoff}` : "",
     `Когда закончишь — отчёт: peer_send {to: "${t.author}", reply_to: "${t.qid}", text: "что сделано, как проверено, что осталось"}. Упрёшься — тем же ответом напиши, что мешает. Пока отчёта нет, задача открыта: остановишься без него — получишь напоминание.`,
   ]

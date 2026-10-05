@@ -96,7 +96,11 @@ await call("peer_role", "sesINTEG1", { role: "integrator" })
 const sp1 = await call("peer_spawn", "sesINTEG1", { title: "фича", goal: "сделать фичу", ...FIELDS })
 const ex1 = task(1).executor
 cell("task #1 started with worktree and branch from the settings", /wt.proj-1-ficha/.test(task(1).worktree ?? "") && task(1).branch === "p1-ficha", JSON.stringify({ wt: task(1).worktree, b: task(1).branch, sp1 }))
-git(proj, "worktree", "add", "-q", "-b", "p1-ficha", task(1).worktree)
+// plan 006: the plugin created the worktree and the branch, the executor's session runs there
+await wait(300)
+cell("the plugin created the task's worktree on its branch", existsSync(task(1).worktree) && git(task(1).worktree, "rev-parse", "--abbrev-ref", "HEAD") === "p1-ficha" && task(1).worktree_ready === true, JSON.stringify({ wt: task(1).worktree, ready: task(1).worktree_ready }))
+cell("the executor's session is located in the worktree", sessions.get(ex1)?.location?.directory === task(1).worktree, JSON.stringify(sessions.get(ex1)?.location))
+cell("the task letter says the worktree is ready", got(ex1, "WORKTREE ГОТОВ").length === 1 && got(ex1, "git worktree add").length === 0, JSON.stringify(got(ex1, "ЗАДАЧА").map((d) => d.text.slice(0, 300))))
 writeFileSync(path.join(task(1).worktree, "f.txt"), "feature\n")
 git(task(1).worktree, "add", "-A")
 git(task(1).worktree, "commit", "-q", "-m", "feature")

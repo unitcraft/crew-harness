@@ -167,3 +167,29 @@ export function reworkLetter(t: Task, text: string, by: string): string {
     `Исправь в том же worktree${t.branch ? ` (ветка ${t.branch})` : ""} и сдай снова тем же отчётом: peer_send {to: "${t.author}", reply_to: "${t.qid}", text: "что исправлено, как проверено"}.`,
   ].join("\n")
 }
+
+// WORKTREE ЗАДАЧИ СОЗДАЁТ ПЛАГИН (план 006, 2026-10-05). Сессия воркера запускалась в главной копии проекта, а в свой
+// worktree воркер переходил командами: хуки и стражи проекта видели ветку main и принимали воркера за интегратора
+// (хук Stop nova требовал от него слияний), строка внизу вкладки показывала main. Теперь плагин до запуска сессии
+// создаёт worktree и ветку задачи (от целевой ветки) и запускает сессию в нём. Повторный запуск переиспользует готовый
+// worktree; не вышло — прежний порядок (сессия в папке проекта, worktree создаёт воркер), задача не падает.
+export function ensureWorktree(repoDir: string, worktree: string, branch: string, base: string): { ok: boolean; created: boolean; error?: string } {
+  try {
+    if (existsSync(worktree)) {
+      const head = git(worktree, ["rev-parse", "--abbrev-ref", "HEAD"]).trim()
+      return head === branch ? { ok: true, created: false } : { ok: false, created: false, error: `в ${worktree} ветка ${head}, а не ${branch}` }
+    }
+    const top = git(repoDir, ["rev-parse", "--show-toplevel"]).trim()
+    mkdirSync(path.dirname(worktree), { recursive: true })
+    let exists = true
+    try {
+      git(top, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`])
+    } catch {
+      exists = false
+    }
+    git(top, exists ? ["worktree", "add", worktree, branch] : ["worktree", "add", "-b", branch, worktree, base], 120_000)
+    return { ok: true, created: true }
+  } catch (e: any) {
+    return { ok: false, created: false, error: String(e?.message ?? e).split("\n")[0].slice(0, 300) }
+  }
+}
