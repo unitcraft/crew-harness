@@ -12,13 +12,24 @@ process.env.XDG_DATA_HOME = tmp
 process.env.NOVA_PEERS_POLL_MS = "100"
 process.env.NOVA_PEERS_STATUS_MS = "100"
 process.env.NOVA_PEERS_FLOW_MS = "200"
+process.env.NOVA_PEERS_LEFT_MS = "200"
 const dbPath = path.join(tmp, "opencode.db")
 process.env.NOVA_PEERS_DB = dbPath
 delete process.env.NOVA_PEERS_PRESENCE
 const proj = path.join(tmp, "proj")
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
 // stall after 0.01 min (0.6 s); no review sessions, so a submitted task waits for a reviewer
-writeFileSync(path.join(proj, ".opencode", "opencode-peers.json"), JSON.stringify({ stall_minutes: 0.01, spawn_limits: { reviewer: 0 } }))
+writeFileSync(path.join(proj, ".opencode", "opencode-peers.json"), JSON.stringify({ stall_minutes: 0.01, spawn_limits: { reviewer: 0 }, branch_name: "t{n}-{slug}", cleanup: "local" }))
+// the project is a git repository: task #3 was accepted, but its branch and a diagnostic branch stayed
+const { execFileSync } = await import("node:child_process")
+const g = (...a) => execFileSync("git", ["-C", proj, "-c", "user.name=t", "-c", "user.email=t@t", ...a], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
+g("init", "-q", "-b", "main")
+writeFileSync(path.join(proj, "a.txt"), "a")
+g("add", "-A")
+g("commit", "-q", "-m", "init")
+g("branch", "t3-feat")
+g("branch", "t3-diag")
+g("branch", "t30-other") // another task's number: not a leftover of #3
 
 const db = new DatabaseSync(dbPath)
 db.exec("create table session_v2 (id text primary key, directory text, title text, parent_id text, time_archived integer, time_idle integer, time_viewed integer, time_suspended integer)")
@@ -49,6 +60,7 @@ writeFileSync(lockFile, JSON.stringify({ ...JSON.parse(readFileSync(lockFile, "u
 const t2 = base(2, { status: "submitted", executor: "sesEX2", report: "сделал 2" })
 t2.history.push({ at: Date.now() - 600_000, by: "sesEX2", status: "submitted", note: "отчёт" })
 tasks.saveTask(t2)
+base(3, { status: "cleaned", slug: "feat", executor: "sesEX3", branch: "t3-feat" })
 // sesRUN01: a task session whose turn OpenCode continued itself — messages after the last idle, updated now, no busy
 card("sesRUN01", { spawned: { by: "sesINTEG1", task: "x", tier: "light", status: "running", at: Date.now(), qid: "q9" }, task: { project: "proj", n: 9 } })
 msg("sesRUN01", "idle", { outcome: "succeeded" }, Date.now() - 60_000)
@@ -126,6 +138,12 @@ await until(() => {
 })
 const run = JSON.parse(readFileSync(path.join(tmp, "opencode", "nova-peers", "status", "sesRUN01.json"), "utf8"))
 cell("an open, fresh turn in the database is 'working'", run.state === "working", run.state)
+
+// 5. leftovers of an accepted task: one letter to the author listing them (not another task's branch)
+await until(() => letters("sesINTEG1").some((l) => /остались хвосты/.test(l.text)))
+await wait(600)
+const left = letters("sesINTEG1").filter((l) => /остались хвосты/.test(l.text))
+cell("leftovers of an accepted task are raised to its author, once", left.length === 1 && /t3-feat/.test(left[0].text) && /t3-diag/.test(left[0].text) && !/t30-other/.test(left[0].text), JSON.stringify(left.map((l) => l.text)))
 
 clearInterval(heart)
 stop?.()

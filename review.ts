@@ -3,7 +3,7 @@
 // и тексты писем: замок вливания проекта, «ветка или коммит действительно в целевой ветке», «worktree и ветка
 // удалены», письмо приёмщику, письмо на доработку, шаги очистки.
 
-import { execFileSync } from "node:child_process"
+import { execFile, execFileSync } from "node:child_process"
 import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { type Card, type PeersConfig, ROLES, cardFile, mayWakeCard, readJson, safeKey } from "./core.ts"
@@ -192,4 +192,66 @@ export function ensureWorktree(repoDir: string, worktree: string, branch: string
   } catch (e: any) {
     return { ok: false, created: false, error: String(e?.message ?? e).split("\n")[0].slice(0, 300) }
   }
+}
+
+// ХВОСТЫ ЗАКРЫТЫХ ЗАДАЧ (план 007, 2026-10-05): у принятой задачи #6 nova остались ветка задачи (локально и на
+// origin), её worktree и две диагностические ветки t6-diag* — приёмка их не увидела (журнал задачи остался без
+// worktree и ветки из-за сбоя чтения настроек). Ищем по шаблонам настроек с номером задачи и любым slug: ветки
+// branch_name (локальные; на origin — при cleanup local+remote) и worktree worktree_name, плюс всё на влитом коммите.
+// Плагин сам не удаляет (это действие наружу): список уходит автору задачи.
+const templateRe = (tpl: string, v: { repo: string; n: number; project: string }) =>
+  new RegExp(
+    "^" +
+      tpl
+        .split(/(\{repo\}|\{n\}|\{project\}|\{slug\})/)
+        .map((p) => (p === "{slug}" ? ".+" : (p === "{repo}" ? v.repo : p === "{n}" ? String(v.n) : p === "{project}" ? v.project : p).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
+        .join("") +
+      "$",
+  )
+// одна запись на одно и то же: «ветка B (на влитом коммите)» — локальная ветка B; пути worktree — через /
+const normLeft = (x: string) =>
+  x
+    .replace(/ ещё есть$/, "")
+    .replace(/^ветка (\S+) \(на влитом коммите\)$/, "локальная ветка $1")
+    .replace(/ \(на влитом коммите\)$/, "")
+    .replace(/^(worktree )(.+)$/, (_m: string, w: string, p: string) => w + p.replace(/\\/g, "/"))
+// асинхронно: проверка идёт в цикле сервера раз в несколько минут, синхронный git (тем более ls-remote по сети)
+// держал бы главный поток сервера
+const gitA = (cwd: string, args: string[], timeout = 20_000) =>
+  new Promise<string>((res, rej) => execFile("git", ["-C", cwd, ...args], { encoding: "utf8", windowsHide: true, timeout }, (e, out) => (e ? rej(e) : res(String(out)))))
+const LINES = /\r?\n/
+const BLOCKS = /\r?\n\r?\n/
+export async function leftoversOf(t: Task, cfg: PeersConfig, remote: boolean): Promise<string[]> {
+  const dir = existsSync(t.directory) ? t.directory : undefined
+  if (!dir) return []
+  const left = new Set<string>()
+  try {
+    const top = (await gitA(dir, ["rev-parse", "--show-toplevel"])).trim()
+    const v = { repo: path.basename(top), n: t.n, project: t.project }
+    const branchRe = templateRe(cfg.branchName, v)
+    // ветки, начатые по шаблону, и их «отростки» (t6-…-cand, t6-diag): номер задачи в начале имени ветки
+    const prefix = cfg.branchName.split("{slug}")[0]
+    const prefixRe = prefix.includes("{n}") ? templateRe(`${prefix}{slug}`, v) : branchRe
+    const isTask = (b: string) => b !== cfg.targetBranch && (b === t.branch || branchRe.test(b) || prefixRe.test(b))
+    const names = (out: string) => out.split(LINES).map((x) => x.trim()).filter(Boolean)
+    for (const b of names(await gitA(top, ["for-each-ref", "--format=%(refname:short)", "refs/heads"]))) if (isTask(b)) left.add(`локальная ветка ${b}`)
+    // ветки, заведённые инструментом (EnterWorktree: worktree-task-…), — по влитому коммиту
+    if (t.merged_head)
+      for (const b of names(await gitA(top, ["for-each-ref", "--points-at", t.merged_head, "--format=%(refname:short)", "refs/heads"])))
+        if (b !== cfg.targetBranch) left.add(`локальная ветка ${b}`)
+    const wtRe = cfg.worktrees ? templateRe(cfg.worktreeName, v) : undefined
+    for (const blk of (await gitA(top, ["worktree", "list", "--porcelain"])).split(BLOCKS)) {
+      const get = (k: string) => blk.split(LINES).find((l) => l.startsWith(`${k} `))?.slice(k.length + 1)
+      const wt = get("worktree")
+      const branch = get("branch")?.replace("refs/heads/", "")
+      const onMerged = !!t.merged_head && get("HEAD") === t.merged_head && branch !== cfg.targetBranch
+      if (wt && path.resolve(wt) !== path.resolve(top) && ((branch && isTask(branch)) || (wtRe && wtRe.test(path.basename(wt))) || onMerged)) left.add(normLeft(`worktree ${wt}`))
+    }
+    if (remote && cfg.cleanup === "local+remote")
+      for (const l of names(await gitA(top, ["ls-remote", "--heads", "origin"]))) {
+        const b = l.split("refs/heads/")[1]?.trim()
+        if (b && isTask(b)) left.add(`ветка ${b} на origin`)
+      }
+  } catch {}
+  return [...left]
 }

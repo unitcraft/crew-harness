@@ -100,7 +100,7 @@ import {
 import { pollWatches, watchesOf } from "./watch.ts"
 import { endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
 import { type Task, byPriority, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
-import { ensureWorktree, mergeHolder, reviewLetter } from "./review.ts"
+import { ensureWorktree, leftoversOf, mergeHolder, reviewLetter } from "./review.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
 
@@ -675,6 +675,30 @@ export default {
       }
     }
 
+    // ХВОСТЫ ЗАКРЫТЫХ ЗАДАЧ (план 007): раз в LEFT_EVERY_MS у задач, закрытых за последние трое суток, ищем оставшиеся
+    // ветки (локальные и на origin) и worktree по шаблонам настроек (review.ts leftoversOf, асинхронный git). Нашлись —
+    // письмо автору задачи со списком; одно письмо на один набор хвостов. Отменённая задача — убрать или сохранить
+    // работу решает автор. Сам плагин не удаляет: удаление веток на origin — действие наружу.
+    const LEFT_EVERY_MS = Number(process.env.NOVA_PEERS_LEFT_MS) || 600_000
+    let leftAt = 0
+    async function leftWatch() {
+      if (now() - leftAt < LEFT_EVERY_MS) return
+      leftAt = now()
+      for (const t of listTasks()) {
+        if ((t.status !== "cleaned" && t.status !== "cancelled") || now() - (t.updated ?? 0) > 3 * 86_400_000) continue
+        const left = await leftoversOf(t, loadConfig(t.directory), true)
+        if (!left.length) continue
+        const key = left.slice().sort().join("|")
+        let h = 0
+        for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0
+        const id = `stall-left-${safeKey(t.project)}-${t.n}-${(h >>> 0).toString(36)}`
+        if (letterExists(t.author, id)) continue
+        const what = t.status === "cleaned" ? `принятой задачи #${t.n} «${t.title}» остались хвосты — убери их` : `отменённой задачи #${t.n} «${t.title}» осталась работа — убери её или сохрани, решаешь ты`
+        postLetter(t.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: now(), text: `У ${what}:\n${left.map((x) => `— ${x}`).join("\n")}\n(git worktree remove, git branch -D, git push origin --delete — по правилам проекта.)` })
+        log(`leftovers of ${t.project} #${t.n}: ${left.length}`)
+      }
+    }
+
     async function syncTitles() {
       if (typeof ctx.session.update !== "function") return
       for (const c of allCards()) {
@@ -877,6 +901,7 @@ export default {
         await step("syncTitles", syncTitles)
         await step("syncStatus", syncStatus)
         await step("flowWatch", flowWatch)
+        await step("leftWatch", leftWatch)
         await step("processQueue", processQueue)
         // наблюдения peer_watch (watch.ts): запустить новые, по концу — письмо окну с побудкой
         await step("watches", () => pollWatches((w, text) => postLetter(w.session, { id: `watch-${w.id}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: w.session, time: Date.now(), text }), log, now(), (w) => loadConfig(w.cwd).machineSlots))

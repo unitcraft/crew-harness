@@ -131,7 +131,8 @@ start and its `idle` row): a turn with a tool call is a working one, a turn with
   does not resume it) is picked up by one letter that lists what is open and how to report;
 - a task session whose turn ends with a question is not told "continue": the question goes to whoever set the
   task (a letter that wakes it), who answers or asks the owner; a merge lock held longer than `stall_minutes` (30)
-  and a submitted task waiting for a reviewer that long are raised to the task's author ([plan 007](doc/plans/007-flow-watch.md));
+  and a submitted task waiting for a reviewer that long are raised to the task's author, and so are the leftovers of a
+  closed task (branches here and on origin, worktrees by the project's name templates) ([plan 007](doc/plans/007-flow-watch.md));
 - service letters of the plugin say "do not answer"; a letter to `opencode-peers` itself is refused.
 
 ## Tasks
