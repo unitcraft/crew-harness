@@ -102,7 +102,7 @@ A task has a number `#N` (per project, only grows, kept through rework and reass
 owner, the integrator and `peer_list` call it by that; a task session's title is `#N title`. The
 journal is `tasks/<project>/<N>.json` in the mailbox.
 
-- `peer_spawn {title?, goal, criteria, boundaries?, open_questions?, tier?, priority?, role?}` (the
+- `peer_spawn {title?, goal, criteria, boundaries?, open_questions?, tier?, priority?, role?, parent?}` (the
   integrator only) starts task `#N` in a new session, with or without a window. No task without a
   goal and acceptance criteria (the project may require more: `task_fields`); model by tier
   (`claude-code/opus` / `sonnet` / `haiku`, `spawn_models` overrides); a limit of running tasks per
@@ -175,7 +175,8 @@ OPENCODE_PEERS_SESSION=<opencode session id> node mcp.ts   # node >= 24
   `<mailbox>/projects.json` at load (`OPENCODE_PEERS_PROJECTS`, JSON of the `projects` value,
   overrides);
 - delivery stays with the plugin (the letter goes into the OpenCode session); a task started from
-  MCP is written to the journal and the plugin starts it on its next pass.
+  MCP is written to the journal and the plugin starts it on its next pass; a `peer_watch` from MCP is
+  a request file the plugin runs (the MCP server lives only as long as Claude Code's turn).
 
 ## Install
 
