@@ -383,6 +383,46 @@ const TURN_SLACK_MS = 5_000 // сообщение владельца пишет�
 // КОНЕЦ ПОСЛЕДНЕГО ХОДА (план 004): время строки idle, текст последнего ответа модели в этом ходе и было ли после
 // конца сообщение владельца. Нужен сводке /peers и признаку «ждёт вас». Нет базы или хода — undefined.
 export type TurnEnd = { at: number; text: string; ownerAfter: boolean }
+/** Время последней строки idle сессии (0 — нет). Дешёвый запрос без чтения данных сообщений. */
+export async function idleAt(sessionID: string): Promise<number> {
+  if (!sessionID || !existsSync(dbFile())) return 0
+  let db: any
+  try {
+    db = await openDb()
+    return Number(db.prepare("select max(time_created) as t from session_message where session_id = ? and type = 'idle'").get(sessionID)?.t ?? 0)
+  } catch {
+    return 0
+  } finally {
+    try {
+      db?.close()
+    } catch {}
+  }
+}
+
+/** Было ли сообщение владельца (не письмо плагина) после времени at. Читает только строки после него. */
+export async function userAfter(sessionID: string, at: number): Promise<boolean> {
+  if (!sessionID || !existsSync(dbFile())) return false
+  let db: any
+  try {
+    db = await openDb()
+    const rows = db.prepare("select data from session_message where session_id = ? and type = 'user' and time_created > ? limit 20").all(sessionID, at) as any[]
+    return rows.some((r) => {
+      try {
+        const t = JSON.parse(r.data)?.text
+        return typeof t === "string" && !t.startsWith("[opencode-peers]")
+      } catch {
+        return false
+      }
+    })
+  } catch {
+    return false
+  } finally {
+    try {
+      db?.close()
+    } catch {}
+  }
+}
+
 export async function turnEnd(sessionID: string): Promise<TurnEnd | undefined> {
   if (!sessionID || !existsSync(dbFile())) return undefined
   let db: any

@@ -47,6 +47,8 @@ import {
   DEFAULT_SPAWN_MODELS,
   lastTurn,
   turnEnd,
+  idleAt,
+  userAfter,
   hhmm,
   MODEL_TTL_MS,
   log,
@@ -558,7 +560,10 @@ export default {
     // проверки, например хук проекта). Сессия закончила ход вопросом владельцу — уведомление во все живые окна (с
     // кнопкой Open и системным уведомлением, когда окно не в фокусе); не ответил — повтор через owner_reminder_min.
     // В сводке — открытые вкладки, сессии задач и те, у кого есть наблюдения или свои открытые задачи.
-    const STATUS_EVERY_MS = Number(process.env.NOVA_PEERS_STATUS_MS) || 5_000
+    const STATUS_EVERY_MS = Number(process.env.NOVA_PEERS_STATUS_MS) || 15_000
+    // конец хода — из базы (5 ГБ у владельца) только когда появилась новая строка idle: сначала дешёвое время
+    // последнего idle (idleAt), тяжёлое чтение сообщений — при его изменении (замер: ~0,1 с на вкладку, в главном потоке)
+    const ends = new Map<string, { at: number; end: Awaited<ReturnType<typeof turnEnd>> }>()
     let statusAt = 0
     async function syncStatus() {
       if (now() - statusAt < STATUS_EVERY_MS) return
@@ -578,7 +583,21 @@ export default {
           continue
         }
         const busy = !!tab?.tab.busy || !!c.busy
-        const end = busy ? undefined : await turnEnd(c.session)
+        let end: Awaited<ReturnType<typeof turnEnd>> = undefined
+        if (!busy) {
+          const at = await idleAt(c.session)
+          const hit = ends.get(c.session)
+          if (hit && hit.at === at && at) end = hit.end
+          else {
+            end = await turnEnd(c.session)
+            ends.set(c.session, { at, end })
+          }
+          // владелец написал после конца хода — это видно только в сообщениях: перечитать, если стоял вопрос
+          if (end && !end.ownerAfter && hit && hit.at === at && (await userAfter(c.session, at))) {
+            end = { ...end, ownerAfter: true }
+            ends.set(c.session, { at, end })
+          }
+        }
         const s = statusOf({ card: c, busy, busySince: c.busySince, end, asked: asked.get(c.session) ?? [], now: t })
         const prev = saveStatus(s)
         if (s.state !== "owner") continue
@@ -877,12 +896,25 @@ export default {
     }, 10_000)
 
     log(`setup pid=${process.pid} base=${BASE}`)
-    return () => {
+    const dispose = () => {
       clearInterval(timer)
       clearTimeout(doctorTimer)
       try {
         watcher?.close()
       } catch {}
+    }
+    // ОДИН ЦИКЛ НА ПРОЦЕСС (2026-10-05). OpenCode перегружает плагин при изменении его файлов, не всегда закрывая
+    // прежний экземпляр: циклы прежних экземпляров жили дальше, каждый со своим проходом раз в секунду. Вместе с
+    // чтением базы (5 ГБ) это клало сервер — «Event stream stalled», окно перезапускало сервис (18:19, 18:42).
+    // Новый экземпляр останавливает цикл прежнего.
+    const g = globalThis as any
+    try {
+      g.__opencodePeersDispose?.()
+    } catch {}
+    g.__opencodePeersDispose = dispose
+    return () => {
+      dispose()
+      if (g.__opencodePeersDispose === dispose) g.__opencodePeersDispose = undefined
     }
   },
 }
