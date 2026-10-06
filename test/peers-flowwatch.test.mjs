@@ -19,7 +19,7 @@ delete process.env.NOVA_PEERS_PRESENCE
 const proj = path.join(tmp, "proj")
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
 // stall after 0.01 min (0.6 s); no review sessions, so a submitted task waits for a reviewer
-writeFileSync(path.join(proj, ".opencode", "opencode-peers.json"), JSON.stringify({ stall_minutes: 0.01, accepted_reminder_min: 0.01, inflight_limit: 3, spawn_limits: { reviewer: 0 }, branch_name: "t{n}-{slug}", cleanup: "local" }))
+writeFileSync(path.join(proj, ".opencode", "opencode-peers.json"), JSON.stringify({ stall_minutes: 0.01, accepted_reminder_min: 0.01, inflight_limit: 3, heavy_commands: ["scripts/gate.sh"], spawn_limits: { reviewer: 0 }, branch_name: "t{n}-{slug}", cleanup: "local" }))
 // the project is a git repository: task #3 was accepted, but its branch and a diagnostic branch stayed
 const { execFileSync } = await import("node:child_process")
 const g = (...a) => execFileSync("git", ["-C", proj, "-c", "user.name=t", "-c", "user.email=t@t", ...a], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
@@ -167,6 +167,14 @@ const put = (await tools.peer_watch.execute({ command: "sleep 60", machine: true
 const wid = /id: "([^"]+)"/.exec(put)?.[1]
 const cancelled = wid ? (await tools.peer_watch.execute({ action: "cancel", id: wid }, { sessionID: "sesINTEG1" })).content : ""
 cell("peer_watch names the id and cancels its own watch", !!wid && /отменено/.test(cancelled), JSON.stringify({ put, cancelled }))
+
+// 8. a command from heavy_commands goes to the machine queue by itself (plan 012)
+const heavy = (await tools.peer_watch.execute({ command: "bash scripts/gate.sh --tier push", note: "гейт" }, { sessionID: "sesINTEG1" })).content
+const hid = /id: "([^"]+)"/.exec(heavy)?.[1]
+const wfile = (ext) => path.join(core.BASE, "watches", `${hid}${ext}`)
+const hreq = hid ? JSON.parse(readFileSync([".req.json", ".json"].map(wfile).find((f) => { try { readFileSync(f); return true } catch { return false } }) ?? wfile(".json"), "utf8")) : {}
+cell("a heavy command is queued for the machine without machine: true", hreq.machine === true && /heavy_commands/.test(heavy), JSON.stringify({ heavy, hreq }))
+if (hid) await tools.peer_watch.execute({ action: "cancel", id: hid }, { sessionID: "sesINTEG1" })
 
 clearInterval(heart)
 stop?.()

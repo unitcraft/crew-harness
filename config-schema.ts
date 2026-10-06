@@ -12,6 +12,7 @@ export type Kind =
   | { type: "modelMap" }
   | { type: "tierLists" }
   | { type: "acceptance" }
+  | { type: "strings" }
 export type Setting = { key: string; kind: Kind; default: any; question: string; why: string; recommend?: string; group: string }
 
 const TIERS = ["heavy", "medium", "light"]
@@ -34,6 +35,11 @@ export const SCHEMA: Setting[] = [
   { key: "owner_reminder_min", group: "Подталкивание", kind: { type: "int" }, default: 15, question: "Через сколько минут повторять владельцу «вкладка ждёт вашего ответа», если он не ответил (0 — не повторять)?", why: "вопрос в окне, прокрученном вверх, не виден; без повтора он висит часами", recommend: "15" },
   { key: "push_max", group: "Подталкивание", kind: { type: "int" }, default: 20, question: "Сколько всего напоминаний на задачу до вызова интегратора?", why: "предохранитель от бесконечных напоминаний", recommend: "20" },
   { key: "reviewer", group: "Приёмка", kind: { type: "enum", options: ["worker", "integrator"] }, default: "worker", question: "Кто принимает сданные задачи?", why: "worker — другой воркер (не автор), интегратор свободен; integrator — сам интегратор", recommend: "worker" },
+  { key: "plans_dir", group: "Планы", kind: { type: "string" }, default: "docs/plans", question: "Где в репозитории лежат планы (папка от корня репозитория папки настроек)?", why: "задача-план пишет файл плана туда; после согласования плагин читает из него шаги", recommend: "docs/plans" },
+  { key: "plan_name", group: "Планы", kind: { type: "string" }, default: "{n}-{slug}.md", question: "Как называть файл плана ({n} — номер, {slug} — латиницей из названия)?", why: "номер выдаёт плагин; подплан — {n} вида 12.1", recommend: "{n}-{slug}.md" },
+  { key: "plan_rounds_max", group: "Планы", kind: { type: "int" }, default: 4, question: "Сколько раундов перепроверки плана, прежде чем спросить владельца?", why: "раунды идут, пока два подряд не дадут только косметические замечания; бесконечно — нельзя", recommend: "4" },
+  { key: "plan_clean_rounds", group: "Планы", kind: { type: "int" }, default: 2, question: "Сколько раундов подряд только с косметическими замечаниями — и план готов к согласованию?", why: "один чистый раунд — случайность, два подряд — устойчивость", recommend: "2" },
+  { key: "heavy_commands", group: "Подталкивание", kind: { type: "strings" }, default: [], question: "Какие команды — тяжёлые прогоны (подстроки: полный гейт, сборка, прогон тестов, бенчмарки)?", why: "peer_watch с такой командой сам встаёт в очередь машины (machine_slots); команда не из списка тяжёлая, если занимает все ядра или идёт дольше 2 мин", recommend: "скрипты гейта и полной сборки проекта" },
   { key: "acceptance", group: "Приёмка", kind: { type: "acceptance" }, default: [], question: "Какие шаги приёмки (id, текст, обязателен ли)?", why: "accept не проходит без отчёта по каждому обязательному шагу; текст ссылается на методологию проекта", recommend: "шаги из методологии проекта" },
   { key: "target_branch", group: "Приёмка", kind: { type: "string" }, default: "main", question: "В какую ветку вливать?", why: "плагин проверяет, что ветка задачи или squash-коммит в ней", recommend: "main" },
   { key: "rework_max", group: "Приёмка", kind: { type: "int" }, default: 3, question: "Сколько кругов доработки до вызова интегратора?", why: "много возвратов — задача поставлена неясно", recommend: "3" },
@@ -71,6 +77,8 @@ export function invalid(key: string, v: any): string | undefined {
       return isObj(v) && Object.entries(v).every(([t, m]) => TIERS.includes(t) && typeof m === "string" && /^[^/\s]+\/\S+$/.test(m)) ? undefined : `${key}: {"heavy"|"medium"|"light": "провайдер/модель"}`
     case "tierLists":
       return isObj(v) && Object.entries(v).every(([t, l]) => TIERS.includes(t) && Array.isArray(l) && l.every((x) => typeof x === "string" && x)) ? undefined : `${key}: {"heavy"|"medium"|"light": ["подстрока", ...]}`
+    case "strings":
+      return Array.isArray(v) && v.every((x) => typeof x === "string" && x.trim()) ? undefined : `${key}: список строк`
     case "acceptance":
       return Array.isArray(v) && v.every((a) => isObj(a) && typeof a.id === "string" && /^[a-z0-9][a-z0-9_-]*$/.test(a.id) && typeof a.text === "string" && a.text.trim() && (a.required === undefined || typeof a.required === "boolean")) && new Set(v.map((a: any) => a.id)).size === v.length
         ? undefined

@@ -173,6 +173,12 @@ export type PeersConfig = {
   stallMin: number
   /** принятая, но не очищенная задача: через столько минут — письма приёмщику и автору (0 — нет) */
   acceptedReminderMin: number
+  plansDir: string
+  planName: string
+  planRoundsMax: number
+  planCleanRounds: number
+  /** подстроки команд — тяжёлые прогоны: peer_watch ставит их в очередь машины сам */
+  heavyCommands: string[]
   inbound: "integrator" | "any" | "none"
   root?: string
 }
@@ -218,6 +224,11 @@ export function loadConfig(dir: string): PeersConfig {
     machineSlots: num(j.machine_slots, 1),
     stallMin: num(j.stall_minutes, 30),
     acceptedReminderMin: num(j.accepted_reminder_min, 30),
+    plansDir: typeof j.plans_dir === "string" && j.plans_dir.trim() ? j.plans_dir.trim() : "docs/plans",
+    planName: typeof j.plan_name === "string" && j.plan_name.includes("{n}") ? j.plan_name : "{n}-{slug}.md",
+    planRoundsMax: num(j.plan_rounds_max, 4),
+    planCleanRounds: Math.max(1, num(j.plan_clean_rounds, 2)),
+    heavyCommands: Array.isArray(j.heavy_commands) ? j.heavy_commands.filter((x: any) => typeof x === "string" && x.trim()) : [],
     inbound: oneOf(j.inbound, ["integrator", "any", "none"] as const, "integrator"),
     root,
   }
@@ -1775,10 +1786,12 @@ export function makeTools(host: PeersHost): PeerTool[] {
         return { content: ws.length ? `Наблюдения вкладки (отмена — peer_watch {action: "cancel", id}):\n${ws.map((w) => `— ${w.id} ${w.note ? `«${w.note}» ` : ""}${w.status === "requested" ? `ждёт запуска${w.machine ? " в очереди машины" : ""} с ${hhmm(w.created)}` : `с ${hhmm(w.started ?? w.created)}`}, предел ${w.minutes} мин: ${w.command.slice(0, 200)}`).join("\n")}` : "Наблюдений нет." }
       }
       const project = me.project ?? projOf(me)
-      const machine = input.machine === true
+      // тяжёлая по списку проекта (heavy_commands) — в очередь машины сама, даже без machine: true (план 012)
+      const heavyBy = loadConfig(me.directory || host.defaultDir).heavyCommands.find((h) => command.includes(h))
+      const machine = input.machine === true || !!heavyBy
       const w = requestWatch({ session: me.session, command, cwd: me.directory || host.defaultDir, note: String(input.note ?? "").trim() || undefined, minutes: input.minutes, machine, project })
       const ahead = machine ? machineQueue(project).filter((x) => x.id !== w.id).length : 0
-      const queueText = machine ? ` Команда грузит машину: стоит в очереди машины проекта${ahead ? `, перед ней ${ahead}` : ""} — запустится, когда освободится место (machine_slots).` : ""
+      const queueText = machine ? `${heavyBy && input.machine !== true ? ` Команда — тяжёлый прогон (heavy_commands: «${heavyBy}»), поэтому в очереди машины.` : ""} Команда грузит машину: стоит в очереди машины проекта${ahead ? `, перед ней ${ahead}` : ""} — запустится, когда освободится место (machine_slots).` : ""
       return { content: `Наблюдение ${w.note ? `«${w.note}» ` : ""}${w.id} поставлено (${hhmm(w.created)}, предел ${w.minutes} мин от запуска; отмена — peer_watch {action: "cancel", id: "${w.id}"}).${queueText} Плагин запустит команду в сервере OpenCode и разбудит эту вкладку письмом с результатом. Заканчивай ход — ждать не нужно.` }
     },
   }
