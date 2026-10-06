@@ -908,13 +908,30 @@ export default {
     // работу решает автор. Сам плагин не удаляет: удаление веток на origin — действие наружу.
     const LEFT_EVERY_MS = Number(process.env.CREW_HARNESS_LEFT_MS) || 600_000
     let leftAt = 0
+    const leftClean = new Set<string>()
+    const LEFT_PER_RUN = Number(process.env.NOVA_PEERS_LEFT_PER_RUN) || 3
+    const LEFT_REMOTE_MS = Number(process.env.NOVA_PEERS_LEFT_REMOTE_MS) || 6 * 3_600_000
+    let leftRemoteAt = 0
     async function leftWatch() {
       if (now() - leftAt < LEFT_EVERY_MS) return
       leftAt = now()
+      // ЛЕГЧЕ (2026-10-07): проход гонял git по каждой задаче, закрытой за трое суток (ls-remote, for-each-ref, worktree
+      // list на репозитории nova), — десятки процессов git каждые 10 мин на перегруженной гейтами машине; задержки потока
+      // сервера 8–17 с пришлись на этот шаг. Теперь: задача, у которой хвостов не нашлось, больше не проверяется (до
+      // перезапуска); за проход — не больше LEFT_PER_RUN задач; origin (ls-remote, сеть) — раз в LEFT_REMOTE_MS.
+      const remote = now() - leftRemoteAt >= LEFT_REMOTE_MS
+      if (remote) leftRemoteAt = now()
+      let checked = 0
       for (const t of listTasks()) {
         if ((t.status !== "cleaned" && t.status !== "cancelled") || now() - (t.updated ?? 0) > 3 * 86_400_000) continue
-        const left = await leftoversOf(t, loadConfig(t.directory), true)
-        if (!left.length) continue
+        const key0 = `${t.project}#${t.n}`
+        if (leftClean.has(key0)) continue
+        if (++checked > LEFT_PER_RUN) break
+        const left = await leftoversOf(t, loadConfig(t.directory), remote)
+        if (!left.length) {
+          if (remote) leftClean.add(key0) // чисто и локально, и на origin — больше не смотреть
+          continue
+        }
         const key = left.slice().sort().join("|")
         let h = 0
         for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0
