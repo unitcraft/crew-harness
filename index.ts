@@ -964,7 +964,7 @@ export default {
               return { error: why }
             }
             if (cfg.worktrees && !insideDir(t.worktree, cfg.worktrees)) return refuse(`worktree ${t.worktree} вне папки деревьев проекта ${cfg.worktrees}`)
-            const w = ensureWorktree(t.directory, t.worktree, t.branch, cfg.targetBranch)
+            const w = await ensureWorktree(t.directory, t.worktree, t.branch, cfg.targetBranch)
             if (!w.ok) return refuse(`worktree ${t.worktree} не создан: ${w.error}`)
             dir = t.worktree
             if (!t.worktree_ready) {
