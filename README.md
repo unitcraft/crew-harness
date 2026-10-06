@@ -293,6 +293,29 @@ by itself. Full design: [plan 012](doc/plans/012-plans.md).
   integrator, who does it with its own tasks: `peer_spawn {…, parent: "alpha#N"}`. The order follows
   that task: cleaned → the order is done (a quiet summary to the orderer), cancelled → a call.
 
+## Other machines (prototype)
+
+Letters to projects on other machines go through an encrypted [ntfy](https://ntfy.sh) channel
+(`ntfy.ts`, `remote.ts`). Each machine has `<data>/opencode-peers/remote.json` (not in a repository —
+the secret is the only protection of the channel):
+
+```json
+{ "node": "home", "secret": "<the same on every machine>", "projects": ["site"] }
+```
+
+- `projects` — projects of the **other** machines: `peer_send {to: "site.lead"}` puts the letter into
+  `remote/outbox/` instead of the inbox. A session of another machine you got a letter from is
+  remembered, so a reply to its `from_session` goes back the same way. `tier` and `project.all` do not
+  work across machines;
+- the topic and the AES-256-GCM key come from `secret` (a new one: `ntfySecret()` from `ntfy.ts`);
+  optional `server` (default `https://ntfy.sh`) and `token` for your own ntfy server;
+- one process per machine holds the bridge (`remote/bridge.lock`): it sends the outbox and takes from
+  the channel only letters for its own projects, by the project's `inbound`; a session gets letters only
+  after it wrote to another machine itself. A letter that cannot be sent goes to `remote/failed/`, and
+  its sender gets a note;
+- a letter takes about 1–3 s on ntfy.sh (`node test/ntfy-latency.mjs`); anonymous ntfy.sh limits
+  requests and messages per day, so pending letters leave together.
+
 ## Self-check
 
 `peer_doctor` (and once at load, as a notice): the OpenCode features the plugin relies on, the
