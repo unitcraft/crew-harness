@@ -4,7 +4,7 @@
 // status/ (их пишет плагин сервиса), раз в 2 с; логика строк — status.ts sidebarLines (под тестом). Подключается из
 // tui.ts через import() с защитой: не заработало — блока нет, остальное в окне работает.
 import { createSignal, For, onCleanup } from "solid-js"
-import { readStatuses, sidebarLines } from "./status.ts"
+import { readStatuses, sideText, sidebarLines } from "./status.ts"
 
 const EVERY_MS = 2_000
 
@@ -28,7 +28,7 @@ function PeersBlock(props: { api: any; sessionID?: string }) {
   return (
     <box flexDirection="column" marginTop={1}>
       <text fg={color("base")}>{view().title}</text>
-      <For each={view().rows}>{(r) => <text fg={color(r.tone)}>{`${r.mark} ${r.who.padEnd(9).slice(0, 9)} ${r.what}`}</text>}</For>
+      <For each={view().rows}>{(r) => <text fg={color(r.tone)}>{sideText(r)}</text>}</For>
       <text fg={color("muted")}>{view().foot}</text>
     </box>
   )

@@ -231,6 +231,10 @@ export function acceptanceReports(project: string, now = Date.now()): string[] {
 // реальном времени?»). Строки блока «Peers» под «Context»: кто чего ждёт в проекте вкладки на экране, ждущие владельца
 // первыми. Чистая функция — рисует sidebar.tsx, проверяет тест.
 export type SideRow = { mark: string; who: string; what: string; tone: "accent" | "base" | "muted" }
+/** Строка панели как она печатается (ширина панели ~32 знака: длиннее — перенос, и список выглядит разрезанным).
+ *  Подстрока (who пустой) — с отступом под «что», без колонки «кто». */
+export const SIDE_WIDTH = 32
+export const sideText = (r: SideRow) => (r.who ? `${r.mark} ${r.who.padEnd(9).slice(0, 9)} ${r.what}` : `    ${r.what}`).slice(0, SIDE_WIDTH)
 const WORD_OF_TASK: Record<string, string> = { submitted: "✓ сдана", reviewing: "✓◐ приёмка", rework: "↻ доработка", accepted: "✓✓◐ влита", running: "в работе", starting: "запуск" }
 const SIDE_MAX = 9
 export function sidebarLines(list: Status[], now = Date.now(), project?: string): { title: string; rows: SideRow[]; foot: string } {
@@ -269,7 +273,7 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string)
       tone: (s.state === "owner" || s.state === "question" ? "accent" : s.state === "idle" ? "muted" : "base") as SideRow["tone"],
     })
     const cur = s.task?.as === "reviewer" && prog?.startsWith("проверка") ? s.task.steps!.find((a) => a.id === s.task!.checking) : undefined
-    if (cur) rows.push({ mark: " ", who: "", what: `↳ ${short(cur.text, 28)}`, tone: "muted" })
+    if (cur) rows.push({ mark: " ", who: "", what: `↳ ${short(cur.text.replace(/[`*_]/g, ""), 26)}`, tone: "muted" })
   }
   const waiting = mine.filter((s) => s.state === "owner").length
   // «ход» — модель думает сейчас; «ждут» — наблюдения (гейты, коммит в main), из них в очереди машины — ещё не запущены

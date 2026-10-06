@@ -8,7 +8,7 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "peers-sidebar-"))
 process.env.XDG_DATA_HOME = tmp
-const { sidebarLines, formatStatuses } = await import("../status.ts")
+const { sidebarLines, formatStatuses, sideText } = await import("../status.ts")
 let fail = 0
 const cell = (name, ok, detail) => {
   console.log(`${ok ? "ok  " : "FAIL"} ${name}${ok ? "" : " :: " + detail}`)
@@ -32,9 +32,10 @@ cell("a task state is shown with its mark and word", v.rows.some((r) => r.who ==
 cell("rows fit the narrow panel (32 columns) without wrapping", v.rows.every((r) => 2 + 9 + 1 + r.what.length <= 32), JSON.stringify(v.rows.map((r) => r.what)))
 {
   // acceptance in progress: "проверка 2/3: guards" on the reviewer's row, the step's text under it
-  const steps = [{ id: "tests", text: "тесты", result: "12/12" }, { id: "guards", text: "стражи зелёные на всех платформах" }, { id: "notes", text: "заметки" }]
+  const steps = [{ id: "tests", text: "тесты", result: "12/12" }, { id: "guards", text: "стражи зелёные: `NOVA_GATE_TIER=loop bash scripts/gate.sh` на всех платформах" }, { id: "notes", text: "заметки" }]
   const r = { session: "sR", project: "proj", role: "worker", title: "#5", state: "working", since: Date.now() - 60_000, detail: "", watches: [], asked: [], tasks: [], updated: Date.now(), task: { n: 5, status: "reviewing", as: "reviewer", title: "t", steps, checking: "guards" } }
   const sv = sidebarLines([r], Date.now(), "proj")
+  cell("printed rows, the step's sub-row included, fit the panel without wrapping", sv.rows.every((x) => sideText(x).length <= 32 && !sideText(x).endsWith(" ")) && sideText(sv.rows[1]).startsWith("    ↳ "), JSON.stringify(sv.rows.map(sideText)))
   cell("the reviewer's row shows the step in progress", sv.rows[0].what === "проверка 2/3: guards" && sv.rows[1]?.what.startsWith("↳ стражи"), JSON.stringify(sv.rows))
   const text = formatStatuses([r], Date.now(), "proj")
   cell("/peers lists every step with its mark", /✓ tests: 12\/12/.test(text) && /▶ guards: стражи/.test(text) && /· notes: заметки/.test(text), text)
