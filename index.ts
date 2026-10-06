@@ -49,6 +49,7 @@ import {
   turnEnd,
   idleAt,
   openTurn,
+  PROCESS_START,
   userAfter,
   hhmm,
   MODEL_TTL_MS,
@@ -201,6 +202,8 @@ export default {
       const windows = liveWindows()
       const fresh = readJson<Card>(cardFile(card.session)) ?? card
       if (turnRunning(fresh, windows)) return // ход идёт: письма ждут его конца
+      // сессия задачи: ход, начатый не плагином (продолженный OpenCode после перезапуска), виден только по базе
+      if (fresh.spawned && (await openTurn(fresh.session, now()))) return
       const open = mayWakeCard(fresh, windows)
       if (!open && !hasQuietIn(keys)) {
         if (!held.has(card.session)) log(`hold letters for ${card.session} (${keyOf(card)}): tab not open`)
@@ -375,7 +378,7 @@ export default {
     // каждую новую папку (замер 2026-10-05: десять загрузок за день в одном процессе). Новый экземпляр иначе считал
     // оборванными ходы, которые идут прямо сейчас (time_suspended стоит и у идущего хода), и слал работающим
     // приёмщикам «работа прервана перезапуском».
-    const setupAt = Number(process.env.NOVA_PEERS_PROCESS_START) || Date.now() - process.uptime() * 1000
+    const setupAt = PROCESS_START
     let interruptedChecked = 0
     async function resumeInterrupted() {
       if (now() - interruptedChecked < 30_000) return

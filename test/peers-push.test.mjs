@@ -227,6 +227,27 @@ await failedTurn()
 await failedTurn()
 cell("three failed turns: stuck, the call says the turns fail", got("sesINTEG1", "ход падает с ошибкой").length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "sesINTEG1").map((d) => d.text.slice(0, 200))))
 
+// 9. a long provider turn OpenCode itself resumed after a restart (#14 nova, 2026-10-06): the assistant row is written
+// at the start and updated only at the end, the card is not busy (the plugin did not start the turn). It is running:
+// letters wait for its end instead of piling up in OpenCode's queue (replayed as seven empty turns after it)
+{
+  db.prepare("insert into session_v2 values (?, ?, ?, null, null, null, null, null)").run("ses_long1", proj, "ses_long1")
+  core.saveCard({ session: "ses_long1", role: "worker", auto: false, title: "ses_long1", directory: proj, repo: "proj", project: "proj", pid: process.pid, updated: Date.now(), spawned: { by: "sesINTEG1", task: "long", tier: "light", status: "running", at: Date.now() - 3_600_000, qid: "qLONG" } })
+  msg("ses_long1", "idle", { outcome: "succeeded" }, Date.now() - 3_600_000)
+  msg("ses_long1", "synthetic", { text: "The server restarted while you were working." }, Date.now() - 1000)
+  const at = Date.now() - 1000 // started in this process; checked 10 min later below: the row is not updated meanwhile
+  db.prepare("insert into session_message values (?, ?, ?, ?, ?, ?, ?)").run(`m${++seq}`, "ses_long1", "assistant", seq, at, at, JSON.stringify({ time: { created: at } }))
+  cell("a turn started in this process and not ended is open", await core.openTurn("ses_long1", Date.now() + 600_000), "closed")
+  cell("the same turn from a previous process is not (it was cut off)", !(await core.openTurn("ses_long1", Date.now() + 600_000, 300_000, Date.now())), "open")
+  core.postLetter("ses_long1", { id: "long-l1", from_role: "proj.integrator", from_session: "sesINTEG1", to: "ses_long1", time: Date.now(), text: "письмо в долгий ход" })
+  await wait(800)
+  cell("letters wait for the end of such a turn", !got("ses_long1", "письмо в долгий ход").length, "delivered into a running turn")
+  msg("ses_long1", "idle", { outcome: "succeeded" })
+  cell("after its idle row the turn is over", !(await core.openTurn("ses_long1", Date.now() + 600_000)), "open")
+  await wait(1200)
+  cell("then the waiting letter is delivered", got("ses_long1", "письмо в долгий ход").length === 1, "still waiting")
+}
+
 // 8. OpenCode loads the plugin again in the same process for a new directory: a turn running right now (its session
 // has time_suspended too, no idle yet) is not "cut off by a restart" for the new instance (found live 2026-10-05:
 // two working reviewers got "работа прервана перезапуском")

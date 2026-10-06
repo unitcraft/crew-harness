@@ -450,14 +450,26 @@ export async function userAfter(sessionID: string, at: number): Promise<boolean>
 }
 
 /** Ход открыт и живой: после последнего idle есть сообщения, обновлённые не раньше чем за fresh мс. */
-export async function openTurn(sessionID: string, now = Date.now(), fresh = 300_000): Promise<boolean> {
+/** Старт процесса сервера (не загрузки плагина: OpenCode грузит его заново в том же процессе на каждую папку). */
+export const PROCESS_START = Number(process.env.NOVA_PEERS_PROCESS_START) || Date.now() - process.uptime() * 1000
+const OPEN_TURN_MAX_MS = 4 * 3_600_000
+
+/** Ход сессии идёт: по базе (сессия задачи без окна, ход начат не через плагин).
+ *  — последнее сообщение новее последнего idle и обновлялось за fresh;
+ *  — или ответ модели начат в этом процессе сервера и idle после него нет. Провайдер claude-code пишет строку ответа
+ *    в начале хода и обновляет в конце: двухчасовой ход #14 nova (2026-10-06, продолжен самой OpenCode после
+ *    перезапуска) выглядел «стоит между ходами», и плагин будил его письмами — OpenCode копила их и проиграла после хода
+ *    семью ходами «старое письмо, нового нет». Ход из прошлого процесса не считается: тот оборван (resumeInterrupted). */
+export async function openTurn(sessionID: string, now = Date.now(), fresh = 300_000, since = PROCESS_START): Promise<boolean> {
   if (!sessionID || !existsSync(dbFile())) return false
   let db: any
   try {
     db = await openDb()
-    const r = db.prepare("select max(case when type = 'idle' then time_created end) as idle, max(case when type <> 'idle' then time_updated end) as upd from session_message where session_id = ?").get(sessionID)
+    const r = db.prepare("select max(case when type = 'idle' then time_created end) as idle, max(case when type <> 'idle' then time_updated end) as upd, max(case when type = 'assistant' then time_created end) as asst from session_message where session_id = ?").get(sessionID)
+    const idle = Number(r?.idle ?? 0)
     const upd = Number(r?.upd ?? 0)
-    return upd > Number(r?.idle ?? 0) && now - upd < fresh
+    const asst = Number(r?.asst ?? 0)
+    return (upd > idle && now - upd < fresh) || (asst > idle && asst >= since && now - asst < OPEN_TURN_MAX_MS)
   } catch {
     return false
   } finally {
