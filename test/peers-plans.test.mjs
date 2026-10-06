@@ -48,6 +48,7 @@ cell("phases and steps with their tags", p.phases.length === 2 && steps.length =
 cell("titles are clean of tags and marks", steps[0].title === "лексер" && steps[1].title === "парсер", JSON.stringify(steps.map((s) => s.title)))
 cell("done marks are read", steps[1].done && !steps[0].done, JSON.stringify(steps.map((s) => s.done)))
 cell("what and criteria of a step", steps[0].what.startsWith("лексер отдаёт") && steps[0].criteria.length === 1 && /12\/12/.test(steps[0].criteria[0]), JSON.stringify(steps[0]))
+cell("section bodies are kept (boundaries for step tasks)", p.bodies["Не делаем"].trim() === "Оракул.", JSON.stringify(p.bodies["Не делаем"]))
 cell("the owner's answer on shortcuts", p.noShortcuts === true, String(p.noShortcuts))
 cell("a phase's 'after' expands to its steps", JSON.stringify(stepDeps(p, steps[2])) === '["Ф.1.1","Ф.1.2"]', JSON.stringify(stepDeps(p, steps[2])))
 cell("a good plan has no problems", planProblems(good).length === 0, JSON.stringify(planProblems(good)))

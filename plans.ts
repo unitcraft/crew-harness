@@ -30,6 +30,8 @@ export type Plan = {
   /** «Без упрощений: ДА/НЕТ» — ответ владельца; undefined — ещё не ответил */
   noShortcuts?: boolean
   noQuestionsLine: boolean
+  /** текст разделов «## …» (без подразделов фаз) — например, «Не делаем» для границ задач-шагов */
+  bodies: Record<string, string>
 }
 
 export const PLAN_SECTIONS = ["Зачем", "Что уже есть", "Режим выполнения", "Фазы", "Не делаем", "Открытые вопросы"] as const
@@ -86,7 +88,7 @@ const cleanTitle = (s: string) =>
 /** Разбор файла плана по форме шаблона. */
 export function parsePlan(text: string): Plan {
   const lines = text.replace(/\r/g, "").split("\n")
-  const plan: Plan = { title: "", header: {}, sections: [], phases: [], questions: [], noQuestionsLine: false }
+  const plan: Plan = { title: "", header: {}, sections: [], phases: [], questions: [], noQuestionsLine: false, bodies: {} }
   let section = ""
   let step: PlanStep | undefined
   let inCriteria = false
@@ -104,6 +106,7 @@ export function parsePlan(text: string): Plan {
     if ((m = /^##\s+(?!#)(.+)$/.exec(line))) {
       section = m[1].trim()
       plan.sections.push(section)
+      plan.bodies[section] = ""
       step = undefined
       inCriteria = false
       continue
@@ -124,6 +127,8 @@ export function parsePlan(text: string): Plan {
       inCriteria = false
       continue
     }
+    if (section && section !== "Фазы" && !/^#{3,}/.test(line)) plan.bodies[section] = `${plan.bodies[section]}${line}
+`
     if (section === "Открытые вопросы") {
       if ((m = /^\s*[-*]\s*(❔|✅)\s*(.+)$/.exec(line))) plan.questions.push({ text: m[2].trim(), open: m[1] === "❔" })
       if (/Открытых вопросов нет/i.test(line)) plan.noQuestionsLine = true

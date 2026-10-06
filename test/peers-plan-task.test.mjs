@@ -12,6 +12,7 @@ process.env.XDG_DATA_HOME = tmp
 process.env.NOVA_PEERS_POLL_MS = "100"
 process.env.NOVA_PEERS_DB = path.join(tmp, "absent.db")
 process.env.NOVA_PEERS_PRESENCE = "all"
+process.env.NOVA_PEERS_PLANSTEPS_MS = "200"
 const proj = path.join(tmp, "proj")
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
 mkdirSync(path.join(proj, "docs", "plans"), { recursive: true })
@@ -91,6 +92,8 @@ const good = readFileSync(new URL("../plans.ts", import.meta.url), "utf8") && [
   "# План 8 — длина фрагмента", "", "**Статус:** 🔴 ОТКРЫТ", "**Источник:** задача #1", "**Зависимости:** —", "",
   "## Зачем", "0 на 3 фикстурах из 12", "## Что уже есть", "одна функция", "## Режим выполнения", "Без упрощений: ❔ — вопрос владельцу",
   "## Фазы", "### Ф.1 — длина [P1]", "#### Ф.1.1 — лексер [где: lex.nv]", "Что: длина из склеенного текста", "**Приёмка:**", "- ⬜ nova test lex → 12/12; краснота: старая длина → 3 FAIL",
+  "#### Ф.1.2 — парсер [где: lex.nv]", "Что: парсер берёт длину у лексера", "**Приёмка:**", "- ⬜ nova test parse → 40/40",
+  "### Ф.2 — проверка [P2] [после: Ф.1]", "#### Ф.2.1 — батарея фикстур [подплан]", "Что: батарея фикстур на длину", "**Приёмка:**", "- ⬜ батарея зелёная",
   "## Не делаем", "оракул", "## Открытые вопросы", "Открытых вопросов нет, проверено 2026-10-06", "## Решения владельца",
 ].join("\n")
 writeFileSync(file, good)
@@ -177,6 +180,55 @@ git(t1.worktree, "commit", "-q", "-am", "plan 8: the owner's answer")
 git(proj, "merge", "-q", "--no-edit", t1.branch)
 const acc = await call("peer_task", rm, { action: "accept", n: 1 })
 cell("with the answer in main the plan is accepted", task().status === "accepted", acc)
+
+// 7. cleaned: the steps become tasks -- Ф.1.1 first; Ф.1.2 shares «где: lex.nv» and waits; Ф.2 waits for Ф.1
+git(proj, "worktree", "remove", "--force", t1.worktree)
+git(proj, "branch", "-D", t1.branch)
+const cl = await call("peer_task", rm, { action: "cleaned", n: 1 })
+cell("the plan task is cleaned", task().status === "cleaned", cl)
+const byStep = (id) => tasks.listTasks("proj").find((x) => x.plan_step?.step === id)
+await until(() => !!byStep("Ф.1.1"))
+await wait(800)
+const s11 = byStep("Ф.1.1")
+cell("step Ф.1.1 becomes a task: goal, criteria, boundaries, priority of its phase", !!s11 && s11.goal === "длина из склеенного текста" && /12\/12/.test(s11.criteria) && /оракул/.test(s11.boundaries) && /без упрощений/.test(s11.boundaries) && s11.priority === "P1" && s11.title === "8 Ф.1.1 лексер", JSON.stringify(s11))
+cell("Ф.1.2 waits: the same «где» as a running step; Ф.2.1 waits for phase Ф.1", !byStep("Ф.1.2") && !byStep("Ф.2.1"), JSON.stringify(tasks.listTasks("proj").map((x) => [x.n, x.plan_step?.step])))
+cell("the step task's letter asks for the done mark", got(s11.executor, "ШАГ ПЛАНА 8, Ф.1.1").length === 1, JSON.stringify(got(s11.executor, "ЗАДАЧА").map((d) => d.text.slice(0, 200))))
+
+// 8. the step's acceptance requires «✅ СДЕЛАНО» of the step in the plan in main
+const sw = byStep("Ф.1.1").worktree
+writeFileSync(path.join(sw, "lex.nv"), "len\n")
+git(sw, "add", "-A")
+git(sw, "commit", "-q", "-m", "lexer")
+await call("peer_send", s11.executor, { to: "sesINTEG1", text: "лексер готов", reply_to: s11.qid })
+await until(() => byStep("Ф.1.1").reviewer && sessions.has(byStep("Ф.1.1").reviewer))
+const sr = byStep("Ф.1.1").reviewer
+await call("peer_task", sr, { action: "review", n: s11.n })
+await call("peer_task", sr, { action: "merge", n: s11.n })
+git(proj, "merge", "-q", "--no-edit", s11.branch)
+const noMark = await call("peer_task", sr, { action: "accept", n: s11.n })
+cell("accept of a step without «✅ СДЕЛАНО» in the plan is refused", /нет отметки «✅ СДЕЛАНО/.test(noMark) && byStep("Ф.1.1").status === "reviewing", noMark)
+const mainPlan = path.join(proj, t1.plan.file)
+writeFileSync(mainPlan, readFileSync(mainPlan, "utf8").replace("#### Ф.1.1 — лексер [где: lex.nv]", "#### Ф.1.1 — лексер ✅ СДЕЛАНО 2026-10-06, коммит \`abc\` [где: lex.nv]"))
+git(proj, "commit", "-q", "-am", "plan 8: Ф.1.1 done")
+const okMark = await call("peer_task", sr, { action: "accept", n: s11.n })
+cell("with the mark the step is accepted", byStep("Ф.1.1").status === "accepted", okMark)
+
+// 9. Ф.1.1 closed -> Ф.1.2 starts; Ф.1 closed -> the sub-plan step Ф.2.1 becomes a plan task 8.1; all closed -> letter
+const close = (id) => {
+  const x = byStep(id)
+  x.status = "cleaned"
+  tasks.saveTask(x)
+}
+close("Ф.1.1")
+await until(() => !!byStep("Ф.1.2"))
+cell("Ф.1.1 closed: Ф.1.2 starts", !!byStep("Ф.1.2") && !byStep("Ф.2.1"), JSON.stringify(tasks.listTasks("proj").map((x) => [x.n, x.plan_step?.step])))
+close("Ф.1.2")
+await until(() => !!byStep("Ф.2.1"))
+const sub = byStep("Ф.2.1")
+cell("phase Ф.1 closed: the sub-plan step becomes plan task 8.1", !!sub && sub.plan?.n === "8.1" && sub.plan.parent === "8" && /батарея фикстур/.test(sub.plan.source), JSON.stringify(sub && { plan: sub.plan, title: sub.title }))
+close("Ф.2.1")
+await until(() => got("sesINTEG1", "все шаги закрыты").length > 0)
+cell("all steps closed: the author is asked to close the plan", got("sesINTEG1", "План 8").some((d) => /все шаги закрыты \(3\)/.test(d.text)), JSON.stringify(got("sesINTEG1", "План 8").map((d) => d.text.slice(0, 160))))
 
 clearInterval(heart)
 stop?.()

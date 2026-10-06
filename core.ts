@@ -12,7 +12,7 @@ import { type Projects, parseProjects as parseProjectsWith, projectFor, rawSetti
 import { SCHEMA, guideText, invalid } from "./config-schema.ts"
 export { PROJECT_RE, type Project, type Projects, settingsProblems } from "./settings.ts"
 import { PROJECT_RE, settingsProblems } from "./settings.ts"
-import { PLAN_ACCEPTANCE, PLAN_MERGE_ACCEPTANCE, ROUND_RULES, nextPlanNumber, parsePlan, planProblems, planTemplate } from "./plans.ts"
+import { PLAN_ACCEPTANCE, PLAN_MERGE_ACCEPTANCE, ROUND_RULES, allSteps, nextPlanNumber, parsePlan, planProblems, planTemplate } from "./plans.ts"
 import { type Task, type TaskPlan, WORKING_STATUSES, slugify, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { cleanupDone, cleanupSteps, fileAt, holdsMergeLock, isMerged, mergeHolder, releaseMergeLock, reworkLetter, takeMergeLock } from "./review.ts"
 import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, watchesOf } from "./watch.ts"
@@ -1697,6 +1697,13 @@ export function makeTools(host: PeersHost): PeerTool[] {
           const commit = String(input.commit ?? "").trim() || undefined
           const m = isMerged(t, tcfg.targetBranch, commit)
           if (!m.ok) return { content: `Не принято: ${m.how}. Влей и запушь, затем снова accept.` }
+          // шаг плана (план 012): в целевой ветке у шага — отметка «✅ СДЕЛАНО»
+          if (t.plan_step) {
+            const ps = t.plan_step
+            const text = fileAt(t.directory, tcfg.targetBranch, ps.file)
+            const s = text ? allSteps(parsePlan(text)).find((x) => x.id === ps.step) : undefined
+            if (!s?.done) return { content: `Не принято: в ${ps.file} (${tcfg.targetBranch}) у шага ${ps.step} нет отметки «✅ СДЕЛАНО <дата>, коммит <hash>» в заголовке. Впиши её тем же слиянием и снова accept.` }
+          }
           // согласованный план (план 012): в целевой ветке — файл плана в порядке и с ответом владельца
           if (t.plan) {
             const a = t.plan.approval
@@ -1967,6 +1974,7 @@ export function formatTaskLetter(t: Task): string {
           ? `ВЕТКА: ${t.branch}.`
           : "",
     t.handoff ? `СДЕЛАНО ПРЕЖНИМ ИСПОЛНИТЕЛЕМ (задача передана тебе):\n${t.handoff}` : "",
+    t.plan_step ? `ШАГ ПЛАНА ${t.plan_step.plan}, ${t.plan_step.step} (файл ${t.plan_step.file}): закрыв шаг, отметь в его заголовке «✅ СДЕЛАНО <дата>, коммит <hash>» тем же слиянием — без отметки в целевой ветке приёмка не пройдёт.` : "",
     acceptanceForExecutor(t),
     `Когда закончишь — отчёт: peer_send {to: "${t.author}", reply_to: "${t.qid}", text: "что сделано, как проверено, что осталось"}. Упрёшься — тем же ответом напиши, что мешает. Пока отчёта нет, задача открыта: остановишься без него — получишь напоминание.`,
   ]

@@ -105,10 +105,11 @@ import {
   PLUGIN_SENDER,
 } from "./core.ts"
 import { DECISION_RU, readApprovals, removeApproval } from "./approvals.ts"
+import { allSteps, nextPlanNumber, parsePlan, stepDeps } from "./plans.ts"
 import { dropWatch, openWatchesBySession, pollWatches, watchesOf } from "./watch.ts"
 import { endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
-import { type Task, acceptedAt, ago, byPriority, rounds, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
-import { ensureWorktree, gitTraces, leftoversOf, mergeHolder, reviewLetter } from "./review.ts"
+import { type Task, acceptedAt, ago, byPriority, createTask, rounds, slugify, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
+import { ensureWorktree, fileAt, gitTraces, leftoversOf, mergeHolder, reviewLetter } from "./review.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
 
@@ -744,6 +745,75 @@ export default {
       }
     }
 
+    // ШАГИ ПЛАНА — ЗАДАЧИ (план 012, шаг 4). Согласованный и влитый план (задача-план очищена) читается из целевой
+    // ветки; каждый шаг — задача с его «Что» и «Приёмкой», границами плана и режимом выполнения. Шаг стартует, когда
+    // закрыто всё из его «после:» (и «после:» его фазы) и не идёт шаг с пересекающимся «где:»; внутри лимитов проекта;
+    // по приоритету шага, иначе фазы, затем по порядку в плане. Шаг-подплан — задача-план. Все шаги закрыты —
+    // письмо автору: закрыть план. Раз в PLAN_STEPS_MS: файл плана читается из git.
+    const PLAN_STEPS_MS = Number(process.env.NOVA_PEERS_PLANSTEPS_MS) || 10_000
+    let planStepsAt = 0
+    async function planSteps() {
+      if (now() - planStepsAt < PLAN_STEPS_MS) return
+      planStepsAt = now()
+      for (const pt of listTasks()) {
+        if (!pt.plan || pt.status !== "cleaned" || pt.plan.finished || !pt.plan.approval || pt.plan.approval.decision === "no") continue
+        const author = readJson<Card>(cardFile(pt.author))
+        if (author && author.pid !== process.pid && pidAlive(author.pid)) continue // ставит процесс автора
+        const cfg = loadConfig(pt.directory)
+        const text = fileAt(pt.directory, cfg.targetBranch, pt.plan.file)
+        if (!text) continue
+        const plan = parsePlan(text)
+        const steps = allSteps(plan)
+        pt.plan.spawned ??= {}
+        const taskOf = (id: string) => (pt.plan!.spawned![id] ? loadTask(pt.project, pt.plan!.spawned![id]) : undefined)
+        const done = (id: string) => !!steps.find((s) => s.id === id)?.done || ["cleaned", "closed"].includes(taskOf(id)?.status ?? "")
+        const running = steps.filter((s) => isOpen(taskOf(s.id)))
+        const order = new Map(steps.map((s, i) => [s.id, i]))
+        const prio = (s: (typeof steps)[number]) => s.priority ?? plan.phases.find((f) => f.id === s.phase)?.priority ?? cfg.defaultPriority
+        const ready = steps
+          .filter((s) => !s.done && !pt.plan!.spawned![s.id] && stepDeps(plan, s).every(done))
+          .sort((a, b) => prio(a).localeCompare(prio(b)) || order.get(a.id)! - order.get(b.id)!)
+        let changed = false
+        for (const s of ready) {
+          const busyWhere = running.find((r) => r.where.some((w) => s.where.includes(w)))
+          if (busyWhere) continue // пересекается по «где:» с идущим шагом — ждёт его
+          const open = listTasks(pt.project).filter(isOpen)
+          const workers = open.filter((x) => x.kind === "spawn" && x.role === DEFAULT_ROLE && (x.status === "starting" || x.status === "running"))
+          const p = prio(s)
+          if (p !== "P0" && (open.length >= cfg.inflightLimit || workers.length >= (cfg.spawnLimits[DEFAULT_ROLE] ?? cfg.spawnLimits["*"] ?? 3))) break // лимиты — ждать
+          const boundaries = [plan.bodies["Не делаем"]?.trim(), `Режим выполнения: ${pt.plan.approval.decision === "ok" ? "без упрощений — ни заглушек, ни TODO, ни «временно»" : "упрощения — только перечисленные в плане"}.`].filter(Boolean).join("\n")
+          const model = cfg.spawnModels.medium ?? DEFAULT_SPAWN_MODELS.medium
+          const base = {
+            project: pt.project, goal: s.subplan ? `${s.what}\n(подплан шага ${s.id} плана ${pt.plan.n})` : s.what, criteria: s.criteria.join("\n"), boundaries,
+            priority: p, tier: "medium" as const, role: DEFAULT_ROLE, model, author: pt.author, author_role: pt.author_role, qid: `q${now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+            status: "starting" as const, kind: "spawn" as const, executor: plannedSessionId(), directory: pt.directory,
+            plan_step: { project: pt.project, task: pt.n, plan: pt.plan.n, step: s.id, file: pt.plan.file },
+          }
+          let t: Task
+          if (s.subplan) {
+            let names: string[] = []
+            try {
+              names = readdirSync(path.join(pt.worktree && existsSync(pt.worktree) ? pt.worktree : pt.directory, cfg.plansDir))
+            } catch {}
+            const n = nextPlanNumber(names, listTasks(pt.project).filter((x) => x.plan).map((x) => x.plan!.n), pt.plan.n)
+            t = createTask({ ...base, title: `план ${n}: ${s.title}`, plan: { n, file: path.posix.join(cfg.plansDir.replace(/\\/g, "/"), cfg.planName.replace(/\{n\}/g, n).replace(/\{slug\}/g, slugify(s.title))), source: `${s.what}\nКритерии шага ${s.id} плана ${pt.plan.n}:\n${s.criteria.join("\n")}`, parent: pt.plan.n, rounds: [], clean: 0 } }, (n2, slug) => taskPlace(pt.directory, cfg, n2, slug, pt.project))
+          } else t = createTask({ ...base, title: `${pt.plan.n} ${s.id} ${s.title}` }, (n2, slug) => taskPlace(pt.directory, cfg, n2, slug, pt.project))
+          pt.plan.spawned[s.id] = t.n
+          running.push(s)
+          changed = true
+          taskEvent(pt, "opencode-peers", undefined, `шаг ${s.id} плана ${pt.plan.n} — задача #${t.n}`)
+          log(`plan ${pt.plan.n} (${pt.project}): step ${s.id} -> task #${t.n}`)
+          await startTask(t)
+        }
+        if (steps.length && steps.every((s) => done(s.id))) {
+          pt.plan.finished = true
+          changed = true
+          postLetter(pt.author, { id: `plan-finished-${safeKey(pt.project)}-${pt.n}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: pt.author, time: now(), text: `План ${pt.plan.n} «${plan.title}»: все шаги закрыты (${steps.length}). Закрой план: в шапке «**Статус:** ✅ ЗАКРЫТ <дата> (фазы; коммиты)», влей.` })
+        }
+        if (changed) saveTask(pt)
+      }
+    }
+
     function flowWatch() {
       if (now() - flowAt < (Number(process.env.NOVA_PEERS_FLOW_MS) || 60_000)) return
       flowAt = now()
@@ -1036,6 +1106,7 @@ export default {
         await step("resumeTasks", resumeTasks)
         await step("applyApprovals", applyApprovals)
         await step("assignReviewers", assignReviewers)
+        await step("planSteps", planSteps)
         await step("reconcile", reconcile)
         await step("resumeInterrupted", resumeInterrupted)
         await step("finishTasks", finishTasks)
