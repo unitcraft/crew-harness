@@ -159,7 +159,7 @@ export function reviewLetter(t: Task, cfg: PeersConfig): string {
 /** Письмо исполнителю: на доработку. */
 export function reworkLetter(t: Task, text: string, by: string): string {
   return [
-    `ДОРАБОТКА задачи #${t.n} «${t.title}» (круг ${t.rework ?? 1}) от приёмщика ${by}:`,
+    t.rework_sync ? `СИНХРОНИЗАЦИЯ задачи #${t.n} «${t.title}» с целевой веткой (не доработка) от приёмщика ${by}:` : `ДОРАБОТКА задачи #${t.n} «${t.title}» (круг ${t.rework ?? 1}) от приёмщика ${by}:`,
     text,
     `Исправь в том же worktree${t.branch ? ` (ветка ${t.branch})` : ""} и сдай снова тем же отчётом: peer_send {to: "${t.author}", reply_to: "${t.qid}", text: "что исправлено, как проверено"}.`,
   ].join("\n")

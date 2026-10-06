@@ -105,7 +105,7 @@ import {
 } from "./core.ts"
 import { dropWatch, openWatchesBySession, pollWatches, watchesOf } from "./watch.ts"
 import { endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
-import { type Task, acceptedAt, ago, byPriority, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
+import { type Task, acceptedAt, ago, byPriority, rounds, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
 import { ensureWorktree, gitTraces, leftoversOf, mergeHolder, reviewLetter } from "./review.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
@@ -568,7 +568,7 @@ export default {
             saveCard(rc)
           }
           if (!t.review_letter || !letterExists(t.reviewer, t.review_letter)) await reviewerAssigned(t, rc)
-          if (!(t.status === "submitted" && (t.rework ?? 0) > 0)) need(t.reviewer, t.review_qid, `приёмка #${t.n}`)
+          if (!(t.status === "submitted" && rounds(t) > 0)) need(t.reviewer, t.review_qid, `приёмка #${t.n}`)
         }
       }
     }

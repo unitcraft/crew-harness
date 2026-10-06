@@ -72,6 +72,10 @@ export type Task = {
   reviewers?: string[]
   /** кругов доработки; замечания последнего круга (для письма исполнителю — и для сверки после перезапуска) */
   rework?: number
+  /** возвраты «влей свежую целевую ветку» (rework {sync: true}): не доработка, в rework_max не идут (план 011, дефект 4) */
+  syncs?: number
+  /** последний возврат — синхронизация, а не доработка */
+  rework_sync?: boolean
   rework_note?: string
   /** адреса приёмщика и исполнителя — подписи писем, которые кладёт сверка */
   reviewer_role?: string
@@ -164,6 +168,9 @@ export function createTask(fields: Omit<Task, "n" | "history" | "created" | "upd
     }
   }
 }
+
+/** Сколько раз задачу возвращали исполнителю (доработки и синхронизации): номер круга в id писем. */
+export const rounds = (t: Task) => (t.rework ?? 0) + (t.syncs ?? 0)
 
 /** Когда задачу приняли (последняя запись «accepted» журнала). */
 export const acceptedAt = (t: Task) => [...(t.history ?? [])].reverse().find((h) => h.status === "accepted")?.at ?? t.updated

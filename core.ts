@@ -12,7 +12,7 @@ import { type Projects, parseProjects as parseProjectsWith, projectFor, rawSetti
 import { SCHEMA, guideText, invalid } from "./config-schema.ts"
 export { PROJECT_RE, type Project, type Projects, settingsProblems } from "./settings.ts"
 import { PROJECT_RE, settingsProblems } from "./settings.ts"
-import { type Task, WORKING_STATUSES, acceptedAt, ago, byPriority, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
+import { type Task, WORKING_STATUSES, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { cleanupDone, cleanupSteps, holdsMergeLock, isMerged, mergeHolder, releaseMergeLock, reworkLetter, takeMergeLock } from "./review.ts"
 import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, machineQueue, requestWatch, watchesOf } from "./watch.ts"
 
@@ -1202,7 +1202,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
         const again = t.status === "rework"
         t.report = text
         t.executor_role = fromRole
-        taskEvent(t, sessionID, "submitted", again ? `доработка сдана (круг ${t.rework ?? 1})` : "отчёт")
+        taskEvent(t, sessionID, "submitted", again ? (t.rework_sync ? "сдана после синхронизации с целевой веткой" : `доработка сдана (круг ${t.rework ?? 1})`) : "отчёт")
         if (again && t.reviewer) {
           // приёмщик ждёт: будим его с отчётом о доработке, его обязательство — снова
           addObligation(t.reviewer, { qid: t.review_qid ?? t.qid, from_session: t.author, from_role: t.author_role, at: now, nudges: 0, task: `приёмка #${t.n}` })
@@ -1391,7 +1391,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
   const peerTask: PeerTool = {
     name: "peer_task",
     description:
-      "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), show {n} (details and history), and for the integrator: assign {session, goal, criteria, ...} (give a task to an existing tab instead of a new session), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done), cancel {n, text?}, priority {n, priority}, order {to: 'project.integrator', goal, criteria, ...} (work for another project: its integrator does it with its own tasks; the order follows them); for the task's reviewer: review {n} (start), merge {n} (the project's merge lock), rework {n, text}, check {n, step} before checking a step and {n, step, result} after it (the owner sees the progress in the window), accept {n, checks?, commit?} (steps marked by check count; the plugin checks the required steps and that it is merged), cleaned {n} (the plugin checks the worktree and branch are gone).",
+      "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), show {n} (details and history), and for the integrator: assign {session, goal, criteria, ...} (give a task to an existing tab instead of a new session), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done), cancel {n, text?}, priority {n, priority}, order {to: 'project.integrator', goal, criteria, ...} (work for another project: its integrator does it with its own tasks; the order follows them); for the task's reviewer: review {n} (start), merge {n} (the project's merge lock), rework {n, text, sync?} (sync: true -- only to merge the fresh target branch: not a rework round, not counted in rework_max), check {n, step} before checking a step and {n, step, result} after it (the owner sees the progress in the window), accept {n, checks?, commit?} (steps marked by check count; the plugin checks the required steps and that it is merged), cleaned {n} (the plugin checks the worktree and branch are gone).",
     input: {
       type: "object",
       properties: {
@@ -1404,6 +1404,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
         n: { type: "number", description: "Task number" },
         session: str("assign: the tab (session id) that takes the task"),
         text: str("push / cancel: text for the executor"),
+        sync: { type: "boolean", description: "rework: return only to merge the fresh target branch (not a rework round, not counted in rework_max)" },
         all: { type: "boolean", description: "list: include closed and cancelled", default: false },
         ...taskInput,
       },
@@ -1499,7 +1500,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
           t.steps = tcfg.acceptance.map((a) => ({ id: a.id, text: a.text, ...(a.required ? { required: true } : {}) }))
           if (t.status === "submitted") {
             taskEvent(t, me.session, "reviewing", `приёмка начата (${keyOf(me)})`)
-            if (t.executor) quiet(t.executor, `review-start-${safeKey(project)}-${t.n}-${t.rework ?? 0}`, `Задача #${t.n} «${t.title}» на приёмке у ${keyOf(me)}. Жди: на доработку вернут письмом.`)
+            if (t.executor) quiet(t.executor, `review-start-${safeKey(project)}-${t.n}-${rounds(t)}`, `Задача #${t.n} «${t.title}» на приёмке у ${keyOf(me)}. Жди: на доработку вернут письмом.`)
             if (t.executor) host.posted([t.executor])
           }
           else saveTask(t)
@@ -1534,20 +1535,27 @@ export function makeTools(host: PeersHost): PeerTool[] {
           return { content: `Замок вливания проекта ${project} твой. Влей ${t.branch ? `ветку ${t.branch}` : "работу"} в ${tcfg.targetBranch}, запушь и вызови peer_task {action: "accept", n: ${t.n}, checks: {...}${t.branch ? "" : ', commit: "<хэш>"'}}.` }
         }
         if (action === "rework") {
-          const text = String(input.text ?? "").trim()
+          // sync: true — вернуть влить свежую целевую ветку (main ушёл вперёд, пока шёл CI): не доработка, круг в
+          // rework_max не идёт (#15 nova ушла «на доработку» 4-й раз только из-за сдвига main, и плагин предложил спросить
+          // владельца, не поставлена ли задача неясно)
+          const sync = input.sync === true
+          const text = String(input.text ?? "").trim() || (sync ? `влей свежую ${tcfg.targetBranch} в ветку задачи, прогони проверки и сдай снова` : "")
           if (!text) return { content: "Нужен text: что исправить." }
           if (t.status !== "reviewing" && t.status !== "submitted") return { content: `Задача #${t.n} ${statusRu(t.status)} — вернуть на доработку нельзя.` }
-          t.rework = (t.rework ?? 0) + 1
+          if (sync) t.syncs = (t.syncs ?? 0) + 1
+          else t.rework = (t.rework ?? 0) + 1
+          t.rework_sync = sync
           t.rework_note = text
           t.reviewer_role = keyOf(me)
           releaseMergeLock(project, me.session)
           if (t.review_qid) settleObligation(me.session, t.review_qid)
-          taskEvent(t, me.session, "rework", `на доработку (круг ${t.rework}): ${text.slice(0, 300)}`)
+          taskEvent(t, me.session, "rework", sync ? `на синхронизацию с ${tcfg.targetBranch} (${t.syncs}-я, не доработка): ${text.slice(0, 300)}` : `на доработку (круг ${t.rework}): ${text.slice(0, 300)}`)
           if (t.executor) {
             addObligation(t.executor, { qid: t.qid, from_session: t.author, from_role: t.author_role, at: now, nudges: 0, task: t.title })
             host.posted(postExpected(t))
           }
-          if (t.rework > tcfg.reworkMax) {
+          if (sync) return { content: `Задача #${t.n} возвращена влить свежую ${tcfg.targetBranch} (синхронизация ${t.syncs}, в rework_max не идёт). Исполнитель разбужен; сдаст — тебя разбудят.` }
+          if ((t.rework ?? 0) > tcfg.reworkMax) {
             postLetter(t.author, { id: `rework-max-${safeKey(project)}-${t.n}-${t.rework}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: now, text: `Задача #${t.n} «${t.title}» уходит на доработку ${t.rework}-й раз (предел проекта rework_max ${tcfg.reworkMax}). Похоже, задача поставлена неясно или не по силам исполнителю — спроси владельца: уточнить задачу, передать другой сессии (peer_task reassign) или отменить.` })
             host.posted([t.author])
           }
@@ -1841,9 +1849,9 @@ export function expectedLetters(t: Task): Letter[] {
   const at = t.updated
   const reviewerRole = t.reviewer_role ?? "приёмщик"
   if (t.status === "rework" && t.executor && t.rework_note)
-    out.push({ id: `rework-${p}-${t.n}-${t.rework ?? 1}`, from_role: reviewerRole, from_session: t.reviewer ?? PLUGIN_SENDER, to: t.executor, time: at, text: reworkLetter(t, t.rework_note, reviewerRole) })
-  if (t.status === "submitted" && (t.rework ?? 0) > 0 && t.reviewer && t.report)
-    out.push({ id: `review-again-${p}-${t.n}-${t.rework}`, from_role: t.executor_role ?? "исполнитель", from_session: t.executor ?? PLUGIN_SENDER, to: t.reviewer, time: at, text: `Доработка задачи #${t.n} «${t.title}» сдана (круг ${t.rework}):\n${t.report}\nПроверь снова: peer_task {action: "review", n: ${t.n}}, дальше rework или merge → accept.` })
+    out.push({ id: `rework-${p}-${t.n}-${rounds(t) || 1}`, from_role: reviewerRole, from_session: t.reviewer ?? PLUGIN_SENDER, to: t.executor, time: at, text: reworkLetter(t, t.rework_note, reviewerRole) })
+  if (t.status === "submitted" && rounds(t) > 0 && t.reviewer && t.report)
+    out.push({ id: `review-again-${p}-${t.n}-${rounds(t)}`, from_role: t.executor_role ?? "исполнитель", from_session: t.executor ?? PLUGIN_SENDER, to: t.reviewer, time: at, text: `Доработка задачи #${t.n} «${t.title}» сдана (круг ${t.rework}):\n${t.report}\nПроверь снова: peer_task {action: "review", n: ${t.n}}, дальше rework или merge → accept.` })
   if (t.status === "cleaned") {
     const checks = Object.entries(t.checks ?? {}).map(([k, v]) => `${k}: ${v}`).join("; ")
     out.push({ id: `cleaned-${p}-${t.n}`, from_role: reviewerRole, from_session: t.reviewer ?? PLUGIN_SENDER, to: t.author, time: at, wake: false, text: `Задача #${t.n} «${t.title}» принята и влита (${t.commit ? `коммит ${t.commit}` : `ветка ${t.branch ?? "?"}`}), очищена. Приёмщик ${reviewerRole}. Шаги: ${checks || "—"}. Перепроверять не нужно.` })
