@@ -1,4 +1,4 @@
-// Self-test of opencode-harness-crew role handover (node >= 24):  node test/crew-role.test.mjs
+// Self-test of crew-harness role handover (node >= 24):  node test/crew-role.test.mjs
 // Two sessions in one process: A holds `integrator`, B takes it with force. After A's next
 // turn A must NOT hold `integrator` again, and a letter to `integrator` must reach B only.
 import { mkdtempSync, readdirSync, rmSync } from "node:fs"
@@ -7,12 +7,12 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-test-"))
 process.env.XDG_DATA_HOME = tmp
-process.env.HARNESS_CREW_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
+process.env.CREW_HARNESS_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
 import { mkdirSync, writeFileSync } from "node:fs"
 // Project config: integrator is exclusive here (the plugin itself names no role).
 const proj = path.join(tmp, "proj")
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
-writeFileSync(path.join(proj, ".opencode", "harness-crew.json"), JSON.stringify({ exclusive_roles: ["integrator"] }))
+writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ exclusive_roles: ["integrator"] }))
 const mod = await import("../index.ts")
 
 const hooks = {}

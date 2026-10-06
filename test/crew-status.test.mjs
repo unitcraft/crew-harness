@@ -10,15 +10,15 @@ import { DatabaseSync } from "node:sqlite"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-status-"))
 process.env.XDG_DATA_HOME = tmp
-process.env.HARNESS_CREW_POLL_MS = "100"
-process.env.HARNESS_CREW_STATUS_MS = "100"
+process.env.CREW_HARNESS_POLL_MS = "100"
+process.env.CREW_HARNESS_STATUS_MS = "100"
 const dbPath = path.join(tmp, "opencode.db")
-process.env.HARNESS_CREW_DB = dbPath
-delete process.env.HARNESS_CREW_PRESENCE
+process.env.CREW_HARNESS_DB = dbPath
+delete process.env.CREW_HARNESS_PRESENCE
 const proj = path.join(tmp, "proj")
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
 // a reminder every 0.03 min (1.8 s) to see the repeat in a test
-writeFileSync(path.join(proj, ".opencode", "harness-crew.json"), JSON.stringify({ owner_reminder_min: 0.03 }))
+writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ owner_reminder_min: 0.03 }))
 
 const db = new DatabaseSync(dbPath)
 db.exec("create table session_v2 (id text primary key, directory text, title text, parent_id text, time_archived integer, time_idle integer, time_viewed integer, time_suspended integer)")

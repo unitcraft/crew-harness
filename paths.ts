@@ -1,4 +1,4 @@
-// ПАПКА ПЛАГИНА. Ящик — <данные OpenCode>/harness-crew: письма, карточки, задачи, наблюдения, состояние. Прежние
+// ПАПКА ПЛАГИНА. Ящик — <данные OpenCode>/crew-harness: письма, карточки, задачи, наблюдения, состояние. Прежние
 // имена: opencode-peers (до плана 014, 2026-10-06), nova-peers (до 2026-10-05). Новое имя — ссылка-junction на настоящую
 // папку прежнего ящика: данные не двигаются, ничего не раздваивается. Модуль без зависимостей: его импортируют core,
 // tasks, watch, status, settings.
@@ -12,7 +12,7 @@ export function dataDir(): string {
   return xdg ? path.join(xdg, "opencode") : path.join(os.homedir(), ".local", "share", "opencode")
 }
 
-export const CREW_DIR = "harness-crew"
+export const CREW_DIR = "crew-harness"
 /** прежние имена ящика, от новых к старым: opencode-peers (до 2026-10-06, план 014), nova-peers (до 2026-10-05) */
 export const LEGACY_DIRS = ["opencode-peers", "nova-peers"]
 

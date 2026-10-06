@@ -12,15 +12,15 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-review-"))
 process.env.XDG_DATA_HOME = tmp
-process.env.HARNESS_CREW_POLL_MS = "100"
-process.env.HARNESS_CREW_DB = path.join(tmp, "absent.db")
-delete process.env.HARNESS_CREW_PRESENCE
+process.env.CREW_HARNESS_POLL_MS = "100"
+process.env.CREW_HARNESS_DB = path.join(tmp, "absent.db")
+delete process.env.CREW_HARNESS_PRESENCE
 const proj = path.join(tmp, "proj")
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
 const git = (cwd, ...args) => execFileSync("git", ["-C", cwd, "-c", "user.name=t", "-c", "user.email=t@t", ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim()
 const settings = (reviewers) =>
   writeFileSync(
-    path.join(proj, ".opencode", "harness-crew.json"),
+    path.join(proj, ".opencode", "crew-harness.json"),
     JSON.stringify({
       worktrees: "wt",
       branch_name: "p{n}-{slug}",

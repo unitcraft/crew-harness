@@ -1,4 +1,4 @@
-// Self-test of projects in opencode-harness-crew (node >= 24):  node test/crew-project.test.mjs
+// Self-test of projects in crew-harness (node >= 24):  node test/crew-project.test.mjs
 // Projects come from the plugin options (one list); a window belongs to the project with the longest
 // matching root. Addresses: role (own project), project.role, project.all. Exclusive roles are per project.
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs"
@@ -7,9 +7,9 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-project-"))
 process.env.XDG_DATA_HOME = tmp
-process.env.HARNESS_CREW_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
-process.env.HARNESS_CREW_POLL_MS = "100"
-process.env.HARNESS_CREW_DB = path.join(tmp, "absent.db")
+process.env.CREW_HARNESS_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
+process.env.CREW_HARNESS_POLL_MS = "100"
+process.env.CREW_HARNESS_DB = path.join(tmp, "absent.db")
 const root = path.join(tmp, "src")
 const dirs = {
   A: path.join(root, "nova", "repo-a"), // project nova

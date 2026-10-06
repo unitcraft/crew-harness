@@ -11,14 +11,14 @@ import { DatabaseSync } from "node:sqlite"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-push-"))
 process.env.XDG_DATA_HOME = tmp
-process.env.HARNESS_CREW_POLL_MS = "100"
-process.env.HARNESS_CREW_STATUS_MS = "200"
+process.env.CREW_HARNESS_POLL_MS = "100"
+process.env.CREW_HARNESS_STATUS_MS = "200"
 const dbPath = path.join(tmp, "opencode.db")
-process.env.HARNESS_CREW_DB = dbPath
-delete process.env.HARNESS_CREW_PRESENCE
+process.env.CREW_HARNESS_DB = dbPath
+delete process.env.CREW_HARNESS_PRESENCE
 const proj = path.join(tmp, "proj")
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
-writeFileSync(path.join(proj, ".opencode", "harness-crew.json"), JSON.stringify({ push_empty_turns: 3, push_max: 8 }))
+writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ push_empty_turns: 3, push_max: 8 }))
 
 // OpenCode's tables, as much as the plugin reads
 const db = new DatabaseSync(dbPath)
@@ -121,7 +121,7 @@ cell("the resume letter names the git traces: the stale index.lock and the merge
 }
 cell("a turn that failed before the plugin started: one 'continue' letter", got("ses_retry1", "кончился ошибкой").length === 1 && got("ses_retry1", "приёмка #7").length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "ses_retry1").map((d) => d.text.slice(0, 200))))
 cell("the resume letter says how to report", got("sesINTER1", 'reply_to: "qOLD"').length === 1, got("sesINTER1", "прервана")[0]?.text)
-const toPlugin = await call("crew_send", "sesINTER1", { to: "harness-crew", text: "принял, продолжаю" })
+const toPlugin = await call("crew_send", "sesINTER1", { to: "crew-harness", text: "принял, продолжаю" })
 cell("a letter to the plugin itself is refused with a hint", /это сам плагин/.test(toPlugin) && /reply_to/.test(toPlugin), toPlugin)
 
 // the integrator gives sesWORK01 a task

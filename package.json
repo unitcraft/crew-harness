@@ -1,5 +1,5 @@
 {
-  "name": "opencode-harness-crew",
+  "name": "crew-harness",
   "version": "0.5.0",
   "type": "module",
   "description": "Your AI dev team, harnessed: plans, tasks, reviewers and letters between Claude Code sessions in OpenCode",
@@ -11,7 +11,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/unitcraft/opencode-harness-crew.git"
+    "url": "git+https://github.com/unitcraft/crew-harness.git"
   },
   "scripts": {
     "test": "node test/cleanup-tmp.mjs && node test/crew-project.test.mjs && node test/crew-config.test.mjs && node test/crew-settings.test.mjs && node test/crew-help.test.mjs && node test/crew-idle.test.mjs && node test/crew-model.test.mjs && node test/crew-role.test.mjs && node test/crew-shared.test.mjs && node test/crew-tier.test.mjs && node test/crew-mcp.test.mjs && node test/crew-wake.test.mjs && node test/crew-delivery.test.mjs && node test/crew-flow.test.mjs && node test/crew-tasks.test.mjs && node test/crew-push.test.mjs && node test/crew-review.test.mjs && node test/crew-place.test.mjs && node test/crew-plans.test.mjs && node test/crew-plan-task.test.mjs && node test/crew-plan-config.test.mjs && node test/crew-restart.test.mjs && node test/crew-cross.test.mjs && node test/crew-cfgtool.test.mjs && node test/crew-watch.test.mjs && node test/crew-status.test.mjs && node test/crew-flowwatch.test.mjs && node test/crew-stuck.test.mjs && node test/crew-paths.test.mjs && node test/crew-housekeeping.test.mjs && node test/crew-autoclose.test.mjs && node test/crew-sidebar.test.mjs && node test/crew-acceptor.test.mjs && node test/crew-deny.test.mjs"

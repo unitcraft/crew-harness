@@ -1,4 +1,4 @@
-// Self-test of opencode-harness-crew task tiers (node >= 24):  node test/crew-tier.test.mjs
+// Self-test of crew-harness task tiers (node >= 24):  node test/crew-tier.test.mjs
 // crew_send {tier}: a FREE holder of the role whose model is of that tier or stronger gets the letter, weaker
 // never; none -> the letter queues and goes to the first suitable window that frees up. busy is set by the
 // window's request and cleared by the session.idle event. Red probe: CREW_MODULE=<copy that ignores busy>.
@@ -8,9 +8,9 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-tier-"))
 process.env.XDG_DATA_HOME = tmp
-process.env.HARNESS_CREW_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
-process.env.HARNESS_CREW_DB = path.join(tmp, "absent.db")
-process.env.HARNESS_CREW_POLL_MS = "60"
+process.env.CREW_HARNESS_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
+process.env.CREW_HARNESS_DB = path.join(tmp, "absent.db")
+process.env.CREW_HARNESS_POLL_MS = "60"
 const mod = await import(process.env.CREW_MODULE ?? "../index.ts")
 
 const hooks = {}
@@ -120,7 +120,7 @@ cell("without tier a shared role with two holders is still refused with the list
 // 6b. liveness by last activity is NOT a criterion, presence is: a tab silent for 2 hours but open in a live window
 // gets the heavy task; a tab open in no window (closed, its window closed or frozen) does not, whatever its pid.
 import { mkdirSync, readdirSync, writeFileSync } from "node:fs"
-const cardsDir = path.join(tmp, "opencode", "harness-crew", "cards")
+const cardsDir = path.join(tmp, "opencode", "crew-harness", "cards")
 const oldCard = (sid, model, role, pid = process.pid) =>
   writeFileSync(path.join(cardsDir, `${sid}.json`), JSON.stringify({ session: sid, role, auto: false, title: "", directory: tmp, repo: "t", model, modelAt: Date.now() - 7200_000, modelFrom: "request", pid, updated: Date.now() - 7200_000 }))
 const OPUS_ID = "anthropic-sdk/claude-opus-5-5#medium"
@@ -128,8 +128,8 @@ oldCard("sesQUIET1", OPUS_ID, "w8")
 oldCard("sesCLOSE1", OPUS_ID, "w9")
 oldCard("sesFROZE1", OPUS_ID, "w10")
 // real presence from here: one live window with every tab but the closed one, one frozen window with sesFROZE1
-delete process.env.HARNESS_CREW_PRESENCE
-const windowsDir = path.join(tmp, "opencode", "harness-crew", "windows")
+delete process.env.CREW_HARNESS_PRESENCE
+const windowsDir = path.join(tmp, "opencode", "crew-harness", "windows")
 mkdirSync(windowsDir, { recursive: true })
 const openTabs = () => readdirSync(cardsDir).map((f) => f.replace(/\.json$/, "")).filter((s) => s !== "sesCLOSE1" && s !== "sesFROZE1").map((sessionID) => ({ sessionID, active: false, busy: false }))
 const beat = () => writeFileSync(path.join(windowsDir, "777001.json"), JSON.stringify({ pid: 777001, beat: Date.now(), tabs: openTabs() }))

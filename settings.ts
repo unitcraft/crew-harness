@@ -3,13 +3,13 @@
 // Проект бывает виртуальным: C:/work/nova — папка с многими репозиториями, сама не репозиторий. Поэтому
 // настройки проекта живут в РЕПОЗИТОРИИ НАСТРОЕК, а не в рабочей папке вкладки:
 //   opencode.jsonc:  "options": { "projects": ["C:/work/nova/nova-settings", "C:/work/tools"] }
-//   <папка>/.opencode/harness-crew.json:  { "project": "nova", "root": "..", ... }
+//   <папка>/.opencode/crew-harness.json:  { "project": "nova", "root": "..", ... }
 // Папка — любая внутри git-репозитория. Имя проекта — поле "project" (нет — имя папки); корень — "root" от папки
 // (нет — сама папка). Файл читается ЗАКОММИЧЕННЫМ из ветки по умолчанию (`git show <ветка>:<путь>`; другая ветка —
 // поле "branch"): незакоммиченная правка не действует, worktree и ветки кода на настройки не влияют.
 //
 // Прежняя форма опций `{ "nova": "C:/work/nova" }` читается дальше: имя → корень, а настройки — по-старому
-// из `.opencode/harness-crew.json` вверх от каталога вкладки (рабочая копия). Старое имя nova-peers.json больше не
+// из `.opencode/crew-harness.json` вверх от каталога вкладки (рабочая копия). Старое имя nova-peers.json больше не
 // читается (решение №16 плана 002 выполнено: nv-lang перешёл на репозиторий настроек 2026-10-05).
 //
 // Машинно-зависимое (модели по ступеням) — необязательная поправка в опциях плагина:
@@ -21,7 +21,7 @@ import path from "node:path"
 import { log, safeKey } from "./core.ts"
 import { BASE } from "./paths.ts"
 
-export const SETTINGS_FILE = path.join(".opencode", "harness-crew.json")
+export const SETTINGS_FILE = path.join(".opencode", "crew-harness.json")
 /** прежнее имя файла настроек (до плана 014, 2026-10-06) */
 export const LEGACY_SETTINGS_NAME = ".opencode/opencode-peers.json"
 export const PROJECT_RE = /^[a-z0-9][a-z0-9-]{0,40}$/
@@ -92,7 +92,7 @@ const parseJson = (text: string | undefined): any => {
 }
 
 // Прочитанные файлы настроек — на несколько секунд (инструменты зовут настройки на каждое письмо, git — процесс).
-const CACHE_MS = Number(process.env.HARNESS_CREW_SETTINGS_TTL_MS) || 5_000
+const CACHE_MS = Number(process.env.CREW_HARNESS_SETTINGS_TTL_MS) || 5_000
 const cache = new Map<string, { at: number; value: any }>()
 const good = new Map<string, any>() // последние настройки без проблем, по папке
 
@@ -114,7 +114,7 @@ export function readSettingsFolder(folder: string, now = Date.now()): { project:
   }
   if (repo) {
     const prefix = git(dir, ["rev-parse", "--show-prefix"]).trim()
-    file = prefix + ".opencode/harness-crew.json" // путь в репозитории
+    file = prefix + ".opencode/crew-harness.json" // путь в репозитории
     branch = defaultBranch(repo)
     let j = parseJson(showCommitted(repo, branch, file))
     // прежнее имя файла (до плана 014): читается, crew_doctor просит переименовать
@@ -209,7 +209,7 @@ export function rawSettingsFor(dir: string, projects: Projects, local: Record<st
   return over && typeof over === "object" ? { ...raw, ...over } : raw
 }
 
-// Прежняя форма: `.opencode/harness-crew.json` вверх от каталога вкладки, рабочая копия.
+// Прежняя форма: `.opencode/crew-harness.json` вверх от каталога вкладки, рабочая копия.
 function legacyWalk(dir: string): any {
   let d = dir ? path.resolve(dir) : ""
   for (let i = 0; d && i < 32; i++) {
@@ -256,8 +256,8 @@ export function writeSettings(folder: string, values: Record<string, any>): stri
 /** Проблемы настроек всех проектов (crew_doctor). Вложенные корни — не проблема: вложенный проект побеждает. */
 export function settingsProblems(projects: Projects): string[] {
   const out = projects.flatMap((p) => p.problems ?? [])
-  for (const p of projects) if (p.legacy) out.push(`проект ${p.name}: настройки в файле с прежним именем ${p.legacy} — переименуй в .opencode/harness-crew.json (git mv) и закоммить`)
+  for (const p of projects) if (p.legacy) out.push(`проект ${p.name}: настройки в файле с прежним именем ${p.legacy} — переименуй в .opencode/crew-harness.json (git mv) и закоммить`)
   const old = projects.filter((p) => !p.dir).map((p) => p.name)
-  if (old.length) out.push(`проекты ${old.join(", ")} заданы прежней формой опций (имя → корень); новая — список папок настроек: "projects": ["<папка с .opencode/harness-crew.json>"], файл называет проект и root (doc/plans/002-tasks.md, «Где живут настройки проекта»)`)
+  if (old.length) out.push(`проекты ${old.join(", ")} заданы прежней формой опций (имя → корень); новая — список папок настроек: "projects": ["<папка с .opencode/crew-harness.json>"], файл называет проект и root (doc/plans/002-tasks.md, «Где живут настройки проекта»)`)
   return [...new Set(out)]
 }

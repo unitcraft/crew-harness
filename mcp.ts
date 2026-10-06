@@ -1,4 +1,4 @@
-// MCP-сервер opencode-harness-crew (stdio) — инструменты писем для окон OpenCode на провайдере claude-code.
+// MCP-сервер crew-harness (stdio) — инструменты писем для окон OpenCode на провайдере claude-code.
 //
 // ЗАЧЕМ. Провайдер claude-code отдаёт ход официальному Claude Code, а инструменты OpenCode (и peer_* этого
 // плагина) отбрасывает: Claude Code их не исполняет. Письма между окнами обязательны, поэтому провайдер на
@@ -60,7 +60,7 @@ const tools = makeTools({
 })
 
 const INSTRUCTIONS =
-  `opencode-harness-crew: это вкладка OpenCode (сессия ${SESSION || "?"}); соседние вкладки на этой машине переписываются письмами. ` +
+  `crew-harness: это вкладка OpenCode (сессия ${SESSION || "?"}); соседние вкладки на этой машине переписываются письмами. ` +
   `Соседи и их адреса «проект.роль» (своя вкладка помечена *) — crew_list, письмо — crew_send, вопрос с ответом в том же ходе — ` +
   `crew_send {expect_reply} + crew_wait, своя роль — crew_role, задачи #N — crew_task (интегратор ставит crew_spawn), правила — crew_help. ` +
   `Фон Claude Code (Bash run_in_background, Monitor) в этой вкладке гибнет с концом хода и уведомления не даёт: долгое ` +
@@ -77,7 +77,7 @@ async function handle(m: Msg): Promise<object | undefined> {
       return {
         protocolVersion: m.params?.protocolVersion ?? "2025-06-18",
         capabilities: { tools: {} },
-        serverInfo: { name: "opencode-harness-crew", version: "0.2.0" },
+        serverInfo: { name: "crew-harness", version: "0.2.0" },
         instructions: INSTRUCTIONS,
       }
     case "ping":
@@ -87,7 +87,7 @@ async function handle(m: Msg): Promise<object | undefined> {
     case "tools/call": {
       const tool = tools.find((t) => t.name === m.params?.name)
       if (!tool) throw Object.assign(new Error(`unknown tool ${m.params?.name}`), { code: -32602 })
-      if (!SESSION) return { content: [{ type: "text", text: "opencode-harness-crew: сессия окна не задана (OPENCODE_CREW_SESSION) — инструменты писем недоступны." }], isError: true }
+      if (!SESSION) return { content: [{ type: "text", text: "crew-harness: сессия окна не задана (OPENCODE_CREW_SESSION) — инструменты писем недоступны." }], isError: true }
       try {
         const r = await tool.execute(m.params?.arguments ?? {}, SESSION)
         return { content: [{ type: "text", text: r.content }] }

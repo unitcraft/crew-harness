@@ -10,14 +10,14 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-cross-"))
 process.env.XDG_DATA_HOME = tmp
-process.env.HARNESS_CREW_POLL_MS = "100"
-process.env.HARNESS_CREW_DB = path.join(tmp, "absent.db")
-process.env.HARNESS_CREW_SETTINGS_TTL_MS = "1"
-delete process.env.HARNESS_CREW_PRESENCE
+process.env.CREW_HARNESS_POLL_MS = "100"
+process.env.CREW_HARNESS_DB = path.join(tmp, "absent.db")
+process.env.CREW_HARNESS_SETTINGS_TTL_MS = "1"
+delete process.env.CREW_HARNESS_PRESENCE
 const dirA = path.join(tmp, "alpha")
 const dirB = path.join(tmp, "beta")
 for (const d of [dirA, dirB]) mkdirSync(path.join(d, ".opencode"), { recursive: true })
-const inbound = (v) => writeFileSync(path.join(dirB, ".opencode", "harness-crew.json"), JSON.stringify(v ? { inbound: v } : {}))
+const inbound = (v) => writeFileSync(path.join(dirB, ".opencode", "crew-harness.json"), JSON.stringify(v ? { inbound: v } : {}))
 inbound(undefined)
 
 const mod = await import("../index.ts")

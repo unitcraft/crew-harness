@@ -1,4 +1,4 @@
-// opencode-harness-crew — ПЛАГИН ОКНА (TUI). OpenCode грузит его в каждом окне: tui.ts в папке плагина, папка указана в
+// crew-harness — ПЛАГИН ОКНА (TUI). OpenCode грузит его в каждом окне: tui.ts в папке плагина, папка указана в
 // ~/.config/opencode/cli.json, раздел plugins (сервер грузит index.ts той же папки из opencode.jsonc).
 //
 // ЗАЧЕМ. Письмо будит вкладку ходом модели, а сервис OpenCode работает и без окон; надёжно знать, какие вкладки
@@ -24,10 +24,10 @@ import { listTasks, loadTask } from "./tasks.ts"
 import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
 
 const BEAT_MS = 1_000
-const AUTOCLOSE_MS = Number(process.env.HARNESS_CREW_AUTOCLOSE_MS) || 120_000
+const AUTOCLOSE_MS = Number(process.env.CREW_HARNESS_AUTOCLOSE_MS) || 120_000
 
 export default {
-  id: "harness-crew.window",
+  id: "crew-harness.window",
   setup(api: any) {
     mkdirSync(WINDOWS, { recursive: true })
     const file = path.join(WINDOWS, `${process.pid}.json`)
@@ -92,7 +92,7 @@ export default {
       } catch {}
       const list = readStatuses()
       const mine = list.find((s) => s.session === route)?.project
-      api.ui?.dialog?.alert?.({ title: "opencode-harness-crew — кто чего ждёт", message: formatStatuses(list, Date.now(), mine) })
+      api.ui?.dialog?.alert?.({ title: "crew-harness — кто чего ждёт", message: formatStatuses(list, Date.now(), mine) })
     }
     // /crew-config: действующие настройки проекта вкладки на экране — значение и откуда (как crew_config show)
     const showConfig = () => {
@@ -109,7 +109,7 @@ export default {
       } catch (e) {
         text = `Не прочитать настройки: ${e}`
       }
-      api.ui?.dialog?.alert?.({ title: "opencode-harness-crew — настройки проекта", message: text })
+      api.ui?.dialog?.alert?.({ title: "crew-harness — настройки проекта", message: text })
     }
     // /plans: планы на согласовании (план 012) — владелец выбирает план и решение; решение пишется файлом, его применяет
     // плагин сервиса. Агент этот диалог вызвать не может: согласует только человек в окне.
@@ -163,9 +163,9 @@ export default {
       }
     }
     const commands = [
-      { id: "harness-crew.status", title: "Crew: кто чего ждёт", group: "Crew", slash: { name: "crew" }, palette: true, run: showStatus },
-      { id: "harness-crew.config", title: "Crew: настройки проекта", group: "Crew", slash: { name: "crew-config" }, palette: true, run: showConfig },
-      { id: "harness-crew.plans", title: "Crew: планы на согласовании", group: "Crew", slash: { name: "plans" }, palette: true, run: showPlans },
+      { id: "crew-harness.status", title: "Crew: кто чего ждёт", group: "Crew", slash: { name: "crew" }, palette: true, run: showStatus },
+      { id: "crew-harness.config", title: "Crew: настройки проекта", group: "Crew", slash: { name: "crew-config" }, palette: true, run: showConfig },
+      { id: "crew-harness.plans", title: "Crew: планы на согласовании", group: "Crew", slash: { name: "plans" }, palette: true, run: showPlans },
     ]
     try {
       api.ui.slot({
@@ -183,7 +183,7 @@ export default {
 
     // блок «Crew» в боковой панели (план 010): отдельным модулем и с защитой — JSX компилирует OpenCode; не вышло (другая
     // версия, тест под Node) — блока нет, присутствие, уведомления и команды работают
-    if (api.ui?.slot && !process.env.HARNESS_CREW_NO_SIDEBAR) import("./sidebar.tsx").then((m) => (m.mountSidebar(api), log(`sidebar mounted pid=${process.pid}`))).catch((e) => log(`sidebar not drawn pid=${process.pid}: ${String(e).slice(0, 300)}`))
+    if (api.ui?.slot && !process.env.CREW_HARNESS_NO_SIDEBAR) import("./sidebar.tsx").then((m) => (m.mountSidebar(api), log(`sidebar mounted pid=${process.pid}`))).catch((e) => log(`sidebar not drawn pid=${process.pid}: ${String(e).slice(0, 300)}`))
 
     beat()
     const timer = setInterval(beat, BEAT_MS)

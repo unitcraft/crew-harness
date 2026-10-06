@@ -1,4 +1,4 @@
-// Self-test of opencode-harness-crew delivery to an idle window (node >= 24):  node test/crew-idle.test.mjs
+// Self-test of crew-harness delivery to an idle window (node >= 24):  node test/crew-idle.test.mjs
 // A window's card exists on disk (written by an earlier plugin instance), but the window
 // makes no request after the plugin (re)loads. A letter to its role must still be
 // delivered within one poll tick; a card of a live FOREIGN process must be left alone.
@@ -8,9 +8,9 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-idle-"))
 process.env.XDG_DATA_HOME = tmp
-process.env.HARNESS_CREW_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
-process.env.HARNESS_CREW_POLL_MS = "100"
-const cards = path.join(tmp, "opencode", "harness-crew", "cards")
+process.env.CREW_HARNESS_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
+process.env.CREW_HARNESS_POLL_MS = "100"
+const cards = path.join(tmp, "opencode", "crew-harness", "cards")
 mkdirSync(cards, { recursive: true })
 const card = (session, role, pid) =>
   writeFileSync(path.join(cards, `${session}.json`), JSON.stringify({ session, role, auto: false, title: "", directory: process.cwd(), repo: "nova", pid, updated: Date.now() }))

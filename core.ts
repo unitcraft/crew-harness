@@ -1,4 +1,4 @@
-// Ядро opencode-harness-crew: ящик, визитки, адреса, проекты, ступени и САМИ ИНСТРУМЕНТЫ (crew_list, crew_role,
+// Ядро crew-harness: ящик, визитки, адреса, проекты, ступени и САМИ ИНСТРУМЕНТЫ (crew_list, crew_role,
 // crew_send, crew_inbox, crew_help). Его делят плагин OpenCode (index.ts) и MCP-сервер (mcp.ts) для окон
 // провайдера claude-code, которым инструменты плагина недоступны: одна реализация — одна семантика.
 // Отличия хозяев — в CrewHost (визитка своего окна, кандидаты, немедленная доставка в своём процессе).
@@ -20,19 +20,19 @@ import { cleanupDone, cleanupSteps, fileAt, holdsMergeLock, isMerged, mergeHolde
 import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, watchesOf } from "./watch.ts"
 import { watchRefusal } from "./deny.ts"
 
-export const POLL_MS = Number(process.env.HARNESS_CREW_POLL_MS) || 1_000 // переопределение — для самотеста
+export const POLL_MS = Number(process.env.CREW_HARNESS_POLL_MS) || 1_000 // переопределение — для самотеста
 export const LIVE_MS = 15 * 60_000
 const STALE_CARD_MS = 7 * 24 * 3600_000
 export const ROLE_RE = /^[a-z][a-z0-9-]{0,40}$/
 const LOG = path.join(os.tmpdir(), "opencode-plugins.log")
 
 // журнал общий для плагинов окружения; больше LOG_MAX_BYTES — в .1 (проверка раз в 200 строк)
-const LOG_MAX_BYTES = Number(process.env.HARNESS_CREW_LOG_MAX) || 5_000_000
+const LOG_MAX_BYTES = Number(process.env.CREW_HARNESS_LOG_MAX) || 5_000_000
 let logWrites = 0
 export function log(line: string) {
   if (++logWrites % 200 === 0) rotateLog(LOG, LOG_MAX_BYTES)
   try {
-    appendFileSync(LOG, `${new Date().toISOString()} harness-crew ${line}\n`)
+    appendFileSync(LOG, `${new Date().toISOString()} crew-harness ${line}\n`)
   } catch {}
 }
 
@@ -83,7 +83,7 @@ export function configShowText(dir: string, fallbackName = "?", compact = false)
     return compact && j.length > 120 ? `${j.slice(0, 117)}…` : j
   }
   const rows = SCHEMA.map((s) => `  ${s.key} = ${shown(effective[s.key] ?? s.default)} — ${sourceOf(s.key)}`)
-  const head = p?.dir ? `Проект ${p.name}: настройки ${path.join(p.dir, ".opencode", "harness-crew.json")}, читается ветка ${p.branch} (${p.repo}).` : `Проект ${fallbackName}: прежняя форма опций — настройки из рабочей копии вверх от каталога вкладки.`
+  const head = p?.dir ? `Проект ${p.name}: настройки ${path.join(p.dir, ".opencode", "crew-harness.json")}, читается ветка ${p.branch} (${p.repo}).` : `Проект ${fallbackName}: прежняя форма опций — настройки из рабочей копии вверх от каталога вкладки.`
   let pending = ""
   if (p?.dir) {
     const work = workingSettings(p.dir).raw
@@ -128,7 +128,7 @@ export function parseAddr(to: string, home: string, isSession: (s: string) => bo
 // Ящик роли — `<проект>.<роль>` (имя каталога через safeKey: `nova_integrator`; ни в проекте, ни в роли `_` нет).
 export const roleKey = (project: string, role: string) => `${project}.${role}`
 
-export const BASE = CREW_BASE // paths.ts: opencode-harness-crew (прежняя nova-peers переносится)
+export const BASE = CREW_BASE // paths.ts: crew-harness (прежняя nova-peers переносится)
 export const CARDS = path.join(BASE, "cards")
 export const INBOX = path.join(BASE, "inbox")
 export const READ = path.join(BASE, "read")
@@ -139,7 +139,7 @@ export type Spawned = { by: string; task: string; tier: string; status: "running
 export type Card = { session: string; role: string; auto: boolean; spawned?: Spawned; task?: { project: string; n: number }; review?: { project: string; n: number }; titleShown?: string; title: string; directory: string; repo: string; project?: string; model?: string; modelAt?: number; modelFrom?: "request" | "db"; modelCheckedAt?: number; busy?: boolean; busySince?: number; wokeAt?: number; pid: number; updated: number }
 export type Letter = { id: string; from_role: string; from_session: string; to: string; text: string; time: number; tier?: Tier; wake?: boolean; qid?: string; reply_to?: string }
 
-// НАСТРОЙКИ ПРОЕКТА — settings.ts: файл `.opencode/harness-crew.json` из репозитория настроек (закоммиченный),
+// НАСТРОЙКИ ПРОЕКТА — settings.ts: файл `.opencode/crew-harness.json` из репозитория настроек (закоммиченный),
 // для прежней формы опций — тот же файл вверх от каталога окна. Плагин абстрактен: ни ролей, ни проектного текста в
 // нём нет. Роли ИСКЛЮЧИТЕЛЬНЫЕ (`integrator` + exclusive_roles проекта) — у них один держатель (замок, см. РОЛИ);
 // любая другая роль РАЗДЕЛЯЕМАЯ: crew_role присоединяет окно, а письмо на роль с несколькими открытыми
@@ -332,7 +332,7 @@ export function pickHolder(holders: Card[], tier: Tier, cfg: CrewConfig, now = D
 // печатается с меткой «последний ход HH:MM». Замер владельца: окно на Haiku показывалось как Kimi.
 export const MODEL_TTL_MS = 20_000
 const MODEL_FRESH_MS = 5 * 60_000
-export const dbFile = () => process.env.HARNESS_CREW_DB || path.join(dataDir(), "opencode.db")
+export const dbFile = () => process.env.CREW_HARNESS_DB || path.join(dataDir(), "opencode.db")
 
 export function fmtModel(m: any): string {
   if (!m) return ""
@@ -549,7 +549,7 @@ export function insideDir(p: string, dir: string): boolean {
 }
 
 /** Старт процесса сервера (не загрузки плагина: OpenCode грузит его заново в том же процессе на каждую папку). */
-export const PROCESS_START = Number(process.env.HARNESS_CREW_PROCESS_START) || Date.now() - process.uptime() * 1000
+export const PROCESS_START = Number(process.env.CREW_HARNESS_PROCESS_START) || Date.now() - process.uptime() * 1000
 const OPEN_TURN_MAX_MS = 4 * 3_600_000
 
 /** Ход сессии идёт: по базе (сессия задачи без окна, ход начат не через плагин).
@@ -654,7 +654,7 @@ export async function lastTurn(sessionID: string, since = 0): Promise<TurnFacts 
 // открытые вкладки (сессии) и активную. Вкладка ОТКРЫТА, если её список есть в файле окна моложе WINDOW_STALE_MS;
 // закрыли окно крестиком или оно упало — файл остаётся, но время замирает, и через 3 с вкладка закрыта. Будить
 // можно только открытую вкладку (фоновую тоже) и сессию, запущенную интегратором под задачу (crew_spawn), пока
-// задача не закрыта. Окон без нашего плагина для писем нет. HARNESS_CREW_PRESENCE=all — все открыты (самотесты).
+// задача не закрыта. Окон без нашего плагина для писем нет. CREW_HARNESS_PRESENCE=all — все открыты (самотесты).
 export const WINDOWS = path.join(BASE, "windows")
 export const NOTICES = path.join(BASE, "notices")
 export const WINDOW_STALE_MS = 3_000
@@ -678,7 +678,7 @@ export function liveWindows(now = Date.now()): WindowBeat[] {
 
 /** Где открыта вкладка: окно и активна ли; undefined — не открыта ни в одном живом окне. */
 export function tabOf(sessionID: string, windows = liveWindows()): { window: WindowBeat; tab: WindowTab } | undefined {
-  if (process.env.HARNESS_CREW_PRESENCE === "all") return { window: { pid: 0, beat: Date.now(), tabs: [] }, tab: { sessionID, active: true } }
+  if (process.env.CREW_HARNESS_PRESENCE === "all") return { window: { pid: 0, beat: Date.now(), tabs: [] }, tab: { sessionID, active: true } }
   for (const w of windows) {
     const tab = (w.tabs ?? []).find((t) => t.sessionID === sessionID)
     if (tab) return { window: w, tab }
@@ -842,7 +842,7 @@ export function recoverClaims(maxAgeMs = CLAIM_MAX_MS, now = Date.now()): number
   return n
 }
 
-export const PLUGIN_SENDER = "harness-crew"
+export const PLUGIN_SENDER = "crew-harness"
 // ВИД ПИСЬМА (план 009, 2026-10-06; владелец: «непонятно, кто кому пишет»). Шапка — кто кому и когда, с ролью в задаче:
 //   ✉ #8 приёмщик nova.worker → nova.integrator · 01:17
 //   ⚙ crew → nova.integrator · 01:17 (служебное, не отвечай)
@@ -901,7 +901,7 @@ export function settleObligation(session: string, qid: string): Obligation | und
 
 // Справка (`/crew_help` и инструмент `crew_help`). Текст — единственный дом правил переписки:
 // подсказка context-хука и описания инструментов на него ссылаются, а не повторяют.
-export const HELP = `opencode-harness-crew — письма между вкладками OpenCode на этой машине, в любом репозитории.
+export const HELP = `crew-harness — письма между вкладками OpenCode на этой машине, в любом репозитории.
 
 СЛОВА. Окно — программа OpenCode в терминале. Вкладка — сессия внутри окна (на экране одна, остальные фоновые).
 Письма адресуются вкладкам.
@@ -946,7 +946,7 @@ export const HELP = `opencode-harness-crew — письма между вкла�
 всем открытым вкладкам своего проекта; «проект.all». Отправитель подписан полным адресом и сессией.
 
 РОЛИ. Новая вкладка — worker (разделяемая; вкладки внутри роли различает id сессии). assistant — то же, что worker.
-integrator — исключительная: один держатель на проект (плюс exclusive_roles из .opencode/harness-crew.json).
+integrator — исключительная: один держатель на проект (плюс exclusive_roles из .opencode/crew-harness.json).
 Держится замком: пока держатель открыт, роль не отнять без force; закрыл окно — роль свободна сразу.
 Письмо на разделяемую роль с несколькими открытыми держателями не доставляется наугад — адресуй id сессии.
 acceptor — роль приёмщика (разделяемая) при настройке проекта reviewer: acceptor: см. ПРИЁМКА.
@@ -999,7 +999,7 @@ reviewer; места worker не занимает), и merge, accept, cleaned р
 им является: «я integrator проекта X». Остальные молчат — ответ на чужой вопрос это лишний ход у спрашивающего.
 Проверка связи: письмо с просьбой ответить одной строкой «дошло, время»; ответ — crew_send с reply_to.`
 
-// Справка с дописью проекта (help_extra из .opencode/harness-crew.json окна).
+// Справка с дописью проекта (help_extra из .opencode/crew-harness.json окна).
 export const helpFor = (dir: string): string => {
   const extra = loadConfig(dir).helpExtra.trim()
   return extra ? `${HELP}\n\nПРОЕКТ. ${extra}` : HELP
@@ -1200,7 +1200,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
       const openTasks = home ? listTasks(home).filter(isOpen).sort(byPriority) : []
       const tasksPart = openTasks.length ? `\nЗадачи (crew_task):\n${openTasks.map((t) => `  #${t.n} ${t.priority} ${statusRu(t.status)} «${t.title}»${t.executor ? ` — ${t.executor}` : ""}`).join("\n")}` : ""
       const tail = tasksPart + (others ? `\n(ещё ${others} вкладок в других проектах — crew_list {all: true})` : "")
-      const noWindow = windows.length || process.env.HARNESS_CREW_PRESENCE === "all" ? "" : "\n(ни одно окно OpenCode с плагином окна сейчас не открыто — письма ждут; crew_doctor)"
+      const noWindow = windows.length || process.env.CREW_HARNESS_PRESENCE === "all" ? "" : "\n(ни одно окно OpenCode с плагином окна сейчас не открыто — письма ждут; crew_doctor)"
       return { content: (rows.length ? rows.join("\n") : `Вкладок проекта ${home} нет.`) + tail + noWindow }
     },
   }
@@ -1270,7 +1270,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
       const to = String(input.to ?? "").trim()
       const text = String(input.text ?? "").trim()
       if (!to || !text) return { content: "Нужны и адресат, и текст." }
-      if (to === PLUGIN_SENDER || to.endsWith(`.${PLUGIN_SENDER}`)) return { content: "Не отправлено: opencode-harness-crew — это сам плагин, ему не пишут. Отчёт по вопросу или задаче — тому, кто спросил: crew_send {to: \"<его сессия>\", reply_to: \"<qid>\"} (qid и сессия — в письме с вопросом; открытые задачи — crew_task {action: \"list\"})." }
+      if (to === PLUGIN_SENDER || to.endsWith(`.${PLUGIN_SENDER}`)) return { content: "Не отправлено: crew-harness — это сам плагин, ему не пишут. Отчёт по вопросу или задаче — тому, кто спросил: crew_send {to: \"<его сессия>\", reply_to: \"<qid>\"} (qid и сессия — в письме с вопросом; открытые задачи — crew_task {action: \"list\"})." }
       if (!input.expect_reply && ACK_ONLY.test(text)) return { content: "Не отправлено: подтверждение без содержания будит получателя впустую. Пиши, только когда есть что сообщить." }
       let wake = input.wake !== false
       const qid = input.expect_reply ? `q${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` : undefined
@@ -1906,7 +1906,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
   const crewConfig: CrewTool = {
     name: "crew_config",
     description:
-      "The project's settings (.opencode/harness-crew.json in its settings repository). guide — questions for the owner on every key (current value, options, recommendation, why): ask them in text and record the answers; show — effective values and where each comes from (default, the committed file, the local option of opencode.jsonc), plus uncommitted edits; set {values} — integrator only: checks every value and writes the working copy (null removes a key); it applies once committed to the settings branch.",
+      "The project's settings (.opencode/crew-harness.json in its settings repository). guide — questions for the owner on every key (current value, options, recommendation, why): ask them in text and record the answers; show — effective values and where each comes from (default, the committed file, the local option of opencode.jsonc), plus uncommitted edits; set {values} — integrator only: checks every value and writes the working copy (null removes a key); it applies once committed to the settings branch.",
     input: {
       type: "object",
       properties: {
@@ -1929,7 +1929,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
       if (action === "show") return { content: configShowText(me.directory, projOf(me)) }
       if (action === "set") {
         if (!isIntegrator(me)) return notIntegrator(me)
-        if (!p?.dir) return { content: `Проект ${projOf(me)} задан прежней формой опций: записать некуда. Переведи его на репозиторий настроек — в opencode.jsonc "projects": ["<папка с .opencode/harness-crew.json>"].` }
+        if (!p?.dir) return { content: `Проект ${projOf(me)} задан прежней формой опций: записать некуда. Переведи его на репозиторий настроек — в opencode.jsonc "projects": ["<папка с .opencode/crew-harness.json>"].` }
         const values = input.values
         if (!values || typeof values !== "object" || Array.isArray(values) || !Object.keys(values).length) return { content: "Нужно values: {ключ: значение}." }
         const errors = Object.entries(values).filter(([, v]) => v !== null).map(([k, v]) => invalid(k, v)).filter(Boolean)
@@ -1984,7 +1984,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
 
   const crewDoctor: CrewTool = {
     name: "crew_doctor",
-    description: "Self-check of opencode-harness-crew: the OpenCode features it relies on, the window plugin (presence), the mailbox. Lists what is broken and what to do.",
+    description: "Self-check of crew-harness: the OpenCode features it relies on, the window plugin (presence), the mailbox. Lists what is broken and what to do.",
     input: { type: "object", properties: {}, additionalProperties: false },
     execute: async (_input: any, sessionID: string) => {
       const problems = [...(await host.doctor()), ...commonDoctor(sessionID), ...settingsProblems(projects)]
@@ -1995,7 +1995,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
   // НАБЛЮДЕНИЯ (watch.ts): ожидание, которое переживает конец хода — фон Claude Code гибнет с ходом окна claude-code.
   const crewWatch: CrewTool = {
     name: "crew_watch",
-    description: `Wait for something long WITHOUT holding the turn: the opencode-harness-crew plugin runs \`command\` (Git Bash, in the tab's directory) in the OpenCode server, detached -- it survives the end of your turn and a service restart -- and when it exits wakes this tab with a letter: exit code, duration, output tail. Use it instead of Bash run_in_background / Monitor for anything that must outlive the turn (a gate's verdict, a long build): in a claude-code tab background tasks are killed when the turn ends and no notification ever comes. The command should itself wait and finish, e.g. \`until [ -f /tmp/gate.done ]; do sleep 30; done; cat /tmp/gate.done\`. minutes: time limit (default ${WATCH_DEFAULT_MIN}, up to ${WATCH_MAX_MIN}), then it is stopped (exit 124). note: a short label for the letter. machine: true for a command that loads the machine (a gate, a build, a full test run -- run it here, not in your own Bash): it waits its turn in the project's machine queue (machine_slots at a time, default 1), so the tabs' heavy runs do not pile up. The command runs outside the window's permissions, so it is checked against the project's permissions.deny (.claude/settings.json): a command matching a denied Bash/PowerShell prefix (whole or any subcommand) or naming a file under a denied Read glob is refused, naming the rule. The command's environment carries CREW_SESSION_ID, CREW_ROLE, CREW_PROJECT and CREW_REVIEW_N (a reviewer) / CREW_TASK_N (an executor). No command: list this tab's watches. After calling it, end your turn -- the letter wakes you.`,
+    description: `Wait for something long WITHOUT holding the turn: the crew-harness plugin runs \`command\` (Git Bash, in the tab's directory) in the OpenCode server, detached -- it survives the end of your turn and a service restart -- and when it exits wakes this tab with a letter: exit code, duration, output tail. Use it instead of Bash run_in_background / Monitor for anything that must outlive the turn (a gate's verdict, a long build): in a claude-code tab background tasks are killed when the turn ends and no notification ever comes. The command should itself wait and finish, e.g. \`until [ -f /tmp/gate.done ]; do sleep 30; done; cat /tmp/gate.done\`. minutes: time limit (default ${WATCH_DEFAULT_MIN}, up to ${WATCH_MAX_MIN}), then it is stopped (exit 124). note: a short label for the letter. machine: true for a command that loads the machine (a gate, a build, a full test run -- run it here, not in your own Bash): it waits its turn in the project's machine queue (machine_slots at a time, default 1), so the tabs' heavy runs do not pile up. The command runs outside the window's permissions, so it is checked against the project's permissions.deny (.claude/settings.json): a command matching a denied Bash/PowerShell prefix (whole or any subcommand) or naming a file under a denied Read glob is refused, naming the rule. The command's environment carries CREW_SESSION_ID, CREW_ROLE, CREW_PROJECT and CREW_REVIEW_N (a reviewer) / CREW_TASK_N (an executor). No command: list this tab's watches. After calling it, end your turn -- the letter wakes you.`,
     input: {
       type: "object",
       properties: {
@@ -2034,7 +2034,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
 
   const crewHelp: CrewTool = {
     name: "crew_help",
-    description: "Help for opencode-harness-crew: the tools with examples, addressing, roles, delivery and presence, questions and answers, tasks for the integrator.",
+    description: "Help for crew-harness: the tools with examples, addressing, roles, delivery and presence, questions and answers, tasks for the integrator.",
     input: { type: "object", properties: {}, additionalProperties: false },
     execute: async (_input: any, sessionID: string) => ({ content: helpFor(readJson<Card>(cardFile(String(sessionID ?? "")))?.directory || host.defaultDir) }),
   }
@@ -2224,7 +2224,7 @@ export function commonDoctor(sessionID?: string): string[] {
     out.push(`ящик ${BASE} не пишется: ${e}`)
   }
   const windows = liveWindows()
-  if (!windows.length) out.push("ни одно окно OpenCode не отмечается: плагин окна не подключён или окна закрыты. Подключение: в ~/.config/opencode/cli.json, раздел plugins — путь к папке opencode-harness-crew; окна открыть заново")
-  else if (sessionID && !process.env.HARNESS_CREW_PRESENCE && !tabOf(sessionID, windows) && !readJson<Card>(cardFile(sessionID))?.spawned) out.push("эта вкладка не видна ни одному окну: она открыта в окне, запущенном до подключения плагина окна? Открой окно заново")
+  if (!windows.length) out.push("ни одно окно OpenCode не отмечается: плагин окна не подключён или окна закрыты. Подключение: в ~/.config/opencode/cli.json, раздел plugins — путь к папке crew-harness; окна открыть заново")
+  else if (sessionID && !process.env.CREW_HARNESS_PRESENCE && !tabOf(sessionID, windows) && !readJson<Card>(cardFile(sessionID))?.spawned) out.push("эта вкладка не видна ни одному окну: она открыта в окне, запущенном до подключения плагина окна? Открой окно заново")
   return out
 }

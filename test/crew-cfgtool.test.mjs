@@ -10,17 +10,17 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-cfgtool-"))
 process.env.XDG_DATA_HOME = path.join(tmp, "data")
-process.env.HARNESS_CREW_POLL_MS = "100"
-process.env.HARNESS_CREW_DB = path.join(tmp, "absent.db")
-process.env.HARNESS_CREW_SETTINGS_TTL_MS = "1"
-process.env.HARNESS_CREW_PRESENCE = "all"
+process.env.CREW_HARNESS_POLL_MS = "100"
+process.env.CREW_HARNESS_DB = path.join(tmp, "absent.db")
+process.env.CREW_HARNESS_SETTINGS_TTL_MS = "1"
+process.env.CREW_HARNESS_PRESENCE = "all"
 const git = (cwd, ...args) => execFileSync("git", ["-C", cwd, "-c", "user.name=t", "-c", "user.email=t@t", ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
 const root = path.join(tmp, "proj")
 const cfgDir = path.join(root, "proj-settings")
 const work = path.join(root, "repo")
 mkdirSync(path.join(cfgDir, ".opencode"), { recursive: true })
 mkdirSync(work, { recursive: true })
-const file = path.join(cfgDir, ".opencode", "harness-crew.json")
+const file = path.join(cfgDir, ".opencode", "crew-harness.json")
 git(cfgDir, "init", "-q", "-b", "main")
 writeFileSync(file, JSON.stringify({ project: "proj", root: "..", cleanup: "local" }, null, 2))
 git(cfgDir, "add", "-A")

@@ -118,7 +118,7 @@ import { ensureWorktree, fileAt, gitTraces, leftoversOf, mergeHolder, reviewLett
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
 
 export default {
-  id: "harness-crew",
+  id: "crew-harness",
   async setup(ctx: any) {
     const mine = new Map<string, Card>() // сессии этого процесса
     const children = new Set<string>()
@@ -259,7 +259,7 @@ export default {
           // предел времени: зависшая отправка держала бы вкладку в delivering навсегда (письма ей больше не шли бы)
           const capped = (p: Promise<any>) => {
             let timer: any
-            return Promise.race([p, new Promise((_, rej) => (timer = setTimeout(() => rej(new Error("delivery took too long")), Number(process.env.HARNESS_CREW_STEP_MS) || 60_000)))]).finally(() => clearTimeout(timer))
+            return Promise.race([p, new Promise((_, rej) => (timer = setTimeout(() => rej(new Error("delivery took too long")), Number(process.env.CREW_HARNESS_STEP_MS) || 60_000)))]).finally(() => clearTimeout(timer))
           }
           if (wake) await capped(ctx.session.prompt({ sessionID: card.session, text, delivery: "queue" }))
           else if (typeof ctx.session.synthetic === "function") await capped(ctx.session.synthetic({ sessionID: card.session, text, resume: false }))
@@ -655,7 +655,7 @@ export default {
     // проверки, например хук проекта). Сессия закончила ход вопросом владельцу — уведомление во все живые окна (с
     // кнопкой Open и системным уведомлением, когда окно не в фокусе); не ответил — повтор через owner_reminder_min.
     // В сводке — открытые вкладки, сессии задач и те, у кого есть наблюдения или свои открытые задачи.
-    const STATUS_EVERY_MS = Number(process.env.HARNESS_CREW_STATUS_MS) || 15_000
+    const STATUS_EVERY_MS = Number(process.env.CREW_HARNESS_STATUS_MS) || 15_000
     // конец хода — из базы (5 ГБ у владельца) только когда появилась новая строка idle: сначала дешёвое время
     // последнего idle (idleAt), тяжёлое чтение сообщений — при его изменении (замер: ~0,1 с на вкладку, в главном потоке)
     const ends = new Map<string, { at: number; end: Awaited<ReturnType<typeof turnEnd>> }>()
@@ -765,7 +765,7 @@ export default {
     // закрыто всё из его «после:» (и «после:» его фазы) и не идёт шаг с пересекающимся «где:»; внутри лимитов проекта;
     // по приоритету шага, иначе фазы, затем по порядку в плане. Шаг-подплан — задача-план. Все шаги закрыты —
     // письмо автору: закрыть план. Раз в PLAN_STEPS_MS: файл плана читается из git.
-    const PLAN_STEPS_MS = Number(process.env.HARNESS_CREW_PLANSTEPS_MS) || 10_000
+    const PLAN_STEPS_MS = Number(process.env.CREW_HARNESS_PLANSTEPS_MS) || 10_000
     let planStepsAt = 0
     async function planSteps() {
       if (now() - planStepsAt < PLAN_STEPS_MS) return
@@ -846,7 +846,7 @@ export default {
     // УБОРКА (housekeeping.ts): прочитанные письма старше keep_days (опция плагина, умолчание 7) — id в список, файл
     // вон; раз в HOUSEKEEP_MS.
     const KEEP_MS = (Number(ctx?.options?.keep_days) > 0 ? Number(ctx.options.keep_days) : 7) * 24 * 3_600_000
-    const HOUSEKEEP_MS = Number(process.env.HARNESS_CREW_HOUSEKEEP_MS) || 3_600_000
+    const HOUSEKEEP_MS = Number(process.env.CREW_HARNESS_HOUSEKEEP_MS) || 3_600_000
     let housekeptAt = 0
     function housekeep() {
       if (now() - housekeptAt < HOUSEKEEP_MS) return
@@ -856,7 +856,7 @@ export default {
     }
 
     function flowWatch() {
-      if (now() - flowAt < (Number(process.env.HARNESS_CREW_FLOW_MS) || 60_000)) return
+      if (now() - flowAt < (Number(process.env.CREW_HARNESS_FLOW_MS) || 60_000)) return
       flowAt = now()
       const t = now()
       const byProject = new Map<string, Task[]>()
@@ -905,7 +905,7 @@ export default {
     // ветки (локальные и на origin) и worktree по шаблонам настроек (review.ts leftoversOf, асинхронный git). Нашлись —
     // письмо автору задачи со списком; одно письмо на один набор хвостов. Отменённая задача — убрать или сохранить
     // работу решает автор. Сам плагин не удаляет: удаление веток на origin — действие наружу.
-    const LEFT_EVERY_MS = Number(process.env.HARNESS_CREW_LEFT_MS) || 600_000
+    const LEFT_EVERY_MS = Number(process.env.CREW_HARNESS_LEFT_MS) || 600_000
     let leftAt = 0
     async function leftWatch() {
       if (now() - leftAt < LEFT_EVERY_MS) return
@@ -959,7 +959,7 @@ export default {
     // любом шаге — следующий проход (resumeTasks) повторит запуск, второй сессии и второго письма не будет.
     const startingNow = new Set<string>()
     const startBlocked = new Map<string, number>() // задача → когда повторить запуск, отложенный из-за дерева
-    const START_RETRY_MS = Number(process.env.HARNESS_CREW_START_RETRY_MS) || 120_000
+    const START_RETRY_MS = Number(process.env.CREW_HARNESS_START_RETRY_MS) || 120_000
     async function startTask(t0: Task): Promise<{ session?: string; error?: string }> {
       const key = `${t0.project}#${t0.n}`
       if (startingNow.has(key)) return { error: "запуск уже идёт" }
@@ -1097,8 +1097,8 @@ export default {
     // прохода не вернулся, passBusy остался true, следующие проходы выходили сразу: ни доставки, ни подталкивания, ни
     // сторожа, и всё молча. Теперь каждый шаг — с пределом времени (зависший или упавший шаг в журнал, остальные
     // идут), а проход, висящий дольше PASS_STUCK_MS, следующий не ждёт (в журнале — шаг, на котором висит).
-    const STEP_MS = Number(process.env.HARNESS_CREW_STEP_MS) || 60_000
-    const PASS_STUCK_MS = Number(process.env.HARNESS_CREW_PASS_STUCK_MS) || 120_000
+    const STEP_MS = Number(process.env.CREW_HARNESS_STEP_MS) || 60_000
+    const PASS_STUCK_MS = Number(process.env.CREW_HARNESS_PASS_STUCK_MS) || 120_000
     let passStage = ""
     let passStartedAt = 0
     let passId = 0
@@ -1193,7 +1193,7 @@ export default {
         ev.system.push({
           type: "text",
           text:
-            `opencode-harness-crew: ты — вкладка с ролью «${card.role}» в проекте ${projOf(card)} (адрес ${keyOf(card)}), репозиторий ${card.repo || "?"}, ` +
+            `crew-harness: ты — вкладка с ролью «${card.role}» в проекте ${projOf(card)} (адрес ${keyOf(card)}), репозиторий ${card.repo || "?"}, ` +
             `сессия ${card.session}. Соседи — crew_list, письмо — crew_send, вопрос с ответом — crew_send {expect_reply} + crew_wait, справка — crew_help.`,
         })
       } catch (e) {
@@ -1261,7 +1261,7 @@ export default {
         await ctx.command.transform((editor: any) => {
           editor.add({
             name: "crew_help",
-            description: "Справка по письмам между вкладками (opencode-harness-crew)",
+            description: "Справка по письмам между вкладками (crew-harness)",
             execute: async ({ sessionID, prompt, delivery }: any) => {
               const dir = readJson<Card>(cardFile(String(sessionID ?? "")))?.directory || String(ctx?.location?.directory ?? "")
               await ctx.session.prompt({ ...prompt, sessionID, text: `Покажи пользователю эту справку дословно, без пересказа:\n\n${helpFor(dir)}`, delivery })
@@ -1286,7 +1286,7 @@ export default {
     // LAG_LOG_MS — строка в журнал с шагом прохода плагина, который в это время шёл («—» — плагин был свободен: держал
     // кто-то другой в процессе сервера), и памятью процесса.
     const LAG_EVERY_MS = 500
-    const LAG_LOG_MS = Number(process.env.HARNESS_CREW_LAG_MS) || 1_000
+    const LAG_LOG_MS = Number(process.env.CREW_HARNESS_LAG_MS) || 1_000
     let lagExpected = Date.now() + LAG_EVERY_MS
     const lagTimer = setInterval(() => {
       const t = Date.now()
@@ -1313,12 +1313,12 @@ export default {
     // Новый экземпляр останавливает цикл прежнего.
     const g = globalThis as any
     try {
-      g.__harnessCrewDispose?.()
+      g.__crewHarnessDispose?.()
     } catch {}
-    g.__harnessCrewDispose = dispose
+    g.__crewHarnessDispose = dispose
     return () => {
       dispose()
-      if (g.__harnessCrewDispose === dispose) g.__harnessCrewDispose = undefined
+      if (g.__crewHarnessDispose === dispose) g.__crewHarnessDispose = undefined
     }
   },
 }

@@ -1,5 +1,5 @@
 // Self-test of project settings in a settings repository (node >= 24):  node test/crew-settings.test.mjs
-// Plan 002, decision 12: the plugin options list settings folders; the file `.opencode/harness-crew.json` in a
+// Plan 002, decision 12: the plugin options list settings folders; the file `.opencode/crew-harness.json` in a
 // folder names the project and its root (relative to the folder) and is read COMMITTED from the default branch
 // (another branch: its "branch" field), never from the working copy. The old options form (name -> root) still
 // works; machine-specific values come from the `local` option.
@@ -10,7 +10,7 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-settings-"))
 process.env.XDG_DATA_HOME = path.join(tmp, "data")
-process.env.HARNESS_CREW_SETTINGS_TTL_MS = "1" // no cache between steps
+process.env.CREW_HARNESS_SETTINGS_TTL_MS = "1" // no cache between steps
 const core = await import(process.env.CREW_CORE ?? "../core.ts")
 const { canon } = await import("../settings.ts")
 
@@ -32,7 +32,7 @@ const tab = path.join(nv, "nova-carina", "src")
 mkdirSync(tab, { recursive: true })
 mkdirSync(cfgRepo, { recursive: true })
 git(cfgRepo, "init", "-q", "-b", "main")
-const file = path.join(cfgRepo, ".opencode", "harness-crew.json")
+const file = path.join(cfgRepo, ".opencode", "crew-harness.json")
 write(file, { project: "nova", root: "..", help_extra: "COMMITTED-LINE", spawn_limits: { worker: 2 }, task_fields: ["goal", "criteria", "boundaries"], worktrees: "worktrees", default_priority: "P1" })
 git(cfgRepo, "add", "-A")
 git(cfgRepo, "commit", "-q", "-m", "settings")
@@ -83,19 +83,19 @@ git(empty, "commit", "-q", "-m", "x")
 const dup = path.join(tmp, "dup-repo")
 mkdirSync(dup, { recursive: true })
 git(dup, "init", "-q", "-b", "main")
-write(path.join(dup, ".opencode", "harness-crew.json"), { project: "nova" })
+write(path.join(dup, ".opencode", "crew-harness.json"), { project: "nova" })
 git(dup, "add", "-A")
 git(dup, "commit", "-q", "-m", "dup")
 const bad = core.parseProjects({ projects: [cfgRepo, plain, empty, dup] })
 const problems = core.settingsProblems(bad)
 cell("doctor: a folder outside git", problems.some((p) => p.includes("не внутри git")), JSON.stringify(problems))
-cell("doctor: no settings file in the default branch", problems.some((p) => p.includes("нет .opencode/harness-crew.json")), JSON.stringify(problems))
+cell("doctor: no settings file in the default branch", problems.some((p) => p.includes("нет .opencode/crew-harness.json")), JSON.stringify(problems))
 cell("doctor: two projects with one name", problems.some((p) => p.includes("два проекта с именем «nova»")), JSON.stringify(problems))
 
 // the old options form still works (name -> root, settings walked up from the tab, working copy)
 const old = core.parseProjects({ projects: { legacy: path.join(tmp, "old") } })
 core.setProjects(old, {})
-write(path.join(tmp, "old", ".opencode", "harness-crew.json"), { help_extra: "OLD-FORM-LINE" })
+write(path.join(tmp, "old", ".opencode", "crew-harness.json"), { help_extra: "OLD-FORM-LINE" })
 mkdirSync(path.join(tmp, "old", "a"), { recursive: true })
 cell("the old options form: project by root", core.projectOf(path.join(tmp, "old", "a"), old) === "legacy", core.projectOf(path.join(tmp, "old", "a"), old))
 cell("the old options form: settings from the tab's tree", core.helpFor(path.join(tmp, "old", "a")).includes("OLD-FORM-LINE"), "missing")

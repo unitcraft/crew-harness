@@ -1,5 +1,5 @@
-// Self-test of opencode-harness-crew shared roles and window models (node >= 24):  node test/crew-shared.test.mjs
-// Red probe: HARNESS_CREW_NO_AMBIGUITY_GUARD=1 -- not supported by the plugin; the probe in the report removes the
+// Self-test of crew-harness shared roles and window models (node >= 24):  node test/crew-shared.test.mjs
+// Red probe: CREW_HARNESS_NO_AMBIGUITY_GUARD=1 -- not supported by the plugin; the probe in the report removes the
 // guard line from a copy (see the commit message). This file asserts the behaviour.
 import { mkdtempSync, rmSync } from "node:fs"
 import os from "node:os"
@@ -7,13 +7,13 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-shared-"))
 process.env.XDG_DATA_HOME = tmp
-process.env.HARNESS_CREW_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
+process.env.CREW_HARNESS_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
 import { mkdirSync, writeFileSync } from "node:fs"
 // Project config: integrator is exclusive here (the plugin itself names no role).
 const proj = path.join(tmp, "proj")
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
-writeFileSync(path.join(proj, ".opencode", "harness-crew.json"), JSON.stringify({ exclusive_roles: ["integrator"] }))
-process.env.HARNESS_CREW_DB = path.join(tmp, "absent.db") // no database: models come from the event
+writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ exclusive_roles: ["integrator"] }))
+process.env.CREW_HARNESS_DB = path.join(tmp, "absent.db") // no database: models come from the event
 const mod = await import(process.env.CREW_MODULE ?? "../index.ts")
 
 const hooks = {}

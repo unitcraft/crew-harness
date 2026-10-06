@@ -1,4 +1,6 @@
-# opencode-harness-crew
+# CrewHarness
+
+*ИИ-команда в упряжке — обвязка для команды ИИ-агентов.*
 
 **Your AI dev team, harnessed.** An OpenCode V2 plugin that turns Claude Code tabs into a crew that carries work
 from a plan to a merge, while the owner only approves and watches:
@@ -26,13 +28,13 @@ background); a task session may run with no window at all. Formerly `opencode-pe
   root, a tab outside every root to the project named after its repository;
 - **project settings live in a settings repository**, not in the tab's working copy (a project can
   be a folder of many repositories, like `C:/work/nova`). The plugin options list settings
-  folders — any folder inside a git repository; the file `.opencode/harness-crew.json` there
+  folders — any folder inside a git repository; the file `.opencode/crew-harness.json` there
   names the project and its root (relative to the folder) and is read **committed** from the
   default branch (`git show`; another branch: its `"branch"` field), never from the working copy:
 
   ```jsonc
   "plugins": [
-    { "package": "C:/work/opencode-harness-crew",
+    { "package": "C:/work/crew-harness",
       "options": { "projects": ["C:/work/nova/nova-settings", "C:/work/tools"],
                    "local": { "nova": { "spawn_models": { "light": "kimi/k3" } } } } }
   ]
@@ -137,7 +139,7 @@ and repeats it every `owner_reminder_min` minutes (15; 0 — once) until you ans
 The service plugin keeps `<mailbox>/status/<session id>.json` for open tabs, task sessions and sessions with watches
 or open tasks of their own — an open contract for outside checks (e.g. a project's Stop hook; the claude-code
 provider puts `OPENCODE_SESSION_ID` into Claude Code's environment). `<mailbox>` is
-`$XDG_DATA_HOME/opencode/opencode-harness-crew` (OpenCode's data directory; the old `nova-peers` is moved there on the first
+`$XDG_DATA_HOME/opencode/crew-harness` (OpenCode's data directory; the old `nova-peers` is moved there on the first
 start of this version and left as a link to it, so old paths keep working):
 
 ```jsonc
@@ -169,7 +171,7 @@ start and its `idle` row): a turn with a tool call is a working one, a turn with
   task (a letter that wakes it), who answers or asks the owner; a merge lock held longer than `stall_minutes` (30)
   and a submitted task waiting for a reviewer that long are raised to the task's author, and so are the leftovers of a
   closed task (branches here and on origin, worktrees by the project's name templates) ([plan 007](doc/plans/007-flow-watch.md));
-- service letters of the plugin say "do not answer"; a letter to `opencode-harness-crew` itself is refused.
+- service letters of the plugin say "do not answer"; a letter to `crew-harness` itself is refused.
 
 ## Tasks
 
@@ -335,20 +337,20 @@ OPENCODE_CREW_SESSION=<opencode session id> node mcp.ts   # node >= 24
 ## Install
 
 ```sh
-git clone https://github.com/unitcraft/opencode-harness-crew C:/work/opencode-harness-crew
+git clone https://github.com/unitcraft/crew-harness C:/work/crew-harness
 ```
 
 `~/.config/opencode/opencode.jsonc` (the server plugin):
 
 ```jsonc
-"plugins": ["C:/work/opencode-harness-crew"]
+"plugins": ["C:/work/crew-harness"]
 ```
 
 `~/.config/opencode/cli.json` (the window plugin; a folder, not a file — OpenCode loads `tui.ts`
 from it):
 
 ```json
-{ "plugins": ["C:/work/opencode-harness-crew"] }
+{ "plugins": ["C:/work/crew-harness"] }
 ```
 
 Windows opened before the window plugin was added do not report their tabs: reopen them.
@@ -368,8 +370,8 @@ npm test   # node >= 24
 ```
 
 History: moved with its commits from `a private plugins repository of the nova project` (`plugins/nova-peers`).
-The plugin id `nova.peers` is kept; the mailbox moved from `nova-peers` to `opencode-harness-crew` (the old name stays as a
-junction to it, so nothing is lost and old processes land in the same folder); the settings file is `.opencode/harness-crew.json` (named after the package; the old name
+The plugin id `nova.peers` is kept; the mailbox moved from `nova-peers` to `crew-harness` (the old name stays as a
+junction to it, so nothing is lost and old processes land in the same folder); the settings file is `.opencode/crew-harness.json` (named after the package; the old name
 `nova-peers.json` is no longer read).
 
 License: MIT OR Apache-2.0 (see [LICENSE](LICENSE)).

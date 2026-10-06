@@ -8,10 +8,10 @@ import { execFileSync } from "node:child_process"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-plancfg-"))
 process.env.XDG_DATA_HOME = tmp
-process.env.HARNESS_CREW_POLL_MS = "100"
-process.env.HARNESS_CREW_DB = path.join(tmp, "absent.db")
-process.env.HARNESS_CREW_PRESENCE = "all"
-process.env.HARNESS_CREW_PLANSTEPS_MS = "200"
+process.env.CREW_HARNESS_POLL_MS = "100"
+process.env.CREW_HARNESS_DB = path.join(tmp, "absent.db")
+process.env.CREW_HARNESS_PRESENCE = "all"
+process.env.CREW_HARNESS_PLANSTEPS_MS = "200"
 const proj = path.join(tmp, "proj")
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
 mkdirSync(path.join(proj, "plans"), { recursive: true })
@@ -30,7 +30,7 @@ const SETTINGS = {
   plan_approver: "integrator",
   plan_steps: "manual",
 }
-writeFileSync(path.join(proj, ".opencode", "harness-crew.json"), JSON.stringify(SETTINGS))
+writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify(SETTINGS))
 const PLAN = [
   "# План 1 — своя форма", "", "**Статус:** 🔴 ОТКРЫТ", "**Источник:** задача", "**Зависимости:** —", "",
   "## Причина", "замер", "## Что уже есть", "ничего", "## Фазы",

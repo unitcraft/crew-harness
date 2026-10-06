@@ -13,9 +13,9 @@ import { DatabaseSync } from "node:sqlite"
 const here = path.dirname(fileURLToPath(import.meta.url))
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-mcp-"))
 process.env.XDG_DATA_HOME = tmp
-process.env.HARNESS_CREW_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
-process.env.HARNESS_CREW_POLL_MS = "100"
-delete process.env.HARNESS_CREW_DB
+process.env.CREW_HARNESS_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
+process.env.CREW_HARNESS_POLL_MS = "100"
+delete process.env.CREW_HARNESS_DB
 delete process.env.OPENCODE_CREW_PROJECTS
 const root = path.join(tmp, "src")
 const dirs = { A: path.join(root, "nova", "repo-a"), B: path.join(root, "nova", "limits"), C: path.join(root, "nova", "repo-c"), D: path.join(root, "nova", "limits", "sub") }
@@ -128,7 +128,7 @@ try {
   // crew_role from MCP; the card keeps the plugin's pid, so letters to the MCP window are still delivered
   const r = (await mcp.call("crew_role", { role: "worker" })).text
   cell("MCP crew_role sets the role", /теперь «worker», адрес nova\.worker/.test(r), r)
-  const card = JSON.parse(readFileSync(path.join(tmp, "opencode", "harness-crew", "cards", "sesCCCCCC.json"), "utf8"))
+  const card = JSON.parse(readFileSync(path.join(tmp, "opencode", "crew-harness", "cards", "sesCCCCCC.json"), "utf8"))
   cell("the card keeps the OpenCode process pid", card.pid === process.pid && card.role === "worker", JSON.stringify(card))
   const rx = (await mcp.call("crew_role", { role: "integrator" })).text
   cell("exclusive role held by a live window is refused through MCP too", /занята/.test(rx), rx)
@@ -147,8 +147,8 @@ try {
   cell("MCP crew_help is the plugin's help", help === (await tools.crew_help.execute({}, { sessionID: "sesCCCCCC" })).content, help.slice(0, 80))
   const bad = (await mcp.call("crew_send", { to: "No Such.x", text: "bad" })).text
   cell("invalid address is refused", /не годится/.test(bad), bad)
-  const inboxDirs = readdirSync(path.join(tmp, "opencode", "harness-crew", "inbox"))
-  cell("nothing stuck in the inbox", inboxDirs.every((d) => readdirSync(path.join(tmp, "opencode", "harness-crew", "inbox", d)).filter((f) => f.endsWith(".json")).length === 0), inboxDirs.join(","))
+  const inboxDirs = readdirSync(path.join(tmp, "opencode", "crew-harness", "inbox"))
+  cell("nothing stuck in the inbox", inboxDirs.every((d) => readdirSync(path.join(tmp, "opencode", "crew-harness", "inbox", d)).filter((f) => f.endsWith(".json")).length === 0), inboxDirs.join(","))
 } catch (e) {
   cell("mcp session", false, String(e?.stack ?? e))
 } finally {
@@ -163,7 +163,7 @@ try {
   await fresh.rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {} })
   const pl = (await fresh.call("crew_list")).text
   cell("a window without a card gets project.role from the plugin's project list", /^\* limits\.worker/m.test(pl) && /limits\.integrator/.test(pl), pl)
-  const card = JSON.parse(readFileSync(path.join(tmp, "opencode", "harness-crew", "cards", "sesDDDDDD.json"), "utf8"))
+  const card = JSON.parse(readFileSync(path.join(tmp, "opencode", "crew-harness", "cards", "sesDDDDDD.json"), "utf8"))
   cell("its card has pid 0 (delivered by the plugin's timer)", card.pid === 0 && card.project === "limits", JSON.stringify(card))
   await tools.crew_send.execute({ to: "sesDDDDDD", text: "to-a-fresh-window" }, { sessionID: "sesBBBBBB" })
   await wait()

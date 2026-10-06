@@ -1,4 +1,4 @@
-// Self-test of opencode-harness-crew window model (node >= 24):  node test/crew-model.test.mjs
+// Self-test of crew-harness window model (node >= 24):  node test/crew-model.test.mjs
 // The model is the one of the REQUEST the window makes now (hook model.request); the database is only a
 // fallback and is printed with the time of the last turn. Red probe: CREW_MODULE=<copy of the plugin that
 // ignores the request model> -- the cell "request model wins" goes red.
@@ -9,12 +9,12 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-model-"))
 process.env.XDG_DATA_HOME = tmp
-process.env.HARNESS_CREW_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
-process.env.HARNESS_CREW_DB = path.join(tmp, "opencode.db")
+process.env.CREW_HARNESS_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
+process.env.CREW_HARNESS_DB = path.join(tmp, "opencode.db")
 
 // A database whose last assistant turn of window Y ran on Kimi (the tab was switched afterwards).
 const turnAt = Date.parse("2026-10-04T02:24:37")
-const db = new DatabaseSync(process.env.HARNESS_CREW_DB)
+const db = new DatabaseSync(process.env.CREW_HARNESS_DB)
 db.exec("create table session_message (id text primary key, session_id text, type text, seq integer, time_created integer, time_updated integer, data text)")
 db.prepare("insert into session_message values (?,?,?,?,?,?,?)").run(
   "m1", "sesYYYYYY", "assistant", 1, turnAt, turnAt,

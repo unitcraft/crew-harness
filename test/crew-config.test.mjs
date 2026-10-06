@@ -1,4 +1,4 @@
-// Self-test of opencode-harness-crew project config (node >= 24):  node test/crew-config.test.mjs
+// Self-test of crew-harness project config (node >= 24):  node test/crew-config.test.mjs
 // Base roles of the plugin: `integrator` exclusive, everything else shared. The project config ADDS exclusive
 // roles (exclusive_roles), appends help_extra and may override the tier lists (tiers).
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
@@ -7,13 +7,13 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-config-"))
 process.env.XDG_DATA_HOME = tmp
-process.env.HARNESS_CREW_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
-process.env.HARNESS_CREW_DB = path.join(tmp, "absent.db")
+process.env.CREW_HARNESS_PRESENCE ??= "all" // every tab taken as open (presence has its own test)
+process.env.CREW_HARNESS_DB = path.join(tmp, "absent.db")
 const bare = path.join(tmp, "bare")
 const proj = path.join(tmp, "proj")
 mkdirSync(bare, { recursive: true })
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
-writeFileSync(path.join(proj, ".opencode", "harness-crew.json"), JSON.stringify({ exclusive_roles: ["lead"], help_extra: "EXTRA-LINE-OF-THE-PROJECT" }))
+writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ exclusive_roles: ["lead"], help_extra: "EXTRA-LINE-OF-THE-PROJECT" }))
 
 const dirOf = (sid) => (sid.startsWith("sesP") ? proj : bare)
 const mod = await import(process.env.CREW_MODULE ?? "../index.ts")
@@ -63,7 +63,7 @@ cell("help_extra is appended for the project", helpProj.includes("EXTRA-LINE-OF-
 cell("help_extra is absent without a config", !helpBare.includes("EXTRA-LINE-OF-THE-PROJECT"), "present")
 cell("default help names neutral roles", /integrator/.test(helpBare) && /worker/.test(helpBare), "missing")
 
-// The config is named after the package (harness-crew.json); the old name nova-peers.json is no longer read
+// The config is named after the package (crew-harness.json); the old name nova-peers.json is no longer read
 // (plan 002, decision 16: nv-lang moved to a settings repository 2026-10-05).
 const legacy = path.join(tmp, "legacy")
 const both = path.join(tmp, "both")
@@ -71,14 +71,14 @@ mkdirSync(path.join(legacy, ".opencode"), { recursive: true })
 mkdirSync(path.join(both, ".opencode"), { recursive: true })
 writeFileSync(path.join(legacy, ".opencode", "nova-peers.json"), JSON.stringify({ help_extra: "OLD-NAME-LINE" }))
 writeFileSync(path.join(both, ".opencode", "nova-peers.json"), JSON.stringify({ help_extra: "OLD-NAME-LINE" }))
-writeFileSync(path.join(both, ".opencode", "harness-crew.json"), JSON.stringify({ help_extra: "NEW-NAME-LINE" }))
+writeFileSync(path.join(both, ".opencode", "crew-harness.json"), JSON.stringify({ help_extra: "NEW-NAME-LINE" }))
 cell("the old name nova-peers.json is not read", !mod.helpFor(legacy).includes("OLD-NAME-LINE"), "read")
-cell("harness-crew.json wins over the old name", mod.helpFor(both).includes("NEW-NAME-LINE") && !mod.helpFor(both).includes("OLD-NAME-LINE"), "wrong file")
+cell("crew-harness.json wins over the old name", mod.helpFor(both).includes("NEW-NAME-LINE") && !mod.helpFor(both).includes("OLD-NAME-LINE"), "wrong file")
 
 // A project config saved with a BOM (Notepad, PowerShell 5.1 "utf8") is read like any other.
 const bom = path.join(tmp, "bom")
 mkdirSync(path.join(bom, ".opencode"), { recursive: true })
-writeFileSync(path.join(bom, ".opencode", "harness-crew.json"), "\uFEFF" + JSON.stringify({ help_extra: "BOM-LINE" }))
+writeFileSync(path.join(bom, ".opencode", "crew-harness.json"), "\uFEFF" + JSON.stringify({ help_extra: "BOM-LINE" }))
 cell("a config saved with a BOM is read", mod.helpFor(bom).includes("BOM-LINE"), "BOM file ignored")
 stop?.()
 rmSync(tmp, { recursive: true, force: true })
