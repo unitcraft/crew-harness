@@ -1,0 +1,77 @@
+# 012 — роль приёмщика со своими правами; `peer_watch` не обходит запреты проекта
+
+**Статус:** ЗАКРЫТ 2026-10-06 (коммит 472083d, ветка `acceptor-role`).
+**Где остановились:** всё сделано; ветка ждёт вливания интегратором после чтения диффа.
+**Проверено:** `npm test` целиком зелёный; каждый пункт 2–6 проверен в обе стороны (раздел «Обе стороны»).
+
+Источник — задача владельца проекта nova 2026-10-06: у приёмки должна быть отдельная роль со своими правами, а
+`peer_watch` перестаёт быть обходом прав проекта. Рамки — только репозиторий плагина; каждый пункт с тестом, который
+краснеет без него и зеленеет с ним.
+
+## Что было и почему это дыра
+
+- Приёмщиком становилась любая свободная вкладка `worker` или сессия приёмки с ролью `worker`: права приёмщика
+  (замок вливания, принятие, очистка) держались только на записи «приёмщик» в задаче, роль их не различала. Проект не
+  мог дать приёмщику права, которых нет у воркера, и наоборот.
+- `peer_watch` запускает команду в сервере OpenCode, мимо прав окна: запрещённое окну (`git reset --hard`, чтение
+  ключей — `permissions.deny` в `.claude/settings.json`) проходило наблюдением.
+- Команда наблюдения не знала, кто её поставил: скрипту приёмки проекта (гейт, проверка) приходилось угадывать номер
+  задачи и роль.
+
+## Решения
+
+| № | Что | Решение |
+|---|-----|---------|
+| 1 | Настройка | `reviewer: "acceptor"` — третье значение (схема `config-schema.ts`, тип и разбор в `core.ts`). Умолчание осталось `worker`: старые проекты не меняются |
+| 2 | Роль сессии и вкладки | При `acceptor` новая сессия приёмки рождается с ролью `acceptor` (`reviewerRole(cfg)`), свободная открытая вкладка годится в приёмщики, только если её роль `acceptor` (вкладка `worker` — нет). При `worker` — как было: роль `worker`. Роль `acceptor` разделяемая |
+| 3 | Лимит | `reviewSessionLimit(cfg)`: при `acceptor` — `spawn_limits.acceptor`, без него `spawn_limits.reviewer`, без обоих 2; при `worker` — прежнее `spawn_limits.reviewer ?? 2`. Сессии приёмки места `worker` не занимают (лимит `worker` считает задачи, а не визитки — закреплено тестом). Письмо «ждёт приёмщика» называет действующий ключ |
+| 4 | Права | `merge`, `accept`, `cleaned` (как и `review`, `check`, `rework`) — только приёмщику ЭТОЙ задачи (так было). Исполнитель задачи получает отказ по имени: «Ты исполнитель задачи #N: … только его». При `acceptor` для `merge`/`accept`/`cleaned` нужна ещё роль `acceptor` или интегратор: приёмщик, сменивший роль, их теряет — права у роли, а не у записи в задаче |
+| 5 | Кто запустил | `peer_watch` кладёт в запись наблюдения `env`: `PEERS_SESSION_ID`, `PEERS_ROLE`, `PEERS_PROJECT`; у приёмщика открытой задачи — `PEERS_REVIEW_N`, у исполнителя — `PEERS_TASK_N` (`watchEnv` в `core.ts`). Запуск (`watch.ts`, `spawn(..., {env: {...process.env, ...w.env}})`) берёт их из записи на диске: перезапуск сервера и смена роли после постановки их не меняют |
+| 6 | Запреты проекта | `deny.ts`: перед постановкой команда сверяется с `permissions.deny` из `.claude/settings.json` (каталог вкладки и вверх до корня git; вне git — только сам каталог, выше лежат личные настройки; нет файла — проверки нет; файл не читается — отказ, иначе сломанный файл молча снимал бы все запреты). `Bash(…)`/`PowerShell(…)`: `префикс:*` — начало команды, `*` внутри — подстановка, без `:*` — команда целиком, голое `Bash` — любая. `Read(…)` и прочие файловые: путь-глоб, `./**/x` — x в любом месте пути; команда, у которой токен (слово, значение `--k=v`, цель перенаправления) подходит под глоб, отказывается. Сверяется команда целиком и каждая подкоманда: `&&`, `\|\|`, `;`, `\|`, `&`, перевод строки, тело `bash -c '…'` / `sh -c "…"` / `eval`, подстановки `$(…)` и `` `…` ``; ведущие `then`/`do`/`VAR=1`/`timeout N`/`env`/`nohup` и глобальные ключи git (`-C <дерево>`, `-c k=v`, `--git-dir=…`) запрет не прячут. Отказ называет правило и подкоманду |
+| 7 | Справка | `peer_help`: роль `acceptor` в РОЛЯХ и ПРИЁМКЕ, у `peer_watch` — сверка с `permissions.deny` и переменные `PEERS_*`; описания инструментов `peer_watch` и `peer_task`; README |
+
+Кто решил: пункты 1–7 — задача владельца проекта nova 2026-10-06 (умолчание `worker` — ради совместимости, там же);
+формы разбора п.6 (подкоманды, обёртки, ключи git) — исполнитель плана по замеру на наборе запретов nova.
+Выбор владельца по п.6 — сверять с запретами проекта, а не держать белый список команд: список проекта один, его
+правят в одном месте, а безобидные команды (`bash scripts/gate.sh`, `gh run list`, `git status`, цикл ожидания
+`until [ -f x ]; do sleep 30; done`) проходят без настройки.
+
+## Тесты
+
+- `test/peers-acceptor.test.mjs` (новый): проект с `reviewer: "acceptor"`, `spawn_limits {worker: 1, reviewer: 5,
+  acceptor: 1}`, `machine_slots: 1`, запреты nova в закоммиченном `.claude/settings.json` — п.2–6 через инструменты.
+- `test/peers-deny.test.mjs` (новый): набор запретов nova (скопирован в тест): безобидные проходят, запрещённые целиком
+  и подкомандой отказываются с названием правила; поиск файла вверх до корня git, нет файла, сломанный файл, голое
+  `Bash`, формы шаблонов.
+- `test/peers-watch.test.mjs`: `env` записи доходит до команды и лежит в `.req.json`.
+- `test/peers-review.test.mjs`: при умолчании сессия приёмки — роль `worker` (поведение `worker` не изменилось); весь
+  прежний тест приёмки (вкладка `worker` в приёмщиках, сессии по `spawn_limits.reviewer`) — без правок и зелёный.
+
+## Обе стороны
+
+Ломалось по одному месту (`scratch/breaks.py`, не коммитится), прогонялся тест пункта, место возвращалось. Красные
+строки — дословно из вывода.
+
+| п. | Сломано | Красное | Возвращено |
+|----|---------|---------|------------|
+| 2 | выбор вкладки: `normalizeRole(c.role) === reviewerRole(cfg)` → `=== DEFAULT_ROLE` | `FAIL a free worker tab does not become the acceptor :: {"rv1":"sesWORKER1","kind":"tab"}` (и ещё 6, `peers-acceptor.test: FAIL 7`) | ok |
+| 2 | роль сессии приёмки: `role: reviewerRole(cfg)` → `role: DEFAULT_ROLE` | `FAIL the review session is born with role acceptor :: {"kind":"spawn","role":"worker"}` (`peers-acceptor.test: FAIL 3`) | ok |
+| 3 | лимит: `spawnLimits.acceptor ?? spawnLimits.reviewer` → `spawnLimits.reviewer ?? spawnLimits.acceptor` | `FAIL spawn_limits.acceptor (1) bounds review sessions, not .reviewer (5): #2 waits :: {"r":"ses_muwwymduvx8acptliq","k":"spawn"}` (`peers-acceptor.test: FAIL 2`) | ok |
+| 4 | проверка роли выключена (`if (false && tcfg.reviewer === "acceptor" …`) | `FAIL merge needs the acceptor role (reviewer: acceptor) :: Замок вливания проекта proj твой. …`, `FAIL accept needs the acceptor role :: Задача #1 принята (p1-ficha в main). …`, `FAIL cleaned needs the acceptor role :: Задача #1 принята и очищена …` (`peers-acceptor.test: FAIL 3`) | ok |
+| 4 | отказ исполнителю по имени выключен | `FAIL the executor cannot merge its own task :: Приёмщик задачи #1 — ses_muwwzf4obmm6ylsul9; это действие только его.` (`peers-acceptor.test: FAIL 2`) | ok |
+| 5 | `spawn` без `w.env` (`env: { ...process.env }`) | `FAIL the executor's watch sees PEERS_TASK_N and its role`, `FAIL the queued watch runs with the env of the moment it was put` (`peers-acceptor.test: FAIL 2`); `peers-watch`: `AssertionError [ERR_ASSERTION]: The input did not match the regular expression /who=sesE\/acceptor\/7/.` | ok |
+| 6 | сверка в `peer_watch` выключена (`if (false) return { content: refused }`) | `FAIL peer_watch refuses a denied command, naming the rule :: Наблюдение … поставлено …`, `FAIL a refused command is not queued` (`peers-acceptor.test: FAIL 3`) | ok |
+| 6 | без разбора на подкоманды (`const parts = [command]`) | `FAIL refused: "git status && git reset --hard HEAD~1" -> Bash(git reset --hard:*) ::` … `FAIL the refusal names the matching subcommand :: undefined` (`peers-deny.test: FAIL 10`) | ok |
+
+`npm test` целиком зелёный (29 файлов: 27 прежних + `peers-acceptor`, `peers-deny`).
+
+## Не сделано и почему
+
+- Права роли `acceptor` в самом репозитории (что ей можно в git, кроме вливания) — дело проекта: плагин даёт роль,
+  переменные `PEERS_*` и сверку с `permissions.deny`; правило «что разрешено приёмщику» проект пишет в своих
+  настройках и скриптах.
+- Сверка `peer_watch` — по запретам `permissions.deny` проекта, не по `allow` и не по хукам Claude Code: хуки
+  (`PreToolUse`) окна плагин не исполняет. Запрет, обойдённый формой, которую разбор не знает (например, команда,
+  собранная из переменных: `c=reset; git $c --hard`), не ловится — это сверка по тексту, а не песочница.
+- Личные настройки (`~/.claude/settings.json`) и `settings.local.json` не читаются: запреты проекта живут в
+  закоммиченном файле.
