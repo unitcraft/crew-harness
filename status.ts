@@ -1,9 +1,9 @@
-// СОСТОЯНИЕ СЕССИЙ (план 004, 2026-10-05): кто чего ждёт — для владельца (сводка /peers, уведомление «ждёт вас») и
+// СОСТОЯНИЕ СЕССИЙ (план 004, 2026-10-05): кто чего ждёт — для владельца (сводка /crew, уведомление «ждёт вас») и
 // для внешних проверок (хук проекта читает status/<сессия>.json — открытый контракт, README «Session status»).
 //
 // Случай владельца 2026-10-05: вопрос интегратора дважды висел незамеченным (окно прокручено вверх), а что работают
 // три воркера, владелец узнал случайно. Состояние выводится из данных плагина, без проектного текста: идёт ход;
-// ждёт наблюдения (peer_watch); ждёт ответа на свой вопрос; своя задача сдана / на доработке; ждёт своих задач;
+// ждёт наблюдения (crew_watch); ждёт ответа на свой вопрос; своя задача сдана / на доработке; ждёт своих задач;
 // ход кончился вопросом — ждёт владельца. Последнее — общий признак любой модели: ответ кончается вопросом (строка
 // с «?» в конце среди последних строк ответа), владелец после этого не писал, и это вкладка владельца, а не сессия
 // задачи (её ведёт интегратор).
@@ -108,7 +108,7 @@ export function statusOf(x: StatusInput): Status {
   if (x.busy) return { ...base, state: "working", since: x.busySince, detail: `работает${x.busySince ? ` (${minutes(x.busySince, now)})` : ""}` }
   // сессию задачи ведёт интегратор, и её вопрос в конце хода бывает ему (сдавший воркер спросил интегратора), а бывает
   // владельцу (приёмщик просил «вливай?»): кому — по тексту не определить. Поэтому у сессии задачи — «question»: видно
-  // в /peers, но без уведомления; «owner» с уведомлением — только у вкладок владельца.
+  // в /crew, но без уведомления; «owner» с уведомлением — только у вкладок владельца.
   const q = x.end && !x.end.ownerAfter ? endsWithQuestion(x.end.text) : undefined
   if (q && !card.spawned) return { ...base, state: "owner", since: x.end!.at, question: q, detail: `ждёт вас с ${hm(x.end!.at)}: ${q}` }
   if (q) return { ...base, state: "question", since: x.end!.at, question: q, detail: `ждёт ответа (интегратора или вас) с ${hm(x.end!.at)}: ${q}` }
@@ -182,7 +182,7 @@ export function readStatuses(): Status[] {
 
 const ORDER: Record<State, number> = { owner: 0, question: 1, working: 2, watch: 3, reply: 4, task: 5, tasks: 6, idle: 7 }
 
-/** Текст сводки /peers: проекты (свой первым), в проекте — сначала ждущие владельца. */
+/** Текст сводки /crew: проекты (свой первым), в проекте — сначала ждущие владельца. */
 export function formatStatuses(list: Status[], now = Date.now(), first?: string): string {
   if (!list.length) return "Сессий проекта не видно: плагин сервиса ещё не записал состояние (status/)."
   const byProject = new Map<string, Status[]>()
@@ -211,7 +211,7 @@ const short = (x: string, n: number) => {
   const one = x.replace(/\s+/g, " ").trim()
   return one.length > n ? `${one.slice(0, n - 1)}…` : one
 }
-/** Планы проекта для /peers (план 012): на перепроверке, на согласовании, в работе — с ходом шагов. */
+/** Планы проекта для /crew (план 012): на перепроверке, на согласовании, в работе — с ходом шагов. */
 export function planLines(project: string): string[] {
   let list: Task[] = []
   try {
@@ -264,7 +264,7 @@ export function acceptanceReports(project: string, now = Date.now()): string[] {
 }
 
 // БОКОВАЯ ПАНЕЛЬ ОКНА (план 010, 2026-10-06; владелец: «в этой области можно выводить активные сессии и обновлять в
-// реальном времени?»). Строки блока «Peers» под «Context»: кто чего ждёт в проекте вкладки на экране, ждущие владельца
+// реальном времени?»). Строки блока «Crew» под «Context»: кто чего ждёт в проекте вкладки на экране, ждущие владельца
 // первыми. Чистая функция — рисует sidebar.tsx, проверяет тест.
 export type SideRow = { mark: string; who: string; what: string; tone: "accent" | "base" | "muted" }
 /** Строка панели как она печатается (ширина панели ~32 знака: длиннее — перенос, и список выглядит разрезанным).
@@ -317,5 +317,5 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string)
   const watching = mine.filter((s) => s.state === "watch").length
   const queued = mine.filter((s) => s.state === "watch" && s.watches[0] && !s.watches[0].started).length
   const more = sorted.length > SIDE_MAX ? ` · +${sorted.length - SIDE_MAX}` : ""
-  return { title: `Peers${project ? ` · ${project}` : ""}${waiting ? ` — ждут вас: ${waiting}` : ""}`, rows, foot: `ход ${working} · ждут ${watching}${queued ? ` (очередь ${queued})` : ""}${more} · /peers` }
+  return { title: `Crew${project ? ` · ${project}` : ""}${waiting ? ` — ждут вас: ${waiting}` : ""}`, rows, foot: `ход ${working} · ждут ${watching}${queued ? ` (очередь ${queued})` : ""}${more} · /crew` }
 }

@@ -1,6 +1,6 @@
-// ЗАПРЕТЫ ПРОЕКТА ДЛЯ peer_watch (план 013, п.6). Команду наблюдения запускает плагин в сервере OpenCode — мимо прав
+// ЗАПРЕТЫ ПРОЕКТА ДЛЯ crew_watch (план 013, п.6). Команду наблюдения запускает плагин в сервере OpenCode — мимо прав
 // окна (permissions.deny из `.claude/settings.json`), которые Claude Code сверяет у своего Bash. Без сверки здесь
-// peer_watch был обходом: `git reset --hard` или чтение ключа, запрещённые окну, проходили наблюдением. Выбор
+// crew_watch был обходом: `git reset --hard` или чтение ключа, запрещённые окну, проходили наблюдением. Выбор
 // владельца (2026-10-06): сверять с запретами проекта, а не держать свой белый список.
 //
 // Файл — `.claude/settings.json` от каталога вкладки вверх до корня git (первый найденный; нет — проверки нет;
@@ -301,13 +301,13 @@ export function deniedBy(command: string, rules: string[], root: string, cwd: st
   return undefined
 }
 
-/** Сверка команды peer_watch с запретами проекта каталога cwd: текст отказа или undefined (можно). */
+/** Сверка команды crew_watch с запретами проекта каталога cwd: текст отказа или undefined (можно). */
 export function watchRefusal(command: string, cwd: string): string | undefined {
   const d = projectDeny(cwd)
   if (!d) return undefined
-  if ("error" in d) return `Наблюдение не поставлено: файл прав проекта ${d.error} — peer_watch не сверит команду с permissions.deny. Исправь файл.`
+  if ("error" in d) return `Наблюдение не поставлено: файл прав проекта ${d.error} — crew_watch не сверит команду с permissions.deny. Исправь файл.`
   const hit = deniedBy(command, d.rules, d.root, cwd)
   if (!hit) return undefined
   const part = hit.part.length > 200 ? `${hit.part.slice(0, 200)}…` : hit.part
-  return `Наблюдение не поставлено: команда совпадает с запретом проекта «${hit.rule}» (permissions.deny в ${d.file})${norm(hit.part) !== norm(command) ? `, подкоманда «${part}»` : ""}. peer_watch запускает команду мимо прав окна, поэтому запреты проекта сверяются здесь; обходить их другой формой команды нельзя.`
+  return `Наблюдение не поставлено: команда совпадает с запретом проекта «${hit.rule}» (permissions.deny в ${d.file})${norm(hit.part) !== norm(command) ? `, подкоманда «${part}»` : ""}. crew_watch запускает команду мимо прав окна, поэтому запреты проекта сверяются здесь; обходить их другой формой команды нельзя.`
 }

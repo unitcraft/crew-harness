@@ -1,6 +1,6 @@
 // plugins/nova-peers — переписка между окнами (сессиями) OpenCode во ВСЕХ репозиториях.
 //
-// ЗАЧЕМ. В Claude Code окна говорили через `/peers` и `SendMessage` по ИМЕНИ сессии,
+// ЗАЧЕМ. В Claude Code окна говорили через `/crew` и `SendMessage` по ИМЕНИ сессии,
 // а имя менялось при каждом перезапуске, поэтому держались ещё визитки
 // (`scripts/tools/session-card.sh`). В OpenCode ни того, ни другого нет; плагин
 // команд Ensemble на V2 не работает (hueyexe/opencode-ensemble#40). Решение
@@ -13,12 +13,12 @@
 // окна разных репозиториев друг друга не видели (замер 2026-10-03).
 //   cards/<сессия>.json   — визитка: роль, заголовок, каталог, процесс, отметка жизни;
 //   inbox/<адрес>/*.json  — непрочитанные письма; адрес — роль или id сессии;
-//   read/<адрес>/*.json   — доставленные (история для `peer_inbox`).
+//   read/<адрес>/*.json   — доставленные (история для `crew_inbox`).
 // Доставка — переносом файла из inbox в read (rename атомарен): письмо уходит
 // ровно одной сессии, даже если плагин загружен в нескольких процессах.
 //
 // РОЛЬ. Окно без назначенной роли получает её САМО: `assistant-<6 знаков id>`
-// (слово владельца 2026-10-03). Назначенная (`peer_role`) хранится в визитке и
+// (слово владельца 2026-10-03). Назначенная (`crew_role`) хранится в визитке и
 // переживает перезапуск сессии с тем же id. Занятая живой сессией роль не
 // отбирается без `force`. Субагенты (сессии с родителем) визиток не получают.
 //
@@ -118,7 +118,7 @@ import { ensureWorktree, fileAt, gitTraces, leftoversOf, mergeHolder, reviewLett
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
 
 export default {
-  id: "nova.peers",
+  id: "harness-crew",
   async setup(ctx: any) {
     const mine = new Map<string, Card>() // сессии этого процесса
     const children = new Set<string>()
@@ -142,7 +142,7 @@ export default {
     // Визитка сессии: создаётся при первом обращении, отметка жизни — при каждом.
     async function touch(sessionID: string, ev?: any): Promise<Card | undefined> {
       if (!sessionID || children.has(sessionID)) return undefined
-      // ФАЙЛ ПЕРВЫМ, память — только запасом. Визитку правят и ДРУГИЕ сессии (peer_role force переписывает роль
+      // ФАЙЛ ПЕРВЫМ, память — только запасом. Визитку правят и ДРУГИЕ сессии (crew_role force переписывает роль
       // прежнего владельца); память процесса записала бы старую роль поверх (замер 2026-10-03).
       let card = readJson<Card>(cardFile(sessionID)) ?? mine.get(sessionID)
       if (!card) {
@@ -189,7 +189,7 @@ export default {
     //    текущего, поэтому занятой вкладке ничего не отправляем, письма ждут конца хода.
     // Отсюда: вкладка свободна — будящие письма (с ними и ждущие тихие) одним session.prompt, только вкладке, открытой
     // в живом окне, или сессии под задачу (core.ts, «ПРИСУТСТВИЕ»); одни тихие — session.synthetic без хода.
-    // Ответ, которого получатель ждёт в peer_wait, не трогается: его заберёт сам peer_wait в тот же ход.
+    // Ответ, которого получатель ждёт в crew_wait, не трогается: его заберёт сам crew_wait в тот же ход.
     const held = new Set<string>()
     const delivering = new Set<string>()
     const keysOf = (card: Card) => [keyOf(card), card.role, card.session]
@@ -259,7 +259,7 @@ export default {
           // предел времени: зависшая отправка держала бы вкладку в delivering навсегда (письма ей больше не шли бы)
           const capped = (p: Promise<any>) => {
             let timer: any
-            return Promise.race([p, new Promise((_, rej) => (timer = setTimeout(() => rej(new Error("delivery took too long")), Number(process.env.NOVA_PEERS_STEP_MS) || 60_000)))]).finally(() => clearTimeout(timer))
+            return Promise.race([p, new Promise((_, rej) => (timer = setTimeout(() => rej(new Error("delivery took too long")), Number(process.env.HARNESS_CREW_STEP_MS) || 60_000)))]).finally(() => clearTimeout(timer))
           }
           if (wake) await capped(ctx.session.prompt({ sessionID: card.session, text, delivery: "queue" }))
           else if (typeof ctx.session.synthetic === "function") await capped(ctx.session.synthetic({ sessionID: card.session, text, resume: false }))
@@ -296,7 +296,7 @@ export default {
     // нет — напоминание сразу. Различаем рабочий ход и пустой (lastTurn: были ли вызовы инструментов): рабочий
     // обнуляет счётчик пустых, пустой его растит. push_empty_turns пустых подряд или push_max напоминаний всего —
     // вкладка застряла: напоминаний больше нет, спросившему вызов (письмо и уведомление в окне). Ход, в котором писал
-    // владелец, — без напоминания (владелец ведёт вкладку сам), счётчик с нуля. Снимает застревание peer_task push.
+    // владелец, — без напоминания (владелец ведёт вкладку сам), счётчик с нуля. Снимает застревание crew_task push.
     async function nudge(card: Card) {
       const list = obligationsOf(card.session)
       if (!list.length) return
@@ -318,13 +318,13 @@ export default {
             if (letterExists(to, id)) continue
             const ref = card.task ?? card.review
             const what = ref ? `${card.review && !card.task ? "приёмка задачи" : "задача"} #${ref.n}` : "вопрос"
-            postLetter(to, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to, time: t, text: `${what}: вкладка ${keyOf(card)} (сессия ${card.session}) остановилась с вопросом, работа стоит до ответа:\n«${q}»\n\nКонец её ответа:\n${tail}\n\nОтветь ей сам: peer_send {to: "${card.session}", text: "..."}. Решить без владельца нельзя — спроси владельца (вопросом в конце своего хода).` })
+            postLetter(to, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to, time: t, text: `${what}: вкладка ${keyOf(card)} (сессия ${card.session}) остановилась с вопросом, работа стоит до ответа:\n«${q}»\n\nКонец её ответа:\n${tail}\n\nОтветь ей сам: crew_send {to: "${card.session}", text: "..."}. Решить без владельца нельзя — спроси владельца (вопросом в конце своего хода).` })
             log(`question of ${card.session} forwarded to ${to}`)
           }
           if (askers.length) return // не «продолжай»: ждёт ответа
         }
       }
-      // ЖДЁТ ПО-ЧЕСТНОМУ (2026-10-06, дополнение к плану 007): у вкладки открыто наблюдение peer_watch или её вопрос ждёт
+      // ЖДЁТ ПО-ЧЕСТНОМУ (2026-10-06, дополнение к плану 007): у вкладки открыто наблюдение crew_watch или её вопрос ждёт
       // ответа (expect_reply) — её разбудят концом наблюдения или ответом. Раньше «Не завершено» шло на каждый конец хода:
       // исполнитель #17 nova, ждавший чужой коммит в main, получал его раз в минуту (ход ~220 тыс. токенов) и в ответ стал
       // ждать опросом в Bash, держа ход по 9 минут.
@@ -351,37 +351,37 @@ export default {
         const task = isReview ? rv : card.task ? loadTask(card.task.project, card.task.n) : undefined
         const what = isReview ? `приёмка задачи #${rv!.n} «${rv!.title}» (${statusRu(rv!.status)})` : task && task.qid === o.qid ? `задача #${task.n} «${task.title}»` : `вопрос ${o.qid}${o.task ? ` («${o.task.slice(0, 200)}»)` : ""}`
         const howTo = isReview
-          ? `Продолжай приёмку: peer_task {action: "review" | "rework" | "merge" | "accept" | "cleaned", n: ${rv!.n}} (что дальше — в письме с приёмкой).`
-          : `Закончил — отчёт: peer_send {to: "${o.from_session}", reply_to: "${o.qid}", text: "..."}. Упёрся — тем же ответом напиши, что мешает.`
+          ? `Продолжай приёмку: crew_task {action: "review" | "rework" | "merge" | "accept" | "cleaned", n: ${rv!.n}} (что дальше — в письме с приёмкой).`
+          : `Закончил — отчёт: crew_send {to: "${o.from_session}", reply_to: "${o.qid}", text: "..."}. Упёрся — тем же ответом напиши, что мешает.`
         if (o.empty >= cfg.pushEmptyTurns || o.nudges >= cfg.pushMax) {
           o.stuck = true
           const failing = turn?.outcome === "failed" ? " (ход падает с ошибкой — посмотри модель и журнал сервера)" : ""
         const why = (o.empty >= cfg.pushEmptyTurns ? `${o.empty} хода подряд остановилась без работы и без ответа` : `${o.nudges} напоминаний остались без ответа`) + failing
           postLetter(o.from_session, {
             id: `${t}-stuck-${safeKey(o.qid)}`,
-            from_role: "opencode-peers",
-            from_session: "opencode-peers",
+            from_role: PLUGIN_SENDER,
+            from_session: PLUGIN_SENDER,
             to: o.from_session,
             time: t,
-            text: `Вкладка ${keyOf(card)} (сессия ${card.session}) застряла: ${what} — ${why}. Напоминаний больше не будет. Подтолкни (peer_task {action: "push"${task ? `, n: ${task.n}` : ""}, text: "..."}), передай другой сессии (reassign) или загляни в неё сам.`,
+            text: `Вкладка ${keyOf(card)} (сессия ${card.session}) застряла: ${what} — ${why}. Напоминаний больше не будет. Подтолкни (crew_task {action: "push"${task ? `, n: ${task.n}` : ""}, text: "..."}), передай другой сессии (reassign) или загляни в неё сам.`,
           })
           const w = tabOf(o.from_session)
           if (w?.window.pid) postNotice(w.window.pid, { sessionID: card.session, title: task ? `#${task.n} застряла` : `${keyOf(card)} застряла`, message: short(why, 80), duration: 15_000 })
-          if (task && task.qid === o.qid) taskEvent(task, "opencode-peers", undefined, `застряла: ${why}`)
+          if (task && task.qid === o.qid) taskEvent(task, PLUGIN_SENDER, undefined, `застряла: ${why}`)
           log(`stuck ${card.session} for ${o.qid} (empty ${o.empty}, pushes ${o.nudges})`)
           continue
         }
         o.nudges++
         postLetter(card.session, {
           id: `${t}-nudge-${safeKey(o.qid)}`,
-          from_role: "opencode-peers",
-          from_session: "opencode-peers",
+          from_role: PLUGIN_SENDER,
+          from_session: PLUGIN_SENDER,
           to: card.session,
           time: t,
           text:
             `Не завершено: ${what} от ${o.from_role} (сессия ${o.from_session}). Ты остановился, не закончив. Продолжай работу. ` +
             howTo +
-            ` Ждёшь внешнего (коммит в main, чужую задачу, сборку) — peer_watch {command: "<ждёт и выходит>", note} или вопрос с expect_reply: пока они открыты, напоминаний нет, разбудят по итогу. Опросом в Bash не жди — он держит ход.` +
+            ` Ждёшь внешнего (коммит в main, чужую задачу, сборку) — crew_watch {command: "<ждёт и выходит>", note} или вопрос с expect_reply: пока они открыты, напоминаний нет, разбудят по итогу. Опросом в Bash не жди — он держит ход.` +
             (o.empty ? ` Ход без работы ${o.empty} из ${cfg.pushEmptyTurns}: дальше спросивший узнает, что вкладка стоит.` : ""),
         })
         log(`nudge ${card.session} for ${o.qid} (#${o.nudges}, empty ${o.empty})`)
@@ -419,7 +419,7 @@ export default {
         const task = c.task ? loadTask(c.task.project, c.task.n) : undefined
         const open = obligationsOf(c.session)
           .filter((o) => !o.stuck)
-          .map((o) => `— ${task && task.qid === o.qid ? `задача #${task.n} «${task.title}»` : `вопрос${o.task ? ` «${o.task.slice(0, 200)}»` : ""}`} от ${o.from_role}: отчёт — peer_send {to: "${o.from_session}", reply_to: "${o.qid}", text: "..."}`)
+          .map((o) => `— ${task && task.qid === o.qid ? `задача #${task.n} «${task.title}»` : `вопрос${o.task ? ` «${o.task.slice(0, 200)}»` : ""}`} от ${o.from_role}: отчёт — crew_send {to: "${o.from_session}", reply_to: "${o.qid}", text: "..."}`)
           .join("\n")
         // следы оборванной операции git в деревьях задачи (worktree исполнителя и главная копия) и замок вливания
         const ref = c.task ?? c.review
@@ -430,8 +430,8 @@ export default {
         const gitNote = traces.length ? `\nВ git осталось от оборванного хода:\n${traces.map((x) => `— ${x}`).join("\n")}` : ""
         postLetter(c.session, {
           id,
-          from_role: "opencode-peers",
-          from_session: "opencode-peers",
+          from_role: PLUGIN_SENDER,
+          from_session: PLUGIN_SENDER,
           to: c.session,
           time: now(),
           text: `Работа прервана перезапуском OpenCode (ход оборвался в ${hhmm(row.suspended)}). Продолжай с того места, где остановился: сначала проверь, что успело сделаться (файлы, коммиты, запущенные команды; git status в деревьях задачи).${gitNote}${lock}\nОткрыто:\n${open}`,
@@ -453,8 +453,8 @@ export default {
       const open = obligationsOf(c.session).filter((o) => !o.stuck).map((o) => `— ${o.task ?? `вопрос ${o.qid}`} от ${o.from_role}`).join("\n")
       postLetter(c.session, {
         id,
-        from_role: "opencode-peers",
-        from_session: "opencode-peers",
+        from_role: PLUGIN_SENDER,
+        from_session: PLUGIN_SENDER,
         to: c.session,
         time: now(),
         text: `Прошлый ход (${hhmm(turn.at)}) кончился ошибкой, не дойдя до дела. Продолжай работу. Открыто:\n${open}`,
@@ -502,7 +502,7 @@ export default {
           }
           if (sid === t.executor) {
             const w = tabOf(t.author)
-            if (w?.window.pid) postNotice(w.window.pid, { sessionID: sid, title: done ? `#${t.n} ✓✓ готово${ids.length ? ` · шаги ${passed}/${ids.length}` : ""}` : `#${t.n} ✗ отменена`, message: done && ids.length ? `${short(t.title, 60)} · отчёт — /peers` : short(t.title, 80), duration: 10_000 })
+            if (w?.window.pid) postNotice(w.window.pid, { sessionID: sid, title: done ? `#${t.n} ✓✓ готово${ids.length ? ` · шаги ${passed}/${ids.length}` : ""}` : `#${t.n} ✗ отменена`, message: done && ids.length ? `${short(t.title, 60)} · отчёт — /crew` : short(t.title, 80), duration: 10_000 })
           }
           log(`task #${t.n} (${t.project}) ${t.status}: session ${sid} closed`)
         }
@@ -532,7 +532,7 @@ export default {
         const cfg = loadConfig(t.directory)
         const model = cfg.spawnModels[t.tier] ?? DEFAULT_SPAWN_MODELS[t.tier]
         const [providerID, ...rest] = model.split("/")
-        await ctx.session.create({ id: t.reviewer, title: `#${t.n} приёмка ${t.title}`, location: { directory: t.directory }, metadata: { peersReview: { project: t.project, n: t.n } }, model: { providerID, id: rest.join("/") } })
+        await ctx.session.create({ id: t.reviewer, title: `#${t.n} приёмка ${t.title}`, location: { directory: t.directory }, metadata: { crewReview: { project: t.project, n: t.n } }, model: { providerID, id: rest.join("/") } })
         const now = Date.now()
         // роль сессии приёмки — по настройке reviewer (план 013): acceptor несёт права вливания и принятия
         const card: Card = { session: t.reviewer, role: reviewerRole(cfg), auto: false, title: `#${t.n} приёмка ${t.title}`, directory: t.directory, repo: repoLabel(t.directory), project: t.project, model, modelAt: now, modelFrom: "request", pid: process.pid, updated: now, spawned: { by: t.author, task: `приёмка #${t.n}`, tier: t.tier, status: "running", at: now, qid: t.review_qid ?? "" }, review: { project: t.project, n: t.n } }
@@ -604,7 +604,7 @@ export default {
         if (cfg.reviewer === "integrator") {
           t.reviewer = t.author
           t.review_kind = "integrator"
-          taskEvent(t, "opencode-peers", undefined, "приёмщик — интегратор (настройка reviewer)")
+          taskEvent(t, PLUGIN_SENDER, undefined, "приёмщик — интегратор (настройка reviewer)")
           const ac = author ?? (readJson<Card>(cardFile(t.author)) as Card)
           if (ac) {
             ac.review = { project: t.project, n: t.n }
@@ -628,7 +628,7 @@ export default {
         if (tab) {
           t.reviewer = tab.session
           t.review_kind = "tab"
-          taskEvent(t, "opencode-peers", undefined, `приёмщик — открытая вкладка ${tab.session}`)
+          taskEvent(t, PLUGIN_SENDER, undefined, `приёмщик — открытая вкладка ${tab.session}`)
           tab.review = { project: t.project, n: t.n }
           saveCard(tab)
           await reviewerAssigned(t, tab)
@@ -641,7 +641,7 @@ export default {
         if (t.priority !== "P0" && reviewing >= limit) continue // ждёт: приёмщиков-сессий уже limit
         t.reviewer = plannedSessionId()
         t.review_kind = "spawn"
-        taskEvent(t, "opencode-peers", undefined, `приёмщик — новая сессия ${t.reviewer}`)
+        taskEvent(t, PLUGIN_SENDER, undefined, `приёмщик — новая сессия ${t.reviewer}`)
         await startReviewer(t)
       }
       // сессия приёмки записана, но не создана (оборвался запуск) — повторить тем же id
@@ -651,11 +651,11 @@ export default {
     // ЗАГОЛОВКИ СЕССИЙ ЗАДАЧ — из журнала: «#N название», сдана/закрыта «#N ✓», отменена «#N ✗», передана другой
     // сессии «#N ↷». Сверяются каждый проход (то, что поменял MCP-сервер или другой процесс, тоже доходит), меняются
     // через session.update — без хода модели. Вкладки владельца (assign) не переименовываются.
-    // СОСТОЯНИЕ СЕССИЙ (план 004, status.ts). Раз в STATUS_EVERY_MS — status/<сессия>.json (сводка /peers окна и внешние
+    // СОСТОЯНИЕ СЕССИЙ (план 004, status.ts). Раз в STATUS_EVERY_MS — status/<сессия>.json (сводка /crew окна и внешние
     // проверки, например хук проекта). Сессия закончила ход вопросом владельцу — уведомление во все живые окна (с
     // кнопкой Open и системным уведомлением, когда окно не в фокусе); не ответил — повтор через owner_reminder_min.
     // В сводке — открытые вкладки, сессии задач и те, у кого есть наблюдения или свои открытые задачи.
-    const STATUS_EVERY_MS = Number(process.env.NOVA_PEERS_STATUS_MS) || 15_000
+    const STATUS_EVERY_MS = Number(process.env.HARNESS_CREW_STATUS_MS) || 15_000
     // конец хода — из базы (5 ГБ у владельца) только когда появилась новая строка idle: сначала дешёвое время
     // последнего idle (idleAt), тяжёлое чтение сообщений — при его изменении (замер: ~0,1 с на вкладку, в главном потоке)
     const ends = new Map<string, { at: number; end: Awaited<ReturnType<typeof turnEnd>> }>()
@@ -747,8 +747,8 @@ export default {
         const every = Math.max(1, acfg.ownerReminderMin) * 60_000
         if (t.plan.notifiedAt && now() - t.plan.notifiedAt < every) continue
         if (acfg.planApprover === "integrator") {
-          // согласует интегратор (plan_approver): письмо автору с побудкой; владелец видит план в /peers и может решить сам (/plans)
-          postLetter(t.author, { id: `plan-approve-${safeKey(t.project)}-${t.n}-${t.plan.rounds.length}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: now(), text: `План ${t.plan.n} (${t.plan.file}, задача #${t.n}) прошёл перепроверку${t.plan.stuck ? " (раунды кончились — решай по последним замечаниям)" : ""} и ждёт твоего согласования: peer_task {action: "plan_decide", n: ${t.n}, decision: "ok" | "ok-shortcuts" | "no", text: "замечания, если no"}.` })
+          // согласует интегратор (plan_approver): письмо автору с побудкой; владелец видит план в /crew и может решить сам (/plans)
+          postLetter(t.author, { id: `plan-approve-${safeKey(t.project)}-${t.n}-${t.plan.rounds.length}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: now(), text: `План ${t.plan.n} (${t.plan.file}, задача #${t.n}) прошёл перепроверку${t.plan.stuck ? " (раунды кончились — решай по последним замечаниям)" : ""} и ждёт твоего согласования: crew_task {action: "plan_decide", n: ${t.n}, decision: "ok" | "ok-shortcuts" | "no", text: "замечания, если no"}.` })
         } else {
           const message = `${t.title.replace(/^план \S+: /, "")}${t.plan.stuck ? " — раунды кончились, решаете по последним замечаниям" : ""} · /plans`
           const wins = liveWindows()
@@ -765,7 +765,7 @@ export default {
     // закрыто всё из его «после:» (и «после:» его фазы) и не идёт шаг с пересекающимся «где:»; внутри лимитов проекта;
     // по приоритету шага, иначе фазы, затем по порядку в плане. Шаг-подплан — задача-план. Все шаги закрыты —
     // письмо автору: закрыть план. Раз в PLAN_STEPS_MS: файл плана читается из git.
-    const PLAN_STEPS_MS = Number(process.env.NOVA_PEERS_PLANSTEPS_MS) || 10_000
+    const PLAN_STEPS_MS = Number(process.env.HARNESS_CREW_PLANSTEPS_MS) || 10_000
     let planStepsAt = 0
     async function planSteps() {
       if (now() - planStepsAt < PLAN_STEPS_MS) return
@@ -786,12 +786,12 @@ export default {
             pt.plan.listed = true
             pt.plan.total = steps.length
             saveTask(pt)
-            postLetter(pt.author, { id: `plan-steps-${safeKey(pt.project)}-${pt.n}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: pt.author, time: now(), text: `План ${pt.plan.n} влит. Шаги (plan_steps: manual — задачи ставишь сам, peer_spawn):\n${steps.map((x) => `— ${x.id} ${x.title}${x.after.length ? ` [после: ${x.after.join(", ")}]` : ""}: ${x.what}\n  приёмка: ${x.criteria.join("; ")}`).join("\n")}` })
+            postLetter(pt.author, { id: `plan-steps-${safeKey(pt.project)}-${pt.n}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: pt.author, time: now(), text: `План ${pt.plan.n} влит. Шаги (plan_steps: manual — задачи ставишь сам, crew_spawn):\n${steps.map((x) => `— ${x.id} ${x.title}${x.after.length ? ` [после: ${x.after.join(", ")}]` : ""}: ${x.what}\n  приёмка: ${x.criteria.join("; ")}`).join("\n")}` })
           }
           continue
         }
         if (pt.plan.total !== steps.length) {
-          pt.plan.total = steps.length // для /peers: «шаги закрыто/всего»
+          pt.plan.total = steps.length // для /crew: «шаги закрыто/всего»
           saveTask(pt)
         }
         const taskOf = (id: string) => (pt.plan!.spawned![id] ? loadTask(pt.project, pt.plan!.spawned![id]) : undefined)
@@ -830,7 +830,7 @@ export default {
           pt.plan.spawned[s.id] = t.n
           running.push(s)
           changed = true
-          taskEvent(pt, "opencode-peers", undefined, `шаг ${s.id} плана ${pt.plan.n} — задача #${t.n}`)
+          taskEvent(pt, PLUGIN_SENDER, undefined, `шаг ${s.id} плана ${pt.plan.n} — задача #${t.n}`)
           log(`plan ${pt.plan.n} (${pt.project}): step ${s.id} -> task #${t.n}`)
           await startTask(t)
         }
@@ -846,7 +846,7 @@ export default {
     // УБОРКА (housekeeping.ts): прочитанные письма старше keep_days (опция плагина, умолчание 7) — id в список, файл
     // вон; раз в HOUSEKEEP_MS.
     const KEEP_MS = (Number(ctx?.options?.keep_days) > 0 ? Number(ctx.options.keep_days) : 7) * 24 * 3_600_000
-    const HOUSEKEEP_MS = Number(process.env.NOVA_PEERS_HOUSEKEEP_MS) || 3_600_000
+    const HOUSEKEEP_MS = Number(process.env.HARNESS_CREW_HOUSEKEEP_MS) || 3_600_000
     let housekeptAt = 0
     function housekeep() {
       if (now() - housekeptAt < HOUSEKEEP_MS) return
@@ -856,7 +856,7 @@ export default {
     }
 
     function flowWatch() {
-      if (now() - flowAt < (Number(process.env.NOVA_PEERS_FLOW_MS) || 60_000)) return
+      if (now() - flowAt < (Number(process.env.HARNESS_CREW_FLOW_MS) || 60_000)) return
       flowAt = now()
       const t = now()
       const byProject = new Map<string, Task[]>()
@@ -871,12 +871,12 @@ export default {
         if (lock && lockTask && t - lock.at > stall) {
           const id = `stall-lock-${safeKey(project)}-${lock.n}-${lock.at}`
           if (!letterExists(lockTask.author, id)) {
-            postLetter(lockTask.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: lockTask.author, time: t, text: `Замок вливания проекта ${project} держит приёмка #${lock.n} «${lockTask.title}» (сессия ${lock.session}) с ${hhmm(lock.at)} — ${Math.round((t - lock.at) / 60_000)} мин; остальные вливания ждут. Узнай у приёмщика, что мешает (peer_send {to: "${lock.session}", text: "..."}), и помоги или реши; без владельца не решить — спроси владельца.` })
+            postLetter(lockTask.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: lockTask.author, time: t, text: `Замок вливания проекта ${project} держит приёмка #${lock.n} «${lockTask.title}» (сессия ${lock.session}) с ${hhmm(lock.at)} — ${Math.round((t - lock.at) / 60_000)} мин; остальные вливания ждут. Узнай у приёмщика, что мешает (crew_send {to: "${lock.session}", text: "..."}), и помоги или реши; без владельца не решить — спроси владельца.` })
             log(`stall: merge lock of ${project} #${lock.n} held since ${lock.at}`)
           }
         }
         // ПРИНЯТА, НО НЕ ОЧИЩЕНА (план 011, дефект 2): держит место в inflight_limit. Через accepted_reminder_min —
-        // одно письмо приёмщику с побудкой («повтори cleaned») и одно автору; отказ peer_spawn называет такие поимённо.
+        // одно письмо приёмщику с побудкой («повтори cleaned») и одно автору; отказ crew_spawn называет такие поимённо.
         const accMin = loadConfig(any.directory).acceptedReminderMin
         if (accMin > 0)
           for (const x of list.filter((y) => y.status === "accepted")) {
@@ -884,9 +884,9 @@ export default {
             if (t - at < accMin * 60_000) continue
             const id = `stale-accepted-${safeKey(project)}-${x.n}-${at}`
             if (x.reviewer && !letterExists(x.reviewer, id))
-              postLetter(x.reviewer, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.reviewer, time: t, text: `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена — держит место в лимите задач проекта (inflight_limit). Убери её дерево и ветки и повтори peer_task {action: "cleaned", n: ${x.n}}: отказ назовёт, что осталось. Не убирается — напиши автору (${x.author_role}), что мешает.` })
+              postLetter(x.reviewer, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.reviewer, time: t, text: `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена — держит место в лимите задач проекта (inflight_limit). Убери её дерево и ветки и повтори crew_task {action: "cleaned", n: ${x.n}}: отказ назовёт, что осталось. Не убирается — напиши автору (${x.author_role}), что мешает.` })
             if (!letterExists(x.author, id))
-              postLetter(x.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.author, time: t, text: `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена${x.reviewer ? ` (приёмщик ${x.reviewer}, ему написано)` : ""} — держит место в inflight_limit, пока не будет peer_task cleaned.` })
+              postLetter(x.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.author, time: t, text: `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена${x.reviewer ? ` (приёмщик ${x.reviewer}, ему написано)` : ""} — держит место в inflight_limit, пока не будет crew_task cleaned.` })
             log(`stall: #${x.n} of ${project} accepted ${at}, not cleaned`)
           }
         for (const x of list.filter((y) => y.status === "submitted" && !y.reviewer)) {
@@ -895,7 +895,7 @@ export default {
           const id = `stall-review-${safeKey(project)}-${x.n}-${since}`
           if (letterExists(x.author, id)) continue
           const busy = list.filter((y) => y.review_kind === "spawn" && y.reviewer && isOpen(y) && y.status !== "rework" && y.n !== x.n)
-          postLetter(x.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.author, time: t, text: `Задача #${x.n} «${x.title}» сдана в ${hhmm(since)} и ${Math.round((t - since) / 60_000)} мин ждёт приёмщика: места приёмщиков (spawn_limits.${loadConfig(x.directory).reviewer === "acceptor" ? "acceptor" : "reviewer"}) заняты — ${busy.map((y) => `#${y.n} ${statusRu(y.status)}`).join(", ") || "?"}. Разберись, почему те приёмки стоят (письмо приёмщику), или подними предел приёмщиков (peer_config).` })
+          postLetter(x.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.author, time: t, text: `Задача #${x.n} «${x.title}» сдана в ${hhmm(since)} и ${Math.round((t - since) / 60_000)} мин ждёт приёмщика: места приёмщиков (spawn_limits.${loadConfig(x.directory).reviewer === "acceptor" ? "acceptor" : "reviewer"}) заняты — ${busy.map((y) => `#${y.n} ${statusRu(y.status)}`).join(", ") || "?"}. Разберись, почему те приёмки стоят (письмо приёмщику), или подними предел приёмщиков (crew_config).` })
           log(`stall: #${x.n} of ${project} waits for a reviewer since ${since}`)
         }
       }
@@ -905,7 +905,7 @@ export default {
     // ветки (локальные и на origin) и worktree по шаблонам настроек (review.ts leftoversOf, асинхронный git). Нашлись —
     // письмо автору задачи со списком; одно письмо на один набор хвостов. Отменённая задача — убрать или сохранить
     // работу решает автор. Сам плагин не удаляет: удаление веток на origin — действие наружу.
-    const LEFT_EVERY_MS = Number(process.env.NOVA_PEERS_LEFT_MS) || 600_000
+    const LEFT_EVERY_MS = Number(process.env.HARNESS_CREW_LEFT_MS) || 600_000
     let leftAt = 0
     async function leftWatch() {
       if (now() - leftAt < LEFT_EVERY_MS) return
@@ -959,7 +959,7 @@ export default {
     // любом шаге — следующий проход (resumeTasks) повторит запуск, второй сессии и второго письма не будет.
     const startingNow = new Set<string>()
     const startBlocked = new Map<string, number>() // задача → когда повторить запуск, отложенный из-за дерева
-    const START_RETRY_MS = Number(process.env.NOVA_PEERS_START_RETRY_MS) || 120_000
+    const START_RETRY_MS = Number(process.env.HARNESS_CREW_START_RETRY_MS) || 120_000
     async function startTask(t0: Task): Promise<{ session?: string; error?: string }> {
       const key = `${t0.project}#${t0.n}`
       if (startingNow.has(key)) return { error: "запуск уже идёт" }
@@ -982,15 +982,15 @@ export default {
           const cfg = loadConfig(t.directory)
           if (cfg.worktrees && (!t.worktree || !t.branch)) {
             Object.assign(t, taskPlace(t.directory, cfg, t.n, t.slug, t.project))
-            taskEvent(t, "opencode-peers", undefined, `место задачи достроено по настройкам: worktree ${t.worktree}, ветка ${t.branch}`)
+            taskEvent(t, PLUGIN_SENDER, undefined, `место задачи достроено по настройкам: worktree ${t.worktree}, ветка ${t.branch}`)
           }
           if (t.worktree && t.branch) {
             const refuse = (why: string) => {
               startBlocked.set(key, Date.now() + START_RETRY_MS)
               const id = `start-refused-${safeKey(t.project)}-${t.n}-${safeKey(why).slice(0, 60)}`
               if (!letterExists(t.author, id)) {
-                postLetter(t.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: Date.now(), text: `Задача #${t.n} «${t.title}» не запущена: ${why}. Сессию в главной копии плагин не открывает. Повтор — сам, раз в ${START_RETRY_MS / 60_000} мин; поправь причину или отмени задачу (peer_task {action: "cancel", n: ${t.n}}).` })
-                taskEvent(t, "opencode-peers", undefined, `не запущена: ${why}`)
+                postLetter(t.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: Date.now(), text: `Задача #${t.n} «${t.title}» не запущена: ${why}. Сессию в главной копии плагин не открывает. Повтор — сам, раз в ${START_RETRY_MS / 60_000} мин; поправь причину или отмени задачу (crew_task {action: "cancel", n: ${t.n}}).` })
+                taskEvent(t, PLUGIN_SENDER, undefined, `не запущена: ${why}`)
               }
               log(`task #${t.n} (${t.project}) not started: ${why}`)
               return { error: why }
@@ -1002,12 +1002,12 @@ export default {
             if (!t.worktree_ready) {
               t.worktree_ready = true
               saveTask(t)
-              taskEvent(t, "opencode-peers", undefined, `worktree ${t.worktree}, ветка ${t.branch}${w.created ? " — создан плагином" : " — уже был"}`)
+              taskEvent(t, PLUGIN_SENDER, undefined, `worktree ${t.worktree}, ветка ${t.branch}${w.created ? " — создан плагином" : " — уже был"}`)
             }
           }
         }
         const [providerID, ...rest] = String(t.model ?? "").split("/")
-        await ctx.session.create({ id: sid, title: `#${t.n} ${t.title}`, location: { directory: dir }, metadata: { peersTask: { project: t.project, n: t.n, attempt: t.attempt } }, ...(t.model ? { model: { providerID, id: rest.join("/") } } : {}) })
+        await ctx.session.create({ id: sid, title: `#${t.n} ${t.title}`, location: { directory: dir }, metadata: { crewTask: { project: t.project, n: t.n, attempt: t.attempt } }, ...(t.model ? { model: { providerID, id: rest.join("/") } } : {}) })
         const now = Date.now()
         const prev = readJson<Card>(cardFile(sid))
         const card: Card = { ...(prev ?? {}), session: sid, role: t.role, auto: false, title: `#${t.n} ${t.title}`, directory: dir, repo: repoLabel(dir), project: t.project, model: t.model, modelAt: now, modelFrom: "request", pid: process.pid, updated: now, spawned: { by: t.author, task: t.goal.slice(0, 300), tier: t.tier, status: "running", at: now, qid: t.qid }, task: { project: t.project, n: t.n } }
@@ -1016,7 +1016,7 @@ export default {
         addObligation(sid, { qid: t.qid, from_session: t.author, from_role: t.author_role, at: now, nudges: 0, task: t.title })
         const lid = taskLetterId(t)
         if (!letterExists(sid, lid)) postLetter(sid, { id: lid, from_role: t.author_role, from_session: t.author, to: sid, time: now, qid: t.qid, text: formatTaskLetter(t) })
-        taskEvent(t, "opencode-peers", "running", `сессия ${sid}`)
+        taskEvent(t, PLUGIN_SENDER, "running", `сессия ${sid}`)
         void deliver(card)
         const w = tabOf(t.author)
         if (w?.window.pid) postNotice(w.window.pid, { sessionID: sid, title: `#${t.n} запущена`, message: short(t.title, 80), duration: 8_000 })
@@ -1097,8 +1097,8 @@ export default {
     // прохода не вернулся, passBusy остался true, следующие проходы выходили сразу: ни доставки, ни подталкивания, ни
     // сторожа, и всё молча. Теперь каждый шаг — с пределом времени (зависший или упавший шаг в журнал, остальные
     // идут), а проход, висящий дольше PASS_STUCK_MS, следующий не ждёт (в журнале — шаг, на котором висит).
-    const STEP_MS = Number(process.env.NOVA_PEERS_STEP_MS) || 60_000
-    const PASS_STUCK_MS = Number(process.env.NOVA_PEERS_PASS_STUCK_MS) || 120_000
+    const STEP_MS = Number(process.env.HARNESS_CREW_STEP_MS) || 60_000
+    const PASS_STUCK_MS = Number(process.env.HARNESS_CREW_PASS_STUCK_MS) || 120_000
     let passStage = ""
     let passStartedAt = 0
     let passId = 0
@@ -1157,7 +1157,7 @@ export default {
         await step("leftWatch", leftWatch)
         await step("housekeep", housekeep)
         await step("processQueue", processQueue)
-        // наблюдения peer_watch (watch.ts): запустить новые, по концу — письмо окну с побудкой
+        // наблюдения crew_watch (watch.ts): запустить новые, по концу — письмо окну с побудкой
         await step("watches", () => pollWatches((w, text) => postLetter(w.session, { id: `watch-${w.id}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: w.session, time: Date.now(), text }), log, now(), (w) => loadConfig(w.cwd).machineSlots))
         passStage = "deliver"
         // АДРЕСАТЫ — ИЗ ВИЗИТОК НА ДИСКЕ (после перезагрузки плагина память пуста). Визитки этого процесса и умершего;
@@ -1189,12 +1189,12 @@ export default {
         if (!card) return
         setBusy(card, true) // запрос вкладки: она занята ходом до строки простоя
         // ПОДСКАЗКА — НЕИЗМЕННАЯ, пока не сменилась роль: системная часть стоит перед всей историей, и любое её
-        // изменение заново оплачивает историю (замер 2026-10-04). Соседи — peer_list.
+        // изменение заново оплачивает историю (замер 2026-10-04). Соседи — crew_list.
         ev.system.push({
           type: "text",
           text:
-            `opencode-peers: ты — вкладка с ролью «${card.role}» в проекте ${projOf(card)} (адрес ${keyOf(card)}), репозиторий ${card.repo || "?"}, ` +
-            `сессия ${card.session}. Соседи — peer_list, письмо — peer_send, вопрос с ответом — peer_send {expect_reply} + peer_wait, справка — peer_help.`,
+            `opencode-harness-crew: ты — вкладка с ролью «${card.role}» в проекте ${projOf(card)} (адрес ${keyOf(card)}), репозиторий ${card.repo || "?"}, ` +
+            `сессия ${card.session}. Соседи — crew_list, письмо — crew_send, вопрос с ответом — crew_send {expect_reply} + crew_wait, справка — crew_help.`,
         })
       } catch (e) {
         log(`context failed: ${e}`)
@@ -1250,18 +1250,18 @@ export default {
       for (const t of tools) editor.add(toEditor(t))
     })
 
-    // Слэш-команда /peer_help. Тело — просьба показать справку: своего канала «показать без хода модели» плагин V2 не даёт.
+    // Слэш-команда /crew_help. Тело — просьба показать справку: своего канала «показать без хода модели» плагин V2 не даёт.
     try {
       const existing = new Set<string>()
       try {
         const list = await ctx.command.list()
         for (const c of list?.data ?? list ?? []) if (c?.name) existing.add(String(c.name))
       } catch {}
-      if (!existing.has("peer_help")) {
+      if (!existing.has("crew_help")) {
         await ctx.command.transform((editor: any) => {
           editor.add({
-            name: "peer_help",
-            description: "Справка по письмам между вкладками (opencode-peers)",
+            name: "crew_help",
+            description: "Справка по письмам между вкладками (opencode-harness-crew)",
             execute: async ({ sessionID, prompt, delivery }: any) => {
               const dir = readJson<Card>(cardFile(String(sessionID ?? "")))?.directory || String(ctx?.location?.directory ?? "")
               await ctx.session.prompt({ ...prompt, sessionID, text: `Покажи пользователю эту справку дословно, без пересказа:\n\n${helpFor(dir)}`, delivery })
@@ -1270,7 +1270,7 @@ export default {
         })
       }
     } catch (e) {
-      log(`command peer_help failed: ${e}`)
+      log(`command crew_help failed: ${e}`)
     }
 
     // Самопроверка при загрузке (через 10 с: окна успевают отметиться). Проблемы — в журнал и уведомлением окнам.
@@ -1278,7 +1278,7 @@ export default {
       const problems = [...(await doctor()), ...commonDoctor()]
       if (!problems.length) return log("doctor: ok")
       log(`doctor: ${problems.join(" | ")}`)
-      for (const w of liveWindows()) postNotice(w.pid, { title: "peers: проблемы — peer_doctor", message: short(problems.join("; "), 100), duration: 15_000 })
+      for (const w of liveWindows()) postNotice(w.pid, { title: "crew: проблемы — crew_doctor", message: short(problems.join("; "), 100), duration: 15_000 })
     }, 10_000)
 
     // ЗАМЕР ЗАДЕРЖКИ ГЛАВНОГО ПОТОКА (2026-10-06). Сервер дважды за вечер терял окна («Event stream stalled»), и было
@@ -1286,7 +1286,7 @@ export default {
     // LAG_LOG_MS — строка в журнал с шагом прохода плагина, который в это время шёл («—» — плагин был свободен: держал
     // кто-то другой в процессе сервера), и памятью процесса.
     const LAG_EVERY_MS = 500
-    const LAG_LOG_MS = Number(process.env.NOVA_PEERS_LAG_MS) || 1_000
+    const LAG_LOG_MS = Number(process.env.HARNESS_CREW_LAG_MS) || 1_000
     let lagExpected = Date.now() + LAG_EVERY_MS
     const lagTimer = setInterval(() => {
       const t = Date.now()
@@ -1313,12 +1313,12 @@ export default {
     // Новый экземпляр останавливает цикл прежнего.
     const g = globalThis as any
     try {
-      g.__opencodePeersDispose?.()
+      g.__harnessCrewDispose?.()
     } catch {}
-    g.__opencodePeersDispose = dispose
+    g.__harnessCrewDispose = dispose
     return () => {
       dispose()
-      if (g.__opencodePeersDispose === dispose) g.__opencodePeersDispose = undefined
+      if (g.__harnessCrewDispose === dispose) g.__harnessCrewDispose = undefined
     }
   },
 }

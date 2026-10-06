@@ -1,13 +1,13 @@
-// Ядро opencode-peers: ящик, визитки, адреса, проекты, ступени и САМИ ИНСТРУМЕНТЫ (peer_list, peer_role,
-// peer_send, peer_inbox, peer_help). Его делят плагин OpenCode (index.ts) и MCP-сервер (mcp.ts) для окон
+// Ядро opencode-harness-crew: ящик, визитки, адреса, проекты, ступени и САМИ ИНСТРУМЕНТЫ (crew_list, crew_role,
+// crew_send, crew_inbox, crew_help). Его делят плагин OpenCode (index.ts) и MCP-сервер (mcp.ts) для окон
 // провайдера claude-code, которым инструменты плагина недоступны: одна реализация — одна семантика.
-// Отличия хозяев — в PeersHost (визитка своего окна, кандидаты, немедленная доставка в своём процессе).
+// Отличия хозяев — в CrewHost (визитка своего окна, кандидаты, немедленная доставка в своём процессе).
 
 import { execFileSync } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync, appendFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { BASE as PEERS_BASE, dataDir } from "./paths.ts"
+import { BASE as CREW_BASE, dataDir } from "./paths.ts"
 import { rotateLog } from "./housekeeping.ts"
 import { type Projects, parseProjects as parseProjectsWith, projectFor, rawSettingsFor, readSettingsFolder, workingSettings, writeSettings } from "./settings.ts"
 import { SCHEMA, guideText, invalid } from "./config-schema.ts"
@@ -20,19 +20,19 @@ import { cleanupDone, cleanupSteps, fileAt, holdsMergeLock, isMerged, mergeHolde
 import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, watchesOf } from "./watch.ts"
 import { watchRefusal } from "./deny.ts"
 
-export const POLL_MS = Number(process.env.NOVA_PEERS_POLL_MS) || 1_000 // переопределение — для самотеста
+export const POLL_MS = Number(process.env.HARNESS_CREW_POLL_MS) || 1_000 // переопределение — для самотеста
 export const LIVE_MS = 15 * 60_000
 const STALE_CARD_MS = 7 * 24 * 3600_000
 export const ROLE_RE = /^[a-z][a-z0-9-]{0,40}$/
 const LOG = path.join(os.tmpdir(), "opencode-plugins.log")
 
 // журнал общий для плагинов окружения; больше LOG_MAX_BYTES — в .1 (проверка раз в 200 строк)
-const LOG_MAX_BYTES = Number(process.env.NOVA_PEERS_LOG_MAX) || 5_000_000
+const LOG_MAX_BYTES = Number(process.env.HARNESS_CREW_LOG_MAX) || 5_000_000
 let logWrites = 0
 export function log(line: string) {
   if (++logWrites % 200 === 0) rotateLog(LOG, LOG_MAX_BYTES)
   try {
-    appendFileSync(LOG, `${new Date().toISOString()} nova-peers ${line}\n`)
+    appendFileSync(LOG, `${new Date().toISOString()} harness-crew ${line}\n`)
   } catch {}
 }
 
@@ -69,21 +69,21 @@ export function setProjects(projects: Projects, local: any = {}) {
   currentLocal = local && typeof local === "object" ? local : {}
 }
 
-/** Действующие настройки проекта каталога dir: значение и откуда оно (peer_config show и команда окна /peers-config). */
+/** Действующие настройки проекта каталога dir: значение и откуда оно (crew_config show и команда окна /crew-config). */
 export function configShowText(dir: string, fallbackName = "?", compact = false): string {
   const p = projectFor(dir, currentProjects)
   const committed = p?.dir ? readSettingsFolder(p.dir).raw : rawSettingsFor(dir, currentProjects, {})
   const local = (p && currentLocal[p.name]) || {}
   const effective = { ...committed, ...local }
   const sourceOf = (k: string) => (k in local ? "local в opencode.jsonc" : k in committed ? (p?.dir ? `файл, ветка ${p.branch}` : "файл (прежняя форма)") : "по умолчанию")
-  // compact — для окна: у списков с id — число и имена, длинное обрезается (полное — peer_config show у модели)
+  // compact — для окна: у списков с id — число и имена, длинное обрезается (полное — crew_config show у модели)
   const shown = (v: any) => {
     if (compact && Array.isArray(v) && v.length && v.every((x) => x && typeof x === "object" && "id" in x)) return `${v.length}: ${v.map((x) => x.id).join(", ")}`
     const j = JSON.stringify(v)
     return compact && j.length > 120 ? `${j.slice(0, 117)}…` : j
   }
   const rows = SCHEMA.map((s) => `  ${s.key} = ${shown(effective[s.key] ?? s.default)} — ${sourceOf(s.key)}`)
-  const head = p?.dir ? `Проект ${p.name}: настройки ${path.join(p.dir, ".opencode", "opencode-peers.json")}, читается ветка ${p.branch} (${p.repo}).` : `Проект ${fallbackName}: прежняя форма опций — настройки из рабочей копии вверх от каталога вкладки.`
+  const head = p?.dir ? `Проект ${p.name}: настройки ${path.join(p.dir, ".opencode", "harness-crew.json")}, читается ветка ${p.branch} (${p.repo}).` : `Проект ${fallbackName}: прежняя форма опций — настройки из рабочей копии вверх от каталога вкладки.`
   let pending = ""
   if (p?.dir) {
     const work = workingSettings(p.dir).raw
@@ -128,7 +128,7 @@ export function parseAddr(to: string, home: string, isSession: (s: string) => bo
 // Ящик роли — `<проект>.<роль>` (имя каталога через safeKey: `nova_integrator`; ни в проекте, ни в роли `_` нет).
 export const roleKey = (project: string, role: string) => `${project}.${role}`
 
-export const BASE = PEERS_BASE // paths.ts: opencode-peers (прежняя nova-peers переносится)
+export const BASE = CREW_BASE // paths.ts: opencode-harness-crew (прежняя nova-peers переносится)
 export const CARDS = path.join(BASE, "cards")
 export const INBOX = path.join(BASE, "inbox")
 export const READ = path.join(BASE, "read")
@@ -139,11 +139,11 @@ export type Spawned = { by: string; task: string; tier: string; status: "running
 export type Card = { session: string; role: string; auto: boolean; spawned?: Spawned; task?: { project: string; n: number }; review?: { project: string; n: number }; titleShown?: string; title: string; directory: string; repo: string; project?: string; model?: string; modelAt?: number; modelFrom?: "request" | "db"; modelCheckedAt?: number; busy?: boolean; busySince?: number; wokeAt?: number; pid: number; updated: number }
 export type Letter = { id: string; from_role: string; from_session: string; to: string; text: string; time: number; tier?: Tier; wake?: boolean; qid?: string; reply_to?: string }
 
-// НАСТРОЙКИ ПРОЕКТА — settings.ts: файл `.opencode/opencode-peers.json` из репозитория настроек (закоммиченный),
+// НАСТРОЙКИ ПРОЕКТА — settings.ts: файл `.opencode/harness-crew.json` из репозитория настроек (закоммиченный),
 // для прежней формы опций — тот же файл вверх от каталога окна. Плагин абстрактен: ни ролей, ни проектного текста в
 // нём нет. Роли ИСКЛЮЧИТЕЛЬНЫЕ (`integrator` + exclusive_roles проекта) — у них один держатель (замок, см. РОЛИ);
-// любая другая роль РАЗДЕЛЯЕМАЯ: peer_role присоединяет окно, а письмо на роль с несколькими открытыми
-// держателями не доставляется наугад (см. peer_send). Ступени heavy/medium/light — по семействам моделей
+// любая другая роль РАЗДЕЛЯЕМАЯ: crew_role присоединяет окно, а письмо на роль с несколькими открытыми
+// держателями не доставляется наугад (см. crew_send). Ступени heavy/medium/light — по семействам моделей
 // (подстрока id в нижнем регистре); `tiers` проекта заменяет список ступени целиком.
 const BASE_EXCLUSIVE = ["integrator"]
 export const TIER_ORDER = ["light", "medium", "heavy"] as const
@@ -155,7 +155,7 @@ export const PRIORITIES = ["P0", "P1", "P2", "P3"] as const
 export type Priority = (typeof PRIORITIES)[number]
 export const isPriority = (p: any): p is Priority => PRIORITIES.includes(p)
 export type AcceptanceStep = { id: string; text: string; required: boolean }
-export type PeersConfig = {
+export type CrewConfig = {
   exclusive: Set<string>
   helpExtra: string
   tiers: Record<Tier, string[]>
@@ -187,7 +187,7 @@ export type PeersConfig = {
   planName: string
   planRoundsMax: number
   planCleanRounds: number
-  /** подстроки команд — тяжёлые прогоны: peer_watch ставит их в очередь машины сам */
+  /** подстроки команд — тяжёлые прогоны: crew_watch ставит их в очередь машины сам */
   heavyCommands: string[]
   /** форма плана (plans.ts PlanForm) из plan_sections, plan_header, plan_prefix, plan_labels, plan_marks, plan_mode_question, plan_grades */
   planForm: PlanForm
@@ -232,7 +232,7 @@ export function planFormOf(j: any): PlanForm {
 }
 
 /** Настройки проекта каталога dir (с умолчаниями). */
-export function loadConfig(dir: string): PeersConfig {
+export function loadConfig(dir: string): CrewConfig {
   const j = rawSettingsFor(dir, currentProjects, currentLocal) ?? {}
   const roles = Array.isArray(j.exclusive_roles) ? j.exclusive_roles.map((r: any) => String(r)) : []
   const tiers = { ...DEFAULT_TIERS }
@@ -292,13 +292,13 @@ export function loadConfig(dir: string): PeersConfig {
 export const ACCEPTOR_ROLE = "acceptor"
 export const DEFAULT_REVIEW_LIMIT = 2
 /** Роль приёмщика по настройке проекта: acceptor — при reviewer "acceptor", иначе worker (как было). */
-export const reviewerRole = (cfg: PeersConfig) => (cfg.reviewer === "acceptor" ? ACCEPTOR_ROLE : DEFAULT_ROLE)
+export const reviewerRole = (cfg: CrewConfig) => (cfg.reviewer === "acceptor" ? ACCEPTOR_ROLE : DEFAULT_ROLE)
 /** Сколько сессий приёмки проекта работает разом. */
-export const reviewSessionLimit = (cfg: PeersConfig) =>
+export const reviewSessionLimit = (cfg: CrewConfig) =>
   cfg.reviewer === "acceptor" ? (cfg.spawnLimits.acceptor ?? cfg.spawnLimits.reviewer ?? DEFAULT_REVIEW_LIMIT) : (cfg.spawnLimits.reviewer ?? DEFAULT_REVIEW_LIMIT)
 
 // Ступень модели «провайдер/id#вариант»: проверяется от тяжёлой к лёгкой; нет совпадения — undefined (вне ступеней).
-export function tierOf(model: string | undefined, cfg: PeersConfig): Tier | undefined {
+export function tierOf(model: string | undefined, cfg: CrewConfig): Tier | undefined {
   const m = (model ?? "").toLowerCase()
   if (!m) return undefined
   for (const t of ["heavy", "medium", "light"] as const) if (cfg.tiers[t].some((s) => s && m.includes(s))) return t
@@ -308,13 +308,13 @@ export function tierOf(model: string | undefined, cfg: PeersConfig): Tier | unde
 // Окно СВОБОДНО, если не занято ходом. busy ставится в хуке запроса и снимается событием простоя; занятость
 // старше BUSY_MAX_MS считается потерянным событием — окно свободно (иначе одно пропущенное событие вешало бы его навсегда).
 export const BUSY_MAX_MS = 30 * 60_000
-// Давность последней активности (`updated`) отбора НЕ делает — только показ в peer_list: простаивающее окно и есть
+// Давность последней активности (`updated`) отбора НЕ делает — только показ в crew_list: простаивающее окно и есть
 // лучший исполнитель. Кандидат = процесс визитки жив И сессия существует и не архивирована (candidates()) И не занят.
 export const isFree = (c: Card, now = Date.now()) => !c.busy || now - (c.busySince ?? 0) > BUSY_MAX_MS
 
 // Кандидаты письма с ступенью: СВОБОДНЫЕ живые держатели роли с моделью той же ступени; если таких нет — со
 // ступенью выше (ближайшей, затем дальше), ниже — никогда. Окно с моделью вне ступеней не кандидат.
-export function pickHolder(holders: Card[], tier: Tier, cfg: PeersConfig, now = Date.now()): Card | undefined {
+export function pickHolder(holders: Card[], tier: Tier, cfg: CrewConfig, now = Date.now()): Card | undefined {
   const free = holders.filter((c) => isFree(c, now))
   for (let r = TIER_ORDER.indexOf(tier); r < TIER_ORDER.length; r++) {
     const hit = free.filter((c) => tierOf(c.model, cfg) === TIER_ORDER[r]).sort((a, b) => (a.busySince ?? 0) - (b.busySince ?? 0))
@@ -332,7 +332,7 @@ export function pickHolder(holders: Card[], tier: Tier, cfg: PeersConfig, now = 
 // печатается с меткой «последний ход HH:MM». Замер владельца: окно на Haiku показывалось как Kimi.
 export const MODEL_TTL_MS = 20_000
 const MODEL_FRESH_MS = 5 * 60_000
-export const dbFile = () => process.env.NOVA_PEERS_DB || path.join(dataDir(), "opencode.db")
+export const dbFile = () => process.env.HARNESS_CREW_DB || path.join(dataDir(), "opencode.db")
 
 export function fmtModel(m: any): string {
   if (!m) return ""
@@ -484,7 +484,7 @@ export async function sessionFromDb(sessionID: string): Promise<SessionRow | und
 export type TurnFacts = { tools: boolean; owner: boolean; outcome?: string; at: number }
 const TURN_SLACK_MS = 5_000 // сообщение владельца пишется чуть раньше запроса, с которого визитка занята
 // КОНЕЦ ПОСЛЕДНЕГО ХОДА (план 004): время строки idle, текст последнего ответа модели в этом ходе и было ли после
-// конца сообщение владельца. Нужен сводке /peers и признаку «ждёт вас». Нет базы или хода — undefined.
+// конца сообщение владельца. Нужен сводке /crew и признаку «ждёт вас». Нет базы или хода — undefined.
 export type TurnEnd = { at: number; text: string; ownerAfter: boolean }
 /** Время последней строки idle сессии (0 — нет). Дешёвый запрос без чтения данных сообщений. */
 export async function idleAt(sessionID: string): Promise<number> {
@@ -521,7 +521,7 @@ export async function userAfter(sessionID: string, at: number): Promise<boolean>
     return rows.some((r) => {
       try {
         const t = JSON.parse(r.data)?.text
-        return typeof t === "string" && !isPeersText(t)
+        return typeof t === "string" && !isCrewText(t)
       } catch {
         return false
       }
@@ -537,8 +537,8 @@ export async function userAfter(sessionID: string, at: number): Promise<boolean>
 
 /** Ход открыт и живой: после последнего idle есть сообщения, обновлённые не раньше чем за fresh мс. */
 /** Путь worktree и ветка задачи по настройкам проекта (worktrees не задан — решает методология). Слаг — из записи задачи:
- *  вычислен один раз при постановке, путь в ответе peer_spawn и созданный — одни и те же. */
-export function taskPlace(dir: string, cfg: PeersConfig, n: number, slug: string, project: string): { worktree?: string; branch: string } {
+ *  вычислен один раз при постановке, путь в ответе crew_spawn и созданный — одни и те же. */
+export function taskPlace(dir: string, cfg: CrewConfig, n: number, slug: string, project: string): { worktree?: string; branch: string } {
   const v = { repo: repoNameOf(dir), n, slug, project }
   return { worktree: cfg.worktrees ? path.join(cfg.worktrees, fillName(cfg.worktreeName, v)) : undefined, branch: fillName(cfg.branchName, v) }
 }
@@ -549,7 +549,7 @@ export function insideDir(p: string, dir: string): boolean {
 }
 
 /** Старт процесса сервера (не загрузки плагина: OpenCode грузит его заново в том же процессе на каждую папку). */
-export const PROCESS_START = Number(process.env.NOVA_PEERS_PROCESS_START) || Date.now() - process.uptime() * 1000
+export const PROCESS_START = Number(process.env.HARNESS_CREW_PROCESS_START) || Date.now() - process.uptime() * 1000
 const OPEN_TURN_MAX_MS = 4 * 3_600_000
 
 /** Ход сессии идёт: по базе (сессия задачи без окна, ход начат не через плагин).
@@ -592,7 +592,7 @@ export async function turnEnd(sessionID: string): Promise<TurnEnd | undefined> {
         return undefined
       }
     }
-    const ownerAfter = rows.slice(0, first).some((r) => r.type === "user" && typeof parse(r)?.text === "string" && !isPeersText(parse(r).text))
+    const ownerAfter = rows.slice(0, first).some((r) => r.type === "user" && typeof parse(r)?.text === "string" && !isCrewText(parse(r).text))
     let text = ""
     for (const r of rows.slice(first + 1)) {
       if (r.type === "idle") break
@@ -636,7 +636,7 @@ export async function lastTurn(sessionID: string, since = 0): Promise<TurnFacts 
         continue
       }
       if (r.type === "assistant" && (d?.content ?? []).some((c: any) => c?.type === "tool")) facts.tools = true
-      if (r.type === "user" && typeof d?.text === "string" && !isPeersText(d.text)) facts.owner = true
+      if (r.type === "user" && typeof d?.text === "string" && !isCrewText(d.text)) facts.owner = true
     }
     return facts
   } catch (e) {
@@ -653,8 +653,8 @@ export async function lastTurn(sessionID: string, since = 0): Promise<TurnFacts 
 // без окон. Каждое окно OpenCode грузит плагин окна (tui.ts) и раз в секунду пишет windows/<pid>.json: время,
 // открытые вкладки (сессии) и активную. Вкладка ОТКРЫТА, если её список есть в файле окна моложе WINDOW_STALE_MS;
 // закрыли окно крестиком или оно упало — файл остаётся, но время замирает, и через 3 с вкладка закрыта. Будить
-// можно только открытую вкладку (фоновую тоже) и сессию, запущенную интегратором под задачу (peer_spawn), пока
-// задача не закрыта. Окон без нашего плагина для писем нет. NOVA_PEERS_PRESENCE=all — все открыты (самотесты).
+// можно только открытую вкладку (фоновую тоже) и сессию, запущенную интегратором под задачу (crew_spawn), пока
+// задача не закрыта. Окон без нашего плагина для писем нет. HARNESS_CREW_PRESENCE=all — все открыты (самотесты).
 export const WINDOWS = path.join(BASE, "windows")
 export const NOTICES = path.join(BASE, "notices")
 export const WINDOW_STALE_MS = 3_000
@@ -678,7 +678,7 @@ export function liveWindows(now = Date.now()): WindowBeat[] {
 
 /** Где открыта вкладка: окно и активна ли; undefined — не открыта ни в одном живом окне. */
 export function tabOf(sessionID: string, windows = liveWindows()): { window: WindowBeat; tab: WindowTab } | undefined {
-  if (process.env.NOVA_PEERS_PRESENCE === "all") return { window: { pid: 0, beat: Date.now(), tabs: [] }, tab: { sessionID, active: true } }
+  if (process.env.HARNESS_CREW_PRESENCE === "all") return { window: { pid: 0, beat: Date.now(), tabs: [] }, tab: { sessionID, active: true } }
   for (const w of windows) {
     const tab = (w.tabs ?? []).find((t) => t.sessionID === sessionID)
     if (tab) return { window: w, tab }
@@ -687,7 +687,7 @@ export function tabOf(sessionID: string, windows = liveWindows()): { window: Win
 }
 
 /** Вкладку можно будить письмом: открыта в живом окне или запущена интегратором под задачу (не закрытую). */
-// Вкладка, которой интегратор отдал задачу (peer_task assign), будится, пока задача открыта, даже закрытая
+// Вкладка, которой интегратор отдал задачу (crew_task assign), будится, пока задача открыта, даже закрытая
 // (решение №9 плана 002): иначе её задача встала бы навсегда.
 export const holdsOpenTask = (c: Card) => {
   const t = c.task ? loadTask(c.task.project, c.task.n) : undefined
@@ -696,14 +696,14 @@ export const holdsOpenTask = (c: Card) => {
   const r = c.review ? loadTask(c.review.project, c.review.n) : undefined
   return isOpen(r) && r!.reviewer === c.session
 }
-/** Окружение команды peer_watch (план 013, п.5): кто её поставил. Команде (скрипту приёмки проекта, гейту) не нужно
- *  угадывать, чья она: сессия, роль, проект; у приёмщика открытой задачи — PEERS_REVIEW_N, у исполнителя — PEERS_TASK_N. */
+/** Окружение команды crew_watch (план 013, п.5): кто её поставил. Команде (скрипту приёмки проекта, гейту) не нужно
+ *  угадывать, чья она: сессия, роль, проект; у приёмщика открытой задачи — CREW_REVIEW_N, у исполнителя — CREW_TASK_N. */
 export function watchEnv(c: Card, project: string): Record<string, string> {
-  const env: Record<string, string> = { PEERS_SESSION_ID: c.session, PEERS_ROLE: normalizeRole(c.role), PEERS_PROJECT: project }
+  const env: Record<string, string> = { CREW_SESSION_ID: c.session, CREW_ROLE: normalizeRole(c.role), CREW_PROJECT: project }
   const r = c.review ? loadTask(c.review.project, c.review.n) : undefined
-  if (isOpen(r) && r!.reviewer === c.session) env.PEERS_REVIEW_N = String(r!.n)
+  if (isOpen(r) && r!.reviewer === c.session) env.CREW_REVIEW_N = String(r!.n)
   const t = c.task ? loadTask(c.task.project, c.task.n) : undefined
-  if (isOpen(t) && t!.executor === c.session) env.PEERS_TASK_N = String(t!.n)
+  if (isOpen(t) && t!.executor === c.session) env.CREW_TASK_N = String(t!.n)
   return env
 }
 export const mayWakeCard =(c: Card, windows = liveWindows()) => !!tabOf(c.session, windows) || c.spawned?.status === "running" || c.spawned?.status === "done" || holdsOpenTask(c)
@@ -842,13 +842,13 @@ export function recoverClaims(maxAgeMs = CLAIM_MAX_MS, now = Date.now()): number
   return n
 }
 
-export const PLUGIN_SENDER = "opencode-peers"
+export const PLUGIN_SENDER = "harness-crew"
 // ВИД ПИСЬМА (план 009, 2026-10-06; владелец: «непонятно, кто кому пишет»). Шапка — кто кому и когда, с ролью в задаче:
 //   ✉ #8 приёмщик nova.worker → nova.integrator · 01:17
-//   ⚙ peers → nova.integrator · 01:17 (служебное, не отвечай)
+//   ⚙ crew → nova.integrator · 01:17 (служебное, не отвечай)
 // По меткам ✉ / ⚙ (и прежней «[opencode-peers]» — письма в истории) плагин отличает свои письма от сообщений владельца.
-export const LETTER_MARKS = ["✉ ", "⚙ ", "[opencode-peers]"]
-export const isPeersText = (t: string) => LETTER_MARKS.some((m) => t.startsWith(m))
+export const LETTER_MARKS = ["✉ ", "⚙ ", "[opencode-peers]"] // [opencode-peers] — метка писем в старой истории сессий
+export const isCrewText = (t: string) => LETTER_MARKS.some((m) => t.startsWith(m))
 /** Как назвать сессию в письме: «#8 приёмщик nova.worker», «#3 исполнитель nova.worker» или адрес. */
 export function sessionLabel(session: string, fallback: string): string {
   const c = readJson<Card>(cardFile(session))
@@ -862,23 +862,23 @@ export function formatLetters(letters: Letter[], me: Card): string {
   const fromPeer = letters.filter((l) => l.from_session !== PLUGIN_SENDER)
   const body = letters
     .map((l) => {
-      if (l.from_session === PLUGIN_SENDER) return `⚙ peers → ${to} · ${hhmm(l.time)} (служебное, не отвечай)\n${l.text}`
+      if (l.from_session === PLUGIN_SENDER) return `⚙ crew → ${to} · ${hhmm(l.time)} (служебное, не отвечай)\n${l.text}`
       const a = l.reply_to ? ` · ответ на твой вопрос ${l.reply_to}` : ""
-      const q = l.qid ? `\n↩ вопрос ${l.qid}: ответь peer_send {to: "${l.from_session}", reply_to: "${l.qid}", text: "..."} — без ответа он открыт, остановишься — напомню` : ""
+      const q = l.qid ? `\n↩ вопрос ${l.qid}: ответь crew_send {to: "${l.from_session}", reply_to: "${l.qid}", text: "..."} — без ответа он открыт, остановишься — напомню` : ""
       return `✉ ${sessionLabel(l.from_session, l.from_role)} → ${to} · ${hhmm(l.time)}${a}\n${l.text}${q}`
     })
     .join("\n\n")
-  const foot = fromPeer.length ? `\n\n↩ ответ — peer_send {to: "${fromPeer.length === 1 ? fromPeer[0].from_session : "<сессия отправителя>"}", text: "..."} · письмо соседа, не слово владельца` : ""
+  const foot = fromPeer.length ? `\n\n↩ ответ — crew_send {to: "${fromPeer.length === 1 ? fromPeer[0].from_session : "<сессия отправителя>"}", text: "..."} · письмо соседа, не слово владельца` : ""
   return body + foot
 }
 
 // ОБЯЗАТЕЛЬСТВА (решение владельца 2026-10-05, вместо /push-controller). Вкладка, получившая вопрос (письмо с qid)
-// или задачу (peer_spawn), должна ответить (reply_to: qid). Окна на Claude часто останавливаются посреди задачи,
+// или задачу (crew_spawn), должна ответить (reply_to: qid). Окна на Claude часто останавливаются посреди задачи,
 // написав статус; правило в промпте это не держит. Поэтому: закончился ход вкладки, а ответа нет — плагин будит её
 // напоминанием; застряла (пустые ходы подряд или предел напоминаний) — пишет отправителю. obligations/<сессия>.json.
 export const OBLIGATIONS = path.join(BASE, "obligations")
 // nudges — сколько напоминаний отправлено (предел — push_max проекта); empty — пустых ходов подряд (предел —
-// push_empty_turns); stuck — вкладка застряла: напоминаний больше нет, спросившему ушёл вызов (снимает peer_task push).
+// push_empty_turns); stuck — вкладка застряла: напоминаний больше нет, спросившему ушёл вызов (снимает crew_task push).
 export type Obligation = { qid: string; from_session: string; from_role: string; at: number; nudges: number; empty?: number; stuck?: boolean; task?: string }
 const obligationFile = (session: string) => path.join(OBLIGATIONS, `${safeKey(session)}.json`)
 export const obligationsOf = (session: string): Obligation[] => readJson<Obligation[]>(obligationFile(session)) ?? []
@@ -899,54 +899,54 @@ export function settleObligation(session: string, qid: string): Obligation | und
   return hit
 }
 
-// Справка (`/peer_help` и инструмент `peer_help`). Текст — единственный дом правил переписки:
+// Справка (`/crew_help` и инструмент `crew_help`). Текст — единственный дом правил переписки:
 // подсказка context-хука и описания инструментов на него ссылаются, а не повторяют.
-export const HELP = `opencode-peers — письма между вкладками OpenCode на этой машине, в любом репозитории.
+export const HELP = `opencode-harness-crew — письма между вкладками OpenCode на этой машине, в любом репозитории.
 
 СЛОВА. Окно — программа OpenCode в терминале. Вкладка — сессия внутри окна (на экране одна, остальные фоновые).
 Письма адресуются вкладкам.
 
 ИНСТРУМЕНТЫ:
-  peer_list {all?}            — вкладки своего проекта: адрес, открыта/закрыта, занята/свободна, модель, ждущие письма.
-  peer_send {to, text, ...}   — письмо: peer_send {to: "integrator", text: "тесты зелёные"}.
+  crew_list {all?}            — вкладки своего проекта: адрес, открыта/закрыта, занята/свободна, модель, ждущие письма.
+  crew_send {to, text, ...}   — письмо: crew_send {to: "integrator", text: "тесты зелёные"}.
        wake: false            — не будить: письмо придёт вкладке вместе с её следующим ходом (статусы, «к сведению»).
-       expect_reply: true     — вопрос: в ответе qid; ответ жди peer_wait в этом же ходе.
+       expect_reply: true     — вопрос: в ответе qid; ответ жди crew_wait в этом же ходе.
        reply_to: "<qid>"      — это ответ на вопрос <qid>.
        tier: heavy|medium|light — задача свободной открытой вкладке роли с моделью этой ступени или сильнее.
-  peer_wait {qid, seconds?}   — ждать ответа на свой вопрос в этом же ходе (до 300 с): без второго пробуждения.
-  peer_watch {command, note?, minutes?} — долгое ожидание без удержания хода: команду (ждёт и выходит) запускает плагин
+  crew_wait {qid, seconds?}   — ждать ответа на свой вопрос в этом же ходе (до 300 с): без второго пробуждения.
+  crew_watch {command, note?, minutes?} — долгое ожидание без удержания хода: команду (ждёт и выходит) запускает плагин
                               в сервере OpenCode, по её концу вкладку будит письмо с кодом и хвостом вывода. Во вкладке
                               claude-code фон (run_in_background, Monitor) гибнет с концом хода — ждать только так.
        action: "cancel", id   — отменить своё наблюдение: снимается из очереди или его процесс останавливается,
-                              место в очереди машины освобождается (id — в ответе и в списке peer_watch без команды).
+                              место в очереди машины освобождается (id — в ответе и в списке crew_watch без команды).
        machine: true          — команда грузит машину (гейт, сборка, прогон тестов): ждёт места в очереди машины
                               проекта (machine_slots, по умолчанию 1) — тяжёлые прогоны окон не идут разом.
        Команда запускается мимо прав окна, поэтому плагин сверяет её с permissions.deny проекта (.claude/settings.json
        от каталога вкладки вверх до корня git): совпала целиком или подкомандой (&&, ||, ;, |, тело bash -c '…') с
        Bash(…)/PowerShell(…) или упоминает файл под Read(…) — отказ с названием правила. В окружении команды —
-       PEERS_SESSION_ID, PEERS_ROLE, PEERS_PROJECT и у приёмщика PEERS_REVIEW_N, у исполнителя PEERS_TASK_N
+       CREW_SESSION_ID, CREW_ROLE, CREW_PROJECT и у приёмщика CREW_REVIEW_N, у исполнителя CREW_TASK_N
        (на момент постановки; переживают перезапуск сервера).
-  peer_role {role, force?}    — сменить роль: peer_role {role: "integrator"}.
-  peer_inbox {limit?}         — доставленные письма и число ждущих.
-  peer_spawn {goal, criteria, ...} — только интегратор: задача #N в новой сессии (работает и без окна).
+  crew_role {role, force?}    — сменить роль: crew_role {role: "integrator"}.
+  crew_inbox {limit?}         — доставленные письма и число ждущих.
+  crew_spawn {goal, criteria, ...} — только интегратор: задача #N в новой сессии (работает и без окна).
        kind: "plan"          — задача-план: исполнитель пишет файл плана (plans_dir) по шаблону; перепроверка раундами
-                              новыми сессиями (peer_task round {blocking, significant, cosmetic, text}); готовый план
+                              новыми сессиями (crew_task round {blocking, significant, cosmetic, text}); готовый план
                               согласует владелец командой окна /plans; после вливания шаги плана становятся задачами.
-  peer_task {action, n?}      — задачи по номеру: list, show; интегратору ещё assign, push, reassign, cancel, priority,
+  crew_task {action, n?}      — задачи по номеру: list, show; интегратору ещё assign, push, reassign, cancel, priority,
                                 order; приёмщику — review, check, rework (sync: true — только влить свежую целевую
                                 ветку, не круг доработки), merge, accept, cleaned. assign — открытой вкладке владельца;
                                 сессия задачи ведёт одну задачу и закрывается после cleaned: продолжение работы того же
-                                исполнителя — новой задачей (peer_spawn), assign на сессию задачи отказывает.
-  peer_config {action}        — настройки проекта: guide (опросник для владельца), show (что действует и откуда),
+                                исполнителя — новой задачей (crew_spawn), assign на сессию задачи отказывает.
+  crew_config {action}        — настройки проекта: guide (опросник для владельца), show (что действует и откуда),
                                 set {values} (интегратор; пишет рабочую копию файла настроек, действует с коммита).
-  peer_doctor                 — самопроверка: что сломано и что делать.
-  /peers (команда окна)       — владельцу: кто чего ждёт, без хода модели; кто ждёт его — уведомление в окне.
+  crew_doctor                 — самопроверка: что сломано и что делать.
+  /crew (команда окна)       — владельцу: кто чего ждёт, без хода модели; кто ждёт его — уведомление в окне.
 
 АДРЕС (to): роль своего проекта (worker, integrator); «проект.роль» — в другом проекте; id сессии (ses_...); all —
 всем открытым вкладкам своего проекта; «проект.all». Отправитель подписан полным адресом и сессией.
 
 РОЛИ. Новая вкладка — worker (разделяемая; вкладки внутри роли различает id сессии). assistant — то же, что worker.
-integrator — исключительная: один держатель на проект (плюс exclusive_roles из .opencode/opencode-peers.json).
+integrator — исключительная: один держатель на проект (плюс exclusive_roles из .opencode/harness-crew.json).
 Держится замком: пока держатель открыт, роль не отнять без force; закрыл окно — роль свободна сразу.
 Письмо на разделяемую роль с несколькими открытыми держателями не доставляется наугад — адресуй id сессии.
 acceptor — роль приёмщика (разделяемая) при настройке проекта reviewer: acceptor: см. ПРИЁМКА.
@@ -959,24 +959,24 @@ acceptor — роль приёмщика (разделяемая) при нас�
 ВОПРОС И ОТВЕТ. Вопрос (expect_reply) и задача — обязательство получателя: пока он не ответил (reply_to), они открыты.
 Ход кончился без ответа — плагин сразу будит напоминанием. Ход с вызовами инструментов — рабочий, без них — пустой;
 push_empty_turns (3) пустых подряд или push_max (20) напоминаний — вкладка застряла: напоминаний больше нет, спросившему
-вызов. Ход, где писал владелец, напоминания не получает. Снова будит застрявшую — peer_task push. Ход, оборванный
+вызов. Ход, где писал владелец, напоминания не получает. Снова будит застрявшую — crew_task push. Ход, оборванный
 перезапуском OpenCode, плагин подхватывает письмом «продолжай». Служебным письмам плагина не отвечают.
-Спросивший ждёт ответ peer_wait в том же ходе — ответ приходит туда, без отдельного пробуждения.
+Спросивший ждёт ответ crew_wait в том же ходе — ответ приходит туда, без отдельного пробуждения.
 
 ЗАДАЧИ. У задачи номер #N (сквозной в проекте, только растёт; при доработке и передаче не меняется) — по нему её
-называют владелец, интегратор и peer_list; заголовок сессии задачи — «#N название».
-  peer_spawn {title?, goal, criteria, boundaries?, open_questions?, tier?, priority?, role?, parent?} — новая сессия: без цели и
+называют владелец, интегратор и crew_list; заголовок сессии задачи — «#N название».
+  crew_spawn {title?, goal, criteria, boundaries?, open_questions?, tier?, priority?, role?, parent?} — новая сессия: без цели и
     критериев приёмки задача не ставится (проект может требовать больше — task_fields); модель по ступени (heavy —
     claude-code/opus, medium — sonnet, light — haiku; проект меняет spawn_models); лимит работающих на роль —
     spawn_limits (3). Если в настройках проекта задан worktrees — письмо с задачей называет папку worktree и ветку.
   priority: P0 авария (всё остальное ждёт), P1 первая очередь, P2 обычная работа (по умолчанию), P3 когда освободятся руки.
-  peer_task {action: "assign", session, goal, criteria, ...} — отдать задачу открытой вкладке владельца, а не новой
+  crew_task {action: "assign", session, goal, criteria, ...} — отдать задачу открытой вкладке владельца, а не новой
     сессии; пока задача открыта, такую вкладку будят, даже закрытую.
-  peer_task {action: "push", n, text?} — подтолкнуть остановившегося исполнителя сейчас (счётчик напоминаний — с нуля).
-  peer_task {action: "reassign", n} — передать задачу новой сессии под тем же номером со сводкой сделанного.
-  peer_task {action: "cancel", n, text?} / {action: "priority", n, priority} / {action: "show", n} / {action: "list"}.
-  peer_task {action: "order", to: "<проект>.integrator", goal, criteria, ...} — заказ в другой проект: его интегратор
-    делает работу своими задачами (peer_spawn {parent: "<проект>#N"}); заказ идёт за ними: принята у него — заказ
+  crew_task {action: "push", n, text?} — подтолкнуть остановившегося исполнителя сейчас (счётчик напоминаний — с нуля).
+  crew_task {action: "reassign", n} — передать задачу новой сессии под тем же номером со сводкой сделанного.
+  crew_task {action: "cancel", n, text?} / {action: "priority", n, priority} / {action: "show", n} / {action: "list"}.
+  crew_task {action: "order", to: "<проект>.integrator", goal, criteria, ...} — заказ в другой проект: его интегратор
+    делает работу своими задачами (crew_spawn {parent: "<проект>#N"}); заказ идёт за ними: принята у него — заказ
     выполнен (сводка без пробуждения), отменена — тебе вызов.
 
 ПРИЁМКА. Исполнитель обязан прислать отчёт ответом на qid задачи (reply_to); прислал — задача сдана (интегратора отчёт не
@@ -985,7 +985,7 @@ push_empty_turns (3) пустых подряд или push_max (20) напоми
 свободная открытая вкладка роли acceptor или новая сессия с ролью acceptor (лимит spawn_limits.acceptor, без него —
 reviewer; места worker не занимает), и merge, accept, cleaned разрешены только роли acceptor (или интегратору):
 приёмщик, сменивший роль, их теряет. Исполнитель задачи её не вливает и не принимает. Интегратор принятое не
-перепроверяет. Приёмщик: peer_task review → rework {text} | check {step} → проверка → check {step, result} по каждому шагу (ход видно в окне) → merge (замок вливания проекта) → accept {commit?}
+перепроверяет. Приёмщик: crew_task review → rework {text} | check {step} → проверка → check {step, result} по каждому шагу (ход видно в окне) → merge (замок вливания проекта) → accept {commit?}
 (плагин проверит обязательные шаги приёмки и что ветка или коммит в целевой ветке) → очистка → cleaned (плагин
 проверит, что worktree и ветка удалены). Потом сессии задачи закрываются, интегратору тихая сводка.
 
@@ -997,9 +997,9 @@ reviewer; места worker не занимает), и merge, accept, cleaned р
 
 КОНТРОЛЬНЫЙ ВОПРОС. Вопрос вида «кто тут integrator проекта X?» (адресован роли или всем) отвечает вкладка, которая
 им является: «я integrator проекта X». Остальные молчат — ответ на чужой вопрос это лишний ход у спрашивающего.
-Проверка связи: письмо с просьбой ответить одной строкой «дошло, время»; ответ — peer_send с reply_to.`
+Проверка связи: письмо с просьбой ответить одной строкой «дошло, время»; ответ — crew_send с reply_to.`
 
-// Справка с дописью проекта (help_extra из .opencode/opencode-peers.json окна).
+// Справка с дописью проекта (help_extra из .opencode/harness-crew.json окна).
 export const helpFor = (dir: string): string => {
   const extra = loadConfig(dir).helpExtra.trim()
   return extra ? `${HELP}\n\nПРОЕКТ. ${extra}` : HELP
@@ -1007,7 +1007,7 @@ export const helpFor = (dir: string): string => {
 
 // СПИСОК ПРОЕКТОВ — ОДИН, в опциях плагина (opencode.jsonc). Плагин при загрузке кладёт опции в ящик
 // (`projects.json`: {projects, local}), MCP-сервер читает оттуда и разбирает так же: второй копии списка руками нет,
-// и `проект.роль` у обоих хозяев совпадает. OPENCODE_PEERS_PROJECTS (JSON значения `projects`) — переопределение.
+// и `проект.роль` у обоих хозяев совпадает. OPENCODE_CREW_PROJECTS (JSON значения `projects`) — переопределение.
 const PROJECTS_FILE = path.join(BASE, "projects.json")
 export function saveProjects(opt: any) {
   try {
@@ -1020,13 +1020,13 @@ export function saveProjects(opt: any) {
 }
 /** Проекты для MCP-сервера; заодно ставит их текущими (setProjects). */
 export function loadProjects(): Projects {
-  const env = process.env.OPENCODE_PEERS_PROJECTS
+  const env = process.env.OPENCODE_CREW_PROJECTS
   let opt: any = readJson<any>(PROJECTS_FILE) ?? {}
   if (env) {
     try {
       opt = { ...opt, projects: JSON.parse(env) }
     } catch (e) {
-      log(`OPENCODE_PEERS_PROJECTS ignored: ${e}`)
+      log(`OPENCODE_CREW_PROJECTS ignored: ${e}`)
     }
   }
   const projects = parseProjects(opt)
@@ -1091,8 +1091,8 @@ export function takeExclusive(key: string, role: string, me: string, force: bool
 /** Держит ли сессия исключительную роль key прямо сейчас. */
 export const holdsExclusive = (key: string, session: string) => readJson<RoleLock>(lockFile(key))?.session === session
 
-// ВОПРОС-ОТВЕТ. peer_send {expect_reply} даёт письму qid; ответ — peer_send {reply_to: qid}. Пока отправитель ждёт
-// ответа инструментом peer_wait, ответ забирает сам peer_wait в ТОТ ЖЕ ход (без второго пробуждения), а таймер такое
+// ВОПРОС-ОТВЕТ. crew_send {expect_reply} даёт письму qid; ответ — crew_send {reply_to: qid}. Пока отправитель ждёт
+// ответа инструментом crew_wait, ответ забирает сам crew_wait в ТОТ ЖЕ ход (без второго пробуждения), а таймер такое
 // письмо не доставляет; waits/<сессия>.json — кто какого ответа ждёт и до какого времени.
 type Wait = { qid: string; until: number }
 export const waitingFor = (session: string, now = Date.now()) => {
@@ -1131,7 +1131,7 @@ const ACK_ONLY = /^(ок|окей|ok|okay|принято|принял|спаси
 //   startTask — запустить записанную задачу (плагин — ctx.session.create с id из журнала; MCP — ждёт, пока
 //               плагин подхватит задачу в статусе starting);
 //   doctor    — проверки, которые умеет только этот хозяин.
-export type PeersHost = {
+export type CrewHost = {
   projects: Projects
   defaultDir: string
   touch(sessionID: string): Promise<Card | undefined>
@@ -1143,7 +1143,7 @@ export type PeersHost = {
   doctor(): Promise<string[]>
 }
 
-export type PeerTool = { name: string; description: string; input: any; execute(input: any, sessionID: string): Promise<{ content: string }> }
+export type CrewTool = { name: string; description: string; input: any; execute(input: any, sessionID: string): Promise<{ content: string }> }
 
 const str = (description: string) => ({ type: "string", description })
 export const DEFAULT_SPAWN_MODELS: Record<Tier, string> = { heavy: "claude-code/opus", medium: "claude-code/sonnet", light: "claude-code/haiku" }
@@ -1166,18 +1166,18 @@ export function tabStatus(c: Card, windows = liveWindows()): string {
 // события простоя. У сессии под задачу окна нет — только флаг визитки.
 export const isBusy = (c: Card, windows = liveWindows()) => (c.spawned ? !!c.busy : !!tabOf(c.session, windows)?.tab.busy || !!c.busy)
 
-export function makeTools(host: PeersHost): PeerTool[] {
+export function makeTools(host: CrewHost): CrewTool[] {
   const { projects } = host
   // Проект визитки: записанный в ней (вкладка сама ставит его при каждом обращении) или вычисленный по каталогу.
   const projOf = (c: Card) => c.project ?? projectOf(c.directory, projects)
   const keyOf = (c: Card) => roleKey(projOf(c), normalizeRole(c.role)) // старые визитки с assistant — это worker
   // Исключительные роли — из конфига проекта вкладки (по каталогу её визитки).
-  const configFor = (card?: Card): PeersConfig => loadConfig(card?.directory || host.defaultDir)
+  const configFor = (card?: Card): CrewConfig => loadConfig(card?.directory || host.defaultDir)
   const live = (cards: Card[], windows = liveWindows()) => cards.filter((c) => !host.isChild(c.session) && mayWakeCard(c, windows))
   const waiting = (c: Card) => waitingIn([keyOf(c), c.role, c.session])
 
-  const peerList: PeerTool = {
-    name: "peer_list",
+  const crewList: CrewTool = {
+    name: "crew_list",
     description:
       "List the tabs (sessions) of the caller's project: address project.role, open/closed (open = shown as a tab in a live OpenCode window, on screen or in the background), busy/free, model, letters waiting; all=true lists every project. Marks the caller. Then the open tasks #N of the project.",
     input: {
@@ -1198,15 +1198,15 @@ export function makeTools(host: PeersHost): PeerTool[] {
       })
       const others = input?.all || !home ? 0 : all.length - cards.length
       const openTasks = home ? listTasks(home).filter(isOpen).sort(byPriority) : []
-      const tasksPart = openTasks.length ? `\nЗадачи (peer_task):\n${openTasks.map((t) => `  #${t.n} ${t.priority} ${statusRu(t.status)} «${t.title}»${t.executor ? ` — ${t.executor}` : ""}`).join("\n")}` : ""
-      const tail = tasksPart + (others ? `\n(ещё ${others} вкладок в других проектах — peer_list {all: true})` : "")
-      const noWindow = windows.length || process.env.NOVA_PEERS_PRESENCE === "all" ? "" : "\n(ни одно окно OpenCode с плагином окна сейчас не открыто — письма ждут; peer_doctor)"
+      const tasksPart = openTasks.length ? `\nЗадачи (crew_task):\n${openTasks.map((t) => `  #${t.n} ${t.priority} ${statusRu(t.status)} «${t.title}»${t.executor ? ` — ${t.executor}` : ""}`).join("\n")}` : ""
+      const tail = tasksPart + (others ? `\n(ещё ${others} вкладок в других проектах — crew_list {all: true})` : "")
+      const noWindow = windows.length || process.env.HARNESS_CREW_PRESENCE === "all" ? "" : "\n(ни одно окно OpenCode с плагином окна сейчас не открыто — письма ждут; crew_doctor)"
       return { content: (rows.length ? rows.join("\n") : `Вкладок проекта ${home} нет.`) + tail + noWindow }
     },
   }
 
-  const peerRole: PeerTool = {
-    name: "peer_role",
+  const crewRole: CrewTool = {
+    name: "crew_role",
     description:
       "Set the caller tab's role (worker, integrator, ... -- lowercase, digits, hyphens; assistant = worker). An exclusive role (integrator and the project's exclusive_roles) has one holder: taken while its holder is open in a live window, force=true moves it; a closed holder loses it at once. Any other role is shared.",
     input: {
@@ -1246,17 +1246,17 @@ export function makeTools(host: PeersHost): PeerTool[] {
     },
   }
 
-  const peerSend: PeerTool = {
-    name: "peer_send",
+  const crewSend: CrewTool = {
+    name: "crew_send",
     description:
-      "Send a letter to another tab. `to`: a role of the caller's project (worker, integrator, ...), `project.role`, a session id, `all` or `project.all`. It wakes the recipient only if its tab is open in a live window (or it is a peer_spawn task); otherwise it waits. wake=false: no wake -- the letter joins the recipient's next turn (for status / FYI). expect_reply=true: a question with a qid; wait for the answer with peer_wait in the same turn. reply_to: the qid you answer. Empty acknowledgements are not sent.",
+      "Send a letter to another tab. `to`: a role of the caller's project (worker, integrator, ...), `project.role`, a session id, `all` or `project.all`. It wakes the recipient only if its tab is open in a live window (or it is a crew_spawn task); otherwise it waits. wake=false: no wake -- the letter joins the recipient's next turn (for status / FYI). expect_reply=true: a question with a qid; wait for the answer with crew_wait in the same turn. reply_to: the qid you answer. Empty acknowledgements are not sent.",
     input: {
       type: "object",
       properties: {
         to: str("Recipient: role, project.role, session id, all, or project.all"),
         text: str("Letter text"),
         wake: { type: "boolean", description: "Wake the recipient (default true). false = deliver with its next turn, no extra turn", default: true },
-        expect_reply: { type: "boolean", description: "This is a question: the result gives a qid for peer_wait", default: false },
+        expect_reply: { type: "boolean", description: "This is a question: the result gives a qid for crew_wait", default: false },
         reply_to: str("The qid of the question this letter answers"),
         tier: { type: "string", enum: ["heavy", "medium", "light"], description: "Optional task weight: only a FREE open holder of the role with a model of that tier or stronger gets it; none free -> queued." },
       },
@@ -1270,7 +1270,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
       const to = String(input.to ?? "").trim()
       const text = String(input.text ?? "").trim()
       if (!to || !text) return { content: "Нужны и адресат, и текст." }
-      if (to === PLUGIN_SENDER || to.endsWith(`.${PLUGIN_SENDER}`)) return { content: "Не отправлено: opencode-peers — это сам плагин, ему не пишут. Отчёт по вопросу или задаче — тому, кто спросил: peer_send {to: \"<его сессия>\", reply_to: \"<qid>\"} (qid и сессия — в письме с вопросом; открытые задачи — peer_task {action: \"list\"})." }
+      if (to === PLUGIN_SENDER || to.endsWith(`.${PLUGIN_SENDER}`)) return { content: "Не отправлено: opencode-harness-crew — это сам плагин, ему не пишут. Отчёт по вопросу или задаче — тому, кто спросил: crew_send {to: \"<его сессия>\", reply_to: \"<qid>\"} (qid и сессия — в письме с вопросом; открытые задачи — crew_task {action: \"list\"})." }
       if (!input.expect_reply && ACK_ONLY.test(text)) return { content: "Не отправлено: подтверждение без содержания будит получателя впустую. Пиши, только когда есть что сообщить." }
       let wake = input.wake !== false
       const qid = input.expect_reply ? `q${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` : undefined
@@ -1294,10 +1294,10 @@ export function makeTools(host: PeersHost): PeerTool[] {
         const toRole = addr.kind === "role" ? addr.role : addr.kind === "session" ? normalizeRole(cards.find((x) => x.session === addr.session)?.role ?? "") : "all"
         if (tcfg.inbound === "none") return { content: `Не отправлено: проект ${toProject} не принимает писем из других проектов (inbound: none).` }
         if (tcfg.inbound === "integrator" && toRole !== "integrator")
-          return { content: `Не отправлено: из другого проекта в ${toProject} можно писать только интегратору (inbound: integrator). Пиши ${toProject}.integrator; работу в другой проект — заказом: peer_task {action: "order", to: "${toProject}.integrator", ...}.` }
+          return { content: `Не отправлено: из другого проекта в ${toProject} можно писать только интегратору (inbound: integrator). Пиши ${toProject}.integrator; работу в другой проект — заказом: crew_task {action: "order", to: "${toProject}.integrator", ...}.` }
       }
       // ОТЧЁТ ПО ЗАДАЧЕ (план 002, Ф.3): ответ исполнителя на qid своей задачи — задача сдана и ждёт приёмщика.
-      // Интегратора отчёт НЕ будит (письмо тихое: придёт с его следующим ходом; ждёт peer_wait — получит сразу);
+      // Интегратора отчёт НЕ будит (письмо тихое: придёт с его следующим ходом; ждёт crew_wait — получит сразу);
       // сдача после доработки будит приёмщика. Сессия исполнителя остаётся открытой до очистки (на случай доработки).
       const myTask = replyTo && me?.task ? loadTask(me.task.project, me.task.n) : undefined
       const isReport = !!myTask && myTask.qid === replyTo && myTask.executor === sessionID
@@ -1336,7 +1336,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
         me.spawned.status = "done"
         saveCard(me)
       }
-      const qidTail = qid ? ` Вопрос ${qid}: ответ жди в этом же ходе — peer_wait {qid: "${qid}"}.` : ""
+      const qidTail = qid ? ` Вопрос ${qid}: ответ жди в этом же ходе — crew_wait {qid: "${qid}"}.` : ""
       // ПИСЬМО СО СТУПЕНЬЮ: из открытых держателей роли — свободный с моделью этой ступени, иначе выше; никого — очередь.
       if (input.tier !== undefined && input.tier !== null && input.tier !== "") {
         if (!isTier(input.tier)) return { content: `Ступень «${input.tier}» не годится: heavy, medium или light.` }
@@ -1389,12 +1389,12 @@ export function makeTools(host: PeersHost): PeerTool[] {
     },
   }
 
-  const peerWait: PeerTool = {
-    name: "peer_wait",
-    description: `Wait in this same turn for the answer to a question sent with peer_send {expect_reply: true} (its qid). Returns the answer as soon as it arrives -- no second wake. seconds: up to ${WAIT_MAX_S} (default 120). No answer in time -> it will come as an ordinary letter.`,
+  const crewWait: CrewTool = {
+    name: "crew_wait",
+    description: `Wait in this same turn for the answer to a question sent with crew_send {expect_reply: true} (its qid). Returns the answer as soon as it arrives -- no second wake. seconds: up to ${WAIT_MAX_S} (default 120). No answer in time -> it will come as an ordinary letter.`,
     input: {
       type: "object",
-      properties: { qid: str("The qid from peer_send"), seconds: { type: "number", description: `How long to wait, up to ${WAIT_MAX_S}`, default: 120 } },
+      properties: { qid: str("The qid from crew_send"), seconds: { type: "number", description: `How long to wait, up to ${WAIT_MAX_S}`, default: 120 } },
       required: ["qid"],
       additionalProperties: false,
     },
@@ -1427,7 +1427,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
     return p ? (p.rootPath ?? p.root) : undefined
   }
   const isIntegrator = (me: Card) => me.role === "integrator" && holdsExclusive(roleKey(projOf(me), "integrator"), me.session)
-  const notIntegrator = (me: Card) => ({ content: `Это может только интегратор проекта ${projOf(me)} (peer_role {role: "integrator"}).` })
+  const notIntegrator = (me: Card) => ({ content: `Это может только интегратор проекта ${projOf(me)} (crew_role {role: "integrator"}).` })
   const taskInput = {
     title: str("Short title (it becomes the session title: #N title)"),
     goal: str("Goal: what has to be true when the task is done"),
@@ -1436,7 +1436,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
     open_questions: str("Open questions: each with an addressee and a default"),
     priority: { type: "string", enum: [...PRIORITIES], description: "P0 emergency, P1 first queue, P2 normal (default from the project), P3 when hands are free" },
   }
-  const missingFields = (input: any, cfg: PeersConfig) => cfg.taskFields.filter((f) => !String(input[f] ?? "").trim())
+  const missingFields = (input: any, cfg: CrewConfig) => cfg.taskFields.filter((f) => !String(input[f] ?? "").trim())
   const FIELD_RU: Record<string, string> = { goal: "цель (goal)", criteria: "критерии приёмки (criteria)", boundaries: "границы (boundaries)", open_questions: "открытые вопросы (open_questions)" }
   const newQid = () => `q${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
   const findTask = (me: Card | undefined, n: any): Task | undefined => (me && Number.isInteger(Number(n)) ? loadTask(projOf(me), Number(n)) : undefined)
@@ -1452,10 +1452,10 @@ export function makeTools(host: PeersHost): PeerTool[] {
     return `Задача #${t.n} принята и очищена (${note}). Интегратору ушла сводка без пробуждения; сессии задачи закроются.`
   }
 
-  const peerSpawn: PeerTool = {
-    name: "peer_spawn",
+  const crewSpawn: CrewTool = {
+    name: "crew_spawn",
     description:
-      "Integrator only: start a task #N in a new session (it runs in the OpenCode server even with no window). goal and criteria are required (the project may require more: boundaries, open_questions); tier heavy|medium|light picks the model (claude-code opus|sonnet|haiku unless the project overrides); priority P0..P3. The project limits running tasks per role. The report comes back as an answer to the task's qid: peer_wait {qid}. Manage tasks with peer_task.",
+      "Integrator only: start a task #N in a new session (it runs in the OpenCode server even with no window). goal and criteria are required (the project may require more: boundaries, open_questions); tier heavy|medium|light picks the model (claude-code opus|sonnet|haiku unless the project overrides); priority P0..P3. The project limits running tasks per role. The report comes back as an answer to the task's qid: crew_wait {qid}. Manage tasks with crew_task.",
     input: {
       type: "object",
       properties: {
@@ -1484,12 +1484,12 @@ export function makeTools(host: PeersHost): PeerTool[] {
       const limit = cfg.spawnLimits[role] ?? cfg.spawnLimits["*"] ?? DEFAULT_SPAWN_LIMIT
       const running = listTasks(project).filter((t) => t.kind === "spawn" && t.role === role && (t.status === "starting" || t.status === "running"))
       const prio = isPriority(input.priority) ? input.priority : cfg.defaultPriority
-      if (prio !== "P0" && running.length >= limit) return { content: `Лимит работающих задач роли ${role} в проекте — ${limit}, уже работают: ${running.map((t) => `#${t.n}`).join(", ")}. Дождись сдачи или отмени (peer_task {action: "cancel"}); авария — priority P0.` }
+      if (prio !== "P0" && running.length >= limit) return { content: `Лимит работающих задач роли ${role} в проекте — ${limit}, уже работают: ${running.map((t) => `#${t.n}`).join(", ")}. Дождись сдачи или отмени (crew_task {action: "cancel"}); авария — priority P0.` }
       const inflight = listTasks(project).filter(isOpen)
       if (prio !== "P0" && inflight.length >= cfg.inflightLimit) {
         // принятые, но не очищенные держат место молча (#9 nova — 11,5 ч): назвать их поимённо с возрастом
         const stale = inflight.filter((t) => t.status === "accepted").map((t) => `#${t.n} принята ${ago(acceptedAt(t))}, не очищена (приёмщик ${t.reviewer ?? "?"})`)
-        return { content: `Лимит задач проекта в работе и на приёмке — ${cfg.inflightLimit} (inflight_limit), открыто: ${inflight.map((t) => `#${t.n} ${statusRu(t.status)}`).join(", ")}.${stale.length ? ` Место держат принятые, но не очищенные: ${stale.join("; ")} — пусть приёмщик повторит peer_task {action: \"cleaned\"}.` : ""} Дождись приёмки; авария — priority P0.` }
+        return { content: `Лимит задач проекта в работе и на приёмке — ${cfg.inflightLimit} (inflight_limit), открыто: ${inflight.map((t) => `#${t.n} ${statusRu(t.status)}`).join(", ")}.${stale.length ? ` Место держат принятые, но не очищенные: ${stale.join("; ")} — пусть приёмщик повторит crew_task {action: \"cleaned\"}.` : ""} Дождись приёмки; авария — priority P0.` }
       }
       const model = cfg.spawnModels[tier] ?? DEFAULT_SPAWN_MODELS[tier]
       const title = String(input.title ?? "").trim() || String(input.goal).split(/\r?\n/)[0].slice(0, 60)
@@ -1528,12 +1528,12 @@ export function makeTools(host: PeersHost): PeerTool[] {
       }
       const r = await host.startTask(t)
       if (!r.session) return { content: `Задача #${t.n} записана, но сессия не запущена: ${r.error ?? "неизвестная ошибка"}. Плагин повторит запуск сам (тем же id сессии — второй не будет).` }
-      return { content: `Задача #${t.n} запущена (${hhmm(Date.now())}): «${t.title}», сессия ${r.session}, роль ${roleKey(project, role)}, модель ${model}, приоритет ${t.priority}${t.worktree ? `, worktree ${t.worktree}, ветка ${t.branch}` : ""}. Отчёт придёт ответом на ${t.qid}: peer_wait {qid: "${t.qid}"} или обычным письмом. Управление — peer_task {n: ${t.n}, action: ...}.` }
+      return { content: `Задача #${t.n} запущена (${hhmm(Date.now())}): «${t.title}», сессия ${r.session}, роль ${roleKey(project, role)}, модель ${model}, приоритет ${t.priority}${t.worktree ? `, worktree ${t.worktree}, ветка ${t.branch}` : ""}. Отчёт придёт ответом на ${t.qid}: crew_wait {qid: "${t.qid}"} или обычным письмом. Управление — crew_task {n: ${t.n}, action: ...}.` }
     },
   }
 
-  const peerTask: PeerTool = {
-    name: "peer_task",
+  const crewTask: CrewTool = {
+    name: "crew_task",
     description:
       "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), show {n} (details and history), and for the integrator: assign {session, goal, criteria, ...} (give a task to an existing tab instead of a new session), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done), cancel {n, text?}, priority {n, priority}, order {to: 'project.integrator', goal, criteria, ...} (work for another project: its integrator does it with its own tasks; the order follows them); for the task's reviewer: review {n} (start), merge {n} (the project's merge lock), rework {n, text, sync?} (sync: true -- only to merge the fresh target branch: not a rework round, not counted in rework_max), check {n, step} before checking a step and {n, step, result} after it (the owner sees the progress in the window), accept {n, checks?, commit?} (steps marked by check count; the plugin checks the required steps and that it is merged), cleaned {n} (the plugin checks the worktree and branch are gone). With the project's reviewer: acceptor, merge/accept/cleaned also need the acceptor (or integrator) role.",
     input: {
@@ -1613,11 +1613,11 @@ export function makeTools(host: PeersHost): PeerTool[] {
             t.criteria ? `КРИТЕРИИ ПРИЁМКИ: ${t.criteria}` : "",
             t.boundaries ? `ГРАНИЦЫ: ${t.boundaries}` : "",
             t.open_questions ? `ОТКРЫТЫЕ ВОПРОСЫ: ${t.open_questions}` : "",
-            `Ставь задачу с parent: peer_spawn {..., parent: "${project}#${t.n}"} — тогда заказчик видит её ход сам: принята у тебя → заказ выполнен, отменена → заказчику вызов. Вопросы — peer_send {to: "${me.session}"}.`,
+            `Ставь задачу с parent: crew_spawn {..., parent: "${project}#${t.n}"} — тогда заказчик видит её ход сам: принята у тебя → заказ выполнен, отменена → заказчику вызов. Вопросы — crew_send {to: "${me.session}"}.`,
           ].filter(Boolean).join("\n"),
         })
         host.posted([to])
-        return { content: `Заказ #${t.n} «${t.title}» отправлен интегратору ${m[1]}. Его ход виден в peer_task {action: "show", n: ${t.n}}; выполнен — придёт сводка.` }
+        return { content: `Заказ #${t.n} «${t.title}» отправлен интегратору ${m[1]}. Его ход виден в crew_task {action: "show", n: ${t.n}}; выполнен — придёт сводка.` }
       }
       const t = findTask(me, input.n)
       if (!t) return { content: `Задачи #${input.n} в проекте ${project} нет.` }
@@ -1662,7 +1662,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
         // ПРАВА РОЛИ (план 013): при reviewer "acceptor" замок вливания, принятие и очистку держит роль acceptor (или
         // интегратор). Приёмщик, сменивший роль, их теряет: права у роли, а не у записи «приёмщик» в задаче.
         if (tcfg.reviewer === "acceptor" && ["merge", "accept", "cleaned"].includes(action) && normalizeRole(me.role) !== ACCEPTOR_ROLE && !isIntegrator(me))
-          return { content: `${action} в проекте ${project} — право роли ${ACCEPTOR_ROLE} (настройка reviewer: acceptor) или интегратора; у тебя роль ${keyOf(me)}. Вернуть роль — peer_role {role: "${ACCEPTOR_ROLE}"}.` }
+          return { content: `${action} в проекте ${project} — право роли ${ACCEPTOR_ROLE} (настройка reviewer: acceptor) или интегратора; у тебя роль ${keyOf(me)}. Вернуть роль — crew_role {role: "${ACCEPTOR_ROLE}"}.` }
         const acc = acceptanceOf(t, tcfg) // задача-план — шаги перепроверки плана (план 012), иначе — приёмки проекта
         const now = Date.now()
         const quiet = (to: string, id: string, text: string) => postLetter(to, { id, from_role: keyOf(me), from_session: me.session, to, time: now, wake: false, text })
@@ -1675,11 +1675,11 @@ export function makeTools(host: PeersHost): PeerTool[] {
             if (t.executor) host.posted([t.executor])
           }
           else saveTask(t)
-          return { content: `Задача #${t.n} на приёмке. Шаги приёмки: ${acc.map((a) => a.id).join(", ") || "критерии задачи"}. Каждый шаг — в окне владельца: peer_task {action: "check", n: ${t.n}, step} перед проверкой шага, {step, result} — после. Дальше — rework {text} или merge → accept.` }
+          return { content: `Задача #${t.n} на приёмке. Шаги приёмки: ${acc.map((a) => a.id).join(", ") || "критерии задачи"}. Каждый шаг — в окне владельца: crew_task {action: "check", n: ${t.n}, step} перед проверкой шага, {step, result} — после. Дальше — rework {text} или merge → accept.` }
         }
         // шаг приёмки — по ходу проверки (2026-10-06): владелец видит прогресс в окне; accept засчитывает отмеченные
         if (action === "check") {
-          if (t.status !== "reviewing") return { content: `Сначала peer_task {action: "review", n: ${t.n}} (задача сейчас ${statusRu(t.status)}).` }
+          if (t.status !== "reviewing") return { content: `Сначала crew_task {action: "review", n: ${t.n}} (задача сейчас ${statusRu(t.status)}).` }
           const step = String(input.step ?? "").trim()
           const result = String(input.result ?? "").trim()
           if (!acc.some((a) => a.id === step)) return { content: `Шага «${step}» в приёмке проекта нет. Шаги: ${acc.map((a) => a.id).join(", ")}.` }
@@ -1704,7 +1704,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
         if (action === "round") {
           if (t.plan?.approval && t.plan.approval.decision !== "no") return { content: `План ${t.plan.n} уже согласован владельцем — раундов больше нет; влей его: merge → accept.` }
           if (!t.plan) return { content: `Вердикт раунда — у задачи-плана; задача #${t.n} обычная (rework / merge / accept).` }
-          if (t.status !== "reviewing") return { content: `Сначала peer_task {action: "review", n: ${t.n}} (задача сейчас ${statusRu(t.status)}).` }
+          if (t.status !== "reviewing") return { content: `Сначала crew_task {action: "review", n: ${t.n}} (задача сейчас ${statusRu(t.status)}).` }
           // градации — настройка проекта (plan_grades); числа — полями с id градаций или объектом grades
           const grades = tcfg.planForm.grades
           const raw = input.grades && typeof input.grades === "object" ? input.grades : input
@@ -1766,11 +1766,11 @@ export function makeTools(host: PeersHost): PeerTool[] {
           return { content: `Раунд ${no} записан (${line}). Чистых подряд ${p.clean} из ${tcfg.planCleanRounds}; следующий раунд — новая сессия.` }
         }
         if (action === "merge") {
-          if (t.status !== "reviewing") return { content: `Сначала peer_task {action: "review", n: ${t.n}} (задача сейчас ${statusRu(t.status)}).` }
+          if (t.status !== "reviewing") return { content: `Сначала crew_task {action: "review", n: ${t.n}} (задача сейчас ${statusRu(t.status)}).` }
           const r = takeMergeLock(project, me.session, t.n)
           if (!r.ok) return { content: `Замок вливания проекта ${project} у приёмщика задачи #${r.holder.n} (сессия ${r.holder.session}) с ${hhmm(r.holder.at)}. Дождись (спроси позже ещё раз) — вливать одновременно нельзя.` }
           taskEvent(t, me.session, undefined, "замок вливания взят")
-          return { content: `Замок вливания проекта ${project} твой. Влей ${t.branch ? `ветку ${t.branch}` : "работу"} в ${tcfg.targetBranch}, запушь и вызови peer_task {action: "accept", n: ${t.n}, checks: {...}${t.branch ? "" : ', commit: "<хэш>"'}}.` }
+          return { content: `Замок вливания проекта ${project} твой. Влей ${t.branch ? `ветку ${t.branch}` : "работу"} в ${tcfg.targetBranch}, запушь и вызови crew_task {action: "accept", n: ${t.n}, checks: {...}${t.branch ? "" : ', commit: "<хэш>"'}}.` }
         }
         if (action === "rework") {
           // sync: true — вернуть влить свежую целевую ветку (main ушёл вперёд, пока шёл CI): не доработка, круг в
@@ -1794,14 +1794,14 @@ export function makeTools(host: PeersHost): PeerTool[] {
           }
           if (sync) return { content: `Задача #${t.n} возвращена влить свежую ${tcfg.targetBranch} (синхронизация ${t.syncs}, в rework_max не идёт). Исполнитель разбужен; сдаст — тебя разбудят.` }
           if ((t.rework ?? 0) > tcfg.reworkMax) {
-            postLetter(t.author, { id: `rework-max-${safeKey(project)}-${t.n}-${t.rework}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: now, text: `Задача #${t.n} «${t.title}» уходит на доработку ${t.rework}-й раз (предел проекта rework_max ${tcfg.reworkMax}). Похоже, задача поставлена неясно или не по силам исполнителю — спроси владельца: уточнить задачу, передать другой сессии (peer_task reassign) или отменить.` })
+            postLetter(t.author, { id: `rework-max-${safeKey(project)}-${t.n}-${t.rework}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: now, text: `Задача #${t.n} «${t.title}» уходит на доработку ${t.rework}-й раз (предел проекта rework_max ${tcfg.reworkMax}). Похоже, задача поставлена неясно или не по силам исполнителю — спроси владельца: уточнить задачу, передать другой сессии (crew_task reassign) или отменить.` })
             host.posted([t.author])
           }
           return { content: `Задача #${t.n} на доработке (круг ${t.rework}). Исполнитель разбужен с замечаниями; сдаст — тебя разбудят.` }
         }
         if (action === "accept") {
           if (t.status !== "reviewing") return { content: `Принять можно задачу на приёмке (сейчас ${statusRu(t.status)}).` }
-          if (!holdsMergeLock(project, me.session)) return { content: `Сначала замок вливания: peer_task {action: "merge", n: ${t.n}} — вливает один приёмщик за раз.` }
+          if (!holdsMergeLock(project, me.session)) return { content: `Сначала замок вливания: crew_task {action: "merge", n: ${t.n}} — вливает один приёмщик за раз.` }
           const checks: Record<string, string> = { ...(t.checks ?? {}) } // отмеченные по ходу (check) засчитываются
           for (const [k, v] of Object.entries(input.checks ?? {})) if (String(v ?? "").trim()) checks[k] = String(v).trim()
           const missing = acc.filter((a) => a.required && !checks[a.id])
@@ -1836,7 +1836,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
           taskEvent(t, me.session, "accepted", `принята: ${m.how}`)
           const steps = cleanupSteps(t, tcfg)
           if (!steps.length) return { content: finishCleaned(t, me, "очистка не нужна (cleanup: none)") }
-          return { content: `Задача #${t.n} принята (${m.how}). Очистка по настройке проекта (cleanup: ${tcfg.cleanup}):\n${steps.map((x) => `  ${x}`).join("\n")}\nСделал — peer_task {action: "cleaned", n: ${t.n}}.` }
+          return { content: `Задача #${t.n} принята (${m.how}). Очистка по настройке проекта (cleanup: ${tcfg.cleanup}):\n${steps.map((x) => `  ${x}`).join("\n")}\nСделал — crew_task {action: "cleaned", n: ${t.n}}.` }
         }
         // cleaned
         if (t.status !== "accepted") return { content: `Очистка — после принятия (сейчас ${statusRu(t.status)}).` }
@@ -1855,7 +1855,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
       if (action === "push") {
         if (!t.executor) return { content: `У задачи #${t.n} нет исполнителя.` }
         const text = String(input.text ?? "").trim() || "продолжай работу по задаче."
-        postLetter(t.executor, { id: `push-${safeKey(project)}-${t.n}-${Date.now()}`, from_role: keyOf(me), from_session: me.session, to: t.executor, time: Date.now(), text: `Подталкивание по задаче #${t.n} «${t.title}»: ${text}\nЗакончил — отчёт: peer_send {to: "${t.author}", reply_to: "${t.qid}", text: "..."}; упёрся — тем же ответом напиши, что мешает.` })
+        postLetter(t.executor, { id: `push-${safeKey(project)}-${t.n}-${Date.now()}`, from_role: keyOf(me), from_session: me.session, to: t.executor, time: Date.now(), text: `Подталкивание по задаче #${t.n} «${t.title}»: ${text}\nЗакончил — отчёт: crew_send {to: "${t.author}", reply_to: "${t.qid}", text: "..."}; упёрся — тем же ответом напиши, что мешает.` })
         const obl = obligationsOf(t.executor)
         for (const o of obl)
           if (o.qid === t.qid) {
@@ -1903,10 +1903,10 @@ export function makeTools(host: PeersHost): PeerTool[] {
 
   // НАСТРОЙКИ ПРОЕКТА (план 002, Ф.6): опросник, показ, запись. Файл — в репозитории настроек (settings.ts);
   // set пишет рабочую копию, действует значение с коммита.
-  const peerConfig: PeerTool = {
-    name: "peer_config",
+  const crewConfig: CrewTool = {
+    name: "crew_config",
     description:
-      "The project's settings (.opencode/opencode-peers.json in its settings repository). guide — questions for the owner on every key (current value, options, recommendation, why): ask them in text and record the answers; show — effective values and where each comes from (default, the committed file, the local option of opencode.jsonc), plus uncommitted edits; set {values} — integrator only: checks every value and writes the working copy (null removes a key); it applies once committed to the settings branch.",
+      "The project's settings (.opencode/harness-crew.json in its settings repository). guide — questions for the owner on every key (current value, options, recommendation, why): ask them in text and record the answers; show — effective values and where each comes from (default, the committed file, the local option of opencode.jsonc), plus uncommitted edits; set {values} — integrator only: checks every value and writes the working copy (null removes a key); it applies once committed to the settings branch.",
     input: {
       type: "object",
       properties: {
@@ -1929,7 +1929,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
       if (action === "show") return { content: configShowText(me.directory, projOf(me)) }
       if (action === "set") {
         if (!isIntegrator(me)) return notIntegrator(me)
-        if (!p?.dir) return { content: `Проект ${projOf(me)} задан прежней формой опций: записать некуда. Переведи его на репозиторий настроек — в opencode.jsonc "projects": ["<папка с .opencode/opencode-peers.json>"].` }
+        if (!p?.dir) return { content: `Проект ${projOf(me)} задан прежней формой опций: записать некуда. Переведи его на репозиторий настроек — в opencode.jsonc "projects": ["<папка с .opencode/harness-crew.json>"].` }
         const values = input.values
         if (!values || typeof values !== "object" || Array.isArray(values) || !Object.keys(values).length) return { content: "Нужно values: {ключ: значение}." }
         const errors = Object.entries(values).filter(([, v]) => v !== null).map(([k, v]) => invalid(k, v)).filter(Boolean)
@@ -1937,14 +1937,14 @@ export function makeTools(host: PeersHost): PeerTool[] {
         const all = [...new Set([...errors, ...unknown])]
         if (all.length) return { content: `Не записано (файл не тронут):\n${all.map((e) => `- ${e}`).join("\n")}` }
         const file = writeSettings(p.dir, values)
-        return { content: `Записано в ${file}: ${Object.keys(values).join(", ")}. Действует после коммита в ветку ${p.branch} репозитория ${p.repo} (по методологии проекта); до коммита действуют прежние значения — peer_config {action: "show"} покажет незакоммиченное.` }
+        return { content: `Записано в ${file}: ${Object.keys(values).join(", ")}. Действует после коммита в ветку ${p.branch} репозитория ${p.repo} (по методологии проекта); до коммита действуют прежние значения — crew_config {action: "show"} покажет незакоммиченное.` }
       }
       return { content: `Неизвестное действие «${action}».` }
     },
   }
 
-  const peerInbox: PeerTool = {
-    name: "peer_inbox",
+  const crewInbox: CrewTool = {
+    name: "crew_inbox",
     description: "The caller tab's letters: letters still waiting are handed over right here, in this turn (no separate wake), then the recent delivered ones (newest last).",
     input: {
       type: "object",
@@ -1967,7 +1967,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
         .slice(-Math.max(1, Number(input.limit ?? 10)))
       const body = letters.map((l) => `${hhmm(l.time)} от ${l.from_role} → ${l.to}${l.qid ? ` [вопрос ${l.qid}]` : ""}${l.reply_to ? ` [ответ на ${l.reply_to}]` : ""}: ${l.text}`).join("\n")
       // ЖДУЩИЕ ПИСЬМА — отдаются здесь же, в этом ходе (вкладка сама спросила почту — будить её потом незачем); тот же
-      // захват, что у доставки: письмо забирает кто-то один. Ответ, которого ждёт peer_wait, не трогается.
+      // захват, что у доставки: письмо забирает кто-то один. Ответ, которого ждёт crew_wait, не трогается.
       const awaited = waitingFor(me.session)
       const claimed = keys.flatMap((k) => claimLetters(k, `inbox-${process.pid}-${Date.now()}`))
       const back = claimed.filter((c) => awaited && c.letter.reply_to === awaited)
@@ -1982,20 +1982,20 @@ export function makeTools(host: PeersHost): PeerTool[] {
     },
   }
 
-  const peerDoctor: PeerTool = {
-    name: "peer_doctor",
-    description: "Self-check of opencode-peers: the OpenCode features it relies on, the window plugin (presence), the mailbox. Lists what is broken and what to do.",
+  const crewDoctor: CrewTool = {
+    name: "crew_doctor",
+    description: "Self-check of opencode-harness-crew: the OpenCode features it relies on, the window plugin (presence), the mailbox. Lists what is broken and what to do.",
     input: { type: "object", properties: {}, additionalProperties: false },
     execute: async (_input: any, sessionID: string) => {
       const problems = [...(await host.doctor()), ...commonDoctor(sessionID), ...settingsProblems(projects)]
-      return { content: problems.length ? `peer_doctor — есть проблемы:\n${problems.map((p) => `- ${p}`).join("\n")}` : "peer_doctor: всё в порядке (окна отмечаются, ящик пишется, нужные возможности OpenCode на месте)." }
+      return { content: problems.length ? `crew_doctor — есть проблемы:\n${problems.map((p) => `- ${p}`).join("\n")}` : "crew_doctor: всё в порядке (окна отмечаются, ящик пишется, нужные возможности OpenCode на месте)." }
     },
   }
 
   // НАБЛЮДЕНИЯ (watch.ts): ожидание, которое переживает конец хода — фон Claude Code гибнет с ходом окна claude-code.
-  const peerWatch: PeerTool = {
-    name: "peer_watch",
-    description: `Wait for something long WITHOUT holding the turn: the opencode-peers plugin runs \`command\` (Git Bash, in the tab's directory) in the OpenCode server, detached -- it survives the end of your turn and a service restart -- and when it exits wakes this tab with a letter: exit code, duration, output tail. Use it instead of Bash run_in_background / Monitor for anything that must outlive the turn (a gate's verdict, a long build): in a claude-code tab background tasks are killed when the turn ends and no notification ever comes. The command should itself wait and finish, e.g. \`until [ -f /tmp/gate.done ]; do sleep 30; done; cat /tmp/gate.done\`. minutes: time limit (default ${WATCH_DEFAULT_MIN}, up to ${WATCH_MAX_MIN}), then it is stopped (exit 124). note: a short label for the letter. machine: true for a command that loads the machine (a gate, a build, a full test run -- run it here, not in your own Bash): it waits its turn in the project's machine queue (machine_slots at a time, default 1), so the tabs' heavy runs do not pile up. The command runs outside the window's permissions, so it is checked against the project's permissions.deny (.claude/settings.json): a command matching a denied Bash/PowerShell prefix (whole or any subcommand) or naming a file under a denied Read glob is refused, naming the rule. The command's environment carries PEERS_SESSION_ID, PEERS_ROLE, PEERS_PROJECT and PEERS_REVIEW_N (a reviewer) / PEERS_TASK_N (an executor). No command: list this tab's watches. After calling it, end your turn -- the letter wakes you.`,
+  const crewWatch: CrewTool = {
+    name: "crew_watch",
+    description: `Wait for something long WITHOUT holding the turn: the opencode-harness-crew plugin runs \`command\` (Git Bash, in the tab's directory) in the OpenCode server, detached -- it survives the end of your turn and a service restart -- and when it exits wakes this tab with a letter: exit code, duration, output tail. Use it instead of Bash run_in_background / Monitor for anything that must outlive the turn (a gate's verdict, a long build): in a claude-code tab background tasks are killed when the turn ends and no notification ever comes. The command should itself wait and finish, e.g. \`until [ -f /tmp/gate.done ]; do sleep 30; done; cat /tmp/gate.done\`. minutes: time limit (default ${WATCH_DEFAULT_MIN}, up to ${WATCH_MAX_MIN}), then it is stopped (exit 124). note: a short label for the letter. machine: true for a command that loads the machine (a gate, a build, a full test run -- run it here, not in your own Bash): it waits its turn in the project's machine queue (machine_slots at a time, default 1), so the tabs' heavy runs do not pile up. The command runs outside the window's permissions, so it is checked against the project's permissions.deny (.claude/settings.json): a command matching a denied Bash/PowerShell prefix (whole or any subcommand) or naming a file under a denied Read glob is refused, naming the rule. The command's environment carries CREW_SESSION_ID, CREW_ROLE, CREW_PROJECT and CREW_REVIEW_N (a reviewer) / CREW_TASK_N (an executor). No command: list this tab's watches. After calling it, end your turn -- the letter wakes you.`,
     input: {
       type: "object",
       properties: {
@@ -2015,7 +2015,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
       const command = String(input.command ?? "").trim()
       if (!command) {
         const ws = watchesOf(me.session)
-        return { content: ws.length ? `Наблюдения вкладки (отмена — peer_watch {action: "cancel", id}):\n${ws.map((w) => `— ${w.id} ${w.note ? `«${w.note}» ` : ""}${w.status === "requested" ? `ждёт запуска${w.machine ? " в очереди машины" : ""} с ${hhmm(w.created)}` : `с ${hhmm(w.started ?? w.created)}`}, предел ${w.minutes} мин: ${w.command.slice(0, 200)}`).join("\n")}` : "Наблюдений нет." }
+        return { content: ws.length ? `Наблюдения вкладки (отмена — crew_watch {action: "cancel", id}):\n${ws.map((w) => `— ${w.id} ${w.note ? `«${w.note}» ` : ""}${w.status === "requested" ? `ждёт запуска${w.machine ? " в очереди машины" : ""} с ${hhmm(w.created)}` : `с ${hhmm(w.started ?? w.created)}`}, предел ${w.minutes} мин: ${w.command.slice(0, 200)}`).join("\n")}` : "Наблюдений нет." }
       }
       const project = me.project ?? projOf(me)
       // тяжёлая по списку проекта (heavy_commands) — в очередь машины сама, даже без machine: true (план 012)
@@ -2028,22 +2028,22 @@ export function makeTools(host: PeersHost): PeerTool[] {
       const w = requestWatch({ session: me.session, command, cwd, note: String(input.note ?? "").trim() || undefined, minutes: input.minutes, machine, project, env: watchEnv(me, project) })
       const ahead = machine ? machineQueue(project).filter((x) => x.id !== w.id).length : 0
       const queueText = machine ? `${heavyBy && input.machine !== true ? ` Команда — тяжёлый прогон (heavy_commands: «${heavyBy}»), поэтому в очереди машины.` : ""} Команда грузит машину: стоит в очереди машины проекта${ahead ? `, перед ней ${ahead}` : ""} — запустится, когда освободится место (machine_slots).` : ""
-      return { content: `Наблюдение ${w.note ? `«${w.note}» ` : ""}${w.id} поставлено (${hhmm(w.created)}, предел ${w.minutes} мин от запуска; отмена — peer_watch {action: "cancel", id: "${w.id}"}).${queueText} Плагин запустит команду в сервере OpenCode и разбудит эту вкладку письмом с результатом. Заканчивай ход — ждать не нужно.` }
+      return { content: `Наблюдение ${w.note ? `«${w.note}» ` : ""}${w.id} поставлено (${hhmm(w.created)}, предел ${w.minutes} мин от запуска; отмена — crew_watch {action: "cancel", id: "${w.id}"}).${queueText} Плагин запустит команду в сервере OpenCode и разбудит эту вкладку письмом с результатом. Заканчивай ход — ждать не нужно.` }
     },
   }
 
-  const peerHelp: PeerTool = {
-    name: "peer_help",
-    description: "Help for opencode-peers: the tools with examples, addressing, roles, delivery and presence, questions and answers, tasks for the integrator.",
+  const crewHelp: CrewTool = {
+    name: "crew_help",
+    description: "Help for opencode-harness-crew: the tools with examples, addressing, roles, delivery and presence, questions and answers, tasks for the integrator.",
     input: { type: "object", properties: {}, additionalProperties: false },
     execute: async (_input: any, sessionID: string) => ({ content: helpFor(readJson<Card>(cardFile(String(sessionID ?? "")))?.directory || host.defaultDir) }),
   }
 
-  return [peerList, peerRole, peerSend, peerWait, peerWatch, peerSpawn, peerTask, peerConfig, peerInbox, peerDoctor, peerHelp]
+  return [crewList, crewRole, crewSend, crewWait, crewWatch, crewSpawn, crewTask, crewConfig, crewInbox, crewDoctor, crewHelp]
 }
 
 /** Шаги приёмки задачи: у задачи-плана — перепроверка плана (план 012), у остальных — приёмка проекта. */
-export const acceptanceOf = (t: Task, cfg: PeersConfig) => (t.plan ? (t.plan.approval && t.plan.approval.decision !== "no" ? cfg.planMergeAcceptance : cfg.planAcceptance) : cfg.acceptance)
+export const acceptanceOf = (t: Task, cfg: CrewConfig) => (t.plan ? (t.plan.approval && t.plan.approval.decision !== "no" ? cfg.planMergeAcceptance : cfg.planAcceptance) : cfg.acceptance)
 
 /** Письмо с задачей исполнителю. */
 /** Письмо исполнителю задачи-плана (план 012): исходная задача, файл, шаблон, критерии, ход перепроверки. */
@@ -2051,7 +2051,7 @@ export function planTaskLetter(t: Task): string {
   const p = t.plan!
   const cfg = loadConfig(t.directory)
   const f = cfg.planForm
-  const approver = cfg.planApprover === "owner" ? "владелец (командой окна /plans)" : "интегратор (peer_task plan_decide)"
+  const approver = cfg.planApprover === "owner" ? "владелец (командой окна /plans)" : "интегратор (crew_task plan_decide)"
   const strict = f.grades.filter((g) => !g.clean).map((g) => g.name)
   return [
     `ЗАДАЧА-ПЛАН #${t.n} «${t.title}» от ${t.author_role} (сессия ${t.author}), приоритет ${t.priority}. Составь план ${p.n}${p.parent ? ` — подплан плана ${p.parent}` : ""}. Код не пиши: результат — только файл плана.`,
@@ -2062,14 +2062,14 @@ export function planTaskLetter(t: Task): string {
     `ФОРМА (по этому шаблону: фазы «### ${f.prefix}.N — …», шаги «#### ${f.prefix}.N.M — …» с [P1] [после: …] [где: …], у шага «${f.whatLabel}:» и «**${f.criteriaLabel}:**»; отметки — как в шаблоне):\n${planTemplateFor(t, cfg)}`,
     `КРИТЕРИИ ПРИЁМКИ ПЛАНА — по ним идёт перепроверка:\n${cfg.planAcceptance.map((a) => `  ${a.id}: ${a.text}`).join("\n")}\nФорму (шапка, разделы, «${f.whatLabel}:» и «${f.criteriaLabel}» у каждого шага, вопросы четвёркой с «Блокирует», «после:» на существующие шаги без кругов) плагин проверит при сдаче — с ошибками формы отчёт не примет.`,
     `ДАЛЬШЕ: перепроверка раундами, каждый раунд — новая сессия.\n${roundRules(f.grades)}\nГотов — ${cfg.planCleanRounds} раунда подряд без замечаний градаций ${strict.join(", ")}; тогда план согласует ${approver}${f.modeQuestion ? ` (и ответит на «${f.sections.mode}»)` : ""}. Строку «**Перепроверка:**» в шапке обновляй после каждого раунда.`,
-    `СДАЧА: закоммить файл плана в ветку задачи и отчитайся: peer_send {to: "${t.author}", reply_to: "${t.qid}", text: "план ${p.n}: файл, фазы и шаги кратко"}. Упрёшься — тем же ответом напиши, что мешает.`,
+    `СДАЧА: закоммить файл плана в ветку задачи и отчитайся: crew_send {to: "${t.author}", reply_to: "${t.qid}", text: "план ${p.n}: файл, фазы и шаги кратко"}. Упрёшься — тем же ответом напиши, что мешает.`,
   ]
     .filter(Boolean)
     .join("\n")
 }
 
 /** Шаблон плана: свой файл проекта (plan_template; {n} {title} {source}) или встроенный по форме проекта. */
-export function planTemplateFor(t: Task, cfg: PeersConfig): string {
+export function planTemplateFor(t: Task, cfg: CrewConfig): string {
   const p = t.plan!
   if (cfg.planTemplate) {
     try {
@@ -2111,7 +2111,7 @@ export function formatTaskLetter(t: Task): string {
     t.handoff ? `СДЕЛАНО ПРЕЖНИМ ИСПОЛНИТЕЛЕМ (задача передана тебе):\n${t.handoff}` : "",
     t.plan_step ? `ШАГ ПЛАНА ${t.plan_step.plan}, ${t.plan_step.step} (файл ${t.plan_step.file}): закрыв шаг, отметь в его заголовке «${loadConfig(t.directory).planForm.marks.step_done} <дата>, коммит <hash>» тем же слиянием — без отметки в целевой ветке приёмка не пройдёт.` : "",
     acceptanceForExecutor(t),
-    `Когда закончишь — отчёт: peer_send {to: "${t.author}", reply_to: "${t.qid}", text: "что сделано, как проверено, что осталось"}. Упрёшься — тем же ответом напиши, что мешает. Пока отчёта нет, задача открыта: остановишься без него — получишь напоминание.`,
+    `Когда закончишь — отчёт: crew_send {to: "${t.author}", reply_to: "${t.qid}", text: "что сделано, как проверено, что осталось"}. Упрёшься — тем же ответом напиши, что мешает. Пока отчёта нет, задача открыта: остановишься без него — получишь напоминание.`,
   ]
     .filter(Boolean)
     .join("\n")
@@ -2158,7 +2158,7 @@ export function expectedLetters(t: Task): Letter[] {
   if (t.status === "rework" && t.executor && t.rework_note)
     out.push({ id: `rework-${p}-${t.n}-${rounds(t) || 1}`, from_role: reviewerRole, from_session: t.reviewer ?? PLUGIN_SENDER, to: t.executor, time: at, text: reworkLetter(t, t.rework_note, reviewerRole) })
   if (t.status === "submitted" && rounds(t) > 0 && t.reviewer && t.report)
-    out.push({ id: `review-again-${p}-${t.n}-${rounds(t)}`, from_role: t.executor_role ?? "исполнитель", from_session: t.executor ?? PLUGIN_SENDER, to: t.reviewer, time: at, text: `Доработка задачи #${t.n} «${t.title}» сдана (круг ${t.rework}):\n${t.report}\nПроверь снова: peer_task {action: "review", n: ${t.n}}, дальше rework или merge → accept.` })
+    out.push({ id: `review-again-${p}-${t.n}-${rounds(t)}`, from_role: t.executor_role ?? "исполнитель", from_session: t.executor ?? PLUGIN_SENDER, to: t.reviewer, time: at, text: `Доработка задачи #${t.n} «${t.title}» сдана (круг ${t.rework}):\n${t.report}\nПроверь снова: crew_task {action: "review", n: ${t.n}}, дальше rework или merge → accept.` })
   if (t.status === "cleaned") {
     const checks = Object.entries(t.checks ?? {}).map(([k, v]) => `${k}: ${v}`).join("; ")
     out.push({ id: `cleaned-${p}-${t.n}`, from_role: reviewerRole, from_session: t.reviewer ?? PLUGIN_SENDER, to: t.author, time: at, wake: false, text: `Задача #${t.n} «${t.title}» принята и влита (${t.commit ? `коммит ${t.commit}` : `ветка ${t.branch ?? "?"}`}), очищена. Приёмщик ${reviewerRole}. Шаги: ${checks || "—"}. Перепроверять не нужно.` })
@@ -2206,7 +2206,7 @@ export function propagateToParent(t: Task): string[] {
       id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: order.author, time: Date.now(), ...(done ? { wake: false } : {}),
       text: done
         ? `Заказ #${order.n} «${order.title}» выполнен проектом ${t.project} (задача #${t.n} принята и влита${t.commit ? `, коммит ${t.commit}` : ""}).`
-        : `Заказ #${order.n} «${order.title}»: задачу ${t.project} #${t.n} отменили. Спроси интегратора ${t.project} (peer_send {to: "${t.project}.integrator"}) или отмени заказ (peer_task {action: "cancel", n: ${order.n}}).`,
+        : `Заказ #${order.n} «${order.title}»: задачу ${t.project} #${t.n} отменили. Спроси интегратора ${t.project} (crew_send {to: "${t.project}.integrator"}) или отмени заказ (crew_task {action: "cancel", n: ${order.n}}).`,
     })
     sent.push(order.author)
   }
@@ -2224,7 +2224,7 @@ export function commonDoctor(sessionID?: string): string[] {
     out.push(`ящик ${BASE} не пишется: ${e}`)
   }
   const windows = liveWindows()
-  if (!windows.length) out.push("ни одно окно OpenCode не отмечается: плагин окна не подключён или окна закрыты. Подключение: в ~/.config/opencode/cli.json, раздел plugins — путь к папке opencode-peers; окна открыть заново")
-  else if (sessionID && !process.env.NOVA_PEERS_PRESENCE && !tabOf(sessionID, windows) && !readJson<Card>(cardFile(sessionID))?.spawned) out.push("эта вкладка не видна ни одному окну: она открыта в окне, запущенном до подключения плагина окна? Открой окно заново")
+  if (!windows.length) out.push("ни одно окно OpenCode не отмечается: плагин окна не подключён или окна закрыты. Подключение: в ~/.config/opencode/cli.json, раздел plugins — путь к папке opencode-harness-crew; окна открыть заново")
+  else if (sessionID && !process.env.HARNESS_CREW_PRESENCE && !tabOf(sessionID, windows) && !readJson<Card>(cardFile(sessionID))?.spawned) out.push("эта вкладка не видна ни одному окну: она открыта в окне, запущенном до подключения плагина окна? Открой окно заново")
   return out
 }

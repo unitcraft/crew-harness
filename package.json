@@ -1,8 +1,8 @@
 {
-  "name": "opencode-peers",
-  "version": "0.4.0",
+  "name": "opencode-harness-crew",
+  "version": "0.5.0",
   "type": "module",
-  "description": "Letters and tasks between OpenCode sessions on one machine, across windows and projects, addressed by project.role",
+  "description": "Your AI dev team, harnessed: plans, tasks, reviewers and letters between Claude Code sessions in OpenCode",
   "license": "MIT OR Apache-2.0",
   "exports": {
     ".": "./index.ts",
@@ -11,9 +11,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/unitcraft/opencode-peers.git"
+    "url": "git+https://github.com/unitcraft/opencode-harness-crew.git"
   },
   "scripts": {
-    "test": "node test/cleanup-tmp.mjs && node test/peers-project.test.mjs && node test/peers-config.test.mjs && node test/peers-settings.test.mjs && node test/peers-help.test.mjs && node test/peers-idle.test.mjs && node test/peers-model.test.mjs && node test/peers-role.test.mjs && node test/peers-shared.test.mjs && node test/peers-tier.test.mjs && node test/peers-mcp.test.mjs && node test/peers-wake.test.mjs && node test/peers-delivery.test.mjs && node test/peers-flow.test.mjs && node test/peers-tasks.test.mjs && node test/peers-push.test.mjs && node test/peers-review.test.mjs && node test/peers-place.test.mjs && node test/peers-plans.test.mjs && node test/peers-plan-task.test.mjs && node test/peers-plan-config.test.mjs && node test/peers-restart.test.mjs && node test/peers-cross.test.mjs && node test/peers-cfgtool.test.mjs && node test/peers-watch.test.mjs && node test/peers-status.test.mjs && node test/peers-flowwatch.test.mjs && node test/peers-stuck.test.mjs && node test/peers-paths.test.mjs && node test/peers-housekeeping.test.mjs && node test/peers-autoclose.test.mjs && node test/peers-sidebar.test.mjs && node test/peers-acceptor.test.mjs && node test/peers-deny.test.mjs"
+    "test": "node test/cleanup-tmp.mjs && node test/crew-project.test.mjs && node test/crew-config.test.mjs && node test/crew-settings.test.mjs && node test/crew-help.test.mjs && node test/crew-idle.test.mjs && node test/crew-model.test.mjs && node test/crew-role.test.mjs && node test/crew-shared.test.mjs && node test/crew-tier.test.mjs && node test/crew-mcp.test.mjs && node test/crew-wake.test.mjs && node test/crew-delivery.test.mjs && node test/crew-flow.test.mjs && node test/crew-tasks.test.mjs && node test/crew-push.test.mjs && node test/crew-review.test.mjs && node test/crew-place.test.mjs && node test/crew-plans.test.mjs && node test/crew-plan-task.test.mjs && node test/crew-plan-config.test.mjs && node test/crew-restart.test.mjs && node test/crew-cross.test.mjs && node test/crew-cfgtool.test.mjs && node test/crew-watch.test.mjs && node test/crew-status.test.mjs && node test/crew-flowwatch.test.mjs && node test/crew-stuck.test.mjs && node test/crew-paths.test.mjs && node test/crew-housekeeping.test.mjs && node test/crew-autoclose.test.mjs && node test/crew-sidebar.test.mjs && node test/crew-acceptor.test.mjs && node test/crew-deny.test.mjs"
   }
 }

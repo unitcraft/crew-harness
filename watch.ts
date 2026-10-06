@@ -4,7 +4,7 @@
 // Claude Code закрывается, уведомления о конце не будет (замер). Случай владельца: интегратор поставил ожидание
 // вердикта гейта в фон и закончил ход «уведомление придёт само» — гейт кончился, окно стояло.
 //
-// peer_watch {command}: инструмент только КЛАДЁТ задание (watches/<id>.req.json) — MCP-сервер окна claude-code
+// crew_watch {command}: инструмент только КЛАДЁТ задание (watches/<id>.req.json) — MCP-сервер окна claude-code
 // умирает вместе с ходом. Запускает его плагин (сервер OpenCode, проход доставки): команда идёт в Git Bash
 // ОТКРЕПЛЁННО (переживает и перезапуск сервиса), вывод — в <id>.out, код выхода — в <id>.exit. Когда код появился —
 // письмо окну с побудкой: код, длительность, хвост вывода. Процесс пропал без кода — письмо «оборвано».
@@ -40,9 +40,9 @@ export type Watch = {
   code?: number | null
   /** снято: задача закрыта */
   dropped?: boolean
-  /** отменено своей вкладкой (peer_watch cancel) */
+  /** отменено своей вкладкой (crew_watch cancel) */
   cancelled?: boolean
-  /** кто поставил (план 013, п.5): PEERS_SESSION_ID, PEERS_ROLE, PEERS_PROJECT, PEERS_REVIEW_N / PEERS_TASK_N —
+  /** кто поставил (план 013, п.5): CREW_SESSION_ID, CREW_ROLE, CREW_PROJECT, CREW_REVIEW_N / CREW_TASK_N —
    *  в окружение команды. Фиксируется при постановке и лежит в записи на диске: запуск после перезапуска сервера
    *  берёт те же значения, а не роль вкладки на момент запуска. */
   env?: Record<string, string>
@@ -224,7 +224,7 @@ export function dropWatch(w: Watch, log: (s: string) => void = () => {}, now = D
  *  ошибкой в команде 90 мин держало единственное место машины nova, снять его можно было только руками. */
 export function cancelWatch(id: string, session: string, log: (s: string) => void = () => {}, now = Date.now()): { ok: boolean; text: string } {
   const w = readJson<Watch>(file(id, ".req.json")) ?? readJson<Watch>(file(id, ".json"))
-  if (!w || w.status === "done") return { ok: false, text: `Открытого наблюдения ${id} нет (peer_watch без команды — список своих).` }
+  if (!w || w.status === "done") return { ok: false, text: `Открытого наблюдения ${id} нет (crew_watch без команды — список своих).` }
   if (w.session !== session) return { ok: false, text: `Наблюдение ${id} — не этой вкладки; отменить его может только она.` }
   dropWatch(w, log, now, { cancelled: true })
   return { ok: true, text: `Наблюдение ${w.note ? `«${w.note}» ` : ""}${id} отменено${w.status === "requested" ? " (снято из очереди)" : " (процесс остановлен)"}${w.machine ? ", место в очереди машины свободно" : ""}. Письма о нём не будет.` }

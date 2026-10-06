@@ -6,7 +6,7 @@
 import { execFile, execFileSync } from "node:child_process"
 import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { type Card, type PeersConfig, ROLES, cardFile, mayWakeCard, readJson, safeKey } from "./core.ts"
+import { type Card, type CrewConfig, ROLES, cardFile, mayWakeCard, readJson, safeKey } from "./core.ts"
 import { type Task, isOpen, listTasks, loadTask } from "./tasks.ts"
 import { roundRules } from "./plans.ts"
 
@@ -105,7 +105,7 @@ export function fileAt(dir: string, ref: string, file: string): string | undefin
 }
 
 /** Шаги очистки по настройке проекта — текстом для приёмщика. */
-export function cleanupSteps(t: Task, cfg: PeersConfig): string[] {
+export function cleanupSteps(t: Task, cfg: CrewConfig): string[] {
   if (cfg.cleanup === "none") return []
   const out: string[] = []
   if (t.worktree) out.push(`git worktree remove "${t.worktree}"`)
@@ -115,7 +115,7 @@ export function cleanupSteps(t: Task, cfg: PeersConfig): string[] {
 }
 
 /** Очистка сделана: ни одного артефакта задачи (ownership) — локально, а при local+remote и на origin (если доступен). */
-export function cleanupDone(t: Task, cfg: PeersConfig): { ok: boolean; left: string[] } {
+export function cleanupDone(t: Task, cfg: CrewConfig): { ok: boolean; left: string[] } {
   const left: string[] = []
   if (cfg.cleanup === "none") return { ok: true, left }
   if (t.worktree && existsSync(t.worktree)) left.push(`worktree ${t.worktree} ещё есть`)
@@ -140,7 +140,7 @@ export function cleanupDone(t: Task, cfg: PeersConfig): { ok: boolean; left: str
 }
 
 /** Письмо приёмщику. */
-export function reviewLetter(t: Task, cfg: PeersConfig): string {
+export function reviewLetter(t: Task, cfg: CrewConfig): string {
   if (t.plan?.approval && t.plan.approval.decision !== "no") return planMergeLetter(t, cfg)
   if (t.plan) return planReviewLetter(t, cfg)
   const steps = cfg.acceptance.length
@@ -155,21 +155,21 @@ export function reviewLetter(t: Task, cfg: PeersConfig): string {
     t.report ? `ОТЧЁТ ИСПОЛНИТЕЛЯ:\n${t.report.slice(0, 3000)}` : "",
     `ШАГИ ПРИЁМКИ:\n${steps}`,
     `ПОРЯДОК:`,
-    `  1) peer_task {action: "review", n: ${t.n}} — начал приёмку (исполнитель узнает без пробуждения);`,
+    `  1) crew_task {action: "review", n: ${t.n}} — начал приёмку (исполнитель узнает без пробуждения);`,
     cfg.acceptance.length
-      ? `  2) КАЖДЫЙ ШАГ — по очереди, владелец видит ход в окне: peer_task {action: "check", n: ${t.n}, step: "<шаг>"} перед проверкой шага, после — {action: "check", n: ${t.n}, step: "<шаг>", result: "чем подтверждено"};`
+      ? `  2) КАЖДЫЙ ШАГ — по очереди, владелец видит ход в окне: crew_task {action: "check", n: ${t.n}, step: "<шаг>"} перед проверкой шага, после — {action: "check", n: ${t.n}, step: "<шаг>", result: "чем подтверждено"};`
       : "",
-    `  ${cfg.acceptance.length ? "3" : "2"}) нашёл ошибки — peer_task {action: "rework", n: ${t.n}, text: "что исправить"} (вернётся тебе на повторную приёмку);`,
-    `  ${cfg.acceptance.length ? "4" : "3"}) всё зелёное — peer_task {action: "merge", n: ${t.n}} (замок вливания проекта), влей в ${cfg.targetBranch} и запушь, затем`,
-    `     peer_task {action: "accept", n: ${t.n}${cfg.acceptance.length ? "" : ", checks: {\"<критерий>\": \"чем подтверждено\"}"}, commit: "<хэш в ${cfg.targetBranch}, если squash>"} (отмеченные шаги засчитаны);`,
-    `  ${cfg.acceptance.length ? "5" : "4"}) плагин сам проверит, что влито, и выдаст шаги очистки; сделал — peer_task {action: "cleaned", n: ${t.n}}.`,
+    `  ${cfg.acceptance.length ? "3" : "2"}) нашёл ошибки — crew_task {action: "rework", n: ${t.n}, text: "что исправить"} (вернётся тебе на повторную приёмку);`,
+    `  ${cfg.acceptance.length ? "4" : "3"}) всё зелёное — crew_task {action: "merge", n: ${t.n}} (замок вливания проекта), влей в ${cfg.targetBranch} и запушь, затем`,
+    `     crew_task {action: "accept", n: ${t.n}${cfg.acceptance.length ? "" : ", checks: {\"<критерий>\": \"чем подтверждено\"}"}, commit: "<хэш в ${cfg.targetBranch}, если squash>"} (отмеченные шаги засчитаны);`,
+    `  ${cfg.acceptance.length ? "5" : "4"}) плагин сам проверит, что влито, и выдаст шаги очистки; сделал — crew_task {action: "cleaned", n: ${t.n}}.`,
   ]
     .filter(Boolean)
     .join("\n")
 }
 
 /** Письмо проверяющему раунда перепроверки плана (план 012). */
-export function planReviewLetter(t: Task, cfg: PeersConfig): string {
+export function planReviewLetter(t: Task, cfg: CrewConfig): string {
   const p = t.plan!
   const no = p.rounds.length + 1
   const f = cfg.planForm
@@ -183,9 +183,9 @@ export function planReviewLetter(t: Task, cfg: PeersConfig): string {
     `ЧТО ПРОВЕРИТЬ — по каждому шагу check:\n${cfg.planAcceptance.map((a) => `  ${a.id}: ${a.text}`).join("\n")}`,
     roundRules(f.grades),
     "ПОРЯДОК:",
-    `  1) peer_task {action: "review", n: ${t.n}};`,
-    `  2) по каждому шагу: peer_task {action: "check", n: ${t.n}, step} перед проверкой, {action: "check", n: ${t.n}, step, result: "что нашёл"} после (у a2-coverage в result — таблица «требование → шаг → критерий»);`,
-    `  3) вердикт: peer_task {action: "round", n: ${t.n}, grades: {${f.grades.map((g) => `${g.id}: <число>`).join(", ")}}, text: "замечания: [градация] что не так → что исправить"}.`,
+    `  1) crew_task {action: "review", n: ${t.n}};`,
+    `  2) по каждому шагу: crew_task {action: "check", n: ${t.n}, step} перед проверкой, {action: "check", n: ${t.n}, step, result: "что нашёл"} после (у a2-coverage в result — таблица «требование → шаг → критерий»);`,
+    `  3) вердикт: crew_task {action: "round", n: ${t.n}, grades: {${f.grades.map((g) => `${g.id}: <число>`).join(", ")}}, text: "замечания: [градация] что не так → что исправить"}.`,
     `Готов — ${cfg.planCleanRounds} раунда подряд только с косметическими; тогда план уйдёт владельцу. merge и accept в раунде не нужны: план вливается после согласования.`,
   ]
     .filter(Boolean)
@@ -193,7 +193,7 @@ export function planReviewLetter(t: Task, cfg: PeersConfig): string {
 }
 
 /** Письмо приёмщику согласованного плана: записать решение владельца и влить (план 012, шаг 3). */
-export function planMergeLetter(t: Task, cfg: PeersConfig): string {
+export function planMergeLetter(t: Task, cfg: CrewConfig): string {
   const p = t.plan!
   const a = p.approval!
   const yes = a.decision === "ok"
@@ -206,9 +206,9 @@ export function planMergeLetter(t: Task, cfg: PeersConfig): string {
     `  — в «${cfg.planForm.sections.decisions}»: строку «план согласован${yes ? " без упрощений" : ", упрощения — как в плане"} | ${day}»;`,
     `  — в шапке: «**Статус:** ${cfg.planForm.marks.plan_work}».`,
     "ПОРЯДОК:",
-    `  1) peer_task {action: "review", n: ${t.n}}; шаги approval-written и form — check по каждому;`,
-    `  2) peer_task {action: "merge", n: ${t.n}} (замок вливания), влей ветку в ${cfg.targetBranch} и запушь;`,
-    `  3) peer_task {action: "accept", n: ${t.n}} — плагин прочтёт план в ${cfg.targetBranch}: форма${cfg.planForm.modeQuestion ? ` и ответ «${cfg.planForm.modeLabel}»` : ""} должны сойтись с решением владельца; затем очистка и cleaned.`,
+    `  1) crew_task {action: "review", n: ${t.n}}; шаги approval-written и form — check по каждому;`,
+    `  2) crew_task {action: "merge", n: ${t.n}} (замок вливания), влей ветку в ${cfg.targetBranch} и запушь;`,
+    `  3) crew_task {action: "accept", n: ${t.n}} — плагин прочтёт план в ${cfg.targetBranch}: форма${cfg.planForm.modeQuestion ? ` и ответ «${cfg.planForm.modeLabel}»` : ""} должны сойтись с решением владельца; затем очистка и cleaned.`,
     cfg.planSteps === "auto" ? "После cleaned плагин сам поставит задачи по шагам плана." : "После cleaned автор получит список шагов: задачи по ним ставит он сам (plan_steps: manual).",
   ]
     .filter(Boolean)
@@ -220,7 +220,7 @@ export function reworkLetter(t: Task, text: string, by: string): string {
   return [
     t.plan ? `ЗАМЕЧАНИЯ ПЕРЕПРОВЕРКИ ПЛАНА ${t.plan.n} (задача #${t.n}) от ${by}:` : t.rework_sync ? `СИНХРОНИЗАЦИЯ задачи #${t.n} «${t.title}» с целевой веткой (не доработка) от приёмщика ${by}:` : `ДОРАБОТКА задачи #${t.n} «${t.title}» (круг ${t.rework ?? 1}) от приёмщика ${by}:`,
     text,
-    `Исправь в том же worktree${t.branch ? ` (ветка ${t.branch})` : ""} и сдай снова тем же отчётом: peer_send {to: "${t.author}", reply_to: "${t.qid}", text: "что исправлено, как проверено"}.`,
+    `Исправь в том же worktree${t.branch ? ` (ветка ${t.branch})` : ""} и сдай снова тем же отчётом: crew_send {to: "${t.author}", reply_to: "${t.qid}", text: "что исправлено, как проверено"}.`,
   ].join("\n")
 }
 
@@ -293,7 +293,7 @@ function worktreesOf(porcelain: string): { path: string; branch?: string }[] {
   }
   return out
 }
-export function ownership(t: Task, cfg: PeersConfig, repo: string) {
+export function ownership(t: Task, cfg: CrewConfig, repo: string) {
   const v = { repo, n: t.n, project: t.project }
   const branchRe = templateRe(cfg.branchName, v)
   // ветки, начатые по шаблону, и их «отростки» (t6-…-cand, t6-diag): номер задачи в начале имени ветки
@@ -317,7 +317,7 @@ export function ownership(t: Task, cfg: PeersConfig, repo: string) {
 // держал бы главный поток сервера
 const gitA = (cwd: string, args: string[], timeout = 20_000) =>
   new Promise<string>((res, rej) => execFile("git", ["-C", cwd, ...args], { encoding: "utf8", windowsHide: true, timeout }, (e, out) => (e ? rej(e) : res(String(out)))))
-export async function leftoversOf(t: Task, cfg: PeersConfig, remote: boolean): Promise<string[]> {
+export async function leftoversOf(t: Task, cfg: CrewConfig, remote: boolean): Promise<string[]> {
   const dir = existsSync(t.directory) ? t.directory : undefined
   if (!dir) return []
   const left = new Set<string>()

@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-// БЛОК «Peers» В БОКОВОЙ ПАНЕЛИ ОКНА (план 010, 2026-10-06). Слот sidebar.content — тот же, куда OpenCode 2.0.23 выводит
+// БЛОК «Crew» В БОКОВОЙ ПАНЕЛИ ОКНА (план 010, 2026-10-06). Слот sidebar.content — тот же, куда OpenCode 2.0.23 выводит
 // «Context» и «MCP»; JSX плагина окна OpenCode компилирует сам (Solid + opentui) и даёт свой рантайм. Строки — из
 // status/ (их пишет плагин сервиса), раз в 2 с; логика строк — status.ts sidebarLines (под тестом). Подключается из
 // tui.ts через import() с защитой: не заработало — блока нет, остальное в окне работает.
@@ -8,14 +8,14 @@ import { readStatuses, sideText, sidebarLines } from "./status.ts"
 
 const EVERY_MS = 2_000
 
-function PeersBlock(props: { api: any; sessionID?: string }) {
+function CrewBlock(props: { api: any; sessionID?: string }) {
   const read = () => {
     try {
       const list = readStatuses()
       const project = list.find((s) => s.session === props.sessionID)?.project ?? list[0]?.project
       return sidebarLines(list, Date.now(), project)
     } catch {
-      return { title: "Peers", rows: [], foot: "" }
+      return { title: "Crew", rows: [], foot: "" }
     }
   }
   const [view, setView] = createSignal(read())
@@ -35,5 +35,5 @@ function PeersBlock(props: { api: any; sessionID?: string }) {
 }
 
 export function mountSidebar(api: any) {
-  api.ui.slot({ append: "sidebar.content", render: (p: any) => <PeersBlock api={api} sessionID={p?.sessionID} /> })
+  api.ui.slot({ append: "sidebar.content", render: (p: any) => <CrewBlock api={api} sessionID={p?.sessionID} /> })
 }

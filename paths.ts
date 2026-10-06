@@ -1,13 +1,9 @@
-// ПАПКА ПЛАГИНА (2026-10-06). Ящик плагина — <данные OpenCode>/opencode-peers: письма, карточки, задачи, наблюдения,
-// состояние. Прежнее имя — nova-peers (плагин родился в nv-lang под этим именем; после выноса имя папки оставили, чтобы
-// не потерять накопленное). Владелец: «почему nova-peers?» — переносим.
-//
-// Перенос делает первый процесс нового кода: nova-peers переименовывается в opencode-peers, на старом месте остаётся
-// ссылка-junction nova-peers → opencode-peers, и процессы старого кода (открытые окна, внешние проверки по старому пути)
-// попадают в ту же папку — ничего не раздваивается. Папку держат (переименовать нельзя) — наоборот: opencode-peers
-// становится ссылкой на nova-peers; данные остаются на месте, имя — новое. Модуль без зависимостей: его импортируют core, tasks, watch, status, settings.
+// ПАПКА ПЛАГИНА. Ящик — <данные OpenCode>/harness-crew: письма, карточки, задачи, наблюдения, состояние. Прежние
+// имена: opencode-peers (до плана 014, 2026-10-06), nova-peers (до 2026-10-05). Новое имя — ссылка-junction на настоящую
+// папку прежнего ящика: данные не двигаются, ничего не раздваивается. Модуль без зависимостей: его импортируют core,
+// tasks, watch, status, settings.
 
-import { existsSync, lstatSync, renameSync, symlinkSync } from "node:fs"
+import { existsSync, realpathSync, symlinkSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
@@ -16,36 +12,29 @@ export function dataDir(): string {
   return xdg ? path.join(xdg, "opencode") : path.join(os.homedir(), ".local", "share", "opencode")
 }
 
-export const PEERS_DIR = "opencode-peers"
-export const LEGACY_DIR = "nova-peers"
+export const CREW_DIR = "harness-crew"
+/** прежние имена ящика, от новых к старым: opencode-peers (до 2026-10-06, план 014), nova-peers (до 2026-10-05) */
+export const LEGACY_DIRS = ["opencode-peers", "nova-peers"]
 
-/** Ящик плагина; при первом обращении нового кода переносит прежнюю папку nova-peers. */
-export function peersBase(root = dataDir()): string {
-  const neu = path.join(root, PEERS_DIR)
-  const old = path.join(root, LEGACY_DIR)
+/**
+ * Ящик плагина. Есть прежний (opencode-peers или nova-peers; любой может быть ссылкой) — новое имя становится
+ * ссылкой-junction на его настоящую папку: данные не двигаются (Windows не переименует папку, файлы которой держат
+ * окна и MCP-процессы), прежние процессы и новый код работают с одними файлами.
+ */
+export function crewBase(root = dataDir()): string {
+  const neu = path.join(root, CREW_DIR)
   if (existsSync(neu)) return neu
-  let real = false
-  try {
-    real = lstatSync(old).isDirectory() // junction — не isDirectory у lstat
-  } catch {}
-  if (!real) return neu // прежней папки нет: новая установка
-  try {
-    renameSync(old, neu)
-  } catch {
-    // папку держат (Windows не переименует папку с открытыми файлами, а их держат окна и MCP-процессы — так было при
-    // каждом запуске, 2026-10-06): новое имя — ссылкой на прежнюю папку. Ссылку создать можно и при занятой папке;
-    // со следующего запуска existsSync(neu) — и все работают через opencode-peers
+  for (const name of LEGACY_DIRS) {
+    const old = path.join(root, name)
+    if (!existsSync(old)) continue
     try {
-      symlinkSync(old, neu, "junction")
+      symlinkSync(realpathSync(old), neu, "junction")
       return neu
     } catch {
       return old
     }
   }
-  try {
-    symlinkSync(neu, old, "junction")
-  } catch {} // без ссылки старый код начнёт новую nova-peers — заметно в журнале; новый код её не читает
-  return neu
+  return neu // прежнего ящика нет: новая установка
 }
 
-export const BASE = peersBase()
+export const BASE = crewBase()

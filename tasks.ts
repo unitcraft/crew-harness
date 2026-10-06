@@ -40,7 +40,7 @@ export type Task = {
   /** сессия и адрес автора (интегратора) */
   author: string
   author_role: string
-  /** qid отчёта: исполнитель отвечает peer_send {reply_to: qid} */
+  /** qid отчёта: исполнитель отвечает crew_send {reply_to: qid} */
   qid: string
   status: TaskStatus
   /** spawn — сессия создана плагином; assign — задачу взяла вкладка владельца; order — заказ в другой проект (своей

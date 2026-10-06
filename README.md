@@ -1,14 +1,24 @@
-# opencode-peers
+# opencode-harness-crew
 
-OpenCode V2 plugin: **letters and tasks between OpenCode sessions on one machine** — across
-windows and projects, in any repository, addressed by `project.role`. The integrator hands out
-tasks, workers do them in their worktrees, reviewers accept and merge, long waits wake the session
-when done. A *window* is the OpenCode program in a terminal; a *tab* is a session inside it (one on
-screen, the rest in the background); a task session may run with no window at all. A *peer* is any
-such session.
+**Your AI dev team, harnessed.** An OpenCode V2 plugin that turns Claude Code tabs into a crew that carries work
+from a plan to a merge, while the owner only approves and watches:
 
-- tools `peer_list`, `peer_send`, `peer_wait`, `peer_watch`, `peer_role`, `peer_inbox`, `peer_spawn`,
-  `peer_task`, `peer_config`, `peer_doctor`, `peer_help` (also `/peer_help`);
+- **plans** — a plan task writes a plan document; it is rechecked in rounds by fresh sessions with graded remarks,
+  approved by the owner in the window (`/plans`), and its steps become tasks by dependencies and priorities;
+- **tasks** — each in its own session, worktree and branch; priorities, limits, a queue;
+- **acceptance** — a separate reviewer goes through the project's steps, merges under a lock (one at a time) and
+  confirms the cleanup;
+- **letters** — between tabs and projects, addressed by `project.role`; questions with an awaited answer;
+- **flow control** — reminders, a stall watchdog, recovery after a service restart, a stale-window check;
+- **the machine** — long waits that outlive a turn (`crew_watch`) and a queue for heavy runs;
+- **for the owner** — a side panel in the window, `/crew`, "waiting for you" notices, acceptance reports;
+- **everything is a setting** — plan form, acceptance steps, grades, limits, who approves.
+
+A *window* is the OpenCode program in a terminal; a *tab* is a session inside it (one on screen, the rest in the
+background); a task session may run with no window at all. Formerly `opencode-peers` (renamed 2026-10-07, plan 014).
+
+- tools `crew_list`, `crew_send`, `crew_wait`, `crew_watch`, `crew_role`, `crew_inbox`, `crew_spawn`,
+  `crew_task`, `crew_config`, `crew_doctor`, `crew_help` (also `/crew_help`);
 - **projects**: every tab belongs to a project and its address is `project.role`
   (`nova.integrator`). A plain role means the sender's own project; `project.role` reaches another
   project; `all` is every open tab of the own project, `project.all` of another one; a session id
@@ -16,13 +26,13 @@ such session.
   root, a tab outside every root to the project named after its repository;
 - **project settings live in a settings repository**, not in the tab's working copy (a project can
   be a folder of many repositories, like `C:/work/nova`). The plugin options list settings
-  folders — any folder inside a git repository; the file `.opencode/opencode-peers.json` there
+  folders — any folder inside a git repository; the file `.opencode/harness-crew.json` there
   names the project and its root (relative to the folder) and is read **committed** from the
   default branch (`git show`; another branch: its `"branch"` field), never from the working copy:
 
   ```jsonc
   "plugins": [
-    { "package": "C:/work/opencode-peers",
+    { "package": "C:/work/opencode-harness-crew",
       "options": { "projects": ["C:/work/nova/nova-settings", "C:/work/tools"],
                    "local": { "nova": { "spawn_models": { "light": "kimi/k3" } } } } }
   ]
@@ -35,14 +45,14 @@ such session.
 
   `local` holds machine-specific values on top of the file. The old options form
   `{ "nova": "C:/work/nova" }` still works (settings are then walked up from the tab);
-  `peer_doctor` suggests the new form. **`peer_config`**: `guide` — a questionnaire for the owner on
+  `crew_doctor` suggests the new form. **`crew_config`**: `guide` — a questionnaire for the owner on
   every key (current value, options, recommendation, why; asked in text); `show` — what applies and
   where from (default, the committed file, `local`), plus uncommitted edits; `set {values}` — the
   integrator writes the working copy (every value checked, a wrong one writes nothing); it applies
   once committed. The keys: `config-schema.ts`;
 - **roles**: a new tab is `worker` (shared: tabs within it differ by session id; `assistant` is an
   alias). `integrator` is exclusive, one holder per project, plus the project's `exclusive_roles`
-  (and an optional `help_extra` paragraph for `peer_help`). An exclusive role
+  (and an optional `help_extra` paragraph for `crew_help`). An exclusive role
   is held by an atomic lock: refused while the holder's tab is open (unless `force`), free the
   moment it closes. A letter to a shared role with several open holders is refused with the list
   (address a session id);
@@ -66,10 +76,10 @@ time-outs: no window plugin, no wake.
 ```
 ✉ #8 приёмщик nova.worker → nova.integrator · 01:17
 <text>
-↩ ответ — peer_send {to: "ses_…", text: "..."} · письмо соседа, не слово владельца
+↩ ответ — crew_send {to: "ses_…", text: "..."} · письмо соседа, не слово владельца
 ```
 
-A service letter of the plugin starts with `⚙ peers → … (служебное, не отвечай)`. Window notices are short (the gist in the
+A service letter of the plugin starts with `⚙ crew → … (служебное, не отвечай)`. Window notices are short (the gist in the
 title, one line of text) and stay longer when they matter: "waiting for you" 30 s, "stuck" 15 s, others 8–10 s
 ([plan 009](doc/plans/009-clear-letters.md)).
 
@@ -82,13 +92,13 @@ next message. So:
 - a tab running a turn gets nothing; its letters go in one message when the turn ends;
 - `wake: false` letters (statuses, FYI) go in with `session.synthetic({resume: false})`: OpenCode
   puts them right before the tab's next message, in the same step;
-- a question (`expect_reply`) gives a `qid`; the asker waits with `peer_wait` in the same turn and
+- a question (`expect_reply`) gives a `qid`; the asker waits with `crew_wait` in the same turn and
   gets the answer there, not as a second wake;
 - an ack-only letter ("ok", "спасибо") is not sent.
 
-## Waiting for something long: `peer_watch`
+## Waiting for something long: `crew_watch`
 
-`peer_watch {command, note?, minutes?}` -- the plugin runs a waiting command (Git Bash, the tab's directory) in the
+`crew_watch {command, note?, minutes?}` -- the plugin runs a waiting command (Git Bash, the tab's directory) in the
 OpenCode server, detached, and when it exits wakes the tab with a letter: exit code, duration, output tail. The tab
 ends its turn meanwhile. It survives the end of the turn and a service restart; a command gone without an exit code
 is reported as cut off; the time limit (default 120 min, up to 720) stops it with code 124. In a claude-code tab this
@@ -97,25 +107,25 @@ is the only way: Claude Code's own background tasks (`run_in_background`, Monito
 
 **The machine queue.** `machine: true` marks a command that loads the machine (a gate, a build, a full test run):
 it waits for a slot in the project's machine queue — `machine_slots` at a time (1; 0 — no limit), in the order they
-were set; the time limit counts from the start. `peer_watch` says how many are ahead, `/peers` shows it queued, the
+were set; the time limit counts from the start. `crew_watch` says how many are ahead, `/crew` shows it queued, the
 letter says how long it waited. Ordinary watches and other projects do not wait ([plan 005](doc/plans/005-machine-queue.md)).
 
-**The project's deny rules.** The command runs outside the window's permissions, so `peer_watch` checks it against
+**The project's deny rules.** The command runs outside the window's permissions, so `crew_watch` checks it against
 `permissions.deny` of the project's `.claude/settings.json` (from the tab's directory up to the git root; no file — no
 check, an unreadable one — refusal): a command matching `Bash(…)` / `PowerShell(…)` (`prefix:*`, `*` as a wildcard),
 whole or in any subcommand (`&&`, `||`, `;`, `|`, a newline, the body of `bash -c '…'`, `$(…)`; `git -C <dir>` and
 `VAR=1 timeout N` prefixes do not hide it), or naming a file under a `Read(…)` glob is refused, naming the rule.
-**Who started it:** the command's environment carries `PEERS_SESSION_ID`, `PEERS_ROLE`, `PEERS_PROJECT`, and
-`PEERS_REVIEW_N` for the reviewer of an open task, `PEERS_TASK_N` for its executor — fixed when the watch is put and
+**Who started it:** the command's environment carries `CREW_SESSION_ID`, `CREW_ROLE`, `CREW_PROJECT`, and
+`CREW_REVIEW_N` for the reviewer of an open task, `CREW_TASK_N` for its executor — fixed when the watch is put and
 kept in its record, so a restart or a later role change does not alter them ([plan 013](doc/plans/013-acceptor-role.md)).
 
-## Who waits for what: `/peers` and "waiting for you"
+## Who waits for what: `/crew` and "waiting for you"
 
-The window's right panel shows a "Peers" block under "Context": the sessions of the project of the tab on screen —
+The window's right panel shows a "Crew" block under "Context": the sessions of the project of the tab on screen —
 the ones waiting for you first, who is working and how long, who waits for what — refreshed every 2 s
 ([plan 010](doc/plans/010-sidebar.md)). The window closes the tab of a task or review session two minutes after its task was accepted or cancelled, unless
-the tab is on screen (the owner's own tabs are left alone; the session stays in the history). `/peers-config` shows the project's settings in effect, each with where it comes from (default, the committed file,
-`local`), like `peer_config show`. `/peers` in any window (also in the Ctrl+P palette) shows, without a model turn, every session of the projects:
+the tab is on screen (the owner's own tabs are left alone; the session stays in the history). `/crew-config` shows the project's settings in effect, each with where it comes from (default, the committed file,
+`local`), like `crew_config show`. `/crew` in any window (also in the Ctrl+P palette) shows, without a model turn, every session of the projects:
 working, **waiting for you** (its last answer ends with a question and you have not written since), waiting for a
 watch, for an answer to its question, for its task's review or rework, for its own tasks, or idle — your project
 first, the ones waiting for you on top. A session that starts waiting for you puts a notice into every live window
@@ -127,14 +137,14 @@ and repeats it every `owner_reminder_min` minutes (15; 0 — once) until you ans
 The service plugin keeps `<mailbox>/status/<session id>.json` for open tabs, task sessions and sessions with watches
 or open tasks of their own — an open contract for outside checks (e.g. a project's Stop hook; the claude-code
 provider puts `OPENCODE_SESSION_ID` into Claude Code's environment). `<mailbox>` is
-`$XDG_DATA_HOME/opencode/opencode-peers` (OpenCode's data directory; the old `nova-peers` is moved there on the first
+`$XDG_DATA_HOME/opencode/opencode-harness-crew` (OpenCode's data directory; the old `nova-peers` is moved there on the first
 start of this version and left as a link to it, so old paths keep working):
 
 ```jsonc
 { "session": "ses_…", "project": "nova", "role": "integrator", "title": "…", "model": "claude-code/opus",
   "state": "working" | "owner" | "question" | "watch" | "reply" | "task" | "tasks" | "idle",
   "since": 1791200000000, "detail": "a line for people", "question": "… (state owner)",
-  "watches": [{ "id", "note", "started", "minutes" }],          // running peer_watch
+  "watches": [{ "id", "note", "started", "minutes" }],          // running crew_watch
   "asked": [{ "qid", "to", "at" }],                              // its questions without an answer
   "task": { "n", "status", "as": "executor" | "reviewer", "title" },
   "tasks": [{ "n", "status", "priority", "title" }],             // open tasks it set
@@ -151,7 +161,7 @@ start and its `idle` row): a turn with a tool call is a working one, a turn with
 - a turn ended without the answer → a reminder right away; a working turn resets the empty counter;
 - `push_empty_turns` (3) empty turns in a row or `push_max` (20) reminders → the tab is stuck: no
   more reminders, the asker gets a call (a letter and a notice in its window), the task's history
-  records it; `peer_task {action: "push"}` wakes it again and clears "stuck";
+  records it; `crew_task {action: "push"}` wakes it again and clears "stuck";
 - a turn with the owner's own message gets no reminder (the owner leads the tab) and resets the count;
 - a turn cut off by an OpenCode restart (the session keeps `time_suspended`, no `idle` row, OpenCode
   does not resume it) is picked up by one letter that lists what is open and how to report;
@@ -159,15 +169,15 @@ start and its `idle` row): a turn with a tool call is a working one, a turn with
   task (a letter that wakes it), who answers or asks the owner; a merge lock held longer than `stall_minutes` (30)
   and a submitted task waiting for a reviewer that long are raised to the task's author, and so are the leftovers of a
   closed task (branches here and on origin, worktrees by the project's name templates) ([plan 007](doc/plans/007-flow-watch.md));
-- service letters of the plugin say "do not answer"; a letter to `opencode-peers` itself is refused.
+- service letters of the plugin say "do not answer"; a letter to `opencode-harness-crew` itself is refused.
 
 ## Tasks
 
 A task has a number `#N` (per project, only grows, kept through rework and reassignment) — the
-owner, the integrator and `peer_list` call it by that; a task session's title is `#N title`. The
+owner, the integrator and `crew_list` call it by that; a task session's title is `#N title`. The
 journal is `tasks/<project>/<N>.json` in the mailbox.
 
-- `peer_spawn {title?, goal, criteria, boundaries?, open_questions?, tier?, priority?, role?, parent?}` (the
+- `crew_spawn {title?, goal, criteria, boundaries?, open_questions?, tier?, priority?, role?, parent?}` (the
   integrator only) starts task `#N` in a new session, with or without a window. No task without a
   goal and acceptance criteria (the project may require more: `task_fields`); model by tier
   (`claude-code/opus` / `sonnet` / `haiku`, `spawn_models` overrides); a limit of running tasks per
@@ -178,7 +188,7 @@ journal is `tasks/<project>/<N>.json` in the mailbox.
   `session.create` (OpenCode accepts an own id starting with `ses` and returns the existing session
   on a repeat), the task letter's id comes from the number — a start cut off at any step is
   finished by the next pass without a second session or letter.
-- `peer_task {action}`: `list`, `show {n}`; for the integrator `assign {session, goal, criteria…}`
+- `crew_task {action}`: `list`, `show {n}`; for the integrator `assign {session, goal, criteria…}`
   (an owner's tab takes the task; it is woken while the task is open, even when closed), `push
   {n, text?}` (wake a stalled executor now), `reassign {n}` (a new session, the same number, a
   summary of what was done), `cancel {n}`, `priority {n, priority}`.
@@ -194,7 +204,7 @@ The integrator stays free for the owner and does not re-check accepted work:
   integrator itself, otherwise a free open `worker` tab (never the author or the executor), or a
   new review session (`spawn_limits.reviewer`, 2); the reviewer gets the task, the report and the
   project's `acceptance` steps;
-- the reviewer: `peer_task {action: "review"}` (started; the executor learns it quietly), `rework
+- the reviewer: `crew_task {action: "review"}` (started; the executor learns it quietly), `rework
   {text}` (back to the executor with the remarks; the resubmission wakes the same reviewer;
   over `rework_max` the integrator gets a call), `merge` (the project's merge lock: one merging
   reviewer at a time), `accept {checks, commit?}` — the plugin requires a report for every
@@ -217,7 +227,7 @@ The integrator stays free for the owner and does not re-check accepted work:
 ## Plans
 
 New work starts with a plan: a document in the project's repository (`plans_dir`, default `docs/plans`,
-named `{n}-{slug}.md`). The integrator sets a plan task: `peer_spawn {kind: "plan", title, goal}`.
+named `{n}-{slug}.md`). The integrator sets a plan task: `crew_spawn {kind: "plan", title, goal}`.
 `goal` is the original task the plan must solve. The plugin picks the plan number: the next one after
 the files in the plans folder and the open plan tasks. A sub-plan gets `N.k`.
 
@@ -239,7 +249,7 @@ reviewer. The reviewer goes through two groups of steps:
 - **B — how the plan is composed:** machine-checkable criteria with a red probe, criterion tools
   tried before and after, one step = one task, explicit dependencies, existing paths, form.
 
-The round ends with `peer_task {action: "round", n, blocking, significant, cosmetic, text}`. The grade
+The round ends with `crew_task {action: "round", n, blocking, significant, cosmetic, text}`. The grade
 of a remark is set by what fixing it changes:
 
 | Grade | What fixing it changes |
@@ -271,74 +281,74 @@ boundaries. A step starts when:
 
 Order is by priority (the step's, else the phase's), then by plan order. A `[подплан]` step becomes a
 plan task. A step task is accepted only with «✅ СДЕЛАНО <date>, commit» in its heading in the target
-branch. When every step is closed, the author is asked to close the plan. `/peers` shows each plan:
+branch. When every step is closed, the author is asked to close the plan. `/crew` shows each plan:
 written, rechecked (round, clean rounds), waiting for approval, or in progress (steps closed/total,
 which are running).
 
 Marks: plan `🔴 ОТКРЫТ / 🟡 В РАБОТЕ / ✅ ЗАКРЫТ / ❌ ОТМЕНЁН`, step `⏳ В РАБОТЕ / ✅ СДЕЛАНО`, criterion
 `✅ ВЫПОЛНЕНО / ⬜`, question `❔ / ✅`.
 
-**Everything is a setting.** The plan's form and process are project settings with nova's form as the default: `plan_sections`, `plan_header`, `plan_prefix`, `plan_labels`, `plan_marks`, `plan_mode_question`, `plan_acceptance`, `plan_merge_acceptance`, `plan_grades` (`{id, name, text, clean}`), `plan_approver` (owner / integrator — `peer_task plan_decide`), `plan_steps` (auto / manual), `plan_template` (a template file in the repository). `peer_config guide` asks about each.
+**Everything is a setting.** The plan's form and process are project settings with nova's form as the default: `plan_sections`, `plan_header`, `plan_prefix`, `plan_labels`, `plan_marks`, `plan_mode_question`, `plan_acceptance`, `plan_merge_acceptance`, `plan_grades` (`{id, name, text, clean}`), `plan_approver` (owner / integrator — `crew_task plan_decide`), `plan_steps` (auto / manual), `plan_template` (a template file in the repository). `crew_config guide` asks about each.
 
 **Heavy runs.** `heavy_commands` lists substrings of commands that load the machine (full gate,
-full build, full test run, benchmarks). `peer_watch` with such a command goes to the machine queue
+full build, full test run, benchmarks). `crew_watch` with such a command goes to the machine queue
 by itself. Full design: [plan 012](doc/plans/012-plans.md).
 
 ## Other projects
 
 - **inbound** of the receiving project limits letters from other projects: `integrator` (default:
   only to its integrator), `any`, `none`; a refused letter names the address to use;
-- **an order**: `peer_task {action: "order", to: "beta.integrator", goal, criteria, …}` records task
+- **an order**: `crew_task {action: "order", to: "beta.integrator", goal, criteria, …}` records task
   `#N` of kind order in the orderer's journal (no session, no title marks) and sends it to beta's
-  integrator, who does it with its own tasks: `peer_spawn {…, parent: "alpha#N"}`. The order follows
+  integrator, who does it with its own tasks: `crew_spawn {…, parent: "alpha#N"}`. The order follows
   that task: cleaned → the order is done (a quiet summary to the orderer), cancelled → a call.
 
 ## Self-check
 
-`peer_doctor` (and once at load, as a notice): the OpenCode features the plugin relies on, the
+`crew_doctor` (and once at load, as a notice): the OpenCode features the plugin relies on, the
 mailbox, whether any window plugin is beating, whether the caller's tab is visible to a window.
 
 The system hint the plugin adds to each request is **constant** within a session (it sits before
 the whole history, and anything changing there re-bills the history with Claude's prefix prompt
-cache); neighbours and their models come from `peer_list`.
+cache); neighbours and their models come from `crew_list`.
 
 ## Windows on the `claude-code` provider (MCP)
 
 The [`claude-code` provider](https://github.com/unitcraft/opencode-claude-code-provider) hands
 every turn to the official Claude Code and drops OpenCode's tool list, so the plugin's `peer_*`
 tools do not reach those tabs. `mcp.ts` is a stdio MCP server with the same tools
-(`mcp__peers__peer_list`, ... in Claude Code), built on the same core (`core.ts`) as the plugin:
+(`mcp__crew__peer_list`, ... in Claude Code), built on the same core (`core.ts`) as the plugin:
 
 ```sh
-OPENCODE_PEERS_SESSION=<opencode session id> node mcp.ts   # node >= 24
+OPENCODE_CREW_SESSION=<opencode session id> node mcp.ts   # node >= 24
 ```
 
-- it acts for the one OpenCode session in `OPENCODE_PEERS_SESSION` (the provider sets it per
+- it acts for the one OpenCode session in `OPENCODE_CREW_SESSION` (the provider sets it per
   request) and writes to the same mailbox (`XDG_DATA_HOME` as for OpenCode);
 - the project list is not repeated: the plugin writes its `projects` and `local` options to
-  `<mailbox>/projects.json` at load (`OPENCODE_PEERS_PROJECTS`, JSON of the `projects` value,
+  `<mailbox>/projects.json` at load (`OPENCODE_CREW_PROJECTS`, JSON of the `projects` value,
   overrides);
 - delivery stays with the plugin (the letter goes into the OpenCode session); a task started from
-  MCP is written to the journal and the plugin starts it on its next pass; a `peer_watch` from MCP is
+  MCP is written to the journal and the plugin starts it on its next pass; a `crew_watch` from MCP is
   a request file the plugin runs (the MCP server lives only as long as Claude Code's turn).
 
 ## Install
 
 ```sh
-git clone https://github.com/unitcraft/opencode-peers C:/work/opencode-peers
+git clone https://github.com/unitcraft/opencode-harness-crew C:/work/opencode-harness-crew
 ```
 
 `~/.config/opencode/opencode.jsonc` (the server plugin):
 
 ```jsonc
-"plugins": ["C:/work/opencode-peers"]
+"plugins": ["C:/work/opencode-harness-crew"]
 ```
 
 `~/.config/opencode/cli.json` (the window plugin; a folder, not a file — OpenCode loads `tui.ts`
 from it):
 
 ```json
-{ "plugins": ["C:/work/opencode-peers"] }
+{ "plugins": ["C:/work/opencode-harness-crew"] }
 ```
 
 Windows opened before the window plugin was added do not report their tabs: reopen them.
@@ -358,8 +368,8 @@ npm test   # node >= 24
 ```
 
 History: moved with its commits from `a private plugins repository of the nova project` (`plugins/nova-peers`).
-The plugin id `nova.peers` is kept; the mailbox moved from `nova-peers` to `opencode-peers` (the old name stays as a
-junction to it, so nothing is lost and old processes land in the same folder); the settings file is `.opencode/opencode-peers.json` (named after the package; the old name
+The plugin id `nova.peers` is kept; the mailbox moved from `nova-peers` to `opencode-harness-crew` (the old name stays as a
+junction to it, so nothing is lost and old processes land in the same folder); the settings file is `.opencode/harness-crew.json` (named after the package; the old name
 `nova-peers.json` is no longer read).
 
 License: MIT OR Apache-2.0 (see [LICENSE](LICENSE)).

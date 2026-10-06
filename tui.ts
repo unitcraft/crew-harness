@@ -1,4 +1,4 @@
-// opencode-peers — ПЛАГИН ОКНА (TUI). OpenCode грузит его в каждом окне: tui.ts в папке плагина, папка указана в
+// opencode-harness-crew — ПЛАГИН ОКНА (TUI). OpenCode грузит его в каждом окне: tui.ts в папке плагина, папка указана в
 // ~/.config/opencode/cli.json, раздел plugins (сервер грузит index.ts той же папки из opencode.jsonc).
 //
 // ЗАЧЕМ. Письмо будит вкладку ходом модели, а сервис OpenCode работает и без окон; надёжно знать, какие вкладки
@@ -12,7 +12,7 @@
 // даёт {type: "session", sessionID}; api.ui.tabs.list() — [{sessionID, title, active, busy, ...}]; api.ui.toast.show
 // с sessionID чужой вкладки сам добавляет кнопку Open.
 //
-// СВОДКА /peers и «ЖДЁТ ВАС» (план 004). Команда окна — как встроенный модуль opencode.stats той же версии:
+// СВОДКА /crew и «ЖДЁТ ВАС» (план 004). Команда окна — как встроенный модуль opencode.stats той же версии:
 // ui.slot({append: "app"}) + keymap.layer({commands: [{slash: {name}, palette: true, run}]}); run показывает
 // ui.dialog.alert со сводкой из status/ (пишет плагин сервиса) — в окне, без хода модели. Уведомление с attention —
 // ещё и attention.notify: системное уведомление, когда окно не в фокусе (настройка OpenCode attention.notifications).
@@ -24,10 +24,10 @@ import { listTasks, loadTask } from "./tasks.ts"
 import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
 
 const BEAT_MS = 1_000
-const AUTOCLOSE_MS = Number(process.env.NOVA_PEERS_AUTOCLOSE_MS) || 120_000
+const AUTOCLOSE_MS = Number(process.env.HARNESS_CREW_AUTOCLOSE_MS) || 120_000
 
 export default {
-  id: "opencode-peers.window",
+  id: "harness-crew.window",
   setup(api: any) {
     mkdirSync(WINDOWS, { recursive: true })
     const file = path.join(WINDOWS, `${process.pid}.json`)
@@ -83,7 +83,7 @@ export default {
       } catch {} // нет уведомлений — нет папки
     }
 
-    // /peers: кто чего ждёт — свой проект первым
+    // /crew: кто чего ждёт — свой проект первым
     const showStatus = () => {
       let route: string | undefined
       try {
@@ -92,9 +92,9 @@ export default {
       } catch {}
       const list = readStatuses()
       const mine = list.find((s) => s.session === route)?.project
-      api.ui?.dialog?.alert?.({ title: "opencode-peers — кто чего ждёт", message: formatStatuses(list, Date.now(), mine) })
+      api.ui?.dialog?.alert?.({ title: "opencode-harness-crew — кто чего ждёт", message: formatStatuses(list, Date.now(), mine) })
     }
-    // /peers-config: действующие настройки проекта вкладки на экране — значение и откуда (как peer_config show)
+    // /crew-config: действующие настройки проекта вкладки на экране — значение и откуда (как crew_config show)
     const showConfig = () => {
       let route: string | undefined
       try {
@@ -109,7 +109,7 @@ export default {
       } catch (e) {
         text = `Не прочитать настройки: ${e}`
       }
-      api.ui?.dialog?.alert?.({ title: "opencode-peers — настройки проекта", message: text })
+      api.ui?.dialog?.alert?.({ title: "opencode-harness-crew — настройки проекта", message: text })
     }
     // /plans: планы на согласовании (план 012) — владелец выбирает план и решение; решение пишется файлом, его применяет
     // плагин сервиса. Агент этот диалог вызвать не может: согласует только человек в окне.
@@ -163,9 +163,9 @@ export default {
       }
     }
     const commands = [
-      { id: "opencode-peers.status", title: "Peers: кто чего ждёт", group: "Peers", slash: { name: "peers" }, palette: true, run: showStatus },
-      { id: "opencode-peers.config", title: "Peers: настройки проекта", group: "Peers", slash: { name: "peers-config" }, palette: true, run: showConfig },
-      { id: "opencode-peers.plans", title: "Peers: планы на согласовании", group: "Peers", slash: { name: "plans" }, palette: true, run: showPlans },
+      { id: "harness-crew.status", title: "Crew: кто чего ждёт", group: "Crew", slash: { name: "crew" }, palette: true, run: showStatus },
+      { id: "harness-crew.config", title: "Crew: настройки проекта", group: "Crew", slash: { name: "crew-config" }, palette: true, run: showConfig },
+      { id: "harness-crew.plans", title: "Crew: планы на согласовании", group: "Crew", slash: { name: "plans" }, palette: true, run: showPlans },
     ]
     try {
       api.ui.slot({
@@ -181,9 +181,9 @@ export default {
       } catch {}
     }
 
-    // блок «Peers» в боковой панели (план 010): отдельным модулем и с защитой — JSX компилирует OpenCode; не вышло (другая
+    // блок «Crew» в боковой панели (план 010): отдельным модулем и с защитой — JSX компилирует OpenCode; не вышло (другая
     // версия, тест под Node) — блока нет, присутствие, уведомления и команды работают
-    if (api.ui?.slot && !process.env.NOVA_PEERS_NO_SIDEBAR) import("./sidebar.tsx").then((m) => (m.mountSidebar(api), log(`sidebar mounted pid=${process.pid}`))).catch((e) => log(`sidebar not drawn pid=${process.pid}: ${String(e).slice(0, 300)}`))
+    if (api.ui?.slot && !process.env.HARNESS_CREW_NO_SIDEBAR) import("./sidebar.tsx").then((m) => (m.mountSidebar(api), log(`sidebar mounted pid=${process.pid}`))).catch((e) => log(`sidebar not drawn pid=${process.pid}: ${String(e).slice(0, 300)}`))
 
     beat()
     const timer = setInterval(beat, BEAT_MS)
