@@ -909,8 +909,8 @@ export default {
     const LEFT_EVERY_MS = Number(process.env.CREW_HARNESS_LEFT_MS) || 600_000
     let leftAt = 0
     const leftClean = new Set<string>()
-    const LEFT_PER_RUN = Number(process.env.NOVA_PEERS_LEFT_PER_RUN) || 3
-    const LEFT_REMOTE_MS = Number(process.env.NOVA_PEERS_LEFT_REMOTE_MS) || 6 * 3_600_000
+    const LEFT_PER_RUN = Number(process.env.CREW_HARNESS_LEFT_PER_RUN) || 3
+    const LEFT_REMOTE_MS = Number(process.env.CREW_HARNESS_LEFT_REMOTE_MS) || 6 * 3_600_000
     let leftRemoteAt = 0
     async function leftWatch() {
       if (now() - leftAt < LEFT_EVERY_MS) return
