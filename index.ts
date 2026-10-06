@@ -765,6 +765,10 @@ export default {
         const plan = parsePlan(text)
         const steps = allSteps(plan)
         pt.plan.spawned ??= {}
+        if (pt.plan.total !== steps.length) {
+          pt.plan.total = steps.length // для /peers: «шаги закрыто/всего»
+          saveTask(pt)
+        }
         const taskOf = (id: string) => (pt.plan!.spawned![id] ? loadTask(pt.project, pt.plan!.spawned![id]) : undefined)
         const done = (id: string) => !!steps.find((s) => s.id === id)?.done || ["cleaned", "closed"].includes(taskOf(id)?.status ?? "")
         const running = steps.filter((s) => isOpen(taskOf(s.id)))

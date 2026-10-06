@@ -852,6 +852,9 @@ export const HELP = `opencode-peers — письма между вкладкам
   peer_role {role, force?}    — сменить роль: peer_role {role: "integrator"}.
   peer_inbox {limit?}         — доставленные письма и число ждущих.
   peer_spawn {goal, criteria, ...} — только интегратор: задача #N в новой сессии (работает и без окна).
+       kind: "plan"          — задача-план: исполнитель пишет файл плана (plans_dir) по шаблону; перепроверка раундами
+                              новыми сессиями (peer_task round {blocking, significant, cosmetic, text}); готовый план
+                              согласует владелец командой окна /plans; после вливания шаги плана становятся задачами.
   peer_task {action, n?}      — задачи по номеру: list, show; интегратору ещё assign, push, reassign, cancel, priority,
                                 order; приёмщику — review, check, rework (sync: true — только влить свежую целевую
                                 ветку, не круг доработки), merge, accept, cleaned. assign — открытой вкладке владельца;

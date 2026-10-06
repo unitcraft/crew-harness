@@ -137,6 +137,8 @@ const r3 = task().reviewer
 cell("round 3 is again a new session", !!r3 && ![r1, r2].includes(r3), JSON.stringify({ r1, r2, r3 }))
 const v3 = await roundBy(r3, { blocking: 0, significant: 0, cosmetic: 0 })
 cell("two clean rounds in a row: the plan goes to the owner", task().status === "approval" && /согласование владельцу/.test(v3), JSON.stringify({ st: task().status, v3 }))
+const st = await import("../status.ts")
+cell("/peers lists the plan waiting for approval", st.planLines("proj").some((l) => /план 8 «длина фрагмента» — ◇ ждёт вашего согласования — \/plans/.test(l)), JSON.stringify(st.planLines("proj")))
 cell("the history records every round", task().history.filter((h) => /перепроверка: раунд/.test(h.note ?? "")).length === 3, JSON.stringify(task().history.map((h) => h.note)))
 
 // 5. the owner is notified; /plans writes the decision; "return" -> the author gets the owner's remarks
@@ -222,6 +224,7 @@ const close = (id) => {
 close("Ф.1.1")
 await until(() => !!byStep("Ф.1.2"))
 cell("Ф.1.1 closed: Ф.1.2 starts", !!byStep("Ф.1.2") && !byStep("Ф.2.1"), JSON.stringify(tasks.listTasks("proj").map((x) => [x.n, x.plan_step?.step])))
+cell("/peers shows the plan's progress", st.planLines("proj").some((l) => /план 8 .* в работе: шаги 1\/3, идут Ф\.1\.2/.test(l)), JSON.stringify(st.planLines("proj")))
 close("Ф.1.2")
 await until(() => !!byStep("Ф.2.1"))
 const sub = byStep("Ф.2.1")
