@@ -17,7 +17,7 @@ const dirs = {
   C: path.join(root, "nova", "limits"), // nested project limits (longest root wins)
 }
 for (const d of Object.values(dirs)) mkdirSync(d, { recursive: true })
-const dirOf = { sesAAAAAA: dirs.A, sesBBBBBB: dirs.B, sesCCCCCC: dirs.C }
+const dirOf = { sesAAAAAA: dirs.A, sesBBBBBB: dirs.B, sesCCCCCC: dirs.C, sesTASKL1: dirs.A }
 
 const mod = await import(process.env.PEERS_MODULE ?? "../index.ts")
 const hooks = {}
@@ -48,6 +48,15 @@ const P = mod.parseProjects(ctx.options)
 cell("invalid project name is ignored", P.length === 2 && !P.some((p) => p.name.includes(" ")), JSON.stringify(P))
 cell("longest root wins", mod.projectOf(dirs.C, P) === "limits" && mod.projectOf(dirs.A, P) === "nova", `${mod.projectOf(dirs.C, P)} ${mod.projectOf(dirs.A, P)}`)
 cell("outside the list -> repository name", mod.projectOf(path.join(tmp, "elsewhere", "my_Repo"), P) === "my-repo", mod.projectOf(path.join(tmp, "elsewhere", "my_Repo"), P))
+
+// a task session of limits whose worktree lies under nova's root stays in limits
+{
+  const core = await import("../core.ts")
+  core.saveCard({ session: "sesTASKL1", role: "worker", auto: false, title: "#1 limits", directory: dirs.A, repo: "repo-a", project: "limits", pid: process.pid, updated: Date.now(), spawned: { by: "sesCCCCCC", task: "t", tier: "light", status: "running", at: Date.now(), qid: "q1" }, task: { project: "limits", n: 1 } })
+  await call("peer_inbox", "sesTASKL1")
+  const c = core.allCards().find((x) => x.session === "sesTASKL1")
+  cell("a task session keeps its task's project, not its folder's", c?.project === "limits", c?.project)
+}
 
 // A and B in nova, C in limits: integrator is exclusive PER PROJECT
 const ra = await call("peer_role", "sesAAAAAA", { role: "integrator" })
@@ -81,7 +90,7 @@ cell("limits.all from nova is refused by limits' inbound", /только инт�
 // peer_list: own project by default, every project with all
 const own = (await call("peer_list", "sesAAAAAA")).content
 const every = (await call("peer_list", "sesAAAAAA", { all: true })).content
-cell("peer_list shows own project only", /nova\.integrator/.test(own) && /nova\.worker/.test(own) && !/limits\./.test(own) && /ещё 1 вкладок/.test(own), own)
+cell("peer_list shows own project only", /nova\.integrator/.test(own) && /nova\.worker/.test(own) && !/limits\./.test(own) && /ещё 2 вкладок/.test(own), JSON.stringify(own))
 cell("peer_list all shows every project", /limits\.integrator/.test(every), every)
 
 // a bad address is refused, not delivered

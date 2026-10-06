@@ -147,7 +147,9 @@ export default {
         log(`card new ${sessionID} role=${card.role} repo=${card.repo}`)
       }
       if (!card.repo) card.repo = repoLabel(card.directory)
-      card.project = projectOf(card.directory, projects) // каждый раз: список проектов мог поменяться
+      // каждый раз: список проектов мог поменяться. Вкладка задачи или приёмки — проект своей задачи, где бы ни лежал
+      // её worktree (worktree claude-limits в nv-lang/worktrees — под корнем nova; 2026-10-06)
+      card.project = card.task?.project ?? card.review?.project ?? projectOf(card.directory, projects)
       // МОДЕЛЬ. Запрос (ev.model из хука запроса) главнее; запас — база (модель прошлого хода).
       const fromRequest = fmtModel(ev?.model)
       if (fromRequest) {
