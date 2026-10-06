@@ -1,4 +1,4 @@
-// Self-test of the project's deny rules for peer_watch (plan 012, item 6; node >= 24):  node test/peers-deny.test.mjs
+// Self-test of the project's deny rules for peer_watch (plan 013, item 6; node >= 24):  node test/peers-deny.test.mjs
 // peer_watch runs its command in the OpenCode server, outside the window's permissions; so the command is checked
 // against permissions.deny of the project's .claude/settings.json (from the tab's directory up to the git root).
 // Bash(prefix:*) / PowerShell(prefix:*) -- a command prefix, checked on the whole command and on every subcommand

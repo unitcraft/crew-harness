@@ -106,10 +106,12 @@ import {
   propagateToParent,
   PLUGIN_SENDER,
 } from "./core.ts"
+import { DECISION_RU, readApprovals, removeApproval } from "./approvals.ts"
+import { allSteps, nextPlanNumber, parsePlan, stepDeps } from "./plans.ts"
 import { dropWatch, openWatchesBySession, pollWatches, watchesOf } from "./watch.ts"
 import { endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
-import { type Task, acceptedAt, ago, byPriority, rounds, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
-import { ensureWorktree, gitTraces, leftoversOf, mergeHolder, reviewLetter } from "./review.ts"
+import { type Task, acceptedAt, ago, byPriority, createTask, rounds, slugify, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
+import { ensureWorktree, fileAt, gitTraces, leftoversOf, mergeHolder, reviewLetter } from "./review.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
 
@@ -515,7 +517,7 @@ export default {
     // "integrator" — сам интегратор; иначе свободная открытая вкладка роли worker (не исполнитель, не автор, без своей
     // задачи), а нет такой — новая сессия под приёмку (лимит spawn_limits.reviewer, по умолчанию 2). Сессия приёмки
     // запускается так же повторяемо, как задача: id пишется в журнал до session.create. При reviewer "acceptor"
-    // (план 012) — то же с ролью acceptor: вкладка годится только этой роли, сессия рождается с ней, лимит —
+    // (план 013) — то же с ролью acceptor: вкладка годится только этой роли, сессия рождается с ней, лимит —
     // spawn_limits.acceptor (без него — reviewer).
     const reviewStarting = new Set<string>()
     async function startReviewer(t0: Task): Promise<void> {
@@ -530,7 +532,7 @@ export default {
         const [providerID, ...rest] = model.split("/")
         await ctx.session.create({ id: t.reviewer, title: `#${t.n} приёмка ${t.title}`, location: { directory: t.directory }, metadata: { peersReview: { project: t.project, n: t.n } }, model: { providerID, id: rest.join("/") } })
         const now = Date.now()
-        // роль сессии приёмки — по настройке reviewer (план 012): acceptor несёт права вливания и принятия
+        // роль сессии приёмки — по настройке reviewer (план 013): acceptor несёт права вливания и принятия
         const card: Card = { session: t.reviewer, role: reviewerRole(cfg), auto: false, title: `#${t.n} приёмка ${t.title}`, directory: t.directory, repo: repoLabel(t.directory), project: t.project, model, modelAt: now, modelFrom: "request", pid: process.pid, updated: now, spawned: { by: t.author, task: `приёмка #${t.n}`, tier: t.tier, status: "running", at: now, qid: t.review_qid ?? "" }, review: { project: t.project, n: t.n } }
         saveCard(card)
         mine.set(card.session, card)
@@ -616,6 +618,7 @@ export default {
             normalizeRole(c.role) === reviewerRole(cfg) &&
             c.session !== t.executor &&
             c.session !== t.author &&
+            !(t.reviewers ?? []).includes(c.session) && // перепроверка плана: каждый раунд — новая сессия (план 012)
             !holdsOpenTask(c) &&
             !!tabOf(c.session, windows)?.window.pid &&
             !tabOf(c.session, windows)?.tab.busy,
@@ -709,6 +712,117 @@ export default {
     // ждёт приёмщика дольше stall_minutes (места заняты) — письмо с побудкой поставившему задачу (интегратору): что
     // стоит, кто держит, что можно сделать. Одно письмо на случай (id из проекта, номера и времени начала).
     let flowAt = 0
+    // СОГЛАСОВАНИЕ ПЛАНОВ (план 012, шаг 3). Решение владельца приходит файлом из окна (/plans, approvals.ts):
+    // «вернуть» — план автору с замечаниями владельца, перепроверка заново; «согласовать» — план уходит приёмщику
+    // вливания (новая сессия): вписать решение в план, влить, accept. План на согласовании — уведомление во все окна,
+    // повтор через owner_reminder_min.
+    function applyApprovals() {
+      for (const a of readApprovals()) {
+        const t = loadTask(a.project, a.n)
+        removeApproval(a.project, a.n)
+        if (!t?.plan || t.status !== "approval") continue
+        const p = t.plan
+        p.approval = { decision: a.decision, ...(a.text ? { text: a.text } : {}), at: a.at }
+        p.notifiedAt = undefined
+        const day = new Date(a.at).toISOString().slice(0, 10)
+        if (a.decision === "no") {
+          p.clean = 0
+          p.stuck = false
+          t.rework = (t.rework ?? 0) + 1
+          t.rework_sync = false
+          t.rework_note = `ЗАМЕЧАНИЯ ВЛАДЕЛЬЦА к плану ${p.n} (${day}):\n${a.text ?? ""}\nИсправь в файле плана и сдай снова тем же отчётом — перепроверка начнётся заново (новыми сессиями).`
+          if (t.executor) addObligation(t.executor, { qid: t.qid, from_session: t.author, from_role: t.author_role, at: now(), nudges: 0, task: t.title })
+          taskEvent(t, "owner", "rework", `владелец вернул план: ${(a.text ?? "").slice(0, 300)}`)
+        } else {
+          taskEvent(t, "owner", "submitted", `владелец: план ${DECISION_RU[a.decision]} (${day}) — приёмщик впишет решение и вольёт`)
+        }
+        postLetter(t.author, { id: `plan-decision-${safeKey(t.project)}-${t.n}-${a.at}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: now(), wake: false, text: `План ${p.n} (задача #${t.n}): владелец — ${DECISION_RU[a.decision]}${a.text ? `: ${a.text}` : ""}.` })
+        log(`plan ${p.n} (${t.project} #${t.n}): owner ${a.decision}`)
+      }
+      for (const t of listTasks()) {
+        if (t.status !== "approval" || !t.plan) continue
+        const every = Math.max(1, loadConfig(t.directory).ownerReminderMin) * 60_000
+        if (t.plan.notifiedAt && now() - t.plan.notifiedAt < every) continue
+        const message = `${t.title.replace(/^план \S+: /, "")}${t.plan.stuck ? " — раунды кончились, решаете по последним замечаниям" : ""} · /plans`
+        for (const w of liveWindows()) postNotice(w.pid, { title: `План ${t.plan.n} ждёт согласования`, message: short(message, 100), attention: true, duration: 30_000 })
+        t.plan.notifiedAt = now()
+        saveTask(t)
+      }
+    }
+
+    // ШАГИ ПЛАНА — ЗАДАЧИ (план 012, шаг 4). Согласованный и влитый план (задача-план очищена) читается из целевой
+    // ветки; каждый шаг — задача с его «Что» и «Приёмкой», границами плана и режимом выполнения. Шаг стартует, когда
+    // закрыто всё из его «после:» (и «после:» его фазы) и не идёт шаг с пересекающимся «где:»; внутри лимитов проекта;
+    // по приоритету шага, иначе фазы, затем по порядку в плане. Шаг-подплан — задача-план. Все шаги закрыты —
+    // письмо автору: закрыть план. Раз в PLAN_STEPS_MS: файл плана читается из git.
+    const PLAN_STEPS_MS = Number(process.env.NOVA_PEERS_PLANSTEPS_MS) || 10_000
+    let planStepsAt = 0
+    async function planSteps() {
+      if (now() - planStepsAt < PLAN_STEPS_MS) return
+      planStepsAt = now()
+      for (const pt of listTasks()) {
+        if (!pt.plan || pt.status !== "cleaned" || pt.plan.finished || !pt.plan.approval || pt.plan.approval.decision === "no") continue
+        const author = readJson<Card>(cardFile(pt.author))
+        if (author && author.pid !== process.pid && pidAlive(author.pid)) continue // ставит процесс автора
+        const cfg = loadConfig(pt.directory)
+        const text = fileAt(pt.directory, cfg.targetBranch, pt.plan.file)
+        if (!text) continue
+        const plan = parsePlan(text)
+        const steps = allSteps(plan)
+        pt.plan.spawned ??= {}
+        if (pt.plan.total !== steps.length) {
+          pt.plan.total = steps.length // для /peers: «шаги закрыто/всего»
+          saveTask(pt)
+        }
+        const taskOf = (id: string) => (pt.plan!.spawned![id] ? loadTask(pt.project, pt.plan!.spawned![id]) : undefined)
+        const done = (id: string) => !!steps.find((s) => s.id === id)?.done || ["cleaned", "closed"].includes(taskOf(id)?.status ?? "")
+        const running = steps.filter((s) => isOpen(taskOf(s.id)))
+        const order = new Map(steps.map((s, i) => [s.id, i]))
+        const prio = (s: (typeof steps)[number]) => s.priority ?? plan.phases.find((f) => f.id === s.phase)?.priority ?? cfg.defaultPriority
+        const ready = steps
+          .filter((s) => !s.done && !pt.plan!.spawned![s.id] && stepDeps(plan, s).every(done))
+          .sort((a, b) => prio(a).localeCompare(prio(b)) || order.get(a.id)! - order.get(b.id)!)
+        let changed = false
+        for (const s of ready) {
+          const busyWhere = running.find((r) => r.where.some((w) => s.where.includes(w)))
+          if (busyWhere) continue // пересекается по «где:» с идущим шагом — ждёт его
+          const open = listTasks(pt.project).filter(isOpen)
+          const workers = open.filter((x) => x.kind === "spawn" && x.role === DEFAULT_ROLE && (x.status === "starting" || x.status === "running"))
+          const p = prio(s)
+          if (p !== "P0" && (open.length >= cfg.inflightLimit || workers.length >= (cfg.spawnLimits[DEFAULT_ROLE] ?? cfg.spawnLimits["*"] ?? 3))) break // лимиты — ждать
+          const boundaries = [plan.bodies["Не делаем"]?.trim(), `Режим выполнения: ${pt.plan.approval.decision === "ok" ? "без упрощений — ни заглушек, ни TODO, ни «временно»" : "упрощения — только перечисленные в плане"}.`].filter(Boolean).join("\n")
+          const model = cfg.spawnModels.medium ?? DEFAULT_SPAWN_MODELS.medium
+          const base = {
+            project: pt.project, goal: s.subplan ? `${s.what}\n(подплан шага ${s.id} плана ${pt.plan.n})` : s.what, criteria: s.criteria.join("\n"), boundaries,
+            priority: p, tier: "medium" as const, role: DEFAULT_ROLE, model, author: pt.author, author_role: pt.author_role, qid: `q${now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+            status: "starting" as const, kind: "spawn" as const, executor: plannedSessionId(), directory: pt.directory,
+            plan_step: { project: pt.project, task: pt.n, plan: pt.plan.n, step: s.id, file: pt.plan.file },
+          }
+          let t: Task
+          if (s.subplan) {
+            let names: string[] = []
+            try {
+              names = readdirSync(path.join(pt.worktree && existsSync(pt.worktree) ? pt.worktree : pt.directory, cfg.plansDir))
+            } catch {}
+            const n = nextPlanNumber(names, listTasks(pt.project).filter((x) => x.plan).map((x) => x.plan!.n), pt.plan.n)
+            t = createTask({ ...base, title: `план ${n}: ${s.title}`, plan: { n, file: path.posix.join(cfg.plansDir.replace(/\\/g, "/"), cfg.planName.replace(/\{n\}/g, n).replace(/\{slug\}/g, slugify(s.title))), source: `${s.what}\nКритерии шага ${s.id} плана ${pt.plan.n}:\n${s.criteria.join("\n")}`, parent: pt.plan.n, rounds: [], clean: 0 } }, (n2, slug) => taskPlace(pt.directory, cfg, n2, slug, pt.project))
+          } else t = createTask({ ...base, title: `${pt.plan.n} ${s.id} ${s.title}` }, (n2, slug) => taskPlace(pt.directory, cfg, n2, slug, pt.project))
+          pt.plan.spawned[s.id] = t.n
+          running.push(s)
+          changed = true
+          taskEvent(pt, "opencode-peers", undefined, `шаг ${s.id} плана ${pt.plan.n} — задача #${t.n}`)
+          log(`plan ${pt.plan.n} (${pt.project}): step ${s.id} -> task #${t.n}`)
+          await startTask(t)
+        }
+        if (steps.length && steps.every((s) => done(s.id))) {
+          pt.plan.finished = true
+          changed = true
+          postLetter(pt.author, { id: `plan-finished-${safeKey(pt.project)}-${pt.n}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: pt.author, time: now(), text: `План ${pt.plan.n} «${plan.title}»: все шаги закрыты (${steps.length}). Закрой план: в шапке «**Статус:** ✅ ЗАКРЫТ <дата> (фазы; коммиты)», влей.` })
+        }
+        if (changed) saveTask(pt)
+      }
+    }
+
     function flowWatch() {
       if (now() - flowAt < (Number(process.env.NOVA_PEERS_FLOW_MS) || 60_000)) return
       flowAt = now()
@@ -788,11 +902,11 @@ export default {
         const ref = (c.task ?? c.review)!
         const t = loadTask(ref.project, ref.n)
         if (!t) continue
-        const MARK: Record<string, string> = { submitted: "✓", reviewing: "✓◐", rework: "↻", accepted: "✓✓◐", cleaned: "✓✓", closed: "✓", cancelled: "✗" }
+        const MARK: Record<string, string> = { submitted: "✓", reviewing: "✓◐", rework: "↻", approval: "◇", accepted: "✓✓◐", cleaned: "✓✓", closed: "✓", cancelled: "✗" }
         const replaced = asReviewer ? t.reviewer !== c.session : t.executor !== c.session
         const mark = replaced ? "↷" : asReviewer ? (t.status === "cleaned" ? "✓✓" : t.status === "cancelled" ? "✗" : "") : (MARK[t.status] ?? "")
         // значок и слово (план 009; владелец: «что значат две галочки и луна?» — значки оставить, слово рядом)
-        const WORD: Record<string, string> = { "✓": "сдана", "✓◐": "приёмка", "↻": "доработка", "✓✓◐": "влита", "✓✓": "готово", "✗": "отменена", "↷": "передана" }
+        const WORD: Record<string, string> = { "✓": "сдана", "✓◐": "приёмка", "↻": "доработка", "◇": "согласование", "✓✓◐": "влита", "✓✓": "готово", "✗": "отменена", "↷": "передана" }
         const title = `#${t.n}${mark ? ` ${mark} ${WORD[mark]}` : ""} ${asReviewer ? "приёмка " : ""}${t.title}`
         if (c.titleShown === title) continue
         try {
@@ -999,7 +1113,9 @@ export default {
             for (const t of w.tabs ?? []) if (!existsSync(cardFile(t.sessionID)) && waitingIn([t.sessionID]) && (await sessionInfo(t.sessionID))) await touch(t.sessionID)
         })
         await step("resumeTasks", resumeTasks)
+        await step("applyApprovals", applyApprovals)
         await step("assignReviewers", assignReviewers)
+        await step("planSteps", planSteps)
         await step("reconcile", reconcile)
         await step("resumeInterrupted", resumeInterrupted)
         await step("finishTasks", finishTasks)

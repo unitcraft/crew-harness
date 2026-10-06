@@ -107,7 +107,7 @@ whole or in any subcommand (`&&`, `||`, `;`, `|`, a newline, the body of `bash -
 `VAR=1 timeout N` prefixes do not hide it), or naming a file under a `Read(…)` glob is refused, naming the rule.
 **Who started it:** the command's environment carries `PEERS_SESSION_ID`, `PEERS_ROLE`, `PEERS_PROJECT`, and
 `PEERS_REVIEW_N` for the reviewer of an open task, `PEERS_TASK_N` for its executor — fixed when the watch is put and
-kept in its record, so a restart or a later role change does not alter them ([plan 012](doc/plans/012-acceptor-role.md)).
+kept in its record, so a restart or a later role change does not alter them ([plan 013](doc/plans/013-acceptor-role.md)).
 
 ## Who waits for what: `/peers` and "waiting for you"
 
@@ -206,13 +206,81 @@ The integrator stays free for the owner and does not re-check accepted work:
   accepted;
 - a task on rework does not hold a review session's place (`spawn_limits.reviewer`): the next submitted task gets
   it; the resubmission goes back to the same reviewer at once;
-- `reviewer: "acceptor"` — a separate acceptor role with its own rights ([plan 012](doc/plans/012-acceptor-role.md)):
+- `reviewer: "acceptor"` — a separate acceptor role with its own rights ([plan 013](doc/plans/013-acceptor-role.md)):
   only a free open tab of role `acceptor` becomes a reviewer (never a `worker` tab), a new review session is born
   with role `acceptor`, review sessions are bounded by `spawn_limits.acceptor` (without it `spawn_limits.reviewer`,
   then 2) and take no `worker` place; `merge`, `accept` and `cleaned` need the task's reviewer AND the `acceptor`
   (or `integrator`) role — a reviewer who changed role loses them; the executor of a task is refused by name. The
   role is shared. The default stays `worker`;
 - `inflight_limit` (6) bounds the tasks running and in review; `P0` passes every limit.
+
+## Plans
+
+New work starts with a plan: a document in the project's repository (`plans_dir`, default `docs/plans`,
+named `{n}-{slug}.md`). The integrator sets a plan task: `peer_spawn {kind: "plan", title, goal}`.
+`goal` is the original task the plan must solve. The plugin picks the plan number: the next one after
+the files in the plans folder and the open plan tasks. A sub-plan gets `N.k`.
+
+**Writing the plan.** The executor writes the plan from the template in its letter:
+- header: `Статус`, `Источник`, `Зависимости`;
+- sections: «Зачем», «Что уже есть», «Режим выполнения», «Фазы», «Не делаем», «Открытые вопросы»,
+  «Решения владельца»;
+- phases `### Ф.N`, and in them steps `#### Ф.N.M` with `[P1] [после: …] [где: …]`;
+- each step has a «Что:» line and an «**Приёмка:**» block.
+
+The report is refused while the file is missing or its form is wrong. The form check covers the
+header, the sections, «Что» and «Приёмка» of every step, open questions as a quadruple with
+«Блокирует», and `после:` pointing at real steps with no cycles.
+
+**Recheck in rounds.** Each round is run by a new session: not the plan's author and not a previous
+reviewer. The reviewer goes through two groups of steps:
+- **A — against the original task:** goal, coverage table "requirement → step → criterion",
+  assumptions, scope, what already exists, the mode question;
+- **B — how the plan is composed:** machine-checkable criteria with a red probe, criterion tools
+  tried before and after, one step = one task, explicit dependencies, existing paths, form.
+
+The round ends with `peer_task {action: "round", n, blocking, significant, cosmetic, text}`. The grade
+of a remark is set by what fixing it changes:
+
+| Grade | What fixing it changes |
+|---|---|
+| blocking | the plan does not solve the task |
+| significant | the content: a step, a criterion, the order, a dependency, the boundaries |
+| cosmetic | only the text |
+
+When in doubt, the higher grade applies. A blocking or significant remark sends the plan back to its
+author. The plan is ready when `plan_clean_rounds` (2) rounds in a row find only cosmetic remarks.
+After `plan_rounds_max` (4) rounds the owner decides.
+
+**Approval by the owner.** A ready plan notifies every window. The owner types `/plans` in a window
+and chooses one of:
+- approve without shortcuts;
+- approve with the shortcuts named in the plan;
+- return it with remarks.
+
+The decision is written by the window, so an agent cannot fake it. A new session writes the decision
+into the plan («Режим выполнения», «Решения владельца») and merges it. `accept` reads the plan in the
+target branch and requires its form and the owner's answer.
+
+**Steps become tasks.** Once the plan is merged, each step becomes a task. The task gets the step's
+«Что» as its goal, the step's «Приёмка» as its criteria, and the plan's «Не делаем» and mode as its
+boundaries. A step starts when:
+- everything in its own `после:` and its phase's `после:` is closed;
+- no running step shares its `где:`;
+- the project's limits allow it.
+
+Order is by priority (the step's, else the phase's), then by plan order. A `[подплан]` step becomes a
+plan task. A step task is accepted only with «✅ СДЕЛАНО <date>, commit» in its heading in the target
+branch. When every step is closed, the author is asked to close the plan. `/peers` shows each plan:
+written, rechecked (round, clean rounds), waiting for approval, or in progress (steps closed/total,
+which are running).
+
+Marks: plan `🔴 ОТКРЫТ / 🟡 В РАБОТЕ / ✅ ЗАКРЫТ / ❌ ОТМЕНЁН`, step `⏳ В РАБОТЕ / ✅ СДЕЛАНО`, criterion
+`✅ ВЫПОЛНЕНО / ⬜`, question `❔ / ✅`.
+
+**Heavy runs.** `heavy_commands` lists substrings of commands that load the machine (full gate,
+full build, full test run, benchmarks). `peer_watch` with such a command goes to the machine queue
+by itself. Full design: [plan 012](doc/plans/012-plans.md).
 
 ## Other projects
 

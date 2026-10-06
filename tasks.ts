@@ -18,8 +18,8 @@ export const TASKS = path.join(BASE, "tasks")
 // starting — записана, сессия создаётся; running — в работе; submitted — сдана (отчёт), ждёт приёмщика;
 // reviewing — на приёмке; rework — на доработке; accepted — принята (влита), ждёт очистки; cleaned — очищена, всё
 // закрыто; closed — закрыта (прежний путь «по отчёту»); cancelled — отменена.
-export type TaskStatus = "starting" | "running" | "submitted" | "reviewing" | "rework" | "accepted" | "cleaned" | "closed" | "cancelled"
-export const OPEN_STATUSES: TaskStatus[] = ["starting", "running", "submitted", "reviewing", "rework", "accepted"]
+export type TaskStatus = "starting" | "running" | "submitted" | "reviewing" | "rework" | "approval" | "accepted" | "cleaned" | "closed" | "cancelled"
+export const OPEN_STATUSES: TaskStatus[] = ["starting", "running", "submitted", "reviewing", "rework", "approval", "accepted"]
 /** статусы, в которых исполнитель работает (может сдавать отчёт) */
 export const WORKING_STATUSES: TaskStatus[] = ["starting", "running", "rework"]
 export type TaskEvent = { at: number; by: string; status?: TaskStatus; note?: string }
@@ -70,6 +70,10 @@ export type Task = {
   review_kind?: "tab" | "spawn" | "integrator"
   review_qid?: string
   reviewers?: string[]
+  /** задача-план (план 012): номер и файл плана, исходная задача, раунды перепроверки, решение владельца */
+  plan?: TaskPlan
+  /** задача — шаг плана: план, задача-план, шаг, файл (приёмка требует отметку «✅ СДЕЛАНО» шага в целевой ветке) */
+  plan_step?: { project: string; task: number; plan: string; step: string; file: string }
   /** кругов доработки; замечания последнего круга (для письма исполнителю — и для сверки после перезапуска) */
   rework?: number
   /** возвраты «влей свежую целевую ветку» (rework {sync: true}): не доработка, в rework_max не идут (план 011, дефект 4) */
@@ -169,6 +173,33 @@ export function createTask(fields: Omit<Task, "n" | "history" | "created" | "upd
   }
 }
 
+/** Раунд перепроверки плана: вердикт проверяющего по градациям замечаний. */
+export type PlanRound = { reviewer: string; at: number; blocking: number; significant: number; cosmetic: number; notes: string }
+export type TaskPlan = {
+  /** номер плана («12», подплан «12.1») */
+  n: string
+  /** путь файла плана от корня репозитория */
+  file: string
+  /** исходная задача — против неё перепроверка проверяет план */
+  source: string
+  parent?: string
+  rounds: PlanRound[]
+  /** раундов подряд только с косметическими замечаниями */
+  clean: number
+  /** раундов не хватило (plan_rounds_max): владелец решает по последним замечаниям */
+  stuck?: boolean
+  /** решение владельца из окна (/plans) */
+  approval?: { decision: "ok" | "ok-shortcuts" | "no"; text?: string; at: number }
+  /** когда владельцу последний раз напомнили о согласовании */
+  notifiedAt?: number
+  /** шаг плана → номер задачи (поставленные плагином после вливания плана) */
+  spawned?: Record<string, number>
+  /** все шаги закрыты, автору написано */
+  finished?: boolean
+  /** шагов в плане (по файлу в целевой ветке) */
+  total?: number
+}
+
 /** Сколько раз задачу возвращали исполнителю (доработки и синхронизации): номер круга в id писем. */
 export const rounds = (t: Task) => (t.rework ?? 0) + (t.syncs ?? 0)
 
@@ -206,5 +237,5 @@ export function letterExists(key: string, id: string): boolean {
 const PRIORITY_RANK: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3 }
 export const byPriority = (a: Task, b: Task) => (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9) || a.created - b.created
 
-const STATUS_RU: Record<TaskStatus, string> = { starting: "запускается", running: "в работе", submitted: "сдана", reviewing: "на приёмке", rework: "на доработке", accepted: "принята", cleaned: "очищена", closed: "закрыта", cancelled: "отменена" }
+const STATUS_RU: Record<TaskStatus, string> = { starting: "запускается", running: "в работе", submitted: "сдана", reviewing: "на приёмке", rework: "на доработке", approval: "на согласовании у владельца", accepted: "принята", cleaned: "очищена", closed: "закрыта", cancelled: "отменена" }
 export const statusRu = (s: TaskStatus) => STATUS_RU[s] ?? s

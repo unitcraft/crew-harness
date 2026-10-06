@@ -199,7 +199,7 @@ settings(1)
 await wait(800)
 const rv2 = task(2).reviewer
 cell("the other task gets a new review session", task(2).review_kind === "spawn" && sessions.has(rv2) && sessions.get(rv2).title === "#2 приёмка обычная", JSON.stringify({ rv2, s: sessions.get(rv2) }))
-// plan 012: with the default reviewer ("worker") the review session keeps role worker, as before the acceptor role
+// plan 013: with the default reviewer ("worker") the review session keeps role worker, as before the acceptor role
 cell("the default reviewer: the review session's role is worker", core.loadConfig(proj).reviewer === "worker" && core.allCards().find((c) => c.session === rv2)?.role === "worker", JSON.stringify(core.allCards().find((c) => c.session === rv2)?.role))
 cell("no reviewer is the author or the executor", [1, 2, 3].every((n) => task(n).reviewer !== task(n).author && task(n).reviewer !== task(n).executor), "same")
 await wait()

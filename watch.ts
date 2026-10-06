@@ -42,7 +42,7 @@ export type Watch = {
   dropped?: boolean
   /** отменено своей вкладкой (peer_watch cancel) */
   cancelled?: boolean
-  /** кто поставил (план 012, п.5): PEERS_SESSION_ID, PEERS_ROLE, PEERS_PROJECT, PEERS_REVIEW_N / PEERS_TASK_N —
+  /** кто поставил (план 013, п.5): PEERS_SESSION_ID, PEERS_ROLE, PEERS_PROJECT, PEERS_REVIEW_N / PEERS_TASK_N —
    *  в окружение команды. Фиксируется при постановке и лежит в записи на диске: запуск после перезапуска сервера
    *  берёт те же значения, а не роль вкладки на момент запуска. */
   env?: Record<string, string>

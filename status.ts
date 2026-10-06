@@ -200,6 +200,7 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
       out.push(`  ${s.state === "owner" ? "▶ " : ""}${who.slice(0, 60)}${model} — ${s.detail}${prog ? ` · ${prog}` : ""}`)
       if (prog) for (const a of s.task!.steps!) out.push(`      ${a.result ? "✓" : a.id === s.task!.checking ? "▶" : "·"} ${a.id}: ${short(a.result ?? a.text, 90)}`)
     }
+    out.push(...planLines(p))
     out.push(...acceptanceReports(p, now))
   }
   out.push(`(${hm(now)}; обновляется раз в несколько секунд)`)
@@ -210,6 +211,41 @@ const short = (x: string, n: number) => {
   const one = x.replace(/\s+/g, " ").trim()
   return one.length > n ? `${one.slice(0, n - 1)}…` : one
 }
+/** Планы проекта для /peers (план 012): на перепроверке, на согласовании, в работе — с ходом шагов. */
+export function planLines(project: string): string[] {
+  let list: Task[] = []
+  try {
+    list = listTasks(project).filter((t) => t.plan && !(t.status === "cleaned" && t.plan.finished) && t.status !== "cancelled")
+  } catch {}
+  const out: string[] = []
+  for (const t of list) {
+    const p = t.plan!
+    const last = p.rounds.at(-1)
+    const r = p.rounds.length
+    const state =
+      t.status === "starting" || t.status === "running"
+        ? `пишется (задача #${t.n})`
+        : t.status === "submitted" || t.status === "reviewing"
+          ? p.approval && p.approval.decision !== "no"
+            ? "согласован владельцем — вливается"
+            : `перепроверка: раунд ${r + 1}, чистых подряд ${p.clean}`
+          : t.status === "rework"
+            ? `доработка после ${p.approval?.decision === "no" ? "замечаний владельца" : `раунда ${r}${last ? ` (блокирующих ${last.blocking}, существенных ${last.significant})` : ""}`}`
+            : t.status === "approval"
+              ? `◇ ждёт вашего согласования${p.stuck ? " (раунды кончились)" : ""} — /plans`
+              : t.status === "accepted"
+                ? "влит, очистка"
+                : (() => {
+                    const ids = Object.entries(p.spawned ?? {})
+                    const closed = ids.filter(([, n]) => ["cleaned", "closed"].includes(loadTask(project, n)?.status ?? "")).length
+                    const going = ids.filter(([, n]) => { const x = loadTask(project, n); return !!x && isOpen(x) }).map(([id]) => id)
+                    return `в работе: шаги ${closed}/${p.total ?? "?"}${going.length ? `, идут ${going.join(", ")}` : ""}`
+                  })()
+    out.push(`  план ${p.n} «${short(t.title.replace(/^план \S+: /, ""), 50)}» — ${state}`)
+  }
+  return out.length ? ["  планы:", ...out.map((l) => `  ${l}`)] : []
+}
+
 const REPORT_MS = 24 * 3_600_000
 /** Отчёты приёмки за сутки: задачи, принятые с шагами, — каждый шаг с тем, чем подтверждён (владелец: «+ отчёт в конце»). */
 export function acceptanceReports(project: string, now = Date.now()): string[] {
@@ -235,7 +271,7 @@ export type SideRow = { mark: string; who: string; what: string; tone: "accent" 
  *  Подстрока (who пустой) — с отступом под «что», без колонки «кто». */
 export const SIDE_WIDTH = 32
 export const sideText = (r: SideRow) => (r.who ? `${r.mark} ${r.who.padEnd(9).slice(0, 9)} ${r.what}` : `    ${r.what}`).slice(0, SIDE_WIDTH)
-const WORD_OF_TASK: Record<string, string> = { submitted: "✓ сдана", reviewing: "✓◐ приёмка", rework: "↻ доработка", accepted: "✓✓◐ влита", running: "в работе", starting: "запуск" }
+const WORD_OF_TASK: Record<string, string> = { submitted: "✓ сдана", reviewing: "✓◐ приёмка", rework: "↻ доработка", approval: "◇ согласование", accepted: "✓✓◐ влита", running: "в работе", starting: "запуск" }
 const SIDE_MAX = 9
 export function sidebarLines(list: Status[], now = Date.now(), project?: string): { title: string; rows: SideRow[]; foot: string } {
   const mine = project ? list.filter((s) => (s.project ?? "?") === project) : list

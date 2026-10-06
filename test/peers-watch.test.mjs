@@ -116,7 +116,7 @@ assert.ok(started(z1.id) && started(z2.id), "machine_slots 0: no limit")
   assert.ok(rq.ok && /снято из очереди/.test(rq.text) && !existsSync(path.join(w.WATCHES, `${q.id}.req.json`)), "a queued watch leaves the queue")
   assert.ok(!w.cancelWatch(q.id, "sesC").ok, "a second cancel finds nothing open")
 }
-// who started it (plan 012, item 5): the env of the record reaches the command; the record keeps it on disk
+// who started it (plan 013, item 5): the env of the record reaches the command; the record keeps it on disk
 {
   const e = w.requestWatch({ session: "sesE", command: 'echo "who=$PEERS_SESSION_ID/$PEERS_ROLE/$PEERS_REVIEW_N"', cwd: tmp, env: { PEERS_SESSION_ID: "sesE", PEERS_ROLE: "acceptor", PEERS_REVIEW_N: "7" } })
   assert.deepEqual(JSON.parse(readFileSync(path.join(w.WATCHES, `${e.id}.req.json`), "utf8")).env, { PEERS_SESSION_ID: "sesE", PEERS_ROLE: "acceptor", PEERS_REVIEW_N: "7" })
