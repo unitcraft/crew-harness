@@ -295,26 +295,46 @@ by itself. Full design: [plan 012](doc/plans/012-plans.md).
 
 ## Other machines (prototype)
 
-Letters to projects on other machines go through an encrypted [ntfy](https://ntfy.sh) channel
-(`ntfy.ts`, `remote.ts`). Each machine has `<data>/opencode-peers/remote.json` (not in a repository —
-the secret is the only protection of the channel):
+Letters to projects on other machines (`remote.ts`). Each machine has
+`<data>/opencode-peers/remote.json` — not in a repository. Two transports:
+
+**Tailscale** (`tailnet.ts`, recommended): bridges talk HTTP directly inside your Tailscale network.
+The network names the sender (`tailscale whois`), so there is no shared secret, and each machine has
+its own rights:
+
+```json
+{ "node": "home", "transport": "tailnet",
+  "nodes": { "vps-1": { "projects": ["site"], "may_write": ["nova.integrator"] } } }
+```
+
+- `nodes` — the machines this one talks to, by their Tailscale name (`host`/`port` if not the
+  MagicDNS name and port 7647); a machine not listed gets 403;
+- `projects` — that machine's projects: `peer_send {to: "site.lead"}` goes to `vps-1`;
+- `may_write` — where that machine may write here: `project.role`, `project.*` or `*`;
+- the bridge listens only on the Tailscale address (`tailscale ip -4`), so on a VPS with a public
+  address the port is not open to the internet. Let only the bridge port through in the tailnet ACL;
+- a refusal there comes back to the sender as a note; an unreachable machine keeps the letter and
+  retries (1, 2, 4… up to 60 s) for 24 h.
+
+**ntfy** (`ntfy.ts`): a shared encrypted channel on [ntfy](https://ntfy.sh) for machines outside a
+tailnet. All machines of the channel are equal — the secret is its only protection:
 
 ```json
 { "node": "home", "secret": "<the same on every machine>", "projects": ["site"] }
 ```
 
-- `projects` — projects of the **other** machines: `peer_send {to: "site.lead"}` puts the letter into
-  `remote/outbox/` instead of the inbox. A session of another machine you got a letter from is
-  remembered, so a reply to its `from_session` goes back the same way. `tier` and `project.all` do not
-  work across machines;
-- the topic and the AES-256-GCM key come from `secret` (a new one: `ntfySecret()` from `ntfy.ts`);
-  optional `server` (default `https://ntfy.sh`) and `token` for your own ntfy server;
-- one process per machine holds the bridge (`remote/bridge.lock`): it sends the outbox and takes from
-  the channel only letters for its own projects, by the project's `inbound`; a session gets letters only
-  after it wrote to another machine itself. A letter that cannot be sent goes to `remote/failed/`, and
-  its sender gets a note;
-- a letter takes about 1–3 s on ntfy.sh (`node test/ntfy-latency.mjs`); anonymous ntfy.sh limits
-  requests and messages per day, so pending letters leave together.
+The topic and the AES-256-GCM key come from `secret` (a new one: `ntfySecret()` from `ntfy.ts`);
+optional `server` and `token` for your own ntfy server. The channel is shared, so a refusal stays in the
+receiver's log. A letter takes about 1–3 s on ntfy.sh (`node test/ntfy-latency.mjs`); anonymous
+ntfy.sh limits requests and messages per day, so pending letters leave together.
+
+Both:
+
+- a session of another machine you got a letter from is remembered with its machine, so a reply to
+  its `from_session` goes back there. `tier` and `project.all` do not work across machines;
+- one process per machine holds the bridge (`remote/bridge.lock`); it takes only letters for its own
+  projects, by the project's `inbound`; a session gets letters only from a machine it wrote to itself.
+  A letter that cannot be sent goes to `remote/failed/`, and its sender gets a note.
 
 ## Self-check
 

@@ -1346,8 +1346,13 @@ export function makeTools(host: PeersHost): PeerTool[] {
         if (addr.kind === "all") return { content: `Не отправлено: рассылка всем вкладкам проекта ${addr.project} другой машины не поддерживается — адресуй роль.` }
         const key = addr.kind === "session" ? addr.session : roleKey(addr.project, addr.role)
         queueRemote({ id: `${now}-${safeKey(sessionID)}-${safeKey(key)}`, ...base, to: key }, remote, now)
-        log(`send ${fromRole} -> ${key} via remote (node ${remote.node})${qid ? " qid=" + qid : ""}`)
-        return { content: `Отправлено на другую машину (${hhmm(now)}): ${key} — через канал ntfy, обычно за 1–3 с; примут ли — решает та машина (inbound проекта), отказ там не вернётся.${qidTail}` }
+        const where = remote.cfg.transport === "tailnet" ? `машина ${remote.to_node}` : "канал ntfy"
+        log(`send ${fromRole} -> ${key} via ${remote.cfg.transport} (${remote.to_node})${qid ? " qid=" + qid : ""}`)
+        const fate =
+          remote.cfg.transport === "tailnet"
+            ? "примет ли — решает та машина (её may_write и inbound проекта); отказ или недоступность вернутся служебным письмом"
+            : "обычно за 1–3 с; примут ли — решает та машина (inbound проекта), отказ не вернётся"
+        return { content: `Отправлено на другую машину (${hhmm(now)}): ${key} — ${where}; ${fate}.${qidTail}` }
       }
       // ПИСЬМО СО СТУПЕНЬЮ: из открытых держателей роли — свободный с моделью этой ступени, иначе выше; никого — очередь.
       if (input.tier !== undefined && input.tier !== null && input.tier !== "") {
