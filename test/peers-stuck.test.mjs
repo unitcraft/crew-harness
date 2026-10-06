@@ -64,6 +64,13 @@ cell("a hung session.create does not stop delivery", delivered.some((d) => d.tex
 const logText = readFileSync(path.join(os.tmpdir(), "opencode-plugins.log"), "utf8").split("\n").filter((l) => l.includes(`pid=`) || l.includes("pass step")).slice(-50).join("\n")
 cell("the hung step is in the log", /pass step resumeTasks failed: Error: step resumeTasks took over 300 ms/.test(logText), "no log line")
 
+// the main thread held for 1.5 s: the lag monitor writes how long and what the plugin was doing (2026-10-06)
+const lagMark = Date.now()
+for (const end = Date.now() + 1_500; Date.now() < end; ) {}
+await new Promise((r) => setTimeout(r, 800))
+const lagLines = readFileSync(path.join(os.tmpdir(), "opencode-plugins.log"), "utf8").split("\n").filter((l) => /loop lag \d+ ms/.test(l) && Date.parse(l.slice(0, 24)) >= lagMark - 50)
+cell("a held main thread is logged with its length and the plugin's step", lagLines.some((l) => { const ms = Number(/loop lag (\d+) ms/.exec(l)[1]); return ms >= 1_000 && /шаг прохода|плагин свободен/.test(l) && /память \d+ МБ/.test(l) }), JSON.stringify(lagLines))
+
 clearInterval(heart)
 stop?.()
 try {

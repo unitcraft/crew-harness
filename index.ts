@@ -1248,9 +1248,27 @@ export default {
       for (const w of liveWindows()) postNotice(w.pid, { title: "peers: проблемы — peer_doctor", message: short(problems.join("; "), 100), duration: 15_000 })
     }, 10_000)
 
+    // ЗАМЕР ЗАДЕРЖКИ ГЛАВНОГО ПОТОКА (2026-10-06). Сервер дважды за вечер терял окна («Event stream stalled»), и было
+    // не понять, держал ли поток плагин. Таймер раз в LAG_EVERY_MS замечает, насколько опоздал: опоздание от
+    // LAG_LOG_MS — строка в журнал с шагом прохода плагина, который в это время шёл («—» — плагин был свободен: держал
+    // кто-то другой в процессе сервера), и памятью процесса.
+    const LAG_EVERY_MS = 500
+    const LAG_LOG_MS = Number(process.env.NOVA_PEERS_LAG_MS) || 1_000
+    let lagExpected = Date.now() + LAG_EVERY_MS
+    const lagTimer = setInterval(() => {
+      const t = Date.now()
+      const lag = t - lagExpected
+      lagExpected = t + LAG_EVERY_MS
+      if (lag < LAG_LOG_MS) return
+      const inPass = passBusy ? `шаг прохода ${passStage}, проход идёт ${Math.round((t - passStartedAt) / 1000)} с` : "плагин свободен"
+      log(`loop lag ${lag} ms (${inPass}; память ${Math.round(process.memoryUsage().rss / 1048576)} МБ)`)
+    }, LAG_EVERY_MS)
+    lagTimer.unref?.()
+
     log(`setup pid=${process.pid} base=${BASE}`)
     const dispose = () => {
       clearInterval(timer)
+      clearInterval(lagTimer)
       clearTimeout(doctorTimer)
       try {
         watcher?.close()
