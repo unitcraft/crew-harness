@@ -8,7 +8,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, sta
 import path from "node:path"
 import { type Card, type PeersConfig, ROLES, cardFile, mayWakeCard, readJson, safeKey } from "./core.ts"
 import { type Task, isOpen, listTasks, loadTask } from "./tasks.ts"
-import { PLAN_ACCEPTANCE, ROUND_RULES } from "./plans.ts"
+import { roundRules } from "./plans.ts"
 
 const git = (cwd: string, args: string[], timeout = 15_000) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", windowsHide: true, timeout, stdio: ["ignore", "pipe", "ignore"] })
 const gitOk = (cwd: string, args: string[], timeout?: number) => {
@@ -172,19 +172,20 @@ export function reviewLetter(t: Task, cfg: PeersConfig): string {
 export function planReviewLetter(t: Task, cfg: PeersConfig): string {
   const p = t.plan!
   const no = p.rounds.length + 1
-  const past = p.rounds.map((r, i) => `  раунд ${i + 1}: блокирующих ${r.blocking}, существенных ${r.significant}, косметических ${r.cosmetic}${r.notes ? `\n    ${r.notes.replace(/\n/g, "\n    ")}` : ""}`)
+  const f = cfg.planForm
+  const past = p.rounds.map((r, i) => `  ${r.line ?? `раунд ${i + 1}: блокирующих ${r.blocking}, существенных ${r.significant}, косметических ${r.cosmetic}`}${r.notes ? `\n    ${r.notes.replace(/\n/g, "\n    ")}` : ""}`)
   return [
     `ПЕРЕПРОВЕРКА ПЛАНА ${p.n} (задача #${t.n} «${t.title}»), раунд ${no}. Ты — проверяющий этого раунда: не автор плана и не прошлые проверяющие. План не правь — замечания идут автору.`,
     `ИСХОДНАЯ ЗАДАЧА (против неё проверяешь план):\n${p.source}`,
     `ФАЙЛ ПЛАНА: ${p.file}${t.worktree ? ` в worktree ${t.worktree}, ветка ${t.branch}` : ` в ${t.directory}`}.`,
     t.report ? `ОТЧЁТ АВТОРА:\n${t.report.slice(0, 2000)}` : "",
     past.length ? `ПРОШЛЫЕ РАУНДЫ (проверь и их градации: косметическое, оказавшееся содержательным, — замечание этого раунда):\n${past.join("\n")}` : "",
-    `ЧТО ПРОВЕРИТЬ — по каждому шагу check:\n${PLAN_ACCEPTANCE.map((a) => `  ${a.id}: ${a.text}`).join("\n")}`,
-    ROUND_RULES,
+    `ЧТО ПРОВЕРИТЬ — по каждому шагу check:\n${cfg.planAcceptance.map((a) => `  ${a.id}: ${a.text}`).join("\n")}`,
+    roundRules(f.grades),
     "ПОРЯДОК:",
     `  1) peer_task {action: "review", n: ${t.n}};`,
     `  2) по каждому шагу: peer_task {action: "check", n: ${t.n}, step} перед проверкой, {action: "check", n: ${t.n}, step, result: "что нашёл"} после (у a2-coverage в result — таблица «требование → шаг → критерий»);`,
-    `  3) вердикт: peer_task {action: "round", n: ${t.n}, blocking: <число>, significant: <число>, cosmetic: <число>, text: "замечания: [градация] что не так → что исправить"}.`,
+    `  3) вердикт: peer_task {action: "round", n: ${t.n}, grades: {${f.grades.map((g) => `${g.id}: <число>`).join(", ")}}, text: "замечания: [градация] что не так → что исправить"}.`,
     `Готов — ${cfg.planCleanRounds} раунда подряд только с косметическими; тогда план уйдёт владельцу. merge и accept в раунде не нужны: план вливается после согласования.`,
   ]
     .filter(Boolean)
@@ -198,18 +199,20 @@ export function planMergeLetter(t: Task, cfg: PeersConfig): string {
   const yes = a.decision === "ok"
   const day = new Date(a.at).toISOString().slice(0, 10)
   return [
-    `ВЛИТЬ СОГЛАСОВАННЫЙ ПЛАН ${p.n} (задача #${t.n} «${t.title}»). Владелец ${day}: ${yes ? "согласован без упрощений" : "согласован, упрощения — как в плане"}.`,
+    `ВЛИТЬ СОГЛАСОВАННЫЙ ПЛАН ${p.n} (задача #${t.n} «${t.title}»). ${cfg.planApprover === "owner" ? "Владелец" : "Интегратор"} ${day}: ${yes ? "согласован без упрощений" : "согласован, упрощения — как в плане"}.`,
     `ФАЙЛ: ${p.file}${t.worktree ? ` в worktree ${t.worktree}, ветка ${t.branch}` : ""}.`,
     "ВПИШИ В ПЛАН (коммитом в ветку задачи):",
-    `  — в «Режим выполнения»: «Без упрощений: ${yes ? "ДА" : "НЕТ"} — владелец, ${day}»;`,
-    `  — в «Решения владельца»: строку «план согласован${yes ? " без упрощений" : ", упрощения — как в плане"} | ${day}»;`,
-    "  — в шапке: «**Статус:** 🟡 В РАБОТЕ».",
+    cfg.planForm.modeQuestion ? `  — в «${cfg.planForm.sections.mode}»: «${cfg.planForm.modeLabel}: ${yes ? "ДА" : "НЕТ"} — ${cfg.planApprover === "owner" ? "владелец" : "интегратор"}, ${day}»;` : "",
+    `  — в «${cfg.planForm.sections.decisions}»: строку «план согласован${yes ? " без упрощений" : ", упрощения — как в плане"} | ${day}»;`,
+    `  — в шапке: «**Статус:** ${cfg.planForm.marks.plan_work}».`,
     "ПОРЯДОК:",
     `  1) peer_task {action: "review", n: ${t.n}}; шаги approval-written и form — check по каждому;`,
     `  2) peer_task {action: "merge", n: ${t.n}} (замок вливания), влей ветку в ${cfg.targetBranch} и запушь;`,
-    `  3) peer_task {action: "accept", n: ${t.n}} — плагин прочтёт план в ${cfg.targetBranch}: форма и ответ «Без упрощений» должны сойтись с решением владельца; затем очистка и cleaned.`,
-    "После cleaned плагин сам поставит задачи по шагам плана.",
-  ].join("\n")
+    `  3) peer_task {action: "accept", n: ${t.n}} — плагин прочтёт план в ${cfg.targetBranch}: форма${cfg.planForm.modeQuestion ? ` и ответ «${cfg.planForm.modeLabel}»` : ""} должны сойтись с решением владельца; затем очистка и cleaned.`,
+    cfg.planSteps === "auto" ? "После cleaned плагин сам поставит задачи по шагам плана." : "После cleaned автор получит список шагов: задачи по ним ставит он сам (plan_steps: manual).",
+  ]
+    .filter(Boolean)
+    .join("\n")
 }
 
 /** Письмо исполнителю: на доработку. */

@@ -13,7 +13,8 @@ import { type Projects, parseProjects as parseProjectsWith, projectFor, rawSetti
 import { SCHEMA, guideText, invalid } from "./config-schema.ts"
 export { PROJECT_RE, type Project, type Projects, settingsProblems } from "./settings.ts"
 import { PROJECT_RE, settingsProblems } from "./settings.ts"
-import { PLAN_ACCEPTANCE, PLAN_MERGE_ACCEPTANCE, ROUND_RULES, allSteps, nextPlanNumber, parsePlan, planProblems, planTemplate } from "./plans.ts"
+import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
+import { DEFAULT_FORM, PLAN_ACCEPTANCE, PLAN_MERGE_ACCEPTANCE, type PlanForm, allSteps, nextPlanNumber, parsePlan, planProblems, planTemplate, roundRules } from "./plans.ts"
 import { type Task, type TaskPlan, WORKING_STATUSES, slugify, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { cleanupDone, cleanupSteps, fileAt, holdsMergeLock, isMerged, mergeHolder, releaseMergeLock, reworkLetter, takeMergeLock } from "./review.ts"
 import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, watchesOf } from "./watch.ts"
@@ -188,12 +189,47 @@ export type PeersConfig = {
   planCleanRounds: number
   /** подстроки команд — тяжёлые прогоны: peer_watch ставит их в очередь машины сам */
   heavyCommands: string[]
+  /** форма плана (plans.ts PlanForm) из plan_sections, plan_header, plan_prefix, plan_labels, plan_marks, plan_mode_question, plan_grades */
+  planForm: PlanForm
+  planAcceptance: AcceptanceStep[]
+  planMergeAcceptance: AcceptanceStep[]
+  planApprover: "owner" | "integrator"
+  planSteps: "auto" | "manual"
+  /** путь к своему шаблону плана от корня репозитория ("" — встроенный) */
+  planTemplate: string
   inbound: "integrator" | "any" | "none"
   root?: string
 }
 export const TASK_FIELDS = ["goal", "criteria", "boundaries", "open_questions"] as const
 const num = (v: any, d: number) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : d)
 const oneOf = <T extends string>(v: any, all: readonly T[], d: T): T => (all.includes(v) ? v : d)
+/** Список шагов приёмки из настроек или undefined (нет, пуст, не той формы — умолчание). */
+function acceptanceList(raw: any): AcceptanceStep[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const list = raw.filter((a: any) => a && typeof a.id === "string" && typeof a.text === "string").map((a: any) => ({ id: a.id, text: a.text, required: a.required !== false }))
+  return list.length ? list : undefined
+}
+const strMap = <T extends Record<string, string>>(raw: any, d: T): T => {
+  const out: Record<string, string> = { ...d }
+  if (raw && typeof raw === "object") for (const k of Object.keys(d)) if (typeof raw[k] === "string" && raw[k].trim()) out[k] = raw[k].trim()
+  return out as T
+}
+/** Форма плана из настроек проекта; чего нет — умолчание (форма nova). */
+export function planFormOf(j: any): PlanForm {
+  const grades = Array.isArray(j?.plan_grades) ? j.plan_grades.filter((g: any) => g && typeof g.id === "string" && typeof g.name === "string").map((g: any) => ({ id: g.id, name: g.name, text: String(g.text ?? ""), clean: g.clean === true })) : []
+  const labels = strMap(j?.plan_labels, { what: DEFAULT_FORM.whatLabel, criteria: DEFAULT_FORM.criteriaLabel, mode: DEFAULT_FORM.modeLabel })
+  return {
+    sections: strMap(j?.plan_sections, DEFAULT_FORM.sections),
+    header: Array.isArray(j?.plan_header) && j.plan_header.length ? j.plan_header.filter((x: any) => typeof x === "string" && x.trim()) : DEFAULT_FORM.header,
+    prefix: typeof j?.plan_prefix === "string" && j.plan_prefix.trim() ? j.plan_prefix.trim() : DEFAULT_FORM.prefix,
+    whatLabel: labels.what,
+    criteriaLabel: labels.criteria,
+    marks: strMap(j?.plan_marks, DEFAULT_FORM.marks),
+    modeQuestion: j?.plan_mode_question !== "off",
+    modeLabel: labels.mode,
+    grades: grades.length && grades.some((g: any) => !g.clean) ? grades : DEFAULT_FORM.grades,
+  }
+}
 
 /** Настройки проекта каталога dir (с умолчаниями). */
 export function loadConfig(dir: string): PeersConfig {
@@ -238,6 +274,12 @@ export function loadConfig(dir: string): PeersConfig {
     planRoundsMax: num(j.plan_rounds_max, 4),
     planCleanRounds: Math.max(1, num(j.plan_clean_rounds, 2)),
     heavyCommands: Array.isArray(j.heavy_commands) ? j.heavy_commands.filter((x: any) => typeof x === "string" && x.trim()) : [],
+    planForm: planFormOf(j),
+    planAcceptance: acceptanceList(j.plan_acceptance) ?? PLAN_ACCEPTANCE,
+    planMergeAcceptance: acceptanceList(j.plan_merge_acceptance) ?? PLAN_MERGE_ACCEPTANCE,
+    planApprover: oneOf(j.plan_approver, ["owner", "integrator"] as const, "owner"),
+    planSteps: oneOf(j.plan_steps, ["auto", "manual"] as const, "auto"),
+    planTemplate: typeof j.plan_template === "string" ? j.plan_template.trim() : "",
     inbound: oneOf(j.inbound, ["integrator", "any", "none"] as const, "integrator"),
     root,
   }
@@ -1275,7 +1317,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
           ptext = readFileSync(file, "utf8")
         } catch {}
         if (!ptext) return { content: `Не сдано: файла плана ${file} нет. Напиши план в этот файл, закоммить и сдай снова.` }
-        const problems = planProblems(ptext)
+        const problems = planProblems(ptext, loadConfig(pt.directory).planForm)
         if (problems.length) return { content: `Не сдано: форма плана ${pt.plan!.n} не в порядке (${problems.length}):\n${problems.map((x) => `— ${x}`).join("\n")}\nИсправь и сдай снова.` }
       }
       if (isReport) {
@@ -1497,7 +1539,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
     input: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["list", "show", "assign", "order", "push", "reassign", "cancel", "priority", "review", "check", "round", "merge", "rework", "accept", "cleaned"] },
+        action: { type: "string", enum: ["list", "show", "assign", "order", "push", "reassign", "cancel", "priority", "plan_decide", "review", "check", "round", "merge", "rework", "accept", "cleaned"] },
         to: str("order: the other project's integrator, \"project.integrator\""),
         checks: { type: "object", description: "accept: report per acceptance step {step id: what proves it}", additionalProperties: { type: "string" } },
         step: str("check: the acceptance step id"),
@@ -1509,6 +1551,8 @@ export function makeTools(host: PeersHost): PeerTool[] {
         blocking: { type: "number", description: "round (plan recheck): number of blocking remarks" },
         significant: { type: "number", description: "round: number of significant remarks" },
         cosmetic: { type: "number", description: "round: number of cosmetic remarks" },
+        decision: { type: "string", enum: ["ok", "ok-shortcuts", "no"], description: "plan_decide: the integrator's decision on a plan when the project's plan_approver is integrator" },
+        grades: { type: "object", description: "round: number of remarks per grade id of the project (plan_grades); the default grades can also be passed as blocking, significant, cosmetic", additionalProperties: { type: "number" } },
         sync: { type: "boolean", description: "rework: return only to merge the fresh target branch (not a rework round, not counted in rework_max)" },
         all: { type: "boolean", description: "list: include closed and cancelled", default: false },
         ...taskInput,
@@ -1595,6 +1639,20 @@ export function makeTools(host: PeersHost): PeerTool[] {
         return { content: lines.filter(Boolean).join("\n") }
       }
       // ДЕЙСТВИЯ ПРИЁМЩИКА (план 002, Ф.3): review, merge, rework, accept, cleaned — только приёмщик этой задачи.
+      // СОГЛАСОВАНИЕ ПЛАНА ИНТЕГРАТОРОМ (plan_approver: integrator): то же решение, что владелец даёт в окне (/plans)
+      if (action === "plan_decide") {
+        const pcfg = loadConfig(t.directory)
+        if (!t.plan || t.status !== "approval") return { content: `Задача #${t.n} — не план на согласовании (сейчас ${statusRu(t.status)}).` }
+        if (pcfg.planApprover !== "integrator") return { content: `План ${t.plan.n} согласует владелец (plan_approver: owner) — командой окна /plans.` }
+        if (t.author !== me.session) return { content: `План ${t.plan.n} согласует автор задачи (${t.author_role}).` }
+        const decision = String(input.decision ?? "")
+        if (!["ok", "ok-shortcuts", "no"].includes(decision)) return { content: 'decision: "ok" (без упрощений), "ok-shortcuts" (упрощения — как в плане) или "no" (вернуть; text — замечания).' }
+        const text = String(input.text ?? "").trim()
+        if (decision === "no" && !text) return { content: "text: что изменить в плане." }
+        writeApproval({ project: t.project, n: t.n, decision: decision as Decision, ...(text ? { text } : {}) })
+        host.posted([])
+        return { content: `План ${t.plan.n}: ${DECISION_RU[decision as Decision]} — записано, плагин применит на ближайшем проходе.` }
+      }
       if (["review", "check", "round", "merge", "rework", "accept", "cleaned"].includes(action)) {
         // исполнитель свою работу не вливает и не принимает — отказ называет это прямо (план 013, п.4)
         if (t.reviewer !== me.session && t.executor === me.session)
@@ -1647,16 +1705,22 @@ export function makeTools(host: PeersHost): PeerTool[] {
           if (t.plan?.approval && t.plan.approval.decision !== "no") return { content: `План ${t.plan.n} уже согласован владельцем — раундов больше нет; влей его: merge → accept.` }
           if (!t.plan) return { content: `Вердикт раунда — у задачи-плана; задача #${t.n} обычная (rework / merge / accept).` }
           if (t.status !== "reviewing") return { content: `Сначала peer_task {action: "review", n: ${t.n}} (задача сейчас ${statusRu(t.status)}).` }
-          const [blocking, significant, cosmetic] = ["blocking", "significant", "cosmetic"].map((k) => Number(input[k] ?? NaN))
-          if (![blocking, significant, cosmetic].every((x) => Number.isInteger(x) && x >= 0)) return { content: "blocking, significant, cosmetic — числа замечаний каждой градации (0 и больше)." }
+          // градации — настройка проекта (plan_grades); числа — полями с id градаций или объектом grades
+          const grades = tcfg.planForm.grades
+          const raw = input.grades && typeof input.grades === "object" ? input.grades : input
+          const counts: Record<string, number> = Object.fromEntries(grades.map((g) => [g.id, Number(raw[g.id] ?? NaN)]))
+          if (!Object.values(counts).every((x) => Number.isInteger(x) && x >= 0)) return { content: `Числа замечаний каждой градации (0 и больше): ${grades.map((g) => `${g.id} (${g.name})`).join(", ")}.` }
+          const total = Object.values(counts).reduce((a, b) => a + b, 0)
+          const strict = grades.filter((g) => !g.clean).reduce((a, g) => a + counts[g.id], 0)
           const notes = String(input.text ?? "").trim()
-          if (!notes && blocking + significant + cosmetic > 0) return { content: "text: замечания списком, у каждого градация (блокирующее / существенное / косметическое) и что исправить." }
+          if (!notes && total > 0) return { content: `text: замечания списком, у каждого градация (${grades.map((g) => g.name).join(" / ")}) и что исправить.` }
           const missing = acc.filter((a) => a.required && !t.checks?.[a.id])
           if (missing.length) return { content: `Сначала все шаги перепроверки (check): ${missing.map((a) => a.id).join(", ")}.` }
           const p = t.plan
-          p.rounds.push({ reviewer: me.session, at: now, blocking, significant, cosmetic, notes })
-          const no = p.rounds.length
-          const clean = blocking + significant === 0
+          const no = p.rounds.length + 1
+          const line = `раунд ${no}, ${new Date(now).toISOString().slice(0, 10)} — ${grades.map((g) => `${g.name} ${counts[g.id]}`).join(", ")}`
+          p.rounds.push({ reviewer: me.session, at: now, counts, line, notes })
+          const clean = strict === 0
           p.clean = clean ? p.clean + 1 : 0
           if (t.review_qid) settleObligation(me.session, t.review_qid)
           const rc = readJson<Card>(cardFile(me.session))
@@ -1671,7 +1735,6 @@ export function makeTools(host: PeersHost): PeerTool[] {
           t.checks = undefined
           t.steps = undefined
           t.checking = undefined
-          const line = `раунд ${no}, ${new Date(now).toISOString().slice(0, 10)} — блокирующих ${blocking}, существенных ${significant}, косметических ${cosmetic}`
           const toExec = (id: string, text: string) => {
             if (!t.executor) return
             postLetter(t.executor, { id, from_role: keyOf(me), from_session: me.session, to: t.executor, time: now, wake: false, text })
@@ -1691,7 +1754,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
             host.posted(postExpected(t))
             return { content: `Раунд ${no} записан (${line}). План вернулся автору; следующий раунд — новой сессией после его сдачи.` }
           }
-          const cos = cosmetic ? `\nКосметика (поправь в файле и закоммить; сдавать заново не нужно):\n${notes}` : ""
+          const cos = total > strict ? `\nКосметика (поправь в файле и закоммить; сдавать заново не нужно):\n${notes}` : ""
           if (p.clean >= tcfg.planCleanRounds) {
             taskEvent(t, me.session, "approval", `перепроверка: ${line}; чистых раундов подряд ${p.clean} — план готов, согласует владелец`)
             toExec(`plan-ready-${safeKey(project)}-${t.n}-${no}`, `План ${p.n} прошёл перепроверку (${line}; чистых подряд ${p.clean}) и ушёл на согласование владельцу. Обнови строку «**Перепроверка:**» в шапке.${cos}`)
@@ -1750,8 +1813,8 @@ export function makeTools(host: PeersHost): PeerTool[] {
           if (t.plan_step) {
             const ps = t.plan_step
             const text = fileAt(t.directory, tcfg.targetBranch, ps.file)
-            const s = text ? allSteps(parsePlan(text)).find((x) => x.id === ps.step) : undefined
-            if (!s?.done) return { content: `Не принято: в ${ps.file} (${tcfg.targetBranch}) у шага ${ps.step} нет отметки «✅ СДЕЛАНО <дата>, коммит <hash>» в заголовке. Впиши её тем же слиянием и снова accept.` }
+            const s = text ? allSteps(parsePlan(text, tcfg.planForm)).find((x) => x.id === ps.step) : undefined
+            if (!s?.done) return { content: `Не принято: в ${ps.file} (${tcfg.targetBranch}) у шага ${ps.step} нет отметки «${tcfg.planForm.marks.step_done} <дата>, коммит <hash>» в заголовке. Впиши её тем же слиянием и снова accept.` }
           }
           // согласованный план (план 012): в целевой ветке — файл плана в порядке и с ответом владельца
           if (t.plan) {
@@ -1759,10 +1822,11 @@ export function makeTools(host: PeersHost): PeerTool[] {
             if (!a || a.decision === "no") return { content: `План ${t.plan.n} не согласован владельцем — accept только после согласования (/plans в окне владельца).` }
             const text = fileAt(t.directory, tcfg.targetBranch, t.plan.file)
             if (!text) return { content: `Не принято: файла ${t.plan.file} нет в ${tcfg.targetBranch}. Влей план и запушь.` }
-            const probs = planProblems(text)
+            const probs = planProblems(text, tcfg.planForm)
             if (probs.length) return { content: `Не принято: форма плана в ${tcfg.targetBranch}: ${probs.join("; ")}.` }
-            const yes = parsePlan(text).noShortcuts
-            if (yes !== (a.decision === "ok")) return { content: `Не принято: в «Режиме выполнения» должно быть «Без упрощений: ${a.decision === "ok" ? "ДА" : "НЕТ"} — владелец, дата» (так решил владелец).` }
+            const f = tcfg.planForm
+            const yes = parsePlan(text, f).noShortcuts
+            if (f.modeQuestion && yes !== (a.decision === "ok")) return { content: `Не принято: в «${f.sections.mode}» должно быть «${f.modeLabel}: ${a.decision === "ok" ? "ДА" : "НЕТ"} — дата» (так решено при согласовании).` }
           }
           t.checks = checks
           delete t.checking
@@ -1979,25 +2043,43 @@ export function makeTools(host: PeersHost): PeerTool[] {
 }
 
 /** Шаги приёмки задачи: у задачи-плана — перепроверка плана (план 012), у остальных — приёмка проекта. */
-export const acceptanceOf = (t: Task, cfg: PeersConfig) => (t.plan ? (t.plan.approval && t.plan.approval.decision !== "no" ? PLAN_MERGE_ACCEPTANCE : PLAN_ACCEPTANCE) : cfg.acceptance)
+export const acceptanceOf = (t: Task, cfg: PeersConfig) => (t.plan ? (t.plan.approval && t.plan.approval.decision !== "no" ? cfg.planMergeAcceptance : cfg.planAcceptance) : cfg.acceptance)
 
 /** Письмо с задачей исполнителю. */
 /** Письмо исполнителю задачи-плана (план 012): исходная задача, файл, шаблон, критерии, ход перепроверки. */
 export function planTaskLetter(t: Task): string {
   const p = t.plan!
+  const cfg = loadConfig(t.directory)
+  const f = cfg.planForm
+  const approver = cfg.planApprover === "owner" ? "владелец (командой окна /plans)" : "интегратор (peer_task plan_decide)"
+  const strict = f.grades.filter((g) => !g.clean).map((g) => g.name)
   return [
     `ЗАДАЧА-ПЛАН #${t.n} «${t.title}» от ${t.author_role} (сессия ${t.author}), приоритет ${t.priority}. Составь план ${p.n}${p.parent ? ` — подплан плана ${p.parent}` : ""}. Код не пиши: результат — только файл плана.`,
     `ИСХОДНАЯ ЗАДАЧА (перепроверка сверит план с ней):\n${p.source}`,
     t.boundaries ? `ГРАНИЦЫ (не делаем): ${t.boundaries}` : "",
     t.open_questions ? `ОТКРЫТЫЕ ВОПРОСЫ: ${t.open_questions}` : "",
     `ФАЙЛ ПЛАНА: ${p.file} — в ${t.worktree && t.worktree_ready ? `worktree ${t.worktree}, ветка ${t.branch} (создан плагином; правь и коммить здесь)` : "папке задачи"}.`,
-    `ФОРМА (по этому шаблону: фазы «### Ф.N — …», шаги «#### Ф.N.M — …» с [P1] [после: …] [где: …], у шага «Что:» и «**Приёмка:**»; отметки — значком и словом):\n${planTemplate(p.n, "<название>", "<исходная задача>")}`,
-    `КРИТЕРИИ ПРИЁМКИ ПЛАНА — по ним идёт перепроверка:\n${PLAN_ACCEPTANCE.map((a) => `  ${a.id}: ${a.text}`).join("\n")}\nФорму (шапка, разделы, «Что:» и «Приёмка» у каждого шага, вопросы четвёркой с «Блокирует», «после:» на существующие шаги без кругов) плагин проверит при сдаче — с ошибками формы отчёт не примет.`,
-    `ДАЛЬШЕ: перепроверка раундами, каждый раунд — новая сессия.\n${ROUND_RULES}\nГотов — два раунда подряд только с косметическими замечаниями; тогда план согласует владелец (он же ответит на «Режим выполнения»). Строку «**Перепроверка:**» в шапке обновляй после каждого раунда.`,
+    `ФОРМА (по этому шаблону: фазы «### ${f.prefix}.N — …», шаги «#### ${f.prefix}.N.M — …» с [P1] [после: …] [где: …], у шага «${f.whatLabel}:» и «**${f.criteriaLabel}:**»; отметки — как в шаблоне):\n${planTemplateFor(t, cfg)}`,
+    `КРИТЕРИИ ПРИЁМКИ ПЛАНА — по ним идёт перепроверка:\n${cfg.planAcceptance.map((a) => `  ${a.id}: ${a.text}`).join("\n")}\nФорму (шапка, разделы, «${f.whatLabel}:» и «${f.criteriaLabel}» у каждого шага, вопросы четвёркой с «Блокирует», «после:» на существующие шаги без кругов) плагин проверит при сдаче — с ошибками формы отчёт не примет.`,
+    `ДАЛЬШЕ: перепроверка раундами, каждый раунд — новая сессия.\n${roundRules(f.grades)}\nГотов — ${cfg.planCleanRounds} раунда подряд без замечаний градаций ${strict.join(", ")}; тогда план согласует ${approver}${f.modeQuestion ? ` (и ответит на «${f.sections.mode}»)` : ""}. Строку «**Перепроверка:**» в шапке обновляй после каждого раунда.`,
     `СДАЧА: закоммить файл плана в ветку задачи и отчитайся: peer_send {to: "${t.author}", reply_to: "${t.qid}", text: "план ${p.n}: файл, фазы и шаги кратко"}. Упрёшься — тем же ответом напиши, что мешает.`,
   ]
     .filter(Boolean)
     .join("\n")
+}
+
+/** Шаблон плана: свой файл проекта (plan_template; {n} {title} {source}) или встроенный по форме проекта. */
+export function planTemplateFor(t: Task, cfg: PeersConfig): string {
+  const p = t.plan!
+  if (cfg.planTemplate) {
+    try {
+      const top = execFileSync("git", ["-C", t.directory, "rev-parse", "--show-toplevel"], { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"] }).trim()
+      return readFileSync(path.join(top, cfg.planTemplate), "utf8").replace(/\{n\}/g, p.n).replace(/\{title\}/g, "<название>").replace(/\{source\}/g, "<исходная задача>")
+    } catch (e) {
+      log(`plan template ${cfg.planTemplate}: ${e} -- the built-in one is used`)
+    }
+  }
+  return planTemplate(p.n, "<название>", "<исходная задача>", cfg.planForm)
 }
 
 // ШАГИ ПРИЁМКИ — И ИСПОЛНИТЕЛЮ (2026-10-06, дополнение к плану 002). Раньше их видел только приёмщик: исполнитель
@@ -2027,7 +2109,7 @@ export function formatTaskLetter(t: Task): string {
           ? `ВЕТКА: ${t.branch}.`
           : "",
     t.handoff ? `СДЕЛАНО ПРЕЖНИМ ИСПОЛНИТЕЛЕМ (задача передана тебе):\n${t.handoff}` : "",
-    t.plan_step ? `ШАГ ПЛАНА ${t.plan_step.plan}, ${t.plan_step.step} (файл ${t.plan_step.file}): закрыв шаг, отметь в его заголовке «✅ СДЕЛАНО <дата>, коммит <hash>» тем же слиянием — без отметки в целевой ветке приёмка не пройдёт.` : "",
+    t.plan_step ? `ШАГ ПЛАНА ${t.plan_step.plan}, ${t.plan_step.step} (файл ${t.plan_step.file}): закрыв шаг, отметь в его заголовке «${loadConfig(t.directory).planForm.marks.step_done} <дата>, коммит <hash>» тем же слиянием — без отметки в целевой ветке приёмка не пройдёт.` : "",
     acceptanceForExecutor(t),
     `Когда закончишь — отчёт: peer_send {to: "${t.author}", reply_to: "${t.qid}", text: "что сделано, как проверено, что осталось"}. Упрёшься — тем же ответом напиши, что мешает. Пока отчёта нет, задача открыта: остановишься без него — получишь напоминание.`,
   ]

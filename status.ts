@@ -230,7 +230,7 @@ export function planLines(project: string): string[] {
             ? "согласован владельцем — вливается"
             : `перепроверка: раунд ${r + 1}, чистых подряд ${p.clean}`
           : t.status === "rework"
-            ? `доработка после ${p.approval?.decision === "no" ? "замечаний владельца" : `раунда ${r}${last ? ` (блокирующих ${last.blocking}, существенных ${last.significant})` : ""}`}`
+            ? `доработка после ${p.approval?.decision === "no" ? "замечаний владельца" : `раунда ${r}${last ? ` (${last.line?.replace(/^раунд \d+, [\d-]+ — /, "") ?? `блокирующих ${last.blocking}, существенных ${last.significant}`})` : ""}`}`
             : t.status === "approval"
               ? `◇ ждёт вашего согласования${p.stuck ? " (раунды кончились)" : ""} — /plans`
               : t.status === "accepted"

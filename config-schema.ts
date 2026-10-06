@@ -13,6 +13,8 @@ export type Kind =
   | { type: "tierLists" }
   | { type: "acceptance" }
   | { type: "strings" }
+  | { type: "stringMap"; keys: string[] }
+  | { type: "grades" }
 export type Setting = { key: string; kind: Kind; default: any; question: string; why: string; recommend?: string; group: string }
 
 const TIERS = ["heavy", "medium", "light"]
@@ -39,6 +41,18 @@ export const SCHEMA: Setting[] = [
   { key: "plan_name", group: "Планы", kind: { type: "string" }, default: "{n}-{slug}.md", question: "Как называть файл плана ({n} — номер, {slug} — латиницей из названия)?", why: "номер выдаёт плагин; подплан — {n} вида 12.1", recommend: "{n}-{slug}.md" },
   { key: "plan_rounds_max", group: "Планы", kind: { type: "int" }, default: 4, question: "Сколько раундов перепроверки плана, прежде чем спросить владельца?", why: "раунды идут, пока два подряд не дадут только косметические замечания; бесконечно — нельзя", recommend: "4" },
   { key: "plan_clean_rounds", group: "Планы", kind: { type: "int" }, default: 2, question: "Сколько раундов подряд только с косметическими замечаниями — и план готов к согласованию?", why: "один чистый раунд — случайность, два подряд — устойчивость", recommend: "2" },
+  { key: "plan_sections", group: "Планы", kind: { type: "stringMap", keys: ["why", "existing", "mode", "phases", "out", "questions", "decisions"] }, default: { why: "Зачем", existing: "Что уже есть", mode: "Режим выполнения", phases: "Фазы", out: "Не делаем", questions: "Открытые вопросы", decisions: "Решения владельца" }, question: "Как называются разделы плана (по ролям)?", why: "плагин находит по ним фазы, границы шагов, вопросы и ответ владельца о режиме; обязательны все, кроме decisions (и mode, если вопрос о режиме выключен)", recommend: "как в проекте; умолчание — форма nova" },
+  { key: "plan_header", group: "Планы", kind: { type: "strings" }, default: ["Статус", "Источник", "Зависимости"], question: "Какие поля обязательны в шапке плана («**Поле:**»)?", why: "форма проверяется при сдаче плана", recommend: "Статус, Источник, Зависимости" },
+  { key: "plan_prefix", group: "Планы", kind: { type: "string" }, default: "Ф", question: "Как обозначаются фазы и шаги (префикс: «Ф» → «### Ф.1», «#### Ф.1.2»)?", why: "по префиксу плагин находит фазы и шаги и ставит по ним задачи", recommend: "Ф" },
+  { key: "plan_labels", group: "Планы", kind: { type: "stringMap", keys: ["what", "criteria", "mode"] }, default: { what: "Что", criteria: "Приёмка", mode: "Без упрощений" }, question: "Какие метки у шага (что сделать, приёмка) и у вопроса о режиме?", why: "«Что:» — цель задачи-шага, «**Приёмка:**» — её критерии; метка режима — строка ответа владельца", recommend: "Что, Приёмка, Без упрощений" },
+  { key: "plan_marks", group: "Планы", kind: { type: "stringMap", keys: ["plan_open", "plan_work", "plan_closed", "plan_cancelled", "step_work", "step_done", "criterion_open", "criterion_done", "question_open", "question_answered"] }, default: { plan_open: "🔴 ОТКРЫТ", plan_work: "🟡 В РАБОТЕ", plan_closed: "✅ ЗАКРЫТ", plan_cancelled: "❌ ОТМЕНЁН", step_work: "⏳ В РАБОТЕ", step_done: "✅ СДЕЛАНО", criterion_open: "⬜", criterion_done: "✅ ВЫПОЛНЕНО", question_open: "❔", question_answered: "✅" }, question: "Какие отметки (значок и слово) у плана, шага, критерия и вопроса?", why: "приёмка шага требует отметку step_done в целевой ветке; открытые вопросы — по question_open", recommend: "значок и слово, как в умолчании" },
+  { key: "plan_mode_question", group: "Планы", kind: { type: "enum", options: ["on", "off"] }, default: "on", question: "Спрашивать ли владельца о режиме выполнения («Без упрощений: ДА/НЕТ»)?", why: "on: раздел обязателен, ответ владельца проверяется при вливании плана; off: вопроса нет", recommend: "on" },
+  { key: "plan_acceptance", group: "Планы", kind: { type: "acceptance" }, default: "(шаги А/Б плана 012)", question: "Какие шаги у перепроверки плана (id, текст, обязателен ли)?", why: "проверяющий раунда отмечает каждый (check); без отметки всех обязательных вердикт раунда не принимается", recommend: "умолчание: А — против исходной задачи, Б — правильность составления" },
+  { key: "plan_merge_acceptance", group: "Планы", kind: { type: "acceptance" }, default: "(approval-written, form)", question: "Какие шаги у вливания согласованного плана?", why: "приёмщик вливания отмечает их перед accept", recommend: "умолчание" },
+  { key: "plan_grades", group: "Планы", kind: { type: "grades" }, default: "(блокирующее, существенное, косметическое)", question: "Какие градации замечаний перепроверки и какие из них не мешают «чистому» раунду (clean)?", why: "раунд чистый, когда нет замечаний градаций с clean: false; план готов после plan_clean_rounds чистых подряд", recommend: "три градации умолчания" },
+  { key: "plan_approver", group: "Планы", kind: { type: "enum", options: ["owner", "integrator"] }, default: "owner", question: "Кто согласует план — владелец (/plans в окне) или интегратор (peer_task plan_decide)?", why: "owner: решение пишет окно владельца, агент его не подделает; integrator: быстрее, владелец видит планы в /peers", recommend: "owner" },
+  { key: "plan_steps", group: "Планы", kind: { type: "enum", options: ["auto", "manual"] }, default: "auto", question: "Ставить ли задачи по шагам влитого плана автоматически?", why: "auto: плагин ставит шаги по зависимостям, «где» и лимитам; manual: автору — список шагов, задачи ставит он сам", recommend: "auto" },
+  { key: "plan_template", group: "Планы", kind: { type: "string", allowEmpty: true }, default: "", question: "Свой шаблон плана — путь к файлу от корня репозитория (пусто — встроенный)?", why: "шаблон идёт в письмо исполнителю задачи-плана; {n}, {title}, {source} подставляются", recommend: "пусто" },
   { key: "heavy_commands", group: "Подталкивание", kind: { type: "strings" }, default: [], question: "Какие команды — тяжёлые прогоны (подстроки: полный гейт, сборка, прогон тестов, бенчмарки)?", why: "peer_watch с такой командой сам встаёт в очередь машины (machine_slots); команда не из списка тяжёлая, если занимает все ядра или идёт дольше 2 мин", recommend: "скрипты гейта и полной сборки проекта" },
   { key: "acceptance", group: "Приёмка", kind: { type: "acceptance" }, default: [], question: "Какие шаги приёмки (id, текст, обязателен ли)?", why: "accept не проходит без отчёта по каждому обязательному шагу; текст ссылается на методологию проекта", recommend: "шаги из методологии проекта" },
   { key: "target_branch", group: "Приёмка", kind: { type: "string" }, default: "main", question: "В какую ветку вливать?", why: "плагин проверяет, что ветка задачи или squash-коммит в ней", recommend: "main" },
@@ -77,6 +91,12 @@ export function invalid(key: string, v: any): string | undefined {
       return isObj(v) && Object.entries(v).every(([t, m]) => TIERS.includes(t) && typeof m === "string" && /^[^/\s]+\/\S+$/.test(m)) ? undefined : `${key}: {"heavy"|"medium"|"light": "провайдер/модель"}`
     case "tierLists":
       return isObj(v) && Object.entries(v).every(([t, l]) => TIERS.includes(t) && Array.isArray(l) && l.every((x) => typeof x === "string" && x)) ? undefined : `${key}: {"heavy"|"medium"|"light": ["подстрока", ...]}`
+    case "stringMap":
+      return isObj(v) && Object.entries(v).every(([k, x]) => (s.kind as any).keys.includes(k) && typeof x === "string" && x.trim()) ? undefined : `${key}: {${(s.kind as any).keys.map((k: string) => `"${k}"`).join(", ")}: "строка"} (любые из ключей)`
+    case "grades":
+      return Array.isArray(v) && v.length > 0 && v.every((g) => isObj(g) && typeof g.id === "string" && /^[a-z][a-z0-9_-]*$/.test(g.id) && typeof g.name === "string" && g.name.trim() && typeof g.text === "string" && typeof g.clean === "boolean") && new Set(v.map((g: any) => g.id)).size === v.length && v.some((g: any) => !g.clean)
+        ? undefined
+        : `${key}: список {"id": "латиницей", "name": "название", "text": "что значит", "clean": true|false}, id без повторов, хотя бы одна градация с clean: false`
     case "strings":
       return Array.isArray(v) && v.every((x) => typeof x === "string" && x.trim()) ? undefined : `${key}: список строк`
     case "acceptance":

@@ -175,7 +175,7 @@ export function createTask(fields: Omit<Task, "n" | "history" | "created" | "upd
 }
 
 /** Раунд перепроверки плана: вердикт проверяющего по градациям замечаний. */
-export type PlanRound = { reviewer: string; at: number; blocking: number; significant: number; cosmetic: number; notes: string }
+export type PlanRound = { reviewer: string; at: number; counts?: Record<string, number>; line?: string; blocking?: number; significant?: number; cosmetic?: number; notes: string }
 export type TaskPlan = {
   /** номер плана («12», подплан «12.1») */
   n: string
@@ -197,6 +197,8 @@ export type TaskPlan = {
   spawned?: Record<string, number>
   /** все шаги закрыты, автору написано */
   finished?: boolean
+  /** plan_steps: manual — список шагов автору отправлен */
+  listed?: boolean
   /** шагов в плане (по файлу в целевой ветке) */
   total?: number
 }

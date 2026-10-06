@@ -278,6 +278,8 @@ which are running).
 Marks: plan `🔴 ОТКРЫТ / 🟡 В РАБОТЕ / ✅ ЗАКРЫТ / ❌ ОТМЕНЁН`, step `⏳ В РАБОТЕ / ✅ СДЕЛАНО`, criterion
 `✅ ВЫПОЛНЕНО / ⬜`, question `❔ / ✅`.
 
+**Everything is a setting.** The plan's form and process are project settings with nova's form as the default: `plan_sections`, `plan_header`, `plan_prefix`, `plan_labels`, `plan_marks`, `plan_mode_question`, `plan_acceptance`, `plan_merge_acceptance`, `plan_grades` (`{id, name, text, clean}`), `plan_approver` (owner / integrator — `peer_task plan_decide`), `plan_steps` (auto / manual), `plan_template` (a template file in the repository). `peer_config guide` asks about each.
+
 **Heavy runs.** `heavy_commands` lists substrings of commands that load the machine (full gate,
 full build, full test run, benchmarks). `peer_watch` with such a command goes to the machine queue
 by itself. Full design: [plan 012](doc/plans/012-plans.md).

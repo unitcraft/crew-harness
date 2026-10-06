@@ -743,10 +743,18 @@ export default {
       }
       for (const t of listTasks()) {
         if (t.status !== "approval" || !t.plan) continue
-        const every = Math.max(1, loadConfig(t.directory).ownerReminderMin) * 60_000
+        const acfg = loadConfig(t.directory)
+        const every = Math.max(1, acfg.ownerReminderMin) * 60_000
         if (t.plan.notifiedAt && now() - t.plan.notifiedAt < every) continue
-        const message = `${t.title.replace(/^план \S+: /, "")}${t.plan.stuck ? " — раунды кончились, решаете по последним замечаниям" : ""} · /plans`
-        for (const w of liveWindows()) postNotice(w.pid, { title: `План ${t.plan.n} ждёт согласования`, message: short(message, 100), attention: true, duration: 30_000 })
+        if (acfg.planApprover === "integrator") {
+          // согласует интегратор (plan_approver): письмо автору с побудкой; владелец видит план в /peers и может решить сам (/plans)
+          postLetter(t.author, { id: `plan-approve-${safeKey(t.project)}-${t.n}-${t.plan.rounds.length}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: now(), text: `План ${t.plan.n} (${t.plan.file}, задача #${t.n}) прошёл перепроверку${t.plan.stuck ? " (раунды кончились — решай по последним замечаниям)" : ""} и ждёт твоего согласования: peer_task {action: "plan_decide", n: ${t.n}, decision: "ok" | "ok-shortcuts" | "no", text: "замечания, если no"}.` })
+        } else {
+          const message = `${t.title.replace(/^план \S+: /, "")}${t.plan.stuck ? " — раунды кончились, решаете по последним замечаниям" : ""} · /plans`
+          const wins = liveWindows()
+          if (!wins.length) continue // окон нет — уведомить некого: не отмечать, повторить на следующем проходе
+          for (const w of wins) postNotice(w.pid, { title: `План ${t.plan.n} ждёт согласования`, message: short(message, 100), attention: true, duration: 30_000 })
+        }
         t.plan.notifiedAt = now()
         saveTask(t)
       }
@@ -769,9 +777,19 @@ export default {
         const cfg = loadConfig(pt.directory)
         const text = fileAt(pt.directory, cfg.targetBranch, pt.plan.file)
         if (!text) continue
-        const plan = parsePlan(text)
+        const plan = parsePlan(text, cfg.planForm)
         const steps = allSteps(plan)
         pt.plan.spawned ??= {}
+        if (cfg.planSteps === "manual") {
+          // задачи по шагам ставит автор сам (plan_steps: manual): одно письмо со списком шагов
+          if (!pt.plan.listed) {
+            pt.plan.listed = true
+            pt.plan.total = steps.length
+            saveTask(pt)
+            postLetter(pt.author, { id: `plan-steps-${safeKey(pt.project)}-${pt.n}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: pt.author, time: now(), text: `План ${pt.plan.n} влит. Шаги (plan_steps: manual — задачи ставишь сам, peer_spawn):\n${steps.map((x) => `— ${x.id} ${x.title}${x.after.length ? ` [после: ${x.after.join(", ")}]` : ""}: ${x.what}\n  приёмка: ${x.criteria.join("; ")}`).join("\n")}` })
+          }
+          continue
+        }
         if (pt.plan.total !== steps.length) {
           pt.plan.total = steps.length // для /peers: «шаги закрыто/всего»
           saveTask(pt)

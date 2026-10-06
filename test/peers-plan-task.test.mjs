@@ -113,7 +113,7 @@ cell("a verdict before every step is checked is refused", /Сначала все
 const steps = task().steps.map((s) => s.id)
 for (const step of steps) await call("peer_task", r1, { action: "check", n: 1, step, result: "проверено" })
 const badNum = await call("peer_task", r1, { action: "round", n: 1, blocking: "много", significant: 0, cosmetic: 0 })
-cell("a verdict without numbers per gradation is refused", /числа замечаний/.test(badNum), badNum)
+cell("a verdict without numbers per gradation is refused", /исла замечаний/i.test(badNum), badNum)
 const v1 = await call("peer_task", r1, { action: "round", n: 1, blocking: 0, significant: 1, cosmetic: 0, text: "[существенное] у Ф.1.1 нет пробы на пустой ввод → добавить критерий" })
 await wait(600)
 cell("a significant remark returns the plan to the author", task().status === "rework" && /вернулся автору/.test(v1) && got(ex, "ЗАМЕЧАНИЯ ПЕРЕПРОВЕРКИ ПЛАНА 8").length === 1, JSON.stringify({ st: task().status, v1 }))
@@ -189,8 +189,7 @@ git(proj, "branch", "-D", t1.branch)
 const cl = await call("peer_task", rm, { action: "cleaned", n: 1 })
 cell("the plan task is cleaned", task().status === "cleaned", cl)
 const byStep = (id) => tasks.listTasks("proj").find((x) => x.plan_step?.step === id)
-await until(() => !!byStep("Ф.1.1"))
-await wait(800)
+await until(() => byStep("Ф.1.1")?.status === "running" && got(byStep("Ф.1.1").executor, "ШАГ ПЛАНА").length > 0, 20_000) // the worktree is created asynchronously
 const s11 = byStep("Ф.1.1")
 cell("step Ф.1.1 becomes a task: goal, criteria, boundaries, priority of its phase", !!s11 && s11.goal === "длина из склеенного текста" && /12\/12/.test(s11.criteria) && /оракул/.test(s11.boundaries) && /без упрощений/.test(s11.boundaries) && s11.priority === "P1" && s11.title === "8 Ф.1.1 лексер", JSON.stringify(s11))
 cell("Ф.1.2 waits: the same «где» as a running step; Ф.2.1 waits for phase Ф.1", !byStep("Ф.1.2") && !byStep("Ф.2.1"), JSON.stringify(tasks.listTasks("proj").map((x) => [x.n, x.plan_step?.step])))
@@ -216,20 +215,21 @@ const okMark = await call("peer_task", sr, { action: "accept", n: s11.n })
 cell("with the mark the step is accepted", byStep("Ф.1.1").status === "accepted", okMark)
 
 // 9. Ф.1.1 closed -> Ф.1.2 starts; Ф.1 closed -> the sub-plan step Ф.2.1 becomes a plan task 8.1; all closed -> letter
-const close = (id) => {
+const close = async (id) => {
+  await until(() => ["running", "accepted"].includes(byStep(id)?.status), 20_000) // not in the middle of its start
   const x = byStep(id)
   x.status = "cleaned"
   tasks.saveTask(x)
 }
-close("Ф.1.1")
-await until(() => !!byStep("Ф.1.2"))
+await close("Ф.1.1")
+await until(() => !!byStep("Ф.1.2"), 20_000)
 cell("Ф.1.1 closed: Ф.1.2 starts", !!byStep("Ф.1.2") && !byStep("Ф.2.1"), JSON.stringify(tasks.listTasks("proj").map((x) => [x.n, x.plan_step?.step])))
 cell("/peers shows the plan's progress", st.planLines("proj").some((l) => /план 8 .* в работе: шаги 1\/3, идут Ф\.1\.2/.test(l)), JSON.stringify(st.planLines("proj")))
-close("Ф.1.2")
-await until(() => !!byStep("Ф.2.1"))
+await close("Ф.1.2")
+await until(() => !!byStep("Ф.2.1"), 20_000)
 const sub = byStep("Ф.2.1")
 cell("phase Ф.1 closed: the sub-plan step becomes plan task 8.1", !!sub && sub.plan?.n === "8.1" && sub.plan.parent === "8" && /батарея фикстур/.test(sub.plan.source), JSON.stringify(sub && { plan: sub.plan, title: sub.title }))
-close("Ф.2.1")
+await close("Ф.2.1")
 await until(() => got("sesINTEG1", "все шаги закрыты").length > 0)
 cell("all steps closed: the author is asked to close the plan", got("sesINTEG1", "План 8").some((d) => /все шаги закрыты \(3\)/.test(d.text)), JSON.stringify(got("sesINTEG1", "План 8").map((d) => d.text.slice(0, 160))))
 

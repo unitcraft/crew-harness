@@ -149,7 +149,7 @@ export default {
             text = `Не прочитать ${t.plan.file}: ${e}`
           }
           const last = t.plan.rounds.at(-1)
-          await dialog.alert?.({ title: t.title, message: `${text}\n\n— последний раунд перепроверки: ${last ? `блокирующих ${last.blocking}, существенных ${last.significant}, косметических ${last.cosmetic}${last.notes ? `\n${last.notes}` : ""}` : "нет"}` })
+          await dialog.alert?.({ title: t.title, message: `${text}\n\n— последний раунд перепроверки: ${last ? `${last.line ?? `блокирующих ${last.blocking}, существенных ${last.significant}, косметических ${last.cosmetic}`}${last.notes ? `\n${last.notes}` : ""}` : "нет"}` })
           continue
         }
         let text: string | undefined
