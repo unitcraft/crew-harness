@@ -8,6 +8,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, sta
 import path from "node:path"
 import { type Card, type PeersConfig, ROLES, cardFile, mayWakeCard, readJson, safeKey } from "./core.ts"
 import { type Task, isOpen, listTasks, loadTask } from "./tasks.ts"
+import { PLAN_ACCEPTANCE, ROUND_RULES } from "./plans.ts"
 
 const git = (cwd: string, args: string[], timeout = 15_000) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", windowsHide: true, timeout, stdio: ["ignore", "pipe", "ignore"] })
 const gitOk = (cwd: string, args: string[], timeout?: number) => {
@@ -131,6 +132,7 @@ export function cleanupDone(t: Task, cfg: PeersConfig): { ok: boolean; left: str
 
 /** Письмо приёмщику. */
 export function reviewLetter(t: Task, cfg: PeersConfig): string {
+  if (t.plan) return planReviewLetter(t, cfg)
   const steps = cfg.acceptance.length
     ? cfg.acceptance.map((a) => `  ${a.id}${a.required ? " (обязательно)" : ""}: ${a.text}`).join("\n")
     : "  (шаги приёмки в настройках проекта не заданы — проверь критерии задачи)"
@@ -156,10 +158,33 @@ export function reviewLetter(t: Task, cfg: PeersConfig): string {
     .join("\n")
 }
 
+/** Письмо проверяющему раунда перепроверки плана (план 012). */
+export function planReviewLetter(t: Task, cfg: PeersConfig): string {
+  const p = t.plan!
+  const no = p.rounds.length + 1
+  const past = p.rounds.map((r, i) => `  раунд ${i + 1}: блокирующих ${r.blocking}, существенных ${r.significant}, косметических ${r.cosmetic}${r.notes ? `\n    ${r.notes.replace(/\n/g, "\n    ")}` : ""}`)
+  return [
+    `ПЕРЕПРОВЕРКА ПЛАНА ${p.n} (задача #${t.n} «${t.title}»), раунд ${no}. Ты — проверяющий этого раунда: не автор плана и не прошлые проверяющие. План не правь — замечания идут автору.`,
+    `ИСХОДНАЯ ЗАДАЧА (против неё проверяешь план):\n${p.source}`,
+    `ФАЙЛ ПЛАНА: ${p.file}${t.worktree ? ` в worktree ${t.worktree}, ветка ${t.branch}` : ` в ${t.directory}`}.`,
+    t.report ? `ОТЧЁТ АВТОРА:\n${t.report.slice(0, 2000)}` : "",
+    past.length ? `ПРОШЛЫЕ РАУНДЫ (проверь и их градации: косметическое, оказавшееся содержательным, — замечание этого раунда):\n${past.join("\n")}` : "",
+    `ЧТО ПРОВЕРИТЬ — по каждому шагу check:\n${PLAN_ACCEPTANCE.map((a) => `  ${a.id}: ${a.text}`).join("\n")}`,
+    ROUND_RULES,
+    "ПОРЯДОК:",
+    `  1) peer_task {action: "review", n: ${t.n}};`,
+    `  2) по каждому шагу: peer_task {action: "check", n: ${t.n}, step} перед проверкой, {action: "check", n: ${t.n}, step, result: "что нашёл"} после (у a2-coverage в result — таблица «требование → шаг → критерий»);`,
+    `  3) вердикт: peer_task {action: "round", n: ${t.n}, blocking: <число>, significant: <число>, cosmetic: <число>, text: "замечания: [градация] что не так → что исправить"}.`,
+    `Готов — ${cfg.planCleanRounds} раунда подряд только с косметическими; тогда план уйдёт владельцу. merge и accept в раунде не нужны: план вливается после согласования.`,
+  ]
+    .filter(Boolean)
+    .join("\n")
+}
+
 /** Письмо исполнителю: на доработку. */
 export function reworkLetter(t: Task, text: string, by: string): string {
   return [
-    t.rework_sync ? `СИНХРОНИЗАЦИЯ задачи #${t.n} «${t.title}» с целевой веткой (не доработка) от приёмщика ${by}:` : `ДОРАБОТКА задачи #${t.n} «${t.title}» (круг ${t.rework ?? 1}) от приёмщика ${by}:`,
+    t.plan ? `ЗАМЕЧАНИЯ ПЕРЕПРОВЕРКИ ПЛАНА ${t.plan.n} (задача #${t.n}) от ${by}:` : t.rework_sync ? `СИНХРОНИЗАЦИЯ задачи #${t.n} «${t.title}» с целевой веткой (не доработка) от приёмщика ${by}:` : `ДОРАБОТКА задачи #${t.n} «${t.title}» (круг ${t.rework ?? 1}) от приёмщика ${by}:`,
     text,
     `Исправь в том же worktree${t.branch ? ` (ветка ${t.branch})` : ""} и сдай снова тем же отчётом: peer_send {to: "${t.author}", reply_to: "${t.qid}", text: "что исправлено, как проверено"}.`,
   ].join("\n")

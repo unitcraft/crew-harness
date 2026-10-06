@@ -1,6 +1,6 @@
 // Self-test of plan documents (plan 012; node >= 24):  node test/peers-plans.test.mjs
 // The template, the parser (phases, steps, tags, criteria, questions, mode) and the machine criteria of a plan.
-const { planTemplate, parsePlan, planProblems, stepDeps, allSteps } = await import("../plans.ts")
+const { planTemplate, parsePlan, planProblems, stepDeps, allSteps, nextPlanNumber } = await import("../plans.ts")
 let fail = 0
 const cell = (name, ok, detail) => {
   console.log(`${ok ? "ok  " : "FAIL"} ${name}${ok ? "" : " :: " + detail}`)
@@ -65,6 +65,10 @@ const cyc = good.replace("#### Ф.1.1 — лексер — GATE [P1]", "#### Ф.
 cell("a dependency cycle is found", planProblems(cyc).some((x) => /по кругу/.test(x)), JSON.stringify(planProblems(cyc)))
 const noQ = good.replace(/## Открытые вопросы\n- ❔[^\n]*\n/, "## Открытые вопросы\n")
 cell("empty open questions need the explicit 'none' line", planProblems(noQ).some((x) => /Открытых вопросов нет/.test(x)) && planProblems(noQ.replace("## Открытые вопросы\n", "## Открытые вопросы\nОткрытых вопросов нет, проверено 2026-10-06\n")).length === 0, JSON.stringify(planProblems(noQ)))
+
+const names = ["README.md", "274-novac.md", "274.11-release.md", "274.15-detector.md", "292-stop.md", "65-old.md"]
+cell("next plan number: after files and reserved numbers", nextPlanNumber(names, []) === "293" && nextPlanNumber(names, ["293"]) === "294", nextPlanNumber(names, []))
+cell("next sub-plan number under a parent", nextPlanNumber(names, [], "274") === "274.16" && nextPlanNumber(names, [], "292") === "292.1", nextPlanNumber(names, [], "274"))
 
 console.log(fail ? `peers-plans.test: FAIL ${fail}` : "peers-plans.test ok")
 process.exit(fail ? 1 : 0)

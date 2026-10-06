@@ -12,7 +12,8 @@ import { type Projects, parseProjects as parseProjectsWith, projectFor, rawSetti
 import { SCHEMA, guideText, invalid } from "./config-schema.ts"
 export { PROJECT_RE, type Project, type Projects, settingsProblems } from "./settings.ts"
 import { PROJECT_RE, settingsProblems } from "./settings.ts"
-import { type Task, WORKING_STATUSES, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
+import { PLAN_ACCEPTANCE, ROUND_RULES, nextPlanNumber, planProblems, planTemplate } from "./plans.ts"
+import { type Task, type TaskPlan, WORKING_STATUSES, slugify, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { cleanupDone, cleanupSteps, holdsMergeLock, isMerged, mergeHolder, releaseMergeLock, reworkLetter, takeMergeLock } from "./review.ts"
 import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, watchesOf } from "./watch.ts"
 
@@ -1222,6 +1223,19 @@ export function makeTools(host: PeersHost): PeerTool[] {
       if (isReport) wake = false
       const base = { from_role: fromRole, from_session: sessionID, text, time: now, ...(wake ? {} : { wake: false }), ...(qid ? { qid } : {}), ...(replyTo ? { reply_to: replyTo } : {}) }
       if (replyTo) settleObligation(sessionID, replyTo)
+      if (isReport && myTask!.plan) {
+        // задача-план: отчёт принимается, только если файл плана есть и форма в порядке (план 012, критерии 1–5)
+        const pt = myTask!
+        const base = pt.worktree && existsSync(pt.worktree) ? pt.worktree : pt.directory
+        const file = path.join(base, pt.plan!.file)
+        let ptext = ""
+        try {
+          ptext = readFileSync(file, "utf8")
+        } catch {}
+        if (!ptext) return { content: `Не сдано: файла плана ${file} нет. Напиши план в этот файл, закоммить и сдай снова.` }
+        const problems = planProblems(ptext)
+        if (problems.length) return { content: `Не сдано: форма плана ${pt.plan!.n} не в порядке (${problems.length}):\n${problems.map((x) => `— ${x}`).join("\n")}\nИсправь и сдай снова.` }
+      }
       if (isReport) {
         const t = myTask!
         const again = t.status === "rework"
@@ -1363,6 +1377,8 @@ export function makeTools(host: PeersHost): PeerTool[] {
       properties: {
         ...taskInput,
         role: str("Role of the new session (default worker)"),
+        kind: { type: "string", enum: ["work", "plan"], description: "plan: the task writes a plan document (plans_dir), rechecked in rounds and approved by the owner; goal is the original task the plan must solve", default: "work" },
+        plan_parent: str("kind plan: the parent plan number for a sub-plan (e.g. 274)"),
         tier: { type: "string", enum: ["heavy", "medium", "light"], description: "Task weight -> model", default: "medium" },
         task: str("Old name of goal"),
         parent: str("The order of another project this task fulfils: \"project#N\" (from the order letter)"),
@@ -1376,7 +1392,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
       const project = projOf(me)
       const cfg = configFor(me)
       if (input.task && !input.goal) input.goal = input.task
-      const missing = missingFields(input, cfg)
+      const missing = missingFields(input, cfg).filter((f) => !(input.kind === "plan" && f === "criteria")) // у задачи-плана критерии — приёмки плана
       if (missing.length) return { content: `Задача не поставлена: нет полей ${missing.map((f) => FIELD_RU[f] ?? f).join(", ")} (настройка проекта task_fields). Работа не начинается без критериев приёмки.` }
       const role = normalizeRole(String(input.role ?? DEFAULT_ROLE).trim().toLowerCase() || DEFAULT_ROLE)
       if (!ROLE_RE.test(role)) return { content: `Роль «${role}» не годится.` }
@@ -1393,10 +1409,29 @@ export function makeTools(host: PeersHost): PeerTool[] {
       }
       const model = cfg.spawnModels[tier] ?? DEFAULT_SPAWN_MODELS[tier]
       const title = String(input.title ?? "").trim() || String(input.goal).split(/\r?\n/)[0].slice(0, 60)
+      // ЗАДАЧА-ПЛАН (план 012): результат — файл плана в репозитории; номер выдаёт плагин (после файлов папки планов
+      // и открытых задач-планов), подплан — «родитель.k»
+      let plan: TaskPlan | undefined
+      if (input.kind === "plan") {
+        let top = me.directory
+        try {
+          top = execFileSync("git", ["-C", me.directory, "rev-parse", "--show-toplevel"], { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"] }).trim()
+        } catch {}
+        let names: string[] = []
+        try {
+          names = readdirSync(path.join(top, cfg.plansDir))
+        } catch {}
+        const reserved = listTasks(project).filter((x) => x.plan && x.status !== "cancelled").map((x) => x.plan!.n)
+        const parentPlan = String(input.plan_parent ?? "").trim() || undefined
+        const n = nextPlanNumber(names, reserved, parentPlan)
+        const file = path.posix.join(cfg.plansDir.replace(/\\/g, "/"), cfg.planName.replace(/\{n\}/g, n).replace(/\{slug\}/g, slugify(title)))
+        plan = { n, file, source: String(input.goal).trim(), ...(parentPlan ? { parent: parentPlan } : {}), rounds: [], clean: 0 }
+      }
       const t = createTask({
-        project, title, goal: String(input.goal).trim(), criteria: input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(),
+        project, title: plan ? `план ${plan.n}: ${title}` : title, goal: String(input.goal).trim(), criteria: plan ? "критерии приёмки плана (план 012): А — против исходной задачи, Б — правильность составления" : input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(),
         priority: isPriority(input.priority) ? input.priority : cfg.defaultPriority, tier, role, model,
         author: me.session, author_role: keyOf(me), qid: newQid(), status: "starting", kind: "spawn", executor: plannedSessionId(), directory: me.directory,
+        ...(plan ? { plan } : {}),
       }, (n, slug) => taskPlace(me.directory, cfg, n, slug, project))
       const par = parseParent(input.parent)
       if (par) {
@@ -1420,7 +1455,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
     input: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["list", "show", "assign", "order", "push", "reassign", "cancel", "priority", "review", "check", "merge", "rework", "accept", "cleaned"] },
+        action: { type: "string", enum: ["list", "show", "assign", "order", "push", "reassign", "cancel", "priority", "review", "check", "round", "merge", "rework", "accept", "cleaned"] },
         to: str("order: the other project's integrator, \"project.integrator\""),
         checks: { type: "object", description: "accept: report per acceptance step {step id: what proves it}", additionalProperties: { type: "string" } },
         step: str("check: the acceptance step id"),
@@ -1429,6 +1464,9 @@ export function makeTools(host: PeersHost): PeerTool[] {
         n: { type: "number", description: "Task number" },
         session: str("assign: the tab (session id) that takes the task"),
         text: str("push / cancel: text for the executor"),
+        blocking: { type: "number", description: "round (plan recheck): number of blocking remarks" },
+        significant: { type: "number", description: "round: number of significant remarks" },
+        cosmetic: { type: "number", description: "round: number of cosmetic remarks" },
         sync: { type: "boolean", description: "rework: return only to merge the fresh target branch (not a rework round, not counted in rework_max)" },
         all: { type: "boolean", description: "list: include closed and cancelled", default: false },
         ...taskInput,
@@ -1515,42 +1553,104 @@ export function makeTools(host: PeersHost): PeerTool[] {
         return { content: lines.filter(Boolean).join("\n") }
       }
       // ДЕЙСТВИЯ ПРИЁМЩИКА (план 002, Ф.3): review, merge, rework, accept, cleaned — только приёмщик этой задачи.
-      if (["review", "check", "merge", "rework", "accept", "cleaned"].includes(action)) {
+      if (["review", "check", "round", "merge", "rework", "accept", "cleaned"].includes(action)) {
         if (t.reviewer !== me.session) return { content: `Приёмщик задачи #${t.n} — ${t.reviewer ?? "ещё не назначен"}; это действие только его.` }
         const tcfg = loadConfig(t.directory)
+        const acc = acceptanceOf(t, tcfg) // задача-план — шаги перепроверки плана (план 012), иначе — приёмки проекта
         const now = Date.now()
         const quiet = (to: string, id: string, text: string) => postLetter(to, { id, from_role: keyOf(me), from_session: me.session, to, time: now, wake: false, text })
         if (action === "review") {
           if (t.status !== "submitted" && t.status !== "reviewing") return { content: `Задача #${t.n} ${statusRu(t.status)} — начинать приёмку нечего.` }
-          t.steps = tcfg.acceptance.map((a) => ({ id: a.id, text: a.text, ...(a.required ? { required: true } : {}) }))
+          t.steps = acc.map((a) => ({ id: a.id, text: a.text, ...(a.required ? { required: true } : {}) }))
           if (t.status === "submitted") {
             taskEvent(t, me.session, "reviewing", `приёмка начата (${keyOf(me)})`)
             if (t.executor) quiet(t.executor, `review-start-${safeKey(project)}-${t.n}-${rounds(t)}`, `Задача #${t.n} «${t.title}» на приёмке у ${keyOf(me)}. Жди: на доработку вернут письмом.`)
             if (t.executor) host.posted([t.executor])
           }
           else saveTask(t)
-          return { content: `Задача #${t.n} на приёмке. Шаги приёмки: ${tcfg.acceptance.map((a) => a.id).join(", ") || "критерии задачи"}. Каждый шаг — в окне владельца: peer_task {action: "check", n: ${t.n}, step} перед проверкой шага, {step, result} — после. Дальше — rework {text} или merge → accept.` }
+          return { content: `Задача #${t.n} на приёмке. Шаги приёмки: ${acc.map((a) => a.id).join(", ") || "критерии задачи"}. Каждый шаг — в окне владельца: peer_task {action: "check", n: ${t.n}, step} перед проверкой шага, {step, result} — после. Дальше — rework {text} или merge → accept.` }
         }
         // шаг приёмки — по ходу проверки (2026-10-06): владелец видит прогресс в окне; accept засчитывает отмеченные
         if (action === "check") {
           if (t.status !== "reviewing") return { content: `Сначала peer_task {action: "review", n: ${t.n}} (задача сейчас ${statusRu(t.status)}).` }
           const step = String(input.step ?? "").trim()
           const result = String(input.result ?? "").trim()
-          if (!tcfg.acceptance.some((a) => a.id === step)) return { content: `Шага «${step}» в приёмке проекта нет. Шаги: ${tcfg.acceptance.map((a) => a.id).join(", ")}.` }
-          const i = tcfg.acceptance.findIndex((a) => a.id === step) + 1
+          if (!acc.some((a) => a.id === step)) return { content: `Шага «${step}» в приёмке проекта нет. Шаги: ${acc.map((a) => a.id).join(", ")}.` }
+          const i = acc.findIndex((a) => a.id === step) + 1
           if (!result) {
             t.checking = { step, at: now }
             saveTask(t)
             host.posted([]) // проход плагина обновит окно сразу
-            return { content: `Шаг ${i}/${tcfg.acceptance.length} ${step} начат — владелец видит его в окне. Проверил — check {step: "${step}", result: "чем подтверждён"}.` }
+            return { content: `Шаг ${i}/${acc.length} ${step} начат — владелец видит его в окне. Проверил — check {step: "${step}", result: "чем подтверждён"}.` }
           }
           t.checks = { ...(t.checks ?? {}), [step]: result }
           if (t.checking?.step === step) delete t.checking
           saveTask(t)
           host.posted([])
-          const done = tcfg.acceptance.filter((a) => t.checks?.[a.id]).length
-          const left = tcfg.acceptance.filter((a) => a.required && !t.checks?.[a.id]).map((a) => a.id)
-          return { content: `Шаг ${step} отмечен (${done}/${tcfg.acceptance.length}).${left.length ? ` Осталось обязательных: ${left.join(", ")}.` : " Обязательные отмечены — дальше merge и accept."}` }
+          const done = acc.filter((a) => t.checks?.[a.id]).length
+          const left = acc.filter((a) => a.required && !t.checks?.[a.id]).map((a) => a.id)
+          return { content: `Шаг ${step} отмечен (${done}/${acc.length}).${left.length ? ` Осталось обязательных: ${left.join(", ")}.` : " Обязательные отмечены — дальше merge и accept."}` }
+        }
+        // ВЕРДИКТ РАУНДА ПЕРЕПРОВЕРКИ ПЛАНА (план 012): проверяющий отметил все шаги А/Б и называет число замечаний по
+        // градациям. Есть блокирующие или существенные — план автору; только косметические — чистый раунд; нужное число
+        // чистых подряд — на согласование владельцу. Каждый раунд — новая сессия: эта с перепроверки снимается.
+        if (action === "round") {
+          if (!t.plan) return { content: `Вердикт раунда — у задачи-плана; задача #${t.n} обычная (rework / merge / accept).` }
+          if (t.status !== "reviewing") return { content: `Сначала peer_task {action: "review", n: ${t.n}} (задача сейчас ${statusRu(t.status)}).` }
+          const [blocking, significant, cosmetic] = ["blocking", "significant", "cosmetic"].map((k) => Number(input[k] ?? NaN))
+          if (![blocking, significant, cosmetic].every((x) => Number.isInteger(x) && x >= 0)) return { content: "blocking, significant, cosmetic — числа замечаний каждой градации (0 и больше)." }
+          const notes = String(input.text ?? "").trim()
+          if (!notes && blocking + significant + cosmetic > 0) return { content: "text: замечания списком, у каждого градация (блокирующее / существенное / косметическое) и что исправить." }
+          const missing = acc.filter((a) => a.required && !t.checks?.[a.id])
+          if (missing.length) return { content: `Сначала все шаги перепроверки (check): ${missing.map((a) => a.id).join(", ")}.` }
+          const p = t.plan
+          p.rounds.push({ reviewer: me.session, at: now, blocking, significant, cosmetic, notes })
+          const no = p.rounds.length
+          const clean = blocking + significant === 0
+          p.clean = clean ? p.clean + 1 : 0
+          if (t.review_qid) settleObligation(me.session, t.review_qid)
+          const rc = readJson<Card>(cardFile(me.session))
+          if (rc?.spawned && t.review_kind === "spawn") {
+            rc.spawned.status = "closed"
+            saveCard(rc)
+          }
+          t.reviewers = [...(t.reviewers ?? []), me.session]
+          t.reviewer = undefined
+          t.review_kind = undefined
+          t.review_letter = undefined
+          t.checks = undefined
+          t.steps = undefined
+          t.checking = undefined
+          const line = `раунд ${no}, ${new Date(now).toISOString().slice(0, 10)} — блокирующих ${blocking}, существенных ${significant}, косметических ${cosmetic}`
+          const toExec = (id: string, text: string) => {
+            if (!t.executor) return
+            postLetter(t.executor, { id, from_role: keyOf(me), from_session: me.session, to: t.executor, time: now, wake: false, text })
+          }
+          if (!clean && no >= tcfg.planRoundsMax) {
+            p.stuck = true
+            taskEvent(t, me.session, "approval", `перепроверка: ${line}; раундов ${no} из ${tcfg.planRoundsMax} — решает владелец`)
+            toExec(`plan-stuck-${safeKey(project)}-${t.n}-${no}`, `План ${p.n}: ${line}. Раунды кончились (plan_rounds_max ${tcfg.planRoundsMax}) — решает владелец по последним замечаниям:\n${notes}`)
+            return { content: `Раунд ${no} записан (${line}). Раунды кончились — план ушёл владельцу с последними замечаниями.` }
+          }
+          if (!clean) {
+            t.rework = (t.rework ?? 0) + 1
+            t.rework_sync = false
+            t.rework_note = `ПЕРЕПРОВЕРКА ПЛАНА ${p.n}, ${line}:\n${notes}\nИсправь в файле плана, обнови строку «**Перепроверка:**» в шапке, закоммить и сдай снова тем же отчётом — следующий раунд проведёт новая сессия.`
+            if (t.executor) addObligation(t.executor, { qid: t.qid, from_session: t.author, from_role: t.author_role, at: now, nudges: 0, task: t.title })
+            taskEvent(t, me.session, "rework", `перепроверка: ${line}`)
+            host.posted(postExpected(t))
+            return { content: `Раунд ${no} записан (${line}). План вернулся автору; следующий раунд — новой сессией после его сдачи.` }
+          }
+          const cos = cosmetic ? `\nКосметика (поправь в файле и закоммить; сдавать заново не нужно):\n${notes}` : ""
+          if (p.clean >= tcfg.planCleanRounds) {
+            taskEvent(t, me.session, "approval", `перепроверка: ${line}; чистых раундов подряд ${p.clean} — план готов, согласует владелец`)
+            toExec(`plan-ready-${safeKey(project)}-${t.n}-${no}`, `План ${p.n} прошёл перепроверку (${line}; чистых подряд ${p.clean}) и ушёл на согласование владельцу. Обнови строку «**Перепроверка:**» в шапке.${cos}`)
+            return { content: `Раунд ${no} записан (${line}). Чистых подряд ${p.clean} — план ушёл на согласование владельцу.` }
+          }
+          taskEvent(t, me.session, "submitted", `перепроверка: ${line}; чистых подряд ${p.clean} из ${tcfg.planCleanRounds} — следующий раунд новой сессией`)
+          toExec(`plan-clean-${safeKey(project)}-${t.n}-${no}`, `План ${p.n}: ${line} — чистый раунд ${p.clean} из ${tcfg.planCleanRounds}; следующий проведёт новая сессия. Обнови строку «**Перепроверка:**» в шапке.${cos}`)
+          host.posted([])
+          return { content: `Раунд ${no} записан (${line}). Чистых подряд ${p.clean} из ${tcfg.planCleanRounds}; следующий раунд — новая сессия.` }
         }
         if (action === "merge") {
           if (t.status !== "reviewing") return { content: `Сначала peer_task {action: "review", n: ${t.n}} (задача сейчас ${statusRu(t.status)}).` }
@@ -1591,7 +1691,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
           if (!holdsMergeLock(project, me.session)) return { content: `Сначала замок вливания: peer_task {action: "merge", n: ${t.n}} — вливает один приёмщик за раз.` }
           const checks: Record<string, string> = { ...(t.checks ?? {}) } // отмеченные по ходу (check) засчитываются
           for (const [k, v] of Object.entries(input.checks ?? {})) if (String(v ?? "").trim()) checks[k] = String(v).trim()
-          const missing = tcfg.acceptance.filter((a) => a.required && !checks[a.id])
+          const missing = acc.filter((a) => a.required && !checks[a.id])
           if (missing.length) return { content: `Не принято: нет отчёта по обязательным шагам приёмки: ${missing.map((a) => `${a.id} (${a.text})`).join("; ")}. Передай checks: {"<шаг>": "чем подтверждено"}.` }
           const commit = String(input.commit ?? "").trim() || undefined
           const m = isMerged(t, tcfg.targetBranch, commit)
@@ -1806,7 +1906,28 @@ export function makeTools(host: PeersHost): PeerTool[] {
   return [peerList, peerRole, peerSend, peerWait, peerWatch, peerSpawn, peerTask, peerConfig, peerInbox, peerDoctor, peerHelp]
 }
 
+/** Шаги приёмки задачи: у задачи-плана — перепроверка плана (план 012), у остальных — приёмка проекта. */
+export const acceptanceOf = (t: Task, cfg: PeersConfig) => (t.plan ? PLAN_ACCEPTANCE : cfg.acceptance)
+
 /** Письмо с задачей исполнителю. */
+/** Письмо исполнителю задачи-плана (план 012): исходная задача, файл, шаблон, критерии, ход перепроверки. */
+export function planTaskLetter(t: Task): string {
+  const p = t.plan!
+  return [
+    `ЗАДАЧА-ПЛАН #${t.n} «${t.title}» от ${t.author_role} (сессия ${t.author}), приоритет ${t.priority}. Составь план ${p.n}${p.parent ? ` — подплан плана ${p.parent}` : ""}. Код не пиши: результат — только файл плана.`,
+    `ИСХОДНАЯ ЗАДАЧА (перепроверка сверит план с ней):\n${p.source}`,
+    t.boundaries ? `ГРАНИЦЫ (не делаем): ${t.boundaries}` : "",
+    t.open_questions ? `ОТКРЫТЫЕ ВОПРОСЫ: ${t.open_questions}` : "",
+    `ФАЙЛ ПЛАНА: ${p.file} — в ${t.worktree && t.worktree_ready ? `worktree ${t.worktree}, ветка ${t.branch} (создан плагином; правь и коммить здесь)` : "папке задачи"}.`,
+    `ФОРМА (по этому шаблону: фазы «### Ф.N — …», шаги «#### Ф.N.M — …» с [P1] [после: …] [где: …], у шага «Что:» и «**Приёмка:**»; отметки — значком и словом):\n${planTemplate(p.n, "<название>", "<исходная задача>")}`,
+    `КРИТЕРИИ ПРИЁМКИ ПЛАНА — по ним идёт перепроверка:\n${PLAN_ACCEPTANCE.map((a) => `  ${a.id}: ${a.text}`).join("\n")}\nФорму (шапка, разделы, «Что:» и «Приёмка» у каждого шага, вопросы четвёркой с «Блокирует», «после:» на существующие шаги без кругов) плагин проверит при сдаче — с ошибками формы отчёт не примет.`,
+    `ДАЛЬШЕ: перепроверка раундами, каждый раунд — новая сессия.\n${ROUND_RULES}\nГотов — два раунда подряд только с косметическими замечаниями; тогда план согласует владелец (он же ответит на «Режим выполнения»). Строку «**Перепроверка:**» в шапке обновляй после каждого раунда.`,
+    `СДАЧА: закоммить файл плана в ветку задачи и отчитайся: peer_send {to: "${t.author}", reply_to: "${t.qid}", text: "план ${p.n}: файл, фазы и шаги кратко"}. Упрёшься — тем же ответом напиши, что мешает.`,
+  ]
+    .filter(Boolean)
+    .join("\n")
+}
+
 // ШАГИ ПРИЁМКИ — И ИСПОЛНИТЕЛЮ (2026-10-06, дополнение к плану 002). Раньше их видел только приёмщик: исполнитель
 // nv-lang узнавал о фикстуре, пробе «подсунь негодное», строке реестра, отчёте по образцу лишь на доработке (у #2 —
 // четвёртый круг). Теперь письмо с задачей их перечисляет: делай сразу то, что проверят.
@@ -1819,6 +1940,7 @@ function acceptanceForExecutor(t: Task): string {
   return `ПРИЁМЩИК ПРОВЕРИТ (шаги приёмки проекта — сделай и опиши в отчёте сразу, иначе вернут на доработку):\n${steps.map((a) => `  ${a.id}${a.required ? "" : " (по желанию)"}: ${a.text}`).join("\n")}`
 }
 export function formatTaskLetter(t: Task): string {
+  if (t.plan) return planTaskLetter(t)
   return [
     `ЗАДАЧА #${t.n} «${t.title}» от ${t.author_role} (сессия ${t.author}), приоритет ${t.priority}.`,
     `ЦЕЛЬ: ${t.goal}`,

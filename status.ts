@@ -235,7 +235,7 @@ export type SideRow = { mark: string; who: string; what: string; tone: "accent" 
  *  Подстрока (who пустой) — с отступом под «что», без колонки «кто». */
 export const SIDE_WIDTH = 32
 export const sideText = (r: SideRow) => (r.who ? `${r.mark} ${r.who.padEnd(9).slice(0, 9)} ${r.what}` : `    ${r.what}`).slice(0, SIDE_WIDTH)
-const WORD_OF_TASK: Record<string, string> = { submitted: "✓ сдана", reviewing: "✓◐ приёмка", rework: "↻ доработка", accepted: "✓✓◐ влита", running: "в работе", starting: "запуск" }
+const WORD_OF_TASK: Record<string, string> = { submitted: "✓ сдана", reviewing: "✓◐ приёмка", rework: "↻ доработка", approval: "◇ согласование", accepted: "✓✓◐ влита", running: "в работе", starting: "запуск" }
 const SIDE_MAX = 9
 export function sidebarLines(list: Status[], now = Date.now(), project?: string): { title: string; rows: SideRow[]; foot: string } {
   const mine = project ? list.filter((s) => (s.project ?? "?") === project) : list

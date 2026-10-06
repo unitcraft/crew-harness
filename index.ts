@@ -611,6 +611,7 @@ export default {
             normalizeRole(c.role) === DEFAULT_ROLE &&
             c.session !== t.executor &&
             c.session !== t.author &&
+            !(t.reviewers ?? []).includes(c.session) && // перепроверка плана: каждый раунд — новая сессия (план 012)
             !holdsOpenTask(c) &&
             !!tabOf(c.session, windows)?.window.pid &&
             !tabOf(c.session, windows)?.tab.busy,
@@ -783,11 +784,11 @@ export default {
         const ref = (c.task ?? c.review)!
         const t = loadTask(ref.project, ref.n)
         if (!t) continue
-        const MARK: Record<string, string> = { submitted: "✓", reviewing: "✓◐", rework: "↻", accepted: "✓✓◐", cleaned: "✓✓", closed: "✓", cancelled: "✗" }
+        const MARK: Record<string, string> = { submitted: "✓", reviewing: "✓◐", rework: "↻", approval: "◇", accepted: "✓✓◐", cleaned: "✓✓", closed: "✓", cancelled: "✗" }
         const replaced = asReviewer ? t.reviewer !== c.session : t.executor !== c.session
         const mark = replaced ? "↷" : asReviewer ? (t.status === "cleaned" ? "✓✓" : t.status === "cancelled" ? "✗" : "") : (MARK[t.status] ?? "")
         // значок и слово (план 009; владелец: «что значат две галочки и луна?» — значки оставить, слово рядом)
-        const WORD: Record<string, string> = { "✓": "сдана", "✓◐": "приёмка", "↻": "доработка", "✓✓◐": "влита", "✓✓": "готово", "✗": "отменена", "↷": "передана" }
+        const WORD: Record<string, string> = { "✓": "сдана", "✓◐": "приёмка", "↻": "доработка", "◇": "согласование", "✓✓◐": "влита", "✓✓": "готово", "✗": "отменена", "↷": "передана" }
         const title = `#${t.n}${mark ? ` ${mark} ${WORD[mark]}` : ""} ${asReviewer ? "приёмка " : ""}${t.title}`
         if (c.titleShown === title) continue
         try {
