@@ -19,7 +19,7 @@ delete process.env.NOVA_PEERS_PRESENCE
 const proj = path.join(tmp, "proj")
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
 // stall after 0.01 min (0.6 s); no review sessions, so a submitted task waits for a reviewer
-writeFileSync(path.join(proj, ".opencode", "opencode-peers.json"), JSON.stringify({ stall_minutes: 0.01, spawn_limits: { reviewer: 0 }, branch_name: "t{n}-{slug}", cleanup: "local" }))
+writeFileSync(path.join(proj, ".opencode", "opencode-peers.json"), JSON.stringify({ stall_minutes: 0.01, accepted_reminder_min: 0.01, inflight_limit: 3, spawn_limits: { reviewer: 0 }, branch_name: "t{n}-{slug}", cleanup: "local" }))
 // the project is a git repository: task #3 was accepted, but its branch and a diagnostic branch stayed
 const { execFileSync } = await import("node:child_process")
 const g = (...a) => execFileSync("git", ["-C", proj, "-c", "user.name=t", "-c", "user.email=t@t", ...a], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
@@ -61,12 +61,17 @@ const t2 = base(2, { status: "submitted", executor: "sesEX2", report: "сдел�
 t2.history.push({ at: Date.now() - 600_000, by: "sesEX2", status: "submitted", note: "отчёт" })
 tasks.saveTask(t2)
 base(3, { status: "cleaned", slug: "feat", executor: "sesEX3", branch: "t3-feat" })
+// #4: accepted an hour ago and never cleaned (#9 nova: 11.5 h, holding a place in inflight_limit)
+const t4 = base(4, { status: "accepted", executor: "sesEX4", reviewer: "sesREV04", review_kind: "spawn" })
+t4.history.push({ at: Date.now() - 3_600_000, by: "sesREV04", status: "accepted", note: "принята" })
+tasks.saveTask(t4)
 // sesRUN01: a task session whose turn OpenCode continued itself — messages after the last idle, updated now, no busy
 card("sesRUN01", { spawned: { by: "sesINTEG1", task: "x", tier: "light", status: "running", at: Date.now(), qid: "q9" }, task: { project: "proj", n: 9 } })
 msg("sesRUN01", "idle", { outcome: "succeeded" }, Date.now() - 60_000)
 msg("sesRUN01", "assistant", { content: [{ type: "tool", name: "bash" }] })
 
 const mod = await import("../index.ts")
+const tools = {}
 const hooks = {}
 const events = {}
 const delivered = []
@@ -80,7 +85,7 @@ const ctx = {
     create: async (req) => ({ id: req.id }),
     hook: async (name, cb) => (hooks[name] = cb),
   },
-  tool: { transform: async () => {} },
+  tool: { transform: async (fn) => fn({ add: (t) => (tools[t.name] = t) }) },
   events: { on: async (name, cb) => (events[name] = cb) },
 }
 let fail = 0
@@ -144,6 +149,18 @@ await until(() => letters("sesINTEG1").some((l) => /остались хвост�
 await wait(600)
 const left = letters("sesINTEG1").filter((l) => /остались хвосты/.test(l.text))
 cell("leftovers of an accepted task are raised to its author, once", left.length === 1 && /t3-feat/.test(left[0].text) && /t3-diag/.test(left[0].text) && !/t30-other/.test(left[0].text), JSON.stringify(left.map((l) => l.text)))
+
+// 6. accepted but not cleaned past accepted_reminder_min (plan 011, defect 2): the reviewer is woken to repeat cleaned,
+// the author is told; a spawn refused by the full inflight_limit names the task
+await until(() => letters("sesREV04").some((l) => /не очищена/.test(l.text)))
+await wait(600)
+const stale = letters("sesREV04").filter((l) => /не очищена/.test(l.text))
+cell("the reviewer of a stale accepted task is woken to repeat cleaned, once", stale.length === 1 && /#4/.test(stale[0].text) && /cleaned/.test(stale[0].text) && stale[0].wake !== false, JSON.stringify(stale.map((l) => l.text.slice(0, 200))))
+const staleA = letters("sesINTEG1").filter((l) => /#4 .*не очищена/.test(l.text))
+cell("the author is told too, once", staleA.length === 1, JSON.stringify(staleA.map((l) => l.text.slice(0, 200))))
+await tools.peer_role.execute({ role: "integrator" }, { sessionID: "sesINTEG1" })
+const refused = (await tools.peer_spawn.execute({ title: "срочная", goal: "g", criteria: "c", priority: "P1" }, { sessionID: "sesINTEG1" })).content
+cell("a spawn refused by inflight_limit names the accepted, not cleaned task", /Лимит задач проекта/.test(refused) && /#4 принята 60 мин назад, не очищена/.test(refused), refused)
 
 clearInterval(heart)
 stop?.()

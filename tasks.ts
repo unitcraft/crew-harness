@@ -153,6 +153,14 @@ export function createTask(fields: Omit<Task, "n" | "history" | "created" | "upd
   }
 }
 
+/** Когда задачу приняли (последняя запись «accepted» журнала). */
+export const acceptedAt = (t: Task) => [...(t.history ?? [])].reverse().find((h) => h.status === "accepted")?.at ?? t.updated
+/** «12 мин назад», «11 ч назад» */
+export const ago = (at: number, now = Date.now()) => {
+  const m = Math.max(0, Math.round((now - at) / 60_000))
+  return m < 90 ? `${m} мин назад` : `${Math.round(m / 60)} ч назад`
+}
+
 /** id сессии задачи, выбранный заранее (OpenCode принимает свой id, если он начинается с "ses"). */
 export const plannedSessionId = () => `ses_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`.slice(0, 30)
 

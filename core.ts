@@ -12,7 +12,7 @@ import { type Projects, parseProjects as parseProjectsWith, projectFor, rawSetti
 import { SCHEMA, guideText, invalid } from "./config-schema.ts"
 export { PROJECT_RE, type Project, type Projects, settingsProblems } from "./settings.ts"
 import { PROJECT_RE, settingsProblems } from "./settings.ts"
-import { type Task, WORKING_STATUSES, byPriority, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
+import { type Task, WORKING_STATUSES, acceptedAt, ago, byPriority, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { cleanupDone, cleanupSteps, holdsMergeLock, isMerged, mergeHolder, releaseMergeLock, reworkLetter, takeMergeLock } from "./review.ts"
 import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, machineQueue, requestWatch, watchesOf } from "./watch.ts"
 
@@ -171,6 +171,8 @@ export type PeersConfig = {
   ownerReminderMin: number
   machineSlots: number
   stallMin: number
+  /** принятая, но не очищенная задача: через столько минут — письма приёмщику и автору (0 — нет) */
+  acceptedReminderMin: number
   inbound: "integrator" | "any" | "none"
   root?: string
 }
@@ -215,6 +217,7 @@ export function loadConfig(dir: string): PeersConfig {
     ownerReminderMin: num(j.owner_reminder_min, 15),
     machineSlots: num(j.machine_slots, 1),
     stallMin: num(j.stall_minutes, 30),
+    acceptedReminderMin: num(j.accepted_reminder_min, 30),
     inbound: oneOf(j.inbound, ["integrator", "any", "none"] as const, "integrator"),
     root,
   }
@@ -1351,7 +1354,11 @@ export function makeTools(host: PeersHost): PeerTool[] {
       const prio = isPriority(input.priority) ? input.priority : cfg.defaultPriority
       if (prio !== "P0" && running.length >= limit) return { content: `Лимит работающих задач роли ${role} в проекте — ${limit}, уже работают: ${running.map((t) => `#${t.n}`).join(", ")}. Дождись сдачи или отмени (peer_task {action: "cancel"}); авария — priority P0.` }
       const inflight = listTasks(project).filter(isOpen)
-      if (prio !== "P0" && inflight.length >= cfg.inflightLimit) return { content: `Лимит задач проекта в работе и на приёмке — ${cfg.inflightLimit} (inflight_limit), открыто: ${inflight.map((t) => `#${t.n} ${statusRu(t.status)}`).join(", ")}. Дождись приёмки; авария — priority P0.` }
+      if (prio !== "P0" && inflight.length >= cfg.inflightLimit) {
+        // принятые, но не очищенные держат место молча (#9 nova — 11,5 ч): назвать их поимённо с возрастом
+        const stale = inflight.filter((t) => t.status === "accepted").map((t) => `#${t.n} принята ${ago(acceptedAt(t))}, не очищена (приёмщик ${t.reviewer ?? "?"})`)
+        return { content: `Лимит задач проекта в работе и на приёмке — ${cfg.inflightLimit} (inflight_limit), открыто: ${inflight.map((t) => `#${t.n} ${statusRu(t.status)}`).join(", ")}.${stale.length ? ` Место держат принятые, но не очищенные: ${stale.join("; ")} — пусть приёмщик повторит peer_task {action: \"cleaned\"}.` : ""} Дождись приёмки; авария — priority P0.` }
+      }
       const model = cfg.spawnModels[tier] ?? DEFAULT_SPAWN_MODELS[tier]
       const title = String(input.title ?? "").trim() || String(input.goal).split(/\r?\n/)[0].slice(0, 60)
       const t = createTask({

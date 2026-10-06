@@ -103,7 +103,7 @@ import {
 } from "./core.ts"
 import { dropWatch, openWatchesBySession, pollWatches, watchesOf } from "./watch.ts"
 import { endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
-import { type Task, byPriority, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
+import { type Task, acceptedAt, ago, byPriority, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
 import { ensureWorktree, gitTraces, leftoversOf, mergeHolder, reviewLetter } from "./review.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
@@ -711,6 +711,20 @@ export default {
             log(`stall: merge lock of ${project} #${lock.n} held since ${lock.at}`)
           }
         }
+        // ПРИНЯТА, НО НЕ ОЧИЩЕНА (план 011, дефект 2): держит место в inflight_limit. Через accepted_reminder_min —
+        // одно письмо приёмщику с побудкой («повтори cleaned») и одно автору; отказ peer_spawn называет такие поимённо.
+        const accMin = loadConfig(any.directory).acceptedReminderMin
+        if (accMin > 0)
+          for (const x of list.filter((y) => y.status === "accepted")) {
+            const at = acceptedAt(x)
+            if (t - at < accMin * 60_000) continue
+            const id = `stale-accepted-${safeKey(project)}-${x.n}-${at}`
+            if (x.reviewer && !letterExists(x.reviewer, id))
+              postLetter(x.reviewer, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.reviewer, time: t, text: `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена — держит место в лимите задач проекта (inflight_limit). Убери её дерево и ветки и повтори peer_task {action: "cleaned", n: ${x.n}}: отказ назовёт, что осталось. Не убирается — напиши автору (${x.author_role}), что мешает.` })
+            if (!letterExists(x.author, id))
+              postLetter(x.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.author, time: t, text: `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена${x.reviewer ? ` (приёмщик ${x.reviewer}, ему написано)` : ""} — держит место в inflight_limit, пока не будет peer_task cleaned.` })
+            log(`stall: #${x.n} of ${project} accepted ${at}, not cleaned`)
+          }
         for (const x of list.filter((y) => y.status === "submitted" && !y.reviewer)) {
           const since = [...(x.history ?? [])].reverse().find((h) => h.status === "submitted")?.at ?? 0
           if (!since || t - since <= stall) continue
