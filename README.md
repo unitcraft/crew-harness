@@ -139,8 +139,8 @@ and repeats it every `owner_reminder_min` minutes (15; 0 — once) until you ans
 The service plugin keeps `<mailbox>/status/<session id>.json` for open tabs, task sessions and sessions with watches
 or open tasks of their own — an open contract for outside checks (e.g. a project's Stop hook; the claude-code
 provider puts `OPENCODE_SESSION_ID` into Claude Code's environment). `<mailbox>` is
-`$XDG_DATA_HOME/opencode/crew-harness` (OpenCode's data directory; the old `nova-peers` is moved there on the first
-start of this version and left as a link to it, so old paths keep working):
+`$XDG_DATA_HOME/opencode/crew-harness` (OpenCode's data directory; an earlier mailbox — `opencode-peers`, `nova-peers` — stays in place and the new name links to it on the first
+so old paths keep working):
 
 ```jsonc
 { "session": "ses_…", "project": "nova", "role": "integrator", "title": "…", "model": "claude-code/opus",
@@ -305,6 +305,84 @@ by itself. Full design: [plan 012](doc/plans/012-plans.md).
   integrator, who does it with its own tasks: `crew_spawn {…, parent: "alpha#N"}`. The order follows
   that task: cleaned → the order is done (a quiet summary to the orderer), cancelled → a call.
 
+## Other machines (prototype)
+
+Letters to projects on other machines (`remote.ts`). Each machine has
+`<data>/crew-harness/remote.json` — not in a repository. Two transports:
+
+**Tailscale** (`tailnet.ts`, recommended): bridges talk HTTP directly inside your Tailscale network.
+The network names the sender (`tailscale whois`), so there is no shared secret, and each machine has
+its own rights:
+
+```json
+{ "node": "home", "transport": "tailnet",
+  "nodes": { "vps-1": { "projects": ["site"], "may_write": ["nova.integrator"] } } }
+```
+
+- `nodes` — the machines this one talks to, by their Tailscale name (`host`/`port` if not the
+  MagicDNS name and port 7647); a machine not listed gets 403;
+- `projects` — that machine's projects: `crew_send {to: "site.lead"}` goes to `vps-1`;
+- `may_write` — where that machine may write here: `project.role`, `project.*` or `*`;
+- the bridge listens only on the Tailscale address (`tailscale ip -4`), so on a VPS with a public
+  address the port is not open to the internet. Let only the bridge port through in the tailnet ACL;
+- a refusal there comes back to the sender as a note; an unreachable machine keeps the letter and
+  retries (1, 2, 4… up to 60 s) for 24 h.
+
+**ntfy** (`ntfy.ts`): a shared encrypted channel on [ntfy](https://ntfy.sh) for machines outside a
+tailnet. All machines of the channel are equal — the secret is its only protection:
+
+```json
+{ "node": "home", "secret": "<the same on every machine>", "projects": ["site"] }
+```
+
+The topic and the AES-256-GCM key come from `secret` (a new one: `ntfySecret()` from `ntfy.ts`);
+optional `server` and `token` for your own ntfy server. The channel is shared, so a refusal stays in the
+receiver's log. A letter takes about 1–3 s on ntfy.sh (`node test/ntfy-latency.mjs`); anonymous
+ntfy.sh limits requests and messages per day, so pending letters leave together.
+
+Both:
+
+- a session of another machine you got a letter from is remembered with its machine, so a reply to
+  its `from_session` goes back there. `tier` and `project.all` do not work across machines;
+- one process per machine holds the bridge (`remote/bridge.lock`); it takes only letters for its own
+  projects, by the project's `inbound`; a session gets letters only from a machine it wrote to itself.
+  A letter that cannot be sent goes to `remote/failed/`, and its sender gets a note.
+
+### Status (2026-10-07)
+
+A prototype. Checked by self-tests only: fake ntfy and GitHub servers, two real HTTP bridges on
+`127.0.0.1` with a faked `whois`, the bridge with a fake transport. One live run: 5 pings over ntfy.sh,
+median about 2 s, most of it the publish request. Not yet run inside a live OpenCode, not across real
+machines, and not against a real Tailscale: the parsing of `tailscale whois --json` (`Node.Name`) is
+written from memory. No type check (no TypeScript in the project). `github.ts` is a transport kept for
+comparison; nothing uses it.
+
+Known gaps:
+
+- **the ntfy cursor lives in memory**: after a restart the bridge reads the channel from its start, so
+  letters sent while no OpenCode process ran on the machine are lost, though ntfy.sh keeps them ~12 h;
+- **ntfy has no sender identity**: one shared secret, every machine of the channel is equal, a refusal
+  stays in the receiver's log, and the sender is told "sent" even if no machine took the letter;
+- **Tailscale keeps the outgoing queue in memory**: retries survive a pause, not a restart of the bridge
+  process (the letter stays in `remote/outbox/` and is sent again — the receiver drops the repeat by id);
+- **only letters cross machines**: no `tier`, no `project.all`, no tasks or orders (`crew_task`,
+  `crew_spawn`), no `crew_watch` or status; `crew_list` does not show tabs of other machines;
+- **remote.json is edited by hand**: `crew_config` does not touch it, and a broken file is only logged;
+- **the queue and back-off code is repeated** in `github.ts`, `ntfy.ts` and `tailnet.ts`.
+
+Next:
+
+1. Check on a real tailnet: `tailscale ip -4` and `whois` output on Windows and Linux, a letter between
+   this machine and a VPS, the ACL that leaves a worker only the bridge port.
+2. Orders across machines: `crew_task order` to the integrator of a project on another machine, which
+   runs it with its own tasks; the order's status comes back. Code moves through git: the worker pulls a
+   branch from a shared remote and pushes its result to its own branch; review and merge stay at home.
+3. OpenCode without windows on a VPS (`opencode serve`): today a wake needs an open tab or a
+   `crew_spawn` task — check what a headless worker needs.
+4. Smaller: keep the ntfy cursor in a file; `crew_list` with remote machines (reachable or not); edit
+   `remote.json` through `crew_config`; one shared queue module for the transports; drop `github.ts` if
+   nothing needs it.
+
 ## Self-check
 
 `crew_doctor` (and once at load, as a notice): the OpenCode features the plugin relies on, the
@@ -317,9 +395,9 @@ cache); neighbours and their models come from `crew_list`.
 ## Windows on the `claude-code` provider (MCP)
 
 The [`claude-code` provider](https://github.com/unitcraft/opencode-claude-code-provider) hands
-every turn to the official Claude Code and drops OpenCode's tool list, so the plugin's `peer_*`
+every turn to the official Claude Code and drops OpenCode's tool list, so the plugin's `crew_*`
 tools do not reach those tabs. `mcp.ts` is a stdio MCP server with the same tools
-(`mcp__crew__peer_list`, ... in Claude Code), built on the same core (`core.ts`) as the plugin:
+(`mcp__crew__crew_list`, ... in Claude Code), built on the same core (`core.ts`) as the plugin:
 
 ```sh
 OPENCODE_CREW_SESSION=<opencode session id> node mcp.ts   # node >= 24
@@ -369,9 +447,12 @@ Other OpenCode plugins of the same set (they work independently; together they a
 npm test   # node >= 24
 ```
 
+What each test checks, the manual latency checks and what the tests do not cover — [test/README.md](test/README.md).
+
 History: moved with its commits from `a private plugins repository of the nova project` (`plugins/nova-peers`).
-The plugin id `nova.peers` is kept; the mailbox moved from `nova-peers` to `crew-harness` (the old name stays as a
-junction to it, so nothing is lost and old processes land in the same folder); the settings file is `.opencode/crew-harness.json` (named after the package; the old name
-`nova-peers.json` is no longer read).
+Renamed 2026-10-07 (plan 014): `nova-peers` → `opencode-peers` → CrewHarness (`crew-harness`); the plugin id is
+`crew-harness`; the mailbox `crew-harness` is a junction to the folder of the earliest one (nothing moves, nothing is
+lost); the settings file is `.opencode/crew-harness.json` (`.opencode/opencode-peers.json` is still read, with a
+`crew_doctor` note to rename it).
 
 License: MIT OR Apache-2.0 (see [LICENSE](LICENSE)).

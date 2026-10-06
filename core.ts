@@ -19,6 +19,7 @@ import { type Task, type TaskPlan, WORKING_STATUSES, slugify, acceptedAt, ago, b
 import { cleanupDone, cleanupSteps, fileAt, holdsMergeLock, isMerged, mergeHolder, releaseMergeLock, reworkLetter, takeMergeLock } from "./review.ts"
 import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, watchesOf } from "./watch.ts"
 import { watchRefusal } from "./deny.ts"
+import { queueRemote, remoteRoute } from "./remote.ts"
 
 export const POLL_MS = Number(process.env.CREW_HARNESS_POLL_MS) || 1_000 // переопределение — для самотеста
 export const LIVE_MS = 15 * 60_000
@@ -1281,6 +1282,8 @@ export function makeTools(host: CrewHost): CrewTool[] {
       if (addr.kind === "role") addr.role = normalizeRole(addr.role)
       if (addr.kind !== "session" && !PROJECT_RE.test(addr.project)) return { content: `Проект «${addr.project}» не годится: строчные латинские буквы, цифры, дефис.` }
       if (addr.kind === "role" && !ROLE_RE.test(addr.role)) return { content: `Роль «${addr.role}» не годится: строчные латинские буквы, цифры, дефис, первая — буква.` }
+      // ДРУГАЯ МАШИНА (remote.ts): проект из remote.json или сессия, от которой приходили письма оттуда.
+      const remote = remoteRoute(addr, (s) => cards.some((c) => c.session === s))
       const now = Date.now()
       const open = live(cards, windows)
       const target = addr.kind === "session" ? undefined : addr.project
@@ -1289,7 +1292,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
       // INBOUND (план 002, Ф.5): письма из чужого проекта ограничивает проект-получатель — integrator (по умолчанию:
       // только его интегратору), any, none. Свой проект не ограничен.
       const toProject = addr.kind === "session" ? (() => { const c = cards.find((x) => x.session === addr.session); return c ? projOf(c) : undefined })() : addr.project
-      if (toProject && toProject !== home) {
+      if (toProject && toProject !== home && !remote) {
         const tcfg = loadConfig(projectDir(toProject) ?? cards.find((c) => projOf(c) === toProject)?.directory ?? "")
         const toRole = addr.kind === "role" ? addr.role : addr.kind === "session" ? normalizeRole(cards.find((x) => x.session === addr.session)?.role ?? "") : "all"
         if (tcfg.inbound === "none") return { content: `Не отправлено: проект ${toProject} не принимает писем из других проектов (inbound: none).` }
@@ -1337,6 +1340,20 @@ export function makeTools(host: CrewHost): CrewTool[] {
         saveCard(me)
       }
       const qidTail = qid ? ` Вопрос ${qid}: ответ жди в этом же ходе — crew_wait {qid: "${qid}"}.` : ""
+      // На другую машину — в outbox; inbound, ступень и доставку решает её мост.
+      if (remote) {
+        if (input.tier) return { content: "Не отправлено: tier с проектом другой машины не сочетается — ступень выбирают там, у держателей роли." }
+        if (addr.kind === "all") return { content: `Не отправлено: рассылка всем вкладкам проекта ${addr.project} другой машины не поддерживается — адресуй роль.` }
+        const key = addr.kind === "session" ? addr.session : roleKey(addr.project, addr.role)
+        queueRemote({ id: `${now}-${safeKey(sessionID)}-${safeKey(key)}`, ...base, to: key }, remote, now)
+        const where = remote.cfg.transport === "tailnet" ? `машина ${remote.to_node}` : "канал ntfy"
+        log(`send ${fromRole} -> ${key} via ${remote.cfg.transport} (${remote.to_node})${qid ? " qid=" + qid : ""}`)
+        const fate =
+          remote.cfg.transport === "tailnet"
+            ? "примет ли — решает та машина (её may_write и inbound проекта); отказ или недоступность вернутся служебным письмом"
+            : "обычно за 1–3 с; примут ли — решает та машина (inbound проекта), отказ не вернётся"
+        return { content: `Отправлено на другую машину (${hhmm(now)}): ${key} — ${where}; ${fate}.${qidTail}` }
+      }
       // ПИСЬМО СО СТУПЕНЬЮ: из открытых держателей роли — свободный с моделью этой ступени, иначе выше; никого — очередь.
       if (input.tier !== undefined && input.tier !== null && input.tier !== "") {
         if (!isTier(input.tier)) return { content: `Ступень «${input.tier}» не годится: heavy, medium или light.` }
