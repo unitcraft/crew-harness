@@ -336,6 +336,41 @@ Both:
   projects, by the project's `inbound`; a session gets letters only from a machine it wrote to itself.
   A letter that cannot be sent goes to `remote/failed/`, and its sender gets a note.
 
+### Status (2026-10-07)
+
+A prototype. Checked by self-tests only: fake ntfy and GitHub servers, two real HTTP bridges on
+`127.0.0.1` with a faked `whois`, the bridge with a fake transport. One live run: 5 pings over ntfy.sh,
+median about 2 s, most of it the publish request. Not yet run inside a live OpenCode, not across real
+machines, and not against a real Tailscale: the parsing of `tailscale whois --json` (`Node.Name`) is
+written from memory. No type check (no TypeScript in the project). `github.ts` is a transport kept for
+comparison; nothing uses it.
+
+Known gaps:
+
+- **the ntfy cursor lives in memory**: after a restart the bridge reads the channel from its start, so
+  letters sent while no OpenCode process ran on the machine are lost, though ntfy.sh keeps them ~12 h;
+- **ntfy has no sender identity**: one shared secret, every machine of the channel is equal, a refusal
+  stays in the receiver's log, and the sender is told "sent" even if no machine took the letter;
+- **Tailscale keeps the outgoing queue in memory**: retries survive a pause, not a restart of the bridge
+  process (the letter stays in `remote/outbox/` and is sent again — the receiver drops the repeat by id);
+- **only letters cross machines**: no `tier`, no `project.all`, no tasks or orders (`peer_task`,
+  `peer_spawn`), no `peer_watch` or status; `peer_list` does not show tabs of other machines;
+- **remote.json is edited by hand**: `peer_config` does not touch it, and a broken file is only logged;
+- **the queue and back-off code is repeated** in `github.ts`, `ntfy.ts` and `tailnet.ts`.
+
+Next:
+
+1. Check on a real tailnet: `tailscale ip -4` and `whois` output on Windows and Linux, a letter between
+   this machine and a VPS, the ACL that leaves a worker only the bridge port.
+2. Orders across machines: `peer_task order` to the integrator of a project on another machine, which
+   runs it with its own tasks; the order's status comes back. Code moves through git: the worker pulls a
+   branch from a shared remote and pushes its result to its own branch; review and merge stay at home.
+3. OpenCode without windows on a VPS (`opencode serve`): today a wake needs an open tab or a
+   `peer_spawn` task — check what a headless worker needs.
+4. Smaller: keep the ntfy cursor in a file; `peer_list` with remote machines (reachable or not); edit
+   `remote.json` through `peer_config`; one shared queue module for the transports; drop `github.ts` if
+   nothing needs it.
+
 ## Self-check
 
 `peer_doctor` (and once at load, as a notice): the OpenCode features the plugin relies on, the
@@ -399,6 +434,8 @@ Other OpenCode plugins of the same set (they work independently; together they a
 ```sh
 npm test   # node >= 24
 ```
+
+What each test checks, the manual latency checks and what the tests do not cover — [test/README.md](test/README.md).
 
 History: moved with its commits from `a private plugins repository of the nova project` (`plugins/nova-peers`).
 The plugin id `nova.peers` is kept; the mailbox moved from `nova-peers` to `opencode-peers` (the old name stays as a
