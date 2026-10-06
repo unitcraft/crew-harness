@@ -188,6 +188,8 @@ export type TaskPlan = {
   stuck?: boolean
   /** решение владельца из окна (/plans) */
   approval?: { decision: "ok" | "ok-shortcuts" | "no"; text?: string; at: number }
+  /** когда владельцу последний раз напомнили о согласовании */
+  notifiedAt?: number
 }
 
 /** Сколько раз задачу возвращали исполнителю (доработки и синхронизации): номер круга в id писем. */

@@ -104,6 +104,7 @@ import {
   propagateToParent,
   PLUGIN_SENDER,
 } from "./core.ts"
+import { DECISION_RU, readApprovals, removeApproval } from "./approvals.ts"
 import { dropWatch, openWatchesBySession, pollWatches, watchesOf } from "./watch.ts"
 import { endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
 import { type Task, acceptedAt, ago, byPriority, rounds, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
@@ -705,6 +706,44 @@ export default {
     // ждёт приёмщика дольше stall_minutes (места заняты) — письмо с побудкой поставившему задачу (интегратору): что
     // стоит, кто держит, что можно сделать. Одно письмо на случай (id из проекта, номера и времени начала).
     let flowAt = 0
+    // СОГЛАСОВАНИЕ ПЛАНОВ (план 012, шаг 3). Решение владельца приходит файлом из окна (/plans, approvals.ts):
+    // «вернуть» — план автору с замечаниями владельца, перепроверка заново; «согласовать» — план уходит приёмщику
+    // вливания (новая сессия): вписать решение в план, влить, accept. План на согласовании — уведомление во все окна,
+    // повтор через owner_reminder_min.
+    function applyApprovals() {
+      for (const a of readApprovals()) {
+        const t = loadTask(a.project, a.n)
+        removeApproval(a.project, a.n)
+        if (!t?.plan || t.status !== "approval") continue
+        const p = t.plan
+        p.approval = { decision: a.decision, ...(a.text ? { text: a.text } : {}), at: a.at }
+        p.notifiedAt = undefined
+        const day = new Date(a.at).toISOString().slice(0, 10)
+        if (a.decision === "no") {
+          p.clean = 0
+          p.stuck = false
+          t.rework = (t.rework ?? 0) + 1
+          t.rework_sync = false
+          t.rework_note = `ЗАМЕЧАНИЯ ВЛАДЕЛЬЦА к плану ${p.n} (${day}):\n${a.text ?? ""}\nИсправь в файле плана и сдай снова тем же отчётом — перепроверка начнётся заново (новыми сессиями).`
+          if (t.executor) addObligation(t.executor, { qid: t.qid, from_session: t.author, from_role: t.author_role, at: now(), nudges: 0, task: t.title })
+          taskEvent(t, "owner", "rework", `владелец вернул план: ${(a.text ?? "").slice(0, 300)}`)
+        } else {
+          taskEvent(t, "owner", "submitted", `владелец: план ${DECISION_RU[a.decision]} (${day}) — приёмщик впишет решение и вольёт`)
+        }
+        postLetter(t.author, { id: `plan-decision-${safeKey(t.project)}-${t.n}-${a.at}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: now(), wake: false, text: `План ${p.n} (задача #${t.n}): владелец — ${DECISION_RU[a.decision]}${a.text ? `: ${a.text}` : ""}.` })
+        log(`plan ${p.n} (${t.project} #${t.n}): owner ${a.decision}`)
+      }
+      for (const t of listTasks()) {
+        if (t.status !== "approval" || !t.plan) continue
+        const every = Math.max(1, loadConfig(t.directory).ownerReminderMin) * 60_000
+        if (t.plan.notifiedAt && now() - t.plan.notifiedAt < every) continue
+        const message = `${t.title.replace(/^план \S+: /, "")}${t.plan.stuck ? " — раунды кончились, решаете по последним замечаниям" : ""} · /plans`
+        for (const w of liveWindows()) postNotice(w.pid, { title: `План ${t.plan.n} ждёт согласования`, message: short(message, 100), attention: true, duration: 30_000 })
+        t.plan.notifiedAt = now()
+        saveTask(t)
+      }
+    }
+
     function flowWatch() {
       if (now() - flowAt < (Number(process.env.NOVA_PEERS_FLOW_MS) || 60_000)) return
       flowAt = now()
@@ -995,6 +1034,7 @@ export default {
             for (const t of w.tabs ?? []) if (!existsSync(cardFile(t.sessionID)) && waitingIn([t.sessionID]) && (await sessionInfo(t.sessionID))) await touch(t.sessionID)
         })
         await step("resumeTasks", resumeTasks)
+        await step("applyApprovals", applyApprovals)
         await step("assignReviewers", assignReviewers)
         await step("reconcile", reconcile)
         await step("resumeInterrupted", resumeInterrupted)

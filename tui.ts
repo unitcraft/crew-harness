@@ -16,11 +16,12 @@
 // ui.slot({append: "app"}) + keymap.layer({commands: [{slash: {name}, palette: true, run}]}); run показывает
 // ui.dialog.alert со сводкой из status/ (пишет плагин сервиса) — в окне, без хода модели. Уведомление с attention —
 // ещё и attention.notify: системное уведомление, когда окно не в фокусе (настройка OpenCode attention.notifications).
-import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { NOTICES, WINDOWS, cardFile, configShowText, loadProjects, log, readJson } from "./core.ts"
 import { formatStatuses, readStatuses } from "./status.ts"
-import { loadTask } from "./tasks.ts"
+import { listTasks, loadTask } from "./tasks.ts"
+import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
 
 const BEAT_MS = 1_000
 const AUTOCLOSE_MS = Number(process.env.NOVA_PEERS_AUTOCLOSE_MS) || 120_000
@@ -110,9 +111,61 @@ export default {
       }
       api.ui?.dialog?.alert?.({ title: "opencode-peers — настройки проекта", message: text })
     }
+    // /plans: планы на согласовании (план 012) — владелец выбирает план и решение; решение пишется файлом, его применяет
+    // плагин сервиса. Агент этот диалог вызвать не может: согласует только человек в окне.
+    const showPlans = async () => {
+      const dialog = api.ui?.dialog
+      if (!dialog?.select) return
+      const waiting = listTasks().filter((t) => t.status === "approval" && t.plan)
+      if (!waiting.length) return void dialog.alert?.({ title: "Планы", message: "Планов на согласовании нет." })
+      const pick: string | undefined = await dialog.select({
+        title: "Планы на согласовании",
+        options: waiting.map((t) => ({
+          title: `${t.project} · ${t.title}`,
+          value: `${t.project}#${t.n}`,
+          description: `раундов перепроверки ${t.plan!.rounds.length}${t.plan!.stuck ? " — раунды кончились, решаете по последним замечаниям" : ", два последних чистые"} · задача #${t.n}`,
+        })),
+      })
+      if (!pick) return
+      const [project, n] = [pick.slice(0, pick.lastIndexOf("#")), Number(pick.slice(pick.lastIndexOf("#") + 1))]
+      const t = loadTask(project, n)
+      if (!t?.plan || t.status !== "approval") return
+      for (;;) {
+        const d: string | undefined = await dialog.select({
+          title: `${t.title}`,
+          options: [
+            { title: "Показать план", value: "show", description: t.plan.file },
+            { title: "Согласовать: без упрощений", value: "ok", description: "ни заглушек, ни TODO, ни «временно» — шаг с упрощением не принимается" },
+            { title: "Согласовать: упрощения — как в плане", value: "ok-shortcuts", description: "допустимы упрощения, перечисленные в «Режиме выполнения»" },
+            { title: "Вернуть с замечаниями", value: "no", description: "план уйдёт автору, перепроверка начнётся заново" },
+          ],
+        })
+        if (!d) return
+        if (d === "show") {
+          let text = ""
+          try {
+            text = readFileSync(path.join(t.worktree && existsSync(t.worktree) ? t.worktree : t.directory, t.plan.file), "utf8")
+          } catch (e) {
+            text = `Не прочитать ${t.plan.file}: ${e}`
+          }
+          const last = t.plan.rounds.at(-1)
+          await dialog.alert?.({ title: t.title, message: `${text}\n\n— последний раунд перепроверки: ${last ? `блокирующих ${last.blocking}, существенных ${last.significant}, косметических ${last.cosmetic}${last.notes ? `\n${last.notes}` : ""}` : "нет"}` })
+          continue
+        }
+        let text: string | undefined
+        if (d === "no") {
+          text = (await dialog.prompt?.({ title: `Замечания к плану ${t.plan.n}`, placeholder: "что изменить в плане" }))?.trim()
+          if (!text) return
+        }
+        writeApproval({ project, n, decision: d as Decision, ...(text ? { text } : {}) })
+        api.ui?.toast?.show?.({ title: `План ${t.plan.n}`, message: `${DECISION_RU[d as Decision]} — передано`, variant: "success", duration: 5_000 })
+        return
+      }
+    }
     const commands = [
       { id: "opencode-peers.status", title: "Peers: кто чего ждёт", group: "Peers", slash: { name: "peers" }, palette: true, run: showStatus },
       { id: "opencode-peers.config", title: "Peers: настройки проекта", group: "Peers", slash: { name: "peers-config" }, palette: true, run: showConfig },
+      { id: "opencode-peers.plans", title: "Peers: планы на согласовании", group: "Peers", slash: { name: "plans" }, palette: true, run: showPlans },
     ]
     try {
       api.ui.slot({

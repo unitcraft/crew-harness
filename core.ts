@@ -12,9 +12,9 @@ import { type Projects, parseProjects as parseProjectsWith, projectFor, rawSetti
 import { SCHEMA, guideText, invalid } from "./config-schema.ts"
 export { PROJECT_RE, type Project, type Projects, settingsProblems } from "./settings.ts"
 import { PROJECT_RE, settingsProblems } from "./settings.ts"
-import { PLAN_ACCEPTANCE, ROUND_RULES, nextPlanNumber, planProblems, planTemplate } from "./plans.ts"
+import { PLAN_ACCEPTANCE, PLAN_MERGE_ACCEPTANCE, ROUND_RULES, nextPlanNumber, parsePlan, planProblems, planTemplate } from "./plans.ts"
 import { type Task, type TaskPlan, WORKING_STATUSES, slugify, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
-import { cleanupDone, cleanupSteps, holdsMergeLock, isMerged, mergeHolder, releaseMergeLock, reworkLetter, takeMergeLock } from "./review.ts"
+import { cleanupDone, cleanupSteps, fileAt, holdsMergeLock, isMerged, mergeHolder, releaseMergeLock, reworkLetter, takeMergeLock } from "./review.ts"
 import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, watchesOf } from "./watch.ts"
 
 export const POLL_MS = Number(process.env.NOVA_PEERS_POLL_MS) || 1_000 // переопределение — для самотеста
@@ -1595,6 +1595,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
         // градациям. Есть блокирующие или существенные — план автору; только косметические — чистый раунд; нужное число
         // чистых подряд — на согласование владельцу. Каждый раунд — новая сессия: эта с перепроверки снимается.
         if (action === "round") {
+          if (t.plan?.approval && t.plan.approval.decision !== "no") return { content: `План ${t.plan.n} уже согласован владельцем — раундов больше нет; влей его: merge → accept.` }
           if (!t.plan) return { content: `Вердикт раунда — у задачи-плана; задача #${t.n} обычная (rework / merge / accept).` }
           if (t.status !== "reviewing") return { content: `Сначала peer_task {action: "review", n: ${t.n}} (задача сейчас ${statusRu(t.status)}).` }
           const [blocking, significant, cosmetic] = ["blocking", "significant", "cosmetic"].map((k) => Number(input[k] ?? NaN))
@@ -1696,6 +1697,17 @@ export function makeTools(host: PeersHost): PeerTool[] {
           const commit = String(input.commit ?? "").trim() || undefined
           const m = isMerged(t, tcfg.targetBranch, commit)
           if (!m.ok) return { content: `Не принято: ${m.how}. Влей и запушь, затем снова accept.` }
+          // согласованный план (план 012): в целевой ветке — файл плана в порядке и с ответом владельца
+          if (t.plan) {
+            const a = t.plan.approval
+            if (!a || a.decision === "no") return { content: `План ${t.plan.n} не согласован владельцем — accept только после согласования (/plans в окне владельца).` }
+            const text = fileAt(t.directory, tcfg.targetBranch, t.plan.file)
+            if (!text) return { content: `Не принято: файла ${t.plan.file} нет в ${tcfg.targetBranch}. Влей план и запушь.` }
+            const probs = planProblems(text)
+            if (probs.length) return { content: `Не принято: форма плана в ${tcfg.targetBranch}: ${probs.join("; ")}.` }
+            const yes = parsePlan(text).noShortcuts
+            if (yes !== (a.decision === "ok")) return { content: `Не принято: в «Режиме выполнения» должно быть «Без упрощений: ${a.decision === "ok" ? "ДА" : "НЕТ"} — владелец, дата» (так решил владелец).` }
+          }
           t.checks = checks
           delete t.checking
           t.commit = commit
@@ -1907,7 +1919,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
 }
 
 /** Шаги приёмки задачи: у задачи-плана — перепроверка плана (план 012), у остальных — приёмка проекта. */
-export const acceptanceOf = (t: Task, cfg: PeersConfig) => (t.plan ? PLAN_ACCEPTANCE : cfg.acceptance)
+export const acceptanceOf = (t: Task, cfg: PeersConfig) => (t.plan ? (t.plan.approval && t.plan.approval.decision !== "no" ? PLAN_MERGE_ACCEPTANCE : PLAN_ACCEPTANCE) : cfg.acceptance)
 
 /** Письмо с задачей исполнителю. */
 /** Письмо исполнителю задачи-плана (план 012): исходная задача, файл, шаблон, критерии, ход перепроверки. */

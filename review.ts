@@ -95,6 +95,15 @@ export function isMerged(t: Task, target: string, commit?: string): { ok: boolea
   return { ok: false, how: commit ? `коммита ${commit} нет в ${targets.join(" / ")}` : `ветка ${t.branch ?? "?"} не влита в ${targets.join(" / ")} (squash-слияние — передай commit: <хэш коммита в ${target}>)` }
 }
 
+/** Файл в ветке (git show ветка:путь) или undefined. */
+export function fileAt(dir: string, ref: string, file: string): string | undefined {
+  try {
+    return git(dir, ["show", `${ref}:${file}`])
+  } catch {
+    return undefined
+  }
+}
+
 /** Шаги очистки по настройке проекта — текстом для приёмщика. */
 export function cleanupSteps(t: Task, cfg: PeersConfig): string[] {
   if (cfg.cleanup === "none") return []
@@ -132,6 +141,7 @@ export function cleanupDone(t: Task, cfg: PeersConfig): { ok: boolean; left: str
 
 /** Письмо приёмщику. */
 export function reviewLetter(t: Task, cfg: PeersConfig): string {
+  if (t.plan?.approval && t.plan.approval.decision !== "no") return planMergeLetter(t, cfg)
   if (t.plan) return planReviewLetter(t, cfg)
   const steps = cfg.acceptance.length
     ? cfg.acceptance.map((a) => `  ${a.id}${a.required ? " (обязательно)" : ""}: ${a.text}`).join("\n")
@@ -179,6 +189,27 @@ export function planReviewLetter(t: Task, cfg: PeersConfig): string {
   ]
     .filter(Boolean)
     .join("\n")
+}
+
+/** Письмо приёмщику согласованного плана: записать решение владельца и влить (план 012, шаг 3). */
+export function planMergeLetter(t: Task, cfg: PeersConfig): string {
+  const p = t.plan!
+  const a = p.approval!
+  const yes = a.decision === "ok"
+  const day = new Date(a.at).toISOString().slice(0, 10)
+  return [
+    `ВЛИТЬ СОГЛАСОВАННЫЙ ПЛАН ${p.n} (задача #${t.n} «${t.title}»). Владелец ${day}: ${yes ? "согласован без упрощений" : "согласован, упрощения — как в плане"}.`,
+    `ФАЙЛ: ${p.file}${t.worktree ? ` в worktree ${t.worktree}, ветка ${t.branch}` : ""}.`,
+    "ВПИШИ В ПЛАН (коммитом в ветку задачи):",
+    `  — в «Режим выполнения»: «Без упрощений: ${yes ? "ДА" : "НЕТ"} — владелец, ${day}»;`,
+    `  — в «Решения владельца»: строку «план согласован${yes ? " без упрощений" : ", упрощения — как в плане"} | ${day}»;`,
+    "  — в шапке: «**Статус:** 🟡 В РАБОТЕ».",
+    "ПОРЯДОК:",
+    `  1) peer_task {action: "review", n: ${t.n}}; шаги approval-written и form — check по каждому;`,
+    `  2) peer_task {action: "merge", n: ${t.n}} (замок вливания), влей ветку в ${cfg.targetBranch} и запушь;`,
+    `  3) peer_task {action: "accept", n: ${t.n}} — плагин прочтёт план в ${cfg.targetBranch}: форма и ответ «Без упрощений» должны сойтись с решением владельца; затем очистка и cleaned.`,
+    "После cleaned плагин сам поставит задачи по шагам плана.",
+  ].join("\n")
 }
 
 /** Письмо исполнителю: на доработку. */

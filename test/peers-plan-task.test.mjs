@@ -2,7 +2,7 @@
 // peer_spawn {kind: "plan"} -> the executor writes the plan file; a report with a bad form is refused; the plan is
 // rechecked in rounds, each by a new session; blocking/significant remarks return it to the author; two clean rounds
 // in a row send it to the owner for approval.
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { execFileSync } from "node:child_process"
@@ -24,6 +24,8 @@ git(proj, "commit", "-q", "-m", "init")
 
 const mod = await import("../index.ts")
 const tasks = await import("../tasks.ts")
+const core = await import("../core.ts")
+const approvals = await import("../approvals.ts")
 const tools = {}
 const hooks = {}
 const events = {}
@@ -46,6 +48,11 @@ const ctx = {
   tool: { transform: async (fn) => fn({ add: (t) => (tools[t.name] = t) }) },
   events: { on: async (name, cb) => (events[name] = cb) },
 }
+const WPID = 515151
+mkdirSync(core.WINDOWS, { recursive: true })
+const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now(), tabs: [] }))
+beat()
+const heart = setInterval(beat, 300)
 const stop = await mod.default.setup(ctx)
 let fail = 0
 const cell = (name, ok, detail) => {
@@ -129,6 +136,49 @@ const v3 = await roundBy(r3, { blocking: 0, significant: 0, cosmetic: 0 })
 cell("two clean rounds in a row: the plan goes to the owner", task().status === "approval" && /согласование владельцу/.test(v3), JSON.stringify({ st: task().status, v3 }))
 cell("the history records every round", task().history.filter((h) => /перепроверка: раунд/.test(h.note ?? "")).length === 3, JSON.stringify(task().history.map((h) => h.note)))
 
+// 5. the owner is notified; /plans writes the decision; "return" -> the author gets the owner's remarks
+const notices = () => {
+  try {
+    return readdirSync(path.join(core.NOTICES, String(WPID))).map((f) => JSON.parse(readFileSync(path.join(core.NOTICES, String(WPID), f), "utf8")))
+  } catch {
+    return []
+  }
+}
+await until(() => notices().some((n) => /План 8 ждёт согласования/.test(n.title)), 60_000)
+cell("the owner gets a notice: the plan waits for approval", notices().some((n) => /План 8 ждёт согласования/.test(n.title) && n.attention), JSON.stringify(notices()))
+approvals.writeApproval({ project: "proj", n: 1, decision: "no", text: "добавь фазу замера до правки" })
+await until(() => task().status === "rework")
+await wait(600)
+await until(() => got(ex, "ЗАМЕЧАНИЯ ВЛАДЕЛЬЦА к плану 8").length > 0)
+cell("'return with remarks': the plan goes back with the owner's words, rounds start over", task().status === "rework" && task().plan.clean === 0 && got(ex, "ЗАМЕЧАНИЯ ВЛАДЕЛЬЦА к плану 8").length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === ex).map((d) => d.text.slice(0, 120))))
+await report("добавил фазу замера")
+for (let i = 0; i < 2; i++) {
+  await until(() => task().reviewer && !task().reviewers.includes(task().reviewer) && sessions.has(task().reviewer))
+  await roundBy(task().reviewer, { blocking: 0, significant: 0, cosmetic: 0 })
+}
+cell("two clean rounds again: back to the owner", task().status === "approval", task().status)
+
+// 6. "approve without shortcuts": a merge reviewer writes the decision into the plan and merges; accept checks main
+approvals.writeApproval({ project: "proj", n: 1, decision: "ok" })
+await until(() => task().status === "submitted" && task().reviewer && sessions.has(task().reviewer))
+const rm = task().reviewer
+await until(() => got(rm, "ВЛИТЬ СОГЛАСОВАННЫЙ ПЛАН 8").length > 0)
+cell("the merge reviewer gets the approved plan to write the decision in and merge", got(rm, "ВЛИТЬ СОГЛАСОВАННЫЙ ПЛАН 8").length === 1 && got(rm, "Без упрощений: ДА").length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === rm).map((d) => d.text.slice(0, 200))))
+await call("peer_task", rm, { action: "review", n: 1 })
+const roundAfter = await call("peer_task", rm, { action: "round", n: 1, blocking: 0, significant: 0, cosmetic: 0 })
+cell("no more rounds after approval", /уже согласован/.test(roundAfter), roundAfter)
+for (const step of task().steps.map((s) => s.id)) await call("peer_task", rm, { action: "check", n: 1, step, result: "ok" })
+await call("peer_task", rm, { action: "merge", n: 1 })
+git(proj, "merge", "-q", "--no-edit", t1.branch)
+const noAnswer = await call("peer_task", rm, { action: "accept", n: 1 })
+cell("accept is refused while the plan in main lacks the owner's answer", /Без упрощений: ДА/.test(noAnswer) && task().status === "reviewing", noAnswer)
+writeFileSync(file, readFileSync(file, "utf8").replace("Без упрощений: ❔ — вопрос владельцу", "Без упрощений: ДА — владелец, 2026-10-06"))
+git(t1.worktree, "commit", "-q", "-am", "plan 8: the owner's answer")
+git(proj, "merge", "-q", "--no-edit", t1.branch)
+const acc = await call("peer_task", rm, { action: "accept", n: 1 })
+cell("with the answer in main the plan is accepted", task().status === "accepted", acc)
+
+clearInterval(heart)
 stop?.()
 try {
   rmSync(tmp, { recursive: true, force: true })

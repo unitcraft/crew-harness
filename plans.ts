@@ -227,6 +227,12 @@ export const PLAN_ACCEPTANCE: { id: string; text: string; required: boolean }[] 
   { id: "b6-form", text: "нет оценок сроков и повторов абзацев; отметки — значком и словом по форме плана", required: true },
 ]
 
+/** Шаги приёмки согласованного плана: записать решение владельца и влить (план 012, шаг 3). */
+export const PLAN_MERGE_ACCEPTANCE: { id: string; text: string; required: boolean }[] = [
+  { id: "approval-written", text: "в плане записано решение владельца: в «Режиме выполнения» — «Без упрощений: ДА/НЕТ — владелец, дата», строка в «Решения владельца», Статус — 🟡 В РАБОТЕ", required: true },
+  { id: "form", text: "форма плана в порядке: плагин проверит файл в целевой ветке при accept", required: true },
+]
+
 /** Номер нового плана: следующий после занятых файлами папки планов и открытыми задачами-планами; подплан — «родитель.k». */
 export function nextPlanNumber(fileNames: string[], reserved: string[], parent?: string): string {
   const tokens = [...fileNames.map((f) => /^(\d+(?:\.\d+)*)[-_.]/.exec(f)?.[1]).filter(Boolean), ...reserved] as string[]
