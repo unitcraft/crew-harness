@@ -28,7 +28,7 @@ function PeersBlock(props: { api: any; sessionID?: string }) {
   return (
     <box flexDirection="column" marginTop={1}>
       <text fg={color("base")}>{view().title}</text>
-      <For each={view().rows}>{(r) => <text fg={color(r.tone)}>{`${r.mark} ${r.who.padEnd(14).slice(0, 14)} ${r.what}`}</text>}</For>
+      <For each={view().rows}>{(r) => <text fg={color(r.tone)}>{`${r.mark} ${r.who.padEnd(9).slice(0, 9)} ${r.what}`}</text>}</For>
       <text fg={color("muted")}>{view().foot}</text>
     </box>
   )

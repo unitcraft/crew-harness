@@ -179,6 +179,29 @@ cell("reminders up to push_max", reminders() === 15 && obl()?.nudges === 8, `${r
 await turn({ tools: true })
 cell("over push_max: stuck, a call 'reminders without an answer'", obl()?.stuck === true && got("sesINTEG1", "8 напоминаний остались без ответа").length === 1 && reminders() === 15, JSON.stringify(obl()))
 
+// 5b. waiting the honest way (2026-10-06): an open peer_watch or a question waiting for its answer -> no
+// reminders (executor #17 of nova got one a minute while waiting for a commit in main and took to polling in Bash)
+{
+  await call("peer_task", "sesINTEG1", { action: "push", n: 1 })
+  const watch = await import("../watch.ts")
+  const w = watch.requestWatch({ session: "sesWORK01", command: "sleep 4", cwd: proj, note: "хеш в main", minutes: 5 })
+  await wait(600)
+  const r0 = reminders()
+  await turn()
+  await turn()
+  cell("an open peer_watch: no reminders", reminders() === r0, reminders() - r0)
+  for (let i = 0; i < 40 && !got("sesWORK01", "хеш в main").length; i++) await wait(250)
+  cell("the watch's end wakes the tab", got("sesWORK01", "хеш в main").length >= 1, JSON.stringify(delivered.filter((d) => d.sessionID === "sesWORK01").map((d) => d.text.slice(0, 80))))
+  await turn()
+  cell("after the watch the reminders are back", reminders() === r0 + 1, reminders() - r0)
+  cell("the reminder says how to wait", /peer_watch/.test(got("sesWORK01", "Не завершено").at(-1)?.text ?? ""), got("sesWORK01", "Не завершено").at(-1)?.text)
+  await call("peer_send", "sesWORK01", { to: "sesINTEG1", text: "какой хеш влит в main?", expect_reply: true })
+  const r1 = reminders()
+  await turn()
+  cell("a question waiting for its answer: no reminders", reminders() === r1, reminders() - r1)
+  void w
+}
+
 // 6. the answer settles it
 await call("peer_task", "sesINTEG1", { action: "push", n: 1 })
 await call("peer_send", "sesWORK01", { to: "sesINTEG1", text: "парсер готов", reply_to: task.qid })

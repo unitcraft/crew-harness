@@ -80,6 +80,9 @@ export type Task = {
   review_letter?: string
   /** отчёт приёмщика по шагам приёмки и коммит вливания */
   checks?: Record<string, string>
+  /** шаги приёмки проекта на момент review (их ход видно в окне) и шаг, который приёмщик проверяет сейчас */
+  steps?: { id: string; text: string; required?: boolean }[]
+  checking?: { step: string; at: number }
   commit?: string
   /** влитый коммит (его ветки и worktree проверяет очистка) */
   merged_head?: string
@@ -92,8 +95,17 @@ export const taskFile = (project: string, n: number) => path.join(TASKS, safeKey
 export const loadTask = (project: string, n: number) => readJson<Task>(taskFile(project, n))
 export const isOpen = (t?: Task) => !!t && OPEN_STATUSES.includes(t.status)
 
+// задача изменилась — сводка окна (status/) обновится на ближайшем проходе, а не через 15 с (шаги приёмки видно сразу)
+let changed = false
+export function tasksChanged(): boolean {
+  const c = changed
+  changed = false
+  return c
+}
+
 export function saveTask(t: Task) {
   t.updated = Date.now()
+  changed = true
   const file = taskFile(t.project, t.n)
   mkdirSync(path.dirname(file), { recursive: true })
   const tmp = `${file}.${process.pid}.${Date.now()}.tmp`

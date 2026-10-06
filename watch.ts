@@ -38,6 +38,8 @@ export type Watch = {
   started?: number
   ended?: number
   code?: number | null
+  /** снято: задача закрыта */
+  dropped?: boolean
 }
 
 const file = (id: string, ext: string) => path.join(WATCHES, `${id}${ext}`)
@@ -194,6 +196,23 @@ export function pollWatches(post: (w: Watch, text: string) => void, log: (s: str
 }
 
 /** Все незавершённые наблюдения, по сессиям — одним чтением папки (сводка состояния, план 009). */
+/** Снять наблюдение без письма: его задача закрыта (2026-10-06: наблюдение приёмщика #3 nova жило 10 ч после
+ *  очистки задачи). Запущенное — убить вместе с деревом процессов. */
+export function dropWatch(w: Watch, log: (s: string) => void = () => {}, now = Date.now()) {
+  if (w.status === "requested") {
+    rmSync(file(w.id, ".req.json"), { force: true })
+  } else if (w.pid && pidAlive(w.pid)) {
+    try {
+      if (process.platform === "win32") execFileSync("taskkill", ["/T", "/F", "/PID", String(w.pid)], { stdio: "ignore", windowsHide: true, timeout: 10_000 })
+      else process.kill(-w.pid, "SIGTERM")
+    } catch (e) {
+      log(`watch ${w.id}: не остановилось: ${e}`)
+    }
+  }
+  writeAtomic(file(w.id, ".json"), { ...w, status: "done", ended: now, code: null, dropped: true })
+  log(`watch ${w.id} dropped (${w.session})`)
+}
+
 export function openWatchesBySession(): Map<string, Watch[]> {
   const out = new Map<string, Watch[]>()
   if (!existsSync(WATCHES)) return out

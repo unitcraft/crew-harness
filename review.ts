@@ -150,10 +150,13 @@ export function reviewLetter(t: Task, cfg: PeersConfig): string {
     `ШАГИ ПРИЁМКИ:\n${steps}`,
     `ПОРЯДОК:`,
     `  1) peer_task {action: "review", n: ${t.n}} — начал приёмку (исполнитель узнает без пробуждения);`,
-    `  2) нашёл ошибки — peer_task {action: "rework", n: ${t.n}, text: "что исправить"} (вернётся тебе на повторную приёмку);`,
-    `  3) всё зелёное — peer_task {action: "merge", n: ${t.n}} (замок вливания проекта), влей в ${cfg.targetBranch} и запушь, затем`,
-    `     peer_task {action: "accept", n: ${t.n}, checks: {${cfg.acceptance.map((a) => `"${a.id}": "чем подтверждено"`).join(", ")}}, commit: "<хэш в ${cfg.targetBranch}, если squash>"};`,
-    `  4) плагин сам проверит, что влито, и выдаст шаги очистки; сделал — peer_task {action: "cleaned", n: ${t.n}}.`,
+    cfg.acceptance.length
+      ? `  2) КАЖДЫЙ ШАГ — по очереди, владелец видит ход в окне: peer_task {action: "check", n: ${t.n}, step: "<шаг>"} перед проверкой шага, после — {action: "check", n: ${t.n}, step: "<шаг>", result: "чем подтверждено"};`
+      : "",
+    `  ${cfg.acceptance.length ? "3" : "2"}) нашёл ошибки — peer_task {action: "rework", n: ${t.n}, text: "что исправить"} (вернётся тебе на повторную приёмку);`,
+    `  ${cfg.acceptance.length ? "4" : "3"}) всё зелёное — peer_task {action: "merge", n: ${t.n}} (замок вливания проекта), влей в ${cfg.targetBranch} и запушь, затем`,
+    `     peer_task {action: "accept", n: ${t.n}${cfg.acceptance.length ? "" : ", checks: {\"<критерий>\": \"чем подтверждено\"}"}, commit: "<хэш в ${cfg.targetBranch}, если squash>"} (отмеченные шаги засчитаны);`,
+    `  ${cfg.acceptance.length ? "5" : "4"}) плагин сам проверит, что влито, и выдаст шаги очистки; сделал — peer_task {action: "cleaned", n: ${t.n}}.`,
   ]
     .filter(Boolean)
     .join("\n")

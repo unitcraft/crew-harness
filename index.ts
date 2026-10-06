@@ -67,6 +67,7 @@ import {
   readJson,
   cardFile,
   allCards,
+  asksOpen,
   saveCard,
   pidAlive,
   postLetter,
@@ -99,9 +100,9 @@ import {
   propagateToParent,
   PLUGIN_SENDER,
 } from "./core.ts"
-import { openWatchesBySession, pollWatches } from "./watch.ts"
+import { dropWatch, openWatchesBySession, pollWatches, watchesOf } from "./watch.ts"
 import { endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
-import { type Task, byPriority, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
+import { type Task, byPriority, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
 import { ensureWorktree, gitTraces, leftoversOf, mergeHolder, reviewLetter } from "./review.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
@@ -300,6 +301,18 @@ export default {
           if (askers.length) return // не «продолжай»: ждёт ответа
         }
       }
+      // ЖДЁТ ПО-ЧЕСТНОМУ (2026-10-06, дополнение к плану 007): у вкладки открыто наблюдение peer_watch или её вопрос ждёт
+      // ответа (expect_reply) — её разбудят концом наблюдения или ответом. Раньше «Не завершено» шло на каждый конец хода:
+      // исполнитель #17 nova, ждавший чужой коммит в main, получал его раз в минуту (ход ~220 тыс. токенов) и в ответ стал
+      // ждать опросом в Bash, держа ход по 9 минут.
+      if (!turn?.owner) {
+        const watching = watchesOf(card.session).length > 0
+        const asking = !watching && asksOpen(card.session)
+        if (watching || asking) {
+          log(`nudge skipped ${card.session}: waits for ${watching ? "a watch" : "a reply"}`)
+          return
+        }
+      }
       let changed = false
       for (const o of list) {
         if (o.stuck) continue
@@ -345,6 +358,7 @@ export default {
           text:
             `Не завершено: ${what} от ${o.from_role} (сессия ${o.from_session}). Ты остановился, не закончив. Продолжай работу. ` +
             howTo +
+            ` Ждёшь внешнего (коммит в main, чужую задачу, сборку) — peer_watch {command: "<ждёт и выходит>", note} или вопрос с expect_reply: пока они открыты, напоминаний нет, разбудят по итогу. Опросом в Bash не жди — он держит ход.` +
             (o.empty ? ` Ход без работы ${o.empty} из ${cfg.pushEmptyTurns}: дальше спросивший узнает, что вкладка стоит.` : ""),
         })
         log(`nudge ${card.session} for ${o.qid} (#${o.nudges}, empty ${o.empty})`)
@@ -429,6 +443,20 @@ export default {
     // закрываются: строка в историю без хода, уведомление интегратору. Только когда ход сессии не идёт: строка,
     // записанная посреди хода, стала бы ещё одним шагом модели (замер 2026-10-05).
     async function finishTasks() {
+      // наблюдения сессий закрытой задачи больше не нужны: снять (иначе висят до предела, до 12 ч, и держат очередь машины)
+      const open = openWatchesBySession()
+      if (open.size)
+        for (const t of listTasks()) {
+          if (t.status !== "cleaned" && t.status !== "cancelled") continue
+          for (const sid of new Set([t.executor, t.reviewer, ...t.executors, ...(t.reviewers ?? [])].filter(Boolean) as string[])) {
+            const ws = open.get(sid)
+            if (!ws) continue
+            const c = readJson<Card>(cardFile(sid))
+            const other = [c?.task, c?.review].some((r) => r && (r.project !== t.project || r.n !== t.n) && isOpen(loadTask(r.project, r.n) ?? ({ status: "closed" } as Task)))
+            if (other) continue // сессия уже на другой открытой задаче
+            for (const w of ws) dropWatch(w, log)
+          }
+        }
       for (const t of listTasks()) {
         if (t.status !== "cleaned" && t.status !== "cancelled") continue
         const sessions = [t.executor, t.reviewer, ...t.executors, ...(t.reviewers ?? [])].filter(Boolean) as string[]
@@ -439,15 +467,19 @@ export default {
           c.spawned.status = "closed"
           saveCard(c)
           const done = t.status === "cleaned"
+          // отчёт приёмки по шагам — в конце истории вкладки (владелец: «+ отчёт в конце»)
+          const ids = t.steps?.length ? t.steps.map((a) => a.id) : Object.keys(t.checks ?? {})
+          const passed = ids.filter((id) => t.checks?.[id]).length
+          const report = ids.length ? `\nОтчёт приёмки — шаги ${passed}/${ids.length}:\n${ids.map((id) => `${t.checks?.[id] ? "✓" : "–"} ${id}: ${t.checks?.[id] ?? "не отмечен (необязательный)"}`).join("\n")}` : ""
           try {
-            const note = { sessionID: sid, text: done ? `✓✓ Задача #${t.n} принята и влита. Сессия закрыта — письма больше не приходят.` : `✗ Задача #${t.n} отменена. Сессия закрыта — письма больше не приходят.`, resume: false }
+            const note = { sessionID: sid, text: done ? `✓✓ Задача #${t.n} принята и влита. Сессия закрыта — письма больше не приходят.${report}` : `✗ Задача #${t.n} отменена. Сессия закрыта — письма больше не приходят.`, resume: false }
             await (typeof ctx.session.synthetic === "function" ? ctx.session.synthetic(note) : ctx.session.prompt(note)) // строка в историю, без хода
           } catch (e) {
             log(`final note failed ${sid}: ${e}`)
           }
           if (sid === t.executor) {
             const w = tabOf(t.author)
-            if (w?.window.pid) postNotice(w.window.pid, { sessionID: sid, title: done ? `#${t.n} ✓✓ готово` : `#${t.n} ✗ отменена`, message: short(t.title, 80), duration: 10_000 })
+            if (w?.window.pid) postNotice(w.window.pid, { sessionID: sid, title: done ? `#${t.n} ✓✓ готово${ids.length ? ` · шаги ${passed}/${ids.length}` : ""}` : `#${t.n} ✗ отменена`, message: done && ids.length ? `${short(t.title, 60)} · отчёт — /peers` : short(t.title, 80), duration: 10_000 })
           }
           log(`task #${t.n} (${t.project}) ${t.status}: session ${sid} closed`)
         }
@@ -602,7 +634,7 @@ export default {
     const ends = new Map<string, { at: number; end: Awaited<ReturnType<typeof turnEnd>> }>()
     let statusAt = 0
     async function syncStatus() {
-      if (now() - statusAt < STATUS_EVERY_MS) return
+      if (!tasksChanged() && now() - statusAt < STATUS_EVERY_MS) return
       statusAt = now()
       const windows = liveWindows()
       const t = now()

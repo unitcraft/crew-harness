@@ -610,6 +610,21 @@ export function waitingIn(keys: string[]): number {
   return n
 }
 
+/** Вопрос вкладки (expect_reply) ещё ждёт ответа: письмо не доставлено или получатель его должен. */
+export function asksOpen(session: string): boolean {
+  if (existsSync(INBOX))
+    for (const d of readdirSync(INBOX)) {
+      try {
+        for (const f of readdirSync(path.join(INBOX, d))) {
+          if (!f.endsWith(".json")) continue
+          const l = readJson<Letter>(path.join(INBOX, d, f))
+          if (l?.from_session === session && l.qid) return true
+        }
+      } catch {}
+    }
+  return allCards().some((x) => x.session !== session && obligationsOf(x.session).some((o) => o.from_session === session && !o.task && !o.stuck))
+}
+
 export function pidAlive(pid: number): boolean {
   if (!pid) return false
   try {
@@ -833,7 +848,7 @@ push_empty_turns (3) пустых подряд или push_max (20) напоми
 ПРИЁМКА. Исполнитель обязан прислать отчёт ответом на qid задачи (reply_to); прислал — задача сдана (интегратора отчёт не
 будит), второй отчёт не отправляется. Сданную задачу проверяет и вливает ПРИЁМЩИК — свободная открытая вкладка worker
 (не автор, не исполнитель) или новая сессия; при reviewer: integrator — сам интегратор. Интегратор принятое не
-перепроверяет. Приёмщик: peer_task review → rework {text} | merge (замок вливания проекта) → accept {checks, commit?}
+перепроверяет. Приёмщик: peer_task review → rework {text} | check {step} → проверка → check {step, result} по каждому шагу (ход видно в окне) → merge (замок вливания проекта) → accept {commit?}
 (плагин проверит обязательные шаги приёмки и что ветка или коммит в целевой ветке) → очистка → cleaned (плагин
 проверит, что worktree и ветка удалены). Потом сессии задачи закрываются, интегратору тихая сводка.
 
@@ -1351,13 +1366,15 @@ export function makeTools(host: PeersHost): PeerTool[] {
   const peerTask: PeerTool = {
     name: "peer_task",
     description:
-      "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), show {n} (details and history), and for the integrator: assign {session, goal, criteria, ...} (give a task to an existing tab instead of a new session), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done), cancel {n, text?}, priority {n, priority}, order {to: 'project.integrator', goal, criteria, ...} (work for another project: its integrator does it with its own tasks; the order follows them); for the task's reviewer: review {n} (start), merge {n} (the project's merge lock), rework {n, text}, accept {n, checks, commit?} (the plugin checks the required steps and that it is merged), cleaned {n} (the plugin checks the worktree and branch are gone).",
+      "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), show {n} (details and history), and for the integrator: assign {session, goal, criteria, ...} (give a task to an existing tab instead of a new session), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done), cancel {n, text?}, priority {n, priority}, order {to: 'project.integrator', goal, criteria, ...} (work for another project: its integrator does it with its own tasks; the order follows them); for the task's reviewer: review {n} (start), merge {n} (the project's merge lock), rework {n, text}, check {n, step} before checking a step and {n, step, result} after it (the owner sees the progress in the window), accept {n, checks?, commit?} (steps marked by check count; the plugin checks the required steps and that it is merged), cleaned {n} (the plugin checks the worktree and branch are gone).",
     input: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["list", "show", "assign", "order", "push", "reassign", "cancel", "priority", "review", "merge", "rework", "accept", "cleaned"] },
+        action: { type: "string", enum: ["list", "show", "assign", "order", "push", "reassign", "cancel", "priority", "review", "check", "merge", "rework", "accept", "cleaned"] },
         to: str("order: the other project's integrator, \"project.integrator\""),
         checks: { type: "object", description: "accept: report per acceptance step {step id: what proves it}", additionalProperties: { type: "string" } },
+        step: str("check: the acceptance step id"),
+        result: str("check: what proves the step (omit when starting the step)"),
         commit: str("accept: the commit in the target branch (squash merge); without it the task branch must be merged"),
         n: { type: "number", description: "Task number" },
         session: str("assign: the tab (session id) that takes the task"),
@@ -1449,19 +1466,42 @@ export function makeTools(host: PeersHost): PeerTool[] {
         return { content: lines.filter(Boolean).join("\n") }
       }
       // ДЕЙСТВИЯ ПРИЁМЩИКА (план 002, Ф.3): review, merge, rework, accept, cleaned — только приёмщик этой задачи.
-      if (["review", "merge", "rework", "accept", "cleaned"].includes(action)) {
+      if (["review", "check", "merge", "rework", "accept", "cleaned"].includes(action)) {
         if (t.reviewer !== me.session) return { content: `Приёмщик задачи #${t.n} — ${t.reviewer ?? "ещё не назначен"}; это действие только его.` }
         const tcfg = loadConfig(t.directory)
         const now = Date.now()
         const quiet = (to: string, id: string, text: string) => postLetter(to, { id, from_role: keyOf(me), from_session: me.session, to, time: now, wake: false, text })
         if (action === "review") {
           if (t.status !== "submitted" && t.status !== "reviewing") return { content: `Задача #${t.n} ${statusRu(t.status)} — начинать приёмку нечего.` }
+          t.steps = tcfg.acceptance.map((a) => ({ id: a.id, text: a.text, ...(a.required ? { required: true } : {}) }))
           if (t.status === "submitted") {
             taskEvent(t, me.session, "reviewing", `приёмка начата (${keyOf(me)})`)
             if (t.executor) quiet(t.executor, `review-start-${safeKey(project)}-${t.n}-${t.rework ?? 0}`, `Задача #${t.n} «${t.title}» на приёмке у ${keyOf(me)}. Жди: на доработку вернут письмом.`)
             if (t.executor) host.posted([t.executor])
           }
-          return { content: `Задача #${t.n} на приёмке. Шаги приёмки: ${tcfg.acceptance.map((a) => a.id).join(", ") || "критерии задачи"}. Дальше — rework {text} или merge → accept {checks}.` }
+          else saveTask(t)
+          return { content: `Задача #${t.n} на приёмке. Шаги приёмки: ${tcfg.acceptance.map((a) => a.id).join(", ") || "критерии задачи"}. Каждый шаг — в окне владельца: peer_task {action: "check", n: ${t.n}, step} перед проверкой шага, {step, result} — после. Дальше — rework {text} или merge → accept.` }
+        }
+        // шаг приёмки — по ходу проверки (2026-10-06): владелец видит прогресс в окне; accept засчитывает отмеченные
+        if (action === "check") {
+          if (t.status !== "reviewing") return { content: `Сначала peer_task {action: "review", n: ${t.n}} (задача сейчас ${statusRu(t.status)}).` }
+          const step = String(input.step ?? "").trim()
+          const result = String(input.result ?? "").trim()
+          if (!tcfg.acceptance.some((a) => a.id === step)) return { content: `Шага «${step}» в приёмке проекта нет. Шаги: ${tcfg.acceptance.map((a) => a.id).join(", ")}.` }
+          const i = tcfg.acceptance.findIndex((a) => a.id === step) + 1
+          if (!result) {
+            t.checking = { step, at: now }
+            saveTask(t)
+            host.posted([]) // проход плагина обновит окно сразу
+            return { content: `Шаг ${i}/${tcfg.acceptance.length} ${step} начат — владелец видит его в окне. Проверил — check {step: "${step}", result: "чем подтверждён"}.` }
+          }
+          t.checks = { ...(t.checks ?? {}), [step]: result }
+          if (t.checking?.step === step) delete t.checking
+          saveTask(t)
+          host.posted([])
+          const done = tcfg.acceptance.filter((a) => t.checks?.[a.id]).length
+          const left = tcfg.acceptance.filter((a) => a.required && !t.checks?.[a.id]).map((a) => a.id)
+          return { content: `Шаг ${step} отмечен (${done}/${tcfg.acceptance.length}).${left.length ? ` Осталось обязательных: ${left.join(", ")}.` : " Обязательные отмечены — дальше merge и accept."}` }
         }
         if (action === "merge") {
           if (t.status !== "reviewing") return { content: `Сначала peer_task {action: "review", n: ${t.n}} (задача сейчас ${statusRu(t.status)}).` }
@@ -1493,7 +1533,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
         if (action === "accept") {
           if (t.status !== "reviewing") return { content: `Принять можно задачу на приёмке (сейчас ${statusRu(t.status)}).` }
           if (!holdsMergeLock(project, me.session)) return { content: `Сначала замок вливания: peer_task {action: "merge", n: ${t.n}} — вливает один приёмщик за раз.` }
-          const checks: Record<string, string> = {}
+          const checks: Record<string, string> = { ...(t.checks ?? {}) } // отмеченные по ходу (check) засчитываются
           for (const [k, v] of Object.entries(input.checks ?? {})) if (String(v ?? "").trim()) checks[k] = String(v).trim()
           const missing = tcfg.acceptance.filter((a) => a.required && !checks[a.id])
           if (missing.length) return { content: `Не принято: нет отчёта по обязательным шагам приёмки: ${missing.map((a) => `${a.id} (${a.text})`).join("; ")}. Передай checks: {"<шаг>": "чем подтверждено"}.` }
@@ -1501,6 +1541,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
           const m = isMerged(t, tcfg.targetBranch, commit)
           if (!m.ok) return { content: `Не принято: ${m.how}. Влей и запушь, затем снова accept.` }
           t.checks = checks
+          delete t.checking
           t.commit = commit
           t.merged_head = m.head
           releaseMergeLock(project, me.session)
@@ -1705,6 +1746,17 @@ export function makeTools(host: PeersHost): PeerTool[] {
 }
 
 /** Письмо с задачей исполнителю. */
+// ШАГИ ПРИЁМКИ — И ИСПОЛНИТЕЛЮ (2026-10-06, дополнение к плану 002). Раньше их видел только приёмщик: исполнитель
+// nv-lang узнавал о фикстуре, пробе «подсунь негодное», строке реестра, отчёте по образцу лишь на доработке (у #2 —
+// четвёртый круг). Теперь письмо с задачей их перечисляет: делай сразу то, что проверят.
+function acceptanceForExecutor(t: Task): string {
+  let steps: { id: string; text: string; required?: boolean }[] = []
+  try {
+    steps = loadConfig(t.directory).acceptance
+  } catch {}
+  if (!steps.length) return ""
+  return `ПРИЁМЩИК ПРОВЕРИТ (шаги приёмки проекта — сделай и опиши в отчёте сразу, иначе вернут на доработку):\n${steps.map((a) => `  ${a.id}${a.required ? "" : " (по желанию)"}: ${a.text}`).join("\n")}`
+}
 export function formatTaskLetter(t: Task): string {
   return [
     `ЗАДАЧА #${t.n} «${t.title}» от ${t.author_role} (сессия ${t.author}), приоритет ${t.priority}.`,
@@ -1720,6 +1772,7 @@ export function formatTaskLetter(t: Task): string {
           ? `ВЕТКА: ${t.branch}.`
           : "",
     t.handoff ? `СДЕЛАНО ПРЕЖНИМ ИСПОЛНИТЕЛЕМ (задача передана тебе):\n${t.handoff}` : "",
+    acceptanceForExecutor(t),
     `Когда закончишь — отчёт: peer_send {to: "${t.author}", reply_to: "${t.qid}", text: "что сделано, как проверено, что осталось"}. Упрёшься — тем же ответом напиши, что мешает. Пока отчёта нет, задача открыта: остановишься без него — получишь напоминание.`,
   ]
     .filter(Boolean)

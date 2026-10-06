@@ -33,12 +33,24 @@ export type Status = {
   watches: { id: string; note?: string; started?: number; minutes: number }[]
   asked: { qid: string; to: string; at: number }[]
   /** Своя задача (исполнитель или приёмщик). */
-  task?: { n: number; status: string; as: "executor" | "reviewer"; title: string }
+  task?: { n: number; status: string; as: "executor" | "reviewer"; title: string; steps?: StepView[]; checking?: string }
   /** Открытые задачи, поставленные этой сессией. */
   tasks: { n: number; status: string; priority: string; title: string }[]
   /** Когда владельцу последний раз показали «ждёт вас» (повтор по owner_reminder_min). */
   notified?: number
   updated: number
+}
+
+/** Шаг приёмки задачи в окне: result — итог (шаг пройден), без него — ещё нет. */
+export type StepView = { id: string; text: string; result?: string }
+const stepsOf = (t: Task): StepView[] | undefined => t.steps?.length ? t.steps.map((a) => ({ id: a.id, text: a.text, ...(t.checks?.[a.id] ? { result: t.checks[a.id] } : {}) })) : undefined
+/** «проверка 3/13: fixture» — шаг, который приёмщик проверяет сейчас, или «шаги 5/13», когда между шагами. */
+export function stepProgress(task: Status["task"]): string | undefined {
+  if (!task?.steps?.length || !["reviewing", "accepted"].includes(task.status)) return undefined
+  const total = task.steps.length
+  const i = task.checking ? task.steps.findIndex((a) => a.id === task.checking) : -1
+  if (i >= 0 && !task.steps[i].result) return `проверка ${i + 1}/${total}: ${task.checking}`
+  return `шаги ${task.steps.filter((a) => a.result).length}/${total}`
 }
 
 /** Ответ кончается вопросом: строка с «?» в конце среди последних трёх непустых строк (за ней бывает подпись). */
@@ -83,7 +95,7 @@ export function statusOf(x: StatusInput): Status {
     detail: "свободна",
     watches: watches.map((w) => ({ id: w.id, note: w.note, started: w.started, minutes: w.minutes })),
     asked: x.asked,
-    ...(own ? { task: { n: own.n, status: own.status, as: card.task ? ("executor" as const) : ("reviewer" as const), title: own.title } } : {}),
+    ...(own ? { task: { n: own.n, status: own.status, as: card.task ? ("executor" as const) : ("reviewer" as const), title: own.title, ...(stepsOf(own) ? { steps: stepsOf(own) } : {}), ...(own.checking ? { checking: own.checking.step } : {}) } } : {}),
     tasks: authored.map((t) => ({ n: t.n, status: t.status, priority: t.priority, title: t.title })),
     updated: now,
   }
@@ -178,11 +190,35 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
     for (const s of items) {
       const who = s.task ? s.title : `${s.role}${s.title && s.title !== s.session ? ` · ${s.title}` : ""}`
       const model = s.model ? ` [${s.model.replace(/^.*\//, "")}]` : ""
-      out.push(`  ${s.state === "owner" ? "▶ " : ""}${who.slice(0, 60)}${model} — ${s.detail}`)
+      const prog = s.task?.as === "reviewer" ? stepProgress(s.task) : undefined
+      out.push(`  ${s.state === "owner" ? "▶ " : ""}${who.slice(0, 60)}${model} — ${s.detail}${prog ? ` · ${prog}` : ""}`)
+      if (prog) for (const a of s.task!.steps!) out.push(`      ${a.result ? "✓" : a.id === s.task!.checking ? "▶" : "·"} ${a.id}: ${short(a.result ?? a.text, 90)}`)
     }
+    out.push(...acceptanceReports(p, now))
   }
   out.push(`(${hm(now)}; обновляется раз в несколько секунд)`)
   return out.join("\n")
+}
+
+const short = (x: string, n: number) => {
+  const one = x.replace(/\s+/g, " ").trim()
+  return one.length > n ? `${one.slice(0, n - 1)}…` : one
+}
+const REPORT_MS = 24 * 3_600_000
+/** Отчёты приёмки за сутки: задачи, принятые с шагами, — каждый шаг с тем, чем подтверждён (владелец: «+ отчёт в конце»). */
+export function acceptanceReports(project: string, now = Date.now()): string[] {
+  let done: Task[] = []
+  try {
+    done = listTasks(project).filter((t) => ["accepted", "cleaned"].includes(t.status) && t.checks && now - t.updated < REPORT_MS)
+  } catch {}
+  const out: string[] = []
+  for (const t of done.sort((a, b) => b.updated - a.updated).slice(0, 3)) {
+    const ids = t.steps?.length ? t.steps.map((a) => a.id) : Object.keys(t.checks!)
+    const ok = ids.filter((id) => t.checks![id]).length
+    out.push(`  отчёт приёмки #${t.n} «${short(t.title, 50)}» — ${t.status === "cleaned" ? "влита" : "принята"} ${hm(t.updated)}, шаги ${ok}/${ids.length}:`)
+    for (const id of ids) out.push(`      ${t.checks![id] ? "✓" : "–"} ${id}: ${short(t.checks![id] ?? "не отмечен (необязательный)", 90)}`)
+  }
+  return out
 }
 
 // БОКОВАЯ ПАНЕЛЬ ОКНА (план 010, 2026-10-06; владелец: «в этой области можно выводить активные сессии и обновлять в
@@ -193,7 +229,8 @@ const WORD_OF_TASK: Record<string, string> = { submitted: "✓ сдана", revi
 const SIDE_MAX = 9
 export function sidebarLines(list: Status[], now = Date.now(), project?: string): { title: string; rows: SideRow[]; foot: string } {
   const mine = project ? list.filter((s) => (s.project ?? "?") === project) : list
-  const who = (s: Status) => (s.task ? `#${s.task.n} ${s.task.as === "reviewer" ? "приёмщик" : "исполнитель"}` : s.role === "integrator" ? "интегратор" : s.role)
+  // панель узкая (~32 знака): кто — до 9 знаков, что — до 20, иначе строка переносится
+  const who = (s: Status) => (s.task ? `#${s.task.n} ${s.task.as === "reviewer" ? "прм" : "исп"}` : s.role === "integrator" ? "интегр." : s.role.slice(0, 9))
   const what = (s: Status): string => {
     switch (s.state) {
       case "owner":
@@ -203,7 +240,7 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string)
       case "working":
         return s.since ? `работает ${minutes(s.since, now)}` : "работает"
       case "watch":
-        return `ждёт: ${(s.watches[0]?.note ?? "наблюдение").slice(0, 22)}`
+        return s.watches[0] && !s.watches[0].started ? `⧗ очередь: ${s.watches[0].note ?? "машина"}` : `⧗ ${s.watches[0]?.note ?? "наблюдение"}`
       case "reply":
         return `ждёт ответа от ${s.asked[0]?.to ?? "?"}`
       case "task":
@@ -215,14 +252,24 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string)
     }
   }
   const sorted = mine.slice().sort((a, b) => ORDER[a.state] - ORDER[b.state] || who(a).localeCompare(who(b)))
-  const rows = sorted.slice(0, SIDE_MAX).map((s) => ({
-    mark: s.state === "owner" ? "▶" : s.state === "question" ? "?" : s.state === "working" ? "•" : " ",
-    who: who(s),
-    what: what(s),
-    tone: (s.state === "owner" || s.state === "question" ? "accent" : s.state === "idle" ? "muted" : "base") as SideRow["tone"],
-  }))
+  const rows: SideRow[] = []
+  for (const s of sorted.slice(0, SIDE_MAX)) {
+    // приёмка по шагам: «проверка 3/13: fixture» вместо «работает», под строкой — что проверяет шаг
+    const prog = s.state !== "owner" && s.state !== "question" ? stepProgress(s.task) : undefined
+    rows.push({
+      mark: s.state === "owner" ? "▶" : s.state === "question" ? "?" : s.state === "working" ? "•" : " ",
+      who: who(s),
+      what: short(prog ?? what(s), 20),
+      tone: (s.state === "owner" || s.state === "question" ? "accent" : s.state === "idle" ? "muted" : "base") as SideRow["tone"],
+    })
+    const cur = s.task?.as === "reviewer" && prog?.startsWith("проверка") ? s.task.steps!.find((a) => a.id === s.task!.checking) : undefined
+    if (cur) rows.push({ mark: " ", who: "", what: `↳ ${short(cur.text, 28)}`, tone: "muted" })
+  }
   const waiting = mine.filter((s) => s.state === "owner").length
+  // «ход» — модель думает сейчас; «ждут» — наблюдения (гейты, коммит в main), из них в очереди машины — ещё не запущены
   const working = mine.filter((s) => s.state === "working").length
-  const more = sorted.length > SIDE_MAX ? `и ещё ${sorted.length - SIDE_MAX} · /peers` : "/peers — подробно"
-  return { title: `Peers${project ? ` · ${project}` : ""}${waiting ? ` — ждут вас: ${waiting}` : ""}`, rows, foot: `работают ${working} · ${more}` }
+  const watching = mine.filter((s) => s.state === "watch").length
+  const queued = mine.filter((s) => s.state === "watch" && s.watches[0] && !s.watches[0].started).length
+  const more = sorted.length > SIDE_MAX ? ` · +${sorted.length - SIDE_MAX}` : ""
+  return { title: `Peers${project ? ` · ${project}` : ""}${waiting ? ` — ждут вас: ${waiting}` : ""}`, rows, foot: `ход ${working} · ждут ${watching}${queued ? ` (очередь ${queued})` : ""}${more} · /peers` }
 }

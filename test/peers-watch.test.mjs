@@ -75,4 +75,20 @@ const z1 = w.requestWatch({ session: "sesZ", command: "sleep 2", cwd: tmp, machi
 const z2 = w.requestWatch({ session: "sesZ", command: "sleep 2", cwd: tmp, machine: true, project: "Z" }, Date.now() + 1)
 w.pollWatches(post, () => {}, Date.now(), () => 0)
 assert.ok(started(z1.id) && started(z2.id), "machine_slots 0: no limit")
+// a closed task's watch is dropped: the process tree is killed, no letter, the queue frees up (2026-10-06)
+{
+  const d1 = w.requestWatch({ session: "sesD", command: "sleep 60", cwd: tmp, note: "orphan" })
+  const d2 = w.requestWatch({ session: "sesD", command: "sleep 60", cwd: tmp, machine: true, project: "D" }, Date.now() + 1)
+  w.pollWatches(post, () => {}, Date.now(), () => 1)
+  const run = JSON.parse(readFileSync(path.join(w.WATCHES, `${d1.id}.json`), "utf8"))
+  for (const x of w.watchesOf("sesD")) w.dropWatch(x)
+  const before = posted.filter((p) => p.session === "sesD").length
+  w.pollWatches(post, () => {}, Date.now(), () => 1)
+  let alive = true
+  try { process.kill(run.pid, 0) } catch { alive = false }
+  assert.equal(w.watchesOf("sesD").length, 0, "dropped watches are not open")
+  assert.ok(!alive, "the dropped watch's process is gone")
+  assert.equal(posted.filter((p) => p.session === "sesD").length, before, "no letter for a dropped watch")
+  assert.ok(!existsSync(path.join(w.WATCHES, `${d2.id}.req.json`)), "a queued one leaves the queue")
+}
 console.log("peers-watch: ok")
