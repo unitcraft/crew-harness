@@ -27,6 +27,22 @@ const fresh = path.join(tmp, "fresh")
 mkdirSync(fresh)
 cell("a new install: opencode-peers, no nova-peers", peersBase(fresh) === path.join(fresh, "opencode-peers") && !existsSync(path.join(fresh, "nova-peers")), "nova-peers made")
 
+// the old folder is held (Windows: open files inside it; windows and MCP processes keep them): the new name becomes a
+// link to it, the data stays where it is
+{
+  const { openSync, closeSync } = await import("node:fs")
+  const held = path.join(tmp, "held")
+  mkdirSync(path.join(held, "nova-peers"), { recursive: true })
+  writeFileSync(path.join(held, "nova-peers", "x.json"), "{}")
+  const fd = openSync(path.join(held, "nova-peers", "x.json"), "r")
+  const base = peersBase(held)
+  closeSync(fd)
+  const neu = path.join(held, "opencode-peers")
+  if (lstatSync(path.join(held, "nova-peers")).isSymbolicLink()) console.log("ok   (the held folder was renamed anyway on this platform)")
+  else cell("a held old folder: opencode-peers is a link to it", base === neu && lstatSync(neu).isSymbolicLink() && readFileSync(path.join(neu, "x.json"), "utf8") === "{}", JSON.stringify({ base, link: existsSync(neu) && lstatSync(neu).isSymbolicLink() }))
+  cell("next start: opencode-peers", peersBase(held) === neu, peersBase(held))
+}
+
 try {
   rmSync(tmp, { recursive: true, force: true })
 } catch {}

@@ -4,8 +4,8 @@
 //
 // Перенос делает первый процесс нового кода: nova-peers переименовывается в opencode-peers, на старом месте остаётся
 // ссылка-junction nova-peers → opencode-peers, и процессы старого кода (открытые окна, внешние проверки по старому пути)
-// попадают в ту же папку — ничего не раздваивается. Не вышло (кто-то держит файлы папки) — работаем со старой папкой,
-// попытка — при следующем запуске. Модуль без зависимостей: его импортируют core, tasks, watch, status, settings.
+// попадают в ту же папку — ничего не раздваивается. Папку держат (переименовать нельзя) — наоборот: opencode-peers
+// становится ссылкой на nova-peers; данные остаются на месте, имя — новое. Модуль без зависимостей: его импортируют core, tasks, watch, status, settings.
 
 import { existsSync, lstatSync, renameSync, symlinkSync } from "node:fs"
 import os from "node:os"
@@ -32,7 +32,15 @@ export function peersBase(root = dataDir()): string {
   try {
     renameSync(old, neu)
   } catch {
-    return old // папку держат — работаем со старой, перенос при следующем запуске
+    // папку держат (Windows не переименует папку с открытыми файлами, а их держат окна и MCP-процессы — так было при
+    // каждом запуске, 2026-10-06): новое имя — ссылкой на прежнюю папку. Ссылку создать можно и при занятой папке;
+    // со следующего запуска existsSync(neu) — и все работают через opencode-peers
+    try {
+      symlinkSync(old, neu, "junction")
+      return neu
+    } catch {
+      return old
+    }
   }
   try {
     symlinkSync(neu, old, "junction")
