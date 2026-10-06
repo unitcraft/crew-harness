@@ -1380,8 +1380,8 @@ export function makeTools(host: PeersHost): PeerTool[] {
         t.parent = par
         order.child = { project, n: t.n }
         taskEvent(order, me.session, undefined, `принят в работу в ${project}: #${t.n}`)
+        saveTask(t) // место уже в первой записи; пересохранить — только ради parent
       }
-      saveTask(t)
       const r = await host.startTask(t)
       if (!r.session) return { content: `Задача #${t.n} записана, но сессия не запущена: ${r.error ?? "неизвестная ошибка"}. Плагин повторит запуск сам (тем же id сессии — второй не будет).` }
       return { content: `Задача #${t.n} запущена (${hhmm(Date.now())}): «${t.title}», сессия ${r.session}, роль ${roleKey(project, role)}, модель ${model}, приоритет ${t.priority}${t.worktree ? `, worktree ${t.worktree}, ветка ${t.branch}` : ""}. Отчёт придёт ответом на ${t.qid}: peer_wait {qid: "${t.qid}"} или обычным письмом. Управление — peer_task {n: ${t.n}, action: ...}.` }

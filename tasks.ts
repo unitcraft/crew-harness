@@ -110,7 +110,16 @@ export function saveTask(t: Task) {
   mkdirSync(path.dirname(file), { recursive: true })
   const tmp = `${file}.${process.pid}.${Date.now()}.tmp`
   writeFileSync(tmp, JSON.stringify(t, null, 1))
-  renameSync(tmp, file)
+  // Windows: файл задачи в этот миг переименовывает другой процесс (сервер и MCP-процесс пишут одну задачу) — EPERM;
+  // короткий повтор, а не падение инструмента
+  for (let i = 0; ; i++)
+    try {
+      renameSync(tmp, file)
+      return
+    } catch (e: any) {
+      if (!(e?.code === "EPERM" || e?.code === "EACCES" || e?.code === "EBUSY") || i >= 20) throw e
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25)
+    }
 }
 
 /** Записать смену статуса (или заметку) в историю и сохранить. */

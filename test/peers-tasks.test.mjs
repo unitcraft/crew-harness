@@ -20,6 +20,11 @@ delete process.env.NOVA_PEERS_PRESENCE
 const proj = path.join(tmp, "proj")
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
 writeFileSync(path.join(proj, ".opencode", "opencode-peers.json"), JSON.stringify({ task_fields: ["goal", "criteria", "boundaries"], spawn_limits: { worker: 5 }, worktrees: "wt", branch_name: "p{n}-{slug}" }))
+// a git repository: the plugin creates the task's worktree in it (a session is never opened in the main copy, plan 011)
+const g = (...args) => execFileSync("git", ["-C", proj, "-c", "user.name=t", "-c", "user.email=t@t", ...args], { stdio: "ignore" })
+g("init", "-q", "-b", "main")
+g("add", "-A")
+g("commit", "-q", "-m", "init")
 
 const mod = await import("../index.ts")
 const core = await import("../core.ts")
