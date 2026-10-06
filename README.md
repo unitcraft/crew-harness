@@ -100,6 +100,15 @@ it waits for a slot in the project's machine queue — `machine_slots` at a time
 were set; the time limit counts from the start. `peer_watch` says how many are ahead, `/peers` shows it queued, the
 letter says how long it waited. Ordinary watches and other projects do not wait ([plan 005](doc/plans/005-machine-queue.md)).
 
+**The project's deny rules.** The command runs outside the window's permissions, so `peer_watch` checks it against
+`permissions.deny` of the project's `.claude/settings.json` (from the tab's directory up to the git root; no file — no
+check, an unreadable one — refusal): a command matching `Bash(…)` / `PowerShell(…)` (`prefix:*`, `*` as a wildcard),
+whole or in any subcommand (`&&`, `||`, `;`, `|`, a newline, the body of `bash -c '…'`, `$(…)`; `git -C <dir>` and
+`VAR=1 timeout N` prefixes do not hide it), or naming a file under a `Read(…)` glob is refused, naming the rule.
+**Who started it:** the command's environment carries `PEERS_SESSION_ID`, `PEERS_ROLE`, `PEERS_PROJECT`, and
+`PEERS_REVIEW_N` for the reviewer of an open task, `PEERS_TASK_N` for its executor — fixed when the watch is put and
+kept in its record, so a restart or a later role change does not alter them ([plan 012](doc/plans/012-acceptor-role.md)).
+
 ## Who waits for what: `/peers` and "waiting for you"
 
 The window's right panel shows a "Peers" block under "Context": the sessions of the project of the tab on screen —
@@ -197,6 +206,12 @@ The integrator stays free for the owner and does not re-check accepted work:
   accepted;
 - a task on rework does not hold a review session's place (`spawn_limits.reviewer`): the next submitted task gets
   it; the resubmission goes back to the same reviewer at once;
+- `reviewer: "acceptor"` — a separate acceptor role with its own rights ([plan 012](doc/plans/012-acceptor-role.md)):
+  only a free open tab of role `acceptor` becomes a reviewer (never a `worker` tab), a new review session is born
+  with role `acceptor`, review sessions are bounded by `spawn_limits.acceptor` (without it `spawn_limits.reviewer`,
+  then 2) and take no `worker` place; `merge`, `accept` and `cleaned` need the task's reviewer AND the `acceptor`
+  (or `integrator`) role — a reviewer who changed role loses them; the executor of a task is refused by name. The
+  role is shared. The default stays `worker`;
 - `inflight_limit` (6) bounds the tasks running and in review; `P0` passes every limit.
 
 ## Other projects

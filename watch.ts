@@ -42,6 +42,10 @@ export type Watch = {
   dropped?: boolean
   /** отменено своей вкладкой (peer_watch cancel) */
   cancelled?: boolean
+  /** кто поставил (план 012, п.5): PEERS_SESSION_ID, PEERS_ROLE, PEERS_PROJECT, PEERS_REVIEW_N / PEERS_TASK_N —
+   *  в окружение команды. Фиксируется при постановке и лежит в записи на диске: запуск после перезапуска сервера
+   *  берёт те же значения, а не роль вкладки на момент запуска. */
+  env?: Record<string, string>
 }
 
 const file = (id: string, ext: string) => path.join(WATCHES, `${id}${ext}`)
@@ -53,11 +57,11 @@ const forBash = (p: string) => p.replace(/\\/g, "/")
 const quote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`
 
 /** Задание наблюдения: только файл, запустит плагин. */
-export function requestWatch(w: { session: string; command: string; cwd: string; note?: string; minutes?: number; machine?: boolean; project?: string }, now = Date.now()): Watch {
+export function requestWatch(w: { session: string; command: string; cwd: string; note?: string; minutes?: number; machine?: boolean; project?: string; env?: Record<string, string> }, now = Date.now()): Watch {
   mkdirSync(WATCHES, { recursive: true })
   const minutes = Math.min(WATCH_MAX_MIN, Math.max(1, Math.round(Number(w.minutes) || WATCH_DEFAULT_MIN)))
   const id = `${now}-${Math.random().toString(36).slice(2, 8)}`
-  const watch: Watch = { id, session: w.session, command: w.command, cwd: w.cwd, ...(w.note ? { note: w.note } : {}), ...(w.machine ? { machine: true } : {}), ...(w.project ? { project: w.project } : {}), minutes, created: now, status: "requested" }
+  const watch: Watch = { id, session: w.session, command: w.command, cwd: w.cwd, ...(w.note ? { note: w.note } : {}), ...(w.machine ? { machine: true } : {}), ...(w.project ? { project: w.project } : {}), ...(w.env ? { env: w.env } : {}), minutes, created: now, status: "requested" }
   writeAtomic(file(id, ".req.json"), watch)
   return watch
 }
@@ -91,7 +95,7 @@ function start(w: Watch, now: number, log: (s: string) => void): Watch {
   const exit = forBash(file(w.id, ".exit"))
   const script = `timeout ${w.minutes * 60} bash -c ${quote(w.command)} > ${quote(out)} 2>&1; echo $? > ${quote(exit + ".tmp")} && mv ${quote(exit + ".tmp")} ${quote(exit)}`
   try {
-    const child = spawn(gitBash(), ["-c", script], { cwd: existsSync(w.cwd) ? w.cwd : undefined, detached: true, stdio: "ignore", windowsHide: true })
+    const child = spawn(gitBash(), ["-c", script], { cwd: existsSync(w.cwd) ? w.cwd : undefined, env: { ...process.env, ...(w.env ?? {}) }, detached: true, stdio: "ignore", windowsHide: true })
     child.on("error", (e) => log(`watch ${w.id}: ${e}`))
     child.unref()
     return { ...w, status: "running", pid: child.pid, started: now }

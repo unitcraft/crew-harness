@@ -43,6 +43,8 @@ import {
   BASE,
   DEFAULT_ROLE,
   normalizeRole,
+  reviewerRole,
+  reviewSessionLimit,
   holdsOpenTask,
   DEFAULT_SPAWN_MODELS,
   lastTurn,
@@ -512,7 +514,9 @@ export default {
     // ПРИЁМЩИК (план 002, Ф.3). Сданная задача без приёмщика получает его по приоритету (P0 первым): при reviewer
     // "integrator" — сам интегратор; иначе свободная открытая вкладка роли worker (не исполнитель, не автор, без своей
     // задачи), а нет такой — новая сессия под приёмку (лимит spawn_limits.reviewer, по умолчанию 2). Сессия приёмки
-    // запускается так же повторяемо, как задача: id пишется в журнал до session.create.
+    // запускается так же повторяемо, как задача: id пишется в журнал до session.create. При reviewer "acceptor"
+    // (план 012) — то же с ролью acceptor: вкладка годится только этой роли, сессия рождается с ней, лимит —
+    // spawn_limits.acceptor (без него — reviewer).
     const reviewStarting = new Set<string>()
     async function startReviewer(t0: Task): Promise<void> {
       const key = `${t0.project}#${t0.n}`
@@ -526,7 +530,8 @@ export default {
         const [providerID, ...rest] = model.split("/")
         await ctx.session.create({ id: t.reviewer, title: `#${t.n} приёмка ${t.title}`, location: { directory: t.directory }, metadata: { peersReview: { project: t.project, n: t.n } }, model: { providerID, id: rest.join("/") } })
         const now = Date.now()
-        const card: Card = { session: t.reviewer, role: DEFAULT_ROLE, auto: false, title: `#${t.n} приёмка ${t.title}`, directory: t.directory, repo: repoLabel(t.directory), project: t.project, model, modelAt: now, modelFrom: "request", pid: process.pid, updated: now, spawned: { by: t.author, task: `приёмка #${t.n}`, tier: t.tier, status: "running", at: now, qid: t.review_qid ?? "" }, review: { project: t.project, n: t.n } }
+        // роль сессии приёмки — по настройке reviewer (план 012): acceptor несёт права вливания и принятия
+        const card: Card = { session: t.reviewer, role: reviewerRole(cfg), auto: false, title: `#${t.n} приёмка ${t.title}`, directory: t.directory, repo: repoLabel(t.directory), project: t.project, model, modelAt: now, modelFrom: "request", pid: process.pid, updated: now, spawned: { by: t.author, task: `приёмка #${t.n}`, tier: t.tier, status: "running", at: now, qid: t.review_qid ?? "" }, review: { project: t.project, n: t.n } }
         saveCard(card)
         mine.set(card.session, card)
         await reviewerAssigned(t, card)
@@ -608,7 +613,7 @@ export default {
           (c) =>
             !c.spawned &&
             (c.project ?? projectOf(c.directory, projects)) === t.project &&
-            normalizeRole(c.role) === DEFAULT_ROLE &&
+            normalizeRole(c.role) === reviewerRole(cfg) &&
             c.session !== t.executor &&
             c.session !== t.author &&
             !holdsOpenTask(c) &&
@@ -624,7 +629,7 @@ export default {
           await reviewerAssigned(t, tab)
           continue
         }
-        const limit = cfg.spawnLimits.reviewer ?? 2
+        const limit = reviewSessionLimit(cfg)
         // задача на доработке места не держит: следующий шаг — исполнителя, приёмщик ждёт без хода (правило «блокирует ли
         // незакрытая задача новую» методологии: ждём чужого хода — не блокирует). Досданную будит прежний приёмщик сразу.
         const reviewing = listTasks(t.project).filter((x) => isOpen(x) && x.review_kind === "spawn" && x.reviewer && x.status !== "accepted" && x.status !== "rework").length
@@ -744,7 +749,7 @@ export default {
           const id = `stall-review-${safeKey(project)}-${x.n}-${since}`
           if (letterExists(x.author, id)) continue
           const busy = list.filter((y) => y.review_kind === "spawn" && y.reviewer && isOpen(y) && y.status !== "rework" && y.n !== x.n)
-          postLetter(x.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.author, time: t, text: `Задача #${x.n} «${x.title}» сдана в ${hhmm(since)} и ${Math.round((t - since) / 60_000)} мин ждёт приёмщика: места приёмщиков (spawn_limits.reviewer) заняты — ${busy.map((y) => `#${y.n} ${statusRu(y.status)}`).join(", ") || "?"}. Разберись, почему те приёмки стоят (письмо приёмщику), или подними предел приёмщиков (peer_config).` })
+          postLetter(x.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.author, time: t, text: `Задача #${x.n} «${x.title}» сдана в ${hhmm(since)} и ${Math.round((t - since) / 60_000)} мин ждёт приёмщика: места приёмщиков (spawn_limits.${loadConfig(x.directory).reviewer === "acceptor" ? "acceptor" : "reviewer"}) заняты — ${busy.map((y) => `#${y.n} ${statusRu(y.status)}`).join(", ") || "?"}. Разберись, почему те приёмки стоят (письмо приёмщику), или подними предел приёмщиков (peer_config).` })
           log(`stall: #${x.n} of ${project} waits for a reviewer since ${since}`)
         }
       }

@@ -15,6 +15,7 @@ import { PROJECT_RE, settingsProblems } from "./settings.ts"
 import { type Task, WORKING_STATUSES, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { cleanupDone, cleanupSteps, holdsMergeLock, isMerged, mergeHolder, releaseMergeLock, reworkLetter, takeMergeLock } from "./review.ts"
 import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, watchesOf } from "./watch.ts"
+import { watchRefusal } from "./deny.ts"
 
 export const POLL_MS = Number(process.env.NOVA_PEERS_POLL_MS) || 1_000 // переопределение — для самотеста
 export const LIVE_MS = 15 * 60_000
@@ -163,7 +164,9 @@ export type PeersConfig = {
   branchName: string
   targetBranch: string
   cleanup: "none" | "local" | "local+remote"
-  reviewer: "worker" | "integrator"
+  /** кто принимает: worker — свободная вкладка worker или сессия приёмки; acceptor — то же, но с ролью acceptor и её
+   *  правами (план 012); integrator — сам интегратор */
+  reviewer: "worker" | "integrator" | "acceptor"
   acceptance: AcceptanceStep[]
   reworkMax: number
   pushEmptyTurns: number
@@ -209,7 +212,7 @@ export function loadConfig(dir: string): PeersConfig {
     branchName: typeof j.branch_name === "string" && j.branch_name ? j.branch_name : "t{n}-{slug}",
     targetBranch: typeof j.target_branch === "string" && j.target_branch ? j.target_branch : "main",
     cleanup: oneOf(j.cleanup, ["none", "local", "local+remote"] as const, "local+remote"),
-    reviewer: oneOf(j.reviewer, ["worker", "integrator"] as const, "worker"),
+    reviewer: oneOf(j.reviewer, ["worker", "integrator", "acceptor"] as const, "worker"),
     acceptance,
     reworkMax: num(j.rework_max, 3),
     pushEmptyTurns: num(j.push_empty_turns, 3),
@@ -222,6 +225,18 @@ export function loadConfig(dir: string): PeersConfig {
     root,
   }
 }
+
+// ПРИЁМЩИК-РОЛЬ (план 012, 2026-10-06). При reviewer "acceptor" сессия приёмки рождается с ролью acceptor, в
+// приёмщики годится только открытая вкладка этой роли, а merge / accept / cleaned требуют роль acceptor или
+// integrator. Роль разделяемая: приёмщиков несколько. Лимит сессий приёмки — spawn_limits.acceptor, без него —
+// spawn_limits.reviewer (прежние настройки), без обоих — 2; места worker они не занимают (тот лимит считает задачи).
+export const ACCEPTOR_ROLE = "acceptor"
+export const DEFAULT_REVIEW_LIMIT = 2
+/** Роль приёмщика по настройке проекта: acceptor — при reviewer "acceptor", иначе worker (как было). */
+export const reviewerRole = (cfg: PeersConfig) => (cfg.reviewer === "acceptor" ? ACCEPTOR_ROLE : DEFAULT_ROLE)
+/** Сколько сессий приёмки проекта работает разом. */
+export const reviewSessionLimit = (cfg: PeersConfig) =>
+  cfg.reviewer === "acceptor" ? (cfg.spawnLimits.acceptor ?? cfg.spawnLimits.reviewer ?? DEFAULT_REVIEW_LIMIT) : (cfg.spawnLimits.reviewer ?? DEFAULT_REVIEW_LIMIT)
 
 // Ступень модели «провайдер/id#вариант»: проверяется от тяжёлой к лёгкой; нет совпадения — undefined (вне ступеней).
 export function tierOf(model: string | undefined, cfg: PeersConfig): Tier | undefined {
@@ -622,7 +637,17 @@ export const holdsOpenTask = (c: Card) => {
   const r = c.review ? loadTask(c.review.project, c.review.n) : undefined
   return isOpen(r) && r!.reviewer === c.session
 }
-export const mayWakeCard = (c: Card, windows = liveWindows()) => !!tabOf(c.session, windows) || c.spawned?.status === "running" || c.spawned?.status === "done" || holdsOpenTask(c)
+/** Окружение команды peer_watch (план 012, п.5): кто её поставил. Команде (скрипту приёмки проекта, гейту) не нужно
+ *  угадывать, чья она: сессия, роль, проект; у приёмщика открытой задачи — PEERS_REVIEW_N, у исполнителя — PEERS_TASK_N. */
+export function watchEnv(c: Card, project: string): Record<string, string> {
+  const env: Record<string, string> = { PEERS_SESSION_ID: c.session, PEERS_ROLE: normalizeRole(c.role), PEERS_PROJECT: project }
+  const r = c.review ? loadTask(c.review.project, c.review.n) : undefined
+  if (isOpen(r) && r!.reviewer === c.session) env.PEERS_REVIEW_N = String(r!.n)
+  const t = c.task ? loadTask(c.task.project, c.task.n) : undefined
+  if (isOpen(t) && t!.executor === c.session) env.PEERS_TASK_N = String(t!.n)
+  return env
+}
+export const mayWakeCard =(c: Card, windows = liveWindows()) => !!tabOf(c.session, windows) || c.spawned?.status === "running" || c.spawned?.status === "done" || holdsOpenTask(c)
 
 /** Уведомление окну pid (покажет плагин окна): письмо пришло в его фоновую вкладку и т.п. */
 /** Строка не длиннее n знаков (с «…»): уведомления окна короткие, чтобы их успевали прочитать (план 009). */
@@ -837,6 +862,11 @@ export const HELP = `opencode-peers — письма между вкладкам
                               место в очереди машины освобождается (id — в ответе и в списке peer_watch без команды).
        machine: true          — команда грузит машину (гейт, сборка, прогон тестов): ждёт места в очереди машины
                               проекта (machine_slots, по умолчанию 1) — тяжёлые прогоны окон не идут разом.
+       Команда запускается мимо прав окна, поэтому плагин сверяет её с permissions.deny проекта (.claude/settings.json
+       от каталога вкладки вверх до корня git): совпала целиком или подкомандой (&&, ||, ;, |, тело bash -c '…') с
+       Bash(…)/PowerShell(…) или упоминает файл под Read(…) — отказ с названием правила. В окружении команды —
+       PEERS_SESSION_ID, PEERS_ROLE, PEERS_PROJECT и у приёмщика PEERS_REVIEW_N, у исполнителя PEERS_TASK_N
+       (на момент постановки; переживают перезапуск сервера).
   peer_role {role, force?}    — сменить роль: peer_role {role: "integrator"}.
   peer_inbox {limit?}         — доставленные письма и число ждущих.
   peer_spawn {goal, criteria, ...} — только интегратор: задача #N в новой сессии (работает и без окна).
@@ -857,6 +887,7 @@ export const HELP = `opencode-peers — письма между вкладкам
 integrator — исключительная: один держатель на проект (плюс exclusive_roles из .opencode/opencode-peers.json).
 Держится замком: пока держатель открыт, роль не отнять без force; закрыл окно — роль свободна сразу.
 Письмо на разделяемую роль с несколькими открытыми держателями не доставляется наугад — адресуй id сессии.
+acceptor — роль приёмщика (разделяемая) при настройке проекта reviewer: acceptor: см. ПРИЁМКА.
 
 ДОСТАВКА. Письмо будит вкладку, только если она открыта в живом окне (на экране или фоном) или это сессия под задачу.
 Закрытой вкладке письмо ждёт и уходит в течение секунды после того, как её откроют. Окно отмечается плагином окна
@@ -888,7 +919,10 @@ push_empty_turns (3) пустых подряд или push_max (20) напоми
 
 ПРИЁМКА. Исполнитель обязан прислать отчёт ответом на qid задачи (reply_to); прислал — задача сдана (интегратора отчёт не
 будит), второй отчёт не отправляется. Сданную задачу проверяет и вливает ПРИЁМЩИК — свободная открытая вкладка worker
-(не автор, не исполнитель) или новая сессия; при reviewer: integrator — сам интегратор. Интегратор принятое не
+(не автор, не исполнитель) или новая сессия; при reviewer: integrator — сам интегратор. При reviewer: acceptor —
+свободная открытая вкладка роли acceptor или новая сессия с ролью acceptor (лимит spawn_limits.acceptor, без него —
+reviewer; места worker не занимает), и merge, accept, cleaned разрешены только роли acceptor (или интегратору):
+приёмщик, сменивший роль, их теряет. Исполнитель задачи её не вливает и не принимает. Интегратор принятое не
 перепроверяет. Приёмщик: peer_task review → rework {text} | check {step} → проверка → check {step, result} по каждому шагу (ход видно в окне) → merge (замок вливания проекта) → accept {commit?}
 (плагин проверит обязательные шаги приёмки и что ветка или коммит в целевой ветке) → очистка → cleaned (плагин
 проверит, что worktree и ветка удалены). Потом сессии задачи закрываются, интегратору тихая сводка.
@@ -1405,7 +1439,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
   const peerTask: PeerTool = {
     name: "peer_task",
     description:
-      "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), show {n} (details and history), and for the integrator: assign {session, goal, criteria, ...} (give a task to an existing tab instead of a new session), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done), cancel {n, text?}, priority {n, priority}, order {to: 'project.integrator', goal, criteria, ...} (work for another project: its integrator does it with its own tasks; the order follows them); for the task's reviewer: review {n} (start), merge {n} (the project's merge lock), rework {n, text, sync?} (sync: true -- only to merge the fresh target branch: not a rework round, not counted in rework_max), check {n, step} before checking a step and {n, step, result} after it (the owner sees the progress in the window), accept {n, checks?, commit?} (steps marked by check count; the plugin checks the required steps and that it is merged), cleaned {n} (the plugin checks the worktree and branch are gone).",
+      "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), show {n} (details and history), and for the integrator: assign {session, goal, criteria, ...} (give a task to an existing tab instead of a new session), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done), cancel {n, text?}, priority {n, priority}, order {to: 'project.integrator', goal, criteria, ...} (work for another project: its integrator does it with its own tasks; the order follows them); for the task's reviewer: review {n} (start), merge {n} (the project's merge lock), rework {n, text, sync?} (sync: true -- only to merge the fresh target branch: not a rework round, not counted in rework_max), check {n, step} before checking a step and {n, step, result} after it (the owner sees the progress in the window), accept {n, checks?, commit?} (steps marked by check count; the plugin checks the required steps and that it is merged), cleaned {n} (the plugin checks the worktree and branch are gone). With the project's reviewer: acceptor, merge/accept/cleaned also need the acceptor (or integrator) role.",
     input: {
       type: "object",
       properties: {
@@ -1505,8 +1539,15 @@ export function makeTools(host: PeersHost): PeerTool[] {
       }
       // ДЕЙСТВИЯ ПРИЁМЩИКА (план 002, Ф.3): review, merge, rework, accept, cleaned — только приёмщик этой задачи.
       if (["review", "check", "merge", "rework", "accept", "cleaned"].includes(action)) {
+        // исполнитель свою работу не вливает и не принимает — отказ называет это прямо (план 012, п.4)
+        if (t.reviewer !== me.session && t.executor === me.session)
+          return { content: `Ты исполнитель задачи #${t.n}: ${action} делает её приёмщик (${t.reviewer ?? "ещё не назначен"}), это действие только его. Исполнитель свою работу не вливает и не принимает — сдай отчёт и жди приёмки.` }
         if (t.reviewer !== me.session) return { content: `Приёмщик задачи #${t.n} — ${t.reviewer ?? "ещё не назначен"}; это действие только его.` }
         const tcfg = loadConfig(t.directory)
+        // ПРАВА РОЛИ (план 012): при reviewer "acceptor" замок вливания, принятие и очистку держит роль acceptor (или
+        // интегратор). Приёмщик, сменивший роль, их теряет: права у роли, а не у записи «приёмщик» в задаче.
+        if (tcfg.reviewer === "acceptor" && ["merge", "accept", "cleaned"].includes(action) && normalizeRole(me.role) !== ACCEPTOR_ROLE && !isIntegrator(me))
+          return { content: `${action} в проекте ${project} — право роли ${ACCEPTOR_ROLE} (настройка reviewer: acceptor) или интегратора; у тебя роль ${keyOf(me)}. Вернуть роль — peer_role {role: "${ACCEPTOR_ROLE}"}.` }
         const now = Date.now()
         const quiet = (to: string, id: string, text: string) => postLetter(to, { id, from_role: keyOf(me), from_session: me.session, to, time: now, wake: false, text })
         if (action === "review") {
@@ -1752,7 +1793,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
   // НАБЛЮДЕНИЯ (watch.ts): ожидание, которое переживает конец хода — фон Claude Code гибнет с ходом окна claude-code.
   const peerWatch: PeerTool = {
     name: "peer_watch",
-    description: `Wait for something long WITHOUT holding the turn: the opencode-peers plugin runs \`command\` (Git Bash, in the tab's directory) in the OpenCode server, detached -- it survives the end of your turn and a service restart -- and when it exits wakes this tab with a letter: exit code, duration, output tail. Use it instead of Bash run_in_background / Monitor for anything that must outlive the turn (a gate's verdict, a long build): in a claude-code tab background tasks are killed when the turn ends and no notification ever comes. The command should itself wait and finish, e.g. \`until [ -f /tmp/gate.done ]; do sleep 30; done; cat /tmp/gate.done\`. minutes: time limit (default ${WATCH_DEFAULT_MIN}, up to ${WATCH_MAX_MIN}), then it is stopped (exit 124). note: a short label for the letter. machine: true for a command that loads the machine (a gate, a build, a full test run -- run it here, not in your own Bash): it waits its turn in the project's machine queue (machine_slots at a time, default 1), so the tabs' heavy runs do not pile up. No command: list this tab's watches. After calling it, end your turn -- the letter wakes you.`,
+    description: `Wait for something long WITHOUT holding the turn: the opencode-peers plugin runs \`command\` (Git Bash, in the tab's directory) in the OpenCode server, detached -- it survives the end of your turn and a service restart -- and when it exits wakes this tab with a letter: exit code, duration, output tail. Use it instead of Bash run_in_background / Monitor for anything that must outlive the turn (a gate's verdict, a long build): in a claude-code tab background tasks are killed when the turn ends and no notification ever comes. The command should itself wait and finish, e.g. \`until [ -f /tmp/gate.done ]; do sleep 30; done; cat /tmp/gate.done\`. minutes: time limit (default ${WATCH_DEFAULT_MIN}, up to ${WATCH_MAX_MIN}), then it is stopped (exit 124). note: a short label for the letter. machine: true for a command that loads the machine (a gate, a build, a full test run -- run it here, not in your own Bash): it waits its turn in the project's machine queue (machine_slots at a time, default 1), so the tabs' heavy runs do not pile up. The command runs outside the window's permissions, so it is checked against the project's permissions.deny (.claude/settings.json): a command matching a denied Bash/PowerShell prefix (whole or any subcommand) or naming a file under a denied Read glob is refused, naming the rule. The command's environment carries PEERS_SESSION_ID, PEERS_ROLE, PEERS_PROJECT and PEERS_REVIEW_N (a reviewer) / PEERS_TASK_N (an executor). No command: list this tab's watches. After calling it, end your turn -- the letter wakes you.`,
     input: {
       type: "object",
       properties: {
@@ -1776,7 +1817,11 @@ export function makeTools(host: PeersHost): PeerTool[] {
       }
       const project = me.project ?? projOf(me)
       const machine = input.machine === true
-      const w = requestWatch({ session: me.session, command, cwd: me.directory || host.defaultDir, note: String(input.note ?? "").trim() || undefined, minutes: input.minutes, machine, project })
+      const cwd = me.directory || host.defaultDir
+      // запреты проекта (план 012, п.6): команду запустит сервер мимо прав окна — сверка здесь, до постановки
+      const refused = watchRefusal(command, cwd)
+      if (refused) return { content: refused }
+      const w = requestWatch({ session: me.session, command, cwd, note: String(input.note ?? "").trim() || undefined, minutes: input.minutes, machine, project, env: watchEnv(me, project) })
       const ahead = machine ? machineQueue(project).filter((x) => x.id !== w.id).length : 0
       const queueText = machine ? ` Команда грузит машину: стоит в очереди машины проекта${ahead ? `, перед ней ${ahead}` : ""} — запустится, когда освободится место (machine_slots).` : ""
       return { content: `Наблюдение ${w.note ? `«${w.note}» ` : ""}${w.id} поставлено (${hhmm(w.created)}, предел ${w.minutes} мин от запуска; отмена — peer_watch {action: "cancel", id: "${w.id}"}).${queueText} Плагин запустит команду в сервере OpenCode и разбудит эту вкладку письмом с результатом. Заканчивай ход — ждать не нужно.` }
