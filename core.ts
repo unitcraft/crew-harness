@@ -428,6 +428,15 @@ export async function idleAt(sessionID: string): Promise<number> {
   }
 }
 
+/** ОКНО ГОВОРИТ «ХОД ИДЁТ», А СЕРВЕР СВОБОДЕН (2026-10-06): сообщение интегратору nova ушло в миг перезапуска сервиса и
+ *  потерялось, окно осталось «занятым» полтора часа, плагин копил письма до конца хода, которого нет. Хода нет, если
+ *  база не видит открытого хода и последний конец хода старше staleMs; тогда — время того конца (иначе 0). */
+export async function staleBusy(sessionID: string, now = Date.now(), staleMs = 600_000): Promise<number> {
+  if (await openTurn(sessionID, now)) return 0
+  const idle = await idleAt(sessionID)
+  return idle && now - idle > staleMs ? idle : 0
+}
+
 /** Было ли сообщение владельца (не письмо плагина) после времени at. Читает только строки после него. */
 export async function userAfter(sessionID: string, at: number): Promise<boolean> {
   if (!sessionID || !existsSync(dbFile())) return false

@@ -4,7 +4,7 @@
 // or push_max reminders -> the tab is stuck: no more reminders, the asker gets a call (letter + notice). A turn
 // with an owner's message gets no reminder and resets the counter. peer_task push clears "stuck". A turn cut off
 // by a server restart (time_suspended, no idle) is resumed by one letter.
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { DatabaseSync } from "node:sqlite"
@@ -12,6 +12,7 @@ import { DatabaseSync } from "node:sqlite"
 const tmp = mkdtempSync(path.join(os.tmpdir(), "peers-push-"))
 process.env.XDG_DATA_HOME = tmp
 process.env.NOVA_PEERS_POLL_MS = "100"
+process.env.NOVA_PEERS_STATUS_MS = "200"
 const dbPath = path.join(tmp, "opencode.db")
 process.env.NOVA_PEERS_DB = dbPath
 delete process.env.NOVA_PEERS_PRESENCE
@@ -246,6 +247,25 @@ cell("three failed turns: stuck, the call says the turns fail", got("sesINTEG1",
   cell("after its idle row the turn is over", !(await core.openTurn("ses_long1", Date.now() + 600_000)), "open")
   await wait(1200)
   cell("then the waiting letter is delivered", got("ses_long1", "письмо в долгий ход").length === 1, "still waiting")
+}
+
+// 10. the window says "busy", the server is idle (the owner's message was lost in a service restart, 2026-10-06):
+// after 10 min of silence in the database the letters are delivered anyway and the owner is told to press Esc
+{
+  db.prepare("insert into session_v2 values (?, ?, ?, null, null, null, null, null)").run("ses_stale1", proj, "ses_stale1")
+  core.saveCard({ session: "ses_stale1", role: "worker", auto: false, title: "ses_stale1", directory: proj, repo: "proj", project: "proj", pid: process.pid, updated: Date.now() })
+  msg("ses_stale1", "assistant", { content: [{ type: "text", text: "готово" }] }, Date.now() - 21 * 60_000)
+  msg("ses_stale1", "idle", { outcome: "succeeded" }, Date.now() - 20 * 60_000)
+  tabs.push({ sessionID: "ses_stale1", active: false, busy: true })
+  core.postLetter("ses_stale1", { id: "stale-l1", from_role: "proj.integrator", from_session: "sesINTEG1", to: "ses_stale1", time: Date.now(), text: "письмо в мнимый ход" })
+  await wait(1500)
+  cell("a window stuck on 'busy' with an idle server gets its letters", got("ses_stale1", "письмо в мнимый ход").length === 1, "held")
+  const stFile = path.join(core.BASE, "status", "ses_stale1.json")
+  const readSt = () => { try { return JSON.parse(readFileSync(stFile, "utf8")) } catch { return {} } }
+  for (let i = 0; i < 40 && readSt().state !== "owner"; i++) await wait(100)
+  const st = readSt()
+  cell("the owner is told to press Esc and resend", st.state === "owner" && /нажмите Esc/.test(st.detail), JSON.stringify({ state: st.state, detail: st.detail }))
+  tabs.pop()
 }
 
 // 8. OpenCode loads the plugin again in the same process for a new directory: a turn running right now (its session

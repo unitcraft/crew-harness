@@ -76,6 +76,8 @@ export type StatusInput = {
   now: number
   /** наблюдения сессии, прочитанные проходом один раз на всех (иначе — читаются здесь) */
   watches?: Watch[]
+  /** окно считает ход идущим, а сервер свободен с этого времени (core.ts staleBusy) */
+  staleSince?: number
 }
 
 /** Состояние одной сессии из её данных. Порядок важности: ход > вопрос владельцу > наблюдение > ответ > задачи. */
@@ -98,6 +100,10 @@ export function statusOf(x: StatusInput): Status {
     ...(own ? { task: { n: own.n, status: own.status, as: card.task ? ("executor" as const) : ("reviewer" as const), title: own.title, ...(stepsOf(own) ? { steps: stepsOf(own) } : {}), ...(own.checking ? { checking: own.checking.step } : {}) } } : {}),
     tasks: authored.map((t) => ({ n: t.n, status: t.status, priority: t.priority, title: t.title })),
     updated: now,
+  }
+  if (x.staleSince) {
+    const q = `окно считает ход идущим, а сервер свободен с ${hm(x.staleSince)}: сообщение, видимо, не дошло — нажмите Esc в окне и отправьте его снова`
+    return { ...base, state: "owner", since: x.staleSince, question: q, detail: q }
   }
   if (x.busy) return { ...base, state: "working", since: x.busySince, detail: `работает${x.busySince ? ` (${minutes(x.busySince, now)})` : ""}` }
   // сессию задачи ведёт интегратор, и её вопрос в конце хода бывает ему (сдавший воркер спросил интегратора), а бывает

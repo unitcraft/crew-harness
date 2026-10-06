@@ -49,6 +49,7 @@ import {
   turnEnd,
   idleAt,
   openTurn,
+  staleBusy,
   insideDir,
   taskPlace,
   PROCESS_START,
@@ -192,6 +193,7 @@ export default {
       const t = card.spawned ? undefined : tabOf(card.session, windows)
       return t ? !!t.tab.busy : !!card.busy
     }
+    const staleLogged = new Set<string>()
     function delivered(card: Card, letters: Letter[], windows: ReturnType<typeof liveWindows>) {
       for (const l of letters) if (l.qid) addObligation(card.session, { qid: l.qid, from_session: l.from_session, from_role: l.from_role, at: l.time, nudges: 0 })
       // будящее письмо в фоновую вкладку — уведомление её окну (кнопка Open)
@@ -205,7 +207,15 @@ export default {
       if (!waitingIn(keys)) return
       const windows = liveWindows()
       const fresh = readJson<Card>(cardFile(card.session)) ?? card
-      if (turnRunning(fresh, windows)) return // ход идёт: письма ждут его конца
+      if (turnRunning(fresh, windows)) {
+        // ход идёт: письма ждут его конца. Но если «идёт» только по окну, а сервер свободен дольше 10 мин (сообщение
+        // потерялось при перезапуске сервиса) — не ждать вечно: доставить, сервер примет письмо новым ходом
+        const tab = fresh.spawned ? undefined : tabOf(fresh.session, windows)
+        const stale = tab?.tab.busy && !fresh.busy ? await staleBusy(fresh.session, now()) : 0
+        if (!stale) return
+        if (!staleLogged.has(fresh.session)) log(`window says ${fresh.session} is busy, the database is idle since ${stale}: delivering`)
+        staleLogged.add(fresh.session)
+      } else staleLogged.delete(fresh.session)
       // сессия задачи: ход, начатый не плагином (продолженный OpenCode после перезапуска), виден только по базе
       if (fresh.spawned && (await openTurn(fresh.session, now()))) return
       const open = mayWakeCard(fresh, windows)
@@ -661,7 +671,8 @@ export default {
         }
         // «работает» — ещё и по базе: ход открыт и обновляется (ход, продолженный самим OpenCode после перезапуска,
         // плагин не доставлял — признака busy у карточки нет; сводка писала «стоит», а сессия работала, 2026-10-05)
-        const busy = !!tab?.tab.busy || !!c.busy || (await openTurn(c.session, t))
+        const staleSince = tab?.tab.busy ? await staleBusy(c.session, t) : 0
+        const busy = !staleSince && (!!tab?.tab.busy || !!c.busy || (await openTurn(c.session, t)))
         let end: Awaited<ReturnType<typeof turnEnd>> = undefined
         if (!busy) {
           const at = await idleAt(c.session)
@@ -677,7 +688,7 @@ export default {
             ends.set(c.session, { at, end })
           }
         }
-        const s = statusOf({ card: c, busy, busySince: c.busySince, end, asked: asked.get(c.session) ?? [], now: t, watches: ws })
+        const s = statusOf({ card: c, busy, busySince: c.busySince, end, asked: asked.get(c.session) ?? [], now: t, watches: ws, ...(staleSince ? { staleSince } : {}) })
         const prev = saveStatus(s)
         if (s.state !== "owner") continue
         const fresh = !(prev?.state === "owner" && prev.since === s.since)
