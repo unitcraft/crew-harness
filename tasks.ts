@@ -10,6 +10,7 @@
 import { existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { INBOX, READ, type Priority, type Tier, readJson, safeKey } from "./core.ts"
+import { idsHas } from "./housekeeping.ts"
 import { BASE } from "./paths.ts"
 
 // путь — из paths.ts (модуль без зависимостей: core и tasks импортируют друг друга, а BASE ядра здесь ещё не готов)
@@ -231,7 +232,7 @@ export const taskLetterId = (t: Task) => `task-${safeKey(t.project)}-${t.n}-${t.
 /** Письмо с этим id уже лежит у адресата key (ждёт или прочитано). */
 export function letterExists(key: string, id: string): boolean {
   const f = `${id}.json`
-  return existsSync(path.join(INBOX, safeKey(key), f)) || existsSync(path.join(READ, safeKey(key), f))
+  return existsSync(path.join(INBOX, safeKey(key), f)) || existsSync(path.join(READ, safeKey(key), f)) || idsHas(path.join(READ, safeKey(key)), id) // удалённое уборкой — по списку id
 }
 
 const PRIORITY_RANK: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3 }

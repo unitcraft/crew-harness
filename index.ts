@@ -40,6 +40,7 @@ import {
   POLL_MS,
   QUEUE,
   INBOX,
+  READ,
   BASE,
   DEFAULT_ROLE,
   normalizeRole,
@@ -107,6 +108,7 @@ import {
   PLUGIN_SENDER,
 } from "./core.ts"
 import { DECISION_RU, readApprovals, removeApproval } from "./approvals.ts"
+import { sweepRead } from "./housekeeping.ts"
 import { allSteps, nextPlanNumber, parsePlan, stepDeps } from "./plans.ts"
 import { dropWatch, openWatchesBySession, pollWatches, watchesOf } from "./watch.ts"
 import { endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
@@ -823,6 +825,18 @@ export default {
       }
     }
 
+    // УБОРКА (housekeeping.ts): прочитанные письма старше keep_days (опция плагина, умолчание 7) — id в список, файл
+    // вон; раз в HOUSEKEEP_MS.
+    const KEEP_MS = (Number(ctx?.options?.keep_days) > 0 ? Number(ctx.options.keep_days) : 7) * 24 * 3_600_000
+    const HOUSEKEEP_MS = Number(process.env.NOVA_PEERS_HOUSEKEEP_MS) || 3_600_000
+    let housekeptAt = 0
+    function housekeep() {
+      if (now() - housekeptAt < HOUSEKEEP_MS) return
+      housekeptAt = now()
+      const removed = sweepRead(READ, KEEP_MS, now())
+      if (removed) log(`housekeeping: ${removed} read letters older than ${Math.round(KEEP_MS / 86_400_000)} d removed (ids kept)`)
+    }
+
     function flowWatch() {
       if (now() - flowAt < (Number(process.env.NOVA_PEERS_FLOW_MS) || 60_000)) return
       flowAt = now()
@@ -1123,6 +1137,7 @@ export default {
         await step("syncStatus", syncStatus)
         await step("flowWatch", flowWatch)
         await step("leftWatch", leftWatch)
+        await step("housekeep", housekeep)
         await step("processQueue", processQueue)
         // наблюдения peer_watch (watch.ts): запустить новые, по концу — письмо окну с побудкой
         await step("watches", () => pollWatches((w, text) => postLetter(w.session, { id: `watch-${w.id}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: w.session, time: Date.now(), text }), log, now(), (w) => loadConfig(w.cwd).machineSlots))

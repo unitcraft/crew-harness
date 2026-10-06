@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, w
 import os from "node:os"
 import path from "node:path"
 import { BASE as PEERS_BASE, dataDir } from "./paths.ts"
+import { rotateLog } from "./housekeeping.ts"
 import { type Projects, parseProjects as parseProjectsWith, projectFor, rawSettingsFor, readSettingsFolder, workingSettings, writeSettings } from "./settings.ts"
 import { SCHEMA, guideText, invalid } from "./config-schema.ts"
 export { PROJECT_RE, type Project, type Projects, settingsProblems } from "./settings.ts"
@@ -24,7 +25,11 @@ const STALE_CARD_MS = 7 * 24 * 3600_000
 export const ROLE_RE = /^[a-z][a-z0-9-]{0,40}$/
 const LOG = path.join(os.tmpdir(), "opencode-plugins.log")
 
+// журнал общий для плагинов окружения; больше LOG_MAX_BYTES — в .1 (проверка раз в 200 строк)
+const LOG_MAX_BYTES = Number(process.env.NOVA_PEERS_LOG_MAX) || 5_000_000
+let logWrites = 0
 export function log(line: string) {
+  if (++logWrites % 200 === 0) rotateLog(LOG, LOG_MAX_BYTES)
   try {
     appendFileSync(LOG, `${new Date().toISOString()} nova-peers ${line}\n`)
   } catch {}

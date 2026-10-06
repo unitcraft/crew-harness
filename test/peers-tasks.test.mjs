@@ -101,7 +101,7 @@ const cut = await call("peer_spawn", "sesINTEG1", { title: "первая", goal:
 cell("the cut-off start says the task is recorded and will be retried", /записана, но сессия не запущена/.test(cut), cut)
 const t1 = tasks.loadTask("proj", 1)
 cell("the journal keeps the planned session id", t1?.status === "starting" && t1.executor?.startsWith("ses_") && sessions.has(t1.executor), JSON.stringify(t1))
-await wait(800)
+for (let i = 0; i < 80 && tasks.loadTask("proj", 1)?.status !== "running"; i++) await wait(100)
 const t1b = tasks.loadTask("proj", 1)
 cell("the next pass finishes the start", t1b?.status === "running", t1b?.status)
 cell("still one session", sessions.size === 1, JSON.stringify([...sessions.keys()]))
@@ -111,7 +111,7 @@ cell("the letter names the worktree and the branch from the settings", got(t1.ex
 const again = tasks.loadTask("proj", 1)
 again.status = "starting"
 tasks.saveTask(again)
-await wait(800)
+for (let i = 0; i < 80 && tasks.loadTask("proj", 1).status !== "running"; i++) await wait(100) // async worktree check: give it time
 cell("a repeated start after the letter: still one session, one letter", sessions.size === 1 && got(t1.executor, "ЗАДАЧА #1").length === 1 && tasks.loadTask("proj", 1).status === "running", `${sessions.size} ${got(t1.executor, "ЗАДАЧА #1").length}`)
 cell("the session title is #N title", updates.some((u) => u.sessionID === t1.executor && u.title === "#1 первая") || sessions.get(t1.executor)?.title === "#1 первая", JSON.stringify(updates))
 
