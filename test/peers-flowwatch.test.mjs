@@ -162,6 +162,12 @@ await tools.peer_role.execute({ role: "integrator" }, { sessionID: "sesINTEG1" }
 const refused = (await tools.peer_spawn.execute({ title: "срочная", goal: "g", criteria: "c", priority: "P1" }, { sessionID: "sesINTEG1" })).content
 cell("a spawn refused by inflight_limit names the accepted, not cleaned task", /Лимит задач проекта/.test(refused) && /#4 принята 60 мин назад, не очищена/.test(refused), refused)
 
+// 7. peer_watch {action: "cancel", id} through the tool (plan 011, defect 5)
+const put = (await tools.peer_watch.execute({ command: "sleep 60", machine: true, note: "плохая команда" }, { sessionID: "sesINTEG1" })).content
+const wid = /id: "([^"]+)"/.exec(put)?.[1]
+const cancelled = wid ? (await tools.peer_watch.execute({ action: "cancel", id: wid }, { sessionID: "sesINTEG1" })).content : ""
+cell("peer_watch names the id and cancels its own watch", !!wid && /отменено/.test(cancelled), JSON.stringify({ put, cancelled }))
+
 clearInterval(heart)
 stop?.()
 db.close()

@@ -91,4 +91,29 @@ assert.ok(started(z1.id) && started(z2.id), "machine_slots 0: no limit")
   assert.equal(posted.filter((p) => p.session === "sesD").length, before, "no letter for a dropped watch")
   assert.ok(!existsSync(path.join(w.WATCHES, `${d2.id}.req.json`)), "a queued one leaves the queue")
 }
+// a tab cancels its own watch (plan 011, defect 5): a bad command held nova's only machine slot for 90 min
+{
+  const hog = w.requestWatch({ session: "sesC", command: "sleep 60", cwd: tmp, machine: true, project: "C", note: "ошибка в команде" })
+  const next = w.requestWatch({ session: "sesC2", command: "sleep 1", cwd: tmp, machine: true, project: "C" }, Date.now() + 1)
+  w.pollWatches(post, () => {}, Date.now(), () => 1)
+  assert.ok(started(hog.id) && !started(next.id), "the hog runs, the next waits for the slot")
+  const pid = JSON.parse(readFileSync(path.join(w.WATCHES, `${hog.id}.json`), "utf8")).pid
+  const foreign = w.cancelWatch(hog.id, "sesOTHER")
+  assert.ok(!foreign.ok && /не этой вкладки/.test(foreign.text), "another tab cannot cancel it")
+  const before = posted.filter((p) => p.session === "sesC").length
+  const r = w.cancelWatch(hog.id, "sesC")
+  assert.ok(r.ok && /отменено/.test(r.text) && /место в очереди машины свободно/.test(r.text), r.text)
+  const rec = JSON.parse(readFileSync(path.join(w.WATCHES, `${hog.id}.json`), "utf8"))
+  assert.ok(rec.status === "done" && rec.cancelled === true, "the record says cancelled")
+  let alive = true
+  try { process.kill(pid, 0) } catch { alive = false }
+  assert.ok(!alive, "the running process is stopped")
+  w.pollWatches(post, () => {}, Date.now(), () => 1)
+  assert.ok(started(next.id), "the freed slot goes to the next watch")
+  assert.equal(posted.filter((p) => p.session === "sesC").length, before, "no letter for a cancelled watch")
+  const q = w.requestWatch({ session: "sesC", command: "sleep 60", cwd: tmp, machine: true, project: "C" }, Date.now() + 2)
+  const rq = w.cancelWatch(q.id, "sesC")
+  assert.ok(rq.ok && /снято из очереди/.test(rq.text) && !existsSync(path.join(w.WATCHES, `${q.id}.req.json`)), "a queued watch leaves the queue")
+  assert.ok(!w.cancelWatch(q.id, "sesC").ok, "a second cancel finds nothing open")
+}
 console.log("peers-watch: ok")

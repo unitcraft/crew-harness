@@ -40,6 +40,8 @@ export type Watch = {
   code?: number | null
   /** снято: задача закрыта */
   dropped?: boolean
+  /** отменено своей вкладкой (peer_watch cancel) */
+  cancelled?: boolean
 }
 
 const file = (id: string, ext: string) => path.join(WATCHES, `${id}${ext}`)
@@ -198,7 +200,7 @@ export function pollWatches(post: (w: Watch, text: string) => void, log: (s: str
 /** Все незавершённые наблюдения, по сессиям — одним чтением папки (сводка состояния, план 009). */
 /** Снять наблюдение без письма: его задача закрыта (2026-10-06: наблюдение приёмщика #3 nova жило 10 ч после
  *  очистки задачи). Запущенное — убить вместе с деревом процессов. */
-export function dropWatch(w: Watch, log: (s: string) => void = () => {}, now = Date.now()) {
+export function dropWatch(w: Watch, log: (s: string) => void = () => {}, now = Date.now(), extra: Partial<Watch> = {}) {
   if (w.status === "requested") {
     rmSync(file(w.id, ".req.json"), { force: true })
   } else if (w.pid && pidAlive(w.pid)) {
@@ -209,8 +211,19 @@ export function dropWatch(w: Watch, log: (s: string) => void = () => {}, now = D
       log(`watch ${w.id}: не остановилось: ${e}`)
     }
   }
-  writeAtomic(file(w.id, ".json"), { ...w, status: "done", ended: now, code: null, dropped: true })
+  writeAtomic(file(w.id, ".json"), { ...w, status: "done", ended: now, code: null, dropped: true, ...extra })
   log(`watch ${w.id} dropped (${w.session})`)
+}
+
+/** Отмена своего наблюдения (план 011, дефект 5): из очереди — снять заявку, запущенное — убить дерево процессов;
+ *  место в очереди машины освобождается, в записи — «отменено». Чужое наблюдение не трогает. Замер: наблюдение с
+ *  ошибкой в команде 90 мин держало единственное место машины nova, снять его можно было только руками. */
+export function cancelWatch(id: string, session: string, log: (s: string) => void = () => {}, now = Date.now()): { ok: boolean; text: string } {
+  const w = readJson<Watch>(file(id, ".req.json")) ?? readJson<Watch>(file(id, ".json"))
+  if (!w || w.status === "done") return { ok: false, text: `Открытого наблюдения ${id} нет (peer_watch без команды — список своих).` }
+  if (w.session !== session) return { ok: false, text: `Наблюдение ${id} — не этой вкладки; отменить его может только она.` }
+  dropWatch(w, log, now, { cancelled: true })
+  return { ok: true, text: `Наблюдение ${w.note ? `«${w.note}» ` : ""}${id} отменено${w.status === "requested" ? " (снято из очереди)" : " (процесс остановлен)"}${w.machine ? ", место в очереди машины свободно" : ""}. Письма о нём не будет.` }
 }
 
 export function openWatchesBySession(): Map<string, Watch[]> {

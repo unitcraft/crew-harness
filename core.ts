@@ -14,7 +14,7 @@ export { PROJECT_RE, type Project, type Projects, settingsProblems } from "./set
 import { PROJECT_RE, settingsProblems } from "./settings.ts"
 import { type Task, WORKING_STATUSES, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { cleanupDone, cleanupSteps, holdsMergeLock, isMerged, mergeHolder, releaseMergeLock, reworkLetter, takeMergeLock } from "./review.ts"
-import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, machineQueue, requestWatch, watchesOf } from "./watch.ts"
+import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, watchesOf } from "./watch.ts"
 
 export const POLL_MS = Number(process.env.NOVA_PEERS_POLL_MS) || 1_000 // переопределение — для самотеста
 export const LIVE_MS = 15 * 60_000
@@ -824,13 +824,18 @@ export const HELP = `opencode-peers — письма между вкладкам
   peer_watch {command, note?, minutes?} — долгое ожидание без удержания хода: команду (ждёт и выходит) запускает плагин
                               в сервере OpenCode, по её концу вкладку будит письмо с кодом и хвостом вывода. Во вкладке
                               claude-code фон (run_in_background, Monitor) гибнет с концом хода — ждать только так.
+       action: "cancel", id   — отменить своё наблюдение: снимается из очереди или его процесс останавливается,
+                              место в очереди машины освобождается (id — в ответе и в списке peer_watch без команды).
        machine: true          — команда грузит машину (гейт, сборка, прогон тестов): ждёт места в очереди машины
                               проекта (machine_slots, по умолчанию 1) — тяжёлые прогоны окон не идут разом.
   peer_role {role, force?}    — сменить роль: peer_role {role: "integrator"}.
   peer_inbox {limit?}         — доставленные письма и число ждущих.
   peer_spawn {goal, criteria, ...} — только интегратор: задача #N в новой сессии (работает и без окна).
   peer_task {action, n?}      — задачи по номеру: list, show; интегратору ещё assign, push, reassign, cancel, priority,
-                                order; приёмщику — review, rework, merge, accept, cleaned.
+                                order; приёмщику — review, check, rework (sync: true — только влить свежую целевую
+                                ветку, не круг доработки), merge, accept, cleaned. assign — открытой вкладке владельца;
+                                сессия задачи ведёт одну задачу и закрывается после cleaned: продолжение работы того же
+                                исполнителя — новой задачей (peer_spawn), assign на сессию задачи отказывает.
   peer_config {action}        — настройки проекта: guide (опросник для владельца), show (что действует и откуда),
                                 set {values} (интегратор; пишет рабочую копию файла настроек, действует с коммита).
   peer_doctor                 — самопроверка: что сломано и что делать.
@@ -1746,23 +1751,26 @@ export function makeTools(host: PeersHost): PeerTool[] {
         note: str("Short label for the letter, e.g. 'gate verdict'"),
         minutes: { type: "number", description: `Time limit, default ${WATCH_DEFAULT_MIN}, up to ${WATCH_MAX_MIN}` },
         machine: { type: "boolean", description: "The command loads the machine (gate, build, test run): wait for a slot in the project's machine queue", default: false },
+        action: { type: "string", enum: ["cancel"], description: "cancel {id}: cancel this tab's own watch -- leaves the queue or its process is stopped, the machine slot is freed" },
+        id: str("cancel: the watch id (from the answer or the list)"),
       },
       additionalProperties: false,
     },
     execute: async (input: any, sessionID: string) => {
       const me = await host.touch(sessionID)
       if (!me) return { content: "Наблюдение ставит только вкладка, не субагент." }
+      if (input.action === "cancel") return { content: cancelWatch(String(input.id ?? "").trim(), me.session, log).text }
       const command = String(input.command ?? "").trim()
       if (!command) {
         const ws = watchesOf(me.session)
-        return { content: ws.length ? `Наблюдения вкладки:\n${ws.map((w) => `— ${w.note ? `«${w.note}» ` : ""}${w.status === "requested" ? `ждёт запуска${w.machine ? " в очереди машины" : ""} с ${hhmm(w.created)}` : `с ${hhmm(w.started ?? w.created)}`}, предел ${w.minutes} мин: ${w.command.slice(0, 200)}`).join("\n")}` : "Наблюдений нет." }
+        return { content: ws.length ? `Наблюдения вкладки (отмена — peer_watch {action: "cancel", id}):\n${ws.map((w) => `— ${w.id} ${w.note ? `«${w.note}» ` : ""}${w.status === "requested" ? `ждёт запуска${w.machine ? " в очереди машины" : ""} с ${hhmm(w.created)}` : `с ${hhmm(w.started ?? w.created)}`}, предел ${w.minutes} мин: ${w.command.slice(0, 200)}`).join("\n")}` : "Наблюдений нет." }
       }
       const project = me.project ?? projOf(me)
       const machine = input.machine === true
       const w = requestWatch({ session: me.session, command, cwd: me.directory || host.defaultDir, note: String(input.note ?? "").trim() || undefined, minutes: input.minutes, machine, project })
       const ahead = machine ? machineQueue(project).filter((x) => x.id !== w.id).length : 0
       const queueText = machine ? ` Команда грузит машину: стоит в очереди машины проекта${ahead ? `, перед ней ${ahead}` : ""} — запустится, когда освободится место (machine_slots).` : ""
-      return { content: `Наблюдение ${w.note ? `«${w.note}» ` : ""}поставлено (${hhmm(w.created)}, предел ${w.minutes} мин от запуска).${queueText} Плагин запустит команду в сервере OpenCode и разбудит эту вкладку письмом с результатом. Заканчивай ход — ждать не нужно.` }
+      return { content: `Наблюдение ${w.note ? `«${w.note}» ` : ""}${w.id} поставлено (${hhmm(w.created)}, предел ${w.minutes} мин от запуска; отмена — peer_watch {action: "cancel", id: "${w.id}"}).${queueText} Плагин запустит команду в сервере OpenCode и разбудит эту вкладку письмом с результатом. Заканчивай ход — ждать не нужно.` }
     },
   }
 
