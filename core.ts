@@ -453,6 +453,18 @@ export async function userAfter(sessionID: string, at: number): Promise<boolean>
 }
 
 /** Ход открыт и живой: после последнего idle есть сообщения, обновлённые не раньше чем за fresh мс. */
+/** Путь worktree и ветка задачи по настройкам проекта (worktrees не задан — решает методология). Слаг — из записи задачи:
+ *  вычислен один раз при постановке, путь в ответе peer_spawn и созданный — одни и те же. */
+export function taskPlace(dir: string, cfg: PeersConfig, n: number, slug: string, project: string): { worktree?: string; branch: string } {
+  const v = { repo: repoNameOf(dir), n, slug, project }
+  return { worktree: cfg.worktrees ? path.join(cfg.worktrees, fillName(cfg.worktreeName, v)) : undefined, branch: fillName(cfg.branchName, v) }
+}
+/** Путь внутри папки (без «..» наружу; регистр букв на Windows не важен). */
+export function insideDir(p: string, dir: string): boolean {
+  const rel = path.relative(path.resolve(dir).toLowerCase(), path.resolve(p).toLowerCase())
+  return !!rel && !rel.startsWith("..") && !path.isAbsolute(rel)
+}
+
 /** Старт процесса сервера (не загрузки плагина: OpenCode грузит его заново в том же процессе на каждую папку). */
 export const PROCESS_START = Number(process.env.NOVA_PEERS_PROCESS_START) || Date.now() - process.uptime() * 1000
 const OPEN_TURN_MAX_MS = 4 * 3_600_000
@@ -1304,11 +1316,6 @@ export function makeTools(host: PeersHost): PeerTool[] {
   const missingFields = (input: any, cfg: PeersConfig) => cfg.taskFields.filter((f) => !String(input[f] ?? "").trim())
   const FIELD_RU: Record<string, string> = { goal: "цель (goal)", criteria: "критерии приёмки (criteria)", boundaries: "границы (boundaries)", open_questions: "открытые вопросы (open_questions)" }
   const newQid = () => `q${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
-  /** Путь worktree и ветка задачи по настройкам проекта (worktrees не задан — решает методология). */
-  const placeFor = (me: Card, cfg: PeersConfig, n: number, slug: string, project: string) => {
-    const v = { repo: repoNameOf(me.directory), n, slug, project }
-    return { worktree: cfg.worktrees ? path.join(cfg.worktrees, fillName(cfg.worktreeName, v)) : undefined, branch: fillName(cfg.branchName, v) }
-  }
   const findTask = (me: Card | undefined, n: any): Task | undefined => (me && Number.isInteger(Number(n)) ? loadTask(projOf(me), Number(n)) : undefined)
   const taskRow = (t: Task) => `#${t.n} ${t.priority} ${statusRu(t.status)} «${t.title}» — ${t.executor ? `исполнитель ${t.executor}` : "без исполнителя"}${t.kind === "assign" ? " (вкладка владельца)" : ""}${t.reviewer ? `, приёмщик ${t.reviewer}` : ""}`
 
@@ -1365,8 +1372,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
         project, title, goal: String(input.goal).trim(), criteria: input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(),
         priority: isPriority(input.priority) ? input.priority : cfg.defaultPriority, tier, role, model,
         author: me.session, author_role: keyOf(me), qid: newQid(), status: "starting", kind: "spawn", executor: plannedSessionId(), directory: me.directory,
-      })
-      Object.assign(t, placeFor(me, cfg, t.n, t.slug, project))
+      }, (n, slug) => taskPlace(me.directory, cfg, n, slug, project))
       const par = parseParent(input.parent)
       if (par) {
         const order = loadTask(par.project, par.n)
@@ -1428,9 +1434,7 @@ export function makeTools(host: PeersHost): PeerTool[] {
           project, title, goal: String(input.goal).trim(), criteria: input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(),
           priority: isPriority(input.priority) ? input.priority : cfg.defaultPriority, tier: "medium", role: target.role, model: target.model,
           author: me.session, author_role: keyOf(me), qid: newQid(), status: "running", kind: "assign", executor: target.session, directory: target.directory,
-        })
-        Object.assign(t, placeFor(target, cfg, t.n, t.slug, project))
-        saveTask(t)
+        }, (n, slug) => taskPlace(target.directory, cfg, n, slug, project))
         target.task = { project, n: t.n }
         saveCard(target)
         postLetter(target.session, { id: taskLetterId(t), from_role: keyOf(me), from_session: me.session, to: target.session, time: Date.now(), qid: t.qid, text: formatTaskLetter(t) })

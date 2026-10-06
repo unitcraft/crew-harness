@@ -135,7 +135,9 @@ export function listTasks(project?: string): Task[] {
 }
 
 /** Новая задача: следующий свободный номер проекта, файл создаётся атомарно. */
-export function createTask(fields: Omit<Task, "n" | "history" | "created" | "updated" | "executors" | "attempt" | "slug"> & { slug?: string }): Task {
+// place — место задачи (worktree, ветка) по номеру и слагу: пишется ВМЕСТЕ с задачей, первой же записью. Раньше его
+// дописывали вторым сохранением, и сервер, подхватив задачу между ними, запускал её без места (план 011, дефект 3).
+export function createTask(fields: Omit<Task, "n" | "history" | "created" | "updated" | "executors" | "attempt" | "slug"> & { slug?: string }, place?: (n: number, slug: string) => Partial<Task>): Task {
   const dir = path.join(TASKS, safeKey(fields.project))
   mkdirSync(dir, { recursive: true })
   const used = readdirSync(dir).map((f) => /^(\d+)\.json$/.exec(f)?.[1]).filter(Boolean).map(Number)
@@ -143,6 +145,7 @@ export function createTask(fields: Omit<Task, "n" | "history" | "created" | "upd
   const now = Date.now()
   for (;;) {
     const t: Task = { ...fields, slug: fields.slug ?? slugify(fields.title), n, executors: [], attempt: 1, history: [{ at: now, by: fields.author, status: fields.status, note: "поставлена" }], created: now, updated: now }
+    if (place) Object.assign(t, place(n, t.slug))
     try {
       writeFileSync(taskFile(fields.project, n), JSON.stringify(t, null, 1), { flag: "wx" })
       return t

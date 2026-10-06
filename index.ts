@@ -49,6 +49,8 @@ import {
   turnEnd,
   idleAt,
   openTurn,
+  insideDir,
+  taskPlace,
   PROCESS_START,
   userAfter,
   hhmm,
@@ -794,6 +796,8 @@ export default {
     // письмо с задачей кладётся, только если его ещё нет (id письма — из номера и попытки). Оборвался процесс на
     // любом шаге — следующий проход (resumeTasks) повторит запуск, второй сессии и второго письма не будет.
     const startingNow = new Set<string>()
+    const startBlocked = new Map<string, number>() // задача → когда повторить запуск, отложенный из-за дерева
+    const START_RETRY_MS = Number(process.env.NOVA_PEERS_START_RETRY_MS) || 120_000
     async function startTask(t0: Task): Promise<{ session?: string; error?: string }> {
       const key = `${t0.project}#${t0.n}`
       if (startingNow.has(key)) return { error: "запуск уже идёт" }
@@ -806,18 +810,39 @@ export default {
           t.executor = sid
           saveTask(t)
         }
-        // план 006: worktree и ветку задачи создаёт плагин, сессия работает в нём (хуки видят ветку задачи, не main)
+        // план 006: worktree и ветку задачи создаёт плагин, сессия работает в нём (хуки видят ветку задачи, не main).
+        // План 011, дефект 3: сессия задачи с деревом по настройкам НИКОГДА не открывается в главной копии — там
+        // исполнитель заводил дерево сам, не в той папке и со своим слагом (#19, #22 nova). Места нет в записи (её
+        // записали прежним путём) — достроить по шаблону; дерево вне папки деревьев или не создалось — не запускать.
         let dir = t.directory
-        if (t.kind === "spawn" && t.worktree && t.branch) {
-          const w = ensureWorktree(t.directory, t.worktree, t.branch, loadConfig(t.directory).targetBranch)
-          if (w.ok) {
+        if (t.kind === "spawn") {
+          if ((startBlocked.get(key) ?? 0) > Date.now()) return { error: "запуск отложен: дерево задачи не готово" }
+          const cfg = loadConfig(t.directory)
+          if (cfg.worktrees && (!t.worktree || !t.branch)) {
+            Object.assign(t, taskPlace(t.directory, cfg, t.n, t.slug, t.project))
+            taskEvent(t, "opencode-peers", undefined, `место задачи достроено по настройкам: worktree ${t.worktree}, ветка ${t.branch}`)
+          }
+          if (t.worktree && t.branch) {
+            const refuse = (why: string) => {
+              startBlocked.set(key, Date.now() + START_RETRY_MS)
+              const id = `start-refused-${safeKey(t.project)}-${t.n}-${safeKey(why).slice(0, 60)}`
+              if (!letterExists(t.author, id)) {
+                postLetter(t.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: Date.now(), text: `Задача #${t.n} «${t.title}» не запущена: ${why}. Сессию в главной копии плагин не открывает. Повтор — сам, раз в ${START_RETRY_MS / 60_000} мин; поправь причину или отмени задачу (peer_task {action: "cancel", n: ${t.n}}).` })
+                taskEvent(t, "opencode-peers", undefined, `не запущена: ${why}`)
+              }
+              log(`task #${t.n} (${t.project}) not started: ${why}`)
+              return { error: why }
+            }
+            if (cfg.worktrees && !insideDir(t.worktree, cfg.worktrees)) return refuse(`worktree ${t.worktree} вне папки деревьев проекта ${cfg.worktrees}`)
+            const w = ensureWorktree(t.directory, t.worktree, t.branch, cfg.targetBranch)
+            if (!w.ok) return refuse(`worktree ${t.worktree} не создан: ${w.error}`)
             dir = t.worktree
             if (!t.worktree_ready) {
               t.worktree_ready = true
               saveTask(t)
               taskEvent(t, "opencode-peers", undefined, `worktree ${t.worktree}, ветка ${t.branch}${w.created ? " — создан плагином" : " — уже был"}`)
             }
-          } else log(`task #${t.n} worktree not created (the worker creates it): ${w.error}`)
+          }
         }
         const [providerID, ...rest] = String(t.model ?? "").split("/")
         await ctx.session.create({ id: sid, title: `#${t.n} ${t.title}`, location: { directory: dir }, metadata: { peersTask: { project: t.project, n: t.n, attempt: t.attempt } }, ...(t.model ? { model: { providerID, id: rest.join("/") } } : {}) })
