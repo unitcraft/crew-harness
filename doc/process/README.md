@@ -1,5 +1,7 @@
 # Процесс CrewHarness: отличия и дополнения к методике
 
+Часть Канона проекта (состав Канона — [AGENTS.md](../../AGENTS.md), раздел «Канон»).
+
 **Основа — методика [unitcraft/ai-dev-methodology](https://github.com/unitcraft/ai-dev-methodology/tree/main)**
 целиком: README (канон и надстройка), `task-algorithm.md`, `task-sessions.md`, `task-runner.md`,
 `completeness-check.md`. Всё, что там сказано, действует здесь без пересказа. Ниже — только то, чем проект от неё
