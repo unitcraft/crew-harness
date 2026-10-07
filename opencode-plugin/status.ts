@@ -289,6 +289,12 @@ export const SIDE_WIDTH = 32
 export const sideText = (r: SideRow) => (r.who ? `${r.mark} ${r.who.padEnd(9).slice(0, 9)} ${r.what}` : `    ${r.what}`).slice(0, SIDE_WIDTH)
 const WORD_OF_TASK: Record<string, string> = { submitted: "✓ сдана", reviewing: "✓◐ приёмка", rework: "↻ доработка", approval: "◇ согласование", accepted: "✓✓◐ влита", running: "в работе", starting: "запуск" }
 const SIDE_MAX = 9
+/** «что» ждущей вкладки с длительностью ожидания: «⧗ CI t34 40м» (длительность — в конце, обрезается текст перед ней). */
+export function waitText(text: string, since: number | undefined, now: number): string {
+  if (!since) return text
+  const dur = ` ${Math.max(0, Math.round((now - since) / 60_000))}м`
+  return `${short(text, 20 - dur.length)}${dur}`
+}
 export function sidebarLines(list: Status[], now = Date.now(), project?: string): { title: string; rows: SideRow[]; foot: string } {
   const mine = project ? list.filter((s) => (s.project ?? "?") === project) : list
   // панель узкая (~32 знака): кто — до 9 знаков, что — до 20, иначе строка переносится
@@ -317,15 +323,20 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string)
   const rows: SideRow[] = []
   for (const s of sorted.slice(0, SIDE_MAX)) {
     // приёмка по шагам: «проверка 3/13: fixture» вместо «работает», под строкой — что проверяет шаг
-    const prog = s.state !== "owner" && s.state !== "question" ? stepProgress(s.task) : undefined
+    // ждущая вкладка (наблюдение, очередь машины, ответ) показывает, чего ждёт, и сколько; шаги — строкой под ней
+    const stepsLine = s.state !== "owner" && s.state !== "question" ? stepProgress(s.task) : undefined
+    const waiting = s.state === "watch" || s.state === "reply"
+    const prog = waiting ? undefined : stepsLine
+    const waitFor = waiting ? waitText(what(s), s.since, now) : undefined
     rows.push({
       mark: s.state === "owner" ? "▶" : s.state === "question" ? "?" : s.state === "working" ? "•" : " ",
       who: who(s),
-      what: short(prog ?? what(s), 20),
+      what: short(prog ?? waitFor ?? what(s), 20),
       tone: (s.state === "owner" || s.state === "question" ? "accent" : s.state === "idle" ? "muted" : "base") as SideRow["tone"],
     })
     const cur = s.task?.as === "reviewer" && prog?.startsWith("проверка") ? s.task.steps!.find((a) => a.id === s.task!.checking) : undefined
     if (cur) rows.push({ mark: " ", who: "", what: `↳ ${short(cur.text.replace(/[`*_]/g, ""), 26)}`, tone: "muted" })
+    if (waiting && stepsLine) rows.push({ mark: " ", who: "", what: `↳ ${stepsLine}`, tone: "muted" })
   }
   const waiting = mine.filter((s) => s.state === "owner").length
   // «ход» — модель думает сейчас; «ждут» — наблюдения (гейты, коммит в main), из них в очереди машины — ещё не запущены

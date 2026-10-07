@@ -41,6 +41,18 @@ cell("rows fit the narrow panel (32 columns) without wrapping", v.rows.every((r)
   cell("/crew shows the steps on one line and the step in progress", /шаги 1\/3 ✓▶·/.test(text) && /▶ guards: стражи/.test(text) && !/notes/.test(text), text)
   cell("/crew lines fit the dialog without wrapping", text.split("\n").every((l) => l.length <= 72), text)
 }
+{
+  // a reviewer waiting on a watch does not hide the wait behind its steps: the wait first with its minutes, the steps under it
+  const steps = Array.from({ length: 12 }, (_, i) => ({ id: "s" + i, text: "шаг " + i, ...(i < 10 ? { result: "ok" } : {}) }))
+  const w = { session: "sW", project: "proj", role: "worker", title: "#22", state: "watch", since: Date.now() - 40 * 60_000, detail: "", watches: [{ id: "w", note: "когда сдвинется main", started: Date.now() - 40 * 60_000, minutes: 90 }], asked: [], tasks: [], updated: Date.now(), task: { n: 22, status: "reviewing", as: "reviewer", title: "t", steps } }
+  const sv = sidebarLines([w], Date.now(), "proj")
+  cell("a waiting reviewer shows the wait with minutes, not the steps", sv.rows[0].what.startsWith("⧗ ") && /40м$/.test(sv.rows[0].what) && sv.rows[0].what.length <= 20, JSON.stringify(sv.rows))
+  cell("the steps go on a muted row under the wait", sv.rows[1]?.what === "↳ шаги 10/12" && sv.rows[1].tone === "muted", JSON.stringify(sv.rows))
+  cell("the printed rows of a waiting reviewer fit the panel", sv.rows.every((x) => sideText(x).length <= 32), JSON.stringify(sv.rows.map(sideText)))
+  const idle = { ...w, state: "task", watches: [], since: undefined }
+  const iv = sidebarLines([idle], Date.now(), "proj")
+  cell("a reviewer that waits for nothing still shows its steps", iv.rows[0].what === "шаги 10/12" && iv.rows.length === 1, JSON.stringify(iv.rows))
+}
 cell("another project's sessions are not shown", !v.rows.some((r) => r.who === "worker" && r.what.startsWith("работает")), JSON.stringify(v.rows))
 cell("at most 9 rows, the rest in the foot", v.rows.length === 9 && /\+5 · \/crew/.test(v.foot) && /ход 1 · ждут 1 \(очередь 1\)/.test(v.foot),JSON.stringify({ n: v.rows.length, foot: v.foot }))
 
