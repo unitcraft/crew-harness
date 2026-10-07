@@ -32,3 +32,6 @@
 
 **Уточнение, 2026-10-07 (владелец).** Правила разработки собраны в Канон — `doc/canon/`: `process.md` (бывший
 `doc/process/`), `decisions/`, `plans/`; `AGENTS.md` остаётся в корне. В `doc/` кроме Канона — `tasks/` и `research/`.
+
+**Уточнение, 2026-10-07 (владелец).** `plans/` из Канона убраны в `doc/archive/plans/`
+([ADR-0007](ADR-0007-plan-in-task-epics.md)); в `doc/` кроме Канона — `tasks/`, `research/`, `archive/`.

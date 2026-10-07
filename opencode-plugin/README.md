@@ -83,7 +83,7 @@ time-outs: no window plugin, no wake.
 
 A service letter of the plugin starts with `⚙ 01:17 · crew → … (служебное, не отвечай)`. Window notices are short (the gist in the
 title, one line of text) and stay longer when they matter: "waiting for you" 30 s, "stuck" 15 s, others 8–10 s
-([plan 003.1](../doc/canon/plans/003.1-clear-letters.md)).
+([plan 003.1](../doc/archive/plans/003.1-clear-letters.md)).
 
 ## Turn economy
 
@@ -105,12 +105,12 @@ OpenCode server, detached, and when it exits wakes the tab with a letter: exit c
 ends its turn meanwhile. It survives the end of the turn and a service restart; a command gone without an exit code
 is reported as cut off; the time limit (default 120 min, up to 720) stops it with code 124. In a claude-code tab this
 is the only way: Claude Code's own background tasks (`run_in_background`, Monitor) die with the turn
-([plan 002.1](../doc/canon/plans/002.1-watch.md)).
+([plan 002.1](../doc/archive/plans/002.1-watch.md)).
 
 **The machine queue.** `machine: true` marks a command that loads the machine (a gate, a build, a full test run):
 it waits for a slot in the project's machine queue — `machine_slots` at a time (1; 0 — no limit), in the order they
 were set; the time limit counts from the start. `crew_watch` says how many are ahead, `/crew` shows it queued, the
-letter says how long it waited. Ordinary watches and other projects do not wait ([plan 002.2](../doc/canon/plans/002.2-machine-queue.md)).
+letter says how long it waited. Ordinary watches and other projects do not wait ([plan 002.2](../doc/archive/plans/002.2-machine-queue.md)).
 
 **The project's deny rules.** The command runs outside the window's permissions, so `crew_watch` checks it against
 `permissions.deny` of the project's `.claude/settings.json` (from the tab's directory up to the git root; no file — no
@@ -119,20 +119,20 @@ whole or in any subcommand (`&&`, `||`, `;`, `|`, a newline, the body of `bash -
 `VAR=1 timeout N` prefixes do not hide it), or naming a file under a `Read(…)` glob is refused, naming the rule.
 **Who started it:** the command's environment carries `CREW_SESSION_ID`, `CREW_ROLE`, `CREW_PROJECT`, and
 `CREW_REVIEW_N` for the reviewer of an open task, `CREW_TASK_N` for its executor — fixed when the watch is put and
-kept in its record, so a restart or a later role change does not alter them ([plan 002.7](../doc/canon/plans/002.7-acceptor-role.md)).
+kept in its record, so a restart or a later role change does not alter them ([plan 002.7](../doc/archive/plans/002.7-acceptor-role.md)).
 
 ## Who waits for what: `/crew` and "waiting for you"
 
 The window's right panel shows a "Crew" block under "Context": the sessions of the project of the tab on screen —
 the ones waiting for you first, who is working and how long, who waits for what — refreshed every 2 s
-([plan 003.2](../doc/canon/plans/003.2-sidebar.md)). The window closes the tab of a task or review session two minutes after its task was merged (accepted — before the cleanup: an open tab keeps the server watching the task's folder, and Windows will not remove it) or cancelled, unless its turn is going or
+([plan 003.2](../doc/archive/plans/003.2-sidebar.md)). The window closes the tab of a task or review session two minutes after its task was merged (accepted — before the cleanup: an open tab keeps the server watching the task's folder, and Windows will not remove it) or cancelled, unless its turn is going or
 the tab is on screen (the owner's own tabs are left alone; the session stays in the history). `/crew-config` shows the project's settings in effect, each with where it comes from (default, the committed file,
 `local`), like `crew_config show`. `/crew-doctor` shows the service's last self-check (made at start and every 10 minutes), like `crew_doctor`. `/crew` in any window (also in the Ctrl+P palette) shows, without a model turn, every session of the projects:
 working, **waiting for you** (its last answer ends with a question and you have not written since), waiting for a
 watch, for an answer to its question, for its task's review or rework, for its own tasks, or idle — your project
 first, the ones waiting for you on top. A session that starts waiting for you puts a notice into every live window
 (with Open; a system notification when the window is not focused, if OpenCode's `attention.notifications` is on)
-and repeats it every `owner_reminder_min` minutes (15; 0 — once) until you answer ([plan 003](../doc/canon/plans/003-status.md)).
+and repeats it every `owner_reminder_min` minutes (15; 0 — once) until you answer ([plan 003](../doc/archive/plans/003-status.md)).
 
 ### Session status
 
@@ -170,7 +170,7 @@ start and its `idle` row): a turn with a tool call is a working one, a turn with
 - a task session whose turn ends with a question is not told "continue": the question goes to whoever set the
   task (a letter that wakes it), who answers or asks the owner; a merge lock held longer than `stall_minutes` (30)
   and a submitted task waiting for a reviewer that long are raised to the task's author, and so are the leftovers of a
-  closed task (branches here and on origin, worktrees by the project's name templates) ([plan 002.4](../doc/canon/plans/002.4-flow-watch.md));
+  closed task (branches here and on origin, worktrees by the project's name templates) ([plan 002.4](../doc/archive/plans/002.4-flow-watch.md));
 - service letters of the plugin say "do not answer"; a letter to `crew-harness` itself is refused.
 
 ## Tasks
@@ -185,7 +185,7 @@ journal is `tasks/<project>/<N>.json` in the mailbox.
   (`claude-code/opus` / `sonnet` / `haiku`, `spawn_models` overrides); a limit of running tasks per
   role (`spawn_limits`, 3); priority `P0` (emergency) … `P3`, default `P2`. With `worktrees` set the
   plugin creates the task's worktree and branch (from the target branch) and starts the session in it, so the
-  project's hooks see the task's branch, not the main copy ([plan 002.3](../doc/canon/plans/002.3-task-worktree.md)).
+  project's hooks see the task's branch, not the main copy ([plan 002.3](../doc/archive/plans/002.3-task-worktree.md)).
 - The start is repeatable: the session id is chosen and written to the journal **before**
   `session.create` (OpenCode accepts an own id starting with `ses` and returns the existing session
   on a repeat), the task letter's id comes from the number — a start cut off at any step is
@@ -218,7 +218,7 @@ The integrator stays free for the owner and does not re-check accepted work:
   accepted;
 - a task on rework does not hold a review session's place (`spawn_limits.reviewer`): the next submitted task gets
   it; the resubmission goes back to the same reviewer at once;
-- `reviewer: "acceptor"` — a separate acceptor role with its own rights ([plan 002.7](../doc/canon/plans/002.7-acceptor-role.md)):
+- `reviewer: "acceptor"` — a separate acceptor role with its own rights ([plan 002.7](../doc/archive/plans/002.7-acceptor-role.md)):
   only a free open tab of role `acceptor` becomes a reviewer (never a `worker` tab), a new review session is born
   with role `acceptor`, review sessions are bounded by `spawn_limits.acceptor` (without it `spawn_limits.reviewer`,
   then 2) and take no `worker` place; `merge`, `accept` and `cleaned` need the task's reviewer AND the `acceptor`
@@ -294,7 +294,7 @@ Marks: plan `🔴 ОТКРЫТ / 🟡 В РАБОТЕ / ✅ ЗАКРЫТ / ❌ �
 
 **Heavy runs.** `heavy_commands` lists substrings of commands that load the machine (full gate,
 full build, full test run, benchmarks). `crew_watch` with such a command goes to the machine queue
-by itself. Full design: [plan 004](../doc/canon/plans/004-plans.md).
+by itself. Full design: [plan 004](../doc/archive/plans/004-plans.md).
 
 ## Other projects
 

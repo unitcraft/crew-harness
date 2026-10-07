@@ -267,6 +267,6 @@ export function settingsProblems(projects: Projects): string[] {
   const out = projects.flatMap((p) => p.problems ?? [])
   for (const p of projects) if (p.legacy) out.push(`проект ${p.name}: настройки в файле с прежним именем ${p.legacy} — переименуй в .opencode/crew-harness.json (git mv) и закоммить`)
   const old = projects.filter((p) => !p.dir).map((p) => p.name)
-  if (old.length) out.push(`проекты ${old.join(", ")} заданы прежней формой опций (имя → корень); новая — список папок настроек: "projects": ["<папка с .opencode/crew-harness.json>"], файл называет проект и root (doc/canon/plans/002-tasks.md, «Где живут настройки проекта»)`)
+  if (old.length) out.push(`проекты ${old.join(", ")} заданы прежней формой опций (имя → корень); новая — список папок настроек: "projects": ["<папка с .opencode/crew-harness.json>"], файл называет проект и root (doc/archive/plans/002-tasks.md, «Где живут настройки проекта»)`)
   return [...new Set(out)]
 }
