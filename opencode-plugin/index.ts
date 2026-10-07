@@ -1357,6 +1357,10 @@ export default {
       for (const w of liveWindows()) postNotice(w.pid, { title: "crew: проблемы — /crew-doctor", message: short(problems.join("; "), 100), duration: 15_000 })
     }
     const doctorTimer = setTimeout(() => void runDoctor(), 10_000)
+    // и ещё раз через минуту: при подъёме сервиса окна переподключаются позже 10 с, и первая проверка видит «ни одно
+    // окно не отмечается» (2026-10-07) — без повтора ложное замечание висело в /crew-doctor до плановой проверки
+    const doctorAgain = setTimeout(() => void runDoctor(), 70_000)
+    doctorAgain.unref?.()
     const doctorEvery = setInterval(() => void runDoctor(), DOCTOR_EVERY_MS)
     doctorEvery.unref?.()
 
@@ -1382,6 +1386,7 @@ export default {
       clearInterval(timer)
       clearInterval(lagTimer)
       clearTimeout(doctorTimer)
+      clearTimeout(doctorAgain)
       clearInterval(doctorEvery)
       remoteBridge.stop()
       try {
