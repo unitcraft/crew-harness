@@ -70,6 +70,13 @@ card("sesRUN01", { spawned: { by: "sesINTEG1", task: "x", tier: "light", status:
 msg("sesRUN01", "idle", { outcome: "succeeded" }, Date.now() - 60_000)
 msg("sesRUN01", "assistant", { content: [{ type: "tool", name: "bash" }] })
 
+// #5: accepted, its worktree still there; a watch stands in it (#26 nova, 2026-10-07: the watch waiting for the tree to go
+// held the folder, and "git worktree remove" failed with Permission denied)
+const wt5 = path.join(tmp, "wt5")
+mkdirSync(wt5, { recursive: true })
+base(5, { status: "accepted", executor: "sesEX5", reviewer: "sesREV05", review_kind: "spawn", worktree: wt5 })
+const watchMod = await import("../watch.ts")
+const w5 = watchMod.requestWatch({ session: "sesREV05", command: "sleep 30", cwd: wt5, note: "жду уборки" })
 const mod = await import("../index.ts")
 const tools = {}
 const hooks = {}
@@ -176,6 +183,12 @@ const hreq = hid ? JSON.parse(readFileSync([".req.json", ".json"].map(wfile).fin
 cell("a heavy command is queued for the machine without machine: true", hreq.machine === true && /heavy_commands/.test(heavy), JSON.stringify({ heavy, hreq }))
 if (hid) await tools.crew_watch.execute({ action: "cancel", id: hid }, { sessionID: "sesINTEG1" })
 
+// 5. the watch standing in an accepted task's tree moves to the main copy, with a letter
+await until(() => watchMod.watchesOf("sesREV05").some((w) => w.cwd === proj))
+const moved = watchMod.watchesOf("sesREV05")
+cell("a watch in an accepted task's tree moves to the main copy", moved.length === 1 && moved[0].cwd === proj && moved[0].command === "sleep 30" && moved[0].id !== w5.id, JSON.stringify(moved))
+cell("its tab is told the new id", letters("sesREV05").some((l) => l.text.includes(w5.id) && l.text.includes(moved[0]?.id ?? "?") && /основную копию/.test(l.text)), JSON.stringify(letters("sesREV05").map((l) => l.text.slice(0, 160))))
+for (const w of moved) watchMod.dropWatch(w)
 clearInterval(heart)
 stop?.()
 db.close()

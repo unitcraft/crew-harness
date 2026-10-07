@@ -112,7 +112,7 @@ import {
 import { DECISION_RU, readApprovals, removeApproval } from "./approvals.ts"
 import { sweepRead } from "./housekeeping.ts"
 import { allSteps, nextPlanNumber, parsePlan, stepDeps } from "./plans.ts"
-import { dropWatch, openWatchesBySession, pollWatches, watchesOf } from "./watch.ts"
+import { dropWatch, openWatchesBySession, pollWatches, requestWatch, watchesOf } from "./watch.ts"
 import { endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
 import { type Task, acceptedAt, ago, byPriority, createTask, rounds, slugify, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
 import { createRemoteBridge } from "./remote.ts"
@@ -469,6 +469,33 @@ export default {
     // закрываются: строка в историю без хода, уведомление интегратору. Только когда ход сессии не идёт: строка,
     // записанная посреди хода, стала бы ещё одним шагом модели (замер 2026-10-05).
     async function finishTasks() {
+      // НАБЛЮДЕНИЕ ДЕРЖИТ ДЕРЕВО (2026-10-07, #26 nova): наблюдение идёт с рабочей папкой сессии, у приёмщика и
+      // исполнителя это дерево задачи; на Windows папку, в которой стоит процесс, не удалить — уборка принятой задачи
+      // кончалась «Permission denied», а держало её как раз наблюдение «жду, пока дерево исчезнет». Задача влита
+      // (accepted) или отменена — наблюдения (любой сессии) из её дерева переезжают в основную копию: тот же процесс
+      // снимается, та же команда ставится заново с папкой проекта, вкладке — письмо с новым id.
+      const moving = openWatchesBySession()
+      if (moving.size)
+        for (const t of listTasks()) {
+          if ((t.status !== "accepted" && t.status !== "cancelled") || !t.worktree || !t.directory) continue
+          const tree = t.worktree
+          const inTree = (p: string) => path.resolve(p).toLowerCase() === path.resolve(tree).toLowerCase() || insideDir(p, tree)
+          for (const ws of moving.values())
+            for (const w of ws) {
+              if (!w.cwd || !inTree(w.cwd) || inTree(t.directory)) continue
+              dropWatch(w, log, now(), { moved: true })
+              const nw = requestWatch({ session: w.session, command: w.command, cwd: t.directory, note: w.note, minutes: w.minutes, machine: w.machine, project: w.project, env: w.env })
+              postLetter(w.session, {
+                id: `watch-moved-${w.id}`,
+                from_role: PLUGIN_SENDER,
+                from_session: PLUGIN_SENDER,
+                to: w.session,
+                time: now(),
+                text: `Наблюдение ${w.note ? `«${w.note}» ` : ""}${w.id} стояло в дереве задачи #${t.n}, а задача ${t.status === "accepted" ? "влита и дерево убирается" : "отменена"}: Windows не даёт удалить папку, в которой идёт процесс. Перенёс его в основную копию (${t.directory}) — та же команда, новый id ${nw.id}; ждать его так же.`,
+              })
+              log(`watch ${w.id} moved out of ${tree} as ${nw.id}`)
+            }
+        }
       // наблюдения сессий закрытой задачи больше не нужны: снять (иначе висят до предела, до 12 ч, и держат очередь машины)
       const open = openWatchesBySession()
       if (open.size)
