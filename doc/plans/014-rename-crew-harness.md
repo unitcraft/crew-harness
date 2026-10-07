@@ -1,6 +1,6 @@
 # 014 — переименование: opencode-peers → CrewHarness (crew-harness)
 
-Статус: 🟡 В РАБОТЕ (2026-10-07): правка кода и документов — в ветке `rename-crew`; переключение — по слову владельца.
+Статус: 🟡 ПЕРЕКЛЮЧЕНО (2026-10-07 ~02:50): шаги 1–5 сделаны; остался шаг 6 — вливание ветки nova и `crew_doctor`.
 
 Владелец 2026-10-06: «opencode-peers уже сильно не соответствует название»; выбрано «opencode-harness-crew», затем (2026-10-07, после внешней оценки названия) — **CrewHarness**, репозиторий `crew-harness` без приставки opencode: план 015 выносит задачи из OpenCode, и продукт перестаёт быть только плагином OpenCode;
 «следующий план — переименовать название и сделать рефакторинг всех внутренних команд под новое название»;
@@ -48,6 +48,17 @@ README, лицензия, package.json (0.5.0). Метка `[opencode-peers]` в
 | `.claude/commands/integrator.md`, `carina.md`, `docs/dev/prompts/*handoff.md` | `peer_*`, `mcp__peers__*`, `/peers`, `opencode-peers` | `crew_*`, `mcp__crew__*`, `/crew`, `crew-harness` |
 | `scripts/tools/double-build.sh`, `scripts/guards/worktree-count.baseline` | `peer_watch`, `peer_task`, `peer_spawn`, `opencode-peers.json` | новые имена |
 | `.claude/settings.json` (разрешения) | `mcp__peers__*` | `mcp__crew__*` |
+| `AGENTS.md`, `.claude/commands/flow.md` (добавлено по вопросу интегратора) | `peer_watch`, `peer_task merge` | `crew_watch`, `crew_task merge` |
 
 Пути к ящику (`nova-peers`, `opencode-peers`) в скриптах продолжают работать: прежние папки остаются на месте;
 новое имя — `crew-harness`.
+
+`/peers` в handoff-файлах nova не меняется: это прежняя команда Claude Code (теперь `/old-peers`), история, а не команда
+плагина.
+
+## Ход
+
+- 2026-10-07: `main` плагина `3ed9121` и провайдера `0500f04` запушены; репозиторий — `unitcraft/crew-harness`, папка —
+  `<папка плагинов>\crew-harness`; пути в `opencode.jsonc` и `cli.json`; ссылки в README соседних плагинов.
+  Сервис перезапущен владельцем, плагин загружен из новой папки, ящик `crew-harness` — ссылка на `nova-peers`.
+  Ветка nova `crew-harness-rename` ждёт зелёного CI и вливается интегратором.
