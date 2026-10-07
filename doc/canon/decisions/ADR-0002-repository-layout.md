@@ -18,7 +18,8 @@
 ## Решение
 
 Вариант 2. `opencode-plugin/` — плагин (TypeScript, в работе); `service/` — сервис координации; `web/` — пульт;
-`doc/` — `tasks/`, `decisions/`, `process/`, `research/`, `plans/` (архив). Сделано: коммиты `5f723fa`, `07205be`.
+`doc/` — `canon/` (Канон: `README.md` — входной файл, `process.md`, `decisions/`), `tasks/`, `research/`, `archive/`;
+`AGENTS.md` — в корне, агенты читают его оттуда при старте. Сделано: коммиты `5f723fa`, `07205be`.
 
 ## Последствия
 
@@ -29,9 +30,3 @@
 ## Границы
 
 Папка задачи и её материалы — в `doc/tasks/`, не в коде частей.
-
-**Уточнение, 2026-10-07 (владелец).** Правила разработки собраны в Канон — `doc/canon/`: `process.md` (бывший
-`doc/process/`), `decisions/`, `plans/`; `AGENTS.md` остаётся в корне. В `doc/` кроме Канона — `tasks/` и `research/`.
-
-**Уточнение, 2026-10-07 (владелец).** `plans/` из Канона убраны в `doc/archive/plans/`
-([ADR-0007](ADR-0007-plan-in-task-epics.md)); в `doc/` кроме Канона — `tasks/`, `research/`, `archive/`.
