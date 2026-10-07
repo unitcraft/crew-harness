@@ -30,3 +30,8 @@
 ## Границы
 
 Папка задачи и её материалы — в `doc/tasks/`, не в коде частей.
+
+## Связи
+
+- [ADR-0001](ADR-0001-work-by-methodology.md) — Канон и задачи в `doc/`; [ADR-0007](ADR-0007-plan-in-task-epics.md) —
+  старые планы в `doc/archive/plans/`.

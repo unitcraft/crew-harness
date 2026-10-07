@@ -36,3 +36,8 @@ https://github.com/unitcraft/ai-dev-methodology/blob/main/task-runner.md».
 Методика не копируется в репозиторий, в том числе `task-algorithm.md` в папку задачи: версия методики закрепляется
 коммитом при старте задачи (строка `Методика: … @ <коммит>` в `log.md`), сессии читают файл этого коммита
 ([process.md](../process.md)). Правка методики — в её репозитории, не здесь.
+
+## Связи
+
+- Методика: [unitcraft/ai-dev-methodology](https://github.com/unitcraft/ai-dev-methodology/tree/main).
+- Опираются на это решение: [ADR-0007](ADR-0007-plan-in-task-epics.md) — план в задаче и эпик.
