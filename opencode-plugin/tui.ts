@@ -12,7 +12,7 @@
 // даёт {type: "session", sessionID}; api.ui.tabs.list() — [{sessionID, title, active, busy, ...}]; api.ui.toast.show
 // с sessionID чужой вкладки сам добавляет кнопку Open.
 //
-// СВОДКА /crew и «ЖДЁТ ВАС» (план 004). Команда окна — как встроенный модуль opencode.stats той же версии:
+// СВОДКА /crew и «ЖДЁТ ВАС» (план 003). Команда окна — как встроенный модуль opencode.stats той же версии:
 // ui.slot({append: "app"}) + keymap.layer({commands: [{slash: {name}, palette: true, run}]}); run показывает
 // ui.dialog.alert со сводкой из status/ (пишет плагин сервиса) — в окне, без хода модели. Уведомление с attention —
 // ещё и attention.notify: системное уведомление, когда окно не в фокусе (настройка OpenCode attention.notifications).
@@ -114,7 +114,7 @@ export default {
       }
       api.ui?.dialog?.alert?.({ title: "crew-harness — настройки проекта", message: text })
     }
-    // /plans: планы на согласовании (план 012) — владелец выбирает план и решение; решение пишется файлом, его применяет
+    // /plans: планы на согласовании (план 004) — владелец выбирает план и решение; решение пишется файлом, его применяет
     // плагин сервиса. Агент этот диалог вызвать не может: согласует только человек в окне.
     const showPlans = async () => {
       const dialog = api.ui?.dialog
@@ -190,7 +190,7 @@ export default {
       } catch {}
     }
 
-    // блок «Crew» в боковой панели (план 010): отдельным модулем и с защитой — JSX компилирует OpenCode; не вышло (другая
+    // блок «Crew» в боковой панели (план 003.2): отдельным модулем и с защитой — JSX компилирует OpenCode; не вышло (другая
     // версия, тест под Node) — блока нет, присутствие, уведомления и команды работают
     if (api.ui?.slot && !process.env.CREW_HARNESS_NO_SIDEBAR) import("./sidebar.tsx").then((m) => (m.mountSidebar(api), log(`sidebar mounted pid=${process.pid}`))).catch((e) => log(`sidebar not drawn pid=${process.pid}: ${String(e).slice(0, 300)}`))
 

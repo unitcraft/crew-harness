@@ -1,4 +1,4 @@
-// Self-test of the acceptor role (plan 013; node >= 24):  node test/crew-acceptor.test.mjs
+// Self-test of the acceptor role (plan 002.7; node >= 24):  node test/crew-acceptor.test.mjs
 // reviewer: "acceptor": a submitted task gets a free open tab of role acceptor (never a worker tab) or a new review
 // session born with role acceptor; review sessions are bounded by spawn_limits.acceptor (not .reviewer) and take no
 // worker place; merge / accept / cleaned belong to the task's reviewer AND the acceptor role -- the executor and a

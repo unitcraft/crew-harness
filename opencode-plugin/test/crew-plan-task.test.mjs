@@ -1,4 +1,4 @@
-// Self-test of a plan task (plan 012; node >= 24):  node test/crew-plan-task.test.mjs
+// Self-test of a plan task (plan 004; node >= 24):  node test/crew-plan-task.test.mjs
 // crew_spawn {kind: "plan"} -> the executor writes the plan file; a report with a bad form is refused; the plan is
 // rechecked in rounds, each by a new session; blocking/significant remarks return it to the author; two clean rounds
 // in a row send it to the owner for approval.

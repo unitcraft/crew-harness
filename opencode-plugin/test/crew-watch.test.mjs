@@ -51,7 +51,7 @@ assert.equal(w.tailOf(Array.from({ length: 50 }, (_, i) => `l${i}`).join("\n")).
 if (process.platform === "win32") assert.ok(!/System32/i.test(w.gitBash()) && existsSync(w.gitBash()), w.gitBash())
 await until(() => posted.length === 3) // the "true" watch from 3.
 
-// 5. the machine queue (plan 005): heavy commands of one project one at a time (machine_slots 1), in order;
+// 5. the machine queue (plan 002.2): heavy commands of one project one at a time (machine_slots 1), in order;
 // another project's heavy command and an ordinary watch do not wait; slots 0 = no limit
 const running = (id) => JSON.parse(readFileSync(path.join(w.WATCHES, `${id}.json`), "utf8")).status === "running"
 const started = (id) => existsSync(path.join(w.WATCHES, `${id}.json`))
@@ -91,7 +91,7 @@ assert.ok(started(z1.id) && started(z2.id), "machine_slots 0: no limit")
   assert.equal(posted.filter((p) => p.session === "sesD").length, before, "no letter for a dropped watch")
   assert.ok(!existsSync(path.join(w.WATCHES, `${d2.id}.req.json`)), "a queued one leaves the queue")
 }
-// a tab cancels its own watch (plan 011, defect 5): a bad command held nova's only machine slot for 90 min
+// a tab cancels its own watch (plan 002.6, defect 5): a bad command held nova's only machine slot for 90 min
 {
   const hog = w.requestWatch({ session: "sesC", command: "sleep 60", cwd: tmp, machine: true, project: "C", note: "ошибка в команде" })
   const next = w.requestWatch({ session: "sesC2", command: "sleep 1", cwd: tmp, machine: true, project: "C" }, Date.now() + 1)
@@ -116,7 +116,7 @@ assert.ok(started(z1.id) && started(z2.id), "machine_slots 0: no limit")
   assert.ok(rq.ok && /снято из очереди/.test(rq.text) && !existsSync(path.join(w.WATCHES, `${q.id}.req.json`)), "a queued watch leaves the queue")
   assert.ok(!w.cancelWatch(q.id, "sesC").ok, "a second cancel finds nothing open")
 }
-// who started it (plan 013, item 5): the env of the record reaches the command; the record keeps it on disk
+// who started it (plan 002.7, item 5): the env of the record reaches the command; the record keeps it on disk
 {
   const e = w.requestWatch({ session: "sesE", command: 'echo "who=$CREW_SESSION_ID/$CREW_ROLE/$CREW_REVIEW_N"', cwd: tmp, env: { CREW_SESSION_ID: "sesE", CREW_ROLE: "acceptor", CREW_REVIEW_N: "7" } })
   assert.deepEqual(JSON.parse(readFileSync(path.join(w.WATCHES, `${e.id}.req.json`), "utf8")).env, { CREW_SESSION_ID: "sesE", CREW_ROLE: "acceptor", CREW_REVIEW_N: "7" })

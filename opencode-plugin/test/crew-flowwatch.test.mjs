@@ -1,4 +1,4 @@
-// Self-test of the flow watchdog (plan 007; node >= 24):  node test/crew-flowwatch.test.mjs
+// Self-test of the flow watchdog (plan 002.4; node >= 24):  node test/crew-flowwatch.test.mjs
 // A task session whose turn ends with a question is not told "continue": the question goes to whoever set the task.
 // A merge lock held longer than stall_minutes and a submitted task waiting for a reviewer longer than that are raised
 // to the task's author once. A turn OpenCode itself continued (no delivery, no busy mark) counts as working.
@@ -157,7 +157,7 @@ await wait(600)
 const left = letters("sesINTEG1").filter((l) => /остались хвосты/.test(l.text))
 cell("leftovers of an accepted task are raised to its author, once", left.length === 1 && /t3-feat/.test(left[0].text) && /t3-diag/.test(left[0].text) && !/t30-other/.test(left[0].text), JSON.stringify(left.map((l) => l.text)))
 
-// 6. accepted but not cleaned past accepted_reminder_min (plan 011, defect 2): the reviewer is woken to repeat cleaned,
+// 6. accepted but not cleaned past accepted_reminder_min (plan 002.6, defect 2): the reviewer is woken to repeat cleaned,
 // the author is told; a spawn refused by the full inflight_limit names the task
 await until(() => letters("sesREV04").some((l) => /не очищена/.test(l.text)))
 await wait(600)
@@ -169,13 +169,13 @@ await tools.crew_role.execute({ role: "integrator" }, { sessionID: "sesINTEG1" }
 const refused = (await tools.crew_spawn.execute({ title: "срочная", goal: "g", criteria: "c", priority: "P1" }, { sessionID: "sesINTEG1" })).content
 cell("a spawn refused by inflight_limit names the accepted, not cleaned task", /Лимит задач проекта/.test(refused) && /#4 принята 60 мин назад, не очищена/.test(refused), refused)
 
-// 7. crew_watch {action: "cancel", id} through the tool (plan 011, defect 5)
+// 7. crew_watch {action: "cancel", id} through the tool (plan 002.6, defect 5)
 const put = (await tools.crew_watch.execute({ command: "sleep 60", machine: true, note: "плохая команда" }, { sessionID: "sesINTEG1" })).content
 const wid = /id: "([^"]+)"/.exec(put)?.[1]
 const cancelled = wid ? (await tools.crew_watch.execute({ action: "cancel", id: wid }, { sessionID: "sesINTEG1" })).content : ""
 cell("crew_watch names the id and cancels its own watch", !!wid && /отменено/.test(cancelled), JSON.stringify({ put, cancelled }))
 
-// 8. a command from heavy_commands goes to the machine queue by itself (plan 012)
+// 8. a command from heavy_commands goes to the machine queue by itself (plan 004)
 const heavy = (await tools.crew_watch.execute({ command: "bash scripts/gate.sh --tier push", note: "гейт" }, { sessionID: "sesINTEG1" })).content
 const hid = /id: "([^"]+)"/.exec(heavy)?.[1]
 const wfile = (ext) => path.join(core.BASE, "watches", `${hid}${ext}`)

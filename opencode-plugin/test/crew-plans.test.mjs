@@ -1,4 +1,4 @@
-// Self-test of plan documents (plan 012; node >= 24):  node test/crew-plans.test.mjs
+// Self-test of plan documents (plan 004; node >= 24):  node test/crew-plans.test.mjs
 // The template, the parser (phases, steps, tags, criteria, questions, mode) and the machine criteria of a plan.
 const { planTemplate, parsePlan, planProblems, stepDeps, allSteps, nextPlanNumber } = await import("../plans.ts")
 let fail = 0

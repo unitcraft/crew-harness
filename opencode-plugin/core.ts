@@ -173,7 +173,7 @@ export type CrewConfig = {
   targetBranch: string
   cleanup: "none" | "local" | "local+remote"
   /** кто принимает: worker — свободная вкладка worker или сессия приёмки; acceptor — то же, но с ролью acceptor и её
-   *  правами (план 013); integrator — сам интегратор */
+   *  правами (план 002.7); integrator — сам интегратор */
   reviewer: "worker" | "integrator" | "acceptor"
   acceptance: AcceptanceStep[]
   reworkMax: number
@@ -286,7 +286,7 @@ export function loadConfig(dir: string): CrewConfig {
   }
 }
 
-// ПРИЁМЩИК-РОЛЬ (план 013, 2026-10-06). При reviewer "acceptor" сессия приёмки рождается с ролью acceptor, в
+// ПРИЁМЩИК-РОЛЬ (план 002.7, 2026-10-06). При reviewer "acceptor" сессия приёмки рождается с ролью acceptor, в
 // приёмщики годится только открытая вкладка этой роли, а merge / accept / cleaned требуют роль acceptor или
 // integrator. Роль разделяемая: приёмщиков несколько. Лимит сессий приёмки — spawn_limits.acceptor, без него —
 // spawn_limits.reviewer (прежние настройки), без обоих — 2; места worker они не занимают (тот лимит считает задачи).
@@ -484,7 +484,7 @@ export async function sessionFromDb(sessionID: string): Promise<SessionRow | und
 // старое сообщение владельца из оборванного хода засчитало новый ход «с владельцем»).
 export type TurnFacts = { tools: boolean; owner: boolean; outcome?: string; at: number }
 const TURN_SLACK_MS = 5_000 // сообщение владельца пишется чуть раньше запроса, с которого визитка занята
-// КОНЕЦ ПОСЛЕДНЕГО ХОДА (план 004): время строки idle, текст последнего ответа модели в этом ходе и было ли после
+// КОНЕЦ ПОСЛЕДНЕГО ХОДА (план 003): время строки idle, текст последнего ответа модели в этом ходе и было ли после
 // конца сообщение владельца. Нужен сводке /crew и признаку «ждёт вас». Нет базы или хода — undefined.
 export type TurnEnd = { at: number; text: string; ownerAfter: boolean }
 /** Время последней строки idle сессии (0 — нет). Дешёвый запрос без чтения данных сообщений. */
@@ -699,7 +699,7 @@ export const holdsOpenTask = (c: Card) => {
   const r = c.review ? loadTask(c.review.project, c.review.n) : undefined
   return isOpen(r) && r!.reviewer === c.session
 }
-/** Окружение команды crew_watch (план 013, п.5): кто её поставил. Команде (скрипту приёмки проекта, гейту) не нужно
+/** Окружение команды crew_watch (план 002.7, п.5): кто её поставил. Команде (скрипту приёмки проекта, гейту) не нужно
  *  угадывать, чья она: сессия, роль, проект; у приёмщика открытой задачи — CREW_REVIEW_N, у исполнителя — CREW_TASK_N. */
 export function watchEnv(c: Card, project: string): Record<string, string> {
   const env: Record<string, string> = { CREW_SESSION_ID: c.session, CREW_ROLE: normalizeRole(c.role), CREW_PROJECT: project }
@@ -712,7 +712,7 @@ export function watchEnv(c: Card, project: string): Record<string, string> {
 export const mayWakeCard =(c: Card, windows = liveWindows()) => !!tabOf(c.session, windows) || c.spawned?.status === "running" || c.spawned?.status === "done" || holdsOpenTask(c)
 
 /** Уведомление окну pid (покажет плагин окна): письмо пришло в его фоновую вкладку и т.п. */
-/** Строка не длиннее n знаков (с «…»): уведомления окна короткие, чтобы их успевали прочитать (план 009). */
+/** Строка не длиннее n знаков (с «…»): уведомления окна короткие, чтобы их успевали прочитать (план 003.1). */
 export const short = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 /** duration — сколько держать уведомление на экране, мс (окно передаёт его OpenCode). */
 export function postNotice(pid: number, notice: { sessionID?: string; title: string; message: string; attention?: boolean; duration?: number }) {
@@ -846,7 +846,7 @@ export function recoverClaims(maxAgeMs = CLAIM_MAX_MS, now = Date.now()): number
 }
 
 export const PLUGIN_SENDER = "crew-harness"
-// ВИД ПИСЬМА (план 009, 2026-10-06; владелец: «непонятно, кто кому пишет»). Шапка — когда, кто кому, с ролью в задаче;
+// ВИД ПИСЬМА (план 003.1, 2026-10-06; владелец: «непонятно, кто кому пишет»). Шапка — когда, кто кому, с ролью в задаче;
 // время первым (владелец 2026-10-07): в длинной шапке оно не теряется в конце строки:
 //   ✉ 01:17 · #8 приёмщик nova.worker → nova.integrator
 //   ⚙ 01:17 · crew → nova.integrator (служебное, не отвечай)
@@ -1314,7 +1314,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
       const base = { from_role: fromRole, from_session: sessionID, text, time: now, ...(wake ? {} : { wake: false }), ...(qid ? { qid } : {}), ...(replyTo ? { reply_to: replyTo } : {}) }
       if (replyTo) settleObligation(sessionID, replyTo)
       if (isReport && myTask!.plan) {
-        // задача-план: отчёт принимается, только если файл плана есть и форма в порядке (план 012, критерии 1–5)
+        // задача-план: отчёт принимается, только если файл плана есть и форма в порядке (план 004, критерии 1–5)
         const pt = myTask!
         const base = pt.worktree && existsSync(pt.worktree) ? pt.worktree : pt.directory
         const file = path.join(base, pt.plan!.file)
@@ -1513,7 +1513,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
       }
       const model = cfg.spawnModels[tier] ?? DEFAULT_SPAWN_MODELS[tier]
       const title = String(input.title ?? "").trim() || String(input.goal).split(/\r?\n/)[0].slice(0, 60)
-      // ЗАДАЧА-ПЛАН (план 012): результат — файл плана в репозитории; номер выдаёт плагин (после файлов папки планов
+      // ЗАДАЧА-ПЛАН (план 004): результат — файл плана в репозитории; номер выдаёт плагин (после файлов папки планов
       // и открытых задач-планов), подплан — «родитель.k»
       let plan: TaskPlan | undefined
       if (input.kind === "plan") {
@@ -1532,7 +1532,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         plan = { n, file, source: String(input.goal).trim(), ...(parentPlan ? { parent: parentPlan } : {}), rounds: [], clean: 0 }
       }
       const t = createTask({
-        project, title: plan ? `план ${plan.n}: ${title}` : title, goal: String(input.goal).trim(), criteria: plan ? "критерии приёмки плана (план 012): А — против исходной задачи, Б — правильность составления" : input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(),
+        project, title: plan ? `план ${plan.n}: ${title}` : title, goal: String(input.goal).trim(), criteria: plan ? "критерии приёмки плана (план 004): А — против исходной задачи, Б — правильность составления" : input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(),
         priority: isPriority(input.priority) ? input.priority : cfg.defaultPriority, tier, role, model,
         author: me.session, author_role: keyOf(me), qid: newQid(), status: "starting", kind: "spawn", executor: plannedSessionId(), directory: me.directory,
         ...(plan ? { plan } : {}),
@@ -1674,16 +1674,16 @@ export function makeTools(host: CrewHost): CrewTool[] {
         return { content: `План ${t.plan.n}: ${DECISION_RU[decision as Decision]} — записано, плагин применит на ближайшем проходе.` }
       }
       if (["review", "check", "round", "merge", "rework", "accept", "cleaned"].includes(action)) {
-        // исполнитель свою работу не вливает и не принимает — отказ называет это прямо (план 013, п.4)
+        // исполнитель свою работу не вливает и не принимает — отказ называет это прямо (план 002.7, п.4)
         if (t.reviewer !== me.session && t.executor === me.session)
           return { content: `Ты исполнитель задачи #${t.n}: ${action} делает её приёмщик (${t.reviewer ?? "ещё не назначен"}), это действие только его. Исполнитель свою работу не вливает и не принимает — сдай отчёт и жди приёмки.` }
         if (t.reviewer !== me.session) return { content: `Приёмщик задачи #${t.n} — ${t.reviewer ?? "ещё не назначен"}; это действие только его.` }
         const tcfg = loadConfig(t.directory)
-        // ПРАВА РОЛИ (план 013): при reviewer "acceptor" замок вливания, принятие и очистку держит роль acceptor (или
+        // ПРАВА РОЛИ (план 002.7): при reviewer "acceptor" замок вливания, принятие и очистку держит роль acceptor (или
         // интегратор). Приёмщик, сменивший роль, их теряет: права у роли, а не у записи «приёмщик» в задаче.
         if (tcfg.reviewer === "acceptor" && ["merge", "accept", "cleaned"].includes(action) && normalizeRole(me.role) !== ACCEPTOR_ROLE && !isIntegrator(me))
           return { content: `${action} в проекте ${project} — право роли ${ACCEPTOR_ROLE} (настройка reviewer: acceptor) или интегратора; у тебя роль ${keyOf(me)}. Вернуть роль — crew_role {role: "${ACCEPTOR_ROLE}"}.` }
-        const acc = acceptanceOf(t, tcfg) // задача-план — шаги перепроверки плана (план 012), иначе — приёмки проекта
+        const acc = acceptanceOf(t, tcfg) // задача-план — шаги перепроверки плана (план 004), иначе — приёмки проекта
         const now = Date.now()
         const quiet = (to: string, id: string, text: string) => postLetter(to, { id, from_role: keyOf(me), from_session: me.session, to, time: now, wake: false, text })
         if (action === "review") {
@@ -1718,7 +1718,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           const left = acc.filter((a) => a.required && !t.checks?.[a.id]).map((a) => a.id)
           return { content: `Шаг ${step} отмечен (${done}/${acc.length}).${left.length ? ` Осталось обязательных: ${left.join(", ")}.` : " Обязательные отмечены — дальше merge и accept."}` }
         }
-        // ВЕРДИКТ РАУНДА ПЕРЕПРОВЕРКИ ПЛАНА (план 012): проверяющий отметил все шаги А/Б и называет число замечаний по
+        // ВЕРДИКТ РАУНДА ПЕРЕПРОВЕРКИ ПЛАНА (план 004): проверяющий отметил все шаги А/Б и называет число замечаний по
         // градациям. Есть блокирующие или существенные — план автору; только косметические — чистый раунд; нужное число
         // чистых подряд — на согласование владельцу. Каждый раунд — новая сессия: эта с перепроверки снимается.
         if (action === "round") {
@@ -1829,14 +1829,14 @@ export function makeTools(host: CrewHost): CrewTool[] {
           const commit = String(input.commit ?? "").trim() || undefined
           const m = isMerged(t, tcfg.targetBranch, commit)
           if (!m.ok) return { content: `Не принято: ${m.how}. Влей и запушь, затем снова accept.` }
-          // шаг плана (план 012): в целевой ветке у шага — отметка «✅ СДЕЛАНО»
+          // шаг плана (план 004): в целевой ветке у шага — отметка «✅ СДЕЛАНО»
           if (t.plan_step) {
             const ps = t.plan_step
             const text = fileAt(t.directory, tcfg.targetBranch, ps.file)
             const s = text ? allSteps(parsePlan(text, tcfg.planForm)).find((x) => x.id === ps.step) : undefined
             if (!s?.done) return { content: `Не принято: в ${ps.file} (${tcfg.targetBranch}) у шага ${ps.step} нет отметки «${tcfg.planForm.marks.step_done} <дата>, коммит <hash>» в заголовке. Впиши её тем же слиянием и снова accept.` }
           }
-          // согласованный план (план 012): в целевой ветке — файл плана в порядке и с ответом владельца
+          // согласованный план (план 004): в целевой ветке — файл плана в порядке и с ответом владельца
           if (t.plan) {
             const a = t.plan.approval
             if (!a || a.decision === "no") return { content: `План ${t.plan.n} не согласован владельцем — accept только после согласования (/plans в окне владельца).` }
@@ -2038,11 +2038,11 @@ export function makeTools(host: CrewHost): CrewTool[] {
         return { content: ws.length ? `Наблюдения вкладки (отмена — crew_watch {action: "cancel", id}):\n${ws.map((w) => `— ${w.id} ${w.note ? `«${w.note}» ` : ""}${w.status === "requested" ? `ждёт запуска${w.machine ? " в очереди машины" : ""} с ${hhmm(w.created)}` : `с ${hhmm(w.started ?? w.created)}`}, предел ${w.minutes} мин: ${w.command.slice(0, 200)}`).join("\n")}` : "Наблюдений нет." }
       }
       const project = me.project ?? projOf(me)
-      // тяжёлая по списку проекта (heavy_commands) — в очередь машины сама, даже без machine: true (план 012)
+      // тяжёлая по списку проекта (heavy_commands) — в очередь машины сама, даже без machine: true (план 004)
       const heavyBy = loadConfig(me.directory || host.defaultDir).heavyCommands.find((h) => command.includes(h))
       const machine = input.machine === true || !!heavyBy
       const cwd = me.directory || host.defaultDir
-      // запреты проекта (план 013, п.6): команду запустит сервер мимо прав окна — сверка здесь, до постановки
+      // запреты проекта (план 002.7, п.6): команду запустит сервер мимо прав окна — сверка здесь, до постановки
       const refused = watchRefusal(command, cwd)
       if (refused) return { content: refused }
       const w = requestWatch({ session: me.session, command, cwd, note: String(input.note ?? "").trim() || undefined, minutes: input.minutes, machine, project, env: watchEnv(me, project) })
@@ -2062,11 +2062,11 @@ export function makeTools(host: CrewHost): CrewTool[] {
   return [crewList, crewRole, crewSend, crewWait, crewWatch, crewSpawn, crewTask, crewConfig, crewInbox, crewDoctor, crewHelp]
 }
 
-/** Шаги приёмки задачи: у задачи-плана — перепроверка плана (план 012), у остальных — приёмка проекта. */
+/** Шаги приёмки задачи: у задачи-плана — перепроверка плана (план 004), у остальных — приёмка проекта. */
 export const acceptanceOf = (t: Task, cfg: CrewConfig) => (t.plan ? (t.plan.approval && t.plan.approval.decision !== "no" ? cfg.planMergeAcceptance : cfg.planAcceptance) : cfg.acceptance)
 
 /** Письмо с задачей исполнителю. */
-/** Письмо исполнителю задачи-плана (план 012): исходная задача, файл, шаблон, критерии, ход перепроверки. */
+/** Письмо исполнителю задачи-плана (план 004): исходная задача, файл, шаблон, критерии, ход перепроверки. */
 export function planTaskLetter(t: Task): string {
   const p = t.plan!
   const cfg = loadConfig(t.directory)

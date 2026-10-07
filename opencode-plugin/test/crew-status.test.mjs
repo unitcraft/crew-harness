@@ -1,4 +1,4 @@
-// Self-test of session status (plan 004; node >= 24):  node test/crew-status.test.mjs
+// Self-test of session status (plan 003; node >= 24):  node test/crew-status.test.mjs
 // The plugin writes status/<session>.json: working (a turn runs), waiting for the owner (the last answer ends with a
 // question and the owner has not written since), waiting for a watch, idle. A new question to the owner posts a
 // notice with attention to every live window; unanswered, it is repeated after owner_reminder_min. The /crew text

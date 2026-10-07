@@ -1,4 +1,4 @@
-// Self-test of plan settings (plan 012, "everything configurable"; node >= 24):  node test/crew-plan-config.test.mjs
+// Self-test of plan settings (plan 004, "everything configurable"; node >= 24):  node test/crew-plan-config.test.mjs
 // A project's own plan form (prefix, labels, marks, no mode question), its own grades in a recheck round, the
 // integrator approving plans (plan_approver: integrator) and steps listed instead of spawned (plan_steps: manual).
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"

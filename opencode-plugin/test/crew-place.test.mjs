@@ -1,4 +1,4 @@
-// Self-test of a task's place (plan 011, defect 3; node >= 24):  node test/crew-place.test.mjs
+// Self-test of a task's place (plan 002.6, defect 3; node >= 24):  node test/crew-place.test.mjs
 // The worktree and branch are written with the task itself (not by a second save a server pass could miss), the
 // path in the crew_spawn answer is the path created, and a task session is never opened in the main copy: a task
 // whose record lost its place gets it from the settings; a worktree outside the project's worktrees folder or one

@@ -59,7 +59,7 @@ export type Task = {
   attempt: number
   directory: string
   worktree?: string
-  /** worktree создал плагин, сессия исполнителя работает в нём (план 006) */
+  /** worktree создал плагин, сессия исполнителя работает в нём (план 002.3) */
   worktree_ready?: boolean
   branch?: string
   /** сводка сделанного прежним исполнителем (reassign) — в письмо новому */
@@ -71,13 +71,13 @@ export type Task = {
   review_kind?: "tab" | "spawn" | "integrator"
   review_qid?: string
   reviewers?: string[]
-  /** задача-план (план 012): номер и файл плана, исходная задача, раунды перепроверки, решение владельца */
+  /** задача-план (план 004): номер и файл плана, исходная задача, раунды перепроверки, решение владельца */
   plan?: TaskPlan
   /** задача — шаг плана: план, задача-план, шаг, файл (приёмка требует отметку «✅ СДЕЛАНО» шага в целевой ветке) */
   plan_step?: { project: string; task: number; plan: string; step: string; file: string }
   /** кругов доработки; замечания последнего круга (для письма исполнителю — и для сверки после перезапуска) */
   rework?: number
-  /** возвраты «влей свежую целевую ветку» (rework {sync: true}): не доработка, в rework_max не идут (план 011, дефект 4) */
+  /** возвраты «влей свежую целевую ветку» (rework {sync: true}): не доработка, в rework_max не идут (план 002.6, дефект 4) */
   syncs?: number
   /** последний возврат — синхронизация, а не доработка */
   rework_sync?: boolean
@@ -154,7 +154,7 @@ export function listTasks(project?: string): Task[] {
 
 /** Новая задача: следующий свободный номер проекта, файл создаётся атомарно. */
 // place — место задачи (worktree, ветка) по номеру и слагу: пишется ВМЕСТЕ с задачей, первой же записью. Раньше его
-// дописывали вторым сохранением, и сервер, подхватив задачу между ними, запускал её без места (план 011, дефект 3).
+// дописывали вторым сохранением, и сервер, подхватив задачу между ними, запускал её без места (план 002.6, дефект 3).
 export function createTask(fields: Omit<Task, "n" | "history" | "created" | "updated" | "executors" | "attempt" | "slug"> & { slug?: string }, place?: (n: number, slug: string) => Partial<Task>): Task {
   const dir = path.join(TASKS, safeKey(fields.project))
   mkdirSync(dir, { recursive: true })

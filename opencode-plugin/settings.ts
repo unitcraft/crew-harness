@@ -22,7 +22,7 @@ import { log, safeKey } from "./core.ts"
 import { BASE } from "./paths.ts"
 
 export const SETTINGS_FILE = path.join(".opencode", "crew-harness.json")
-/** прежнее имя файла настроек (до плана 014, 2026-10-06) */
+/** прежнее имя файла настроек (до плана 005, 2026-10-06) */
 export const LEGACY_SETTINGS_NAME = ".opencode/opencode-peers.json"
 export const PROJECT_RE = /^[a-z0-9][a-z0-9-]{0,40}$/
 // Канонический путь: короткие имена Windows (8.3, `ABCD~1`) раскрываются, чтобы корень проекта и каталог вкладки
@@ -117,7 +117,7 @@ export function readSettingsFolder(folder: string, now = Date.now()): { project:
     file = prefix + ".opencode/crew-harness.json" // путь в репозитории
     branch = defaultBranch(repo)
     let j = parseJson(showCommitted(repo, branch, file))
-    // прежнее имя файла (до плана 014): читается, crew_doctor просит переименовать
+    // прежнее имя файла (до плана 005): читается, crew_doctor просит переименовать
     if (j === undefined) {
       const oldFile = prefix + LEGACY_SETTINGS_NAME
       const o = parseJson(showCommitted(repo, branch, oldFile))

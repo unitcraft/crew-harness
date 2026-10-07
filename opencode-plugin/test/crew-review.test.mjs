@@ -96,7 +96,7 @@ await call("crew_role", "sesINTEG1", { role: "integrator" })
 const sp1 = await call("crew_spawn", "sesINTEG1", { title: "фича", goal: "сделать фичу", ...FIELDS })
 const ex1 = task(1).executor
 cell("task #1 started with worktree and branch from the settings", /wt.proj-1-ficha/.test(task(1).worktree ?? "") && task(1).branch === "p1-ficha", JSON.stringify({ wt: task(1).worktree, b: task(1).branch, sp1 }))
-// plan 006: the plugin created the worktree and the branch, the executor's session runs there
+// plan 002.3: the plugin created the worktree and the branch, the executor's session runs there
 await wait(300)
 cell("the plugin created the task's worktree on its branch", existsSync(task(1).worktree) && git(task(1).worktree, "rev-parse", "--abbrev-ref", "HEAD") === "p1-ficha" && task(1).worktree_ready === true, JSON.stringify({ wt: task(1).worktree, ready: task(1).worktree_ready }))
 cell("the executor's session is located in the worktree", sessions.get(ex1)?.location?.directory === task(1).worktree, JSON.stringify(sessions.get(ex1)?.location))
@@ -148,7 +148,7 @@ const acc = await call("crew_task", "sesREVIEW1", { action: "accept", n: 1, chec
 cell("accept after the merge: accepted, cleanup steps given", task(1).status === "accepted" && /git worktree remove/.test(acc) && /git branch -D p1-ficha/.test(acc) && !/push origin --delete/.test(acc), acc)
 cell("accept keeps the steps marked by check", task(1).checks?.tests === "зелёные: 12/12" && task(1).checks?.guards === "ok", JSON.stringify(task(1).checks))
 cell("accept releases the merge lock", !review.mergeHolder("proj"), JSON.stringify(review.mergeHolder("proj")))
-// leftovers are the task's OWN artifacts (plan 011, defect 1): its worktree and branch, sprouts p1-…, integrate/t1;
+// leftovers are the task's OWN artifacts (plan 002.6, defect 1): its worktree and branch, sprouts p1-…, integrate/t1;
 // a new task born from fresh main stands exactly on the merged commit -- its branch and worktree are never #1's
 const mergedHead = git(proj, "rev-parse", "main")
 git(proj, "branch", "p1-ficha-cand", "p1-ficha")
@@ -199,7 +199,7 @@ settings(1)
 await wait(800)
 const rv2 = task(2).reviewer
 cell("the other task gets a new review session", task(2).review_kind === "spawn" && sessions.has(rv2) && sessions.get(rv2).title === "#2 приёмка обычная", JSON.stringify({ rv2, s: sessions.get(rv2) }))
-// plan 013: with the default reviewer ("worker") the review session keeps role worker, as before the acceptor role
+// plan 002.7: with the default reviewer ("worker") the review session keeps role worker, as before the acceptor role
 cell("the default reviewer: the review session's role is worker", core.loadConfig(proj).reviewer === "worker" && core.allCards().find((c) => c.session === rv2)?.role === "worker", JSON.stringify(core.allCards().find((c) => c.session === rv2)?.role))
 cell("no reviewer is the author or the executor", [1, 2, 3].every((n) => task(n).reviewer !== task(n).author && task(n).reviewer !== task(n).executor), "same")
 await wait()
@@ -215,7 +215,7 @@ await call("crew_send", ex3, { to: "sesINTEG1", text: "добавил тест",
 await wait()
 await wait(800)
 cell("resubmission wakes the same reviewer", task(3).status === "submitted" && task(3).reviewer === "sesREVIEW1" && got("sesREVIEW1", "Доработка задачи #3 «срочная» сдана").length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "sesREVIEW1").map((d) => d.text.slice(0, 160))))
-// a return only to merge the fresh main (plan 011, defect 4): not a rework round, rework_max (1 here) is not hit
+// a return only to merge the fresh main (plan 002.6, defect 4): not a rework round, rework_max (1 here) is not hit
 await call("crew_task", "sesREVIEW1", { action: "review", n: 3 })
 const syncAns = await call("crew_task", "sesREVIEW1", { action: "rework", n: 3, sync: true })
 await wait()

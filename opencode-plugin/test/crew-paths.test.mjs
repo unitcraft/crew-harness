@@ -1,4 +1,4 @@
-// Self-test of the mailbox name (plan 014; node >= 24):  node test/crew-paths.test.mjs
+// Self-test of the mailbox name (plan 005; node >= 24):  node test/crew-paths.test.mjs
 // The mailbox is <OpenCode data>/crew-harness. An earlier mailbox (opencode-peers, nova-peers; either may itself be a
 // link) stays where it is: crew-harness becomes a junction to its real folder, so old and new code share the files.
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
@@ -13,7 +13,7 @@ const cell = (name, ok, detail) => {
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-paths-"))
 const real = (p) => realpathSync(p).toLowerCase()
 
-// the live case: nova-peers is the real folder, opencode-peers a junction to it (plan 008)
+// the live case: nova-peers is the real folder, opencode-peers a junction to it (plan 002.5)
 const root = path.join(tmp, "opencode")
 mkdirSync(path.join(root, "nova-peers", "tasks", "nova"), { recursive: true })
 writeFileSync(path.join(root, "nova-peers", "tasks", "nova", "1.json"), '{"n":1}')

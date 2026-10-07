@@ -1,4 +1,4 @@
-// Self-test of the sidebar lines (plan 010; node >= 24):  node test/crew-sidebar.test.mjs
+// Self-test of the sidebar lines (plan 003.2; node >= 24):  node test/crew-sidebar.test.mjs
 // The window's "Crew" block: the project of the tab on screen, the ones waiting for the owner first and marked,
 // task sessions named by role, at most 9 rows and a foot with the rest. The drawing itself (sidebar.tsx) needs
 // OpenCode's runtime; here: the lines, and that the window plugin still loads when the block cannot be drawn.
