@@ -25,7 +25,7 @@ export const POLL_MS = Number(process.env.CREW_HARNESS_POLL_MS) || 1_000 // пе
 export const LIVE_MS = 15 * 60_000
 const STALE_CARD_MS = 7 * 24 * 3600_000
 export const ROLE_RE = /^[a-z][a-z0-9-]{0,40}$/
-const LOG = path.join(os.tmpdir(), "opencode-plugins.log")
+const LOG = path.join(os.tmpdir(), "crew-harness.log")
 
 // журнал общий для плагинов окружения; больше LOG_MAX_BYTES — в .1 (проверка раз в 200 строк)
 const LOG_MAX_BYTES = Number(process.env.CREW_HARNESS_LOG_MAX) || 5_000_000

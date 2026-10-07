@@ -449,7 +449,7 @@ npm test   # node >= 24
 
 What each test checks, the manual latency checks and what the tests do not cover — [test/README.md](test/README.md).
 
-History: moved with its commits from `a private plugins repository of the nova project` (`plugins/nova-peers`).
+History: moved with its commits from a private plugins repository of the nova project (`plugins/nova-peers`).
 Renamed 2026-10-07 (plan 014): `nova-peers` → `opencode-peers` → CrewHarness (`crew-harness`); the plugin id is
 `crew-harness`; the mailbox `crew-harness` is a junction to the folder of the earliest one (nothing moves, nothing is
 lost); the settings file is `.opencode/crew-harness.json` (`.opencode/opencode-peers.json` is still read, with a
