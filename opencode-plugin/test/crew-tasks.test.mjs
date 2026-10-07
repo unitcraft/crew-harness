@@ -157,7 +157,7 @@ const as = await call("crew_task", "sesINTEG1", { action: "assign", session: "se
 await wait()
 cell("assign: the tab gets the task letter", /Задача #3/.test(as) && got("sesOWNER1", "ЗАДАЧА #3").length === 1, as)
 const pl = await call("crew_list", "sesINTEG1")
-cell("crew_list shows the tab's task", /задача #3 \(в работе\)[^\n]*sesOWNER1/.test(pl), pl)
+cell("crew_list shows the tab's task", /задача #3 «[^»]*» \(в работе\)[^\n]*sesOWNER1/.test(pl), pl)
 tabs.splice(tabs.findIndex((t) => t.sessionID === "sesOWNER1"), 1)
 beat()
 await wait()

@@ -134,7 +134,7 @@ cell("the task session gets the task without any window", task.length === 1 && t
 const limit = await call("crew_spawn", "sesASKER1", { goal: "вторая задача", criteria: "c" })
 cell("the project's limit per role holds", /Лимит работающих задач роли worker/.test(limit), limit)
 const list = await call("crew_list", "sesASKER1")
-cell("crew_list shows the running task", list.includes(TASK) && /задачи #1 \(в работе\)/.test(list) && /#1 P2 в работе «почини тест X»/.test(list), list)
+cell("crew_list shows the running task", list.includes(TASK) && /задачи #1 «[^»]*» \(в работе\)/.test(list) && /#1 P2 в работе «почини тест X»/.test(list), list)
 await hooks.context({ sessionID: TASK, system: [], model: { id: "x", providerID: "y" } }) // its turn is running
 const before = delivered.filter((d) => d.sessionID === "sesASKER1").length
 await call("crew_send", TASK, { to: "sesASKER1", text: "готово: тест X зелёный", reply_to: tqid })

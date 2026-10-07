@@ -114,7 +114,7 @@ import { sweepRead } from "./housekeeping.ts"
 import { allSteps, nextPlanNumber, parsePlan, stepDeps } from "./plans.ts"
 import { dropWatch, openWatchesBySession, pollWatches, requestWatch, watchesOf } from "./watch.ts"
 import { endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
-import { type Task, acceptedAt, ago, byPriority, createTask, rounds, slugify, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
+import { type Task, taskRef, acceptedAt, ago, byPriority, createTask, rounds, slugify, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
 import { createRemoteBridge } from "./remote.ts"
 import { ensureWorktree, fileAt, gitTraces, leftoversOf, mergeHolder, reviewLetter } from "./review.ts"
 
@@ -320,7 +320,7 @@ export default {
             const id = `ask-${safeKey(card.session)}-${end.at}`
             if (letterExists(to, id)) continue
             const ref = card.task ?? card.review
-            const what = ref ? `${card.review && !card.task ? "приёмка задачи" : "задача"} #${ref.n}` : "вопрос"
+            const what = ref ? `${card.review && !card.task ? "приёмка задачи" : "задача"} ${taskRef(ref)}` : "вопрос"
             postLetter(to, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to, time: t, text: `${what}: вкладка ${keyOf(card)} (сессия ${card.session}) остановилась с вопросом, работа стоит до ответа:\n«${q}»\n\nКонец её ответа:\n${tail}\n\nОтветь ей сам: crew_send {to: "${card.session}", text: "..."}. Решить без владельца нельзя — спроси владельца (вопросом в конце своего хода).` })
             log(`question of ${card.session} forwarded to ${to}`)
           }
@@ -369,7 +369,7 @@ export default {
             text: `Вкладка ${keyOf(card)} (сессия ${card.session}) застряла: ${what} — ${why}. Напоминаний больше не будет. Подтолкни (crew_task {action: "push"${task ? `, n: ${task.n}` : ""}, text: "..."}), передай другой сессии (reassign) или загляни в неё сам.`,
           })
           const w = tabOf(o.from_session)
-          if (w?.window.pid) postNotice(w.window.pid, { sessionID: card.session, title: task ? `#${task.n} застряла` : `${keyOf(card)} застряла`, message: short(why, 80), duration: 15_000 })
+          if (w?.window.pid) postNotice(w.window.pid, { sessionID: card.session, title: task ? `#${task.n} застряла` : `${keyOf(card)} застряла`, message: short(task ? `«${task.title}» · ${why}` : why, 80), duration: 15_000 })
           if (task && task.qid === o.qid) taskEvent(task, PLUGIN_SENDER, undefined, `застряла: ${why}`)
           log(`stuck ${card.session} for ${o.qid} (empty ${o.empty}, pushes ${o.nudges})`)
           continue
@@ -429,7 +429,7 @@ export default {
         const t = ref ? loadTask(ref.project, ref.n) : undefined
         const dirs = [...new Set([t?.worktree, t?.directory, c.directory].filter((d): d is string => !!d && existsSync(d)))]
         const traces = dirs.flatMap((d) => gitTraces(d))
-        const lock = t && mergeHolder(t.project)?.session === c.session ? `\nЗамок вливания проекта ${t.project} всё ещё твой (приёмка #${t.n}): доведи вливание или отпусти его.` : ""
+        const lock = t && mergeHolder(t.project)?.session === c.session ? `\nЗамок вливания проекта ${t.project} всё ещё твой (приёмка ${taskRef(t)}): доведи вливание или отпусти его.` : ""
         const gitNote = traces.length ? `\nВ git осталось от оборванного хода:\n${traces.map((x) => `— ${x}`).join("\n")}` : ""
         postLetter(c.session, {
           id,
@@ -491,7 +491,7 @@ export default {
                 from_session: PLUGIN_SENDER,
                 to: w.session,
                 time: now(),
-                text: `Наблюдение ${w.note ? `«${w.note}» ` : ""}${w.id} стояло в дереве задачи #${t.n}, а задача ${t.status === "accepted" ? "влита и дерево убирается" : "отменена"}: Windows не даёт удалить папку, в которой идёт процесс. Перенёс его в основную копию (${t.directory}) — та же команда, новый id ${nw.id}; ждать его так же.`,
+                text: `Наблюдение ${w.note ? `«${w.note}» ` : ""}${w.id} стояло в дереве задачи ${taskRef(t)}, а задача ${t.status === "accepted" ? "влита и дерево убирается" : "отменена"}: Windows не даёт удалить папку, в которой идёт процесс. Перенёс его в основную копию (${t.directory}) — та же команда, новый id ${nw.id}; ждать его так же.`,
               })
               log(`watch ${w.id} moved out of ${tree} as ${nw.id}`)
             }
@@ -525,7 +525,7 @@ export default {
           const passed = ids.filter((id) => t.checks?.[id]).length
           const report = ids.length ? `\nОтчёт приёмки — шаги ${passed}/${ids.length}:\n${ids.map((id) => `${t.checks?.[id] ? "✓" : "–"} ${id}: ${t.checks?.[id] ?? "не отмечен (необязательный)"}`).join("\n")}` : ""
           try {
-            const note = { sessionID: sid, text: done ? `✓✓ Задача #${t.n} принята и влита. Сессия закрыта — письма больше не приходят.${report}` : `✗ Задача #${t.n} отменена. Сессия закрыта — письма больше не приходят.`, resume: false }
+            const note = { sessionID: sid, text: done ? `✓✓ Задача ${taskRef(t)} принята и влита. Сессия закрыта — письма больше не приходят.${report}` : `✗ Задача #${t.n} отменена. Сессия закрыта — письма больше не приходят.`, resume: false }
             await (typeof ctx.session.synthetic === "function" ? ctx.session.synthetic(note) : ctx.session.prompt(note)) // строка в историю, без хода
           } catch (e) {
             log(`final note failed ${sid}: ${e}`)
@@ -617,7 +617,7 @@ export default {
             saveCard(rc)
           }
           if (!t.review_letter || !letterExists(t.reviewer, t.review_letter)) await reviewerAssigned(t, rc)
-          if (!(t.status === "submitted" && rounds(t) > 0)) need(t.reviewer, t.review_qid, `приёмка #${t.n}`)
+          if (!(t.status === "submitted" && rounds(t) > 0)) need(t.reviewer, t.review_qid, `приёмка ${taskRef(t)}`)
         }
       }
     }
@@ -1261,7 +1261,8 @@ export default {
           type: "text",
           text:
             `crew-harness: ты — вкладка с ролью «${card.role}» в проекте ${projOf(card)} (адрес ${keyOf(card)}), репозиторий ${card.repo || "?"}, ` +
-            `сессия ${card.session}. Соседи — crew_list, письмо — crew_send, вопрос с ответом — crew_send {expect_reply} + crew_wait, справка — crew_help.`,
+            `сессия ${card.session}. Соседи — crew_list, письмо — crew_send, вопрос с ответом — crew_send {expect_reply} + crew_wait, справка — crew_help. ` +
+            `Задачу называй с названием: «#31 «замок вливания»» при первом упоминании в ответе, дальше можно «#31».`,
         })
       } catch (e) {
         log(`context failed: ${e}`)

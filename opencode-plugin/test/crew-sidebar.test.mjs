@@ -51,10 +51,11 @@ cell("rows fit the narrow panel (32 columns) without wrapping", v.rows.every((r)
   cell("the printed rows of a waiting reviewer fit the panel", sv.rows.every((x) => sideText(x).length <= 32), JSON.stringify(sv.rows.map(sideText)))
   const idle = { ...w, state: "task", watches: [], since: undefined }
   const iv = sidebarLines([idle], Date.now(), "proj")
-  cell("a reviewer that waits for nothing still shows its steps", iv.rows[0].what === "шаги 10/12" && iv.rows.length === 1, JSON.stringify(iv.rows))
+  cell("a reviewer that waits for nothing still shows its steps", iv.rows[0].what === "шаги 10/12" && iv.rows.length === 2 && iv.rows[1].what === "↳ t", JSON.stringify(iv.rows))
 }
+cell("a task row has its title on a muted row under it, so the number says what the task is", v.rows.some((x, i) => x.who === "#2 исп" && v.rows[i + 1]?.what === "↳ x" && v.rows[i + 1].tone === "muted"), JSON.stringify(v.rows))
 cell("another project's sessions are not shown", !v.rows.some((r) => r.who === "worker" && r.what.startsWith("работает")), JSON.stringify(v.rows))
-cell("at most 9 rows, the rest in the foot", v.rows.length === 9 && /\+5 · \/crew/.test(v.foot) && /ход 1 · ждут 1 \(очередь 1\)/.test(v.foot),JSON.stringify({ n: v.rows.length, foot: v.foot }))
+cell("at most 9 rows, the rest in the foot", v.rows.filter((x) => x.who).length === 9 && /\+5 · \/crew/.test(v.foot) && /ход 1 · ждут 1 \(очередь 1\)/.test(v.foot),JSON.stringify({ n: v.rows.length, foot: v.foot }))
 
 // the window plugin loads under Node, where sidebar.tsx cannot be compiled: the import fails quietly
 const mod = await import("../tui.ts")
