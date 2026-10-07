@@ -182,6 +182,13 @@ export function readStatuses(): Status[] {
 
 const ORDER: Record<State, number> = { owner: 0, question: 1, working: 2, watch: 3, reply: 4, task: 5, tasks: 6, idle: 7 }
 
+/** Ширина строки окна /crew (диалог OpenCode ~74 знака): длиннее — перенос, и список рвётся (владелец 2026-10-07:
+ *  «выглядит некрасиво»). Строка обрезается с «…». */
+export const DIALOG_WIDTH = 72
+const fit = (line: string, n = DIALOG_WIDTH) => (line.length > n ? `${line.slice(0, n - 1)}…` : line)
+/** Шаги приёмки одной строкой: ✓ отмечен, ▶ идёт, · впереди (– не отмечен в отчёте). */
+export const stepBar = (steps: { id: string; result?: string }[], checking?: string) => steps.map((a) => (a.result ? "✓" : a.id === checking ? "▶" : "·")).join("")
+
 /** Текст сводки /crew: проекты (свой первым), в проекте — сначала ждущие владельца. */
 export function formatStatuses(list: Status[], now = Date.now(), first?: string): string {
   if (!list.length) return "Сессий проекта не видно: плагин сервиса ещё не записал состояние (status/)."
@@ -197,8 +204,15 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
       const who = s.task ? s.title : `${s.role}${s.title && s.title !== s.session ? ` · ${s.title}` : ""}`
       const model = s.model ? ` [${s.model.replace(/^.*\//, "")}]` : ""
       const prog = s.task?.as === "reviewer" ? stepProgress(s.task) : undefined
-      out.push(`  ${s.state === "owner" ? "▶ " : ""}${who.slice(0, 60)}${model} — ${s.detail}${prog ? ` · ${prog}` : ""}`)
-      if (prog) for (const a of s.task!.steps!) out.push(`      ${a.result ? "✓" : a.id === s.task!.checking ? "▶" : "·"} ${a.id}: ${short(a.result ?? a.text, 90)}`)
+      // вопрос владельцу — целиком (его и читают), остальное — строкой по ширине окна
+      const row = `  ${s.state === "owner" ? "▶ " : ""}${short(who, 40)}${model} — ${s.detail}`
+      out.push(s.state === "owner" ? row : fit(row))
+      if (prog) {
+        const steps = s.task!.steps!
+        const cur = steps.find((a) => a.id === s.task!.checking && !a.result)
+        out.push(fit(`      шаги ${steps.filter((a) => a.result).length}/${steps.length} ${stepBar(steps, s.task!.checking)}`))
+        if (cur) out.push(fit(`      ▶ ${cur.id}: ${short(cur.text, 120)}`))
+      }
     }
     out.push(...planLines(p))
     out.push(...acceptanceReports(p, now))
@@ -241,7 +255,7 @@ export function planLines(project: string): string[] {
                     const going = ids.filter(([, n]) => { const x = loadTask(project, n); return !!x && isOpen(x) }).map(([id]) => id)
                     return `в работе: шаги ${closed}/${p.total ?? "?"}${going.length ? `, идут ${going.join(", ")}` : ""}`
                   })()
-    out.push(`  план ${p.n} «${short(t.title.replace(/^план \S+: /, ""), 50)}» — ${state}`)
+    out.push(fit(`  план ${p.n} «${short(t.title.replace(/^план \S+: /, ""), 30)}» — ${state}`, DIALOG_WIDTH - 2))
   }
   return out.length ? ["  планы:", ...out.map((l) => `  ${l}`)] : []
 }
@@ -257,8 +271,10 @@ export function acceptanceReports(project: string, now = Date.now()): string[] {
   for (const t of done.sort((a, b) => b.updated - a.updated).slice(0, 3)) {
     const ids = t.steps?.length ? t.steps.map((a) => a.id) : Object.keys(t.checks!)
     const ok = ids.filter((id) => t.checks![id]).length
-    out.push(`  отчёт приёмки #${t.n} «${short(t.title, 50)}» — ${t.status === "cleaned" ? "влита" : "принята"} ${hm(t.updated)}, шаги ${ok}/${ids.length}:`)
-    for (const id of ids) out.push(`      ${t.checks![id] ? "✓" : "–"} ${id}: ${short(t.checks![id] ?? "не отмечен (необязательный)", 90)}`)
+    out.push(fit(`  отчёт приёмки #${t.n} «${short(t.title, 30)}» — ${t.status === "cleaned" ? "влита" : "принята"} ${hm(t.updated)}`))
+    out.push(fit(`      шаги ${ok}/${ids.length} ${ids.map((id) => (t.checks![id] ? "✓" : "–")).join("")}`))
+    const skipped = ids.filter((id) => !t.checks![id])
+    if (skipped.length) out.push(fit(`      – не отмечены (необязательные): ${skipped.join(", ")}`))
   }
   return out
 }
@@ -318,4 +334,12 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string)
   const queued = mine.filter((s) => s.state === "watch" && s.watches[0] && !s.watches[0].started).length
   const more = sorted.length > SIDE_MAX ? ` · +${sorted.length - SIDE_MAX}` : ""
   return { title: `Crew${project ? ` · ${project}` : ""}${waiting ? ` — ждут вас: ${waiting}` : ""}`, rows, foot: `ход ${working} · ждут ${watching}${queued ? ` (очередь ${queued})` : ""}${more} · /crew` }
+}
+
+/** Текст /crew-doctor: последняя самопроверка сервиса (DOCTOR_FILE) и её время. */
+export function doctorText(d: { at: number; problems: string[] } | undefined, now = Date.now()): string {
+  if (!d?.at) return "Самопроверки ещё не было: сервис делает её через 10 с после запуска плагина и раз в 10 минут."
+  const when = `проверено в ${hm(d.at)} (${minutes(d.at, now) || "0 мин"} назад)`
+  if (!d.problems?.length) return `Всё в порядке: окна отмечаются, ящик пишется, настройки проектов читаются, нужные возможности OpenCode на месте.\n\n${when}`
+  return `Есть проблемы:\n${d.problems.map((p) => `- ${p}`).join("\n")}\n\n${when}`
 }

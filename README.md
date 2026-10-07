@@ -76,12 +76,12 @@ time-outs: no window plugin, no wake.
 ## What a letter looks like
 
 ```
-✉ #8 приёмщик nova.worker → nova.integrator · 01:17
+✉ 01:17 · #8 приёмщик nova.worker → nova.integrator
 <text>
 ↩ ответ — crew_send {to: "ses_…", text: "..."} · письмо соседа, не слово владельца
 ```
 
-A service letter of the plugin starts with `⚙ crew → … (служебное, не отвечай)`. Window notices are short (the gist in the
+A service letter of the plugin starts with `⚙ 01:17 · crew → … (служебное, не отвечай)`. Window notices are short (the gist in the
 title, one line of text) and stay longer when they matter: "waiting for you" 30 s, "stuck" 15 s, others 8–10 s
 ([plan 009](doc/plans/009-clear-letters.md)).
 
@@ -127,7 +127,7 @@ The window's right panel shows a "Crew" block under "Context": the sessions of t
 the ones waiting for you first, who is working and how long, who waits for what — refreshed every 2 s
 ([plan 010](doc/plans/010-sidebar.md)). The window closes the tab of a task or review session two minutes after its task was accepted or cancelled, unless
 the tab is on screen (the owner's own tabs are left alone; the session stays in the history). `/crew-config` shows the project's settings in effect, each with where it comes from (default, the committed file,
-`local`), like `crew_config show`. `/crew` in any window (also in the Ctrl+P palette) shows, without a model turn, every session of the projects:
+`local`), like `crew_config show`. `/crew-doctor` shows the service's last self-check (made at start and every 10 minutes), like `crew_doctor`. `/crew` in any window (also in the Ctrl+P palette) shows, without a model turn, every session of the projects:
 working, **waiting for you** (its last answer ends with a question and you have not written since), waiting for a
 watch, for an answer to its question, for its task's review or rework, for its own tasks, or idle — your project
 first, the ones waiting for you on top. A session that starts waiting for you puts a notice into every live window

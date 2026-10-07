@@ -97,6 +97,8 @@ import {
   obligationsOf,
   saveObligations,
   commonDoctor,
+  DOCTOR_FILE,
+  settingsProblems,
   helpFor,
   saveProjects,
   setProjects,
@@ -1307,13 +1309,25 @@ export default {
       log(`command crew_help failed: ${e}`)
     }
 
-    // Самопроверка при загрузке (через 10 с: окна успевают отметиться). Проблемы — в журнал и уведомлением окнам.
-    const doctorTimer = setTimeout(async () => {
-      const problems = [...(await doctor()), ...commonDoctor()]
+    // Самопроверка при загрузке (через 10 с: окна успевают отметиться) и раз в DOCTOR_EVERY_MS. Итог — в DOCTOR_FILE
+    // (его показывает /crew-doctor окна), проблемы — в журнал; уведомление окнам — только когда набор проблем сменился.
+    const DOCTOR_EVERY_MS = Number(process.env.CREW_HARNESS_DOCTOR_MS) || 10 * 60_000
+    let doctorSaid = ""
+    const runDoctor = async () => {
+      const problems = [...(await doctor()), ...commonDoctor(), ...settingsProblems(projects)]
+      try {
+        writeFileSync(DOCTOR_FILE, JSON.stringify({ at: Date.now(), problems }))
+      } catch {}
+      const said = problems.join(" | ")
+      if (said === doctorSaid) return
+      doctorSaid = said
       if (!problems.length) return log("doctor: ok")
-      log(`doctor: ${problems.join(" | ")}`)
-      for (const w of liveWindows()) postNotice(w.pid, { title: "crew: проблемы — crew_doctor", message: short(problems.join("; "), 100), duration: 15_000 })
-    }, 10_000)
+      log(`doctor: ${said}`)
+      for (const w of liveWindows()) postNotice(w.pid, { title: "crew: проблемы — /crew-doctor", message: short(problems.join("; "), 100), duration: 15_000 })
+    }
+    const doctorTimer = setTimeout(() => void runDoctor(), 10_000)
+    const doctorEvery = setInterval(() => void runDoctor(), DOCTOR_EVERY_MS)
+    doctorEvery.unref?.()
 
     // ЗАМЕР ЗАДЕРЖКИ ГЛАВНОГО ПОТОКА (2026-10-06). Сервер дважды за вечер терял окна («Event stream stalled»), и было
     // не понять, держал ли поток плагин. Таймер раз в LAG_EVERY_MS замечает, насколько опоздал: опоздание от
@@ -1337,6 +1351,7 @@ export default {
       clearInterval(timer)
       clearInterval(lagTimer)
       clearTimeout(doctorTimer)
+      clearInterval(doctorEvery)
       remoteBridge.stop()
       try {
         watcher?.close()

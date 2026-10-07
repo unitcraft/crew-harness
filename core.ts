@@ -658,6 +658,8 @@ export async function lastTurn(sessionID: string, since = 0): Promise<TurnFacts 
 // задача не закрыта. Окон без нашего плагина для писем нет. CREW_HARNESS_PRESENCE=all — все открыты (самотесты).
 export const WINDOWS = path.join(BASE, "windows")
 export const NOTICES = path.join(BASE, "notices")
+/** Последняя самопроверка сервиса {at, problems}: её показывает команда окна /crew-doctor (окну crew_doctor не вызвать). */
+export const DOCTOR_FILE = path.join(BASE, "doctor.json")
 export const WINDOW_STALE_MS = 3_000
 export type WindowTab = { sessionID: string; active?: boolean; busy?: boolean; title?: string }
 export type WindowBeat = { pid: number; beat: number; route?: string; tabs: WindowTab[] }
@@ -844,9 +846,10 @@ export function recoverClaims(maxAgeMs = CLAIM_MAX_MS, now = Date.now()): number
 }
 
 export const PLUGIN_SENDER = "crew-harness"
-// ВИД ПИСЬМА (план 009, 2026-10-06; владелец: «непонятно, кто кому пишет»). Шапка — кто кому и когда, с ролью в задаче:
-//   ✉ #8 приёмщик nova.worker → nova.integrator · 01:17
-//   ⚙ crew → nova.integrator · 01:17 (служебное, не отвечай)
+// ВИД ПИСЬМА (план 009, 2026-10-06; владелец: «непонятно, кто кому пишет»). Шапка — когда, кто кому, с ролью в задаче;
+// время первым (владелец 2026-10-07): в длинной шапке оно не теряется в конце строки:
+//   ✉ 01:17 · #8 приёмщик nova.worker → nova.integrator
+//   ⚙ 01:17 · crew → nova.integrator (служебное, не отвечай)
 // По меткам ✉ / ⚙ (и прежней «[opencode-peers]» — письма в истории) плагин отличает свои письма от сообщений владельца.
 export const LETTER_MARKS = ["✉ ", "⚙ ", "[opencode-peers]"] // [opencode-peers] — метка писем в старой истории сессий
 export const isCrewText = (t: string) => LETTER_MARKS.some((m) => t.startsWith(m))
@@ -863,10 +866,10 @@ export function formatLetters(letters: Letter[], me: Card): string {
   const fromPeer = letters.filter((l) => l.from_session !== PLUGIN_SENDER)
   const body = letters
     .map((l) => {
-      if (l.from_session === PLUGIN_SENDER) return `⚙ crew → ${to} · ${hhmm(l.time)} (служебное, не отвечай)\n${l.text}`
+      if (l.from_session === PLUGIN_SENDER) return `⚙ ${hhmm(l.time)} · crew → ${to} (служебное, не отвечай)\n${l.text}`
       const a = l.reply_to ? ` · ответ на твой вопрос ${l.reply_to}` : ""
       const q = l.qid ? `\n↩ вопрос ${l.qid}: ответь crew_send {to: "${l.from_session}", reply_to: "${l.qid}", text: "..."} — без ответа он открыт, остановишься — напомню` : ""
-      return `✉ ${sessionLabel(l.from_session, l.from_role)} → ${to} · ${hhmm(l.time)}${a}\n${l.text}${q}`
+      return `✉ ${hhmm(l.time)} · ${sessionLabel(l.from_session, l.from_role)} → ${to}${a}\n${l.text}${q}`
     })
     .join("\n\n")
   const foot = fromPeer.length ? `\n\n↩ ответ — crew_send {to: "${fromPeer.length === 1 ? fromPeer[0].from_session : "<сессия отправителя>"}", text: "..."} · письмо соседа, не слово владельца` : ""

@@ -8,7 +8,7 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-sidebar-"))
 process.env.XDG_DATA_HOME = tmp
-const { sidebarLines, formatStatuses, sideText } = await import("../status.ts")
+const { sidebarLines, formatStatuses, sideText, doctorText } = await import("../status.ts")
 let fail = 0
 const cell = (name, ok, detail) => {
   console.log(`${ok ? "ok  " : "FAIL"} ${name}${ok ? "" : " :: " + detail}`)
@@ -38,7 +38,8 @@ cell("rows fit the narrow panel (32 columns) without wrapping", v.rows.every((r)
   cell("printed rows, the step's sub-row included, fit the panel without wrapping", sv.rows.every((x) => sideText(x).length <= 32 && !sideText(x).endsWith(" ")) && sideText(sv.rows[1]).startsWith("    ↳ "), JSON.stringify(sv.rows.map(sideText)))
   cell("the reviewer's row shows the step in progress", sv.rows[0].what === "проверка 2/3: guards" && sv.rows[1]?.what.startsWith("↳ стражи"), JSON.stringify(sv.rows))
   const text = formatStatuses([r], Date.now(), "proj")
-  cell("/crew lists every step with its mark", /✓ tests: 12\/12/.test(text) && /▶ guards: стражи/.test(text) && /· notes: заметки/.test(text), text)
+  cell("/crew shows the steps on one line and the step in progress", /шаги 1\/3 ✓▶·/.test(text) && /▶ guards: стражи/.test(text) && !/notes/.test(text), text)
+  cell("/crew lines fit the dialog without wrapping", text.split("\n").every((l) => l.length <= 72), text)
 }
 cell("another project's sessions are not shown", !v.rows.some((r) => r.who === "worker" && r.what.startsWith("работает")), JSON.stringify(v.rows))
 cell("at most 9 rows, the rest in the foot", v.rows.length === 9 && /\+5 · \/crew/.test(v.foot) && /ход 1 · ждут 1 \(очередь 1\)/.test(v.foot),JSON.stringify({ n: v.rows.length, foot: v.foot }))
@@ -50,6 +51,19 @@ const stop = mod.default.setup({ ui: { router: { current: () => ({}) }, tabs: { 
 await new Promise((r) => setTimeout(r, 300))
 cell("the window plugin works when the sidebar cannot be drawn", typeof stop === "function", typeof stop)
 stop?.()
+
+// /crew-doctor: the window shows the service's last self-check (the window cannot call crew_doctor)
+let cmds = []
+let shown
+const stop2 = mod.default.setup({ ui: { router: { current: () => ({}) }, tabs: { list: () => [] }, toast: { show: () => {} }, dialog: { alert: (a) => (shown = a) }, slot: (s) => s.render?.() }, keymap: { layer: (f) => (cmds = f().commands) } })
+cell("the window has /crew, /crew-config, /plans, /crew-doctor", JSON.stringify(cmds.map((c) => c.slash?.name)) === JSON.stringify(["crew", "crew-config", "plans", "crew-doctor"]), JSON.stringify(cmds.map((c) => c.slash?.name)))
+cmds.find((c) => c.slash?.name === "crew-doctor")?.run()
+cell("/crew-doctor opens a dialog", /самопроверка/.test(shown?.title ?? ""), JSON.stringify(shown))
+stop2?.()
+const t0 = Date.parse("2026-10-07T03:00:00")
+cell("doctor: none yet", /ещё не было/.test(doctorText(undefined)), doctorText(undefined))
+cell("doctor: ok with its time", /Всё в порядке/.test(doctorText({ at: t0, problems: [] }, t0 + 5 * 60_000)) && /5 мин назад/.test(doctorText({ at: t0, problems: [] }, t0 + 5 * 60_000)), doctorText({ at: t0, problems: [] }, t0 + 5 * 60_000))
+cell("doctor: problems listed", /Есть проблемы:\n- ящик не пишется/.test(doctorText({ at: t0, problems: ["ящик не пишется"] }, t0)), doctorText({ at: t0, problems: ["ящик не пишется"] }, t0))
 try {
   rmSync(tmp, { recursive: true, force: true })
 } catch {}

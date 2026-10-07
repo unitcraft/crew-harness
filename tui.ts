@@ -18,8 +18,8 @@
 // ещё и attention.notify: системное уведомление, когда окно не в фокусе (настройка OpenCode attention.notifications).
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { NOTICES, WINDOWS, cardFile, configShowText, loadProjects, log, readJson } from "./core.ts"
-import { formatStatuses, readStatuses } from "./status.ts"
+import { DOCTOR_FILE, NOTICES, WINDOWS, cardFile, configShowText, loadProjects, log, readJson } from "./core.ts"
+import { doctorText, formatStatuses, readStatuses } from "./status.ts"
 import { listTasks, loadTask } from "./tasks.ts"
 import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
 
@@ -162,10 +162,16 @@ export default {
         return
       }
     }
+    // /crew-doctor: последняя самопроверка сервиса (он пишет её при запуске и раз в 10 минут)
+    const showDoctor = () => {
+      const d = readJson<{ at: number; problems: string[] }>(DOCTOR_FILE)
+      api.ui?.dialog?.alert?.({ title: "crew-harness — самопроверка", message: doctorText(d) })
+    }
     const commands = [
       { id: "crew-harness.status", title: "Crew: кто чего ждёт", group: "Crew", slash: { name: "crew" }, palette: true, run: showStatus },
       { id: "crew-harness.config", title: "Crew: настройки проекта", group: "Crew", slash: { name: "crew-config" }, palette: true, run: showConfig },
       { id: "crew-harness.plans", title: "Crew: планы на согласовании", group: "Crew", slash: { name: "plans" }, palette: true, run: showPlans },
+      { id: "crew-harness.doctor", title: "Crew: самопроверка", group: "Crew", slash: { name: "crew-doctor" }, palette: true, run: showDoctor },
     ]
     try {
       api.ui.slot({

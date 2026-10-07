@@ -77,7 +77,7 @@ await call("crew_send", "sesBBBBBB", { to: "limits.integrator", text: "cross-pro
 await wait()
 const cross = delivered.find((d) => d.sessionID === "sesCCCCCC" && d.text.includes("cross-project"))
 cell("limits.integrator reaches the other project", !!cross, JSON.stringify(delivered))
-cell("the letter is signed nova.worker", !!cross && /✉ nova\.worker → /.test(cross.text), cross?.text)
+cell("the letter is signed nova.worker", !!cross && /✉ \d\d:\d\d · nova\.worker → /.test(cross.text), cross?.text)
 
 // all = own project; project.all = that project
 await call("crew_send", "sesAAAAAA", { to: "all", text: "to-all-nova" })

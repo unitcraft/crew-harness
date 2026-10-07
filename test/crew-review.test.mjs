@@ -173,7 +173,7 @@ rmSync(path.join(core.BASE, "tasks", "proj", "99.json"), { force: true })
 cell("the integrator gets a quiet summary", got("sesINTEG1", "принята и влита").some((d) => d.synthetic), JSON.stringify(got("sesINTEG1", "принята")))
 cell("the executor session is closed with a final line", core.allCards().find((c) => c.session === ex1)?.spawned?.status === "closed" && got(ex1, "✓✓ Задача #1 принята").length === 1, JSON.stringify(got(ex1, "✓✓")))
 cell("the final line carries the step report", /Отчёт приёмки — шаги 2\/3/.test(got(ex1, "✓✓ Задача #1 принята")[0]?.text ?? "") && /✓ tests: зелёные: 12\/12/.test(got(ex1, "✓✓ Задача #1 принята")[0]?.text ?? ""), got(ex1, "✓✓ Задача #1 принята")[0]?.text)
-cell("/crew shows the acceptance report of the day", st.acceptanceReports("proj").some((l) => /отчёт приёмки #1/.test(l)) && st.acceptanceReports("proj").some((l) => /✓ guards: ok/.test(l)), JSON.stringify(st.acceptanceReports("proj")))
+cell("/crew shows the acceptance report of the day", st.acceptanceReports("proj").some((l) => /отчёт приёмки #1/.test(l)) && st.acceptanceReports("proj").some((l) => /шаги 2\/3 [✓–]{3}/.test(l)), JSON.stringify(st.acceptanceReports("proj")))
 cell("the executor session is titled #1 ✓✓", updates.some((u) => u.sessionID === ex1 && u.title === "#1 ✓✓ готово фича"), JSON.stringify(updates.filter((u) => u.sessionID === ex1)))
 
 // 3. queue by priority: both tasks wait (the tab is busy, no review sessions allowed); the tab frees up -> the P1
