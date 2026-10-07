@@ -12,9 +12,9 @@ one merge at a time, letters between agents, a queue for heavy runs on the machi
 | Folder | What it is | State |
 |---|---|---|
 | [`opencode-plugin/`](opencode-plugin/README.md) | the crew as an OpenCode V2 plugin: Claude Code tabs of OpenCode are the agents | in use |
-| `service/` | the coordination service: tasks, letters, reviews, the merge lock, the machine queue, plans — outside any one agent program; agents reach it over MCP | planned ([plan 015](doc/plans/015-crew-service.md)) |
-| `web/` | the owner's console in the browser: the board, live agent terminals, chat with pictures | planned (plan 015) |
-| [`doc/`](doc/plans/README.md) | plans and research | |
+| `service/` | the coordination service: tasks, letters, reviews, the merge lock, the machine queue, plans — outside any one agent program; agents reach it over MCP | planned ([task 001](doc/tasks/001-crew-service/)) |
+| `web/` | the owner's console in the browser: the board, live agent terminals, chat with pictures | planned (task 001) |
+| `doc/` | [`tasks/`](doc/tasks/README.md) — work by the [methodology](https://github.com/unitcraft/ai-dev-methodology) (one task, one folder: spec, plan, reviews); [`plans/`](doc/plans/README.md) — the plugin's earlier plans (archive); [`research/`](doc/research/) | |
 
 Why a service: one OpenCode server holds every session in one process and stalls at about eight parallel tasks
 ([research](doc/research/2026-10-06-many-agents.md)). The service starts each agent as its own process and keeps the

@@ -1,0 +1,40 @@
+С1 0/38 старт
+С1 1/38 task/message.md
+С1 2/38 task/agents-capabilities.md
+С1 3/38 task/draft-plan-previous.md
+С1 4/38 task/methodology-task-runner.md
+С1 5/38 task/methodology-task-sessions.md
+С1 6/38 task/nova-facts.md
+С1 7/38 task/research-many-agents.md
+С1 8/38 task-algorithm.md
+С1 9/38 log.md
+С1 10/38 github.com/unitcraft/crew-harness
+С1 11/38 ai-dev-methodology task-runner.md
+С1 12/38 github.com/unitcraft/ai-dev-methodology
+С1 13/38 github.com/ComposioHQ/agent-orchestrator
+С1 14/38 opencode issue 21215
+С1 15/38 opencode issue 16777
+С1 16/38 code.claude.com agent-view
+С1 17/38 code.claude.com claude-code-on-the-web
+С1 18/38 code.claude.com legal-and-compliance
+С1 19/38 support.claude.com agent sdk с подпиской
+С1 20/38 code.claude.com sub-agents
+С1 21/38 code.claude.com workflows
+С1 22/38 code.claude.com agent-teams
+С1 23/38 code.claude.com agents
+С1 24/38 code.claude.com claude-projects
+С1 25/38 platform.claude.com managed-agents
+С1 26/38 emdash.com/docs
+С1 27/38 github.com/nimbalyst/nimbalyst
+С1 28/38 github.com/cline/kanban
+С1 29/38 augmentcode.com open-source-agent-orchestrators
+С1 30/38 codex.danielvaughan.com
+С1 31/38 kimi.com/code/docs
+С1 32/38 github.com/MoonshotAI/kimi-code
+С1 33/38 flaviocopes.com/zcode
+С1 34/38 eesel.ai (ZCode)
+С1 35/38 agentclientprotocol.com
+С1 36/38 репозиторий unitcraft/crew-harness @ 0eb9bfc
+С1 37/38 репозиторий nova (https://github.com/nv-lang/nova)
+С1 38/38 проект claude-limits (https://github.com/unitcraft/claude-limits)
+С1 39/39 github.com/nv-lang/nova/tree/main/novac
