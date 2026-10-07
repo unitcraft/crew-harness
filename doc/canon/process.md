@@ -3,8 +3,12 @@
 Часть Канона проекта ([состав Канона](README.md)).
 
 **Основа — методика [unitcraft/ai-dev-methodology](https://github.com/unitcraft/ai-dev-methodology/tree/main)**
-целиком: README (канон и надстройка), `task-algorithm.md`, `task-sessions.md`, `task-runner.md`,
-`completeness-check.md`. Всё, что там сказано, действует здесь без пересказа. Ниже — только то, чем проект от неё
+целиком: README (канон и надстройка),
+[`task-algorithm.md`](https://github.com/unitcraft/ai-dev-methodology/blob/main/task-algorithm.md),
+[`task-sessions.md`](https://github.com/unitcraft/ai-dev-methodology/blob/main/task-sessions.md),
+[`task-runner.md`](https://github.com/unitcraft/ai-dev-methodology/blob/main/task-runner.md),
+[`completeness-check.md`](https://github.com/unitcraft/ai-dev-methodology/blob/main/completeness-check.md).
+Всё, что там сказано, действует здесь без пересказа. Ниже — только то, чем проект от неё
 отличается и что добавляет ([ADR-0001](decisions/ADR-0001-work-by-methodology.md)). Правила для того, кто правит
 репозиторий, — [AGENTS.md](../../AGENTS.md).
 
