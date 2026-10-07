@@ -900,7 +900,7 @@ export function settleObligation(session: string, qid: string): Obligation | und
   return hit
 }
 
-// Справка (`/crew_help` и инструмент `crew_help`). Текст — единственный дом правил переписки:
+// Справка (`/crew-help` и инструмент `crew_help`). Текст — единственный дом правил переписки:
 // подсказка context-хука и описания инструментов на него ссылаются, а не повторяют.
 export const HELP = `crew-harness — письма между вкладками OpenCode на этой машине, в любом репозитории.
 

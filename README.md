@@ -20,7 +20,7 @@ A *window* is the OpenCode program in a terminal; a *tab* is a session inside it
 background); a task session may run with no window at all. Formerly `opencode-peers` (renamed 2026-10-07, plan 014).
 
 - tools `crew_list`, `crew_send`, `crew_wait`, `crew_watch`, `crew_role`, `crew_inbox`, `crew_spawn`,
-  `crew_task`, `crew_config`, `crew_doctor`, `crew_help` (also `/crew_help`);
+  `crew_task`, `crew_config`, `crew_doctor`, `crew_help` (also `/crew-help`);
 - **projects**: every tab belongs to a project and its address is `project.role`
   (`nova.integrator`). A plain role means the sender's own project; `project.role` reaches another
   project; `all` is every open tab of the own project, `project.all` of another one; a session id

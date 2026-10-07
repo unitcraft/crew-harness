@@ -29,7 +29,7 @@ stops at the first failing file.
 | | `peers-settings` | settings read committed from a settings repository; the old options form; `local` values |
 | | `peers-cfgtool` | `crew_config`: guide, show with sources, set by the integrator only, applied once committed |
 | | `peers-paths` | the mailbox moves `nova-peers` → `crew-harness` with a junction left behind |
-| | `peers-help` | `crew_help` and `/crew_help` name all tools |
+| | `crew-help` | `crew_help` and `/crew-help` name all tools |
 | Roles and models | `peers-role` | handing over an exclusive role with `force` |
 | | `peers-shared` | shared roles with several open holders: no delivery by guess |
 | | `peers-model` | the window's model comes from its current request, the database is a fallback |

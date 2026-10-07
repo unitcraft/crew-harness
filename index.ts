@@ -1284,17 +1284,17 @@ export default {
       for (const t of tools) editor.add(toEditor(t))
     })
 
-    // Слэш-команда /crew_help. Тело — просьба показать справку: своего канала «показать без хода модели» плагин V2 не даёт.
+    // Слэш-команда /crew-help. Тело — просьба показать справку: своего канала «показать без хода модели» плагин V2 не даёт.
     try {
       const existing = new Set<string>()
       try {
         const list = await ctx.command.list()
         for (const c of list?.data ?? list ?? []) if (c?.name) existing.add(String(c.name))
       } catch {}
-      if (!existing.has("crew_help")) {
+      if (!existing.has("crew-help")) {
         await ctx.command.transform((editor: any) => {
           editor.add({
-            name: "crew_help",
+            name: "crew-help",
             description: "Справка по письмам между вкладками (crew-harness)",
             execute: async ({ sessionID, prompt, delivery }: any) => {
               const dir = readJson<Card>(cardFile(String(sessionID ?? "")))?.directory || String(ctx?.location?.directory ?? "")

@@ -1,5 +1,5 @@
 // Self-test of crew-harness help (node >= 24):  node test/crew-help.test.mjs
-// The help is served by the crew_help tool and by the /crew_help command, names all four tools,
+// The help is served by the crew_help tool and by the /crew-help command, names all four tools,
 // and the context hook points at it. Red probe: CREW_HARNESS_HELP_DROP=<tool> strips one name from the
 // served text -- the cell naming that tool must go red.
 import { mkdtempSync, rmSync } from "node:fs"
@@ -43,9 +43,9 @@ for (const w of ["force", "all", "worker", "assistant — то же, что work
   cell(`help mentions «${w}»`, help.includes(w), "missing")
 }
 
-cell("/crew_help is registered", typeof commands.crew_help?.execute === "function", JSON.stringify(Object.keys(commands)))
-await commands.crew_help.execute({ sessionID: "sesHELP01", prompt: {}, delivery: "queue" })
-cell("/crew_help sends the help to the session", prompts.length === 1 && prompts[0].text.includes("crew_inbox"), JSON.stringify(prompts).slice(0, 120))
+cell("/crew-help is registered", typeof commands["crew-help"]?.execute === "function", JSON.stringify(Object.keys(commands)))
+await commands["crew-help"].execute({ sessionID: "sesHELP01", prompt: {}, delivery: "queue" })
+cell("/crew-help sends the help to the session", prompts.length === 1 && prompts[0].text.includes("crew_inbox"), JSON.stringify(prompts).slice(0, 120))
 
 const ev = { sessionID: "sesHELP01", system: [] }
 await hooks.context(ev)
