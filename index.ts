@@ -909,11 +909,15 @@ export default {
     // письмо автору задачи со списком; одно письмо на один набор хвостов. Отменённая задача — убрать или сохранить
     // работу решает автор. Сам плагин не удаляет: удаление веток на origin — действие наружу.
     const LEFT_EVERY_MS = Number(process.env.CREW_HARNESS_LEFT_MS) || 600_000
-    let leftAt = 0
+    // НЕ ПРИ ЗАПУСКЕ (2026-10-07): первый проход шёл сразу при подъёме сервиса, да ещё с ls-remote, — 32 с прохода
+    // в минуту, когда сервер и так загружает сессии и окна переподключаются. Первый проход — через LEFT_EVERY_MS,
+    // первый взгляд на origin — через LEFT_REMOTE_FIRST_MS.
+    let leftAt = Date.now()
     const leftClean = new Set<string>()
     const LEFT_PER_RUN = Number(process.env.CREW_HARNESS_LEFT_PER_RUN) || 3
     const LEFT_REMOTE_MS = Number(process.env.CREW_HARNESS_LEFT_REMOTE_MS) || 6 * 3_600_000
-    let leftRemoteAt = 0
+    const LEFT_REMOTE_FIRST_MS = Number(process.env.CREW_HARNESS_LEFT_REMOTE_FIRST_MS) || 30 * 60_000
+    let leftRemoteAt = Date.now() - LEFT_REMOTE_MS + LEFT_REMOTE_FIRST_MS
     async function leftWatch() {
       if (now() - leftAt < LEFT_EVERY_MS) return
       leftAt = now()
