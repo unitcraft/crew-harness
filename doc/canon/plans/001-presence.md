@@ -3,7 +3,7 @@
 **Статус:** ЗАКРЫТ 2026-10-05.
 **Где остановились:** всё сделано; продолжение — план [002](002-tasks.md).
 **Проверено:** `npm test` (12 файлов), красные пробы (10), живая проверка в песочнице на
-OpenCode 2.0.22 с claude-code/haiku; коммиты `4e79ed5` (opencode-peers), `744bc03`
+OpenCode 2.0.22 с claude-code/haiku; коммиты `4257a35` (opencode-peers), `744bc03`
 (opencode-claude-code-provider).
 
 ## Цель

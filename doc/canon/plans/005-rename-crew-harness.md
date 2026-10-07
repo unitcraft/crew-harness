@@ -58,7 +58,7 @@ README, лицензия, package.json (0.5.0). Метка `[opencode-peers]` в
 
 ## Ход
 
-- 2026-10-07: `main` плагина `3ed9121` и провайдера `0500f04` запушены; репозиторий — `unitcraft/crew-harness`, папка —
+- 2026-10-07: `main` плагина `2cca4fa` и провайдера `0500f04` запушены; репозиторий — `unitcraft/crew-harness`, папка —
   `<папка плагинов>\crew-harness`; пути в `opencode.jsonc` и `cli.json`; ссылки в README соседних плагинов.
   Сервис перезапущен владельцем, плагин загружен из новой папки, ящик `crew-harness` — ссылка на `nova-peers`.
   Ветка nova `crew-harness-rename` ждёт зелёного CI и вливается интегратором.

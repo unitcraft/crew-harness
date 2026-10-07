@@ -18,7 +18,7 @@
 ## Решение
 
 Вариант 2. `opencode-plugin/` — плагин (TypeScript, в работе); `service/` — сервис координации; `web/` — пульт;
-`doc/` — `tasks/`, `decisions/`, `process/`, `research/`, `plans/` (архив). Сделано: коммиты `3c5965c`, `acf640e`.
+`doc/` — `tasks/`, `decisions/`, `process/`, `research/`, `plans/` (архив). Сделано: коммиты `5f723fa`, `07205be`.
 
 ## Последствия
 
