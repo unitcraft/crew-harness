@@ -131,7 +131,16 @@ export function readSettingsFolder(folder: string, now = Date.now()): { project:
       branch = j.branch
       j = parseJson(showCommitted(repo, branch, file))
     }
-    if (j === undefined) problems.push(`в ветке ${branch} репозитория ${repo} нет ${file} — настройки по умолчанию`)
+    if (j === undefined) {
+      // файл в рабочей копии есть, а в ветке нет — его просто не закоммитили (claude-limits, 2026-10-07: приёмка
+      // проекта сутки не действовала, а самопроверка говорила только «нет файла»)
+      const local = [prefix + ".opencode/crew-harness.json", prefix + LEGACY_SETTINGS_NAME].find((f) => existsSync(path.join(repo!, f)))
+      problems.push(
+        local
+          ? `${local} лежит в рабочей копии ${repo}, но не закоммичен в ${branch} — плагин его не читает, настройки по умолчанию; закоммить его в ${branch}${local.endsWith(LEGACY_SETTINGS_NAME) ? ` под именем .opencode/crew-harness.json` : ""}`
+          : `в ветке ${branch} репозитория ${repo} нет ${file} — настройки по умолчанию`,
+      )
+    }
     else if (j === null) problems.push(`${file} в ветке ${branch} — не JSON; настройки по умолчанию`)
     else raw = j
   }
