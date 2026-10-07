@@ -64,3 +64,10 @@
 - **Приватное не в публичное (владелец 2026-10-07):** репозиторий crew-harness публичный; в spec, plan и всё, что
   уйдёт в репозиторий, — без локальных путей машины владельца и приватных репозиториев; Нова — только
   https://github.com/nv-lang/nova.
+
+## Версия методики
+
+Задача ведётся по методике **unitcraft/ai-dev-methodology @ `41ba76f`** (владелец, 2026-10-07: копий методики в задаче
+не держать). Файлы этого коммита:
+https://github.com/unitcraft/ai-dev-methodology/blob/41ba76feb4c3dd809f9706a2d4d549f6e423b581/task-algorithm.md,
+…/task-sessions.md, …/task-runner.md, …/README.md (тот же адрес с другим именем файла).
