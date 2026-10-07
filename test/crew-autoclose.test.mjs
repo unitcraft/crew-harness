@@ -1,6 +1,6 @@
 // Self-test: the window closes the tabs of closed tasks (node >= 24):  node test/crew-autoclose.test.mjs
-// A task or review session whose task was accepted (cleaned) or cancelled more than AUTOCLOSE_MS ago is closed, unless
-// its tab is on screen; the owner's own tabs (no spawned session) and tasks still open are never closed.
+// A task or review session whose task was merged (accepted, cleaned) or cancelled more than AUTOCLOSE_MS ago is closed,
+// unless its tab is on screen or its turn is going (an open tab keeps the task's tree held, #26 nova 2026-10-07); the owner's own tabs (no spawned session) and tasks still open are never closed.
 import { mkdtempSync, rmSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -24,6 +24,8 @@ await mk(2, "cleaned", old)
 await mk(3, "running", old)
 await mk(4, "cleaned", Date.now())
 await mk(5, "cancelled", old)
+await mk(6, "accepted", old)
+await mk(7, "accepted", old)
 const card = (session, extra) => core.saveCard({ session, role: "worker", auto: false, title: session, directory: tmp, repo: "r", project: "proj", pid: 1, updated: Date.now(), ...extra })
 const spawned = { by: "sesI", task: "x", tier: "light", status: "closed", at: old, qid: "q" }
 card("sesDONE", { spawned, task: { project: "proj", n: 1 } })
@@ -31,9 +33,11 @@ card("sesSHOWN", { spawned, task: { project: "proj", n: 2 } })
 card("sesRUN", { spawned: { ...spawned, status: "running" }, task: { project: "proj", n: 3 } })
 card("sesFRESH", { spawned, task: { project: "proj", n: 4 } })
 card("sesREV", { spawned, review: { project: "proj", n: 5 } })
+card("sesMERGED", { spawned, review: { project: "proj", n: 6 } })
+card("sesBUSY", { spawned, review: { project: "proj", n: 7 } })
 card("sesOWNER", { task: { project: "proj", n: 1 } }) // the owner's tab took task #1 by assign: never closed
 
-const tabs = ["sesDONE", "sesSHOWN", "sesRUN", "sesFRESH", "sesREV", "sesOWNER"].map((sessionID) => ({ sessionID, active: sessionID === "sesSHOWN" }))
+const tabs = ["sesDONE", "sesSHOWN", "sesRUN", "sesFRESH", "sesREV", "sesMERGED", "sesBUSY", "sesOWNER"].map((sessionID) => ({ sessionID, active: sessionID === "sesSHOWN", busy: sessionID === "sesBUSY" }))
 const closed = []
 const api = {
   ui: {
@@ -54,6 +58,8 @@ const cell = (name, ok, detail) => {
 }
 cell("an accepted task's tab not on screen is closed", closed.includes("sesDONE"), JSON.stringify(closed))
 cell("a cancelled task's review tab is closed", closed.includes("sesREV"), JSON.stringify(closed))
+cell("a merged (accepted) task's tab is closed before its cleanup: it would hold the tree", closed.includes("sesMERGED"), JSON.stringify(closed))
+cell("a tab whose turn is going is not closed", !closed.includes("sesBUSY"), JSON.stringify(closed))
 cell("the tab on screen is not closed", !closed.includes("sesSHOWN"), JSON.stringify(closed))
 cell("a running task's tab is not closed", !closed.includes("sesRUN"), JSON.stringify(closed))
 cell("a task closed a moment ago is not closed yet", !closed.includes("sesFRESH"), JSON.stringify(closed))

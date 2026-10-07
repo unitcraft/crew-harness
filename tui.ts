@@ -53,8 +53,11 @@ export default {
         renameSync(tmp, file)
       } catch {}
       // ВКЛАДКИ ЗАКРЫТЫХ ЗАДАЧ закрываются сами (владелец 2026-10-06: «#6 вкладка закроется автоматически?»): сессия
-      // задачи или приёмки, чья задача принята (cleaned) или отменена больше AUTOCLOSE_MS назад, — если вкладка не на
-      // экране. Вкладки владельца (задача assign) не трогаются. Сессия остаётся в истории (Ctrl+P → Switch session).
+      // задачи или приёмки, чья задача влита (accepted, cleaned) или отменена больше AUTOCLOSE_MS назад, — если вкладка
+      // не на экране и её ход не идёт. Вкладки владельца (задача assign) не трогаются. Сессия остаётся в истории
+      // (Ctrl+P → Switch session). С ВЛИТОЙ, А НЕ С УБРАННОЙ (2026-10-07, #26 nova): пока открыта вкладка сессии из дерева
+      // задачи, сервер держит экземпляр этой папки со слежкой за файлами, и Windows не даёт её удалить — уборка ждала
+      // закрытия вкладки, а вкладка ждала уборки. Закрыли вкладки — пустой каталог удалился.
       if (Date.now() - closeCheckedAt > 10_000) {
         closeCheckedAt = Date.now()
         for (const t of tabs) {
@@ -63,7 +66,7 @@ export default {
             const card = readJson<any>(cardFile(t.sessionID))
             const ref = card?.spawned ? (card.task ?? card.review) : undefined
             const task = ref ? loadTask(ref.project, ref.n) : undefined
-            if (!task || (task.status !== "cleaned" && task.status !== "cancelled") || Date.now() - task.updated < AUTOCLOSE_MS) continue
+            if (t.busy || !task || !["accepted", "cleaned", "cancelled"].includes(task.status) || Date.now() - task.updated < AUTOCLOSE_MS) continue
             if (api.ui?.tabs?.close?.(t.sessionID)) closedTabs.add(t.sessionID)
           } catch {}
         }
