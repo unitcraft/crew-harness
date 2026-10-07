@@ -21,7 +21,7 @@ https://github.com/unitcraft/ai-dev-methodology/blob/main/task-runner.md».
 
 ## Решение
 
-Вариант 2. Применение и отступления — [doc/process/](../process/README.md). Задачи — `doc/tasks/NNN-<slug>/`, номера
+Вариант 2. Применение и отступления — [doc/process/](../process.md). Задачи — `doc/tasks/NNN-<slug>/`, номера
 с 001; старые планы — в архив `doc/plans/archive/`.
 
 **Уточнение, 2026-10-07 (владелец).** Архива нет: `doc/plans/` — планы с подпланами, номера сплошные; старые
