@@ -66,7 +66,7 @@ if [ "$cur_email" != "$email" ]; then
   changed=1
 fi
 
-hooks_dir=$(git rev-parse --git-path hooks 2>/dev/null)
+hooks_dir=$(git rev-parse --git-common-dir 2>/dev/null)/hooks
 live=
 if [ -n "$hooks_dir" ] && [ -d "$hooks_dir" ]; then
   for f in "$hooks_dir"/*; do

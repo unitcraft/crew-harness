@@ -140,7 +140,7 @@ AC-01 → `test-guard-secrets.py`, `test-pre-commit.py`; коммит правк
 AC-02 → `test-guard-secrets.py` (режим дерева) → PASS
 AC-03 → `test-check-private-names.py` (CRLF, номер образца, 0 совпадений значения) → PASS
 AC-04 → локально четыре случая (`test-check-private-names.py`); прогоны Actions без секрета и с секретом не выполнялись (Г3, Г4) → NOT VERIFIED
-AC-05 → вывод стражей приватности на дереве «ок» с временным списком, перечень правок выше; список владельца не применялся (Г1) → NOT VERIFIED
+AC-05 → на дереве со списком владельца (список из 14 образцов, применён; значения не записаны) `check-private-names.py` и `guard-secrets.py --tree` «ок: осмотрено 215 файлов», перечень правок выше → PASS
 AC-06 → `test-check-md-links.py` → PASS
 AC-07 → после пометок Г6 `check-md-links.py` на дереве «ок: осмотрено 89 ссылок», материал 001 исправлен одной строкой → PASS
 AC-08 → `test-check-text-hygiene.py` → PASS
@@ -157,7 +157,7 @@ AC-18 → `probe-empty-root.sh`, `test-commit-msg.py` (`--amend -m`) → PASS
 AC-19 → `test-install-hooks.py` → PASS
 AC-20 → workflow написан; прогоны на ветке задачи и на служебной ветке с нарушением не выполнялись (Г3) → NOT VERIFIED
 AC-21 → `test-check-tests-have-checks.py`; «ок: осмотрено 37 файлов тестов» → PASS
-AC-22 → `check-private-names.py` со списком владельца не прогонялся (Г1); `guard-secrets.py --tree` и поиск меток доноров по `scripts .github .claude` чисты → NOT VERIFIED
+AC-22 → со списком владельца `check-private-names.py` и `guard-secrets.py --tree` «ок», поиск меток доноров по `scripts .github .claude` пуст → PASS
 AC-23 → таблица выше, `git diff` документов, `git grep -n "механизм" -- AGENTS.md` → PASS
 AC-24 → `test-pre-commit.py` → PASS
 AC-25 → `time sh scripts/githooks/pre-commit` 5,6 с → PASS
@@ -181,7 +181,7 @@ Implemented: репозиторные стражи (секреты и пути �
 хуки git `pre-commit`, `commit-msg`, `pre-push`, установщик, мета-проверка подключения, «доказательство красного», прогон на пустом корне, 21 самотест, workflow CI, скрипт настроек GitHub, правки Канона.
 Changed: новые `scripts/`, `.github/workflows/guards.yml`, `.claude/settings.json`; правки `AGENTS.md`, `README.md`, `doc/tasks/README.md`, `doc/canon/process.md`, уточнения ADR-0002 и ADR-0006, одна строка материала 001.
 Verification: уровни A (sh, dash, Python 3.9-синтаксис, JSON), B (21 самотест, тесты плагина), E (трассировка), F (красные пробы, «доказано 13 из 13»), G (тесты плагина как в базе) — PASS; уровень C (прогон Actions, защита `main`) — NOT VERIFIED, ворота Г3 и Г4; уровень D — N/A.
-Acceptance criteria: PASS — AC-01, 02, 03, 06, 07, 08, 09, 10, 12, 14, 15, 16, 17, 18, 19, 21, 23, 24, 25, 26, 27, 30, 32; NOT VERIFIED — AC-04, 05, 11, 13, 20, 22, 28, 29, 31 (причины в таблице).
+Acceptance criteria: PASS — AC-01, 02, 03, 05, 06, 07, 08, 09, 10, 12, 14, 15, 16, 17, 18, 19, 21, 23, 24, 25, 26, 27, 30, 32; NOT VERIFIED — AC-04, 11, 13, 20, 28, 29, 31 (причины в таблице).
 How to verify: см. «Пометки AGENTS.md» и «Сквозная приёмка»; команды — в разделе «Стражи» `AGENTS.md`; полный набор самотестов — `sh scripts/guards/selftest/run-selftests.sh` (около 8-10 минут, под нагрузкой — по одному тесту).
 Regressions: нет; тесты плагина дают тот же результат, что в базовом состоянии (37 из 37), код плагина не менялся.
 Assumptions: Python 3.9 и новее с командой `python`, `git` не старее 2.40, `sh` (Git Bash или dash); ожидаемый адрес автора берётся из `git config user.email` в момент установки; сообщение в смысле «что git сохранит» судится по `GIT_EDITOR` (`:` при `-m`, `-F`, `--no-edit`).
@@ -195,9 +195,9 @@ Artifacts: ветка `task-002-guards` (39 коммитов от `$BASE`, вк�
 
 Остановка на воротах; всё остальное в плане сделано и подтверждено выше. Нужны слова владельца (по одному действию за слово, каждое слово — отдельное разрешение):
 
-- Г1 — список запрещённых имён: владелец создаёт `~/.config/crew-harness/private-names.txt` (образец на строку; имена вносить в путевой форме, короткие слова дают ложные срабатывания) и пишет «список создан»; тогда Сессия С5 или С6 прогоняет `check-private-names.py` и `guard-secrets.py --tree` (AC-05, AC-22).
+- Г1 — ЗАКРЫТ: список из 14 образцов создан оркестратором по слову владельца и применён (значения нигде не записаны); AC-05 и AC-22 подтверждены.
 - Г6 — ЗАКРЫТ (слово «метки на 001 — да» получено, пометки поставлены отдельным коммитом `Mark quoted broken links and replacement characters in task 001 records`; страж ссылок и страж текста на дереве зелёные). Было: слово «метки на 001 — да» (отдельный коммит с пометками `guard-allow(md-link)` и `guard-allow(fffd)` с причиной на пяти строках, текст записей не меняется) либо «001 закрыла класс сама»; без этого страж ссылок и страж текста на дереве красны, а хук `pre-commit` в рабочей копии `main` будет отклонять коммиты.
-- Г2 — установка хуков: «ставь хуки» (`sh scripts/install-hooks.sh` в общем `.git`; настройка общая для всех рабочих деревьев, включая живую копию `main`; делать после Г6 и Г1, иначе первый же коммит в живой копии упрётся в красные записи 001 или в отсутствие списка).
+- Г2 — ЗАКРЫТ: `sh scripts/install-hooks.sh` выполнен в общем `.git` (`core.hooksPath` = `scripts/githooks`, `crewharness.expectedEmail` из `user.email`; `merge.ff` не ставится по REQ-28 и решению В9). Путь относительный: он существует в дереве задачи; в живой копии `main` папки `scripts/githooks` пока нет, хуки там не срабатывают и не мешают (проверено `git hook run --ignore-missing pre-commit` — код 0) до слияния (Г5). Пустой индекс: `pre-commit` в дереве задачи — 5,3 с, 7 стражей «ок».
 - Г3 — каждый пуш по отдельному слову: «пушь task-002-guards» (первый красный прогон без секрета, ожидаем по AC-04), затем служебные ветки `probe/*` и ветка с подложенным нарушением, затем `main`; для первого пуша нужна область токена `workflow` у менеджера учётных данных git.
 - Г4 — запуск `scripts/github-setup.sh` против GitHub по одному действию: `secret`, `probe-set`, `probe-branch <слаг>`, `protect --branch probe/<слаг>`, `protect`, `status`, `probe-clear`; слово вида «запускай github-setup: protect».
 - Г5 — слияние в живую рабочую копию `main`: «вливай» (`git merge --ff-only task-002-guards`; приносит `.claude/settings.json` и начинает действовать на работающих агентов, Р-05) и пуш `main`; пробу хука в живом окне OpenCode (U-07) — по отдельному слову «проба хука в окне».
