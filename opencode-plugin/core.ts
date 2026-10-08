@@ -917,6 +917,36 @@ export function settleObligation(session: string, qid: string): Obligation | und
 
 // Справка (`/crew-help` и инструмент `crew_help`). Текст — единственный дом правил переписки:
 // подсказка context-хука и описания инструментов на него ссылаются, а не повторяют.
+// ГЛАГОЛЫ КОМАНД ОКНА /crew-sets и /crew-profiles — ЕДИНСТВЕННОЕ место с описанием каждого (правка 003, 2026-10-08): из него собраны
+// строка «Глаголы …» в отказах profile-cmd.ts, раздел справки (HELP, /crew-help) и меню команд окна (tui.ts). Порядок — как в строке отказов.
+export type VerbHelp = { verb: string; usage: string; what: string; example: string; bare?: boolean }
+export const SETS_VERB_HELP: VerbHelp[] = [
+  { verb: "show", usage: "[имя]", what: "набор подробно: модель, ступень и окно по этапам; без имени — включённый", example: "show cross-kimi", bare: true },
+  { verb: "use", usage: "<имя>", what: "включить набор локально (для всех этапов); файл проекта не меняется", example: "use cross-kimi" },
+  { verb: "reset", usage: "[<имя> [<этап>] | all]", what: "забрать локальные правки: имя набора, правки набора, одну клетку или всё", example: "reset all" },
+  { verb: "set", usage: "<имя> <этап> <семья>/<ступень>", what: "изменить клетку набора", example: "set cross-kimi accept kimi/heavy" },
+  { verb: "unset", usage: "<имя> <этап>", what: "убрать клетку: этап вернётся к spawn_models", example: "unset cross-kimi accept" },
+  { verb: "new", usage: "<имя> [from <имя>]", what: "новый набор: пустой или копия другого", example: "new my-set from default" },
+  { verb: "rename", usage: "<а> <б>", what: "переименовать набор (включённое имя следует за ним)", example: "rename my-set my-set2" },
+  { verb: "delete", usage: "<имя>", what: "удалить набор (включённый не удаляется)", example: "delete my-set2" },
+  { verb: "check", usage: "", what: "проверить данные и окна; ничего не меняет", example: "check", bare: true },
+  { verb: "save", usage: "[force]", what: "перенести локальные правки в файл проекта (в рабочую копию, без коммита)", example: "save", bare: true },
+]
+export const PROFILES_VERB_HELP: VerbHelp[] = [
+  { verb: "show", usage: "[<семья>]", what: "таблицу подробно или одну семью с наборами, которые на неё ссылаются", example: "show claude", bare: true },
+  { verb: "set", usage: "<семья> <ступень|all> <модель> <context> output=<n> [input=<n>]", what: "создать или изменить запись справочника; all — все три ступени", example: "set kimi heavy kimi-code-plan-global/k3-256k 220000 output=131072" },
+  { verb: "new", usage: "<семья> [from <семья>]", what: "новая семья: три пустые записи или копия", example: "new codex2 from codex" },
+  { verb: "rename", usage: "<а> <б>", what: "переименовать семью (ссылки наборов обновятся)", example: "rename codex2 codex3" },
+  { verb: "delete", usage: "<семья> [<ступень>]", what: "удалить семью или одну ступень (если на неё нет ссылок)", example: "delete codex3" },
+  { verb: "reset", usage: "[<семья>[/<ступень>] | all]", what: "забрать локальные правки семьи, записи или всё", example: "reset all" },
+  { verb: "check", usage: "", what: "проверить данные и окна; ничего не меняет", example: "check", bare: true },
+  { verb: "save", usage: "[force]", what: "перенести локальные правки в файл проекта (в рабочую копию, без коммита)", example: "save", bare: true },
+]
+export const verbHelpOf = (kind: "sets" | "profiles"): VerbHelp[] => (kind === "sets" ? SETS_VERB_HELP : PROFILES_VERB_HELP)
+export const verbUsageList = (kind: "sets" | "profiles"): string => verbHelpOf(kind).map((v) => `${v.verb}${v.usage ? " " + v.usage : ""}`).join(" | ")
+const verbHelpText = (): string =>
+  (["sets", "profiles"] as const).map((k) => `  /crew-${k}: ` + verbHelpOf(k).map((v) => v.verb).join(", ") + ". " + verbHelpOf(k).filter((v) => v.verb !== "show" && v.verb !== "check" && v.verb !== "save" && v.verb !== "reset").map((v) => `${v.verb} ${v.usage} — ${v.what}`).join("; ")).join("\n")
+
 export const HELP = `crew-harness — письма между вкладками OpenCode на этой машине, в любом репозитории.
 
 СЛОВА. Задачу называй с названием: «#31 «замок вливания»» при первом упоминании в ответе владельцу, письме и отчёте, дальше можно «#31»: по одному номеру не вспомнить, о чём она.
@@ -968,6 +998,8 @@ export const HELP = `crew-harness — письма между вкладками
   /crew-sets, /crew-profiles (команды окна) — владельцу: наборы профилей моделей и справочник «семья, ступень → модель и окно»;
                                 use включает набор для всех этапов (модель исполнителя, приёмщика, плана), окно профиля действует на
                                 сессии в рабочем дереве задачи; агент набор не включает (crew_config set пишет справочник и наборы).
+  Глаголы (в окне — пункты меню команды):
+${verbHelpText()}
 
 АДРЕС (to): роль своего проекта (worker, integrator); «проект.роль» — в другом проекте; id сессии (ses_...); all —
 всем открытым вкладкам своего проекта; «проект.all». Отправитель подписан полным адресом и сессией.

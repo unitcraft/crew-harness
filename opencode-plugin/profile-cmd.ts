@@ -15,6 +15,11 @@ export type CmdDeps = {
   catalog?: () => Promise<{ providerID: string; modelID: string; limit?: { context?: number; input?: number; output?: number } }[] | undefined>
   /** версия OpenCode — check печатает её (чтение цепочки настроек может разойтись при смене версии) */
   version?: string
+  /** команда вызвана из окна: тексты называют пункты меню */
+  window?: boolean
+  /** откуда каталог (снимок плагина сервиса и его возраст) — check печатает строкой; причина, если каталога нет */
+  catalogNote?: string
+  catalogWhy?: string
 }
 
 export const SETS_VERBS = ["show", "use", "reset", "set", "unset", "new", "rename", "delete", "check", "save"]
@@ -26,8 +31,11 @@ const refused = (project: string, command: string, why: string): string => {
 }
 const usageLine = (cmd: "sets" | "profiles"): string =>
   cmd === "sets"
-    ? "Глаголы /crew-sets: show [имя] | use <имя> | reset [<имя> [<этап>] | all] | set <имя> <этап> <семья>/<ступень> | unset <имя> <этап> | new <имя> [from <имя>] | rename <а> <б> | delete <имя> | check | save [force]. Этапы: develop, accept, plan, plan_accept (или разработка, приёмка, планирование, приёмка-плана). Без аргумента — таблица наборов."
-    : "Глаголы /crew-profiles: show [<семья>] | set <семья> <ступень|all> <модель> <context> output=<n> [input=<n>] | new <семья> [from <семья>] | rename <а> <б> | delete <семья> [<ступень>] | reset [<семья>[/<ступень>] | all] | check | save [force]. Без аргумента — таблица справочника."
+    ? `Глаголы /crew-sets: ${verbUsageList("sets")}. Этапы: develop, accept, plan, plan_accept (или разработка, приёмка, планирование, приёмка-плана). Без аргумента — таблица наборов.`
+    : `Глаголы /crew-profiles: ${verbUsageList("profiles")}. Без аргумента — таблица справочника.`
+/** В окне команды — пункты меню, а не набираемые слова: тексты ссылаются на пункт меню, слэш-форма остаётся записью для памяти. */
+let windowMenu = false
+const ref = (slash: string, item: string): string => (windowMenu ? `пункт «${item}» меню ${slash.split(" ")[0]} (${slash})` : slash)
 
 /** Единственный вызывающий журнал правок: ровно одна строка на каждую успешную правку любого глагола (use, reset, save — тоже). */
 export function commitEdit(project: string, command: string, what: string, from: any, to: any) {
@@ -304,7 +312,7 @@ export function profilesEditVerb(dir: string, verb: string, args: string[]): { o
 // Показ, use, check, save, разбор команд (шаг 11)
 
 import path from "node:path"
-import { DEFAULT_SPAWN_MODELS, loadConfig, settingsContext } from "./core.ts"
+import { DEFAULT_SPAWN_MODELS, loadConfig, settingsContext, verbUsageList } from "./core.ts"
 import { projectFor, workingSettings } from "./settings.ts"
 import { listTasks } from "./tasks.ts"
 import * as W from "./profile-windows.ts"
@@ -356,12 +364,12 @@ export function setsTable(ps: L.PState): string {
     const widths = STAGE_ORDER.map((st) => Math.max([...P.STAGE_RU[st]].length, ...names.map((n) => [...col(n, st)].length)))
     lines.push(`  ${pad("имя", w0 + 2)}${STAGE_ORDER.map((st, i) => pad(P.STAGE_RU[st], widths[i] + 2)).join("")}`.trimEnd())
     for (const n of names) lines.push(`${n === ps.name ? "● " : "  "}${pad(n, w0 + 2)}${STAGE_ORDER.map((st, i) => pad(col(n, st), widths[i] + 2)).join("")}`.trimEnd())
-    lines.push("● — включённый набор. Подробно: /crew-sets show [имя]; включить: /crew-sets use <имя>.")
+    lines.push(`● — включённый набор. Подробно: ${ref("/crew-sets show [имя]", "show")}; включить: ${ref("/crew-sets use <имя>", "use")}.`)
   }
   if (ps.state.message) lines.push(`! ${ps.state.message}`)
   for (const w of ps.state.warnings) lines.push(`! ${w.text}`)
   const d = L.layerDiff(ps.raw, ps.layer)
-  if (d.length) lines.push(`Локальные правки не в файле: ${d.length} (${d.map((x) => x.label).join(", ")}) — /crew-sets save перенесёт их в файл проекта; /crew-sets check — подробности.`)
+  if (d.length) lines.push(`Локальные правки не в файле: ${d.length} (${d.map((x) => x.label).join(", ")}) — ${ref("/crew-sets save", "save")} перенесёт их в файл проекта; ${ref("/crew-sets check", "check")} — подробности.`)
   return lines.join("\n")
 }
 
@@ -377,7 +385,7 @@ export function profilesTable(ps: L.PState): string {
     }
   if (ps.state.message) lines.push(`! ${ps.state.message}`)
   const d = L.layerDiff(ps.raw, ps.layer).filter((x) => x.key.startsWith("profile:"))
-  if (d.length) lines.push(`Локальные правки не в файле: ${d.map((x) => x.label).join(", ")} — /crew-profiles save.`)
+  if (d.length) lines.push(`Локальные правки не в файле: ${d.map((x) => x.label).join(", ")} — ${ref("/crew-profiles save", "save")}.`)
   return lines.join("\n")
 }
 
@@ -389,7 +397,7 @@ export function showFamily(ps: L.PState, family?: string): string {
   for (const t of P.PROFILE_TIERS) {
     const p = f[t]
     if (!p) lines.push(`  ${t}: записи нет`)
-    else if (P.isEmptyProfile(p)) lines.push(`  ${t}: пусто («заполнить»: /crew-profiles set ${family} ${t} <модель> <context> output=<n>)`)
+    else if (P.isEmptyProfile(p)) lines.push(`  ${t}: пусто («заполнить»: ${ref(`/crew-profiles set ${family} ${t} <модель> <context> output=<n>`, "set")})`)
     else lines.push(`  ${t}: ${p.model} — ${P.winText(winOf(p))}`)
   }
   const refs = referencing(ps.data, family)
@@ -399,7 +407,7 @@ export function showFamily(ps: L.PState, family?: string): string {
 
 export function showSet(ps: L.PState, name: string | undefined, dir: string): string {
   const n = name ?? ps.name
-  if (!n) return "Набор не включён (имени нет ни в файле проекта, ни в локальном слое). Покажи любой: /crew-sets show <имя>; включить: /crew-sets use <имя>."
+  if (!n) return `Набор не включён (имени нет ни в файле проекта, ни в локальном слое). Покажи любой: ${ref("/crew-sets show <имя>", "show")}; включить: ${ref("/crew-sets use <имя>", "use")}.`
   const set = (ps.data.sets as any)?.[n]
   if (!isObj(set)) return `Набора «${n}» нет (есть: ${listSets(ps.data)}).`
   const root = mainFolder(dir)
@@ -444,7 +452,7 @@ async function catalogWarnings(models: Map<string, P.Win>, deps: CmdDeps, full: 
   const out: string[] = []
   const cat = await catalogOf(deps)
   if (!cat) {
-    if (full) out.push("модели не сверены с каталогом OpenCode: не проверено (каталог недоступен)")
+    if (full) out.push(`модели не сверены с каталогом OpenCode: не проверено (каталог недоступен${deps.catalogWhy ? `: ${deps.catalogWhy}` : ""})`)
   } else {
     for (const [model, win] of models) {
       const [prov, ...rest] = model.split("/")
@@ -538,6 +546,7 @@ async function checkReport(dir: string, deps: CmdDeps): Promise<string> {
   const ps = L.profileState(dir)
   const root = mainFolder(dir)
   const lines = [`Проверка профилей проекта ${ps.project}${deps.version ? ` (OpenCode ${deps.version})` : ""}: данные не меняются.`]
+  if (deps.catalogNote) lines.push(`Каталог моделей OpenCode: ${deps.catalogNote}.`)
   lines.push(`Включён: ${ps.name ? `«${ps.name}» (${ps.nameSource === "layer" ? "локальное переключение" : "файл проекта"}), строка ${ps.state.row} таблицы исходов` : "набор не включён"}.`)
   if (ps.state.message) lines.push(`! ${ps.state.message}`)
   const all = P.checkData(ps.data, ps.name)
@@ -585,6 +594,7 @@ async function dispatch(kind: "sets" | "profiles", dir: string, text: string, de
   const w = words(text)
   const verb = w[0]
   const args = w.slice(1)
+  windowMenu = !!deps.window
   const verbs = kind === "sets" ? SETS_VERBS : PROFILES_VERBS
   const bad = (why: string) => `${why}\n${usageLine(kind)}`
   if (!verb) {

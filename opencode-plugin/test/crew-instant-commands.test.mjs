@@ -5,7 +5,7 @@
 // functions as before; the catalog of the window comes from the provider list of the window, or is declared unavailable.
 import { execFileSync } from "node:child_process"
 import { createHash } from "node:crypto"
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
@@ -47,7 +47,10 @@ git(cfgDir, "commit", "-q", "-m", "settings")
 
 const mod = await import("../index.ts")
 const core = await import("../core.ts")
+const Core = core
 const Tui = await import("../tui.ts")
+const Cat = await import("../model-catalog.ts")
+const Size = await import("../dialog-size.ts")
 const L = await import("../profile-layer.ts")
 const commands = {}
 const serverCalls = []
@@ -56,7 +59,7 @@ const ctx = {
   app: { name: "opencode", version: "2.0.23-test" },
   options: { projects: [cfgDir] },
   command: { list: async () => ({ data: [] }), transform: async (fn) => fn({ add: (cmd) => (commands[cmd.name] = cmd) }) },
-  model: { list: async () => ({ data: [] }) },
+  model: { list: async () => ({ data: [{ providerID: "claude-code", modelID: "opus", limit: { context: 1000000, output: 64000 } }, { providerID: "claude-code", modelID: "sonnet" }, { providerID: "claude-code", modelID: "haiku" }, { providerID: "kimi-code-plan-global", modelID: "k3-256k" }] }) },
   session: {
     get: async ({ sessionID }) => ({ id: sessionID, title: sessionID, location: { directory: root }, time: {} }),
     prompt: async (p) => serverCalls.push(p),
@@ -73,7 +76,7 @@ const cell = (name, ok, detail) => {
 }
 const session = "ses_instant_demo"
 mkdirSync(path.dirname(core.cardFile(session)), { recursive: true })
-writeFileSync(core.cardFile(session), JSON.stringify({ session, directory: root }))
+writeFileSync(core.cardFile(session), JSON.stringify({ session, directory: root, role: "worker", project: "cmdproj", repo: "r", pid: process.pid, updated: Date.now() }))
 
 // a window API as OpenCode gives it, cut down: select / prompt answer from a script; every shown text is kept
 const mkApi = (script, provider) => {
@@ -98,6 +101,15 @@ const last = (out) => out.shown.at(-1)
 const msg = (out) => last(out)?.message ?? ""
 const slashOf = (out, n) => out.cmds.find((x) => x.slash?.name === n)
 
+// the server plugin writes the snapshot of the model catalog 3 s after the start (and every 10 minutes)
+await new Promise((r) => setTimeout(r, 3600))
+{
+  const snap = Cat.readCatalog()
+  cell("the plugin of the server writes the snapshot of the catalog (provider, model, limit) with the time", existsSync(Cat.CATALOG_FILE) && snap.models?.length === 4 && snap.models.find((m) => m.modelID === "opus")?.limit?.context === 1000000 && /назад/.test(snap.note ?? ""), JSON.stringify(snap))
+  const file0 = Cat.CATALOG_FILE
+  cell("an empty reply is not a snapshot; an old snapshot is refused with the reason; no file -> the reason", !Cat.writeCatalog([]) && /старый/.test(Cat.readCatalog(Date.now() + 2 * 3600_000).why ?? "") && /ещё не записал/.test(Cat.readCatalog(Date.now(), file0 + ".none").why ?? ""), JSON.stringify([Cat.readCatalog(Date.now() + 2 * 3600_000), Cat.readCatalog(Date.now(), file0 + ".none")]))
+}
+
 {
   const { api, out } = mkApi([])
   const stop = Tui.default.setup(api)
@@ -108,53 +120,115 @@ const slashOf = (out, n) => out.cmds.find((x) => x.slash?.name === n)
 
   await slashOf(out, "crew-help").run()
   cell("/crew-help shows the help at once in the window dialog; no server call, no model turn", /crew_inbox/.test(msg(out)) && serverCalls.length === 0, JSON.stringify(last(out))?.slice(0, 120))
+  cell("the help lists the verbs of /crew-sets and /crew-profiles from the one table (the same texts as the menu)", Core.SETS_VERB_HELP.every((v) => msg(out).includes(v.verb)) && Core.PROFILES_VERB_HELP.filter((v) => !v.bare && v.verb !== "reset").every((v) => msg(out).includes(v.what)), "")
 
-  api.ui.dialog.select = async (o) => (out.asked.push(o), "table")
+  // the menu: the table and every verb with «what it does and with which arguments»
+  api.ui.dialog.select = async (o) => (out.asked.push(o), "__table")
   await slashOf(out, "crew-sets").run()
-  cell("/crew-sets: the first dialog offers the table, check, save and typing; the table is shown at once", out.asked[0]?.options?.map((o) => o.value).join() === "table,check,save,type" && /cross-kimi/.test(msg(out)) && /kimi-only/.test(msg(out)), JSON.stringify(last(out))?.slice(0, 200))
+  const menu = out.asked.at(-1)
+  cell("/crew-sets: the menu has the table and every verb of runSetsCommand, each with its arguments and what it does", menu.options[0].value === "__table" && Core.SETS_VERB_HELP.every((v) => menu.options.some((o) => o.value === v.verb && o.description.includes(v.what) && o.description.startsWith(v.verb + (v.usage ? " " + v.usage : "")))), JSON.stringify(menu.options.map((o) => o.value)))
+  cell("the verbs of the menu are exactly the verbs the command accepts (no verb is missing, none is invented)", JSON.stringify(Core.SETS_VERB_HELP.map((v) => v.verb)) === JSON.stringify((await import("../profile-cmd.ts")).SETS_VERBS) && JSON.stringify(Core.PROFILES_VERB_HELP.map((v) => v.verb).sort()) === JSON.stringify([...(await import("../profile-cmd.ts")).PROFILES_VERBS].sort()), "")
+  const shown = out.shown.map((x) => x.message)
+  cell("the dialog «Загрузка…» is shown first, then the table of the sets (the heavy part runs after)", shown.at(-2) === "Загрузка…" && /cross-kimi/.test(shown.at(-1)) && /kimi-only/.test(shown.at(-1)), JSON.stringify(shown.map((m) => m.slice(0, 30))))
+  cell("in the window the texts name the menu items, the slash form stays in brackets as a note", /пункт «show» меню \/crew-sets \(\/crew-sets show \[имя\]\)/.test(msg(out)) && /пункт «use» меню \/crew-sets \(\/crew-sets use <имя>\)/.test(msg(out)), msg(out).slice(-300))
   await slashOf(out, "crew-profiles").run()
   cell("/crew-profiles table: family, tier -> model, window", /claude\s+heavy\s+claude-code\/opus/.test(msg(out)), JSON.stringify(last(out))?.slice(0, 200))
 
-  // the verbs that change: typed after "type", the same files and checks as before
+  // a verb with arguments opens the input with the format of this verb; the changing verbs run through the same functions
   const fileHash = sha(file)
-  let script = ["type", "use no-such-set"]
-  api.ui.dialog.select = async () => script.shift()
-  api.ui.dialog.prompt = async () => script.shift()
+  let script = ["use", "use no-such-set"]
+  api.ui.dialog.select = async (o) => (out.asked.push(o), script.shift())
+  api.ui.dialog.prompt = async (o) => (out.asked.push(o), script.shift())
   await slashOf(out, "crew-sets").run()
+  const ask = out.asked.at(-1)
+  cell("the input of «use» has the title, the format and an example of this verb, the verb already typed", ask.title === "/crew-sets use" && ask.placeholder.includes("use <имя> — например: use cross-kimi") && ask.value === "use ", JSON.stringify(ask))
   cell("a typed verb runs the same command: use with an unknown name is refused with the list of names, nothing changed", /Не сделано/.test(msg(out)) && /cross-kimi/.test(msg(out)) && Object.keys(L.profileState(root).layer).length === 0 && sha(file) === fileHash, JSON.stringify(last(out))?.slice(0, 200))
-  script = ["type", "use cross-kimi"]
+  script = ["use", "use cross-kimi"]
   await slashOf(out, "crew-sets").run()
   cell("use <set> from the window changes the local layer only, not the project file", /cross-kimi/.test(msg(out)) && L.profileState(root).name === "cross-kimi" && L.profileState(root).nameSource === "layer" && sha(file) === fileHash, JSON.stringify([last(out), L.profileState(root).name])?.slice(0, 300))
+  script = ["use", "cross-codex-not"] // typed without the verb: the verb is added
+  await slashOf(out, "crew-sets").run()
+  cell("a line typed without the verb gets the verb of the item", /Не сделано/.test(msg(out)) && /cross-codex-not/.test(msg(out)), msg(out).slice(0, 200))
   script = ["check"]
   await slashOf(out, "crew-sets").run()
-  cell("check without a catalog in the window process says the catalog is unavailable instead of failing", /каталог недоступен/.test(msg(out)), msg(out).slice(0, 300))
+  cell("check shows the catalog from the snapshot of the server plugin with its age, and compares the models", /Каталог моделей OpenCode: снимок плагина сервиса, .* назад/.test(msg(out)) && !/каталог недоступен/.test(msg(out)), msg(out).slice(0, 400))
   const n = out.shown.length
   script = [undefined]
   await slashOf(out, "crew-sets").run()
-  cell("Esc on the first dialog does nothing (no text, no change)", out.shown.length === n, String(out.shown.length))
-  script = ["type", "  "]
+  cell("Esc on the menu does nothing (no text, no change)", out.shown.length === n, String(out.shown.length))
+  script = ["use", "  "]
   await slashOf(out, "crew-sets").run()
-  cell("an empty typed command does nothing", out.shown.length === n, String(out.shown.length))
+  cell("a verb with required arguments and an empty input does nothing", out.shown.length === n, String(out.shown.length))
+  script = ["save"]
+  await slashOf(out, "crew-profiles").run()
+  cell("a verb without required arguments (save) runs at once from the menu", /Загрузка/.test(out.shown.at(-2).message) && out.shown.length === n + 2, JSON.stringify(out.shown.slice(-2)).slice(0, 200))
+  // the snapshot is old / absent: the reason is named
+  const keep = readFileSync(Cat.CATALOG_FILE, "utf8")
+  rmSync(Cat.CATALOG_FILE)
+  script = ["check"]
+  await slashOf(out, "crew-sets").run()
+  cell("no snapshot: check says the catalog is unavailable and names the reason", /каталог недоступен: плагин сервиса ещё не записал снимок/.test(msg(out)), msg(out).slice(0, 300))
+  writeFileSync(Cat.CATALOG_FILE, JSON.stringify({ at: Date.now() - 3 * 3600_000, models: JSON.parse(keep).models }))
+  script = ["check"]
+  await slashOf(out, "crew-sets").run()
+  cell("an old snapshot is not used, the reason names its age", /каталог недоступен: снимок каталога старый \(3 ч назад\)/.test(msg(out)), msg(out).slice(0, 300))
+  writeFileSync(Cat.CATALOG_FILE, keep)
   stop?.()
 }
 
 {
-  // the catalog of the window: api.state.provider (the form Provider.models with limit) is read for check
+  // the same without the worker thread: the process of the window does the work after «Загрузка…»
+  process.env.CREW_HARNESS_NO_WORKER = "1"
+  const { api, out } = mkApi(["__table"])
+  const stop = Tui.default.setup(api)
+  await slashOf(out, "crew-profiles").run()
+  cell("without the worker the same answer arrives (the fallback in the process of the window)", out.shown.at(-2)?.message === "Загрузка…" && /claude\s+heavy/.test(msg(out)), JSON.stringify(out.shown.map((x) => x.message.slice(0, 20))))
+  delete process.env.CREW_HARNESS_NO_WORKER
+  stop?.()
+}
+
+{
+  // the catalog of the window itself (api.state.provider) wins over the snapshot
   const prov = [
     { id: "claude-code", models: { opus: { id: "opus" }, sonnet: { id: "sonnet" }, haiku: { id: "haiku" } } },
     { id: "kimi-code-plan-global", models: { "k3-256k": { id: "k3-256k" } } },
-    { id: "openai", models: { "gpt-5.5": { id: "gpt-5.5", limit: { context: 1050000, input: 922000, output: 128000 } }, "gpt-5.6-terra": { id: "gpt-5.6-terra" }, "gpt-6-luna": { id: "gpt-6-luna" } } },
   ]
   const { api, out } = mkApi(["check"], prov)
   const stop = Tui.default.setup(api)
   await slashOf(out, "crew-sets").run()
-  cell("with the provider list in the window the models are compared with the catalog: no «каталог недоступен»", !/каталог недоступен/.test(msg(out)) && /Проверка профилей/.test(msg(out)), msg(out).slice(0, 400))
+  cell("with the provider list in the window the models are compared with it (the note names the source)", /Каталог моделей OpenCode: список окна OpenCode/.test(msg(out)), msg(out).slice(0, 400))
   stop?.()
   const { api: api2, out: out2 } = mkApi(["check"], [{ id: "claude-code", models: { opus: { id: "opus" } } }])
   const stop2 = Tui.default.setup(api2)
   await slashOf(out2, "crew-sets").run()
   cell("a model of the sets missing from the window catalog is named", /нет в каталоге OpenCode/.test(msg(out2)), msg(out2).slice(0, 400))
   stop2?.()
+}
+
+{
+  // /crew-config goes through the same path: «Загрузка…», then the settings
+  const { api, out } = mkApi([])
+  const stop = Tui.default.setup(api)
+  await slashOf(out, "crew-config").run()
+  cell("/crew-config shows «Загрузка…» first and then the settings of the project of the tab", out.shown.at(-2)?.message === "Загрузка…" && msg(out).length > 20 && !/Не прочитать/.test(msg(out)), JSON.stringify(out.shown.map((x) => x.message.slice(0, 30))))
+  stop?.()
+}
+
+{
+  // the size of the dialog by the content (dialog-size.ts)
+  const two = "Наборов нет в файле проекта.\nСоздать: пункт «new» меню /crew-sets."
+  cell("a two-line answer is a medium window and its body is two rows", Size.pickSize(two, 20).size === "medium" && Size.pickSize(two, 20).bodyRows === 2 && !Size.pickSize(two, 20).scrolls, JSON.stringify(Size.pickSize(two, 20)))
+  const wide = ["имя" + " ".repeat(30) + "разработка".padEnd(40, "x"), "b"].join("\n")
+  const wide90 = "x".repeat(90) + "\n" + wide
+  cell("lines wider than the medium window make it large; wider than the large one - the widest", Size.pickSize(wide, 20).size === "large" && Size.pickSize(wide90, 20).size === "xlarge", JSON.stringify([Size.pickSize(wide, 20), Size.pickSize(wide90, 20)]))
+  const longSmall = Array.from({ length: 16 }, (_, i) => "строка " + i).join("\n")
+  cell("sixteen short lines are the large window, not the widest", Size.pickSize(longSmall, 30).size === "large", JSON.stringify(Size.pickSize(longSmall, 30)))
+  const huge = Array.from({ length: 80 }, (_, i) => "строка " + i).join("\n")
+  const pk = Size.pickSize(huge, 20)
+  cell("a text longer than the screen is the widest window and scrolls", pk.size === "xlarge" && pk.scrolls && pk.bodyRows === 20, JSON.stringify(pk))
+  cell("the width of a wide character counts twice", Size.cellWidth("漢字") === 4 && Size.cellWidth("ab") === 2, "")
+  const src = readFileSync(new URL("../dialog-text.tsx", import.meta.url), "utf8")
+  cell("dialog-text.tsx sets the size from the content, not a fixed xlarge, and puts the hint right under the text", /size: fit\.size/.test(src) && !/size: "xlarge"/.test(src) && /height=\{fit\.bodyRows\}/.test(src), "")
 }
 
 stopServer?.()

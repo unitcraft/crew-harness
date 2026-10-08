@@ -119,6 +119,7 @@ import { type Task, taskRef, acceptedAt, ago, byPriority, createTask, rounds, sl
 import { createRemoteBridge } from "./remote.ts"
 import { profileProblems, profileState, stateSignature, syncProjectFiles, syncSnapshot, syncTaskFile } from "./profile-layer.ts"
 import { cellOfState, resolveStageProfile, stageOfLaunch, tabFitsCell } from "./profiles.ts"
+import { catalogModels, writeCatalog } from "./model-catalog.ts"
 import { ensureWorktree, fileAt, gitTraces, leftoversOf, mergeHolder, reviewLetter } from "./review.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
@@ -1427,6 +1428,18 @@ export default {
     // окно не отмечается» (2026-10-07) — без повтора ложное замечание висело в /crew-doctor до плановой проверки
     const doctorAgain = setTimeout(() => void runDoctor(), 70_000)
     doctorAgain.unref?.()
+    // снимок каталога моделей для окна (model-catalog.ts): при загрузке (после 3 с) и раз в 10 минут
+    const snapCatalog = async () => {
+      try {
+        if (!writeCatalog(catalogModels(await ctx.model.list()))) log("model catalog snapshot: empty reply, not written")
+      } catch (e) {
+        log(`model catalog snapshot failed: ${e}`)
+      }
+    }
+    const catalogFirst = setTimeout(() => void snapCatalog(), 3_000)
+    const catalogTimer = setInterval(() => void snapCatalog(), 10 * 60_000)
+    catalogFirst.unref?.()
+    catalogTimer.unref?.()
     const doctorEvery = setInterval(() => void runDoctor(), DOCTOR_EVERY_MS)
     doctorEvery.unref?.()
 
@@ -1453,6 +1466,8 @@ export default {
       clearInterval(lagTimer)
       clearTimeout(doctorTimer)
       clearTimeout(doctorAgain)
+      clearTimeout(catalogFirst)
+      clearInterval(catalogTimer)
       clearInterval(doctorEvery)
       remoteBridge.stop()
       try {

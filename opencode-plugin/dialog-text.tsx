@@ -5,17 +5,20 @@
 // клавиши), под ним строка «ещё N строк». Подключается из tui.ts через import() с защитой: не загрузился (другая версия, тест
 // под Node) — остаётся обычный alert.
 import { createSignal, onMount } from "solid-js"
+import { pickSize } from "./dialog-size.ts"
 
 function TextDialog(props: { api: any; title: string; message: string; done: () => void }) {
   const lines = props.message.split("\n")
   // высота текста: окно минус рамка, заголовок, подсказка и отступы
   const rows = Math.max(8, (process.stdout.rows || 30) - 10)
-  const scrolls = lines.length > rows
+  // размер окна — по содержимому (dialog-size.ts): короткий ответ не занимает весь экран
+  const fit = pickSize(props.message, rows, process.stdout.columns || 120)
+  const scrolls = fit.scrolls
   let box: any
-  const [more, setMore] = createSignal(Math.max(0, lines.length - rows))
+  const [more, setMore] = createSignal(Math.max(0, lines.length - fit.bodyRows))
   const refresh = () => {
     try {
-      setMore(Math.max(0, lines.length - rows - Math.round(box?.scrollTop ?? 0)))
+      setMore(Math.max(0, lines.length - fit.bodyRows - Math.round(box?.scrollTop ?? 0)))
     } catch {}
   }
   const scroll = (by: number) => () => {
@@ -26,7 +29,7 @@ function TextDialog(props: { api: any; title: string; message: string; done: () 
   }
   onMount(() => {
     try {
-      props.api.ui.dialog.set({ size: "xlarge", centered: true })
+      props.api.ui.dialog.set({ size: fit.size, centered: true })
     } catch {}
   })
   try {
@@ -47,17 +50,19 @@ function TextDialog(props: { api: any; title: string; message: string; done: () 
   } catch {}
   const t = props.api?.theme?.text ?? {}
   return (
-    <box flexDirection="column" paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
+    <box flexDirection="column" paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1} flexGrow={0}>
       <box flexDirection="row" justifyContent="space-between">
         <text fg={t.base}>{props.title}</text>
         <text fg={t.muted}>esc</text>
       </box>
-      <scrollbox ref={(el: any) => (box = el)} maxHeight={rows} scrollbarOptions={{ visible: false }}>
-        <text fg={t.base} wrapMode="word">
-          {props.message}
-        </text>
-      </scrollbox>
-      <text fg={t.muted}>{scrolls ? (more() > 0 ? `ещё ${more()} строк · ↑↓ PgUp PgDn или колесо мыши — прокрутка` : "конец · ↑↓ PgUp PgDn — прокрутка") : "enter — закрыть"}</text>
+      <box flexDirection="column" flexGrow={0}>
+        <scrollbox ref={(el: any) => (box = el)} height={fit.bodyRows} flexGrow={0} scrollbarOptions={{ visible: false }}>
+          <text fg={t.base} wrapMode="word">
+            {props.message}
+          </text>
+        </scrollbox>
+        <text fg={t.muted}>{scrolls ? (more() > 0 ? `ещё ${more()} строк · ↑↓ PgUp PgDn или колесо мыши — прокрутка` : "конец · ↑↓ PgUp PgDn — прокрутка") : "enter — закрыть"}</text>
+      </box>
     </box>
   )
 }
@@ -74,4 +79,9 @@ export function showTextDialog(api: any, o: { title: string; message: string }):
     }
     api.ui.dialog.show(() => <TextDialog api={api} title={o.title} message={o.message} done={done} />, done)
   })
+}
+
+/** Строка-подсказка под строкой ввода (api.ui.dialog.prompt принимает description как функцию, возвращающую элемент). */
+export function noteLine(api: any, text: string) {
+  return <text fg={api?.theme?.text?.muted}>{text}</text>
 }

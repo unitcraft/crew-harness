@@ -18,7 +18,8 @@
 // ещё и attention.notify: системное уведомление, когда окно не в фокусе (настройка OpenCode attention.notifications).
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { DOCTOR_FILE, NOTICES, WINDOWS, cardFile, configShowText, helpFor, loadProjects, log, readJson } from "./core.ts"
+import { DOCTOR_FILE, NOTICES, WINDOWS, cardFile, helpFor, log, readJson, verbHelpOf } from "./core.ts"
+import { readCatalog } from "./model-catalog.ts"
 import { doctorText, formatStatuses, readStatuses } from "./status.ts"
 import { listTasks, loadTask } from "./tasks.ts"
 import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
@@ -91,14 +92,62 @@ export default {
     let textDialog: any
     if (api.ui?.slot && !process.env.CREW_HARNESS_NO_SIDEBAR) import("./dialog-text.tsx").then((m) => (textDialog = m)).catch((e) => log(`text dialog not drawn pid=${process.pid}: ${String(e).slice(0, 300)}`))
     const showText = (o: { title: string; message: string }): Promise<void> | undefined => {
-      const lines = String(o.message ?? "").split("\n")
-      if (textDialog && api.ui?.dialog?.show && (lines.length > 12 || lines.some((l) => l.length > 60))) {
+      // диалог сам выбирает размер по содержимому (dialog-size.ts): короткий текст - среднее окно по центру, большое - для длинного
+      if (textDialog && api.ui?.dialog?.show) {
         try {
           return textDialog.showTextDialog(api, o)
         } catch {}
       }
       return api.ui?.dialog?.alert?.(o)
     }
+    // ТЯЖЁЛОЕ — НЕ В ПОТОКЕ ОКНА. Чтение настроек проекта — вызовы git (1–4 с на нагруженной машине); окно сначала показывает диалог
+    // «Загрузка…», а работу делает рабочий поток (cmd-worker.ts) или, если поток не поднялся, этот же процесс после перерисовки
+    let worker: any
+    const pending = new Map<number, (m: any) => void>()
+    let seq = 0
+    const inline = async (op: any): Promise<string> => {
+      await new Promise((r) => setTimeout(r, 30)) // дать окну нарисовать «Загрузка…» до блокирующей работы
+      try {
+        return await (await import("./cmd-ops.ts")).execOp(op)
+      } catch (e) {
+        log(`window command failed: ${e}`)
+        return `Команда не выполнена: ${(e as any)?.message ?? e}`
+      }
+    }
+    const offThread = (op: any): Promise<string> =>
+      new Promise((resolve) => {
+        const fallback = () => void inline(op).then(resolve)
+        if (process.env.CREW_HARNESS_NO_WORKER) return fallback()
+        import("node:worker_threads")
+          .then(({ Worker }) => {
+            if (!worker) {
+              const w = new Worker(new URL("./cmd-worker.ts", import.meta.url))
+              w.unref?.()
+              w.on("message", (m: any) => pending.get(m.id)?.(m))
+              const lost = () => {
+                if (worker === w) worker = undefined
+                for (const f of [...pending.values()]) f({ failed: true })
+              }
+              w.on("error", (e: any) => (log(`window worker failed: ${String(e).slice(0, 200)}`), lost()))
+              w.on("exit", lost)
+              worker = w
+            }
+            const id = ++seq
+            const timer = setTimeout(() => pending.get(id)?.({ failed: true }), 30_000)
+            pending.set(id, (m) => {
+              clearTimeout(timer)
+              pending.delete(id)
+              if (m.failed) return fallback()
+              resolve(m.error !== undefined ? `Команда не выполнена: ${m.error}` : m.out)
+            })
+            worker.postMessage({ id, op })
+          })
+          .catch((e) => {
+            log(`window worker not started: ${String(e).slice(0, 200)}`)
+            worker = undefined
+            fallback()
+          })
+      })
     // /crew: кто чего ждёт — свой проект первым
     const showStatus = () => {
       let route: string | undefined
@@ -111,21 +160,17 @@ export default {
       showText({ title: "crew-harness — кто чего ждёт", message: formatStatuses(list, Date.now(), mine) })
     }
     // /crew-config: действующие настройки проекта вкладки на экране — значение и откуда (как crew_config show)
-    const showConfig = () => {
+    const showConfig = async () => {
       let route: string | undefined
       try {
         const r = api.ui?.router?.current?.()
         route = r?.type === "session" ? r.sessionID : undefined
       } catch {}
       const card = route ? readJson<any>(cardFile(route)) : undefined
-      let text: string
-      try {
-        loadProjects() // проекты — из ящика (их кладёт плагин сервиса)
-        text = configShowText(card?.directory || process.cwd(), card?.project, true)
-      } catch (e) {
-        text = `Не прочитать настройки: ${e}`
-      }
-      showText({ title: "crew-harness — настройки проекта", message: text })
+      const title = "crew-harness — настройки проекта"
+      showText({ title, message: "Загрузка…" })
+      const text = await offThread({ kind: "config", dir: card?.directory || process.cwd(), project: card?.project })
+      showText({ title, message: text })
     }
     // /plans: планы на согласовании (план 004) — владелец выбирает план и решение; решение пишется файлом, его применяет
     // плагин сервиса. Агент этот диалог вызвать не может: согласует только человек в окне.
@@ -224,62 +269,61 @@ export default {
       }
       showText({ title: "crew-harness — справка", message: text })
     }
-    // Каталог моделей для сверки окон (use, check): у окна он свой — api.state.provider (V1: Provider.models) или клиент окна;
-    // нет ни того ни другого — undefined, и check пишет «каталог недоступен», а не падает
-    const catalogOfWindow = async () => {
+    // Каталог моделей для сверки окон (use, check): живой список окна (api.state.provider), иначе снимок плагина сервиса
+    // (model-catalog.ts) с возрастом; нет ни того ни другого — причина вместо молчаливого «недоступен»
+    const catalogForOp = (): { catalog?: any[]; catalogNote?: string; catalogWhy?: string } => {
       const rows: { providerID: string; modelID: string; limit?: any }[] = []
-      const take = (providers: any) => {
-        for (const p of Array.isArray(providers) ? providers : []) {
-          const models = p?.models && typeof p.models === "object" ? Object.entries<any>(p.models) : []
-          for (const [id, m] of models) rows.push({ providerID: String(p.id ?? p.providerID ?? ""), modelID: String(m?.id ?? id), limit: m?.limit })
-        }
-      }
       try {
-        take(api.state?.provider)
+        for (const p of Array.isArray(api.state?.provider) ? api.state.provider : []) {
+          for (const [id, m] of p?.models && typeof p.models === "object" ? Object.entries<any>(p.models) : []) rows.push({ providerID: String(p.id ?? p.providerID ?? ""), modelID: String(m?.id ?? id), limit: m?.limit })
+        }
       } catch {}
-      if (!rows.length) {
-        try {
-          const r = await Promise.race([api.client?.provider?.list?.(), new Promise((res) => setTimeout(res, 3_000))])
-          const d: any = (r as any)?.data ?? r
-          take(d?.all ?? d)
-        } catch {}
-      }
-      return rows.length ? rows : undefined
+      if (rows.length) return { catalog: rows, catalogNote: "список окна OpenCode" }
+      const snap = readCatalog()
+      return snap.models ? { catalog: snap.models, catalogNote: snap.note } : { catalogWhy: snap.why }
     }
+    // Меню команды: «Таблица» и все глаголы с краткой строкой «что делает и с какими аргументами» (описания — core.ts, VERB_HELP:
+    // тот же источник, что у /crew-help и у строки отказов); глагол с аргументами открывает ввод с форматом именно этого глагола
     const verbCommand = (kind: "sets" | "profiles") => async (given?: unknown) => {
       const name = `/crew-${kind}`
+      const helps = verbHelpOf(kind)
       let text = typeof given === "string" ? given : undefined
       if (text === undefined) {
         const dialog = api.ui?.dialog
-        // аргументов у команды окна нет: первый диалог — выбор «таблица, проверка, сохранение» или ввод глагола (ответ на пустой
-        // ввод от отмены не отличить, поэтому таблица — пункт выбора, а не пустая строка)
+        // ответ на пустой ввод от отмены не отличить, поэтому таблица — пункт меню, а не пустая строка
         const pick: string | undefined = await dialog?.select?.({
           title: name,
           options: [
-            { title: "Таблица", value: "table", description: kind === "sets" ? "все наборы и включённый" : "семья, ступень → модель, окно" },
-            { title: "check", value: "check", description: "проверка данных и окон, ничего не меняет" },
-            { title: "save", value: "save", description: "записать локальные правки в файл проекта" },
-            { title: "Ввести команду…", value: "type", description: kind === "sets" ? "show, use, set, unset, new, rename, delete, reset, check, save" : "show, set, new, rename, delete, reset, check, save" },
+            { title: "Таблица", value: "__table", description: kind === "sets" ? "все наборы, включённый отмечен" : "семья, ступень → модель, окно" },
+            ...helps.map((v) => ({ title: v.verb, value: v.verb, description: `${v.verb}${v.usage ? " " + v.usage : ""} — ${v.what}` })),
           ],
         })
         if (!pick) return
-        if (pick === "type") {
-          const typed: string | undefined = await dialog?.prompt?.({ title: name, placeholder: kind === "sets" ? "например: use cross-kimi" : "например: show claude" })
-          if (!typed?.trim()) return
-          text = typed.trim()
-        } else text = pick === "table" ? "" : pick
+        if (pick === "__table") text = ""
+        else {
+          const v = helps.find((h) => h.verb === pick)!
+          if (v.bare) text = v.verb
+          else {
+            const allVerbs = `Все глаголы: ${helps.map((h) => h.verb).join(" · ")}`
+            const ask = (extra: object) => dialog?.prompt?.({ title: `${name} ${v.verb}`, placeholder: `${v.verb} ${v.usage} — например: ${v.example}`, value: `${v.verb} `, ...extra })
+            let typed: string | undefined
+            try {
+              typed = await ask(textDialog?.noteLine ? { description: () => textDialog.noteLine(api, allVerbs) } : {})
+            } catch {
+              typed = await ask({}) // окно не приняло подсказку под строкой — тот же ввод без неё
+            }
+            if (typed === undefined) return
+            const t = typed.trim()
+            const rest = t.startsWith(v.verb) ? t.slice(v.verb.length).trim() : t // строка могла прийти с глаголом или без него
+            if (!rest && /^<[^>]*>/.test(v.usage)) return // нужные аргументы не введены
+            text = `${v.verb}${rest ? " " + rest : ""}`
+          }
+        }
       }
-      let out: string
-      try {
-        loadProjects() // проекты — из ящика (их кладёт плагин сервиса)
-        const m = await import("./profile-cmd.ts")
-        const deps = { catalog: catalogOfWindow, version: undefined }
-        out = await (kind === "sets" ? m.runSetsCommand : m.runProfilesCommand)(tabDir(), text, deps)
-      } catch (e) {
-        log(`window command ${name} failed: ${e}`)
-        out = `Команда не выполнена: ${(e as any)?.message ?? e}`
-      }
-      showText({ title: `crew-harness — ${name}${text ? " " + text : ""}`, message: out })
+      const title = `crew-harness — ${name}${text ? " " + text : ""}`
+      showText({ title, message: "Загрузка…" })
+      const out = await offThread({ kind, dir: tabDir(), text, ...catalogForOp() })
+      showText({ title, message: out })
     }
     const commands = [
       { id: "crew-harness.status", title: "Crew: кто чего ждёт", group: "Crew", slash: { name: "crew" }, palette: true, run: showStatus },
@@ -311,10 +355,17 @@ export default {
     // блок «Ход работ» (задача 004) — под «Crew», своей цепочкой: ошибка в нём не касается «Crew», ошибка в «Crew» не мешает ему
     crewSidebar?.finally(() => import("./progress-sidebar.tsx").then((m) => (m.mountProgress(api), log(`progress block mounted pid=${process.pid}`))).catch((e) => log(`progress block not drawn pid=${process.pid}: ${String(e).slice(0, 300)}`)))
 
+    // поток поднимается заранее (через 5 с после открытия окна), чтобы первая команда не ждала ни загрузки модулей, ни git
+    const warmTimer = process.env.CREW_HARNESS_NO_WORKER ? undefined : setTimeout(() => void offThread({ kind: "warm" }), 5_000)
+    warmTimer?.unref?.()
     beat()
     const timer = setInterval(beat, BEAT_MS)
     return () => {
       clearInterval(timer)
+      clearTimeout(warmTimer)
+      try {
+        worker?.terminate?.()
+      } catch {}
       rmSync(file, { force: true })
       rmSync(notices, { recursive: true, force: true })
     }
