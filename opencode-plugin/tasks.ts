@@ -43,6 +43,8 @@ export type Task = {
   criteria?: string
   boundaries?: string
   open_questions?: string
+  /** дополнительные поля проекта (task_extra_fields): {id: значение}; подписи берутся из настроек в момент письма */
+  extra?: Record<string, string>
   priority: Priority
   tier: Tier
   role: string

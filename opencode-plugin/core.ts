@@ -239,6 +239,36 @@ export function extraFieldsOf(raw: any): ExtraField[] {
   }
   return out
 }
+export const EXTRA_VALUE_MAX = 300
+/** Разбор входа extra {id: строка} по объявлению проекта: значение — одна строка до 300 знаков после обрезки, пустое отбрасывается. */
+export function parseExtra(raw: any, cfg: CrewConfig): { value?: Record<string, string> } | { error: string } {
+  if (raw === undefined || raw === null) return {}
+  if (typeof raw !== "object" || Array.isArray(raw)) return { error: "extra — объект {id: строка}." }
+  const declared = cfg.extraFields.map((f) => f.id)
+  const list = declared.length ? `объявлены поля: ${declared.join(", ")}` : "проект не объявил дополнительных полей (task_extra_fields)"
+  const out: Record<string, string> = {}
+  for (const [id, v] of Object.entries(raw)) {
+    if (!declared.includes(id)) return { error: `дополнительного поля «${id}» нет — ${list}.` }
+    if (typeof v !== "string") return { error: `значение поля «${id}» — строка; ${list}.` }
+    const val = v.trim()
+    if (/[\r\n]/.test(val)) return { error: `значение поля «${id}» — одна строка, без переводов строки; объявлены поля: ${declared.join(", ")}.` }
+    if (val.length > EXTRA_VALUE_MAX) return { error: `значение поля «${id}» длиннее ${EXTRA_VALUE_MAX} знаков (${val.length}); объявлены поля: ${declared.join(", ")}.` }
+    if (val) out[id] = val
+  }
+  return Object.keys(out).length ? { value: out } : {}
+}
+/** Блок «ДОПОЛНИТЕЛЬНО (поля проекта)» с подписями из объявления проекта; нет значений — пустая строка (письма её отсеивают). */
+export function extraBlock(t: Task): string {
+  const e = t.extra
+  if (!e || !Object.keys(e).length) return ""
+  let fields: ExtraField[] = []
+  try {
+    fields = loadConfig(t.directory).extraFields
+  } catch {}
+  const label = (id: string) => fields.find((f) => f.id === id)?.label ?? id
+  const ids = [...fields.map((f) => f.id).filter((id) => id in e), ...Object.keys(e).filter((id) => !fields.some((f) => f.id === id))]
+  return `ДОПОЛНИТЕЛЬНО (поля проекта):\n${ids.map((id) => `  ${label(id)}: ${e[id]}`).join("\n")}`
+}
 /** Список шагов приёмки из настроек или undefined (нет, пуст, не той формы — умолчание). */
 function acceptanceList(raw: any): AcceptanceStep[] | undefined {
   if (!Array.isArray(raw)) return undefined
@@ -1570,6 +1600,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
     boundaries: str("Boundaries: what is NOT done in this task"),
     open_questions: str("Open questions: each with an addressee and a default"),
     priority: { type: "string", enum: [...PRIORITIES], description: "P0 emergency, P1 first queue, P2 normal (default from the project), P3 when hands are free" },
+    extra: { type: "object", description: "crew_spawn and assign: values of the project's extra task fields {id: one line up to 300 characters}; the ids are declared by the project (task_extra_fields, see crew_config show)", additionalProperties: { type: "string" } },
   }
   const missingFields = (input: any, cfg: CrewConfig) => cfg.taskFields.filter((f) => !String(input[f] ?? "").trim())
   const FIELD_RU: Record<string, string> = { goal: "цель (goal)", criteria: "критерии приёмки (criteria)", boundaries: "границы (boundaries)", open_questions: "открытые вопросы (open_questions)" }
@@ -1613,6 +1644,8 @@ export function makeTools(host: CrewHost): CrewTool[] {
       if (input.task && !input.goal) input.goal = input.task
       const missing = missingFields(input, cfg).filter((f) => !(input.kind === "plan" && f === "criteria")) // у задачи-плана критерии — приёмки плана
       if (missing.length) return { content: `Задача не поставлена: нет полей ${missing.map((f) => FIELD_RU[f] ?? f).join(", ")} (настройка проекта task_fields). Работа не начинается без критериев приёмки.` }
+      const extra = parseExtra(input.extra, cfg)
+      if ("error" in extra) return { content: `Задача не поставлена: ${extra.error}` }
       const role = normalizeRole(String(input.role ?? DEFAULT_ROLE).trim().toLowerCase() || DEFAULT_ROLE)
       if (!ROLE_RE.test(role)) return { content: `Роль «${role}» не годится.` }
       const tier: Tier = isTier(input.tier) ? input.tier : "medium"
@@ -1659,6 +1692,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
       }
       const t = createTask({
         project, title: plan ? `план ${plan.n}: ${title}` : title, goal: String(input.goal).trim(), criteria: plan ? "критерии приёмки плана (план 004): А — против исходной задачи, Б — правильность составления" : input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(),
+        ...(extra.value ? { extra: extra.value } : {}),
         priority: isPriority(input.priority) ? input.priority : cfg.defaultPriority, tier: recTier, role, model,
         author: me.session, author_role: keyOf(me), qid: newQid(), status: "starting", kind: "spawn", executor: plannedSessionId(), directory: me.directory,
         ...(plan ? { plan } : {}),
@@ -1726,9 +1760,12 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const cfg = configFor(me)
         const missing = missingFields(input, cfg)
         if (missing.length) return { content: `Задача не поставлена: нет полей ${missing.map((f) => FIELD_RU[f] ?? f).join(", ")}.` }
+        const extra = parseExtra(input.extra, cfg)
+        if ("error" in extra) return { content: `Задача не поставлена: ${extra.error}` }
         const title = String(input.title ?? "").trim() || String(input.goal).split(/\r?\n/)[0].slice(0, 60)
         const t = createTask({
           project, title, goal: String(input.goal).trim(), criteria: input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(),
+          ...(extra.value ? { extra: extra.value } : {}),
           priority: isPriority(input.priority) ? input.priority : cfg.defaultPriority, tier: "medium", role: target.role, model: target.model,
           author: me.session, author_role: keyOf(me), qid: newQid(), status: "running", kind: "assign", executor: target.session, directory: target.directory,
         }, (n, slug) => taskPlace(target.directory, cfg, n, slug, project))
@@ -1745,6 +1782,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const cfg = configFor(me)
         const missing = missingFields(input, cfg)
         if (missing.length) return { content: `Заказ не отправлен: нет полей ${missing.map((f) => FIELD_RU[f] ?? f).join(", ")}.` }
+        if (input.extra !== undefined && input.extra !== null) return { content: "Заказ не отправлен: extra для заказа не поддерживается (дополнительные поля проекта задаёт crew_spawn и assign своего проекта)." }
         const title = String(input.title ?? "").trim() || String(input.goal).split(/\r?\n/)[0].slice(0, 60)
         const t = createTask({
           project, title, goal: String(input.goal).trim(), criteria: input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(),
@@ -1777,6 +1815,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           t.criteria ? `критерии: ${t.criteria}` : "",
           t.boundaries ? `границы: ${t.boundaries}` : "",
           t.open_questions ? `открытые вопросы: ${t.open_questions}` : "",
+          extraBlock(t),
           t.executors.length ? `прежние исполнители: ${t.executors.join(", ")}` : "",
           t.reviewer ? `приёмщик: ${t.reviewer}${t.review_kind ? ` (${t.review_kind === "tab" ? "открытая вкладка" : t.review_kind === "spawn" ? "сессия под приёмку" : "интегратор"})` : ""}${t.rework ? `, кругов доработки: ${t.rework}` : ""}` : "",
           t.report ? `отчёт исполнителя: ${t.report.slice(0, 500)}` : "",
@@ -2252,6 +2291,7 @@ export function planTaskLetter(t: Task): string {
     `ИСХОДНАЯ ЗАДАЧА (перепроверка сверит план с ней):\n${p.source}`,
     t.boundaries ? `ГРАНИЦЫ (не делаем): ${t.boundaries}` : "",
     t.open_questions ? `ОТКРЫТЫЕ ВОПРОСЫ: ${t.open_questions}` : "",
+    extraBlock(t),
     `ФАЙЛ ПЛАНА: ${p.file} — в ${t.worktree && t.worktree_ready ? `worktree ${t.worktree}, ветка ${t.branch} (создан плагином; правь и коммить здесь)` : "папке задачи"}.`,
     `ФОРМА (по этому шаблону: фазы «### ${f.prefix}.N — …», шаги «#### ${f.prefix}.N.M — …» с [P1] [после: …] [где: …], у шага «${f.whatLabel}:» и «**${f.criteriaLabel}:**»; отметки — как в шаблоне):\n${planTemplateFor(t, cfg)}`,
     `КРИТЕРИИ ПРИЁМКИ ПЛАНА — по ним идёт перепроверка:\n${cfg.planAcceptance.map((a) => `  ${a.id}: ${a.text}`).join("\n")}\nФорму (шапка, разделы, «${f.whatLabel}:» и «${f.criteriaLabel}» у каждого шага, вопросы четвёркой с «Блокирует», «после:» на существующие шаги без кругов) плагин проверит при сдаче — с ошибками формы отчёт не примет.`,
@@ -2295,6 +2335,7 @@ export function formatTaskLetter(t: Task): string {
     t.criteria ? `КРИТЕРИИ ПРИЁМКИ: ${t.criteria}` : "",
     t.boundaries ? `ГРАНИЦЫ (не делаем): ${t.boundaries}` : "",
     t.open_questions ? `ОТКРЫТЫЕ ВОПРОСЫ: ${t.open_questions}` : "",
+    extraBlock(t),
     t.worktree && t.worktree_ready
       ? `WORKTREE ГОТОВ: эта сессия уже работает в ${t.worktree}, ветка ${t.branch} (создал плагин от целевой ветки). Правь и коммить здесь; другой worktree не создавай (по этому пути и ветке приёмщик вливает и чистит).`
       : t.worktree

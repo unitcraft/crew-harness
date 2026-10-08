@@ -6,8 +6,8 @@
 import { execFile, execFileSync } from "node:child_process"
 import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { type Card, type CrewConfig, ROLES, cardFile, mayWakeCard, readJson, safeKey } from "./core.ts"
-import { type Task, isOpen, listTasks, loadTask } from "./tasks.ts"
+import { type Card, type CrewConfig, ROLES, cardFile, extraBlock, mayWakeCard, readJson, safeKey } from "./core.ts"
+import { type Task, isOpen, listTasks, loadTask, taskFile } from "./tasks.ts"
 import { roundRules } from "./plans.ts"
 
 const git = (cwd: string, args: string[], timeout = 15_000) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", windowsHide: true, timeout, stdio: ["ignore", "pipe", "ignore"] })
@@ -151,6 +151,8 @@ export function reviewLetter(t: Task, cfg: CrewConfig): string {
     `ЦЕЛЬ: ${t.goal}`,
     t.criteria ? `КРИТЕРИИ ПРИЁМКИ: ${t.criteria}` : "",
     t.boundaries ? `ГРАНИЦЫ: ${t.boundaries}` : "",
+    extraBlock(t),
+    extraBlock(t) ? `ЗАПИСЬ ЗАДАЧИ: ${taskFile(t.project, t.n)}, поле extra ({id: значение}) — скрипт проекта читает значения оттуда.` : "",
     t.worktree ? `WORKTREE ИСПОЛНИТЕЛЯ: ${t.worktree}, ветка ${t.branch}; целевая ветка ${cfg.targetBranch}.` : t.branch ? `ВЕТКА: ${t.branch}; целевая ${cfg.targetBranch}.` : `Целевая ветка ${cfg.targetBranch}.`,
     t.report ? `ОТЧЁТ ИСПОЛНИТЕЛЯ:\n${t.report.slice(0, 3000)}` : "",
     `ШАГИ ПРИЁМКИ:\n${steps}`,
