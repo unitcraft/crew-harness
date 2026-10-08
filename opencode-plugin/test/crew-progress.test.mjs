@@ -612,6 +612,160 @@ const sec = (h, m) => at(h, m) // seconds-exact times, so the order of files is 
   cell("DNC-02 neither module writes anything (no write call in progress.ts or progress-scan.ts)", !WRITE.test(PROG_SRC) && !WRITE.test(SCAN_SRC), "")
 }
 
+// ---- texts of the panel and of the command dialog (step 6) ---------------------------------------------------------------
+const V = await import("../progress-view.ts")
+const St = await import("../status.ts")
+const task = (lines, mtime, now, { title = "Стражи репозитория", folder = "002-guards", branchMs } = {}) =>
+  P.summarizeTasks({ tasks: [{ folder, title, copies: [Cp("main", lines, mtime, branchMs !== undefined ? { branchMs } : {})] }] }, now)
+const panel = (tasks, now) => V.panelLines(tasks, now).map((r) => r.text)
+const dialog = (tasks, now, scan) => V.dialogText(tasks, now, scan)
+const T0 = at(12, 0)
+
+cell("AC-12 the width constants equal those of status.ts (SIDE_WIDTH, DIALOG_WIDTH)", V.PANEL_WIDTH === St.SIDE_WIDTH && V.DIALOG_WIDTH === St.DIALOG_WIDTH, show({ p: V.PANEL_WIDTH, s: St.SIDE_WIDTH, d: V.DIALOG_WIDTH, sd: St.DIALOG_WIDTH }))
+cell("AC-10 the walk (5 s) and the show (2 s) periods give news within 10 seconds", S.WALK_MS + V.SHOW_MS < 10_000 && V.SHOW_MS === 2_000 && S.WALK_MS === 5_000, show({ w: S.WALK_MS, s: V.SHOW_MS }))
+{
+  // AC-01
+  const t = task(["С5 0/14 старт", "С5 13/14 [11:57] шаг: сводка"], at(11, 57), T0)
+  const rows = panel(t, T0)
+  cell("AC-01 the panel: title and four rows of the task", show(rows) === show(["Ход работ", "• 002 Стражи репозитория", "    С5 реализация 13/14", "    ↳ шаг: сводка", "    идёт 11:57 · 3м назад"]), show(rows))
+  cell("AC-01 no «нет вестей» in the panel and the command says «идёт: последняя весть 11:57, 3 мин назад»", !rows.join("\n").includes("нет вестей") && dialog(t, T0).includes("идёт: последняя весть 11:57, 3 мин назад"), dialog(t, T0))
+}
+{
+  // AC-02 (texts)
+  const mk = (ago) => task(["С5 0/14 старт", `С5 13/14 ${hhmm(T0 - ago * MIN)} шаг`], T0 - ago * MIN, T0)
+  cell("AC-02 11 minutes: «⚠ нет вестей 11м» in the panel, «давно нет вестей 11 мин» in the command", panel(mk(11), T0)[4] === "    ⚠ нет вестей 11м" && dialog(mk(11), T0).includes("давно нет вестей 11 мин"), show(panel(mk(11), T0)))
+  cell("AC-02 9 minutes: «идёт 11:51 · 9м назад»", panel(mk(9), T0)[4] === "    идёт 11:51 · 9м назад", show(panel(mk(9), T0)))
+}
+{
+  // AC-03 (texts)
+  const done = task(["С5 0/14 старт", "С5 14/14 [11:55] готово — итог"], at(11, 55), T0)
+  const rows = panel(done, T0)
+  cell("AC-03 «готово 11:55» in the panel (mark ✓), «готово, 11:55» in the command", rows[1].startsWith("✓ ") && rows[4] === "    готово 11:55" && dialog(done, T0).includes("готово, 11:55"), show(rows))
+  const noTime = task(["С5 0/14 старт", "С5 14/14 готово"], at(11, 55), T0)
+  cell("AC-03 without a time field the time is marked by file: «готово ≈11:55»", panel(noTime, T0)[4] === "    готово ≈11:55", show(panel(noTime, T0)))
+  const doneLater = task(["С5 0/14 старт", "С5 14/14 [11:55] готово — итог"], at(11, 55), T0 + 16 * MIN)
+  cell("AC-03 after 16 minutes the task is gone from the panel and from the command", panel(doneLater, T0 + 16 * MIN).length === 0 && dialog(doneLater, T0 + 16 * MIN).startsWith("Идущих задач нет"), dialog(doneLater, T0 + 16 * MIN))
+  const quiet = task(["С5 0/14 старт", "С5 5/14 шаг"], T0 - 25 * 3_600_000, T0)
+  cell("AC-03 silent for 25 hours: not in the panel, «давно брошена» in the command", panel(quiet, T0).length === 0 && dialog(quiet, T0).includes("давно брошена"), dialog(quiet, T0))
+}
+{
+  // AC-07 (texts) and AC-19 (texts)
+  const l = task(["С1 0/0 [11:57] запуск"], at(11, 57), T0)
+  const rows = panel(l, T0)
+  cell("AC-07 a launch: «шагов нет» in row 2, «запущена 11:57» in row 4; the command «запущена 11:57, шагов нет»", rows[2] === "    С1 разбор шагов нет" && rows[4] === "    запущена 11:57" && rows[1].startsWith("• ") && dialog(l, T0).includes("запущена 11:57, шагов нет"), show(rows))
+  const late = task(["С1 0/0 [11:49] запуск"], at(11, 49), T0)
+  cell("AC-07 after the threshold: «⚠ нет вестей 11м» (mark !), never «готово»", panel(late, T0)[4] === "    ⚠ нет вестей 11м" && panel(late, T0)[1].startsWith("! ") && dialog(late, T0).includes("запущена 11:49, шагов нет, давно нет вестей 11 мин") && !panel(late, T0).join().includes("готово"), show(panel(late, T0)))
+  const k = task(["КОММИТ 0/0 старт"], at(11, 58), T0)
+  cell("AC-07 «КОММИТ 0/0 старт»: «без единиц ≈11:58», gone after 15 minutes", panel(k, T0)[4] === "    без единиц ≈11:58" && panel(task(["КОММИТ 0/0 старт"], at(11, 58), T0 + 15 * MIN), T0 + 15 * MIN).length === 0, show(panel(k, T0)))
+  // AC-19
+  const b = task(["С5 0/14 старт", "С5 5/14 [11:49] шаг"], at(11, 49), T0, { branchMs: T0 - 3 * MIN })
+  cell("AC-19 «⚠ нет вестей 11м · ветка 3м»; the command says «давно нет вестей 11 мин, ветка двигалась 3 мин назад»", panel(b, T0)[4] === "    ⚠ нет вестей 11м · ветка 3м" && dialog(b, T0).includes("давно нет вестей 11 мин, ветка двигалась 3 мин назад"), show(panel(b, T0)))
+  const h = task(["С5 0/14 старт", "С5 5/14 [09:30] шаг"], at(9, 30), T0, { branchMs: T0 - 45 * MIN })
+  cell("AC-19 150 minutes of silence and 45 of the branch: «⚠ нет вестей 2ч · ветка 45м»", panel(h, T0)[4] === "    ⚠ нет вестей 2ч · ветка 45м", show(panel(h, T0)))
+  const w = task(["С5 0/14 старт", "С5 5/14 шаг"], T0 - (99 * 60 + 59) * 1000, T0, { branchMs: T0 - (99 * 60 + 10) * 1000 })
+  const w4 = panel(w, T0)[4]
+  cell("AC-19 99 and 99 minutes: the row is exactly 32 characters", w4 === "    ⚠ нет вестей 99м · ветка 99м" && w4.length === 32, show(w4))
+  const nb = task(["С5 0/14 старт", "С5 5/14 [11:49] шаг"], at(11, 49), T0, { branchMs: at(11, 40) })
+  cell("AC-19 the branch did not move after the news: no «ветка»", panel(nb, T0)[4] === "    ⚠ нет вестей 11м" && !dialog(nb, T0).includes("ветка"), show(panel(nb, T0)))
+  const st3 = task(["С1 0/0 [11:49] запуск"], at(11, 49), T0, { branchMs: T0 - 3 * MIN })
+  cell("AC-19 state 3 after the threshold shows the branch too", panel(st3, T0)[4] === "    ⚠ нет вестей 11м · ветка 3м", show(panel(st3, T0)))
+}
+{
+  // AC-08 (texts)
+  for (const line of ["С5 13/14 [11:50] стоп: ворота — ждёт слова владельца", "С5 14/14 стоп: ворота — ждёт", "С5 15/14 стоп:ворота"]) {
+    const t = task(["С5 0/14 старт", line], at(11, 50), T0)
+    cell(`AC-08 «${line.slice(0, 16)}»: «остановилась: ворота», no «нет вестей» and no «готово»`, panel(t, T0)[4] === "    остановилась: ворота" && !panel(t, T0).join().includes("нет вестей") && !panel(t, T0).join().includes("готово") && panel(t, T0)[1].startsWith("! "), show(panel(t, T0)))
+  }
+  const named = task(["С5 0/14 старт", "С5 13/14 [11:50] стоп: ворота — ждёт слова владельца"], at(11, 50), T0)
+  cell("AC-08 the command: «остановилась: ворота — ждёт слова владельца, 11:50»", dialog(named, T0).includes("остановилась: ворота — ждёт слова владельца, 11:50"), dialog(named, T0))
+  const un = task(["С5 0/14 старт", "С5 13/14 [11:50] стоп: что-то — x"], at(11, 50), T0)
+  cell("AC-08 a kind outside the list: «остановилась: вид не назван» (27 characters, fits 28)", panel(un, T0)[4] === "    остановилась: вид не назван" && "остановилась: вид не назван".length === 27 && dialog(un, T0).includes("остановилась: вид не назван — что-то — x, 11:50"), show(panel(un, T0)) + dialog(un, T0))
+}
+{
+  // AC-23 (texts)
+  const t = task(["С5 0/14 старт", "С5 14/14 пересборка: ветка на main"], at(11, 30), T0)
+  cell("AC-23 «все шаги сделаны, итога нет» in the panel (mark !) and the command", panel(t, T0)[4] === "    все шаги сделаны, итога нет" && panel(t, T0)[1].startsWith("! ") && dialog(t, T0).includes("все шаги сделаны, итога нет"), show(panel(t, T0)))
+}
+{
+  // AC-12: widths, the number of tasks, the order
+  const base = (n, title, lines, mtime) => ({ folder: `00${n}-t`, title, copies: [Cp("main", lines, mtime)] })
+  const run = (age) => ["С5 0/14 старт", `С5 3/14 ${hhmm(T0 - age * MIN)} шаг сводки панели и ещё немного слов`]
+  const four = [
+    base(1, "Первая задача с очень длинным названием, которое не поместится", run(1), T0 - 1 * MIN),
+    base(2, "Вторая задача", run(9), T0 - 9 * MIN),
+    base(3, "Guards of the repository tests with a long latin title", run(11), T0 - 11 * MIN),
+    base(4, "Четвёртая", run(5), T0 - 5 * MIN),
+  ]
+  const tasks = P.summarizeTasks({ tasks: four }, T0)
+  const rows = V.panelLines(tasks, T0)
+  const texts = rows.map((r) => r.text)
+  cell("AC-12 panel rows are at most 32 characters and do not end with a space", texts.every((x) => x.length <= 32 && !x.endsWith(" ")), show(texts.filter((x) => x.length > 32 || x.endsWith(" "))))
+  cell("AC-12 at most 3 tasks and the line «+1 · /crew-progress», at most 14 rows", texts.length <= 14 && texts.at(-1) === "+1 · /crew-progress" && texts.filter((x) => /^[•!✓] /.test(x)).length === 3, show(texts))
+  cell("AC-12 the silent task is first and the least fresh of the others is hidden", texts[1].startsWith("! 003 Guards of the") && texts[5].startsWith("• 001") && texts[9].startsWith("• 004") && !texts.some((x) => x.includes("002")), show(texts.filter((x) => /^[•!✓] /.test(x))))
+  cell("AC-12 row 4 of every task holds the state", [4, 8, 12].every((i) => /идёт|нет вестей/.test(texts[i])), show(texts))
+  cell("AC-15 the latin title stays as written (the letter s is not replaced), the number has no #", texts[1].startsWith("! 003 Guards of the repos") && !texts.join("").includes("#"), texts[1])
+  const d = dialog(tasks, T0)
+  cell("AC-12 dialog lines are at most 72 characters and do not end with a space", d.split("\n").every((x) => x.length <= 72 && !x.endsWith(" ")), show(d.split("\n").filter((x) => x.length > 72 || x.endsWith(" "))))
+  cell("AC-15 the command prints the full titles", d.includes("003 Guards of the repository tests with a long latin title") || d.includes("003 Guards of the repository tests with a long latin"), d)
+  // four silent tasks: the three oldest are shown
+  const silent = [1, 2, 3, 4].map((i) => base(i, `Тихая ${i}`, run(10 + i * 3), T0 - (10 + i * 3) * MIN))
+  const st = V.panelLines(P.summarizeTasks({ tasks: silent }, T0), T0).map((r) => r.text)
+  cell("AC-12 four silent tasks: the three oldest are shown, the fourth is «+1»", st.filter((x) => /^! /.test(x)).length === 3 && st.some((x) => x.includes("Тихая 4")) && !st.some((x) => x.includes("Тихая 1")) && st.at(-1) === "+1 · /crew-progress", show(st))
+  // the second row with ≠ and +1: the name is cut with «…», «13/14 ≠ +1» whole
+  const proto = tasks[0]
+  for (const [code, full] of [["С5д", "С5д продолжение реализации"], ["С9", "С9 разбор обратной связи"]]) {
+    const t = { ...proto, session: code, sessionName: P.sessionName(code), k: 13, n: 14, divergent: true, others: 1, state: 5, stale: false }
+    const r2 = V.taskRows(t, T0)[1].text
+    cell(`AC-12 row 2 for ${code}: at most 32 characters, «13/14 ≠ +1» whole, the name cut with «…»`, r2.length <= 32 && r2.endsWith(" 13/14 ≠ +1") && r2.includes("…") && P.sessionName(code) === full, show(r2))
+  }
+  const fit = P.sessionName("С5") + " 13/14 ≠ +1"
+  const rr = V.taskRows({ ...proto, session: "С5", sessionName: P.sessionName("С5"), k: 13, n: 14, divergent: true, others: 1, state: 5 }, T0)[1].text
+  cell("AC-12 a name that fits is not cut", rr === `    ${fit}`, rr)
+}
+{
+  // AC-13: the dialog
+  const t = task(["С5 0/14 старт", "С5 11/14 [11:40] а", "С5 12/14 [11:45] б", "С5 13/14 [11:50] в"], at(11, 50), T0)
+  const d = dialog(t, T0)
+  cell("AC-13 the dialog shows the task, the session, the state and the three last lines of the journal", d.includes("002 Стражи репозитория") && d.includes("С5 реализация 13/14") && d.includes("↳ 13/14 [11:50] в") && d.includes("↳ 12/14 [11:45] б") && d.includes("↳ 11/14 [11:40] а") && !d.includes("0/14 старт"), d)
+  const none = dialog([], T0, { trees: 2, journals: 5 })
+  cell("AC-13 no running tasks: «Идущих задач нет» with the trees and journals looked at", none === "Идущих задач нет. Осмотрено деревьев: 2, журналов: 5.", none)
+  const sessions = [task(["С5д 0/3 старт", "С5д 1/3 [11:50] а"], at(11, 50), T0), task(["С9 0/3 старт", "С9 1/3 [11:50] б"], at(11, 50), T0)].flat()
+  const dd = dialog(sessions, T0)
+  cell("AC-15 the command names the sessions in full: «С5д продолжение реализации», «С9 разбор обратной связи»", dd.includes("С5д продолжение реализации 1/3") && dd.includes("С9 разбор обратной связи 1/3"), dd)
+}
+{
+  // AC-16 (entries): outside a repository, no tab
+  const outside = path.join(tmp, "norepo2")
+  mkdirSync(outside, { recursive: true })
+  cell("AC-16 /crew-progress with no tab or outside a repository: the one sentence", V.progressDialog(undefined, T0) === V.OUTSIDE_TEXT && V.progressDialog(outside, T0) === V.OUTSIDE_TEXT && V.OUTSIDE_TEXT === "Вкладка открыта вне репозитория: ход работ показывать нечем (осмотрено деревьев: 0)", V.progressDialog(outside, T0))
+  cell("AC-16 the block of a tab outside a repository is empty and does not throw", V.progressPanel(outside, T0).length === 0 && V.progressPanel(undefined, T0).length === 0, "")
+  const bare = makeRepo({})
+  const empty = V.progressDialog(bare.main, T0)
+  cell("AC-13 a repository with no journals: «Идущих задач нет. Осмотрено деревьев: 1, журналов: 0.»", empty === "Идущих задач нет. Осмотрено деревьев: 1, журналов: 0.", empty)
+}
+{
+  // the entries on a real repository with a tree
+  const repo = makeRepo({ "002-guards": { title: "Стражи репозитория", lines: [...common] } })
+  const tree = addTree(repo, "task-x")
+  jwrite(repo.main, "002-guards", [...common, "С5 0/0 [11:00] запуск"], sec(11, 0))
+  jwrite(tree, "002-guards", [...common, "С5 0/14 [11:01] старт", "С5 13/14 [11:57] шаг: сводка"], sec(11, 57))
+  const rows = V.progressPanel(tree, T0).map((r) => r.text)
+  cell("AC-01 the entry progressPanel on a real tree: the tab sits in the tree, the journal of the tree is shown", rows[1] === "• 002 Стражи репозитория" && rows[2] === "    С5 реализация 13/14" && rows[4] === "    идёт 11:57 · 3м назад", show(rows))
+  const dlg = V.progressDialog(repo.main, T0)
+  cell("AC-13 the entry progressDialog on the main copy of the same repository", dlg.includes("идёт: последняя весть 11:57, 3 мин назад") && dlg.includes("↳ 13/14 [11:57] шаг: сводка"), dlg)
+}
+{
+  // AC-27 (numbers in the panel and in the command)
+  const codes = ["С1", "С1п", "С2", "С3", "С4", "С5"]
+  const lines = []
+  for (let i = 0; i < 69; i++) lines.push(`${codes[i % 6]} 0/3 старт заход ${i}`, `${codes[i % 6]} 1/3 а`, `${codes[i % 6]} 3/3 готово`)
+  lines.push("С5 0/14 старт", ...Array.from({ length: 13 }, (_, k) => `С5 ${k + 1}/14 шаг ${k + 1}`))
+  const t = P.summarizeTasks({ tasks: [{ folder: "002-guards", title: "Стражи", copies: [Cp("main", lines, at(11, 0)), Cp("tree", [...lines, "С5 14/14 пересборка: ветка на main"], at(11, 58))] }] }, T0)
+  const rows = panel(t, T0)
+  const d = dialog(t, T0)
+  cell("AC-27 task-002 style in the panel and the command: no «+N», «вытеснено 69», «итога нет»", !rows.some((x) => /\+\d/.test(x)) && d.includes("вытеснено 69") && d.includes("все шаги сделаны, итога нет") && d.includes("↳ 14/14 пересборка: ветка на main"), show(rows) + d)
+}
+
 // ==== END OF CELLS ====
 try {
   rmSync(tmp, { recursive: true, force: true })
