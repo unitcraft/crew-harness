@@ -116,7 +116,7 @@ REQ-15 → `guard-commit-message.py` → `test-guard-commit-message.py` (--ci, �
 REQ-16 → `agent-hooks/guard-git.py`, `.claude/settings.json` → `test-guard-git.py` (19 проб) → PASS
 REQ-17 → `github-setup.sh protect` → `test-github-setup.py` на подставном gh и `--dry-run`; настоящая защита не применялась (Г4) → NOT VERIFIED
 REQ-18 → `githooks/pre-push`, `commit-range.sh` → `test-pre-push.py` (9 проб), имитация по 39 коммитам → PASS
-REQ-19 → `commit-range.sh`, `guards.yml` → `test-commit-range.py`; прогон Actions не выполнялся (Г3) → NOT VERIFIED
+REQ-19 → `commit-range.sh`, `guards.yml` → `test-commit-range.py`; шаг подписи в зелёном прогоне Actions на ветке задачи → PASS
 REQ-20 → `check-task-docs.py` → `test-check-task-docs.py`; дерево «ок: осмотрено 51 файлов задач» → PASS
 REQ-21 → `check-task-docs.py` → `test-check-task-docs.py` → PASS
 REQ-22 → `check-task-docs.py` → `test-check-task-docs.py` → PASS
@@ -139,7 +139,7 @@ REQ-38 → `guard-commit-message.py` → `test-guard-commit-message.py`, `test-c
 AC-01 → `test-guard-secrets.py`, `test-pre-commit.py`; коммит правки п.15 проходит `guard-secrets.py --commit` (коммит `AGENTS.md: guards, install and mechanism notes`, в имитации красный только по трейлеру) → PASS
 AC-02 → `test-guard-secrets.py` (режим дерева) → PASS
 AC-03 → `test-check-private-names.py` (CRLF, номер образца, 0 совпадений значения) → PASS
-AC-04 → локально четыре случая (`test-check-private-names.py`); прогон Actions 37753894719 на ветке задачи без секрета: задание `guards` красное на шаге «Guards by mask» — `check-private-names.py -> FAIL: предпосылка: секрет или переменная CREW_PRIVATE_NAMES пусты. Заведите список…` (подсказка, значений нет), остальные шесть стражей «ок»; прогон с секретом — после Г4 → NOT VERIFIED
+AC-04 → локально четыре случая; прогон Actions 37753894719 без секрета красный с подсказкой, после записи секрета (`github-setup.sh secret`, 14 образцов) повтор того же прогона зелёный (задания `guards` и `selftests`) → PASS
 AC-05 → на дереве со списком владельца (список из 14 образцов, применён; значения не записаны) `check-private-names.py` и `guard-secrets.py --tree` «ок: осмотрено 215 файлов», перечень правок выше → PASS
 AC-06 → `test-check-md-links.py` → PASS
 AC-07 → после пометок Г6 `check-md-links.py` на дереве «ок: осмотрено 89 ссылок», материал 001 исправлен одной строкой → PASS
@@ -148,7 +148,7 @@ AC-09 → `test-guard-commit-message.py`, `test-commit-msg.py` → PASS
 AC-10 → `test-guard-git.py` (59 команд из 42 строк таблицы), `prove-red.sh` → PASS
 AC-11 → скрипт и `--dry-run protect` проверены на подставном gh; вывод `gh api` и пуши не получены (Г4) → NOT VERIFIED
 AC-12 → `test-pre-push.py` (cherry-pick, rebase --continue, новая ветка, удаление) → PASS
-AC-13 → `test-commit-range.py` (три вида диапазона); прогон Actions не выполнялся (Г3) → NOT VERIFIED
+AC-13 → `test-commit-range.py` (три вида диапазона); зелёный прогон Actions 37753894719 на ветке задачи → PASS
 AC-14 → `test-check-task-docs.py`; дерево 001, 002 «ок» → PASS
 AC-15 → `test-check-no-status-table.py`; дерево «ок»; в `doc/tasks/README.md` таблицы и ссылок на папки задач нет → PASS
 AC-16 → `test-check-wiring.py` → PASS
@@ -164,7 +164,7 @@ AC-25 → `time sh scripts/githooks/pre-commit` 5,6 с → PASS
 AC-26 → `git diff --name-only $BASE HEAD -- opencode-plugin/` пусто; 37 тестов по одному, упавших 0 → PASS
 AC-27 → `git merge-base --is-ancestor d963ecc HEAD` код 0; `git diff --diff-filter=M` — один файл, одна строка; `.gitattributes` не изменён → PASS
 AC-28 → строки вердиктов в самотестах, счёт `run-all.sh`; прогон Actions с подложенным пропуском не выполнялся (Г3) → NOT VERIFIED
-AC-29 → вывод `run-selftests.sh` под двумя локалями совпал построчно; прогон Actions на ubuntu не выполнялся (Г3) → NOT VERIFIED
+AC-29 → вывод `run-selftests.sh` под двумя локалями совпал построчно; задание `selftests` зелёное на ubuntu в Actions → PASS
 AC-30 → `test-pre-commit.py` (грязная рабочая копия, `--only`, неотслеживаемый файл) → PASS
 AC-31 → `ci-mask.sh`, шаблон пробы, `github-setup.sh log-search` проверены на подставных данных; прогон на GitHub не выполнялся (Г3, Г4) → NOT VERIFIED
 AC-32 → `test-guard-commit-message.py`, `test-commit-msg.py`, `test-pre-push.py` → PASS
@@ -181,7 +181,7 @@ Implemented: репозиторные стражи (секреты и пути �
 хуки git `pre-commit`, `commit-msg`, `pre-push`, установщик, мета-проверка подключения, «доказательство красного», прогон на пустом корне, 21 самотест, workflow CI, скрипт настроек GitHub, правки Канона.
 Changed: новые `scripts/`, `.github/workflows/guards.yml`, `.claude/settings.json`; правки `AGENTS.md`, `README.md`, `doc/tasks/README.md`, `doc/canon/process.md`, уточнения ADR-0002 и ADR-0006, одна строка материала 001.
 Verification: уровни A (sh, dash, Python 3.9-синтаксис, JSON), B (21 самотест, тесты плагина), E (трассировка), F (красные пробы, «доказано 13 из 13»), G (тесты плагина как в базе) — PASS; уровень C (прогон Actions, защита `main`) — NOT VERIFIED, ворота Г3 и Г4; уровень D — N/A.
-Acceptance criteria: PASS — AC-01, 02, 03, 05, 06, 07, 08, 09, 10, 12, 14, 15, 16, 17, 18, 19, 21, 23, 24, 25, 26, 27, 30, 32; NOT VERIFIED — AC-04, 11, 13, 20, 28, 29, 31 (причины в таблице).
+Acceptance criteria: PASS — AC-01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 12, 14, 15, 16, 17, 18, 19, 21, 23, 24, 25, 26, 27, 30, 32; NOT VERIFIED — AC-11, 20, 28, 31 (причины в таблице).
 How to verify: см. «Пометки AGENTS.md» и «Сквозная приёмка»; команды — в разделе «Стражи» `AGENTS.md`; полный набор самотестов — `sh scripts/guards/selftest/run-selftests.sh` (около 8-10 минут, под нагрузкой — по одному тесту).
 Regressions: нет; тесты плагина дают тот же результат, что в базовом состоянии (37 из 37), код плагина не менялся.
 Assumptions: Python 3.9 и новее с командой `python`, `git` не старее 2.40, `sh` (Git Bash или dash); ожидаемый адрес автора берётся из `git config user.email` в момент установки; сообщение в смысле «что git сохранит» судится по `GIT_EDITOR` (`:` при `-m`, `-F`, `--no-edit`).
@@ -209,3 +209,9 @@ Artifacts: ветка `task-002-guards` (39 коммитов от `$BASE`, вк�
 - `git push origin task-002-guards` с установленным `pre-push`: хук отработал («ок: осмотрено 43 коммитов пуша»), ветка создана на GitHub, красных нет; `--no-verify` не применялся.
 - Прогон Actions `37753894719` (событие push, ветка задачи), только чтение: задание `selftests` зелёное за 50 с (21 самотест, «доказательство красного», пустой корень на ubuntu); задание `guards` красное за 7 с: шаги маскирования и `dash -n` прошли, «Guards by mask» красный из-за пустого секрета `CREW_PRIVATE_NAMES` (ожидаемо по AC-04: нет списка в CI — красный с подсказкой, не зелёный), дальнейшие шаги пропущены. Журнал значений списка не содержит (секрета нет); прочие стражи в журнале: ссылок 89, файлов .md 94, задач 51, тестов 37, текста 215, подключение 20 — «ок».
 - Не сделано до слов владельца: секрет, служебные ветки `probe/*`, защита `main` (Г4), слияние (Г5). Коммит записи об этом пуше в ветке локальный, не опубликован.
+
+## Ворота Г4, действие 1 (слово «секрет — да»)
+
+- `sh scripts/github-setup.sh secret`: секрет `CREW_PRIVATE_NAMES` создан из локального файла списка (14 образцов), значение не печаталось.
+- Повтор прогона `37753894719` (`gh run rerun`, тот же коммит, нового пуша нет): `selftests` и `guards` зелёные (`guards` за 6 с, шаги подписи и сообщений коммитов пройдены). Поиск по журналу локально: образцов 14, значений в журнале 0, звёздочек `***` 14 (маскирование работает), найденное не печаталось.
+- Не сделано до слов владельца: `probe-set`, `probe-branch`, `protect`, `status`, пуши служебных веток и `main`. Коммит `98d2617` и коммит этой записи локальные.
