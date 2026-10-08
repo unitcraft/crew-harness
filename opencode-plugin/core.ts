@@ -70,6 +70,9 @@ export function setProjects(projects: Projects, local: any = {}) {
   currentLocal = local && typeof local === "object" ? local : {}
 }
 
+/** Проекты процесса и локальные поправки (для профилей моделей, profile-layer.ts). */
+export const settingsContext = (): { projects: Projects; local: Record<string, any> } => ({ projects: currentProjects, local: currentLocal })
+
 /** Действующие настройки проекта каталога dir: значение и откуда оно (crew_config show и команда окна /crew-config). */
 export function configShowText(dir: string, fallbackName = "?", compact = false): string {
   const p = projectFor(dir, currentProjects)
