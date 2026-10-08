@@ -26,7 +26,7 @@ export const WORKING_STATUSES: TaskStatus[] = ["starting", "running", "rework"]
 export type TaskEvent = { at: number; by: string; status?: TaskStatus; note?: string }
 /** «#31 «замок вливания»» — номер задачи с названием: по одному номеру не вспомнить, о чём она (владелец, 2026-10-07). */
 export const taskRef = (t: { n: number | string; title?: string }, max = 40): string => {
-  const title = (t.title ?? "").replace(/[«»]/g, "").replace(/s+/g, " ").trim()
+  const title = (t.title ?? "").replace(/[«»]/g, "").replace(/\s+/g, " ").trim()
   return title ? `#${t.n} «${title.length > max ? `${title.slice(0, max - 1)}…` : title}»` : `#${t.n}`
 }
 
