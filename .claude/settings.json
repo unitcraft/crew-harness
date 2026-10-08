@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'f=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null)}/scripts/agent-hooks/guard-git.py\"; [ -f \"$f\" ] || exit 0; exec python \"$f\"'"
+          }
+        ]
+      }
+    ]
+  }
+}
