@@ -106,7 +106,7 @@ const badCases = [
   ["output missing", { model_profiles: { claude: { heavy: { model: "a/b", context: 5 } } } }, /output/],
   ["input above context", { model_profiles: { claude: { heavy: { ...TABLE.claude.heavy, input: 999999999 } } } }, /input/],
   ["a set name with a capital", { profile_sets: { Cross: {} } }, /Cross/],
-  ["a reserved set name", { profile_sets: { use: {} } }, /use/],
+  ["a reserved set name", { profile_sets: { use: {} } }, /\buse\b/],
   ["an unknown stage", { profile_sets: { x: { coordination: c("claude", "heavy") } } }, /coordination/],
   ["a cell tier out of the list", { profile_sets: { x: { develop: c("claude", "huge") } } }, /tier/],
 ]

@@ -312,6 +312,55 @@ await until(() => L.profileState(proj).state.row === 2)
   cell("AC-24 a project without profiles: its worktree gets no file, its session starts as before", !!o1.worktree && atCreate.get(o1.executor)?.file === null && !fileOf(o1.worktree) && !o1.profiles, JSON.stringify(atCreate.get(o1.executor)))
 }
 
+// ---- step 9: reading the chain of the OpenCode settings: hand-written windows, the explicit threshold of Claude Code ----
+{
+  const cmd = await import("../profile-cmd.ts")
+  // the hand-written .opencode/opencode.jsonc of the root is committed: every NEW worktree carries it (it is stronger than the file of the plugin there)
+  git(proj, "add", "--", ".opencode/opencode.jsonc")
+  git(proj, "commit", "-q", "-m", "hand-written windows of the repository")
+  use("default")
+  await spawn("sesINTEG", {})
+  const tt = lastTaskOf("proj")
+  await until(() => !!fileOf(tt.worktree))
+  const chain = W.configChain(tt.worktree)
+  cell("AC-25 the chain of the settings for a worktree: the global file first, then from the disk root down, the hand-written jsonc of the worktree last (deepest and `.opencode/opencode.jsonc` strongest)", chain[0] === globalCfg && chain.at(-1).replace(/\\/g, "/").endsWith(".opencode/opencode.jsonc") && chain.some((f) => f.replace(/\\/g, "/").endsWith(".opencode/opencode.json")), JSON.stringify(chain.map((f) => path.basename(f))))
+  const win = W.chainWindow(tt.worktree, "claude-code/opus", { skipOurs: true })
+  cell("AC-40 the window of the model by the chain, without the file of the plugin: the value and the file of every field", win.context?.value === 520000 && win.output?.value === 64000 && /opencode\.jsonc$/.test(win.context.file), JSON.stringify(win))
+  const overAll = W.handWrittenOverrides(tt.worktree, "claude-code/opus", { context: 720000, output: 64000 })
+  const over = overAll.filter((o) => o.stronger)
+  cell("AC-40 (а) the tracked hand-written file inside the worktree is stronger than the file of the plugin there: found with the value; the file of the repository root above is weaker and is listed apart", over.length === 1 && over[0].field === "context" && over[0].value === 520000 && /wt[\\/].*opencode\.jsonc$/.test(over[0].file) && overAll.length === 2, JSON.stringify(overAll))
+  const predicted = W.predictWindow(tt.worktree, "claude-code/opus", fileOf(tt.worktree))
+  cell("AC-40 the forecast of the window after the plugin file is written: the hand-written value wins in that folder", predicted.context?.value === 520000, JSON.stringify(predicted))
+  const doc2 = await call("crew_doctor", "sesINTEG")
+  cell("AC-40 (а) crew_doctor names the file and the value inside the worktree", new RegExp(`в рабочем дереве задачи #${tt.n} окно модели claude-code/opus \\(context\\) задано рукописно: 520000`).test(doc2) && /opencode\.jsonc/.test(doc2), doc2.slice(0, 500))
+  cell("AC-40 (б) crew_doctor names the hand-written window of the main folder, which the owner's tabs and the reviewers take", /в основной папке проекта у модели claude-code\/opus context 520000/.test(doc2), doc2.slice(0, 500))
+  const chk = await cmd.runSetsCommand(proj, "check", { version: "2.0.23-test" })
+  cell("AC-40 check names both places with the files and the values; it says the version of OpenCode", /в рабочем дереве задачи #\d+ окно модели claude-code\/opus \(context\) задано рукописно: 520000/.test(chk) && /в основной папке проекта у модели claude-code\/opus context 520000/.test(chk) && /OpenCode 2\.0\.23-test/.test(chk), chk.slice(0, 600))
+  const useR = await cmd.runSetsCommand(proj, "use cross-codex", {})
+  cell("AC-40 use names them too", /окно модели claude-code\/opus \(context\) задано рукописно: 520000/.test(useR) && /в основной папке проекта у модели claude-code\/opus context 520000/.test(useR), useR.slice(0, 800))
+  // the explicit threshold of Claude Code (the provider project file): named, not touched, not cancelled
+  const explicit = path.join(proj, ".opencode", "opencode-claude-code-provider.json")
+  writeFileSync(explicit, JSON.stringify({ autoCompactWindow: { opus: 500000 } }))
+  const explicitHash = sha(explicit)
+  const chk2 = await cmd.runSetsCommand(proj, "check", {})
+  const use2 = await cmd.runSetsCommand(proj, "use default", {})
+  const ex = W.explicitCompact(tt.worktree, "opus")
+  cell("AC-25 the explicit autoCompactWindow of the project file of the provider is found for the model of the family (opus)", ex?.value === 500000 && /opencode-claude-code-provider\.json$/.test(ex.where), JSON.stringify(ex))
+  cell("AC-25 use and check name the model, the explicit value and the window of OpenCode; the threshold stays explicit", /порог Claude Code для модели claude-code\/opus задан явно \(500000/.test(use2) && /порог Claude Code для модели claude-code\/opus задан явно \(500000/.test(chk2) && /от набора не меняется; окно OpenCode станет 720000/.test(use2), use2.slice(0, 600))
+  const docs3 = await call("crew_doctor", "sesINTEG")
+  cell("AC-25 crew_doctor says it too", /порог Claude Code для модели claude-code\/opus задан явно \(500000/.test(docs3), docs3.slice(0, 400))
+  cell("DNC-10 the explicit file is byte for byte the same and the plugin wrote no autoCompactWindow anywhere", sha(explicit) === explicitHash && !/autoCompactWindow/.test(fileOf(tt.worktree) ?? "") && handHashes() === hand0, "changed")
+  const sw = W.explicitCompact(tt.worktree, "sonnet")
+  cell("AC-25 the explicit value for the family `opus` does not apply to sonnet", sw === undefined, JSON.stringify(sw))
+  rmSync(explicit)
+  // JSONC: comments and trailing commas
+  cell("AC-25 the JSONC reader: comments outside strings and trailing commas", JSON.stringify(W.parseJsonc('{ // c\n "a": "x//y", /* b */ "n": [1,2,], }')) === JSON.stringify({ a: "x//y", n: [1, 2] }), "bad parse")
+  cell("AC-40 reserved from the chain is read (only read), the model without a record says `not set`", W.reservedOf(tt.worktree)?.value === 20000 && Object.keys(W.chainWindow(tt.worktree, "nothing/here", { skipOurs: true })).length === 0, JSON.stringify(W.reservedOf(tt.worktree)))
+}
+function lastTaskOf(project) {
+  return tasks.listTasks(project).at(-1)
+}
+
 // ---- DNC-03: the plugin wrote only what it may ----
 cell("DNC-03 the hand-written files are the same at the end; nothing is written in the main folder", handHashes() === hand0 && !existsSync(path.join(proj, ".opencode", "opencode.json")) && !existsSync(path.join(other, ".opencode", "opencode.json")), handHashes())
 cell("DNC-03 the only lines added to info/exclude are the plugin's (comment and path)", readFileSync(path.join(proj, ".git", "info", "exclude"), "utf8").split(/\r?\n/).filter((l) => l && !l.startsWith("#") && l !== "/.opencode/opencode.json").length === 0, readFileSync(path.join(proj, ".git", "info", "exclude"), "utf8"))

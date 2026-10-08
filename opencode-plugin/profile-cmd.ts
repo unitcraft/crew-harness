@@ -294,3 +294,308 @@ export function profilesEditVerb(dir: string, verb: string, args: string[]): { o
   }
   return undefined
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Показ, use, check, save, разбор команд (шаг 11)
+
+import path from "node:path"
+import { DEFAULT_SPAWN_MODELS, loadConfig, settingsContext } from "./core.ts"
+import { projectFor, workingSettings } from "./settings.ts"
+import { listTasks } from "./tasks.ts"
+import * as W from "./profile-windows.ts"
+
+const STAGE_ORDER = P.STAGES
+const pad = (s: string, n: number) => s + " ".repeat(Math.max(0, n - [...s].length))
+const fileName = (f: string) => path.resolve(f).replace(/\\/g, "/")
+const winOf = (p: any): P.Win => ({ context: Number(p.context), output: Number(p.output), ...(p.input !== undefined ? { input: Number(p.input) } : {}) })
+
+/** Основная папка проекта: там идут сессии приёмки и вкладки владельца (окно профиля там не применяется). */
+function mainFolder(dir: string): string {
+  const { projects } = settingsContext()
+  return projectFor(dir, projects)?.rootPath ?? dir
+}
+/** Окна моделей набора, по которому идут сессии сейчас (пусто — набор не применяется). */
+function windowsOfActive(ps: L.PState): Map<string, P.Win> {
+  const u = ps.state.usable
+  return u && ps.state.row !== 6 ? P.windowsOfSet(u.data, u.name).models : new Map()
+}
+const fieldsText = (f: W.WindowFields): string =>
+  (["context", "input", "output"] as const)
+    .filter((k) => f[k])
+    .map((k) => `${k} ${f[k]!.value}`)
+    .join(", ") || "в файлах настроек окно не задано"
+/** Окно модели по рукописным и общим настройкам папки как P.Win (если записаны context и output). */
+function chainAsWin(dir: string, model: string): P.Win | undefined {
+  const f = W.chainWindow(dir, model, { skipOurs: true })
+  return f.context && f.output ? { context: f.context.value, output: f.output.value, ...(f.input ? { input: f.input.value } : {}) } : undefined
+}
+
+/** Строка про окно модели в основной папке (приёмка и вкладки владельца). */
+function reviewerWindowLine(root: string, model: string): string {
+  const f = W.chainWindow(root, model, { skipOurs: true })
+  const src = f.context ? ` (${fileName(f.context.file)})` : ""
+  return `окно профиля здесь не применяется (приёмка идёт в основной папке): модель ${model} берёт окно из рукописных и глобальных настроек: ${fieldsText(f)}${src}`
+}
+
+export function setsTable(ps: L.PState): string {
+  const names = setNames(ps.data)
+  const src = ps.name ? (ps.nameSource === "layer" ? "локальное переключение (/crew-sets use)" : "файл проекта") : ""
+  const lines = [`Наборы проекта ${ps.project}. Включён: ${ps.name ? `«${ps.name}» — источник имени: ${src}` : "нет (набор не применяется, модели — по spawn_models)"}.`]
+  if (!names.length) lines.push("Наборов нет. Пример файла — в README плагина (раздел о профилях моделей).")
+  else {
+    const col = (n: string, st: P.Stage) => {
+      const c = P.cellsOf((ps.data.sets as any)[n]).find(([s]) => s === st)
+      return c ? P.cellText(c[1]) : "—"
+    }
+    const w0 = Math.max(4, ...names.map((n) => [...n].length))
+    const widths = STAGE_ORDER.map((st) => Math.max([...P.STAGE_RU[st]].length, ...names.map((n) => [...col(n, st)].length)))
+    lines.push(`  ${pad("имя", w0 + 2)}${STAGE_ORDER.map((st, i) => pad(P.STAGE_RU[st], widths[i] + 2)).join("")}`.trimEnd())
+    for (const n of names) lines.push(`${n === ps.name ? "● " : "  "}${pad(n, w0 + 2)}${STAGE_ORDER.map((st, i) => pad(col(n, st), widths[i] + 2)).join("")}`.trimEnd())
+    lines.push("● — включённый набор. Подробно: /crew-sets show [имя]; включить: /crew-sets use <имя>.")
+  }
+  if (ps.state.message) lines.push(`! ${ps.state.message}`)
+  for (const w of ps.state.warnings) lines.push(`! ${w.text}`)
+  const d = L.layerDiff(ps.raw, ps.layer)
+  if (d.length) lines.push(`Локальные правки не в файле: ${d.length} (${d.map((x) => x.label).join(", ")}) — /crew-sets save перенесёт их в файл проекта; /crew-sets check — подробности.`)
+  return lines.join("\n")
+}
+
+export function profilesTable(ps: L.PState): string {
+  const fams = Object.keys(isObj(ps.data.profiles) ? ps.data.profiles : {}).sort()
+  const lines = [`Справочник профилей проекта ${ps.project}: семья, ступень → модель, окно.`]
+  if (!fams.length) lines.push("Справочник пуст. Пример файла — в README плагина (раздел о профилях моделей).")
+  for (const f of fams)
+    for (const t of P.PROFILE_TIERS) {
+      const p = (ps.data.profiles as any)[f][t]
+      if (!p) continue
+      lines.push(`  ${pad(f, 8)}${pad(t, 8)}${P.isEmptyProfile(p) ? "(пусто — заполнить)" : `${pad(p.model, 34)}${P.winText(winOf(p))}`}`)
+    }
+  if (ps.state.message) lines.push(`! ${ps.state.message}`)
+  const d = L.layerDiff(ps.raw, ps.layer).filter((x) => x.key.startsWith("profile:"))
+  if (d.length) lines.push(`Локальные правки не в файле: ${d.map((x) => x.label).join(", ")} — /crew-profiles save.`)
+  return lines.join("\n")
+}
+
+export function showFamily(ps: L.PState, family?: string): string {
+  if (!family) return profilesTable(ps)
+  const f = (ps.data.profiles as any)?.[family]
+  if (!isObj(f)) return `Семьи «${family}» нет (есть: ${Object.keys(isObj(ps.data.profiles) ? ps.data.profiles : {}).sort().join(", ") || "справочник пуст"}).`
+  const lines = [`Семья «${family}» проекта ${ps.project}:`]
+  for (const t of P.PROFILE_TIERS) {
+    const p = f[t]
+    if (!p) lines.push(`  ${t}: записи нет`)
+    else if (P.isEmptyProfile(p)) lines.push(`  ${t}: пусто («заполнить»: /crew-profiles set ${family} ${t} <модель> <context> output=<n>)`)
+    else lines.push(`  ${t}: ${p.model} — ${P.winText(winOf(p))}`)
+  }
+  const refs = referencing(ps.data, family)
+  lines.push(refs.length ? `Ссылаются наборы: ${refs.join("; ")}` : "Ни один набор на семью не ссылается.")
+  return lines.join("\n")
+}
+
+export function showSet(ps: L.PState, name: string | undefined, dir: string): string {
+  const n = name ?? ps.name
+  if (!n) return "Набор не включён (имени нет ни в файле проекта, ни в локальном слое). Покажи любой: /crew-sets show <имя>; включить: /crew-sets use <имя>."
+  const set = (ps.data.sets as any)?.[n]
+  if (!isObj(set)) return `Набора «${n}» нет (есть: ${listSets(ps.data)}).`
+  const root = mainFolder(dir)
+  const lines = [`Набор «${n}»${n === ps.name ? ` — включён (имя из: ${ps.nameSource === "layer" ? "локальное переключение" : "файл проекта"})` : " — не включён"}:`]
+  for (const st of STAGE_ORDER) {
+    const cell = P.cellsOf(set).find(([s]) => s === st)?.[1]
+    if (!cell) {
+      lines.push(`  ${P.STAGE_RU[st]}: не описан — модель по spawn_models`)
+      continue
+    }
+    const fam = (ps.data.profiles as any)?.[cell.family]
+    const prof = (t: P.PTier) => (isObj(fam?.[t]) && !P.isEmptyProfile(fam[t]) ? (fam[t] as any) : undefined)
+    const front = st === "develop" || st === "plan"
+    if (cell.tier === "task") {
+      lines.push(`  ${P.STAGE_RU[st]}: ${P.cellText(cell)} — по ступени задачи: ${P.PROFILE_TIERS.map((t) => `${t} → ${prof(t)?.model ?? "нет профиля"}`).join(", ")}`)
+      if (front) {
+        for (const t of P.PROFILE_TIERS) if (prof(t)) lines.push(`      окно профиля в рабочем дереве задачи (${t}): ${P.winText(winOf(prof(t)))}`)
+      } else {
+        for (const t of P.PROFILE_TIERS) if (prof(t)) lines.push(`      ${t}: ${reviewerWindowLine(root, prof(t).model)}`)
+      }
+    } else {
+      const p = prof(cell.tier)
+      lines.push(`  ${P.STAGE_RU[st]}: ${P.cellText(cell)} → ${p?.model ?? "нет профиля"}`)
+      if (p) lines.push(front ? `      окно профиля в рабочем дереве задачи: ${P.winText(winOf(p))}` : `      ${reviewerWindowLine(root, p.model)}`)
+    }
+  }
+  for (const e of P.checkData(ps.data, n).errors) lines.push(`! ${e.text}`)
+  return lines.join("\n")
+}
+
+type Catalog = { providerID: string; modelID: string; limit?: { context?: number; input?: number; output?: number } }[]
+async function catalogOf(deps: CmdDeps): Promise<Catalog | undefined> {
+  try {
+    return await deps.catalog?.()
+  } catch {
+    return undefined
+  }
+}
+
+/** Предупреждения про окна набора: заметки об окнах и порог Claude Code (profile-windows), каталог моделей (use, check). */
+async function windowWarnings(ps: L.PState, models: Map<string, P.Win>, dir: string, deps: CmdDeps, full: boolean): Promise<string[]> {
+  const out: string[] = W.windowNotes(mainFolder(dir), W.qualifying(ps.project, listTasks(ps.project)), models)
+  const cat = await catalogOf(deps)
+  if (!cat) {
+    if (full) out.push("модели не сверены с каталогом OpenCode: не проверено (каталог недоступен)")
+  } else {
+    for (const [model, win] of models) {
+      const [prov, ...rest] = model.split("/")
+      const hit = cat.find((m) => m.providerID === prov && m.modelID === rest.join("/"))
+      if (!hit) out.push(`модели ${model} нет в каталоге OpenCode (опечатка или провайдер не подключён)`)
+      else if (full && hit.limit?.input !== undefined && win.input === undefined) out.push(`у модели ${model} в каталоге есть input (${hit.limit.input}), а в профиле его нет: окно профиля сжатие этой модели не изменит (у моделей с input сжатием управляет input)`)
+    }
+  }
+  return out
+}
+
+function updownLines(before: Map<string, P.Win>, after: Map<string, P.Win>, root: string): string[] {
+  const out: string[] = []
+  const reserved = W.reservedOf(root)?.value
+  const fmt = (w: P.Win | undefined) => (w ? P.winText(w) : "окна нет в рукописных настройках")
+  const shrunk: string[] = []
+  for (const m of [...new Set([...before.keys(), ...after.keys()])].sort()) {
+    const b = before.get(m) ?? chainAsWin(root, m)
+    const a = after.get(m) ?? chainAsWin(root, m)
+    if (JSON.stringify(b) === JSON.stringify(a)) continue
+    out.push(`  ${m}: ${fmt(b)} → ${after.has(m) ? fmt(a) : `${fmt(a)} (набор окна не задаёт — из рукописных настроек)`}`)
+    const bt = b ? (b.input ?? b.context) : undefined
+    const at = a ? (a.input ?? a.context) : undefined
+    if (bt !== undefined && at !== undefined && at < bt) shrunk.push(`${m} (порог сжатия ${reserved !== undefined ? `${bt - reserved} → ${at - reserved}` : `окно ${bt} → ${at}`})`)
+  }
+  if (!out.length) out.push("  окна моделей этого набора совпадают с прежними — файлы окон не изменились")
+  if (shrunk.length) out.push(`Окно уменьшено: ${shrunk.join(", ")}. Вкладки, чей контекст уже больше нового порога, сожмутся на следующем ходе (порог — окно минус compaction.reserved; у моделей с input — input минус reserved).`)
+  return out
+}
+
+/** Модели приёмки и приёмки плана набора (для строки про окно приёмки). */
+function reviewerModels(data: P.Data, name: string): string[] {
+  const out = new Set<string>()
+  for (const [st, c] of P.cellsOf((data.sets as any)?.[name])) {
+    if (st !== "accept" && st !== "plan_accept") continue
+    for (const ref of P.referencedProfiles(c)) {
+      if (c.tier === "task" && ref.tier !== "medium") continue
+      const p = (data.profiles as any)?.[c.family]?.[ref.tier]
+      if (p && !P.isEmptyProfile(p)) out.add(p.model)
+    }
+  }
+  return [...out]
+}
+
+async function useSet(dir: string, name: string | undefined, deps: CmdDeps): Promise<string> {
+  const ps = L.profileState(dir)
+  const command = "crew-sets use"
+  if (!name) return refused(ps.project, command, `нужно: use <имя>; наборы: ${listSets(ps.data)}`)
+  if (!isObj(ps.data.sets?.[name])) return refused(ps.project, command, `набора «${name}» нет; наборы: ${listSets(ps.data)}`)
+  const chk = P.checkData(ps.data, name)
+  if (chk.errors.length) return refused(ps.project, command, `набор «${name}» нельзя включить: ${chk.errors.map((e) => e.text).join("; ")}`)
+  const root = mainFolder(dir)
+  const before = windowsOfActive(ps)
+  L.writeLayer(ps.project, L.layerSetName(ps.layer, ps.raw, name))
+  L.syncSnapshot(dir)
+  const files = L.syncProjectFiles(dir)
+  const after = L.profileState(dir)
+  commitEdit(ps.project, command, "включён набор", ps.name, name)
+  const models = windowsOfActive(after)
+  const fileSet = typeof ps.raw?.profile_set === "string" ? ps.raw.profile_set : undefined
+  const lines: string[] = []
+  lines.push(`Включён набор «${name}» (локальное переключение, без коммита; ${ps.name ? `было «${ps.name}»` : "набор не был включён"}${fileSet && fileSet !== name ? `; в файле проекта по умолчанию «${fileSet}»` : ""}). Перезапуск не нужен.`)
+  const cellOf = (st: P.Stage) => {
+    const c = P.cellsOf((after.data.sets as any)[name]).find(([s]) => s === st)
+    return c ? P.cellText(c[1]) : "не описан (spawn_models)"
+  }
+  lines.push("Этапы: " + STAGE_ORDER.map((st) => `${P.STAGE_RU[st]} — ${cellOf(st)}`).join("; ") + ".")
+  lines.push("Окна сессий в рабочих деревьях задач (было → стало), применятся на следующем ходе каждой сессии:")
+  lines.push(...updownLines(before, models, root))
+  for (const m of reviewerModels(after.data, name)) lines.push(`Приёмка и приёмка плана: ${reviewerWindowLine(root, m)}.`)
+  const wts = W.qualifying(ps.project, listTasks(ps.project))
+  lines.push(`Файлы окон: записано ${files.written.length}, снято ${files.removed.length}; задач с рабочим деревом сейчас ${wts.length}. Задачи без рабочего дерева (исполнитель в основной папке) окон профиля не получают.`)
+  const cfg = loadConfig(dir)
+  if (cfg.reviewer === "integrator" && P.cellsOf((after.data.sets as any)[name]).some(([s, c]) => (s === "accept" || s === "plan_accept") && c.tier !== "task")) lines.push("Предупреждение: в проекте reviewer: integrator — приёмку ведёт вкладка интегратора на её модели; набор приёмку не меняет (модель открытой вкладки плагин не переключает).")
+  for (const w of after.state.warnings) lines.push(`Предупреждение: ${w.text}`)
+  for (const w of await windowWarnings(after, models, dir, deps, false)) lines.push(`Предупреждение: ${w}`)
+  return lines.join("\n")
+}
+
+async function checkReport(dir: string, deps: CmdDeps): Promise<string> {
+  const ps = L.profileState(dir)
+  const root = mainFolder(dir)
+  const lines = [`Проверка профилей проекта ${ps.project}${deps.version ? ` (OpenCode ${deps.version})` : ""}: данные не меняются.`]
+  lines.push(`Включён: ${ps.name ? `«${ps.name}» (${ps.nameSource === "layer" ? "локальное переключение" : "файл проекта"}), строка ${ps.state.row} таблицы исходов` : "набор не включён"}.`)
+  if (ps.state.message) lines.push(`! ${ps.state.message}`)
+  const all = P.checkData(ps.data, ps.name)
+  for (const e of all.errors) lines.push(`! ${e.text}`)
+  for (const w of all.warnings) lines.push(`! ${w.text}`)
+  // пустые записи, на которые кто-то ссылается (пустую ступень без ссылок не называем); конфликты окон других наборов
+  for (const name of setNames(ps.data)) {
+    if (name === ps.name) continue
+    for (const e of P.emptyRefs(ps.data, name)) lines.push(`! ${e.text}`)
+    for (const c of P.windowsOfSet(ps.data, name).conflicts) lines.push(`! ${c.text} — use этого набора откажет`)
+  }
+  // расхождение с spawn_models (набор default повторяет прежнее поведение только при равенстве)
+  const cfg = loadConfig(dir)
+  for (const t of P.PROFILE_TIERS) {
+    const p = (ps.data.profiles as any)?.claude?.[t]
+    const want = cfg.spawnModels[t] ?? DEFAULT_SPAWN_MODELS[t]
+    if (isObj(p) && !P.isEmptyProfile(p) && p.model !== want) lines.push(`! модель профиля claude/${t} (${p.model}) не равна spawn_models.${t} (${want}): набор с клетками claude/task изменит выбор моделей новых сессий`)
+  }
+  const models = windowsOfActive(ps)
+  for (const w of await windowWarnings(ps, models, dir, deps, true)) lines.push(`! ${w}`)
+  for (const p of L.problemsOf(ps)) if (!lines.some((l) => l.includes(p))) lines.push(`! ${p}`)
+  const work = ps.folder ? workingSettings(ps.folder).raw : undefined
+  const d = L.layerDiff(ps.raw, ps.layer, work)
+  if (d.length) {
+    lines.push("Локальные правки (не в файле проекта):")
+    for (const x of d) lines.push(`  ${x.label}${x.inWorking ? " — записано в рабочую копию, ждёт коммита" : " — только в локальном слое"}${x.fileChanged ? "; в файле теперь иначе, чем было при правке (действует локальное значение)" : ""}`)
+  }
+  if (ps.state.usable) for (const m of reviewerModels(ps.state.usable.data, ps.state.usable.name)) lines.push(`Приёмка и приёмка плана: ${reviewerWindowLine(root, m)}.`)
+  if (lines.length === 2) lines.push("Замечаний нет.")
+  return lines.join("\n")
+}
+
+function saveReport(dir: string, force: boolean): string {
+  const ps = L.profileState(dir)
+  const command = `crew-sets save${force ? " force" : ""}`
+  const r = L.saveLayer(dir, force)
+  if (!r.ok) return refused(ps.project, command, r.error ?? "не записано")
+  commitEdit(ps.project, command, `save: записано ${r.saved.length}, пропущено ${r.skipped.length}`, undefined, r.saved.join(","))
+  const lines = [`Перенесено в рабочую копию ${fileName(r.file!)}: ${r.saved.length} записей${r.saved.length ? ` (${r.saved.map(L.labelOf).join(", ")})` : ""}. Плагин не коммитит: закоммить файл в ветку настроек — после коммита записи слоя исчезнут сами.`]
+  if (r.skipped.length) lines.push(`Пропущено — в файле значение уже иное, чем было при правке (${r.skipped.length}): ${r.skipped.map((x) => `${x.label} (${x.why})`).join("; ")}. Что делать: reset <запись> (оставить файл) или save force (перезаписать файл локальным значением).`)
+  return lines.join("\n")
+}
+
+async function dispatch(kind: "sets" | "profiles", dir: string, text: string, deps: CmdDeps): Promise<string> {
+  const w = words(text)
+  const verb = w[0]
+  const args = w.slice(1)
+  const verbs = kind === "sets" ? SETS_VERBS : PROFILES_VERBS
+  const bad = (why: string) => `${why}\n${usageLine(kind)}`
+  if (!verb) {
+    const ps = L.profileState(dir)
+    return kind === "sets" ? setsTable(ps) : profilesTable(ps)
+  }
+  if (!verbs.includes(verb)) return bad(`Неизвестный глагол «${verb}».`)
+  switch (verb) {
+    case "show": {
+      if (args.length > 1) return bad("show принимает не больше одного имени.")
+      const ps = L.profileState(dir)
+      return kind === "sets" ? showSet(ps, args[0], dir) : showFamily(ps, args[0])
+    }
+    case "use":
+      if (kind !== "sets" || args.length !== 1) return bad("use принимает ровно одно имя набора.")
+      return useSet(dir, args[0], deps)
+    case "check":
+      if (args.length) return bad("check без аргументов.")
+      return checkReport(dir, deps)
+    case "save":
+      if (args.length > 1 || (args.length === 1 && args[0] !== "force")) return bad("save принимает только слово force.")
+      return saveReport(dir, args[0] === "force")
+  }
+  const r = kind === "sets" ? setsEditVerb(dir, verb, args) : profilesEditVerb(dir, verb, args)
+  return r ? r.text : bad(`Глагол «${verb}» не обработан.`)
+}
+
+export const runSetsCommand = (dir: string, text: string, deps: CmdDeps = {}): Promise<string> => dispatch("sets", dir, text, deps)
+export const runProfilesCommand = (dir: string, text: string, deps: CmdDeps = {}): Promise<string> => dispatch("profiles", dir, text, deps)
