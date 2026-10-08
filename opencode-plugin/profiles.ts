@@ -170,3 +170,180 @@ export function stageOfLaunch(t: { plan?: unknown }, role: "executor" | "reviewe
   if (role === "executor") return t.plan ? "plan" : "develop"
   return t.plan ? "plan_accept" : "accept"
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Связи между ключами, окна набора, проверка данных, таблица состояний, выбор профиля (шаг 3 плана; без файлов).
+
+export type Problem = { kind: "form" | "link" | "empty" | "conflict"; set?: string; text: string }
+export type Win = { context: number; output: number; input?: number }
+export const winText = (w: Win): string => `context ${w.context}${w.input !== undefined ? `, input ${w.input}` : ""}, output ${w.output}`
+const sameWin = (a: Win, b: Win) => a.context === b.context && a.output === b.output && a.input === b.input
+
+/** Описанные в наборе клетки известных этапов (незнакомые этапы читатель игнорирует). */
+export function cellsOf(set: any): [Stage, Cell][] {
+  if (!isObj(set)) return []
+  const out: [Stage, Cell][] = []
+  for (const st of STAGES) {
+    const c = set[st]
+    if (isObj(c) && typeof c.family === "string" && isCellTier(c.tier)) out.push([st, c as Cell])
+  }
+  return out
+}
+
+/** Профили, на которые ссылается клетка: явная ступень — одна, `task` — все три (ступень берётся из входа или записи задачи). */
+export function referencedProfiles(cell: Cell): { family: string; tier: PTier }[] {
+  return cell.tier === "task" ? PROFILE_TIERS.map((tier) => ({ family: cell.family, tier })) : [{ family: cell.family, tier: cell.tier }]
+}
+
+/** Повисшие ссылки наборов (всех или одного) на семью и ступень справочника. */
+export function linkProblems(data: Data, setName?: string): Problem[] {
+  const out: Problem[] = []
+  const sets = isObj(data.sets) ? data.sets : {}
+  for (const name of setName ? [setName] : Object.keys(sets)) {
+    for (const [st, cell] of cellsOf(sets[name])) {
+      const fam = isObj(data.profiles) ? data.profiles[cell.family] : undefined
+      if (!isObj(fam)) {
+        out.push({ kind: "link", set: name, text: `набор «${name}», этап «${STAGE_RU[st]}»: семьи «${cell.family}» нет в справочнике профилей` })
+        continue
+      }
+      for (const ref of referencedProfiles(cell)) if (!isObj(fam[ref.tier])) out.push({ kind: "link", set: name, text: `набор «${name}», этап «${STAGE_RU[st]}»: у семьи «${cell.family}» нет ступени «${ref.tier}» в справочнике` })
+    }
+  }
+  return out
+}
+
+/** Ссылки набора на пустые записи («заполнить», REQ-30). */
+export function emptyRefs(data: Data, setName: string): Problem[] {
+  const out: Problem[] = []
+  for (const [st, cell] of cellsOf(data.sets?.[setName])) {
+    const fam = isObj(data.profiles) ? data.profiles[cell.family] : undefined
+    if (!isObj(fam)) continue
+    for (const ref of referencedProfiles(cell)) if (isObj(fam[ref.tier]) && isEmptyProfile(fam[ref.tier])) out.push({ kind: "empty", set: setName, text: `набор «${setName}», этап «${STAGE_RU[st]}»: профиль ${ref.family}/${ref.tier} пуст («заполнить»)` })
+  }
+  return out
+}
+
+/**
+ * Окна набора: для каждой модели профилей всех трёх ступеней каждой семьи, названной в этапах набора (tier на входе
+ * меняет ступень внутри семьи). Одна модель в двух профилях с разными полями окна — конфликт: окно одно на модель.
+ */
+export function windowsOfSet(data: Data, setName: string): { models: Map<string, Win>; conflicts: Problem[]; families: string[] } {
+  const models = new Map<string, Win>()
+  const conflicts: Problem[] = []
+  const families = [...new Set(cellsOf(data.sets?.[setName]).map(([, c]) => c.family))].sort()
+  const groups = new Map<string, { at: string; win: Win }[]>()
+  for (const fam of families) {
+    const tiers = isObj(data.profiles) ? data.profiles[fam] : undefined
+    if (!isObj(tiers)) continue
+    for (const tier of PROFILE_TIERS) {
+      const p = tiers[tier]
+      if (!isObj(p) || isEmptyProfile(p) || !p.model) continue
+      const win: Win = { context: Number(p.context), output: Number(p.output), ...(p.input !== undefined ? { input: Number(p.input) } : {}) }
+      groups.set(p.model, [...(groups.get(p.model) ?? []), { at: `${fam}/${tier}`, win }])
+    }
+  }
+  for (const [model, list] of groups) {
+    if (list.every((x) => sameWin(x.win, list[0].win))) models.set(model, list[0].win)
+    else conflicts.push({ kind: "conflict", set: setName, text: `набор «${setName}»: модель ${model} стоит в профилях с разными окнами (окно в OpenCode одно на модель): ${list.map((x) => `${x.at} — ${winText(x.win)}`).join("; ")}` })
+  }
+  return { models, conflicts, families }
+}
+
+/** Проверка данных: ошибки (недопустимо) и предупреждения. Включённый набор строже остальных. */
+export function checkData(data: Data, enabled?: string): { errors: Problem[]; warnings: Problem[] } {
+  const errors: Problem[] = []
+  const warnings: Problem[] = []
+  if (data.profiles !== undefined) {
+    const e = invalidProfileKey("model_profiles", data.profiles)
+    if (e) errors.push({ kind: "form", text: e })
+  }
+  if (data.sets !== undefined) {
+    const e = invalidProfileKey("profile_sets", data.sets, { lenientStages: true })
+    if (e) errors.push({ kind: "form", text: e })
+  }
+  if (errors.length) return { errors, warnings }
+  for (const p of linkProblems(data)) (p.set === enabled ? errors : warnings).push(p)
+  if (enabled && isObj(data.sets?.[enabled])) {
+    errors.push(...emptyRefs(data, enabled))
+    errors.push(...windowsOfSet(data, enabled).conflicts)
+  }
+  return { errors, warnings }
+}
+
+/** Снимок: последнее допустимое состояние трёх ключей (остальные настройки проекта в него не входят). */
+export type Snapshot = { name: string; profiles: Families; sets: Sets }
+export const snapshotOf = (data: Data, name: string): Snapshot => JSON.parse(JSON.stringify({ name, profiles: data.profiles ?? {}, sets: data.sets ?? {} }))
+
+export type StateRow = 1 | 2 | 3 | 4 | 5 | 6 | 7
+export type State = {
+  /** строка таблицы исходов (REQ-33) */
+  row: StateRow
+  name?: string
+  /** по каким данным идут сессии: действующим или снимку; нет — набор не применяется (строки 1, 6, 7) */
+  usable?: { data: Data; name: string; viaSnapshot: boolean }
+  /** строка 4: набор недопустим, снимка нет — профили ищутся в действующих данных, окно профиля не пишется */
+  degraded?: boolean
+  errors: Problem[]
+  warnings: Problem[]
+  /** сообщение владельцу и самопроверке (пусто, если сказать нечего) */
+  message: string
+}
+const nonEmpty = (v: any) => isObj(v) && Object.keys(v).length > 0
+
+/**
+ * Единая таблица исходов (REQ-33): имя набора, наличие набора, ключей профилей, допустимость и снимок → строка 1…7.
+ * Сессии, файлы окон и сообщения берут исход отсюда, никто не пересчитывает таблицу сам.
+ */
+export function stateRow(name: string | undefined, eff: Data, snapshot?: Snapshot): State {
+  const nothing = { errors: [] as Problem[], warnings: [] as Problem[] }
+  if (!name) return { row: 1, ...nothing, message: "" }
+  if (!nonEmpty(eff.profiles) && !nonEmpty(eff.sets)) return { row: 7, name, ...nothing, message: `имя набора «${name}» игнорируется: в проекте нет ни справочника профилей, ни наборов` }
+  const check = checkData(eff, name)
+  const bySnap = snapshot && isObj(snapshot.sets) ? { data: { profiles: snapshot.profiles, sets: snapshot.sets }, name: snapshot.name || name, viaSnapshot: true } : undefined
+  const list = (ps: Problem[]) => ps.map((p) => p.text).join("; ")
+  if (isObj(eff.sets) && isObj(eff.sets[name])) {
+    if (!check.errors.length) return { row: 2, name, usable: { data: eff, name, viaSnapshot: false }, ...check, message: "" }
+    if (bySnap) return { row: 3, name, usable: bySnap, ...check, message: `набор «${name}» недопустим: ${list(check.errors)}. Сессии идут по последнему допустимому состоянию (набор «${bySnap.name}»); исправь данные` }
+    return { row: 4, name, usable: { data: eff, name, viaSnapshot: false }, degraded: true, ...check, message: `набор «${name}» недопустим, а допустимого состояния нет: ${list(check.errors)}. Этап без клетки идёт по spawn_models; профиль, который не находится, — отказ; окна профиля не пишутся` }
+  }
+  if (bySnap) return { row: 5, name, usable: bySnap, ...check, message: `набора «${name}» нет в данных проекта (удалён или переименован). Сессии идут по последнему допустимому состоянию (набор «${bySnap.name}»); верни набор или смени имя` }
+  return { row: 6, name, ...check, message: `набора «${name}» нет в данных проекта, допустимого состояния нет: этапы, которым нужен профиль, отказываются; верни набор или убери имя (/crew-sets reset)` }
+}
+
+export type Resolved = { model: string; family: string; tier: PTier; set: string; viaSnapshot: boolean; window: boolean; stage: Stage }
+export type ResolveOpts = {
+  /** ступень из входа инструмента (ключ присутствует и значение — ступень) либо ступень записи задачи при reassign */
+  inputTier?: any
+  /** ступень записи задачи — для клетки `task` приёмки */
+  taskTier?: any
+  /** шаг авто-плана: ступень этапа разработки, tier на входе нет */
+  autoPlan?: boolean
+}
+
+/**
+ * Профиль этапа по состоянию (REQ-06, REQ-15, REQ-33): undefined — набора нет или этап не описан (берётся spawn_models);
+ * { refuse } — набор включён, этап описан, а профиль не находится: молчаливой подмены семьи нет.
+ */
+export function resolveStageProfile(state: State | undefined, stage: Stage, opts: ResolveOpts = {}): Resolved | { refuse: string } | undefined {
+  if (!state || state.row === 1 || state.row === 7) return undefined
+  if (state.row === 6) return { refuse: `включён набор «${state.name}», но его нет в данных проекта, допустимого состояния нет; этап «${STAGE_RU[stage]}» не запущен (верни набор или /crew-sets reset)` }
+  const u = state.usable
+  if (!u) return undefined
+  const set = u.data.sets?.[u.name]
+  const cell: any = isObj(set) ? (set as any)[stage] : undefined
+  if (!isObj(cell) || typeof cell.family !== "string" || !isCellTier(cell.tier)) return undefined
+  const front = stage === "develop" || stage === "plan"
+  let tier: PTier
+  if (front) tier = (!opts.autoPlan && isPTier(opts.inputTier) ? opts.inputTier : cell.tier === "task" ? "medium" : cell.tier) as PTier
+  else tier = (cell.tier === "task" ? (isPTier(opts.taskTier) ? opts.taskTier : "medium") : cell.tier) as PTier
+  const p: any = isObj(u.data.profiles) ? (u.data.profiles as any)[cell.family]?.[tier] : undefined
+  if (!isObj(p)) return { refuse: `набор «${u.name}», этап «${STAGE_RU[stage]}»: профиля ${cell.family}/${tier} нет в справочнике; сессия не запущена` }
+  if (isEmptyProfile(p)) return { refuse: `набор «${u.name}», этап «${STAGE_RU[stage]}»: профиль ${cell.family}/${tier} пуст («заполнить»); сессия не запущена` }
+  return { model: p.model, family: cell.family, tier, set: u.name, viaSnapshot: u.viaSnapshot, window: front && !state.degraded, stage }
+}
+
+/** Годится ли открытая вкладка в приёмщики по клетке: явная ступень — только семья клетки; `task` модель вкладки не проверяет. */
+export function tabFitsCell(cell: Cell | undefined, tabModel: string | undefined, profiles: Families | undefined): boolean {
+  if (!cell || cell.tier === "task") return true
+  return familyOfModel(tabModel, profiles) === cell.family
+}
