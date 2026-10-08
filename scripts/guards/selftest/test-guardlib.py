@@ -4,7 +4,9 @@
 Зачем: на библиотеке стоят все стражи; ошибка в ней (пропущенный файл, перепутанный индекс и
     рабочая копия) молча сделала бы зелёными их всех.
 Проверяет: Source в трёх режимах (в том числе кириллический путь и временный индекс), judged_files
-    (бинарные расширения, подмодуль, файл без расширения), пометки с причиной и без, четыре вердикта.
+    (бинарные расширения, подмодуль, файл без расширения), пометки с причиной и без, четыре вердикта,
+    Source.added_lines (добавленные в индексе строки: номера, файл без изменений, файл не из HEAD,
+    режимы дерева и коммита, временный индекс, CRLF, репозиторий без коммитов, пустой индекс).
 Не проверяет: конкретные стражи; запуск общим скриптом (его проверяет test-run-all.py).
 Правило: AGENTS.md п.8 (проверки до пуша), контракт вердиктов REQ-35.
 """
@@ -227,6 +229,110 @@ def main():
     pr.probe("законное", "файл без расширения с NUL судится, png с NUL нет", legit_exts_nul_noext)
     pr.probe("законное", "индекс не видит правки рабочей копии", index_vs_tree)
     pr.probe("законное", "временный индекс GIT_INDEX_FILE соблюдается", temp_index_respected)
+    # --- добавленные строки индекса (помощник для предела подписи в журнале хода) ---
+    def added_repo(name, content, crlf=False):
+        sep = "\r\n" if crlf else "\n"
+        body = sep.join(content) + sep
+        return stlib.make_repo(base, env, {"j.log": body, "other.txt": "x\n"}, name=name)
+
+    def added_lines_numbers():
+        r = added_repo("added1", ["one", "two", "three"])
+        stlib.write_files(r, {"j.log": "one\nTWO\ntwo-and-a-half\nthree\nfour\n"})
+        stlib.git(r, env, "add", "--", "j.log")
+        with stlib.patched_environ(env):
+            src = guardlib.Source(r, "index")
+            got = src.added_lines("j.log")
+            src.close()
+        assert got == [(2, "TWO"), (3, "two-and-a-half"), (5, "four")], got
+
+    def added_lines_unchanged_is_empty_list():
+        r = added_repo("added2", ["one", "two"])
+        with stlib.patched_environ(env):
+            src = guardlib.Source(r, "index")
+            got = src.added_lines("j.log")
+            src.close()
+        assert got == [], got
+
+    def added_lines_new_file_is_none():
+        r = added_repo("added3", ["one"])
+        stlib.write_files(r, {"new.log": "long new first version\n"})
+        stlib.git(r, env, "add", "--", "new.log")
+        with stlib.patched_environ(env):
+            src = guardlib.Source(r, "index")
+            got = src.added_lines("new.log")
+            src.close()
+        assert got is None, got
+
+    def added_lines_tree_and_commit_modes_are_none():
+        r = added_repo("added4", ["one"])
+        stlib.write_files(r, {"j.log": "one\ntwo\n"})
+        stlib.git(r, env, "add", "--", "j.log")
+        sha = stlib.git(r, env, "rev-parse", "HEAD").out.strip()
+        with stlib.patched_environ(env):
+            tree = guardlib.Source(r, "tree")
+            commit = guardlib.Source(r, "commit", sha)
+            a, b = tree.added_lines("j.log"), commit.added_lines("j.log")
+            tree.close()
+            commit.close()
+        assert a is None and b is None, (a, b)
+
+    def added_lines_temp_index():
+        r = added_repo("added5", ["one"])
+        alt = os.path.join(base, "alt-index-added")
+        env2 = dict(env, GIT_INDEX_FILE=alt)
+        stlib.git(r, env2, "read-tree", "HEAD")
+        stlib.write_files(r, {"j.log": "one\nonly in the temporary index\n"})
+        stlib.git(r, env2, "add", "--", "j.log")
+        with stlib.patched_environ(env2):
+            src = guardlib.Source(r, "index")
+            got = src.added_lines("j.log")
+            src.close()
+        with stlib.patched_environ(env):
+            src = guardlib.Source(r, "index")
+            common = src.added_lines("j.log")
+            src.close()
+        assert got == [(2, "only in the temporary index")] and common == [], (got, common)
+
+    def added_lines_crlf_and_plus_signs():
+        r = added_repo("added6", ["one"], crlf=True)
+        stlib.write_files(r, {"j.log": b"one\r\n++two\r\n@@ -1 +1 @@\r\n"})
+        stlib.git(r, env, "add", "--", "j.log")
+        with stlib.patched_environ(env):
+            src = guardlib.Source(r, "index")
+            got = src.added_lines("j.log")
+            src.close()
+        assert got == [(2, "++two\r"), (3, "@@ -1 +1 @@\r")], got
+
+    def added_lines_no_commits_is_none():
+        base2 = pr.mkdtemp()
+        r = os.path.join(base2, "e")
+        os.makedirs(r)
+        stlib.git(r, env, "init", "-q")
+        stlib.write_files(r, {"j.log": "first\n"})
+        stlib.git(r, env, "add", "--", "j.log")
+        with stlib.patched_environ(env):
+            src = guardlib.Source(r, "index")
+            got = src.added_lines("j.log")
+            src.close()
+        assert got is None, got
+
+    def added_lines_removed_from_index_is_empty():
+        r = added_repo("added7", ["one", "two"])
+        stlib.git(r, env, "rm", "-q", "--cached", "--", "j.log")
+        with stlib.patched_environ(env):
+            src = guardlib.Source(r, "index")
+            got = src.added_lines("j.log")
+            src.close()
+        assert got == [], got
+
+    pr.probe("законное", "добавленные строки индекса: номера в индексе", added_lines_numbers)
+    pr.probe("законное", "добавленные строки: файл без изменений — пустой список", added_lines_unchanged_is_empty_list)
+    pr.probe("законное", "добавленные строки: файл не из HEAD — None", added_lines_new_file_is_none)
+    pr.probe("законное", "добавленные строки: режимы дерева и коммита — None", added_lines_tree_and_commit_modes_are_none)
+    pr.probe("законное", "добавленные строки: временный индекс соблюдается", added_lines_temp_index)
+    pr.probe("иной-синтаксис", "добавленные строки: CRLF, строка из плюсов и «@@» в тексте", added_lines_crlf_and_plus_signs)
+    pr.probe("иной-синтаксис", "добавленные строки: репозиторий без коммитов — None", added_lines_no_commits_is_none)
+    pr.probe("мишень", "добавленные строки: файл убран из индекса — пустой список", added_lines_removed_from_index_is_empty)
     pr.probe("законное", "режим коммита: только изменённые, корневой и слияние", commit_mode)
     pr.probe("законное", "коммит слияния: файлы обеих сторон", merge_commit)
     pr.probe("законное", "подмодуль 160000 учтён в числе, не читается", gitlink_counted)

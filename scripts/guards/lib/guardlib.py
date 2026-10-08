@@ -6,7 +6,8 @@
     их сосчитать.
 Проверяет: ничего сам не проверяет; даёт стражам Source (рабочая копия, индекс, коммит), охват
     текстовых файлов (judged_files, BINARY_EXT), четыре формы вердикта, пометки с причиной
-    (guard-allow, guard-fixture), разбор аргументов и запуск.
+    (guard-allow, guard-fixture), добавленные в индексе строки файла (Source.added_lines), разбор
+    аргументов и запуск.
 Не проверяет: содержимое файлов (это дело стражей) и ничего не читает из среды, кроме git.
 Правило: AGENTS.md п.15 (приватные данные) и ADR-0006 (публичный репозиторий) держат стражи;
     сама библиотека правила не держит.
@@ -39,6 +40,7 @@ Entry = collections.namedtuple("Entry", "path mode oid")
 ALLOW_RE = re.compile(r"guard-allow\(([a-z0-9-]+)\):[ \t]*(.*)")
 COMMENT_END = re.compile(r"\s*(-->|\*/)\s*$")
 FIXTURE_RE = re.compile(r"guard-fixture\(([a-z0-9-]+)\):[ \t]*(.*)")
+HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 
 
 class Unavailable(Exception):
@@ -182,6 +184,34 @@ class Source(object):
             by_path = dict((e.path, e) for e in self.entries())
             self._changed = [by_path[p] for p in sorted(wanted) if p in by_path]
         return self._changed
+
+    # -- добавленные строки ------------------------------------------------------------------
+    def added_lines(self, path):
+        """Добавленные в индексе строки файла: список (номер строки в индексе, текст).
+
+        Только в режиме индекса и только для файла, который уже есть в HEAD: первая версия файла
+        целиком «добавлена» и этим понятием не судится. В режимах дерева и коммита, для файла не из
+        HEAD и в репозитории без коммитов — None (не пустой список: «не определено» не то же, что
+        «ничего не добавлено»). Строки берутся из `git diff --cached -U0 --no-renames`, поэтому
+        временный индекс (GIT_INDEX_FILE) соблюдается; возврат каретки в конце строки сохраняется.
+        """
+        if self.mode != "index":
+            return None
+        known = git(self.root, "rev-parse", "--verify", "--quiet", "HEAD:" + path, check=False)
+        if not known.strip():
+            return None
+        raw = git(self.root, "diff", "--cached", "-U0", "--no-renames", "--text", "--no-color",
+                  "--", path).decode("utf-8", "replace")
+        out = []
+        number = None
+        for line in raw.split("\n"):
+            m = HUNK_RE.match(line)
+            if m:
+                number = int(m.group(1))
+            elif number is not None and line.startswith("+"):
+                out.append((number, line[1:]))
+                number += 1
+        return out
 
     # -- чтение ------------------------------------------------------------------------------
     def read(self, entry):
