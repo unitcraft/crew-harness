@@ -280,3 +280,5 @@
 | DNC-08 | права ролей и лимиты | тест | select («DNC-08»); `crew-acceptor`, `crew-deny`, `crew-cross`, `crew-tasks` | PASS |
 | DNC-09 | интегратор не этап, `switchModel` не вызывается | тест, команда | select («DNC-09»); поиск `switchModel` в коде плагина пуст | PASS |
 | DNC-10 | явный `autoCompactWindow` не переписан | тест, проба | windows («DNC-10»); probe AC-25 | PASS |
+
+Проба набора codex-kimi, 2026-10-08: исполнитель запущен моделью openai/gpt-5.6-terra#default
