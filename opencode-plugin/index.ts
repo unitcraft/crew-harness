@@ -1318,7 +1318,8 @@ export default {
       for (const t of tools) editor.add(toEditor(t))
     })
 
-    // Слэш-команда /crew-help. Тело — просьба показать справку: своего канала «показать без хода модели» плагин V2 не даёт.
+    // Слэш-команда /crew-help. Справка показывается служебным сообщением без хода модели (ctx.session.synthetic, 0 токенов,
+    // без эха «просьбы»); если OpenCode этого не даёт — прежний путь: просьба показать справку дословно.
     try {
       const existing = new Set<string>()
       try {
@@ -1332,7 +1333,11 @@ export default {
             description: "Справка по письмам между вкладками (crew-harness)",
             execute: async ({ sessionID, prompt, delivery }: any) => {
               const dir = readJson<Card>(cardFile(String(sessionID ?? "")))?.directory || String(ctx?.location?.directory ?? "")
-              await ctx.session.prompt({ ...prompt, sessionID, text: `Покажи пользователю эту справку дословно, без пересказа:\n\n${helpFor(dir)}`, delivery })
+              const text = helpFor(dir)
+              if (typeof ctx.session.synthetic === "function") await ctx.session.synthetic({ sessionID, text, resume: false })
+              else await ctx.session.prompt({ ...prompt, sessionID, text: `Покажи пользователю эту справку дословно, без пересказа:
+
+${text}`, delivery })
             },
           })
         })

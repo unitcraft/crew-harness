@@ -15,11 +15,13 @@ const hooks = {}
 const tools = {}
 const commands = {}
 const prompts = []
+const synthetics = []
 const ctx = {
   location: { directory: process.cwd() },
   session: {
     get: async ({ sessionID }) => ({ id: sessionID, title: sessionID, location: { directory: process.cwd() } }),
     prompt: async (p) => prompts.push(p),
+    synthetic: async (p) => synthetics.push(p),
     hook: async (name, cb) => (hooks[name] = cb),
   },
   tool: { transform: async (fn) => fn({ add: (t) => (tools[t.name] = t) }) },
@@ -45,7 +47,10 @@ for (const w of ["force", "all", "worker", "assistant — то же, что work
 
 cell("/crew-help is registered", typeof commands["crew-help"]?.execute === "function", JSON.stringify(Object.keys(commands)))
 await commands["crew-help"].execute({ sessionID: "sesHELP01", prompt: {}, delivery: "queue" })
-cell("/crew-help sends the help to the session", prompts.length === 1 && prompts[0].text.includes("crew_inbox"), JSON.stringify(prompts).slice(0, 120))
+cell("/crew-help shows the help as a service message, no model turn", synthetics.length === 1 && synthetics[0].text.includes("crew_inbox") && synthetics[0].resume === false && prompts.length === 0, JSON.stringify({ synthetics, prompts }).slice(0, 160))
+delete ctx.session.synthetic
+await commands["crew-help"].execute({ sessionID: "sesHELP01", prompt: {}, delivery: "queue" })
+cell("/crew-help falls back to the request when OpenCode has no synthetic", prompts.length === 1 && prompts[0].text.includes("crew_inbox"), JSON.stringify(prompts).slice(0, 120))
 
 const ev = { sessionID: "sesHELP01", system: [] }
 await hooks.context(ev)
