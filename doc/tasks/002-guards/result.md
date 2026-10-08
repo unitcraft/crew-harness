@@ -40,7 +40,7 @@
 шаг 11 (до ворот Г3): написаны `.github/workflows/guards.yml`, `scripts/guards/ci-mask.sh` (самотест `test-ci-mask.py`, 11 проб, под sh и dash), шаблон `scripts/guards/probe/probe-log.yml.tmpl`; оба YAML разобраны PyYAML на машине (в репозиторий зависимость не вводится); пуши и прогоны Actions — ворота Г3, не выполнялись
 шаг 12 (до ворот Г4): написан `scripts/github-setup.sh`, `test-github-setup.py` (13 проб на подставной команде `gh`, настоящий GitHub не вызывался), `--dry-run protect` печатает тело запроса; запуск против GitHub — ворота Г4, не выполнялся
 шаг 13: сделан, правки `AGENTS.md` (раздел «Стражи», пометки «механизм» у п.3, 4, 5, 6, 8, 15, п.4 по О-07), `README.md` (три строки), уточнение ADR-0006 (датированная вставка); сверка — в разделе «Пометки AGENTS.md» ниже
-шаг 14: см. раздел «Сквозная приёмка»
+шаг 14 (часть до ворот Г1, Г2, Г3, Г5, Г6): приёмка выполнена, см. «Сквозная приёмка»; установка хуков, пуши, слияние, список имён и подтверждение Г6 ждут слов владельца
 
 ## Расхождения с планом, замечания по ходу
 
@@ -53,3 +53,158 @@
 - `lib/find-python.sh` читает необязательную переменную `GUARDS_PYTHON_CANDIDATES` (список кандидатов через запятую): только для самотестов, чтобы воспроизвести «нет рабочего интерпретатора»; режим стража она не задаёт.
 - Трейлер `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>` добавлен в каждый коммит по прямому указанию владельца в запуске сессии, хотя AGENTS.md п.4, plan.md и REQ-15 (R2 стража сообщения) такой трейлер
   запрещают. Страж сообщения красен на этих коммитах (`pre-push`, CI); решение по ним — за владельцем (ворота Г3: либо убрать трейлер ребейзом ветки до первого пуша, либо принять исключение).
+
+## Пометки AGENTS.md (правило → пометка → REQ)
+
+Сверено построчно с парами REQ-32 (`git diff $BASE HEAD -- AGENTS.md`, `git grep -n "механизм" -- AGENTS.md`).
+
+| Правило | Пометка в AGENTS.md | Основание |
+|---|---|---|
+| п.3 изменения в отдельном рабочем дереве | механизма нет: хуки каталог работы агента не видят; судится приёмкой (Сессия С6, владелец на воротах) | Н-12 |
+| п.3 в `main` только `--ff-only` | механизм: защита ветки `main` на GitHub, линейная история | REQ-17 |
+| п.4 сообщение по-английски, `-s`, без трейлеров соавторства | механизм: страж сообщения, вызывает `commit-msg`, `pre-push`, CI | REQ-13, REQ-14, REQ-15, REQ-18, REQ-19 |
+| п.4 файлы по имени, без `git add -A`, перечень файлов в команде | механизм: хук агента — подсказка, не барьер | REQ-16, Н-12, О-07 |
+| п.4 без упоминаний инструментов | механизма нет: страж не берётся | Н-03 |
+| п.5 никогда не `push --force` | механизм: защита ветки `main`; для веток задач — подсказка хука агента | REQ-17, REQ-16 |
+| п.5 пуш только после зелёных тестов | судится приёмкой: Сессия С6 перепрогоняет тесты, владелец на воротах сдачи | REQ-17 (проверки статуса не включаются) |
+| п.6 уборка веток и деревьев | механизма нет: уборка — вне задачи | — |
+| п.8 весь набор тестов перед пушем | судится приёмкой (как вторая половина п.5) | — |
+| п.15 без приватных данных | механизм: стражи приватности, вызывают `pre-commit`, `commit-msg`, `pre-push`, CI; ручной поиск заменён ссылкой на стражей | REQ-01…REQ-06, REQ-38 |
+
+Построчная сверка п.4 с правилами хука агента: область коммита (`--only`/`-o`, `--include`/`-i`, ` -- <файлы>`) и пометка `# index-verified`
+в хуке — в п.4 названы три формы перечня файлов; `git add -- <файлы>` только чтобы git узнал новый файл (О-07); отказы на `add -A`, `add .` — те же. Пометка «механизм» у правила, которое ничем из задачи
+не держится (п.5 «пуш после зелёных тестов», п.8), не стоит.
+
+## Сквозная приёмка (шаг 14, до ворот)
+
+Тяжёлые прогоны шли по одному, последним изменением кода был коммит «locale-independent order of guards and self-tests»; доказательства ниже собраны после него.
+
+- `LC_ALL=C sh scripts/guards/selftest/run-selftests.sh`: «ок: осмотрено 21 самотестов, упало 0» (7 мин 46 с); то же под `LC_ALL=ru_RU.UTF-8`: «ок: осмотрено 21 самотестов, упало 0» (10 мин 31 с);
+  `diff` двух выводов без строк времени — пуст (AC-29, локальная часть).
+- `sh scripts/guards/prove-red.sh`: «ок: доказано 13 из 13» (13 стражей: 7 `check-*`, `guard-secrets`, `guard-commit-message`, хук агента, три хука git); `git status --porcelain` до и после — оба пусты (AC-17).
+- `sh scripts/guards/probe-empty-root.sh`: «ок: осмотрено 24 запусков, «ок» на пустоте нет» (8 стражей x 3 мишени, AC-18).
+- Тесты плагина по одному, пауза 5 с: 37 из 37 код 0, упавших 0, пропущенных 0 — как в базовом состоянии (AC-26, DoD «Уровень G»).
+- `time sh scripts/githooks/pre-commit` с индексом из одного файла: 5,6 с при пороге 10 с (Р-03, AC-25); две красные строки стражей — известные записи 001 (Н-11).
+- Стражи на дереве задачи (с временным выдуманным списком имён): `guard-secrets.py --tree` — «ок: осмотрено 214 файлов»; `check-private-names.py` — «ок: осмотрено 214 файлов»; `check-no-status-table.py` — «ок: осмотрено 93 файлов .md»;
+  `check-task-docs.py` — «ок: осмотрено 51 файлов задач»; `check-tests-have-checks.py` — «ок: осмотрено 37 файлов тестов»; `check-wiring.py` — «ок: осмотрено 20 стражей»;
+  `check-md-links.py` — красный ровно по `spec-review-12.md:47` и `spec-review-13.md:41`; `check-text-hygiene.py` — красный ровно по `spec-review-3.md:221`, `spec-review-4.md:156`, `spec-review-4.md:157` (все пять — записи 001, Н-11, Г6).
+- Имитация `pre-push` по каждому коммиту ветки (одноразовый клон и одноразовый удалённый репозиторий во временной папке, хуки только в клоне, общий `.git` не тронут): `git push` ветки отклонён; 39 коммитов
+  судились, красных 39: `co-authored-by` x39 (трейлер по указанию владельца), `machine-path` x1 (промежуточный коммит стража секретов: образец «диск + work+shop» в самотесте, исправлен позже),
+  `mojibake` x2 и `fffd` x1 (промежуточный коммит стража текста: литералы порчи в его файлах, исправлены позже). Итоговое дерево чисто; промежуточные коммиты остаются красными для `pre-push`.
+- DNC и границы: `git diff --name-only $BASE HEAD -- opencode-plugin/` — пусто; `-- doc/archive/` — пусто; `-- .gitattributes` — пусто; `git diff --stat $BASE HEAD -- doc/canon/decisions/` — только ADR-0002 (+4 строки) и ADR-0006 (+6 строк);
+  `git diff --diff-filter=M --stat $BASE HEAD -- 'doc/tasks/*/task/*'` — один файл `doc/tasks/001-crew-service/task/draft-plan-previous.md`, одна строка; положительный контроль: та же команда на одноразовом репозитории с заведомо
+  изменённым материалом выводит файл, а шаблон с завершающей косой чертой пуст; `git merge-base --is-ancestor d963ecc HEAD` — код 0; `git push` и `git push --force` не вызывались вовсе (журнал команд сессии).
+- Правки по AC-05 (перечень, `git diff --stat $BASE HEAD -- AGENTS.md doc/archive doc/canon doc/tasks/README.md opencode-plugin README.md doc/tasks/001-crew-service`): `AGENTS.md` (REQ-32, О-07, п.15), `README.md` (+3 строки, REQ-32),
+  `doc/canon/decisions/ADR-0002` и `ADR-0006` (датированные уточнения, Р-01 и REQ-32), `doc/canon/process.md` (+2 строки, О-03), `doc/tasks/README.md` (таблица и список убраны, О-03), материал 001 (одна строка, О-02). Записи 001 пометками не тронуты (Г6).
+- Поиск меток доноров: `git grep -c -i -E "(^|[^A-Za-z])[AB]: (guards|githooks|claude-hooks|install-hooks|\.github)" -- scripts .github .claude` — пусто, код 1; положительный контроль: тот же поиск по `plan.md` находит 16 строк.
+- Уровень D (визуальная проверка): N/A, у задачи нет интерфейса: стражи, хуки и CI работают в терминале.
+
+## Трассировка
+
+REQ-01 → `guard-secrets.py` → `test-guard-secrets.py`, `test-pre-commit.py` → 26 и 13 проб, упало 0 (DoD: REQ-01, REQ-06, AC-01, AC-02) → PASS
+REQ-02 → `lib/names.py`, `check-private-names.py` → `test-check-private-names.py`, 18 проб; настоящий список владельца не применялся (Г1) → PASS
+REQ-03 → `names.load_names`, `lib/find-python.sh` → четыре случая отсутствия списка в `test-check-private-names.py`, `test-run-all.py` → PASS
+REQ-04 → вывод без значения, `ci-mask.sh`, шаблон пробы → `test-check-private-names.py` (0 совпадений с контролем), `test-ci-mask.py`; журнал настоящего прогона не получен (Г3, Г4) → NOT VERIFIED
+REQ-05 → `lib/guardlib.py` `judged_files` → `test-guardlib.py`, `test-check-private-names.py` → PASS
+REQ-06 → `lib/machine_paths.py` → `test-guard-secrets.py` (определение и пробы) → PASS
+REQ-07 → `check-md-links.py` → `test-check-md-links.py` (24 пробы) → PASS
+REQ-08 → `check-md-links.py` `github_slug`, `heading_anchors` → `test-check-md-links.py` → PASS
+REQ-09 → `check-text-hygiene.py` → `test-check-text-hygiene.py` (27 проб) → PASS
+REQ-10 → `check-text-hygiene.py` → `test-check-text-hygiene.py` → PASS
+REQ-11 → `check-text-hygiene.py` → `test-check-text-hygiene.py` → PASS
+REQ-12 → `check-text-hygiene.py` → `test-check-text-hygiene.py` → PASS
+REQ-13 → `guard-commit-message.py` → `test-guard-commit-message.py`, `test-commit-msg.py` → PASS
+REQ-14 → `lib/message.py` → `test-guard-commit-message.py`, `test-commit-msg.py` (режимы editor, message, diff) → PASS
+REQ-15 → `guard-commit-message.py` → `test-guard-commit-message.py` (--ci, без настройки, GITHUB_ACTIONS) → PASS
+REQ-16 → `agent-hooks/guard-git.py`, `.claude/settings.json` → `test-guard-git.py` (19 проб) → PASS
+REQ-17 → `github-setup.sh protect` → `test-github-setup.py` на подставном gh и `--dry-run`; настоящая защита не применялась (Г4) → NOT VERIFIED
+REQ-18 → `githooks/pre-push`, `commit-range.sh` → `test-pre-push.py` (9 проб), имитация по 39 коммитам → PASS
+REQ-19 → `commit-range.sh`, `guards.yml` → `test-commit-range.py`; прогон Actions не выполнялся (Г3) → NOT VERIFIED
+REQ-20 → `check-task-docs.py` → `test-check-task-docs.py`; дерево «ок: осмотрено 51 файлов задач» → PASS
+REQ-21 → `check-task-docs.py` → `test-check-task-docs.py` → PASS
+REQ-22 → `check-task-docs.py` → `test-check-task-docs.py` → PASS
+REQ-23 → `check-no-status-table.py`, правки README задач и process.md → `test-check-no-status-table.py`; `git grep -c "001-crew-service" -- doc/tasks/README.md` пусто → PASS
+REQ-24 → `run-all.sh`, `githooks/pre-commit` → `test-run-all.py`, `test-pre-commit.py` → PASS
+REQ-25 → `check-wiring.py` → `test-check-wiring.py` (19 проб), дерево «ок: осмотрено 20 стражей» → PASS
+REQ-26 → `prove-red.sh`, `selftest/` → «ок: доказано 13 из 13», `test-prove-red.py` → PASS
+REQ-27 → `probe-empty-root.sh`, `guardlib.no_target` → 24 запуска без «ок», `test-probe-empty-root.py` → PASS
+REQ-28 → `install-hooks.sh` → `test-install-hooks.py` (11 проб) → PASS
+REQ-29 → `.github/workflows/guards.yml` → разобран PyYAML и `dash -n` по скриптам; прогон Actions не выполнялся (Г3) → NOT VERIFIED
+REQ-30 → `check-tests-have-checks.py` → `test-check-tests-have-checks.py`; дерево «ок: осмотрено 37 файлов тестов» → PASS
+REQ-31 → шапки и комментарии написаны заново → поиск меток доноров пусто (контроль 16), `guard-secrets.py --tree` ноль; список владельца не применялся (Г1) → PASS
+REQ-32 → `AGENTS.md`, `README.md`, ADR-0006, `doc/tasks/README.md`, `doc/canon/process.md` → таблица выше, `git grep -n "механизм" -- AGENTS.md` → PASS
+REQ-33 → буфер в `pre-commit` → `test-pre-commit.py` (`git commit | head -1`) → PASS
+REQ-34 → `time sh scripts/githooks/pre-commit` → 5,6 с при пороге 10 с → PASS
+REQ-35 → четыре вида вердикта, `run-all.sh` счёт → `test-guardlib.py`, `test-run-all.py` → PASS
+REQ-36 → метки шапок, `check-wiring.py` → дерево «ок: осмотрено 20 стражей» → PASS
+REQ-37 → байтовый разбор, UTF-8 вывод → `diff` вывода `run-selftests.sh` под `LC_ALL=C` и `ru_RU.UTF-8` пуст; ubuntu в CI не проверялся (Г3) → PASS
+REQ-38 → `guard-commit-message.py` → `test-guard-commit-message.py`, `test-commit-msg.py`, `test-pre-push.py` → PASS
+AC-01 → `test-guard-secrets.py`, `test-pre-commit.py`; коммит правки п.15 проходит `guard-secrets.py --commit` (коммит `AGENTS.md: guards, install and mechanism notes`, в имитации красный только по трейлеру) → PASS
+AC-02 → `test-guard-secrets.py` (режим дерева) → PASS
+AC-03 → `test-check-private-names.py` (CRLF, номер образца, 0 совпадений значения) → PASS
+AC-04 → локально четыре случая (`test-check-private-names.py`); прогоны Actions без секрета и с секретом не выполнялись (Г3, Г4) → NOT VERIFIED
+AC-05 → вывод стражей приватности на дереве «ок» с временным списком, перечень правок выше; список владельца не применялся (Г1) → NOT VERIFIED
+AC-06 → `test-check-md-links.py` → PASS
+AC-07 → страж ссылок на дереве красен по двум цитатам записей 001 (Н-11), материал 001 исправлен одной строкой; пометки по Г6 ждут слова владельца → NOT VERIFIED
+AC-08 → `test-check-text-hygiene.py` → PASS
+AC-09 → `test-guard-commit-message.py`, `test-commit-msg.py` → PASS
+AC-10 → `test-guard-git.py` (59 команд из 42 строк таблицы), `prove-red.sh` → PASS
+AC-11 → скрипт и `--dry-run protect` проверены на подставном gh; вывод `gh api` и пуши не получены (Г4) → NOT VERIFIED
+AC-12 → `test-pre-push.py` (cherry-pick, rebase --continue, новая ветка, удаление) → PASS
+AC-13 → `test-commit-range.py` (три вида диапазона); прогон Actions не выполнялся (Г3) → NOT VERIFIED
+AC-14 → `test-check-task-docs.py`; дерево 001, 002 «ок» → PASS
+AC-15 → `test-check-no-status-table.py`; дерево «ок»; в `doc/tasks/README.md` таблицы и ссылок на папки задач нет → PASS
+AC-16 → `test-check-wiring.py` → PASS
+AC-17 → четыре вида проб в каждом самотесте (проверяет `run-selftests.sh`), «доказано 13 из 13», `git status --porcelain` пуст → PASS
+AC-18 → `probe-empty-root.sh`, `test-commit-msg.py` (`--amend -m`) → PASS
+AC-19 → `test-install-hooks.py` → PASS
+AC-20 → workflow написан; прогоны на ветке задачи и на служебной ветке с нарушением не выполнялись (Г3) → NOT VERIFIED
+AC-21 → `test-check-tests-have-checks.py`; «ок: осмотрено 37 файлов тестов» → PASS
+AC-22 → `check-private-names.py` со списком владельца не прогонялся (Г1); `guard-secrets.py --tree` и поиск меток доноров по `scripts .github .claude` чисты → NOT VERIFIED
+AC-23 → таблица выше, `git diff` документов, `git grep -n "механизм" -- AGENTS.md` → PASS
+AC-24 → `test-pre-commit.py` → PASS
+AC-25 → `time sh scripts/githooks/pre-commit` 5,6 с → PASS
+AC-26 → `git diff --name-only $BASE HEAD -- opencode-plugin/` пусто; 37 тестов по одному, упавших 0 → PASS
+AC-27 → `git merge-base --is-ancestor d963ecc HEAD` код 0; `git diff --diff-filter=M` — один файл, одна строка; `.gitattributes` не изменён → PASS
+AC-28 → строки вердиктов в самотестах, счёт `run-all.sh`; прогон Actions с подложенным пропуском не выполнялся (Г3) → NOT VERIFIED
+AC-29 → вывод `run-selftests.sh` под двумя локалями совпал построчно; прогон Actions на ubuntu не выполнялся (Г3) → NOT VERIFIED
+AC-30 → `test-pre-commit.py` (грязная рабочая копия, `--only`, неотслеживаемый файл) → PASS
+AC-31 → `ci-mask.sh`, шаблон пробы, `github-setup.sh log-search` проверены на подставных данных; прогон на GitHub не выполнялся (Г3, Г4) → NOT VERIFIED
+AC-32 → `test-guard-commit-message.py`, `test-commit-msg.py`, `test-pre-push.py` → PASS
+DNC-01 → `opencode-plugin/` без правок; `watchRefusal` на дереве с готовым файлом — `undefined`; в `.claude/settings.json` нет `permissions`; `crew-deny.test.mjs` ok → PASS
+DNC-02 → `git diff --stat $BASE HEAD -- doc/archive/` пусто → PASS
+DNC-03 → в ADR добавлены только датированные уточнения ADR-0002 и ADR-0006 → PASS
+DNC-04 → единственное изменение материалов — строка 8 `draft-plan-previous.md` (О-02) → PASS
+DNC-05 → история не переписана, `git push` не вызывался → PASS
+DNC-06 → `git diff --stat $BASE HEAD -- .gitattributes` пусто → PASS
+
+## RESULT
+
+Implemented: репозиторные стражи (секреты и пути машины, запрещённые имена, гигиена текста, ссылки и якоря, форматы документов задач, таблицы статусов, пустые тесты, сообщение коммита), хук агента для команд оболочки,
+хуки git `pre-commit`, `commit-msg`, `pre-push`, установщик, мета-проверка подключения, «доказательство красного», прогон на пустом корне, 21 самотест, workflow CI, скрипт настроек GitHub, правки Канона.
+Changed: новые `scripts/`, `.github/workflows/guards.yml`, `.claude/settings.json`; правки `AGENTS.md`, `README.md`, `doc/tasks/README.md`, `doc/canon/process.md`, уточнения ADR-0002 и ADR-0006, одна строка материала 001.
+Verification: уровни A (sh, dash, Python 3.9-синтаксис, JSON), B (21 самотест, тесты плагина), E (трассировка), F (красные пробы, «доказано 13 из 13»), G (тесты плагина как в базе) — PASS; уровень C (прогон Actions, защита `main`) — NOT VERIFIED, ворота Г3 и Г4; уровень D — N/A.
+Acceptance criteria: PASS — AC-01, 02, 03, 06, 08, 09, 10, 12, 14, 15, 16, 17, 18, 19, 21, 23, 24, 25, 26, 27, 30, 32; NOT VERIFIED — AC-04, 05, 07, 11, 13, 20, 22, 28, 29, 31 (причины в таблице).
+How to verify: см. «Пометки AGENTS.md» и «Сквозная приёмка»; команды — в разделе «Стражи» `AGENTS.md`; полный набор самотестов — `sh scripts/guards/selftest/run-selftests.sh` (около 8-10 минут, под нагрузкой — по одному тесту).
+Regressions: нет; тесты плагина дают тот же результат, что в базовом состоянии (37 из 37), код плагина не менялся.
+Assumptions: Python 3.9 и новее с командой `python`, `git` не старее 2.40, `sh` (Git Bash или dash); ожидаемый адрес автора берётся из `git config user.email` в момент установки; сообщение в смысле «что git сохранит» судится по `GIT_EDITOR` (`:` при `-m`, `-F`, `--no-edit`).
+Known limitations: (1) пока не даны слова владельца на ворота, нет прогонов на GitHub (CI, защита `main`, секрет, проба журнала) и прогонов со списком владельца; (2) записи задачи 001 красны для стражей ссылок и текста (Н-11) до Г6;
+(3) Р-07: флаг `-v` в командной строке при `-m`/`-F` хуку не виден (хвост за ножницами судится строже), `core.editor=:` без `-m` даёт режим `message`; (4) хук агента — подсказка, не барьер (Н-12), в живом окне OpenCode не проверялся (U-07);
+(5) все коммиты ветки содержат `Co-Authored-By` по указанию владельца, что красно для стража сообщения; два промежуточных коммита содержат литералы, исправленные следующими коммитами (красны для `pre-push`, пока ветка не пересобрана).
+Out of scope notes: на машине `bash` в PATH — заглушка WSL, поэтому скрипты зовутся через `sh` (замер: `bash --version` в Git Bash — 5.3, а `bash.exe` из PATH не видит путей Windows; самотест `test-ci-mask.py` отбирает работающие оболочки запуском);
+полный прогон `run-selftests.sh` занимает 8-10 минут из-за хуков git в одноразовых репозиториях (`test-commit-msg.py` около 2,5 минут).
+Remaining questions: слова владельца по воротам (раздел «Ждёт владельца»), судьба трейлера `Co-Authored-By` и пересборка ветки до первого пуша.
+Artifacts: ветка `task-002-guards` (39 коммитов от `$BASE`, включая коммиты журнала), связанное рабочее дерево рядом с репозиторием; переменные и секреты для CI — `CREW_PRIVATE_NAMES` (список владельца), `CREW_PRIVATE_NAMES_PROBE` (временный, из `probe-set`); скриншотов и логов нет (интерфейса нет).
+
+## Ждёт владельца
+
+Остановка на воротах; всё остальное в плане сделано и подтверждено выше. Нужны слова владельца (по одному действию за слово, каждое слово — отдельное разрешение):
+
+- Г1 — список запрещённых имён: владелец создаёт `~/.config/crew-harness/private-names.txt` (образец на строку; имена вносить в путевой форме, короткие слова дают ложные срабатывания) и пишет «список создан»; тогда Сессия С5 или С6 прогоняет `check-private-names.py` и `guard-secrets.py --tree` (AC-05, AC-22).
+- Г6 — записи 001 (Н-11, Р-06): слово «метки на 001 — да» (отдельный коммит с пометками `guard-allow(md-link)` и `guard-allow(fffd)` с причиной на пяти строках, текст записей не меняется) либо «001 закрыла класс сама»; без этого страж ссылок и страж текста на дереве красны, а хук `pre-commit` в рабочей копии `main` будет отклонять коммиты.
+- Г2 — установка хуков: «ставь хуки» (`sh scripts/install-hooks.sh` в общем `.git`; настройка общая для всех рабочих деревьев, включая живую копию `main`; делать после Г6 и Г1, иначе первый же коммит в живой копии упрётся в красные записи 001 или в отсутствие списка).
+- Г3 — каждый пуш по отдельному слову: «пушь task-002-guards» (первый красный прогон без секрета, ожидаем по AC-04), затем служебные ветки `probe/*` и ветка с подложенным нарушением, затем `main`; для первого пуша нужна область токена `workflow` у менеджера учётных данных git. До первого пуша решить судьбу трейлера `Co-Authored-By` и промежуточных красных коммитов: пересобрать ветку (ребейз неопубликованных коммитов) или принять исключение.
+- Г4 — запуск `scripts/github-setup.sh` против GitHub по одному действию: `secret`, `probe-set`, `probe-branch <слаг>`, `protect --branch probe/<слаг>`, `protect`, `status`, `probe-clear`; слово вида «запускай github-setup: protect».
+- Г5 — слияние в живую рабочую копию `main`: «вливай» (`git merge --ff-only task-002-guards`; приносит `.claude/settings.json` и начинает действовать на работающих агентов, Р-05) и пуш `main`; пробу хука в живом окне OpenCode (U-07) — по отдельному слову «проба хука в окне».
+
+вопрос: жду слов владельца по воротам Г1, Г6, Г2, Г3, Г4, Г5 в таком порядке и решение по трейлеру `Co-Authored-By` и пересборке ветки до первого пуша; до этого статус остаётся «в работе».

@@ -358,48 +358,48 @@ R7 пустое сообщение — красный. `pre-push` зовёт т�
 
 ## DoD
 
-[ ] Уровень A, shell: `git ls-files -z -- 'scripts/*.sh' 'scripts/githooks/*' | xargs -0 -n1 bash -n`, код 0; то же с `dash -n` (здесь `sh` — это bash, POSIX он не проверяет; `dash` на машине есть, нет — строка NOT VERIFIED с причиной) и шаг `dash -n` в CI; `node --check` N/A (новых .mjs нет)
-[ ] Уровень A, Python: `git ls-files -z -- 'scripts/*.py' | xargs -0 -n1 python -B -c "import sys, ast; ast.parse(open(sys.argv[1], encoding='utf-8').read(), sys.argv[1], feature_version=(3, 9))"`, код 0 (проверка синтаксиса Python 3.9, Р-02)
-[ ] Уровень A, JSON: `python -B -c "import json; json.load(open('.claude/settings.json', encoding='utf-8'))"`; YAML workflow — прогон Actions (строка про уровень C); линтеры не вводятся (решение плана)
-[ ] Уровень B, самотесты по одному: `python scripts/guards/selftest/test-<имя>.py` для каждого из 21 файла `scripts/guards/selftest/test-*.py`, у каждого последняя строка `итого: … упало 0`; все подряд — `sh scripts/guards/selftest/run-selftests.sh`
+[x] Уровень A, shell: `git ls-files -z -- 'scripts/*.sh' 'scripts/githooks/*' | xargs -0 -n1 bash -n`, код 0; то же с `dash -n` (здесь `sh` — это bash, POSIX он не проверяет; `dash` на машине есть, нет — строка NOT VERIFIED с причиной) и шаг `dash -n` в CI; `node --check` N/A (новых .mjs нет)
+[x] Уровень A, Python: `git ls-files -z -- 'scripts/*.py' | xargs -0 -n1 python -B -c "import sys, ast; ast.parse(open(sys.argv[1], encoding='utf-8').read(), sys.argv[1], feature_version=(3, 9))"`, код 0 (проверка синтаксиса Python 3.9, Р-02)
+[x] Уровень A, JSON: `python -B -c "import json; json.load(open('.claude/settings.json', encoding='utf-8'))"`; YAML workflow — прогон Actions (строка про уровень C); линтеры не вводятся (решение плана)
+[x] Уровень B, самотесты по одному: `python scripts/guards/selftest/test-<имя>.py` для каждого из 21 файла `scripts/guards/selftest/test-*.py`, у каждого последняя строка `итого: … упало 0`; все подряд — `sh scripts/guards/selftest/run-selftests.sh`
 [ ] Уровень C, целевое окружение: прогон `.github/workflows/guards.yml` на ветке задачи зелёный (ссылка на прогон), на служебной ветке с подложенным нарушением красный (ссылка); `gh api repos/unitcraft/crew-harness/branches/main/protection` (вывод)
-[ ] Уровень E: таблица трассировки каждого REQ-01…REQ-38, AC-01…AC-32, DNC-01…DNC-06 в result.md со ссылкой на строку этого DoD
-[ ] Уровень F, негативные сценарии: красная проба на каждое правило каждого стража — строки `проба красная` в выводе `test-*.py`; `sh scripts/guards/prove-red.sh`, итог «доказано N из N»
-[ ] Уровень G: тесты плагина по одному, итог как в базовом состоянии шага 1 (`cd opencode-plugin && node test/<файл>.test.mjs`, число файлов из записи шага 1 с паузой между ними); история не переписана; `.gitattributes` не изменён
-[ ] Уровень D: N/A, интерфейса нет (причина записана в result.md)
-[ ] REQ-01, REQ-06, AC-01, AC-02: `python scripts/guards/selftest/test-guard-secrets.py`; `python scripts/guards/selftest/test-pre-commit.py` (проба коммита в одноразовом репозитории)
-[ ] REQ-02, REQ-03, REQ-04, REQ-05, AC-03, AC-04: `python scripts/guards/selftest/test-check-private-names.py` (четыре случая отсутствия списка, CRLF, поиск образца в выводе — 0 совпадений с положительным контролем)
-[ ] REQ-09…REQ-12, AC-08: `python scripts/guards/selftest/test-check-text-hygiene.py` (NUL, UTF-16, `.png` из списка, файл без расширения, `.log`, `.gitignore`)
-[ ] REQ-07, REQ-08, AC-06: `python scripts/guards/selftest/test-check-md-links.py`
+[x] Уровень E: таблица трассировки каждого REQ-01…REQ-38, AC-01…AC-32, DNC-01…DNC-06 в result.md со ссылкой на строку этого DoD
+[x] Уровень F, негативные сценарии: красная проба на каждое правило каждого стража — строки `проба красная` в выводе `test-*.py`; `sh scripts/guards/prove-red.sh`, итог «доказано N из N»
+[x] Уровень G: тесты плагина по одному, итог как в базовом состоянии шага 1 (`cd opencode-plugin && node test/<файл>.test.mjs`, число файлов из записи шага 1 с паузой между ними); история не переписана; `.gitattributes` не изменён
+[x] Уровень D: N/A, интерфейса нет (причина записана в result.md)
+[x] REQ-01, REQ-06, AC-01, AC-02: `python scripts/guards/selftest/test-guard-secrets.py`; `python scripts/guards/selftest/test-pre-commit.py` (проба коммита в одноразовом репозитории)
+[x] REQ-02, REQ-03, REQ-04, REQ-05, AC-03, AC-04: `python scripts/guards/selftest/test-check-private-names.py` (четыре случая отсутствия списка, CRLF, поиск образца в выводе — 0 совпадений с положительным контролем)
+[x] REQ-09…REQ-12, AC-08: `python scripts/guards/selftest/test-check-text-hygiene.py` (NUL, UTF-16, `.png` из списка, файл без расширения, `.log`, `.gitignore`)
+[x] REQ-07, REQ-08, AC-06: `python scripts/guards/selftest/test-check-md-links.py`
 [ ] AC-07: `python scripts/guards/check-md-links.py` на ветке — «ок: осмотрено N ссылок» (после закрытия класса Н-11 в записях 001, Р-06; до того красные ровно по двум названным адресам); `git diff -U0 $BASE HEAD -- doc/tasks/001-crew-service/task/draft-plan-previous.md` — одна строка
-[ ] REQ-20, REQ-21, REQ-22, AC-14: `python scripts/guards/selftest/test-check-task-docs.py`; `python scripts/guards/check-task-docs.py` на дереве — «ок»
-[ ] REQ-23, AC-15: `python scripts/guards/selftest/test-check-no-status-table.py`; `python scripts/guards/check-no-status-table.py` на дереве — «ок»; `git grep -c "001-crew-service" -- doc/tasks/README.md` — пустой вывод, код 1
-[ ] REQ-30, AC-21: `python scripts/guards/selftest/test-check-tests-have-checks.py`; `python scripts/guards/check-tests-have-checks.py` — «ок: осмотрено N», N равно числу `*.test.mjs` из записи шага 1
-[ ] REQ-13, REQ-14, REQ-15, REQ-38, AC-09, AC-32: `python scripts/guards/selftest/test-guard-commit-message.py` (режимы `editor`, `message`, `--commit`, `--ci`; поиск значения в выводе — 0 с положительным контролем)
-[ ] REQ-16, AC-10: `python scripts/guards/selftest/test-guard-git.py` — 42 строки таблицы AC-10, `Don't` в сообщении (проход) и обратный апостроф (отказ), кириллица, экранирование PowerShell, красная проба на каждое правило, пробы-хулиганы; команда из `.claude/settings.json` через `sh` в корне, подкаталоге, без `CLAUDE_PROJECT_DIR`, в дереве без скрипта (код 0)
-[ ] REQ-18, AC-12: `python scripts/guards/selftest/test-pre-push.py` (одноразовый удалённый репозиторий: cherry-pick, `rebase --continue`, новая ветка, удаление ветки)
+[x] REQ-20, REQ-21, REQ-22, AC-14: `python scripts/guards/selftest/test-check-task-docs.py`; `python scripts/guards/check-task-docs.py` на дереве — «ок»
+[x] REQ-23, AC-15: `python scripts/guards/selftest/test-check-no-status-table.py`; `python scripts/guards/check-no-status-table.py` на дереве — «ок»; `git grep -c "001-crew-service" -- doc/tasks/README.md` — пустой вывод, код 1
+[x] REQ-30, AC-21: `python scripts/guards/selftest/test-check-tests-have-checks.py`; `python scripts/guards/check-tests-have-checks.py` — «ок: осмотрено N», N равно числу `*.test.mjs` из записи шага 1
+[x] REQ-13, REQ-14, REQ-15, REQ-38, AC-09, AC-32: `python scripts/guards/selftest/test-guard-commit-message.py` (режимы `editor`, `message`, `--commit`, `--ci`; поиск значения в выводе — 0 с положительным контролем)
+[x] REQ-16, AC-10: `python scripts/guards/selftest/test-guard-git.py` — 42 строки таблицы AC-10, `Don't` в сообщении (проход) и обратный апостроф (отказ), кириллица, экранирование PowerShell, красная проба на каждое правило, пробы-хулиганы; команда из `.claude/settings.json` через `sh` в корне, подкаталоге, без `CLAUDE_PROJECT_DIR`, в дереве без скрипта (код 0)
+[x] REQ-18, AC-12: `python scripts/guards/selftest/test-pre-push.py` (одноразовый удалённый репозиторий: cherry-pick, `rebase --continue`, новая ветка, удаление ветки)
 [ ] REQ-19, AC-13: `python scripts/guards/selftest/test-commit-range.py` (три вида диапазона); прогон Actions на ветке задачи
-[ ] REQ-24, REQ-33, AC-24, AC-30: `python scripts/guards/selftest/test-pre-commit.py` (`git commit … | head -1`; грязное рабочее дерево с `--only`; коммит из связанного рабочего дерева `git worktree add`, то же в `test-commit-msg.py`, `test-pre-push.py`)
-[ ] REQ-28, AC-19: `python scripts/guards/selftest/test-install-hooks.py` (свежий клон: `git config --get core.hooksPath`, повтор, отказ без `user.email`)
-[ ] AC-18: `sh scripts/guards/probe-empty-root.sh` — таблица страж → вердикт → код, нет ни одного «ок»; `python scripts/guards/selftest/test-commit-msg.py` (`git commit --amend -m`)
-[ ] REQ-25, REQ-36, AC-16: `python scripts/guards/selftest/test-check-wiring.py`; `python scripts/guards/check-wiring.py` на дереве — «ок» (после появления `guards.yml`, шаг 11; путь скрипта из записи хука не существует — красная проба в тесте)
-[ ] REQ-26, REQ-27, AC-17: `sh scripts/guards/prove-red.sh` — «доказано 13 из 13» и `git status --porcelain` пуст после прогона на чистой ветке (в рабочем состоянии совпадает с состоянием до прогона); `python scripts/guards/selftest/test-prove-red.py` (заглушка с синтаксической ошибкой не засчитана)
+[x] REQ-24, REQ-33, AC-24, AC-30: `python scripts/guards/selftest/test-pre-commit.py` (`git commit … | head -1`; грязное рабочее дерево с `--only`; коммит из связанного рабочего дерева `git worktree add`, то же в `test-commit-msg.py`, `test-pre-push.py`)
+[x] REQ-28, AC-19: `python scripts/guards/selftest/test-install-hooks.py` (свежий клон: `git config --get core.hooksPath`, повтор, отказ без `user.email`)
+[x] AC-18: `sh scripts/guards/probe-empty-root.sh` — таблица страж → вердикт → код, нет ни одного «ок»; `python scripts/guards/selftest/test-commit-msg.py` (`git commit --amend -m`)
+[x] REQ-25, REQ-36, AC-16: `python scripts/guards/selftest/test-check-wiring.py`; `python scripts/guards/check-wiring.py` на дереве — «ок» (после появления `guards.yml`, шаг 11; путь скрипта из записи хука не существует — красная проба в тесте)
+[x] REQ-26, REQ-27, AC-17: `sh scripts/guards/prove-red.sh` — «доказано 13 из 13» и `git status --porcelain` пуст после прогона на чистой ветке (в рабочем состоянии совпадает с состоянием до прогона); `python scripts/guards/selftest/test-prove-red.py` (заглушка с синтаксической ошибкой не засчитана)
 [ ] REQ-29, REQ-35, AC-28: `python scripts/guards/selftest/test-run-all.py` (число вердиктов каждого вида); прогон Actions с подложенным «пропущено» красный (ссылка)
 [ ] REQ-37, AC-29: `LC_ALL=C sh scripts/guards/selftest/run-selftests.sh` и то же под русской UTF-8 локалью, `diff` двух выводов пуст; прогон Actions на ubuntu
-[ ] REQ-34, AC-25: `time sh scripts/githooks/pre-commit` на дереве задачи с изменённым файлом в индексе — не более 10 с (порог — решение Р-03)
+[x] REQ-34, AC-25: `time sh scripts/githooks/pre-commit` на дереве задачи с изменённым файлом в индексе — не более 10 с (порог — решение Р-03)
 [ ] REQ-17, AC-11: `sh scripts/github-setup.sh --dry-run protect` (вывод действий); после ворот Г4 — `gh api repos/unitcraft/crew-harness/branches/main/protection`, `gh secret list`, вывод пушей fast-forward и слияния, повтор `protect` без изменений
 [ ] REQ-04, AC-31: `sh scripts/github-setup.sh log-search <прогон>` — на служебной ветке `probe/*` (`probe-log.yml`, копия шаблона из ветки задачи) значения пробы в журнале 0, `PROBE-MARKER` найден, строка стража с файлом, строкой и номером; ссылка на прогон; `python scripts/guards/selftest/test-github-setup.py` (`--dry-run`, отказ без файла списка); `python scripts/guards/selftest/test-ci-mask.py`
 [ ] AC-04, AC-20: ссылки на прогоны Actions: без секрета красный с подсказкой, с секретом зелёный (достижим после Г6, Р-06); служебная ветка с нарушением красная
 [ ] REQ-31, AC-22: `python scripts/guards/check-private-names.py` и `python scripts/guards/guard-secrets.py --tree` на ветке со списком владельца — «ок» (приватность от Н-11 не зависит); `git grep -c -i -E "(^|[^A-Za-z])[AB]: (guards|githooks|claude-hooks|install-hooks|\.github)" -- scripts .github .claude` — пустой вывод, код 1 (все пять форм меток доноров из плана; положительный контроль — тот же поиск по plan.md находит их)
 [ ] AC-05: те же два прогона на дереве задачи — «ок: осмотрено N» (прогоны текста и ссылок — после Г6); `git diff --stat $BASE HEAD -- AGENTS.md doc/archive doc/canon doc/tasks/README.md opencode-plugin README.md doc/tasks/001-crew-service` и `git diff` по каждому файлу (записи 001 — только если выбран вариант (б) Р-06) со сверкой с REQ-32, Р-01, О-02 в result.md
-[ ] REQ-32, AC-23: `git diff $BASE HEAD -- AGENTS.md README.md doc/canon doc/tasks/README.md`; таблица «правило → пометка → REQ» в result.md; `git grep -n "механизм:" -- AGENTS.md`
-[ ] DNC-01, AC-26: `git diff --name-only $BASE HEAD -- opencode-plugin/` — пусто; в `.claude/settings.json` нет ключа `permissions` (`python -B -c "import json; assert 'permissions' not in json.load(open('.claude/settings.json', encoding='utf-8'))"`); одноразовый скрипт вне репозитория вызывает `watchRefusal(<команда из списка запретов Канона>, <корень дерева задачи>)` из `opencode-plugin/deny.ts` на дереве с готовым файлом — ожидаемо `undefined` (код плагина не меняется); `node opencode-plugin/test/crew-deny.test.mjs` — итог как в базе
-[ ] DNC-02: `git diff --stat $BASE HEAD -- doc/archive/` — пусто
-[ ] DNC-03: `git diff $BASE HEAD -- doc/canon/decisions/` — только добавленные датированные «Уточнение» в ADR-0002 (или новый ADR и строка реестра при другом решении Р-01) и ADR-0006, строки принятых решений не изменены
-[ ] DNC-04, AC-27: `git diff --diff-filter=M --stat $BASE HEAD -- 'doc/tasks/*/task/*'` — один файл `doc/tasks/001-crew-service/task/draft-plan-previous.md`, одна строка; положительный контроль в result.md: та же команда на одноразовой копии с заведомо изменённым материалом выводит этот файл (шаблон с завершающей косой чертой в git не совпадает ни с чем и всегда пуст)
-[ ] DNC-05, AC-27: `git merge-base --is-ancestor d963ecc HEAD`, `git log --oneline $BASE..HEAD` без переписанных коммитов; `git push --force` нигде не вызывался (журнал команд в result.md)
-[ ] DNC-06, AC-27: `git diff --stat $BASE HEAD -- .gitattributes` — пусто
-[ ] Тесты плагина как в базе: `cd opencode-plugin && node test/<файл>.test.mjs` по одному, сравнение с таблицей базового состояния (число файлов и упавших — как в записи шага 1; упавших 0, пропущенных как в базе)
+[x] REQ-32, AC-23: `git diff $BASE HEAD -- AGENTS.md README.md doc/canon doc/tasks/README.md`; таблица «правило → пометка → REQ» в result.md; `git grep -n "механизм:" -- AGENTS.md`
+[x] DNC-01, AC-26: `git diff --name-only $BASE HEAD -- opencode-plugin/` — пусто; в `.claude/settings.json` нет ключа `permissions` (`python -B -c "import json; assert 'permissions' not in json.load(open('.claude/settings.json', encoding='utf-8'))"`); одноразовый скрипт вне репозитория вызывает `watchRefusal(<команда из списка запретов Канона>, <корень дерева задачи>)` из `opencode-plugin/deny.ts` на дереве с готовым файлом — ожидаемо `undefined` (код плагина не меняется); `node opencode-plugin/test/crew-deny.test.mjs` — итог как в базе
+[x] DNC-02: `git diff --stat $BASE HEAD -- doc/archive/` — пусто
+[x] DNC-03: `git diff $BASE HEAD -- doc/canon/decisions/` — только добавленные датированные «Уточнение» в ADR-0002 (или новый ADR и строка реестра при другом решении Р-01) и ADR-0006, строки принятых решений не изменены
+[x] DNC-04, AC-27: `git diff --diff-filter=M --stat $BASE HEAD -- 'doc/tasks/*/task/*'` — один файл `doc/tasks/001-crew-service/task/draft-plan-previous.md`, одна строка; положительный контроль в result.md: та же команда на одноразовой копии с заведомо изменённым материалом выводит этот файл (шаблон с завершающей косой чертой в git не совпадает ни с чем и всегда пуст)
+[x] DNC-05, AC-27: `git merge-base --is-ancestor d963ecc HEAD`, `git log --oneline $BASE..HEAD` без переписанных коммитов; `git push --force` нигде не вызывался (журнал команд в result.md)
+[x] DNC-06, AC-27: `git diff --stat $BASE HEAD -- .gitattributes` — пусто
+[x] Тесты плагина как в базе: `cd opencode-plugin && node test/<файл>.test.mjs` по одному, сравнение с таблицей базового состояния (число файлов и упавших — как в записи шага 1; упавших 0, пропущенных как в базе)
 
 ## План
 
