@@ -2,6 +2,8 @@
 // Короткий текст — среднее окно по центру; текст с широкими строками (таблицы) или длинный — большое. Отдельный модуль без JSX,
 // чтобы тест под Node проверял выбор размера (dialog-text.tsx компилирует OpenCode). Ширины текста — по окнам OpenCode 2.0.23:
 // medium 60, large 88, xlarge 116 колонок минус отступы диалога.
+/** В <text> OpenCode кладёт только строки: любое значение приводится к строке (нестрока роняла окно: TextNodeRenderable only accepts strings). */
+export const str = (v: unknown): string => (typeof v === "string" ? v : v === undefined || v === null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v))
 export type DialogSize = "medium" | "large" | "xlarge"
 export const TEXT_WIDTH: Record<DialogSize, number> = { medium: 56, large: 84, xlarge: 112 }
 /** Видимая ширина строки: широкие знаки (CJK, эмодзи) занимают две колонки. */
@@ -17,7 +19,7 @@ export const cellWidth = (s: string): number => {
 export const wrappedRows = (lines: string[], width: number): number => lines.reduce((n, l) => n + Math.max(1, Math.ceil(cellWidth(l) / width)), 0)
 /** Размер окна и число строк тела для текста; rows — сколько строк тела помещается на экране. */
 export function pickSize(message: string, rows: number, columns = 120): { size: DialogSize; bodyRows: number; scrolls: boolean } {
-  const lines = String(message ?? "").split("\n")
+  const lines = str(message).split("\n")
   const widest = Math.max(0, ...lines.map(cellWidth))
   let size: DialogSize
   if (widest > TEXT_WIDTH.large && columns >= 100) size = "xlarge" // таблицы и длинные строки: широкое окно

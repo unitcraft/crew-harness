@@ -5,6 +5,7 @@
 // tui.ts через import() с защитой: не заработало — блока нет, остальное в окне работает.
 import { createSignal, For, onCleanup } from "solid-js"
 import { readStatuses, sideText, sidebarLines } from "./status.ts"
+import { str } from "./dialog-size.ts"
 
 const EVERY_MS = 2_000
 
@@ -27,9 +28,9 @@ function CrewBlock(props: { api: any; sessionID?: string }) {
   }
   return (
     <box flexDirection="column" marginTop={1}>
-      <text fg={color("base")}>{view().title}</text>
-      <For each={view().rows}>{(r) => <text fg={color(r.tone)}>{sideText(r)}</text>}</For>
-      <text fg={color("muted")}>{view().foot}</text>
+      <text fg={color("base")}>{str(view().title)}</text>
+      <For each={view().rows}>{(r) => <text fg={color(r.tone)}>{str(sideText(r))}</text>}</For>
+      <text fg={color("muted")}>{str(view().foot)}</text>
     </box>
   )
 }

@@ -5,7 +5,7 @@
 // клавиши), под ним строка «ещё N строк». Подключается из tui.ts через import() с защитой: не загрузился (другая версия, тест
 // под Node) — остаётся обычный alert.
 import { createSignal, onMount } from "solid-js"
-import { pickSize } from "./dialog-size.ts"
+import { pickSize, str } from "./dialog-size.ts"
 
 function TextDialog(props: { api: any; title: string; message: string; done: () => void }) {
   const lines = props.message.split("\n")
@@ -52,23 +52,24 @@ function TextDialog(props: { api: any; title: string; message: string; done: () 
   return (
     <box flexDirection="column" paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1} flexGrow={0}>
       <box flexDirection="row" justifyContent="space-between">
-        <text fg={t.base}>{props.title}</text>
+        <text fg={t.base}>{str(props.title)}</text>
         <text fg={t.muted}>esc</text>
       </box>
       <box flexDirection="column" flexGrow={0}>
         <scrollbox ref={(el: any) => (box = el)} height={fit.bodyRows} flexGrow={0} scrollbarOptions={{ visible: false }}>
           <text fg={t.base} wrapMode="word">
-            {props.message}
+            {str(props.message)}
           </text>
         </scrollbox>
-        <text fg={t.muted}>{scrolls ? (more() > 0 ? `ещё ${more()} строк · ↑↓ PgUp PgDn или колесо мыши — прокрутка` : "конец · ↑↓ PgUp PgDn — прокрутка") : "enter — закрыть"}</text>
+        <text fg={t.muted}>{str(scrolls ? (more() > 0 ? `ещё ${more()} строк · ↑↓ PgUp PgDn или колесо мыши — прокрутка` : "конец · ↑↓ PgUp PgDn — прокрутка") : "enter — закрыть")}</text>
       </box>
     </box>
   )
 }
 
 /** Показать текст в широком диалоге; обещание выполняется, когда диалог закрыт. */
-export function showTextDialog(api: any, o: { title: string; message: string }): Promise<void> {
+export function showTextDialog(api: any, o0: { title: string; message: string }): Promise<void> {
+  const o = { title: str(o0?.title), message: str(o0?.message) } // в <text> идут только строки: нестрока роняет окно (TextNodeRenderable)
   return new Promise((resolve) => {
     let finished = false
     const done = () => {
@@ -79,9 +80,4 @@ export function showTextDialog(api: any, o: { title: string; message: string }):
     }
     api.ui.dialog.show(() => <TextDialog api={api} title={o.title} message={o.message} done={done} />, done)
   })
-}
-
-/** Строка-подсказка под строкой ввода (api.ui.dialog.prompt принимает description как функцию, возвращающую элемент). */
-export function noteLine(api: any, text: string) {
-  return <text fg={api?.theme?.text?.muted}>{text}</text>
 }

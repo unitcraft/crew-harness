@@ -141,7 +141,7 @@ await new Promise((r) => setTimeout(r, 3600))
   api.ui.dialog.prompt = async (o) => (out.asked.push(o), script.shift())
   await slashOf(out, "crew-sets").run()
   const ask = out.asked.at(-1)
-  cell("the input of «use» has the title, the format and an example of this verb, the verb already typed", ask.title === "/crew-sets use" && ask.placeholder.includes("use <имя> — например: use cross-kimi") && ask.value === "use ", JSON.stringify(ask))
+  cell("the input of «use» has the title, the format and an example of this verb, the verb already typed", ask.title.startsWith("/crew-sets use") && Core.SETS_VERB_HELP.every((v) => ask.title.includes(v.verb)) && Object.values(ask).every((x) => typeof x === "string") && ask.placeholder.includes("use <имя> — например: use cross-kimi") && ask.value === "use ", JSON.stringify(ask))
   cell("a typed verb runs the same command: use with an unknown name is refused with the list of names, nothing changed", /Не сделано/.test(msg(out)) && /cross-kimi/.test(msg(out)) && Object.keys(L.profileState(root).layer).length === 0 && sha(file) === fileHash, JSON.stringify(last(out))?.slice(0, 200))
   script = ["use", "use cross-kimi"]
   await slashOf(out, "crew-sets").run()
@@ -229,6 +229,31 @@ await new Promise((r) => setTimeout(r, 3600))
   cell("the width of a wide character counts twice", Size.cellWidth("漢字") === 4 && Size.cellWidth("ab") === 2, "")
   const src = readFileSync(new URL("../dialog-text.tsx", import.meta.url), "utf8")
   cell("dialog-text.tsx sets the size from the content, not a fixed xlarge, and puts the hint right under the text", /size: fit\.size/.test(src) && !/size: "xlarge"/.test(src) && /height=\{fit\.bodyRows\}/.test(src), "")
+}
+
+{
+  // THE CRASH OF 2026-10-08 (TextNodeRenderable only accepts strings): nothing but strings goes to the window - static check of the
+  // sources and a cell with answers that are not strings
+  const read = (f) => readFileSync(new URL("../" + f, import.meta.url), "utf8")
+  const tuiSrc = read("tui.ts").split(/\r?\n/).map((l) => l.replace(/\/\/.*$/, "")).join(" ") // without the comments
+  cell("tui.ts passes no function or element as description / children to the dialogs of the window (description: () => ..., JSX, noteLine)", !/description\s*:\s*(\(|async|function)/.test(tuiSrc) && !/noteLine/.test(tuiSrc) && !/<text|<box|<span/.test(tuiSrc) && !/noteLine/.test(read("dialog-text.tsx")), "")
+  const bad = []
+  for (const f of ["dialog-text.tsx", "sidebar.tsx", "progress-sidebar.tsx"]) {
+    for (const m of read(f).matchAll(/<text\b[^>]*>([\s\S]*?)<\/text>/g)) {
+      const inner = m[1].trim()
+      if (inner.includes("{") && !inner.startsWith("{str(")) bad.push(f + ": " + inner.slice(0, 60))
+    }
+  }
+  cell("every expression inside <text> of the three window files goes through str(...) (a non-string would crash the window)", bad.length === 0, bad.join(" | "))
+  cell("str() makes a string of anything; pickSize takes a non-string without a throw", [undefined, null, 5, { a: 1 }, ["x"], "ok"].every((v) => typeof Size.str(v) === "string") && Size.str(undefined) === "" && Size.str(5) === "5" && typeof Size.pickSize(undefined, 20).size === "string" && typeof Size.pickSize(12345, 20).bodyRows === "number", "")
+  // a command whose answer is not a string: the dialog gets strings only
+  const { api, out } = mkApi([])
+  const stop = Tui.default.setup(api)
+  core.writeDoctorForTest?.()
+  writeFileSync(core.DOCTOR_FILE, JSON.stringify({ at: Date.now(), problems: [7, { a: 1 }, null, "text"] }))
+  await slashOf(out, "crew-doctor").run()
+  cell("a self-check with problems that are numbers and objects reaches the dialog as strings", out.shown.length > 0 && out.shown.every((x) => typeof x.title === "string" && typeof x.message === "string"), JSON.stringify(out.shown))
+  stop?.()
 }
 
 stopServer?.()

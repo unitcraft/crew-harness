@@ -20,6 +20,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, w
 import path from "node:path"
 import { DOCTOR_FILE, NOTICES, WINDOWS, cardFile, helpFor, log, readJson, verbHelpOf } from "./core.ts"
 import { readCatalog } from "./model-catalog.ts"
+import { str } from "./dialog-size.ts"
 import { doctorText, formatStatuses, readStatuses } from "./status.ts"
 import { listTasks, loadTask } from "./tasks.ts"
 import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
@@ -91,7 +92,9 @@ export default {
     // короткий остаётся обычным alert. Модуль грузится при старте, с защитой: не загрузился — везде alert
     let textDialog: any
     if (api.ui?.slot && !process.env.CREW_HARNESS_NO_SIDEBAR) import("./dialog-text.tsx").then((m) => (textDialog = m)).catch((e) => log(`text dialog not drawn pid=${process.pid}: ${String(e).slice(0, 300)}`))
-    const showText = (o: { title: string; message: string }): Promise<void> | undefined => {
+    const showText = (o0: { title: string; message: string }): Promise<void> | undefined => {
+      const o = { title: str(o0?.title), message: str(o0?.message) } // в <text> идут только строки
+
       // диалог сам выбирает размер по содержимому (dialog-size.ts): короткий текст - среднее окно по центру, большое - для длинного
       if (textDialog && api.ui?.dialog?.show) {
         try {
@@ -182,7 +185,7 @@ export default {
       const pick: string | undefined = await dialog.select({
         title: "Планы на согласовании",
         options: waiting.map((t) => ({
-          title: `${t.project} · ${t.title}`,
+          title: str(`${t.project} · ${t.title}`),
           value: `${t.project}#${t.n}`,
           description: `раундов перепроверки ${t.plan!.rounds.length}${t.plan!.stuck ? " — раунды кончились, решаете по последним замечаниям" : ", два последних чистые"} · задача #${t.n}`,
         })),
@@ -195,7 +198,7 @@ export default {
         const d: string | undefined = await dialog.select({
           title: `${t.title}`,
           options: [
-            { title: "Показать план", value: "show", description: t.plan.file },
+            { title: "Показать план", value: "show", description: str(t.plan.file) },
             { title: "Согласовать: без упрощений", value: "ok", description: "ни заглушек, ни TODO, ни «временно» — шаг с упрощением не принимается" },
             { title: "Согласовать: упрощения — как в плане", value: "ok-shortcuts", description: "допустимы упрощения, перечисленные в «Режиме выполнения»" },
             { title: "Вернуть с замечаниями", value: "no", description: "план уйдёт автору, перепроверка начнётся заново" },
@@ -304,14 +307,11 @@ export default {
           const v = helps.find((h) => h.verb === pick)!
           if (v.bare) text = v.verb
           else {
-            const allVerbs = `Все глаголы: ${helps.map((h) => h.verb).join(" · ")}`
-            const ask = (extra: object) => dialog?.prompt?.({ title: `${name} ${v.verb}`, placeholder: `${v.verb} ${v.usage} — например: ${v.example}`, value: `${v.verb} `, ...extra })
-            let typed: string | undefined
-            try {
-              typed = await ask(textDialog?.noteLine ? { description: () => textDialog.noteLine(api, allVerbs) } : {})
-            } catch {
-              typed = await ask({}) // окно не приняло подсказку под строкой — тот же ввод без неё
-            }
+            // ВВОД ТОЛЬКО СТРОКАМИ (дефект 2026-10-08): description у dialog.prompt - функция, чей результат окно вставляет в свой блок;
+            // элемент <text> оттуда роняет окно (TextNodeRenderable only accepts strings). Подсказка со списком глаголов - в заголовке
+            // (строка), формат и пример - в placeholder (строка).
+            const allVerbs = helps.map((h) => h.verb).join(" ")
+            const typed: string | undefined = await dialog?.prompt?.({ title: str(`${name} ${v.verb} · глаголы: ${allVerbs}`), placeholder: str(`${v.verb} ${v.usage} — например: ${v.example}`), value: str(`${v.verb} `) })
             if (typed === undefined) return
             const t = typed.trim()
             const rest = t.startsWith(v.verb) ? t.slice(v.verb.length).trim() : t // строка могла прийти с глаголом или без него

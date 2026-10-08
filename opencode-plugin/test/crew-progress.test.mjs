@@ -1036,7 +1036,7 @@ procs.n = 0 // the fixtures are built, from here every started process is counte
   const progressSrc = readFileSync(new URL("../progress-sidebar.tsx", import.meta.url), "utf8")
   const tuiSrc = readFileSync(new URL("../tui.ts", import.meta.url), "utf8")
   const imp = (s) => s.split("\n").filter((l) => /^import /.test(l))
-  cell("AC-16 progress-sidebar.tsx: the same first line (jsxImportSource) and the same solid-js import as sidebar.tsx; progress-view is not imported statically", progressSrc.split("\n")[0] === sidebarSrc.split("\n")[0] && imp(progressSrc)[0] === imp(sidebarSrc)[0] && imp(progressSrc).length === 2 && imp(progressSrc)[1].includes("./core.ts") && !imp(progressSrc).some((l) => l.includes("progress-view")), show(imp(progressSrc)))
+  cell("AC-16 progress-sidebar.tsx: the same first line (jsxImportSource) and the same solid-js import as sidebar.tsx; progress-view is not imported statically", progressSrc.split("\n")[0] === sidebarSrc.split("\n")[0] && imp(progressSrc)[0] === imp(sidebarSrc)[0] && imp(progressSrc).length === 3 && imp(progressSrc)[1].includes("./core.ts") && imp(progressSrc)[2].includes("./dialog-size.ts") && !imp(progressSrc).some((l) => l.includes("progress-view")), show(imp(progressSrc)))
   cell("AC-16 tui.ts imports none of the new modules statically (a syntax error in them does not stop the window)", !imp(tuiSrc).some((l) => /progress/.test(l)), show(imp(tuiSrc)))
   cell("AC-13 the registration is in tui.ts", /crew-progress/.test(tuiSrc) && /crewSidebar\?\.finally\(/.test(tuiSrc), "")
 }

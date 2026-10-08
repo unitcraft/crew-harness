@@ -6,6 +6,7 @@
 // подгружается отсюда через import() в try/catch: не загрузился — блок пуст, окно живо.
 import { createSignal, For, onCleanup } from "solid-js"
 import { cardFile, readJson } from "./core.ts"
+import { str } from "./dialog-size.ts"
 
 const EVERY_MS = 2_000
 
@@ -39,7 +40,7 @@ function ProgressBlock(props: { api: any; sessionID?: string }) {
     <box flexDirection="column">
       {rows().length ? (
         <box flexDirection="column" marginTop={1}>
-          <For each={rows()}>{(r) => <text fg={color(r.tone)}>{r.text}</text>}</For>
+          <For each={rows()}>{(r) => <text fg={color(r.tone)}>{str(r.text)}</text>}</For>
         </box>
       ) : null}
     </box>
