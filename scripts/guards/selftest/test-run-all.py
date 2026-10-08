@@ -14,6 +14,7 @@ import sys
 sys.dont_write_bytecode = True
 
 import os
+import shutil
 
 import stlib
 
@@ -134,7 +135,44 @@ def main():
         proc = stlib.run(("sh", RUN_ALL, "--dir", folder), cwd=repo, env=e)
         assert proc.returncode == 1 and "ок:" not in proc.out, (proc.out, proc.err)
 
+    SELFTESTS = os.path.join(stlib.GUARDS, "selftest", "run-selftests.sh")
+    NL = chr(10)
+    GOOD_TEST = NL.join(["print('проба законное a: ок')", "print('проба красная b: ок')",
+                         "print('проба иной-синтаксис c: ок')", "print('проба мишень d: ок')",
+                         "print('итого: 4 проб, упало 0')", ""])
+    BAD_SHAPE = NL.join(["print('проба красная x: ок')", "print('итого: 1 проб, упало 0')", ""])
+    RED_TEST = NL.join(["import sys", "print('проба законное x: FAIL')", "print('итого: 1 проб, упало 1')",
+                        "sys.exit(1)", ""])
+    SILENT_TEST = "print('что-то')" + NL
+
+    def selftests_runner(tests):
+        folder = os.path.join(base, "rs%d" % len(os.listdir(base)))
+        os.makedirs(os.path.join(folder, "selftest"))
+        os.makedirs(os.path.join(folder, "lib"))
+        shutil.copy(SELFTESTS, os.path.join(folder, "selftest", "run-selftests.sh"))
+        shutil.copy(FIND, os.path.join(folder, "lib", "find-python.sh"))
+        for name, text in tests.items():
+            write(os.path.join(folder, "selftest", name), text)
+        return stlib.run(("sh", os.path.join(folder, "selftest", "run-selftests.sh")), env=dict(env, PYTHONIOENCODING="utf-8"))
+
+    def selftests_good():
+        proc = selftests_runner({"test-a.py": GOOD_TEST})
+        assert proc.returncode == 0 and proc.out.strip().splitlines()[-1] == "ок: осмотрено 1 самотестов, упало 0", proc.out
+
+    def selftests_bad_shape_and_failures():
+        proc = selftests_runner({"test-a.py": GOOD_TEST, "test-bad.py": BAD_SHAPE,
+                                 "test-red.py": RED_TEST, "test-silent.py": SILENT_TEST})
+        assert proc.returncode == 1 and "FAIL: самотесты: упало 3 из 4" in proc.out, proc.out
+        assert "нет законной пробы первой" in proc.out, proc.out
+
+    def selftests_none():
+        proc = selftests_runner({})
+        assert proc.returncode == 1 and "FAIL: мишень потеряна" in proc.out, proc.out
+
     pr.probe("законное", "три стража (два Python, один sh): счёт и код 0", legit)
+    pr.probe("законное", "run-selftests: хороший самотест принят", selftests_good)
+    pr.probe("красная", "run-selftests: плохая форма, упавший и молчащий самотесты красные", selftests_bad_shape_and_failures)
+    pr.probe("мишень", "run-selftests: нет самотестов - мишень потеряна", selftests_none)
     pr.probe("законное", "«пропущено» локально зелёное, в CI красное", skipped_local_green_ci_red)
     pr.probe("законное", "аргументы --root, --index, --ci доходят до стражей", args_pass_through)
     pr.probe("законное", "вывод ошибок стража не теряется", stderr_is_shown)

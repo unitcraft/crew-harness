@@ -34,6 +34,17 @@ for t in "$here"/test-*.py "$here"/test-*.sh; do
     "итого: "*" проб, упало 0") good=1 ;;
     *) good=0 ;;
   esac
+  # форма самотеста: законная проба первой и все четыре вида проб на месте
+  shape=1
+  first=$(grep -m 1 '^проба ' "$tmp/out")
+  case "$first" in "проба законное "*) ;; *) shape=0 ;; esac
+  for kind in законное красная иной-синтаксис мишень; do
+    grep -q "^проба $kind " "$tmp/out" || shape=0
+  done
+  if [ "$rc" -eq 0 ] && [ "$good" -eq 1 ] && [ "$shape" -eq 0 ]; then
+    rc=1
+    last="$last; нет законной пробы первой или одного из видов проб"
+  fi
   if [ "$rc" -eq 0 ] && [ "$good" -eq 1 ]; then
     echo "$name: $last"
   else
