@@ -19,10 +19,16 @@ export type Kind =
   | { type: "stringMap"; keys: string[] }
   | { type: "grades" }
   | { type: "profiles" }
+  | { type: "extraFields" }
 /** humanOnly — ключ ставит человек (команда окна use и save либо правка файла); crew_config set его не пишет */
 export type Setting = { key: string; kind: Kind; default: any; question: string; why: string; recommend?: string; group: string; humanOnly?: boolean }
 
 const TIERS = ["heavy", "medium", "light"]
+/** Встроенные поля задачи и входа crew_spawn / crew_task: id полей проекта (task_extra_fields) с ними не совпадает. Список живёт
+ *  здесь, а не в core.ts: core.ts импортирует эту схему, обратный импорт образовал бы цикл; тест сверяет его с полями входа. */
+export const RESERVED_FIELD_IDS = ["title", "goal", "criteria", "boundaries", "open_questions", "priority", "tier", "role", "model", "kind", "parent", "plan_parent", "task", "session", "n", "action", "extra"]
+export const EXTRA_FIELDS_MAX = 8
+export const EXTRA_ID_RE = /^[a-z0-9_]{1,31}$/
 export const SCHEMA: Setting[] = [
   { key: "project", group: "Проект", kind: { type: "string" }, default: "(имя папки настроек)", question: "Как называется проект (адрес вкладок «проект.роль»)?", why: "строчные латинские буквы, цифры, дефис", recommend: "короткое имя, например nova" },
   { key: "root", group: "Проект", kind: { type: "string" }, default: ".", question: "Где корень проекта — относительно папки настроек?", why: "вкладки под корнем относятся к проекту; «..» — папка выше (виртуальный проект из многих репозиториев)", recommend: ".. для папки со многими репозиториями, . для одного репозитория" },
@@ -38,6 +44,9 @@ export const SCHEMA: Setting[] = [
   { key: "profile_sets", group: "Профили моделей", kind: { type: "profiles" }, default: {}, question: "Какие наборы: на какой семье и ступени идут разработка (develop), приёмка (accept), планирование (plan), приёмка плана (plan_accept)?", why: "набор — именованная раскладка этапов; ступень task — ступень задачи; этап без клетки идёт по spawn_models", recommend: `default, cross-kimi, cross-codex, kimi-only — как в примере раздела README о профилях моделей: ${PROFILES_README_URL}` },
   { key: "profile_set", group: "Профили моделей", kind: { type: "profiles" }, default: "(нет)", question: "Какой набор включён по умолчанию?", why: "имя набора из profile_sets; без имени набор не применяется", recommend: "не задавать, пока нет наборов; потом default", humanOnly: true },
   { key: "default_priority", group: "Задачи", kind: { type: "enum", options: ["P0", "P1", "P2", "P3"] }, default: "P2", question: "Какой приоритет у задачи, если его не назвали?", why: "P0 авария, P1 первая очередь, P2 обычная работа, P3 когда освободятся руки", recommend: "P2" },
+  { key: "accepted_slot", group: "Задачи", kind: { type: "enum", options: ["hold", "free"] }, default: "hold", question: "Занимает ли принятая, но не очищенная задача место в inflight_limit?", why: "hold: занимает, как раньше; free: не занимает, её уборку считает отдельный счётчик cleanup_limit, и новая работа ставится, пока приёмщики убирают", recommend: "free, если приёмка забивает inflight_limit принятыми задачами; иначе hold" },
+  { key: "cleanup_limit", group: "Задачи", kind: { type: "int" }, default: 10, question: "Сколько принятых, но не очищенных задач допустимо, прежде чем новую работу перестанут ставить (0 — без предела)?", why: "действует только при accepted_slot: free; отказ называет ждущие уборки поимённо; P0 проходит мимо", recommend: "10 (вдвое больше типичного inflight_limit 5)" },
+  { key: "task_extra_fields", group: "Задачи", kind: { type: "extraFields" }, default: [], question: "Какие дополнительные поля задачи объявляет проект (id, подпись в письмах, подсказка)?", why: "значения идут в запись задачи, письма исполнителю и приёмщику и в show; плагин их только хранит и доставляет, проверяет их скрипт проекта (например, диапазон номеров реестра); до 8 полей", recommend: "не задавать, пока скрипту проекта не нужны свои поля" },
   { key: "push_empty_turns", group: "Подталкивание", kind: { type: "int" }, default: 3, question: "Сколько пустых ходов подряд (без инструментов) считать застреванием?", why: "дальше напоминаний нет, интегратору вызов", recommend: "3" },
   { key: "stall_minutes", group: "Подталкивание", kind: { type: "int" }, default: 30, question: "Через сколько минут затянувшееся (замок вливания держат, сданная задача ждёт приёмщика) поднимать интегратору (0 — не поднимать)?", why: "приёмка может упереться в запрет и стоять часами, пока кто-то не заметит", recommend: "30" },
   { key: "accepted_reminder_min", group: "Подталкивание", kind: { type: "int" }, default: 30, question: "Через сколько минут напоминать о принятой, но не очищенной задаче (0 — не напоминать)?", why: "принятая задача до очистки занимает место в inflight_limit; задача #9 nova провисела так 11,5 ч, и запуск срочной задачи получил отказ", recommend: "30" },
@@ -66,6 +75,7 @@ export const SCHEMA: Setting[] = [
   { key: "target_branch", group: "Приёмка", kind: { type: "string" }, default: "main", question: "В какую ветку вливать?", why: "плагин проверяет, что ветка задачи или squash-коммит в ней", recommend: "main" },
   { key: "rework_max", group: "Приёмка", kind: { type: "int" }, default: 3, question: "Сколько кругов доработки до вызова интегратора?", why: "много возвратов — задача поставлена неясно", recommend: "3" },
   { key: "cleanup", group: "Приёмка", kind: { type: "enum", options: ["none", "local", "local+remote"] }, default: "local+remote", question: "Что удалять после вливания?", why: "local — worktree и локальную ветку, local+remote — ещё ветку на origin", recommend: "local+remote" },
+  { key: "merge_precheck", group: "Приёмка", kind: { type: "enum", options: ["off", "required"] }, default: "off", question: "Требовать ли зелёную предпроверку перед замком вливания?", why: "off: merge берёт замок сразу, как раньше; required: приёмщик сначала делает crew_task precheck (без замка), ждёт CI на кандидате, отмечает его, и merge выдаёт замок только на ту же вершину целевой ветки на origin; сдвинулась — отказ без замка. Включать вместе с изменением скрипта вливания проекта", recommend: "required, если вливание держит замок на весь круг проверки (полчаса и больше); иначе off" },
   { key: "worktrees", group: "Worktree", kind: { type: "string", allowEmpty: true }, default: "", question: "В какой папке (от корня проекта) создавать worktree задач?", why: "пусто — решает методология проекта; задано — письмо с задачей называет точный путь", recommend: "worktrees" },
   { key: "worktree_name", group: "Worktree", kind: { type: "string" }, default: "{repo}-{n}-{slug}", question: "Как называть папку worktree?", why: "{repo} репозиторий, {n} номер задачи, {slug} название латиницей, {project}", recommend: "{repo}-{n}-{slug}" },
   { key: "branch_name", group: "Worktree", kind: { type: "string" }, default: "t{n}-{slug}", question: "Как называть ветку задачи?", why: "те же подстановки", recommend: "t{n}-{slug} или как принято в проекте" },
@@ -109,6 +119,10 @@ export function invalid(key: string, v: any): string | undefined {
       return Array.isArray(v) && v.every((x) => typeof x === "string" && x.trim()) ? undefined : `${key}: список строк`
     case "profiles":
       return invalidProfileKey(key, v)
+    case "extraFields":
+      return Array.isArray(v) && v.length <= EXTRA_FIELDS_MAX && v.every((f) => isObj(f) && typeof f.id === "string" && EXTRA_ID_RE.test(f.id) && !RESERVED_FIELD_IDS.includes(f.id) && typeof f.label === "string" && f.label.trim() && (f.hint === undefined || typeof f.hint === "string")) && new Set(v.map((f: any) => f.id)).size === v.length
+        ? undefined
+        : `${key}: список до ${EXTRA_FIELDS_MAX} полей {"id": "строчные латинские, цифры, _ (до 31 знака)", "label": "подпись в письмах", "hint": "подсказка (необязательно)"}, id без повторов и не из встроенных (${RESERVED_FIELD_IDS.join(", ")})`
     case "acceptance":
       return Array.isArray(v) && v.every((a) => isObj(a) && typeof a.id === "string" && /^[a-z0-9][a-z0-9_-]*$/.test(a.id) && typeof a.text === "string" && a.text.trim() && (a.required === undefined || typeof a.required === "boolean")) && new Set(v.map((a: any) => a.id)).size === v.length
         ? undefined

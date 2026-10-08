@@ -11,6 +11,7 @@ import { BASE as CREW_BASE, dataDir } from "./paths.ts"
 import { rotateLog } from "./housekeeping.ts"
 import { type Projects, parseProjects as parseProjectsWith, projectFor, rawSettingsFor, readSettingsFolder, workingSettings, writeSettings } from "./settings.ts"
 import { SCHEMA, guideText, invalid } from "./config-schema.ts"
+import { EXTRA_FIELDS_MAX, EXTRA_ID_RE, RESERVED_FIELD_IDS } from "./config-schema.ts"
 export { PROJECT_RE, type Project, type Projects, settingsProblems } from "./settings.ts"
 import { PROJECT_RE, settingsProblems } from "./settings.ts"
 import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
@@ -212,10 +213,31 @@ export type CrewConfig = {
   planTemplate: string
   inbound: "integrator" | "any" | "none"
   root?: string
+  /** принятая, но не очищенная задача: hold — занимает место в inflight_limit (как раньше), free — не занимает (считается cleanup_limit) */
+  acceptedSlot: "hold" | "free"
+  /** free: сколько принятых и не очищенных задач допустимо, прежде чем новую работу не ставят (0 — без предела) */
+  cleanupLimit: number
+  /** off — merge берёт замок сразу (как раньше); required — замок только после зелёной предпроверки на той же вершине */
+  mergePrecheck: "off" | "required"
+  /** дополнительные поля задачи, объявленные проектом (task_extra_fields) */
+  extraFields: ExtraField[]
 }
+export type ExtraField = { id: string; label: string; hint?: string }
 export const TASK_FIELDS = ["goal", "criteria", "boundaries", "open_questions"] as const
 const num = (v: any, d: number) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : d)
 const oneOf = <T extends string>(v: any, all: readonly T[], d: T): T => (all.includes(v) ? v : d)
+/** Объявленные проектом дополнительные поля: негодные элементы, повторы id и встроенные имена отбрасываются, не больше 8. */
+export function extraFieldsOf(raw: any): ExtraField[] {
+  if (!Array.isArray(raw)) return []
+  const out: ExtraField[] = []
+  for (const f of raw) {
+    if (!f || typeof f !== "object" || typeof f.id !== "string" || !EXTRA_ID_RE.test(f.id) || RESERVED_FIELD_IDS.includes(f.id) || out.some((x) => x.id === f.id)) continue
+    if (typeof f.label !== "string" || !f.label.trim()) continue
+    out.push({ id: f.id, label: f.label.trim(), ...(typeof f.hint === "string" && f.hint.trim() ? { hint: f.hint.trim() } : {}) })
+    if (out.length >= EXTRA_FIELDS_MAX) break
+  }
+  return out
+}
 /** Список шагов приёмки из настроек или undefined (нет, пуст, не той формы — умолчание). */
 function acceptanceList(raw: any): AcceptanceStep[] | undefined {
   if (!Array.isArray(raw)) return undefined
@@ -295,6 +317,10 @@ export function loadConfig(dir: string): CrewConfig {
     planTemplate: typeof j.plan_template === "string" ? j.plan_template.trim() : "",
     inbound: oneOf(j.inbound, ["integrator", "any", "none"] as const, "integrator"),
     root,
+    acceptedSlot: oneOf(j.accepted_slot, ["hold", "free"] as const, "hold"),
+    cleanupLimit: num(j.cleanup_limit, 10),
+    mergePrecheck: oneOf(j.merge_precheck, ["off", "required"] as const, "off"),
+    extraFields: extraFieldsOf(j.task_extra_fields),
   }
 }
 
