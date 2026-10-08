@@ -18,7 +18,7 @@
 // ещё и attention.notify: системное уведомление, когда окно не в фокусе (настройка OpenCode attention.notifications).
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { DOCTOR_FILE, NOTICES, WINDOWS, cardFile, configShowText, loadProjects, log, readJson } from "./core.ts"
+import { DOCTOR_FILE, NOTICES, WINDOWS, cardFile, configShowText, helpFor, loadProjects, log, readJson } from "./core.ts"
 import { doctorText, formatStatuses, readStatuses } from "./status.ts"
 import { listTasks, loadTask } from "./tasks.ts"
 import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
@@ -201,12 +201,95 @@ export default {
       }
       showText({ title: "crew-harness — что сейчас идёт", message: text })
     }
+    // КОМАНДЫ БЕЗ ХОДА МОДЕЛИ, ОТВЕТ СРАЗУ (владелец, 2026-10-08: «выполнение команды должно делаться сразу»). Прежняя серверная
+    // регистрация (ctx.command.transform + ctx.session.synthetic) отвечала служебным сообщением, которое окно OpenCode 2.0.23
+    // не показывает вовсе (проба на одноразовом сервере: execute вызван, synthetic завершён, список сообщений сессии пуст).
+    // Поэтому /crew-help, /crew-sets и /crew-profiles — команды окна, как /crew-progress: текст в диалоге. Серверных команд с
+    // этими именами нет (два одноимённых пункта в списке слэш-команд были бы лишними).
+    const tabDir = (): string => {
+      let route: string | undefined
+      try {
+        const r = api.ui?.router?.current?.()
+        route = r?.type === "session" ? r.sessionID : undefined
+      } catch {}
+      const card = route ? readJson<any>(cardFile(route)) : undefined
+      return card?.directory || process.cwd()
+    }
+    const showHelp = () => {
+      let text: string
+      try {
+        text = helpFor(tabDir())
+      } catch (e) {
+        text = `Не прочитать справку: ${e}`
+      }
+      showText({ title: "crew-harness — справка", message: text })
+    }
+    // Каталог моделей для сверки окон (use, check): у окна он свой — api.state.provider (V1: Provider.models) или клиент окна;
+    // нет ни того ни другого — undefined, и check пишет «каталог недоступен», а не падает
+    const catalogOfWindow = async () => {
+      const rows: { providerID: string; modelID: string; limit?: any }[] = []
+      const take = (providers: any) => {
+        for (const p of Array.isArray(providers) ? providers : []) {
+          const models = p?.models && typeof p.models === "object" ? Object.entries<any>(p.models) : []
+          for (const [id, m] of models) rows.push({ providerID: String(p.id ?? p.providerID ?? ""), modelID: String(m?.id ?? id), limit: m?.limit })
+        }
+      }
+      try {
+        take(api.state?.provider)
+      } catch {}
+      if (!rows.length) {
+        try {
+          const r = await Promise.race([api.client?.provider?.list?.(), new Promise((res) => setTimeout(res, 3_000))])
+          const d: any = (r as any)?.data ?? r
+          take(d?.all ?? d)
+        } catch {}
+      }
+      return rows.length ? rows : undefined
+    }
+    const verbCommand = (kind: "sets" | "profiles") => async (given?: unknown) => {
+      const name = `/crew-${kind}`
+      let text = typeof given === "string" ? given : undefined
+      if (text === undefined) {
+        const dialog = api.ui?.dialog
+        // аргументов у команды окна нет: первый диалог — выбор «таблица, проверка, сохранение» или ввод глагола (ответ на пустой
+        // ввод от отмены не отличить, поэтому таблица — пункт выбора, а не пустая строка)
+        const pick: string | undefined = await dialog?.select?.({
+          title: name,
+          options: [
+            { title: "Таблица", value: "table", description: kind === "sets" ? "все наборы и включённый" : "семья, ступень → модель, окно" },
+            { title: "check", value: "check", description: "проверка данных и окон, ничего не меняет" },
+            { title: "save", value: "save", description: "записать локальные правки в файл проекта" },
+            { title: "Ввести команду…", value: "type", description: kind === "sets" ? "show, use, set, unset, new, rename, delete, reset, check, save" : "show, set, new, rename, delete, reset, check, save" },
+          ],
+        })
+        if (!pick) return
+        if (pick === "type") {
+          const typed: string | undefined = await dialog?.prompt?.({ title: name, placeholder: kind === "sets" ? "например: use cross-kimi" : "например: show claude" })
+          if (!typed?.trim()) return
+          text = typed.trim()
+        } else text = pick === "table" ? "" : pick
+      }
+      let out: string
+      try {
+        loadProjects() // проекты — из ящика (их кладёт плагин сервиса)
+        const m = await import("./profile-cmd.ts")
+        const deps = { catalog: catalogOfWindow, version: undefined }
+        out = await (kind === "sets" ? m.runSetsCommand : m.runProfilesCommand)(tabDir(), text, deps)
+      } catch (e) {
+        log(`window command ${name} failed: ${e}`)
+        out = `Команда не выполнена: ${(e as any)?.message ?? e}`
+      }
+      showText({ title: `crew-harness — ${name}${text ? " " + text : ""}`, message: out })
+    }
     const commands = [
       { id: "crew-harness.status", title: "Crew: кто чего ждёт", group: "Crew", slash: { name: "crew" }, palette: true, run: showStatus },
       { id: "crew-harness.config", title: "Crew: настройки проекта", group: "Crew", slash: { name: "crew-config" }, palette: true, run: showConfig },
       { id: "crew-harness.plans", title: "Crew: планы на согласовании", group: "Crew", slash: { name: "plans" }, palette: true, run: showPlans },
       { id: "crew-harness.doctor", title: "Crew: самопроверка", group: "Crew", slash: { name: "crew-doctor" }, palette: true, run: showDoctor },
       { id: "crew-harness.progress", title: "Crew: что сейчас идёт", group: "Crew", slash: { name: "crew-progress" }, palette: true, run: showProgress },
+      { id: "crew-harness.help", title: "Crew: справка", group: "Crew", slash: { name: "crew-help" }, palette: true, run: showHelp },
+      { id: "crew-harness.sets", title: "Crew: наборы профилей моделей", group: "Crew", slash: { name: "crew-sets" }, palette: true, run: verbCommand("sets") },
+      { id: "crew-harness.profiles", title: "Crew: профили моделей и окон", group: "Crew", slash: { name: "crew-profiles" }, palette: true, run: verbCommand("profiles") },
     ]
     try {
       api.ui.slot({

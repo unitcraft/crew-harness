@@ -87,9 +87,14 @@ const cell = (name, ok, detail) => {
   if (!ok) fail++
 }
 const allReplies = []
+// the window runs the same functions with the catalog of the window (tui.ts); here the catalog is the test one
+const Cmd = await import("../profile-cmd.ts")
+const deps = { version: "2.0.23-test", catalog: async () => { if (catalogFails) throw new Error("catalog down"); return catalog } }
 const run = async (name, text) => {
   const n = replies.length
-  await commands[name].execute({ sessionID: "sesOWNER", prompt: { text } })
+  let t
+  try { t = await (name === "crew-sets" ? Cmd.runSetsCommand : Cmd.runProfilesCommand)(root, text, deps) } catch (e) { t = `Команда не выполнена: ${e?.message ?? e}` }
+  replies.push({ sessionID: "sesOWNER", text: t })
   const r = replies.slice(n).map((x) => x.text).join("\n")
   allReplies.push(r)
   return r
@@ -109,7 +114,7 @@ const st = () => L.profileState(root)
 bump() // normalises the working file once
 
 // ---- AC-07: tables, show, use, reset; no turn of the model ----
-cell("the commands are registered next to each other by the plugin", typeof commands["crew-sets"]?.execute === "function" && typeof commands["crew-profiles"]?.execute === "function", Object.keys(commands).join())
+cell("the plugin of the server registers no /crew-sets and /crew-profiles (they are window commands, see crew-instant-commands.test)", !commands["crew-sets"] && !commands["crew-profiles"], Object.keys(commands).join())
 let r = await sets("")
 cell("AC-07 /crew-sets without an argument: a table of all sets with the four stages, none enabled", ["default", "cross-kimi", "cross-codex", "kimi-only", "разработка", "приёмка", "планирование", "приёмка плана", "claude/task", "kimi/heavy"].every((w) => r.includes(w)) && /Включён: нет/.test(r) && !r.includes("●  ") , r)
 r = await profs("")

@@ -45,12 +45,7 @@ for (const w of ["force", "all", "worker", "assistant — то же, что work
   cell(`help mentions «${w}»`, help.includes(w), "missing")
 }
 
-cell("/crew-help is registered", typeof commands["crew-help"]?.execute === "function", JSON.stringify(Object.keys(commands)))
-await commands["crew-help"].execute({ sessionID: "sesHELP01", prompt: {}, delivery: "queue" })
-cell("/crew-help shows the help as a service message, no model turn", synthetics.length === 1 && synthetics[0].text.includes("crew_inbox") && synthetics[0].resume === false && prompts.length === 0, JSON.stringify({ synthetics, prompts }).slice(0, 160))
-delete ctx.session.synthetic
-await commands["crew-help"].execute({ sessionID: "sesHELP01", prompt: {}, delivery: "queue" })
-cell("/crew-help falls back to the request when OpenCode has no synthetic", prompts.length === 1 && prompts[0].text.includes("crew_inbox"), JSON.stringify(prompts).slice(0, 120))
+cell("the server registers no /crew-help command (it is a window command, see crew-instant-commands.test)", !commands["crew-help"] && synthetics.length === 0 && prompts.length === 0, JSON.stringify(Object.keys(commands)))
 
 const ev = { sessionID: "sesHELP01", system: [] }
 await hooks.context(ev)

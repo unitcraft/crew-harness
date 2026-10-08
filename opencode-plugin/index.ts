@@ -119,7 +119,6 @@ import { type Task, taskRef, acceptedAt, ago, byPriority, createTask, rounds, sl
 import { createRemoteBridge } from "./remote.ts"
 import { profileProblems, profileState, stateSignature, syncProjectFiles, syncSnapshot, syncTaskFile } from "./profile-layer.ts"
 import { cellOfState, resolveStageProfile, stageOfLaunch, tabFitsCell } from "./profiles.ts"
-import { runProfilesCommand, runSetsCommand } from "./profile-cmd.ts"
 import { ensureWorktree, fileAt, gitTraces, leftoversOf, mergeHolder, reviewLetter } from "./review.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
@@ -1403,79 +1402,9 @@ export default {
       for (const t of tools) editor.add(toEditor(t))
     })
 
-    // Слэш-команда /crew-help. Справка показывается служебным сообщением без хода модели (ctx.session.synthetic, 0 токенов,
-    // без эха «просьбы»); если OpenCode этого не даёт — прежний путь: просьба показать справку дословно.
-    try {
-      const existing = new Set<string>()
-      try {
-        const list = await ctx.command.list()
-        for (const c of list?.data ?? list ?? []) if (c?.name) existing.add(String(c.name))
-      } catch {}
-      if (!existing.has("crew-help")) {
-        await ctx.command.transform((editor: any) => {
-          editor.add({
-            name: "crew-help",
-            description: "Справка по письмам между вкладками (crew-harness)",
-            execute: async ({ sessionID, prompt, delivery }: any) => {
-              const dir = readJson<Card>(cardFile(String(sessionID ?? "")))?.directory || String(ctx?.location?.directory ?? "")
-              const text = helpFor(dir)
-              if (typeof ctx.session.synthetic === "function") await ctx.session.synthetic({ sessionID, text, resume: false })
-              else await ctx.session.prompt({ ...prompt, sessionID, text: `Покажи пользователю эту справку дословно, без пересказа:
-
-${text}`, delivery })
-            },
-          })
-        })
-      }
-    } catch (e) {
-      log(`command crew_help failed: ${e}`)
-    }
-
-    // Слэш-команды /crew-sets (наборы) и /crew-profiles (справочник) — задача 003. Ответ показывается служебным сообщением без хода
-    // модели, как у /crew-help. Аргумент приходит в prompt.text целиком, без имени команды (проба на одноразовом сервере).
-    try {
-      const have = new Set<string>()
-      try {
-        const list = await ctx.command.list()
-        for (const c of list?.data ?? list ?? []) if (c?.name) have.add(String(c.name))
-      } catch {}
-      const catalog = async () => {
-        try {
-          const r = await ctx.model.list()
-          const d = r?.data ?? r
-          return Array.isArray(d) ? d.map((m: any) => ({ providerID: String(m.providerID ?? ""), modelID: String(m.modelID ?? m.id ?? ""), limit: m.limit })) : undefined
-        } catch {
-          return undefined
-        }
-      }
-      const deps = { catalog, version: ctx?.app?.version ? String(ctx.app.version) : undefined }
-      for (const [name, run, description] of [
-        ["crew-sets", runSetsCommand, "Наборы профилей моделей: таблица, show, use, set, check, save (crew-harness)"],
-        ["crew-profiles", runProfilesCommand, "Справочник профилей моделей и окон: таблица, show, set, check, save (crew-harness)"],
-      ] as const) {
-        if (have.has(name)) continue
-        await ctx.command.transform((editor: any) => {
-          editor.add({
-            name,
-            description,
-            execute: async ({ sessionID, prompt, delivery }: any) => {
-              const dir = readJson<Card>(cardFile(String(sessionID ?? "")))?.directory || String(ctx?.location?.directory ?? "")
-              let text: string
-              try {
-                text = await run(dir, String(prompt?.text ?? ""), deps)
-              } catch (e) {
-                log(`command ${name} failed: ${e}`)
-                text = `Команда не выполнена: ${(e as any)?.message ?? e}`
-              }
-              if (typeof ctx.session.synthetic === "function") await ctx.session.synthetic({ sessionID, text, resume: false })
-              else await ctx.session.prompt({ ...prompt, sessionID, text: `Покажи пользователю этот ответ дословно, без пересказа:\n\n${text}`, delivery })
-            },
-          })
-        })
-      }
-    } catch (e) {
-      log(`profile commands failed: ${e}`)
-    }
+    // Слэш-команды /crew-help, /crew-sets и /crew-profiles — команды окна (tui.ts, диалог с текстом сразу). Здесь они не
+    // регистрируются: служебное сообщение (ctx.session.synthetic) окно 2.0.23 не показывает (проба 2026-10-08: execute вызван, сообщений
+    // в сессии нет), а одноимённая серверная команда стояла бы вторым пунктом списка.
 
     // Самопроверка при загрузке (через 10 с: окна успевают отметиться) и раз в DOCTOR_EVERY_MS. Итог — в DOCTOR_FILE
     // (его показывает /crew-doctor окна), проблемы — в журнал; уведомление окнам — только когда набор проблем сменился.
