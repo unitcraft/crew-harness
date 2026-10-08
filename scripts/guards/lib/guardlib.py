@@ -202,6 +202,28 @@ class Source(object):
             self._batch = None
 
 
+FENCE = re.compile(r"^( {0,3})(`{3,}|~{3,})(.*)$")
+
+
+def strip_fenced(text):
+    """Только огороженные блоки кода заменены пробелами (встроенный код в заголовках остаётся)."""
+    out = []
+    fence = None
+    for line in text.split("\n"):
+        m = FENCE.match(line)
+        if fence is None:
+            if m and not (m.group(2)[0] == "`" and "`" in m.group(3)):
+                fence = (m.group(2)[0], len(m.group(2)))
+                out.append("")
+            else:
+                out.append(line)
+        else:
+            out.append("")
+            if m and m.group(2)[0] == fence[0] and len(m.group(2)) >= fence[1] and not m.group(3).strip():
+                fence = None
+    return "\n".join(out)
+
+
 # -- пометки ----------------------------------------------------------------------------------
 def _reason(text):
     """Причина пометки без закрывающих знаков комментария."""
@@ -373,6 +395,8 @@ def run(guard, target, judge, argv=None, extra=None, lost="нет ни одно�
         return finish(lines, skipped(result.skip), 0)
     if result.nothing:
         return finish(lines, nothing_to_judge(result.nothing), 0)
+    if result.count <= 0 and source.mode == "commit":
+        return finish(lines, nothing_to_judge("коммит не меняет файлов этой мишени"), 0)
     if result.count <= 0:
         return finish(lines, no_target(lost), 1)
     return finish(lines, ok(result.count, target), 0)

@@ -30,7 +30,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib
 
 import guardlib  # noqa: E402
 
-FENCE = re.compile(r"^( {0,3})(`{3,}|~{3,})(.*)$")
 SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`)(.*?)(?<!`)\1(?!`)", re.S)
 ATX = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$")
@@ -48,7 +47,7 @@ def strip_code(text):
     out = []
     fence = None
     for line in text.split("\n"):
-        m = FENCE.match(line)
+        m = guardlib.FENCE.match(line)
         if fence is None:
             if m and not (m.group(2)[0] == "`" and "`" in m.group(3)):
                 fence = (m.group(2)[0], len(m.group(2)))
@@ -125,7 +124,7 @@ def heading_anchors(text):
     """Множество якорей файла: заголовки ATX и setext, суффиксы повторов, HTML id и name."""
     anchors = set()
     counts = {}
-    lines = strip_fenced(text).split("\n")
+    lines = guardlib.strip_fenced(text).split("\n")
 
     def add(heading):
         base = github_slug(heading)
@@ -151,25 +150,6 @@ def heading_anchors(text):
     return anchors
 
 
-def strip_fenced(text):
-    """Только огороженные блоки кода заменены пробелами (встроенный код в заголовках остаётся)."""
-    out = []
-    fence = None
-    for line in text.split("\n"):
-        m = FENCE.match(line)
-        if fence is None:
-            if m and not (m.group(2)[0] == "`" and "`" in m.group(3)):
-                fence = (m.group(2)[0], len(m.group(2)))
-                out.append("")
-            else:
-                out.append(line)
-        else:
-            out.append("")
-            if m and m.group(2)[0] == fence[0] and len(m.group(2)) >= fence[1] and not m.group(3).strip():
-                fence = None
-    return "\n".join(out)
-
-
 class Checker(object):
     def __init__(self, source):
         self.source = source
@@ -184,7 +164,7 @@ class Checker(object):
     def anchors_of(self, path):
         if path not in self._anchors:
             data = self.source.read(self.entries[path])
-            text = data.decode("utf-8", "replace").lstrip("﻿") if data is not None else ""
+            text = data.decode("utf-8", "replace").lstrip("\ufeff") if data is not None else ""
             self._anchors[path] = heading_anchors(text)
         return self._anchors[path]
 
@@ -235,7 +215,7 @@ def judge(source, args, rep):
         if data is None:
             continue
         view = guardlib.FileView(entry.path, data)
-        text = view.text.lstrip("﻿")
+        text = view.text.lstrip("\ufeff")
         for line, target in extract_links(text):
             if checker.check_target(view, line, target, rep):
                 judged += 1
