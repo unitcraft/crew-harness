@@ -20,7 +20,8 @@ import { cleanupDone, cleanupSteps, fileAt, holdsMergeLock, isMerged, mergeHolde
 import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, timerSpec, watchesOf } from "./watch.ts"
 import { watchRefusal } from "./deny.ts"
 import { queueRemote, remoteRoute } from "./remote.ts"
-import { linkErrorsOfWrite, profileProblems, profilesShow } from "./profile-layer.ts"
+import { linkErrorsOfWrite, profileProblems, profileState, profilesShow } from "./profile-layer.ts"
+import { type Resolved, resolveStageProfile, stageOfLaunch } from "./profiles.ts"
 
 export const POLL_MS = Number(process.env.CREW_HARNESS_POLL_MS) || 1_000 // переопределение — для самотеста
 export const LIVE_MS = 15 * 60_000
@@ -1169,6 +1170,13 @@ export type CrewTool = { name: string; description: string; input: any; execute(
 
 const str = (description: string) => ({ type: "string", description })
 export const DEFAULT_SPAWN_MODELS: Record<Tier, string> = { heavy: "claude-code/opus", medium: "claude-code/sonnet", light: "claude-code/haiku" }
+
+/** След профиля в записи задачи (задача 003): этап, набор, семья, ступень, модель и откуда окно; строка в историю. */
+export function stampProfile(t: Task, role: "executor" | "reviewer", session: string, r: Resolved, inWorktree: boolean) {
+  const window = !r.window || !inWorktree ? "general" : r.viaSnapshot ? "snapshot" : "profile"
+  ;(t.profiles ??= []).push({ at: Date.now(), role, session, stage: r.stage, set: r.set, family: r.family, tier: r.tier, model: r.model, window })
+  taskEvent(t, PLUGIN_SENDER, undefined, `профиль: набор «${r.set}», этап ${r.stage}, ${r.family}/${r.tier}, модель ${r.model}${r.viaSnapshot ? " (по снимку)" : ""}, окно: ${window}`)
+}
 const DEFAULT_SPAWN_LIMIT = 3
 const WAIT_MAX_S = 300
 
@@ -1501,7 +1509,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         role: str("Role of the new session (default worker)"),
         kind: { type: "string", enum: ["work", "plan"], description: "plan: the task writes a plan document (plans_dir), rechecked in rounds and approved by the owner; goal is the original task the plan must solve", default: "work" },
         plan_parent: str("kind plan: the parent plan number for a sub-plan (e.g. 274)"),
-        tier: { type: "string", enum: ["heavy", "medium", "light"], description: "Task weight -> model", default: "medium" },
+        tier: { type: "string", enum: ["heavy", "medium", "light"], description: "Task weight -> model" },
         task: str("Old name of goal"),
         parent: str("The order of another project this task fulfils: \"project#N\" (from the order letter)"),
       },
@@ -1529,7 +1537,12 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const stale = inflight.filter((t) => t.status === "accepted").map((t) => `#${t.n} принята ${ago(acceptedAt(t))}, не очищена (приёмщик ${t.reviewer ?? "?"})`)
         return { content: `Лимит задач проекта в работе и на приёмке — ${cfg.inflightLimit} (inflight_limit), открыто: ${inflight.map((t) => `#${t.n} ${statusRu(t.status)}`).join(", ")}.${stale.length ? ` Место держат принятые, но не очищенные: ${stale.join("; ")} — пусть приёмщик повторит crew_task {action: \"cleaned\"}.` : ""} Дождись приёмки; авария — priority P0.` }
       }
-      const model = cfg.spawnModels[tier] ?? DEFAULT_SPAWN_MODELS[tier]
+      // МОДЕЛЬ ПО ВКЛЮЧЁННОМУ НАБОРУ (задача 003). Этап — по виду запуска; ступень: tier, присутствующий во входе, иначе ступень
+      // клетки. Этап не описан или набора нет — spawn_models, как прежде; описан, а профиль не находится — отказ до записи задачи.
+      const chosen = resolveStageProfile(profileState(me.directory).state, stageOfLaunch({ plan: input.kind === "plan" }, "executor"), { inputTier: isTier(input.tier) ? input.tier : undefined })
+      if (chosen && "refuse" in chosen) return { content: `Задача не поставлена: ${chosen.refuse}.` }
+      const model = chosen ? chosen.model : (cfg.spawnModels[tier] ?? DEFAULT_SPAWN_MODELS[tier])
+      const recTier: Tier = chosen ? chosen.tier : tier // ступень записи при наборе — та, на которой реально запущена сессия
       const title = String(input.title ?? "").trim() || String(input.goal).split(/\r?\n/)[0].slice(0, 60)
       // ЗАДАЧА-ПЛАН (план 004): результат — файл плана в репозитории; номер выдаёт плагин (после файлов папки планов
       // и открытых задач-планов), подплан — «родитель.k»
@@ -1551,10 +1564,11 @@ export function makeTools(host: CrewHost): CrewTool[] {
       }
       const t = createTask({
         project, title: plan ? `план ${plan.n}: ${title}` : title, goal: String(input.goal).trim(), criteria: plan ? "критерии приёмки плана (план 004): А — против исходной задачи, Б — правильность составления" : input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(),
-        priority: isPriority(input.priority) ? input.priority : cfg.defaultPriority, tier, role, model,
+        priority: isPriority(input.priority) ? input.priority : cfg.defaultPriority, tier: recTier, role, model,
         author: me.session, author_role: keyOf(me), qid: newQid(), status: "starting", kind: "spawn", executor: plannedSessionId(), directory: me.directory,
         ...(plan ? { plan } : {}),
       }, (n, slug) => taskPlace(me.directory, cfg, n, slug, project))
+      if (chosen && !("refuse" in chosen)) stampProfile(t, "executor", t.executor!, chosen, !!t.worktree)
       const par = parseParent(input.parent)
       if (par) {
         const order = loadTask(par.project, par.n)
@@ -1922,6 +1936,10 @@ export function makeTools(host: CrewHost): CrewTool[] {
         return { content: `Задача ${taskRef(t)} отменена.` }
       }
       if (action === "reassign") {
+        // модель по включённому набору на момент передачи (REQ-32): набор и профиль проверяются ДО снятия прежнего исполнителя,
+        // чтобы отказ не оставил задачу без исполнителя; без набора — модель записи, как прежде
+        const chosen = resolveStageProfile(profileState(t.directory).state, stageOfLaunch(t, "executor"), { inputTier: t.tier })
+        if (chosen && "refuse" in chosen) return { content: `Не передано: ${chosen.refuse}. Прежний исполнитель остался на задаче.` }
         const old = t.executor
         if (old) {
           t.handoff = handoffOf(t, old)
@@ -1931,6 +1949,11 @@ export function makeTools(host: CrewHost): CrewTool[] {
         t.attempt++
         t.kind = "spawn"
         t.executor = plannedSessionId()
+        if (chosen) {
+          t.model = chosen.model
+          t.tier = chosen.tier
+          stampProfile(t, "executor", t.executor, chosen, !!t.worktree)
+        }
         taskEvent(t, me.session, "starting", `передана новой сессии${old ? ` (была ${old})` : ""}`)
         const r = await host.startTask(t)
         return { content: r.session ? `Задача ${taskRef(t)} передана новой сессии ${r.session}${t.handoff ? " со сводкой сделанного" : ""}.` : `Задача #${t.n} записана к передаче, сессия не запущена: ${r.error ?? "?"}. Плагин повторит запуск.` }

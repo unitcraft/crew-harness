@@ -685,7 +685,11 @@ export default {
     const profileSigs = new Map<string, string>()
     let profilesSaid = ""
     let profilesAt = 0
+    let profilesRunAt = 0
+    const PROFILES_MS = Number(process.env.CREW_HARNESS_PROFILES_MS) || 10_000 // чтение настроек — процессы git: не чаще раза в 10 с
     async function profilesStep() {
+      if (now() - profilesRunAt < PROFILES_MS) return
+      profilesRunAt = now()
       let changed = false
       for (const p of projects) {
         const dir = p.dir ?? p.rootPath
