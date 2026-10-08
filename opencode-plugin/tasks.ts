@@ -30,6 +30,10 @@ export const taskRef = (t: { n: number | string; title?: string }, max = 40): st
   return title ? `#${t.n} «${title.length > max ? `${title.slice(0, max - 1)}…` : title}»` : `#${t.n}`
 }
 
+/** Как запущена сессия при включённом наборе: этап, набор, семья, ступень, модель и откуда окно (profile — файл окон
+ *  в worktree; snapshot — по снимку; general — окно из общих настроек: приёмка, задача без worktree, набор недопустим). */
+export type ProfileStamp = { at: number; role: "executor" | "reviewer"; session: string; stage: string; set: string; family: string; tier: string; model: string; window: "profile" | "general" | "snapshot" }
+
 export type Task = {
   project: string
   n: number
@@ -98,6 +102,10 @@ export type Task = {
   /** шаги приёмки проекта на момент review (их ход видно в окне) и шаг, который приёмщик проверяет сейчас */
   steps?: { id: string; text: string; required?: boolean }[]
   checking?: { step: string; at: number }
+  /** след профилей (задача 003): по записи на каждый запуск сессии исполнителя или приёмщика при включённом наборе */
+  profiles?: ProfileStamp[]
+  /** модель приёмщика, выбранная набором до запуска сессии: повтор оборванного запуска даёт ту же модель */
+  review_model?: string
   commit?: string
   /** влитый коммит (его ветки и worktree проверяет очистка) */
   merged_head?: string
