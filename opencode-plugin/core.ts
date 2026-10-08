@@ -22,7 +22,7 @@ import { watchRefusal } from "./deny.ts"
 import { queueRemote, remoteRoute } from "./remote.ts"
 import { linkErrorsOfWrite, profileProblems, profileState, profilesShow } from "./profile-layer.ts"
 import { releaseTaskWindow } from "./profile-windows.ts"
-import { type Resolved, resolveStageProfile, stageOfLaunch } from "./profiles.ts"
+import { type Resolved, familyOfModel, resolveStageProfile, stageOfLaunch } from "./profiles.ts"
 
 export const POLL_MS = Number(process.env.CREW_HARNESS_POLL_MS) || 1_000 // переопределение — для самотеста
 export const LIVE_MS = 15 * 60_000
@@ -1227,9 +1227,21 @@ export function makeTools(host: CrewHost): CrewTool[] {
       const home = me ? projOf(me) : undefined
       const all = allCards().filter((c) => !c.spawned || c.spawned.status !== "closed")
       const cards = all.filter((c) => input?.all || !home || projOf(c) === home)
+      // семья вкладки по справочнику профилей проекта (задача 003, желательное): только если у проекта есть справочник
+      const famOf = (c: Card): string => {
+        try {
+          if (!c.model) return ""
+          const profiles = profileState(c.directory).data.profiles
+          if (!profiles || !Object.keys(profiles).length) return ""
+          const f = familyOfModel(c.model, profiles)
+          return f ? `, семья ${f}` : ", вне профилей"
+        } catch {
+          return ""
+        }
+      }
       const rows = cards.map((c) => {
         const w = waiting(c)
-        return `${c.session === me?.session ? "* " : "  "}${keyOf(c)}${c.auto ? " (авто)" : ""} — ${tabStatus(c, windows)}, ${c.repo || "?"}, сессия ${c.session}, модель ${modelLabel(c, now)}${w ? `, ждут писем: ${w}` : ""}${c.title ? `, «${c.title}»` : ""}`
+        return `${c.session === me?.session ? "* " : "  "}${keyOf(c)}${c.auto ? " (авто)" : ""} — ${tabStatus(c, windows)}, ${c.repo || "?"}, сессия ${c.session}, модель ${modelLabel(c, now)}${famOf(c)}${w ? `, ждут писем: ${w}` : ""}${c.title ? `, «${c.title}»` : ""}`
       })
       const others = input?.all || !home ? 0 : all.length - cards.length
       const openTasks = home ? listTasks(home).filter(isOpen).sort(byPriority) : []
