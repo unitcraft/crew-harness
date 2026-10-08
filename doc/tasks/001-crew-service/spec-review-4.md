@@ -153,8 +153,8 @@ $ for f in [0-9]*.md; do printf "%s: " "$f"; sed -n 3p "$f" | cut -c1-60; done
 003-status.md: **Статус:** ЗАКРЫТ 2026-10-07 — владеле
 003.1-clear-letters.md: **Статус:** ЗАКРЫТ 2026-10-06.
 003.2-sidebar.md: **Статус:** ЗАКРЫТ 2026-10-06.
-004-plans.md: Статус: ✅ ЗАКРЫТ 2026-10-06 (шаги 1–6; �
-005-rename-crew-harness.md: Статус: ✅ ЗАКРЫТ 2026-10-07: переключ�
+004-plans.md: Статус: ✅ ЗАКРЫТ 2026-10-06 (шаги 1–6; � <!-- guard-allow(fffd): quoted replacement character from the reviewed text, kept as written -->
+005-rename-crew-harness.md: Статус: ✅ ЗАКРЫТ 2026-10-07: переключ� <!-- guard-allow(fffd): quoted replacement character from the reviewed text, kept as written -->
 006-crew-service.md: Статус: ЗАМЕНЁН 2026-10-07 — черновик
 ```
 

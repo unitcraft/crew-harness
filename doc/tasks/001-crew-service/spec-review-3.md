@@ -218,7 +218,7 @@ $ cd doc/canon/plans && for f in *.md; do echo "== $f"; head -3 "$f" | cut -c1-1
 == README.md
 # Планы
 
-Что здесь: планы работ — что делаем, в каком порядке, как про�
+Что здесь: планы работ — что делаем, в каком порядке, как про� <!-- guard-allow(fffd): quoted replacement character from the reviewed text, kept as written -->
 ```
 
 (вывод сокращён многоточием; у всех 15 планов первая строка — `# План …`, статус — третья строка, в двух формах:
