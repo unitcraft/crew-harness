@@ -1,0 +1,237 @@
+Статус: готово
+
+# 003 — Профили моделей и окон контекста по семьям и этапам работы — результат реализации (Сессия С5, 2026-10-08)
+
+Вход: spec.md и plan.md (оба «утверждено, 2026-10-08, владелец»; решения Р-01…Р-05 приняты по рекомендации). Ветка задачи
+`task-003-model-profiles` в связанном рабочем дереве рядом с репозиторием; основная рабочая копия `main` кода не менялась (в ней
+лежит только эта папка задачи). Пуши, вливание в `main`, перезапуск сервиса и настоящие аккаунты не выполнялись (ворота Г1–Г4).
+
+## Ревизия, база, окружение
+
+- `$BASE` = `git merge-base main task-003-model-profiles` = `f1f5754c624460843bc6f0fdd8e74ac4064486b8` (головка `main` в момент создания
+  ветки). Команды DoD считаются от этого значения; после каждого ребейза оно пересчитывается.
+- Сравнение с базой плана (вторая строка plan.md, `242cd71`): `git diff --name-only 242cd71 f1f5754 -- opencode-plugin` — пусто; из файлов плана
+  (карта: `opencode-plugin/*`, README плагина, реестр решений) изменённых нет; изменились стражи 002, `AGENTS.md`, `process.md`, папки задач —
+  план их не затрагивает.
+- Окружение: Node v24.15.0, git 2.56.0, OpenCode v2.0.23; пакетов ставить не нужно.
+
+## Базовое состояние (шаг 6 алгоритма, шаг 1 плана)
+
+- `node test/cleanup-tmp.mjs` — «2 old test folders removed».
+- 38 файлов `opencode-plugin/test/*.test.mjs`, каждый отдельно, пауза 5 с: 38 из 38 код 0, упавших 0, пропущенных 0
+  (журнал запусков — раздел «Журнал запусков тестов»). Число файлов в AGENTS п.7 (37) не правится (Р-05); итоговое число — в конце.
+
+## Пробы шага 1 (одноразовый сервер OpenCode v2.0.23)
+
+Сервер: `opencode serve` на своём свободном порту 127.0.0.1, свои `XDG_*` во временной папке, плагин-проба вместо плагина владельца;
+остановка — номер слушателя своего порта (опрос сети по порту) и номер своей оболочки через `process.kill`. Чужие процессы не тронуты.
+- (а) аргумент слэш-команды: вызов `POST /api/session/{id}/command {name: "crew-probe", text: "use cross-kimi extra"}` отдаёт обработчику
+  `prompt.text = "use cross-kimi extra"` (аргумент целиком, без имени команды) — подтверждено повторно.
+- (б) серверная команда, добавленная в `ctx.command.transform`, видна в `ctx.command.list()`: «init, review, crew-probe».
+- (в) Н-05: контекст плагина даёт `ctx.model.list()` (11 записей, у каждой `limit`) и `ctx.provider.list()`; каталог моделей доступен для `check` и `use`.
+- (г) файл `.opencode/opencode.json` с ключом `_crew_harness` и `limit` в папке проекта принят: окно модели 100000/8000 стало 55000/7000 за ≤2,5 с,
+  после удаления файла вернулось 100000/8000. Ключ-пометка не мешает.
+- Замечание: сервер печатает свой пароль при старте (Basic-авторизация); проба берёт его из своего журнала, в файлы он не пишется. Каталог
+  пользователя читается сервером независимо от `USERPROFILE` (Пр-9 spec.md) — на результаты проб это не влияет.
+
+## Журнал шагов
+
+шаг 1: сделан, ветка и дерево готовы, `$BASE` записан, базовое состояние (38 из 38) и пробы (а)–(г) записаны, ADR-0008 и строка реестра — первый коммит ветки (3dda1d6)
+шаг 2: сделан, `node test/crew-profiles-data.test.mjs` — 62 ячейки, «crew-profiles-data.test ok»; `crew-cfgtool` и `crew-config` — ok; коммиты aa92d18, 2ccff36 (модуль данных, затем ключи схемы вместе с тестом: тест читает схему)
+шаг 3: сделан, `node test/crew-profiles-data.test.mjs` — 94 ячейки, ok (связи, окна набора, конфликт окон, таблица исходов 1…7, выбор профиля, фильтр вкладок); коммит 817e6eb (два коммита плана сведены в один: логика в одном файле)
+шаг 4: сделан, `node test/crew-profiles-layer.test.mjs` — 40 ячеек, ok (слой, «в файле теперь иначе», save и save force, формы reset, снимок, вложенные проекты, строки журнала правок); `crew-settings`, `crew-cfgtool` — ok; коммит c507e25
+шаг 5: сделан, `node test/crew-profiles-config.test.mjs` — 31 ячейка, ok; `crew-cfgtool`, `crew-config`, `crew-plan-config` — ok; коммит 281deec (crew_config, crew_doctor, шаг прохода profilesStep: снимок и уведомление)
+шаг 6: сделан, `node test/crew-profiles-select.test.mjs` (часть 1: 25 ячеек, ok); `crew-tier`, `crew-flow`, `crew-tasks`, `crew-plan-task`, `crew-settings`, `crew-cfgtool` — ok; коммиты 60f8bf4 (записи задачи), e3bea71 (crew_spawn и reassign; шаг прохода profilesStep не чаще раза в 10 с: чтение настроек — процессы git)
+шаг 7: сделан, `node test/crew-profiles-select.test.mjs` (части 1 и 2 вместе: 53 ячейки, ok); `crew-acceptor`, `crew-cross`, `crew-review`, `crew-plan-task`, `crew-plans`, `crew-flow` — ok; коммит 11c7628 (два коммита плана сведены в один: правка в index.ts одна)
+шаг 8: сделан, `node test/crew-profiles-windows.test.mjs` — 31 ячейка (после шага 9: 46), ok (файл до первого хода, содержимое, исключение git, обновление по набору и данным, снятие по имени, отмене, принятию, исчезнувшей папке, чужой файл не тронут, строки 3–7 таблицы исходов); `crew-flow`, `crew-autoclose`, `crew-restart`, `crew-housekeeping`, `crew-acceptor` — ok; коммит 8afa2fe (три коммита плана сведены в один: модуль, жизненный цикл и запуск задачи связаны одним тестом)
+шаг 9: сделан, чтение цепочки настроек OpenCode, рукописные перекрытия, явный порог Claude Code, заметки в crew_doctor; ячейки AC-25, AC-40, DNC-10 в тесте окон; коммит 41c63d4
+шаг 10: сделан, глаголы правки обеих команд; коммит bfcde5b (тест команд — в коммите шага 11: тест общий на шаги 10 и 11)
+шаг 11: сделан, `node test/crew-profiles-cmd.test.mjs` — 73 ячейки, ok; `crew-help` — ok; коммит 1d2142d (таблицы, show, use, check, save, регистрация команд)
+шаг 12: сделан, `node test/crew-profiles-docs.test.mjs` — ok; `crew-help` — ok; коммиты cab70a5 (справка и описания), 6ea2555 (README)
+шаг 13: сделан, `node test/probe-profiles.mjs` по разделам AC-08, AC-09, AC-10, AC-11, AC-14, AC-25, AC-40 — 21 PASS, 0 NOT VERIFIED (вывод и номера процессов — «Доказательства»); коммит 961fc41
+шаг 14: не выполнялся по решению Р-04 (REQ-20, желательное): совпадение имён слэш-команд окна и сервера и `dialog.select` проверяются только в живом окне; запись в Known limitations; коммитов нет
+шаг 15: сделан, итоговый прогон 45 файлов по одному, уровни A и G, поиск по образцам AG п.15, стражи 002, проверка коммитов, документы задачи; найден и исправлен один дефект (сообщение `reset`), красный прогон — в «Доказательства», F; коммиты c9c6243 (уборка), 3d72954 (семья вкладки в `crew_list`), b7fc1b5 (final fixes); ворота Г1–Г4 — «Ждёт владельца»
+
+## Журнал запусков тестов
+
+(`npm test` целиком не запускался ни разу; тесты — по одному с паузой 5 с)
+
+- Шаг 1, базовое состояние: 38 файлов по одному с паузой 5 с, 38 из 38 «ok».
+- Шаг 2: crew-profiles-data, crew-cfgtool, crew-config — по одному. Шаг 3: crew-profiles-data. Шаг 4: crew-profiles-layer (несколько запусков при отладке теста: он оказался медленным — один чтение состояния проекта это 5–6 процессов git), crew-settings, crew-cfgtool. Шаг 5: crew-profiles-config, crew-cfgtool, crew-config, crew-plan-config. Шаг 6: crew-profiles-select, crew-tier, crew-flow, crew-tasks, crew-plan-task, crew-settings, crew-cfgtool. Шаг 7: crew-profiles-select (несколько запусков при отладке теста), crew-acceptor, crew-cross, crew-review, crew-plan-task, crew-plans, crew-flow. Шаг 8: crew-profiles-windows, crew-flow, crew-autoclose, crew-restart, crew-housekeeping, crew-acceptor. Шаги 9–12: crew-profiles-windows, crew-profiles-cmd, crew-profiles-docs, crew-help. Шаг 13: probe-profiles по семи разделам, по одному. Шаг 15: итоговый прогон всех 45 файлов `test/*.test.mjs` по одному с паузой 5 с (число запущенных файлов — 45; 38 прежних и 7 новых), затем отдельный счётный прогон семи новых тестов; `npm test` целиком не запускался ни разу.
+
+## Расхождения с планом, замечания по ходу
+
+Состав шагов, слоёв, контрактов и DoD плана не менялся. Детали внутри шагов:
+
+- Коммиты шагов 3, 7, 8, 10–11 сведены: логика шага лежит в одном файле (`profiles.ts`, `index.ts`, `profile-windows.ts`, `profile-cmd.ts`), его нельзя разнести на два рабочих коммита без частичной индексации. Шаг 10 закоммичен без теста (глаголы правки), тест команд общий на шаги 10 и 11 и лежит в коммите шага 11. Тест окон (шаг 8) расширен ячейками шага 9 в коммите шага 11: они зовут модуль команд.
+- Шаг прохода `profilesStep` работает не чаще раза в 10 с (`CREW_HARNESS_PROFILES_MS`): чтение настроек проекта — 5–6 процессов git (на этой машине замер 0,3–0,4 с на процесс), на каждый проход раз в секунду это блокировало бы сервер. Решение шага 6 (`e3bea71`), записано здесь как деталь реализации.
+- Тесты слоя, команд, конфигурации и окон держат кэш настроек долгим (`CREW_HARNESS_SETTINGS_TTL_MS=600000`) и сбрасывают его после коммита вызовом `writeSettings(папка, {})`; иначе каждый вызов читал бы файл заново и тест шёл бы десятки минут.
+- Н-05 закрыт пробой шага 1: `ctx.model.list()` и `ctx.provider.list()` доступны; `use` и `check` сверяют модели с каталогом, при недоступном каталоге говорят «не проверено».
+- Шаг 14 (REQ-20, диалог-таблица в окне) не выполнен — решение Р-04: совпадение имён слэш-команд окна и сервера и выбор клетки в `dialog.select` проверяются только в живом окне (`tui.ts` работает в терминальном интерфейсе, на одноразовом сервере его нет). Остаётся в Known limitations.
+- `crew_list` называет семью вкладки (желательное в REQ-16) — сделано, коммит `3d72954`.
+- Ограничение среды проб: сервер OpenCode читает конфиг домашнего каталога пользователя независимо от `USERPROFILE` (Пр-9 spec.md); на результаты проб это не повлияло (все числа сняты из своих файлов).
+
+## Доказательства (ревизия `b7fc1b5`, все команды из `opencode-plugin/` ветки задачи, `$BASE` = `f1f5754`)
+
+**A. Static — PASS.** `XDG_DATA_HOME=<своя папка> XDG_CONFIG_HOME=<своя папка> node --input-type=module -e "for (const f of ['profiles','profile-layer','profile-windows','profile-cmd','config-schema','core','index','tasks']) await import('./'+f+'.ts'); console.log('load ok')"` → `load ok`; `git diff --check $BASE` → пусто, код 0; `node --check` на восьми новых файлах `test/` (семь тестов и проба) — без ошибок. Стражи 002: `sh scripts/guards/run-all.sh` → «итого: ок 7, судить нечего 0, пропущено 0, FAIL 0»; `py -3 scripts/guards/guard-secrets.py --tree` → «ок: осмотрено 248 файлов».
+
+**B. Automated — PASS.** Полный прогон: 45 файлов `test/*.test.mjs`, каждый отдельно, пауза 5 с, `npm test` целиком не запускался; код выхода 0 у всех 45, итоговая строка `<имя> ok` (у `crew-github` и `crew-ntfy` — `all ok`). Базовое состояние (шаг 1): 38 из 38, упавших и пропущенных нет — итог тот же: 38 прежних из 38 и 7 новых из 7. Число ячеек новых тестов (последний прогон каждого, без `FAIL`): data 94, layer 40, config 31, select 54, windows 46, cmd 74, docs 24 — всего 363.
+
+**C. Runtime — PASS.** `node test/probe-profiles.mjs <раздел>` по одному на одноразовом сервере OpenCode v2.0.23 (свой свободный порт 127.0.0.1, свои `XDG_*` в `C:/work/probe-profiles-*`, заглушка провайдера по протоколу OpenAI; исполняемый файл — `opencode` из PATH, исходники провайдера — через `CREW_HARNESS_PROVIDER_SRC`): 21 PASS, 0 NOT VERIFIED.
+
+| Раздел | Что показал вывод | Номера пробных процессов (оболочка, слушатель) |
+|---|---|---|
+| AC-08 | каталог для worktree до → после записи файла: `m1` context 100000, output 8000 → context 55000, output 7000; `mi` (с input) context 100000, input 90000 → context 60000, input 50000, output 7000; основная папка не изменилась (100000 / 8000); `opencodeWindow()` провайдера для worktree: порог 707655 → 287655, для основной папки 707655; перезапуска нет | 54488, 61128 |
+| AC-09 | worktree без `input`, окно 66000, порог 53655, использование 60000 — сжатие на следующем ходе; основная папка (окно 200000) — нет; worktree с `input` 66000 — сжатие, основная (input 190000) — нет; использование 40000 — нет | 56736, 18744 |
+| AC-10 | `m1`: 100000 / 8000 до файла, 55000 / 7000 с файлом, 100000 / 8000 после снятия за ≤5 с | 30804, 50048 |
+| AC-11 | рукописные файлы байт в байт те же, в основной папке файла нет, `git status --porcelain` worktree пуст; файл без пометки не перезаписан | 46984, 42436 |
+| AC-14 | в каталоге запроса 11 из 12 `crew_*`, `crew_watch` находится поиском (`tools.crew_watch`, `tools.crew_timer`); `crew_task review` → «Задачи #999 в проекте proj нет.», `crew_send` → «Отправлено …», `crew_watch` без команды → «Наблюдений нет.» | 27920, 37564 |
+| AC-25 | `explicitSettingsFor()` → `{"opus":500000}` первее порога OpenCode 280000; плагин читает то же 500000, файл не тронут | — (серверов нет) |
+| AC-40 | worktree с отслеживаемым рукописным `.opencode/opencode.jsonc`: каталог даёт context 90000 (рукописное сильнее файла плагина 55000); основная папка — 90000 | 8104, 53612 |
+
+Проба останавливает только номера своих процессов (`process.kill`), по имени и маске не останавливает; после прогонов все перечисленные номера проверены — процессов нет. Живой сервис, его настройки и ящик владельца не затрагивались; сервер печатает свой одноразовый пароль в свой журнал, он не записывался.
+
+**D. Visual — N/A:** изображений и макетов нет, окно показывает текст.
+
+**E. Requirements — PASS** кроме двух строк, оставшихся NOT VERIFIED: таблица «Трассировка» ниже — 34 REQ, 40 AC, 10 DNC.
+
+**F. Negative — PASS.** Ячейки `AC-06(б)`, `AC-12`, `AC-23`, `AC-26`, `AC-27`, `AC-28`, `AC-37`, `AC-39`, `AC-40` зелёные в data, config, select, windows, cmd. Красный прогон до правки (дефект найден на последнем чтении требования о сообщениях `use` и `reset`): код на ревизии `961fc41` (архив ревизии в своей папке, новая ячейка добавлена), команда `node test/crew-profiles-cmd.test.mjs`, вывод: `FAIL AC-07/AC-10 reset says what is enabled now and how the windows change, as use does (no restart) :: Готово: снято из локального слоя: имя включённого набора.` и `crew-profiles-cmd.test: FAIL 1`; после правки (`b7fc1b5`) тест зелёный, 74 ячейки.
+
+**G. Regression — PASS.** Прежние 38 тестов — по одному после шагов 6–8 и 11 (список шагов в журнале выше) и все 38 в итоговом прогоне на `b7fc1b5`.
+
+**DNC (команды плана):** DNC-02 `git diff $BASE -U0 -- ':(top)opencode-plugin/*.ts' | grep -n -E "$RE"` — пусто (код 1); DNC-04/DNC-05 `git diff --name-only $BASE | grep -v -E '^(opencode-plugin|doc)/'` — пусто; репозиторий провайдера: `git status --short` — пусто; DNC-06 `package.json` вне `scripts.test` — пусто, `registerProvider|provider.transform` — пусто; DNC-07 `taskkill|pkill|killall|Stop-Process` в добавленных строках кода и проб — пусто; DNC-09 `switchModel` в добавленных строках кода — пусто.
+
+**AC-18 (приватность):** `grep -rh -I "" doc/tasks/003-model-profiles | sed 's#C:/work/[^ ]*##g' | grep -n -E "$PAT"` в основной копии — 0 совпадений; поиск по добавленным строкам `git diff $BASE -U0` — 0; по новым неотслеживаемым файлам — 0; положительный контроль (строка с путём диска и домашней папкой) шаблон находит; `guard-secrets.py --tree` без красных строк.
+
+**ADR раньше кода:** `git log $BASE..HEAD --reverse --format=%s | head -1` → `Decision: model profiles layer and window files (ADR-0008)`; `git diff $BASE --name-only | grep -c -E 'decisions/(ADR-0008|README)'` → 2. **Коммиты:** 19 коммитов, у каждого `Signed-off-by`, `Co-Authored-By` — 0, сообщения по-английски; `git status --short` после последнего коммита пуст.
+
+## RESULT
+
+**Implemented.** Профили моделей и окон по семьям и этапам: три ключа настроек проекта (`model_profiles`, `profile_sets`, `profile_set`); модель сессии исполнителя, приёмщика, задачи-плана и шагов авто-плана берётся из включённого набора по этапу и ступени, без молчаливой подмены семьи; открытая вкладка приёмщика проходит по семье клетки; окно профиля пишется файлом `.opencode/opencode.json` с пометкой в рабочее дерево каждой задачи до первого хода и снимается по жизни задачи; локальный слой правок и снимок допустимого состояния; команды окна `/crew-sets` и `/crew-profiles` (таблицы, `show`, `use`, правки, `reset`, `check`, `save`); чтение цепочки настроек OpenCode для рукописных окон и явного порога Claude Code; запись задачи с этапом, набором, семьёй, ступенью и моделью; ADR-0008; README и справка.
+
+**Changed.** `opencode-plugin/`: новые `profiles.ts`, `profile-layer.ts`, `profile-windows.ts`, `profile-cmd.ts`; правки `config-schema.ts`, `core.ts`, `index.ts`, `tasks.ts`, `README.md`, `package.json` (только `scripts.test`), `test/README.md`; семь новых тестов и проба в `test/`; `doc/canon/decisions/ADR-0008-…md` и строка реестра. Сервис на Go, драйверы, пульт, OpenCode и провайдер не менялись.
+
+**Verification.** A–G — раздел «Доказательства».
+
+**Acceptance criteria.** AC-01…AC-14, AC-16…AC-40 — PASS; AC-15 — NOT VERIFIED (ворота Г4).
+
+**How to verify.** Из `opencode-plugin/` ветки `task-003-model-profiles`: каждый `node test/<файл>.test.mjs` по одному с паузой; `node test/probe-profiles.mjs <AC-08|AC-09|AC-10|AC-11|AC-14|AC-25|AC-40>` (нужен `opencode` в PATH; для AC-08 (б) и AC-25 — переменная `CREW_HARNESS_PROVIDER_SRC` с корнем исходников провайдера `claude-code`); команды DoD плана.
+
+**Regressions.** Нет: 38 прежних тестов проходят как в базе (уровень G).
+
+**Assumptions.** Решения Р-01…Р-05 приняты владельцем по рекомендации 2026-10-08 (источник — log.md); Р-04: диалог-таблица в окне не делается, пока проверенного способа нет. Допущение реализации: ступень записи задачи при включённом наборе — ступень фактического запуска (Р-03). Допущение реализации: чтение настроек проекта для профилей не чаще раза в 10 секунд на проход сервиса.
+
+**Known limitations.**
+- REQ-20 (желательное, диалог-таблица в окне) не сделан — Р-04; проверить совпадение имён слэш-команд окна и сервера можно только в живом окне.
+- AC-15 NOT VERIFIED: две приёмки целиком на настоящих Kimi и Codex — ворота Г4, до слова владельца не выполнялись; команды `review`, `check`, `merge`, `accept`, `cleaned` у модели другой семьи проверены пробой на заглушке (AC-14), а не настоящей моделью (Н-02).
+- Н-01 NOT VERIFIED: ведёт ли себя настоящий сервис как одноразовый (подхват окна без перезапуска, появление команд в живом окне, процент контекста в окне) — ворота Г3.
+- Окно профиля действует только на сессии в рабочем дереве задачи; приёмка идёт в основной папке и берёт окно из общих настроек (решение О-12), об этом говорят `use`, `check`, `show`, README.
+- Нагрузка на сервер: чтение настроек проекта — синхронные процессы git; шаг профилей работает не чаще раза в 10 с; на нагруженной машине чтение занимало до двух секунд.
+
+**Out of scope notes.** В журнале `crew-github` и `crew-ntfy` итоговая строка `all ok` вместо `<имя> ok` — так в базе (замер: базовое состояние шага 1). Число файлов самотестов в AGENTS п.7 (37) расходится с `main` (на базе 38, теперь 45) — не правится по Р-05.
+
+**Remaining questions.** Нет.
+
+**Artifacts.** Ветка `task-003-model-profiles` в связанном рабочем дереве рядом с репозиторием; 19 коммитов от `f1f5754` до `b7fc1b5`; не опубликована. Порядок выкатки и откат: после слова владельца — `git merge --ff-only` в `main` (плагин подхватывается на лету), откат — `git revert` либо возврат `main` на `f1f5754`; новых переменных окружения и секретов нет; переменные проб `CREW_HARNESS_OPENCODE`, `CREW_HARNESS_PROVIDER_SRC` — только для проб.
+
+## Ждёт владельца
+
+Эти шаги относятся к воротам шага 15 плана; сессия реализации их не выполняла и ничего не публиковала. Слова владельца:
+
+1. **Г1 — выполнен** (слово владельца «запушь ветку task-003-model-profiles», 2026-10-08): `git push origin task-003-model-profiles` — новая ветка, хук pre-push осмотрел 19 коммитов, красных нет, без --no-verify; прогон GitHub Actions `guards` на `b7fc1b5` (заданий selftests и guards) — success (чтение: `gh run list`, `gh run view`). Коммит журнала поверх — локальный, не запушен.
+2. **Г2 — вливание в живую копию `main`.** Слово: «вливай» — `git merge --ff-only` меняет файлы, которые подгружает работающий сервис. Если в живом окне команды не появятся без перезагрузки плагина — отдельное слово «переключай» (перезапуск сервиса делает только владелец; сначала предупредить интегратора проекта и дождаться «готово к перезапуску», AGENTS п.12).
+3. **Г3 — проверка на настоящем сервисе и в живом окне.** Безвредные действия, слово «проверяй на живом»: `/crew-sets` без аргумента и `/crew-sets check` (только читают), чтение каталога моделей для папки worktree. **`use` — отдельное слово с названием набора** (например «включай cross-kimi»): оно пишет слой в настоящий ящик, файлы окон — в worktree настоящих открытых задач, меняет окна их вкладок (уменьшение сожмёт вкладки на следующем ходе); откат — `/crew-sets reset`; набор должен уже лежать в файле настроек проекта (его туда вносит владелец, сессия этого не делает).
+4. **Г4 — AC-15.** Слово «приёмка на Kimi / на Codex»: по небольшой задаче целиком, на наборах `cross-kimi` и `cross-codex`.
+
+После слов Г1–Г4 — Сессия С6 (проверка реализации).
+
+## Трассировка
+
+Тесты — `opencode-plugin/test/crew-profiles-<data|layer|config|select|windows|cmd|docs>.test.mjs`, проба — `opencode-plugin/test/probe-profiles.mjs <раздел>`; в скобках — начало имени ячейки (имя ячейки начинается с номера сценария). Статус ставится по последнему полному прогону (раздел «Доказательства»).
+
+| № | Реализация | Метод | Доказательство | Статус |
+|---|---|---|---|---|
+| REQ-01 | `profiles.ts` `invalidProfile`; `config-schema.ts` | тест | data («AC-12», «AC-34»); docs («AC-30 nine records») | PASS |
+| REQ-02 | `profiles.ts` `STAGES`, `stageOfLaunch`; `core.ts` `crew_spawn`; `index.ts` | тест | data («stage of launch»); select («AC-02», «AC-05») | PASS |
+| REQ-03 | `profiles.ts` `invalidSetName`, `RESERVED_WORDS` | тест | data («AC-12 red: set name», 13 слов); config («AC-12 red») | PASS |
+| REQ-04 | `profile-layer.ts` `applyLayer`; `profile-cmd.ts` `useSet` | тест | layer («REQ-04», «AC-21»); cmd («AC-21») | PASS |
+| REQ-05 | `profile-cmd.ts` `runSetsCommand`, `setsTable`, `showSet` | тест | cmd («AC-07», «AC-27») | PASS |
+| REQ-06 | `profiles.ts` `resolveStageProfile`; `core.ts`; `index.ts` | тест | select («AC-02», «AC-05», «AC-06»); data («AC-06») | PASS |
+| REQ-07 | `profiles.ts` `tabFitsCell`; `index.ts` `assignReviewers` | тест | select («AC-04», «AC-38») | PASS |
+| REQ-08 | `profile-windows.ts` `windowFileContent`, `writeWindowFile` | тест, проба | windows («AC-08», «REQ-22»); probe AC-08 | PASS |
+| REQ-09 | `profile-windows.ts` `syncWindows`; `index.ts` `profilesStep` | тест | windows («REQ-09», «AC-10», строки 3–7) | PASS |
+| REQ-10 | `profile-cmd.ts` `useSet`, `changeBody`, `reviewerWindowLine` | тест | cmd («AC-07 use», «AC-09», «AC-07/AC-10 reset») | PASS |
+| REQ-11 | без ключей прежний путь; проекты порознь | тест | select («AC-01», «AC-24»); layer («AC-24»); 38 прежних тестов | PASS |
+| REQ-12 | `config-schema.ts` три ключа, `humanOnly` | тест | config («AC-13», «AC-12»); cfgtool; docs («AC-16») | PASS |
+| REQ-13 | `profiles.ts` `invalidProfileKey`, `checkData` | тест | data («AC-12»); config; cmd («AC-28 empty record») | PASS |
+| REQ-14 | `profiles.ts` `familyOfModel` | тест | data («family of a tab»); select («AC-04» вариант `#high`, `-fast`) | PASS |
+| REQ-15 | `profiles.ts` `resolveStageProfile` (`refuse`); `index.ts`; `core.ts` | тест | select («AC-06(б)»); windows («AC-37 row 4», «row 6») | PASS |
+| REQ-16 | `profile-layer.ts` `profileProblems`; `profile-windows.ts` `windowProblems`, `windowNotes`; `core.ts` `crew_list` | тест | config («crew_doctor»); windows («AC-11/REQ-16», «AC-40»); select («REQ-16 crew_list») | PASS |
+| REQ-17 | `tasks.ts` `ProfileStamp`; `profile-layer.ts` `logEdit`; `profile-cmd.ts` `commitEdit` | тест | select («AC-17», «AC-03/AC-17»); cmd («AC-17»); layer («AC-17») | PASS |
+| REQ-18 | кода нет: письма без возможностей только Claude Code | тест, проба | select («AC-14 the letter»); probe AC-14 (a)(b)(c) | PASS |
+| REQ-19 | `README.md` раздел о профилях; `core.ts` `HELP`, описания | тест | docs («AC-19»); help | PASS |
+| REQ-20 | `tui.ts` диалог-таблица (желательное) | — | не сделано по решению Р-04: имена команд окна и сервера и `dialog.select` проверяются только в живом окне; Known limitations | NOT VERIFIED |
+| REQ-21 | `config-schema.ts` `humanOnly`; `core.ts` `crew_config set` | тест | config («AC-23») | PASS |
+| REQ-22 | `index.ts` `startTask` → `syncTaskFile`; `profile-windows.ts` `releaseTaskWindow`; `core.ts` | тест | windows («REQ-22», «AC-10») | PASS |
+| REQ-23 | `profile-windows.ts` `explicitCompact` | тест, проба | windows («AC-25», «DNC-10»); cmd («AC-25»); probe AC-25 | PASS |
+| REQ-24 | `profiles.ts` `windowsOfSet` (конфликты) | тест | data («AC-26»); cmd («AC-26», «AC-28») | PASS |
+| REQ-25 | слой и снимок по проекту | тест | layer («AC-24»); select («AC-24») | PASS |
+| REQ-26 | README пример; `check` сверяет с `spawn_models` | тест | docs («AC-16», «AC-30»); cmd («AC-38/AC-29 check warns») | PASS |
+| REQ-27 | `profile-cmd.ts` `runProfilesCommand`, `profilesTable`, `showFamily` | тест | cmd («AC-28», «AC-07 /crew-profiles») | PASS |
+| REQ-28 | `profile-cmd.ts` `applyEdit` | тест | cmd («AC-27/AC-28 refused whole», «AC-37(а)») | PASS |
+| REQ-29 | `profile-cmd.ts` `checkReport`, `saveReport`; `profile-layer.ts` `saveLayer` | тест | cmd («AC-29», «AC-35»); layer («AC-35») | PASS |
+| REQ-30 | `profiles.ts` `isEmptyProfile`, `emptyRefs` | тест | data («REQ-30»); cmd («AC-28 … empty», «AC-29 check names the empty») | PASS |
+| REQ-31 | `profile-layer.ts` слой, `layerDiff`, `layerReset`, `pruneLayer` | тест | layer («AC-33», «AC-36»); cmd («AC-36») | PASS |
+| REQ-32 | `core.ts` `crew_task reassign` | тест | select («AC-32», три случая и красная сторона) | PASS |
+| REQ-33 | `profiles.ts` `stateRow`; `profile-layer.ts` снимок | тест | data («AC-37 row 1»…«row 6»); layer («AC-37»); windows («row 4»…«row 7»); select («AC-24 row 5/6») | PASS |
+| REQ-34 | `profile-layer.ts` `linkErrorsOfWrite`; `profiles.ts` `linkProblems` | тест | config («AC-39», «AC-37(б′)»); data («AC-39») | PASS |
+| AC-01 | без ключей поведение прежнее | тест | select («AC-01»); `crew-tier`, `crew-flow`, `crew-settings`, `crew-cfgtool`, `crew-config`, `crew-acceptor` | PASS |
+| AC-02 | модель по набору, файл окон всех ступеней семьи | тест | select («AC-02»); windows («REQ-22», «AC-08 the file holds all three tiers») | PASS |
+| AC-03 | приёмка на Kimi в основной папке | тест | select («AC-03») | PASS |
+| AC-04 | вкладки по семье, вариант `#`, другая ступень, integrator | тест | select («AC-04», «DNC-09») | PASS |
+| AC-05 | задача-план, раунды, шаги авто-плана | тест | select («AC-05») | PASS |
+| AC-06 | этап не описан; профиль не найден; по снимку | тест | select («AC-06(а)», «(б)», «(в)») | PASS |
+| AC-07 | таблицы, show, use, reset, без хода модели | тест | cmd («AC-07»); `prompts.length === 0` | PASS |
+| AC-08 | каталог для worktree и `opencodeWindow()` ≤5 с, без перезапуска | тест, проба | windows («AC-08»); probe AC-08 (a)(b)(c) | PASS |
+| AC-09 | меньшее окно сжимает на следующем ходе; `input − reserved` | тест, проба | cmd («AC-09»); probe AC-09 | PASS |
+| AC-10 | снятие файлов: имя, принятие, отмена, исчезнувшая папка | тест, проба | windows («AC-10»); probe AC-10 | PASS |
+| AC-11 | рукописное не тронуто, git чист, чужой файл не перезаписан | тест, проба | windows («AC-11»); probe AC-11 | PASS |
+| AC-12 | формы значений, красная и зелёная стороны | тест | data («AC-12»); config («AC-12 red») | PASS |
+| AC-13 | `guide`, `show` | тест | config («AC-13»); `crew-cfgtool`, `crew-config` | PASS |
+| AC-14 | инструменты `crew_*` у модели другой семьи | проба, тест | probe AC-14 (a)(b)(c); select («AC-14 the letter») | PASS |
+| AC-15 | две приёмки на настоящих Kimi и Codex | — | ворота Г4: до слова владельца не выполнялось | NOT VERIFIED |
+| AC-16 | пример README читается `JSON.parse`, проходит проверки | тест | docs («AC-16») | PASS |
+| AC-17 | запись задачи и строки журнала | тест | select («AC-17»); cmd («AC-17»); layer («AC-17») | PASS |
+| AC-18 | нет путей машины, приватных имён | команды | раздел «Доказательства», AC-18: три поиска и страж — 0 совпадений, контроль найден | PASS |
+| AC-19 | README и справка | тест | docs («AC-19»); `crew-help` | PASS |
+| AC-20 | тесты по одному, `npm test` не запускался | журнал | раздел «Журнал запусков тестов» | PASS |
+| AC-21 | `use` не меняет файл проекта | тест | layer («AC-21»); cmd («AC-21») | PASS |
+| AC-22 | `kimi-only`, `reassign` | тест | select («AC-22»); cmd («AC-22») | PASS |
+| AC-23 | агент не включает набор | тест | config («AC-23») | PASS |
+| AC-24 | проекты порознь, вложенные корни, строки 5–7 | тест | layer («AC-24»); select («AC-24»); windows («AC-24») | PASS |
+| AC-25 | явный порог Claude Code назван и не тронут | тест, проба | windows («AC-25»); cmd («AC-25»); probe AC-25 | PASS |
+| AC-26 | одна модель в двух профилях | тест | data («AC-26»); cmd («AC-26») | PASS |
+| AC-27 | глаголы `/crew-sets` | тест | cmd («AC-27») | PASS |
+| AC-28 | глаголы `/crew-profiles` | тест | cmd («AC-28») | PASS |
+| AC-29 | `check` и `save` | тест | cmd («AC-29») | PASS |
+| AC-30 | пример: девять записей и четыре набора | тест | docs («AC-30») | PASS |
+| AC-31 | имена команд только во множественном числе | тест | docs («AC-31», с положительным контролем) | PASS |
+| AC-32 | `reassign` по набору | тест | select («AC-32») | PASS |
+| AC-33 | слой поверх файла, «в файле теперь иначе» | тест | layer («AC-33») | PASS |
+| AC-34 | три поля окна у модели с `input` | тест | data («AC-34»); windows («AC-34») | PASS |
+| AC-35 | `save`, `save force`, слой после коммита пуст | тест | layer («AC-35»); cmd («AC-35») | PASS |
+| AC-36 | формы `reset` | тест | layer («AC-36»); cmd («AC-36») | PASS |
+| AC-37 | недопустимое состояние не командой: строки 3–6 | тест | layer («AC-37»); data («AC-37»); config («AC-37(б′)»); windows | PASS |
+| AC-38 | `default` повторяет прежний выбор | тест | select («AC-38»); cmd («AC-38/AC-29») | PASS |
+| AC-39 | связи ключей в `crew_config set` | тест | config («AC-39»); data («AC-39») | PASS |
+| AC-40 | рукописные окна называются в двух местах | тест, проба | windows («AC-40»); probe AC-40 | PASS |
+| DNC-01 | `spawn_models`, `tiers`, `reviewer`, `spawn_limits`, ответы, письма прежние | тест | 38 прежних тестов как в базе; select («AC-01», «AC-38») | PASS |
+| DNC-02 | порогов `compaction.*` не пишет | команда, тест | DoD DNC-02 — пусто; windows («DNC-02») | PASS |
+| DNC-03 | пишет только файл окон, `info/exclude`, три ключа, ящик | тест | windows («DNC-03», «AC-11») | PASS |
+| DNC-04 | чужие репозитории не менялись | команда | `git diff --name-only $BASE` — только `opencode-plugin/` и `doc/` | PASS |
+| DNC-05 | Go, драйверы, пульт не тронуты | команда | тот же список | PASS |
+| DNC-06 | провайдеры и зависимости не добавлены | команда | `package.json` — только `scripts.test`; поиск `registerProvider`/`provider.transform` пуст | PASS |
+| DNC-07 | сервис не перезапускался; пробы на своих портах | команда, журнал | поиск остановок по имени пуст; номера пробных процессов — в разделе «Доказательства» | PASS |
+| DNC-08 | права ролей и лимиты | тест | select («DNC-08»); `crew-acceptor`, `crew-deny`, `crew-cross`, `crew-tasks` | PASS |
+| DNC-09 | интегратор не этап, `switchModel` не вызывается | тест, команда | select («DNC-09»); поиск `switchModel` в коде плагина пуст | PASS |
+| DNC-10 | явный `autoCompactWindow` не переписан | тест, проба | windows («DNC-10»); probe AC-25 | PASS |
