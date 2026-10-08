@@ -175,4 +175,3 @@ export function progressDialog(dir: string | undefined, now: number = Date.now()
   if (!scan.repo) return OUTSIDE_TEXT
   return dialogText(summarizeTasks(scan, now, thresholdsFromEnv(process.env)), now, { trees: scan.trees.length, journals: scan.journals })
 }
-
