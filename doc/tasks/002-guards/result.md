@@ -114,7 +114,7 @@ REQ-13 → `guard-commit-message.py` → `test-guard-commit-message.py`, `test-c
 REQ-14 → `lib/message.py` → `test-guard-commit-message.py`, `test-commit-msg.py` (режимы editor, message, diff) → PASS
 REQ-15 → `guard-commit-message.py` → `test-guard-commit-message.py` (--ci, без настройки, GITHUB_ACTIONS) → PASS
 REQ-16 → `agent-hooks/guard-git.py`, `.claude/settings.json` → `test-guard-git.py` (19 проб) → PASS
-REQ-17 → `github-setup.sh protect` применён к `main` и сверен чтением (`gh api` GET): запрет силового пуша и удаления, линейная история, `enforce_admins`, правил pull request и status checks нет; повтор ничего не меняет; отказ коммита слияния проверяется пробой на служебной ветке (AC-11), не выполнена → NOT VERIFIED
+REQ-17 → `github-setup.sh protect` → защита `main` сверена чтением; на служебной ветке с той же защитой пуш fast-forward прошёл, пуш коммита слияния отклонён GitHub у администратора (protected branch hook declined) → PASS
 REQ-18 → `githooks/pre-push`, `commit-range.sh` → `test-pre-push.py` (9 проб), имитация по 39 коммитам → PASS
 REQ-19 → `commit-range.sh`, `guards.yml` → `test-commit-range.py`; шаг подписи в зелёном прогоне Actions на ветке задачи → PASS
 REQ-20 → `check-task-docs.py` → `test-check-task-docs.py`; дерево «ок: осмотрено 51 файлов задач» → PASS
@@ -126,7 +126,7 @@ REQ-25 → `check-wiring.py` → `test-check-wiring.py` (19 проб), дере�
 REQ-26 → `prove-red.sh`, `selftest/` → «ок: доказано 13 из 13», `test-prove-red.py` → PASS
 REQ-27 → `probe-empty-root.sh`, `guardlib.no_target` → 24 запуска без «ок», `test-probe-empty-root.py` → PASS
 REQ-28 → `install-hooks.sh` → `test-install-hooks.py` (11 проб) → PASS
-REQ-29 → `.github/workflows/guards.yml` → разобран PyYAML и `dash -n` по скриптам; прогон Actions не выполнялся (Г3) → NOT VERIFIED
+REQ-29 → `.github/workflows/guards.yml` → зелёный прогон на ветке задачи, красный на служебной ветке с пропуском стража, selftests на ubuntu → PASS
 REQ-30 → `check-tests-have-checks.py` → `test-check-tests-have-checks.py`; дерево «ок: осмотрено 37 файлов тестов» → PASS
 REQ-31 → шапки и комментарии написаны заново → поиск меток доноров пусто (контроль 16), `guard-secrets.py --tree` ноль; список владельца не применялся (Г1) → PASS
 REQ-32 → `AGENTS.md`, `README.md`, ADR-0006, `doc/tasks/README.md`, `doc/canon/process.md` → таблица выше, `git grep -n "механизм" -- AGENTS.md` → PASS
@@ -146,7 +146,7 @@ AC-07 → после пометок Г6 `check-md-links.py` на дереве «
 AC-08 → `test-check-text-hygiene.py` → PASS
 AC-09 → `test-guard-commit-message.py`, `test-commit-msg.py` → PASS
 AC-10 → `test-guard-git.py` (59 команд из 42 строк таблицы), `prove-red.sh` → PASS
-AC-11 → скрипт и `--dry-run protect` проверены на подставном gh; вывод `gh api` и пуши не получены (Г4) → NOT VERIFIED
+AC-11 → `gh api` GET по `main` (запрет силового пуша и удаления, линейная история, `enforce_admins`, нет правил pull request и status checks), повтор `protect` без изменений, `gh secret list` показывает `CREW_PRIVATE_NAMES`; проба на `probe/p11`: fast-forward проходит, слияние отклонено → PASS
 AC-12 → `test-pre-push.py` (cherry-pick, rebase --continue, новая ветка, удаление) → PASS
 AC-13 → `test-commit-range.py` (три вида диапазона); зелёный прогон Actions 37753894719 на ветке задачи → PASS
 AC-14 → `test-check-task-docs.py`; дерево 001, 002 «ок» → PASS
@@ -155,7 +155,7 @@ AC-16 → `test-check-wiring.py` → PASS
 AC-17 → четыре вида проб в каждом самотесте (проверяет `run-selftests.sh`), «доказано 13 из 13», `git status --porcelain` пуст → PASS
 AC-18 → `probe-empty-root.sh`, `test-commit-msg.py` (`--amend -m`) → PASS
 AC-19 → `test-install-hooks.py` → PASS
-AC-20 → workflow написан; прогоны на ветке задачи и на служебной ветке с нарушением не выполнялись (Г3) → NOT VERIFIED
+AC-20 → зелёный прогон Actions на ветке задачи с секретом (37753894719) и красный прогон 37755970226 на служебной ветке с подложенным нарушением (пропуск обязательного стража) → PASS
 AC-21 → `test-check-tests-have-checks.py`; «ок: осмотрено 37 файлов тестов» → PASS
 AC-22 → со списком владельца `check-private-names.py` и `guard-secrets.py --tree` «ок», поиск меток доноров по `scripts .github .claude` пуст → PASS
 AC-23 → таблица выше, `git diff` документов, `git grep -n "механизм" -- AGENTS.md` → PASS
@@ -163,7 +163,7 @@ AC-24 → `test-pre-commit.py` → PASS
 AC-25 → `time sh scripts/githooks/pre-commit` 5,6 с → PASS
 AC-26 → `git diff --name-only $BASE HEAD -- opencode-plugin/` пусто; 37 тестов по одному, упавших 0 → PASS
 AC-27 → `git merge-base --is-ancestor d963ecc HEAD` код 0; `git diff --diff-filter=M` — один файл, одна строка; `.gitattributes` не изменён → PASS
-AC-28 → строки вердиктов в самотестах, счёт `run-all.sh`; прогон Actions с подложенным пропуском не выполнялся (Г3) → NOT VERIFIED
+AC-28 → строки вердиктов в самотестах, счёт `run-all.sh`; прогон Actions 37755970226: «пропущено» у обязательного стража в CI красный, `Process completed with exit code 1` → PASS
 AC-29 → вывод `run-selftests.sh` под двумя локалями совпал построчно; задание `selftests` зелёное на ubuntu в Actions → PASS
 AC-30 → `test-pre-commit.py` (грязная рабочая копия, `--only`, неотслеживаемый файл) → PASS
 AC-31 → проба на служебной ветке `probe/logprobe1`, `github-setup.sh log-search` по журналу прогона `37755119378`: пробные значения 2, найдено в журнале 0, положительный контроль `PROBE-MARKER` найден, строка стража с файлом, строкой и номером образца есть → PASS
@@ -181,7 +181,7 @@ Implemented: репозиторные стражи (секреты и пути �
 хуки git `pre-commit`, `commit-msg`, `pre-push`, установщик, мета-проверка подключения, «доказательство красного», прогон на пустом корне, 21 самотест, workflow CI, скрипт настроек GitHub, правки Канона.
 Changed: новые `scripts/`, `.github/workflows/guards.yml`, `.claude/settings.json`; правки `AGENTS.md`, `README.md`, `doc/tasks/README.md`, `doc/canon/process.md`, уточнения ADR-0002 и ADR-0006, одна строка материала 001.
 Verification: уровни A (sh, dash, Python 3.9-синтаксис, JSON), B (21 самотест, тесты плагина), E (трассировка), F (красные пробы, «доказано 13 из 13»), G (тесты плагина как в базе) — PASS; уровень C (прогон Actions, защита `main`) — NOT VERIFIED, ворота Г3 и Г4; уровень D — N/A.
-Acceptance criteria: PASS — AC-01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 12, 14, 15, 16, 17, 18, 19, 21, 23, 24, 25, 26, 27, 30, 32; NOT VERIFIED — AC-11, 20, 28 (причины в таблице).
+Acceptance criteria: PASS — AC-01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 12, 14, 15, 16, 17, 18, 19, 21, 23, 24, 25, 26, 27, 30, 32; NOT VERIFIED — нет.
 How to verify: см. «Пометки AGENTS.md» и «Сквозная приёмка»; команды — в разделе «Стражи» `AGENTS.md`; полный набор самотестов — `sh scripts/guards/selftest/run-selftests.sh` (около 8-10 минут, под нагрузкой — по одному тесту).
 Regressions: нет; тесты плагина дают тот же результат, что в базовом состоянии (37 из 37), код плагина не менялся.
 Assumptions: Python 3.9 и новее с командой `python`, `git` не старее 2.40, `sh` (Git Bash или dash); ожидаемый адрес автора берётся из `git config user.email` в момент установки; сообщение в смысле «что git сохранит» судится по `GIT_EDITOR` (`:` при `-m`, `-F`, `--no-edit`).
@@ -228,3 +228,13 @@ Artifacts: ветка `task-002-guards` (39 коммитов от `$BASE`, вк�
 - `sh scripts/github-setup.sh protect` для `main`: «защита ветки main применена и сверена»; повтор: «ничего не изменилось». Чтением (`protect`, `status`, `gh api` GET) включено: `allow_force_pushes` = false, `allow_deletions` = false, `required_linear_history` = true, `enforce_admins` = true; не включено: обязательные pull request, обязательные status checks, ограничения пушей, подписи, блокировка ветки, разрешение обсуждений (решение В9). Других настроек GitHub не менялось; секреты: только `CREW_PRIVATE_NAMES`.
 - Обычный пуш владельца в `main` fast-forward остаётся возможным: правил, требующих pull request или проверок статуса, нет, ограничений на тех, кто пушит, нет; запрещены только силовой пуш, удаление и коммиты слияния. Пробного пуша в `main` не делалось.
 - Нужны пробы на служебной ветке (отдельные слова владельца), не выполнялись: (1) AC-11 — `probe-set`, `probe-branch <слаг>`, пуш ветки, `protect --branch probe/<слаг>`, затем пуш fast-forward (должен пройти) и пуш коммита слияния в эту ветку (GitHub должен отклонить, у администратора тоже), `status`, `unprotect --branch probe/<слаг>`; (2) AC-20 — пуш служебной ветки с подложенным нарушением (например, файл с путём машины из выдуманных частей): прогон `guards` красный; (3) AC-28 — пуш служебной ветки с подложенным «пропущено» у обязательного стража: прогон красный; затем `probe-clear --branch probe/<слаг>` и проверка чтением.
+
+## Ворота Г4, действия 4-6 (слово «пробы на служебной ветке — да»)
+
+Все пробы шли на служебных ветках `probe/*` в одноразовом дереве на опубликованной вершине ветки задачи (локальные коммиты в пуши не попадали); `main` и её защита не менялись; пробные значения выдуманные.
+
+- AC-11 (`probe/p11`): `probe-set`, `probe-branch`, пуш, `protect --branch probe/p11` (сверено), пуш fast-forward прошёл; пуш коммита слияния отклонён GitHub («protected branch hook declined») у администратора; `status` прочитан.
+- AC-28 (`probe/p28`, прогон 37755970226): добавлен страж, печатающий «пропущено»; задание `guards` красное: `check-zz-skip.py -> пропущено ... [в CI пропуск обязательного стража — красный]`, код 1. Это же красный прогон служебной ветки с подложенным нарушением для AC-20. Задание `selftests` на этой ветке тоже красное из-за пробного стража (самотест пустого корня не принимает его «пропущено») — ожидаемо.
+- Замечание по AC-20: подложить выдуманный путь машины нельзя без обхода хуков: `pre-commit` останавливает коммит, а коммит, созданный командами низкого уровня, останавливает `pre-push` (`FAIL probe/path.txt:1: machine-path`, push не состоялся); это и есть цель стражей, обход `--no-verify` не применялся. Вместо этого нарушение для CI — пропуск обязательного стража.
+- Уборка: `unprotect --branch probe/p11`, `probe-clear` (секрет пробы удалён), удалены удалённые ветки `probe/p11`, `probe/p20`, `probe/p28` и локальные, временное дерево убрано. Чтением: ветки на GitHub — `main` и `task-002-guards`; секрет — только `CREW_PRIVATE_NAMES`; защита `main` на месте.
+- Осталось: Г5 — слияние в `main`, пуш `main`, публикация локальных коммитов ветки задачи.
