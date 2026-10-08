@@ -31,33 +31,78 @@ export type Line = {
 export type Keyword = "готово" | "стоп" | "запуск" | "старт"
 
 /** Байты журнала → строки: делятся только по LF, один CR в конце снимается, последний пустой кусок после LF — не строка. */
+const DECODER = new TextDecoder("utf-8", { ignoreBOM: true })
 export function splitJournal(bytes: Uint8Array): string[] {
-  const text = new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes)
+  const text = DECODER.decode(bytes)
   const parts = text.split("\n")
   if (parts.length && parts[parts.length - 1] === "") parts.pop()
   return parts.map((l) => (l.endsWith("\r") ? l.slice(0, -1) : l))
 }
 
-/** Одна строка → разобранная строка журнала; не по форме — undefined. */
+/**
+ * Одна строка → разобранная строка журнала; не по форме — undefined. Разбор рукой, без регулярного выражения: тот же язык, что
+ * у LINE_RE (код без пробела и табуляции, пробел, цифры, косая черта, цифры, пробел, непустой остаток без LF), но быстрее;
+ * тест сверяет оба разбора на общем наборе строк.
+ */
 export function parseLine(s: string): Line | undefined {
-  const m = LINE_RE.exec(s)
-  if (!m) return undefined
-  const sig = m[4]
-  const t = TIME_RE.exec(sig)
-  const line: Line = { code: m[1], k: Number(m[2]), n: Number(m[3]), sig, text: sig }
-  if (t) {
-    line.time = Number(sig.slice(1, 3)) * 60 + Number(sig.slice(4, 6))
-    line.text = sig.slice(t[0].length)
+  return s.indexOf("\n") === -1 ? parseAt(s, 0, s.length, "") : undefined
+}
+
+// разбор строки text[from, to), в которой нет LF; `prev` — код предыдущей строки: коды в журнале идут блоками, повтор не копируется
+function parseAt(text: string, from: number, to: number, prev: string): Line | undefined {
+  let sp = from
+  while (sp < to) {
+    const c = text.charCodeAt(sp)
+    if (c === 32) break
+    if (c === 9) return undefined // табуляция в коде
+    sp++
+  }
+  if (sp === from || sp >= to) return undefined
+  let i = sp + 1
+  let k = 0
+  let c = 0
+  const a = i
+  while (i < to && (c = text.charCodeAt(i)) >= 48 && c <= 57) {
+    k = k * 10 + (c - 48)
+    i++
+  }
+  if (i === a || text.charCodeAt(i) !== 47) return undefined
+  const b = ++i
+  let n = 0
+  while (i < to && (c = text.charCodeAt(i)) >= 48 && c <= 57) {
+    n = n * 10 + (c - 48)
+    i++
+  }
+  if (i === b || text.charCodeAt(i) !== 32 || i + 1 >= to) return undefined
+  const sig = text.slice(i + 1, to)
+  const code = prev.length === sp - from && text.startsWith(prev, from) ? prev : text.slice(from, sp)
+  const line: Line = { code, k, n, sig, text: sig }
+  if (sig.charCodeAt(0) === 91) {
+    const m = TIME_RE.exec(sig)
+    if (m) {
+      line.time = Number(sig.slice(1, 3)) * 60 + Number(sig.slice(4, 6))
+      line.text = sig.slice(m[0].length)
+    }
   }
   return line
 }
 
 /** Весь журнал: только строки по форме, в порядке файла. */
 export function parseJournal(bytes: Uint8Array): Line[] {
+  const text = DECODER.decode(bytes)
   const out: Line[] = []
-  for (const s of splitJournal(bytes)) {
-    const l = parseLine(s)
-    if (l) out.push(l)
+  let prev = ""
+  let from = 0
+  while (from < text.length) {
+    let nl = text.indexOf("\n", from)
+    if (nl === -1) nl = text.length
+    const to = nl > from && text.charCodeAt(nl - 1) === 13 ? nl - 1 : nl
+    const l = parseAt(text, from, to, prev)
+    if (l) {
+      out.push(l)
+      prev = l.code
+    }
+    from = nl + 1
   }
   return out
 }
@@ -115,7 +160,10 @@ export type Session = {
  * того же кода, строка которой идёт следом (`старт` или, если «старт» пропущен, строка с k > 0); иначе это запись
  * «запуск без старта». Новый запуск после запуска или сессии того же кода открывает следующую сессию.
  */
+const SESSIONS = new WeakMap<Line[], Session[]>()
 export function sessionsOf(lines: Line[]): Session[] {
+  const hit = SESSIONS.get(lines)
+  if (hit) return hit
   const out: Session[] = []
   const count = new Map<string, number>()
   let cur: Session | undefined
@@ -138,6 +186,7 @@ export function sessionsOf(lines: Line[]): Session[] {
     cur!.rows.push(l)
     lastK = l.k
   }
+  SESSIONS.set(lines, out)
   return out
 }
 
@@ -265,7 +314,7 @@ export type JournalCopy = {
 
 type Inst = { ci: number; si: number; session: Session; copy: JournalCopy }
 
-export type Choice = {
+type Pick = {
   key: string
   ci: number
   si: number
@@ -275,8 +324,12 @@ export type Choice = {
   divergent: boolean
   /** сессия есть минимум в двух копиях, строки одинаковы: общее начало журналов */
   common: boolean
-  /** после неё в выбранной копии началась другая сессия, либо кандидат без времени, не самый свежий */
-  displaced: boolean
+  /** время файла, по которому считается момент вести без поля времени (у равных копий — более раннее) */
+  mtime: number
+}
+
+export type Choice = Pick & {
+  /** состояние и момент вести: считаются только у кандидатов, у вытесненных сессий записи нет */
   entry: Entry
 }
 
@@ -285,8 +338,6 @@ const sameRows = (a: Line[], b: Line[]) => a.length === b.length && a.every((l, 
 const startsWithRows = (longer: Line[], shorter: Line[]) => shorter.length <= longer.length && shorter.every((l, i) => sameLine(l, longer[i]))
 
 export type Chosen = {
-  /** все сессии с выбранной копией (по ключу), в порядке копий и строк */
-  all: Choice[]
   /** кандидаты: не вытесненные */
   candidates: Choice[]
   /** показываемая запись: кандидат с самой свежей вестью (сначала хвосты, потом общее начало) */
@@ -300,11 +351,41 @@ export type Chosen = {
 /**
  * Для набора копий журнала одной задачи: сессии всех копий сводятся по ключу (код, номер); для каждой сессии выбирается копия,
  * где у неё больше строк (при равенстве — основная; расходятся — позже по времени, иначе дерево, с пометкой `≠`); вытесненные
- * сессии убираются; из кандидатов выбирается показываемая запись и считается «+N» (REQ-03).
+ * сессии убираются; из кандидатов выбирается показываемая запись и считается «+N» (REQ-03). Состояние считается только у кандидатов.
  */
 export function chooseSessions(copiesIn: JournalCopy[], now: number, th: Thresholds): Chosen {
   const copies = [...copiesIn].sort((a, b) => (a.kind === "main" ? 0 : 1) - (b.kind === "main" ? 0 : 1))
+  if (!copies.length) return { candidates: [], others: 0, displaced: 0 }
+  // выбор копий не зависит от часов, если не пришлось сравнивать моменты вести; тогда он держится по сигнатуре копий (время и размер
+  // каждой — здесь это массив разобранных строк и время файла), а состояния и тексты считаются заново при каждом показе
+  const sig = copies.map((c) => `${c.kind}:${idOf(c.lines)}:${c.mtimeMs}`).join("|")
+  const hit = PICKS.get(copies[0].lines)
+  let live: Pick[]
+  let total: number
+  if (hit && hit.sig === sig) {
+    live = hit.live.map((p) => ({ ...p, copy: copies[p.ci] }))
+    total = hit.total
+  } else {
+    const r = pickSessions(copies, now)
+    live = r.live
+    total = r.total
+    if (!r.usedNow) PICKS.set(copies[0].lines, { sig, live, total })
+  }
+  return finishChoice(live, total, now, th)
+}
+
+const PICKS = new WeakMap<Line[], { sig: string; live: Pick[]; total: number }>()
+const IDS = new WeakMap<Line[], number>()
+let nextId = 1
+const idOf = (lines: Line[]) => {
+  let id = IDS.get(lines)
+  if (!id) IDS.set(lines, (id = nextId++))
+  return id
+}
+
+function pickSessions(copies: JournalCopy[], now: number): { live: Pick[]; total: number; usedNow: boolean } {
   const lists = copies.map((c) => sessionsOf(c.lines))
+  let usedNow = false
   const byKey = new Map<string, Inst[]>()
   lists.forEach((ss, ci) =>
     ss.forEach((session, si) => {
@@ -314,9 +395,14 @@ export function chooseSessions(copiesIn: JournalCopy[], now: number, th: Thresho
       else byKey.set(session.key, [inst])
     }),
   )
-  const lastMoment = (i: Inst) => momentOf(lastOf(i.session), i.copy.mtimeMs, now)
-  const all: Choice[] = []
+  const lastMoment = (i: Inst) => {
+    usedNow = true
+    return momentOf(lastOf(i.session), i.copy.mtimeMs, now)
+  }
+  let total = 0
+  const live: Pick[] = []
   for (const [key, insts] of byKey) {
+    total++
     let best = insts[0]
     let divergent = false
     for (const x of insts.slice(1)) {
@@ -336,42 +422,35 @@ export function chooseSessions(copiesIn: JournalCopy[], now: number, th: Thresho
         else best = x.ci > best.ci ? x : best
       }
     }
+    if (best.si < lists[best.ci].length - 1) continue // после неё в выбранной копии началась другая сессия: вытеснена
     // время файла для вести без поля времени: у равных по содержимому копий — более раннее (слияние освежает файл)
-    const equal = insts.filter((i) => sameRows(i.session.rows, best.session.rows))
+    const equal = insts.length === 1 ? insts : insts.filter((i) => sameRows(i.session.rows, best.session.rows))
     const mtime = best.session.rows.length ? Math.min(...equal.map((i) => i.copy.mtimeMs)) : best.copy.mtimeMs
-    const common = insts.length >= 2 && equal.length === insts.length
-    all.push({
-      key,
-      ci: best.ci,
-      si: best.si,
-      copy: best.copy,
-      session: best.session,
-      divergent,
-      common,
-      displaced: best.si < lists[best.ci].length - 1,
-      entry: entryOf(best.session, mtime, now, th),
-    })
+    live.push({ key, ci: best.ci, si: best.si, copy: best.copy, session: best.session, divergent, common: insts.length >= 2 && equal.length === insts.length, mtime })
   }
+  return { live, total, usedNow }
+}
+
+function finishChoice(live: Pick[], total: number, now: number, th: Thresholds): Chosen {
+  let cands: Choice[] = live.map((p) => ({ ...p, entry: entryOf(p.session, p.mtime, now, th) }))
   // кандидат без времени, который не самый свежий, вытеснен: его «давно нет вестей» и скрытие от времени файла были бы ложными
   const ahead = (a: Choice, b: Choice) => a.entry.at - b.entry.at || a.ci - b.ci || a.si - b.si
-  let live = all.filter((c) => !c.displaced)
-  if (live.length) {
-    const freshest = live.reduce((a, b) => (ahead(b, a) > 0 ? b : a))
-    for (const c of live) if (c !== freshest && c.entry.byFile) c.displaced = true
-    live = live.filter((c) => !c.displaced)
+  if (cands.length) {
+    const freshest = cands.reduce((a, b) => (ahead(b, a) > 0 ? b : a))
+    cands = cands.filter((c) => c === freshest || !c.entry.byFile)
   }
-  const tails = live.filter((c) => !c.common)
-  const pool = tails.length ? tails : live
+  const tails = cands.filter((c) => !c.common)
+  const pool = tails.length ? tails : cands
   const shown = pool.length ? pool.reduce((a, b) => (ahead(b, a) > 0 ? b : a)) : undefined
   let others = 0
   if (shown)
-    for (const c of live) {
+    for (const c of cands) {
       if (c === shown || !c.entry.shown) continue
       const quiet = c.entry.state === 1 || c.entry.state === 2 || c.entry.state === 4 || c.entry.state === 7
       if (quiet && c.entry.at <= shown.entry.at) continue
       others++
     }
-  return { all, candidates: live, ...(shown ? { shown } : {}), others, displaced: all.length - live.length }
+  return { candidates: cands, ...(shown ? { shown } : {}), others, displaced: total - cands.length }
 }
 
 // ---- Сводка по задачам: открытый контракт состояния (REQ-18, REQ-20) -----------------------------------------------------
@@ -460,15 +539,17 @@ export function summarizeTasks(scan: { tasks: ScanTask[] }, now: number, th: Thr
       .filter((c) => c !== chosen.shown)
       .sort((a, b) => b.entry.at - a.entry.at)
       .map(sessionInfo)
-    out.push({
+    const task = {
       ...first,
       number: /^[0-9]+/.exec(t.folder)?.[0] ?? t.folder,
       folder: t.folder,
-      title: t.title,
       others: chosen.others,
       displaced: chosen.displaced,
       candidates: [first, ...rest],
-    })
+    }
+    // название читается, когда понадобилось (у сканера оно ленивое)
+    Object.defineProperty(task, "title", { get: () => t.title, enumerable: true })
+    out.push(task as ProgressTask)
   }
   return out
 }

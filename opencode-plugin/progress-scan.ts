@@ -5,7 +5,7 @@
 // Нагрузка (REQ-10): обход файловой системы — не чаще WALK_MS на репозиторий; между обходами показ берёт готовый результат без
 // доступа к файлам; файл перечитывается, только если пара (время изменения, размер) изменилась; за обход разбирается не больше
 // PARSE_BUDGET изменившихся файлов, самые свежие первыми; `scanAll` (команда окна) бюджета не знает.
-import { readFileSync, readdirSync, realpathSync, statSync } from "node:fs"
+import { closeSync, fstatSync, openSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs"
 import path from "node:path"
 import { parseJournal, type JournalCopy, type Line, type ScanTask } from "./progress.ts"
 
@@ -35,6 +35,26 @@ const readText = (p: string) => {
     return readFileSync(p, "utf8")
   } catch {
     return undefined
+  }
+}
+
+/** Файл целиком вместе с парой (время изменения, размер): снята до чтения и после него, `stable` — не разошлись ли они. */
+function readStamped(file: string): { bytes: Buffer; mtimeMs: number; size: number; stable: boolean } | undefined {
+  let fd = -1
+  try {
+    fd = openSync(file, "r")
+    const before = fstatSync(fd)
+    const bytes = readFileSync(fd)
+    const after = fstatSync(fd)
+    return { bytes, mtimeMs: before.mtimeMs, size: before.size, stable: before.mtimeMs === after.mtimeMs && before.size === after.size && bytes.length === after.size }
+  } catch {
+    return undefined
+  } finally {
+    if (fd >= 0) {
+      try {
+        closeSync(fd)
+      } catch {}
+    }
   }
 }
 
@@ -84,20 +104,22 @@ export type Tree = {
 /** Основная копия и записи реестра `.git/worktrees` (файл `gitdir` каждой записи), папка которых существует. */
 export function listTrees(place: RepoPlace): Tree[] {
   const out: Tree[] = [{ kind: "main", name: "", root: place.root, headLog: path.join(place.commonGit, "logs", "HEAD") }]
-  const seen = new Set([norm(place.root)])
   const reg = path.join(place.commonGit, "worktrees")
   let names: string[] = []
   try {
     names = readdirSync(reg)
   } catch {}
+  if (!names.length) return out
+  const plain = (p: string) => path.resolve(p).replace(/\\/g, "/").toLowerCase()
+  const seen = new Set([plain(place.root)])
   for (const name of names) {
     try {
       const entry = path.join(reg, name)
       const pointer = readText(path.join(entry, "gitdir"))?.trim()
       if (!pointer) continue
       const root = path.dirname(path.resolve(entry, pointer))
-      if (seen.has(norm(root)) || !statOf(root)?.isDirectory()) continue
-      seen.add(norm(root))
+      if (seen.has(plain(root)) || !statOf(root)?.isDirectory()) continue
+      seen.add(plain(root))
       out.push({ kind: "tree", name, root, headLog: path.join(entry, "logs", "HEAD") })
     } catch {}
   }
@@ -147,6 +169,8 @@ export type Scanner = {
 
 const EMPTY: ScanResult = { trees: [], journals: 0, complete: true, tasks: [] }
 
+type Found = { tree: Tree; folder: string; file: string; mtimeMs: number; size: number; headMs?: number; bytes?: Buffer; stable?: boolean }
+
 export function createScanner(opts: { walkMs?: number; parseBudget?: number } = {}): Scanner {
   const walkMs = opts.walkMs ?? WALK_MS
   const budget = opts.parseBudget ?? PARSE_BUDGET
@@ -160,8 +184,9 @@ export function createScanner(opts: { walkMs?: number; parseBudget?: number } = 
     const journals = new Map<string, JournalCache>()
     const titles = new Map<string, TitleCache>()
     const trees = listTrees(place)
-    type Found = { tree: Tree; folder: string; file: string; mtimeMs: number; size: number; headMs?: number }
     const found: Found[] = []
+    // команда окна (без бюджета) читает новые файлы сразу, без отдельного `stat`: порядок разбора ей не нужен
+    const direct = limit === Infinity
     for (const tree of trees) {
       try {
         const head = statOf(tree.headLog)
@@ -173,8 +198,14 @@ export function createScanner(opts: { walkMs?: number; parseBudget?: number } = 
         for (const folder of entries) {
           try {
             const file = path.join(base, folder, "progress.log")
+            const headMs = head ? { headMs: head.mtimeMs } : {}
+            if (direct && !prev?.journals.has(file)) {
+              const r = readStamped(file)
+              if (r) found.push({ tree, folder, file, mtimeMs: r.mtimeMs, size: r.size, bytes: r.bytes, stable: r.stable, ...headMs })
+              continue
+            }
             const st = statOf(file)
-            if (st?.isFile()) found.push({ tree, folder, file, mtimeMs: st.mtimeMs, size: st.size, ...(head ? { headMs: head.mtimeMs } : {}) })
+            if (st?.isFile()) found.push({ tree, folder, file, mtimeMs: st.mtimeMs, size: st.size, ...headMs })
           } catch {}
         }
       } catch {}
@@ -182,47 +213,60 @@ export function createScanner(opts: { walkMs?: number; parseBudget?: number } = 
     // что изменилось с прошлого обхода: самые свежие файлы первыми, не больше `limit`
     const changed = found.filter((f) => {
       const c = prev?.journals.get(f.file)
-      return !c || c.mtimeMs !== f.mtimeMs || c.size !== f.size
+      return f.bytes !== undefined || !c || c.mtimeMs !== f.mtimeMs || c.size !== f.size
     })
     changed.sort((a, b) => b.mtimeMs - a.mtimeMs)
-    const parsedNow = new Set<string>()
     for (const f of changed.slice(0, limit)) {
       try {
-        // пара (время, размер) снимается до чтения и сверяется после: файл дописывали — разбор повторится на следующем обходе
-        const bytes = readFileSync(f.file)
-        const after = statOf(f.file)
+        // пара (время, размер) снимается до чтения и после него: файл дописывали — разбор повторится на следующем обходе
+        const r = f.bytes !== undefined ? { bytes: f.bytes, mtimeMs: f.mtimeMs, size: f.size, stable: f.stable === true } : readStamped(f.file)
+        if (!r) continue
         stats.parses++
         stats.lastParsed.push(f.file)
-        parsedNow.add(f.file)
-        if (after && after.mtimeMs === f.mtimeMs && after.size === f.size && bytes.length === f.size) journals.set(f.file, { mtimeMs: f.mtimeMs, size: f.size, lines: parseJournal(bytes) })
-        else {
-          const old = prev?.journals.get(f.file)
-          if (old) journals.set(f.file, old)
-        }
+        if (r.stable) journals.set(f.file, { mtimeMs: r.mtimeMs, size: r.size, lines: parseJournal(r.bytes) })
       } catch {}
     }
     for (const f of found) {
       if (journals.has(f.file)) continue
       const old = prev?.journals.get(f.file)
-      if (old) journals.set(f.file, old) // не дошла очередь разбора — пока старый разбор
+      if (old) journals.set(f.file, old) // не дошла очередь разбора (или файл дописывают) — пока старый разбор
     }
-    // названия задач — из `task/message.md`, тоже по паре (время, размер)
-    const titleOf = new Map<string, string | undefined>()
-    for (const f of found) {
-      if (titleOf.has(f.folder) && titleOf.get(f.folder) !== undefined) continue
-      const mp = path.join(path.dirname(f.file), "task", "message.md")
-      const st = statOf(mp)
-      if (!st?.isFile()) {
-        if (!titleOf.has(f.folder)) titleOf.set(f.folder, undefined)
-        continue
+    // названия задач — из `task/message.md`, по паре (время, размер); читаются, когда название понадобилось (ленивое свойство
+    // `title`): панели нужны названия трёх задач, а не всех
+    const prevTitles = prev?.titles
+    const titleLoader = (folder: string, copies: Found[]) => {
+      let text: string | undefined
+      let done = false
+      return () => {
+        if (done) return taskTitle(folder, text)
+        done = true
+        for (const f of copies) {
+          const mp = path.join(path.dirname(f.file), "task", "message.md")
+          const old = prevTitles?.get(mp)
+          let c: TitleCache | undefined
+          if (old) {
+            const st = statOf(mp)
+            if (st?.isFile()) c = st.mtimeMs === old.mtimeMs && st.size === old.size ? old : undefined
+          }
+          if (!c) {
+            const r = readStamped(mp)
+            if (r) c = { mtimeMs: r.mtimeMs, size: r.size, text: r.bytes.toString("utf8") }
+          }
+          if (c) {
+            titles.set(mp, c)
+            text = c.text
+            break
+          }
+        }
+        return taskTitle(folder, text)
       }
-      let c = prev?.titles.get(mp)
-      if (!c || c.mtimeMs !== st.mtimeMs || c.size !== st.size) c = { mtimeMs: st.mtimeMs, size: st.size, text: readText(mp) }
-      titles.set(mp, c)
-      titleOf.set(f.folder, c.text)
     }
     const byFolder = new Map<string, Found[]>()
-    for (const f of found) byFolder.set(f.folder, [...(byFolder.get(f.folder) ?? []), f])
+    for (const f of found) {
+      const list = byFolder.get(f.folder)
+      if (list) list.push(f)
+      else byFolder.set(f.folder, [f])
+    }
     const tasks: ScanTask[] = []
     let complete = true
     for (const folder of [...byFolder.keys()].sort()) {
@@ -240,7 +284,14 @@ export function createScanner(opts: { walkMs?: number; parseBudget?: number } = 
         complete = false // задача появляется, когда разобраны все её копии (REQ-03)
         continue
       }
-      tasks.push({ folder, title: taskTitle(folder, titleOf.get(folder)), copies })
+      const load = titleLoader(folder, byFolder.get(folder)!)
+      tasks.push({
+        folder,
+        get title() {
+          return load()
+        },
+        copies,
+      })
     }
     return { walkedAt: 0, result: { repo: place.root, trees, journals: found.length, complete, tasks }, journals, titles }
   }
