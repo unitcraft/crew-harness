@@ -153,6 +153,91 @@ so old paths keep working):
   "updated": 1791200000000 }
 ```
 
+## Progress of background sessions (progress.log)
+
+The sessions of the development method (analysis, plan, implementation, review — see
+[`doc/canon/process.md`](../doc/canon/process.md)) work in the background, not in tabs. Each of them writes its progress
+into `doc/tasks/<NNN-name>/progress.log`, one line per finished unit: `<code> <k>/<N> [HH:MM] <what was done>` (the format
+and the guard that checks it are in the Canon item "Журнал хода `progress.log`"). The window reads these journals itself —
+no service, no setting, no process — and shows them. The texts of the window are Russian, like the rest of the window.
+
+### 1. The "Ход работ" block and `/crew-progress`
+
+Under the "Crew" block of the right panel the window draws a "Ход работ" block (nothing is drawn while no task is running):
+at most 3 tasks, 4 rows each — the mark and "NNN title", the session in words and "k/N", `↳` the last line, the state — and a row
+`+N · /crew-progress` for the rest. Marks: `!` needs attention (silent for too long, stopped, "all steps done, no result",
+a launch with no news), `•` runs, `✓` done. The states, as the panel prints them: "идёт HH:MM · Nм назад", "⚠ нет вестей Nм" (with
+"· ветка Mм" when the task's branch moved after the last line), "остановилась: <kind>", "готово HH:MM", "запущена HH:MM" (the row
+before says "шагов нет"), "без единиц HH:MM", "все шаги сделаны, итога нет". `HH:MM` is the time of the last line; a leading `≈` marks a
+time taken from the file (the line has no time field); `≠` after "k/N" marks a session whose lines differ between two copies
+of the journal; `+N` — other running sessions of the task. The block refreshes every 2 s from a cache; the files are walked
+at most every 5 s, so a new line is on the panel within 10 s. The command `/crew-progress` (also in the Ctrl+P palette, "Crew: что сейчас идёт")
+shows the same in a dialog, without a model turn: every running task of the repository of the tab on screen, every running session of it with the
+last three lines of its journal, "вытеснено N" for the past sessions, and the abandoned ones marked "давно брошена". The repository is
+the one of the tab: found without any process by climbing from the tab's folder to `.git` (a folder — the main copy; a file
+`gitdir: …` — a linked working tree, the common `.git` by `commondir`; relative paths are resolved from the folder of the file),
+and every working tree of it is read from git's own registry `.git/worktrees/*/gitdir`, wherever the tree lies. For each session the copy of the
+journal with more lines of that session is taken (the main copy when they are equal).
+
+### 2. Thresholds and environment variables
+
+Constants of the module, the same for all projects: silence is "давно нет вестей" after 10 minutes, "done" and "no units" stay in the panel
+for 15 minutes, a silent unfinished session leaves the panel after 24 hours (the command still lists it as abandoned). They are counted
+from the clock at every show, not from a change of the file. The window process can override them, in milliseconds (a value that is not
+a positive number is ignored): `CREW_HARNESS_PROGRESS_STALE_MS` (10 minutes), `CREW_HARNESS_PROGRESS_DONE_MS` (15 minutes),
+`CREW_HARNESS_PROGRESS_ABANDON_MS` (24 hours). No project setting, no schema and no `crew_help` text is involved.
+
+### 3. Open contract: `ProgressTask`
+
+`progress.ts` is pure (no file, no window, no OpenCode, no `status.ts`): `parseJournal(bytes)` gives the lines of a journal and
+`summarizeTasks(scan, now, thresholds)` gives the state of every task; `progress-scan.ts` walks the trees and caches the parsed journals
+(`createScanner().scan(dir)` and `.scanAll(dir)`), a future service can use both. The input is
+`{ tasks: [{ folder, title, copies: [{ kind: "main" | "tree", tree?, lines, mtimeMs, branchMs? }] }] }`; the output is an array of
+
+```jsonc
+{ "number": "002", "folder": "002-guards", "title": "…",            // ProgressTask = ProgressSession + the fields of the task
+  "others": 0, "displaced": 69,                                     // other running sessions ("+N"); past sessions displaced
+  "candidates": [ /* ProgressSession of every running session, the shown one first */ ],
+  // ProgressSession:
+  "session": "С5", "sessionName": "С5 реализация", "k": 13, "n": 14, "signature": "…",
+  "at": 1791200000000, "byFile": false,                              // the time of the last news; true — taken from the file time
+  "state": 5, "stateWord": "идёт", "kind": "ворота",                 // state 1…7 of the table; kind — only for state 1 (empty: no kind named)
+  "stale": false, "divergent": false, "source": "main" | "tree",     // silent past the threshold; the copies differ (≠); the copy it was taken from
+  "branchAt": 1791200000000,                                         // the last move of the branch of that copy (logs/HEAD), if known
+  "visible": true, "abandoned": false,                               // shown in the panel; silent for 24 hours
+  "tail": ["12/14 …", "13/14 …"] }                                   // up to three last lines of the session
+```
+
+States: 1 stopped, 2 done, 3 launched (no steps yet), 4 no units, 5 running, 6 silent, 7 all steps done with no "готово". The field names are
+the contract; they change only by changing this section.
+
+### 4. A session with no lines is invisible
+
+A session that wrote no line at all and has no launch line `<code> 0/0 [HH:MM] запуск` in a journal cannot be seen: nothing in the files says it began.
+Sessions are told apart by a start line (`k = 0`), by a change of the code or by a fall of `k`; a session is shown only after its first line.
+
+### 5. Caveats of the launch line and of the copies
+
+A session that wrote only a launch line and ended silently stays in the panel as "запущена" (and then "⚠ нет вестей") until it is abandoned
+after 24 hours. The launch line of the first implementation session goes into the task's worktree, not into the main copy:
+otherwise `progress.log` of the main copy and of the branch diverge, a `--ff-only` merge refuses and a rebase conflicts (the panel itself loses
+nothing: the same session is recognized in both copies). A repeated launch of the same code is written into the copy where the lines of the
+previous session of that code are; a launch in one copy while a finished session of the same code is in another copy does not start a new session.
+An interrupted session of the common beginning of both copies, written with time fields, may leave a "+1" next to a running session of the task
+(the state of the task itself stays right); without time fields the stale one is dropped.
+
+### 6. The file time is only a hint
+
+A line with no time field is dated by the change time of the file (marked `≈`), and for equal copies the earlier one. A merge, a switch of branches
+and a clone refresh that time, so a journal brought by a merge may look newer than its last line; lines written with `[HH:MM]` do not have this
+limit. The date of such a line is the day of the file (the previous day when the time is later than the file by more than 5 minutes).
+
+### 7. The transitional period
+
+Until the Canon item about the journal is in `main`, sessions write the earlier form with no "готово" line, so a finished session shows as
+"все шаги сделаны, итога нет" until it leaves the panel after 24 hours; a line written after "готово" in the same session brings the same
+state back. Later the sessions write `<code> N/N [HH:MM] готово …` last and the panel shows "готово" for 15 minutes.
+
 ## Obligations instead of a push controller
 
 A question or a task is the recipient's obligation until it answers (`reply_to: qid`). Windows on
