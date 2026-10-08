@@ -6,20 +6,22 @@
 #
 # Использование: . scripts/guards/lib/find-python.sh; find_python || exit 1; $PYTHON скрипт.py
 # Файл подключается точкой, сам ничего не запускает и не меняет окружение, кроме PYTHON и
-# PYTHONDONTWRITEBYTECODE (иначе __pycache__ ломает проверку «git status пуст»).
+# PYTHONDONTWRITEBYTECODE (иначе __pycache__ ломает проверку «git status пуст») и PYTHONIOENCODING (вывод
+# в UTF-8 при любой кодовой странице консоли).
 PYTHONDONTWRITEBYTECODE=1
-export PYTHONDONTWRITEBYTECODE
+PYTHONIOENCODING=utf-8
+export PYTHONDONTWRITEBYTECODE PYTHONIOENCODING
 
 find_python() {
   PYTHON=
   # GUARDS_PYTHON_CANDIDATES (через запятую) нужна только самотестам: подменить перечень кандидатов.
-  rest=${GUARDS_PYTHON_CANDIDATES:-python,python3,py -3}
-  while [ -n "$rest" ]; do
-    candidate=${rest%%,*}
-    case "$rest" in *,*) rest=${rest#*,} ;; *) rest= ;; esac
+  fp_rest=${GUARDS_PYTHON_CANDIDATES:-python,python3,py -3}
+  while [ -n "$fp_rest" ]; do
+    fp_candidate=${fp_rest%%,*}
+    case "$fp_rest" in *,*) fp_rest=${fp_rest#*,} ;; *) fp_rest= ;; esac
     # shellcheck disable=SC2086
-    if $candidate -c "import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)" >/dev/null 2>&1; then
-      PYTHON=$candidate
+    if $fp_candidate -c "import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)" >/dev/null 2>&1; then
+      PYTHON=$fp_candidate
       return 0
     fi
   done
