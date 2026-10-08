@@ -14,7 +14,7 @@ const fetch = () => git(proj, "fetch", "-q", "origin")
 const begin = (t, sid = REV) => call("crew_task", sid, { action: "precheck", n: t.n })
 const finish = (t, input, sid = REV) => call("crew_task", sid, { action: "precheck", n: t.n, ...input })
 const snap = (t) => JSON.stringify({ p: T(t.n).precheck ?? null, h: T(t.n).history.length, s: T(t.n).status })
-const lockFor = (sid, n) => review.takeMergeLock("proj", sid, n)
+const lockFor = (sid, n) => H.take(sid, n)
 const clearLock = () => review.releaseMergeLock("proj", review.mergeHolder("proj")?.session ?? "")
 /** a task on review with a green record on the current tip of the origin (candidate = a branch with one commit) */
 const greenTask = async (more = {}) => {

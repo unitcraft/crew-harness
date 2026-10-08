@@ -18,7 +18,7 @@ import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
 import { DEFAULT_FORM, PLAN_ACCEPTANCE, PLAN_MERGE_ACCEPTANCE, type PlanForm, allSteps, nextPlanNumber, parsePlan, planProblems, planTemplate, roundRules } from "./plans.ts"
 import { type Task, type TaskPlan, WORKING_STATUSES, taskRef, slugify, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { countedOpen, waitingCleanup } from "./tasks.ts"
-import { beginPrecheck, finishPrecheck, markPrecheckStale, unlockMerge } from "./precheck.ts"
+import { acceptedTip, beginPrecheck, finishPrecheck, gateMerge, markPrecheckStale, unlockMerge } from "./precheck.ts"
 import { cleanupDone, cleanupSteps, fileAt, holdsMergeLock, isMerged, mergeHolder, releaseMergeLock, reworkLetter, takeMergeLock } from "./review.ts"
 import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, timerSpec, watchesOf } from "./watch.ts"
 import { watchRefusal } from "./deny.ts"
@@ -1964,6 +1964,12 @@ export function makeTools(host: CrewHost): CrewTool[] {
         if (action === "unlock") return { content: unlockMerge(t, me.session) }
         if (action === "merge") {
           if (t.status !== "reviewing") return { content: `Сначала crew_task {action: "review", n: ${t.n}} (задача сейчас ${statusRu(t.status)}).` }
+          if (tcfg.mergePrecheck === "required") {
+            // ворота: замок выдаётся только на ту вершину главной ветки, на которой кандидат уже собран и проверен (задача 005)
+            const g = await gateMerge(t, me.session, tcfg.targetBranch)
+            if ("text" in g) return { content: g.text }
+            return { content: `Замок вливания проекта ${project} твой, выдан на вершину ${tcfg.targetBranch} ${g.granted}. Влей ${t.branch ? `ветку ${t.branch}` : "работу"} (кандидата, проверенного на этой вершине) в ${tcfg.targetBranch}, запушь и вызови crew_task {action: "accept", n: ${t.n}, checks: {...}${t.branch ? "" : ', commit: "<хэш>"'}}.` }
+          }
           const r = takeMergeLock(project, me.session, t.n)
           if (!r.ok) return { content: `Замок вливания проекта ${project} у приёмщика задачи #${r.holder.n} (сессия ${r.holder.session}) с ${hhmm(r.holder.at)}. Дождись (спроси позже ещё раз) — вливать одновременно нельзя.` }
           taskEvent(t, me.session, undefined, "замок вливания взят")
@@ -2032,6 +2038,14 @@ export function makeTools(host: CrewHost): CrewTool[] {
           t.merged_head = m.head
           releaseMergeLock(project, me.session)
           taskEvent(t, me.session, "accepted", `принята: ${m.how}`)
+          if (t.precheck) {
+            // запись предпроверки остаётся историей: на какой вершине целевой ветки принята задача
+            const onTip = acceptedTip(t, tcfg.targetBranch, m.head)
+            if (onTip) {
+              t.precheck = { ...t.precheck, accepted_on: onTip }
+              taskEvent(t, me.session, undefined, `принята на ${onTip.slice(0, 7)}`)
+            }
+          }
           try {
             releaseTaskWindow(t.project, t) // файл окон профиля из дерева принятой задачи снят (задача 003, REQ-22)
           } catch (e) {

@@ -2,7 +2,7 @@
 // repository with a local bare `origin` (a file path), a second clone that moves the origin, tabs of the integrator and the
 // reviewers, and helpers that build tasks on review. Not a test itself (no `.test.` in the name: `npm test` does not take it).
 // The plugin code comes from CREW_PLUGIN_DIR (a copy with stubs, task 005 AC-30) or from the folder above this one.
-import { execFileSync } from "node:child_process"
+import { execFileSync, spawnSync } from "node:child_process"
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -88,7 +88,12 @@ export async function harness(prefix, opts = {}) {
   const until = async (cond, ms = 8_000) => {
     for (const end = Date.now() + ms; !cond() && Date.now() < end; ) await wait(100)
   }
-  const call = async (name, sid, input = {}) => (await tools[name].execute(input, { sessionID: sid })).content
+  // the window heartbeat is refreshed before every call: the synchronous git work of a test blocks the timer for seconds, and a
+  // holder whose window looks dead would have its lock taken as abandoned
+  const call = async (name, sid, input = {}) => {
+    beat()
+    return (await tools[name].execute(input, { sessionID: sid })).content
+  }
   const roleOf = (sid) => (sid === "sesINTEG1" ? "integrator" : "worker")
   for (const sid of sids) {
     core.saveCard({ session: sid, role: roleOf(sid), auto: false, title: sid, directory: proj, repo: "proj", project: "proj", pid: process.pid, updated: Date.now() })
@@ -100,6 +105,12 @@ export async function harness(prefix, opts = {}) {
   let seq = 0
   const H = {
     tmp, proj, bare, other, git, gitTry, settings, mod, core, tasks, review, precheck, delivered, hooks, tools, events, call, wait, until, sids,
+    beat,
+    /** take the merge lock for a session directly (the window heartbeat is fresh) */
+    take: (sid, n) => {
+      beat()
+      return review.takeMergeLock("proj", sid, n)
+    },
     cfg: () => core.loadConfig(proj),
     /** current settings written by the last settings() call */
     current: () => current,
@@ -159,6 +170,18 @@ export async function harness(prefix, opts = {}) {
       git(proj, "merge", "-q", "--no-edit", "--no-ff", branch)
       git(proj, "push", "-q", "origin", "main")
       return git(proj, "rev-parse", "HEAD")
+    },
+    /** git processes of the machine whose command line contains the needle (the name condition keeps the probe itself out of the list) */
+    gitProcs: (needle) => {
+      let lines = []
+      if (process.platform === "win32") {
+        const r = spawnSync("powershell", ["-NoProfile", "-Command", "Get-CimInstance Win32_Process -Filter \"Name LIKE 'git%'\" | Select-Object ProcessId,Name,CommandLine | ConvertTo-Json -Compress"], { encoding: "utf8", windowsHide: true })
+        const t = (r.stdout ?? "").trim()
+        if (t) lines = (Array.isArray(JSON.parse(t)) ? JSON.parse(t) : [JSON.parse(t)]).map((p) => `${p.ProcessId} ${p.Name} ${p.CommandLine ?? ""}`)
+      } else {
+        lines = (spawnSync("ps", ["-eo", "pid,comm,args"], { encoding: "utf8" }).stdout ?? "").split(String.fromCharCode(10)).filter((l) => /^\s*\d+\s+git/.test(l))
+      }
+      return lines.filter((l) => l.includes(needle))
     },
     history: (n) => H.task(n).history.map((h) => h.note ?? "").filter(Boolean),
     lockFile: () => path.join(core.ROLES, "proj_merge.json"),
