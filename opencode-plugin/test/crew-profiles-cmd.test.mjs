@@ -136,6 +136,7 @@ r = await sets("show kimi-only")
 cell("AC-07 show <name>: any set", /Набор «kimi-only» — не включён/.test(r), r)
 r = await sets("reset")
 cell("AC-07 reset returns the set of the file (none here)", /Готово/.test(r) && st().name === undefined && editLines().length === 2, r + JSON.stringify(editLines().length))
+cell("AC-07/AC-10 reset says what is enabled now and how the windows change, as use does (no restart)", /Набор не включён/.test(r) && /Перезапуск не нужен/.test(r) && /Окна сессий в рабочих деревьях задач \(было → стало\)/.test(r), r)
 cell("AC-07 no turn of the model: every answer is a service message", prompts.length === 0 && replies.length > 0, String(prompts.length))
 
 // ---- AC-09: the text about a smaller window ----

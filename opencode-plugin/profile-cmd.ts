@@ -86,11 +86,18 @@ function parseResetSets(args: string[]): L.ResetForm | string {
 }
 
 function resetEdit(dir: string, command: string, form: L.ResetForm): { ok: boolean; text: string } {
-  return applyEdit(dir, command, ({ layer }) => {
-    const r = L.layerReset(layer, form)
-    if (!r.removed.length) return { refuse: "в локальном слое нечего снимать по этой форме" }
-    return { layer: r.layer, what: `снято из локального слоя: ${r.removed.map(L.labelOf).join(", ")}`, from: r.removed.join(","), to: "(из файла)" }
+  const before = L.profileState(dir)
+  const r = applyEdit(dir, command, ({ layer }) => {
+    const x = L.layerReset(layer, form)
+    if (!x.removed.length) return { refuse: "в локальном слое нечего снимать по этой форме" }
+    return { layer: x.layer, what: `снято из локального слоя: ${x.removed.map(L.labelOf).join(", ")}`, from: x.removed.join(","), to: "(из файла)" }
   })
+  if (!r.ok) return r
+  // имя набора сменилось (reset имени или reset all): сказать, что включено и как изменились окна (как use)
+  const after = L.profileState(dir)
+  if (before.name === after.name) return r
+  const now = after.name ? `Сейчас включён набор «${after.name}» (${after.nameSource === "layer" ? "локальное переключение" : "файл проекта"}); было ${before.name ? `«${before.name}»` : "набор не включён"}.` : "Набор не включён (имени нет ни в файле проекта, ни в локальном слое): модели — по spawn_models, файлы окон в деревьях задач сняты."
+  return { ok: true, text: [r.text, now + " Перезапуск не нужен.", ...changeBody(before, after, dir)].join("\n") }
 }
 
 export function setsEditVerb(dir: string, verb: string, args: string[]): { ok: boolean; text: string } | undefined {
@@ -432,9 +439,9 @@ async function catalogOf(deps: CmdDeps): Promise<Catalog | undefined> {
   }
 }
 
-/** Предупреждения про окна набора: заметки об окнах и порог Claude Code (profile-windows), каталог моделей (use, check). */
-async function windowWarnings(ps: L.PState, models: Map<string, P.Win>, dir: string, deps: CmdDeps, full: boolean): Promise<string[]> {
-  const out: string[] = W.windowNotes(mainFolder(dir), W.qualifying(ps.project, listTasks(ps.project)), models)
+/** Предупреждения по каталогу моделей OpenCode (use, check): подсказка, не условие работы. */
+async function catalogWarnings(models: Map<string, P.Win>, deps: CmdDeps, full: boolean): Promise<string[]> {
+  const out: string[] = []
   const cat = await catalogOf(deps)
   if (!cat) {
     if (full) out.push("модели не сверены с каталогом OpenCode: не проверено (каталог недоступен)")
@@ -447,6 +454,10 @@ async function windowWarnings(ps: L.PState, models: Map<string, P.Win>, dir: str
     }
   }
   return out
+}
+/** Заметки об окнах (рукописные перекрытия, явный порог Claude Code) и каталог — для check. */
+async function windowWarnings(ps: L.PState, models: Map<string, P.Win>, dir: string, deps: CmdDeps, full: boolean): Promise<string[]> {
+  return [...W.windowNotes(mainFolder(dir), W.qualifying(ps.project, listTasks(ps.project)), models), ...(await catalogWarnings(models, deps, full))]
 }
 
 function updownLines(before: Map<string, P.Win>, after: Map<string, P.Win>, root: string): string[] {
@@ -482,6 +493,16 @@ function reviewerModels(data: P.Data, name: string): string[] {
   return [...out]
 }
 
+/** Что изменилось в окнах при смене набора (use, reset): было → стало, окно приёмки, заметки об окнах. */
+function changeBody(before: L.PState, after: L.PState, dir: string): string[] {
+  const root = mainFolder(dir)
+  const am = windowsOfActive(after)
+  const lines = ["Окна сессий в рабочих деревьях задач (было → стало), применятся на следующем ходе каждой сессии:", ...updownLines(windowsOfActive(before), am, root)]
+  if (after.state.usable) for (const m of reviewerModels(after.state.usable.data, after.state.usable.name)) lines.push(`Приёмка и приёмка плана: ${reviewerWindowLine(root, m)}.`)
+  for (const w of W.windowNotes(root, W.qualifying(after.project, listTasks(after.project)), am)) lines.push(`Предупреждение: ${w}`)
+  return lines
+}
+
 async function useSet(dir: string, name: string | undefined, deps: CmdDeps): Promise<string> {
   const ps = L.profileState(dir)
   const command = "crew-sets use"
@@ -489,8 +510,6 @@ async function useSet(dir: string, name: string | undefined, deps: CmdDeps): Pro
   if (!isObj(ps.data.sets?.[name])) return refused(ps.project, command, `набора «${name}» нет; наборы: ${listSets(ps.data)}`)
   const chk = P.checkData(ps.data, name)
   if (chk.errors.length) return refused(ps.project, command, `набор «${name}» нельзя включить: ${chk.errors.map((e) => e.text).join("; ")}`)
-  const root = mainFolder(dir)
-  const before = windowsOfActive(ps)
   L.writeLayer(ps.project, L.layerSetName(ps.layer, ps.raw, name))
   L.syncSnapshot(dir)
   const files = L.syncProjectFiles(dir)
@@ -505,15 +524,13 @@ async function useSet(dir: string, name: string | undefined, deps: CmdDeps): Pro
     return c ? P.cellText(c[1]) : "не описан (spawn_models)"
   }
   lines.push("Этапы: " + STAGE_ORDER.map((st) => `${P.STAGE_RU[st]} — ${cellOf(st)}`).join("; ") + ".")
-  lines.push("Окна сессий в рабочих деревьях задач (было → стало), применятся на следующем ходе каждой сессии:")
-  lines.push(...updownLines(before, models, root))
-  for (const m of reviewerModels(after.data, name)) lines.push(`Приёмка и приёмка плана: ${reviewerWindowLine(root, m)}.`)
+  lines.push(...changeBody(ps, after, dir))
   const wts = W.qualifying(ps.project, listTasks(ps.project))
   lines.push(`Файлы окон: записано ${files.written.length}, снято ${files.removed.length}; задач с рабочим деревом сейчас ${wts.length}. Задачи без рабочего дерева (исполнитель в основной папке) окон профиля не получают.`)
   const cfg = loadConfig(dir)
   if (cfg.reviewer === "integrator" && P.cellsOf((after.data.sets as any)[name]).some(([s, c]) => (s === "accept" || s === "plan_accept") && c.tier !== "task")) lines.push("Предупреждение: в проекте reviewer: integrator — приёмку ведёт вкладка интегратора на её модели; набор приёмку не меняет (модель открытой вкладки плагин не переключает).")
   for (const w of after.state.warnings) lines.push(`Предупреждение: ${w.text}`)
-  for (const w of await windowWarnings(after, models, dir, deps, false)) lines.push(`Предупреждение: ${w}`)
+  for (const w of await catalogWarnings(models, deps, false)) lines.push(`Предупреждение: ${w}`)
   return lines.join("\n")
 }
 
