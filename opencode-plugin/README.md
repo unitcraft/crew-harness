@@ -164,16 +164,17 @@ no service, no setting, no process — and shows them. The texts of the window a
 ### 1. The "Ход работ" block and `/crew-progress`
 
 Under the "Crew" block of the right panel the window draws a "Ход работ" block (nothing is drawn while no task is running):
-at most 3 tasks, 4 rows each — the mark and "NNN title", the session in words and "k/N", `↳` the last line, the state — and a row
-`+N · /crew-progress` for the rest. Marks: `!` needs attention (silent for too long, stopped, "all steps done, no result",
-a launch with no news), `•` runs, `✓` done. The states, as the panel prints them: "идёт HH:MM · Nм назад", "⚠ нет вестей Nм" (with
+at most 3 tasks, 4 rows each — the mark and "NNN title", the session in words and "k/N", `↳` the last line, the state — and a bottom
+row: `ещё N · все: /crew-progress` when N tasks did not fit, `все: /crew-progress` when all fit. Marks: `!` needs attention (silent for
+too long, stopped, a launch with no news past the threshold), `•` runs, launched, "no units" or "all steps done, no result", `✓` done. The states, as the panel prints them: "идёт HH:MM · Nм назад", "⚠ нет вестей Nм" (with
 "· ветка Mм" when the task's branch moved after the last line), "остановилась: <kind>", "готово HH:MM", "запущена HH:MM" (the row
 before says "шагов нет"), "без единиц HH:MM", "все шаги сделаны, итога нет". `HH:MM` is the time of the last line; a leading `≈` marks a
 time taken from the file (the line has no time field); `≠` after "k/N" marks a session whose lines differ between two copies
 of the journal; `+N` — other running sessions of the task. The block refreshes every 2 s from a cache; the files are walked
 at most every 5 s, so a new line is on the panel within 10 s. The command `/crew-progress` (also in the Ctrl+P palette, "Crew: что сейчас идёт")
 shows the same in a dialog, without a model turn: every running task of the repository of the tab on screen, every running session of it with the
-last three lines of its journal, "вытеснено N" for the past sessions, and the abandoned ones marked "давно брошена". The repository is
+last three lines of its journal, "вытеснено N" for the past sessions, and a stopped, launched or silent session with no news for
+24 hours marked "давно брошена" ("all steps done, no result" is never marked so). The repository is
 the one of the tab: found without any process by climbing from the tab's folder to `.git` (a folder — the main copy; a file
 `gitdir: …` — a linked working tree, the common `.git` by `commondir`; relative paths are resolved from the folder of the file),
 and every working tree of it is read from git's own registry `.git/worktrees/*/gitdir`, wherever the tree lies. For each session the copy of the
@@ -182,7 +183,8 @@ journal with more lines of that session is taken (the main copy when they are eq
 ### 2. Thresholds and environment variables
 
 Constants of the module, the same for all projects: silence is "давно нет вестей" after 10 minutes, "done" and "no units" stay in the panel
-for 15 minutes, a silent unfinished session leaves the panel after 24 hours (the command still lists it as abandoned). They are counted
+for 15 minutes, a stopped, launched or silent unfinished session leaves the panel after 24 hours and the command marks it "давно брошена";
+a session in "все шаги сделаны, итога нет" leaves the panel and the command after 24 hours with no mark. They are counted
 from the clock at every show, not from a change of the file. The window process can override them, in milliseconds (a value that is not
 a positive number is ignored): `CREW_HARNESS_PROGRESS_STALE_MS` (10 minutes), `CREW_HARNESS_PROGRESS_DONE_MS` (15 minutes),
 `CREW_HARNESS_PROGRESS_ABANDON_MS` (24 hours). No project setting, no schema and no `crew_help` text is involved.
@@ -204,7 +206,7 @@ a positive number is ignored): `CREW_HARNESS_PROGRESS_STALE_MS` (10 minutes), `C
   "state": 5, "stateWord": "идёт", "kind": "ворота",                 // state 1…7 of the table; kind — only for state 1 (empty: no kind named)
   "stale": false, "divergent": false, "source": "main" | "tree",     // silent past the threshold; the copies differ (≠); the copy it was taken from
   "branchAt": 1791200000000,                                         // the last move of the branch of that copy (logs/HEAD), if known
-  "visible": true, "abandoned": false,                               // shown in the panel; silent for 24 hours
+  "visible": true, "abandoned": false,                               // shown in the panel; state 1, 3 or 6 with no news for 24 hours
   "tail": ["12/14 …", "13/14 …"] }                                   // up to three last lines of the session
 ```
 
@@ -224,7 +226,10 @@ otherwise `progress.log` of the main copy and of the branch diverge, a `--ff-onl
 nothing: the same session is recognized in both copies). A repeated launch of the same code is written into the copy where the lines of the
 previous session of that code are; a launch in one copy while a finished session of the same code is in another copy does not start a new session.
 An interrupted session of the common beginning of both copies, written with time fields, may leave a "+1" next to a running session of the task
-(the state of the task itself stays right); without time fields the stale one is dropped.
+(the state of the task itself stays right); without time fields the stale one is dropped. When the shown record of a task is hidden
+("итога нет" after 24 hours, "готово" or "без единиц" after 15 minutes), the command still names an older session of another copy that
+is stopped, launched or silent and has had no news for 24 hours, marked "давно брошена", and counts the task among the abandoned ones;
+such a session younger than 24 hours is not listed until that time has passed.
 
 ### 6. The file time is only a hint
 
