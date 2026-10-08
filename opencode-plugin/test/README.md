@@ -65,6 +65,7 @@ stops at the first failing file.
 | | `crew-profiles-layer` | the local layer over the committed file: effective data, "the file now differs", save / save force, the forms of reset, the snapshot of the last valid state, projects apart |
 | | `crew-profiles-config` | `crew_config` and `crew_doctor` for the profile keys: forms, links on the working copy plus the new values, profile_set refused always, guide, show, the problems named |
 | | `crew-profiles-select` | the model of a session by the enabled set: crew_spawn, plan task, reassign, the reviewer and the open tabs, auto-plan steps; refusals create nothing; without keys everything as before |
+| | `crew-profiles-windows` | the window file in the task worktree: written before the first turn, updated with the set and the data, removed with the set / task / folder, hand-written files untouched, the root and the main folders get nothing, git ignores it; hand-written windows and the explicit threshold of Claude Code are read and named |
 
 ## Manual checks (not in `npm test`)
 

@@ -21,6 +21,7 @@ import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWat
 import { watchRefusal } from "./deny.ts"
 import { queueRemote, remoteRoute } from "./remote.ts"
 import { linkErrorsOfWrite, profileProblems, profileState, profilesShow } from "./profile-layer.ts"
+import { releaseTaskWindow } from "./profile-windows.ts"
 import { type Resolved, resolveStageProfile, stageOfLaunch } from "./profiles.ts"
 
 export const POLL_MS = Number(process.env.CREW_HARNESS_POLL_MS) || 1_000 // переопределение — для самотеста
@@ -1886,6 +1887,11 @@ export function makeTools(host: CrewHost): CrewTool[] {
           t.merged_head = m.head
           releaseMergeLock(project, me.session)
           taskEvent(t, me.session, "accepted", `принята: ${m.how}`)
+          try {
+            releaseTaskWindow(t.project, t) // файл окон профиля из дерева принятой задачи снят (задача 003, REQ-22)
+          } catch (e) {
+            log(`window file release of #${t.n} failed: ${e}`)
+          }
           const steps = cleanupSteps(t, tcfg)
           if (!steps.length) return { content: finishCleaned(t, me, "очистка не нужна (cleanup: none)") }
           return { content: `Задача ${taskRef(t)} принята (${m.how}). Очистка по настройке проекта (cleanup: ${tcfg.cleanup}):\n${steps.map((x) => `  ${x}`).join("\n")}\nСделал — crew_task {action: "cleaned", n: ${t.n}}.` }
@@ -1923,6 +1929,11 @@ export function makeTools(host: CrewHost): CrewTool[] {
       if (action === "cancel") {
         const why = String(input.text ?? "").trim()
         taskEvent(t, me.session, "cancelled", why || undefined)
+        try {
+          releaseTaskWindow(t.project, t) // и у отменённой задачи (задача 003, REQ-22)
+        } catch (e) {
+          log(`window file release of #${t.n} failed: ${e}`)
+        }
         host.posted(propagateToParent(t))
         if (t.reviewer) {
           releaseMergeLock(project, t.reviewer)

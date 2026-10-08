@@ -117,7 +117,7 @@ import { dropWatch, openWatchesBySession, pollWatches, requestWatch, watchesOf }
 import { endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
 import { type Task, taskRef, acceptedAt, ago, byPriority, createTask, rounds, slugify, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
 import { createRemoteBridge } from "./remote.ts"
-import { profileProblems, profileState, stateSignature, syncSnapshot } from "./profile-layer.ts"
+import { profileProblems, profileState, stateSignature, syncProjectFiles, syncSnapshot, syncTaskFile } from "./profile-layer.ts"
 import { cellOfState, resolveStageProfile, stageOfLaunch, tabFitsCell } from "./profiles.ts"
 import { ensureWorktree, fileAt, gitTraces, leftoversOf, mergeHolder, reviewLetter } from "./review.ts"
 
@@ -720,11 +720,16 @@ export default {
         try {
           const ps = profileState(dir)
           const sig = stateSignature(ps)
-          if (profileSigs.get(p.name) === sig) continue
-          changed = true
-          profileSigs.set(p.name, sig)
-          const after = syncSnapshot(dir)
-          profileSigs.set(p.name, stateSignature(after))
+          if (profileSigs.get(p.name) !== sig) {
+            changed = true
+            profileSigs.set(p.name, sig)
+            const after = syncSnapshot(dir)
+            profileSigs.set(p.name, stateSignature(after))
+          }
+          // файлы окон в деревьях задач: первый проход после старта безусловно, дальше — сверка с набором и задачами (задача 003, REQ-09)
+          const rep = syncProjectFiles(dir)
+          if (rep.written.length || rep.removed.length) log(`profile windows of ${p.name}: written ${rep.written.length}, removed ${rep.removed.length}`)
+          for (const e of rep.errors) log(`profile windows of ${p.name}: ${e}`)
         } catch (e) {
           log(`profiles step of ${p.name} failed: ${e}`)
         }
@@ -1124,6 +1129,14 @@ export default {
               t.worktree_ready = true
               saveTask(t)
               taskEvent(t, PLUGIN_SENDER, undefined, `worktree ${t.worktree}, ветка ${t.branch}${w.created ? " — создан плагином" : " — уже был"}`)
+            }
+            // файл окон профилей включённого набора — в дерево задачи ДО первого хода сессии (задача 003, REQ-22); сбой записи запуск не срывает
+            try {
+              const rep = syncTaskFile(t)
+              if (rep.foreign.length) log(`task #${t.n}: в ${t.worktree} уже есть .opencode/opencode.json без пометки плагина — файл окон профиля не записан`)
+              for (const e of rep.errors) log(`task #${t.n}: файл окон профиля: ${e}`)
+            } catch (e) {
+              log(`task #${t.n}: файл окон профиля не записан: ${e}`)
             }
           }
         }

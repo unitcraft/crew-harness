@@ -17,7 +17,8 @@ import { BASE } from "./paths.ts"
 import { projectFor, rawSettingsFor, workingSettings, writeSettings } from "./settings.ts"
 import { log, projectOf, settingsContext } from "./core.ts"
 import * as P from "./profiles.ts"
-import { listTasks } from "./tasks.ts"
+import { type Task, listTasks } from "./tasks.ts"
+import { type SyncReport, type WindowPlan, syncTaskWindow, syncWindows, windowPlanOf, windowProblems } from "./profile-windows.ts"
 
 const isObj = (v: any): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v)
 const clone = <T>(v: T): T => (v === undefined ? v : JSON.parse(JSON.stringify(v)))
@@ -432,6 +433,20 @@ export function linkErrorsOfWrite(folder: string, values: Record<string, any>): 
   return P.linkProblems({ profiles: merged.model_profiles, sets: merged.profile_sets }).map((p) => p.text).filter((t) => !before.includes(t))
 }
 
+// ---- файлы окон по состоянию ------------------------------------------------------------------------------------------
+
+/** Файлы окон проекта привести к состоянию: записать, обновить, снять (проход сервиса, use, reset, правка, save). */
+export function syncProjectFiles(dir0: string): SyncReport & { plan: WindowPlan } {
+  const ps = profileState(dir0)
+  const plan = windowPlanOf(ps.state)
+  return { ...syncWindows(ps.project, listTasks(ps.project), plan), plan }
+}
+/** Файл окон для одной задачи до первого хода её сессии (REQ-22); сбой записи не срывает запуск. */
+export function syncTaskFile(t: Task): SyncReport {
+  const ps = profileState(t.directory)
+  return syncTaskWindow(ps.project, t, windowPlanOf(ps.state))
+}
+
 /** Проблемы профилей всех проектов процесса — для crew_doctor и уведомления. */
 export function profileProblems(): string[] {
   const out: string[] = []
@@ -440,7 +455,7 @@ export function profileProblems(): string[] {
     if (!dir0) continue
     try {
       const ps = profileState(dir0)
-      out.push(...problemsOf(ps))
+      out.push(...problemsOf(ps), ...windowProblems(ps.project, listTasks(ps.project), windowPlanOf(ps.state)))
       // сданные задачи, которым приёмщика не нашли из-за набора (REQ-15): причина — в самопроверке
       for (const t of listTasks(ps.project)) {
         if (t.status !== "submitted" || t.reviewer) continue
