@@ -3,9 +3,20 @@
 // session, the scan of working trees, the cache and its budget, the texts of the panel and of /crew-progress. All data are
 // made up and created here in a temp folder with real git trees; nothing of the owner's settings, mailbox or service is touched.
 // Cells are named from the acceptance scenario (AC-07 ...), so the plan's DoD finds them by number.
-import { mkdtempSync, readFileSync, rmSync } from "node:fs"
+import cp from "node:child_process"
+import { closeSync, ftruncateSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync, writeSync } from "node:fs"
+import { syncBuiltinESMExports } from "node:module"
 import os from "node:os"
 import path from "node:path"
+
+// every way of starting a process is counted before any module under test is imported (AC-11 д): the fixtures start git through
+// the counted functions too, the counter is reset after they are built
+const procs = { n: 0 }
+for (const name of ["execFile", "execFileSync", "spawn", "spawnSync", "exec", "execSync"]) {
+  const orig = cp[name]
+  cp[name] = (...args) => (procs.n++, orig.apply(cp, args))
+}
+syncBuiltinESMExports()
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-progress-"))
 process.env.XDG_DATA_HOME = path.join(tmp, "xdg-data")
@@ -375,6 +386,230 @@ const common = ["С1 0/2 старт", "С1 1/2 а", "С1 2/2 готово"]
   cell("AC-27 task-003 style: +N is at most 1, the interrupted displaced ones are not running", r3.others <= 1 && r3.candidates.every((c) => !(c.session === "С3" && c.k === 0)) && r3.session === "С2" && r3.k === 7, show({ o: r3.others, s: r3.session, k: r3.k, c: r3.candidates.map((c) => c.session + c.k) }))
   const r3b = one([Cp("main", mainLines, at(11, 20)), Cp("tree", treeLines, at(11, 58))], n)
   cell("AC-27 task-003 style, the tree file is later: С4 8/8 «готово» is shown, +N at most 1", r3b.others <= 1 && r3b.session === "С4" && r3b.state === 2, show({ o: r3b.others, s: r3b.session, st: r3b.state }))
+}
+
+// ---- real repositories with working trees: scan, cache, budget (step 5) --------------------------------------------------
+const S = await import("../progress-scan.ts")
+const SCAN_SRC = readFileSync(new URL("../progress-scan.ts", import.meta.url), "utf8")
+const PROG_SRC = readFileSync(new URL("../progress.ts", import.meta.url), "utf8")
+const gitConfig = path.join(tmp, "gitconfig")
+writeFileSync(gitConfig, "[user]\n\tname = Test\n\temail = test@example.com\n[commit]\n\tgpgsign = false\n[core]\n\tautocrlf = false\n[init]\n\tdefaultBranch = main\n")
+const genv = { ...process.env, GIT_CONFIG_GLOBAL: gitConfig, GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: "0" }
+const git = (cwd, ...a) => cp.execFileSync("git", a, { cwd, env: genv, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })
+const jfile = (root, folder) => path.join(root, "doc", "tasks", folder, "progress.log")
+const jwrite = (root, folder, lines, mtimeMs) => {
+  const f = jfile(root, folder)
+  mkdirSync(path.dirname(f), { recursive: true })
+  writeFileSync(f, lines.length ? lines.join("\n") + "\n" : "")
+  if (mtimeMs) utimesSync(f, mtimeMs / 1000, mtimeMs / 1000)
+  return f
+}
+const mwrite = (root, folder, title) => {
+  const f = path.join(root, "doc", "tasks", folder, "task", "message.md")
+  mkdirSync(path.dirname(f), { recursive: true })
+  writeFileSync(f, `# Задание: ${title}\n\nТекст задания.\n`)
+}
+let repoNo = 0
+// a throwaway repository with one commit; trees are added by the test
+const makeRepo = (tasks = {}) => {
+  const base = path.join(tmp, `r${++repoNo}`)
+  const main = path.join(base, "main")
+  mkdirSync(main, { recursive: true })
+  git(main, "init", "-q")
+  for (const [folder, t] of Object.entries(tasks)) {
+    mwrite(main, folder, t.title)
+    jwrite(main, folder, t.lines ?? ["С1 0/1 старт", "С1 1/1 готово"])
+  }
+  if (!Object.keys(tasks).length) writeFileSync(path.join(main, "README.md"), "demo\n")
+  git(main, "add", "--", ".")
+  git(main, "commit", "-q", "-m", "init")
+  return { base, main }
+}
+const addTree = (repo, name, where) => {
+  const dir = where ?? path.join(repo.base, "trees", name)
+  git(repo.main, "worktree", "add", "-q", "-b", name, dir)
+  return dir
+}
+// the `.git` file of a tree is hidden on Windows: it is opened for reading and writing, not created anew
+const overwrite = (file, text) => {
+  const fd = openSync(file, "r+")
+  ftruncateSync(fd, 0)
+  writeSync(fd, text, 0)
+  closeSync(fd)
+}
+const real = (p) => (p ? realpathSync.native(p).toLowerCase() : p)
+const NOW = at(12, 0)
+const sec = (h, m) => at(h, m) // seconds-exact times, so the order of files is clear
+
+{
+  // AC-06: trees are found by the registry of git, wherever they lie; the tab may sit in a tree or in a subfolder
+  const repo = makeRepo({ "002-guards": { title: "Guards of the repository tests", lines: ["С5 0/14 старт", "С5 1/14 а", "С5 2/14 б"] } })
+  const tree = addTree(repo, "task-x")
+  jwrite(repo.main, "002-guards", ["С5 0/14 старт", "С5 1/14 а", "С5 2/14 б"], sec(11, 0))
+  jwrite(tree, "002-guards", ["С5 0/14 старт", "С5 1/14 а", "С5 2/14 б", "С5 3/14 в", "С5 4/14 г"], sec(11, 50))
+  const sc = S.createScanner()
+  const r = sc.scanAll(repo.main, NOW)
+  cell("AC-06 a tree outside the project root is found without any setting", r.trees.length === 2 && r.trees[1].kind === "tree" && r.trees[1].name === "task-x" && r.journals === 2, show({ trees: r.trees.map((t) => t.name), j: r.journals }))
+  const sum0 = P.summarizeTasks(r, NOW)[0]
+  cell("AC-06 the journal of the tree is chosen (longer): k = 4 from the tree", sum0?.k === 4 && sum0.source === "tree" && sum0.signature === "г", show(sum0))
+  const inTree = S.createScanner().scanAll(tree, NOW)
+  cell("AC-06 a tab opened in the tree itself finds the same repository and trees", real(inTree.repo) === real(r.repo) && inTree.trees.length === 2 && inTree.tasks.length === 1 && inTree.tasks[0].copies.length === 2, show({ repo: inTree.repo, t: inTree.trees.length }))
+  const subMain = S.createScanner().scanAll(path.join(repo.main, "doc", "tasks"), NOW)
+  const subTree = S.createScanner().scanAll(path.join(tree, "doc"), NOW)
+  cell("AC-06 a tab in a subfolder of the repository or of a tree finds it too", real(subMain.repo) === real(r.repo) && real(subTree.repo) === real(r.repo) && subTree.trees.length === 2, show({ a: subMain.repo, b: subTree.repo }))
+  // relative paths in the .git file of the tree, in `gitdir` of the registry and in `commondir`
+  const treeGit = path.join(tree, ".git")
+  const entry = path.join(repo.main, ".git", "worktrees", "task-x")
+  overwrite(treeGit, `gitdir: ${path.relative(tree, entry).split(path.sep).join("/")}\n`)
+  writeFileSync(path.join(entry, "gitdir"), `${path.relative(entry, treeGit).split(path.sep).join("/")}\n`)
+  writeFileSync(path.join(entry, "commondir"), "../..\n")
+  const rel = S.createScanner().scanAll(tree, NOW)
+  const relMain = S.createScanner().scanAll(repo.main, NOW)
+  cell("AC-06 relative gitdir and commondir are resolved from the folder of the file", real(rel.repo) === real(r.repo) && rel.trees.length === 2 && relMain.trees.length === 2 && real(S.findRepoRoot(tree)?.commonGit) === real(S.findRepoRoot(repo.main)?.commonGit), show({ repo: rel.repo, t: rel.trees.length, tm: relMain.trees.length }))
+  cell("AC-15 the title comes from the first line of task/message.md, latin letters stay", r.tasks[0].title === "Guards of the repository tests", show(r.tasks[0].title))
+  const noMsg = makeRepo({})
+  jwrite(noMsg.main, "003-no-title", ["С1 0/1 старт"], sec(11, 0))
+  const rt = S.createScanner().scanAll(noMsg.main, NOW)
+  cell("AC-15 no message.md: the folder name without the number", rt.tasks[0].title === "no-title", show(rt.tasks))
+}
+{
+  // AC-04 (real trees): the tree is longer, then a fast-forward merge makes the copies equal
+  const repo = makeRepo({ "002-guards": { title: "Guards", lines: ["С5 0/14 старт", "С5 1/14 [10:00] а"] } })
+  const tree = addTree(repo, "task-x")
+  const longer = ["С5 0/14 старт", "С5 1/14 [10:00] а", "С5 2/14 [10:20] б", "С5 3/14 [10:40] в"]
+  jwrite(tree, "002-guards", longer)
+  git(tree, "add", "--", "doc")
+  git(tree, "commit", "-q", "-m", "journal")
+  jwrite(repo.main, "002-guards", ["С5 0/14 старт", "С5 1/14 [10:00] а"], sec(10, 1))
+  utimesSync(jfile(tree, "002-guards"), sec(10, 41) / 1000, sec(10, 41) / 1000)
+  const a = P.summarizeTasks(S.createScanner().scanAll(repo.main, sec(10, 45)), sec(10, 45))[0]
+  cell("AC-04 real trees: the main copy is the beginning, the tree is longer: shown from the tree", a.k === 3 && a.source === "tree" && !a.divergent && a.others === 0, show(a))
+  git(repo.main, "checkout", "-q", "--", ".") // the main copy is clean again (the file is the committed beginning)
+  git(repo.main, "merge", "--ff-only", "-q", "task-x")
+  utimesSync(jfile(repo.main, "002-guards"), sec(10, 42) / 1000 + 3, sec(10, 42) / 1000 + 3)
+  const b = P.summarizeTasks(S.createScanner().scanAll(repo.main, sec(10, 45)), sec(10, 45))[0]
+  cell("AC-04 after merge --ff-only the copies are equal and the time of the line is shown", b.k === 3 && b.at === sec(10, 40) && !b.byFile && b.source === "main", show(b))
+  // without a time field: the earlier file time, marked by file
+  const plain = ["С5 0/14 старт", "С5 1/14 а", "С5 2/14 б"]
+  jwrite(repo.main, "002-guards", plain, sec(10, 43) + 3_000)
+  jwrite(tree, "002-guards", plain, sec(10, 43))
+  const c = P.summarizeTasks(S.createScanner().scanAll(repo.main, sec(10, 45)), sec(10, 45))[0]
+  cell("AC-04 after the merge, no time field: the earlier file time, marked by file", c.byFile && c.at === sec(10, 43), show(c))
+}
+{
+  // AC-24 on real trees: S0 (launch in the main copy, work in the tree), S1 (with and without the later file), S2, the common start
+  const repo = makeRepo({ "002-demo": { title: "Demo", lines: common } })
+  const tree = addTree(repo, "task-x")
+  const run = (mainLines, treeLines, mm, tm, now = NOW) => {
+    jwrite(repo.main, "002-demo", mainLines, mm)
+    jwrite(tree, "002-demo", treeLines, tm)
+    return P.summarizeTasks(S.createScanner().scanAll(repo.main, now), now)[0]
+  }
+  const s0 = run([...common, "С5 0/0 запуск"], [...common, "С5 0/2 старт", "С5 1/2 шаг"], sec(11, 30), sec(11, 55))
+  cell("AC-24 real S0a: one session С5 from the tree, no +N, no ≠", s0.session === "С5" && s0.k === 1 && s0.source === "tree" && s0.others === 0 && !s0.divergent, show(s0))
+  const s0b = run([...common, "С5 0/0 запуск"], [...common, "С5 0/2 старт", "С5 2/2 готово"], sec(11, 30), sec(11, 55))
+  cell("AC-24 real S0b: «готово», no ghost launch", s0b.state === 2 && s0b.others === 0, show(s0b))
+  const mainS1 = [...common, "С7 0/0 запуск", "С7 0/3 старт", "С7 1/3 а"]
+  const treeS1 = [...common, "С5 0/2 старт", "С5 2/2 готово", "С6 0/4 старт", "С6 4/4 готово"]
+  const s1 = run(mainS1, treeS1, sec(11, 58), sec(11, 55))
+  const s1r = run(mainS1, treeS1, sec(11, 50), sec(11, 59))
+  cell("AC-24 real S1: the main file is later: С7 is shown, no +N; reversed: С6 «готово»", s1.session === "С7" && s1.others === 0 && s1r.session === "С6" && s1r.state === 2, show({ s1: s1.session, s1r: s1r.session }))
+  const s2 = run([...common, "С7 0/0 [10:00] запуск"], [...common, "С5п 0/3 [11:30] старт", "С5п 1/3 [11:40] шаг"], sec(10, 0), sec(11, 40), at(11, 50))
+  cell("AC-24 real S2: С5п runs, the abandoned launch of С7 is +1", s2.session === "С5п" && s2.others === 1, show(s2))
+  const base = [...common, "С4 0/2 [11:00] старт", "С4 2/2 [11:10] готово"]
+  const cs = run(base, [...base, "С5 0/3 [11:30] старт", "С5 1/3 [11:40] а"], sec(11, 10), sec(11, 40), at(11, 50))
+  cell("AC-24 real common start: С4 «готово» in the main copy, С5 in the tree: +N 0", cs.session === "С5" && cs.others === 0, show(cs))
+  const div = run(["С5 0/3 старт", "С5 1/3 [11:30] в основной"], ["С5 0/3 старт", "С5 1/3 [11:10] в дереве"], sec(11, 31), sec(11, 12))
+  cell("AC-24 real divergence: the later time wins, ≠", div.divergent && div.source === "main", show(div))
+}
+{
+  // AC-09 and AC-16: no journal, an empty one, no repository, a removed tree, an unreadable journal
+  const repo = makeRepo({ "002-demo": { title: "Demo", lines: ["С1 0/1 старт"] } })
+  mkdirSync(path.join(repo.main, "doc", "tasks", "003-no-log"), { recursive: true })
+  jwrite(repo.main, "004-empty", [])
+  const r = S.createScanner().scanAll(repo.main, NOW)
+  const sm = P.summarizeTasks(r, NOW)
+  cell("AC-09 a task with no progress.log or with an empty one is not shown and nothing throws", sm.length === 1 && sm[0].number === "002" && r.journals === 2, show({ n: sm.length, j: r.journals }))
+  const none = path.join(tmp, "norepo", "sub")
+  mkdirSync(none, { recursive: true })
+  const rn = S.createScanner().scan(none, NOW)
+  cell("AC-16 a tab outside any repository: no repository, no trees, no tasks", rn.repo === undefined && rn.trees.length === 0 && rn.tasks.length === 0, show(rn))
+  const bare = makeRepo({})
+  const rb = S.createScanner().scanAll(bare.main, NOW)
+  cell("AC-16 a repository with no doc/tasks: no tasks, the repository and one tree are known", real(rb.repo) === real(S.findRepoRoot(bare.main)?.root) && rb.trees.length === 1 && rb.tasks.length === 0, show(rb))
+  const rep2 = makeRepo({ "002-demo": { title: "Demo", lines: ["С1 0/2 старт", "С1 1/2 а"] } })
+  const tr = addTree(rep2, "task-gone")
+  jwrite(tr, "002-demo", ["С1 0/2 старт", "С1 1/2 а", "С1 2/2 готово"])
+  rmSync(tr, { recursive: true, force: true })
+  const rg = S.createScanner().scanAll(rep2.main, NOW)
+  cell("AC-16 a removed tree is skipped, the rest is read", rg.trees.length === 1 && rg.tasks.length === 1 && rg.tasks[0].copies.length === 1, show({ t: rg.trees.length }))
+  const rep3 = makeRepo({ "002-demo": { title: "Demo", lines: ["С1 0/2 старт"] } })
+  const logFile = jfile(rep3.main, "002-demo")
+  rmSync(logFile)
+  mkdirSync(logFile) // the journal "cannot be read": a folder in its place
+  const ru = S.createScanner().scanAll(rep3.main, NOW)
+  cell("AC-16 an unreadable journal is skipped without an exception", ru.tasks.length === 0, show(ru))
+}
+{
+  // AC-19 (data): the movement of the branch is read from logs/HEAD, with no process
+  const repo = makeRepo({ "002-demo": { title: "Demo", lines: ["С5 0/3 старт"] } })
+  const tree = addTree(repo, "task-x")
+  const mainHead = path.join(repo.main, ".git", "logs", "HEAD")
+  const treeHead = path.join(repo.main, ".git", "worktrees", "task-x", "logs", "HEAD")
+  cell("AC-19 both reflog files exist in the fixture", statSync(mainHead).isFile() && statSync(treeHead).isFile(), "")
+  jwrite(repo.main, "002-demo", ["С5 0/3 [11:00] старт"], sec(11, 0))
+  jwrite(tree, "002-demo", ["С5 0/3 [11:00] старт", "С5 1/3 [11:05] а"], sec(11, 5))
+  utimesSync(mainHead, sec(11, 40) / 1000, sec(11, 40) / 1000)
+  utimesSync(treeHead, sec(11, 49) / 1000, sec(11, 49) / 1000)
+  const t = P.summarizeTasks(S.createScanner().scanAll(repo.main, NOW), NOW)[0]
+  cell("AC-19 the chosen copy is the tree: the branch time is the one of .git/worktrees/<name>/logs/HEAD", t.source === "tree" && t.branchAt === sec(11, 49), show(t))
+  jwrite(tree, "002-demo", ["С5 0/3 [11:00] старт"], sec(11, 5))
+  const t2 = P.summarizeTasks(S.createScanner().scanAll(repo.main, NOW), NOW)[0]
+  cell("AC-19 equal copies: the main copy is chosen and its branch time is .git/logs/HEAD", t2.source === "main" && t2.branchAt === sec(11, 40), show(t2))
+}
+{
+  // AC-11 (г): the walk, the cache and the budget of parsing
+  const tasks = {}
+  for (let i = 1; i <= 8; i++) tasks[`00${i}-job`] = { title: `Job ${i}`, lines: ["С5 0/3 старт", "С5 1/3 а"] }
+  const repo = makeRepo(tasks)
+  for (let i = 1; i <= 8; i++) utimesSync(jfile(repo.main, `00${i}-job`), sec(10, i) / 1000, sec(10, i) / 1000)
+  const sc = S.createScanner()
+  const t0 = NOW
+  const w1 = sc.scan(repo.main, t0)
+  cell("AC-11 г a cold walk parses at most 5 files (PARSE_BUDGET), the freshest first", sc.stats.parses === 5 && S.PARSE_BUDGET === 5 && sc.stats.lastParsed.every((f, i, a) => i === 0 || statSync(f).mtimeMs <= statSync(a[i - 1]).mtimeMs) && path.basename(path.dirname(sc.stats.lastParsed[0])) === "008-job", show({ p: sc.stats.parses, first: sc.stats.lastParsed[0] }))
+  cell("AC-11 г a task appears when all its copies are parsed: 5 tasks, the walk is not complete", w1.tasks.length === 5 && !w1.complete && w1.journals === 8, show({ t: w1.tasks.length, c: w1.complete }))
+  const w1b = sc.scan(repo.main, t0 + 2_000)
+  cell("AC-11 г between walks (2 s) nothing is touched: the same result, no new walk", w1b === w1 && sc.stats.walks === 1, show({ same: w1b === w1, w: sc.stats.walks }))
+  const w2 = sc.scan(repo.main, t0 + S.WALK_MS)
+  cell("AC-11 г the next walk takes the rest: 3 more files, all 8 tasks, complete", sc.stats.parses === 8 && w2.tasks.length === 8 && w2.complete, show({ p: sc.stats.parses, t: w2.tasks.length }))
+  const w3 = sc.scan(repo.main, t0 + 2 * S.WALK_MS)
+  cell("AC-11 a walk with nothing changed parses nothing", sc.stats.parses === 8 && sc.stats.lastParsed.length === 0 && w3.tasks.length === 8, show({ p: sc.stats.parses }))
+  const f4 = jfile(repo.main, "004-job")
+  writeFileSync(f4, "С5 0/3 старт\nС5 1/3 а\nС5 2/3 б\n")
+  utimesSync(f4, sec(11, 0) / 1000, sec(11, 0) / 1000)
+  const w4 = sc.scan(repo.main, t0 + 3 * S.WALK_MS)
+  cell("AC-11 one changed journal is parsed again (pair time + size), the others are not", sc.stats.parses === 9 && w4.tasks.find((t) => t.folder === "004-job").copies[0].lines.length === 3, show({ p: sc.stats.parses }))
+  writeFileSync(f4, "С5 0/3 старт\nС5 1/3 а\nС5 2/3 б\nС5 3/3 в\n")
+  utimesSync(f4, sec(11, 0) / 1000, sec(11, 0) / 1000) // same time, another size
+  const w5 = sc.scan(repo.main, t0 + 4 * S.WALK_MS)
+  cell("AC-11 the size alone makes a file change visible (time unchanged)", w5.tasks.find((t) => t.folder === "004-job").copies[0].lines.length === 4, show({ p: sc.stats.parses }))
+  rmSync(jfile(repo.main, "008-job"))
+  const w6 = sc.scan(repo.main, t0 + 5 * S.WALK_MS)
+  cell("AC-11 a journal that disappeared leaves the result (the cache entry is dropped)", w6.tasks.length === 7 && w6.journals === 7, show({ t: w6.tasks.length }))
+  const cold = S.createScanner()
+  const wa = cold.scanAll(repo.main, t0)
+  cell("AC-11 г scanAll on a cold cache parses every file in one call and does not know the budget", cold.stats.parses === 7 && wa.complete && wa.tasks.length === 7, show({ p: cold.stats.parses }))
+  const again = cold.scanAll(repo.main, t0 + 100)
+  cell("AC-11 scanAll fills the same cache: a second call parses nothing", cold.stats.parses === 7 && again.tasks.length === 7, show({ p: cold.stats.parses }))
+}
+{
+  // AC-21: the imports of the modules
+  const importsOf = (src) => src.split("\n").filter((l) => /^import /.test(l))
+  cell("AC-21 progress.ts has no import at all (no node:fs, no window, no OpenCode, no status.ts)", importsOf(PROG_SRC).length === 0, show(importsOf(PROG_SRC)))
+  const scanImports = importsOf(SCAN_SRC).map((l) => /from "([^"]+)"/.exec(l)?.[1]).sort()
+  cell("AC-21 progress-scan.ts imports only node:fs, node:path and ./progress.ts", show(scanImports) === show(["./progress.ts", "node:fs", "node:path"]), show(scanImports))
+  const WRITE = /writeFile|appendFile|createWriteStream|copyFile|rename|mkdir|rmSync|unlink|fs[.]promises/
+  cell("DNC-02 neither module writes anything (no write call in progress.ts or progress-scan.ts)", !WRITE.test(PROG_SRC) && !WRITE.test(SCAN_SRC), "")
 }
 
 // ==== END OF CELLS ====
