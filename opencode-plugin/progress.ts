@@ -248,3 +248,227 @@ const SESSION_WORDS: Record<string, string> = {
 
 /** Сессия словами: «С5 реализация»; КОММИТ, ПУШ и неизвестный код — как есть (REQ-08). */
 export const sessionName = (code: string) => (SESSION_WORDS[code] ? `${code} ${SESSION_WORDS[code]}` : code)
+
+// ---- Выбор копии журнала по каждой сессии (REQ-03) ---------------------------------------------------------------------
+
+/** Одна копия журнала задачи: в основной копии репозитория или в связанном дереве. */
+export type JournalCopy = {
+  kind: "main" | "tree"
+  /** имя дерева (папка записи `.git/worktrees`), у основной копии пусто */
+  tree?: string
+  lines: Line[]
+  /** время изменения файла копии */
+  mtimeMs: number
+  /** время последнего движения ветки этой копии (`logs/HEAD`), если известно (REQ-17) */
+  branchMs?: number
+}
+
+type Inst = { ci: number; si: number; session: Session; copy: JournalCopy }
+
+export type Choice = {
+  key: string
+  ci: number
+  si: number
+  copy: JournalCopy
+  session: Session
+  /** разные строки одной сессии в копиях: ни одна не начало другой (`≠`) */
+  divergent: boolean
+  /** сессия есть минимум в двух копиях, строки одинаковы: общее начало журналов */
+  common: boolean
+  /** после неё в выбранной копии началась другая сессия, либо кандидат без времени, не самый свежий */
+  displaced: boolean
+  entry: Entry
+}
+
+const sameLine = (a: Line, b: Line) => a.code === b.code && a.k === b.k && a.n === b.n && a.sig === b.sig
+const sameRows = (a: Line[], b: Line[]) => a.length === b.length && a.every((l, i) => sameLine(l, b[i]))
+const startsWithRows = (longer: Line[], shorter: Line[]) => shorter.length <= longer.length && shorter.every((l, i) => sameLine(l, longer[i]))
+
+export type Chosen = {
+  /** все сессии с выбранной копией (по ключу), в порядке копий и строк */
+  all: Choice[]
+  /** кандидаты: не вытесненные */
+  candidates: Choice[]
+  /** показываемая запись: кандидат с самой свежей вестью (сначала хвосты, потом общее начало) */
+  shown?: Choice
+  /** «+N»: другие кандидаты, не скрытые по REQ-05, без остановившихся/законченных/«итога нет», что старше показываемой записи */
+  others: number
+  /** число вытесненных сессий */
+  displaced: number
+}
+
+/**
+ * Для набора копий журнала одной задачи: сессии всех копий сводятся по ключу (код, номер); для каждой сессии выбирается копия,
+ * где у неё больше строк (при равенстве — основная; расходятся — позже по времени, иначе дерево, с пометкой `≠`); вытесненные
+ * сессии убираются; из кандидатов выбирается показываемая запись и считается «+N» (REQ-03).
+ */
+export function chooseSessions(copiesIn: JournalCopy[], now: number, th: Thresholds): Chosen {
+  const copies = [...copiesIn].sort((a, b) => (a.kind === "main" ? 0 : 1) - (b.kind === "main" ? 0 : 1))
+  const lists = copies.map((c) => sessionsOf(c.lines))
+  const byKey = new Map<string, Inst[]>()
+  lists.forEach((ss, ci) =>
+    ss.forEach((session, si) => {
+      const inst = { ci, si, session, copy: copies[ci] }
+      const list = byKey.get(session.key)
+      if (list) list.push(inst)
+      else byKey.set(session.key, [inst])
+    }),
+  )
+  const lastMoment = (i: Inst) => momentOf(lastOf(i.session), i.copy.mtimeMs, now)
+  const all: Choice[] = []
+  for (const [key, insts] of byKey) {
+    let best = insts[0]
+    let divergent = false
+    for (const x of insts.slice(1)) {
+      const a = best.session.rows
+      const b = x.session.rows
+      if (!a.length && !b.length) {
+        // два запуска без старта: более поздняя строка запуска, без времени — копия с более поздним файлом
+        if (lastMoment(x).at >= lastMoment(best).at) best = x
+      } else if (sameRows(a, b)) continue
+      else if (startsWithRows(b, a)) best = x
+      else if (startsWithRows(a, b)) continue
+      else {
+        divergent = true
+        const ma = lastMoment(best)
+        const mb = lastMoment(x)
+        if (!ma.byFile && !mb.byFile && ma.at !== mb.at) best = mb.at > ma.at ? x : best
+        else best = x.ci > best.ci ? x : best
+      }
+    }
+    // время файла для вести без поля времени: у равных по содержимому копий — более раннее (слияние освежает файл)
+    const equal = insts.filter((i) => sameRows(i.session.rows, best.session.rows))
+    const mtime = best.session.rows.length ? Math.min(...equal.map((i) => i.copy.mtimeMs)) : best.copy.mtimeMs
+    const common = insts.length >= 2 && equal.length === insts.length
+    all.push({
+      key,
+      ci: best.ci,
+      si: best.si,
+      copy: best.copy,
+      session: best.session,
+      divergent,
+      common,
+      displaced: best.si < lists[best.ci].length - 1,
+      entry: entryOf(best.session, mtime, now, th),
+    })
+  }
+  // кандидат без времени, который не самый свежий, вытеснен: его «давно нет вестей» и скрытие от времени файла были бы ложными
+  const ahead = (a: Choice, b: Choice) => a.entry.at - b.entry.at || a.ci - b.ci || a.si - b.si
+  let live = all.filter((c) => !c.displaced)
+  if (live.length) {
+    const freshest = live.reduce((a, b) => (ahead(b, a) > 0 ? b : a))
+    for (const c of live) if (c !== freshest && c.entry.byFile) c.displaced = true
+    live = live.filter((c) => !c.displaced)
+  }
+  const tails = live.filter((c) => !c.common)
+  const pool = tails.length ? tails : live
+  const shown = pool.length ? pool.reduce((a, b) => (ahead(b, a) > 0 ? b : a)) : undefined
+  let others = 0
+  if (shown)
+    for (const c of live) {
+      if (c === shown || !c.entry.shown) continue
+      const quiet = c.entry.state === 1 || c.entry.state === 2 || c.entry.state === 4 || c.entry.state === 7
+      if (quiet && c.entry.at <= shown.entry.at) continue
+      others++
+    }
+  return { all, candidates: live, ...(shown ? { shown } : {}), others, displaced: all.length - live.length }
+}
+
+// ---- Сводка по задачам: открытый контракт состояния (REQ-18, REQ-20) -----------------------------------------------------
+
+/** Что известно о сессии-кандидате для показа. */
+export type ProgressSession = {
+  session: string
+  sessionName: string
+  k: number
+  n: number
+  signature: string
+  /** момент вести (мс) и признак «по файлу» */
+  at: number
+  byFile: boolean
+  /** состояние 1…7 таблицы REQ-04 и его слово */
+  state: State
+  stateWord: string
+  /** вид остановки при состоянии 1; пусто — «вид не назван» */
+  kind?: string
+  /** тишина дольше порога «давно нет вестей» (состояния 3 и 6) */
+  stale: boolean
+  /** копии расходятся (`≠`) */
+  divergent: boolean
+  /** копия, из которой взята сессия */
+  source: "main" | "tree"
+  /** время последнего движения ветки этой копии, мс */
+  branchAt?: number
+  /** виден в панели по REQ-05 */
+  visible: boolean
+  /** молчит дольше 24 часов (в команде «давно брошена») */
+  abandoned: boolean
+  /** до трёх последних строк сессии (`k/N подпись`) */
+  tail: string[]
+}
+
+export type ProgressTask = ProgressSession & {
+  /** номер задачи методики («002») и имя её папки */
+  number: string
+  folder: string
+  title: string
+  /** сколько других кандидатов (в панели «+N») */
+  others: number
+  /** сколько прошлых сессий вытеснено */
+  displaced: number
+  /** все кандидаты задачи, показываемый — первым */
+  candidates: ProgressSession[]
+}
+
+const sessionInfo = (c: Choice): ProgressSession => {
+  const e = c.entry
+  const rows = c.session.rows.length ? c.session.rows : c.session.launch ? [c.session.launch] : []
+  return {
+    session: c.session.code,
+    sessionName: sessionName(c.session.code),
+    k: e.last.k,
+    n: e.last.n,
+    signature: e.last.text,
+    at: e.at,
+    byFile: e.byFile,
+    state: e.state,
+    stateWord: STATE_WORDS[e.state],
+    ...(e.kind !== undefined ? { kind: e.kind } : {}),
+    stale: e.stale,
+    divergent: c.divergent,
+    source: c.copy.kind,
+    ...(c.copy.branchMs !== undefined ? { branchAt: c.copy.branchMs } : {}),
+    visible: e.shown,
+    abandoned: e.abandoned,
+    tail: rows.slice(-3).map((l) => `${l.k}/${l.n} ${l.sig}`),
+  }
+}
+
+export type ScanTask = { folder: string; title: string; copies: JournalCopy[] }
+
+/**
+ * Сводка: по каждой задаче с показываемой записью — {@link ProgressTask}. Состояния, тишина и видимость считаются от `now` при
+ * каждом вызове (REQ-10); задачи без журнала или с пустым журналом в сводку не входят (REQ-01).
+ */
+export function summarizeTasks(scan: { tasks: ScanTask[] }, now: number, th: Thresholds = DEFAULT_THRESHOLDS): ProgressTask[] {
+  const out: ProgressTask[] = []
+  for (const t of scan.tasks) {
+    const chosen = chooseSessions(t.copies, now, th)
+    if (!chosen.shown) continue
+    const first = sessionInfo(chosen.shown)
+    const rest = chosen.candidates
+      .filter((c) => c !== chosen.shown)
+      .sort((a, b) => b.entry.at - a.entry.at)
+      .map(sessionInfo)
+    out.push({
+      ...first,
+      number: /^[0-9]+/.exec(t.folder)?.[0] ?? t.folder,
+      folder: t.folder,
+      title: t.title,
+      others: chosen.others,
+      displaced: chosen.displaced,
+      candidates: [first, ...rest],
+    })
+  }
+  return out
+}

@@ -234,6 +234,149 @@ const now0 = at(12, 0)
   cell("AC-25 a non-number, a negative and a zero value fall back to the default", show(b) === show(d), show(b))
 }
 
+// ---- the choice of a copy per session, on arrays of lines (step 4; the same on real trees in step 5) ----------------------
+const Cp = (kind, lines, mtime, extra = {}) => ({ kind, ...(kind === "tree" ? { tree: "t1" } : {}), lines: parse(...lines), mtimeMs: mtime, ...extra })
+const sum = (copies, now, th = TH, folder = "002-demo") => P.summarizeTasks({ tasks: [{ folder, title: "Demo", copies }] }, now, th)
+const one = (copies, now, th) => sum(copies, now, th)[0]
+const common = ["С1 0/2 старт", "С1 1/2 а", "С1 2/2 готово"]
+
+{
+  // AC-04 (model): the main copy is the beginning, the tree is longer
+  const head = ["С5 0/14 старт", "С5 1/14 а", "С5 2/14 б", "С5 3/14 в"]
+  const tail = [...head, "С5 4/14 г", "С5 5/14 д", "С5 6/14 е"]
+  const n = at(12, 0)
+  const a = one([Cp("main", head, at(11, 30)), Cp("tree", tail, at(11, 55))], n)
+  const b = one([Cp("tree", tail, at(11, 55)), Cp("main", head, at(11, 30))], n)
+  cell("AC-04 the main copy is the beginning, the tree is longer: k and signature come from the tree", a.k === 6 && a.signature === "е" && a.source === "tree" && !a.divergent && a.others === 0, show(a))
+  cell("AC-04 the same when the copies are passed in the other order", show(a) === show(b), show(b))
+  // after a fast-forward merge both copies are equal; the main file is a few seconds younger
+  const timed = [...head, "С5 4/14 [11:40] г"]
+  const m1 = one([Cp("main", timed, at(11, 55, 8) + 3_000), Cp("tree", timed, at(11, 55))], n)
+  cell("AC-04 after the merge: the equal copies show the time from the line", m1.at === at(11, 40) && !m1.byFile && m1.source === "main", show(m1))
+  const plain = [...head, "С5 4/14 г"]
+  const m2 = one([Cp("main", plain, at(11, 55) + 3_000), Cp("tree", plain, at(11, 55))], n)
+  cell("AC-04 after the merge, no time field: the earlier file time, marked by file", m2.byFile && m2.at === at(11, 55) && m2.source === "main", show(m2))
+}
+{
+  // AC-05: the same session, different lines
+  const mk = (tm, tt) => [Cp("main", ["С5 0/3 старт", `С5 1/3 ${tm}в основной`], at(11, 50)), Cp("tree", ["С5 0/3 старт", `С5 1/3 ${tt}в дереве`], at(11, 40))]
+  const n = at(12, 0)
+  const later = one(mk("[11:30] ", "[11:10] "), n)
+  cell("AC-05 the copy with the later time of the last line wins (main here), marked ≠", later.source === "main" && later.divergent && later.signature === "в основной", show(later))
+  const laterTree = one(mk("[11:10] ", "[11:30] "), n)
+  cell("AC-05 the tree wins when its time is later", laterTree.source === "tree" && laterTree.divergent, show(laterTree))
+  const equal = one(mk("[11:30] ", "[11:30] "), n)
+  cell("AC-05 equal time: the tree", equal.source === "tree" && equal.divergent, show(equal))
+  const noTime = one(mk("", ""), n)
+  cell("AC-05 no time in the lines: the tree", noTime.source === "tree" && noTime.divergent, show(noTime))
+  const oneTime = one(mk("[11:30] ", ""), n)
+  cell("AC-05 time in one copy only: the tree", oneTime.source === "tree" && oneTime.divergent, show(oneTime))
+  // different tails of different sessions are not a divergence
+  const main = [...common, "С7 0/3 [11:30] старт", "С7 1/3 [11:40] а"]
+  const tree = [...common, "С5 0/3 [11:00] старт", "С5 3/3 [11:10] готово", "С6 0/2 [11:20] старт", "С6 1/2 [11:50] б"]
+  const t = one([Cp("main", main, at(11, 41)), Cp("tree", tree, at(11, 51))], n)
+  cell("AC-05 different tails of different sessions (С7 in main, С5 and С6 in the tree): no ≠, the freshest is shown", !t.divergent && t.session === "С6" && t.k === 1, show(t))
+  cell("AC-05 the other tail candidate is counted: С7 is running (+1)", t.others === 1 && t.candidates.length === 2, show({ others: t.others, c: t.candidates.map((c) => c.session) }))
+}
+{
+  const n = at(12, 0)
+  // S0: the launch is in the main copy before the tree, the work is in the tree
+  const tree = [...common, "С5 0/2 старт", "С5 1/2 шаг"]
+  const s0a = one([Cp("main", [...common, "С5 0/0 запуск"], at(11, 30)), Cp("tree", tree, at(11, 55))], n)
+  cell("AC-24 S0a a running session: one session С5 from the tree, no +N, no ≠", s0a.session === "С5" && s0a.k === 1 && s0a.source === "tree" && s0a.others === 0 && !s0a.divergent && s0a.state === 5, show(s0a))
+  const s0b = one([Cp("main", [...common, "С5 0/0 запуск"], at(11, 30)), Cp("tree", [...common, "С5 0/2 старт", "С5 1/2 а", "С5 2/2 готово"], at(11, 55))], n)
+  cell("AC-24 S0b a finished session: «готово», no ghost «запущена, шагов нет», no +N", s0b.state === 2 && s0b.others === 0 && s0b.candidates.length === 1, show(s0b))
+  const s0c = one([Cp("main", [...common, "С5 0/0 [10:00] запуск"], at(10, 0)), Cp("tree", [...common, "С5 0/2 [10:05] старт", "С5 2/2 [10:30] готово"], at(10, 30))], at(10, 40))
+  cell("AC-24 S0c the same with time: «готово» 10:30", s0c.state === 2 && s0c.at === at(10, 30) && s0c.others === 0 && s0c.visible, show(s0c))
+}
+{
+  // S1: without time the file time of the main copy is later; С7 runs in the main copy, С5 and С6 are in the tree
+  const n = at(12, 0)
+  const main = [...common, "С7 0/0 запуск", "С7 0/3 старт", "С7 1/3 а"]
+  const tree = [...common, "С5 0/2 старт", "С5 2/2 готово", "С6 0/4 старт", "С6 4/4 готово"]
+  const s1 = one([Cp("main", main, at(11, 58)), Cp("tree", tree, at(11, 55))], n)
+  cell("AC-24 S1 the file of the main copy is later: С7 1/3 is shown, running, no +N", s1.session === "С7" && s1.k === 1 && s1.n === 3 && s1.state === 5 && s1.others === 0, show(s1))
+  const s1r = one([Cp("main", main, at(11, 50)), Cp("tree", tree, at(11, 59))], n)
+  cell("AC-24 S1 reversed (the tree file is later): С6 «готово» is shown (a border of the method)", s1r.session === "С6" && s1r.state === 2 && s1r.others === 0, show(s1r))
+  const mainT = [...common, "С7 0/0 [11:50] запуск", "С7 0/3 [11:51] старт", "С7 1/3 [11:55] а"]
+  const treeT = [...common, "С5 0/2 [11:00] старт", "С5 2/2 [11:10] готово", "С6 0/4 [11:20] старт", "С6 4/4 [11:30] готово"]
+  const t1 = one([Cp("main", mainT, at(11, 58)), Cp("tree", treeT, at(11, 59))], n)
+  const t2 = one([Cp("main", mainT, at(11, 59)), Cp("tree", treeT, at(11, 40))], n)
+  cell("AC-24 S1 with time fields the result does not depend on the file times", t1.session === "С7" && t2.session === "С7" && t1.state === 5 && t1.others === 0 && t2.others === 0, show({ t1: t1.session, t2: t2.session }))
+}
+{
+  const n = at(12, 40)
+  // S2: an abandoned launch (with time) beside a running session of another code
+  const s2 = one([Cp("main", [...common, "С7 0/0 [10:00] запуск"], at(10, 0)), Cp("tree", [...common, "С5п 0/3 [12:20] старт", "С5п 1/3 [12:30] шаг"], at(12, 30))], n)
+  cell("AC-24 S2 С5п runs, the abandoned launch of С7 is +1", s2.session === "С5п" && s2.state === 5 && s2.others === 1, show(s2))
+  const cand = s2.candidates.find((c) => c.session === "С7")
+  cell("AC-24 S2 the launch of С7 is a candidate «запущена», silent past the threshold", cand?.state === 3 && cand.stale && cand.k === 0 && cand.n === 0 && cand.tail.length === 1, show(cand))
+  // S3: equal copies
+  const eq = [...common, "С5 0/3 старт", "С5 1/3 а"]
+  const s3 = one([Cp("main", eq, at(12, 30)), Cp("tree", eq, at(12, 31))], n)
+  const s3r = one([Cp("tree", eq, at(12, 31)), Cp("main", eq, at(12, 30))], n)
+  cell("AC-24 S3 equal copies: the main copy is chosen, the result is defined and the same in any order", s3.source === "main" && show(s3) === show(s3r) && s3.at === at(12, 30) && s3.byFile, show(s3))
+  // S4: a repeated launch of the same code in the copy where the previous session was
+  const s4 = one([Cp("main", ["С5 0/2 старт", "С5 2/2 готово", "С5 0/0 запуск"], at(12, 38))], n)
+  cell("AC-24 S4 a repeated launch in the same copy is a new session: «запущена, шагов нет»", s4.state === 3 && s4.k === 0 && s4.candidates.length === 1 && s4.displaced === 1, show(s4))
+  const s4b = one([Cp("main", [...common, "С5 0/0 запуск"], at(12, 38)), Cp("tree", [...common, "С5 0/2 старт", "С5 2/2 готово"], at(12, 38))], n)
+  cell("AC-24 S4 a launch in one copy while the other copy has the finished session: no new session", s4b.state === 2 && s4b.others === 0, show(s4b))
+  // S5: the launch, then k > 0 with no «старт»
+  const s5 = one([Cp("main", ["С3 0/0 запуск", "С3 1/34 а"], at(12, 38))], n)
+  cell("AC-24 S5 a launch, then «1/34» with no start line: one session, N = 34", s5.n === 34 && s5.k === 1 && s5.candidates.length === 1 && s5.state === 5, show(s5))
+  // two launch lines of one key in two copies: the later one
+  const two = one([Cp("main", [...common, "С7 0/0 [10:00] запуск"], at(12, 0)), Cp("tree", [...common, "С7 0/0 [12:30] запуск"], at(12, 31))], n)
+  cell("AC-24 two launch lines of one key in two copies: one record with the later line", two.candidates.length === 1 && two.at === at(12, 30) && two.state === 3 && !two.stale, show(two))
+  // a stale tree: the main copy has С3 running, the tree is a snapshot before it
+  const mainS = ["С2 0/2 старт", "С2 2/2 [12:00] готово", "С3 0/5 [12:10] старт", "С3 1/5 [12:35] а"]
+  const stale = one([Cp("main", mainS, at(12, 35)), Cp("tree", mainS.slice(0, 2), at(12, 5))], n)
+  cell("AC-24 a stale tree: С3 is shown, the stale С2 is displaced, no +N", stale.session === "С3" && stale.others === 0 && stale.candidates.length === 1 && stale.displaced === 1, show(stale))
+  // common start: the main copy ends with С4 «готово» (or С6 «стоп»), the tree goes on with С5
+  const base = [...common, "С4 0/2 [11:00] старт", "С4 2/2 [11:10] готово"]
+  const cs = one([Cp("main", base, at(11, 10)), Cp("tree", [...base, "С5 0/3 [12:30] старт", "С5 1/3 [12:35] а"], at(12, 35))], n)
+  cell("AC-24 common start: С4 «готово» in the main copy, С5 in the tree: С5 shown, +N 0", cs.session === "С5" && cs.others === 0, show(cs))
+  const base6 = [...common, "С6 0/2 [11:00] старт", "С6 1/2 [11:10] стоп: ворота — x"]
+  const cs6 = one([Cp("main", base6, at(11, 10)), Cp("tree", [...base6, "С5 0/3 [12:30] старт", "С5 1/3 [12:35] а"], at(12, 35))], n)
+  cell("AC-24 common start: С6 «стоп» in the main copy, С5 in the tree: +N 0", cs6.session === "С5" && cs6.others === 0, show(cs6))
+  // S6: the border of the method: an interrupted session of the common start, with time fields, stays +1
+  const base7 = [...common, "С4 0/8 [10:00] старт", "С4 3/8 [10:20] шаг"]
+  const s6 = one([Cp("main", base7, at(10, 20)), Cp("tree", [...base7, "С5 0/3 [12:30] старт", "С5 1/3 [12:35] а"], at(12, 35))], n)
+  cell("AC-24 S6 an interrupted session of the common start (with time fields): the task is right, +1 stays", s6.session === "С5" && s6.state === 5 && s6.others === 1, show(s6))
+  const base8 = [...common, "С4 0/8 старт", "С4 3/8 шаг"]
+  const s6n = one([Cp("main", base8, at(10, 20)), Cp("tree", [...base8, "С5 0/3 старт", "С5 1/3 а"], at(12, 35))], n)
+  cell("AC-24 S6 the same without time fields: the old candidate has no time and is displaced, +N 0", s6n.session === "С5" && s6n.others === 0, show(s6n))
+}
+{
+  // AC-27: many sessions with repeats (made after the journal of task 002 and of task 003)
+  const n = at(12, 0)
+  const codes = ["С1", "С1п", "С2", "С3", "С4", "С5"]
+  const sessions002 = []
+  for (let i = 0; i < 69; i++) sessions002.push(`${codes[i % 6]} 0/3 старт заход ${i}`, `${codes[i % 6]} 1/3 а`, `${codes[i % 6]} 3/3 готово`)
+  const live = ["С5 0/14 старт"]
+  for (let k = 1; k <= 13; k++) live.push(`С5 ${k}/14 шаг ${k}`)
+  const main002 = [...sessions002, ...live]
+  const tree002 = [...main002, "С5 14/14 пересборка: ветка на main"]
+  const r = one([Cp("main", main002, at(11, 0)), Cp("tree", tree002, at(11, 58))], n)
+  cell("AC-27 task-002 style (70 sessions): +N is 0, 69 displaced, С5 14/14 «итога нет»", r.others === 0 && r.displaced === 69 && r.k === 14 && r.state === 7 && r.candidates.length === 1, show({ o: r.others, d: r.displaced, k: r.k, s: r.state }))
+  cell("AC-27 the last three lines are only at the candidates", r.candidates.every((c) => c.tail.length <= 3) && r.tail.length === 3 && r.tail[2] === "14/14 пересборка: ветка на main", show(r.tail))
+  // 003 style: main has 19 sessions, the tree 15; interrupted «С3 0/34 старт» twice and «С4 3/8», the last session С2 7/9
+  const c14 = []
+  const mk = (code, n2, done) => {
+    const out = [`${code} 0/${n2} старт`]
+    for (let k = 1; k <= done; k++) out.push(`${code} ${k}/${n2} шаг ${k}`)
+    return out
+  }
+  c14.push(...mk("С1", 3, 3), ...mk("С2", 9, 9), ...mk("С3", 34, 0), ...mk("С3", 34, 0), ...mk("С3", 34, 34), ...mk("С2", 9, 9), ...mk("С5", 6, 6), ...mk("С6", 5, 5), ...mk("С2", 9, 9), ...mk("С3", 4, 4), ...mk("С2", 9, 9), ...mk("С1", 3, 3), ...mk("С3п", 5, 5), ...mk("С2", 9, 9))
+  const sessionsOfC = P.sessionsOf(parse(...c14)).length
+  const mainLines = [...c14, ...mk("С4", 8, 3), ...mk("С1", 3, 3), ...mk("С2", 9, 9), ...mk("С5", 4, 4), ...mk("С2", 9, 7)]
+  const treeLines = [...c14, ...mk("С4", 8, 7), "С4 8/8 готово"]
+  const r3 = one([Cp("main", mainLines, at(11, 58)), Cp("tree", treeLines, at(11, 40))], n)
+  cell("AC-27 task-003 style: main 19 sessions, tree 15 (the fixture)", sessionsOfC === 14 && P.sessionsOf(parse(...mainLines)).length === 19 && P.sessionsOf(parse(...treeLines)).length === 15, show({ c: sessionsOfC }))
+  cell("AC-27 task-003 style: +N is at most 1, the interrupted displaced ones are not running", r3.others <= 1 && r3.candidates.every((c) => !(c.session === "С3" && c.k === 0)) && r3.session === "С2" && r3.k === 7, show({ o: r3.others, s: r3.session, k: r3.k, c: r3.candidates.map((c) => c.session + c.k) }))
+  const r3b = one([Cp("main", mainLines, at(11, 20)), Cp("tree", treeLines, at(11, 58))], n)
+  cell("AC-27 task-003 style, the tree file is later: С4 8/8 «готово» is shown, +N at most 1", r3b.others <= 1 && r3b.session === "С4" && r3b.state === 2, show({ o: r3b.others, s: r3b.session, st: r3b.state }))
+}
+
 // ==== END OF CELLS ====
 try {
   rmSync(tmp, { recursive: true, force: true })
