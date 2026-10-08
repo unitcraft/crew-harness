@@ -18,7 +18,7 @@ import { projectFor, rawSettingsFor, workingSettings, writeSettings } from "./se
 import { log, projectOf, settingsContext } from "./core.ts"
 import * as P from "./profiles.ts"
 import { type Task, listTasks } from "./tasks.ts"
-import { type SyncReport, type WindowPlan, syncTaskWindow, syncWindows, windowPlanOf, windowProblems } from "./profile-windows.ts"
+import { type SyncReport, type WindowPlan, qualifying, syncTaskWindow, syncWindows, windowNotes, windowPlanOf, windowProblems } from "./profile-windows.ts"
 
 const isObj = (v: any): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v)
 const clone = <T>(v: T): T => (v === undefined ? v : JSON.parse(JSON.stringify(v)))
@@ -456,6 +456,9 @@ export function profileProblems(): string[] {
     try {
       const ps = profileState(dir0)
       out.push(...problemsOf(ps), ...windowProblems(ps.project, listTasks(ps.project), windowPlanOf(ps.state)))
+      // рукописные окна, которые перекрывают окно профиля, и явный порог Claude Code — названы с файлом и значением (REQ-16, REQ-23)
+      const u = ps.state.usable
+      if (u && ps.state.row !== 6) out.push(...windowNotes(p.rootPath ?? dir0, qualifying(ps.project, listTasks(ps.project)), P.windowsOfSet(u.data, u.name).models).map((x) => `проект ${ps.project}: ${x}`))
       // сданные задачи, которым приёмщика не нашли из-за набора (REQ-15): причина — в самопроверке
       for (const t of listTasks(ps.project)) {
         if (t.status !== "submitted" || t.reviewer) continue

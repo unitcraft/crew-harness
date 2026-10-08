@@ -256,3 +256,228 @@ export function windowProblems(project: string, tasks: Task[], plan: WindowPlan)
   return out
 }
 
+
+// ---------------------------------------------------------------------------------------------------------------------
+// ЧТЕНИЕ НАСТРОЕК OPENCODE (шаг 9): какие окна на самом деле у модели в папке, что перекрывает окно профиля, явный порог
+// Claude Code. Порядок файлов повторяет OpenCode (и `opencodeConfigFiles` провайдера claude-code): глобальные
+// `opencode.json(c)`, затем для каждого уровня от корня диска вниз `opencode.json`, `opencode.jsonc`,
+// `.opencode/opencode.json`, `.opencode/opencode.jsonc`; глубже — сильнее. Дубль логики сознательный: репозитории
+// публичные и независимые, импорта между ними нет; при смене версии OpenCode сообщения могут разойтись с действительностью
+// (check печатает версию). Только чтение: ничего здесь не пишет (DNC-02, DNC-03).
+
+import os from "node:os"
+
+/** JSONC: комментарии вне строк и висячие запятые убраны. */
+export function parseJsonc(text: string): any {
+  let out = ""
+  let inStr = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (inStr) {
+      out += c
+      if (c === "\\") out += text[++i] ?? ""
+      else if (c === '"') inStr = false
+      continue
+    }
+    if (c === '"') {
+      inStr = true
+      out += c
+    } else if (c === "/" && text[i + 1] === "/") {
+      while (i < text.length && text[i] !== "\n") i++
+      out += "\n"
+    } else if (c === "/" && text[i + 1] === "*") {
+      i += 2
+      while (i < text.length && !(text[i] === "*" && text[i + 1] === "/")) i++
+      i++
+    } else out += c
+  }
+  return JSON.parse(out.replace(/^﻿/, "").replace(/,(\s*[}\]])/g, "$1"))
+}
+const readCfg = (file: string): any => {
+  try {
+    return parseJsonc(readFileSync(file, "utf8"))
+  } catch {
+    return undefined
+  }
+}
+const LEVEL_NAMES = ["opencode.json", "opencode.jsonc", path.join(".opencode", "opencode.json"), path.join(".opencode", "opencode.jsonc")]
+
+/** Файлы настроек OpenCode для папки в порядке возрастания силы (существующие и несуществующие: порядок нужен и для прогноза). */
+export function configChainAll(dir: string, env: NodeJS.ProcessEnv = process.env): string[] {
+  const configDir = env.XDG_CONFIG_HOME ? path.join(env.XDG_CONFIG_HOME, "opencode") : path.join(os.homedir(), ".config", "opencode")
+  const files = ["opencode.json", "opencode.jsonc"].map((n) => path.join(configDir, n))
+  const levels: string[] = []
+  let d = dir ? path.resolve(dir) : ""
+  for (let i = 0; d && i < 64; i++) {
+    levels.unshift(d)
+    const up = path.dirname(d)
+    if (up === d) break
+    d = up
+  }
+  for (const l of levels) for (const n of LEVEL_NAMES) files.push(path.join(l, n))
+  return files
+}
+export const configChain = (dir: string, env: NodeJS.ProcessEnv = process.env): string[] => configChainAll(dir, env).filter((f) => existsSync(f))
+
+const sameFile = (a: string, b: string) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase()
+const providersOf = (cfg: any): Record<string, any> => ({ ...(isObj(cfg?.provider) ? cfg.provider : {}), ...(isObj(cfg?.providers) ? cfg.providers : {}) })
+const limitOf = (cfg: any, prov: string, id: string): Partial<Record<"context" | "input" | "output", number>> | undefined => {
+  const l = providersOf(cfg)[prov]?.models?.[id]?.limit
+  return isObj(l) ? l : undefined
+}
+export type Field = { value: number; file: string }
+export type WindowFields = Partial<Record<"context" | "input" | "output", Field>>
+const splitModel = (model: string): [string, string] => {
+  const i = model.indexOf("/")
+  return [model.slice(0, i), model.slice(i + 1)]
+}
+
+/** Окно модели по файлам цепочки папки: значение каждого поля и файл, который его задал. skip — файлы, которых не учитывать (файл плагина). */
+export function chainWindow(dir: string, model: string, opts: { skipOurs?: boolean; extra?: { file: string; limit: any } } = {}): WindowFields {
+  const [prov, id] = splitModel(model)
+  const out: WindowFields = {}
+  const files = opts.extra ? configChainAll(dir) : configChain(dir)
+  for (const file of files) {
+    let limit: any
+    if (opts.extra && sameFile(file, opts.extra.file)) limit = opts.extra.limit
+    else {
+      if (!existsSync(file)) continue
+      const text = readText(file)
+      if (text === undefined) continue
+      if (opts.skipOurs && isOurs(text)) continue
+      try {
+        limit = limitOf(parseJsonc(text), prov, id)
+      } catch {
+        continue
+      }
+    }
+    if (!limit) continue
+    for (const k of ["context", "input", "output"] as const) if (typeof limit[k] === "number") out[k] = { value: limit[k], file }
+  }
+  return out
+}
+/** Окно модели в папке после записи файла плагина с содержимым content (прогноз для use и check). */
+export function predictWindow(dir: string, model: string, content: string): WindowFields {
+  const [prov, id] = splitModel(model)
+  let limit: any
+  try {
+    limit = limitOf(JSON.parse(content), prov, id)
+  } catch {}
+  return chainWindow(dir, model, { extra: { file: windowPath(dir), limit } })
+}
+
+/** Рукописные значения окна модели, которые стоят в цепочке папки: сильнее файла плагина (позже него) и слабее (раньше, с иным значением). */
+export type Override = { file: string; field: "context" | "input" | "output"; value: number; stronger: boolean }
+export function handWrittenOverrides(dir: string, model: string, window: P.Win): Override[] {
+  const [prov, id] = splitModel(model)
+  const ours = windowPath(dir)
+  const out: Override[] = []
+  let passed = false
+  for (const file of configChainAll(dir)) {
+    if (sameFile(file, ours)) {
+      passed = true
+      continue
+    }
+    if (!existsSync(file)) continue
+    const text = readText(file)
+    if (text === undefined || isOurs(text)) continue
+    let limit: any
+    try {
+      limit = limitOf(parseJsonc(text), prov, id)
+    } catch {
+      continue
+    }
+    if (!limit) continue
+    for (const k of ["context", "input", "output"] as const) if (typeof limit[k] === "number" && limit[k] !== (window as any)[k]) out.push({ file, field: k, value: limit[k], stronger: passed })
+  }
+  return out
+}
+/** compaction.reserved из цепочки папки (только чтение; для порога в сообщениях), undefined — не задан. */
+export function reservedOf(dir: string): { value: number; file: string } | undefined {
+  let out: { value: number; file: string } | undefined
+  for (const file of configChain(dir)) {
+    const text = readText(file)
+    if (text === undefined || isOurs(text)) continue
+    try {
+      const c = parseJsonc(text)?.compaction
+      const v = typeof c?.reserved === "number" ? c.reserved : typeof c?.buffer === "number" ? c.buffer : undefined
+      if (v !== undefined) out = { value: v, file }
+    } catch {}
+  }
+  return out
+}
+
+/** autoCompactWindow: число — для всех моделей; объект — точное имя, семейство по подстроке, «*». */
+function compactFor(option: any, modelId: string): number | undefined {
+  if (typeof option === "number") return option
+  if (!isObj(option)) return undefined
+  const id = modelId.toLowerCase()
+  if (typeof option[id] === "number") return option[id]
+  const family = Object.keys(option).find((k) => k !== "*" && id.includes(k.toLowerCase()))
+  if (family && typeof option[family] === "number") return option[family]
+  return typeof option["*"] === "number" ? option["*"] : undefined
+}
+/**
+ * Явный autoCompactWindow провайдера claude-code для модели в папке (REQ-23): опции провайдера в файлах цепочки
+ * (`providers["claude-code"].settings`) и проектный файл провайдера вверх от папки. Он сильнее окна профиля; плагин его не
+ * переписывает и не отменяет, а называет.
+ */
+export function explicitCompact(dir: string, modelId: string): { value: number; where: string } | undefined {
+  let out: { value: number; where: string } | undefined
+  for (const file of configChain(dir)) {
+    const text = readText(file)
+    if (text === undefined || isOurs(text)) continue
+    try {
+      const all = providersOf(parseJsonc(text))
+      const p = all["claude-code"] ?? Object.values(all).find((x: any) => /claude-code-provider/.test(String(x?.package ?? x?.npm ?? "")))
+      const v = compactFor((p?.settings ?? p?.options?.settings)?.autoCompactWindow, modelId)
+      if (v !== undefined) out = { value: v, where: file }
+    } catch {}
+  }
+  let d = dir ? path.resolve(dir) : ""
+  for (let i = 0; d && i < 32; i++) {
+    const f = path.join(d, ".opencode", "opencode-claude-code-provider.json")
+    if (existsSync(f)) {
+      try {
+        const v = compactFor(JSON.parse((readText(f) ?? "").replace(/^﻿/, "")).autoCompactWindow, modelId)
+        if (v !== undefined) out = { value: v, where: f }
+      } catch {}
+      break
+    }
+    const up = path.dirname(d)
+    if (up === d) break
+    d = up
+  }
+  return out
+}
+/** Порог сжатия модели в OpenCode: по input там, где он есть, иначе по context, минус reserved; undefined — окно нигде не записано. */
+export function thresholdOf(w: { context?: number; input?: number }, reserved?: number): number | undefined {
+  const base = w.input ?? w.context
+  return base === undefined ? undefined : reserved === undefined ? undefined : base - reserved
+}
+
+const slash = (f: string) => path.resolve(f).split(path.sep).join("/")
+/**
+ * Заметки об окнах моделей набора (REQ-16, REQ-23, AC-25, AC-40): рукописное окно в рабочем дереве задачи, которое сильнее
+ * файла плагина; рукописное окно в основной папке (вкладки владельца и сессии приёмки берут его, профиль там не применяется);
+ * явный порог Claude Code. Только чтение.
+ */
+export function windowNotes(root: string, wts: Task[], models: Map<string, P.Win>): string[] {
+  const out: string[] = []
+  const reserved = reservedOf(root)
+  for (const [model, win] of models) {
+    for (const t of wts)
+      for (const o of handWrittenOverrides(t.worktree!, model, win).filter((x) => x.stronger))
+        out.push(`в рабочем дереве задачи #${t.n} окно модели ${model} (${o.field}) задано рукописно: ${o.value} (файл ${slash(o.file)}) — оно сильнее файла плагина, сессия получит его, а не окно профиля (${(win as any)[o.field] ?? "—"})`)
+    const hand = chainWindow(root, model, { skipOurs: true })
+    for (const k of ["context", "input", "output"] as const) {
+      const h = hand[k]
+      if (h && h.value !== (win as any)[k]) out.push(`в основной папке проекта у модели ${model} ${k} ${h.value} (файл ${slash(h.file)}): вкладки владельца и сессии приёмки берут его, профиль набора там не применяется (в профиле ${(win as any)[k] ?? "—"})`)
+    }
+    if (model.startsWith("claude-code/")) {
+      const ex = explicitCompact(wts[0]?.worktree ?? root, model.slice("claude-code/".length))
+      if (ex) out.push(`порог Claude Code для модели ${model} задан явно (${ex.value}, ${slash(ex.where)}) и от набора не меняется; окно OpenCode станет ${win.input ?? win.context}${reserved ? ` (сжатие OpenCode на ${(win.input ?? win.context) - reserved.value})` : ""}`)
+    }
+  }
+  return out
+}
