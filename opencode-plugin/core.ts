@@ -18,6 +18,7 @@ import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
 import { DEFAULT_FORM, PLAN_ACCEPTANCE, PLAN_MERGE_ACCEPTANCE, type PlanForm, allSteps, nextPlanNumber, parsePlan, planProblems, planTemplate, roundRules } from "./plans.ts"
 import { type Task, type TaskPlan, WORKING_STATUSES, taskRef, slugify, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { countedOpen, waitingCleanup } from "./tasks.ts"
+import { beginPrecheck, finishPrecheck, markPrecheckStale, unlockMerge } from "./precheck.ts"
 import { cleanupDone, cleanupSteps, fileAt, holdsMergeLock, isMerged, mergeHolder, releaseMergeLock, reworkLetter, takeMergeLock } from "./review.ts"
 import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, timerSpec, watchesOf } from "./watch.ts"
 import { watchRefusal } from "./deny.ts"
@@ -1716,16 +1717,17 @@ export function makeTools(host: CrewHost): CrewTool[] {
   const crewTask: CrewTool = {
     name: "crew_task",
     description:
-      "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), show {n} (details and history), and for the integrator: assign {session, goal, criteria, ...} (give a task to an existing tab instead of a new session), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done; with an enabled model-profile set the model is taken by the set at that moment), cancel {n, text?}, priority {n, priority}, order {to: 'project.integrator', goal, criteria, ...} (work for another project: its integrator does it with its own tasks; the order follows them); for the task's reviewer: review {n} (start), merge {n} (the project's merge lock), rework {n, text, sync?} (sync: true -- only to merge the fresh target branch: not a rework round, not counted in rework_max), check {n, step} before checking a step and {n, step, result} after it (the owner sees the progress in the window), accept {n, checks?, commit?} (steps marked by check count; the plugin checks the required steps and that it is merged), cleaned {n} (the plugin checks the worktree and branch are gone). With the project's reviewer: acceptor, merge/accept/cleaned also need the acceptor (or integrator) role.",
+      "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), show {n} (details and history), and for the integrator: assign {session, goal, criteria, ...} (give a task to an existing tab instead of a new session), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done; with an enabled model-profile set the model is taken by the set at that moment), cancel {n, text?}, priority {n, priority}, order {to: 'project.integrator', goal, criteria, ...} (work for another project: its integrator does it with its own tasks; the order follows them); for the task's reviewer: review {n} (start), precheck {n} (when the project requires it: read the tip of the target branch, then precheck {n, candidate, result} after the CI on the integrated candidate), merge {n} (the project's merge lock; with a required precheck only on the same tip), unlock {n} (release the lock you hold for the task), rework {n, text, sync?} (sync: true -- only to merge the fresh target branch: not a rework round, not counted in rework_max), check {n, step} before checking a step and {n, step, result} after it (the owner sees the progress in the window), accept {n, checks?, commit?} (steps marked by check count; the plugin checks the required steps and that it is merged), cleaned {n} (the plugin checks the worktree and branch are gone). With the project's reviewer: acceptor, merge/accept/cleaned also need the acceptor (or integrator) role.",
     input: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["list", "show", "assign", "order", "push", "reassign", "cancel", "priority", "plan_decide", "review", "check", "round", "merge", "rework", "accept", "cleaned"] },
+        action: { type: "string", enum: ["list", "show", "assign", "order", "push", "reassign", "cancel", "priority", "plan_decide", "review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleaned"] },
         to: str("order: the other project's integrator, \"project.integrator\""),
         checks: { type: "object", description: "accept: report per acceptance step {step id: what proves it}", additionalProperties: { type: "string" } },
         step: str("check: the acceptance step id"),
         result: str("check: what proves the step (omit when starting the step)"),
         commit: str("accept: the commit in the target branch (squash merge); without it the task branch must be merged"),
+        candidate: str("precheck: the integrated candidate (branch or hash) that was built and checked on the base; with result it finishes the precheck"),
         n: { type: "number", description: "Task number" },
         session: str("assign: the tab (session id) that takes the task"),
         text: str("push / cancel: text for the executor"),
@@ -1839,7 +1841,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         host.posted([])
         return { content: `План ${t.plan.n}: ${DECISION_RU[decision as Decision]} — записано, плагин применит на ближайшем проходе.` }
       }
-      if (["review", "check", "round", "merge", "rework", "accept", "cleaned"].includes(action)) {
+      if (["review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleaned"].includes(action)) {
         // исполнитель свою работу не вливает и не принимает — отказ называет это прямо (план 002.7, п.4)
         if (t.reviewer !== me.session && t.executor === me.session)
           return { content: `Ты исполнитель задачи ${taskRef(t)}: ${action} делает её приёмщик (${t.reviewer ?? "ещё не назначен"}), это действие только его. Исполнитель свою работу не вливает и не принимает — сдай отчёт и жди приёмки.` }
@@ -1847,7 +1849,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const tcfg = loadConfig(t.directory)
         // ПРАВА РОЛИ (план 002.7): при reviewer "acceptor" замок вливания, принятие и очистку держит роль acceptor (или
         // интегратор). Приёмщик, сменивший роль, их теряет: права у роли, а не у записи «приёмщик» в задаче.
-        if (tcfg.reviewer === "acceptor" && ["merge", "accept", "cleaned"].includes(action) && normalizeRole(me.role) !== ACCEPTOR_ROLE && !isIntegrator(me))
+        if (tcfg.reviewer === "acceptor" && ["merge", "unlock", "precheck", "accept", "cleaned"].includes(action) && normalizeRole(me.role) !== ACCEPTOR_ROLE && !isIntegrator(me))
           return { content: `${action} в проекте ${project} — право роли ${ACCEPTOR_ROLE} (настройка reviewer: acceptor) или интегратора; у тебя роль ${keyOf(me)}. Вернуть роль — crew_role {role: "${ACCEPTOR_ROLE}"}.` }
         const acc = acceptanceOf(t, tcfg) // задача-план — шаги перепроверки плана (план 004), иначе — приёмки проекта
         const now = Date.now()
@@ -1856,6 +1858,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           if (t.status !== "submitted" && t.status !== "reviewing") return { content: `Задача ${taskRef(t)} ${statusRu(t.status)} — начинать приёмку нечего.` }
           t.steps = acc.map((a) => ({ id: a.id, text: a.text, ...(a.required ? { required: true } : {}) }))
           if (t.status === "submitted") {
+            markPrecheckStale(t, "приёмка начата заново")
             taskEvent(t, me.session, "reviewing", `приёмка начата (${keyOf(me)})`)
             if (t.executor) quiet(t.executor, `review-start-${safeKey(project)}-${t.n}-${rounds(t)}`, `Задача #${t.n} «${t.title}» на приёмке у ${keyOf(me)}. Жди: на доработку вернут письмом.`)
             if (t.executor) host.posted([t.executor])
@@ -1951,6 +1954,14 @@ export function makeTools(host: CrewHost): CrewTool[] {
           host.posted([])
           return { content: `Раунд ${no} записан (${line}). Чистых подряд ${p.clean} из ${tcfg.planCleanRounds}; следующий раунд — новая сессия.` }
         }
+        if (action === "precheck") {
+          if (tcfg.mergePrecheck !== "required") return { content: "Предпроверка не включена в проекте (merge_precheck: off): merge берёт замок без неё. Включает интегратор проекта настройкой merge_precheck: required." }
+          if (t.plan && !(t.plan.approval && t.plan.approval.decision !== "no")) return { content: `Задача ${taskRef(t)} сейчас в раунде перепроверки плана ${t.plan.n}: вливания нет, предпроверка не нужна. Она действует на вливание согласованного плана (после решения, статус на приёмке).` }
+          if (t.status !== "reviewing") return { content: `Сначала crew_task {action: "review", n: ${t.n}} (задача сейчас ${statusRu(t.status)}).` }
+          const finishing = input.candidate !== undefined || input.result !== undefined
+          return { content: finishing ? await finishPrecheck(t, me.session, tcfg.targetBranch, { candidate: input.candidate, result: input.result }) : await beginPrecheck(t, me.session, tcfg.targetBranch) }
+        }
+        if (action === "unlock") return { content: unlockMerge(t, me.session) }
         if (action === "merge") {
           if (t.status !== "reviewing") return { content: `Сначала crew_task {action: "review", n: ${t.n}} (задача сейчас ${statusRu(t.status)}).` }
           const r = takeMergeLock(project, me.session, t.n)
@@ -1973,6 +1984,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           t.reviewer_role = keyOf(me)
           releaseMergeLock(project, me.session)
           if (t.review_qid) settleObligation(me.session, t.review_qid)
+          markPrecheckStale(t, sync ? "возвращена исполнителю (синхронизация)" : "возвращена исполнителю (доработка)")
           taskEvent(t, me.session, "rework", sync ? `на синхронизацию с ${tcfg.targetBranch} (${t.syncs}-я, не доработка): ${text.slice(0, 300)}` : `на доработку (круг ${t.rework}): ${text.slice(0, 300)}`)
           if (t.executor) {
             addObligation(t.executor, { qid: t.qid, from_session: t.author, from_role: t.author_role, at: now, nudges: 0, task: t.title })
@@ -2061,6 +2073,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
       }
       if (action === "cancel") {
         const why = String(input.text ?? "").trim()
+        markPrecheckStale(t, "задача отменена")
         taskEvent(t, me.session, "cancelled", why || undefined)
         try {
           releaseTaskWindow(t.project, t) // и у отменённой задачи (задача 003, REQ-22)
@@ -2098,6 +2111,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           t.tier = chosen.tier
           stampProfile(t, "executor", t.executor, chosen, !!t.worktree)
         }
+        markPrecheckStale(t, "передана другой сессии")
         taskEvent(t, me.session, "starting", `передана новой сессии${old ? ` (была ${old})` : ""}`)
         const r = await host.startTask(t)
         return { content: r.session ? `Задача ${taskRef(t)} передана новой сессии ${r.session}${t.handoff ? " со сводкой сделанного" : ""}.` : `Задача #${t.n} записана к передаче, сессия не запущена: ${r.error ?? "?"}. Плагин повторит запуск.` }

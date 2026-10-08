@@ -34,6 +34,23 @@ export const taskRef = (t: { n: number | string; title?: string }, max = 40): st
  *  в worktree; snapshot — по снимку; general — окно из общих настроек: приёмка, задача без worktree, набор недопустим). */
 export type ProfileStamp = { at: number; role: "executor" | "reviewer"; session: string; stage: string; set: string; family: string; tier: string; model: string; window: "profile" | "general" | "snapshot" }
 
+/** Запись предпроверки вливания: running — начата на вершине base; green — кандидат собран и проверен на base; stale — устарела
+ *  (причина в stale). lock_on — замок выдан на эту вершину; accepted_on — вершина целевой ветки, в которой принята задача. */
+export type PrecheckRecord = {
+  state: "running" | "green" | "stale"
+  base: string
+  at: number
+  by: string
+  /** rounds(t) + attempt на момент начала: запись прежнего круга зелёной не считается */
+  round: number
+  candidate?: string
+  result?: string
+  green_at?: number
+  lock_on?: { tip: string; at: number }
+  stale?: { reason: string; at: number }
+  accepted_on?: string
+}
+
 export type Task = {
   project: string
   n: number
@@ -109,6 +126,8 @@ export type Task = {
   /** модель приёмщика, выбранная набором до запуска сессии: повтор оборванного запуска даёт ту же модель */
   review_model?: string
   commit?: string
+  /** предпроверка вливания (задача 005, merge_precheck): на какой вершине главной ветки приёмщик собрал и проверил кандидата */
+  precheck?: PrecheckRecord
   /** влитый коммит (его ветки и worktree проверяет очистка) */
   merged_head?: string
   history: TaskEvent[]
