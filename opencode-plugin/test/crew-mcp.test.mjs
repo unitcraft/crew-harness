@@ -102,7 +102,7 @@ try {
   cell("initialize answers with tools capability", !!init.result?.capabilities?.tools, JSON.stringify(init))
   cell("instructions name the window's session", /sesCCCCCC/.test(init.result?.instructions ?? ""), init.result?.instructions)
   const listed = (await mcp.rpc("tools/list", {})).result?.tools?.map((t) => t.name).sort() ?? []
-  cell("eleven peer tools", JSON.stringify(listed) === JSON.stringify(["crew_config", "crew_doctor", "crew_help", "crew_inbox", "crew_list", "crew_role", "crew_send", "crew_spawn", "crew_task", "crew_wait", "crew_watch"]), JSON.stringify(listed))
+  cell("twelve peer tools", JSON.stringify(listed) === JSON.stringify(["crew_config", "crew_doctor", "crew_help", "crew_inbox", "crew_list", "crew_role", "crew_send", "crew_spawn", "crew_task", "crew_timer", "crew_wait", "crew_watch"]), JSON.stringify(listed))
   const schema = (await mcp.rpc("tools/list", {})).result.tools.find((t) => t.name === "crew_send").inputSchema
   cell("crew_send schema requires to and text", JSON.stringify(schema.required) === JSON.stringify(["to", "text"]), JSON.stringify(schema))
 

@@ -20,6 +20,16 @@ const until = async (cond, ms = 20_000) => {
   }
 }
 
+// 0. crew_timer: minutes -> a sleeping command and a limit one minute longer; wrong input is refused
+{
+  const s = w.timerSpec(10)
+  assert.deepEqual(s, { seconds: 600, limit: 11 })
+  assert.deepEqual(w.timerSpec(0.5), { seconds: 30, limit: 2 })
+  assert.deepEqual(w.timerSpec("2"), { seconds: 120, limit: 3 })
+  for (const bad of [0, -1, "x", undefined, w.WATCH_MAX_MIN, w.WATCH_MAX_MIN + 5]) assert.ok("error" in w.timerSpec(bad), String(bad))
+  assert.ok(!("error" in w.timerSpec(w.WATCH_MAX_MIN - 1)))
+}
+
 // 1. a command that waits, prints and exits 3; quotes inside survive
 const a = w.requestWatch({ session: "sesA", command: `sleep 1; echo "it's done"; exit 3`, cwd: tmp, note: "gate" })
 assert.equal(a.minutes, w.WATCH_DEFAULT_MIN)

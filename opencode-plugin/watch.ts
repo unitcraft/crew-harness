@@ -18,6 +18,14 @@ import { BASE } from "./paths.ts"
 export const WATCHES = path.join(BASE, "watches")
 export const WATCH_MAX_MIN = 720
 export const WATCH_DEFAULT_MIN = 120
+
+/** crew_timer: таймер — наблюдение, чья команда спит. Минуты больше 0 и меньше WATCH_MAX_MIN; предел наблюдения — на минуту длиннее сна. */
+export function timerSpec(minutes: unknown): { seconds: number; limit: number } | { error: string } {
+  const m = Number(minutes)
+  if (!Number.isFinite(m) || m <= 0) return { error: "minutes: число минут больше 0" }
+  if (m >= WATCH_MAX_MIN) return { error: `minutes: не больше ${WATCH_MAX_MIN - 1} (предел наблюдения — ${WATCH_MAX_MIN})` }
+  return { seconds: Math.max(1, Math.round(m * 60)), limit: Math.ceil(m) + 1 }
+}
 const KEEP_DONE_MS = 24 * 3600_000
 const TAIL_LINES = 30
 const TAIL_CHARS = 3000

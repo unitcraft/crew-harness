@@ -17,7 +17,7 @@ import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
 import { DEFAULT_FORM, PLAN_ACCEPTANCE, PLAN_MERGE_ACCEPTANCE, type PlanForm, allSteps, nextPlanNumber, parsePlan, planProblems, planTemplate, roundRules } from "./plans.ts"
 import { type Task, type TaskPlan, WORKING_STATUSES, taskRef, slugify, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { cleanupDone, cleanupSteps, fileAt, holdsMergeLock, isMerged, mergeHolder, releaseMergeLock, reworkLetter, takeMergeLock } from "./review.ts"
-import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, watchesOf } from "./watch.ts"
+import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, timerSpec, watchesOf } from "./watch.ts"
 import { watchRefusal } from "./deny.ts"
 import { queueRemote, remoteRoute } from "./remote.ts"
 
@@ -919,6 +919,7 @@ export const HELP = `crew-harness — письма между вкладками
        reply_to: "<qid>"      — это ответ на вопрос <qid>.
        tier: heavy|medium|light — задача свободной открытой вкладке роли с моделью этой ступени или сильнее.
   crew_wait {qid, seconds?}   — ждать ответа на свой вопрос в этом же ходе (до 300 с): без второго пробуждения.
+  crew_timer {minutes, note?} — таймер: письмо разбудит эту вкладку через minutes минут (дробные можно, до 719), без удержания хода.
   crew_watch {command, note?, minutes?, machine?} — долгое ожидание без удержания хода. command плагин запускает сам, в
                               фоне в сервере OpenCode (переживает конец хода и перезапуск сервиса); когда команда
                               завершилась, вкладку будит письмо: код выхода, время работы, хвост вывода. Поэтому команда
@@ -2059,6 +2060,30 @@ export function makeTools(host: CrewHost): CrewTool[] {
     },
   }
 
+  const crewTimer: CrewTool = {
+    name: "crew_timer",
+    description: `Timer: wake THIS tab with a letter after N minutes, without holding the turn (a watch whose command sleeps; it survives the end of your turn and a service restart). minutes: more than 0, less than ${WATCH_MAX_MIN}. note: a short label for the letter ("check the gate"). After calling it, end your turn -- the letter wakes you. Cancel like any watch: crew_watch {action: "cancel", id}.`,
+    input: {
+      type: "object",
+      properties: {
+        minutes: { type: "number", description: `In how many minutes to wake (fractions allowed, up to ${WATCH_MAX_MIN - 1})` },
+        note: str("Short label for the letter, e.g. 'check the gate'"),
+      },
+      required: ["minutes"],
+      additionalProperties: false,
+    },
+    execute: async (input: any, sessionID: string) => {
+      const me = await host.touch(sessionID)
+      if (!me) return { content: "Таймер ставит только вкладка, не субагент." }
+      const spec = timerSpec(input.minutes)
+      if ("error" in spec) return { content: spec.error }
+      const project = me.project ?? projOf(me)
+      const note = String(input.note ?? "").trim() || `таймер ${Number(input.minutes)} мин`
+      const w = requestWatch({ session: me.session, command: `sleep ${spec.seconds}`, cwd: me.directory || host.defaultDir, note, minutes: spec.limit, machine: false, project, env: watchEnv(me, project) })
+      return { content: `Таймер «${note}» ${w.id} поставлен (${hhmm(w.created)}): письмо придёт через ${Number(input.minutes)} мин. Отмена — crew_watch {action: "cancel", id: "${w.id}"}. Закончи ход: письмо разбудит эту вкладку.` }
+    },
+  }
+
   const crewHelp: CrewTool = {
     name: "crew_help",
     description: "Help for crew-harness: the tools with examples, addressing, roles, delivery and presence, questions and answers, tasks for the integrator.",
@@ -2066,7 +2091,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
     execute: async (_input: any, sessionID: string) => ({ content: helpFor(readJson<Card>(cardFile(String(sessionID ?? "")))?.directory || host.defaultDir) }),
   }
 
-  return [crewList, crewRole, crewSend, crewWait, crewWatch, crewSpawn, crewTask, crewConfig, crewInbox, crewDoctor, crewHelp]
+  return [crewList, crewRole, crewSend, crewWait, crewWatch, crewTimer, crewSpawn, crewTask, crewConfig, crewInbox, crewDoctor, crewHelp]
 }
 
 /** Шаги приёмки задачи: у задачи-плана — перепроверка плана (план 004), у остальных — приёмка проекта. */
