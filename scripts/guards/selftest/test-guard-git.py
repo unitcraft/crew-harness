@@ -29,7 +29,10 @@ HOOK = os.path.join(stlib.SCRIPTS, "agent-hooks", "guard-git.py")
 SETTINGS = os.path.join(stlib.REPO, ".claude", "settings.json")
 spec = importlib.util.spec_from_file_location("guard_git", HOOK)
 gg = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(gg)
+try:
+    spec.loader.exec_module(gg)
+except BaseException:  # заглушка хука может завершить процесс при загрузке: проба тогда должна упасть
+    gg = None
 
 T = chr(96)  # обратный апостроф
 F = "m.txt"

@@ -24,7 +24,10 @@ import importlib.util  # noqa: E402
 ALLOW = "guard-" + "allow"
 spec = importlib.util.spec_from_file_location("check_md_links", os.path.join(stlib.GUARDS, "check-md-links.py"))
 mdl = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mdl)
+try:
+    spec.loader.exec_module(mdl)
+except BaseException:  # заглушка стража может завершить процесс при загрузке: проба тогда должна упасть
+    mdl = None
 TICK = "`"
 
 
