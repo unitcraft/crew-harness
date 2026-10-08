@@ -73,7 +73,7 @@ export function releaseMergeLock(project: string, session: string) {
 export const holdsMergeLock = (project: string, session: string) => mergeHolder(project)?.session === session
 
 /** Каталог репозитория задачи: worktree (если ещё есть) или каталог, где задачу ставили. */
-const repoDir = (t: Task) => (t.worktree && existsSync(t.worktree) ? t.worktree : t.directory)
+export const repoDir = (t: Task) => (t.worktree && existsSync(t.worktree) ? t.worktree : t.directory)
 
 /** Влито ли: коммит (squash-слияние) или ветка задачи — предок целевой ветки (локальной или origin/). */
 export function isMerged(t: Task, target: string, commit?: string): { ok: boolean; how?: string; head?: string } {
