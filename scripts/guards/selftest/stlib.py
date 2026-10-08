@@ -226,3 +226,57 @@ def captured(fn, *args, **kw):
     with contextlib.redirect_stdout(buf):
         code = fn(*args, **kw)
     return code, buf.getvalue()
+
+
+# --- одноразовый репозиторий с копией стражей и установленными хуками ---------------------------
+SKELETON = {
+    "README.md": "# Test\n\nSee [the spec](doc/tasks/001-x/spec.md).\n",
+    "doc/tasks/001-x/spec.md": "Статус: черновик\n\nREQ-01 a\n",
+    "opencode-plugin/test/a.test.mjs": "cell('x', true)\n",
+}
+EXPECTED_EMAIL = "author@example.test"
+
+
+def copy_tree_files(repo):
+    """Копия scripts/, .claude/ и .github/ настоящего репозитория (если есть) в одноразовый."""
+    for name in ("scripts", ".claude", ".github"):
+        src = os.path.join(REPO, name)
+        if os.path.isdir(src):
+            shutil.copytree(src, os.path.join(repo, name), ignore=shutil.ignore_patterns("__pycache__"))
+    for folder in ("scripts/githooks", "scripts/guards", "scripts"):
+        full = os.path.join(repo, *folder.split("/"))
+        if os.path.isdir(full):
+            for entry in os.listdir(full):
+                path = os.path.join(full, entry)
+                if os.path.isfile(path) and (folder == "scripts/githooks" or entry.endswith(".sh")):
+                    os.chmod(path, 0o755)
+
+
+def hooked_repo(base, env, name="hooked", extra=None, install=True):
+    """Репозиторий-каркас, в котором зелёны все стражи дерева, со стражами и хуками из настоящего."""
+    files = dict(SKELETON)
+    files.update(extra or {})
+    repo = make_repo(base, env, files, name=name, message="skeleton")
+    copy_tree_files(repo)
+    git(repo, env, "add", "--", "scripts", *[n for n in (".claude", ".github") if os.path.isdir(os.path.join(repo, n))])
+    hooks = [p for p in git(repo, env, "ls-files", "scripts/githooks").out.split() if p]
+    if hooks:
+        git(repo, env, "update-index", "--chmod=+x", "--", *hooks)
+    git(repo, env, "commit", "-q", "-m", "guards copy")
+    if install:
+        install_hooks(repo, env)
+    return repo
+
+
+def install_hooks(repo, env):
+    git(repo, env, "config", "core.hooksPath", "scripts/githooks")
+    git(repo, env, "config", "crewharness.expectedEmail", EXPECTED_EMAIL)
+
+
+def commit(repo, env, message, *args, **kw):
+    """git commit -s -m <сообщение> [аргументы]; возвращает процесс (код не проверяется)."""
+    return run(("git", "commit", "-q", "-s", "-m", message) + args, cwd=repo, env=env, input=kw.get("input"))
+
+
+def head(repo, env):
+    return git(repo, env, "rev-parse", "HEAD").out.strip()
