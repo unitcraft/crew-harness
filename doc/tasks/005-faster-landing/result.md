@@ -1,0 +1,42 @@
+Статус: в работе
+
+# 005 — Ускорить вливание задач: слот при принятии, предпроверка без замка, дополнительные поля задачи — result (Сессия С5, 2026-10-08)
+
+Журнал запусков ведётся ниже по шагам. Тесты — только отдельными файлами, по одному, с паузой 5 с; `npm test` целиком не запускался (только в строках «не запускался»).
+
+## Ревизия и база
+
+- Ветка: `task-005-faster-landing`, связанное рабочее дерево рядом с основной копией (путь машины не записывается). Основная копия `main` — только чтение.
+- `BASE` = `868023440170ea0e6a0926da1cb5a76459c301f5` (`git merge-base main task-005-faster-landing` на момент создания ветки; `main` — коммит «Fix window crash on verb input»).
+- База плана (вторая строка plan.md): `22af5f12c2604f4762425d3c3dc9589fa0a15578`. `main` с тех пор ушёл на семь коммитов. Сравнение по файлам плана: `git diff --stat 22af5f1..868023440170 -- opencode-plugin` затрагивает `config-schema.ts` (в двух строках справочника профилей моделей — ссылка на раздел README, плюс строка импорта `paths.ts`), `paths.ts` (константа), `tui.ts`, `sidebar.tsx`, `progress-sidebar.tsx`, `dialog-*.ts*`, `profile-cmd.ts` и тесты окна. Ключи 005 добавляются в конец групп схемы, строки профилей не пересекаются; файлы, которые 005 не правит (DNC-03, DNC-11), в это сравнение попали, но предел «от `$BASE`» считается от записанного значения. Вывод: пересечения по смыслу нет, остановка «ревизия» не нужна (план сам велит считать `$BASE` в момент создания ветки и перечитывать места по имени функции).
+- Окружение: Node v24.15.0, git 2.56.0, Python 3.14.4.
+- Деревья других задач — только чтение (`git worktree list`); задача 007 правит те же `core.ts`, `index.ts`, `config-schema.ts`, `tasks.ts`: правки 005 локальные и в концах своих разделов.
+
+## Базовое состояние (шаг 1)
+
+Прежние самотесты по одному до первого среза (`node test/<файл>.test.mjs` из `opencode-plugin/`, пауза 5 с между запусками; `node test/cleanup-tmp.mjs` перед серией):
+
+| Тест | ячеек ok | упало | пропущено | время, с | итоговая строка |
+|---|---|---|---|---|---|
+| crew-review | 52 | 0 | 0 | 23 | `crew-review.test ok` |
+| crew-flowwatch | 13 | 0 | 0 | 5 | `crew-flowwatch.test ok` |
+| crew-tasks | 28 | 0 | 0 | 12 | `crew-tasks.test ok` |
+| crew-place | 8 | 0 | 0 | 4 | `crew-place.test ok` |
+| crew-cfgtool | 17 | 0 | 0 | 14 | `crew-cfgtool.test ok` |
+| crew-help | 32 | 0 | 0 | 0 | `crew-help.test ok` |
+| crew-plan-task | 33 | 0 | 0 | 17 | `crew-plan-task.test ok` |
+| crew-profiles-select | 54 | 0 | 0 | 70 | `crew-profiles-select.test ok` |
+| crew-profiles-config | 31 | 0 | 0 | 9 | `crew-profiles-config.test ok` |
+| crew-profiles-docs | 27 | 0 | 0 | 0 | `crew-profiles-docs.test ok` |
+| crew-acceptor | 25 | 0 | 0 | 12 | `crew-acceptor.test ok` |
+| crew-restart | 13 | 0 | 0 | 6 | `crew-restart.test ok` |
+| crew-plans | 15 | 0 | 0 | 0 | `crew-plans.test ok` |
+| crew-autoclose | 8 | 0 | 0 | 1 | `crew-autoclose.test ok` |
+
+- `sh scripts/guards/run-all.sh` на базе (дерево ветки без правок кода, с новым ADR и тестами шага 1): `итого: ок 7, судить нечего 0, пропущено 0, FAIL 0`.
+- В `main` 47 файлов `*.test.mjs` (число «37» в AGENTS п.7 устарело уже на базе и этой задачей не правится).
+
+## Журнал запусков
+
+шаг 1: сделан, ветка и дерево созданы, `BASE` записан, базовое состояние четырнадцати тестов и `run-all.sh` снято (таблица выше); `node test/landing-golden.mjs --write` записал снимок 18 текстов до правок ядра (отказ `crew_spawn` по лимиту, `list`, `show` для пяти задач, письма `formatTaskLetter`, `planTaskLetter`, `reviewLetter`, `planMergeLetter`, напоминания приёмщику и автору); `node test/landing-golden.mjs --check` — `golden ok (18 texts)`; `--check --defaults` — `golden ok (18 texts, default values of the new keys set)`; `node test/crew-landing-golden.test.mjs` — `crew-landing-golden.test ok`, 2 ячейки ok и одна `skip AC-01 значения по умолчанию: ключей ещё нет` (включается сама, когда в схеме появляется `accepted_slot`); контроль: копия снимка с испорченной строкой даёт `golden differs: letter reviewLetter #2` и код 1; `guard-secrets.py --tree` — ок (в снимке только маркер `<TMP>`). Коммит `34342bb`
+шаг 2: сделан, `doc/canon/decisions/ADR-0009-merge-precheck-without-lock.md` (Статус: предложено, 2026-10-08; пять решений, 11 вариантов — `grep -c "^[0-9]\. \*\*"` печатает 11) и строка в реестре (`grep -c merge-precheck-without-lock doc/canon/decisions/README.md` — 1); `python scripts/guards/check-md-links.py` — ок, `guard-secrets.py --tree` и `check-private-names.py` — ок. Коммит `4cbd0ef`, раньше коммита шага 3
