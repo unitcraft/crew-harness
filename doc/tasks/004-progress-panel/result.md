@@ -1,4 +1,4 @@
-Статус: в работе
+Статус: готово
 
 # 004 — Панель показывает ход работы фоновых сессий — result (Сессия С5, 2026-10-08)
 
@@ -49,3 +49,142 @@
 шаг 9: сделан, `Source.added_lines` в `guardlib.py` и правило журнала в `check-task-docs.py` (`journal-line`, `journal-path`, `journal-long`, шапка обновлена). Проверки из корня дерева: `test-guardlib.py` — `итого: 27 проб, упало 0`; `test-check-task-docs.py` — `итого: 33 проб, упало 0` (законная проба на копиях настоящих отслеживаемых журналов, число файлов сверено независимым счётчиком файлов и строк; красные пробы — порча тех же копий: убрано k/N, дописан путь машины, дописана подпись длиннее 80 знаков в индексе; общий набор строк `progress-vectors.json` читается и стражем, отсутствие файла — красная проба; общий запуск `run-all.sh --ci` на одноразовой копии принимает вердикт, в том числе красный); `sh scripts/guards/prove-red.sh --only check-task-docs | grep -c '^ок: доказано 1 из 1$'` печатает `1`; `sh scripts/guards/run-all.sh` и `sh scripts/guards/run-all.sh --ci` на дереве ветки (журналы 001–004 настоящие) — `итого: ок 7, судить нечего 0, пропущено 0, FAIL 0`, `check-task-docs.py -> ок: осмотрено 84 файлов задач`; `python scripts/guards/check-wiring.py` — `ок: осмотрено 20 стражей`. После этого шага хук `pre-commit` краснит добавленную строку журнала с подписью длиннее 80 знаков
 шаг 10: сделан, пункт «Журнал хода `progress.log`» в «Дополнениях» `doc/canon/process.md` (текст предложения для Канона из spec.md, владелец 2026-10-08; добавки РП-05: ключевые слова строчными, после «готово» строки сессии не пишутся, вид в `стоп:` из списка); `grep -n "Журнал хода" doc/canon/process.md` — строка 88; `python scripts/guards/check-md-links.py` — `ок: осмотрено 94 ссылок`; `sh scripts/guards/run-all.sh` — `FAIL 0`. В `main` запись входит слиянием на воротах Г2
 шаг 11: сделан, раздел `## Progress of background sessions (progress.log)` в `opencode-plugin/README.md` с семью позициями `### 1.`…`### 7.` (в позиции 5 по одному вхождению `only a launch line`, `24 hours`, `task's worktree`, `does not start a new session`; в позиции 2 названы три переменные `CREW_HARNESS_PROGRESS_*`; открытый контракт `ProgressTask` в позиции 3) и абзац о журнале, страже и пределе 80 знаков в `doc/tasks/README.md`; `python scripts/guards/check-md-links.py` — `ок: осмотрено 98 ссылок`; `sh scripts/guards/run-all.sh` — `FAIL 0`
+шаг 12: сделан, уровни A…G прогнаны (ниже), перечень изменённых файлов равен перечню «Раскладки» (17 путей), поиск путей машины по своим файлам пуст, сообщения всех коммитов от `BASE` проверены `guard-commit-message.py --commit`, `git status --short` пуст. Ворота Г1, Г2, Г3 не выполнялись (раздел «Ждёт владельца»)
+
+## Журнал красных прогонов до правки
+
+Дефекты, найденные собственными ячейками, чинились после красного прогона (команда `node test/crew-progress.test.mjs` из `opencode-plugin/`, ревизия — коммиты шага 7):
+
+- `AC-11 б`, холодный разбор: красный на первой сборке `progress-scan.ts` — `cold parse: median 26.20 ms, p90 34.14 ms, plain read: median 4.75 ms, ratios 5.52 / 7.19` (предел 4 и 6). Правка: ручной разбор строки той же формы, чтение без отдельного `stat` у новых файлов, названия задач читаются, когда понадобились. После правки в трёх прогонах 2,65…3,07 и 3,82…4,16 (таблица шага 7).
+- `AC-11 в`, показ без обхода: красный — `show between walks: median 2.526 ms` (предел 1 мс). Правка (запасной ход плана): выбор копий кэшируется по сигнатуре копий, состояния считаются заново только у кандидатов. После правки 0,44…0,57 мс.
+- `AC-25`, переменные порогов: красный из-за ошибки самой ячейки (в одноразовом репозитории ветка двигалась позже «вести» и добавляла «· ветка 0м»; счётчик процессов не сбрасывался после построения фикстуры); ячейка исправлена, требование не менялось.
+- `git diff --check "$BASE"..HEAD`: `progress-view.ts:178: new blank line at EOF` — убрано отдельным коммитом.
+
+## Итог
+
+**Implemented.** Блок «Ход работ» под блоком «Crew» боковой панели окна и команда `/crew-progress` («Crew: что сейчас идёт»): по каждой идущей задаче методики номер и название, сессия словами, «k из N», последняя подпись, время вести и состояние (идёт, давно нет вестей, остановилась, готово, запущена, без единиц, итога нет); журналы `progress.log` читаются из основной копии и всех связанных деревьев репозитория вкладки без процессов и настроек, по каждой сессии берётся копия с большим числом строк; страж формата журнала в `check-task-docs.py`; формат записан в Канон; раздел в README плагина с семью позициями и открытым контрактом `ProgressTask`.
+
+**Changed.** Новые: `opencode-plugin/progress.ts`, `progress-scan.ts`, `progress-view.ts`, `progress-sidebar.tsx`, `test/crew-progress.test.mjs`, `test/progress-vectors.json`. Правки: `opencode-plugin/tui.ts` (цепочка `crewSidebar?.finally(...)`, команда и `showProgress`), `test/crew-sidebar.test.mjs` (одно сравнение), `package.json` (`scripts.test`), `test/README.md`, `README.md` плагина; `scripts/guards/check-task-docs.py`, `lib/guardlib.py`, самотесты `test-check-task-docs.py`, `test-guardlib.py`; `doc/canon/process.md` (один пункт); `doc/tasks/README.md` (абзац). Служба и ядро (`index.ts`, `core.ts`), `status.ts`, `sidebar.tsx`, `settings.ts`, `config-schema.ts` не тронуты.
+
+**Verification** (ревизия кода — коммит `13cc6e0` и документы после него; все команды из `opencode-plugin/`, если не сказано иное):
+
+- A Static — PASS. `XDG_DATA_HOME="$(mktemp -d)" node --input-type=module -e "for (const f of ['progress','progress-scan','progress-view','tui']) await import('./'+f+'.ts'); console.log('load ok')"` печатает `load ok`; `git diff --check "$BASE"..HEAD` пуст, код 0 (контроль на файле с пробелом в конце строки печатает замечание); разбор Python-файлов (`check-task-docs.py`, `guardlib.py`) — код 0, вывода нет.
+- B Automated, новые — PASS. `node test/crew-progress.test.mjs` — `crew-progress.test ok`, 242 ячейки ok, 0 FAIL; `python scripts/guards/selftest/test-guardlib.py` — `итого: 27 проб, упало 0`; `python scripts/guards/selftest/test-check-task-docs.py` — `итого: 33 проб, упало 0`.
+- B Automated, прежние — PASS, как в базе (число ячеек, упавшие, пропущенные): crew-sidebar 22, crew-status 12, crew-help 34, crew-autoclose 8, crew-wake 22; упавших и пропущенных нет ни до, ни после; изменение прежних тестов — одно сравнение в crew-sidebar (2 строки в `git diff -U0`).
+- C Runtime — PASS. Ячейки `AC-04`, `AC-06`, `AC-19`, `AC-24 S0…S6`, `AC-11` идут на одноразовых репозиториях с настоящими деревьями `git worktree` (запись, `merge --ff-only`, чтение, время файлов через `utimes`); страж — `run-all.sh --ci` на одноразовой копии (проба `test-check-task-docs.py`) и на дереве ветки: `итого: ок 7, судить нечего 0, пропущено 0, FAIL 0`, `check-task-docs.py -> ок: осмотрено 84 файлов задач`.
+- D Visual — NOT VERIFIED: нужно живое окно, AG п.12 (ворота Г3); референса нет, это снимок факта.
+- E Requirements — PASS, таблица «Трассировка» ниже: 21 REQ, 27 AC, 8 DNC.
+- F Negative — PASS. Ячейки `AC-09`, `AC-14`, `AC-16`, `AC-07`, `AC-08` зелёные; красные пробы стража `journal-line`, `journal-path`, `journal-long` в `test-check-task-docs.py`; `sh scripts/guards/prove-red.sh --only check-task-docs | grep -c '^ок: доказано 1 из 1$'` печатает `1`.
+- G Regression — PASS. Пять прежних тестов по одному после шагов 8 и 12 (числа выше); `sh scripts/guards/run-all.sh` из корня дерева — `FAIL 0`; полный проход всех 39 файлов самотестов плагина не делался (AG п.9, машина нагружена; слово владельца — «Ждёт владельца»).
+
+**Acceptance criteria.** AC-01…AC-27 PASS по самотестам; живое окно для AC-10 (снимок) и AC-13 (вызов) — NOT VERIFIED (Г3). Подробно — «Трассировка».
+
+**How to verify.** Из `opencode-plugin/` по одному, с паузой: `node test/crew-progress.test.mjs`, `node test/crew-sidebar.test.mjs`, `node test/crew-status.test.mjs`, `node test/crew-help.test.mjs`, `node test/crew-autoclose.test.mjs`, `node test/crew-wake.test.mjs`. Из корня дерева: `python scripts/guards/selftest/test-guardlib.py`, `python scripts/guards/selftest/test-check-task-docs.py`, `sh scripts/guards/prove-red.sh --only check-task-docs`, `sh scripts/guards/run-all.sh` и `sh scripts/guards/run-all.sh --ci`. Руками (после слияния, по слову владельца): открыть новое окно в репозитории с `doc/tasks/*/progress.log`, найти блок «Ход работ» под «Crew», вызвать `/crew-progress`, дописать строку в журнал одноразовой задачи и увидеть её в блоке не позже чем через 10 секунд.
+
+**Regressions.** Нет (после уровня G): прежние самотесты как в базе, `status.ts`, `sidebar.tsx`, `index.ts`, `core.ts` в `git diff` не значатся.
+
+**Assumptions.**
+- FACT: Node 24 снимает типы сам; `.tsx` Node не компилирует, `progress-sidebar.tsx` проверен только статически (первая строка и импорт `solid-js` как у `sidebar.tsx`, `progress-view` не импортируется статически) — источник: наблюдение в этой сессии.
+- FACT: на Windows короткие (8.3) и длинные имена одного пути дают разные строки; сравнение путей деревьев идёт через `realpathSync.native` — источник: красный прогон `AC-06` в этой сессии.
+- FACT: файл `.git` связанного дерева на Windows скрытый; самотест перезаписывает его через `r+`, а не созданием заново — источник: ошибка EPERM в этой сессии.
+- Допущение: «одна сессия — одна запись», порядок равных по моменту вести кандидатов — копия дерева выше основной, затем позже в журнале (REQ-03 говорит «более поздняя по порядку»).
+- Допущение: поле `title` задачи в сводке ленивое (читается из `task/message.md`, когда понадобилось); контракт полей не меняется.
+
+**Known limitations.**
+- Блок «Ход работ» не проверен в живом окне (положение под «Crew», прокрутка, ширина 42 колонки, высота до 14 строк на фоне «Context» и «MCP»; Н-01) — решение владельца: не принято (ворота Г3).
+- Команда `/crew-progress` не вызвана в настоящем окне; тест вызывает её через `commands[...].run()` с урезанным `api` — решение владельца: не принято (ворота Г3).
+- Остаток «+1» от прерванной сессии общего начала с полем времени (граница способа, `AC-24 S6`; названа в README, позиция 5) — решение владельца: принято планом (шаг 4), 2026-10-08.
+- Полный проход всех самотестов плагина не делался — решение владельца: не принято (вопрос в «Ждёт владельца»).
+
+**Out of scope notes.**
+- `AGENTS.md` п.7 называет 37 файлов самотестов, в дереве сейчас 39 с новым — число расходится уже на `main` (замер: `ls opencode-plugin/test/*.test.mjs | wc -l`), текст Канона не правился (план: «Граничные случаи»).
+- Журналы 001–004 разобраны формой Д-11 без записи: строк не по форме нет (замер шага 1).
+
+**Remaining questions.** Нет открытых UNKNOWN, кроме закрываемого воротами Г3 (Н-01).
+
+**Artifacts.** Ветка `task-004-progress-panel` в связанном рабочем дереве рядом с основной копией; коммиты от `BASE` = `55553e95bb0a862fb9f27291a12fb152b187fdbb`; не отправлена (пуш — Г1). Переменные окружения (необязательные, значения в миллисекундах): `CREW_HARNESS_PROGRESS_STALE_MS`, `CREW_HARNESS_PROGRESS_DONE_MS`, `CREW_HARNESS_PROGRESS_ABANDON_MS`; секретов и миграций нет. Перезапуск службы не нужен (`index.ts`, `core.ts` не тронуты); новые окна загрузят блок и команду сами. План отката: не вливать ветку; после слияния — `git revert` слитых коммитов.
+
+## Расхождения с планом
+
+Расхождений нет: план не противоречит спецификации и коду, остановок «план» и «вопрос» не было. Детали внутри шагов, записанные в строках шагов выше: `summarizeTasks` сделана целиком в шаге 4, два коммита шага 5 слиты в один, к шагу 7 добавлен коммит ускорений модулей (запасной ход плана), коммит `Progress view: drop a blank line…` и коммит именования ячеек `AC-11 ж` и `DNC-03`.
+
+## Трассировка
+
+Статусы: PASS — проверка выполнена и подтверждена выводом; NOT VERIFIED — нужно живое окно. «Ячейка» — строка вывода `node test/crew-progress.test.mjs`, начинающаяся с её имени.
+
+| Пункт | Реализация | Метод | Доказательство | Статус |
+|---|---|---|---|---|
+| REQ-01 показ хода | `progress.ts summarizeTasks`, `progress-view.ts panelLines` | самотест | ячейки `AC-01`, `AC-12` | PASS |
+| REQ-02 деревья по реестру git | `progress-scan.ts findRepoRoot`, `listTrees` | самотест на настоящих деревьях | ячейки `AC-06` (5) | PASS |
+| REQ-03 копия по каждой сессии | `progress.ts chooseSessions` | самотест, модель и деревья | ячейки `AC-04`, `AC-05`, `AC-24 S0…S6`, `AC-27` | PASS |
+| REQ-04 время, состояния | `progress.ts momentOf`, `stateOf` | самотест, перебор 80 сочетаний | ячейки `AC-14`, `AC-02`, `AC-26`, перебор таблицы | PASS |
+| REQ-05 исчезновение | `progress.ts isShown` | самотест по часам | ячейки `AC-03` | PASS |
+| REQ-06 «шагов нет» | состояние 3, `progress-view.ts` | самотест | ячейки `AC-07` | PASS |
+| REQ-07 место и раскладка (тексты, порядок, ширина 32) | `progress-view.ts`, `progress-sidebar.tsx` | самотест, статический разбор импортов | ячейки `AC-01`, `AC-12`, `AC-16` | PASS |
+| REQ-07 место в живом окне | слот `sidebar.content` | снимок окна | не снят | NOT VERIFIED |
+| REQ-08 названия словами | `sessionName`, `taskTitle` | самотест | ячейки `AC-15` | PASS |
+| REQ-09 не позже 10 секунд (константы, подставные часы) | `WALK_MS`, `SHOW_MS` | самотест | ячейки `AC-10` (2) | PASS |
+| REQ-10 нагрузка | `createScanner`, кэш, бюджет | самотест, измерения | ячейки `AC-11 а…ж`, `AC-25`; таблица шага 7 | PASS |
+| REQ-11 команда `/crew-progress` (текст, регистрация) | `progress-view.ts dialogText`, `tui.ts` | самотест, `crew-sidebar` | ячейки `AC-13`, `AC-16`; `crew-sidebar.test ok` | PASS |
+| REQ-11 вызов в живом окне | `showProgress` | вызов в окне | не вызвана | NOT VERIFIED |
+| REQ-12 единый формат строки | `LINE_RE`, `parseAt`, `parse_progress_line` | самотесты двух языков, общий файл строк | ячейки `AC-26`, `AC-14`; `test-check-task-docs.py` | PASS |
+| REQ-13 строка остановки | `keywordOf`, `stopKind`, состояние 1 | самотест | ячейки `AC-08`, `AC-23`, `AC-26` | PASS |
+| REQ-14 строка запуска | `sessionsOf`, состояния 3 и 4 | самотест | ячейки `AC-07`, `AC-24 S0`, `S4`, `S5` | PASS |
+| REQ-15 запись в Канон | `doc/canon/process.md`, пункт «Журнал хода» | `git diff`, `grep -n`, `check-md-links.py` | `grep -c "Журнал хода"` по diff — 1; `ок: осмотрено 98 ссылок` | PASS |
+| REQ-16 страж формата | `check-task-docs.py`, `guardlib.py added_lines` | самотесты стража, `prove-red`, `run-all` | `итого: 33 проб, упало 0`; `итого: 27 проб, упало 0`; `ок: доказано 1 из 1` | PASS |
+| REQ-17 движение ветки | `progress-scan.ts` (`logs/HEAD`), `stateWord` | самотест на деревьях | ячейки `AC-19` (8) | PASS |
+| REQ-18 пригодность сервису | `progress.ts` без импортов | `grep -n "^import"`, ячейка | ячейки `AC-21`; `grep` — 0 импортов в `progress.ts` | PASS |
+| REQ-19 устойчивость | `try/catch` по журналу и дереву, динамический `import()` | самотест | ячейки `AC-09`, `AC-16` (11), `AC-14` | PASS |
+| REQ-20 документация | раздел README плагина, `doc/tasks/README.md` | `grep -n` по семи заголовкам | `### 1.`…`### 7.`; по одному вхождению четырёх фраз позиции 5 | PASS |
+| REQ-21 самотесты | `crew-progress.test.mjs`, `package.json`, `crew-sidebar` | запуск | 242 ячейки; `grep -c "crew-progress.test.mjs" package.json` — 1; в `crew-sidebar` 2 строки diff | PASS |
+| AC-01 панель идущей задачи | `panelLines` | самотест | ячейки `AC-01` (3) | PASS |
+| AC-02 порог 11 и 9 минут, 20 минут, часы вперёд | `stateOf`, `thresholdsFromEnv` | самотест | ячейки `AC-02` (7) | PASS |
+| AC-03 «готово», пропадание | `isShown` | самотест | ячейки `AC-03` (8) | PASS |
+| AC-04 копии, слияние `ff-only` | `chooseSessions`, настоящие деревья | самотест | ячейки `AC-04` (7) | PASS |
+| AC-05 `≠` и хвосты разных сессий | `chooseSessions` | самотест | ячейки `AC-05` (7) | PASS |
+| AC-06 деревья вне корня, вкладка в дереве, относительные пути | `findRepoRoot`, `listTrees` | самотест | ячейки `AC-06` (5) | PASS |
+| AC-07 запуск, «шагов нет», «без единиц» | `stateOf`, `sessionsOf` | самотест | ячейки `AC-07` (10) | PASS |
+| AC-08 «остановилась: ворота» | `stopKind`, `stateWord` | самотест | ячейки `AC-08` (14) | PASS |
+| AC-09 нет журнала или пуст | `createScanner` | самотест | ячейка `AC-09` | PASS |
+| AC-10 обновление не позже 10 секунд, подставные часы | `WALK_MS`, `SHOW_MS` | самотест | ячейки `AC-10` (2) | PASS |
+| AC-10 снимок настоящего окна до и после | блок в окне | снимок | не снят | NOT VERIFIED |
+| AC-11 бюджеты, процессы, запись | `createScanner`, `scanAll` | измерения в одном прогоне | ячейки `AC-11 а…ж` (19); таблица шага 7 | PASS |
+| AC-12 ширины 32 и 72, 3 задачи, порядок, `13/14 ≠ +1` | `fitRow`, `orderTasks`, `taskRows` | самотест | ячейки `AC-12` (10) | PASS |
+| AC-13 команда, пять имён, `crew-sidebar` (самотест) | `tui.ts`, `dialogText` | самотест, `crew-sidebar.test ok`, `grep -n "crew-progress" tui.ts` | ячейки `AC-13` (8) | PASS |
+| AC-13 вызов в настоящем окне | `showProgress` | вызов | не вызвана | NOT VERIFIED |
+| AC-14 CRLF, мусор, k больше N, время | `parseJournal`, `momentOf` | самотест | ячейки `AC-14` (20) | PASS |
+| AC-15 названия словами | `sessionName`, `taskTitle` | самотест | ячейки `AC-15` (6) | PASS |
+| AC-16 сбои | `try/catch`, динамический `import()` | самотест, `crew-sidebar`, `crew-status` | ячейки `AC-16` (11) | PASS |
+| AC-17 пункт в Каноне (на ветке; в `main` — Г2) | `doc/canon/process.md` | `git diff`, `grep -n`, `check-md-links.py` | строка 88; `ок: осмотрено 98 ссылок` | PASS |
+| AC-18 страж формата | `check-task-docs.py` | самотест, `run-all.sh --ci` | `итого: 33 проб, упало 0`; `ок 7 … FAIL 0` | PASS |
+| AC-19 «ветка Mм» | `branchSignal`, `stateWord` | самотест | ячейки `AC-19` (8) | PASS |
+| AC-20 прежние самотесты как в базе | пять тестов по одному | запуск, `git diff -U0` | 22, 12, 34, 8, 22; 2 строки diff в `crew-sidebar` | PASS |
+| AC-21 импорты модулей, контракт в README | `progress.ts`, `progress-scan.ts` | `grep -n "^import"`, `grep -c ProgressTask` | 0 импортов; `progress-scan.ts` — три; README — 2 строки | PASS |
+| AC-22 семь позиций README | `opencode-plugin/README.md` | `grep -nE '^### [1-7]\. '` | семь заголовков подряд | PASS |
+| AC-23 состояние 7, «готово» при k ≠ N | `stateOf` | самотест | ячейки `AC-23` (12) | PASS |
+| AC-24 выбор копии S0…S6, общее начало | `chooseSessions` | самотест, модель и деревья | ячейки `AC-24 S0…S6` и общее начало (24) | PASS |
+| AC-25 120 показов, настройки не читаются, пороги | `progress-view.ts`, `thresholdsFromEnv` | самотест | ячейки `AC-25` (5); `git diff --stat` по `index.ts` пуст | PASS |
+| AC-26 векторы времени и строки | `LINE_RE`, `TIME_RE`, `progress-vectors.json` | самотесты двух языков | ячейки `AC-26` (44); `vectors` в `test-check-task-docs.py` | PASS |
+| AC-27 журналы по образцу 002 и 003 | `chooseSessions` | самотест | ячейки `AC-27` (6) | PASS |
+| DNC-01 блок «Crew», `/crew`, `status/` не меняются | `status.ts`, `sidebar.tsx` | `git diff --stat`, самотесты | пусто (контроль по `tui.ts` непуст); `crew-status`, `crew-sidebar` зелёные | PASS |
+| DNC-02 только чтение | четыре модуля панели | `grep`, ячейка хешей | `grep` пуст (контроль `status.ts` — 7); ячейки `DNC-02`, `AC-11 ж` | PASS |
+| DNC-03 формат `progress.log`, `profile.log`, `log.md` | форма `run` | ячейка, `git diff` | ячейка `DNC-03`; diff по папкам 001…003 пуст | PASS |
+| DNC-04 методика и сервис на Go не правятся | — | `git diff --name-only` | по задаче 001 пусто; 17 путей раскладки | PASS |
+| DNC-05 нет управления сессиями, токенов, стоимости | — | `grep` | пусто (контроль `index.ts` — 39) | PASS |
+| DNC-06 тесты по одному, сервис не перезапускался | — | журнал запусков | ни одного `npm test`; перезапусков нет | PASS |
+| DNC-07 настройки не меняются | — | `git diff --stat` | `config-schema.ts`, `settings.ts`, `core.ts`, `index.ts` пусто (контроль `package.json` непуст) | PASS |
+| DNC-08 старые журналы не переписываются | — | `git diff`, `numstat` | diff 001…003 пуст; журнал 004: `12 0` | PASS |
+
+## Журнал запусков
+
+Ни одного `npm test`. Тесты запускались по одному с паузой 5 с или одиночно: `crew-progress` (много раз при разработке, три подряд на шаге 7, два на шаге 12), по одному разу пять прежних тестов после шагов 1, 8 и 12; `test-guardlib.py`, `test-check-task-docs.py` и `prove-red.sh --only check-task-docs` — по одному разу после шага 9, `run-all.sh` и `run-all.sh --ci` — несколько раз. Процессы OpenCode не останавливались, не запускались и не перезапускались; службу и настройки не трогали; пробы шли в одноразовых папках и репозиториях во временной папке с префиксом `crew-progress-`. Хуки git работали на каждом коммите, `--no-verify` не применялся.
+
+## Ждёт владельца
+
+Реализация (шаги 1–12) готова и проверена на одноразовых данных. Ворота ниже сессия не выполняет; для каждого нужно слово владельца:
+
+1. Г1, пуш ветки `task-004-progress-panel`: слово «пуш». Перед ним владелец смотрит `git diff main...task-004-progress-panel` (17 файлов вне папки задачи; коммиты — `git log --oneline "$BASE"..HEAD`).
+2. Вопрос перед полным проходом всех 39 самотестов плагина по одному (AG п.9: машина нагружена). Рекомендация: не гнать, затронуты только пять перечисленных тестов и новый, все они зелёные; слово «гони все» запустит полный проход по одному с паузами.
+3. Г2, слияние в `main` через `git merge --ff-only`, слово «вливай». Порядок относительно задачи 003 — РП-01: 003 вливается первой, ветка 004 перед слиянием ребейзится на `main` с 003 (пересечения: `package.json` — обе добавки в `scripts.test`, `test/README.md` — обе строки, `README.md` — оба раздела, `tui.ts` — массив `commands`, `test/crew-sidebar.test.mjs` — список имён, хвосты `progress.log`, `log.md`, `profile.log` объединяются вручную по времени); после ребейза сессия заново прогонит пять тестов, `crew-progress` и `run-all.sh`. Служба не меняется, перезапуск не нужен.
+4. Г3, проверка в живом окне: слово «смотрим в окне» после того, как новое окно откроется на слитом `main`: блок «Ход работ» под «Crew», вызов `/crew-progress`, снимок до и после дописывания строки в одноразовой задаче. Если блок окажется ниже экрана, решение о запасном варианте (строка в `sidebar.footer`) принимает владелец.
+5. Уборка ветки и рабочего дерева после слияния — отдельно, по слову «убирай».
