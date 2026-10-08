@@ -1032,6 +1032,22 @@ procs.n = 0 // the fixtures are built, from here every started process is counte
   cell("AC-13 the registration is in tui.ts", /crew-progress/.test(tuiSrc) && /crewSidebar\?\.finally\(/.test(tuiSrc), "")
 }
 
+{
+  // AC-11 ж, DNC-02: the modules write nothing (a control: status.ts does write); DNC-03: the lines are of the form of the runner
+  const WRITE = /writeFile|appendFile|createWriteStream|copyFile|rename|mkdir|rmSync|unlink|fs[.]promises/
+  const src = (f) => readFileSync(new URL("../" + f, import.meta.url), "utf8")
+  const mine = ["progress.ts", "progress-scan.ts", "progress-view.ts", "progress-sidebar.tsx"]
+  cell("AC-11 ж the four modules of the panel contain no write call (the same pattern finds the writes of status.ts)", mine.every((f) => !WRITE.test(src(f))) && WRITE.test(src("status.ts")), show(mine.filter((f) => WRITE.test(src(f)))))
+  const runForm = /^(\S+) (\d+)\/(\d+) (.*)$/ // the form "<code> <k>/<N> <signature>" of the runner (task-runner.md, machine formats)
+  const samples = ["КОММИТ 0/0 старт", "С1 0/0 [10:05] запуск", "С5 13/14 [10:05] стоп: ворота — ждёт слова владельца", "С5 14/14 готово — итог"]
+  const same = samples.every((s) => {
+    const a = runForm.exec(s)
+    const b = P.parseLine(s)
+    return !!a && !!b && a[1] === b.code && Number(a[2]) === b.k && Number(a[3]) === b.n && a[4] === b.sig
+  })
+  cell("DNC-03 the launch, start, stop and done lines are read by the runner's form <code> <k>/<N> <signature> as by the panel", same, "")
+}
+
 // ==== END OF CELLS ====
 try {
   rmSync(tmp, { recursive: true, force: true })
