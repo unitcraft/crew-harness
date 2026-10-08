@@ -10,7 +10,7 @@
 
 import { spawn, execFileSync } from "node:child_process"
 import { holdsMergeLock, isMerged, mergeHolder, releaseMergeLock, repoDir, takeMergeLock } from "./review.ts"
-import { type PrecheckRecord, type Task, loadTask, rounds, taskEvent, taskRef } from "./tasks.ts"
+import { type PrecheckRecord, type Task, acceptedAt, isOpen, listTasks, loadTask, rounds, taskEvent, taskRef } from "./tasks.ts"
 
 /** срок чтения вершины на origin, мс */
 export const TIP_TIMEOUT_MS = 20_000
@@ -125,8 +125,43 @@ const hm = (at: number) => {
 export const roundOf = (t: Task) => rounds(t) + t.attempt
 /** Запись действует (не устарела). */
 export const isLive = (rec?: PrecheckRecord): rec is PrecheckRecord => !!rec && rec.state !== "stale"
-/** Подсказки о соседних задачах проекта — по шагу 9; здесь заготовка, возвращающая пустую строку. */
-export function neighbourHints(_t: Task, _kind: "running" | "moved"): string {
+/**
+ * Подсказки о соседних задачах проекта; только чтение журнала задач, ничего не хранится и не резервируется.
+ * running — какие другие открытые задачи сейчас с записью «идёт» или «зелёная» (номер, на какой вершине, с какого времени);
+ * moved — какие задачи проекта приняты после времени зелёной предпроверки этой задачи (из журнала, без git).
+ * Возвращает строку, начинающуюся с пробела, или пустую.
+ */
+export function neighbourHints(t: Task, kind: "running" | "moved"): string {
+  let all: Task[] = []
+  try {
+    all = listTasks(t.project).filter((x) => x.n !== t.n)
+  } catch {
+    return ""
+  }
+  if (kind === "running") {
+    const busy = all.filter((x) => isOpen(x) && isLive(x.precheck) && x.status === "reviewing")
+    if (!busy.length) return ""
+    return ` Параллельно идут: ${busy.map((x) => `#${x.n} (${x.precheck!.state === "green" ? "зелёная" : "идёт"} на ${short(x.precheck!.base)} с ${hm(x.precheck!.state === "green" ? (x.precheck!.green_at ?? x.precheck!.at) : x.precheck!.at)})`).join(", ")}.`
+  }
+  const since = t.precheck?.green_at ?? t.precheck?.at ?? 0
+  const landed = all.filter((x) => (x.status === "accepted" || x.status === "cleaned") && acceptedAt(x) > since)
+  if (!landed.length) return ""
+  return ` После зелёной приняты: ${landed.map((x) => `#${x.n} (${hm(acceptedAt(x))})`).join(", ")}.`
+}
+
+/**
+ * Предупреждение `accept` (REQ-13): запись зелёная, а проверенный кандидат не входит в принимаемую вершину целевой ветки — влито
+ * не то, что проверялось. Не отказ: при squash и перебазировании кандидат предком не будет. Пустая строка — предупреждать не о чем.
+ */
+export function acceptWarning(t: Task, target: string, head?: string): string {
+  const rec = t.precheck
+  if (!rec || rec.state !== "green" || !rec.candidate) return ""
+  const dir = repoDir(t)
+  const tip = acceptedTip(t, target, head)
+  if (!tip) return ""
+  if (!resolveCommit(dir, rec.candidate)) return ` Внимание: кандидата предпроверки ${short(rec.candidate)} в локальном репозитории нет — сверить, что влито именно проверенное, нельзя.`
+  const r = runGit(dir, ["merge-base", "--is-ancestor", rec.candidate, tip], 10_000)
+  if (r.code === 1) return ` Внимание: влито не то, что проверялось: кандидат предпроверки ${short(rec.candidate)} не входит в ${target} (${short(tip)}). Это предупреждение, не отказ (при squash и перебазировании так бывает); сверь содержимое.`
   return ""
 }
 

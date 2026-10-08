@@ -18,7 +18,7 @@ import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
 import { DEFAULT_FORM, PLAN_ACCEPTANCE, PLAN_MERGE_ACCEPTANCE, type PlanForm, allSteps, nextPlanNumber, parsePlan, planProblems, planTemplate, roundRules } from "./plans.ts"
 import { type Task, type TaskPlan, WORKING_STATUSES, taskRef, slugify, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { countedOpen, waitingCleanup } from "./tasks.ts"
-import { acceptedTip, beginPrecheck, finishPrecheck, gateMerge, markPrecheckStale, unlockMerge } from "./precheck.ts"
+import { acceptWarning, acceptedTip, beginPrecheck, finishPrecheck, gateMerge, markPrecheckStale, neighbourHints, unlockMerge } from "./precheck.ts"
 import { cleanupDone, cleanupSteps, fileAt, holdsMergeLock, isMerged, mergeHolder, releaseMergeLock, reworkLetter, takeMergeLock } from "./review.ts"
 import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, timerSpec, watchesOf } from "./watch.ts"
 import { watchRefusal } from "./deny.ts"
@@ -1818,6 +1818,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           t.boundaries ? `границы: ${t.boundaries}` : "",
           t.open_questions ? `открытые вопросы: ${t.open_questions}` : "",
           extraBlock(t),
+          t.precheck && t.precheck.state !== "stale" ? neighbourHints(t, "running").trim() : "",
           t.executors.length ? `прежние исполнители: ${t.executors.join(", ")}` : "",
           t.reviewer ? `приёмщик: ${t.reviewer}${t.review_kind ? ` (${t.review_kind === "tab" ? "открытая вкладка" : t.review_kind === "spawn" ? "сессия под приёмку" : "интегратор"})` : ""}${t.rework ? `, кругов доработки: ${t.rework}` : ""}` : "",
           t.report ? `отчёт исполнителя: ${t.report.slice(0, 500)}` : "",
@@ -2013,6 +2014,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           const commit = String(input.commit ?? "").trim() || undefined
           const m = isMerged(t, tcfg.targetBranch, commit)
           if (!m.ok) return { content: `Не принято: ${m.how}. Влей и запушь, затем снова accept.` }
+          const warn = tcfg.mergePrecheck === "required" ? acceptWarning(t, tcfg.targetBranch, m.head) : "" // REQ-13: влито не то, что проверялось
           // шаг плана (план 004): в целевой ветке у шага — отметка «✅ СДЕЛАНО»
           if (t.plan_step) {
             const ps = t.plan_step
@@ -2046,14 +2048,15 @@ export function makeTools(host: CrewHost): CrewTool[] {
               taskEvent(t, me.session, undefined, `принята на ${onTip.slice(0, 7)}`)
             }
           }
+          if (warn) taskEvent(t, me.session, undefined, `предупреждение: ${warn.trim()}`)
           try {
             releaseTaskWindow(t.project, t) // файл окон профиля из дерева принятой задачи снят (задача 003, REQ-22)
           } catch (e) {
             log(`window file release of #${t.n} failed: ${e}`)
           }
           const steps = cleanupSteps(t, tcfg)
-          if (!steps.length) return { content: finishCleaned(t, me, "очистка не нужна (cleanup: none)") }
-          return { content: `Задача ${taskRef(t)} принята (${m.how}). Очистка по настройке проекта (cleanup: ${tcfg.cleanup}):\n${steps.map((x) => `  ${x}`).join("\n")}\nСделал — crew_task {action: "cleaned", n: ${t.n}}.` }
+          if (!steps.length) return { content: finishCleaned(t, me, "очистка не нужна (cleanup: none)") + warn }
+          return { content: `Задача ${taskRef(t)} принята (${m.how}). Очистка по настройке проекта (cleanup: ${tcfg.cleanup}):\n${steps.map((x) => `  ${x}`).join("\n")}\nСделал — crew_task {action: "cleaned", n: ${t.n}}.${warn}` }
         }
         // cleaned
         if (t.status !== "accepted") return { content: `Очистка — после принятия (сейчас ${statusRu(t.status)}).` }
