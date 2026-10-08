@@ -347,3 +347,11 @@ export function tabFitsCell(cell: Cell | undefined, tabModel: string | undefined
   if (!cell || cell.tier === "task") return true
   return familyOfModel(tabModel, profiles) === cell.family
 }
+
+/** Клетка этапа в наборе, по которому идут сессии (действующие данные или снимок); undefined — набора или клетки нет. */
+export function cellOfState(state: State | undefined, stage: Stage): Cell | undefined {
+  const u = state && state.row !== 6 ? state.usable : undefined
+  const set = u ? u.data.sets?.[u.name] : undefined
+  const cell: any = isObj(set) ? (set as any)[stage] : undefined
+  return isObj(cell) && typeof cell.family === "string" && isCellTier(cell.tier) ? (cell as Cell) : undefined
+}

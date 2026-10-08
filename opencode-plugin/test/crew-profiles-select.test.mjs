@@ -14,6 +14,7 @@ process.env.CREW_HARNESS_DB = path.join(tmp, "absent.db")
 process.env.CREW_HARNESS_SETTINGS_TTL_MS = "1"
 process.env.CREW_HARNESS_PRESENCE = "all"
 process.env.CREW_HARNESS_PROFILES_MS = "150"
+process.env.CREW_HARNESS_PLANSTEPS_MS = "200"
 delete process.env.CREW_HARNESS_STATUS_MS
 
 const prof = (model, context, output, input) => ({ model, context, output, ...(input ? { input } : {}) })
@@ -240,6 +241,237 @@ use("default")
 const withDefault = await matrix()
 cell("AC-38 default (claude profiles equal spawn_models): every row of the matrix gives the same call as without keys", noSet.join("|") === withDefault.join("|") && noSet.length === 8, noSet.join("|") + " ## " + withDefault.join("|"))
 use(undefined)
+
+// =====================================================================================================================
+// Part 2: the reviewer, the open tabs, the auto-plan steps (step 7 of the plan)
+// =====================================================================================================================
+delete process.env.CREW_HARNESS_PRESENCE // from now on a tab is open only if a window beat lists it
+const WPID = 616161
+mkdirSync(core.WINDOWS, { recursive: true })
+const tabsNow = []
+const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now(), tabs: tabsNow }))
+const heart = setInterval(beat, 300)
+const openTab = async (sid, role, model, dir = proj) => {
+  dirOf.set(sid, dir)
+  if (!tabsNow.some((t) => t.sessionID === sid)) tabsNow.push({ sessionID: sid, active: false, busy: false })
+  beat()
+  await hooks["model.request"]({ sessionID: sid, kind: "primary", model })
+  await call("crew_role", sid, { role })
+}
+const closeTab = (sid) => {
+  const i = tabsNow.findIndex((t) => t.sessionID === sid)
+  if (i >= 0) tabsNow.splice(i, 1)
+  beat()
+}
+const CLAUDE = { providerID: "claude-code", id: "sonnet" }
+const KIMI = { providerID: "kimi-code-plan-global", id: "k3-256k" }
+const CODEX = { providerID: "openai", id: "gpt-5.5", variant: "high" }
+const FAST = { providerID: "openai", id: "gpt-5.5-fast" }
+const LUNA = { providerID: "openai", id: "gpt-6-luna" }
+tabsNow.push({ sessionID: "sesINTEG", active: true, busy: false })
+beat()
+// submit a task: the executor reports; the pass hands it to a reviewer
+const submit = async (input = {}) => {
+  await spawn("sesINTEG", input)
+  const t = lastTask("proj")
+  await call("crew_send", t.executor, { to: "sesINTEG", text: "done", reply_to: t.qid })
+  await until(() => task("proj", t.n).status === "submitted" || task("proj", t.n).reviewer, 5000)
+  return t.n
+}
+const reviewed = async (n, ms = 12_000) => {
+  await until(() => !!task("proj", n).reviewer, ms)
+  await wait(400)
+  return task("proj", n)
+}
+const reviewerLetterTo = (sid) => delivered.filter((d) => d.sessionID === sid && /приёмк|review/i.test(d.text)).map((d) => d.text)
+
+// ---- AC-03 / AC-04: cross-kimi with a Claude tab open: not taken, a new session on Kimi in the main folder ----
+await openTab("sesCLAUDE", "worker", CLAUDE)
+use("cross-kimi")
+const nA = await submit({ tier: "heavy" })
+const tA = await reviewed(nA)
+cell("AC-04 a free tab of another family is not the reviewer when the cell has an explicit tier", tA.reviewer !== "sesCLAUDE" && tA.review_kind === "spawn", JSON.stringify([tA.reviewer, tA.review_kind]))
+cell("AC-03 the reviewer is a new session on the Kimi model, in the main folder; the executor stays on Claude", modelOf(tA.reviewer) === "kimi-code-plan-global/k3-256k" && sessions.get(tA.reviewer)?.location?.directory === proj && modelOf(tA.executor) === "claude-code/opus", JSON.stringify([modelOf(tA.reviewer), sessions.get(tA.reviewer)?.location, modelOf(tA.executor)]))
+cell("AC-03/AC-17 the record keeps the reviewer launch: stage accept, set, family kimi, tier heavy, model; the window is general", tA.review_model === "kimi-code-plan-global/k3-256k" && tA.profiles?.at(-1)?.role === "reviewer" && tA.profiles.at(-1).stage === "accept" && tA.profiles.at(-1).set === "cross-kimi" && tA.profiles.at(-1).family === "kimi" && tA.profiles.at(-1).tier === "heavy" && tA.profiles.at(-1).window === "general" && tA.profiles.at(-1).session === tA.reviewer, JSON.stringify(tA.profiles))
+cell("AC-14 the letter of the review does not ask for anything only Claude Code has", reviewerLetterTo(tA.reviewer).length > 0 && reviewerLetterTo(tA.reviewer).every((t) => !/SendMessage|run_in_background|ScheduleWakeup|TodoWrite|Monitor\b/.test(t) && /crew_task/.test(t)), reviewerLetterTo(tA.reviewer).join("|").slice(0, 300))
+// a tab of the right family is taken
+await openTab("sesKIMI", "worker", KIMI)
+const nB = await submit({})
+const tB = await reviewed(nB)
+cell("AC-04 an open tab of the family of the cell is the reviewer (no new session)", tB.reviewer === "sesKIMI" && tB.review_kind === "tab" && !sessions.has("sesKIMI"), JSON.stringify([tB.reviewer, tB.review_kind]))
+
+// ---- cross-codex: the variant after # is dropped, gpt-5.5-fast is another model, another tier of the family fits ----
+use("cross-codex")
+await openTab("sesFAST", "worker", FAST)
+await openTab("sesCODEX", "worker", CODEX)
+const nC = await submit({})
+const tC = await reviewed(nC)
+cell("AC-04 openai/gpt-5.5#high fits the profile openai/gpt-5.5, openai/gpt-5.5-fast does not", tC.reviewer === "sesCODEX" && tC.review_kind === "tab", JSON.stringify([tC.reviewer, tC.review_kind]))
+await openTab("sesLUNA", "worker", LUNA)
+const nD = await submit({})
+const tD = await reviewed(nD)
+cell("AC-04 a tab on another tier of the same family (gpt-6-luna under codex/heavy) is taken", tD.reviewer === "sesLUNA" && tD.review_kind === "tab", JSON.stringify([tD.reviewer, tD.review_kind]))
+const nE = await submit({})
+const tE = await reviewed(nE)
+cell("AC-04 only tabs of other families (Claude, gpt-5.5-fast) are left: a new session on the model of the cell, in the main folder", tE.review_kind === "spawn" && modelOf(tE.reviewer) === "openai/gpt-5.5" && sessions.get(tE.reviewer)?.location?.directory === proj, JSON.stringify([tE.review_kind, modelOf(tE.reviewer)]))
+
+// ---- AC-38 / DNC-09: default: the cell is `task` -> tabs of Kimi and Codex are taken as without a set ----
+for (const sid of ["sesCLAUDE", "sesFAST", "sesCODEX", "sesLUNA", "sesKIMI"]) closeTab(sid)
+await openTab("sesKIMI2", "worker", KIMI)
+use("default")
+const nF = await submit({})
+const tF = await reviewed(nF)
+cell("AC-38 with default (accept claude/task) an open Kimi tab is the reviewer, as without a set", tF.reviewer === "sesKIMI2" && tF.review_kind === "tab", JSON.stringify([tF.reviewer, tF.review_kind]))
+cell("AC-38 and the matching reviewer launch has no model chosen by the set", !tF.review_model, String(tF.review_model))
+closeTab("sesKIMI2")
+
+// ---- AC-06(а): the stage is not described -> spawn_models of the task tier, as before ----
+use("dev-only")
+const nG = await submit({ tier: "heavy" })
+const tG = await reviewed(nG)
+cell("AC-06(а) the set does not describe accept: the reviewer is a new session on spawn_models of the tier of the task (opus), no model chosen by the set", tG.review_kind === "spawn" && modelOf(tG.reviewer) === "claude-code/opus" && !tG.review_model, JSON.stringify([tG.review_kind, modelOf(tG.reviewer), tG.review_model]))
+
+// ---- AC-05: a plan task: the stage plan for the executor, plan_accept for every round, a new session each round ----
+use("cross-kimi")
+await spawn("sesINTEG", { kind: "plan", goal: "the original", title: "a plan" })
+const pt = lastTask("proj")
+cell("AC-05 a plan task runs on the stage `plan` (claude/task: sonnet), the stamp says plan", modelOf(pt.executor) === "claude-code/sonnet" && pt.profiles[0].stage === "plan", JSON.stringify(pt.profiles))
+tasks.taskEvent(pt, "test", "submitted", "plan submitted")
+const ptR1 = await reviewed(pt.n)
+cell("AC-05 the first round: a new session on the model of plan_accept (kimi/heavy)", modelOf(ptR1.reviewer) === "kimi-code-plan-global/k3-256k" && ptR1.profiles.at(-1).stage === "plan_accept", JSON.stringify(ptR1.profiles.at(-1)))
+{
+  // what a round with remarks does: the reviewer leaves, the plan goes back and is submitted again
+  const t = task("proj", pt.n)
+  t.reviewers = [...(t.reviewers ?? []), t.reviewer]
+  delete t.reviewer
+  delete t.review_kind
+  t.status = "submitted"
+  tasks.saveTask(t)
+}
+const ptR2 = await reviewed(pt.n)
+cell("AC-05 the next round is a NEW session, again on the model of plan_accept", ptR2.reviewer !== ptR1.reviewer && modelOf(ptR2.reviewer) === "kimi-code-plan-global/k3-256k" && ptR2.profiles.filter((p) => p.role === "reviewer").length === 2, JSON.stringify(ptR2.profiles.map((p) => [p.role, p.stage, p.session])))
+
+// ---- auto-plan steps: the develop stage of the set, its tier; without a set medium ----
+const planText = [
+  "# План 8 — длина фрагмента", "", "**Статус:** 🔴 ОТКРЫТ", "**Источник:** задача #1", "**Зависимости:** —", "",
+  "## Зачем", "0 на 3 фикстурах из 12", "## Что уже есть", "одна функция", "## Режим выполнения", "Без упрощений: ДА — 2026-10-08",
+  "## Фазы", "### Ф.1 — длина [P1]", "#### Ф.1.1 — лексер [где: lex.nv]", "Что: длина из склеенного текста", "**Приёмка:**", "- ⬜ nova test lex → 12/12",
+  "## Не делаем", "оракул", "## Открытые вопросы", "Открытых вопросов нет", "## Решения владельца",
+].join("\n")
+// the plan file is committed in the repository of proj (the steps read it from the target branch)
+{
+  const git = (await import("node:child_process")).execFileSync
+  const g = (...a) => git("git", ["-C", proj, "-c", "user.name=t", "-c", "user.email=t@t", ...a], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
+  g("init", "-q", "-b", "main")
+  mkdirSync(path.join(proj, "docs", "plans"), { recursive: true })
+  writeFileSync(path.join(proj, "docs", "plans", "8-dlina.md"), planText)
+  g("add", "docs")
+  g("commit", "-q", "-m", "plan 8")
+}
+const stepsOf = (planTask) => tasks.listTasks("proj").filter((x) => x.plan_step?.task === planTask)
+const mkPlanTask = () =>
+  tasks.createTask({
+    project: "proj", title: "план 8: длина", goal: "g", criteria: "c", priority: "P2", tier: "medium", role: "worker", author: "sesINTEG", author_role: "proj.integrator", qid: `qplan${Math.random().toString(36).slice(2, 8)}`,
+    status: "cleaned", kind: "spawn", directory: proj,
+    plan: { n: "8", file: "docs/plans/8-dlina.md", source: "s", rounds: [], clean: 2, approval: { decision: "ok", at: Date.now() } },
+  })
+use("kimi-only")
+const ptA = mkPlanTask()
+await until(() => stepsOf(ptA.n).length > 0, 15_000)
+const stA = stepsOf(ptA.n)[0]
+cell("AC-05 auto-plan steps start on the develop stage of the set and its tier (kimi-only: k3, heavy), not on a hard medium", !!stA && stA.model === "kimi-code-plan-global/k3-256k" && stA.tier === "heavy" && stA.profiles?.[0]?.stage === "develop", JSON.stringify(stA && [stA.model, stA.tier, stA.profiles]))
+use(undefined)
+const ptB = mkPlanTask()
+await until(() => stepsOf(ptB.n).length > 0, 15_000)
+const stB = stepsOf(ptB.n)[0]
+cell("AC-05 without a set a step runs on spawn_models medium, as before", !!stB && stB.model === "claude-code/sonnet" && stB.tier === "medium" && !stB.profiles, JSON.stringify(stB && [stB.model, stB.tier]))
+use("default")
+const ptC = mkPlanTask()
+await until(() => stepsOf(ptC.n).length > 0, 15_000)
+const stC = stepsOf(ptC.n)[0]
+cell("AC-38 default: a step on claude medium, the same as without a set", !!stC && stC.model === "claude-code/sonnet" && stC.tier === "medium", JSON.stringify(stC && [stC.model, stC.tier]))
+
+// ---- AC-06(б): the profile of a described stage is not found -> no reviewer, one letter, a line in the doctor; (в) by the snapshot ----
+use("cross-kimi")
+const snapName = () => {
+  try {
+    return JSON.parse(readFileSync(L.snapshotFile("proj"), "utf8")).name
+  } catch {
+    return undefined
+  }
+}
+await until(() => snapName() === "cross-kimi", 8000)
+{
+  const f = JSON.parse(readFileSync(path.join(proj, ".opencode", "crew-harness.json"), "utf8"))
+  delete f.model_profiles.kimi
+  writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify(f))
+  await until(() => L.profileState(proj).state.row === 3, 5000)
+  const nH = await submit({})
+  const tH = await reviewed(nH)
+  cell("AC-06(в) invalid data with a snapshot: the reviewer is started by the snapshot (kimi) and the history says so", modelOf(tH.reviewer) === "kimi-code-plan-global/k3-256k" && tH.history.some((h) => /по снимку/.test(h.note ?? "")), JSON.stringify([modelOf(tH.reviewer), tH.profiles?.at(-1)]))
+  L.dropSnapshot("proj")
+  await wait(400)
+  const nI = await submit({})
+  await wait(2500)
+  const tI = task("proj", nI)
+  const refusedLetters = () => delivered.filter((d) => d.sessionID === "sesINTEG" && /приёмщик не назначен/.test(d.text)).length
+  cell("AC-06(б) no snapshot, the profile is not found: the task stays «submitted» with no reviewer, no session is created for it", tI.status === "submitted" && !tI.reviewer && !tI.review_kind, JSON.stringify([tI.status, tI.reviewer]))
+  await until(() => refusedLetters() >= 1, 8000)
+  const l1 = refusedLetters()
+  await wait(2500)
+  cell("AC-06(б) one letter to the integrator with the reason; the repeated passes add no new letter", l1 === 1 && refusedLetters() === 1, String(l1) + "/" + refusedLetters())
+  const doc = await call("crew_doctor", "sesINTEG")
+  cell("AC-06(б) crew_doctor has the line: submitted, no reviewer, with the reason", new RegExp(`задача #${nI} .*сдана, приёмщика нет`).test(doc), doc.slice(0, 400))
+  f.model_profiles.kimi = TABLE.kimi
+  writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify(f))
+  const tI2 = await reviewed(nI, 15_000)
+  cell("AC-06(б) the data is repaired: the reviewer is assigned by itself on the next pass, on the model of the set", !!tI2.reviewer && modelOf(tI2.reviewer) === "kimi-code-plan-global/k3-256k", JSON.stringify([tI2.reviewer, tI2.status]))
+}
+use(undefined)
+
+// ---- DNC-09: the integrator as the reviewer is not a stage of the set; no model switch; an unknown stage is ignored ----
+{
+  // reviewer: integrator is written into the file of proj
+  const f = JSON.parse(readFileSync(path.join(proj, ".opencode", "crew-harness.json"), "utf8"))
+  f.reviewer = "integrator"
+  f.profile_sets["with-extra"] = { ...SETS["cross-kimi"], coordination: c("claude", "heavy") }
+  writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify(f))
+  use("with-extra")
+  const before = creates.length
+  const nJ = await submit({})
+  const tJ = await reviewed(nJ, 8000)
+  cell("DNC-09 reviewer: integrator -> the reviewer is the integrator tab, the set does not choose a model, no review session is created", tJ.reviewer === "sesINTEG" && tJ.review_kind === "integrator" && !tJ.review_model && creates.length === before + 1 /* only the executor */, JSON.stringify([tJ.reviewer, tJ.review_kind, creates.length - before]))
+  cell("DNC-09 the plugin never calls session.switchModel (no such call in the host stub either)", typeof ctx.session.switchModel === "undefined", "present")
+  cell("DNC-09 a set with an unknown stage (coordination) is read, the stage is ignored, the set is valid", L.profileState(proj).state.row === 2 && L.profileState(proj).data.sets["with-extra"].coordination !== undefined, String(L.profileState(proj).state.row))
+  f.reviewer = "worker"
+  delete f.profile_sets["with-extra"]
+  writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify(f))
+}
+use(undefined)
+
+// ---- DNC-08: the role acceptor and the limits are not changed by a set ----
+{
+  const f = JSON.parse(readFileSync(path.join(proj, ".opencode", "crew-harness.json"), "utf8"))
+  // the earlier tasks hold review places: cancel every open task of the project first
+  for (const t of tasks.listTasks("proj").filter(tasks.isOpen)) await call("crew_task", "sesINTEG", { action: "cancel", n: t.n })
+  f.reviewer = "acceptor"
+  f.spawn_limits = { ...f.spawn_limits, acceptor: 1 }
+  writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify(f))
+  use("cross-kimi")
+  const nK = await submit({})
+  const tK = await reviewed(nK)
+  const cardK = core.allCards().find((x) => x.session === tK.reviewer)
+  cell("DNC-08 reviewer: acceptor with a set: the review session is born with the role acceptor on the model of the set", cardK?.role === "acceptor" && modelOf(tK.reviewer) === "kimi-code-plan-global/k3-256k", JSON.stringify([cardK?.role, modelOf(tK.reviewer)]))
+  const nL = await submit({})
+  await wait(2500)
+  cell("DNC-08 the limit spawn_limits.acceptor still holds: the second review waits", !task("proj", nL).reviewer, JSON.stringify(task("proj", nL).reviewer))
+  const merge = await call("crew_task", tK.executor, { action: "merge", n: nK })
+  cell("DNC-08 merge stays with the reviewer (role acceptor): the executor of the task does not get the merge lock", !/Замок вливания .* твой/.test(String(merge)), String(merge).slice(0, 200))
+  f.reviewer = "worker"
+  writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify(f))
+}
+use(undefined)
+clearInterval(heart)
 
 stop?.()
 rmSync(tmp, { recursive: true, force: true })

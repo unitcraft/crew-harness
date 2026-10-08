@@ -17,6 +17,7 @@ import { BASE } from "./paths.ts"
 import { projectFor, rawSettingsFor, workingSettings, writeSettings } from "./settings.ts"
 import { log, projectOf, settingsContext } from "./core.ts"
 import * as P from "./profiles.ts"
+import { listTasks } from "./tasks.ts"
 
 const isObj = (v: any): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v)
 const clone = <T>(v: T): T => (v === undefined ? v : JSON.parse(JSON.stringify(v)))
@@ -438,7 +439,14 @@ export function profileProblems(): string[] {
     const dir0 = p.dir ?? p.rootPath
     if (!dir0) continue
     try {
-      out.push(...problemsOf(profileState(dir0)))
+      const ps = profileState(dir0)
+      out.push(...problemsOf(ps))
+      // сданные задачи, которым приёмщика не нашли из-за набора (REQ-15): причина — в самопроверке
+      for (const t of listTasks(ps.project)) {
+        if (t.status !== "submitted" || t.reviewer) continue
+        const r = P.resolveStageProfile(ps.state, P.stageOfLaunch(t, "reviewer"), { taskTier: t.tier })
+        if (r && "refuse" in r) out.push(`проект ${ps.project}: задача #${t.n} «${t.title}»: сдана, приёмщика нет — ${r.refuse}`)
+      }
     } catch (e) {
       log(`profile problems of ${p.name} failed: ${e}`)
     }

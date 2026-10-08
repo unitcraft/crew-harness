@@ -108,6 +108,7 @@ import {
   postExpected,
   propagateToParent,
   PLUGIN_SENDER,
+  stampProfile,
 } from "./core.ts"
 import { DECISION_RU, readApprovals, removeApproval } from "./approvals.ts"
 import { sweepRead } from "./housekeeping.ts"
@@ -117,6 +118,7 @@ import { endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } fr
 import { type Task, taskRef, acceptedAt, ago, byPriority, createTask, rounds, slugify, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
 import { createRemoteBridge } from "./remote.ts"
 import { profileProblems, profileState, stateSignature, syncSnapshot } from "./profile-layer.ts"
+import { cellOfState, resolveStageProfile, stageOfLaunch, tabFitsCell } from "./profiles.ts"
 import { ensureWorktree, fileAt, gitTraces, leftoversOf, mergeHolder, reviewLetter } from "./review.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
@@ -561,7 +563,7 @@ export default {
         const t = loadTask(t0.project, t0.n) ?? t0
         if (!t.reviewer || t.review_kind !== "spawn" || readJson<Card>(cardFile(t.reviewer))) return
         const cfg = loadConfig(t.directory)
-        const model = cfg.spawnModels[t.tier] ?? DEFAULT_SPAWN_MODELS[t.tier]
+        const model = t.review_model ?? cfg.spawnModels[t.tier] ?? DEFAULT_SPAWN_MODELS[t.tier]
         const [providerID, ...rest] = model.split("/")
         await ctx.session.create({ id: t.reviewer, title: `#${t.n} приёмка ${t.title}`, location: { directory: t.directory }, metadata: { crewReview: { project: t.project, n: t.n } }, model: { providerID, id: rest.join("/") } })
         const now = Date.now()
@@ -569,6 +571,9 @@ export default {
         const card: Card = { session: t.reviewer, role: reviewerRole(cfg), auto: false, title: `#${t.n} приёмка ${t.title}`, directory: t.directory, repo: repoLabel(t.directory), project: t.project, model, modelAt: now, modelFrom: "request", pid: process.pid, updated: now, spawned: { by: t.author, task: `приёмка #${t.n}`, tier: t.tier, status: "running", at: now, qid: t.review_qid ?? "" }, review: { project: t.project, n: t.n } }
         saveCard(card)
         mine.set(card.session, card)
+        // след профиля приёмки (задача 003): набор, этап, семья, ступень; окно у приёмки — общие настройки (general)
+        const rch = t.review_model ? resolveStageProfile(profileState(t.directory).state, stageOfLaunch(t, "reviewer"), { taskTier: t.tier }) : undefined
+        if (rch && !("refuse" in rch) && rch.model === model) stampProfile(t, "reviewer", t.reviewer, rch, false)
         await reviewerAssigned(t, card)
         log(`task #${t.n} (${t.project}): reviewer session ${t.reviewer} started`)
       } catch (e) {
@@ -644,9 +649,25 @@ export default {
           }
           continue
         }
+        // ПРОФИЛЬ ПРИЁМКИ ПО ВКЛЮЧЁННОМУ НАБОРУ (задача 003). Ветка reviewer: integrator выше от набора не зависит. Этап описан, а
+        // профиль не находится — приёмщика нет: задача остаётся «сдана», интегратору одно письмо (постоянный id), строка в crew_doctor.
+        const pstate = profileState(t.directory).state
+        const rstage = stageOfLaunch(t, "reviewer")
+        const chosen = resolveStageProfile(pstate, rstage, { taskTier: t.tier })
+        if (chosen && "refuse" in chosen) {
+          const id = `review-refused-${safeKey(t.project)}-${t.n}-${safeKey(chosen.refuse).slice(0, 60)}`
+          if (!letterExists(t.author, id)) {
+            postLetter(t.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: now(), text: `Задача ${taskRef(t)} сдана, но приёмщик не назначен: ${chosen.refuse}. Исправь профили или переключи набор (/crew-sets, /crew-profiles); приёмщик назначится сам.` })
+            taskEvent(t, PLUGIN_SENDER, undefined, `приёмщик не назначен: ${chosen.refuse}`)
+          }
+          continue
+        }
+        const rcell = cellOfState(pstate, rstage)
+        const rprofiles = pstate.usable?.data.profiles
         const tab = allCards().find(
           (c) =>
             !c.spawned &&
+            tabFitsCell(rcell, c.model, rprofiles) && // явная ступень клетки — только вкладка семьи клетки (REQ-07)
             (c.project ?? projectOf(c.directory, projects)) === t.project &&
             normalizeRole(c.role) === reviewerRole(cfg) &&
             c.session !== t.executor &&
@@ -670,6 +691,8 @@ export default {
         // незакрытая задача новую» методологии: ждём чужого хода — не блокирует). Досданную будит прежний приёмщик сразу.
         const reviewing = listTasks(t.project).filter((x) => isOpen(x) && x.review_kind === "spawn" && x.reviewer && x.status !== "accepted" && x.status !== "rework").length
         if (t.priority !== "P0" && reviewing >= limit) continue // ждёт: приёмщиков-сессий уже limit
+        if (chosen) t.review_model = chosen.model
+        else delete t.review_model
         t.reviewer = plannedSessionId()
         t.review_kind = "spawn"
         taskEvent(t, PLUGIN_SENDER, undefined, `приёмщик — новая сессия ${t.reviewer}`)
@@ -863,6 +886,13 @@ export default {
           pt.plan.total = steps.length // для /crew: «шаги закрыто/всего»
           saveTask(pt)
         }
+        // модель шагов — этап разработки набора (задача 003): отказ — шаги в этот проход не ставятся, автору одно письмо
+        const stepChoice = resolveStageProfile(profileState(pt.directory).state, "develop", { autoPlan: true })
+        if (stepChoice && "refuse" in stepChoice) {
+          const rid = `plan-steps-refused-${safeKey(pt.project)}-${pt.n}-${safeKey(stepChoice.refuse).slice(0, 60)}`
+          if (!letterExists(pt.author, rid)) postLetter(pt.author, { id: rid, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: pt.author, time: now(), text: `План ${pt.plan.n}: шаги не ставятся — ${stepChoice.refuse}. Исправь профили или переключи набор (/crew-sets, /crew-profiles); шаги встанут сами.` })
+          continue
+        }
         const taskOf = (id: string) => (pt.plan!.spawned![id] ? loadTask(pt.project, pt.plan!.spawned![id]) : undefined)
         const done = (id: string) => !!steps.find((s) => s.id === id)?.done || ["cleaned", "closed"].includes(taskOf(id)?.status ?? "")
         const running = steps.filter((s) => isOpen(taskOf(s.id)))
@@ -880,10 +910,10 @@ export default {
           const p = prio(s)
           if (p !== "P0" && (open.length >= cfg.inflightLimit || workers.length >= (cfg.spawnLimits[DEFAULT_ROLE] ?? cfg.spawnLimits["*"] ?? 3))) break // лимиты — ждать
           const boundaries = [plan.bodies["Не делаем"]?.trim(), `Режим выполнения: ${pt.plan.approval.decision === "ok" ? "без упрощений — ни заглушек, ни TODO, ни «временно»" : "упрощения — только перечисленные в плане"}.`].filter(Boolean).join("\n")
-          const model = cfg.spawnModels.medium ?? DEFAULT_SPAWN_MODELS.medium
+          const model = stepChoice ? stepChoice.model : (cfg.spawnModels.medium ?? DEFAULT_SPAWN_MODELS.medium)
           const base = {
             project: pt.project, goal: s.subplan ? `${s.what}\n(подплан шага ${s.id} плана ${pt.plan.n})` : s.what, criteria: s.criteria.join("\n"), boundaries,
-            priority: p, tier: "medium" as const, role: DEFAULT_ROLE, model, author: pt.author, author_role: pt.author_role, qid: `q${now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+            priority: p, tier: (stepChoice ? stepChoice.tier : "medium") as "heavy" | "medium" | "light", role: DEFAULT_ROLE, model, author: pt.author, author_role: pt.author_role, qid: `q${now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
             status: "starting" as const, kind: "spawn" as const, executor: plannedSessionId(), directory: pt.directory,
             plan_step: { project: pt.project, task: pt.n, plan: pt.plan.n, step: s.id, file: pt.plan.file },
           }
@@ -896,6 +926,7 @@ export default {
             const n = nextPlanNumber(names, listTasks(pt.project).filter((x) => x.plan).map((x) => x.plan!.n), pt.plan.n)
             t = createTask({ ...base, title: `план ${n}: ${s.title}`, plan: { n, file: path.posix.join(cfg.plansDir.replace(/\\/g, "/"), cfg.planName.replace(/\{n\}/g, n).replace(/\{slug\}/g, slugify(s.title))), source: `${s.what}\nКритерии шага ${s.id} плана ${pt.plan.n}:\n${s.criteria.join("\n")}`, parent: pt.plan.n, rounds: [], clean: 0 } }, (n2, slug) => taskPlace(pt.directory, cfg, n2, slug, pt.project))
           } else t = createTask({ ...base, title: `${pt.plan.n} ${s.id} ${s.title}` }, (n2, slug) => taskPlace(pt.directory, cfg, n2, slug, pt.project))
+          if (stepChoice) stampProfile(t, "executor", t.executor!, stepChoice, !!t.worktree)
           pt.plan.spawned[s.id] = t.n
           running.push(s)
           changed = true
