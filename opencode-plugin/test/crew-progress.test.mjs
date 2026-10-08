@@ -1001,11 +1001,20 @@ procs.n = 0 // the fixtures are built, from here every started process is counte
   cell("AC-13 the command opens a dialog with the running tasks and the last lines of the journal, with no model turn", /что сейчас идёт/.test(out.shown?.title ?? "") && out.shown.message.includes("002 Стражи репозитория") && out.shown.message.includes("↳ 13/14 [11:57] шаг: сводка"), show(out.shown))
   cell("AC-11 д the command /crew-progress starts no process", procs.n === 0, show(procs))
   stop?.()
-  // no tab on screen: the sentence about the repository
+  // no tab on screen (the start screen): the folder of the window process is used, like /crew-config does
+  const cwd0 = process.cwd()
+  const away = path.join(tmp, "away-from-any-repo")
+  mkdirSync(away, { recursive: true })
+  process.chdir(away)
   const out2 = {}
   const stop2 = Tui.default.setup(mkApi(undefined, out2))
   await out2.cmds.find((c) => c.slash?.name === "crew-progress").run()
-  cell("AC-16 /crew-progress with no tab on screen: «Вкладка открыта вне репозитория…»", out2.shown?.message === V.OUTSIDE_TEXT, show(out2.shown))
+  cell("AC-16 /crew-progress with no tab on screen and the process outside a repository: «Вкладка открыта вне репозитория…»", out2.shown?.message === V.OUTSIDE_TEXT, show(out2.shown))
+  process.chdir(repo.main)
+  out2.shown = undefined
+  await out2.cmds.find((c) => c.slash?.name === "crew-progress").run()
+  cell("AC-16 /crew-progress on the start screen takes the folder of the process: the running task of that repository is shown", /002 Стражи репозитория/.test(out2.shown?.message ?? "") && /↳ 13\/14 \[11:57\] шаг: сводка/.test(out2.shown?.message ?? ""), show(out2.shown))
+  process.chdir(cwd0)
   stop2?.()
   // the module of the texts cannot be loaded: the window and the other commands work, the command says so
   const copy = path.join(tmp, "plugin-copy")

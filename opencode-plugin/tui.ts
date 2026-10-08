@@ -86,6 +86,19 @@ export default {
       } catch {} // нет уведомлений — нет папки
     }
 
+    // длинный текст — в широком прокручиваемом диалоге (dialog-text.tsx): alert OpenCode узкий, прижат к верху и не прокручивается;
+    // короткий остаётся обычным alert. Модуль грузится при старте, с защитой: не загрузился — везде alert
+    let textDialog: any
+    if (api.ui?.slot && !process.env.CREW_HARNESS_NO_SIDEBAR) import("./dialog-text.tsx").then((m) => (textDialog = m)).catch((e) => log(`text dialog not drawn pid=${process.pid}: ${String(e).slice(0, 300)}`))
+    const showText = (o: { title: string; message: string }): Promise<void> | undefined => {
+      const lines = String(o.message ?? "").split("\n")
+      if (textDialog && api.ui?.dialog?.show && (lines.length > 12 || lines.some((l) => l.length > 60))) {
+        try {
+          return textDialog.showTextDialog(api, o)
+        } catch {}
+      }
+      return api.ui?.dialog?.alert?.(o)
+    }
     // /crew: кто чего ждёт — свой проект первым
     const showStatus = () => {
       let route: string | undefined
@@ -95,7 +108,7 @@ export default {
       } catch {}
       const list = readStatuses()
       const mine = list.find((s) => s.session === route)?.project
-      api.ui?.dialog?.alert?.({ title: "crew-harness — кто чего ждёт", message: formatStatuses(list, Date.now(), mine) })
+      showText({ title: "crew-harness — кто чего ждёт", message: formatStatuses(list, Date.now(), mine) })
     }
     // /crew-config: действующие настройки проекта вкладки на экране — значение и откуда (как crew_config show)
     const showConfig = () => {
@@ -112,7 +125,7 @@ export default {
       } catch (e) {
         text = `Не прочитать настройки: ${e}`
       }
-      api.ui?.dialog?.alert?.({ title: "crew-harness — настройки проекта", message: text })
+      showText({ title: "crew-harness — настройки проекта", message: text })
     }
     // /plans: планы на согласовании (план 004) — владелец выбирает план и решение; решение пишется файлом, его применяет
     // плагин сервиса. Агент этот диалог вызвать не может: согласует только человек в окне.
@@ -152,7 +165,7 @@ export default {
             text = `Не прочитать ${t.plan.file}: ${e}`
           }
           const last = t.plan.rounds.at(-1)
-          await dialog.alert?.({ title: t.title, message: `${text}\n\n— последний раунд перепроверки: ${last ? `${last.line ?? `блокирующих ${last.blocking}, существенных ${last.significant}, косметических ${last.cosmetic}`}${last.notes ? `\n${last.notes}` : ""}` : "нет"}` })
+          await showText({ title: t.title, message: `${text}\n\n— последний раунд перепроверки: ${last ? `${last.line ?? `блокирующих ${last.blocking}, существенных ${last.significant}, косметических ${last.cosmetic}`}${last.notes ? `\n${last.notes}` : ""}` : "нет"}` })
           continue
         }
         let text: string | undefined
@@ -168,7 +181,7 @@ export default {
     // /crew-doctor: последняя самопроверка сервиса (он пишет её при запуске и раз в 10 минут)
     const showDoctor = () => {
       const d = readJson<{ at: number; problems: string[] }>(DOCTOR_FILE)
-      api.ui?.dialog?.alert?.({ title: "crew-harness — самопроверка", message: doctorText(d) })
+      showText({ title: "crew-harness — самопроверка", message: doctorText(d) })
     }
     // /crew-progress: что сейчас идёт (задача 004) — ход фоновых сессий методики по `progress.log` всех рабочих деревьев репозитория
     // вкладки на экране; без хода модели. progress-view.ts подгружается по требованию: сбой в нём — сообщение, а не падение окна
@@ -182,11 +195,11 @@ export default {
       let text: string
       try {
         const view = await import("./progress-view.ts")
-        text = view.progressDialog(card?.directory)
+        text = view.progressDialog(card?.directory || process.cwd())
       } catch (e) {
         text = `Не прочитать ход работ: ${e}`
       }
-      api.ui?.dialog?.alert?.({ title: "crew-harness — что сейчас идёт", message: text })
+      showText({ title: "crew-harness — что сейчас идёт", message: text })
     }
     const commands = [
       { id: "crew-harness.status", title: "Crew: кто чего ждёт", group: "Crew", slash: { name: "crew" }, palette: true, run: showStatus },
