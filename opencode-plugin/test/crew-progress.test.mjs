@@ -968,6 +968,70 @@ procs.n = 0 // the fixtures are built, from here every started process is counte
   cell("AC-26 parseJournal equals splitting by LF and parsing each line (CRLF, a lone CR, junk, no last LF)", show(viaSplit) === show(direct) && direct.length === 4, show(direct))
 }
 
+// ---- the window: the fifth command and the block under «Crew» (step 8) ---------------------------------------------------
+{
+  const { copyFileSync, readdirSync } = await import("node:fs")
+  const { fileURLToPath, pathToFileURL } = await import("node:url")
+  const Core = await import("../core.ts")
+  const Tui = await import("../tui.ts")
+  const pluginDir = path.dirname(fileURLToPath(new URL("../tui.ts", import.meta.url)))
+  // a window API as OpenCode gives it, cut down: the tab on screen is a session with a card (the directory of the tab)
+  const mkApi = (route, out) => {
+    const api = {
+      ui: { router: { current: () => (route ? { type: "session", sessionID: route } : {}) }, tabs: { list: () => [] }, toast: { show: () => {} }, dialog: { alert: (a) => (out.shown = a) }, slot: (s) => s.render?.() },
+      keymap: { layer: (f) => (out.cmds = f().commands) },
+    }
+    return api
+  }
+  const repo = makeRepo({ "002-guards": { title: "Стражи репозитория", lines: [...common] } })
+  jwrite(repo.main, "002-guards", [...common, "С5 0/14 [11:50] старт", "С5 13/14 [11:57] шаг: сводка"], sec(11, 57))
+  utimesSync(path.join(repo.main, ".git", "logs", "HEAD"), sec(9, 0) / 1000, sec(9, 0) / 1000)
+  const session = "ses_progress_demo"
+  mkdirSync(path.dirname(Core.cardFile(session)), { recursive: true })
+  writeFileSync(Core.cardFile(session), JSON.stringify({ session, directory: repo.main }))
+  procs.n = 0
+  const out = {}
+  const stop = Tui.default.setup(mkApi(session, out))
+  const names = out.cmds.map((c) => c.slash?.name)
+  const before = ["crew", "crew-config", "plans", "crew-doctor"]
+  cell("AC-13 the commands of the window include crew-progress and the earlier ones keep their order", names.includes("crew-progress") && show(names.filter((n) => before.includes(n))) === show(before), show(names))
+  const cmd = out.cmds.find((c) => c.slash?.name === "crew-progress")
+  cell("AC-13 /crew-progress is in the palette with the title «Crew: что сейчас идёт»", cmd?.title === "Crew: что сейчас идёт" && cmd.palette === true, show(cmd))
+  await cmd.run()
+  cell("AC-13 the command opens a dialog with the running tasks and the last lines of the journal, with no model turn", /что сейчас идёт/.test(out.shown?.title ?? "") && out.shown.message.includes("002 Стражи репозитория") && out.shown.message.includes("↳ 13/14 [11:57] шаг: сводка"), show(out.shown))
+  cell("AC-11 д the command /crew-progress starts no process", procs.n === 0, show(procs))
+  stop?.()
+  // no tab on screen: the sentence about the repository
+  const out2 = {}
+  const stop2 = Tui.default.setup(mkApi(undefined, out2))
+  await out2.cmds.find((c) => c.slash?.name === "crew-progress").run()
+  cell("AC-16 /crew-progress with no tab on screen: «Вкладка открыта вне репозитория…»", out2.shown?.message === V.OUTSIDE_TEXT, show(out2.shown))
+  stop2?.()
+  // the module of the texts cannot be loaded: the window and the other commands work, the command says so
+  const copy = path.join(tmp, "plugin-copy")
+  mkdirSync(copy, { recursive: true })
+  for (const f of readdirSync(pluginDir)) if (f.endsWith(".ts") || f === "package.json") copyFileSync(path.join(pluginDir, f), path.join(copy, f))
+  writeFileSync(path.join(copy, "progress-view.ts"), "export const broken = ;\n")
+  const Bad = await import(pathToFileURL(path.join(copy, "tui.ts")).href)
+  const out3 = {}
+  const stop3 = Bad.default.setup(mkApi(session, out3))
+  await new Promise((r) => setTimeout(r, 200))
+  await out3.cmds.find((c) => c.slash?.name === "crew-progress").run()
+  cell("AC-16 the module of the texts cannot load: the window works and /crew-progress says «Не прочитать ход работ»", typeof stop3 === "function" && /^Не прочитать ход работ/.test(out3.shown?.message ?? ""), show(out3.shown))
+  out3.shown = undefined
+  out3.cmds.find((c) => c.slash?.name === "crew-doctor").run()
+  cell("AC-16 the other commands still work (/crew-doctor opens its dialog)", /самопроверка/.test(out3.shown?.title ?? ""), show(out3.shown))
+  stop3?.()
+  // the sources: the imports of the block and the isolation of the two chains
+  const sidebarSrc = readFileSync(new URL("../sidebar.tsx", import.meta.url), "utf8")
+  const progressSrc = readFileSync(new URL("../progress-sidebar.tsx", import.meta.url), "utf8")
+  const tuiSrc = readFileSync(new URL("../tui.ts", import.meta.url), "utf8")
+  const imp = (s) => s.split("\n").filter((l) => /^import /.test(l))
+  cell("AC-16 progress-sidebar.tsx: the same first line (jsxImportSource) and the same solid-js import as sidebar.tsx; progress-view is not imported statically", progressSrc.split("\n")[0] === sidebarSrc.split("\n")[0] && imp(progressSrc)[0] === imp(sidebarSrc)[0] && imp(progressSrc).length === 2 && imp(progressSrc)[1].includes("./core.ts") && !imp(progressSrc).some((l) => l.includes("progress-view")), show(imp(progressSrc)))
+  cell("AC-16 tui.ts imports none of the new modules statically (a syntax error in them does not stop the window)", !imp(tuiSrc).some((l) => /progress/.test(l)), show(imp(tuiSrc)))
+  cell("AC-13 the registration is in tui.ts", /crew-progress/.test(tuiSrc) && /crewSidebar\?\.finally\(/.test(tuiSrc), "")
+}
+
 // ==== END OF CELLS ====
 try {
   rmSync(tmp, { recursive: true, force: true })

@@ -170,11 +170,30 @@ export default {
       const d = readJson<{ at: number; problems: string[] }>(DOCTOR_FILE)
       api.ui?.dialog?.alert?.({ title: "crew-harness — самопроверка", message: doctorText(d) })
     }
+    // /crew-progress: что сейчас идёт (задача 004) — ход фоновых сессий методики по `progress.log` всех рабочих деревьев репозитория
+    // вкладки на экране; без хода модели. progress-view.ts подгружается по требованию: сбой в нём — сообщение, а не падение окна
+    const showProgress = async () => {
+      let route: string | undefined
+      try {
+        const r = api.ui?.router?.current?.()
+        route = r?.type === "session" ? r.sessionID : undefined
+      } catch {}
+      const card = route ? readJson<any>(cardFile(route)) : undefined
+      let text: string
+      try {
+        const view = await import("./progress-view.ts")
+        text = view.progressDialog(card?.directory)
+      } catch (e) {
+        text = `Не прочитать ход работ: ${e}`
+      }
+      api.ui?.dialog?.alert?.({ title: "crew-harness — что сейчас идёт", message: text })
+    }
     const commands = [
       { id: "crew-harness.status", title: "Crew: кто чего ждёт", group: "Crew", slash: { name: "crew" }, palette: true, run: showStatus },
       { id: "crew-harness.config", title: "Crew: настройки проекта", group: "Crew", slash: { name: "crew-config" }, palette: true, run: showConfig },
       { id: "crew-harness.plans", title: "Crew: планы на согласовании", group: "Crew", slash: { name: "plans" }, palette: true, run: showPlans },
       { id: "crew-harness.doctor", title: "Crew: самопроверка", group: "Crew", slash: { name: "crew-doctor" }, palette: true, run: showDoctor },
+      { id: "crew-harness.progress", title: "Crew: что сейчас идёт", group: "Crew", slash: { name: "crew-progress" }, palette: true, run: showProgress },
     ]
     try {
       api.ui.slot({
@@ -192,7 +211,9 @@ export default {
 
     // блок «Crew» в боковой панели (план 003.2): отдельным модулем и с защитой — JSX компилирует OpenCode; не вышло (другая
     // версия, тест под Node) — блока нет, присутствие, уведомления и команды работают
-    if (api.ui?.slot && !process.env.CREW_HARNESS_NO_SIDEBAR) import("./sidebar.tsx").then((m) => (m.mountSidebar(api), log(`sidebar mounted pid=${process.pid}`))).catch((e) => log(`sidebar not drawn pid=${process.pid}: ${String(e).slice(0, 300)}`))
+    const crewSidebar = api.ui?.slot && !process.env.CREW_HARNESS_NO_SIDEBAR ? import("./sidebar.tsx").then((m) => (m.mountSidebar(api), log(`sidebar mounted pid=${process.pid}`))).catch((e) => log(`sidebar not drawn pid=${process.pid}: ${String(e).slice(0, 300)}`)) : undefined
+    // блок «Ход работ» (задача 004) — под «Crew», своей цепочкой: ошибка в нём не касается «Crew», ошибка в «Crew» не мешает ему
+    crewSidebar?.finally(() => import("./progress-sidebar.tsx").then((m) => (m.mountProgress(api), log(`progress block mounted pid=${process.pid}`))).catch((e) => log(`progress block not drawn pid=${process.pid}: ${String(e).slice(0, 300)}`)))
 
     beat()
     const timer = setInterval(beat, BEAT_MS)

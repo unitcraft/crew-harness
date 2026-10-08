@@ -69,7 +69,7 @@ stop?.()
 let cmds = []
 let shown
 const stop2 = mod.default.setup({ ui: { router: { current: () => ({}) }, tabs: { list: () => [] }, toast: { show: () => {} }, dialog: { alert: (a) => (shown = a) }, slot: (s) => s.render?.() }, keymap: { layer: (f) => (cmds = f().commands) } })
-cell("the window has /crew, /crew-config, /plans, /crew-doctor", JSON.stringify(cmds.map((c) => c.slash?.name)) === JSON.stringify(["crew", "crew-config", "plans", "crew-doctor"]), JSON.stringify(cmds.map((c) => c.slash?.name)))
+cell("the window has /crew, /crew-config, /plans, /crew-doctor, /crew-progress", JSON.stringify(cmds.map((c) => c.slash?.name)) === JSON.stringify(["crew", "crew-config", "plans", "crew-doctor", "crew-progress"]), JSON.stringify(cmds.map((c) => c.slash?.name)))
 cmds.find((c) => c.slash?.name === "crew-doctor")?.run()
 cell("/crew-doctor opens a dialog", /самопроверка/.test(shown?.title ?? ""), JSON.stringify(shown))
 stop2?.()
