@@ -73,12 +73,12 @@
 - B Automated, новые — PASS. `node test/crew-progress.test.mjs` — `crew-progress.test ok`, 242 ячейки ok, 0 FAIL; `python scripts/guards/selftest/test-guardlib.py` — `итого: 27 проб, упало 0`; `python scripts/guards/selftest/test-check-task-docs.py` — `итого: 33 проб, упало 0`.
 - B Automated, прежние — PASS, как в базе (число ячеек, упавшие, пропущенные): crew-sidebar 22, crew-status 12, crew-help 34, crew-autoclose 8, crew-wake 22; упавших и пропущенных нет ни до, ни после; изменение прежних тестов — одно сравнение в crew-sidebar (2 строки в `git diff -U0`).
 - C Runtime — PASS. Ячейки `AC-04`, `AC-06`, `AC-19`, `AC-24 S0…S6`, `AC-11` идут на одноразовых репозиториях с настоящими деревьями `git worktree` (запись, `merge --ff-only`, чтение, время файлов через `utimes`); страж — `run-all.sh --ci` на одноразовой копии (проба `test-check-task-docs.py`) и на дереве ветки: `итого: ок 7, судить нечего 0, пропущено 0, FAIL 0`, `check-task-docs.py -> ок: осмотрено 84 файлов задач`.
-- D Visual — NOT VERIFIED: нужно живое окно, AG п.12 (ворота Г3); референса нет, это снимок факта.
+- D Visual — PASS (ворота Г3, 2026-10-09): скриншоты владельца 2026-10-08/09: окна crew-harness и nova, блок «Ход работ» и диалог `/crew-progress`; референса нет, это снимок факта.
 - E Requirements — PASS, таблица «Трассировка» ниже: 21 REQ, 27 AC, 8 DNC.
 - F Negative — PASS. Ячейки `AC-09`, `AC-14`, `AC-16`, `AC-07`, `AC-08` зелёные; красные пробы стража `journal-line`, `journal-path`, `journal-long` в `test-check-task-docs.py`; `sh scripts/guards/prove-red.sh --only check-task-docs | grep -c '^ок: доказано 1 из 1$'` печатает `1`.
 - G Regression — PASS. Пять прежних тестов по одному после шагов 8 и 12 (числа выше); `sh scripts/guards/run-all.sh` из корня дерева — `FAIL 0`; полный проход всех 39 файлов самотестов плагина не делался (AG п.9, машина нагружена; слово владельца — «Ждёт владельца»).
 
-**Acceptance criteria.** AC-01…AC-27 PASS по самотестам; живое окно для AC-10 (снимок) и AC-13 (вызов) — NOT VERIFIED (Г3). Подробно — «Трассировка».
+**Acceptance criteria.** AC-01…AC-27 PASS по самотестам; живое окно для AC-10 (снимок) и AC-13 (вызов) — PASS (Г3, 2026-10-09, скриншоты владельца 2026-10-08/09: окна crew-harness и nova, блок «Ход работ» и диалог `/crew-progress`). Подробно — «Трассировка».
 
 **How to verify.** Из `opencode-plugin/` по одному, с паузой: `node test/crew-progress.test.mjs`, `node test/crew-sidebar.test.mjs`, `node test/crew-status.test.mjs`, `node test/crew-help.test.mjs`, `node test/crew-autoclose.test.mjs`, `node test/crew-wake.test.mjs`. Из корня дерева: `python scripts/guards/selftest/test-guardlib.py`, `python scripts/guards/selftest/test-check-task-docs.py`, `sh scripts/guards/prove-red.sh --only check-task-docs`, `sh scripts/guards/run-all.sh` и `sh scripts/guards/run-all.sh --ci`. Руками (после слияния, по слову владельца): открыть новое окно в репозитории с `doc/tasks/*/progress.log`, найти блок «Ход работ» под «Crew», вызвать `/crew-progress`, дописать строку в журнал одноразовой задачи и увидеть её в блоке не позже чем через 10 секунд.
 
@@ -123,12 +123,12 @@
 | REQ-05 исчезновение | `progress.ts isShown`, `isAbandoned` (шаг 13: состояние 7 не брошено); `progress-view.ts dialogText` | самотест по часам | ячейки `AC-03`, `AC-23` (в том числе (а)…(г) шага 13) | PASS |
 | REQ-06 «шагов нет» | состояние 3, `progress-view.ts` | самотест | ячейки `AC-07` | PASS |
 | REQ-07 место и раскладка (тексты, порядок, ширина 32) | `progress-view.ts`, `progress-sidebar.tsx` | самотест, статический разбор импортов | ячейки `AC-01`, `AC-12`, `AC-16` | PASS |
-| REQ-07 место в живом окне | слот `sidebar.content` | снимок окна | не снят | NOT VERIFIED |
+| REQ-07 место в живом окне | слот `sidebar.content` | снимок окна | скриншоты владельца 2026-10-08/09: окна crew-harness и nova, блок «Ход работ» и диалог `/crew-progress` | PASS |
 | REQ-08 названия словами | `sessionName`, `taskTitle` | самотест | ячейки `AC-15` | PASS |
 | REQ-09 не позже 10 секунд (константы, подставные часы) | `WALK_MS`, `SHOW_MS` | самотест | ячейки `AC-10` (2) | PASS |
 | REQ-10 нагрузка | `createScanner`, кэш, бюджет | самотест, измерения | ячейки `AC-11 а…ж`, `AC-25`; таблица шага 7 | PASS |
 | REQ-11 команда `/crew-progress` (текст, регистрация) | `progress-view.ts dialogText`, `tui.ts` | самотест, `crew-sidebar` | ячейки `AC-13`, `AC-16`; `crew-sidebar.test ok` | PASS |
-| REQ-11 вызов в живом окне | `showProgress` | вызов в окне | не вызвана | NOT VERIFIED |
+| REQ-11 вызов в живом окне | `showProgress` | вызов в окне | скриншоты владельца 2026-10-08/09: окна crew-harness и nova, блок «Ход работ» и диалог `/crew-progress` | PASS |
 | REQ-12 единый формат строки | `LINE_RE`, `parseAt`, `parse_progress_line` | самотесты двух языков, общий файл строк | ячейки `AC-26`, `AC-14`; `test-check-task-docs.py` | PASS |
 | REQ-13 строка остановки | `keywordOf`, `stopKind`, состояние 1 | самотест | ячейки `AC-08`, `AC-23`, `AC-26` | PASS |
 | REQ-14 строка запуска | `sessionsOf`, состояния 3 и 4 | самотест | ячейки `AC-07`, `AC-24 S0`, `S4`, `S5` | PASS |
@@ -149,11 +149,11 @@
 | AC-08 «остановилась: ворота» | `stopKind`, `stateWord` | самотест | ячейки `AC-08` (14) | PASS |
 | AC-09 нет журнала или пуст | `createScanner` | самотест | ячейка `AC-09` | PASS |
 | AC-10 обновление не позже 10 секунд, подставные часы | `WALK_MS`, `SHOW_MS` | самотест | ячейки `AC-10` (2) | PASS |
-| AC-10 снимок настоящего окна до и после | блок в окне | снимок | не снят | NOT VERIFIED |
+| AC-10 снимок настоящего окна до и после | блок в окне | снимок | скриншоты владельца 2026-10-08/09: окна crew-harness и nova, блок «Ход работ» и диалог `/crew-progress` | PASS |
 | AC-11 бюджеты, процессы, запись | `createScanner`, `scanAll` | измерения в одном прогоне | ячейки `AC-11 а…ж` (19); таблица шага 7 | PASS |
 | AC-12 ширины 32 и 72, 3 задачи, порядок, `13/14 ≠ +1`, нижняя строка | `fitRow`, `orderTasks`, `taskRows`, `panelLines` | самотест | ячейки `AC-12` (12; шаг 13: «ещё 1 · все: /crew-progress», «все: /crew-progress» при 1 и 3 задачах) | PASS |
 | AC-13 команда, пять имён, `crew-sidebar` (самотест) | `tui.ts`, `dialogText` | самотест, `crew-sidebar.test ok`, `grep -n "crew-progress" tui.ts` | ячейки `AC-13` (8) | PASS |
-| AC-13 вызов в настоящем окне | `showProgress` | вызов | не вызвана | NOT VERIFIED |
+| AC-13 вызов в настоящем окне | `showProgress` | вызов | скриншоты владельца 2026-10-08/09: окна crew-harness и nova, блок «Ход работ» и диалог `/crew-progress` | PASS |
 | AC-14 CRLF, мусор, k больше N, время | `parseJournal`, `momentOf` | самотест | ячейки `AC-14` (20) | PASS |
 | AC-15 названия словами | `sessionName`, `taskTitle` | самотест | ячейки `AC-15` (6) | PASS |
 | AC-16 сбои | `try/catch`, динамический `import()` | самотест, `crew-sidebar`, `crew-status` | ячейки `AC-16` (11) | PASS |
