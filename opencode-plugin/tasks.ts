@@ -220,6 +220,12 @@ export type TaskPlan = {
 /** Сколько раз задачу возвращали исполнителю (доработки и синхронизации): номер круга в id писем. */
 export const rounds = (t: Task) => (t.rework ?? 0) + (t.syncs ?? 0)
 
+/** Принятые и не очищенные задачи из списка: они ждут уборки (при accepted_slot: free место в inflight_limit не занимают). */
+export const waitingCleanup = (tasks: Task[]): Task[] => tasks.filter((t) => t.status === "accepted")
+/** Открытые задачи, которые идут в счёт inflight_limit. Принимает уже отобранные открытые задачи проекта; slot "hold" — все
+ *  (как всегда), "free" — без принятых, ждущих уборки. Одна функция на два места: crew_spawn и шаги авто-плана. */
+export const countedOpen = (open: Task[], slot: "hold" | "free"): Task[] => (slot === "free" ? open.filter((t) => !waitingCleanup([t]).length) : open)
+
 /** Когда задачу приняли (последняя запись «accepted» журнала). */
 export const acceptedAt = (t: Task) => [...(t.history ?? [])].reverse().find((h) => h.status === "accepted")?.at ?? t.updated
 /** «12 мин назад», «11 ч назад» */

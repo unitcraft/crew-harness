@@ -17,6 +17,7 @@ import { PROJECT_RE, settingsProblems } from "./settings.ts"
 import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
 import { DEFAULT_FORM, PLAN_ACCEPTANCE, PLAN_MERGE_ACCEPTANCE, type PlanForm, allSteps, nextPlanNumber, parsePlan, planProblems, planTemplate, roundRules } from "./plans.ts"
 import { type Task, type TaskPlan, WORKING_STATUSES, taskRef, slugify, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
+import { countedOpen, waitingCleanup } from "./tasks.ts"
 import { cleanupDone, cleanupSteps, fileAt, holdsMergeLock, isMerged, mergeHolder, releaseMergeLock, reworkLetter, takeMergeLock } from "./review.ts"
 import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, timerSpec, watchesOf } from "./watch.ts"
 import { watchRefusal } from "./deny.ts"
@@ -1574,7 +1575,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
   const FIELD_RU: Record<string, string> = { goal: "цель (goal)", criteria: "критерии приёмки (criteria)", boundaries: "границы (boundaries)", open_questions: "открытые вопросы (open_questions)" }
   const newQid = () => `q${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
   const findTask = (me: Card | undefined, n: any): Task | undefined => (me && Number.isInteger(Number(n)) ? loadTask(projOf(me), Number(n)) : undefined)
-  const taskRow = (t: Task) => `#${t.n} ${t.priority} ${statusRu(t.status)} «${t.title}» — ${t.executor ? `исполнитель ${t.executor}` : "без исполнителя"}${t.kind === "assign" ? " (вкладка владельца)" : ""}${t.reviewer ? `, приёмщик ${t.reviewer}` : ""}`
+  const taskRow = (t: Task) => `#${t.n} ${t.priority} ${statusRu(t.status)} «${t.title}» — ${t.executor ? `исполнитель ${t.executor}` : "без исполнителя"}${t.kind === "assign" ? " (вкладка владельца)" : ""}${t.reviewer ? `, приёмщик ${t.reviewer}` : ""}${t.status === "accepted" && loadConfig(t.directory).acceptedSlot === "free" ? " — ждёт уборки" : ""}`
 
   // Задача очищена: всё закрыто. Интегратору и исполнителю — тихие сводки (без пробуждения); сессии задачи закроет
   // плагин (заголовок «#N ✓✓»).
@@ -1620,11 +1621,17 @@ export function makeTools(host: CrewHost): CrewTool[] {
       const prio = isPriority(input.priority) ? input.priority : cfg.defaultPriority
       if (prio !== "P0" && running.length >= limit) return { content: `Лимит работающих задач роли ${role} в проекте — ${limit}, уже работают: ${running.map((t) => `#${t.n}`).join(", ")}. Дождись сдачи или отмени (crew_task {action: "cancel"}); авария — priority P0.` }
       const inflight = listTasks(project).filter(isOpen)
-      if (prio !== "P0" && inflight.length >= cfg.inflightLimit) {
+      const counted = countedOpen(inflight, cfg.acceptedSlot) // accepted_slot: free — принятые, ждущие уборки, в счёт не идут
+      if (prio !== "P0" && counted.length >= cfg.inflightLimit) {
+        if (cfg.acceptedSlot === "free") return { content: `Лимит задач проекта в работе и на приёмке — ${cfg.inflightLimit} (inflight_limit), открыто: ${counted.map((t) => `#${t.n} ${statusRu(t.status)}`).join(", ")}.${inflight.length > counted.length ? ` Принятые, но не очищенные, место не занимают (ждут уборки: ${inflight.length - counted.length}).` : ""} Дождись приёмки; авария — priority P0.` }
         // принятые, но не очищенные держат место молча (#9 nova — 11,5 ч): назвать их поимённо с возрастом
         const stale = inflight.filter((t) => t.status === "accepted").map((t) => `#${t.n} принята ${ago(acceptedAt(t))}, не очищена (приёмщик ${t.reviewer ?? "?"})`)
         return { content: `Лимит задач проекта в работе и на приёмке — ${cfg.inflightLimit} (inflight_limit), открыто: ${inflight.map((t) => `#${t.n} ${statusRu(t.status)}`).join(", ")}.${stale.length ? ` Место держат принятые, но не очищенные: ${stale.join("; ")} — пусть приёмщик повторит crew_task {action: \"cleaned\"}.` : ""} Дождись приёмки; авария — priority P0.` }
       }
+      // accepted_slot: free — счёт «ждёт уборки»: принятых и не очищенных не меньше cleanup_limit (0 — без предела) — новая работа не ставится
+      const waiting = waitingCleanup(inflight)
+      if (prio !== "P0" && cfg.acceptedSlot === "free" && cfg.cleanupLimit > 0 && waiting.length >= cfg.cleanupLimit)
+        return { content: `Лимит ожидающих уборки — ${cfg.cleanupLimit} (cleanup_limit), принятых и не очищенных ${waiting.length}: ${waiting.map((t) => `#${t.n} принята ${ago(acceptedAt(t))}, не очищена (приёмщик ${t.reviewer ?? "?"})`).join("; ")} — пусть приёмщик повторит crew_task {action: \"cleaned\"}. Новая работа не ставится, пока их не станет меньше; авария — priority P0.` }
       // МОДЕЛЬ ПО ВКЛЮЧЁННОМУ НАБОРУ (задача 003). Этап — по виду запуска; ступень: tier, присутствующий во входе, иначе ступень
       // клетки. Этап не описан или набора нет — spawn_models, как прежде; описан, а профиль не находится — отказ до записи задачи.
       const chosen = resolveStageProfile(profileState(me.directory).state, stageOfLaunch({ plan: input.kind === "plan" }, "executor"), { inputTier: isTier(input.tier) ? input.tier : undefined })

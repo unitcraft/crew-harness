@@ -116,6 +116,7 @@ import { allSteps, nextPlanNumber, parsePlan, stepDeps } from "./plans.ts"
 import { dropWatch, openWatchesBySession, pollWatches, requestWatch, watchesOf } from "./watch.ts"
 import { endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
 import { type Task, taskRef, acceptedAt, ago, byPriority, createTask, rounds, slugify, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
+import { countedOpen, waitingCleanup } from "./tasks.ts"
 import { createRemoteBridge } from "./remote.ts"
 import { profileProblems, profileState, stateSignature, syncProjectFiles, syncSnapshot, syncTaskFile } from "./profile-layer.ts"
 import { cellOfState, resolveStageProfile, stageOfLaunch, tabFitsCell } from "./profiles.ts"
@@ -914,7 +915,8 @@ export default {
           const open = listTasks(pt.project).filter(isOpen)
           const workers = open.filter((x) => x.kind === "spawn" && x.role === DEFAULT_ROLE && (x.status === "starting" || x.status === "running"))
           const p = prio(s)
-          if (p !== "P0" && (open.length >= cfg.inflightLimit || workers.length >= (cfg.spawnLimits[DEFAULT_ROLE] ?? cfg.spawnLimits["*"] ?? 3))) break // лимиты — ждать
+          if (p !== "P0" && (countedOpen(open, cfg.acceptedSlot).length >= cfg.inflightLimit || workers.length >= (cfg.spawnLimits[DEFAULT_ROLE] ?? cfg.spawnLimits["*"] ?? 3))) break // лимиты — ждать
+          if (p !== "P0" && cfg.acceptedSlot === "free" && cfg.cleanupLimit > 0 && waitingCleanup(open).length >= cfg.cleanupLimit) break // cleanup_limit: ждущих уборки слишком много — ждать
           const boundaries = [plan.bodies["Не делаем"]?.trim(), `Режим выполнения: ${pt.plan.approval.decision === "ok" ? "без упрощений — ни заглушек, ни TODO, ни «временно»" : "упрощения — только перечисленные в плане"}.`].filter(Boolean).join("\n")
           const model = stepChoice ? stepChoice.model : (cfg.spawnModels.medium ?? DEFAULT_SPAWN_MODELS.medium)
           const base = {
@@ -983,16 +985,26 @@ export default {
         }
         // ПРИНЯТА, НО НЕ ОЧИЩЕНА (план 002.6, дефект 2): держит место в inflight_limit. Через accepted_reminder_min —
         // одно письмо приёмщику с побудкой («повтори cleaned») и одно автору; отказ crew_spawn называет такие поимённо.
-        const accMin = loadConfig(any.directory).acceptedReminderMin
+        const accCfg = loadConfig(any.directory)
+        const accMin = accCfg.acceptedReminderMin
+        // accepted_slot: free — принятая место не занимает, письма говорят «ждёт уборки N из M» (cleanup_limit 0 — «N, предела нет»)
+        const waitingN = waitingCleanup(list).length
+        const waitingOf = accCfg.cleanupLimit > 0 ? `ждёт уборки ${waitingN} из ${accCfg.cleanupLimit}` : `ждёт уборки ${waitingN}, предела нет`
         if (accMin > 0)
           for (const x of list.filter((y) => y.status === "accepted")) {
             const at = acceptedAt(x)
             if (t - at < accMin * 60_000) continue
             const id = `stale-accepted-${safeKey(project)}-${x.n}-${at}`
+            const toReviewer = accCfg.acceptedSlot === "free"
+              ? `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена — ждёт уборки, место в inflight_limit не занимает (${waitingOf}). Убери её дерево и ветки и повтори crew_task {action: "cleaned", n: ${x.n}}: отказ назовёт, что осталось. Не убирается — напиши автору (${x.author_role}), что мешает.`
+              : `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена — держит место в лимите задач проекта (inflight_limit). Убери её дерево и ветки и повтори crew_task {action: "cleaned", n: ${x.n}}: отказ назовёт, что осталось. Не убирается — напиши автору (${x.author_role}), что мешает.`
+            const toAuthor = accCfg.acceptedSlot === "free"
+              ? `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена${x.reviewer ? ` (приёмщик ${x.reviewer}, ему написано)` : ""} — ждёт уборки, место не занимает; ${waitingOf}, пока не будет crew_task cleaned.`
+              : `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена${x.reviewer ? ` (приёмщик ${x.reviewer}, ему написано)` : ""} — держит место в inflight_limit, пока не будет crew_task cleaned.`
             if (x.reviewer && !letterExists(x.reviewer, id))
-              postLetter(x.reviewer, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.reviewer, time: t, text: `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена — держит место в лимите задач проекта (inflight_limit). Убери её дерево и ветки и повтори crew_task {action: "cleaned", n: ${x.n}}: отказ назовёт, что осталось. Не убирается — напиши автору (${x.author_role}), что мешает.` })
+              postLetter(x.reviewer, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.reviewer, time: t, text: toReviewer })
             if (!letterExists(x.author, id))
-              postLetter(x.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.author, time: t, text: `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена${x.reviewer ? ` (приёмщик ${x.reviewer}, ему написано)` : ""} — держит место в inflight_limit, пока не будет crew_task cleaned.` })
+              postLetter(x.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.author, time: t, text: toAuthor })
             log(`stall: #${x.n} of ${project} accepted ${at}, not cleaned`)
           }
         for (const x of list.filter((y) => y.status === "submitted" && !y.reviewer)) {
