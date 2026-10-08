@@ -232,6 +232,38 @@ await new Promise((r) => setTimeout(r, 3600))
 }
 
 {
+  // THE ARGUMENTS OF THE SLASH COMMAND (2026-10-09): "/crew-sets use kimi" reaches run("use kimi") of the window command and is
+  // executed at once: no menu, no model turn, no server command
+  const { api, out } = mkApi([])
+  const stop = Tui.default.setup(api)
+  const names = out.cmds.map((x) => x.slash?.name)
+  cell("/crew-sets and /crew-profiles take arguments (slash.arguments), the others are as before; no name twice, no server command of the same name", slashOf(out, "crew-sets").slash.arguments === true && slashOf(out, "crew-profiles").slash.arguments === true && out.cmds.filter((x) => x.slash.name !== "crew-sets" && x.slash.name !== "crew-profiles").every((x) => !x.slash.arguments) && new Set(names).size === names.length && !commands["crew-sets"] && !commands["crew-profiles"], JSON.stringify(out.cmds.map((x) => x.slash)))
+  let asked = 0
+  api.ui.dialog.select = async () => (asked++, undefined)
+  api.ui.dialog.prompt = async () => (asked++, undefined)
+  const before = out.shown.length
+  await slashOf(out, "crew-sets").run("use cross-kimi")
+  const shownNow = out.shown.slice(before).map((x) => x.message)
+  cell("run(\"use cross-kimi\") enables the set at once: no menu, «Загрузка…» then the answer, the local layer changed, the file not", asked === 0 && shownNow[0] === "Загрузка…" && /Включён набор «cross-kimi»/.test(shownNow.at(-1)) && L.profileState(root).name === "cross-kimi" && serverCalls.length === 0, JSON.stringify([asked, shownNow.map((m) => m.slice(0, 40))]))
+  await slashOf(out, "crew-sets").run("  show cross-kimi  ")
+  cell("run(\"show cross-kimi\") shows the set (the line is trimmed; the verb and the argument go to the command as typed)", asked === 0 && /Набор «cross-kimi»/.test(msg(out)) && /kimi\/heavy/.test(msg(out)), msg(out).slice(0, 200))
+  await slashOf(out, "crew-profiles").run("show claude")
+  cell("run(\"show claude\") of /crew-profiles shows the family", asked === 0 && /heavy: claude-code\/opus — контекст 720K/.test(msg(out)), msg(out).slice(0, 200))
+  await slashOf(out, "crew-sets").run("use no-such-set")
+  cell("a refusal of the command comes the same way: a dialog with the reason, nothing changed", asked === 0 && /Не сделано/.test(msg(out)) && L.profileState(root).name === "cross-kimi", msg(out).slice(0, 160))
+  await slashOf(out, "crew-profiles").run("frobnicate")
+  cell("an unknown verb: the dialog names the verbs of the command", /Неизвестный глагол «frobnicate»/.test(msg(out)) && /Глаголы \/crew-profiles/.test(msg(out)), msg(out).slice(0, 160))
+  // without arguments the menu opens: "", spaces, undefined (the palette and the hint of the slash list give undefined or "")
+  for (const empty of ["", "   ", undefined]) {
+    let menus = 0
+    api.ui.dialog.select = async (o) => (menus++, o.options[0].value === "__table" ? undefined : "x")
+    await slashOf(out, "crew-sets").run(empty)
+    cell(`run(${JSON.stringify(empty)}) opens the menu (the table and the verbs)`, menus === 1, String(menus))
+  }
+  stop?.()
+}
+
+{
   // THE CRASH OF 2026-10-08 (TextNodeRenderable only accepts strings): nothing but strings goes to the window - static check of the
   // sources and a cell with answers that are not strings
   const read = (f) => readFileSync(new URL("../" + f, import.meta.url), "utf8")

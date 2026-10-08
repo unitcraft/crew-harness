@@ -290,7 +290,12 @@ export default {
     const verbCommand = (kind: "sets" | "profiles") => async (given?: unknown) => {
       const name = `/crew-${kind}`
       const helps = verbHelpOf(kind)
-      let text = typeof given === "string" ? given : undefined
+      // АРГУМЕНТЫ СЛЭШ-КОМАНДЫ (проба 2026-10-09, сборка OpenCode 2.0.23): команда окна со slash.arguments = true получает при отправке
+      // «/crew-sets use kimi» всё после имени строкой (run("use kimi")) и перехватывает ввод ДО отправки модели вкладки; без флага
+      // такая строка уходила модели как обычное сообщение. «/crew-sets» без аргументов, из палитры или из подсказки — пустая строка
+      // или undefined: открывается меню.
+      const typedArgs = typeof given === "string" ? given.trim() : ""
+      let text: string | undefined = typedArgs || undefined
       if (text === undefined) {
         const dialog = api.ui?.dialog
         // ответ на пустой ввод от отмены не отличить, поэтому таблица — пункт меню, а не пустая строка
@@ -332,8 +337,8 @@ export default {
       { id: "crew-harness.doctor", title: "Crew: самопроверка", group: "Crew", slash: { name: "crew-doctor" }, palette: true, run: showDoctor },
       { id: "crew-harness.progress", title: "Crew: что сейчас идёт", group: "Crew", slash: { name: "crew-progress" }, palette: true, run: showProgress },
       { id: "crew-harness.help", title: "Crew: справка", group: "Crew", slash: { name: "crew-help" }, palette: true, run: showHelp },
-      { id: "crew-harness.sets", title: "Crew: наборы профилей моделей", group: "Crew", slash: { name: "crew-sets" }, palette: true, run: verbCommand("sets") },
-      { id: "crew-harness.profiles", title: "Crew: профили моделей и окон", group: "Crew", slash: { name: "crew-profiles" }, palette: true, run: verbCommand("profiles") },
+      { id: "crew-harness.sets", title: "Crew: наборы профилей моделей", group: "Crew", slash: { name: "crew-sets", arguments: true }, palette: true, run: verbCommand("sets") },
+      { id: "crew-harness.profiles", title: "Crew: профили моделей и окон", group: "Crew", slash: { name: "crew-profiles", arguments: true }, palette: true, run: verbCommand("profiles") },
     ]
     try {
       api.ui.slot({
