@@ -20,6 +20,7 @@ import { cleanupDone, cleanupSteps, fileAt, holdsMergeLock, isMerged, mergeHolde
 import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, timerSpec, watchesOf } from "./watch.ts"
 import { watchRefusal } from "./deny.ts"
 import { queueRemote, remoteRoute } from "./remote.ts"
+import { linkErrorsOfWrite, profileProblems, profilesShow } from "./profile-layer.ts"
 
 export const POLL_MS = Number(process.env.CREW_HARNESS_POLL_MS) || 1_000 // переопределение — для самотеста
 export const LIVE_MS = 15 * 60_000
@@ -94,7 +95,13 @@ export function configShowText(dir: string, fallbackName = "?", compact = false)
     const changed = [...new Set([...Object.keys(work), ...Object.keys(committed)])].filter((k) => JSON.stringify(work[k]) !== JSON.stringify(committed[k]))
     if (changed.length) pending = `\nНезакоммичено (действует после коммита): ${changed.join(", ")}.`
   }
-  return `${head}\n${rows.join("\n")}${pending}`
+  let prof = ""
+  try {
+    prof = profilesShow(dir)
+  } catch (e) {
+    log(`profiles show failed: ${e}`)
+  }
+  return `${head}\n${rows.join("\n")}${pending}${prof ? `\n${prof}` : ""}`
 }
 
 // Имя репозитория каталога не меняется — git спрашиваем один раз на каталог (проход доставки идёт раз в секунду).
@@ -1963,10 +1970,14 @@ export function makeTools(host: CrewHost): CrewTool[] {
         if (!p?.dir) return { content: `Проект ${projOf(me)} задан прежней формой опций: записать некуда. Переведи его на репозиторий настроек — в opencode.jsonc "projects": ["<папка с .opencode/crew-harness.json>"].` }
         const values = input.values
         if (!values || typeof values !== "object" || Array.isArray(values) || !Object.keys(values).length) return { content: "Нужно values: {ключ: значение}." }
+        if (Object.prototype.hasOwnProperty.call(values, "profile_set")) return { content: "Не записано (файл не тронут):\n- profile_set: имя набора меняет человек (команда окна /crew-sets use и save либо правка файла); вызовом set его не записывают" }
         const errors = Object.entries(values).filter(([, v]) => v !== null).map(([k, v]) => invalid(k, v)).filter(Boolean)
         const unknown = Object.keys(values).filter((k) => !SCHEMA.some((s) => s.key === k)).map((k) => invalid(k, null))
         const all = [...new Set([...errors, ...unknown])]
         if (all.length) return { content: `Не записано (файл не тронут):\n${all.map((e) => `- ${e}`).join("\n")}` }
+        // связи между ключами профилей: рабочая копия плюс вносимое (два вызова подряд — справочник, затем наборы — проходят)
+        const links = linkErrorsOfWrite(p.dir, values)
+        if (links.length) return { content: `Не записано (файл не тронут):\n${links.map((e) => `- ${e}`).join("\n")}` }
         const file = writeSettings(p.dir, values)
         return { content: `Записано в ${file}: ${Object.keys(values).join(", ")}. Действует после коммита в ветку ${p.branch} репозитория ${p.repo} (по методологии проекта); до коммита действуют прежние значения — crew_config {action: "show"} покажет незакоммиченное.` }
       }
@@ -2018,7 +2029,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
     description: "Self-check of crew-harness: the OpenCode features it relies on, the window plugin (presence), the mailbox. Lists what is broken and what to do.",
     input: { type: "object", properties: {}, additionalProperties: false },
     execute: async (_input: any, sessionID: string) => {
-      const problems = [...(await host.doctor()), ...commonDoctor(sessionID), ...settingsProblems(projects)]
+      const problems = [...(await host.doctor()), ...commonDoctor(sessionID), ...settingsProblems(projects), ...profileProblems()]
       return { content: problems.length ? `crew_doctor — есть проблемы:\n${problems.map((p) => `- ${p}`).join("\n")}` : "crew_doctor: всё в порядке (окна отмечаются, ящик пишется, нужные возможности OpenCode на месте)." }
     },
   }

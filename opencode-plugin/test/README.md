@@ -63,6 +63,7 @@ stops at the first failing file.
 | | `crew-remote` | routing by `remote.json`, the outbox, one bridge per machine, `inbound` / `may_write`, replies only from a machine written to, refusals back to the sender |
 | Model profiles | `crew-profiles-data` | the data module: stages and words, value checks of `model_profiles` / `profile_sets` / `profile_set`, family of a tab model, links, windows of a set, profile choice and the state table (task 003) |
 | | `crew-profiles-layer` | the local layer over the committed file: effective data, "the file now differs", save / save force, the forms of reset, the snapshot of the last valid state, projects apart |
+| | `crew-profiles-config` | `crew_config` and `crew_doctor` for the profile keys: forms, links on the working copy plus the new values, profile_set refused always, guide, show, the problems named |
 
 ## Manual checks (not in `npm test`)
 

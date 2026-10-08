@@ -116,6 +116,7 @@ import { dropWatch, openWatchesBySession, pollWatches, requestWatch, watchesOf }
 import { endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
 import { type Task, taskRef, acceptedAt, ago, byPriority, createTask, rounds, slugify, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
 import { createRemoteBridge } from "./remote.ts"
+import { profileProblems, profileState, stateSignature, syncSnapshot } from "./profile-layer.ts"
 import { ensureWorktree, fileAt, gitTraces, leftoversOf, mergeHolder, reviewLetter } from "./review.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
@@ -678,6 +679,40 @@ export default {
       for (const t of listTasks()) if (isOpen(t) && t.review_kind === "spawn" && t.reviewer && !readJson<Card>(cardFile(t.reviewer))) await startReviewer(t)
     }
 
+    // ПРОФИЛИ МОДЕЛЕЙ (задача 003). Раз в проход, но тяжёлое — только когда сменилась подпись входных данных (слой, три ключа
+    // файла, снимок): снимок допустимого состояния (создаётся на первом допустимом проходе, обновляется, отбрасывается на
+    // строках 1 и 7 таблицы исходов), уведомление окнам о новых проблемах профилей.
+    const profileSigs = new Map<string, string>()
+    let profilesSaid = ""
+    let profilesAt = 0
+    async function profilesStep() {
+      let changed = false
+      for (const p of projects) {
+        const dir = p.dir ?? p.rootPath
+        if (!dir) continue
+        try {
+          const ps = profileState(dir)
+          const sig = stateSignature(ps)
+          if (profileSigs.get(p.name) === sig) continue
+          changed = true
+          profileSigs.set(p.name, sig)
+          const after = syncSnapshot(dir)
+          profileSigs.set(p.name, stateSignature(after))
+        } catch (e) {
+          log(`profiles step of ${p.name} failed: ${e}`)
+        }
+      }
+      if (!changed && now() - profilesAt < 30_000) return
+      profilesAt = now()
+      const problems = profileProblems()
+      const said = problems.join(" | ")
+      if (said === profilesSaid) return
+      profilesSaid = said
+      if (!problems.length) return
+      log(`profiles: ${said}`)
+      for (const w of liveWindows()) postNotice(w.pid, { title: "crew: профили моделей — /crew-sets check", message: short(problems.join("; "), 100), duration: 15_000 })
+    }
+
     // ЗАГОЛОВКИ СЕССИЙ ЗАДАЧ — из журнала: «#N название», сдана/закрыта «#N ✓», отменена «#N ✗», передана другой
     // сессии «#N ↷». Сверяются каждый проход (то, что поменял MCP-сервер или другой процесс, тоже доходит), меняются
     // через session.update — без хода модели. Вкладки владельца (assign) не переименовываются.
@@ -1214,6 +1249,7 @@ export default {
         await step("applyApprovals", applyApprovals)
         await step("assignReviewers", assignReviewers)
         await step("planSteps", planSteps)
+        await step("profilesStep", profilesStep)
         await step("reconcile", reconcile)
         await step("resumeInterrupted", resumeInterrupted)
         await step("finishTasks", finishTasks)
@@ -1351,7 +1387,7 @@ ${text}`, delivery })
     const DOCTOR_EVERY_MS = Number(process.env.CREW_HARNESS_DOCTOR_MS) || 10 * 60_000
     let doctorSaid = ""
     const runDoctor = async () => {
-      const problems = [...(await doctor()), ...commonDoctor(), ...settingsProblems(projects)]
+      const problems = [...(await doctor()), ...commonDoctor(), ...settingsProblems(projects), ...profileProblems()]
       try {
         writeFileSync(DOCTOR_FILE, JSON.stringify({ at: Date.now(), problems }))
       } catch {}
