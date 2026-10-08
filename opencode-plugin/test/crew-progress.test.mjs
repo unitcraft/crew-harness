@@ -89,6 +89,151 @@ const parse = (...lines) => P.parseJournal(bytes(...lines))
   cell("AC-26 «готово» not at the start of the signature is no keyword", P.keywordOf(P.parseLine("С5 14/14 сделано, не готово").text) === undefined, "")
 }
 
+// ---- states, thresholds, visibility (step 3) ------------------------------------------------------------------------------
+const TH = P.thresholdsFromEnv({})
+const MIN = 60_000
+// one session from journal lines; the file time is `mtime`; the entry is computed at `now`
+const entryAt = (lines, mtime, now, th = TH) => {
+  const ss = P.sessionsOf(parse(...lines))
+  return P.entryOf(ss[ss.length - 1], mtime, now, th)
+}
+// the same with a time field written in the last line: `[HH:MM]` of the moment `t`
+const hhmm = (t) => {
+  const d = new Date(t)
+  return `[${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}]`
+}
+const now0 = at(12, 0)
+
+{
+  // AC-02: the silence threshold
+  const mk = (ago) => entryAt(["С5 0/14 старт", `С5 13/14 ${hhmm(now0 - ago * MIN)} шаг`], now0 - ago * MIN, now0)
+  cell("AC-02 11 minutes of silence with k < N: state 6 (давно нет вестей)", mk(11).state === 6 && mk(11).stale, show(mk(11)))
+  cell("AC-02 9 minutes: state 5 (идёт), no silence mark", mk(9).state === 5 && !mk(9).stale, show(mk(9)))
+  const th20 = P.thresholdsFromEnv({ CREW_HARNESS_PROGRESS_STALE_MS: String(20 * MIN) })
+  const e20 = entryAt(["С5 0/14 старт", `С5 13/14 ${hhmm(now0 - 11 * MIN)} шаг`], now0 - 11 * MIN, now0, th20)
+  cell("AC-02 the threshold of 20 minutes from the environment moves the border", e20.state === 5, show(e20))
+  const fileTime = now0 - 8 * MIN // the file is not touched while the clock goes on
+  const lines = ["С5 0/14 старт", `С5 13/14 ${hhmm(fileTime)} шаг`]
+  const early = entryAt(lines, fileTime, fileTime + 9 * MIN)
+  const late = entryAt(lines, fileTime, fileTime + 12 * MIN)
+  cell("AC-02 the file is unchanged, the clock goes 2 minutes past the threshold: the mark appears", early.state === 5 && late.state === 6, show({ early: early.state, late: late.state }))
+}
+{
+  // AC-03: done, disappearance
+  const doneWith = entryAt(["С5 0/14 старт", `С5 14/14 ${hhmm(now0 - 5 * MIN)} готово — итог`], now0 - 5 * MIN, now0)
+  const doneNo = entryAt(["С5 0/14 старт", "С5 14/14 готово — итог"], now0 - 5 * MIN, now0)
+  cell("AC-03 «готово» with and without the time field is state 2 and shown", doneWith.state === 2 && doneNo.state === 2 && doneWith.shown && doneNo.shown && doneNo.byFile && !doneWith.byFile, show({ doneWith, doneNo }))
+  const old15 = entryAt(["С5 0/14 старт", "С5 14/14 готово"], now0 - 15 * MIN, now0)
+  const old16 = entryAt(["С5 0/14 старт", "С5 14/14 готово"], now0 - 16 * MIN, now0)
+  cell("AC-03 «готово» vanishes at 15 minutes and stays gone at 16 without the file changing", !old15.shown && !old16.shown, show({ old15: old15.shown, old16: old16.shown }))
+  const quiet = entryAt(["С5 0/14 старт", "С5 5/14 шаг"], now0 - 25 * 3_600_000, now0)
+  cell("AC-03 an unfinished session silent for 25 hours vanishes from the panel and is abandoned in the command", !quiet.shown && quiet.abandoned && quiet.state === 6, show(quiet))
+  const quiet23 = entryAt(["С5 0/14 старт", "С5 5/14 шаг"], now0 - 23 * 3_600_000, now0)
+  cell("AC-03 at 23 hours it is still shown", quiet23.shown && !quiet23.abandoned, show(quiet23))
+}
+{
+  // AC-07: launch and start lines
+  const l1 = entryAt([`С1 0/0 ${hhmm(now0 - 3 * MIN)} запуск`], now0 - 3 * MIN, now0)
+  cell("AC-07 a launch line alone: state 3, no silence mark yet", l1.state === 3 && !l1.stale && l1.shown, show(l1))
+  const l1late = entryAt([`С1 0/0 ${hhmm(now0 - 11 * MIN)} запуск`], now0 - 11 * MIN, now0)
+  cell("AC-07 a launch line after the threshold: still state 3, with the silence mark, never «готово»", l1late.state === 3 && l1late.stale, show(l1late))
+  const k = entryAt(["КОММИТ 0/0 старт"], now0 - 2 * MIN, now0)
+  cell("AC-07 «КОММИТ 0/0 старт»: state 4 (без единиц), no silence mark", k.state === 4 && !k.stale && k.shown, show(k))
+  const k16 = entryAt(["КОММИТ 0/0 старт"], now0 - 16 * MIN, now0)
+  cell("AC-07 «без единиц» vanishes after 15 minutes", !k16.shown, show(k16))
+  const a = entryAt(["С1 0/0 запуск", "С1 0/26 старт"], now0 - MIN, now0)
+  cell("AC-07 launch then «0/26 старт»: one session, N = 26", P.sessionsOf(parse("С1 0/0 запуск", "С1 0/26 старт")).length === 1 && a.last.n === 26 && a.state === 5, show(a))
+  const b = entryAt(["С1 0/0 запуск", "С1 1/26 шаг"], now0 - MIN, now0)
+  cell("AC-07 launch then «1/26» without the start line: one session, N = 26", P.sessionsOf(parse("С1 0/0 запуск", "С1 1/26 шаг")).length === 1 && b.last.n === 26 && b.state === 5, show(b))
+  const s = P.sessionsOf(parse("С1 0/0 запуск", "С1 0/26 старт"))[0]
+  cell("AC-07 the launch line is attached to the session and does not count as its row", s.launch?.k === 0 && s.rows.length === 1, show(s))
+}
+{
+  // AC-08: stop lines
+  for (const [k, n] of [[13, 14], [14, 14], [15, 14]]) {
+    for (const withTime of [false, true]) {
+      const line = `С5 ${k}/${n} ${withTime ? hhmm(now0 - 30 * MIN) + " " : ""}стоп: ворота — ждёт слова владельца`
+      const e = entryAt(["С5 0/14 старт", line], now0 - 30 * MIN, now0)
+      cell(`AC-08 stop at ${k}/${n}${withTime ? " with time" : ""}: state 1, kind ворота, no silence mark`, e.state === 1 && e.kind === "ворота" && !e.stale && e.shown, show(e))
+    }
+  }
+  const joined = entryAt(["С5 0/14 старт", "С5 13/14 [10:05] стоп:ворота — x"], at(10, 6), at(10, 8))
+  const spaced = entryAt(["С5 0/14 старт", "С5 13/14 [10:05] стоп: ворота — x"], at(10, 6), at(10, 8))
+  cell("AC-08 «стоп:ворота» and «стоп: ворота» both give kind ворота", joined.kind === "ворота" && spaced.kind === "ворота", show({ joined: joined.kind, spaced: spaced.kind }))
+  const odd = entryAt(["С5 0/14 старт", "С5 13/14 стоп: что-то — x"], now0, now0)
+  const none = entryAt(["С5 0/14 старт", "С5 13/14 стоп: — x"], now0, now0)
+  cell("AC-08 a kind outside the list or no kind: state 1 with no kind named", odd.state === 1 && odd.kind === undefined && none.state === 1 && none.kind === undefined, show({ odd, none }))
+  const gone = entryAt(["С5 0/14 старт", "С5 13/14 стоп: ворота — x"], now0 - 25 * 3_600_000, now0)
+  cell("AC-08 a stopped session is abandoned after 24 hours", !gone.shown && gone.abandoned, show(gone))
+}
+{
+  // AC-23: k = N and k > N without «готово»
+  for (const line of ["С5 14/14 пересборка: ветка на main", "С5 15/14 пересборка: ветка на main"]) {
+    const e = entryAt(["С5 0/14 старт", line], now0 - 16 * MIN, now0)
+    cell(`AC-23 «${line.slice(0, 7)}» with no «готово»: state 7, still shown after 16 minutes`, e.state === 7 && e.shown && !e.stale, show(e))
+    const e25 = entryAt(["С5 0/14 старт", line], now0 - 25 * 3_600_000, now0)
+    cell(`AC-23 «${line.slice(0, 7)}»: gone after 24 hours`, !e25.shown && e25.abandoned, show(e25))
+  }
+  for (const line of ["С5 14/14 готово", "С5 15/14 готово", "С5 12/14 готово", "С5 14/14 [10:05] готово — итог"]) {
+    const e = entryAt(["С5 0/14 старт", "С5 11/14 шаг", line], at(10, 6), at(10, 8))
+    cell(`AC-23 «${line}»: state 2 (the word outranks the count)`, e.state === 2, show(e))
+  }
+  for (const line of ["С5 14/14 стоп: ворота — x", "С5 15/14 стоп: ворота — x"]) {
+    const e = entryAt(["С5 0/14 старт", line], now0, now0)
+    cell(`AC-23 «${line.slice(0, 7)} стоп»: state 1`, e.state === 1 && e.kind === "ворота", show(e))
+  }
+  const after = entryAt(["С5 0/14 старт", "С5 14/14 готово", "С5 14/14 уборка: ветка"], now0 - 20 * MIN, now0)
+  cell("AC-23 a line after «готово» in the same session brings back «итога нет» (an accepted border)", after.state === 7, show(after))
+}
+{
+  // the whole table: every combination has exactly one first matching row and it is the table's row (REQ-04, the table written apart)
+  const rows = [
+    [1, (w) => w === "стоп"],
+    [2, (w, k, n) => w === "готово" && n > 0],
+    [3, (w, k, n) => n === 0 && w === "запуск"],
+    [4, (w, k, n) => n === 0],
+    [5, (w, k, n, stale) => k < n && !stale],
+    [6, (w, k, n, stale) => k < n && stale],
+    [7, (w, k, n) => k >= n],
+  ]
+  let combos = 0
+  let bad = []
+  for (const word of ["", "готово", "стоп: ворота", "запуск", "старт"])
+    for (const n of [0, 3])
+      for (const k of [0, 2, 3, 4])
+        for (const stale of [false, true]) {
+          combos++
+          const sig = `${word || "шаг"} x`
+          const line = P.parseLine(`С5 ${k}/${n} ${sig}`)
+          const mt = now0 - (stale ? 11 : 2) * MIN
+          const got = P.stateOf(line, P.momentOf(line, mt, now0), now0, TH).state
+          const kw = P.keywordOf(line.text)
+          const hit = rows.filter(([, f]) => f(kw, k, n, stale))
+          const first = hit[0]?.[0]
+          if (!hit.length || got !== first) bad.push(show({ word, n, k, stale, got, first }))
+        }
+  cell(`AC-02 the state table: ${combos} combinations, each has a first matching row and the code agrees`, bad.length === 0 && combos === 80, bad.slice(0, 3).join(" | "))
+}
+{
+  // AC-15: session names
+  const names = {
+    "С1": "С1 разбор", "С1п": "С1п правка разбора", "С2": "С2 проверка разбора", "С3": "С3 план", "С3п": "С3п правка плана", "С4": "С4 проверка плана",
+    "С5": "С5 реализация", "С5д": "С5д продолжение реализации", "С5п": "С5п правка реализации", "С6": "С6 проверка реализации", "С7": "С7 сдача",
+    "С7п": "С7п правка сдачи", "С8": "С8 проверка сдачи", "С9": "С9 разбор обратной связи", "КОММИТ": "КОММИТ", "ПУШ": "ПУШ", "Х1": "Х1",
+  }
+  const wrong = Object.entries(names).filter(([c, n]) => P.sessionName(c) !== n)
+  cell("AC-15 session names by the REQ-08 list, КОММИТ/ПУШ and unknown codes as written", wrong.length === 0, show(wrong))
+}
+{
+  // AC-25 (thresholds): defaults and the environment
+  const d = P.thresholdsFromEnv({})
+  cell("AC-25 thresholds by default: 10 minutes, 15 minutes, 24 hours", d.staleMs === 10 * MIN && d.doneMs === 15 * MIN && d.abandonMs === 24 * 3_600_000, show(d))
+  const o = P.thresholdsFromEnv({ CREW_HARNESS_PROGRESS_STALE_MS: "1200000", CREW_HARNESS_PROGRESS_DONE_MS: "60000", CREW_HARNESS_PROGRESS_ABANDON_MS: "7200000" })
+  cell("AC-25 the three environment variables override the thresholds", o.staleMs === 1_200_000 && o.doneMs === 60_000 && o.abandonMs === 7_200_000, show(o))
+  const b = P.thresholdsFromEnv({ CREW_HARNESS_PROGRESS_STALE_MS: "abc", CREW_HARNESS_PROGRESS_DONE_MS: "-5", CREW_HARNESS_PROGRESS_ABANDON_MS: "0" })
+  cell("AC-25 a non-number, a negative and a zero value fall back to the default", show(b) === show(d), show(b))
+}
+
 // ==== END OF CELLS ====
 try {
   rmSync(tmp, { recursive: true, force: true })

@@ -140,3 +140,111 @@ export function sessionsOf(lines: Line[]): Session[] {
   }
   return out
 }
+
+// ---- Пороги, состояния, видимость, названия сессий --------------------------------------------------------------------
+
+export type Thresholds = { staleMs: number; doneMs: number; abandonMs: number }
+export const DEFAULT_THRESHOLDS: Thresholds = { staleMs: 10 * 60_000, doneMs: 15 * 60_000, abandonMs: 24 * 3_600_000 }
+
+/**
+ * Пороги: 10 минут «давно нет вестей», 15 минут показа «готово» и «без единиц», 24 часа до пропадания молчащей. Переопределяются
+ * переменными окружения процесса окна, значение в миллисекундах; не число, нуль и отрицательное — умолчание (REQ-10, РП-04).
+ */
+export function thresholdsFromEnv(env: Record<string, string | undefined> = {}): Thresholds {
+  const pick = (name: string, fallback: number) => {
+    const v = Number(env[name])
+    return Number.isFinite(v) && v > 0 ? v : fallback
+  }
+  return {
+    staleMs: pick("CREW_HARNESS_PROGRESS_STALE_MS", DEFAULT_THRESHOLDS.staleMs),
+    doneMs: pick("CREW_HARNESS_PROGRESS_DONE_MS", DEFAULT_THRESHOLDS.doneMs),
+    abandonMs: pick("CREW_HARNESS_PROGRESS_ABANDON_MS", DEFAULT_THRESHOLDS.abandonMs),
+  }
+}
+
+/** Состояния таблицы REQ-04: 1 остановилась, 2 готово, 3 запущена (шагов нет), 4 без единиц, 5 идёт, 6 тишина, 7 итога нет. */
+export type State = 1 | 2 | 3 | 4 | 5 | 6 | 7
+export const STATE_WORDS: Record<State, string> = {
+  1: "остановилась",
+  2: "готово",
+  3: "запущена, шагов нет",
+  4: "без единиц",
+  5: "идёт",
+  6: "давно нет вестей",
+  7: "все шаги сделаны, итога нет",
+}
+
+/** Последняя строка сессии: её последняя строка, а у записи «запуск без старта» — строка запуска. */
+export const lastOf = (s: Session): Line => (s.rows.length ? s.rows[s.rows.length - 1] : (s.launch as Line))
+
+/** Состояние последней строки по таблице REQ-04 (первая подходящая строка таблицы). */
+export function stateOf(last: Line, moment: Moment, now: number, th: Thresholds): { state: State; kind?: string } {
+  const kw = keywordOf(last.text)
+  if (kw === "стоп") return { state: 1, kind: stopKind(last.text) }
+  if (kw === "готово" && last.n > 0) return { state: 2 }
+  if (last.n === 0) return { state: kw === "запуск" ? 3 : 4 }
+  if (last.k >= last.n) return { state: 7 }
+  return { state: now - moment.at > th.staleMs ? 6 : 5 }
+}
+
+/** Видна ли запись в панели: «готово» и «без единиц» — 15 минут, остановившаяся, запущенная, молчащая и «итога нет» — 24 часа (REQ-05). */
+export function isShown(state: State, at: number, now: number, th: Thresholds): boolean {
+  const age = now - at
+  if (state === 2 || state === 4) return age < th.doneMs
+  if (state === 1 || state === 3 || state === 6 || state === 7) return age < th.abandonMs
+  return true
+}
+
+/** Молчит дольше 24 часов (в команде такая запись «давно брошена»). */
+export const isAbandoned = (state: State, at: number, now: number, th: Thresholds) => (state === 1 || state === 3 || state === 6 || state === 7) && now - at >= th.abandonMs
+
+/** Запись о сессии для показа: последняя строка, момент вести, состояние, видимость. */
+export type Entry = {
+  session: Session
+  last: Line
+  at: number
+  byFile: boolean
+  state: State
+  kind?: string
+  /** тишина дольше порога «давно нет вестей» у состояний 3 и 6 */
+  stale: boolean
+  shown: boolean
+  abandoned: boolean
+}
+
+export function entryOf(session: Session, fileMtime: number, now: number, th: Thresholds): Entry {
+  const last = lastOf(session)
+  const m = momentOf(last, fileMtime, now)
+  const st = stateOf(last, m, now, th)
+  return {
+    session,
+    last,
+    at: m.at,
+    byFile: m.byFile,
+    state: st.state,
+    ...(st.kind !== undefined ? { kind: st.kind } : {}),
+    stale: (st.state === 3 || st.state === 6) && now - m.at > th.staleMs,
+    shown: isShown(st.state, m.at, now, th),
+    abandoned: isAbandoned(st.state, m.at, now, th),
+  }
+}
+
+const SESSION_WORDS: Record<string, string> = {
+  "С1": "разбор",
+  "С1п": "правка разбора",
+  "С2": "проверка разбора",
+  "С3": "план",
+  "С3п": "правка плана",
+  "С4": "проверка плана",
+  "С5": "реализация",
+  "С5д": "продолжение реализации",
+  "С5п": "правка реализации",
+  "С6": "проверка реализации",
+  "С7": "сдача",
+  "С7п": "правка сдачи",
+  "С8": "проверка сдачи",
+  "С9": "разбор обратной связи",
+}
+
+/** Сессия словами: «С5 реализация»; КОММИТ, ПУШ и неизвестный код — как есть (REQ-08). */
+export const sessionName = (code: string) => (SESSION_WORDS[code] ? `${code} ${SESSION_WORDS[code]}` : code)
