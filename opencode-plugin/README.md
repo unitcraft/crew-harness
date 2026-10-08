@@ -432,7 +432,7 @@ change that (the plugin never switches the model of an open tab). A reviewer on 
 hooks of the shell, `permissions.deny` and `.claude/commands` through the guards plugin; `Write`, `Stop`,
 `SessionStart` and `PostToolUse` hooks do not).
 
-Commands of the window (answers are shown in a dialog at once, no turn of the model; a window opens the commands after its restart). In the window `/crew-sets` and `/crew-profiles` open a menu: the table and every verb below with its arguments; a verb with arguments opens an input with the format and an example of that verb. The catalog of models for `check` and `use` comes from the window, otherwise from a snapshot that the plugin of the service writes (`model-catalog.json` in the mailbox, every 10 minutes); an old or absent snapshot is named in the answer:
+Commands of the window (answers are shown in a dialog at once, no turn of the model; a window opens the commands after its restart). In the window `/crew-sets` and `/crew-profiles` open a menu: the table and every verb below with its arguments; a verb with arguments opens an input with the format and an example of that verb. The catalog of models for `check` and `use` comes from the window, otherwise from a snapshot that the plugin of the service writes (`model-catalog.json` in the mailbox, every 10 minutes); an old or absent snapshot is named in the answer. Sizes in the answers are written as «контекст 720K · вывод до 64K» (with a separate input limit: «контекст 525K · ввод 461K · вывод до 128K»); «контекст» is the OpenCode `limit.context`, the word «окно» is kept for the terminal window:
 
 | Command | What it does |
 |---|---|

@@ -238,7 +238,7 @@ export function profilesEditVerb(dir: string, verb: string, args: string[]): { o
         let l = layer
         for (const t of tiers) l = L.layerSetProfile(l, raw, family, t, p)
         const old = tiers.map((t) => (data.profiles as any)?.[family]?.[t]).filter(Boolean)
-        return { layer: l, what: `профиль ${family}/${tierWord}: ${p.model}, ${P.winText(p as any)}${tiers.length > 1 ? " (все три ступени разом)" : ""}`, from: old.length ? old.map((x: any) => `${x.model} ${x.context}`).join("|") : undefined, to: `${p.model} ${p.context}` }
+        return { layer: l, what: `профиль ${family}/${tierWord}: ${p.model}, ${limitsText(p as any)}${tiers.length > 1 ? " (все три ступени разом)" : ""}`, from: old.length ? old.map((x: any) => `${x.model} ${x.context}`).join("|") : undefined, to: `${p.model} ${p.context}` }
       })
     }
     case "new": {
@@ -312,7 +312,7 @@ export function profilesEditVerb(dir: string, verb: string, args: string[]): { o
 // Показ, use, check, save, разбор команд (шаг 11)
 
 import path from "node:path"
-import { DEFAULT_SPAWN_MODELS, loadConfig, settingsContext, verbUsageList } from "./core.ts"
+import { DEFAULT_SPAWN_MODELS, LIMIT_RU, fmtTokens, limitsText, loadConfig, settingsContext, verbUsageList } from "./core.ts"
 import { projectFor, workingSettings } from "./settings.ts"
 import { listTasks } from "./tasks.ts"
 import * as W from "./profile-windows.ts"
@@ -335,8 +335,8 @@ function windowsOfActive(ps: L.PState): Map<string, P.Win> {
 const fieldsText = (f: W.WindowFields): string =>
   (["context", "input", "output"] as const)
     .filter((k) => f[k])
-    .map((k) => `${k} ${f[k]!.value}`)
-    .join(", ") || "в файлах настроек окно не задано"
+    .map((k) => `${LIMIT_RU[k]} ${fmtTokens(f[k]!.value)}`)
+    .join(" · ") || "контекст в файлах настроек не задан"
 /** Окно модели по рукописным и общим настройкам папки как P.Win (если записаны context и output). */
 function chainAsWin(dir: string, model: string): P.Win | undefined {
   const f = W.chainWindow(dir, model, { skipOurs: true })
@@ -347,7 +347,7 @@ function chainAsWin(dir: string, model: string): P.Win | undefined {
 function reviewerWindowLine(root: string, model: string): string {
   const f = W.chainWindow(root, model, { skipOurs: true })
   const src = f.context ? ` (${fileName(f.context.file)})` : ""
-  return `окно профиля здесь не применяется (приёмка идёт в основной папке): модель ${model} берёт окно из рукописных и глобальных настроек: ${fieldsText(f)}${src}`
+  return `контекст профиля здесь не применяется (приёмка идёт в основной папке): модель ${model} берёт контекст из рукописных и глобальных настроек: ${fieldsText(f)}${src}`
 }
 
 export function setsTable(ps: L.PState): string {
@@ -375,13 +375,13 @@ export function setsTable(ps: L.PState): string {
 
 export function profilesTable(ps: L.PState): string {
   const fams = Object.keys(isObj(ps.data.profiles) ? ps.data.profiles : {}).sort()
-  const lines = [`Справочник профилей проекта ${ps.project}: семья, ступень → модель, окно.`]
+  const lines = [`Справочник профилей проекта ${ps.project}: семья, ступень → модель, контекст.`]
   if (!fams.length) lines.push("Справочник пуст. Пример файла — в README плагина (раздел о профилях моделей).")
   for (const f of fams)
     for (const t of P.PROFILE_TIERS) {
       const p = (ps.data.profiles as any)[f][t]
       if (!p) continue
-      lines.push(`  ${pad(f, 8)}${pad(t, 8)}${P.isEmptyProfile(p) ? "(пусто — заполнить)" : `${pad(p.model, 34)}${P.winText(winOf(p))}`}`)
+      lines.push(`  ${pad(f, 8)}${pad(t, 8)}${P.isEmptyProfile(p) ? "(пусто — заполнить)" : `${pad(p.model, 34)}${limitsText(winOf(p))}`}`)
     }
   if (ps.state.message) lines.push(`! ${ps.state.message}`)
   const d = L.layerDiff(ps.raw, ps.layer).filter((x) => x.key.startsWith("profile:"))
@@ -398,7 +398,7 @@ export function showFamily(ps: L.PState, family?: string): string {
     const p = f[t]
     if (!p) lines.push(`  ${t}: записи нет`)
     else if (P.isEmptyProfile(p)) lines.push(`  ${t}: пусто («заполнить»: ${ref(`/crew-profiles set ${family} ${t} <модель> <context> output=<n>`, "set")})`)
-    else lines.push(`  ${t}: ${p.model} — ${P.winText(winOf(p))}`)
+    else lines.push(`  ${t}: ${p.model} — ${limitsText(winOf(p))}`)
   }
   const refs = referencing(ps.data, family)
   lines.push(refs.length ? `Ссылаются наборы: ${refs.join("; ")}` : "Ни один набор на семью не ссылается.")
@@ -424,14 +424,14 @@ export function showSet(ps: L.PState, name: string | undefined, dir: string): st
     if (cell.tier === "task") {
       lines.push(`  ${P.STAGE_RU[st]}: ${P.cellText(cell)} — по ступени задачи: ${P.PROFILE_TIERS.map((t) => `${t} → ${prof(t)?.model ?? "нет профиля"}`).join(", ")}`)
       if (front) {
-        for (const t of P.PROFILE_TIERS) if (prof(t)) lines.push(`      окно профиля в рабочем дереве задачи (${t}): ${P.winText(winOf(prof(t)))}`)
+        for (const t of P.PROFILE_TIERS) if (prof(t)) lines.push(`      контекст профиля в рабочем дереве задачи (${t}): ${limitsText(winOf(prof(t)))}`)
       } else {
         for (const t of P.PROFILE_TIERS) if (prof(t)) lines.push(`      ${t}: ${reviewerWindowLine(root, prof(t).model)}`)
       }
     } else {
       const p = prof(cell.tier)
       lines.push(`  ${P.STAGE_RU[st]}: ${P.cellText(cell)} → ${p?.model ?? "нет профиля"}`)
-      if (p) lines.push(front ? `      окно профиля в рабочем дереве задачи: ${P.winText(winOf(p))}` : `      ${reviewerWindowLine(root, p.model)}`)
+      if (p) lines.push(front ? `      контекст профиля в рабочем дереве задачи: ${limitsText(winOf(p))}` : `      ${reviewerWindowLine(root, p.model)}`)
     }
   }
   for (const e of P.checkData(ps.data, n).errors) lines.push(`! ${e.text}`)
@@ -458,7 +458,7 @@ async function catalogWarnings(models: Map<string, P.Win>, deps: CmdDeps, full: 
       const [prov, ...rest] = model.split("/")
       const hit = cat.find((m) => m.providerID === prov && m.modelID === rest.join("/"))
       if (!hit) out.push(`модели ${model} нет в каталоге OpenCode (опечатка или провайдер не подключён)`)
-      else if (full && hit.limit?.input !== undefined && win.input === undefined) out.push(`у модели ${model} в каталоге есть input (${hit.limit.input}), а в профиле его нет: окно профиля сжатие этой модели не изменит (у моделей с input сжатием управляет input)`)
+      else if (full && hit.limit?.input !== undefined && win.input === undefined) out.push(`у модели ${model} в каталоге есть ввод (${fmtTokens(hit.limit.input)}), а в профиле его нет: контекст профиля сжатие этой модели не изменит (у моделей с вводом сжатием управляет ввод)`)
     }
   }
   return out
@@ -471,19 +471,19 @@ async function windowWarnings(ps: L.PState, models: Map<string, P.Win>, dir: str
 function updownLines(before: Map<string, P.Win>, after: Map<string, P.Win>, root: string): string[] {
   const out: string[] = []
   const reserved = W.reservedOf(root)?.value
-  const fmt = (w: P.Win | undefined) => (w ? P.winText(w) : "окна нет в рукописных настройках")
+  const fmt = (w: P.Win | undefined) => (w ? limitsText(w) : "контекста нет в рукописных настройках")
   const shrunk: string[] = []
   for (const m of [...new Set([...before.keys(), ...after.keys()])].sort()) {
     const b = before.get(m) ?? chainAsWin(root, m)
     const a = after.get(m) ?? chainAsWin(root, m)
     if (JSON.stringify(b) === JSON.stringify(a)) continue
-    out.push(`  ${m}: ${fmt(b)} → ${after.has(m) ? fmt(a) : `${fmt(a)} (набор окна не задаёт — из рукописных настроек)`}`)
+    out.push(`  ${m}: ${fmt(b)} → ${after.has(m) ? fmt(a) : `${fmt(a)} (набор контекст не задаёт — из рукописных настроек)`}`)
     const bt = b ? (b.input ?? b.context) : undefined
     const at = a ? (a.input ?? a.context) : undefined
-    if (bt !== undefined && at !== undefined && at < bt) shrunk.push(`${m} (порог сжатия ${reserved !== undefined ? `${bt - reserved} → ${at - reserved}` : `окно ${bt} → ${at}`})`)
+    if (bt !== undefined && at !== undefined && at < bt) shrunk.push(`${m} (порог сжатия ${reserved !== undefined ? `${fmtTokens(bt - reserved)} → ${fmtTokens(at - reserved)}` : `контекст ${fmtTokens(bt)} → ${fmtTokens(at)}`})`)
   }
-  if (!out.length) out.push("  окна моделей этого набора совпадают с прежними — файлы окон не изменились")
-  if (shrunk.length) out.push(`Окно уменьшено: ${shrunk.join(", ")}. Вкладки, чей контекст уже больше нового порога, сожмутся на следующем ходе (порог — окно минус compaction.reserved; у моделей с input — input минус reserved).`)
+  if (!out.length) out.push("  контексты моделей этого набора совпадают с прежними — файл пределов не изменился")
+  if (shrunk.length) out.push(`Контекст уменьшен: ${shrunk.join(", ")}. Вкладки, чей контекст уже больше нового порога, сожмутся на следующем ходе (порог — контекст минус compaction.reserved; у моделей с вводом — ввод минус reserved).`)
   return out
 }
 
@@ -505,7 +505,7 @@ function reviewerModels(data: P.Data, name: string): string[] {
 function changeBody(before: L.PState, after: L.PState, dir: string): string[] {
   const root = mainFolder(dir)
   const am = windowsOfActive(after)
-  const lines = ["Окна сессий в рабочих деревьях задач (было → стало), применятся на следующем ходе каждой сессии:", ...updownLines(windowsOfActive(before), am, root)]
+  const lines = ["Контекст сессий в рабочих деревьях задач (было → стало), применится на следующем ходе каждой сессии:", ...updownLines(windowsOfActive(before), am, root)]
   if (after.state.usable) for (const m of reviewerModels(after.state.usable.data, after.state.usable.name)) lines.push(`Приёмка и приёмка плана: ${reviewerWindowLine(root, m)}.`)
   for (const w of W.windowNotes(root, W.qualifying(after.project, listTasks(after.project)), am)) lines.push(`Предупреждение: ${w}`)
   return lines

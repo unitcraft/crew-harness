@@ -917,11 +917,24 @@ export function settleObligation(session: string, qid: string): Obligation | und
 
 // Справка (`/crew-help` и инструмент `crew_help`). Текст — единственный дом правил переписки:
 // подсказка context-хука и описания инструментов на него ссылаются, а не повторяют.
+// ЧИСЛА В ОТВЕТАХ (правка 003, 2026-10-08, слово владельца): размер контекста и пределы моделей пишутся не голыми «720000/64000», а
+// «контекст 720K · вывод до 64K» («контекст 525K · ввод 461K · вывод до 128K» у моделей с отдельным пределом ввода). «Окно» в
+// этом смысле не говорим: путает с окном терминала (в панели OpenCode «Context», в настройках limit.context). ≥ 1000 и кратно
+// 1000 — K без дробной части, иначе точное число (220000 → 220K, 131072 → 131072). Единственное место форматирования.
+export const fmtTokens = (n: number): string => (Number.isInteger(n) && n >= 1000 && n % 1000 === 0 ? `${n / 1000}K` : String(n))
+export const LIMIT_RU = { context: "контекст", input: "ввод", output: "вывод до" } as const
+/** Пределы модели словами: поля по порядку контекст, ввод, вывод; пропущенные не называются. */
+export const limitsText = (w: { context?: number; input?: number; output?: number }): string =>
+  (["context", "input", "output"] as const)
+    .filter((k) => w[k] !== undefined)
+    .map((k) => `${LIMIT_RU[k]} ${fmtTokens(w[k]!)}`)
+    .join(" · ")
+
 // ГЛАГОЛЫ КОМАНД ОКНА /crew-sets и /crew-profiles — ЕДИНСТВЕННОЕ место с описанием каждого (правка 003, 2026-10-08): из него собраны
 // строка «Глаголы …» в отказах profile-cmd.ts, раздел справки (HELP, /crew-help) и меню команд окна (tui.ts). Порядок — как в строке отказов.
 export type VerbHelp = { verb: string; usage: string; what: string; example: string; bare?: boolean }
 export const SETS_VERB_HELP: VerbHelp[] = [
-  { verb: "show", usage: "[имя]", what: "набор подробно: модель, ступень и окно по этапам; без имени — включённый", example: "show cross-kimi", bare: true },
+  { verb: "show", usage: "[имя]", what: "набор подробно: модель, ступень и контекст по этапам; без имени — включённый", example: "show cross-kimi", bare: true },
   { verb: "use", usage: "<имя>", what: "включить набор локально (для всех этапов); файл проекта не меняется", example: "use cross-kimi" },
   { verb: "reset", usage: "[<имя> [<этап>] | all]", what: "забрать локальные правки: имя набора, правки набора, одну клетку или всё", example: "reset all" },
   { verb: "set", usage: "<имя> <этап> <семья>/<ступень>", what: "изменить клетку набора", example: "set cross-kimi accept kimi/heavy" },
@@ -929,7 +942,7 @@ export const SETS_VERB_HELP: VerbHelp[] = [
   { verb: "new", usage: "<имя> [from <имя>]", what: "новый набор: пустой или копия другого", example: "new my-set from default" },
   { verb: "rename", usage: "<а> <б>", what: "переименовать набор (включённое имя следует за ним)", example: "rename my-set my-set2" },
   { verb: "delete", usage: "<имя>", what: "удалить набор (включённый не удаляется)", example: "delete my-set2" },
-  { verb: "check", usage: "", what: "проверить данные и окна; ничего не меняет", example: "check", bare: true },
+  { verb: "check", usage: "", what: "проверить данные и контексты; ничего не меняет", example: "check", bare: true },
   { verb: "save", usage: "[force]", what: "перенести локальные правки в файл проекта (в рабочую копию, без коммита)", example: "save", bare: true },
 ]
 export const PROFILES_VERB_HELP: VerbHelp[] = [
@@ -939,7 +952,7 @@ export const PROFILES_VERB_HELP: VerbHelp[] = [
   { verb: "rename", usage: "<а> <б>", what: "переименовать семью (ссылки наборов обновятся)", example: "rename codex2 codex3" },
   { verb: "delete", usage: "<семья> [<ступень>]", what: "удалить семью или одну ступень (если на неё нет ссылок)", example: "delete codex3" },
   { verb: "reset", usage: "[<семья>[/<ступень>] | all]", what: "забрать локальные правки семьи, записи или всё", example: "reset all" },
-  { verb: "check", usage: "", what: "проверить данные и окна; ничего не меняет", example: "check", bare: true },
+  { verb: "check", usage: "", what: "проверить данные и контексты; ничего не меняет", example: "check", bare: true },
   { verb: "save", usage: "[force]", what: "перенести локальные правки в файл проекта (в рабочую копию, без коммита)", example: "save", bare: true },
 ]
 export const verbHelpOf = (kind: "sets" | "profiles"): VerbHelp[] => (kind === "sets" ? SETS_VERB_HELP : PROFILES_VERB_HELP)
@@ -995,8 +1008,8 @@ export const HELP = `crew-harness — письма между вкладками
                                 set {values} (интегратор; пишет рабочую копию файла настроек, действует с коммита).
   crew_doctor                 — самопроверка: что сломано и что делать.
   /crew (команда окна)       — владельцу: кто чего ждёт, без хода модели; кто ждёт его — уведомление в окне.
-  /crew-sets, /crew-profiles (команды окна) — владельцу: наборы профилей моделей и справочник «семья, ступень → модель и окно»;
-                                use включает набор для всех этапов (модель исполнителя, приёмщика, плана), окно профиля действует на
+  /crew-sets, /crew-profiles (команды окна) — владельцу: наборы профилей моделей и справочник «семья, ступень → модель и контекст»;
+                                use включает набор для всех этапов (модель исполнителя, приёмщика, плана), контекст профиля действует на
                                 сессии в рабочем дереве задачи; агент набор не включает (crew_config set пишет справочник и наборы).
   Глаголы (в окне — пункты меню команды):
 ${verbHelpText()}

@@ -15,6 +15,7 @@ import path from "node:path"
 import { BASE } from "./paths.ts"
 import type { Task } from "./tasks.ts"
 import * as P from "./profiles.ts"
+import { LIMIT_RU, fmtTokens } from "./core.ts" // единственное форматирование чисел ответов; вызывается при показе
 
 export const MARK = "_crew_harness"
 export const MARK_TEXT = "created by crew-harness (model profiles): windows of the models of the enabled set for the sessions of this task; the plugin rewrites and removes this file, do not edit"
@@ -468,15 +469,15 @@ export function windowNotes(root: string, wts: Task[], models: Map<string, P.Win
   for (const [model, win] of models) {
     for (const t of wts)
       for (const o of handWrittenOverrides(t.worktree!, model, win).filter((x) => x.stronger))
-        out.push(`в рабочем дереве задачи #${t.n} окно модели ${model} (${o.field}) задано рукописно: ${o.value} (файл ${slash(o.file)}) — оно сильнее файла плагина, сессия получит его, а не окно профиля (${(win as any)[o.field] ?? "—"})`)
+        out.push(`в рабочем дереве задачи #${t.n} у модели ${model} ${LIMIT_RU[o.field as "context"]} задан рукописно: ${fmtTokens(o.value)} (файл ${slash(o.file)}) — он сильнее файла плагина, сессия получит его, а не значение профиля (${(win as any)[o.field] !== undefined ? fmtTokens((win as any)[o.field]) : "—"})`)
     const hand = chainWindow(root, model, { skipOurs: true })
     for (const k of ["context", "input", "output"] as const) {
       const h = hand[k]
-      if (h && h.value !== (win as any)[k]) out.push(`в основной папке проекта у модели ${model} ${k} ${h.value} (файл ${slash(h.file)}): вкладки владельца и сессии приёмки берут его, профиль набора там не применяется (в профиле ${(win as any)[k] ?? "—"})`)
+      if (h && h.value !== (win as any)[k]) out.push(`в основной папке проекта у модели ${model} ${LIMIT_RU[k]} ${fmtTokens(h.value)} (файл ${slash(h.file)}): вкладки владельца и сессии приёмки берут его, профиль набора там не применяется (в профиле ${(win as any)[k] !== undefined ? fmtTokens((win as any)[k]) : "—"})`)
     }
     if (model.startsWith("claude-code/")) {
       const ex = explicitCompact(wts[0]?.worktree ?? root, model.slice("claude-code/".length))
-      if (ex) out.push(`порог Claude Code для модели ${model} задан явно (${ex.value}, ${slash(ex.where)}) и от набора не меняется; окно OpenCode станет ${win.input ?? win.context}${reserved ? ` (сжатие OpenCode на ${(win.input ?? win.context) - reserved.value})` : ""}`)
+      if (ex) out.push(`порог Claude Code для модели ${model} задан явно (${ex.value}, ${slash(ex.where)}) и от набора не меняется; контекст OpenCode станет ${fmtTokens((win.input ?? win.context))}${reserved ? ` (сжатие OpenCode на ${fmtTokens((win.input ?? win.context) - reserved.value)})` : ""}`)
     }
   }
   return out

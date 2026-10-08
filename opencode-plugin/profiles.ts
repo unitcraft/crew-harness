@@ -6,6 +6,8 @@
 //   profile_set:    "<имя набора по умолчанию>" (ставит человек)
 // Пустая запись («заполнить») — { "model": "" }. Окно — свойство профиля (модели), а не этапа.
 
+import { limitsText } from "./core.ts" // единственное форматирование чисел ответов (core.ts); вызывается при показе, не при загрузке
+
 export const STAGES = ["develop", "accept", "plan", "plan_accept"] as const
 export type Stage = (typeof STAGES)[number]
 export const isStage = (s: any): s is Stage => STAGES.includes(s)
@@ -87,7 +89,7 @@ export function invalidProfile(p: any, where: string): string | undefined {
     return undefined
   }
   if (!MODEL_RE.test(p.model)) return `${where}.model: «${p.model}» — нужно «провайдер/модель»`
-  if (!isPosInt(p.context)) return `${where}.context: целое положительное число (окно, токены)`
+  if (!isPosInt(p.context)) return `${where}.context: целое положительное число (контекст, токены)`
   if (!isPosInt(p.output)) return `${where}.output: целое положительное число (предел вывода; без него OpenCode отбросит запись окна целиком)`
   if (p.input !== undefined && !isPosInt(p.input)) return `${where}.input: целое положительное число`
   if (p.input !== undefined && p.input > p.context) return `${where}.input (${p.input}) больше context (${p.context})`
@@ -176,7 +178,6 @@ export function stageOfLaunch(t: { plan?: unknown }, role: "executor" | "reviewe
 
 export type Problem = { kind: "form" | "link" | "empty" | "conflict"; set?: string; text: string }
 export type Win = { context: number; output: number; input?: number }
-export const winText = (w: Win): string => `context ${w.context}${w.input !== undefined ? `, input ${w.input}` : ""}, output ${w.output}`
 const sameWin = (a: Win, b: Win) => a.context === b.context && a.output === b.output && a.input === b.input
 
 /** Описанные в наборе клетки известных этапов (незнакомые этапы читатель игнорирует). */
@@ -244,7 +245,7 @@ export function windowsOfSet(data: Data, setName: string): { models: Map<string,
   }
   for (const [model, list] of groups) {
     if (list.every((x) => sameWin(x.win, list[0].win))) models.set(model, list[0].win)
-    else conflicts.push({ kind: "conflict", set: setName, text: `набор «${setName}»: модель ${model} стоит в профилях с разными окнами (окно в OpenCode одно на модель): ${list.map((x) => `${x.at} — ${winText(x.win)}`).join("; ")}` })
+    else conflicts.push({ kind: "conflict", set: setName, text: `набор «${setName}»: модель ${model} стоит в профилях с разными контекстами (контекст в OpenCode один на модель): ${list.map((x) => `${x.at} — ${limitsText(x.win)}`).join("; ")}` })
   }
   return { models, conflicts, families }
 }

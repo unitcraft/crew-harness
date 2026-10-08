@@ -10,6 +10,7 @@ process.env.XDG_DATA_HOME = tmp
 process.env.CREW_HARNESS_POLL_MS = "100"
 
 const P = await import("../profiles.ts")
+const Core = await import("../core.ts")
 const schema = await import("../config-schema.ts")
 
 let fail = 0
@@ -127,14 +128,15 @@ cell("AC-26 equal windows: kimi-only gets one record for the one model on three 
 const conflict = clone(DATA)
 conflict.profiles.kimi.heavy.context = 150000
 const w2 = P.windowsOfSet(conflict, "kimi-only")
-cell("AC-26 different windows: a conflict naming the model, the profiles and the windows", w2.conflicts.length === 1 && /kimi\/k3/.test(w2.conflicts[0].text) && /kimi\/heavy — context 150000/.test(w2.conflicts[0].text) && /kimi\/medium — context 220000/.test(w2.conflicts[0].text), JSON.stringify(w2.conflicts))
+cell("AC-26 different windows: a conflict naming the model, the profiles and the windows", w2.conflicts.length === 1 && /kimi\/k3/.test(w2.conflicts[0].text) && /kimi\/heavy — контекст 150K/.test(w2.conflicts[0].text) && /kimi\/medium — контекст 220K/.test(w2.conflicts[0].text), JSON.stringify(w2.conflicts))
 cell("AC-26 a conflict makes the enabled set invalid, but a not enabled one only when it is enabled", P.checkData(conflict, "kimi-only").errors.some((e) => e.kind === "conflict") && !P.checkData(conflict, "default").errors.some((e) => e.kind === "conflict"), "wrong")
 const all = clone(DATA)
 for (const t of ["heavy", "medium", "light"]) all.profiles.kimi[t].context = 150000
 cell("AC-28 pure: changing all three tiers at once leaves no conflict", P.windowsOfSet(all, "kimi-only").conflicts.length === 0 && P.windowsOfSet(all, "kimi-only").models.get("kimi/k3").context === 150000, "wrong")
 const cw = P.windowsOfSet(DATA, "cross-codex")
 cell("REQ-08 windows of a set cover all three tiers of every family named in the stages", cw.families.join() === "claude,codex" && cw.models.size === 6 && cw.models.has("claude-code/haiku") && cw.models.has("openai/gpt-6-luna"), JSON.stringify(cw.families) + cw.models.size)
-cell("AC-34 the window of a model with input has three fields, without input two", P.winText(cw.models.get("openai/gpt-5.5")) === "context 525000, input 461000, output 128000" && P.winText(cw.models.get("claude-code/opus")) === "context 720000, output 64000" && cw.models.get("claude-code/opus").input === undefined, JSON.stringify([...cw.models]))
+cell("limits wording: K without a fraction when divisible by 1000, otherwise the exact number; no bare 720000/64000", Core.fmtTokens(720000) === "720K" && Core.fmtTokens(220000) === "220K" && Core.fmtTokens(131072) === "131072" && Core.fmtTokens(999) === "999" && Core.fmtTokens(1000) === "1K" && Core.fmtTokens(1500) === "1500" && Core.limitsText({ context: 720000, output: 64000 }) === "контекст 720K · вывод до 64K" && Core.limitsText({ context: 525000, input: 461000, output: 128000 }) === "контекст 525K · ввод 461K · вывод до 128K" && Core.limitsText({ context: 220000, output: 131072 }) === "контекст 220K · вывод до 131072", "")
+cell("AC-34 the window of a model with input has three fields, without input two", Core.limitsText(cw.models.get("openai/gpt-5.5")) === "контекст 525K · ввод 461K · вывод до 128K" && Core.limitsText(cw.models.get("claude-code/opus")) === "контекст 720K · вывод до 64K" && cw.models.get("claude-code/opus").input === undefined, JSON.stringify([...cw.models]))
 const emptyP = clone(DATA)
 emptyP.profiles.codex.heavy = { model: "" }
 cell("REQ-30 a set referencing an empty record is invalid; an empty tier nobody references is fine", P.checkData(emptyP, "cross-codex").errors.some((e) => e.kind === "empty") && P.checkData(emptyP, "cross-kimi").errors.length === 0 && P.windowsOfSet(emptyP, "cross-codex").models.has("openai/gpt-5.5") === false, JSON.stringify(P.checkData(emptyP, "cross-codex").errors))
