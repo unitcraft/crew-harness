@@ -162,10 +162,6 @@ await until(() => models(fileOf(t1.worktree) ?? "{}")["claude-code/opus"]?.conte
 }
 
 // ---- AC-11: a file without the mark is not touched; it is named ----
-const foreignWt = (() => {
-  return undefined
-})()
-void foreignWt
 await spawn("sesINTEG", {})
 const t2 = task("proj", 2)
 const foreignText = JSON.stringify({ provider: { x: { models: { y: { limit: { context: 9, output: 1 } } } } } })
@@ -289,8 +285,6 @@ use("default")
 await until(() => L.profileState(proj).state.row === 2)
 {
   const s = readSettings(proj)
-  const before = s.profile_sets
-  void before
   delete s.model_profiles
   delete s.profile_sets
   writeSettings(proj, s)

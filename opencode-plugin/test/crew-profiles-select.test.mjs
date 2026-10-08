@@ -193,9 +193,7 @@ const sessionsBefore = creates.length
   const r = await spawn("sesINTEG", {})
   cell("AC-06(б) the described stage whose profile is not found refuses with the stage and the profile; no task, no number, no session", /Задача не поставлена/.test(r) && /разработка/.test(r) && /kimi/.test(r) && tasks.listTasks("proj").length === before && creates.length === sessionsBefore, r)
   const planR = await spawn("sesINTEG", { kind: "plan", goal: "g" })
-  cell("AC-06(б) the plan task refuses too (stage plan is not described in dev-only: spawn_models, no refusal)", !/Задача не поставлена/.test(planR) && tasks.listTasks("proj").length === before + 1, planR)
-  const notR = await spawn("sesINTEG", {})
-  void notR
+  cell("AC-06(а) a plan task: the stage plan is not described in dev-only, so spawn_models applies and there is no refusal", !/Задача не поставлена/.test(planR) && tasks.listTasks("proj").length === before + 1, planR)
   // restore
   f.model_profiles.kimi = TABLE.kimi
   writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify(f))
@@ -296,6 +294,10 @@ cell("AC-03/AC-17 the record keeps the reviewer launch: stage accept, set, famil
 cell("AC-14 the letter of the review does not ask for anything only Claude Code has", reviewerLetterTo(tA.reviewer).length > 0 && reviewerLetterTo(tA.reviewer).every((t) => !/SendMessage|run_in_background|ScheduleWakeup|TodoWrite|Monitor\b/.test(t) && /crew_task/.test(t)), reviewerLetterTo(tA.reviewer).join("|").slice(0, 300))
 // a tab of the right family is taken
 await openTab("sesKIMI", "worker", KIMI)
+{
+  const list = await call("crew_list", "sesINTEG", {})
+  cell("REQ-16 crew_list names the family of a tab by the table of the project; a model outside the table is said so", /sesKIMI.*модель kimi-code-plan-global\/k3-256k, семья kimi/.test(list) && /sesCLAUDE.*модель claude-code\/sonnet, семья claude/.test(list), list.slice(0, 600))
+}
 const nB = await submit({})
 const tB = await reviewed(nB)
 cell("AC-04 an open tab of the family of the cell is the reviewer (no new session)", tB.reviewer === "sesKIMI" && tB.review_kind === "tab" && !sessions.has("sesKIMI"), JSON.stringify([tB.reviewer, tB.review_kind]))

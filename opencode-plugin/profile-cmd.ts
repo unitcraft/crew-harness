@@ -55,11 +55,10 @@ export function applyEdit(dir: string, command: string, mutate: (c: MutateCtx) =
   const created = [...after.errors, ...after.warnings].filter((x) => !known.has(x.text))
   if (created.length) return { ok: false, text: refused(ps.project, command, created.map((x) => x.text).join("; ")) }
   L.writeLayer(ps.project, m.layer)
-  const sync = L.syncSnapshot(dir)
+  L.syncSnapshot(dir)
   const files = L.syncProjectFiles(dir)
   commitEdit(ps.project, command, m.what, m.from, m.to)
   const note = files.written.length || files.removed.length ? ` Файлы окон в деревьях задач пересчитаны: записано ${files.written.length}, снято ${files.removed.length}.` : ""
-  void sync
   return { ok: true, text: `Готово: ${m.what}.${note}`, what: m.what }
 }
 
@@ -76,14 +75,13 @@ function setNames(data: P.Data): string[] {
 }
 const listSets = (data: P.Data) => (setNames(data).length ? setNames(data).join(", ") : "наборов нет")
 
-function parseResetSets(args: string[], data: P.Data): L.ResetForm | string {
+function parseResetSets(args: string[]): L.ResetForm | string {
   if (!args.length) return { kind: "name" }
   if (args[0] === "all") return args.length === 1 ? { kind: "all" } : "после all аргументов нет"
   const name = args[0]
   if (args.length === 1) return { kind: "set", name }
   const st = P.stageOfWord(args[1])
   if (!st || args.length > 2) return `этап «${args[1]}» не годится: develop, accept, plan, plan_accept (или русские названия)`
-  void data
   return { kind: "cell", name, stage: st }
 }
 
@@ -157,7 +155,7 @@ export function setsEditVerb(dir: string, verb: string, args: string[]): { ok: b
       return applyEdit(dir, command, ({ layer, raw, data }) => ({ layer: L.layerDeleteSet(layer, raw, name), what: `набор «${name}» удалён`, from: cellsString((data.sets as any)[name]), to: undefined }))
     }
     case "reset": {
-      const form = parseResetSets(args, ps.data)
+      const form = parseResetSets(args)
       if (typeof form === "string") return bad(form)
       if (form.kind === "set" && !isObj(ps.data.sets?.[form.name]) && !Object.keys(ps.layer).some((k) => k === `set:${form.name}` || k.startsWith(`cell:${form.name}/`))) return bad(`набора «${form.name}» нет (есть: ${listSets(ps.data)})`)
       return resetEdit(dir, command, form)
