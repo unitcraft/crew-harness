@@ -312,6 +312,7 @@ export function profilesEditVerb(dir: string, verb: string, args: string[]): { o
 // Показ, use, check, save, разбор команд (шаг 11)
 
 import path from "node:path"
+import { PROFILES_README_URL } from "./paths.ts"
 import { DEFAULT_SPAWN_MODELS, LIMIT_RU, fmtTokens, limitsText, loadConfig, settingsContext, verbUsageList } from "./core.ts"
 import { projectFor, workingSettings } from "./settings.ts"
 import { listTasks } from "./tasks.ts"
@@ -354,7 +355,7 @@ export function setsTable(ps: L.PState): string {
   const names = setNames(ps.data)
   const src = ps.name ? (ps.nameSource === "layer" ? "локальное переключение (/crew-sets use)" : "файл проекта") : ""
   const lines = [`Наборы проекта ${ps.project}. Включён: ${ps.name ? `«${ps.name}» — источник имени: ${src}` : "нет (набор не применяется, модели — по spawn_models)"}.`]
-  if (!names.length) lines.push("Наборов нет. Пример файла — в README плагина (раздел о профилях моделей).")
+  if (!names.length) lines.push(`Наборов нет. Готовый пример файла (справочник и наборы) — в разделе README о профилях моделей:\n${PROFILES_README_URL}\nСкопируйте пример в .opencode/crew-harness.json проекта (или передайте агенту: crew_config set) и коммитьте файл.`)
   else {
     const col = (n: string, st: P.Stage) => {
       const c = P.cellsOf((ps.data.sets as any)[n]).find(([s]) => s === st)
@@ -376,7 +377,7 @@ export function setsTable(ps: L.PState): string {
 export function profilesTable(ps: L.PState): string {
   const fams = Object.keys(isObj(ps.data.profiles) ? ps.data.profiles : {}).sort()
   const lines = [`Справочник профилей проекта ${ps.project}: семья, ступень → модель, контекст.`]
-  if (!fams.length) lines.push("Справочник пуст. Пример файла — в README плагина (раздел о профилях моделей).")
+  if (!fams.length) lines.push(`Справочник пуст. Готовый пример файла (справочник и наборы) — в разделе README о профилях моделей:\n${PROFILES_README_URL}\nСкопируйте пример в .opencode/crew-harness.json проекта (или передайте агенту: crew_config set) и коммитьте файл.`)
   for (const f of fams)
     for (const t of P.PROFILE_TIERS) {
       const p = (ps.data.profiles as any)[f][t]

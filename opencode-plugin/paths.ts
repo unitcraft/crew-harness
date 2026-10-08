@@ -38,3 +38,6 @@ export function crewBase(root = dataDir()): string {
 }
 
 export const BASE = crewBase()
+
+/** Раздел README о профилях моделей на GitHub: ответы команд и подсказки отсылают к нему прямой ссылкой (отдельным токеном: терминал делает её кликабельной). */
+export const PROFILES_README_URL = "https://github.com/unitcraft/crew-harness/blob/main/opencode-plugin/README.md#model-profiles-sets-of-models-and-windows-by-stage"

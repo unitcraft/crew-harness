@@ -84,6 +84,21 @@ cell("AC-31 no singular names of the commands and no command whose first word is
 const sample = path.join(tmp, "sample.md")
 writeFileSync(sample, "use /crew-" + "set add, /crew-" + "profile show and `/" + "use cross`\n")
 cell("AC-31 positive control: the same patterns find the names in a file that holds them", pats.slice(0, 3).every((p) => p.test(readFileSync(sample, "utf8"))), "not found")
+// ---- the link of the empty answers: the section of the README on GitHub, a separate token, the anchor of a real heading ----
+{
+  const Paths = await import("../paths.ts")
+  const Cmd = await import("../profile-cmd.ts")
+  const url = Paths.PROFILES_README_URL
+  const heading = /^## (Model profiles.*)$/m.exec(readme)?.[1]?.trim() ?? ""
+  const slug = heading.toLowerCase().replace(/[^a-z0-9 -]/g, "").trim().replace(/ /g, "-") // the anchor rule of GitHub
+  cell("the link of the empty answers points to the README of the repository on GitHub with the anchor of the heading of the profiles section", url === `https://github.com/unitcraft/crew-harness/blob/main/opencode-plugin/README.md#${slug}` && slug.length > 10, JSON.stringify({ url, slug }))
+  const empty = { project: "p", data: {}, raw: {}, layer: {}, state: { warnings: [] }, name: undefined }
+  const t1 = Cmd.profilesTable(empty)
+  const t2 = Cmd.setsTable(empty)
+  cell("an empty /crew-profiles and an empty /crew-sets name the link as a separate token (a line of its own) and the hint about the example", [t1, t2].every((t) => t.split("\n").includes(url) && t.includes("Скопируйте пример") && !t.includes("см. README")), t1 + "\n--\n" + t2)
+  const g = schema.SCHEMA?.find?.((x) => x.key === "model_profiles") ?? schema.SETTINGS?.find?.((x) => x.key === "model_profiles")
+  cell("the guide of crew_config names the same link for the profiles keys", !!g && String(g.recommend).includes(url), String(g?.recommend))
+}
 
 rmSync(tmp, { recursive: true, force: true })
 console.log(fail ? `crew-profiles-docs.test: FAIL ${fail}` : "crew-profiles-docs.test ok")
