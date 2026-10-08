@@ -37,6 +37,7 @@ BINARY_EXT = frozenset((
 Entry = collections.namedtuple("Entry", "path mode oid")
 
 ALLOW_RE = re.compile(r"guard-allow\(([a-z0-9-]+)\):[ \t]*(.*)")
+COMMENT_END = re.compile(r"\s*(-->|\*/)\s*$")
 FIXTURE_RE = re.compile(r"guard-fixture\(([a-z0-9-]+)\):[ \t]*(.*)")
 
 
@@ -202,6 +203,11 @@ class Source(object):
 
 
 # -- пометки ----------------------------------------------------------------------------------
+def _reason(text):
+    """Причина пометки без закрывающих знаков комментария."""
+    return COMMENT_END.sub("", text).strip()
+
+
 class FileView(object):
     """Файл источника: байты, текст, строки и пометки с причиной."""
 
@@ -214,9 +220,9 @@ class FileView(object):
         self.fixture = {}
         for number, line in enumerate(self.lines, 1):
             for m in ALLOW_RE.finditer(line):
-                self._allow.setdefault(number, {})[m.group(1)] = m.group(2).strip()
+                self._allow.setdefault(number, {})[m.group(1)] = _reason(m.group(2))
             for m in FIXTURE_RE.finditer(line):
-                self.fixture[m.group(1)] = m.group(2).strip()
+                self.fixture[m.group(1)] = _reason(m.group(2))
 
     def report(self, rep, rule, line, desc):
         """Нарушение правила; снимается пометкой с причиной, пометка без причины — красный."""

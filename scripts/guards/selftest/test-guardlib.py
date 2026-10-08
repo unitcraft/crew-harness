@@ -151,6 +151,15 @@ def main():
         view.report(rep, "md-link", 1, "desc")
         assert rep.findings and "пометка без причины" in rep.findings[0][3], rep.findings
 
+    def marker_comment_end_is_not_a_reason():
+        rep = guardlib.Report()
+        text = "x <!-- %s(md-link): -->\nx /* %s(md-link): cut */\n" % (ALLOW, ALLOW)
+        view = guardlib.FileView("m.md", text.encode())
+        view.report(rep, "md-link", 1, "desc")
+        view.report(rep, "md-link", 2, "desc")
+        assert [x[1] for x in rep.findings] == [1], rep.findings
+        assert rep.accepted == [("m.md", 2, "md-link", "cut")], rep.accepted
+
     def fixture_whole_file():
         rep = guardlib.Report()
         view = guardlib.FileView("f.bin", ("# %s(nul): byte is the subject\nrow\n" % FIXTURE).encode())
@@ -228,6 +237,7 @@ def main():
     pr.probe("законное", "запуск: судить нечего и пропущено", run_nothing_and_skip)
     pr.probe("красная", "пометка без причины — красный", marker_without_reason_is_red)
     pr.probe("иной-синтаксис", "пометка другого правила не снимает нарушение", marker_other_rule_does_not_help)
+    pr.probe("иной-синтаксис", "закрывающий знак комментария — не причина", marker_comment_end_is_not_a_reason)
     pr.probe("мишень", "пустой репозиторий — мишень потеряна", target_lost_on_empty)
     pr.probe("мишень", "папка без git — красная предпосылка", no_git_is_red)
     pr.probe("мишень", "подпапка вместо корня — красная предпосылка", subfolder_is_not_root)
