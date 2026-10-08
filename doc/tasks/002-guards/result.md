@@ -114,7 +114,7 @@ REQ-13 → `guard-commit-message.py` → `test-guard-commit-message.py`, `test-c
 REQ-14 → `lib/message.py` → `test-guard-commit-message.py`, `test-commit-msg.py` (режимы editor, message, diff) → PASS
 REQ-15 → `guard-commit-message.py` → `test-guard-commit-message.py` (--ci, без настройки, GITHUB_ACTIONS) → PASS
 REQ-16 → `agent-hooks/guard-git.py`, `.claude/settings.json` → `test-guard-git.py` (19 проб) → PASS
-REQ-17 → `github-setup.sh protect` → `test-github-setup.py` на подставном gh и `--dry-run`; настоящая защита не применялась (Г4) → NOT VERIFIED
+REQ-17 → `github-setup.sh protect` применён к `main` и сверен чтением (`gh api` GET): запрет силового пуша и удаления, линейная история, `enforce_admins`, правил pull request и status checks нет; повтор ничего не меняет; отказ коммита слияния проверяется пробой на служебной ветке (AC-11), не выполнена → NOT VERIFIED
 REQ-18 → `githooks/pre-push`, `commit-range.sh` → `test-pre-push.py` (9 проб), имитация по 39 коммитам → PASS
 REQ-19 → `commit-range.sh`, `guards.yml` → `test-commit-range.py`; шаг подписи в зелёном прогоне Actions на ветке задачи → PASS
 REQ-20 → `check-task-docs.py` → `test-check-task-docs.py`; дерево «ок: осмотрено 51 файлов задач» → PASS
@@ -222,3 +222,9 @@ Artifacts: ветка `task-002-guards` (39 коммитов от `$BASE`, вк�
 - Прогон workflow `probe-log` (37755119378), чтение журнала: пробные значения: 2, в журнале 0 (в журнале `***`), положительный контроль `PROBE-MARKER` найден, красный шаг стража (ожидаемо, на файле пробы) назвал файл, строку и номер образца без значения. Защита ветки пробы не включалась.
 - Уборка: `probe-clear` (секрет пробы удалён, локальный файл значений убран), удалена удалённая и локальная ветка `probe/logprobe1`, временное дерево убрано. Проверка чтением: `gh secret list` — только `CREW_PRIVATE_NAMES`; ветки на GitHub — `main` и `task-002-guards`.
 - Не сделано до слов владельца: `protect` для `main` (и `status`), слияние и пуш `main`, публикация локальных коммитов ветки задачи.
+
+## Ворота Г4, действие 3 (слово «защита main — да»)
+
+- `sh scripts/github-setup.sh protect` для `main`: «защита ветки main применена и сверена»; повтор: «ничего не изменилось». Чтением (`protect`, `status`, `gh api` GET) включено: `allow_force_pushes` = false, `allow_deletions` = false, `required_linear_history` = true, `enforce_admins` = true; не включено: обязательные pull request, обязательные status checks, ограничения пушей, подписи, блокировка ветки, разрешение обсуждений (решение В9). Других настроек GitHub не менялось; секреты: только `CREW_PRIVATE_NAMES`.
+- Обычный пуш владельца в `main` fast-forward остаётся возможным: правил, требующих pull request или проверок статуса, нет, ограничений на тех, кто пушит, нет; запрещены только силовой пуш, удаление и коммиты слияния. Пробного пуша в `main` не делалось.
+- Нужны пробы на служебной ветке (отдельные слова владельца), не выполнялись: (1) AC-11 — `probe-set`, `probe-branch <слаг>`, пуш ветки, `protect --branch probe/<слаг>`, затем пуш fast-forward (должен пройти) и пуш коммита слияния в эту ветку (GitHub должен отклонить, у администратора тоже), `status`, `unprotect --branch probe/<слаг>`; (2) AC-20 — пуш служебной ветки с подложенным нарушением (например, файл с путём машины из выдуманных частей): прогон `guards` красный; (3) AC-28 — пуш служебной ветки с подложенным «пропущено» у обязательного стража: прогон красный; затем `probe-clear --branch probe/<слаг>` и проверка чтением.
