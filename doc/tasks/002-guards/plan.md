@@ -371,7 +371,7 @@ R7 пустое сообщение — красный. `pre-push` зовёт т�
 [x] REQ-02, REQ-03, REQ-04, REQ-05, AC-03, AC-04: `python scripts/guards/selftest/test-check-private-names.py` (четыре случая отсутствия списка, CRLF, поиск образца в выводе — 0 совпадений с положительным контролем)
 [x] REQ-09…REQ-12, AC-08: `python scripts/guards/selftest/test-check-text-hygiene.py` (NUL, UTF-16, `.png` из списка, файл без расширения, `.log`, `.gitignore`)
 [x] REQ-07, REQ-08, AC-06: `python scripts/guards/selftest/test-check-md-links.py`
-[ ] AC-07: `python scripts/guards/check-md-links.py` на ветке — «ок: осмотрено N ссылок» (после закрытия класса Н-11 в записях 001, Р-06; до того красные ровно по двум названным адресам); `git diff -U0 $BASE HEAD -- doc/tasks/001-crew-service/task/draft-plan-previous.md` — одна строка
+[x] AC-07: `python scripts/guards/check-md-links.py` на ветке — «ок: осмотрено N ссылок» (после закрытия класса Н-11 в записях 001, Р-06; до того красные ровно по двум названным адресам); `git diff -U0 $BASE HEAD -- doc/tasks/001-crew-service/task/draft-plan-previous.md` — одна строка
 [x] REQ-20, REQ-21, REQ-22, AC-14: `python scripts/guards/selftest/test-check-task-docs.py`; `python scripts/guards/check-task-docs.py` на дереве — «ок»
 [x] REQ-23, AC-15: `python scripts/guards/selftest/test-check-no-status-table.py`; `python scripts/guards/check-no-status-table.py` на дереве — «ок»; `git grep -c "001-crew-service" -- doc/tasks/README.md` — пустой вывод, код 1
 [x] REQ-30, AC-21: `python scripts/guards/selftest/test-check-tests-have-checks.py`; `python scripts/guards/check-tests-have-checks.py` — «ок: осмотрено N», N равно числу `*.test.mjs` из записи шага 1
