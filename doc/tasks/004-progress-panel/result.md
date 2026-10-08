@@ -50,6 +50,7 @@
 шаг 10: сделан, пункт «Журнал хода `progress.log`» в «Дополнениях» `doc/canon/process.md` (текст предложения для Канона из spec.md, владелец 2026-10-08; добавки РП-05: ключевые слова строчными, после «готово» строки сессии не пишутся, вид в `стоп:` из списка); `grep -n "Журнал хода" doc/canon/process.md` — строка 88; `python scripts/guards/check-md-links.py` — `ок: осмотрено 94 ссылок`; `sh scripts/guards/run-all.sh` — `FAIL 0`. В `main` запись входит слиянием на воротах Г2
 шаг 11: сделан, раздел `## Progress of background sessions (progress.log)` в `opencode-plugin/README.md` с семью позициями `### 1.`…`### 7.` (в позиции 5 по одному вхождению `only a launch line`, `24 hours`, `task's worktree`, `does not start a new session`; в позиции 2 названы три переменные `CREW_HARNESS_PROGRESS_*`; открытый контракт `ProgressTask` в позиции 3) и абзац о журнале, страже и пределе 80 знаков в `doc/tasks/README.md`; `python scripts/guards/check-md-links.py` — `ок: осмотрено 98 ссылок`; `sh scripts/guards/run-all.sh` — `FAIL 0`
 шаг 12: сделан, уровни A…G прогнаны (ниже), перечень изменённых файлов равен перечню «Раскладки» (17 путей), поиск путей машины по своим файлам пуст, сообщения всех коммитов от `BASE` проверены `guard-commit-message.py --commit`, `git status --short` пуст. Ворота Г1, Г2, Г3 не выполнялись (раздел «Ждёт владельца»)
+шаг 13: сделан, правило «итога нет» (метка `•`, не «давно брошена», уходит через 24 часа без пометки), нижняя строка блока «ещё N · все: /crew-progress» или «все: /crew-progress», кандидат с `abandoned` у задачи со скрытой показываемой записью; `node test/crew-progress.test.mjs` — красный до правки кода (13 ячеек шага 13), после — `crew-progress.test ok`, 251 ячейка; `crew-sidebar` — 22, 0 упавших; проверки README из плана красные до правки и зелёные после (раздел «Шаг 13» ниже)
 
 ## Журнал красных прогонов до правки
 
@@ -118,7 +119,7 @@
 | REQ-02 деревья по реестру git | `progress-scan.ts findRepoRoot`, `listTrees` | самотест на настоящих деревьях | ячейки `AC-06` (5) | PASS |
 | REQ-03 копия по каждой сессии | `progress.ts chooseSessions` | самотест, модель и деревья | ячейки `AC-04`, `AC-05`, `AC-24 S0…S6`, `AC-27` | PASS |
 | REQ-04 время, состояния | `progress.ts momentOf`, `stateOf` | самотест, перебор 80 сочетаний | ячейки `AC-14`, `AC-02`, `AC-26`, перебор таблицы | PASS |
-| REQ-05 исчезновение | `progress.ts isShown` | самотест по часам | ячейки `AC-03` | PASS |
+| REQ-05 исчезновение | `progress.ts isShown`, `isAbandoned` (шаг 13: состояние 7 не брошено); `progress-view.ts dialogText` | самотест по часам | ячейки `AC-03`, `AC-23` (в том числе (а)…(г) шага 13) | PASS |
 | REQ-06 «шагов нет» | состояние 3, `progress-view.ts` | самотест | ячейки `AC-07` | PASS |
 | REQ-07 место и раскладка (тексты, порядок, ширина 32) | `progress-view.ts`, `progress-sidebar.tsx` | самотест, статический разбор импортов | ячейки `AC-01`, `AC-12`, `AC-16` | PASS |
 | REQ-07 место в живом окне | слот `sidebar.content` | снимок окна | не снят | NOT VERIFIED |
@@ -136,7 +137,7 @@
 | REQ-18 пригодность сервису | `progress.ts` без импортов | `grep -n "^import"`, ячейка | ячейки `AC-21`; `grep` — 0 импортов в `progress.ts` | PASS |
 | REQ-19 устойчивость | `try/catch` по журналу и дереву, динамический `import()` | самотест | ячейки `AC-09`, `AC-16` (11), `AC-14` | PASS |
 | REQ-20 документация | раздел README плагина, `doc/tasks/README.md` | `grep -n` по семи заголовкам | `### 1.`…`### 7.`; по одному вхождению четырёх фраз позиции 5 | PASS |
-| REQ-21 самотесты | `crew-progress.test.mjs`, `package.json`, `crew-sidebar` | запуск | 242 ячейки; `grep -c "crew-progress.test.mjs" package.json` — 1; в `crew-sidebar` 2 строки diff | PASS |
+| REQ-21 самотесты | `crew-progress.test.mjs`, `package.json`, `crew-sidebar` | запуск | 242 ячейки (после шага 13 — 251); `grep -c "crew-progress.test.mjs" package.json` — 1; в `crew-sidebar` 2 строки diff | PASS |
 | AC-01 панель идущей задачи | `panelLines` | самотест | ячейки `AC-01` (3) | PASS |
 | AC-02 порог 11 и 9 минут, 20 минут, часы вперёд | `stateOf`, `thresholdsFromEnv` | самотест | ячейки `AC-02` (7) | PASS |
 | AC-03 «готово», пропадание | `isShown` | самотест | ячейки `AC-03` (8) | PASS |
@@ -149,7 +150,7 @@
 | AC-10 обновление не позже 10 секунд, подставные часы | `WALK_MS`, `SHOW_MS` | самотест | ячейки `AC-10` (2) | PASS |
 | AC-10 снимок настоящего окна до и после | блок в окне | снимок | не снят | NOT VERIFIED |
 | AC-11 бюджеты, процессы, запись | `createScanner`, `scanAll` | измерения в одном прогоне | ячейки `AC-11 а…ж` (19); таблица шага 7 | PASS |
-| AC-12 ширины 32 и 72, 3 задачи, порядок, `13/14 ≠ +1` | `fitRow`, `orderTasks`, `taskRows` | самотест | ячейки `AC-12` (10) | PASS |
+| AC-12 ширины 32 и 72, 3 задачи, порядок, `13/14 ≠ +1`, нижняя строка | `fitRow`, `orderTasks`, `taskRows`, `panelLines` | самотест | ячейки `AC-12` (12; шаг 13: «ещё 1 · все: /crew-progress», «все: /crew-progress» при 1 и 3 задачах) | PASS |
 | AC-13 команда, пять имён, `crew-sidebar` (самотест) | `tui.ts`, `dialogText` | самотест, `crew-sidebar.test ok`, `grep -n "crew-progress" tui.ts` | ячейки `AC-13` (8) | PASS |
 | AC-13 вызов в настоящем окне | `showProgress` | вызов | не вызвана | NOT VERIFIED |
 | AC-14 CRLF, мусор, k больше N, время | `parseJournal`, `momentOf` | самотест | ячейки `AC-14` (20) | PASS |
@@ -160,8 +161,8 @@
 | AC-19 «ветка Mм» | `branchSignal`, `stateWord` | самотест | ячейки `AC-19` (8) | PASS |
 | AC-20 прежние самотесты как в базе | пять тестов по одному | запуск, `git diff -U0` | 22, 12, 34, 8, 22; 2 строки diff в `crew-sidebar` | PASS |
 | AC-21 импорты модулей, контракт в README | `progress.ts`, `progress-scan.ts` | `grep -n "^import"`, `grep -c ProgressTask` | 0 импортов; `progress-scan.ts` — три; README — 2 строки | PASS |
-| AC-22 семь позиций README | `opencode-plugin/README.md` | `grep -nE '^### [1-7]\. '` | семь заголовков подряд | PASS |
-| AC-23 состояние 7, «готово» при k ≠ N | `stateOf` | самотест | ячейки `AC-23` (12) | PASS |
+| AC-22 семь позиций README | `opencode-plugin/README.md` | `grep -nE '^### [1-7]\. '`, счёт фраз позиции 5 | семь заголовков подряд; после шага 13 в позиции 5 `younger than 24` — 1, `24 hours` — 4 (условие: не меньше одного) | PASS |
+| AC-23 состояние 7 (метка `•`, не брошено), «готово» при k ≠ N, порядок, старая скрытая запись | `stateOf`, `isAbandoned`, `needsAttention`, `dialogText` | самотест | ячейки `AC-23` (18) | PASS |
 | AC-24 выбор копии S0…S6, общее начало | `chooseSessions` | самотест, модель и деревья | ячейки `AC-24 S0…S6` и общее начало (24) | PASS |
 | AC-25 120 показов, настройки не читаются, пороги | `progress-view.ts`, `thresholdsFromEnv` | самотест | ячейки `AC-25` (5); `git diff --stat` по `index.ts` пуст | PASS |
 | AC-26 векторы времени и строки | `LINE_RE`, `TIME_RE`, `progress-vectors.json` | самотесты двух языков | ячейки `AC-26` (44); `vectors` в `test-check-task-docs.py` | PASS |
@@ -213,3 +214,87 @@
 3. Правка о «закрытых» задачах (состояние «все шаги сделаны, итога нет» не считать брошенной и не помечать «!») НЕ сделана: правило записано в утверждённых требованиях (REQ-04 строка 7, REQ-05 «пропадает через 24 часа», REQ-07 «внимание: 6, 1, 7», AC-23) и в README плагина, позиция 7. Нужна С1 правка по слову владельца (рекомендация: состояние 7 — метка `•`, без «давно брошена» и без «!», панель показывает 24 часа как сейчас; `AC-23` и README правятся вместе).
 
 Проверки: по одному crew-sidebar 22, crew-help 34, crew-autoclose 8, crew-wake 22, crew-status 12, crew-profiles-cmd 74, crew-progress 243 ячейки; упавших нет; `npm test` и полный набор не запускались.
+
+## Шаг 13 (Сессия С5д, 2026-10-09, ветка `task-004-abandoned-rule`)
+
+Правка после утверждения (слово владельца 2026-10-08; spec.md «Изменения после утверждения», plan.md шаг 13). Дерево — отдельное, ветка
+`task-004-abandoned-rule` на `origin/main`; `BASE` шага 13 = `git merge-base main HEAD` = `37a8c5867cabb14ac6455f07e077c348bc6d343e`;
+ревизия до правки — `4b23d2b` (сверх `BASE` только документы задачи). Шаги 1–12 не переделывались.
+
+Сделано:
+
+- `progress.ts` — `isAbandoned` без состояния 7 (остаются 1, 3, 6); `isShown` прежний (состояние 7 пропадает через 24 часа);
+  комментарии к `isAbandoned` и полю `abandoned`.
+- `progress-view.ts` — `needsAttention` без состояния 7 (метка `•`, тон строки 4 и порядок «остальные по свежести»); нижняя строка
+  `panelLines` — «ещё N · все: /crew-progress» при скрытых, иначе «все: /crew-progress» (строка есть всегда, пока блок нарисован;
+  высота до 14); `dialogText` — фильтр задач `t.visible || t.candidates.some((c) => c.abandoned)`, у задачи с непоказываемой и не
+  брошенной записью перечисляются только кандидаты с `abandoned`, у остальных — прежний фильтр `c.visible || c.abandoned`; счёт
+  «давно брошенных: N» — задачи со скрытой показываемой записью и таким кандидатом.
+- `test/crew-progress.test.mjs` — шесть ломавшихся ячеек приведены к новому правилу (`AC-23` строка 186 ×2 — `!abandoned`; `AC-01`
+  строка 630 — шестая строка «все: /crew-progress»; `AC-23` строка 687 — метка `• ` и нет «давно брошена»; `AC-12` строки 703 и
+  713 — «ещё 1 · все: /crew-progress»); новые ячейки: `AC-23` «итога нет» 25 часов — нет ни в панели, ни в команде; `AC-23`
+  порядок (состояние 7 — 300 минут, тишина — 11 минут: «! 001», затем «• 002»); `AC-23` (а) состояние 7 старше 24 часов, (б)
+  «готово» старше 15 минут, (в) «без единиц» старше 15 минут — при запуске `С3 0/0 [09:00] запуск` другой копии 51 час назад
+  панель пуста, команда начинается «Идущих задач: 0, давно брошенных: 1», пишет запуск с «— давно брошена» и не пишет показываемую
+  запись; (г) `стоп: ворота` 3 часа назад при «готово» старше 15 минут — «Идущих задач нет» (граница, REQ-05); `AC-12` при 1 и 3
+  задачах — нижняя строка «все: /crew-progress», 6 и 14 строк. Ячейки `AC-23` строк 184 и 197, `AC-27` (371, 766), `AC-12`
+  порядка (704), `AC-03` и файл `progress-vectors.json` не менялись.
+- `opencode-plugin/README.md` — раздел 1 (нижняя строка; метки: `!` — тишина, остановка, запуск после порога; `•` — в том числе
+  «all steps done, no result»; «давно брошена» — только остановка, запуск и тишина), раздел 2 (состояние 7 уходит из панели и
+  команды через 24 часа без пометки), раздел 3 (комментарий поля `abandoned`: «state 1, 3 or 6 with no news for 24 hours»), раздел 5
+  (кандидат другой копии при скрытой показываемой записи и граница «younger than 24 hours»); раздел 7 верен и не менялся;
+  `doc/canon/process.md` не менялся.
+
+Детали внутри шага: фикстуры ячеек (а)…(г) собраны на модели копий (`Cp`, время файла копии — поле `mtimeMs`, тот же вход, что даёт
+сканер), а не `utimes` на файлах: ячейки стоят в разделе текстов, где все задачи строятся так же. Первый перечисляемый кандидат
+скрытой задачи идёт с отступом из двух пробелов (как раньше первый кандидат), без «+». Три поверхностные находки plan-review-5.md
+учтены: комментарий поля `abandoned` не содержит «silent for 24»; счёт вхождений — `tr '\n' ' '` в одной строке; проверки README —
+из корня дерева с путём `opencode-plugin/README.md`.
+
+Красный прогон до правки кода (тест уже с новыми ожиданиями, код — ревизия `4b23d2b`), из `opencode-plugin/`:
+`node test/crew-progress.test.mjs` — код 1, `ok` 237, `FAIL` 14, итог `crew-progress.test: FAIL 14`; ячейки шага 13 (13, хвосты
+строк сокращены):
+
+```
+FAIL AC-23 «С5 14/1»: gone after 24 hours and not abandoned
+FAIL AC-23 «С5 15/1»: gone after 24 hours and not abandoned
+FAIL AC-01 the panel: title and four rows of the task :: [...,"    идёт 11:57 · 3м назад"]
+FAIL AC-23 «все шаги сделаны, итога нет» in the panel (mark •) and the command, not «давно брошена» :: ["Ход работ","! 002 Стражи репозитория",...
+FAIL AC-23 «итога нет» silent for 25 hours: gone from the panel and from the command, no «давно брошена» :: Идущих задач: 0, давно брошенных: 1
+FAIL AC-23 the order: the task in state 7 stands after the task with «!» :: ["! 002 Итога нет","! 001 Молчит"]
+FAIL AC-23 (а) state 7 older than 24 hours and an older abandoned launch: ... :: Идущих задач: 0, давно брошенных: 1
+FAIL AC-23 (б) «готово» older than 15 minutes and an older abandoned launch: ... :: Идущих задач нет. Осмотрено деревьев: 0, журналов: 0.
+FAIL AC-23 (в) «без единиц» older than 15 minutes and an older abandoned launch: ... :: Идущих задач нет. Осмотрено деревьев: 0, журналов
+FAIL AC-12 at most 3 tasks and the line «ещё 1 · все: /crew-progress», at most 14 rows :: [...]
+FAIL AC-12 four silent tasks: the three oldest are shown, the fourth is «ещё 1» :: [...]
+FAIL AC-12 1 task(s): the bottom line «все: /crew-progress», 6 rows (at most 14) :: [...]
+FAIL AC-12 3 task(s): the bottom line «все: /crew-progress», 14 rows (at most 14) :: [...]
+```
+
+Четырнадцатая — `AC-11 б` (холодный разбор на нагруженной машине: медиана 9,99 мс против 2,58 мс простого чтения): ячейка нагрузки,
+шагом 13 не затронута, в прогоне после правки зелёная. Ячейка (г) — граница, зелёная и до правки (поведение прежнее, так задумано
+планом).
+
+Зелёный после правки (рабочее дерево перед коммитом `c5e68ed`), из `opencode-plugin/`: `node test/crew-progress.test.mjs` — код 0,
+`ok` 251, `FAIL` 0, итог `crew-progress.test ok` (по сценариям: `AC-01` 3, `AC-03` 8, `AC-12` 12, `AC-23` 18); затем одиночно
+`node test/crew-sidebar.test.mjs` — код 0, `ok` 22, `FAIL` 0, `crew-sidebar.test ok`. `grep -n "needsAttention =" progress-view.ts` —
+`s.state === 6 || s.state === 1 || (s.state === 3 && s.stale)`. Изменённые файлы вне папки задачи — ровно `progress.ts`,
+`progress-view.ts`, `test/crew-progress.test.mjs`, `README.md` плагина.
+
+Проверки README (из корня дерева):
+
+- контроль `git diff --stat main -- opencode-plugin/README.md`: до правки пусто; после — `opencode-plugin/README.md | 19 ++++++++++++-------`;
+- `sed -n '/^### 5\. /,/^### 6\. /p' opencode-plugin/README.md | tr '\n' ' ' | grep -o "younger than 24" | wc -l`: до — `0`, после — `1`;
+- `grep -nE "\+N ·|still lists|\"abandoned\": false,.*silent for 24|needs attention \([^)]*no result" opencode-plugin/README.md`: до —
+  три строки, 168 (`` `+N · /crew-progress` for the rest. Marks: `!` needs attention (…, "all steps done, no result", ``), 185
+  (`… (the command still lists it as abandoned)`), 207 (`"abandoned": false, … // shown in the panel; silent for 24 hours`); после —
+  пусто, код 1;
+- `grep -nE '^### [1-7]\. ' opencode-plugin/README.md`: до и после — семь заголовков подряд (после — строки 164…240);
+- позиция 5: `only a launch line`, `task's worktree`, `does not start a new session` — до и после по 1; `24 hours` — до 1, после 4
+  (условие AC-22 — не меньше одного);
+- `python scripts/guards/check-md-links.py`: до и после — `ок: осмотрено 130 ссылок`.
+
+Коммиты шага (все `-s`, без трейлеров соавторства, страж сообщения зелёный): `c5e68ed` `Progress view: "no result" state is not an
+attention mark` (код и тест), `82f962c` `Docs: progress marks in the plugin README`, затем коммит документов задачи. Первая попытка
+коммита кода отклонена стражем сообщения (не-ASCII в теле: «•» и русские слова), сообщение переписано ASCII; `--no-verify` не
+применялся. `npm test` не запускался, тесты — по одному; процессы OpenCode не трогались; пуш, слияние и перезапуск не делались.
