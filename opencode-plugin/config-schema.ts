@@ -2,6 +2,8 @@
 // зачем), проверка crew_config set (значение не той формы — отказ, файл не тронут), показ crew_config show. Тест
 // сверяет, что опросник покрывает все ключи схемы, а loadConfig (core.ts) читает те же ключи.
 
+import { invalidProfileKey } from "./profiles.ts"
+
 export type Kind =
   | { type: "enum"; options: string[] }
   | { type: "int" }
@@ -15,7 +17,9 @@ export type Kind =
   | { type: "strings" }
   | { type: "stringMap"; keys: string[] }
   | { type: "grades" }
-export type Setting = { key: string; kind: Kind; default: any; question: string; why: string; recommend?: string; group: string }
+  | { type: "profiles" }
+/** humanOnly — ключ ставит человек (команда окна use и save либо правка файла); crew_config set его не пишет */
+export type Setting = { key: string; kind: Kind; default: any; question: string; why: string; recommend?: string; group: string; humanOnly?: boolean }
 
 const TIERS = ["heavy", "medium", "light"]
 export const SCHEMA: Setting[] = [
@@ -29,6 +33,9 @@ export const SCHEMA: Setting[] = [
   { key: "inflight_limit", group: "Задачи", kind: { type: "int" }, default: 6, question: "Сколько задач может быть открыто сразу (в работе + сданных + на приёмке)?", why: "держит очередь приёмки обозримой; P0 проходит мимо", recommend: "6" },
   { key: "spawn_models", group: "Задачи", kind: { type: "modelMap" }, default: { heavy: "claude-code/opus", medium: "claude-code/sonnet", light: "claude-code/haiku" }, question: "Какая модель у ступеней heavy / medium / light?", why: "модель сессии задачи по её весу; машинно-зависимое лучше задать в опции плагина local", recommend: "по умолчанию" },
   { key: "tiers", group: "Задачи", kind: { type: "tierLists" }, default: { heavy: ["opus"], medium: ["sonnet"], light: ["haiku"] }, question: "Какие модели относятся к ступеням (подстроки имени)?", why: "по ним письмо с tier выбирает свободную вкладку", recommend: "по умолчанию" },
+  { key: "model_profiles", group: "Профили моделей", kind: { type: "profiles" }, default: {}, question: "Какие модели и окна у семей (claude, kimi, codex...) на ступенях heavy / medium / light?", why: "справочник: семья, ступень -> модель и окно целиком (context, output, у моделей с input — и input); окно действует на сессии в рабочем дереве задачи", recommend: "пример из README плагина (раздел о профилях моделей)" },
+  { key: "profile_sets", group: "Профили моделей", kind: { type: "profiles" }, default: {}, question: "Какие наборы: на какой семье и ступени идут разработка (develop), приёмка (accept), планирование (plan), приёмка плана (plan_accept)?", why: "набор — именованная раскладка этапов; ступень task — ступень задачи; этап без клетки идёт по spawn_models", recommend: "default, cross-kimi, cross-codex, kimi-only — как в README плагина" },
+  { key: "profile_set", group: "Профили моделей", kind: { type: "profiles" }, default: "(нет)", question: "Какой набор включён по умолчанию?", why: "имя набора из profile_sets; без имени набор не применяется", recommend: "не задавать, пока нет наборов; потом default", humanOnly: true },
   { key: "default_priority", group: "Задачи", kind: { type: "enum", options: ["P0", "P1", "P2", "P3"] }, default: "P2", question: "Какой приоритет у задачи, если его не назвали?", why: "P0 авария, P1 первая очередь, P2 обычная работа, P3 когда освободятся руки", recommend: "P2" },
   { key: "push_empty_turns", group: "Подталкивание", kind: { type: "int" }, default: 3, question: "Сколько пустых ходов подряд (без инструментов) считать застреванием?", why: "дальше напоминаний нет, интегратору вызов", recommend: "3" },
   { key: "stall_minutes", group: "Подталкивание", kind: { type: "int" }, default: 30, question: "Через сколько минут затянувшееся (замок вливания держат, сданная задача ждёт приёмщика) поднимать интегратору (0 — не поднимать)?", why: "приёмка может упереться в запрет и стоять часами, пока кто-то не заметит", recommend: "30" },
@@ -99,6 +106,8 @@ export function invalid(key: string, v: any): string | undefined {
         : `${key}: список {"id": "латиницей", "name": "название", "text": "что значит", "clean": true|false}, id без повторов, хотя бы одна градация с clean: false`
     case "strings":
       return Array.isArray(v) && v.every((x) => typeof x === "string" && x.trim()) ? undefined : `${key}: список строк`
+    case "profiles":
+      return invalidProfileKey(key, v)
     case "acceptance":
       return Array.isArray(v) && v.every((a) => isObj(a) && typeof a.id === "string" && /^[a-z0-9][a-z0-9_-]*$/.test(a.id) && typeof a.text === "string" && a.text.trim() && (a.required === undefined || typeof a.required === "boolean")) && new Set(v.map((a: any) => a.id)).size === v.length
         ? undefined
@@ -120,7 +129,7 @@ export function guideText(current: Record<string, any>, sourceOf: (key: string) 
       out.push(`\n${group.toUpperCase()}`)
     }
     const opts = s.kind.type === "enum" || s.kind.type === "subset" ? ` Варианты: ${s.kind.options.map((o, i) => `${i + 1}) ${o}`).join("  ")}.` : ""
-    out.push(`- ${s.key}: ${s.question} Сейчас: ${show(current[s.key] ?? s.default)} (${sourceOf(s.key)}).${opts} Рекомендация: ${s.recommend ?? show(s.default)}. Зачем: ${s.why}.`)
+    out.push(`- ${s.key}: ${s.question} Сейчас: ${show(current[s.key] ?? s.default)} (${sourceOf(s.key)}).${opts} Рекомендация: ${s.recommend ?? show(s.default)}. Зачем: ${s.why}.${s.humanOnly ? " Ставит человек: команда /crew-sets use и save либо правка файла; вызовом set не записывать (set этот ключ отвергает)." : ""}`)
   }
   return out.join("\n")
 }
