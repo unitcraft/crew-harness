@@ -1,0 +1,75 @@
+# Зачем: проверить на сервере то же, что хуки git проверяют локально, и сообщить о нарушении, которое
+#     обошло хук (--no-verify, коммит без установленных хуков).
+# Проверяет: задание guards - синтаксис скриптов sh (dash), маскирование списка имён, стражи по маске
+#     (run-all.sh --ci), страж секретов по дереву, мета-проверку подключения, подпись и сообщение каждого коммита
+#     пуша или запроса на слияние (commit-range.sh и guard-commit-message.py --ci); задание selftests -
+#     все самотесты, «доказательство красного» и прогон на пустом корне. Любой красный вердикт - красный прогон,
+#     «пропущено» у обязательного стража в CI тоже красный.
+# Не проверяет: тесты плагина (их гоняют по одному локально, AGENTS.md п.9) и защиту ветки main
+#     (её настраивает scripts/github-setup.sh).
+# Правило: AGENTS.md п.8, п.15; ADR-0006.
+#
+# Список запрещённых имён приходит секретом CREW_PRIVATE_NAMES; без него страж имён красный с подсказкой.
+name: guards
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  guards:
+    runs-on: ubuntu-latest
+    env:
+      CREW_PRIVATE_NAMES: ${{ secrets.CREW_PRIVATE_NAMES }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Mask the names list in the log
+        run: sh scripts/guards/ci-mask.sh CREW_PRIVATE_NAMES
+      - name: Syntax of shell scripts under dash
+        run: |
+          for f in $(git ls-files 'scripts/*.sh' 'scripts/guards/*.sh' 'scripts/guards/lib/*.sh' 'scripts/githooks/*'); do
+            dash -n "$f" || exit 1
+          done
+      - name: Guards by mask
+        run: sh scripts/guards/run-all.sh --ci
+      - name: Secrets guard on the tree
+        run: python scripts/guards/guard-secrets.py --tree
+      - name: Wiring meta-check
+        run: python scripts/guards/check-wiring.py
+      - name: Signature and message of every commit of the push
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then old=$PR_BASE; new=$PR_HEAD; else old=$BEFORE; new=$AFTER; fi
+          commits=$(sh scripts/guards/commit-range.sh --old "$old" --new "$new" --remote origin --main refs/remotes/origin/main) || exit 1
+          rc=0
+          for c in $commits; do
+            python scripts/guards/guard-commit-message.py --commit "$c" --ci || rc=1
+          done
+          exit $rc
+
+  selftests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Self-tests
+        run: sh scripts/guards/selftest/run-selftests.sh
+      - name: Red proof (guards replaced by stubs)
+        run: sh scripts/guards/prove-red.sh
+      - name: Empty root and skeleton
+        run: sh scripts/guards/probe-empty-root.sh

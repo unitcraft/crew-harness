@@ -1,0 +1,39 @@
+# Зачем: проба «в журнале публичного прогона нет значений секрета»: workflow печатает значения выдуманного
+#     секрета и запускает стража имён на файле с одним из них, а скрипт log-search ищет значения в журнале.
+# Проверяет: что после ci-mask.sh значения заменены звёздочками, маркер PROBE-MARKER виден (положительный
+#     контроль), а вердикт стража называет файл, строку и номер образца без значения (AC-31).
+# Не проверяет: настоящий список имён: он здесь не используется ни как секрет, ни как переменная.
+# Правило: ADR-0006; REQ-04 задачи.
+#
+# Это ИСХОДНИК, а не workflow: GitHub читает только .github/workflows/. Его копирует на служебную ветку probe/*
+# подкоманда probe-branch скрипта scripts/github-setup.sh; в обычных ветках проба не запускается.
+name: probe-log
+
+on:
+  push:
+    branches:
+      - "probe/**"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      CREW_PRIVATE_NAMES_PROBE: ${{ secrets.CREW_PRIVATE_NAMES_PROBE }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Mask the probe values
+        run: sh scripts/guards/ci-mask.sh CREW_PRIVATE_NAMES_PROBE
+      - name: Print the probe values and the marker
+        run: |
+          printf '%s\n' "$CREW_PRIVATE_NAMES_PROBE"
+          echo PROBE-MARKER
+      - name: Names guard with the probe list
+        env:
+          CREW_PRIVATE_NAMES: ${{ secrets.CREW_PRIVATE_NAMES_PROBE }}
+        run: python scripts/guards/check-private-names.py
