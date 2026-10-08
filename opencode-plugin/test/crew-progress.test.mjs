@@ -766,6 +766,208 @@ cell("AC-10 the walk (5 s) and the show (2 s) periods give news within 10 second
   cell("AC-27 task-002 style in the panel and the command: no «+N», «вытеснено 69», «итога нет»", !rows.some((x) => /\+\d/.test(x)) && d.includes("вытеснено 69") && d.includes("все шаги сделаны, итога нет") && d.includes("↳ 14/14 пересборка: ветка на main"), show(rows) + d)
 }
 
+// ---- budgets and load (step 7): the fixture of AC-11 is 10 journals of 600 lines in each of 2 trees and 20 message.md --------
+const stats = (xs) => {
+  const s = [...xs].sort((a, b) => a - b)
+  return { med: s[Math.floor(s.length / 2)], p90: s[Math.min(s.length - 1, Math.floor(s.length * 0.9))], min: s[0], max: s[s.length - 1] }
+}
+const timeOf = (f) => {
+  const t = performance.now()
+  f()
+  return performance.now() - t
+}
+const bigJournal = (seed, tail = 0) => {
+  const out = []
+  const codes = ["С1", "С1п", "С2", "С3", "С4", "С5"]
+  for (let i = 0; out.length < 600 - 14; i++) {
+    const c = codes[(i + seed) % 6]
+    out.push(`${c} 0/12 [10:00] старт заход ${i}`)
+    for (let k = 1; k <= 11; k++) out.push(`${c} ${k}/12 [10:${String(k).padStart(2, "0")}] шаг ${k}: проверен модуль ${seed}-${i}-${k}`)
+    out.push(`${c} 12/12 [10:30] готово — всё сделано и проверено`)
+  }
+  out.push("С5 0/14 [11:00] старт заход последний")
+  for (let k = 1; k <= 13 + tail; k++) out.push(`С5 ${k}/14 [11:${String(k).padStart(2, "0")}] шаг ${k}`)
+  return out
+}
+const heavyTasks = {}
+for (let i = 1; i <= 10; i++) heavyTasks[`0${String(i).padStart(2, "0")}-job`] = { title: `Работа номер ${i}`, lines: ["С1 0/1 старт"] }
+const heavy = makeRepo(heavyTasks)
+const heavyTree = addTree(heavy, "task-heavy")
+const heavyFiles = []
+for (let i = 1; i <= 10; i++) {
+  const folder = `0${String(i).padStart(2, "0")}-job`
+  heavyFiles.push(jwrite(heavy.main, folder, bigJournal(i), sec(11, 20)), jwrite(heavyTree, folder, bigJournal(i, 1), sec(11, 40)))
+}
+const HNOW = sec(11, 59)
+procs.n = 0 // the fixtures are built, from here every started process is counted
+
+{
+  const sc = S.createScanner()
+  sc.scanAll(heavy.main, HNOW)
+  const walk = []
+  const stat = []
+  for (let i = 0; i < 50; i++) {
+    walk.push(timeOf(() => sc.scan(heavy.main, HNOW + (i + 1) * S.WALK_MS)))
+    stat.push(timeOf(() => heavyFiles.forEach((f) => statSync(f))))
+  }
+  const w = stats(walk)
+  const st = stats(stat)
+  console.log(`     warm walk: median ${w.med.toFixed(2)} ms, bare stat of the 20 journals: median ${st.med.toFixed(2)} ms, ratio ${(w.med / st.med).toFixed(2)}`)
+  cell("AC-11 а the warm walk: median of 50 is at most 4 x the bare stat of the same journals (the absolute 15 ms is lifted by the owner's decision)", w.med <= 4 * st.med, show({ walk: w.med, stat: st.med }))
+  cell("AC-11 а a warm walk parses nothing", sc.stats.lastParsed.length === 0, show(sc.stats))
+}
+{
+  const read = []
+  const cold = []
+  for (let i = 0; i < 20; i++) {
+    cold.push(timeOf(() => S.createScanner().scanAll(heavy.main, HNOW)))
+    read.push(timeOf(() => heavyFiles.forEach((f) => readFileSync(f))))
+  }
+  const c = stats(cold)
+  const r = stats(read)
+  console.log(`     cold parse: median ${c.med.toFixed(2)} ms, p90 ${c.p90.toFixed(2)} ms, plain read of the 20 files: median ${r.med.toFixed(2)} ms, ratios ${(c.med / r.med).toFixed(2)} / ${(c.p90 / r.med).toFixed(2)}`)
+  cell("AC-11 б the cold full parse: median of 20 is at most 4 x the plain read, the 90th percentile at most 6 x", c.med <= 4 * r.med && c.p90 <= 6 * r.med, show({ cold: c, read: r }))
+}
+{
+  // (в) the show between walks: from the cache, no files
+  const sc = V.progressPanel
+  V.progressDialog(heavy.main, HNOW) // fills the cache of the window's scanner (scanAll)
+  const first = V.progressPanel(heavy.main, HNOW)
+  const shows = []
+  for (let i = 0; i < 200; i++) shows.push(timeOf(() => V.progressPanel(heavy.main, HNOW + 100 + i)))
+  const s = stats(shows)
+  console.log(`     show between walks: median ${s.med.toFixed(3)} ms, p90 ${s.p90.toFixed(3)} ms, max ${s.max.toFixed(3)} ms`)
+  cell("AC-11 в the show without a walk: median at most 1 ms", s.med <= 1 && first.length > 0 && typeof sc === "function", show(s))
+}
+{
+  // (г) the event loop: 5 runs of 120 shows with a walk every 5 seconds (simulated clock), one journal grows before each run
+  const { monitorEventLoopDelay } = await import("node:perf_hooks")
+  const tops = []
+  let seen = 0
+  for (let run = 0; run < 5; run++) {
+    const f = heavyFiles[run]
+    writeFileSync(f, readFileSync(f, "utf8") + `С5 14/14 [11:5${run}] пересборка ${run}\n`)
+    utimesSync(f, (HNOW + 1000 * run) / 1000, (HNOW + 1000 * run) / 1000)
+    const h = monitorEventLoopDelay({ resolution: 10 })
+    h.enable()
+    for (let i = 0; i < 120; i++) {
+      const rows = V.progressPanel(heavy.main, HNOW + 60_000 * run + i * 2_000)
+      if (rows.length) seen++
+      await new Promise((r) => setImmediate(r))
+    }
+    h.disable()
+    tops.push(h.max / 1e6)
+  }
+  console.log(`     event loop block, max per run (ms): ${tops.map((x) => x.toFixed(1)).join(", ")}`)
+  cell("AC-11 г AC-25 each of the 5 runs of 120 shows blocks the event loop for at most 100 ms", tops.length === 5 && tops.every((x) => x <= 100) && seen === 600, show({ tops, seen }))
+}
+{
+  // (д) no process is started by the shows, the command or the scan
+  const before = procs.n
+  V.progressPanel(heavy.main, HNOW + 600_000)
+  V.progressDialog(heavy.main, HNOW + 600_000)
+  S.createScanner().scanAll(heavy.main, HNOW + 600_000)
+  cell("AC-11 д a show, the command and a full scan start no process (the counter stays 0)", procs.n === 0 && before === 0, show({ n: procs.n, before }))
+  // (е) a positive control: reading the project settings starts git and the counter grows
+  const { readSettingsFolder } = await import("../settings.ts")
+  const mark = procs.n
+  readSettingsFolder(heavy.main, Date.now() + 10_000_000)
+  cell("AC-11 е control: readSettingsFolder on a throwaway repository starts a process and the counter grows", procs.n > mark, show({ mark, now: procs.n }))
+  procs.n = 0
+}
+{
+  // AC-10: the news within 10 seconds, on a substituted clock
+  const repo = makeRepo({ "002-live": { title: "Живая", lines: ["С5 0/3 старт", "С5 1/3 [11:00] а"] } })
+  const f = jfile(repo.main, "002-live")
+  utimesSync(f, sec(11, 1) / 1000, sec(11, 1) / 1000)
+  const t0 = sec(11, 2)
+  const kRow = (rows) => rows.find((x) => x.text.includes("С5 реализация"))?.text
+  const seenAt = []
+  V.progressPanel(repo.main, t0)
+  writeFileSync(f, "С5 0/3 старт\nС5 1/3 [11:00] а\nС5 2/3 [11:02] б\n")
+  utimesSync(f, (t0 + 500) / 1000, (t0 + 500) / 1000)
+  for (const dt of [2_000, 4_000, 6_000, 8_000, 10_000]) seenAt.push([dt, kRow(V.progressPanel(repo.main, t0 + dt)) ?? ""])
+  const first = seenAt.find(([, text]) => text.includes("2/3"))
+  cell("AC-10 a line appended to the journal is on the panel within 10 seconds of the clock (a walk every 5 s, a show every 2 s)", !!first && first[0] <= 10_000 && S.WALK_MS + V.SHOW_MS < 10_000, show(seenAt))
+}
+{
+  // AC-25: thresholds through the environment in the window's entry, settings never read
+  const repo = makeRepo({ "002-live": { title: "Живая", lines: ["С5 0/3 старт", "С5 1/3 [11:49] а"] } })
+  utimesSync(jfile(repo.main, "002-live"), sec(11, 49) / 1000, sec(11, 49) / 1000)
+  utimesSync(path.join(repo.main, ".git", "logs", "HEAD"), sec(9, 0) / 1000, sec(9, 0) / 1000) // the branch was last moved long before the news
+  procs.n = 0 // the throwaway repository is built
+  const row4 = (now) => V.progressPanel(repo.main, now).map((r) => r.text)[4]
+  const base = row4(sec(12, 0))
+  process.env.CREW_HARNESS_PROGRESS_STALE_MS = String(20 * 60_000)
+  const lifted = row4(sec(12, 5))
+  process.env.CREW_HARNESS_PROGRESS_STALE_MS = "abc"
+  const bad = row4(sec(12, 10))
+  delete process.env.CREW_HARNESS_PROGRESS_STALE_MS
+  cell("AC-25 the window's entry takes the thresholds from the environment (11 min is silence by default, not with 20 min; a non-number is the default)", base === "    ⚠ нет вестей 11м" && lifted === "    идёт 11:49 · 16м назад" && bad === "    ⚠ нет вестей 21м", show({ base, lifted, bad }))
+  cell("AC-25 the processes started by all the window's entries in this test stay 0", procs.n === 0, show(procs))
+}
+{
+  // DNC-02: reading changes nothing: the journals, message.md and .git/worktrees have the same contents and times afterwards
+  const { createHash } = await import("node:crypto")
+  const { readdirSync } = await import("node:fs")
+  const digest = (root) => {
+    const h = createHash("sha256")
+    const walk = (d) => {
+      for (const e of readdirSync(d, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+        const p = path.join(d, e.name)
+        if (e.isDirectory()) walk(p)
+        else {
+          const st = statSync(p)
+          h.update(`${p}|${st.size}|${st.mtimeMs}|`)
+          h.update(readFileSync(p))
+        }
+      }
+    }
+    walk(path.join(root, "doc"))
+    try {
+      walk(path.join(root, ".git", "worktrees"))
+    } catch {}
+    return h.digest("hex")
+  }
+  const a = digest(heavy.main) + digest(heavyTree)
+  V.progressPanel(heavy.main, HNOW + 900_000)
+  V.progressDialog(heavy.main, HNOW + 900_000)
+  S.createScanner().scanAll(heavyTree, HNOW + 900_000)
+  const b = digest(heavy.main) + digest(heavyTree)
+  cell("DNC-02 the content and times of the journals, message.md and .git/worktrees are the same before and after a show, the command and a scan", a === b, "")
+}
+
+{
+  // the hand-written line parser is the same language as the regular expression of the format (Д-11), checked on random strings
+  let seed = 12345
+  const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff
+  const alphabet = [" ", " ", "\t", "/", "/", "0", "1", "9", "a", "С", "[", "]", ":", "\r", "-", ".", "٣"]
+  let bad = ""
+  let formCount = 0
+  for (let n = 0; n < 40000 && !bad; n++) {
+    let s = ""
+    const pick = (xs) => xs[Math.floor(rnd() * xs.length)]
+    if (n % 2) s = pick(["С5", "a", "С 5", "", "x\ty", "С5" + String.fromCharCode(0x301)]) + pick([" ", " ", "\t", "  ", ""]) + pick(["3", "12", "", String.fromCharCode(0x663), "03"]) + pick(["/", "/", "//", ""]) + pick(["4", "14", "", String.fromCharCode(0x664)]) + pick([" ", " ", "", "  ", "\t"]) + pick(["x", "[10:05] y", "y\r", " ", "", "стоп: ворота"])
+    else {
+      const len = Math.floor(rnd() * 12)
+      for (let i = 0; i < len; i++) s += alphabet[Math.floor(rnd() * alphabet.length)]
+    }
+    const m = P.LINE_RE.exec(s)
+    const l = P.parseLine(s)
+    if (!!m !== !!l) bad = `form differs on ${JSON.stringify(s)}`
+    else if (m) {
+      formCount++
+      if (l.code !== m[1] || l.k !== Number(m[2]) || l.n !== Number(m[3]) || l.sig !== m[4]) bad = `fields differ on ${JSON.stringify(s)}`
+    }
+  }
+  cell("AC-26 the parser of lines gives the same lines and fields as the regular expression on 40000 random strings", !bad && formCount > 200, bad || `forms: ${formCount}`)
+  // the whole journal: the same lines as split by LF and parse one by one, with CRLF, a lone CR, a missing last LF
+  const raw = Buffer.from("С5 0/3 старт\r\nмусор\n\nС5 1/3 [10:05] а\rб\nС5 2/3 в\n  \r\nС5 3/3 готово", "utf8")
+  const viaSplit = P.splitJournal(raw).map(P.parseLine).filter(Boolean)
+  const direct = P.parseJournal(raw)
+  cell("AC-26 parseJournal equals splitting by LF and parsing each line (CRLF, a lone CR, junk, no last LF)", show(viaSplit) === show(direct) && direct.length === 4, show(direct))
+}
+
 // ==== END OF CELLS ====
 try {
   rmSync(tmp, { recursive: true, force: true })
