@@ -165,12 +165,25 @@ def main():
         assert proc.returncode == 1 and "FAIL: самотесты: упало 3 из 4" in proc.out, proc.out
         assert "нет законной пробы первой" in proc.out, proc.out
 
+    def order_independent_of_locale():
+        folder = make_dir("g11", {"check-ab.py": py_guard("ок: осмотрено 1 файлов"),
+                                  "check-a-c.py": py_guard("ок: осмотрено 2 файлов"),
+                                  "check-b.py": py_guard("судить нечего: пусто"),
+                                  "check-a_b.py": py_guard("ок: осмотрено 3 файлов")})
+        outs = []
+        for loc in ("C", "ru_RU.UTF-8", "en_US.UTF-8"):
+            proc = stlib.run(("sh", RUN_ALL, "--dir", folder), cwd=repo, env=dict(env, LC_ALL=loc))
+            assert proc.returncode == 0, proc.out
+            outs.append(proc.out)
+        assert outs[0] == outs[1] == outs[2], outs
+
     def selftests_none():
         proc = selftests_runner({})
         assert proc.returncode == 1 and "FAIL: мишень потеряна" in proc.out, proc.out
 
     pr.probe("законное", "три стража (два Python, один sh): счёт и код 0", legit)
     pr.probe("законное", "run-selftests: хороший самотест принят", selftests_good)
+    pr.probe("законное", "порядок стражей не зависит от локали", order_independent_of_locale)
     pr.probe("красная", "run-selftests: плохая форма, упавший и молчащий самотесты красные", selftests_bad_shape_and_failures)
     pr.probe("мишень", "run-selftests: нет самотестов - мишень потеряна", selftests_none)
     pr.probe("законное", "«пропущено» локально зелёное, в CI красное", skipped_local_green_ci_red)

@@ -40,8 +40,11 @@ mkdir -p "$tmp/t3/doc" "$tmp/t3/opencode-plugin/test"
 
 probes=0
 bad=0
-for guard in "$guards_dir"/check-*.py "$guards_dir"/check-*.sh "$guards_dir"/guard-secrets.py; do
-  [ -f "$guard" ] || continue
+# порядок не зависит от локали: вывод двух прогонов под разными локалями совпадает построчно
+for g in "$guards_dir"/check-*.py "$guards_dir"/check-*.sh "$guards_dir"/guard-secrets.py; do
+  [ -f "$g" ] && printf '%s\n' "$g"
+done | LC_ALL=C sort > "$tmp/list"
+while IFS= read -r guard; do
   name=$(basename "$guard")
   for target in t1 t2 t3; do
     case "$target" in
@@ -52,8 +55,8 @@ for guard in "$guards_dir"/check-*.py "$guards_dir"/check-*.sh "$guards_dir"/gua
     extra=
     [ "$name" = "guard-secrets.py" ] && extra=--tree
     case "$guard" in
-      *.py) $PYTHON "$guard" --root "$tmp/$target" $extra > "$tmp/out" 2>&1 ;;
-      *) sh "$guard" --root "$tmp/$target" $extra > "$tmp/out" 2>&1 ;;
+      *.py) $PYTHON "$guard" --root "$tmp/$target" $extra > "$tmp/out" 2>&1 < /dev/null ;;
+      *) sh "$guard" --root "$tmp/$target" $extra > "$tmp/out" 2>&1 < /dev/null ;;
     esac
     rc=$?
     verdict=$(tail -n 1 "$tmp/out")
@@ -65,7 +68,7 @@ for guard in "$guards_dir"/check-*.py "$guards_dir"/check-*.sh "$guards_dir"/gua
       *) bad=$((bad + 1)); echo "  ^ ПРОВАЛ: вердикт не из допустимых" ;;
     esac
   done
-done
+done < "$tmp/list"
 
 if [ "$probes" -eq 0 ]; then
   echo "FAIL: мишень потеряна: нет ни одного стража дерева"

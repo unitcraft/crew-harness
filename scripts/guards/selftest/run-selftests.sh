@@ -21,13 +21,16 @@ trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 
 total=0
 failed=0
-for t in "$here"/test-*.py "$here"/test-*.sh; do
-  [ -f "$t" ] || continue
+# порядок самотестов не зависит от локали (вывод двух прогонов под разными локалями совпадает построчно)
+for f in "$here"/test-*.py "$here"/test-*.sh; do
+  [ -f "$f" ] && printf '%s\n' "$f"
+done | LC_ALL=C sort > "$tmp/list"
+while IFS= read -r t; do
   name=$(basename "$t")
   total=$((total + 1))
   case "$t" in
-    *.py) $PYTHON "$t" > "$tmp/out" 2>"$tmp/err"; rc=$? ;;
-    *) sh "$t" > "$tmp/out" 2>"$tmp/err"; rc=$? ;;
+    *.py) $PYTHON "$t" > "$tmp/out" 2>"$tmp/err" < /dev/null; rc=$? ;;
+    *) sh "$t" > "$tmp/out" 2>"$tmp/err" < /dev/null; rc=$? ;;
   esac
   last=$(tail -n 1 "$tmp/out")
   case "$last" in
@@ -53,7 +56,7 @@ for t in "$here"/test-*.py "$here"/test-*.sh; do
     grep 'FAIL' "$tmp/out" | head -n 20
     head -n 5 "$tmp/err"
   fi
-done
+done < "$tmp/list"
 
 if [ "$total" -eq 0 ]; then
   echo "FAIL: мишень потеряна: нет ни одного самотеста test-*"

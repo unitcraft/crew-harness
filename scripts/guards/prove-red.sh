@@ -60,13 +60,12 @@ proved=0
 total=0
 failed_names=
 make_copy
-list=
-for f in "$copy"/scripts/guards/check-*.py "$copy"/scripts/guards/check-*.sh "$copy"/scripts/guards/guard-*.py \
+# порядок не зависит от локали: вывод двух прогонов под разными локалями совпадает построчно
+list=$(for f in "$copy"/scripts/guards/check-*.py "$copy"/scripts/guards/check-*.sh "$copy"/scripts/guards/guard-*.py \
          "$copy"/scripts/agent-hooks/guard-git.py "$copy"/scripts/githooks/pre-commit \
          "$copy"/scripts/githooks/commit-msg "$copy"/scripts/githooks/pre-push; do
-  [ -f "$f" ] || continue
-  list="$list $f"
-done
+  [ -f "$f" ] && printf '%s\n' "$f"
+done | LC_ALL=C sort)
 
 if [ -z "$list" ]; then
   echo "FAIL: мишень потеряна: в копии нет ни одного стража для подмены"

@@ -67,11 +67,14 @@ run_one() {
 }
 
 : > "$tmp/table"
+# порядок стражей не зависит от локали (вывод двух прогонов под разными локалями совпадает построчно)
 for guard in "$guards_dir"/check-*; do
-  [ -f "$guard" ] || continue
+  [ -f "$guard" ] && printf '%s\n' "$guard"
+done | LC_ALL=C sort > "$tmp/list"
+while IFS= read -r guard; do
   name=$(basename "$guard")
   count=$((count + 1))
-  run_one "$guard" > "$tmp/out.$count" 2>"$tmp/err.$count"
+  run_one "$guard" > "$tmp/out.$count" 2>"$tmp/err.$count" < /dev/null
   rc=$?
   last=$(tail -n 1 "$tmp/out.$count")
   case "$last" in
@@ -94,7 +97,7 @@ for guard in "$guards_dir"/check-*; do
   fi
   tally "$kind"
   printf '%s\t%s\t%s\n' "$name" "$kind" "$last" >> "$tmp/table"
-done
+done < "$tmp/list"
 
 if [ "$count" -eq 0 ]; then
   echo "FAIL: мишень потеряна: нет ни одного стража check-* в $(basename "$guards_dir")"
