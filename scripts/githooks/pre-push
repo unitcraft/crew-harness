@@ -1,0 +1,61 @@
+#!/bin/sh
+# Зачем: проверить до публикации каждый коммит пуша, в том числе созданные без хуков (git cherry-pick,
+#     git rebase --continue), и не дать вытолкнуть в публичный репозиторий секрет, путь машины, имя
+#     из списка, порчу текста или неверное сообщение.
+# Проверяет: по каждому коммиту диапазона (commit-range.sh): guard-secrets.py, check-private-names.py,
+#     check-text-hygiene.py, guard-commit-message.py (все с --commit <хеш>); красный коммит отклоняет
+#     пуш с именем коммита и файла. Удаление удалённой ветки — судить нечего.
+# Не проверяет: стражей ссылок, форматов, таблиц и тестов (их держат pre-commit и CI), содержимое тегов.
+# Правило: AGENTS.md п.15, п.4, п.8; REQ-18 задачи.
+#
+# Код возврата решается до печати (вывод через буфер). Диапазон новой ветки считается от удалённых веток
+# и основной ветки; прежней головы нет локально — отказ «сначала git fetch».
+trap '' PIPE
+root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "FAIL: предпосылка: хук запущен вне репозитория git"; exit 1; }
+# shellcheck disable=SC1091
+. "$root/scripts/guards/lib/find-python.sh"
+find_python || exit 1
+
+remote=${1-}
+zero=0000000000000000000000000000000000000000
+tmp=$(mktemp -d 2>/dev/null) || { echo "FAIL: предпосылка: нет места для буфера вывода"; exit 1; }
+trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+: > "$tmp/out"
+
+rc=0
+judged=0
+while read -r lref lsha rref rsha; do
+  [ -z "${lsha-}" ] && continue
+  if [ "$lsha" = "$zero" ]; then
+    echo "судить нечего: удаление ветки $rref" >> "$tmp/out"
+    continue
+  fi
+  commits=$(sh "$root/scripts/guards/commit-range.sh" --old "${rsha:-$zero}" --new "$lsha" --remote "$remote" --main "refs/remotes/$remote/main" 2>"$tmp/range.err")
+  range_rc=$?
+  if [ "$range_rc" -ne 0 ]; then
+    cat "$tmp/range.err" >> "$tmp/out"
+    rc=1
+    continue
+  fi
+  for c in $commits; do
+    judged=$((judged + 1))
+    : > "$tmp/c"
+    crc=0
+    $PYTHON "$root/scripts/guards/guard-secrets.py" --commit "$c" >> "$tmp/c" 2>&1 || crc=1
+    $PYTHON "$root/scripts/guards/check-private-names.py" --commit "$c" >> "$tmp/c" 2>&1 || crc=1
+    $PYTHON "$root/scripts/guards/check-text-hygiene.py" --commit "$c" >> "$tmp/c" 2>&1 || crc=1
+    $PYTHON "$root/scripts/guards/guard-commit-message.py" --commit "$c" >> "$tmp/c" 2>&1 || crc=1
+    if [ "$crc" -ne 0 ]; then
+      rc=1
+      short=$(git rev-parse --short=7 "$c" 2>/dev/null)
+      echo "FAIL: пуш отклонён: коммит $short" >> "$tmp/out"
+      cat "$tmp/c" >> "$tmp/out"
+    fi
+  done
+done
+
+if [ "$rc" -eq 0 ]; then
+  echo "ок: осмотрено $judged коммитов пуша" >> "$tmp/out"
+fi
+cat "$tmp/out" 2>/dev/null || true
+exit "$rc"

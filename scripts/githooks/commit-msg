@@ -1,0 +1,30 @@
+#!/bin/sh
+# Зачем: проверить сообщение коммита до того, как оно попадёт в историю: подпись, язык, трейлеры,
+#     адрес автора, приватные данные.
+# Проверяет: страж сообщения (guard-commit-message.py) по файлу сообщения; режим определяется здесь и только
+#     здесь: переменная GIT_EDITOR равна «:» при -m, -F и --no-edit (сообщение как есть), иначе набрано
+#     в редакторе (git уберёт комментарии и хвост за строкой-ножницами).
+# Не проверяет: содержимое индекса (хук pre-commit); флаг -v в командной строке при -m и -F хуку не виден,
+#     хвост за строкой-ножницами в этом случае судится строже, чем нужно (только в сторону строгости).
+# Правило: AGENTS.md п.4 (сообщение по-английски, -s, без трейлеров соавторства), п.15.
+#
+# Код возврата решается до печати (вывод через буфер).
+trap '' PIPE
+root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "FAIL: предпосылка: хук запущен вне репозитория git"; exit 1; }
+# shellcheck disable=SC1091
+. "$root/scripts/guards/lib/find-python.sh"
+find_python || exit 1
+
+case "${GIT_EDITOR-}" in
+  :) mode=message ;;
+  *) mode=editor ;;
+esac
+
+buf=$(mktemp 2>/dev/null) || { echo "FAIL: предпосылка: нет места для буфера вывода"; exit 1; }
+trap 'rm -f "$buf"' EXIT HUP INT TERM
+
+rc=0
+$PYTHON "$root/scripts/guards/guard-commit-message.py" --message-file "$1" --mode "$mode" > "$buf" 2>&1 || rc=1
+
+cat "$buf" 2>/dev/null || true
+exit "$rc"
