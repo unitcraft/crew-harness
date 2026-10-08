@@ -965,6 +965,9 @@ export const HELP = `crew-harness — письма между вкладками
                                 set {values} (интегратор; пишет рабочую копию файла настроек, действует с коммита).
   crew_doctor                 — самопроверка: что сломано и что делать.
   /crew (команда окна)       — владельцу: кто чего ждёт, без хода модели; кто ждёт его — уведомление в окне.
+  /crew-sets, /crew-profiles (команды окна) — владельцу: наборы профилей моделей и справочник «семья, ступень → модель и окно»;
+                                use включает набор для всех этапов (модель исполнителя, приёмщика, плана), окно профиля действует на
+                                сессии в рабочем дереве задачи; агент набор не включает (crew_config set пишет справочник и наборы).
 
 АДРЕС (to): роль своего проекта (worker, integrator); «проект.роль» — в другом проекте; id сессии (ses_...); all —
 всем открытым вкладкам своего проекта; «проект.all». Отправитель подписан полным адресом и сессией.
@@ -990,8 +993,9 @@ push_empty_turns (3) пустых подряд или push_max (20) напоми
 ЗАДАЧИ. У задачи номер #N (сквозной в проекте, только растёт; при доработке и передаче не меняется) — по нему её
 называют владелец, интегратор и crew_list; заголовок сессии задачи — «#N название».
   crew_spawn {title?, goal, criteria, boundaries?, open_questions?, tier?, priority?, role?, parent?} — новая сессия: без цели и
-    критериев приёмки задача не ставится (проект может требовать больше — task_fields); модель по ступени (heavy —
-    claude-code/opus, medium — sonnet, light — haiku; проект меняет spawn_models); лимит работающих на роль —
+    критериев приёмки задача не ставится (проект может требовать больше — task_fields); модель по ступени (по умолчанию, пока набор не
+    включён: heavy — claude-code/opus, medium — sonnet, light — haiku; проект меняет spawn_models; включённый набор профилей
+    моделей — /crew-sets — переопределяет модель этапа, tier на входе выбирает ступень внутри семьи набора); лимит работающих на роль —
     spawn_limits (3). Если в настройках проекта задан worktrees — письмо с задачей называет папку worktree и ветку.
   priority: P0 авария (всё остальное ждёт), P1 первая очередь, P2 обычная работа (по умолчанию), P3 когда освободятся руки.
   crew_task {action: "assign", session, goal, criteria, ...} — отдать задачу открытой вкладке владельца, а не новой
@@ -1502,7 +1506,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
   const crewSpawn: CrewTool = {
     name: "crew_spawn",
     description:
-      "Integrator only: start a task #N in a new session (it runs in the OpenCode server even with no window). goal and criteria are required (the project may require more: boundaries, open_questions); tier heavy|medium|light picks the model (claude-code opus|sonnet|haiku unless the project overrides); priority P0..P3. The project limits running tasks per role. The report comes back as an answer to the task's qid: crew_wait {qid}. Manage tasks with crew_task.",
+      "Integrator only: start a task #N in a new session (it runs in the OpenCode server even with no window). goal and criteria are required (the project may require more: boundaries, open_questions); tier heavy|medium|light picks the model (by default claude-code opus|sonnet|haiku, spawn_models of the project overrides; an enabled model-profile set /crew-sets overrides both for the stage it describes -- the tier on the input then picks the tier inside the family of the set; without a tier the tier of the cell is used); priority P0..P3. The project limits running tasks per role. The report comes back as an answer to the task's qid: crew_wait {qid}. Manage tasks with crew_task.",
     input: {
       type: "object",
       properties: {
@@ -1588,7 +1592,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
   const crewTask: CrewTool = {
     name: "crew_task",
     description:
-      "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), show {n} (details and history), and for the integrator: assign {session, goal, criteria, ...} (give a task to an existing tab instead of a new session), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done), cancel {n, text?}, priority {n, priority}, order {to: 'project.integrator', goal, criteria, ...} (work for another project: its integrator does it with its own tasks; the order follows them); for the task's reviewer: review {n} (start), merge {n} (the project's merge lock), rework {n, text, sync?} (sync: true -- only to merge the fresh target branch: not a rework round, not counted in rework_max), check {n, step} before checking a step and {n, step, result} after it (the owner sees the progress in the window), accept {n, checks?, commit?} (steps marked by check count; the plugin checks the required steps and that it is merged), cleaned {n} (the plugin checks the worktree and branch are gone). With the project's reviewer: acceptor, merge/accept/cleaned also need the acceptor (or integrator) role.",
+      "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), show {n} (details and history), and for the integrator: assign {session, goal, criteria, ...} (give a task to an existing tab instead of a new session), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done; with an enabled model-profile set the model is taken by the set at that moment), cancel {n, text?}, priority {n, priority}, order {to: 'project.integrator', goal, criteria, ...} (work for another project: its integrator does it with its own tasks; the order follows them); for the task's reviewer: review {n} (start), merge {n} (the project's merge lock), rework {n, text, sync?} (sync: true -- only to merge the fresh target branch: not a rework round, not counted in rework_max), check {n, step} before checking a step and {n, step, result} after it (the owner sees the progress in the window), accept {n, checks?, commit?} (steps marked by check count; the plugin checks the required steps and that it is merged), cleaned {n} (the plugin checks the worktree and branch are gone). With the project's reviewer: acceptor, merge/accept/cleaned also need the acceptor (or integrator) role.",
     input: {
       type: "object",
       properties: {
