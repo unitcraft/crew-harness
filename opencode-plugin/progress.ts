@@ -244,8 +244,8 @@ export function isShown(state: State, at: number, now: number, th: Thresholds): 
   return true
 }
 
-/** Молчит дольше 24 часов (в команде такая запись «давно брошена»). */
-export const isAbandoned = (state: State, at: number, now: number, th: Thresholds) => (state === 1 || state === 3 || state === 6 || state === 7) && now - at >= th.abandonMs
+/** Остановилась, запущена или молчит (1, 3, 6) и без вестей дольше 24 часов: в команде «давно брошена». «Итога нет» (7) не брошена: пропадает без пометки. */
+export const isAbandoned = (state: State, at: number, now: number, th: Thresholds) => (state === 1 || state === 3 || state === 6) && now - at >= th.abandonMs
 
 /** Запись о сессии для показа: последняя строка, момент вести, состояние, видимость. */
 export type Entry = {
@@ -480,7 +480,7 @@ export type ProgressSession = {
   branchAt?: number
   /** виден в панели по REQ-05 */
   visible: boolean
-  /** молчит дольше 24 часов (в команде «давно брошена») */
+  /** состояния 1, 3, 6 без вестей дольше 24 часов (в команде «давно брошена»); «итога нет» не брошена */
   abandoned: boolean
   /** до трёх последних строк сессии (`k/N подпись`) */
   tail: string[]

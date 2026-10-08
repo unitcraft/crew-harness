@@ -183,7 +183,7 @@ const now0 = at(12, 0)
     const e = entryAt(["С5 0/14 старт", line], now0 - 16 * MIN, now0)
     cell(`AC-23 «${line.slice(0, 7)}» with no «готово»: state 7, still shown after 16 minutes`, e.state === 7 && e.shown && !e.stale, show(e))
     const e25 = entryAt(["С5 0/14 старт", line], now0 - 25 * 3_600_000, now0)
-    cell(`AC-23 «${line.slice(0, 7)}»: gone after 24 hours`, !e25.shown && e25.abandoned, show(e25))
+    cell(`AC-23 «${line.slice(0, 7)}»: gone after 24 hours and not abandoned`, !e25.shown && !e25.abandoned, show(e25))
   }
   for (const line of ["С5 14/14 готово", "С5 15/14 готово", "С5 12/14 готово", "С5 14/14 [10:05] готово — итог"]) {
     const e = entryAt(["С5 0/14 старт", "С5 11/14 шаг", line], at(10, 6), at(10, 8))
@@ -627,7 +627,7 @@ cell("AC-10 the walk (5 s) and the show (2 s) periods give news within 10 second
   // AC-01
   const t = task(["С5 0/14 старт", "С5 13/14 [11:57] шаг: сводка"], at(11, 57), T0)
   const rows = panel(t, T0)
-  cell("AC-01 the panel: title and four rows of the task", show(rows) === show(["Ход работ", "• 002 Стражи репозитория", "    С5 реализация 13/14", "    ↳ шаг: сводка", "    идёт 11:57 · 3м назад"]), show(rows))
+  cell("AC-01 the panel: title and four rows of the task", show(rows) === show(["Ход работ", "• 002 Стражи репозитория", "    С5 реализация 13/14", "    ↳ шаг: сводка", "    идёт 11:57 · 3м назад", "все: /crew-progress"]), show(rows))
   cell("AC-01 no «нет вестей» in the panel and the command says «идёт: последняя весть 11:57, 3 мин назад»", !rows.join("\n").includes("нет вестей") && dialog(t, T0).includes("идёт: последняя весть 11:57, 3 мин назад"), dialog(t, T0))
 }
 {
@@ -684,7 +684,30 @@ cell("AC-10 the walk (5 s) and the show (2 s) periods give news within 10 second
 {
   // AC-23 (texts)
   const t = task(["С5 0/14 старт", "С5 14/14 пересборка: ветка на main"], at(11, 30), T0)
-  cell("AC-23 «все шаги сделаны, итога нет» in the panel (mark !) and the command", panel(t, T0)[4] === "    все шаги сделаны, итога нет" && panel(t, T0)[1].startsWith("! ") && dialog(t, T0).includes("все шаги сделаны, итога нет"), show(panel(t, T0)))
+  cell("AC-23 «все шаги сделаны, итога нет» in the panel (mark •) and the command, not «давно брошена»", panel(t, T0)[4] === "    все шаги сделаны, итога нет" && panel(t, T0)[1].startsWith("• ") && dialog(t, T0).includes("все шаги сделаны, итога нет") && !dialog(t, T0).includes("давно брошена"), show(panel(t, T0)))
+  const old = task(["С5 0/14 старт", "С5 14/14 пересборка: ветка на main"], T0 - 25 * 3_600_000, T0)
+  cell("AC-23 «итога нет» silent for 25 hours: gone from the panel and from the command, no «давно брошена»", panel(old, T0).length === 0 && dialog(old, T0).startsWith("Идущих задач нет"), dialog(old, T0))
+  // the order: a task in state 7 stands after a task with «!» (its news is older: 300 against 11 minutes)
+  const order = P.summarizeTasks({ tasks: [
+    { folder: "001-silent", title: "Молчит", copies: [Cp("main", ["С5 0/14 старт", "С5 5/14 [11:49] шаг"], at(11, 49))] },
+    { folder: "002-closed", title: "Итога нет", copies: [Cp("main", ["С5 0/14 старт", "С5 14/14 [07:00] пересборка"], at(7, 0))] },
+  ] }, T0)
+  const marks = panel(order, T0).filter((x) => /^[•!✓] /.test(x))
+  cell("AC-23 the order: the task in state 7 stands after the task with «!»", show(marks) === show(["! 001 Молчит", "• 002 Итога нет"]), show(marks))
+  // the shown record is hidden but not abandoned, an older launch of another copy is silent for more than 24 hours: the launch is kept
+  const DAY = 24 * 3_600_000
+  const launch = ["С3 0/0 [09:00] запуск"]
+  const both = (treeLines, treeMtime, mainLines = launch, mainMtime = at(9, 0, 6)) =>
+    P.summarizeTasks({ tasks: [{ folder: "002-guards", title: "Стражи репозитория", copies: [Cp("main", mainLines, mainMtime), Cp("tree", treeLines, treeMtime)] }] }, T0)
+  const keeps = (d) => d.startsWith("Идущих задач: 0, давно брошенных: 1") && /запущена 09:00, шагов нет.* — давно брошена/.test(d)
+  const a7 = both(["С5 0/14 старт", "С5 14/14 пересборка: ветка на main"], T0 - DAY - 6 * 3_600_000)
+  cell("AC-23 (а) state 7 older than 24 hours and an older abandoned launch: not in the panel, the command lists the launch, not the state 7", panel(a7, T0).length === 0 && keeps(dialog(a7, T0)) && !dialog(a7, T0).includes("итога нет"), dialog(a7, T0))
+  const bDone = both(["С5 0/14 [11:00] старт", "С5 14/14 [11:40] готово — итог"], at(11, 40))
+  cell("AC-23 (б) «готово» older than 15 minutes and an older abandoned launch: not in the panel, the command lists the launch, not «готово»", panel(bDone, T0).length === 0 && keeps(dialog(bDone, T0)) && !dialog(bDone, T0).includes("готово,"), dialog(bDone, T0))
+  const cUnits = both(["КОММИТ 0/0 [11:40] старт"], at(11, 40))
+  cell("AC-23 (в) «без единиц» older than 15 minutes and an older abandoned launch: not in the panel, the command lists the launch, not «без единиц»", panel(cUnits, T0).length === 0 && keeps(dialog(cUnits, T0)) && !dialog(cUnits, T0).includes("без единиц"), dialog(cUnits, T0))
+  const dStop = both(["С5 0/14 [11:00] старт", "С5 14/14 [11:40] готово — итог"], at(11, 40), ["С4 0/8 [08:50] старт", "С4 3/8 [09:00] стоп: ворота — ждёт"], at(9, 0))
+  cell("AC-23 (г) a stop younger than 24 hours beside «готово» older than 15 minutes is not listed (the border, REQ-05)", panel(dStop, T0).length === 0 && dialog(dStop, T0).startsWith("Идущих задач нет"), dialog(dStop, T0))
 }
 {
   // AC-12: widths, the number of tasks, the order
@@ -700,7 +723,7 @@ cell("AC-10 the walk (5 s) and the show (2 s) periods give news within 10 second
   const rows = V.panelLines(tasks, T0)
   const texts = rows.map((r) => r.text)
   cell("AC-12 panel rows are at most 32 characters and do not end with a space", texts.every((x) => x.length <= 32 && !x.endsWith(" ")), show(texts.filter((x) => x.length > 32 || x.endsWith(" "))))
-  cell("AC-12 at most 3 tasks and the line «+1 · /crew-progress», at most 14 rows", texts.length <= 14 && texts.at(-1) === "+1 · /crew-progress" && texts.filter((x) => /^[•!✓] /.test(x)).length === 3, show(texts))
+  cell("AC-12 at most 3 tasks and the line «ещё 1 · все: /crew-progress», at most 14 rows", texts.length <= 14 && texts.at(-1) === "ещё 1 · все: /crew-progress" && texts.filter((x) => /^[•!✓] /.test(x)).length === 3, show(texts))
   cell("AC-12 the silent task is first and the least fresh of the others is hidden", texts[1].startsWith("! 003 Guards of the") && texts[5].startsWith("• 001") && texts[9].startsWith("• 004") && !texts.some((x) => x.includes("002")), show(texts.filter((x) => /^[•!✓] /.test(x))))
   cell("AC-12 row 4 of every task holds the state", [4, 8, 12].every((i) => /идёт|нет вестей/.test(texts[i])), show(texts))
   cell("AC-15 the latin title stays as written (the letter s is not replaced), the number has no #", texts[1].startsWith("! 003 Guards of the repos") && !texts.join("").includes("#"), texts[1])
@@ -710,7 +733,12 @@ cell("AC-10 the walk (5 s) and the show (2 s) periods give news within 10 second
   // four silent tasks: the three oldest are shown
   const silent = [1, 2, 3, 4].map((i) => base(i, `Тихая ${i}`, run(10 + i * 3), T0 - (10 + i * 3) * MIN))
   const st = V.panelLines(P.summarizeTasks({ tasks: silent }, T0), T0).map((r) => r.text)
-  cell("AC-12 four silent tasks: the three oldest are shown, the fourth is «+1»", st.filter((x) => /^! /.test(x)).length === 3 && st.some((x) => x.includes("Тихая 4")) && !st.some((x) => x.includes("Тихая 1")) && st.at(-1) === "+1 · /crew-progress", show(st))
+  cell("AC-12 four silent tasks: the three oldest are shown, the fourth is «ещё 1»", st.filter((x) => /^! /.test(x)).length === 3 && st.some((x) => x.includes("Тихая 4")) && !st.some((x) => x.includes("Тихая 1")) && st.at(-1) === "ещё 1 · все: /crew-progress", show(st))
+  // three tasks or fewer: the bottom line is only the hint «все: /crew-progress», the block is at most 14 rows
+  for (const n of [1, 3]) {
+    const few = V.panelLines(P.summarizeTasks({ tasks: four.slice(0, n) }, T0), T0).map((r) => r.text)
+    cell(`AC-12 ${n} task(s): the bottom line «все: /crew-progress», ${1 + 4 * n + 1} rows (at most 14)`, few.at(-1) === "все: /crew-progress" && few.length === 1 + 4 * n + 1 && few.length <= 14, show(few))
+  }
   // the second row with ≠ and +1: the name is cut with «…», «13/14 ≠ +1» whole
   const proto = tasks[0]
   for (const [code, full] of [["С5д", "С5д продолжение реализации"], ["С9", "С9 разбор обратной связи"]]) {

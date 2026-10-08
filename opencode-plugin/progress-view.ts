@@ -36,8 +36,8 @@ export const longAge = (ms: number) => {
 }
 const stamp = (s: ProgressSession) => `${s.byFile ? "≈" : ""}${clock(s.at)}`
 
-/** Задача требует внимания: тишина (6), остановка (1), «итога нет» (7), запуск после порога (3). Метка `!` (REQ-07). */
-export const needsAttention = (s: ProgressSession) => s.state === 6 || s.state === 1 || s.state === 7 || (s.state === 3 && s.stale)
+/** Задача требует внимания: тишина (6), остановка (1), запуск после порога (3). Метка `!` (REQ-07); «итога нет» (7) — метка `•`. */
+export const needsAttention = (s: ProgressSession) => s.state === 6 || s.state === 1 || (s.state === 3 && s.stale)
 const markOf = (s: ProgressSession) => (needsAttention(s) ? "!" : s.state === 2 ? "✓" : "•")
 
 /** Причина остановки: подпись после «стоп: <вид> —». */
@@ -105,13 +105,14 @@ function panelWord(t: ProgressSession, now: number): string {
   return full
 }
 
-/** Блок «Ход работ»: заголовок, до трёх задач по четыре строки и строка «+N · /crew-progress»; нет идущих задач — пусто (REQ-07). */
+/** Блок «Ход работ»: заголовок, до трёх задач по четыре строки и нижняя строка «ещё N · все: /crew-progress» (без скрытых —
+ * «все: /crew-progress»); нет идущих задач — пусто (REQ-07). */
 export function panelLines(tasks: ProgressTask[], now: number): PanelRow[] {
   const { shown, hidden } = orderTasks(tasks)
   if (!shown.length) return []
   const rows: PanelRow[] = [{ text: "Ход работ", tone: "base" }]
   for (const t of shown) rows.push(...taskRows(t, now))
-  if (hidden > 0) rows.push({ text: fitRow(`+${hidden} · /crew-progress`, PANEL_WIDTH), tone: "muted" })
+  rows.push({ text: fitRow(hidden > 0 ? `ещё ${hidden} · все: /crew-progress` : "все: /crew-progress", PANEL_WIDTH), tone: "muted" })
   return rows
 }
 
@@ -137,16 +138,20 @@ function sessionBlock(s: ProgressSession, now: number, lead: string): string[] {
   return out
 }
 
-/** Текст диалога: все идущие задачи с кандидатами и тремя последними строками каждого, «вытеснено N», брошенные. */
+/**
+ * Текст диалога: все идущие задачи с кандидатами и тремя последними строками каждого, «вытеснено N», брошенные. Задача со скрытой
+ * показываемой записью («итога нет» старше 24 часов, «готово» или «без единиц» старше 15 минут) остаётся ради кандидата с `abandoned`:
+ * пишется только он, сама запись — нет (REQ-05).
+ */
 export function dialogText(tasks: ProgressTask[], now: number, scan?: { trees: number; journals: number }): string {
-  const list = tasks.filter((t) => t.visible || t.abandoned)
+  const list = tasks.filter((t) => t.visible || t.candidates.some((c) => c.abandoned))
   if (!list.length) return `Идущих задач нет. Осмотрено деревьев: ${scan?.trees ?? 0}, журналов: ${scan?.journals ?? 0}.`
   const lines: string[] = [`Идущих задач: ${list.filter((t) => t.visible).length}${list.some((t) => !t.visible) ? `, давно брошенных: ${list.filter((t) => !t.visible).length}` : ""}`]
   const attention = (t: ProgressTask) => (needsAttention(t) ? 0 : 1)
   for (const t of [...list].sort((a, b) => Number(!a.visible) - Number(!b.visible) || attention(a) - attention(b) || a.at - b.at)) {
     lines.push("")
     lines.push(D(`${markOf(t)} ${t.number} ${t.title}`))
-    const cands = t.candidates.filter((c) => c.visible || c.abandoned)
+    const cands = t.visible || t.abandoned ? t.candidates.filter((c) => c.visible || c.abandoned) : t.candidates.filter((c) => c.abandoned)
     cands.forEach((c, i) => lines.push(...sessionBlock(c, now, i === 0 ? "  " : "  + ")))
     if (t.displaced > 0) lines.push(D(`  вытеснено ${t.displaced} (прошлые сессии)`))
   }
