@@ -67,6 +67,7 @@ stops at the first failing file.
 | | `crew-profiles-select` | the model of a session by the enabled set: crew_spawn, plan task, reassign, the reviewer and the open tabs, auto-plan steps; refusals create nothing; without keys everything as before |
 | | `crew-profiles-windows` | the window file in the task worktree: written before the first turn, updated with the set and the data, removed with the set / task / folder, hand-written files untouched, the root and the main folders get nothing, git ignores it; hand-written windows and the explicit threshold of Claude Code are read and named |
 | | `crew-profiles-cmd` | the window commands `/crew-sets` and `/crew-profiles`: tables, show, use with its report, the edit verbs and their refusals, check, save / save force, the forms of reset, one log line per edit, answers without a turn of the model |
+| | `crew-profiles-docs` | the README example is valid JSON of the two keys and passes the key and link checks, holds the starting content; the README and the help describe keys, commands, the window file and what applies where; only the two command names, in the plural |
 
 ## Manual checks (not in `npm test`)
 

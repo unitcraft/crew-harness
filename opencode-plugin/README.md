@@ -182,7 +182,7 @@ journal is `tasks/<project>/<N>.json` in the mailbox.
 - `crew_spawn {title?, goal, criteria, boundaries?, open_questions?, tier?, priority?, role?, parent?}` (the
   integrator only) starts task `#N` in a new session, with or without a window. No task without a
   goal and acceptance criteria (the project may require more: `task_fields`); model by tier
-  (`claude-code/opus` / `sonnet` / `haiku`, `spawn_models` overrides); a limit of running tasks per
+  (by default `claude-code/opus` / `sonnet` / `haiku`, `spawn_models` overrides; an enabled set of model profiles overrides both for the stages it describes — see [Model profiles](#model-profiles-sets-of-models-and-windows-by-stage)); a limit of running tasks per
   role (`spawn_limits`, 3); priority `P0` (emergency) … `P3`, default `P2`. With `worktrees` set the
   plugin creates the task's worktree and branch (from the target branch) and starts the session in it, so the
   project's hooks see the task's branch, not the main copy ([plan 002.3](../doc/archive/plans/002.3-task-worktree.md)).
@@ -295,6 +295,143 @@ Marks: plan `🔴 ОТКРЫТ / 🟡 В РАБОТЕ / ✅ ЗАКРЫТ / ❌ �
 **Heavy runs.** `heavy_commands` lists substrings of commands that load the machine (full gate,
 full build, full test run, benchmarks). `crew_watch` with such a command goes to the machine queue
 by itself. Full design: [plan 004](../doc/archive/plans/004-plans.md).
+
+## Model profiles: sets of models and windows by stage
+
+Which model runs a stage of work and how big its context window is are two settings of the project, kept as plain
+JSON in `.opencode/crew-harness.json` (any reader sees them without this plugin; the decision is
+[ADR-0008](../doc/canon/decisions/ADR-0008-model-profiles-layer-and-window-files.md)). Without these keys nothing changes:
+`spawn_models`, `tiers`, `reviewer` and the texts of the tools work as before.
+
+- **The table of profiles** — `model_profiles`: a family (`claude`, `kimi`, `codex` — any short name from lowercase Latin
+  letters, digits and dashes, not `all`, `context`, `output`, `input`) and a tier (`heavy`, `medium`, `light`) give a
+  model `provider/model` and its **window whole**: `context`, `output` (both required: OpenCode drops a `limit` without
+  `output` together with the provider record) and, for models whose compaction is driven by `input`, `input`. An empty
+  record `{"model": ""}` means «fill in»; a set that refers to it is not enabled.
+- **Sets** — `profile_sets`: a named layout «stage → family and tier». The four stages are `develop` (the
+  executor of a task), `accept` (the reviewer), `plan` (a plan task) and `plan_accept` (the rounds of a plan review and the
+  merge of an approved plan). A cell is `{"family": "claude", "tier": "heavy"}`; the tier `task` means «the tier of the
+  task» (the default behaviour). A stage without a cell keeps the model of `spawn_models`. Names of sets: lowercase Latin
+  letters, digits, dashes, up to 40 characters, not a word of the commands (`use`, `reset`, `all`, `list`, `show`, `set`,
+  `unset`, `new`, `rename`, `delete`, `check`, `save`, `from`).
+- **The enabled set** — `profile_set`: the default name, set by a person (`/crew-sets use` and `save`, or editing the file);
+  `crew_config set` refuses this key whatever the value. A local `use` overrides the name of the file, takes effect at
+  once and needs no commit and no restart of the service.
+
+The window is a property of the model **in a folder**, not of a stage or a session. The plugin writes the windows of the
+models of the enabled set (all three tiers of every family named in the set, because `tier` on the input of `crew_spawn`
+moves a session along the tiers of its family) as `.opencode/opencode.json` **into the worktree of each task**, before
+the first turn of the session; OpenCode and the `claude-code` provider read it within seconds, without a restart. The
+file holds only `limit` of the models (`context` and `output` together, `input` when the profile has it) and the key
+`_crew_harness` (the mark: a file without it is never overwritten or removed); it never holds `compaction` — the
+thresholds stay the owner's. It is excluded from git through `info/exclude` of the common git directory and removed when
+the set is switched off, the task is accepted or cancelled, or its folder is gone.
+
+**The window of a profile applies only to sessions in the worktree of a task (development, planning).** The review
+sessions (`accept`, `plan_accept`) run in the main folder: their model comes from the set, but their window comes from the
+owner's general hand-written settings for that model; `use`, `check` and `/crew-sets show` say so and print the number
+and the file. The root of the project and the main folders get no file, and a task without a worktree gets none. A
+hand-written `.opencode/opencode.jsonc` in the same folder is stronger than the file of the plugin there (the plugin
+names such a case, with the file and the value, in `use`, `check` and `crew_doctor`); an explicit `autoCompactWindow` of
+the `claude-code` provider is stronger than the window for Claude Code and is never rewritten — only named. For a model
+with `input` the compaction is driven by `input` (the threshold is `input` minus `compaction.reserved`), otherwise by
+`context`; a **smaller window compacts** the tabs whose context is above the new threshold on their next turn.
+
+Reviewers on another family. With a cell that has an explicit tier (`accept: kimi/heavy`) an open tab of the reviewer role
+is taken only if its model is a model of that family (any of its three tiers; `openai/gpt-5.5#high` fits the profile
+`openai/gpt-5.5`, `openai/gpt-5.5-fast` does not); otherwise a new review session starts in the main folder on the model
+of the cell — when there is no free open tab of the role. With a `task` cell the model of an open tab is not checked, as
+without a set. With `reviewer: integrator` the reviewer is the integrator's tab on its own model and the set does not
+change that (the plugin never switches the model of an open tab). A reviewer on Kimi or Codex works with the same
+`crew_*` tools; the rules of the repository's `.claude` act in a tab of another family only in part (the PreToolUse
+hooks of the shell, `permissions.deny` and `.claude/commands` through the guards plugin; `Write`, `Stop`,
+`SessionStart` and `PostToolUse` hooks do not).
+
+Commands of the window (answers are service messages, no turn of the model; they appear without a restart):
+
+| Command | What it does |
+|---|---|
+| `/crew-sets` | a table of all sets, the enabled one marked, with the source of the name (file or local switch) |
+| `/crew-sets show [name]` | a set in detail: model, tier and effective window per stage; the enabled one if no name |
+| `/crew-sets use <name>` | enable a set locally: what changed, the windows «was → became», the compaction of smaller windows |
+| `/crew-sets set <name> <stage> <family>/<tier>` | change a cell (stages: `develop`, `accept`, `plan`, `plan_accept` or Russian words) |
+| `/crew-sets unset <name> <stage>` | remove a cell: the stage goes back to `spawn_models` |
+| `/crew-sets new <name> [from <other>]`, `rename <a> <b>`, `delete <name>` | create (empty or a copy), rename (the enabled name follows), delete (not the enabled one) |
+| `/crew-sets reset [<name> [<stage>] \| all]` | take back local edits: the local name; the edits of a set; one cell; the whole local layer |
+| `/crew-profiles` | a table «family, tier → model, window» |
+| `/crew-profiles show [<family>]` | the table in detail or one family with the sets that refer to it |
+| `/crew-profiles set <family> <tier\|all> <model> <context> output=<n> [input=<n>]` | create or change a record; `all` changes the three tiers in one check |
+| `/crew-profiles new <family> [from <other>]`, `rename <a> <b>`, `delete <family> [<tier>]` | three empty records or a copy; rename updates every set; delete is refused while a set refers to the record |
+| `/crew-profiles reset [<family>[/<tier>] \| all]` | take back the local edits of a family or one record |
+| `check`, `save [force]` (both commands) | `check`: the whole table and the sets against the catalog of OpenCode («not checked» when the catalog is unavailable), hand-written windows, the explicit threshold, empty records, links, unsaved edits; changes nothing. `save`: move the local edits into the working copy of the file by keys (the plugin does not commit); a record whose value changed in the file since the edit is skipped and listed, `save force` overwrites it |
+
+Edits act at once, without a commit: they live as a layer over the committed file in the mailbox of the plugin
+(`profiles/<project>.layer.json`); an edit that would make the enabled set invalid or leave a dangling reference is refused
+whole. An invalid state that came not through the commands (a commit removed a profile) does not stop the running tabs:
+sessions go by the last valid state (the snapshot) with a warning in `/crew-sets`, `crew_doctor` and a notice in the
+window; a set that is gone and has no snapshot gives a refusal that names the set. Every edit leaves one line
+`profile edit: …` in the log of the plugin; a task keeps, per launched session, the stage, the set, the family, the tier
+and the model.
+
+An example of the two keys (invented numbers; `crew_config set` takes it in one call, or copy it into the file; the default
+name is not part of it):
+
+```json
+{
+  "model_profiles": {
+    "claude": {
+      "heavy": { "model": "claude-code/opus", "context": 720000, "output": 64000 },
+      "medium": { "model": "claude-code/sonnet", "context": 720000, "output": 64000 },
+      "light": { "model": "claude-code/haiku", "context": 220000, "output": 32000 }
+    },
+    "kimi": {
+      "heavy": { "model": "kimi-code-plan-global/k3-256k", "context": 220000, "output": 131072 },
+      "medium": { "model": "kimi-code-plan-global/k3-256k", "context": 220000, "output": 131072 },
+      "light": { "model": "kimi-code-plan-global/k3-256k", "context": 220000, "output": 131072 }
+    },
+    "codex": {
+      "heavy": { "model": "openai/gpt-5.5", "context": 525000, "input": 461000, "output": 128000 },
+      "medium": { "model": "openai/gpt-5.6-terra", "context": 525000, "input": 461000, "output": 128000 },
+      "light": { "model": "openai/gpt-6-luna", "context": 525000, "input": 461000, "output": 128000 }
+    }
+  },
+  "profile_sets": {
+    "default": {
+      "develop": { "family": "claude", "tier": "task" },
+      "plan": { "family": "claude", "tier": "task" },
+      "accept": { "family": "claude", "tier": "task" },
+      "plan_accept": { "family": "claude", "tier": "task" }
+    },
+    "cross-kimi": {
+      "develop": { "family": "claude", "tier": "task" },
+      "plan": { "family": "claude", "tier": "task" },
+      "accept": { "family": "kimi", "tier": "heavy" },
+      "plan_accept": { "family": "kimi", "tier": "heavy" }
+    },
+    "cross-codex": {
+      "develop": { "family": "claude", "tier": "medium" },
+      "plan": { "family": "claude", "tier": "heavy" },
+      "accept": { "family": "codex", "tier": "heavy" },
+      "plan_accept": { "family": "codex", "tier": "heavy" }
+    },
+    "kimi-only": {
+      "develop": { "family": "kimi", "tier": "heavy" },
+      "plan": { "family": "kimi", "tier": "heavy" },
+      "accept": { "family": "kimi", "tier": "heavy" },
+      "plan_accept": { "family": "kimi", "tier": "heavy" }
+    }
+  }
+}
+```
+
+`default` keeps the choice of models and of open reviewer tabs as it was **while the models of the `claude` profiles equal
+`spawn_models`** of the project (`check` warns when they differ); the file of windows in the worktree is still written with
+the values of the table. A set with an explicit tier of `accept` narrows the open reviewer tabs to its family. The other
+sets show what is possible. The windows of the models of one family may repeat a model on several tiers (Kimi has one model
+on all three) only with equal fields; two profiles of a set with different windows for the same model make `use` refuse,
+because the window in OpenCode is one per model and folder. The window of a hand-written
+`.opencode/opencode.jsonc` of the repository (for example 520000 for a model that the owner's global settings give 720000)
+is what the tabs in the main folder use — the plugin only names it.
 
 ## Other projects
 
