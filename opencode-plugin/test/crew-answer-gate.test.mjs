@@ -85,6 +85,12 @@ const holeBad = F.T9_HOLES.filter((h) => closed(withLine(h)))
 const realBad = F.T9_REAL_FIELDS.filter((r) => !closed(withLine(r)))
 cell("AC-05 и", holeBad.length === 0 && realBad.length === 0 && closed(withLine("Срок: ждём ответа до пятницы?")), JSON.stringify([holeBad, realBad]))
 
+// AC-05 и (адресат): the parts of an address of the narrow form are text too; a word of the gates in the project or the role goes to the
+// owner (review 1, finding 1); an ordinary address does not hinder
+const addrBad = ["nova.push-main", "proj.merger", "nova.release", "ops.deploy", "ops.restart", "x.delete", "nova.merge", "ops.rebase", "nova.main"].filter((a) => closed(withLine(`Адресат: ${a}`)))
+const addrOk = ["nova.integrator", "proj.worker", "владелец", "nova.reviewer"].filter((a) => !closed(withLine(`Адресат: ${a}`)))
+cell("AC-05 и адресат", addrBad.length === 0 && addrOk.length === 0, JSON.stringify([addrBad, addrOk]))
+
 // AC-05 к: "rm..." with an ellipsis and "общих средами"
 cell("AC-05 к", toOwnerByWords(block("Выполнить rm… для папки?")) && toOwnerByWords(block("Нужно ли держать общих средами файлы?")), "ellipsis")
 

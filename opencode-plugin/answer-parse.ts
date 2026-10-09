@@ -182,6 +182,12 @@ function buildBlock(qn: number, rawLines: string[], ids: boolean, place: "tail3"
     }
     const f = l.field
     if (f.sign && !NARROW.sign(f.sign)) checkParts.push(f.sign)
+    // адрес узкой формы «проект.роль» тоже текст для слов ворот: части адреса проверяются (точка — граница слова), иначе
+    // «nova.push-main» или «proj.merger» проходили бы мимо сетки
+    if (f.name === "адресат" && /* GATE:addressee< */ true /* GATE:addressee> */) {
+      checkParts.push(f.value.replace(/\./g, " "))
+      continue
+    }
     const narrow = (f.name === "тип" && NARROW.type(f.value)) || (f.name === "автоответ" && NARROW.auto(f.value)) || (f.name === "срок" && NARROW.deadline(f.value)) || (f.name === "адресат" && NARROW.addressee(f.value))
     if (!narrow) checkParts.push(f.value)
   }

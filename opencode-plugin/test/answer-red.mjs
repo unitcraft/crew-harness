@@ -39,6 +39,7 @@ const MARKERS = {
   "once-letter": ["answer.ts", "true"],
   "recount-count": ["answer.ts", "(r: AnswerRecord) => true"],
   row: ["answer.ts", "true"],
+  addressee: ["answer-parse.ts", "false"],
 }
 const pairRe = (name) => new RegExp(`/\\* GATE:${name.replace(/[-]/g, "\\-")}< \\*/[\\s\\S]*?/\\* GATE:${name.replace(/[-]/g, "\\-")}> \\*/`, "g")
 
@@ -56,6 +57,7 @@ const STUBS = [
   { n: 10, name: "GATE:default", markers: ["default"], tests: { "crew-answer-golden": ["AC-01 без ключей"], "crew-answer-flow": ["AC-01 строки без ключей", "AC-03 a"] } },
   { n: 11, name: "GATE:recount (exists, recount-count)", markers: ["exists", "recount-count"], tests: { "crew-answer-journal": ["AC-17 повтор при пределе"], "crew-answer-flow": ["AC-14 пакет повтор"] } },
   { n: 12, name: "GATE:row", markers: ["row"], tests: { "crew-answer-journal": ["AC-14 после остатка"] } },
+  { n: 14, name: "GATE:addressee", markers: ["addressee"], tests: { "crew-answer-gate": ["AC-05 и адресат"] } },
 ]
 const ALL_TESTS = ["crew-answer-golden", "crew-answer-config", "crew-answer-parse", "crew-answer-gate", "crew-answer-journal", "crew-answer-view", "crew-answer-docs", "crew-answer-flow"]
 
