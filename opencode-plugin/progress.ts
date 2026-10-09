@@ -3,13 +3,17 @@
 // взять в сервис задачи 001. Файлы и обход деревьев — `progress-scan.ts`; тексты панели и диалога — `progress-view.ts`.
 //
 // Формат строки (Д-11, одинаков в Python-страже `scripts/guards/check-task-docs.py`):
-//   <код> <k>/<N> [ЧЧ:ММ] <что сделано>
+//   <код> <k>/<N> [ЧЧ:ММ] <что сделано>             (прежний вид поля времени)
+//   <код> <k>/<N> [ГГГГ-ММ-ДД ЧЧ:ММ] <что сделано>  (вид новых строк; расширен по слову владельца 2026-10-09)
 // Файл читается байтами (UTF-8, недопустимое заменяется), делится только по LF, в конце строки снимается один CR.
 
 /** Строка журнала: только ASCII-цифры, остаток — любые знаки кроме LF (в JavaScript и в Python одинаково, Р-15). */
 export const LINE_RE = /^([^ \t]+) ([0-9]+)\/([0-9]+) ([^\n]+)$/
-/** Необязательное поле времени в начале подписи: `[ЧЧ:ММ]` и пробел, местное время машины (REQ-04, Р-13). */
-export const TIME_RE = /^\[(?:[01][0-9]|2[0-3]):[0-5][0-9]\] /
+/**
+ * Необязательное поле времени в начале подписи: `[ЧЧ:ММ]` или `[ГГГГ-ММ-ДД ЧЧ:ММ]` и пробел, местное время машины (REQ-04, Р-13;
+ * вид с датой — по слову владельца 2026-10-09).
+ */
+export const TIME_RE = /^\[(?:[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01]) )?(?:[01][0-9]|2[0-3]):[0-5][0-9]\] /
 
 /** Вид остановки в строке `стоп: <вид> — …` (REQ-13). */
 export const STOP_KINDS = ["вопрос", "план", "ревизия", "требования", "ворота"]
@@ -22,8 +26,10 @@ export type Line = {
   n: number
   /** подпись как записана, вместе с полем времени */
   sig: string
-  /** минуты от полуночи из поля `[ЧЧ:ММ]`, если оно есть и верно */
+  /** минуты от полуночи из поля времени, если оно есть и верно */
   time?: number
+  /** дата из поля `[ГГГГ-ММ-ДД ЧЧ:ММ]`, если она есть */
+  date?: { y: number; mo: number; d: number }
   /** подпись после снятия поля времени */
   text: string
 }
@@ -80,7 +86,9 @@ function parseAt(text: string, from: number, to: number, prev: string): Line | u
   if (sig.charCodeAt(0) === 91) {
     const m = TIME_RE.exec(sig)
     if (m) {
-      line.time = Number(sig.slice(1, 3)) * 60 + Number(sig.slice(4, 6))
+      const close = sig.indexOf("]")
+      line.time = Number(sig.slice(close - 5, close - 3)) * 60 + Number(sig.slice(close - 2, close))
+      if (close > 6) line.date = { y: Number(sig.slice(1, 5)), mo: Number(sig.slice(6, 8)), d: Number(sig.slice(9, 11)) }
       line.text = sig.slice(m[0].length)
     }
   }
@@ -126,7 +134,7 @@ export function stopKind(text: string): string | undefined {
 export type Moment = { at: number; byFile: boolean }
 
 /**
- * Момент вести: время из поля `[ЧЧ:ММ]` на день файла копии; позже файла больше чем на 5 минут — вчерашний день; позже `now`
+ * Момент вести: время из поля `[ЧЧ:ММ]` на день файла копии (с датой `[ГГГГ-ММ-ДД ЧЧ:ММ]` — на названный день); позже файла больше чем на 5 минут — вчерашний день; позже `now`
  * больше чем на 5 минут (или поля нет) — время изменения файла и пометка «по файлу» (REQ-04). Часы — местные, через `Date`.
  */
 export function momentOf(line: Line | undefined, fileMtime: number, now: number): Moment {
@@ -134,6 +142,13 @@ export function momentOf(line: Line | undefined, fileMtime: number, now: number)
   const f = new Date(fileMtime)
   const h = Math.floor(line.time / 60)
   const m = line.time % 60
+  if (line.date) {
+    // дата названа: она и есть день записи; несуществующий день (30 февраля) или момент позже now больше чем на 5 минут — как без даты / по файлу
+    const dt = new Date(line.date.y, line.date.mo - 1, line.date.d, h, m)
+    if (dt.getFullYear() === line.date.y && dt.getMonth() === line.date.mo - 1 && dt.getDate() === line.date.d) {
+      return dt.getTime() > now + GRACE_MS ? { at: fileMtime, byFile: true } : { at: dt.getTime(), byFile: false }
+    }
+  }
   let at = new Date(f.getFullYear(), f.getMonth(), f.getDate(), h, m).getTime()
   if (at > fileMtime + GRACE_MS) at = new Date(f.getFullYear(), f.getMonth(), f.getDate() - 1, h, m).getTime()
   if (at > now + GRACE_MS) return { at: fileMtime, byFile: true }

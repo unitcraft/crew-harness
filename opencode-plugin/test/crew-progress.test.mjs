@@ -71,6 +71,17 @@ const parse = (...lines) => P.parseJournal(bytes(...lines))
   cell("AC-14 no time field: the file time, marked by file", m4.byFile && m4.at === f, show(m4))
   const m5 = P.momentOf(P.parseLine("С5 3/4 [10:04] x"), at(10, 0), at(10, 3))
   cell("AC-14 a time within 5 minutes after the file is kept (same day)", !m5.byFile && m5.at === at(10, 4), show(m5))
+  // dated form: the named day is the day of the record, not the day of the file; the old rules stay for the plain form
+  const d1 = P.parseLine("С5 3/4 [2026-10-08 23:50] x")
+  cell("dated: the line parses with date and time, the text is cut after the field", d1.time === 23 * 60 + 50 && d1.date.y === 2026 && d1.date.mo === 10 && d1.date.d === 8 && d1.text === "x", show(d1))
+  const m6 = P.momentOf(d1, at(10, 0, 9), at(10, 3, 9))
+  cell("dated: the named day is used instead of the file day", !m6.byFile && m6.at === at(23, 50, 8), show(m6))
+  const m7 = P.momentOf(P.parseLine("С5 3/4 [2026-10-20 10:00] x"), at(10, 0, 9), at(10, 3, 9))
+  cell("dated: a moment later than now by more than 5 minutes falls back to the file time", m7.byFile && m7.at === at(10, 0, 9), show(m7))
+  const m8 = P.momentOf(P.parseLine("С5 3/4 [2026-02-30 10:00] x"), at(10, 0), at(10, 3))
+  cell("dated: a day that does not exist is read as the plain time on the file day (no rolling to March)", !m8.byFile && m8.at === at(10, 0), show(m8))
+  const m9 = P.momentOf(P.parseLine("С5 3/4 [2026-10-08 10:04] x"), at(10, 0, 8), at(10, 3, 8))
+  cell("dated: 4 minutes after the file is kept as written", !m9.byFile && m9.at === at(10, 4, 8), show(m9))
 }
 
 // ---- AC-26: shared vectors (the guard reads the same file) --------------------------------------------------------------
@@ -81,6 +92,12 @@ const parse = (...lines) => P.parseJournal(bytes(...lines))
     const l = P.parseLine("С5 3/4 " + v.sig)
     const got = l?.time === undefined ? null : `${String(Math.floor(l.time / 60)).padStart(2, "0")}:${String(l.time % 60).padStart(2, "0")}`
     cell(`AC-26 time form ${v.sig.split(" ")[0]} is ${v.time ?? "not a time"}`, got === v.time, show({ sig: v.sig, got }))
+  }
+  // the dated form [YYYY-MM-DD HH:MM] (the owner's word, 2026-10-09): the same time rules, the date is checked too
+  for (const v of vectors.dateTimeForms) {
+    const l = P.parseLine("С5 3/4 " + v.sig)
+    const got = l?.time === undefined ? null : `${String(Math.floor(l.time / 60)).padStart(2, "0")}:${String(l.time % 60).padStart(2, "0")}`
+    cell(`dated time form ${v.sig.split("]")[0]}] is ${v.time ?? "not a time"}`, got === v.time && (v.time === null) === (l?.date === undefined), show({ sig: v.sig, got, date: l?.date }))
   }
   const good = new RegExp(P.TIME_RE.source)
   const broken = new RegExp(vectors.brokenTimePattern)
