@@ -10,6 +10,9 @@ import path from "node:path"
 import { harness, reporter } from "./landing-harness.mjs"
 
 const { cell, done } = reporter("crew-landing-gate.test")
+// LANDING_SECTIONS="AC-08,AC-09" runs only these sections (the proof of red, test/landing-red.mjs, needs a few of them, not all)
+const only = process.env.LANDING_SECTIONS?.split(",").map((x) => x.trim())
+const section = (name) => !only || only.includes(name)
 const H = await harness("crew-landing-gate", { settings: { merge_precheck: "required" } })
 const { call, git, proj, task: T, tasks, review, core, precheck } = H
 const REV = "sesREV1"
@@ -61,7 +64,7 @@ const landFromOtherClone = (branch) => {
 }
 
 // ---- AC-07: the whole way
-{
+if (section("AC-07")) {
   const t = H.reviewing()
   const base = H.originTip()
   await begin(t)
@@ -80,7 +83,7 @@ const landFromOtherClone = (branch) => {
 }
 
 // ---- AC-08: no record, running, stale; and the flag switched on while a lock is held
-{
+if (section("AC-08")) {
   const a = H.reviewing()
   const ra = await merge(a)
   cell("AC-08 a: no record — the lock is not issued, the first step is named, the lock file is empty", /нет зелёной предпроверки/.test(ra) && /crew_task \{action: "precheck"/.test(ra) && !H.holder() && !H.tasks.loadTask("proj", a.n).precheck, ra)
@@ -105,7 +108,7 @@ const landFromOtherClone = (branch) => {
 }
 
 // ---- AC-09: the origin moved after the green record
-{
+if (section("AC-09")) {
   const t = await green()
   const b1 = T(t.n).precheck.base
   const b2 = H.moveOrigin()
@@ -119,7 +122,7 @@ const landFromOtherClone = (branch) => {
   cell("AC-09 новый precheck: after a new precheck on the new tip merge passes", /выдан на вершину main/.test(ok) && ok.includes(b2) && H.holder()?.session === REV, ok)
   clearLock()
 }
-{
+if (section("AC-09")) {
   const t = await green()
   const other = H.reviewing({ reviewer: "sesREV2" })
   H.take("sesREV2", other.n)
@@ -132,7 +135,7 @@ const landFromOtherClone = (branch) => {
 }
 
 // ---- AC-12 merge off
-{
+if (section("AC-12")) {
   H.settings({ merge_precheck: "off" })
   const t = H.reviewing()
   const r = await merge(t)
@@ -150,7 +153,7 @@ const closedPort = await new Promise((resolve) => {
     s.close(() => resolve(p))
   })
 })
-{
+if (section("AC-11")) {
   const t = await green()
   git(proj, "remote", "set-url", "origin", `http://127.0.0.1:${closedPort}/r.git`)
   const before = snapRepo()
@@ -159,7 +162,7 @@ const closedPort = await new Promise((resolve) => {
   cell("AC-20 сбой: a failed merge changes no reference, no objects, no FETCH_HEAD", snapRepo() === before, "")
   git(proj, "remote", "set-url", "origin", url0)
 }
-{
+if (section("AC-11")) {
   const silent = await new Promise((resolve) => {
     const s = net.createServer((sock) => sock.on("error", () => {}))
     s.listen(0, "127.0.0.1", () => resolve(s))
@@ -177,7 +180,7 @@ const closedPort = await new Promise((resolve) => {
 }
 
 // ---- AC-32 merge: no branch on origin; at a repeat of the holder the lock stays
-{
+if (section("AC-32")) {
   H.settings({ merge_precheck: "required", target_branch: "nosuch" })
   const t = H.reviewing()
   const x = H.task(t.n)
@@ -193,7 +196,7 @@ const closedPort = await new Promise((resolve) => {
 }
 
 // ---- AC-15: one reviewer, two tasks
-{
+if (section("AC-15")) {
   H.settings({ merge_precheck: "required", reviewer: "integrator" })
   const a = await green({ reviewer: "sesINTEG1" })
   const b = await green({ reviewer: "sesINTEG1" })
@@ -205,7 +208,7 @@ const closedPort = await new Promise((resolve) => {
 }
 
 // ---- AC-17: the tip is read UNDER the lock
-{
+if (section("AC-17")) {
   const t = await green()
   let lockInside = false
   const r = await withSeam(
@@ -222,7 +225,7 @@ const closedPort = await new Promise((resolve) => {
 }
 
 // ---- AC-20: precheck, merge: no references, objects, FETCH_HEAD change
-{
+if (section("AC-20")) {
   const t = H.reviewing()
   const s0 = snapRepo()
   await begin(t)
@@ -239,7 +242,7 @@ const closedPort = await new Promise((resolve) => {
 }
 
 // ---- AC-34: landing of an approved plan under required
-{
+if (section("AC-34")) {
   const plan = { n: "9", file: "docs/plans/9-demo.md", source: "демо", rounds: [], clean: 0, approval: { decision: "ok", at: Date.now() } }
   const t = H.reviewing({ plan })
   const r = await merge(t)
@@ -249,7 +252,7 @@ const closedPort = await new Promise((resolve) => {
 }
 
 // ---- AC-35: a repeat of merge by the holder
-{
+if (section("AC-35")) {
   const t = await green()
   const m1 = await merge(t)
   const tip0 = H.originTip()
@@ -260,7 +263,7 @@ const closedPort = await new Promise((resolve) => {
   cell("AC-35 c1: a repeat after a shift — the lock is released, the record is stale 'главная сдвинулась'", /сдвинулась/.test(m) && !H.holder() && T(t.n).precheck.state === "stale" && T(t.n).precheck.stale.reason === "главная сдвинулась", m + JSON.stringify(T(t.n).precheck))
   clearLock()
 }
-{
+if (section("AC-35")) {
   const t = await green()
   await merge(t)
   const holderBefore = JSON.stringify(H.holder())
@@ -268,7 +271,7 @@ const closedPort = await new Promise((resolve) => {
   cell("AC-35 c2: a read failure at a repeat — the lock stays, the refusal says unlock or repeat, the record is green", /сеть недоступна/.test(r) && /unlock/.test(r) && /остаётся у тебя/.test(r) && JSON.stringify(H.holder()) !== undefined && H.holder()?.session === REV && H.holder()?.n === t.n && T(t.n).precheck.state === "green" && holderBefore !== undefined, r)
   clearLock()
 }
-{
+if (section("AC-35")) {
   const t = await green()
   await merge(t)
   const landed = H.land(`integrate/t${t.n}`)
@@ -278,14 +281,14 @@ const closedPort = await new Promise((resolve) => {
   const a = await accept(t)
   cell("AC-35 c4: the task branch is already in the target branch — the lock stays, the record is not stale, the answer 'влито, вызови accept', and accept passes", /Ветка уже влита/.test(m) && /accept/.test(m) && holderAfter?.session === REV && holderAfter?.n === t.n && stateAfter === "green" && H.history(t.n).includes("повтор merge: уже влито") && T(t.n).status === "accepted" && T(t.n).precheck.accepted_on === landed, m + " | " + a)
 }
-{
+if (section("AC-35")) {
   const t = await green()
   await merge(t)
   H.land(`integrate/t${t.n}`)
   const m = await withSeam({ afterMerged: () => review.releaseMergeLock("proj", REV) }, () => merge(t))
   cell("AC-35 c4b: the lock is lost inside the 'already merged' branch — the honest answer: merged, but the lock is gone, accept would refuse", /Ветка уже влита/.test(m) && /замок вливания снят/.test(m) && !H.holder() && T(t.n).precheck.state === "green", m)
 }
-{
+if (section("AC-35")) {
   const t = await green()
   const other = H.reviewing({ reviewer: "sesREV2" })
   H.take("sesREV2", other.n)
@@ -293,7 +296,7 @@ const closedPort = await new Promise((resolve) => {
   cell("AC-35 c5: a lock of another holder stays with him", /у приёмщика задачи #/.test(m) && H.holder()?.session === "sesREV2" && T(t.n).precheck.state === "green", m)
   clearLock()
 }
-{
+if (section("AC-35")) {
   // c6a: the landing was done from another clone (before fetch): the local references do not show it — a shift, not 'merged'
   const t = await green()
   await merge(t)
@@ -302,7 +305,7 @@ const closedPort = await new Promise((resolve) => {
   cell("AC-35 c6a: landed from another clone before fetch — not 'already merged' but a shift: the lock is released, the record is stale", /сдвинулась/.test(m) && !/Ветка уже влита/.test(m) && !H.holder() && T(t.n).precheck.state === "stale", m)
   fetch()
 }
-{
+if (section("AC-35")) {
   // c6b: squash — the task branch is not an ancestor of the target branch
   const t = await green()
   await merge(t)
@@ -315,7 +318,7 @@ const closedPort = await new Promise((resolve) => {
   const m = await merge(t)
   cell("AC-35 c6b: a squash landing — the task branch is not in the target branch: a shift, not 'merged'", /сдвинулась/.test(m) && !/Ветка уже влита/.test(m) && !H.holder() && T(t.n).precheck.state === "stale", m)
 }
-{
+if (section("AC-35")) {
   // c7: the lock is lost after the landing: a repeat takes it again, sees the tip moved by the landing itself and refuses
   const t = await green()
   await merge(t)
@@ -326,7 +329,7 @@ const closedPort = await new Promise((resolve) => {
 }
 
 // ---- AC-37: changes inside the read of the tip
-{
+if (section("AC-37")) {
   const t = await green()
   const r = await withSeam({ afterTip: () => review.releaseMergeLock("proj", REV) }, () => merge(t))
   cell("AC-37 c1: the lock was taken off inside the read — 'замок потерян', not issued, no lock file, no lock_on in the record", /Замок потерян/.test(r) && !H.holder() && !T(t.n).precheck.lock_on, r)
@@ -363,7 +366,7 @@ const closedPort = await new Promise((resolve) => {
 }
 
 // ---- AC-14 merge: a record made stale by the ways of AC-14 does not open the lock
-{
+if (section("AC-14")) {
   const resubmit = async (t) => {
     const x = H.task(t.n)
     x.status = "submitted"
