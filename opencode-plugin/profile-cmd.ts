@@ -33,7 +33,7 @@ const refused = (project: string, command: string, why: string): string => {
 }
 const usageLine = (cmd: "sets" | "profiles"): string =>
   cmd === "sets"
-    ? `Глаголы /crew-sets: ${verbUsageList("sets")}. Этапы: develop, accept, plan, plan_accept (или разработка, приёмка, планирование, приёмка-плана). Без аргумента — таблица наборов.`
+    ? `Глаголы /crew-sets: ${verbUsageList("sets")}. Этапы: develop, develop_accept, plan, plan_accept, spec, spec_accept, delivery, delivery_accept (прежнее accept — то же, что develop_accept; или русские: разработка, приёмка, планирование, приёмка-плана, разбор, приёмка-разбора, сдача, приёмка-сдачи). Без аргумента — таблица наборов.`
     : `Глаголы /crew-profiles: ${verbUsageList("profiles")}. Без аргумента — таблица справочника.`
 /** В окне команды — пункты меню, а не набираемые слова: тексты ссылаются на пункт меню, слэш-форма остаётся записью для памяти. */
 let windowMenu = false
@@ -97,20 +97,20 @@ export function setsEditVerb(dir: string, verb: string, args: string[]): { ok: b
       if (args.length !== 3) return bad("нужно: set <имя> <этап> <семья>/<ступень>")
       const [name, stageWord, cellWord] = args
       const st = P.stageOfWord(stageWord)
-      if (!st) return bad(`этап «${stageWord}» не годится: develop, accept, plan, plan_accept (или русские названия)`)
+      if (!st) return bad(`этап «${stageWord}» не годится: ${P.STAGES_TEXT} (или русские названия)`)
       const cell = P.parseCell(cellWord)
       if (typeof cell === "string") return bad(cell)
       if (!isObj(ps.data.sets?.[name])) return bad(`набора «${name}» нет (есть: ${listSets(ps.data)}); новый — /crew-sets new ${name}`)
-      return applyEdit(dir, command, ({ draft, data }) => (L.dSetCell(draft, name, st, cell), { what: `набор «${name}»: этап «${P.STAGE_RU[st]}» — ${P.cellText(cell)}`, from: (data.sets as any)[name][st] ? P.cellText((data.sets as any)[name][st]) : undefined, to: P.cellText(cell) }))
+      return applyEdit(dir, command, ({ draft, data }) => (L.dSetCell(draft, name, st, cell), { what: `набор «${name}»: этап «${P.STAGE_RU[st]}» — ${P.cellText(cell)}`, from: P.rawCell((data.sets as any)[name], st) ? P.cellText(P.rawCell((data.sets as any)[name], st)) : undefined, to: P.cellText(cell) }))
     }
     case "unset": {
       if (args.length !== 2) return bad("нужно: unset <имя> <этап>")
       const [name, stageWord] = args
       const st = P.stageOfWord(stageWord)
-      if (!st) return bad(`этап «${stageWord}» не годится: develop, accept, plan, plan_accept (или русские названия)`)
+      if (!st) return bad(`этап «${stageWord}» не годится: ${P.STAGES_TEXT} (или русские названия)`)
       if (!isObj(ps.data.sets?.[name])) return bad(`набора «${name}» нет (есть: ${listSets(ps.data)})`)
-      if (!(ps.data.sets as any)[name][st]) return bad(`у набора «${name}» этап «${P.STAGE_RU[st]}» и так не описан`)
-      return applyEdit(dir, command, ({ draft, data }) => (L.dSetCell(draft, name, st, null), { what: `набор «${name}»: этап «${P.STAGE_RU[st]}» убран (модель — по spawn_models)`, from: P.cellText((data.sets as any)[name][st]), to: undefined }))
+      if (!P.rawCell((ps.data.sets as any)[name], st)) return bad(`у набора «${name}» этап «${P.STAGE_RU[st]}» и так не описан`)
+      return applyEdit(dir, command, ({ draft, data }) => (L.dSetCell(draft, name, st, null), { what: `набор «${name}»: этап «${P.STAGE_RU[st]}» убран (модель — по spawn_models)`, from: P.cellText(P.rawCell((data.sets as any)[name], st)), to: undefined }))
     }
     case "new": {
       if (!args.length || (args.length !== 1 && !(args.length === 3 && args[1] === "from"))) return bad("нужно: new <имя> [from <другой набор>]")
@@ -274,7 +274,7 @@ import { projectFor } from "./settings.ts"
 import { listTasks } from "./tasks.ts"
 import * as W from "./profile-windows.ts"
 
-const STAGE_ORDER = P.STAGES
+const STAGE_ORDER = P.CORE_STAGES
 const pad = (s: string, n: number) => s + " ".repeat(Math.max(0, n - [...s].length))
 const fileName = (f: string) => path.resolve(f).replace(/\\/g, "/")
 const winOf = (p: any): P.Win => ({ context: Number(p.context), output: Number(p.output), ...(p.input !== undefined ? { input: Number(p.input) } : {}) })
@@ -364,29 +364,35 @@ export function showSet(ps: L.PState, name: string | undefined, dir: string): st
   if (!isObj(set)) return `Набора «${n}» нет (есть: ${listSets(ps.data)}).`
   const root = mainFolder(dir)
   const lines = [`Набор «${n}»${n === ps.name ? ` — включён (имя в файле проекта)` : " — не включён"}:`]
-  for (const st of STAGE_ORDER) {
-    const cell = P.cellsOf(set).find(([s]) => s === st)?.[1]
-    if (!cell) {
+  const bounds = ps.state.bounds
+  const cut = (t: P.PTier) => P.clampTier(t, bounds)
+  for (const st of P.STAGES) {
+    const eff = P.effectiveCell(set, st, ps.data.profiles as any)
+    const cell = eff?.cell
+    if (!eff || !cell) {
       lines.push(`  ${P.STAGE_RU[st]}: не описан — модель по spawn_models`)
       continue
     }
+    const how = eff.how === "inherited" ? ` (унаследован от «${P.STAGE_RU[eff.from!]}»${P.INHERIT[st]?.lower ? ", ступенью ниже" : ""})` : ""
     const fam = (ps.data.profiles as any)?.[cell.family]
     const prof = (t: P.PTier) => (isObj(fam?.[t]) && !P.isEmptyProfile(fam[t]) ? (fam[t] as any) : undefined)
     const front = st === "develop" || st === "plan"
     if (cell.tier === "task") {
-      lines.push(`  ${P.STAGE_RU[st]}: ${P.cellText(cell)} — по ступени задачи: ${P.PROFILE_TIERS.map((t) => `${t} → ${prof(t)?.model ?? "нет профиля"}`).join(", ")}`)
+      lines.push(`  ${P.STAGE_RU[st]}: ${P.cellText(cell)}${how} — по ступени задачи: ${P.PROFILE_TIERS.map((t) => `${t} → ${prof(cut(t).tier)?.model ?? "нет профиля"}${cut(t).from ? " (срез границами ступеней)" : ""}`).join(", ")}`)
       if (front) {
         for (const t of P.PROFILE_TIERS) if (prof(t)) lines.push(`      контекст профиля в рабочем дереве задачи (${t}): ${limitsText(winOf(prof(t)))}`)
       } else {
         for (const t of P.PROFILE_TIERS) if (prof(t)) lines.push(`      ${t}: ${reviewerWindowLine(root, prof(t).model)}`)
       }
     } else {
-      const p = prof(cell.tier)
-      lines.push(`  ${P.STAGE_RU[st]}: ${P.cellText(cell)} → ${p?.model ?? "нет профиля"}`)
+      const cl = cut(cell.tier)
+      const p = prof(cl.tier)
+      lines.push(`  ${P.STAGE_RU[st]}: ${P.cellText(cell)}${how} → ${p?.model ?? "нет профиля"}${cl.from ? ` — срез границами ступеней: ${cl.from} → ${cl.tier}` : ""}`)
       if (p) lines.push(front ? `      контекст профиля в рабочем дереве задачи: ${limitsText(winOf(p))}` : `      ${reviewerWindowLine(root, p.model)}`)
     }
   }
   for (const e of P.checkData(ps.data, n).errors) lines.push(`! ${e.text}`)
+  for (const t of P.sameFamilyNotes(set, ps.data.profiles as any)) lines.push(`  заметка: ${t}`)
   return lines.join("\n")
 }
 
@@ -443,7 +449,7 @@ function updownLines(before: Map<string, P.Win>, after: Map<string, P.Win>, root
 function reviewerModels(data: P.Data, name: string): string[] {
   const out = new Set<string>()
   for (const [st, c] of P.cellsOf((data.sets as any)?.[name])) {
-    if (st !== "accept" && st !== "plan_accept") continue
+    if (!st.endsWith("_accept")) continue
     for (const ref of P.referencedProfiles(c)) {
       if (c.tier === "task" && ref.tier !== "medium") continue
       const p = (data.profiles as any)?.[c.family]?.[ref.tier]
@@ -490,7 +496,7 @@ async function useSet(dir: string, name: string | undefined, deps: CmdDeps): Pro
   const wts = W.qualifying(ps.project, listTasks(ps.project))
   lines.push(`Файлы окон: записано ${files.written.length}, снято ${files.removed.length}; задач с рабочим деревом сейчас ${wts.length}. Задачи без рабочего дерева (исполнитель в основной папке) окон профиля не получают.`)
   const cfg = loadConfig(dir)
-  if (cfg.reviewer === "integrator" && P.cellsOf((after.data.sets as any)[name]).some(([s, c]) => (s === "accept" || s === "plan_accept") && c.tier !== "task")) lines.push("Предупреждение: в проекте reviewer: integrator — приёмку ведёт вкладка интегратора на её модели; набор приёмку не меняет (модель открытой вкладки плагин не переключает).")
+  if (cfg.reviewer === "integrator" && P.cellsOf((after.data.sets as any)[name]).some(([s, c]) => (s === "develop_accept" || s === "plan_accept") && c.tier !== "task")) lines.push("Предупреждение: в проекте reviewer: integrator — приёмку ведёт вкладка интегратора на её модели; набор приёмку не меняет (модель открытой вкладки плагин не переключает).")
   for (const w of after.state.warnings) lines.push(`Предупреждение: ${w.text}`)
   for (const w of await catalogWarnings(models, deps, false)) lines.push(`Предупреждение: ${w}`)
   return lines.join("\n")

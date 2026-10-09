@@ -488,15 +488,27 @@ JSON in `.opencode/crew-harness.json` (any reader sees them without this plugin;
   model `provider/model` and its **window whole**: `context`, `output` (both required: OpenCode drops a `limit` without
   `output` together with the provider record) and, for models whose compaction is driven by `input`, `input`. An empty
   record `{"model": ""}` means «fill in»; a set that refers to it is not enabled.
-- **Sets** — `profile_sets`: a named layout «stage → family and tier». The four stages are `develop` (the
-  executor of a task), `accept` (the reviewer), `plan` (a plan task) and `plan_accept` (the rounds of a plan review and the
-  merge of an approved plan). A cell is `{"family": "claude", "tier": "heavy"}`; the tier `task` means «the tier of the
-  task» (the default behaviour). A stage without a cell keeps the model of `spawn_models`. Names of sets: lowercase Latin
+- **Sets** — `profile_sets`: a named layout «stage → family and tier». A phase of the cycle includes stages (the table
+  «Этапы и модели» of the Canon, [process.md](../doc/canon/process.md)). The four you set yourself are `develop` (the
+  executor of a task), `develop_accept` (the reviewer; the old name `accept` is read as an alias and replaced when you
+  set the stage), `plan` (a plan task) and `plan_accept` (the rounds of a plan review and the
+  merge of an approved plan). Four more stages inherit when you do not set them: `spec` as `plan`, `spec_accept` as
+  `plan_accept`, `delivery` as `develop` and `delivery_accept` as `develop_accept`, the last two one tier lower (a `task` cell:
+  the tier of the task, then one lower); the plugin stores and shows them, the sessions of the specification and delivery are
+  still run by the orchestrator. A cell is `{"family": "claude", "tier": "heavy"}`; the tier `task` means «the tier of the
+  task» (the default behaviour). A stage without a cell (and nothing to inherit) keeps the model of `spawn_models`.
+  A check on the same family as its author while another family exists is only noted by `/crew-sets show` (the rule «the
+  reviewer is on another model family», ADR-0013). Names of sets: lowercase Latin
   letters, digits, dashes, up to 40 characters, not a word of the commands or a word kept from the removed ones (`use`, `reset`, `all`, `list`, `show`, `set`,
   `unset`, `new`, `rename`, `delete`, `check`, `save`, `from`).
 - **The enabled set** — `profile_set`: the name, set by a person (`/crew-sets use`, or editing the file);
   `crew_config set` refuses this key whatever the value. `use` writes the name into the file of the project, takes effect
   at once and needs no commit and no restart of the service.
+- **Tier bounds** — `tier_min` and `tier_max` (`light`, `medium`, `heavy`; no key — no bound), project settings in the same
+  file. Any tier of any stage (explicit, inherited, `task`, the `tier` of `crew_spawn`) is clamped into them, so there is no
+  need for a separate set with explicit tiers to cap the cost. A clamp is written to the log of the plugin and to the task
+  event, and `/crew-sets show` prints the tier of the set and the tier after the clamp. `tier_min` above `tier_max` is a
+  settings error: `crew_doctor` says so and the bounds are not applied.
 
 The window is a property of the model **in a folder**, not of a stage or a session. The plugin writes the windows of the
 models of the enabled set (all three tiers of every family named in the set, because `tier` on the input of `crew_spawn`
@@ -508,7 +520,7 @@ thresholds stay the owner's. It is excluded from git through `info/exclude` of t
 the set is switched off, the task is accepted or cancelled, or its folder is gone.
 
 **The window of a profile applies only to sessions in the worktree of a task (development, planning).** The review
-sessions (`accept`, `plan_accept`) run in the main folder: their model comes from the set, but their window comes from the
+sessions (`develop_accept`, `plan_accept`) run in the main folder: their model comes from the set, but their window comes from the
 owner's general hand-written settings for that model; `use`, `check` and `/crew-sets show` say so and print the number
 and the file. The root of the project and the main folders get no file, and a task without a worktree gets none. A
 hand-written `.opencode/opencode.jsonc` in the same folder is stronger than the file of the plugin there (the plugin
@@ -517,7 +529,7 @@ the `claude-code` provider is stronger than the window for Claude Code and is ne
 with `input` the compaction is driven by `input` (the threshold is `input` minus `compaction.reserved`), otherwise by
 `context`; a **smaller window compacts** the tabs whose context is above the new threshold on their next turn.
 
-Reviewers on another family. With a cell that has an explicit tier (`accept: kimi/heavy`) an open tab of the reviewer role
+Reviewers on another family. With a cell that has an explicit tier (`develop_accept: kimi/heavy`) an open tab of the reviewer role
 is taken only if its model is a model of that family (any of its three tiers; `openai/gpt-5.5#high` fits the profile
 `openai/gpt-5.5`, `openai/gpt-5.5-fast` does not); otherwise a new review session starts in the main folder on the model
 of the cell — when there is no free open tab of the role. With a `task` cell the model of an open tab is not checked, as
@@ -534,7 +546,7 @@ Commands of the window (answers are shown in a dialog at once, no turn of the mo
 | `/crew-sets` | a table of all sets, the enabled one marked |
 | `/crew-sets show [name]` | a set in detail: model, tier and effective window per stage; the enabled one if no name |
 | `/crew-sets use <name>` | enable a set (writes `profile_set` into the file of the project): what changed, the windows «was → became», the compaction of smaller windows |
-| `/crew-sets set <name> <stage> <family>/<tier>` | change a cell (stages: `develop`, `accept`, `plan`, `plan_accept` or Russian words) |
+| `/crew-sets set <name> <stage> <family>/<tier>` | change a cell (stages: `develop`, `develop_accept` (also `accept`), `plan`, `plan_accept`, `spec`, `spec_accept`, `delivery`, `delivery_accept` or Russian words) |
 | `/crew-sets unset <name> <stage>` | remove a cell: the stage goes back to `spawn_models` |
 | `/crew-sets new <name> [from <other>]`, `rename <a> <b>`, `delete <name>` | create (empty or a copy), rename (the enabled name follows), delete (not the enabled one) |
 | `/crew-profiles` | a table «family, tier → model, window» |
@@ -581,25 +593,25 @@ name is not part of it):
     "default": {
       "develop": { "family": "claude", "tier": "task" },
       "plan": { "family": "claude", "tier": "task" },
-      "accept": { "family": "claude", "tier": "task" },
+      "develop_accept": { "family": "claude", "tier": "task" },
       "plan_accept": { "family": "claude", "tier": "task" }
     },
     "cross-kimi": {
       "develop": { "family": "claude", "tier": "task" },
       "plan": { "family": "claude", "tier": "task" },
-      "accept": { "family": "kimi", "tier": "heavy" },
+      "develop_accept": { "family": "kimi", "tier": "heavy" },
       "plan_accept": { "family": "kimi", "tier": "heavy" }
     },
     "cross-codex": {
       "develop": { "family": "claude", "tier": "medium" },
       "plan": { "family": "claude", "tier": "heavy" },
-      "accept": { "family": "codex", "tier": "heavy" },
+      "develop_accept": { "family": "codex", "tier": "heavy" },
       "plan_accept": { "family": "codex", "tier": "heavy" }
     },
     "kimi-only": {
       "develop": { "family": "kimi", "tier": "heavy" },
       "plan": { "family": "kimi", "tier": "heavy" },
-      "accept": { "family": "kimi", "tier": "heavy" },
+      "develop_accept": { "family": "kimi", "tier": "heavy" },
       "plan_accept": { "family": "kimi", "tier": "heavy" }
     }
   }
@@ -608,7 +620,7 @@ name is not part of it):
 
 `default` keeps the choice of models and of open reviewer tabs as it was **while the models of the `claude` profiles equal
 `spawn_models`** of the project (`check` warns when they differ); the file of windows in the worktree is still written with
-the values of the table. A set with an explicit tier of `accept` narrows the open reviewer tabs to its family. The other
+the values of the table. A set with an explicit tier of `develop_accept` narrows the open reviewer tabs to its family. The other
 sets show what is possible. The windows of the models of one family may repeat a model on several tiers (Kimi has one model
 on all three) only with equal fields; two profiles of a set with different windows for the same model make `use` refuse,
 because the window in OpenCode is one per model and folder. The window of a hand-written

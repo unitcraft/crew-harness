@@ -81,6 +81,8 @@ export function dSetCell(d: Draft, set: string, stage: string, cell: P.Cell | nu
   if (!d.sets || !isObj(d.sets[set])) return
   if (cell) d.sets[set][stage] = clone(cell)
   else delete d.sets[set][stage]
+  // прежнее имя accept — псевдоним develop_accept: новая запись его вытесняет, снятие убирает обе
+  if (stage === "develop_accept") delete d.sets[set].accept
 }
 export function dNewSet(d: Draft, name: string, cells: Partial<Record<string, P.Cell>>) {
   const set: Record<string, any> = {}
@@ -171,6 +173,7 @@ export function profileState(dir0: string): PState {
   const name = typeof raw.profile_set === "string" && raw.profile_set ? raw.profile_set : undefined
   const snapshot = readSnapshot(project)
   const state = P.stateRow(name, data, snapshot)
+  state.bounds = P.boundsOf(raw)
   return { project, folder: p?.dir ?? (p ? legacyFolder(dir0) : undefined), raw, data, name, snapshot, state }
 }
 
@@ -206,6 +209,7 @@ export function problemsOf(ps: PState): string[] {
   const row = ps.state.row
   if (ps.state.message) out.push(`проект ${ps.project}: ${ps.state.message}`)
   if (row !== 6 && row !== 7) for (const w of ps.state.warnings) out.push(`проект ${ps.project}: ${w.text}`)
+  if (ps.state.bounds?.error) out.push(`проект ${ps.project}: ${ps.state.bounds.error}`)
   return out
 }
 
@@ -215,8 +219,10 @@ export function problemsOf(ps: PState): string[] {
 export function profilesShow(dir0: string): string {
   const ps = profileState(dir0)
   const has = (v: any) => isObj(v) && Object.keys(v).length > 0
-  if (!has(ps.data.profiles) && !has(ps.data.sets) && !ps.name) return ""
+  const b = ps.state.bounds
+  if (!has(ps.data.profiles) && !has(ps.data.sets) && !ps.name && !b?.min && !b?.max && !b?.error) return ""
   const lines: string[] = []
+  if (b?.min || b?.max) lines.push(`Границы ступеней: ${b.min ? `не ниже ${b.min}` : ""}${b.min && b.max ? ", " : ""}${b.max ? `не выше ${b.max}` : ""} (tier_min, tier_max).`)
   lines.push(`Профили моделей: ${ps.name ? `включён набор «${ps.name}» (файл проекта)` : "набор не включён"}${ps.state.row === 2 || ps.state.row === 1 ? "" : `; состояние — строка ${ps.state.row} таблицы исходов`}.`)
   if (has(ps.data.profiles)) lines.push(`  справочник: ${Object.entries(ps.data.profiles!).map(([f, t]) => `${f} (${P.PROFILE_TIERS.filter((x) => (t as any)[x]).join("/")})`).join(", ")}`)
   if (has(ps.data.sets)) lines.push(`  наборы: ${Object.keys(ps.data.sets!).map((n) => (n === ps.name ? `${n} *` : n)).join(", ")}`)

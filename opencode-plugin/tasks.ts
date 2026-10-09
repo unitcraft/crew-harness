@@ -32,7 +32,7 @@ export const taskRef = (t: { n: number | string; title?: string }, max = 40): st
 
 /** Как запущена сессия при включённом наборе: этап, набор, семья, ступень, модель и откуда окно (profile — файл окон
  *  в worktree; snapshot — по снимку; general — окно из общих настроек: приёмка, задача без worktree, набор недопустим). */
-export type ProfileStamp = { at: number; role: "executor" | "reviewer"; session: string; stage: string; set: string; family: string; tier: string; model: string; window: "profile" | "general" | "snapshot" }
+export type ProfileStamp = { at: number; role: "executor" | "reviewer"; session: string; stage: string; set: string; family: string; tier: string; model: string; window: "profile" | "general" | "snapshot"; clamped_from?: string; how?: "inherited" }
 
 /** Запись предпроверки вливания: running — начата на вершине base; green — кандидат собран и проверен на base; stale — устарела
  *  (причина в stale). lock_on — замок выдан на эту вершину; accepted_on — вершина целевой ветки, в которой принята задача. */

@@ -120,6 +120,14 @@ const spExplicit = mk("explicit", { spawn_models: { heavy: "x/big", medium: "x/m
 dirOf.set("sesEXPL", spExplicit)
 const exMod = core.loadConfig(spExplicit)
 cell("AC-01 spawn_models of a project without keys still define the models", exMod.spawnModels.heavy === "x/big", JSON.stringify(exMod.spawnModels))
+// task 016: tier bounds without a set clamp the tier of crew_spawn, so the model of spawn_models comes from the clamped tier
+const spBounds = mk("bounds", { tier_max: "medium", tier_min: "light" })
+await tab("sesBND", "integrator", spBounds)
+const bndCfg = core.loadConfig(spBounds)
+await spawn("sesBND", { tier: "heavy" })
+await spawn("sesBND", { tier: "light" })
+const bndTasks = tasks.listTasks("bounds")
+cell("016 no set: the bounds are read as settings, a heavy spawn is clamped to medium (sonnet), a light one stays", bndCfg.tierBounds.max === "medium" && bndCfg.tierBounds.min === "light" && bndTasks.length === 2 && modelOf(bndTasks[0].executor) === "claude-code/sonnet" && bndTasks[0].tier === "medium" && modelOf(bndTasks[1].executor) === "claude-code/haiku", JSON.stringify(bndTasks.map((t) => [t.tier, modelOf(t.executor)])))
 // a project that has the table and the sets, but no name: nothing applies
 const sp2 = await spawn("sesINTEG", { tier: "heavy" })
 cell("AC-01 a project with the table and the sets but no name enabled works as before (no name -> no set)", modelOf(lastTask("proj").executor) === "claude-code/opus" && !lastTask("proj").profiles, sp2)
@@ -294,7 +302,7 @@ const nA = await submit({ tier: "heavy" })
 const tA = await reviewed(nA)
 cell("AC-04 a free tab of another family is not the reviewer when the cell has an explicit tier", tA.reviewer !== "sesCLAUDE" && tA.review_kind === "spawn", JSON.stringify([tA.reviewer, tA.review_kind]))
 cell("AC-03 the reviewer is a new session on the Kimi model, in the main folder; the executor stays on Claude", modelOf(tA.reviewer) === "kimi-code-plan-global/k3-256k" && sessions.get(tA.reviewer)?.location?.directory === proj && modelOf(tA.executor) === "claude-code/opus", JSON.stringify([modelOf(tA.reviewer), sessions.get(tA.reviewer)?.location, modelOf(tA.executor)]))
-cell("AC-03/AC-17 the record keeps the reviewer launch: stage accept, set, family kimi, tier heavy, model; the window is general", tA.review_model === "kimi-code-plan-global/k3-256k" && tA.profiles?.at(-1)?.role === "reviewer" && tA.profiles.at(-1).stage === "accept" && tA.profiles.at(-1).set === "cross-kimi" && tA.profiles.at(-1).family === "kimi" && tA.profiles.at(-1).tier === "heavy" && tA.profiles.at(-1).window === "general" && tA.profiles.at(-1).session === tA.reviewer, JSON.stringify(tA.profiles))
+cell("AC-03/AC-17 the record keeps the reviewer launch: stage accept, set, family kimi, tier heavy, model; the window is general", tA.review_model === "kimi-code-plan-global/k3-256k" && tA.profiles?.at(-1)?.role === "reviewer" && tA.profiles.at(-1).stage === "develop_accept" && tA.profiles.at(-1).set === "cross-kimi" && tA.profiles.at(-1).family === "kimi" && tA.profiles.at(-1).tier === "heavy" && tA.profiles.at(-1).window === "general" && tA.profiles.at(-1).session === tA.reviewer, JSON.stringify(tA.profiles))
 cell("AC-14 the letter of the review does not ask for anything only Claude Code has", reviewerLetterTo(tA.reviewer).length > 0 && reviewerLetterTo(tA.reviewer).every((t) => !/SendMessage|run_in_background|ScheduleWakeup|TodoWrite|Monitor\b/.test(t) && /crew_task/.test(t)), reviewerLetterTo(tA.reviewer).join("|").slice(0, 300))
 // a tab of the right family is taken
 await openTab("sesKIMI", "worker", KIMI)

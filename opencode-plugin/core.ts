@@ -26,7 +26,7 @@ import { watchRefusal } from "./deny.ts"
 import { queueRemote, remoteRoute } from "./remote.ts"
 import { linkErrorsOfWrite, profileProblems, profileState, profilesShow } from "./profile-layer.ts"
 import { releaseTaskWindow } from "./profile-windows.ts"
-import { type Resolved, familyOfModel, resolveStageProfile, stageOfLaunch } from "./profiles.ts"
+import { type Bounds, type Resolved, boundsOf, clampTier, familyOfModel, resolveStageProfile, stageOfLaunch } from "./profiles.ts"
 
 export const POLL_MS = Number(process.env.CREW_HARNESS_POLL_MS) || 1_000 // переопределение — для самотеста
 export const LIVE_MS = 15 * 60_000
@@ -184,6 +184,8 @@ export type CrewConfig = {
   /** обязательные поля задачи (task_fields) */
   taskFields: string[]
   defaultPriority: Priority
+  /** границы ступеней проекта (tier_min, tier_max; задача 016); ошибка — границы не применяются */
+  tierBounds: Bounds
   inflightLimit: number
   /** папка worktree задач от корня проекта (абсолютный путь) или undefined — решает методология */
   worktrees?: string
@@ -329,6 +331,7 @@ export function loadConfig(dir: string): CrewConfig {
     spawnModels,
     taskFields: Array.isArray(j.task_fields) ? j.task_fields.map(String).filter((f: string) => (TASK_FIELDS as readonly string[]).includes(f)) : ["goal", "criteria"],
     defaultPriority: oneOf(j.default_priority, PRIORITIES, "P2"),
+    tierBounds: boundsOf(j),
     inflightLimit: num(j.inflight_limit, 6),
     worktrees: typeof j.worktrees === "string" && j.worktrees && root ? path.resolve(root, j.worktrees) : undefined,
     worktreeName: typeof j.worktree_name === "string" && j.worktree_name ? j.worktree_name : "{repo}-{n}-{slug}",
@@ -1045,8 +1048,8 @@ export type VerbHelp = { verb: string; usage: string; what: string; example: str
 export const SETS_VERB_HELP: VerbHelp[] = [
   { verb: "show", usage: "[имя]", what: "набор подробно: модель, ступень и контекст по этапам; без имени — включённый", example: "show cross-kimi", bare: true },
   { verb: "use", usage: "<имя>", what: "включить набор для всех этапов: имя записывается в profile_set файла проекта (без коммита)", example: "use cross-kimi" },
-  { verb: "set", usage: "<имя> <этап> <семья>/<ступень>", what: "изменить клетку набора", example: "set cross-kimi accept kimi/heavy" },
-  { verb: "unset", usage: "<имя> <этап>", what: "убрать клетку: этап вернётся к spawn_models", example: "unset cross-kimi accept" },
+  { verb: "set", usage: "<имя> <этап> <семья>/<ступень>", what: "изменить клетку набора", example: "set cross-kimi develop_accept kimi/heavy" },
+  { verb: "unset", usage: "<имя> <этап>", what: "убрать клетку: этап вернётся к spawn_models", example: "unset cross-kimi develop_accept" },
   { verb: "new", usage: "<имя> [from <имя>]", what: "новый набор: пустой или копия другого", example: "new my-set from default" },
   { verb: "rename", usage: "<а> <б>", what: "переименовать набор (включённое имя следует за ним)", example: "rename my-set my-set2" },
   { verb: "delete", usage: "<имя>", what: "удалить набор (включённый не удаляется)", example: "delete my-set2" },
@@ -1350,8 +1353,10 @@ export const DEFAULT_SPAWN_MODELS: Record<Tier, string> = { heavy: "claude-code/
 /** След профиля в записи задачи (задача 003): этап, набор, семья, ступень, модель и откуда окно; строка в историю. */
 export function stampProfile(t: Task, role: "executor" | "reviewer", session: string, r: Resolved, inWorktree: boolean) {
   const window = !r.window || !inWorktree ? "general" : r.viaSnapshot ? "snapshot" : "profile"
-  ;(t.profiles ??= []).push({ at: Date.now(), role, session, stage: r.stage, set: r.set, family: r.family, tier: r.tier, model: r.model, window })
-  taskEvent(t, PLUGIN_SENDER, undefined, `профиль: набор «${r.set}», этап ${r.stage}, ${r.family}/${r.tier}, модель ${r.model}${r.viaSnapshot ? " (по снимку)" : ""}, окно: ${window}`)
+  ;(t.profiles ??= []).push({ at: Date.now(), role, session, stage: r.stage, set: r.set, family: r.family, tier: r.tier, model: r.model, window, ...(r.clampedFrom ? { clamped_from: r.clampedFrom } : {}), ...(r.how ? { how: r.how } : {}) })
+  const note = `${r.clampedFrom ? `, ступень срезана границами проекта ${r.clampedFrom} → ${r.tier}` : ""}${r.how === "inherited" ? ", клетка унаследована" : ""}`
+  taskEvent(t, PLUGIN_SENDER, undefined, `профиль: набор «${r.set}», этап ${r.stage}, ${r.family}/${r.tier}, модель ${r.model}${r.viaSnapshot ? " (по снимку)" : ""}, окно: ${window}${note}`)
+  if (r.clampedFrom) log(`tier clamp: задача #${t.n} этап ${r.stage}: ${r.clampedFrom} -> ${r.tier}`)
 }
 const DEFAULT_SPAWN_LIMIT = 3
 const WAIT_MAX_S = 300
@@ -1717,7 +1722,8 @@ export function makeTools(host: CrewHost): CrewTool[] {
       if ("error" in extra) return { content: `Задача не поставлена: ${extra.error}` }
       const role = normalizeRole(String(input.role ?? DEFAULT_ROLE).trim().toLowerCase() || DEFAULT_ROLE)
       if (!ROLE_RE.test(role)) return { content: `Роль «${role}» не годится.` }
-      const tier: Tier = isTier(input.tier) ? input.tier : "medium"
+      // ступень по входу или medium, в границах проекта (tier_min, tier_max); набор срезает свою ступень сам (resolveStageProfile)
+      const tier: Tier = clampTier(isTier(input.tier) ? input.tier : "medium", cfg.tierBounds).tier
       const limit = cfg.spawnLimits[role] ?? cfg.spawnLimits["*"] ?? DEFAULT_SPAWN_LIMIT
       const running = listTasks(project).filter((t) => t.kind === "spawn" && t.role === role && (t.status === "starting" || t.status === "running"))
       const prio = isPriority(input.priority) ? input.priority : cfg.defaultPriority

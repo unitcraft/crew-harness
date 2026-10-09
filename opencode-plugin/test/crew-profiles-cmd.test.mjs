@@ -190,6 +190,54 @@ rmSync(explicitFile)
   await sets("use default")
 }
 
+// ---- task 015: the legacy accept is read and replaced, the new stages are accepted and shown with inheritance ----
+{
+  const raw = readFileJson()
+  raw.profile_sets.legacy = { develop: c("claude", "heavy"), accept: c("kimi", "heavy"), plan: c("claude", "heavy") }
+  writeFileJson(raw)
+  const rLegacy = await sets("show legacy")
+  cell("015 a set with the legacy accept: it is read as develop_accept and the delivery inherits one tier lower", /приёмка: kimi\/heavy → /.test(rLegacy) && /сдача: claude\/medium \(унаследован от «разработка», ступенью ниже\)/.test(rLegacy) && /разбор: claude\/heavy \(унаследован от «планирование»\)/.test(rLegacy), rLegacy)
+  const rSet = await sets("set legacy develop_accept codex/heavy")
+  cell("015 set with the new name replaces the legacy accept of the set", /Готово/.test(rSet) && st().data.sets.legacy.develop_accept?.family === "codex" && !("accept" in st().data.sets.legacy), JSON.stringify(st().data.sets.legacy))
+  const rNew = await sets("set legacy сдача kimi/light")
+  cell("015 the Russian word of a new stage works: delivery is explicit now", /Готово/.test(rNew) && st().data.sets.legacy.delivery?.family === "kimi", rNew + JSON.stringify(st().data.sets.legacy))
+  const rBad = await sets("set legacy coordination kimi/light")
+  cell("015 an unknown stage is refused and the message lists the eight", /не годится/.test(rBad) && /delivery_accept/.test(rBad), rBad)
+  cell("015 show: a cross set is not noted for the family rule", !/заметка/.test(await sets("show cross-kimi")), "noted")
+  raw.profile_sets.same = { develop: c("claude", "heavy"), develop_accept: c("claude", "heavy") }
+  delete raw.profile_sets.legacy
+  writeFileJson(raw)
+  const rSameNote = await sets("show same")
+  cell("015 show: the same family for the author and the check is noted while another family exists", /заметка: «приёмка» идёт на той же семье claude/.test(rSameNote), rSameNote)
+  delete raw.profile_sets.same
+  writeFileJson(raw)
+}
+// ---- task 016: tier bounds are an ordinary committed setting: shown and clamp; min above max is a problem and is not applied ----
+{
+  const raw = readFileJson()
+  raw.tier_max = "medium"
+  writeFileJson(raw)
+  git(cfgDir, "add", "-A")
+  git(cfgDir, "commit", "-q", "-m", "tier bounds")
+  writeSettings(cfgDir, {})
+  const rClamp = await sets("show cross-codex")
+  cell("016 show: an explicit heavy cell is shown with the clamp to the bound", /планирование: claude\/heavy → claude-code\/sonnet — срез границами ступеней: heavy → medium/.test(rClamp), rClamp)
+  raw.tier_min = "heavy"
+  writeFileJson(raw)
+  git(cfgDir, "add", "-A")
+  git(cfgDir, "commit", "-q", "-m", "tier bounds")
+  writeSettings(cfgDir, {})
+  const rBadB = L.problemsOf(st())
+  const rNoClamp = await sets("show cross-codex")
+  cell("016 min above max is a problem line and the bounds are not applied", rBadB.some((x) => /tier_min \(heavy\) выше tier_max \(medium\)/.test(x)) && /планирование: claude\/heavy → claude-code\/opus/.test(rNoClamp) && !/срез границами/.test(rNoClamp), JSON.stringify(rBadB) + rNoClamp)
+  delete raw.tier_min
+  delete raw.tier_max
+  writeFileJson(raw)
+  git(cfgDir, "add", "-A")
+  git(cfgDir, "commit", "-q", "-m", "tier bounds")
+  writeSettings(cfgDir, {})
+}
+
 // ---- AC-27: edit verbs of /crew-sets ----
 const before27 = editLines().length
 const commits27 = commits()
@@ -197,9 +245,9 @@ r = await sets("new mine")
 cell("AC-27 new <name>: an empty set at once, without a commit", /Готово/.test(r) && !!st().data.sets.mine && Object.keys(st().data.sets.mine).length === 0 && commits() === commits27, r)
 r = await sets("set mine develop kimi/heavy")
 r += await sets("set mine приёмка codex/task")
-cell("AC-27 set <name> <stage> <family>/<tier>: the cell (also with the Russian stage word and tier task)", st().data.sets.mine.develop.family === "kimi" && st().data.sets.mine.accept.tier === "task" && st().data.sets.mine.accept.family === "codex", JSON.stringify(st().data.sets.mine))
+cell("AC-27 set <name> <stage> <family>/<tier>: the cell (also with the Russian stage word and tier task)", st().data.sets.mine.develop.family === "kimi" && st().data.sets.mine.develop_accept.tier === "task" && st().data.sets.mine.develop_accept.family === "codex", JSON.stringify(st().data.sets.mine))
 r = await sets("unset mine приёмка")
-cell("AC-27 unset removes the cell: the stage becomes `not described`", !st().data.sets.mine.accept && /не описан|убран/.test(r), r)
+cell("AC-27 unset removes the cell: the stage becomes `not described`", !st().data.sets.mine.develop_accept && !st().data.sets.mine.accept && /не описан|убран/.test(r), r)
 r = await sets("new copy from mine")
 cell("AC-27 new <name> from <other>: a copy", st().data.sets.copy.develop.family === "kimi", JSON.stringify(st().data.sets.copy))
 r = await sets("rename copy copy2")

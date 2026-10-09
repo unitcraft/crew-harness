@@ -2,29 +2,60 @@
 // значений трёх ключей настроек проекта (model_profiles, profile_sets, profile_set), семья модели вкладки.
 // Файл настроек читается любым JSON-читателем (в том числе сервисом задачи 001), поэтому формат — обычный JSON:
 //   model_profiles: { "<семья>": { "heavy"|"medium"|"light": { "model": "провайдер/модель", "context": N, "output": N[, "input": N] } } }
-//   profile_sets:   { "<имя набора>": { "develop"|"accept"|"plan"|"plan_accept": { "family": "<семья>", "tier": "heavy"|"medium"|"light"|"task" } } }
+//   profile_sets:   { "<имя набора>": { "<этап>": { "family": "<семья>", "tier": "heavy"|"medium"|"light"|"task" } } }
+//   этапы (задача 015, раздел «Этапы и модели» Канона): develop, develop_accept, plan, plan_accept — явные; spec, spec_accept,
+//   delivery, delivery_accept — по умолчанию наследуют; прежнее имя accept читается как develop_accept (псевдоним)
+//   tier_min, tier_max: границы ступеней проекта (задача 016); любая ступень любого этапа срезается в них
 //   profile_set:    "<имя набора по умолчанию>" (ставит человек)
 // Пустая запись («заполнить») — { "model": "" }. Окно — свойство профиля (модели), а не этапа.
 
 import { limitsText } from "./core.ts" // единственное форматирование чисел ответов (core.ts); вызывается при показе, не при загрузке
 
-export const STAGES = ["develop", "accept", "plan", "plan_accept"] as const
+/** Этапы, которые владелец задаёт явно, и этапы, которые по умолчанию наследуют (таблица «Этапы и модели» Канона). */
+export const CORE_STAGES = ["develop", "develop_accept", "plan", "plan_accept"] as const
+export const EXTRA_STAGES = ["spec", "spec_accept", "delivery", "delivery_accept"] as const
+export const STAGES = [...CORE_STAGES, ...EXTRA_STAGES] as const
 export type Stage = (typeof STAGES)[number]
-export const isStage = (s: any): s is Stage => STAGES.includes(s)
-/** Названия этапов в командах: латиница и русский (в файле — только латиница). */
+export const isStage = (s: any): s is Stage => (STAGES as readonly string[]).includes(s)
+/** Прежние имена этапов в файле и в командах: читаются как новые, в наборе новая запись вытесняет прежнюю. */
+export const LEGACY_STAGES: Record<string, Stage> = { accept: "develop_accept" }
+export const canonStage = (s: any): Stage | undefined => (isStage(s) ? s : LEGACY_STAGES[String(s)])
+/** Названия этапов в командах: латиница и русский (в файле — латиница; accept — псевдоним develop_accept). */
 export const STAGE_WORDS: Record<string, Stage> = {
   develop: "develop",
-  accept: "accept",
+  develop_accept: "develop_accept",
+  accept: "develop_accept",
   plan: "plan",
   plan_accept: "plan_accept",
+  spec: "spec",
+  spec_accept: "spec_accept",
+  delivery: "delivery",
+  delivery_accept: "delivery_accept",
   разработка: "develop",
-  приёмка: "accept",
-  приемка: "accept",
+  приёмка: "develop_accept",
+  приемка: "develop_accept",
   планирование: "plan",
   "приёмка-плана": "plan_accept",
   "приемка-плана": "plan_accept",
+  разбор: "spec",
+  "приёмка-разбора": "spec_accept",
+  "приемка-разбора": "spec_accept",
+  сдача: "delivery",
+  "приёмка-сдачи": "delivery_accept",
+  "приемка-сдачи": "delivery_accept",
 }
-export const STAGE_RU: Record<Stage, string> = { develop: "разработка", accept: "приёмка", plan: "планирование", plan_accept: "приёмка плана" }
+export const STAGE_RU: Record<Stage, string> = {
+  develop: "разработка",
+  develop_accept: "приёмка",
+  plan: "планирование",
+  plan_accept: "приёмка плана",
+  spec: "разбор",
+  spec_accept: "приёмка разбора",
+  delivery: "сдача",
+  delivery_accept: "приёмка сдачи",
+}
+/** Список этапов для сообщений об ошибке. */
+export const STAGES_TEXT = `${STAGES.join(", ")} (прежнее accept — то же, что develop_accept)`
 export const stageOfWord = (w: string): Stage | undefined => STAGE_WORDS[String(w).toLowerCase()]
 
 export const PROFILE_TIERS = ["heavy", "medium", "light"] as const
@@ -125,15 +156,15 @@ export function invalidProfileKey(key: string, v: any, opts: { lenientStages?: b
     return undefined
   }
   if (key === "profile_sets") {
-    if (!isObj(v)) return `${key}: {"имя набора": {"develop"|"accept"|"plan"|"plan_accept": {"family": "семья", "tier": "heavy"|"medium"|"light"|"task"}}}`
+    if (!isObj(v)) return `${key}: {"имя набора": {"develop"|"develop_accept"|"plan"|"plan_accept"|…: {"family": "семья", "tier": "heavy"|"medium"|"light"|"task"}}}`
     for (const [name, stages] of Object.entries(v)) {
       const bad = invalidSetName(name)
       if (bad) return `${key}: ${bad}`
       if (!isObj(stages)) return `${key}.${name}: {этап: клетка}`
       for (const [st, cell] of Object.entries(stages)) {
-        if (!isStage(st)) {
+        if (!canonStage(st)) {
           if (opts.lenientStages) continue
-          return `${key}.${name}.${st}: неизвестный этап; этапы — ${STAGES.join(", ")}`
+          return `${key}.${name}.${st}: неизвестный этап; этапы — ${STAGES_TEXT}`
         }
         const e = invalidCell(cell, `${key}.${name}.${st}`)
         if (e) return e
@@ -170,7 +201,7 @@ export function familyOfModel(model: any, profiles: Families | undefined): strin
 /** Этап сессии по виду запуска: задача-план — планирование и приёмка плана, остальное — разработка и приёмка. */
 export function stageOfLaunch(t: { plan?: unknown }, role: "executor" | "reviewer"): Stage {
   if (role === "executor") return t.plan ? "plan" : "develop"
-  return t.plan ? "plan_accept" : "accept"
+  return t.plan ? "plan_accept" : "develop_accept"
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -180,15 +211,108 @@ export type Problem = { kind: "form" | "link" | "empty" | "conflict"; set?: stri
 export type Win = { context: number; output: number; input?: number }
 const sameWin = (a: Win, b: Win) => a.context === b.context && a.output === b.output && a.input === b.input
 
-/** Описанные в наборе клетки известных этапов (незнакомые этапы читатель игнорирует). */
+/** Запись этапа в наборе: своё имя, а у develop_accept — ещё и прежнее accept (новое имя главнее). */
+export const rawCell = (set: any, st: Stage): any => (isObj(set) ? (set[st] ?? (st === "develop_accept" ? set.accept : undefined)) : undefined)
+const validCell = (c: any): c is Cell => isObj(c) && typeof c.family === "string" && isCellTier(c.tier)
+
+/** Описанные в наборе (явно) клетки известных этапов (незнакомые этапы читатель игнорирует). */
 export function cellsOf(set: any): [Stage, Cell][] {
   if (!isObj(set)) return []
   const out: [Stage, Cell][] = []
   for (const st of STAGES) {
-    const c = set[st]
-    if (isObj(c) && typeof c.family === "string" && isCellTier(c.tier)) out.push([st, c as Cell])
+    const c = rawCell(set, st)
+    if (validCell(c)) out.push([st, c])
   }
   return out
+}
+
+// ---- наследование этапов и семья проверяющего (задача 015) ----------------------------------------------------------------
+
+/** Ступенью ниже: heavy → medium → light; light и task остаются (task разрешается по задаче, потом берётся ступень ниже — lower). */
+export const lowerTier = (t: CellTier): CellTier => (t === "heavy" ? "medium" : t === "medium" ? "light" : t)
+/** Наследование пустых этапов: от какого этапа берётся клетка и берётся ли она на ступень ниже (сдача идёт на классе B). */
+export const INHERIT: Partial<Record<Stage, { from: Stage; lower: boolean }>> = {
+  spec: { from: "plan", lower: false },
+  spec_accept: { from: "plan_accept", lower: false },
+  delivery: { from: "develop", lower: true },
+  delivery_accept: { from: "develop_accept", lower: true },
+}
+/** Этап проверки → этап, чей артефакт он проверяет (семья проверяющего отличается от семьи автора). */
+export const AUTHOR_OF: Partial<Record<Stage, Stage>> = { develop_accept: "develop", plan_accept: "plan", spec_accept: "spec", delivery_accept: "delivery" }
+
+export type Effective = {
+  cell: Cell
+  how: "explicit" | "inherited"
+  /** этап, от которого унаследована клетка */
+  from?: Stage
+  /** клетка `task`: после выбора ступени по задаче берётся ступень ниже */
+  lower?: boolean
+}
+
+/** Другая семья со всеми профилями, нужными клетке автора: первая по алфавиту; нет — undefined. */
+export function otherFamily(profiles: Families | undefined, author: Cell): string | undefined {
+  if (!isObj(profiles)) return undefined
+  return Object.keys(profiles)
+    .sort()
+    .find((fam) => fam !== author.family && referencedProfiles({ family: fam, tier: author.tier }).every((r) => isObj(profiles[fam]?.[r.tier]) && !isEmptyProfile(profiles[fam][r.tier])))
+}
+
+/**
+ * Клетка этапа по набору: явная; иначе унаследованная (spec ← plan, spec_accept ← plan_accept, delivery и delivery_accept — от
+ * develop и develop_accept ступенью ниже); иначе undefined (модель по spawn_models, как прежде: требование 003 «этап без клетки
+ * идёт по spawn_models» не меняется). Семью проверяющего, совпавшую с семьёй автора, показывает sameFamilyNotes.
+ */
+export function effectiveCell(set: any, stage: Stage, profiles?: Families): Effective | undefined {
+  const raw = rawCell(set, stage)
+  if (validCell(raw)) return { cell: raw, how: "explicit" }
+  const inh = INHERIT[stage]
+  if (inh) {
+    const base = effectiveCell(set, inh.from, profiles)
+    if (!base) return undefined
+    const tier = inh.lower ? lowerTier(base.cell.tier) : base.cell.tier
+    return { cell: { family: base.cell.family, tier }, how: "inherited", from: inh.from, ...(inh.lower && base.cell.tier === "task" ? { lower: true } : {}) }
+  }
+  return undefined
+}
+
+/**
+ * Правило «проверяющий ≠ семья автора» (ADR-0013, раздел «Этапы и модели» Канона): пары этапов набора, где проверка идёт на той
+ * же семье, что автор, хотя в справочнике есть другая. Только заметка: модель по набору не меняется (запись «семья та же:
+ * причина» делает владелец, плагин причины не знает).
+ */
+export function sameFamilyNotes(set: any, profiles?: Families): string[] {
+  const out: string[] = []
+  for (const [check, author] of Object.entries(AUTHOR_OF) as [Stage, Stage][]) {
+    const c = effectiveCell(set, check, profiles)
+    const a = effectiveCell(set, author, profiles)
+    if (!c || !a || c.cell.family !== a.cell.family) continue
+    const other = otherFamily(profiles, a.cell)
+    if (other) out.push(`«${STAGE_RU[check]}» идёт на той же семье ${c.cell.family}, что «${STAGE_RU[author]}»; в справочнике есть другая (${other}) — правило проверки на другой семье моделей`)
+  }
+  return out
+}
+
+// ---- границы ступеней проекта (задача 016) --------------------------------------------------------------------------------
+
+const TIER_RANK: Record<PTier, number> = { light: 0, medium: 1, heavy: 2 }
+export type Bounds = { min?: PTier; max?: PTier; error?: string }
+/** Границы из настроек проекта (tier_min, tier_max); ошибка — текст, и тогда границы не применяются. */
+export function boundsOf(raw: any): Bounds {
+  const min = isObj(raw) ? raw.tier_min : undefined
+  const max = isObj(raw) ? raw.tier_max : undefined
+  for (const [k, v] of [["tier_min", min], ["tier_max", max]] as const) {
+    if (v !== undefined && !isPTier(v)) return { error: `${k}: «${String(v)}» не годится; ступень — одно из ${PROFILE_TIERS.join(", ")}` }
+  }
+  if (isPTier(min) && isPTier(max) && TIER_RANK[min] > TIER_RANK[max]) return { error: `tier_min (${min}) выше tier_max (${max}): границы ступеней не применяются` }
+  return { ...(isPTier(min) ? { min } : {}), ...(isPTier(max) ? { max } : {}) }
+}
+/** Ступень в границах; from — исходная ступень, если её срезали. */
+export function clampTier(t: PTier, b?: Bounds): { tier: PTier; from?: PTier } {
+  if (!b || b.error) return { tier: t }
+  let r = t
+  if (b.max && TIER_RANK[r] > TIER_RANK[b.max]) r = b.max
+  if (b.min && TIER_RANK[r] < TIER_RANK[b.min]) r = b.min
+  return r === t ? { tier: t } : { tier: r, from: t }
 }
 
 /** Профили, на которые ссылается клетка: явная ступень — одна, `task` — все три (ступень берётся из входа или записи задачи). */
@@ -288,6 +412,8 @@ export type State = {
   warnings: Problem[]
   /** сообщение владельцу и самопроверке (пусто, если сказать нечего) */
   message: string
+  /** границы ступеней проекта (tier_min, tier_max); ставит читатель настроек */
+  bounds?: Bounds
 }
 const nonEmpty = (v: any) => isObj(v) && Object.keys(v).length > 0
 
@@ -311,7 +437,7 @@ export function stateRow(name: string | undefined, eff: Data, snapshot?: Snapsho
   return { row: 6, name, ...check, message: `набора «${name}» нет в данных проекта, допустимого состояния нет: этапы, которым нужен профиль, отказываются; верни набор или убери profile_set из файла проекта` }
 }
 
-export type Resolved = { model: string; family: string; tier: PTier; set: string; viaSnapshot: boolean; window: boolean; stage: Stage }
+export type Resolved = { model: string; family: string; tier: PTier; set: string; viaSnapshot: boolean; window: boolean; stage: Stage; clampedFrom?: PTier; how?: "inherited" }
 export type ResolveOpts = {
   /** ступень из входа инструмента (ключ присутствует и значение — ступень) либо ступень записи задачи при reassign */
   inputTier?: any
@@ -331,16 +457,20 @@ export function resolveStageProfile(state: State | undefined, stage: Stage, opts
   const u = state.usable
   if (!u) return undefined
   const set = u.data.sets?.[u.name]
-  const cell: any = isObj(set) ? (set as any)[stage] : undefined
-  if (!isObj(cell) || typeof cell.family !== "string" || !isCellTier(cell.tier)) return undefined
+  const eff = effectiveCell(set, stage, u.data.profiles)
+  if (!eff) return undefined
+  const cell = eff.cell
   const front = stage === "develop" || stage === "plan"
   let tier: PTier
   if (front) tier = (!opts.autoPlan && isPTier(opts.inputTier) ? opts.inputTier : cell.tier === "task" ? "medium" : cell.tier) as PTier
   else tier = (cell.tier === "task" ? (isPTier(opts.taskTier) ? opts.taskTier : "medium") : cell.tier) as PTier
+  if (eff.lower) tier = lowerTier(tier) as PTier
+  const cl = clampTier(tier, state.bounds)
+  tier = cl.tier
   const p: any = isObj(u.data.profiles) ? (u.data.profiles as any)[cell.family]?.[tier] : undefined
   if (!isObj(p)) return { refuse: `набор «${u.name}», этап «${STAGE_RU[stage]}»: профиля ${cell.family}/${tier} нет в справочнике; сессия не запущена` }
   if (isEmptyProfile(p)) return { refuse: `набор «${u.name}», этап «${STAGE_RU[stage]}»: профиль ${cell.family}/${tier} пуст («заполнить»); сессия не запущена` }
-  return { model: p.model, family: cell.family, tier, set: u.name, viaSnapshot: u.viaSnapshot, window: front && !state.degraded, stage }
+  return { model: p.model, family: cell.family, tier, set: u.name, viaSnapshot: u.viaSnapshot, window: front && !state.degraded, stage, ...(cl.from ? { clampedFrom: cl.from } : {}), ...(eff.how === "inherited" ? { how: "inherited" as const } : {}) }
 }
 
 /** Годится ли открытая вкладка в приёмщики по клетке: явная ступень — только семья клетки; `task` модель вкладки не проверяет. */
@@ -353,6 +483,5 @@ export function tabFitsCell(cell: Cell | undefined, tabModel: string | undefined
 export function cellOfState(state: State | undefined, stage: Stage): Cell | undefined {
   const u = state && state.row !== 6 ? state.usable : undefined
   const set = u ? u.data.sets?.[u.name] : undefined
-  const cell: any = isObj(set) ? (set as any)[stage] : undefined
-  return isObj(cell) && typeof cell.family === "string" && isCellTier(cell.tier) ? (cell as Cell) : undefined
+  return u ? effectiveCell(set, stage, u.data.profiles)?.cell : undefined
 }
