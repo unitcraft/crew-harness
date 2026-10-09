@@ -19,7 +19,7 @@ delete process.env.CREW_HARNESS_PRESENCE
 const proj = path.join(tmp, "proj")
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
 // stall after 0.01 min (0.6 s); no review sessions, so a submitted task waits for a reviewer
-writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ stall_minutes: 0.01, accepted_reminder_min: 0.01, inflight_limit: 3, heavy_commands: ["scripts/gate.sh"], spawn_limits: { reviewer: 0 }, branch_name: "t{n}-{slug}", cleanup: "local" }))
+writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ stall_minutes: 0.01, accepted_reminder_min: 0.01, inflight_limit: 3, accepted_slot: "hold", heavy_commands: ["scripts/gate.sh"], spawn_limits: { reviewer: 0 }, branch_name: "t{n}-{slug}", cleanup: "local" }))
 // the project is a git repository: task #3 was accepted, but its branch and a diagnostic branch stayed
 const { execFileSync } = await import("node:child_process")
 const g = (...a) => execFileSync("git", ["-C", proj, "-c", "user.name=t", "-c", "user.email=t@t", ...a], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })

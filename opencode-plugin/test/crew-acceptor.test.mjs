@@ -29,6 +29,8 @@ writeFileSync(
     worktrees: "wt",
     branch_name: "p{n}-{slug}",
     cleanup: "local",
+    merge_precheck: "off", // the old order of the merge lock (the default is required since 2026-10-09)
+    accepted_slot: "hold",
     machine_slots: 1,
     spawn_limits: { worker: 1, reviewer: 5, acceptor: 1 },
     acceptance: [{ id: "tests", text: "тесты зелёные", required: true }],

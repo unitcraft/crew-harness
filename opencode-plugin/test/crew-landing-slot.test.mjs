@@ -1,7 +1,7 @@
 // Self-test: the slot at acceptance (task 005, AC-02..AC-06; node >= 24):  node test/crew-landing-slot.test.mjs
 // accepted_slot "free": an accepted, not cleaned task does not count in inflight_limit (crew_spawn and the steps of an auto
 // plan), it is counted by cleanup_limit instead ("waits for cleanup"), P0 passes both; the texts do not say that the accepted
-// tasks hold a place; the tab of the accepted task is still woken and reminded; "hold" (the default) is as before.
+// tasks hold a place; the tab of the accepted task is still woken and reminded; "free" is the default since 2026-10-09, the explicit "hold" is as before.
 import { execFileSync } from "node:child_process"
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
@@ -117,6 +117,12 @@ const fiveBase = () => {
   return accepted(60, "sesREVA")
 }
 
+// ---- AC-02 default: no accepted_slot key behaves as free (owner's decision, 2026-10-09)
+settings({ inflight_limit: 5 })
+fiveBase()
+const sDef = await spawn()
+cell("AC-02 умолчание: with no accepted_slot key the sixth task is put (the default is free)", started(sDef) && all().length === 6 && core.loadConfig(proj).acceptedSlot === "free", sDef)
+reset()
 // ---- AC-02: the same data (4 open + 1 accepted, inflight_limit 5): free puts the sixth, hold refuses
 settings({ inflight_limit: 5, accepted_slot: "free" })
 fiveBase()
@@ -124,7 +130,7 @@ const sFree = await spawn()
 cell("AC-02 free: the sixth task is put (4 counted < 5)", started(sFree) && all().length === 6, sFree)
 const sFree2 = await spawn()
 cell("AC-02 free граница: the next one is refused at 5 counted, the accepted one is not named as holding a place", /Лимит задач проекта/.test(sFree2) && !started(sFree2) && all().length === 6, sFree2)
-settings({ inflight_limit: 5 })
+settings({ inflight_limit: 5, accepted_slot: "hold" })
 fiveBase()
 const sHold = await spawn()
 cell("AC-02 hold: the same data refuse the sixth task, as before", /Лимит задач проекта/.test(sHold) && /#5 принята 60 мин назад, не очищена/.test(sHold) && all().length === 5, sHold)
@@ -204,7 +210,7 @@ const list5 = await call("crew_task", { action: "list" })
 cell("AC-05: crew_task list marks the accepted task as waiting for cleanup", new RegExp(`#${a5.n} P2 принята «[^»]+» — исполнитель sesEXsesREV05, приёмщик sesREV05 — ждёт уборки`).test(list5), list5)
 const show5 = await call("crew_task", { action: "show", n: a5.n })
 cell("AC-05: crew_task show marks it too", /^#\d+ .* — ждёт уборки$/m.test(show5.split("\n")[0]), show5.split("\n")[0])
-settings({ inflight_limit: 5 })
+settings({ inflight_limit: 5, accepted_slot: "hold" })
 const listHold = await call("crew_task", { action: "list" })
 cell("AC-05 hold: no mark at hold", !/ждёт уборки/.test(listHold), listHold)
 
@@ -229,7 +235,7 @@ free.author = letters("sesINTEG1").find((l) => new RegExp(`#${accFree.n} .*пр�
 cell("AC-06 free: the refusal by inflight_limit is a real refusal without the words about holding a place", /Лимит задач проекта/.test(free.refusal) && FORBIDDEN.every((re) => !re.test(free.refusal)), free.refusal)
 cell("AC-06 free: the reminders to the reviewer and the author have none of the words", free.reviewer.length > 0 && free.author.length > 0 && [free.reviewer, free.author].every((t) => FORBIDDEN.every((re) => !re.test(t))), JSON.stringify(free))
 reset()
-settings({ inflight_limit: 3 })
+settings({ inflight_limit: 3, accepted_slot: "hold" })
 for (let i = 0; i < 2; i++) mk("running", { executor: `sesRUN${i}` })
 const accHold = accepted(60, "sesREV08")
 const hold = { refusal: await spawn() }

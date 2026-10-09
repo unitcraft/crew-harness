@@ -49,7 +49,9 @@ const cfgOf = (more) => {
   H.settings(more)
   return core.loadConfig(proj)
 }
-const DEFAULTS = { accepted_slot: "hold", cleanup_limit: 10, merge_precheck: "off", task_extra_fields: [] }
+// since 2026-10-09 the defaults are free and required (owner's decision); the old behaviour is the explicit hold and off
+const DEFAULTS = { accepted_slot: "free", cleanup_limit: 10, merge_precheck: "required", task_extra_fields: [] }
+const LEGACY = { accepted_slot: "hold", cleanup_limit: 10, merge_precheck: "off", task_extra_fields: [] }
 const plain = H.reviewing({ title: "обычная" })
 const planT = H.reviewing({ title: "план", plan: { n: "9", file: "docs/plans/9-demo.md", source: "демо", rounds: [], clean: 0, approval: { decision: "ok", at: Date.now() } } })
 const accepted = H.reviewing({ title: "принятая", reviewer: "sesREV2" })
@@ -65,7 +67,9 @@ const L = (more) => {
 }
 const dflt = L({})
 const expl = L(DEFAULTS)
-cell("AC-31 по умолчанию: without the keys and with their default values the two letters are byte for byte the same and have no new words", dflt.ord === expl.ord && dflt.plan === expl.plan && !/precheck|предпроверк|уборки/i.test(dflt.ord + dflt.plan), dflt.ord)
+cell("AC-31 по умолчанию: without the keys and with their default values (free, required) the two letters are byte for byte the same and have the precheck step and the wait for cleanup", dflt.ord === expl.ord && dflt.plan === expl.plan && /ПРЕДПРОВЕРКА/.test(dflt.ord) && /ПРЕДПРОВЕРКА/.test(dflt.plan) && /ждёт уборки/.test(dflt.ord), dflt.ord)
+const leg = L(LEGACY)
+cell("AC-31 hold/off явно: with the old behaviour set explicitly the two letters have no new words (the order as before the task)", !/precheck|предпроверк|уборки/i.test(leg.ord + leg.plan) && /merge", n: \d+\}/.test(leg.ord), leg.ord)
 const req = L({ merge_precheck: "required" })
 {
   const o = req.ord
@@ -77,9 +81,9 @@ const req = L({ merge_precheck: "required" })
   cell("AC-31 required (план): planMergeLetter has the same precheck step before merge", po.every((x) => x >= 0) && po.every((x, i) => i === 0 || x > po[i - 1]) && /merge_precheck: required/.test(pl), pl)
   cell("AC-31 required (нумерация): the steps are numbered without a gap", /\n {2}1\) [^\n]*\n {2}2\) ПРЕДПРОВЕРКА[^\n]*\n {2}3\) нашёл ошибки[^\n]*\n {2}4\) всё зелёное[^\n]*\n[^\n]*\n {2}5\) плагин сам проверит/.test(o), o)
 }
-const fr = L({ accepted_slot: "free", cleanup_limit: 4 })
+const fr = L({ accepted_slot: "free", cleanup_limit: 4, merge_precheck: "off" })
 cell("AC-31 free: reviewLetter says that an accepted task waits for cleanup without a place and gives 'ждущих уборки N из M'", /принятая задача ждёт уборки и место в inflight_limit не занимает; ждущих уборки 1 из 4/.test(fr.ord) && !/precheck/.test(fr.ord), fr.ord)
-const fr0 = L({ accepted_slot: "free", cleanup_limit: 0 })
+const fr0 = L({ accepted_slot: "free", cleanup_limit: 0, merge_precheck: "off" })
 cell("AC-31 free без предела: with cleanup_limit 0 the letter says 'N, предела нет'", /ждущих уборки 1, предела нет/.test(fr0.ord), fr0.ord)
 const both = L({ accepted_slot: "free", merge_precheck: "required" })
 cell("AC-31 оба: both flags — both additions are in the letter", /ПРЕДПРОВЕРКА/.test(both.ord) && /ждёт уборки/.test(both.ord) && /ПРЕДПРОВЕРКА/.test(both.plan), both.ord)
@@ -117,7 +121,7 @@ review.releaseMergeLock("proj", REV)
   cell("AC-31 show устарела: the reason is shown", /предпроверка: устарела \(замок отпущен\)/.test(sStl), sStl)
   const sAcc = (await show(H.task(accepted.n), "sesREV2")).split("\n")[0]
   cell("AC-31 show принятая: at accepted_slot free the first line ends with 'ждёт уборки'", /принята/.test(sAcc) && / — ждёт уборки$/.test(sAcc), sAcc)
-  H.settings({ merge_precheck: "required" })
+  H.settings({ merge_precheck: "required", accepted_slot: "hold" })
   const sAccHold = (await show(H.task(accepted.n), "sesREV2")).split("\n")[0]
   cell("AC-31 show принятая при hold: no mark", !/ждёт уборки/.test(sAccHold), sAccHold)
 }
@@ -131,6 +135,12 @@ review.releaseMergeLock("proj", REV)
   cell("AC-26 описание crew_spawn: the description of crew_spawn names extra and the flags", /extra \{id/.test(sd) && /accepted_slot: free/.test(sd) && !!H.tools.crew_spawn.input.properties.extra, sd.slice(0, 120))
   const help = core.HELP
   cell("AC-26 HELP: the section ПРИЁМКА names the precheck, unlock, the lock on the same tip, the three keys", ["ПРЕДПРОВЕРКА ВЛИВАНИЯ", "merge_precheck", "precheck {n}", "unlock {n}", "accepted_slot", "cleanup_limit", "task_extra_fields", "только на ту"].every((w) => help.includes(w)), help.slice(0, 80))
+  cell(
+    "AC-26 HELP по умолчанию: the help says that the precheck and the free slot are on by default, that merge without a precheck is refused, the order, and the keys that return the old order",
+    ["по умолчанию required", "merge без предпроверки отклоняется", "review → check → precheck → merge → accept → cleaned", "merge_precheck: off", "accepted_slot: hold"].every((w) => help.includes(w)),
+    help.slice(help.indexOf("ПРЕДПРОВЕРКА ВЛИВАНИЯ"), help.indexOf("ПРЕДПРОВЕРКА ВЛИВАНИЯ") + 300),
+  )
+  cell("AC-26 описание crew_task по умолчанию: the English description says merge without a green precheck is refused by default and the explicit off returns the old order", /merge without a green precheck is refused/.test(d) && /merge_precheck: off/.test(d), d.slice(0, 120))
 }
 
 done(H)

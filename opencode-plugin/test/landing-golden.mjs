@@ -1,7 +1,12 @@
 // Golden texts of the base for the faster-landing task (005; node >= 24).
 //   node test/landing-golden.mjs --write            record the snapshot test/landing-golden.json (once, BEFORE the core is changed)
-//   node test/landing-golden.mjs --check            collect the texts again and compare with the snapshot: "golden ok" / "golden differs"
-//   node test/landing-golden.mjs --check --defaults the same, with the new keys of the project set to their default values
+//   node test/landing-golden.mjs --check --legacy   collect the texts again with the OLD behaviour set explicitly (accepted_slot: hold,
+//                                                   merge_precheck: off) and compare with the snapshot: "golden ok" / "golden differs"
+//   node test/landing-golden.mjs --dump <file> [--legacy | --new]  write the collected texts to a file with no comparison; no flag --
+//                                                   no new keys in the project file (the defaults: free and required, since 2026-10-09),
+//                                                   --new -- the same values set explicitly, --legacy -- hold and off
+// The snapshot is the base BEFORE task 005, which is the old behaviour; the defaults changed (owner, 2026-10-09), so the
+// snapshot is compared only with the explicit old values.
 // The texts: the refusal of crew_spawn by the limit with an accepted task, the reminders about an accepted, not cleaned task,
 // formatTaskLetter, planTaskLetter, reviewLetter, planMergeLetter, crew_task show and list for tasks in running, reviewing and
 // accepted. The temp folder and the clock are replaced by markers. LANDING_GOLDEN_FILE points to another snapshot file
@@ -15,10 +20,11 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const SNAPSHOT = process.env.LANDING_GOLDEN_FILE || path.join(HERE, "landing-golden.json")
 const PLUGIN = process.env.CREW_PLUGIN_DIR ? path.resolve(process.env.CREW_PLUGIN_DIR) : path.join(HERE, "..")
-const mode = process.argv.includes("--write") ? "write" : process.argv.includes("--check") ? "check" : ""
-const withDefaults = process.argv.includes("--defaults")
-if (!mode) {
-  console.log("usage: node test/landing-golden.mjs --write | --check [--defaults]")
+const dumpAt = process.argv.indexOf("--dump")
+const mode = process.argv.includes("--write") ? "write" : process.argv.includes("--check") ? "check" : dumpAt > 0 ? "dump" : ""
+const keysMode = process.argv.includes("--legacy") ? "legacy" : process.argv.includes("--new") ? "new" : "none"
+if (!mode || (mode === "check" && keysMode !== "legacy") || (mode === "write" && keysMode !== "legacy")) {
+  console.log("usage: node test/landing-golden.mjs --write --legacy | --check --legacy | --dump <file> [--legacy | --new]")
   process.exit(2)
 }
 
@@ -44,8 +50,9 @@ const settings = {
     { id: "tests", text: "тесты зелёные", required: true },
     { id: "notes", text: "заметки", required: false },
   ],
-  // explicit values of the keys of the faster-landing task: they must not change a single text
-  ...(withDefaults ? { accepted_slot: "hold", cleanup_limit: 10, merge_precheck: "off", task_extra_fields: [] } : {}),
+  // explicit values of the keys of the faster-landing task: legacy -- the old behaviour (the snapshot), new -- the defaults written out
+  ...(keysMode === "legacy" ? { accepted_slot: "hold", cleanup_limit: 10, merge_precheck: "off", task_extra_fields: [] } : {}),
+  ...(keysMode === "new" ? { accepted_slot: "free", cleanup_limit: 10, merge_precheck: "required", task_extra_fields: [] } : {}),
 }
 writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify(settings))
 const git = (...a) => execFileSync("git", ["-C", proj, "-c", "user.name=t", "-c", "user.email=t@t", ...a], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
@@ -156,10 +163,15 @@ if (mode === "write") {
   console.log(`golden written: ${Object.keys(result).length} texts -> ${path.basename(SNAPSHOT)}`)
   process.exit(0)
 }
+if (mode === "dump") {
+  writeFileSync(process.argv[dumpAt + 1], JSON.stringify(result, null, 1) + "\n")
+  console.log(`golden dumped: ${Object.keys(result).length} texts`)
+  process.exit(0)
+}
 const snap = JSON.parse(readFileSync(SNAPSHOT, "utf8"))
 const bad = [...new Set([...Object.keys(snap), ...Object.keys(result)])].filter((k) => snap[k] !== result[k])
 if (!bad.length) {
-  console.log(`golden ok (${Object.keys(result).length} texts${withDefaults ? ", default values of the new keys set" : ""})`)
+  console.log(`golden ok (${Object.keys(result).length} texts${keysMode === "legacy" ? ", old behaviour set explicitly" : ""})`)
   process.exit(0)
 }
 console.log(`golden differs: ${bad.join("; ")}`)

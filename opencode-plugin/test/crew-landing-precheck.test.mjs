@@ -74,11 +74,34 @@ fetch()
   H.settings({ merge_precheck: "off" })
   const t = H.reviewing()
   const r = await begin(t)
-  cell("AC-12 precheck off: the action is refused 'не включена', no record", /не включена/.test(r) && !T(t.n).precheck, r)
+  cell("AC-12 precheck off: the action is refused (the project turned it off with the explicit key), no record", /выключена явным ключом merge_precheck: off/.test(r) && !T(t.n).precheck, r)
   clearLock()
   lockFor(REV, t.n)
   const u = await call("crew_task", REV, { action: "unlock", n: t.n })
   cell("AC-12 unlock: unlock works at merge_precheck off, the lock is free", /отпущен/.test(u) && !H.holder(), u)
+  H.settings({ merge_precheck: "required" })
+}
+
+// ---- AC-12 default: no merge_precheck key means required (owner's decision, 2026-10-09)
+{
+  H.settings({ merge_precheck: undefined })
+  const t = H.reviewing()
+  cell("AC-12 умолчание: with no merge_precheck key loadConfig gives required", core.loadConfig(H.proj).mergePrecheck === "required", core.loadConfig(H.proj).mergePrecheck)
+  clearLock()
+  const m = await call("crew_task", REV, { action: "merge", n: t.n })
+  cell(
+    "AC-12 умолчание: merge without a precheck is refused, the lock is not taken, the text names the next step and the key of the old order",
+    !H.holder() && /merge без предпроверки отклоняется/.test(m) && /crew_task \{action: "precheck", n: \d+\}/.test(m) && /candidate, result/.test(m) && /merge_precheck: off/.test(m),
+    m,
+  )
+  const r = await begin(t)
+  cell("AC-12 умолчание: precheck works with no key and takes no lock", T(t.n).precheck?.state === "running" && !H.holder() && !/выключена/.test(r), r)
+  clearLock()
+  H.settings({ merge_precheck: "off" })
+  const u = H.reviewing()
+  const m2 = await call("crew_task", REV, { action: "merge", n: u.n })
+  cell("AC-12 off явно: merge takes the lock at once without a precheck, as before", H.holder()?.session === REV && /Замок вливания проекта proj твой/.test(m2) && !T(u.n).precheck, m2)
+  clearLock()
   H.settings({ merge_precheck: "required" })
 }
 

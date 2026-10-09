@@ -79,15 +79,16 @@ cell("AC-25 отказы: a worker cannot set the new keys either", /тольк�
 
 // ---- AC-25 записи читаются: right values are written, applied after the commit, defaults are the same
 const d = core.loadConfig(work)
-cell("AC-25 записи читаются: the defaults without the keys", d.acceptedSlot === "hold" && d.cleanupLimit === 10 && d.mergePrecheck === "off" && Array.isArray(d.extraFields) && d.extraFields.length === 0, JSON.stringify([d.acceptedSlot, d.cleanupLimit, d.mergePrecheck, d.extraFields]))
+// since 2026-10-09 the defaults are free and required; the explicit hold and off give the old behaviour back
+cell("AC-25 записи читаются: the defaults without the keys", d.acceptedSlot === "free" && d.cleanupLimit === 10 && d.mergePrecheck === "required" && Array.isArray(d.extraFields) && d.extraFields.length === 0, JSON.stringify([d.acceptedSlot, d.cleanupLimit, d.mergePrecheck, d.extraFields]))
 const fields = [{ id: "ids", label: "Диапазон номеров реестра", hint: "например 40-45" }, { id: "wave", label: "Волна" }]
-const ok = await call("sesINT", { action: "set", values: { accepted_slot: "free", cleanup_limit: 0, merge_precheck: "required", task_extra_fields: fields } })
+const ok = await call("sesINT", { action: "set", values: { accepted_slot: "hold", cleanup_limit: 0, merge_precheck: "off", task_extra_fields: fields } })
 cell("AC-25 записи читаются: right values are written to the working copy", /Записано/.test(ok) && NEW.every((k) => k in JSON.parse(readFileSync(file, "utf8"))), ok)
-cell("AC-25 записи читаются: until the commit the defaults apply", core.loadConfig(work).acceptedSlot === "hold" && core.loadConfig(work).mergePrecheck === "off", JSON.stringify(core.loadConfig(work)))
+cell("AC-25 записи читаются: until the commit the defaults apply", core.loadConfig(work).acceptedSlot === "free" && core.loadConfig(work).mergePrecheck === "required", JSON.stringify(core.loadConfig(work)))
 git(cfgDir, "add", "-A")
 git(cfgDir, "commit", "-q", "-m", "set")
 const after = core.loadConfig(work)
-cell("AC-25 записи читаются: after the commit loadConfig reads the four keys", after.acceptedSlot === "free" && after.cleanupLimit === 0 && after.mergePrecheck === "required" && JSON.stringify(after.extraFields) === JSON.stringify(fields), JSON.stringify([after.acceptedSlot, after.cleanupLimit, after.mergePrecheck, after.extraFields]))
+cell("AC-25 записи читаются: after the commit loadConfig reads the four keys", after.acceptedSlot === "hold" && after.cleanupLimit === 0 && after.mergePrecheck === "off" && JSON.stringify(after.extraFields) === JSON.stringify(fields), JSON.stringify([after.acceptedSlot, after.cleanupLimit, after.mergePrecheck, after.extraFields]))
 const show = await call("sesWRK", { action: "show" })
 cell("AC-25 записи читаются: show names the four keys with their sources", NEW.every((k) => new RegExp(`${k} = .* — файл, ветка main`).test(show)), show)
 // a tolerant reading: bad elements are dropped, the rest stays (a file written by hand)
@@ -95,7 +96,7 @@ writeFileSync(file, JSON.stringify({ project: "proj", root: "..", cleanup: "loca
 git(cfgDir, "add", "-A")
 git(cfgDir, "commit", "-q", "-m", "hand-written")
 const tol = core.loadConfig(work)
-cell("AC-25 записи читаются: a hand-written file is read tolerantly", tol.acceptedSlot === "hold" && tol.cleanupLimit === 10 && tol.mergePrecheck === "off" && JSON.stringify(tol.extraFields) === JSON.stringify([{ id: "ok1", label: "Один" }, { id: "ok2", label: "Два", hint: "подсказка" }]), JSON.stringify(tol))
+cell("AC-25 записи читаются: a hand-written file is read tolerantly", tol.acceptedSlot === "free" && tol.cleanupLimit === 10 && tol.mergePrecheck === "required" && JSON.stringify(tol.extraFields) === JSON.stringify([{ id: "ok1", label: "Один" }, { id: "ok2", label: "Два", hint: "подсказка" }]), JSON.stringify(tol))
 
 // ---- AC-25 guide: the four keys with a question, a recommendation and the reason
 const guide = await call("sesWRK", { action: "guide" })

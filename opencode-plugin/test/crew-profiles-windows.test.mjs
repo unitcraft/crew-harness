@@ -32,7 +32,7 @@ const SETS = {
   "cross-codex": { develop: c("claude", "medium"), plan: c("claude", "heavy"), accept: c("codex", "heavy"), plan_accept: c("codex", "heavy") },
   "kimi-only": { develop: c("kimi", "heavy"), plan: c("kimi", "heavy"), accept: c("kimi", "heavy"), plan_accept: c("kimi", "heavy") },
 }
-const base = { spawn_limits: { worker: 50, "*": 50, reviewer: 50 }, inflight_limit: 50, worktrees: "wt", cleanup: "none", branch_name: "p{n}-{slug}" }
+const base = { spawn_limits: { worker: 50, "*": 50, reviewer: 50 }, inflight_limit: 50, worktrees: "wt", cleanup: "none", branch_name: "p{n}-{slug}", merge_precheck: "off" }
 const settingsOf = (dir) => path.join(dir, ".opencode", "crew-harness.json")
 const writeSettings = (dir, obj) => writeFileSync(settingsOf(dir), JSON.stringify({ ...base, ...obj }))
 const readSettings = (dir) => JSON.parse(readFileSync(settingsOf(dir), "utf8"))

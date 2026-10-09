@@ -371,12 +371,16 @@ The integrator stays free for the owner and does not re-check accepted work:
   (or `integrator`) role — a reviewer who changed role loses them; the executor of a task is refused by name. The
   role is shared. The default stays `worker`;
 - `inflight_limit` (6) bounds the tasks running and in review; `P0` passes every limit;
-- `accepted_slot: "free"` (default `hold`, as before): an accepted task that is not cleaned yet waits for cleanup and
+- `accepted_slot: "free"` (the default since the owner's decision of 2026-10-09; the explicit `hold` returns the previous
+  behaviour: the accepted task holds its place until `cleaned`): an accepted task that is not cleaned yet waits for cleanup and
   no longer counts in `inflight_limit` (`crew_spawn` and the steps of an auto plan count it separately); `cleanup_limit`
   (10, `0` — no limit) stops new work (not `P0`) when that many accepted tasks wait for cleanup, naming them. The tab of an
   accepted task is still woken and reminded (`accepted_reminder_min`), `crew_task list` and `show` mark it "ждёт уборки";
   `OPEN_STATUSES` and `isOpen` are not changed;
-- `merge_precheck: "required"` (default `off`: `merge` takes the lock at once, as before): the lock is issued only on the
+- `merge_precheck: "required"` (the default since the owner's decision of 2026-10-09; the explicit `off` returns the previous
+  behaviour: `merge` takes the lock at once): `merge` without a green precheck is refused with text that names the next step
+  (`precheck {n}` without a lock, then `merge` on the checked tip, and the key that restores the old order), so reviewers
+  move to the new order by themselves. The lock is issued only on the
   tip of the target branch where the candidate was already built and checked. The reviewer calls `precheck {n}` (the plugin
   reads the tip of `origin/<target_branch>` with `git ls-remote`, nothing is fetched or written, and names it), merges that tip
   into a candidate (for example `integrate/tN`), runs the project's CI on it, then `precheck {n, candidate, result}` — the

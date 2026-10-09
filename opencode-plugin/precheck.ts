@@ -305,7 +305,7 @@ const releaseOwnLock = (project: string, session: string, n: number, at?: number
 export type Gate = { text: string } | { granted: string }
 
 /**
- * Замок вливания при merge_precheck: required. Порядок (план 005, «Ворота merge»): запись зелёная и этого круга; держание замка
+ * Замок вливания при merge_precheck: required (по умолчанию). Порядок (план 005, «Ворота merge»): запись зелёная и этого круга; держание замка
  * узнаётся по mergeHolder до takeMergeLock; повтор держателя — сначала «уже влито», затем чтение вершины; замок берётся, вершина
  * читается ПОД замком; не совпала с основой — замок отпускается и отказ называет обе вершины; затем запись перечитывается с диска
  * и сверяется, замок сверяется ещё раз и только тогда в запись пишется «замок на вершине». `await` стоит только в чтении
@@ -320,7 +320,7 @@ export async function gateMerge(t: Task, session: string, target: string): Promi
   const start = `Начни с crew_task {action: "precheck", n: ${t.n}}: назову вершину ${target}, которую нужно влить в кандидата (например, integrate/t${t.n}) и прогнать CI.`
   // 2. запись предпроверки
   if (!isFresh(rec, t)) {
-    if (!rec) return refuse(`у задачи ${taskRef(t)} нет зелёной предпроверки (merge_precheck: required)`, start)
+    if (!rec) return refuse(`merge без предпроверки отклоняется: у задачи ${taskRef(t)} нет зелёной предпроверки (в проекте по умолчанию merge_precheck: required)`, `${start} Затем влей и проверь кандидата, заверши предпроверку (crew_task {action: "precheck", n: ${t.n}, candidate, result}) и снова вызови merge: замок выдаётся на проверенную вершину. Замок для предпроверки не нужен, чужое вливание она не задерживает. Прежний порядок (merge без предпроверки) возвращает интегратор проекта явным ключом merge_precheck: off.`)
     if (rec.state === "running") return refuse(`предпроверка задачи ${taskRef(t)} ещё идёт (кандидат не завершён)`, `Заверши её: crew_task {action: "precheck", n: ${t.n}, candidate, result}.`)
     if (rec.state === "stale") return refuse(`предпроверка задачи ${taskRef(t)} устарела (${rec.stale?.reason ?? "причина не записана"})`, start)
     return refuse(`запись предпроверки прежнего круга: задачу с тех пор возвращали или передавали`, start)

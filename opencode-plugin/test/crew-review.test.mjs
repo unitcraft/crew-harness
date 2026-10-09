@@ -25,6 +25,8 @@ const settings = (reviewers) =>
       worktrees: "wt",
       branch_name: "p{n}-{slug}",
       cleanup: "local",
+      merge_precheck: "off", // these cells check the old order of the merge lock (the default is required since 2026-10-09)
+      accepted_slot: "hold",
       rework_max: 1,
       spawn_limits: { worker: 5, reviewer: reviewers },
       acceptance: [

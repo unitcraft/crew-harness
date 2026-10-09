@@ -221,11 +221,11 @@ export type CrewConfig = {
   planTemplate: string
   inbound: "integrator" | "any" | "none"
   root?: string
-  /** принятая, но не очищенная задача: hold — занимает место в inflight_limit (как раньше), free — не занимает (считается cleanup_limit) */
+  /** принятая, но не очищенная задача: free (по умолчанию) — не занимает место в inflight_limit (считается cleanup_limit), hold — занимает, как было до задачи 005 */
   acceptedSlot: "hold" | "free"
   /** free: сколько принятых и не очищенных задач допустимо, прежде чем новую работу не ставят (0 — без предела) */
   cleanupLimit: number
-  /** off — merge берёт замок сразу (как раньше); required — замок только после зелёной предпроверки на той же вершине */
+  /** required (по умолчанию) — замок только после зелёной предпроверки на той же вершине; off — merge берёт замок сразу, как было до задачи 005 */
   mergePrecheck: "off" | "required"
   /** дополнительные поля задачи, объявленные проектом (task_extra_fields) */
   extraFields: ExtraField[]
@@ -360,9 +360,9 @@ export function loadConfig(dir: string): CrewConfig {
     planTemplate: typeof j.plan_template === "string" ? j.plan_template.trim() : "",
     inbound: oneOf(j.inbound, ["integrator", "any", "none"] as const, "integrator"),
     root,
-    acceptedSlot: oneOf(j.accepted_slot, ["hold", "free"] as const, "hold"),
+    acceptedSlot: oneOf(j.accepted_slot, ["hold", "free"] as const, "free"),
     cleanupLimit: num(j.cleanup_limit, 10),
-    mergePrecheck: oneOf(j.merge_precheck, ["off", "required"] as const, "off"),
+    mergePrecheck: oneOf(j.merge_precheck, ["off", "required"] as const, "required"),
     extraFields: extraFieldsOf(j.task_extra_fields),
     answerMode: normalizeAnswerMode(j.answer_mode).map,
     answerMax: normalizeAnswerMax(j.answer_max),
@@ -1176,13 +1176,15 @@ reviewer; места worker не занимает), и merge, accept, cleaned р
 перепроверяет. Приёмщик: crew_task review → rework {text} | check {step} → проверка → check {step, result} по каждому шагу (ход видно в окне) → merge (замок вливания проекта) → accept {commit?}
 (плагин проверит обязательные шаги приёмки и что ветка или коммит в целевой ветке) → очистка → cleaned (плагин
 проверит, что worktree и ветка удалены). Потом сессии задачи закрываются, интегратору тихая сводка.
-ПРЕДПРОВЕРКА ВЛИВАНИЯ (настройка проекта merge_precheck: required; по умолчанию off). Замок вливания выдаётся только на ту
-вершину главной ветки, на которой кандидат уже собран и проверен: crew_task precheck {n} — плагин читает вершину origin и
-называет её; влей её в кандидата (например, integrate/tN), прогони CI; crew_task precheck {n, candidate, result} — запись
-«зелёная»; merge — замок на ту же вершину (сдвинулась — отказ, предпроверка заново). crew_task unlock {n} отпускает замок,
-который ты держишь для задачи (запись устаревает). Запись устаревает и при rework, reassign, cancel, новой приёмке. Плагин
-ничего не вливает и не пушит. В проекте с accepted_slot: free принятая задача ждёт уборки и место в inflight_limit не занимает
-(cleanup_limit ограничивает число ждущих). task_extra_fields — дополнительные поля задачи проекта: crew_spawn и assign
+ПРЕДПРОВЕРКА ВЛИВАНИЯ (настройка проекта merge_precheck; по умолчанию required — включена). Порядок приёмщика: review → check → precheck → merge → accept → cleaned.
+Замок вливания выдаётся только на ту вершину главной ветки, на которой кандидат уже собран и проверен: crew_task precheck {n} —
+замок не берёт, плагин читает вершину origin и называет её; влей её в кандидата (например, integrate/tN), прогони CI;
+crew_task precheck {n, candidate, result} — запись «зелёная»; merge — замок на ту же вершину (сдвинулась — отказ, предпроверка
+заново). merge без предпроверки отклоняется: сначала precheck. crew_task unlock {n} отпускает замок, который ты держишь для
+задачи (запись устаревает). Запись устаревает и при rework, reassign, cancel, новой приёмке. Плагин ничего не вливает и не
+пушит. Прежний порядок (merge берёт замок сразу) возвращает интегратор проекта явным ключом merge_precheck: off в настройках.
+По умолчанию accepted_slot: free — принятая задача ждёт уборки и место в inflight_limit не занимает (cleanup_limit ограничивает
+число ждущих); прежнее поведение (занимает место до cleaned) — ключ accepted_slot: hold. task_extra_fields — дополнительные поля задачи проекта: crew_spawn и assign
 принимают extra {id: строка}; значения видны исполнителю, приёмщику и в show.
 
 ДРУГОЙ ПРОЕКТ. Писать в чужой проект можно только его интегратору (настройка проекта-получателя inbound: integrator
@@ -1712,7 +1714,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
   const crewSpawn: CrewTool = {
     name: "crew_spawn",
     description:
-      "Integrator only: start a task #N in a new session (it runs in the OpenCode server even with no window). goal and criteria are required (the project may require more: boundaries, open_questions); tier heavy|medium|light picks the model (by default claude-code opus|sonnet|haiku, spawn_models of the project overrides; an enabled model-profile set /crew-sets overrides both for the stage it describes -- the tier on the input then picks the tier inside the family of the set; without a tier the tier of the cell is used); priority P0..P3. extra {id: one line up to 300 characters} fills the extra task fields the project declared (task_extra_fields; crew_config show lists them). The project limits running tasks per role, and with accepted_slot: free accepted tasks waiting for cleanup do not take a place in inflight_limit (cleanup_limit bounds them). The report comes back as an answer to the task's qid: crew_wait {qid}. Manage tasks with crew_task.",
+      "Integrator only: start a task #N in a new session (it runs in the OpenCode server even with no window). goal and criteria are required (the project may require more: boundaries, open_questions); tier heavy|medium|light picks the model (by default claude-code opus|sonnet|haiku, spawn_models of the project overrides; an enabled model-profile set /crew-sets overrides both for the stage it describes -- the tier on the input then picks the tier inside the family of the set; without a tier the tier of the cell is used); priority P0..P3. extra {id: one line up to 300 characters} fills the extra task fields the project declared (task_extra_fields; crew_config show lists them). The project limits running tasks per role, and by default (accepted_slot: free; hold returns the old order) accepted tasks waiting for cleanup do not take a place in inflight_limit (cleanup_limit bounds them). The report comes back as an answer to the task's qid: crew_wait {qid}. Manage tasks with crew_task.",
     input: {
       type: "object",
       properties: {
@@ -1810,7 +1812,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
   const crewTask: CrewTool = {
     name: "crew_task",
     description:
-      "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), show {n} (details and history), and for the integrator: assign {session, goal, criteria, extra?, ...} (give a task to an existing tab instead of a new session; extra {id: line} fills the project's extra task fields, see task_extra_fields in crew_config), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done; with an enabled model-profile set the model is taken by the set at that moment), cancel {n, text?}, priority {n, priority}, order {to: 'project.integrator', goal, criteria, ...} (work for another project: its integrator does it with its own tasks; the order follows them); for the task's reviewer: review {n} (start), precheck {n} (project flag merge_precheck: required -- read the tip of the target branch first, integrate it into a candidate, run CI, then precheck {n, candidate, result}; the lock is not taken), merge {n} (the project's merge lock; under merge_precheck: required it is issued only on the tip where the candidate was checked), unlock {n} (release the merge lock you hold for the task; a precheck record then becomes stale), rework {n, text, sync?} (sync: true -- only to merge the fresh target branch: not a rework round, not counted in rework_max), check {n, step} before checking a step and {n, step, result} after it (the owner sees the progress in the window), accept {n, checks?, commit?} (steps marked by check count; the plugin checks the required steps and that it is merged), cleaned {n} (the plugin checks the worktree and branch are gone). With the project's reviewer: acceptor, merge/accept/cleaned also need the acceptor (or integrator) role.",
+      "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), show {n} (details and history), and for the integrator: assign {session, goal, criteria, extra?, ...} (give a task to an existing tab instead of a new session; extra {id: line} fills the project's extra task fields, see task_extra_fields in crew_config), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done; with an enabled model-profile set the model is taken by the set at that moment), cancel {n, text?}, priority {n, priority}, order {to: 'project.integrator', goal, criteria, ...} (work for another project: its integrator does it with its own tasks; the order follows them); for the task's reviewer: review {n} (start), precheck {n} (on by default, merge_precheck: required; the old order is the explicit merge_precheck: off -- read the tip of the target branch first, integrate it into a candidate, run CI, then precheck {n, candidate, result}; the lock is not taken), merge {n} (the project's merge lock; by default (merge_precheck: required) merge without a green precheck is refused, run precheck first, and the lock is issued only on the tip where the candidate was checked; merge_precheck: off takes the lock at once), unlock {n} (release the merge lock you hold for the task; a precheck record then becomes stale), rework {n, text, sync?} (sync: true -- only to merge the fresh target branch: not a rework round, not counted in rework_max), check {n, step} before checking a step and {n, step, result} after it (the owner sees the progress in the window), accept {n, checks?, commit?} (steps marked by check count; the plugin checks the required steps and that it is merged), cleaned {n} (the plugin checks the worktree and branch are gone). With the project's reviewer: acceptor, merge/accept/cleaned also need the acceptor (or integrator) role.",
     input: {
       type: "object",
       properties: {
@@ -2050,7 +2052,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           return { content: `Раунд ${no} записан (${line}). Чистых подряд ${p.clean} из ${tcfg.planCleanRounds}; следующий раунд — новая сессия.` }
         }
         if (action === "precheck") {
-          if (tcfg.mergePrecheck !== "required") return { content: "Предпроверка не включена в проекте (merge_precheck: off): merge берёт замок без неё. Включает интегратор проекта настройкой merge_precheck: required." }
+          if (tcfg.mergePrecheck !== "required") return { content: "Предпроверка в проекте выключена явным ключом merge_precheck: off: merge берёт замок без неё, precheck не нужен. Включить её (по умолчанию она включена) может интегратор проекта: убрать ключ или поставить merge_precheck: required." }
           if (t.plan && !(t.plan.approval && t.plan.approval.decision !== "no")) return { content: `Задача ${taskRef(t)} сейчас в раунде перепроверки плана ${t.plan.n}: вливания нет, предпроверка не нужна. Она действует на вливание согласованного плана (после решения, статус на приёмке).` }
           if (t.status !== "reviewing") return { content: `Сначала crew_task {action: "review", n: ${t.n}} (задача сейчас ${statusRu(t.status)}).` }
           const finishing = input.candidate !== undefined || input.result !== undefined
