@@ -9,7 +9,7 @@ import { execFileSync } from "node:child_process"
 import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const script = path.join(here, "answer-golden.mjs")
@@ -33,6 +33,16 @@ cell("AC-01 без ключей", first.code === 0 && /^golden ok/m.test(first.o
 // the second pass: answer_mode set to {"default": "owner"}; on the base the key is unknown and ignored, the texts stay the same
 const second = run(["--check", "--owner"])
 cell("AC-01 owner во всех типах", second.code === 0 && /^golden ok/m.test(second.out), second.out.slice(0, 1500))
+
+// AC-04: a pack of three blocks of the form of the Canon plus the lines of the type and the permission: the old pass (endsWithQuestion)
+// sees no question in it. The cell uses only the old function, so it is green on the base too.
+const plugin = process.env.CREW_PLUGIN_DIR ? path.resolve(process.env.CREW_PLUGIN_DIR) : path.join(here, "..")
+process.env.XDG_DATA_HOME = tmp
+const status = await import(pathToFileURL(path.join(plugin, "status.ts")).href)
+const NL = String.fromCharCode(10)
+const blk = (n, type, rec) => [`В-0${n} Вопрос номер ${n}?`, `Тип: ${type}`, ...(rec ? [`Рекомендация: ${rec}`] : []), "Автоответ: допустим"].join(NL)
+const pack = [blk(1, "implementation", "делаем по первому варианту"), "", blk(2, "implementation"), "", blk(3, "gate", "влить ветку")].join(NL)
+cell("AC-04 endsWithQuestion", status.endsWithQuestion(pack) === undefined, String(status.endsWithQuestion(pack)))
 
 // the control: one line of a copy of the snapshot is spoiled -- the check must say "golden differs"
 const spoiled = path.join(tmp, "spoiled.json")

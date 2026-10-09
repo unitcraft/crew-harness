@@ -95,14 +95,15 @@ export async function harness(prefix, opts = {}) {
     open: (sid) => hooks.context?.({ sessionID: sid, system: [], model: { id: "opus", providerID: "claude-code" } }),
     /**
      * a turn of a session as OpenCode records it: the request (busy card), the user row, the assistant text, the idle row and the
-     * idle event. user: false -- the turn is not started by the owner's words but by a letter of the plugin
+     * idle event. user: the text of the first row (a letter mark makes it a letter of the plugin, not the owner's word)
      */
-    turn: async (sid, text, { user = "сделай", tool = false, at = Date.now(), event = true } = {}) => {
+    turn: async (sid, text, { user = "сделай", tool = false, at = Date.now(), event = true, afterRows } = {}) => {
       await H.open(sid)
       if (user) msg(sid, "user", { text: user }, at - 2)
       msg(sid, "assistant", { content: [...(tool ? [{ type: "tool", name: "bash" }] : []), { type: "text", text }] }, at - 1)
       msg(sid, "idle", { outcome: "succeeded" }, at)
       db.prepare("update session_v2 set time_idle = ? where id = ?").run(at, sid)
+      if (afterRows) afterRows(at, sid) // rows written after the end of the turn, before the idle event (the owner writes at once)
       if (event) await events["session.idle"]({ properties: { sessionID: sid } })
     },
     /** a row of the owner after the turn ended */
