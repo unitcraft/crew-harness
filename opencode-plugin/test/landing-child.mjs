@@ -8,7 +8,7 @@ import path from "node:path"
 import { harness } from "./landing-harness.mjs"
 
 const [tmp, sync, k, sid, tabsJson, inputJson] = process.argv.slice(2)
-const H = await harness("child", { attach: tmp, tabs: JSON.parse(tabsJson) })
+const H = await harness("child", { attach: tmp, tabs: JSON.parse(tabsJson), only: sid })
 writeFileSync(path.join(sync, `ready-${k}`), "1")
 while (!existsSync(path.join(sync, "go"))) await new Promise((r) => setTimeout(r, 2))
 let out

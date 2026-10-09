@@ -73,7 +73,7 @@ for (let round = 1; round <= 5; round++) {
   cell(
     `AC-16 раунд ${round}: of 8 processes exactly one got the lock, the others were refused naming the holder`,
     winners.length === 1 && holder?.session === winners[0].sid && losers.length === 7 && losers.every((r) => /Замок вливания проекта proj у приёмщика задачи #\d+ \(сессия sesR\d\)/.test(r.text)),
-    JSON.stringify(res.map((r) => [r.sid, r.code, String(r.text).slice(0, 90)])),
+    JSON.stringify(res.map((r) => [r.sid, r.code, String(r.text).slice(0, String(r.text).startsWith("NO RESULT") ? 900 : 90)])),
   )
 }
 
@@ -88,7 +88,7 @@ for (let round = 1; round <= 5; round++) {
   cell(
     `AC-18 раунд ${round}: the lock older than 2 h is taken by exactly one of 7 processes`,
     winners.length === 1 && H.holder()?.session === winners[0].sid,
-    `winners ${winners.length}: ${JSON.stringify(res.map((r) => [r.sid, r.code, String(r.text).slice(0, 90)]))} holder ${JSON.stringify(H.holder())}`,
+    `winners ${winners.length}: ${JSON.stringify(res.map((r) => [r.sid, r.code, String(r.text).slice(0, String(r.text).startsWith("NO RESULT") ? 900 : 90)]))} holder ${JSON.stringify(H.holder())}`,
   )
 }
 clearLock()

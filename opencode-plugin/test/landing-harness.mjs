@@ -112,7 +112,9 @@ export async function harness(prefix, opts = {}) {
     return (await tools[name].execute(input, { sessionID: sid })).content
   }
   const roleOf = (sid) => (sid === "sesINTEG1" ? "integrator" : "worker")
-  for (const sid of sids) {
+  // a child (attach) registers only the session it acts as: the idle events of the other tabs would make every instance nudge the same
+  // obligations at once, and two processes writing one letter file of the same name collide on a rename (a plugin weakness outside this task)
+  for (const sid of attach ? (opts.only ? [opts.only] : []) : sids) {
     if (!attach) core.saveCard({ session: sid, role: roleOf(sid), auto: false, title: sid, directory: proj, repo: "proj", project: "proj", pid: process.pid, updated: Date.now() })
     await hooks.context({ sessionID: sid, system: [], model: { id: "x", providerID: "y" } })
     await events["session.idle"]({ properties: { sessionID: sid } })
