@@ -71,19 +71,25 @@ function measure(blocks) {
   return { suitable: suitable.length, passed: passed.length, passedBare: passedBare.length, pct: pct(passed.length, suitable.length), pctBare: pct(passedBare.length, suitable.length), bySource, passedList: passed }
 }
 
-const r = measure(data.blocks)
-console.log(`сетка слов: прошло ${r.passed} из ${r.suitable} пригодных (${r.pct} %)`)
-console.log(`без пояснения «потому что …»: прошло бы ${r.passedBare} из ${r.suitable} (${r.pctBare} %)`)
-console.log(`основ в списке: ${P.GATE_STEMS.length}`)
+const fresh = data.blocks.filter((b) => b.fresh)
+const recorded = data.blocks.filter((b) => !b.fresh)
+const r = measure(recorded)
+const all = measure(data.blocks)
+console.log(`по таблице Т-10 спецификации (${recorded.length} записанных блоков): прошло ${r.passed} из ${r.suitable} пригодных (${r.pct} %); без пояснения «потому что …» прошло бы ${r.passedBare} из ${r.suitable} (${r.pctBare} %)`)
 for (const [s, v] of Object.entries(r.bySource)) console.log(`  ${s}: пригодных ${v.total}, прошли ${v.pass.join(", ") || "нет"}${v.mismatch.length ? `, расхождение с таблицей: ${v.mismatch.join(", ")}` : ""}`)
 const mismatches = Object.values(r.bySource).flatMap((v) => v.mismatch)
-// the figures of the specification are for the snapshot as recorded; blocks added later change the totals, not the check by source
-const asRecorded = data.blocks.every((b) => b.rev === "d31e22a" || b.rev === "e606a43")
-if (asRecorded && data.blocks.length === 66) {
+if (recorded.length === 66) {
   const same = r.suitable === 44 && r.passed === 9 && r.pct === 20 && r.passedBare === 16 && mismatches.length === 0
   console.log(`сверка с таблицей Т-10 спецификации (44 / 9 / 20 % / 16): ${same ? "совпадает" : "РАСХОДИТСЯ"}`)
   if (!same) process.exitCode = 1
-} else console.log(`блоков в снимке ${data.blocks.length}: сверка с цифрами таблицы Т-10 не применяется`)
+} else console.log(`записанных блоков ${recorded.length}: сверка с цифрами таблицы Т-10 не применяется`)
+if (fresh.length) {
+  const f = measure(fresh)
+  console.log(`свежие блоки (${fresh.length}, ревизии ${[...new Set(fresh.map((b) => b.rev))].join(", ")}): пригодных ${f.suitable}, прошли ${f.passed} (${f.pct} %): ${fresh.filter((b) => b.label === "suitable" && passes(b.text)).map((b) => `${b.source} ${b.id}`).join(", ") || "нет"}`)
+}
+console.log(`основ в списке: ${P.GATE_STEMS.length}`)
+console.log(`сетка слов: прошло ${all.passed} из ${all.suitable} пригодных (${all.pct} %)`)
+console.log(`без пояснения «потому что …»: прошло бы ${all.passedBare} из ${all.suitable} (${all.pctBare} %)`)
 
 if (process.argv.includes("--control")) {
   const pick = data.blocks.find((b) => b.label === "suitable" && passes(b.text))
