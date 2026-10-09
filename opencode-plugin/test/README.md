@@ -69,6 +69,16 @@ stops at the first failing file.
 | | `crew-profiles-cmd` | the window commands `/crew-sets` and `/crew-profiles`: tables, show, use with its report, the edit verbs and their refusals, check, save / save force, the forms of reset, one log line per edit, answers without a turn of the model |
 | | `crew-profiles-docs` | the README example is valid JSON of the two keys and passes the key and link checks, holds the starting content; the README and the help describe keys, commands, the window file and what applies where; only the two command names, in the plural |
 | Progress of background sessions | `crew-progress` | the `progress.log` journal: line and time forms, sessions, states, the copy per session over real working trees, the cache and its budget, the texts of the "Ход работ" block and of `/crew-progress`; shares `progress-vectors.json` with the guard |
+| Faster landing (task 005) | `crew-landing-golden` | the texts of the base (refusals, letters, show, list) are the same without the new keys and with their default values; shared snapshot `landing-golden.json` |
+| | `crew-landing-config` | the four keys `accepted_slot`, `cleanup_limit`, `merge_precheck`, `task_extra_fields`: refusals, reading back, guide, reserved ids |
+| | `crew-landing-slot` | an accepted task waits for cleanup without a place in `inflight_limit`; `cleanup_limit`; auto-plan steps; the tab is still woken; the old words at `hold` |
+| | `crew-landing-extra` | extra task fields: input and refusals, the executor and reviewer letters, the plan task letter, show, reassign, the path of the record |
+| | `crew-landing-precheck` | the precheck record: begin, finish and its refusals, unlock, rights, staleness on rework / reassign / cancel / new review, the candidate checks |
+| | `crew-landing-gate` | the gate of `merge` under `merge_precheck: required` on real git with a local origin: lock only on the checked tip, the tip read under the lock, repeats of the holder, changes inside the read |
+| | `crew-landing-hints` | the accept warning and the neighbour hints (read from the task journal only) |
+| | `crew-landing-letters` | the letter about interrupted work with the state of the precheck and the lock; the reviewer letters, show and help for the flags |
+| | `crew-landing-tip` | heavy: reading the tip of the target branch, the term and the process tree of `git ls-remote` on silent, closed and unreachable addresses |
+| | `crew-landing-race` | heavy: child processes — 8 reviewers at one lock, a stale lock taken by 7, a restart in the middle of a landing |
 
 ## Manual checks (not in `npm test`)
 
