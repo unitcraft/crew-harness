@@ -296,8 +296,10 @@ export const GATE_STEMS: string[] = [
 
 /**
  * Приведение текста к виду для сопоставления: NFKC; удаление знаков Cf (невидимые, мягкий перенос) и Mn (комбинируемые);
- * нижний регистр; «ё» → «е»; всякий знак кроме букв, цифр, точки и подчёркивания — пробел; подчёркивание на краю слова и
- * серия точек в конце слова — пробел; текст обрамляется пробелами.
+ * нижний регистр; «ё» → «е»; всякий знак, который не буква и не цифра (пунктуация, символы, разделители любых видов письма,
+ * точка и подчёркивание в том числе), — пробел, то есть граница слова: «proj.merger», «nova_merger» и точки других начертаний
+ * (U+FF0E, U+2024, U+FE52 приводятся NFKC к точке) не прячут слово ворот; текст обрамляется пробелами. Основы из словаря
+ * приводятся тем же способом (в «spec.md» и «plan.md» точка тоже граница).
  */
 export function normalizeGateText(text: string): string {
   const t = String(text ?? "")
@@ -305,16 +307,15 @@ export function normalizeGateText(text: string): string {
     .replace(/[\p{Cf}\p{Mn}]/gu, "")
     .toLowerCase()
     .replace(/ё/g, "е")
-    .replace(/[^\p{L}\p{N}._]/gu, " ")
-    .replace(/(?<![\p{L}\p{N}])_+|_+(?![\p{L}\p{N}])/gu, " ")
-    .replace(/\.+(?=\s|$)/g, " ")
+    .replace(/[^\p{L}\p{N}]/gu, " ")
   return ` ${t.replace(/\s+/g, " ").trim()} `
 }
 
 type StemRule = { stem: string; needle: string }
 const STEM_RULES: StemRule[] = GATE_STEMS.map((stem) => {
   const whole = stem.length > 2 && stem.startsWith("|") && stem.endsWith("|")
-  const needle = whole ? ` ${stem.slice(1, -1)} ` : stem.startsWith("^") ? ` ${stem.slice(1)}` : stem
+  const core = normalizeGateText(whole ? stem.slice(1, -1) : stem.startsWith("^") ? stem.slice(1) : stem).trim()
+  const needle = whole ? ` ${core} ` : stem.startsWith("^") ? ` ${core}` : core
   return { stem, needle }
 })
 

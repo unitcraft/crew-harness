@@ -281,7 +281,7 @@ refuses them) — [ADR-0010](../doc/canon/decisions/ADR-0010-question-answering-
 - `answer_max` — how many answers in a row one session may get (3); the owner's word in the tab resets the count.
 
 **The form of a question.** A session asks in text: a block `В-01 …?` with the lines `Тип: requirements|plan|implementation|gate`,
-`Рекомендация: …` and `Автоответ: допустим`, and «?» в конце строки with the question: the recommendation is one paragraph without blank lines (a blank line ends the value), the question ends the line and the fields stand on separate lines below it (вопрос заканчивай знаком «?» в конце строки, поля — отдельными строками ниже). A question is closed only when all of this
+`Рекомендация: …` and `Автоответ: допустим`, and «?» в конце строки with the question: the recommendation is one paragraph without blank lines (a blank line ends the value), the question ends the line and the fields stand on separate lines below it. In the words of the Canon: вопрос заканчивай знаком «?» в конце строки, поля — отдельными строками ниже. A question is closed only when all of this
 holds at once: the type is declared and is not `gate`, the mode of the type is `recommendations`, the recommendation is not empty, the
 permission `Автоответ: допустим` stands, no word of the gates is in its text, the session is not a review session, the limit is not
 spent, and the parse went through. Anything else — and any doubt — stays with the owner, who gets one notice with what is left.
@@ -294,7 +294,7 @@ earlier specifications it lets pass about a fifth of the questions that are fit 
 with the recommendation, the list of the gates "только слово владельца", the rule "вышел за рекомендацию — вопрос владельцу" and the
 numbers of the questions that are left. It is not the owner's word: слово владельца старше автоответа.
 
-**Where to look and how to take it back.** Every answer is a file in `answers/` of the mailbox (kept 30 days) and a note in the
+**Where to look and how to take it back.** Every answer is a file in `answers/` of the mailbox (kept 30 days from the answer, then removed) and a note in the
 history of the task (`crew_task show`); the section "Автоответы" of `/crew` and the line "авто 24ч: N · вмеш. M" of the side panel
 show the answers of the last 24 hours and the questions that wait for the owner's word. There is no command to take an answer back: write
 in the tab — the record becomes "владелец вмешался" and the count of answers in a row starts over. Without the keys nothing changes.

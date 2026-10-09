@@ -12,7 +12,7 @@ import { BASE } from "./paths.ts"
 import { type Block, type ClassifyCtx, answerModesOn, classify, parseTurn } from "./answer-parse.ts"
 
 export const ANSWERS = path.join(BASE, "answers")
-/** Записи журнала хранятся не меньше 30 суток; читатель пропускает более старые, чистка — не в этой задаче. */
+/** Записи журнала хранятся не меньше 30 суток от ответа; читатель пропускает более старые, чистка удаляет их (purgeOld). */
 export const KEEP_MS = 30 * 24 * 3_600_000
 const DAY_MS = 24 * 3_600_000
 const MARK_EVERY_MS = 60_000
@@ -121,9 +121,13 @@ export function readRecord(id: string): AnswerRecord | undefined {
 }
 
 let purgedAt = 0
+/** Сколько файлов чистка удаляет за один вызов: первая чистка после долгого простоя не должна держать главный поток. */
+const PURGE_BATCH = 200
 /**
- * Чистка журнала: записи старше срока хранения (30 суток, REQ-15) удаляются; не чаще раза в 10 минут на процесс. Срок берётся
- * из конца хода в имени файла, файлы не открываются. Возвращает число удалённых.
+ * Чистка журнала: записи старше срока хранения (30 суток, REQ-15) удаляются; не чаще раза в 10 минут на процесс и не больше
+ * PURGE_BATCH за вызов. Возраст записи — время её последней записи в файл (время ответа или позже), а не конец хода: запись на
+ * ход пятидневной давности живёт 30 суток от ответа. Файл с недавним концом хода (он не мог быть записан раньше конца хода) не
+ * проверяется вовсе. Возвращает число удалённых.
  */
 export function purgeOld(now = Date.now(), every = 10 * 60_000): number {
   if (now - purgedAt < every) return 0
@@ -131,10 +135,13 @@ export function purgeOld(now = Date.now(), every = 10 * 60_000): number {
   let n = 0
   try {
     for (const f of readdirSync(ANSWERS)) {
+      if (n >= PURGE_BATCH) break
       if (!f.endsWith(".json") || f.startsWith(".")) continue
       const at = endOfName(f)
-      if (at && now - at > KEEP_MS) {
-        rmSync(path.join(ANSWERS, f), { force: true })
+      if (at && now - at <= KEEP_MS) continue
+      const file = path.join(ANSWERS, f)
+      if (now - statSync(file).mtimeMs > KEEP_MS) {
+        rmSync(file, { force: true })
         n++
       }
     }
@@ -272,10 +279,11 @@ function restLetterText(card: Card, key: string, end: TurnEnd, rest: RestItem[])
  * Положить письмо; при гонке двух процессов за одно имя (общий временный файл postLetter: у проигравшего rename падает с ENOENT)
  * письмо уже лежит у победителя — это успех. Иная ошибка повторяется несколько раз с короткой паузой, затем бросается.
  */
-function postLetterSafe(to: string, letter: Parameters<typeof postLetter>[1]) {
+export const postLetterRace = /* GATE:safepost< */ postLetterSafe /* GATE:safepost> */
+function postLetterSafe(to: string, letter: Parameters<typeof postLetter>[1], post: typeof postLetter = postLetter) {
   for (let i = 0; ; i++)
     try {
-      postLetter(to, letter)
+      post(to, letter)
       return
     } catch (e) {
       if (letterExistsFor(to, letter.id)) return
@@ -327,6 +335,8 @@ async function decide(input: AnswerInput): Promise<AnswerResult> {
   const session = card.session
   const text = end.text
   await markInterventions(session, now, deps, end.at)
+  // ход старше срока хранения журнала не обрабатывается: запись на него удалялась бы чисткой и создавалась бы заново с новым письмом
+  if (/* GATE:keep< */ now - end.at > KEEP_MS /* GATE:keep> */) return { handled: false }
   const pkey = `${session}:${end.at}:${text.length}`
   let turn = parsed.get(pkey)
   if (!turn) {
@@ -395,7 +405,7 @@ async function decide(input: AnswerInput): Promise<AnswerResult> {
     const letterId = `answer-${safeKey(session)}-${end.at}-${String(b.qn).padStart(2, "0")}`
     const exists = letterExistsFor(session, letterId)
     if (/* GATE:once-letter< */ !stored.letterPostedAt && !exists /* GATE:once-letter> */) {
-      postLetterSafe(session, { id: letterId, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: session, time: now, text: answerLetterText(stored, rest.filter((r) => r.n !== b.qn)) })
+      postLetterRace(session, { id: letterId, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: session, time: now, text: answerLetterText(stored, rest.filter((r) => r.n !== b.qn)) })
       log(`answer ${stored.id}: letter ${letterId}`)
     }
     if (!stored.letterPostedAt) updateRecord(stored.id, { letterPostedAt: now })
@@ -417,7 +427,7 @@ async function decide(input: AnswerInput): Promise<AnswerResult> {
       const id = `answer-rest-${safeKey(session)}-${end.at}`
       for (const to of askers) {
         if (cur.letterPostedAt || letterExistsFor(to, id)) continue
-        postLetterSafe(to, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to, time: now, text: restLetterText(card, input.key, end, rest) })
+        postLetterRace(to, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to, time: now, text: restLetterText(card, input.key, end, rest) })
         log(`answer rest of ${session} forwarded to ${to}`)
       }
       if (!cur.letterPostedAt && askers.length) updateRecord(restId, { letterPostedAt: now })
@@ -439,6 +449,8 @@ async function decide(input: AnswerInput): Promise<AnswerResult> {
 // они изменились (время и размер), поэтому перерисовка панели не читает диск на каждый кадр.
 
 const fileCache = new Map<string, { mtime: number; size: number; rec?: AnswerRecord }>()
+/** Файлы, про которые известно, что их записали давно (старше суток с запасом): они не меняются и больше не проверяются. */
+const oldFiles = new Set<string>()
 function readAllCached(now: number): AnswerRecord[] {
   let names: string[]
   try {
@@ -446,17 +458,27 @@ function readAllCached(now: number): AnswerRecord[] {
   } catch {
     return []
   }
+  // кеш не растёт: записи удалённых чисткой файлов уходят из него
+  const live = new Set(names.map((f) => path.join(ANSWERS, f)))
+  for (const k of fileCache.keys()) if (!live.has(k)) fileCache.delete(k)
+  for (const k of oldFiles) if (!live.has(k)) oldFiles.delete(k)
   const out: AnswerRecord[] = []
   for (const f of names) {
     if (!f.endsWith(".json") || f.startsWith(".")) continue
-    // показу нужны сутки: файл с концом хода старше суток и часа запаса не открывается и не проверяется
-    const at = endOfName(f)
-    if (at && now - at > DAY_MS + 3_600_000) continue
     const file = path.join(ANSWERS, f)
+    if (oldFiles.has(file)) continue
     let st
     try {
       st = statSync(file)
     } catch {
+      continue
+    }
+    // показу нужны сутки по времени ОТВЕТА (время записи файла), а не по концу хода: ответ, данный сегодня на ход двухдневной
+    // давности, виден; файл, записанный давно, не открывается и больше не проверяется
+    const aged = /* GATE:viewage< */ now - st.mtimeMs > DAY_MS + 3_600_000 /* GATE:viewage> */
+    if (aged) {
+      oldFiles.add(file)
+      fileCache.delete(file)
       continue
     }
     const hit = fileCache.get(file)
