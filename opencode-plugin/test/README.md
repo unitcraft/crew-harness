@@ -80,6 +80,15 @@ stops at the first failing file.
 | | `crew-landing-letters` | the letter about interrupted work with the state of the precheck and the lock; the reviewer letters, show and help for the flags |
 | | `crew-landing-tip` | heavy: reading the tip of the target branch, the term and the process tree of `git ls-remote` on silent, closed and unreachable addresses |
 | | `crew-landing-race` | heavy: child processes — 8 reviewers at one lock, a stale lock taken by 7, a restart in the middle of a landing |
+| Question answering (task 007) | `crew-answer-golden` | the texts of the base (notices, the forwarded question, `/crew`, the side panel, `crew_config`, `crew_help`, letters) are the same without the new keys and with `answer_mode` owner; the old pass on a pack of blocks and on five texts; the status files; shared snapshot `answer-golden.json` and the base snapshot `answer-golden-base.json` |
+| | `crew-answer-config` | the keys `answer_mode` and `answer_max`: refusals of `crew_config set`, the questionnaire, reading back, the doctor, values of a wrong form |
+| | `crew-answer-parse` | the parse of the answer of a session: blocks, fields, the block-question, the reasons of the rest |
+| | `crew-answer-gate` | the 190 stems of the gate words one by one, the fixed tables T-7, T-8, T-9 of the specification, the rules of the text |
+| | `crew-answer-journal` | the journal of answers: the limit in a row, one answer and one letter for a question (repeats, the second instance and process, breaks between the steps), the letter, the check of the owner word, a broken journal |
+| | `crew-answer-view` | the section of `/crew`, the line of the side panel, the event of the task, the status files, the word of the owner |
+| | `crew-answer-docs` | the help, the README and the questionnaire: the letter, the form of a question, the recommended value, the rule of the owner word |
+| | `crew-answer-flow` | heavy: the whole flow in the running plugin: the tab of the owner, task and review sessions, packs with a rest, the limit, plans |
+| | `answer-harness.mjs`, `answer-golden.mjs`, `answer-fixtures.mjs`, `answer-t10.json`, `answer-measure.mjs`, `answer-scope.mjs`, `answer-child.mjs` | helpers, not tests: the shared set-up, the snapshot of the base texts, the tables of the specification, the blocks and the script of the measure of the gate words (`node test/answer-measure.mjs`), the check of the borders of the modes, a child process of the race test |
 
 ## Manual checks (not in `npm test`)
 
