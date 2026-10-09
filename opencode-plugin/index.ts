@@ -1018,18 +1018,19 @@ export default {
       for (const [project, list] of byProject) {
         const any = list.find((x) => x.directory)
         if (!any) continue
-        const stall = loadConfig(any.directory).stallMin * 60_000
-        if (!(stall > 0)) continue
-        const lock = mergeHolder(project)
-        const lockTask = lock ? list.find((x) => x.n === lock.n) : undefined
+        const lock0 = mergeHolder(project)
         // замок слияния держит задача, чей проверенный кандидат уже в главной ветке на origin: отпустить (только чтение, 20 с)
-        if (lock && lockTask && !landedBusy.has(project)) {
+        if (lock0 && list.some((x) => x.n === lock0.n) && !landedBusy.has(project)) {
           landedBusy.add(project)
           releaseLandedLock(project, loadConfig(any.directory).targetBranch)
             .then((m) => m && log(m))
             .catch((e) => log(`merge lock auto-release of ${project} failed: ${e}`))
             .finally(() => landedBusy.delete(project))
         }
+        const stall = loadConfig(any.directory).stallMin * 60_000
+        if (!(stall > 0)) continue
+        const lock = mergeHolder(project)
+        const lockTask = lock ? list.find((x) => x.n === lock.n) : undefined
         if (lock && lockTask && t - lock.at > stall) {
           const id = `stall-lock-${safeKey(project)}-${lock.n}-${lock.at}`
           if (!letterExists(lockTask.author, id)) {

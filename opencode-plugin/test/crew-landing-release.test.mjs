@@ -12,13 +12,13 @@ const REV = "sesREV1"
 const holder = () => review.mergeHolder("proj")
 const clearLock = () => review.releaseMergeLock("proj", holder()?.session ?? "")
 /** a task on review with a green record and the merge lock held for it (the service pass is held off by a stubbed lock owner: see `quiet`) */
-const greenLocked = async (more = {}) => {
-  const t = H.reviewing(more)
-  await call("crew_task", REV, { action: "precheck", n: t.n })
+const greenLocked = async (more = {}, sid = REV) => {
+  const t = H.reviewing({ reviewer: sid, ...more })
+  await call("crew_task", sid, { action: "precheck", n: t.n })
   git(proj, "fetch", "-q", "origin")
   H.candidate(`integrate/t${t.n}`, { merge: t.branch })
-  await call("crew_task", REV, { action: "precheck", n: t.n, candidate: `integrate/t${t.n}`, result: "CI зелёный" })
-  const m = await call("crew_task", REV, { action: "merge", n: t.n })
+  await call("crew_task", sid, { action: "precheck", n: t.n, candidate: `integrate/t${t.n}`, result: "CI зелёный" })
+  const m = await call("crew_task", sid, { action: "merge", n: t.n })
   return { t, m }
 }
 const release = () => precheck.releaseLandedLock("proj", "main")
@@ -65,6 +65,36 @@ const release = () => precheck.releaseLandedLock("proj", "main")
   cell("REL-7 accept after the release needs no lock and accepts", T(t.n).status === "accepted" && !/Сначала замок/.test(a), a)
 }
 
+// ---- the landing mark opens accept without a lock only while the record is green and of this round; a fresh one is required
+{
+  const { t } = await greenLocked()
+  H.land(`integrate/t${t.n}`)
+  await H.until(() => !holder(), 15_000)
+  const x = H.task(t.n)
+  precheck.markPrecheckStale(x, "rework") // what rework, a new review, reassign and unlock do to the record
+  H.tasks.saveTask(x)
+  cell("REL-12 stale mark: a record marked stale loses the landing mark, accept without the lock is refused", !H.task(t.n).precheck.landed && /Сначала замок вливания/.test(await call("crew_task", REV, { action: "accept", n: t.n })) && T(t.n).status === "reviewing", JSON.stringify(H.task(t.n).precheck))
+  const y = H.task(t.n)
+  y.precheck = { ...y.precheck, state: "green", landed: { tip: H.originTip(), at: Date.now() }, round: y.precheck.round + 1 }
+  H.tasks.saveTask(y)
+  cell("REL-12 old round: a landing mark of an earlier round does not open accept", /Сначала замок вливания/.test(await call("crew_task", REV, { action: "accept", n: t.n })), JSON.stringify(H.task(t.n).precheck))
+  y.precheck.round -= 1
+  H.tasks.saveTask(y)
+  await call("crew_task", REV, { action: "accept", n: t.n })
+  cell("REL-13 fresh mark: with the record green, of this round and marked landed, accept goes without the lock", T(t.n).status === "accepted" && !holder(), JSON.stringify(holder()))
+  clearLock()
+}
+
+// ---- the lock of an unlanded task with a green record stays while another task landed
+{
+  const a = await greenLocked({}, "sesREV2")
+  const c = await greenLocked({}, "sesREV3") // the lock is held by sesREV2 for a: this one is refused, it has a green record of its own
+  cell("REL-14 another task with a green record: the candidate of the holder is not in main — the lock stays", holder()?.n === a.t.n && (await release()) === undefined && holder()?.n === a.t.n, JSON.stringify(holder()))
+  H.land(`integrate/t${c.t.n}`) // a different task lands: the holder's own candidate still is not in main
+  cell("REL-14 control: the other task landing does not release the lock of the holder", (await release()) === undefined && holder()?.n === a.t.n, JSON.stringify(holder()))
+  clearLock()
+}
+
 // ---- a lock without a record of landing: accept still wants the lock
 {
   const t = H.reviewing()
@@ -95,14 +125,16 @@ const release = () => precheck.releaseLandedLock("proj", "main")
   clearLock()
 }
 
-// ---- the service pass releases by itself
+// ---- the service pass releases by itself (also with stall_minutes 0: the release does not depend on the stall watch)
 {
+  H.settings({ stall_minutes: 0 })
   const { t } = await greenLocked()
   H.land(`integrate/t${t.n}`)
   await H.until(() => !holder(), 15_000)
   cell("REL-10 service pass: the lock of a landed task is released by the flow watch without any call", !holder() && H.history(t.n).some((h) => /замок отпущен: слияние на вершине/.test(h)), JSON.stringify(holder()))
   const a = await call("crew_task", REV, { action: "accept", n: t.n })
   cell("REL-10 service pass: accept follows without the lock", T(t.n).status === "accepted", a)
+  H.settings({})
 }
 
 done(H)

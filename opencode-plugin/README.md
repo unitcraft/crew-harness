@@ -394,7 +394,9 @@ The integrator stays free for the owner and does not re-check accepted work:
   record) is already an ancestor of the target tip on `origin` (`git ls-remote` with the 20 s term and `merge-base`
   on local objects, no fetch, nothing written but the history note "замок отпущен: слияние на вершине" and a log line);
   it does nothing when the tip cannot be read, the record is not green, or the lock is held for another task; `accept`
-  then does not ask for the lock. The plugin still merges and pushes nothing. The lock is issued only on the
+  then does not ask for the lock (only while the record is still green and of this round: a record marked stale by `rework`, `unlock`,
+  a new review or `reassign` loses the mark). The release does not depend on `stall_minutes`. It counts the merge as done once the
+  candidate is in the target tip: a mark that the plan step needs in the same merge must be inside the candidate, not pushed after it. The plugin still merges and pushes nothing. The lock is issued only on the
   tip of the target branch where the candidate was already built and checked. The reviewer calls `precheck {n}` (the plugin
   reads the tip of `origin/<target_branch>` with `git ls-remote`, nothing is fetched or written, and names it), merges that tip
   into a candidate (for example `integrate/tN`), runs the project's CI on it, then `precheck {n, candidate, result}` — the

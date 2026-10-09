@@ -19,7 +19,7 @@ import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
 import { DEFAULT_FORM, PLAN_ACCEPTANCE, PLAN_MERGE_ACCEPTANCE, type PlanForm, allSteps, nextPlanNumber, parsePlan, planProblems, planTemplate, roundRules } from "./plans.ts"
 import { type Task, type TaskPlan, WORKING_STATUSES, taskRef, slugify, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { countedOpen, waitingCleanup } from "./tasks.ts"
-import { acceptWarning, acceptedTip, beginPrecheck, finishPrecheck, gateMerge, markPrecheckStale, neighbourHints, precheckLines, unlockMerge } from "./precheck.ts"
+import { acceptWarning, acceptedTip, beginPrecheck, finishPrecheck, gateMerge, landedFresh, markPrecheckStale, neighbourHints, precheckLines, unlockMerge } from "./precheck.ts"
 import { cleanupDone, cleanupSteps, fileAt, holdsMergeLock, isMerged, mergeHolder, releaseMergeLock, reworkLetter, takeMergeLock } from "./review.ts"
 import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, timerSpec, watchesOf } from "./watch.ts"
 import { watchRefusal } from "./deny.ts"
@@ -2107,7 +2107,8 @@ export function makeTools(host: CrewHost): CrewTool[] {
         }
         if (action === "accept") {
           if (t.status !== "reviewing") return { content: `Принять можно задачу на приёмке (сейчас ${statusRu(t.status)}).` }
-          if (!holdsMergeLock(project, me.session) && !t.precheck?.landed) return { content: `Сначала замок вливания: crew_task {action: "merge", n: ${t.n}} — вливает один приёмщик за раз.` }
+          const viaLanded = !holdsMergeLock(project, me.session) && landedFresh(t) // замок отпущен службой после слияния проверенного кандидата
+          if (!holdsMergeLock(project, me.session) && !viaLanded) return { content: `Сначала замок вливания: crew_task {action: "merge", n: ${t.n}} — вливает один приёмщик за раз.` }
           const checks: Record<string, string> = { ...(t.checks ?? {}) } // отмеченные по ходу (check) засчитываются
           for (const [k, v] of Object.entries(input.checks ?? {})) if (String(v ?? "").trim()) checks[k] = String(v).trim()
           const missing = acc.filter((a) => a.required && !checks[a.id])
@@ -2139,7 +2140,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           delete t.checking
           t.commit = commit
           t.merged_head = m.head
-          releaseMergeLock(project, me.session)
+          if (!viaLanded) releaseMergeLock(project, me.session) // замок другой задачи этой сессии при accept по «отпущено службой» не трогаем
           taskEvent(t, me.session, "accepted", `принята: ${m.how}`)
           if (t.precheck) {
             // запись предпроверки остаётся историей: на какой вершине целевой ветки принята задача

@@ -190,8 +190,12 @@ export function precheckLines(t: Task, session: string): string[] {
  */
 export function markPrecheckStale(t: Task, reason: string): void {
   if (!t.precheck || t.precheck.state === "stale") return
-  t.precheck = { ...t.precheck, state: "stale", stale: { reason, at: Date.now() } }
+  const { landed: _landed, ...rest } = t.precheck // устаревшая запись «слияния» не даёт accept без замка
+  t.precheck = { ...rest, state: "stale", stale: { reason, at: Date.now() } }
 }
+
+/** Замок отпущен службой, потому что проверенный кандидат уже в главной ветке: запись зелёная, этого круга и помечена `landed`. */
+export const landedFresh = (t: Task): boolean => !!t.precheck?.landed && t.precheck.state === "green" && t.precheck.round === roundOf(t)
 
 /** Перечитать задачу с диска и убедиться, что она по-прежнему на приёмке у этой сессии (после `await` чтения вершины). */
 const fresh = (t: Task, session: string): Task | undefined => {
