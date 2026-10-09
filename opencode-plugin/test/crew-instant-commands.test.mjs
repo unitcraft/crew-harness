@@ -120,7 +120,7 @@ await new Promise((r) => setTimeout(r, 3600))
 
   await slashOf(out, "crew-help").run()
   cell("/crew-help shows the help at once in the window dialog; no server call, no model turn", /crew_inbox/.test(msg(out)) && serverCalls.length === 0, JSON.stringify(last(out))?.slice(0, 120))
-  cell("the help lists the verbs of /crew-sets and /crew-profiles from the one table (the same texts as the menu)", Core.SETS_VERB_HELP.every((v) => msg(out).includes(v.verb)) && Core.PROFILES_VERB_HELP.filter((v) => !v.bare && v.verb !== "reset").every((v) => msg(out).includes(v.what)), "")
+  cell("the help lists the verbs of /crew-sets and /crew-profiles from the one table (the same texts as the menu)", Core.SETS_VERB_HELP.every((v) => msg(out).includes(v.verb)) && Core.PROFILES_VERB_HELP.filter((v) => !v.bare).every((v) => msg(out).includes(v.what)), "")
 
   // the menu: the table and every verb with «what it does and with which arguments»
   api.ui.dialog.select = async (o) => (out.asked.push(o), "__table")

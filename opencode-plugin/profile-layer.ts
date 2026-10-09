@@ -114,6 +114,10 @@ function workingKeys(folder: string): Record<string, any> | "bad" | undefined {
 /** Записать черновик в рабочую копию файла проекта одной атомарной записью (три ключа; остальное не трогается). */
 export function writeDraft(ps: PState, d: Draft): { ok: true; file: string } | { ok: false; error: string } {
   if (!ps.folder) return { ok: false, error: "проект задан прежней формой опций: писать некуда (переведи его на папку настроек)" }
+  // ключ, заданный поправкой local в опциях плагина, сильнее файла: правка файла ничего бы не изменила
+  const over = settingsContext().local[ps.project] ?? {}
+  const shadowed = P.PROFILE_KEYS.filter((k) => k in over)
+  if (shadowed.length) return { ok: false, error: `${shadowed.join(", ")} задан поправкой local в опциях плагина (opencode.jsonc) и перекрывает файл проекта: правка файла ничего не изменила бы — убери его оттуда` }
   if (workingKeys(ps.folder) === "bad") return { ok: false, error: `${SETTINGS_FILE} в рабочей копии — не JSON: правка не записана, чтобы не затереть файл` }
   const has = (v: any) => isObj(v) && Object.keys(v).length > 0
   const file = writeSettings(ps.folder, { model_profiles: has(d.profiles) ? d.profiles : null, profile_sets: has(d.sets) ? d.sets : null, profile_set: d.name ?? null })
@@ -246,14 +250,15 @@ export function syncTaskFile(t: Task): SyncReport {
 }
 
 /** Проблемы профилей всех проектов процесса — для crew_doctor и уведомления. */
-export function profileProblems(): string[] {
+/** service — проход службы: о файле прежнего слоя сообщается один раз за процесс; иначе (crew_doctor) — каждый раз. */
+export function profileProblems(service = false): string[] {
   const out: string[] = []
   for (const p of settingsContext().projects) {
     const dir0 = p.dir ?? p.rootPath
     if (!dir0) continue
     try {
       const ps = profileState(dir0)
-      const lay = legacyLayerNote(ps.project)
+      const lay = service ? legacyLayerNote(ps.project) : legacyLayerText(ps.project)
       if (lay) out.push(lay)
       out.push(...problemsOf(ps), ...windowProblems(ps.project, listTasks(ps.project), windowPlanOf(ps.state)))
       // рукописные окна, которые перекрывают окно профиля, и явный порог Claude Code — названы с файлом и значением (REQ-16, REQ-23)

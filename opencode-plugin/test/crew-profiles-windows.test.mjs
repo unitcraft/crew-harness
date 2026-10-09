@@ -184,7 +184,7 @@ cell("AC-11 once the foreign file is gone the plugin writes its own", JSON.parse
 // ---- AC-10: lifecycle ----
 use(undefined)
 await until(() => !fileOf(t1.worktree) && !fileOf(t2.worktree))
-cell("AC-10 the name is removed (reset): the files are gone from every worktree, the registry is empty, the hand-written files are as they were", !fileOf(t1.worktree) && !fileOf(t2.worktree) && Object.keys(W.readRegistry("proj")).length === 0 && handHashes() === hand0 && !existsSync(path.join(t1.worktree, ".opencode", "opencode.json")), JSON.stringify(W.readRegistry("proj")))
+cell("AC-10 the name is removed from the file: the files are gone from every worktree, the registry is empty, the hand-written files are as they were", !fileOf(t1.worktree) && !fileOf(t2.worktree) && Object.keys(W.readRegistry("proj")).length === 0 && handHashes() === hand0 && !existsSync(path.join(t1.worktree, ".opencode", "opencode.json")), JSON.stringify(W.readRegistry("proj")))
 use("default")
 await until(() => !!fileOf(t1.worktree) && !!fileOf(t2.worktree))
 cell("AC-10 the name is back: the files are back", !!fileOf(t1.worktree) && !!fileOf(t2.worktree), "no files")

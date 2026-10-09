@@ -308,7 +308,7 @@ export function stateRow(name: string | undefined, eff: Data, snapshot?: Snapsho
     return { row: 4, name, usable: { data: eff, name, viaSnapshot: false }, degraded: true, ...check, message: `набор «${name}» недопустим, а допустимого состояния нет: ${list(check.errors)}. Этап без клетки идёт по spawn_models; профиль, который не находится, — отказ; окна профиля не пишутся` }
   }
   if (bySnap) return { row: 5, name, usable: bySnap, ...check, message: `набора «${name}» нет в данных проекта (удалён или переименован). Сессии идут по последнему допустимому состоянию (набор «${bySnap.name}»); верни набор или смени имя` }
-  return { row: 6, name, ...check, message: `набора «${name}» нет в данных проекта, допустимого состояния нет: этапы, которым нужен профиль, отказываются; верни набор или убери имя (/crew-sets reset)` }
+  return { row: 6, name, ...check, message: `набора «${name}» нет в данных проекта, допустимого состояния нет: этапы, которым нужен профиль, отказываются; верни набор или убери profile_set из файла проекта` }
 }
 
 export type Resolved = { model: string; family: string; tier: PTier; set: string; viaSnapshot: boolean; window: boolean; stage: Stage }
@@ -327,7 +327,7 @@ export type ResolveOpts = {
  */
 export function resolveStageProfile(state: State | undefined, stage: Stage, opts: ResolveOpts = {}): Resolved | { refuse: string } | undefined {
   if (!state || state.row === 1 || state.row === 7) return undefined
-  if (state.row === 6) return { refuse: `включён набор «${state.name}», но его нет в данных проекта, допустимого состояния нет; этап «${STAGE_RU[stage]}» не запущен (верни набор или /crew-sets reset)` }
+  if (state.row === 6) return { refuse: `включён набор «${state.name}», но его нет в данных проекта, допустимого состояния нет; этап «${STAGE_RU[stage]}» не запущен (верни набор или убери profile_set из файла проекта)` }
   const u = state.usable
   if (!u) return undefined
   const set = u.data.sets?.[u.name]

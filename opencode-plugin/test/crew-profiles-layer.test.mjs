@@ -102,9 +102,10 @@ cell("an old *.layer.json is ignored as data: the name and the profiles are thos
 const passName = L.profileState(projSettings).project
 if (passName !== "proj") writeFileSync(L.layerFile(passName), "{}")
 L.resetLegacyNotes()
-const p1 = L.profileProblems().filter((p) => /слой отключён/.test(p))
-const p2 = L.profileProblems().filter((p) => /слой отключён/.test(p))
-cell("the problems of the service carry the note once (pass 1: one, pass 2: none); the file is not deleted", p1.length === 1 && p2.length === 0 && existsSync(L.layerFile("proj")), JSON.stringify([p1.length, p2.length]))
+const p1 = L.profileProblems(true).filter((p) => /слой отключён/.test(p))
+const p2 = L.profileProblems(true).filter((p) => /слой отключён/.test(p))
+const pd = L.profileProblems().filter((p) => /слой отключён/.test(p))
+cell("the pass of the service carries the note once (pass 1: one, pass 2: none); crew_doctor names it every time; the file is not deleted", p1.length === 1 && p2.length === 0 && (passName === "proj" ? pd.length === 1 : true) && existsSync(L.layerFile("proj")), JSON.stringify([p1.length, p2.length, pd.length]))
 if (passName !== "proj") rmSync(L.layerFile(passName), { force: true })
 L.resetLegacyNotes()
 const note1 = L.legacyLayerNote("proj")
@@ -152,6 +153,13 @@ const bad = L.writeDraft(st(), L.draftOf(st()))
 cell("a working file that is not JSON is refused, not overwritten", bad.ok === false && /не JSON/.test(bad.error ?? "") && readFileSync(file, "utf8") === "{ not json", JSON.stringify(bad))
 writeFileSync(file, keep)
 bump()
+// a key set by the "local" option of the plugin is stronger than the file: the write is refused, not silently useless
+core.setProjects(core.parseProjects({ projects: [projSettings, innerSettings, soloSettings] }), { proj: { profile_set: "default" } })
+cached = undefined
+const shadow = L.writeDraft(st(), L.draftOf(st()))
+core.setProjects(core.parseProjects({ projects: [projSettings, innerSettings, soloSettings] }), {})
+cached = undefined
+cell("a key set by the local option of the plugin overrides the file: the write is refused with the reason", shadow.ok === false && /profile_set/.test(shadow.error ?? "") && /local/.test(shadow.error ?? ""), JSON.stringify(shadow))
 cell("an old-form project: nowhere to write", (() => {
   core.setProjects(core.parseProjects({ projects: { oldform: path.join(tmp, "oldform") } }), {})
   mkdirSync(path.join(tmp, "oldform"), { recursive: true })

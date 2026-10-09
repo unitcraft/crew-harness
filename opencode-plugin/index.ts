@@ -756,7 +756,7 @@ export default {
       }
       if (!changed && now() - profilesAt < 30_000) return
       profilesAt = now()
-      const problems = profileProblems()
+      const problems = profileProblems(true)
       const said = problems.join(" | ")
       if (said === profilesSaid) return
       profilesSaid = said

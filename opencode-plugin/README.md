@@ -492,7 +492,7 @@ JSON in `.opencode/crew-harness.json` (any reader sees them without this plugin;
   executor of a task), `accept` (the reviewer), `plan` (a plan task) and `plan_accept` (the rounds of a plan review and the
   merge of an approved plan). A cell is `{"family": "claude", "tier": "heavy"}`; the tier `task` means «the tier of the
   task» (the default behaviour). A stage without a cell keeps the model of `spawn_models`. Names of sets: lowercase Latin
-  letters, digits, dashes, up to 40 characters, not a word of the commands (`use`, `reset`, `all`, `list`, `show`, `set`,
+  letters, digits, dashes, up to 40 characters, not a word of the commands or a word kept from the removed ones (`use`, `reset`, `all`, `list`, `show`, `set`,
   `unset`, `new`, `rename`, `delete`, `check`, `save`, `from`).
 - **The enabled set** — `profile_set`: the name, set by a person (`/crew-sets use`, or editing the file);
   `crew_config set` refuses this key whatever the value. `use` writes the name into the file of the project, takes effect
