@@ -26,7 +26,7 @@ export type Setting = { key: string; kind: Kind; default: any; question: string;
 const TIERS = ["heavy", "medium", "light"]
 /** Встроенные поля задачи и входа crew_spawn / crew_task: id полей проекта (task_extra_fields) с ними не совпадает. Список живёт
  *  здесь, а не в core.ts: core.ts импортирует эту схему, обратный импорт образовал бы цикл; тест сверяет его с полями входа. */
-export const RESERVED_FIELD_IDS = ["title", "goal", "criteria", "boundaries", "open_questions", "priority", "tier", "role", "model", "kind", "parent", "plan_parent", "task", "session", "n", "action", "extra"]
+export const RESERVED_FIELD_IDS = ["title", "goal", "criteria", "boundaries", "open_questions", "priority", "tier", "role", "model", "kind", "parent", "plan_parent", "task", "session", "n", "action", "extra", "__proto__", "constructor", "prototype"]
 export const EXTRA_FIELDS_MAX = 8
 export const EXTRA_ID_RE = /^[a-z0-9_]{1,31}$/
 export const SCHEMA: Setting[] = [

@@ -267,7 +267,7 @@ export function extraBlock(t: Task): string {
     fields = loadConfig(t.directory).extraFields
   } catch {}
   const label = (id: string) => fields.find((f) => f.id === id)?.label ?? id
-  const ids = [...fields.map((f) => f.id).filter((id) => id in e), ...Object.keys(e).filter((id) => !fields.some((f) => f.id === id))]
+  const ids = [...fields.map((f) => f.id).filter((id) => Object.hasOwn(e, id)), ...Object.keys(e).filter((id) => !fields.some((f) => f.id === id))]
   return `ДОПОЛНИТЕЛЬНО (поля проекта):\n${ids.map((id) => `  ${label(id)}: ${e[id]}`).join("\n")}`
 }
 /** Список шагов приёмки из настроек или undefined (нет, пуст, не той формы — умолчание). */

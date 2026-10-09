@@ -111,6 +111,7 @@ cell("AC-25 reserved ids: every input field of crew_spawn is reserved", missing.
 const taskFields = Object.keys(tools.crew_task.input.properties)
 cell("AC-25 reserved ids: action, n and session of crew_task are reserved", ["action", "n", "session"].every((f) => taskFields.includes(f) && schema.RESERVED_FIELD_IDS.includes(f)), JSON.stringify(taskFields))
 
+cell("AC-25 reserved ids: service names of an object (constructor, __proto__, prototype) are reserved", ["constructor", "__proto__", "prototype"].every((f) => schema.RESERVED_FIELD_IDS.includes(f) && schema.invalid("task_extra_fields", [{ id: f, label: "X" }]) !== undefined), JSON.stringify(["constructor", "__proto__", "prototype"].map((f) => schema.invalid("task_extra_fields", [{ id: f, label: "X" }]))))
 stop?.()
 rmSync(tmp, { recursive: true, force: true })
 console.log(fail ? `crew-landing-config.test: FAIL ${fail}` : "crew-landing-config.test ok")

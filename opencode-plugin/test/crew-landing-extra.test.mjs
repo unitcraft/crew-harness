@@ -212,6 +212,12 @@ const showOld = await call("crew_task", { action: "show", n: old.n })
 const listOld = await call("crew_task", { action: "list" })
 cell("REQ-24 old record: a record without extra is read, shown and listed as before, with no extra lines", noKeys && /^#\d+ P2 в работе/.test(showOld) && !/ДОПОЛНИТЕЛЬНО/.test(showOld + listOld) && fmt(tasks.loadTask("proj", old.n)) === strip(fmt(tasks.loadTask("proj", old.n))), showOld)
 
+// ---- review-1, finding 2: a declared service name is not read from the prototype of the values object
+reset()
+settings({ task_extra_fields: [{ id: "constructor", label: "Ctor" }, { id: "__proto__", label: "Proto" }, { id: "a", label: "A" }] })
+const protoCfg = core.loadConfig(proj)
+const protoBlock = core.extraBlock({ directory: proj, extra: { a: "1" } })
+cell("REQ-18 служебные имена: constructor and __proto__ are dropped from the declaration, the block prints only the own value", protoCfg.extraFields.map((f) => f.id).join() === "a" && protoBlock === "ДОПОЛНИТЕЛЬНО (поля проекта):\n  A: 1" &&!/Object|native code/.test(protoBlock), protoBlock + JSON.stringify(protoCfg.extraFields))
 clearInterval(heart)
 stop?.()
 rmSync(tmp, { recursive: true, force: true })

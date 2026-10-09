@@ -363,6 +363,45 @@ if (section("AC-37")) {
   const r4 = await withSeam({ afterTip: () => void called++ }, () => merge(t4))
   cell("AC-37 c3: nothing changed — merge passes (the control that the seam does not break the way)", called === 1 && /выдан на вершину main/.test(r4) && H.holder()?.session === REV && !!T(t4.n).precheck.lock_on, r4)
   clearLock()
+  // c4: one acceptor, two tasks (review-1, finding 1): inside the read the lock is taken off and taken again by the same session for ANOTHER task
+  // after the origin moved — the first task must not get a lock issued on its stale tip
+  const ta = await green()
+  const tb = H.reviewing()
+  let mb = ""
+  const r5 = await withSeam(
+    {
+      afterTip: async () => {
+        delete precheck.seams.afterTip
+        review.releaseMergeLock("proj", REV)
+        H.moveOrigin()
+        await begin(tb)
+        fetch()
+        H.candidate(`integrate/t${tb.n}`, { merge: tb.branch })
+        await finish(tb, { candidate: `integrate/t${tb.n}`, result: "CI зелёный" })
+        mb = await merge(tb)
+      },
+    },
+    () => merge(ta),
+  )
+  cell("AC-37 c4: the lock was taken off and taken again by the same session for another task inside the read — 'замок потерян' for the first, no lock_on, the lock stays the other task's", /выдан на вершину main/.test(mb) && /Замок потерян/.test(r5) && !T(ta.n).precheck.lock_on && H.holder()?.session === REV && H.holder()?.n === tb.n, mb + " | " + r5 + JSON.stringify(H.holder()))
+  clearLock()
+  // c5: a refusal of the first task (its record changed inside the read) does not take off the lock the same session holds for another task
+  const tc = await green()
+  const td = H.reviewing()
+  const r6 = await withSeam(
+    {
+      afterTip: () => {
+        review.releaseMergeLock("proj", REV)
+        review.takeMergeLock("proj", REV, td.n)
+        const x = T(tc.n)
+        precheck.markPrecheckStale(x, "передана другой сессии")
+        tasks.saveTask(x)
+      },
+    },
+    () => merge(tc),
+  )
+  cell("AC-37 c5: the first task is refused (record changed) — the lock the same session holds for the other task stays", /изменилась/.test(r6) && H.holder()?.session === REV && H.holder()?.n === td.n, r6 + JSON.stringify(H.holder()))
+  clearLock()
 }
 
 // ---- AC-14 merge: a record made stale by the ways of AC-14 does not open the lock
