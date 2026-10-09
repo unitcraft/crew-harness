@@ -267,6 +267,38 @@ folder, empty outside a repository). A value the plugin cannot read is `null`, n
 `test_runs` are `null` for now. Call it once, when the session is finished:
 `usage_line {file: "doc/tasks/007-x/usage.log", code: "С5д", result: "готово: 13 из 13"}`.
 
+## Answering session questions (`answer_mode`)
+
+By default every question of a session waits for the owner. A project can hand some of them to the session's own
+recommendation with two keys of `.opencode/crew-harness.json`, which only a person sets (edit the file and commit; `crew_config set`
+refuses them) — [ADR-0010](../doc/canon/decisions/ADR-0010-question-answering-modes.md):
+
+- `answer_mode` — a map "type of the question → mode". Types: `requirements`, `plan`, `implementation` and `default` (for a type
+  without its own entry); modes: `owner` (the owner answers, the default) and `recommendations` (the recommendation of the
+  question closes it). The type `gate` is not accepted in the map, and the mode `agent` (another agent answers) is moved to a
+  separate future task. The value that fits most projects: `{"implementation": "recommendations"}` — for `requirements` and `plan` the owner stays
+  (для `requirements` и `plan` — `owner`: there the method leaves the decision to a person).
+- `answer_max` — how many answers in a row one session may get (3); the owner's word in the tab resets the count.
+
+**The form of a question.** A session asks in text: a block `В-01 …?` with the lines `Тип: requirements|plan|implementation|gate`,
+`Рекомендация: …` and `Автоответ: допустим`, and «?» в конце строки with the question. A question is closed only when all of this
+holds at once: the type is declared and is not `gate`, the mode of the type is `recommendations`, the recommendation is not empty, the
+permission `Автоответ: допустим` stands, no word of the gates is in its text, the session is not a review session, the limit is not
+spent, and the parse went through. Anything else — and any doubt — stays with the owner, who gets one notice with what is left.
+A question about the gates is declared `gate`: approval of `spec.md` and `plan.md` and of a plan, push, merge, deletion, restart or
+switch of the service, publication, money, shared environments, giving up a requirement, the ceiling of rounds and handing over.
+The list of the words of the gates is open and errs towards the owner (`answer-parse.ts`); on the blocks of the question packs of
+earlier specifications it lets pass about a fifth of the questions that are fit by meaning.
+
+**What the session gets.** A service letter "Ответ по настройке проекта (answer_mode: recommendations, тип <тип>), не слово владельца"
+with the recommendation, the list of the gates "только слово владельца", the rule "вышел за рекомендацию — вопрос владельцу" and the
+numbers of the questions that are left. It is not the owner's word: слово владельца старше автоответа.
+
+**Where to look and how to take it back.** Every answer is a file in `answers/` of the mailbox (kept 30 days) and a note in the
+history of the task (`crew_task show`); the section "Автоответы" of `/crew` and the line "авто 24ч: N · вмеш. M" of the side panel
+show the answers of the last 24 hours and the questions that wait for the owner's word. There is no command to take an answer back: write
+in the tab — the record becomes "владелец вмешался" and the count of answers in a row starts over. Without the keys nothing changes.
+
 ## Obligations instead of a push controller
 
 A question or a task is the recipient's obligation until it answers (`reply_to: qid`). Windows on
