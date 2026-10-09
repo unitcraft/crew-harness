@@ -1,4 +1,4 @@
-Статус: в работе
+Статус: готово
 
 # 005 — Ускорить вливание задач: слот при принятии, предпроверка без замка, дополнительные поля задачи — result (Сессия С5, 2026-10-08)
 
@@ -9,6 +9,7 @@
 - Ветка: `task-005-faster-landing`, связанное рабочее дерево рядом с основной копией (путь машины не записывается). Основная копия `main` — только чтение.
 - `BASE` = `868023440170ea0e6a0926da1cb5a76459c301f5` (`git merge-base main task-005-faster-landing` на момент создания ветки; `main` — коммит «Fix window crash on verb input»).
 - База плана (вторая строка plan.md): `22af5f12c2604f4762425d3c3dc9589fa0a15578`. `main` с тех пор ушёл на семь коммитов. Сравнение по файлам плана: `git diff --stat 22af5f1..868023440170 -- opencode-plugin` затрагивает `config-schema.ts` (в двух строках справочника профилей моделей — ссылка на раздел README, плюс строка импорта `paths.ts`), `paths.ts` (константа), `tui.ts`, `sidebar.tsx`, `progress-sidebar.tsx`, `dialog-*.ts*`, `profile-cmd.ts` и тесты окна. Ключи 005 добавляются в конец групп схемы, строки профилей не пересекаются; файлы, которые 005 не правит (DNC-03, DNC-11), в это сравнение попали, но предел «от `$BASE`» считается от записанного значения. Вывод: пересечения по смыслу нет, остановка «ревизия» не нужна (план сам велит считать `$BASE` в момент создания ветки и перечитывать места по имени функции).
+- Второй ребейз (С5д, 2026-10-09, шаг 13): `origin/main` @ `e606a43`, `BASE` = `e606a436e16b9731bd2e4f3335598a8c89e38239`; без конфликтов, `range-diff` — 24 из 24 коммита `=`. Первая новая база (после шагов 1–4) — ниже.
 - Новая база (С5д, 2026-10-09): ребейз ветки на `origin/main` @ `1af4f92` прошёл без конфликтов (семь коммитов 005 перенесены; хеши изменились, `range-diff` см. шаг 13). `BASE` = `1af4f92eca7cb1c204886e60cd51b39739d4114a` (`git merge-base origin/main HEAD`); команды DoD «пусто» и «только эти файлы» считаются от него. Между старой и новой базой в `opencode-plugin` изменился только `tui.ts` (11 строк) и тест окна `crew-instant-commands.test.mjs`; остальное — документы задач 007…011. Запись `BASE` выше (`868023440170`) — база шагов 1–4 до ребейза. ADR-0009 по-прежнему свободный номер на `main`.
 - Окружение: Node v24.15.0, git 2.56.0, Python 3.14.4.
 - Деревья других задач — только чтение (`git worktree list`); задача 007 правит те же `core.ts`, `index.ts`, `config-schema.ts`, `tasks.ts`: правки 005 локальные и в концах своих разделов.
@@ -51,3 +52,165 @@
 шаг 10: сделан, `precheck.ts` (`precheckLines(t, session)` — строки «предпроверка: идёт/зелёная/устарела …» и «замок вливания: твой с … на вершине …» / «замок: нет» / «у другого приёмщика»; пусто, если записи нет; `show` шага 11 берёт её же), `index.ts` (письмо «работа прервана перезапуском» получает строки состояния; одна строка импорта, одна строка `const pre = …`, правка строки `text`); каркас `test/landing-harness.mjs` расширен режимом `attach` (второй экземпляр плагина в дочернем процессе на тех же папках) и базой OpenCode для прерванных ходов; `test/landing-child.mjs` (дочерний процесс: готов → ждёт файл `go` → вызывает `crew_task` → печатает `RESULT`); `node test/crew-landing-race.test.mjs` — `crew-landing-race.test ok`, 14 ячеек, 113 с: `AC-16 держатели живые` (замок каждой из 8 сессий не считается брошенным), `AC-16 раунд 1…5` (8 процессов, ровно один победитель, остальные 7 получили отказ с именем держателя), `AC-18 раунд 1…5` (замок старше 2 ч, 7 процессов, один победитель в каждом из пяти раундов; двойной победитель (Н-03) за пять раундов не воспроизвёлся — вывод «не воспроизведён» не значит «невозможен»), `AC-19 accept` (замок взят одним процессом, `accept` проходит в другом), `AC-19 merge` (после «перезапуска» повтор на сдвинутой вершине отказан, запись устарела), `Г-7` (пустая запись задачи — отказ, замка нет); `node test/crew-landing-letters.test.mjs` — `crew-landing-letters.test ok`, 2 ячейки, 68 с (`AC-19 письмо`, `AC-19 письмо без записи`: письмо без записи прежнее); по одному `crew-restart` 13 ok, `crew-profiles-docs` 27 ok, 0 упавших. Находка при отладке: синтетическая задача без `review_qid` (в каркасе теста) давала обязательство без `qid`, и напоминание падало на `safeKey(undefined)`; в настоящей задаче `review_qid` ставится при назначении приёмщика, поэтому каркас теперь ставит его сам; в коде плагина ничего не менялось по этой причине. Коммит см. `git log` (`Races and restart: …`)
 шаг 11: сделан, `review.ts` (`reviewLetter`: при `required` шаг «ПРЕДПРОВЕРКА» перед «нашёл ошибки» и `merge`, нумерация без разрыва, слова о том, что замок выдаётся на проверенную вершину; при `free` фраза «ПОСЛЕ ПРИНЯТИЯ … ждущих уборки N из M» («N, предела нет» при `cleanup_limit: 0`); `planMergeLetter`: тот же шаг предпроверки; правки — строка импорта и ниже блока замка), `core.ts` (`show` — строки `precheckLines`; описание `crew_task` и `crew_spawn` по-английски: `precheck`, `unlock`, `candidate`, `extra`, флаги; раздел «ПРИЁМКА» в `HELP` — абзац «ПРЕДПРОВЕРКА ВЛИВАНИЯ» и про `accepted_slot`, `cleanup_limit`, `task_extra_fields`), `README.md` плагина («Review and merge»: три флага, абзацы «After the landing» и «If something goes wrong»; сигнатура `crew_spawn` с `extra?`), `test/README.md` (десять строк), `package.json` (`scripts.test`: десять имён в конец); `node test/crew-landing-letters.test.mjs` — `crew-landing-letters.test ok`, 19 ячеек, 79 с (`AC-19 письмо` две, `AC-31` одиннадцать: по умолчанию побайтно, required и порядок, план, нумерация, free, free без предела, оба, show шести видов, `AC-26` три: описание `crew_task`, описание `crew_spawn`, `HELP`); по одному: `crew-help` 32 ok, `crew-review` 52 ok, `crew-flowwatch` 13 ok, `crew-profiles-docs` 27 ok, 0 упавших; `node test/landing-golden.mjs --check` — `golden ok (18 texts)` (письма при значениях по умолчанию побайтно прежние); `python scripts/guards/check-md-links.py` — ок; `grep -c` по README — 12 строк (≥5). Два коммита: `Review letters, show, help and README: precheck, free slot, extra fields` и `Tests: register the landing tests`
 шаг 12: сделан, маркеры `GATE:same-tip`, `GATE:green`, `GATE:recheck`, `GATE:lock` в `precheck.ts` — по одной строке (`node test/landing-red.mjs --markers-only` — `markers ok`); `test/landing-red.mjs` копирует `opencode-plugin/*.ts` и `package.json` во временную папку, заменяет одну строку по маркеру заглушкой `=> true` и запускает `crew-landing-gate.test.mjs` на копии (`CREW_PLUGIN_DIR`, код импортируется по file URL); чтобы прогоны не шли по пять минут, в gate-тесте добавлен отбор разделов `LANDING_SECTIONS` (без переменной идёт всё, как в шаге 8); `node test/landing-red.mjs` — 143 с, вывод: `прогон 1: sameTip -> true: красных ячеек 4 (AC-09, AC-17)`, `прогон 2: isFresh -> true: красных ячеек 4 (AC-08)`, `прогон 3: recordUnchanged and lockStillMine -> true: красных ячеек 4 (AC-37)`, `прогон 4: no stub: красных ячеек 0`, `landing-red ok`; контроль: на копии без маркера `GATE:lock` скрипт печатает `маркер не найден: GATE:lock — нужна ровно одна строка, найдено 0` и выходит с кодом 2. Коммит см. `git log` (`Tests: prove the merge gate red with stubs`)
+шаг 13: сделан (до ворот Г1), второй ребейз на `origin/main` @ `e606a43` (в `main` влилась закрывающая часть задачи 004 и правки документов 007): 24 коммита ветки перенесены без конфликтов, `git range-diff` показывает все 24 как `=` (содержимое не изменилось, `README.md` плагина слился автоматически — правки 004 в других разделах); `BASE` = `e606a436e16b9731bd2e4f3335598a8c89e38239`. После ребейза по одному, с паузой 5 с: четырнадцать прежних тестов и десять новых (таблица ниже), `sh scripts/guards/run-all.sh` — `итого: ок 7, судить нечего 0, пропущено 0, FAIL 0`, `guard-secrets.py --tree` и `check-private-names.py` — ок; команды DoD «пусто» и «только эти файлы» с контролями (раздел «Доказательства уровней»). `npm test` целиком не запускался; полный проход всех 57 файлов по одному — только по слову владельца до пуша (ворота Г1).
+
+## Прогоны после ребейза (по одному, пауза 5 с)
+
+| Тест | Ячеек ok | Упало | Пропущено | Время, с |
+|---|---|---|---|---|
+| crew-review | 52 | 0 | 0 | 24 |
+| crew-flowwatch | 13 | 0 | 0 | 5 |
+| crew-tasks | 28 | 0 | 0 | 10 |
+| crew-place | 8 | 0 | 0 | 4 |
+| crew-cfgtool | 17 | 0 | 0 | 13 |
+| crew-help | 32 | 0 | 0 | 1 |
+| crew-plan-task | 33 | 0 | 0 | 21 |
+| crew-profiles-select | 54 | 0 | 0 | 76 |
+| crew-profiles-config | 31 | 0 | 0 | 11 |
+| crew-profiles-docs | 27 | 0 | 0 | 0 |
+| crew-acceptor | 25 | 0 | 0 | 12 |
+| crew-restart | 13 | 0 | 0 | 6 |
+| crew-plans | 15 | 0 | 0 | 0 |
+| crew-autoclose | 8 | 0 | 0 | 0 |
+| crew-landing-golden | 3 | 0 | 0 | 7 |
+| crew-landing-config | 15 | 0 | 0 | 19 |
+| crew-landing-slot | 24 | 0 | 0 | 10 |
+| crew-landing-extra | 22 | 0 | 0 | 3 |
+| crew-landing-precheck | 38 | 0 | 0 | 72 |
+| crew-landing-gate | 38 | 0 | 0 | 171 |
+| crew-landing-hints | 9 | 0 | 0 | 40 |
+| crew-landing-letters | 19 | 0 | 0 | 69 |
+| crew-landing-tip | 25 | 0 | 0 | 47 |
+| crew-landing-race | 14 | 0 | 0 | 46 (см. «Находки») |
+
+Прежние четырнадцать тестов дали те же числа ячеек, что в базовом состоянии шага 1 (52, 13, 28, 8, 17, 32, 33, 54, 31, 27, 25, 13, 15, 8): упавших и пропущенных нет. `crew-landing-race` в прогоне подряд после ребейза упал в двух раундах из-за аварии дочернего процесса теста (см. «Находки», пункт 1); после правки каркаса теста он прошёл шесть раз подряд (14 ячеек, 0 упавших), код плагина этим не менялся.
+
+## Находки
+
+1. Вне задачи (Out of scope notes): два экземпляра плагина в разных процессах, получив событие простоя одной и той же сессии с обязательством, одновременно кладут напоминание в ящик под одним и тем же именем файла; переименование временного файла на Windows даёт `EPERM`, и процесс падает (`postLetter`, `core.ts`, в отличие от `saveTask`, повтора не делает). Доказательство: вывод дочернего процесса теста гонок `crew_task` в первой раскладке теста — файл `…\inbox\sesR3\.1791506356281-nudge-rq3-cqfj.tmp` → `…\1791506356281-nudge-rq3-cqfj.json`, в трёх раундах `AC-16`: два в прогоне после ребейза и один в отдельном прогоне. Каркас теста теперь регистрирует в дочернем процессе только его вкладку, поэтому событий простоя чужих вкладок там нет. Код `postLetter` задачей не правится (DNC-06 и граница «чужие дефекты»).
+2. Н-03 (двойной победитель при перехвате замка старше `MERGE_STALE_MS`): во всех прогонах теста гонок (около пятнадцати, по пять раундов `AC-18` в каждом) победитель был один. Это «не воспроизведено», а не «невозможно»: гонка зависит от тайминга процессов.
+3. Зависание на недоступном адресе (РП-07): на этой машине закрытый порт отвечает отказом за 5 с, «нет адреса» и «недоступный адрес» доходят до срока git (15 с), молчащий сервер по `http`, `https` и `ssh` — до срока плагина (20 с); во всех случаях процессов git с адресом после срока нет (`ssh` установлен, ячейка `AC-11 ssh` выполнена).
+4. Число «37» в AGENTS п.7 устарело (на `BASE` в `opencode-plugin/test` теперь 57 файлов `*.test.mjs`: 47 прежних и 10 новых); задачей не правится.
+
+## Доказательства уровней
+
+- A Static: `load ok` для `config-schema`, `tasks`, `review`, `precheck`, `core`, `index`; `git diff --check "$BASE"..HEAD` пуст (контроль: `diff --cached --check` на файле с пробелом в конце печатает `trailing whitespace`, код 2).
+- B Automated: таблица выше; новые десять — `<имя>.test ok`; прежние четырнадцать — как в базе.
+- C Runtime: ячейки `AC-07`, `AC-09`, `AC-11` (шесть случаев), `AC-11 merge`, `AC-16`…`AC-19`, `AC-32 merge`, `AC-35` на одноразовых репозиториях с локальным `origin` и дочерними процессами; настоящая среда не трогалась (Г3).
+- D Visual: N/A (визуального нет, показ приёмщику — тексты, уровень E).
+- E Requirements: таблица «Трассировка» ниже.
+- F Negative: `AC-08`, `AC-10`, `AC-11`, `AC-13`, `AC-15`, `AC-23`, `AC-25`, `AC-32`, `AC-34`, `AC-36`, `AC-37` зелёные (ячейки в таблице); доказательство красного `AC-30`: `node test/landing-red.mjs` — `прогон 1…4`, `landing-red ok` (вывод в шаге 12).
+- G Regression: прежние четырнадцать тестов — как в базе; `run-all.sh` без `FAIL`; DNC-01…DNC-12 — по команде DoD (ниже).
+- DNC-01: `landing-golden --check` и `--check --defaults` — `golden ok (18 texts)`; удалённые строки `core.ts` (`git diff -U0 "$BASE"..HEAD | grep '^-[^-]'`): закрывающая скобка типа `CrewConfig` (переехала ниже новых полей), `taskRow`, описание `crew_spawn`, строка счёта `inflight` в `crew_spawn`, описание `crew_task`, перечень действий, два списка прав, два `return` в `accept`; `index.ts`: строка `text` письма «работа прервана», строка счёта слота авто-плана, три строки напоминания о принятой; `review.ts`: две строки импорта, `repoDir` (добавлен `export`), три строки порядка в `reviewLetter` и две строки в `planMergeLetter` (нумерация шагов); в других местах удалений нет.
+- DNC-02: `git diff "$BASE"..HEAD -- tasks.ts | grep -cE '^[-+].*(OPEN_STATUSES|WORKING_STATUSES|export const isOpen)'` — `0`, при этом diff по `tasks.ts` непуст (+27 строк); контроль на копии с изменённым словом `OPEN_STATUSES` печатает `2`.
+- DNC-03, AC-28, DNC-11: `git diff --stat "$BASE"..HEAD` по запретным путям пуст; контроль со списком, включающим `core.ts`, печатает строку `core.ts`.
+- DNC-04: `git diff --name-only | grep -vE …` пуст (код 1); контроль с `opencode-plugin/status.ts` печатает путь.
+- DNC-05: `grep -niE 'queue|очеред' precheck.ts` пуст; контроль `printf 'const queue = []\n' | grep …` печатает строку.
+- DNC-06: изменённых строк `review.ts` с именами замка — `0`; хунков в диапазоне 12…74 — `0`; контроль (пробел в строке 31 копии) печатает `1`.
+- DNC-07: первые аргументы `runGit` — `merge-base`, `remote`, `rev-parse` (подмножество разрешённых); `ls-remote` — одна строка внутри `originTip`; `execFile|spawn|process.kill|taskkill` — строки только внутри `runGit`, `originTip`, `killTree` и строка `import`; контроль `runGit(d, ["fetch","origin"])` печатает совпадение.
+- DNC-08: `taskkill` с `/PID` — 1, с `/IM` или `/FI` — 0, `pkill|killall` — пусто; в тестах `tip` и `race` процессы убиваются только по номеру своего запуска, список процессов `git*` с адресом/портом после срока — 0.
+- DNC-09: команда DoD печатает `ok` (удалены ровно два `return` приёма); контроли на копии базы: `if (false)` вместо `if (!done.ok)` в диапазоне `accept` — `bad 1 0`, замена строки в `merge` — `bad 1 0`; изменённых строк `review.ts` с `isMerged|cleanupDone` — `0`.
+- DNC-10: в этом файле команды запуска тестов — по одному имени файла, `npm test` — только в строках «не запускался».
+- DNC-12: `grep -n "перезапис" test/crew-landing-*.test.mjs` пуст; `AC-15` показывает отказ REQ-12 под `required`.
+
+## Трассировка
+
+| Пункт | Реализация, метод | Доказательство | Статус |
+|---|---|---|---|
+| REQ-01 | ключ `accepted_slot`, `loadConfig` | `crew-landing-config` AC-25 | PASS |
+| REQ-02 | `countedOpen` в двух местах | `crew-landing-slot` AC-02, AC-04 | PASS |
+| REQ-03 | `cleanup_limit`, `waitingCleanup` | `crew-landing-slot` AC-03 c1…c5 | PASS |
+| REQ-04 | тексты при `free` и `hold` | `crew-landing-slot` AC-05, AC-06 | PASS |
+| REQ-05 | ключ `merge_precheck` | AC-25; `crew-landing-gate` AC-12 merge off | PASS |
+| REQ-06 | `beginPrecheck` | `crew-landing-precheck` REQ-06 (три), AC-13, AC-34; gate AC-07 | PASS |
+| REQ-07 | `finishPrecheck` | precheck AC-10 a…f, AC-33, AC-36 a…d2 | PASS |
+| REQ-08 | `gateMerge`, четыре сверки | gate AC-07…AC-09, AC-17, AC-35, AC-37; `landing-red` | PASS |
+| REQ-09 | `originTip`, `killTree` | `crew-landing-tip` (25); gate AC-11 merge | PASS |
+| REQ-10 | `unlockMerge` | precheck AC-13 a…h; AC-12 unlock | PASS |
+| REQ-11 | `markPrecheckStale` в пяти местах, `accepted_on` | precheck AC-14 a…e; gate AC-14 merge, AC-07 запись | PASS |
+| REQ-12 | шаг 3(а) ворот | gate AC-15 | PASS |
+| REQ-13 | `acceptWarning` | `crew-landing-hints` AC-21 (три) | PASS |
+| REQ-14 | `neighbourHints` | hints AC-22 (пять) | PASS |
+| REQ-15 | `precheckLines` в письме «работа прервана» | letters AC-19 письмо (две); race AC-19 | PASS |
+| REQ-16 | ключ `task_extra_fields`, `invalid` | config AC-25 | PASS |
+| REQ-17 | `parseExtra` в `crew_spawn`, `assign` | `crew-landing-extra` AC-23 | PASS |
+| REQ-18 | `Task.extra`, `extraBlock` | extra AC-24 (семь), REQ-18 (две) | PASS |
+| REQ-19 | шесть мест показа | letters AC-26 (три), AC-31 (одиннадцать); `grep` README 12 строк; живой показ — Г3 | PASS (кроме живой среды) |
+| REQ-20 | схема, опросник | config AC-25 guide | PASS |
+| REQ-21 | `ADR-0009-merge-precheck-without-lock.md` (`Статус: предложено`), строка реестра | коммит ADR раньше коммита `Config:`; `check-md-links.py` ок | PASS (принять — Г1) |
+| REQ-22 | ответ интегратору — в сдаче | сдача после ворот | NOT VERIFIED |
+| REQ-23 | десять тестов, `package.json`, `landing-red` | таблица прогонов; `AC-30` | PASS |
+| REQ-24 | необязательные `precheck`, `extra` | precheck и extra: REQ-24 old record | PASS |
+| AC-01 | снимок текстов базы | golden: AC-01 (две), `landing-golden --check` (оба режима) | PASS |
+| AC-02 | `free` против `hold` на одних данных | slot AC-02 free, hold | PASS |
+| AC-03 | отказ по `cleanup_limit` | slot AC-03 c1…c5 | PASS |
+| AC-04 | авто-план | slot AC-04 (четыре) | PASS |
+| AC-05 | вкладка принятой | slot AC-05 (пять) | PASS |
+| AC-06 | слова о месте | slot AC-06 free, hold, контроль | PASS |
+| AC-07 | весь путь | gate AC-07 (две) | PASS |
+| AC-08 | нет записи, идёт, устарела | gate AC-08 a, b, b2, c | PASS |
+| AC-09 | сдвиг `origin` | gate AC-09 (три) | PASS |
+| AC-10 | шесть отказов | precheck AC-10 a…f | PASS |
+| AC-11 | сбой чтения без замка и без остатков | tip AC-11 (шесть, процессов 0); gate AC-11 merge (две) | PASS |
+| AC-12 | `off` | precheck AC-12 (две); gate AC-12 merge off; `crew-review` без правок | PASS |
+| AC-13 | unlock | precheck AC-13 a…h | PASS |
+| AC-14 | пять путей устаревания | precheck AC-14 a…e; gate AC-14 merge a…e | PASS |
+| AC-15 | второй замок для B | gate AC-15 | PASS |
+| AC-16 | гонка замка | race AC-16 (живые, раунды 1…5) | PASS |
+| AC-17 | чтение под замком | gate AC-17; красный при заглушке | PASS |
+| AC-18 | перехват | race AC-18 раунды 1…5, двойной победитель не воспроизведён | PASS |
+| AC-19 | перезапуск | race AC-19 (две); letters AC-19 письмо (две) | PASS |
+| AC-20 | ссылки, объекты, `FETCH_HEAD` | tip AC-20 tip; gate AC-20, AC-20 сбой | PASS |
+| AC-21 | предупреждение `accept` | hints AC-21, без предупреждения, off | PASS |
+| AC-22 | соседние задачи | hints AC-22 (пять) | PASS |
+| AC-23 | отказы `extra` | extra AC-23 c1…c5, assign, order | PASS |
+| AC-24 | блок в письмах и `show` | extra AC-24 (семь) | PASS |
+| AC-25 | схема, запись, опросник | config AC-25 (три) | PASS |
+| AC-26 | описание, справка, README, ADR | letters AC-26 (три); `grep` README; `ls`/`grep` ADR | PASS |
+| AC-27 | ребейз, порядок | два ребейза без конфликтов, `range-diff` 24 из 24 `=`; `crew-profiles-select`, `crew-profiles-config` | PASS |
+| AC-28 | запретные пути, `OPEN_STATUSES` | команды DoD с контролями; стражи секретов и имён | PASS |
+| AC-29 | файл сдачи | сдача после ворот | NOT VERIFIED |
+| AC-30 | доказательство красного | `landing-red` (четыре прогона, контроль маркера) | PASS |
+| AC-31 | письма и `show` для флагов | letters AC-31 (одиннадцать) | PASS |
+| AC-32 | нет ветки, нет origin, недоступен | tip AC-32 (четыре+); precheck, gate AC-32 | PASS |
+| AC-33 | предупреждение ветки задачи | precheck AC-33 (две) | PASS |
+| AC-34 | задача-план | precheck AC-34 (две); gate AC-34 (две) | PASS |
+| AC-35 | повтор `merge` | gate AC-35 c1…c7, c4b (девять) | PASS |
+| AC-36 | замена записи, подсказка `fetch` | precheck AC-36 a, b, c, d1, d2 | PASS |
+| AC-37 | изменения внутри чтения | gate AC-37 c1, c1 перехват, c2, c3 | PASS |
+| DNC-01 | текст прежний | golden, четырнадцать тестов, список удалённых строк | PASS |
+| DNC-02 | статусы не меняются | команда DoD, контроль; slot AC-05 | PASS |
+| DNC-03 | панель и окно | `git diff --stat` пуст | PASS |
+| DNC-04 | только свои пути | команда DoD, контроль | PASS |
+| DNC-05 | нет хранимой очереди | `grep` пуст, контроль | PASS |
+| DNC-06 | замок не правится | команды DoD, контроль | PASS |
+| DNC-07 | только чтение git | команды DoD; AC-20 | PASS |
+| DNC-08 | чужие процессы | команды DoD; списки процессов в тестах | PASS |
+| DNC-09 | `accept` и `cleaned` | команда DoD, два контроля | PASS |
+| DNC-10 | тесты по одному | этот файл | PASS |
+| DNC-11 | задачи 003 и 004, профили | `git diff --stat` пуст | PASS |
+| DNC-12 | дефекты замка | `grep` пуст; AC-15 | PASS |
+
+## RESULT
+
+Implemented: слот при принятии и счётчик «ждёт уборки» (`accepted_slot`, `cleanup_limit`); предпроверка вливания и ворота `merge` без замка до зелёной записи (`merge_precheck: required`, действия `precheck`, `unlock`); дополнительные поля задачи (`task_extra_fields`, вход `extra`); показ приёмщику; ADR-0009; десять самотестов, каркас, доказательство красного.
+
+Changed: `opencode-plugin/precheck.ts` (новый), `tasks.ts`, `config-schema.ts`, `core.ts`, `review.ts`, `index.ts`, `README.md`, `package.json`, `test/` (десять тестов, `landing-harness.mjs`, `landing-child.mjs`, `landing-red.mjs`, `landing-golden.mjs`, `landing-golden.json`, `README.md`), `doc/canon/decisions/ADR-0009-merge-precheck-without-lock.md` и реестр, папка задачи.
+
+Verification: уровни A–G по разделу «Доказательства уровней»; D — N/A.
+
+Acceptance criteria: 36 из 37 PASS, AC-29 NOT VERIFIED (сдача после ворот).
+
+How to verify: из `opencode-plugin/` в дереве ветки — `node test/<файл>` по одному (список в таблице «Прогоны»), `node test/landing-golden.mjs --check`, `node test/landing-red.mjs`; из корня — `sh scripts/guards/run-all.sh`; команды DoD из `plan.md` с `BASE` из этого файла.
+
+Regressions: нет (уровень G: прежние четырнадцать тестов как в базе, тексты при значениях по умолчанию побайтно прежние).
+
+Assumptions: FACT — владелец утвердил РП-01…РП-11 вариантом 1 (2026-10-08); ADR-0009 остаётся «предложено» до Г1; `git remote get-url` читается синхронно (локальная настройка).
+
+Known limitations: AC-29 и REQ-22 (NOT VERIFIED, сдача после ворот) — решение владельца: ожидается на Г1; живая проверка на настоящей службе (Г3) не выполнена — решение владельца: ожидается на Г3; полный проход всех 57 файлов тестов по одному не делался (AGENTS п.8) — решение владельца: ожидается на Г1; двойной победитель Н-03 не воспроизведён — решение владельца: ожидается на Г1.
+
+Out of scope notes: находки 1 и 4 раздела «Находки» (гонка `postLetter` на Windows; число «37» в AGENTS п.7).
+
+Remaining questions: нет открытых UNKNOWN; ворота Г1 (принять ADR-0009, пуш), Г2 (слияние), Г3 (переключение) — по слову владельца.
+
+Artifacts: ветка `task-005-faster-landing` (не отправлена), база `e606a43`, коммиты — `git log --oneline "$BASE"..HEAD`; порядок выкатки и откат: слияние без перезапуска, ключи в настройках проекта включает интегратор, откат — убрать ключи; новых переменных и секретов нет.
