@@ -4,6 +4,7 @@
 // finishes it ("green") after the checks of REQ-07 (every refusal leaves the record as it was); unlock releases the lock the session
 // holds for the task; the record becomes stale on rework, rework sync, reassign, cancel, unlock and a new review after a re-submit.
 import { readFileSync } from "node:fs"
+import path from "node:path"
 import { harness, reporter } from "./landing-harness.mjs"
 
 const { cell, done } = reporter("crew-landing-precheck.test")
@@ -84,8 +85,9 @@ fetch()
 
 // ---- AC-12 default: no merge_precheck key means required (owner's decision, 2026-10-09)
 {
-  H.settings({ merge_precheck: undefined })
+  H.settings({ merge_precheck: undefined }) // JSON.stringify drops the key, so the project file has none: the default applies
   const t = H.reviewing()
+  cell("AC-12 умолчание: the settings file really has no merge_precheck key", !("merge_precheck" in JSON.parse(readFileSync(path.join(H.proj, ".opencode", "crew-harness.json"), "utf8"))), "key present")
   cell("AC-12 умолчание: with no merge_precheck key loadConfig gives required", core.loadConfig(H.proj).mergePrecheck === "required", core.loadConfig(H.proj).mergePrecheck)
   clearLock()
   const m = await call("crew_task", REV, { action: "merge", n: t.n })
@@ -94,6 +96,10 @@ fetch()
     !H.holder() && /merge без предпроверки отклоняется/.test(m) && /crew_task \{action: "precheck", n: \d+\}/.test(m) && /candidate, result/.test(m) && /merge_precheck: off/.test(m),
     m,
   )
+  lockFor(REV, t.n)
+  const m1 = await call("crew_task", REV, { action: "merge", n: t.n })
+  cell("AC-12 умолчание: the holder of the lock without a record is also told how to release it", /crew_task \{action: "unlock", n: \d+\}/.test(m1) && H.holder()?.session === REV, m1)
+  clearLock()
   const r = await begin(t)
   cell("AC-12 умолчание: precheck works with no key and takes no lock", T(t.n).precheck?.state === "running" && !H.holder() && !/выключена/.test(r), r)
   clearLock()
