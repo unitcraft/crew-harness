@@ -312,9 +312,20 @@ export default {
     // вкладка застряла: напоминаний больше нет, спросившему вызов (письмо и уведомление в окне). Ход, в котором писал
     // владелец, — без напоминания (владелец ведёт вкладку сам), счётчик с нуля. Снимает застревание crew_task push.
     async function nudge(card: Card) {
+      // РЕЖИМЫ ОТВЕТА НА ВОПРОСЫ (задача 007, ADR-0010): решение — первой строкой, до проверки обязательств (сессия задачи, сдавшая
+      // отчёт, тоже получает ответ) и до пересылки вопроса и условия !turn?.owner (ход, начатый словом владельца, тоже). Режимы
+      // выключены — ход не читается, дальше всё как раньше. handled — ни пересылки, ни «Не завершено», счётчики не растут.
+      const cfgA = loadConfig(card.directory)
+      if (answerModesOn(cfgA.answerMode)) {
+        const endA = await turnEnd(card.session)
+        if (endA) {
+          const r = await answerTurn({ card, key: keyOf(card), end: endA, cfg: cfgA, now: now(), channel: "nudge", deps: { ownerWordAfter, lastUserAt } })
+          if (r.handled) return
+        }
+      }
       const list = obligationsOf(card.session)
       if (!list.length) return
-      const cfg = loadConfig(card.directory)
+      const cfg = cfgA
       const turn = await lastTurn(card.session, card.busySince ?? 0)
       const t = now()
       // СТОРОЖ ПОТОКА (план 002.4): ход сессии задачи кончился вопросом — это не «остановилась», а «упёрлась». Вместо
