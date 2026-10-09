@@ -12,6 +12,8 @@
 - Окружение: Node v24.15.0, git 2.56.0, Python 3.14.4. Хуки git установлены (`core.hooksPath` = `scripts/githooks`).
 - Деревья других задач — только чтение (`git worktree list`): `task-005-faster-landing` (влита, `40e78c3`), `task-013-runner-core`, `config-model-profiles`.
 
+- Ребейз после review-3 (Сессия С5п, 2026-10-09): `origin/main` @ `4cb0618` (задача 014, журналы сессий: `journal.ts`, `progress_line`, `usage_line`), 45 коммитов ветки перенесены; конфликты в `opencode-plugin/README.md` (два новых раздела рядом — оставлены оба) и `opencode-plugin/package.json` (`scripts.test`: к списку main дописаны восемь файлов `crew-answer-*`); новая база `BASE` = `4cb0618b187a94f4d22152d11edccae6b85dc5dc`. После ребейза зелёные: `run-all.sh` (FAIL 0), `crew-answer-golden`, `crew-answer-config`, `crew-answer-docs`, `crew-status`, `crew-help`, `crew-profiles-docs`; остальные файлы после ребейза не перегонялись (пересъёмка снимков не потребовалась).
+
 ## Базовое состояние (шаг 1)
 
 Прежние самотесты по одному до первого среза кода (`node test/<файл>.test.mjs` из `opencode-plugin/`, пауза 10 с между запусками; `node test/cleanup-tmp.mjs` перед серией), ревизия `40e78c3` плюс файлы шага 1 (кода ядра не тронуто):
