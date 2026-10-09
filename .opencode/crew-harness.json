@@ -2,12 +2,12 @@
   "model_profiles": {
     "claude": {
       "heavy": {
-        "model": "claude-code/opus",
+        "model": "claude-code/claude-opus-5-5",
         "context": 720000,
         "output": 64000
       },
       "medium": {
-        "model": "claude-code/sonnet",
+        "model": "claude-code/claude-sonnet-5-5",
         "context": 720000,
         "output": 64000
       },
@@ -17,32 +17,15 @@
         "output": 32000
       }
     },
-    "kimi": {
-      "heavy": {
-        "model": "kimi-code-plan-global/k3-256k",
-        "context": 220000,
-        "output": 131072
-      },
-      "medium": {
-        "model": "kimi-code-plan-global/k3-256k",
-        "context": 220000,
-        "output": 131072
-      },
-      "light": {
-        "model": "kimi-code-plan-global/k3-256k",
-        "context": 220000,
-        "output": 131072
-      }
-    },
     "codex": {
       "heavy": {
-        "model": "openai/gpt-5.5",
+        "model": "openai/gpt-6-astra",
         "context": 525000,
         "input": 461000,
         "output": 128000
       },
       "medium": {
-        "model": "openai/gpt-5.6-terra",
+        "model": "openai/gpt-6.1-sol",
         "context": 525000,
         "input": 461000,
         "output": 128000
@@ -53,134 +36,76 @@
         "input": 461000,
         "output": 128000
       }
-    }
-  },
-  "profile_sets": {
-    "default": {
-      "develop": {
-        "family": "claude",
-        "tier": "task"
-      },
-      "plan": {
-        "family": "claude",
-        "tier": "task"
-      },
-      "accept": {
-        "family": "claude",
-        "tier": "task"
-      },
-      "plan_accept": {
-        "family": "claude",
-        "tier": "task"
-      }
     },
-    "claude": {
-      "develop": {
-        "family": "claude",
-        "tier": "task"
+    "codex-light": {
+      "heavy": {
+        "model": "openai/gpt-6-luna",
+        "context": 525000,
+        "input": 461000,
+        "output": 128000
       },
-      "plan": {
-        "family": "claude",
-        "tier": "task"
+      "medium": {
+        "model": "openai/gpt-6-luna",
+        "context": 525000,
+        "input": 461000,
+        "output": 128000
       },
-      "accept": {
-        "family": "claude",
-        "tier": "task"
-      },
-      "plan_accept": {
-        "family": "claude",
-        "tier": "task"
-      }
-    },
-    "codex": {
-      "develop": {
-        "family": "codex",
-        "tier": "task"
-      },
-      "plan": {
-        "family": "codex",
-        "tier": "task"
-      },
-      "accept": {
-        "family": "codex",
-        "tier": "task"
-      },
-      "plan_accept": {
-        "family": "codex",
-        "tier": "task"
+      "light": {
+        "model": "openai/gpt-6-luna",
+        "context": 525000,
+        "input": 461000,
+        "output": 128000
       }
     },
     "kimi": {
-      "develop": {
-        "family": "kimi",
-        "tier": "task"
+      "heavy": {
+        "model": "kimi-code-plan-global/k3-256k",
+        "context": 220000,
+        "output": 131072
       },
-      "plan": {
-        "family": "kimi",
-        "tier": "task"
+      "medium": {
+        "model": "kimi-code-plan-global/k3-256k",
+        "context": 220000,
+        "output": 131072
       },
-      "accept": {
-        "family": "kimi",
-        "tier": "task"
-      },
-      "plan_accept": {
-        "family": "kimi",
-        "tier": "task"
+      "light": {
+        "model": "kimi-code-plan-global/k3-256k",
+        "context": 220000,
+        "output": 131072
       }
+    }
+  },
+  "profile_set": "codex-light",
+  "profile_sets": {
+    "claude": {
+      "develop": { "family": "claude", "tier": "task" },
+      "accept": { "family": "claude", "tier": "task" },
+      "plan": { "family": "claude", "tier": "task" },
+      "plan_accept": { "family": "claude", "tier": "task" }
     },
-    "claude-kimi": {
-      "develop": {
-        "family": "claude",
-        "tier": "task"
-      },
-      "plan": {
-        "family": "claude",
-        "tier": "task"
-      },
-      "accept": {
-        "family": "kimi",
-        "tier": "task"
-      },
-      "plan_accept": {
-        "family": "kimi",
-        "tier": "task"
-      }
+    "codex": {
+      "develop": { "family": "codex", "tier": "task" },
+      "accept": { "family": "codex", "tier": "task" },
+      "plan": { "family": "codex", "tier": "task" },
+      "plan_accept": { "family": "codex", "tier": "task" }
     },
-    "claude-codex": {
-      "develop": {
-        "family": "claude",
-        "tier": "task"
-      },
-      "plan": {
-        "family": "claude",
-        "tier": "task"
-      },
-      "accept": {
-        "family": "codex",
-        "tier": "task"
-      },
-      "plan_accept": {
-        "family": "codex",
-        "tier": "task"
-      }
+    "codex-light": {
+      "develop": { "family": "codex", "tier": "light" },
+      "accept": { "family": "codex", "tier": "light" },
+      "plan": { "family": "codex", "tier": "light" },
+      "plan_accept": { "family": "codex", "tier": "light" }
     },
     "codex-kimi": {
-      "develop": {
-        "family": "codex",
-        "tier": "task"
-      },
-      "plan": {
-        "family": "codex",
-        "tier": "task"
-      },
-      "accept": {
-        "family": "kimi",
-        "tier": "task"
-      },
-      "plan_accept": {
-        "family": "kimi",
-        "tier": "task"
-      }
+      "develop": { "family": "codex", "tier": "task" },
+      "plan": { "family": "codex", "tier": "task" },
+      "accept": { "family": "kimi", "tier": "task" },
+      "plan_accept": { "family": "kimi", "tier": "task" }
+    },
+    "kimi": {
+      "develop": { "family": "kimi", "tier": "task" },
+      "plan": { "family": "kimi", "tier": "task" },
+      "accept": { "family": "kimi", "tier": "task" },
+      "plan_accept": { "family": "kimi", "tier": "task" }
     }
   }
 }
