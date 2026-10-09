@@ -235,7 +235,7 @@ such a session younger than 24 hours is not listed until that time has passed.
 
 A line with no time field is dated by the change time of the file (marked `≈`), and for equal copies the earlier one. A merge, a switch of branches
 and a clone refresh that time, so a journal brought by a merge may look newer than its last line; lines written with `[HH:MM]` do not have this
-limit. The date of such a line is the day of the file (the previous day when the time is later than the file by more than 5 minutes).
+limit. The date of such a line is the day of the file (the previous day when the time is later than the file by more than 5 minutes). The field may also be `[YYYY-MM-DD HH:MM]` (new lines since 2026-10-09; the owner's word): then the named day is used (a moment later than now by more than 5 minutes falls back to the file time, marked `≈`); both forms are accepted, earlier lines are not rewritten.
 
 ### 7. The transitional period
 
@@ -251,7 +251,7 @@ failure to register them does not break the plugin. Both are narrow: no shell, a
 stay inside the project folder of the window, the refusal of the file system comes back as a refusal, earlier lines are never
 rewritten. A refusal is the answer `Не записано: <reason>`, nothing is written.
 
-`progress_line` `{file, code, unit, text}`: appends ONE line `<code> k/N [HH:MM] <text>` with the machine time to a file
+`progress_line` `{file, code, unit, text}`: appends ONE line `<code> k/N [YYYY-MM-DD HH:MM] <text>` with the machine date and time to a file
 named `progress.log`, which must already exist. `code` is 1-8 letters or digits, `unit` is `k/N` or `?/?`, `text` is one line
 of up to 120 characters. Example: `progress_line {file: "doc/tasks/007-x/progress.log", code: "С5д", unit: "4/13", text: "..."}`.
 Commands that only ask the clock (`date +%H:%M`, `Get-Date -Format HH:mm`) are refused by the `opencode-windows-env` plugin;
@@ -259,8 +259,8 @@ this tool is the allowed way to put the time into the journal.
 
 `usage_line` `{file, code, result}`: appends ONE JSON line (format version `"v":1`) to a file named `usage.log`; the file may
 be created only when a `progress.log` lies in the same folder. The agent passes the file, the session code and the result
-(one line, up to 200 characters); the plugin fills the rest: `at` (ISO time), `session`, `model` (`provider/id`), `variant`,
-`tokens` `{input, output, reasoning, cache_read, cache_write}`, `cost`, `started` and `seconds` (from the session card of
+(one line, up to 200 characters); the plugin fills the rest: `at` (ISO time with the local offset, e.g. `2026-10-09T04:12:00+03:00`), `session`, `model` (`provider/id`), `variant`,
+`tokens` `{input, output, reasoning, cache_read, cache_write}`, `cost`, `started` (the same ISO form) and `seconds` (from the session card of
 `ctx.session.get`), `max_loop_lag_ms` (the largest delay of the plugin's own loop timer, the one that writes the "loop lag"
 lines, since the session was created or the plugin started, whichever is later), `commit` (`git rev-parse HEAD` of the file
 folder, empty outside a repository). A value the plugin cannot read is `null`, never guessed; `limits`, `tool_calls` and

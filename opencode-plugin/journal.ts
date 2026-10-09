@@ -1,5 +1,5 @@
 // ЖУРНАЛЫ ЗАДАЧИ: операции записи для агента (2026-10-09). Журналы задачи — территория CrewHarness (Канон, «Три журнала сессии»).
-//   progress_line — одна строка `<код> k/N [ЧЧ:ММ] <текст>` с настоящим временем машины в файл progress.log;
+//   progress_line — одна строка `<код> k/N [ГГГГ-ММ-ДД ЧЧ:ММ] <текст>` с настоящими датой и временем машины в файл progress.log;
 //   usage_line    — одна строка JSON (поле версии `v`) с учётом сессии в файл usage.log рядом с progress.log.
 // Обе операции узкие: никакой оболочки, только дозапись, имя файла фиксировано, путь не выходит из папки проекта окна, отказ
 // файловой системы возвращается отказом, прежние строки не переписываются. Чистые функции здесь; регистрация — registerJournalTools.
@@ -9,6 +9,14 @@ import path from "node:path"
 
 const pad2 = (n: number) => String(n).padStart(2, "0")
 export const hhmm = (d: Date = new Date()) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
+// Дата и время местные, как в Каноне: `ГГГГ-ММ-ДД ЧЧ:ММ` (поле строки progress.log) и ISO с местным поясом `2026-10-09T04:12:00+03:00` (usage.log).
+export const ymdhm = (d: Date = new Date()) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${hhmm(d)}`
+export function isoLocal(d: Date): string {
+  const off = -d.getTimezoneOffset()
+  const sign = off < 0 ? "-" : "+"
+  const a = Math.abs(off)
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}${sign}${pad2(Math.floor(a / 60))}:${pad2(a % 60)}`
+}
 
 export type Refused = { ok: false; reason: string }
 
@@ -58,7 +66,7 @@ export function progressLine(input: ProgressInput, base: string, now: Date = new
     return { ok: false, reason: "файла нет: журнал создаёт сессия методики, эта операция только дописывает" }
   }
   if (!st.isFile()) return { ok: false, reason: "это не файл" }
-  const line = `${code} ${unit} [${hhmm(now)}] ${text}`
+  const line = `${code} ${unit} [${ymdhm(now)}] ${text}`
   const bad = appendOnly(where.abs, line)
   if (bad) return bad
   return { ok: true, line, file: where.abs }
@@ -137,13 +145,13 @@ export function usageLine(input: UsageInput, base: string, env: UsageEnv): { ok:
   const row = {
     v: 1,
     code,
-    at: now.toISOString(),
+    at: isoLocal(now),
     session: env.session || null,
     model: m?.id ? `${m.providerID ? m.providerID + "/" : ""}${m.id}` : null,
     variant: m?.variant ? String(m.variant) : null,
     tokens,
     cost: num(c?.cost),
-    started: created === null ? null : new Date(created).toISOString(),
+    started: created === null ? null : isoLocal(new Date(created)),
     seconds: created === null ? null : Math.max(0, Math.round((now.getTime() - created) / 1000)),
     max_loop_lag_ms: created === null ? null : (env.maxLag ?? maxLoopLagSince)(created),
     limits: null,
@@ -178,7 +186,7 @@ export async function registerJournalTools(ctx: any, log: (s: string) => void): 
       editor.add({
         name: "progress_line",
         description:
-          "Append ONE line to a progress.log of the current project: '<code> <k/N> [HH:MM] <text>'. The tool puts the machine time itself; do not ask the clock with date or Get-Date (refused). Only a file named progress.log inside the project folder, only appending; the file must exist. Example: file 'doc/tasks/007-x/progress.log', code 'С5д', unit '4/13', text 'ворота merge: замок только на проверенную вершину'.",
+          "Append ONE line to a progress.log of the current project: '<code> <k/N> [YYYY-MM-DD HH:MM] <text>'. The tool puts the machine date and time itself; do not ask the clock with date or Get-Date (refused). Only a file named progress.log inside the project folder, only appending; the file must exist. Example: file 'doc/tasks/007-x/progress.log', code 'С5д', unit '4/13', text 'ворота merge: замок только на проверенную вершину'.",
         input: {
           type: "object",
           properties: {

@@ -1,5 +1,5 @@
 // Self-test of the task journal tools (node >= 24):  node test/crew-journal.test.mjs
-// progress_line appends ONE line '<code> k/N [HH:MM] <text>' with the machine time to a file named progress.log inside the
+// progress_line appends ONE line '<code> k/N [YYYY-MM-DD HH:MM] <text>' with the machine date and time to a file named progress.log inside the
 // project folder; usage_line appends ONE JSON line (format version v:1) with the accounting of the session to usage.log next to
 // a progress.log of the same task folder. Both: no shell, append only, fixed file names, path inside the project folder, the
 // refusal of the file system is returned as a refusal, history is never rewritten. Exit 1 on any failed cell.
@@ -32,21 +32,27 @@ writeFileSync(log, HISTORY)
 const rel = "doc/tasks/007-x/progress.log"
 const urel = "doc/tasks/007-x/usage.log"
 const at = (h, m) => new Date(2026, 9, 9, h, m, 0)
+// independent expectation of the local ISO form: fields from the Date, offset from the minutes difference to UTC
+const p2 = (n) => String(n).padStart(2, "0")
+const isoLocalOf = (d) => {
+  const off = Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()) - Math.floor(d.getTime() / 1000) * 1000) / 60000)
+  return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}${off < 0 ? "-" : "+"}${p2(Math.floor(Math.abs(off) / 60))}:${p2(Math.abs(off) % 60)}`
+}
 
 // ---- progress_line ----
 {
   const r = progressLine({ file: rel, code: "С5д", unit: "4/13", text: "ворота merge: замок только на проверенную вершину" }, base, at(3, 7))
-  cell("progress: appends one line with the given time", r.ok && r.line === "С5д 4/13 [03:07] ворота merge: замок только на проверенную вершину", JSON.stringify(r))
+  cell("progress: appends one line with the given date and time", r.ok && r.line === "С5д 4/13 [2026-10-09 03:07] ворота merge: замок только на проверенную вершину", JSON.stringify(r))
   const txt = read(log)
   cell("progress: history is kept, one new line only", txt.startsWith(HISTORY) && txt.split("\n").length === 3 && txt.endsWith("\n"), JSON.stringify(txt))
 
   const before = new Date()
   const r2 = progressLine({ file: log, code: "С5д", unit: "?/?", text: "реальное время" }, base)
   const after = new Date()
-  const stamp = /\[(\d\d):(\d\d)\]/.exec(r2.line ?? "")
-  const mins = (d) => d.getHours() * 60 + d.getMinutes()
-  const got = stamp ? Number(stamp[1]) * 60 + Number(stamp[2]) : -1
-  cell("progress: real machine time (absolute path inside the project)", r2.ok && got >= mins(before) && got <= mins(after), JSON.stringify([r2, got]))
+  const stamp = /\[(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d)\]/.exec(r2.line ?? "")
+  const got = stamp ? new Date(Number(stamp[1]), Number(stamp[2]) - 1, Number(stamp[3]), Number(stamp[4]), Number(stamp[5])).getTime() : -1
+  const floor = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes()).getTime()
+  cell("progress: real machine date and time (absolute path inside the project)", r2.ok && got >= floor(before) && got <= floor(after), JSON.stringify([r2, got]))
 
   const bad = (name, input) => {
     const snapshot = read(log)
@@ -107,11 +113,12 @@ const now = new Date(Date.UTC(2026, 9, 9, 10, 30, 0))
   try { row = JSON.parse(lines[0]) } catch (e) { row = undefined }
   cell("usage: the line is valid JSON with v:1", row?.v === 1, lines[0])
   const want = {
-    v: 1, code: "С5д", at: now.toISOString(), session: "ses_abc", model: "anthropic/claude-sonnet-5-5", variant: "high",
+    v: 1, code: "С5д", at: isoLocalOf(now), session: "ses_abc", model: "anthropic/claude-sonnet-5-5", variant: "high",
     tokens: { input: 1000, output: 200, reasoning: 30, cache_read: 5000, cache_write: 400 }, cost: 0.42,
-    started: "2026-10-09T10:00:00.000Z", seconds: 1800, max_loop_lag_ms: 1234, limits: null, tool_calls: null, test_runs: null, commit: "", result: "готово: 13 из 13",
+    started: isoLocalOf(new Date(card.time.created)), seconds: 1800, max_loop_lag_ms: 1234, limits: null, tool_calls: null, test_runs: null, commit: "", result: "готово: 13 из 13",
   }
   cell("usage: all fields with the given values", JSON.stringify(row) === JSON.stringify(want), JSON.stringify(row))
+  cell("usage: at and started are ISO with the local offset, the same moment", /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$/.test(row?.at) && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$/.test(row?.started) && Date.parse(row.at) === now.getTime() && Date.parse(row.started) === card.time.created, lines[0])
   cell("usage: limits, tool_calls, test_runs are null (nothing invented)", row?.limits === null && row?.tool_calls === null && row?.test_runs === null, lines[0])
 
   // no card: everything from the card is null, nothing invented
@@ -198,7 +205,7 @@ const now = new Date(Date.UTC(2026, 9, 9, 10, 30, 0))
   const stop = await plugin.setup(ctx)
   cell("setup registers progress_line and usage_line", !!tools.progress_line && !!tools.usage_line, JSON.stringify(names))
   const out = await tools.progress_line.execute({ file: rel, code: "С5д", unit: "6/13", text: "через инструмент" }, { sessionID: "ses_t" })
-  cell("progress tool writes and answers", /Записано: С5д 6\/13 \[\d\d:\d\d\] через инструмент/.test(out.content) && read(log).includes("] через инструмент"), JSON.stringify(out))
+  cell("progress tool writes and answers", /Записано: С5д 6\/13 \[\d{4}-\d\d-\d\d \d\d:\d\d\] через инструмент/.test(out.content) && read(log).includes("] через инструмент"), JSON.stringify(out))
   const no = await tools.progress_line.execute({ file: "doc/tasks/007-x/result.md", code: "С5д", unit: "6/13", text: "x" }, {})
   cell("progress tool refuses a wrong file", /^Не записано/.test(no.content), JSON.stringify(no))
   const u = await tools.usage_line.execute({ file: urel, code: "С5д", result: "через инструмент" }, { sessionID: "ses_t" })
