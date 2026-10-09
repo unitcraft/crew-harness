@@ -92,7 +92,7 @@ export async function harness(prefix, opts = {}) {
     call: async (name, sid, input = {}) => (await tools[name].execute(input, { sessionID: sid })).content,
     cfg: () => core.loadConfig(proj),
     /** the card of a session with a tab: the request that opened the turn, as OpenCode does it */
-    open: (sid) => hooks.context({ sessionID: sid, system: [], model: { id: "opus", providerID: "claude-code" } }),
+    open: (sid) => hooks.context?.({ sessionID: sid, system: [], model: { id: "opus", providerID: "claude-code" } }),
     /**
      * a turn of a session as OpenCode records it: the request (busy card), the user row, the assistant text, the idle row and the
      * idle event. user: false -- the turn is not started by the owner's words but by a letter of the plugin

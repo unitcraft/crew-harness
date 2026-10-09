@@ -91,6 +91,8 @@ export type Block = {
   qn: number
   /** начало вопроса для письма и показа (до 100 знаков) */
   head: string
+  /** вопрос для записи журнала (до 300 знаков) */
+  qtext: string
   fields: Field[]
   hasFields: boolean
   /** тип вопроса: requirements / plan / implementation / gate; «?» — неизвестный или спорный; undefined — не объявлен */
@@ -184,10 +186,11 @@ function buildBlock(qn: number, rawLines: string[], ids: boolean, place: "tail3"
     if (!narrow) checkParts.push(f.value)
   }
   const q = lines.find((l) => qEnds(l)) ?? lines.find((l) => l.text.trim())
-  const head = (q?.text ?? "").replace(ID_RE, "").replace(/^[\s:.—-]+/, "").trim().slice(0, 100)
+  const qline = (q?.text ?? "").replace(ID_RE, "").replace(/^[\s:.—-]+/, "").trim()
   return {
     qn,
-    head,
+    head: qline.slice(0, 100),
+    qtext: qline.slice(0, 300),
     fields,
     hasFields: fields.length > 0,
     ...(type !== undefined ? { type } : {}),
