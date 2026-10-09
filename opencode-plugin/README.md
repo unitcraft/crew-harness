@@ -494,9 +494,9 @@ JSON in `.opencode/crew-harness.json` (any reader sees them without this plugin;
   task» (the default behaviour). A stage without a cell keeps the model of `spawn_models`. Names of sets: lowercase Latin
   letters, digits, dashes, up to 40 characters, not a word of the commands (`use`, `reset`, `all`, `list`, `show`, `set`,
   `unset`, `new`, `rename`, `delete`, `check`, `save`, `from`).
-- **The enabled set** — `profile_set`: the default name, set by a person (`/crew-sets use` and `save`, or editing the file);
-  `crew_config set` refuses this key whatever the value. A local `use` overrides the name of the file, takes effect at
-  once and needs no commit and no restart of the service.
+- **The enabled set** — `profile_set`: the name, set by a person (`/crew-sets use`, or editing the file);
+  `crew_config set` refuses this key whatever the value. `use` writes the name into the file of the project, takes effect
+  at once and needs no commit and no restart of the service.
 
 The window is a property of the model **in a folder**, not of a stage or a session. The plugin writes the windows of the
 models of the enabled set (all three tiers of every family named in the set, because `tier` on the input of `crew_spawn`
@@ -531,23 +531,25 @@ Commands of the window (answers are shown in a dialog at once, no turn of the mo
 
 | Command | What it does |
 |---|---|
-| `/crew-sets` | a table of all sets, the enabled one marked, with the source of the name (file or local switch) |
+| `/crew-sets` | a table of all sets, the enabled one marked |
 | `/crew-sets show [name]` | a set in detail: model, tier and effective window per stage; the enabled one if no name |
-| `/crew-sets use <name>` | enable a set locally: what changed, the windows «was → became», the compaction of smaller windows |
+| `/crew-sets use <name>` | enable a set (writes `profile_set` into the file of the project): what changed, the windows «was → became», the compaction of smaller windows |
 | `/crew-sets set <name> <stage> <family>/<tier>` | change a cell (stages: `develop`, `accept`, `plan`, `plan_accept` or Russian words) |
 | `/crew-sets unset <name> <stage>` | remove a cell: the stage goes back to `spawn_models` |
 | `/crew-sets new <name> [from <other>]`, `rename <a> <b>`, `delete <name>` | create (empty or a copy), rename (the enabled name follows), delete (not the enabled one) |
-| `/crew-sets reset [<name> [<stage>] \| all]` | take back local edits: the local name; the edits of a set; one cell; the whole local layer |
 | `/crew-profiles` | a table «family, tier → model, window» |
 | `/crew-profiles show [<family>]` | the table in detail or one family with the sets that refer to it |
 | `/crew-profiles set <family> <tier\|all> <model> <context> output=<n> [input=<n>]` | create or change a record; `all` changes the three tiers in one check |
 | `/crew-profiles new <family> [from <other>]`, `rename <a> <b>`, `delete <family> [<tier>]` | three empty records or a copy; rename updates every set; delete is refused while a set refers to the record |
-| `/crew-profiles reset [<family>[/<tier>] \| all]` | take back the local edits of a family or one record |
-| `check`, `save [force]` (both commands) | `check`: the whole table and the sets against the catalog of OpenCode («not checked» when the catalog is unavailable), hand-written windows, the explicit threshold, empty records, links, unsaved edits; changes nothing. `save`: move the local edits into the working copy of the file by keys (the plugin does not commit); a record whose value changed in the file since the edit is skipped and listed, `save force` overwrites it |
+| `check` (both commands) | the whole table and the sets against the catalog of OpenCode («not checked» when the catalog is unavailable), hand-written windows, the explicit threshold, empty records, links; changes nothing |
 
-Edits act at once, without a commit: they live as a layer over the committed file in the mailbox of the plugin
-(`profiles/<project>.layer.json`); an edit that would make the enabled set invalid or leave a dangling reference is refused
-whole. An invalid state that came not through the commands (a commit removed a profile) does not stop the running tabs:
+Edits act at once, without a commit and without any layer between: every command rewrites the three keys (`model_profiles`,
+`profile_sets`, `profile_set`) of the file `.opencode/crew-harness.json` in the working copy of the settings folder, in one
+atomic write; the data in force are those keys of the working copy (the plugin does not commit — commit the file when you
+want the change to travel). An edit that would make the enabled set invalid or leave a dangling reference is refused whole
+and the file stays as it was. There is no `save` and no `reset`: the earlier local layer
+(`profiles/<project>.layer.json` in the mailbox of the plugin) is switched off — see [ADR-0014](../doc/canon/decisions/ADR-0014-profiles-without-local-layer.md);
+an old layer file is not read, the service and `check` name it once, and it can be deleted by hand. An invalid state that came not through the commands (a commit removed a profile) does not stop the running tabs:
 sessions go by the last valid state (the snapshot) with a warning in `/crew-sets`, `crew_doctor` and a notice in the
 window; a set that is gone and has no snapshot gives a refusal that names the set. Every edit leaves one line
 `profile edit: …` in the log of the plugin; a task keeps, per launched session, the stage, the set, the family, the tier

@@ -290,3 +290,20 @@
 | DNC-10 | явный `autoCompactWindow` не переписан | тест, проба | windows («DNC-10»); probe AC-25 | PASS |
 
 Проба набора codex-kimi, 2026-10-08: исполнитель запущен моделью openai/gpt-5.6-terra#default
+
+## Решение владельца 2026-10-09: слой отключён
+
+Слово владельца: «хочу полностью отключить слои — сделай быстрой задачей» (владелец, 2026-10-09, чат). Причина: забытый локальный слой
+(`profiles/<проект>.layer.json` в ящике плагина) молча перекрывает набор из файла проекта — случай: `/crew-sets use codex` перекрыл
+`profile_set=codex-light` в проекте claude-limits. Решение записано в [ADR-0014](../../canon/decisions/ADR-0014-profiles-without-local-layer.md);
+ветка `003-no-layers`.
+
+Сделано в ветке `003-no-layers` (от `origin/main`):
+
+- `opencode-plugin/profile-layer.ts`: убраны слой, `save`, `reset`, сравнение слоя с файлом; добавлены чтение трёх ключей рабочей копии, черновик и
+  `writeDraft` (одна атомарная запись, файл не JSON не перезаписывается), `legacyLayerNote` (один раз за процесс) и `legacyLayerText` (для `check`).
+- `opencode-plugin/profile-cmd.ts`, `core.ts` (таблица глаголов), `config-schema.ts`, `index.ts`: глаголы, тексты и подсказки без слоя.
+- Тесты: `crew-profiles-layer`, `crew-profiles-cmd`, `crew-profiles-select`, `crew-profiles-windows`, `crew-profiles-docs`, `crew-instant-commands`;
+  `crew-profiles-config` заодно исправлен (ячейка AC-23: инструменты журнала `progress_line` и `usage_line` не обязаны начинаться с `crew_`).
+- Документы: ADR-0014, пометка в ADR-0008 и реестре, README плагина, README тестов, этот раздел.
+- Прогнаны только затронутые тесты, по одному; `npm test` целиком не запускался (служба OpenCode живая).
