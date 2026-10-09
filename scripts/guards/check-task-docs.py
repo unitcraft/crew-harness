@@ -13,9 +13,14 @@
     по форме «<код> <k>/<N> <подпись>» (journal-line, с адресом «файл:строка»), без пути машины
     (journal-path; определение одно со стражем секретов, lib/machine_paths.py) и, только в режиме
     индекса у добавленных строк журнала, который уже есть в HEAD, с подписью (без поля времени
-    [ЧЧ:ММ]) не длиннее 80 знаков (journal-long).
-Не проверяет: содержание документов, остальные файлы задач (result.md, log.md, profile.log,
-    материалы task/), вложенные папки задач, вторую строку plan.md (база ревизии); честность строки
+    [ЧЧ:ММ] или [ГГГГ-ММ-ДД ЧЧ:ММ]) не длиннее 80 знаков (journal-long); log.md — только в режиме
+    индекса, добавленные строки (у первой версии файла — все), которые начинаются с даты ГГГГ-ММ-ДД
+    не раньше 2026-10-10: такая строка обязана быть «ГГГГ-ММ-ДД ЧЧ:ММ <вид>: <текст>», вид — из
+    закрытого списка (решение владельца, заседание, ворота, документ, пуск, слияние, находка),
+    иначе log-line.
+Не проверяет: содержание документов, остальные файлы задач (result.md, profile.log, материалы
+    task/), записи log.md без даты в начале строки, с датой раньше 2026-10-10 и вне индекса (в
+    режимах дерева, коммита и CI добавленных строк нет), usage.log, вложенные папки задач, вторую строку plan.md (база ревизии); честность строки
     журнала («пишется по ходу» судится приёмкой); предел подписи в режимах дерева и коммита и CI
     (там нет добавленных строк); k больше N и неверное поле времени (остаются подписью, как в панели).
 Правило: doc/canon/process.md (цикл сессий методики, «Журнал хода progress.log») и формат машинных
@@ -42,8 +47,15 @@ IDENT = re.compile(r"^(REQ|AC|DNC)-(\d+)\b")
 JOURNAL_FILE = re.compile(r"^doc/tasks/[^/]+/progress\.log$")
 # строка журнала (Д-11): только ASCII-цифры, остаток — любые знаки кроме LF; в JavaScript тот же язык (progress.ts, LINE_RE)
 JOURNAL_LINE = re.compile(r"^([^ \t]+) ([0-9]+)/([0-9]+) ([^\n]+)$")
-# необязательное поле времени в начале подписи (REQ-04): общий набор строк test/progress-vectors.json
-JOURNAL_TIME = re.compile(r"^\[(?:[01][0-9]|2[0-3]):[0-5][0-9]\] ")
+# необязательное поле времени в начале подписи (REQ-04): `[ЧЧ:ММ]` или `[ГГГГ-ММ-ДД ЧЧ:ММ]` (по слову владельца, 2026-10-09);
+# общий набор строк test/progress-vectors.json
+JOURNAL_TIME = re.compile(r"^\[(?:[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01]) )?(?:[01][0-9]|2[0-3]):[0-5][0-9]\] ")
+# log.md задачи: новые записи — «ГГГГ-ММ-ДД ЧЧ:ММ <вид>: <текст>»; судятся добавленные строки с датой не раньше LOG_FROM
+LOG_FILE = re.compile(r"^doc/tasks/[^/]+/log\.md$")
+LOG_DATED = re.compile(r"^([0-9]{4}-[0-9]{2}-[0-9]{2})(?![0-9])")
+LOG_ENTRY = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} (решение владельца|заседание|ворота|документ|пуск|слияние|находка): ")
+LOG_FROM = "2026-10-10"
+LOG_KINDS = "решение владельца, заседание, ворота, документ, пуск, слияние, находка"
 SIGNATURE_MAX = 80
 
 
@@ -115,9 +127,30 @@ def check_progress_log(path, data, source, rep):
             rep.add(path, number, "journal-long", "подпись добавленной строки длиннее %d знаков" % SIGNATURE_MAX)
 
 
+def check_log_md(path, data, source, rep):
+    """log.md: добавленные в индексе строки с датой не раньше LOG_FROM — по шаблону новой записи."""
+    if source.mode != "index":
+        return
+    added = source.added_lines(path)
+    if added is None:  # первая версия файла (или репозиторий без коммитов): все строки добавлены
+        added = list(enumerate(data.decode("utf-8", "replace").split("\n"), 1))
+    for number, text in added:
+        text = text.rstrip("\r")
+        m = LOG_DATED.match(text)
+        if m and m.group(1) >= LOG_FROM and not LOG_ENTRY.match(text):
+            rep.add(path, number, "log-line", "запись с датой не раньше %s не по форме «ГГГГ-ММ-ДД ЧЧ:ММ <вид>: <текст>» "
+                    "(вид — один из: %s)" % (LOG_FROM, LOG_KINDS))
+
+
 def judge(source, args, rep):
     count = 0
     for entry in source.changed():
+        if LOG_FILE.match(entry.path) and entry.mode != "160000":
+            data = source.read(entry)
+            if data is not None:
+                count += 1
+                check_log_md(entry.path, data, source, rep)
+            continue
         if JOURNAL_FILE.match(entry.path) and entry.mode != "160000":
             data = source.read(entry)
             if data is not None:
@@ -144,4 +177,4 @@ def judge(source, args, rep):
 
 if __name__ == "__main__":
     sys.exit(guardlib.run("check-task-docs", "файлов задач", judge,
-                          lost="нет ни одного spec.md, plan.md, progress.log или файла проверки в doc/tasks/*/"))
+                          lost="нет ни одного spec.md, plan.md, progress.log, log.md или файла проверки в doc/tasks/*/"))

@@ -12,7 +12,12 @@
     только у добавленных строк существующего журнала в индексе (в дереве и в коммите — нет, у первой
     версии журнала — нет); адрес сайта, k больше N, неверное поле времени, CRLF и пустая строка не
     красные; общий набор строк opencode-plugin/test/progress-vectors.json (его читает и плагин);
-    общий запуск run-all.sh --ci на одноразовой копии принимает вердикт.
+    общий запуск run-all.sh --ci на одноразовой копии принимает вердикт; поле времени строки журнала
+    в обоих видах ([ЧЧ:ММ] и [ГГГГ-ММ-ДД ЧЧ:ММ], по слову владельца 2026-10-09; поле не входит в
+    80 знаков); log.md (по слову владельца 2026-10-09): добавленные в индексе строки с датой не
+    раньше 2026-10-10 — по шаблону «ГГГГ-ММ-ДД ЧЧ:ММ <вид>: <текст>» (красные: вид не из списка,
+    нет времени, нет вида; у первой версии файла судятся все строки); прежние строки, более ранние
+    даты, строки без даты в начале, режимы дерева и коммита — не красные.
 Не проверяет: содержание документов.
 Правило: doc/canon/process.md (цикл сессий методики, «Журнал хода progress.log»); AC-14 и AC-18 задач.
 """
@@ -200,6 +205,78 @@ def main():
         stlib.expect(proc, 1, "FAIL: check-task-docs: 1 нарушений")
         assert stlib.has_line(proc, "FAIL %s:5: journal-long:" % journal) and not stlib.has_line(proc, "%s:4:" % journal), proc.out
 
+    def legit_both_time_forms():
+        content = "\n".join([
+            "С5 0/4 [09:55] старт",
+            "С5 1/4 [2026-10-09 10:05] шаг с датой",
+            "С5 2/4 [2026-13-40 10:05] неверная дата остаётся подписью",
+            "С5 3/4 [2026-10-09 10:06] " + "d" * 80,
+            "С5 4/4 [2026-10-09 10:07] готово",
+        ]) + "\n"
+        files = dict(good_j)
+        files[journal] = content
+        stlib.expect(check(fresh(files)), 0, "ок: осмотрено 7 файлов задач")
+
+    def edge_80_and_81_with_date_time():
+        repo = fresh(good_j)
+        stlib.write_files(repo, {journal: good_j[journal] + "С1 2/2 [2026-10-10 10:31] " + "a" * 80 + "\nС1 2/2 [2026-10-10 10:32] " + "b" * 81 + "\n"})
+        stlib.git(repo, env, "add", "--", journal)
+        proc = check(repo, "--index")
+        stlib.expect(proc, 1, "FAIL: check-task-docs: 1 нарушений")
+        assert stlib.has_line(proc, "FAIL %s:5: journal-long:" % journal) and not stlib.has_line(proc, "%s:4:" % journal), proc.out
+
+    # log.md: новый формат записей с 2026-10-10 (по слову владельца, 2026-10-09)
+    log_md = "doc/tasks/001-x/log.md"
+    old_log = "Методика: x @ abc\n2026-10-08 решение владельца: старая запись в прежнем виде\n2026-10-09 просто так, прежний вид\n"
+    new_ok = [
+        "2026-10-10 09:30 решение владельца: принято",
+        "2026-10-10 09:31 заседание: итог",
+        "2026-10-10 09:32 ворота: В1",
+        "2026-10-10 09:33 документ: spec.md",
+        "2026-10-10 09:34 пуск: С2",
+        "2026-10-10 09:35 слияние: ветка",
+        "2026-10-11 00:00 находка: пример",
+    ]
+
+    def log_repo(extra_files=None):
+        files = dict(good_j)
+        files[log_md] = old_log
+        files.update(extra_files or {})
+        return fresh(files)
+
+    def log_index(added, expect_red=None, first=False):
+        """Дописать строки в log.md, поставить в индекс, проверить --index; expect_red — {номер строки: правило} или None (зелёное)."""
+        def fn():
+            repo = fresh(dict(good_j)) if first else log_repo()
+            body = ("" if first else old_log) + "\n".join(added) + "\n"
+            stlib.write_files(repo, {log_md: body})
+            stlib.git(repo, env, "add", "--", log_md)
+            proc = check(repo, "--index")
+            if expect_red is None:
+                assert proc.returncode == 0 and "FAIL" not in proc.out, proc.out
+            else:
+                stlib.expect(proc, 1, "FAIL: check-task-docs: %d нарушений" % len(expect_red))
+                for number in expect_red:
+                    assert stlib.has_line(proc, "FAIL %s:%d: log-line:" % (log_md, number)), proc.out
+        return fn
+
+    def log_tree_and_commit_not_judged():
+        repo = log_repo()
+        sha = stlib.commit_file(repo, env, log_md, old_log + "2026-10-10 без вида и времени\n", "bad log")
+        stlib.expect(check(repo), 0, "ок: осмотрено 8 файлов задач")
+        stlib.expect(check(repo, "--commit", sha), 0, "ок: осмотрено 1 файлов задач")
+
+    def real_logs_pass_tree():
+        # настоящие log.md репозитория: прежние записи не судятся (в дереве добавленных строк нет)
+        proc = stlib.run(("git", "ls-files", "-z", "--", "doc/tasks/*/log.md"), cwd=stlib.REPO, env=env)
+        names = [x for x in proc.out.split("\0") if x]
+        assert names, "мишень: отслеживаемых log.md нет"
+        files = {}
+        for name in names:
+            with open(os.path.join(stlib.REPO, *name.split("/")), "rb") as handle:
+                files[name] = handle.read()
+        stlib.expect(check(fresh(files)), 0, "ок: осмотрено %d файлов задач" % len(files))
+
     def real_copy_red(mutate, rule, index=False):
         def fn():
             files = real_journals()
@@ -251,6 +328,10 @@ def main():
             m = mod.JOURNAL_TIME.match(item["sig"])
             got = item["sig"][1:6] if m else None
             assert got == item["time"], (item["sig"], got)
+        for item in vec["dateTimeForms"]:
+            m = mod.JOURNAL_TIME.match(item["sig"])
+            got = item["sig"].split("]")[0][-5:] if m else None
+            assert got == item["time"], (item["sig"], got)
         data = bytes.fromhex(vec["splitFile"]["hex"])
         lines = mod.split_journal(data)
         got = "".join("1" if mod.parse_progress_line(s) else "0" for s in lines)
@@ -280,6 +361,19 @@ def main():
     pr.probe("законное", "журнал: подпись длиннее 80 знаков в дереве и в коммите — не красная", legit_long_in_tree_and_commit_modes)
     pr.probe("законное", "журнал: первая версия журнала с длинными подписями в индексе — не красная", legit_first_version_long_in_index)
     pr.probe("законное", "журнал: общий запуск run-all.sh --ci на копии принимает вердикт", run_all_accepts_real_copies)
+    pr.probe("законное", "журнал: поле времени в обоих видах, неверная дата — подпись, поле не входит в 80 знаков", legit_both_time_forms)
+    pr.probe("красная", "журнал: граница 80 и 81 знак при поле [ГГГГ-ММ-ДД ЧЧ:ММ] (индекс)", edge_80_and_81_with_date_time)
+    pr.probe("законное", "log.md: все семь видов новой записи, добавленные в индексе", log_index(new_ok))
+    pr.probe("законное", "log.md: добавленная запись прежнего вида с датой 2026-10-09 и строки без даты — не судятся", log_index(["2026-10-09 просто запись без времени и вида", "продолжение без даты", "2026-10-09 23:59 как угодно"]))
+    pr.probe("законное", "log.md: первая версия файла с верными записями", log_index(["Методика: x @ abc", "2026-10-10 10:00 пуск: С1"], first=True))
+    pr.probe("законное", "log.md: в дереве и в коммите запись не по форме не судится", log_tree_and_commit_not_judged)
+    pr.probe("законное", "log.md: настоящие журналы репозитория в дереве", real_logs_pass_tree)
+    pr.probe("красная", "log.md: дата 2026-10-10, вида нет", log_index(["2026-10-10 просто текст"], {4: 0}))
+    pr.probe("красная", "log.md: вид не из списка", log_index(["2026-10-10 10:00 отчёт: x"], {4: 0}))
+    pr.probe("красная", "log.md: время не названо", log_index(["2026-10-10 ворота: x"], {4: 0}))
+    pr.probe("красная", "log.md: нет двоеточия после вида", log_index(["2026-10-11 10:00 ворота x"], {4: 0}))
+    pr.probe("красная", "log.md: верная и неверная подряд — красная вторая", log_index(["2026-10-10 10:00 ворота: ок", "2026-10-12 10:00 ждём"], {5: 0}))
+    pr.probe("красная", "log.md: первая версия файла с записью не по форме", log_index(["Методика: x @ abc", "2026-10-10 10:00 мнение: x"], {2: 0}, first=True))
     pr.probe("красная", "журнал: строка без k/N", red_j({journal: "С1 0/2 старт\nбез формы\n"}, "journal-line", journal + ":2"))
     pr.probe("красная", "журнал: строка из одних пробелов", red_j({journal: "С1 0/2 старт\n   \n"}, "journal-line", journal + ":2"))
     pr.probe("красная", "журнал: строка без подписи", red_j({journal: "С1 0/2 старт\nС1 1/2\n"}, "journal-line", journal + ":2"))
