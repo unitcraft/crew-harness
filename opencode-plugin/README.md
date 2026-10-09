@@ -380,7 +380,21 @@ The integrator stays free for the owner and does not re-check accepted work:
 - `merge_precheck: "required"` (the default since the owner's decision of 2026-10-09; the explicit `off` returns the previous
   behaviour: `merge` takes the lock at once): `merge` without a green precheck is refused with text that names the next step
   (`precheck {n}` without a lock, then `merge` on the checked tip, and the key that restores the old order), so reviewers
-  move to the new order by themselves. The lock is issued only on the
+  move to the new order by themselves. **Do not take or hold the merge lock while building the candidate or waiting for CI.**
+  Build the integrated candidate from the reported target tip, include the task changes, and run the full project CI before
+  recording the green precheck. Save the exact candidate commit that CI checked. Only then call `merge`; it acquires the lock
+  for the short landing step. Fast-forward the target branch from that exact checked candidate, not from a rebuilt candidate
+  or the task branch alone, then push and call `accept`. If the target tip moved, do not land the old candidate: build and
+  check a new one, record a new precheck, and retry. `accept` releases the task's inflight/worker slot when
+  `accepted_slot: "free"`; perform its returned cleanup steps separately and call `cleaned` when done. The cleanup queue is
+  bounded by `cleanup_limit` (10 by default). The merge lock is released by `accept` (and by `rework` and `cancel`): after the
+  merge and the push call `accept` at once, the cleanup runs without the lock; if the merge is abandoned before `accept`,
+  call `unlock {n}`; `cleaned` does not release the lock (there is none by then). While it is held, only the merge and the
+  push happen under it. The service pass releases the lock by itself when the held task's checked candidate (the green
+  record) is already an ancestor of the target tip on `origin` (`git ls-remote` with the 20 s term and `merge-base`
+  on local objects, no fetch, nothing written but the history note "замок отпущен: слияние на вершине" and a log line);
+  it does nothing when the tip cannot be read, the record is not green, or the lock is held for another task; `accept`
+  then does not ask for the lock. The plugin still merges and pushes nothing. The lock is issued only on the
   tip of the target branch where the candidate was already built and checked. The reviewer calls `precheck {n}` (the plugin
   reads the tip of `origin/<target_branch>` with `git ls-remote`, nothing is fetched or written, and names it), merges that tip
   into a candidate (for example `integrate/tN`), runs the project's CI on it, then `precheck {n, candidate, result}` — the

@@ -970,6 +970,8 @@ export function recoverClaims(maxAgeMs = CLAIM_MAX_MS, now = Date.now()): number
 }
 
 export const PLUGIN_SENDER = "crew-harness"
+/** одна строка в ответе merge, когда замок выдан (решение владельца 2026-10-09) */
+const LOCK_RULE = "Замок слияния держится до accept или unlock; под ним только слияние и пуш."
 // ВИД ПИСЬМА (план 003.1, 2026-10-06; владелец: «непонятно, кто кому пишет»). Шапка — когда, кто кому, с ролью в задаче;
 // время первым (владелец 2026-10-07): в длинной шапке оно не теряется в конце строки:
 //   ✉ 01:17 · #8 приёмщик nova.worker → nova.integrator
@@ -1176,11 +1178,14 @@ reviewer; места worker не занимает), и merge, accept, cleaned р
 перепроверяет. Приёмщик: crew_task review → rework {text} | check {step} → проверка → check {step, result} по каждому шагу (ход видно в окне) → merge (замок вливания проекта) → accept {commit?}
 (плагин проверит обязательные шаги приёмки и что ветка или коммит в целевой ветке) → очистка → cleaned (плагин
 проверит, что worktree и ветка удалены). Потом сессии задачи закрываются, интегратору тихая сводка.
-ПРЕДПРОВЕРКА ВЛИВАНИЯ (настройка проекта merge_precheck; по умолчанию required — включена). Порядок приёмщика: review → check → precheck → merge → accept → cleaned.
-Замок вливания выдаётся только на ту вершину главной ветки, на которой кандидат уже собран и проверен: crew_task precheck {n} —
-замок не берёт, плагин читает вершину origin и называет её; влей её в кандидата (например, integrate/tN), прогони CI;
-crew_task precheck {n, candidate, result} — запись «зелёная»; merge — замок на ту же вершину (сдвинулась — отказ, предпроверка
-заново). merge без предпроверки отклоняется: сначала precheck. crew_task unlock {n} отпускает замок, который ты держишь для
+ПРЕДПРОВЕРКА ВЛИВАНИЯ (настройка проекта merge_precheck; по умолчанию required — включена). Порядок приёмщика: review → check → precheck → CI без замка → precheck candidate → merge → accept → отдельная cleanup → cleaned.
+Замок во время подготовки кандидата и CI не брать. crew_task precheck {n} замок не берёт: плагин читает вершину origin и называет её;
+влей её вместе с веткой задачи в интеграционный candidate (например, integrate/tN), прогони полный CI проекта и сохрани точный commit кандидата;
+crew_task precheck {n, candidate, result} фиксирует зелёный результат именно этого кандидата. Только после этого merge берёт замок:
+fast-forward влей в целевую ветку тот же проверенный candidate и push. Если origin tip сдвинулся, старый candidate не вливай — заново интегрируй новый tip и повтори полный CI/precheck.
+accept проверяет влитое и освобождает слот accepted_slot: free; уборка выполняется отдельно, cleanup_limit ограничивает очередь до cleaned.
+Замок слияния отпускает accept (а также rework и cancel); после слияния и пуша сразу accept, уборка идёт без замка; слияние прервано до accept — unlock {n}; cleaned замок не отпускает (замка к нему уже нет). Замок держится до accept или unlock; под ним только слияние и пуш. Если проверенный кандидат уже предок вершины главной ветки на origin, служба сама отпустит замок (только чтение, без fetch, срок 20 с; вершину не прочитала, запись не «зелёная», задача другая — замок не трогает); тогда accept замка не требует.
+merge без предпроверки отклоняется: сначала precheck. crew_task unlock {n} отпускает замок, который ты держишь для
 задачи (запись устаревает). Запись устаревает и при rework, reassign, cancel, новой приёмке. Плагин ничего не вливает и не
 пушит. Прежний порядок (merge берёт замок сразу) возвращает интегратор проекта явным ключом merge_precheck: off в настройках.
 По умолчанию accepted_slot: free — принятая задача ждёт уборки и место в inflight_limit не занимает (cleanup_limit ограничивает
@@ -1812,7 +1817,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
   const crewTask: CrewTool = {
     name: "crew_task",
     description:
-      "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), show {n} (details and history), and for the integrator: assign {session, goal, criteria, extra?, ...} (give a task to an existing tab instead of a new session; extra {id: line} fills the project's extra task fields, see task_extra_fields in crew_config), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done; with an enabled model-profile set the model is taken by the set at that moment), cancel {n, text?}, priority {n, priority}, order {to: 'project.integrator', goal, criteria, ...} (work for another project: its integrator does it with its own tasks; the order follows them); for the task's reviewer: review {n} (start), precheck {n} (on by default, merge_precheck: required; the old order is the explicit merge_precheck: off -- read the tip of the target branch first, integrate it into a candidate, run CI, then precheck {n, candidate, result}; the lock is not taken), merge {n} (the project's merge lock; by default (merge_precheck: required) merge without a green precheck is refused, run precheck first, and the lock is issued only on the tip where the candidate was checked; merge_precheck: off takes the lock at once), unlock {n} (release the merge lock you hold for the task; a precheck record then becomes stale), rework {n, text, sync?} (sync: true -- only to merge the fresh target branch: not a rework round, not counted in rework_max), check {n, step} before checking a step and {n, step, result} after it (the owner sees the progress in the window), accept {n, checks?, commit?} (steps marked by check count; the plugin checks the required steps and that it is merged), cleaned {n} (the plugin checks the worktree and branch are gone). With the project's reviewer: acceptor, merge/accept/cleaned also need the acceptor (or integrator) role.",
+      "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), show {n} (details and history), and for the integrator: assign {session, goal, criteria, extra?, ...} (give a task to an existing tab instead of a new session; extra {id: line} fills the project's extra task fields, see task_extra_fields in crew_config), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done; with an enabled model-profile set the model is taken by the set at that moment), cancel {n, text?}, priority {n, priority}, order {to: 'project.integrator', goal, criteria, ...} (work for another project: its integrator does it with its own tasks; the order follows them); for the task's reviewer: review {n} (start), precheck {n} (on by default, merge_precheck: required; the old order is the explicit merge_precheck: off -- read the target tip first, integrate it with the task into a candidate, run full CI without a lock, then precheck {n, candidate, result} with the exact green candidate), merge {n} (merge_precheck: required by default, so merge without a green precheck is refused; only after green precheck; takes the short landing lock and lands that exact checked candidate; if the target tip moved, rebuild/recheck and never land the old candidate; merge_precheck: off takes the lock at once; the merge lock is released by accept, also by rework and cancel, unlock {n} releases it when the merge is abandoned before accept, cleaned does not release it, and the service releases it by itself once the checked candidate is already in the target tip on origin), unlock {n} (release the merge lock you hold for the task; a precheck record then becomes stale), rework {n, text, sync?} (sync: true -- only to merge the fresh target branch: not a rework round, not counted in rework_max), check {n, step} before checking a step and {n, step, result} after it (the owner sees the progress in the window), accept {n, checks?, commit?} (steps marked by check count; the plugin checks the required steps and that it is merged), cleaned {n} (the plugin checks the worktree and branch are gone). With accepted_slot: free, accept releases the inflight slot; run cleanup separately and call cleaned (cleanup_limit bounds the waiting cleanup); with the project's reviewer: acceptor, merge/accept/cleaned also need the acceptor (or integrator) role.",
     input: {
       type: "object",
       properties: {
@@ -2065,12 +2070,12 @@ export function makeTools(host: CrewHost): CrewTool[] {
             // ворота: замок выдаётся только на ту вершину главной ветки, на которой кандидат уже собран и проверен (задача 005)
             const g = await gateMerge(t, me.session, tcfg.targetBranch)
             if ("text" in g) return { content: g.text }
-            return { content: `Замок вливания проекта ${project} твой, выдан на вершину ${tcfg.targetBranch} ${g.granted}. Влей ${t.branch ? `ветку ${t.branch}` : "работу"} (кандидата, проверенного на этой вершине) в ${tcfg.targetBranch}, запушь и вызови crew_task {action: "accept", n: ${t.n}, checks: {...}${t.branch ? "" : ', commit: "<хэш>"'}}.` }
+            return { content: `Замок вливания проекта ${project} твой, выдан на вершину ${tcfg.targetBranch} ${g.granted}. Влей ${t.branch ? `ветку ${t.branch}` : "работу"} (кандидата, проверенного на этой вершине) в ${tcfg.targetBranch}, запушь и вызови crew_task {action: "accept", n: ${t.n}, checks: {...}${t.branch ? "" : ', commit: "<хэш>"'}}. ${LOCK_RULE}` }
           }
           const r = takeMergeLock(project, me.session, t.n)
           if (!r.ok) return { content: `Замок вливания проекта ${project} у приёмщика задачи #${r.holder.n} (сессия ${r.holder.session}) с ${hhmm(r.holder.at)}. Дождись (спроси позже ещё раз) — вливать одновременно нельзя.` }
           taskEvent(t, me.session, undefined, "замок вливания взят")
-          return { content: `Замок вливания проекта ${project} твой. Влей ${t.branch ? `ветку ${t.branch}` : "работу"} в ${tcfg.targetBranch}, запушь и вызови crew_task {action: "accept", n: ${t.n}, checks: {...}${t.branch ? "" : ', commit: "<хэш>"'}}.` }
+          return { content: `Замок вливания проекта ${project} твой. Влей ${t.branch ? `ветку ${t.branch}` : "работу"} в ${tcfg.targetBranch}, запушь и вызови crew_task {action: "accept", n: ${t.n}, checks: {...}${t.branch ? "" : ', commit: "<хэш>"'}}. ${LOCK_RULE}` }
         }
         if (action === "rework") {
           // sync: true — вернуть влить свежую целевую ветку (main ушёл вперёд, пока шёл CI): не доработка, круг в
@@ -2102,7 +2107,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         }
         if (action === "accept") {
           if (t.status !== "reviewing") return { content: `Принять можно задачу на приёмке (сейчас ${statusRu(t.status)}).` }
-          if (!holdsMergeLock(project, me.session)) return { content: `Сначала замок вливания: crew_task {action: "merge", n: ${t.n}} — вливает один приёмщик за раз.` }
+          if (!holdsMergeLock(project, me.session) && !t.precheck?.landed) return { content: `Сначала замок вливания: crew_task {action: "merge", n: ${t.n}} — вливает один приёмщик за раз.` }
           const checks: Record<string, string> = { ...(t.checks ?? {}) } // отмеченные по ходу (check) засчитываются
           for (const [k, v] of Object.entries(input.checks ?? {})) if (String(v ?? "").trim()) checks[k] = String(v).trim()
           const missing = acc.filter((a) => a.required && !checks[a.id])

@@ -139,6 +139,10 @@ export function cleanupDone(t: Task, cfg: CrewConfig): { ok: boolean; left: stri
   return { ok: !left.length, left }
 }
 
+/** Жизнь замка слияния в письмах приёмщика при merge_precheck: required (решение владельца 2026-10-09; то же в crew_help и README). */
+export const LOCK_LIFECYCLE =
+  "ЗАМОК СЛИЯНИЯ: его отпускает accept (а также rework и cancel); после слияния и пуша сразу accept, уборка идёт без замка; слияние прервано до accept — crew_task {action: \"unlock\", n}; cleaned замок не отпускает (замка к нему уже нет). Если проверенный кандидат уже в главной ветке на origin, служба сама отпустит замок («замок отпущен: слияние на вершине»), и тогда accept замка не требует."
+
 /** Фраза для письма приёмщику при accepted_slot: free (по умолчанию) — принятая задача ждёт уборки и место в inflight_limit не занимает. */
 function slotSentence(t: Task, cfg: CrewConfig): string {
   const waiting = waitingCleanup(listTasks(t.project)).length
@@ -169,12 +173,19 @@ export function reviewLetter(t: Task, cfg: CrewConfig): string {
       ? `  2) КАЖДЫЙ ШАГ — по очереди, владелец видит ход в окне: crew_task {action: "check", n: ${t.n}, step: "<шаг>"} перед проверкой шага, после — {action: "check", n: ${t.n}, step: "<шаг>", result: "чем подтверждено"};`
       : "",
     pre
-      ? `  ${cfg.acceptance.length ? "3" : "2"}) ПРЕДПРОВЕРКА (в проекте по умолчанию merge_precheck: required, merge без неё отклоняется; замок для предпроверки не нужен; прежний порядок возвращает интегратор ключом merge_precheck: off): crew_task {action: "precheck", n: ${t.n}} — плагин назовёт вершину ${cfg.targetBranch} на origin; влей её в кандидата (например, в ветку integrate/t${t.n}), прогони CI на кандидате и заверши: crew_task {action: "precheck", n: ${t.n}, candidate: "<ветка или хеш>", result: "<чем подтверждено: строка CI>"};`
+      ? `  ${cfg.acceptance.length ? "3" : "2"}) ПРЕДПРОВЕРКА (merge_precheck: required; замок до CI не брать и merge не вызывать): crew_task {action: "precheck", n: ${t.n}} назовёт вершину ${cfg.targetBranch}; влей её вместе с веткой задачи в интеграционный candidate (например, integrate/t${t.n}), прогони полный CI проекта на этом кандидате и заверши: crew_task {action: "precheck", n: ${t.n}, candidate: "<точная ветка или хеш проверенного кандидата>", result: "<зелёный полный CI>"}. Запиши точный проверенный commit кандидата; если основа сдвинулась — собери и проверь новый кандидат заново, старый не вливай;`
       : "",
     `  ${(cfg.acceptance.length ? 3 : 2) + pre}) нашёл ошибки — crew_task {action: "rework", n: ${t.n}, text: "что исправить"} (вернётся тебе на повторную приёмку);`,
-    `  ${(cfg.acceptance.length ? 4 : 3) + pre}) всё зелёное — crew_task {action: "merge", n: ${t.n}} (замок вливания проекта${pre ? "; выдаётся только на ту вершину, на которой кандидат уже проверен, сдвинулась — предпроверка заново" : ""}), влей в ${cfg.targetBranch} и запушь, затем`,
-    `     crew_task {action: "accept", n: ${t.n}${cfg.acceptance.length ? "" : ", checks: {\"<критерий>\": \"чем подтверждено\"}"}, commit: "<хэш в ${cfg.targetBranch}, если squash>"} (отмеченные шаги засчитаны);`,
-    `  ${(cfg.acceptance.length ? 5 : 4) + pre}) плагин сам проверит, что влито, и выдаст шаги очистки; сделал — crew_task {action: "cleaned", n: ${t.n}}.`,
+    pre
+      ? `  ${(cfg.acceptance.length ? 4 : 3) + pre}) только после зелёного precheck — crew_task {action: "merge", n: ${t.n}} (теперь берётся замок); fast-forward влей в ${cfg.targetBranch} ИМЕННО сохранённый проверенный candidate, не пересобирай и не подменяй его веткой задачи, затем запушь;`
+      : `  ${(cfg.acceptance.length ? 4 : 3) + pre}) всё зелёное — crew_task {action: "merge", n: ${t.n}} (замок вливания проекта), влей в ${cfg.targetBranch} и запушь, затем`,
+    pre
+      ? `     crew_task {action: "accept", n: ${t.n}${cfg.acceptance.length ? "" : ", checks: {\"<критерий>\": \"чем подтверждено\"}"}, commit: "<хэш в ${cfg.targetBranch}, если squash>"};`
+      : `     crew_task {action: "accept", n: ${t.n}${cfg.acceptance.length ? "" : ", checks: {\"<критерий>\": \"чем подтверждено\"}"}, commit: "<хэш в ${cfg.targetBranch}, если squash>"} (отмеченные шаги засчитаны);`,
+    pre
+      ? `  ${(cfg.acceptance.length ? 5 : 4) + pre}) отдельно выполни выданные шаги очистки, затем crew_task {action: "cleaned", n: ${t.n}}.${cfg.acceptedSlot === "free" ? " При accepted_slot: free accept освобождает inflight/worker slot; до cleaned задача учитывается отдельно в cleanup_limit." : ""}`
+      : `  ${(cfg.acceptance.length ? 5 : 4) + pre}) плагин сам проверит, что влито, и выдаст шаги очистки; сделал — crew_task {action: "cleaned", n: ${t.n}}.${cfg.acceptedSlot === "free" ? " При accepted_slot: free accept освобождает inflight/worker slot; до cleaned задача учитывается отдельно в cleanup_limit." : ""}`,
+    pre ? LOCK_LIFECYCLE : "",
     cfg.acceptedSlot === "free" ? slotSentence(t, cfg) : "",
   ]
     .filter(Boolean)
@@ -221,10 +232,16 @@ export function planMergeLetter(t: Task, cfg: CrewConfig): string {
     "ПОРЯДОК:",
     `  1) crew_task {action: "review", n: ${t.n}}; шаги approval-written и form — check по каждому;`,
     cfg.mergePrecheck === "required"
-      ? `  2) ПРЕДПРОВЕРКА (по умолчанию merge_precheck: required, merge без неё отклоняется; замок для неё не нужен): crew_task {action: "precheck", n: ${t.n}}, влей названную вершину ${cfg.targetBranch} в кандидата, прогони CI и заверши: crew_task {action: "precheck", n: ${t.n}, candidate, result};`
+      ? `  2) ПРЕДПРОВЕРКА (merge_precheck: required; замок до CI не брать и merge не вызывать): crew_task {action: "precheck", n: ${t.n}} назовёт вершину ${cfg.targetBranch}; влей её вместе с веткой плана в интеграционный candidate, прогони полный CI проекта на нём и заверши: crew_task {action: "precheck", n: ${t.n}, candidate: "<точная ветка или хеш проверенного кандидата>", result: "<зелёный полный CI>"}. Запиши точный commit кандидата; если основа сдвинулась — собери и проверь новый кандидат заново, старый не вливай;`
       : "",
-    `  ${cfg.mergePrecheck === "required" ? 3 : 2}) crew_task {action: "merge", n: ${t.n}} (замок вливания), влей ветку в ${cfg.targetBranch} и запушь;`,
-    `  ${cfg.mergePrecheck === "required" ? 4 : 3}) crew_task {action: "accept", n: ${t.n}} — плагин прочтёт план в ${cfg.targetBranch}: форма${cfg.planForm.modeQuestion ? ` и ответ «${cfg.planForm.modeLabel}»` : ""} должны сойтись с решением владельца; затем очистка и cleaned.`,
+    cfg.mergePrecheck === "required"
+      ? `  3) только после зелёного precheck вызови crew_task {action: "merge", n: ${t.n}} (теперь берётся замок); fast-forward влей в ${cfg.targetBranch} именно сохранённый проверенный candidate, не пересобирай и не подменяй его веткой плана, затем push;`
+      : `  2) crew_task {action: "merge", n: ${t.n}} (замок вливания), влей ветку в ${cfg.targetBranch} и запушь;`,
+    cfg.mergePrecheck === "required"
+      ? `  4) crew_task {action: "accept", n: ${t.n}} — плагин прочтёт план в ${cfg.targetBranch}: форма${cfg.planForm.modeQuestion ? ` и ответ «${cfg.planForm.modeLabel}»` : ""} должны сойтись с решением владельца;`
+      : `  3) crew_task {action: "accept", n: ${t.n}} — плагин прочтёт план в ${cfg.targetBranch}: форма${cfg.planForm.modeQuestion ? ` и ответ «${cfg.planForm.modeLabel}»` : ""} должны сойтись с решением владельца; затем очистка и cleaned.`,
+    ...(cfg.mergePrecheck === "required" ? [`  5) отдельно выполни выданные шаги очистки и вызови crew_task {action: "cleaned", n: ${t.n}}.${cfg.acceptedSlot === "free" ? " При accepted_slot: free accept освобождает inflight/worker slot; cleanup учитывается отдельно до cleaned." : ""}`] : []),
+    ...(cfg.mergePrecheck === "required" ? [LOCK_LIFECYCLE] : []),
     cfg.planSteps === "auto" ? "После cleaned плагин сам поставит задачи по шагам плана." : "После cleaned автор получит список шагов: задачи по ним ставит он сам (plan_steps: manual).",
   ]
     .filter(Boolean)

@@ -49,6 +49,8 @@ export type PrecheckRecord = {
   lock_on?: { tip: string; at: number }
   stale?: { reason: string; at: number }
   accepted_on?: string
+  /** замок отпущен службой, потому что проверенный кандидат уже в вершине главной ветки на origin (accept после этого не требует замка) */
+  landed?: { tip: string; at: number }
 }
 
 export type Task = {

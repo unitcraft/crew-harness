@@ -78,6 +78,7 @@ stops at the first failing file.
 | | `crew-landing-gate` | the gate of `merge` under `merge_precheck: required` on real git with a local origin: lock only on the checked tip, the tip read under the lock, repeats of the holder, changes inside the read |
 | | `crew-landing-hints` | the accept warning and the neighbour hints (read from the task journal only) |
 | | `crew-landing-letters` | the letter about interrupted work with the state of the precheck and the lock; the reviewer letters, show and help for the flags |
+| | `crew-landing-release` | the service releases the merge lock once the checked candidate is in the origin tip (not on a failed or local read, a not green record, another task or session); the line of the `merge` reply; accept after the release needs no lock |
 | | `crew-landing-tip` | heavy: reading the tip of the target branch, the term and the process tree of `git ls-remote` on silent, closed and unreachable addresses |
 | | `crew-landing-race` | heavy: child processes — 8 reviewers at one lock, a stale lock taken by 7, a restart in the middle of a landing |
 | Question answering (task 007) | `crew-answer-golden` | the texts of the base (notices, the forwarded question, `/crew`, the side panel, `crew_config`, `crew_help`, letters) are the same without the new keys and with `answer_mode` owner; the old pass on a pack of blocks and on five texts; the status files; shared snapshot `answer-golden.json` and the base snapshot `answer-golden-base.json` |

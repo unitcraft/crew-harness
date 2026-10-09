@@ -86,7 +86,7 @@ if (section("AC-07")) {
 if (section("AC-08")) {
   const a = H.reviewing()
   const ra = await merge(a)
-  cell("AC-08 a: no record — the lock is not issued, the first step is named, the lock file is empty", /нет зелёной предпроверки/.test(ra) && /crew_task \{action: "precheck"/.test(ra) && !H.holder() && !H.tasks.loadTask("proj", a.n).precheck, ra)
+  cell("AC-08 a: no record — refusal says CI is lock-free and requires the exact candidate before the short lock/landing", /нет зелёной предпроверки/.test(ra) && /crew_task \{action: "precheck"/.test(ra) && /без замка/.test(ra) && /полный CI проекта/.test(ra) && /точный проверенный commit/.test(ra) && /fast-forward влей именно этот candidate/.test(ra) && !H.holder() && !H.tasks.loadTask("proj", a.n).precheck, ra)
   const b = H.reviewing()
   await begin(b)
   const rb = await merge(b)

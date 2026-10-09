@@ -74,12 +74,17 @@ const req = L({ merge_precheck: "required" })
 {
   const o = req.ord
   const at = (re) => o.search(re)
-  const order = [at(/action: "review"/), at(/action: "precheck", n: \d+\}/), at(/candidate: "<ветка или хеш>"/), at(/action: "merge"/), at(/action: "accept"/), at(/action: "cleaned"/)]
+  const order = [at(/action: "review"/), at(/action: "precheck", n: \d+\}/), at(/candidate: "<точная ветка или хеш проверенного кандидата>"/), at(/action: "merge"/), at(/action: "accept"/), at(/action: "cleaned"/)]
   cell("AC-31 required: reviewLetter has the precheck step before merge in the order review, precheck, CI, precheck with a candidate, merge, accept, cleaned", order.every((x) => x >= 0) && order.every((x, i) => i === 0 || x > order[i - 1]) && /merge_precheck: required/.test(o), o)
+  cell("AC-31 lock is not held for CI and landing uses the exact checked candidate", /замок до CI не брать/.test(o) && /только после зелёного precheck/.test(o) && /ИМЕННО сохранённый проверенный candidate/.test(o) && /если основа сдвинулась — собери и проверь новый кандидат заново, старый не вливай/.test(o), o)
+  cell("AC-31 accept frees the slot before separate cleanup", o.indexOf('action: "accept"') < o.indexOf("отдельно выполни выданные шаги очистки") && /accept освобождает inflight\/worker slot/.test(o) && /action: "cleaned"/.test(o), o)
   const pl = req.plan
   const po = [pl.search(/action: "review"/), pl.search(/action: "precheck"/), pl.search(/action: "merge"/), pl.search(/action: "accept"/)]
   cell("AC-31 required (план): planMergeLetter has the same precheck step before merge", po.every((x) => x >= 0) && po.every((x, i) => i === 0 || x > po[i - 1]) && /merge_precheck: required/.test(pl), pl)
-  cell("AC-31 required (нумерация): the steps are numbered without a gap", /\n {2}1\) [^\n]*\n {2}2\) ПРЕДПРОВЕРКА[^\n]*\n {2}3\) нашёл ошибки[^\n]*\n {2}4\) всё зелёное[^\n]*\n[^\n]*\n {2}5\) плагин сам проверит/.test(o), o)
+  cell("AC-31 required (план): CI has no lock, merge lands the exact candidate, then accept and cleanup are separate", /замок до CI не брать/.test(pl) && /только после зелёного precheck/.test(pl) && /именно сохранённый проверенный candidate/.test(pl) && pl.indexOf('action: "accept"') < pl.indexOf("отдельно выполни выданные шаги очистки"), pl)
+  cell("AC-31 required: reviewLetter and planMergeLetter carry the lock lifecycle (accept, rework, cancel, unlock, cleaned, the service release)", [o, pl].every((x) => /ЗАМОК СЛИЯНИЯ: его отпускает accept \(а также rework и cancel\)/.test(x) && /уборка идёт без замка/.test(x) && /unlock/.test(x) && /cleaned замок не отпускает/.test(x) && /служба сама отпустит замок/.test(x)), o)
+  cell("AC-31 off: the old letters have no lock lifecycle line", !/ЗАМОК СЛИЯНИЯ/.test(L(LEGACY).ord + L(LEGACY).plan), "present")
+  cell("AC-31 required (нумерация): review, precheck, rework, merge, accept, cleanup are numbered without a gap", /\n {2}1\) [^\n]*\n {2}2\) ПРЕДПРОВЕРКА[^\n]*\n {2}3\) нашёл ошибки[^\n]*\n {2}4\) только после зелёного precheck[^\n]*\n[^\n]*action: "accept"[^\n]*\n {2}5\) отдельно выполни/.test(o), o)
 }
 const fr = L({ accepted_slot: "free", cleanup_limit: 4, merge_precheck: "off" })
 cell("AC-31 free: reviewLetter says that an accepted task waits for cleanup without a place and gives 'ждущих уборки N из M'", /принятая задача ждёт уборки и место в inflight_limit не занимает; ждущих уборки 1 из 4/.test(fr.ord) && !/precheck/.test(fr.ord), fr.ord)
@@ -134,12 +139,18 @@ review.releaseMergeLock("proj", REV)
   const sd = H.tools.crew_spawn.description
   cell("AC-26 описание crew_spawn: the description of crew_spawn names extra and the flags", /extra \{id/.test(sd) && /accepted_slot: free/.test(sd) && !!H.tools.crew_spawn.input.properties.extra, sd.slice(0, 120))
   const help = core.HELP
-  cell("AC-26 HELP: the section ПРИЁМКА names the precheck, unlock, the lock on the same tip, the three keys", ["ПРЕДПРОВЕРКА ВЛИВАНИЯ", "merge_precheck", "precheck {n}", "unlock {n}", "accepted_slot", "cleanup_limit", "task_extra_fields", "только на ту"].every((w) => help.includes(w)), help.slice(0, 80))
+  cell("AC-26 HELP: the section ПРИЁМКА names the precheck, unlock, the lock on the same tip, the three keys", ["ПРЕДПРОВЕРКА ВЛИВАНИЯ", "merge_precheck", "precheck {n}", "unlock {n}", "accepted_slot", "cleanup_limit", "task_extra_fields", "Только после этого merge берёт замок"].every((w) => help.includes(w)), help.slice(0, 80))
   cell(
     "AC-26 HELP по умолчанию: the help says that the precheck and the free slot are on by default, that merge without a precheck is refused, the order, and the keys that return the old order",
-    ["по умолчанию required", "merge без предпроверки отклоняется", "review → check → precheck → merge → accept → cleaned", "merge_precheck: off", "accepted_slot: hold"].every((w) => help.includes(w)),
+    ["по умолчанию required", "merge без предпроверки отклоняется", "review → check → precheck → CI без замка → precheck candidate → merge → accept → отдельная cleanup → cleaned", "merge_precheck: off", "accepted_slot: hold"].every((w) => help.includes(w)),
     help.slice(help.indexOf("ПРЕДПРОВЕРКА ВЛИВАНИЯ"), help.indexOf("ПРЕДПРОВЕРКА ВЛИВАНИЯ") + 300),
   )
+  cell(
+    "AC-26 HELP замок: the help says who releases the merge lock, that cleanup is without it, unlock after an abandoned merge, cleaned does not release, the line about the lock under merge, and the auto-release",
+    ["отпускает accept (а также rework и cancel)", "уборка идёт без замка", "слияние прервано до accept — unlock {n}", "cleaned замок не отпускает", "Замок держится до accept или unlock; под ним только слияние и пуш", "служба сама отпустит замок"].every((w) => help.includes(w)),
+    help.slice(help.indexOf("Замок слияния отпускает"), help.indexOf("Замок слияния отпускает") + 300),
+  )
+  cell("AC-26 описание crew_task замок: the English description names accept, rework, cancel, unlock, cleaned and the service release", /released by accept, also by rework and cancel/.test(d) && /unlock \{n\} releases it when the merge is abandoned before accept/.test(d) && /cleaned does not release it/.test(d) && /the service releases it by itself/.test(d), d.slice(0, 120))
   cell("AC-26 описание crew_task по умолчанию: the English description says merge without a green precheck is refused by default and the explicit off returns the old order", /merge without a green precheck is refused/.test(d) && /merge_precheck: off/.test(d), d.slice(0, 120))
 }
 

@@ -281,6 +281,32 @@ export function unlockMerge(t: Task, session: string): string {
   return `Замок вливания проекта ${t.project} отпущен. Предпроверка устарела (замок отпущен): чтобы вливать, начни заново — crew_task {action: "precheck", n: ${t.n}}.`
 }
 
+/**
+ * Автоотпускание замка слияния (задача 005, решение владельца 2026-10-09). Замок держит приёмщик задачи, чей проверенный кандидат
+ * (запись «зелёная») уже предок вершины главной ветки на origin: слияние сделано, ждёт только accept, а замок висит. Служба на
+ * проходе отпускает его. Только чтение: вершина — `ls-remote` со сроком 20 с, предок — `merge-base --is-ancestor` по локальным
+ * объектам, без fetch. Не отпускает: нет замка, задача другая или не на приёмке у держателя, запись не «зелёная», кандидат совпадает с основой, вершина не
+ * прочитана или не с origin, кандидат не предок (в том числе объектов нет), замок за время чтения сменился. Плагин ничего не
+ * вливает и не пушит. Возвращает строку для журнала или undefined.
+ */
+export async function releaseLandedLock(project: string, target: string): Promise<string | undefined> {
+  const lock = mergeHolder(project)
+  if (!lock) return undefined
+  const t = loadTask(project, lock.n)
+  const rec = t?.precheck
+  if (!t || t.status !== "reviewing" || t.reviewer !== lock.session || !rec || rec.state !== "green" || rec.round !== roundOf(t) || !rec.candidate || rec.candidate === rec.base) return undefined // кандидат = основа: своего содержимого нет, «влитым» его считать нельзя
+  const tip = await (seams.readTip ?? originTip)(repoDir(t), target)
+  if (!tip.ok || tip.source !== "origin") return undefined
+  if (runGit(repoDir(t), ["merge-base", "--is-ancestor", rec.candidate, tip.tip], 10_000).code !== 0) return undefined
+  if (!holdsFor(project, lock.session, lock.n, lock.at)) return undefined // за время чтения замок сменился
+  const cur = loadTask(project, lock.n)
+  if (!cur || cur.status !== "reviewing" || !cur.precheck || cur.precheck.state !== "green" || cur.precheck.green_at !== rec.green_at) return undefined
+  releaseMergeLock(project, lock.session)
+  cur.precheck = { ...cur.precheck, landed: { tip: tip.tip, at: Date.now() } }
+  taskEvent(cur, "crew-harness", undefined, `замок отпущен: слияние на вершине ${short(tip.tip)} (проверенный кандидат ${short(rec.candidate)} уже в ${target}); дальше accept, уборка без замка`)
+  return `merge lock of ${project} #${lock.n} released: landed on ${short(tip.tip)}`
+}
+
 // ---- ВОРОТА `merge` (REQ-08, REQ-12). Четыре сверки — однострочные функции с маркерами `GATE:*`: доказательство красного
 // (test/landing-red.mjs) подменяет ровно одну такую строку заглушкой и смотрит, что нужные ячейки краснеют.
 /** вершина целевой ветки совпала с основой записи */
@@ -317,10 +343,10 @@ export async function gateMerge(t: Task, session: string, target: string): Promi
   const rec = t.precheck
   const base = rec?.base ?? ""
   const refuse = (why: string, next = "") => ({ text: `Замок не выдан: ${why}.${next ? ` ${next}` : ""}` })
-  const start = `Начни с crew_task {action: "precheck", n: ${t.n}}: назову вершину ${target}, которую нужно влить в кандидата (например, integrate/t${t.n}) и прогнать CI.`
+  const start = `Начни с crew_task {action: "precheck", n: ${t.n}} без замка: назову вершину ${target}; влей её вместе с веткой задачи в candidate (например, integrate/t${t.n}), прогони полный CI проекта, сохрани точный проверенный commit и заверши precheck {candidate, result}. Замок бери только после зелёной записи; после merge fast-forward влей именно этот candidate. Если вершина сдвинулась — старый candidate не вливай, повтори интеграцию и CI.`
   // 2. запись предпроверки
   if (!isFresh(rec, t)) {
-    if (!rec) return refuse(`merge без предпроверки отклоняется: у задачи ${taskRef(t)} нет зелёной предпроверки (в проекте merge_precheck: required)`, `${start} Затем влей и проверь кандидата, заверши предпроверку (crew_task {action: "precheck", n: ${t.n}, candidate, result}) и снова вызови merge: замок выдаётся на проверенную вершину. Замок для предпроверки не нужен, чужое вливание она не задерживает. Прежний порядок (merge без предпроверки) возвращает интегратор проекта явным ключом merge_precheck: off.${mergeHolder(project)?.session === session ? ` Замок вливания у тебя уже есть: если предпроверку делать позже, отпусти его: crew_task {action: "unlock", n: ${t.n}}.` : ""}`)
+    if (!rec) return refuse(`merge без предпроверки отклоняется: у задачи ${taskRef(t)} нет зелёной предпроверки (в проекте merge_precheck: required)`, `${start} Затем снова вызови merge: замок выдаётся только на ту вершину, на которой проверен кандидат. Чужое вливание до замка не задерживается. Прежний порядок возвращает интегратор явным ключом merge_precheck: off.${mergeHolder(project)?.session === session ? ` Замок вливания у тебя уже есть: если предпроверку делать позже, отпусти его: crew_task {action: "unlock", n: ${t.n}}.` : ""}`)
     if (rec.state === "running") return refuse(`предпроверка задачи ${taskRef(t)} ещё идёт (кандидат не завершён)`, `Заверши её: crew_task {action: "precheck", n: ${t.n}, candidate, result}.`)
     if (rec.state === "stale") return refuse(`предпроверка задачи ${taskRef(t)} устарела (${rec.stale?.reason ?? "причина не записана"})`, start)
     return refuse(`запись предпроверки прежнего круга: задачу с тех пор возвращали или передавали`, start)

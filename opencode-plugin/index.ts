@@ -127,7 +127,7 @@ import { profileProblems, profileState, stateSignature, syncProjectFiles, syncSn
 import { cellOfState, clampTier, resolveStageProfile, stageOfLaunch, tabFitsCell } from "./profiles.ts"
 import { catalogModels, writeCatalog } from "./model-catalog.ts"
 import { ensureWorktree, fileAt, gitTraces, leftoversOf, mergeHolder, reviewLetter } from "./review.ts"
-import { precheckLines } from "./precheck.ts"
+import { precheckLines, releaseLandedLock } from "./precheck.ts"
 import { noteLoopLag, registerJournalTools } from "./journal.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
@@ -1008,6 +1008,7 @@ export default {
       if (removed) log(`housekeeping: ${removed} read letters older than ${Math.round(KEEP_MS / 86_400_000)} d removed (ids kept)`)
     }
 
+    const landedBusy = new Set<string>()
     function flowWatch() {
       if (now() - flowAt < (Number(process.env.CREW_HARNESS_FLOW_MS) || 60_000)) return
       flowAt = now()
@@ -1021,6 +1022,14 @@ export default {
         if (!(stall > 0)) continue
         const lock = mergeHolder(project)
         const lockTask = lock ? list.find((x) => x.n === lock.n) : undefined
+        // замок слияния держит задача, чей проверенный кандидат уже в главной ветке на origin: отпустить (только чтение, 20 с)
+        if (lock && lockTask && !landedBusy.has(project)) {
+          landedBusy.add(project)
+          releaseLandedLock(project, loadConfig(any.directory).targetBranch)
+            .then((m) => m && log(m))
+            .catch((e) => log(`merge lock auto-release of ${project} failed: ${e}`))
+            .finally(() => landedBusy.delete(project))
+        }
         if (lock && lockTask && t - lock.at > stall) {
           const id = `stall-lock-${safeKey(project)}-${lock.n}-${lock.at}`
           if (!letterExists(lockTask.author, id)) {

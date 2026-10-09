@@ -19,6 +19,19 @@ one merge at a time, letters between agents, a queue for heavy runs on the machi
 | `.claude/` | repository-level agent settings: registers the shell-command hook | in use |
 | `doc/` | [`canon/`](doc/canon/README.md) — the Canon, the project's development rules: differences from the [methodology](https://github.com/unitcraft/ai-dev-methodology), decisions (ADRs); [`tasks/`](doc/tasks/README.md) — one task, one folder (spec, plan, reviews), large work is an epic of tasks; [`research/`](doc/research/); [`archive/`](doc/archive/plans/README.md) — the plugin's plans before the methodology | |
 
+## Landing a task
+
+With the default `merge_precheck: required`, a reviewer checks without a merge lock:
+read the target tip with `precheck`, integrate that tip and the task changes into a candidate,
+then run the full project CI. Record the exact candidate commit and green CI result with
+`precheck {candidate, result}`. Do not hold the lock while CI runs. Only after the green
+precheck, call `merge` to take the lock and fast-forward the target from that exact checked
+candidate. If the target tip moved, discard that candidate for landing and repeat integration
+and CI against the new tip. Then push and call `accept`; with `accepted_slot: free` (the default),
+accept releases the inflight slot. Perform the returned cleanup separately and call `cleaned`;
+up to `cleanup_limit` (10) accepted tasks may wait for cleanup. See the
+[plugin's merge instructions](opencode-plugin/README.md#review-and-merge) for the full command flow.
+
 Why a service: one OpenCode server holds every session in one process and stalls at about eight parallel tasks
 ([research](doc/research/2026-10-06-many-agents.md)). The service starts each agent as its own process and keeps the
 rules itself, so an agent program is a driver, not the host.

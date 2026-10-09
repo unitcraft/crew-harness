@@ -255,3 +255,9 @@ Artifacts: ветка `task-005-faster-landing` (отправлена на origi
 - Тексты: README плагина (оба ключа), README тестов, спецификация, план, ADR-0009 (запись решения владельца с датой).
 - Тесты: `landing-golden.mjs` и `crew-landing-golden` (проходы `--check --legacy`, `--dump` без ключей против `--new`), `crew-landing-config`, `crew-landing-letters`, `crew-landing-slot`, `crew-landing-precheck` (ячейки «по умолчанию» и «явные hold/off»), прежние `crew-review`, `crew-acceptor`, `crew-plan-task`, `crew-profiles-windows` ставят `off`/`hold` явно.
 - DNC-01 теперь читается так: тексты при явных `hold` и `off` равны снимку базы; без ключей тексты равны текстам с явными `free` и `required`.
+
+## Автоотпускание замка слияния (Сессия С5д, решение владельца 2026-10-09)
+
+- Код: `releaseLandedLock` в `precheck.ts`, поле `landed` записи предпроверки, вызов на проходе службы в `index.ts`, `accept` без замка после отпускания (`core.ts`), строка про замок в ответе `merge`, `LOCK_LIFECYCLE` в письмах приёмщика (`review.ts`), справка, описание `crew_task`, README плагина.
+- Правка интегратора проекта по просьбе владельца принята как своя: тексты письма, справки и отказа `merge` про «замок до CI не брать», «влить именно проверенный кандидат», слот и уборку (`review.ts`, `core.ts`, `precheck.ts`, README, ячейки в `crew-landing-gate` и `crew-landing-letters`).
+- Тесты: новый `crew-landing-release` (14 ячеек); ячейки AC-26 и AC-31 в `crew-landing-letters`. `crew-profiles-config`, ячейка AC-23, не трогалась (чинит другая ветка).
