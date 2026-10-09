@@ -177,4 +177,104 @@ const PACK3 = [block({ n: "01", q: "Первый вопрос?", type: "implemen
   cell("AC-30 к", recsOf(k, "a").length === 1 && recsOf(k, "a")[0].qn === 1 && noticesOf(k).length === 1 && /делаем ли мы это/.test(noticesOf(k)[0].message), JSON.stringify([recsOf(k).map((r) => [r.kind, r.qn]), noticesOf(k)]))
 }
 
+// ---- the task sessions (nudge): a session started by crew_spawn ends a turn with a question -------------------------------
+const AUTHOR = "sesAuthor1"
+/** a task session: a card of a spawned task with its task and the obligation to the author; returns the ids */
+const taskSession = (extra = {}, fields = {}) => {
+  const sid = nextSid()
+  const t = H.tasks.createTask({ project: "proj", title: "задача", goal: "g", criteria: "c", priority: "P2", tier: "light", role: "worker", model: "claude-code/haiku", author: AUTHOR, author_role: "proj.integrator", qid: `q-${sid}`, status: "running", kind: "spawn", directory: H.proj, executor: sid, ...fields })
+  const now = Date.now()
+  core.saveCard({ session: sid, role: "worker", auto: false, title: sid, directory: H.proj, repo: "proj", project: "proj", pid: process.pid, updated: now, task: { project: "proj", n: t.n }, spawned: { by: AUTHOR, task: "задача", tier: "light", status: "running", at: now - 60_000, qid: `q-${sid}` }, ...extra })
+  core.addObligation(sid, { qid: `q-${sid}`, from_session: AUTHOR, from_role: "proj.integrator", at: now - 60_000, nudges: 0, task: undefined })
+  return { sid, t }
+}
+const oblig = (sid) => core.obligationsOf(sid)
+const toAuthor = () => H.letters(AUTHOR)
+const forAuthor = (sid, re) => toAuthor().filter((l) => String(l.id).includes(sid) && re.test(String(l.id)))
+const sessionTurn = async (sid, text, o = {}) => {
+  await H.turn(sid, text, { user: LETTER, ...o })
+  await H.wait(o.wait ?? 1300)
+}
+const noWake = (sid) => H.letters(sid).filter((l) => /Не завершено/.test(l.text)).length === 0 && toAuthor().filter((l) => String(l.id).startsWith(`ask-${sid}`)).length === 0
+
+{
+  modes({ default: "recommendations" })
+  const { sid, t } = taskSession()
+  await sessionTurn(sid, [block({ type: "implementation" }), SEEN].join(NL))
+  const o = oblig(sid)[0]
+  const t2 = H.tasks.loadTask("proj", t.n)
+  cell("AC-10 сессия задачи", recsOf(sid, "a").length === 1 && noWake(sid) && o.nudges === 0 && (o.empty ?? 0) === 0 && !o.stuck && o.qid === `q-${sid}` && t2.history.some((h) => String(h.note ?? "").includes(recsOf(sid, "a")[0].id)) && toAuthor().filter((l) => String(l.id).includes(sid)).length === 0, JSON.stringify([recsOf(sid).length, oblig(sid), toAuthor().map((l) => l.id)]))
+}
+{
+  modes({ default: "recommendations" })
+  const { sid } = taskSession()
+  await sessionTurn(sid, PACK3)
+  const lt = lettersText(sid)
+  const rest = forAuthor(sid, /^answer-rest-/)
+  cell("AC-10 пакет", recsOf(sid, "a").length === 1 && rest.length === 1 && /В-02/.test(rest[0].text) && /В-03/.test(rest[0].text) && /crew_send \{to:/.test(rest[0].text) && /В-02/.test(lt) && noWake(sid) && noticesOf(sid).length === 0, JSON.stringify([recsOf(sid).map((r) => [r.kind, r.qn]), toAuthor().map((l) => l.id), noticesOf(sid)]))
+  const id = rest[0].id
+  await H.wait(1200)
+  cell("AC-30 в", id === `answer-rest-${sid}-${recsOf(sid, "r")[0].end}` && forAuthor(sid, /^answer-rest-/).length === 1 && noticesOf(sid).length === 0 && oblig(sid)[0].nudges === 0 && (oblig(sid)[0].empty ?? 0) === 0, JSON.stringify([id, toAuthor().map((l) => l.id), oblig(sid)]))
+}
+{
+  modes({ default: "recommendations" })
+  const { sid } = taskSession()
+  await sessionTurn(sid, ["В-01 Выбор формата", "Тип: implementation", "Рекомендация: json", "Автоответ: допустим"].join(NL))
+  const rest = forAuthor(sid, /^answer-rest-/)
+  cell("AC-30 и в письме сессии задачи", recsOf(sid, "a").length === 0 && rest.length === 1 && /нет «\?» в конце строки/.test(rest[0].text), JSON.stringify([recsOf(sid), rest.map((l) => l.text)]))
+}
+{
+  modes({ default: "recommendations" })
+  const { sid } = taskSession()
+  const pk = [block({ n: "01", q: "Первый вопрос?", type: "implementation" }), "", "В-02 Второй вопрос без полей?"].join(NL)
+  await sessionTurn(sid, pk)
+  cell("AC-30 з в письме сессии задачи", forAuthor(sid, /^answer-rest-/).length === 1 && toAuthor().filter((l) => String(l.id).startsWith("ask-")).length === 0 && noWake(sid), JSON.stringify(toAuthor().map((l) => l.id)))
+}
+{
+  // started by the owner's word: the answer comes before the condition !turn?.owner
+  modes({ default: "recommendations" })
+  const { sid } = taskSession()
+  await sessionTurn(sid, [block({ type: "implementation" }), SEEN].join(NL), { user: "поехали" })
+  cell("AC-11 b сессия задачи", recsOf(sid, "a").length === 1, JSON.stringify([recsOf(sid)]))
+}
+{
+  // review sessions and task-plan sessions
+  modes({ default: "recommendations" })
+  const rv = taskSession({ review: { project: "proj", n: 1 } })
+  await sessionTurn(rv.sid, [block({ q: "Вливай?", type: "implementation", rec: "да" }), SEEN].join(NL))
+  const rv2 = taskSession({ review: { project: "proj", n: 1 } })
+  await sessionTurn(rv2.sid, [block({ q: "Задача готова, всё зелёное, закрываем?", type: "implementation", rec: "закрываем" }), SEEN].join(NL))
+  const pl = taskSession({}, { plan: { n: "7", file: "docs/plans/7-x.md", source: "s", rounds: [], clean: 0 } })
+  await sessionTurn(pl.sid, [block({ q: "Согласовать план?", type: "requirements", rec: "да" }), SEEN].join(NL))
+  const ok = taskSession({}, { plan: { n: "8", file: "docs/plans/8-x.md", source: "s", rounds: [], clean: 0 } })
+  await sessionTurn(ok.sid, [block({ q: "Как назвать раздел?", type: "requirements", rec: "Контекст" }), SEEN].join(NL))
+  cell("AC-05 г", recsOf(rv.sid).filter((r) => r.kind === "a").length === 0 && recsOf(rv2.sid).filter((r) => r.kind === "a").length === 0 && recsOf(pl.sid).filter((r) => r.kind === "a").length === 0 && /сессия приёмки/.test(JSON.stringify(recsOf(rv2.sid, "r")[0]?.rest)) && forAuthor(rv2.sid, /^answer-rest-/).length === 1 && forAuthor(pl.sid, /^answer-rest-/).length === 1, JSON.stringify([recsOf(rv.sid), recsOf(rv2.sid), recsOf(pl.sid)]))
+  cell("AC-05 д", recsOf(ok.sid, "a").length === 1, JSON.stringify(recsOf(ok.sid)))
+}
+
+// ---- AC-16: the answer changes nothing of the task ---------------------------------------------------------------------
+{
+  modes({ default: "recommendations" })
+  const snapOf = (t) => JSON.stringify({ status: t.status, rework: t.rework, syncs: t.syncs, plan: t.plan && { rounds: t.plan.rounds, clean: t.plan.clean, stuck: t.plan.stuck }, qid: t.qid, attempt: t.attempt })
+  const a = taskSession({}, { status: "rework", rework: 2, syncs: 3 })
+  const b = taskSession({}, { plan: { n: "9", file: "docs/plans/9-x.md", source: "s", rounds: [{ at: 1, found: 2 }], clean: 1, stuck: false } })
+  const before = [snapOf(H.tasks.loadTask("proj", a.t.n)), snapOf(H.tasks.loadTask("proj", b.t.n))]
+  await sessionTurn(a.sid, [block({ type: "implementation" }), SEEN].join(NL))
+  await sessionTurn(b.sid, [block({ type: "requirements", q: "Как назвать раздел?" }), SEEN].join(NL))
+  const after = [snapOf(H.tasks.loadTask("proj", a.t.n)), snapOf(H.tasks.loadTask("proj", b.t.n))]
+  cell("AC-16 снимок", recsOf(a.sid, "a").length === 1 && recsOf(b.sid, "a").length === 1 && before.join() === after.join(), JSON.stringify([before, after]))
+}
+
+// ---- AC-15: the approval of plans is not touched by the modes ----------------------------------------------------------------
+{
+  modes({ default: "recommendations" })
+  const t = H.tasks.createTask({ project: "proj", title: "план 11: проверка", goal: "g", criteria: "c", priority: "P2", tier: "light", role: "worker", model: "claude-code/haiku", author: AUTHOR, author_role: "proj.integrator", qid: "q-plan11", status: "approval", kind: "spawn", directory: H.proj, plan: { n: "11", file: "docs/plans/11-x.md", source: "s", rounds: [], clean: 2 } })
+  await H.until(() => H.notices().some((x) => /План 11 ждёт согласования/.test(x.title)), 8_000)
+  const t1 = H.tasks.loadTask("proj", t.n)
+  modes({ default: "recommendations" }, { plan_approver: "integrator" })
+  const t2 = H.tasks.createTask({ project: "proj", title: "план 12: проверка", goal: "g", criteria: "c", priority: "P2", tier: "light", role: "worker", model: "claude-code/haiku", author: AUTHOR, author_role: "proj.integrator", qid: "q-plan12", status: "approval", kind: "spawn", directory: H.proj, plan: { n: "12", file: "docs/plans/12-x.md", source: "s", rounds: [], clean: 2 } })
+  await H.until(() => toAuthor().some((l) => /^plan-approve-/.test(String(l.id))), 8_000)
+  cell("AC-15 планы", H.notices().some((x) => /План 11 ждёт согласования/.test(x.title)) && t1.status === "approval" && !t1.plan.approval && toAuthor().some((l) => /^plan-approve-proj-\d+-12-|^plan-approve-proj-/.test(String(l.id))) && H.tasks.loadTask("proj", t2.n).status === "approval", JSON.stringify([H.notices().map((x) => x.title), toAuthor().map((l) => l.id), t1.status]))
+}
+
 R.done(H)
