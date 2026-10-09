@@ -9,11 +9,10 @@ import { execFileSync } from "node:child_process"
 import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { fileURLToPath, pathToFileURL } from "node:url"
+import { fileURLToPath } from "node:url"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const script = path.join(here, "answer-golden.mjs")
-const plugin = process.env.CREW_PLUGIN_DIR ? path.resolve(process.env.CREW_PLUGIN_DIR) : path.join(here, "..")
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-answer-golden-"))
 let fail = 0
 const cell = (name, ok, detail) => {
@@ -31,11 +30,9 @@ const run = (args, env = {}) => {
 const first = run(["--check"])
 cell("AC-01 без ключей", first.code === 0 && /^golden ok/m.test(first.out), first.out.slice(0, 1500))
 
-const schema = await import(pathToFileURL(path.join(plugin, "config-schema.ts")).href)
-if (schema.SCHEMA_KEYS.includes("answer_mode")) {
-  const second = run(["--check", "--owner"])
-  cell("AC-01 owner во всех типах", second.code === 0 && /^golden ok/m.test(second.out), second.out.slice(0, 1500))
-} else console.log("skip AC-01 owner во всех типах: ключей ещё нет")
+// the second pass: answer_mode set to {"default": "owner"}; on the base the key is unknown and ignored, the texts stay the same
+const second = run(["--check", "--owner"])
+cell("AC-01 owner во всех типах", second.code === 0 && /^golden ok/m.test(second.out), second.out.slice(0, 1500))
 
 // the control: one line of a copy of the snapshot is spoiled -- the check must say "golden differs"
 const spoiled = path.join(tmp, "spoiled.json")
