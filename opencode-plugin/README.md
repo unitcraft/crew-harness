@@ -281,7 +281,7 @@ refuses them) — [ADR-0010](../doc/canon/decisions/ADR-0010-question-answering-
 - `answer_max` — how many answers in a row one session may get (3); the owner's word in the tab resets the count.
 
 **The form of a question.** A session asks in text: a block `В-01 …?` with the lines `Тип: requirements|plan|implementation|gate`,
-`Рекомендация: …` and `Автоответ: допустим`, and «?» в конце строки with the question. A question is closed only when all of this
+`Рекомендация: …` and `Автоответ: допустим`, and «?» в конце строки with the question: the recommendation is one paragraph without blank lines (a blank line ends the value), the question ends the line and the fields stand on separate lines below it (вопрос заканчивай знаком «?» в конце строки, поля — отдельными строками ниже). A question is closed only when all of this
 holds at once: the type is declared and is not `gate`, the mode of the type is `recommendations`, the recommendation is not empty, the
 permission `Автоответ: допустим` stands, no word of the gates is in its text, the session is not a review session, the limit is not
 spent, and the parse went through. Anything else — and any doubt — stays with the owner, who gets one notice with what is left.
