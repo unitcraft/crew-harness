@@ -4,9 +4,9 @@
 // (index.ts); режимы выключены — answerTurn возвращает { handled: false } до разбора, прежние пути работают как были.
 //
 // Закрыто по умолчанию: любой сбой, сомнение и неготовность — вопрос остаётся владельцу, ошибка идёт в журнал службы.
-import { linkSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
+import { linkSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { type Card, type CrewConfig, type TurnEnd, PLUGIN_SENDER, letterExistsFor, log, obligationsOf, postLetter, safeKey } from "./core.ts"
+import { type Card, type CrewConfig, type TurnEnd, PLUGIN_SENDER, letterExistsFor, log, obligationsOf, postLetter, safeKey, sessionLabel } from "./core.ts"
 import { loadTask, taskEvent, taskRef } from "./tasks.ts"
 import { BASE } from "./paths.ts"
 import { type Block, type ClassifyCtx, answerModesOn, classify, parseTurn } from "./answer-parse.ts"
@@ -377,4 +377,80 @@ async function decide(input: AnswerInput): Promise<AnswerResult> {
     }
   }
   return { handled: true, ...(notice ? { notice } : {}) }
+}
+
+// ПОКАЗ -------------------------------------------------------------------------------------------------------------
+// Раздел «Автоответы» сводки /crew и строка боковой панели. Журнал читается целиком, но файлы разбираются заново только когда
+// они изменились (время и размер), поэтому перерисовка панели не читает диск на каждый кадр.
+
+const fileCache = new Map<string, { mtime: number; size: number; rec?: AnswerRecord }>()
+function readAllCached(now: number): AnswerRecord[] {
+  let names: string[]
+  try {
+    names = readdirSync(ANSWERS)
+  } catch {
+    return []
+  }
+  const out: AnswerRecord[] = []
+  for (const f of names) {
+    if (!f.endsWith(".json") || f.startsWith(".")) continue
+    const file = path.join(ANSWERS, f)
+    let st
+    try {
+      st = statSync(file)
+    } catch {
+      continue
+    }
+    const hit = fileCache.get(file)
+    let rec: AnswerRecord | undefined
+    if (hit && hit.mtime === st.mtimeMs && hit.size === st.size) rec = hit.rec
+    else {
+      try {
+        rec = JSON.parse(readFileSync(file, "utf8"))
+      } catch {
+        rec = undefined
+      }
+      fileCache.set(file, { mtime: st.mtimeMs, size: st.size, rec })
+    }
+    if (rec && (rec.kind === "a" || rec.kind === "r") && now - (rec.answeredAt || rec.askedAt || 0) <= KEEP_MS) out.push(rec)
+  }
+  return out
+}
+
+const WIDTH = 72 // ширина строки окна /crew, как DIALOG_WIDTH в status.ts (импортировать нельзя: status.ts импортирует этот файл)
+const fit72 = (line: string) => (line.length > WIDTH ? `${line.slice(0, WIDTH - 1)}…` : line)
+const one = (s: string, n: number) => {
+  const t = s.replace(/\s+/g, " ").trim()
+  return t.length > n ? `${t.slice(0, n - 1)}…` : t
+}
+const hmOf = (t: number) => new Date(t).toTimeString().slice(0, 5)
+const refOf = (r: AnswerRecord) => (r.task ? `#${r.task}` : one(sessionLabel(r.session, r.session), 28))
+
+/** Строки раздела «Автоответы» для /crew (REQ-17): ответы за 24 часа и вопросы, которые ждут слова владельца. Нет ни того ни другого — пусто. */
+export function answerLines(project: string, now = Date.now()): string[] {
+  const all = readAllCached(now).filter((r) => r.project === project)
+  const day = all.filter((r) => r.kind === "a" && now - r.answeredAt <= DAY_MS).sort((a, b) => b.answeredAt - a.answeredAt)
+  const waiting = all.filter((r) => r.kind === "r" && r.state === "остаток: ждёт слова владельца" && now - r.askedAt <= DAY_MS).sort((a, b) => b.askedAt - a.askedAt)
+  const out: string[] = []
+  if (day.length) {
+    out.push(fit72(`  автоответы за 24 ч: ${day.length}, вмешался владелец: ${day.filter((r) => r.state === "владелец вмешался").length}`))
+    for (const r of day.slice(0, 6)) {
+      out.push(fit72(`    ${hmOf(r.answeredAt)} ${refOf(r)} · ${r.type ?? "?"} · ${r.mode ?? "?"}`))
+      out.push(fit72(`      ${r.who ?? "?"} · ${r.state}: «${one(r.question, 26)}» → «${one(r.answer, 22)}»`))
+    }
+    if (day.length > 6) out.push(`    … и ещё ${day.length - 6}`)
+  }
+  for (const r of waiting.slice(0, 4)) {
+    out.push(fit72(`  ждёт слова владельца: ${refOf(r)}`))
+    for (const it of (r.rest ?? []).slice(0, 4)) out.push(fit72(`    ${it.n ? `В-${String(it.n).padStart(2, "0")}` : "вопрос"} ${one(it.head, 40)} (${it.reason})`))
+  }
+  return out
+}
+
+export type SideRowLike = { mark: string; who: string; what: string; tone: "accent" | "base" | "muted" }
+/** Строка боковой панели «авто 24ч: N · вмеш. M» (REQ-17, AC-32); N = 0 — строки нет. Без проекта — по всем проектам журнала. */
+export function answerSideRow(project?: string, now = Date.now()): SideRowLike | undefined {
+  const day = readAllCached(now).filter((r) => r.kind === "a" && now - r.answeredAt <= DAY_MS && (!project || r.project === project))
+  if (!day.length) return undefined
+  return { mark: " ", who: "", what: `авто 24ч: ${day.length} · вмеш. ${day.filter((r) => r.state === "владелец вмешался").length}`, tone: "muted" }
 }

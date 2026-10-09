@@ -12,6 +12,7 @@ import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync }
 import path from "node:path"
 import { type Card, readJson, safeKey } from "./core.ts"
 import { BASE } from "./paths.ts"
+import { answerLines, answerSideRow } from "./answer.ts"
 import { type Task, isOpen, listTasks, loadTask } from "./tasks.ts"
 import { type Watch, watchesOf } from "./watch.ts"
 
@@ -216,6 +217,7 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
     }
     out.push(...planLines(p))
     out.push(...acceptanceReports(p, now))
+    out.push(...answerLines(p, now))
   }
   out.push(`(${hm(now)}; обновляется раз в несколько секунд)`)
   return out.join("\n")
@@ -340,6 +342,8 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string)
     // название задачи — по номеру не вспомнить, о чём она (владелец, 2026-10-07); последней подстрокой, чтобы строки шагов остались на своих местах
     if (s.task?.title) rows.push({ mark: " ", who: "", what: `↳ ${short(s.task.title.replace(/[`*_«»]/g, ""), 26)}`, tone: "muted" })
   }
+  const auto = answerSideRow(project, now)
+  if (auto) rows.push(auto)
   const waiting = mine.filter((s) => s.state === "owner").length
   // «ход» — модель думает сейчас; «ждут» — наблюдения (гейты, коммит в main), из них в очереди машины — ещё не запущены
   const working = mine.filter((s) => s.state === "working").length
