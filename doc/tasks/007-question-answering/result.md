@@ -1,4 +1,4 @@
-Статус: в работе
+Статус: готово
 
 # 007 — Кто отвечает на вопросы сессий: владелец, по рекомендациям — result (Сессия С5, 2026-10-09)
 
@@ -44,10 +44,199 @@
 шаг 8: сделан, красный прогон новых ячеек потока на копии `git archive HEAD` без вызова в `nudge`: `node test/crew-answer-flow.test.mjs`, код выхода 1; красные `AC-10 сессия задачи`, `AC-10 пакет`, `AC-30 в`, `AC-30 з в письме сессии задачи` (в ящике автора остаётся прежняя пересылка `ask-…`); `AC-30 и в письме сессии задачи`, `AC-11 b сессия задачи`, `AC-05 г`, `AC-05 д`, `AC-16 снимок`, `AC-15 планы` на этом срезе зелёные уже без вызова в `nudge`, потому что тот же ответ принимает проход состояния (`syncStatus` обходит и сессии задач) — отличие от ожидания плана записано; затем `index.ts` (`nudge`: первой строкой `loadConfig`, при включённых режимах — `turnEnd` и `answerTurn` с каналом `nudge`, до проверки обязательств и условия `card.spawned && !turn?.owner`; `handled` — `return`: ни пересылки, ни «Не завершено», счётчики не растут), `node test/crew-answer-flow.test.mjs` — `crew-answer-flow.test ok`, 35 ячеек, 90 с (к 25 ячейкам вкладки владельца добавлены `AC-10 сессия задачи`, `AC-10 пакет`, `AC-30 в`, `AC-30 и в письме сессии задачи`, `AC-30 з в письме сессии задачи`, `AC-11 b сессия задачи`, `AC-05 г` (сессия приёмки: «Вливай?» и «Задача готова, всё зелёное, закрываем?»; сессия задачи-плана: «Согласовать план?»), `AC-05 д` (контроль: вопрос типа `requirements` сессии задачи-плана без слов ворот получает ответ), `AC-16 снимок` (задача в доработке и задача-план: статус, `rework`, `syncs`, `plan.rounds`, `plan.clean`, `plan.stuck`, `qid`, `attempt` как до ответа), `AC-15 планы` (уведомление «План … ждёт согласования» и письмо автору при `plan_approver: integrator`, задача остаётся в `approval`, при `answer_mode` `default: recommendations`)); новый `test/answer-scope.mjs`: `node test/answer-scope.mjs` печатает `scope ok` (файлы согласования планов, приёмки, хранилища задач, предпроверки, панели и профилей не упоминают режимы; тела `applyApprovals`, `planSteps`, `flowWatch`, `endsWithQuestion`, `statusOf` и ветки `plan_decide`, `merge`, `accept`, `rework`, блок приёмки `review … cleaned` не упоминают), `--selfcheck` печатает `scope selfcheck ok`; прежние `crew-stuck` (3), `crew-push` (45), `crew-plans` (15), `crew-status` (12) без правок — `ok`; `sh scripts/guards/run-all.sh` — `FAIL 0`; задержка службы за прогоны до 4,5 с.
 шаг 9: сделан, красный прогон `node test/crew-answer-view.test.mjs` до кода на копии `git archive HEAD` (без `answerLines` и `answerSideRow`): красные `AC-19 раздел`, `AC-20 вмешался`, `AC-30 б /crew`, `AC-32 строка`, на `AC-32 ширина` исключение `TypeError: A.answerSideRow is not a function`; `AC-19 show` и `AC-19 статус автоответ` зелёные уже на этом срезе (событие задачи и файл состояния дают шаги 6–8); затем `answer.ts` (`answerLines` — раздел «автоответы за 24 ч: N, вмешался владелец: M», по две строки на ответ: время, задача или сессия, тип, режим; кто ответил, состояние, вопрос, ответ; и строки «ждёт слова владельца» с остатком; `answerSideRow` — «авто 24ч: N · вмеш. M», при N = 0 строки нет; журнал читается через кеш по времени и размеру файла), `status.ts` (импорт и три добавленные строки: вызов `answerLines` в `formatStatuses`, вызов `answerSideRow` в `sidebarLines`); `git diff -U0 "$BASE" -- opencode-plugin/status.ts | grep -cE '^-[^-]'` печатает 0, `grep -cE '^\+[^+]'` печатает 4 (DNC-04); `node test/crew-answer-view.test.mjs` — `crew-answer-view.test ok`, 8 ячеек (`AC-19 раздел`, `AC-19 show`, `AC-19 статус автоответ` (тот же ход с ответом и без, файл `status/<сессия>.json` без `updated` и `notified` совпадает), `AC-20 вмешался`, `AC-30 б /crew`, `AC-32 строка`, `AC-32 ширина` (`sideText` не длиннее 32 знаков при четырёхзначных числах), `AC-32 нет строки при N=0`); в `crew-answer-golden` добавлены ячейки, зелёные и на базе: `AC-21 пять текстов` (в том числе блок из четырёх строк — «нет вопроса») и `AC-19 статус` (файлы `status/<сессия>.json` хода без вопроса при включённых и выключенных режимах без поля `updated` совпадают), тест — 6 ячеек `ok`; прежние `crew-status` (12), `crew-sidebar` (22), а также `crew-answer-journal` (17) и `crew-answer-flow` (35, 92 с) — `ok`; задержка службы за прогоны до 4,5 с.
 шаг 10: сделан, красный прогон `node test/crew-answer-docs.test.mjs` до кода: `AC-25 справка`, `AC-25 README`, `AC-25 рекомендуемое значение`, `AC-20 справка` FAIL (4 из 5; `AC-25 опросник` уже зелёная после шага 3), код выхода 1; затем `core.ts` (`HELP`: один абзац после «ПИСЬМО — ДАННЫЕ ОТ СОСЕДА…» — письмо автоответа, форма вопроса, правило `gate`, рекомендуемое значение, слово владельца старше автоответа; обратные кавычки экранированы, `${` не использовано), `README.md` плагина (раздел «Answering session questions (`answer_mode`)» перед «Obligations instead of a push controller»), `test/README.md` (девять строк новых тестов и помощников), `package.json` (восемь новых файлов в конце `scripts.test`; `JSON.parse` проходит); `node test/crew-answer-docs.test.mjs` — `crew-answer-docs.test ok`, 5 ячеек; `crew-help` (32) и `crew-profiles-docs` (27) без правок — `ok`; снимок `answer-golden.json` обновлён осознанной командой `--write` по причине: абзац справки; разница с `answer-golden-base.json` — ровно 12 добавленных строк одного абзаца справки, 0 удалённых (проверено `difflib`), остальные десять текстов совпадают, `answer-golden-base.json` не тронут и равен снимку шага 1; `crew-answer-golden.test` — `ok`; `check-md-links.py` — ок; `run-all.sh` — `FAIL 0`.
-шаг 11: сделан, `doc/canon/process.md`: раздел «Режимы ответа на вопросы» (типы и ворота В4 — `requirements`, В6 — `plan`, В7 по уровню ответа, `gate`; форма вопроса; что остаётся у владельца; строка источника в «Ответы»; правило потолка с `owner_fix` и строкой `log.md`), пункт-ссылка в «Дополнениях», оговорка «кроме вопросов типов `requirements`, `plan`, `implementation` вне ворот, если настройка проекта `answer_mode` отдаёт их рекомендации» в строке «Без владельца не делается» и в пункте «Каждый вопрос владельцу — с рекомендацией» (фраза «Без исключений, в том числе для вопросов про деньги и подписки: рекомендация не решение, решает владелец.» заменена: деньги, подписки и ворота остаются у владельца без исключений). Команды DoD AC-23 и AC-24 на дереве (контроль на `$BASE` через `git show "$BASE":doc/canon/process.md`): абзац «Без владельца не делается» → `answer_mode`: 1 (на базе 0); пункт «Каждый вопрос владельцу» → `Тип:`: 1 (0), «кроме вопросов типов»: 1 (0); склеенная безусловная формулировка: 0 (на базе 1); `Источник: рекомендация Сессии С1, режим recommendations, настройка проекта (answer_mode, коммит`: 1 (0); строка `ответ по настройке: … потолок не сброшен, заход`: 1 (0); `owner_fix`: 1 (0); `grep -n "^## Режимы ответа на вопросы"`: одна строка (0); `В4|В6|В7` в новом разделе: 3 строки (0); порядок коммитов: `git log --reverse --format=%s "$BASE"..HEAD | grep -n "^ADR: accept\|^Config: answer_mode"` — `ADR: accept …` (строка 3) раньше `Config: answer_mode …`; `head -1` ADR-0010 в `HEAD` — «Статус: принято, 2026-10-09, владелец»; в реестре «принято»; `check-md-links.py` — ок, `run-all.sh` и `run-all.sh --index` — `FAIL 0`. В ходе шага один раз по ошибке запущено `git add -A --` без перечня файлов (сразу откатано `git reset -q`, в коммит не попало, рабочее дерево не менялось).
+шаг 11: сделан, `doc/canon/process.md`: раздел «Режимы ответа на вопросы» (типы и ворота В4 — `requirements`, В6 — `plan`, В7 по уровню ответа, `gate`; форма вопроса; что остаётся у владельца; строка источника в «Ответы»; правило потолка с `owner_fix` и строкой `log.md`), пункт-ссылка в «Дополнениях», оговорка «кроме вопросов типов `requirements`, `plan`, `implementation` вне ворот, если настройка проекта `answer_mode` отдаёт их рекомендации» в строке «Без владельца не делается» и в пункте «Каждый вопрос владельцу — с рекомендацией» (фраза «Без исключений, в том числе для вопросов про деньги и подписки: рекомендация не решение, решает владелец.» заменена: деньги, подписки и ворота остаются у владельца без исключений). Команды DoD AC-23 и AC-24 на дереве (контроль на `$BASE` через `git show "$BASE":doc/canon/process.md`): абзац «Без владельца не делается» → `answer_mode`: 1 (на базе 0); пункт «Каждый вопрос владельцу» → `Тип:`: 1 (0), «кроме вопросов типов»: 1 (0); склеенная безусловная формулировка: 0 (на базе 1); `Источник: рекомендация Сессии С1, режим recommendations, настройка проекта (answer_mode, коммит`: 1 (0); строка `ответ по настройке: … потолок не сброшен, заход`: 1 (0); `owner_fix`: 1 (0); `grep -n "^## Режимы ответа на вопросы"`: одна строка (0); `В4|В6|В7` в новом разделе: 3 строки (0); порядок коммитов: `git log --reverse --format=%s "$BASE"..HEAD | grep -n "^ADR: accept\|^Config: answer_mode"` — `ADR: accept …` (строка 4) раньше `Config: answer_mode …`; `head -1` ADR-0010 в `HEAD` — «Статус: принято, 2026-10-09, владелец»; в реестре «принято»; `check-md-links.py` — ок, `run-all.sh` и `run-all.sh --index` — `FAIL 0`. В ходе шага один раз по ошибке запущено `git add -A --` без перечня файлов (сразу откатано `git reset -q`, в коммит не попало, рабочее дерево не менялось).
+шаг 12: сделан, маркеры `GATE:default`, `GATE:mode`, `GATE:flag`, `GATE:type`, `GATE:rec`, `GATE:review`, `GATE:limit`, `GATE:words`, `GATE:owner`, `GATE:exists`, `GATE:once-link`, `GATE:once-letter`, `GATE:recount-count`, `GATE:row` стоят в коде парами по одному (`node test/answer-red.mjs --markers-only` — `markers ok`); `test/answer-red.mjs` (прогон 0 «база»: `git archive` базы, тесты по одному со снимком базы `answer-golden-base.json`, список зелёных ячеек на базе — `test/answer-red-base.json`; прогоны 1–12 «заглушки»: копия текущего кода, замена места между парными маркерами, счёт совпадений на маркер обязан быть 1, копия обязана загружаться, нужные ячейки обязаны быть красными; прогон 13 «без заглушек»); контроль `node test/answer-red.mjs --control` — `control ok` (маркер убран, скрипт падает с «маркер не найден»). Первый полный прогон нашёл три слабые ячейки (не краснели при своих заглушках): `AC-29 10` (проверяла разбор, а не `classify`), `AC-29 9` (то же), `AC-04` потока (вопрос ворот содержал слово «влить» и закрывался словом, а не типом); ячейки усилены (`classify` в `AC-29 9` и `AC-29 10`, вопрос ворот `В-03` без слов ворот), прогоны 2, 3 и 9 повторены и красные. Вывод полного прогона (прогон 0–13, до усиления; три строки с ошибками внизу исправлены и перепрогнаны, как сказано):
+
+```
+прогон 0, база 40e78c388e49: новые тесты на коде базы со снимком базы
+  crew-answer-golden: зелёных 7 (ожидалось 7), код 0
+  crew-answer-config: зелёных 3 (ожидалось 3), код 1
+  crew-answer-parse: зелёных 0 (ожидалось 0), код 1
+  crew-answer-gate: зелёных 0 (ожидалось 0), код 1
+  crew-answer-journal: зелёных 0 (ожидалось 0), код 1
+  crew-answer-view: зелёных 0 (ожидалось 0), код 1
+  crew-answer-docs: зелёных 0 (ожидалось 0), код 1
+  crew-answer-flow: зелёных 9 (ожидалось 9), код 1
+прогон 1, заглушка GATE:words
+  crew-answer-gate: AC-05 а stem:* -- красная (190)
+  crew-answer-gate: AC-05 б Т-7 * -- красная (20)
+  crew-answer-gate: AC-05 з -- красная (1)
+  crew-answer-gate: AC-05 и -- красная (1)
+прогон 2, заглушка GATE:flag
+  crew-answer-parse: AC-06 -- красная (1)
+  crew-answer-parse: AC-29 10 -- НЕ КРАСНАЯ
+прогон 3, заглушка GATE:type
+  crew-answer-parse: AC-06 -- красная (1)
+  crew-answer-parse: AC-29 3 -- красная (1)
+  crew-answer-flow: AC-04 -- НЕ КРАСНАЯ
+прогон 4, заглушка GATE:review
+  crew-answer-flow: AC-05 г -- красная (1)
+прогон 5, заглушка GATE:limit
+  crew-answer-journal: AC-14 счёт -- красная (1)
+  crew-answer-journal: AC-14 пачка из трёх -- красная (1)
+  crew-answer-journal: AC-14 после остатка -- красная (1)
+  crew-answer-flow: AC-14 пакет -- красная (1)
+прогон 6, заглушка GATE:owner
+  crew-answer-flow: AC-11 a -- красная (1)
+прогон 7, заглушка GATE:once (exists, once-link, once-letter)
+  crew-answer-journal: AC-17 письмо в доставке -- красная (1)
+  crew-answer-journal: AC-17 повтор прохода -- красная (1)
+  crew-answer-journal: AC-17 второй процесс -- красная (1)
+прогон 8, заглушка GATE:mode
+  crew-answer-flow: AC-03 c -- красная (1)
+  crew-answer-flow: AC-30 е -- красная (1)
+прогон 9, заглушка GATE:rec
+  crew-answer-parse: AC-29 9 -- НЕ КРАСНАЯ
+  crew-answer-flow: AC-30 г -- красная (1)
+прогон 10, заглушка GATE:default
+  crew-answer-golden: AC-01 без ключей -- красная (1)
+  crew-answer-flow: AC-01 строки без ключей -- красная (1)
+  crew-answer-flow: AC-03 a -- красная (1)
+прогон 11, заглушка GATE:recount (exists, recount-count)
+  crew-answer-journal: AC-17 повтор при пределе -- красная (1)
+  crew-answer-flow: AC-14 пакет повтор -- красная (1)
+прогон 12, заглушка GATE:row
+  crew-answer-journal: AC-14 после остатка -- красная (1)
+прогон 13, без заглушек: копия текущего кода, все новые тесты зелёные
+  crew-answer-golden: ячеек 7, красных 0, код 0
+  crew-answer-config: ячеек 18, красных 0, код 0
+  crew-answer-parse: ячеек 14, красных 0, код 0
+  crew-answer-gate: ячеек 415, красных 0, код 0
+  crew-answer-journal: ячеек 17, красных 0, код 0
+  crew-answer-view: ячеек 8, красных 0, код 0
+  crew-answer-docs: ячеек 5, красных 0, код 0
+  crew-answer-flow: ячеек 35, красных 0, код 0
+прогон 2 GATE:flag: crew-answer-parse / AC-29 10: найдено 1, не красных ["AC-29 10"], код 1
+прогон 3 GATE:type: crew-answer-flow / AC-04: найдено 1, не красных ["AC-04"], код 0
+прогон 9 GATE:rec: crew-answer-parse / AC-29 9: найдено 1, не красных ["AC-29 9"], код 0
+answer-red FAILED
+done-exit=1
+```
+
+Повторные прогоны после усиления: прогон 2 — `AC-06` и `AC-29 10` красные; прогон 3 — `AC-06`, `AC-29 3`, `AC-04` красные; прогон 9 — `AC-29 9` и `AC-30 г` красные. Отличия от ожиданий плана: на базе зелёная `AC-04 пакет не виден endsWithQuestion` (моя ячейка, зелёная и на базе) и нет зелёной `AC-05 г` (моя ячейка строже плановой: требует письма остатка автору, на базе его нет); в `crew-answer-golden` пять ячеек плана плюс `AC-01 control`; блок вопроса в снимке баз заменён на форму с идентификатором `В-01 …?` и последней строкой с «?» (иначе заглушка `GATE:default` не меняла бы тексты); снимки базы перечитаны на неизменённом коде базы (`git archive`), отличие от текущего снимка — один абзац справки.
+Замер: `node test/answer-measure.mjs --control` печатает `по таблице Т-10 спецификации (66 записанных блоков): прошло 9 из 44 пригодных (20 %); без пояснения «потому что …» прошло бы 16 из 44 (36 %)`, `сверка с таблицей Т-10 спецификации (44 / 9 / 20 % / 16): совпадает`, `свежие блоки (10, ревизии e606a43, 22d8856): пригодных 6, прошли 0 (0 %)`, `основ в списке: 190`, `сетка слов: прошло 9 из 50 пригодных (18 %)`, `без пояснения «потому что …»: прошло бы 19 из 50 (38 %)`, контроль «прошло 8 вместо 9: control ok». Свежие блоки: В-12 этой спецификации (ворота: решение о списке слов) и РП-01…РП-07, РП-09, РП-10 плана (РП-08 закрыта правкой и вопроса не содержит); метки «ворота / пригоден» поставлены по записанному критерию до замера (ворота: В-12, РП-02, РП-09, РП-10; пригодны: РП-01, РП-03…РП-07); на момент записи у задач 008–011 спецификаций в `origin/main` нет.
+
+шаг 13: сделан (до ворот Г1), `git fetch origin`: `origin/main` по-прежнему `40e78c3`, ветка от него, ребейз и `range-diff` не нужны, `$BASE` = `40e78c388e49de85a8d22e5a87135718af54def7`; итоговый повтор по одному, пауза 10 с, `node test/cleanup-tmp.mjs` перед серией (таблица «Прогоны перед сдачей» ниже); `sh scripts/guards/run-all.sh` — `итого: ок 7, судить нечего 0, пропущено 0, FAIL 0`; `check-text-hygiene.py` один раз красный (смесь CRLF и LF в `answer-golden.mjs`), исправлено; команды DoD «пусто» с контролями — в разделе «Команды DoD»; таблица «Трассировка»; `AC-26`: ни одной команды `npm test` в списке запусков (`grep -nE '(^|[;&|] *)npm (run )?test'` по этому файлу печатает только строки с запретом/пояснением, команд нет), процессы OpenCode и служба не останавливались.
+
+## Прогоны перед сдачей (по одному, пауза 10 с)
+
+| Тест | ячеек ok | упало | пропущено | время, с | итоговая строка |
+|---|---|---|---|---|---|
+| crew-status | 12 | 0 | 0 | 4 | `crew-status.test ok` |
+| crew-stuck | 3 | 0 | 0 | 5 | `crew-stuck.test ok` |
+| crew-push | 45 | 0 | 0 | 28 | `crew-push.test ok` |
+| crew-cfgtool | 17 | 0 | 0 | 14 | `crew-cfgtool.test ok` |
+| crew-config | 10 | 0 | 0 | 1 | `crew-config.test ok` |
+| crew-help | 32 | 0 | 0 | 1 | `crew-help.test ok` |
+| crew-settings | 20 | 0 | 0 | 17 | `crew-settings.test ok` |
+| crew-sidebar | 22 | 0 | 0 | 1 | `crew-sidebar.test ok` |
+| crew-profiles-docs | 27 | 0 | 0 | 1 | `crew-profiles-docs.test ok` |
+| crew-plans | 15 | 0 | 0 | 0 | `crew-plans.test ok` |
+| crew-answer-golden | 7 | 0 | 0 | 13 | `crew-answer-golden.test ok` |
+| crew-answer-config | 18 | 0 | 0 | 21 | `crew-answer-config.test ok` |
+| crew-answer-parse | 14 | 0 | 0 | 0 | `crew-answer-parse.test ok` |
+| crew-answer-gate | 415 | 0 | 0 | 1 | `crew-answer-gate.test ok` |
+| crew-answer-journal | 17 | 0 | 0 | 4 | `crew-answer-journal.test ok` |
+| crew-answer-view | 8 | 0 | 0 | 6 | `crew-answer-view.test ok` |
+| crew-answer-docs | 5 | 0 | 0 | 1 | `crew-answer-docs.test ok` |
+| crew-answer-flow | 35 | 0 | 0 | 97 | `crew-answer-flow.test ok` |
+
+Десять прежних тестов совпадают с базовым состоянием (те же числа ячеек, ни одного упавшего или пропущенного), их файлы не правились (`git diff --stat "$BASE"..HEAD` по ним пуст). Остальные 47 прежних файлов, `crew-answer-*` и `answer-red` не прогонялись вместе одним набором: полный проход всех тестов по одному — только по слову владельца (Г2).
+
+## Команды DoD
+
+Уровень A: `load ok` на семи файлах; `git diff --check "$BASE"..HEAD` пуст (контроль на временном репозитории печатает замечание). DNC-02: `git diff --name-only "$BASE"..HEAD | grep -E 'approvals\.ts|plans\.ts'` — 0 (контроль 1), `node test/answer-scope.mjs` — `scope ok`, `--selfcheck` — `scope selfcheck ok`. DNC-03: `review.ts`, `precheck.ts` в списке изменённых — 0. DNC-04: `git diff -U0 "$BASE"..HEAD -- opencode-plugin/status.ts` — удалённых строк 0, добавленных 4. DNC-05: `grep -n 'утверждено' answer.ts answer-parse.ts` — пусто (контроль 1); файлов `opencode-plugin/progress*` в списке нет. DNC-06: `progress|profile|tui.ts|sidebar.tsx` — 0; `sidebar.tsx` не тронут. DNC-07: `grep -nE 'from_session: *"(owner|владелец)' answer.ts` — 0. DNC-09: удалённых записей ключей схемы 0, добавленных `answer_*` ровно 2, прочих удалённых строк (кроме трёх допустимых) 0. DNC-10: файлов вне `opencode-plugin/` и `doc/` — 0, `.opencode/` — 0. DNC-11: `grep -nE 'writeSettings|crew-harness\.json' answer.ts answer-parse.ts` — пусто (контроль по `settings.ts` — 10). Стражи: `guard-secrets.py --tree`, `check-private-names.py`, `check-md-links.py`, `check-tests-have-checks.py` — ок; `check-text-hygiene.py` — ок после правки.
+
+Изменённые файлы: `opencode-plugin/` — `answer.ts`, `answer-parse.ts` (новые), `config-schema.ts`, `core.ts`, `index.ts`, `settings.ts`, `status.ts`, `README.md`, `package.json`, двадцать файлов `test/` (новые и `README.md`); `doc/canon/` — `process.md`, ADR-0010 и реестр; `doc/tasks/007-question-answering/` — журналы.
+
+## Трассировка
+
+| Критерий | Статус | Чем проверено |
+|---|---|---|
+| REQ-01 | PASS | `crew-answer-config`: AC-07, AC-09, REQ-01 modeFor/answerModesOn |
+| REQ-02 | PASS | `crew-answer-config`: REQ-02 answer_max default, AC-08 guide, AC-09 c/d |
+| REQ-03 | PASS | `crew-answer-config`: AC-08 set answer_mode/answer_max, AC-08 guide, прежний текст отказа profile_set |
+| REQ-04 | PASS | `crew-answer-parse`: AC-29 1…11 |
+| REQ-05 | PASS | `crew-answer-parse`, `crew-answer-gate`, заглушки 2, 3, 4, 5, 8, 9 краснят |
+| REQ-06 | PASS | `crew-answer-flow`: AC-02, AC-10, AC-30; `crew-answer-journal` |
+| REQ-07 | PASS | `crew-answer-flow`: AC-30 б…к; `REQ-07 reasons` в parse |
+| REQ-08 | снят | вынесен (режим agent) |
+| REQ-09 | снят | вынесен (режим agent) |
+| REQ-10 | PASS | `crew-answer-journal`: AC-14, AC-20 частота; `crew-answer-flow`: AC-11 |
+| REQ-11 | PASS | `crew-answer-journal`: AC-22 журнал, AC-22 исключение; `REQ-11 no throw` |
+| REQ-12 | PASS | `crew-answer-flow`: AC-05 г, AC-05 д; `crew-answer-gate`; Канон |
+| REQ-13 | PASS | `crew-answer-gate` (415 ячеек); замер `answer-measure.mjs`: сверка с Т-10 совпадает |
+| REQ-14 | PASS | `crew-answer-journal`: AC-18 подстроки; `crew-answer-docs` |
+| REQ-15 | PASS | `crew-answer-journal`: AC-17, AC-14; формат записи в `answer.ts` |
+| REQ-16 | PASS | `crew-answer-journal`: REQ-16 событие задачи; `crew-answer-flow`: AC-16 снимок |
+| REQ-17 | PASS | `crew-answer-view`: AC-19 раздел, AC-30 б /crew, AC-32 |
+| REQ-18 | PASS | `crew-answer-view`: AC-20 вмешался; `crew-answer-journal`: AC-20 частота; `crew-answer-docs` |
+| REQ-19 | PASS | AC-23 и AC-24 (команды `grep` выше); раздел «Режимы ответа на вопросы», В4, В6, В7 |
+| REQ-20 | PASS | `crew-answer-flow`: AC-16 снимок; `process.md`: строка `log.md` и `owner_fix` |
+| REQ-21 | PASS | `crew-answer-journal`: AC-17 (все ячейки) |
+| REQ-22 | PASS | `crew-answer-docs`: AC-25, AC-20 справка |
+| REQ-23 | PASS | `crew-answer-config`: AC-07 show, AC-07 doctor, AC-09 b |
+| REQ-24 | PASS | ADR-0010 принят до первого шага кода (порядок коммитов, AC-23) |
+| AC-01 | PASS | `crew-answer-golden`: AC-01 без ключей, owner во всех типах; `crew-answer-flow`: AC-01 строки без ключей; прежние шесть тестов |
+| AC-02 | PASS | `crew-answer-flow`: AC-02, поля, без признака, второй проход |
+| AC-03 | PASS | `crew-answer-flow`: AC-03 a, b, c |
+| AC-04 | PASS | `crew-answer-flow`: AC-04; `crew-answer-golden`: AC-04 endsWithQuestion |
+| AC-05 | NOT VERIFIED | (а…к) PASS: `crew-answer-gate`, `crew-answer-flow` AC-05 г, д; (л) сетка слов: прошло 9 из 50 пригодных (18 %), ниже трети (по таблице Т-10 9 из 44, 20 %) — решение владельца: нужно, дата — на воротах Г1 |
+| AC-06 | PASS | `crew-answer-parse`: AC-06; `crew-answer-flow`: AC-06 default recommendations |
+| AC-07 | PASS | `crew-answer-config`: AC-07 set, игнорируется, show, doctor |
+| AC-08 | PASS | `crew-answer-config`: AC-08 set answer_mode, set answer_max, guide; `crew-cfgtool` |
+| AC-09 | PASS | `crew-answer-config`: AC-09 a…e |
+| AC-10 | PASS | `crew-answer-flow`: AC-10 сессия задачи, AC-10 пакет |
+| AC-11 | PASS | `crew-answer-flow`: AC-11 a, b вкладка, b сессия задачи, метка |
+| AC-12 | снят | вместе с REQ-08 |
+| AC-13 | снят | вместе с REQ-09 |
+| AC-14 | PASS | `crew-answer-journal`: счёт, повтор, пачка из трёх, после остатка; `crew-answer-flow`: пакет, пакет повтор |
+| AC-15 | PASS | `crew-answer-flow`: AC-15 планы; `answer-scope.mjs`: `scope ok` |
+| AC-16 | PASS | `crew-answer-flow`: AC-16 снимок |
+| AC-17 | PASS | `crew-answer-journal`: все ячейки AC-17 (включая второй процесс) |
+| AC-18 | PASS | `crew-answer-journal`: подстроки, повтор; `crew-answer-golden`: AC-18 прежние письма |
+| AC-19 | PASS | `crew-answer-view`: раздел, show, статус автоответ; `crew-answer-golden`: AC-19 статус |
+| AC-20 | PASS | `crew-answer-view`: вмешался; `crew-answer-journal`: частота; `crew-answer-docs`: справка |
+| AC-21 | PASS | `crew-answer-golden`: AC-21 пять текстов; `crew-status` без правок |
+| AC-22 | PASS | `crew-answer-journal`: журнал, исключение |
+| AC-23 | PASS | команды `grep` с контролями на `$BASE` (шаг 11), порядок коммитов, статус ADR |
+| AC-24 | PASS | три `grep` (шаг 11); текст проверяют Сессии С2 и С6 |
+| AC-25 | PASS | `crew-answer-docs`: справка, README, опросник, рекомендуемое значение |
+| AC-26 | PASS | в списке запусков нет `npm test`; процессы не останавливались |
+| AC-27 | PASS | `guard-secrets.py --tree`, `check-private-names.py` — код 0 |
+| AC-28 | снят | вместе с вынесенным режимом agent |
+| AC-29 | PASS | `crew-answer-parse`: AC-29 1…11 |
+| AC-30 | PASS | `crew-answer-flow`: а…к (в, и, з для сессии задачи); `crew-answer-view`: AC-30 б /crew |
+| AC-31 | снят | вместе с вынесенным режимом agent |
+| AC-32 | PASS | `crew-answer-view`: строка, ширина, нет строки при N=0; `sidebar.tsx` не тронут |
+| DNC-01 | PASS | `answer-golden.mjs --check`; прежние тесты без правок; `AC-01` |
+| DNC-02 | PASS | команды выше, `scope ok` |
+| DNC-03 | PASS | команды выше, `scope ok` |
+| DNC-04 | PASS | `status.ts`: 0 удалённых, 4 добавленных строки; `AC-21`, `AC-19 статус` |
+| DNC-05 | PASS | `grep` пуст, `progress*` не тронуты |
+| DNC-06 | PASS | `git diff --name-only` пуст по `progress|profile|tui|sidebar` |
+| DNC-07 | PASS | `AC-18`, `grep` пуст |
+| DNC-08 | PASS | в списке нет `npm test`, процессы не останавливались |
+| DNC-09 | PASS | схема: только добавленные два ключа и три допустимые строки |
+| DNC-10 | PASS | файлов вне `opencode-plugin/` и `doc/` нет |
+| DNC-11 | PASS | `grep` пуст; `AC-08 set answer_mode` — файл не тронут |
+
+Уровни проверки: A PASS; B PASS (восемь новых и десять прежних файлов по одному); C PASS (ячейки на одноразовых папках, настоящей sqlite-базе и дочернем процессе; настоящая среда не проверялась — Г4); D N/A; E PASS (таблица); F PASS (красное: прогоны 0–12); G PASS (прежние десять после шагов 3, 7, 8, 9, 10 и в конце, `run-all.sh`).
+
+## Known limitations
+
+- AC-05 (л): доля закрытых вопросов ниже трети — 9 из 50 пригодных (18 %) со свежими блоками, 9 из 44 (20 %) по таблице Т-10; без пояснения «потому что» 19 из 50 (38 %). Строка AC-05 в «Трассировке» — NOT VERIFIED. Решение владельца: ожидается на воротах Г1, дата не поставлена.
+- Словарь слов ворот открытый и ловит с запасом; ложные срабатывания допустимы (REQ-13), принятое ограничение вопроса задачи-плана без слов «согласов» и «раунд» с `Автоответ: допустим` (REQ-12) остаётся. Решение владельца: принято в О-11 и О-12, 2026-10-08 и 2026-10-09.
+- Признак карточки `review` липкий: сессия, однажды бывшая приёмкой, остаётся ею (ошибка в сторону владельца). Решение владельца: принято в REQ-12, 2026-10-09.
+- Чистки журнала ответов старше 30 суток нет (читатель их пропускает): отдельная мелкая задача при росте числа файлов (допущение П-2 плана).
+- Обрывы между шагами записи (AC-17 обрыв) выстроены правкой файлов после полного прохода, а не остановкой процесса в нужный момент: тест без швов в продукте.
+- Настоящая среда (живой сервис, настройки проектов, перезапуск) не проверялась: ворота Г4; плагин правит ядро и действует после перезапуска службы по слову владельца.
+- Полный проход всех 65 файлов тестов не запускался (Г2).
+- Задача 005 уже влита, поэтому порядок слияния и пересъёмка снимков при ребейзе не понадобились; если до слияния `main` уйдёт вперёд, `answer-golden.json` и `answer-golden-base.json` нужно переснять по разделу «Порядок слияния» плана.
 
 ## Открытое
 
-- Ворота Г0: принятие ADR-0010 владельцем (правка первой строки на «Статус: принято, <дата>, владелец» и статуса в строке 0010 реестра отдельным коммитом `ADR: accept question answering modes (owner, <дата>)` — по слову владельца).
+- Ворота Г1: вопрос владельцу о пороге сетки слов (AC-05 (л)) с цифрой 18 % (9 из 50) и рекомендацией; пометка «решение владельца: …, <дата>» ставится после ответа, О-12 её не заменяет.
+- Ворота Г2 (пуш ветки, полный проход тестов по одному), Г3 (слияние `--ff-only` в `main` с предупреждением интегратору), Г4 (живая проверка после перезапуска службы) — только по слову владельца.
 
-Остановка у ворот Г0 (не «ревизия», «план», «требования» и не «вопрос»): ждёт принятия ADR-0010 владельцем; шаги 3–13 не начаты.
+Остановка у ворот Г1: ждёт ответа владельца о пороге сетки слов (вид — ворота, не «ревизия», «план», «требования» и не «вопрос»), пуш, слияние и живая проверка не начаты.
