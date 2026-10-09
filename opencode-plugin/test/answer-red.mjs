@@ -1,7 +1,7 @@
 // The proof of red of the question-answering tests (task 007; node >= 24):
-//   node test/answer-red.mjs                 all runs: 0 (the base), 1..12 (stubs), 13 (no stubs); prints "answer-red ok"
+//   node test/answer-red.mjs                 all runs: 0 (the base), 1..12 and 14..17 (stubs), 13 (no stubs); prints "answer-red ok"
 //   node test/answer-red.mjs --run <k>       one run
-//   node test/answer-red.mjs --markers-only  checks that each of the 14 markers GATE:<name> stands in the code exactly once
+//   node test/answer-red.mjs --markers-only  checks that each of the 17 markers GATE:<name> stands in the code exactly once
 //   node test/answer-red.mjs --control       the control: the marker GATE:review is taken out of a copy -- the script must fall with
 //                                            "маркер не найден" (prints "control ok")
 // Run 0: the code of the base revision (git archive of $BASE, ANSWER_BASE or the merge base with origin/main) and the snapshot of its
@@ -40,6 +40,9 @@ const MARKERS = {
   "recount-count": ["answer.ts", "(r: AnswerRecord) => true"],
   row: ["answer.ts", "true"],
   addressee: ["answer-parse.ts", "false"],
+  viewage: ["answer.ts", "(endOfName(f) ? now - endOfName(f) > DAY_MS + 3_600_000 : false)"],
+  keep: ["answer.ts", "false"],
+  safepost: ["answer.ts", "postLetter"],
 }
 const pairRe = (name) => new RegExp(`/\\* GATE:${name.replace(/[-]/g, "\\-")}< \\*/[\\s\\S]*?/\\* GATE:${name.replace(/[-]/g, "\\-")}> \\*/`, "g")
 
@@ -57,6 +60,9 @@ const STUBS = [
   { n: 10, name: "GATE:default", markers: ["default"], tests: { "crew-answer-golden": ["AC-01 без ключей"], "crew-answer-flow": ["AC-01 строки без ключей", "AC-03 a"] } },
   { n: 11, name: "GATE:recount (exists, recount-count)", markers: ["exists", "recount-count"], tests: { "crew-answer-journal": ["AC-17 повтор при пределе"], "crew-answer-flow": ["AC-14 пакет повтор"] } },
   { n: 12, name: "GATE:row", markers: ["row"], tests: { "crew-answer-journal": ["AC-14 после остатка"] } },
+  { n: 15, name: "GATE:viewage", markers: ["viewage"], tests: { "crew-answer-journal": ["REQ-17 ответ на старый ход виден"] } },
+  { n: 16, name: "GATE:keep", markers: ["keep"], tests: { "crew-answer-journal": ["REQ-15 ход старше срока"] } },
+  { n: 17, name: "GATE:safepost", markers: ["safepost"], tests: { "crew-answer-journal": ["AC-17 гонка за имя письма"] } },
   { n: 14, name: "GATE:addressee", markers: ["addressee"], tests: { "crew-answer-gate": ["AC-05 и адресат"] } },
 ]
 const ALL_TESTS = ["crew-answer-golden", "crew-answer-config", "crew-answer-parse", "crew-answer-gate", "crew-answer-journal", "crew-answer-view", "crew-answer-docs", "crew-answer-flow"]

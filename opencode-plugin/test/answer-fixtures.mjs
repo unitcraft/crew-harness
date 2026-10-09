@@ -466,3 +466,21 @@ export const T9_REAL_FIELDS = [
 ]
 
 export const T9_BLOCK = ["В-01 Как назвать вспомогательную функцию разбора?", "Тип: implementation", "Автоответ: допустим", "Рекомендация: parseBlock — потому что так короче."].join(String.fromCharCode(10))
+
+// Review 2, finding 3: any sign that is not a letter or a digit (the dots of full width, of the leader and of the small form, the
+// underscore, the hyphenation point) is a border of a word, so an anchored stem is found in an address or a path. Added to the tables.
+const dot = (code) => String.fromCodePoint(code)
+export const T9_DOTS = [
+  "Продолжаем разработку в proj.merger?",
+  "Работаем в proj.merge?",
+  "Идём в nova_merger?",
+  "Пишем в x.main?",
+  "Катим на ops.prod?",
+  "Держим ветку nova" + dot(0xff0e) + "merger?",
+  "Держим ветку nova" + dot(0x2024) + "merger?",
+  "Держим ветку nova" + dot(0xfe52) + "merger?",
+  "Держим ветку nova" + dot(0x2027) + "merger?",
+  "Держим ветку nova" + dot(0x00b7) + "merger?",
+]
+export const T9_DOT_ADDRESSES = ["nova" + dot(0xff0e) + "merger", "nova" + dot(0x2024) + "merger", "nova" + dot(0xfe52) + "merger", "nova" + dot(0xff3f) + "merger", "proj" + dot(0x2022) + "main"]
+export const T9_DOT_FIELDS = ["Затрагивает: proj.merger", "Умолчание: proj.merge", "Влияет: ops.main", "Затрагивает: nova_merger"]

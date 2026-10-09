@@ -55,7 +55,7 @@ const groups = [
   ["матрица", F.T9_MATRIX],
 ]
 for (const [title, list] of groups) list.forEach((q, i) => cell(`AC-05 б Т-9 ${title} ${String(i + 1).padStart(2, "0")}`, toOwnerByWords(block(q)), q))
-F.T9_UNDERSCORE.concat(F.T9_DOT).forEach((q, i) => cell(`AC-05 б Т-9 знаки ${String(i + 1).padStart(2, "0")}`, toOwnerByWords(block(q)), q))
+F.T9_UNDERSCORE.concat(F.T9_DOT, F.T9_DOTS).forEach((q, i) => cell(`AC-05 б Т-9 знаки ${String(i + 1).padStart(2, "0")}`, toOwnerByWords(block(q)), q))
 
 // AC-05 в: a gate word only in the continuation of a long recommendation
 cell("AC-05 в", toOwnerByWords(block("Как назвать функцию?", { rec: "parseBlock," + NL + "потому что так короче, а потом влить ветку в основную" })) && toOwnerByWords(["В-01 Как назвать функцию?", "Тип: implementation", "Автоответ: допустим", "Рекомендация: parseBlock", "и затем удалить старое", "Срок: 30 мин"].join(NL)), "continuation")
@@ -90,6 +90,11 @@ cell("AC-05 и", holeBad.length === 0 && realBad.length === 0 && closed(withLine
 const addrBad = ["nova.push-main", "proj.merger", "nova.release", "ops.deploy", "ops.restart", "x.delete", "nova.merge", "ops.rebase", "nova.main"].filter((a) => closed(withLine(`Адресат: ${a}`)))
 const addrOk = ["nova.integrator", "proj.worker", "владелец", "nova.reviewer"].filter((a) => !closed(withLine(`Адресат: ${a}`)))
 cell("AC-05 и адресат", addrBad.length === 0 && addrOk.length === 0, JSON.stringify([addrBad, addrOk]))
+
+// AC-05 к (границы слов): the dots of other forms in an address and the fields that carry a path or a name
+const dotAddr = F.T9_DOT_ADDRESSES.filter((a) => closed(withLine(`Адресат: ${a}`)))
+const dotFields = F.T9_DOT_FIELDS.filter((l) => closed(withLine(l)))
+cell("AC-05 к границы слов", dotAddr.length === 0 && dotFields.length === 0, JSON.stringify([dotAddr, dotFields]))
 
 // AC-05 к: "rm..." with an ellipsis and "общих средами"
 cell("AC-05 к", toOwnerByWords(block("Выполнить rm… для папки?")) && toOwnerByWords(block("Нужно ли держать общих средами файлы?")), "ellipsis")

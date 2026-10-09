@@ -7,7 +7,7 @@
 // steps (AC-17), the text of the letter (AC-18), the rate of the check of the owner's word (AC-20), a broken journal and a failing
 // read (AC-22). The code comes from CREW_PLUGIN_DIR (a copy with stubs) or from the folder above.
 import { execFile } from "node:child_process"
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
@@ -363,7 +363,11 @@ const logTail = () => {
   saveCard(sid)
   mkdirSync(A.ANSWERS, { recursive: true })
   const DAY = 24 * 3_600_000
-  const fake = (name, end) => writeFileSync(path.join(A.ANSWERS, name), JSON.stringify({ id: name.replace(/\.json$/, ""), kind: "a", session: "sesOther", project: "proj", qn: 1, end, type: "implementation", mode: "recommendations", who: "рекомендация", question: "q", answer: "a", state: "дан", askedAt: end, answeredAt: end + 5 }))
+  const fake = (name, end) => {
+    const file = path.join(A.ANSWERS, name)
+    writeFileSync(file, JSON.stringify({ id: name.replace(/\.json$/, ""), kind: "a", session: "sesOther", project: "proj", qn: 1, end, type: "implementation", mode: "recommendations", who: "рекомендация", question: "q", answer: "a", state: "дан", askedAt: end, answeredAt: end + 5 }))
+    utimesSync(file, end / 1000, end / 1000) // the time of the answer is the time of the file, as it would be
+  }
   for (let i = 0; i < 700; i++) fake(`a-sesOther${i % 20}-${clock - 40 * DAY + i}-1.json`, clock - 40 * DAY + i) // older than the term of the storage
   for (let i = 0; i < 300; i++) fake(`a-sesOther${i % 20}-${clock - 5 * DAY + i}-1.json`, clock - 5 * DAY + i) // within the term, older than a day
   await turn(sid, blocks([1]))
@@ -378,9 +382,106 @@ const logTail = () => {
     A.answerSideRow("proj", clock + 10_000 + k)
     sides.push(performance.now() - t1)
   }
+  for (let k = 0; k < 8 && readdirSync(A.ANSWERS).some((f) => Number(/-(\d+)-\d+\.json$/.exec(f)?.[1]) < clock - 30 * DAY); k++) A.purgeOld(clock + 900_000 + k, 0) // the purge removes a bounded number of files at a time
   const files = readdirSync(A.ANSWERS).filter((f) => f.endsWith(".json"))
   const stale = files.filter((f) => Number(/-(\d+)-\d+\.json$/.exec(f)?.[1]) < clock - 30 * DAY)
   cell("REQ-15 журнал 1000 файлов", first.handled && Math.min(...times) < 50 && Math.min(...sides) < 50 && stale.length === 0 && files.filter((f) => f.startsWith("a-sesOther")).length === 300 && recs(sid, "a").length === 1, JSON.stringify({ times: times.map(Math.round), sides: sides.map(Math.round), stale: stale.length, left: files.length }))
+}
+
+// ---- the age of a record is the time of the answer, not the end of the turn (review 2, finding 1) --------------------------------
+{
+  const DAYMS = 24 * 3_600_000
+  modes(3)
+  // (a) an answer given now to a turn of 26 hours ago is shown (the end of the turn is older than a day)
+  const sid = "sesAge00001"
+  saveCard(sid)
+  const nowFake = clock + 20_000
+  const before = A.answerSideRow("proj", nowFake)
+  const nBefore = Number(/авто 24ч: (\d+)/.exec(before?.what ?? "")?.[1] ?? 0)
+  await H.turn(sid, blocks([1]), { user: LETTER, at: nowFake - 26 * 3_600_000, event: false })
+  await pass(sid, nowFake)
+  const side = A.answerSideRow("proj", nowFake)
+  const nAfter = Number(/авто 24ч: (\d+)/.exec(side?.what ?? "")?.[1] ?? 0)
+  const lines = A.answerLines("proj", nowFake).join("\n")
+  cell("REQ-17 ответ на старый ход виден", recs(sid, "a").length === 1 && nAfter === nBefore + 1 && /автоответы за 24 ч/.test(lines), JSON.stringify([nBefore, nAfter, lines.slice(0, 200)]))
+  // (b) the term of the storage runs from the answer: an answer given now to a turn of 5 days ago lives 30 days from now, not 25
+  const five = "sesAge00003"
+  saveCard(five)
+  await H.turn(five, blocks([1]), { user: LETTER, at: nowFake - 5 * DAYMS, event: false })
+  await pass(five, nowFake)
+  const f5 = path.join(A.ANSWERS, `${recs(five, "a")[0].id}.json`)
+  A.purgeOld(nowFake + 26 * DAYMS, 0)
+  const keeps = existsSync(f5)
+  A.purgeOld(nowFake + 31 * DAYMS, 0)
+  cell("REQ-15 срок хранения от ответа", recs(five, "a").length === 0 && keeps && !existsSync(f5), JSON.stringify([keeps, existsSync(f5)]))
+  // (c) a turn older than the term of the storage is not handled at all: no record, no letter, whatever the number of passes
+  const old = "sesAge00002"
+  saveCard(old)
+  await H.turn(old, blocks([1]), { user: LETTER, at: nowFake - 31 * DAYMS, event: false })
+  const rs = []
+  for (let k = 0; k < 3; k++) rs.push(await pass(old, nowFake + k * 11 * 60_000))
+  cell("REQ-15 ход старше срока", rs.every((r) => r.handled === false) && recs(old).length === 0 && answerLetters(old).length === 0 && !existsSync(path.join(A.ANSWERS, `a-${old}-${nowFake - 31 * DAYMS}-1.json`)), JSON.stringify([rs, recs(old).length, answerLetters(old).length]))
+}
+
+// ---- the lost race for the name of a letter, deterministically: the loser of the rename gets ENOENT, the letter is already there ----
+{
+  const sid = "sesRace0000"
+  let calls = 0
+  const letter = { id: "answer-sesRace0000-1-01", from_role: core.PLUGIN_SENDER, from_session: core.PLUGIN_SENDER, to: sid, time: 1, text: "t" }
+  const loser = (to, l) => {
+    calls++
+    if (calls === 1) {
+      core.postLetter(to, l) // the winner has put the letter
+      throw Object.assign(new Error("ENOENT: rename of the shared temp file"), { code: "ENOENT" })
+    }
+  }
+  let threw = false
+  try {
+    A.postLetterRace(sid, letter, loser)
+  } catch {
+    threw = true
+  }
+  const once = calls
+  // a transient failure with no letter yet: tried again, then posted
+  let calls2 = 0
+  const letter2 = { ...letter, id: "answer-sesRace0000-1-02" }
+  const flaky = (to, l) => {
+    calls2++
+    if (calls2 === 1) throw Object.assign(new Error("EPERM"), { code: "EPERM" })
+    core.postLetter(to, l)
+  }
+  let threw2 = false
+  try {
+    A.postLetterRace(sid, letter2, flaky)
+  } catch {
+    threw2 = true
+  }
+  cell("AC-17 гонка за имя письма", !threw && once === 1 && answerLetters(sid, /^answer-sesRace0000-1-01/).length === 1 && !threw2 && calls2 === 2 && answerLetters(sid, /^answer-sesRace0000-1-02/).length === 1, JSON.stringify([threw, once, threw2, calls2]))
+}
+
+// ---- three processes and two questions in a turn, many rounds: the answer and the letter come once, and every process says "handled" (review 2, finding 2) ----
+{
+  const child = path.join(import.meta.dirname, "answer-child.mjs")
+  const spawnChild = (sid, now, startAt) => run(process.execPath, [child, H.tmp, sid, String(now), String(startAt)], { env: { ...process.env }, timeout: 120_000 }).then((r) => JSON.parse(r.stdout.trim().split(NL).pop())).catch((e) => ({ error: String(e.message).slice(0, 200) }))
+  modes(5)
+  const ROUNDS = 25
+  const bad = []
+  for (let chunk = 0; chunk < ROUNDS / 5; chunk++) {
+    const sids = Array.from({ length: 5 }, (_, i) => `sesRace${String(chunk * 5 + i).padStart(3, "0")}`)
+    for (const sid of sids) {
+      saveCard(sid)
+      await turn(sid, blocks([1, 2]))
+    }
+    const startAt = Date.now() + 5_000
+    const all = await Promise.all(sids.flatMap((sid, i) => [0, 1, 2].map((k) => spawnChild(sid, clock + 400_000 + i * 10 + k, startAt).then((r) => ({ sid, r })))))
+    for (const { sid, r } of all) if (r.handled !== true) bad.push([sid, r])
+    for (const sid of sids) {
+      const qns = recs(sid, "a").map((x) => x.qn).join()
+      const letters = answerLetters(sid).length
+      if (qns !== "1,2" || letters !== 2) bad.push([sid, qns, letters])
+    }
+  }
+  cell("AC-17 три процесса", bad.length === 0, JSON.stringify(bad.slice(0, 5)))
 }
 
 R.done(H)
