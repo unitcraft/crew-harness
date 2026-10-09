@@ -108,6 +108,40 @@ export function updateRecord(id: string, patch: Partial<AnswerRecord>): AnswerRe
     }
 }
 
+/** Конец хода из имени файла записи `<вид>-<сессия>-<конец хода>-<номер>.json`; 0 — имя не по форме. */
+const endOfName = (f: string): number => Number(/^[ar]-.+-(\d{10,})-\d+\.json$/.exec(f)?.[1] ?? 0)
+
+/** Одна запись по id (без чтения остального каталога). */
+export function readRecord(id: string): AnswerRecord | undefined {
+  try {
+    return JSON.parse(readFileSync(recFile(id), "utf8"))
+  } catch {
+    return undefined
+  }
+}
+
+let purgedAt = 0
+/**
+ * Чистка журнала: записи старше срока хранения (30 суток, REQ-15) удаляются; не чаще раза в 10 минут на процесс. Срок берётся
+ * из конца хода в имени файла, файлы не открываются. Возвращает число удалённых.
+ */
+export function purgeOld(now = Date.now(), every = 10 * 60_000): number {
+  if (now - purgedAt < every) return 0
+  purgedAt = now
+  let n = 0
+  try {
+    for (const f of readdirSync(ANSWERS)) {
+      if (!f.endsWith(".json") || f.startsWith(".")) continue
+      const at = endOfName(f)
+      if (at && now - at > KEEP_MS) {
+        rmSync(path.join(ANSWERS, f), { force: true })
+        n++
+      }
+    }
+  } catch {}
+  return n
+}
+
 /**
  * Записи журнала (старше 30 суток пропускаются). session — только записи этой сессии: повреждённый файл её записей бросает
  * исключение (вопрос идёт владельцу, REQ-11); повреждённый файл чужой сессии только пишется в журнал службы.
@@ -119,11 +153,15 @@ export function readRecords(session?: string, now = Date.now()): AnswerRecord[] 
   } catch {
     return []
   }
-  const key = session ? `-${safeKey(session)}-` : ""
+  const key = session ? safeKey(session) : ""
   const out: AnswerRecord[] = []
   for (const f of names) {
     if (!f.endsWith(".json") || f.startsWith(".")) continue
-    const mine = !key || f.includes(key)
+    // отбор по имени файла до чтения: файл другой сессии и файл старше срока не открываются (журнал растёт, проход не должен)
+    if (key && !f.startsWith(`a-${key}-`) && !f.startsWith(`r-${key}-`)) continue
+    const at = endOfName(f)
+    if (at && now - at > KEEP_MS) continue
+    const mine = !!key
     let rec: AnswerRecord
     try {
       rec = JSON.parse(readFileSync(path.join(ANSWERS, f), "utf8"))
@@ -230,6 +268,22 @@ function restLetterText(card: Card, key: string, end: TurnEnd, rest: RestItem[])
   return `${what}: вкладка ${key} (сессия ${card.session}) остановилась с вопросами, которых по настройке проекта закрыть нельзя, работа стоит до ответа:\n${rest.map(restLine).join("\n")}\n\nКонец её ответа:\n${tail}\n\nОтветь ей сам: crew_send {to: "${card.session}", text: "..."}. Решить без владельца нельзя — спроси владельца (вопросом в конце своего хода).`
 }
 
+/**
+ * Положить письмо; при гонке двух процессов за одно имя (общий временный файл postLetter: у проигравшего rename падает с ENOENT)
+ * письмо уже лежит у победителя — это успех. Иная ошибка повторяется несколько раз с короткой паузой, затем бросается.
+ */
+function postLetterSafe(to: string, letter: Parameters<typeof postLetter>[1]) {
+  for (let i = 0; ; i++)
+    try {
+      postLetter(to, letter)
+      return
+    } catch (e) {
+      if (letterExistsFor(to, letter.id)) return
+      if (i >= 5) throw e
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25)
+    }
+}
+
 // РЕШЕНИЕ -----------------------------------------------------------------------------------------------------------
 
 export type AnswerInput = {
@@ -289,11 +343,12 @@ async function decide(input: AnswerInput): Promise<AnswerResult> {
   const restId = recId("r", session, end.at, 0)
   // слово владельца после конца хода: он ответил сам — автоответа нет, пометка остатка снимается
   if (/* GATE:owner< */ end.ownerAfter /* GATE:owner> */) {
-    const old = readRecords(session, now).find((r) => r.id === restId)
+    const old = readRecord(restId)
     if (old && old.state === "остаток: ждёт слова владельца") updateRecord(restId, { state: "снято: владелец написал" })
     return { handled: false }
   }
 
+  purgeOld(now)
   const records = readRecords(session, now)
   const byQn = new Map(records.filter((r) => r.kind === "a" && r.end === end.at).map((r) => [r.qn, r]))
   const decisions: { block: Block; existing?: AnswerRecord; closed: boolean; reason?: string }[] = []
@@ -335,12 +390,12 @@ async function decide(input: AnswerInput): Promise<AnswerResult> {
     }
     // запись «если нет»: если другой процесс записал этот вопрос раньше, его запись решает, мы только достраиваем недостающее
     if (!d.existing) createRecord(rec)
-    const stored = readRecords(session, now).find((r) => r.id === rec.id) ?? rec
+    const stored = readRecord(rec.id) ?? rec
     // письмо: только если отметки нет и общая проверка письма не видит (оно могло лежать в delivering/)
     const letterId = `answer-${safeKey(session)}-${end.at}-${String(b.qn).padStart(2, "0")}`
     const exists = letterExistsFor(session, letterId)
     if (/* GATE:once-letter< */ !stored.letterPostedAt && !exists /* GATE:once-letter> */) {
-      postLetter(session, { id: letterId, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: session, time: now, text: answerLetterText(stored, rest.filter((r) => r.n !== b.qn)) })
+      postLetterSafe(session, { id: letterId, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: session, time: now, text: answerLetterText(stored, rest.filter((r) => r.n !== b.qn)) })
       log(`answer ${stored.id}: letter ${letterId}`)
     }
     if (!stored.letterPostedAt) updateRecord(stored.id, { letterPostedAt: now })
@@ -355,14 +410,14 @@ async function decide(input: AnswerInput): Promise<AnswerResult> {
   if (rest.length) {
     const fresh: AnswerRecord = { id: restId, kind: "r", session, ...(info.project ? { project: info.project } : {}), ...(info.task ? { task: info.task } : {}), qn: 0, end: end.at, question: restSummary(rest, 300), answer: "", state: "остаток: ждёт слова владельца", askedAt: end.at, answeredAt: now, rest }
     const created = createRecord(fresh)
-    const cur = created ? fresh : (readRecords(session, now).find((r) => r.id === restId) ?? fresh)
+    const cur = created ? fresh : (readRecord(restId) ?? fresh)
     if (card.spawned) {
       // сессия задачи или приёмки: остаток — письмо спросившим (те же, что у прежней пересылки), одно на ход
       const askers = [...new Set(obligationsOf(session).filter((o) => !o.stuck).map((o) => o.from_session))]
       const id = `answer-rest-${safeKey(session)}-${end.at}`
       for (const to of askers) {
         if (cur.letterPostedAt || letterExistsFor(to, id)) continue
-        postLetter(to, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to, time: now, text: restLetterText(card, input.key, end, rest) })
+        postLetterSafe(to, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to, time: now, text: restLetterText(card, input.key, end, rest) })
         log(`answer rest of ${session} forwarded to ${to}`)
       }
       if (!cur.letterPostedAt && askers.length) updateRecord(restId, { letterPostedAt: now })
@@ -394,6 +449,9 @@ function readAllCached(now: number): AnswerRecord[] {
   const out: AnswerRecord[] = []
   for (const f of names) {
     if (!f.endsWith(".json") || f.startsWith(".")) continue
+    // показу нужны сутки: файл с концом хода старше суток и часа запаса не открывается и не проверяется
+    const at = endOfName(f)
+    if (at && now - at > DAY_MS + 3_600_000) continue
     const file = path.join(ANSWERS, f)
     let st
     try {

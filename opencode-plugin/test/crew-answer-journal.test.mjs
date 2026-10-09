@@ -339,7 +339,7 @@ const logTail = () => {
   modes(3)
   saveCard(sid)
   mkdirSync(A.ANSWERS, { recursive: true })
-  writeFileSync(path.join(A.ANSWERS, `a-${sid}-1-1.json`), "{ this is not json")
+  writeFileSync(path.join(A.ANSWERS, `a-${sid}-${clock - 60_000}-1.json`), "{ this is not json")
   await turn(sid, blocks([1]))
   const res = await pass(sid)
   const endAt = (await core.turnEnd(sid)).at
@@ -354,6 +354,33 @@ const logTail = () => {
   const res2 = await pass(sid2)
   failOwnerWord = false
   cell("AC-22 исключение", fine.handled === true && res2.handled === false && recs(sid2, "a").length === 1 && answerLetters(sid2).length === 1 && /answer: sesBroken02/.test(logTail()), JSON.stringify([fine, res2, recs(sid2, "a").length, answerLetters(sid2).length]))
+}
+
+// ---- the size of the journal: a pass costs the same with a thousand files (review 1, finding 2) ---------------------------------
+{
+  const sid = "sesPerf0001"
+  modes(3)
+  saveCard(sid)
+  mkdirSync(A.ANSWERS, { recursive: true })
+  const DAY = 24 * 3_600_000
+  const fake = (name, end) => writeFileSync(path.join(A.ANSWERS, name), JSON.stringify({ id: name.replace(/\.json$/, ""), kind: "a", session: "sesOther", project: "proj", qn: 1, end, type: "implementation", mode: "recommendations", who: "рекомендация", question: "q", answer: "a", state: "дан", askedAt: end, answeredAt: end + 5 }))
+  for (let i = 0; i < 700; i++) fake(`a-sesOther${i % 20}-${clock - 40 * DAY + i}-1.json`, clock - 40 * DAY + i) // older than the term of the storage
+  for (let i = 0; i < 300; i++) fake(`a-sesOther${i % 20}-${clock - 5 * DAY + i}-1.json`, clock - 5 * DAY + i) // within the term, older than a day
+  await turn(sid, blocks([1]))
+  const first = await pass(sid, clock + 900_000) // 15 minutes after the earlier passes of this test: the purge of the old records is due
+  const times = []
+  const sides = []
+  for (let k = 0; k < 6; k++) {
+    const t0 = performance.now()
+    await pass(sid, clock + 10_000 + k)
+    times.push(performance.now() - t0)
+    const t1 = performance.now()
+    A.answerSideRow("proj", clock + 10_000 + k)
+    sides.push(performance.now() - t1)
+  }
+  const files = readdirSync(A.ANSWERS).filter((f) => f.endsWith(".json"))
+  const stale = files.filter((f) => Number(/-(\d+)-\d+\.json$/.exec(f)?.[1]) < clock - 30 * DAY)
+  cell("REQ-15 журнал 1000 файлов", first.handled && Math.min(...times) < 50 && Math.min(...sides) < 50 && stale.length === 0 && files.filter((f) => f.startsWith("a-sesOther")).length === 300 && recs(sid, "a").length === 1, JSON.stringify({ times: times.map(Math.round), sides: sides.map(Math.round), stale: stale.length, left: files.length }))
 }
 
 R.done(H)
