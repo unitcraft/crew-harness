@@ -4,6 +4,7 @@
 // The plugin code comes from CREW_PLUGIN_DIR (a copy with stubs, task 005 AC-30) or from the folder above this one.
 import { execFileSync, spawnSync } from "node:child_process"
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { DatabaseSync } from "node:sqlite"
 import os from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
@@ -11,21 +12,28 @@ import { pathToFileURL } from "node:url"
 export const PLUGIN = process.env.CREW_PLUGIN_DIR ?? path.join(import.meta.dirname, "..")
 const load = (f) => import(pathToFileURL(path.join(PLUGIN, f)).href)
 
-/** @param prefix temp folder prefix; @param opts {settings, tabs} */
+/**
+ * @param prefix temp folder prefix; @param opts {settings, tabs, attach, db}
+ * attach: the folder of a harness already created by another process — the same project, origin and data folders, a second
+ *   plugin instance in this process (the child processes of the race tests); nothing is created or removed there.
+ * db: an OpenCode database with the session table (opts.tabs sessions), for the letter about an interrupted turn.
+ */
 export async function harness(prefix, opts = {}) {
-  const tmp = mkdtempSync(path.join(os.tmpdir(), `${prefix}-`))
+  const attach = opts.attach
+  const tmp = attach ?? mkdtempSync(path.join(os.tmpdir(), `${prefix}-`))
   process.env.XDG_DATA_HOME = tmp
   process.env.CREW_HARNESS_POLL_MS = "100"
   process.env.CREW_HARNESS_STATUS_MS = "100"
   process.env.CREW_HARNESS_FLOW_MS = "200"
   process.env.CREW_HARNESS_LEFT_MS = "3600000"
   process.env.CREW_HARNESS_SETTINGS_TTL_MS = "1"
-  process.env.CREW_HARNESS_DB = path.join(tmp, "absent.db")
+  process.env.CREW_HARNESS_DB = path.join(tmp, opts.db || attach ? "opencode.db" : "absent.db")
+  if (opts.db) process.env.CREW_HARNESS_PROCESS_START = String(Date.now()) // the turns that stopped before this moment were interrupted by a restart
   delete process.env.CREW_HARNESS_PRESENCE
   const proj = path.join(tmp, "proj")
   const bare = path.join(tmp, "origin.git")
   const other = path.join(tmp, "other")
-  mkdirSync(path.join(proj, ".opencode"), { recursive: true })
+  if (!attach) mkdirSync(path.join(proj, ".opencode"), { recursive: true })
   const git = (cwd, ...args) => execFileSync("git", ["-C", cwd, "-c", "user.name=t", "-c", "user.email=t@t", ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim()
   const gitTry = (cwd, ...args) => {
     try {
@@ -39,16 +47,25 @@ export async function harness(prefix, opts = {}) {
     current = { ...more }
     writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ spawn_limits: { worker: 20, reviewer: 0 }, stall_minutes: 600, inflight_limit: 50, accepted_reminder_min: 600, merge_precheck: "required", ...(opts.settings ?? {}), ...more }))
   }
-  settings()
-  execFileSync("git", ["init", "-q", "--bare", "-b", "main", bare], { stdio: "ignore" })
-  git(proj, "init", "-q", "-b", "main")
-  writeFileSync(path.join(proj, ".git", "info", "exclude"), ".opencode/\n") // the settings file is not part of any commit
-  writeFileSync(path.join(proj, "a.txt"), "a\n")
-  git(proj, "add", "-A")
-  git(proj, "commit", "-q", "-m", "init")
-  git(proj, "remote", "add", "origin", bare)
-  git(proj, "push", "-q", "origin", "main")
-  git(tmp, "clone", "-q", bare, other)
+  if (!attach) {
+    settings()
+    execFileSync("git", ["init", "-q", "--bare", "-b", "main", bare], { stdio: "ignore" })
+    git(proj, "init", "-q", "-b", "main")
+    writeFileSync(path.join(proj, ".git", "info", "exclude"), ".opencode/\n") // the settings file is not part of any commit
+    writeFileSync(path.join(proj, "a.txt"), "a\n")
+    git(proj, "add", "-A")
+    git(proj, "commit", "-q", "-m", "init")
+    git(proj, "remote", "add", "origin", bare)
+    git(proj, "push", "-q", "origin", "main")
+    git(tmp, "clone", "-q", bare, other)
+  }
+  const sidsAll = ["sesINTEG1", ...(opts.tabs ?? ["sesREV1", "sesREV2", "sesREV3"])]
+  let db
+  if (opts.db && !attach) {
+    db = new DatabaseSync(path.join(tmp, "opencode.db"))
+    db.exec("create table session_v2 (id text primary key, directory text, title text, parent_id text, time_archived integer, time_idle integer, time_viewed integer, time_suspended integer)")
+    for (const sid of sidsAll) db.prepare("insert into session_v2 values (?, ?, ?, null, null, null, null, null)").run(sid, proj, sid)
+  }
 
   const mod = await load("index.ts")
   const core = await load("core.ts")
@@ -78,7 +95,7 @@ export async function harness(prefix, opts = {}) {
     events: { on: async (name, cb) => (events[name] = cb) },
   }
   const stop = await mod.default.setup(ctx)
-  const sids = ["sesINTEG1", ...(opts.tabs ?? ["sesREV1", "sesREV2", "sesREV3"])]
+  const sids = sidsAll
   const WPID = 700000 + Math.floor(Math.random() * 90000)
   mkdirSync(core.WINDOWS, { recursive: true })
   const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now(), tabs: sids.map((sessionID, i) => ({ sessionID, active: i === 0, busy: false })) }))
@@ -96,11 +113,11 @@ export async function harness(prefix, opts = {}) {
   }
   const roleOf = (sid) => (sid === "sesINTEG1" ? "integrator" : "worker")
   for (const sid of sids) {
-    core.saveCard({ session: sid, role: roleOf(sid), auto: false, title: sid, directory: proj, repo: "proj", project: "proj", pid: process.pid, updated: Date.now() })
+    if (!attach) core.saveCard({ session: sid, role: roleOf(sid), auto: false, title: sid, directory: proj, repo: "proj", project: "proj", pid: process.pid, updated: Date.now() })
     await hooks.context({ sessionID: sid, system: [], model: { id: "x", providerID: "y" } })
     await events["session.idle"]({ properties: { sessionID: sid } })
   }
-  await call("crew_role", "sesINTEG1", { role: "integrator" })
+  if (!attach) await call("crew_role", "sesINTEG1", { role: "integrator" })
 
   let seq = 0
   const H = {
@@ -122,7 +139,7 @@ export async function harness(prefix, opts = {}) {
       const t = tasks.createTask({
         project: "proj", title: more.title ?? `задача ${++seq}`, goal: "g", criteria: "c", priority: "P2", tier: "light", role: "worker", model: "claude-code/haiku",
         author: "sesINTEG1", author_role: "proj.integrator", qid: `q${Math.random().toString(36).slice(2, 8)}`, status: "reviewing", kind: "spawn", directory: proj,
-        executor: more.executor ?? `sesEX${seq}`, reviewer: more.reviewer ?? "sesREV1", review_kind: "tab", ...(more.plan ? { plan: more.plan } : {}),
+        executor: more.executor ?? `sesEX${seq}`, reviewer: more.reviewer ?? "sesREV1", review_kind: "tab", review_qid: `rq${seq}-${Math.random().toString(36).slice(2, 6)}`, ...(more.plan ? { plan: more.plan } : {}),
       })
       if (more.branch !== false) {
         t.branch = `t${t.n}`
@@ -195,10 +212,15 @@ export async function harness(prefix, opts = {}) {
           return []
         }
       }),
+    /** db: mark the turn of a session as cut off `agoMs` ago (time_suspended), without an idle after it */
+    suspend: (sid, agoMs = 5_000) => db?.prepare("update session_v2 set time_suspended = ?, time_idle = null where id = ?").run(Date.now() - agoMs, sid),
     close: () => {
       clearInterval(heart)
       stop?.()
-      rmSync(tmp, { recursive: true, force: true })
+      try {
+        db?.close()
+      } catch {}
+      if (!attach) rmSync(tmp, { recursive: true, force: true })
     },
   }
   return H

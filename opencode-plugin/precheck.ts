@@ -166,6 +166,25 @@ export function acceptWarning(t: Task, target: string, head?: string): string {
 }
 
 /**
+ * Строки состояния предпроверки и замка для `show` и письма «работа прервана» (REQ-15, REQ-19): пустой список, если записи нет.
+ * Только чтение записи и файла замка; `session` — кому показываем («твой»).
+ */
+export function precheckLines(t: Task, session: string): string[] {
+  const rec = t.precheck
+  if (!rec) return []
+  const out: string[] = []
+  if (rec.state === "running") out.push(`предпроверка: идёт с ${hm(rec.at)} на ${short(rec.base)}`)
+  else if (rec.state === "green") out.push(`предпроверка: зелёная на ${short(rec.base)} (кандидат ${short(rec.candidate ?? "")}, ${hm(rec.green_at ?? rec.at)})`)
+  else out.push(`предпроверка: устарела (${rec.stale?.reason ?? "причина не записана"}), была на ${short(rec.base)}`)
+  const h = mergeHolder(t.project)
+  if (h && h.session === session && h.n === t.n) out.push(`замок вливания: твой с ${hm(h.at)}${rec.lock_on ? `, на вершине ${short(rec.lock_on.tip)}` : ""}`)
+  else if (h && h.session === session) out.push(`замок вливания: твой, но для задачи #${h.n}, не для этой`)
+  else if (h) out.push(`замок вливания: у другого приёмщика (задача #${h.n})`)
+  else out.push("замок: нет")
+  return out
+}
+
+/**
  * Запись предпроверки устаревает с причиной. Чистая функция над записью: сохраняет не она, а тот `taskEvent`/`saveTask`, который
  * вызывающий место и так делает (запись устаревает той же записью файла, что и смена статуса). Уже устаревшая запись не меняется.
  */

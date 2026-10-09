@@ -122,6 +122,7 @@ import { profileProblems, profileState, stateSignature, syncProjectFiles, syncSn
 import { cellOfState, resolveStageProfile, stageOfLaunch, tabFitsCell } from "./profiles.ts"
 import { catalogModels, writeCatalog } from "./model-catalog.ts"
 import { ensureWorktree, fileAt, gitTraces, leftoversOf, mergeHolder, reviewLetter } from "./review.ts"
+import { precheckLines } from "./precheck.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
 
@@ -436,13 +437,14 @@ export default {
         const traces = dirs.flatMap((d) => gitTraces(d))
         const lock = t && mergeHolder(t.project)?.session === c.session ? `\nЗамок вливания проекта ${t.project} всё ещё твой (приёмка ${taskRef(t)}): доведи вливание или отпусти его.` : ""
         const gitNote = traces.length ? `\nВ git осталось от оборванного хода:\n${traces.map((x) => `— ${x}`).join("\n")}` : ""
+        const pre = t ? precheckLines(t, c.session).map((x) => `\n${x}`).join("") : "" // предпроверка вливания и замок (задача 005, REQ-15)
         postLetter(c.session, {
           id,
           from_role: PLUGIN_SENDER,
           from_session: PLUGIN_SENDER,
           to: c.session,
           time: now(),
-          text: `Работа прервана перезапуском OpenCode (ход оборвался в ${hhmm(row.suspended)}). Продолжай с того места, где остановился: сначала проверь, что успело сделаться (файлы, коммиты, запущенные команды; git status в деревьях задачи).${gitNote}${lock}\nОткрыто:\n${open}`,
+          text: `Работа прервана перезапуском OpenCode (ход оборвался в ${hhmm(row.suspended)}). Продолжай с того места, где остановился: сначала проверь, что успело сделаться (файлы, коммиты, запущенные команды; git status в деревьях задачи).${gitNote}${lock}${pre}\nОткрыто:\n${open}`,
         })
         log(`resume interrupted ${c.session} (suspended ${row.suspended})`)
       }
