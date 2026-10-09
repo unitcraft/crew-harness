@@ -4,6 +4,7 @@
 
 import { PROFILES_README_URL } from "./paths.ts"
 import { invalidProfileKey } from "./profiles.ts"
+import { answerModeError } from "./answer-parse.ts"
 
 export type Kind =
   | { type: "enum"; options: string[] }
@@ -20,8 +21,10 @@ export type Kind =
   | { type: "grades" }
   | { type: "profiles" }
   | { type: "extraFields" }
-/** humanOnly — ключ ставит человек (команда окна use и save либо правка файла); crew_config set его не пишет */
-export type Setting = { key: string; kind: Kind; default: any; question: string; why: string; recommend?: string; group: string; humanOnly?: boolean }
+  | { type: "answerMap" }
+/** humanOnly — ключ ставит человек (команда окна use и save либо правка файла); crew_config set его не пишет.
+ *  humanHow — как ставит человек, одной фразой для опросника и отказа set (у profile_set поля нет: его фраза прежняя дословно) */
+export type Setting = { key: string; kind: Kind; default: any; question: string; why: string; recommend?: string; group: string; humanOnly?: boolean; humanHow?: string }
 
 const TIERS = ["heavy", "medium", "light"]
 /** Встроенные поля задачи и входа crew_spawn / crew_task: id полей проекта (task_extra_fields) с ними не совпадает. Список живёт
@@ -79,6 +82,8 @@ export const SCHEMA: Setting[] = [
   { key: "worktrees", group: "Worktree", kind: { type: "string", allowEmpty: true }, default: "", question: "В какой папке (от корня проекта) создавать worktree задач?", why: "пусто — решает методология проекта; задано — письмо с задачей называет точный путь", recommend: "worktrees" },
   { key: "worktree_name", group: "Worktree", kind: { type: "string" }, default: "{repo}-{n}-{slug}", question: "Как называть папку worktree?", why: "{repo} репозиторий, {n} номер задачи, {slug} название латиницей, {project}", recommend: "{repo}-{n}-{slug}" },
   { key: "branch_name", group: "Worktree", kind: { type: "string" }, default: "t{n}-{slug}", question: "Как называть ветку задачи?", why: "те же подстановки", recommend: "t{n}-{slug} или как принято в проекте" },
+  { key: "answer_mode", group: "Ответы на вопросы", kind: { type: "answerMap" }, default: "owner", question: "Кто отвечает на вопросы сессий каждого типа (requirements, plan, implementation, default): owner — владелец, recommendations — рекомендация самой сессии?", why: "recommendations закрывает вопрос рекомендацией без владельца, только если сессия сама объявила тип и «Автоответ: допустим», слов ворот нет, предел не исчерпан; ворота (утверждения, пуши, слияния, удаления, перезапуск) остаются за владельцем при любом значении", recommend: '{"implementation": "recommendations"}, для `requirements` и `plan` — `owner`', humanOnly: true, humanHow: "правка файла настроек и коммит" },
+  { key: "answer_max", group: "Ответы на вопросы", kind: { type: "int" }, default: 3, question: "Сколько ответов по рекомендации подряд может получить одна сессия, прежде чем вопрос уйдёт владельцу (целое ≥ 1)?", why: "слово владельца в диалоге вкладки обнуляет счёт; предел не даёт сессии бесконечно отвечать самой себе", recommend: "3", humanOnly: true, humanHow: "правка файла настроек и коммит" },
   { key: "help_extra", group: "Прочее", kind: { type: "string", allowEmpty: true }, default: "", question: "Какой абзац проекта дописывать к crew_help?", why: "правила проекта для вкладок: контрольный вопрос, где методология", recommend: "коротко, со ссылкой на правила" },
 ]
 export const SCHEMA_KEYS = SCHEMA.map((s) => s.key)
@@ -91,6 +96,8 @@ const isInt = (v: any) => Number.isInteger(v) && v >= 0
 export function invalid(key: string, v: any): string | undefined {
   const s = SCHEMA.find((x) => x.key === key)
   if (!s) return `неизвестный ключ «${key}»; ключи: ${SCHEMA_KEYS.join(", ")}`
+  // answer_max: целое ≥ 1 (вид int принимает 0)
+  if (key === "answer_max") return Number.isInteger(v) && v >= 1 ? undefined : `${key}: целое число ≥ 1`
   const k = s.kind
   switch (k.type) {
     case "enum":
@@ -119,6 +126,8 @@ export function invalid(key: string, v: any): string | undefined {
       return Array.isArray(v) && v.every((x) => typeof x === "string" && x.trim()) ? undefined : `${key}: список строк`
     case "profiles":
       return invalidProfileKey(key, v)
+    case "answerMap":
+      return answerModeError(v)
     case "extraFields":
       return Array.isArray(v) && v.length <= EXTRA_FIELDS_MAX && v.every((f) => isObj(f) && typeof f.id === "string" && EXTRA_ID_RE.test(f.id) && !RESERVED_FIELD_IDS.includes(f.id) && typeof f.label === "string" && f.label.trim() && (f.hint === undefined || typeof f.hint === "string")) && new Set(v.map((f: any) => f.id)).size === v.length
         ? undefined
@@ -144,7 +153,7 @@ export function guideText(current: Record<string, any>, sourceOf: (key: string) 
       out.push(`\n${group.toUpperCase()}`)
     }
     const opts = s.kind.type === "enum" || s.kind.type === "subset" ? ` Варианты: ${s.kind.options.map((o, i) => `${i + 1}) ${o}`).join("  ")}.` : ""
-    out.push(`- ${s.key}: ${s.question} Сейчас: ${show(current[s.key] ?? s.default)} (${sourceOf(s.key)}).${opts} Рекомендация: ${s.recommend ?? show(s.default)}. Зачем: ${s.why}.${s.humanOnly ? " Ставит человек: команда /crew-sets use и save либо правка файла; вызовом set не записывать (set этот ключ отвергает)." : ""}`)
+    out.push(`- ${s.key}: ${s.question} Сейчас: ${show(current[s.key] ?? s.default)} (${sourceOf(s.key)}).${opts} Рекомендация: ${s.recommend ?? show(s.default)}. Зачем: ${s.why}.${s.humanOnly ? (s.humanHow ? ` Ставит человек: ${s.humanHow}; вызовом set не записывать (set этот ключ отвергает).` : " Ставит человек: команда /crew-sets use и save либо правка файла; вызовом set не записывать (set этот ключ отвергает).") : ""}`)
   }
   return out.join("\n")
 }

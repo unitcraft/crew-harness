@@ -19,6 +19,7 @@ import { execFileSync } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { log, safeKey } from "./core.ts"
+import { answerNotes } from "./answer-parse.ts"
 import { BASE } from "./paths.ts"
 
 export const SETTINGS_FILE = path.join(".opencode", "crew-harness.json")
@@ -266,6 +267,12 @@ export function writeSettings(folder: string, values: Record<string, any>): stri
 export function settingsProblems(projects: Projects): string[] {
   const out = projects.flatMap((p) => p.problems ?? [])
   for (const p of projects) if (p.legacy) out.push(`проект ${p.name}: настройки в файле с прежним именем ${p.legacy} — переименуй в .opencode/crew-harness.json (git mv) и закоммить`)
+  // настройка, которая не может сработать: ключ gate в answer_mode, режим agent, неверный answer_max (задача 007)
+  for (const p of projects) {
+    if (!p.dir) continue
+    const raw = readSettingsFolder(p.dir).raw
+    for (const n of answerNotes(raw?.answer_mode, raw?.answer_max)) out.push(`проект ${p.name}: ${n}`)
+  }
   const old = projects.filter((p) => !p.dir).map((p) => p.name)
   if (old.length) out.push(`проекты ${old.join(", ")} заданы прежней формой опций (имя → корень); новая — список папок настроек: "projects": ["<папка с .opencode/crew-harness.json>"], файл называет проект и root (doc/archive/plans/002-tasks.md, «Где живут настройки проекта»)`)
   return [...new Set(out)]

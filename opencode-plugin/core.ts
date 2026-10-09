@@ -11,6 +11,7 @@ import { BASE as CREW_BASE, dataDir } from "./paths.ts"
 import { rotateLog } from "./housekeeping.ts"
 import { type Projects, parseProjects as parseProjectsWith, projectFor, rawSettingsFor, readSettingsFolder, workingSettings, writeSettings } from "./settings.ts"
 import { SCHEMA, guideText, invalid } from "./config-schema.ts"
+import { type AnswerMap, answerNotes, normalizeAnswerMax, normalizeAnswerMode } from "./answer-parse.ts"
 import { EXTRA_FIELDS_MAX, EXTRA_ID_RE, RESERVED_FIELD_IDS } from "./config-schema.ts"
 export { PROJECT_RE, type Project, type Projects, settingsProblems } from "./settings.ts"
 import { PROJECT_RE, settingsProblems } from "./settings.ts"
@@ -92,7 +93,10 @@ export function configShowText(dir: string, fallbackName = "?", compact = false)
     const j = JSON.stringify(v)
     return compact && j.length > 120 ? `${j.slice(0, 117)}…` : j
   }
-  const rows = SCHEMA.map((s) => `  ${s.key} = ${shown(effective[s.key] ?? s.default)} — ${sourceOf(s.key)}`)
+  // замечания к ключам answer_*: что в файле не принято (под строкой ключа)
+  const answerNote = (k: string) => (k === "answer_mode" || k === "answer_max" ? answerNotes(k === "answer_mode" ? effective.answer_mode : undefined, k === "answer_max" ? effective.answer_max : undefined).map((n) => `
+    ! ${n}`).join("") : "")
+  const rows = SCHEMA.map((s) => `  ${s.key} = ${shown(effective[s.key] ?? s.default)} — ${sourceOf(s.key)}${answerNote(s.key)}`)
   const head = p?.dir ? `Проект ${p.name}: настройки ${path.join(p.dir, ".opencode", "crew-harness.json")}, читается ветка ${p.branch} (${p.repo}).` : `Проект ${fallbackName}: прежняя форма опций — настройки из рабочей копии вверх от каталога вкладки.`
   let pending = ""
   if (p?.dir) {
@@ -223,6 +227,10 @@ export type CrewConfig = {
   mergePrecheck: "off" | "required"
   /** дополнительные поля задачи, объявленные проектом (task_extra_fields) */
   extraFields: ExtraField[]
+  /** режимы ответа на вопросы сессий по типам (answer_mode, задача 007): принятые записи; пусто — все вопросы владельцу */
+  answerMode: AnswerMap
+  /** предел ответов по рекомендации подряд одной сессии (answer_max) */
+  answerMax: number
 }
 export type ExtraField = { id: string; label: string; hint?: string }
 export const TASK_FIELDS = ["goal", "criteria", "boundaries", "open_questions"] as const
@@ -353,6 +361,8 @@ export function loadConfig(dir: string): CrewConfig {
     cleanupLimit: num(j.cleanup_limit, 10),
     mergePrecheck: oneOf(j.merge_precheck, ["off", "required"] as const, "off"),
     extraFields: extraFieldsOf(j.task_extra_fields),
+    answerMode: normalizeAnswerMode(j.answer_mode).map,
+    answerMax: normalizeAnswerMax(j.answer_max),
   }
 }
 
@@ -2178,6 +2188,9 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const values = input.values
         if (!values || typeof values !== "object" || Array.isArray(values) || !Object.keys(values).length) return { content: "Нужно values: {ключ: значение}." }
         if (Object.prototype.hasOwnProperty.call(values, "profile_set")) return { content: "Не записано (файл не тронут):\n- profile_set: имя набора меняет человек (команда окна /crew-sets use и save либо правка файла); вызовом set его не записывают" }
+        // остальные ключи «ставит человек» (answer_mode, answer_max): отказ тем же видом, фраза из схемы
+        const human = Object.keys(values).map((k) => SCHEMA.find((x) => x.key === k)).filter((x) => x?.humanOnly)
+        if (human.length) return { content: `Не записано (файл не тронут):\n${human.map((x) => `- ${x!.key}: ключ меняет человек (${x!.humanHow ?? "правка файла"}); вызовом set его не записывают`).join("\n")}` }
         const errors = Object.entries(values).filter(([, v]) => v !== null).map(([k, v]) => invalid(k, v)).filter(Boolean)
         const unknown = Object.keys(values).filter((k) => !SCHEMA.some((s) => s.key === k)).map((k) => invalid(k, null))
         const all = [...new Set([...errors, ...unknown])]
