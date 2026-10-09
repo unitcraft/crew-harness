@@ -497,7 +497,7 @@ JSON in `.opencode/crew-harness.json` (any reader sees them without this plugin;
   the tier of the task, then one lower); the plugin stores and shows them, the sessions of the specification and delivery are
   still run by the orchestrator. A cell is `{"family": "claude", "tier": "heavy"}`; the tier `task` means «the tier of the
   task» (the default behaviour). A stage without a cell (and nothing to inherit) keeps the model of `spawn_models`.
-  A check on the same family as its author while another family exists is only noted by `/crew-sets show` (the rule «the
+  A check stage without a cell goes by `spawn_models` (the owner's decision of task 003). The old name `accept` stays a readable alias of `develop_accept` (the settings file of this repository still uses it; nothing rewrites it). A check on the same family as its author while another family exists is only noted by `/crew-sets show` (the rule «the
   reviewer is on another model family», ADR-0013). Names of sets: lowercase Latin
   letters, digits, dashes, up to 40 characters, not a word of the commands or a word kept from the removed ones (`use`, `reset`, `all`, `list`, `show`, `set`,
   `unset`, `new`, `rename`, `delete`, `check`, `save`, `from`).
@@ -506,9 +506,15 @@ JSON in `.opencode/crew-harness.json` (any reader sees them without this plugin;
   at once and needs no commit and no restart of the service.
 - **Tier bounds** — `tier_min` and `tier_max` (`light`, `medium`, `heavy`; no key — no bound), project settings in the same
   file. Any tier of any stage (explicit, inherited, `task`, the `tier` of `crew_spawn`) is clamped into them, so there is no
-  need for a separate set with explicit tiers to cap the cost. A clamp is written to the log of the plugin and to the task
-  event, and `/crew-sets show` prints the tier of the set and the tier after the clamp. `tier_min` above `tier_max` is a
-  settings error: `crew_doctor` says so and the bounds are not applied.
+  need for a separate set with explicit tiers to cap the cost. The clamp holds on every path that picks a model, with a set
+  and without one: `crew_spawn`, the steps of an auto-plan, the review session started without a cell of the set (the tier of
+  the task record is clamped when the session starts) and `reassign` (without a set the model of the record stays while its
+  tier is inside the bounds). The `tier` of `crew_send` picks a tab, not a model, and is not clamped. A clamp is written to the
+  log of the plugin and to the task event, and into the task record (`profiles`: `clamped_from`; without a set the set is
+  «(без набора)»), and `/crew-sets show` prints the tier of the set and the tier after the clamp. If the clamp lands on a family
+  that has no profile of that tier, the session is refused and the text names the clamp as the cause (the nearest tier is not
+  searched). `tier_min` above `tier_max` is a settings error: `crew_config set` refuses such a write (also against the other key
+  already in the file), and if it comes into the file by hand `crew_doctor` says so and the bounds are not applied.
 
 The window is a property of the model **in a folder**, not of a stage or a session. The plugin writes the windows of the
 models of the enabled set (all three tiers of every family named in the set, because `tier` on the input of `crew_spawn`

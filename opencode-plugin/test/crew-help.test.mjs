@@ -45,6 +45,12 @@ for (const w of ["force", "all", "worker", "assistant — то же, что work
   cell(`help mentions «${w}»`, help.includes(w), "missing")
 }
 
+// task 015/016, review 1 item 6: the help names the eight stages, the alias and the two bounds
+for (const w of ["develop_accept", "plan_accept", "spec_accept", "delivery_accept", "delivery", "spec", "tier_min", "tier_max", "accept — читаемый псевдоним"]) {
+  cell(`help names «${w}» (stages and tier bounds)`, help.includes(w), "missing")
+}
+cell("help says the bounds clamp the tier of crew_spawn and a check stage without a cell goes by spawn_models", /tier у crew_spawn срезается/.test(help) && /этап без клетки\s+идёт по spawn_models/.test(help), "missing")
+
 cell("the server registers no /crew-help command (it is a window command, see crew-instant-commands.test)", !commands["crew-help"] && synthetics.length === 0 && prompts.length === 0, JSON.stringify(Object.keys(commands)))
 
 const ev = { sessionID: "sesHELP01", system: [] }

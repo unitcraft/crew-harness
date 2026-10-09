@@ -149,6 +149,24 @@ writeFileSync(file, JSON.stringify(f, null, 2))
 commit("kimi removed")
 const d2 = await doctor("sesINT")
 cell("AC-37(б) crew_doctor names the place of a data break that came by a commit", /кими|kimi/.test(d2) && /недопустим/.test(d2), d2.slice(0, 500))
+// task 016, review 1 items 5, 7, 11: the text of the guide, the bounds are checked against each other on a write
+{
+  const line = (k) => guide.split("\n").find((l) => l.startsWith(`- ${k}:`)) ?? ""
+  cell("015 review-1 #5: the guide does not promise another family for a check without a cell: it goes by spawn_models, the family rule is a note", !/берёт другую семью/.test(line("profile_sets")) && /проверки без клетки идёт по spawn_models/.test(line("profile_sets")) && /accept читается как develop_accept/.test(line("profile_sets")), line("profile_sets"))
+  cell("016 review-1 #11: the guide says tier of crew_send picks a tab, is not clamped; the bound applies to crew_spawn", /tier у crew_spawn/.test(line("tier_max")) && /crew_send/.test(line("tier_max")) && /не срезается/.test(line("tier_max")), line("tier_max"))
+  const f0 = readFileSync(file, "utf8")
+  const bad1 = await set({ tier_min: "heavy", tier_max: "light" })
+  cell("016 review-1 #7: tier_min above tier_max in one call is refused and the file is untouched", /Не записано/.test(bad1) && /tier_min \(heavy\) выше tier_max \(light\)/.test(bad1) && readFileSync(file, "utf8") === f0, bad1)
+  const ok1 = await set({ tier_max: "light" })
+  cell("016 review-1 #7: one bound alone is written", /Записано/.test(ok1) && read().tier_max === "light", ok1)
+  const f1 = readFileSync(file, "utf8")
+  const bad2 = await set({ tier_min: "medium" })
+  cell("016 review-1 #7: tier_min medium against the written tier_max light is refused (checked against the other key), file untouched", /Не записано/.test(bad2) && /выше tier_max/.test(bad2) && readFileSync(file, "utf8") === f1, bad2)
+  const ok2 = await set({ tier_min: "light", tier_max: "medium" })
+  cell("016 review-1 #7: a consistent pair is written", /Записано/.test(ok2) && read().tier_min === "light" && read().tier_max === "medium", ok2)
+  const ok3 = await set({ tier_min: null, tier_max: null })
+  cell("016 review-1 #7: removing both keys is allowed", /Записано/.test(ok3) && read().tier_min === undefined && read().tier_max === undefined, ok3)
+}
 // the data of a project without profiles: nothing about profiles
 const g = read()
 delete g.profile_set

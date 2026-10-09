@@ -468,8 +468,9 @@ export function resolveStageProfile(state: State | undefined, stage: Stage, opts
   const cl = clampTier(tier, state.bounds)
   tier = cl.tier
   const p: any = isObj(u.data.profiles) ? (u.data.profiles as any)[cell.family]?.[tier] : undefined
-  if (!isObj(p)) return { refuse: `набор «${u.name}», этап «${STAGE_RU[stage]}»: профиля ${cell.family}/${tier} нет в справочнике; сессия не запущена` }
-  if (isEmptyProfile(p)) return { refuse: `набор «${u.name}», этап «${STAGE_RU[stage]}»: профиль ${cell.family}/${tier} пуст («заполнить»); сессия не запущена` }
+  const cause = cl.from ? ` (ступень ${cl.from} срезана границами проекта tier_min/tier_max до ${tier}: добавь профиль ${cell.family}/${tier} или поправь границы)` : ""
+  if (!isObj(p)) return { refuse: `набор «${u.name}», этап «${STAGE_RU[stage]}»: профиля ${cell.family}/${tier} нет в справочнике${cause}; сессия не запущена` }
+  if (isEmptyProfile(p)) return { refuse: `набор «${u.name}», этап «${STAGE_RU[stage]}»: профиль ${cell.family}/${tier} пуст («заполнить»)${cause}; сессия не запущена` }
   return { model: p.model, family: cell.family, tier, set: u.name, viaSnapshot: u.viaSnapshot, window: front && !state.degraded, stage, ...(cl.from ? { clampedFrom: cl.from } : {}), ...(eff.how === "inherited" ? { how: "inherited" as const } : {}) }
 }
 

@@ -97,6 +97,16 @@ const use = (name, dir = proj) => {
   else delete o.profile_set
   writeFileSync(file, JSON.stringify(o))
 }
+// task 016: the bounds of the project are two plain settings of the same file
+const setBounds = (b = {}, dir = proj) => {
+  const file = path.join(dir, ".opencode", "crew-harness.json")
+  const o = JSON.parse(readFileSync(file, "utf8"))
+  delete o.tier_min
+  delete o.tier_max
+  if (b.min) o.tier_min = b.min
+  if (b.max) o.tier_max = b.max
+  writeFileSync(file, JSON.stringify(o))
+}
 const tab = async (sid, role, dir = proj) => {
   dirOf.set(sid, dir)
   await hooks.context({ sessionID: sid, system: [], model: { id: "x", providerID: "y" } })
@@ -128,6 +138,13 @@ await spawn("sesBND", { tier: "heavy" })
 await spawn("sesBND", { tier: "light" })
 const bndTasks = tasks.listTasks("bounds")
 cell("016 no set: the bounds are read as settings, a heavy spawn is clamped to medium (sonnet), a light one stays", bndCfg.tierBounds.max === "medium" && bndCfg.tierBounds.min === "light" && bndTasks.length === 2 && modelOf(bndTasks[0].executor) === "claude-code/sonnet" && bndTasks[0].tier === "medium" && modelOf(bndTasks[1].executor) === "claude-code/haiku", JSON.stringify(bndTasks.map((t) => [t.tier, modelOf(t.executor)])))
+// review 1 item 3: the clamp on the path without a set is written to the record (clamped_from) and to the history of the task
+{
+  const t0 = bndTasks[0]
+  const st = t0.profiles?.[0]
+  cell("016 review-1 #3: the clamp without a set is stamped (clamped_from heavy, tier medium, stage develop) and the history says so", !!st && st.clamped_from === "heavy" && st.tier === "medium" && st.stage === "develop" && st.model === "claude-code/sonnet" && /срезана границами проекта heavy → medium/.test(JSON.stringify(t0)), JSON.stringify(t0.profiles))
+  cell("016 review-1 #3: a spawn that is not clamped has no stamp", !bndTasks[1].profiles, JSON.stringify(bndTasks[1].profiles))
+}
 // a project that has the table and the sets, but no name: nothing applies
 const sp2 = await spawn("sesINTEG", { tier: "heavy" })
 cell("AC-01 a project with the table and the sets but no name enabled works as before (no name -> no set)", modelOf(lastTask("proj").executor) === "claude-code/opus" && !lastTask("proj").profiles, sp2)
@@ -178,6 +195,15 @@ use(undefined)
 const re2 = await call("crew_task", "sesINTEG", { action: "reassign", n: tr.n })
 const tr2 = task("proj", tr.n)
 cell("AC-32 reassign without a set: the model of the record stays as it was", tr2.model === "kimi-code-plan-global/k3-256k" && modelOf(tr2.executor) === "kimi-code-plan-global/k3-256k" && tr2.executor !== tr1.executor, re2)
+// task 016, review 1 item 10: without a set the bounds apply at the handover too (the model of an unclamped record still stays)
+setBounds({})
+await spawn("sesINTEG", { tier: "heavy" })
+const trb = lastTask("proj")
+setBounds({ max: "medium" })
+const reb = await call("crew_task", "sesINTEG", { action: "reassign", n: trb.n })
+const trb1 = task("proj", trb.n)
+cell("016 review-1 #10: reassign without a set on tier_max medium moves a heavy record to sonnet and writes the clamp", trb.model === "claude-code/opus" && trb1.model === "claude-code/sonnet" && trb1.tier === "medium" && modelOf(trb1.executor) === "claude-code/sonnet" && trb1.profiles?.at(-1)?.clamped_from === "heavy", reb + JSON.stringify(trb1.profiles))
+setBounds({})
 // an interrupted start of the same attempt keeps the model of the record and makes no second session
 failCreate = true
 await spawn("sesINTEG", { tier: "light" })
@@ -345,6 +371,19 @@ const nG = await submit({ tier: "heavy" })
 const tG = await reviewed(nG)
 cell("AC-06(а) the set does not describe accept: the reviewer is a new session on spawn_models of the tier of the task (opus), no model chosen by the set", tG.review_kind === "spawn" && modelOf(tG.reviewer) === "claude-code/opus" && !tG.review_model, JSON.stringify([tG.review_kind, modelOf(tG.reviewer), tG.review_model]))
 
+// task 016, review 1 items 2 and 3: the reviewer without a cell takes spawn_models by the tier of the record cut by the bounds
+{
+  await spawn("sesINTEG", { tier: "heavy" })
+  const tq = lastTask("proj") // recorded on heavy: the bounds appear later (a task made before, or by assign)
+  setBounds({ max: "light" })
+  await call("crew_send", tq.executor, { to: "sesINTEG", text: "done", reply_to: tq.qid })
+  const tqr = await reviewed(tq.n)
+  cell("016 review-1 #2: the reviewer without a cell on tier_max light is a haiku session, not opus of the recorded tier", tqr.review_kind === "spawn" && modelOf(tqr.reviewer) === "claude-code/haiku", JSON.stringify([tqr.review_kind, modelOf(tqr.reviewer), tqr.tier]))
+  const rs = tqr.profiles?.filter((x) => x.role === "reviewer").at(-1)
+  cell("016 review-1 #3: the reviewer clamp is stamped (clamped_from heavy, stage develop_accept)", rs?.clamped_from === "heavy" && rs.tier === "light" && rs.stage === "develop_accept" && rs.session === tqr.reviewer, JSON.stringify(tqr.profiles))
+  setBounds({})
+}
+
 // ---- AC-05: a plan task: the stage plan for the executor, plan_accept for every round, a new session each round ----
 use("cross-kimi")
 await spawn("sesINTEG", { kind: "plan", goal: "the original", title: "a plan" })
@@ -404,6 +443,16 @@ const ptC = mkPlanTask()
 await until(() => stepsOf(ptC.n).length > 0, 15_000)
 const stC = stepsOf(ptC.n)[0]
 cell("AC-38 default: a step on claude medium, the same as without a set", !!stC && stC.model === "claude-code/sonnet" && stC.tier === "medium", JSON.stringify(stC && [stC.model, stC.tier]))
+
+// task 016, review 1 item 1: without a set a step runs on medium cut by the bounds, and the cut is written
+setBounds({ max: "light" })
+use(undefined)
+const ptD = mkPlanTask()
+await until(() => stepsOf(ptD.n).length > 0, 15_000)
+const stD = stepsOf(ptD.n)[0]
+cell("016 review-1 #1: auto-plan step without a set and tier_max light runs on light (haiku), not on hard medium", !!stD && stD.model === "claude-code/haiku" && stD.tier === "light", JSON.stringify(stD && [stD.model, stD.tier]))
+cell("016 review-1 #3: that step's record says clamped_from medium", stD?.profiles?.[0]?.clamped_from === "medium" && stD.profiles[0].tier === "light" && stD.profiles[0].stage === "develop", JSON.stringify(stD?.profiles))
+setBounds({})
 
 // ---- AC-06(б): the profile of a described stage is not found -> no reviewer, one letter, a line in the doctor; (в) by the snapshot ----
 use("cross-kimi")

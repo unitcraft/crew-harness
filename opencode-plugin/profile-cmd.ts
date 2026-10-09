@@ -378,11 +378,15 @@ export function showSet(ps: L.PState, name: string | undefined, dir: string): st
     const prof = (t: P.PTier) => (isObj(fam?.[t]) && !P.isEmptyProfile(fam[t]) ? (fam[t] as any) : undefined)
     const front = st === "develop" || st === "plan"
     if (cell.tier === "task") {
-      lines.push(`  ${P.STAGE_RU[st]}: ${P.cellText(cell)}${how} — по ступени задачи: ${P.PROFILE_TIERS.map((t) => `${t} → ${prof(cut(t).tier)?.model ?? "нет профиля"}${cut(t).from ? " (срез границами ступеней)" : ""}`).join(", ")}`)
+      // та же ступень, что выберет resolveStageProfile: клетка task на «ступень ниже» (сдача) сначала снижается, потом срезается
+      const reach = (t: P.PTier) => cut(eff.lower ? (P.lowerTier(t) as P.PTier) : t)
+      lines.push(`  ${P.STAGE_RU[st]}: ${P.cellText(cell)}${how} — по ступени задачи: ${P.PROFILE_TIERS.map((t) => `${t} → ${prof(reach(t).tier)?.model ?? "нет профиля"}${reach(t).from ? " (срез границами ступеней)" : ""}`).join(", ")}`)
+      // окна — только достижимых ступеней (срезанные недостижимы)
+      const live = [...new Set(P.PROFILE_TIERS.map((t) => reach(t).tier))].filter((t) => prof(t))
       if (front) {
-        for (const t of P.PROFILE_TIERS) if (prof(t)) lines.push(`      контекст профиля в рабочем дереве задачи (${t}): ${limitsText(winOf(prof(t)))}`)
+        for (const t of live) lines.push(`      контекст профиля в рабочем дереве задачи (${t}): ${limitsText(winOf(prof(t)))}`)
       } else {
-        for (const t of P.PROFILE_TIERS) if (prof(t)) lines.push(`      ${t}: ${reviewerWindowLine(root, prof(t).model)}`)
+        for (const t of live) lines.push(`      ${t}: ${reviewerWindowLine(root, prof(t).model)}`)
       }
     } else {
       const cl = cut(cell.tier)
@@ -446,13 +450,14 @@ function updownLines(before: Map<string, P.Win>, after: Map<string, P.Win>, root
 }
 
 /** Модели приёмки и приёмки плана набора (для строки про окно приёмки). */
-function reviewerModels(data: P.Data, name: string): string[] {
+function reviewerModels(data: P.Data, name: string, bounds?: P.Bounds): string[] {
   const out = new Set<string>()
   for (const [st, c] of P.cellsOf((data.sets as any)?.[name])) {
-    if (!st.endsWith("_accept")) continue
+    // сессии приёмки плагин запускает только по этим двум этапам; spec_accept и delivery_accept окон не имеют
+    if (st !== "develop_accept" && st !== "plan_accept") continue
     for (const ref of P.referencedProfiles(c)) {
       if (c.tier === "task" && ref.tier !== "medium") continue
-      const p = (data.profiles as any)?.[c.family]?.[ref.tier]
+      const p = (data.profiles as any)?.[c.family]?.[P.clampTier(ref.tier, bounds).tier]
       if (p && !P.isEmptyProfile(p)) out.add(p.model)
     }
   }
@@ -464,7 +469,7 @@ function changeBody(before: L.PState, after: L.PState, dir: string): string[] {
   const root = mainFolder(dir)
   const am = windowsOfActive(after)
   const lines = ["Контекст сессий в рабочих деревьях задач (было → стало), применится на следующем ходе каждой сессии:", ...updownLines(windowsOfActive(before), am, root)]
-  if (after.state.usable) for (const m of reviewerModels(after.state.usable.data, after.state.usable.name)) lines.push(`Приёмка и приёмка плана: ${reviewerWindowLine(root, m)}.`)
+  if (after.state.usable) for (const m of reviewerModels(after.state.usable.data, after.state.usable.name, after.state.bounds)) lines.push(`Приёмка и приёмка плана: ${reviewerWindowLine(root, m)}.`)
   for (const w of W.windowNotes(root, W.qualifying(after.project, listTasks(after.project)), am)) lines.push(`Предупреждение: ${w}`)
   return lines
 }
@@ -530,7 +535,7 @@ async function checkReport(dir: string, deps: CmdDeps): Promise<string> {
   for (const p of L.problemsOf(ps)) if (!lines.some((l) => l.includes(p))) lines.push(`! ${p}`)
   const old = L.legacyLayerText(ps.project)
   if (old) lines.push(`! ${old}`)
-  if (ps.state.usable) for (const m of reviewerModels(ps.state.usable.data, ps.state.usable.name)) lines.push(`Приёмка и приёмка плана: ${reviewerWindowLine(root, m)}.`)
+  if (ps.state.usable) for (const m of reviewerModels(ps.state.usable.data, ps.state.usable.name, ps.state.bounds)) lines.push(`Приёмка и приёмка плана: ${reviewerWindowLine(root, m)}.`)
   if (lines.length === 2) lines.push("Замечаний нет.")
   return lines.join("\n")
 }

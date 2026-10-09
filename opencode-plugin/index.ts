@@ -108,6 +108,7 @@ import {
   postExpected,
   propagateToParent,
   PLUGIN_SENDER,
+  stampClamp,
   stampProfile,
   ownerWordAfter,
   lastUserAt,
@@ -123,7 +124,7 @@ import { type Task, taskRef, acceptedAt, ago, byPriority, createTask, rounds, sl
 import { countedOpen, waitingCleanup } from "./tasks.ts"
 import { createRemoteBridge } from "./remote.ts"
 import { profileProblems, profileState, stateSignature, syncProjectFiles, syncSnapshot, syncTaskFile } from "./profile-layer.ts"
-import { cellOfState, resolveStageProfile, stageOfLaunch, tabFitsCell } from "./profiles.ts"
+import { cellOfState, clampTier, resolveStageProfile, stageOfLaunch, tabFitsCell } from "./profiles.ts"
 import { catalogModels, writeCatalog } from "./model-catalog.ts"
 import { ensureWorktree, fileAt, gitTraces, leftoversOf, mergeHolder, reviewLetter } from "./review.ts"
 import { precheckLines } from "./precheck.ts"
@@ -583,17 +584,20 @@ export default {
         const t = loadTask(t0.project, t0.n) ?? t0
         if (!t.reviewer || t.review_kind !== "spawn" || readJson<Card>(cardFile(t.reviewer))) return
         const cfg = loadConfig(t.directory)
-        const model = t.review_model ?? cfg.spawnModels[t.tier] ?? DEFAULT_SPAWN_MODELS[t.tier]
+        // без модели от набора — spawn_models по ступени задачи, срезанной границами проекта (задача 016)
+        const tierCut = clampTier(t.tier, cfg.tierBounds)
+        const model = t.review_model ?? cfg.spawnModels[tierCut.tier] ?? DEFAULT_SPAWN_MODELS[tierCut.tier]
         const [providerID, ...rest] = model.split("/")
         await ctx.session.create({ id: t.reviewer, title: `#${t.n} приёмка ${t.title}`, location: { directory: t.directory }, metadata: { crewReview: { project: t.project, n: t.n } }, model: { providerID, id: rest.join("/") } })
         const now = Date.now()
         // роль сессии приёмки — по настройке reviewer (план 002.7): acceptor несёт права вливания и принятия
-        const card: Card = { session: t.reviewer, role: reviewerRole(cfg), auto: false, title: `#${t.n} приёмка ${t.title}`, directory: t.directory, repo: repoLabel(t.directory), project: t.project, model, modelAt: now, modelFrom: "request", pid: process.pid, updated: now, spawned: { by: t.author, task: `приёмка #${t.n}`, tier: t.tier, status: "running", at: now, qid: t.review_qid ?? "" }, review: { project: t.project, n: t.n } }
+        const card: Card = { session: t.reviewer, role: reviewerRole(cfg), auto: false, title: `#${t.n} приёмка ${t.title}`, directory: t.directory, repo: repoLabel(t.directory), project: t.project, model, modelAt: now, modelFrom: "request", pid: process.pid, updated: now, spawned: { by: t.author, task: `приёмка #${t.n}`, tier: t.review_model ? t.tier : tierCut.tier, status: "running", at: now, qid: t.review_qid ?? "" }, review: { project: t.project, n: t.n } }
         saveCard(card)
         mine.set(card.session, card)
         // след профиля приёмки (задача 003): набор, этап, семья, ступень; окно у приёмки — общие настройки (general)
         const rch = t.review_model ? resolveStageProfile(profileState(t.directory).state, stageOfLaunch(t, "reviewer"), { taskTier: t.tier }) : undefined
         if (rch && !("refuse" in rch) && rch.model === model) stampProfile(t, "reviewer", t.reviewer, rch, false)
+        else if (!t.review_model) stampClamp(t, "reviewer", t.reviewer, stageOfLaunch(t, "reviewer"), model, tierCut.tier, tierCut.from)
         await reviewerAssigned(t, card)
         log(`task #${t.n} (${t.project}): reviewer session ${t.reviewer} started`)
       } catch (e) {
@@ -956,10 +960,12 @@ export default {
           if (p !== "P0" && (countedOpen(open, cfg.acceptedSlot).length >= cfg.inflightLimit || workers.length >= (cfg.spawnLimits[DEFAULT_ROLE] ?? cfg.spawnLimits["*"] ?? 3))) break // лимиты — ждать
           if (p !== "P0" && cfg.acceptedSlot === "free" && cfg.cleanupLimit > 0 && waitingCleanup(open).length >= cfg.cleanupLimit) break // cleanup_limit: ждущих уборки слишком много — ждать
           const boundaries = [plan.bodies["Не делаем"]?.trim(), `Режим выполнения: ${pt.plan.approval.decision === "ok" ? "без упрощений — ни заглушек, ни TODO, ни «временно»" : "упрощения — только перечисленные в плане"}.`].filter(Boolean).join("\n")
-          const model = stepChoice ? stepChoice.model : (cfg.spawnModels.medium ?? DEFAULT_SPAWN_MODELS.medium)
+          // без набора шаг идёт на medium, срезанной границами проекта (задача 016)
+          const stepCut = clampTier("medium", cfg.tierBounds)
+          const model = stepChoice ? stepChoice.model : (cfg.spawnModels[stepCut.tier] ?? DEFAULT_SPAWN_MODELS[stepCut.tier])
           const base = {
             project: pt.project, goal: s.subplan ? `${s.what}\n(подплан шага ${s.id} плана ${pt.plan.n})` : s.what, criteria: s.criteria.join("\n"), boundaries,
-            priority: p, tier: (stepChoice ? stepChoice.tier : "medium") as "heavy" | "medium" | "light", role: DEFAULT_ROLE, model, author: pt.author, author_role: pt.author_role, qid: `q${now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+            priority: p, tier: (stepChoice ? stepChoice.tier : stepCut.tier) as "heavy" | "medium" | "light", role: DEFAULT_ROLE, model, author: pt.author, author_role: pt.author_role, qid: `q${now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
             status: "starting" as const, kind: "spawn" as const, executor: plannedSessionId(), directory: pt.directory,
             plan_step: { project: pt.project, task: pt.n, plan: pt.plan.n, step: s.id, file: pt.plan.file },
           }
@@ -973,6 +979,7 @@ export default {
             t = createTask({ ...base, title: `план ${n}: ${s.title}`, plan: { n, file: path.posix.join(cfg.plansDir.replace(/\\/g, "/"), cfg.planName.replace(/\{n\}/g, n).replace(/\{slug\}/g, slugify(s.title))), source: `${s.what}\nКритерии шага ${s.id} плана ${pt.plan.n}:\n${s.criteria.join("\n")}`, parent: pt.plan.n, rounds: [], clean: 0 } }, (n2, slug) => taskPlace(pt.directory, cfg, n2, slug, pt.project))
           } else t = createTask({ ...base, title: `${pt.plan.n} ${s.id} ${s.title}` }, (n2, slug) => taskPlace(pt.directory, cfg, n2, slug, pt.project))
           if (stepChoice) stampProfile(t, "executor", t.executor!, stepChoice, !!t.worktree)
+          else stampClamp(t, "executor", t.executor!, "develop", model, stepCut.tier, stepCut.from)
           pt.plan.spawned[s.id] = t.n
           running.push(s)
           changed = true

@@ -212,6 +212,14 @@ cell("016 resolve: an explicit heavy cell is clamped to the lower tier of its fa
 const sB3 = row("default", DATA)
 sB3.bounds = P.boundsOf({ tier_min: "heavy", tier_max: "light" })
 cell("016 resolve: bounds with an error are ignored", P.resolveStageProfile(sB3, "plan", { inputTier: "heavy" }).tier === "heavy" && P.resolveStageProfile(sB3, "plan", { inputTier: "heavy" }).clampedFrom === undefined, "ignored")
+// review 1 item 8: a cut that lands on a missing profile is refused, and the text names the cut as the cause
+const DATA8 = { profiles: { kimi: { heavy: { model: "kimi/k3", context: 200000, output: 32000 } } }, sets: { s: { develop: { family: "kimi", tier: "heavy" } } } }
+const sB8 = row("s", DATA8)
+sB8.bounds = P.boundsOf({ tier_max: "medium" })
+const r8 = P.resolveStageProfile(sB8, "develop")
+cell("016 review-1 #8: the refusal for a profile missing after the cut says heavy was cut to medium by tier_min/tier_max", !!r8?.refuse && /kimi\/medium нет в справочнике/.test(r8.refuse) && /ступень heavy срезана границами проекта tier_min\/tier_max до medium/.test(r8.refuse), JSON.stringify(r8))
+const sB9 = row("s", DATA8)
+cell("016 review-1 #8: the same set without bounds resolves, no cut in the text", P.resolveStageProfile(sB9, "develop")?.model === "kimi/k3", JSON.stringify(P.resolveStageProfile(sB9, "develop")))
 cell("016 schema: tier_min and tier_max are keys, a value is one of light/medium/heavy, a bad one is refused", schema.SCHEMA_KEYS.includes("tier_min") && schema.SCHEMA_KEYS.includes("tier_max") && schema.invalid("tier_max", "medium") === undefined && typeof schema.invalid("tier_max", "ultra") === "string", String(schema.invalid("tier_max", "ultra")))
 
 rmSync(tmp, { recursive: true, force: true })

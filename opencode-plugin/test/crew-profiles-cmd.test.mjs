@@ -222,6 +222,23 @@ rmSync(explicitFile)
   writeSettings(cfgDir, {})
   const rClamp = await sets("show cross-codex")
   cell("016 show: an explicit heavy cell is shown with the clamp to the bound", /планирование: claude\/heavy → claude-code\/sonnet — срез границами ступеней: heavy → medium/.test(rClamp), rClamp)
+  // review 1 item 4: a `task` cell inherited one tier lower (delivery) is shown the way the choice makes it: lower first, then the cut
+  const rDef = await sets("show default")
+  const deliveryLine = rDef.split("\n").find((l) => /^ {2}сдача:/.test(l)) ?? ""
+  cell("016 review-1 #4: show of the delivery cell inherited from a task cell (one tier lower, tier_max medium): heavy -> sonnet with no cut, medium -> haiku", /heavy → claude-code\/sonnet, medium → claude-code\/haiku, light → claude-code\/haiku/.test(deliveryLine) && !/срез/.test(deliveryLine), deliveryLine)
+  cell("016 review-1 #9: show of a task cell lists the windows of the reachable tiers only (heavy is cut away by tier_max medium)", !/\(heavy\)/.test(rDef) && /\(medium\)/.test(rDef), rDef)
+  // review 1 item 9: the reviewer windows of use: only the two stages the plugin starts, and the cut tier
+  const prevName = raw.profile_set
+  raw.profile_sets.bx = { develop: c("claude", "heavy"), develop_accept: c("claude", "heavy"), plan: c("claude", "heavy"), plan_accept: c("claude", "heavy"), spec_accept: c("codex", "heavy"), delivery_accept: c("kimi", "light") }
+  writeFileJson(raw)
+  const rUseBx = await sets("use bx")
+  const revLines = rUseBx.split("\n").filter((l) => l.startsWith("Приёмка и приёмка плана:"))
+  cell("016 review-1 #9: use lists the reviewer window of the cut model only (sonnet), not spec_accept / delivery_accept and not the cut heavy", revLines.length === 1 && /claude-code\/sonnet/.test(revLines[0]) && !/opus|gpt-5\.5|k3-256k/.test(revLines.join()), revLines.join("|"))
+  const raw2 = readFileJson()
+  delete raw2.profile_sets.bx
+  if (prevName === undefined) delete raw2.profile_set
+  else raw2.profile_set = prevName
+  writeFileJson(raw2)
   raw.tier_min = "heavy"
   writeFileJson(raw)
   git(cfgDir, "add", "-A")

@@ -1117,8 +1117,14 @@ export const HELP = `crew-harness — письма между вкладками
   crew_doctor                 — самопроверка: что сломано и что делать.
   /crew (команда окна)       — владельцу: кто чего ждёт, без хода модели; кто ждёт его — уведомление в окне.
   /crew-sets, /crew-profiles (команды окна) — владельцу: наборы профилей моделей и справочник «семья, ступень → модель и контекст»;
-                                use включает набор для всех этапов (модель исполнителя, приёмщика, плана), контекст профиля действует на
-                                сессии в рабочем дереве задачи; агент набор не включает (crew_config set пишет справочник и наборы).
+                                use включает набор для всех этапов, контекст профиля действует на сессии в рабочем дереве задачи; агент набор не включает
+                                (crew_config set пишет справочник и наборы). Этапов восемь: develop, develop_accept, plan, plan_accept
+                                (задаются явно) и spec, spec_accept, delivery, delivery_accept (по умолчанию наследуют: spec и spec_accept
+                                от плана, delivery и delivery_accept от разработки, оба на ступень ниже); accept — читаемый псевдоним
+                                develop_accept. Плагин сам запускает только develop, develop_accept, plan, plan_accept; этап без клетки
+                                идёт по spawn_models. Настройки tier_min и tier_max (light, medium, heavy) ограничивают ступень снизу и
+                                сверху: любая ступень любого этапа и tier у crew_spawn срезается в них (срез виден в /crew-sets show и в
+                                записи задачи; tier_min выше tier_max — ошибка настройки, границы не применяются).
   Глаголы (в окне — пункты меню команды):
 ${verbHelpText()}
 
@@ -1148,7 +1154,8 @@ push_empty_turns (3) пустых подряд или push_max (20) напоми
   crew_spawn {title?, goal, criteria, boundaries?, open_questions?, tier?, priority?, role?, parent?} — новая сессия: без цели и
     критериев приёмки задача не ставится (проект может требовать больше — task_fields); модель по ступени (по умолчанию, пока набор не
     включён: heavy — claude-code/opus, medium — sonnet, light — haiku; проект меняет spawn_models; включённый набор профилей
-    моделей — /crew-sets — переопределяет модель этапа, tier на входе выбирает ступень внутри семьи набора); лимит работающих на роль —
+    моделей — /crew-sets — переопределяет модель этапа, tier на входе выбирает ступень внутри семьи набора; ступень всегда в границах
+    проекта tier_min и tier_max, если они заданы); лимит работающих на роль —
     spawn_limits (3). Если в настройках проекта задан worktrees — письмо с задачей называет папку worktree и ветку.
   priority: P0 авария (всё остальное ждёт), P1 первая очередь, P2 обычная работа (по умолчанию), P3 когда освободятся руки.
   crew_task {action: "assign", session, goal, criteria, ...} — отдать задачу открытой вкладке владельца, а не новой
@@ -1358,6 +1365,16 @@ export function stampProfile(t: Task, role: "executor" | "reviewer", session: st
   taskEvent(t, PLUGIN_SENDER, undefined, `профиль: набор «${r.set}», этап ${r.stage}, ${r.family}/${r.tier}, модель ${r.model}${r.viaSnapshot ? " (по снимку)" : ""}, окно: ${window}${note}`)
   if (r.clampedFrom) log(`tier clamp: задача #${t.n} этап ${r.stage}: ${r.clampedFrom} -> ${r.tier}`)
 }
+/**
+ * След среза на пути без набора (задача 016): модель по spawn_models, но ступень срезана границами проекта. Тот же вид записи и
+ * строки журнала, что у stampProfile; набора нет, поэтому set — «(без набора)», семья — провайдер модели. Нет среза — ничего.
+ */
+export function stampClamp(t: Task, role: "executor" | "reviewer", session: string, stage: string, model: string, tier: Tier, from: Tier | undefined) {
+  if (!from) return
+  ;(t.profiles ??= []).push({ at: Date.now(), role, session, stage, set: "(без набора)", family: model.split("/")[0], tier, model, window: "general", clamped_from: from })
+  taskEvent(t, PLUGIN_SENDER, undefined, `профиль: без набора, этап ${stage}, ступень срезана границами проекта ${from} → ${tier}, модель ${model}`)
+  log(`tier clamp: задача #${t.n} этап ${stage}: ${from} -> ${tier}`)
+}
 const DEFAULT_SPAWN_LIMIT = 3
 const WAIT_MAX_S = 300
 
@@ -1481,7 +1498,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         wake: { type: "boolean", description: "Wake the recipient (default true). false = deliver with its next turn, no extra turn", default: true },
         expect_reply: { type: "boolean", description: "This is a question: the result gives a qid for crew_wait", default: false },
         reply_to: str("The qid of the question this letter answers"),
-        tier: { type: "string", enum: ["heavy", "medium", "light"], description: "Optional task weight: only a FREE open holder of the role with a model of that tier or stronger gets it; none free -> queued." },
+        tier: { type: "string", enum: ["heavy", "medium", "light"], description: "Optional task weight: only a FREE open holder of the role with a model of that tier or stronger gets it; none free -> queued. It picks a tab, not a model, so tier_min/tier_max do not clamp it." },
       },
       required: ["to", "text"],
       additionalProperties: false,
@@ -1723,7 +1740,8 @@ export function makeTools(host: CrewHost): CrewTool[] {
       const role = normalizeRole(String(input.role ?? DEFAULT_ROLE).trim().toLowerCase() || DEFAULT_ROLE)
       if (!ROLE_RE.test(role)) return { content: `Роль «${role}» не годится.` }
       // ступень по входу или medium, в границах проекта (tier_min, tier_max); набор срезает свою ступень сам (resolveStageProfile)
-      const tier: Tier = clampTier(isTier(input.tier) ? input.tier : "medium", cfg.tierBounds).tier
+      const tierCut = clampTier(isTier(input.tier) ? input.tier : "medium", cfg.tierBounds)
+      const tier: Tier = tierCut.tier
       const limit = cfg.spawnLimits[role] ?? cfg.spawnLimits["*"] ?? DEFAULT_SPAWN_LIMIT
       const running = listTasks(project).filter((t) => t.kind === "spawn" && t.role === role && (t.status === "starting" || t.status === "running"))
       const prio = isPriority(input.priority) ? input.priority : cfg.defaultPriority
@@ -1773,6 +1791,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         ...(plan ? { plan } : {}),
       }, (n, slug) => taskPlace(me.directory, cfg, n, slug, project))
       if (chosen && !("refuse" in chosen)) stampProfile(t, "executor", t.executor!, chosen, !!t.worktree)
+      else if (!chosen) stampClamp(t, "executor", t.executor!, stageOfLaunch({ plan: input.kind === "plan" }, "executor"), model, tier, tierCut.from)
       const par = parseParent(input.parent)
       if (par) {
         const order = loadTask(par.project, par.n)
@@ -2202,6 +2221,15 @@ export function makeTools(host: CrewHost): CrewTool[] {
           t.model = chosen.model
           t.tier = chosen.tier
           stampProfile(t, "executor", t.executor, chosen, !!t.worktree)
+        } else {
+          // без набора модель записи остаётся, пока ступень записи в границах проекта; вышла за них — модель берётся по срезанной ступени
+          const bounds = loadConfig(t.directory)
+          const cut = clampTier(t.tier, bounds.tierBounds)
+          if (cut.from) {
+            t.tier = cut.tier
+            t.model = bounds.spawnModels[cut.tier] ?? DEFAULT_SPAWN_MODELS[cut.tier]
+            stampClamp(t, "executor", t.executor, stageOfLaunch(t, "executor"), t.model, cut.tier, cut.from)
+          }
         }
         markPrecheckStale(t, "передана другой сессии")
         taskEvent(t, me.session, "starting", `передана новой сессии${old ? ` (была ${old})` : ""}`)
@@ -2251,6 +2279,13 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const unknown = Object.keys(values).filter((k) => !SCHEMA.some((s) => s.key === k)).map((k) => invalid(k, null))
         const all = [...new Set([...errors, ...unknown])]
         if (all.length) return { content: `Не записано (файл не тронут):\n${all.map((e) => `- ${e}`).join("\n")}` }
+        // границы ступеней связаны: tier_min не выше tier_max, считая и ключ, которого в этом вызове нет
+        if ("tier_min" in values || "tier_max" in values) {
+          const work = { ...workingSettings(p.dir).raw, ...local } // рабочая копия: незакоммиченная запись другого ключа тоже считается
+          const pick = (k: string) => (k in values ? values[k] : work[k])
+          const be = boundsOf({ tier_min: pick("tier_min") ?? undefined, tier_max: pick("tier_max") ?? undefined }).error
+          if (be) return { content: `Не записано (файл не тронут):\n- ${be}` }
+        }
         // связи между ключами профилей: рабочая копия плюс вносимое (два вызова подряд — справочник, затем наборы — проходят)
         const links = linkErrorsOfWrite(p.dir, values)
         if (links.length) return { content: `Не записано (файл не тронут):\n${links.map((e) => `- ${e}`).join("\n")}` }
