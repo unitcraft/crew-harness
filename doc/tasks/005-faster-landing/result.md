@@ -246,3 +246,12 @@ Out of scope notes: находки 1 и 4 раздела «Находки» (г�
 Remaining questions: нет открытых UNKNOWN; ворота Г1 (принять ADR-0009, пуш), Г2 (слияние), Г3 (переключение) — по слову владельца.
 
 Artifacts: ветка `task-005-faster-landing` (отправлена на origin), база на момент слияния — `origin/main` (база реализации `e606a43`), коммиты — `git log --oneline "$BASE"..HEAD`; порядок выкатки и откат: слияние без перезапуска, ключи в настройках проекта включает интегратор, откат — убрать ключи; новых переменных и секретов нет.
+
+## Правка по решению владельца 2026-10-09: ключи включены по умолчанию (Сессия С5д)
+
+Слово владельца (2026-10-09, из чата): `accepted_slot` по умолчанию `free`, `merge_precheck` по умолчанию `required`. Имена и допустимые значения ключей прежние; `cleanup_limit` 10; `task_extra_fields` пуст; прежнее поведение — явные `hold` и `off`, других значений и синонимов нет.
+
+- Код: умолчания в `config-schema.ts` (справочник и рекомендации), `core.ts` (`loadConfig`, комментарии, справка `crew_help`, описания `crew_spawn` и `crew_task`, отказ `precheck` при `off`), `precheck.ts` (отказ `merge` без записи предпроверки теперь называет порядок «precheck без замка, затем merge на проверенную вершину» и ключ возврата `merge_precheck: off`), `review.ts` (письма приёмщика), `tasks.ts` (комментарий).
+- Тексты: README плагина (оба ключа), README тестов, спецификация, план, ADR-0009 (запись решения владельца с датой).
+- Тесты: `landing-golden.mjs` и `crew-landing-golden` (проходы `--check --legacy`, `--dump` без ключей против `--new`), `crew-landing-config`, `crew-landing-letters`, `crew-landing-slot`, `crew-landing-precheck` (ячейки «по умолчанию» и «явные hold/off»), прежние `crew-review`, `crew-acceptor`, `crew-plan-task`, `crew-profiles-windows` ставят `off`/`hold` явно.
+- DNC-01 теперь читается так: тексты при явных `hold` и `off` равны снимку базы; без ключей тексты равны текстам с явными `free` и `required`.
