@@ -1,6 +1,7 @@
-// Self-test of the local layer of the profiles (task 003; node >= 24):  node test/crew-profiles-layer.test.mjs
-// The layer over the committed settings file: effective data, "the file now differs", save / save force, the forms of
-// reset, the snapshot of the last valid state, projects apart (nested roots). A real git repository of settings.
+// Self-test of the data in force of the profiles (task 003, ADR-0014: no local layer; node >= 24):  node test/crew-profiles-layer.test.mjs
+// The three keys of the working copy of the settings file are the data in force; one atomic write of a draft; an old
+// *.layer.json is ignored and named once; the snapshot of the last valid state; projects apart (nested roots).
+// A real git repository of settings.
 import { execFileSync } from "node:child_process"
 import { createHash } from "node:crypto"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
@@ -75,106 +76,92 @@ const bump = () => {
   writeSettings(projSettings, {}) // drops the settings cache of the folder (rewrites the same working file)
 }
 const st = (dir = here) => (dir === here ? (cached ??= L.profileState(dir)) : L.profileState(dir))
-const writeLayer = (p, l) => {
-  L.writeLayer(p, l)
-  bump()
-}
-const edit = (fn) => {
-  const s = st()
-  writeLayer(s.project, fn(s.layer, s.raw))
-}
 
-// the committed file is the base: no layer, no name -> row 1
+// the committed file is the base: no name -> row 1
 cell("base: a project with the table and sets and no name is row 1 (nothing applied)", st().project === "proj" && st().state.row === 1 && st().name === undefined && st().data.profiles.claude.heavy.context === 720000, JSON.stringify(st().state.row))
 
-// AC-21: use writes the project's local layer only; the committed file stays; reset returns the default of the file
+// the data in force are the three keys of the WORKING COPY of the file: an uncommitted edit acts at once, no layer between
 bump() // normalises the file once; every later drop rewrites the same bytes
-const h0 = sha(file)
-edit((l, raw) => L.layerSetName(l, raw, "cross-kimi"))
+const committedName = () => JSON.parse(git(projSettings, "show", "HEAD:.opencode/crew-harness.json")).profile_set
+writeFileJson({ ...readFileJson(), profile_set: "cross-kimi" })
 let s = st()
-cell("AC-21 the local name applies at once, with the source, and the state is row 2", s.name === "cross-kimi" && s.nameSource === "layer" && s.state.row === 2, JSON.stringify([s.name, s.nameSource, s.state.row]))
-cell("AC-21 the committed file does not change by the local switch", sha(file) === h0 && existsSync(L.layerFile("proj")), "changed")
-cell("AC-21 the choice follows the local name at once (develop -> claude, accept -> kimi)", P.resolveStageProfile(s.state, "accept").model === "kimi/k3" && P.resolveStageProfile(s.state, "develop").model === "claude-code/sonnet", JSON.stringify(P.resolveStageProfile(s.state, "accept")))
-const rst = L.layerReset(s.layer, { kind: "name" })
-writeLayer("proj", rst.layer)
-cell("AC-21 reset of the name gives the default of the file (none here -> row 1), the layer file disappears", st().state.row === 1 && !existsSync(L.layerFile("proj")) && rst.removed.join() === "name", JSON.stringify([st().state.row, rst.removed]))
-// a default name in the file
+cell("the name written into the working copy (no commit) applies at once: row 2", s.name === "cross-kimi" && s.state.row === 2 && committedName() === undefined, JSON.stringify([s.name, s.state.row, committedName()]))
+cell("the choice follows the name of the working copy at once (develop -> claude, accept -> kimi)", P.resolveStageProfile(s.state, "accept").model === "kimi/k3" && P.resolveStageProfile(s.state, "develop").model === "claude-code/sonnet", JSON.stringify(P.resolveStageProfile(s.state, "accept")))
+cell("there is no layer in the state any more", !("layer" in s) && !("nameSource" in s), Object.keys(s).join())
+// other keys of the file are read from the committed file as before (the working copy decides only the three profile keys)
 writeFileJson({ ...readFileJson(), profile_set: "default" })
 commit("name default")
-cell("REQ-04 the name of the file applies when there is no local one, with the source", st().name === "default" && st().nameSource === "file" && st().state.row === 2, JSON.stringify([st().name, st().nameSource]))
-edit((l, raw) => L.layerSetName(l, raw, "cross-kimi"))
-cell("REQ-04 the local name overrides the file", st().name === "cross-kimi" && st().nameSource === "layer", st().name)
-writeLayer("proj", L.layerReset(st().layer, { kind: "name" }).layer)
-cell("AC-21 reset of the name returns the set of the file", st().name === "default" && st().nameSource === "file", st().name)
-// a layer entry equal to the file disappears by itself (pruned)
-edit((l, raw) => L.layerSetName(l, raw, "default"))
-cell("REQ-29 a layer entry equal to the file is not kept (pruned in the state)", Object.keys(st().layer).length === 0, JSON.stringify(st().layer))
-writeLayer("proj", {})
+cell("the committed name applies as before", st().name === "default" && st().state.row === 2, JSON.stringify(st().name))
 
-// AC-24 (data): other projects do not know the layer of proj; nested roots
-edit((l, raw) => L.layerSetName(l, raw, "cross-kimi"))
+// the old layer file is not read and not applied; it is named once
+mkdirSync(path.dirname(L.layerFile("proj")), { recursive: true })
+writeFileSync(L.layerFile("proj"), JSON.stringify({ name: { value: "cross-kimi", base: "default" }, "profile:claude/heavy": { value: prof("a/b", 1, 1), base: null } }))
+bump()
+cell("an old *.layer.json is ignored as data: the name and the profiles are those of the file", st().name === "default" && st().data.profiles.claude.heavy.context === 720000, JSON.stringify([st().name, st().data.profiles.claude.heavy.context]))
+// the pass of the service reads the project by the folder of the settings (outside the root in this fixture: another name)
+const passName = L.profileState(projSettings).project
+if (passName !== "proj") writeFileSync(L.layerFile(passName), "{}")
+L.resetLegacyNotes()
+const p1 = L.profileProblems().filter((p) => /слой отключён/.test(p))
+const p2 = L.profileProblems().filter((p) => /слой отключён/.test(p))
+cell("the problems of the service carry the note once (pass 1: one, pass 2: none); the file is not deleted", p1.length === 1 && p2.length === 0 && existsSync(L.layerFile("proj")), JSON.stringify([p1.length, p2.length]))
+if (passName !== "proj") rmSync(L.layerFile(passName), { force: true })
+L.resetLegacyNotes()
+const note1 = L.legacyLayerNote("proj")
+const note2 = L.legacyLayerNote("proj")
+cell("the note says: disabled, not applied, can be deleted; a repeat is silent", /слой отключён/.test(note1 ?? "") && /не применяются/.test(note1 ?? "") && /можно удалить/.test(note1 ?? "") && note2 === undefined, JSON.stringify([note1, note2]))
+cell("a state read does not touch the old layer file", existsSync(L.layerFile("proj")), "gone")
+rmSync(L.layerFile("proj"), { force: true })
+cell("no layer file, no note", L.legacyLayerText("proj") === null, String(L.legacyLayerText("proj")))
+
+// other projects do not know the file of proj; nested roots
+writeFileJson({ ...readFileJson(), profile_set: "cross-kimi" })
 const innerState = L.profileState(innerRoot)
 const soloState = L.profileState(soloRoot)
 cell("AC-24 the nested project is another project: no table, no name, row 1", innerState.project === "inner" && innerState.state.row === 1 && innerState.name === undefined && innerState.data.profiles === undefined, JSON.stringify([innerState.project, innerState.state.row]))
-cell("AC-24 a project without profiles is untouched by the layer of another one", soloState.project === "solo" && soloState.state.row === 1 && Object.keys(soloState.layer).length === 0, JSON.stringify(soloState.project))
-cell("AC-24 the layer file is per project", existsSync(L.layerFile("proj")) && !existsSync(L.layerFile("inner")) && !existsSync(L.layerFile("solo")), "wrong")
-writeLayer("proj", {})
+cell("AC-24 a project without profiles is untouched by the file of another one", soloState.project === "solo" && soloState.state.row === 1, JSON.stringify(soloState.project))
+writeFileJson({ ...readFileJson(), profile_set: "default" })
 
-// AC-33: edits, a deletion, then the file changes by a commit
-edit((l, raw) => L.layerSetProfile(l, raw, "claude", "heavy", prof("claude-code/opus", 500000, 64000)))
-edit((l, raw) => L.layerSetProfile(l, raw, "claude", "light", null))
-edit((l, raw) => L.layerSetCell(l, raw, "cross-kimi", "plan_accept", null))
-edit((l, raw) => L.layerNewSet(l, raw, "mine", { develop: c("kimi", "heavy") }))
-s = st()
-cell("AC-33 the effective data is the file with the layer over it (edit, deletion, unset, new set)", s.data.profiles.claude.heavy.context === 500000 && !s.data.profiles.claude.light && !s.data.sets["cross-kimi"].plan_accept && s.data.sets.mine.develop.family === "kimi" && s.data.profiles.claude.medium.context === 720000, JSON.stringify(s.data.profiles.claude))
-// a commit changes the same record and adds another
-const f1 = readFileJson()
-f1.model_profiles.claude.heavy = prof("claude-code/opus", 600000, 64000)
-f1.model_profiles.extra = { heavy: prof("x/y", 1000, 100) }
-f1.profile_sets.fresh = { develop: c("claude", "heavy") }
-writeFileJson(f1)
-commit("file changed")
-s = st()
-cell("AC-33 the layer wins by key after the file changed; new file records appear", s.data.profiles.claude.heavy.context === 500000 && !!s.data.profiles.extra && !!s.data.sets.fresh, JSON.stringify([s.data.profiles.claude.heavy.context, Object.keys(s.data.profiles)]))
-const diff = L.layerDiff(s.raw, s.layer)
-cell("AC-33 show and check say «the file now differs» exactly for the changed record", diff.find((d) => d.key === "profile:claude/heavy")?.fileChanged === true && diff.find((d) => d.key === "profile:claude/light")?.fileChanged === false && L.problemsOf(s).some((p) => /claude\/heavy/.test(p) && /в файле теперь иначе/.test(p)), JSON.stringify(diff.map((d) => [d.key, d.fileChanged])))
-
-// AC-35: save with three kinds of records
+// writeDraft: one atomic write of the three keys, the other keys of the file are kept, no commit
 const log0 = commits()
-const saveRes = L.saveLayer(here)
+s = st()
+const draft = L.draftOf(s)
+L.dSetProfile(draft, "claude", "heavy", prof("claude-code/opus", 500000, 64000))
+L.dSetProfile(draft, "claude", "light", null)
+L.dSetCell(draft, "cross-kimi", "plan_accept", null)
+L.dNewSet(draft, "mine", { develop: c("kimi", "heavy") })
+draft.name = "mine"
+const before = readFileJson()
+const wr = L.writeDraft(s, draft)
+bump()
 const w = readFileJson()
-cell("AC-35 save writes the local and the deleted records into the working copy", saveRes.ok && !w.model_profiles.claude.light && !w.profile_sets["cross-kimi"].plan_accept && w.profile_sets.mine?.develop?.family === "kimi", JSON.stringify(saveRes))
-cell("AC-35 the record added by a commit is not touched", !!w.model_profiles.extra && !!w.profile_sets.fresh, JSON.stringify(Object.keys(w.model_profiles)))
-cell("AC-35 the record whose value changed in the file is skipped and listed", w.model_profiles.claude.heavy.context === 600000 && saveRes.skipped.length === 1 && saveRes.skipped[0].key === "profile:claude/heavy" && /профиль claude\/heavy/.test(saveRes.skipped[0].label), JSON.stringify(saveRes.skipped))
-const forced = L.saveLayer(here, true)
-cell("AC-35 save force rewrites exactly the listed record", forced.ok && readFileJson().model_profiles.claude.heavy.context === 500000, JSON.stringify(forced))
-cell("AC-35 the plugin does not commit: git log did not grow, the file is modified", commits() === log0 && git(projSettings, "status", "--porcelain").includes("crew-harness.json"), String(commits()))
-commit("saved")
-cell("AC-35 after the commit the layer holds none of the saved records", Object.keys(st().layer).length === 0, JSON.stringify(st().layer))
-cell("AC-35 and the state equals the file", st().data.profiles.claude.heavy.context === 500000 && !st().data.profiles.claude.light, "wrong")
-// the name: save writes the name as the default of the file
-edit((l, raw) => L.layerSetName(l, raw, "mine"))
-L.saveLayer(here)
-cell("AC-29 save puts the enabled name into the file as the default", readFileJson().profile_set === "mine", String(readFileJson().profile_set))
-commit("name saved")
-cell("AC-29 save of an old-form project is refused with the reason (nowhere to write)", (() => {
+cell("the draft lands in the working copy: edit, deletion, unset, new set, name", wr.ok && w.model_profiles.claude.heavy.context === 500000 && !w.model_profiles.claude.light && !w.profile_sets["cross-kimi"].plan_accept && w.profile_sets.mine.develop.family === "kimi" && w.profile_set === "mine", JSON.stringify(wr))
+cell("the other keys of the file are kept as they were", w.project === before.project && w.root === before.root, JSON.stringify([w.project, w.root]))
+cell("the plugin does not commit: git log did not grow, the file is modified", commits() === log0 && git(projSettings, "status", "--porcelain").includes("crew-harness.json"), String(commits()))
+cell("no temporary file is left next to the file", !existsSync(`${file}.${process.pid}.tmp`), "tmp left")
+cell("the state equals the file at once (no commit needed)", st().data.profiles.claude.heavy.context === 500000 && st().name === "mine", JSON.stringify(st().name))
+// an emptied family goes away
+const d2 = L.draftOf(st())
+for (const t of ["heavy", "medium"]) L.dSetProfile(d2, "claude", t, null)
+cell("the family with its last record removed goes away", !d2.profiles.claude, JSON.stringify(d2.profiles))
+// a working copy that is not JSON is not overwritten
+const keep = readFileSync(file, "utf8")
+writeFileSync(file, "{ not json")
+cached = undefined // not bump(): the settings cache is dropped by rewriting the file, and a rewrite would repair it
+const bad = L.writeDraft(st(), L.draftOf(st()))
+cell("a working file that is not JSON is refused, not overwritten", bad.ok === false && /не JSON/.test(bad.error ?? "") && readFileSync(file, "utf8") === "{ not json", JSON.stringify(bad))
+writeFileSync(file, keep)
+bump()
+cell("an old-form project: nowhere to write", (() => {
   core.setProjects(core.parseProjects({ projects: { oldform: path.join(tmp, "oldform") } }), {})
   mkdirSync(path.join(tmp, "oldform"), { recursive: true })
-  const r = L.saveLayer(path.join(tmp, "oldform"))
+  const ps = L.profileState(path.join(tmp, "oldform"))
+  const r = L.writeDraft(ps, L.draftOf(ps))
   core.setProjects(core.parseProjects({ projects: [projSettings, innerSettings, soloSettings] }), {})
   return r.ok === false && /писать некуда/.test(r.error ?? "")
 })(), "saved")
-writeLayer("proj", {})
-
-// AC-36: every form of reset takes exactly its piece
-const base = { name: { value: "cross-kimi", base: null }, "profile:claude/heavy": { value: prof("a/b", 1, 1), base: null }, "profile:claude/light": { value: null, base: null }, "profile:kimi/heavy": { value: prof("a/c", 1, 1), base: null }, "set:mine": { mode: "new", base: null }, "cell:mine/develop": { value: c("kimi", "heavy"), base: null }, "cell:default/accept": { value: c("kimi", "heavy"), base: null }, "cell:default/develop": { value: c("kimi", "heavy"), base: null } }
-const keysAfter = (form) => Object.keys(L.layerReset(base, form).layer).sort().join(" ")
-cell("AC-36 reset name", keysAfter({ kind: "name" }) === Object.keys(base).filter((k) => k !== "name").sort().join(" "), keysAfter({ kind: "name" }))
-cell("AC-36 reset set takes the set and its cells only", keysAfter({ kind: "set", name: "mine" }) === Object.keys(base).filter((k) => k !== "set:mine" && k !== "cell:mine/develop").sort().join(" "), keysAfter({ kind: "set", name: "mine" }))
-cell("AC-36 reset cell takes the one cell", keysAfter({ kind: "cell", name: "default", stage: "accept" }) === Object.keys(base).filter((k) => k !== "cell:default/accept").sort().join(" "), keysAfter({ kind: "cell", name: "default", stage: "accept" }))
-cell("AC-36 reset family takes all its records", keysAfter({ kind: "family", family: "claude" }) === Object.keys(base).filter((k) => !k.startsWith("profile:claude/")).sort().join(" "), keysAfter({ kind: "family", family: "claude" }))
-cell("AC-36 reset record takes one profile", keysAfter({ kind: "profile", family: "claude", tier: "heavy" }) === Object.keys(base).filter((k) => k !== "profile:claude/heavy").sort().join(" "), keysAfter({ kind: "profile", family: "claude", tier: "heavy" }))
-cell("AC-36 reset all empties the layer", keysAfter({ kind: "all" }) === "" && L.layerReset(base, { kind: "all" }).removed.length === Object.keys(base).length, keysAfter({ kind: "all" }))
+writeFileJson({ ...readFileJson(), profile_set: undefined })
+commit("back to no name")
 
 // AC-37 (в, г): the snapshot of the last valid state
 const f2 = readFileJson()

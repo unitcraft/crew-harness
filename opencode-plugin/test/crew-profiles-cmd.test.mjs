@@ -1,6 +1,7 @@
-// Self-test of the window commands /crew-sets and /crew-profiles (task 003; node >= 24):  node test/crew-profiles-cmd.test.mjs
+// Self-test of the window commands /crew-sets and /crew-profiles (task 003, ADR-0014: edits go straight into the file; node >= 24):
+//   node test/crew-profiles-cmd.test.mjs
 // The commands are called as the window calls them (the registered slash command with prompt.text): tables, show, use with
-// its report, the edit verbs of both commands with their refusals, check, save / save force, the forms of reset, one line
+// its report, the edit verbs of both commands with their refusals, check, the removed save / reset, an old layer file, one line
 // of the plugin log per edit. The answer is a service message, never a turn of the model. A real git repository of
 // settings; a state read is cached for long and the cache is dropped by hand after a commit.
 import { execFileSync } from "node:child_process"
@@ -127,22 +128,32 @@ cell("AC-07 /crew-profiles show <family>: the three tiers with the references of
 r = await sets("show")
 cell("AC-07 show without a name and without an enabled set says so", /Набор не включён/.test(r), r)
 const hashFile0 = sha(file)
+const commits0 = commits()
 r = await sets("use no-such-set")
-cell("AC-07 use with an unknown name: refusal with the list of the names; nothing changed", /Не сделано/.test(r) && /no-such-set/.test(r) && /cross-kimi/.test(r) && Object.keys(st().layer).length === 0, r)
+cell("AC-07 use with an unknown name: refusal with the list of the names; nothing changed", /Не сделано/.test(r) && /no-such-set/.test(r) && /cross-kimi/.test(r) && sha(file) === hashFile0, r)
 cell("AC-17 a refused edit leaves one `profile edit refused` line and no `profile edit:` line", refusedLines().length === 1 && editLines().length === 0, JSON.stringify([refusedLines().length, editLines().length]))
 r = await sets("use cross-kimi")
 cell("AC-07 use: what changed, restart is not needed, the windows of the reviewers are said to be general", /Включён набор «cross-kimi»/.test(r) && /Перезапуск не нужен/.test(r) && /Приёмка и приёмка плана: контекст профиля здесь не применяется/.test(r) && /модель kimi-code-plan-global\/k3-256k берёт контекст из рукописных и глобальных настроек: контекст 262144 · вывод до 131072/.test(r), r)
-cell("AC-21 use writes the local state only: the committed file is the same, the name comes from the layer", sha(file) === hashFile0 && st().name === "cross-kimi" && st().nameSource === "layer", st().name)
+cell("AC-21 use writes profile_set into the working copy of the file at once, atomically, without a commit; the data in force are the file", sha(file) !== hashFile0 && readFileJson().profile_set === "cross-kimi" && st().name === "cross-kimi" && commits() === commits0 && JSON.parse(git(cfgDir, "show", "HEAD:.opencode/crew-harness.json")).profile_set === undefined, st().name)
+cell("AC-21 the write left no temporary file and no layer file", !existsSync(`${file}.${process.pid}.tmp`) && !existsSync(L.layerFile("cmdproj")), "left")
 cell("AC-17 use leaves exactly one line of the log", editLines().length === 1 && /crew-sets use include|crew-sets use/.test(editLines()[0]), JSON.stringify(editLines()))
 r = await sets("")
-cell("AC-07 the table marks the enabled set and says where the name comes from", /● cross-kimi/.test(r) && /локальное переключение/.test(r), r)
+cell("AC-07 the table marks the enabled set", /● cross-kimi/.test(r) && !/локальн/.test(r), r)
 r = await sets("show")
-cell("AC-07 show of the enabled set: model, tier, window per stage; for the reviewers `the profile window is not applied here` with the number", /Набор «cross-kimi» — включён \(имя из: локальное переключение\)/.test(r) && /приёмка: kimi\/heavy → kimi-code-plan-global\/k3-256k/.test(r) && /контекст профиля здесь не применяется/.test(r) && /контекст профиля в рабочем дереве задачи \(heavy\): контекст 720K · вывод до 64K/.test(r), r)
+cell("AC-07 show of the enabled set: model, tier, window per stage; for the reviewers `the profile window is not applied here` with the number", /Набор «cross-kimi» — включён \(имя в файле проекта\)/.test(r) && /приёмка: kimi\/heavy → kimi-code-plan-global\/k3-256k/.test(r) && /контекст профиля здесь не применяется/.test(r) && /контекст профиля в рабочем дереве задачи \(heavy\): контекст 720K · вывод до 64K/.test(r), r)
 r = await sets("show kimi-only")
 cell("AC-07 show <name>: any set", /Набор «kimi-only» — не включён/.test(r), r)
+const hashBeforeGone = sha(file)
 r = await sets("reset")
-cell("AC-07 reset returns the set of the file (none here)", /Готово/.test(r) && st().name === undefined && editLines().length === 2, r + JSON.stringify(editLines().length))
-cell("AC-07/AC-10 reset says what is enabled now and how the windows change, as use does (no restart)", /Набор не включён/.test(r) && /Перезапуск не нужен/.test(r) && /Контекст сессий в рабочих деревьях задач \(было → стало\)/.test(r), r)
+cell("reset is gone with the layer: a plain answer, the file and the name are as they were, no log line", /Команды reset больше нет/.test(r) && sha(file) === hashBeforeGone && st().name === "cross-kimi" && editLines().length === 1, r)
+r = await profs("reset all")
+cell("reset of /crew-profiles is gone the same way", /Команды reset больше нет/.test(r) && sha(file) === hashBeforeGone, r)
+r = await sets("save")
+cell("save is gone: nothing to save, the file is untouched", /Команды save больше нет/.test(r) && /сохранять и сбрасывать нечего/.test(r) && sha(file) === hashBeforeGone, r)
+// a person takes the name out of the file by hand: the set is not applied (row 1), as before
+writeFileJson({ ...readFileJson(), profile_set: undefined })
+bump()
+cell("the name taken out of the file by hand: no set enabled", st().name === undefined && st().state.row === 1, String(st().name))
 cell("AC-07 no turn of the model: every answer is a service message", prompts.length === 0 && replies.length > 0, String(prompts.length))
 
 // ---- AC-09: the text about a smaller window ----
@@ -200,15 +211,13 @@ cell("AC-27 the set `mine` is enabled in a state where it has only the develop s
 r = await sets("delete mine")
 cell("AC-27 delete of the enabled set is refused", /Не сделано/.test(r) && /включён/.test(r) && !!st().data.sets.mine, r)
 r = await sets("rename mine mine2")
-cell("AC-27 rename of the enabled set moves the name to the new one (in the layer)", /Готово/.test(r) && st().name === "mine2" && st().nameSource === "layer" && !st().data.sets.mine && !!st().data.sets.mine2, JSON.stringify([st().name, Object.keys(st().data.sets)]))
-const layerBefore = JSON.stringify(st().layer)
+cell("AC-27 rename of the enabled set moves the name to the new one (profile_set of the file)", /Готово/.test(r) && st().name === "mine2" && readFileJson().profile_set === "mine2" && !st().data.sets.mine && !!st().data.sets.mine2, JSON.stringify([st().name, Object.keys(st().data.sets)]))
+const fileBefore27 = sha(file)
 r = await sets("set mine2 develop nofamily/heavy")
-cell("AC-27/AC-28 an edit that breaks the enabled set (a dangling link) is refused whole; the layer is the same", /Не сделано/.test(r) && /nofamily/.test(r) && JSON.stringify(st().layer) === layerBefore, r)
-r = await sets("reset mine2")
-cell("AC-27 a reset that would remove the enabled set is refused", /Не сделано/.test(r) && !!st().data.sets.mine2, r)
+cell("AC-27/AC-28 an edit that breaks the enabled set (a dangling link) is refused whole; the file is byte for byte the same", /Не сделано/.test(r) && /nofamily/.test(r) && sha(file) === fileBefore27, r)
 await sets("use default")
-r = await sets("reset mine2")
-cell("AC-27 once another set is enabled the reset of a set takes only its piece", /Готово/.test(r) && !st().data.sets.mine2, r)
+r = await sets("delete mine2")
+cell("AC-27 once another set is enabled the set is deleted from the file at once", /Готово/.test(r) && !st().data.sets.mine2 && !readFileJson().profile_sets.mine2, r)
 cell("AC-17 every successful edit verb left exactly one line, a refusal left a `refused` line", editLines().length - before27 === 11, String(editLines().length - before27))
 
 // ---- AC-28: edit verbs of /crew-profiles ----
@@ -241,9 +250,9 @@ r = await profs("delete fresh light")
 cell("AC-28 delete of a record nobody references passes", /Готово/.test(r) && !st().data.profiles.fresh.light, r)
 // with kimi-only enabled: one tier alone is refused, all three at once pass
 await sets("use kimi-only")
-const lay1 = JSON.stringify(st().layer)
+const lay1 = sha(file)
 r = await profs(`set kimi heavy ${KIMI} 150000 output=131072`)
-cell("AC-28/AC-37(а) with kimi-only enabled a window of one tier alone is refused whole (one model, two windows); the data is untouched", /Не сделано/.test(r) && /kimi\/heavy — контекст 150K/.test(r) && JSON.stringify(st().layer) === lay1, r)
+cell("AC-28/AC-37(а) with kimi-only enabled a window of one tier alone is refused whole (one model, two windows); the data is untouched", /Не сделано/.test(r) && /kimi\/heavy — контекст 150K/.test(r) && sha(file) === lay1, r)
 r = await profs(`set kimi all ${KIMI} 150000 output=131072`)
 cell("AC-28 the same window on all three tiers at once passes and is the active window at once (no use needed)", /Готово/.test(r) && st().state.row === 2 && L.profileState(root).data.profiles.kimi.light.context === 150000, r)
 await sets("use default")
@@ -252,25 +261,31 @@ cell("AC-28 with kimi-only not enabled the same single-tier command passes (the 
 r = await sets("use kimi-only")
 cell("AC-26/AC-28 and use of that set then refuses with the windows", /Не сделано/.test(r) && /kimi\/heavy — контекст 170K/.test(r), r)
 
-// ---- AC-36 (cmd): reset forms ----
-r = await profs("reset kimi")
-cell("AC-36 reset <family> takes the local records of the family", /Готово/.test(r) && !Object.keys(st().layer).some((k) => k.startsWith("profile:kimi/")) && Object.keys(st().layer).some((k) => k.startsWith("profile:fresh/")), JSON.stringify(Object.keys(st().layer)))
-r = await profs("reset fresh/heavy")
-cell("AC-36 reset <family>/<tier> takes one record", /Готово/.test(r) && !Object.keys(st().layer).includes("profile:fresh/heavy") && Object.keys(st().layer).includes("profile:fresh/medium"), JSON.stringify(Object.keys(st().layer)))
-r = await sets("reset tmpset develop")
-cell("AC-36 reset <name> <stage> takes one cell", /Готово/.test(r) && !Object.keys(st().layer).includes("cell:tmpset/develop"), JSON.stringify(Object.keys(st().layer)))
-r = await sets("reset all")
-cell("AC-36 reset all empties the layer, the file is as it was", /Готово/.test(r) && Object.keys(st().layer).length === 0 && !existsSync(L.layerFile("cmdproj")), JSON.stringify(st().layer))
-r = await sets("reset")
-cell("AC-36 reset with nothing to take is said so", /Не сделано/.test(r) || /нечего/.test(r), r)
+// ---- an invalid edit or a broken file changes nothing ----
+{
+  const keepF = readFileSync(file, "utf8")
+  writeFileSync(file, "{ broken")
+  r = await sets("new zzz")
+  cell("a working file that is not JSON: the command is refused whole, the file is not overwritten", /Не сделано/.test(r) && /не JSON/.test(r) && readFileSync(file, "utf8") === "{ broken", r)
+  writeFileSync(file, keepF)
+  bump()
+}
+const hashNoOutput = sha(file)
+r = await profs("set kimi heavy " + KIMI + " 99999")
+cell("an edit with a missing output is refused whole: the file is the same", /Не сделано/.test(r) && sha(file) === hashNoOutput, r)
 
-// ---- AC-29 / AC-35: check and save ----
+// ---- AC-29: check; an old layer file ----
+const commitsA = commits()
+await profs("set kimi all " + KIMI + " 220000 output=131072") // the windows of kimi are equal again: use of the sets with kimi passes
 await sets("use cross-kimi")
 await profs(`set claude heavy claude-code/opus 650000 output=64000`)
 await sets("new saved")
 await sets("set saved develop claude/heavy")
+{
+  const wc = readFileJson()
+  cell("AC-29 the edits are in the working copy at once: the name, the profile, the new set; git log did not grow, the file is modified", wc.profile_set === "cross-kimi" && wc.model_profiles.claude.heavy.context === 650000 && !!wc.profile_sets.saved && commits() === commitsA && git(cfgDir, "status", "--porcelain").includes("crew-harness.json"), JSON.stringify(Object.keys(wc)))
+}
 const fileBeforeCheck = sha(file)
-const layerBeforeCheck = sha(L.layerFile("cmdproj"))
 catalogFails = false
 catalog = catalog.filter((m) => m.modelID !== "k3-256k")
 mkdirSync(path.join(root, ".opencode"), { recursive: true })
@@ -279,9 +294,19 @@ writeFileSync(handRoot, `{ "provider": { "claude-code": { "models": { "opus": { 
 r = await sets("check")
 cell("AC-29 check: the model of the set that is not in the catalog of OpenCode is named", /модели kimi-code-plan-global\/k3-256k нет в каталоге OpenCode/.test(r), r)
 cell("AC-29 check: the hand-written window of the same model in the main folder is named with the file and the value", /в основной папке проекта у модели claude-code\/opus контекст 520K/.test(r), r)
-cell("AC-29 check: unsaved local records are listed; `the file now differs` is shown", /Локальные правки \(не в файле проекта\)/.test(r) && /профиль claude\/heavy/.test(r), r)
+cell("AC-29 check: no talk of local records, layer or save (there is no layer)", !/Локальные правки|локальн|save/.test(r), r)
 cell("AC-29 check: the window line of the reviewers (the profile window is not applied)", /Приёмка и приёмка плана: контекст профиля здесь не применяется/.test(r), r)
-cell("AC-29 check changes nothing: the file and the layer are byte for byte the same", sha(file) === fileBeforeCheck && sha(L.layerFile("cmdproj")) === layerBeforeCheck, "changed")
+cell("AC-29 check changes nothing: the file is byte for byte the same", sha(file) === fileBeforeCheck, "changed")
+{
+  // an old layer file: not applied, named by check, not deleted
+  const lf = L.layerFile("cmdproj")
+  mkdirSync(path.dirname(lf), { recursive: true })
+  writeFileSync(lf, JSON.stringify({ name: { value: "kimi-only", base: null } }))
+  const nameBefore = st().name
+  r = await sets("check")
+  cell("an old *.layer.json is not applied (the name is that of the file) and check names it: disabled, can be deleted", st().name === nameBefore && /слой отключён/.test(r) && /не применяются/.test(r) && /можно удалить/.test(r) && existsSync(lf), r)
+  rmSync(lf, { force: true })
+}
 catalogFails = true
 r = await sets("check")
 cell("AC-29 check: the catalog is down -> `not checked`, the work does not depend on it", /не проверено \(каталог недоступен\)/.test(r), r)
@@ -298,26 +323,11 @@ catalogFails = false
   commit("spawn_models back")
 }
 rmSync(handRoot)
-const logBeforeSave = commits()
-r = await sets("save")
-const wcopy = readFileJson()
-cell("AC-29 save: the working copy has the local records and the name; git log did not grow, the file is modified", /Перенесено в рабочую копию/.test(r) && wcopy.profile_set === "cross-kimi" && wcopy.model_profiles.claude.heavy.context === 650000 && !!wcopy.profile_sets.saved && commits() === logBeforeSave && git(cfgDir, "status", "--porcelain").includes("crew-harness.json"), r)
-commit("saved by the owner")
-cell("AC-35 after the commit the layer holds none of the saved records", Object.keys(st().layer).length === 0, JSON.stringify(st().layer))
-// a record changed in the file after the local edit: skipped and listed; save force rewrites it
-await profs("set claude light claude-code/haiku 200000 output=32000")
-{
-  const f = readFileJson()
-  f.model_profiles.claude.light.context = 210000
-  writeFileJson(f)
-  commit("light changed in the file")
-}
-r = await sets("save")
-cell("AC-35 save skips the record that changed in the file and lists it with what to do", /Пропущено/.test(r) && /профиль claude\/light/.test(r) && /save force/.test(r) && readFileJson().model_profiles.claude.light.context === 210000, r)
-r = await sets("save force")
-cell("AC-35 save force rewrites exactly the listed record", /Перенесено/.test(r) && readFileJson().model_profiles.claude.light.context === 200000, r)
-commit("forced")
-cell("AC-17 save and save force each left exactly one line", editLines().filter((l) => /crew-sets save/.test(l)).length === 3, JSON.stringify(editLines().filter((l) => /crew-sets save/.test(l))))
+commit("committed by the owner")
+cell("after the owner's commit the state is the same (nothing in between)", st().data.profiles.claude.heavy.context === 650000 && st().name === "cross-kimi", String(st().name))
+const linesBeforeGone = editLines().length
+await sets("save force")
+cell("save force is gone too: no log line", editLines().length === linesBeforeGone, "line")
 
 // ---- grammar ----
 r = await sets("frobnicate")
@@ -327,7 +337,7 @@ cell("an extra argument: the list of the verbs", r.includes("use принима�
 r = await profs("use default")
 cell("use is not a verb of /crew-profiles", /Неизвестный глагол «use»/.test(r), r)
 r = await profs("reset")
-cell("reset of /crew-profiles without an argument says what to type", /Не сделано/.test(r) && /reset <семья>/.test(r), r)
+cell("reset of /crew-profiles without an argument: the plain answer that the command is gone", /Команды reset больше нет/.test(r), r)
 
 // ---- the answers speak in words, not codes of the requirements ----
 const codes = allReplies.filter((t) => /\b(REQ|AC|DNC)-\d+/.test(t))

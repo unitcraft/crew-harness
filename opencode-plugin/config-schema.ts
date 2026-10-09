@@ -22,7 +22,7 @@ export type Kind =
   | { type: "profiles" }
   | { type: "extraFields" }
   | { type: "answerMap" }
-/** humanOnly — ключ ставит человек (команда окна use и save либо правка файла); crew_config set его не пишет.
+/** humanOnly — ключ ставит человек (команда окна use либо правка файла); crew_config set его не пишет.
  *  humanHow — как ставит человек, одной фразой для опросника и отказа set (у profile_set поля нет: его фраза прежняя дословно) */
 export type Setting = { key: string; kind: Kind; default: any; question: string; why: string; recommend?: string; group: string; humanOnly?: boolean; humanHow?: string }
 
@@ -153,7 +153,7 @@ export function guideText(current: Record<string, any>, sourceOf: (key: string) 
       out.push(`\n${group.toUpperCase()}`)
     }
     const opts = s.kind.type === "enum" || s.kind.type === "subset" ? ` Варианты: ${s.kind.options.map((o, i) => `${i + 1}) ${o}`).join("  ")}.` : ""
-    out.push(`- ${s.key}: ${s.question} Сейчас: ${show(current[s.key] ?? s.default)} (${sourceOf(s.key)}).${opts} Рекомендация: ${s.recommend ?? show(s.default)}. Зачем: ${s.why}.${s.humanOnly ? (s.humanHow ? ` Ставит человек: ${s.humanHow}; вызовом set не записывать (set этот ключ отвергает).` : " Ставит человек: команда /crew-sets use и save либо правка файла; вызовом set не записывать (set этот ключ отвергает).") : ""}`)
+    out.push(`- ${s.key}: ${s.question} Сейчас: ${show(current[s.key] ?? s.default)} (${sourceOf(s.key)}).${opts} Рекомендация: ${s.recommend ?? show(s.default)}. Зачем: ${s.why}.${s.humanOnly ? (s.humanHow ? ` Ставит человек: ${s.humanHow}; вызовом set не записывать (set этот ключ отвергает).` : " Ставит человек: команда /crew-sets use либо правка файла; вызовом set не записывать (set этот ключ отвергает).") : ""}`)
   }
   return out.join("\n")
 }

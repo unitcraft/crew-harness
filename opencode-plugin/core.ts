@@ -1044,15 +1044,13 @@ export const limitsText = (w: { context?: number; input?: number; output?: numbe
 export type VerbHelp = { verb: string; usage: string; what: string; example: string; bare?: boolean }
 export const SETS_VERB_HELP: VerbHelp[] = [
   { verb: "show", usage: "[имя]", what: "набор подробно: модель, ступень и контекст по этапам; без имени — включённый", example: "show cross-kimi", bare: true },
-  { verb: "use", usage: "<имя>", what: "включить набор локально (для всех этапов); файл проекта не меняется", example: "use cross-kimi" },
-  { verb: "reset", usage: "[<имя> [<этап>] | all]", what: "забрать локальные правки: имя набора, правки набора, одну клетку или всё", example: "reset all" },
+  { verb: "use", usage: "<имя>", what: "включить набор для всех этапов: имя записывается в profile_set файла проекта (без коммита)", example: "use cross-kimi" },
   { verb: "set", usage: "<имя> <этап> <семья>/<ступень>", what: "изменить клетку набора", example: "set cross-kimi accept kimi/heavy" },
   { verb: "unset", usage: "<имя> <этап>", what: "убрать клетку: этап вернётся к spawn_models", example: "unset cross-kimi accept" },
   { verb: "new", usage: "<имя> [from <имя>]", what: "новый набор: пустой или копия другого", example: "new my-set from default" },
   { verb: "rename", usage: "<а> <б>", what: "переименовать набор (включённое имя следует за ним)", example: "rename my-set my-set2" },
   { verb: "delete", usage: "<имя>", what: "удалить набор (включённый не удаляется)", example: "delete my-set2" },
   { verb: "check", usage: "", what: "проверить данные и контексты; ничего не меняет", example: "check", bare: true },
-  { verb: "save", usage: "[force]", what: "перенести локальные правки в файл проекта (в рабочую копию, без коммита)", example: "save", bare: true },
 ]
 export const PROFILES_VERB_HELP: VerbHelp[] = [
   { verb: "show", usage: "[<семья>]", what: "таблицу подробно или одну семью с наборами, которые на неё ссылаются", example: "show claude", bare: true },
@@ -1060,14 +1058,12 @@ export const PROFILES_VERB_HELP: VerbHelp[] = [
   { verb: "new", usage: "<семья> [from <семья>]", what: "новая семья: три пустые записи или копия", example: "new codex2 from codex" },
   { verb: "rename", usage: "<а> <б>", what: "переименовать семью (ссылки наборов обновятся)", example: "rename codex2 codex3" },
   { verb: "delete", usage: "<семья> [<ступень>]", what: "удалить семью или одну ступень (если на неё нет ссылок)", example: "delete codex3" },
-  { verb: "reset", usage: "[<семья>[/<ступень>] | all]", what: "забрать локальные правки семьи, записи или всё", example: "reset all" },
   { verb: "check", usage: "", what: "проверить данные и контексты; ничего не меняет", example: "check", bare: true },
-  { verb: "save", usage: "[force]", what: "перенести локальные правки в файл проекта (в рабочую копию, без коммита)", example: "save", bare: true },
 ]
 export const verbHelpOf = (kind: "sets" | "profiles"): VerbHelp[] => (kind === "sets" ? SETS_VERB_HELP : PROFILES_VERB_HELP)
 export const verbUsageList = (kind: "sets" | "profiles"): string => verbHelpOf(kind).map((v) => `${v.verb}${v.usage ? " " + v.usage : ""}`).join(" | ")
 const verbHelpText = (): string =>
-  (["sets", "profiles"] as const).map((k) => `  /crew-${k}: ` + verbHelpOf(k).map((v) => v.verb).join(", ") + ". " + verbHelpOf(k).filter((v) => v.verb !== "show" && v.verb !== "check" && v.verb !== "save" && v.verb !== "reset").map((v) => `${v.verb} ${v.usage} — ${v.what}`).join("; ")).join("\n")
+  (["sets", "profiles"] as const).map((k) => `  /crew-${k}: ` + verbHelpOf(k).map((v) => v.verb).join(", ") + ". " + verbHelpOf(k).filter((v) => v.verb !== "show" && v.verb !== "check").map((v) => `${v.verb} ${v.usage} — ${v.what}`).join("; ")).join("\n")
 
 export const HELP = `crew-harness — письма между вкладками OpenCode на этой машине, в любом репозитории.
 
@@ -2241,7 +2237,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         if (!p?.dir) return { content: `Проект ${projOf(me)} задан прежней формой опций: записать некуда. Переведи его на репозиторий настроек — в opencode.jsonc "projects": ["<папка с .opencode/crew-harness.json>"].` }
         const values = input.values
         if (!values || typeof values !== "object" || Array.isArray(values) || !Object.keys(values).length) return { content: "Нужно values: {ключ: значение}." }
-        if (Object.prototype.hasOwnProperty.call(values, "profile_set")) return { content: "Не записано (файл не тронут):\n- profile_set: имя набора меняет человек (команда окна /crew-sets use и save либо правка файла); вызовом set его не записывают" }
+        if (Object.prototype.hasOwnProperty.call(values, "profile_set")) return { content: "Не записано (файл не тронут):\n- profile_set: имя набора меняет человек (команда окна /crew-sets use либо правка файла); вызовом set его не записывают" }
         // остальные ключи «ставит человек» (answer_mode, answer_max): отказ тем же видом, фраза из схемы
         const human = Object.keys(values).map((k) => SCHEMA.find((x) => x.key === k)).filter((x) => x?.humanOnly)
         if (human.length) return { content: `Не записано (файл не тронут):\n${human.map((x) => `- ${x!.key}: ключ меняет человек (${x!.humanHow ?? "правка файла"}); вызовом set его не записывают`).join("\n")}` }

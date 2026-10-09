@@ -75,7 +75,7 @@ const ok8 = ["answer_mode", "answer_max"].every((k) => {
 const am = lines("answer_mode")[0] ?? ""
 cell("AC-08 guide", ok8 && /\{"implementation": "recommendations"\}/.test(am) && /owner/.test(am) && /recommendations/.test(am), lines("answer_mode").concat(lines("answer_max")).join("\n"))
 const prof = await call("sesINT", { action: "set", values: { profile_set: "x" } })
-cell("AC-08 profile_set refusal text is unchanged", prof === "Не записано (файл не тронут):\n- profile_set: имя набора меняет человек (команда окна /crew-sets use и save либо правка файла); вызовом set его не записывают", prof)
+cell("AC-08 profile_set refusal text is unchanged", prof === "Не записано (файл не тронут):\n- profile_set: имя набора меняет человек (команда окна /crew-sets use либо правка файла); вызовом set его не записывают", prof)
 
 // AC-07: the key gate is not accepted
 const s3 = await call("sesINT", { action: "set", values: { answer_mode: { gate: "recommendations" } } })

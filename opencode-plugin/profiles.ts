@@ -11,7 +11,7 @@ import { limitsText } from "./core.ts" // единственное формат�
 export const STAGES = ["develop", "accept", "plan", "plan_accept"] as const
 export type Stage = (typeof STAGES)[number]
 export const isStage = (s: any): s is Stage => STAGES.includes(s)
-/** Названия этапов в командах: латиница и русский (в файле и слое — только латиница). */
+/** Названия этапов в командах: латиница и русский (в файле — только латиница). */
 export const STAGE_WORDS: Record<string, Stage> = {
   develop: "develop",
   accept: "accept",
@@ -45,7 +45,7 @@ export type Profile = { model: string; context?: number; output?: number; input?
 export type Cell = { family: string; tier: CellTier }
 export type Families = Record<string, Partial<Record<PTier, Profile>>>
 export type Sets = Record<string, Partial<Record<Stage, Cell>>>
-/** Данные профилей: справочник, наборы (то, что есть в файле со слоем поверх). */
+/** Данные профилей: справочник, наборы (три ключа файла проекта). */
 export type Data = { profiles?: Families; sets?: Sets }
 
 const isObj = (v: any): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v)

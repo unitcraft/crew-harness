@@ -1,7 +1,7 @@
-// КОМАНДЫ ОКНА /crew-sets И /crew-profiles (задача 003, ADR-0008). Правят профили и наборы в локальном слое проекта
-// (profile-layer.ts) СРАЗУ, без коммита файла проекта; `use` включает набор, `check` проверяет, `save` переносит слой в рабочую
-// копию файла. Ответ — текст для окна без хода модели. Правка, делающая включённый набор недопустимым или создающая
-// повисшую ссылку, отклоняется целиком (данные не тронуты). Единственная точка журнала правок — commitEdit.
+// КОМАНДЫ ОКНА /crew-sets И /crew-profiles (задача 003, ADR-0008, заменён ADR-0014). Правят профили и наборы прямо в файле проекта
+// (рабочая копия папки настроек, profile-layer.ts): СРАЗУ и атомарно, без коммита и без промежуточного слоя; `use` включает набор
+// (пишет profile_set), `check` проверяет. Ответ — текст для окна без хода модели. Правка, делающая включённый набор недопустимым
+// или создающая повисшую ссылку, отклоняется целиком (файл не тронут). Единственная точка журнала правок — commitEdit.
 
 import * as L from "./profile-layer.ts"
 import * as P from "./profiles.ts"
@@ -22,8 +22,10 @@ export type CmdDeps = {
   catalogWhy?: string
 }
 
-export const SETS_VERBS = ["show", "use", "reset", "set", "unset", "new", "rename", "delete", "check", "save"]
-export const PROFILES_VERBS = ["show", "set", "new", "rename", "delete", "reset", "check", "save"]
+export const SETS_VERBS = ["show", "use", "set", "unset", "new", "rename", "delete", "check"]
+export const PROFILES_VERBS = ["show", "set", "new", "rename", "delete", "check"]
+/** Глаголы прежнего локального слоя: убраны вместе со слоем (ADR-0014); на них — короткий ответ, а не «неизвестный глагол». */
+const GONE_VERBS = ["save", "reset"]
 
 const refused = (project: string, command: string, why: string): string => {
   L.logRefused(project, command, why)
@@ -37,23 +39,25 @@ const usageLine = (cmd: "sets" | "profiles"): string =>
 let windowMenu = false
 const ref = (slash: string, item: string): string => (windowMenu ? `пункт «${item}» меню ${slash.split(" ")[0]} (${slash})` : slash)
 
-/** Единственный вызывающий журнал правок: ровно одна строка на каждую успешную правку любого глагола (use, reset, save — тоже). */
+/** Единственный вызывающий журнал правок: ровно одна строка на каждую успешную правку любого глагола (use — тоже). */
 export function commitEdit(project: string, command: string, what: string, from: any, to: any) {
   L.logEdit(project, command, what, from, to)
 }
 
-type Mutation = { layer: L.Layer; what: string; from?: any; to?: any } | { refuse: string }
-type MutateCtx = { layer: L.Layer; raw: any; data: P.Data; name?: string; project: string }
+type Mutation = { what: string; from?: any; to?: any } | { refuse: string }
+type MutateCtx = { draft: L.Draft; data: P.Data; name?: string; project: string }
 
 /**
- * Правка слоя с проверкой допустимости (REQ-28, REQ-34): новые ошибки включённого набора и новые повисшие ссылки любых
- * наборов — отказ целиком. Принятая правка пишется в слой, снимок и файлы окон пересчитываются сразу.
+ * Правка файла проекта с проверкой допустимости (REQ-28, REQ-34): новые ошибки включённого набора и новые повисшие ссылки любых
+ * наборов — отказ целиком. Мутация меняет черновик (копию действующих данных); принятая правка пишется в файл проекта одной
+ * атомарной записью, снимок и файлы окон пересчитываются сразу.
  */
 export function applyEdit(dir: string, command: string, mutate: (c: MutateCtx) => Mutation): { ok: boolean; text: string; what?: string } {
   const ps = L.profileState(dir)
-  const m = mutate({ layer: ps.layer, raw: ps.raw, data: ps.data, name: ps.name, project: ps.project })
+  const draft = L.draftOf(ps)
+  const m = mutate({ draft, data: ps.data, name: ps.name, project: ps.project })
   if ("refuse" in m) return { ok: false, text: refused(ps.project, command, m.refuse) }
-  const next = L.applyLayer(ps.raw, m.layer)
+  const next = { data: { profiles: draft.profiles, sets: draft.sets } as P.Data, name: draft.name }
   // состояние после правки не должно стать хуже: из строк 1, 2, 7 (нет набора, допустим, имя игнорируется) — в 3…6 (REQ-28, REQ-33)
   const rowAfter = P.stateRow(next.name, next.data, ps.snapshot)
   if ([1, 2, 7].includes(ps.state.row) && [3, 4, 5, 6].includes(rowAfter.row)) return { ok: false, text: refused(ps.project, command, rowAfter.message || `правка сделала бы набор «${next.name}» недоступным`) }
@@ -62,12 +66,13 @@ export function applyEdit(dir: string, command: string, mutate: (c: MutateCtx) =
   const known = new Set([...before.errors, ...before.warnings].map((x) => x.text))
   const created = [...after.errors, ...after.warnings].filter((x) => !known.has(x.text))
   if (created.length) return { ok: false, text: refused(ps.project, command, created.map((x) => x.text).join("; ")) }
-  L.writeLayer(ps.project, m.layer)
+  const w = L.writeDraft(ps, draft)
+  if (!w.ok) return { ok: false, text: refused(ps.project, command, w.error) }
   L.syncSnapshot(dir)
   const files = L.syncProjectFiles(dir)
   commitEdit(ps.project, command, m.what, m.from, m.to)
   const note = files.written.length || files.removed.length ? ` Файлы окон в деревьях задач пересчитаны: записано ${files.written.length}, снято ${files.removed.length}.` : ""
-  return { ok: true, text: `Готово: ${m.what}.${note}`, what: m.what }
+  return { ok: true, text: `Готово: ${m.what} (записано в файл проекта, без коммита).${note}`, what: m.what }
 }
 
 const cellsString = (set: any): string =>
@@ -83,31 +88,6 @@ function setNames(data: P.Data): string[] {
 }
 const listSets = (data: P.Data) => (setNames(data).length ? setNames(data).join(", ") : "наборов нет")
 
-function parseResetSets(args: string[]): L.ResetForm | string {
-  if (!args.length) return { kind: "name" }
-  if (args[0] === "all") return args.length === 1 ? { kind: "all" } : "после all аргументов нет"
-  const name = args[0]
-  if (args.length === 1) return { kind: "set", name }
-  const st = P.stageOfWord(args[1])
-  if (!st || args.length > 2) return `этап «${args[1]}» не годится: develop, accept, plan, plan_accept (или русские названия)`
-  return { kind: "cell", name, stage: st }
-}
-
-function resetEdit(dir: string, command: string, form: L.ResetForm): { ok: boolean; text: string } {
-  const before = L.profileState(dir)
-  const r = applyEdit(dir, command, ({ layer }) => {
-    const x = L.layerReset(layer, form)
-    if (!x.removed.length) return { refuse: "в локальном слое нечего снимать по этой форме" }
-    return { layer: x.layer, what: `снято из локального слоя: ${x.removed.map(L.labelOf).join(", ")}`, from: x.removed.join(","), to: "(из файла)" }
-  })
-  if (!r.ok) return r
-  // имя набора сменилось (reset имени или reset all): сказать, что включено и как изменились окна (как use)
-  const after = L.profileState(dir)
-  if (before.name === after.name) return r
-  const now = after.name ? `Сейчас включён набор «${after.name}» (${after.nameSource === "layer" ? "локальное переключение" : "файл проекта"}); было ${before.name ? `«${before.name}»` : "набор не включён"}.` : "Набор не включён (имени нет ни в файле проекта, ни в локальном слое): модели — по spawn_models, файлы окон в деревьях задач сняты."
-  return { ok: true, text: [r.text, now + " Перезапуск не нужен.", ...changeBody(before, after, dir)].join("\n") }
-}
-
 export function setsEditVerb(dir: string, verb: string, args: string[]): { ok: boolean; text: string } | undefined {
   const ps = L.profileState(dir)
   const command = `crew-sets ${verb}`
@@ -121,7 +101,7 @@ export function setsEditVerb(dir: string, verb: string, args: string[]): { ok: b
       const cell = P.parseCell(cellWord)
       if (typeof cell === "string") return bad(cell)
       if (!isObj(ps.data.sets?.[name])) return bad(`набора «${name}» нет (есть: ${listSets(ps.data)}); новый — /crew-sets new ${name}`)
-      return applyEdit(dir, command, ({ layer, raw, data }) => ({ layer: L.layerSetCell(layer, raw, name, st, cell), what: `набор «${name}»: этап «${P.STAGE_RU[st]}» — ${P.cellText(cell)}`, from: (data.sets as any)[name][st] ? P.cellText((data.sets as any)[name][st]) : undefined, to: P.cellText(cell) }))
+      return applyEdit(dir, command, ({ draft, data }) => (L.dSetCell(draft, name, st, cell), { what: `набор «${name}»: этап «${P.STAGE_RU[st]}» — ${P.cellText(cell)}`, from: (data.sets as any)[name][st] ? P.cellText((data.sets as any)[name][st]) : undefined, to: P.cellText(cell) }))
     }
     case "unset": {
       if (args.length !== 2) return bad("нужно: unset <имя> <этап>")
@@ -130,7 +110,7 @@ export function setsEditVerb(dir: string, verb: string, args: string[]): { ok: b
       if (!st) return bad(`этап «${stageWord}» не годится: develop, accept, plan, plan_accept (или русские названия)`)
       if (!isObj(ps.data.sets?.[name])) return bad(`набора «${name}» нет (есть: ${listSets(ps.data)})`)
       if (!(ps.data.sets as any)[name][st]) return bad(`у набора «${name}» этап «${P.STAGE_RU[st]}» и так не описан`)
-      return applyEdit(dir, command, ({ layer, raw, data }) => ({ layer: L.layerSetCell(layer, raw, name, st, null), what: `набор «${name}»: этап «${P.STAGE_RU[st]}» убран (модель — по spawn_models)`, from: P.cellText((data.sets as any)[name][st]), to: undefined }))
+      return applyEdit(dir, command, ({ draft, data }) => (L.dSetCell(draft, name, st, null), { what: `набор «${name}»: этап «${P.STAGE_RU[st]}» убран (модель — по spawn_models)`, from: P.cellText((data.sets as any)[name][st]), to: undefined }))
     }
     case "new": {
       if (!args.length || (args.length !== 1 && !(args.length === 3 && args[1] === "from"))) return bad("нужно: new <имя> [from <другой набор>]")
@@ -144,7 +124,7 @@ export function setsEditVerb(dir: string, verb: string, args: string[]): { ok: b
         if (!isObj(other)) return bad(`набора «${args[2]}» нет (есть: ${listSets(ps.data)})`)
         for (const [st, c] of P.cellsOf(other)) cells[st] = c
       }
-      return applyEdit(dir, command, ({ layer, raw }) => ({ layer: L.layerNewSet(layer, raw, name, cells), what: args.length === 3 ? `создан набор «${name}» как копия «${args[2]}»` : `создан пустой набор «${name}»`, from: undefined, to: cellsString(cells) }))
+      return applyEdit(dir, command, ({ draft }) => (L.dNewSet(draft, name, cells), { what: args.length === 3 ? `создан набор «${name}» как копия «${args[2]}»` : `создан пустой набор «${name}»`, from: undefined, to: cellsString(cells) }))
     }
     case "rename": {
       if (args.length !== 2) return bad("нужно: rename <имя> <новое>")
@@ -153,27 +133,21 @@ export function setsEditVerb(dir: string, verb: string, args: string[]): { ok: b
       if (e) return bad(e)
       if (!isObj(ps.data.sets?.[a])) return bad(`набора «${a}» нет (есть: ${listSets(ps.data)})`)
       if (isObj(ps.data.sets?.[b])) return bad(`набор «${b}» уже есть`)
-      return applyEdit(dir, command, ({ layer, raw, data, name }) => {
+      return applyEdit(dir, command, ({ draft, data, name }) => {
         const cells: Record<string, P.Cell> = {}
         for (const [st, c] of P.cellsOf((data.sets as any)[a])) cells[st] = c
-        let l = L.layerNewSet(layer, raw, b, cells)
-        l = L.layerDeleteSet(l, raw, a)
-        if (name === a) l = L.layerSetName(l, raw, b)
-        return { layer: l, what: `набор «${a}» переименован в «${b}»${name === a ? " (включённое имя перенесено на новое; других ссылок на набор нет)" : " (других ссылок на набор нет)"}`, from: a, to: b }
+        L.dNewSet(draft, b, cells)
+        L.dDeleteSet(draft, a)
+        if (name === a) draft.name = b
+        return { what: `набор «${a}» переименован в «${b}»${name === a ? " (включённое имя перенесено на новое; других ссылок на набор нет)" : " (других ссылок на набор нет)"}`, from: a, to: b }
       })
     }
     case "delete": {
       if (args.length !== 1) return bad("нужно: delete <имя>")
       const name = args[0]
       if (!isObj(ps.data.sets?.[name])) return bad(`набора «${name}» нет (есть: ${listSets(ps.data)})`)
-      if (ps.name === name) return bad(`набор «${name}» включён: сначала включи другой (use) или сними имя (reset)`)
-      return applyEdit(dir, command, ({ layer, raw, data }) => ({ layer: L.layerDeleteSet(layer, raw, name), what: `набор «${name}» удалён`, from: cellsString((data.sets as any)[name]), to: undefined }))
-    }
-    case "reset": {
-      const form = parseResetSets(args)
-      if (typeof form === "string") return bad(form)
-      if (form.kind === "set" && !isObj(ps.data.sets?.[form.name]) && !Object.keys(ps.layer).some((k) => k === `set:${form.name}` || k.startsWith(`cell:${form.name}/`))) return bad(`набора «${form.name}» нет (есть: ${listSets(ps.data)})`)
-      return resetEdit(dir, command, form)
+      if (ps.name === name) return bad(`набор «${name}» включён: сначала включи другой (use)`)
+      return applyEdit(dir, command, ({ draft, data }) => (L.dDeleteSet(draft, name), { what: `набор «${name}» удалён`, from: cellsString((data.sets as any)[name]), to: undefined }))
     }
   }
   return undefined
@@ -207,14 +181,6 @@ export function referencing(data: P.Data, family: string, tier?: string): string
     }
   return out
 }
-function parseResetProfiles(args: string[]): L.ResetForm | string {
-  if (!args.length) return "reset без аргумента — это /crew-sets reset (имя набора); здесь нужно reset <семья>, reset <семья>/<ступень> или reset all"
-  if (args[0] === "all") return args.length === 1 ? { kind: "all" } : "после all аргументов нет"
-  if (args.length > 1) return "лишний аргумент"
-  const m = /^([^/]+)(?:\/(heavy|medium|light))?$/.exec(args[0])
-  if (!m) return `«${args[0]}» — нужно <семья> или <семья>/<ступень>`
-  return m[2] ? { kind: "profile", family: m[1], tier: m[2] } : { kind: "family", family: m[1] }
-}
 
 export function profilesEditVerb(dir: string, verb: string, args: string[]): { ok: boolean; text: string } | undefined {
   const ps = L.profileState(dir)
@@ -234,11 +200,10 @@ export function profilesEditVerb(dir: string, verb: string, args: string[]): { o
       if (typeof p === "string") return bad(p)
       const e = P.invalidProfile(p, `${family}/${tierWord}`)
       if (e) return bad(e)
-      return applyEdit(dir, command, ({ layer, raw, data }) => {
-        let l = layer
-        for (const t of tiers) l = L.layerSetProfile(l, raw, family, t, p)
+      return applyEdit(dir, command, ({ draft, data }) => {
+        for (const t of tiers) L.dSetProfile(draft, family, t, p)
         const old = tiers.map((t) => (data.profiles as any)?.[family]?.[t]).filter(Boolean)
-        return { layer: l, what: `профиль ${family}/${tierWord}: ${p.model}, ${limitsText(p as any)}${tiers.length > 1 ? " (все три ступени разом)" : ""}`, from: old.length ? old.map((x: any) => `${x.model} ${x.context}`).join("|") : undefined, to: `${p.model} ${p.context}` }
+        return { what: `профиль ${family}/${tierWord}: ${p.model}, ${limitsText(p as any)}${tiers.length > 1 ? " (все три ступени разом)" : ""}`, from: old.length ? old.map((x: any) => `${x.model} ${x.context}`).join("|") : undefined, to: `${p.model} ${p.context}` }
       })
     }
     case "new": {
@@ -252,10 +217,9 @@ export function profilesEditVerb(dir: string, verb: string, args: string[]): { o
         src = (ps.data.profiles as any)?.[args[2]]
         if (!isObj(src)) return bad(`семьи «${args[2]}» нет (есть: ${listFams(ps.data)})`)
       }
-      return applyEdit(dir, command, ({ layer, raw }) => {
-        let l = layer
-        for (const t of P.PROFILE_TIERS) l = L.layerSetProfile(l, raw, family, t, src?.[t] ?? { model: "" })
-        return { layer: l, what: src ? `создана семья «${family}» как копия «${args[2]}»` : `создана семья «${family}» из трёх пустых записей («заполнить»: /crew-profiles set ${family} all <модель> <context> output=<n>)`, from: undefined, to: src ? args[2] : "3 пустых" }
+      return applyEdit(dir, command, ({ draft }) => {
+        for (const t of P.PROFILE_TIERS) L.dSetProfile(draft, family, t, src?.[t] ?? { model: "" })
+        return { what: src ? `создана семья «${family}» как копия «${args[2]}»` : `создана семья «${family}» из трёх пустых записей («заполнить»: /crew-profiles set ${family} all <модель> <context> output=<n>)`, from: undefined, to: src ? args[2] : "3 пустых" }
       })
     }
     case "rename": {
@@ -265,23 +229,22 @@ export function profilesEditVerb(dir: string, verb: string, args: string[]): { o
       if (fe) return bad(fe)
       if (!isObj(ps.data.profiles?.[a])) return bad(`семьи «${a}» нет (есть: ${listFams(ps.data)})`)
       if (isObj(ps.data.profiles?.[b])) return bad(`семья «${b}» уже есть`)
-      return applyEdit(dir, command, ({ layer, raw, data }) => {
-        let l = layer
+      return applyEdit(dir, command, ({ draft, data }) => {
         for (const t of P.PROFILE_TIERS) {
           const p = (data.profiles as any)[a][t]
           if (p) {
-            l = L.layerSetProfile(l, raw, b, t, p)
-            l = L.layerSetProfile(l, raw, a, t, null)
+            L.dSetProfile(draft, b, t, p)
+            L.dSetProfile(draft, a, t, null)
           }
         }
         let refs = 0
         for (const [name, set] of Object.entries(isObj(data.sets) ? data.sets : {}))
           for (const [st, c] of P.cellsOf(set))
             if (c.family === a) {
-              l = L.layerSetCell(l, raw, name, st, { family: b, tier: c.tier })
+              L.dSetCell(draft, name, st, { family: b, tier: c.tier })
               refs++
             }
-        return { layer: l, what: `семья «${a}» переименована в «${b}»; ссылок в наборах обновлено: ${refs}`, from: a, to: b }
+        return { what: `семья «${a}» переименована в «${b}»; ссылок в наборах обновлено: ${refs}`, from: a, to: b }
       })
     }
     case "delete": {
@@ -292,29 +255,22 @@ export function profilesEditVerb(dir: string, verb: string, args: string[]): { o
       if (tier !== undefined && !(ps.data.profiles as any)[family][tier]) return bad(`у семьи «${family}» нет записи «${tier}»`)
       const refs = referencing(ps.data, family, tier)
       if (refs.length) return bad(`на ${tier ? `запись ${family}/${tier}` : `семью «${family}»`} ссылаются наборы: ${refs.join("; ")}; сначала поправь набор`)
-      return applyEdit(dir, command, ({ layer, raw, data }) => {
-        let l = layer
-        for (const t of tier ? [tier] : P.PROFILE_TIERS) if ((data.profiles as any)[family][t]) l = L.layerSetProfile(l, raw, family, t, null)
-        return { layer: l, what: tier ? `запись ${family}/${tier} удалена` : `семья «${family}» удалена`, from: tier ?? family, to: undefined }
+      return applyEdit(dir, command, ({ draft, data }) => {
+        for (const t of tier ? [tier] : P.PROFILE_TIERS) if ((data.profiles as any)[family][t]) L.dSetProfile(draft, family, t, null)
+        return { what: tier ? `запись ${family}/${tier} удалена` : `семья «${family}» удалена`, from: tier ?? family, to: undefined }
       })
-    }
-    case "reset": {
-      const form = parseResetProfiles(args)
-      if (typeof form === "string") return bad(form)
-      if ((form.kind === "family" || form.kind === "profile") && !Object.keys(ps.layer).some((k) => k.startsWith(`profile:${form.family}/`))) return bad(`в локальном слое нет правок семьи «${form.family}»`)
-      return resetEdit(dir, command, form)
     }
   }
   return undefined
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// Показ, use, check, save, разбор команд (шаг 11)
+// Показ, use, check, разбор команд (шаг 11)
 
 import path from "node:path"
 import { PROFILES_README_URL } from "./paths.ts"
 import { DEFAULT_SPAWN_MODELS, LIMIT_RU, fmtTokens, limitsText, loadConfig, settingsContext, verbUsageList } from "./core.ts"
-import { projectFor, workingSettings } from "./settings.ts"
+import { projectFor } from "./settings.ts"
 import { listTasks } from "./tasks.ts"
 import * as W from "./profile-windows.ts"
 
@@ -353,8 +309,7 @@ function reviewerWindowLine(root: string, model: string): string {
 
 export function setsTable(ps: L.PState): string {
   const names = setNames(ps.data)
-  const src = ps.name ? (ps.nameSource === "layer" ? "локальное переключение (/crew-sets use)" : "файл проекта") : ""
-  const lines = [`Наборы проекта ${ps.project}. Включён: ${ps.name ? `«${ps.name}» — источник имени: ${src}` : "нет (набор не применяется, модели — по spawn_models)"}.`]
+  const lines = [`Наборы проекта ${ps.project}. Включён: ${ps.name ? `«${ps.name}» (имя в файле проекта)` : "нет (набор не применяется, модели — по spawn_models)"}.`]
   if (!names.length) lines.push(`Наборов нет. Готовый пример файла (справочник и наборы) — в разделе README о профилях моделей:\n${PROFILES_README_URL}\nСкопируйте пример в .opencode/crew-harness.json проекта (или передайте агенту: crew_config set) и коммитьте файл.`)
   else {
     const col = (n: string, st: P.Stage) => {
@@ -369,8 +324,6 @@ export function setsTable(ps: L.PState): string {
   }
   if (ps.state.message) lines.push(`! ${ps.state.message}`)
   for (const w of ps.state.warnings) lines.push(`! ${w.text}`)
-  const d = L.layerDiff(ps.raw, ps.layer)
-  if (d.length) lines.push(`Локальные правки не в файле: ${d.length} (${d.map((x) => x.label).join(", ")}) — ${ref("/crew-sets save", "save")} перенесёт их в файл проекта; ${ref("/crew-sets check", "check")} — подробности.`)
   return lines.join("\n")
 }
 
@@ -385,8 +338,6 @@ export function profilesTable(ps: L.PState): string {
       lines.push(`  ${pad(f, 8)}${pad(t, 8)}${P.isEmptyProfile(p) ? "(пусто — заполнить)" : `${pad(p.model, 34)}${limitsText(winOf(p))}`}`)
     }
   if (ps.state.message) lines.push(`! ${ps.state.message}`)
-  const d = L.layerDiff(ps.raw, ps.layer).filter((x) => x.key.startsWith("profile:"))
-  if (d.length) lines.push(`Локальные правки не в файле: ${d.map((x) => x.label).join(", ")} — ${ref("/crew-profiles save", "save")}.`)
   return lines.join("\n")
 }
 
@@ -408,11 +359,11 @@ export function showFamily(ps: L.PState, family?: string): string {
 
 export function showSet(ps: L.PState, name: string | undefined, dir: string): string {
   const n = name ?? ps.name
-  if (!n) return `Набор не включён (имени нет ни в файле проекта, ни в локальном слое). Покажи любой: ${ref("/crew-sets show <имя>", "show")}; включить: ${ref("/crew-sets use <имя>", "use")}.`
+  if (!n) return `Набор не включён (имени нет в файле проекта). Покажи любой: ${ref("/crew-sets show <имя>", "show")}; включить: ${ref("/crew-sets use <имя>", "use")}.`
   const set = (ps.data.sets as any)?.[n]
   if (!isObj(set)) return `Набора «${n}» нет (есть: ${listSets(ps.data)}).`
   const root = mainFolder(dir)
-  const lines = [`Набор «${n}»${n === ps.name ? ` — включён (имя из: ${ps.nameSource === "layer" ? "локальное переключение" : "файл проекта"})` : " — не включён"}:`]
+  const lines = [`Набор «${n}»${n === ps.name ? ` — включён (имя в файле проекта)` : " — не включён"}:`]
   for (const st of STAGE_ORDER) {
     const cell = P.cellsOf(set).find(([s]) => s === st)?.[1]
     if (!cell) {
@@ -502,7 +453,7 @@ function reviewerModels(data: P.Data, name: string): string[] {
   return [...out]
 }
 
-/** Что изменилось в окнах при смене набора (use, reset): было → стало, окно приёмки, заметки об окнах. */
+/** Что изменилось в окнах при смене набора (use): было → стало, окно приёмки, заметки об окнах. */
 function changeBody(before: L.PState, after: L.PState, dir: string): string[] {
   const root = mainFolder(dir)
   const am = windowsOfActive(after)
@@ -519,15 +470,17 @@ async function useSet(dir: string, name: string | undefined, deps: CmdDeps): Pro
   if (!isObj(ps.data.sets?.[name])) return refused(ps.project, command, `набора «${name}» нет; наборы: ${listSets(ps.data)}`)
   const chk = P.checkData(ps.data, name)
   if (chk.errors.length) return refused(ps.project, command, `набор «${name}» нельзя включить: ${chk.errors.map((e) => e.text).join("; ")}`)
-  L.writeLayer(ps.project, L.layerSetName(ps.layer, ps.raw, name))
+  const draft = L.draftOf(ps)
+  draft.name = name
+  const w = L.writeDraft(ps, draft)
+  if (!w.ok) return refused(ps.project, command, w.error)
   L.syncSnapshot(dir)
   const files = L.syncProjectFiles(dir)
   const after = L.profileState(dir)
   commitEdit(ps.project, command, "включён набор", ps.name, name)
   const models = windowsOfActive(after)
-  const fileSet = typeof ps.raw?.profile_set === "string" ? ps.raw.profile_set : undefined
   const lines: string[] = []
-  lines.push(`Включён набор «${name}» (локальное переключение, без коммита; ${ps.name ? `было «${ps.name}»` : "набор не был включён"}${fileSet && fileSet !== name ? `; в файле проекта по умолчанию «${fileSet}»` : ""}). Перезапуск не нужен.`)
+  lines.push(`Включён набор «${name}» (записано в profile_set файла проекта, без коммита; ${ps.name ? `было «${ps.name}»` : "набор не был включён"}). Перезапуск не нужен.`)
   const cellOf = (st: P.Stage) => {
     const c = P.cellsOf((after.data.sets as any)[name]).find(([s]) => s === st)
     return c ? P.cellText(c[1]) : "не описан (spawn_models)"
@@ -548,7 +501,7 @@ async function checkReport(dir: string, deps: CmdDeps): Promise<string> {
   const root = mainFolder(dir)
   const lines = [`Проверка профилей проекта ${ps.project}${deps.version ? ` (OpenCode ${deps.version})` : ""}: данные не меняются.`]
   if (deps.catalogNote) lines.push(`Каталог моделей OpenCode: ${deps.catalogNote}.`)
-  lines.push(`Включён: ${ps.name ? `«${ps.name}» (${ps.nameSource === "layer" ? "локальное переключение" : "файл проекта"}), строка ${ps.state.row} таблицы исходов` : "набор не включён"}.`)
+  lines.push(`Включён: ${ps.name ? `«${ps.name}» (файл проекта), строка ${ps.state.row} таблицы исходов` : "набор не включён"}.`)
   if (ps.state.message) lines.push(`! ${ps.state.message}`)
   const all = P.checkData(ps.data, ps.name)
   for (const e of all.errors) lines.push(`! ${e.text}`)
@@ -569,25 +522,10 @@ async function checkReport(dir: string, deps: CmdDeps): Promise<string> {
   const models = windowsOfActive(ps)
   for (const w of await windowWarnings(ps, models, dir, deps, true)) lines.push(`! ${w}`)
   for (const p of L.problemsOf(ps)) if (!lines.some((l) => l.includes(p))) lines.push(`! ${p}`)
-  const work = ps.folder ? workingSettings(ps.folder).raw : undefined
-  const d = L.layerDiff(ps.raw, ps.layer, work)
-  if (d.length) {
-    lines.push("Локальные правки (не в файле проекта):")
-    for (const x of d) lines.push(`  ${x.label}${x.inWorking ? " — записано в рабочую копию, ждёт коммита" : " — только в локальном слое"}${x.fileChanged ? "; в файле теперь иначе, чем было при правке (действует локальное значение)" : ""}`)
-  }
+  const old = L.legacyLayerText(ps.project)
+  if (old) lines.push(`! ${old}`)
   if (ps.state.usable) for (const m of reviewerModels(ps.state.usable.data, ps.state.usable.name)) lines.push(`Приёмка и приёмка плана: ${reviewerWindowLine(root, m)}.`)
   if (lines.length === 2) lines.push("Замечаний нет.")
-  return lines.join("\n")
-}
-
-function saveReport(dir: string, force: boolean): string {
-  const ps = L.profileState(dir)
-  const command = `crew-sets save${force ? " force" : ""}`
-  const r = L.saveLayer(dir, force)
-  if (!r.ok) return refused(ps.project, command, r.error ?? "не записано")
-  commitEdit(ps.project, command, `save: записано ${r.saved.length}, пропущено ${r.skipped.length}`, undefined, r.saved.join(","))
-  const lines = [`Перенесено в рабочую копию ${fileName(r.file!)}: ${r.saved.length} записей${r.saved.length ? ` (${r.saved.map(L.labelOf).join(", ")})` : ""}. Плагин не коммитит: закоммить файл в ветку настроек — после коммита записи слоя исчезнут сами.`]
-  if (r.skipped.length) lines.push(`Пропущено — в файле значение уже иное, чем было при правке (${r.skipped.length}): ${r.skipped.map((x) => `${x.label} (${x.why})`).join("; ")}. Что делать: reset <запись> (оставить файл) или save force (перезаписать файл локальным значением).`)
   return lines.join("\n")
 }
 
@@ -602,6 +540,7 @@ async function dispatch(kind: "sets" | "profiles", dir: string, text: string, de
     const ps = L.profileState(dir)
     return kind === "sets" ? setsTable(ps) : profilesTable(ps)
   }
+  if (GONE_VERBS.includes(verb)) return `Команды ${verb} больше нет: правки профилей и наборов идут прямо в файл проекта (рабочая копия, без коммита), сохранять и сбрасывать нечего.`
   if (!verbs.includes(verb)) return bad(`Неизвестный глагол «${verb}».`)
   switch (verb) {
     case "show": {
@@ -615,9 +554,6 @@ async function dispatch(kind: "sets" | "profiles", dir: string, text: string, de
     case "check":
       if (args.length) return bad("check без аргументов.")
       return checkReport(dir, deps)
-    case "save":
-      if (args.length > 1 || (args.length === 1 && args[0] !== "force")) return bad("save принимает только слово force.")
-      return saveReport(dir, args[0] === "force")
   }
   const r = kind === "sets" ? setsEditVerb(dir, verb, args) : profilesEditVerb(dir, verb, args)
   return r ? r.text : bad(`Глагол «${verb}» не обработан.`)

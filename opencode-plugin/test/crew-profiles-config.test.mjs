@@ -86,7 +86,9 @@ const r2 = await set({ profile_set: "nonexistent" })
 const reasonOf = (t) => t.split("\n").filter((l) => l.startsWith("- ")).join("|")
 cell("AC-23 profile_set is refused with one reason, an existing and a missing set alike", reasonOf(r1) === reasonOf(r2) && /имя набора меняет человек/.test(r1) && r1.split("\n").filter((l) => l.startsWith("- ")).length === 1, r1 + "||" + r2)
 cell("AC-23 a refused set leaves the file as it was; other values in the same call are not written either", readFileSync(file, "utf8") === before && /имя набора меняет человек/.test(await set({ profile_set: "x", inflight_limit: 3 })) && readFileSync(file, "utf8") === before, "changed")
-cell("AC-23 no tool changes the local state: crew_* has no use / reset / save", !Object.keys(tools).some((n) => /(^|_)(use|reset|save)$/.test(n)) && Object.keys(tools).every((n) => n.startsWith("crew_")), Object.keys(tools).join())
+// the two journal tools (progress_line, usage_line) are not crew_* by design: they write a line of the task journal, nothing of the profiles
+const JOURNAL_TOOLS = ["progress_line", "usage_line"]
+cell("AC-23 no tool changes the profile name: no use / reset / save tool, every tool is crew_* except the two journal tools", !Object.keys(tools).some((n) => /(^|_)(use|reset|save)$/.test(n)) && Object.keys(tools).filter((n) => !JOURNAL_TOOLS.includes(n)).every((n) => n.startsWith("crew_")), Object.keys(tools).join())
 
 // the README example is accepted by crew_config set: table first, then the sets, with no commit between
 const t1 = await set({ model_profiles: TABLE })

@@ -98,9 +98,13 @@ const until = async (cond, ms = 20_000) => {
 }
 const call = async (name, sid, input = {}) => (await tools[name].execute(input, { sessionID: sid })).content
 const task = (project, n) => tasks.loadTask(project, n)
+// enabling a set = the name in the file of the project (ADR-0014: no local layer; the window commands write the same key)
 const use = (name, dir = proj) => {
-  const s = L.profileState(dir)
-  L.writeLayer(s.project, name ? L.layerSetName(s.layer, s.raw, name) : {})
+  const file = path.join(dir, ".opencode", "crew-harness.json")
+  const o = JSON.parse(readFileSync(file, "utf8"))
+  if (name) o.profile_set = name
+  else delete o.profile_set
+  writeFileSync(file, JSON.stringify(o))
 }
 const tab = async (sid, role, dir = proj) => {
   dirOf.set(sid, dir)

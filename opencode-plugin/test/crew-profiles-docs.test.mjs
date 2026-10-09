@@ -50,7 +50,7 @@ const lower = readme.replace(/\s+/g, " ")
 const need = [
   ["the three keys", ["model_profiles", "profile_sets", "profile_set"]],
   ["the stages", ["develop", "accept", "plan_accept"]],
-  ["all verbs of both commands", ["/crew-sets show", "/crew-sets use", "/crew-sets set", "/crew-sets unset", "/crew-sets new", "rename", "delete", "/crew-sets reset", "/crew-profiles set", "/crew-profiles reset", "check", "save [force]", "from <other>"]],
+  ["all verbs of both commands", ["/crew-sets show", "/crew-sets use", "/crew-sets set", "/crew-sets unset", "/crew-sets new", "rename", "delete", "/crew-profiles set", "check", "from <other>"]],
   ["the file of windows, its mark and where it lives", ["`.opencode/opencode.json`", "_crew_harness", "worktree of each task", "info/exclude"]],
   ["the window is a property of the model in a folder", ["property of the model **in a folder**"]],
   ["the window of a profile applies only to the sessions in the worktree; the reviewers take the general window", ["applies only to sessions in the worktree of a task (development, planning)", "their window comes from the", "general hand-written settings"]],
@@ -92,7 +92,7 @@ cell("AC-31 positive control: the same patterns find the names in a file that ho
   const heading = /^## (Model profiles.*)$/m.exec(readme)?.[1]?.trim() ?? ""
   const slug = heading.toLowerCase().replace(/[^a-z0-9 -]/g, "").trim().replace(/ /g, "-") // the anchor rule of GitHub
   cell("the link of the empty answers points to the README of the repository on GitHub with the anchor of the heading of the profiles section", url === `https://github.com/unitcraft/crew-harness/blob/main/opencode-plugin/README.md#${slug}` && slug.length > 10, JSON.stringify({ url, slug }))
-  const empty = { project: "p", data: {}, raw: {}, layer: {}, state: { warnings: [] }, name: undefined }
+  const empty = { project: "p", data: {}, raw: {}, state: { warnings: [] }, name: undefined }
   const t1 = Cmd.profilesTable(empty)
   const t2 = Cmd.setsTable(empty)
   cell("an empty /crew-profiles and an empty /crew-sets name the link as a separate token (a line of its own) and the hint about the example", [t1, t2].every((t) => t.split("\n").includes(url) && t.includes("Скопируйте пример") && !t.includes("см. README")), t1 + "\n--\n" + t2)

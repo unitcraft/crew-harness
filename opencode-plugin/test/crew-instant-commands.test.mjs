@@ -142,10 +142,10 @@ await new Promise((r) => setTimeout(r, 3600))
   await slashOf(out, "crew-sets").run()
   const ask = out.asked.at(-1)
   cell("the input of «use» has the title, the format and an example of this verb, the verb already typed", ask.title.startsWith("/crew-sets use") && Core.SETS_VERB_HELP.every((v) => ask.title.includes(v.verb)) && Object.values(ask).every((x) => typeof x === "string") && ask.placeholder.includes("use <имя> — например: use cross-kimi") && ask.value === "use ", JSON.stringify(ask))
-  cell("a typed verb runs the same command: use with an unknown name is refused with the list of names, nothing changed", /Не сделано/.test(msg(out)) && /cross-kimi/.test(msg(out)) && Object.keys(L.profileState(root).layer).length === 0 && sha(file) === fileHash, JSON.stringify(last(out))?.slice(0, 200))
+  cell("a typed verb runs the same command: use with an unknown name is refused with the list of names, nothing changed", /Не сделано/.test(msg(out)) && /cross-kimi/.test(msg(out)) && sha(file) === fileHash, JSON.stringify(last(out))?.slice(0, 200))
   script = ["use", "use cross-kimi"]
   await slashOf(out, "crew-sets").run()
-  cell("use <set> from the window changes the local layer only, not the project file", /cross-kimi/.test(msg(out)) && L.profileState(root).name === "cross-kimi" && L.profileState(root).nameSource === "layer" && sha(file) === fileHash, JSON.stringify([last(out), L.profileState(root).name])?.slice(0, 300))
+  cell("use <set> from the window writes profile_set into the file of the project (no layer, no commit)", /cross-kimi/.test(msg(out)) && L.profileState(root).name === "cross-kimi" && JSON.parse(readFileSync(file, "utf8")).profile_set === "cross-kimi" && sha(file) !== fileHash, JSON.stringify([last(out), L.profileState(root).name])?.slice(0, 300))
   script = ["use", "cross-codex-not"] // typed without the verb: the verb is added
   await slashOf(out, "crew-sets").run()
   cell("a line typed without the verb gets the verb of the item", /Не сделано/.test(msg(out)) && /cross-codex-not/.test(msg(out)), msg(out).slice(0, 200))
@@ -159,9 +159,9 @@ await new Promise((r) => setTimeout(r, 3600))
   script = ["use", "  "]
   await slashOf(out, "crew-sets").run()
   cell("a verb with required arguments and an empty input does nothing", out.shown.length === n, String(out.shown.length))
-  script = ["save"]
+  script = ["check"]
   await slashOf(out, "crew-profiles").run()
-  cell("a verb without required arguments (save) runs at once from the menu", /Загрузка/.test(out.shown.at(-2).message) && out.shown.length === n + 2, JSON.stringify(out.shown.slice(-2)).slice(0, 200))
+  cell("a verb without required arguments (check) runs at once from the menu", /Загрузка/.test(out.shown.at(-2).message) && out.shown.length === n + 2, JSON.stringify(out.shown.slice(-2)).slice(0, 200))
   // the snapshot is old / absent: the reason is named
   const keep = readFileSync(Cat.CATALOG_FILE, "utf8")
   rmSync(Cat.CATALOG_FILE)
@@ -244,7 +244,7 @@ await new Promise((r) => setTimeout(r, 3600))
   const before = out.shown.length
   await slashOf(out, "crew-sets").run("use cross-kimi")
   const shownNow = out.shown.slice(before).map((x) => x.message)
-  cell("run(\"use cross-kimi\") enables the set at once: no menu, «Загрузка…» then the answer, the local layer changed, the file not", asked === 0 && shownNow[0] === "Загрузка…" && /Включён набор «cross-kimi»/.test(shownNow.at(-1)) && L.profileState(root).name === "cross-kimi" && serverCalls.length === 0, JSON.stringify([asked, shownNow.map((m) => m.slice(0, 40))]))
+  cell("run(\"use cross-kimi\") enables the set at once: no menu, «Загрузка…» then the answer, the file of the project changed", asked === 0 && shownNow[0] === "Загрузка…" && /Включён набор «cross-kimi»/.test(shownNow.at(-1)) && L.profileState(root).name === "cross-kimi" && serverCalls.length === 0, JSON.stringify([asked, shownNow.map((m) => m.slice(0, 40))]))
   await slashOf(out, "crew-sets").run("  show cross-kimi  ")
   cell("run(\"show cross-kimi\") shows the set (the line is trimmed; the verb and the argument go to the command as typed)", asked === 0 && /Набор «cross-kimi»/.test(msg(out)) && /kimi\/heavy/.test(msg(out)), msg(out).slice(0, 200))
   await slashOf(out, "crew-profiles").run("show claude")
