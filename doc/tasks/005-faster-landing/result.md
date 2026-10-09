@@ -57,6 +57,8 @@
 
 ## Прогоны после ребейза (по одному, пауза 5 с)
 
+Таблица — слой после третьего ребейза, до правок по review-1 и review-2: числа ячеек в трёх строках (`config`, `extra`, `gate`) с тех пор выросли, текущие числа — в строках «сейчас» и в разделах «Исправления по review-1» и «Исправления по review-2»; время — того прогона.
+
 | Тест | Ячеек ok | Упало | Пропущено | Время, с |
 |---|---|---|---|---|
 | crew-review | 52 | 0 | 0 | 24 |
@@ -74,11 +76,11 @@
 | crew-plans | 15 | 0 | 0 | 0 |
 | crew-autoclose | 8 | 0 | 0 | 0 |
 | crew-landing-golden | 3 | 0 | 0 | 7 |
-| crew-landing-config | 15 | 0 | 0 | 19 |
+| crew-landing-config | 15 (сейчас 16) | 0 | 0 | 19 |
 | crew-landing-slot | 24 | 0 | 0 | 10 |
-| crew-landing-extra | 22 | 0 | 0 | 3 |
+| crew-landing-extra | 22 (сейчас 23) | 0 | 0 | 3 |
 | crew-landing-precheck | 38 | 0 | 0 | 72 |
-| crew-landing-gate | 38 | 0 | 0 | 171 |
+| crew-landing-gate | 38 (сейчас 43) | 0 | 0 | 171 |
 | crew-landing-hints | 9 | 0 | 0 | 40 |
 | crew-landing-letters | 19 | 0 | 0 | 69 |
 | crew-landing-tip | 25 | 0 | 0 | 47 |
@@ -100,7 +102,7 @@
 - C Runtime: ячейки `AC-07`, `AC-09`, `AC-11` (шесть случаев), `AC-11 merge`, `AC-16`…`AC-19`, `AC-32 merge`, `AC-35` на одноразовых репозиториях с локальным `origin` и дочерними процессами; настоящая среда не трогалась (Г3).
 - D Visual: N/A (визуального нет, показ приёмщику — тексты, уровень E).
 - E Requirements: таблица «Трассировка» ниже.
-- F Negative: `AC-08`, `AC-10`, `AC-11`, `AC-13`, `AC-15`, `AC-23`, `AC-25`, `AC-32`, `AC-34`, `AC-36`, `AC-37` зелёные (ячейки в таблице); доказательство красного `AC-30`: `node test/landing-red.mjs` — `прогон 1…4`, `landing-red ok` (вывод в шаге 12).
+- F Negative: `AC-08`, `AC-10`, `AC-11`, `AC-13`, `AC-15`, `AC-23`, `AC-25`, `AC-32`, `AC-34`, `AC-36`, `AC-37` зелёные (ячейки в таблице); доказательство красного `AC-30`: `node test/landing-red.mjs` — `прогон 1…5`, `landing-red ok` (вывод в шаге 12 и в разделе «Исправления по review-2»; пятый прогон добавлен С5п).
 - G Regression: прежние четырнадцать тестов — как в базе; `run-all.sh` без `FAIL`; DNC-01…DNC-12 — по команде DoD (ниже).
 - DNC-01: `landing-golden --check` и `--check --defaults` — `golden ok (18 texts)`; удалённые строки `core.ts` (`git diff -U0 "$BASE"..HEAD | grep '^-[^-]'`): закрывающая скобка типа `CrewConfig` (переехала ниже новых полей), `taskRow`, описание `crew_spawn`, строка счёта `inflight` в `crew_spawn`, описание `crew_task`, перечень действий, два списка прав, два `return` в `accept`; `index.ts`: строка `text` письма «работа прервана», строка счёта слота авто-плана, три строки напоминания о принятой; `review.ts`: две строки импорта, `repoDir` (добавлен `export`), три строки порядка в `reviewLetter` и две строки в `planMergeLetter` (нумерация шагов); в других местах удалений нет.
 - DNC-02: `git diff "$BASE"..HEAD -- tasks.ts | grep -cE '^[-+].*(OPEN_STATUSES|WORKING_STATUSES|export const isOpen)'` — `0`, при этом diff по `tasks.ts` непуст (+27 строк); контроль на копии с изменённым словом `OPEN_STATUSES` печатает `2`.
@@ -125,7 +127,7 @@
 | REQ-05 | ключ `merge_precheck` | AC-25; `crew-landing-gate` AC-12 merge off | PASS |
 | REQ-06 | `beginPrecheck` | `crew-landing-precheck` REQ-06 (три), AC-13, AC-34; gate AC-07 | PASS |
 | REQ-07 | `finishPrecheck` | precheck AC-10 a…f, AC-33, AC-36 a…d2 | PASS |
-| REQ-08 | `gateMerge`, четыре сверки | gate AC-07…AC-09, AC-17, AC-35, AC-37; `landing-red` | PASS |
+| REQ-08 | `gateMerge`, пять однострочных сверок (`GATE:same-tip`, `green`, `recheck`, `lock`, `release`) | gate AC-07…AC-09, AC-17, AC-35, AC-37; `landing-red` | PASS |
 | REQ-09 | `originTip`, `killTree` | `crew-landing-tip` (25); gate AC-11 merge | PASS |
 | REQ-10 | `unlockMerge` | precheck AC-13 a…h; AC-12 unlock | PASS |
 | REQ-11 | `markPrecheckStale` в пяти местах, `accepted_on` | precheck AC-14 a…e; gate AC-14 merge, AC-07 запись | PASS |
@@ -171,14 +173,14 @@
 | AC-27 | ребейз, порядок | два ребейза без конфликтов, `range-diff` 24 из 24 `=`; `crew-profiles-select`, `crew-profiles-config` | PASS |
 | AC-28 | запретные пути, `OPEN_STATUSES` | команды DoD с контролями; стражи секретов и имён | PASS |
 | AC-29 | файл сдачи | сдача после ворот | NOT VERIFIED |
-| AC-30 | доказательство красного | `landing-red` (четыре прогона, контроль маркера) | PASS |
+| AC-30 | доказательство красного | `landing-red` (пять прогонов, контроль маркера) | PASS |
 | AC-31 | письма и `show` для флагов | letters AC-31 (одиннадцать) | PASS |
 | AC-32 | нет ветки, нет origin, недоступен | tip AC-32 (четыре+); precheck, gate AC-32 | PASS |
 | AC-33 | предупреждение ветки задачи | precheck AC-33 (две) | PASS |
 | AC-34 | задача-план | precheck AC-34 (две); gate AC-34 (две) | PASS |
 | AC-35 | повтор `merge` | gate AC-35 c1…c7, c4b (девять) | PASS |
 | AC-36 | замена записи, подсказка `fetch` | precheck AC-36 a, b, c, d1, d2 | PASS |
-| AC-37 | изменения внутри чтения | gate AC-37 c1, c1 перехват, c2, c3 | PASS |
+| AC-37 | изменения внутри чтения | gate AC-37 c1, c1 перехват, c2, c3, c4…c8 | PASS |
 | DNC-01 | текст прежний | golden, четырнадцать тестов, список удалённых строк | PASS |
 | DNC-02 | статусы не меняются | команда DoD, контроль; slot AC-05 | PASS |
 | DNC-03 | панель и окно | `git diff --stat` пуст | PASS |
@@ -208,6 +210,18 @@
 5. Вне задачи, не делалось: `legacyWalk` с битым файлом настроек (внесён в материал задачи 006); `postLetter` EPERM (отдельная задача позже).
 
 Прогоны после правки (по одному, пауза 10 с, `npm test` не запускался): `crew-landing-gate` 40 ok за 232 с, `crew-landing-precheck` 38 ok, `crew-landing-race` 14 ok, `crew-landing-extra` 23 ok, `crew-landing-config` 16 ok, `crew-landing-letters` 19 ok, `crew-landing-slot` 24 ok, `crew-landing-tip` 25 ok, `crew-landing-hints` 9 ok, `crew-review` 52 ok, `crew-acceptor` 25 ok, `crew-cfgtool` 17 ok, `crew-help` 32 ok; код 0, FAIL 0 везде; `node test/landing-golden.mjs --check` и `--check --defaults` — `golden ok`.
+
+## Исправления по review-2
+
+Проверка С6, заход 2 (`review-2.md`): существенных 0, поверхностных 3. Решение владельца — «по рекомендации» (2026-10-09): исправить отдельной мелкой правкой после слияния. Дерево: ветка `task-005-review2-fixes` от `origin/main` @ `40e78c3` (Сессия С5п); `spec.md` и `plan.md` не правились.
+
+1. Находка 1 (ячейки на шаги 6 и 7): в `crew-landing-gate.test.mjs` добавлены `AC-37 c6` (вершина сдвинулась, шаг 7: внутри чтения замок переведён на другую задачу той же сессии — отказ «сдвинулась», замок другой задачи цел) и `AC-37 c7` (чтение вершины не удалось, шаг 6: тот же перевод замка — отказ «узнать не удалось», замок другой задачи цел). Для них снятие замка в `precheck.ts` вынесено в однострочную сверку `mayRelease` с маркером `GATE:release` (`releaseOwnLock` вызывает её). В `landing-red.mjs` — прогон 4 «mayRelease -> true»: красные `c5`, `c6`, `c7` (ячейки названы в проверке, а не только раздел); прогон 3 теперь называет `c4`, `c5`, `c8`; прогон без заглушки — пятый. Красное: на заглушке `GATE:release` падают `c5`, `c6`, `c7` (на коде без заглушки зелёные: код был корректен, ячейки закрывают защиту от регрессии).
+2. Находка 2 (замок по экземпляру): исправлено локально в `precheck.ts`, без правки `review.ts` и формата замка (DNC-06) и без правки плана. После `takeMergeLock` (шаг 5) ворота читают метку `at` замка (`mergeHolder(project)?.at`) и сверяют её в шагах 6–9: `lockStillMine` и `mayRelease` принимают метку (`holdsFor(project, session, n, at)`); шаг 4 (повтор держателя, замок взят в прошлом вызове) метку не передаёт. Замок, снятый и снова взятый той же сессией для той же задачи (параллельный `merge`), теперь даёт раннему вызову «Замок потерян» вместо «выдан» на сдвинувшуюся вершину, и его отказ не снимает замок другого вызова. Ячейка `AC-37 c8`: красная на коде `origin/main` (`FAIL AC-37 c8`, «выдан на вершину»), зелёная на правке; краснится заглушкой `GATE:lock` (прогон 3). Остаток: два параллельных `merge` одной задачи одной сессии при записи метки в одну и ту же миллисекунду неразличимы (метка — `Date.now()`); вероятность пренебрежимо мала, окно между сверкой и записью `lock_on` по-прежнему названо в README.
+3. Находка 3 (`result.md`): строка «Artifacts» и база — исправлены коммитом `40e78c3` (ветка отправлена, база названа); таблица «Прогоны после ребейза» получила пояснение и пометки «сейчас» у трёх строк (`config` 16, `extra` 23, `gate` 43); в трассировке исправлены число сверок и прогонов `landing-red` (REQ-08, AC-30), перечень ячеек AC-37 (c1…c8) и ссылка на «прогон 1…5» в разделе F. Отметки DoD — по-прежнему в разделе «Отметки DoD» здесь, `plan.md` не правился.
+
+Прогоны после правки (по одному, пауза 10 с, `npm test` не запускался): `crew-landing-gate` 43 ok за 204 с, `crew-landing-race` 14 ok, `crew-landing-tip` 25 ok, `crew-landing-precheck` 38 ok, `crew-landing-hints` 9 ok, `crew-landing-letters` 19 ok; код 0, FAIL 0 везде; `node test/landing-red.mjs` — пять прогонов, `landing-red ok` (прогон 3: красных 7, `c4`, `c5`, `c8` названы; прогон 4: `c5`, `c6`, `c7`; прогон 5 без заглушки: 0), `--markers-only` — `markers ok`; `landing-golden --check` и `--check --defaults` — `golden ok`; `sh scripts/guards/run-all.sh` — `итого: ок 7, FAIL 0`; `git diff --check` пуст. Задержка службы перед прогонами 1,0–2,7 с (порог 5 с не достигался). Не запускались (код не менялся): `crew-landing-config`, `-extra`, `-slot`, `crew-review`, `crew-acceptor`, `crew-cfgtool`, `crew-help`.
+
+Вне задачи, не делалось: пути `accept`, `rework`, `cancel` определяют замок только по сессии (Ф-10 и В-06 спецификации; `DNC-06` запрещает менять формат замка) — отдельная задача.
 
 ## RESULT
 

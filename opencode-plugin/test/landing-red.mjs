@@ -1,11 +1,12 @@
 // Proof of red for the merge gate (task 005, AC-30):  node test/landing-red.mjs
 // A test that cannot fail proves nothing. The script copies the plugin into a temp folder, replaces exactly ONE line (found by its
 // marker `GATE:*`) by a stub that says "all is well" and runs the gate test on the copy (CREW_PLUGIN_DIR); the cells that guard that check
-// must go red. Four runs:
+// must go red (a run may also name cells that must be among them). Five runs:
 //   1. sameTip -> true                         red: AC-09, AC-17 (a moved tip is let through)
 //   2. isFresh -> true                          red: AC-08 (a missing, running or stale record is let through)
-//   3. recordUnchanged and lockStillMine -> true  red: AC-37 (a changed record / a lost lock is let through)
-//   4. no stub                                  no red cell
+//   3. recordUnchanged and lockStillMine -> true  red: AC-37 c1, c1 перехват, c2, c3, c4, c5, c8 (a changed record / a lost lock / a lock of another call is let through)
+//   4. mayRelease -> true                       red: AC-37 c5, c6, c7 (a refusal takes off a lock of another task of the same session)
+//   5. no stub                                  no red cell
 // If a marker is not found in exactly one line the script fails ("маркер … не найден"): a drift of the markers must not pass silently.
 // Heavy (the gate test on a copy, a few minutes): run it once, on a quiet machine. Flags: --markers-only (only count the markers),
 // --src <folder> (take the plugin from another folder: the control that a deleted marker fails).
@@ -22,7 +23,8 @@ const TEST = import.meta.dirname
 const RUNS = [
   { name: "sameTip -> true", markers: ["GATE:same-tip"], sections: "AC-09,AC-17", red: ["AC-09", "AC-17"] },
   { name: "isFresh -> true", markers: ["GATE:green"], sections: "AC-08", red: ["AC-08"] },
-  { name: "recordUnchanged and lockStillMine -> true", markers: ["GATE:recheck", "GATE:lock"], sections: "AC-37", red: ["AC-37"] },
+  { name: "recordUnchanged and lockStillMine -> true", markers: ["GATE:recheck", "GATE:lock"], sections: "AC-37", red: ["AC-37"], cells: ["AC-37 c4", "AC-37 c5", "AC-37 c8"] },
+  { name: "mayRelease -> true", markers: ["GATE:release"], sections: "AC-37", red: ["AC-37"], cells: ["AC-37 c5", "AC-37 c6", "AC-37 c7"] },
   { name: "no stub", markers: [], sections: "AC-08,AC-09,AC-17,AC-37", red: [] },
 ]
 
@@ -70,9 +72,10 @@ RUNS.forEach((run, k) => {
     const out = `${r.stdout}${r.stderr}`
     const reds = out.split(/\r?\n/).filter((l) => l.startsWith("FAIL"))
     const redIds = [...new Set(reds.map((l) => /^FAIL (AC-\d+)/.exec(l)?.[1]).filter(Boolean))]
+    const missing = (run.cells ?? []).filter((c) => !reds.some((l) => l.startsWith(`FAIL ${c}`)))
     const crashed = r.status !== 0 && !reds.length // the file died before any cell: not a proof of red
-    const ok = !crashed && run.red.every((id) => redIds.includes(id)) && (run.red.length ? true : reds.length === 0 && r.status === 0)
-    console.log(`прогон ${k + 1}: ${run.name}: красных ячеек ${reds.length} (${redIds.join(", ") || "—"}); ожидалось ${run.red.length ? "красные " + run.red.join(", ") : "ноль красных"}: ${ok ? "да" : "НЕТ"}`)
+    const ok = !crashed && !missing.length && run.red.every((id) => redIds.includes(id)) && (run.red.length ? true : reds.length === 0 && r.status === 0)
+    console.log(`прогон ${k + 1}: ${run.name}: красных ячеек ${reds.length} (${redIds.join(", ") || "—"}); ${missing.length ? `не покраснели: ${missing.join(", ")}; ` : ""}ожидалось ${run.red.length ? "красные " + run.red.join(", ") : "ноль красных"}: ${ok ? "да" : "НЕТ"}`)
     for (const l of reds.slice(0, 6)) console.log(`   ${l.slice(0, 150)}`)
     if (!ok) {
       failed = true

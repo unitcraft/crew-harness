@@ -289,15 +289,17 @@ const sameTip = (tip: string, base: string): boolean => tip === base // GATE:sam
 const isFresh = (rec: PrecheckRecord | undefined, t: Task): boolean => !!rec && rec.state === "green" && rec.round === roundOf(t) // GATE:green
 /** запись, перечитанная с диска после чтения вершины, всё ещё та же зелёная */
 const recordUnchanged = (cur: PrecheckRecord | undefined, rec: PrecheckRecord): boolean => !!cur && cur.state === "green" && cur.base === rec.base && cur.round === rec.round && cur.at === rec.at && cur.green_at === rec.green_at // GATE:recheck
-/** замок вливания проекта держит именно эта сессия и именно для этой задачи (сессия одна, задач у приёмщика несколько) */
-const holdsFor = (project: string, session: string, n: number): boolean => {
+/** замок вливания проекта держит именно эта сессия и именно для этой задачи (сессия одна, задач у приёмщика несколько); с `at` — ещё и тот же экземпляр замка (метка `at` записана при взятии в этом вызове) */
+const holdsFor = (project: string, session: string, n: number, at?: number): boolean => {
   const h = mergeHolder(project)
-  return !!h && h.session === session && h.n === n
+  return !!h && h.session === session && h.n === n && (at === undefined || h.at === at)
 }
-const lockStillMine = (project: string, session: string, n: number): boolean => holdsFor(project, session, n) // GATE:lock
-/** Отпустить замок, только если он этой сессии И этой задачи: замок, взятый той же сессией для другой задачи, не трогаем. */
-const releaseOwnLock = (project: string, session: string, n: number): void => {
-  if (holdsFor(project, session, n)) releaseMergeLock(project, session)
+const lockStillMine = (project: string, session: string, n: number, at?: number): boolean => holdsFor(project, session, n, at) // GATE:lock
+/** можно ли отпустить замок: он этой сессии, этой задачи и (если дана метка) взят в этом же вызове */
+const mayRelease = (project: string, session: string, n: number, at?: number): boolean => holdsFor(project, session, n, at) // GATE:release
+/** Отпустить замок, только если он этого вызова: замок, взятый той же сессией для другой задачи или другим вызовом для той же, не трогаем. */
+const releaseOwnLock = (project: string, session: string, n: number, at?: number): void => {
+  if (mayRelease(project, session, n, at)) releaseMergeLock(project, session)
 }
 
 export type Gate = { text: string } | { granted: string }
@@ -343,18 +345,19 @@ export async function gateMerge(t: Task, session: string, target: string): Promi
   // 5. замок
   const got = takeMergeLock(project, session, t.n)
   if (!got.ok) return { text: `Замок вливания проекта ${project} у приёмщика задачи #${got.holder.n} (сессия ${got.holder.session}) с ${hm(got.holder.at)}. Дождись (спроси позже ещё раз) — вливать одновременно нельзя. Твоя предпроверка остаётся действующей, пока ${target} не сдвинется.` }
+  const stamp = mergeHolder(project)?.at // метка этого экземпляра замка: по ней шаги 6–9 узнают «мой» замок, а не взятый параллельным вызовом
   // 6. вершина — под замком
   const tip = await readTip(dir, target)
   await seams.afterTip?.()
   if (!tip.ok) {
-    if (!hadLock) releaseOwnLock(project, session, t.n)
+    if (!hadLock) releaseOwnLock(project, session, t.n, stamp)
     return hadLock
       ? { text: `Вершину ${target} узнать не удалось (${tip.error}). Замок остаётся у тебя, как был; повтори merge позже или отпусти его: crew_task {action: "unlock", n: ${t.n}}.` }
       : refuse(`вершину ${target} на origin узнать не удалось (${tip.error})`, "Замок не взят; повтори merge через минуту. Влить без origin всё равно нельзя.")
   }
   // 7. вершина сдвинулась
   if (!sameTip(tip.tip, base)) {
-    releaseOwnLock(project, session, t.n)
+    releaseOwnLock(project, session, t.n, stamp)
     const cur = loadTask(project, t.n)
     if (cur && hadLock) {
       markPrecheckStale(cur, "главная сдвинулась")
@@ -365,11 +368,11 @@ export async function gateMerge(t: Task, session: string, target: string): Promi
   // 8. запись, перечитанная с диска: по-прежнему та же зелёная
   const cur = loadTask(project, t.n)
   if (!cur || !recordUnchanged(cur.precheck, rec ?? ({} as PrecheckRecord))) {
-    releaseOwnLock(project, session, t.n)
+    releaseOwnLock(project, session, t.n, stamp)
     return refuse(`предпроверка задачи ${taskRef(t)} за время чтения вершины изменилась (устарела или заменена)`, `Замок отпущен. ${start}`)
   }
   // 9. замок всё ещё у этой сессии
-  if (!lockStillMine(project, session, t.n)) return { text: `Замок потерян: за время чтения вершины его сняли (cancel или rework по другой задаче, перехват). Замок не выдан; повтори merge.` }
+  if (!lockStillMine(project, session, t.n, stamp)) return { text: `Замок потерян: за время чтения вершины его сняли (cancel или rework по другой задаче, перехват). Замок не выдан; повтори merge.` }
   // 10. запись «замок на вершине»; окно между сверкой и записью допустимо (README)
   cur.precheck = { ...cur.precheck!, lock_on: { tip: tip.tip, at: Date.now() } }
   taskEvent(cur, session, undefined, `замок вливания взят на вершине ${short(tip.tip)}`)

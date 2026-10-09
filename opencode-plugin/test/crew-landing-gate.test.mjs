@@ -402,6 +402,54 @@ if (section("AC-37")) {
   )
   cell("AC-37 c5: the first task is refused (record changed) — the lock the same session holds for the other task stays", /изменилась/.test(r6) && H.holder()?.session === REV && H.holder()?.n === td.n, r6 + JSON.stringify(H.holder()))
   clearLock()
+  // c6 (review-2, finding 1): the tip moved (step 7) and, inside the read, the lock went to ANOTHER task of the same session — the refusal must not take that lock off
+  const te = await green()
+  const tf = H.reviewing()
+  H.moveOrigin()
+  const r7 = await withSeam(
+    {
+      afterTip: () => {
+        review.releaseMergeLock("proj", REV)
+        review.takeMergeLock("proj", REV, tf.n)
+      },
+    },
+    () => merge(te),
+  )
+  cell("AC-37 c6: the tip moved and the lock went to another task of the same session inside the read — refused as moved, the lock of the other task stays", /сдвинулась/.test(r7) && !T(te.n).precheck.lock_on && H.holder()?.session === REV && H.holder()?.n === tf.n, r7 + JSON.stringify(H.holder()))
+  clearLock()
+  // c7 (review-2, finding 1): the read of the tip failed (step 6) and the lock went to another task of the same session — the refusal must not take that lock off
+  const tg = await green()
+  const th = H.reviewing()
+  const urlC7 = git(proj, "remote", "get-url", "origin")
+  git(proj, "remote", "set-url", "origin", path.join(H.tmp, "no-such-origin.git"))
+  const r8 = await withSeam(
+    {
+      afterTip: () => {
+        review.releaseMergeLock("proj", REV)
+        review.takeMergeLock("proj", REV, th.n)
+      },
+    },
+    () => merge(tg),
+  )
+  git(proj, "remote", "set-url", "origin", urlC7)
+  cell("AC-37 c7: the read of the tip failed and the lock went to another task of the same session inside the read — refused, the lock of the other task stays", /узнать не удалось/.test(r8) && !T(tg.n).precheck.lock_on && H.holder()?.session === REV && H.holder()?.n === th.n, r8 + JSON.stringify(H.holder()))
+  clearLock()
+  // c8 (review-2, finding 2): the lock is checked by the instance: inside the read the lock is taken off and taken again by the same session for the SAME task
+  // (a parallel merge of that task) after the origin moved — this call gets 'замок потерян', the lock of the other call stays
+  const ti = await green()
+  let second = ""
+  const r9 = await withSeam(
+    {
+      afterTip: () => {
+        review.releaseMergeLock("proj", REV)
+        H.moveOrigin()
+        second = JSON.stringify(review.takeMergeLock("proj", REV, ti.n))
+      },
+    },
+    () => merge(ti),
+  )
+  cell("AC-37 c8: the lock was taken off and taken again by the same session for the same task inside the read — 'замок потерян', no lock_on, the lock of the other call stays", /Замок потерян/.test(r9) && !T(ti.n).precheck.lock_on && H.holder()?.session === REV && H.holder()?.n === ti.n, r9 + second + JSON.stringify(H.holder()))
+  clearLock()
 }
 
 // ---- AC-14 merge: a record made stale by the ways of AC-14 does not open the lock
