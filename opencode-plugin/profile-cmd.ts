@@ -377,6 +377,9 @@ export function showSet(ps: L.PState, name: string | undefined, dir: string): st
     const fam = (ps.data.profiles as any)?.[cell.family]
     const prof = (t: P.PTier) => (isObj(fam?.[t]) && !P.isEmptyProfile(fam[t]) ? (fam[t] as any) : undefined)
     const front = st === "develop" || st === "plan"
+    // этапы разбора и сдачи (spec, delivery и их приёмки) пока без сессий: окно приёмки к ним не относится
+    const idle = !P.CORE_STAGES.includes(st as any)
+    const winLine = (model: string) => (idle ? "окно не применяется: у этапа пока нет сессий" : reviewerWindowLine(root, model))
     if (cell.tier === "task") {
       // та же ступень, что выберет resolveStageProfile: клетка task на «ступень ниже» (сдача) сначала снижается, потом срезается
       const reach = (t: P.PTier) => cut(eff.lower ? (P.lowerTier(t) as P.PTier) : t)
@@ -386,13 +389,13 @@ export function showSet(ps: L.PState, name: string | undefined, dir: string): st
       if (front) {
         for (const t of live) lines.push(`      контекст профиля в рабочем дереве задачи (${t}): ${limitsText(winOf(prof(t)))}`)
       } else {
-        for (const t of live) lines.push(`      ${t}: ${reviewerWindowLine(root, prof(t).model)}`)
+        for (const t of live) lines.push(`      ${t}: ${winLine(prof(t).model)}`)
       }
     } else {
       const cl = cut(cell.tier)
       const p = prof(cl.tier)
       lines.push(`  ${P.STAGE_RU[st]}: ${P.cellText(cell)}${how} → ${p?.model ?? "нет профиля"}${cl.from ? ` — срез границами ступеней: ${cl.from} → ${cl.tier}` : ""}`)
-      if (p) lines.push(front ? `      контекст профиля в рабочем дереве задачи: ${limitsText(winOf(p))}` : `      ${reviewerWindowLine(root, p.model)}`)
+      if (p) lines.push(front ? `      контекст профиля в рабочем дереве задачи: ${limitsText(winOf(p))}` : `      ${winLine(p.model)}`)
     }
   }
   for (const e of P.checkData(ps.data, n).errors) lines.push(`! ${e.text}`)
