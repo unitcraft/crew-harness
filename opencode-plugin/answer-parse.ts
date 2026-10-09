@@ -75,3 +75,220 @@ export function answerModeError(v: unknown): string | undefined {
   const { notes } = normalizeAnswerMode(v)
   return notes.length ? notes.join("; ") : undefined
 }
+
+// РАЗБОР ОТВЕТА СЕССИИ (REQ-04, REQ-05, REQ-07, REQ-11, REQ-12). Три слоя, каждый проверяется отдельно (crew-answer-parse):
+// деление на блоки по строкам «В-<число>», поля по девяти именам, блок-вопрос («?» в конце строки по трём правилам места).
+// Закрыто по умолчанию: всё, что разбор не понял, остаётся владельцу.
+
+export const FIELD_NAMES = ["тип", "автоответ", "рекомендация", "варианты", "умолчание", "затрагивает", "адресат", "срок", "влияет"] as const
+export type FieldName = (typeof FIELD_NAMES)[number]
+/** Типы, которые вопрос вправе объявить для автоответа; gate — ворота, всегда владельцу. */
+export const QUESTION_TYPES = ["requirements", "plan", "implementation"] as const
+
+export type Field = { name: FieldName; value: string; sign?: string }
+export type Block = {
+  /** номер из «В-<число>»; 0 — блок без идентификатора */
+  qn: number
+  /** начало вопроса для письма и показа (до 100 знаков) */
+  head: string
+  fields: Field[]
+  hasFields: boolean
+  /** тип вопроса: requirements / plan / implementation / gate; «?» — неизвестный или спорный; undefined — не объявлен */
+  type?: string
+  recommendation: string
+  recommended: boolean
+  /** строка «Автоответ: допустим» есть, без спорных повторов */
+  auto: boolean
+  /** «?» завершает строку вне значений полей */
+  qmark: boolean
+  /** блок-вопрос (REQ-04) */
+  question: boolean
+  /** текст для слов ворот: значения полей, кроме узких форм, и строки без имени поля */
+  checkText: string
+  /** весь ответ владельцу (REQ-04 «отказы»): причина разбора */
+  forceOwner?: string
+  /** спорные повторы Рекомендации */
+  recConflict?: boolean
+}
+export type Turn = { blocks: Block[]; ids: boolean; ownerAll?: string; failed?: string }
+
+const QEND = /\?[)»"*_`.\s]*$/
+const ID_RE = /^\s*(?:[-*]\s+)?[*_`]*[ВB]-(\d+)/
+const FIELD_RE = new RegExp("^\\s*(?:[-*]\\s+)?[*_`]*\\s*(" + FIELD_NAMES.join("|") + ")\\s*(\\([^)]*\\))?\\s*[*_`]*\\s*:[*_`]*\\s*(.*)$", "i")
+const strip = (s: string) => s.replace(/^[\s*_`.]+|[\s*_`.]+$/g, "")
+const squash = (s: string) => s.replace(/\s+/g, " ").trim()
+
+/** Узкие формы значений, которые не проверяются словами ворот (REQ-13). */
+export const NARROW = {
+  type: (v: string) => ([...QUESTION_TYPES, "gate"] as string[]).includes(strip(v).toLowerCase()),
+  auto: (v: string) => strip(v).toLowerCase() === "допустим",
+  deadline: (v: string) => /^(?:\d{4}-\d{2}-\d{2}|до \d{4}-\d{2}-\d{2}|\d+ (?:мин|ч|сут))$/.test(strip(v)),
+  addressee: (v: string) => {
+    const t = strip(v)
+    return t.length <= 40 && (t === "владелец" || /^[a-z0-9-]{1,20}\.[a-z0-9-]{1,20}$/.test(t))
+  },
+  sign: (v: string) => /^\(\s*Сессия\s+[СC]\d+п?(?:\s*,\s*заход\s+\d+)?\s*\)$/.test(v.trim()),
+}
+
+type Line = { text: string; field?: Field; inValue?: boolean }
+
+function lineOf(text: string): Line {
+  const m = FIELD_RE.exec(text)
+  if (!m) return { text }
+  return { text, field: { name: m[1].toLowerCase() as FieldName, value: m[3], ...(m[2] ? { sign: m[2] } : {}) } }
+}
+
+/** Разобрать строки блока: поля, продолжение Рекомендации, «?» вне значений, текст для слов ворот. */
+function buildBlock(qn: number, rawLines: string[], ids: boolean, place: "tail3" | "beforeField" | "any"): Block {
+  const lines = rawLines.map(lineOf)
+  // продолжение значения Рекомендации: до пустой строки, следующего поля или идентификатора
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].field?.name !== "рекомендация") continue
+    for (let j = i + 1; j < lines.length; j++) {
+      const l = lines[j]
+      if (!l.text.trim() || l.field || ID_RE.test(l.text)) break
+      lines[i].field!.value += "\n" + l.text.trim()
+      l.inValue = true
+    }
+  }
+  const fields = lines.filter((l) => l.field).map((l) => l.field!)
+  const vals = (n: FieldName) => fields.filter((f) => f.name === n).map((f) => squash(strip(f.value)).toLowerCase())
+  const types = [...new Set(vals("тип"))]
+  let type: string | undefined
+  if (types.length === 1) type = ([...QUESTION_TYPES, "gate"] as string[]).includes(types[0]) ? types[0] : "?"
+  else if (types.length > 1) type = types.includes("gate") ? "gate" : "?"
+  const autos = [...new Set(vals("автоответ"))]
+  const recs = [...new Set(fields.filter((f) => f.name === "рекомендация").map((f) => squash(strip(f.value))))]
+  const recommendation = recs.length === 1 ? recs[0] : recs.join(" / ")
+  const noRec = (r: string) => r === "" || r === "—" || r === "-" || r === "–"
+  // «?» в конце строки вне значений полей; Срок и Адресат не узкой формы — обычный текст (их «?» считается)
+  const plainField = (f: Field) => (f.name === "срок" && !NARROW.deadline(f.value)) || (f.name === "адресат" && !NARROW.addressee(f.value))
+  const qEnds = (l: Line) => (!l.field && !l.inValue && QEND.test(l.text)) || (!!l.field && plainField(l.field) && QEND.test(l.text))
+  let qmark: boolean
+  if (place === "tail3") qmark = lines.filter((l) => l.text.trim()).slice(-3).some(qEnds)
+  else if (place === "beforeField") {
+    const first = lines.findIndex((l) => l.field)
+    qmark = lines.slice(0, first < 0 ? lines.length : first).some(qEnds)
+  } else qmark = lines.some(qEnds)
+  const hasQFields = fields.some((f) => f.name === "тип" || f.name === "рекомендация" || f.name === "автоответ")
+  const question = ids && qn > 0 ? qmark || hasQFields : qmark
+  const checkParts: string[] = []
+  for (const l of lines) {
+    if (!l.field) {
+      if (!l.inValue) checkParts.push(l.text)
+      continue
+    }
+    const f = l.field
+    if (f.sign && !NARROW.sign(f.sign)) checkParts.push(f.sign)
+    const narrow = (f.name === "тип" && NARROW.type(f.value)) || (f.name === "автоответ" && NARROW.auto(f.value)) || (f.name === "срок" && NARROW.deadline(f.value)) || (f.name === "адресат" && NARROW.addressee(f.value))
+    if (!narrow) checkParts.push(f.value)
+  }
+  const q = lines.find((l) => qEnds(l)) ?? lines.find((l) => l.text.trim())
+  const head = (q?.text ?? "").replace(ID_RE, "").replace(/^[\s:.—-]+/, "").trim().slice(0, 100)
+  return {
+    qn,
+    head,
+    fields,
+    hasFields: fields.length > 0,
+    ...(type !== undefined ? { type } : {}),
+    recommendation,
+    recommended: recs.length === 1 && !noRec(recs[0]),
+    auto: autos.length === 1 && autos[0] === "допустим",
+    qmark,
+    question,
+    checkText: checkParts.join("\n"),
+    ...(recs.length > 1 ? { recConflict: true } : {}),
+  }
+}
+
+/** Разбор последнего ответа хода. Не бросает: при сбое — failed (вопрос владельцу, REQ-11). */
+export function parseTurn(text: string): Turn {
+  try {
+    const lines = String(text ?? "").replace(/\r/g, "").split("\n")
+    const idAt: number[] = []
+    lines.forEach((l, i) => ID_RE.test(l) && idAt.push(i))
+    if (!idAt.length) {
+      const b = buildBlock(0, lines, false, lines.some((l) => FIELD_RE.test(l)) ? "beforeField" : "tail3")
+      const counts = (["тип", "рекомендация", "автоответ"] as const).map((n) => b.fields.filter((f) => f.name === n).length)
+      if (Math.max(...counts) > 1) {
+        b.forceOwner = "несколько пар полей в ответе без идентификаторов"
+        return { blocks: [b], ids: false, ownerAll: b.forceOwner }
+      }
+      return { blocks: [b], ids: false }
+    }
+    const blocks: Block[] = []
+    let ownerAll: string | undefined
+    if (idAt[0] > 0) {
+      const pre = lines.slice(0, idAt[0])
+      if (pre.some((l) => FIELD_RE.test(l))) ownerAll = "поле до первого идентификатора"
+      if (pre.some((l) => l.trim())) blocks.push(buildBlock(0, pre, true, "any"))
+    }
+    idAt.forEach((at, k) => {
+      const end = k + 1 < idAt.length ? idAt[k + 1] : lines.length
+      blocks.push(buildBlock(Number(ID_RE.exec(lines[at])![1]), lines.slice(at, end), true, "any"))
+    })
+    if (ownerAll) for (const b of blocks) b.forceOwner = ownerAll
+    return { blocks, ids: true, ...(ownerAll ? { ownerAll } : {}) }
+  } catch (e) {
+    return { blocks: [], ids: false, failed: String(e) }
+  }
+}
+
+/** Причины остатка — закрытый перечень (REQ-07). */
+export const REST_REASONS = [
+  "нет рекомендации",
+  "нет типа/признака/неизвестный тип",
+  "блок без полей",
+  "ворота (тип gate)",
+  "ворота (слова)",
+  "сессия приёмки",
+  "режим owner для типа",
+  "предел автоответов",
+  "нет «?» в конце строки",
+] as const
+export type RestReason = (typeof REST_REASONS)[number]
+/** Сбой разбора или записи (REQ-11): вопрос владельцу, причина вне перечня — ошибка идёт в журнал службы. */
+export const FAILURE_REASON = "сбой разбора"
+
+export type ClassifyCtx = {
+  map: AnswerMap
+  /** карточка сессии содержит review (сессия приёмки) */
+  review: boolean
+  /** ответов подряд, уже данных до этого блока */
+  count: number
+  max: number
+}
+export type Verdict = { closed: true } | { closed: false; reason: RestReason | typeof FAILURE_REASON }
+
+/**
+ * Слова ворот (REQ-13). На этом шаге заглушка «закрыто по умолчанию»: любой текст — ворота; настоящий словарь —
+ * следующий шаг плана. Возвращает найденную основу или undefined.
+ */
+export function gateWord(_text: string): string | undefined {
+  return "?"
+}
+
+const rest = (reason: RestReason): Verdict => ({ closed: false, reason })
+
+/**
+ * Блок-вопрос закрывается рекомендацией только при всех условиях сразу (REQ-05). Порядок — от самого строгого: блок без полей;
+ * тип gate и неизвестный тип; сессия приёмки; слова ворот; режим типа; рекомендация; разрешающий признак; предел;
+ * «?» в конце строки. Сбой — остаток.
+ */
+export function classify(block: Block, ctx: ClassifyCtx): Verdict {
+  try {
+    if (!block.hasFields) return rest("блок без полей")
+    if (block.forceOwner) return rest(block.type === "gate" ? "ворота (тип gate)" : "нет типа/признака/неизвестный тип")
+    if (!(/* GATE:type< */ (QUESTION_TYPES as readonly string[]).includes(block.type ?? "") /* GATE:type> */)) return rest(block.type === "gate" ? "ворота (тип gate)" : "нет типа/признака/неизвестный тип")
+    if (/* GATE:review< */ ctx.review /* GATE:review> */) return rest("сессия приёмки")
+    if (/* GATE:words< */ gateWord(block.checkText) /* GATE:words> */) return rest("ворота (слова)")
+    if (/* GATE:mode< */ modeFor(ctx.map, block.type!) /* GATE:mode> */ === "owner") return rest("режим owner для типа")
+    if (!(/* GATE:rec< */ block.recommended /* GATE:rec> */)) return rest("нет рекомендации")
+    if (!(/* GATE:flag< */ block.auto /* GATE:flag> */)) return rest("нет типа/признака/неизвестный тип")
+    if (/* GATE:limit< */ ctx.count >= ctx.max /* GATE:limit> */) return rest("предел автоответов")
+    if (!block.qmark) return rest("нет «?» в конце строки")
+    return { closed: true }
+  } catch {
+    return { closed: false, reason: FAILURE_REASON }
+  }
+}
