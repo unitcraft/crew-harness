@@ -9,7 +9,8 @@ import { execFileSync } from "node:child_process"
 import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { fileURLToPath, pathToFileURL } from "node:url"
+import { fileURLToPath } from "node:url"
+import { harness } from "./answer-harness.mjs"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const script = path.join(here, "answer-golden.mjs")
@@ -34,15 +35,42 @@ cell("AC-01 без ключей", first.code === 0 && /^golden ok/m.test(first.o
 const second = run(["--check", "--owner"])
 cell("AC-01 owner во всех типах", second.code === 0 && /^golden ok/m.test(second.out), second.out.slice(0, 1500))
 
-// AC-04: a pack of three blocks of the form of the Canon plus the lines of the type and the permission: the old pass (endsWithQuestion)
-// sees no question in it. The cell uses only the old function, so it is green on the base too.
-const plugin = process.env.CREW_PLUGIN_DIR ? path.resolve(process.env.CREW_PLUGIN_DIR) : path.join(here, "..")
-process.env.XDG_DATA_HOME = tmp
-const status = await import(pathToFileURL(path.join(plugin, "status.ts")).href)
+// The cells below use only the old functions and files, so they are green on the base too (the harness starts the plugin and a
+// real database of turns; the modes of the new keys are written into the project file and are ignored there).
+const H = await harness("crew-answer-golden-cells", { sessions: ["sesGold001", "sesGold002", "sesGold003"] })
+const status = H.status
 const NL = String.fromCharCode(10)
 const blk = (n, type, rec) => [`В-0${n} Вопрос номер ${n}?`, `Тип: ${type}`, ...(rec ? [`Рекомендация: ${rec}`] : []), "Автоответ: допустим"].join(NL)
+
+// AC-04: a pack of three blocks of the form of the Canon plus the lines of the type and the permission: the old pass (endsWithQuestion)
+// sees no question in it
 const pack = [blk(1, "implementation", "делаем по первому варианту"), "", blk(2, "implementation"), "", blk(3, "gate", "влить ветку")].join(NL)
 cell("AC-04 endsWithQuestion", status.endsWithQuestion(pack) === undefined, String(status.endsWithQuestion(pack)))
+
+// AC-21: five texts; a block of four lines (the form of the Canon) is not a question for the old pass
+const five = [
+  [["Итог.", "", "Пушить main?", "", "СТОП: вопрос"].join(NL), "Пушить main?"],
+  [["Готово. Как? — так.", "Всё."].join(NL), undefined],
+  [["В-01 Как назвать функцию?", "Тип: implementation", "Рекомендация: parseBlock", "Автоответ: допустим"].join(NL), undefined],
+  [["Сделал.", "Можно ли так (если да, продолжу)?"].join(NL), "Можно ли так (если да, продолжу)?"],
+  [["Отчёт.", "Что дальше?»", "Подпись"].join(NL), "Что дальше?»"],
+]
+const bad = five.filter(([t, want]) => status.endsWithQuestion(t) !== want)
+cell("AC-21 пять текстов", bad.length === 0, JSON.stringify(bad.map(([t]) => [t, status.endsWithQuestion(t)])))
+
+// AC-19: the files status/<session>.json of a turn without a question are the same with the modes on and off (but for the time of the write)
+const same = async (sid, on) => {
+  on ? H.setSettings({ answer_mode: { default: "recommendations" } }) : H.setSettings({})
+  await H.turn(sid, "Готово, вопросов нет.", { user: "поехали", at: Date.now() - 20_000 })
+  await H.wait(1200)
+  const raw = JSON.parse(readFileSync(path.join(status.STATUS, `${sid}.json`), "utf8"))
+  delete raw.updated
+  return JSON.stringify(raw).replaceAll(sid, "<S>")
+}
+const off = await same("sesGold001", false)
+const onn = await same("sesGold002", true)
+cell("AC-19 статус", off === onn, off + NL + onn)
+H.close()
 
 // the control: one line of a copy of the snapshot is spoiled -- the check must say "golden differs"
 const spoiled = path.join(tmp, "spoiled.json")
