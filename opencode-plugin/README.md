@@ -243,6 +243,30 @@ Until the Canon item about the journal is in `main`, sessions write the earlier 
 "все шаги сделаны, итога нет" until it leaves the panel after 24 hours; a line written after "готово" in the same session brings the same
 state back. Later the sessions write `<code> N/N [HH:MM] готово …` last and the panel shows "готово" for 15 minutes.
 
+## Task journals: `progress_line` and `usage_line`
+
+Two tools of the plugin write the journals of a task folder (Canon item "Три журнала сессии"). They are registered by a
+separate `ctx.tool.transform` call (`journal.ts`), are not in the MCP server and not among the twelve `crew_*` tools; a
+failure to register them does not break the plugin. Both are narrow: no shell, append only, a fixed file name, the path must
+stay inside the project folder of the window, the refusal of the file system comes back as a refusal, earlier lines are never
+rewritten. A refusal is the answer `Не записано: <reason>`, nothing is written.
+
+`progress_line` `{file, code, unit, text}`: appends ONE line `<code> k/N [HH:MM] <text>` with the machine time to a file
+named `progress.log`, which must already exist. `code` is 1-8 letters or digits, `unit` is `k/N` or `?/?`, `text` is one line
+of up to 120 characters. Example: `progress_line {file: "doc/tasks/007-x/progress.log", code: "С5д", unit: "4/13", text: "..."}`.
+Commands that only ask the clock (`date +%H:%M`, `Get-Date -Format HH:mm`) are refused by the `opencode-windows-env` plugin;
+this tool is the allowed way to put the time into the journal.
+
+`usage_line` `{file, code, result}`: appends ONE JSON line (format version `"v":1`) to a file named `usage.log`; the file may
+be created only when a `progress.log` lies in the same folder. The agent passes the file, the session code and the result
+(one line, up to 200 characters); the plugin fills the rest: `at` (ISO time), `session`, `model` (`provider/id`), `variant`,
+`tokens` `{input, output, reasoning, cache_read, cache_write}`, `cost`, `started` and `seconds` (from the session card of
+`ctx.session.get`), `max_loop_lag_ms` (the largest delay of the plugin's own loop timer, the one that writes the "loop lag"
+lines, since the session was created or the plugin started, whichever is later), `commit` (`git rev-parse HEAD` of the file
+folder, empty outside a repository). A value the plugin cannot read is `null`, never guessed; `limits`, `tool_calls` and
+`test_runs` are `null` for now. Call it once, when the session is finished:
+`usage_line {file: "doc/tasks/007-x/usage.log", code: "С5д", result: "готово: 13 из 13"}`.
+
 ## Obligations instead of a push controller
 
 A question or a task is the recipient's obligation until it answers (`reply_to: qid`). Windows on

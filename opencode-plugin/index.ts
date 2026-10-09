@@ -123,6 +123,7 @@ import { cellOfState, resolveStageProfile, stageOfLaunch, tabFitsCell } from "./
 import { catalogModels, writeCatalog } from "./model-catalog.ts"
 import { ensureWorktree, fileAt, gitTraces, leftoversOf, mergeHolder, reviewLetter } from "./review.ts"
 import { precheckLines } from "./precheck.ts"
+import { noteLoopLag, registerJournalTools } from "./journal.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
 
@@ -1416,6 +1417,12 @@ export default {
     await ctx.tool.transform((editor: any) => {
       for (const t of tools) editor.add(toEditor(t))
     })
+    // Журналы задачи (journal.ts): progress_line и usage_line. Отдельным вызовом и вне списка tools / MCP-сервера; сбой не ломает плагин.
+    try {
+      await registerJournalTools(ctx, log)
+    } catch (e) {
+      log(`journal tools failed: ${e}`)
+    }
 
     // Слэш-команды /crew-help, /crew-sets и /crew-profiles — команды окна (tui.ts, диалог с текстом сразу). Здесь они не
     // регистрируются: служебное сообщение (ctx.session.synthetic) окно 2.0.23 не показывает (проба 2026-10-08: execute вызван, сообщений
@@ -1468,6 +1475,7 @@ export default {
       const t = Date.now()
       const lag = t - lagExpected
       lagExpected = t + LAG_EVERY_MS
+      noteLoopLag(lag, t) // для usage_line: наибольшая задержка за время сессии
       if (lag < LAG_LOG_MS) return
       const inPass = passBusy ? `шаг прохода ${passStage}, проход идёт ${Math.round((t - passStartedAt) / 1000)} с` : "плагин свободен"
       log(`loop lag ${lag} ms (${inPass}; память ${Math.round(process.memoryUsage().rss / 1048576)} МБ)`)
