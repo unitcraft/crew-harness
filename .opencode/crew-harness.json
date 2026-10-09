@@ -2,12 +2,12 @@
   "model_profiles": {
     "claude": {
       "heavy": {
-        "model": "claude-code/opus",
+        "model": "claude-code/claude-opus-5-5",
         "context": 720000,
         "output": 64000
       },
       "medium": {
-        "model": "claude-code/sonnet",
+        "model": "claude-code/claude-sonnet-5-5",
         "context": 720000,
         "output": 64000
       },
@@ -36,13 +36,13 @@
     },
     "codex": {
       "heavy": {
-        "model": "openai/gpt-5.5",
+        "model": "openai/gpt-6-astra",
         "context": 525000,
         "input": 461000,
         "output": 128000
       },
       "medium": {
-        "model": "openai/gpt-5.6-terra",
+        "model": "openai/gpt-6.1-sol",
         "context": 525000,
         "input": 461000,
         "output": 128000
@@ -55,6 +55,7 @@
       }
     }
   },
+  "profile_set": "codex",
   "profile_sets": {
     "default": {
       "develop": {
