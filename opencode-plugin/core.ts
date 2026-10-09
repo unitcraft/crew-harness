@@ -616,6 +616,47 @@ export async function userAfter(sessionID: string, at: number): Promise<boolean>
   }
 }
 
+/** Время первого слова владельца (не письма плагина) после момента at; 0 — не было. В отличие от userAfter читает все строки
+ *  `user` после момента, без предела в 20 строк: после двадцати писем плагина слово владельца иначе не видно, а для режимов
+ *  ответа по рекомендации это ошибка в сторону автоответа (задача 007, REQ-10, REQ-18). Метки писем отбираются здесь. */
+export async function ownerWordAfter(sessionID: string, at: number): Promise<number> {
+  if (!sessionID || !existsSync(dbFile())) return 0
+  let db: any
+  try {
+    db = await openDb()
+    const rows = db.prepare("select data, time_created from session_message where session_id = ? and type = 'user' and time_created > ? order by time_created").all(sessionID, at) as any[]
+    for (const r of rows) {
+      try {
+        const t = JSON.parse(r.data)?.text
+        if (typeof t === "string" && !isCrewText(t)) return Number(r.time_created) || 0
+      } catch {}
+    }
+    return 0
+  } catch {
+    return 0
+  } finally {
+    try {
+      db?.close()
+    } catch {}
+  }
+}
+
+/** Время последней строки `user` сессии (письма плагина тоже строки user) — дешёвый признак «в диалоге что-то появилось». */
+export async function lastUserAt(sessionID: string): Promise<number> {
+  if (!sessionID || !existsSync(dbFile())) return 0
+  let db: any
+  try {
+    db = await openDb()
+    return Number(db.prepare("select max(time_created) as t from session_message where session_id = ? and type = 'user'").get(sessionID)?.t ?? 0)
+  } catch {
+    return 0
+  } finally {
+    try {
+      db?.close()
+    } catch {}
+  }
+}
+
 /** Ход открыт и живой: после последнего idle есть сообщения, обновлённые не раньше чем за fresh мс. */
 /** Путь worktree и ветка задачи по настройкам проекта (worktrees не задан — решает методология). Слаг — из записи задачи:
  *  вычислен один раз при постановке, путь в ответе crew_spawn и созданный — одни и те же. */
@@ -2464,7 +2505,7 @@ export function postExpected(t: Task): string[] {
   }
   return sent
 }
-const letterExistsFor = (key: string, id: string) => existsSync(path.join(INBOX, safeKey(key), `${id}.json`)) || existsSync(path.join(READ, safeKey(key), `${id}.json`)) || readdirSafe(DELIVERING).some((d) => existsSync(path.join(DELIVERING, d, safeKey(key), `${id}.json`)))
+export const letterExistsFor = (key: string, id: string) => existsSync(path.join(INBOX, safeKey(key), `${id}.json`)) || existsSync(path.join(READ, safeKey(key), `${id}.json`)) || readdirSafe(DELIVERING).some((d) => existsSync(path.join(DELIVERING, d, safeKey(key), `${id}.json`)))
 const readdirSafe = (d: string) => {
   try {
     return readdirSync(d)
