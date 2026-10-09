@@ -1,0 +1,32 @@
+{
+ "crew-answer-golden": [
+  "AC-01 control",
+  "AC-01 owner во всех типах",
+  "AC-01 без ключей",
+  "AC-04 endsWithQuestion",
+  "AC-18 прежние письма",
+  "AC-19 статус",
+  "AC-21 пять текстов"
+ ],
+ "crew-answer-config": [
+  "AC-07 doctor control: no key, no problem",
+  "AC-07 set",
+  "AC-08 profile_set refusal text is unchanged"
+ ],
+ "crew-answer-parse": [],
+ "crew-answer-gate": [],
+ "crew-answer-journal": [],
+ "crew-answer-view": [],
+ "crew-answer-docs": [],
+ "crew-answer-flow": [
+  "AC-01 строки без ключей",
+  "AC-02 без признака",
+  "AC-03 a",
+  "AC-03 c",
+  "AC-04 пакет не виден endsWithQuestion",
+  "AC-11 a",
+  "AC-15 планы",
+  "AC-30 а",
+  "AC-30 д"
+ ]
+}

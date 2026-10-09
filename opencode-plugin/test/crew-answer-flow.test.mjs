@@ -14,7 +14,9 @@ const cell = R.cell
 const NL = String.fromCharCode(10)
 const SIDS = Array.from({ length: 40 }, (_, i) => `sesFlow${String(i + 1).padStart(2, "0")}`)
 const H = await harness("crew-answer-flow", { sessions: SIDS, settings: { owner_reminder_min: 1 } })
-const A = await load("answer.ts")
+const core0 = () => H.core
+// the module of the journal may be absent (the base of the proof of red): then there are no records and the cells that need them fail
+const A = await load("answer.ts").catch(() => ({ ANSWERS: path.join(core0().BASE, "answers"), readRecords: () => [] }))
 const { core } = H
 let n = 0
 const nextSid = () => SIDS[n++]
@@ -89,7 +91,7 @@ const lettersText = (sid) => H.letters(sid).map((l) => l.text).join(NL + "---" +
 }
 
 // ---- AC-04: a pack of three; endsWithQuestion of the pack sees no question -----------------------------------------------
-const PACK3 = [block({ n: "01", q: "Первый вопрос?", type: "implementation", rec: "делаем по первому варианту" }), "", block({ n: "02", q: "Второй вопрос?", type: "implementation", rec: null }), "", block({ n: "03", q: "Третий вопрос?", type: "gate", rec: "влить ветку" })].join(NL)
+const PACK3 = [block({ n: "01", q: "Первый вопрос?", type: "implementation", rec: "делаем по первому варианту" }), "", block({ n: "02", q: "Второй вопрос?", type: "implementation", rec: null }), "", block({ n: "03", q: "Третий вопрос?", type: "gate", rec: "делаем по третьему варианту" })].join(NL)
 {
   cell("AC-04 пакет не виден endsWithQuestion", H.status.endsWithQuestion(PACK3) === undefined, String(H.status.endsWithQuestion(PACK3)))
   const sid = await go(PACK3, { settings: () => modes({ default: "recommendations" }) })
@@ -137,19 +139,22 @@ const PACK3 = [block({ n: "01", q: "Первый вопрос?", type: "implemen
   const sid = await go(PACK3, { settings: () => modes({ default: "recommendations" }) })
   const first = noticesOf(sid)
   const rest = recsOf(sid, "r")[0]
-  const f = path.join(A.ANSWERS, `${rest.id}.json`)
-  const j = JSON.parse(readFileSync(f, "utf8"))
-  j.remindedAt = Date.now() - 2 * 60_000 // two minutes ago: the repeat is due (owner_reminder_min is 1)
-  writeFileSync(f, JSON.stringify(j))
-  await H.until(() => noticesOf(sid).length >= 2, 8_000)
-  const repeated = noticesOf(sid).length
-  H.ownerSays(sid, "отвечаю сам", Date.now())
-  await H.wait(800)
-  const lifted = recsOf(sid, "r")[0]
-  const afterLift = noticesOf(sid).length
-  writeFileSync(f, JSON.stringify({ ...JSON.parse(readFileSync(f, "utf8")), remindedAt: Date.now() - 2 * 60_000 }))
-  await H.wait(1200)
-  cell("AC-30 б", first.length === 1 && /В-02/.test(first[0].message) && /В-03/.test(first[0].message) && /ждёт вас$/.test(first[0].title) && repeated === 2 && lifted?.state === "снято: владелец написал" && noticesOf(sid).length === afterLift, JSON.stringify([first.length, repeated, lifted?.state, afterLift, noticesOf(sid).length]))
+  if (!rest) cell("AC-30 б", false, "no mark of the rest in the journal")
+  else {
+    const f = path.join(A.ANSWERS, `${rest.id}.json`)
+    const j = JSON.parse(readFileSync(f, "utf8"))
+    j.remindedAt = Date.now() - 2 * 60_000 // two minutes ago: the repeat is due (owner_reminder_min is 1)
+    writeFileSync(f, JSON.stringify(j))
+    await H.until(() => noticesOf(sid).length >= 2, 8_000)
+    const repeated = noticesOf(sid).length
+    H.ownerSays(sid, "отвечаю сам", Date.now())
+    await H.wait(800)
+    const lifted = recsOf(sid, "r")[0]
+    const afterLift = noticesOf(sid).length
+    writeFileSync(f, JSON.stringify({ ...JSON.parse(readFileSync(f, "utf8")), remindedAt: Date.now() - 2 * 60_000 }))
+    await H.wait(1200)
+    cell("AC-30 б", first.length === 1 && /В-02/.test(first[0].message) && /В-03/.test(first[0].message) && /ждёт вас$/.test(first[0].title) && repeated === 2 && lifted?.state === "снято: владелец написал" && noticesOf(sid).length === afterLift, JSON.stringify([first.length, repeated, lifted?.state, afterLift, noticesOf(sid).length]))
+  }
 }
 {
   // г: no question has a recommendation: a notice with the text of the rest
@@ -168,7 +173,7 @@ const PACK3 = [block({ n: "01", q: "Первый вопрос?", type: "implemen
   // з: a mixed pack of short blocks, the last question is seen by endsWithQuestion: exactly one notice, no old one
   const pk = [block({ n: "01", q: "Первый вопрос?", type: "implementation" }), "", "В-02 Второй вопрос без полей?"].join(NL)
   const zz = await go(pk, { settings: () => modes({ default: "recommendations" }) })
-  cell("AC-30 з", H.status.endsWithQuestion(pk) !== undefined && noticesOf(zz).length === 1 && /В-02/.test(noticesOf(zz)[0].message), JSON.stringify([H.status.endsWithQuestion(pk), noticesOf(zz)]))
+  cell("AC-30 з", H.status.endsWithQuestion(pk) !== undefined && noticesOf(zz).length === 1 && /В-02/.test(noticesOf(zz)[0].message) && /блок без полей/.test(noticesOf(zz)[0].message), JSON.stringify([H.status.endsWithQuestion(pk), noticesOf(zz)]))
   // и: a block of the type, the permission and a recommendation but no "?" at the end of a line
   const i = await go(["В-01 Выбор формата", "Тип: implementation", "Рекомендация: json", "Автоответ: допустим"].join(NL), { settings: () => modes({ default: "recommendations" }) })
   cell("AC-30 и", recsOf(i, "a").length === 0 && noticesOf(i).length === 1 && /нет «\?» в конце строки/.test(noticesOf(i)[0].message), JSON.stringify([recsOf(i), noticesOf(i)]))
@@ -212,9 +217,9 @@ const noWake = (sid) => H.letters(sid).filter((l) => /Не завершено/.t
   const lt = lettersText(sid)
   const rest = forAuthor(sid, /^answer-rest-/)
   cell("AC-10 пакет", recsOf(sid, "a").length === 1 && rest.length === 1 && /В-02/.test(rest[0].text) && /В-03/.test(rest[0].text) && /crew_send \{to:/.test(rest[0].text) && /В-02/.test(lt) && noWake(sid) && noticesOf(sid).length === 0, JSON.stringify([recsOf(sid).map((r) => [r.kind, r.qn]), toAuthor().map((l) => l.id), noticesOf(sid)]))
-  const id = rest[0].id
+  const id = rest[0]?.id
   await H.wait(1200)
-  cell("AC-30 в", id === `answer-rest-${sid}-${recsOf(sid, "r")[0].end}` && forAuthor(sid, /^answer-rest-/).length === 1 && noticesOf(sid).length === 0 && oblig(sid)[0].nudges === 0 && (oblig(sid)[0].empty ?? 0) === 0, JSON.stringify([id, toAuthor().map((l) => l.id), oblig(sid)]))
+  cell("AC-30 в", id === `answer-rest-${sid}-${recsOf(sid, "r")[0]?.end}` && forAuthor(sid, /^answer-rest-/).length === 1 && noticesOf(sid).length === 0 && oblig(sid)[0].nudges === 0 && (oblig(sid)[0].empty ?? 0) === 0, JSON.stringify([id, toAuthor().map((l) => l.id), oblig(sid)]))
 }
 {
   modes({ default: "recommendations" })

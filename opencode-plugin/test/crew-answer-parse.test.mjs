@@ -58,11 +58,13 @@ cell("AC-29 8", t8a.blocks.find((b) => b.qn === 1).question && P.classify(t8a.bl
 
 // 9. the recommendation: "нет, отдельной задачей" is one; a bare dash and an empty one are not; the bare "нет" is one
 const rec = (v) => P.parseTurn(`В-01 Вопрос?\nТип: plan\nРекомендация:${v}\nАвтоответ: допустим`).blocks[0].recommended
-cell("AC-29 9", rec(" нет, отдельной задачей") && !rec(" —") && !rec(" -") && !rec("") && !rec(" **—**.") && rec(" нет") && !P.parseTurn("В-01 Вопрос?\nТип: plan\nАвтоответ: допустим").blocks[0].recommended, "recommended")
+const recClosed = (v) => P.classify(P.parseTurn(`В-01 Вопрос?\nТип: plan\nРекомендация:${v}\nАвтоответ: допустим`).blocks[0], ctx()).closed
+cell("AC-29 9", rec(" нет, отдельной задачей") && !rec(" —") && !rec(" -") && !rec("") && !rec(" **—**.") && rec(" нет") && !P.parseTurn("В-01 Вопрос?\nТип: plan\nАвтоответ: допустим").blocks[0].recommended && recClosed(" нет, отдельной задачей") && recClosed(" нет") && !recClosed(" —") && !recClosed("") && !recClosed(" **—**."), "recommended")
 
 // 10. no "Автоответ: допустим", or another word in it: to the owner
+const flagClosed = (line) => P.classify(P.parseTurn(`В-01 Вопрос?\nТип: plan\nРекомендация: так${line ? "\n" + line : ""}`).blocks[0], ctx()).closed
 const auto = (line) => P.parseTurn(`В-01 Вопрос?\nТип: plan\nРекомендация: так${line ? "\n" + line : ""}`).blocks[0].auto
-cell("AC-29 10", auto("Автоответ: допустим") && auto("Автоответ: Допустим.") && auto("**Автоответ:** допустим") && !auto("") && !auto("Автоответ: нет") && !auto("Автоответ: допустим (после слияния)") && !auto("Автоответ: допустим\nАвтоответ: нет"), "auto")
+cell("AC-29 10", auto("Автоответ: допустим") && auto("Автоответ: Допустим.") && auto("**Автоответ:** допустим") && !auto("") && !auto("Автоответ: нет") && !auto("Автоответ: допустим (после слияния)") && !auto("Автоответ: допустим\nАвтоответ: нет") && flagClosed("Автоответ: допустим") && flagClosed("Автоответ: Допустим.") && !flagClosed("") && !flagClosed("Автоответ: нет") && !flagClosed("Автоответ: допустим (после слияния)"), "auto")
 
 // 11. a question in the text before the first "В-01"
 const t11a = P.parseTurn("Сначала скажи, делаем ли мы это?\n\nВ-01 Вопрос?\nТип: plan\nРекомендация: так\nАвтоответ: допустим")

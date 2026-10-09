@@ -70,6 +70,17 @@ const same = async (sid, on) => {
 const off = await same("sesGold001", false)
 const onn = await same("sesGold002", true)
 cell("AC-19 статус", off === onn, off + NL + onn)
+// AC-18: the letters of the old kinds look as before (formatLetters over a letter of a neighbour, with a question, a reply and a
+// service letter of the plugin); the text is compared with the snapshot of the base (or the current one)
+{
+  const me = { session: "sesTASK02", role: "worker", auto: false, title: "sesTASK02", directory: H.proj, repo: "proj", project: "proj", pid: process.pid, updated: 1 }
+  const NOW = Date.UTC(2026, 9, 9, 12, 0, 0)
+  const peer = (id, more = {}) => ({ id, from_role: "proj.worker", from_session: "sesOWNER1", to: "sesTASK02", time: NOW, text: `письмо ${id}`, ...more })
+  const letters = [peer("l1"), peer("l2", { qid: "q1" }), peer("l3", { reply_to: "q0" }), { id: "l4", from_role: H.core.PLUGIN_SENDER, from_session: H.core.PLUGIN_SENDER, to: "sesTASK02", time: NOW, text: "служебное письмо плагина" }]
+  const shown = H.core.formatLetters(letters, me).replace(/\d\d:\d\d/g, "HH:MM")
+  const snap = JSON.parse(readFileSync(process.env.ANSWER_GOLDEN_FILE || path.join(here, "answer-golden.json"), "utf8"))["letters: formatLetters"]
+  cell("AC-18 прежние письма", shown === snap, shown + NL + "---" + NL + snap)
+}
 H.close()
 
 // the control: one line of a copy of the snapshot is spoiled -- the check must say "golden differs"

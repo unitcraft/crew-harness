@@ -24,8 +24,9 @@ if (!mode) {
   process.exit(2)
 }
 
-// the full block of a question: the type, the recommendation, the permission, and the "?" at the end of a line among the last three
-const BLOCK = "Итог по шагу.\n\nТип: implementation\nРекомендация: формат json — потому что его читает тест\nАвтоответ: допустим\nКакой формат писать?"
+// the full block of a question: the identifier, the type, the recommendation, the permission, and a "?" at the end of a line among the last three
+// (the old pass sees it; with the modes on by a broken default the new pass would see a block-question too, so a broken default changes the texts)
+const BLOCK = ["Итог по шагу.", "", "В-01 Какой формат писать?", "Тип: implementation", "Рекомендация: формат json — потому что его читает тест", "Автоответ: допустим", "Согласны с рекомендацией?"].join(String.fromCharCode(10))
 const NOW = Date.UTC(2026, 9, 9, 12, 0, 0)
 
 const H = await harness("crew-answer-golden", { settings: { owner_reminder_min: 0.03, ...(withOwner ? { answer_mode: { default: "owner" } } : {}) } })
