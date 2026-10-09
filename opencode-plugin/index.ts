@@ -109,7 +109,11 @@ import {
   propagateToParent,
   PLUGIN_SENDER,
   stampProfile,
+  ownerWordAfter,
+  lastUserAt,
 } from "./core.ts"
+import { answerTurn, markInterventions } from "./answer.ts"
+import { answerModesOn } from "./answer-parse.ts"
 import { DECISION_RU, readApprovals, removeApproval } from "./approvals.ts"
 import { sweepRead } from "./housekeeping.ts"
 import { allSteps, nextPlanNumber, parsePlan, stepDeps } from "./plans.ts"
@@ -802,6 +806,26 @@ export default {
         }
         const s = statusOf({ card: c, busy, busySince: c.busySince, end, asked: asked.get(c.session) ?? [], now: t, watches: ws, ...(staleSince ? { staleSince } : {}) })
         const prev = saveStatus(s)
+        // РЕЖИМЫ ОТВЕТА НА ВОПРОСЫ (задача 007, ADR-0010): решение принимается раньше блока уведомлений. Режимы выключены —
+        // ничего не читается и прежний путь идёт как был. handled — «ждёт вас» по этому ходу подавлено целиком; остаток вопросов
+        // на вкладке владельца уходит одним уведомлением (повтор по owner_reminder_min), markNotified не вызывается.
+        const cfgA = loadConfig(c.directory)
+        if (answerModesOn(cfgA.answerMode)) {
+          // слово владельца после автоответа или остатка — каждый проход, даже если ход уже идёт (отзыв не ждёт конца хода)
+          try {
+            await markInterventions(c.session, t, { ownerWordAfter, lastUserAt })
+          } catch (e) {
+            log(`answer: marks of ${c.session} failed: ${e}`)
+          }
+          if (end && !busy) {
+            const r = await answerTurn({ card: c, key: keyOf(c), end, cfg: cfgA, now: t, channel: "status", deps: { ownerWordAfter, lastUserAt } })
+            if (r.handled) {
+              if (r.notice) for (const w of windows) postNotice(w.pid, { sessionID: c.session, title: `${short(sessionLabel(c.session, keyOf(c)), 40)} ждёт вас`, message: r.notice.message, attention: true, duration: 30_000 })
+              if (r.notice) log(`owner wanted by ${c.session}: the rest of the questions`)
+              continue
+            }
+          }
+        }
         if (s.state !== "owner") continue
         const fresh = !(prev?.state === "owner" && prev.since === s.since)
         const every = loadConfig(c.directory).ownerReminderMin * 60_000

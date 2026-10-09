@@ -167,7 +167,8 @@ export type Deps = {
 const marked = new Map<string, { at: number; userAt: number; idle: number }>()
 
 /**
- * Слово владельца после автоответа помечает запись `владелец вмешался` (REQ-18). Не чаще раза в минуту на сессию и не чаще, чем
+ * Слово владельца после автоответа помечает запись `владелец вмешался` (REQ-18); слово после конца хода с остатком снимает
+ * пометку остатка. Не чаще раза в минуту на сессию и не чаще, чем
  * меняется время конца хода (idle) или время последней строки user; новая строка user снимает минутное ограничение: слово
  * владельца обнуляет счёт на ближайшем проходе. Проверяются только записи `дан` младше суток. Возвращает число помеченных.
  */
@@ -180,11 +181,20 @@ export async function markInterventions(session: string, now: number, deps: Deps
   marked.set(session, { at: now, userAt, idle })
   let n = 0
   for (const r of readRecords(session, now)) {
-    if (r.kind !== "a" || r.state !== "дан" || now - r.answeredAt > DAY_MS) continue
-    const at = await deps.ownerWordAfter(session, r.answeredAt)
-    if (at > 0) {
-      updateRecord(r.id, { state: "владелец вмешался", intervenedAt: at })
-      n++
+    if (now - (r.answeredAt || r.askedAt) > DAY_MS) continue
+    if (r.kind === "a" && r.state === "дан") {
+      const at = await deps.ownerWordAfter(session, r.answeredAt)
+      if (at > 0) {
+        updateRecord(r.id, { state: "владелец вмешался", intervenedAt: at })
+        n++
+      }
+    } else if (r.kind === "r" && r.state === "остаток: ждёт слова владельца") {
+      // владелец написал после конца хода с остатком: пометка снимается, повтор уведомления прекращается (даже если ход уже идёт)
+      const at = await deps.ownerWordAfter(session, r.end)
+      if (at > 0) {
+        updateRecord(r.id, { state: "снято: владелец написал", intervenedAt: at })
+        n++
+      }
     }
   }
   return n
@@ -208,8 +218,8 @@ export function answerLetterText(rec: AnswerRecord, rest: RestItem[]): string {
 }
 
 /** Что показать владельцу об остатке одной строкой (уведомление, /crew). */
-export const restSummary = (rest: RestItem[], max = 100) => {
-  const t = rest.map((r) => `${r.n ? `В-${String(r.n).padStart(2, "0")}` : "вопрос"} ${r.head}`).join("; ")
+export const restSummary = (rest: RestItem[], max = 240) => {
+  const t = rest.map((r) => `${r.n ? `В-${String(r.n).padStart(2, "0")}` : "вопрос"} ${r.head} (${r.reason})`).join("; ")
   return t.length > max ? `${t.slice(0, max - 1)}…` : t
 }
 
