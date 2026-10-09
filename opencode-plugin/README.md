@@ -269,7 +269,7 @@ A task has a number `#N` (per project, only grows, kept through rework and reass
 owner, the integrator and `crew_list` call it by that; a task session's title is `#N title`. The
 journal is `tasks/<project>/<N>.json` in the mailbox.
 
-- `crew_spawn {title?, goal, criteria, boundaries?, open_questions?, tier?, priority?, role?, parent?}` (the
+- `crew_spawn {title?, goal, criteria, boundaries?, open_questions?, extra?, tier?, priority?, role?, parent?}` (the
   integrator only) starts task `#N` in a new session, with or without a window. No task without a
   goal and acceptance criteria (the project may require more: `task_fields`); model by tier
   (by default `claude-code/opus` / `sonnet` / `haiku`, `spawn_models` overrides; an enabled set of model profiles overrides both for the stages it describes — see [Model profiles](#model-profiles-sets-of-models-and-windows-by-stage)); a limit of running tasks per
@@ -314,7 +314,41 @@ The integrator stays free for the owner and does not re-check accepted work:
   then 2) and take no `worker` place; `merge`, `accept` and `cleaned` need the task's reviewer AND the `acceptor`
   (or `integrator`) role — a reviewer who changed role loses them; the executor of a task is refused by name. The
   role is shared. The default stays `worker`;
-- `inflight_limit` (6) bounds the tasks running and in review; `P0` passes every limit.
+- `inflight_limit` (6) bounds the tasks running and in review; `P0` passes every limit;
+- `accepted_slot: "free"` (default `hold`, as before): an accepted task that is not cleaned yet waits for cleanup and
+  no longer counts in `inflight_limit` (`crew_spawn` and the steps of an auto plan count it separately); `cleanup_limit`
+  (10, `0` — no limit) stops new work (not `P0`) when that many accepted tasks wait for cleanup, naming them. The tab of an
+  accepted task is still woken and reminded (`accepted_reminder_min`), `crew_task list` and `show` mark it "ждёт уборки";
+  `OPEN_STATUSES` and `isOpen` are not changed;
+- `merge_precheck: "required"` (default `off`: `merge` takes the lock at once, as before): the lock is issued only on the
+  tip of the target branch where the candidate was already built and checked. The reviewer calls `precheck {n}` (the plugin
+  reads the tip of `origin/<target_branch>` with `git ls-remote`, nothing is fetched or written, and names it), merges that tip
+  into a candidate (for example `integrate/tN`), runs the project's CI on it, then `precheck {n, candidate, result}` — the
+  record becomes green (the candidate must exist locally and contain the tip; the task branch not being in it is only a
+  warning). `merge` then reads the tip again **under the lock**: moved — the lock is released and `merge` is refused naming both
+  tips (a new precheck is needed); the same — the lock is issued on that tip. `unlock {n}` releases a lock you hold for the
+  task. The record becomes stale on `rework`, `reassign`, `cancel`, `unlock` and a new review after a re-submit. The plugin never
+  merges, pushes or runs CI: the plugin only reads. A reviewer who already holds the lock for one task cannot take it for
+  another. If the tip cannot be read (network, 20 s term, no such branch on `origin`) `merge` is refused with the cause and
+  the lock is not issued; a repeat of `merge` by the holder keeps the lock in that case. Without `origin` the tip of the
+  local branch is used;
+- `task_extra_fields` (default empty): up to 8 project fields `{id, label, hint?}`; `crew_spawn` and `crew_task assign`
+  take `extra {id: one line up to 300 characters}`, the values go into the executor letter, the reviewer letter (with the path
+  of the task record, field `extra`) and `show` under "ДОПОЛНИТЕЛЬНО (поля проекта)". An unknown id is refused naming the
+  declared ones; `order` takes no `extra`.
+
+**After the landing.** The reply "already merged, call `accept`" to a repeated `merge` relies on the same local check as
+`accept` (the task branch is an ancestor of the target branch, no `fetch`): it works when the landing was made from the
+task's repository. A landing from another clone before `fetch`, or a squash, shows as a shifted tip: start a new precheck.
+After the lock is lost the landing is confirmed by a new precheck as well. Between the last check of the lock and the reply
+a few milliseconds remain in which another process may take it; the consequence is that `accept` refuses ("lock first"), the
+reply issues nothing.
+
+**If something goes wrong.** The lock may be lost at any time (`cancel` or `rework` of another task by the same reviewer,
+a takeover of a stale lock, a restart); `accept` always checks it again. A stuck or unwanted lock: `unlock {n}`; a moved tip:
+a new `precheck`; the work is returned: `rework`. The state lives in the task record and the lock file only (no timers): a
+restart letter gives the state of the precheck and of the lock. The lock is not the last line of defence: `git` refuses a
+non-fast-forward push and the project's own landing script checks again.
 
 ## Plans
 

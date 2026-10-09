@@ -18,7 +18,7 @@ import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
 import { DEFAULT_FORM, PLAN_ACCEPTANCE, PLAN_MERGE_ACCEPTANCE, type PlanForm, allSteps, nextPlanNumber, parsePlan, planProblems, planTemplate, roundRules } from "./plans.ts"
 import { type Task, type TaskPlan, WORKING_STATUSES, taskRef, slugify, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { countedOpen, waitingCleanup } from "./tasks.ts"
-import { acceptWarning, acceptedTip, beginPrecheck, finishPrecheck, gateMerge, markPrecheckStale, neighbourHints, unlockMerge } from "./precheck.ts"
+import { acceptWarning, acceptedTip, beginPrecheck, finishPrecheck, gateMerge, markPrecheckStale, neighbourHints, precheckLines, unlockMerge } from "./precheck.ts"
 import { cleanupDone, cleanupSteps, fileAt, holdsMergeLock, isMerged, mergeHolder, releaseMergeLock, reworkLetter, takeMergeLock } from "./review.ts"
 import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, timerSpec, watchesOf } from "./watch.ts"
 import { watchRefusal } from "./deny.ts"
@@ -1119,6 +1119,14 @@ reviewer; места worker не занимает), и merge, accept, cleaned р
 перепроверяет. Приёмщик: crew_task review → rework {text} | check {step} → проверка → check {step, result} по каждому шагу (ход видно в окне) → merge (замок вливания проекта) → accept {commit?}
 (плагин проверит обязательные шаги приёмки и что ветка или коммит в целевой ветке) → очистка → cleaned (плагин
 проверит, что worktree и ветка удалены). Потом сессии задачи закрываются, интегратору тихая сводка.
+ПРЕДПРОВЕРКА ВЛИВАНИЯ (настройка проекта merge_precheck: required; по умолчанию off). Замок вливания выдаётся только на ту
+вершину главной ветки, на которой кандидат уже собран и проверен: crew_task precheck {n} — плагин читает вершину origin и
+называет её; влей её в кандидата (например, integrate/tN), прогони CI; crew_task precheck {n, candidate, result} — запись
+«зелёная»; merge — замок на ту же вершину (сдвинулась — отказ, предпроверка заново). crew_task unlock {n} отпускает замок,
+который ты держишь для задачи (запись устаревает). Запись устаревает и при rework, reassign, cancel, новой приёмке. Плагин
+ничего не вливает и не пушит. В проекте с accepted_slot: free принятая задача ждёт уборки и место в inflight_limit не занимает
+(cleanup_limit ограничивает число ждущих). task_extra_fields — дополнительные поля задачи проекта: crew_spawn и assign
+принимают extra {id: строка}; значения видны исполнителю, приёмщику и в show.
 
 ДРУГОЙ ПРОЕКТ. Писать в чужой проект можно только его интегратору (настройка проекта-получателя inbound: integrator
 по умолчанию; any — всем; none — никому). Работа для другого проекта — заказом, а не письмом его воркерам.
@@ -1622,7 +1630,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
   const crewSpawn: CrewTool = {
     name: "crew_spawn",
     description:
-      "Integrator only: start a task #N in a new session (it runs in the OpenCode server even with no window). goal and criteria are required (the project may require more: boundaries, open_questions); tier heavy|medium|light picks the model (by default claude-code opus|sonnet|haiku, spawn_models of the project overrides; an enabled model-profile set /crew-sets overrides both for the stage it describes -- the tier on the input then picks the tier inside the family of the set; without a tier the tier of the cell is used); priority P0..P3. The project limits running tasks per role. The report comes back as an answer to the task's qid: crew_wait {qid}. Manage tasks with crew_task.",
+      "Integrator only: start a task #N in a new session (it runs in the OpenCode server even with no window). goal and criteria are required (the project may require more: boundaries, open_questions); tier heavy|medium|light picks the model (by default claude-code opus|sonnet|haiku, spawn_models of the project overrides; an enabled model-profile set /crew-sets overrides both for the stage it describes -- the tier on the input then picks the tier inside the family of the set; without a tier the tier of the cell is used); priority P0..P3. extra {id: one line up to 300 characters} fills the extra task fields the project declared (task_extra_fields; crew_config show lists them). The project limits running tasks per role, and with accepted_slot: free accepted tasks waiting for cleanup do not take a place in inflight_limit (cleanup_limit bounds them). The report comes back as an answer to the task's qid: crew_wait {qid}. Manage tasks with crew_task.",
     input: {
       type: "object",
       properties: {
@@ -1717,7 +1725,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
   const crewTask: CrewTool = {
     name: "crew_task",
     description:
-      "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), show {n} (details and history), and for the integrator: assign {session, goal, criteria, ...} (give a task to an existing tab instead of a new session), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done; with an enabled model-profile set the model is taken by the set at that moment), cancel {n, text?}, priority {n, priority}, order {to: 'project.integrator', goal, criteria, ...} (work for another project: its integrator does it with its own tasks; the order follows them); for the task's reviewer: review {n} (start), precheck {n} (when the project requires it: read the tip of the target branch, then precheck {n, candidate, result} after the CI on the integrated candidate), merge {n} (the project's merge lock; with a required precheck only on the same tip), unlock {n} (release the lock you hold for the task), rework {n, text, sync?} (sync: true -- only to merge the fresh target branch: not a rework round, not counted in rework_max), check {n, step} before checking a step and {n, step, result} after it (the owner sees the progress in the window), accept {n, checks?, commit?} (steps marked by check count; the plugin checks the required steps and that it is merged), cleaned {n} (the plugin checks the worktree and branch are gone). With the project's reviewer: acceptor, merge/accept/cleaned also need the acceptor (or integrator) role.",
+      "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), show {n} (details and history), and for the integrator: assign {session, goal, criteria, extra?, ...} (give a task to an existing tab instead of a new session; extra {id: line} fills the project's extra task fields, see task_extra_fields in crew_config), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done; with an enabled model-profile set the model is taken by the set at that moment), cancel {n, text?}, priority {n, priority}, order {to: 'project.integrator', goal, criteria, ...} (work for another project: its integrator does it with its own tasks; the order follows them); for the task's reviewer: review {n} (start), precheck {n} (project flag merge_precheck: required -- read the tip of the target branch first, integrate it into a candidate, run CI, then precheck {n, candidate, result}; the lock is not taken), merge {n} (the project's merge lock; under merge_precheck: required it is issued only on the tip where the candidate was checked), unlock {n} (release the merge lock you hold for the task; a precheck record then becomes stale), rework {n, text, sync?} (sync: true -- only to merge the fresh target branch: not a rework round, not counted in rework_max), check {n, step} before checking a step and {n, step, result} after it (the owner sees the progress in the window), accept {n, checks?, commit?} (steps marked by check count; the plugin checks the required steps and that it is merged), cleaned {n} (the plugin checks the worktree and branch are gone). With the project's reviewer: acceptor, merge/accept/cleaned also need the acceptor (or integrator) role.",
     input: {
       type: "object",
       properties: {
@@ -1818,6 +1826,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           t.boundaries ? `границы: ${t.boundaries}` : "",
           t.open_questions ? `открытые вопросы: ${t.open_questions}` : "",
           extraBlock(t),
+          ...precheckLines(t, me.session),
           t.precheck && t.precheck.state !== "stale" ? neighbourHints(t, "running").trim() : "",
           t.executors.length ? `прежние исполнители: ${t.executors.join(", ")}` : "",
           t.reviewer ? `приёмщик: ${t.reviewer}${t.review_kind ? ` (${t.review_kind === "tab" ? "открытая вкладка" : t.review_kind === "spawn" ? "сессия под приёмку" : "интегратор"})` : ""}${t.rework ? `, кругов доработки: ${t.rework}` : ""}` : "",
