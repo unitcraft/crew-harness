@@ -1390,16 +1390,20 @@ export default {
         if (id === passId) passBusy = false // зависший прежний проход, вернувшись, не снимает флаг идущего
       }
     }
-    const timer = setInterval(() => void pass(), POLL_MS)
+    // Таймеры цикла создаёт start() в конце setup, снимает stop(): цикл можно перенести на другой экземпляр (см. «ОДИН ЦИКЛ»).
+    let timer: any
     let watcher: any
-    try {
-      let soon: any
-      watcher = watch(INBOX, { recursive: true }, () => {
-        clearTimeout(soon)
-        soon = setTimeout(() => void pass(), 100)
-      })
-    } catch (e) {
-      log(`inbox watch unavailable (the ${POLL_MS} ms tick delivers): ${e}`)
+    let soon: any
+    const startPass = () => {
+      timer = setInterval(() => void pass(), POLL_MS)
+      try {
+        watcher = watch(INBOX, { recursive: true }, () => {
+          clearTimeout(soon)
+          soon = setTimeout(() => void pass(), 100)
+        })
+      } catch (e) {
+        log(`inbox watch unavailable (the ${POLL_MS} ms tick delivers): ${e}`)
+      }
     }
 
     await ctx.session.hook("context", async (ev: any) => {
@@ -1496,11 +1500,12 @@ export default {
       log(`doctor: ${said}`)
       for (const w of liveWindows()) postNotice(w.pid, { title: "crew: проблемы — /crew-doctor", message: short(problems.join("; "), 100), duration: 15_000 })
     }
-    const doctorTimer = setTimeout(() => void runDoctor(), 10_000)
-    // и ещё раз через минуту: при подъёме сервиса окна переподключаются позже 10 с, и первая проверка видит «ни одно
-    // окно не отмечается» (2026-10-07) — без повтора ложное замечание висело в /crew-doctor до плановой проверки
-    const doctorAgain = setTimeout(() => void runDoctor(), 70_000)
-    doctorAgain.unref?.()
+    let doctorTimer: any
+    let doctorAgain: any
+    let catalogFirst: any
+    let catalogTimer: any
+    let doctorEvery: any
+    let lagTimer: any
     // снимок каталога моделей для окна (model-catalog.ts): при загрузке (после 3 с) и раз в 10 минут
     const snapCatalog = async () => {
       try {
@@ -1509,12 +1514,6 @@ export default {
         log(`model catalog snapshot failed: ${e}`)
       }
     }
-    const catalogFirst = setTimeout(() => void snapCatalog(), 3_000)
-    const catalogTimer = setInterval(() => void snapCatalog(), 10 * 60_000)
-    catalogFirst.unref?.()
-    catalogTimer.unref?.()
-    const doctorEvery = setInterval(() => void runDoctor(), DOCTOR_EVERY_MS)
-    doctorEvery.unref?.()
 
     // ЗАМЕР ЗАДЕРЖКИ ГЛАВНОГО ПОТОКА (2026-10-06). Сервер дважды за вечер терял окна («Event stream stalled»), и было
     // не понять, держал ли поток плагин. Таймер раз в LAG_EVERY_MS замечает, насколько опоздал: опоздание от
@@ -1523,7 +1522,7 @@ export default {
     const LAG_EVERY_MS = 500
     const LAG_LOG_MS = Number(process.env.CREW_HARNESS_LAG_MS) || 1_000
     let lagExpected = Date.now() + LAG_EVERY_MS
-    const lagTimer = setInterval(() => {
+    const lagTick = () => {
       const t = Date.now()
       const lag = t - lagExpected
       lagExpected = t + LAG_EVERY_MS
@@ -1531,12 +1530,33 @@ export default {
       if (lag < LAG_LOG_MS) return
       const inPass = passBusy ? `шаг прохода ${passStage}, проход идёт ${Math.round((t - passStartedAt) / 1000)} с` : "плагин свободен"
       log(`loop lag ${lag} ms (${inPass}; память ${Math.round(process.memoryUsage().rss / 1048576)} МБ)`)
-    }, LAG_EVERY_MS)
-    lagTimer.unref?.()
+    }
 
-    log(`setup pid=${process.pid} base=${BASE}`)
-    const dispose = () => {
+    let running = false
+    const start = () => {
+      if (running) return
+      running = true
+      startPass()
+      doctorTimer = setTimeout(() => void runDoctor(), 10_000)
+      // и ещё раз через минуту: при подъёме сервиса окна переподключаются позже 10 с, и первая проверка видит «ни одно
+      // окно не отмечается» (2026-10-07) — без повтора ложное замечание висело в /crew-doctor до плановой проверки
+      doctorAgain = setTimeout(() => void runDoctor(), 70_000)
+      doctorAgain.unref?.()
+      catalogFirst = setTimeout(() => void snapCatalog(), 3_000)
+      catalogTimer = setInterval(() => void snapCatalog(), 10 * 60_000)
+      catalogFirst.unref?.()
+      catalogTimer.unref?.()
+      doctorEvery = setInterval(() => void runDoctor(), DOCTOR_EVERY_MS)
+      doctorEvery.unref?.()
+      lagExpected = Date.now() + LAG_EVERY_MS
+      lagTimer = setInterval(lagTick, LAG_EVERY_MS)
+      lagTimer.unref?.()
+    }
+    const stop = () => {
+      if (!running) return
+      running = false
       clearInterval(timer)
+      clearTimeout(soon)
       clearInterval(lagTimer)
       clearTimeout(doctorTimer)
       clearTimeout(doctorAgain)
@@ -1548,18 +1568,45 @@ export default {
         watcher?.close()
       } catch {}
     }
+
+    log(`setup pid=${process.pid} base=${BASE}`)
     // ОДИН ЦИКЛ НА ПРОЦЕСС (2026-10-05). OpenCode перегружает плагин при изменении его файлов, не всегда закрывая
     // прежний экземпляр: циклы прежних экземпляров жили дальше, каждый со своим проходом раз в секунду. Вместе с
     // чтением базы (5 ГБ) это клало сервер — «Event stream stalled», окно перезапускало сервис (18:19, 18:42).
     // Новый экземпляр останавливает цикл прежнего.
+    // ЦИКЛ ПЕРЕХОДИТ К ЖИВОМУ СОСЕДУ (2026-10-10). Экземпляр плагина — на каталог (OpenCode создаёт и снимает их
+    // по одному), а цикл один на процесс и принадлежит последнему созданному. Когда OpenCode снял именно его, а
+    // экземпляры других каталогов живы, цикл вставал насовсем: письма не доставлялись, пока что-нибудь не создало
+    // новый экземпляр (замер: 15:16–15:48, письмо открытой вкладке nova.integrator ждало 10 минут). Теперь снятый
+    // хозяин цикла отдаёт его последнему из оставшихся. Новый экземпляр того же каталога заменяет прежний (перезагрузка
+    // плагина): оставшийся от перезагрузки прежний экземпляр цикл не получит.
     const g = globalThis as any
+    type Loop = { directory: string; running: () => boolean; start: () => void; stop: () => void }
+    const loops: Loop[] = (g.__crewHarnessLoops ??= [])
+    const directory = String(ctx?.location?.directory ?? "")
+    const me: Loop = { directory, running: () => running, start, stop }
     try {
-      g.__crewHarnessDispose?.()
+      g.__crewHarnessDispose?.() // экземпляр плагина прежней версии
     } catch {}
-    g.__crewHarnessDispose = dispose
+    for (const l of [...loops]) {
+      l.stop()
+      if (l.directory === directory) loops.splice(loops.indexOf(l), 1)
+    }
+    loops.push(me)
+    const legacyDispose = () => stop()
+    g.__crewHarnessDispose = legacyDispose
+    start()
     return () => {
-      dispose()
-      if (g.__crewHarnessDispose === dispose) g.__crewHarnessDispose = undefined
+      const owned = running
+      stop()
+      const i = loops.indexOf(me)
+      if (i >= 0) loops.splice(i, 1)
+      if (g.__crewHarnessDispose === legacyDispose) g.__crewHarnessDispose = undefined
+      const next = owned ? loops[loops.length - 1] : undefined
+      if (next) {
+        log(`loop of ${directory || "?"} released, handed over to ${next.directory || "?"}`)
+        next.start()
+      }
     }
   },
 }

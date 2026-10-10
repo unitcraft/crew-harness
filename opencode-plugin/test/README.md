@@ -35,6 +35,7 @@ stops at the first failing file.
 | | `peers-model` | the window's model comes from its current request, the database is a fallback |
 | | `peers-tier` | `crew_send {tier}`: a free holder of that tier or stronger, otherwise a queue |
 | Delivery | `peers-delivery` | two-step delivery, at-least-once; a claim of a crashed process comes back |
+| | `crew-loop-handover` | the delivery loop moves to a living instance when the instance that owns it is removed |
 | | `peers-idle` | a letter reaches an idle window whose card was written by an earlier plugin instance |
 | | `peers-wake` | only a tab open in a live window is woken; `wake: false` letters |
 | | `peers-mcp` | the MCP server for claude-code windows: same mailbox and tools |
