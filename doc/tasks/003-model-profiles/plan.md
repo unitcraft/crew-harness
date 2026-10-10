@@ -704,7 +704,7 @@ cell:<имя>/<этап>          {value: клетка | null, base: клетк�
 
 Слово владельца: «хочу полностью отключить слои — сделай быстрой задачей» (владелец, 2026-10-09, чат). Причина: забытый локальный слой
 (`profiles/<проект>.layer.json` в ящике плагина) молча перекрывает набор из файла проекта — случай: `/crew-sets use codex` перекрыл
-`profile_set=codex-light` в проекте claude-limits. Решение записано в [ADR-0014](../../canon/decisions/ADR-0014-profiles-without-local-layer.md);
+`profile_set=codex-light` в проекте claude-limits. Решение записано в [ADR-0014](../../canon/decisions/ADR-0008-model-profiles-layer-and-window-files.md);
 ветка `003-no-layers`.
 
 Пункты плана, которые строили слой (шаги про `profile-layer.ts`, `save`, `reset`), закрыты прежней реализацией и этим решением заменены: `profile-layer.ts` оставлен

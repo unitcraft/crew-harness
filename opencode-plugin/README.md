@@ -586,7 +586,7 @@ Edits act at once, without a commit and without any layer between: every command
 atomic write; the data in force are those keys of the working copy (the plugin does not commit — commit the file when you
 want the change to travel). An edit that would make the enabled set invalid or leave a dangling reference is refused whole
 and the file stays as it was. There is no `save` and no `reset`: the earlier local layer
-(`profiles/<project>.layer.json` in the mailbox of the plugin) is switched off — see [ADR-0014](../doc/canon/decisions/ADR-0014-profiles-without-local-layer.md);
+(`profiles/<project>.layer.json` in the mailbox of the plugin) is switched off — see [ADR-0014](../doc/canon/decisions/ADR-0008-model-profiles-layer-and-window-files.md);
 an old layer file is not read, the service and `check` name it once, and it can be deleted by hand. An invalid state that came not through the commands (a commit removed a profile) does not stop the running tabs:
 sessions go by the last valid state (the snapshot) with a warning in `/crew-sets`, `crew_doctor` and a notice in the
 window; a set that is gone and has no snapshot gives a refusal that names the set. Every edit leaves one line
