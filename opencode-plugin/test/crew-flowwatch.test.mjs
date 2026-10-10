@@ -131,10 +131,11 @@ cell("the question goes to the integrator, once", ask.length === 1 && /«Вли�
 cell("the reviewer is not told 'continue'", letters("sesREV01").every((l) => !/Не завершено/.test(l.text)), JSON.stringify(letters("sesREV01").map((l) => l.text.slice(0, 80))))
 
 // 2. the merge lock held 10 min > stall_minutes: one letter to the task's author
-await until(() => letters("sesINTEG1").some((l) => /Замок вливания/.test(l.text)))
+await until(() => letters("sesINTEG1").some((l) => /Замок слияния/.test(l.text)))
 await wait(600)
-const lock = letters("sesINTEG1").filter((l) => /Замок вливания/.test(l.text))
+const lock = letters("sesINTEG1").filter((l) => /Замок слияния/.test(l.text))
 cell("a long-held merge lock is raised to the integrator, once", lock.length === 1 && /приёмка #1/.test(lock[0].text), JSON.stringify(lock.map((l) => l.text.slice(0, 160))))
+cell("the lock letter names the holder, the task, the time and the way out (accept after LANDED or unlock; the service releases a landed lock)", lock.length === 1 && /сессия sesREV\d+/.test(lock[0].text) && /«[^»]+»/.test(lock[0].text) && /с \d\d:\d\d/.test(lock[0].text) && /accept 1 после LANDED или unlock 1, если слияние прервано/.test(lock[0].text) && /плагин сам отпускает замок, когда проверенный кандидат уже на вершине origin/.test(lock[0].text), JSON.stringify(lock.map((l) => l.text)))
 
 // 3. a submitted task waiting for a reviewer
 const wait2 = letters("sesINTEG1").filter((l) => /ждёт приёмщика/.test(l.text))

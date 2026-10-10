@@ -389,7 +389,7 @@ The integrator stays free for the owner and does not re-check accepted work:
   `accepted_slot: "free"`; perform its returned cleanup steps separately and call `cleaned` when done. The cleanup queue is
   bounded by `cleanup_limit` (10 by default). The merge lock is released by `accept` (and by `rework` and `cancel`): after the
   merge and the push call `accept` at once, the cleanup runs without the lock; if the merge is abandoned before `accept`,
-  call `unlock {n}`; `cleaned` does not release the lock (there is none by then). While it is held, only the merge and the
+  call `unlock {n}`; `cleaned` does not release the lock (there is none by then). The answers say it at the moment of the action: `accept`, `rework` and `cancel` report that they released the lock (only when it was held), and `cleaned` warns when the session still holds it. While it is held, only the merge and the
   push happen under it. The service pass releases the lock by itself when the held task's checked candidate (the green
   record) is already an ancestor of the target tip on `origin` (`git ls-remote` with the 20 s term and `merge-base`
   on local objects, no fetch, nothing written but the history note "замок отпущен: слияние на вершине" and a log line);

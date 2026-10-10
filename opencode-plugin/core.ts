@@ -972,6 +972,10 @@ export function recoverClaims(maxAgeMs = CLAIM_MAX_MS, now = Date.now()): number
 export const PLUGIN_SENDER = "crew-harness"
 /** одна строка в ответе merge, когда замок выдан (решение владельца 2026-10-09) */
 const LOCK_RULE = "Замок слияния держится до accept или unlock; под ним только слияние и пуш."
+/** строки-подсказки о замке в ответах accept, rework, cancel, cleaned (решение владельца 2026-10-10): правило сообщается в момент действия */
+const LOCK_FREED_ACCEPT = "Замок слияния отпущен (его отпускает accept)."
+const LOCK_FREED = "Замок слияния отпущен."
+const lockStillYours = (n: number) => `Внимание: замок слияния всё ещё у тебя: cleaned его не отпускает; отпусти unlock {n: ${n}}.`
 // ВИД ПИСЬМА (план 003.1, 2026-10-06; владелец: «непонятно, кто кому пишет»). Шапка — когда, кто кому, с ролью в задаче;
 // время первым (владелец 2026-10-07): в длинной шапке оно не теряется в конце строки:
 //   ✉ 01:17 · #8 приёмщик nova.worker → nova.integrator
@@ -2090,7 +2094,9 @@ export function makeTools(host: CrewHost): CrewTool[] {
           t.rework_sync = sync
           t.rework_note = text
           t.reviewer_role = keyOf(me)
+          const lockHeld = holdsMergeLock(project, me.session)
           releaseMergeLock(project, me.session)
+          const lockNote = lockHeld ? ` ${LOCK_FREED}` : ""
           if (t.review_qid) settleObligation(me.session, t.review_qid)
           markPrecheckStale(t, sync ? "возвращена исполнителю (синхронизация)" : "возвращена исполнителю (доработка)")
           taskEvent(t, me.session, "rework", sync ? `на синхронизацию с ${tcfg.targetBranch} (${t.syncs}-я, не доработка): ${text.slice(0, 300)}` : `на доработку (круг ${t.rework}): ${text.slice(0, 300)}`)
@@ -2098,12 +2104,12 @@ export function makeTools(host: CrewHost): CrewTool[] {
             addObligation(t.executor, { qid: t.qid, from_session: t.author, from_role: t.author_role, at: now, nudges: 0, task: t.title })
             host.posted(postExpected(t))
           }
-          if (sync) return { content: `Задача ${taskRef(t)} возвращена влить свежую ${tcfg.targetBranch} (синхронизация ${t.syncs}, в rework_max не идёт). Исполнитель разбужен; сдаст — тебя разбудят.` }
+          if (sync) return { content: `Задача ${taskRef(t)} возвращена влить свежую ${tcfg.targetBranch} (синхронизация ${t.syncs}, в rework_max не идёт). Исполнитель разбужен; сдаст — тебя разбудят.${lockNote}` }
           if ((t.rework ?? 0) > tcfg.reworkMax) {
             postLetter(t.author, { id: `rework-max-${safeKey(project)}-${t.n}-${t.rework}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: now, text: `Задача #${t.n} «${t.title}» уходит на доработку ${t.rework}-й раз (предел проекта rework_max ${tcfg.reworkMax}). Похоже, задача поставлена неясно или не по силам исполнителю — спроси владельца: уточнить задачу, передать другой сессии (crew_task reassign) или отменить.` })
             host.posted([t.author])
           }
-          return { content: `Задача ${taskRef(t)} на доработке (круг ${t.rework}). Исполнитель разбужен с замечаниями; сдаст — тебя разбудят.` }
+          return { content: `Задача ${taskRef(t)} на доработке (круг ${t.rework}). Исполнитель разбужен с замечаниями; сдаст — тебя разбудят.${lockNote}` }
         }
         if (action === "accept") {
           if (t.status !== "reviewing") return { content: `Принять можно задачу на приёмке (сейчас ${statusRu(t.status)}).` }
@@ -2140,6 +2146,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           delete t.checking
           t.commit = commit
           t.merged_head = m.head
+          const lockFreed = !viaLanded && holdsMergeLock(project, me.session)
           if (!viaLanded) releaseMergeLock(project, me.session) // замок другой задачи этой сессии при accept по «отпущено службой» не трогаем
           taskEvent(t, me.session, "accepted", `принята: ${m.how}`)
           if (t.precheck) {
@@ -2157,14 +2164,18 @@ export function makeTools(host: CrewHost): CrewTool[] {
             log(`window file release of #${t.n} failed: ${e}`)
           }
           const steps = cleanupSteps(t, tcfg)
-          if (!steps.length) return { content: finishCleaned(t, me, "очистка не нужна (cleanup: none)") + warn }
-          return { content: `Задача ${taskRef(t)} принята (${m.how}). Очистка по настройке проекта (cleanup: ${tcfg.cleanup}):\n${steps.map((x) => `  ${x}`).join("\n")}\nСделал — crew_task {action: "cleaned", n: ${t.n}}.${warn}` }
+          if (!steps.length) return { content: finishCleaned(t, me, "очистка не нужна (cleanup: none)") + warn + (lockFreed ? `
+${LOCK_FREED_ACCEPT}` : "") }
+          return { content: `Задача ${taskRef(t)} принята (${m.how}). Очистка по настройке проекта (cleanup: ${tcfg.cleanup}):\n${steps.map((x) => `  ${x}`).join("\n")}\nСделал — crew_task {action: "cleaned", n: ${t.n}}.${warn}${lockFreed ? `
+${LOCK_FREED_ACCEPT} Дальше уборка без замка, затем cleaned ${t.n}.` : ""}` }
         }
         // cleaned
         if (t.status !== "accepted") return { content: `Очистка — после принятия (сейчас ${statusRu(t.status)}).` }
         const done = cleanupDone(t, tcfg)
         if (!done.ok) return { content: `Очистка не закончена: ${done.left.join("; ")}.` }
-        return { content: finishCleaned(t, me, "worktree и ветка удалены") }
+        const stillHeld = mergeHolder(project)
+        return { content: finishCleaned(t, me, "worktree и ветка удалены") + (stillHeld?.session === me.session ? `
+${lockStillYours(stillHeld.n)}` : "") }
       }
       if (!isIntegrator(me)) return notIntegrator(me)
       if (action === "priority") {
@@ -2200,6 +2211,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           log(`window file release of #${t.n} failed: ${e}`)
         }
         host.posted(propagateToParent(t))
+        const lockHeld = !!t.reviewer && holdsMergeLock(project, t.reviewer)
         if (t.reviewer) {
           releaseMergeLock(project, t.reviewer)
           if (t.review_qid) settleObligation(t.reviewer, t.review_qid)
@@ -2209,7 +2221,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           postLetter(t.executor, { id: `cancel-${safeKey(project)}-${t.n}`, from_role: keyOf(me), from_session: me.session, to: t.executor, time: Date.now(), wake: false, text: `Задача #${t.n} «${t.title}» отменена${why ? `: ${why}` : ""}. Работу по ней прекрати, отчёт не нужен.` })
           host.posted([t.executor])
         }
-        return { content: `Задача ${taskRef(t)} отменена.` }
+        return { content: `Задача ${taskRef(t)} отменена.${lockHeld ? ` ${LOCK_FREED}` : ""}` }
       }
       if (action === "reassign") {
         // модель по включённому набору на момент передачи (REQ-32): набор и профиль проверяются ДО снятия прежнего исполнителя,
