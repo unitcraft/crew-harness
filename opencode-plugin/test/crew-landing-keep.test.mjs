@@ -134,4 +134,17 @@ const lines = (n) => H.history(n).filter((h) => /улики сохранены/.
   cell("KEEP-9 another session: refused, nothing is written", /только его/.test(r) && !rec(a.n).kept && rec(a.n).status === "accepted", r)
 }
 
+// ---- the task branch is checked out in the kept tree: the answer gives the hint, and after the detach the task is cleaned
+{
+  const a = accepted({ branch: false })
+  git(proj, "branch", "t" + a.n, "origin/main")
+  git(a.tree, "checkout", "-q", "t" + a.n)
+  const r = await cleaned(a.n, { keep: [a.rel] })
+  cell("KEEP-10 the branch is checked out in the kept tree: the answer says git checkout --detach, then delete", /локальная ветка t[0-9]+ ещё есть/.test(r) && /git checkout --detach/.test(r) && r.includes("t" + a.n) && rec(a.n).status === "accepted", r)
+  git(a.tree, "checkout", "-q", "--detach")
+  git(proj, "branch", "-D", "t" + a.n)
+  const fin = await cleaned(a.n)
+  cell("KEEP-10b after the detach and the branch delete the task is cleaned, the tree stays", rec(a.n).status === "cleaned" && existsSync(a.tree), fin)
+}
+
 done(H)

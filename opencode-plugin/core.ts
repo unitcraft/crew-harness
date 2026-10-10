@@ -20,7 +20,7 @@ import { DEFAULT_FORM, PLAN_ACCEPTANCE, PLAN_MERGE_ACCEPTANCE, type PlanForm, al
 import { type Task, type TaskPlan, WORKING_STATUSES, taskRef, slugify, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { countedOpen, waitingCleanup } from "./tasks.ts"
 import { acceptWarning, acceptedTip, beginPrecheck, finishPrecheck, gateMerge, landedFresh, markPrecheckStale, neighbourHints, precheckLines, unlockMerge } from "./precheck.ts"
-import { cleanupDone, cleanupSteps, fileAt, holdsMergeLock, isMerged, keptPaths, mergeHolder, releaseMergeLock, resolveKeep, reworkLetter, sameFs, takeMergeLock } from "./review.ts"
+import { cleanupDone, cleanupSteps, fileAt, holdsMergeLock, isMerged, keptOnBranch, keptPaths, mergeHolder, releaseMergeLock, resolveKeep, reworkLetter, sameFs, takeMergeLock } from "./review.ts"
 import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, timerSpec, watchesOf } from "./watch.ts"
 import { watchRefusal } from "./deny.ts"
 import { queueRemote, remoteRoute } from "./remote.ts"
@@ -1181,7 +1181,7 @@ reviewer; места worker не занимает), и merge, accept, cleaned р
 приёмщик, сменивший роль, их теряет. Исполнитель задачи её не вливает и не принимает. Интегратор принятое не
 перепроверяет. Приёмщик: crew_task review → rework {text} | check {step} → проверка → check {step, result} по каждому шагу (ход видно в окне) → merge (замок вливания проекта) → accept {commit?}
 (плагин проверит обязательные шаги приёмки и что ветка или коммит в целевой ветке) → очистка → cleaned (плагин
-проверит, что worktree и ветка удалены). Улики сохранить — cleaned {n, keep:[путь, …]} (до 8 путей: worktree репозитория или папка в папке деревьев проекта; основное дерево и ветки нельзя; такое дерево уборка не проверяет, ответ: «Сохранено: <путь> (не проверялось уборкой)»); удалять их не нужно, ветку задачи удалить по-прежнему надо. Потом сессии задачи закрываются, интегратору тихая сводка.
+проверит, что worktree и ветка удалены). Улики сохранить — cleaned {n, keep:[путь, …]} (до 8 путей: worktree репозитория или папка в папке деревьев проекта; основное дерево и ветки нельзя; такое дерево уборка не проверяет, ответ: «Сохранено: <путь> (не проверялось уборкой)»); удалять их не нужно, ветку задачи удалить по-прежнему надо (если она выбрана в сохранённом дереве — там git checkout --detach, затем git branch -D; ответ cleaned подскажет). Потом сессии задачи закрываются, интегратору тихая сводка.
 ПРЕДПРОВЕРКА ВЛИВАНИЯ (настройка проекта merge_precheck; по умолчанию required — включена). Порядок приёмщика: review → check → precheck → CI без замка → precheck candidate → merge → accept → отдельная cleanup → cleaned.
 Замок во время подготовки кандидата и CI не брать. crew_task precheck {n} замок не берёт: плагин читает вершину origin и называет её;
 влей её вместе с веткой задачи в интеграционный candidate (например, integrate/tN), прогони полный CI проекта и сохрани точный commit кандидата;
@@ -2185,7 +2185,13 @@ ${LOCK_FREED_ACCEPT} Дальше уборка без замка, затем cle
         const keptNow = keptPaths(t).filter((p) => existsSync(p))
         const keptLine = keptNow.length ? "\n" + keptNow.map((p) => `Сохранено: ${p} (не проверялось уборкой)`).join("\n") : ""
         const done = cleanupDone(t, tcfg)
-        if (!done.ok) return { content: `Очистка не закончена: ${done.left.join("; ")}.${keptLine}` }
+        if (!done.ok) {
+          // ветка задачи выбрана в сохранённом дереве: git branch -D откажет («checked out at …»)
+          const brs = done.left.map((x) => /^локальная ветка (\S+) ещё есть$/.exec(x)?.[1]).filter(Boolean) as string[]
+          const held = keptOnBranch(t, brs)
+          const hint = held.map((h) => `\nВетка ${h.branch} выбрана в сохранённом дереве ${h.path}: git branch -D откажет. В этом дереве выполни git checkout --detach, затем удали ветку.`).join("")
+          return { content: `Очистка не закончена: ${done.left.join("; ")}.${keptLine}${hint}` }
+        }
         const stillHeld = mergeHolder(project)
         return { content: finishCleaned(t, me, `worktree и ветка удалены${keptNow.length ? `; сохранено: ${keptNow.join(", ")}` : ""}`) + keptLine + (stillHeld?.session === me.session ? `
 ${lockStillYours(stillHeld.n)}` : "") }

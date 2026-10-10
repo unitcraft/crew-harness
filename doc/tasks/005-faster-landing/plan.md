@@ -1001,3 +1001,4 @@ REQ-23) — до шага 3, РП-11 (`extra` у задачи-плана) — д
 
 - `tasks.ts` — поле записи `kept`; `review.ts` — `resolveKeep` (проверка путей), `keptPaths`, `cleanupDone` и `leftoversOf` пропускают сохранённые деревья, строка про `keep` в письмах приёмщика; `core.ts` — параметр `keep` и ответ `cleaned`, справка `crew_help`, описание `crew_task`.
 - Тексты: README плагина, README тестов. Тест: новый `crew-landing-keep`, в `package.json` и `test/README.md`.
+- Замечание С6 принято: ветка задачи, выбранная в сохранённом дереве, — подсказка в отказе `cleaned` (`keptOnBranch`), README и `crew_help` (ячейка KEEP-10); в README уточнён корень относительных путей.

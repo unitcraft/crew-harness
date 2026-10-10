@@ -153,6 +153,19 @@ const canon = (p?: string) => {
   }
 }
 export const sameFs = (a?: string, b?: string) => samePath(a, b) || samePath(canon(a), canon(b))
+/** Сохранённые деревья, на которых стоит ветка: git branch -D такой ветки откажет, пока в дереве она выбрана. */
+export function keptOnBranch(t: Task, branches: string[]): { path: string; branch: string }[] {
+  const dir = existsSync(t.directory) ? t.directory : undefined
+  if (!dir) return []
+  try {
+    const top = git(dir, ["rev-parse", "--show-toplevel"]).trim()
+    return worktreesOf(git(top, ["worktree", "list", "--porcelain"]))
+      .filter((w) => w.branch && branches.includes(w.branch) && keptPaths(t).some((k) => sameFs(k, w.path)))
+      .map((w) => ({ path: w.path.replace(/\\/g, "/"), branch: w.branch! }))
+  } catch {
+    return []
+  }
+}
 export const keptPaths = (t: Task, extra: string[] = []): string[] => [...(t.kept ?? []).map((k) => k.path), ...extra]
 
 /**
