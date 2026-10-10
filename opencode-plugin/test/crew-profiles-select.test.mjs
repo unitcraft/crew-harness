@@ -452,6 +452,24 @@ await until(() => stepsOf(ptD.n).length > 0, 15_000)
 const stD = stepsOf(ptD.n)[0]
 cell("016 review-1 #1: auto-plan step without a set and tier_max light runs on light (haiku), not on hard medium", !!stD && stD.model === "claude-code/haiku" && stD.tier === "light", JSON.stringify(stD && [stD.model, stD.tier]))
 cell("016 review-1 #3: that step's record says clamped_from medium", stD?.profiles?.[0]?.clamped_from === "medium" && stD.profiles[0].tier === "light" && stD.profiles[0].stage === "develop", JSON.stringify(stD?.profiles))
+// review 2 item 2: a sub-plan step is a plan task, so the clamp record says stage plan, an ordinary step says develop
+{
+  const git = (await import("node:child_process")).execFileSync
+  const g = (...a) => git("git", ["-C", proj, "-c", "user.name=t", "-c", "user.email=t@t", ...a], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
+  writeFileSync(path.join(proj, "docs", "plans", "9-podplan.md"), planText.replace("# План 8 — длина фрагмента", "# План 9 — подплан").replace("#### Ф.1.1 — лексер [где: lex.nv]", "#### Ф.1.1 — лексер [подплан] [где: lex.nv]"))
+  g("add", "docs")
+  g("commit", "-q", "-m", "plan 9")
+}
+setBounds({ max: "light" })
+use(undefined)
+const ptE = tasks.createTask({
+  project: "proj", title: "план 9: подплан", goal: "g", criteria: "c", priority: "P2", tier: "medium", role: "worker", author: "sesINTEG", author_role: "proj.integrator", qid: `qplan${Math.random().toString(36).slice(2, 8)}`,
+  status: "cleaned", kind: "spawn", directory: proj,
+  plan: { n: "9", file: "docs/plans/9-podplan.md", source: "s", rounds: [], clean: 2, approval: { decision: "ok", at: Date.now() } },
+})
+await until(() => stepsOf(ptE.n).length > 0, 15_000)
+const stE = stepsOf(ptE.n)[0]
+cell("015 review-2 #2: a sub-plan step without a set is a plan task and its clamp record says stage plan (not develop)", !!stE && !!stE.plan && stE.profiles?.[0]?.clamped_from === "medium" && stE.profiles[0].stage === "plan", JSON.stringify(stE && [!!stE.plan, stE.profiles]))
 setBounds({})
 
 // ---- AC-06(б): the profile of a described stage is not found -> no reviewer, one letter, a line in the doctor; (в) by the snapshot ----

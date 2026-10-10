@@ -979,7 +979,7 @@ export default {
             t = createTask({ ...base, title: `план ${n}: ${s.title}`, plan: { n, file: path.posix.join(cfg.plansDir.replace(/\\/g, "/"), cfg.planName.replace(/\{n\}/g, n).replace(/\{slug\}/g, slugify(s.title))), source: `${s.what}\nКритерии шага ${s.id} плана ${pt.plan.n}:\n${s.criteria.join("\n")}`, parent: pt.plan.n, rounds: [], clean: 0 } }, (n2, slug) => taskPlace(pt.directory, cfg, n2, slug, pt.project))
           } else t = createTask({ ...base, title: `${pt.plan.n} ${s.id} ${s.title}` }, (n2, slug) => taskPlace(pt.directory, cfg, n2, slug, pt.project))
           if (stepChoice) stampProfile(t, "executor", t.executor!, stepChoice, !!t.worktree)
-          else stampClamp(t, "executor", t.executor!, "develop", model, stepCut.tier, stepCut.from)
+          else stampClamp(t, "executor", t.executor!, stageOfLaunch(t, "executor"), model, stepCut.tier, stepCut.from)
           pt.plan.spawned[s.id] = t.n
           running.push(s)
           changed = true
