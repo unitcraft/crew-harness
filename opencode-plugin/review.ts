@@ -4,7 +4,7 @@
 // удалены», письмо приёмщику, письмо на доработку, шаги очистки.
 
 import { execFile, execFileSync } from "node:child_process"
-import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { type Card, type CrewConfig, ROLES, cardFile, extraBlock, mayWakeCard, readJson, safeKey } from "./core.ts"
 import { type Task, isOpen, listTasks, loadTask, taskFile, waitingCleanup } from "./tasks.ts"
@@ -115,10 +115,13 @@ export function cleanupSteps(t: Task, cfg: CrewConfig): string[] {
 }
 
 /** Очистка сделана: ни одного артефакта задачи (ownership) — локально, а при local+remote и на origin (если доступен). */
-export function cleanupDone(t: Task, cfg: CrewConfig): { ok: boolean; left: string[] } {
+export function cleanupDone(t: Task, cfg: CrewConfig, extraKept: string[] = []): { ok: boolean; left: string[] } {
   const left: string[] = []
   if (cfg.cleanup === "none") return { ok: true, left }
-  if (t.worktree && existsSync(t.worktree)) left.push(`worktree ${t.worktree} ещё есть`)
+  // деревья, сохранённые приёмщиком как улики (cleaned {keep}), уборка не проверяет; ветка задачи проверяется по-прежнему
+  const kept = keptPaths(t, extraKept)
+  const isKept = (p?: string) => !!p && kept.some((k) => sameFs(k, p))
+  if (t.worktree && existsSync(t.worktree) && !isKept(t.worktree)) left.push(`worktree ${t.worktree} ещё есть`)
   const dir = existsSync(t.directory) ? t.directory : undefined
   if (!dir) return { ok: !left.length, left }
   let top = dir
@@ -129,7 +132,7 @@ export function cleanupDone(t: Task, cfg: CrewConfig): { ok: boolean; left: stri
   try {
     for (const b of names(git(top, ["for-each-ref", "--format=%(refname:short)", "refs/heads"]))) if (own.isBranch(b)) left.push(`локальная ветка ${b} ещё есть`)
     for (const w of worktreesOf(git(top, ["worktree", "list", "--porcelain"])))
-      if (!samePath(w.path, top) && !samePath(w.path, t.worktree) && own.isWorktree(w.path, w.branch)) left.push(`worktree ${w.path} ещё есть`)
+      if (!samePath(w.path, top) && !samePath(w.path, t.worktree) && !isKept(w.path) && own.isWorktree(w.path, w.branch)) left.push(`worktree ${w.path} ещё есть`)
   } catch {}
   if (cfg.cleanup === "local+remote") {
     try {
@@ -137,6 +140,63 @@ export function cleanupDone(t: Task, cfg: CrewConfig): { ok: boolean; left: stri
     } catch {} // origin недоступен — проверку remote пропускаем (не держим задачу из-за сети)
   }
   return { ok: !left.length, left }
+}
+
+/** Пути деревьев, сохранённых как улики (запись задачи) и новые из текущего вызова. */
+/** Тот же путь на диске: и по записи, и по настоящему имени (короткие имена 8.3, регистр, ссылки). */
+const canon = (p?: string) => {
+  if (!p) return p
+  try {
+    return realpathSync.native(p)
+  } catch {
+    return p
+  }
+}
+export const sameFs = (a?: string, b?: string) => samePath(a, b) || samePath(canon(a), canon(b))
+export const keptPaths = (t: Task, extra: string[] = []): string[] => [...(t.kept ?? []).map((k) => k.path), ...extra]
+
+/**
+ * Проверка keep у cleaned (задача 005, REQ-29): каждый путь — существующее worktree репозитория из `git worktree list` или
+ * существующая папка внутри папки деревьев проекта; основное дерево, ветка, несуществующий путь — отказ с причиной.
+ * Относительный путь считается от корня репозитория. Возвращает нормализованные пути (через /) без повторов.
+ */
+export function resolveKeep(t: Task, cfg: CrewConfig, keep: unknown): { ok: true; paths: string[] } | { ok: false; why: string } {
+  if (!Array.isArray(keep) || !keep.length) return { ok: false, why: "keep — непустой массив путей деревьев (до 8)" }
+  if (keep.length > 8) return { ok: false, why: `в keep не больше 8 путей (передано ${keep.length})` }
+  if (keep.some((k) => typeof k !== "string" || !k.trim())) return { ok: false, why: "каждый путь в keep — непустая строка" }
+  const dir = existsSync(t.directory) ? t.directory : undefined
+  if (!dir) return { ok: false, why: `папки проекта ${t.directory} нет — сохранять нечего` }
+  let top = dir
+  let trees: { path: string; branch?: string }[] = []
+  let branches: string[] = []
+  try {
+    top = git(dir, ["rev-parse", "--show-toplevel"]).trim()
+    trees = worktreesOf(git(top, ["worktree", "list", "--porcelain"]))
+    branches = names(git(top, ["for-each-ref", "--format=%(refname:short)", "refs/heads"]))
+  } catch {}
+  const main = trees[0]?.path
+  const out: string[] = []
+  for (const raw of keep as string[]) {
+    const p = path.resolve(top, raw.trim())
+    const shown = raw.trim()
+    if (sameFs(p, top) || sameFs(p, main)) return { ok: false, why: `${shown}: это основное дерево проекта, в keep его нельзя` }
+    const tree = trees.find((w) => sameFs(w.path, p))
+    const isTree = !!tree
+    let inTrees = false
+    if (!isTree && cfg.worktrees) {
+      try {
+        inTrees = normP(canon(p)).startsWith(`${normP(canon(cfg.worktrees))}/`) && statSync(p).isDirectory()
+      } catch {}
+    }
+    if (!isTree && !inTrees) {
+      const hint = branches.includes(shown) ? " (это ветка: keep сохраняет только дерево, ветку задачи уборка требует удалить)" : ""
+      return { ok: false, why: `${shown}: нет такого worktree репозитория и такой папки в папке деревьев проекта${hint}` }
+    }
+    if (isTree && !existsSync(p)) return { ok: false, why: `${shown}: папки дерева на диске нет` }
+    const n = (tree ? tree.path : (canon(p) ?? p)).replace(/\\/g, "/")
+    if (!out.some((x) => sameFs(x, n))) out.push(n)
+  }
+  return { ok: true, paths: out }
 }
 
 /** Жизнь замка слияния в письмах приёмщика при merge_precheck: required (решение владельца 2026-10-09; то же в crew_help и README). */
@@ -183,7 +243,7 @@ export function reviewLetter(t: Task, cfg: CrewConfig): string {
       ? `     crew_task {action: "accept", n: ${t.n}${cfg.acceptance.length ? "" : ", checks: {\"<критерий>\": \"чем подтверждено\"}"}, commit: "<хэш в ${cfg.targetBranch}, если squash>"};`
       : `     crew_task {action: "accept", n: ${t.n}${cfg.acceptance.length ? "" : ", checks: {\"<критерий>\": \"чем подтверждено\"}"}, commit: "<хэш в ${cfg.targetBranch}, если squash>"} (отмеченные шаги засчитаны);`,
     pre
-      ? `  ${(cfg.acceptance.length ? 5 : 4) + pre}) отдельно выполни выданные шаги очистки, затем crew_task {action: "cleaned", n: ${t.n}}.${cfg.acceptedSlot === "free" ? " При accepted_slot: free accept освобождает inflight/worker slot; до cleaned задача учитывается отдельно в cleanup_limit." : ""}`
+      ? `  ${(cfg.acceptance.length ? 5 : 4) + pre}) отдельно выполни выданные шаги очистки, затем crew_task {action: "cleaned", n: ${t.n}}.${cfg.acceptedSlot === "free" ? " При accepted_slot: free accept освобождает inflight/worker slot; до cleaned задача учитывается отдельно в cleanup_limit." : ""} Улики сохранить — cleaned {n, keep:[путь]}; удалять их не нужно.`
       : `  ${(cfg.acceptance.length ? 5 : 4) + pre}) плагин сам проверит, что влито, и выдаст шаги очистки; сделал — crew_task {action: "cleaned", n: ${t.n}}.${cfg.acceptedSlot === "free" ? " При accepted_slot: free accept освобождает inflight/worker slot; до cleaned задача учитывается отдельно в cleanup_limit." : ""}`,
     pre ? LOCK_LIFECYCLE : "",
     cfg.acceptedSlot === "free" ? slotSentence(t, cfg) : "",
@@ -240,7 +300,7 @@ export function planMergeLetter(t: Task, cfg: CrewConfig): string {
     cfg.mergePrecheck === "required"
       ? `  4) crew_task {action: "accept", n: ${t.n}} — плагин прочтёт план в ${cfg.targetBranch}: форма${cfg.planForm.modeQuestion ? ` и ответ «${cfg.planForm.modeLabel}»` : ""} должны сойтись с решением владельца;`
       : `  3) crew_task {action: "accept", n: ${t.n}} — плагин прочтёт план в ${cfg.targetBranch}: форма${cfg.planForm.modeQuestion ? ` и ответ «${cfg.planForm.modeLabel}»` : ""} должны сойтись с решением владельца; затем очистка и cleaned.`,
-    ...(cfg.mergePrecheck === "required" ? [`  5) отдельно выполни выданные шаги очистки и вызови crew_task {action: "cleaned", n: ${t.n}}.${cfg.acceptedSlot === "free" ? " При accepted_slot: free accept освобождает inflight/worker slot; cleanup учитывается отдельно до cleaned." : ""}`] : []),
+    ...(cfg.mergePrecheck === "required" ? [`  5) отдельно выполни выданные шаги очистки и вызови crew_task {action: "cleaned", n: ${t.n}}.${cfg.acceptedSlot === "free" ? " При accepted_slot: free accept освобождает inflight/worker slot; cleanup учитывается отдельно до cleaned." : ""} Улики сохранить — cleaned {n, keep:[путь]}; удалять их не нужно.`] : []),
     ...(cfg.mergePrecheck === "required" ? [LOCK_LIFECYCLE] : []),
     cfg.planSteps === "auto" ? "После cleaned плагин сам поставит задачи по шагам плана." : "После cleaned автор получит список шагов: задачи по ним ставит он сам (plan_steps: manual).",
   ]
@@ -313,7 +373,7 @@ const normLeft = (x: string) =>
 // integrate/t<N> и integrate/t<N>-*, деревья по шаблону имени или на таких ветках. Ветка или дерево ДРУГОЙ задачи
 // проекта (из её записи) хвостом не бывает никогда.
 const normP = (p?: string) => (p ? path.resolve(p).replace(/\\/g, "/").toLowerCase() : "")
-const samePath = (a?: string, b?: string) => !!a && !!b && normP(a) === normP(b)
+export const samePath = (a?: string, b?: string) => !!a && !!b && normP(a) === normP(b)
 const names = (out: string) => out.split(/\r?\n/).map((x) => x.trim()).filter(Boolean)
 const remoteHeads = (out: string) => names(out).map((l) => l.split("refs/heads/")[1]?.trim()).filter(Boolean) as string[]
 /** блоки «worktree <путь> / HEAD <sha> / branch <ref>», разделённые пустой строкой */
@@ -358,7 +418,8 @@ export async function leftoversOf(t: Task, cfg: CrewConfig, remote: boolean): Pr
     const top = (await gitA(dir, ["rev-parse", "--show-toplevel"])).trim()
     const own = ownership(t, cfg, path.basename(top))
     for (const b of names(await gitA(top, ["for-each-ref", "--format=%(refname:short)", "refs/heads"]))) if (own.isBranch(b)) left.add(`локальная ветка ${b}`)
-    for (const w of worktreesOf(await gitA(top, ["worktree", "list", "--porcelain"]))) if (!samePath(w.path, top) && own.isWorktree(w.path, w.branch)) left.add(normLeft(`worktree ${w.path}`))
+    const kept = keptPaths(t)
+    for (const w of worktreesOf(await gitA(top, ["worktree", "list", "--porcelain"]))) if (!samePath(w.path, top) && !kept.some((k) => sameFs(k, w.path)) && own.isWorktree(w.path, w.branch)) left.add(normLeft(`worktree ${w.path}`))
     if (remote && cfg.cleanup === "local+remote") for (const b of remoteHeads(await gitA(top, ["ls-remote", "--heads", "origin"]))) if (own.isBranch(b)) left.add(`ветка ${b} на origin`)
   } catch {}
   return [...left]

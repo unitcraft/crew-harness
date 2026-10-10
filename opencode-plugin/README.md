@@ -359,6 +359,11 @@ The integrator stays free for the owner and does not re-check accepted work:
   required acceptance step and checks that the task branch (or a squash commit) is in the target
   branch; then the cleanup steps by `cleanup` (`git worktree remove`, `git branch -D`, `git push
   origin --delete`), and `cleaned` — the plugin checks the worktree and the branch are gone;
+  to keep a worktree as evidence call `cleaned {n, keep: [path, ...]}` (up to 8 paths, absolute or from the repository root;
+  each must be a worktree of the repository or an existing folder inside the project's worktree folder, never the main tree
+  or a branch): the check skips those trees, the answer says `Сохранено: <path> (не проверялось уборкой)`, the task record
+  keeps them in `kept` and the history says `улики сохранены: <path>`; the task branch must still be deleted; a repeated
+  `cleaned` without `keep` keeps skipping them while they exist;
 - cleaned → the sessions of the task close with a line in their history, titles `#N ✓✓ готово`, the
   integrator gets a quiet summary. Titles on the way (a mark and a word): `#N ✓ сдана`, `#N ✓◐ приёмка`, `#N ↻ доработка`, `#N ✓✓◐ влита`
   accepted;

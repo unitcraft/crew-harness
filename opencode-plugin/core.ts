@@ -20,7 +20,7 @@ import { DEFAULT_FORM, PLAN_ACCEPTANCE, PLAN_MERGE_ACCEPTANCE, type PlanForm, al
 import { type Task, type TaskPlan, WORKING_STATUSES, taskRef, slugify, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { countedOpen, waitingCleanup } from "./tasks.ts"
 import { acceptWarning, acceptedTip, beginPrecheck, finishPrecheck, gateMerge, landedFresh, markPrecheckStale, neighbourHints, precheckLines, unlockMerge } from "./precheck.ts"
-import { cleanupDone, cleanupSteps, fileAt, holdsMergeLock, isMerged, mergeHolder, releaseMergeLock, reworkLetter, takeMergeLock } from "./review.ts"
+import { cleanupDone, cleanupSteps, fileAt, holdsMergeLock, isMerged, keptPaths, mergeHolder, releaseMergeLock, resolveKeep, reworkLetter, sameFs, takeMergeLock } from "./review.ts"
 import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, timerSpec, watchesOf } from "./watch.ts"
 import { watchRefusal } from "./deny.ts"
 import { queueRemote, remoteRoute } from "./remote.ts"
@@ -1181,7 +1181,7 @@ reviewer; места worker не занимает), и merge, accept, cleaned р
 приёмщик, сменивший роль, их теряет. Исполнитель задачи её не вливает и не принимает. Интегратор принятое не
 перепроверяет. Приёмщик: crew_task review → rework {text} | check {step} → проверка → check {step, result} по каждому шагу (ход видно в окне) → merge (замок вливания проекта) → accept {commit?}
 (плагин проверит обязательные шаги приёмки и что ветка или коммит в целевой ветке) → очистка → cleaned (плагин
-проверит, что worktree и ветка удалены). Потом сессии задачи закрываются, интегратору тихая сводка.
+проверит, что worktree и ветка удалены). Улики сохранить — cleaned {n, keep:[путь, …]} (до 8 путей: worktree репозитория или папка в папке деревьев проекта; основное дерево и ветки нельзя; такое дерево уборка не проверяет, ответ: «Сохранено: <путь> (не проверялось уборкой)»); удалять их не нужно, ветку задачи удалить по-прежнему надо. Потом сессии задачи закрываются, интегратору тихая сводка.
 ПРЕДПРОВЕРКА ВЛИВАНИЯ (настройка проекта merge_precheck; по умолчанию required — включена). Порядок приёмщика: review → check → precheck → CI без замка → precheck candidate → merge → accept → отдельная cleanup → cleaned.
 Замок во время подготовки кандидата и CI не брать. crew_task precheck {n} замок не берёт: плагин читает вершину origin и называет её;
 влей её вместе с веткой задачи в интеграционный candidate (например, integrate/tN), прогони полный CI проекта и сохрани точный commit кандидата;
@@ -1821,12 +1821,13 @@ export function makeTools(host: CrewHost): CrewTool[] {
   const crewTask: CrewTool = {
     name: "crew_task",
     description:
-      "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), show {n} (details and history), and for the integrator: assign {session, goal, criteria, extra?, ...} (give a task to an existing tab instead of a new session; extra {id: line} fills the project's extra task fields, see task_extra_fields in crew_config), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done; with an enabled model-profile set the model is taken by the set at that moment), cancel {n, text?}, priority {n, priority}, order {to: 'project.integrator', goal, criteria, ...} (work for another project: its integrator does it with its own tasks; the order follows them); for the task's reviewer: review {n} (start), precheck {n} (on by default, merge_precheck: required; the old order is the explicit merge_precheck: off -- read the target tip first, integrate it with the task into a candidate, run full CI without a lock, then precheck {n, candidate, result} with the exact green candidate), merge {n} (merge_precheck: required by default, so merge without a green precheck is refused; only after green precheck; takes the short landing lock and lands that exact checked candidate; if the target tip moved, rebuild/recheck and never land the old candidate; merge_precheck: off takes the lock at once; the merge lock is released by accept, also by rework and cancel, unlock {n} releases it when the merge is abandoned before accept, cleaned does not release it, and the service releases it by itself once the checked candidate is already in the target tip on origin), unlock {n} (release the merge lock you hold for the task; a precheck record then becomes stale), rework {n, text, sync?} (sync: true -- only to merge the fresh target branch: not a rework round, not counted in rework_max), check {n, step} before checking a step and {n, step, result} after it (the owner sees the progress in the window), accept {n, checks?, commit?} (steps marked by check count; the plugin checks the required steps and that it is merged), cleaned {n} (the plugin checks the worktree and branch are gone). With accepted_slot: free, accept releases the inflight slot; run cleanup separately and call cleaned (cleanup_limit bounds the waiting cleanup); with the project's reviewer: acceptor, merge/accept/cleaned also need the acceptor (or integrator) role.",
+      "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), show {n} (details and history), and for the integrator: assign {session, goal, criteria, extra?, ...} (give a task to an existing tab instead of a new session; extra {id: line} fills the project's extra task fields, see task_extra_fields in crew_config), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done; with an enabled model-profile set the model is taken by the set at that moment), cancel {n, text?}, priority {n, priority}, order {to: 'project.integrator', goal, criteria, ...} (work for another project: its integrator does it with its own tasks; the order follows them); for the task's reviewer: review {n} (start), precheck {n} (on by default, merge_precheck: required; the old order is the explicit merge_precheck: off -- read the target tip first, integrate it with the task into a candidate, run full CI without a lock, then precheck {n, candidate, result} with the exact green candidate), merge {n} (merge_precheck: required by default, so merge without a green precheck is refused; only after green precheck; takes the short landing lock and lands that exact checked candidate; if the target tip moved, rebuild/recheck and never land the old candidate; merge_precheck: off takes the lock at once; the merge lock is released by accept, also by rework and cancel, unlock {n} releases it when the merge is abandoned before accept, cleaned does not release it, and the service releases it by itself once the checked candidate is already in the target tip on origin), unlock {n} (release the merge lock you hold for the task; a precheck record then becomes stale), rework {n, text, sync?} (sync: true -- only to merge the fresh target branch: not a rework round, not counted in rework_max), check {n, step} before checking a step and {n, step, result} after it (the owner sees the progress in the window), accept {n, checks?, commit?} (steps marked by check count; the plugin checks the required steps and that it is merged), cleaned {n, keep?} (the plugin checks the worktree and branch are gone; keep: [paths] -- up to 8 worktrees kept as evidence, the check skips them and the answer says \"Сохранено: <path> (не проверялось уборкой)\"; the branch must still be deleted). With accepted_slot: free, accept releases the inflight slot; run cleanup separately and call cleaned (cleanup_limit bounds the waiting cleanup); with the project's reviewer: acceptor, merge/accept/cleaned also need the acceptor (or integrator) role.",
     input: {
       type: "object",
       properties: {
         action: { type: "string", enum: ["list", "show", "assign", "order", "push", "reassign", "cancel", "priority", "plan_decide", "review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleaned"] },
         to: str("order: the other project's integrator, \"project.integrator\""),
+        keep: { type: "array", maxItems: 8, items: { type: "string" }, description: "cleaned: up to 8 paths of worktrees to keep as evidence (a worktree of the repository or a folder inside the project's worktree folder; absolute or from the repository root; not the main tree; no branches); the cleanup check skips them, the task's branch must still be deleted" },
         checks: { type: "object", description: "accept: report per acceptance step {step id: what proves it}", additionalProperties: { type: "string" } },
         step: str("check: the acceptance step id"),
         result: str("check: what proves the step (omit when starting the step)"),
@@ -2171,10 +2172,22 @@ ${LOCK_FREED_ACCEPT} Дальше уборка без замка, затем cle
         }
         // cleaned
         if (t.status !== "accepted") return { content: `Очистка — после принятия (сейчас ${statusRu(t.status)}).` }
+        // keep: деревья-улики, которые уборка не проверяет (задача 005, REQ-29); проверка путей — до любой записи
+        if (input.keep !== undefined) {
+          const k = resolveKeep(t, tcfg, input.keep)
+          if (!k.ok) return { content: `Не сохранено: ${k.why}. Ничего не записано.` }
+          const fresh = k.paths.filter((p) => !keptPaths(t).some((x) => sameFs(x, p)))
+          if (fresh.length) {
+            t.kept = [...(t.kept ?? []), ...fresh.map((p) => ({ path: p, at: Date.now(), by: me.session }))]
+            for (const p of fresh) taskEvent(t, me.session, undefined, `улики сохранены: ${p}`)
+          }
+        }
+        const keptNow = keptPaths(t).filter((p) => existsSync(p))
+        const keptLine = keptNow.length ? "\n" + keptNow.map((p) => `Сохранено: ${p} (не проверялось уборкой)`).join("\n") : ""
         const done = cleanupDone(t, tcfg)
-        if (!done.ok) return { content: `Очистка не закончена: ${done.left.join("; ")}.` }
+        if (!done.ok) return { content: `Очистка не закончена: ${done.left.join("; ")}.${keptLine}` }
         const stillHeld = mergeHolder(project)
-        return { content: finishCleaned(t, me, "worktree и ветка удалены") + (stillHeld?.session === me.session ? `
+        return { content: finishCleaned(t, me, `worktree и ветка удалены${keptNow.length ? `; сохранено: ${keptNow.join(", ")}` : ""}`) + keptLine + (stillHeld?.session === me.session ? `
 ${lockStillYours(stillHeld.n)}` : "") }
       }
       if (!isIntegrator(me)) return notIntegrator(me)

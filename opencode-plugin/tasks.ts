@@ -132,6 +132,8 @@ export type Task = {
   precheck?: PrecheckRecord
   /** влитый коммит (его ветки и worktree проверяет очистка) */
   merged_head?: string
+  /** деревья, которые приёмщик сохранил как улики (cleaned {keep}): уборка их не проверяет, пока они есть (задача 005, REQ-29) */
+  kept?: { path: string; at: number; by: string }[]
   history: TaskEvent[]
   created: number
   updated: number
