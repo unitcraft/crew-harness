@@ -2,8 +2,7 @@
 
 Заказчик и владелец: владелец репозитория `unitcraft/crew-harness` (он же отвечает на вопросы и принимает результат).
 Репозиторий кода: `unitcraft/crew-harness` (https://github.com/unitcraft/crew-harness, ветка `main`). Дата задания: 2026-10-09.
-Источник: раздел «Этапы и модели» [Канона](../../../canon/process.md) (таблица этапов, наследование, диалог),
-[ADR-0013](../../../canon/decisions/ADR-0013-optional-helpers-and-reviewer-family.md),
+Источник: раздел «Этапы и модель» [методики](https://github.com/unitcraft/ai-dev-methodology/blob/main/task-runner.md) (таблица этапов, наследование, диалог; бывший ADR-0013),
 [спецификация задачи 003](../../003-model-profiles/spec.md) (наборы, REQ-07 «приёмщик на другой семье»).
 
 Задача полная: разбор, план, реализация, сдача.

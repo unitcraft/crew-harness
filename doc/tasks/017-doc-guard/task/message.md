@@ -2,8 +2,7 @@
 
 Заказчик и владелец: владелец репозитория `unitcraft/crew-harness` (он же отвечает на вопросы и принимает результат).
 Репозиторий кода: `unitcraft/crew-harness` (https://github.com/unitcraft/crew-harness, ветка `main`). Дата задания: 2026-10-10.
-Источник: раздел «Размер задачи и глубина проверки» [Канона](../../../canon/process.md), [ADR-0012](../../../canon/decisions/ADR-0012-task-size-and-document-limits.md)
-(уточнение 2026-10-10), стражи в [scripts/guards/](../../../../scripts/guards/).
+Источник: правила размера и документов [методики](https://github.com/unitcraft/ai-dev-methodology/blob/main/task-sessions.md) («Правила»), пороги проекта в [process.md](../../../canon/process.md) (бывший ADR-0012), стражи в [scripts/guards/](../../../../scripts/guards/).
 
 Задача полная: разбор, план, реализация, сдача.
 

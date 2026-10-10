@@ -2,7 +2,7 @@
 
 Заказчик и владелец: владелец репозитория `unitcraft/crew-harness` (он же отвечает на вопросы и принимает результат).
 Репозиторий кода: `unitcraft/crew-harness` (https://github.com/unitcraft/crew-harness, ветка `main`). Дата задания: 2026-10-09.
-Источник: раздел «Этапы и модели» [Канона](../../../canon/process.md) («Ступени модели»), набор `codex-light` в `.opencode/crew-harness.json`.
+Источник: раздел «Этапы и модель» [методики](https://github.com/unitcraft/ai-dev-methodology/blob/main/task-runner.md) и параметры проекта в [process.md](../../../canon/process.md), набор `codex-light` в `.opencode/crew-harness.json`.
 
 Задача полная: разбор, план, реализация, сдача.
 
