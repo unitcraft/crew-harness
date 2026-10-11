@@ -17,6 +17,7 @@ mkdirSync(path.join(proj, ".opencode"), { recursive: true })
 writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ spawn_limits: { reviewer: 2 } }))
 
 const titles = new Map()
+let goneTries = 0 // updates of a session that no longer exists in OpenCode
 const core = await import("../core.ts")
 const tasks = await import("../tasks.ts")
 const DEAD = 999999
@@ -51,6 +52,10 @@ card("sesEXEC6", { spawned: { by: "sesINTEG1", task: "t6", tier: "light", status
 base(6, { status: "running", executor: "sesEXEC6" })
 core.addObligation("sesEXEC6", { qid: "q6", from_session: "sesINTEG1", from_role: "proj.integrator", at: Date.now(), nudges: 2, empty: 3, stuck: true })
 
+// #7: cleaned, but its executor session was deleted in OpenCode: the title update fails with NotFound
+card("sesGONE7", { spawned: { by: "sesINTEG1", task: "t7", tier: "light", status: "running", at: Date.now(), qid: "q7" }, task: { project: "proj", n: 7 } })
+base(7, { status: "cleaned", executor: "sesGONE7", reviewer: "sesREVTAB", review_kind: "tab", reviewer_role: "proj.worker", branch: "t7-x", checks: { tests: "ok" } })
+
 // one live window with the tabs of the owner
 const WPID = 919191
 mkdirSync(core.WINDOWS, { recursive: true })
@@ -75,7 +80,13 @@ const mkctx = () => ({
       if (!sessions.has(req.id)) sessions.set(req.id, req)
       return { id: req.id }
     },
-    update: async ({ sessionID, title }) => titles.set(sessionID, title),
+    update: async ({ sessionID, title }) => {
+      if (sessionID === "sesGONE7") {
+        goneTries++
+        throw Object.assign(new Error("Session.NotFoundError"), { name: "Session.NotFoundError" })
+      }
+      titles.set(sessionID, title)
+    },
     hook: async () => {},
   },
   tool: { transform: async () => {} },
@@ -118,6 +129,8 @@ await wait(3500)
 const extra = delivered.slice(before.letters)
 cell("a second restart adds no letters", extra.length === 0, JSON.stringify(extra.map((d) => `${d.sessionID}: ${d.text.slice(0, 60)}`)))
 cell("a second restart creates no sessions", sessions.size === before.creates, JSON.stringify([...sessions.keys()]))
+
+cell("#7: a deleted session is tried once, not on every pass", goneTries === 1, String(goneTries))
 
 clearInterval(heart)
 stop?.()

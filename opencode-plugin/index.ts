@@ -1164,7 +1164,13 @@ export default {
           fresh.title = title
           saveCard(fresh)
         } catch (e) {
-          log(`title ${c.session} failed: ${e}`)
+          // сессии в OpenCode нет (удалена): повторять каждый проход бессмысленно — запоминаем название как показанное
+          if (/NotFound/i.test(String((e as any)?.name ?? "") + String(e))) {
+            const fresh = readJson<Card>(cardFile(c.session)) ?? c
+            fresh.titleShown = title
+            saveCard(fresh)
+            log(`title ${c.session}: session not found, not retried`)
+          } else log(`title ${c.session} failed: ${e}`)
         }
       }
     }
