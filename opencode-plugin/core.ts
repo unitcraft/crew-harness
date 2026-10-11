@@ -3,6 +3,7 @@
 // провайдера claude-code, которым инструменты плагина недоступны: одна реализация — одна семантика.
 // Отличия хозяев — в CrewHost (визитка своего окна, кандидаты, немедленная доставка в своём процессе).
 
+import { gluedText, gluedRefusal } from "./glued.ts"
 import { execFileSync } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync, appendFileSync } from "node:fs"
 import os from "node:os"
@@ -1115,6 +1116,8 @@ export const HELP = `crew-harness — письма между вкладками
        wake: false            — не будить: письмо придёт вкладке вместе с её следующим ходом (статусы, «к сведению»).
        expect_reply: true     — вопрос: в ответе qid; ответ жди crew_wait в этом же ходе.
        reply_to: "<qid>"      — это ответ на вопрос <qid>.
+       Слипшиеся слова — модели gpt-6.1-sol и gpt-6-astra в коде execute теряют пробелы в длинных строках с русским и
+                              английским; такое письмо плагин отклоняет. Обход: короткое письмо, подробности — файлом и ссылкой.
        tier: heavy|medium|light — задача свободной открытой вкладке роли с моделью этой ступени или сильнее.
   crew_wait {qid, seconds?}   — ждать ответа на свой вопрос в этом же ходе (до 300 с): без второго пробуждения.
   crew_timer {minutes, note?} — таймер: письмо разбудит эту вкладку через minutes минут (дробные можно, до 719), без удержания хода.
@@ -1563,6 +1566,8 @@ export function makeTools(host: CrewHost): CrewTool[] {
       if (!to || !text) return { content: "Нужны и адресат, и текст." }
       if (to === PLUGIN_SENDER || to.endsWith(`.${PLUGIN_SENDER}`)) return { content: "Не отправлено: crew-harness — это сам плагин, ему не пишут. Отчёт по вопросу или задаче — тому, кто спросил: crew_send {to: \"<его сессия>\", reply_to: \"<qid>\"} (qid и сессия — в письме с вопросом; открытые задачи — crew_task {action: \"list\"})." }
       if (!input.expect_reply && ACK_ONLY.test(text)) return { content: "Не отправлено: подтверждение без содержания будит получателя впустую. Пиши, только когда есть что сообщить." }
+      const glued = gluedText(text)
+      if (glued.reject) return { content: gluedRefusal(glued) }
       let wake = input.wake !== false
       const qid = input.expect_reply ? `q${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` : undefined
       const replyTo = input.reply_to ? String(input.reply_to) : undefined

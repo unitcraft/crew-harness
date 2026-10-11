@@ -87,6 +87,12 @@ A service letter of the plugin starts with `⚙ 01:17 · crew → … (служ�
 title, one line of text) and stay longer when they matter: "waiting for you" 30 s, "stuck" 15 s, others 8–10 s
 ([plan 003.1](../doc/archive/plans/003.1-clear-letters.md)).
 
+## Glued words in letters
+
+Models gpt-6.1-sol and gpt-6-astra (openai) sometimes drop spaces in long mixed Russian/English string literals inside `execute` code (`crew_send({text:'...'})`); the plugin is not at fault.
+`crew_send` rejects a letter with two or more glued mixed-alphabet runs of 20+ characters (code, links, paths and hashes excluded), or one such run in a long text with under 6% spaces.
+Workaround: a short letter, details in a file and a link to it.
+
 ## Turn economy
 
 Measured on OpenCode 2.0.22: anything sent into a session while its turn runs becomes one more
