@@ -56,4 +56,8 @@ await fw.startFormWait({ event: { subscribe: (f) => { cb = f } } }, () => {})
 cb({ type: "form.created", data: { form: { id: "frm_5", sessionID: "sesE", metadata: { kind: "question" } } } })
 cell("startFormWait subscribes", stOf("sesE").state === "owner", JSON.stringify(stOf("sesE")))
 
+// the built-in questionnaire shape: field title = header, description = the question text
+fw.handleFormEvent({ type: "form.created", data: { form: { id: "frm_6", sessionID: "sesF", title: "Questions", metadata: { kind: "question" }, fields: [{ key: "q0", title: "Цвет", description: "Какой цвет тебе нравится?", type: "string", options: [{ label: "Синий" }] }] } } })
+cell("field description is taken as the question text", stOf("sesF").question === "Какой цвет тебе нравится?", JSON.stringify(stOf("sesF")))
+
 process.exit(fail ? 1 : 0)

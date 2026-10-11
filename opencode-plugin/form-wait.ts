@@ -55,7 +55,9 @@ export function cleanupForms(now = Date.now(), dir = FORMS) {
   } catch {}
 }
 
-// the text of the first question among the form fields (shape of fields is not fixed: look for a text under common names)
+// the text of the first question among the form fields. The built-in questionnaire turns a question into a field with
+// title = header and description = the question text (read from the OpenCode 2.0.26 binary, not yet seen live): the question
+// text is preferred over the short header; other names are a fallback.
 function firstQuestion(form: any): string | undefined {
   const seen = new Set<any>()
   const walk = (v: any, depth: number): string | undefined => {
@@ -68,7 +70,7 @@ function firstQuestion(form: any): string | undefined {
       }
       return undefined
     }
-    for (const k of ["question", "label", "prompt", "text"]) if (typeof v[k] === "string" && v[k].trim()) return v[k]
+    for (const k of ["question", "description", "prompt", "text", "label", "title"]) if (typeof v[k] === "string" && v[k].trim()) return v[k]
     for (const k of ["fields", "questions", "items", "children"]) {
       const r = walk(v[k], depth + 1)
       if (r) return r
