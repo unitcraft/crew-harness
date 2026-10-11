@@ -1054,6 +1054,29 @@ export function addObligation(session: string, o: Obligation) {
   const list = obligationsOf(session).filter((x) => x.qid !== o.qid)
   saveObligations(session, [...list, o])
 }
+// ЗАДАЧА 032: вопрос (expect_reply) не висит часами. Срок — ASKED_STALE_MIN: старше — «устарел», в состоянии reply не участвует.
+export const ASKED_STALE_MIN = 120
+export const ASKED_STALE_MS = ASKED_STALE_MIN * 60_000
+/** Вопрос к сессии `to` закрыт сам, раньше срока: сессия-адресат закрыта (спавн закрыт или вкладки нет и визитка не обновлялась
+ *  дольше LIVE_MS — пропуск сердцебиения окна не закрывает вопрос) или её задача очищена. Иначе undefined. */
+export function askedClosedWhy(to: Card, tabOpen: boolean, now = Date.now()): string | undefined {
+  if (to.task) {
+    const t = loadTask(to.task.project, to.task.n)
+    if (t && t.status === "cleaned") return `задача #${t.n} принята и очищена`
+  }
+  if (to.spawned?.status === "closed") return "сессия-адресат закрыта"
+  if (!to.spawned && !tabOpen && now - to.updated > LIVE_MS) return "вкладки-адресата нет"
+  return undefined
+}
+/** Письмо от `from` пришло к `targets` (id сессий или ключи ролей): его открытые вопросы к автору этих писем закрыты —
+ *  адресат ответил, пусть и без reply_to. Совпадение — по адресату и времени (вопрос раньше письма). Возвращает снятые. */
+export function closeAskedByLetter(from: string, targets: string[], authorKeys: (session: string) => string[], now = Date.now()): Obligation[] {
+  const all = obligationsOf(from)
+  const closed = all.filter((o) => !o.task && !o.stuck && o.at < now && (targets.includes(o.from_session) || authorKeys(o.from_session).some((k) => targets.includes(k))))
+  if (closed.length) saveObligations(from, all.filter((x) => !closed.includes(x)))
+  for (const o of closed) log(`asked closed: qid=${o.qid} by a letter from ${from} to ${o.from_session} (asked ${new Date(o.at).toISOString()})`)
+  return closed
+}
 /** Ответ отправлен: обязательство снято. Возвращает снятое. */
 export function settleObligation(session: string, qid: string): Obligation | undefined {
   const list = obligationsOf(session)
@@ -1660,6 +1683,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const letter: Letter = { id: `${now}-${safeKey(sessionID)}-${safeKey(key)}`, ...base, to: pick?.session ?? key, tier: input.tier }
         if (pick) {
           postLetter(pick.session, letter)
+          closeAskedByLetter(sessionID, [pick.session, key], (s) => cards.filter((c) => c.session === s).map(keyOf), now)
           host.picked(pick)
           log(`send ${fromRole} -> ${pick.session} tier=${input.tier}`)
           return { content: `Отправлено (${hhmm(now)}): ${key} -> сессия ${pick.session}, модель ${modelLabel(pick, now)}, ступень ${tierOf(pick.model, cfg) ?? "?"} (задача ${input.tier}).${qidTail}` }
@@ -1688,6 +1712,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         if (!targets.length) return { content: `Открытых вкладок в проекте ${addr.project} нет — отправлять некому.` }
       } else targets = [addr.kind === "session" ? addr.session : roleKey(addr.project, addr.role)]
       for (const t of targets) postLetter(t, { id: `${now}-${safeKey(sessionID)}-${safeKey(t)}`, ...base, to: t })
+      closeAskedByLetter(sessionID, targets, (s) => cards.filter((c) => c.session === s).map(keyOf), now)
       host.posted(targets)
       const known = targets.map((t) => {
         const c = cards.find((x) => x.session === t) ?? open.find((x) => keyOf(x) === t) ?? cards.find((x) => keyOf(x) === t)

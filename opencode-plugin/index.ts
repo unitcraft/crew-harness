@@ -95,6 +95,9 @@ import {
   sessionLabel,
   addObligation,
   obligationsOf,
+  settleObligation,
+  askedClosedWhy,
+  ASKED_STALE_MS,
   saveObligations,
   commonDoctor,
   DOCTOR_FILE,
@@ -789,8 +792,23 @@ export default {
       const t = now()
       const cards = allCards()
       // вопросы с ответом (expect_reply) — обязательства получателя перед спросившим; задачи и приёмки — не вопросы
+      // ЗАДАЧА 032: закрытый адресат или очищенная задача снимают вопрос (то же правило чистит висящее при запуске — это первый
+      // проход); старше ASKED_STALE_MS — «устарел», reply не держит. Письмо адресата автору закрывает вопрос в crew_send.
       const asked = new Map<string, { qid: string; to: string; at: number }[]>()
-      for (const c of cards) for (const o of obligationsOf(c.session)) if (!o.task && !o.stuck) asked.set(o.from_session, [...(asked.get(o.from_session) ?? []), { qid: o.qid, to: keyOf(c), at: o.at }])
+      const askedStale = new Map<string, { qid: string; to: string; at: number }[]>()
+      for (const c of cards) {
+        const list = obligationsOf(c.session).filter((o) => !o.task && !o.stuck)
+        const why = list.length ? askedClosedWhy(c, !!tabOf(c.session, windows), t) : undefined
+        for (const o of list) {
+          if (why) {
+            settleObligation(c.session, o.qid)
+            log(`asked closed: qid=${o.qid} to ${keyOf(c)}: ${why}`)
+            continue
+          }
+          const into = t - o.at > ASKED_STALE_MS ? askedStale : asked
+          into.set(o.from_session, [...(into.get(o.from_session) ?? []), { qid: o.qid, to: keyOf(c), at: o.at }])
+        }
+      }
       const watchesBy = openWatchesBySession() // одно чтение папки наблюдений на проход (их сотни: завершённые хранятся сутки)
       for (const c of cards) {
         if (c.pid !== process.pid && pidAlive(c.pid)) continue // вкладка другого живого сервера
@@ -820,7 +838,7 @@ export default {
             ends.set(c.session, { at, end })
           }
         }
-        const s = statusOf({ card: c, busy, busySince: c.busySince, end, asked: asked.get(c.session) ?? [], now: t, watches: ws, ...(staleSince ? { staleSince } : {}) })
+        const s = statusOf({ card: c, busy, busySince: c.busySince, end, asked: asked.get(c.session) ?? [], askedStale: askedStale.get(c.session) ?? [], now: t, watches: ws, ...(staleSince ? { staleSince } : {}) })
         const prev = saveStatus(s)
         // РЕЖИМЫ ОТВЕТА НА ВОПРОСЫ (задача 007, ADR-0010): решение принимается раньше блока уведомлений. Режимы выключены —
         // ничего не читается и прежний путь идёт как был. handled — «ждёт вас» по этому ходу подавлено целиком; остаток вопросов

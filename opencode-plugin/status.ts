@@ -36,6 +36,8 @@ export type Status = {
   question?: string
   watches: { id: string; note?: string; started?: number; minutes: number }[]
   asked: { qid: string; to: string; at: number }[]
+  /** Вопросы старше ASKED_STALE_MIN без ответа: в /crew отдельной строкой, состояние reply не держат. */
+  askedStale?: { qid: string; to: string; at: number }[]
   /** Своя задача (исполнитель или приёмщик). */
   task?: { n: number; status: string; as: "executor" | "reviewer"; title: string; steps?: StepView[]; checking?: string }
   /** Открытые задачи, поставленные этой сессией. */
@@ -89,6 +91,7 @@ export type StatusInput = {
   end?: { at: number; text: string; ownerAfter: boolean }
   /** Вопросы этой сессии, на которые ещё нет ответа (обязательства других перед ней). */
   asked: { qid: string; to: string; at: number }[]
+  askedStale?: { qid: string; to: string; at: number }[]
   now: number
   /** наблюдения сессии, прочитанные проходом один раз на всех (иначе — читаются здесь) */
   watches?: Watch[]
@@ -113,6 +116,7 @@ export function statusOf(x: StatusInput): Status {
     detail: "свободна",
     watches: watches.map((w) => ({ id: w.id, note: w.note, started: w.started, minutes: w.minutes })),
     asked: x.asked,
+    ...(x.askedStale?.length ? { askedStale: x.askedStale } : {}),
     ...(own ? { task: { n: own.n, status: own.status, as: card.task ? ("executor" as const) : ("reviewer" as const), title: own.title, ...(stepsOf(own) ? { steps: stepsOf(own) } : {}), ...(own.checking ? { checking: own.checking.step } : {}) } } : {}),
     tasks: authored.map((t) => ({ n: t.n, status: t.status, priority: t.priority, title: t.title })),
     updated: now,
@@ -229,6 +233,7 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
       // вопрос владельцу — целиком (его и читают), остальное — строкой по ширине окна
       const row = `  ${s.state === "owner" ? "▶ " : ""}${short(who, 40)}${model} — ${s.detail}`
       out.push(s.state === "owner" ? row : fit(row))
+      if (s.askedStale?.length) out.push(fit(`      вопрос устарел: ${s.askedStale.map((a) => `к ${a.to} с ${hm(a.at)} (${minutes(a.at, now)})`).join(", ")}`))
       if (prog) {
         const steps = s.task!.steps!
         const cur = steps.find((a) => a.id === s.task!.checking && !a.result)
