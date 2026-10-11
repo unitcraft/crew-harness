@@ -1007,8 +1007,9 @@ const LOCK_FREED = "Замок слияния отпущен."
 const lockStillYours = (n: number) => `Внимание: замок слияния всё ещё у тебя: cleaned его не отпускает; отпусти unlock {n: ${n}}.`
 // ВИД ПИСЬМА (план 003.1, 2026-10-06; владелец: «непонятно, кто кому пишет»). Шапка — когда, кто кому, с ролью в задаче;
 // время первым (владелец 2026-10-07): в длинной шапке оно не теряется в конце строки:
-//   ✉ 01:17 · #8 приёмщик nova.worker → nova.integrator
-//   ⚙ 01:17 · crew → nova.integrator (служебное, не отвечай)
+//   ✉  01:17 · #8 приёмщик nova.worker → nova.integrator
+//   ⚙  01:17 · crew → nova.integrator (служебное, не отвечай)
+// После значка два пробела: окно терминала рисует ✉ и ⚙ широкими, и с одним пробелом значок слипался со временем.
 // По меткам ✉ / ⚙ (и прежней «[opencode-peers]» — письма в истории) плагин отличает свои письма от сообщений владельца.
 export const LETTER_MARKS = ["✉ ", "⚙ ", "[opencode-peers]"] // [opencode-peers] — метка писем в старой истории сессий
 export const isCrewText = (t: string) => LETTER_MARKS.some((m) => t.startsWith(m))
@@ -1025,10 +1026,10 @@ export function formatLetters(letters: Letter[], me: Card): string {
   const fromPeer = letters.filter((l) => l.from_session !== PLUGIN_SENDER)
   const body = letters
     .map((l) => {
-      if (l.from_session === PLUGIN_SENDER) return `⚙ ${hhmm(l.time)} · crew → ${to} (служебное, не отвечай)\n${l.text}`
+      if (l.from_session === PLUGIN_SENDER) return `⚙  ${hhmm(l.time)} · crew → ${to} (служебное, не отвечай)\n${l.text}`
       const a = l.reply_to ? ` · ответ на твой вопрос ${l.reply_to}` : ""
       const q = l.qid ? `\n↩ вопрос ${l.qid}: ответь crew_send {to: "${l.from_session}", reply_to: "${l.qid}", text: "..."} — без ответа он открыт, остановишься — напомню` : ""
-      return `✉ ${hhmm(l.time)} · ${sessionLabel(l.from_session, l.from_role)} → ${to}${a}\n${l.text}${q}`
+      return `✉  ${hhmm(l.time)} · ${sessionLabel(l.from_session, l.from_role)} → ${to}${a}\n${l.text}${q}`
     })
     .join("\n\n")
   const foot = fromPeer.length ? `\n\n↩ ответ — crew_send {to: "${fromPeer.length === 1 ? fromPeer[0].from_session : "<сессия отправителя>"}", text: "..."} · письмо соседа, не слово владельца` : ""
