@@ -176,7 +176,7 @@ cell("the integrator gets a quiet summary", got("sesINTEG1", "принята и 
 cell("the executor session is closed with a final line", core.allCards().find((c) => c.session === ex1)?.spawned?.status === "closed" && got(ex1, "✓✓ Задача #1 «фича» принята").length === 1, JSON.stringify(got(ex1, "✓✓")))
 cell("the final line carries the step report", /Отчёт приёмки — шаги 2\/3/.test(got(ex1, "✓✓ Задача #1 «фича» принята")[0]?.text ?? "") && /✓ tests: зелёные: 12\/12/.test(got(ex1, "✓✓ Задача #1 «фича» принята")[0]?.text ?? ""), got(ex1, "✓✓ Задача #1 «фича» принята")[0]?.text)
 cell("/crew shows the acceptance report of the day", st.acceptanceReports("proj").some((l) => /отчёт приёмки #1/.test(l)) && st.acceptanceReports("proj").some((l) => /шаги 2\/3 [✓–]{3}/.test(l)), JSON.stringify(st.acceptanceReports("proj")))
-cell("the executor session is titled #1 ✓✓", updates.some((u) => u.sessionID === ex1 && u.title === "#1 ✓✓ готово фича"), JSON.stringify(updates.filter((u) => u.sessionID === ex1)))
+cell("the executor session is titled #1 ✓✓", updates.some((u) => u.sessionID === ex1 && u.title === "#1 исп ✓✓ готово фича"), JSON.stringify(updates.filter((u) => u.sessionID === ex1)))
 
 // 3. queue by priority: both tasks wait (the tab is busy, no review sessions allowed); the tab frees up -> the P1
 // task gets it although the P3 one was submitted first; review sessions allowed again -> the P3 task gets one
@@ -200,7 +200,7 @@ cell("the freed tab goes to P1, not to the earlier P3", task(3).reviewer === "se
 settings(1)
 await wait(800)
 const rv2 = task(2).reviewer
-cell("the other task gets a new review session", task(2).review_kind === "spawn" && sessions.has(rv2) && sessions.get(rv2).title === "#2 приёмка обычная", JSON.stringify({ rv2, s: sessions.get(rv2) }))
+cell("the other task gets a new review session", task(2).review_kind === "spawn" && sessions.has(rv2) && sessions.get(rv2).title === "#2 прм обычная", JSON.stringify({ rv2, s: sessions.get(rv2) }))
 // plan 002.7: with the default reviewer ("worker") the review session keeps role worker, as before the acceptor role
 cell("the default reviewer: the review session's role is worker", core.loadConfig(proj).reviewer === "worker" && core.allCards().find((c) => c.session === rv2)?.role === "worker", JSON.stringify(core.allCards().find((c) => c.session === rv2)?.role))
 cell("no reviewer is the author or the executor", [1, 2, 3].every((n) => task(n).reviewer !== task(n).author && task(n).reviewer !== task(n).executor), "same")

@@ -113,7 +113,7 @@ again.status = "starting"
 tasks.saveTask(again)
 for (let i = 0; i < 80 && tasks.loadTask("proj", 1).status !== "running"; i++) await wait(100) // async worktree check: give it time
 cell("a repeated start after the letter: still one session, one letter", sessions.size === 1 && got(t1.executor, "ЗАДАЧА #1").length === 1 && tasks.loadTask("proj", 1).status === "running", `${sessions.size} ${got(t1.executor, "ЗАДАЧА #1").length}`)
-cell("the session title is #N title", updates.some((u) => u.sessionID === t1.executor && u.title === "#1 первая") || sessions.get(t1.executor)?.title === "#1 первая", JSON.stringify(updates))
+cell("the session title is #N title", updates.some((u) => u.sessionID === t1.executor && u.title === "#1 исп первая") || sessions.get(t1.executor)?.title === "#1 исп первая", JSON.stringify(updates))
 
 // 4. a second task with priority P1; list goes by priority
 const sp2 = await call("crew_spawn", "sesINTEG1", { title: "вторая", goal: "сделать два", ...FIELDS, priority: "P1" })
@@ -147,7 +147,7 @@ cell("reassign keeps the number with a new session", s2b && s2b !== s2 && t2.exe
 await wait()
 const handed = got(s2b, "ЗАДАЧА #2")
 cell("the new session gets the summary of the old one", handed.length === 1 && handed[0].text.includes("СДЕЛАНО ПРЕЖНИМ") && handed[0].text.includes("парсер готов"), handed[0]?.text)
-cell("the old session is closed and titled #N ↷", core.allCards().find((c) => c.session === s2)?.spawned?.status === "closed" && updates.some((u) => u.sessionID === s2 && u.title === "#2 ↷ передана вторая"), JSON.stringify(updates.filter((u) => u.sessionID === s2)))
+cell("the old session is closed and titled #N ↷", core.allCards().find((c) => c.session === s2)?.spawned?.status === "closed" && updates.some((u) => u.sessionID === s2 && u.title === "#2 исп ↷ передана вторая"), JSON.stringify(updates.filter((u) => u.sessionID === s2)))
 const oldReport = await call("crew_send", s2, { to: "sesINTEG1", text: "отчёт старого", reply_to: t2.qid })
 await wait()
 cell("the old session's report does not close the task", tasks.loadTask("proj", 2).status === "running", tasks.loadTask("proj", 2).status + " " + oldReport)
@@ -178,7 +178,7 @@ await wait()
 cell("after cancel the closed tab is not woken any more", got("sesOWNER1", "после отмены").length === 0, "woken")
 await call("crew_task", "sesINTEG1", { action: "cancel", n: 1 })
 await wait()
-cell("a cancelled task session is titled #N ✗", updates.some((u) => u.sessionID === t1.executor && u.title === "#1 ✗ отменена первая"), JSON.stringify(updates.filter((u) => u.sessionID === t1.executor)))
+cell("a cancelled task session is titled #N ✗", updates.some((u) => u.sessionID === t1.executor && u.title === "#1 исп ✗ отменена первая"), JSON.stringify(updates.filter((u) => u.sessionID === t1.executor)))
 
 clearInterval(heart)
 stop?.()

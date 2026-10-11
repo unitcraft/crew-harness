@@ -194,7 +194,7 @@ try {
   const refused = (await integ.call("crew_spawn", { goal: "без критериев" })).text
   cell("MCP crew_spawn refuses a task without criteria", /нет полей критерии/.test(refused), refused)
   const sp = (await integ.call("crew_spawn", { title: "через mcp", goal: "проверить", criteria: "зелёное", tier: "light" })).text
-  cell("MCP crew_spawn: the plugin starts the task", /Задача #1 запущена/.test(sp) && created.length === 1 && created[0].title === "#1 через mcp", sp + JSON.stringify(created))
+  cell("MCP crew_spawn: the plugin starts the task", /Задача #1 запущена/.test(sp) && created.length === 1 && created[0].title === "#1 исп через mcp", sp + JSON.stringify(created))
   const list = (await integ.call("crew_task", { action: "list" })).text
   cell("MCP crew_task list shows the same journal", /#1 P2 в работе «через mcp»/.test(list), list)
   const bad = (await integ.call("crew_task", { action: "push", n: 99 })).text

@@ -592,10 +592,10 @@ export default {
         // без модели от набора — spawn_models по ступени задачи, срезанной границами проекта (задача 016)
         const tierCut = clampTier(t.tier, cfg.tierBounds)
         const model = t.review_model ?? cfg.spawnModels[tierCut.tier] ?? DEFAULT_SPAWN_MODELS[tierCut.tier]
-        await ctx.session.create({ id: t.reviewer, title: `#${t.n} приёмка ${t.title}`, location: { directory: t.directory }, metadata: { crewReview: { project: t.project, n: t.n } }, model: splitLaunchModel(model) })
+        await ctx.session.create({ id: t.reviewer, title: `#${t.n} прм ${t.title}`, location: { directory: t.directory }, metadata: { crewReview: { project: t.project, n: t.n } }, model: splitLaunchModel(model) })
         const now = Date.now()
         // роль сессии приёмки — по настройке reviewer (план 002.7): acceptor несёт права вливания и принятия
-        const card: Card = { session: t.reviewer, role: reviewerRole(cfg), auto: false, title: `#${t.n} приёмка ${t.title}`, directory: t.directory, repo: repoLabel(t.directory), project: t.project, model, modelAt: now, modelFrom: "request", pid: process.pid, updated: now, spawned: { by: t.author, task: `приёмка #${t.n}`, tier: t.review_model ? t.tier : tierCut.tier, status: "running", at: now, qid: t.review_qid ?? "" }, review: { project: t.project, n: t.n } }
+        const card: Card = { session: t.reviewer, role: reviewerRole(cfg), auto: false, title: `#${t.n} прм ${t.title}`, directory: t.directory, repo: repoLabel(t.directory), project: t.project, model, modelAt: now, modelFrom: "request", pid: process.pid, updated: now, spawned: { by: t.author, task: `приёмка #${t.n}`, tier: t.review_model ? t.tier : tierCut.tier, status: "running", at: now, qid: t.review_qid ?? "" }, review: { project: t.project, n: t.n } }
         saveCard(card)
         mine.set(card.session, card)
         // след профиля приёмки (задача 003): набор, этап, семья, ступень; окно у приёмки — общие настройки (general)
@@ -1153,7 +1153,9 @@ export default {
         const mark = replaced ? "↷" : asReviewer ? (t.status === "cleaned" ? "✓✓" : t.status === "cancelled" ? "✗" : "") : (MARK[t.status] ?? "")
         // значок и слово (план 003.1; владелец: «что значат две галочки и луна?» — значки оставить, слово рядом)
         const WORD: Record<string, string> = { "✓": "сдана", "✓◐": "приёмка", "↻": "доработка", "◇": "согласование", "✓✓◐": "влита", "✓✓": "готово", "✗": "отменена", "↷": "передана" }
-        const title = `#${t.n}${mark ? ` ${mark} ${WORD[mark]}` : ""} ${asReviewer ? "приёмка " : ""}${t.title}`
+        // роль в названии (владелец, 2026-10-11: «в названиях сессий не указано, какая роль»): исп — исполнитель, прм — приёмщик;
+        // слово «приёмка» рядом со значком — статус задачи, не роль
+        const title = `#${t.n} ${asReviewer ? "прм" : "исп"}${mark ? ` ${mark} ${WORD[mark]}` : ""} ${t.title}`
         if (c.titleShown === title) continue
         try {
           await ctx.session.update({ sessionID: c.session, title })
@@ -1233,10 +1235,10 @@ export default {
             }
           }
         }
-        await ctx.session.create({ id: sid, title: `#${t.n} ${t.title}`, location: { directory: dir }, metadata: { crewTask: { project: t.project, n: t.n, attempt: t.attempt } }, ...(t.model ? { model: splitLaunchModel(String(t.model)) } : {}) })
+        await ctx.session.create({ id: sid, title: `#${t.n} исп ${t.title}`, location: { directory: dir }, metadata: { crewTask: { project: t.project, n: t.n, attempt: t.attempt } }, ...(t.model ? { model: splitLaunchModel(String(t.model)) } : {}) })
         const now = Date.now()
         const prev = readJson<Card>(cardFile(sid))
-        const card: Card = { ...(prev ?? {}), session: sid, role: t.role, auto: false, title: `#${t.n} ${t.title}`, directory: dir, repo: repoLabel(dir), project: t.project, model: t.model, modelAt: now, modelFrom: "request", pid: process.pid, updated: now, spawned: { by: t.author, task: t.goal.slice(0, 300), tier: t.tier, status: "running", at: now, qid: t.qid }, task: { project: t.project, n: t.n } }
+        const card: Card = { ...(prev ?? {}), session: sid, role: t.role, auto: false, title: `#${t.n} исп ${t.title}`, directory: dir, repo: repoLabel(dir), project: t.project, model: t.model, modelAt: now, modelFrom: "request", pid: process.pid, updated: now, spawned: { by: t.author, task: t.goal.slice(0, 300), tier: t.tier, status: "running", at: now, qid: t.qid }, task: { project: t.project, n: t.n } }
         saveCard(card)
         mine.set(sid, card)
         addObligation(sid, { qid: t.qid, from_session: t.author, from_role: t.author_role, at: now, nudges: 0, task: t.title })
