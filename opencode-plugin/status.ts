@@ -14,6 +14,7 @@ import { type Card, readJson, safeKey } from "./core.ts"
 import { BASE } from "./paths.ts"
 import { answerLines, answerSideRow } from "./answer.ts"
 import { divergenceLineFor } from "./config-diverge.ts"
+import { pendingForms } from "./form-wait.ts"
 import { lockWaitLine } from "./review.ts"
 import { type Task, isOpen, listTasks, loadTask } from "./tasks.ts"
 import { type Watch, watchesOf } from "./watch.ts"
@@ -119,6 +120,12 @@ export function statusOf(x: StatusInput): Status {
   if (x.staleSince) {
     const q = `окно считает ход идущим, а сервер свободен с ${hm(x.staleSince)}: сообщение, видимо, не дошло — нажмите Esc в окне и отправьте его снова`
     return { ...base, state: "owner", since: x.staleSince, question: q, detail: q }
+  }
+  // встроенный вопросник OpenCode (события form.*, form-wait.ts): адресован человеку всегда, и у вкладки владельца, и у сессии задачи
+  const form = pendingForms(card.session, now)[0]
+  if (form) {
+    const q = form.question ?? form.title ?? "вопрос во встроенном вопроснике"
+    return { ...base, state: "owner", since: form.at, question: q, detail: `ждёт вас с ${hm(form.at)}: ${q}` }
   }
   if (x.busy) return { ...base, state: "working", since: x.busySince, detail: `работает${x.busySince ? ` (${minutes(x.busySince, now)})` : ""}` }
   // сессию задачи ведёт интегратор, и её вопрос в конце хода бывает ему (сдавший воркер спросил интегратора), а бывает

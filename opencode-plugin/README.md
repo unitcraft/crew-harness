@@ -832,6 +832,16 @@ Other OpenCode plugins of the same set (they work independently; together they a
 - [opencode-claude-guards](https://github.com/unitcraft/opencode-claude-guards) — the repository's Claude Code rules (hooks, permissions) in OpenCode windows
 - [opencode-claude-code-provider](https://github.com/unitcraft/opencode-claude-code-provider) — OpenCode provider `claude-code` on top of the official Claude Code
 
+## Waiting for you by the built-in questionnaire
+
+When a model asks through the built-in OpenCode questionnaire, the bus emits `form.created` (metadata kind `question`);
+the plugin records the open form in `forms/<session>.json` and the session shows as "waiting for you" with the text of
+the first question, in `/crew`, the sidebar and the notice. `form.replied` and `form.cancelled` remove the record and
+the status returns by itself. No model is involved, and the same applies to task sessions (the questionnaire is always
+addressed to a human). Events arrive in copies (several windows), so records are idempotent by form id; a form older
+than 12 hours does not count. The wait phrases stay as a safety net for plain prose.
+Details: [doc/tasks/026-crew-question/task/analysis.md](../doc/tasks/026-crew-question/task/analysis.md).
+
 ## Event probe
 
 A diagnostic, off by default (task 026): `CREW_HARNESS_EVENT_PROBE=1` in the service environment, then restart.

@@ -125,6 +125,7 @@ import { countedOpen, waitingCleanup } from "./tasks.ts"
 import { createRemoteBridge } from "./remote.ts"
 import { profileProblems, profileState, stateSignature, syncProjectFiles, syncSnapshot, syncTaskFile } from "./profile-layer.ts"
 import { cellOfState, clampTier, resolveStageProfile, splitLaunchModel, stageOfLaunch, tabFitsCell } from "./profiles.ts"
+import { cleanupForms, startFormWait } from "./form-wait.ts"
 import { probeEnabled, startEventProbe } from "./event-probe.ts"
 import { catalogModels, writeCatalog } from "./model-catalog.ts"
 import { ensureWorktree, fileAt, gitTraces, leftoversOf, mergeHolder, mergeLockAbandoned, reviewLetter, wakeLockWaiters } from "./review.ts"
@@ -1298,6 +1299,8 @@ export default {
       log(`session.idle subscribe failed: ${e}`)
     }
 
+    cleanupForms()
+    void startFormWait(ctx, log).catch(() => {}) // ожидание по встроенному вопроснику (task 026), всегда включено
     if (probeEnabled()) void startEventProbe(ctx, log).catch(() => {}) // проба событий (task 026), по умолчанию выкл
 
     // ДРУГИЕ МАШИНЫ (remote.ts): мост держит один процесс машины; входящие — в ящики, как обычные письма.
