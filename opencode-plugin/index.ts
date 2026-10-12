@@ -132,7 +132,8 @@ import { cellOfState, clampTier, resolveStageProfile, splitLaunchModel, stageOfL
 import { cleanupForms, startFormWait } from "./form-wait.ts"
 import { probeEnabled, startEventProbe } from "./event-probe.ts"
 import { catalogModels, writeCatalog } from "./model-catalog.ts"
-import { ensureWorktree, fileAt, gitTraces, leftoversOf, mergeHolder, mergeLockAbandoned, reviewLetter, wakeLockWaiters } from "./review.ts"
+import { forEachBudget, background, stepBudget } from "./async-git.ts"
+import { ensureWorktree, fileAtAsync, gitTraces, leftoversOf, mergeHolder, mergeLockAbandoned, reviewLetter, wakeLockWaiters } from "./review.ts"
 import { precheckLines, releaseLandedLock } from "./precheck.ts"
 import { noteLoopLag, registerJournalTools } from "./journal.ts"
 
@@ -146,6 +147,8 @@ export default {
     const projects = parseProjects(ctx?.options)
     setProjects(projects, ctx?.options?.local)
     saveProjects(ctx?.options) // для MCP-сервера вкладок claude-code: список проектов один
+    // задача 034: дальше стартового чтения настройки и файл приёмки обновляются в фоне (асинхронный git), цикл службы не ждёт
+    background.on = process.env.CREW_HARNESS_SYNC_GIT !== "1"
     // Проект визитки: записанный в ней (вкладка сама ставит его при каждом обращении) или вычисленный по каталогу.
     const projOf = (c: Card) => c.project ?? projectOf(c.directory, projects)
     const keyOf = (c: Card) => roleKey(projOf(c), normalizeRole(c.role)) // старые визитки с assistant — это worker
@@ -659,7 +662,10 @@ export default {
     async function assignReviewers() {
       const windows = liveWindows()
       const queue = listTasks().filter((t) => t.status === "submitted" && !t.reviewer).sort(byPriority)
+      const bud = stepBudget("assignReviewers", log)
+      let qi = 0
       for (const t0 of queue) {
+        if (await bud.stop(qi++, queue.length)) break
         const t = loadTask(t0.project, t0.n)
         if (!t || t.status !== "submitted" || t.reviewer) continue
         const author = readJson<Card>(cardFile(t.author))
@@ -966,7 +972,7 @@ export default {
         const author = readJson<Card>(cardFile(pt.author))
         if (author && author.pid !== process.pid && pidAlive(author.pid)) continue // ставит процесс автора
         const cfg = loadConfig(pt.directory)
-        const text = fileAt(pt.directory, cfg.targetBranch, pt.plan.file)
+        const text = await fileAtAsync(pt.directory, cfg.targetBranch, pt.plan.file)
         if (!text) continue
         const plan = parsePlan(text, cfg.planForm)
         const steps = allSteps(plan)
@@ -1148,31 +1154,32 @@ export default {
       // перезапуска); за проход — не больше LEFT_PER_RUN задач; origin (ls-remote, сеть) — раз в LEFT_REMOTE_MS.
       const remote = now() - leftRemoteAt >= LEFT_REMOTE_MS
       if (remote) leftRemoteAt = now()
-      let checked = 0
-      for (const t of listTasks()) {
-        if ((t.status !== "cleaned" && t.status !== "cancelled") || now() - (t.updated ?? 0) > 3 * 86_400_000) continue
+      const cand = listTasks().filter((t) => (t.status === "cleaned" || t.status === "cancelled") && now() - (t.updated ?? 0) <= 3 * 86_400_000 && !leftClean.has(`${t.project}#${t.n}`)).slice(0, LEFT_PER_RUN)
+      await forEachBudget("leftWatch", cand, async (t) => {
         const key0 = `${t.project}#${t.n}`
-        if (leftClean.has(key0)) continue
-        if (++checked > LEFT_PER_RUN) break
         const left = await leftoversOf(t, loadConfig(t.directory), remote)
         if (!left.length) {
           if (remote) leftClean.add(key0) // чисто и локально, и на origin — больше не смотреть
-          continue
+          return
         }
         const key = left.slice().sort().join("|")
         let h = 0
         for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0
         const id = `stall-left-${safeKey(t.project)}-${t.n}-${(h >>> 0).toString(36)}`
-        if (letterExists(t.author, id)) continue
+        if (letterExists(t.author, id)) return
         const what = t.status === "cleaned" ? `принятой задачи #${t.n} «${t.title}» остались хвосты — убери их` : `отменённой задачи #${t.n} «${t.title}» осталась работа — убери её или сохрани, решаешь ты`
         postLetter(t.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: now(), text: `У ${what}:\n${left.map((x) => `— ${x}`).join("\n")}\n(git worktree remove, git branch -D, git push origin --delete — по правилам проекта.)` })
         log(`leftovers of ${t.project} #${t.n}: ${left.length}`)
-      }
+      }, log)
     }
 
     async function syncTitles() {
       if (typeof ctx.session.update !== "function") return
-      for (const c of allCards()) {
+      const bud = stepBudget("syncTitles", log)
+      const all = allCards()
+      let ci = 0
+      for (const c of all) {
+        if (await bud.stop(ci++, all.length)) break
         // карточки умершего процесса (сервер перезапущен посреди задачи) — тоже наши; чужой живой процесс — нет
         if (!c.spawned || (!c.task && !c.review) || (c.pid !== process.pid && pidAlive(c.pid))) continue
         const asReviewer = !c.task && !!c.review
@@ -1386,15 +1393,24 @@ export default {
     let passStage = ""
     let passStartedAt = 0
     let passId = 0
+    // ЖУРНАЛ МЕДЛЕННЫХ ШАГОВ (задача 034): шаг дольше SLOW_STEP_MS — одна строка, не чаще раза в минуту на шаг
+    const SLOW_STEP_MS = Number(process.env.CREW_HARNESS_SLOW_STEP_MS) || 1000
+    const slowLoggedAt = new Map<string, number>()
     const step = async (name: string, fn: () => any) => {
       passStage = name
       let timer: any
+      const t0 = Date.now()
       try {
         await Promise.race([Promise.resolve().then(fn), new Promise((_, rej) => (timer = setTimeout(() => rej(new Error(`step ${name} took over ${STEP_MS} ms`)), STEP_MS)))])
       } catch (e) {
         log(`pass step ${name} failed: ${e}`)
       } finally {
         clearTimeout(timer)
+        const took = Date.now() - t0
+        if (took > SLOW_STEP_MS && Date.now() - (slowLoggedAt.get(name) ?? 0) >= 60_000) {
+          slowLoggedAt.set(name, Date.now())
+          log(`slow step ${name}: ${took} ms`)
+        }
       }
     }
     async function pass() {

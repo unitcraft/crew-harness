@@ -3,7 +3,8 @@
 // и тексты писем: замок вливания проекта, «ветка или коммит действительно в целевой ветке», «worktree и ветка
 // удалены», письмо приёмщику, письмо на доработку, шаги очистки.
 
-import { execFile, execFileSync } from "node:child_process"
+import { execFileSync } from "node:child_process"
+import { gitAsync } from "./async-git.ts"
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { type Card, type CrewConfig, PLUGIN_SENDER, ROLES, allCards, cardFile, extraBlock, mayWakeCard, postLetter, readJson, safeKey, saveCard } from "./core.ts"
@@ -151,6 +152,15 @@ export function isMerged(t: Task, target: string, commit?: string): { ok: boolea
 export function fileAt(dir: string, ref: string, file: string): string | undefined {
   try {
     return git(dir, ["show", `${ref}:${file}`])
+  } catch {
+    return undefined
+  }
+}
+
+/** То же без блокировки цикла службы (шаги прохода). */
+export async function fileAtAsync(dir: string, ref: string, file: string): Promise<string | undefined> {
+  try {
+    return await gitAsync(dir, ["show", `${ref}:${file}`])
   } catch {
     return undefined
   }
@@ -497,8 +507,7 @@ export function ownership(t: Task, cfg: CrewConfig, repo: string) {
 
 // асинхронно: проверка идёт в цикле сервера раз в несколько минут, синхронный git (тем более ls-remote по сети)
 // держал бы главный поток сервера
-const gitA = (cwd: string, args: string[], timeout = 20_000) =>
-  new Promise<string>((res, rej) => execFile("git", ["-C", cwd, ...args], { encoding: "utf8", windowsHide: true, timeout }, (e, out) => (e ? rej(e) : res(String(out)))))
+const gitA = (cwd: string, args: string[], timeout = 20_000) => gitAsync(cwd, args, timeout)
 export async function leftoversOf(t: Task, cfg: CrewConfig, remote: boolean): Promise<string[]> {
   const dir = existsSync(t.directory) ? t.directory : undefined
   if (!dir) return []

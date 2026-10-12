@@ -16,6 +16,7 @@
 //   "options": { "projects": [...], "local": { "nova": { "spawn_models": { "light": "kimi/k3" } } } }
 
 import { execFileSync } from "node:child_process"
+import { background, gitAsync } from "./async-git.ts"
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { log, safeKey } from "./core.ts"
@@ -62,23 +63,28 @@ export type Projects = Project[]
 
 const git = (cwd: string, args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"], timeout: 20_000 })
 
-function defaultBranch(repo: string): string {
+// Чтение настроек — генератор: каждый вызов git он отдаёт наружу (yield [папка, аргументы]) и получает текст или исключение.
+// Синхронный водитель гоняет execFileSync (старт, инструменты), асинхронный — gitAsync (обновление в фоне, цикл службы стоять не должен).
+type GitCall = [string, string[]]
+type GitGen<R> = Generator<GitCall, R, string>
+
+function* defaultBranch(repo: string): GitGen<string> {
   try {
-    const head = git(repo, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]).trim() // origin/main
+    const head = (yield [repo, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]]).trim() // origin/main
     if (head) return head.replace(/^[^/]+\//, "")
   } catch {}
   for (const b of ["main", "master"])
     try {
-      git(repo, ["rev-parse", "--verify", "--quiet", `refs/heads/${b}`])
+      yield [repo, ["rev-parse", "--verify", "--quiet", `refs/heads/${b}`]]
       return b
     } catch {}
   return "main"
 }
 
 /** Закоммиченный файл настроек: текст из ветки или undefined. */
-function showCommitted(repo: string, branch: string, file: string): string | undefined {
+function* showCommitted(repo: string, branch: string, file: string): GitGen<string | undefined> {
   try {
-    return git(repo, ["show", `${branch}:${file}`])
+    return yield [repo, ["show", `${branch}:${file}`]]
   } catch {
     return undefined
   }
@@ -99,10 +105,8 @@ const cache = new Map<string, { at: number; value: any }>()
 const good = new Map<string, any>() // последние настройки без проблем, по папке
 
 /** Папка настроек → проект (имя, корень, сырые настройки). */
-export function readSettingsFolder(folder: string, now = Date.now()): { project: Project; raw: any } {
-  const dir = path.resolve(folder)
-  const hit = cache.get(dir)
-  if (hit && now - hit.at < CACHE_MS) return hit.value
+type Folder = { project: Project; raw: any }
+function* settingsBody(dir: string): GitGen<Folder> {
   const problems: string[] = []
   let repo: string | undefined
   let file: string | undefined
@@ -110,19 +114,19 @@ export function readSettingsFolder(folder: string, now = Date.now()): { project:
   let legacy: string | undefined
   let raw: any = {}
   try {
-    repo = git(dir, ["rev-parse", "--show-toplevel"]).trim()
+    repo = (yield [dir, ["rev-parse", "--show-toplevel"]]).trim()
   } catch {
     problems.push(`папка настроек ${dir} не внутри git-репозитория`)
   }
   if (repo) {
-    const prefix = git(dir, ["rev-parse", "--show-prefix"]).trim()
+    const prefix = (yield [dir, ["rev-parse", "--show-prefix"]]).trim()
     file = prefix + ".opencode/crew-harness.json" // путь в репозитории
-    branch = defaultBranch(repo)
-    let j = parseJson(showCommitted(repo, branch, file))
+    branch = yield* defaultBranch(repo)
+    let j = parseJson(yield* showCommitted(repo, branch, file))
     // прежнее имя файла (до плана 005): читается, crew_doctor просит переименовать
     if (j === undefined) {
       const oldFile = prefix + LEGACY_SETTINGS_NAME
-      const o = parseJson(showCommitted(repo, branch, oldFile))
+      const o = parseJson(yield* showCommitted(repo, branch, oldFile))
       if (o !== undefined) {
         j = o
         file = oldFile
@@ -131,7 +135,7 @@ export function readSettingsFolder(folder: string, now = Date.now()): { project:
     }
     if (j && typeof j.branch === "string" && j.branch && j.branch !== branch) {
       branch = j.branch
-      j = parseJson(showCommitted(repo, branch, file))
+      j = parseJson(yield* showCommitted(repo, branch, file))
     }
     if (j === undefined) {
       // файл в рабочей копии есть, а в ветке нет — его просто не закоммитили (claude-limits, 2026-10-07: приёмка
@@ -174,9 +178,63 @@ export function readSettingsFolder(folder: string, now = Date.now()): { project:
       value = last
     }
   }
+  return value
+}
+
+const sync = <R>(g: GitGen<R>): R => {
+  let r = g.next()
+  while (!r.done) {
+    let out: string | undefined
+    let err: unknown
+    try {
+      out = git(r.value[0], r.value[1])
+    } catch (e) {
+      err = e ?? new Error("git failed")
+    }
+    r = err !== undefined ? g.throw(err) : g.next(out!)
+  }
+  return r.value
+}
+const async_ = async <R>(g: GitGen<R>): Promise<R> => {
+  let r = g.next()
+  while (!r.done) {
+    let out: string | undefined
+    let err: unknown
+    try {
+      out = await gitAsync(r.value[0], r.value[1], 20_000)
+    } catch (e) {
+      err = e ?? new Error("git failed")
+    }
+    r = err !== undefined ? g.throw(err) : g.next(out!)
+  }
+  return r.value
+}
+
+// ФОНОВОЕ ОБНОВЛЕНИЕ (задача 034): чтение настроек — пять-шесть вызовов git подряд, на нагруженной машине секунды, и все они стояли
+// поперёк цикла службы (loadConfig зовут шаги прохода). Служба включает режим: устаревшее значение отдаётся сразу, а перечитывается
+// оно асинхронно (gitAsync). Первое чтение папки (старт) и инструменты без режима — по-прежнему синхронные.
+const refreshing = new Set<string>()
+
+/** Папка настроек → проект (имя, корень, сырые настройки). */
+export function readSettingsFolder(folder: string, now = Date.now()): Folder {
+  const dir = path.resolve(folder)
+  const hit = cache.get(dir)
+  if (hit && now - hit.at < CACHE_MS) return hit.value
+  if (hit && background.on) {
+    if (!refreshing.has(dir)) {
+      refreshing.add(dir)
+      void async_(settingsBody(dir))
+        .then((value) => cache.set(dir, { at: Date.now(), value }))
+        .catch(() => {})
+        .finally(() => refreshing.delete(dir))
+    }
+    return hit.value
+  }
+  const value = sync(settingsBody(dir))
   cache.set(dir, { at: now, value })
   return value
 }
+
 
 /** Опции плагина → проекты. Новая форма — массив папок настроек; прежняя — объект имя → корень. */
 export function parseProjects(opt: any, log: (s: string) => void = () => {}): Projects {

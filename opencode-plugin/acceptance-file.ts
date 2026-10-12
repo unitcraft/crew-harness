@@ -2,6 +2,7 @@
 // файл читается с целевой ветки (origin/<ветка>, затем локальная), в нём markdown-таблица `| id | текст | обязателен |`.
 // Чтение — короткий git show с кешем на несколько секунд: loadConfig зовут часто, git на каждый вызов не запускается.
 import { execFileSync } from "node:child_process"
+import { background, gitAsync } from "./async-git.ts"
 
 export type FileStep = { id: string; text: string; required: boolean }
 const ID_RE = /^[a-z0-9][a-z0-9_-]*$/
@@ -34,6 +35,7 @@ export function parseAcceptanceTable(text: string): { steps: FileStep[]; warning
 
 const git = (cwd: string, args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", windowsHide: true, timeout: 5000, stdio: ["ignore", "pipe", "ignore"] })
 const cache = new Map<string, { at: number; value: { steps: FileStep[]; warnings: string[]; ref?: string } | undefined }>()
+const refreshing = new Set<string>()
 const ttl = () => (process.env.CREW_HARNESS_ACCEPTANCE_TTL_MS !== undefined ? Number(process.env.CREW_HARNESS_ACCEPTANCE_TTL_MS) : 15_000)
 
 /** Шаги из файла целевой ветки или undefined (нет файла, нет шагов). Результат кешируется на проход. */
@@ -41,6 +43,23 @@ export function acceptanceFromFile(dir: string, targetBranch: string, file: stri
   const key = `${dir}\0${targetBranch}\0${file}`
   const hit = cache.get(key)
   if (hit && Date.now() - hit.at < ttl()) return hit.value
+  // служба (задача 034): устаревшее значение — сразу, перечитывание — в фоне, цикл службы не ждёт git
+  if (hit && background.on) {
+    if (!refreshing.has(key)) {
+      refreshing.add(key)
+      void (async () => {
+        let v: { steps: FileStep[]; warnings: string[]; ref?: string } | undefined
+        for (const ref of [`origin/${targetBranch}`, targetBranch]) {
+          try {
+            const parsed = parseAcceptanceTable(await gitAsync(dir, ["show", `${ref}:${file}`], 5000))
+            if (parsed.steps.length) { v = { ...parsed, ref }; break }
+          } catch {}
+        }
+        cache.set(key, { at: Date.now(), value: v })
+      })().finally(() => refreshing.delete(key))
+    }
+    return hit.value
+  }
   let value: { steps: FileStep[]; warnings: string[]; ref?: string } | undefined
   for (const ref of [`origin/${targetBranch}`, targetBranch]) {
     try {
