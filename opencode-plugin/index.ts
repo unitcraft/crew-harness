@@ -54,6 +54,7 @@ import {
   idleAt,
   openTurn,
   staleBusy,
+  hungTurn,
   recentRows,
   insideDir,
   taskPlace,
@@ -798,6 +799,28 @@ export default {
     // по которым видна закономерность: какое окно, как давно служба и окно живы, что в базе, когда сессию смотрели.
     const staleDiagAt = new Map<string, number>()
     const hm = (ms: number) => (ms ? new Date(ms).toTimeString().slice(0, 5) : "-")
+    const hungDiagAt = new Map<string, number>()
+    async function noteHung(c: Card, tab: any, hungSince: number, t: number) {
+      try {
+        const was = hungDiagAt.get(c.session)
+        if (hungSince && was !== hungSince) {
+          hungDiagAt.set(c.session, hungSince)
+          const rows = await recentRows(c.session)
+          const w = tab?.window
+          log(
+            `hung turn: ${keyOf(c)} (${c.session}) window pid=${w?.pid ?? "?"} beat ${w ? Math.round((t - Number(w.beat || 0)) / 1000) : "?"}s ago, ` +
+              `tab active=${!!tab?.tab?.active} busy=${!!tab?.tab?.busy}; model silent since ${hm(hungSince)} (${Math.round((t - hungSince) / 60_000)} min); ` +
+              `plugin process up since ${hm(PROCESS_START)} (${Math.round((t - PROCESS_START) / 60_000)} min); ` +
+              `last rows: ${rows.map((r) => `${r.type}@${hm(r.at)}`).join(", ") || "-"}`,
+          )
+        } else if (!hungSince && was !== undefined) {
+          hungDiagAt.delete(c.session)
+          log(`hung turn cleared: ${keyOf(c)} (${c.session})`)
+        }
+      } catch (e) {
+        log(`hung turn note failed: ${e}`)
+      }
+    }
     async function noteStale(c: Card, tab: any, staleSince: number, t: number) {
       try {
         const was = staleDiagAt.get(c.session)
@@ -860,7 +883,9 @@ export default {
         // плагин не доставлял — признака busy у карточки нет; сводка писала «стоит», а сессия работала, 2026-10-05)
         const staleSince = tab?.tab.busy ? await staleBusy(c.session, t) : 0
         await noteStale(c, tab, staleSince, t)
-        const busy = !staleSince && (!!tab?.tab.busy || !!c.busy || (await openTurn(c.session, t)))
+        const hungSince = tab?.tab.busy && !staleSince ? await hungTurn(c.session, t, ws.length > 0) : 0
+        await noteHung(c, tab, hungSince, t)
+        const busy = !staleSince && !hungSince && (!!tab?.tab.busy || !!c.busy || (await openTurn(c.session, t)))
         let end: Awaited<ReturnType<typeof turnEnd>> = undefined
         if (!busy) {
           const at = await idleAt(c.session)
@@ -876,7 +901,7 @@ export default {
             ends.set(c.session, { at, end })
           }
         }
-        const s = statusOf({ card: c, busy, busySince: c.busySince, end, asked: asked.get(c.session) ?? [], askedStale: askedStale.get(c.session) ?? [], now: t, watches: ws, ...(staleSince ? { staleSince } : {}) })
+        const s = statusOf({ card: c, busy, busySince: c.busySince, end, asked: asked.get(c.session) ?? [], askedStale: askedStale.get(c.session) ?? [], now: t, watches: ws, ...(staleSince ? { staleSince } : {}), ...(hungSince ? { hungSince } : {}) })
         const prev = saveStatus(s)
         // РЕЖИМЫ ОТВЕТА НА ВОПРОСЫ (задача 007, ADR-0010): решение принимается раньше блока уведомлений. Режимы выключены —
         // ничего не читается и прежний путь идёт как был. handled — «ждёт вас» по этому ходу подавлено целиком; остаток вопросов

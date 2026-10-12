@@ -101,6 +101,8 @@ export type StatusInput = {
   watches?: Watch[]
   /** окно считает ход идущим, а сервер свободен с этого времени (core.ts staleBusy) */
   staleSince?: number
+  /** ход завис: модель молчит с этого времени, строки idle нет (core.ts hungTurn) */
+  hungSince?: number
 }
 
 /** Состояние одной сессии из её данных. Порядок важности: ход > вопрос владельцу > наблюдение > ответ > задачи. */
@@ -128,6 +130,10 @@ export function statusOf(x: StatusInput): Status {
   if (x.staleSince) {
     const q = `окно считает ход идущим, а сервер свободен с ${hm(x.staleSince)}: сообщение, видимо, не дошло — нажмите Esc в окне и отправьте его снова`
     return { ...base, state: "owner", since: x.staleSince, question: q, detail: q }
+  }
+  if (x.hungSince) {
+    const q = `ход завис с ${hm(x.hungSince)} (${minutes(x.hungSince, now)}): нажмите Esc в окне и напишите «продолжай»`
+    return { ...base, state: "owner", since: x.hungSince, question: q, detail: q }
   }
   // встроенный вопросник OpenCode (события form.*, form-wait.ts): адресован человеку всегда, и у вкладки владельца, и у сессии задачи
   const form = pendingForms(card.session, now)[0]

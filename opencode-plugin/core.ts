@@ -621,6 +621,36 @@ export async function recentRows(sessionID: string, n = 6): Promise<{ type: stri
   }
 }
 
+/** ХОД ЗАВИС (задача 036): строки idle после последнего ответа нет, а модель молчит дольше hungMs. Активность модели — обновление строк
+ *  `assistant` (ответ и вызовы инструментов лежат в нём) и `compaction`; `user`, `synthetic`, `agent-switched` и прочие служебные —
+ *  не активность (переключение агента владельцем — не работа). Не завис, если у сессии есть открытые наблюдения (watching) или
+ *  в последнем ответе есть незавершённый вызов инструмента (status running/pending). Возвращает время последней активности
+ *  (иначе 0). Тишина дольше 15 мин у нормальных ходов не встречалась, кроме долгих инструментов (analysis.md). */
+export async function hungTurn(sessionID: string, now = Date.now(), watching = false, hungMs = HUNG_MS): Promise<number> {
+  if (watching || !sessionID || !existsSync(dbFile())) return 0
+  let db: any
+  try {
+    db = await openDb()
+    const r = db.prepare("select max(case when type = 'idle' then time_created end) as idle, max(case when type in ('assistant', 'compaction') then time_updated end) as act, max(case when type = 'assistant' then time_created end) as asst from session_message where session_id = ?").get(sessionID)
+    const idle = Number(r?.idle ?? 0)
+    const act = Number(r?.act ?? 0)
+    const asst = Number(r?.asst ?? 0)
+    if (!asst || asst <= idle || now - act < hungMs) return 0
+    const last = db.prepare("select data from session_message where session_id = ? and type = 'assistant' and time_created = ? order by seq desc limit 1").get(sessionID, asst)
+    try {
+      const parts = JSON.parse(last?.data ?? "{}")?.content
+      if (Array.isArray(parts) && parts.some((p: any) => p?.type === "tool" && (p?.state?.status === "running" || p?.state?.status === "pending"))) return 0
+    } catch {}
+    return act
+  } catch {
+    return 0
+  } finally {
+    try {
+      db?.close()
+    } catch {}
+  }
+}
+
 /** Время последней строки idle сессии (0 — нет). Дешёвый запрос без чтения данных сообщений. */
 export async function idleAt(sessionID: string): Promise<number> {
   if (!sessionID || !existsSync(dbFile())) return 0
@@ -726,7 +756,11 @@ export function insideDir(p: string, dir: string): boolean {
 
 /** Старт процесса сервера (не загрузки плагина: OpenCode грузит его заново в том же процессе на каждую папку). */
 export const PROCESS_START = Number(process.env.CREW_HARNESS_PROCESS_START) || Date.now() - process.uptime() * 1000
-const OPEN_TURN_MAX_MS = 4 * 3_600_000
+// Замер 2026-10-13 по базе за 7 дней (doc/tasks/036-hung-turn-detection/task/analysis.md): тишина между строками внутри закрытых
+// ходов — медиана 0,05 с, 95-й процентиль 1,8 с, 99-й 62 с, 99,9-й 194 с, максимум 81 мин (один ход с долгим инструментом).
+// Окно открытого хода 45 мин, порог «завис» 15 мин.
+const OPEN_TURN_MAX_MS = Number(process.env.CREW_HARNESS_OPEN_TURN_MAX_MS) || 45 * 60_000
+export const HUNG_MS = Number(process.env.CREW_HARNESS_HUNG_MS) || 15 * 60_000
 
 /** Ход сессии идёт: по базе (сессия задачи без окна, ход начат не через плагин).
  *  — последнее сообщение новее последнего idle и обновлялось за fresh;
