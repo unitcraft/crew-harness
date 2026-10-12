@@ -13,6 +13,7 @@ process.env.XDG_DATA_HOME = path.join(tmp, "data")
 process.env.CREW_HARNESS_POLL_MS = "100"
 process.env.CREW_HARNESS_DB = path.join(tmp, "absent.db")
 process.env.CREW_HARNESS_SETTINGS_TTL_MS = "1"
+process.env.CREW_HARNESS_SYNC_GIT = "1" // settings are read at once, not from the background cache (task 034): this test commits and reads back
 process.env.CREW_HARNESS_PRESENCE = "all"
 const plugin = process.env.CREW_PLUGIN_DIR ? path.resolve(process.env.CREW_PLUGIN_DIR) : path.join(import.meta.dirname, "..")
 const load = (f) => import(pathToFileURL(path.join(plugin, f)).href)
