@@ -71,11 +71,15 @@ export const WAITING_PHRASES: RegExp[] = [
   /(?<![а-яё])(?<!не\s)(?:просит|просим|запрашивает)(?![а-яё])[^.!?\n,;:]{0,60}?(?<![а-яё])(?:разрешени|согласи|GO(?![а-яё\w]))/i,
 ]
 
+/** Ожидание не владельца, а приёмки, проверки, слияния, наблюдения или другой сессии: «жду решения приёмки». Вырезается до положительных фраз. */
+const NOT_OWNER_WAIT = /(?<![а-яё])((?:жду|ждёт|ждем|ждём|ожидаю|ожидает|ожидаем)(?![а-яё]))\s+(?:решени|ответ|результат|вердикт|слов|итог)[а-яё]*\s+(?:приёмк|приемк|приёмщик|приемщик|CI(?![a-z])|проверк|слиян|наблюден|воркер|исполнител)[а-яё]*/gi
+
 /** Ответ кончается вопросом или фразой ожидания слова владельца: такая строка среди последних трёх непустых (за ней бывает подпись). */
 export function endsWithQuestion(text: string): string | undefined {
+  const waits = (l: string) => { const c = l.replace(NOT_OWNER_WAIT, "$1 "); return WAITING_PHRASES.some((r) => r.test(c)) }
   const lines = text.replace(/\r/g, "").split("\n").map((l) => l.trim()).filter(Boolean)
   const tail = lines.slice(-3)
-  const i = tail.map((l) => /\?[)»"*_`]*$/.test(l) || WAITING_PHRASES.some((r) => r.test(l))).lastIndexOf(true)
+  const i = tail.map((l) => /\?[)»"*_`]*$/.test(l) || waits(l)).lastIndexOf(true)
   if (i < 0) return undefined
   return tail[i].length > 300 ? `${tail[i].slice(0, 300)}…` : tail[i]
 }
@@ -135,7 +139,9 @@ export function statusOf(x: StatusInput): Status {
   // сессию задачи ведёт интегратор, и её вопрос в конце хода бывает ему (сдавший воркер спросил интегратора), а бывает
   // владельцу (приёмщик просил «вливай?»): кому — по тексту не определить. Поэтому у сессии задачи — «question»: видно
   // в /crew, но без уведомления; «owner» с уведомлением — только у вкладок владельца.
-  const q = x.end && !x.end.ownerAfter ? endsWithQuestion(x.end.text) : undefined
+  // исполнитель, сдавший задачу (submitted/reviewing/accepted), по роли ждёт приёмщика: «жду решения приёмки» — не вопрос
+  const handedOver = !!card.task && !!own && ["submitted", "reviewing", "accepted"].includes(own.status)
+  const q = x.end && !x.end.ownerAfter && !handedOver ? endsWithQuestion(x.end.text) : undefined
   if (q && !card.spawned) return { ...base, state: "owner", since: x.end!.at, question: q, detail: `ждёт вас с ${hm(x.end!.at)}: ${q}` }
   if (q) return { ...base, state: "question", since: x.end!.at, question: q, detail: `ждёт ответа (интегратора или вас) с ${hm(x.end!.at)}: ${q}` }
   if (watches.length) {
