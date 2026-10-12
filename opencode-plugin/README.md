@@ -295,6 +295,7 @@ refuses them) — [ADR-0010](../doc/canon/decisions/ADR-0010-question-answering-
   question closes it). The type `gate` is not accepted in the map, and the mode `agent` (another agent answers) is moved to a
   separate future task. The value that fits most projects: `{"implementation": "recommendations"}` — for `requirements` and `plan` the owner stays
   (для `requirements` и `plan` — `owner`: there the method leaves the decision to a person).
+- `allow_self_assign` (default `false`, set by a human) — the integrator is never the executor of its own task: `assign` to its own session is refused (`crew_spawn` makes a separate executor); `true` only by the owner's word.
 - `answer_max` — how many answers in a row one session may get (3); the owner's word in the tab resets the count.
 
 **The form of a question.** A session asks in text: a block `В-01 …?` with the lines `Тип: requirements|plan|implementation|gate`,

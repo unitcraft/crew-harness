@@ -244,6 +244,8 @@ export type CrewConfig = {
   answerMode: AnswerMap
   /** предел ответов по рекомендации подряд одной сессии (answer_max) */
   answerMax: number
+  /** allow_self_assign: интегратору можно назначить задачу на собственную сессию (по умолчанию нет, задача 035) */
+  allowSelfAssign: boolean
 }
 export type ExtraField = { id: string; label: string; hint?: string }
 export const TASK_FIELDS = ["goal", "criteria", "boundaries", "open_questions"] as const
@@ -397,6 +399,7 @@ export function loadConfig(dir: string): CrewConfig {
     extraFields: extraFieldsOf(j.task_extra_fields),
     answerMode: normalizeAnswerMode(j.answer_mode).map,
     answerMax: normalizeAnswerMax(j.answer_max),
+    allowSelfAssign: j.allow_self_assign === true,
   }
 }
 
@@ -1251,7 +1254,8 @@ push_empty_turns (3) пустых подряд или push_max (20) напоми
     spawn_limits (3). Если в настройках проекта задан worktrees — письмо с задачей называет папку worktree и ветку.
   priority: P0 авария (всё остальное ждёт), P1 первая очередь, P2 обычная работа (по умолчанию), P3 когда освободятся руки.
   crew_task {action: "assign", session, goal, criteria, ...} — отдать задачу открытой вкладке владельца, а не новой
-    сессии; пока задача открыта, такую вкладку будят, даже закрытую.
+    сессии; пока задача открыта, такую вкладку будят, даже закрытую. Интегратор исполнителем своей задачи не бывает: assign на
+    собственную сессию отказывает (исключение по слову владельца — allow_self_assign: true в настройках проекта).
   crew_task {action: "push", n, text?} — подтолкнуть остановившегося исполнителя сейчас (счётчик напоминаний — с нуля).
   crew_task {action: "reassign", n} — передать задачу новой сессии под тем же номером со сводкой сделанного.
   crew_task {action: "cancel", n, text?} / {action: "priority", n, priority} / {action: "view", n} (show — прежнее имя, работает) / {action: "list"}.
@@ -1986,6 +1990,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const target = readJson<Card>(cardFile(String(input.session ?? "")))
         if (!target || projOf(target) !== project) return { content: `Вкладки ${input.session} в проекте ${project} нет.` }
         if (target.spawned) return { content: "Это сессия задачи — у неё уже своя задача." }
+        if (target.session === me.session && !configFor(me).allowSelfAssign) return { content: "Задача не назначается на собственную сессию: отдельный исполнитель создаётся crew_spawn (ступень light или medium); исключение — по слову владельца, настройка проекта allow_self_assign: true." }
         const busyWith = target.task && loadTask(target.task.project, target.task.n)
         if (busyWith && isOpen(busyWith) && busyWith.executor === target.session) return { content: `У вкладки уже открыта задача ${taskRef(busyWith)}.` }
         const cfg = configFor(me)

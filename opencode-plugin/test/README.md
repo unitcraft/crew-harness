@@ -47,6 +47,7 @@ stops at the first failing file.
 | | `peers-status` | session status, questions to the owner, notices and reminders |
 | | `peers-sidebar` | the "Peers" block lines in the window |
 | Tasks | `peers-tasks` | the task journal: unique numbers, session id before create, required fields, push / reassign |
+| | `crew-no-self-assign` | `assign` to the author's own session refused (no task made), to another tab allowed, `allow_self_assign: true` allows, `reassign` never gives the author's session |
 | | `peers-place` | a task's worktree and branch, never the main copy |
 | | `peers-restart` | a restart between steps: each step finished exactly once |
 | | `peers-review` | submission, the review queue, the merge lock, acceptance checks on a real git repo, cleanup |
