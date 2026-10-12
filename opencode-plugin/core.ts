@@ -599,6 +599,23 @@ const TURN_SLACK_MS = 5_000 // сообщение владельца пишет�
 // КОНЕЦ ПОСЛЕДНЕГО ХОДА (план 003): время строки idle, текст последнего ответа модели в этом ходе и было ли после
 // конца сообщение владельца. Нужен сводке /crew и признаку «ждёт вас». Нет базы или хода — undefined.
 export type TurnEnd = { at: number; text: string; ownerAfter: boolean }
+/** Последние n строк сессии: тип и время (данных сообщений не читает) — для диагностики залипшего хода. */
+export async function recentRows(sessionID: string, n = 6): Promise<{ type: string; at: number }[]> {
+  if (!sessionID || !existsSync(dbFile())) return []
+  let db: any
+  try {
+    db = await openDb()
+    const rows = db.prepare("select type, time_created as at from session_message where session_id = ? order by time_created desc, seq desc limit ?").all(sessionID, n) as any[]
+    return rows.map((r) => ({ type: String(r.type), at: Number(r.at) })).reverse()
+  } catch {
+    return []
+  } finally {
+    try {
+      db?.close()
+    } catch {}
+  }
+}
+
 /** Время последней строки idle сессии (0 — нет). Дешёвый запрос без чтения данных сообщений. */
 export async function idleAt(sessionID: string): Promise<number> {
   if (!sessionID || !existsSync(dbFile())) return 0

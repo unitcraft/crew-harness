@@ -53,6 +53,7 @@ import {
   idleAt,
   openTurn,
   staleBusy,
+  recentRows,
   insideDir,
   taskPlace,
   PROCESS_START,
@@ -785,6 +786,35 @@ export default {
     // последнего idle (idleAt), тяжёлое чтение сообщений — при его изменении (замер: ~0,1 с на вкладку, в главном потоке)
     const ends = new Map<string, { at: number; end: Awaited<ReturnType<typeof turnEnd>> }>()
     let statusAt = 0
+    // ДИАГНОСТИКА ЗАЛИПШЕГО ХОДА (владелец, 2026-10-12: «такое часто вижу, после перезагрузки или переоткрытия окна?»):
+    // окно считает ход идущим, а база хода не видит. Одна строка в журнал при начале состояния и одна при конце — с фактами,
+    // по которым видна закономерность: какое окно, как давно служба и окно живы, что в базе, когда сессию смотрели.
+    const staleDiagAt = new Map<string, number>()
+    const hm = (ms: number) => (ms ? new Date(ms).toTimeString().slice(0, 5) : "-")
+    async function noteStale(c: Card, tab: any, staleSince: number, t: number) {
+      try {
+        const was = staleDiagAt.get(c.session)
+        if (staleSince && was !== staleSince) {
+          staleDiagAt.set(c.session, staleSince)
+          const row = await sessionFromDb(c.session)
+          const rows = await recentRows(c.session)
+          const w = tab?.window
+          log(
+            `stale busy: ${keyOf(c)} (${c.session}) window pid=${w?.pid ?? "?"} beat ${w ? Math.round((t - Number(w.beat || 0)) / 1000) : "?"}s ago, ` +
+              `tab active=${!!tab?.tab?.active} busy=${!!tab?.tab?.busy}; server idle since ${hm(staleSince)} (${Math.round((t - staleSince) / 60_000)} min); ` +
+              `plugin process up since ${hm(PROCESS_START)} (${Math.round((t - PROCESS_START) / 60_000)} min); ` +
+              `db idle=${hm(row?.idle ?? 0)} viewed=${hm(row?.viewed ?? 0)} suspended=${hm(row?.suspended ?? 0)}; ` +
+              `last rows: ${rows.map((r) => `${r.type}@${hm(r.at)}`).join(", ") || "-"}`,
+          )
+        } else if (!staleSince && was !== undefined) {
+          staleDiagAt.delete(c.session)
+          log(`stale busy cleared: ${keyOf(c)} (${c.session}) after ${Math.round((t - was) / 60_000)} min of idle server`)
+        }
+      } catch (e) {
+        log(`stale busy note failed: ${e}`)
+      }
+    }
+
     async function syncStatus() {
       if (!tasksChanged() && now() - statusAt < STATUS_EVERY_MS) return
       statusAt = now()
@@ -822,6 +852,7 @@ export default {
         // «работает» — ещё и по базе: ход открыт и обновляется (ход, продолженный самим OpenCode после перезапуска,
         // плагин не доставлял — признака busy у карточки нет; сводка писала «стоит», а сессия работала, 2026-10-05)
         const staleSince = tab?.tab.busy ? await staleBusy(c.session, t) : 0
+        await noteStale(c, tab, staleSince, t)
         const busy = !staleSince && (!!tab?.tab.busy || !!c.busy || (await openTurn(c.session, t)))
         let end: Awaited<ReturnType<typeof turnEnd>> = undefined
         if (!busy) {
