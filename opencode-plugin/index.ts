@@ -1204,6 +1204,12 @@ export default {
       const bud = stepBudget("syncTitles", log)
       const all = allCards()
       let ci = 0
+      // ПЕРЕИМЕНОВАНИЕ — ТЯЖЁЛОЕ ДЛЯ СЛУЖБЫ (2026-10-13): каждый session.update пишет в базу OpenCode в процессе службы; 237 старых
+      // сессий после смены формата названия давали задержку цикла 5–11 с. Поэтому: не больше TITLES_PER_PASS переименований за
+      // проход и закрытые задачи старше TITLES_FRESH_MS не переименовываются вовсе (их названия не меняются, роль в них не нужна).
+      const perPass = Number(process.env.CREW_HARNESS_TITLES_PER_PASS) || 3
+      const freshMs = Number(process.env.CREW_HARNESS_TITLES_FRESH_MS) || 24 * 3_600_000
+      let renamed = 0
       for (const c of all) {
         if (await bud.stop(ci++, all.length)) break
         // карточки умершего процесса (сервер перезапущен посреди задачи) — тоже наши; чужой живой процесс — нет
@@ -1212,6 +1218,7 @@ export default {
         const ref = (c.task ?? c.review)!
         const t = loadTask(ref.project, ref.n)
         if (!t) continue
+        if (!isOpen(t) && Date.now() - (t.updated ?? 0) > freshMs) continue // старая закрытая задача: название не трогаем
         const MARK: Record<string, string> = { submitted: "✓", reviewing: "✓◐", rework: "↻", approval: "◇", accepted: "✓✓◐", cleaned: "✓✓", closed: "✓", cancelled: "✗" }
         const replaced = asReviewer ? t.reviewer !== c.session : t.executor !== c.session
         const mark = replaced ? "↷" : asReviewer ? (t.status === "cleaned" ? "✓✓" : t.status === "cancelled" ? "✗" : "") : (MARK[t.status] ?? "")
@@ -1221,6 +1228,8 @@ export default {
         // слово «приёмка» рядом со значком — статус задачи, не роль
         const title = `#${t.n} ${asReviewer ? "прм" : "исп"}${mark ? ` ${mark} ${WORD[mark]}` : ""} ${t.title}`
         if (c.titleShown === title) continue
+        if (renamed >= perPass) break // остальное — на следующих проходах
+        renamed++
         try {
           await ctx.session.update({ sessionID: c.session, title })
           const fresh = readJson<Card>(cardFile(c.session)) ?? c
