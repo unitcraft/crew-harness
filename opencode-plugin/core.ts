@@ -15,7 +15,8 @@ import { SCHEMA, guideText, invalid } from "./config-schema.ts"
 import { type AnswerMap, answerNotes, normalizeAnswerMax, normalizeAnswerMode } from "./answer-parse.ts"
 import { EXTRA_FIELDS_MAX, EXTRA_ID_RE, RESERVED_FIELD_IDS } from "./config-schema.ts"
 export { PROJECT_RE, type Project, type Projects, settingsProblems } from "./settings.ts"
-import { PROJECT_RE, settingsProblems } from "./settings.ts"
+import { PROJECT_RE, settingsProblems, modelsDefined } from "./settings.ts"
+import { mergeTemplate } from "./config-template.ts"
 import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
 import { DEFAULT_FORM, PLAN_ACCEPTANCE, PLAN_MERGE_ACCEPTANCE, type PlanForm, allSteps, nextPlanNumber, parsePlan, planProblems, planTemplate, roundRules } from "./plans.ts"
 import { type Task, type TaskPlan, WORKING_STATUSES, taskRef, slugify, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
@@ -1195,7 +1196,9 @@ export const HELP = `crew-harness — письма между вкладками
                                 сессия задачи ведёт одну задачу и закрывается после cleaned: продолжение работы того же
                                 исполнителя — новой задачей (crew_spawn), assign на сессию задачи отказывает.
   crew_config {action}        — настройки проекта: guide (опросник для владельца), view (что действует и откуда; show — прежнее имя, работает),
-                                set {values} (интегратор; пишет рабочую копию файла настроек, действует с коммита).
+                                set {values} (интегратор; пишет рабочую копию файла настроек, действует с коммита), apply_template (интегратор;
+                                дописывает стандартный шаблон моделей: claude/codex/kimi, набор codex, потолок light; ключи проекта не трогает).
+                                Проект без моделей (нет profile_set, spawn_models, allow_default_models) отказывает crew_spawn без явного model.
   crew_doctor                 — самопроверка: что сломано и что делать.
   /crew (команда окна)       — владельцу: кто чего ждёт, без хода модели; кто ждёт его — уведомление в окне.
   /crew-sets, /crew-profiles (команды окна) — владельцу: наборы профилей моделей и справочник «семья, ступень → модель и контекст»;
@@ -1808,6 +1811,18 @@ export function makeTools(host: CrewHost): CrewTool[] {
     return `Задача ${taskRef(t)} принята и очищена (${note}). Интегратору ушла сводка без пробуждения; сессии задачи закроются.`
   }
 
+  /** Отказ crew_spawn проекта без определённых моделей: что не задано и что делать (задача 033). */
+  const unconfiguredRefusal = (project: string, sessionModel: string | undefined) =>
+    `Задача не поставлена: проект ${project} не настроен: не заданы модели для воркеров (нет включённого profile_set, spawn_models, явного model и allow_default_models). Без этого воркер взял бы модель по умолчанию (heavy — Opus) и тратил лимит молча.
+` +
+    `Спроси владельца инструментом question и дай варианты:
+` +
+    `1) применить стандартный набор (рекомендую: codex, потолок light) — crew_config {action: "apply_template"}, затем закоммить файл в целевую ветку проекта и повтори crew_spawn;
+` +
+    `2) использовать для воркеров модель этой сессии${sessionModel ? ` (${sessionModel})` : " (название модели сессии плагину неизвестно — спроси у владельца)"} — вызови crew_spawn ещё раз с явным model${sessionModel ? `: "${sessionModel}"` : ""};
+` +
+    `3) выбрать иное — crew_config {action: "guide"} (вопросы по каждому ключу; allow_default_models: true оставляет модели по умолчанию осознанно).`
+
   const crewSpawn: CrewTool = {
     name: "crew_spawn",
     description:
@@ -1820,6 +1835,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         kind: { type: "string", enum: ["work", "plan"], description: "plan: the task writes a plan document (plans_dir), rechecked in rounds and approved by the owner; goal is the original task the plan must solve", default: "work" },
         plan_parent: str("kind plan: the parent plan number for a sub-plan (e.g. 274)"),
         tier: { type: "string", enum: ["heavy", "medium", "light"], description: "Task weight -> model" },
+        model: str("Explicit model of the worker (provider/id[#variant]); needed when the project has no model settings (profile_set, spawn_models, allow_default_models) - ask the owner first"),
         task: str("Old name of goal"),
         parent: str("The order of another project this task fulfils: \"project#N\" (from the order letter)"),
       },
@@ -1859,9 +1875,14 @@ export function makeTools(host: CrewHost): CrewTool[] {
         return { content: `Лимит ожидающих уборки — ${cfg.cleanupLimit} (cleanup_limit), принятых и не очищенных ${waiting.length}: ${waiting.map((t) => `#${t.n} принята ${ago(acceptedAt(t))}, не очищена (приёмщик ${t.reviewer ?? "?"})`).join("; ")} — пусть приёмщик повторит crew_task {action: \"cleaned\"}. Новая работа не ставится, пока их не станет меньше; авария — priority P0.` }
       // МОДЕЛЬ ПО ВКЛЮЧЁННОМУ НАБОРУ (задача 003). Этап — по виду запуска; ступень: tier, присутствующий во входе, иначе ступень
       // клетки. Этап не описан или набора нет — spawn_models, как прежде; описан, а профиль не находится — отказ до записи задачи.
-      const chosen = resolveStageProfile(profileState(me.directory).state, stageOfLaunch({ plan: input.kind === "plan" }, "executor"), { inputTier: isTier(input.tier) ? input.tier : undefined })
+      const pst = profileState(me.directory)
+      const explicitModel = typeof input.model === "string" && input.model.trim() ? input.model.trim() : undefined
+      const chosen = explicitModel ? undefined : resolveStageProfile(pst.state, stageOfLaunch({ plan: input.kind === "plan" }, "executor"), { inputTier: isTier(input.tier) ? input.tier : undefined })
       if (chosen && "refuse" in chosen) return { content: `Задача не поставлена: ${chosen.refuse}.` }
-      const model = chosen ? chosen.model : (cfg.spawnModels[tier] ?? DEFAULT_SPAWN_MODELS[tier])
+      // МОДЕЛЬ НЕ ОПРЕДЕЛЕНА (задача 033): ни набора, ни spawn_models, ни явного model, ни allow_default_models — отказ, а не молчаливая
+      // модель по умолчанию (ступень heavy — Opus и расход лимита Claude); задача не записывается
+      if (!explicitModel && !chosen && !modelsDefined(pst.raw)) return { content: unconfiguredRefusal(project, me.model) }
+      const model = explicitModel ?? (chosen ? chosen.model : (cfg.spawnModels[tier] ?? DEFAULT_SPAWN_MODELS[tier]))
       const recTier: Tier = chosen ? chosen.tier : tier // ступень записи при наборе — та, на которой реально запущена сессия
       const title = String(input.title ?? "").trim() || String(input.goal).split(/\r?\n/)[0].slice(0, 60)
       // ЗАДАЧА-ПЛАН (план 004): результат — файл плана в репозитории; номер выдаёт плагин (после файлов папки планов
@@ -2401,11 +2422,11 @@ ${lockStillYours(stillHeld.n)}` : "") }
   const crewConfig: CrewTool = {
     name: "crew_config",
     description:
-      "The project's settings (.opencode/crew-harness.json in its settings repository). Model profiles: model_profiles = families/tiers -> model, profile_sets = named sets of stages, profile_set = the enabled set (only a person changes it, /crew-sets use|off); show prints a summary first (sets in the file: N; enabled: name or none) - never answer \"no sets\" from \"not enabled\"; details: crew_help. guide — questions for the owner on every key (current value, options, recommendation, why): ask them in text and record the answers; show — effective values and where each comes from (default, the committed file, the local option of opencode.jsonc), plus uncommitted edits; set {values} — integrator only: checks every value and writes the working copy (null removes a key); it applies once committed to the settings branch.",
+      "The project's settings (.opencode/crew-harness.json in its settings repository). Model profiles: model_profiles = families/tiers -> model, profile_sets = named sets of stages, profile_set = the enabled set (only a person changes it, /crew-sets use|off); show prints a summary first (sets in the file: N; enabled: name or none) - never answer \"no sets\" from \"not enabled\"; details: crew_help. guide — questions for the owner on every key (current value, options, recommendation, why): ask them in text and record the answers; show — effective values and where each comes from (default, the committed file, the local option of opencode.jsonc), plus uncommitted edits; apply_template — integrator only: writes the standard template (families claude/codex/kimi, sets, profile_set codex, tier_max light, branch and worktree names) into the file; the project's own keys win; commit the file to the target branch or the old state stays; set {values} — integrator only: checks every value and writes the working copy (null removes a key); it applies once committed to the settings branch.",
     input: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["guide", "view", "show", "set"] },
+        action: { type: "string", enum: ["guide", "view", "show", "set", "apply_template"] },
         values: { type: "object", description: "set: {key: value}; null removes a key" },
       },
       required: ["action"],
@@ -2422,6 +2443,14 @@ ${lockStillYours(stillHeld.n)}` : "") }
       const action = String(input.action ?? "") === "view" ? "show" : String(input.action ?? "")
       if (action === "guide") return { content: guideText(effective, sourceOf) }
       if (action === "show") return { content: configShowText(me.directory, projOf(me)) }
+      if (action === "apply_template") {
+        if (!isIntegrator(me)) return notIntegrator(me)
+        if (!p?.dir) return { content: `Проект ${projOf(me)} задан прежней формой опций: записать некуда. Переведи его на репозиторий настроек — в opencode.jsonc "projects": ["<папка с .opencode/crew-harness.json>"].` }
+        const { values, added } = mergeTemplate(workingSettings(p.dir).raw)
+        if (!added.length) return { content: `Шаблон ничего не добавил: все его ключи у проекта уже есть (файл не тронут).` }
+        const file = writeSettings(p.dir, values)
+        return { content: `Стандартный шаблон записан в ${file}; добавлены ключи: ${added.join(", ")}; уже заданные ключи проекта не тронуты. Файл нужно закоммитить в ветку ${p.branch} репозитория ${p.repo}, иначе действует прежнее состояние (проект остаётся не настроенным).` }
+      }
       if (action === "set") {
         if (!isIntegrator(me)) return notIntegrator(me)
         if (!p?.dir) return { content: `Проект ${projOf(me)} задан прежней формой опций: записать некуда. Переведи его на репозиторий настроек — в opencode.jsonc "projects": ["<папка с .opencode/crew-harness.json>"].` }
@@ -2496,7 +2525,7 @@ ${lockStillYours(stillHeld.n)}` : "") }
     description: "Self-check of crew-harness: the OpenCode features it relies on, the window plugin (presence), the mailbox. Lists what is broken and what to do.",
     input: { type: "object", properties: {}, additionalProperties: false },
     execute: async (_input: any, sessionID: string) => {
-      const problems = [...(await host.doctor()), ...commonDoctor(sessionID), ...settingsProblems(projects), ...profileProblems()]
+      const problems = [...(await host.doctor()), ...commonDoctor(sessionID), ...settingsProblems(projects, currentLocal), ...profileProblems()]
       return { content: problems.length ? `crew_doctor — есть проблемы:\n${problems.map((p) => `- ${p}`).join("\n")}` : "crew_doctor: всё в порядке (окна отмечаются, ящик пишется, нужные возможности OpenCode на месте)." }
     },
   }

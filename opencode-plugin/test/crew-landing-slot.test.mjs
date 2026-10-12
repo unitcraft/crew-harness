@@ -21,7 +21,7 @@ const proj = path.join(tmp, "proj")
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
 mkdirSync(path.join(proj, "docs", "plans"), { recursive: true })
 const git = (cwd, ...args) => execFileSync("git", ["-C", cwd, "-c", "user.name=t", "-c", "user.email=t@t", ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim()
-const settings = (extra) => writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ spawn_limits: { worker: 20, reviewer: 0 }, stall_minutes: 600, accepted_reminder_min: 0.01, ...extra }))
+const settings = (extra) => writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ allow_default_models: true, spawn_limits: { worker: 20, reviewer: 0 }, stall_minutes: 600, accepted_reminder_min: 0.01, ...extra }))
 settings({})
 const PLAN = [
   "# План 9 — демо", "", "**Статус:** 🟡 В РАБОТЕ", "**Источник:** задача #1", "**Зависимости:** —", "",

@@ -17,7 +17,7 @@ delete process.env.CREW_HARNESS_PRESENCE
 const dirA = path.join(tmp, "alpha")
 const dirB = path.join(tmp, "beta")
 for (const d of [dirA, dirB]) mkdirSync(path.join(d, ".opencode"), { recursive: true })
-const inbound = (v) => writeFileSync(path.join(dirB, ".opencode", "crew-harness.json"), JSON.stringify(v ? { inbound: v } : {}))
+const inbound = (v) => writeFileSync(path.join(dirB, ".opencode", "crew-harness.json"), JSON.stringify(v ? { inbound: v, allow_default_models: true } : { allow_default_models: true }))
 inbound(undefined)
 
 const mod = await import("../index.ts")

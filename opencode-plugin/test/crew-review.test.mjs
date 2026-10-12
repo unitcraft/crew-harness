@@ -22,6 +22,7 @@ const settings = (reviewers) =>
   writeFileSync(
     path.join(proj, ".opencode", "crew-harness.json"),
     JSON.stringify({
+      allow_default_models: true,
       worktrees: "wt",
       branch_name: "p{n}-{slug}",
       cleanup: "local",

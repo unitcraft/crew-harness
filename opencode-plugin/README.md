@@ -53,7 +53,14 @@ background); a task session may run with no window at all. Formerly `opencode-pe
   every key (current value, options, recommendation, why; asked in text); `show` — what applies and
   where from (default, the committed file, `local`), plus uncommitted edits; `set {values}` — the
   integrator writes the working copy (every value checked, a wrong one writes nothing); it applies
-  once committed. The keys: `config-schema.ts`;
+  once committed; `apply_template` — the integrator appends the standard model template (`config-template.ts`: families
+  `claude` / `codex` / `kimi`, sets, `profile_set: codex`, `tier_max: light`, branch and worktree name templates) to the
+  file, the project's own keys win, nothing is overwritten, and the file still has to be committed to the target branch.
+  **A project without model settings** (no enabled `profile_set`, no `spawn_models`, no `allow_default_models: true`)
+  refuses `crew_spawn` without an explicit `model`: the refusal tells the integrator to ask the owner (`question`) —
+  apply the template, use the model of the calling session, or choose otherwise. `crew_doctor` and `/crew` show
+  «проект X не настроен: модели» for such projects. `allow_default_models: true` keeps the built-in defaults on purpose.
+  The keys: `config-schema.ts`;
 - **roles**: a new tab is `worker` (shared: tabs within it differ by session id; `assistant` is an
   alias). `integrator` is exclusive, one holder per project, plus the project's `exclusive_roles`
   (and an optional `help_extra` paragraph for `crew_help`). An exclusive role

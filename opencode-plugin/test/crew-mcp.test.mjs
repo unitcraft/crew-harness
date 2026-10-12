@@ -4,7 +4,7 @@
 // letters sent through MCP are delivered by the plugin's timer, letters to the MCP window reach it too.
 // CREW_MODULE / CREW_MCP point at mutated copies for the red probes.
 import { spawn } from "node:child_process"
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -188,6 +188,9 @@ try {
 
 // Tasks through MCP: the integrator's claude-code window starts a task; the plugin (in this process) picks it up
 // from the journal; crew_task through MCP shows the same journal.
+// the project has no model settings of its own: the default models are allowed on purpose (task 033)
+mkdirSync(path.join(root, "nova", ".opencode"), { recursive: true })
+writeFileSync(path.join(root, "nova", ".opencode", "crew-harness.json"), JSON.stringify({ allow_default_models: true }))
 const integ = startMcp("sesAAAAAA")
 try {
   await integ.rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {} })

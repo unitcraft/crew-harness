@@ -19,7 +19,7 @@ process.env.CREW_HARNESS_DB = path.join(tmp, "absent.db")
 delete process.env.CREW_HARNESS_PRESENCE
 const proj = path.join(tmp, "proj")
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
-writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ task_fields: ["goal", "criteria", "boundaries"], spawn_limits: { worker: 5 }, worktrees: "wt", branch_name: "p{n}-{slug}" }))
+writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ task_fields: ["goal", "criteria", "boundaries"], spawn_limits: { worker: 5 }, worktrees: "wt", branch_name: "p{n}-{slug}", allow_default_models: true }))
 // a git repository: the plugin creates the task's worktree in it (a session is never opened in the main copy, plan 002.6)
 const g = (...args) => execFileSync("git", ["-C", proj, "-c", "user.name=t", "-c", "user.email=t@t", ...args], { stdio: "ignore" })
 g("init", "-q", "-b", "main")

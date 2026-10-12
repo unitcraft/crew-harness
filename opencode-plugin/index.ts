@@ -48,6 +48,7 @@ import {
   reviewSessionLimit,
   holdsOpenTask,
   DEFAULT_SPAWN_MODELS,
+  settingsContext,
   lastTurn,
   turnEnd,
   idleAt,
@@ -1574,7 +1575,7 @@ export default {
     const DOCTOR_EVERY_MS = Number(process.env.CREW_HARNESS_DOCTOR_MS) || 10 * 60_000
     let doctorSaid = ""
     const runDoctor = async () => {
-      const problems = [...(await doctor()), ...commonDoctor(), ...settingsProblems(projects), ...profileProblems()]
+      const problems = [...(await doctor()), ...commonDoctor(), ...settingsProblems(projects, settingsContext().local), ...profileProblems()]
       try {
         writeFileSync(DOCTOR_FILE, JSON.stringify({ at: Date.now(), problems }))
       } catch {}

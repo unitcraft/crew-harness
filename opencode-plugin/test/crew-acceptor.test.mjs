@@ -25,6 +25,7 @@ writeFileSync(path.join(proj, ".claude", "settings.json"), JSON.stringify({ perm
 writeFileSync(
   path.join(proj, ".opencode", "crew-harness.json"),
   JSON.stringify({
+    allow_default_models: true,
     reviewer: "acceptor",
     worktrees: "wt",
     branch_name: "p{n}-{slug}",

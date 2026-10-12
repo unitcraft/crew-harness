@@ -31,7 +31,7 @@ const SETS = {
   "kimi-only": { develop: c("kimi", "heavy"), plan: c("kimi", "heavy"), accept: c("kimi", "heavy"), plan_accept: c("kimi", "heavy") },
   "dev-only": { develop: c("kimi", "heavy") },
 }
-const base = { spawn_limits: { worker: 50, "*": 50, reviewer: 50 }, inflight_limit: 50, plans_dir: "plans" }
+const base = { allow_default_models: true, spawn_limits: { worker: 50, "*": 50, reviewer: 50 }, inflight_limit: 50, plans_dir: "plans" }
 const mk = (name, extra = {}) => {
   const dir = path.join(tmp, name)
   mkdirSync(path.join(dir, ".opencode"), { recursive: true })

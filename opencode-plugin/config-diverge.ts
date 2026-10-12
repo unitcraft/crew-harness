@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { BASE } from "./paths.ts"
+import { modelsDefined, unconfiguredLine } from "./settings.ts"
 
 export type Divergence = { kind: "same" } | { kind: "differ"; keys: string[]; ref: string } | { kind: "note"; text: string }
 
@@ -80,6 +81,18 @@ export function divergenceLineFor(project: string): string | undefined {
     for (const f of readdirSync(dir)) {
       const p = JSON.parse(readFileSync(path.join(dir, f), "utf8"))?.project
       if (p?.name === project) return divergenceLine(configDivergence(p.repo, p.file, p.branch))
+    }
+  } catch {}
+  return undefined
+}
+
+/** Строка «проект X не настроен: модели» для /crew и боковой панели (задача 033); модели определены или настроек не читали — undefined. */
+export function unconfiguredLineFor(project: string): string | undefined {
+  try {
+    const dir = path.join(BASE, "settings-good")
+    for (const f of readdirSync(dir)) {
+      const v = JSON.parse(readFileSync(path.join(dir, f), "utf8"))
+      if (v?.project?.name === project) return modelsDefined(v.raw) ? undefined : `⚠ ${unconfiguredLine(project)}`
     }
   } catch {}
   return undefined

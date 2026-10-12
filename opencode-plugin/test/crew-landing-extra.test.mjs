@@ -19,7 +19,7 @@ delete process.env.CREW_HARNESS_PRESENCE
 const proj = path.join(tmp, "proj")
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
 const git = (cwd, ...args) => execFileSync("git", ["-C", cwd, "-c", "user.name=t", "-c", "user.email=t@t", ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim()
-const settings = (extra) => writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ spawn_limits: { worker: 20, reviewer: 0 }, inflight_limit: 50, stall_minutes: 600, ...extra }))
+const settings = (extra) => writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ allow_default_models: true, spawn_limits: { worker: 20, reviewer: 0 }, inflight_limit: 50, stall_minutes: 600, ...extra }))
 settings({})
 git(proj, "init", "-q", "-b", "main")
 git(proj, "add", "-A")

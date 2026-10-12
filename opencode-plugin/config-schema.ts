@@ -9,6 +9,7 @@ import { answerModeError } from "./answer-parse.ts"
 export type Kind =
   | { type: "enum"; options: string[] }
   | { type: "int" }
+  | { type: "bool" }
   | { type: "string"; allowEmpty?: boolean }
   | { type: "subset"; options: string[] }
   | { type: "roles" }
@@ -47,6 +48,7 @@ export const SCHEMA: Setting[] = [
   { key: "profile_sets", group: "Профили моделей", kind: { type: "profiles" }, default: {}, question: "Какие наборы нужны владельцу и какой из них включить (включает человек: /crew-sets use <имя>; выключает /crew-sets off)? Для каждого: на какой семье и ступени идут разработка (develop), её приёмка (develop_accept, прежнее accept), планирование (plan) и приёмка плана (plan_accept)?", why: "набор — именованная раскладка этапов; разбор (spec, spec_accept) и сдача (delivery, delivery_accept) наследуют от плана и разработки, если не заданы; этап проверки без клетки идёт по spawn_models (правило «проверяющий не из семьи автора» только подсказка в /crew-sets show, профиль само не подменяется); прежнее имя этапа accept читается как develop_accept; ступень task — ступень задачи; этап без клетки идёт по spawn_models", recommend: `default, cross-kimi, cross-codex, kimi-only — как в примере раздела README о профилях моделей: ${PROFILES_README_URL}` },
   { key: "profile_set", group: "Профили моделей", kind: { type: "profiles" }, default: "(нет)", question: "Какой набор включён по умолчанию?", why: "имя набора из profile_sets; без имени набор не применяется", recommend: "не задавать, пока нет наборов; потом default", humanOnly: true },
   { key: "tier_max", group: "Профили моделей", kind: { type: "enum", options: ["light", "medium", "heavy"] }, default: "(нет)", question: "Выше какой ступени (light / medium / heavy) модели не берутся?", why: "потолок: любая ступень любого этапа и входа tier у crew_spawn срезается до него (tier у crew_send выбирает вкладку, а не модель, и не срезается); вместо отдельного набора с явными ступенями", recommend: "не задавать; medium или light — чтобы ограничить расход" },
+  { key: "allow_default_models", group: "Профили моделей", kind: { type: "bool" }, default: false, question: "Разрешить воркерам модели по умолчанию (claude-code/opus, sonnet, haiku), когда набор профилей не включён и spawn_models не заданы?", why: "без этого crew_spawn проекта без моделей отказывает и просит выбрать модели (владелец решает); true — осознанно оставить прежнее поведение", recommend: "не включать; применить шаблон: crew_config {action: \"apply_template\"}" },
   { key: "tier_min", group: "Профили моделей", kind: { type: "enum", options: ["light", "medium", "heavy"] }, default: "(нет)", question: "Ниже какой ступени (light / medium / heavy) модели не берутся?", why: "нижняя граница: любая ступень срезается не ниже неё; tier_min выше tier_max — ошибка настройки, границы тогда не применяются", recommend: "не задавать" },
   { key: "default_priority", group: "Задачи", kind: { type: "enum", options: ["P0", "P1", "P2", "P3"] }, default: "P2", question: "Какой приоритет у задачи, если его не назвали?", why: "P0 авария, P1 первая очередь, P2 обычная работа, P3 когда освободятся руки", recommend: "P2" },
   { key: "accepted_slot", group: "Задачи", kind: { type: "enum", options: ["hold", "free"] }, default: "free", question: "Занимает ли принятая, но не очищенная задача место в inflight_limit?", why: "free (по умолчанию): принятая не занимает место, её уборку считает отдельный счётчик cleanup_limit, и новая работа ставится, пока приёмщики убирают; hold: занимает место до cleaned, как было до задачи 005", recommend: "free; hold — только если проекту нужно прежнее поведение" },
@@ -106,6 +108,8 @@ export function invalid(key: string, v: any): string | undefined {
   switch (k.type) {
     case "enum":
       return k.options.includes(v) ? undefined : `${key}: одно из ${k.options.join(" / ")}`
+    case "bool":
+      return typeof v === "boolean" ? undefined : `${key}: true или false`
     case "int":
       return isInt(v) ? undefined : `${key}: целое число ≥ 0`
     case "string":

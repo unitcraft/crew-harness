@@ -357,7 +357,18 @@ const describesAcceptanceOrder = (text: unknown) => {
   return /под замком[^.]{0,80}(ci|land|посадк|гейт)|(ci|land|посадк|гейт)[^.]{0,80}под замком|замок вливания[^.]{0,80}ci|ci[^.]{0,80}замок вливания/i.test(t)
 }
 
-export function settingsProblems(projects: Projects): string[] {
+/** Определены ли модели воркеров проекта (задача 033): включён набор профилей, либо заданы spawn_models, либо явно разрешены значения по умолчанию. */
+export function modelsDefined(raw: any): boolean {
+  if (raw?.allow_default_models === true) return true
+  if (typeof raw?.profile_set === "string" && raw.profile_set.trim()) return true
+  const sm = raw?.spawn_models
+  return !!sm && typeof sm === "object" && Object.values(sm).some((v) => typeof v === "string" && v)
+}
+export function unconfiguredLine(name: string): string {
+  return `проект ${name} не настроен: модели`
+}
+
+export function settingsProblems(projects: Projects, local: Record<string, any> = {}): string[] {
   const out = projects.flatMap((p) => p.problems ?? [])
   for (const p of projects) if (p.legacy) out.push(`проект ${p.name}: настройки в файле с прежним именем ${p.legacy} — переименуй в .opencode/crew-harness.json (git mv) и закоммить`)
   // настройка, которая не может сработать: ключ gate в answer_mode, режим agent, неверный answer_max (задача 007)
@@ -379,6 +390,11 @@ export function settingsProblems(projects: Projects): string[] {
     if (w) out.push(w)
   }
   out.push(...legacyProblems(projects))
+  // проект без определённых моделей: crew_spawn откажет (задача 033)
+  for (const p of projects) {
+    if (p.problems?.length) continue // нет читаемых настроек — об этом уже сказано выше
+    if (!modelsDefined(rawSettingsFor(p.rootPath ?? p.root, projects, local))) out.push(`${unconfiguredLine(p.name)} (нет profile_set, spawn_models и allow_default_models: crew_spawn откажет; crew_config {action: "apply_template"} или crew_config guide)`)
+  }
   const old = projects.filter((p) => !p.dir).map((p) => p.name)
   if (old.length) out.push(`проекты ${old.join(", ")} заданы прежней формой опций (имя → корень); новая — список папок настроек: "projects": ["<папка с .opencode/crew-harness.json>"], файл называет проект и root (doc/archive/plans/002-tasks.md, «Где живут настройки проекта»)`)
   return [...new Set(out)]
