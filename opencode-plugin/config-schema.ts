@@ -23,7 +23,6 @@ export type Kind =
   | { type: "profiles" }
   | { type: "extraFields" }
   | { type: "answerMap" }
-  | { type: "bool" }
 /** humanOnly — ключ ставит человек (команда окна use либо правка файла); crew_config set его не пишет.
  *  humanHow — как ставит человек, одной фразой для опросника и отказа set (у profile_set поля нет: его фраза прежняя дословно) */
 export type Setting = { key: string; kind: Kind; default: any; question: string; why: string; recommend?: string; group: string; humanOnly?: boolean; humanHow?: string }

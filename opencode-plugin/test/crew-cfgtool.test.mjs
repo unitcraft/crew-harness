@@ -86,9 +86,19 @@ cell("show lists the uncommitted keys", /Незакоммичено.*inflight_li
 cell("until the commit the old values apply", core.loadConfig(work).inflightLimit === 6 && core.loadConfig(work).cleanup === "local", JSON.stringify(core.loadConfig(work).inflightLimit))
 git(cfgDir, "add", "-A")
 git(cfgDir, "commit", "-q", "-m", "set")
-const after = core.loadConfig(work)
+// the settings refresh in the background after the first read (task 034): the new values come within a pass or two
+let after = core.loadConfig(work)
+for (const end = Date.now() + 10_000; Date.now() < end && after.inflightLimit !== 4; ) {
+  await new Promise((r) => setTimeout(r, 150))
+  after = core.loadConfig(work)
+}
 cell("after the commit the new values apply", after.inflightLimit === 4 && after.cleanup === "local+remote" && after.helpExtra === "ABC-LINE", JSON.stringify({ i: after.inflightLimit, c: after.cleanup }))
-cell("no uncommitted keys after the commit", !/Незакоммичено/.test(await call("sesWRK", { action: "show" })), "still pending")
+let shown = await call("sesWRK", { action: "show" })
+for (const end = Date.now() + 10_000; Date.now() < end && /Незакоммичено/.test(shown); ) {
+  await new Promise((r) => setTimeout(r, 150))
+  shown = await call("sesWRK", { action: "show" })
+}
+cell("no uncommitted keys after the commit", !/Незакоммичено/.test(shown), "still pending")
 
 stop?.()
 rmSync(tmp, { recursive: true, force: true })
