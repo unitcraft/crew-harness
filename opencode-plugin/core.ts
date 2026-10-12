@@ -16,6 +16,7 @@ import { type AnswerMap, answerNotes, normalizeAnswerMax, normalizeAnswerMode } 
 import { EXTRA_FIELDS_MAX, EXTRA_ID_RE, RESERVED_FIELD_IDS } from "./config-schema.ts"
 export { PROJECT_RE, type Project, type Projects, settingsProblems } from "./settings.ts"
 import { PROJECT_RE, settingsProblems, modelsDefined } from "./settings.ts"
+import { background } from "./async-git.ts"
 import { mergeTemplate } from "./config-template.ts"
 import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
 import { DEFAULT_FORM, PLAN_ACCEPTANCE, PLAN_MERGE_ACCEPTANCE, type PlanForm, allSteps, nextPlanNumber, parsePlan, planProblems, planTemplate, roundRules } from "./plans.ts"
@@ -1881,7 +1882,19 @@ export function makeTools(host: CrewHost): CrewTool[] {
       if (chosen && "refuse" in chosen) return { content: `Задача не поставлена: ${chosen.refuse}.` }
       // МОДЕЛЬ НЕ ОПРЕДЕЛЕНА (задача 033): ни набора, ни spawn_models, ни явного model, ни allow_default_models — отказ, а не молчаливая
       // модель по умолчанию (ступень heavy — Opus и расход лимита Claude); задача не записывается
-      if (!explicitModel && !chosen && !modelsDefined(pst.raw)) return { content: unconfiguredRefusal(project, me.model) }
+      if (!explicitModel && !chosen && !modelsDefined(pst.raw)) {
+        // настройки читаются «из кеша сразу, обновление в фоне» (задача 034): отказывать по устаревшему значению нельзя —
+        // перед отказом одно свежее чтение (без фонового режима), иначе сразу после записи шаблона и коммита приходит ложный отказ
+        const prevBg = background.on
+        background.on = false
+        let freshRaw = pst.raw
+        try {
+          freshRaw = profileState(me.directory).raw
+        } finally {
+          background.on = prevBg
+        }
+        if (!modelsDefined(freshRaw)) return { content: unconfiguredRefusal(project, me.model) }
+      }
       const model = explicitModel ?? (chosen ? chosen.model : (cfg.spawnModels[tier] ?? DEFAULT_SPAWN_MODELS[tier]))
       const recTier: Tier = chosen ? chosen.tier : tier // ступень записи при наборе — та, на которой реально запущена сессия
       const title = String(input.title ?? "").trim() || String(input.goal).split(/\r?\n/)[0].slice(0, 60)
