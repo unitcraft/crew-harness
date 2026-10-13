@@ -78,11 +78,11 @@ const acc = await call("sesINT", { action: "set", values: { acceptance: [{ id: "
 cell("acceptance with repeated ids is refused", /id без повторов/.test(acc), acc)
 
 // a good set: written to the working copy, applies only after the commit
-const ok = await call("sesINT", { action: "set", values: { inflight_limit: 4, help_extra: "ABC-LINE", cleanup: null } })
+const ok = await call("sesINT", { action: "set", values: { inflight_limit: 4, project_rules: "ABC-LINE", cleanup: null } })
 cell("a good set writes the working copy", /Записано/.test(ok) && JSON.parse(readFileSync(file, "utf8")).inflight_limit === 4 && !("cleanup" in JSON.parse(readFileSync(file, "utf8"))), ok)
 cell("the file keeps the other keys", JSON.parse(readFileSync(file, "utf8")).project === "proj", readFileSync(file, "utf8"))
 const pend = await call("sesWRK", { action: "show" })
-cell("show lists the uncommitted keys", /Незакоммичено.*inflight_limit/.test(pend) && /help_extra/.test(pend) && /cleanup/.test(pend), pend)
+cell("show lists the uncommitted keys", /Незакоммичено.*inflight_limit/.test(pend) && /project_rules/.test(pend) && /cleanup/.test(pend), pend)
 cell("until the commit the old values apply", core.loadConfig(work).inflightLimit === 6 && core.loadConfig(work).cleanup === "local", JSON.stringify(core.loadConfig(work).inflightLimit))
 git(cfgDir, "add", "-A")
 git(cfgDir, "commit", "-q", "-m", "set")
@@ -92,7 +92,7 @@ for (const end = Date.now() + 10_000; Date.now() < end && after.inflightLimit !=
   await new Promise((r) => setTimeout(r, 150))
   after = core.loadConfig(work)
 }
-cell("after the commit the new values apply", after.inflightLimit === 4 && after.cleanup === "local+remote" && after.helpExtra === "ABC-LINE", JSON.stringify({ i: after.inflightLimit, c: after.cleanup }))
+cell("after the commit the new values apply", after.inflightLimit === 4 && after.cleanup === "local+remote" && after.projectRules === "ABC-LINE", JSON.stringify({ i: after.inflightLimit, c: after.cleanup }))
 let shown = await call("sesWRK", { action: "show" })
 for (const end = Date.now() + 10_000; Date.now() < end && /Незакоммичено/.test(shown); ) {
   await new Promise((r) => setTimeout(r, 150))

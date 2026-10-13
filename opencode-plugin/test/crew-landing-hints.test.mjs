@@ -90,16 +90,16 @@ const warnings = (n) => H.history(n).filter((h) => /^предупреждени�
   cell("AC-22 после зелёной (нет): a task accepted before the green record is not named", /сдвинулась/.test(r2) && !/После зелёной приняты/.test(r2), r2)
 }
 
-// ---- REQ-28: hints about the merge lock in the answers of accept, rework, cancel and cleaned (owner's decision 2026-10-10)
+// ---- REQ-28: hints about the merge lock in the answers of accept, rework, cancel and cleanup (owner's decision 2026-10-10)
 const FREED_ACCEPT = "Замок слияния отпущен (его отпускает accept)."
 const INTEG = "sesINTEG1"
 {
-  // accept: the session held the lock and accept released it — the line, with the way on (cleanup without the lock, then cleaned N)
+  // accept: the session held the lock and accept released it — the line, with the way on (cleanup without the lock, then cleanup N)
   const t = await green()
   await merge(t)
   H.land(`integrate/t${t.n}`)
   const a = await accept(t)
-  cell("REQ-28 accept: the lock was held and accept released it — the line names accept, cleanup without the lock and cleaned N", a.includes(FREED_ACCEPT) && a.includes(`Дальше уборка без замка, затем cleaned ${t.n}.`) && !H.holder(), a)
+  cell("REQ-28 accept: the lock was held and accept released it — the line names accept, cleanup without the lock and cleanup N", a.includes(FREED_ACCEPT) && a.includes(`Дальше уборка без замка, затем cleanup ${t.n}.`) && !H.holder(), a)
   // accept after the service released the lock: the session held none, so no line
   const u = await green()
   await merge(u)
@@ -107,14 +107,14 @@ const INTEG = "sesINTEG1"
   await precheck.releaseLandedLock("proj", "main")
   const au = await accept(u)
   cell("REQ-28 accept без замка: the service released the lock before accept — accepted, no lock line", T(u.n).status === "accepted" && !/Замок слияния отпущен/.test(au), au)
-  // cleanup: none — the task is finished at once; the line is still there, without the cleaned hint
+  // cleanup: none — the task is finished at once; the line is still there, without the cleanup hint
   H.settings({ merge_precheck: "required", cleanup: "none" })
   const w = await green()
   await merge(w)
   H.land(`integrate/t${w.n}`)
   const aw = await accept(w)
   H.settings({ merge_precheck: "required" })
-  cell("REQ-28 accept cleanup none: the line is shown, the hint 'затем cleaned' is not (the task is already cleaned)", aw.includes(FREED_ACCEPT) && !/затем cleaned/.test(aw) && T(w.n).status === "cleaned", aw)
+  cell("REQ-28 accept cleanup none: the line is shown, the hint 'затем cleanup' is not (the task is already cleanup)", aw.includes(FREED_ACCEPT) && !/затем cleanup/.test(aw) && T(w.n).status === "done", aw)
 }
 {
   // rework: with the lock — the line; without it — none (both forms: a round and a sync)
@@ -141,7 +141,7 @@ const INTEG = "sesINTEG1"
   cell("REQ-28 cancel без замка: no lock was held — no line", !/Замок слияния/.test(c2), c2)
 }
 {
-  // cleaned: a lock still held by the session — the warning with unlock N; none — nothing added
+  // cleanup: a lock still held by the session — the warning with unlock N; none — nothing added
   H.settings({ merge_precheck: "required", cleanup: "none" })
   const mkAccepted = () => {
     const x = H.reviewing()
@@ -154,12 +154,12 @@ const INTEG = "sesINTEG1"
   const a = mkAccepted()
   const b = mkAccepted()
   H.take(REV, b.n)
-  const c1 = await call("crew_task", REV, { action: "cleaned", n: a.n })
-  cell("REQ-28 cleaned: the lock is still held — the warning names that cleaned does not release it and unlock N", /замок слияния всё ещё у тебя: cleaned его не отпускает; отпусти unlock \{n: \d+\}/.test(c1) && c1.includes(`unlock {n: ${b.n}}`) && H.holder()?.session === REV, c1)
+  const c1 = await call("crew_task", REV, { action: "cleanup", n: a.n })
+  cell("REQ-28 cleanup: the lock is still held — the warning names that cleanup does not release it and unlock N", /замок слияния всё ещё у тебя: cleanup его не отпускает; отпусти unlock \{n: \d+\}/.test(c1) && c1.includes(`unlock {n: ${b.n}}`) && H.holder()?.session === REV, c1)
   review.releaseMergeLock("proj", REV)
   const c = mkAccepted()
-  const c2 = await call("crew_task", REV, { action: "cleaned", n: c.n })
-  cell("REQ-28 cleaned без замка: no lock — nothing added", T(c.n).status === "cleaned" && !/замок слияния/i.test(c2), c2)
+  const c2 = await call("crew_task", REV, { action: "cleanup", n: c.n })
+  cell("REQ-28 cleanup без замка: no lock — nothing added", T(c.n).status === "done" && !/замок слияния/i.test(c2), c2)
   H.settings({ merge_precheck: "required" })
 }
 

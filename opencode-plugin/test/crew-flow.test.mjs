@@ -148,7 +148,7 @@ cell("a second report for a submitted task is refused", /уже отправле
 await events["session.idle"]({ properties: { sessionID: TASK } })
 await wait(600)
 const card = core.allCards().find((c) => c.session === TASK)
-cell("the task session stays open for rework until the task is cleaned", card?.spawned?.status === "running", JSON.stringify(card?.spawned))
+cell("the task session stays open for rework until the task is cleanup", card?.spawned?.status === "running", JSON.stringify(card?.spawned))
 cell("the task session's title is marked submitted", updates.some((u) => u.sessionID === TASK && u.title === "#1 исп ✓ сдана почини тест X"), JSON.stringify(updates))
 await call("crew_task", "sesASKER1", { action: "cancel", n: 1, text: "проверка закрытия" })
 await wait(600)

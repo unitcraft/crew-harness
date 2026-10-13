@@ -3,7 +3,7 @@
 //   node test/answer-scope.mjs --selfcheck   puts the word answerMode into a copy of approvals.ts: the check must fail ("scope selfcheck ok")
 // The text of the code is read, not run: the files of the approval of plans, of the review and the merge, of the task store, of the
 // panel and of the profiles do not mention the answer modes at all, and the bodies of applyApprovals, planSteps, flowWatch,
-// endsWithQuestion and statusOf and the branches plan_decide, merge, accept, cleaned, rework of crew_task do not either.
+// endsWithQuestion and statusOf and the branches plan_decide, merge, accept, cleanup, rework of crew_task do not either.
 // CREW_PLUGIN_DIR points to another copy of the code.
 import { readFileSync, readdirSync } from "node:fs"
 import path from "node:path"
@@ -34,7 +34,7 @@ const BODIES = [
   ["core.ts", /action === "plan_decide"/],
   ["core.ts", /action === "merge"/],
   ["core.ts", /action === "accept"/],
-  ["core.ts", /\["review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleaned"\]\.includes\(action\)\) \{/],
+  ["core.ts", /\["review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleanup"\]\.includes\(action\)\) \{/],
   ["core.ts", /action === "rework"/],
 ]
 

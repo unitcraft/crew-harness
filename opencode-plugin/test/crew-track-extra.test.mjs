@@ -1,6 +1,6 @@
 // Self-test: side branches and trees in the task record (task 023; node >= 24):
 //   node test/crew-track-extra.test.mjs
-// The record field is `side` (`extra` is taken by the project's extra task fields). cleaned removes what is recorded (a tree on
+// The record field is `side` (`extra` is taken by the project's extra task fields). cleanup removes what is recorded (a tree on
 // integrate/t<N>-precheck by the auto-record, a branch with a foreign name by track), except trees in keep; track adds without
 // duplicates; an old record without the field reads as empty and cleans as before; an unrecorded foreign name is still refused
 // with a text that offers track.
@@ -29,8 +29,8 @@ const accepted = () => {
   cell("TR-1 an old record has no side and reads as empty", rec(n).side === undefined)
   const shown = await call("crew_task", REV, { action: "view", n })
   cell("TR-1b view works without the field and has no side line", !/побочные ветки/.test(shown), shown)
-  const r = await call("crew_task", REV, { action: "cleaned", n })
-  cell("TR-1c cleaned of an old record works as before", rec(n).status === "cleaned", r)
+  const r = await call("crew_task", REV, { action: "cleanup", n })
+  cell("TR-1c cleanup of an old record works as before", rec(n).status === "done", r)
 }
 // auto: integrate/tN-precheck with its tree
 {
@@ -38,8 +38,8 @@ const accepted = () => {
   const tree = path.join(proj, "wt", `proj-${n}-precheck`)
   git(proj, "worktree", "add", "-q", "-b", `integrate/t${n}-precheck`, tree, "origin/main")
   git(proj, "branch", `integrate/t${n}-precheck-main`, "origin/main")
-  const r = await call("crew_task", REV, { action: "cleaned", n })
-  cell("TR-2 cleaned removes the auto-seen branches and the tree", rec(n).status === "cleaned" && !existsSync(tree) && !branches().some((b) => b.startsWith(`integrate/t${n}`)), r)
+  const r = await call("crew_task", REV, { action: "cleanup", n })
+  cell("TR-2 cleanup removes the auto-seen branches and the tree", rec(n).status === "done" && !existsSync(tree) && !branches().some((b) => b.startsWith(`integrate/t${n}`)), r)
   cell("TR-2b the record lists them as written by the plugin", (rec(n).side ?? []).length === 3 && rec(n).side.every((i) => i.auto), JSON.stringify(rec(n).side))
 }
 // track: no duplicates, foreign name, view
@@ -55,8 +55,8 @@ const accepted = () => {
   cell("TR-3c track without branch and worktree is refused", /нужна branch/.test(bad) && rec(n).side.length === 1, bad)
   const outsider = await call("crew_task", "sesOTHER", { action: "track", n, branch: "x" })
   cell("TR-3d a stranger cannot track", rec(n).side.length === 1, outsider)
-  const r = await call("crew_task", REV, { action: "cleaned", n })
-  cell("TR-3e cleaned removes the tracked foreign-named branch", rec(n).status === "cleaned" && !branches().includes(`old-name-${n}-final`), r)
+  const r = await call("crew_task", REV, { action: "cleanup", n })
+  cell("TR-3e cleanup removes the tracked foreign-named branch", rec(n).status === "done" && !branches().includes(`old-name-${n}-final`), r)
 }
 // keep wins over the record
 {
@@ -64,19 +64,19 @@ const accepted = () => {
   const tree = path.join(proj, "wt", `proj-${n}-ev`)
   git(proj, "worktree", "add", "-q", "--detach", tree, "origin/main")
   await call("crew_task", REV, { action: "track", n, worktree: tree })
-  const r = await call("crew_task", REV, { action: "cleaned", n, keep: [`wt/proj-${n}-ev`] })
-  cell("TR-4 a tracked tree in keep stays", rec(n).status === "cleaned" && existsSync(tree) && /Сохранено/.test(r), r)
+  const r = await call("crew_task", REV, { action: "cleanup", n, keep: [`wt/proj-${n}-ev`] })
+  cell("TR-4 a tracked tree in keep stays", rec(n).status === "done" && existsSync(tree) && /Сохранено/.test(r), r)
 }
 // unrecorded name matching the project template: old refusal, now with the hint
 {
   const n = accepted()
   const tree = path.join(proj, "wt", `proj-${n}-stray`)
   git(proj, "worktree", "add", "-q", "--detach", tree, "origin/main")
-  const r = await call("crew_task", REV, { action: "cleaned", n })
+  const r = await call("crew_task", REV, { action: "cleanup", n })
   cell("TR-5 an unrecorded tree by template: refused, text offers track", rec(n).status === "accepted" && /ещё есть/.test(r) && /action: "track"/.test(r), r)
   await call("crew_task", REV, { action: "track", n, worktree: tree })
-  const r2 = await call("crew_task", REV, { action: "cleaned", n })
-  cell("TR-5b after track the same cleaned passes and removes it", rec(n).status === "cleaned" && !existsSync(tree), r2)
+  const r2 = await call("crew_task", REV, { action: "cleanup", n })
+  cell("TR-5b after track the same cleanup passes and removes it", rec(n).status === "done" && !existsSync(tree), r2)
 }
 // an unmerged recorded branch is not deleted (only what is already in the target branch goes)
 {
@@ -85,7 +85,7 @@ const accepted = () => {
   git(proj, "worktree", "add", "-q", "-b", `integrate/t${n}-precheck`, tree, "origin/main")
   git(tree, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "--allow-empty", "-q", "-m", "work not in main")
   git(proj, "worktree", "remove", tree)
-  const r = await call("crew_task", REV, { action: "cleaned", n })
+  const r = await call("crew_task", REV, { action: "cleanup", n })
   cell("TR-6 an unmerged side branch stays and is named", branches().includes(`integrate/t${n}-precheck`) && /не влита/.test(r), r)
 }
 await done()

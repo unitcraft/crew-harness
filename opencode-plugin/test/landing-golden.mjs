@@ -7,7 +7,7 @@
 //                                                   --new -- the same values set explicitly, --legacy -- hold and off
 // The snapshot is the base BEFORE task 005, which is the old behaviour; the defaults changed (owner, 2026-10-09), so the
 // snapshot is compared only with the explicit old values.
-// The texts: the refusal of crew_spawn by the limit with an accepted task, the reminders about an accepted, not cleaned task,
+// The texts: the refusal of crew_spawn by the limit with an accepted task, the reminders about an accepted, not cleanup task,
 // formatTaskLetter, planTaskLetter, reviewLetter, planMergeLetter, crew_task show and list for tasks in running, reviewing and
 // accepted. The temp folder and the clock are replaced by markers. LANDING_GOLDEN_FILE points to another snapshot file
 // (the control: a snapshot with one line spoiled must differ).
@@ -126,7 +126,7 @@ out["letter reviewLetter #2"] = review.reviewLetter(load(2), cfg)
 out["letter reviewLetter #5 (plan merge)"] = review.reviewLetter(load(5), cfg)
 out["letter planMergeLetter #5"] = review.planMergeLetter(load(5), cfg)
 
-// the reminders about an accepted, not cleaned task: to its reviewer and to its author (the flow watch posts them)
+// the reminders about an accepted, not cleanup task: to its reviewer and to its author (the flow watch posts them)
 const letters = (to) =>
   ["inbox", "read"].flatMap((d) => {
     try {

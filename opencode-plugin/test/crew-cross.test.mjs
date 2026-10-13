@@ -2,7 +2,7 @@
 // - inbound of the receiving project: integrator (default: from another project only to its integrator), any, none;
 //   a refused letter names the address to use;
 // - an order: alpha's integrator orders work from beta's integrator (crew_task order); beta takes it with its own
-//   task (crew_spawn {parent: "alpha#N"}); the order follows that task: cleaned -> the order is done (a quiet summary
+//   task (crew_spawn {parent: "alpha#N"}); the order follows that task: cleanup -> the order is done (a quiet summary
 //   to alpha's integrator), cancelled -> a call; no session and no title marks for the order.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
@@ -100,10 +100,10 @@ cell("beta's task carries the parent; the order knows its child", child?.parent?
 const wrongParent = await call("crew_spawn", "sesBINT", { title: "x", goal: "g", criteria: "c", parent: "alpha#99" })
 cell("an unknown parent is refused", /Заказа alpha#99/.test(wrongParent), wrongParent)
 
-// 3. beta's task is cleaned (as the reviewer would) -> the order is done; alpha's integrator gets a quiet summary
-tasks.taskEvent(tasks.loadTask("beta", 1), "test", "cleaned", "принята")
+// 3. beta's task is cleanup (as the reviewer would) -> the order is done; alpha's integrator gets a quiet summary
+tasks.taskEvent(tasks.loadTask("beta", 1), "test", "done", "принята")
 await wait(2600) // the reconcile pass (every 2 s)
-cell("the order is done when beta's task is cleaned", tasks.loadTask("alpha", 1).status === "cleaned", JSON.stringify(tasks.loadTask("alpha", 1).history))
+cell("the order is done when beta's task is cleanup", tasks.loadTask("alpha", 1).status === "done", JSON.stringify(tasks.loadTask("alpha", 1).history))
 cell("alpha's integrator gets a quiet summary", got("sesAINT", "Заказ #1 «библиотека» выполнен проектом beta").some((d) => d.synthetic), JSON.stringify(got("sesAINT", "Заказ")))
 cell("no titles of integrators were touched", !updates.some((u) => u.sessionID === "sesAINT" || u.sessionID === "sesBINT"), JSON.stringify(updates))
 

@@ -60,8 +60,8 @@ writeFileSync(lockFile, JSON.stringify({ ...JSON.parse(readFileSync(lockFile, "u
 const t2 = base(2, { status: "submitted", executor: "sesEX2", report: "сделал 2" })
 t2.history.push({ at: Date.now() - 600_000, by: "sesEX2", status: "submitted", note: "отчёт" })
 tasks.saveTask(t2)
-base(3, { status: "cleaned", slug: "feat", executor: "sesEX3", branch: "t3-feat" })
-// #4: accepted an hour ago and never cleaned (#9 nova: 11.5 h, holding a place in inflight_limit)
+base(3, { status: "done", slug: "feat", executor: "sesEX3", branch: "t3-feat" })
+// #4: accepted an hour ago and never cleanup (#9 nova: 11.5 h, holding a place in inflight_limit)
 const t4 = base(4, { status: "accepted", executor: "sesEX4", reviewer: "sesREV04", review_kind: "spawn" })
 t4.history.push({ at: Date.now() - 3_600_000, by: "sesREV04", status: "accepted", note: "принята" })
 tasks.saveTask(t4)
@@ -158,17 +158,17 @@ await wait(600)
 const left = letters("sesINTEG1").filter((l) => /остались хвосты/.test(l.text))
 cell("leftovers of an accepted task are raised to its author, once", left.length === 1 && /t3-feat/.test(left[0].text) && /t3-diag/.test(left[0].text) && !/t30-other/.test(left[0].text), JSON.stringify(left.map((l) => l.text)))
 
-// 6. accepted but not cleaned past accepted_reminder_min (plan 002.6, defect 2): the reviewer is woken to repeat cleaned,
+// 6. accepted but not cleanup past accepted_reminder_min (plan 002.6, defect 2): the reviewer is woken to repeat cleanup,
 // the author is told; a spawn refused by the full inflight_limit names the task
 await until(() => letters("sesREV04").some((l) => /не очищена/.test(l.text)))
 await wait(600)
 const stale = letters("sesREV04").filter((l) => /не очищена/.test(l.text))
-cell("the reviewer of a stale accepted task is woken to repeat cleaned, once", stale.length === 1 && /#4/.test(stale[0].text) && /cleaned/.test(stale[0].text) && stale[0].wake !== false, JSON.stringify(stale.map((l) => l.text.slice(0, 200))))
+cell("the reviewer of a stale accepted task is woken to repeat cleanup, once", stale.length === 1 && /#4/.test(stale[0].text) && /cleanup/.test(stale[0].text) && stale[0].wake !== false, JSON.stringify(stale.map((l) => l.text.slice(0, 200))))
 const staleA = letters("sesINTEG1").filter((l) => /#4 .*не очищена/.test(l.text))
 cell("the author is told too, once", staleA.length === 1, JSON.stringify(staleA.map((l) => l.text.slice(0, 200))))
 await tools.crew_role.execute({ role: "integrator" }, { sessionID: "sesINTEG1" })
 const refused = (await tools.crew_spawn.execute({ title: "срочная", goal: "g", criteria: "c", priority: "P1" }, { sessionID: "sesINTEG1" })).content
-cell("a spawn refused by inflight_limit names the accepted, not cleaned task", /Лимит задач проекта/.test(refused) && /#4 принята 60 мин назад, не очищена/.test(refused), refused)
+cell("a spawn refused by inflight_limit names the accepted, not cleanup task", /Лимит задач проекта/.test(refused) && /#4 принята 60 мин назад, не очищена/.test(refused), refused)
 
 // 7. crew_watch {action: "cancel", id} through the tool (plan 002.6, defect 5)
 const put = (await tools.crew_watch.execute({ command: "sleep 60", machine: true, note: "плохая команда" }, { sessionID: "sesINTEG1" })).content

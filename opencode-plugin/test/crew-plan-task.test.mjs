@@ -183,11 +183,11 @@ git(proj, "merge", "-q", "--no-edit", t1.branch)
 const acc = await call("crew_task", rm, { action: "accept", n: 1 })
 cell("with the answer in main the plan is accepted", task().status === "accepted", acc)
 
-// 7. cleaned: the steps become tasks -- Ф.1.1 first; Ф.1.2 shares «где: lex.nv» and waits; Ф.2 waits for Ф.1
+// 7. cleanup: the steps become tasks -- Ф.1.1 first; Ф.1.2 shares «где: lex.nv» and waits; Ф.2 waits for Ф.1
 git(proj, "worktree", "remove", "--force", t1.worktree)
 git(proj, "branch", "-D", t1.branch)
-const cl = await call("crew_task", rm, { action: "cleaned", n: 1 })
-cell("the plan task is cleaned", task().status === "cleaned", cl)
+const cl = await call("crew_task", rm, { action: "cleanup", n: 1 })
+cell("the plan task is cleanup", task().status === "done", cl)
 const byStep = (id) => tasks.listTasks("proj").find((x) => x.plan_step?.step === id)
 await until(() => byStep("Ф.1.1")?.status === "running" && got(byStep("Ф.1.1").executor, "ШАГ ПЛАНА").length > 0, 20_000) // the worktree is created asynchronously
 const s11 = byStep("Ф.1.1")
@@ -218,7 +218,7 @@ cell("with the mark the step is accepted", byStep("Ф.1.1").status === "accepted
 const close = async (id) => {
   await until(() => ["running", "accepted"].includes(byStep(id)?.status), 20_000) // not in the middle of its start
   const x = byStep(id)
-  x.status = "cleaned"
+  x.status = "done"
   tasks.saveTask(x)
 }
 await close("Ф.1.1")

@@ -128,7 +128,7 @@ await until(() => tasks.loadTask("proj", t2.n).status === "submitted")
 cell("the integrator's decision is applied like the owner's", tasks.loadTask("proj", t2.n).status === "submitted" && tasks.loadTask("proj", t2.n).plan.approval?.decision === "ok" && /записано/.test(ok), JSON.stringify({ ok, st: tasks.loadTask("proj", t2.n).status }))
 
 // 5. plan_steps: manual -- a merged plan's steps are listed to the author, no tasks are made
-mk(3, { status: "cleaned", plan: { n: "1", file: "plans/1-svoya.md", source: "задача", rounds: [], clean: 2, approval: { decision: "ok", at: Date.now() } } })
+mk(3, { status: "done", plan: { n: "1", file: "plans/1-svoya.md", source: "задача", rounds: [], clean: 2, approval: { decision: "ok", at: Date.now() } } })
 await until(() => letters("sesINTEG1").some((l) => /plan_steps: manual/.test(l.text)))
 const listed = letters("sesINTEG1").find((l) => /plan_steps: manual/.test(l.text))
 cell("manual steps: one letter lists them, no step tasks", !!listed && /Ш\.1\.1 шаг один: сделать раз/.test(listed.text) && /приёмка: тест 1\/1/.test(listed.text) && !tasks.listTasks("proj").some((x) => x.plan_step), JSON.stringify(listed?.text))

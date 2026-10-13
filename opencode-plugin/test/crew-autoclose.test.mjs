@@ -1,5 +1,5 @@
 // Self-test: the window closes the tabs of closed tasks (node >= 24):  node test/crew-autoclose.test.mjs
-// A task or review session whose task was merged (accepted, cleaned) or cancelled more than AUTOCLOSE_MS ago is closed,
+// A task or review session whose task was merged (accepted, cleanup) or cancelled more than AUTOCLOSE_MS ago is closed,
 // unless its tab is on screen or its turn is going (an open tab keeps the task's tree held, #26 nova 2026-10-07); the owner's own tabs (no spawned session) and tasks still open are never closed.
 import { mkdtempSync, rmSync } from "node:fs"
 import os from "node:os"
@@ -19,10 +19,10 @@ const mk = async (n, status, updated) => {
   j.updated = updated
   ;(await import("node:fs")).writeFileSync(f, JSON.stringify(j))
 }
-await mk(1, "cleaned", old)
-await mk(2, "cleaned", old)
+await mk(1, "done", old)
+await mk(2, "done", old)
 await mk(3, "running", old)
-await mk(4, "cleaned", Date.now())
+await mk(4, "done", Date.now())
 await mk(5, "cancelled", old)
 await mk(6, "accepted", old)
 await mk(7, "accepted", old)

@@ -1,7 +1,7 @@
 // Self-test of picking up after a restart (plan 002, Ph.4; node >= 24):  node test/crew-restart.test.mjs
 // The previous OpenCode process died between writing a task's status and the next step. On disk: a task whose
 // session was never created, a submitted task whose tab reviewer got neither its mark nor its letter, a task sent to
-// rework without the letter to the executor, a cleaned task without its summaries, a review session recorded but not
+// rework without the letter to the executor, a cleanup task without its summaries, a review session recorded but not
 // created. A new plugin finishes each step exactly once; a second restart adds nothing.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
@@ -40,9 +40,9 @@ card("sesEXEC3", { spawned: { by: "sesINTEG1", task: "t3", tier: "light", status
 card("sesREV3", { review: { project: "proj", n: 3 } })
 base(3, { status: "rework", executor: "sesEXEC3", reviewer: "sesREV3", review_kind: "tab", review_qid: "rq3", rework: 1, rework_note: "исправь пустой ввод", reviewer_role: "proj.worker", review_letter: "review-proj-3-1" })
 core.postLetter("sesREV3", { id: "review-proj-3-1", from_role: "proj.integrator", from_session: "sesINTEG1", to: "sesREV3", time: Date.now(), text: "старое письмо с приёмкой" })
-// #4: cleaned, the summaries lost, the executor session still open
+// #4: cleanup, the summaries lost, the executor session still open
 card("sesEXEC4", { spawned: { by: "sesINTEG1", task: "t4", tier: "light", status: "running", at: Date.now(), qid: "q4" }, task: { project: "proj", n: 4 } })
-base(4, { status: "cleaned", executor: "sesEXEC4", reviewer: "sesREVTAB", review_kind: "tab", reviewer_role: "proj.worker", branch: "t4-x", checks: { tests: "ok" } })
+base(4, { status: "done", executor: "sesEXEC4", reviewer: "sesREVTAB", review_kind: "tab", reviewer_role: "proj.worker", branch: "t4-x", checks: { tests: "ok" } })
 // #5: submitted, a review session recorded but not created
 card("sesEXEC5", { spawned: { by: "sesINTEG1", task: "t5", tier: "light", status: "running", at: Date.now(), qid: "q5" }, task: { project: "proj", n: 5 } })
 base(5, { status: "submitted", executor: "sesEXEC5", report: "сделал 5", reviewer: "ses_restart5review", review_kind: "spawn", review_qid: "rq5" })
@@ -52,9 +52,9 @@ card("sesEXEC6", { spawned: { by: "sesINTEG1", task: "t6", tier: "light", status
 base(6, { status: "running", executor: "sesEXEC6" })
 core.addObligation("sesEXEC6", { qid: "q6", from_session: "sesINTEG1", from_role: "proj.integrator", at: Date.now(), nudges: 2, empty: 3, stuck: true })
 
-// #7: cleaned, but its executor session was deleted in OpenCode: the title update fails with NotFound
+// #7: cleanup, but its executor session was deleted in OpenCode: the title update fails with NotFound
 card("sesGONE7", { spawned: { by: "sesINTEG1", task: "t7", tier: "light", status: "running", at: Date.now(), qid: "q7" }, task: { project: "proj", n: 7 } })
-base(7, { status: "cleaned", executor: "sesGONE7", reviewer: "sesREVTAB", review_kind: "tab", reviewer_role: "proj.worker", branch: "t7-x", checks: { tests: "ok" } })
+base(7, { status: "done", executor: "sesGONE7", reviewer: "sesREVTAB", review_kind: "tab", reviewer_role: "proj.worker", branch: "t7-x", checks: { tests: "ok" } })
 
 // one live window with the tabs of the owner
 const WPID = 919191

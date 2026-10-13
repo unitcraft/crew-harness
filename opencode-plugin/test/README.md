@@ -25,7 +25,7 @@ stops at the first failing file.
 | Area | Test | What it checks |
 |---|---|---|
 | Basics | `peers-project` | projects from the plugin options, the longest matching root, addresses `role` / `project.role` / `project.all` |
-| | `peers-config` | the project config: exclusive roles, `help_extra`, tier lists |
+| | `peers-config` | the project config: exclusive roles, `project_rules`, tier lists |
 | | `peers-settings` | settings read committed from a settings repository; the old options form; `local` values |
 | | `peers-cfgtool` | `crew_config`: guide, show with sources, set by the integrator only, applied once committed |
 | | `peers-paths` | the mailbox moves `nova-peers` → `crew-harness` with a junction left behind |

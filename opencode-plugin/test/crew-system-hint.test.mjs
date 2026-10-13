@@ -40,9 +40,9 @@ const hint = async () => {
 }
 const h1 = await hint()
 const h2 = await hint()
-cell("the hint names the tab and its role", /crew-harness: ты — вкладка с ролью «carina»/.test(h1), h1)
-cell("the hint tells to ask the owner by the question tool", /инструментом question/.test(h1) && /\(Recommended\)/.test(h1), h1)
-cell("the hint forbids a prose question at the end of the answer", /вопрос прозой в конце ответа не задавай/.test(h1), h1)
+cell("the hint names the tab and its role", /You are the crew-harness tab with the role "carina"/.test(h1), h1)
+cell("the hint tells to ask the owner by the question tool", /question tool/.test(h1) && /\(Recommended\)/.test(h1), h1)
+cell("the hint forbids a prose question at the end of the answer", /do not ask a question in prose at the end of a reply/.test(h1), h1)
 cell("the hint is byte-identical between requests", h1 === h2 && h1.length > 0, `${h1.length} vs ${h2.length}`)
 
 stop?.()

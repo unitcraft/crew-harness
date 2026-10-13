@@ -1,7 +1,7 @@
 // Self-test of the acceptor role (plan 002.7; node >= 24):  node test/crew-acceptor.test.mjs
 // reviewer: "acceptor": a submitted task gets a free open tab of role acceptor (never a worker tab) or a new review
 // session born with role acceptor; review sessions are bounded by spawn_limits.acceptor (not .reviewer) and take no
-// worker place; merge / accept / cleaned belong to the task's reviewer AND the acceptor role -- the executor and a
+// worker place; merge / accept / cleanup belong to the task's reviewer AND the acceptor role -- the executor and a
 // stranger are refused, a reviewer who changed role loses them. crew_watch hands the command who started it
 // (CREW_* in its environment, fixed when the watch is put, not when it starts) and refuses a command matching the
 // project's permissions.deny.
@@ -193,11 +193,11 @@ cell("the acceptor accepts", task(1).status === "accepted", acc)
 git(proj, "worktree", "remove", "--force", task(1).worktree)
 git(proj, "branch", "-D", "p1-ficha")
 await call("crew_role", rv1, { role: "worker" })
-const clWorker = await call("crew_task", rv1, { action: "cleaned", n: 1 })
-cell("cleaned needs the acceptor role", /право роли acceptor/.test(clWorker) && task(1).status === "accepted", clWorker)
+const clWorker = await call("crew_task", rv1, { action: "cleanup", n: 1 })
+cell("cleanup needs the acceptor role", /право роли acceptor/.test(clWorker) && task(1).status === "accepted", clWorker)
 await call("crew_role", rv1, { role: "acceptor" })
-const cl = await call("crew_task", rv1, { action: "cleaned", n: 1 })
-cell("the acceptor cleans", task(1).status === "cleaned", cl)
+const cl = await call("crew_task", rv1, { action: "cleanup", n: 1 })
+cell("the acceptor cleans", task(1).status === "done", cl)
 
 // help names the role and the rule
 const help = await call("crew_help", "sesINTEG1")

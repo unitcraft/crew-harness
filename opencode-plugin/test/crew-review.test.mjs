@@ -3,7 +3,7 @@
 // assigned by priority (a free open worker tab — never the author or the executor — or a new review session); the
 // reviewer starts (review), takes the project's merge lock (merge), returns for rework or accepts: the plugin
 // requires a report per required acceptance step and checks that the branch (or a squash commit) is in the target
-// branch; then the cleanup steps, checked by the plugin (cleaned) -> sessions closed, a quiet summary to the
+// branch; then the cleanup steps, checked by the plugin (cleanup) -> sessions closed, a quiet summary to the
 // integrator. rework_max exceeded -> a call to the integrator.
 import { execFileSync } from "node:child_process"
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
@@ -160,16 +160,16 @@ const newWt = path.join(proj, "wt", "proj-99-novaya")
 git(proj, "worktree", "add", "-q", "-b", "p99-novaya", newWt, mergedHead)
 git(proj, "branch", "zz-unrelated", mergedHead)
 tasks.saveTask({ project: "proj", n: 99, title: "новая", slug: "novaya", goal: "g", priority: "P2", tier: "light", role: "worker", author: "sesINTEG1", author_role: "proj.integrator", qid: "q99", status: "cancelled", kind: "spawn", directory: proj, worktree: newWt, branch: "p99-novaya", executors: [], attempt: 1, history: [], created: Date.now(), updated: Date.now() })
-const early2 = await call("crew_task", "sesREVIEW1", { action: "cleaned", n: 1 })
-cell("cleaned before the cleanup is refused, naming its own leftovers", /worktree .* ещё есть/.test(early2) && /ветка p1-ficha ещё есть/.test(early2) && /p1-ficha-cand ещё есть/.test(early2) && /Убрано по записи задачи: ветка integrate\/t1/.test(early2) && /action: "track"/.test(early2), early2) // integrate/t1 (task 023): the plugin records and removes it itself
+const early2 = await call("crew_task", "sesREVIEW1", { action: "cleanup", n: 1 })
+cell("cleanup before the cleanup is refused, naming its own leftovers", /worktree .* ещё есть/.test(early2) && /ветка p1-ficha ещё есть/.test(early2) && /p1-ficha-cand ещё есть/.test(early2) && /Убрано по записи задачи: ветка integrate\/t1/.test(early2) && /action: "track"/.test(early2), early2) // integrate/t1 (task 023): the plugin records and removes it itself
 cell("another task on the merged commit is not a leftover of #1", !/p99-novaya/.test(early2) && !/proj-99-novaya/.test(early2) && !/zz-unrelated/.test(early2), early2)
 const left1 = await review.leftoversOf(task(1), core.loadConfig(proj), false)
 cell("the leftovers reminder of #1 does not name the new task's branch or worktree", left1.some((l) => /p1-ficha-cand/.test(l)) && !left1.some((l) => /p99|proj-99|zz-unrelated/.test(l)), JSON.stringify(left1))
 git(proj, "worktree", "remove", task(1).worktree)
 for (const b of ["p1-ficha", "p1-ficha-cand"]) git(proj, "branch", "-D", b)
-const cl = await call("crew_task", "sesREVIEW1", { action: "cleaned", n: 1 })
+const cl = await call("crew_task", "sesREVIEW1", { action: "cleanup", n: 1 })
 await wait(800)
-cell("cleaned: the task is cleaned while the new task's branch and worktree stay", task(1).status === "cleaned" && git(proj, "branch", "--list", "p99-novaya").includes("p99-novaya"), cl)
+cell("cleanup: the task is cleanup while the new task's branch and worktree stay", task(1).status === "done" && git(proj, "branch", "--list", "p99-novaya").includes("p99-novaya"), cl)
 git(proj, "worktree", "remove", newWt)
 git(proj, "branch", "-D", "p99-novaya", "zz-unrelated")
 rmSync(path.join(core.BASE, "tasks", "proj", "99.json"), { force: true })

@@ -33,17 +33,17 @@ mkdirSync(tab, { recursive: true })
 mkdirSync(cfgRepo, { recursive: true })
 git(cfgRepo, "init", "-q", "-b", "main")
 const file = path.join(cfgRepo, ".opencode", "crew-harness.json")
-write(file, { project: "nova", root: "..", help_extra: "COMMITTED-LINE", spawn_limits: { worker: 2 }, task_fields: ["goal", "criteria", "boundaries"], worktrees: "worktrees", default_priority: "P1" })
+write(file, { project: "nova", root: "..", project_rules: "COMMITTED-LINE", spawn_limits: { worker: 2 }, task_fields: ["goal", "criteria", "boundaries"], worktrees: "worktrees", default_priority: "P1" })
 git(cfgRepo, "add", "-A")
 git(cfgRepo, "commit", "-q", "-m", "settings")
-write(file, { project: "nova", root: "..", help_extra: "UNCOMMITTED-LINE" }) // a working-copy edit
+write(file, { project: "nova", root: "..", project_rules: "UNCOMMITTED-LINE" }) // a working-copy edit
 
 const projects = core.parseProjects({ projects: [cfgRepo] })
 core.setProjects(projects, {})
 cell("the folder gives the project named in the file", projects.length === 1 && projects[0].name === "nova", JSON.stringify(projects))
 cell("root is relative to the settings folder", projects[0].root === canon(nv).replace(/\\/g, "/").toLowerCase(), projects[0].root)
 cell("a tab in a sibling repository belongs to the project", core.projectOf(tab, projects) === "nova", core.projectOf(tab, projects))
-const help = core.helpFor(tab)
+const help = core.loadConfig(tab).projectRules
 cell("the committed file is read", help.includes("COMMITTED-LINE"), help.slice(-200))
 cell("the working copy is not read", !help.includes("UNCOMMITTED-LINE"), "uncommitted edit applied")
 const cfg = core.loadConfig(tab)
@@ -54,18 +54,18 @@ cell("defaults where the file is silent", cfg.targetBranch === "main" && cfg.cle
 // after a commit the new value applies
 git(cfgRepo, "add", "-A")
 git(cfgRepo, "commit", "-q", "-m", "edit")
-cell("a committed edit applies", core.helpFor(tab).includes("UNCOMMITTED-LINE"), "not applied")
+cell("a committed edit applies", core.loadConfig(tab).projectRules.includes("UNCOMMITTED-LINE"), "not applied")
 
 // "branch": read from that branch instead
-write(file, { project: "nova", root: "..", branch: "settings", help_extra: "MAIN-LINE" })
+write(file, { project: "nova", root: "..", branch: "settings", project_rules: "MAIN-LINE" })
 git(cfgRepo, "add", "-A")
 git(cfgRepo, "commit", "-q", "-m", "point at a branch")
 git(cfgRepo, "checkout", "-q", "-b", "settings")
-write(file, { project: "nova", root: "..", branch: "settings", help_extra: "BRANCH-LINE" })
+write(file, { project: "nova", root: "..", branch: "settings", project_rules: "BRANCH-LINE" })
 git(cfgRepo, "add", "-A")
 git(cfgRepo, "commit", "-q", "-m", "branch value")
 git(cfgRepo, "checkout", "-q", "main")
-cell("the branch named in the file is read", core.helpFor(tab).includes("BRANCH-LINE"), core.helpFor(tab).slice(-120))
+cell("the branch named in the file is read", core.loadConfig(tab).projectRules.includes("BRANCH-LINE"), core.loadConfig(tab).projectRules.slice(-120))
 
 // local (machine-specific) override on top of the file
 core.setProjects(projects, { nova: { spawn_models: { light: "kimi/k3" } } })
@@ -103,10 +103,10 @@ cell("doctor: two projects with one name", problems.some((p) => p.includes("дв
 // the old options form still works (name -> root, settings walked up from the tab, working copy)
 const old = core.parseProjects({ projects: { legacy: path.join(tmp, "old") } })
 core.setProjects(old, {})
-write(path.join(tmp, "old", ".opencode", "crew-harness.json"), { help_extra: "OLD-FORM-LINE" })
+write(path.join(tmp, "old", ".opencode", "crew-harness.json"), { project_rules: "OLD-FORM-LINE" })
 mkdirSync(path.join(tmp, "old", "a"), { recursive: true })
 cell("the old options form: project by root", core.projectOf(path.join(tmp, "old", "a"), old) === "legacy", core.projectOf(path.join(tmp, "old", "a"), old))
-cell("the old options form: settings from the tab's tree", core.helpFor(path.join(tmp, "old", "a")).includes("OLD-FORM-LINE"), "missing")
+cell("the old options form: settings from the tab's tree", core.loadConfig(path.join(tmp, "old", "a")).projectRules.includes("OLD-FORM-LINE"), "missing")
 
 // MCP reads the same options from the mailbox
 core.saveProjects({ projects: [cfgRepo], local: { nova: { spawn_models: { heavy: "x/y" } } } })
@@ -115,7 +115,7 @@ cell("MCP gets the same projects from the mailbox", fromBox.length === 1 && from
 cell("MCP gets the local option too", core.loadConfig(tab).spawnModels.heavy === "x/y", JSON.stringify(core.loadConfig(tab).spawnModels))
 
 // git fails for a moment (a loaded machine, a lock): the last good settings stay, not the defaults (live 2026-10-05:
-// a task went without its worktree and was never cleaned up)
+// a task went without its worktree and was never cleanup up)
 const { readSettingsFolder } = await import("../settings.ts")
 const before = readSettingsFolder(cfgRepo, Date.now() + 60_000).raw
 const { renameSync } = await import("node:fs")

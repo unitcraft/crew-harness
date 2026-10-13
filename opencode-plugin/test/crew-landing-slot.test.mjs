@@ -1,5 +1,5 @@
 // Self-test: the slot at acceptance (task 005, AC-02..AC-06; node >= 24):  node test/crew-landing-slot.test.mjs
-// accepted_slot "free": an accepted, not cleaned task does not count in inflight_limit (crew_spawn and the steps of an auto
+// accepted_slot "free": an accepted, not cleanup task does not count in inflight_limit (crew_spawn and the steps of an auto
 // plan), it is counted by cleanup_limit instead ("waits for cleanup"), P0 passes both; the texts do not say that the accepted
 // tasks hold a place; the tab of the accepted task is still woken and reminded; "free" is the default since 2026-10-09, the explicit "hold" is as before.
 import { execFileSync } from "node:child_process"
@@ -98,7 +98,7 @@ const mk = (status, extra = {}) => {
   tasks.saveTask(t)
   return t
 }
-/** accepted an `ageMin` ago, not cleaned */
+/** accepted an `ageMin` ago, not cleanup */
 const accepted = (ageMin, reviewer) => {
   const t = mk("accepted", { executor: `sesEX${reviewer}`, reviewer, review_kind: "spawn" })
   t.history.push({ at: Date.now() - ageMin * 60_000, by: reviewer, status: "accepted", note: "принята" })
@@ -142,7 +142,7 @@ accepted(60, "sesREVA")
 accepted(80, "sesREVB")
 mk("running", { executor: "sesRUN0" })
 const c1 = await spawn()
-cell("AC-03 c1: refused, both waiting tasks named with age and reviewer", /cleanup_limit/.test(c1) && !started(c1) && /#1 принята 60 мин назад, не очищена \(приёмщик sesREVA\)/.test(c1) && /#2 принята 80 мин назад, не очищена \(приёмщик sesREVB\)/.test(c1) && /cleaned/.test(c1) && all().length === 3, c1)
+cell("AC-03 c1: refused, both waiting tasks named with age and reviewer", /cleanup_limit/.test(c1) && !started(c1) && /#1 принята 60 мин назад, не очищена \(приёмщик sesREVA\)/.test(c1) && /#2 принята 80 мин назад, не очищена \(приёмщик sesREVB\)/.test(c1) && /cleanup/.test(c1) && all().length === 3, c1)
 const c2 = await spawn({ priority: "P0" })
 cell("AC-03 c2: P0 passes both limits", started(c2) && all().length === 4, c2)
 settings({ inflight_limit: 10, accepted_slot: "free", cleanup_limit: 0 })
@@ -152,16 +152,16 @@ settings({ inflight_limit: 10, accepted_slot: "free", cleanup_limit: 2 })
 const c3b = await spawn()
 cell("AC-03 c3 control: with the limit back at 2 the refusal returns", /cleanup_limit/.test(c3b) && all().length === 5, c3b)
 const one = tasks.loadTask("proj", 1)
-tasks.taskEvent(one, "sesREVA", "cleaned", "очищена")
+tasks.taskEvent(one, "sesREVA", "done", "очищена")
 const c4 = await spawn()
-cell("AC-03 c4: after one task is cleaned (1 waiting < 2) the next one is put", started(c4) && all().length === 6, c4)
+cell("AC-03 c4: after one task is cleanup (1 waiting < 2) the next one is put", started(c4) && all().length === 6, c4)
 settings({ inflight_limit: 10, accepted_slot: "hold", cleanup_limit: 1 })
 const c5 = await spawn()
 cell("AC-03 c5: with accepted_slot hold cleanup_limit does not act", started(c5) && all().length === 7, c5)
 
-// ---- AC-04: the steps of an auto plan (a cleaned, approved plan task; its file is in the target branch)
+// ---- AC-04: the steps of an auto plan (a cleanup, approved plan task; its file is in the target branch)
 const planTask = () =>
-  mk("cleaned", { title: "план 9", executor: "sesEXP", reviewer: "sesREVP", plan: { n: "9", file: "docs/plans/9-demo.md", source: "демо", rounds: [], clean: 2, approval: { decision: "ok", at: Date.now() } } })
+  mk("done", { title: "план 9", executor: "sesEXP", reviewer: "sesREVP", plan: { n: "9", file: "docs/plans/9-demo.md", source: "демо", rounds: [], clean: 2, approval: { decision: "ok", at: Date.now() } } })
 const spawnedOf = () => Object.keys(tasks.loadTask("proj", planNo)?.plan?.spawned ?? {}).length
 let planNo = 0
 const scenario = async (label, cfg, prep) => {
@@ -189,9 +189,9 @@ n = await scenario("cleanup_limit", { inflight_limit: 5, accepted_slot: "free", 
 })
 cell("AC-04 cleanup_limit: two waiting for cleanup stop the auto plan", n === 0, `spawned ${n}`)
 const waitingOne = all().find((t) => t.status === "accepted")
-tasks.taskEvent(waitingOne, "sesREVA", "cleaned", "очищена")
+tasks.taskEvent(waitingOne, "sesREVA", "done", "очищена")
 await until(() => spawnedOf() > 0, 4_000)
-cell("AC-04 после cleaned: one cleaned (1 waiting < 2) and the steps are put", spawnedOf() >= 1, `spawned ${spawnedOf()}`)
+cell("AC-04 после cleanup: one cleanup (1 waiting < 2) and the steps are put", spawnedOf() >= 1, `spawned ${spawnedOf()}`)
 settings({})
 
 // ---- AC-05: the tab of an accepted task is still woken, reminded and marked

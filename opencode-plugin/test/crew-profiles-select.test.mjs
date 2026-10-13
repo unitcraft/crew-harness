@@ -425,7 +425,7 @@ const stepsOf = (planTask) => tasks.listTasks("proj").filter((x) => x.plan_step?
 const mkPlanTask = () =>
   tasks.createTask({
     project: "proj", title: "план 8: длина", goal: "g", criteria: "c", priority: "P2", tier: "medium", role: "worker", author: "sesINTEG", author_role: "proj.integrator", qid: `qplan${Math.random().toString(36).slice(2, 8)}`,
-    status: "cleaned", kind: "spawn", directory: proj,
+    status: "done", kind: "spawn", directory: proj,
     plan: { n: "8", file: "docs/plans/8-dlina.md", source: "s", rounds: [], clean: 2, approval: { decision: "ok", at: Date.now() } },
   })
 use("kimi-only")
@@ -464,7 +464,7 @@ setBounds({ max: "light" })
 use(undefined)
 const ptE = tasks.createTask({
   project: "proj", title: "план 9: подплан", goal: "g", criteria: "c", priority: "P2", tier: "medium", role: "worker", author: "sesINTEG", author_role: "proj.integrator", qid: `qplan${Math.random().toString(36).slice(2, 8)}`,
-  status: "cleaned", kind: "spawn", directory: proj,
+  status: "done", kind: "spawn", directory: proj,
   plan: { n: "9", file: "docs/plans/9-podplan.md", source: "s", rounds: [], clean: 2, approval: { decision: "ok", at: Date.now() } },
 })
 await until(() => stepsOf(ptE.n).length > 0, 15_000)

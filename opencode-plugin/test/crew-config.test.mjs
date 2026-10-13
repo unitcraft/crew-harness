@@ -1,6 +1,6 @@
 // Self-test of crew-harness project config (node >= 24):  node test/crew-config.test.mjs
 // Base roles of the plugin: `integrator` exclusive, everything else shared. The project config ADDS exclusive
-// roles (exclusive_roles), appends help_extra and may override the tier lists (tiers).
+// roles (exclusive_roles), sets project_rules (the end of the system block) and may override the tier lists (tiers).
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -13,10 +13,11 @@ const bare = path.join(tmp, "bare")
 const proj = path.join(tmp, "proj")
 mkdirSync(bare, { recursive: true })
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
-writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ exclusive_roles: ["lead"], help_extra: "EXTRA-LINE-OF-THE-PROJECT" }))
+writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ exclusive_roles: ["lead"], project_rules: "EXTRA-LINE-OF-THE-PROJECT" }))
 
 const dirOf = (sid) => (sid.startsWith("sesP") ? proj : bare)
 const mod = await import(process.env.CREW_MODULE ?? "../index.ts")
+const { loadConfig } = await import("../core.ts")
 const hooks = {}
 const tools = {}
 const ctx = {
@@ -59,8 +60,8 @@ cell("with a config force takes the exclusive role", /теперь «lead»/.tes
 
 const helpProj = (await call("crew_help", "sesP1")).content
 const helpBare = (await call("crew_help", "sesB1")).content
-cell("help_extra is appended for the project", helpProj.includes("EXTRA-LINE-OF-THE-PROJECT"), helpProj.slice(-120))
-cell("help_extra is absent without a config", !helpBare.includes("EXTRA-LINE-OF-THE-PROJECT"), "present")
+cell("project_rules is read for the project and is not in crew_help", loadConfig(proj).projectRules === "EXTRA-LINE-OF-THE-PROJECT" && !helpProj.includes("EXTRA-LINE-OF-THE-PROJECT"), helpProj.slice(-120))
+cell("project_rules is absent without a config", loadConfig(bare).projectRules === "", "present")
 cell("default help names neutral roles", /integrator/.test(helpBare) && /worker/.test(helpBare), "missing")
 
 // The config is named after the package (crew-harness.json); the old name nova-peers.json is no longer read
@@ -69,17 +70,17 @@ const legacy = path.join(tmp, "legacy")
 const both = path.join(tmp, "both")
 mkdirSync(path.join(legacy, ".opencode"), { recursive: true })
 mkdirSync(path.join(both, ".opencode"), { recursive: true })
-writeFileSync(path.join(legacy, ".opencode", "nova-peers.json"), JSON.stringify({ help_extra: "OLD-NAME-LINE" }))
-writeFileSync(path.join(both, ".opencode", "nova-peers.json"), JSON.stringify({ help_extra: "OLD-NAME-LINE" }))
-writeFileSync(path.join(both, ".opencode", "crew-harness.json"), JSON.stringify({ help_extra: "NEW-NAME-LINE" }))
-cell("the old name nova-peers.json is not read", !mod.helpFor(legacy).includes("OLD-NAME-LINE"), "read")
-cell("crew-harness.json wins over the old name", mod.helpFor(both).includes("NEW-NAME-LINE") && !mod.helpFor(both).includes("OLD-NAME-LINE"), "wrong file")
+writeFileSync(path.join(legacy, ".opencode", "nova-peers.json"), JSON.stringify({ project_rules: "OLD-NAME-LINE" }))
+writeFileSync(path.join(both, ".opencode", "nova-peers.json"), JSON.stringify({ project_rules: "OLD-NAME-LINE" }))
+writeFileSync(path.join(both, ".opencode", "crew-harness.json"), JSON.stringify({ project_rules: "NEW-NAME-LINE" }))
+cell("the old name nova-peers.json is not read", !loadConfig(legacy).projectRules.includes("OLD-NAME-LINE"), "read")
+cell("crew-harness.json wins over the old name", loadConfig(both).projectRules.includes("NEW-NAME-LINE") && !loadConfig(both).projectRules.includes("OLD-NAME-LINE"), "wrong file")
 
 // A project config saved with a BOM (Notepad, PowerShell 5.1 "utf8") is read like any other.
 const bom = path.join(tmp, "bom")
 mkdirSync(path.join(bom, ".opencode"), { recursive: true })
-writeFileSync(path.join(bom, ".opencode", "crew-harness.json"), "\uFEFF" + JSON.stringify({ help_extra: "BOM-LINE" }))
-cell("a config saved with a BOM is read", mod.helpFor(bom).includes("BOM-LINE"), "BOM file ignored")
+writeFileSync(path.join(bom, ".opencode", "crew-harness.json"), "\uFEFF" + JSON.stringify({ project_rules: "BOM-LINE" }))
+cell("a config saved with a BOM is read", loadConfig(bom).projectRules.includes("BOM-LINE"), "BOM file ignored")
 stop?.()
 rmSync(tmp, { recursive: true, force: true })
 console.log(fail ? `crew-config.test: FAIL ${fail}` : "crew-config.test ok")

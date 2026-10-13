@@ -34,7 +34,7 @@ for (let n = 1; n <= 6; n++) {
 const OLD = Date.now() - 3 * 86_400_000
 for (let n = 7; n <= 12; n++) {
   card(`sesEX${n}`, { spawned: { by: "sesINTEG1", task: `t${n}`, tier: "light", status: "closed", at: OLD, qid: `q${n}` }, task: { project: "proj", n } })
-  const t = base(n, { status: "cleaned", executor: `sesEX${n}`, reviewer: "sesREVX", review_kind: "tab", reviewer_role: "proj.worker", branch: `t${n}-x` })
+  const t = base(n, { status: "done", executor: `sesEX${n}`, reviewer: "sesREVX", review_kind: "tab", reviewer_role: "proj.worker", branch: `t${n}-x` })
   const f = path.join(tmp, "opencode", "crew-harness", "tasks", "proj", `${n}.json`)
   const j = JSON.parse(readFileSync(f, "utf8"))
   j.updated = OLD
