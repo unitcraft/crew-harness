@@ -39,7 +39,7 @@ const lines = (n) => H.history(n).filter((h) => /улики сохранены/.
   // ---- keep of a tree by the template: passes, written to the record and the history
   const k = await cleanup(a.n, { keep: [a.rel] })
   const kept = rec(a.n).kept
-  cell("KEEP-2 keep: the task is cleanup, the tree is still on disk", rec(a.n).status === "done" && existsSync(a.tree), k)
+  cell("KEEP-2 keep: the task is cleaned up, the tree is still on disk", rec(a.n).status === "done" && existsSync(a.tree), k)
   cell("KEEP-2b the record has kept [{path, at, by}] and the history has the line", kept?.length === 1 && norm(kept[0].path) === norm(a.tree) && typeof kept[0].at === "number" && kept[0].by === REV && lines(a.n).length === 1 && lines(a.n)[0].toLowerCase().includes(norm(a.tree)), JSON.stringify(kept) + JSON.stringify(H.history(a.n)))
   cell("KEEP-2c the answer: 'Сохранено: <путь> (не проверялось уборкой)'", k.toLowerCase().includes(`сохранено: ${norm(a.tree)} (не проверялось уборкой)`), k)
   const left2 = await review.leftoversOf(rec(a.n), core.loadConfig(proj), false)
@@ -114,7 +114,7 @@ const lines = (n) => H.history(n).filter((h) => /улики сохранены/.
   git(proj, "branch", "-D", `t${a.n}-cand`)
   gitTry(proj, "branch", "-D", "t-sprout-" + a.n)
   const fin = await cleanup(a.n)
-  cell("KEEP-7c after the sprouts are deleted the task is cleanup", rec(a.n).status === "done", fin)
+  cell("KEEP-7c after the sprouts are deleted the task is cleaned up", rec(a.n).status === "done", fin)
 }
 
 // ---- a plain folder inside the worktree folder is a valid keep
@@ -134,7 +134,7 @@ const lines = (n) => H.history(n).filter((h) => /улики сохранены/.
   cell("KEEP-9 another session: refused, nothing is written", /только его/.test(r) && !rec(a.n).kept && rec(a.n).status === "accepted", r)
 }
 
-// ---- the task branch is checked out in the kept tree: the answer gives the hint, and after the detach the task is cleanup
+// ---- the task branch is checked out in the kept tree: the answer gives the hint, and after the detach the task is cleaned up
 {
   const a = accepted({ branch: false })
   git(proj, "branch", "t" + a.n, "origin/main")
@@ -144,7 +144,7 @@ const lines = (n) => H.history(n).filter((h) => /улики сохранены/.
   git(a.tree, "checkout", "-q", "--detach")
   git(proj, "branch", "-D", "t" + a.n)
   const fin = await cleanup(a.n)
-  cell("KEEP-10b after the detach and the branch delete the task is cleanup, the tree stays", rec(a.n).status === "done" && existsSync(a.tree), fin)
+  cell("KEEP-10b after the detach and the branch delete the task is cleaned up, the tree stays", rec(a.n).status === "done" && existsSync(a.tree), fin)
 }
 
 done(H)

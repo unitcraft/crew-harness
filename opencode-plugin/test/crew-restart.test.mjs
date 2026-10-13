@@ -1,7 +1,7 @@
 // Self-test of picking up after a restart (plan 002, Ph.4; node >= 24):  node test/crew-restart.test.mjs
 // The previous OpenCode process died between writing a task's status and the next step. On disk: a task whose
 // session was never created, a submitted task whose tab reviewer got neither its mark nor its letter, a task sent to
-// rework without the letter to the executor, a cleanup task without its summaries, a review session recorded but not
+// rework without the letter to the executor, a cleaned-up task without its summaries, a review session recorded but not
 // created. A new plugin finishes each step exactly once; a second restart adds nothing.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"

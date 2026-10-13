@@ -1143,7 +1143,7 @@ export default {
               postLetter(x.reviewer, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.reviewer, time: t, text: toReviewer })
             if (!letterExists(x.author, id))
               postLetter(x.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.author, time: t, text: toAuthor })
-            log(`stall: #${x.n} of ${project} accepted ${at}, not cleanup`)
+            log(`stall: #${x.n} of ${project} accepted ${at}, not cleaned up`)
           }
         for (const x of list.filter((y) => y.status === "submitted" && !y.reviewer)) {
           const since = [...(x.history ?? [])].reverse().find((h) => h.status === "submitted")?.at ?? 0

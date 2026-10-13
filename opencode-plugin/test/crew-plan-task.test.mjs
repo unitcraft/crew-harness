@@ -187,7 +187,7 @@ cell("with the answer in main the plan is accepted", task().status === "accepted
 git(proj, "worktree", "remove", "--force", t1.worktree)
 git(proj, "branch", "-D", t1.branch)
 const cl = await call("crew_task", rm, { action: "cleanup", n: 1 })
-cell("the plan task is cleanup", task().status === "done", cl)
+cell("the plan task is cleaned up", task().status === "done", cl)
 const byStep = (id) => tasks.listTasks("proj").find((x) => x.plan_step?.step === id)
 await until(() => byStep("Ф.1.1")?.status === "running" && got(byStep("Ф.1.1").executor, "ШАГ ПЛАНА").length > 0, 20_000) // the worktree is created asynchronously
 const s11 = byStep("Ф.1.1")

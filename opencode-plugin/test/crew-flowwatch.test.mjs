@@ -158,7 +158,7 @@ await wait(600)
 const left = letters("sesINTEG1").filter((l) => /остались хвосты/.test(l.text))
 cell("leftovers of an accepted task are raised to its author, once", left.length === 1 && /t3-feat/.test(left[0].text) && /t3-diag/.test(left[0].text) && !/t30-other/.test(left[0].text), JSON.stringify(left.map((l) => l.text)))
 
-// 6. accepted but not cleanup past accepted_reminder_min (plan 002.6, defect 2): the reviewer is woken to repeat cleanup,
+// 6. accepted but not cleaned up past accepted_reminder_min (plan 002.6, defect 2): the reviewer is woken to repeat cleanup,
 // the author is told; a spawn refused by the full inflight_limit names the task
 await until(() => letters("sesREV04").some((l) => /не очищена/.test(l.text)))
 await wait(600)
@@ -168,7 +168,7 @@ const staleA = letters("sesINTEG1").filter((l) => /#4 .*не очищена/.tes
 cell("the author is told too, once", staleA.length === 1, JSON.stringify(staleA.map((l) => l.text.slice(0, 200))))
 await tools.crew_role.execute({ role: "integrator" }, { sessionID: "sesINTEG1" })
 const refused = (await tools.crew_spawn.execute({ title: "срочная", goal: "g", criteria: "c", priority: "P1" }, { sessionID: "sesINTEG1" })).content
-cell("a spawn refused by inflight_limit names the accepted, not cleanup task", /Лимит задач проекта/.test(refused) && /#4 принята 60 мин назад, не очищена/.test(refused), refused)
+cell("a spawn refused by inflight_limit names the accepted, not cleaned up task", /Лимит задач проекта/.test(refused) && /#4 принята 60 мин назад, не очищена/.test(refused), refused)
 
 // 7. crew_watch {action: "cancel", id} through the tool (plan 002.6, defect 5)
 const put = (await tools.crew_watch.execute({ command: "sleep 60", machine: true, note: "плохая команда" }, { sessionID: "sesINTEG1" })).content

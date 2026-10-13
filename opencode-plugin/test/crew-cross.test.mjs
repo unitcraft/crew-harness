@@ -100,10 +100,10 @@ cell("beta's task carries the parent; the order knows its child", child?.parent?
 const wrongParent = await call("crew_spawn", "sesBINT", { title: "x", goal: "g", criteria: "c", parent: "alpha#99" })
 cell("an unknown parent is refused", /Заказа alpha#99/.test(wrongParent), wrongParent)
 
-// 3. beta's task is cleanup (as the reviewer would) -> the order is done; alpha's integrator gets a quiet summary
+// 3. beta's task is cleaned up (as the reviewer would) -> the order is done; alpha's integrator gets a quiet summary
 tasks.taskEvent(tasks.loadTask("beta", 1), "test", "done", "принята")
 await wait(2600) // the reconcile pass (every 2 s)
-cell("the order is done when beta's task is cleanup", tasks.loadTask("alpha", 1).status === "done", JSON.stringify(tasks.loadTask("alpha", 1).history))
+cell("the order is done when beta's task is cleaned up", tasks.loadTask("alpha", 1).status === "done", JSON.stringify(tasks.loadTask("alpha", 1).history))
 cell("alpha's integrator gets a quiet summary", got("sesAINT", "Заказ #1 «библиотека» выполнен проектом beta").some((d) => d.synthetic), JSON.stringify(got("sesAINT", "Заказ")))
 cell("no titles of integrators were touched", !updates.some((u) => u.sessionID === "sesAINT" || u.sessionID === "sesBINT"), JSON.stringify(updates))
 

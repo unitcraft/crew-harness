@@ -1,5 +1,5 @@
 // Self-test: the slot at acceptance (task 005, AC-02..AC-06; node >= 24):  node test/crew-landing-slot.test.mjs
-// accepted_slot "free": an accepted, not cleanup task does not count in inflight_limit (crew_spawn and the steps of an auto
+// accepted_slot "free": an accepted, not cleaned up task does not count in inflight_limit (crew_spawn and the steps of an auto
 // plan), it is counted by cleanup_limit instead ("waits for cleanup"), P0 passes both; the texts do not say that the accepted
 // tasks hold a place; the tab of the accepted task is still woken and reminded; "free" is the default since 2026-10-09, the explicit "hold" is as before.
 import { execFileSync } from "node:child_process"
@@ -98,7 +98,7 @@ const mk = (status, extra = {}) => {
   tasks.saveTask(t)
   return t
 }
-/** accepted an `ageMin` ago, not cleanup */
+/** accepted an `ageMin` ago, not cleaned up */
 const accepted = (ageMin, reviewer) => {
   const t = mk("accepted", { executor: `sesEX${reviewer}`, reviewer, review_kind: "spawn" })
   t.history.push({ at: Date.now() - ageMin * 60_000, by: reviewer, status: "accepted", note: "принята" })
@@ -154,12 +154,12 @@ cell("AC-03 c3 control: with the limit back at 2 the refusal returns", /cleanup_
 const one = tasks.loadTask("proj", 1)
 tasks.taskEvent(one, "sesREVA", "done", "очищена")
 const c4 = await spawn()
-cell("AC-03 c4: after one task is cleanup (1 waiting < 2) the next one is put", started(c4) && all().length === 6, c4)
+cell("AC-03 c4: after one task is cleaned up (1 waiting < 2) the next one is put", started(c4) && all().length === 6, c4)
 settings({ inflight_limit: 10, accepted_slot: "hold", cleanup_limit: 1 })
 const c5 = await spawn()
 cell("AC-03 c5: with accepted_slot hold cleanup_limit does not act", started(c5) && all().length === 7, c5)
 
-// ---- AC-04: the steps of an auto plan (a cleanup, approved plan task; its file is in the target branch)
+// ---- AC-04: the steps of an auto plan (a done, approved plan task; its file is in the target branch)
 const planTask = () =>
   mk("done", { title: "план 9", executor: "sesEXP", reviewer: "sesREVP", plan: { n: "9", file: "docs/plans/9-demo.md", source: "демо", rounds: [], clean: 2, approval: { decision: "ok", at: Date.now() } } })
 const spawnedOf = () => Object.keys(tasks.loadTask("proj", planNo)?.plan?.spawned ?? {}).length
@@ -191,7 +191,7 @@ cell("AC-04 cleanup_limit: two waiting for cleanup stop the auto plan", n === 0,
 const waitingOne = all().find((t) => t.status === "accepted")
 tasks.taskEvent(waitingOne, "sesREVA", "done", "очищена")
 await until(() => spawnedOf() > 0, 4_000)
-cell("AC-04 после cleanup: one cleanup (1 waiting < 2) and the steps are put", spawnedOf() >= 1, `spawned ${spawnedOf()}`)
+cell("AC-04 после cleanup: one cleaned up (1 waiting < 2) and the steps are put", spawnedOf() >= 1, `spawned ${spawnedOf()}`)
 settings({})
 
 // ---- AC-05: the tab of an accepted task is still woken, reminded and marked
