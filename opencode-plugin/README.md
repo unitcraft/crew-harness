@@ -63,7 +63,7 @@ background); a task session may run with no window at all. Formerly `opencode-pe
   The keys: `config-schema.ts`;
 - **roles**: a new tab is `worker` (shared: tabs within it differ by session id; `assistant` is an
   alias). `integrator` is exclusive, one holder per project, plus the project's `exclusive_roles`
-  (and an optional `help_extra` paragraph for `crew_help`). An exclusive role
+  (and an optional `project_rules` text: English, appended to the end of the tab's system block). An exclusive role
   is held by an atomic lock: refused while the holder's tab is open (unless `force`), free the
   moment it closes. A letter to a shared role with several open holders is refused with the list
   (address a session id);
@@ -339,6 +339,11 @@ start and its `idle` row): a turn with a tool call is a working one, a turn with
 
 ## Tasks
 
+Task statuses: `starting` → `running` → `submitted` → `reviewing` ⇄ `rework`; `approval` (a plan task waits for approval);
+`accepted` (landed, cleanup ahead) → `done` (accepted and cleaned up); `cancelled`. Task files written before 2026-10-14 may say
+`cleaned` instead of `done`: it is read as `done` (no migration of the files). The action that finishes a task is `crew_task cleanup`
+(`cleaned` still works as its old name). `crew_task view` and `crew_config view` are the main names; `show` is a synonym.
+
 A task has a number `#N` (per project, only grows, kept through rework and reassignment) — the
 owner, the integrator and `crew_list` call it by that; a task session's title is `#N title`. The
 journal is `tasks/<project>/<N>.json` in the mailbox.
@@ -360,7 +365,7 @@ journal is `tasks/<project>/<N>.json` in the mailbox.
   summary of what was done), `cancel {n}`, `priority {n, priority}`.
 - The executor reports as the answer to the task's qid; the task is submitted (title `#N ✓`) — the
   report does **not** wake the integrator; a second report is refused. The executor's session
-  stays open for rework until the task is cleaned.
+  stays open for rework until the task is done.
 
 ## Review and merge
 
@@ -375,15 +380,15 @@ The integrator stays free for the owner and does not re-check accepted work:
   over `rework_max` the integrator gets a call), `merge` (the project's merge lock: one merging
   reviewer at a time), `accept {checks, commit?}` — the plugin requires a report for every
   required acceptance step and checks that the task branch (or a squash commit) is in the target
-  branch; then the cleanup steps by `cleanup` (`git worktree remove`, `git branch -D`, `git push
-  origin --delete`), and `cleaned` — the plugin checks the worktree and the branch are gone;
-  to keep a worktree as evidence call `cleaned {n, keep: [path, ...]}` (up to 8 paths, absolute, or relative to the repository root as `git rev-parse --show-toplevel` gives it from the task directory;
+  branch; then the cleanup steps by the project setting `cleanup` (`git worktree remove`, `git branch -D`, `git push
+  origin --delete`), and `crew_task cleanup` — the plugin checks the worktree and the branch are gone;
+  to keep a worktree as evidence call `cleanup {n, keep: [path, ...]}` (up to 8 paths, absolute, or relative to the repository root as `git rev-parse --show-toplevel` gives it from the task directory;
   each must be a worktree of the repository or an existing folder inside the project's worktree folder, never the main tree
   or a branch): the check skips those trees, the answer says `Сохранено: <path> (не проверялось уборкой)`, the task record
-  keeps them in `kept` and the history says `улики сохранены: <path>`; the task branch must still be deleted (if it is checked out in a kept tree, run `git checkout --detach` there first, then `git branch -D`; the answer of `cleaned` says so); a repeated
-  `cleaned` without `keep` keeps skipping them while they exist;
-  Side branches and worktrees of a task (task 023): `crew_task {action: "track", n, branch?, worktree?}` (executor, reviewer, integrator; no duplicates) records them in the task's `side` list (`view` shows it; the field is `side` because `extra` holds the project's extra task fields). The plugin records `integrate/t<N>` and `integrate/t<N>-*` and the trees on them itself at precheck, accept and cleaned. `cleaned` removes everything recorded except the trees in `keep` (no force: a dirty tree is reported, not deleted); an unrecorded branch or tree that only matches the name template is still refused, and the refusal offers `track`. Records without `side` read as empty.
-- cleaned → the sessions of the task close with a line in their history, titles `#N ✓✓ готово`, the
+  keeps them in `kept` and the history says `улики сохранены: <path>`; the task branch must still be deleted (if it is checked out in a kept tree, run `git checkout --detach` there first, then `git branch -D`; the answer of `cleanup` says so); a repeated
+  `cleanup` without `keep` keeps skipping them while they exist;
+  Side branches and worktrees of a task (task 023): `crew_task {action: "track", n, branch?, worktree?}` (executor, reviewer, integrator; no duplicates) records them in the task's `side` list (`view` shows it; the field is `side` because `extra` holds the project's extra task fields). The plugin records `integrate/t<N>` and `integrate/t<N>-*` and the trees on them itself at precheck, accept and cleaned. `cleanup` removes everything recorded except the trees in `keep` (no force: a dirty tree is reported, not deleted); an unrecorded branch or tree that only matches the name template is still refused, and the refusal offers `track`. Records without `side` read as empty.
+- `done` (after `cleanup`) → the sessions of the task close with a line in their history, titles `#N ✓✓ готово`, the
   integrator gets a quiet summary. Titles on the way (a mark and a word): `#N ✓ сдана`, `#N ✓◐ приёмка`, `#N ↻ доработка`, `#N ✓✓◐ влита`
   accepted;
 - a task on rework does not hold a review session's place (`spawn_limits.reviewer`): the next submitted task gets
@@ -391,12 +396,12 @@ The integrator stays free for the owner and does not re-check accepted work:
 - `reviewer: "acceptor"` — a separate acceptor role with its own rights ([plan 002.7](../doc/archive/plans/002.7-acceptor-role.md)):
   only a free open tab of role `acceptor` becomes a reviewer (never a `worker` tab), a new review session is born
   with role `acceptor`, review sessions are bounded by `spawn_limits.acceptor` (without it `spawn_limits.reviewer`,
-  then 2) and take no `worker` place; `merge`, `accept` and `cleaned` need the task's reviewer AND the `acceptor`
+  then 2) and take no `worker` place; `merge`, `accept` and `cleanup` need the task's reviewer AND the `acceptor`
   (or `integrator`) role — a reviewer who changed role loses them; the executor of a task is refused by name. The
   role is shared. The default stays `worker`;
 - `inflight_limit` (6) bounds the tasks running and in review; `P0` passes every limit;
 - `accepted_slot: "free"` (the default since the owner's decision of 2026-10-09; the explicit `hold` returns the previous
-  behaviour: the accepted task holds its place until `cleaned`): an accepted task that is not cleaned yet waits for cleanup and
+  behaviour: the accepted task holds its place until `cleanup`): an accepted task that is not cleaned up yet waits for cleanup and
   no longer counts in `inflight_limit` (`crew_spawn` and the steps of an auto plan count it separately); `cleanup_limit`
   (10, `0` — no limit) stops new work (not `P0`) when that many accepted tasks wait for cleanup, naming them. The tab of an
   accepted task is still woken and reminded (`accepted_reminder_min`), `crew_task list` and `show` mark it "ждёт уборки";
@@ -410,10 +415,10 @@ The integrator stays free for the owner and does not re-check accepted work:
   for the short landing step. Fast-forward the target branch from that exact checked candidate, not from a rebuilt candidate
   or the task branch alone, then push and call `accept`. If the target tip moved, do not land the old candidate: build and
   check a new one, record a new precheck, and retry. `accept` releases the task's inflight/worker slot when
-  `accepted_slot: "free"`; perform its returned cleanup steps separately and call `cleaned` when done. The cleanup queue is
+  `accepted_slot: "free"`; perform its returned cleanup steps separately and call `cleanup` when done. The cleanup queue is
   bounded by `cleanup_limit` (10 by default). The merge lock is released by `accept` (and by `rework` and `cancel`): after the
   merge and the push call `accept` at once, the cleanup runs without the lock; if the merge is abandoned before `accept`,
-  call `unlock {n}`; `cleaned` does not release the lock (there is none by then). The answers say it at the moment of the action: `accept`, `rework` and `cancel` report that they released the lock (only when it was held), and `cleaned` warns when the session still holds it. While it is held, only the merge and the
+  call `unlock {n}`; `cleanup` does not release the lock (there is none by then). The answers say it at the moment of the action: `accept`, `rework` and `cancel` report that they released the lock (only when it was held), and `cleanup` warns when the session still holds it. While it is held, only the merge and the
   push happen under it. The service pass releases the lock by itself when the held task's checked candidate (the green
   record) is already an ancestor of the target tip on `origin` (`git ls-remote` with the 20 s term and `merge-base`
   on local objects, no fetch, nothing written but the history note "замок отпущен: слияние на вершине" and a log line);
@@ -504,6 +509,14 @@ and chooses one of:
 The decision is written by the window, so an agent cannot fake it. A new session writes the decision
 into the plan («Режим выполнения», «Решения владельца») and merges it. `accept` reads the plan in the
 target branch and requires its form and the owner's answer.
+
+**Approval by the integrator.** With `plan_approver: "integrator"` the task author decides instead, from the tab:
+`crew_task {action: "plan_decide", n, decision: "ok" | "ok-shortcuts" | "no", text?}` (`text` is required with `no`: what to
+change). The decision is written the same way as the window's, the owner still sees the plan in `/crew` and can decide with
+`/plans` first. The task status while the plan waits is `approval`. Verdicts of the recheck rounds are given by the round's
+reviewer with `crew_task {action: "round", n, blocking, significant, cosmetic, text}` (or `grades {id: count}` for custom
+`plan_grades`) after `review` and `check` of every step: `plan_clean_rounds` clean rounds in a row end the recheck, `plan_rounds_max`
+rounds end it anyway and the plan goes to approval with the last remarks.
 
 **Steps become tasks.** Once the plan is merged, each step becomes a task. The task gets the step's
 «Что» as its goal, the step's «Приёмка» as its criteria, and the plan's «Не делаем» and mode as its
@@ -702,7 +715,7 @@ is what the tabs in the main folder use — the plugin only names it.
 - **an order**: `crew_task {action: "order", to: "beta.integrator", goal, criteria, …}` records task
   `#N` of kind order in the orderer's journal (no session, no title marks) and sends it to beta's
   integrator, who does it with its own tasks: `crew_spawn {…, parent: "alpha#N"}`. The order follows
-  that task: cleaned → the order is done (a quiet summary to the orderer), cancelled → a call.
+  that task: done → the order is done (a quiet summary to the orderer), cancelled → a call.
 
 ## Other machines (prototype)
 

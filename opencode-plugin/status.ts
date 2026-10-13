@@ -86,7 +86,7 @@ export function endsWithQuestion(text: string): string | undefined {
 
 const hm = (t?: number) => (t ? new Date(t).toTimeString().slice(0, 5) : "?")
 const minutes = (from: number | undefined, now: number) => (from ? `${Math.max(0, Math.round((now - from) / 60_000))} мин` : "")
-const STATUS_RU: Record<string, string> = { starting: "запускается", running: "в работе", submitted: "сдана", reviewing: "на приёмке", rework: "на доработке", accepted: "принята", cleaned: "влита", closed: "закрыта", cancelled: "отменена" }
+const STATUS_RU: Record<string, string> = { starting: "запускается", running: "в работе", submitted: "сдана", reviewing: "на приёмке", rework: "на доработке", accepted: "принята", done: "влита", cancelled: "отменена" }
 
 export type StatusInput = {
   card: Card
@@ -275,7 +275,7 @@ const short = (x: string, n: number) => {
 export function planLines(project: string): string[] {
   let list: Task[] = []
   try {
-    list = listTasks(project).filter((t) => t.plan && !(t.status === "cleaned" && t.plan.finished) && t.status !== "cancelled")
+    list = listTasks(project).filter((t) => t.plan && !(t.status === "done" && t.plan.finished) && t.status !== "cancelled")
   } catch {}
   const out: string[] = []
   for (const t of list) {
@@ -297,7 +297,7 @@ export function planLines(project: string): string[] {
                 ? "влит, очистка"
                 : (() => {
                     const ids = Object.entries(p.spawned ?? {})
-                    const closed = ids.filter(([, n]) => ["cleaned", "closed"].includes(loadTask(project, n)?.status ?? "")).length
+                    const closed = ids.filter(([, n]) => loadTask(project, n)?.status === "done").length
                     const going = ids.filter(([, n]) => { const x = loadTask(project, n); return !!x && isOpen(x) }).map(([id]) => id)
                     return `в работе: шаги ${closed}/${p.total ?? "?"}${going.length ? `, идут ${going.join(", ")}` : ""}`
                   })()
@@ -311,13 +311,13 @@ const REPORT_MS = 24 * 3_600_000
 export function acceptanceReports(project: string, now = Date.now()): string[] {
   let done: Task[] = []
   try {
-    done = listTasks(project).filter((t) => ["accepted", "cleaned"].includes(t.status) && t.checks && now - t.updated < REPORT_MS)
+    done = listTasks(project).filter((t) => ["accepted", "done"].includes(t.status) && t.checks && now - t.updated < REPORT_MS)
   } catch {}
   const out: string[] = []
   for (const t of done.sort((a, b) => b.updated - a.updated).slice(0, 3)) {
     const ids = t.steps?.length ? t.steps.map((a) => a.id) : Object.keys(t.checks!)
     const ok = ids.filter((id) => t.checks![id]).length
-    out.push(fit(`  отчёт приёмки #${t.n} «${short(t.title, 30)}» — ${t.status === "cleaned" ? "влита" : "принята"} ${hm(t.updated)}`))
+    out.push(fit(`  отчёт приёмки #${t.n} «${short(t.title, 30)}» — ${t.status === "done" ? "влита" : "принята"} ${hm(t.updated)}`))
     out.push(fit(`      шаги ${ok}/${ids.length} ${ids.map((id) => (t.checks![id] ? "✓" : "–")).join("")}`))
     const skipped = ids.filter((id) => !t.checks![id])
     if (skipped.length) out.push(fit(`      – не отмечены (необязательные): ${skipped.join(", ")}`))

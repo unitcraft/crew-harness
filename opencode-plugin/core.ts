@@ -186,7 +186,7 @@ export const isPriority = (p: any): p is Priority => PRIORITIES.includes(p)
 export type AcceptanceStep = { id: string; text: string; required: boolean }
 export type CrewConfig = {
   exclusive: Set<string>
-  helpExtra: string
+  projectRules: string
   tiers: Record<Tier, string[]>
   spawnLimits: Record<string, number>
   spawnModels: Partial<Record<Tier, string>>
@@ -357,7 +357,7 @@ export function loadConfig(dir: string): CrewConfig {
   }
   return {
     exclusive: new Set([...BASE_EXCLUSIVE, ...roles]),
-    helpExtra: typeof j.help_extra === "string" ? j.help_extra : "",
+    projectRules: typeof j.project_rules === "string" ? j.project_rules.trim() : "",
     tiers,
     spawnLimits,
     spawnModels,
@@ -404,7 +404,7 @@ export function loadConfig(dir: string): CrewConfig {
 }
 
 // ПРИЁМЩИК-РОЛЬ (план 002.7, 2026-10-06). При reviewer "acceptor" сессия приёмки рождается с ролью acceptor, в
-// приёмщики годится только открытая вкладка этой роли, а merge / accept / cleaned требуют роль acceptor или
+// приёмщики годится только открытая вкладка этой роли, а merge / accept / cleanup требуют роль acceptor или
 // integrator. Роль разделяемая: приёмщиков несколько. Лимит сессий приёмки — spawn_limits.acceptor, без него —
 // spawn_limits.reviewer (прежние настройки), без обоих — 2; места worker они не занимают (тот лимит считает задачи).
 export const ACCEPTOR_ROLE = "acceptor"
@@ -1057,10 +1057,10 @@ export function recoverClaims(maxAgeMs = CLAIM_MAX_MS, now = Date.now()): number
 export const PLUGIN_SENDER = "crew-harness"
 /** одна строка в ответе merge, когда замок выдан (решение владельца 2026-10-09) */
 const LOCK_RULE = "Замок слияния держится до accept или unlock; под ним только слияние и пуш."
-/** строки-подсказки о замке в ответах accept, rework, cancel, cleaned (решение владельца 2026-10-10): правило сообщается в момент действия */
+/** строки-подсказки о замке в ответах accept, rework, cancel, cleanup (решение владельца 2026-10-10): правило сообщается в момент действия */
 const LOCK_FREED_ACCEPT = "Замок слияния отпущен (его отпускает accept)."
 const LOCK_FREED = "Замок слияния отпущен."
-const lockStillYours = (n: number) => `Внимание: замок слияния всё ещё у тебя: cleaned его не отпускает; отпусти unlock {n: ${n}}.`
+const lockStillYours = (n: number) => `Внимание: замок слияния всё ещё у тебя: cleanup его не отпускает; отпусти unlock {n: ${n}}.`
 // ВИД ПИСЬМА (план 003.1, 2026-10-06; владелец: «непонятно, кто кому пишет»). Шапка — когда, кто кому, с ролью в задаче;
 // время первым (владелец 2026-10-07): в длинной шапке оно не теряется в конце строки:
 //   ✉  01:17 · #8 приёмщик nova.worker → nova.integrator
@@ -1119,7 +1119,7 @@ export const ASKED_STALE_MS = ASKED_STALE_MIN * 60_000
 export function askedClosedWhy(to: Card, tabOpen: boolean, now = Date.now()): string | undefined {
   if (to.task) {
     const t = loadTask(to.task.project, to.task.n)
-    if (t && t.status === "cleaned") return `задача #${t.n} принята и очищена`
+    if (t && t.status === "done") return `задача #${t.n} принята и очищена`
   }
   if (to.spawned?.status === "closed") return "сессия-адресат закрыта"
   if (!to.spawned && !tabOpen && now - to.updated > LIVE_MS) return "вкладки-адресата нет"
@@ -1225,13 +1225,11 @@ export const HELP = `crew-harness — письма между вкладками
   crew_role {role, force?}    — сменить роль: crew_role {role: "integrator"}.
   crew_inbox {limit?}         — доставленные письма и число ждущих.
   crew_spawn {goal, criteria, ...} — только интегратор: задача #N в новой сессии (работает и без окна).
-       kind: "plan"          — задача-план: исполнитель пишет файл плана (plans_dir) по шаблону; перепроверка раундами
-                              новыми сессиями (crew_task round {blocking, significant, cosmetic, text}); готовый план
-                              согласует владелец командой окна /plans; после вливания шаги плана становятся задачами.
-  crew_task {action, n?}      — задачи по номеру: list, show; интегратору ещё assign, push, reassign, cancel, priority,
-                                order; приёмщику — review, check, rework (sync: true — только влить свежую целевую
-                                ветку, не круг доработки), merge, accept, cleaned. assign — открытой вкладке владельца;
-                                сессия задачи ведёт одну задачу и закрывается после cleaned: продолжение работы того же
+       kind: "plan"          — задача-план (раздел ПЛАНИРОВАНИЕ ниже).
+  crew_task {action, n?}      — задачи по номеру: list, view (show — синоним); интегратору ещё assign, push, reassign, cancel,
+                                priority, order, plan_decide; приёмщику — review, check, round (план), precheck, merge, unlock, rework
+                                (sync: true — только влить свежую целевую ветку, не круг доработки), accept, cleanup (cleaned — старое имя). assign — открытой вкладке владельца;
+                                сессия задачи ведёт одну задачу и закрывается после cleanup: продолжение работы того же
                                 исполнителя — новой задачей (crew_spawn), assign на сессию задачи отказывает.
   crew_config {action}        — настройки проекта: guide (опросник для владельца), view (что действует и откуда; show — прежнее имя, работает),
                                 set {values} (интегратор; пишет рабочую копию файла настроек, действует с коммита), apply_template (интегратор;
@@ -1297,30 +1295,53 @@ push_empty_turns (3) пустых подряд или push_max (20) напоми
     делает работу своими задачами (crew_spawn {parent: "<проект>#N"}); заказ идёт за ними: принята у него — заказ
     выполнен (сводка без пробуждения), отменена — тебе вызов.
 
+ПЛАНИРОВАНИЕ (задача-план). Это задача, в которой исполнитель не пишет код, а составляет файл плана. Устройство по шагам:
+  1. Интегратор: crew_spawn {kind: "plan", goal: <исходная задача, которую план должен решить>, plan_parent?: <номер плана-родителя для подплана>}.
+  2. Плагин даёт исполнителю шаблон плана, следующий свободный номер и файл в plans_dir (по умолчанию docs/plans) внутри worktree задачи.
+     Исполнитель пишет план (фазы, шаги с «где» и «после», приёмка у каждого шага, открытые вопросы), коммитит и отчитывается; форму плана
+     плагин проверяет при сдаче и с ошибкой формы отчёт не принимает.
+  3. Перепроверка раундами, каждый раунд — новая сессия приёмщика: crew_task review, check по каждому шагу (plan_acceptance), затем
+     crew_task round {n, blocking, significant, cosmetic, text} (или grades {id градации: число}; градации — plan_grades) — число замечаний
+     каждой градации и список замечаний в text. Есть блокирующие или существенные — план возвращается исполнителю (статус rework),
+     следующий раунд проведёт новая сессия. Только косметические — раунд чистый. plan_clean_rounds чистых подряд (по умолчанию 2) — перепроверка
+     кончена; plan_rounds_max раундов (по умолчанию 4) без этого — план уходит на согласование с последними замечаниями.
+  4. Статус approval — «ждёт согласования». Кто согласует, решает настройка plan_approver. owner (по умолчанию): владелец видит уведомление
+     во всех окнах и решает командой окна /plans — «согласовать», «согласовать с упрощениями» или «вернуть» с замечаниями; ожидание видно и в /crew.
+     integrator: автор задачи (интегратор) решает crew_task plan_decide {n, decision: ok | ok-shortcuts | no, text}; text обязателен при no.
+     «Вернуть» (no): план идёт исполнителю с замечаниями, перепроверка начинается заново.
+  5. После согласования новый приёмщик вписывает решение в план, вливает (merge → accept → cleanup по шагам приёмки плана) — задача done.
+     Дальше при plan_steps: auto (по умолчанию) плагин сам ставит задачу на каждый шаг плана, читая его из целевой ветки: по «после»,
+     по пересечению «где» и в границах лимитов; шаг-подплан — снова задача-план. При plan_steps: manual автор получает список шагов и ставит
+     задачи сам (crew_spawn). Когда все шаги закрыты, автору приходит письмо закрыть план.
+  Настройки: plans_dir, plan_approver, plan_acceptance, plan_grades, plan_clean_rounds, plan_rounds_max, plan_steps (crew_config guide).
+
+СТАТУСЫ ЗАДАЧИ: starting (сессия создаётся) → running (в работе) → submitted (сдана) → reviewing (на приёмке) ⇄ rework (на доработке);
+approval (задача-план ждёт согласования) → accepted (принята и влита, ждёт уборки) → done (принята и убрана) | cancelled (отменена).
+
 ПРИЁМКА. Исполнитель обязан прислать отчёт ответом на qid задачи (reply_to); прислал — задача сдана (интегратора отчёт не
 будит), второй отчёт не отправляется. Сданную задачу проверяет и вливает ПРИЁМЩИК — свободная открытая вкладка worker
 (не автор, не исполнитель) или новая сессия; при reviewer: integrator — сам интегратор. При reviewer: acceptor —
 свободная открытая вкладка роли acceptor или новая сессия с ролью acceptor (лимит spawn_limits.acceptor, без него —
-reviewer; места worker не занимает), и merge, accept, cleaned разрешены только роли acceptor (или интегратору):
+reviewer; места worker не занимает), и merge, accept, cleanup разрешены только роли acceptor (или интегратору):
 приёмщик, сменивший роль, их теряет. Исполнитель задачи её не вливает и не принимает. Интегратор принятое не
 перепроверяет. Приёмщик: crew_task review → rework {text} | check {step} → проверка → check {step, result} по каждому шагу (ход видно в окне) → merge (замок вливания проекта) → accept {commit?}
-(плагин проверит обязательные шаги приёмки и что ветка или коммит в целевой ветке) → очистка → cleaned (плагин
-проверит, что worktree и ветка удалены). Улики сохранить — cleaned {n, keep:[путь, …]} (до 8 путей: worktree репозитория или папка в папке деревьев проекта; основное дерево и ветки нельзя; такое дерево уборка не проверяет, ответ: «Сохранено: <путь> (не проверялось уборкой)»); удалять их не нужно, ветку задачи удалить по-прежнему надо (если она выбрана в сохранённом дереве — там git checkout --detach, затем git branch -D; ответ cleaned подскажет). Побочные ветки и деревья задачи (диагностические, предпроверка, итоговая ветка от опубликованной) записывает crew_task {action: "track", n, branch?, worktree?} (исполнитель, приёмщик, интегратор; без дублей; ветки integrate/tN и integrate/tN-* плагин записывает сам при precheck, accept и cleaned; список виден в view); cleaned убирает всё записанное, кроме деревьев из keep. Потом сессии задачи закрываются, интегратору тихая сводка.
-ПРЕДПРОВЕРКА ВЛИВАНИЯ (настройка проекта merge_precheck; по умолчанию required — включена). Порядок приёмщика: review → check → precheck → CI без замка → precheck candidate → merge → accept → отдельная cleanup → cleaned.
+(плагин проверит обязательные шаги приёмки и что ветка или коммит в целевой ветке) → очистка → cleanup (плагин
+проверит, что worktree и ветка удалены). Улики сохранить — cleanup {n, keep:[путь, …]} (до 8 путей: worktree репозитория или папка в папке деревьев проекта; основное дерево и ветки нельзя; такое дерево уборка не проверяет, ответ: «Сохранено: <путь> (не проверялось уборкой)»); удалять их не нужно, ветку задачи удалить по-прежнему надо (если она выбрана в сохранённом дереве — там git checkout --detach, затем git branch -D; ответ cleanup подскажет). Побочные ветки и деревья задачи (диагностические, предпроверка, итоговая ветка от опубликованной) записывает crew_task {action: "track", n, branch?, worktree?} (исполнитель, приёмщик, интегратор; без дублей; ветки integrate/tN и integrate/tN-* плагин записывает сам при precheck, accept и cleanup; список виден в view); cleanup убирает всё записанное, кроме деревьев из keep. Потом сессии задачи закрываются, интегратору тихая сводка.
+ПРЕДПРОВЕРКА ВЛИВАНИЯ (настройка проекта merge_precheck; по умолчанию required — включена). Порядок приёмщика: review → check → precheck → CI без замка → precheck candidate → merge → accept → отдельная cleanup → cleanup.
 Замок во время подготовки кандидата и CI не брать. crew_task precheck {n} замок не берёт: плагин читает вершину origin и называет её;
 влей её вместе с веткой задачи в интеграционный candidate (например, integrate/tN), прогони полный CI проекта и сохрани точный commit кандидата;
 crew_task precheck {n, candidate, result} фиксирует зелёный результат именно этого кандидата. Только после этого merge берёт замок:
 fast-forward влей в целевую ветку тот же проверенный candidate и push. Вливается ровно зафиксированный кандидат; ветка задачи может отличаться, и это не повод остановки. Если origin tip сдвинулся, старый candidate не вливай — заново интегрируй новый tip и повтори полный CI/precheck.
-accept проверяет влитое и освобождает слот accepted_slot: free; уборка выполняется отдельно, cleanup_limit ограничивает очередь до cleaned.
-Замок слияния отпускает accept (а также rework и cancel); после слияния и пуша сразу accept, уборка идёт без замка; слияние прервано до accept — unlock {n}; cleaned замок не отпускает (замка к нему уже нет). Замок держится до accept или unlock; под ним только слияние и пуш. Если проверенный кандидат уже предок вершины главной ветки на origin, служба сама отпустит замок (только чтение, без fetch, срок 20 с; вершину не прочитала, запись не «зелёная», задача другая — замок не трогает); тогда accept замка не требует.
+accept проверяет влитое и освобождает слот accepted_slot: free; уборка выполняется отдельно, cleanup_limit ограничивает очередь до cleanup.
+Замок слияния отпускает accept (а также rework и cancel); после слияния и пуша сразу accept, уборка идёт без замка; слияние прервано до accept — unlock {n}; cleanup замок не отпускает (замка к нему уже нет). Замок держится до accept или unlock; под ним только слияние и пуш. Если проверенный кандидат уже предок вершины главной ветки на origin, служба сама отпустит замок (только чтение, без fetch, срок 20 с; вершину не прочитала, запись не «зелёная», задача другая — замок не трогает); тогда accept замка не требует.
 merge без предпроверки отклоняется: сначала precheck. crew_task unlock {n} отпускает замок, который ты держишь для
 задачи (запись устаревает). Запись устаревает и при rework, reassign, cancel, новой приёмке. Плагин ничего не вливает и не
 пушит. Прежний порядок (merge берёт замок сразу) возвращает интегратор проекта явным ключом merge_precheck: off в настройках.
 Шаги приёмки проекта — из документа Канона (acceptance_file); порядок приёмки задаёт плагин.
 Шаги acceptance проекта порядок приёмки не описывают: его задаёт плагин (merge_precheck, accepted_slot); crew_doctor предупреждает о шаге, который его пересказывает.
 По умолчанию accepted_slot: free — принятая задача ждёт уборки и место в inflight_limit не занимает (cleanup_limit ограничивает
-число ждущих); прежнее поведение (занимает место до cleaned) — ключ accepted_slot: hold. task_extra_fields — дополнительные поля задачи проекта: crew_spawn и assign
-принимают extra {id: строка}; значения видны исполнителю, приёмщику и в show.
+число ждущих); прежнее поведение (занимает место до cleanup) — ключ accepted_slot: hold. task_extra_fields — дополнительные поля задачи проекта: crew_spawn и assign
+принимают extra {id: строка}; значения видны исполнителю, приёмщику и в view.
 
 ДРУГОЙ ПРОЕКТ. Писать в чужой проект можно только его интегратору (настройка проекта-получателя inbound: integrator
 по умолчанию; any — всем; none — никому). Работа для другого проекта — заказом, а не письмом его воркерам.
@@ -1345,11 +1366,8 @@ merge без предпроверки отклоняется: сначала pre
 им является: «я integrator проекта X». Остальные молчат — ответ на чужой вопрос это лишний ход у спрашивающего.
 Проверка связи: письмо с просьбой ответить одной строкой «дошло, время»; ответ — crew_send с reply_to.`
 
-// Справка с дописью проекта (help_extra из .opencode/crew-harness.json окна).
-export const helpFor = (dir: string): string => {
-  const extra = loadConfig(dir).helpExtra.trim()
-  return extra ? `${HELP}\n\nПРОЕКТ. ${extra}` : HELP
-}
+// Справка. Правила проекта (project_rules) уходят не сюда, а в конец системного блока вкладки (index.ts, хук context).
+export const helpFor = (_dir: string): string => HELP
 
 // СПИСОК ПРОЕКТОВ — ОДИН, в опциях плагина (opencode.jsonc). Плагин при загрузке кладёт опции в ящик
 // (`projects.json`: {projects, local}), MCP-сервер читает оттуда и разбирает так же: второй копии списка руками нет,
@@ -1844,7 +1862,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
   // плагин (заголовок «#N ✓✓»).
   const finishCleaned = (t: Task, me: Card, note: string): string => {
     t.reviewer_role = keyOf(me)
-    taskEvent(t, me.session, "cleaned", note)
+    taskEvent(t, me.session, "done", note)
     if (t.review_qid) settleObligation(me.session, t.review_qid)
     host.posted([...postExpected(t), ...propagateToParent(t)])
     return `Задача ${taskRef(t)} принята и очищена (${note}). Интегратору ушла сводка без пробуждения; сессии задачи закроются.`
@@ -1865,7 +1883,19 @@ export function makeTools(host: CrewHost): CrewTool[] {
   const crewSpawn: CrewTool = {
     name: "crew_spawn",
     description:
-      "Integrator only: start a task #N in a new session (it runs in the OpenCode server even with no window). goal and criteria are required (the project may require more: boundaries, open_questions); tier heavy|medium|light picks the model (by default claude-code opus|sonnet|haiku, spawn_models of the project overrides; an enabled model-profile set /crew-sets overrides both for the stage it describes -- the tier on the input then picks the tier inside the family of the set; without a tier the tier of the cell is used); priority P0..P3. extra {id: one line up to 300 characters} fills the extra task fields the project declared (task_extra_fields; crew_config show lists them). The project limits running tasks per role, and by default (accepted_slot: free; hold returns the old order) accepted tasks waiting for cleanup do not take a place in inflight_limit (cleanup_limit bounds them). The report comes back as an answer to the task's qid: crew_wait {qid}. Manage tasks with crew_task.",
+      [
+        "Integrator only: start a task #N in a new session (it runs in the OpenCode server even with no window). The report comes back as an answer to the task's qid: crew_wait {qid}. Manage tasks with crew_task.",
+        "goal, criteria - required (the project may require more: boundaries, open_questions; task_fields). title? priority? P0..P3.",
+        "tier heavy|medium|light - picks the model: by default claude-code opus|sonnet|haiku, spawn_models of the project overrides; an enabled model-profile set (/crew-sets) overrides both for the stage it describes (the tier then picks the tier inside the set's family). model - explicit provider/id[#variant]; required when the project has no model settings (ask the owner first).",
+        "role? - role of the new session, default worker. extra {id: one line up to 300 characters} - the project's extra task fields (task_extra_fields; crew_config view lists them). parent \"project#N\" - the order of another project this task fulfils.",
+        "Limits: the project caps running tasks per role (spawn_limits) and open tasks (inflight_limit). By default (accepted_slot: free) accepted tasks waiting for cleanup do not take a place in inflight_limit; cleanup_limit bounds them.",
+        "kind: plan - a PLAN TASK: the executor writes no code, only a plan file. Steps:",
+        "1. goal = the original task the plan must solve (criteria are not needed); plan_parent = number of the parent plan for a sub-plan.",
+        "2. The plugin gives the executor a template, the next free plan number and the file name in plans_dir (default docs/plans) inside the task worktree; the executor writes the plan (phases, steps with 'where' and 'after', acceptance per step, open questions), commits it and reports. The plugin refuses a report whose plan form is wrong.",
+        "3. The reviewer rechecks the plan in rounds, each round a new session: crew_task review, check each step, then crew_task round with the numbers of remarks per grade. Blocking/significant remarks send the plan back; plan_clean_rounds clean rounds in a row (default 2) finish the recheck; plan_rounds_max (default 4) ends it anyway.",
+        "4. The task gets status approval (waiting for approval). Who approves is the project setting plan_approver: owner (default) - the owner sees a notice and decides in the window with /plans (approve / approve with shortcuts / return with remarks; the status is also in /crew); integrator - the task author (you) decides with crew_task plan_decide.",
+        "5. After approval a new reviewer writes the decision into the plan, lands it (merge, accept, cleanup). Then, with plan_steps: auto (default), the plugin starts a task for every step by the plan's dependencies, 'where' conflicts and the limits; with manual you get the list of steps and start the tasks yourself. When all steps are closed you get a letter to close the plan.",
+      ].join("\n"),
     input: {
       type: "object",
       properties: {
@@ -1906,12 +1936,12 @@ export function makeTools(host: CrewHost): CrewTool[] {
         if (cfg.acceptedSlot === "free") return { content: `Лимит задач проекта в работе и на приёмке — ${cfg.inflightLimit} (inflight_limit), открыто: ${counted.map((t) => `#${t.n} ${statusRu(t.status)}`).join(", ")}.${inflight.length > counted.length ? ` Принятые, но не очищенные, место не занимают (ждут уборки: ${inflight.length - counted.length}).` : ""} Дождись приёмки; авария — priority P0.` }
         // принятые, но не очищенные держат место молча (#9 nova — 11,5 ч): назвать их поимённо с возрастом
         const stale = inflight.filter((t) => t.status === "accepted").map((t) => `#${t.n} принята ${ago(acceptedAt(t))}, не очищена (приёмщик ${t.reviewer ?? "?"})`)
-        return { content: `Лимит задач проекта в работе и на приёмке — ${cfg.inflightLimit} (inflight_limit), открыто: ${inflight.map((t) => `#${t.n} ${statusRu(t.status)}`).join(", ")}.${stale.length ? ` Место держат принятые, но не очищенные: ${stale.join("; ")} — пусть приёмщик повторит crew_task {action: \"cleaned\"}.` : ""} Дождись приёмки; авария — priority P0.` }
+        return { content: `Лимит задач проекта в работе и на приёмке — ${cfg.inflightLimit} (inflight_limit), открыто: ${inflight.map((t) => `#${t.n} ${statusRu(t.status)}`).join(", ")}.${stale.length ? ` Место держат принятые, но не очищенные: ${stale.join("; ")} — пусть приёмщик повторит crew_task {action: \"cleanup\"}.` : ""} Дождись приёмки; авария — priority P0.` }
       }
       // accepted_slot: free — счёт «ждёт уборки»: принятых и не очищенных не меньше cleanup_limit (0 — без предела) — новая работа не ставится
       const waiting = waitingCleanup(inflight)
       if (prio !== "P0" && cfg.acceptedSlot === "free" && cfg.cleanupLimit > 0 && waiting.length >= cfg.cleanupLimit)
-        return { content: `Лимит ожидающих уборки — ${cfg.cleanupLimit} (cleanup_limit), принятых и не очищенных ${waiting.length}: ${waiting.map((t) => `#${t.n} принята ${ago(acceptedAt(t))}, не очищена (приёмщик ${t.reviewer ?? "?"})`).join("; ")} — пусть приёмщик повторит crew_task {action: \"cleaned\"}. Новая работа не ставится, пока их не станет меньше; авария — priority P0.` }
+        return { content: `Лимит ожидающих уборки — ${cfg.cleanupLimit} (cleanup_limit), принятых и не очищенных ${waiting.length}: ${waiting.map((t) => `#${t.n} принята ${ago(acceptedAt(t))}, не очищена (приёмщик ${t.reviewer ?? "?"})`).join("; ")} — пусть приёмщик повторит crew_task {action: \"cleanup\"}. Новая работа не ставится, пока их не станет меньше; авария — priority P0.` }
       // МОДЕЛЬ ПО ВКЛЮЧЁННОМУ НАБОРУ (задача 003). Этап — по виду запуска; ступень: tier, присутствующий во входе, иначе ступень
       // клетки. Этап не описан или набора нет — spawn_models, как прежде; описан, а профиль не находится — отказ до записи задачи.
       const pst = profileState(me.directory)
@@ -1981,30 +2011,52 @@ export function makeTools(host: CrewHost): CrewTool[] {
   const crewTask: CrewTool = {
     name: "crew_task",
     description:
-      "Tasks of the caller's project by number #N. action: list (open tasks by priority; all=true with closed), view {n} (details and history; show is the old name, still works), and for the integrator: assign {session, goal, criteria, extra?, ...} (give a task to an existing tab instead of a new session; extra {id: line} fills the project's extra task fields, see task_extra_fields in crew_config), push {n, text?} (wake a stalled executor now), reassign {n} (a new session takes the task under the same number, with a summary of what was done; with an enabled model-profile set the model is taken by the set at that moment), cancel {n, text?}, priority {n, priority}, order {to: 'project.integrator', goal, criteria, ...} (work for another project: its integrator does it with its own tasks; the order follows them); for the task's reviewer: review {n} (start), precheck {n} (on by default, merge_precheck: required; the old order is the explicit merge_precheck: off -- read the target tip first, integrate it with the task into a candidate, run full CI without a lock, then precheck {n, candidate, result} with the exact green candidate), merge {n} (merge_precheck: required by default, so merge without a green precheck is refused; only after green precheck; takes the short landing lock and lands that exact checked candidate; if the target tip moved, rebuild/recheck and never land the old candidate; merge_precheck: off takes the lock at once; the merge lock is released by accept, also by rework and cancel, unlock {n} releases it when the merge is abandoned before accept, cleaned does not release it, and the service releases it by itself once the checked candidate is already in the target tip on origin), unlock {n} (release the merge lock you hold for the task; a precheck record then becomes stale), rework {n, text, sync?} (sync: true -- only to merge the fresh target branch: not a rework round, not counted in rework_max), check {n, step} before checking a step and {n, step, result} after it (the owner sees the progress in the window), accept {n, checks?, commit?} (steps marked by check count; the plugin checks the required steps and that it is merged), track {n, branch?, worktree?} (executor, reviewer or integrator: record a side branch or worktree of the task, no duplicates; the plugin records integrate/t<N> and integrate/t<N>-* itself at precheck, accept and cleaned; view shows the list), cleaned {n, keep?} (removes the recorded side branches and worktrees except the kept ones, the plugin checks the worktree and branch are gone; keep: [paths] -- up to 8 worktrees kept as evidence, the check skips them and the answer says \"Сохранено: <path> (не проверялось уборкой)\"; the branch must still be deleted). With accepted_slot: free, accept releases the inflight slot; run cleanup separately and call cleaned (cleanup_limit bounds the waiting cleanup); with the project's reviewer: acceptor, merge/accept/cleaned also need the acceptor (or integrator) role.",
+      [
+        "Tasks of the caller's project, by number #N. One line per action: action - who may - parameters - what it does. Roles: integrator = the tab that plans and starts the project's tasks; executor = the session doing the task; reviewer = the tab that checks and lands a submitted task (a free worker tab, a session started for it, the acceptor role when the project says reviewer: acceptor, or the integrator).",
+        "list - anyone - all? - open tasks by priority; all=true adds finished and cancelled ones.",
+        "view - anyone - n - details and history of a task, with its steps, side branches and worktrees (show is a synonym).",
+        "assign - integrator - session, goal, criteria, title?, boundaries?, open_questions?, priority?, extra? - give a task to an existing open tab instead of a new session; the tab is woken while the task is open. Refused for the integrator's own session (unless the project sets allow_self_assign) and for a session that already runs a task. extra {id: one line} fills the project's extra task fields (task_extra_fields, see crew_config view).",
+        "order - integrator - to \"project.integrator\", goal, criteria, ... - order work from another project: its integrator does it with its own tasks; when its task is accepted the order is done (a quiet summary to you), when cancelled you get a call.",
+        "push - integrator - n, text? - nudge a stalled executor now (the reminder counter starts over).",
+        "reassign - integrator - n - hand the task to a new session under the same number with a summary of what was done.",
+        "cancel - integrator - n, text? - cancel the task; text goes to the executor. Releases the merge lock if the task held it.",
+        "priority - integrator - n, priority P0..P3 - change the priority.",
+        "track - executor, reviewer, integrator - n, branch?, worktree? - record a side branch or worktree of the task (no duplicates) so cleanup removes it; branches integrate/t<N> and integrate/t<N>-* are recorded by the plugin itself.",
+        "plan_decide - integrator, only the plan task's author, only when the project's plan_approver is integrator - n, decision ok|ok-shortcuts|no, text (required with no) - decide a plan that passed the recheck rounds and waits for approval (status approval). ok = approved with no shortcuts; ok-shortcuts = approved, the shortcuts written in the plan stay; no = back to the executor, text lists what to change, the rounds start over. With plan_approver: owner (default) the owner decides in the window with /plans and this action is refused.",
+        "review - reviewer - n - start reviewing a submitted task; the answer lists the acceptance steps. For a plan task the steps are the plan recheck steps.",
+        "check - reviewer - n, step, then again with result - mark an acceptance step: first {n, step} before checking it, then {n, step, result: what proves it} after (the owner sees the progress in the window).",
+        "round - reviewer of a plan task (a new session for every round) - n, text, blocking, significant, cosmetic (or grades {plan_grades id: count}) - the verdict of one plan recheck round, after review and all required check steps: how many remarks of each grade. text lists the remarks with grade and fix (required when there are any). Blocking or significant remarks: the plan goes back to the executor, the next round is a new session. Only cosmetic: a clean round. plan_clean_rounds clean rounds in a row (default 2): the plan goes to approval; plan_rounds_max rounds (default 4) without that: to approval anyway, with the last remarks.",
+        "precheck - reviewer - n, then {n, candidate, result} - on by default (project setting merge_precheck: required; merge_precheck: off returns the old order). First precheck {n}: the plugin reads the target branch tip on origin and names it. Then merge that tip with the task branch into a candidate branch (for example integrate/t<N>), run the full CI of the project without any lock, and record {n, candidate: branch or commit, result: the CI verdict} for that exact candidate.",
+        "merge - reviewer - n - take the project's merge lock (one task is landed at a time) and land that exact checked candidate: you fast-forward it into the target branch and push; the plugin merges and pushes nothing itself. With merge_precheck: required a merge without a green precheck is refused. If the target tip moved, never land the old candidate: rebuild and recheck. The lock is released by accept, also by rework and cancel; unlock {n} releases it when the merge is abandoned before accept; cleanup does not release it; the service releases it by itself when the checked candidate is already in the target tip on origin.",
+        "unlock - reviewer - unlock {n} - release the merge lock you hold for the task (the precheck record becomes stale).",
+        "rework - reviewer - n, text, sync? - return the task to the executor with remarks; sync: true only asks to merge the fresh target branch (not a rework round, not counted in rework_max). Releases the merge lock.",
+        "accept - reviewer - n, checks?, commit? - accept after landing: the plugin checks that the required steps are marked and that the task branch (or commit, when squashed) is in the target branch, releases the merge lock, and with accepted_slot: free the task stops taking a place in inflight_limit; the answer lists the cleanup steps. For a plan task the approval must exist first. commit: the commit in the target branch for a squash merge.",
+        "cleanup - reviewer - n, keep? - after accept, remove the task's worktree, branch and recorded side branches/worktrees yourself, then call this; the plugin checks they are gone and the task becomes done. keep: up to 8 paths of worktrees to keep as evidence (a worktree of the repository or a folder in the project's worktree folder; absolute or from the repository root; not the main tree); the check skips them and the answer says \"Сохранено: <path> (не проверялось уборкой)\"; the task branch must still be deleted. cleanup_limit bounds the queue of accepted tasks waiting for cleanup.",
+        "With the project setting reviewer: acceptor, merge, unlock, precheck, accept and cleanup need the acceptor role (or the integrator). The executor never lands or accepts its own task. Reviewer order: review, check each step, precheck, merge, accept, cleanup.",
+      ].join("\n"),
     input: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["list", "view", "show", "assign", "order", "push", "reassign", "cancel", "priority", "track", "plan_decide", "review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleaned"] },
+        action: { type: "string", enum: ["list", "view", "show", "assign", "order", "push", "reassign", "cancel", "priority", "track", "plan_decide", "review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleanup", "cleaned"] },
         to: str("order: the other project's integrator, \"project.integrator\""),
-        keep: { type: "array", maxItems: 8, items: { type: "string" }, description: "cleaned: up to 8 paths of worktrees to keep as evidence (a worktree of the repository or a folder inside the project's worktree folder; absolute or from the repository root; not the main tree; no branches); the cleanup check skips them, the task's branch must still be deleted" },
+        keep: { type: "array", maxItems: 8, items: { type: "string" }, description: "cleanup: up to 8 worktree paths to keep as evidence" },
         checks: { type: "object", description: "accept: report per acceptance step {step id: what proves it}", additionalProperties: { type: "string" } },
         step: str("check: the acceptance step id"),
         result: str("check: what proves the step (omit when starting the step)"),
         commit: str("accept: the commit in the target branch (squash merge); without it the task branch must be merged"),
-        branch: str("track: a side branch of the task to record (cleaned removes it)"),
-        worktree: str("track: a side worktree of the task to record (path; cleaned removes it unless it is in keep)"),
-        candidate: str("precheck: the integrated candidate (branch or hash) that was built and checked on the base; with result it finishes the precheck"),
+        branch: str("track: side branch to record"),
+        worktree: str("track: side worktree path to record"),
+        candidate: str("precheck: the checked candidate (branch or hash); with result it finishes the precheck"),
         n: { type: "number", description: "Task number" },
         session: str("assign: the tab (session id) that takes the task"),
         text: str("push / cancel: text for the executor"),
         blocking: { type: "number", description: "round (plan recheck): number of blocking remarks" },
         significant: { type: "number", description: "round: number of significant remarks" },
         cosmetic: { type: "number", description: "round: number of cosmetic remarks" },
-        decision: { type: "string", enum: ["ok", "ok-shortcuts", "no"], description: "plan_decide: the integrator's decision on a plan when the project's plan_approver is integrator" },
-        grades: { type: "object", description: "round: number of remarks per grade id of the project (plan_grades); the default grades can also be passed as blocking, significant, cosmetic", additionalProperties: { type: "number" } },
-        sync: { type: "boolean", description: "rework: return only to merge the fresh target branch (not a rework round, not counted in rework_max)" },
-        all: { type: "boolean", description: "list: include closed and cancelled", default: false },
+        decision: { type: "string", enum: ["ok", "ok-shortcuts", "no"], description: "plan_decide: the decision" },
+        grades: { type: "object", description: "round: remarks per grade id of plan_grades", additionalProperties: { type: "number" } },
+        sync: { type: "boolean", description: "rework: only merge the fresh target branch, not a round" },
+        all: { type: "boolean", description: "list: include finished and cancelled", default: false },
         ...taskInput,
       },
       required: ["action"],
@@ -2014,7 +2066,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
       const me = await host.touch(sessionID)
       if (!me) return { content: "Задачи видит только вкладка." }
       const project = projOf(me)
-      const action = String(input.action ?? "") === "view" ? "show" : String(input.action ?? "")
+      const action = ((a) => (a === "view" ? "show" : a === "cleaned" ? "cleanup" : a))(String(input.action ?? ""))
       if (action === "list") {
         const ts = listTasks(project).filter((t) => input.all || isOpen(t)).sort(byPriority)
         return { content: ts.length ? `Задачи проекта ${project}:\n${ts.map(taskRow).join("\n")}` : `Открытых задач в проекте ${project} нет.` }
@@ -2086,7 +2138,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           t.boundaries ? `границы: ${t.boundaries}` : "",
           t.open_questions ? `открытые вопросы: ${t.open_questions}` : "",
           extraBlock(t),
-          sideItems(t).length ? `побочные ветки и деревья (убирает cleaned): ${sideItems(t).map((i) => [i.branch ? `ветка ${i.branch}` : "", i.worktree ? `worktree ${i.worktree}` : ""].filter(Boolean).join(" + ") + (i.auto ? " (записана плагином)" : "")).join("; ")}` : "",
+          sideItems(t).length ? `побочные ветки и деревья (убирает cleanup): ${sideItems(t).map((i) => [i.branch ? `ветка ${i.branch}` : "", i.worktree ? `worktree ${i.worktree}` : ""].filter(Boolean).join(" + ") + (i.auto ? " (записана плагином)" : "")).join("; ")}` : "",
           ...precheckLines(t, me.session),
           t.precheck && t.precheck.state !== "stale" ? neighbourHints(t, "running").trim() : "",
           t.executors.length ? `прежние исполнители: ${t.executors.join(", ")}` : "",
@@ -2097,7 +2149,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         ]
         return { content: lines.filter(Boolean).join("\n") }
       }
-      // ДЕЙСТВИЯ ПРИЁМЩИКА (план 002, Ф.3): review, merge, rework, accept, cleaned — только приёмщик этой задачи.
+      // ДЕЙСТВИЯ ПРИЁМЩИКА (план 002, Ф.3): review, merge, rework, accept, cleanup — только приёмщик этой задачи.
       // СОГЛАСОВАНИЕ ПЛАНА ИНТЕГРАТОРОМ (plan_approver: integrator): то же решение, что владелец даёт в окне (/plans)
       if (action === "plan_decide") {
         const pcfg = loadConfig(t.directory)
@@ -2114,7 +2166,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
       }
       if (action === "track") {
         if (t.reviewer !== me.session && t.executor !== me.session && !isIntegrator(me)) return { content: `track задачи ${taskRef(t)}: исполнитель, приёмщик или интегратор.` }
-        if (t.status === "cleaned" || t.status === "cancelled") return { content: `Задача ${taskRef(t)} уже ${statusRu(t.status)}: записывать нечего.` }
+        if (t.status === "done" || t.status === "cancelled") return { content: `Задача ${taskRef(t)} уже ${statusRu(t.status)}: записывать нечего.` }
         const branch = String(input.branch ?? "").trim()
         const worktree = String(input.worktree ?? "").trim()
         if (!branch && !worktree) return { content: `track: нужна branch и/или worktree (путь). Записанное: ${sideItems(t).length ? sideItems(t).map((i) => i.branch ?? i.worktree).join(", ") : "пусто"}.` }
@@ -2124,9 +2176,9 @@ export function makeTools(host: CrewHost): CrewTool[] {
         if (worktree) items.push({ worktree })
         const added = addSide(t, items, me.session)
         if (added.length) taskEvent(t, me.session, undefined, `записано для уборки: ${items.map((i) => i.branch ?? i.worktree).join(", ")}`)
-        return { content: added.length ? `Записано в задачу ${taskRef(t)}: ${added.map((i) => i.branch ?? i.worktree).join(", ")}. cleaned уберёт это вместе с остальным (деревья из keep остаются).` : `Уже записано в задачу ${taskRef(t)}: ${items.map((i) => i.branch ?? i.worktree).join(", ")}.` }
+        return { content: added.length ? `Записано в задачу ${taskRef(t)}: ${added.map((i) => i.branch ?? i.worktree).join(", ")}. cleanup уберёт это вместе с остальным (деревья из keep остаются).` : `Уже записано в задачу ${taskRef(t)}: ${items.map((i) => i.branch ?? i.worktree).join(", ")}.` }
       }
-      if (["review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleaned"].includes(action)) {
+      if (["review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleanup"].includes(action)) {
         // исполнитель свою работу не вливает и не принимает — отказ называет это прямо (план 002.7, п.4)
         if (t.reviewer !== me.session && t.executor === me.session)
           return { content: `Ты исполнитель задачи ${taskRef(t)}: ${action} делает её приёмщик (${t.reviewer ?? "ещё не назначен"}), это действие только его. Исполнитель свою работу не вливает и не принимает — сдай отчёт и жди приёмки.` }
@@ -2134,7 +2186,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const tcfg = loadConfig(t.directory)
         // ПРАВА РОЛИ (план 002.7): при reviewer "acceptor" замок вливания, принятие и очистку держит роль acceptor (или
         // интегратор). Приёмщик, сменивший роль, их теряет: права у роли, а не у записи «приёмщик» в задаче.
-        if (tcfg.reviewer === "acceptor" && ["merge", "unlock", "precheck", "accept", "cleaned"].includes(action) && normalizeRole(me.role) !== ACCEPTOR_ROLE && !isIntegrator(me))
+        if (tcfg.reviewer === "acceptor" && ["merge", "unlock", "precheck", "accept", "cleanup"].includes(action) && normalizeRole(me.role) !== ACCEPTOR_ROLE && !isIntegrator(me))
           return { content: `${action} в проекте ${project} — право роли ${ACCEPTOR_ROLE} (настройка reviewer: acceptor) или интегратора; у тебя роль ${keyOf(me)}. Вернуть роль — crew_role {role: "${ACCEPTOR_ROLE}"}.` }
         const acc = acceptanceOf(t, tcfg) // задача-план — шаги перепроверки плана (план 004), иначе — приёмки проекта
         const now = Date.now()
@@ -2247,7 +2299,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           const pre = finishing ? await finishPrecheck(t, me.session, tcfg.targetBranch, { candidate: input.candidate, result: input.result }) : await beginPrecheck(t, me.session, tcfg.targetBranch)
           const seen = finishing ? autoTrack(loadTask(t.project, t.n) ?? t, tcfg, me.session) : []
           return { content: pre + (seen.length ? `
-Записано для уборки (cleaned уберёт): ${seen.map((i) => i.branch ?? i.worktree).join(", ")}.` : "") }
+Записано для уборки (cleanup уберёт): ${seen.map((i) => i.branch ?? i.worktree).join(", ")}.` : "") }
         }
         if (action === "unlock") return { content: unlockMerge(t, me.session) }
         if (action === "merge") {
@@ -2351,10 +2403,10 @@ export function makeTools(host: CrewHost): CrewTool[] {
           const steps = cleanupSteps(t, tcfg)
           if (!steps.length) return { content: finishCleaned(t, me, "очистка не нужна (cleanup: none)") + warn + (lockFreed ? `
 ${LOCK_FREED_ACCEPT}` : "") }
-          return { content: `Задача ${taskRef(t)} принята (${m.how}). Очистка по настройке проекта (cleanup: ${tcfg.cleanup}):\n${steps.map((x) => `  ${x}`).join("\n")}\nСделал — crew_task {action: "cleaned", n: ${t.n}}.${warn}${lockFreed ? `
-${LOCK_FREED_ACCEPT} Дальше уборка без замка, затем cleaned ${t.n}.` : ""}` }
+          return { content: `Задача ${taskRef(t)} принята (${m.how}). Очистка по настройке проекта (cleanup: ${tcfg.cleanup}):\n${steps.map((x) => `  ${x}`).join("\n")}\nСделал — crew_task {action: "cleanup", n: ${t.n}}.${warn}${lockFreed ? `
+${LOCK_FREED_ACCEPT} Дальше уборка без замка, затем cleanup ${t.n}.` : ""}` }
         }
-        // cleaned
+        // cleanup
         if (t.status !== "accepted") return { content: `Очистка — после принятия (сейчас ${statusRu(t.status)}).` }
         // keep: деревья-улики, которые уборка не проверяет (задача 005, REQ-29); проверка путей — до любой записи
         if (input.keep !== undefined) {
@@ -2380,7 +2432,7 @@ ${LOCK_FREED_ACCEPT} Дальше уборка без замка, затем cle
           const brs = done.left.map((x) => /^локальная ветка (\S+) ещё есть$/.exec(x)?.[1]).filter(Boolean) as string[]
           const held = keptOnBranch(t, brs)
           const hint = held.map((h) => `\nВетка ${h.branch} выбрана в сохранённом дереве ${h.path}: git branch -D откажет. В этом дереве выполни git checkout --detach, затем удали ветку.`).join("")
-          return { content: `Очистка не закончена: ${[...side.failed, ...done.left].join("; ")}.${sideLine}${keptLine}${hint}${done.left.length ? `\nЕсли это побочная ветка или дерево этой задачи, которого плагин не знал, запиши его: crew_task {action: "track", n: ${t.n}, branch или worktree: "..."} и повтори cleaned (убрать можно и вручную).` : ""}` }
+          return { content: `Очистка не закончена: ${[...side.failed, ...done.left].join("; ")}.${sideLine}${keptLine}${hint}${done.left.length ? `\nЕсли это побочная ветка или дерево этой задачи, которого плагин не знал, запиши его: crew_task {action: "track", n: ${t.n}, branch или worktree: "..."} и повтори cleanup (убрать можно и вручную).` : ""}` }
         }
         const stillHeld = mergeHolder(project)
         return { content: finishCleaned(t, me, `worktree и ветка удалены${side.done.length ? `; по записи убрано: ${side.done.length}` : ""}${keptNow.length ? `; сохранено: ${keptNow.join(", ")}` : ""}`) + sideLine + keptLine + (stillHeld?.session === me.session ? `
@@ -2474,7 +2526,14 @@ ${lockStillYours(stillHeld.n)}` : "") }
   const crewConfig: CrewTool = {
     name: "crew_config",
     description:
-      "The project's settings (.opencode/crew-harness.json in its settings repository). Model profiles: model_profiles = families/tiers -> model, profile_sets = named sets of stages, profile_set = the enabled set (only a person changes it, /crew-sets use|off); show prints a summary first (sets in the file: N; enabled: name or none) - never answer \"no sets\" from \"not enabled\"; details: crew_help. guide — questions for the owner on every key (current value, options, recommendation, why): ask them in text and record the answers; show — effective values and where each comes from (default, the committed file, the local option of opencode.jsonc), plus uncommitted edits; apply_template — integrator only: writes the standard template (families claude/codex/kimi, sets, profile_set codex, tier_max light, branch and worktree names) into the file; the project's own keys win; commit the file to the target branch or the old state stays; set {values} — integrator only: checks every value and writes the working copy (null removes a key); it applies once committed to the settings branch.",
+      [
+        "The project's settings (.opencode/crew-harness.json in its settings repository). One line per action: action - who may - parameters - what it does.",
+        "guide - anyone - questions for the owner on every key (current value, options, recommendation, why): ask them in text and record the answers.",
+        "view - anyone - effective values and where each comes from (default, the committed file, the local option of opencode.jsonc), plus uncommitted edits (show is a synonym). Model profiles come first: model_profiles = families/tiers -> model, profile_sets = named sets of stages, profile_set = the enabled set (only a person changes it, /crew-sets use|off); the summary says 'sets in the file: N; enabled: name or none' - never answer 'no sets' from 'not enabled'; details: crew_help.",
+        "set - integrator - values {key: value; null removes a key} - checks every value and writes the working copy; it applies once committed to the settings branch. Keys changed by people only (profile_set, answer_mode, answer_max) are refused.",
+        "apply_template - integrator - writes the standard template (families claude/codex/kimi, sets, profile_set codex, tier_max light, branch and worktree names) into the file; the project's own keys win; commit the file or the old state stays.",
+        "Planning keys (plan tasks: crew_spawn kind plan): plans_dir (folder of plan files in the repository, default docs/plans), plan_approver (owner = the owner decides with /plans in the window; integrator = the integrator decides with crew_task plan_decide), plan_acceptance (steps of the plan recheck: id, text, required), plan_grades (grades of remarks and which of them keep a round clean), plan_clean_rounds, plan_rounds_max, plan_steps (auto|manual: start the tasks of a landed plan's steps automatically). project_rules - English text appended to the end of every tab's system block.",
+      ].join("\n"),
     input: {
       type: "object",
       properties: {
@@ -2585,7 +2644,17 @@ ${lockStillYours(stillHeld.n)}` : "") }
   // НАБЛЮДЕНИЯ (watch.ts): ожидание, которое переживает конец хода — фон Claude Code гибнет с ходом окна claude-code.
   const crewWatch: CrewTool = {
     name: "crew_watch",
-    description: `Wait for something long WITHOUT holding the turn: the crew-harness plugin runs \`command\` (Git Bash, in the tab's directory) in the OpenCode server, detached -- it survives the end of your turn and a service restart -- and when it exits wakes this tab with a letter: exit code, duration, output tail. Use it instead of Bash run_in_background / Monitor for anything that must outlive the turn (a gate's verdict, a long build): in a claude-code tab background tasks are killed when the turn ends and no notification ever comes. A timer is just a command that sleeps: "sleep 600" wakes this tab in 10 minutes. The command should itself wait and finish, e.g. \`until [ -f /tmp/gate.done ]; do sleep 30; done; cat /tmp/gate.done\`. minutes: time limit (default ${WATCH_DEFAULT_MIN}, up to ${WATCH_MAX_MIN}), then it is stopped (exit 124). note: a short label for the letter. machine: true for a command that loads the machine (a gate, a build, a full test run -- run it here, not in your own Bash): it waits its turn in the project's machine queue (machine_slots at a time, default 1), so the tabs' heavy runs do not pile up. machine: true ONLY for heavy commands (builds, tests, gates); waiting for a remote CI (a gh / check-push-proven-by-ci polling loop with a pause) and anything else that does not load the machine goes with machine: false -- otherwise it holds the only queue slot and other windows' heavy runs stand idle. The command runs outside the window's permissions, so it is checked against the project's permissions.deny (.claude/settings.json): a command matching a denied Bash/PowerShell prefix (whole or any subcommand) or naming a file under a denied Read glob is refused, naming the rule. The command's environment carries CREW_SESSION_ID, CREW_ROLE, CREW_PROJECT and CREW_REVIEW_N (a reviewer) / CREW_TASK_N (an executor). No command: list this tab's watches. After calling it, end your turn -- the letter wakes you.`,
+    description:
+      [
+        `Wait for something long WITHOUT holding the turn: the plugin runs a command (Git Bash, in the tab's directory) in the OpenCode server, detached - it survives the end of your turn and a service restart - and when it exits wakes this tab with a letter: exit code, duration, output tail. Use it instead of Bash run_in_background / Monitor for anything that must outlive the turn (a gate's verdict, a long build): in a claude-code tab background tasks are killed when the turn ends and no notification ever comes. After calling it, end your turn - the letter wakes you.`,
+        `command - the bash command; it must itself wait and exit when the thing is done. A timer is a command that sleeps: "sleep 600" wakes in 10 minutes; "until [ -f /tmp/gate.done ]; do sleep 30; done; cat /tmp/gate.done" waits for a file. Without command: list this tab's watches.`,
+        `note - short label for the letter, e.g. "gate verdict".`,
+        `minutes - time limit from the start, default ${WATCH_DEFAULT_MIN}, at most ${WATCH_MAX_MIN}; then the command is stopped (exit 124).`,
+        `machine - true only for heavy commands (build, tests, gate): wait for a slot in the project's machine queue (machine_slots at a time, default 1) so heavy runs of the windows do not pile up. Waiting for a remote CI (a gh polling loop with a pause) and anything light goes with machine false, otherwise it holds the only slot.`,
+        `action cancel + id - cancel this tab's own watch: it leaves the queue or its process is stopped, the machine slot is freed (id: from the answer or the list).`,
+        `Permissions: the command runs outside the window's permissions, so it is checked against the project's permissions.deny (.claude/settings.json): a command matching a denied Bash/PowerShell prefix (whole or any subcommand) or naming a file under a denied Read glob is refused, naming the rule.`,
+        `Environment of the command: CREW_SESSION_ID, CREW_ROLE, CREW_PROJECT, and CREW_REVIEW_N (a reviewer) / CREW_TASK_N (an executor).`,
+      ].join("\n"),
     input: {
       type: "object",
       properties: {
@@ -2775,7 +2844,7 @@ export function expectedLetters(t: Task): Letter[] {
     out.push({ id: `rework-${p}-${t.n}-${rounds(t) || 1}`, from_role: reviewerRole, from_session: t.reviewer ?? PLUGIN_SENDER, to: t.executor, time: at, text: reworkLetter(t, t.rework_note, reviewerRole) })
   if (t.status === "submitted" && rounds(t) > 0 && t.reviewer && t.report)
     out.push({ id: `review-again-${p}-${t.n}-${rounds(t)}`, from_role: t.executor_role ?? "исполнитель", from_session: t.executor ?? PLUGIN_SENDER, to: t.reviewer, time: at, text: `Доработка задачи #${t.n} «${t.title}» сдана (круг ${t.rework}):\n${t.report}\nПроверь снова: crew_task {action: "review", n: ${t.n}}, дальше rework или merge → accept.` })
-  if (t.status === "cleaned") {
+  if (t.status === "done") {
     const checks = Object.entries(t.checks ?? {}).map(([k, v]) => `${k}: ${v}`).join("; ")
     out.push({ id: `cleaned-${p}-${t.n}`, from_role: reviewerRole, from_session: t.reviewer ?? PLUGIN_SENDER, to: t.author, time: at, wake: false, text: `Задача #${t.n} «${t.title}» принята и влита (${t.commit ? `коммит ${t.commit}` : `ветка ${t.branch ?? "?"}`}), очищена. Приёмщик ${reviewerRole}. Шаги: ${checks || "—"}. Перепроверять не нужно.` })
     if (t.executor) out.push({ id: `cleaned-ex-${p}-${t.n}`, from_role: reviewerRole, from_session: t.reviewer ?? PLUGIN_SENDER, to: t.executor, time: at, wake: false, text: `Задача #${t.n} принята и влита. Работа закончена — сессия закрывается.` })
@@ -2810,12 +2879,12 @@ export function parseParent(v: any): { project: string; n: number } | undefined 
 // ЗАКАЗ ИДЁТ ЗА ЗАДАЧЕЙ ИСПОЛНИТЕЛЯ (план 002, Ф.5): задача с parent очищена — заказ выполнен (заказчику тихая
 // сводка); отменена — заказчику вызов. Повторяемо: заказ уже закрыт — ничего; письма с постоянными id.
 export function propagateToParent(t: Task): string[] {
-  if (!t.parent || (t.status !== "cleaned" && t.status !== "cancelled")) return []
+  if (!t.parent || (t.status !== "done" && t.status !== "cancelled")) return []
   const order = loadTask(t.parent.project, t.parent.n)
   if (!order || order.kind !== "order") return []
   const sent: string[] = []
-  const done = t.status === "cleaned"
-  if (isOpen(order)) taskEvent(order, PLUGIN_SENDER, done ? "cleaned" : undefined, done ? `выполнен в ${t.project}: #${t.n} принята` : `задача ${t.project} #${t.n} отменена`)
+  const done = t.status === "done"
+  if (isOpen(order)) taskEvent(order, PLUGIN_SENDER, done ? "done" : undefined, done ? `выполнен в ${t.project}: #${t.n} принята` : `задача ${t.project} #${t.n} отменена`)
   const id = `order-${done ? "done" : "cancel"}-${safeKey(order.project)}-${order.n}-${safeKey(t.project)}-${t.n}`
   if (!letterExistsFor(order.author, id)) {
     postLetter(order.author, {

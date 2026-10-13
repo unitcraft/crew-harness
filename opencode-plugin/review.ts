@@ -180,7 +180,7 @@ export function cleanupSteps(t: Task, cfg: CrewConfig): string[] {
 export function cleanupDone(t: Task, cfg: CrewConfig, extraKept: string[] = []): { ok: boolean; left: string[] } {
   const left: string[] = []
   if (cfg.cleanup === "none") return { ok: true, left }
-  // деревья, сохранённые приёмщиком как улики (cleaned {keep}), уборка не проверяет; ветка задачи проверяется по-прежнему
+  // деревья, сохранённые приёмщиком как улики (cleanup {keep}), уборка не проверяет; ветка задачи проверяется по-прежнему
   const kept = keptPaths(t, extraKept)
   const isKept = (p?: string) => !!p && kept.some((k) => sameFs(k, p))
   if (t.worktree && existsSync(t.worktree) && !isKept(t.worktree)) left.push(`worktree ${t.worktree} ещё есть`)
@@ -231,7 +231,7 @@ export function keptOnBranch(t: Task, branches: string[]): { path: string; branc
 export const keptPaths = (t: Task, extra: string[] = []): string[] => [...(t.kept ?? []).map((k) => k.path), ...extra]
 
 /**
- * Проверка keep у cleaned (задача 005, REQ-29): каждый путь — существующее worktree репозитория из `git worktree list` или
+ * Проверка keep у cleanup (задача 005, REQ-29): каждый путь — существующее worktree репозитория из `git worktree list` или
  * существующая папка внутри папки деревьев проекта; основное дерево, ветка, несуществующий путь — отказ с причиной.
  * Относительный путь считается от корня репозитория. Возвращает нормализованные пути (через /) без повторов.
  */
@@ -276,12 +276,12 @@ export function resolveKeep(t: Task, cfg: CrewConfig, keep: unknown): { ok: true
 
 /** Жизнь замка слияния в письмах приёмщика при merge_precheck: required (решение владельца 2026-10-09; то же в crew_help и README). */
 export const LOCK_LIFECYCLE =
-  "ЗАМОК СЛИЯНИЯ: его отпускает accept (а также rework и cancel); после слияния и пуша сразу accept, уборка идёт без замка; слияние прервано до accept — crew_task {action: \"unlock\", n}; cleaned замок не отпускает (замка к нему уже нет). Если проверенный кандидат уже в главной ветке на origin, служба сама отпустит замок («замок отпущен: слияние на вершине»), и тогда accept замка не требует."
+  "ЗАМОК СЛИЯНИЯ: его отпускает accept (а также rework и cancel); после слияния и пуша сразу accept, уборка идёт без замка; слияние прервано до accept — crew_task {action: \"unlock\", n}; cleanup замок не отпускает (замка к нему уже нет). Если проверенный кандидат уже в главной ветке на origin, служба сама отпустит замок («замок отпущен: слияние на вершине»), и тогда accept замка не требует."
 
 /** Фраза для письма приёмщику при accepted_slot: free (по умолчанию) — принятая задача ждёт уборки и место в inflight_limit не занимает. */
 function slotSentence(t: Task, cfg: CrewConfig): string {
   const waiting = waitingCleanup(listTasks(t.project)).length
-  return `ПОСЛЕ ПРИНЯТИЯ (accepted_slot: free): принятая задача ждёт уборки и место в inflight_limit не занимает; ждущих уборки ${cfg.cleanupLimit > 0 ? `${waiting} из ${cfg.cleanupLimit}` : `${waiting}, предела нет`}. Всё равно доведи до cleaned: пока уборки ждут, новая работа может не ставиться.`
+  return `ПОСЛЕ ПРИНЯТИЯ (accepted_slot: free): принятая задача ждёт уборки и место в inflight_limit не занимает; ждущих уборки ${cfg.cleanupLimit > 0 ? `${waiting} из ${cfg.cleanupLimit}` : `${waiting}, предела нет`}. Всё равно доведи до cleanup: пока уборки ждут, новая работа может не ставиться.`
 }
 
 /** Письмо приёмщику. */
@@ -318,8 +318,8 @@ export function reviewLetter(t: Task, cfg: CrewConfig): string {
       ? `     crew_task {action: "accept", n: ${t.n}${cfg.acceptance.length ? "" : ", checks: {\"<критерий>\": \"чем подтверждено\"}"}, commit: "<хэш в ${cfg.targetBranch}, если squash>"};`
       : `     crew_task {action: "accept", n: ${t.n}${cfg.acceptance.length ? "" : ", checks: {\"<критерий>\": \"чем подтверждено\"}"}, commit: "<хэш в ${cfg.targetBranch}, если squash>"} (отмеченные шаги засчитаны);`,
     pre
-      ? `  ${(cfg.acceptance.length ? 5 : 4) + pre}) отдельно выполни выданные шаги очистки, затем crew_task {action: "cleaned", n: ${t.n}}.${cfg.acceptedSlot === "free" ? " При accepted_slot: free accept освобождает inflight/worker slot; до cleaned задача учитывается отдельно в cleanup_limit." : ""} Улики сохранить — cleaned {n, keep:[путь]}; удалять их не нужно.`
-      : `  ${(cfg.acceptance.length ? 5 : 4) + pre}) плагин сам проверит, что влито, и выдаст шаги очистки; сделал — crew_task {action: "cleaned", n: ${t.n}}.${cfg.acceptedSlot === "free" ? " При accepted_slot: free accept освобождает inflight/worker slot; до cleaned задача учитывается отдельно в cleanup_limit." : ""}`,
+      ? `  ${(cfg.acceptance.length ? 5 : 4) + pre}) отдельно выполни выданные шаги очистки, затем crew_task {action: "cleanup", n: ${t.n}}.${cfg.acceptedSlot === "free" ? " При accepted_slot: free accept освобождает inflight/worker slot; до cleanup задача учитывается отдельно в cleanup_limit." : ""} Улики сохранить — cleanup {n, keep:[путь]}; удалять их не нужно.`
+      : `  ${(cfg.acceptance.length ? 5 : 4) + pre}) плагин сам проверит, что влито, и выдаст шаги очистки; сделал — crew_task {action: "cleanup", n: ${t.n}}.${cfg.acceptedSlot === "free" ? " При accepted_slot: free accept освобождает inflight/worker slot; до cleanup задача учитывается отдельно в cleanup_limit." : ""}`,
     pre ? LOCK_LIFECYCLE : "",
     cfg.acceptedSlot === "free" ? slotSentence(t, cfg) : "",
   ]
@@ -374,10 +374,10 @@ export function planMergeLetter(t: Task, cfg: CrewConfig): string {
       : `  2) crew_task {action: "merge", n: ${t.n}} (замок вливания), влей ветку в ${cfg.targetBranch} и запушь;`,
     cfg.mergePrecheck === "required"
       ? `  4) crew_task {action: "accept", n: ${t.n}} — плагин прочтёт план в ${cfg.targetBranch}: форма${cfg.planForm.modeQuestion ? ` и ответ «${cfg.planForm.modeLabel}»` : ""} должны сойтись с решением владельца;`
-      : `  3) crew_task {action: "accept", n: ${t.n}} — плагин прочтёт план в ${cfg.targetBranch}: форма${cfg.planForm.modeQuestion ? ` и ответ «${cfg.planForm.modeLabel}»` : ""} должны сойтись с решением владельца; затем очистка и cleaned.`,
-    ...(cfg.mergePrecheck === "required" ? [`  5) отдельно выполни выданные шаги очистки и вызови crew_task {action: "cleaned", n: ${t.n}}.${cfg.acceptedSlot === "free" ? " При accepted_slot: free accept освобождает inflight/worker slot; cleanup учитывается отдельно до cleaned." : ""} Улики сохранить — cleaned {n, keep:[путь]}; удалять их не нужно.`] : []),
+      : `  3) crew_task {action: "accept", n: ${t.n}} — плагин прочтёт план в ${cfg.targetBranch}: форма${cfg.planForm.modeQuestion ? ` и ответ «${cfg.planForm.modeLabel}»` : ""} должны сойтись с решением владельца; затем очистка и cleanup.`,
+    ...(cfg.mergePrecheck === "required" ? [`  5) отдельно выполни выданные шаги очистки и вызови crew_task {action: "cleanup", n: ${t.n}}.${cfg.acceptedSlot === "free" ? " При accepted_slot: free accept освобождает inflight/worker slot; cleanup учитывается отдельно до cleanup." : ""} Улики сохранить — cleanup {n, keep:[путь]}; удалять их не нужно.`] : []),
     ...(cfg.mergePrecheck === "required" ? [LOCK_LIFECYCLE] : []),
-    cfg.planSteps === "auto" ? "После cleaned плагин сам поставит задачи по шагам плана." : "После cleaned автор получит список шагов: задачи по ним ставит он сам (plan_steps: manual).",
+    cfg.planSteps === "auto" ? "После cleanup плагин сам поставит задачи по шагам плана." : "После cleanup автор получит список шагов: задачи по ним ставит он сам (plan_steps: manual).",
   ]
     .filter(Boolean)
     .join("\n")
@@ -548,7 +548,7 @@ export function gitTraces(dir: string, now = Date.now()): string[] {
 
 // ПОБОЧНЫЕ ВЕТКИ И ДЕРЕВЬЯ В ЗАПИСИ ЗАДАЧИ (задача 023). Плагин не видит git-команд сессий (git вызывают они сами, не через
 // инструменты плагина), поэтому запись идёт двумя путями: команда track и автозапись того, что плагин находит в git сам
-// (integrate/t<N> и integrate/t<N>-*, деревья на таких ветках). cleaned убирает всё записанное, кроме деревьев kept.
+// (integrate/t<N> и integrate/t<N>-*, деревья на таких ветках). cleanup убирает всё записанное, кроме деревьев kept.
 export const sideItems = (t: Task): SideItem[] => (Array.isArray(t.side) ? t.side : [])
 /** Добавить в запись без дублей (ветка и дерево сравниваются по имени и по пути); возвращает добавленное. Сохраняет задачу, если что-то добавилось. */
 export function addSide(t: Task, items: { branch?: string; worktree?: string }[], by: string, auto = false): SideItem[] {

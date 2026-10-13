@@ -144,7 +144,7 @@ export function neighbourHints(t: Task, kind: "running" | "moved"): string {
     return ` Параллельно идут: ${busy.map((x) => `#${x.n} (${x.precheck!.state === "green" ? "зелёная" : "идёт"} на ${short(x.precheck!.base)} с ${hm(x.precheck!.state === "green" ? (x.precheck!.green_at ?? x.precheck!.at) : x.precheck!.at)})`).join(", ")}.`
   }
   const since = t.precheck?.green_at ?? t.precheck?.at ?? 0
-  const landed = all.filter((x) => (x.status === "accepted" || x.status === "cleaned") && acceptedAt(x) > since)
+  const landed = all.filter((x) => (x.status === "accepted" || x.status === "done") && acceptedAt(x) > since)
   if (!landed.length) return ""
   return ` После зелёной приняты: ${landed.map((x) => `#${x.n} (${hm(acceptedAt(x))})`).join(", ")}.`
 }

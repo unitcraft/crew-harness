@@ -388,7 +388,7 @@ export default {
         const task = isReview ? rv : card.task ? loadTask(card.task.project, card.task.n) : undefined
         const what = isReview ? `приёмка задачи #${rv!.n} «${rv!.title}» (${statusRu(rv!.status)})` : task && task.qid === o.qid ? `задача #${task.n} «${task.title}»` : `вопрос ${o.qid}${o.task ? ` («${o.task.slice(0, 200)}»)` : ""}`
         const howTo = isReview
-          ? `Продолжай приёмку: crew_task {action: "review" | "rework" | "merge" | "accept" | "cleaned", n: ${rv!.n}} (что дальше — в письме с приёмкой).`
+          ? `Продолжай приёмку: crew_task {action: "review" | "rework" | "merge" | "accept" | "cleanup", n: ${rv!.n}} (что дальше — в письме с приёмкой).`
           : `Закончил — отчёт: crew_send {to: "${o.from_session}", reply_to: "${o.qid}", text: "..."}. Упёрся — тем же ответом напиши, что мешает.`
         if (o.empty >= cfg.pushEmptyTurns || o.nudges >= cfg.pushMax) {
           o.stuck = true
@@ -535,18 +535,18 @@ export default {
       const open = openWatchesBySession()
       if (open.size)
         for (const t of listTasks()) {
-          if (t.status !== "cleaned" && t.status !== "cancelled") continue
+          if (t.status !== "done" && t.status !== "cancelled") continue
           for (const sid of new Set([t.executor, t.reviewer, ...t.executors, ...(t.reviewers ?? [])].filter(Boolean) as string[])) {
             const ws = open.get(sid)
             if (!ws) continue
             const c = readJson<Card>(cardFile(sid))
-            const other = [c?.task, c?.review].some((r) => r && (r.project !== t.project || r.n !== t.n) && isOpen(loadTask(r.project, r.n) ?? ({ status: "closed" } as Task)))
+            const other = [c?.task, c?.review].some((r) => r && (r.project !== t.project || r.n !== t.n) && isOpen(loadTask(r.project, r.n) ?? ({ status: "cancelled" } as Task)))
             if (other) continue // сессия уже на другой открытой задаче
             for (const w of ws) dropWatch(w, log)
           }
         }
       for (const t of listTasks()) {
-        if (t.status !== "cleaned" && t.status !== "cancelled") continue
+        if (t.status !== "done" && t.status !== "cancelled") continue
         const sessions = [t.executor, t.reviewer, ...t.executors, ...(t.reviewers ?? [])].filter(Boolean) as string[]
         for (const sid of new Set(sessions)) {
           const c = readJson<Card>(cardFile(sid))
@@ -554,7 +554,7 @@ export default {
           if (c.pid !== process.pid && pidAlive(c.pid)) continue
           c.spawned.status = "closed"
           saveCard(c)
-          const done = t.status === "cleaned"
+          const done = t.status === "done"
           // отчёт приёмки по шагам — в конце истории вкладки (владелец: «+ отчёт в конце»)
           const ids = t.steps?.length ? t.steps.map((a) => a.id) : Object.keys(t.checks ?? {})
           const passed = ids.filter((id) => t.checks?.[id]).length
@@ -639,7 +639,7 @@ export default {
       reconciledAt = now()
       for (const t of listTasks()) {
         if (t.parent && now() - t.updated < 24 * 3600_000) propagateToParent(t) // заказ другого проекта идёт за этой задачей
-        const recent = t.status === "cleaned" && now() - t.updated < 24 * 3600_000
+        const recent = t.status === "done" && now() - t.updated < 24 * 3600_000
         if (!isOpen(t) && !recent) continue
         const author = readJson<Card>(cardFile(t.author))
         if (author && author.pid !== process.pid && pidAlive(author.pid)) continue // сверяет процесс автора
@@ -994,7 +994,7 @@ export default {
       if (now() - planStepsAt < PLAN_STEPS_MS) return
       planStepsAt = now()
       for (const pt of listTasks()) {
-        if (!pt.plan || pt.status !== "cleaned" || pt.plan.finished || !pt.plan.approval || pt.plan.approval.decision === "no") continue
+        if (!pt.plan || pt.status !== "done" || pt.plan.finished || !pt.plan.approval || pt.plan.approval.decision === "no") continue
         const author = readJson<Card>(cardFile(pt.author))
         if (author && author.pid !== process.pid && pidAlive(author.pid)) continue // ставит процесс автора
         const cfg = loadConfig(pt.directory)
@@ -1025,7 +1025,7 @@ export default {
           continue
         }
         const taskOf = (id: string) => (pt.plan!.spawned![id] ? loadTask(pt.project, pt.plan!.spawned![id]) : undefined)
-        const done = (id: string) => !!steps.find((s) => s.id === id)?.done || ["cleaned", "closed"].includes(taskOf(id)?.status ?? "")
+        const done = (id: string) => !!steps.find((s) => s.id === id)?.done || taskOf(id)?.status === "done"
         const running = steps.filter((s) => isOpen(taskOf(s.id)))
         const order = new Map(steps.map((s, i) => [s.id, i]))
         const prio = (s: (typeof steps)[number]) => s.priority ?? plan.phases.find((f) => f.id === s.phase)?.priority ?? cfg.defaultPriority
@@ -1122,7 +1122,7 @@ export default {
           }
         }
         // ПРИНЯТА, НО НЕ ОЧИЩЕНА (план 002.6, дефект 2): держит место в inflight_limit. Через accepted_reminder_min —
-        // одно письмо приёмщику с побудкой («повтори cleaned») и одно автору; отказ crew_spawn называет такие поимённо.
+        // одно письмо приёмщику с побудкой («повтори cleanup») и одно автору; отказ crew_spawn называет такие поимённо.
         const accCfg = loadConfig(any.directory)
         const accMin = accCfg.acceptedReminderMin
         // accepted_slot: free — принятая место не занимает, письма говорят «ждёт уборки N из M» (cleanup_limit 0 — «N, предела нет»)
@@ -1134,16 +1134,16 @@ export default {
             if (t - at < accMin * 60_000) continue
             const id = `stale-accepted-${safeKey(project)}-${x.n}-${at}`
             const toReviewer = accCfg.acceptedSlot === "free"
-              ? `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена — ждёт уборки, место в inflight_limit не занимает (${waitingOf}). Убери её дерево и ветки и повтори crew_task {action: "cleaned", n: ${x.n}}: отказ назовёт, что осталось. Не убирается — напиши автору (${x.author_role}), что мешает.`
-              : `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена — держит место в лимите задач проекта (inflight_limit). Убери её дерево и ветки и повтори crew_task {action: "cleaned", n: ${x.n}}: отказ назовёт, что осталось. Не убирается — напиши автору (${x.author_role}), что мешает.`
+              ? `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена — ждёт уборки, место в inflight_limit не занимает (${waitingOf}). Убери её дерево и ветки и повтори crew_task {action: "cleanup", n: ${x.n}}: отказ назовёт, что осталось. Не убирается — напиши автору (${x.author_role}), что мешает.`
+              : `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена — держит место в лимите задач проекта (inflight_limit). Убери её дерево и ветки и повтори crew_task {action: "cleanup", n: ${x.n}}: отказ назовёт, что осталось. Не убирается — напиши автору (${x.author_role}), что мешает.`
             const toAuthor = accCfg.acceptedSlot === "free"
-              ? `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена${x.reviewer ? ` (приёмщик ${x.reviewer}, ему написано)` : ""} — ждёт уборки, место не занимает; ${waitingOf}, пока не будет crew_task cleaned.`
-              : `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена${x.reviewer ? ` (приёмщик ${x.reviewer}, ему написано)` : ""} — держит место в inflight_limit, пока не будет crew_task cleaned.`
+              ? `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена${x.reviewer ? ` (приёмщик ${x.reviewer}, ему написано)` : ""} — ждёт уборки, место не занимает; ${waitingOf}, пока не будет crew_task cleanup.`
+              : `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена${x.reviewer ? ` (приёмщик ${x.reviewer}, ему написано)` : ""} — держит место в inflight_limit, пока не будет crew_task cleanup.`
             if (x.reviewer && !letterExists(x.reviewer, id))
               postLetter(x.reviewer, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.reviewer, time: t, text: toReviewer })
             if (!letterExists(x.author, id))
               postLetter(x.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.author, time: t, text: toAuthor })
-            log(`stall: #${x.n} of ${project} accepted ${at}, not cleaned`)
+            log(`stall: #${x.n} of ${project} accepted ${at}, not cleanup`)
           }
         for (const x of list.filter((y) => y.status === "submitted" && !y.reviewer)) {
           const since = [...(x.history ?? [])].reverse().find((h) => h.status === "submitted")?.at ?? 0
@@ -1180,7 +1180,7 @@ export default {
       // перезапуска); за проход — не больше LEFT_PER_RUN задач; origin (ls-remote, сеть) — раз в LEFT_REMOTE_MS.
       const remote = now() - leftRemoteAt >= LEFT_REMOTE_MS
       if (remote) leftRemoteAt = now()
-      const cand = listTasks().filter((t) => (t.status === "cleaned" || t.status === "cancelled") && now() - (t.updated ?? 0) <= 3 * 86_400_000 && !leftClean.has(`${t.project}#${t.n}`)).slice(0, LEFT_PER_RUN)
+      const cand = listTasks().filter((t) => (t.status === "done" || t.status === "cancelled") && now() - (t.updated ?? 0) <= 3 * 86_400_000 && !leftClean.has(`${t.project}#${t.n}`)).slice(0, LEFT_PER_RUN)
       await forEachBudget("leftWatch", cand, async (t) => {
         const key0 = `${t.project}#${t.n}`
         const left = await leftoversOf(t, loadConfig(t.directory), remote)
@@ -1193,7 +1193,7 @@ export default {
         for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0
         const id = `stall-left-${safeKey(t.project)}-${t.n}-${(h >>> 0).toString(36)}`
         if (letterExists(t.author, id)) return
-        const what = t.status === "cleaned" ? `принятой задачи #${t.n} «${t.title}» остались хвосты — убери их` : `отменённой задачи #${t.n} «${t.title}» осталась работа — убери её или сохрани, решаешь ты`
+        const what = t.status === "done" ? `принятой задачи #${t.n} «${t.title}» остались хвосты — убери их` : `отменённой задачи #${t.n} «${t.title}» осталась работа — убери её или сохрани, решаешь ты`
         postLetter(t.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: now(), text: `У ${what}:\n${left.map((x) => `— ${x}`).join("\n")}\n(git worktree remove, git branch -D, git push origin --delete — по правилам проекта.)` })
         log(`leftovers of ${t.project} #${t.n}: ${left.length}`)
       }, log)
@@ -1219,9 +1219,9 @@ export default {
         const t = loadTask(ref.project, ref.n)
         if (!t) continue
         if (!isOpen(t) && Date.now() - (t.updated ?? 0) > freshMs) continue // старая закрытая задача: название не трогаем
-        const MARK: Record<string, string> = { submitted: "✓", reviewing: "✓◐", rework: "↻", approval: "◇", accepted: "✓✓◐", cleaned: "✓✓", closed: "✓", cancelled: "✗" }
+        const MARK: Record<string, string> = { submitted: "✓", reviewing: "✓◐", rework: "↻", approval: "◇", accepted: "✓✓◐", done: "✓✓", cancelled: "✗" }
         const replaced = asReviewer ? t.reviewer !== c.session : t.executor !== c.session
-        const mark = replaced ? "↷" : asReviewer ? (t.status === "cleaned" ? "✓✓" : t.status === "cancelled" ? "✗" : "") : (MARK[t.status] ?? "")
+        const mark = replaced ? "↷" : asReviewer ? (t.status === "done" ? "✓✓" : t.status === "cancelled" ? "✗" : "") : (MARK[t.status] ?? "")
         // значок и слово (план 003.1; владелец: «что значат две галочки и луна?» — значки оставить, слово рядом)
         const WORD: Record<string, string> = { "✓": "сдана", "✓◐": "приёмка", "↻": "доработка", "◇": "согласование", "✓✓◐": "влита", "✓✓": "готово", "✗": "отменена", "↷": "передана" }
         // роль в названии (владелец, 2026-10-11: «в названиях сессий не указано, какая роль»): исп — исполнитель, прм — приёмщик;
@@ -1531,14 +1531,17 @@ export default {
         setBusy(card, true) // запрос вкладки: она занята ходом до строки простоя
         // ПОДСКАЗКА — НЕИЗМЕННАЯ, пока не сменилась роль: системная часть стоит перед всей историей, и любое её
         // изменение заново оплачивает историю (замер 2026-10-04). Соседи — crew_list.
+        // Правила проекта (project_rules) — в конец: их изменение, как и смена роли, один раз заново оплачивает историю.
+        const rules = loadConfig(card.directory).projectRules
         ev.system.push({
           type: "text",
           text:
-            `crew-harness: ты — вкладка с ролью «${card.role}» в проекте ${projOf(card)} (адрес ${keyOf(card)}), репозиторий ${card.repo || "?"}, ` +
-            `сессия ${card.session}. Соседи — crew_list, письмо — crew_send, вопрос с ответом — crew_send {expect_reply} + crew_wait, справка — crew_help. ` +
-            `Задачу называй с названием: «#31 «замок вливания»» при первом упоминании в ответе, дальше можно «#31». ` +
-            `Решение владельца запрашивай инструментом question: одно решение, 2–4 варианта, рекомендуемый первым с пометкой «(Recommended)» и доводом; ` +
-            `вопрос прозой в конце ответа не задавай — окно покажет его владельцу только через question.`,
+            `crew-harness: You are the crew-harness tab with the role "${card.role}" in project ${projOf(card)} (address ${keyOf(card)}), repository ${card.repo || "?"}, session ${card.session}. ` +
+            `Name a task with its title: "#31 "merge lock"" at the first mention in a reply, then just "#31". ` +
+            `Ask the owner for a decision with the question tool: one decision, 2-4 options, the recommended one first marked "(Recommended)" with the reason; ` +
+            `do not ask a question in prose at the end of a reply - only the question tool shows it to the owner. ` +
+            `Help on the tools: crew_help.` +
+            (rules ? ` Project rules: ${rules}` : ""),
         })
       } catch (e) {
         log(`context failed: ${e}`)

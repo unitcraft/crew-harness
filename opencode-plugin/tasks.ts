@@ -17,9 +17,9 @@ import { BASE } from "./paths.ts"
 export const TASKS = path.join(BASE, "tasks")
 
 // starting — записана, сессия создаётся; running — в работе; submitted — сдана (отчёт), ждёт приёмщика;
-// reviewing — на приёмке; rework — на доработке; accepted — принята (влита), ждёт очистки; cleaned — очищена, всё
-// закрыто; closed — закрыта (прежний путь «по отчёту»); cancelled — отменена.
-export type TaskStatus = "starting" | "running" | "submitted" | "reviewing" | "rework" | "approval" | "accepted" | "cleaned" | "closed" | "cancelled"
+// reviewing — на приёмке; rework — на доработке; accepted — принята (влита), ждёт очистки; done — принята и убрана, всё
+// закрыто (в старых файлах это слово «cleaned»: читается как done, см. normTask); cancelled — отменена.
+export type TaskStatus = "starting" | "running" | "submitted" | "reviewing" | "rework" | "approval" | "accepted" | "done" | "cancelled"
 export const OPEN_STATUSES: TaskStatus[] = ["starting", "running", "submitted", "reviewing", "rework", "approval", "accepted"]
 /** статусы, в которых исполнитель работает (может сдавать отчёт) */
 export const WORKING_STATUSES: TaskStatus[] = ["starting", "running", "rework"]
@@ -134,9 +134,9 @@ export type Task = {
   precheck?: PrecheckRecord
   /** влитый коммит (его ветки и worktree проверяет очистка) */
   merged_head?: string
-  /** деревья, которые приёмщик сохранил как улики (cleaned {keep}): уборка их не проверяет, пока они есть (задача 005, REQ-29) */
+  /** деревья, которые приёмщик сохранил как улики (cleanup {keep}): уборка их не проверяет, пока они есть (задача 005, REQ-29) */
   kept?: { path: string; at: number; by: string }[]
-  /** побочные ветки и деревья задачи (задача 023; поле `extra` занято дополнительными полями проекта): track и автозапись; cleaned убирает всё, кроме деревьев kept */
+  /** побочные ветки и деревья задачи (задача 023; поле `extra` занято дополнительными полями проекта): track и автозапись; cleanup убирает всё, кроме деревьев kept */
   side?: SideItem[]
   history: TaskEvent[]
   created: number
@@ -147,7 +147,15 @@ export type Task = {
 export type SideItem = { branch?: string; worktree?: string; at: number; by: string; auto?: boolean }
 
 export const taskFile = (project: string, n: number) => path.join(TASKS, safeKey(project), `${n}.json`)
-export const loadTask = (project: string, n: number) => readJson<Task>(taskFile(project, n))
+/** Старые файлы: статус «cleaned» (так звался нынешний done) читается как done — в статусе и в истории; массовой миграции нет. */
+export function normTask<T extends Task | undefined>(t: T): T {
+  if (!t) return t
+  const old = (s: unknown) => s === "cleaned"
+  if (old(t.status)) (t as Task).status = "done"
+  for (const h of t.history ?? []) if (old(h.status)) h.status = "done"
+  return t
+}
+export const loadTask = (project: string, n: number) => normTask(readJson<Task>(taskFile(project, n)))
 export const isOpen = (t?: Task) => !!t && OPEN_STATUSES.includes(t.status)
 
 // задача изменилась — сводка окна (status/) обновится на ближайшем проходе, а не через 15 с (шаги приёмки видно сразу)
@@ -191,7 +199,7 @@ export function listTasks(project?: string): Task[] {
     const dir = path.join(TASKS, p)
     if (!existsSync(dir)) continue
     for (const f of readdirSync(dir).filter((f) => /^\d+\.json$/.test(f))) {
-      const t = readJson<Task>(path.join(dir, f))
+      const t = normTask(readJson<Task>(path.join(dir, f)))
       if (t) out.push(t)
     }
   }
@@ -292,5 +300,5 @@ export function letterExists(key: string, id: string): boolean {
 const PRIORITY_RANK: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3 }
 export const byPriority = (a: Task, b: Task) => (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9) || a.created - b.created
 
-const STATUS_RU: Record<TaskStatus, string> = { starting: "запускается", running: "в работе", submitted: "сдана", reviewing: "на приёмке", rework: "на доработке", approval: "на согласовании у владельца", accepted: "принята", cleaned: "очищена", closed: "закрыта", cancelled: "отменена" }
+const STATUS_RU: Record<TaskStatus, string> = { starting: "запускается", running: "в работе", submitted: "сдана", reviewing: "на приёмке", rework: "на доработке", approval: "на согласовании у владельца", accepted: "принята", done: "готова", cancelled: "отменена" }
 export const statusRu = (s: TaskStatus) => STATUS_RU[s] ?? s

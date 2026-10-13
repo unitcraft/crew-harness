@@ -1,4 +1,5 @@
 {
+  "project_rules": "crew-harness must not open a task until the owner says to open one, but it may propose opening a task and explain why it thinks so. Internal rule: a task is what changes code or texts on main and needs independent acceptance. Not tasks: an answer to a question, a fact check, an analysis, a fix of 1-3 lines (the integrator or a worker does it on the owner's word), a repeat of an already cancelled task.",
   "model_profiles": {
     "claude": {
       "heavy": {

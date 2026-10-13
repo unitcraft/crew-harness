@@ -28,7 +28,7 @@ then run the full project CI. Record the exact candidate commit and green CI res
 precheck, call `merge` to take the lock and fast-forward the target from that exact checked
 candidate. If the target tip moved, discard that candidate for landing and repeat integration
 and CI against the new tip. Then push and call `accept`; with `accepted_slot: free` (the default),
-accept releases the inflight slot. Perform the returned cleanup separately and call `cleaned`;
+accept releases the inflight slot. Perform the returned cleanup separately and call `cleanup`;
 up to `cleanup_limit` (10) accepted tasks may wait for cleanup. See the
 [plugin's merge instructions](opencode-plugin/README.md#review-and-merge) for the full command flow.
 
