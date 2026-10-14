@@ -410,7 +410,7 @@ export default {
           })
           const w = tabOf(o.from_session)
           if (w?.window.pid) postNotice(w.window.pid, { sessionID: card.session, title: task ? `#${task.n} застряла` : `${keyOf(card)} застряла`, message: short(task ? `«${task.title}» · ${why}` : why, 80), duration: 15_000 })
-          if (task && task.qid === o.qid) taskEvent(task, PLUGIN_SENDER, undefined, `застряла: ${why}`)
+          if (task && (task.qid === o.qid || isReview)) taskEvent(task, PLUGIN_SENDER, undefined, `${isReview ? "приёмка застряла" : "застряла"}: ${why}`)
           log(`stuck ${card.session} for ${o.qid} (empty ${o.empty}, pushes ${o.nudges})`)
           continue
         }
@@ -618,6 +618,16 @@ export default {
         log(`task #${t.n} (${t.project}): reviewer session ${t.reviewer} started`)
       } catch (e) {
         log(`reviewer start #${t0.n} failed: ${e}`)
+        // сессию приёмки создать не удалось: повтор идёт сам (assignReviewers), но молча — автору одно письмо на сессию приёмки
+        try {
+          const t = loadTask(t0.project, t0.n)
+          const id = t?.reviewer ? `review-start-failed-${safeKey(t.project)}-${t.n}-${safeKey(t.reviewer)}` : ""
+          if (t && id && !letterExists(t.author, id)) {
+            const why = String((e as any)?.message ?? e).slice(0, 300)
+            postLetter(t.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: Date.now(), text: `Задача ${taskRef(t)} сдана, но сессию приёмки создать не удалось (${why}). Плагин повторяет запуск сам на каждом проходе; не получится — поправь причину (модель приёмки: spawn_models и профили) или смени способ приёмки (настройка reviewer).` })
+            taskEvent(t, PLUGIN_SENDER, undefined, `сессия приёмки не создана: ${why.slice(0, 200)}`)
+          }
+        } catch {}
       } finally {
         reviewStarting.delete(key)
       }
@@ -1311,6 +1321,7 @@ export default {
     // любом шаге — следующий проход (resumeTasks) повторит запуск, второй сессии и второго письма не будет.
     const startingNow = new Set<string>()
     const startBlocked = new Map<string, number>() // задача → когда повторить запуск, отложенный из-за дерева
+    const startFailed = new Map<string, string>() // задача → причина последнего сбоя создания сессии (resumeTasks скажет автору)
     const START_RETRY_MS = Number(process.env.CREW_HARNESS_START_RETRY_MS) || 120_000
     async function startTask(t0: Task): Promise<{ session?: string; error?: string }> {
       const key = `${t0.project}#${t0.n}`
@@ -1388,6 +1399,7 @@ export default {
         return { session: sid }
       } catch (e) {
         log(`task #${t0.n} start failed: ${e}`)
+        startFailed.set(key, String((e as any)?.message ?? e))
         return { error: String((e as any)?.message ?? e) }
       } finally {
         startingNow.delete(key)
@@ -1400,7 +1412,19 @@ export default {
         if (t.status !== "starting") continue
         const author = readJson<Card>(cardFile(t.author))
         if (author && author.pid !== process.pid && pidAlive(author.pid)) continue
+        const key = `${t.project}#${t.n}`
+        startFailed.delete(key)
         await startTask(t)
+        // сессию создать не удалось (модель недоступна и т. п.): повтор идёт сам, но молча он ждал бы вечно — автору одно письмо на попытку
+        const why = startFailed.get(key)
+        if (why) {
+          const id = `start-failed-${safeKey(t.project)}-${t.n}-${t.attempt}`
+          if (!letterExists(t.author, id)) {
+            postLetter(t.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: Date.now(), text: `Задача ${taskRef(t)} не запущена: сессию создать не удалось (${why.slice(0, 300)}). Плагин повторяет запуск сам на каждом проходе; не получится — поправь причину, передай задачу другой сессии (crew_task {action: "reassign", n: ${t.n}}) или отмени (crew_task {action: "cancel", n: ${t.n}}).` })
+            const fresh = loadTask(t.project, t.n)
+            if (fresh) taskEvent(fresh, PLUGIN_SENDER, undefined, `не запущена: ${why.slice(0, 200)}`)
+          }
+        }
       }
     }
 
