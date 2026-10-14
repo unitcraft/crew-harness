@@ -378,9 +378,15 @@ journal is `tasks/<project>/<N>.json` in the mailbox.
   (an owner's tab takes the task; it is woken while the task is open, even when closed), `push
   {n, text?}` (wake a stalled executor now), `reassign {n}` (a new session, the same number, a
   summary of what was done), `cancel {n}`, `priority {n, priority}`.
-- The executor reports as the answer to the task's qid; the task is submitted (title `#N ✓`) — the
-  report does **not** wake the integrator; a second report is refused. The executor's session
-  stays open for rework until the task is done.
+- The executor submits with `crew_task {action: "submit", n, text}` (`submit - executor - n, text`):
+  no qid needed; `text` is the report (what was done, how it was checked, what is left). The spare
+  way is the old one, `crew_send` with `reply_to` = the task's qid; both go through the same code
+  (first submission, after rework, after a sync, a plan task with the form check). The task is
+  submitted (title `#N ✓`) — the report does **not** wake the integrator (after rework it wakes the
+  reviewer); a second report is refused. An ordinary letter of the executor to the author, the
+  integrator or the reviewer is not a report: it is sent as before, and the answer reminds the
+  executor of `submit`. `review` of a task still in rework names the same command for the
+  executor. The executor's session stays open for rework until the task is done.
 
 ## Review and merge
 
@@ -491,7 +497,7 @@ the files in the plans folder and the open plan tasks. A sub-plan gets `N.k`.
 - phases `### Ф.N`, and in them steps `#### Ф.N.M` with `[P1] [после: …] [где: …]`;
 - each step has a «Что:» line and an «**Приёмка:**» block.
 
-The report is refused while the file is missing or its form is wrong. The form check covers the
+The report (`submit` or `reply_to`) is refused while the file is missing or its form is wrong. The form check covers the
 header, the sections, «Что» and «Приёмка» of every step, open questions as a quadruple with
 «Блокирует», and `после:` pointing at real steps with no cycles.
 
