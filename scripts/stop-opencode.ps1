@@ -2,7 +2,7 @@
 # just "0" when nothing is left, otherwise the table of the remaining processes.
 # Use it before a service restart (AGENTS.md, rule 12). -DryRun only lists the processes, stops none.
 param(
-  [int]$WaitSeconds = 15,
+  [int]$WaitSeconds = 4,
   [switch]$DryRun
 )
 
