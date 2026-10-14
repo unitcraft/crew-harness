@@ -23,7 +23,7 @@ cell("TT-1a the block is English and keeps the tab identity", /You are the crew-
 cell("TT-1b the block does not retell the tools (crew_list, crew_send, crew_wait) but points to crew_help", !/crew_list|crew_send|crew_wait/.test(s1) && /crew_help/.test(s1), s1)
 cell("TT-1c the question rule and the task naming rule are there", /question tool/.test(s1) && /\(Recommended\)/.test(s1) && /#31/.test(s1), s1)
 cell("TT-1d no Russian and no project rules by default", !/[а-яё]/i.test(s1) && !/Project rules:/.test(s1), s1)
-cell("TT-1e the block is byte-identical between requests and stays under 1000 characters (it carries the built-in task rule)", s1 === s2 && s1.length > 0 && s1.length < 1000, `${s1.length}`)
+cell("TT-1e the block is byte-identical between requests and stays under 1100 characters (it carries the built-in task rule)", s1 === s2 && s1.length > 0 && s1.length < 1100, `${s1.length}`)
 H.settings({ project_rules: "Never open a task before the owner says so." })
 const s3 = await sys()
 const s4 = await sys()

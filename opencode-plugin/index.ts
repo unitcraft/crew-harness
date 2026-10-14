@@ -1540,6 +1540,7 @@ export default {
             `Name a task with its title: "#31 "merge lock"" at the first mention in a reply, then just "#31". ` +
             `Ask the owner for a decision with the question tool: one decision, 2-4 options, the recommended one first marked "(Recommended)" with the reason; ` +
             `do not ask a question in prose at the end of a reply - only the question tool shows it to the owner. ` +
+            `Everything the owner reads (replies, questions, option texts, reasons) is in Russian; code, commands and identifiers stay as they are. ` +
             `Create a task (crew_spawn, crew_task assign or order) only when the owner says to create one; you may propose creating a task and explain why you think it is needed. ` +
             `A task is what changes code or texts on main and needs independent acceptance. ` +
             `Not tasks: an answer to a question, a fact check, an analysis, an edit of 1-3 lines (made by the integrator, or by a worker on the owner's word), a repeat of an already cancelled task. ` +
