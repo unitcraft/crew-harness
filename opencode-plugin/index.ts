@@ -118,6 +118,9 @@ import {
   stampProfile,
   ownerWordAfter,
   lastUserAt,
+  idleFactsAfter,
+  pendingTool,
+  letterExistsFor,
 } from "./core.ts"
 import { answerTurn, markInterventions } from "./answer.ts"
 import { answerModesOn } from "./answer-parse.ts"
@@ -131,7 +134,8 @@ import { countedOpen, waitingCleanup } from "./tasks.ts"
 import { createRemoteBridge } from "./remote.ts"
 import { profileProblems, profileState, stateSignature, syncProjectFiles, syncSnapshot, syncTaskFile } from "./profile-layer.ts"
 import { cellOfState, clampTier, resolveStageProfile, splitLaunchModel, stageOfLaunch, tabFitsCell } from "./profiles.ts"
-import { cleanupForms, startFormWait } from "./form-wait.ts"
+import { allForms, cleanupForms, formReminders, formTick, settleOnRequest, startFormWait } from "./form-wait.ts"
+import { systemToast } from "./toast-win.ts"
 import { probeEnabled, startEventProbe } from "./event-probe.ts"
 import { catalogModels, writeCatalog } from "./model-catalog.ts"
 import { forEachBudget, background, stepBudget } from "./async-git.ts"
@@ -869,6 +873,7 @@ export default {
           into.set(o.from_session, [...(into.get(o.from_session) ?? []), { qid: o.qid, to: keyOf(c), at: o.at }])
         }
       }
+      const formOpen = new Set(allForms(t).map((x) => x.session))
       const watchesBy = openWatchesBySession() // одно чтение папки наблюдений на проход (их сотни: завершённые хранятся сутки)
       for (const c of cards) {
         if (c.pid !== process.pid && pidAlive(c.pid)) continue // вкладка другого живого сервера
@@ -881,7 +886,8 @@ export default {
         }
         // «работает» — ещё и по базе: ход открыт и обновляется (ход, продолженный самим OpenCode после перезапуска,
         // плагин не доставлял — признака busy у карточки нет; сводка писала «стоит», а сессия работала, 2026-10-05)
-        const staleSince = tab?.tab.busy ? await staleBusy(c.session, t) : 0
+        // вопрос владельцу на экране (инструмент question ждёт ответа дольше окна открытого хода) - не залипший ход (задача 040)
+        const staleSince = tab?.tab.busy && !(formOpen.has(c.session) && (await pendingTool(c.session))) ? await staleBusy(c.session, t) : 0
         await noteStale(c, tab, staleSince, t)
         const hungSince = tab?.tab.busy && !staleSince ? await hungTurn(c.session, t, ws.length > 0) : 0
         await noteHung(c, tab, hungSince, t)
@@ -924,6 +930,7 @@ export default {
           }
         }
         if (s.state !== "owner") continue
+        if (s.formId) continue // вопрос вопросника: уведомление и повтор раз в 30 минут ведёт formWatch (form-wait.ts)
         const fresh = !(prev?.state === "owner" && prev.since === s.since)
         const every = loadConfig(c.directory).ownerReminderMin * 60_000
         if (!fresh && !(every > 0 && t - (prev?.notified ?? 0) >= every)) continue
@@ -931,6 +938,54 @@ export default {
         markNotified(c.session, t)
         log(`owner wanted by ${c.session}${fresh ? "" : " (reminder)"}`)
       }
+    }
+
+    // ВОПРОС ВЛАДЕЛЬЦУ НЕ ПРОПАДАЕТ МОЛЧА (задача 040, form-wait.ts). Раз в FORM_EVERY_MS: (1) запись о вопросе встроенного вопросника открыта,
+    // а хода во вкладке нет (перезапуск окна или службы, вопрос закрыли без ответа, событие не дошло) - вкладку будит служебное письмо с
+    // текстом и вариантами: задать вопрос заново (до 3 раз, не чаще раза в 2 минуты; потом «без ответа, нужен владелец»); (2) уведомление
+    // владельцу при появлении вопроса и раз в 30 минут, пока он открыт: всплывающее в окнах, а по настройке проекта owner_system_notify -
+    // ещё и системное Windows. За владельца не отвечается и вариант не выбирается нигде.
+    const FORM_EVERY_MS = Number(process.env.CREW_HARNESS_FORM_MS) || 5_000
+    let formAt = 0
+    async function formWatch() {
+      if (now() - formAt < FORM_EVERY_MS) return
+      formAt = now()
+      const windows = liveWindows()
+      await formTick(
+        {
+          processStart: PROCESS_START,
+          tab: async (s) => {
+            const c = readJson<Card>(cardFile(s))
+            const tab = tabOf(s, windows)
+            const open = !!tab || (!!c && mayWakeCard(c, windows))
+            let busy = tab ? !!tab.tab.busy : !!c?.busy
+            // окно или визитка говорит «идёт», а база ходов не видит (после перезапуска): не занята. Вопрос на экране (инструмент ждёт) - занята
+            if (busy && !(await pendingTool(s)) && (await staleBusy(s, now()))) busy = false
+            if (!busy && !tab && (await openTurn(s, now()))) busy = true
+            return { open, busy }
+          },
+          idle: (s, since) => idleFactsAfter(s, since),
+          ownerWrote: async (s, since) => (await ownerWordAfter(s, since)) > 0,
+          wake: (s, text, id) => {
+            if (letterExistsFor(s, id)) return
+            postLetter(s, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: s, time: now(), text })
+          },
+          say: (line) => log(line),
+        },
+        now(),
+      )
+      formReminders(now(), (session, f, message) => {
+        const c = readJson<Card>(cardFile(session))
+        const title = `${short(sessionLabel(session, c ? keyOf(c) : session), 40)} ждёт вас`
+        const wins = liveWindows()
+        for (const w of wins) postNotice(w.pid, { sessionID: session, title, message: short(message, 100), attention: true, duration: 30_000 })
+        let toast = false
+        try {
+          if (c && loadConfig(c.directory).ownerSystemNotify) toast = systemToast(title, short(message, 200), log)
+        } catch {}
+        log(`owner wanted by ${session}: question ${f.id}${f.exhausted ? " (no answer after the repeats)" : f.notifiedAt ? " (reminder)" : ""}`)
+        return wins.length > 0 || toast
+      })
     }
 
     // СТОРОЖ ПОТОКА (план 002.4): раз в минуту — затянувшееся. Замок вливания держат дольше stall_minutes; сданная задача
@@ -1489,6 +1544,7 @@ export default {
         await step("finishTasks", finishTasks)
         await step("syncTitles", syncTitles)
         await step("syncStatus", syncStatus)
+        await step("formWatch", formWatch)
         await step("flowWatch", flowWatch)
         await step("leftWatch", leftWatch)
         await step("housekeep", housekeep)
@@ -1529,6 +1585,8 @@ export default {
         const card = await touch(String(ev.sessionID ?? ""), ev)
         if (!card) return
         setBusy(card, true) // запрос вкладки: она занята ходом до строки простоя
+        // новый запрос модели после вопроса владельцу: ход пошёл дальше, вопрос закрыт (form-wait.ts, задача 040)
+        void settleOnRequest(card.session, now(), async (since) => (await ownerWordAfter(card.session, since)) > 0).catch(() => {})
         // ПОДСКАЗКА — НЕИЗМЕННАЯ, пока не сменилась роль: системная часть стоит перед всей историей, и любое её
         // изменение заново оплачивает историю (замер 2026-10-04). Соседи — crew_list.
         // Правила проекта (project_rules) — в конец: их изменение, как и смена роли, один раз заново оплачивает историю.

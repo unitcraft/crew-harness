@@ -151,6 +151,21 @@ first, the ones waiting for you on top. A session that starts waiting for you pu
 (with Open; a system notification when the window is not focused, if OpenCode's `attention.notifications` is on)
 and repeats it every `owner_reminder_min` minutes (15; 0 — once) until you answer ([plan 003](../doc/archive/plans/003-status.md)).
 
+### A question to the owner is not lost (task 040)
+
+A question of the built-in questionnaire (`question`) is kept as a record in `forms/` until it is answered. `form.replied`
+closes the record; a new model request of the tab, a succeeded end of its turn after the question, or your own word in the
+tab close it too (so a false "waiting for you" goes away at once; the 12-hour TTL stays as the last resort). `form.cancelled`
+(you pressed Esc) and a question that vanished without any event (the window or the service was restarted) do not close it:
+if the tab has no running turn, the plugin wakes it with a service message that holds the question text and the options and asks
+to call `question` again. At most 3 repeats, at least 2 minutes apart, and not in the first 3 minutes after a start of the
+service (the windows get time to show their questions again); then the record says "без ответа, нужен владелец" and nothing wakes
+the tab any more. The plugin never answers for you and never picks the recommended option.
+Every window shows one line `Ждут вас: N, старейший ЧЧ:ММ` (in `/crew` and the side panel); `/ask` lists the open questions
+(project, tab, how long it waits, text and options). A question gives a notice at once and again every 30 minutes while it is
+open. With `owner_system_notify: true` the project also gets a Windows system notification (built-in PowerShell, no installs and no rights;
+off by default).
+
 ### Session status
 
 The service plugin keeps `<mailbox>/status/<session id>.json` for open tabs, task sessions and sessions with watches

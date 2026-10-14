@@ -22,6 +22,7 @@ import { DOCTOR_FILE, NOTICES, WINDOWS, cardFile, helpFor, log, readJson, verbHe
 import { readCatalog } from "./model-catalog.ts"
 import { str } from "./dialog-size.ts"
 import { doctorText, formatStatuses, readStatuses } from "./status.ts"
+import { askText } from "./form-wait.ts"
 import { listTasks, loadTask } from "./tasks.ts"
 import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
 
@@ -161,6 +162,16 @@ export default {
       const list = readStatuses()
       const mine = list.find((s) => s.session === route)?.project
       showText({ title: "crew-harness — кто чего ждёт", message: formatStatuses(list, Date.now(), mine) })
+    }
+    // /ask: вопросы, которые ждут владельца (задача 040) - проект, вкладка, сколько ждёт, текст вопроса и варианты; из forms/, без хода модели
+    const showAsk = () => {
+      let text: string
+      try {
+        text = askText()
+      } catch (e) {
+        text = `Не прочитать вопросы: ${e}`
+      }
+      showText({ title: "crew-harness — вопросы, ждущие вас", message: text })
     }
     // /crew-config: действующие настройки проекта вкладки на экране — значение и откуда (как crew_config show)
     const showConfig = async () => {
@@ -332,6 +343,7 @@ export default {
     }
     const commands = [
       { id: "crew-harness.status", title: "Crew: кто чего ждёт", group: "Crew", slash: { name: "crew" }, palette: true, run: showStatus },
+      { id: "crew-harness.ask", title: "Crew: вопросы, ждущие вас", group: "Crew", slash: { name: "ask" }, palette: true, run: showAsk },
       { id: "crew-harness.config", title: "Crew: настройки проекта", group: "Crew", slash: { name: "crew-config" }, palette: true, run: showConfig },
       { id: "crew-harness.plans", title: "Crew: планы на согласовании", group: "Crew", slash: { name: "plans" }, palette: true, run: showPlans },
       { id: "crew-harness.doctor", title: "Crew: самопроверка", group: "Crew", slash: { name: "crew-doctor" }, palette: true, run: showDoctor },
