@@ -43,6 +43,8 @@ const h2 = await hint()
 cell("the hint names the tab and its role", /You are the crew-harness tab with the role "carina"/.test(h1), h1)
 cell("the hint tells to ask the owner by the question tool", /question tool/.test(h1) && /\(Recommended\)/.test(h1), h1)
 cell("the hint forbids a prose question at the end of the answer", /do not ask a question in prose at the end of a reply/.test(h1), h1)
+cell("the hint carries the task rule built in: a task only on the owner's word, a proposal with a reason is allowed", /Create a task \(crew_spawn, crew_task assign or order\) only when the owner says to create one/.test(h1) && /you may propose creating a task and explain why/.test(h1), h1)
+cell("the hint names what is not a task", /Not tasks: an answer to a question, a fact check, an analysis, an edit of 1-3 lines/.test(h1) && /a repeat of an already cancelled task/.test(h1), h1)
 cell("the hint is byte-identical between requests", h1 === h2 && h1.length > 0, `${h1.length} vs ${h2.length}`)
 
 stop?.()
