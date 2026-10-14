@@ -210,6 +210,8 @@ export type CrewConfig = {
   pushEmptyTurns: number
   pushMax: number
   ownerReminderMin: number
+  /** системное уведомление Windows о вопросе владельцу (задача 040), кроме всплывающего в окне */
+  ownerSystemNotify: boolean
   machineSlots: number
   stallMin: number
   /** принятая, но не очищенная задача: через столько минут — письма приёмщику и автору (0 — нет) */
@@ -376,6 +378,7 @@ export function loadConfig(dir: string): CrewConfig {
     pushEmptyTurns: num(j.push_empty_turns, 3),
     pushMax: num(j.push_max, 20),
     ownerReminderMin: num(j.owner_reminder_min, 15),
+    ownerSystemNotify: j.owner_system_notify === true,
     machineSlots: num(j.machine_slots, 1),
     stallMin: num(j.stall_minutes, 30),
     acceptedReminderMin: num(j.accepted_reminder_min, 30),
@@ -660,6 +663,51 @@ export async function idleAt(sessionID: string): Promise<number> {
     return Number(db.prepare("select max(time_created) as t from session_message where session_id = ? and type = 'idle'").get(sessionID)?.t ?? 0)
   } catch {
     return 0
+  } finally {
+    try {
+      db?.close()
+    } catch {}
+  }
+}
+
+/** Последняя строка idle после момента since: время и итог хода (succeeded / failed / interrupted). Нет базы или строки — undefined (задача 040). */
+export async function idleFactsAfter(sessionID: string, since: number): Promise<{ at: number; outcome?: string } | undefined> {
+  if (!sessionID || !existsSync(dbFile())) return undefined
+  let db: any
+  try {
+    db = await openDb()
+    const r = db.prepare("select data, time_created from session_message where session_id = ? and type = 'idle' and time_created > ? order by time_created desc limit 1").get(sessionID, since)
+    if (!r) return undefined
+    let outcome: string | undefined
+    try {
+      outcome = JSON.parse(r.data)?.outcome
+    } catch {}
+    return { at: Number(r.time_created) || 0, ...(outcome ? { outcome } : {}) }
+  } catch {
+    return undefined
+  } finally {
+    try {
+      db?.close()
+    } catch {}
+  }
+}
+
+/** В последнем ответе хода, начатого в этом процессе сервера, есть вызов инструмента, который ещё идёт (running / pending), а idle после него нет.
+ *  Так выглядит вопрос владельцу на экране: инструмент `question` ждёт ответа (задача 040) - долгая тишина тут не «залипший ход». */
+export async function pendingTool(sessionID: string, since = PROCESS_START): Promise<boolean> {
+  if (!sessionID || !existsSync(dbFile())) return false
+  let db: any
+  try {
+    db = await openDb()
+    const r = db.prepare("select max(case when type = 'idle' then time_created end) as idle, max(case when type = 'assistant' then time_created end) as asst from session_message where session_id = ?").get(sessionID)
+    const idle = Number(r?.idle ?? 0)
+    const asst = Number(r?.asst ?? 0)
+    if (!asst || asst <= idle || asst < since) return false
+    const last = db.prepare("select data from session_message where session_id = ? and type = 'assistant' and time_created = ? order by seq desc limit 1").get(sessionID, asst)
+    const parts = JSON.parse(last?.data ?? "{}")?.content
+    return Array.isArray(parts) && parts.some((p: any) => p?.type === "tool" && (p?.state?.status === "running" || p?.state?.status === "pending"))
+  } catch {
+    return false
   } finally {
     try {
       db?.close()
@@ -1237,6 +1285,7 @@ export const HELP = `crew-harness — письма между вкладками
                                 Проект без моделей (нет profile_set, spawn_models, allow_default_models) отказывает crew_spawn без явного model.
   crew_doctor                 — самопроверка: что сломано и что делать.
   /crew (команда окна)       — владельцу: кто чего ждёт, без хода модели; кто ждёт его — уведомление в окне.
+  /ask (команда окна)        — владельцу: вопросы, которые ждут его ответа (проект, вкладка, сколько ждёт, текст и варианты).
   /crew-sets, /crew-profiles (команды окна) — владельцу: наборы профилей моделей и справочник «семья, ступень → модель и контекст»;
                                 use включает набор для всех этапов, контекст профиля действует на сессии в рабочем дереве задачи; агент набор не включает
                                 (crew_config set пишет справочник и наборы). Этапов восемь: develop, develop_accept, plan, plan_accept

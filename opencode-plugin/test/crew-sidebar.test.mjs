@@ -25,11 +25,13 @@ const list = [
   ...Array.from({ length: 10 }, (_, i) => st(`idle${i}`, "idle")),
 ]
 const v = sidebarLines(list, now, "nova")
-cell("the title names the project and how many wait for the owner", v.title === "Crew · nova — ждут вас: 1", v.title)
-cell("the one waiting for the owner is first and marked", v.rows[0].who === "интегр." && v.rows[0].mark === "▶" && v.rows[0].what === "ждёт вас 01:42" && v.rows[0].tone === "accent", JSON.stringify(v.rows[0]))
+cell("the title names the project", v.title === "Crew · nova", v.title)
+// task 040: one summary line "Ждут вас: N, старейший ЧЧ:ММ" (all projects) opens the rows
+cell("the summary line is first", v.rows[0].what === "Ждут вас: 1, старейший 01:42" && v.rows[0].tone === "accent" && !v.rows[0].who, JSON.stringify(v.rows[0]))
+cell("the one waiting for the owner is next and marked", v.rows[1].who === "интегр." && v.rows[1].mark === "▶" && v.rows[1].what === "ждёт вас 01:42" && v.rows[1].tone === "accent", JSON.stringify(v.rows[1]))
 cell("a task session is named by its role", v.rows.some((r) => r.who === "#2 исп" && r.what === "работает 12 мин") && v.rows.some((r) => r.who === "#2 прм" && r.what.startsWith("⧗ очередь: CI")), JSON.stringify(v.rows))
 cell("a task state is shown with its mark and word", v.rows.some((r) => r.who === "#3 прм" && r.what === "↻ доработка"), JSON.stringify(v.rows))
-cell("rows fit the narrow panel (32 columns) without wrapping", v.rows.every((r) => 2 + 9 + 1 + r.what.length <= 32), JSON.stringify(v.rows.map((r) => r.what)))
+cell("rows fit the narrow panel (32 columns) without wrapping", v.rows.every((r) => (r.who ? 2 + 9 + 1 + r.what.length : sideText(r).length) <= 32), JSON.stringify(v.rows.map((r) => r.what)))
 {
   // acceptance in progress: "проверка 2/3: guards" on the reviewer's row, the step's text under it
   const steps = [{ id: "tests", text: "тесты", result: "12/12" }, { id: "guards", text: "стражи зелёные: `NOVA_GATE_TIER=loop bash scripts/gate.sh` на всех платформах" }, { id: "notes", text: "заметки" }]
@@ -69,9 +71,11 @@ stop?.()
 let cmds = []
 let shown
 const stop2 = mod.default.setup({ ui: { router: { current: () => ({}) }, tabs: { list: () => [] }, toast: { show: () => {} }, dialog: { alert: (a) => (shown = a) }, slot: (s) => s.render?.() }, keymap: { layer: (f) => (cmds = f().commands) } })
-cell("the window has /crew, /crew-config, /plans, /crew-doctor, /crew-progress, /crew-help, /crew-sets, /crew-profiles", JSON.stringify(cmds.map((c) => c.slash?.name)) === JSON.stringify(["crew", "crew-config", "plans", "crew-doctor", "crew-progress", "crew-help", "crew-sets", "crew-profiles"]), JSON.stringify(cmds.map((c) => c.slash?.name)))
+cell("the window has /crew, /crew-config, /plans, /crew-doctor, /crew-progress, /crew-help, /crew-sets, /crew-profiles", JSON.stringify(cmds.map((c) => c.slash?.name)) === JSON.stringify(["crew", "ask", "crew-config", "plans", "crew-doctor", "crew-progress", "crew-help", "crew-sets", "crew-profiles"]), JSON.stringify(cmds.map((c) => c.slash?.name)))
 cmds.find((c) => c.slash?.name === "crew-doctor")?.run()
 cell("/crew-doctor opens a dialog", /самопроверка/.test(shown?.title ?? ""), JSON.stringify(shown))
+cmds.find((c) => c.slash?.name === "ask")?.run()
+cell("/ask opens a dialog with the open questions (task 040)", /ждущие вас/.test(shown?.title ?? "") && /Открытых вопросов к вам нет|Ждут вас/.test(shown?.message ?? ""), JSON.stringify(shown))
 stop2?.()
 const t0 = Date.parse("2026-10-07T03:00:00")
 cell("doctor: none yet", /ещё не было/.test(doctorText(undefined)), doctorText(undefined))

@@ -31,7 +31,10 @@ cell("form.replied: not owner, file gone", stOf("sesA").state === "working" && f
 
 fw.handleFormEvent(created("frm_2", "sesB"))
 fw.handleFormEvent({ type: "form.cancelled", data: { id: "frm_2" } })
-cell("form.cancelled (id only): not owner", stOf("sesB").state === "working", JSON.stringify(stOf("sesB")))
+// task 040: cancelled is not an answer: the record stays (the repeat starts), only form.replied closes it
+cell("form.cancelled (id only): still waiting, a repeat is coming", stOf("sesB").state === "owner" && /будет повторён/.test(stOf("sesB").detail), JSON.stringify(stOf("sesB")))
+fw.handleFormEvent({ type: "form.replied", data: { id: "frm_2" } })
+cell("form.replied (id only) closes it", stOf("sesB").state === "working", JSON.stringify(stOf("sesB")))
 
 fw.handleFormEvent(created("frm_3", "sesC", "other"))
 cell("foreign kind ignored", stOf("sesC").state === "working", JSON.stringify(stOf("sesC")))

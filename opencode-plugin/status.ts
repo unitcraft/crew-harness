@@ -14,7 +14,7 @@ import { type Card, readJson, safeKey } from "./core.ts"
 import { BASE } from "./paths.ts"
 import { answerLines, answerSideRow } from "./answer.ts"
 import { divergenceLineFor, unconfiguredLineFor } from "./config-diverge.ts"
-import { pendingForms } from "./form-wait.ts"
+import { FORM_MAX_REPEATS, pendingForms } from "./form-wait.ts"
 import { lockWaitLine } from "./review.ts"
 import { type Task, isOpen, listTasks, loadTask } from "./tasks.ts"
 import { type Watch, watchesOf } from "./watch.ts"
@@ -34,6 +34,8 @@ export type Status = {
   detail: string
   /** Вопрос владельцу (state owner): последние строки ответа. */
   question?: string
+  /** Вопрос встроенного вопросника (form-wait.ts): уведомления по нему ведёт formWatch, не общий повтор owner_reminder_min. */
+  formId?: string
   watches: { id: string; note?: string; started?: number; minutes: number }[]
   asked: { qid: string; to: string; at: number }[]
   /** Вопросы старше ASKED_STALE_MIN без ответа: в /crew отдельной строкой, состояние reply не держат. */
@@ -139,7 +141,8 @@ export function statusOf(x: StatusInput): Status {
   const form = pendingForms(card.session, now)[0]
   if (form) {
     const q = form.question ?? form.title ?? "вопрос во встроенном вопроснике"
-    return { ...base, state: "owner", since: form.at, question: q, detail: `ждёт вас с ${hm(form.at)}: ${q}` }
+    const tail = form.exhausted ? "без ответа, нужен владелец" : form.repeats ? `повтор ${form.repeats} из ${FORM_MAX_REPEATS}` : form.cancelled ? "закрыт без ответа, будет повторён" : ""
+    return { ...base, state: "owner", since: form.at, question: q, formId: form.id, detail: form.exhausted ? `${tail} (с ${hm(form.at)}): ${q}` : `ждёт вас с ${hm(form.at)}${tail ? ` (${tail})` : ""}: ${q}` }
   }
   if (x.busy) return { ...base, state: "working", since: x.busySince, detail: `работает${x.busySince ? ` (${minutes(x.busySince, now)})` : ""}` }
   // сессию задачи ведёт интегратор, и её вопрос в конце хода бывает ему (сдавший воркер спросил интегратора), а бывает
@@ -227,6 +230,14 @@ const fit = (line: string, n = DIALOG_WIDTH) => (line.length > n ? `${line.slice
 /** Шаги приёмки одной строкой: ✓ отмечен, ▶ идёт, · впереди (– не отмечен в отчёте). */
 export const stepBar = (steps: { id: string; result?: string }[], checking?: string) => steps.map((a) => (a.result ? "✓" : a.id === checking ? "▶" : "·")).join("")
 
+/** Единая сводная строка «Ждут вас: N, старейший ЧЧ:ММ» (все проекты): /crew, боковая панель, /ask. Никто не ждёт — undefined. */
+export function waitingLine(list: Status[], _now = Date.now()): string | undefined {
+  const w = list.filter((s) => s.state === "owner")
+  if (!w.length) return undefined
+  const oldest = Math.min(...w.map((s) => s.since ?? Infinity))
+  return `Ждут вас: ${w.length}${Number.isFinite(oldest) ? `, старейший ${hm(oldest)}` : ""}`
+}
+
 /** Текст сводки /crew: проекты (свой первым), в проекте — сначала ждущие владельца. */
 export function formatStatuses(list: Status[], now = Date.now(), first?: string): string {
   if (!list.length) return "Сессий проекта не видно: плагин сервиса ещё не записал состояние (status/)."
@@ -234,6 +245,8 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
   for (const s of list) byProject.set(s.project ?? "?", [...(byProject.get(s.project ?? "?") ?? []), s])
   const names = [...byProject.keys()].sort((a, b) => (a === first ? -1 : b === first ? 1 : a.localeCompare(b)))
   const out: string[] = []
+  const sum = waitingLine(list, now)
+  if (sum) out.push(sum)
   for (const p of names) {
     const items = byProject.get(p)!.sort((a, b) => ORDER[a.state] - ORDER[b.state] || a.title.localeCompare(b.title))
     const waiting = items.filter((s) => s.state === "owner").length
@@ -367,6 +380,9 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string)
   }
   const sorted = mine.slice().sort((a, b) => ORDER[a.state] - ORDER[b.state] || who(a).localeCompare(who(b)))
   const rows: SideRow[] = []
+  // одна сводная строка на все окна (по всем проектам, не только по этому): «Ждут вас: N, старейший ЧЧ:ММ»
+  const sum = waitingLine(list, now)
+  if (sum) rows.push({ mark: " ", who: "", what: sum, tone: "accent" })
   for (const s of sorted.slice(0, SIDE_MAX)) {
     // приёмка по шагам: «проверка 3/13: fixture» вместо «работает», под строкой — что проверяет шаг
     // ждущая вкладка (наблюдение, очередь машины, ответ) показывает, чего ждёт, и сколько; шаги — строкой под ней
@@ -394,13 +410,12 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string)
   if (dv) rows.push({ mark: " ", who: "", what: dv.replace("⚠ настройки не на ветке:", "⚠ не на ветке:"), tone: "accent" })
   const uc = project ? unconfiguredLineFor(project) : undefined
   if (uc) rows.push({ mark: " ", who: "", what: uc, tone: "accent" })
-  const waiting = mine.filter((s) => s.state === "owner").length
   // «ход» — модель думает сейчас; «ждут» — наблюдения (гейты, коммит в main), из них в очереди машины — ещё не запущены
   const working = mine.filter((s) => s.state === "working").length
   const watching = mine.filter((s) => s.state === "watch").length
   const queued = mine.filter((s) => s.state === "watch" && s.watches[0] && !s.watches[0].started).length
   const more = sorted.length > SIDE_MAX ? ` · +${sorted.length - SIDE_MAX}` : ""
-  return { title: `Crew${project ? ` · ${project}` : ""}${waiting ? ` — ждут вас: ${waiting}` : ""}`, rows, foot: `ход ${working} · ждут ${watching}${queued ? ` (очередь ${queued})` : ""}${more} · /crew` }
+  return { title: `Crew${project ? ` · ${project}` : ""}`, rows, foot: `ход ${working} · ждут ${watching}${queued ? ` (очередь ${queued})` : ""}${more} · /crew` }
 }
 
 /** Текст /crew-doctor: последняя самопроверка сервиса (DOCTOR_FILE) и её время. */
