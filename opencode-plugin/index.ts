@@ -394,7 +394,7 @@ export default {
         const howTo = isReview
           ? `Продолжай приёмку: crew_task {action: "review" | "rework" | "merge" | "accept" | "cleanup", n: ${rv!.n}} (что дальше — в письме с приёмкой).`
           : task && task.qid === o.qid && task.executor === card.session
-            ? `Закончил — сдай: crew_task {action: "submit", n: ${task.n}, text: "..."} (запасной путь — crew_send {to: "${o.from_session}", reply_to: "${o.qid}", text: "..."}). Упёрся — в том же отчёте напиши, что мешает.`
+            ? `Закончил — сдай: crew_task {action: "submit", n: ${task.n}, text: "..."}. Упёрся — в том же отчёте напиши, что мешает.`
             : `Закончил — отчёт: crew_send {to: "${o.from_session}", reply_to: "${o.qid}", text: "..."}. Упёрся — тем же ответом напиши, что мешает.`
         if (o.empty >= cfg.pushEmptyTurns || o.nudges >= cfg.pushMax) {
           o.stuck = true
@@ -462,7 +462,7 @@ export default {
         const task = c.task ? loadTask(c.task.project, c.task.n) : undefined
         const open = obligationsOf(c.session)
           .filter((o) => !o.stuck)
-          .map((o) => `— ${task && task.qid === o.qid ? `задача #${task.n} «${task.title}»` : `вопрос${o.task ? ` «${o.task.slice(0, 200)}»` : ""}`} от ${o.from_role}: ${task && task.qid === o.qid ? `сдача — crew_task {action: "submit", n: ${task.n}, text: "..."} (запасной путь — crew_send {to: "${o.from_session}", reply_to: "${o.qid}"})` : `отчёт — crew_send {to: "${o.from_session}", reply_to: "${o.qid}", text: "..."}`}`)
+          .map((o) => `— ${task && task.qid === o.qid ? `задача #${task.n} «${task.title}»` : `вопрос${o.task ? ` «${o.task.slice(0, 200)}»` : ""}`} от ${o.from_role}: ${task && task.qid === o.qid ? `сдача — crew_task {action: "submit", n: ${task.n}, text: "..."}` : `отчёт — crew_send {to: "${o.from_session}", reply_to: "${o.qid}", text: "..."}`}`)
           .join("\n")
         // следы оборванной операции git в деревьях задачи (worktree исполнителя и главная копия) и замок вливания
         const ref = c.task ?? c.review

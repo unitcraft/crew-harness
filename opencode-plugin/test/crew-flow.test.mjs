@@ -130,7 +130,7 @@ cell("the model comes from the project's spawn_models", created[0]?.model?.provi
 cell("the session title is #N and the first line of the goal", created[0]?.title === "#1 исп почини тест X", JSON.stringify(created[0]))
 await wait()
 const task = got(TASK, "почини тест X")
-cell("the task session gets the task without any window", task.length === 1 && task[0].text.includes(tqid), JSON.stringify(task))
+cell("the task session gets the task without any window, with the submit command and no qid", task.length === 1 && /crew_task \{action: "submit", n: \d+/.test(task[0].text) && !task[0].text.includes(tqid), JSON.stringify(task))
 const limit = await call("crew_spawn", "sesASKER1", { goal: "вторая задача", criteria: "c" })
 cell("the project's limit per role holds", /Лимит работающих задач роли worker/.test(limit), limit)
 const list = await call("crew_list", "sesASKER1")

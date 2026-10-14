@@ -342,7 +342,7 @@ start and its `idle` row): a turn with a tool call is a working one, a turn with
 - a turn ended without the answer → a reminder right away; a working turn resets the empty counter;
 - `push_empty_turns` (3) empty turns in a row or `push_max` (20) reminders → the tab is stuck: no
   more reminders, the asker gets a call (a letter and a notice in its window), the task's history
-  records it; `crew_task {action: "push"}` wakes it again and clears "stuck";
+  records it; `crew_task {action: "push", n, to?}` wakes it again (the executor, or the reviewer with `to: "reviewer"`) and clears "stuck";
 - a turn with the owner's own message gets no reminder (the owner leads the tab) and resets the count;
 - a turn cut off by an OpenCode restart (the session keeps `time_suspended`, no `idle` row, OpenCode
   does not resume it) is picked up by one letter that lists what is open and how to report;
@@ -379,9 +379,8 @@ journal is `tasks/<project>/<N>.json` in the mailbox.
   {n, text?}` (wake a stalled executor now), `reassign {n}` (a new session, the same number, a
   summary of what was done), `cancel {n}`, `priority {n, priority}`.
 - The executor submits with `crew_task {action: "submit", n, text}` (`submit - executor - n, text`):
-  no qid needed; `text` is the report (what was done, how it was checked, what is left). The spare
-  way is the old one, `crew_send` with `reply_to` = the task's qid; both go through the same code
-  (first submission, after rework, after a sync, a plan task with the form check). The task is
+  no qid needed; `text` is the report (what was done, how it was checked, what is left). It covers
+  the first submission, the one after rework or after a sync, and a plan task with the form check. The task is
   submitted (title `#N ✓`) — the report does **not** wake the integrator (after rework it wakes the
   reviewer); a second report is refused. An ordinary letter of the executor to the author, the
   integrator or the reviewer is not a report: it is sent as before, and the answer reminds the
@@ -497,7 +496,7 @@ the files in the plans folder and the open plan tasks. A sub-plan gets `N.k`.
 - phases `### Ф.N`, and in them steps `#### Ф.N.M` with `[P1] [после: …] [где: …]`;
 - each step has a «Что:» line and an «**Приёмка:**» block.
 
-The report (`submit` or `reply_to`) is refused while the file is missing or its form is wrong. The form check covers the
+The report (`submit`) is refused while the file is missing or its form is wrong. The form check covers the
 header, the sections, «Что» and «Приёмка» of every step, open questions as a quadruple with
 «Блокирует», and `после:` pointing at real steps with no cycles.
 

@@ -1132,7 +1132,13 @@ export function formatLetters(letters: Letter[], me: Card): string {
     .map((l) => {
       if (l.from_session === PLUGIN_SENDER) return `⚙  ${hhmm(l.time)} · crew → ${to} (служебное, не отвечай)\n${l.text}`
       const a = l.reply_to ? ` · ответ на твой вопрос ${l.reply_to}` : ""
-      const q = l.qid ? `\n↩ вопрос ${l.qid}: ответь crew_send {to: "${l.from_session}", reply_to: "${l.qid}", text: "..."} — без ответа он открыт, остановишься — напомню` : ""
+      // Письмо с qid самой задачи исполнителя (задание, доработка): сдают действием submit, а не ответом на qid.
+      const myTask = l.qid && me.task ? loadTask(me.task.project, me.task.n) : undefined
+      const q = l.qid
+        ? myTask && myTask.qid === l.qid && myTask.executor === me.session
+          ? `\n↩ задача #${myTask.n}: сдай crew_task {action: "submit", n: ${myTask.n}, text: "..."} — без сдачи она открыта, остановишься — напомню`
+          : `\n↩ вопрос ${l.qid}: ответь crew_send {to: "${l.from_session}", reply_to: "${l.qid}", text: "..."} — без ответа он открыт, остановишься — напомню`
+        : ""
       return `✉  ${hhmm(l.time)} · ${sessionLabel(l.from_session, l.from_role)} → ${to}${a}\n${l.text}${q}`
     })
     .join("\n\n")
@@ -1318,7 +1324,7 @@ acceptor — роль приёмщика (разделяемая) при нас�
 раз в секунду; закрыли окно (даже крестиком) — через 3 с его вкладки закрыты. Письмо в фоновую вкладку — уведомление
 в окне с кнопкой Open. Каждое пробуждение — ход и лимит: «принято», «спасибо» плагин не отправляет; статусы — wake: false.
 
-ВОПРОС И ОТВЕТ. Вопрос (expect_reply) и задача — обязательство получателя: пока он не ответил (reply_to), они открыты.
+ВОПРОС И ОТВЕТ. Вопрос (expect_reply) — обязательство получателя: пока он не ответил (reply_to), он открыт. Задача — обязательство исполнителя: пока он не сдал её (crew_task submit), она открыта.
 Ход кончился без ответа — плагин сразу будит напоминанием. Ход с вызовами инструментов — рабочий, без них — пустой;
 push_empty_turns (3) пустых подряд или push_max (20) напоминаний — вкладка застряла: напоминаний больше нет, спросившему
 вызов. Ход, где писал владелец, напоминания не получает. Снова будит застрявшую — crew_task push. Ход, оборванный
@@ -1337,7 +1343,7 @@ push_empty_turns (3) пустых подряд или push_max (20) напоми
   crew_task {action: "assign", session, goal, criteria, ...} — отдать задачу открытой вкладке владельца, а не новой
     сессии; пока задача открыта, такую вкладку будят, даже закрытую. Интегратор исполнителем своей задачи не бывает: assign на
     собственную сессию отказывает (исключение по слову владельца — allow_self_assign: true в настройках проекта).
-  crew_task {action: "push", n, text?} — подтолкнуть остановившегося исполнителя сейчас (счётчик напоминаний — с нуля).
+  crew_task {action: "push", n, text?, to?} — подтолкнуть остановившуюся вкладку сейчас: to "executor" (по умолчанию) — исполнителя, "reviewer" — приёмщика (счётчик напоминаний — с нуля).
   crew_task {action: "reassign", n} — передать задачу новой сессии под тем же номером со сводкой сделанного.
   crew_task {action: "cancel", n, text?} / {action: "priority", n, priority} / {action: "view", n} (show — прежнее имя, работает) / {action: "list"}.
   crew_task {action: "order", to: "<проект>.integrator", goal, criteria, ...} — заказ в другой проект: его интегратор
@@ -1367,8 +1373,7 @@ push_empty_turns (3) пустых подряд или push_max (20) напоми
 СТАТУСЫ ЗАДАЧИ: starting (сессия создаётся) → running (в работе) → submitted (сдана) → reviewing (на приёмке) ⇄ rework (на доработке);
 approval (задача-план ждёт согласования) → accepted (принята и влита, ждёт уборки) → done (принята и убрана) | cancelled (отменена).
 
-ПРИЁМКА. Исполнитель сдаёт работу действием crew_task {action: "submit", n, text} (qid знать не нужно; запасной путь — отчёт
-crew_send с reply_to = qid задачи); сдал — задача сдана (интегратора отчёт не будит), второй отчёт не отправляется.
+ПРИЁМКА. Исполнитель сдаёт работу действием crew_task {action: "submit", n, text} (qid знать не нужно); сдал — задача сдана (интегратора отчёт не будит), второй отчёт не отправляется.
 Обычное письмо приёмщику или интегратору сдачей не считается. Сданную задачу проверяет и вливает ПРИЁМЩИК — свободная открытая вкладка worker
 (не автор, не исполнитель) или новая сессия; при reviewer: integrator — сам интегратор. При reviewer: acceptor —
 свободная открытая вкладка роли acceptor или новая сессия с ролью acceptor (лимит spawn_limits.acceptor, без него —
@@ -2083,11 +2088,11 @@ export function makeTools(host: CrewHost): CrewTool[] {
         "view - anyone - n - details and history of a task, with its steps, side branches and worktrees (show is a synonym).",
         "assign - integrator - session, goal, criteria, title?, boundaries?, open_questions?, priority?, extra? - give a task to an existing open tab instead of a new session; the tab is woken while the task is open. Refused for the integrator's own session (unless the project sets allow_self_assign) and for a session that already runs a task. extra {id: one line} fills the project's extra task fields (task_extra_fields, see crew_config view).",
         "order - integrator - to \"project.integrator\", goal, criteria, ... - order work from another project: its integrator does it with its own tasks; when its task is accepted the order is done (a quiet summary to you), when cancelled you get a call.",
-        "push - integrator - n, text? - nudge a stalled executor now (the reminder counter starts over).",
+        "push - integrator - n, text?, to? - nudge a stalled tab now (the reminder counter starts over): to \"executor\" (default) wakes the executor, to \"reviewer\" wakes the reviewer of the task.",
         "reassign - integrator - n - hand the task to a new session under the same number with a summary of what was done.",
         "cancel - integrator - n, text? - cancel the task; text goes to the executor. Releases the merge lock if the task held it.",
         "priority - integrator - n, priority P0..P3 - change the priority.",
-        "submit - executor - n, text - submit the task's work with the report (what was done, how it was checked, what is left): the same as crew_send with reply_to the task's qid, without knowing the qid. The first submission, one after rework or after a sync (the reviewer is woken), a plan task (the plan file and its form are checked). Already submitted: refused.",
+        "submit - executor - n, text - submit the task's work with the report (what was done, how it was checked, what is left); no qid is needed. The first submission, one after rework or after a sync (the reviewer is woken), a plan task (the plan file and its form are checked). Already submitted: refused.",
         "track - executor, reviewer, integrator - n, branch?, worktree? - record a side branch or worktree of the task (no duplicates) so cleanup removes it; branches integrate/t<N> and integrate/t<N>-* are recorded by the plugin itself.",
         "plan_decide - integrator, only the plan task's author, only when the project's plan_approver is integrator - n, decision ok|ok-shortcuts|no, text (required with no) - decide a plan that passed the recheck rounds and waits for approval (status approval). ok = approved with no shortcuts; ok-shortcuts = approved, the shortcuts written in the plan stay; no = back to the executor, text lists what to change, the rounds start over. With plan_approver: owner (default) the owner decides in the window with /plans and this action is refused.",
         "review - reviewer - n - start reviewing a submitted task; the answer lists the acceptance steps. For a plan task the steps are the plan recheck steps.",
@@ -2105,7 +2110,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
       type: "object",
       properties: {
         action: { type: "string", enum: ["list", "view", "show", "assign", "order", "push", "reassign", "cancel", "priority", "track", "plan_decide", "submit", "review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleanup", "cleaned"] },
-        to: str("order: the other project's integrator, \"project.integrator\""),
+        to: str("order: the other project's integrator, \"project.integrator\"; push: \"executor\" (default) or \"reviewer\""),
         keep: { type: "array", maxItems: 8, items: { type: "string" }, description: "cleanup: up to 8 worktree paths to keep as evidence" },
         checks: { type: "object", description: "accept: report per acceptance step {step id: what proves it}", additionalProperties: { type: "string" } },
         step: str("check: the acceptance step id"),
@@ -2162,7 +2167,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         saveCard(target)
         postLetter(target.session, { id: taskLetterId(t), from_role: keyOf(me), from_session: me.session, to: target.session, time: Date.now(), qid: t.qid, text: formatTaskLetter(t) })
         host.posted([target.session])
-        return { content: `Задача #${t.n} «${t.title}» отдана вкладке ${target.session} (${tabStatus(target)}). Пока задача открыта, вкладку будят, даже если её закроют. Сдача — crew_task {action: "submit", n: ${t.n}, text} (запасной путь — ответ на ${t.qid}).` }
+        return { content: `Задача #${t.n} «${t.title}» отдана вкладке ${target.session} (${tabStatus(target)}). Пока задача открыта, вкладку будят, даже если её закроют. Сдача — crew_task {action: "submit", n: ${t.n}, text}.` }
       }
       if (action === "order") {
         if (!isIntegrator(me)) return notIntegrator(me)
@@ -2276,7 +2281,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const quiet = (to: string, id: string, text: string) => postLetter(to, { id, from_role: keyOf(me), from_session: me.session, to, time: now, wake: false, text })
         if (action === "review") {
           if (t.status !== "submitted" && t.status !== "reviewing") {
-            const unsent = WORKING_STATUSES.includes(t.status) ? ` Исполнитель ещё не сдал${t.status === "rework" ? " доработку" : " работу"}: пусть вызовет crew_task {action: "submit", n: ${t.n}, text: "..."} (запасной путь — crew_send с reply_to: "${t.qid}").` : ""
+            const unsent = WORKING_STATUSES.includes(t.status) ? ` Исполнитель ещё не сдал${t.status === "rework" ? " доработку" : " работу"}: пусть вызовет crew_task {action: "submit", n: ${t.n}, text: "..."}.` : ""
             return { content: `Задача ${taskRef(t)} ${statusRu(t.status)} — начинать приёмку нечего.${unsent}` }
           }
           t.steps = acc.map((a) => ({ id: a.id, text: a.text, ...(a.required ? { required: true } : {}) }))
@@ -2533,20 +2538,29 @@ ${lockStillYours(stillHeld.n)}` : "") }
       }
       if (!isOpen(t)) return { content: `Задача ${taskRef(t)} уже ${statusRu(t.status)}.` }
       if (action === "push") {
-        if (!t.executor) return { content: `У задачи ${taskRef(t)} нет исполнителя.` }
-        const text = String(input.text ?? "").trim() || "продолжай работу по задаче."
-        postLetter(t.executor, { id: `push-${safeKey(project)}-${t.n}-${Date.now()}`, from_role: keyOf(me), from_session: me.session, to: t.executor, time: Date.now(), text: `Подталкивание по задаче #${t.n} «${t.title}»: ${text}\nЗакончил — сдай: crew_task {action: "submit", n: ${t.n}, text: "..."} (запасной путь — crew_send {to: "${t.author}", reply_to: "${t.qid}", text: "..."}); упёрся — в том же отчёте напиши, что мешает.` })
-        const obl = obligationsOf(t.executor)
+        // кого толкать: исполнителя (по умолчанию) или приёмщика (to: "reviewer")
+        const whom = String(input.to ?? "").trim().toLowerCase() || "executor"
+        if (whom !== "executor" && whom !== "reviewer") return { content: `push: to — executor (по умолчанию) или reviewer, а не «${String(input.to)}».` }
+        const target = whom === "reviewer" ? t.reviewer : t.executor
+        const targetQid = whom === "reviewer" ? t.review_qid : t.qid
+        if (!target) return { content: whom === "reviewer" ? `У задачи ${taskRef(t)} нет приёмщика (приёмка ещё не назначена).` : `У задачи ${taskRef(t)} нет исполнителя.` }
+        const text = String(input.text ?? "").trim() || (whom === "reviewer" ? "продолжай приёмку." : "продолжай работу по задаче.")
+        const how =
+          whom === "reviewer"
+            ? `Продолжай приёмку: crew_task {action: "review" | "rework" | "merge" | "accept" | "cleanup", n: ${t.n}} (что дальше — в письме с приёмкой).`
+            : `Закончил — сдай: crew_task {action: "submit", n: ${t.n}, text: "..."}; упёрся — в том же отчёте напиши, что мешает.`
+        postLetter(target, { id: `push-${safeKey(project)}-${t.n}-${Date.now()}`, from_role: keyOf(me), from_session: me.session, to: target, time: Date.now(), text: `Подталкивание по задаче #${t.n} «${t.title}»: ${text}\n${how}` })
+        const obl = obligationsOf(target)
         for (const o of obl)
-          if (o.qid === t.qid) {
+          if (o.qid === targetQid) {
             o.nudges = 0
             o.empty = 0
             o.stuck = false
           }
-        saveObligations(t.executor, obl)
-        taskEvent(t, me.session, undefined, "подталкивание")
-        host.posted([t.executor])
-        return { content: `Задача ${taskRef(t)}: исполнитель ${t.executor} разбужен.` }
+        saveObligations(target, obl)
+        taskEvent(t, me.session, undefined, whom === "reviewer" ? "подталкивание приёмщика" : "подталкивание")
+        host.posted([target])
+        return { content: `Задача ${taskRef(t)}: ${whom === "reviewer" ? "приёмщик" : "исполнитель"} ${target} разбужен.` }
       }
       if (action === "cancel") {
         const why = String(input.text ?? "").trim()
@@ -2832,7 +2846,7 @@ export function planTaskLetter(t: Task): string {
     `ФОРМА (по этому шаблону: фазы «### ${f.prefix}.N — …», шаги «#### ${f.prefix}.N.M — …» с [P1] [после: …] [где: …], у шага «${f.whatLabel}:» и «**${f.criteriaLabel}:**»; отметки — как в шаблоне):\n${planTemplateFor(t, cfg)}`,
     `КРИТЕРИИ ПРИЁМКИ ПЛАНА — по ним идёт перепроверка:\n${cfg.planAcceptance.map((a) => `  ${a.id}: ${a.text}`).join("\n")}\nФорму (шапка, разделы, «${f.whatLabel}:» и «${f.criteriaLabel}» у каждого шага, вопросы четвёркой с «Блокирует», «после:» на существующие шаги без кругов) плагин проверит при сдаче — с ошибками формы отчёт не примет.`,
     `ДАЛЬШЕ: перепроверка раундами, каждый раунд — новая сессия.\n${roundRules(f.grades)}\nГотов — ${cfg.planCleanRounds} раунда подряд без замечаний градаций ${strict.join(", ")}; тогда план согласует ${approver}${f.modeQuestion ? ` (и ответит на «${f.sections.mode}»)` : ""}. Строку «**Перепроверка:**» в шапке обновляй после каждого раунда.`,
-    `СДАЧА: закоммить файл плана в ветку задачи и сдай: crew_task {action: "submit", n: ${t.n}, text: "план ${p.n}: файл, фазы и шаги кратко"}. Запасной путь — crew_send {to: "${t.author}", reply_to: "${t.qid}", text: "..."}. Упрёшься — в том же отчёте напиши, что мешает.`,
+    `СДАЧА: закоммить файл плана в ветку задачи и сдай: crew_task {action: "submit", n: ${t.n}, text: "план ${p.n}: файл, фазы и шаги кратко"}. Упрёшься — в том же отчёте напиши, что мешает.`,
   ]
     .filter(Boolean)
     .join("\n")
@@ -2882,7 +2896,7 @@ export function formatTaskLetter(t: Task): string {
     t.handoff ? `СДЕЛАНО ПРЕЖНИМ ИСПОЛНИТЕЛЕМ (задача передана тебе):\n${t.handoff}` : "",
     t.plan_step ? `ШАГ ПЛАНА ${t.plan_step.plan}, ${t.plan_step.step} (файл ${t.plan_step.file}): закрыв шаг, отметь в его заголовке «${loadConfig(t.directory).planForm.marks.step_done} <дата>, коммит <hash>» тем же слиянием — без отметки в целевой ветке приёмка не пройдёт.` : "",
     acceptanceForExecutor(t),
-    `Когда закончишь — сдай работу: crew_task {action: "submit", n: ${t.n}, text: "что сделано, как проверено, что осталось"}. Запасной путь — crew_send {to: "${t.author}", reply_to: "${t.qid}", text: "..."}. Упрёшься — в том же отчёте напиши, что мешает. Обычное письмо сдачей не считается. Пока работа не сдана, задача открыта: остановишься без сдачи — получишь напоминание.`,
+    `Когда закончишь — сдай работу: crew_task {action: "submit", n: ${t.n}, text: "что сделано, как проверено, что осталось"}. Упрёшься — в том же отчёте напиши, что мешает. Обычное письмо сдачей не считается. Пока работа не сдана, задача открыта: остановишься без сдачи — получишь напоминание.`,
   ]
     .filter(Boolean)
     .join("\n")

@@ -80,7 +80,7 @@ await call("crew_role", "sesINTEG1", { role: "integrator" })
 await call("crew_spawn", "sesINTEG1", { title: "фича", goal: "сделать фичу", criteria: "тест зелёный" })
 await wait(300)
 const ex1 = task(1).executor
-cell("the task letter names submit as the main way, reply_to as the spare", got(ex1, 'crew_task {action: "submit", n: 1').length === 1 && got(ex1, "reply_to").length === 1, JSON.stringify(got(ex1, "ЗАДАЧА").map((d) => d.text.slice(-400))))
+cell("the task letter names submit as the only way and does not name reply_to", got(ex1, 'crew_task {action: "submit", n: 1').length === 1 && got(ex1, "reply_to").length === 0, JSON.stringify(got(ex1, "ЗАДАЧА").map((d) => d.text.slice(-400))))
 const notEx = await call("crew_task", "sesINTEG1", { action: "submit", n: 1, text: "готово" })
 cell("submit by a non-executor is refused", /исполнител/.test(notEx) && task(1).status === "running", notEx)
 const noText = await call("crew_task", ex1, { action: "submit", n: 1 })
@@ -104,7 +104,7 @@ await call("crew_task", "sesREVIEW1", { action: "rework", n: 1, text: "доба�
 await wait(600)
 cell("the rework letter names submit as the main way", task(1).status === "rework" && got(ex1, "ДОРАБОТКА задачи #1").some((d) => d.text.includes('crew_task {action: "submit", n: 1')), JSON.stringify(got(ex1, "ДОРАБОТКА").map((d) => d.text.slice(-300))))
 const early = await call("crew_task", "sesREVIEW1", { action: "review", n: 1 })
-cell("review in rework names the executor's command", /crew_task \{action: "submit", n: 1,/.test(early) && /reply_to/.test(early), early)
+cell("review in rework names the executor's command and not reply_to", /crew_task \{action: "submit", n: 1,/.test(early) && !/reply_to/.test(early), early)
 const sendNoReply = await call("crew_send", ex1, { to: "sesINTEG1", text: "поправил" })
 cell("an ordinary letter in rework gets the hint", /Отправлено/.test(sendNoReply) && /crew_task \{action: "submit", n: 1/.test(sendNoReply) && task(1).status === "rework", sendNoReply)
 const rw = await call("crew_task", ex1, { action: "submit", n: 1, text: "добавил проверку" })
@@ -140,7 +140,7 @@ const ex3 = task(3).executor
 const noFile = await call("crew_task", ex3, { action: "submit", n: 3, text: "план готов" })
 cell("a plan task without the plan file: not submitted", /Не сдано: файла плана/.test(noFile) && task(3).status === "running", noFile)
 const planLetter = got(ex3, "ЗАДАЧА-ПЛАН")[0]?.text ?? ""
-cell("the plan task letter names submit as the main way", planLetter.includes('crew_task {action: "submit", n: 3') && planLetter.includes("reply_to"), planLetter.slice(-300))
+cell("the plan task letter names submit as the only way", planLetter.includes('crew_task {action: "submit", n: 3') && !planLetter.includes("reply_to"), planLetter.slice(-300))
 
 clearInterval(heart)
 stop?.()
