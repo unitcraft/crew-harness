@@ -1367,8 +1367,9 @@ push_empty_turns (3) пустых подряд или push_max (20) напоми
 СТАТУСЫ ЗАДАЧИ: starting (сессия создаётся) → running (в работе) → submitted (сдана) → reviewing (на приёмке) ⇄ rework (на доработке);
 approval (задача-план ждёт согласования) → accepted (принята и влита, ждёт уборки) → done (принята и убрана) | cancelled (отменена).
 
-ПРИЁМКА. Исполнитель обязан прислать отчёт ответом на qid задачи (reply_to); прислал — задача сдана (интегратора отчёт не
-будит), второй отчёт не отправляется. Сданную задачу проверяет и вливает ПРИЁМЩИК — свободная открытая вкладка worker
+ПРИЁМКА. Исполнитель сдаёт работу действием crew_task {action: "submit", n, text} (qid знать не нужно; запасной путь — отчёт
+crew_send с reply_to = qid задачи); сдал — задача сдана (интегратора отчёт не будит), второй отчёт не отправляется.
+Обычное письмо приёмщику или интегратору сдачей не считается. Сданную задачу проверяет и вливает ПРИЁМЩИК — свободная открытая вкладка worker
 (не автор, не исполнитель) или новая сессия; при reviewer: integrator — сам интегратор. При reviewer: acceptor —
 свободная открытая вкладка роли acceptor или новая сессия с ролью acceptor (лимит spawn_limits.acceptor, без него —
 reviewer; места worker не занимает), и merge, accept, cleanup разрешены только роли acceptor (или интегратору):
@@ -1690,6 +1691,36 @@ export function makeTools(host: CrewHost): CrewTool[] {
     },
   }
 
+  // СДАЧА ЗАДАЧИ (задача 041): одно место для двух путей — отчёта crew_send с reply_to и действия crew_task submit.
+  // Отказ — строкой (задача не меняется); иначе задача сдана (или доработка сдана), обязательство исполнителя снято,
+  // приёмщик после доработки разбужен. Письмо с отчётом автору кладёт вызывающий.
+  const submitTask = (t: Task, sessionID: string, fromRole: string, text: string, now: number): string | undefined => {
+    if (!WORKING_STATUSES.includes(t.status)) return `Не отправлено: отчёт по задаче ${taskRef(t)} уже отправлен (задача ${statusRu(t.status)}). Остановись — дальше приёмка.`
+    if (t.plan) {
+      // задача-план: отчёт принимается, только если файл плана есть и форма в порядке (план 004, критерии 1–5)
+      const base = t.worktree && existsSync(t.worktree) ? t.worktree : t.directory
+      const file = path.join(base, t.plan.file)
+      let ptext = ""
+      try {
+        ptext = readFileSync(file, "utf8")
+      } catch {}
+      if (!ptext) return `Не сдано: файла плана ${file} нет. Напиши план в этот файл, закоммить и сдай снова.`
+      const problems = planProblems(ptext, loadConfig(t.directory).planForm)
+      if (problems.length) return `Не сдано: форма плана ${t.plan.n} не в порядке (${problems.length}):\n${problems.map((x) => `— ${x}`).join("\n")}\nИсправь и сдай снова.`
+    }
+    settleObligation(sessionID, t.qid)
+    const again = t.status === "rework"
+    t.report = text
+    t.executor_role = fromRole
+    taskEvent(t, sessionID, "submitted", again ? (t.rework_sync ? "сдана после синхронизации с целевой веткой" : `доработка сдана (круг ${t.rework ?? 1})`) : "отчёт")
+    if (again && t.reviewer) {
+      // приёмщик ждёт: будим его с отчётом о доработке, его обязательство — снова
+      addObligation(t.reviewer, { qid: t.review_qid ?? t.qid, from_session: t.author, from_role: t.author_role, at: now, nudges: 0, task: `приёмка #${t.n}` })
+      host.posted(postExpected(t))
+    }
+    return undefined
+  }
+
   const crewSend: CrewTool = {
     name: "crew_send",
     description:
@@ -1749,37 +1780,14 @@ export function makeTools(host: CrewHost): CrewTool[] {
       // сдача после доработки будит приёмщика. Сессия исполнителя остаётся открытой до очистки (на случай доработки).
       const myTask = replyTo && me?.task ? loadTask(me.task.project, me.task.n) : undefined
       const isReport = !!myTask && myTask.qid === replyTo && myTask.executor === sessionID
-      if (isReport && !WORKING_STATUSES.includes(myTask!.status))
-        return { content: `Не отправлено: отчёт по задаче ${taskRef(myTask!)} уже отправлен (задача ${statusRu(myTask!.status)}). Остановись — дальше приёмка.` }
       if (replyTo && me?.spawned && !me.task && me.spawned.status !== "running" && me.spawned.qid === replyTo) return { content: "Не отправлено: отчёт по этой задаче уже отправлен, задача закрыта. Остановись." }
-      if (isReport) wake = false
-      const base = { from_role: fromRole, from_session: sessionID, text, time: now, ...(wake ? {} : { wake: false }), ...(qid ? { qid } : {}), ...(replyTo ? { reply_to: replyTo } : {}) }
-      if (replyTo) settleObligation(sessionID, replyTo)
-      if (isReport && myTask!.plan) {
-        // задача-план: отчёт принимается, только если файл плана есть и форма в порядке (план 004, критерии 1–5)
-        const pt = myTask!
-        const base = pt.worktree && existsSync(pt.worktree) ? pt.worktree : pt.directory
-        const file = path.join(base, pt.plan!.file)
-        let ptext = ""
-        try {
-          ptext = readFileSync(file, "utf8")
-        } catch {}
-        if (!ptext) return { content: `Не сдано: файла плана ${file} нет. Напиши план в этот файл, закоммить и сдай снова.` }
-        const problems = planProblems(ptext, loadConfig(pt.directory).planForm)
-        if (problems.length) return { content: `Не сдано: форма плана ${pt.plan!.n} не в порядке (${problems.length}):\n${problems.map((x) => `— ${x}`).join("\n")}\nИсправь и сдай снова.` }
-      }
       if (isReport) {
-        const t = myTask!
-        const again = t.status === "rework"
-        t.report = text
-        t.executor_role = fromRole
-        taskEvent(t, sessionID, "submitted", again ? (t.rework_sync ? "сдана после синхронизации с целевой веткой" : `доработка сдана (круг ${t.rework ?? 1})`) : "отчёт")
-        if (again && t.reviewer) {
-          // приёмщик ждёт: будим его с отчётом о доработке, его обязательство — снова
-          addObligation(t.reviewer, { qid: t.review_qid ?? t.qid, from_session: t.author, from_role: t.author_role, at: now, nudges: 0, task: `приёмка #${t.n}` })
-          host.posted(postExpected(t))
-        }
+        const refusal = submitTask(myTask!, sessionID, fromRole, text, now) // общий путь с crew_task submit
+        if (refusal) return { content: refusal }
+        wake = false
       }
+      const base = { from_role: fromRole, from_session: sessionID, text, time: now, ...(wake ? {} : { wake: false }), ...(qid ? { qid } : {}), ...(replyTo ? { reply_to: replyTo } : {}) }
+      if (replyTo && !isReport) settleObligation(sessionID, replyTo)
       if (replyTo && me?.spawned && !me.task && me.spawned.status === "running" && me.spawned.qid === replyTo) {
         me.spawned.status = "done"
         saveCard(me)
@@ -1849,7 +1857,16 @@ export function makeTools(host: CrewHost): CrewTool[] {
         return `${t} — ${isBusy(c, windows) ? "вкладка занята, прочтёт после текущего хода" : "доставляется сейчас"}`
       })
       log(`send ${fromRole} -> ${targets.join(",")}${wake ? "" : " (no wake)"}${qid ? " qid=" + qid : ""}`)
-      return { content: `Отправлено (${hhmm(now)}): ${known.join("; ")}.${qidTail}` }
+      // ПОДСКАЗКА СДАЧИ (задача 041): обычное письмо исполнителя приёмщику, интегратору или автору отчётом не считается
+      // (по тексту не определить) — отправка проходит как есть, ответ напоминает про crew_task submit.
+      let submitTip = ""
+      const myOpen = !replyTo && me?.task ? loadTask(me.task.project, me.task.n) : undefined
+      if (myOpen && myOpen.executor === sessionID && WORKING_STATUSES.includes(myOpen.status)) {
+        const toIntegrator = (x: string) => x === roleKey(home, "integrator") || cards.some((c) => c.session === x && isIntegrator(c))
+        if (targets.some((x) => x === myOpen.author || x === myOpen.reviewer || toIntegrator(x)))
+          submitTip = ` Задача #${myOpen.n} ещё не сдана${myOpen.status === "rework" ? " (на доработке)" : ""}: письмо отчётом не считается. Чтобы сдать, вызови crew_task {action: "submit", n: ${myOpen.n}, text: "что сделано, как проверено, что осталось"}.`
+      }
+      return { content: `Отправлено (${hhmm(now)}): ${known.join("; ")}.${qidTail}${submitTip}` }
     },
   }
 
@@ -2070,6 +2087,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         "reassign - integrator - n - hand the task to a new session under the same number with a summary of what was done.",
         "cancel - integrator - n, text? - cancel the task; text goes to the executor. Releases the merge lock if the task held it.",
         "priority - integrator - n, priority P0..P3 - change the priority.",
+        "submit - executor - n, text - submit the task's work with the report (what was done, how it was checked, what is left): the same as crew_send with reply_to the task's qid, without knowing the qid. The first submission, one after rework or after a sync (the reviewer is woken), a plan task (the plan file and its form are checked). Already submitted: refused.",
         "track - executor, reviewer, integrator - n, branch?, worktree? - record a side branch or worktree of the task (no duplicates) so cleanup removes it; branches integrate/t<N> and integrate/t<N>-* are recorded by the plugin itself.",
         "plan_decide - integrator, only the plan task's author, only when the project's plan_approver is integrator - n, decision ok|ok-shortcuts|no, text (required with no) - decide a plan that passed the recheck rounds and waits for approval (status approval). ok = approved with no shortcuts; ok-shortcuts = approved, the shortcuts written in the plan stay; no = back to the executor, text lists what to change, the rounds start over. With plan_approver: owner (default) the owner decides in the window with /plans and this action is refused.",
         "review - reviewer - n - start reviewing a submitted task; the answer lists the acceptance steps. For a plan task the steps are the plan recheck steps.",
@@ -2086,7 +2104,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
     input: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["list", "view", "show", "assign", "order", "push", "reassign", "cancel", "priority", "track", "plan_decide", "review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleanup", "cleaned"] },
+        action: { type: "string", enum: ["list", "view", "show", "assign", "order", "push", "reassign", "cancel", "priority", "track", "plan_decide", "submit", "review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleanup", "cleaned"] },
         to: str("order: the other project's integrator, \"project.integrator\""),
         keep: { type: "array", maxItems: 8, items: { type: "string" }, description: "cleanup: up to 8 worktree paths to keep as evidence" },
         checks: { type: "object", description: "accept: report per acceptance step {step id: what proves it}", additionalProperties: { type: "string" } },
@@ -2098,7 +2116,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         candidate: str("precheck: the checked candidate (branch or hash); with result it finishes the precheck"),
         n: { type: "number", description: "Task number" },
         session: str("assign: the tab (session id) that takes the task"),
-        text: str("push / cancel: text for the executor"),
+        text: str("submit: the report (what was done, how it was checked, what is left); push / cancel: text for the executor"),
         blocking: { type: "number", description: "round (plan recheck): number of blocking remarks" },
         significant: { type: "number", description: "round: number of significant remarks" },
         cosmetic: { type: "number", description: "round: number of cosmetic remarks" },
@@ -2144,7 +2162,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         saveCard(target)
         postLetter(target.session, { id: taskLetterId(t), from_role: keyOf(me), from_session: me.session, to: target.session, time: Date.now(), qid: t.qid, text: formatTaskLetter(t) })
         host.posted([target.session])
-        return { content: `Задача #${t.n} «${t.title}» отдана вкладке ${target.session} (${tabStatus(target)}). Пока задача открыта, вкладку будят, даже если её закроют. Отчёт — ответом на ${t.qid}.` }
+        return { content: `Задача #${t.n} «${t.title}» отдана вкладке ${target.session} (${tabStatus(target)}). Пока задача открыта, вкладку будят, даже если её закроют. Сдача — crew_task {action: "submit", n: ${t.n}, text} (запасной путь — ответ на ${t.qid}).` }
       }
       if (action === "order") {
         if (!isIntegrator(me)) return notIntegrator(me)
@@ -2213,6 +2231,22 @@ export function makeTools(host: CrewHost): CrewTool[] {
         host.posted([])
         return { content: `План ${t.plan.n}: ${DECISION_RU[decision as Decision]} — записано, плагин применит на ближайшем проходе.` }
       }
+      // СДАЧА (задача 041): исполнитель сдаёт работу сам, qid знать не нужно — то же, что отчёт crew_send с reply_to
+      if (action === "submit") {
+        if (t.executor !== me.session) return { content: `submit задачи ${taskRef(t)} — действие её исполнителя (${t.executor ?? "не назначен"}); ты не исполнитель.` }
+        const text = String(input.text ?? "").trim()
+        if (!text) return { content: `Нужен text: отчёт — что сделано, как проверено, что осталось. crew_task {action: "submit", n: ${t.n}, text: "..."}.` }
+        const now = Date.now()
+        const refusal = submitTask(t, me.session, keyOf(me), text, now)
+        if (refusal) return { content: refusal }
+        // отчёт автору — тихо, как у reply_to: придёт с его следующим ходом
+        const cards = allCards()
+        postLetter(t.author, { id: `${now}-${safeKey(me.session)}-${safeKey(t.author)}`, from_role: keyOf(me), from_session: me.session, to: t.author, time: now, wake: false, reply_to: t.qid, text })
+        closeAskedByLetter(me.session, [t.author], (s) => cards.filter((c) => c.session === s).map(keyOf), now)
+        host.posted([t.author])
+        log(`submit ${keyOf(me)} -> ${t.author} task #${t.n}`)
+        return { content: `Задача ${taskRef(t)} сдана (${hhmm(now)}): отчёт ушёл автору, дальше приёмка. Остановись и жди; вернут на доработку — придёт письмо.` }
+      }
       if (action === "track") {
         if (t.reviewer !== me.session && t.executor !== me.session && !isIntegrator(me)) return { content: `track задачи ${taskRef(t)}: исполнитель, приёмщик или интегратор.` }
         if (t.status === "done" || t.status === "cancelled") return { content: `Задача ${taskRef(t)} уже ${statusRu(t.status)}: записывать нечего.` }
@@ -2241,7 +2275,10 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const now = Date.now()
         const quiet = (to: string, id: string, text: string) => postLetter(to, { id, from_role: keyOf(me), from_session: me.session, to, time: now, wake: false, text })
         if (action === "review") {
-          if (t.status !== "submitted" && t.status !== "reviewing") return { content: `Задача ${taskRef(t)} ${statusRu(t.status)} — начинать приёмку нечего.` }
+          if (t.status !== "submitted" && t.status !== "reviewing") {
+            const unsent = WORKING_STATUSES.includes(t.status) ? ` Исполнитель ещё не сдал${t.status === "rework" ? " доработку" : " работу"}: пусть вызовет crew_task {action: "submit", n: ${t.n}, text: "..."} (запасной путь — crew_send с reply_to: "${t.qid}").` : ""
+            return { content: `Задача ${taskRef(t)} ${statusRu(t.status)} — начинать приёмку нечего.${unsent}` }
+          }
           t.steps = acc.map((a) => ({ id: a.id, text: a.text, ...(a.required ? { required: true } : {}) }))
           if (t.status === "submitted") {
             markPrecheckStale(t, "приёмка начата заново")
@@ -2498,7 +2535,7 @@ ${lockStillYours(stillHeld.n)}` : "") }
       if (action === "push") {
         if (!t.executor) return { content: `У задачи ${taskRef(t)} нет исполнителя.` }
         const text = String(input.text ?? "").trim() || "продолжай работу по задаче."
-        postLetter(t.executor, { id: `push-${safeKey(project)}-${t.n}-${Date.now()}`, from_role: keyOf(me), from_session: me.session, to: t.executor, time: Date.now(), text: `Подталкивание по задаче #${t.n} «${t.title}»: ${text}\nЗакончил — отчёт: crew_send {to: "${t.author}", reply_to: "${t.qid}", text: "..."}; упёрся — тем же ответом напиши, что мешает.` })
+        postLetter(t.executor, { id: `push-${safeKey(project)}-${t.n}-${Date.now()}`, from_role: keyOf(me), from_session: me.session, to: t.executor, time: Date.now(), text: `Подталкивание по задаче #${t.n} «${t.title}»: ${text}\nЗакончил — сдай: crew_task {action: "submit", n: ${t.n}, text: "..."} (запасной путь — crew_send {to: "${t.author}", reply_to: "${t.qid}", text: "..."}); упёрся — в том же отчёте напиши, что мешает.` })
         const obl = obligationsOf(t.executor)
         for (const o of obl)
           if (o.qid === t.qid) {
@@ -2795,7 +2832,7 @@ export function planTaskLetter(t: Task): string {
     `ФОРМА (по этому шаблону: фазы «### ${f.prefix}.N — …», шаги «#### ${f.prefix}.N.M — …» с [P1] [после: …] [где: …], у шага «${f.whatLabel}:» и «**${f.criteriaLabel}:**»; отметки — как в шаблоне):\n${planTemplateFor(t, cfg)}`,
     `КРИТЕРИИ ПРИЁМКИ ПЛАНА — по ним идёт перепроверка:\n${cfg.planAcceptance.map((a) => `  ${a.id}: ${a.text}`).join("\n")}\nФорму (шапка, разделы, «${f.whatLabel}:» и «${f.criteriaLabel}» у каждого шага, вопросы четвёркой с «Блокирует», «после:» на существующие шаги без кругов) плагин проверит при сдаче — с ошибками формы отчёт не примет.`,
     `ДАЛЬШЕ: перепроверка раундами, каждый раунд — новая сессия.\n${roundRules(f.grades)}\nГотов — ${cfg.planCleanRounds} раунда подряд без замечаний градаций ${strict.join(", ")}; тогда план согласует ${approver}${f.modeQuestion ? ` (и ответит на «${f.sections.mode}»)` : ""}. Строку «**Перепроверка:**» в шапке обновляй после каждого раунда.`,
-    `СДАЧА: закоммить файл плана в ветку задачи и отчитайся: crew_send {to: "${t.author}", reply_to: "${t.qid}", text: "план ${p.n}: файл, фазы и шаги кратко"}. Упрёшься — тем же ответом напиши, что мешает.`,
+    `СДАЧА: закоммить файл плана в ветку задачи и сдай: crew_task {action: "submit", n: ${t.n}, text: "план ${p.n}: файл, фазы и шаги кратко"}. Запасной путь — crew_send {to: "${t.author}", reply_to: "${t.qid}", text: "..."}. Упрёшься — в том же отчёте напиши, что мешает.`,
   ]
     .filter(Boolean)
     .join("\n")
@@ -2845,7 +2882,7 @@ export function formatTaskLetter(t: Task): string {
     t.handoff ? `СДЕЛАНО ПРЕЖНИМ ИСПОЛНИТЕЛЕМ (задача передана тебе):\n${t.handoff}` : "",
     t.plan_step ? `ШАГ ПЛАНА ${t.plan_step.plan}, ${t.plan_step.step} (файл ${t.plan_step.file}): закрыв шаг, отметь в его заголовке «${loadConfig(t.directory).planForm.marks.step_done} <дата>, коммит <hash>» тем же слиянием — без отметки в целевой ветке приёмка не пройдёт.` : "",
     acceptanceForExecutor(t),
-    `Когда закончишь — отчёт: crew_send {to: "${t.author}", reply_to: "${t.qid}", text: "что сделано, как проверено, что осталось"}. Упрёшься — тем же ответом напиши, что мешает. Пока отчёта нет, задача открыта: остановишься без него — получишь напоминание.`,
+    `Когда закончишь — сдай работу: crew_task {action: "submit", n: ${t.n}, text: "что сделано, как проверено, что осталось"}. Запасной путь — crew_send {to: "${t.author}", reply_to: "${t.qid}", text: "..."}. Упрёшься — в том же отчёте напиши, что мешает. Обычное письмо сдачей не считается. Пока работа не сдана, задача открыта: остановишься без сдачи — получишь напоминание.`,
   ]
     .filter(Boolean)
     .join("\n")
