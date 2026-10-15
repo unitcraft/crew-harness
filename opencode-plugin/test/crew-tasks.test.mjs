@@ -4,7 +4,7 @@
 //   with the same id: no second session, no second task letter;
 // - a task without the project's required fields is not started;
 // - crew_task: push wakes the executor and resets its reminders, reassign keeps the number and hands over a
-//   summary, assign gives a task to an owner's tab (woken while the task is open, even when closed), cancel,
+//   summary (with text: a refinement of the goal in the first letter, before the old goal, task 057), assign gives a task to an owner's tab (woken while the task is open, even when closed), cancel,
 //   priority, list by priority, show; only the integrator manages;
 // - session titles come from the journal: #N title, #N ↷ for a replaced session, #N ✗ for a cancelled one.
 import { execFileSync } from "node:child_process"
@@ -151,6 +151,23 @@ cell("the old session is closed and titled #N ↷", core.allCards().find((c) => 
 const oldReport = await call("crew_send", s2, { to: "sesINTEG1", text: "отчёт старого", reply_to: t2.qid })
 await wait()
 cell("the old session's report does not close the task", tasks.loadTask("proj", 2).status === "running", tasks.loadTask("proj", 2).status + " " + oldReport)
+cell("reassign without text: the letter is as before (no refinement block, the goal as ЦЕЛЬ)", handed.length === 1 && !handed[0].text.includes("УТОЧНЕНИЕ ПРИ ПЕРЕДАЧЕ") && handed[0].text.includes("ЦЕЛЬ: сделать два"), handed[0]?.text)
+
+// 6a. reassign with text (task 057): the refinement is in the FIRST letter of the new session, before the old goal;
+//     the old goal stays (history); the text is in the task history and in view
+const re2 = await call("crew_task", "sesINTEG1", { action: "reassign", n: 2, text: "делай только парсер, вывод не трогай" })
+const s2c = sidOf(re2)
+await wait()
+const handed2 = got(s2c, "ЗАДАЧА #2")
+const L = handed2[0]?.text ?? ""
+cell("reassign with text: one letter to the new session", s2c && s2c !== s2b && handed2.length === 1 && delivered.filter((d) => d.sessionID === s2c).length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === s2c)))
+cell("reassign with text: the refinement block is in the first letter, before the old goal", L.includes("УТОЧНЕНИЕ ПРИ ПЕРЕДАЧЕ") && L.includes("делай только парсер, вывод не трогай") && L.indexOf("УТОЧНЕНИЕ ПРИ ПЕРЕДАЧЕ") < L.indexOf("сделать два"), L)
+cell("reassign with text: the old goal stays and is marked as the original one", L.includes("сделать два") && !L.includes("ЦЕЛЬ: сделать два") && /действует уточнение/.test(L), L)
+const t2c = tasks.loadTask("proj", 2)
+cell("reassign with text: the text is in the task history", t2c.history.some((h) => h.note?.includes("делай только парсер, вывод не трогай")), JSON.stringify(t2c.history))
+const show2 = await call("crew_task", "sesOWNER1", { action: "view", n: 2 })
+cell("reassign with text: view shows the refinement", /уточнение при передаче: делай только парсер/.test(show2), show2)
+cell("reassign with text: the answer names the refinement", /с уточнением цели/.test(re2), re2)
 
 // 7. assign: an owner's tab takes a task; woken while the task is open, even when closed
 const as = await call("crew_task", "sesINTEG1", { action: "assign", session: "sesOWNER1", title: "вкладке владельца", goal: "посмотреть", ...FIELDS })
