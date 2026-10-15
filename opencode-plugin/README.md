@@ -178,6 +178,25 @@ tabs whose turn ended with a question. A question gives a notice at once and aga
 open. With `owner_system_notify: true` the project also gets a Windows system notification (built-in PowerShell, no installs and no rights;
 off by default).
 
+### Your answer to a question from outside the window (task 059)
+
+On your word in the orchestrator chat, the orchestrator can pass your answer to an open questionnaire of any tab:
+
+```
+node scripts/crew-answer.mjs                    # open questions: project, tab, form id, question, options
+node scripts/crew-answer.mjs <form id | session | project.role> --option 2 --quote "your word"
+node scripts/crew-answer.mjs frm_123 --text "your own answer" --quote "your word"
+```
+
+The script puts an answer file into `<mailbox>/answers/` and waits up to 30 s for the result. OpenCode 2.0.26 gives the plugin no
+way to reply to a form (no `form.reply` in the plugin context), so the plugin closes the question by an interrupt of the turn
+(`session.interrupt`, as on Esc) and sends the tab a letter «Ответ владельца на ваш вопрос «…»: <answer> (передан через
+оркестратора по слову владельца: «…»)». The record in `forms/` goes as answered (no repeat of task 040), the task of the tab gets
+the event «ответ владельца через оркестратора», the plugin log a line `owner answer <id> applied`. Not applied — no open question
+(or it is already answered), no such option, no quote, the interrupt failed (the question stays open): the reason is in the file
+(`status: refused`, `why`) and in the log. Only files in the local data folder of the service are read; whoever can write there
+can forge an answer, the same border as the mailbox — the log line and the task event are the signal.
+
 ### A hung turn is interrupted and resumed by the plugin (tasks 036, 048)
 
 A tab whose window says the turn runs, while the model has been silent for 15 minutes (`CREW_HARNESS_HUNG_MS`) with no

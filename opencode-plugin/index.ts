@@ -143,6 +143,7 @@ import { forEachBudget, background, stepBudget } from "./async-git.ts"
 import { ensureWorktree, fileAtAsync, gitTraces, leftoversOf, mergeHolder, mergeLockAbandoned, reviewLetter, wakeLockWaiters } from "./review.ts"
 import { precheckLines, releaseLandedLock } from "./precheck.ts"
 import { isLauncherCard, noteLoopLag, registerJournalTools } from "./journal.ts"
+import { answerTick } from "./owner-answer.ts"
 import { type ResumeTry, RESUME_WINDOW_MS, canInterrupt, interruptTurn, resumeLetter, resumeNote, resumeVerdict } from "./hung-resume.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
@@ -1121,6 +1122,23 @@ export default {
         },
         now(),
       )
+      // ОТВЕТ ВЛАДЕЛЬЦА СНАРУЖИ ОКНА (задача 059, owner-answer.ts): файл из scripts/crew-answer.mjs — прерывание хода и письмо с ответом
+      await answerTick({
+        interrupt: (s) => interruptTurn(ctx.session, s),
+        letter: (s, text, id) => {
+          if (!letterExistsFor(s, id)) postLetter(s, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: s, time: now(), text })
+        },
+        history: (s, note) => {
+          const c = readJson<Card>(cardFile(s))
+          for (const ref of [c?.task, c?.review]) {
+            const task = ref ? loadTask(ref.project, ref.n) : undefined
+            if (task && (task.executor === s || task.reviewer === s)) taskEvent(task, PLUGIN_SENDER, undefined, note)
+          }
+          void clearStuck(s, "the owner answered the question form from outside")
+          if (c) void deliver(c)
+        },
+        say: (line) => log(line),
+      }, now())
       formReminders(now(), (session, f, message) => {
         const c = readJson<Card>(cardFile(session))
         const title = `${short(sessionLabel(session, c ? keyOf(c) : session), 40)} ждёт вас`
