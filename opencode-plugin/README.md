@@ -288,19 +288,38 @@ Until the Canon item about the journal is in `main`, sessions write the earlier 
 "все шаги сделаны, итога нет" until it leaves the panel after 24 hours; a line written after "готово" in the same session brings the same
 state back. Later the sessions write `<code> N/N [HH:MM] готово …` last and the panel shows "готово" for 15 minutes.
 
-## Task journals: `progress_line` and `usage_line`
+## Task journals: `progress_line`, `log_line` and `usage_line`
 
-Two tools of the plugin write the journals of a task folder (Canon item "Три журнала сессии"). They are registered by a
-separate `ctx.tool.transform` call (`journal.ts`), are not in the MCP server and not among the twelve `crew_*` tools; a
-failure to register them does not break the plugin. Both are narrow: no shell, append only, a fixed file name, the path must
-stay inside the project folder of the window, the refusal of the file system comes back as a refusal, earlier lines are never
-rewritten. A refusal is the answer `Не записано: <reason>`, nothing is written.
+Three tools of the plugin write the journals of a task folder (Canon item "Три журнала сессии"); they are the way to write these
+journals in an OpenCode window, the system hint of every tab says so. They are registered by a separate `ctx.tool.transform` call
+(`journal.ts`), are not in the MCP server and not among the `crew_*` tools; a failure to register them does not break the plugin. All
+are narrow: no shell, append only, a fixed file name, the path must stay inside the project folder of the window, the refusal of the
+file system comes back as a refusal, earlier lines are never rewritten. A refusal is the answer `Не записано: <reason>`, nothing is
+written; the reason names the rule, the expected form and an example call.
 
-`progress_line` `{file, code, unit, text}`: appends ONE line `<code> k/N [YYYY-MM-DD HH:MM] <text>` with the machine date and time to a file
-named `progress.log`, which must already exist. `code` is 1-8 letters or digits, `unit` is `k/N` or `?/?`, `text` is one line
-of up to 120 characters. Example: `progress_line {file: "doc/tasks/007-x/progress.log", code: "С5д", unit: "4/13", text: "..."}`.
-Commands that only ask the clock (`date +%H:%M`, `Get-Date -Format HH:mm`) are refused by the `opencode-windows-env` plugin;
-this tool is the allowed way to put the time into the journal.
+`progress_line` `{file, code, kind, k, n, pass, stop, text}` (task 049): the agent names the kind of the line and the numbers, the tool
+builds the line `<code> k/N [YYYY-MM-DD HH:MM] <signature>` itself and checks it against the earlier lines of the same session code in
+the file (rules: methodology, `task-runner.md`, "Строки `progress.log`"):
+
+| kind | input | line | refused when |
+|---|---|---|---|
+| `start` | `n`, `pass` (required for a review code С2, С4, С6), `text` optional | `С2 0/34 [..] старт заход 1 — опись 34 источника` | no `n`; review code without `pass`; `text` begins with a keyword |
+| `step` (default) | `k`, `n`, `text` (or the old `unit: "k/N"`) | `С2 1/34 [..] spec.md прочитан целиком` | no start line of the session; after `готово`; `k` not previous + 1 (a jump names the missing units, a repeat names the next one); `k > n`; `text` begins with старт, готово, стоп or запуск |
+| `done` | `text` optional | `С2 34/34 [..] готово — отчёт сохранён` | units before N not written; no start; a second `готово` |
+| `stop` | `stop` (вопрос, план, ревизия, требования, ворота), `text` = reason | `С2 5/34 [..] стоп: вопрос — нужен ответ` | kind missing or outside the list; no reason |
+| `launch` | `text` optional | `С5 0/0 [..] запуск` | - |
+
+The whole signature (everything after the time field) is at most 80 characters, as in the methodology; a longer one is refused with
+the number of characters to cut. `start` and `launch` create a missing `progress.log` in an existing folder; other kinds need the file.
+`?/?` is no longer written: neither the guard nor the panel reads it as a line. A session continues after `стоп` with the next unit;
+a new `start` of the same code opens a new session. The answer `Записано: <line>` is followed by the next step (for example
+`следующая — k: 5`). Commands that only ask the clock (`date +%H:%M`, `Get-Date -Format HH:mm`) are refused by the `opencode-windows-env`
+plugin; these tools are the allowed way to put the time into the journals.
+
+`log_line` `{file, kind, text}` (task 049): appends ONE entry `YYYY-MM-DD HH:MM <kind>: <text>` with the machine date and time to a file
+named `log.md`; `kind` is one of решение владельца, заседание, ворота, документ, пуск, слияние, находка (the guard rule `log-line`); one
+entry per call, one line, up to 2000 characters; a file without a final newline gets one first; the file may be created only in an
+existing folder. Example: `log_line {file: "doc/tasks/007-x/log.md", kind: "решение владельца", text: "владелец, 2026-10-15, чат: «да»"}`.
 
 `usage_line` `{file, code, result}`: appends ONE JSON line (format version `"v":1`) to a file named `usage.log`; the file may
 be created only when a `progress.log` lies in the same folder. The agent passes the file, the session code and the result

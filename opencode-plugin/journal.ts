@@ -1,11 +1,14 @@
 // ЖУРНАЛЫ ЗАДАЧИ: операции записи для агента (2026-10-09). Журналы задачи — территория CrewHarness (Канон, «Три журнала сессии»).
-//   progress_line — одна строка `<код> k/N [ГГГГ-ММ-ДД ЧЧ:ММ] <текст>` с настоящими датой и временем машины в файл progress.log;
+//   progress_line — одна строка `<код> k/N [ГГГГ-ММ-ДД ЧЧ:ММ] <подпись>` с настоящими датой и временем машины в файл progress.log;
+//                   строку собирает инструмент по виду (старт, шаг, готово, стоп, запуск) и сверяет с прежними строками сессии (задача 049);
+//   log_line      — одна запись `ГГГГ-ММ-ДД ЧЧ:ММ <вид>: <текст>` в log.md задачи, вид — из закрытого списка Канона (задача 049);
 //   usage_line    — одна строка JSON (поле версии `v`) с учётом сессии в файл usage.log рядом с progress.log.
-// Обе операции узкие: никакой оболочки, только дозапись, имя файла фиксировано, путь не выходит из папки проекта окна, отказ
+// Все операции узкие: никакой оболочки, только дозапись, имя файла фиксировано, путь не выходит из папки проекта окна, отказ
 // файловой системы возвращается отказом, прежние строки не переписываются. Чистые функции здесь; регистрация — registerJournalTools.
 import { execFileSync } from "node:child_process"
-import { appendFileSync, existsSync, statSync } from "node:fs"
+import { appendFileSync, existsSync, readFileSync, statSync } from "node:fs"
 import path from "node:path"
+import { keywordOf, parseJournal, STOP_KINDS, type Line } from "./progress.ts"
 
 const pad2 = (n: number) => String(n).padStart(2, "0")
 export const hhmm = (d: Date = new Date()) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
@@ -21,7 +24,6 @@ export function isoLocal(d: Date): string {
 export type Refused = { ok: false; reason: string }
 
 const CODE_RE = /^[A-Za-zА-Яа-яЁё0-9]{1,8}$/
-const UNIT_RE = /^(?:\d{1,4}\/\d{1,4}|\?\/\?)$/
 const CONTROL_RE = /[\r\n\u0000-\u001f\u007f]/
 
 // Файл внутри папки проекта окна и с нужным именем; иначе отказ.
@@ -45,29 +47,212 @@ function appendOnly(abs: string, line: string): Refused | undefined {
 }
 
 // ---- progress_line ----
+// Задача 049 (2026-10-15): строку журнала хода собирает инструмент, а не агент. Агент называет вид строки (старт, шаг, готово, стоп,
+// запуск) и числа; инструмент сам ставит ключевое слово, номер захода, вид остановки, дату и время машины и сверяет строку с
+// предыдущими строками той же сессии в файле: старт перед шагами, по строке на единицу без пропусков, k не уменьшается, после
+// «готово» строк той же сессии нет, подпись не длиннее 80 знаков (правила — методика, task-runner.md, «Строки progress.log»).
+// Отказ называет правило, ожидаемую форму и пример вызова. Прежние строки не переписываются.
 
-export type ProgressInput = { file: string; code: string; unit: string; text: string }
+export type ProgressKind = "start" | "step" | "done" | "stop" | "launch"
+export type ProgressInput = {
+  file: string
+  code: string
+  kind?: string
+  k?: number | string
+  n?: number | string
+  pass?: number | string
+  stop?: string
+  text?: string
+  /** прежняя форма «k/N» для шага; вместо неё — k и n */
+  unit?: string
+}
 
-export function progressLine(input: ProgressInput, base: string, now: Date = new Date()): { ok: true; line: string; file: string } | Refused {
-  const text = String(input?.text ?? "").trim()
+/** Предел подписи без поля времени (методика: «подпись без времени — не длиннее 80 знаков»). */
+export const SIGNATURE_MAX = 80
+const KIND_ALIASES: Record<string, ProgressKind> = {
+  start: "start",
+  старт: "start",
+  step: "step",
+  шаг: "step",
+  done: "done",
+  готово: "done",
+  stop: "stop",
+  стоп: "stop",
+  launch: "launch",
+  запуск: "launch",
+}
+// Коды проверяющих сессий (С2, С4, С6 и их варианты: С2д, С2в9): у них номер захода в строке старта обязателен.
+const REVIEW_CODE_RE = /^[СC][246]/
+const KEYWORD_START_RE = /^(?:старт|готово|стоп|запуск)(?:$|[ \t.,:;!—–-])/i
+const SEP = " — "
+
+const asInt = (v: unknown): number | undefined => {
+  if (typeof v === "number" && Number.isInteger(v) && v >= 0) return v
+  if (typeof v === "string" && /^\d{1,4}$/.test(v.trim())) return Number(v.trim())
+  return undefined
+}
+const given = (v: unknown) => v !== undefined && v !== null && String(v).trim() !== ""
+
+/** Что известно о последней сессии кода в журнале: начата ли строкой старт, закончена ли «готово», последний k и N. */
+export type SessionState = { started: boolean; done: boolean; k: number; n?: number }
+export function sessionState(lines: Line[], code: string): SessionState {
+  let st: SessionState = { started: false, done: false, k: -1 }
+  for (const l of lines) {
+    if (l.code !== code) continue
+    const kw = keywordOf(l.text)
+    if (kw === "запуск" && l.k === 0 && l.n === 0) st = { started: false, done: false, k: -1 }
+    else if (kw === "старт") st = { started: true, done: false, k: l.k, n: l.n }
+    // строка после «готово» или с упавшим k — новая сессия без строки старт (так её разбирает и панель)
+    else if (st.done || (st.k >= 0 && l.k < st.k)) st = { started: false, done: kw === "готово", k: l.k, n: l.n }
+    else st = { started: st.started, done: kw === "готово", k: l.k, n: l.n }
+  }
+  return st
+}
+
+const example = (file: string, code: string, rest: string) => `progress_line {file: "${file}", code: "${code}", ${rest}}`
+const range = (a: number, b: number) => (b > a ? `${a}–${b}` : `${a}`)
+
+/**
+ * Собрать строку журнала хода по виду и проверить её против прежних строк сессии. Чистая функция: файл не читает и не пишет;
+ * `prior` — разобранные строки файла (пусто, если файла нет).
+ */
+export function buildProgress(input: ProgressInput, prior: Line[], now: Date = new Date()): { ok: true; line: string; kind: ProgressKind; hint: string } | Refused {
+  const file = String(input?.file ?? "").trim() || "doc/tasks/NNN-x/progress.log"
   const code = String(input?.code ?? "").trim()
+  if (!CODE_RE.test(code)) return { ok: false, reason: "код сессии: 1–8 букв или цифр без пробелов, дословно из строки «Сессия:» (например С2 или С5д)" }
+  const rawKind = String(input?.kind ?? "").trim().toLowerCase()
   const unit = String(input?.unit ?? "").trim()
-  if (!CODE_RE.test(code)) return { ok: false, reason: "код сессии: 1–8 букв или цифр без пробелов (например С5д)" }
-  if (!UNIT_RE.test(unit)) return { ok: false, reason: "счёт: k/N числами (например 4/13) или ?/?" }
-  if (!text) return { ok: false, reason: "текст пустой" }
-  if (CONTROL_RE.test(text)) return { ok: false, reason: "текст в одну строку, без управляющих символов" }
-  if ([...text].length > 120) return { ok: false, reason: "текст длиннее 120 знаков (строка журнала до 80 знаков по правилу проекта; сократи)" }
+  let kind: ProgressKind | undefined = rawKind ? KIND_ALIASES[rawKind] : undefined
+  if (rawKind && !kind) return { ok: false, reason: `вид строки «${rawKind}» неизвестен; kind — одно из: start (старт), step (шаг), done (готово), stop (стоп), launch (запуск)` }
+  let k = asInt(input?.k)
+  let n = asInt(input?.n)
+  if (given(input?.k) && k === undefined) return { ok: false, reason: "k — целое число от 0" }
+  if (given(input?.n) && n === undefined) return { ok: false, reason: "n — целое число от 0" }
+  if (unit) {
+    const m = /^(\d{1,4})\/(\d{1,4})$/.exec(unit)
+    if (!m) return { ok: false, reason: `счёт «${unit}» не k/N числами; лучше k и n отдельно: ${example(file, code, 'kind: "step", k: 4, n: 13, text: "что сделано"')}` }
+    k ??= Number(m[1])
+    n ??= Number(m[2])
+  }
+  kind ??= "step"
+  const text = String(input?.text ?? "").trim()
+  if (CONTROL_RE.test(text)) return { ok: false, reason: "текст в одну строку, без переводов строки и управляющих символов" }
+  const st = sessionState(prior, code)
+  const review = REVIEW_CODE_RE.test(code)
+  let sig: string
+  let hint: string
+
+  if (kind === "launch") {
+    k = 0
+    n = 0
+    sig = "запуск" + (text ? SEP + text : "")
+    hint = `сессия ${code} видна в панели; её первая строка — старт: ${example(file, code, 'kind: "start", n: <число единиц>')}`
+  } else if (kind === "start") {
+    if (n === undefined)
+      return { ok: false, reason: `у строки старт нужен n — число единиц, видимое сессии (методика: «первая строка сессии — <код> 0/<N> [время] старт»); пример: ${example(file, code, 'kind: "start", n: 34, pass: 1, text: "опись 34 источника"')}` }
+    const pass = asInt(input?.pass)
+    if (given(input?.pass) && (pass === undefined || pass < 1)) return { ok: false, reason: "pass — номер захода, целое число от 1" }
+    if (pass === undefined && review)
+      return { ok: false, reason: `у проверяющей сессии ${code} нужен pass — номер захода (методика: «номер захода — в подписи первой строки ("старт заход 7")»), как в имени файла проверки (spec-review-N.md и др.); пример: ${example(file, code, `kind: "start", n: ${n}, pass: 9`)}` }
+    if (text && KEYWORD_START_RE.test(text)) return { ok: false, reason: "в text не пиши ключевое слово: «старт» и номер захода ставит инструмент; в text — что предстоит (например «опись 34 источника»)" }
+    k = 0
+    sig = "старт" + (pass !== undefined ? ` заход ${pass}` : "") + (text ? SEP + text : "")
+    hint = n > 0 ? `дальше — строка сразу после каждой завершённой единицы: ${example(file, code, `kind: "step", k: 1, n: ${n}, text: "что сделано"`)}` : 'единиц нет: конец — kind "done"'
+  } else if (kind === "step") {
+    if (k === undefined || n === undefined) return { ok: false, reason: `у шага нужны k и n — номер завершённой единицы и число единиц; пример: ${example(file, code, 'kind: "step", k: 4, n: 13, text: "spec.md прочитан целиком"')}` }
+    if (!text) return { ok: false, reason: "у шага нужен text — что сделано, начиная с предмета (до 80 знаков вместе со всем, кроме времени)" }
+    const kw = KEYWORD_START_RE.exec(text)
+    if (kw) return { ok: false, reason: `text шага начинается с ключевого слова «${kw[0].trim()}»: старт, готово, стоп и запуск ставит инструмент по виду строки — kind start, done, stop или launch; в шаге первое слово — предмет (что сделано)` }
+    if (!st.started)
+      return { ok: false, reason: `у сессии ${code} в этом файле нет строки старт${st.done ? " после её «готово»" : ""}: первая строка сессии — старт, её пишут до чтения и работы (методика: «первая строка сессии — <код> 0/<N> [время] старт»). Сначала: ${example(file, code, `kind: "start", n: ${n}${review ? ", pass: <номер захода>" : ""}`)}` }
+    if (st.done) return { ok: false, reason: `сессия ${code} уже закончена строкой готово; после неё строки той же сессии не пишутся — новая сессия начинается строкой старт (kind start)` }
+    if (k < 1) return { ok: false, reason: "k шага — номер завершённой единицы, от 1 (0 — только у старта)" }
+    if (k > n) return { ok: false, reason: `k=${k} больше n=${n}; если единиц оказалось больше, назови новое n` }
+    if (k <= st.k) return { ok: false, reason: `единица ${k} уже записана (последняя строка сессии ${code} — ${st.k}/${st.n}); k не повторяется и не уменьшается — следующая единица ${st.k + 1}` }
+    if (k > st.k + 1)
+      return { ok: false, reason: `пропущены единицы ${range(st.k + 1, k - 1)}: строка пишется на каждую завершённую единицу, сразу после неё, по одной (методика: «одна строка на каждую завершённую единицу»). Запиши сначала: ${example(file, code, `kind: "step", k: ${st.k + 1}, n: ${n}, text: "что сделано"`)}` }
+    sig = text
+    hint = k < n ? `следующая — k: ${k + 1}` : `все единицы записаны; конец — ${example(file, code, 'kind: "done", text: "итог"')}, остановка на воротах — kind "stop"`
+  } else if (kind === "done") {
+    if (!st.started) return { ok: false, reason: `у сессии ${code} в этом файле нет строки старт — готово пишет начатая сессия; начало: ${example(file, code, 'kind: "start", n: <число единиц>')}` }
+    if (st.done) return { ok: false, reason: `сессия ${code} уже закончена строкой готово; второй готово не пишется` }
+    n ??= st.n
+    if (n === undefined) return { ok: false, reason: "не известно n сессии: назови n" }
+    if (st.k < n - 1)
+      return { ok: false, reason: `до готово не записаны единицы ${range(st.k + 1, n - 1)} из ${n}: готово — строка последней единицы N/N; сессия, вставшая раньше, пишет kind "stop" с видом остановки` }
+    if (text && KEYWORD_START_RE.test(text)) return { ok: false, reason: "в text не пиши «готово»: ключевое слово ставит инструмент; в text — итог" }
+    k = n
+    sig = "готово" + (text ? SEP + text : "")
+    hint = "сессия закончена; дальнейшее — новой сессией"
+  } else {
+    const word = String(input?.stop ?? "").trim().toLowerCase()
+    if (!STOP_KINDS.includes(word))
+      return { ok: false, reason: `вид остановки ${word ? `«${word}» не из списка` : "не назван"}: stop — одно из слов ${STOP_KINDS.join(", ")} (методика: «стоп: <вид> — <причина>»); пример: ${example(file, code, 'kind: "stop", stop: "вопрос", text: "нужен ответ интегратора о составе описи"')}` }
+    if (!text) return { ok: false, reason: "у остановки нужен text — причина" }
+    if (st.done) return { ok: false, reason: `сессия ${code} уже закончена строкой готово; остановка пишется до неё` }
+    k = st.k >= 0 ? st.k : 0
+    n = st.n ?? n ?? 0
+    sig = `стоп: ${word}${SEP}${text}`
+    hint = 'сессия остановлена; продолжение той же сессии после решения — следующей единицей (kind "step")'
+  }
+  const len = [...sig].length
+  if (len > SIGNATURE_MAX)
+    return { ok: false, reason: `подпись «${sig}» — ${len} знаков, предел ${SIGNATURE_MAX} без поля времени (методика: «подпись без времени — не длиннее 80 знаков»); сократи text на ${len - SIGNATURE_MAX}, подробности — в отчёт или log.md` }
+  return { ok: true, line: `${code} ${k}/${n} [${ymdhm(now)}] ${sig}`, kind, hint }
+}
+
+export function progressLine(input: ProgressInput, base: string, now: Date = new Date()): { ok: true; line: string; file: string; hint: string } | Refused {
   const where = insideBase(input?.file, base, "progress.log")
   if (!where.ok) return where
-  let st
+  let prior: Line[] = []
+  let exists = false
   try {
-    st = statSync(where.abs)
-  } catch {
-    return { ok: false, reason: "файла нет: журнал создаёт сессия методики, эта операция только дописывает" }
+    const st = statSync(where.abs)
+    if (!st.isFile()) return { ok: false, reason: "это не файл" }
+    exists = true
+    prior = parseJournal(readFileSync(where.abs))
+  } catch (e: any) {
+    if (e?.code !== "ENOENT") return { ok: false, reason: `файловая система отказала: ${e?.code ?? e}` }
   }
-  if (!st.isFile()) return { ok: false, reason: "это не файл" }
-  const line = `${code} ${unit} [${ymdhm(now)}] ${text}`
-  const bad = appendOnly(where.abs, line)
+  const built = buildProgress(input, prior, now)
+  if (!built.ok) return built
+  if (!exists) {
+    if (built.kind !== "start" && built.kind !== "launch") return { ok: false, reason: 'файла нет: журнал создаёт строка старт (kind "start") или запуск (kind "launch")' }
+    if (!existsSync(path.dirname(where.abs))) return { ok: false, reason: "папки журнала нет: инструмент создаёт только файл progress.log в существующей папке" }
+  }
+  const bad = appendOnly(where.abs, built.line)
+  if (bad) return bad
+  return { ok: true, line: built.line, file: where.abs, hint: built.hint }
+}
+
+// ---- log_line ----
+// Задача 049: запись log.md задачи «ГГГГ-ММ-ДД ЧЧ:ММ <вид>: <текст>» с датой и временем машины и видом из закрытого списка Канона
+// (doc/canon/process.md, «Дата в каждой записи журналов»; страж check-task-docs.py, правило log-line). Одна строка, только дозапись.
+export const LOG_KINDS = ["решение владельца", "заседание", "ворота", "документ", "пуск", "слияние", "находка"]
+export type LogInput = { file: string; kind: string; text: string }
+
+export function logLine(input: LogInput, base: string, now: Date = new Date()): { ok: true; line: string; file: string } | Refused {
+  const kind = String(input?.kind ?? "").trim().toLowerCase()
+  const text = String(input?.text ?? "").trim()
+  if (!LOG_KINDS.includes(kind))
+    return { ok: false, reason: `вид записи ${kind ? `«${kind}» не из списка` : "не назван"}: kind — одно из: ${LOG_KINDS.join(", ")} (Канон, process.md); пример: log_line {file: "doc/tasks/007-x/log.md", kind: "документ", text: "spec.md передан на С2"}` }
+  if (!text) return { ok: false, reason: "текст пустой" }
+  if (CONTROL_RE.test(text)) return { ok: false, reason: "одна запись — одна строка: без переводов строки и управляющих символов (две записи — два вызова)" }
+  if ([...text].length > 2000) return { ok: false, reason: "текст длиннее 2000 знаков; подробности — в отчёт, в журнал — итог и ссылка" }
+  const where = insideBase(input?.file, base, "log.md")
+  if (!where.ok) return where
+  let lead = ""
+  try {
+    const st = statSync(where.abs)
+    if (!st.isFile()) return { ok: false, reason: "это не файл" }
+    const data = readFileSync(where.abs)
+    if (data.length && data[data.length - 1] !== 10) lead = "\n"
+  } catch (e: any) {
+    if (e?.code !== "ENOENT") return { ok: false, reason: `файловая система отказала: ${e?.code ?? e}` }
+    if (!existsSync(path.dirname(where.abs))) return { ok: false, reason: "папки задачи нет: log.md создаётся только в существующей папке" }
+  }
+  const line = `${ymdhm(now)} ${kind}: ${text}`
+  const bad = appendOnly(where.abs, lead + line)
   if (bad) return bad
   return { ok: true, line, file: where.abs }
 }
@@ -186,16 +371,28 @@ export async function registerJournalTools(ctx: any, log: (s: string) => void): 
       editor.add({
         name: "progress_line",
         description:
-          "Append ONE line to a progress.log of the current project: '<code> <k/N> [YYYY-MM-DD HH:MM] <text>'. The tool puts the machine date and time itself; do not ask the clock with date or Get-Date (refused). Only a file named progress.log inside the project folder, only appending; the file must exist. Example: file 'doc/tasks/007-x/progress.log', code 'С5д', unit '4/13', text 'ворота merge: замок только на проверенную вершину'.",
+          "The way to write the task progress journal (progress.log): name the KIND of the line and the numbers, the tool builds the line itself - keyword, pass number, stop kind, machine date and time - and checks it against the earlier lines of the same session in the file (never write these lines by hand or ask the clock with date/Get-Date). " +
+          "Kinds: start {n, pass for a review session С2/С4/С6, text optional} -> '<code> 0/N [time] старт заход P — text', written BEFORE reading or work, creates the file if missing; " +
+          "step {k, n, text} -> '<code> k/N [time] text', one line right after EACH finished unit, k = previous + 1; " +
+          "done {text optional} -> '<code> N/N [time] готово — text', the last line of a finished session; " +
+          "stop {stop: вопрос|план|ревизия|требования|ворота, text = reason} -> '<code> k/N [time] стоп: вид — reason'; " +
+          "launch -> '<code> 0/0 [time] запуск' (the orchestrator, before a session starts). " +
+          "The whole signature (all but the time) is at most 80 characters. A refusal names the rule, the expected form and an example call; nothing is written. " +
+          "Example: {file: 'doc/tasks/007-x/progress.log', code: 'С2', kind: 'start', n: 34, pass: 1, text: 'опись 34 источника'}, then {file: same, code: 'С2', kind: 'step', k: 1, n: 34, text: 'spec.md прочитан целиком'}.",
         input: {
           type: "object",
           properties: {
             file: { type: "string", description: "path to progress.log, relative to the project folder or absolute inside it" },
-            code: { type: "string", description: "session code, e.g. С5д" },
-            unit: { type: "string", description: "k/N as numbers, e.g. 4/13, or ?/?" },
-            text: { type: "string", description: "what is being done, one line, up to 120 characters" },
+            code: { type: "string", description: "session code exactly from the 'Сессия:' line, e.g. С2 or С5д" },
+            kind: { type: "string", enum: ["start", "step", "done", "stop", "launch"], description: "kind of the line; step when omitted" },
+            k: { type: "number", description: "step: number of the finished unit, previous + 1" },
+            n: { type: "number", description: "start and step: number of units the session sees" },
+            pass: { type: "number", description: "start: number of the review pass (заход), as in spec-review-N.md; required for С2, С4, С6" },
+            stop: { type: "string", enum: STOP_KINDS, description: "stop: kind of the stop" },
+            text: { type: "string", description: "step: what is done, starting with the subject; start: what is ahead; done: the result; stop: the reason. One line, no keyword" },
+            unit: { type: "string", description: "old form of k and n for a step: 'k/N', e.g. 4/13" },
           },
-          required: ["file", "code", "unit", "text"],
+          required: ["file", "code"],
         },
         execute: async (input: any) => {
           const r = progressLine(input, base())
@@ -203,7 +400,31 @@ export async function registerJournalTools(ctx: any, log: (s: string) => void): 
             log(`progress_line refused: ${r.reason}`)
             return { content: `Не записано: ${r.reason}` }
           }
-          return { content: `Записано: ${r.line}` }
+          return { content: `Записано: ${r.line}\n${r.hint}` }
+        },
+      })
+      editor.add({
+        name: "log_line",
+        description:
+          "The way to write an entry of the task log (log.md): appends ONE line 'YYYY-MM-DD HH:MM <kind>: <text>' with the machine date and time (never type the time by hand or ask the clock). " +
+          "kind is one of: решение владельца, заседание, ворота, документ, пуск, слияние, находка. One entry - one call, one line (no line breaks), up to 2000 characters. " +
+          "File named log.md inside the project folder; created only in an existing folder. Example: {file: 'doc/tasks/007-x/log.md', kind: 'решение владельца', text: 'владелец, 2026-10-15, чат: «по рекомендации»'}.",
+        input: {
+          type: "object",
+          properties: {
+            file: { type: "string", description: "path to log.md, relative to the project folder or absolute inside it" },
+            kind: { type: "string", enum: LOG_KINDS, description: "kind of the entry" },
+            text: { type: "string", description: "the entry, one line" },
+          },
+          required: ["file", "kind", "text"],
+        },
+        execute: async (input: any) => {
+          const r = logLine(input, base())
+          if (!r.ok) {
+            log(`log_line refused: ${r.reason}`)
+            return { content: `Не записано: ${r.reason}` }
+          }
+          return { content: `Записано в log.md: ${r.line}` }
         },
       })
       editor.add({

@@ -1,6 +1,7 @@
 // Self-test of the task journal tools (node >= 24):  node test/crew-journal.test.mjs
-// progress_line appends ONE line '<code> k/N [YYYY-MM-DD HH:MM] <text>' with the machine date and time to a file named progress.log inside the
-// project folder; usage_line appends ONE JSON line (format version v:1) with the accounting of the session to usage.log next to
+// progress_line appends ONE line '<code> k/N [YYYY-MM-DD HH:MM] <signature>' with the machine date and time to a file named progress.log inside the
+// project folder; since task 049 it builds the line by kind (start, step, done, stop, launch) and checks it against the session: the red probes
+// are the lines agents stumbled on in tasks 031 and 045; log_line appends ONE entry 'YYYY-MM-DD HH:MM <kind>: <text>' to log.md; usage_line appends ONE JSON line (format version v:1) with the accounting of the session to usage.log next to
 // a progress.log of the same task folder. Both: no shell, append only, fixed file names, path inside the project folder, the
 // refusal of the file system is returned as a refusal, history is never rewritten. Exit 1 on any failed cell.
 import { mkdtempSync, writeFileSync, readFileSync, chmodSync, mkdirSync, existsSync, rmSync } from "node:fs"
@@ -12,7 +13,8 @@ const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-journal-"))
 process.env.XDG_DATA_HOME = path.join(tmp, "data")
 process.env.CREW_HARNESS_PRESENCE ??= "all"
 const plugin = (await import("../index.ts")).default
-const { progressLine, usageLine, noteLoopLag, maxLoopLagSince, resetLoopLagForTest } = await import("../journal.ts")
+const { progressLine, logLine, usageLine, noteLoopLag, maxLoopLagSince, resetLoopLagForTest } = await import("../journal.ts")
+const { parseLine, keywordOf, stopKind } = await import("../progress.ts")
 
 let fail = 0
 function cell(name, ok, detail) {
@@ -27,7 +29,7 @@ const dir = path.join(base, "doc", "tasks", "007-x")
 mkdirSync(dir, { recursive: true })
 const log = path.join(dir, "progress.log")
 const ulog = path.join(dir, "usage.log")
-const HISTORY = "С5д 3/13 [02:04] историческая строка\n"
+const HISTORY = "С5д 0/13 [02:00] старт\nС5д 3/13 [02:04] историческая строка\n"
 writeFileSync(log, HISTORY)
 const rel = "doc/tasks/007-x/progress.log"
 const urel = "doc/tasks/007-x/usage.log"
@@ -42,43 +44,137 @@ const isoLocalOf = (d) => {
 // ---- progress_line ----
 {
   const r = progressLine({ file: rel, code: "С5д", unit: "4/13", text: "ворота merge: замок только на проверенную вершину" }, base, at(3, 7))
-  cell("progress: appends one line with the given date and time", r.ok && r.line === "С5д 4/13 [2026-10-09 03:07] ворота merge: замок только на проверенную вершину", JSON.stringify(r))
+  cell("progress: appends one line with the given date and time (old form unit k/N is a step)", r.ok && r.line === "С5д 4/13 [2026-10-09 03:07] ворота merge: замок только на проверенную вершину", JSON.stringify(r))
   const txt = read(log)
-  cell("progress: history is kept, one new line only", txt.startsWith(HISTORY) && txt.split("\n").length === 3 && txt.endsWith("\n"), JSON.stringify(txt))
+  cell("progress: history is kept, one new line only", txt.startsWith(HISTORY) && txt.split("\n").length === 4 && txt.endsWith("\n"), JSON.stringify(txt))
 
   const before = new Date()
-  const r2 = progressLine({ file: log, code: "С5д", unit: "?/?", text: "реальное время" }, base)
+  const r2 = progressLine({ file: log, code: "С5д", kind: "step", k: 5, n: 13, text: "реальное время" }, base)
   const after = new Date()
   const stamp = /\[(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d)\]/.exec(r2.line ?? "")
   const got = stamp ? new Date(Number(stamp[1]), Number(stamp[2]) - 1, Number(stamp[3]), Number(stamp[4]), Number(stamp[5])).getTime() : -1
   const floor = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes()).getTime()
   cell("progress: real machine date and time (absolute path inside the project)", r2.ok && got >= floor(before) && got <= floor(after), JSON.stringify([r2, got]))
 
-  const bad = (name, input) => {
+  const bad = (name, input, why) => {
     const snapshot = read(log)
     const x = progressLine(input, base, at(3, 8))
-    cell(`progress refused: ${name}`, x.ok === false && read(log) === snapshot, JSON.stringify(x))
+    cell(`progress refused: ${name}`, x.ok === false && read(log) === snapshot && (!why || why.test(x.reason)), JSON.stringify(x))
   }
-  bad("other file name", { file: "doc/tasks/007-x/result.md", code: "С5д", unit: "5/13", text: "x" })
-  bad("file outside the project folder", { file: "../outside/progress.log", code: "С5д", unit: "5/13", text: "x" })
-  bad("absolute path outside", { file: path.join(tmp, "other", "progress.log"), code: "С5д", unit: "5/13", text: "x" })
-  bad("multi-line text", { file: rel, code: "С5д", unit: "5/13", text: "раз\nдва" })
-  bad("control characters", { file: rel, code: "С5д", unit: "5/13", text: "раз\u0007два" })
-  bad("long text", { file: rel, code: "С5д", unit: "5/13", text: "я".repeat(121) })
-  bad("empty text", { file: rel, code: "С5д", unit: "5/13", text: "  " })
-  bad("code with spaces", { file: rel, code: "С5 д", unit: "5/13", text: "x" })
+  bad("other file name", { file: "doc/tasks/007-x/result.md", code: "С5д", unit: "6/13", text: "x" })
+  bad("file outside the project folder", { file: "../outside/progress.log", code: "С5д", unit: "6/13", text: "x" })
+  bad("absolute path outside", { file: path.join(tmp, "other", "progress.log"), code: "С5д", unit: "6/13", text: "x" })
+  bad("multi-line text", { file: rel, code: "С5д", unit: "6/13", text: "раз\nдва" })
+  bad("control characters", { file: rel, code: "С5д", unit: "6/13", text: "раз\u0007два" })
+  bad("signature over 80 characters", { file: rel, code: "С5д", unit: "6/13", text: "я".repeat(81) }, /81 знак.*предел 80.*сократи text на 1/)
+  bad("empty text of a step", { file: rel, code: "С5д", unit: "6/13", text: "  " })
+  bad("code with spaces", { file: rel, code: "С5 д", unit: "6/13", text: "x" })
   bad("unit not k/N", { file: rel, code: "С5д", unit: "пять", text: "x" })
-  bad("missing file is not created", { file: "doc/tasks/008-y/progress.log", code: "С5д", unit: "1/2", text: "x" })
+  bad("unit ?/? is no longer written (the guard and the panel do not read it)", { file: rel, code: "С5д", unit: "?/?", text: "x" })
+  bad("unknown kind", { file: rel, code: "С5д", kind: "итог", text: "x" }, /start.*step.*done.*stop.*launch/)
+  bad("a step of a missing file is not written and the file is not created", { file: "doc/tasks/008-y/progress.log", code: "С5д", unit: "1/2", text: "x" }, /старт/)
   cell("progress: missing file not created on disk", !exists(path.join(base, "doc/tasks/008-y/progress.log")), "created")
 
   const ro = path.join(dir, "ro", "progress.log")
   mkdirSync(path.dirname(ro), { recursive: true })
-  writeFileSync(ro, "С1 0/0 [01:00] запуск\n")
+  writeFileSync(ro, "С1 0/2 [01:00] старт\n")
   chmodSync(ro, 0o444)
   const snap = read(ro)
   const denied = progressLine({ file: ro, code: "С1", unit: "1/2", text: "x" }, base, at(3, 9))
   cell("progress: file access denial is respected", denied.ok === false && /отказал|EPERM|EACCES/.test(denied.reason) && read(ro) === snap, JSON.stringify(denied))
   chmodSync(ro, 0o644)
+}
+
+// ---- progress_line by kind: the tool builds the line and checks it against the session (task 049) ----
+{
+  const tdir = path.join(base, "doc", "tasks", "045-k")
+  mkdirSync(tdir, { recursive: true })
+  const f = "doc/tasks/045-k/progress.log"
+  const abs = path.join(tdir, "progress.log")
+  const put = (input, h = 15, m = 2) => progressLine({ file: f, ...input }, base, at(h, m))
+  const no = (name, input, why) => {
+    const snapshot = exists(abs) ? read(abs) : null
+    const x = put(input)
+    cell(`kind refused: ${name}`, x.ok === false && (exists(abs) ? read(abs) : null) === snapshot && why.test(x.reason), JSON.stringify(x))
+  }
+
+  // case 045 С2 attempt 1 and the live s2-2 journal: the first line was a step, there was no start line
+  no("a step before the start line (case 045 С2, attempt 1)", { code: "С2д", kind: "step", k: 1, n: 6, text: "входной снимок четырёх файлов совпал" }, /нет строки старт.*kind: "start", n: 6, pass: <номер захода>/)
+  cell("kind: a step before the start does not create the file", !exists(abs), "created")
+  // case 031 С2-9 finding 2: the start line of a review session without the pass number
+  no("a review start without pass (case 031 С2-9)", { code: "С2в9", kind: "start", n: 39, text: "опись 39, fingerprints сняты" }, /pass — номер захода.*pass: 9/)
+  // case 031 С2-9 finding 1 and case 045 С2 retry 1: the agent wrote the keyword itself as «старт:»
+  no("the keyword in text of a start (case 045 С2 retry 1)", { code: "С2д2", kind: "start", n: 34, pass: 1, text: "старт: С2-1 повтор" }, /не пиши ключевое слово/)
+  no("a step whose text begins with «старт:» (case 045 С1)", { code: "С1", unit: "0/31", text: "старт: опись задачи 042 и чтение источников" }, /ключевого слова «старт:».*kind start/)
+
+  const s = put({ code: "С2в9", kind: "start", n: 39, pass: 9, text: "опись 39, fingerprints сняты" }, 3, 15)
+  cell("kind: start creates the file and writes the exact form «старт заход 9 — …»", s.ok && s.line === "С2в9 0/39 [2026-10-09 03:15] старт заход 9 — опись 39, fingerprints сняты" && read(abs) === s.line + "\n", JSON.stringify(s))
+  cell("kind: the panel reads the start line as «старт»", keywordOf(parseLine(s.line).text) === "старт", s.line)
+  cell("kind: the answer says what comes next", /kind: "step", k: 1, n: 39/.test(s.hint), s.hint)
+  const s1 = put({ code: "С2в9", kind: "step", k: 1, n: 39, text: "045 spec.md прочитан целиком" }, 3, 16)
+  cell("kind: step after start", s1.ok && s1.line === "С2в9 1/39 [2026-10-09 03:16] 045 spec.md прочитан целиком", JSON.stringify(s1))
+  // case 045 С1 (1/31 then 31/32) and С2 retry 4 (0/34 then 19/34): a jump over units
+  no("a jump over units (case 045 С2 retry 4: 0/34 then 19/34)", { code: "С2в9", kind: "step", k: 19, n: 39, text: "031 review-9 fully read" }, /пропущены единицы 2–18.*k: 2, n: 39/)
+  no("the same unit twice", { code: "С2в9", kind: "step", k: 1, n: 39, text: "ещё раз" }, /единица 1 уже записана/)
+  no("k above n", { code: "С2в9", kind: "step", k: 2, n: 1, text: "x" }, /больше n/)
+  // case 045 С2 retry 2: seven signatures of 82-88 characters (the tool allowed 120)
+  no("a signature of 87 characters (case 045 С2 retry 2, unit 6)", { code: "С2в9", kind: "step", k: 2, n: 39, text: "031 spec.md fully reread: closed format, REQ/AC/DNC, examples, owner questions, history" }, /87 знаков, предел 80.*сократи text на 7/)
+  // case 031 С2-9 finding 3: a stop with a kind outside the list
+  no("a stop kind outside the list (case 031 С2-9: «ресурсный»)", { code: "С2в9", kind: "stop", stop: "ресурсный", text: "прочитано 5/40" }, /«ресурсный» не из списка.*вопрос, план, ревизия, требования, ворота/)
+  no("a stop without a kind", { code: "С2в9", kind: "stop", text: "блокер" }, /не назван/)
+  no("a step text that begins with «готово»", { code: "С2в9", kind: "step", k: 2, n: 39, text: "готово всё" }, /kind start, done, stop или launch/)
+  no("done before the last unit", { code: "С2в9", kind: "done", text: "итог" }, /не записаны единицы 2–38 из 39/)
+
+  const st = put({ code: "С2в9", kind: "stop", stop: "вопрос", text: "нужен ответ о составе описи" }, 3, 21)
+  cell("kind: stop takes k and n of the session and writes «стоп: вид — причина»", st.ok && st.line === "С2в9 1/39 [2026-10-09 03:21] стоп: вопрос — нужен ответ о составе описи", JSON.stringify(st))
+  cell("kind: the panel reads the stop kind", stopKind(parseLine(st.line).text) === "вопрос", st.line)
+  const c2 = put({ code: "С2в9", kind: "step", k: 2, n: 40, text: "README плагина прочитан; опись 40 по ответу" }, 5, 13)
+  cell("kind: the same session goes on after a stop, n may grow", c2.ok && c2.line.startsWith("С2в9 2/40 "), JSON.stringify(c2))
+
+  // a short session to the end
+  put({ code: "С3", kind: "start", n: 2 }, 6, 0)
+  put({ code: "С3", kind: "step", k: 1, n: 2, text: "раздел 1 плана" }, 6, 1)
+  const d = put({ code: "С3", kind: "done", text: "план готов к С4" }, 6, 2)
+  cell("kind: done is the line of the last unit N/N with the exact keyword", d.ok && d.line === "С3 2/2 [2026-10-09 06:02] готово — план готов к С4" && keywordOf(parseLine(d.line).text) === "готово", JSON.stringify(d))
+  no("a line of the same session after done", { code: "С3", kind: "step", k: 3, n: 3, text: "ещё" }, /нет строки старт после её «готово»|закончена строкой готово/)
+  no("a second done", { code: "С3", kind: "done" }, /нет строки старт|закончена/)
+  const s3 = put({ code: "С3", kind: "start", n: 1, text: "правка плана" }, 7, 0)
+  cell("kind: a new start of the same code opens a new session", s3.ok && s3.line === "С3 0/1 [2026-10-09 07:00] старт — правка плана", JSON.stringify(s3))
+  const l = put({ code: "С5", kind: "launch" }, 7, 1)
+  cell("kind: launch writes «0/0 запуск»", l.ok && l.line === "С5 0/0 [2026-10-09 07:01] запуск", JSON.stringify(l))
+  const nonReview = put({ code: "С5", kind: "start", n: 3, text: "план из 3 пунктов" }, 7, 2)
+  cell("kind: a start of a non-review session needs no pass", nonReview.ok && nonReview.line === "С5 0/3 [2026-10-09 07:02] старт — план из 3 пунктов", JSON.stringify(nonReview))
+  const ru = put({ code: "С5", kind: "шаг", k: 1, n: 3, text: "пункт 1 сделан" }, 7, 3)
+  cell("kind: Russian names of the kinds are accepted", ru.ok && ru.line.startsWith("С5 1/3 "), JSON.stringify(ru))
+  // every line the tool wrote is a line of the journal form for the guard and the panel
+  const all = read(abs).split("\n").filter(Boolean)
+  cell("kind: every written line has the journal form and a signature of at most 80 characters", all.every((x) => { const p = parseLine(x); return p && [...p.text].length <= 80 }), JSON.stringify(all))
+}
+
+// ---- log_line ----
+{
+  const ldir = path.join(base, "doc", "tasks", "049-l")
+  mkdirSync(ldir, { recursive: true })
+  const lf = path.join(ldir, "log.md")
+  writeFileSync(lf, "Методика: x @ abc") // no newline at the end
+  const r = logLine({ file: "doc/tasks/049-l/log.md", kind: "решение владельца", text: "владелец, 2026-10-15, чат: «по рекомендации»" }, base, at(16, 1))
+  cell("log: one entry with the machine date and time, the missing newline of the file is added first", r.ok && read(lf) === "Методика: x @ abc\n2026-10-09 16:01 решение владельца: владелец, 2026-10-15, чат: «по рекомендации»\n", JSON.stringify([r, read(lf)]))
+  const LOG_ENTRY = /^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} (решение владельца|заседание|ворота|документ|пуск|слияние|находка): /
+  cell("log: the entry has the form of the guard rule log-line", LOG_ENTRY.test(r.line), r.line)
+  const snap = read(lf)
+  const lno = (name, input, why) => {
+    const x = logLine({ file: "doc/tasks/049-l/log.md", ...input }, base, at(16, 2))
+    cell(`log refused: ${name}`, x.ok === false && read(lf) === snap && (!why || why.test(x.reason)), JSON.stringify(x))
+  }
+  // case 031 review 7: the kind of an entry was the session code instead of a kind of the list, two entries glued
+  lno("a kind outside the list (case 031: «С1п5»)", { kind: "С1п5", text: "x" }, /«с1п5» не из списка.*решение владельца, заседание/)
+  lno("no kind", { text: "x" }, /не назван/)
+  lno("two entries in one call", { kind: "документ", text: "раз\n2026-10-09 16:02 документ: два" }, /одна запись — одна строка/)
+  lno("empty text", { kind: "документ", text: " " })
+  lno("other file name", { file: "doc/tasks/049-l/progress.log", kind: "документ", text: "x" })
+  lno("outside the project", { file: "../x/log.md", kind: "документ", text: "x" })
+  const fresh = logLine({ file: "doc/tasks/049-l/sub/log.md", kind: "документ", text: "x" }, base, at(16, 3))
+  cell("log: no folder - not created", fresh.ok === false && !exists(path.join(ldir, "sub")), JSON.stringify(fresh))
 }
 
 // ---- usage_line ----
@@ -203,9 +299,13 @@ const now = new Date(Date.UTC(2026, 9, 9, 10, 30, 0))
     command: { list: async () => [], transform: async () => {} },
   }
   const stop = await plugin.setup(ctx)
-  cell("setup registers progress_line and usage_line", !!tools.progress_line && !!tools.usage_line, JSON.stringify(names))
-  const out = await tools.progress_line.execute({ file: rel, code: "С5д", unit: "6/13", text: "через инструмент" }, { sessionID: "ses_t" })
-  cell("progress tool writes and answers", /Записано: С5д 6\/13 \[\d{4}-\d\d-\d\d \d\d:\d\d\] через инструмент/.test(out.content) && read(log).includes("] через инструмент"), JSON.stringify(out))
+  cell("setup registers progress_line, log_line and usage_line", !!tools.progress_line && !!tools.log_line && !!tools.usage_line, JSON.stringify(names))
+  const out = await tools.progress_line.execute({ file: rel, code: "С5д", kind: "step", k: 6, n: 13, text: "через инструмент" }, { sessionID: "ses_t" })
+  cell("progress tool writes and answers with the next step", /Записано: С5д 6\/13 \[\d{4}-\d\d-\d\d \d\d:\d\d\] через инструмент\nследующая — k: 7/.test(out.content) && read(log).includes("] через инструмент"), JSON.stringify(out))
+  const lo = await tools.log_line.execute({ file: "doc/tasks/007-x/log.md", kind: "находка", text: "через инструмент" }, {})
+  cell("log tool writes and answers", /^Записано в log.md: \d{4}-\d\d-\d\d \d\d:\d\d находка: через инструмент$/.test(lo.content), JSON.stringify(lo))
+  const lno = await tools.log_line.execute({ file: "doc/tasks/007-x/log.md", kind: "отчёт", text: "x" }, {})
+  cell("log tool refuses a kind outside the list", /^Не записано: вид записи «отчёт» не из списка/.test(lno.content), JSON.stringify(lno))
   const no = await tools.progress_line.execute({ file: "doc/tasks/007-x/result.md", code: "С5д", unit: "6/13", text: "x" }, {})
   cell("progress tool refuses a wrong file", /^Не записано/.test(no.content), JSON.stringify(no))
   const u = await tools.usage_line.execute({ file: urel, code: "С5д", result: "через инструмент" }, { sessionID: "ses_t" })
