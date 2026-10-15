@@ -464,7 +464,7 @@ await until(() => lettersRe(AUTH.pw, /застряла/).some((l) => new RegExp(
   await call("crew_role", AUTH.pw, { role: "integrator" })
   await call("crew_task", AUTH.pw, { action: "push", n: T.t1.n, text: "доделай" })
   const t1Line = () => view().split("\n").some((l) => l.includes(`задача #${T.t1.n} `) && /застряла с/.test(l))
-  await until(() => !t1Line(), 4000)
+  await until(() => !t1Line(), 8000) // the status pass may take more than 4 s on a loaded machine (task 048 measure: 2.0-3.8 s)
   cell("T1e", "crew_task push clears the mark: the line is gone from /crew", !t1Line(), view())
 }
 // T2: reviewer, empty turns
