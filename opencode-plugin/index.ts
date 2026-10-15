@@ -131,7 +131,6 @@ import { dropWatch, openWatchesBySession, pollWatches, requestWatch, watchesOf }
 import { endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
 import { type Task, taskRef, acceptedAt, ago, byPriority, createTask, rounds, slugify, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
 import { countedOpen, waitingCleanup, ACCEPTED_REMINDERS_MAX, acceptedReminderId, acceptedReminders, letterTime } from "./tasks.ts"
-import { createRemoteBridge } from "./remote.ts"
 import { profileProblems, profileState, stateSignature, syncProjectFiles, syncSnapshot, syncTaskFile } from "./profile-layer.ts"
 import { cellOfState, clampTier, resolveStageProfile, splitLaunchModel, stageOfLaunch, tabFitsCell } from "./profiles.ts"
 import { allForms, cleanupForms, formReminders, formTick, settleOnRequest, startFormWait } from "./form-wait.ts"
@@ -1564,21 +1563,6 @@ export default {
     void startFormWait(ctx, log).catch(() => {}) // ожидание по встроенному вопроснику (task 026), всегда включено
     if (probeEnabled()) void startEventProbe(ctx, log).catch(() => {}) // проба событий (task 026), по умолчанию выкл
 
-    // ДРУГИЕ МАШИНЫ (remote.ts): мост держит один процесс машины; входящие — в ящики, как обычные письма.
-    const projectRoot = (p: string) => {
-      const x = projects.find((y) => y.name === p)
-      return x ? (x.rootPath ?? x.root) : allCards().find((c) => projOf(c) === p)?.directory
-    }
-    const remoteBridge = createRemoteBridge({
-      deliver: postLetter,
-      exists: letterExists,
-      isLocalSession: (s) => existsSync(cardFile(s)),
-      isLocalProject: (p) => !!projectRoot(p),
-      inboundOf: (p) => loadConfig(projectRoot(p) ?? "").inbound,
-      notify: (s, text) => postLetter(s, { id: `remote-failed-${Date.now()}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: s, time: Date.now(), text }),
-      log,
-    })
-
     // Один проход доставки: зовут таймер (страховка, раз в POLL_MS = 1 с) и fs.watch ящиков (сразу).
     let passBusy = false
     // ПРОХОД НЕ ЗАВИСАЕТ (2026-10-05): у владельца цикл встал на 47 мин (21:27–22:14) — один вызов OpenCode внутри
@@ -1658,7 +1642,6 @@ export default {
         await step("processQueue", processQueue)
         // наблюдения crew_watch (watch.ts): запустить новые, по концу — письмо окну с побудкой
         await step("watches", () => pollWatches((w, text) => postLetter(w.session, { id: `watch-${w.id}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: w.session, time: Date.now(), text }), log, now(), (w) => loadConfig(w.cwd).machineSlots))
-        await step("remote", remoteBridge.step)
         passStage = "deliver"
         // АДРЕСАТЫ — ИЗ ВИЗИТОК НА ДИСКЕ (после перезагрузки плагина память пуста). Визитки этого процесса и умершего;
         // двойной доставки нет: письмо забирает тот, чей rename в claimLetters прошёл первым.
@@ -1855,7 +1838,6 @@ export default {
       clearTimeout(catalogFirst)
       clearInterval(catalogTimer)
       clearInterval(doctorEvery)
-      remoteBridge.stop()
       try {
         watcher?.close()
       } catch {}
