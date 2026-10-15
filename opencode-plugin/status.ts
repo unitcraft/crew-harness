@@ -237,6 +237,9 @@ export function readStatuses(): Status[] {
     .filter((s): s is Status => !!s)
 }
 
+/** Значки вкладок (владелец, 2026-10-15: «? — ждёт вас; ▶ — задал вопрос текстом, ждёт ответа интегратора (или вашего);»):
+ *  панель, /crew, /ask. */
+export const MARK: Partial<Record<State, string>> = { owner: "?", question: "▶", working: "•" }
 const ORDER: Record<State, number> = { owner: 0, question: 1, working: 2, watch: 3, reply: 4, task: 5, tasks: 6, idle: 7 }
 
 /** Ширина строки окна /crew (диалог OpenCode ~74 знака): длиннее — перенос, и список рвётся (владелец 2026-10-07:
@@ -271,7 +274,7 @@ export function waitingRows(list: Status[], width = SIDE_WIDTH): SideRow[] {
   const oldest = oldestWait(w)
   const rows: SideRow[] = [
     { mark: " ", who: "", what: `Ждут вас: ${w.length}${oldest.since ? ` · с ${hm(oldest.since)}` : ""}`, tone: "accent", flush: true },
-    { mark: "▶", who: "", what: `▶ ${[oldest.project, tabOf(oldest)].filter(Boolean).join(" ")}`, tone: "accent", flush: true },
+    { mark: "?", who: "", what: `? ${[oldest.project, tabOf(oldest)].filter(Boolean).join(" ")}`, tone: "accent", flush: true },
   ]
   const q = oldest.question?.replace(/[`*_]/g, "").replace(/\s+/g, " ").trim()
   if (q) rows.push({ mark: " ", who: "", what: fit(`  ↳ ${q}`, width), tone: "muted", flush: true })
@@ -295,8 +298,8 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
       const who = s.task ? s.title : `${s.role}${s.title && s.title !== s.session ? ` · ${s.title}` : ""}`
       const model = s.model ? ` [${s.model.replace(/^.*\//, "")}]` : ""
       const prog = s.task?.as === "reviewer" ? stepProgress(s.task) : undefined
-      // вопрос владельцу — целиком (его и читают), остальное — строкой по ширине окна
-      const row = `  ${s.state === "owner" ? "▶ " : ""}${short(who, 40)}${model} — ${s.detail}`
+      // вопрос владельцу — целиком (его и читают), остальное — строкой по ширине окна; значки — как в панели (MARK)
+      const row = `  ${s.state === "owner" || s.state === "question" ? `${MARK[s.state]} ` : ""}${short(who, 40)}${model} — ${s.detail}`
       out.push(s.state === "owner" ? row : fit(row))
       if (s.askedStale?.length) out.push(fit(`      вопрос устарел: ${s.askedStale.map((a) => `к ${a.to} с ${hm(a.at)} (${minutes(a.at, now)})`).join(", ")}`))
       for (const k of s.stuck ?? []) out.push(fit(`      ⚠ ${stuckText(k)}`))
@@ -448,7 +451,7 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
     const prog = waiting ? undefined : stepsLine
     const waitFor = waiting ? waitText(what(s), s.since, now) : undefined
     rows.push({
-      mark: s.state === "owner" ? "▶" : s.state === "question" ? "?" : s.state === "working" ? "•" : " ",
+      mark: MARK[s.state] ?? " ",
       who: who(s),
       what: short(prog ?? waitFor ?? what(s), 20),
       tone: (s.state === "owner" || s.state === "question" ? "accent" : s.state === "idle" ? "muted" : "base") as SideRow["tone"],

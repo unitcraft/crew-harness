@@ -391,7 +391,7 @@ export function askText(now = Date.now(), dir = FORMS, ended: EndedWait[] = []):
     return m < 120 ? `${m} мин` : `${Math.floor(m / 60)} ч ${m % 60} мин`
   }
   for (const e of more) {
-    out.push(`▶ ${e.project ?? "?"} · ${e.role}${e.title && e.title !== e.session ? ` «${e.title}»` : ""}${e.since ? ` — ждёт ${ago(e.since)} (с ${hm(e.since)})` : ""}`)
+    out.push(`? ${e.project ?? "?"} · ${e.role}${e.title && e.title !== e.session ? ` «${e.title}»` : ""}${e.since ? ` — ждёт ${ago(e.since)} (с ${hm(e.since)})` : ""}`)
     if (e.question) out.push(`   ${e.question}`)
     out.push(`   Сессия ${e.session}: ход кончился вопросом — откройте вкладку и ответьте.`)
     out.push("")
@@ -401,7 +401,7 @@ export function askText(now = Date.now(), dir = FORMS, ended: EndedWait[] = []):
     const who = `${card?.project ?? "?"} · ${card?.role ?? "?"}${card?.title && card.title !== session ? ` «${card.title}»` : ""}`
     const waited = Math.max(0, Math.round((now - f.at) / 60_000))
     const how = f.exhausted ? ` — без ответа, нужен владелец (повторов было ${f.repeats ?? 0})` : f.repeats ? ` — повтор ${f.repeats} из ${FORM_MAX_REPEATS}` : f.cancelled ? " — закрыт без ответа, будет повторён" : ""
-    out.push(`▶ ${who} — ждёт ${waited < 120 ? `${waited} мин` : `${Math.floor(waited / 60)} ч ${waited % 60} мин`} (с ${hm(f.at)})${how}`)
+    out.push(`? ${who} — ждёт ${waited < 120 ? `${waited} мин` : `${Math.floor(waited / 60)} ч ${waited % 60} мин`} (с ${hm(f.at)})${how}`)
     out.push(`   ${f.question ?? f.title ?? "вопрос во встроенном вопроснике"}`)
     if (f.options?.length) out.push(`   Варианты: ${f.options.join("; ")}`)
     out.push(`   Сессия ${session}: откройте вкладку и ответьте в диалоге; если диалога нет, вкладка получит повтор.`)
