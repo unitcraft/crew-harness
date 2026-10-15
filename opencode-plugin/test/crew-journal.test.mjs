@@ -137,7 +137,8 @@ const isoLocalOf = (d) => {
   const d = put({ code: "С3", kind: "done", text: "план готов к С4" }, 6, 2)
   cell("kind: done is the line of the last unit N/N with the exact keyword", d.ok && d.line === "С3 2/2 [2026-10-09 06:02] готово — план готов к С4" && keywordOf(parseLine(d.line).text) === "готово", JSON.stringify(d))
   no("a line of the same session after done", { code: "С3", kind: "step", k: 3, n: 3, text: "ещё" }, /нет строки старт после её «готово»|закончена строкой готово/)
-  no("a second done", { code: "С3", kind: "done" }, /нет строки старт|закончена/)
+  // task 050: a repeat of «готово» with the same k is the fix of its form (methodology 09e86c1); with another k it is refused
+  no("a second done with another k", { code: "С3", kind: "done", n: 3 }, /только её повтор с тем же k/)
   const s3 = put({ code: "С3", kind: "start", n: 1, text: "правка плана" }, 7, 0)
   cell("kind: a new start of the same code opens a new session", s3.ok && s3.line === "С3 0/1 [2026-10-09 07:00] старт — правка плана", JSON.stringify(s3))
   const l = put({ code: "С5", kind: "launch" }, 7, 1)

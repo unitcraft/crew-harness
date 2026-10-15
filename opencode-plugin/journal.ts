@@ -1,6 +1,7 @@
 // ЖУРНАЛЫ ЗАДАЧИ: операции записи для агента (2026-10-09). Журналы задачи — территория CrewHarness (Канон, «Три журнала сессии»).
 //   progress_line — одна строка `<код> k/N [ГГГГ-ММ-ДД ЧЧ:ММ] <подпись>` с настоящими датой и временем машины в файл progress.log;
-//                   строку собирает инструмент по виду (старт, шаг, готово, стоп, запуск) и сверяет с прежними строками сессии (задача 049);
+//                   строку собирает инструмент по виду (старт, шаг, готово, стоп, запуск, поправка) и сверяет с прежними строками сессии
+//                   (задачи 049 и 050);
 //   log_line      — одна запись `ГГГГ-ММ-ДД ЧЧ:ММ <вид>: <текст>` в log.md задачи, вид — из закрытого списка Канона (задача 049);
 //   usage_line    — одна строка JSON (поле версии `v`) с учётом сессии в файл usage.log рядом с progress.log.
 // Все операции узкие: никакой оболочки, только дозапись, имя файла фиксировано, путь не выходит из папки проекта окна, отказ
@@ -52,8 +53,12 @@ function appendOnly(abs: string, line: string): Refused | undefined {
 // предыдущими строками той же сессии в файле: старт перед шагами, по строке на единицу без пропусков, k не уменьшается, после
 // «готово» строк той же сессии нет, подпись не длиннее 80 знаков (правила — методика, task-runner.md, «Строки progress.log»).
 // Отказ называет правило, ожидаемую форму и пример вызова. Прежние строки не переписываются.
+// Задача 050 (методика 09e86c1): ошибка формы прежней строки исправляется строкой-поправкой той же сессии с текущим k —
+// `поправка: к строке «<начало, до 30 знаков>» — <что не так>`; она не единица и k не меняет; после итоговой строки (готово, стоп:) не
+// пишется — итоговую строку исправляют её повтором с тем же k и ключевым словом, и такой повтор инструмент принимает. Пропуск единицы и
+// старт не первой строкой поправкой не исправить: сессия без строки старт продолжает работу следующей единицей, новую попытку не начинает.
 
-export type ProgressKind = "start" | "step" | "done" | "stop" | "launch"
+export type ProgressKind = "start" | "step" | "done" | "stop" | "launch" | "correction"
 export type ProgressInput = {
   file: string
   code: string
@@ -63,6 +68,8 @@ export type ProgressInput = {
   pass?: number | string
   stop?: string
   text?: string
+  /** поправка: начало ошибочной строки той же сессии (вся строка или подпись), до 30 знаков */
+  to?: string
   /** прежняя форма «k/N» для шага; вместо неё — k и n */
   unit?: string
 }
@@ -80,10 +87,16 @@ const KIND_ALIASES: Record<string, ProgressKind> = {
   стоп: "stop",
   launch: "launch",
   запуск: "launch",
+  correction: "correction",
+  поправка: "correction",
 }
+/** Предел начала ошибочной строки в подписи поправки (методика: «начало ошибочной строки, до 30 знаков»). */
+export const CORRECTION_QUOTE_MAX = 30
 // Коды проверяющих сессий (С2, С4, С6 и их варианты: С2д, С2в9): у них номер захода в строке старта обязателен.
 const REVIEW_CODE_RE = /^[СC][246]/
-const KEYWORD_START_RE = /^(?:старт|готово|стоп|запуск)(?:$|[ \t.,:;!—–-])/i
+const KEYWORD_START_RE = /^(?:старт|готово|стоп|запуск|поправка)(?:$|[ \t.,:;!—–-])/i
+// Итоговая строка, в том числе с ошибкой в ключевом слове («Готово», «стоп» без двоеточия): после неё поправка не пишется, её исправляет повтор.
+const FINAL_LIKE_RE = /^(готово|стоп)(?:$|[ \t.,:;!—–-])/i
 const SEP = " — "
 
 const asInt = (v: unknown): number | undefined => {
@@ -93,20 +106,41 @@ const asInt = (v: unknown): number | undefined => {
 }
 const given = (v: unknown) => v !== undefined && v !== null && String(v).trim() !== ""
 
-/** Что известно о последней сессии кода в журнале: начата ли строкой старт, закончена ли «готово», последний k и N. */
-export type SessionState = { started: boolean; done: boolean; k: number; n?: number }
+/**
+ * Что известно о последней сессии кода в журнале: начата ли строкой старт, закончена ли «готово», последний k и N, итоговая ли последняя
+ * строка (кроме поправок; «Готово» и «стоп» без двоеточия — тоже итоговые), был ли пропуск единиц, строки сессии (для поправки).
+ * Строка-поправка k не меняет и сессию не открывает; повтор «готово» с тем же k — та же сессия (задача 050).
+ */
+export type SessionState = { started: boolean; done: boolean; k: number; n?: number; final?: "done" | "stop"; skipped: boolean; rows: Line[] }
+const finalOf = (text: string): "done" | "stop" | undefined => {
+  const m = FINAL_LIKE_RE.exec(text)
+  return m ? (m[1].toLowerCase() === "готово" ? "done" : "stop") : undefined
+}
 export function sessionState(lines: Line[], code: string): SessionState {
-  let st: SessionState = { started: false, done: false, k: -1 }
+  const fresh = (): SessionState => ({ started: false, done: false, k: -1, skipped: false, rows: [] })
+  let st = fresh()
   for (const l of lines) {
     if (l.code !== code) continue
     const kw = keywordOf(l.text)
-    if (kw === "запуск" && l.k === 0 && l.n === 0) st = { started: false, done: false, k: -1 }
-    else if (kw === "старт") st = { started: true, done: false, k: l.k, n: l.n }
+    if (kw === "поправка") {
+      if (st.k >= 0) st.rows.push(l)
+      continue
+    }
+    const final = finalOf(l.text)
+    if (kw === "запуск" && l.k === 0 && l.n === 0) st = fresh()
+    else if (kw === "старт") st = { started: true, done: false, k: l.k, n: l.n, skipped: false, rows: [l] }
+    else if (st.done && kw === "готово" && l.k === st.k) st = { ...st, n: l.n, rows: [...st.rows, l] } // повтор итоговой строки
     // строка после «готово» или с упавшим k — новая сессия без строки старт (так её разбирает и панель)
-    else if (st.done || (st.k >= 0 && l.k < st.k)) st = { started: false, done: kw === "готово", k: l.k, n: l.n }
-    else st = { started: st.started, done: kw === "готово", k: l.k, n: l.n }
+    else if (st.done || (st.k >= 0 && l.k < st.k)) st = { started: false, done: kw === "готово", k: l.k, n: l.n, final, skipped: false, rows: [l] }
+    else st = { started: st.started, done: kw === "готово", k: l.k, n: l.n, final, skipped: st.skipped || (st.k >= 0 && l.k > st.k + 1), rows: [...st.rows, l] }
   }
   return st
+}
+
+// Пропуск единицы и старт не первой строкой поправкой не исправить (методика 09e86c1): ответ велит продолжать, а не начинать заново.
+const defectNote = (st: SessionState): string => {
+  const what = !st.started ? "старт не первой строкой" : st.skipped ? "пропуск единицы" : ""
+  return what ? `; у сессии ${what} — это поправкой не исправить: продолжай работу, новую попытку сессии не начинай` : ""
 }
 
 const example = (file: string, code: string, rest: string) => `progress_line {file: "${file}", code: "${code}", ${rest}}`
@@ -123,7 +157,7 @@ export function buildProgress(input: ProgressInput, prior: Line[], now: Date = n
   const rawKind = String(input?.kind ?? "").trim().toLowerCase()
   const unit = String(input?.unit ?? "").trim()
   let kind: ProgressKind | undefined = rawKind ? KIND_ALIASES[rawKind] : undefined
-  if (rawKind && !kind) return { ok: false, reason: `вид строки «${rawKind}» неизвестен; kind — одно из: start (старт), step (шаг), done (готово), stop (стоп), launch (запуск)` }
+  if (rawKind && !kind) return { ok: false, reason: `вид строки «${rawKind}» неизвестен; kind — одно из: start (старт), step (шаг), done (готово), stop (стоп), launch (запуск), correction (поправка)` }
   let k = asInt(input?.k)
   let n = asInt(input?.n)
   if (given(input?.k) && k === undefined) return { ok: false, reason: "k — целое число от 0" }
@@ -162,8 +196,9 @@ export function buildProgress(input: ProgressInput, prior: Line[], now: Date = n
     if (k === undefined || n === undefined) return { ok: false, reason: `у шага нужны k и n — номер завершённой единицы и число единиц; пример: ${example(file, code, 'kind: "step", k: 4, n: 13, text: "spec.md прочитан целиком"')}` }
     if (!text) return { ok: false, reason: "у шага нужен text — что сделано, начиная с предмета (до 80 знаков вместе со всем, кроме времени)" }
     const kw = KEYWORD_START_RE.exec(text)
-    if (kw) return { ok: false, reason: `text шага начинается с ключевого слова «${kw[0].trim()}»: старт, готово, стоп и запуск ставит инструмент по виду строки — kind start, done, stop или launch; в шаге первое слово — предмет (что сделано)` }
-    if (!st.started)
+    if (kw) return { ok: false, reason: `text шага начинается с ключевого слова «${kw[0].trim()}»: старт, готово, стоп, запуск и поправку ставит инструмент по виду строки — kind start, done, stop или launch (поправка — kind correction); в шаге первое слово — предмет (что сделано)` }
+    // первая строка сессии — старт; у сессии, уже начатой без него (строки руками), старт поправкой не исправить: она продолжает работу
+    if (!st.started && (st.k < 0 || st.done))
       return { ok: false, reason: `у сессии ${code} в этом файле нет строки старт${st.done ? " после её «готово»" : ""}: первая строка сессии — старт, её пишут до чтения и работы (методика: «первая строка сессии — <код> 0/<N> [время] старт»). Сначала: ${example(file, code, `kind: "start", n: ${n}${review ? ", pass: <номер захода>" : ""}`)}` }
     if (st.done) return { ok: false, reason: `сессия ${code} уже закончена строкой готово; после неё строки той же сессии не пишутся — новая сессия начинается строкой старт (kind start)` }
     if (k < 1) return { ok: false, reason: "k шага — номер завершённой единицы, от 1 (0 — только у старта)" }
@@ -172,18 +207,39 @@ export function buildProgress(input: ProgressInput, prior: Line[], now: Date = n
     if (k > st.k + 1)
       return { ok: false, reason: `пропущены единицы ${range(st.k + 1, k - 1)}: строка пишется на каждую завершённую единицу, сразу после неё, по одной (методика: «одна строка на каждую завершённую единицу»). Запиши сначала: ${example(file, code, `kind: "step", k: ${st.k + 1}, n: ${n}, text: "что сделано"`)}` }
     sig = text
-    hint = k < n ? `следующая — k: ${k + 1}` : `все единицы записаны; конец — ${example(file, code, 'kind: "done", text: "итог"')}, остановка на воротах — kind "stop"`
+    hint = (k < n ? `следующая — k: ${k + 1}` : `все единицы записаны; конец — ${example(file, code, 'kind: "done", text: "итог"')}, остановка на воротах — kind "stop"`) + defectNote(st)
   } else if (kind === "done") {
-    if (!st.started) return { ok: false, reason: `у сессии ${code} в этом файле нет строки старт — готово пишет начатая сессия; начало: ${example(file, code, 'kind: "start", n: <число единиц>')}` }
-    if (st.done) return { ok: false, reason: `сессия ${code} уже закончена строкой готово; второй готово не пишется` }
+    if (!st.started && st.k < 0) return { ok: false, reason: `у сессии ${code} в этом файле нет строки старт — готово пишет начатая сессия; начало: ${example(file, code, 'kind: "start", n: <число единиц>')}` }
     n ??= st.n
+    // повтор итоговой строки с тем же k — исправление её формы (методика 09e86c1); читается последняя
+    if (st.done && st.k !== n) return { ok: false, reason: `сессия ${code} уже закончена строкой готово ${st.k}/${st.n}; после неё пишется только её повтор с тем же k (n: ${st.k}) для исправления формы, новая работа — новой сессией (kind start)` }
     if (n === undefined) return { ok: false, reason: "не известно n сессии: назови n" }
     if (st.k < n - 1)
       return { ok: false, reason: `до готово не записаны единицы ${range(st.k + 1, n - 1)} из ${n}: готово — строка последней единицы N/N; сессия, вставшая раньше, пишет kind "stop" с видом остановки` }
     if (text && KEYWORD_START_RE.test(text)) return { ok: false, reason: "в text не пиши «готово»: ключевое слово ставит инструмент; в text — итог" }
     k = n
     sig = "готово" + (text ? SEP + text : "")
-    hint = "сессия закончена; дальнейшее — новой сессией"
+    hint = (st.done ? "повтор итоговой строки записан, читается последняя; " : "") + "сессия закончена; дальнейшее — новой сессией"
+  } else if (kind === "correction") {
+    const to = String(input?.to ?? "").trim()
+    if (st.k < 0)
+      return { ok: false, reason: `у сессии ${code} в этом файле нет строк — нечего поправлять; поправка пишется к строке той же сессии` }
+    if (st.final) {
+      const again = st.final === "done" ? 'kind: "done", text: "итог"' : 'kind: "stop", stop: "<вид из списка>", text: "причина"'
+      return { ok: false, reason: `после итоговой строки (готово или стоп:) поправка не пишется: итоговую строку исправляют её повтором с тем же k (${st.k}) и ключевым словом в верной форме (методика: «ошибку формы в самой последней строке исправляют, дописав её заново»): ${example(file, code, again)}` }
+    }
+    if (!to)
+      return { ok: false, reason: `у поправки нужен to — начало ошибочной строки той же сессии (вся строка или подпись, до ${CORRECTION_QUOTE_MAX} знаков); пример: ${example(file, code, 'kind: "correction", to: "опись source inventory", text: "подпись 93 знака, предел 80"')}` }
+    if (CONTROL_RE.test(to) || /[«»]/.test(to)) return { ok: false, reason: "to — начало строки в одну строку, без кавычек « » и управляющих символов" }
+    if (!text) return { ok: false, reason: "у поправки нужен text — что не так в строке" }
+    const hit = st.rows.some((l) => `${l.code} ${l.k}/${l.n} ${l.sig}`.startsWith(to) || l.sig.startsWith(to) || l.text.startsWith(to))
+    if (!hit)
+      return { ok: false, reason: `строка сессии ${code}, начинающаяся с «${to}», в этом файле не нашлась: to — начало строки этой сессии (вся строка или подпись после времени); поправка исправляет только форму записанной строки. Пропуск единицы и старт не первой строкой поправкой не исправить: продолжай работу, новую попытку сессии не начинай` }
+    const quote = [...to].slice(0, CORRECTION_QUOTE_MAX).join("").trimEnd()
+    k = st.k
+    n = st.n ?? 0
+    sig = `поправка: к строке «${quote}»${SEP}${text}`
+    hint = `поправка записана, k не меняется (не единица); следующая единица — k: ${st.k + 1}` + defectNote(st)
   } else {
     const word = String(input?.stop ?? "").trim().toLowerCase()
     if (!STOP_KINDS.includes(word))
@@ -376,7 +432,8 @@ export async function registerJournalTools(ctx: any, log: (s: string) => void): 
           "step {k, n, text} -> '<code> k/N [time] text', one line right after EACH finished unit, k = previous + 1; " +
           "done {text optional} -> '<code> N/N [time] готово — text', the last line of a finished session; " +
           "stop {stop: вопрос|план|ревизия|требования|ворота, text = reason} -> '<code> k/N [time] стоп: вид — reason'; " +
-          "launch -> '<code> 0/0 [time] запуск' (the orchestrator, before a session starts). " +
+          "launch -> '<code> 0/0 [time] запуск' (the orchestrator, before a session starts); " +
+          "correction {to = the start of the wrong line of the same session, text = what is wrong} -> '<code> k/N [time] поправка: к строке «to, up to 30 chars» — text', keeps the current k, is not a unit; never rewrite a line, correct it. Not after the final line: a wrong 'готово'/'стоп:' line is fixed by repeating done/stop with the same k. A skipped unit or a missing start cannot be corrected: go on with the work, do not begin a new attempt. A form mistake of the journal is a finding (находка in log.md), not a reason to redo the session. " +
           "The whole signature (all but the time) is at most 80 characters. A refusal names the rule, the expected form and an example call; nothing is written. " +
           "Example: {file: 'doc/tasks/007-x/progress.log', code: 'С2', kind: 'start', n: 34, pass: 1, text: 'опись 34 источника'}, then {file: same, code: 'С2', kind: 'step', k: 1, n: 34, text: 'spec.md прочитан целиком'}.",
         input: {
@@ -384,12 +441,13 @@ export async function registerJournalTools(ctx: any, log: (s: string) => void): 
           properties: {
             file: { type: "string", description: "path to progress.log, relative to the project folder or absolute inside it" },
             code: { type: "string", description: "session code exactly from the 'Сессия:' line, e.g. С2 or С5д" },
-            kind: { type: "string", enum: ["start", "step", "done", "stop", "launch"], description: "kind of the line; step when omitted" },
+            kind: { type: "string", enum: ["start", "step", "done", "stop", "launch", "correction"], description: "kind of the line; step when omitted" },
             k: { type: "number", description: "step: number of the finished unit, previous + 1" },
             n: { type: "number", description: "start and step: number of units the session sees" },
             pass: { type: "number", description: "start: number of the review pass (заход), as in spec-review-N.md; required for С2, С4, С6" },
             stop: { type: "string", enum: STOP_KINDS, description: "stop: kind of the stop" },
-            text: { type: "string", description: "step: what is done, starting with the subject; start: what is ahead; done: the result; stop: the reason. One line, no keyword" },
+            text: { type: "string", description: "step: what is done, starting with the subject; start: what is ahead; done: the result; stop: the reason; correction: what is wrong. One line, no keyword" },
+            to: { type: "string", description: "correction: the start of the wrong line of the same session (the whole line or its signature), up to 30 characters are kept" },
             unit: { type: "string", description: "old form of k and n for a step: 'k/N', e.g. 4/13" },
           },
           required: ["file", "code"],

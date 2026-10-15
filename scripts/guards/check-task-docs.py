@@ -14,7 +14,11 @@
     (journal-path; определение одно со стражем секретов, lib/machine_paths.py) и, только в режиме
     индекса у добавленных строк журнала, который уже есть в HEAD, с подписью (без поля времени
     [ЧЧ:ММ] или [ГГГГ-ММ-ДД ЧЧ:ММ]) не длиннее 80 знаков (journal-long), а строка остановки «стоп:» — с видом
-    из списка вопрос, план, ревизия, требования, ворота (journal-stop); log.md — только в режиме
+    из списка вопрос, план, ревизия, требования, ворота (journal-stop), строка «поправка:» — по форме «поправка: к строке
+    «<начало, до 30 знаков>» — <что не так>» (journal-fix); journal-long и journal-stop не судят строку, исправленную позже в файле
+    строкой той же сессии (тот же код): поправкой с началом этой строки (всей строки, подписи или подписи без поля времени), а итоговую
+    строку («готово», «стоп:», и с ошибкой в ключевом слове) — только её повтором с тем же k и ключевым словом в верной форме
+    (задача 050; методика unitcraft/ai-dev-methodology @ 09e86c1); log.md — только в режиме
     индекса, добавленные строки (у первой версии файла — все), которые начинаются с даты ГГГГ-ММ-ДД
     не раньше 2026-10-10: такая строка обязана быть «ГГГГ-ММ-ДД ЧЧ:ММ <вид>: <текст>», вид — из
     закрытого списка (решение владельца, заседание, ворота, документ, пуск, слияние, находка),
@@ -33,6 +37,8 @@
     журнала («пишется по ходу» судится приёмкой); предел подписи в режимах дерева и коммита и CI
     (там нет добавленных строк), вид остановки там же и в прежних строках; порядок строк сессии (старт первой
     строкой, по строке на единицу, номер захода) — его проверяет инструмент progress_line при записи; k больше N и неверное поле времени (остаются подписью, как в панели);
+    «готово» при k меньше N и неисправленную ошибку ключевого слова итоговой строки (существенные находки приёмки по методике, страж их
+    не держит: исправить их можно только новой строкой, а не правкой прежней); поправку после итоговой строки (её не принимает progress_line);
     по норме о результате — задачи, заведённые раньше 2026-10-15 14:20, и папки без log.md с датой;
     current.md до появления result.md (его создаёт шаг плана в реализации); содержание current.md,
     метки копий, единственность действующего текста и честность строки «нет: результат — код» (это
@@ -74,6 +80,14 @@ SIGNATURE_MAX = 80
 STOP_KINDS = "вопрос, план, ревизия, требования, ворота"
 STOP_KIND_LIST = ("вопрос", "план", "ревизия", "требования", "ворота")
 STOP_WORD = re.compile(r"^стоп:[ \t]*([^ \t.,:;!—–-]*)")
+# строка-поправка (задача 050; методика unitcraft/ai-dev-methodology @ 09e86c1, task-runner.md, «Строки progress.log»): ключевое слово
+# «поправка» с двоеточием, начало ошибочной строки — до 30 знаков в кавычках «»
+CORRECTION_WORD = re.compile(r"^поправка:")
+CORRECTION_FORM = re.compile(r"^поправка: к строке «([^«»]{1,30})» — \S")
+CORRECTION_EXAMPLE = "«С1 31/32 [2026-10-15 12:14] поправка: к строке «опись source inventory» — подпись 93 знака»"
+# итоговая строка, в том числе с ошибкой в ключевом слове («Готово», «стоп» без двоеточия): её исправляет только повтор с тем же k
+FINAL_LIKE = re.compile(r"^(готово|стоп)(?:$|[ \t.,:;!—–-])", re.IGNORECASE)
+KEYWORD_DONE = re.compile(r"^готово(?:$|[ \t.,:;!—–-])")
 # сообщения стража называют правило, ожидаемую форму и пример (задача 049: агенты не видели, что именно не так)
 TOOL_HINT = "в окне OpenCode строку собирает инструмент %s"
 JOURNAL_EXAMPLE = "«С2 3/34 [2026-10-15 16:20] spec.md прочитан целиком»"
@@ -141,6 +155,46 @@ def signature_without_time(signature):
     return signature[m.end():] if m else signature
 
 
+def stop_fault(signature):
+    """Что не так в строке остановки «стоп:» (вид не из списка или не назван) или None."""
+    m = STOP_WORD.match(signature)
+    if m and m.group(1) not in STOP_KIND_LIST:
+        return "вид «%s» не из списка" % m.group(1) if m.group(1) else "вид не назван"
+    return None
+
+
+def well_formed_final(signature, word):
+    """Итоговая строка в верной форме: «готово» строчными или «стоп: <вид из списка>», подпись до предела."""
+    if len(signature) > SIGNATURE_MAX:
+        return False
+    if word == "готово":
+        return bool(KEYWORD_DONE.match(signature))
+    return bool(STOP_WORD.match(signature)) and stop_fault(signature) is None
+
+
+def corrected(lines, number, parsed):
+    """Исправлена ли ошибка формы строки number (задача 050, методика 09e86c1): позже в файле есть строка той же сессии (тот же код) —
+    поправка «поправка: к строке «<начало>» — …», где начало — начало всей строки, её подписи или подписи без поля времени; итоговую
+    строку («готово», «стоп:», и с ошибкой в ключевом слове) исправляет только её повтор с тем же k и ключевым словом в верной форме."""
+    raw = lines[number - 1]
+    code, k, _, signature = parsed
+    text = signature_without_time(signature)
+    final = FINAL_LIKE.match(text)
+    for later in lines[number:]:
+        other = parse_progress_line(later)
+        if other is None or other[0] != code:
+            continue
+        later_text = signature_without_time(other[3])
+        if final:
+            if other[1] == k and well_formed_final(later_text, final.group(1).lower()):
+                return True
+            continue
+        m = CORRECTION_FORM.match(later_text)
+        if m and (raw.startswith(m.group(1)) or signature.startswith(m.group(1)) or text.startswith(m.group(1))):
+            return True
+    return False
+
+
 def check_progress_log(path, data, source, rep):
     lines = split_journal(data)
     for number, line in enumerate(lines, 1):
@@ -158,17 +212,25 @@ def check_progress_log(path, data, source, rep):
         if parsed is None:
             continue
         signature = signature_without_time(parsed[3])
-        if len(signature) > SIGNATURE_MAX:
+        if CORRECTION_WORD.match(signature) and not CORRECTION_FORM.match(signature):
+            rep.add(path, number, "journal-fix", "строка-поправка не по форме «поправка: к строке «<начало ошибочной строки, до 30 "
+                    "знаков>» — <что не так>» (методика, task-runner.md, «Строки progress.log»); пример %s; %s (kind correction)" % (
+                        CORRECTION_EXAMPLE, TOOL_HINT % "progress_line"))
+        fault_long = len(signature) > SIGNATURE_MAX
+        fault_stop = stop_fault(signature)
+        if (fault_long or fault_stop) and number <= len(lines) and corrected(lines, number, parsed):
+            continue  # ошибка формы исправлена поправкой или повтором итоговой строки — прежняя строка не переписывается
+        if fault_long:
             rep.add(path, number, "journal-long", "подпись добавленной строки — %d знаков, предел %d без поля времени (методика: "
                     "«подпись без времени — не длиннее 80 знаков»); сократи на %d, подробности — в отчёт или log.md; пример %s; "
-                    "%s, он не пропускает длинную подпись" % (len(signature), SIGNATURE_MAX, len(signature) - SIGNATURE_MAX,
-                                                         JOURNAL_EXAMPLE, TOOL_HINT % "progress_line"))
-        m = STOP_WORD.match(signature)
-        if m and m.group(1) not in STOP_KIND_LIST:
-            found = "вид «%s» не из списка" % m.group(1) if m.group(1) else "вид не назван"
+                    "%s, он не пропускает длинную подпись; прежняя строка не переписывается — допиши строку-поправку "
+                    "(kind correction), у итоговой строки — её повтор с тем же k" % (
+                        len(signature), SIGNATURE_MAX, len(signature) - SIGNATURE_MAX, JOURNAL_EXAMPLE, TOOL_HINT % "progress_line"))
+        if fault_stop:
             rep.add(path, number, "journal-stop", "строка остановки: %s; форма «стоп: <вид> — <причина>», вид — одно из слов: %s "
                     "(методика, task-runner.md, «Строки progress.log»); пример «С2 5/40 [2026-10-15 16:20] стоп: вопрос — нужен "
-                    "ответ о составе описи»; %s (kind stop)" % (found, STOP_KINDS, TOOL_HINT % "progress_line"))
+                    "ответ о составе описи»; %s (kind stop); прежняя строка не переписывается — допиши её повтор с тем же k и "
+                    "верным видом" % (fault_stop, STOP_KINDS, TOOL_HINT % "progress_line"))
 
 
 def log_line_fault(text):

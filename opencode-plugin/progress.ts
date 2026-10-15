@@ -34,7 +34,7 @@ export type Line = {
   text: string
 }
 
-export type Keyword = "готово" | "стоп" | "запуск" | "старт"
+export type Keyword = "готово" | "стоп" | "запуск" | "старт" | "поправка"
 
 /** Байты журнала → строки: делятся только по LF, один CR в конце снимается, последний пустой кусок после LF — не строка. */
 const DECODER = new TextDecoder("utf-8", { ignoreBOM: true })
@@ -117,12 +117,22 @@ export function parseJournal(bytes: Uint8Array): Line[] {
 
 const startsWord = (text: string, word: string) => text.startsWith(word) && (text.length === word.length || BOUNDARY.includes(text[word.length]))
 
-/** Ключевое слово в начале подписи (после снятого времени): слово целиком, строчными; `стоп` — только с двоеточием. */
+/**
+ * Ключевое слово в начале подписи (после снятого времени): слово целиком, строчными, знак после него допустим; `стоп` и `поправка` —
+ * только с двоеточием (методика 09e86c1, task-runner.md, «Строки progress.log»).
+ */
 export function keywordOf(text: string): Keyword | undefined {
   for (const w of ["готово", "запуск", "старт"] as const) if (startsWord(text, w)) return w
   if (text.startsWith("стоп:")) return "стоп"
+  if (text.startsWith("поправка:")) return "поправка"
   return undefined
 }
+
+/**
+ * Строка-поправка (задача 050; методика 09e86c1): `<код> <текущий k>/<N> [время] поправка: к строке «<начало>» — <что не так>`. Не единица и
+ * не признак хода: k не меняет, сессию не открывает, «без прогресса» не снимает, показ `k/N` её не учитывает.
+ */
+export const isCorrection = (l: Line) => keywordOf(l.text) === "поправка"
 
 /** Вид остановки: первое слово после `стоп:` (пробелы необязательны), если оно из списка; иначе undefined — «вид не назван». */
 export function stopKind(text: string): string | undefined {
@@ -197,6 +207,10 @@ export function sessionsOf(lines: Line[]): Session[] {
     }
     if (!cur || (cur.rows.length === 0 && cur.launch && cur.code === l.code)) {
       if (!cur) open(l.code)
+    } else if (isCorrection(l) && l.code === cur.code) {
+      // поправка той же сессии: не открывает сессию и не меняет k (задача 050)
+      cur!.rows.push(l)
+      continue
     } else if (l.code !== cur.code || l.k === 0 || l.k < lastK) open(l.code)
     cur!.rows.push(l)
     lastK = l.k
@@ -238,8 +252,26 @@ export const STATE_WORDS: Record<State, string> = {
   7: "все шаги сделаны, итога нет",
 }
 
-/** Последняя строка сессии: её последняя строка, а у записи «запуск без старта» — строка запуска. */
-export const lastOf = (s: Session): Line => (s.rows.length ? s.rows[s.rows.length - 1] : (s.launch as Line))
+/**
+ * Последняя строка сессии без строк-поправок (задача 050: поправка не единица; повтор итоговой строки в верной форме читается вместо
+ * прежней — он и есть последняя строка); у записи «запуск без старта» и у сессии из одних поправок — строка запуска, иначе последняя строка.
+ */
+export const lastOf = (s: Session): Line => {
+  for (let i = s.rows.length - 1; i >= 0; i--) if (!isCorrection(s.rows[i])) return s.rows[i]
+  return s.launch ?? s.rows[s.rows.length - 1]
+}
+
+/**
+ * Строка, с которой k последний раз вырос: первая из подряд идущих в конце сессии строк (кроме поправок) с тем же k, что у последней.
+ * От неё считается «без прогресса» (методика 09e86c1, «Протокол прогресса», п. 3: «если k не растёт дольше порога»).
+ */
+export function growthOf(s: Session): Line {
+  const rows = s.rows.filter((l) => !isCorrection(l))
+  if (!rows.length) return lastOf(s)
+  let i = rows.length - 1
+  while (i > 0 && rows[i - 1].k === rows[i].k) i--
+  return rows[i]
+}
 
 /** Состояние последней строки по таблице REQ-04 (первая подходящая строка таблицы). */
 export function stateOf(last: Line, moment: Moment, now: number, th: Thresholds): { state: State; kind?: string } {
@@ -279,7 +311,8 @@ export type Entry = {
 export function entryOf(session: Session, fileMtime: number, now: number, th: Thresholds): Entry {
   const last = lastOf(session)
   const m = momentOf(last, fileMtime, now)
-  const st = stateOf(last, m, now, th)
+  // «идёт» или «давно нет вестей» — по росту k: строка с тем же k и поправка тишину не прерывают (задача 050)
+  const st = stateOf(last, momentOf(growthOf(session), fileMtime, now), now, th)
   return {
     session,
     last,
@@ -287,7 +320,7 @@ export function entryOf(session: Session, fileMtime: number, now: number, th: Th
     byFile: m.byFile,
     state: st.state,
     ...(st.kind !== undefined ? { kind: st.kind } : {}),
-    stale: (st.state === 3 || st.state === 6) && now - m.at > th.staleMs,
+    stale: st.state === 6 || (st.state === 3 && now - m.at > th.staleMs),
     shown: isShown(st.state, m.at, now, th),
     abandoned: isAbandoned(st.state, m.at, now, th),
   }
