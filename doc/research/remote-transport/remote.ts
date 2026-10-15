@@ -8,7 +8,7 @@
 //   projects — её проекты (crew_send роли такого проекта уходит ей); may_write — куда ей можно писать здесь:
 //   `<проект>.<роль>`, `<проект>.*` или `*`. Отправителя называет сеть (whois), не письмо.
 // ntfy — общий канал с общим секретом (все машины канала равны, отправитель не проверяется):
-//   { "node": "home", "secret": "<ntfySecret()>", "projects": ["site"], "server": "...", "token": "..." }
+//   { "node": "home", "secret": "...", "projects": ["site"], "server": "...", "token": "..." }
 //
 // Сессия другой машины (from_session пришедшего письма) запоминается вместе с машиной — ответ ей уходит туда же.
 //
@@ -23,7 +23,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, watch, writeFileSync } from "node:fs"
 import path from "node:path"
 import { createNtfyTransport, type PeerLetter } from "./ntfy.ts"
-import { BASE } from "./paths.ts"
+import { BASE } from "../../../opencode-plugin/paths.ts" // каталог данных плагина: тот же ящик, что у писем
 import { createTailnetTransport, type Verdict } from "./tailnet.ts"
 
 export const REMOTE_FILE = path.join(BASE, "remote.json")

@@ -2,6 +2,7 @@
 // A fake ntfy in memory: the topic and key come from the secret, letters are encrypted and cut into parts, a long
 // letter is reassembled, a forged or replayed message is dropped, own messages are skipped, a 429 pauses sending,
 // the subscription delivers within the stream and resumes from the last id after a break.
+import { randomBytes } from "node:crypto"
 const nt = await import("../ntfy.ts")
 
 let fail = 0
@@ -64,7 +65,7 @@ async function fakeFetch(url, init = {}) {
   })
   return new Response(body, { headers: { "content-type": "application/x-ndjson" } })
 }
-const secret = "test-secret-0123456789abcdef"
+const secret = `test-${randomBytes(12).toString("hex")}` // a fresh test secret per run, no secret literal in the repository
 const letter = (id, to, text) => ({ id, from_role: "dev", to, text, time: clock })
 const mk = (node, extra = {}) => nt.createNtfyTransport({ secret, node, fetch: fakeFetch, now, sendGapMs: 1000, ...extra })
 const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms))

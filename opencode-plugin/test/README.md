@@ -59,10 +59,7 @@ stops at the first failing file.
 | | `peers-plan-config` | a project's own plan form, grades, approver, manual steps |
 | `crew_watch` | `peers-watch` | a command run detached; one letter with the exit code and output tail |
 | | `peers-deny` | the project's `permissions.deny` checked on a watch command |
-| Other machines | `crew-github` | GitHub issue transport on a fake GitHub: 304, batches, own comments skipped, 429 |
-| | `crew-ntfy` | ntfy transport on a fake ntfy: encryption, parts, forged / replayed messages, subscription and resume |
-| | `crew-tailnet` | Tailscale transport: two real HTTP bridges on `127.0.0.1`, `whois` faked; verdicts, 403, retries, max age |
-| | `crew-remote` | routing by `remote.json`, the outbox, one bridge per machine, `inbound` / `may_write`, replies only from a machine written to, refusals back to the sender |
+| Plugin border | `crew-no-research` | static: no import from `doc/research`, every relative import inside the plugin, no bridge to other machines, every file of the `npm test` chain exists (task 046) |
 | Model profiles | `crew-profiles-data` | the data module: stages and words, value checks of `model_profiles` / `profile_sets` / `profile_set`, family of a tab model, links, windows of a set, profile choice and the state table (task 003) |
 | | `crew-profiles-layer` | the data in force (the three keys of the working copy), one atomic write of a draft, an old `*.layer.json` ignored and named once, the snapshot of the last valid state, projects apart |
 | | `crew-profiles-config` | `crew_config` and `crew_doctor` for the profile keys: forms, links on the working copy plus the new values, profile_set refused always, guide, show, the problems named |
@@ -94,23 +91,10 @@ stops at the first failing file.
 | | `crew-answer-flow` | heavy: the whole flow in the running plugin: the tab of the owner, task and review sessions, packs with a rest, the limit, plans |
 | | `answer-harness.mjs`, `answer-golden.mjs`, `answer-fixtures.mjs`, `answer-t10.json`, `answer-measure.mjs`, `answer-scope.mjs`, `answer-child.mjs` | helpers, not tests: the shared set-up, the snapshot of the base texts, the tables of the specification, the blocks and the script of the measure of the gate words (`node test/answer-measure.mjs`), the check of the borders of the modes, a child process of the race test |
 
-## Manual checks (not in `npm test`)
-
-They talk to real services, so they run only by hand:
-
-```sh
-node test/ntfy-latency.mjs [count=5] [server=https://ntfy.sh]          # publishes to a new random topic
-node test/gh-latency.mjs <owner/repo> <issue> [count=5] [pollMs=1000]  # posts comments to the issue
-```
-
-Last run (2026-10-07): `ntfy-latency` on ntfy.sh — 5/5 delivered, median about 2 s, max 2.7 s; most of it is
-the publish request. `gh-latency` has not been run.
-
 ## Not covered
 
 - a live OpenCode: windows, real sessions, models and turns are faked;
-- other machines for real: no run between two machines, no real Tailscale (`tailscale ip -4` and the
-  `tailscale whois --json` parsing are untested), no real GitHub;
 - types: there is no TypeScript in the project, Node strips the annotations without checking them.
 
-The status of the work on other machines and what comes next — in the main [README](../README.md#status-2026-10-07).
+Letters between machines are not in the plugin: the prototype, its self-tests and the manual latency checks
+(`ntfy-latency`, `gh-latency`) are in [doc/research/remote-transport/](../../doc/research/remote-transport/README.md).

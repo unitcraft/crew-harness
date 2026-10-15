@@ -3,6 +3,7 @@
 // per machine (the lock). ntfy: the channel is shared — only our letters are taken, by the project's inbound.
 // Tailscale: the sender is named by the network, its may_write limits where it writes, a refusal comes back to the
 // sender. A session gets letters only from a machine it wrote to; a letter that cannot leave comes back.
+import { randomBytes } from "node:crypto"
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -29,7 +30,7 @@ cell("a bad remote.json is ignored", r.loadRemote() === undefined, "loaded")
 cell("problems are named", r.remoteProblems({ node: "home", transport: "tailnet", nodes: { home: { may_write: ["bad role"] } } }).length === 2, JSON.stringify(r.remoteProblems({ node: "home", transport: "tailnet", nodes: { home: { may_write: ["bad role"] } } })))
 
 // ---- ntfy ----
-await setRemote({ node: "home", secret: "0123456789abcdef0123", projects: ["site"] })
+await setRemote({ node: "home", secret: randomBytes(10).toString("hex"), projects: ["site"] })
 cell("ntfy: a project of another machine is remote", r.remoteRoute({ kind: "role", project: "site", role: "lead" }, isLocal)?.to_node === "*", "local")
 cell("a local project is not", r.remoteRoute({ kind: "role", project: "nova", role: "lead" }, isLocal) === undefined, "remote")
 cell("an unknown session is not", r.remoteRoute({ kind: "session", session: "ses_far1" }, isLocal) === undefined, "remote")

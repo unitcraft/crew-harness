@@ -748,83 +748,13 @@ is what the tabs in the main folder use — the plugin only names it.
   integrator, who does it with its own tasks: `crew_spawn {…, parent: "alpha#N"}`. The order follows
   that task: done → the order is done (a quiet summary to the orderer), cancelled → a call.
 
-## Other machines (prototype)
+## Other machines (research, not in the plugin)
 
-Letters to projects on other machines (`remote.ts`). Each machine has
-`<data>/crew-harness/remote.json` — not in a repository. Two transports:
-
-**Tailscale** (`tailnet.ts`, recommended): bridges talk HTTP directly inside your Tailscale network.
-The network names the sender (`tailscale whois`), so there is no shared secret, and each machine has
-its own rights:
-
-```json
-{ "node": "home", "transport": "tailnet",
-  "nodes": { "vps-1": { "projects": ["site"], "may_write": ["nova.integrator"] } } }
-```
-
-- `nodes` — the machines this one talks to, by their Tailscale name (`host`/`port` if not the
-  MagicDNS name and port 7647); a machine not listed gets 403;
-- `projects` — that machine's projects: `crew_send {to: "site.lead"}` goes to `vps-1`;
-- `may_write` — where that machine may write here: `project.role`, `project.*` or `*`;
-- the bridge listens only on the Tailscale address (`tailscale ip -4`), so on a VPS with a public
-  address the port is not open to the internet. Let only the bridge port through in the tailnet ACL;
-- a refusal there comes back to the sender as a note; an unreachable machine keeps the letter and
-  retries (1, 2, 4… up to 60 s) for 24 h.
-
-**ntfy** (`ntfy.ts`): a shared encrypted channel on [ntfy](https://ntfy.sh) for machines outside a
-tailnet. All machines of the channel are equal — the secret is its only protection:
-
-```json
-{ "node": "home", "secret": "<the same on every machine>", "projects": ["site"] }
-```
-
-The topic and the AES-256-GCM key come from `secret` (a new one: `ntfySecret()` from `ntfy.ts`);
-optional `server` and `token` for your own ntfy server. The channel is shared, so a refusal stays in the
-receiver's log. A letter takes about 1–3 s on ntfy.sh (`node test/ntfy-latency.mjs`); anonymous
-ntfy.sh limits requests and messages per day, so pending letters leave together.
-
-Both:
-
-- a session of another machine you got a letter from is remembered with its machine, so a reply to
-  its `from_session` goes back there. `tier` and `project.all` do not work across machines;
-- one process per machine holds the bridge (`remote/bridge.lock`); it takes only letters for its own
-  projects, by the project's `inbound`; a session gets letters only from a machine it wrote to itself.
-  A letter that cannot be sent goes to `remote/failed/`, and its sender gets a note.
-
-### Status (2026-10-07)
-
-A prototype. Checked by self-tests only: fake ntfy and GitHub servers, two real HTTP bridges on
-`127.0.0.1` with a faked `whois`, the bridge with a fake transport. One live run: 5 pings over ntfy.sh,
-median about 2 s, most of it the publish request. Not yet run inside a live OpenCode, not across real
-machines, and not against a real Tailscale: the parsing of `tailscale whois --json` (`Node.Name`) is
-written from memory. No type check (no TypeScript in the project). `github.ts` is a transport kept for
-comparison; nothing uses it.
-
-Known gaps:
-
-- **the ntfy cursor lives in memory**: after a restart the bridge reads the channel from its start, so
-  letters sent while no OpenCode process ran on the machine are lost, though ntfy.sh keeps them ~12 h;
-- **ntfy has no sender identity**: one shared secret, every machine of the channel is equal, a refusal
-  stays in the receiver's log, and the sender is told "sent" even if no machine took the letter;
-- **Tailscale keeps the outgoing queue in memory**: retries survive a pause, not a restart of the bridge
-  process (the letter stays in `remote/outbox/` and is sent again — the receiver drops the repeat by id);
-- **only letters cross machines**: no `tier`, no `project.all`, no tasks or orders (`crew_task`,
-  `crew_spawn`), no `crew_watch` or status; `crew_list` does not show tabs of other machines;
-- **remote.json is edited by hand**: `crew_config` does not touch it, and a broken file is only logged;
-- **the queue and back-off code is repeated** in `github.ts`, `ntfy.ts` and `tailnet.ts`.
-
-Next:
-
-1. Check on a real tailnet: `tailscale ip -4` and `whois` output on Windows and Linux, a letter between
-   this machine and a VPS, the ACL that leaves a worker only the bridge port.
-2. Orders across machines: `crew_task order` to the integrator of a project on another machine, which
-   runs it with its own tasks; the order's status comes back. Code moves through git: the worker pulls a
-   branch from a shared remote and pushes its result to its own branch; review and merge stay at home.
-3. OpenCode without windows on a VPS (`opencode serve`): today a wake needs an open tab or a
-   `crew_spawn` task — check what a headless worker needs.
-4. Smaller: keep the ntfy cursor in a file; `crew_list` with remote machines (reachable or not); edit
-   `remote.json` through `crew_config`; one shared queue module for the transports; drop `github.ts` if
-   nothing needs it.
+The plugin carries letters between tabs of one machine only. A prototype of letters to projects on other
+machines (a bridge over Tailscale, ntfy or GitHub issues, configured by `remote.json`) was tried on 2026-10-06
+and left unfinished; it is not part of the plugin and the plugin does not read `remote.json`. Its code, tests,
+measurements and open questions are in
+[doc/research/remote-transport/](../doc/research/remote-transport/README.md) (task 046).
 
 ## Self-check
 
