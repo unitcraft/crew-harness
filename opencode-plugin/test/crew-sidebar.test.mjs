@@ -91,6 +91,29 @@ cell("rows fit the narrow panel (32 columns) without wrapping", v.rows.every((r)
   const ct = formatStatuses(marks, t, "nova").split("\n")
   cell("055: /crew marks the same way", ct.some((l) => l.startsWith("  ? worker")) && ct.some((l) => l.startsWith("  ▶ #7 исп")), ct.join("\n"))
 }
+{
+  // task 056: a turn that ended with a waiting phrase - "ждёт указаний" and the phrase under it, a mark not like a question;
+  // a turn that ended with "?" - "вопрос — ждёт ответа" and the question under it
+  const t = Date.now()
+  const phrase = "Сообщил интегратору, что жду дальнейших указаний."
+  const wq = st("w22", "question", { since: t, wait: true, question: phrase, title: "#22 прм x", task: { n: 22, status: "reviewing", as: "reviewer", title: "x" }, detail: `ждёт указаний интегратора с 10:00: ${phrase}` })
+  const qq = st("q7", "question", { since: t, question: "Базу опустить?", title: "#7 исп x", task: { n: 7, status: "running", as: "executor", title: "x" }, detail: "ждёт ответа (интегратора или вас) с 10:00: Базу опустить?" })
+  const sv = sidebarLines([wq, qq], t, "nova")
+  const at = (who) => sv.rows.findIndex((r) => r.who === who)
+  const w = sv.rows[at("#22 прм")]
+  cell("056: a waiting tab says 'ждёт указаний', no question", w?.what === "ждёт указаний" && !sv.rows.some((r) => r.who === "#22 прм" && /вопрос/.test(r.what)), JSON.stringify(sv.rows))
+  cell("056: its mark is neither ? nor ▶", !!w && w.mark !== "?" && w.mark !== "▶" && w.mark.trim().length === 1, JSON.stringify(w))
+  cell("056: the phrase is under the waiting tab", sv.rows[at("#22 прм") + 1]?.what.startsWith("↳ Сообщил интегратору") && sv.rows[at("#22 прм") + 1].tone === "muted", JSON.stringify(sv.rows))
+  cell("056: a question keeps its label and mark, the question under it", sv.rows[at("#7 исп")]?.what === "вопрос — ждёт ответа" && sv.rows[at("#7 исп")].mark === "▶" && sv.rows[at("#7 исп") + 1]?.what === "↳ Базу опустить?", JSON.stringify(sv.rows))
+  cell("056: the rows fit the panel", sv.rows.every((r) => sideText(r).length <= 32), JSON.stringify(sv.rows.map((r) => sideText(r))))
+  const ct = formatStatuses([wq, qq], t, "nova").split("\n")
+  cell("056: /crew marks the waiting tab like the panel, without 'вопрос'", ct.some((l) => l.startsWith(`  ${w?.mark} #22 прм`) && /ждёт указаний/.test(l) && !/вопрос/.test(l)), ct.join("\n"))
+  // a tab of the owner (not spawned) waiting with a phrase: waits for you, the summary marks it as a wait, the phrase under it
+  const ow = st("o56", "owner", { project: "nova", role: "integrator", since: t, wait: true, question: "Жду вашего решения по плану.", detail: "ждёт вас с 10:00: Жду вашего решения по плану." })
+  const ov = sidebarLines([ow], t, "nova")
+  cell("056: the summary of an owner's waiting tab is not marked ?", sideText(ov.rows[1]) === `${w?.mark} nova интегр.` && sideText(ov.rows[2]).startsWith("  ↳ Жду вашего"), JSON.stringify(ov.rows.map((r) => sideText(r))))
+  cell("056: its row is marked as a wait", ov.rows.find((r) => r.who === "интегр.")?.mark === w?.mark, JSON.stringify(ov.rows))
+}
 cell("a task row has its title on a muted row under it, so the number says what the task is", v.rows.some((x, i) => x.who === "#2 исп" && v.rows[i + 1]?.what === "↳ x" && v.rows[i + 1].tone === "muted"), JSON.stringify(v.rows))
 cell("another project's sessions are not shown", !v.rows.some((r) => r.who === "worker" && r.what.startsWith("работает")), JSON.stringify(v.rows))
 cell("at most 9 rows, the rest in the foot", v.rows.filter((x) => x.who).length === 9 && /\+5 · \/crew/.test(v.foot) && /ход 1 · ждут 1 \(очередь 1\)/.test(v.foot),JSON.stringify({ n: v.rows.length, foot: v.foot }))

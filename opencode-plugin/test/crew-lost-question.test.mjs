@@ -192,6 +192,11 @@ await safe("f", async () => {
   const both = fw.askText(T0 + 70 * MIN, undefined, [ended])
   cell("f: /ask lists a question at the end of a turn with its project, tab and text", both.includes("claude-limits · worker «#33 исп лимиты»") && both.includes("Продолжать #31 или переключиться на #33?") && /ждёт 10 мин/.test(both), both)
   cell("f: every waiting tab in /ask is marked ? (task 055)", both.split("\n").filter((l) => /^\S/.test(l) && !/^Ждут вас/.test(l)).every((l) => l.startsWith("? ")) && !/^▶/m.test(both), both)
+  // task 056: a turn that ended with a waiting phrase is not called a question in /ask and is marked as a wait
+  const waits = { ...ended, session: "sesWait", title: "#34 исп", wait: true, question: "Жду вашего решения по плану." }
+  const ww = fw.askText(T0 + 70 * MIN, undefined, [waits])
+  const head = ww.split("\n").find((l) => l.includes("«#34 исп»")) ?? ""
+  cell("f: /ask marks a waiting phrase as a wait, not ? (task 056)", !!head && !head.startsWith("? ") && !head.startsWith("▶") && ww.includes("Жду вашего решения по плану.") && /указаний/.test(ww) && !/кончился вопросом/.test(ww), ww)
   cell("f: /ask counts it in the summary line", Number(/^Ждут вас: (\d+)/.exec(both)?.[1]) === Number(/^Ждут вас: (\d+)/.exec(text)?.[1]) + 1, both.split("\n")[0])
   cell("f: nothing open says so", fw.askText(T0 + 70 * MIN, path.join(tmp, "empty-forms")).includes("нет"), "")
 })

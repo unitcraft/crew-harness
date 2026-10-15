@@ -67,6 +67,20 @@ cell("integrator + 'Жду вашего решения по плану.': owner"
 cell("running executor + 'жду решения приёмки': not question", st(ex(running), "жду решения приёмки").state !== "question", "run1")
 cell("running executor + 'жду вашего решения': question", st(ex(running), "жду вашего решения").state === "question", "run2")
 
+// task 056: a turn that ends with a waiting phrase waits for instructions, not for an answer to a question (the two phrases of
+// the source, 2026-10-15); the turn still stops the nudge (endsWithQuestion finds it), the line with "?" stays a question
+const SRC = ["Сообщил интегратору, что жду дальнейших указаний.", "Ожидаю дальнейшего решения по #23."]
+for (const p of SRC) {
+  cell(`056: '${p}' stops the nudge as before`, status.endsWithQuestion(`Проверка закончена.\n${p}`) === p, String(status.endsWithQuestion(p)))
+  cell(`056: '${p}' is a wait, not a question`, status.endOfTurn?.(p)?.wait === true, JSON.stringify(status.endOfTurn?.(p)))
+  const r = st(ex(running), `Проверка закончена.\n${p}`)
+  cell(`056: a task session with '${p}' waits for instructions`, r.state === "question" && r.wait === true && r.question === p && /ждёт указаний/.test(r.detail) && !/вопрос|ответа/.test(r.detail), JSON.stringify(r))
+}
+cell("056: the integrator named in the phrase is who it waits for", /ждёт указаний интегратора/.test(st(ex(running), SRC[0]).detail), st(ex(running), SRC[0]).detail)
+cell("056: a line with '?' is a question", status.endOfTurn?.("Базу опустить?")?.wait === false && st(ex(running), "Базу опустить?").wait === undefined && /ждёт ответа/.test(st(ex(running), "Базу опустить?").detail), JSON.stringify(st(ex(running), "Базу опустить?")))
+const ownerWait = st({ session: "sesINT56", role: "integrator", spawned: undefined }, "Жду вашего решения по плану.")
+cell("056: an owner's tab with a waiting phrase waits for the owner, no word 'вопрос'", ownerWait.state === "owner" && ownerWait.wait === true && !/вопрос/.test(ownerWait.detail), JSON.stringify(ownerWait))
+
 rmSync(tmp, { recursive: true, force: true })
 console.log(fail ? `crew-waiting-phrases.test: FAIL ${fail}` : "crew-waiting-phrases.test ok")
 process.exit(fail ? 1 : 0)
