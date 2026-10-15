@@ -191,6 +191,7 @@ await safe("f", async () => {
   const ended = { session: "sesEnd", project: "claude-limits", role: "worker", title: "#33 исп лимиты", state: "owner", since: T0 + 60 * MIN, question: "Продолжать #31 или переключиться на #33?" }
   const both = fw.askText(T0 + 70 * MIN, undefined, [ended])
   cell("f: /ask lists a question at the end of a turn with its project, tab and text", both.includes("claude-limits · worker «#33 исп лимиты»") && both.includes("Продолжать #31 или переключиться на #33?") && /ждёт 10 мин/.test(both), both)
+  cell("f: every waiting tab in /ask is marked ? (task 055)", both.split("\n").filter((l) => /^\S/.test(l) && !/^Ждут вас/.test(l)).every((l) => l.startsWith("? ")) && !/^▶/m.test(both), both)
   cell("f: /ask counts it in the summary line", Number(/^Ждут вас: (\d+)/.exec(both)?.[1]) === Number(/^Ждут вас: (\d+)/.exec(text)?.[1]) + 1, both.split("\n")[0])
   cell("f: nothing open says so", fw.askText(T0 + 70 * MIN, path.join(tmp, "empty-forms")).includes("нет"), "")
 })
@@ -207,7 +208,7 @@ await safe("g", async () => {
   cell("g: nothing waits, no line", waitingLine([st("s3", "working", T0)], T0) === undefined, "")
   cell("g: /crew starts with the line", formatStatuses(list, T0 + 20 * MIN).split("\n")[0] === line, formatStatuses(list, T0 + 20 * MIN).split("\n")[0])
   const side = sidebarLines(list, T0 + 20 * MIN, "nova")
-  cell("g: the side panel has the count and the time, for all projects", side.rows[0]?.what === `Ждут вас: 2 · с ${hmOf(T0 + 5 * MIN)}` && side.rows[1]?.what === "▶ crew-harness интегр." && side.rows[2]?.what === "  ↳ q", JSON.stringify(side.rows.slice(0, 3)))
+  cell("g: the side panel has the count and the time, for all projects", side.rows[0]?.what === `Ждут вас: 2 · с ${hmOf(T0 + 5 * MIN)}` && side.rows[1]?.what === "? crew-harness интегр." && side.rows[2]?.what === "  ↳ q", JSON.stringify(side.rows.slice(0, 3)))
 })
 
 // (h) the notice: at the first sight, then every 30 minutes, not more often

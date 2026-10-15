@@ -116,7 +116,7 @@ cell("after the owner's answer it no longer waits for the owner", st("sesINTEG1"
 const spawned = status.statusOf({ card: { session: "ses_task01", role: "worker", auto: false, title: "#9 x", directory: proj, repo: "proj", project: "proj", pid: process.pid, updated: Date.now(), spawned: { by: "sesINTEG1", task: "x", tier: "light", status: "running", at: Date.now(), qid: "q9" } }, busy: false, end: { at: Date.now(), text: "Сдал. Базу опустит интегратор или мне?", ownerAfter: false }, asked: [], now: Date.now() })
 cell("a task session's closing question: 'question' (integrator or owner), no notice", spawned.state === "question" && /интегратора или вас/.test(spawned.detail), JSON.stringify(spawned))
 const text = status.formatStatuses(status.readStatuses().concat([{ ...st("sesIDLE01"), session: "sesQ", state: "owner", detail: "ждёт вас с 10:00: Можно?", question: "Можно?" }]), Date.now(), "proj")
-cell("/crew text: the waiting first, the count in the project line", /ВАС ЖДУТ: 1/.test(text) && text.split("\n")[0] === "Ждут вас: 1 · proj" && text.split("\n")[2].includes("▶"), text)
+cell("/crew text: the waiting first, the count in the project line", /ВАС ЖДУТ: 1/.test(text) && text.split("\n")[0] === "Ждут вас: 1 · proj" && text.split("\n")[2].startsWith("  ? "), text)
 
 clearInterval(heart)
 stop?.()
