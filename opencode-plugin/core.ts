@@ -1368,7 +1368,8 @@ acceptor — роль приёмщика (разделяемая) при нас�
     сессии; пока задача открыта, такую вкладку будят, даже закрытую. Интегратор исполнителем своей задачи не бывает: assign на
     собственную сессию отказывает (исключение по слову владельца — allow_self_assign: true в настройках проекта).
   crew_task {action: "push", n, text?, to?} — подтолкнуть остановившуюся вкладку сейчас: to "executor" (по умолчанию) — исполнителя, "reviewer" — приёмщика (счётчик напоминаний — с нуля).
-  crew_task {action: "reassign", n} — передать задачу новой сессии под тем же номером со сводкой сделанного.
+  crew_task {action: "reassign", n, text?} — передать задачу новой сессии под тем же номером со сводкой сделанного; text —
+    уточнение цели: идёт в первое письмо новой сессии перед прежней целью (уточнять тем же вызовом, не вторым письмом).
   crew_task {action: "cancel", n, text?} / {action: "priority", n, priority} / {action: "view", n} (show — прежнее имя, работает) / {action: "list"}.
   crew_task {action: "order", to: "<проект>.integrator", goal, criteria, ...} — заказ в другой проект: его интегратор
     делает работу своими задачами (crew_spawn {parent: "<проект>#N"}); заказ идёт за ними: принята у него — заказ
@@ -2097,7 +2098,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         "assign - integrator - session, goal, criteria, title?, boundaries?, open_questions?, priority?, extra? - give a task to an existing open tab instead of a new session; the tab is woken while the task is open. Refused for the integrator's own session (unless the project sets allow_self_assign) and for a session that already runs a task. extra {id: one line} fills the project's extra task fields (task_extra_fields, see crew_config view).",
         "order - integrator - to \"project.integrator\", goal, criteria, ... - order work from another project: its integrator does it with its own tasks; when its task is accepted the order is done (a quiet summary to you), when cancelled you get a call.",
         "push - integrator - n, text?, to? - nudge a stalled tab now (the reminder counter starts over): to \"executor\" (default) wakes the executor, to \"reviewer\" wakes the reviewer of the task.",
-        "reassign - integrator - n - hand the task to a new session under the same number with a summary of what was done.",
+        "reassign - integrator - n, text? - hand the task to a new session under the same number with a summary of what was done. text = a refinement of the goal: it goes into the new session's first letter as a block before the old goal, wins where they differ and stays in the task history (view). Refine the goal with this same call, never with a second letter after the handover: the new session would start on the old goal and report twice.",
         "cancel - integrator - n, text? - cancel the task; text goes to the executor. Releases the merge lock if the task held it.",
         "priority - integrator - n, priority P0..P3 - change the priority.",
         "submit - executor - n, text - submit the task's work with the report (what was done, how it was checked, what is left); no qid is needed. The first submission, one after rework or after a sync (the reviewer is woken), a plan task (the plan file and its form are checked). Already submitted: refused.",
@@ -2129,7 +2130,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         candidate: str("precheck: the checked candidate (branch or hash); with result it finishes the precheck"),
         n: { type: "number", description: "Task number" },
         session: str("assign: the tab (session id) that takes the task"),
-        text: str("submit: the report (what was done, how it was checked, what is left); push / cancel: text for the executor"),
+        text: str("submit: the report (what was done, how it was checked, what is left); push / cancel: text for the executor; reassign: the refined goal for the new session's first letter"),
         blocking: { type: "number", description: "round (plan recheck): number of blocking remarks" },
         significant: { type: "number", description: "round: number of significant remarks" },
         cosmetic: { type: "number", description: "round: number of cosmetic remarks" },
@@ -2213,6 +2214,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           taskRow(t),
           `автор ${t.author_role} (${t.author}), ступень ${t.tier}${t.model ? `, модель ${t.model}` : ""}, qid ${t.qid}`,
           t.worktree ? `worktree ${t.worktree}, ветка ${t.branch}` : t.branch ? `ветка ${t.branch}` : "",
+          t.refinement ? `уточнение при передаче: ${t.refinement.text} (${hhmm(t.refinement.at)})` : "",
           `цель: ${t.goal}`,
           t.criteria ? `критерии: ${t.criteria}` : "",
           t.boundaries ? `границы: ${t.boundaries}` : "",
@@ -2599,7 +2601,10 @@ ${lockStillYours(stillHeld.n)}` : "") }
         // чтобы отказ не оставил задачу без исполнителя; без набора — модель записи, как прежде
         const chosen = resolveStageProfile(profileState(t.directory).state, stageOfLaunch(t, "executor"), { inputTier: t.tier })
         if (chosen && "refuse" in chosen) return { content: `Не передано: ${chosen.refuse}. Прежний исполнитель остался на задаче.` }
+        // уточнение цели — в то же первое письмо новой сессии (задача 057), а не вторым письмом после старта
+        const refine = String(input.text ?? "").trim()
         const old = t.executor
+        if (refine) t.refinement = { text: refine, at: Date.now(), by: me.session }
         if (old) {
           t.handoff = handoffOf(t, old)
           releaseExecutor(t, old)
@@ -2623,9 +2628,10 @@ ${lockStillYours(stillHeld.n)}` : "") }
           }
         }
         markPrecheckStale(t, "передана другой сессии")
-        taskEvent(t, me.session, "starting", `передана новой сессии${old ? ` (была ${old})` : ""}`)
+        taskEvent(t, me.session, "starting", `передана новой сессии${old ? ` (была ${old})` : ""}${refine ? `; уточнение при передаче: ${refine}` : ""}`)
         const r = await host.startTask(t)
-        return { content: r.session ? `Задача ${taskRef(t)} передана новой сессии ${r.session}${t.handoff ? " со сводкой сделанного" : ""}.` : `Задача #${t.n} записана к передаче, сессия не запущена: ${r.error ?? "?"}. Плагин повторит запуск.` }
+        const how = [refine ? "с уточнением цели (в первом письме, перед прежней целью)" : "", t.handoff ? "со сводкой сделанного" : ""].filter(Boolean).join(" и ")
+        return { content: r.session ? `Задача ${taskRef(t)} передана новой сессии ${r.session}${how ? ` ${how}` : ""}.` : `Задача #${t.n} записана к передаче${refine ? " с уточнением цели" : ""}, сессия не запущена: ${r.error ?? "?"}. Плагин повторит запуск.` }
       }
       return { content: `Неизвестное действие «${action}».` }
     },
@@ -2848,7 +2854,8 @@ export function planTaskLetter(t: Task): string {
   const strict = f.grades.filter((g) => !g.clean).map((g) => g.name)
   return [
     `ЗАДАЧА-ПЛАН #${t.n} «${t.title}» от ${t.author_role} (сессия ${t.author}), приоритет ${t.priority}. Составь план ${p.n}${p.parent ? ` — подплан плана ${p.parent}` : ""}. Код не пиши: результат — только файл плана.`,
-    `ИСХОДНАЯ ЗАДАЧА (перепроверка сверит план с ней):\n${p.source}`,
+    refinementBlock(t),
+    `ИСХОДНАЯ ЗАДАЧА (перепроверка сверит план с ней${t.refinement ? "; действует уточнение выше" : ""}):\n${p.source}`,
     t.boundaries ? `ГРАНИЦЫ (не делаем): ${t.boundaries}` : "",
     t.open_questions ? `ОТКРЫТЫЕ ВОПРОСЫ: ${t.open_questions}` : "",
     extraBlock(t),
@@ -2887,11 +2894,16 @@ function acceptanceForExecutor(t: Task): string {
   if (!steps.length) return ""
   return `ПРИЁМЩИК ПРОВЕРИТ (шаги приёмки проекта — сделай и опиши в отчёте сразу, иначе вернут на доработку):\n${steps.map((a) => `  ${a.id}${a.required ? "" : " (по желанию)"}: ${a.text}`).join("\n")}`
 }
+/** Блок «уточнение при передаче» (reassign {text}, задача 057): в первом письме новой сессии, перед прежней целью. */
+export function refinementBlock(t: Task): string {
+  return t.refinement ? `УТОЧНЕНИЕ ПРИ ПЕРЕДАЧЕ (${hhmm(t.refinement.at)}, задача передана тебе с ним):\n${t.refinement.text}\nДействует уточнение: где прежняя цель ниже с ним расходится — делай по уточнению.` : ""
+}
 export function formatTaskLetter(t: Task): string {
   if (t.plan) return planTaskLetter(t)
   return [
     `ЗАДАЧА #${t.n} «${t.title}» от ${t.author_role} (сессия ${t.author}), приоритет ${t.priority}.`,
-    `ЦЕЛЬ: ${t.goal}`,
+    refinementBlock(t),
+    t.refinement ? `ЦЕЛЬ (исходная; действует уточнение выше): ${t.goal}` : `ЦЕЛЬ: ${t.goal}`,
     t.criteria ? `КРИТЕРИИ ПРИЁМКИ: ${t.criteria}` : "",
     t.boundaries ? `ГРАНИЦЫ (не делаем): ${t.boundaries}` : "",
     t.open_questions ? `ОТКРЫТЫЕ ВОПРОСЫ: ${t.open_questions}` : "",

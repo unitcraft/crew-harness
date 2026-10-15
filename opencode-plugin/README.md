@@ -435,8 +435,10 @@ journal is `tasks/<project>/<N>.json` in the mailbox.
   finished by the next pass without a second session or letter.
 - `crew_task {action}`: `list`, `show {n}`; for the integrator `assign {session, goal, criteria…}`
   (an owner's tab takes the task; it is woken while the task is open, even when closed), `push
-  {n, text?}` (wake a stalled executor now), `reassign {n}` (a new session, the same number, a
-  summary of what was done), `cancel {n}`, `priority {n, priority}`.
+  {n, text?}` (wake a stalled executor now), `reassign {n, text?}` (a new session, the same number, a
+  summary of what was done; `text` refines the goal: it goes into the new session's first letter as a
+  block «УТОЧНЕНИЕ ПРИ ПЕРЕДАЧЕ» before the old goal, wins where they differ and stays in the task
+  history and `view`; refine with this call, not with a second letter), `cancel {n}`, `priority {n, priority}`.
 - The executor submits with `crew_task {action: "submit", n, text}` (`submit - executor - n, text`):
   no qid needed; `text` is the report (what was done, how it was checked, what is left). It covers
   the first submission, the one after rework or after a sync, and a plan task with the form check. The task is
