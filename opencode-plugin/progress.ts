@@ -144,6 +144,12 @@ export const finalOf = (text: string): "done" | "stop" | undefined => {
   return m ? (m[1].toLowerCase() === "готово" ? "done" : "stop") : undefined
 }
 
+/**
+ * `готово — N завышено: <причина>` (методика ab2a4ef): работа сделана, а N в строке `старт` было завышено; итоговая строка и завершение и при
+ * k меньше N из строки старт — сразу и после прежнего `готово` с тем же k.
+ */
+export const isOverstated = (text: string) => /^готово[ \t.,:;!—–-]+N завышено:/.test(text)
+
 /** Вид остановки: первое слово после `стоп:` (пробелы необязательны), если оно из списка; иначе undefined — «вид не назван». */
 export function stopKind(text: string): string | undefined {
   if (!text.startsWith("стоп:")) return undefined
@@ -219,20 +225,25 @@ export function sessionsOf(lines: Line[]): Session[] {
     lastByCode.set(code, cur)
     lastK = -1
   }
-  // строка того же кода после итоговой строки сессии, кроме её повтора и «стоп:» после «готово» с тем же k
+  // строка того же кода после итоговой строки сессии, кроме её повтора и «стоп:» после «готово» с тем же k; «готово» при k меньше N из
+  // строки старт итоговой строкой не является (методика ab2a4ef): за ним идут поправка и единицы, `стоп:` или `готово — N завышено`
   const afterFinal = (s: Session, l: Line) => {
     if (!s.rows.length) return false
     const last = lastOf(s)
     const f = finalOf(last.text)
+    if (f === "done" && lowDone(s, last)) return false
     if (!f || l.k !== last.k) return !!f
     const g = finalOf(l.text)
     return !(g === f || (f === "done" && keywordOf(l.text) === "стоп"))
   }
-  // строка старт, а прежняя сессия кода не закончена: вторая строка старт той же сессии по методике
+  // строка старт, а прежняя сессия кода со строкой старт не закончена: вторая строка старт той же сессии по методике; у сессии без
+  // строки старт это старт, дописанный не первой строкой (методика ab2a4ef: «если строки старт ещё нет, допиши её сейчас»)
   const restartOf = (l: Line) => {
     if (keywordOf(l.text) !== "старт") return false
     const prev = lastByCode.get(l.code)
-    return !!prev && prev.rows.length > 0 && !finalOf(lastOf(prev).text)
+    if (!prev || !prev.rows.some((r) => keywordOf(r.text) === "старт")) return false
+    const last = lastOf(prev)
+    return !finalOf(last.text) || lowDone(prev, last)
   }
   for (const l of lines) {
     if (isLaunch(l)) {
@@ -309,12 +320,20 @@ export function growthOf(s: Session): Line {
 
 /**
  * Завершение `готово` (задача 053, методика d5f1e80): в сессии одна строка `старт`, и k не меньше N из неё (`9/8 готово` после `0/8 старт` —
- * завершение, `7/7 готово` после `0/10 старт` — нет); `готово` без строки старт или после второй строки старт завершением не читается.
+ * завершение, `7/7 готово` после `0/10 старт` — нет, `7/10 готово — N завышено: …` — да, методика ab2a4ef); `готово` без строки старт или
+ * после второй строки старт завершением не читается.
  */
 export function finishes(s: Session, last: Line = lastOf(s)): boolean {
   if (keywordOf(last.text) !== "готово" || s.restart) return false
   const starts = s.rows.filter((l) => keywordOf(l.text) === "старт")
-  return starts.length === 1 && last.k >= starts[0].n
+  return starts.length === 1 && (last.k >= starts[0].n || isOverstated(last.text))
+}
+
+/** `готово` при k меньше N из единственной строки старт и без «N завышено»: не итоговая строка и не завершение (методика ab2a4ef). */
+export function lowDone(s: Session, last: Line = lastOf(s)): boolean {
+  if (keywordOf(last.text) !== "готово" || s.restart || isOverstated(last.text)) return false
+  const starts = s.rows.filter((l) => keywordOf(l.text) === "старт")
+  return starts.length === 1 && last.k < starts[0].n
 }
 
 /**

@@ -9,7 +9,7 @@
 import { execFileSync } from "node:child_process"
 import { appendFileSync, existsSync, readFileSync, statSync } from "node:fs"
 import path from "node:path"
-import { finalOf, keywordOf, parseJournal, stopKind, STOP_KINDS, type Line } from "./progress.ts"
+import { finalOf, isOverstated, keywordOf, parseJournal, stopKind, STOP_KINDS, type Line } from "./progress.ts"
 
 const pad2 = (n: number) => String(n).padStart(2, "0")
 export const hhmm = (d: Date = new Date()) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
@@ -63,6 +63,10 @@ function appendOnly(abs: string, line: string): Refused | undefined {
 // только если прежний не из списка) и «стоп:» с тем же k после «готово» при k меньше N; после «стоп:» продолжение — новой сессией со строки
 // старт; строку запуск агент не пишет (границу сессии ставит раннер или оркестратор); начало в поправке — начало подписи после времени,
 // от 10 до 30 знаков, а если подпись короче — вся.
+// Методика ab2a4ef: журнал — сигнал, а не доказательство; «готово» при k меньше N из строки старт итоговой строкой не является и
+// исправляется по делу: работа идёт — поправкой и дальше единицами; остановка — «стоп:» с тем же k; работа сделана, а N завышено —
+// «готово — N завышено: <причина>» с тем же k (итоговая строка и завершение); старт, которого нет, дописывается сейчас и работа идёт
+// дальше; запись о запуске агент не пишет ни в progress.log, ни в log.md.
 
 export type ProgressKind = "start" | "step" | "done" | "stop" | "launch" | "correction"
 export type ProgressInput = {
@@ -126,6 +130,8 @@ export type SessionState = {
   n?: number
   final?: "done" | "stop"
   stopKind?: string
+  /** последняя строка — «готово» при k меньше N из строки старт без «N завышено»: не итоговая (методика ab2a4ef) */
+  low?: boolean
   skipped: boolean
   rows: Line[]
 }
@@ -156,21 +162,25 @@ export function sessionState(lines: Line[], code: string): SessionState {
       st = fresh() // строка после итоговой открывает новую сессию
     }
     if (kw === "старт" && st.k < 0) st = { ...fresh(), started: true, starts: 1, startN: l.n, k: l.k, n: l.n, rows: [l] }
-    else if (kw === "старт") st = { ...st, starts: st.starts + 1, n: l.n, rows: [...st.rows, l] }
+    // старт, дописанный не первой строкой (методика ab2a4ef: «если строки старт ещё нет, допиши её сейчас»): k не сбрасывается
+    else if (kw === "старт" && st.starts === 0) st = { ...st, started: true, starts: 1, startN: l.n, n: l.n, low: false, rows: [...st.rows, l] }
+    else if (kw === "старт") st = { ...st, starts: st.starts + 1, n: l.n, low: false, rows: [...st.rows, l] }
     // упавший k — новая сессия без строки старт (так её разбирает и панель)
     else if (st.k >= 0 && l.k < st.k) st = { ...fresh(), k: l.k, n: l.n, ...finalFields(l.text), rows: [l] }
-    else st = { ...st, k: l.k, n: l.n, ...finalFields(l.text), skipped: st.skipped || (st.k >= 0 && l.k > st.k + 1), rows: [...st.rows, l] }
+    else st = { ...st, k: l.k, n: l.n, ...finalFields(l.text), low: false, skipped: st.skipped || (st.k >= 0 && l.k > st.k + 1), rows: [...st.rows, l] }
+    // «готово» при k меньше N из единственной строки старт и без «N завышено» итоговой строкой не является
+    if (kw === "готово" && st.started && st.starts === 1 && st.startN !== undefined && l.k < st.startN && !isOverstated(l.text))
+      st = { ...st, final: undefined, low: true }
   }
   return st
 }
 /** «готово» сессии — завершение: одна строка старт и k не меньше N из неё (методика d5f1e80). */
 const finishes = (st: SessionState) => st.started && st.starts === 1 && st.startN !== undefined && st.k >= st.startN
-/** «готово» при k меньше N из строки старт: его исправляет «стоп:» с тем же k. */
-const lowDone = (st: SessionState) => st.final === "done" && st.started && st.starts === 1 && st.startN !== undefined && st.k < st.startN
 
 // Пропуск единицы и старт не первой строкой поправкой не исправить (методика 09e86c1): ответ велит продолжать, а не начинать заново.
 const defectNote = (st: SessionState): string => {
-  const what = !st.started ? "старт не первой строкой" : st.starts > 1 ? "вторая строка старт" : st.skipped ? "пропуск единицы" : ""
+  if (!st.started) return "; у сессии старт не первой строкой — это поправкой не исправить: если строки старт ещё нет, допиши её сейчас (kind start) и продолжай работу, новую попытку сессии не начинай"
+  const what = st.starts > 1 ? "вторая строка старт" : st.skipped ? "пропуск единицы" : ""
   return what ? `; у сессии ${what} — это поправкой не исправить: продолжай работу, новую попытку сессии не начинай` : ""
 }
 
@@ -212,9 +222,7 @@ export function buildProgress(input: ProgressInput, prior: Line[], now: Date = n
   const closed = (): string =>
     st.final === "stop"
       ? `сессия ${code} остановлена строкой стоп: (${st.k}/${st.n}); после неё строки той же сессии не пишутся, кроме её повтора с тем же k в верной форме (методика: «после строки готово или стоп: строки той же сессии не пишутся, дальнейшее — новой сессией»); продолжение после ответа — новой сессией, её первая строка — старт: ${startCall}`
-      : lowDone(st)
-        ? `у сессии ${code} строка готово ${st.k}/${st.n} при k меньше N из строки старт (${st.startN}) завершением не считается, после неё единицы не пишутся; исправь её строкой стоп с тем же k: ${example(file, code, 'kind: "stop", stop: "ворота", text: "N в старте завышено"')}`
-        : `сессия ${code} уже закончена строкой готово ${st.k}/${st.n}; после неё пишется только её повтор с тем же k для исправления формы, новая работа — новой сессией: ${startCall}`
+      : `сессия ${code} уже закончена строкой готово ${st.k}/${st.n}; после неё пишется только её повтор с тем же k для исправления формы, новая работа — новой сессией: ${startCall}`
 
   if (kind === "launch") {
     return { ok: false, reason: `строку запуск агент не пишет: границу сессии ставит раннер или оркестратор (методика: «раннер пишет эти строки сам»); первая строка сессии агента — старт: ${startCall}` }
@@ -226,11 +234,14 @@ export function buildProgress(input: ProgressInput, prior: Line[], now: Date = n
     if (pass === undefined && review)
       return { ok: false, reason: `у проверяющей сессии ${code} нужен pass — номер захода (методика: «номер захода — в подписи первой строки ("старт заход 7")»), как в имени файла проверки (spec-review-N.md и др.); пример: ${example(file, code, `kind: "start", n: ${n}, pass: 9`)}` }
     if (text && KEYWORD_START_RE.test(text)) return { ok: false, reason: "в text не пиши ключевое слово: «старт» и номер захода ставит инструмент; в text — что предстоит (например «опись 34 источника»)" }
-    if (st.k >= 0 && !st.final)
-      return { ok: false, reason: `строка старт в сессии одна (методика: «строка старт в сессии одна»): у сессии ${code} уже есть строки (последняя — ${st.k}/${st.n}); продолжай работу следующей единицей (k: ${st.k + 1}), новую попытку сессии не начинай${!st.started ? "; старт не первой строкой поправкой не исправить" : ""}` }
+    const late = st.k >= 0 && !st.final && st.starts === 0
+    if (st.k >= 0 && !st.final && !late)
+      return { ok: false, reason: `строка старт в сессии одна (методика: «строка старт в сессии одна»): у сессии ${code} уже есть строка старт (последняя строка — ${st.k}/${st.n}); продолжай работу следующей единицей (k: ${st.k + 1}), новую попытку сессии не начинай` }
     k = 0
     sig = "старт" + (pass !== undefined ? ` заход ${pass}` : "") + (text ? SEP + text : "")
-    hint = n > 0 ? `дальше — строка сразу после каждой завершённой единицы: ${example(file, code, `kind: "step", k: 1, n: ${n}, text: "что сделано"`)}` : 'единиц нет: конец — kind "done"'
+    hint = late
+      ? `строка старт дописана не первой строкой (методика: «если строки старт ещё нет, допиши её сейчас») — это находка формы, не повод начинать заново; продолжай работу: ${example(file, code, `kind: "step", k: ${st.k + 1}, n: ${n}, text: "что сделано"`)}`
+      : n > 0 ? `дальше — строка сразу после каждой завершённой единицы: ${example(file, code, `kind: "step", k: 1, n: ${n}, text: "что сделано"`)}` : 'единиц нет: конец — kind "done"'
   } else if (kind === "step") {
     if (k === undefined || n === undefined) return { ok: false, reason: `у шага нужны k и n — номер завершённой единицы и число единиц; пример: ${example(file, code, 'kind: "step", k: 4, n: 13, text: "spec.md прочитан целиком"')}` }
     if (!text) return { ok: false, reason: "у шага нужен text — что сделано, начиная с предмета (до 80 знаков вместе со всем, кроме времени)" }
@@ -252,7 +263,8 @@ export function buildProgress(input: ProgressInput, prior: Line[], now: Date = n
     if (text && KEYWORD_START_RE.test(text)) return { ok: false, reason: "в text не пиши «готово»: ключевое слово ставит инструмент; в text — итог" }
     const stopInstead = `останови сессию строкой стоп с тем же k (${st.k}): ${example(file, code, 'kind: "stop", stop: "ворота", text: "причина"')}`
     const repeat = st.final === "done"
-    if (st.final === "stop" || lowDone(st)) return { ok: false, reason: closed() }
+    const overstated = /^N завышено:/.test(text)
+    if (st.final === "stop") return { ok: false, reason: closed() }
     if (repeat) {
       // повтор итоговой строки с тем же k — исправление её формы (методика); читается последняя
       if (!finishes(st)) return { ok: false, reason: `строка готово этой сессии завершением не считается (нет строки старт или их две) — её повтор не пишется; ${stopInstead}` }
@@ -260,15 +272,21 @@ export function buildProgress(input: ProgressInput, prior: Line[], now: Date = n
       k = st.k
       n = st.n ?? 0
     } else {
-      if (!st.started) return { ok: false, reason: `у сессии ${code} без строки старт готово не пишется: такое готово завершением не считается (методика: «готово в сессии без строки старт» — существенная находка); ${stopInstead}` }
+      if (!st.started) return { ok: false, reason: `у сессии ${code} без строки старт готово не пишется: такое готово завершением не считается (методика: «готово в сессии без строки старт» — существенная находка); строки старт ещё нет — допиши её сейчас: ${startCall}, затем готово; или ${stopInstead}` }
       if (st.starts > 1) return { ok: false, reason: `у сессии ${code} со второй строкой старт готово не пишется: такое готово завершением не считается (методика: «строка старт в сессии одна»); ${stopInstead}` }
-      n ??= st.n
-      if (n === undefined) return { ok: false, reason: "не известно n сессии: назови n" }
-      if (st.k < n - 1)
-        return { ok: false, reason: `до готово не записаны единицы ${range(st.k + 1, n - 1)} из ${n}: готово — строка последней единицы N/N; сессия, вставшая раньше, пишет kind "stop" с видом остановки` }
-      k = Math.max(st.k, n)
-      if (st.startN !== undefined && k < st.startN)
-        return { ok: false, reason: `готово при k=${k} меньше N из строки старт (${st.startN}) завершением не считается (методика: «k сравнивается с N из строки старт, а не с N самой строки»); если единиц правда меньше, ${stopInstead}` }
+      if (overstated) {
+        // работа сделана, а N в строке старт завышено: итоговая строка с тем же k (методика ab2a4ef), причину сверяют по артефакту
+        k = st.k
+        n = n ?? st.n ?? 0
+      } else {
+        n ??= st.n
+        if (n === undefined) return { ok: false, reason: "не известно n сессии: назови n" }
+        if (st.k < n - 1)
+          return { ok: false, reason: `до готово не записаны единицы ${range(st.k + 1, n - 1)} из ${n}: готово — строка последней единицы N/N; сессия, вставшая раньше, пишет kind "stop" с видом остановки` }
+        k = Math.max(st.k, n)
+        if (st.startN !== undefined && k < st.startN)
+          return { ok: false, reason: `готово при k=${k} меньше N из строки старт (${st.startN}) завершением не считается (методика: «k сравнивается с N из строки старт, а не с N самой строки»); исправь по делу: работа сделана, а N завышено — ${example(file, code, 'kind: "done", text: "N завышено: <причина>"')}; работа идёт — следующая единица k: ${st.k + 1}; остановился — ${stopInstead}` }
+      }
     }
     sig = "готово" + (text ? SEP + text : "")
     hint = (repeat ? "повтор итоговой строки записан, читается последняя; " : "") + `сессия закончена; дальнейшее — новой сессией: ${startCall}`
@@ -305,8 +323,8 @@ export function buildProgress(input: ProgressInput, prior: Line[], now: Date = n
     if (!STOP_KINDS.includes(word))
       return { ok: false, reason: `вид остановки ${word ? `«${word}» не из списка` : "не назван"}: stop — одно из слов ${STOP_KINDS.join(", ")} (методика: «стоп: <вид> — <причина>»); пример: ${example(file, code, 'kind: "stop", stop: "вопрос", text: "нужен ответ интегратора о составе описи"')}` }
     if (!text) return { ok: false, reason: "у остановки нужен text — причина" }
-    // «стоп:» после «готово» — только исправление «готово» при k меньше N из строки старт (методика d5f1e80)
-    if (st.final === "done" && !lowDone(st)) return { ok: false, reason: `сессия ${code} уже закончена строкой готово ${st.k}/${st.n}; остановка пишется до неё (после готово строка стоп: — только исправление готово при k меньше N из строки старт)` }
+    // «готово» при k меньше N итоговой строкой не является (st.low), после него «стоп:» с тем же k законен; после завершения — нет
+    if (st.final === "done") return { ok: false, reason: `сессия ${code} уже закончена строкой готово ${st.k}/${st.n}; остановка пишется до неё (после готово строка стоп: — только исправление готово при k меньше N из строки старт)` }
     if (st.final === "stop" && st.stopKind && st.stopKind !== word)
       return { ok: false, reason: `сессия ${code} уже остановлена строкой стоп: ${st.stopKind}; её повтор пишется с тем же k, а вид остановки меняется, только если прежний не из списка (методика) — повтори stop: "${st.stopKind}"` }
     k = st.k >= 0 ? st.k : 0
@@ -357,6 +375,8 @@ export function logLine(input: LogInput, base: string, now: Date = new Date()): 
     return { ok: false, reason: `вид записи ${kind ? `«${kind}» не из списка` : "не назван"}: kind — одно из: ${LOG_KINDS.join(", ")} (Канон, process.md); пример: log_line {file: "doc/tasks/007-x/log.md", kind: "документ", text: "spec.md передан на С2"}` }
   if (!text) return { ok: false, reason: "текст пустой" }
   if (CONTROL_RE.test(text)) return { ok: false, reason: "одна запись — одна строка: без переводов строки и управляющих символов (две записи — два вызова)" }
+  if (/^запуск\s*№/.test(text))
+    return { ok: false, reason: "запись о запуске («запуск №<n> <код> [время]») агент не пишет: её пишет запускающий — раннер или оркестратор вместе со строкой запуск в progress.log (методика: «агент строку запуск не пишет и в log.md не пишет»)" }
   if ([...text].length > 2000) return { ok: false, reason: "текст длиннее 2000 знаков; подробности — в отчёт, в журнал — итог и ссылка" }
   const where = insideBase(input?.file, base, "log.md")
   if (!where.ok) return where
@@ -491,12 +511,12 @@ export async function registerJournalTools(ctx: any, log: (s: string) => void): 
         name: "progress_line",
         description:
           "The way to write the task progress journal (progress.log): name the KIND of the line and the numbers, the tool builds the line itself - keyword, pass number, stop kind, machine date and time - and checks it against the earlier lines of the same session in the file (never write these lines by hand or ask the clock with date/Get-Date). " +
-          "Kinds: start {n, pass for a review session С2/С4/С6, text optional} -> '<code> 0/N [time] старт заход P — text', written BEFORE reading or work, creates the file if missing; one start per session: never a second one, after a crash go on with the next unit; " +
+          "Kinds: start {n, pass for a review session С2/С4/С6, text optional} -> '<code> 0/N [time] старт заход P — text', written BEFORE reading or work, creates the file if missing; one start per session: never a second one, after a crash go on with the next unit; a session without a start writes it now and goes on; " +
           "step {k, n, text} -> '<code> k/N [time] text', one line right after EACH finished unit, k = previous + 1; " +
-          "done {text optional} -> '<code> N/N [time] готово — text', the last line of a finished session; k must be at least N of the start line (k above N is fine); not written without a start, after a second start or with k below N - stop instead; " +
+          "done {text optional} -> '<code> N/N [time] готово — text', the last line of a finished session; k must be at least N of the start line (k above N is fine); not written without a start or after a second start; with k below N of the start fix it by what happened: the work goes on - next units, it stopped - stop, it is done and N was too high - done {text: 'N завышено: <reason>'} (a final line); " +
           "stop {stop: вопрос|план|ревизия|требования|ворота, text = reason} -> '<code> k/N [time] стоп: вид — reason'; after it the session writes no units: the work after the answer goes on in a new session that begins with start; " +
-          "the line 'запуск' is not written by the agent (the runner or the orchestrator marks the session); " +
-          "correction {to = the start of the signature (after the time) of the wrong line of the same session, text = what is wrong} -> '<code> k/N [time] поправка: к строке «10 to 30 chars of it, or the whole shorter signature» — text', keeps the current k, is not a unit; never rewrite a line, correct it. Not after the final line: a wrong 'готово'/'стоп:' line is fixed by repeating done/stop with the same k (a stop kind of the list is kept); 'готово' with k below N of the start is fixed by stop with the same k. A skipped unit or a missing start cannot be corrected: go on with the work, do not begin a new attempt. A form mistake of the journal is a finding (находка in log.md), not a reason to redo the session. " +
+          "the line 'запуск' is not written by the agent, neither in progress.log nor in log.md (the runner or the orchestrator marks the session); " +
+          "correction {to = the start of the signature (after the time) of the wrong line of the same session, text = what is wrong} -> '<code> k/N [time] поправка: к строке «10 to 30 chars of it, or the whole shorter signature» — text', keeps the current k, is not a unit; never rewrite a line, correct it. Not after the final line: a wrong 'готово'/'стоп:' line is fixed by repeating done/stop with the same k (a stop kind of the list is kept). The journal is a signal, not a proof: the finish is judged by the artifact. A skipped unit or a missing start cannot be corrected: go on with the work, do not begin a new attempt. A form mistake of the journal is a finding (находка in log.md), not a reason to redo the session. " +
           "The whole signature (all but the time) is at most 80 characters. A refusal names the rule, the expected form and an example call; nothing is written. " +
           "Example: {file: 'doc/tasks/007-x/progress.log', code: 'С2', kind: 'start', n: 34, pass: 1, text: 'опись 34 источника'}, then {file: same, code: 'С2', kind: 'step', k: 1, n: 34, text: 'spec.md прочитан целиком'}.",
         input: {
@@ -528,7 +548,7 @@ export async function registerJournalTools(ctx: any, log: (s: string) => void): 
         name: "log_line",
         description:
           "The way to write an entry of the task log (log.md): appends ONE line 'YYYY-MM-DD HH:MM <kind>: <text>' with the machine date and time (never type the time by hand or ask the clock). " +
-          "kind is one of: решение владельца, заседание, ворота, документ, пуск, слияние, находка. One entry - one call, one line (no line breaks), up to 2000 characters. " +
+          "kind is one of: решение владельца, заседание, ворота, документ, пуск, слияние, находка. One entry - one call, one line (no line breaks), up to 2000 characters. The launch record 'запуск №<n> <code> [time]' is written by the runner or the orchestrator, never by the agent. " +
           "File named log.md inside the project folder; created only in an existing folder. Example: {file: 'doc/tasks/007-x/log.md', kind: 'решение владельца', text: 'владелец, 2026-10-15, чат: «по рекомендации»'}.",
         input: {
           type: "object",

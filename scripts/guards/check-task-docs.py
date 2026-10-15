@@ -16,12 +16,17 @@
     [ЧЧ:ММ] или [ГГГГ-ММ-ДД ЧЧ:ММ]) не длиннее 80 знаков (journal-long), а строка остановки «стоп:» — с видом
     из списка вопрос, план, ревизия, требования, ворота (journal-stop), строка «поправка:» — по форме «поправка: к строке
     «<начало подписи после времени, от 10 до 30 знаков, а если подпись короче — вся>» — <что не так>», начало — начало подписи
-    прежней строки того же кода (journal-fix); «готово» при k меньше N из строки «старт» своей сессии, не исправленное позже строкой
-    «стоп: <вид из списка>» того же кода с тем же k (journal-done; сессия — строки кода от строки запуска или первой строки до итоговой,
-    после итоговой её продолжают только повтор с тем же k и «стоп:» после «готово»); journal-long и journal-stop не судят строку,
+    прежней строки того же кода (journal-fix); «готово» при k меньше N из строки «старт» своей сессии, не исправленное позже по делу:
+    строкой «стоп: <вид из списка>» или «готово — N завышено: <причина>» того же кода с тем же k либо дальнейшими единицами (journal-done;
+    сессия — строки кода от строки запуска или первой строки до итоговой, после итоговой её продолжают только повтор с тем же k и «стоп:»
+    после «готово»; «готово» при k меньше N итоговой строкой не является; старт, дописанный не первой строкой, — старт сессии); в журнале,
+    начатом не раньше 2026-10-16 00:00 (первая строка с полем [ГГГГ-ММ-ДД ЧЧ:ММ]), у добавленных строк — поле времени
+    [ГГГГ-ММ-ДД ЧЧ:ММ] (journal-time) и строка запуска «<код> 0/0 [время] запуск №<n>»: номер не повторяет прежний номер запуска в файле, а в
+    log.md папки есть запись «запуск №<n> <код>» (journal-launch; методика ab2a4ef: границу сессии ставит запускающий); journal-long и
+    journal-stop не судят строку,
     исправленную позже в файле строкой той же сессии (тот же код): поправкой с началом подписи этой строки после поля времени, а итоговую
     строку («готово», «стоп:», и с ошибкой в ключевом слове) — только её повтором с тем же k и ключевым словом в верной форме
-    (задачи 050 и 053; методика unitcraft/ai-dev-methodology @ d5f1e80); log.md — только в режиме
+    (задачи 050 и 053; методика unitcraft/ai-dev-methodology @ ab2a4ef); log.md — только в режиме
     индекса, добавленные строки (у первой версии файла — все), которые начинаются с даты ГГГГ-ММ-ДД
     не раньше 2026-10-10: такая строка обязана быть «ГГГГ-ММ-ДД ЧЧ:ММ <вид>: <текст>», вид — из
     закрытого списка (решение владельца, заседание, ворота, документ, пуск, слияние, находка),
@@ -44,7 +49,10 @@
     новой строкой их не исправить, красный страж требовал бы переписать журнал, а прежние строки не переписываются; progress_line таких
     строк не пишет); неисправленную ошибку ключевого слова итоговой строки (ошибка, только если строка осталась последней в сессии, а при
     записи этого не видно; судит приёмка); поправку после итоговой строки (её не принимает progress_line); прежние
-    строки истории (не добавленные) по правилам задачи 053 — задним числом их не исправить, не переписав историю;
+    строки истории (не добавленные) по правилам задачи 053 — задним числом их не исправить, не переписав историю; journal-time и
+    journal-launch в журналах, начатых раньше 2026-10-16 00:00 или без даты в первой строке (переход: строки запуска без номера и время
+    [ЧЧ:ММ] в них законны по прежним правилам, а дописать номер или запись в log.md задним числом — переписать историю); кто написал
+    строку запуска и запись в log.md (журнал — сигнал, а не доказательство; автора строка не несёт);
     по норме о результате — задачи, заведённые раньше 2026-10-15 14:20, и папки без log.md с датой;
     current.md до появления result.md (его создаёт шаг плана в реализации); содержание current.md,
     метки копий, единственность действующего текста и честность строки «нет: результат — код» (это
@@ -94,7 +102,14 @@ CORRECTION_MIN = 10
 CORRECTION_EXAMPLE = "«С1 31/32 [2026-10-15 12:14] поправка: к строке «опись source inventory» — подпись 93 знака»"
 KEYWORD_START = re.compile(r"^старт(?:$|[ \t.,:;!—–-])")
 KEYWORD_LAUNCH = re.compile(r"^запуск(?:$|[ \t.,:;!—–-])")
-DONE_EXAMPLE = "«С6 7/7 [2026-10-15 16:20] стоп: ворота — N в старте завышено»"
+DONE_EXAMPLE = "«С6 7/7 [2026-10-15 16:20] готово — N завышено: AC семь»"
+# «готово — N завышено: <причина>» (методика ab2a4ef): итоговая строка и завершение и при k меньше N из строки «старт»
+OVERSTATED = re.compile(r"^готово[ \t.,:;!—–-]+N завышено:")
+# журналы, начатые не раньше JOURNAL_FROM (первая строка с полем [ГГГГ-ММ-ДД ЧЧ:ММ]), судятся по journal-time и journal-launch (переход)
+JOURNAL_FROM = "2026-10-16 00:00"
+JOURNAL_DATED = re.compile(r"^\[([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2})\] ")
+LAUNCH_NUMBERED = re.compile(r"^запуск №([1-9][0-9]*)(?:$|[ \t.,:;!—–-])")
+LAUNCH_EXAMPLE = "«С5 0/0 [2026-10-16 09:00] запуск №3» и в log.md «2026-10-16 09:00 пуск: запуск №3 С5 [2026-10-16 09:00]»"
 # итоговая строка, в том числе с ошибкой в ключевом слове («Готово», «стоп» без двоеточия): её исправляет только повтор с тем же k
 FINAL_LIKE = re.compile(r"^(готово|стоп)(?:$|[ \t.,:;!—–-])", re.IGNORECASE)
 KEYWORD_DONE = re.compile(r"^готово(?:$|[ \t.,:;!—–-])")
@@ -238,6 +253,9 @@ def session_start(lines, number, code):
             continue
         word = FINAL_LIKE.match(text)
         word = word.group(1).lower() if word else None
+        if word == "готово" and KEYWORD_DONE.match(text) and starts == 1 and start_n is not None and k < start_n \
+                and not OVERSTATED.match(text):
+            word = None  # «готово» при k меньше N итоговой строкой не является (методика ab2a4ef)
         if final is not None:
             if k == last_k and (word == final or (final == "готово" and text.startswith("стоп:"))):
                 final = word
@@ -246,6 +264,8 @@ def session_start(lines, number, code):
         if KEYWORD_START.match(text):
             if last_k < 0:
                 start_n, starts, last_k = n, 1, k
+            elif starts == 0:
+                start_n, starts = n, 1  # старт, дописанный не первой строкой (методика ab2a4ef)
             else:
                 starts += 1
         elif last_k >= 0 and k < last_k:
@@ -257,16 +277,57 @@ def session_start(lines, number, code):
 
 
 def low_done_fixed(lines, number, code, k):
-    """«готово» при k меньше N исправлено позже строкой «стоп: <вид из списка>» того же кода с тем же k."""
+    """«готово» при k меньше N исправлено позже по делу (методика ab2a4ef): строкой «стоп: <вид из списка>» или «готово — N завышено:
+    <причина>» того же кода с тем же k либо дальнейшей единицей той же сессии (работа идёт)."""
     for later in lines[number:]:
         other = parse_progress_line(later)
-        if other is not None and other[0] == code and other[1] == k and well_formed_final(signature_without_time(other[3]), "стоп"):
+        if other is None or other[0] != code:
+            continue
+        text = signature_without_time(other[3])
+        if CORRECTION_WORD.match(text):
+            continue
+        if KEYWORD_LAUNCH.match(text) or KEYWORD_START.match(text):
+            return False
+        if other[1] == k and (well_formed_final(text, "стоп") or OVERSTATED.match(text)):
+            return True
+        if other[1] > k:
             return True
     return False
 
 
-def check_progress_log(path, data, source, rep):
+def journal_started(lines):
+    """Дата и время первой строки журнала из поля [ГГГГ-ММ-ДД ЧЧ:ММ] или None (журнал без даты в первой строке — прежний)."""
+    for line in lines:
+        parsed = parse_progress_line(line)
+        if parsed is not None:
+            m = JOURNAL_DATED.match(parsed[3])
+            return m.group(1) if m else None
+    return None
+
+
+def launch_fault(lines, number, parsed, log_text):
+    """Что не так со строкой запуска нового журнала (методика ab2a4ef) или None."""
+    code, k, n, signature = parsed
+    text = signature_without_time(signature)
+    m = LAUNCH_NUMBERED.match(text)
+    if k != 0 or n != 0 or not m:
+        return "строка запуска не по форме «<код> 0/0 [ГГГГ-ММ-ДД ЧЧ:ММ] запуск №<n>»"
+    number_n = m.group(1)
+    for line in lines[:number - 1]:
+        other = parse_progress_line(line)
+        if other is not None:
+            prev = LAUNCH_NUMBERED.match(signature_without_time(other[3]))
+            if prev and prev.group(1) == number_n:
+                return "номер запуска №%s уже был в журнале (вторая строка с тем же номером — существенная находка)" % number_n
+    if not re.search(r"(?:^|[^0-9])запуск №%s %s(?:$|[ \t\[])" % (number_n, re.escape(code)), log_text or "", re.MULTILINE):
+        return "в log.md папки нет записи «запуск №%s %s» оркестратора (запуск без записи — существенная находка)" % (number_n, code)
+    return None
+
+
+def check_progress_log(path, data, source, rep, log_text=None):
     lines = split_journal(data)
+    started = journal_started(lines)
+    new_journal = started is not None and started >= JOURNAL_FROM
     for number, line in enumerate(lines, 1):
         if line == "":
             continue  # пустая строка форму не нарушает (на нынешних журналах их нет, Д-11 о ней молчит)
@@ -290,13 +351,24 @@ def check_progress_log(path, data, source, rep):
                         "после времени, от 10 до 30 знаков, а если подпись короче — вся>» — <что не так>»%s (методика, task-runner.md, "
                         "«Строки progress.log»); пример %s; %s (kind correction)" % (
                             ": " + fault if fault else "", CORRECTION_EXAMPLE, TOOL_HINT % "progress_line"))
-        if KEYWORD_DONE.match(signature) and number <= len(lines):
+        if new_journal and not JOURNAL_DATED.match(parsed[3]):
+            rep.add(path, number, "journal-time", "в строке нет поля времени [ГГГГ-ММ-ДД ЧЧ:ММ] — в журнале, начатом не раньше %s, у новой "
+                    "строки время с датой (методика, task-runner.md, машинный хвост: «в форме [ГГГГ-ММ-ДД ЧЧ:ММ]»); пример %s; %s, он "
+                    "ставит дату и время машины" % (JOURNAL_FROM, JOURNAL_EXAMPLE, TOOL_HINT % "progress_line"))
+        if new_journal and KEYWORD_LAUNCH.match(signature) and number <= len(lines):
+            fault = launch_fault(lines, number, parsed, log_text)
+            if fault:
+                rep.add(path, number, "journal-launch", "%s (методика, task-runner.md, «Строки progress.log»: запуск несёт порядковый "
+                        "номер, тот же номер — в перечне запусков оркестратора в log.md); пример %s; строку запуск и запись в log.md "
+                        "пишет запускающий (оркестратор, раннер), агент их не пишет" % (fault, LAUNCH_EXAMPLE))
+        if KEYWORD_DONE.match(signature) and not OVERSTATED.match(signature) and number <= len(lines):
             start_n = session_start(lines, number, parsed[0])
             if start_n is not None and parsed[1] < start_n and not low_done_fixed(lines, number, parsed[0], parsed[1]):
                 rep.add(path, number, "journal-done", "«готово» при k=%d, а N из строки «старт» — %d: такое «готово» завершением не "
                         "считается (методика, task-runner.md, «Строки progress.log»: k сравнивается с N из строки «старт»); прежняя "
-                        "строка не переписывается — допиши «стоп: <вид> — <причина>» с тем же k, например %s; %s (kind stop), он "
-                        "такого «готово» не пишет" % (parsed[1], start_n, DONE_EXAMPLE, TOOL_HINT % "progress_line"))
+                        "строка не переписывается — исправь по делу: работа сделана, а N завышено, — «готово — N завышено: <причина>» "
+                        "с тем же k, например %s; остановка — «стоп: <вид> — <причина>» с тем же k; работа идёт — следующая единица; "
+                        "%s (kind done или stop), он такого «готово» не пишет" % (parsed[1], start_n, DONE_EXAMPLE, TOOL_HINT % "progress_line"))
         fault_long = len(signature) > SIGNATURE_MAX
         fault_stop = stop_fault(signature)
         if (fault_long or fault_stop) and number <= len(lines) and corrected(lines, number, parsed):
@@ -412,7 +484,11 @@ def judge(source, args, rep):
             data = source.read(entry)
             if data is not None:
                 count += 1
-                check_progress_log(entry.path, data, source, rep)
+                if by_path is None:
+                    by_path = dict((e.path, e) for e in source.entries())
+                log_entry = by_path.get(entry.path.rsplit("/", 1)[0] + "/log.md")
+                log_data = source.read(log_entry) if log_entry is not None and log_entry.mode != "160000" else None
+                check_progress_log(entry.path, data, source, rep, log_data.decode("utf-8", "replace") if log_data is not None else "")
             continue
         m = TASK_FILE.match(entry.path)
         if not m or entry.mode == "160000":
