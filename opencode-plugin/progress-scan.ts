@@ -1,5 +1,6 @@
 // ХОД РАБОТ — ОБХОД ДЕРЕВЬЕВ И ЧТЕНИЕ ЖУРНАЛОВ (задача 004). Находит репозиторий вкладки, его рабочие деревья по реестру
-// `.git/worktrees` самого git (без процессов и без настроек плагина), читает `doc/tasks/*/progress.log` байтами и держит кэш
+// `.git/worktrees` самого git (без процессов и без настроек плагина), читает `<каталог задач>/*/progress.log` байтами и держит кэш
+// (каталог задач — ключ tasks_dir проекта, задача 058; его передаёт вызывающий, по умолчанию doc/tasks)
 // разобранного. Только чтение: ничего не пишет туда, где наблюдает (DNC-02). Разбор строк и состояний — `progress.ts`.
 //
 // Нагрузка (REQ-10): обход файловой системы — не чаще WALK_MS на репозиторий; между обходами показ берёт готовый результат без
@@ -160,14 +161,16 @@ export type ScanStats = {
 }
 
 export type Scanner = {
-  /** результат для вкладки с каталогом `dir`: не чаще раза в WALK_MS обходит файлы, между обходами отдаёт готовое */
-  scan(dir: string, now?: number): ScanResult
+  /** результат для вкладки с каталогом `dir`: не чаще раза в WALK_MS обходит файлы, между обходами отдаёт готовое; rel — каталог задач */
+  scan(dir: string, now?: number, rel?: string): ScanResult
   /** то же без бюджета и без паузы между обходами: для команды окна */
-  scanAll(dir: string, now?: number): ScanResult
+  scanAll(dir: string, now?: number, rel?: string): ScanResult
   stats: ScanStats
 }
 
 const EMPTY: ScanResult = { trees: [], journals: 0, complete: true, tasks: [] }
+/** Каталог задач по умолчанию (ключ tasks_dir, задача 058). */
+export const DEFAULT_REL = "doc/tasks"
 
 type Found = { tree: Tree; folder: string; file: string; mtimeMs: number; size: number; headMs?: number; bytes?: Buffer; stable?: boolean }
 
@@ -178,7 +181,7 @@ export function createScanner(opts: { walkMs?: number; parseBudget?: number } = 
   const places = new Map<string, { at: number; place: RepoPlace | undefined }>()
   const stats: ScanStats = { walks: 0, parses: 0, lastParsed: [] }
 
-  const walk = (place: RepoPlace, prev: RepoState | undefined, limit: number): RepoState => {
+  const walk = (place: RepoPlace, prev: RepoState | undefined, limit: number, rel: string): RepoState => {
     stats.walks++
     stats.lastParsed = []
     const journals = new Map<string, JournalCache>()
@@ -190,7 +193,7 @@ export function createScanner(opts: { walkMs?: number; parseBudget?: number } = 
     for (const tree of trees) {
       try {
         const head = statOf(tree.headLog)
-        const base = path.join(tree.root, "doc", "tasks")
+        const base = path.join(tree.root, ...rel.split("/"))
         let entries: string[] = []
         try {
           entries = readdirSync(base, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name)
@@ -296,18 +299,20 @@ export function createScanner(opts: { walkMs?: number; parseBudget?: number } = 
     return { walkedAt: 0, result: { repo: place.root, trees, journals: found.length, complete, tasks }, journals, titles }
   }
 
-  const run = (dir: string, now: number, all: boolean): ScanResult => {
+  const run = (dir: string, now: number, all: boolean, rel0?: string): ScanResult => {
     try {
+      const rel = (rel0 ?? DEFAULT_REL).replace(/\\/g, "/").replace(/^\.\/+|\/+$/g, "")
+      if (!rel) return EMPTY // tasks_dir "" — папок задач в проекте нет
       let p = places.get(dir)
       if (all || !p || now - p.at >= walkMs) {
         p = { at: now, place: findRepoRoot(dir) }
         places.set(dir, p)
       }
       if (!p.place) return EMPTY
-      const key = norm(p.place.commonGit)
+      const key = `${norm(p.place.commonGit)}|${rel}`
       const prev = repos.get(key)
       if (!all && prev && now - prev.walkedAt < walkMs) return prev.result
-      const state = walk(p.place, prev, all ? Infinity : budget)
+      const state = walk(p.place, prev, all ? Infinity : budget, rel)
       state.walkedAt = now
       repos.delete(key)
       repos.set(key, state)
@@ -320,8 +325,8 @@ export function createScanner(opts: { walkMs?: number; parseBudget?: number } = 
   }
 
   return {
-    scan: (dir, now = Date.now()) => run(dir, now, false),
-    scanAll: (dir, now = Date.now()) => run(dir, now, true),
+    scan: (dir, now = Date.now(), rel?: string) => run(dir, now, false, rel),
+    scanAll: (dir, now = Date.now(), rel?: string) => run(dir, now, true, rel),
     stats,
   }
 }

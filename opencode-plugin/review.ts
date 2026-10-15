@@ -8,7 +8,7 @@ import { gitAsync } from "./async-git.ts"
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { type Card, type CrewConfig, PLUGIN_SENDER, ROLES, allCards, cardFile, extraBlock, mayWakeCard, postLetter, readJson, safeKey, saveCard } from "./core.ts"
-import { type SideItem, type Task, saveTask, isOpen, listTasks, loadTask, taskFile, waitingCleanup } from "./tasks.ts"
+import { type SideItem, type Task, saveTask, isOpen, listTasks, loadTask, taskFile, taskNo, waitingCleanup } from "./tasks.ts"
 import { roundRules } from "./plans.ts"
 
 const git = (cwd: string, args: string[], timeout = 15_000) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", windowsHide: true, timeout, stdio: ["ignore", "pipe", "ignore"] })
@@ -293,7 +293,7 @@ export function reviewLetter(t: Task, cfg: CrewConfig): string {
     : "  (шаги приёмки в настройках проекта не заданы — проверь критерии задачи)"
   const pre = cfg.mergePrecheck === "required" ? 1 : 0 // merge_precheck: required — перед merge шаг предпроверки
   return [
-    `ПРИЁМКА задачи #${t.n} «${t.title}» (приоритет ${t.priority}). Ты — приёмщик: проверяешь и вливаешь сам; интегратор принятое не перепроверяет. Автор задачи — ${t.author_role}, исполнитель — сессия ${t.executor}.`,
+    `ПРИЁМКА задачи ${taskNo(t)} «${t.title}» (приоритет ${t.priority}). Ты — приёмщик: проверяешь и вливаешь сам; интегратор принятое не перепроверяет. Автор задачи — ${t.author_role}, исполнитель — сессия ${t.executor}.`,
     `ЦЕЛЬ: ${t.goal}`,
     t.criteria ? `КРИТЕРИИ ПРИЁМКИ: ${t.criteria}` : "",
     t.boundaries ? `ГРАНИЦЫ: ${t.boundaries}` : "",
@@ -334,7 +334,7 @@ export function planReviewLetter(t: Task, cfg: CrewConfig): string {
   const f = cfg.planForm
   const past = p.rounds.map((r, i) => `  ${r.line ?? `раунд ${i + 1}: блокирующих ${r.blocking}, существенных ${r.significant}, косметических ${r.cosmetic}`}${r.notes ? `\n    ${r.notes.replace(/\n/g, "\n    ")}` : ""}`)
   return [
-    `ПЕРЕПРОВЕРКА ПЛАНА ${p.n} (задача #${t.n} «${t.title}»), раунд ${no}. Ты — проверяющий этого раунда: не автор плана и не прошлые проверяющие. План не правь — замечания идут автору.`,
+    `ПЕРЕПРОВЕРКА ПЛАНА ${p.n} (задача ${taskNo(t)} «${t.title}»), раунд ${no}. Ты — проверяющий этого раунда: не автор плана и не прошлые проверяющие. План не правь — замечания идут автору.`,
     `ИСХОДНАЯ ЗАДАЧА (против неё проверяешь план):\n${p.source}`,
     `ФАЙЛ ПЛАНА: ${p.file}${t.worktree ? ` в worktree ${t.worktree}, ветка ${t.branch}` : ` в ${t.directory}`}.`,
     t.report ? `ОТЧЁТ АВТОРА:\n${t.report.slice(0, 2000)}` : "",
@@ -358,7 +358,7 @@ export function planMergeLetter(t: Task, cfg: CrewConfig): string {
   const yes = a.decision === "ok"
   const day = new Date(a.at).toISOString().slice(0, 10)
   return [
-    `ВЛИТЬ СОГЛАСОВАННЫЙ ПЛАН ${p.n} (задача #${t.n} «${t.title}»). ${cfg.planApprover === "owner" ? "Владелец" : "Интегратор"} ${day}: ${yes ? "согласован без упрощений" : "согласован, упрощения — как в плане"}.`,
+    `ВЛИТЬ СОГЛАСОВАННЫЙ ПЛАН ${p.n} (задача ${taskNo(t)} «${t.title}»). ${cfg.planApprover === "owner" ? "Владелец" : "Интегратор"} ${day}: ${yes ? "согласован без упрощений" : "согласован, упрощения — как в плане"}.`,
     `ФАЙЛ: ${p.file}${t.worktree ? ` в worktree ${t.worktree}, ветка ${t.branch}` : ""}.`,
     "ВПИШИ В ПЛАН (коммитом в ветку задачи):",
     cfg.planForm.modeQuestion ? `  — в «${cfg.planForm.sections.mode}»: «${cfg.planForm.modeLabel}: ${yes ? "ДА" : "НЕТ"} — ${cfg.planApprover === "owner" ? "владелец" : "интегратор"}, ${day}»;` : "",
@@ -386,7 +386,7 @@ export function planMergeLetter(t: Task, cfg: CrewConfig): string {
 /** Письмо исполнителю: на доработку. */
 export function reworkLetter(t: Task, text: string, by: string): string {
   return [
-    t.plan ? `ЗАМЕЧАНИЯ ПЕРЕПРОВЕРКИ ПЛАНА ${t.plan.n} (задача #${t.n}) от ${by}:` : t.rework_sync ? `СИНХРОНИЗАЦИЯ задачи #${t.n} «${t.title}» с целевой веткой (не доработка) от приёмщика ${by}:` : `ДОРАБОТКА задачи #${t.n} «${t.title}» (круг ${t.rework ?? 1}) от приёмщика ${by}:`,
+    t.plan ? `ЗАМЕЧАНИЯ ПЕРЕПРОВЕРКИ ПЛАНА ${t.plan.n} (задача ${taskNo(t)}) от ${by}:` : t.rework_sync ? `СИНХРОНИЗАЦИЯ задачи ${taskNo(t)} «${t.title}» с целевой веткой (не доработка) от приёмщика ${by}:` : `ДОРАБОТКА задачи ${taskNo(t)} «${t.title}» (круг ${t.rework ?? 1}) от приёмщика ${by}:`,
     text,
     ...(t.precheck?.candidate && !t.rework_sync && !t.plan ? [`Проверенный приёмщиком кандидат устареет с твоими новыми коммитами: приёмщик пересоберёт его от новой вершины ветки.`] : []),
     `Исправь в том же worktree${t.branch ? ` (ветка ${t.branch})` : ""} и сдай снова: crew_task {action: "submit", n: ${t.n}, text: "что исправлено, как проверено"}.`,

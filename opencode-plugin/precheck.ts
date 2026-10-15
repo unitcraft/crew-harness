@@ -10,7 +10,7 @@
 
 import { spawn, execFileSync } from "node:child_process"
 import { isMerged, mergeHolder, releaseMergeLock, repoDir, takeMergeLock } from "./review.ts"
-import { type PrecheckRecord, type Task, acceptedAt, isOpen, listTasks, loadTask, rounds, taskEvent, taskRef } from "./tasks.ts"
+import { type PrecheckRecord, type Task, acceptedAt, isOpen, listTasks, loadTask, rounds, taskEvent, taskNo, taskRef } from "./tasks.ts"
 
 /** срок чтения вершины на origin, мс */
 export const TIP_TIMEOUT_MS = 20_000
@@ -141,12 +141,12 @@ export function neighbourHints(t: Task, kind: "running" | "moved"): string {
   if (kind === "running") {
     const busy = all.filter((x) => isOpen(x) && isLive(x.precheck) && x.status === "reviewing")
     if (!busy.length) return ""
-    return ` Параллельно идут: ${busy.map((x) => `#${x.n} (${x.precheck!.state === "green" ? "зелёная" : "идёт"} на ${short(x.precheck!.base)} с ${hm(x.precheck!.state === "green" ? (x.precheck!.green_at ?? x.precheck!.at) : x.precheck!.at)})`).join(", ")}.`
+    return ` Параллельно идут: ${busy.map((x) => `${taskNo(x)} (${x.precheck!.state === "green" ? "зелёная" : "идёт"} на ${short(x.precheck!.base)} с ${hm(x.precheck!.state === "green" ? (x.precheck!.green_at ?? x.precheck!.at) : x.precheck!.at)})`).join(", ")}.`
   }
   const since = t.precheck?.green_at ?? t.precheck?.at ?? 0
   const landed = all.filter((x) => (x.status === "accepted" || x.status === "done") && acceptedAt(x) > since)
   if (!landed.length) return ""
-  return ` После зелёной приняты: ${landed.map((x) => `#${x.n} (${hm(acceptedAt(x))})`).join(", ")}.`
+  return ` После зелёной приняты: ${landed.map((x) => `${taskNo(x)} (${hm(acceptedAt(x))})`).join(", ")}.`
 }
 
 /**
@@ -295,7 +295,7 @@ export function unlockMerge(t: Task, session: string): string {
   const h = mergeHolder(t.project)
   if (!h) return `Замка вливания проекта ${t.project} нет — отпускать нечего.`
   if (h.session !== session) return `Замок вливания проекта ${t.project} не твой (держит приёмщик задачи #${h.n}); чужой замок unlock не снимает.`
-  if (h.n !== t.n) return `Твой замок вливания — для задачи #${h.n}, а не #${t.n}: unlock {n: ${h.n}}.`
+  if (h.n !== t.n) return `Твой замок вливания — для задачи #${h.n}, а не ${taskNo(t)}: unlock {n: ${h.n}}.`
   releaseMergeLock(t.project, session, t.n)
   markPrecheckStale(t, "замок отпущен")
   taskEvent(t, session, undefined, "замок вливания отпущен (unlock); предпроверка устарела")

@@ -17,8 +17,9 @@ function ProgressBlock(props: { api: any; sessionID?: string }) {
   const read = (): Row[] => {
     try {
       if (!view) return []
-      const dir = props.sessionID ? readJson<any>(cardFile(props.sessionID))?.directory : undefined
-      return view.progressPanel(dir)
+      const card = props.sessionID ? readJson<any>(cardFile(props.sessionID)) : undefined
+      // каталог задач проекта (tasks_dir, задача 058) служба пишет в визитку вкладки: окно настроек не читает
+      return view.progressPanel(card?.directory, Date.now(), card?.tasksDir)
     } catch {
       return []
     }

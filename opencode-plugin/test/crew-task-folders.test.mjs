@@ -20,7 +20,7 @@ process.env.CREW_HARNESS_PRESENCE = "all"
 const proj = path.join(tmp, "proj")
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
 const git = (cwd, ...args) => execFileSync("git", ["-C", cwd, "-c", "user.name=t", "-c", "user.email=t@t", ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim()
-writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ root: "..", worktrees: "worktrees", worktree_name: "{repo}-{n}-{slug}", branch_name: "task/{n}-{slug}", cleanup: "local", allow_default_models: true, spawn_limits: { worker: 9, reviewer: 0 } }))
+writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ root: "..", worktrees: "worktrees", worktree_name: "{repo}-{n}-{slug}", branch_name: "task/{n}-{slug}", cleanup: "local", allow_default_models: true, inflight_limit: 20, spawn_limits: { worker: 9, reviewer: 0 } }))
 const folder = (name, files) => {
   for (const [f, text] of Object.entries(files)) {
     const p = path.join(proj, "doc", "tasks", name, f)
@@ -166,6 +166,13 @@ const log45 = read(path.join(taskTree, "doc", "tasks", "045-registry", "log.md")
 const pusk = log45.split("\n").filter((l) => /^\d{4}-\d\d-\d\d \d\d:\d\d пуск: запуск №\d+ /.test(l))
 cell("AC-05: three «пуск» lines in log.md of the task, each with the session ident", pusk.length === 3 && pusk[2].includes("045 С4-2"), log45)
 cell("AC-05: the main copy is still clean", git(proj, "status", "--porcelain") === "", git(proj, "status", "--porcelain"))
+// AC-08: the session title and the session letter name the task by its folder number and the session by code and ordinal
+const sesC4 = t45?.sessions?.[2]
+cell("AC-08: the session title is «045 С4-2 исп <task title>»", sessions.get(sesC4?.session)?.title === "045 С4-2 исп Реестры контрактов", sessions.get(sesC4?.session)?.title)
+cell("AC-08: the executor session of a new task is titled «059 исп <title>»", sessions.get(task(59)?.sessions?.[0]?.session)?.title === "059 исп Страж повтора номера", sessions.get(task(59)?.sessions?.[0]?.session)?.title)
+const letter = lettersTo(sesC4?.session ?? "-").find((l) => l.text.startsWith("ЗАДАЧА"))?.text ?? ""
+cell("AC-08: the session letter: «ЗАДАЧА 045 «…», СЕССИЯ С4-2 (запуск №3)», the folder, the session goal, submit to the integrator", letter.startsWith("ЗАДАЧА 045 «Реестры контрактов», СЕССИЯ С4-2 (запуск №3) от proj.integrator, приоритет P2.") && letter.includes("ПАПКА ЗАДАЧИ: doc/tasks/045-registry/ — задание task/message.md, журнал log.md.") && letter.includes("ЦЕЛЬ СЕССИИ: проверка исправленного плана") && letter.includes('crew_task {action: "submit", n: 45'), letter)
+cell("AC-05: a review session (С4) works in its own tree task/045-s4-2 from the task branch, an author session (С3п) in the task tree", sesC4?.place === "own" && sesC4?.branch === "task/045-s4-2" && t45?.sessions?.[1]?.place === "task" && sessions.get(sesC4?.session)?.location?.directory === sesC4?.worktree && sessions.get(t45?.sessions?.[1]?.session)?.location?.directory === t45?.worktree, JSON.stringify(t45?.sessions?.map((s) => [s.place, s.branch])))
 
 // ---- AC-06: the session С4-2 submits to the integrator, deliver starts the review of the task ----
 const cur = t45?.sessions?.[2]
@@ -204,6 +211,15 @@ const all = await call("crew_task", "sesINTEG1", { action: "list", all: true })
 cell("AC-10: crew_task list all shows the old record", all.includes("старая закрытая"), all)
 const a14 = await call("crew_spawn", "sesINTEG1", { task: 14, session: "С1", goal: "g" })
 cell("AC-10: an open old record with the number refuses with its title", a14.includes("живая старая") && hash(path.join(store, "14.json")) === hash14 && !existsSync(path.join(store, "legacy", "14.json")), a14)
+
+// REQ-10: reassign of a task with sessions — the same code with the next ordinal and a new launch number, the old one handed
+const old13 = task(13)?.sessions?.[0]?.session
+const ra = await call("crew_task", "sesINTEG1", { action: "reassign", n: 13, text: "уточнение: только разбор" })
+await wait()
+const r13 = task(13)
+cell("REQ-10: reassign gives С1-2 with launch №2, С1-1 is handed", JSON.stringify((r13?.sessions ?? []).map((s) => `${s.code}-${s.k} №${s.launch} ${s.status}`)) === JSON.stringify(["С1-1 №1 handed", "С1-2 №2 running"]) && r13?.executor !== old13, JSON.stringify({ ra, s: r13?.sessions }))
+const l13 = lettersTo(r13?.executor ?? "-").find((l) => l.text.startsWith("ЗАДАЧА"))?.text ?? ""
+cell("REQ-10: the new session's letter carries the refinement (task 057) and its session ident", l13.includes("СЕССИЯ С1-2 (запуск №2)") && l13.includes("УТОЧНЕНИЕ ПРИ ПЕРЕДАЧЕ") && l13.includes("только разбор"), l13)
 
 stop?.()
 try {

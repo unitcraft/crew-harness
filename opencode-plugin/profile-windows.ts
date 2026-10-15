@@ -13,7 +13,7 @@ import { createHash } from "node:crypto"
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, rmdirSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { BASE } from "./paths.ts"
-import type { Task } from "./tasks.ts"
+import { type Task, taskNo } from "./tasks.ts"
 import * as P from "./profiles.ts"
 import { LIMIT_RU, fmtTokens } from "./core.ts" // единственное форматирование чисел ответов; вызывается при показе
 
@@ -249,10 +249,10 @@ export function windowProblems(project: string, tasks: Task[], plan: WindowPlan)
     const wt = path.resolve(t.worktree!)
     const cur = readText(windowPath(wt))
     if (cur !== undefined && !isOurs(cur)) {
-      out.push(`проект ${project}, задача #${t.n}: в рабочем дереве уже есть .opencode/opencode.json без пометки плагина — файл окон профиля не записан, окно профиля там не действует (плагин чужой файл не трогает)`)
+      out.push(`проект ${project}, задача ${taskNo(t)}: в рабочем дереве уже есть .opencode/opencode.json без пометки плагина — файл окон профиля не записан, окно профиля там не действует (плагин чужой файл не трогает)`)
       continue
     }
-    if (plan.mode === "all" && expected && cur !== expected) out.push(`проект ${project}, задача #${t.n}: файл окон в рабочем дереве ${cur === undefined ? "отсутствует" : "разошёлся с набором"} (плагин перепишет на ближайшем проходе)`)
+    if (plan.mode === "all" && expected && cur !== expected) out.push(`проект ${project}, задача ${taskNo(t)}: файл окон в рабочем дереве ${cur === undefined ? "отсутствует" : "разошёлся с набором"} (плагин перепишет на ближайшем проходе)`)
   }
   return out
 }
@@ -469,7 +469,7 @@ export function windowNotes(root: string, wts: Task[], models: Map<string, P.Win
   for (const [model, win] of models) {
     for (const t of wts)
       for (const o of handWrittenOverrides(t.worktree!, model, win).filter((x) => x.stronger))
-        out.push(`в рабочем дереве задачи #${t.n} у модели ${model} ${LIMIT_RU[o.field as "context"]} задан рукописно: ${fmtTokens(o.value)} (файл ${slash(o.file)}) — он сильнее файла плагина, сессия получит его, а не значение профиля (${(win as any)[o.field] !== undefined ? fmtTokens((win as any)[o.field]) : "—"})`)
+        out.push(`в рабочем дереве задачи ${taskNo(t)} у модели ${model} ${LIMIT_RU[o.field as "context"]} задан рукописно: ${fmtTokens(o.value)} (файл ${slash(o.file)}) — он сильнее файла плагина, сессия получит его, а не значение профиля (${(win as any)[o.field] !== undefined ? fmtTokens((win as any)[o.field]) : "—"})`)
     const hand = chainWindow(root, model, { skipOurs: true })
     for (const k of ["context", "input", "output"] as const) {
       const h = hand[k]

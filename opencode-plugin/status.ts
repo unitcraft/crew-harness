@@ -16,7 +16,7 @@ import { answerLines, answerSideRow } from "./answer.ts"
 import { divergenceLineFor, unconfiguredLineFor } from "./config-diverge.ts"
 import { FORM_MAX_REPEATS, pendingForms } from "./form-wait.ts"
 import { lockWaitLine } from "./review.ts"
-import { type Task, ACCEPTED_REMINDERS_MAX, acceptedAt, acceptedReminders, isOpen, listTasks, loadTask } from "./tasks.ts"
+import { type Task, ACCEPTED_REMINDERS_MAX, acceptedAt, acceptedReminders, isOpen, listTasks, loadTask, sesLabel, sessionOf, taskNo } from "./tasks.ts"
 import { type Watch, watchesOf } from "./watch.ts"
 
 export const STATUS = path.join(BASE, "status")
@@ -43,8 +43,10 @@ export type Status = {
   asked: { qid: string; to: string; at: number }[]
   /** Вопросы старше ASKED_STALE_MIN без ответа: в /crew отдельной строкой, состояние reply не держат. */
   askedStale?: { qid: string; to: string; at: number }[]
-  /** Своя задача (исполнитель или приёмщик). */
-  task?: { n: number; status: string; as: "executor" | "reviewer"; title: string; steps?: StepView[]; checking?: string }
+  /** Своя задача (исполнитель или приёмщик). ref — номер задачи в показе («045» с папкой, «#57» без, задача 058); label — сессия
+   *  методики («С4-3»); group — задача с папкой: панель и /crew группируют её сессии под строкой задачи; status у сессии методики —
+   *  её собственный (сдана — submitted, передана — handed), ended — когда сдана. */
+  task?: { n: number; status: string; as: "executor" | "reviewer"; title: string; steps?: StepView[]; checking?: string; ref?: string; label?: string; group?: true; ended?: number }
   /** Открытые задачи, поставленные этой сессией. */
   tasks: { n: number; status: string; priority: string; title: string }[]
   /** Вкладка застряла (задача 043, L3): с какого времени и по чему; держится, пока признак не снят (push, ответ, сдача, рабочий ход,
@@ -105,7 +107,7 @@ export function waitLabel(phrase = ""): string {
 
 const hm = (t?: number) => (t ? new Date(t).toTimeString().slice(0, 5) : "?")
 const minutes = (from: number | undefined, now: number) => (from ? `${Math.max(0, Math.round((now - from) / 60_000))} мин` : "")
-const STATUS_RU: Record<string, string> = { starting: "запускается", running: "в работе", submitted: "сдана", reviewing: "на приёмке", rework: "на доработке", accepted: "принята", done: "влита", cancelled: "отменена" }
+const STATUS_RU: Record<string, string> = { starting: "запускается", running: "в работе", submitted: "сдана", reviewing: "на приёмке", rework: "на доработке", accepted: "принята", done: "влита", cancelled: "отменена", idle: "ждёт следующей сессии" }
 
 export type StatusInput = {
   card: Card
@@ -139,6 +141,8 @@ function statusOfAll(x: StatusInput): Status {
   const watches: Watch[] = x.watches ?? watchesOf(card.session)
   const ref = card.task ?? card.review
   const own: Task | undefined = ref ? loadTask(ref.project, ref.n) : undefined
+  // сессия задачи с папкой (задача 058): у сессии методики своё состояние
+  const ses = own && card.task ? sessionOf(own, card.session) : undefined
   const authored = listTasks(card.project).filter((t) => t.author === card.session && isOpen(t))
   const stuck = obligationsOf(card.session)
     .filter((o) => o.stuck)
@@ -154,7 +158,7 @@ function statusOfAll(x: StatusInput): Status {
     watches: watches.map((w) => ({ id: w.id, note: w.note, started: w.started, minutes: w.minutes })),
     asked: x.asked,
     ...(x.askedStale?.length ? { askedStale: x.askedStale } : {}),
-    ...(own ? { task: { n: own.n, status: own.status, as: card.task ? ("executor" as const) : ("reviewer" as const), title: own.title, ...(stepsOf(own) ? { steps: stepsOf(own) } : {}), ...(own.checking ? { checking: own.checking.step } : {}) } } : {}),
+    ...(own ? { task: { n: own.n, status: ses && ses.status !== "running" ? (ses.status === "submitted" ? "submitted" : ses.status === "handed" ? "handed" : "cancelled") : own.status, as: card.task ? ("executor" as const) : ("reviewer" as const), title: own.title, ...(stepsOf(own) ? { steps: stepsOf(own) } : {}), ...(own.checking ? { checking: own.checking.step } : {}), ...(own.folder ? { ref: taskNo(own), group: true as const } : {}), ...(ses && ses.code !== "исп" ? { label: sesLabel(ses) } : {}), ...(ses?.ended && ses.status !== "running" ? { ended: ses.ended } : {}) } } : {}),
     tasks: authored.map((t) => ({ n: t.n, status: t.status, priority: t.priority, title: t.title })),
     ...(stuck.length ? { stuck } : {}),
     updated: now,
@@ -195,23 +199,28 @@ function statusOfAll(x: StatusInput): Status {
   if (x.asked.length) return { ...base, state: "reply", since: x.asked[0].at, detail: `ждёт ответа от ${x.asked.map((a) => a.to).join(", ")} (с ${hm(x.asked[0].at)})` }
   if (own && isOpen(own)) {
     const s = own.status
-    const what = card.task
+    // у задачи с папкой номер — в строке задачи над сессиями (задача 058); без папки — в начале, как раньше
+    const no = own.folder ? "" : `${taskNo(own)} `
+    const what = ses && ses.code !== "исп" && ses.status !== "running"
+      ? ses.status === "submitted" ? `сдана ${hm(ses.ended)}` : ses.status === "handed" ? "передана другой сессии" : "закрыта"
+      : card.task
       ? s === "submitted" || s === "reviewing" || s === "accepted"
-        ? `#${own.n} сдана, ${STATUS_RU[s]}`
+        ? `${no}сдана, ${STATUS_RU[s]}`
         : s === "rework"
-          ? `#${own.n} на доработке — стоит`
-          : `#${own.n} ${STATUS_RU[s] ?? s} — стоит между ходами`
+          ? `${no}на доработке — стоит`
+          : `${no}${STATUS_RU[s] ?? s} — стоит между ходами`
       : s === "rework"
-        ? `приёмка #${own.n}: ждёт доработки`
-        : `приёмка #${own.n}: ${STATUS_RU[s] ?? s}`
+        ? `приёмка${own.folder ? "" : ` ${taskNo(own)}`}: ждёт доработки`
+        : `приёмка${own.folder ? "" : ` ${taskNo(own)}`}: ${STATUS_RU[s] ?? s}`
     return { ...base, state: "task", detail: what }
   }
   if (authored.length) {
-    const by = (st: string[]) => authored.filter((t) => st.includes(t.status)).map((t) => `#${t.n}`)
+    const by = (st: string[]) => authored.filter((t) => st.includes(t.status)).map((t) => `${taskNo(t)}`)
     const parts = [
       [by(["starting", "running"]), "в работе"],
       [by(["rework"]), "на доработке"],
       [by(["submitted", "reviewing", "accepted"]), "на приёмке"],
+      [by(["idle"]), "между сессиями"],
     ]
       .filter(([l]) => (l as string[]).length)
       .map(([l, w]) => `${(l as string[]).join(" ")} ${w}`)
@@ -279,14 +288,16 @@ export function waitingLine(list: Status[], _now = Date.now()): string | undefin
   const w = list.filter((s) => s.state === "owner")
   if (!w.length) return undefined
   const oldest = oldestWait(w)
-  const label = /^#\d+ \S+/.exec(oldest.title ?? "")?.[0]
+  const label = TAB_RE.exec(oldest.title ?? "")?.[0]
   const where = [oldest.project, label].filter(Boolean).join(" ")
   return `Ждут вас: ${w.length}${oldest.since ? ` · с ${hm(oldest.since)}` : ""}${where ? ` · ${where}` : ""}`
 }
 
 const oldestWait = (w: Status[]) => w.reduce((a, b) => ((b.since ?? Infinity) < (a.since ?? Infinity) ? b : a))
-/** Вкладка ждущего — то, что открыть: «#33 исп» (задача и роль), иначе роль («интегр.»). */
-const tabOf = (s: Status) => /^#\d+ \S+/.exec(s.title ?? "")?.[0] ?? (s.task ? `#${s.task.n} ${s.task.as === "reviewer" ? "прм" : "исп"}` : s.role === "integrator" ? "интегр." : s.role)
+/** Начало заголовка сессии задачи: «#33 исп», «045 прм», «045 С4-3» (задача 058). */
+const TAB_RE = /^(?:#\d+|\d{3,}) \S+/
+/** Вкладка ждущего — то, что открыть: «#33 исп» (задача и роль), «045 С4-3» (сессия задачи), иначе роль («интегр.»). */
+const tabOf = (s: Status) => TAB_RE.exec(s.title ?? "")?.[0] ?? (s.task ? `${s.task.ref ?? `#${s.task.n}`} ${s.task.label ?? (s.task.as === "reviewer" ? "прм" : "исп")}` : s.role === "integrator" ? "интегр." : s.role)
 
 /** «Ждут вас» в боковой панели (задача 055; владелец, 2026-10-15: «не вижу кто меня ждет?» — одна строка
  *  «Ждут вас: 1 · с 18:55 · clau» обрезалась по ширине панели). Три строки, все проекты: сколько и с какого времени; кто ждёт
@@ -317,21 +328,35 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
     const items = byProject.get(p)!.sort((a, b) => ORDER[a.state] - ORDER[b.state] || a.title.localeCompare(b.title))
     const waiting = items.filter((s) => s.state === "owner").length
     out.push(`${p}${waiting ? ` — ВАС ЖДУТ: ${waiting}` : ""}`)
-    for (const s of items) {
-      const who = s.task ? s.title : `${s.role}${s.title && s.title !== s.session ? ` · ${s.title}` : ""}`
+    const one = (s: Status, pad: string) => {
+      // у сессии задачи с папкой номер — в строке задачи над ней (задача 058): «С4-3 исп», «прм»
+      const who = s.task?.group ? `${s.task.label ? `${s.task.label} ` : ""}${s.task.as === "reviewer" ? "прм" : "исп"}` : s.task ? s.title : `${s.role}${s.title && s.title !== s.session ? ` · ${s.title}` : ""}`
       const model = s.model ? ` [${s.model.replace(/^.*\//, "")}]` : ""
       const prog = s.task?.as === "reviewer" ? stepProgress(s.task) : undefined
       // вопрос владельцу — целиком (его и читают), остальное — строкой по ширине окна; значки — как в панели (MARK)
-      const row = `  ${s.state === "owner" || s.state === "question" ? `${markOf(s)} ` : ""}${short(who, 40)}${model} — ${s.detail}`
+      const row = `${pad}${s.state === "owner" || s.state === "question" ? `${markOf(s)} ` : ""}${short(who, 40)}${model} — ${s.detail}`
       out.push(s.state === "owner" ? row : fit(row))
-      if (s.askedStale?.length) out.push(fit(`      вопрос устарел: ${s.askedStale.map((a) => `к ${a.to} с ${hm(a.at)} (${minutes(a.at, now)})`).join(", ")}`))
-      for (const k of s.stuck ?? []) out.push(fit(`      ⚠ ${stuckText(k)}`))
+      if (s.askedStale?.length) out.push(fit(`${pad}    вопрос устарел: ${s.askedStale.map((a) => `к ${a.to} с ${hm(a.at)} (${minutes(a.at, now)})`).join(", ")}`))
+      for (const k of s.stuck ?? []) out.push(fit(`${pad}    ⚠ ${stuckText(k)}`))
       if (prog) {
         const steps = s.task!.steps!
         const cur = steps.find((a) => a.id === s.task!.checking && !a.result)
-        out.push(fit(`      шаги ${steps.filter((a) => a.result).length}/${steps.length} ${stepBar(steps, s.task!.checking)}`))
-        if (cur) out.push(fit(`      ▶ ${cur.id}: ${short(cur.text, 120)}`))
+        out.push(fit(`${pad}    шаги ${steps.filter((a) => a.result).length}/${steps.length} ${stepBar(steps, s.task!.checking)}`))
+        if (cur) out.push(fit(`${pad}    ▶ ${cur.id}: ${short(cur.text, 120)}`))
       }
+    }
+    const shown = new Set<string>()
+    for (const s of items) {
+      if (!s.task?.group) {
+        one(s, "  ")
+        continue
+      }
+      const key = s.task.ref ?? String(s.task.n)
+      if (shown.has(key)) continue
+      shown.add(key)
+      out.push(fit(`  ${key} «${short(s.task.title.replace(/[«»]/g, ""), 50)}»`))
+      // в группе: по состоянию, сданные и переданные сессии — после работающих
+      for (const x of items.filter((y) => y.task?.group && (y.task.ref ?? String(y.task.n)) === key).sort((a, b) => ORDER[a.state] - ORDER[b.state] || Number(!!a.task?.ended) - Number(!!b.task?.ended))) one(x, "    ")
     }
     out.push(...planLines(p))
     out.push(...uncleanedLines(p, now))
@@ -359,7 +384,7 @@ export function uncleanedLines(project: string, now = Date.now()): string[] {
   } catch {}
   return list.map((t) => {
     const m = Math.max(0, Math.round((now - acceptedAt(t)) / 60_000))
-    return fit(`  ⚠ #${t.n} «${short(t.title, 30)}» принята и не убрана ${m >= 60 ? `${Math.round(m / 60)} ч` : `${m} мин`} — напоминаний было ${ACCEPTED_REMINDERS_MAX}, нужен crew_task cleanup`)
+    return fit(`  ⚠ ${taskNo(t)} «${short(t.title, 30)}» принята и не убрана ${m >= 60 ? `${Math.round(m / 60)} ч` : `${m} мин`} — напоминаний было ${ACCEPTED_REMINDERS_MAX}, нужен crew_task cleanup`)
   })
 }
 
@@ -380,7 +405,7 @@ export function planLines(project: string): string[] {
     const r = p.rounds.length
     const state =
       t.status === "starting" || t.status === "running"
-        ? `пишется (задача #${t.n})`
+        ? `пишется (задача ${taskNo(t)})`
         : t.status === "submitted" || t.status === "reviewing"
           ? p.approval && p.approval.decision !== "no"
             ? "согласован владельцем — вливается"
@@ -413,7 +438,7 @@ export function acceptanceReports(project: string, now = Date.now()): string[] {
   for (const t of done.sort((a, b) => b.updated - a.updated).slice(0, 3)) {
     const ids = t.steps?.length ? t.steps.map((a) => a.id) : Object.keys(t.checks!)
     const ok = ids.filter((id) => t.checks![id]).length
-    out.push(fit(`  отчёт приёмки #${t.n} «${short(t.title, 30)}» — ${t.status === "done" ? "влита" : "принята"} ${hm(t.updated)}`))
+    out.push(fit(`  отчёт приёмки ${taskNo(t)} «${short(t.title, 30)}» — ${t.status === "done" ? "влита" : "принята"} ${hm(t.updated)}`))
     out.push(fit(`      шаги ${ok}/${ids.length} ${ids.map((id) => (t.checks![id] ? "✓" : "–")).join("")}`))
     const skipped = ids.filter((id) => !t.checks![id])
     if (skipped.length) out.push(fit(`      – не отмечены (необязательные): ${skipped.join(", ")}`))
@@ -430,7 +455,7 @@ export type SideRow = { mark: string; who: string; what: string; tone: "accent" 
  *  2.0.23 даёт панели 42 колонки, под текст после отступов — около 37). Подстрока (who пустой) — с отступом под «что», без колонки «кто». */
 export const SIDE_WIDTH = 32
 export const sideText = (r: SideRow, width = SIDE_WIDTH) => (r.flush ? r.what : r.who ? `${r.mark} ${r.who.padEnd(9).slice(0, 9)} ${r.what}` : `    ${r.what}`).slice(0, width)
-const WORD_OF_TASK: Record<string, string> = { submitted: "✓ сдана", reviewing: "✓◐ приёмка", rework: "↻ доработка", approval: "◇ согласование", accepted: "✓✓◐ влита", running: "в работе", starting: "запуск" }
+const WORD_OF_TASK: Record<string, string> = { submitted: "✓ сдана", reviewing: "✓◐ приёмка", rework: "↻ доработка", approval: "◇ согласование", accepted: "✓✓◐ влита", running: "в работе", starting: "запуск", idle: "ждёт сессии", handed: "↷ передана" }
 const SIDE_MAX = 9
 /** «что» ждущей вкладки с длительностью ожидания: «⧗ CI t34 40м» (длительность — в конце, обрезается текст перед ней). */
 export function waitText(text: string, since: number | undefined, now: number): string {
@@ -462,11 +487,23 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
         return "свободна"
     }
   }
-  const sorted = mine.slice().sort((a, b) => ORDER[a.state] - ORDER[b.state] || who(a).localeCompare(who(b)))
+  const sorted0 = mine.slice().sort((a, b) => ORDER[a.state] - ORDER[b.state] || who(a).localeCompare(who(b)))
+  // задача с папкой (задача 058): её сессии подряд, под строкой задачи «045 название» — на месте самой важной из них
+  const gkey = (s: Status) => (s.task?.group ? (s.task.ref ?? String(s.task.n)) : undefined)
+  const sorted: Status[] = []
+  for (const s of sorted0) {
+    const k = gkey(s)
+    if (!k) sorted.push(s)
+    else if (!sorted.some((x) => gkey(x) === k)) sorted.push(...sorted0.filter((x) => gkey(x) === k).sort((a, b) => ORDER[a.state] - ORDER[b.state] || Number(!!a.task?.ended) - Number(!!b.task?.ended)))
+  }
   const rows: SideRow[] = []
   // «Ждут вас» на все окна (по всем проектам, не только по этому): сколько и с какого времени, кто ждёт дольше всех, начало вопроса
   rows.push(...waitingRows(list, width))
+  let lastGroup: string | undefined
   for (const s of sorted.slice(0, SIDE_MAX)) {
+    const g = gkey(s)
+    if (g && g !== lastGroup) rows.push({ mark: " ", who: "", what: `${g} ${s.task!.title.replace(/[`*_«»]/g, "")}`.slice(0, width), tone: "base", flush: true })
+    lastGroup = g
     // приёмка по шагам: «проверка 3/13: fixture» вместо «работает», под строкой — что проверяет шаг
     // ждущая вкладка (наблюдение, очередь машины, ответ) показывает, чего ждёт, и сколько; шаги — строкой под ней
     const stepsLine = s.state !== "owner" && s.state !== "question" ? stepProgress(s.task) : undefined
@@ -475,7 +512,7 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
     const waitFor = waiting ? waitText(what(s), s.since, now) : undefined
     rows.push({
       mark: markOf(s) ?? " ",
-      who: who(s),
+      who: g ? ` ↳ ${s.task!.label ?? (s.task!.as === "reviewer" ? "прм" : "исп")}` : who(s),
       what: short(prog ?? waitFor ?? what(s), 20),
       tone: (s.state === "owner" || s.state === "question" ? "accent" : s.state === "idle" ? "muted" : "base") as SideRow["tone"],
     })
@@ -487,7 +524,7 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
     // застряла (задача 043, L3): строка, пока признак не снят
     if (s.stuck?.length) rows.push({ mark: " ", who: "", what: s.stuck[0].at ? `⚠ застряла с ${hm(s.stuck[0].at)}` : "⚠ застряла", tone: "accent" })
     // название задачи — по номеру не вспомнить, о чём она (владелец, 2026-10-07); последней подстрокой, чтобы строки шагов остались на своих местах
-    if (s.task?.title) rows.push({ mark: " ", who: "", what: `↳ ${short(s.task.title.replace(/[`*_«»]/g, ""), 26)}`, tone: "muted" })
+    if (s.task?.title && !g) rows.push({ mark: " ", who: "", what: `↳ ${short(s.task.title.replace(/[`*_«»]/g, ""), 26)}`, tone: "muted" })
   }
   const auto = answerSideRow(project, now)
   if (auto) rows.push(auto)

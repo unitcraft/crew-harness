@@ -20,8 +20,10 @@ import { background } from "./async-git.ts"
 import { mergeTemplate } from "./config-template.ts"
 import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
 import { DEFAULT_FORM, PLAN_ACCEPTANCE, PLAN_MERGE_ACCEPTANCE, type PlanForm, allSteps, nextPlanNumber, parsePlan, planProblems, planTemplate, roundRules } from "./plans.ts"
-import { type Task, type TaskPlan, WORKING_STATUSES, taskRef, slugify, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
+import { type Task, type TaskPlan, type TaskSession, WORKING_STATUSES, EXECUTOR_CODE, taskRef, taskNo, sessionOf, sessionRef, sesLabel, methodSession, moveToLegacy, listLegacy, slugify, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { countedOpen, waitingCleanup } from "./tasks.ts"
+import { baseRef, branchExists, commitFiles, ensureBranch, findFolder, folderName, pad3, usedNumbers } from "./task-numbers.ts"
+import { firstLogLine, folderInfo, nextLaunch, readFolderFile, taskLog, templateMessage, titleOfMessage } from "./task-folders.ts"
 import { acceptanceFromFile } from "./acceptance-file.ts"
 import { acceptWarning, acceptedTip, beginPrecheck, finishPrecheck, gateMerge, landedFresh, landingLine, markPrecheckStale, neighbourHints, precheckLines, unlockMerge } from "./precheck.ts"
 import { addSide, autoTrack, cleanupDone, removeSide, sideItems, cleanupSteps, fileAt, holdsMergeLock, isMerged, keptOnBranch, keptPaths, mergeHolder, releaseMergeLock, resolveKeep, reworkLetter, sameFs, takeMergeLock } from "./review.ts"
@@ -166,7 +168,7 @@ for (const d of [CARDS, INBOX, READ, QUEUE]) mkdirSync(d, { recursive: true }) /
 export type Spawned = { by: string; task: string; tier: string; status: "running" | "done" | "closed"; at: number; qid: string }
 // busySince — время последнего запроса модели (ставится на каждом шаге хода); turnStart — первого запроса хода: по нему lastTurn
 // видит весь ход (задача 052: вызов инструмента в раннем шаге, а последний шаг — только текст, и ход читался пустым)
-export type Card = { session: string; role: string; auto: boolean; spawned?: Spawned; task?: { project: string; n: number }; review?: { project: string; n: number }; titleShown?: string; title: string; directory: string; repo: string; project?: string; lock_wait?: { project: string; n: number; at: number }; model?: string; modelAt?: number; modelFrom?: "request" | "db"; modelCheckedAt?: number; busy?: boolean; busySince?: number; turnStart?: number; wokeAt?: number; pid: number; updated: number }
+export type Card = { session: string; role: string; auto: boolean; spawned?: Spawned; task?: { project: string; n: number }; review?: { project: string; n: number }; titleShown?: string; title: string; directory: string; repo: string; project?: string; lock_wait?: { project: string; n: number; at: number }; model?: string; modelAt?: number; modelFrom?: "request" | "db"; modelCheckedAt?: number; tasksDir?: string; busy?: boolean; busySince?: number; turnStart?: number; wokeAt?: number; pid: number; updated: number }
 export type Letter = { id: string; from_role: string; from_session: string; to: string; text: string; time: number; tier?: Tier; wake?: boolean; qid?: string; reply_to?: string }
 
 // НАСТРОЙКИ ПРОЕКТА — settings.ts: файл `.opencode/crew-harness.json` из репозитория настроек (закоммиченный),
@@ -220,6 +222,8 @@ export type CrewConfig = {
   /** принятая, но не очищенная задача: через столько минут — письма приёмщику и автору (0 — нет) */
   acceptedReminderMin: number
   plansDir: string
+  /** каталог папок задач от корня репозитория (tasks_dir, задача 058; по умолчанию doc/tasks; "" — папок нет): включён, когда он есть в целевой ветке */
+  tasksDir: string
   planName: string
   planRoundsMax: number
   planCleanRounds: number
@@ -387,6 +391,7 @@ export function loadConfig(dir: string): CrewConfig {
     stallMin: num(j.stall_minutes, 30),
     acceptedReminderMin: num(j.accepted_reminder_min, 30),
     plansDir: typeof j.plans_dir === "string" && j.plans_dir.trim() ? j.plans_dir.trim() : "docs/plans",
+    tasksDir: typeof j.tasks_dir === "string" ? j.tasks_dir.trim() : "doc/tasks",
     planName: typeof j.plan_name === "string" && j.plan_name.includes("{n}") ? j.plan_name : "{n}-{slug}.md",
     planRoundsMax: num(j.plan_rounds_max, 4),
     planCleanRounds: Math.max(1, num(j.plan_clean_rounds, 2)),
@@ -796,7 +801,7 @@ export async function lastUserAt(sessionID: string): Promise<number> {
 /** Ход открыт и живой: после последнего idle есть сообщения, обновлённые не раньше чем за fresh мс. */
 /** Путь worktree и ветка задачи по настройкам проекта (worktrees не задан — решает методология). Слаг — из записи задачи:
  *  вычислен один раз при постановке, путь в ответе crew_spawn и созданный — одни и те же. */
-export function taskPlace(dir: string, cfg: CrewConfig, n: number, slug: string, project: string): { worktree?: string; branch: string } {
+export function taskPlace(dir: string, cfg: CrewConfig, n: number | string, slug: string, project: string): { worktree?: string; branch: string } {
   const v = { repo: repoNameOf(dir), n, slug, project }
   return { worktree: cfg.worktrees ? path.join(cfg.worktrees, fillName(cfg.worktreeName, v)) : undefined, branch: fillName(cfg.branchName, v) }
 }
@@ -1125,8 +1130,15 @@ export const isCrewText = (t: string) => LETTER_MARKS.some((m) => t.startsWith(m
 export function sessionLabel(session: string, fallback: string): string {
   const c = readJson<Card>(cardFile(session))
   const addr = c ? `${c.project ?? "?"}.${normalizeRole(c.role)}` : fallback
-  if (c?.review && !c.task) return `#${c.review.n} приёмщик ${addr}`
-  if (c?.task && c.spawned) return `#${c.task.n} исполнитель ${addr}`
+  // номер задачи — как в показе (задача 058): «045» у задачи с папкой, у сессии методики — «045 С4-3»
+  const no = (r: { project: string; n: number }, as: "task" | "review") => {
+    const t = loadTask(r.project, r.n)
+    if (!t) return `#${r.n}`
+    const s = as === "task" ? sessionOf(t, session) : undefined
+    return s && s.code !== EXECUTOR_CODE ? sessionRef(t, s) : taskNo(t)
+  }
+  if (c?.review && !c.task) return `${no(c.review, "review")} приёмщик ${addr}`
+  if (c?.task && c.spawned) return `${no(c.task, "task")} исполнитель ${addr}`
   return addr
 }
 export function formatLetters(letters: Letter[], me: Card): string {
@@ -1140,7 +1152,7 @@ export function formatLetters(letters: Letter[], me: Card): string {
       const myTask = l.qid && me.task ? loadTask(me.task.project, me.task.n) : undefined
       const q = l.qid
         ? myTask && myTask.qid === l.qid && myTask.executor === me.session
-          ? `\n↩ задача #${myTask.n}: сдай crew_task {action: "submit", n: ${myTask.n}, text: "..."} — без сдачи она открыта, остановишься — напомню`
+          ? `\n↩ задача ${taskNo(myTask)}: сдай crew_task {action: "submit", n: ${myTask.n}, text: "..."} — без сдачи она открыта, остановишься — напомню`
           : `\n↩ вопрос ${l.qid}: ответь crew_send {to: "${l.from_session}", reply_to: "${l.qid}", text: "..."} — без ответа он открыт, остановишься — напомню`
         : ""
       return `✉  ${hhmm(l.time)} · ${sessionLabel(l.from_session, l.from_role)} → ${to}${a}\n${l.text}${q}`
@@ -1197,7 +1209,7 @@ export const ASKED_STALE_MS = ASKED_STALE_MIN * 60_000
 export function askedClosedWhy(to: Card, tabOpen: boolean, now = Date.now()): string | undefined {
   if (to.task) {
     const t = loadTask(to.task.project, to.task.n)
-    if (t && t.status === "done") return `задача #${t.n} принята и очищена`
+    if (t && t.status === "done") return `задача ${taskNo(t)} принята и очищена`
   }
   if (to.spawned?.status === "closed") return "сессия-адресат закрыта"
   if (!to.spawned && !tabOpen && now - to.updated > LIVE_MS) return "вкладки-адресата нет"
@@ -1598,7 +1610,7 @@ export function stampProfile(t: Task, role: "executor" | "reviewer", session: st
   ;(t.profiles ??= []).push({ at: Date.now(), role, session, stage: r.stage, set: r.set, family: r.family, tier: r.tier, model: r.model, window, ...(r.clampedFrom ? { clamped_from: r.clampedFrom } : {}), ...(r.how ? { how: r.how } : {}) })
   const note = `${r.clampedFrom ? `, ступень срезана границами проекта ${r.clampedFrom} → ${r.tier}` : ""}${r.how === "inherited" ? ", клетка унаследована" : ""}`
   taskEvent(t, PLUGIN_SENDER, undefined, `профиль: набор «${r.set}», этап ${r.stage}, ${r.family}/${r.tier}, модель ${r.model}${r.viaSnapshot ? " (по снимку)" : ""}, окно: ${window}${note}`)
-  if (r.clampedFrom) log(`tier clamp: задача #${t.n} этап ${r.stage}: ${r.clampedFrom} -> ${r.tier}`)
+  if (r.clampedFrom) log(`tier clamp: задача ${taskNo(t)} этап ${r.stage}: ${r.clampedFrom} -> ${r.tier}`)
 }
 /**
  * След среза на пути без набора (задача 016): модель по spawn_models, но ступень срезана границами проекта. Тот же вид записи и
@@ -1608,7 +1620,7 @@ export function stampClamp(t: Task, role: "executor" | "reviewer", session: stri
   if (!from) return
   ;(t.profiles ??= []).push({ at: Date.now(), role, session, stage, set: "(без набора)", family: model.split("/")[0], tier, model, window: "general", clamped_from: from })
   taskEvent(t, PLUGIN_SENDER, undefined, `профиль: без набора, этап ${stage}, ступень срезана границами проекта ${from} → ${tier}, модель ${model}`)
-  log(`tier clamp: задача #${t.n} этап ${stage}: ${from} -> ${tier}`)
+  log(`tier clamp: задача ${taskNo(t)} этап ${stage}: ${from} -> ${tier}`)
 }
 const DEFAULT_SPAWN_LIMIT = 3
 const WAIT_MAX_S = 300
@@ -1621,7 +1633,7 @@ export function tabStatus(c: Card, windows = liveWindows()): string {
   if (c.spawned) return t ? `сессия задачи ${taskRef(t)} (${t.executor === c.session ? statusRu(t.status) : "передана другой"})` : `под задачу (${c.spawned.status === "running" ? "работает" : c.spawned.status === "done" ? "готово" : "закрыта"})`
   const tab = tabOf(c.session, windows)
   const rv = c.review ? loadTask(c.review.project, c.review.n) : undefined
-  const task = t && isOpen(t) && t.executor === c.session ? `, задача ${taskRef(t)} (${statusRu(t.status)})` : rv && isOpen(rv) && rv.reviewer === c.session ? `, приёмщик #${rv.n} (${statusRu(rv.status)})` : ""
+  const task = t && isOpen(t) && t.executor === c.session ? `, задача ${taskRef(t)} (${statusRu(t.status)})` : rv && isOpen(rv) && rv.reviewer === c.session ? `, приёмщик ${taskNo(rv)} (${statusRu(rv.status)})` : ""
   if (!tab) return `закрыта${task}`
   return `открыта ${tab.tab.active ? "на экране" : "фоном"}, ${tab.tab.busy ? "занята" : "свободна"}${task}`
 }
@@ -1673,7 +1685,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
       })
       const others = input?.all || !home ? 0 : all.length - cards.length
       const openTasks = home ? listTasks(home).filter(isOpen).sort(byPriority) : []
-      const tasksPart = openTasks.length ? `\nЗадачи (crew_task):\n${openTasks.map((t) => `  #${t.n} ${t.priority} ${statusRu(t.status)} «${t.title}»${t.executor ? ` — ${t.executor}` : ""}`).join("\n")}` : ""
+      const tasksPart = openTasks.length ? `\nЗадачи (crew_task):\n${openTasks.map((t) => `  ${taskNo(t)} ${t.priority} ${statusRu(t.status)} «${t.title}»${t.executor ? ` — ${t.executor}` : ""}`).join("\n")}` : ""
       const tail = tasksPart + (others ? `\n(ещё ${others} вкладок в других проектах — crew_list {all: true})` : "")
       const noWindow = windows.length || process.env.CREW_HARNESS_PRESENCE === "all" ? "" : "\n(ни одно окно OpenCode с плагином окна сейчас не открыто — письма ждут; crew_doctor)"
       return { content: (rows.length ? rows.join("\n") : `Вкладок проекта ${home} нет.`) + tail + noWindow }
@@ -1725,6 +1737,8 @@ export function makeTools(host: CrewHost): CrewTool[] {
   // Отказ — строкой (задача не меняется); иначе задача сдана (или доработка сдана), обязательство исполнителя снято,
   // приёмщик после доработки разбужен. Письмо с отчётом автору кладёт вызывающий.
   const submitTask = (t: Task, sessionID: string, fromRole: string, text: string, now: number): string | undefined => {
+    const ms = methodSession(t)
+    if (ms && ms.session === sessionID) return submitSession(t, ms, sessionID, fromRole, text, now)
     if (!WORKING_STATUSES.includes(t.status)) return `Не отправлено: отчёт по задаче ${taskRef(t)} уже отправлен (задача ${statusRu(t.status)}). Остановись — дальше приёмка.`
     if (t.plan) {
       // задача-план: отчёт принимается, только если файл плана есть и форма в порядке (план 004, критерии 1–5)
@@ -1745,7 +1759,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
     taskEvent(t, sessionID, "submitted", again ? (t.rework_sync ? "сдана после синхронизации с целевой веткой" : `доработка сдана (круг ${t.rework ?? 1})`) : "отчёт")
     if (again && t.reviewer) {
       // приёмщик ждёт: будим его с отчётом о доработке, его обязательство — снова
-      addObligation(t.reviewer, { qid: t.review_qid ?? t.qid, from_session: t.author, from_role: t.author_role, at: now, nudges: 0, task: `приёмка #${t.n}` })
+      addObligation(t.reviewer, { qid: t.review_qid ?? t.qid, from_session: t.author, from_role: t.author_role, at: now, nudges: 0, task: `приёмка ${taskNo(t)}` })
       host.posted(postExpected(t))
     }
     return undefined
@@ -1808,11 +1822,12 @@ export function makeTools(host: CrewHost): CrewTool[] {
       // сдача после доработки будит приёмщика. Сессия исполнителя остаётся открытой до очистки (на случай доработки).
       const myTask = replyTo && me?.task ? loadTask(me.task.project, me.task.n) : undefined
       const isReport = !!myTask && myTask.qid === replyTo && myTask.executor === sessionID
+      const sessionReport = isReport && !!methodSession(myTask!) // сдача сессии методики будит интегратора: дальше решает он
       if (replyTo && me?.spawned && !me.task && me.spawned.status !== "running" && me.spawned.qid === replyTo) return { content: "Не отправлено: отчёт по этой задаче уже отправлен, задача закрыта. Остановись." }
       if (isReport) {
         const refusal = submitTask(myTask!, sessionID, fromRole, text, now) // общий путь с crew_task submit
         if (refusal) return { content: refusal }
-        wake = false
+        wake = sessionReport
       }
       const base = { from_role: fromRole, from_session: sessionID, text, time: now, ...(wake ? {} : { wake: false }), ...(qid ? { qid } : {}), ...(replyTo ? { reply_to: replyTo } : {}) }
       if (replyTo && !isReport) settleObligation(sessionID, replyTo)
@@ -1878,7 +1893,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
       if (myOpen && myOpen.executor === sessionID && WORKING_STATUSES.includes(myOpen.status)) {
         const toIntegrator = (x: string) => x === roleKey(home, "integrator") || cards.some((c) => c.session === x && isIntegrator(c))
         if (targets.some((x) => x === myOpen.author || x === myOpen.reviewer || toIntegrator(x)))
-          submitTip = ` Задача #${myOpen.n} ещё не сдана${myOpen.status === "rework" ? " (на доработке)" : ""}: письмо отчётом не считается. Чтобы сдать, вызови crew_task {action: "submit", n: ${myOpen.n}, text: "что сделано, как проверено, что осталось"}.`
+          submitTip = ` Задача ${taskNo(myOpen)} ещё не сдана${myOpen.status === "rework" ? " (на доработке)" : ""}: письмо отчётом не считается. Чтобы сдать, вызови crew_task {action: "submit", n: ${myOpen.n}, text: "что сделано, как проверено, что осталось"}.`
       }
       return { content: `Отправлено (${hhmm(now)}): ${known.join("; ")}.${qidTail}${submitTip}` }
     },
@@ -1936,7 +1951,53 @@ export function makeTools(host: CrewHost): CrewTool[] {
   const FIELD_RU: Record<string, string> = { goal: "цель (goal)", criteria: "критерии приёмки (criteria)", boundaries: "границы (boundaries)", open_questions: "открытые вопросы (open_questions)" }
   const newQid = () => `q${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
   const findTask = (me: Card | undefined, n: any): Task | undefined => (me && Number.isInteger(Number(n)) ? loadTask(projOf(me), Number(n)) : undefined)
-  const taskRow = (t: Task) => `#${t.n} ${t.priority} ${statusRu(t.status)} «${t.title}» — ${t.executor ? `исполнитель ${t.executor}` : "без исполнителя"}${t.kind === "assign" ? " (вкладка владельца)" : ""}${t.reviewer ? `, приёмщик ${t.reviewer}` : ""}${t.status === "accepted" && loadConfig(t.directory).acceptedSlot === "free" ? " — ждёт уборки" : ""}`
+  // ПАПКИ ЗАДАЧ И СЕССИИ (задача 058). Код сессии — как в журнале хода: 1–8 букв или цифр (С1, С4, С3п, исп).
+  const SESSION_CODE_RE = /^[A-Za-zА-Яа-яЁё0-9]{1,8}$/
+  // проверяющие сессии методики (С2, С4, С6 и их варианты) по умолчанию работают в своём дереве от ветки задачи (вопрос В-04)
+  const REVIEW_CODE_RE = /^[СC][246]/
+  /** Новая сессия задачи: запись в sessions (код, порядковый номер кода, номер запуска, место), прежняя сессия — передана или уже сдана. */
+  const startSession = (t: Task, code: string, goal: string, placeArg: string | undefined, cfg: CrewConfig, by: string): TaskSession => {
+    const sessions = t.sessions ?? (t.sessions = [])
+    const k = sessions.filter((x) => x.code === code).length + 1
+    const launch = nextLaunch(t)
+    const own = !!cfg.worktrees && !!t.worktree && (placeArg === "own" || (placeArg !== "task" && REVIEW_CODE_RE.test(code)))
+    const old = t.executor
+    if (old) {
+      const prev = sessionOf(t, old)
+      if (prev && prev.status === "running") {
+        prev.status = "handed"
+        prev.ended = Date.now()
+        releaseExecutor(t, old)
+      } else if (!prev) releaseExecutor(t, old)
+      if (!t.executors.includes(old)) t.executors.push(old)
+      t.attempt++
+    }
+    const s: TaskSession = { code, k, launch, session: plannedSessionId(), status: "running", ...(goal ? { goal } : {}), place: own ? "own" : "task", started: Date.now() }
+    if (own) {
+      const v = { repo: repoNameOf(t.directory), n: pad3(t.n), slug: slugify(`${code}-${k}`), project: t.project }
+      s.worktree = path.join(cfg.worktrees!, fillName("{repo}-{n}-{slug}", v))
+      s.branch = fillName("task/{n}-{slug}", v)
+      addSide(t, [{ branch: s.branch, worktree: s.worktree }], by)
+    }
+    sessions.push(s)
+    t.executor = s.session
+    t.kind = "spawn"
+    delete t.handoff
+    return s
+  }
+  /** Сдача сессии методики (не «исп»): интегратору, приёмки плагина нет — задача ждёт следующей сессии или deliver (REQ-08). */
+  const submitSession = (t: Task, s: TaskSession, sessionID: string, fromRole: string, text: string, now: number): string | undefined => {
+    if (s.status !== "running" || !WORKING_STATUSES.includes(t.status)) return `Не отправлено: сессия ${sessionRef(t, s)} уже сдана (${s.status === "handed" ? "передана другой сессии" : "сдана"}). Остановись — дальше решает интегратор.`
+    settleObligation(sessionID, t.qid)
+    s.status = "submitted"
+    s.ended = now
+    s.report = text
+    t.executor_role = fromRole
+    const why = taskLog(t, "документ", `${sesLabel(s)} сдала: ${text.replace(/\s+/g, " ").slice(0, 200)}`)
+    taskEvent(t, sessionID, "idle", `сессия ${sesLabel(s)} сдана${why ? ` (log.md не записан: ${why})` : ""}`)
+    return undefined
+  }
+  const taskRow = (t: Task) => `${taskNo(t)} ${t.priority} ${statusRu(t.status)} «${t.title}» — ${t.executor ? `исполнитель ${t.executor}` : "без исполнителя"}${t.kind === "assign" ? " (вкладка владельца)" : ""}${t.reviewer ? `, приёмщик ${t.reviewer}` : ""}${t.status === "accepted" && loadConfig(t.directory).acceptedSlot === "free" ? " — ждёт уборки" : ""}`
 
   // Задача очищена: всё закрыто. Интегратору и исполнителю — тихие сводки (без пробуждения); сессии задачи закроет
   // плагин (заголовок «#N ✓✓»).
@@ -1960,11 +2021,116 @@ export function makeTools(host: CrewHost): CrewTool[] {
 ` +
     `3) выбрать иное — crew_config {action: "guide"} (вопросы по каждому ключу; allow_default_models: true оставляет модели по умолчанию осознанно).`
 
+  // ЗАДАЧА С ПАПКОЙ (задача 058). Новая задача — номер 1 + max по записям и папкам во всех деревьях и ветках, папка NNN-<slug>/
+  // (task/message.md и log.md) коммитом плагина на ветке задачи; задача, чья папка уже есть, — запись с её номером без коммита папки;
+  // сессия задачи — запись в sessions той же задачи; подзадача — новая задача со строкой «Часть задачи NNN «…».».
+  const spawnInFolder = async (a: { me: Card; project: string; cfg: CrewConfig; fm: { top: string; rel: string }; input: any; taskNum?: number; code: string; partOf?: number; role: string; model: string; recTier: Tier; tier: Tier; from?: Tier; chosen: any; title: string; extra?: Record<string, string> }): Promise<{ content: string }> => {
+    const { me, project, cfg, fm, input, taskNum, code, partOf, role, model, recTier, chosen, extra } = a
+    const goal = String(input.goal ?? "").trim()
+    const prio = isPriority(input.priority) ? input.priority : cfg.defaultPriority
+    const common = { project, goal, boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(), ...(extra ? { extra } : {}), priority: prio, tier: recTier, role, model, author: me.session, author_role: keyOf(me), qid: newQid(), status: "idle" as const, kind: "spawn" as const, directory: me.directory }
+    const placeOf = (n: number, slug: string) => taskPlace(me.directory, cfg, pad3(n), slug, project)
+    let t: Task
+    let made = ""
+    let fresh = false
+    if (taskNum !== undefined) {
+      const old = loadTask(project, taskNum)
+      if (old && isOpen(old) && !old.folder)
+        return { content: `Не запущено: номер ${taskNum} занят открытой записью «${old.title}» (${statusRu(old.status)}) — это другая работа, заведённая до задачи 058. Её закрывают или отменяют (crew_task {action: "cancel", n: ${taskNum}}) — решает владелец.` }
+      if (old && isOpen(old)) {
+        if (!["idle", "running", "starting", "rework"].includes(old.status))
+          return { content: `Сессия не запущена: задача ${taskRef(old)} ${statusRu(old.status)} — сессию добавляют до передачи на приёмку (deliver) или после возврата на доработку.` }
+        t = old
+      } else {
+        const hits = findFolder(fm.top, fm.rel, taskNum)
+        if (!hits.length) return { content: `Задача не поставлена: папки задачи ${pad3(taskNum)} нет ни в одном дереве и ни в одной ветке репозитория (${fm.rel}). Новую задачу заводят без task — номер и папку выдаст плагин.` }
+        const names = [...new Set(hits.map((h) => h.name))]
+        if (names.length > 1) return { content: `Задача не поставлена: номер ${pad3(taskNum)} у нескольких папок (${names.join(", ")}) — повтор номера (страж task-number-dup); разведи папки.` }
+        const onBranch = hits.filter((h) => h.ref)
+        if (!onBranch.length) return { content: `Задача не поставлена: папка ${names[0]} есть только незакоммиченной (${hits.map((h) => h.where).join("; ")}) — закоммить её на ветке и повтори.` }
+        const inTarget = onBranch.find((h) => h.ref === cfg.targetBranch || h.ref === `origin/${cfg.targetBranch}`)
+        const hit = inTarget ?? onBranch[0]
+        const ftitle = String(input.title ?? "").trim() || titleOfMessage(hit.name, readFolderFile(fm.top, fm.rel, hit, "task/message.md"))
+        const moved = old ? moveToLegacy(project, taskNum) : ""
+        try {
+          t = createTask({ ...common, title: ftitle, slug: hit.name.replace(/^\d+-/, ""), criteria: input.criteria?.trim() || `по заданию ${fm.rel}/${hit.name}/task/message.md` }, placeOf, { n: taskNum, fill: () => ({ folder: `${fm.rel}/${hit.name}`, sessions: [] }) })
+        } catch (e: any) {
+          return { content: `Задача не поставлена: запись ${taskNum} в этот миг завёл другой процесс (${e?.code ?? e}). Повтори.` }
+        }
+        // папки нет в целевой ветке — ветка задачи идёт от ветки, где папка лежит (основную копию не трогаем)
+        if (!inTarget && t.branch && !branchExists(fm.top, t.branch)) ensureBranch(fm.top, t.branch, hit.ref!)
+        if (old) taskEvent(t, me.session, undefined, `старая запись #${taskNum} «${old.title}» перенесена в legacy/ без изменений`)
+        made = `Запись задачи ${taskRef(t)} заведена по папке ${t.folder}/${moved ? ` (старая закрытая запись #${taskNum} «${old!.title}» перенесена в legacy/)` : ""}. `
+      }
+    } else {
+      // подзадача: родитель — запись задачи с папкой или папка без записи
+      let parent: Task | undefined
+      let parentTitle = ""
+      if (partOf !== undefined) {
+        const pr = loadTask(project, partOf)
+        if (pr?.folder) {
+          parent = pr
+          parentTitle = pr.title
+        } else {
+          const ph = findFolder(fm.top, fm.rel, partOf)
+          if (!ph.length) return { content: `Подзадача не поставлена: задачи-родителя ${pad3(partOf)} нет (ни записи с папкой, ни папки в деревьях и ветках).` }
+          parentTitle = titleOfMessage(ph[0].name, readFolderFile(fm.top, fm.rel, ph[0], "task/message.md"))
+        }
+      }
+      const used = usedNumbers(fm.top, fm.rel)
+      t = createTask({ ...common, title: a.title, criteria: input.criteria?.trim(), ...(partOf !== undefined ? { part_of: partOf } : {}) }, placeOf, { used, fill: (n, slug) => ({ folder: `${fm.rel}/${folderName(n, slug)}`, sessions: [] }) })
+      const own = String(input.message ?? "")
+      const text = (partOf !== undefined ? `Часть задачи ${pad3(partOf)} «${parentTitle.replace(/[«»]/g, "")}».\n\n` : "") + (own.trim() ? own : templateMessage(t))
+      const base = baseRef(fm.top, cfg.targetBranch)
+      let sha = ""
+      try {
+        sha = execFileSync("git", ["-C", fm.top, "rev-parse", "--short", base], { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"] }).trim()
+      } catch {}
+      const files = { [`${t.folder}/task/message.md`]: text, [`${t.folder}/log.md`]: firstLogLine(t, own.trim() ? "текст интегратора (поле message)" : "шаблон из полей задачи", `${cfg.targetBranch} ${sha}`.trim()) }
+      const c = t.branch ? commitFiles(fm.top, t.branch, base, files, `Add task ${pad3(t.n)}: ${t.slug}`) : ({ ok: false, error: "у задачи нет ветки" } as const)
+      if (!c.ok) {
+        taskEvent(t, me.session, "cancelled", `папка не заведена: ${c.error}`)
+        return { content: `Задача ${taskRef(t)} не заведена: папку ${t.folder}/ не удалось записать на ветку ${t.branch} (${c.error}). Номер ${pad3(t.n)} остаётся пропуском.` }
+      }
+      taskEvent(t, me.session, undefined, `папка ${t.folder}/ заведена на ветке ${t.branch} (коммит ${c.commit.slice(0, 8)})`)
+      if (partOf !== undefined) {
+        const line = `заведена подзадача ${pad3(t.n)} «${t.title.replace(/[«»]/g, "")}»: папка ${t.folder}/, ветка ${t.branch}`
+        let why: string | undefined = "записи задачи-родителя нет"
+        if (parent) {
+          parent.parts = [...new Set([...(parent.parts ?? []), t.n])]
+          why = taskLog(parent, "документ", line)
+          taskEvent(parent, me.session, undefined, `${line}${why ? ` (в log.md родителя не записано: ${why})` : ""}`)
+        }
+        // дерева родителя нет — строку в его log.md пишет интегратор: письмо с готовым текстом
+        if (why) postLetter(me.session, { id: `subtask-${safeKey(project)}-${t.n}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: me.session, time: Date.now(), wake: false, text: `Подзадача ${taskRef(t)} заведена как часть задачи ${pad3(partOf)}; в log.md родителя строку не записал (${why}). Запиши её сам: log_line {kind: "документ", text: "${line}"}.` })
+      }
+      fresh = true
+      made = `Задача ${taskRef(t)} заведена: папка ${t.folder}/ на ветке ${t.branch}`
+    }
+    const s = startSession(t, code, goal, input.place, cfg, me.session)
+    t.model = model
+    t.tier = recTier
+    t.role = role
+    if (chosen && !("refuse" in chosen)) stampProfile(t, "executor", t.executor!, chosen, !!t.worktree)
+    else if (!chosen) stampClamp(t, "executor", t.executor!, stageOfLaunch({}, "executor"), model, a.tier, a.from)
+    taskEvent(t, me.session, "starting", `сессия ${sesLabel(s)} (запуск №${s.launch})${s.place === "own" ? `, своё дерево ${s.worktree}, ветка ${s.branch}` : ""}`)
+    const r = await host.startTask(t)
+    const ref = sessionRef(t, s)
+    const where = s.place === "own" ? `дерево ${s.worktree}, ветка ${s.branch}` : t.worktree ? `дерево ${t.worktree}, ветка ${t.branch}` : `ветка ${t.branch}`
+    if (!r.session) return { content: `${made}${fresh ? ". " : ""}Сессия ${ref} (запуск №${s.launch}) записана, но не запущена: ${r.error ?? "неизвестная ошибка"}. Плагин повторит запуск сам (тем же id сессии — второй не будет).` }
+    const tail = `модель ${model}. Сдача придёт письмом${s.code === EXECUTOR_CODE ? ` ответом на ${t.qid} (crew_wait {qid: "${t.qid}"})` : "; дальше — следующая сессия crew_spawn {task, session, goal} или приёмка задачи crew_task {action: \"deliver\", n, text}"}. Управление — crew_task {n: ${t.n}, action: ...}.`
+    if (fresh) return { content: `${made}, сессия ${ref} запущена (${hhmm(Date.now())}): ${where}, ${tail}` }
+    return { content: `${made}Сессия ${ref} (запуск №${s.launch}) запущена (${hhmm(Date.now())}): задача «${t.title}», ${where}, ${tail}` }
+  }
+
   const crewSpawn: CrewTool = {
     name: "crew_spawn",
     description:
       [
-        "Integrator only: start a task #N in a new session (it runs in the OpenCode server even with no window). The report comes back as an answer to the task's qid: crew_wait {qid}. Manage tasks with crew_task. The owner reads title, goal and criteria too: write them in the owner's language named in your system block.",
+        "Integrator only: start a task in a new session (it runs in the OpenCode server even with no window). The report comes back as an answer to the task's qid: crew_wait {qid}. Manage tasks with crew_task. The owner reads title, goal and criteria too: write them in the owner's language named in your system block.",
+        "One task, one number. In a project with task folders (tasks_dir, default doc/tasks, present in the target branch) the task number is the number of its folder NNN-<slug>/, shown as 045; without folders it is the plugin's #N. A new task: the plugin takes 1 + the largest number of the records and of the folders in every working tree and branch, writes the folder (task/message.md = message word for word, or a template from the fields when message is absent; log.md with its first line) on the task branch and commits it there; the main copy is never written. task: N - a task whose folder already exists (no folder commit; refused when no folder has that number).",
+        "A task session is a part of the task, not a task: session \"<code>\" (С1, С2, С3п, С4…; default исп = the executor) adds a session to task N: ident 045 С4-3 (code and its ordinal in the task) plus the launch number №n; the plugin writes the launch lines into progress.log and log.md of the folder. A method session submits to you (crew_task submit), with no plugin review; the plugin's review of the task starts once, after crew_task deliver. place: own (default for С2/С4/С6) - its own worktree and branch task/NNN-<code>-<k> from the task branch; task (default for the others) - the task worktree.",
+        "A sub-task (part_of: N) is a task of its own: own number and folder, the first line of its task/message.md is «Часть задачи NNN «…».», a line in the parent's log.md. The rule: an own acceptance or an own landing in main - a sub-task; the next step of the same work (a check, a fix by findings, a continuation, a handover) - a session.",
         "goal, criteria - required (the project may require more: boundaries, open_questions; task_fields). title? priority? P0..P3.",
         "tier heavy|medium|light - picks the model: by default claude-code opus|sonnet|haiku, spawn_models of the project overrides; an enabled model-profile set (/crew-sets) overrides both for the stage it describes (the tier then picks the tier inside the set's family). model - explicit provider/id[#variant]; required when the project has no model settings (ask the owner first).",
         "role? - role of the new session, default worker. extra {id: one line up to 300 characters} - the project's extra task fields (task_extra_fields; crew_config view lists them). parent \"project#N\" - the order of another project this task fulfils.",
@@ -1985,7 +2151,11 @@ export function makeTools(host: CrewHost): CrewTool[] {
         plan_parent: str("kind plan: the parent plan number for a sub-plan (e.g. 274)"),
         tier: { type: "string", enum: ["heavy", "medium", "light"], description: "Task weight -> model" },
         model: str("Explicit model of the worker (provider/id[#variant]); needed when the project has no model settings (profile_set, spawn_models, allow_default_models) - ask the owner first"),
-        task: str("Old name of goal"),
+        task: str("Number of a task with a folder (\"45\"): a session of that task, or the record of a folder made outside the plugin; any other text is the old name of goal"),
+        session: str("Code of the task session: С1, С2, С3п, С4…; default исп (the executor)"),
+        part_of: str("Number of the parent task: the new task is its sub-task (own number and folder)"),
+        place: { type: "string", enum: ["own", "task"], description: "Where the session works: own - its own worktree and branch from the task branch (default for С2, С4, С6), task - the task worktree" },
+        message: str("Full text of task/message.md of a new task folder (with the owner's words and date); without it the plugin writes a template from the fields"),
         parent: str("The order of another project this task fulfils: \"project#N\" (from the order letter)"),
       },
       additionalProperties: false,
@@ -1996,8 +2166,21 @@ export function makeTools(host: CrewHost): CrewTool[] {
       if (!isIntegrator(me)) return notIntegrator(me)
       const project = projOf(me)
       const cfg = configFor(me)
-      if (input.task && !input.goal) input.goal = input.task
-      const missing = missingFields(input, cfg).filter((f) => !(input.kind === "plan" && f === "criteria")) // у задачи-плана критерии — приёмки плана
+      // task — номер задачи с папкой (задача 058) или прежнее имя goal (строка не из одних цифр)
+      const taskNum = /^\d{1,5}$/.test(String(input.task ?? "").trim()) ? Number(String(input.task).trim()) : undefined
+      if (taskNum === undefined && input.task && !input.goal) input.goal = input.task
+      const sessionCode = String(input.session ?? "").trim()
+      const partOf = /^\d{1,5}$/.test(String(input.part_of ?? "").trim()) ? Number(String(input.part_of).trim()) : undefined
+      if (sessionCode && !SESSION_CODE_RE.test(sessionCode)) return { content: `Сессия не запущена: код сессии «${sessionCode}» — 1–8 букв или цифр без пробелов, как в журнале хода (С1, С4, С3п; исполнитель — исп).` }
+      if (input.part_of !== undefined && input.part_of !== null && partOf === undefined) return { content: "Задача не поставлена: part_of — номер задачи-родителя (например 45)." }
+      if (input.place !== undefined && input.place !== null && !["own", "task"].includes(String(input.place))) return { content: 'Сессия не запущена: place — "own" (своё дерево и ветка от ветки задачи) или "task" (дерево задачи).' }
+      // папки задач проекта (tasks_dir есть в целевой ветке): номер задачи — номер папки; задача-план живёт по своим номерам (DNC-04)
+      const fm = input.kind === "plan" ? undefined : folderInfo(me.directory, cfg)
+      if (!fm && (taskNum !== undefined || sessionCode || partOf !== undefined))
+        return { content: `Задача не поставлена: в проекте ${project} нет папок задач (каталога tasks_dir «${cfg.tasksDir}» нет в целевой ветке ${cfg.targetBranch}); task, session и part_of — для проекта с папками задач.` }
+      if (taskNum !== undefined && partOf !== undefined) return { content: "Задача не поставлена: task (сессия задачи) и part_of (новая подзадача) вместе не бывают." }
+      // сессия задачи с папкой: обязательна цель сессии; критерии — у задачи (task/message.md)
+      const missing = taskNum !== undefined ? (String(input.goal ?? "").trim() ? [] : ["goal"]) : missingFields(input, cfg).filter((f) => !(input.kind === "plan" && f === "criteria")) // у задачи-плана критерии — приёмки плана
       if (missing.length) return { content: `Задача не поставлена: нет полей ${missing.map((f) => FIELD_RU[f] ?? f).join(", ")} (настройка проекта task_fields). Работа не начинается без критериев приёмки.` }
       const extra = parseExtra(input.extra, cfg)
       if ("error" in extra) return { content: `Задача не поставлена: ${extra.error}` }
@@ -2009,19 +2192,19 @@ export function makeTools(host: CrewHost): CrewTool[] {
       const limit = cfg.spawnLimits[role] ?? cfg.spawnLimits["*"] ?? DEFAULT_SPAWN_LIMIT
       const running = listTasks(project).filter((t) => t.kind === "spawn" && t.role === role && (t.status === "starting" || t.status === "running"))
       const prio = isPriority(input.priority) ? input.priority : cfg.defaultPriority
-      if (prio !== "P0" && running.length >= limit) return { content: `Лимит работающих задач роли ${role} в проекте — ${limit}, уже работают: ${running.map((t) => `#${t.n}`).join(", ")}. Дождись сдачи или отмени (crew_task {action: "cancel"}); авария — priority P0.` }
+      if (prio !== "P0" && running.length >= limit) return { content: `Лимит работающих задач роли ${role} в проекте — ${limit}, уже работают: ${running.map((t) => `${taskNo(t)}`).join(", ")}. Дождись сдачи или отмени (crew_task {action: "cancel"}); авария — priority P0.` }
       const inflight = listTasks(project).filter(isOpen)
       const counted = countedOpen(inflight, cfg.acceptedSlot) // accepted_slot: free — принятые, ждущие уборки, в счёт не идут
       if (prio !== "P0" && counted.length >= cfg.inflightLimit) {
-        if (cfg.acceptedSlot === "free") return { content: `Лимит задач проекта в работе и на приёмке — ${cfg.inflightLimit} (inflight_limit), открыто: ${counted.map((t) => `#${t.n} ${statusRu(t.status)}`).join(", ")}.${inflight.length > counted.length ? ` Принятые, но не очищенные, место не занимают (ждут уборки: ${inflight.length - counted.length}).` : ""} Дождись приёмки; авария — priority P0.` }
+        if (cfg.acceptedSlot === "free") return { content: `Лимит задач проекта в работе и на приёмке — ${cfg.inflightLimit} (inflight_limit), открыто: ${counted.map((t) => `${taskNo(t)} ${statusRu(t.status)}`).join(", ")}.${inflight.length > counted.length ? ` Принятые, но не очищенные, место не занимают (ждут уборки: ${inflight.length - counted.length}).` : ""} Дождись приёмки; авария — priority P0.` }
         // принятые, но не очищенные держат место молча (#9 nova — 11,5 ч): назвать их поимённо с возрастом
-        const stale = inflight.filter((t) => t.status === "accepted").map((t) => `#${t.n} принята ${ago(acceptedAt(t))}, не очищена (приёмщик ${t.reviewer ?? "?"})`)
-        return { content: `Лимит задач проекта в работе и на приёмке — ${cfg.inflightLimit} (inflight_limit), открыто: ${inflight.map((t) => `#${t.n} ${statusRu(t.status)}`).join(", ")}.${stale.length ? ` Место держат принятые, но не очищенные: ${stale.join("; ")} — пусть приёмщик повторит crew_task {action: \"cleanup\"}.` : ""} Дождись приёмки; авария — priority P0.` }
+        const stale = inflight.filter((t) => t.status === "accepted").map((t) => `${taskNo(t)} принята ${ago(acceptedAt(t))}, не очищена (приёмщик ${t.reviewer ?? "?"})`)
+        return { content: `Лимит задач проекта в работе и на приёмке — ${cfg.inflightLimit} (inflight_limit), открыто: ${inflight.map((t) => `${taskNo(t)} ${statusRu(t.status)}`).join(", ")}.${stale.length ? ` Место держат принятые, но не очищенные: ${stale.join("; ")} — пусть приёмщик повторит crew_task {action: \"cleanup\"}.` : ""} Дождись приёмки; авария — priority P0.` }
       }
       // accepted_slot: free — счёт «ждёт уборки»: принятых и не очищенных не меньше cleanup_limit (0 — без предела) — новая работа не ставится
       const waiting = waitingCleanup(inflight)
       if (prio !== "P0" && cfg.acceptedSlot === "free" && cfg.cleanupLimit > 0 && waiting.length >= cfg.cleanupLimit)
-        return { content: `Лимит ожидающих уборки — ${cfg.cleanupLimit} (cleanup_limit), принятых и не очищенных ${waiting.length}: ${waiting.map((t) => `#${t.n} принята ${ago(acceptedAt(t))}, не очищена (приёмщик ${t.reviewer ?? "?"})`).join("; ")} — пусть приёмщик повторит crew_task {action: \"cleanup\"}. Новая работа не ставится, пока их не станет меньше; авария — priority P0.` }
+        return { content: `Лимит ожидающих уборки — ${cfg.cleanupLimit} (cleanup_limit), принятых и не очищенных ${waiting.length}: ${waiting.map((t) => `${taskNo(t)} принята ${ago(acceptedAt(t))}, не очищена (приёмщик ${t.reviewer ?? "?"})`).join("; ")} — пусть приёмщик повторит crew_task {action: \"cleanup\"}. Новая работа не ставится, пока их не станет меньше; авария — priority P0.` }
       // МОДЕЛЬ ПО ВКЛЮЧЁННОМУ НАБОРУ (задача 003). Этап — по виду запуска; ступень: tier, присутствующий во входе, иначе ступень
       // клетки. Этап не описан или набора нет — spawn_models, как прежде; описан, а профиль не находится — отказ до записи задачи.
       const pst = profileState(me.directory)
@@ -2046,6 +2229,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
       const model = explicitModel ?? (chosen ? chosen.model : (cfg.spawnModels[tier] ?? DEFAULT_SPAWN_MODELS[tier]))
       const recTier: Tier = chosen ? chosen.tier : tier // ступень записи при наборе — та, на которой реально запущена сессия
       const title = String(input.title ?? "").trim() || String(input.goal).split(/\r?\n/)[0].slice(0, 60)
+      if (fm) return await spawnInFolder({ me, project, cfg, fm, input, taskNum, code: sessionCode || EXECUTOR_CODE, partOf, role, model, recTier, tier, from: tierCut.from, chosen, title, extra: extra.value })
       // ЗАДАЧА-ПЛАН (план 004): результат — файл плана в репозитории; номер выдаёт плагин (после файлов папки планов
       // и открытых задач-планов), подплан — «родитель.k»
       let plan: TaskPlan | undefined
@@ -2079,12 +2263,12 @@ export function makeTools(host: CrewHost): CrewTool[] {
         if (!order || order.kind !== "order" || order.order_to !== project) return { content: `Заказа ${input.parent} для проекта ${project} нет.` }
         t.parent = par
         order.child = { project, n: t.n }
-        taskEvent(order, me.session, undefined, `принят в работу в ${project}: #${t.n}`)
+        taskEvent(order, me.session, undefined, `принят в работу в ${project}: ${taskNo(t)}`)
         saveTask(t) // место уже в первой записи; пересохранить — только ради parent
       }
       const r = await host.startTask(t)
       if (!r.session) return { content: `Задача ${taskRef(t)} записана, но сессия не запущена: ${r.error ?? "неизвестная ошибка"}. Плагин повторит запуск сам (тем же id сессии — второй не будет).` }
-      return { content: `Задача #${t.n} запущена (${hhmm(Date.now())}): «${t.title}», сессия ${r.session}, роль ${roleKey(project, role)}, модель ${model}, приоритет ${t.priority}${t.worktree ? `, worktree ${t.worktree}, ветка ${t.branch}` : ""}. Отчёт придёт ответом на ${t.qid}: crew_wait {qid: "${t.qid}"} или обычным письмом. Управление — crew_task {n: ${t.n}, action: ...}.` }
+      return { content: `Задача ${taskNo(t)} запущена (${hhmm(Date.now())}): «${t.title}», сессия ${r.session}, роль ${roleKey(project, role)}, модель ${model}, приоритет ${t.priority}${t.worktree ? `, worktree ${t.worktree}, ветка ${t.branch}` : ""}. Отчёт придёт ответом на ${t.qid}: crew_wait {qid: "${t.qid}"} или обычным письмом. Управление — crew_task {n: ${t.n}, action: ...}.` }
     },
   }
 
@@ -2092,13 +2276,14 @@ export function makeTools(host: CrewHost): CrewTool[] {
     name: "crew_task",
     description:
       [
-        "Tasks of the caller's project, by number #N. One line per action: action - who may - parameters - what it does. Roles: integrator = the tab that plans and starts the project's tasks; executor = the session doing the task; reviewer = the tab that checks and lands a submitted task (a free worker tab, a session started for it, the acceptor role when the project says reviewer: acceptor, or the integrator). Texts that go to another tab (submit report, rework remarks, order, push and cancel texts) are read by the owner too: write them in the owner's language named in your system block.",
+        "Tasks of the caller's project, by number (045 for a task with a folder, #N without). One line per action: action - who may - parameters - what it does. Roles: integrator = the tab that plans and starts the project's tasks; executor = the session doing the task; reviewer = the tab that checks and lands a submitted task (a free worker tab, a session started for it, the acceptor role when the project says reviewer: acceptor, or the integrator). Texts that go to another tab (submit report, rework remarks, order, push and cancel texts) are read by the owner too: write them in the owner's language named in your system block.",
         "list - anyone - all? - open tasks by priority; all=true adds finished and cancelled ones.",
         "view - anyone - n - details and history of a task, with its steps, side branches and worktrees (show is a synonym).",
         "assign - integrator - session, goal, criteria, title?, boundaries?, open_questions?, priority?, extra? - give a task to an existing open tab instead of a new session; the tab is woken while the task is open. Refused for the integrator's own session (unless the project sets allow_self_assign) and for a session that already runs a task. extra {id: one line} fills the project's extra task fields (task_extra_fields, see crew_config view).",
         "order - integrator - to \"project.integrator\", goal, criteria, ... - order work from another project: its integrator does it with its own tasks; when its task is accepted the order is done (a quiet summary to you), when cancelled you get a call.",
         "push - integrator - n, text?, to? - nudge a stalled tab now (the reminder counter starts over): to \"executor\" (default) wakes the executor, to \"reviewer\" wakes the reviewer of the task.",
-        "reassign - integrator - n, text? - hand the task to a new session under the same number with a summary of what was done. text = a refinement of the goal: it goes into the new session's first letter as a block before the old goal, wins where they differ and stays in the task history (view). Refine the goal with this same call, never with a second letter after the handover: the new session would start on the old goal and report twice.",
+        "deliver - integrator - n, text - a task led by method sessions (status idle: the last session submitted to you) goes to the plugin's review once: text is the report for the reviewer (what is ready to land). A task with a single executor session goes to review on its submit, as before.",
+        "reassign - integrator - n, text? - hand the task to a new session under the same number with a summary of what was done (a task session: the same code, the next ordinal and a new launch number; the old one is marked handed). text = a refinement of the goal: it goes into the new session's first letter as a block before the old goal, wins where they differ and stays in the task history (view). Refine the goal with this same call, never with a second letter after the handover: the new session would start on the old goal and report twice.",
         "cancel - integrator - n, text? - cancel the task; text goes to the executor. Releases the merge lock if the task held it.",
         "priority - integrator - n, priority P0..P3 - change the priority.",
         "submit - executor - n, text - submit the task's work with the report (what was done, how it was checked, what is left); no qid is needed. The first submission, one after rework or after a sync (the reviewer is woken), a plan task (the plan file and its form are checked). Already submitted: refused.",
@@ -2118,7 +2303,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
     input: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["list", "view", "show", "assign", "order", "push", "reassign", "cancel", "priority", "track", "plan_decide", "submit", "review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleanup", "cleaned"] },
+        action: { type: "string", enum: ["list", "view", "show", "assign", "order", "push", "reassign", "cancel", "priority", "track", "plan_decide", "submit", "deliver", "review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleanup", "cleaned"] },
         to: str("order: the other project's integrator, \"project.integrator\"; push: \"executor\" (default) or \"reviewer\""),
         keep: { type: "array", maxItems: 8, items: { type: "string" }, description: "cleanup: up to 8 worktree paths to keep as evidence" },
         checks: { type: "object", description: "accept: report per acceptance step {step id: what proves it}", additionalProperties: { type: "string" } },
@@ -2130,7 +2315,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         candidate: str("precheck: the checked candidate (branch or hash); with result it finishes the precheck"),
         n: { type: "number", description: "Task number" },
         session: str("assign: the tab (session id) that takes the task"),
-        text: str("submit: the report (what was done, how it was checked, what is left); push / cancel: text for the executor; reassign: the refined goal for the new session's first letter"),
+        text: str("submit: the report (what was done, how it was checked, what is left); push / cancel: text for the executor; reassign: the refined goal for the new session's first letter; deliver: the report for the reviewer"),
         blocking: { type: "number", description: "round (plan recheck): number of blocking remarks" },
         significant: { type: "number", description: "round: number of significant remarks" },
         cosmetic: { type: "number", description: "round: number of cosmetic remarks" },
@@ -2150,7 +2335,10 @@ export function makeTools(host: CrewHost): CrewTool[] {
       const action = ((a) => (a === "view" ? "show" : a === "cleaned" ? "cleanup" : a))(String(input.action ?? ""))
       if (action === "list") {
         const ts = listTasks(project).filter((t) => input.all || isOpen(t)).sort(byPriority)
-        return { content: ts.length ? `Задачи проекта ${project}:\n${ts.map(taskRow).join("\n")}` : `Открытых задач в проекте ${project} нет.` }
+        // старые записи с номерами папок, перенесённые в legacy/ (задача 058), — в полном списке
+        const old = input.all ? listLegacy(project) : []
+        const legacy = old.length ? `\nСтарые записи (перенесены в legacy/, номер отдан папке задачи):\n${old.map((t) => `${taskNo(t)} ${statusRu(t.status)} «${t.title}»`).join("\n")}` : ""
+        return { content: ts.length ? `Задачи проекта ${project}:\n${ts.map(taskRow).join("\n")}${legacy}` : `Открытых задач в проекте ${project} нет.${legacy}` }
       }
       if (action === "assign") {
         if (!isIntegrator(me)) return notIntegrator(me)
@@ -2176,7 +2364,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         saveCard(target)
         postLetter(target.session, { id: taskLetterId(t), from_role: keyOf(me), from_session: me.session, to: target.session, time: Date.now(), qid: t.qid, text: formatTaskLetter(t) })
         host.posted([target.session])
-        return { content: `Задача #${t.n} «${t.title}» отдана вкладке ${target.session} (${tabStatus(target)}). Пока задача открыта, вкладку будят, даже если её закроют. Сдача — crew_task {action: "submit", n: ${t.n}, text}.` }
+        return { content: `Задача ${taskNo(t)} «${t.title}» отдана вкладке ${target.session} (${tabStatus(target)}). Пока задача открыта, вкладку будят, даже если её закроют. Сдача — crew_task {action: "submit", n: ${t.n}, text}.` }
       }
       if (action === "order") {
         if (!isIntegrator(me)) return notIntegrator(me)
@@ -2196,7 +2384,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         postLetter(to, {
           id: `order-${safeKey(project)}-${t.n}`, from_role: keyOf(me), from_session: me.session, to, time: Date.now(),
           text: [
-            `ЗАКАЗ проекта ${project} #${t.n} «${t.title}» (приоритет ${t.priority}) — интегратору ${m[1]}. Сделай его по правилам своего проекта, своими задачами.`,
+            `ЗАКАЗ проекта ${project} ${taskNo(t)} «${t.title}» (приоритет ${t.priority}) — интегратору ${m[1]}. Сделай его по правилам своего проекта, своими задачами.`,
             `ЦЕЛЬ: ${t.goal}`,
             t.criteria ? `КРИТЕРИИ ПРИЁМКИ: ${t.criteria}` : "",
             t.boundaries ? `ГРАНИЦЫ: ${t.boundaries}` : "",
@@ -2205,7 +2393,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           ].filter(Boolean).join("\n"),
         })
         host.posted([to])
-        return { content: `Заказ #${t.n} «${t.title}» отправлен интегратору ${m[1]}. Его ход виден в crew_task {action: "view", n: ${t.n}}; выполнен — придёт сводка.` }
+        return { content: `Заказ ${taskNo(t)} «${t.title}» отправлен интегратору ${m[1]}. Его ход виден в crew_task {action: "view", n: ${t.n}}; выполнен — придёт сводка.` }
       }
       const t = findTask(me, input.n)
       if (!t) return { content: `Задачи #${input.n} в проекте ${project} нет.` }
@@ -2252,14 +2440,23 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const text = String(input.text ?? "").trim()
         if (!text) return { content: `Нужен text: отчёт — что сделано, как проверено, что осталось. crew_task {action: "submit", n: ${t.n}, text: "..."}.` }
         const now = Date.now()
+        const ms = methodSession(t)
         const refusal = submitTask(t, me.session, keyOf(me), text, now)
         if (refusal) return { content: refusal }
-        // отчёт автору — тихо, как у reply_to: придёт с его следующим ходом
         const cards = allCards()
+        if (ms) {
+          // сдача сессии методики (задача 058): интегратору с пробуждением — следующую сессию или приёмку задачи решает он
+          postLetter(t.author, { id: `${now}-${safeKey(me.session)}-${safeKey(t.author)}`, from_role: keyOf(me), from_session: me.session, to: t.author, time: now, reply_to: t.qid, text: `Сессия ${sessionRef(t, ms)} (запуск №${ms.launch}) сдана: ${text}\nДальше — твоё решение: следующая сессия crew_spawn {task: ${t.n}, session: "<код>", goal}; работа готова к вливанию — crew_task {action: "deliver", n: ${t.n}, text}.` })
+          closeAskedByLetter(me.session, [t.author], (s) => cards.filter((c) => c.session === s).map(keyOf), now)
+          host.posted([t.author])
+          log(`submit session ${keyOf(me)} -> ${t.author} task ${taskNo(t)} ${sesLabel(ms)}`)
+          return { content: `Сессия ${sessionRef(t, ms)} сдана (${hhmm(now)}): отчёт ушёл интегратору, приёмки плагина у сессии нет. Остановись — дальше решает интегратор.` }
+        }
+        // отчёт автору — тихо, как у reply_to: придёт с его следующим ходом
         postLetter(t.author, { id: `${now}-${safeKey(me.session)}-${safeKey(t.author)}`, from_role: keyOf(me), from_session: me.session, to: t.author, time: now, wake: false, reply_to: t.qid, text })
         closeAskedByLetter(me.session, [t.author], (s) => cards.filter((c) => c.session === s).map(keyOf), now)
         host.posted([t.author])
-        log(`submit ${keyOf(me)} -> ${t.author} task #${t.n}`)
+        log(`submit ${keyOf(me)} -> ${t.author} task ${taskNo(t)}`)
         return { content: `Задача ${taskRef(t)} сдана (${hhmm(now)}): отчёт ушёл автору, дальше приёмка. Остановись и жди; вернут на доработку — придёт письмо.` }
       }
       if (action === "track") {
@@ -2298,7 +2495,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           if (t.status === "submitted") {
             markPrecheckStale(t, "приёмка начата заново")
             taskEvent(t, me.session, "reviewing", `приёмка начата (${keyOf(me)})`)
-            if (t.executor) quiet(t.executor, `review-start-${safeKey(project)}-${t.n}-${rounds(t)}`, `Задача #${t.n} «${t.title}» на приёмке у ${keyOf(me)}. Жди: на доработку вернут письмом.`)
+            if (t.executor) quiet(t.executor, `review-start-${safeKey(project)}-${t.n}-${rounds(t)}`, `Задача ${taskNo(t)} «${t.title}» на приёмке у ${keyOf(me)}. Жди: на доработку вернут письмом.`)
             if (t.executor) host.posted([t.executor])
           }
           else saveTask(t)
@@ -2330,7 +2527,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         // чистых подряд — на согласование владельцу. Каждый раунд — новая сессия: эта с перепроверки снимается.
         if (action === "round") {
           if (t.plan?.approval && t.plan.approval.decision !== "no") return { content: `План ${t.plan.n} уже согласован владельцем — раундов больше нет; влей его: merge → accept.` }
-          if (!t.plan) return { content: `Вердикт раунда — у задачи-плана; задача #${t.n} обычная (rework / merge / accept).` }
+          if (!t.plan) return { content: `Вердикт раунда — у задачи-плана; задача ${taskNo(t)} обычная (rework / merge / accept).` }
           if (t.status !== "reviewing") return { content: `Сначала crew_task {action: "review", n: ${t.n}} (задача сейчас ${statusRu(t.status)}).` }
           // градации — настройка проекта (plan_grades); числа — полями с id градаций или объектом grades
           const grades = tcfg.planForm.grades
@@ -2442,7 +2639,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           }
           if (sync) return { content: `Задача ${taskRef(t)} возвращена влить свежую ${tcfg.targetBranch} (синхронизация ${t.syncs}, в rework_max не идёт). Исполнитель разбужен; сдаст — тебя разбудят.${lockNote}` }
           if ((t.rework ?? 0) > tcfg.reworkMax) {
-            postLetter(t.author, { id: `rework-max-${safeKey(project)}-${t.n}-${t.rework}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: now, text: `Задача #${t.n} «${t.title}» уходит на доработку ${t.rework}-й раз (предел проекта rework_max ${tcfg.reworkMax}). Похоже, задача поставлена неясно или не по силам исполнителю — спроси владельца: уточнить задачу, передать другой сессии (crew_task reassign) или отменить.` })
+            postLetter(t.author, { id: `rework-max-${safeKey(project)}-${t.n}-${t.rework}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: now, text: `Задача ${taskNo(t)} «${t.title}» уходит на доработку ${t.rework}-й раз (предел проекта rework_max ${tcfg.reworkMax}). Похоже, задача поставлена неясно или не по силам исполнителю — спроси владельца: уточнить задачу, передать другой сессии (crew_task reassign) или отменить.` })
             host.posted([t.author])
           }
           return { content: `Задача ${taskRef(t)} на доработке (круг ${t.rework}). Исполнитель разбужен с замечаниями; сдаст — тебя разбудят.${lockNote}` }
@@ -2499,7 +2696,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           try {
             releaseTaskWindow(t.project, t) // файл окон профиля из дерева принятой задачи снят (задача 003, REQ-22)
           } catch (e) {
-            log(`window file release of #${t.n} failed: ${e}`)
+            log(`window file release of ${taskNo(t)} failed: ${e}`)
           }
           const steps = cleanupSteps(t, tcfg)
           if (!steps.length) return { content: finishCleaned(t, me, "очистка не нужна (cleanup: none)") + warn + (lockFreed ? `
@@ -2559,7 +2756,7 @@ ${lockStillYours(stillHeld.n)}` : "") }
           whom === "reviewer"
             ? `Продолжай приёмку: crew_task {action: "review" | "rework" | "merge" | "accept" | "cleanup", n: ${t.n}} (что дальше — в письме с приёмкой).`
             : `Закончил — сдай: crew_task {action: "submit", n: ${t.n}, text: "..."}; упёрся — в том же отчёте напиши, что мешает.`
-        postLetter(target, { id: `push-${safeKey(project)}-${t.n}-${Date.now()}`, from_role: keyOf(me), from_session: me.session, to: target, time: Date.now(), text: `Подталкивание по задаче #${t.n} «${t.title}»: ${text}\n${how}` })
+        postLetter(target, { id: `push-${safeKey(project)}-${t.n}-${Date.now()}`, from_role: keyOf(me), from_session: me.session, to: target, time: Date.now(), text: `Подталкивание по задаче ${taskNo(t)} «${t.title}»: ${text}\n${how}` })
         const obl = obligationsOf(target)
         for (const o of obl)
           if (o.qid === targetQid) {
@@ -2574,14 +2771,29 @@ ${lockStillYours(stillHeld.n)}` : "") }
         host.posted([target])
         return { content: `Задача ${taskRef(t)}: ${whom === "reviewer" ? "приёмщик" : "исполнитель"} ${target} разбужен.` }
       }
+      // ПРИЁМКА ЗАДАЧИ С СЕССИЯМИ МЕТОДИКИ (задача 058, REQ-09): одна на задачу, по действию интегратора
+      if (action === "deliver") {
+        if (t.status !== "idle") return { content: `deliver — для задачи между сессиями (последняя сессия сдана интегратору); задача ${taskRef(t)} сейчас ${statusRu(t.status)}.${WORKING_STATUSES.includes(t.status) ? " Дождись сдачи сессии." : ""}` }
+        const text = String(input.text ?? "").trim()
+        if (!text) return { content: `Нужен text: что готово к вливанию — отчёт для приёмщика. crew_task {action: "deliver", n: ${t.n}, text: "..."}.` }
+        t.report = text
+        markPrecheckStale(t, "задача передана на приёмку заново")
+        taskEvent(t, me.session, "submitted", "передана на приёмку интегратором (deliver)")
+        host.posted([])
+        return { content: `Задача ${taskRef(t)} передана на приёмку (${hhmm(Date.now())}): ветка ${t.branch ?? "?"}; приёмщика назначит плагин, как после сдачи исполнителя.` }
+      }
       if (action === "cancel") {
         const why = String(input.text ?? "").trim()
         markPrecheckStale(t, "задача отменена")
+        for (const s of t.sessions ?? []) if (s.status === "running") {
+          s.status = "cancelled"
+          s.ended = Date.now()
+        }
         taskEvent(t, me.session, "cancelled", why || undefined)
         try {
           releaseTaskWindow(t.project, t) // и у отменённой задачи (задача 003, REQ-22)
         } catch (e) {
-          log(`window file release of #${t.n} failed: ${e}`)
+          log(`window file release of ${taskNo(t)} failed: ${e}`)
         }
         host.posted(propagateToParent(t))
         const lockHeld = !!t.reviewer && holdsMergeLock(project, t.reviewer, t.n)
@@ -2591,7 +2803,7 @@ ${lockStillYours(stillHeld.n)}` : "") }
         }
         if (t.executor) {
           releaseExecutor(t, t.executor, false)
-          postLetter(t.executor, { id: `cancel-${safeKey(project)}-${t.n}`, from_role: keyOf(me), from_session: me.session, to: t.executor, time: Date.now(), wake: false, text: `Задача #${t.n} «${t.title}» отменена${why ? `: ${why}` : ""}. Работу по ней прекрати, отчёт не нужен.` })
+          postLetter(t.executor, { id: `cancel-${safeKey(project)}-${t.n}`, from_role: keyOf(me), from_session: me.session, to: t.executor, time: Date.now(), wake: false, text: `Задача ${taskNo(t)} «${t.title}» отменена${why ? `: ${why}` : ""}. Работу по ней прекрати, отчёт не нужен.` })
           host.posted([t.executor])
         }
         return { content: `Задача ${taskRef(t)} отменена.${lockHeld ? ` ${LOCK_FREED}` : ""}` }
@@ -2605,6 +2817,14 @@ ${lockStillYours(stillHeld.n)}` : "") }
         const refine = String(input.text ?? "").trim()
         const old = t.executor
         if (refine) t.refinement = { text: refine, at: Date.now(), by: me.session }
+        const prevS = sessionOf(t, old)
+        if (t.folder && prevS) {
+          // задача с сессиями (задача 058, REQ-10): новая сессия того же кода с k+1 и новым номером запуска, прежняя — передана
+          const handoff = old ? handoffOf(t, old) : undefined
+          const s = startSession(t, prevS.code, prevS.goal ?? "", prevS.place, loadConfig(t.directory), me.session)
+          if (handoff) t.handoff = handoff
+          taskEvent(t, me.session, undefined, `сессия ${sesLabel(prevS)} передана сессии ${sesLabel(s)} (запуск №${s.launch})`)
+        } else {
         if (old) {
           t.handoff = handoffOf(t, old)
           releaseExecutor(t, old)
@@ -2613,6 +2833,7 @@ ${lockStillYours(stillHeld.n)}` : "") }
         t.attempt++
         t.kind = "spawn"
         t.executor = plannedSessionId()
+        }
         if (chosen) {
           t.model = chosen.model
           t.tier = chosen.tier
@@ -2631,7 +2852,7 @@ ${lockStillYours(stillHeld.n)}` : "") }
         taskEvent(t, me.session, "starting", `передана новой сессии${old ? ` (была ${old})` : ""}${refine ? `; уточнение при передаче: ${refine}` : ""}`)
         const r = await host.startTask(t)
         const how = [refine ? "с уточнением цели (в первом письме, перед прежней целью)" : "", t.handoff ? "со сводкой сделанного" : ""].filter(Boolean).join(" и ")
-        return { content: r.session ? `Задача ${taskRef(t)} передана новой сессии ${r.session}${how ? ` ${how}` : ""}.` : `Задача #${t.n} записана к передаче${refine ? " с уточнением цели" : ""}, сессия не запущена: ${r.error ?? "?"}. Плагин повторит запуск.` }
+        return { content: r.session ? `Задача ${taskRef(t)} передана новой сессии ${r.session}${how ? ` ${how}` : ""}.` : `Задача ${taskNo(t)} записана к передаче${refine ? " с уточнением цели" : ""}, сессия не запущена: ${r.error ?? "?"}. Плагин повторит запуск.` }
       }
       return { content: `Неизвестное действие «${action}».` }
     },
@@ -2853,7 +3074,7 @@ export function planTaskLetter(t: Task): string {
   const approver = cfg.planApprover === "owner" ? "владелец (командой окна /plans)" : "интегратор (crew_task plan_decide)"
   const strict = f.grades.filter((g) => !g.clean).map((g) => g.name)
   return [
-    `ЗАДАЧА-ПЛАН #${t.n} «${t.title}» от ${t.author_role} (сессия ${t.author}), приоритет ${t.priority}. Составь план ${p.n}${p.parent ? ` — подплан плана ${p.parent}` : ""}. Код не пиши: результат — только файл плана.`,
+    `ЗАДАЧА-ПЛАН ${taskNo(t)} «${t.title}» от ${t.author_role} (сессия ${t.author}), приоритет ${t.priority}. Составь план ${p.n}${p.parent ? ` — подплан плана ${p.parent}` : ""}. Код не пиши: результат — только файл плана.`,
     refinementBlock(t),
     `ИСХОДНАЯ ЗАДАЧА (перепроверка сверит план с ней${t.refinement ? "; действует уточнение выше" : ""}):\n${p.source}`,
     t.boundaries ? `ГРАНИЦЫ (не делаем): ${t.boundaries}` : "",
@@ -2900,10 +3121,13 @@ export function refinementBlock(t: Task): string {
 }
 export function formatTaskLetter(t: Task): string {
   if (t.plan) return planTaskLetter(t)
+  const s = sessionOf(t, t.executor)
+  if (t.folder && s && s.code !== EXECUTOR_CODE) return sessionLetter(t, s)
   return [
-    `ЗАДАЧА #${t.n} «${t.title}» от ${t.author_role} (сессия ${t.author}), приоритет ${t.priority}.`,
+    `ЗАДАЧА ${taskNo(t)} «${t.title}» от ${t.author_role} (сессия ${t.author}), приоритет ${t.priority}.`,
+    t.folder ? `ПАПКА ЗАДАЧИ: ${t.folder}/ — задание task/message.md, журнал log.md.` : "",
     refinementBlock(t),
-    t.refinement ? `ЦЕЛЬ (исходная; действует уточнение выше): ${t.goal}` : `ЦЕЛЬ: ${t.goal}`,
+    t.refinement ? `ЦЕЛЬ (исходная; действует уточнение выше): ${t.goal}` : `ЦЕЛЬ: ${s?.goal && s.goal !== t.goal ? `${s.goal}\nЦЕЛЬ ЗАДАЧИ: ${t.goal}` : t.goal}`,
     t.criteria ? `КРИТЕРИИ ПРИЁМКИ: ${t.criteria}` : "",
     t.boundaries ? `ГРАНИЦЫ (не делаем): ${t.boundaries}` : "",
     t.open_questions ? `ОТКРЫТЫЕ ВОПРОСЫ: ${t.open_questions}` : "",
@@ -2919,6 +3143,23 @@ export function formatTaskLetter(t: Task): string {
     t.plan_step ? `ШАГ ПЛАНА ${t.plan_step.plan}, ${t.plan_step.step} (файл ${t.plan_step.file}): закрыв шаг, отметь в его заголовке «${loadConfig(t.directory).planForm.marks.step_done} <дата>, коммит <hash>» тем же слиянием — без отметки в целевой ветке приёмка не пройдёт.` : "",
     acceptanceForExecutor(t),
     `Когда закончишь — сдай работу: crew_task {action: "submit", n: ${t.n}, text: "что сделано, как проверено, что осталось"}. Упрёшься — в том же отчёте напиши, что мешает. Обычное письмо сдачей не считается. Пока работа не сдана, задача открыта: остановишься без сдачи — получишь напоминание.`,
+  ]
+    .filter(Boolean)
+    .join("\n")
+}
+
+/** Письмо сессии методики (задача 058): задача, сессия с номером запуска, папка задачи, цель сессии; сдача — интегратору. */
+export function sessionLetter(t: Task, s: TaskSession): string {
+  const tree = s.place === "own" && s.worktree ? `WORKTREE ГОТОВ: эта сессия работает в своём дереве ${s.worktree}, ветка ${s.branch} (создал плагин от ветки задачи ${t.branch}). Правь и коммить здесь.` : t.worktree ? `WORKTREE ГОТОВ: эта сессия работает в дереве задачи ${t.worktree}, ветка ${t.branch}. Правь и коммить здесь; другой worktree не создавай.` : t.branch ? `ВЕТКА: ${t.branch}.` : ""
+  return [
+    `ЗАДАЧА ${taskNo(t)} «${t.title}», СЕССИЯ ${sesLabel(s)} (запуск №${s.launch}) от ${t.author_role}, приоритет ${t.priority}.`,
+    `ПАПКА ЗАДАЧИ: ${t.folder}/ — задание task/message.md, журнал log.md.`,
+    refinementBlock(t),
+    `ЦЕЛЬ СЕССИИ: ${s.goal ?? t.goal}`,
+    tree,
+    t.handoff ? `СДЕЛАНО ПРЕЖНЕЙ СЕССИЕЙ (сессия передана тебе):\n${t.handoff}` : "",
+    `Строку запуска «${s.code} 0/0 […] запуск №${s.launch}» в progress.log и запись «пуск» в log.md уже записал плагин; первая твоя строка — старт (progress_line kind start).`,
+    `Когда закончишь — сдай сессию: crew_task {action: "submit", n: ${t.n}, text: "что сделано, как проверено, что осталось"}. Сдача уходит интегратору; приёмки плагина у сессии нет.`,
   ]
     .filter(Boolean)
     .join("\n")
@@ -2965,11 +3206,11 @@ export function expectedLetters(t: Task): Letter[] {
   if (t.status === "rework" && t.executor && t.rework_note)
     out.push({ id: `rework-${p}-${t.n}-${rounds(t) || 1}`, from_role: reviewerRole, from_session: t.reviewer ?? PLUGIN_SENDER, to: t.executor, time: at, text: reworkLetter(t, t.rework_note, reviewerRole) })
   if (t.status === "submitted" && rounds(t) > 0 && t.reviewer && t.report)
-    out.push({ id: `review-again-${p}-${t.n}-${rounds(t)}`, from_role: t.executor_role ?? "исполнитель", from_session: t.executor ?? PLUGIN_SENDER, to: t.reviewer, time: at, text: `Доработка задачи #${t.n} «${t.title}» сдана (круг ${t.rework}):\n${t.report}\nПроверь снова: crew_task {action: "review", n: ${t.n}}, дальше rework или merge → accept.` })
+    out.push({ id: `review-again-${p}-${t.n}-${rounds(t)}`, from_role: t.executor_role ?? "исполнитель", from_session: t.executor ?? PLUGIN_SENDER, to: t.reviewer, time: at, text: `Доработка задачи ${taskNo(t)} «${t.title}» сдана (круг ${t.rework}):\n${t.report}\nПроверь снова: crew_task {action: "review", n: ${t.n}}, дальше rework или merge → accept.` })
   if (t.status === "done") {
     const checks = Object.entries(t.checks ?? {}).map(([k, v]) => `${k}: ${v}`).join("; ")
-    out.push({ id: `cleaned-${p}-${t.n}`, from_role: reviewerRole, from_session: t.reviewer ?? PLUGIN_SENDER, to: t.author, time: at, wake: false, text: `Задача #${t.n} «${t.title}» принята и влита (${t.commit ? `коммит ${t.commit}` : `ветка ${t.branch ?? "?"}`}), очищена. Приёмщик ${reviewerRole}. Шаги: ${checks || "—"}. Перепроверять не нужно.` })
-    if (t.executor) out.push({ id: `cleaned-ex-${p}-${t.n}`, from_role: reviewerRole, from_session: t.reviewer ?? PLUGIN_SENDER, to: t.executor, time: at, wake: false, text: `Задача #${t.n} принята и влита. Работа закончена — сессия закрывается.` })
+    out.push({ id: `cleaned-${p}-${t.n}`, from_role: reviewerRole, from_session: t.reviewer ?? PLUGIN_SENDER, to: t.author, time: at, wake: false, text: `Задача ${taskNo(t)} «${t.title}» принята и влита (${t.commit ? `коммит ${t.commit}` : `ветка ${t.branch ?? "?"}`}), очищена. Приёмщик ${reviewerRole}. Шаги: ${checks || "—"}. Перепроверять не нужно.` })
+    if (t.executor) out.push({ id: `cleaned-ex-${p}-${t.n}`, from_role: reviewerRole, from_session: t.reviewer ?? PLUGIN_SENDER, to: t.executor, time: at, wake: false, text: `Задача ${taskNo(t)} принята и влита. Работа закончена — сессия закрывается.` })
   }
   return out
 }
@@ -3006,14 +3247,14 @@ export function propagateToParent(t: Task): string[] {
   if (!order || order.kind !== "order") return []
   const sent: string[] = []
   const done = t.status === "done"
-  if (isOpen(order)) taskEvent(order, PLUGIN_SENDER, done ? "done" : undefined, done ? `выполнен в ${t.project}: #${t.n} принята` : `задача ${t.project} #${t.n} отменена`)
+  if (isOpen(order)) taskEvent(order, PLUGIN_SENDER, done ? "done" : undefined, done ? `выполнен в ${t.project}: ${taskNo(t)} принята` : `задача ${t.project} ${taskNo(t)} отменена`)
   const id = `order-${done ? "done" : "cancel"}-${safeKey(order.project)}-${order.n}-${safeKey(t.project)}-${t.n}`
   if (!letterExistsFor(order.author, id)) {
     postLetter(order.author, {
       id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: order.author, time: Date.now(), ...(done ? { wake: false } : {}),
       text: done
-        ? `Заказ #${order.n} «${order.title}» выполнен проектом ${t.project} (задача #${t.n} принята и влита${t.commit ? `, коммит ${t.commit}` : ""}).`
-        : `Заказ #${order.n} «${order.title}»: задачу ${t.project} #${t.n} отменили. Спроси интегратора ${t.project} (crew_send {to: "${t.project}.integrator"}) или отмени заказ (crew_task {action: "cancel", n: ${order.n}}).`,
+        ? `Заказ #${order.n} «${order.title}» выполнен проектом ${t.project} (задача ${taskNo(t)} принята и влита${t.commit ? `, коммит ${t.commit}` : ""}).`
+        : `Заказ #${order.n} «${order.title}»: задачу ${t.project} ${taskNo(t)} отменили. Спроси интегратора ${t.project} (crew_send {to: "${t.project}.integrator"}) или отмени заказ (crew_task {action: "cancel", n: ${order.n}}).`,
     })
     sent.push(order.author)
   }

@@ -23,7 +23,7 @@ import { readCatalog } from "./model-catalog.ts"
 import { str } from "./dialog-size.ts"
 import { doctorText, formatStatuses, readStatuses } from "./status.ts"
 import { askText } from "./form-wait.ts"
-import { listTasks, loadTask } from "./tasks.ts"
+import { listTasks, loadTask, taskNo } from "./tasks.ts"
 import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
 
 const BEAT_MS = 1_000
@@ -198,7 +198,7 @@ export default {
         options: waiting.map((t) => ({
           title: str(`${t.project} · ${t.title}`),
           value: `${t.project}#${t.n}`,
-          description: `раундов перепроверки ${t.plan!.rounds.length}${t.plan!.stuck ? " — раунды кончились, решаете по последним замечаниям" : ", два последних чистые"} · задача #${t.n}`,
+          description: `раундов перепроверки ${t.plan!.rounds.length}${t.plan!.stuck ? " — раунды кончились, решаете по последним замечаниям" : ", два последних чистые"} · задача ${taskNo(t)}`,
         })),
       })
       if (!pick) return
@@ -254,7 +254,7 @@ export default {
       let text: string
       try {
         const view = await import("./progress-view.ts")
-        text = view.progressDialog(card?.directory || process.cwd())
+        text = view.progressDialog(card?.directory || process.cwd(), Date.now(), card?.tasksDir)
       } catch (e) {
         text = `Не прочитать ход работ: ${e}`
       }

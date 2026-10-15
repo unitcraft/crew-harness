@@ -19,16 +19,58 @@ export const TASKS = path.join(BASE, "tasks")
 // starting — записана, сессия создаётся; running — в работе; submitted — сдана (отчёт), ждёт приёмщика;
 // reviewing — на приёмке; rework — на доработке; accepted — принята (влита), ждёт очистки; done — принята и убрана, всё
 // закрыто (в старых файлах это слово «cleaned»: читается как done, см. normTask); cancelled — отменена.
-export type TaskStatus = "starting" | "running" | "submitted" | "reviewing" | "rework" | "approval" | "accepted" | "done" | "cancelled"
-export const OPEN_STATUSES: TaskStatus[] = ["starting", "running", "submitted", "reviewing", "rework", "approval", "accepted"]
+// idle (задача 058) — задача с сессиями методики между сессиями: прежняя сессия сдана интегратору, следующей ещё нет; приёмки нет.
+export type TaskStatus = "starting" | "running" | "submitted" | "reviewing" | "rework" | "approval" | "accepted" | "done" | "cancelled" | "idle"
+export const OPEN_STATUSES: TaskStatus[] = ["starting", "running", "submitted", "reviewing", "rework", "approval", "accepted", "idle"]
 /** статусы, в которых исполнитель работает (может сдавать отчёт) */
 export const WORKING_STATUSES: TaskStatus[] = ["starting", "running", "rework"]
 export type TaskEvent = { at: number; by: string; status?: TaskStatus; note?: string }
-/** «#31 «замок вливания»» — номер задачи с названием: по одному номеру не вспомнить, о чём она (владелец, 2026-10-07). */
-export const taskRef = (t: { n: number | string; title?: string }, max = 40): string => {
+/** Номер задачи в показе (задача 058): у задачи с папкой — номер папки тремя цифрами без «#» («045»), без папки — «#88», как раньше. */
+export const taskNo = (t: { n: number | string; folder?: string }): string => (t.folder ? String(t.n).padStart(3, "0") : `#${t.n}`)
+/** «#31 «замок вливания»» — номер задачи с названием: по одному номеру не вспомнить, о чём она (владелец, 2026-10-07); у задачи с
+ *  папкой — «045 «…»» (задача 058). */
+export const taskRef = (t: { n: number | string; title?: string; folder?: string }, max = 40): string => {
   const title = (t.title ?? "").replace(/[«»]/g, "").replace(/\s+/g, " ").trim()
-  return title ? `#${t.n} «${title.length > max ? `${title.slice(0, max - 1)}…` : title}»` : `#${t.n}`
+  return title ? `${taskNo(t)} «${title.length > max ? `${title.slice(0, max - 1)}…` : title}»` : taskNo(t)
 }
+
+// СЕССИИ ЗАДАЧИ (задача 058). Сессия — один запуск агента внутри задачи: исполнитель (код «исп») или сессия методики (С1, С2, С3п,
+// С4…). Своего номера задачи у неё нет: идентификатор — номер задачи, код и порядковый номер кода в задаче («045 С4-3»), в записи и
+// журналах к нему добавляется номер запуска методики №n, сквозной в задаче (тот же, что в строке «запуск №n» журнала хода).
+export const EXECUTOR_CODE = "исп"
+/** running — работает; submitted — сдала интегратору (или работу задачи — у кода «исп»); handed — передана другой сессии; cancelled — задача отменена. */
+export type SessionStatus = "running" | "submitted" | "handed" | "cancelled"
+export type TaskSession = {
+  code: string
+  /** порядковый номер кода в задаче: С4-1, С4-2… */
+  k: number
+  /** номер запуска методики №n, сквозной в задаче */
+  launch: number
+  /** сессия OpenCode */
+  session: string
+  status: SessionStatus
+  /** цель этой сессии (письмо: «ЦЕЛЬ СЕССИИ») */
+  goal?: string
+  /** место: task — дерево и ветка задачи; own — своё дерево и ветка от ветки задачи */
+  place: "task" | "own"
+  worktree?: string
+  branch?: string
+  started: number
+  ended?: number
+  /** отчёт сдачи */
+  report?: string
+}
+/** «С4-3»; у исполнителя — «исп» (одна сессия на задачу, порядковый номер не нужен). */
+export const sesLabel = (s: { code: string; k: number }) => (s.code === EXECUTOR_CODE ? EXECUTOR_CODE : `${s.code}-${s.k}`)
+/** Сессия записи по id сессии OpenCode. */
+export const sessionOf = (t: { sessions?: TaskSession[] }, id: string | undefined): TaskSession | undefined => (id ? t.sessions?.find((s) => s.session === id) : undefined)
+/** Задача ведётся сессиями методики: нынешняя сессия — не «исп» (её сдача идёт интегратору, приёмка плагина — по deliver). */
+export const methodSession = (t: { sessions?: TaskSession[]; executor?: string }): TaskSession | undefined => {
+  const s = sessionOf(t, t.executor)
+  return s && s.code !== EXECUTOR_CODE ? s : undefined
+}
+/** «045 С4-3» — сессия задачи; у исполнителя и приёмщика — «060 исп» / «060 прм». */
+export const sessionRef = (t: { n: number | string; folder?: string }, s: { code: string; k: number }) => `${taskNo(t)} ${sesLabel(s)}`
 
 /** Как запущена сессия при включённом наборе: этап, набор, семья, ступень, модель и откуда окно (profile — файл окон
  *  в worktree; snapshot — по снимку; general — окно из общих настроек: приёмка, задача без worktree, набор недопустим). */
@@ -77,8 +119,9 @@ export type Task = {
   qid: string
   status: TaskStatus
   /** spawn — сессия создана плагином; assign — задачу взяла вкладка владельца; order — заказ в другой проект (своей
-   *  сессии нет: делает интегратор проекта-исполнителя своими задачами, у них parent — этот заказ) */
-  kind: "spawn" | "assign" | "order"
+   *  сессии нет: делает интегратор проекта-исполнителя своими задачами, у них parent — этот заказ); external — номер взял агент
+   *  вне OpenCode (scripts/task-number.mjs, задача 058): запись только занимает номер */
+  kind: "spawn" | "assign" | "order" | "external"
   /** order: проект-исполнитель и его задача, взявшая заказ */
   order_to?: string
   child?: { project: string; n: number }
@@ -141,6 +184,13 @@ export type Task = {
   kept?: { path: string; at: number; by: string }[]
   /** побочные ветки и деревья задачи (задача 023; поле `extra` занято дополнительными полями проекта): track и автозапись; cleanup убирает всё, кроме деревьев kept */
   side?: SideItem[]
+  /** папка задачи от корня репозитория («doc/tasks/045-runner-registry», задача 058): номер задачи — номер папки; без папки — «#N» */
+  folder?: string
+  /** сессии задачи (задача 058): по записи на запуск, в порядке запуска */
+  sessions?: TaskSession[]
+  /** подзадача: номер задачи-родителя; у родителя — номера подзадач */
+  part_of?: number
+  parts?: number[]
   history: TaskEvent[]
   created: number
   updated: number
@@ -209,43 +259,51 @@ export function listTasks(project?: string): Task[] {
   return out.sort((a, b) => a.project.localeCompare(b.project) || a.n - b.n)
 }
 
-/** Номера папок задач проекта `doc/tasks/NNN-<slug>/` в каталоге `dir` (нет папки — пусто). */
-export function docTaskNumbers(dir: string | undefined): number[] {
-  if (!dir) return []
-  try {
-    const d = path.join(dir, "doc", "tasks")
-    if (!existsSync(d)) return []
-    return readdirSync(d)
-      .map((f) => /^(\d{3})-/.exec(f)?.[1])
-      .filter(Boolean)
-      .map(Number)
-  } catch {
-    return []
-  }
-}
-
-/** Новая задача: следующий свободный номер проекта (после номеров папок doc/tasks проекта), файл создаётся атомарно. */
+/** Новая задача: следующий свободный номер проекта, файл создаётся атомарно (флаг wx: из двух процессов, взявших один номер,
+ *  проходит один, второй берёт следующий). opts.used — номера, занятые вне записей (папки задач во всех деревьях и ветках, задача
+ *  058: task-numbers.ts); opts.n — ровно этот номер (папка уже есть): занят — ошибка EEXIST, следующий не берётся. */
 // place — место задачи (worktree, ветка) по номеру и слагу: пишется ВМЕСТЕ с задачей, первой же записью. Раньше его
 // дописывали вторым сохранением, и сервер, подхватив задачу между ними, запускал её без места (план 002.6, дефект 3).
-export function createTask(fields: Omit<Task, "n" | "history" | "created" | "updated" | "executors" | "attempt" | "slug"> & { slug?: string }, place?: (n: number, slug: string) => Partial<Task>): Task {
+export function createTask(fields: Omit<Task, "n" | "history" | "created" | "updated" | "executors" | "attempt" | "slug"> & { slug?: string }, place?: (n: number, slug: string) => Partial<Task>, opts: { used?: number[]; n?: number; fill?: (n: number, slug: string) => Partial<Task> } = {}): Task {
   const dir = path.join(TASKS, safeKey(fields.project))
   mkdirSync(dir, { recursive: true })
   const used = readdirSync(dir).map((f) => /^(\d+)\.json$/.exec(f)?.[1]).filter(Boolean).map(Number)
-  // ВРЕМЕННО (владелец, 2026-10-15): номер поручения не совпадает с номером папки doc/tasks/NNN-* проекта — счёт идёт
-  // после наибольшего из обоих, пока две нумерации не сведены в одну. Папок нет (проект их не ведёт) — счёт как раньше.
-  let n = Math.max(0, ...used, ...docTaskNumbers(fields.directory)) + 1
+  let n = opts.n ?? Math.max(0, ...used, ...(opts.used ?? [])) + 1
   const now = Date.now()
   for (;;) {
     const t: Task = { ...fields, slug: fields.slug ?? slugify(fields.title), n, executors: [], attempt: 1, history: [{ at: now, by: fields.author, status: fields.status, note: "поставлена" }], created: now, updated: now }
+    if (opts.fill) Object.assign(t, opts.fill(n, t.slug))
     if (place) Object.assign(t, place(n, t.slug))
     try {
       writeFileSync(taskFile(fields.project, n), JSON.stringify(t, null, 1), { flag: "wx" })
       return t
     } catch (e: any) {
-      if (e?.code !== "EEXIST") throw e
+      if (e?.code !== "EEXIST" || opts.n !== undefined) throw e
       n++
     }
   }
+}
+
+/** Перенести старую закрытую запись с номером n в tasks/<проект>/legacy/ без изменений (задача 058, переход): номер освобождается
+ *  для задачи с папкой. Повтор номера в legacy — имя «n-2.json» и далее. Возвращает путь переноса. */
+export function moveToLegacy(project: string, n: number): string {
+  const dir = path.join(TASKS, safeKey(project), "legacy")
+  mkdirSync(dir, { recursive: true })
+  let dest = path.join(dir, `${n}.json`)
+  for (let k = 2; existsSync(dest); k++) dest = path.join(dir, `${n}-${k}.json`)
+  renameSync(taskFile(project, n), dest)
+  changed = true
+  return dest
+}
+/** Старые записи, перенесённые в legacy/ (задача 058): видны в crew_task list all. */
+export function listLegacy(project: string): Task[] {
+  const dir = path.join(TASKS, safeKey(project), "legacy")
+  if (!existsSync(dir)) return []
+  return readdirSync(dir)
+    .filter((f) => /^\d+(-\d+)?\.json$/.test(f))
+    .map((f) => normTask(readJson<Task>(path.join(dir, f))))
+    .filter((t): t is Task => !!t)
+    .sort((a, b) => a.n - b.n)
 }
 
 /** Раунд перепроверки плана: вердикт проверяющего по градациям замечаний. */
@@ -322,8 +380,8 @@ export function slugify(title: string): string {
   return s.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "") || "task"
 }
 
-/** Подстановка {repo} {n} {slug} {project} в шаблон имени ветки или папки. */
-export const fillName = (tpl: string, v: { repo: string; n: number; slug: string; project: string }) =>
+/** Подстановка {repo} {n} {slug} {project} в шаблон имени ветки или папки ({n} задачи с папкой — три цифры, задача 058). */
+export const fillName = (tpl: string, v: { repo: string; n: number | string; slug: string; project: string }) =>
   tpl.replace(/\{repo\}/g, v.repo).replace(/\{n\}/g, String(v.n)).replace(/\{slug\}/g, v.slug).replace(/\{project\}/g, v.project)
 
 /** id письма с задачей: из проекта, номера и попытки — повтор запуска не кладёт второе письмо. */
@@ -338,5 +396,5 @@ export function letterExists(key: string, id: string): boolean {
 const PRIORITY_RANK: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3 }
 export const byPriority = (a: Task, b: Task) => (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9) || a.created - b.created
 
-const STATUS_RU: Record<TaskStatus, string> = { starting: "запускается", running: "в работе", submitted: "сдана", reviewing: "на приёмке", rework: "на доработке", approval: "на согласовании у владельца", accepted: "принята", done: "готова", cancelled: "отменена" }
+const STATUS_RU: Record<TaskStatus, string> = { starting: "запускается", running: "в работе", submitted: "сдана", reviewing: "на приёмке", rework: "на доработке", approval: "на согласовании у владельца", accepted: "принята", done: "готова", cancelled: "отменена", idle: "ждёт следующей сессии" }
 export const statusRu = (s: TaskStatus) => STATUS_RU[s] ?? s

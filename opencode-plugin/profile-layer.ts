@@ -14,7 +14,7 @@ import { BASE } from "./paths.ts"
 import { SETTINGS_FILE, projectFor, rawSettingsFor, workingSettings, writeSettings } from "./settings.ts"
 import { limitsText, log, projectOf, settingsContext } from "./core.ts"
 import * as P from "./profiles.ts"
-import { type Task, listTasks } from "./tasks.ts"
+import { type Task, listTasks, taskNo } from "./tasks.ts"
 import { type SyncReport, type WindowPlan, qualifying, syncTaskWindow, syncWindows, windowNotes, windowPlanOf, windowProblems } from "./profile-windows.ts"
 
 const isObj = (v: any): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v)
@@ -296,7 +296,7 @@ export function profileProblems(service = false): string[] {
       for (const t of listTasks(ps.project)) {
         if (t.status !== "submitted" || t.reviewer) continue
         const r = P.resolveStageProfile(ps.state, P.stageOfLaunch(t, "reviewer"), { taskTier: t.tier })
-        if (r && "refuse" in r) out.push(`проект ${ps.project}: задача #${t.n} «${t.title}»: сдана, приёмщика нет — ${r.refuse}`)
+        if (r && "refuse" in r) out.push(`проект ${ps.project}: задача ${taskNo(t)} «${t.title}»: сдана, приёмщика нет — ${r.refuse}`)
       }
     } catch (e) {
       log(`profile problems of ${p.name} failed: ${e}`)

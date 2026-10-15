@@ -163,20 +163,20 @@ export function dialogText(tasks: ProgressTask[], now: number, scan?: { trees: n
 const scanner = createScanner()
 
 /** Строки блока для вкладки с каталогом `dir`: обход не чаще раза в 5 секунд, между обходами — из кэша. Ошибка — пустой блок. */
-export function progressPanel(dir: string | undefined, now: number = Date.now()): PanelRow[] {
+export function progressPanel(dir: string | undefined, now: number = Date.now(), rel?: string): PanelRow[] {
   try {
     if (!dir) return []
     const th = thresholdsFromEnv(process.env)
-    return panelLines(summarizeTasks(scanner.scan(dir, now), now, th), now)
+    return panelLines(summarizeTasks(scanner.scan(dir, now, rel), now, th), now)
   } catch {
     return []
   }
 }
 
 /** Текст диалога `/crew-progress`: журналы разбираются все за один вызов, начиная со свежих. */
-export function progressDialog(dir: string | undefined, now: number = Date.now()): string {
+export function progressDialog(dir: string | undefined, now: number = Date.now(), rel?: string): string {
   if (!dir) return OUTSIDE_TEXT
-  const scan = scanner.scanAll(dir, now)
+  const scan = scanner.scanAll(dir, now, rel)
   if (!scan.repo) return OUTSIDE_TEXT
   return dialogText(summarizeTasks(scan, now, thresholdsFromEnv(process.env)), now, { trees: scan.trees.length, journals: scan.journals })
 }
