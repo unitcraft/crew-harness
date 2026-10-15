@@ -166,6 +166,18 @@ Every window shows one line `Ждут вас: N · с ЧЧ:ММ · <project> <#N
 open. With `owner_system_notify: true` the project also gets a Windows system notification (built-in PowerShell, no installs and no rights;
 off by default).
 
+### A hung turn is interrupted and resumed by the plugin (tasks 036, 048)
+
+A tab whose window says the turn runs, while the model has been silent for 15 minutes (`CREW_HARNESS_HUNG_MS`) with no
+`idle` row after its last answer, is hung. A running tool, a running `crew_watch` and an open question to the owner are not a hang.
+The plugin interrupts such a turn itself — `session.interrupt` of the plugin context with `resume: true`, the same call the window
+makes on Esc — and wakes the tab with a service letter «Ход завис и прерван плагином в ЧЧ:ММ; продолжай с того места, где
+остановился»; the task of the tab gets a line in its history, the plugin log a `hung turn resumed` line, and you have nothing to do.
+One try per hang, at most 2 tries per session in an hour. When the plugin cannot (OpenCode has no `session.interrupt` — the log line
+`hung turn self-recovery: off` at start and `crew_doctor` say so; the interrupt found nothing to stop; the turn is still hung
+5 minutes after the try; the limit), the tab is shown as waiting for you with «ход завис с ЧЧ:ММ: нажмите Esc в окне и напишите
+«продолжай»» and the log says why (`hung turn not resumed`).
+
 ### Session status
 
 The service plugin keeps `<mailbox>/status/<session id>.json` for open tabs, task sessions and sessions with watches

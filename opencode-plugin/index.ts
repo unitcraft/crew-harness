@@ -141,6 +141,7 @@ import { forEachBudget, background, stepBudget } from "./async-git.ts"
 import { ensureWorktree, fileAtAsync, gitTraces, leftoversOf, mergeHolder, mergeLockAbandoned, reviewLetter, wakeLockWaiters } from "./review.ts"
 import { precheckLines, releaseLandedLock } from "./precheck.ts"
 import { noteLoopLag, registerJournalTools } from "./journal.ts"
+import { type ResumeTry, RESUME_WINDOW_MS, canInterrupt, interruptTurn, resumeLetter, resumeNote, resumeVerdict } from "./hung-resume.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
 
@@ -921,6 +922,43 @@ export default {
         log(`hung turn note failed: ${e}`)
       }
     }
+    // САМОВОССТАНОВЛЕНИЕ ЗАВИСШЕГО ХОДА (задача 048, hung-resume.ts): плагин прерывает ход сам и будит вкладку письмом «продолжай».
+    // true — зависание взято на себя (попытка удалась или ждёт итога): владельцу «нажмите Esc» не показывается. false — как в 036.
+    const hungInterrupt = canInterrupt(ctx?.session)
+    log(`hung turn self-recovery: ${hungInterrupt ? "on (session.interrupt)" : "off (no session.interrupt in this OpenCode; the owner is told to press Esc)"}`)
+    const resumeTries = new Map<string, ResumeTry[]>()
+    const resumeOwnerSaid = new Map<string, number>()
+    async function selfResume(c: Card, since: number, t: number): Promise<boolean> {
+      try {
+        const tries = (resumeTries.get(c.session) ?? []).filter((x) => t - x.at < RESUME_WINDOW_MS || x.since === since)
+        resumeTries.set(c.session, tries)
+        const v = resumeVerdict(tries, since, t, hungInterrupt)
+        if (v.act === "wait") return true
+        if (v.act === "owner") {
+          if (resumeOwnerSaid.get(c.session) !== since) log(`hung turn not resumed: ${keyOf(c)} (${c.session}) silent since ${hm(since)}: ${v.why}; the owner is told`)
+          resumeOwnerSaid.set(c.session, since)
+          return false
+        }
+        const r = await interruptTurn(ctx.session, c.session)
+        tries.push({ since, at: t, ok: r.ok })
+        if (!r.ok) {
+          resumeOwnerSaid.set(c.session, since)
+          log(`hung turn not resumed: ${keyOf(c)} (${c.session}) silent since ${hm(since)}: ${r.why}; the owner is told`)
+          return false
+        }
+        postLetter(c.session, { id: `hung-resume-${safeKey(c.session)}-${t}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: c.session, time: t, text: resumeLetter(t) })
+        for (const ref of [c.task, c.review]) {
+          const task = ref ? loadTask(ref.project, ref.n) : undefined
+          if (task && (task.executor === c.session || task.reviewer === c.session)) taskEvent(task, PLUGIN_SENDER, undefined, resumeNote(since, t))
+        }
+        log(`hung turn resumed: ${keyOf(c)} (${c.session}) silent since ${hm(since)}, interrupted at ${hm(t)}, the tab is asked to go on (try ${tries.filter((x) => t - x.at < RESUME_WINDOW_MS).length} in an hour)`)
+        void deliver(c)
+        return true
+      } catch (e) {
+        log(`hung turn self-recovery failed: ${e}`)
+        return false
+      }
+    }
     async function noteStale(c: Card, tab: any, staleSince: number, t: number) {
       try {
         const was = staleDiagAt.get(c.session)
@@ -985,8 +1023,11 @@ export default {
         // вопрос владельцу на экране (инструмент question ждёт ответа дольше окна открытого хода) - не залипший ход (задача 040)
         const staleSince = tab?.tab.busy && !(formOpen.has(c.session) && (await pendingTool(c.session))) ? await staleBusy(c.session, t) : 0
         await noteStale(c, tab, staleSince, t)
-        const hungSince = tab?.tab.busy && !staleSince ? await hungTurn(c.session, t, ws.length > 0) : 0
-        await noteHung(c, tab, hungSince, t)
+        // вопрос владельцу на экране (вопросник, задача 040) - не зависание (задача 048)
+        const hungAt = tab?.tab.busy && !staleSince && !formOpen.has(c.session) ? await hungTurn(c.session, t, ws.length > 0) : 0
+        await noteHung(c, tab, hungAt, t)
+        // зависание взял на себя плагин (задача 048): ход прерван и вкладка разбужена письмом - владельцу ничего делать не нужно
+        const hungSince = hungAt && (await selfResume(c, hungAt, t)) ? 0 : hungAt
         const busy = !staleSince && !hungSince && (!!tab?.tab.busy || !!c.busy || (await openTurn(c.session, t)))
         let end: Awaited<ReturnType<typeof turnEnd>> = undefined
         if (!busy) {
@@ -1731,6 +1772,7 @@ export default {
       const out: string[] = []
       for (const [name, f] of [["session.prompt", ctx?.session?.prompt], ["session.create", ctx?.session?.create], ["session.get", ctx?.session?.get], ["session.hook", ctx?.session?.hook]] as const)
         if (typeof f !== "function") out.push(`в этой версии OpenCode у плагина нет ${name} — доставка или задачи не работают`)
+      if (!hungInterrupt) out.push("в этой версии OpenCode у плагина нет session.interrupt — зависший ход плагин сам не снимает: владельцу приходит «нажмите Esc в окне и напишите «продолжай»» (задача 048)")
       const probe = allCards()[0]
       if (probe) {
         const row = await sessionFromDb(probe.session)
