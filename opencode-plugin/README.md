@@ -63,7 +63,10 @@ background); a task session may run with no window at all. Formerly `opencode-pe
   The keys: `config-schema.ts`;
 - **roles**: a new tab is `worker` (shared: tabs within it differ by session id; `assistant` is an
   alias). `integrator` is exclusive, one holder per project, plus the project's `exclusive_roles`
-  (and an optional `project_rules` text: English, appended to the end of the tab's system block). An exclusive role
+  (and an optional `project_rules` text: English, appended to the end of the tab's system block). The
+  `owner_language` setting (an English language name, default `Russian`) is the language of everything the owner
+  reads — replies, questions, options, reasons, and letters to other tabs and task reports, which the owner sees in
+  popups and in the recipient's tab; the system block takes it from the setting. An exclusive role
   is held by an atomic lock: refused while the holder's tab is open (unless `force`), free the
   moment it closes. A letter to a shared role with several open holders is refused with the list
   (address a session id);

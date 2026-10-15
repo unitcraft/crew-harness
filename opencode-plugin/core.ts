@@ -13,7 +13,7 @@ import { rotateLog } from "./housekeeping.ts"
 import { type Projects, parseProjects as parseProjectsWith, projectFor, rawSettingsFor, readSettingsFolder, workingSettings, writeSettings } from "./settings.ts"
 import { SCHEMA, guideText, invalid } from "./config-schema.ts"
 import { type AnswerMap, answerNotes, normalizeAnswerMax, normalizeAnswerMode } from "./answer-parse.ts"
-import { EXTRA_FIELDS_MAX, EXTRA_ID_RE, RESERVED_FIELD_IDS } from "./config-schema.ts"
+import { EXTRA_FIELDS_MAX, EXTRA_ID_RE, RESERVED_FIELD_IDS, OWNER_LANGUAGE_RE, DEFAULT_OWNER_LANGUAGE } from "./config-schema.ts"
 export { PROJECT_RE, type Project, type Projects, settingsProblems } from "./settings.ts"
 import { PROJECT_RE, settingsProblems, modelsDefined } from "./settings.ts"
 import { background } from "./async-git.ts"
@@ -188,6 +188,8 @@ export type AcceptanceStep = { id: string; text: string; required: boolean }
 export type CrewConfig = {
   exclusive: Set<string>
   projectRules: string
+  /** язык владельца (owner_language, задача 054): английское имя языка для правила системного блока; умолчание Russian */
+  ownerLanguage: string
   tiers: Record<Tier, string[]>
   spawnLimits: Record<string, number>
   spawnModels: Partial<Record<Tier, string>>
@@ -361,6 +363,7 @@ export function loadConfig(dir: string): CrewConfig {
   return {
     exclusive: new Set([...BASE_EXCLUSIVE, ...roles]),
     projectRules: typeof j.project_rules === "string" ? j.project_rules.trim() : "",
+    ownerLanguage: typeof j.owner_language === "string" && OWNER_LANGUAGE_RE.test(j.owner_language.trim()) ? j.owner_language.trim() : DEFAULT_OWNER_LANGUAGE,
     tiers,
     spawnLimits,
     spawnModels,
@@ -1750,7 +1753,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
   const crewSend: CrewTool = {
     name: "crew_send",
     description:
-      "Send a letter to another tab. `to`: a role of the caller's project (worker, integrator, ...), `project.role`, a session id, `all` or `project.all`. It wakes the recipient only if its tab is open in a live window (or it is a crew_spawn task); otherwise it waits. wake=false: no wake -- the letter joins the recipient's next turn (for status / FYI). expect_reply=true: a question with a qid; wait for the answer with crew_wait in the same turn. reply_to: the qid you answer. Empty acknowledgements are not sent.",
+      "Send a letter to another tab. `to`: a role of the caller's project (worker, integrator, ...), `project.role`, a session id, `all` or `project.all`. It wakes the recipient only if its tab is open in a live window (or it is a crew_spawn task); otherwise it waits. wake=false: no wake -- the letter joins the recipient's next turn (for status / FYI). expect_reply=true: a question with a qid; wait for the answer with crew_wait in the same turn. reply_to: the qid you answer. Empty acknowledgements are not sent. The owner reads the letter text too (a popup and the recipient's tab): write it in the owner's language named in your system block; code, commands and identifiers stay as they are.",
     input: {
       type: "object",
       properties: {
@@ -1960,7 +1963,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
     name: "crew_spawn",
     description:
       [
-        "Integrator only: start a task #N in a new session (it runs in the OpenCode server even with no window). The report comes back as an answer to the task's qid: crew_wait {qid}. Manage tasks with crew_task.",
+        "Integrator only: start a task #N in a new session (it runs in the OpenCode server even with no window). The report comes back as an answer to the task's qid: crew_wait {qid}. Manage tasks with crew_task. The owner reads title, goal and criteria too: write them in the owner's language named in your system block.",
         "goal, criteria - required (the project may require more: boundaries, open_questions; task_fields). title? priority? P0..P3.",
         "tier heavy|medium|light - picks the model: by default claude-code opus|sonnet|haiku, spawn_models of the project overrides; an enabled model-profile set (/crew-sets) overrides both for the stage it describes (the tier then picks the tier inside the set's family). model - explicit provider/id[#variant]; required when the project has no model settings (ask the owner first).",
         "role? - role of the new session, default worker. extra {id: one line up to 300 characters} - the project's extra task fields (task_extra_fields; crew_config view lists them). parent \"project#N\" - the order of another project this task fulfils.",
@@ -2088,7 +2091,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
     name: "crew_task",
     description:
       [
-        "Tasks of the caller's project, by number #N. One line per action: action - who may - parameters - what it does. Roles: integrator = the tab that plans and starts the project's tasks; executor = the session doing the task; reviewer = the tab that checks and lands a submitted task (a free worker tab, a session started for it, the acceptor role when the project says reviewer: acceptor, or the integrator).",
+        "Tasks of the caller's project, by number #N. One line per action: action - who may - parameters - what it does. Roles: integrator = the tab that plans and starts the project's tasks; executor = the session doing the task; reviewer = the tab that checks and lands a submitted task (a free worker tab, a session started for it, the acceptor role when the project says reviewer: acceptor, or the integrator). Texts that go to another tab (submit report, rework remarks, order, push and cancel texts) are read by the owner too: write them in the owner's language named in your system block.",
         "list - anyone - all? - open tasks by priority; all=true adds finished and cancelled ones.",
         "view - anyone - n - details and history of a task, with its steps, side branches and worktrees (show is a synonym).",
         "assign - integrator - session, goal, criteria, title?, boundaries?, open_questions?, priority?, extra? - give a task to an existing open tab instead of a new session; the tab is woken while the task is open. Refused for the integrator's own session (unless the project sets allow_self_assign) and for a session that already runs a task. extra {id: one line} fills the project's extra task fields (task_extra_fields, see crew_config view).",
@@ -2639,7 +2642,7 @@ ${lockStillYours(stillHeld.n)}` : "") }
         "view - anyone - effective values and where each comes from (default, the committed file, the local option of opencode.jsonc), plus uncommitted edits (show is a synonym). Model profiles come first: model_profiles = families/tiers -> model, profile_sets = named sets of stages, profile_set = the enabled set (only a person changes it, /crew-sets use|off); the summary says 'sets in the file: N; enabled: name or none' - never answer 'no sets' from 'not enabled'; details: crew_help.",
         "set - integrator - values {key: value; null removes a key} - checks every value and writes the working copy; it applies once committed to the settings branch. Keys changed by people only (profile_set, answer_mode, answer_max) are refused.",
         "apply_template - integrator - writes the standard template (families claude/codex/kimi, sets, profile_set codex, tier_max light, branch and worktree names) into the file; the project's own keys win; commit the file or the old state stays.",
-        "Planning keys (plan tasks: crew_spawn kind plan): plans_dir (folder of plan files in the repository, default docs/plans), plan_approver (owner = the owner decides with /plans in the window; integrator = the integrator decides with crew_task plan_decide), plan_acceptance (steps of the plan recheck: id, text, required), plan_grades (grades of remarks and which of them keep a round clean), plan_clean_rounds, plan_rounds_max, plan_steps (auto|manual: start the tasks of a landed plan's steps automatically). project_rules - English text appended to the end of every tab's system block.",
+        "Planning keys (plan tasks: crew_spawn kind plan): plans_dir (folder of plan files in the repository, default docs/plans), plan_approver (owner = the owner decides with /plans in the window; integrator = the integrator decides with crew_task plan_decide), plan_acceptance (steps of the plan recheck: id, text, required), plan_grades (grades of remarks and which of them keep a round clean), plan_clean_rounds, plan_rounds_max, plan_steps (auto|manual: start the tasks of a landed plan's steps automatically). project_rules - English text appended to the end of every tab's system block. owner_language - the owner's language as an English name (default Russian): every tab writes what the owner reads in it, letters to other tabs included.",
       ].join("\n"),
     input: {
       type: "object",

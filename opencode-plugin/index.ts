@@ -1743,17 +1743,19 @@ export default {
         // ПОДСКАЗКА — НЕИЗМЕННАЯ, пока не сменилась роль: системная часть стоит перед всей историей, и любое её
         // изменение заново оплачивает историю (замер 2026-10-04). Соседи — crew_list.
         // Правила проекта (project_rules) — в конец: их изменение, как и смена роли, один раз заново оплачивает историю.
-        const rules = loadConfig(card.directory).projectRules
+        // Язык владельца (owner_language, задача 054) — из настроек: письма вкладкам владелец тоже читает (уведомление, вкладка получателя).
+        const cfg = loadConfig(card.directory)
+        const rules = cfg.projectRules
         ev.system.push({
           type: "text",
           text:
             `crew-harness: You are the crew-harness tab with the role "${card.role}" in project ${projOf(card)} (address ${keyOf(card)}), repository ${card.repo || "?"}, session ${card.session}. ` +
             `Name a task with its title: "#31 "merge lock"" at the first mention in a reply, then just "#31". ` +
             `Ask the owner for a decision with the question tool: one decision, 2-4 options, the recommended one first marked "(Recommended)" with the reason; ` +
-            `do not ask a question in prose at the end of a reply - only the question tool shows it to the owner. ` +
-            `Everything the owner reads (replies, questions, option texts, reasons) is in Russian; code, commands and identifiers stay as they are. ` +
-            `Create a task (crew_spawn, crew_task assign or order) only when the owner says to create one; you may propose creating a task and explain why you think it is needed. ` +
-            `A task is what changes code or texts on main and needs independent acceptance. ` +
+            `do not ask a question in prose at the end of a reply - only the question tool reaches the owner. ` +
+            `Everything the owner reads (replies, questions, option texts, reasons, letters to other tabs and task reports) is in ${cfg.ownerLanguage}; code, commands and identifiers stay as they are. ` +
+            `Create a task (crew_spawn, crew_task assign or order) only when the owner says to create one; you may propose creating a task and explain why. ` +
+            `A task changes code or texts on main and needs independent acceptance. ` +
             `Not tasks: an answer to a question, a fact check, an analysis, an edit of 1-3 lines (made by the integrator, or by a worker on the owner's word), a repeat of an already cancelled task. ` +
             `Help on the tools: crew_help.` +
             (rules ? ` Project rules: ${rules}` : ""),
