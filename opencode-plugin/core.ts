@@ -1153,7 +1153,9 @@ export function formatLetters(letters: Letter[], me: Card): string {
 export const OBLIGATIONS = path.join(BASE, "obligations")
 // nudges — сколько напоминаний отправлено (предел — push_max проекта); empty — пустых ходов подряд (предел —
 // push_empty_turns); stuck — вкладка застряла: напоминаний больше нет, спросившему ушёл вызов (снимает crew_task push).
-export type Obligation = { qid: string; from_session: string; from_role: string; at: number; nudges: number; empty?: number; stuck?: boolean; task?: string }
+// Рабочий ход (с вызовом инструментов) обнуляет nudges (задача 043, L1). stuckAt, stuckWhat — когда и почему застряла:
+// строка «застряла с ЧЧ:ММ: <что>» в /crew и в боковой панели, пока признак не снят (задача 043, L3).
+export type Obligation = { qid: string; from_session: string; from_role: string; at: number; nudges: number; empty?: number; stuck?: boolean; stuckAt?: number; stuckWhat?: string; task?: string }
 const obligationFile = (session: string) => path.join(OBLIGATIONS, `${safeKey(session)}.json`)
 export const obligationsOf = (session: string): Obligation[] => readJson<Obligation[]>(obligationFile(session)) ?? []
 export function saveObligations(session: string, list: Obligation[]) {
@@ -1326,8 +1328,8 @@ acceptor — роль приёмщика (разделяемая) при нас�
 
 ВОПРОС И ОТВЕТ. Вопрос (expect_reply) — обязательство получателя: пока он не ответил (reply_to), он открыт. Задача — обязательство исполнителя: пока он не сдал её (crew_task submit), она открыта.
 Ход кончился без ответа — плагин сразу будит напоминанием. Ход с вызовами инструментов — рабочий, без них — пустой;
-push_empty_turns (3) пустых подряд или push_max (20) напоминаний — вкладка застряла: напоминаний больше нет, спросившему
-вызов. Ход, где писал владелец, напоминания не получает. Снова будит застрявшую — crew_task push. Ход, оборванный
+рабочий ход обнуляет и счёт напоминаний. push_empty_turns (3) пустых подряд или push_max (20) напоминаний без рабочего хода —
+вкладка застряла: напоминаний больше нет, спросившему вызов, в /crew строка «застряла с ЧЧ:ММ». Ход, где писал владелец, напоминания не получает. Снова будит застрявшую — crew_task push. Ход, оборванный
 перезапуском OpenCode, плагин подхватывает письмом «продолжай». Служебным письмам плагина не отвечают.
 Спросивший ждёт ответ crew_wait в том же ходе — ответ приходит туда, без отдельного пробуждения.
 
@@ -2556,6 +2558,8 @@ ${lockStillYours(stillHeld.n)}` : "") }
             o.nudges = 0
             o.empty = 0
             o.stuck = false
+            delete o.stuckAt
+            delete o.stuckWhat
           }
         saveObligations(target, obl)
         taskEvent(t, me.session, undefined, whom === "reviewer" ? "подталкивание приёмщика" : "подталкивание")

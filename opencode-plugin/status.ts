@@ -10,13 +10,13 @@
 
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { type Card, readJson, safeKey } from "./core.ts"
+import { type Card, obligationsOf, readJson, safeKey } from "./core.ts"
 import { BASE } from "./paths.ts"
 import { answerLines, answerSideRow } from "./answer.ts"
 import { divergenceLineFor, unconfiguredLineFor } from "./config-diverge.ts"
 import { FORM_MAX_REPEATS, pendingForms } from "./form-wait.ts"
 import { lockWaitLine } from "./review.ts"
-import { type Task, isOpen, listTasks, loadTask } from "./tasks.ts"
+import { type Task, ACCEPTED_REMINDERS_MAX, acceptedAt, acceptedReminders, isOpen, listTasks, loadTask } from "./tasks.ts"
 import { type Watch, watchesOf } from "./watch.ts"
 
 export const STATUS = path.join(BASE, "status")
@@ -44,6 +44,8 @@ export type Status = {
   task?: { n: number; status: string; as: "executor" | "reviewer"; title: string; steps?: StepView[]; checking?: string }
   /** Открытые задачи, поставленные этой сессией. */
   tasks: { n: number; status: string; priority: string; title: string }[]
+  /** Вкладка застряла (задача 043, L3): с какого времени и по чему; держится, пока признак не снят (push, ответ, сдача). */
+  stuck?: { at?: number; what: string }[]
   /** Когда владельцу последний раз показали «ждёт вас» (повтор по owner_reminder_min). */
   notified?: number
   updated: number
@@ -114,6 +116,9 @@ export function statusOf(x: StatusInput): Status {
   const ref = card.task ?? card.review
   const own: Task | undefined = ref ? loadTask(ref.project, ref.n) : undefined
   const authored = listTasks(card.project).filter((t) => t.author === card.session && isOpen(t))
+  const stuck = obligationsOf(card.session)
+    .filter((o) => o.stuck)
+    .map((o) => ({ ...(o.stuckAt ? { at: o.stuckAt } : {}), what: o.stuckWhat ?? (o.task ? o.task : `вопрос ${o.qid}`) }))
   const base: Status = {
     session: card.session,
     project: card.project,
@@ -127,6 +132,7 @@ export function statusOf(x: StatusInput): Status {
     ...(x.askedStale?.length ? { askedStale: x.askedStale } : {}),
     ...(own ? { task: { n: own.n, status: own.status, as: card.task ? ("executor" as const) : ("reviewer" as const), title: own.title, ...(stepsOf(own) ? { steps: stepsOf(own) } : {}), ...(own.checking ? { checking: own.checking.step } : {}) } } : {}),
     tasks: authored.map((t) => ({ n: t.n, status: t.status, priority: t.priority, title: t.title })),
+    ...(stuck.length ? { stuck } : {}),
     updated: now,
   }
   if (x.staleSince) {
@@ -259,6 +265,7 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
       const row = `  ${s.state === "owner" ? "▶ " : ""}${short(who, 40)}${model} — ${s.detail}`
       out.push(s.state === "owner" ? row : fit(row))
       if (s.askedStale?.length) out.push(fit(`      вопрос устарел: ${s.askedStale.map((a) => `к ${a.to} с ${hm(a.at)} (${minutes(a.at, now)})`).join(", ")}`))
+      for (const k of s.stuck ?? []) out.push(fit(`      ⚠ ${stuckText(k)}`))
       if (prog) {
         const steps = s.task!.steps!
         const cur = steps.find((a) => a.id === s.task!.checking && !a.result)
@@ -267,6 +274,7 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
       }
     }
     out.push(...planLines(p))
+    out.push(...uncleanedLines(p, now))
     out.push(...acceptanceReports(p, now))
     out.push(...answerLines(p, now))
     const lw = lockWaitLine(p, now)
@@ -278,6 +286,21 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
   }
   out.push(`(${hm(now)}; обновляется раз в несколько секунд)`)
   return out.join("\n")
+}
+
+/** «застряла с 12:30: задача #5 «…» — 2 хода подряд…» (задача 043, L3). */
+export const stuckText = (k: { at?: number; what: string }) => `застряла с ${hm(k.at)}: ${k.what}`
+
+/** Принятые и не убранные после всех напоминаний (задача 043, M18a): «#5 «…» принята и не убрана 3 ч». */
+export function uncleanedLines(project: string, now = Date.now()): string[] {
+  let list: Task[] = []
+  try {
+    list = listTasks(project).filter((t) => t.status === "accepted" && acceptedReminders(t) >= ACCEPTED_REMINDERS_MAX)
+  } catch {}
+  return list.map((t) => {
+    const m = Math.max(0, Math.round((now - acceptedAt(t)) / 60_000))
+    return fit(`  ⚠ #${t.n} «${short(t.title, 30)}» принята и не убрана ${m >= 60 ? `${Math.round(m / 60)} ч` : `${m} мин`} — напоминаний было ${ACCEPTED_REMINDERS_MAX}, нужен crew_task cleanup`)
+  })
 }
 
 const short = (x: string, n: number) => {
@@ -399,6 +422,8 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string)
     const cur = s.task?.as === "reviewer" && prog?.startsWith("проверка") ? s.task.steps!.find((a) => a.id === s.task!.checking) : undefined
     if (cur) rows.push({ mark: " ", who: "", what: `↳ ${short(cur.text.replace(/[`*_]/g, ""), 26)}`, tone: "muted" })
     if (waiting && stepsLine) rows.push({ mark: " ", who: "", what: `↳ ${stepsLine}`, tone: "muted" })
+    // застряла (задача 043, L3): строка, пока признак не снят
+    if (s.stuck?.length) rows.push({ mark: " ", who: "", what: `⚠ застряла с ${hm(s.stuck[0].at)}`, tone: "accent" })
     // название задачи — по номеру не вспомнить, о чём она (владелец, 2026-10-07); последней подстрокой, чтобы строки шагов остались на своих местах
     if (s.task?.title) rows.push({ mark: " ", who: "", what: `↳ ${short(s.task.title.replace(/[`*_«»]/g, ""), 26)}`, tone: "muted" })
   }

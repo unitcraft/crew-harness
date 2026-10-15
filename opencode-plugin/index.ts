@@ -130,7 +130,7 @@ import { allSteps, nextPlanNumber, parsePlan, stepDeps } from "./plans.ts"
 import { dropWatch, openWatchesBySession, pollWatches, requestWatch, watchesOf } from "./watch.ts"
 import { endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
 import { type Task, taskRef, acceptedAt, ago, byPriority, createTask, rounds, slugify, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
-import { countedOpen, waitingCleanup } from "./tasks.ts"
+import { countedOpen, waitingCleanup, ACCEPTED_REMINDERS_MAX, acceptedReminderId, acceptedReminders, letterTime } from "./tasks.ts"
 import { createRemoteBridge } from "./remote.ts"
 import { profileProblems, profileState, stateSignature, syncProjectFiles, syncSnapshot, syncTaskFile } from "./profile-layer.ts"
 import { cellOfState, clampTier, resolveStageProfile, splitLaunchModel, stageOfLaunch, tabFitsCell } from "./profiles.ts"
@@ -237,6 +237,40 @@ export default {
       const t = tabOf(card.session, windows)
       if (loud && t && !t.tab.active && t.window.pid) postNotice(t.window.pid, { sessionID: card.session, title: `✉ ${short(sessionLabel(loud.from_session, loud.from_role), 40)}`, message: short(loud.text.split(/\r?\n/)[0], 80), duration: 10_000 })
     }
+    // СЕССИЯ ЗАДАЧИ ПРОПАЛА (задача 043, T11/M04a; владелец, 2026-10-15, «согласовано»). Сессию исполнителя или приёмщика удалили в
+    // OpenCode (доставка падает с NotFoundError) или её визитки нет: задача стояла молча, знал только журнал сервера. После
+    // LOST_AFTER неудач подряд — одно письмо автору с тем, что делать, и запись в истории задачи; повторов этого письма нет.
+    const LOST_AFTER = 3
+    const deliveryFails = new Map<string, number>()
+    const cardMisses = new Map<string, number>()
+    function sessionLost(t: Task, session: string, why: string) {
+      if (session === t.author) return // автору о его же сессии сказать некуда
+      const asReviewer = t.reviewer === session && t.executor !== session
+      const id = `session-lost-${safeKey(t.project)}-${t.n}-${safeKey(session)}`
+      if (letterExists(t.author, id)) return
+      const text = asReviewer
+        ? `Сессия приёмки задачи ${taskRef(t)} пропала (приёмщик ${session}: ${why}). Приёмка стоит. Сменить приёмщика инструментом нельзя: если вкладку приёмщика просто закрыли — открой её; если сессии больше нет — спроси владельца, что делать (например, отменить задачу: crew_task {action: "cancel", n: ${t.n}}).`
+        : `Сессия задачи ${taskRef(t)} пропала (исполнитель ${session}: ${why}). Работа стоит. Передай задачу другой сессии: crew_task {action: "reassign", n: ${t.n}}; не нужна — отмени: crew_task {action: "cancel", n: ${t.n}}.`
+      postLetter(t.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: now(), text })
+      taskEvent(t, PLUGIN_SENDER, undefined, `${asReviewer ? "сессия приёмщика" : "сессия исполнителя"} ${session} пропала: ${why.slice(0, 200)}`)
+      log(`task #${t.n} (${t.project}): session ${session} lost (${why.slice(0, 120)}), the author is told`)
+    }
+    // задачи, которые держит сессия: исполнитель — в работе или на доработке, приёмщик — сдана, на приёмке или принята
+    const heldBy = (card: Card) =>
+      [card.task, card.review]
+        .map((r) => (r ? loadTask(r.project, r.n) : undefined))
+        .filter((t): t is Task => !!t && ((t.executor === card.session && (t.status === "running" || t.status === "rework")) || (t.reviewer === card.session && ["submitted", "reviewing", "accepted"].includes(t.status))))
+    function deliveryFailed(card: Card, e: unknown) {
+      const err = `${String((e as any)?.name ?? "")} ${String(e)}`
+      if (!/NotFound/i.test(err)) {
+        deliveryFails.delete(card.session)
+        return
+      }
+      const n = (deliveryFails.get(card.session) ?? 0) + 1
+      deliveryFails.set(card.session, n)
+      if (n === LOST_AFTER) for (const t of heldBy(card)) sessionLost(t, card.session, `доставка писем ${n} раза подряд: ${String(e).slice(0, 200)}`)
+    }
+
     async function deliver(card: Card) {
       if (delivering.has(card.session)) return
       const keys = keysOf(card)
@@ -295,11 +329,13 @@ export default {
           else if (typeof ctx.session.synthetic === "function") await capped(ctx.session.synthetic({ sessionID: card.session, text, resume: false }))
           else await ctx.session.prompt({ sessionID: card.session, text, resume: false }) // OpenCode без synthetic: лишний шаг, но без хода
           confirmLetters(claimed)
+          deliveryFails.delete(card.session)
           delivered(card, letters, windows)
           log(`delivered${wake ? "" : " quietly"} ${letters.map((l) => l.id).join(",")} -> ${card.session} (${keyOf(card)})`)
         } catch (e) {
           releaseLetters(claimed)
           log(`deliver failed ${card.session}: ${e}`)
+          deliveryFailed(card, e)
         }
       } finally {
         delivering.delete(card.session)
@@ -322,9 +358,26 @@ export default {
       mine.set(fresh.session, fresh)
     }
 
+    // УВЕДОМЛЕНИЕ АВТОРУ (задача 043, T7b; владелец, 2026-10-15, «согласовано»). Вкладка автора открыта — в её окно (whenOpen; иначе
+    // ему хватает письма: в фоновую вкладку о нём скажет доставка). Вкладки автора нет — «застряла», «ждёт приёмщика» и «замок»
+    // лежали только письмом в его ящике, и никто не знал: уведомление во все живые окна проекта, нет и их — во все живые окна.
+    function noticeAuthor(author: string, project: string | undefined, notice: { sessionID?: string; title: string; message: string; duration?: number }, whenOpen: boolean) {
+      const windows = liveWindows()
+      const own = tabOf(author, windows)
+      if (own) {
+        if (whenOpen && own.window.pid) postNotice(own.window.pid, notice)
+        return
+      }
+      const projectOfSession = new Map(allCards().map((c) => [c.session, projOf(c)]))
+      const ofProject = project ? windows.filter((w) => (w.tabs ?? []).some((tab) => projectOfSession.get(tab.sessionID) === project)) : []
+      const targets = ofProject.length ? ofProject : windows
+      for (const w of targets) if (w.pid) postNotice(w.pid, notice)
+      if (targets.length) log(`notice for the closed tab of ${author} -> ${targets.length} window(s)${ofProject.length ? ` of ${project}` : ""}: ${notice.title}`)
+    }
+
     // ПОДТАЛКИВАНИЕ (план 002, Ф.2; core.ts, «ОБЯЗАТЕЛЬСТВА»). Ход вкладки кончился, а ответа по вопросу или задаче
     // нет — напоминание сразу. Различаем рабочий ход и пустой (lastTurn: были ли вызовы инструментов): рабочий
-    // обнуляет счётчик пустых, пустой его растит. push_empty_turns пустых подряд или push_max напоминаний всего —
+    // обнуляет счётчики пустых и напоминаний, пустой их растит. push_empty_turns пустых подряд или push_max напоминаний без рабочего хода —
     // вкладка застряла: напоминаний больше нет, спросившему вызов (письмо и уведомление в окне). Ход, в котором писал
     // владелец, — без напоминания (владелец ведёт вкладку сам), счётчик с нуля. Снимает застревание crew_task push.
     async function nudge(card: Card) {
@@ -387,6 +440,10 @@ export default {
         }
         // базы нет — ход считается рабочим (лишнее напоминание дешевле ложного «застряла»)
         o.empty = turn && !turn.tools ? (o.empty ?? 0) + 1 : 0
+        // РАБОЧИЙ ХОД ОБНУЛЯЕТ СЧЁТЧИК НАПОМИНАНИЙ (задача 043, L1; владелец, 2026-10-15, «согласовано»): push_max копился за всё время
+        // жизни обязательства, и исполнитель большой задачи после 20 рабочих ходов получал «застряла», хотя работа шла. Ход, о котором
+        // базы нет, счётчик не обнуляет: тогда push_max — единственный предел
+        if (turn?.tools) o.nudges = 0
         const rv = card.review ? loadTask(card.review.project, card.review.n) : undefined
         const isReview = !!rv && rv.review_qid === o.qid
         const task = isReview ? rv : card.task ? loadTask(card.task.project, card.task.n) : undefined
@@ -399,17 +456,20 @@ export default {
         if (o.empty >= cfg.pushEmptyTurns || o.nudges >= cfg.pushMax) {
           o.stuck = true
           const failing = turn?.outcome === "failed" ? " (ход падает с ошибкой — посмотри модель и журнал сервера)" : ""
-        const why = (o.empty >= cfg.pushEmptyTurns ? `${o.empty} хода подряд остановилась без работы и без ответа` : `${o.nudges} напоминаний остались без ответа`) + failing
+          const why = (o.empty >= cfg.pushEmptyTurns ? `${o.empty} хода подряд остановилась без работы и без ответа` : `${o.nudges} напоминаний остались без ответа`) + failing
+          o.stuckAt = t
+          o.stuckWhat = `${what} — ${why}`
+          // приёмку подталкивают к приёмщику (to: "reviewer"), а не к исполнителю, давно сдавшему работу (задача 043)
+          const pushHint = `crew_task {action: "push"${task ? `, n: ${task.n}` : ""}${isReview ? `, to: "reviewer"` : ""}, text: "..."}`
           postLetter(o.from_session, {
             id: `${t}-stuck-${safeKey(o.qid)}`,
             from_role: PLUGIN_SENDER,
             from_session: PLUGIN_SENDER,
             to: o.from_session,
             time: t,
-            text: `Вкладка ${keyOf(card)} (сессия ${card.session}) застряла: ${what} — ${why}. Напоминаний больше не будет. Подтолкни (crew_task {action: "push"${task ? `, n: ${task.n}` : ""}, text: "..."}), передай другой сессии (reassign) или загляни в неё сам.`,
+            text: `Вкладка ${keyOf(card)} (сессия ${card.session}) застряла: ${what} — ${why}. Напоминаний больше не будет. Подтолкни (${pushHint}), передай другой сессии (reassign) или загляни в неё сам.`,
           })
-          const w = tabOf(o.from_session)
-          if (w?.window.pid) postNotice(w.window.pid, { sessionID: card.session, title: task ? `#${task.n} застряла` : `${keyOf(card)} застряла`, message: short(task ? `«${task.title}» · ${why}` : why, 80), duration: 15_000 })
+          noticeAuthor(o.from_session, projOf(card), { sessionID: card.session, title: task ? `#${task.n} застряла` : `${keyOf(card)} застряла`, message: short(task ? `«${task.title}» · ${why}` : why, 80), duration: 15_000 }, true)
           if (task && (task.qid === o.qid || isReview)) taskEvent(task, PLUGIN_SENDER, undefined, `${isReview ? "приёмка застряла" : "застряла"}: ${why}`)
           log(`stuck ${card.session} for ${o.qid} (empty ${o.empty}, pushes ${o.nudges})`)
           continue
@@ -664,10 +724,23 @@ export default {
         const need = (session: string | undefined, qid: string | undefined, what: string) => {
           if (session && qid && !obligationsOf(session).some((o) => o.qid === qid)) addObligation(session, { qid, from_session: t.author, from_role: t.author_role, at: now(), nudges: 0, task: what })
         }
-        if (t.status === "running" || t.status === "rework") need(t.executor, t.qid, t.title)
+        // визитки сессии нет LOST_AFTER проходов подряд — сессия пропала (задача 043, M04a): автору одно письмо
+        const missing = (session: string, has: boolean) => {
+          const key = `${t.project}#${t.n}:${session}`
+          if (has) return void cardMisses.delete(key)
+          const n = (cardMisses.get(key) ?? 0) + 1
+          cardMisses.set(key, n)
+          if (n === LOST_AFTER) sessionLost(t, session, "визитки сессии нет: плагин её не знает")
+        }
+        if (t.status === "running" || t.status === "rework") {
+          need(t.executor, t.qid, t.title)
+          if (t.executor && t.kind !== "order") missing(t.executor, existsSync(cardFile(t.executor)))
+        }
         if (t.reviewer && ["submitted", "reviewing", "accepted"].includes(t.status)) {
           const rc = readJson<Card>(cardFile(t.reviewer))
+          if (!rc && t.review_kind !== "spawn") missing(t.reviewer, false) // сессию приёмки spawn создаёт assignReviewers
           if (!rc) continue // сессия приёмки ещё не создана — её запустит assignReviewers
+          missing(t.reviewer, true)
           if (!rc.review || rc.review.n !== t.n || rc.review.project !== t.project) {
             rc.review = { project: t.project, n: t.n }
             saveCard(rc)
@@ -1185,11 +1258,13 @@ export default {
           const id = `stall-lock-${safeKey(project)}-${lock.n}-${lock.at}`
           if (!letterExists(lockTask.author, id)) {
             postLetter(lockTask.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: lockTask.author, time: t, text: `Замок слияния проекта ${project} держит приёмка #${lock.n} «${lockTask.title}» (сессия ${lock.session}) с ${hhmm(lock.at)} — ${Math.round((t - lock.at) / 60_000)} мин; остальные слияния ждут. Держателю: вызвать accept ${lock.n} после успешного слияния и пуша или unlock ${lock.n}, если слияние прервано; при merge_precheck: required плагин сам отпускает замок, когда проверенный кандидат уже на вершине origin. Узнай у приёмщика, что мешает (crew_send {to: "${lock.session}", text: "..."}), и помоги или реши; без владельца не решить — спроси владельца.` })
+            noticeAuthor(lockTask.author, project, { sessionID: lock.session, title: `Замок слияния ${project}: #${lock.n} держит ${Math.round((t - lock.at) / 60_000)} мин`, message: short(`«${lockTask.title}» · письмо ждёт автора (${lockTask.author_role}) в ящике`, 80), duration: 15_000 }, false)
             log(`stall: merge lock of ${project} #${lock.n} held since ${lock.at}`)
           }
         }
         // ПРИНЯТА, НО НЕ ОЧИЩЕНА (план 002.6, дефект 2): держит место в inflight_limit. Через accepted_reminder_min —
-        // одно письмо приёмщику с побудкой («повтори cleanup») и одно автору; отказ crew_spawn называет такие поимённо.
+        // письмо приёмщику с побудкой («повтори cleanup») и автору; отказ crew_spawn называет такие поимённо. Повтор (задача 043, M18a) —
+        // каждые accepted_reminder_min, не больше ACCEPTED_REMINDERS_MAX раз на приёмку; дальше тишина и строка «не убрана N ч» в /crew.
         const accCfg = loadConfig(any.directory)
         const accMin = accCfg.acceptedReminderMin
         // accepted_slot: free — принятая место не занимает, письма говорят «ждёт уборки N из M» (cleanup_limit 0 — «N, предела нет»)
@@ -1199,7 +1274,12 @@ export default {
           for (const x of list.filter((y) => y.status === "accepted")) {
             const at = acceptedAt(x)
             if (t - at < accMin * 60_000) continue
-            const id = `stale-accepted-${safeKey(project)}-${x.n}-${at}`
+            const sent = acceptedReminders(x, at)
+            if (sent >= ACCEPTED_REMINDERS_MAX) continue
+            const k = sent + 1
+            if (k > 1 && t - letterTime(x.author, acceptedReminderId(x, at, k - 1)) < accMin * 60_000) continue
+            const id = acceptedReminderId(x, at, k)
+            const nth = k > 1 ? ` Напоминание ${k} из ${ACCEPTED_REMINDERS_MAX}${k === ACCEPTED_REMINDERS_MAX ? ", последнее: дальше — только строка в /crew" : ""}.` : ""
             const toReviewer = accCfg.acceptedSlot === "free"
               ? `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена — ждёт уборки, место в inflight_limit не занимает (${waitingOf}). Убери её дерево и ветки и повтори crew_task {action: "cleanup", n: ${x.n}}: отказ назовёт, что осталось. Не убирается — напиши автору (${x.author_role}), что мешает.`
               : `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена — держит место в лимите задач проекта (inflight_limit). Убери её дерево и ветки и повтори crew_task {action: "cleanup", n: ${x.n}}: отказ назовёт, что осталось. Не убирается — напиши автору (${x.author_role}), что мешает.`
@@ -1207,10 +1287,10 @@ export default {
               ? `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена${x.reviewer ? ` (приёмщик ${x.reviewer}, ему написано)` : ""} — ждёт уборки, место не занимает; ${waitingOf}, пока не будет crew_task cleanup.`
               : `Задача #${x.n} «${x.title}» принята ${ago(at, t)}, но не очищена${x.reviewer ? ` (приёмщик ${x.reviewer}, ему написано)` : ""} — держит место в inflight_limit, пока не будет crew_task cleanup.`
             if (x.reviewer && !letterExists(x.reviewer, id))
-              postLetter(x.reviewer, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.reviewer, time: t, text: toReviewer })
+              postLetter(x.reviewer, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.reviewer, time: t, text: toReviewer + nth })
             if (!letterExists(x.author, id))
-              postLetter(x.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.author, time: t, text: toAuthor })
-            log(`stall: #${x.n} of ${project} accepted ${at}, not cleaned up`)
+              postLetter(x.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.author, time: t, text: toAuthor + nth })
+            log(`stall: #${x.n} of ${project} accepted ${at}, not cleaned up (reminder ${k} of ${ACCEPTED_REMINDERS_MAX})`)
           }
         for (const x of list.filter((y) => y.status === "submitted" && !y.reviewer)) {
           const since = [...(x.history ?? [])].reverse().find((h) => h.status === "submitted")?.at ?? 0
@@ -1219,6 +1299,7 @@ export default {
           if (letterExists(x.author, id)) continue
           const busy = list.filter((y) => y.review_kind === "spawn" && y.reviewer && isOpen(y) && y.status !== "rework" && y.n !== x.n)
           postLetter(x.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.author, time: t, text: `Задача #${x.n} «${x.title}» сдана в ${hhmm(since)} и ${Math.round((t - since) / 60_000)} мин ждёт приёмщика: места приёмщиков (spawn_limits.${loadConfig(x.directory).reviewer === "acceptor" ? "acceptor" : "reviewer"}) заняты — ${busy.map((y) => `#${y.n} ${statusRu(y.status)}`).join(", ") || "?"}. Разберись, почему те приёмки стоят (письмо приёмщику), или подними предел приёмщиков (crew_config).` })
+          noticeAuthor(x.author, project, { title: `#${x.n} ждёт приёмщика ${Math.round((t - since) / 60_000)} мин`, message: short(`«${x.title}» · места приёмщиков заняты, письмо ждёт автора в ящике`, 80), duration: 15_000 }, false)
           log(`stall: #${x.n} of ${project} waits for a reviewer since ${since}`)
         }
       }

@@ -285,6 +285,24 @@ export const countedOpen = (open: Task[], slot: "hold" | "free"): Task[] => (slo
 
 /** Когда задачу приняли (последняя запись «accepted» журнала). */
 export const acceptedAt = (t: Task) => [...(t.history ?? [])].reverse().find((h) => h.status === "accepted")?.at ?? t.updated
+// ПРИНЯТА, НО НЕ ОЧИЩЕНА (задача 043, M18a): напоминание повторяется каждые accepted_reminder_min, не больше
+// ACCEPTED_REMINDERS_MAX раз на приёмку; счёт — по письмам автору (id первого — прежний, без номера). После предела — строка в /crew.
+export const ACCEPTED_REMINDERS_MAX = 5
+export const acceptedReminderId = (t: Task, at: number, k: number) => `stale-accepted-${safeKey(t.project)}-${t.n}-${at}${k > 1 ? `-${k}` : ""}`
+/** Сколько напоминаний «принята и не очищена» уже ушло автору по этой приёмке. */
+export function acceptedReminders(t: Task, at = acceptedAt(t)): number {
+  let k = 0
+  while (k < ACCEPTED_REMINDERS_MAX && letterExists(t.author, acceptedReminderId(t, at, k + 1))) k++
+  return k
+}
+/** Время письма id в ящике key (непрочитанное или доставленное); убранное уборкой — 0. */
+export function letterTime(key: string, id: string): number {
+  for (const d of [INBOX, READ]) {
+    const l = readJson<{ time?: number }>(path.join(d, safeKey(key), `${id}.json`))
+    if (l) return Number(l.time) || 0
+  }
+  return 0
+}
 /** «12 мин назад», «11 ч назад» */
 export const ago = (at: number, now = Date.now()) => {
   const m = Math.max(0, Math.round((now - at) / 60_000))

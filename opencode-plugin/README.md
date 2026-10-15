@@ -182,6 +182,7 @@ so old paths keep working):
   "asked": [{ "qid", "to", "at" }],                              // its questions without an answer
   "task": { "n", "status", "as": "executor" | "reviewer", "title" },
   "tasks": [{ "n", "status", "priority", "title" }],             // open tasks it set
+  "stuck": [{ "at", "what" }],                                   // stuck obligations (only when there are any)
   "updated": 1791200000000 }
 ```
 
@@ -339,16 +340,25 @@ Claude often stop mid-task after writing a status; the plugin keeps them going �
 turn, not by a timer. The turn's facts come from OpenCode's database (messages between the turn's
 start and its `idle` row): a turn with a tool call is a working one, a turn without one is empty.
 
-- a turn ended without the answer → a reminder right away; a working turn resets the empty counter;
-- `push_empty_turns` (3) empty turns in a row or `push_max` (20) reminders → the tab is stuck: no
-  more reminders, the asker gets a call (a letter and a notice in its window), the task's history
-  records it; `crew_task {action: "push", n, to?}` wakes it again (the executor, or the reviewer with `to: "reviewer"`) and clears "stuck";
+- a turn ended without the answer → a reminder right away; a working turn resets the empty counter and the
+  reminder counter (task 043: a long task done in working turns is not "stuck"; a turn the database does not show
+  counts as working but does not reset the reminders);
+- `push_empty_turns` (3) empty turns in a row or `push_max` (20) reminders without a working turn → the tab is stuck: no
+  more reminders, the asker gets a call (a letter and a notice in its window; when the asker's tab is closed, the notice goes
+  to the live windows of the project, or to all live windows when the project has none), the task's history
+  records it, and `/crew` and the side panel show "застряла с ЧЧ:ММ: <что>" under the tab until the mark is cleared;
+  `crew_task {action: "push", n, to?}` wakes it again (the executor, or the reviewer with `to: "reviewer"`; the call about a
+  stuck review names `to: "reviewer"`) and clears "stuck"; the answer or the submit settles the obligation;
+- a task session deleted in OpenCode (three deliveries in a row fail with `NotFoundError`) or a task session without a card
+  (three passes in a row) → one letter to the task's author with what to do (`crew_task reassign` for an executor) and a
+  note in the task's history, no repeats;
 - a turn with the owner's own message gets no reminder (the owner leads the tab) and resets the count;
 - a turn cut off by an OpenCode restart (the session keeps `time_suspended`, no `idle` row, OpenCode
   does not resume it) is picked up by one letter that lists what is open and how to report;
 - a task session whose turn ends with a question is not told "continue": the question goes to whoever set the
   task (a letter that wakes it), who answers or asks the owner; a merge lock held longer than `stall_minutes` (30)
-  and a submitted task waiting for a reviewer that long are raised to the task's author, and so are the leftovers of a
+  and a submitted task waiting for a reviewer that long are raised to the task's author (with a notice to the live windows
+  when the author's tab is closed), and so are the leftovers of a
   closed task (branches here and on origin, worktrees by the project's name templates) ([plan 002.4](../doc/archive/plans/002.4-flow-watch.md));
 - service letters of the plugin say "do not answer"; a letter to `crew-harness` itself is refused.
 
@@ -424,7 +434,8 @@ The integrator stays free for the owner and does not re-check accepted work:
   behaviour: the accepted task holds its place until `cleanup`): an accepted task that is not cleaned up yet waits for cleanup and
   no longer counts in `inflight_limit` (`crew_spawn` and the steps of an auto plan count it separately); `cleanup_limit`
   (10, `0` — no limit) stops new work (not `P0`) when that many accepted tasks wait for cleanup, naming them. The tab of an
-  accepted task is still woken and reminded (`accepted_reminder_min`), `crew_task list` and `show` mark it "ждёт уборки";
+  accepted task is still woken and reminded (`accepted_reminder_min`; the reminder repeats every `accepted_reminder_min`, at most
+  5 times per acceptance, then `/crew` shows "принята и не убрана N ч"), `crew_task list` and `show` mark it "ждёт уборки";
   `OPEN_STATUSES` and `isOpen` are not changed;
 - `merge_precheck: "required"` (the default since the owner's decision of 2026-10-09; the explicit `off` returns the previous
   behaviour: `merge` takes the lock at once): `merge` without a green precheck is refused with text that names the next step
