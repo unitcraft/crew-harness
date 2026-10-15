@@ -1745,7 +1745,6 @@ export default {
             `Create a task (crew_spawn, crew_task assign or order) only when the owner says to create one; you may propose creating a task and explain why you think it is needed. ` +
             `A task is what changes code or texts on main and needs independent acceptance. ` +
             `Not tasks: an answer to a question, a fact check, an analysis, an edit of 1-3 lines (made by the integrator, or by a worker on the owner's word), a repeat of an already cancelled task. ` +
-            `Task journals: write progress.log lines only with progress_line (kind start before work, step after each unit, done or stop at the end) and log.md entries only with log_line; they put the time and the form, a refusal names the rule. ` +
             `Help on the tools: crew_help.` +
             (rules ? ` Project rules: ${rules}` : ""),
         })

@@ -291,7 +291,7 @@ state back. Later the sessions write `<code> N/N [HH:MM] готово …` last 
 ## Task journals: `progress_line`, `log_line` and `usage_line`
 
 Three tools of the plugin write the journals of a task folder (Canon item "Три журнала сессии"); they are the way to write these
-journals in an OpenCode window, the system hint of every tab says so. They are registered by a separate `ctx.tool.transform` call
+journals in an OpenCode window, the tool descriptions say so (the system hint of the tabs stays under its size cap). They are registered by a separate `ctx.tool.transform` call
 (`journal.ts`), are not in the MCP server and not among the `crew_*` tools; a failure to register them does not break the plugin. All
 are narrow: no shell, append only, a fixed file name, the path must stay inside the project folder of the window, the refusal of the
 file system comes back as a refusal, earlier lines are never rewritten. A refusal is the answer `Не записано: <reason>`, nothing is
