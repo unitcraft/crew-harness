@@ -375,11 +375,27 @@ export function formReminders(now: number, notify: (session: string, f: PendingF
   return sent
 }
 
-/** /ask: the open questions to the owner - project, tab, how long, text and options. */
-export function askText(now = Date.now(), dir = FORMS): string {
+/** A tab that waits for the owner without a record in forms/: its turn ended with a question (status.ts, state "owner"). */
+export type EndedWait = { session: string; project?: string; role: string; title: string; since?: number; question?: string }
+
+/** /ask: the open questions to the owner - project, tab, how long, text and options; `ended` - the tabs whose turn ended
+ *  with a question (task 055: /ask names every tab that waits, not only the questionnaire ones). */
+export function askText(now = Date.now(), dir = FORMS, ended: EndedWait[] = []): string {
   const list = allForms(now, dir)
-  if (!list.length) return "Открытых вопросов к вам нет."
-  const out = [`Ждут вас: ${list.length} · с ${hm(list[0].form.at)}`, ""]
+  const more = ended.filter((e) => !list.some((x) => x.session === e.session))
+  if (!list.length && !more.length) return "Открытых вопросов к вам нет."
+  const first = Math.min(...list.map((x) => x.form.at), ...more.map((e) => e.since ?? Infinity))
+  const out = [`Ждут вас: ${list.length + more.length}${Number.isFinite(first) ? ` · с ${hm(first)}` : ""}`, ""]
+  const ago = (at: number) => {
+    const m = Math.max(0, Math.round((now - at) / 60_000))
+    return m < 120 ? `${m} мин` : `${Math.floor(m / 60)} ч ${m % 60} мин`
+  }
+  for (const e of more) {
+    out.push(`▶ ${e.project ?? "?"} · ${e.role}${e.title && e.title !== e.session ? ` «${e.title}»` : ""}${e.since ? ` — ждёт ${ago(e.since)} (с ${hm(e.since)})` : ""}`)
+    if (e.question) out.push(`   ${e.question}`)
+    out.push(`   Сессия ${e.session}: ход кончился вопросом — откройте вкладку и ответьте.`)
+    out.push("")
+  }
   for (const { session, form: f } of list) {
     const card = readJson<any>(path.join(CARDS, `${safeKey(session)}.json`))
     const who = `${card?.project ?? "?"} · ${card?.role ?? "?"}${card?.title && card.title !== session ? ` «${card.title}»` : ""}`

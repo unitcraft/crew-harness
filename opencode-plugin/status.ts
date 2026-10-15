@@ -252,10 +252,30 @@ export const stepBar = (steps: { id: string; result?: string }[], checking?: str
 export function waitingLine(list: Status[], _now = Date.now()): string | undefined {
   const w = list.filter((s) => s.state === "owner")
   if (!w.length) return undefined
-  const oldest = w.reduce((a, b) => ((b.since ?? Infinity) < (a.since ?? Infinity) ? b : a))
+  const oldest = oldestWait(w)
   const label = /^#\d+ \S+/.exec(oldest.title ?? "")?.[0]
   const where = [oldest.project, label].filter(Boolean).join(" ")
   return `Ждут вас: ${w.length}${oldest.since ? ` · с ${hm(oldest.since)}` : ""}${where ? ` · ${where}` : ""}`
+}
+
+const oldestWait = (w: Status[]) => w.reduce((a, b) => ((b.since ?? Infinity) < (a.since ?? Infinity) ? b : a))
+/** Вкладка ждущего — то, что открыть: «#33 исп» (задача и роль), иначе роль («интегр.»). */
+const tabOf = (s: Status) => /^#\d+ \S+/.exec(s.title ?? "")?.[0] ?? (s.task ? `#${s.task.n} ${s.task.as === "reviewer" ? "прм" : "исп"}` : s.role === "integrator" ? "интегр." : s.role)
+
+/** «Ждут вас» в боковой панели (задача 055; владелец, 2026-10-15: «не вижу кто меня ждет?» — одна строка
+ *  «Ждут вас: 1 · с 18:55 · clau» обрезалась по ширине панели). Три строки, все проекты: сколько и с какого времени; кто ждёт
+ *  дольше всех — проект и вкладка, что открыть (не обрезаются); начало вопроса по ширине панели (нет текста — нет строки). */
+export function waitingRows(list: Status[], width = SIDE_WIDTH): SideRow[] {
+  const w = list.filter((s) => s.state === "owner")
+  if (!w.length) return []
+  const oldest = oldestWait(w)
+  const rows: SideRow[] = [
+    { mark: " ", who: "", what: `Ждут вас: ${w.length}${oldest.since ? ` · с ${hm(oldest.since)}` : ""}`, tone: "accent", flush: true },
+    { mark: "▶", who: "", what: `▶ ${[oldest.project, tabOf(oldest)].filter(Boolean).join(" ")}`, tone: "accent", flush: true },
+  ]
+  const q = oldest.question?.replace(/[`*_]/g, "").replace(/\s+/g, " ").trim()
+  if (q) rows.push({ mark: " ", who: "", what: fit(`  ↳ ${q}`, width), tone: "muted", flush: true })
+  return rows
 }
 
 /** Текст сводки /crew: проекты (свой первым), в проекте — сначала ждущие владельца. */
@@ -378,11 +398,12 @@ export function acceptanceReports(project: string, now = Date.now()): string[] {
 // БОКОВАЯ ПАНЕЛЬ ОКНА (план 003.2, 2026-10-06; владелец: «в этой области можно выводить активные сессии и обновлять в
 // реальном времени?»). Строки блока «Crew» под «Context»: кто чего ждёт в проекте вкладки на экране, ждущие владельца
 // первыми. Чистая функция — рисует sidebar.tsx, проверяет тест.
-export type SideRow = { mark: string; who: string; what: string; tone: "accent" | "base" | "muted" }
-/** Строка панели как она печатается (ширина панели ~32 знака: длиннее — перенос, и список выглядит разрезанным).
- *  Подстрока (who пустой) — с отступом под «что», без колонки «кто». */
+/** flush — строка печатается как есть, с первой колонки (строки «Ждут вас», задача 055). */
+export type SideRow = { mark: string; who: string; what: string; tone: "accent" | "base" | "muted"; flush?: boolean }
+/** Строка панели как она печатается (ширина панели ~32 знака: длиннее — перенос, и список выглядит разрезанным; OpenCode
+ *  2.0.23 даёт панели 42 колонки, под текст после отступов — около 37). Подстрока (who пустой) — с отступом под «что», без колонки «кто». */
 export const SIDE_WIDTH = 32
-export const sideText = (r: SideRow) => (r.who ? `${r.mark} ${r.who.padEnd(9).slice(0, 9)} ${r.what}` : `    ${r.what}`).slice(0, SIDE_WIDTH)
+export const sideText = (r: SideRow, width = SIDE_WIDTH) => (r.flush ? r.what : r.who ? `${r.mark} ${r.who.padEnd(9).slice(0, 9)} ${r.what}` : `    ${r.what}`).slice(0, width)
 const WORD_OF_TASK: Record<string, string> = { submitted: "✓ сдана", reviewing: "✓◐ приёмка", rework: "↻ доработка", approval: "◇ согласование", accepted: "✓✓◐ влита", running: "в работе", starting: "запуск" }
 const SIDE_MAX = 9
 /** «что» ждущей вкладки с длительностью ожидания: «⧗ CI t34 40м» (длительность — в конце, обрезается текст перед ней). */
@@ -391,7 +412,7 @@ export function waitText(text: string, since: number | undefined, now: number): 
   const dur = ` ${Math.max(0, Math.round((now - since) / 60_000))}м`
   return `${short(text, 20 - dur.length)}${dur}`
 }
-export function sidebarLines(list: Status[], now = Date.now(), project?: string): { title: string; rows: SideRow[]; foot: string } {
+export function sidebarLines(list: Status[], now = Date.now(), project?: string, width = SIDE_WIDTH): { title: string; rows: SideRow[]; foot: string } {
   const mine = project ? list.filter((s) => (s.project ?? "?") === project) : list
   // панель узкая (~32 знака): кто — до 9 знаков, что — до 20, иначе строка переносится
   const who = (s: Status) => (s.task ? `#${s.task.n} ${s.task.as === "reviewer" ? "прм" : "исп"}` : s.role === "integrator" ? "интегр." : s.role.slice(0, 9))
@@ -417,9 +438,8 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string)
   }
   const sorted = mine.slice().sort((a, b) => ORDER[a.state] - ORDER[b.state] || who(a).localeCompare(who(b)))
   const rows: SideRow[] = []
-  // одна сводная строка на все окна (по всем проектам, не только по этому): «Ждут вас: N · с ЧЧ:ММ · проект #N роль»
-  const sum = waitingLine(list, now)
-  if (sum) rows.push({ mark: " ", who: "", what: sum, tone: "accent" })
+  // «Ждут вас» на все окна (по всем проектам, не только по этому): сколько и с какого времени, кто ждёт дольше всех, начало вопроса
+  rows.push(...waitingRows(list, width))
   for (const s of sorted.slice(0, SIDE_MAX)) {
     // приёмка по шагам: «проверка 3/13: fixture» вместо «работает», под строкой — что проверяет шаг
     // ждущая вкладка (наблюдение, очередь машины, ответ) показывает, чего ждёт, и сколько; шаги — строкой под ней

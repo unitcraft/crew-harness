@@ -167,7 +167,7 @@ export default {
     const showAsk = () => {
       let text: string
       try {
-        text = askText()
+        text = askText(Date.now(), undefined, readStatuses().filter((s) => s.state === "owner" && !s.formId))
       } catch (e) {
         text = `Не прочитать вопросы: ${e}`
       }
