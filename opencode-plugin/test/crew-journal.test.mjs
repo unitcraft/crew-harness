@@ -71,7 +71,7 @@ const isoLocalOf = (d) => {
   bad("code with spaces", { file: rel, code: "С5 д", unit: "6/13", text: "x" })
   bad("unit not k/N", { file: rel, code: "С5д", unit: "пять", text: "x" })
   bad("unit ?/? is no longer written (the guard and the panel do not read it)", { file: rel, code: "С5д", unit: "?/?", text: "x" })
-  bad("unknown kind", { file: rel, code: "С5д", kind: "итог", text: "x" }, /start.*step.*done.*stop.*launch/)
+  bad("unknown kind", { file: rel, code: "С5д", kind: "итог", text: "x" }, /start.*step.*done.*stop.*correction/)
   bad("a step of a missing file is not written and the file is not created", { file: "doc/tasks/008-y/progress.log", code: "С5д", unit: "1/2", text: "x" }, /старт/)
   cell("progress: missing file not created on disk", !exists(path.join(base, "doc/tasks/008-y/progress.log")), "created")
 
@@ -122,14 +122,16 @@ const isoLocalOf = (d) => {
   // case 031 С2-9 finding 3: a stop with a kind outside the list
   no("a stop kind outside the list (case 031 С2-9: «ресурсный»)", { code: "С2в9", kind: "stop", stop: "ресурсный", text: "прочитано 5/40" }, /«ресурсный» не из списка.*вопрос, план, ревизия, требования, ворота/)
   no("a stop without a kind", { code: "С2в9", kind: "stop", text: "блокер" }, /не назван/)
-  no("a step text that begins with «готово»", { code: "С2в9", kind: "step", k: 2, n: 39, text: "готово всё" }, /kind start, done, stop или launch/)
+  no("a step text that begins with «готово»", { code: "С2в9", kind: "step", k: 2, n: 39, text: "готово всё" }, /kind start, done, stop/)
   no("done before the last unit", { code: "С2в9", kind: "done", text: "итог" }, /не записаны единицы 2–38 из 39/)
 
   const st = put({ code: "С2в9", kind: "stop", stop: "вопрос", text: "нужен ответ о составе описи" }, 3, 21)
   cell("kind: stop takes k and n of the session and writes «стоп: вид — причина»", st.ok && st.line === "С2в9 1/39 [2026-10-09 03:21] стоп: вопрос — нужен ответ о составе описи", JSON.stringify(st))
   cell("kind: the panel reads the stop kind", stopKind(parseLine(st.line).text) === "вопрос", st.line)
-  const c2 = put({ code: "С2в9", kind: "step", k: 2, n: 40, text: "README плагина прочитан; опись 40 по ответу" }, 5, 13)
-  cell("kind: the same session goes on after a stop, n may grow", c2.ok && c2.line.startsWith("С2в9 2/40 "), JSON.stringify(c2))
+  // task 053 (methodology d5f1e80): after «стоп:» the same session writes no units, the work goes on in a new session (kind start)
+  no("a unit of the same session after a stop", { code: "С2в9", kind: "step", k: 2, n: 40, text: "README плагина прочитан; опись 40 по ответу" }, /остановлена строкой стоп:.*новой сессией.*kind: "start"/)
+  const c2 = put({ code: "С2в9", kind: "start", n: 40, pass: 9, text: "продолжение после ответа" }, 5, 13)
+  cell("kind: after a stop the work goes on in a new session that begins with a start", c2.ok && c2.line.startsWith("С2в9 0/40 "), JSON.stringify(c2))
 
   // a short session to the end
   put({ code: "С3", kind: "start", n: 2 }, 6, 0)
@@ -141,8 +143,8 @@ const isoLocalOf = (d) => {
   no("a second done with another k", { code: "С3", kind: "done", n: 3 }, /только её повтор с тем же k/)
   const s3 = put({ code: "С3", kind: "start", n: 1, text: "правка плана" }, 7, 0)
   cell("kind: a new start of the same code opens a new session", s3.ok && s3.line === "С3 0/1 [2026-10-09 07:00] старт — правка плана", JSON.stringify(s3))
-  const l = put({ code: "С5", kind: "launch" }, 7, 1)
-  cell("kind: launch writes «0/0 запуск»", l.ok && l.line === "С5 0/0 [2026-10-09 07:01] запуск", JSON.stringify(l))
+  // task 053: the launch line is not written by the agent (the boundary of a session is the mark of the runner or the orchestrator)
+  no("a launch line from the agent", { code: "С5", kind: "launch" }, /запуск.*не пишет/)
   const nonReview = put({ code: "С5", kind: "start", n: 3, text: "план из 3 пунктов" }, 7, 2)
   cell("kind: a start of a non-review session needs no pass", nonReview.ok && nonReview.line === "С5 0/3 [2026-10-09 07:02] старт — план из 3 пунктов", JSON.stringify(nonReview))
   const ru = put({ code: "С5", kind: "шаг", k: 1, n: 3, text: "пункт 1 сделан" }, 7, 3)
@@ -178,8 +180,10 @@ const isoLocalOf = (d) => {
   cell("correction: the tool builds «поправка: к строке «…» — …» with the current k", c.ok && c.line === "С2 2/5 [2026-10-09 09:03] поправка: к строке «опись source inventory» — подпись 93 знака, предел 80", JSON.stringify(c))
   cell("correction: the panel reads «поправка» as the keyword", keywordOf(parseLine(c.line ?? "x 0/0 x")?.text ?? "") === "поправка", JSON.stringify(c))
   cell("correction: «поправка» without a colon is no keyword", keywordOf("поправка без двоеточия") === undefined, String(keywordOf("поправка без двоеточия")))
-  const ru = put({ code: "С2", kind: "поправка", to: "С2 2/5 [2026-10-09 09:02] опись source inventory", text: "ещё раз" }, 9, 4)
-  cell("correction: the Russian kind name; the start of the line is cut to 30 characters", ru.ok && ru.line === "С2 2/5 [2026-10-09 09:04] поправка: к строке «С2 2/5 [2026-10-09 09:02] опис» — ещё раз", JSON.stringify(ru))
+  // task 053 (methodology d5f1e80): the quote is the start of the signature after the time, 10 to 30 characters, or the whole short signature
+  no("a correction quoting the whole line with the code and the time", { code: "С2", kind: "correction", to: "С2 2/5 [2026-10-09 09:02] опись source inventory", text: "x" }, /начало подписи после времени/)
+  const ru = put({ code: "С2", kind: "поправка", to: "опись source inventory пересчитана: 31 файл", text: "ещё раз" }, 9, 4)
+  cell("correction: the Russian kind name; the start of the signature is cut to 30 characters", ru.ok && ru.line === "С2 2/5 [2026-10-09 09:04] поправка: к строке «опись source inventory пересчи» — ещё раз", JSON.stringify(ru))
   no("a correction quoting no line of the session", { code: "С2", kind: "correction", to: "такой строки нет", text: "x" }, /не нашлась.*продолжай работу.*новую попытку/)
   no("a correction without text", { code: "С2", kind: "correction", to: "опись source" }, /что не так/)
   no("a correction without the start of the line", { code: "С2", kind: "correction", text: "x" }, /нужен to/)
@@ -252,6 +256,95 @@ const isoLocalOf = (d) => {
   cell("panel: the repeat of the final line in the right form is read instead of the former", d.e.state === 2, JSON.stringify(d.e))
   const e = entry(["С5 0/0 [10:00] запуск", "С5 0/0 [10:01] поправка: к строке «С5 0/0» — x"], t(10, 2))
   cell("panel: a correction alone after a launch keeps the launch state", e.e.state === 3, JSON.stringify(e.e))
+}
+
+// ---- task 053 (methodology d5f1e80, task-runner.md «Строки progress.log», «Что проверить в программе»): «готово» against N of the start
+// line, one start per session, nothing after the final line but its repeat and «стоп:» after «готово» with k below N, no launch from the
+// agent, the quote of a correction is the start of the signature after the time (10 to 30 characters or the whole short signature) ----
+{
+  const tdir = path.join(base, "doc", "tasks", "053-m")
+  mkdirSync(tdir, { recursive: true })
+  const f = "doc/tasks/053-m/progress.log"
+  const abs = path.join(tdir, "progress.log")
+  const put = (input, h = 14, m = 0) => progressLine({ file: f, ...input }, base, at(h, m))
+  const hand = (line) => writeFileSync(abs, (exists(abs) ? read(abs) : "") + line + "\n")
+  const no = (name, input, why) => {
+    const snapshot = exists(abs) ? read(abs) : null
+    const x = put(input)
+    cell(`053 refused: ${name}`, x.ok === false && (exists(abs) ? read(abs) : null) === snapshot && why.test(x.reason), JSON.stringify(x))
+  }
+  // 6: the launch line is not the agent's
+  no("launch from the agent, even as the first line of the file", { code: "С5", kind: "launch" }, /запуск.*не пишет/)
+  cell("053: a refused launch does not create the file", !exists(abs), "created")
+  no("launch by its Russian name", { code: "С5", kind: "запуск" }, /не пишет/)
+
+  // 2: «готово» is compared with N of the start line; more units than expected give k above N
+  put({ code: "С5", kind: "start", n: 8, text: "план из 8 пунктов" }, 14, 0)
+  for (let i = 1; i <= 8; i++) put({ code: "С5", kind: "step", k: i, n: 8, text: `пункт ${i}` }, 14, i)
+  const s9 = put({ code: "С5", kind: "step", k: 9, n: 9, text: "пункт 9 по находке" }, 14, 9)
+  const d9 = put({ code: "С5", kind: "done", n: 8, text: "девять пунктов" }, 14, 10)
+  cell("053: «9/8 готово» after «0/8 старт» is a finish; k does not fall below the last unit", s9.ok && d9.ok && d9.line === "С5 9/8 [2026-10-09 14:10] готово — девять пунктов", JSON.stringify([s9, d9]))
+
+  // 3: «готово» with k below N of the start is not written; a hand-written one is fixed by «стоп:» with the same k
+  put({ code: "С6", kind: "start", n: 10, pass: 1 }, 15, 0)
+  for (let i = 1; i <= 7; i++) put({ code: "С6", kind: "step", k: i, n: 7, text: `AC-0${i} проверен` }, 15, i)
+  no("«7/7 готово» after «0/10 старт» (k below N of the start)", { code: "С6", kind: "done", text: "итог" }, /N из строки старт.*10.*kind: "stop"/)
+  hand("С6 7/7 [2026-10-09 15:08] готово — семь из десяти")
+  no("a unit after «готово» with k below N of the start", { code: "С6", kind: "step", k: 8, n: 10, text: "AC-08" }, /единицы не пишутся.*стоп/)
+  no("a repeat of «готово» with k below N of the start", { code: "С6", kind: "done", text: "итог" }, /N из строки старт/)
+  no("a correction after such «готово»", { code: "С6", kind: "correction", to: "готово — семь из десяти", text: "x" }, /после итоговой строки/)
+  const fixStop = put({ code: "С6", kind: "stop", stop: "ворота", text: "N в старте завышено: AC семь" }, 15, 9)
+  cell("053: «готово» with k below N of the start is fixed by «стоп:» with the same k", fixStop.ok && fixStop.line === "С6 7/7 [2026-10-09 15:09] стоп: ворота — N в старте завышено: AC семь", JSON.stringify(fixStop))
+  no("a unit after the fixing stop", { code: "С6", kind: "step", k: 8, n: 10, text: "AC-08" }, /остановлена строкой стоп:/)
+
+  // 4: one start per session; «готово» without a start or after a second start is not written
+  put({ code: "С3", kind: "start", n: 2 }, 16, 0)
+  put({ code: "С3", kind: "step", k: 1, n: 2, text: "раздел 1" }, 16, 1)
+  no("a second start inside an open session", { code: "С3", kind: "start", n: 2 }, /строка старт в сессии одна/)
+  hand("С3 0/2 [2026-10-09 16:02] старт")
+  const after2 = put({ code: "С3", kind: "step", k: 2, n: 2, text: "раздел 2" }, 16, 3)
+  cell("053: after a hand-written second start the session goes on (it cannot be corrected)", after2.ok && /продолжай работу/.test(after2.hint), JSON.stringify(after2))
+  no("«готово» after a second start", { code: "С3", kind: "done", text: "итог" }, /второй строкой старт.*kind: "stop"/)
+  hand("С4 1/3 [2026-10-09 16:05] план прочитан")
+  put({ code: "С4", kind: "step", k: 2, n: 3, text: "раздел 2" }, 16, 6)
+  put({ code: "С4", kind: "step", k: 3, n: 3, text: "раздел 3" }, 16, 7)
+  no("«готово» in a session without a start", { code: "С4", kind: "done", text: "итог" }, /без строки старт.*kind: "stop"/)
+  const st4 = put({ code: "С4", kind: "stop", stop: "ворота", text: "сессия без строки старт" }, 16, 8)
+  cell("053: a session without a start ends with a stop", st4.ok && st4.line.startsWith("С4 3/3 "), JSON.stringify(st4))
+
+  // 5: after the final line only its repeat in the right form; a stop repeat keeps a kind of the list
+  no("a stop repeat that changes a kind of the list", { code: "С4", kind: "stop", stop: "вопрос", text: "x" }, /вид остановки.*только если прежний не из списка/)
+  const rep4 = put({ code: "С4", kind: "stop", stop: "ворота", text: "сессия без старта" }, 16, 9)
+  cell("053: a stop repeat with the same k and kind is accepted", rep4.ok && rep4.line.startsWith("С4 3/3 "), JSON.stringify(rep4))
+  no("«готово» after «стоп:»", { code: "С4", kind: "done", text: "итог" }, /остановлена строкой стоп:/)
+
+  // 1: the quote of a correction
+  put({ code: "С1", kind: "start", n: 3 }, 17, 0)
+  hand("С1 1/3 [2026-10-09 17:01] опись source inventory пересчитана: 31 файл и бриф; 013 расхождение закреплений зафиксировано")
+  hand("С1 2/3 [2026-10-09 17:02] Бриф")
+  const q1 = put({ code: "С1", kind: "correction", to: "опись", text: "подпись 93 знака" }, 17, 3)
+  cell("053: a quote shorter than 10 characters is taken from the signature up to 10", q1.ok && q1.line.endsWith("поправка: к строке «опись sour» — подпись 93 знака"), JSON.stringify(q1))
+  const q2 = put({ code: "С1", kind: "correction", to: "Бриф", text: "заглавная" }, 17, 4)
+  cell("053: a signature shorter than 10 characters is quoted whole", q2.ok && q2.line.endsWith("поправка: к строке «Бриф» — заглавная"), JSON.stringify(q2))
+  no("a quote that begins with the time field", { code: "С1", kind: "correction", to: "[2026-10-09 17:01] опись", text: "x" }, /начало подписи после времени/)
+
+  // the panel reads the same (task-runner.md, «Что проверить в программе»)
+  const T = (h, m) => new Date(2026, 9, 9, h, m).getTime()
+  const th = { ...DEFAULT_THRESHOLDS }
+  const last = (...ls) => {
+    const ss = sessionsOf(ls.map((l) => parseLine(l)))
+    return entryOf(ss[ss.length - 1], T(23, 0), T(10, 5), th)
+  }
+  cell("053 panel: «9/8 готово» after «0/8 старт» is a finish", last("С5 0/8 [10:00] старт", "С5 9/9 [10:01] п9", "С5 9/8 [10:02] готово").state === 2, "")
+  cell("053 panel: «7/7 готово» after «0/10 старт» is not a finish", last("С6 0/10 [10:00] старт", "С6 7/7 [10:01] п7", "С6 7/7 [10:02] готово").state !== 2, "")
+  const stopAfter = last("С6 0/10 [10:00] старт", "С6 7/7 [10:01] готово", "С6 7/7 [10:02] стоп: ворота — N завышено")
+  cell("053 panel: «стоп:» after «готово» with k below N of the start is a stop", stopAfter.state === 1 && stopAfter.kind === "ворота", JSON.stringify(stopAfter))
+  cell("053 panel: «готово» without a start line is not a finish", last("С4 1/3 [10:00] а", "С4 3/3 [10:01] готово").state !== 2, "")
+  cell("053 panel: «готово» after a second start line is not a finish", last("С3 0/2 [10:00] старт", "С3 1/2 [10:01] а", "С3 0/2 [10:02] старт", "С3 2/2 [10:03] готово").state !== 2, "")
+  cell("053 panel: a launch line opens a new session, its start and «готово» are a finish", last("С3 0/2 [10:00] старт", "С3 1/2 [10:01] а", "С3 0/0 [10:02] запуск", "С3 0/2 [10:03] старт", "С3 2/2 [10:04] готово").state === 2, "")
+  cell("053 panel: units after «стоп:» are a new session without a start, their «готово» is not a finish", last("С2 0/3 [10:00] старт", "С2 1/3 [10:01] а", "С2 1/3 [10:02] стоп: вопрос — x", "С2 2/3 [10:03] б", "С2 3/3 [10:04] готово").state !== 2, "")
+  const all = read(abs).split("\n").filter(Boolean)
+  cell("053: every line has the journal form", all.every((x) => parseLine(x)), JSON.stringify(all))
 }
 
 // ---- log_line ----
