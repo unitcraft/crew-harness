@@ -422,7 +422,7 @@ const isoLocalOf = (d) => {
   const l7 = progressLine({ file: f, code: "С6", kind: "launch", launch: 7 }, base, at(18, 5), L)
   cell("launcher: a free number given by the launcher is taken", l7.ok && l7.line === "С6 0/0 [2026-10-09 18:05] запуск №7", JSON.stringify(l7))
   const ag = progressLine({ file: f, code: "С6", kind: "launch" }, base, at(18, 6))
-  cell("launcher refused: the agent of a session gets no launch line and no record", ag.ok === false && /запуск.*не пишет/.test(ag.reason) && rd(lmd).split("\n").filter(Boolean).length === 3, JSON.stringify(ag))
+  cell("launcher refused: the agent of a session gets no launch line and no record", ag.ok === false && /запуск.*не пишет/.test(ag.reason) && rd(lmd).split("\n").filter(Boolean).length === 4, JSON.stringify(ag))
   const rec = logLine({ file: "doc/tasks/053-r/log.md", kind: "пуск", text: "запуск №8 С7 [2026-10-09 18:07]" }, base, at(18, 7), L)
   cell("launcher: log_line takes the launch record from the launcher", rec.ok && rec.line === "2026-10-09 18:07 пуск: запуск №8 С7 [2026-10-09 18:07]", JSON.stringify(rec))
   // the rule the machine checks: the calling tab holds the integrator role of its project and has no task or review of its own
@@ -598,6 +598,10 @@ const now = new Date(Date.UTC(2026, 9, 9, 10, 30, 0))
   // task 053: the plugin asks who calls - a tab that is not the integrator gets no launch line
   const la = await tools.progress_line.execute({ file: rel, code: "С9", kind: "launch" }, { sessionID: "ses_t" })
   cell("progress tool refuses a launch from a tab that is not the integrator", /^Не записано: строку запуск/.test(la.content) && !read(log).includes("С9 0/0"), JSON.stringify(la))
+  // the integrator tab (it holds the role and has no task) is the launcher: the launch line and the log.md record are written
+  const role = await tools.crew_role.execute({ role: "integrator" }, { sessionID: "ses_int" })
+  const li = await tools.progress_line.execute({ file: rel, code: "С9", kind: "launch" }, { sessionID: "ses_int" })
+  cell("progress tool writes a launch from the integrator tab and the record in log.md", /^Записано: С9 0\/0 \[[^\]]+\] запуск №\d+/.test(li.content) && /пуск: запуск №\d+ С9 \[/.test(read(path.join(dir, "log.md"))), JSON.stringify([role, li]))
   stop?.()
 }
 

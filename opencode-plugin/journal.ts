@@ -82,7 +82,22 @@ export type ProgressInput = {
   to?: string
   /** прежняя форма «k/N» для шага; вместо неё — k и n */
   unit?: string
+  /** запуск (только запускающий): номер запуска; без него — 1 + наибольший номер в progress.log и log.md */
+  launch?: number | string
 }
+/** Кто зовёт инструмент: запускающий (интегратор проекта) пишет строку запуска; агент сессии — нет (методика ab2a4ef). */
+export type JournalEnv = { launcher?: boolean; launches?: number[] }
+
+/**
+ * Запускающий в ручном цикле (задача 053, методика ab2a4ef: «запуск — то, что знает запускающий»): вкладка, которая держит
+ * исключительную роль integrator своего проекта и сама не исполняет и не принимает задачу (в визитке нет task и review). Это машина
+ * проверяет по визитке и замку роли; агент сессии (исполнитель, приёмщик, рабочая вкладка) запускающим не бывает.
+ */
+export function isLauncherCard(card: { role?: string; task?: unknown; review?: unknown } | undefined, holdsIntegrator: boolean): boolean {
+  return !!card && card.role === "integrator" && holdsIntegrator && !card.task && !card.review
+}
+const LAUNCH_NO_RE = /запуск №([1-9][0-9]*)/g
+const launchNumbers = (text: string): number[] => [...text.matchAll(LAUNCH_NO_RE)].map((m) => Number(m[1]))
 
 /** Предел подписи без поля времени (методика: «подпись без времени — не длиннее 80 знаков»). */
 export const SIGNATURE_MAX = 80
@@ -191,7 +206,7 @@ const range = (a: number, b: number) => (b > a ? `${a}–${b}` : `${a}`)
  * Собрать строку журнала хода по виду и проверить её против прежних строк сессии. Чистая функция: файл не читает и не пишет;
  * `prior` — разобранные строки файла (пусто, если файла нет).
  */
-export function buildProgress(input: ProgressInput, prior: Line[], now: Date = new Date()): { ok: true; line: string; kind: ProgressKind; hint: string } | Refused {
+export function buildProgress(input: ProgressInput, prior: Line[], now: Date = new Date(), env: JournalEnv = {}): { ok: true; line: string; kind: ProgressKind; hint: string; launch?: number } | Refused {
   const file = String(input?.file ?? "").trim() || "doc/tasks/NNN-x/progress.log"
   const code = String(input?.code ?? "").trim()
   if (!CODE_RE.test(code)) return { ok: false, reason: "код сессии: 1–8 букв или цифр без пробелов, дословно из строки «Сессия:» (например С2 или С5д)" }
@@ -224,8 +239,20 @@ export function buildProgress(input: ProgressInput, prior: Line[], now: Date = n
       ? `сессия ${code} остановлена строкой стоп: (${st.k}/${st.n}); после неё строки той же сессии не пишутся, кроме её повтора с тем же k в верной форме (методика: «после строки готово или стоп: строки той же сессии не пишутся, дальнейшее — новой сессией»); продолжение после ответа — новой сессией, её первая строка — старт: ${startCall}`
       : `сессия ${code} уже закончена строкой готово ${st.k}/${st.n}; после неё пишется только её повтор с тем же k для исправления формы, новая работа — новой сессией: ${startCall}`
 
+  let launch: number | undefined
   if (kind === "launch") {
-    return { ok: false, reason: `строку запуск агент не пишет: границу сессии ставит раннер или оркестратор (методика: «раннер пишет эти строки сам»); первая строка сессии агента — старт: ${startCall}` }
+    if (!env.launcher)
+      return { ok: false, reason: `строку запуск агент сессии не пишет: её пишет запускающий — интегратор проекта (вкладка, которая держит роль integrator и сама не исполняет и не принимает задачу) или раннер (методика: «агент строку запуск не пишет и в log.md не пишет»); первая строка сессии агента — старт: ${startCall}` }
+    const used = new Set([...(env.launches ?? []), ...prior.flatMap((l) => launchNumbers(l.text))])
+    const want = asInt(input?.launch)
+    if (given(input?.launch) && (want === undefined || want < 1)) return { ok: false, reason: "launch — номер запуска, целое число от 1" }
+    if (want !== undefined && used.has(want))
+      return { ok: false, reason: `номер запуска №${want} уже был в progress.log или log.md этой папки: одной записи запуска — одна строка, повтор номера — существенная находка; без launch номер берётся сам (1 + наибольший)` }
+    launch = want ?? Math.max(0, ...used) + 1
+    k = 0
+    n = 0
+    sig = `запуск №${launch}`
+    hint = `запуск №${launch} записан в progress.log и log.md; первая строка сессии агента — старт: ${startCall}`
   } else if (kind === "start") {
     if (n === undefined)
       return { ok: false, reason: `у строки старт нужен n — число единиц, видимое сессии (методика: «первая строка сессии — <код> 0/<N> [время] старт»); пример: ${example(file, code, 'kind: "start", n: 34, pass: 1, text: "опись 34 источника"')}` }
@@ -335,10 +362,10 @@ export function buildProgress(input: ProgressInput, prior: Line[], now: Date = n
   const len = [...sig].length
   if (len > SIGNATURE_MAX)
     return { ok: false, reason: `подпись «${sig}» — ${len} знаков, предел ${SIGNATURE_MAX} без поля времени (методика: «подпись без времени — не длиннее 80 знаков»); сократи text на ${len - SIGNATURE_MAX}, подробности — в отчёт или log.md` }
-  return { ok: true, line: `${code} ${k}/${n} [${ymdhm(now)}] ${sig}`, kind, hint }
+  return { ok: true, line: `${code} ${k}/${n} [${ymdhm(now)}] ${sig}`, kind, hint, ...(launch !== undefined ? { launch } : {}) }
 }
 
-export function progressLine(input: ProgressInput, base: string, now: Date = new Date()): { ok: true; line: string; file: string; hint: string } | Refused {
+export function progressLine(input: ProgressInput, base: string, now: Date = new Date(), env: JournalEnv = {}): { ok: true; line: string; file: string; hint: string } | Refused {
   const where = insideBase(input?.file, base, "progress.log")
   if (!where.ok) return where
   let prior: Line[] = []
@@ -351,11 +378,28 @@ export function progressLine(input: ProgressInput, base: string, now: Date = new
   } catch (e: any) {
     if (e?.code !== "ENOENT") return { ok: false, reason: `файловая система отказала: ${e?.code ?? e}` }
   }
-  const built = buildProgress(input, prior, now)
+  // запускающий: номера запусков из log.md той же папки, чтобы номер не повторился (методика ab2a4ef)
+  const logAbs = path.join(path.dirname(where.abs), "log.md")
+  let logText = ""
+  if (env.launcher) {
+    try {
+      logText = readFileSync(logAbs, "utf8")
+    } catch (e: any) {
+      if (e?.code !== "ENOENT") return { ok: false, reason: `файловая система отказала: ${e?.code ?? e}` }
+    }
+  }
+  const built = buildProgress(input, prior, now, { ...env, launches: launchNumbers(logText) })
   if (!built.ok) return built
   if (!exists) {
-    if (built.kind !== "start" && built.kind !== "launch") return { ok: false, reason: 'файла нет: журнал создаёт строка старт (kind "start") или запуск (kind "launch")' }
+    if (built.kind !== "start" && built.kind !== "launch") return { ok: false, reason: 'файла нет: журнал создаёт строка старт (kind "start") или запуск запускающего (kind "launch")' }
     if (!existsSync(path.dirname(where.abs))) return { ok: false, reason: "папки журнала нет: инструмент создаёт только файл progress.log в существующей папке" }
+  }
+  if (built.launch !== undefined) {
+    // сначала запись в перечне запусков log.md, потом строка в progress.log: строка без записи была бы существенной находкой
+    const stamp = ymdhm(now)
+    const lead = logText && !logText.endsWith("\n") ? "\n" : ""
+    const badLog = appendOnly(logAbs, `${lead}${stamp} пуск: запуск №${built.launch} ${String(input.code).trim()} [${stamp}]`)
+    if (badLog) return badLog
   }
   const bad = appendOnly(where.abs, built.line)
   if (bad) return bad
@@ -368,15 +412,15 @@ export function progressLine(input: ProgressInput, base: string, now: Date = new
 export const LOG_KINDS = ["решение владельца", "заседание", "ворота", "документ", "пуск", "слияние", "находка"]
 export type LogInput = { file: string; kind: string; text: string }
 
-export function logLine(input: LogInput, base: string, now: Date = new Date()): { ok: true; line: string; file: string } | Refused {
+export function logLine(input: LogInput, base: string, now: Date = new Date(), env: JournalEnv = {}): { ok: true; line: string; file: string } | Refused {
   const kind = String(input?.kind ?? "").trim().toLowerCase()
   const text = String(input?.text ?? "").trim()
   if (!LOG_KINDS.includes(kind))
     return { ok: false, reason: `вид записи ${kind ? `«${kind}» не из списка` : "не назван"}: kind — одно из: ${LOG_KINDS.join(", ")} (Канон, process.md); пример: log_line {file: "doc/tasks/007-x/log.md", kind: "документ", text: "spec.md передан на С2"}` }
   if (!text) return { ok: false, reason: "текст пустой" }
   if (CONTROL_RE.test(text)) return { ok: false, reason: "одна запись — одна строка: без переводов строки и управляющих символов (две записи — два вызова)" }
-  if (/^запуск\s*№/.test(text))
-    return { ok: false, reason: "запись о запуске («запуск №<n> <код> [время]») агент не пишет: её пишет запускающий — раннер или оркестратор вместе со строкой запуск в progress.log (методика: «агент строку запуск не пишет и в log.md не пишет»)" }
+  if (/^запуск\s*№/.test(text) && !env.launcher)
+    return { ok: false, reason: "запись о запуске («запуск №<n> <код> [время]») агент сессии не пишет: её пишет запускающий — интегратор проекта или раннер, лучше вместе со строкой запуск: progress_line kind launch (методика: «агент строку запуск не пишет и в log.md не пишет»)" }
   if ([...text].length > 2000) return { ok: false, reason: "текст длиннее 2000 знаков; подробности — в отчёт, в журнал — итог и ссылка" }
   const where = insideBase(input?.file, base, "log.md")
   if (!where.ok) return where
@@ -492,8 +536,18 @@ export function usageLine(input: UsageInput, base: string, env: UsageEnv): { ok:
 
 // ---- регистрация инструментов ----
 // Отдельным вызовом ctx.tool.transform; сбой регистрации не ломает плагин.
-export async function registerJournalTools(ctx: any, log: (s: string) => void): Promise<void> {
+export async function registerJournalTools(ctx: any, log: (s: string) => void, opts: { launcher?: (sessionID: string) => boolean } = {}): Promise<void> {
   const base = () => String(ctx?.location?.directory ?? process.cwd())
+  // запускающий ли вызывающая вкладка (index.ts: визитка и замок роли integrator); сбой проверки — не запускающий
+  const launcherOf = (context: any): boolean => {
+    try {
+      const sid = String(context?.sessionID ?? "")
+      return !!sid && !!opts.launcher?.(sid)
+    } catch (e) {
+      log(`journal tools: launcher check failed: ${e}`)
+      return false
+    }
+  }
   const cardOf = async (sessionID: string): Promise<SessionCard | undefined> => {
     try {
       if (!sessionID || typeof ctx?.session?.get !== "function") return undefined
@@ -515,7 +569,7 @@ export async function registerJournalTools(ctx: any, log: (s: string) => void): 
           "step {k, n, text} -> '<code> k/N [time] text', one line right after EACH finished unit, k = previous + 1; " +
           "done {text optional} -> '<code> N/N [time] готово — text', the last line of a finished session; k must be at least N of the start line (k above N is fine); not written without a start or after a second start; with k below N of the start fix it by what happened: the work goes on - next units, it stopped - stop, it is done and N was too high - done {text: 'N завышено: <reason>'} (a final line); " +
           "stop {stop: вопрос|план|ревизия|требования|ворота, text = reason} -> '<code> k/N [time] стоп: вид — reason'; after it the session writes no units: the work after the answer goes on in a new session that begins with start; " +
-          "the line 'запуск' is not written by the agent, neither in progress.log nor in log.md (the runner or the orchestrator marks the session); " +
+          "launch {launch optional} -> '<code> 0/0 [time] запуск №n' plus the record '<time> пуск: запуск №n <code> [time]' in log.md of the folder: only for the launcher - the tab holding the integrator role of the project without a task or review of its own; the agent of a session never writes a launch, neither in progress.log nor in log.md; " +
           "correction {to = the start of the signature (after the time) of the wrong line of the same session, text = what is wrong} -> '<code> k/N [time] поправка: к строке «10 to 30 chars of it, or the whole shorter signature» — text', keeps the current k, is not a unit; never rewrite a line, correct it. Not after the final line: a wrong 'готово'/'стоп:' line is fixed by repeating done/stop with the same k (a stop kind of the list is kept). The journal is a signal, not a proof: the finish is judged by the artifact. A skipped unit or a missing start cannot be corrected: go on with the work, do not begin a new attempt. A form mistake of the journal is a finding (находка in log.md), not a reason to redo the session. " +
           "The whole signature (all but the time) is at most 80 characters. A refusal names the rule, the expected form and an example call; nothing is written. " +
           "Example: {file: 'doc/tasks/007-x/progress.log', code: 'С2', kind: 'start', n: 34, pass: 1, text: 'опись 34 источника'}, then {file: same, code: 'С2', kind: 'step', k: 1, n: 34, text: 'spec.md прочитан целиком'}.",
@@ -524,7 +578,7 @@ export async function registerJournalTools(ctx: any, log: (s: string) => void): 
           properties: {
             file: { type: "string", description: "path to progress.log, relative to the project folder or absolute inside it" },
             code: { type: "string", description: "session code exactly from the 'Сессия:' line, e.g. С2 or С5д" },
-            kind: { type: "string", enum: ["start", "step", "done", "stop", "correction"], description: "kind of the line; step when omitted" },
+            kind: { type: "string", enum: ["start", "step", "done", "stop", "correction", "launch"], description: "kind of the line; step when omitted; launch - the launcher only" },
             k: { type: "number", description: "step: number of the finished unit, previous + 1" },
             n: { type: "number", description: "start and step: number of units the session sees" },
             pass: { type: "number", description: "start: number of the review pass (заход), as in spec-review-N.md; required for С2, С4, С6" },
@@ -532,11 +586,12 @@ export async function registerJournalTools(ctx: any, log: (s: string) => void): 
             text: { type: "string", description: "step: what is done, starting with the subject; start: what is ahead; done: the result; stop: the reason; correction: what is wrong. One line, no keyword" },
             to: { type: "string", description: "correction: the start of the signature after the time of the wrong line of the same session (no code, k/N or time); 10 to 30 characters are kept, the whole signature if it is shorter" },
             unit: { type: "string", description: "old form of k and n for a step: 'k/N', e.g. 4/13" },
+            launch: { type: "number", description: "launch (the launcher only): the launch number; by default 1 + the largest one in progress.log and log.md" },
           },
           required: ["file", "code"],
         },
-        execute: async (input: any) => {
-          const r = progressLine(input, base())
+        execute: async (input: any, context: any) => {
+          const r = progressLine(input, base(), new Date(), { launcher: launcherOf(context) })
           if (!r.ok) {
             log(`progress_line refused: ${r.reason}`)
             return { content: `Не записано: ${r.reason}` }
@@ -548,7 +603,7 @@ export async function registerJournalTools(ctx: any, log: (s: string) => void): 
         name: "log_line",
         description:
           "The way to write an entry of the task log (log.md): appends ONE line 'YYYY-MM-DD HH:MM <kind>: <text>' with the machine date and time (never type the time by hand or ask the clock). " +
-          "kind is one of: решение владельца, заседание, ворота, документ, пуск, слияние, находка. One entry - one call, one line (no line breaks), up to 2000 characters. The launch record 'запуск №<n> <code> [time]' is written by the runner or the orchestrator, never by the agent. " +
+          "kind is one of: решение владельца, заседание, ворота, документ, пуск, слияние, находка. One entry - one call, one line (no line breaks), up to 2000 characters. The launch record 'запуск №<n> <code> [time]' is written by the launcher (the integrator tab, better via progress_line kind launch), never by the agent of a session. " +
           "File named log.md inside the project folder; created only in an existing folder. Example: {file: 'doc/tasks/007-x/log.md', kind: 'решение владельца', text: 'владелец, 2026-10-15, чат: «по рекомендации»'}.",
         input: {
           type: "object",
@@ -559,8 +614,8 @@ export async function registerJournalTools(ctx: any, log: (s: string) => void): 
           },
           required: ["file", "kind", "text"],
         },
-        execute: async (input: any) => {
-          const r = logLine(input, base())
+        execute: async (input: any, context: any) => {
+          const r = logLine(input, base(), new Date(), { launcher: launcherOf(context) })
           if (!r.ok) {
             log(`log_line refused: ${r.reason}`)
             return { content: `Не записано: ${r.reason}` }

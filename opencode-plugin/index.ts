@@ -67,6 +67,7 @@ import {
   parseProjects,
   projectOf,
   roleKey,
+  holdsExclusive,
   loadConfig,
   tierOf,
   pickHolder,
@@ -141,7 +142,7 @@ import { catalogModels, writeCatalog } from "./model-catalog.ts"
 import { forEachBudget, background, stepBudget } from "./async-git.ts"
 import { ensureWorktree, fileAtAsync, gitTraces, leftoversOf, mergeHolder, mergeLockAbandoned, reviewLetter, wakeLockWaiters } from "./review.ts"
 import { precheckLines, releaseLandedLock } from "./precheck.ts"
-import { noteLoopLag, registerJournalTools } from "./journal.ts"
+import { isLauncherCard, noteLoopLag, registerJournalTools } from "./journal.ts"
 import { type ResumeTry, RESUME_WINDOW_MS, canInterrupt, interruptTurn, resumeLetter, resumeNote, resumeVerdict } from "./hung-resume.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
@@ -1816,7 +1817,13 @@ export default {
     })
     // Журналы задачи (journal.ts): progress_line, log_line и usage_line. Отдельным вызовом и вне списка tools / MCP-сервера; сбой не ломает плагин.
     try {
-      await registerJournalTools(ctx, log)
+      // запускающий (задача 053): вкладка держит роль integrator своего проекта и сама не исполняет и не принимает задачу
+      await registerJournalTools(ctx, log, {
+        launcher: (sid) => {
+          const c = readJson<Card>(cardFile(sid)) ?? mine.get(sid)
+          return !!c && isLauncherCard(c, holdsExclusive(roleKey(projOf(c), "integrator"), sid))
+        },
+      })
     } catch (e) {
       log(`journal tools failed: ${e}`)
     }
