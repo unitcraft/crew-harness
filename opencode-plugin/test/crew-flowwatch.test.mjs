@@ -162,10 +162,11 @@ cell("leftovers of an accepted task are raised to its author, once", left.length
 // the author is told; a spawn refused by the full inflight_limit names the task
 await until(() => letters("sesREV04").some((l) => /не очищена/.test(l.text)))
 await wait(600)
-const stale = letters("sesREV04").filter((l) => /не очищена/.test(l.text))
-cell("the reviewer of a stale accepted task is woken to repeat cleanup, once", stale.length === 1 && /#4/.test(stale[0].text) && /cleanup/.test(stale[0].text) && stale[0].wake !== false, JSON.stringify(stale.map((l) => l.text.slice(0, 200))))
+// the reminder repeats every accepted_reminder_min, at most 5 times per acceptance (task 043): the first one has no number
+const stale = letters("sesREV04").filter((l) => /не очищена/.test(l.text)).sort((x, y) => x.time - y.time)
+cell("the reviewer of a stale accepted task is woken to repeat cleanup (repeats at most 5 times, numbered)", stale.length >= 1 && stale.length <= 5 && /#4/.test(stale[0].text) && /cleanup/.test(stale[0].text) && !/Напоминание \d/.test(stale[0].text) && stale.every((l) => l.wake !== false) && stale.slice(1).every((l, i) => new RegExp(`Напоминание ${i + 2} из 5`).test(l.text)), JSON.stringify(stale.map((l) => l.text.slice(0, 200))))
 const staleA = letters("sesINTEG1").filter((l) => /#4 .*не очищена/.test(l.text))
-cell("the author is told too, once", staleA.length === 1, JSON.stringify(staleA.map((l) => l.text.slice(0, 200))))
+cell("the author is told too (at most 5 times)", staleA.length >= 1 && staleA.length <= 5,JSON.stringify(staleA.map((l) => l.text.slice(0, 200))))
 await tools.crew_role.execute({ role: "integrator" }, { sessionID: "sesINTEG1" })
 const refused = (await tools.crew_spawn.execute({ title: "срочная", goal: "g", criteria: "c", priority: "P1" }, { sessionID: "sesINTEG1" })).content
 cell("a spawn refused by inflight_limit names the accepted, not cleaned up task", /Лимит задач проекта/.test(refused) && /#4 принята 60 мин назад, не очищена/.test(refused), refused)

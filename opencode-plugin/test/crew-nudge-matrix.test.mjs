@@ -5,6 +5,7 @@
 // of the test projects and the CREW_HARNESS_* variables.
 // A row without an implementation is a KNOWN HOLE: it states the behavior that is wanted and passes only while the plugin does NOT do
 // it ("HOLE" in the output). When a hole gets closed the row fails with "hole closed": turn it into a normal row.
+// Task 043 closed T3 (L1), L3, T7b, M18a, T11/M04a and the text of the "review stuck" letter: those rows are normal now.
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -60,6 +61,7 @@ const ses = (s, dir = tmp) => {
 const core = await import("../core.ts")
 const tasks = await import("../tasks.ts")
 const review = await import("../review.ts")
+const status = await import("../status.ts")
 const DEAD = 999999
 const card = (session, project, extra = {}) => {
   ses(session, dirs[project])
@@ -143,10 +145,16 @@ reviewerCard("sesRV16", T.m16)
 T.m17 = mk("pw", { status: "reviewing", executor: "sesEX17", reviewer: "sesRV17", review_kind: "tab", review_qid: "rq17x" })
 reviewerCard("sesRV17", T.m17)
 review.takeMergeLock("pw", "sesRV17", T.m17.n)
-{
-  const lockFile = path.join(core.ROLES, "pw_merge.json")
+const ageLock = (project) => {
+  const lockFile = path.join(core.ROLES, `${project}_merge.json`)
   writeFileSync(lockFile, JSON.stringify({ ...JSON.parse(readFileSync(lockFile, "utf8")), at: Date.now() - 600_000 }))
 }
+ageLock("pw")
+// T7c on review in the project whose author's tab is closed: the reviewer has held the merge lock too long
+T.t7c = mk("pc", { status: "reviewing", executor: "sesEX7c", reviewer: "sesRV7c", review_kind: "tab", review_qid: "rq7cx" })
+reviewerCard("sesRV7c", T.t7c)
+review.takeMergeLock("pc", "sesRV7c", T.t7c.n)
+ageLock("pc")
 // M18/M19 accepted, not cleaned up an hour: accepted_slot free / hold
 T.m18 = mk("pf", { status: "accepted", executor: "sesEX18", reviewer: "sesRV18", review_kind: "tab", review_qid: "rq18x" })
 when(T.m18, "accepted", 3_600_000)
@@ -326,8 +334,11 @@ cell("M03", "running: reconcile restores the executor's obligation (qid of the t
 {
   const ob = oblig("sesEX04", T.m04.qid)
   cell("M04", "running, no card of the executor: reconcile still records the obligation", !!ob, "no obligation")
-  const told = [...letters(AUTH.pw), ...noticesFor(AUTH.pw)].filter((x) => new RegExp(`#${T.m04.n}\\b`).test(x.text ?? x.title ?? ""))
-  hole("M04a", "running, the executor's session is gone (no card): nobody is told, the task hangs as running (wanted: a letter to the author)", told.length > 0, JSON.stringify(told.map((x) => (x.text ?? x.title).slice(0, 80))))
+  const m04re = new RegExp(`#${T.m04.n}\\b.*пропала`)
+  await until(() => lettersRe(AUTH.pw, m04re).length > 0)
+  const told = lettersRe(AUTH.pw, m04re)
+  const hist = tasks.loadTask("pw", T.m04.n).history.filter((h) => /пропала/.test(h.note ?? ""))
+  cell("M04a", "running, the executor's session is gone (no card): after 3 passes ONE letter to the author (reassign) and an entry in the task history", told.length === 1 && /crew_task \{action: "reassign", n: \d+\}/.test(told[0].text) && hist.length === 1, JSON.stringify({ told: told.map((x) => x.text.slice(0, 160)), hist: hist.length }))
 }
 // M05/M06 rework
 cell("M05", "rework (remarks): the executor gets the rework letter with the remarks and has the obligation", sent("sesEX05", /исправь пустой ввод/).length === 1 && !!oblig("sesEX05", T.m05.qid), JSON.stringify({ d: delivered.filter((d) => d.sessionID === "sesEX05").map((d) => d.text.slice(0, 60)), ob: core.obligationsOf("sesEX05") }))
@@ -393,9 +404,9 @@ cell("M07", "running, kind assign, the owner's tab is closed: reconcile records 
 {
   const rf = lettersRe("sesRV18", /не очищена/)
   const af = lettersRe(AUTH.pf, new RegExp(`#${T.m18.n} .*не очищена`))
-  cell("M18", "accepted, accepted_slot free, over accepted_reminder_min: the reviewer is woken to repeat cleanup (place not held), the author is told, once each", rf.length === 1 && /место в inflight_limit не занимает/.test(rf[0].text) && rf[0].wake !== false && af.length === 1, JSON.stringify({ rf: rf.map((l) => l.text.slice(0, 100)), af: af.length }))
+  cell("M18", "accepted, accepted_slot free, over accepted_reminder_min: the reviewer is woken to repeat cleanup (place not held), the author is told", rf.length >= 1 && rf.every((l) => /место в inflight_limit не занимает/.test(l.text) && l.wake !== false) && af.length >= 1, JSON.stringify({ rf: rf.map((l) => l.text.slice(0, 100)), af: af.length }))
   const rh = lettersRe("sesRV19", /не очищена/)
-  cell("M19", "accepted, accepted_slot hold: same letters, the text says the place is held", rh.length === 1 && /держит место в лимите/.test(rh[0].text), JSON.stringify(rh.map((l) => l.text.slice(0, 100))))
+  cell("M19", "accepted, accepted_slot hold: same letters, the text says the place is held", rh.length >= 1 && /держит место в лимите/.test(rh[0].text), JSON.stringify(rh.map((l) => l.text.slice(0, 100))))
 }
 // M20/M21 approval
 {
@@ -412,12 +423,23 @@ cell("M07", "running, kind assign, the owner's tab is closed: reconcile records 
   cell("M23", "cancelled: the executor session is closed, no nudges", c23?.spawned?.status === "closed" && sent("sesEX23", /Не завершено/).length === 0, JSON.stringify(c23?.spawned))
 }
 // T11 the deleted session
-hole("T11", "running, the executor's session was deleted in OpenCode: every delivery fails again and again and only the server log knows (wanted: the author is told)", lettersRe(AUTH.pw, new RegExp(`#${T.t11.n}\b`)).length > 0, `prompt failed ${promptFails} times`)
-// the one-shot reminders do not repeat while the reminder period passes again (accepted_reminder_min 0.6 s)
-await wait(2500)
 {
+  const t11re = new RegExp(`#${T.t11.n}\\b.*пропала`)
+  await until(() => lettersRe(AUTH.pw, t11re).length > 0)
+  await until(() => promptFails >= 5)
+  const told = lettersRe(AUTH.pw, t11re)
+  const hist = tasks.loadTask("pw", T.t11.n).history.filter((h) => /пропала/.test(h.note ?? ""))
+  cell("T11", "running, the executor's session was deleted in OpenCode: after 3 failed deliveries in a row ONE letter to the author (reassign) and ONE entry in the task history, not repeated", promptFails >= 5 && told.length === 1 && /NotFound/.test(told[0].text) && /crew_task \{action: "reassign", n: \d+\}/.test(told[0].text) && hist.length === 1, JSON.stringify({ promptFails, told: told.map((l) => l.text.slice(0, 200)), hist: hist.length }))
+}
+// M18a the reminder repeats every accepted_reminder_min (0.6 s here), at most 5 times per acceptance; then a line in /crew
+{
+  await until(() => lettersRe("sesRV18", /не очищена/).length >= 5)
+  await wait(2000)
   const rf = lettersRe("sesRV18", /не очищена/)
-  hole("M18a", "accepted and still not cleaned up after several reminder periods: the reminder repeats (wanted: repeats; now ONE letter per acceptance, then silence)", rf.length > 1, `${rf.length} letter(s)`)
+  const af = lettersRe(AUTH.pf, new RegExp(`#${T.m18.n} .*не очищена`))
+  const view = status.formatStatuses(status.readStatuses(), Date.now(), "pf")
+  const line = new RegExp(`#${T.m18.n} «[^»]*» принята и не убрана 1 ч`)
+  cell("M18a", "accepted and still not cleaned up: the reminder repeats every accepted_reminder_min, 5 times per acceptance (reviewer and author), then silence and the line 'не убрана N ч' in /crew", rf.length === 5 && af.length === 5 && line.test(view), JSON.stringify({ rf: rf.length, af: af.length, view: view.split("\n").filter((l) => /не убрана|pf/.test(l)) }))
 }
 
 // ===== rows decided by the end of a turn =====
@@ -432,6 +454,18 @@ await until(() => lettersRe(AUTH.pw, /застряла/).some((l) => new RegExp(
   const before = sent("sesEX31", /Не завершено/).length
   await turn("sesEX31")
   cell("T1c", "stuck: no more reminders after that", sent("sesEX31", /Не завершено/).length === before, `${sent("sesEX31", /Не завершено/).length} vs ${before}`)
+  // L3: "stuck since HH:MM: what" stays in /crew and in the sidebar until the mark is cleared
+  const stuckRe = /застряла с \d\d:\d\d: задача #\d+/
+  const view = () => status.formatStatuses(status.readStatuses(), Date.now(), "pw")
+  const side = () => status.sidebarLines(status.readStatuses(), Date.now(), "pw").rows.map((r) => status.sideText(r))
+  await until(() => stuckRe.test(view()), 4000)
+  const row = view().split("\n").find((l) => stuckRe.test(l)) ?? ""
+  cell("T1d", "stuck: the line 'застряла с ЧЧ:ММ: <что>' is shown in /crew under the tab and in the sidebar", row.includes(`#${T.t1.n}`) && side().some((l) => /застряла с \d\d:\d\d/.test(l)), JSON.stringify({ row, side: side() }))
+  await call("crew_role", AUTH.pw, { role: "integrator" })
+  await call("crew_task", AUTH.pw, { action: "push", n: T.t1.n, text: "доделай" })
+  const t1Line = () => view().split("\n").some((l) => l.includes(`задача #${T.t1.n} `) && /застряла с/.test(l))
+  await until(() => !t1Line(), 4000)
+  cell("T1e", "crew_task push clears the mark: the line is gone from /crew", !t1Line(), view())
 }
 // T2: reviewer, empty turns
 await turn("sesRV32")
@@ -442,13 +476,17 @@ await until(() => lettersRe(AUTH.pt, /застряла/).length > 0)
   const c = lettersRe(AUTH.pt, /застряла/)
   cell("T2b", "reviewing: a stuck reviewer -> a letter to the author and a notice", c.length === 1 && noticesFor("sesRV32").some((n) => /застряла/.test(n.title)), JSON.stringify({ l: c.length, n: noticesFor("sesRV32").map((n) => n.title) }))
   cell("T2c", "reviewing: a stuck reviewer is recorded in the task history (like a stuck executor)", tasks.loadTask("pt", T.t2.n).history.some((h) => /застряла/.test(h.note ?? "")), JSON.stringify(tasks.loadTask("pt", T.t2.n).history.map((h) => h.note)))
+  cell("T2d", "reviewing: the 'review stuck' letter tells to push the REVIEWER (crew_task push with to: reviewer)", c.length === 1 && new RegExp(`crew_task \\{action: "push", n: ${T.t2.n}, to: "reviewer"`).test(c[0].text), JSON.stringify(c.map((l) => l.text)))
 }
-// T3: push_max over the whole life of the obligation: working turns also count
-for (let i = 0; i < 3; i++) await turn("sesEX33", { tools: true })
-cell("T3a", "running: working turns (with tools) are reminded too, up to push_max (3)", sent("sesEX33", /Не завершено: задача/).length === 3, String(sent("sesEX33", /Не завершено/).length))
-await turn("sesEX33", { tools: true })
-await until(() => lettersRe(AUTH.pw, /напоминаний остались без ответа/).length > 0)
-cell("T3b", "running: the 4th working turn -> stuck by push_max (reminders are counted for the whole life of the obligation, not 'in a row'): the author is called", lettersRe(AUTH.pw, /напоминаний остались без ответа/).length === 1 && sent("sesEX33", /Не завершено/).length === 3, JSON.stringify({ l: lettersRe(AUTH.pw, /напоминаний/).length, r: sent("sesEX33", /Не завершено/).length }))
+// T3 (L1): a working turn (with tools) resets the reminder counter of the obligation: working turns never reach push_max (3)
+for (let i = 0; i < 5; i++) await turn("sesEX33", { tools: true })
+cell("T3a", "running: working turns (with tools) are reminded after each one, past push_max (3)", sent("sesEX33", /Не завершено: задача/).length === 5, String(sent("sesEX33", /Не завершено/).length))
+await wait(600)
+{
+  const ob = oblig("sesEX33", T.t3.qid)
+  const calls = lettersRe(AUTH.pw, /застряла/).filter((l) => new RegExp(`задача #${T.t3.n} `).test(l.text))
+  cell("T3b", "running: the working turns do not make the task stuck: no call to the author, the reminder counter is 1 (reset by each working turn)", calls.length === 0 && ob?.nudges === 1 && !ob?.stuck, JSON.stringify({ ob, calls: calls.map((l) => l.text.slice(0, 120)) }))
+}
 // T4: accepted, reviewer nudged until cleanup
 await turn("sesRV34")
 cell("T4", "accepted: the reviewer is nudged at the end of an empty turn until cleanup (the text names the status 'принята')", sent("sesRV34", /Не завершено: приёмка задачи #\d+ «[^»]*» \(принята\)/).length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "sesRV34").map((d) => d.text.slice(0, 120))))
@@ -473,7 +511,10 @@ await wait(600)
 {
   const l = letters(AUTH.pc).filter((l) => /застряла/.test(l.text))
   cell("T7a", "stuck, the author's tab is closed: the call letter is posted and waits in his inbox (not delivered until he opens the tab)", l.length === 1 && l[0].box === "inbox" && sent(AUTH.pc, /застряла/).length === 0, JSON.stringify(l.map((x) => x.box)))
-  hole("T7b", "stuck, the author's tab is closed: no sign anywhere (no window notice) until the author's tab opens (wanted: a notice to some live window)", seenNotices.some((n) => /застряла/.test(n.title) && n.sessionID === "sesEX37"), "no notice")
+  cell("T7b", "stuck, the author's tab is closed: the notice goes to the live windows (no window of the project here: all live windows)", seenNotices.some((n) => /застряла/.test(n.title) && n.sessionID === "sesEX37"), JSON.stringify(seenNotices.map((n) => n.title)))
+  const lockL = lettersRe(AUTH.pc, /Замок слияния проекта pc/)
+  const lockN = seenNotices.filter((n) => /замок/i.test(n.title) && new RegExp(`#${T.t7c.n}\\b`).test(`${n.title} ${n.message}`))
+  cell("T7c", "merge lock held too long, the author's tab is closed: ONE letter waits in his inbox, and ONE notice goes to the live windows", lockL.length === 1 && lockN.length === 1, JSON.stringify({ l: lockL.length, n: seenNotices.map((n) => n.title) }))
 }
 // T8: the owner's closed tab as an executor gets the nudge
 await turn("sesOWN8")

@@ -2,7 +2,8 @@
 // The turn facts come from OpenCode's database (session_message between two `idle` rows): a turn with a tool call
 // is a working one (resets the empty counter), a turn without one is empty; push_empty_turns empty turns in a row
 // or push_max reminders -> the tab is stuck: no more reminders, the asker gets a call (letter + notice). A turn
-// with an owner's message gets no reminder and resets the counter. crew_task push clears "stuck". A turn cut off
+// with an owner's message gets no reminder and resets the counter; a working turn also resets the reminder counter (task 043),
+// so push_max stops only the reminders of turns the database does not show. crew_task push clears "stuck". A turn cut off
 // by a server restart (time_suspended, no idle) is resumed by one letter.
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
@@ -174,11 +175,16 @@ cell("push clears stuck and the counters", obl()?.stuck === false && obl()?.empt
 await turn()
 cell("after push an empty turn gets a reminder again", reminders() === 8, reminders())
 
-// 5. push_max: reminders without an answer stop at the project's limit (8 here)
-for (let i = 0; i < 7; i++) await turn({ tools: true })
-cell("reminders up to push_max", reminders() === 15 && obl()?.nudges === 8, `${reminders()} ${JSON.stringify(obl())}`)
-await turn({ tools: true })
-cell("over push_max: stuck, a call 'reminders without an answer'", obl()?.stuck === true && got("sesINTEG1", "8 напоминаний остались без ответа").length === 1 && reminders() === 15, JSON.stringify(obl()))
+// 5. a working turn resets the reminder counter (task 043, L1): working turns never reach push_max (8 here)
+for (let i = 0; i < 9; i++) await turn({ tools: true })
+cell("working turns past push_max: a reminder after each, the counter stays 1, not stuck", reminders() === 17 && obl()?.nudges === 1 && !obl()?.stuck && calls() === 1, `${reminders()} ${JSON.stringify(obl())}`)
+// push_max still stops reminders of turns the database does not show (they count as working, but do not reset the counter)
+process.env.CREW_HARNESS_DB = path.join(tmp, "no-such.db")
+for (let i = 0; i < 7; i++) await turn()
+cell("turns unseen in the database: reminders up to push_max", reminders() === 24 && obl()?.nudges === 8 && obl()?.empty === 0, `${reminders()} ${JSON.stringify(obl())}`)
+await turn()
+cell("over push_max: stuck, a call 'reminders without an answer'", obl()?.stuck === true && got("sesINTEG1", "8 напоминаний остались без ответа").length === 1 && reminders() === 24, JSON.stringify(obl()))
+process.env.CREW_HARNESS_DB = dbPath
 
 // 5b. waiting the honest way (2026-10-06): an open crew_watch or a question waiting for its answer -> no
 // reminders (executor #17 of nova got one a minute while waiting for a commit in main and took to polling in Bash)
