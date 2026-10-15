@@ -528,7 +528,9 @@ hole("T9", "a turn ended while the service was down (card of a dead process, obl
   const out = await call("crew_task", AUTH.pt, { action: "push", n: T.t10.n, text: "поторопись с приёмкой" })
   await wait(800)
   cell("T10a", "crew_task push on a task under review: the executor gets the letter", sent("sesEX40", /Подталкивание по задаче/).length === 1, out)
-  hole("T10b", "crew_task push on a task under review: the REVIEWER is woken too (wanted: push goes to the one who holds the task now; now only the executor, who has already submitted)", sent("sesRV40", /Подталкивание|поторопись/).length > 0, JSON.stringify(delivered.filter((d) => d.sessionID === "sesRV40").map((d) => d.text.slice(0, 60))))
+  const outRev = await call("crew_task", AUTH.pt, { action: "push", n: T.t10.n, to: "reviewer", text: "поторопись с приёмкой" })
+  for (let i = 0; i < 20 && !sent("sesRV40", /Подталкивание по задаче/).length; i++) await wait(250)
+  cell("T10b", "crew_task push with to: reviewer on a task under review: the reviewer gets the letter (owner, 2026-10-15: the target is chosen by `to`, the default stays the executor)", sent("sesRV40", /Подталкивание по задаче/).length === 1, outRev)
 }
 
 clearInterval(heart)
