@@ -17,9 +17,15 @@
     80 знаков); log.md (по слову владельца 2026-10-09): добавленные в индексе строки с датой не
     раньше 2026-10-10 — по шаблону «ГГГГ-ММ-ДД ЧЧ:ММ <вид>: <текст>» (красные: вид не из списка,
     нет времени, нет вида; у первой версии файла судятся все строки); прежние строки, более ранние
-    даты, строки без даты в начале, режимы дерева и коммита — не красные.
+    даты, строки без даты в начале, режимы дерева и коммита — не красные; «результат и куда он
+    попадает» (задача 047): у задачи, заведённой не раньше 2026-10-15 14:20, красные — вторая строка
+    spec.md или третья plan.md не дословно по промптам С1 и С3, нет раздела, пустой раздел, строка «нет:
+    результат — код» без фразы, результат назван при result.md без current.md, заголовок только в
+    огороженном коде; не красные — более ранняя задача, папка без log.md, CRLF и BOM, настоящие spec.md
+    и plan.md репозитория.
 Не проверяет: содержание документов.
-Правило: doc/canon/process.md (цикл сессий методики, «Журнал хода progress.log»); AC-14 и AC-18 задач.
+Правило: doc/canon/process.md (цикл сессий методики, «Журнал хода progress.log», «Результат и куда он
+    попадает»); AC-14 и AC-18 задач.
 """
 import sys
 
@@ -386,6 +392,83 @@ def main():
     pr.probe("иной-синтаксис", "журнал: неразрывный пробел на месте разделителя — не строка", red_j({journal: "С1 0/2 старт\nС1\u00a01/2 x\n"}, "journal-line", journal + ":2"))
     pr.probe("иной-синтаксис", "журнал: граница 80 и 81 знак (поле времени не считается)", edge_80_and_81_with_time)
     pr.probe("мишень", "журнал: общий набор строк с плагином существует и читается одинаково", vectors)
+    # ------------------------------------------------------------------------------------------------
+    # «результат и куда он попадает» (задача 047; методика 03d28d0, промпты С1 и С3): задачи с 2026-10-15 14:20
+    # ------------------------------------------------------------------------------------------------
+    rh = "doc/tasks/048-n/"
+    rh_line = "Документ задачи: после сдачи история; где действует результат — current.md в этой папке, если он есть"
+    rh_spec = ("Статус: черновик\n" + rh_line + "\n\n# 048\n\nREQ-01 a\n\n## Результат и куда он попадает\n\n"
+               "- формат X: действует doc/canon/process.md, раздел «X» (существует); переносится шагом 3 плана.\n\n## Вопросы\n\nнет\n")
+    rh_plan = "Статус: черновик\nБаза: ревизия abc, 2026-10-16\n" + rh_line + "\n\n1. шаг\n"
+    rh_log = "Методика: unitcraft/ai-dev-methodology @ 03d28d0\n2026-10-15 14:20 документ: задание заведено\n"
+    rh_good = dict(good)
+    rh_good.update({rh + "spec.md": rh_spec, rh + "plan.md": rh_plan, rh + "log.md": rh_log})
+    no_code = "## Результат и куда он попадает\n\nнет: результат — код; сдаётся поправка стража в scripts/guards/.\n"
+
+    def rh_check(change, expect_red=None, drop=()):
+        """expect_red — список (где, правило) или None (зелёное); drop — файлы, которых в папке нет."""
+        def fn():
+            files = dict(rh_good)
+            files.update(change)
+            for name in drop:
+                files.pop(name, None)
+            proc = check(fresh(files))
+            if expect_red is None:
+                assert proc.returncode == 0 and "FAIL" not in proc.out, proc.out
+            else:
+                stlib.expect(proc, 1, "FAIL: check-task-docs: %d нарушений" % len(expect_red))
+                for where, rule in expect_red:
+                    assert stlib.has_line(proc, "FAIL %s: %s:" % (where, rule)), proc.out
+        return fn
+
+    def rh_real_specs_and_plans():
+        # настоящие spec.md, plan.md и log.md репозитория: задачи до даты правила новым правилом не судятся
+        proc = stlib.run(("git", "ls-files", "-z", "--", "doc/tasks/*/spec.md", "doc/tasks/*/plan.md", "doc/tasks/*/log.md"),
+                         cwd=stlib.REPO, env=env)
+        names = [x for x in proc.out.split("\0") if x]
+        assert any(n.endswith("/spec.md") for n in names), "мишень: отслеживаемых spec.md нет"
+        files = {}
+        for name in names:
+            with open(os.path.join(stlib.REPO, *name.split("/")), "rb") as handle:
+                files[name] = handle.read()
+        out = check(fresh(files))
+        assert ": result-" not in out.out, out.out
+
+    def rh_commit_mode():
+        repo = fresh(rh_good)
+        sha = stlib.commit_file(repo, env, rh + "plan.md", "Статус: черновик\nБаза: ревизия abc\nтретья строка не та\n", "plan")
+        proc = check(repo, "--commit", sha)
+        stlib.expect(proc, 1, "FAIL: check-task-docs: 1 нарушений")
+        assert stlib.has_line(proc, "FAIL %splan.md:3: result-line:" % rh), proc.out
+
+    pr.probe("законное", "результат: новая задача, результат назван, result.md ещё нет", rh_check({}))
+    pr.probe("законное", "результат: строка «нет: результат — код» с фразой, current.md не нужен даже при result.md",
+             rh_check({rh + "spec.md": "Статус: черновик\n" + rh_line + "\n\n" + no_code, rh + "result.md": "x\n"}))
+    pr.probe("законное", "результат: назван, result.md и current.md есть",
+             rh_check({rh + "result.md": "x\n", rh + "current.md": "формат X: doc/canon/process.md\n"}))
+    pr.probe("законное", "результат: задача заведена раньше 2026-10-15 14:20 — не судится",
+             rh_check({rh + "log.md": "2026-10-15 14:19 документ: задание\n", rh + "spec.md": "Статус: черновик\n", rh + "plan.md": "Статус: черновик\n"}))
+    pr.probe("законное", "результат: папка без log.md — не судится", rh_check({rh + "spec.md": "Статус: черновик\n"}, drop=(rh + "log.md",)))
+    pr.probe("законное", "результат: CRLF и BOM в spec.md, заголовок третьего уровня",
+             rh_check({rh + "spec.md": ("﻿Статус: черновик\r\n" + rh_line + "\r\n### Результат и куда он попадает\r\nформат X: README.md\r\n").encode("utf-8")}))
+    pr.probe("законное", "результат: настоящие spec.md и plan.md репозитория не судятся новым правилом", rh_real_specs_and_plans)
+    pr.probe("красная", "результат: вторая строка spec.md не про current.md",
+             rh_check({rh + "spec.md": rh_spec.replace(rh_line, "Сессия С1")}, [(rh + "spec.md:2", "result-line")]))
+    pr.probe("красная", "результат: третья строка plan.md не про current.md",
+             rh_check({rh + "plan.md": "Статус: черновик\nБаза: ревизия abc\n\n" + rh_line + "\n"}, [(rh + "plan.md:3", "result-line")]))
+    pr.probe("красная", "результат: нет раздела в spec.md",
+             rh_check({rh + "spec.md": "Статус: черновик\n" + rh_line + "\n\n## Требования\n\nREQ-01 a\n"}, [(rh + "spec.md", "result-section")]))
+    pr.probe("красная", "результат: раздел пуст",
+             rh_check({rh + "spec.md": "Статус: черновик\n" + rh_line + "\n## Результат и куда он попадает\n\n## Дальше\nтекст\n"}, [(rh + "spec.md:3", "result-section")]))
+    pr.probe("красная", "результат: строка «нет: результат — код» без фразы",
+             rh_check({rh + "spec.md": "Статус: черновик\n" + rh_line + "\n## Результат и куда он попадает\n- нет: результат — код.\n"}, [(rh + "spec.md:3", "result-section")]))
+    pr.probe("красная", "результат: назван, result.md есть, current.md нет",
+             rh_check({rh + "result.md": "x\n"}, [(rh + "spec.md:8", "result-current")]))
+    pr.probe("красная", "результат: режим коммита судит изменённый plan.md", rh_commit_mode)
+    pr.probe("иной-синтаксис", "результат: заголовок раздела внутри огороженного кода не считается",
+             rh_check({rh + "spec.md": "Статус: черновик\n" + rh_line + "\n```\n## Результат и куда он попадает\nформат X\n```\n"}, [(rh + "spec.md", "result-section")]))
+    pr.probe("иной-синтаксис", "результат: current.md в обратных кавычках — не дословная строка промпта",
+             rh_check({rh + "spec.md": rh_spec.replace("current.md в этой", "`current.md` в этой")}, [(rh + "spec.md:2", "result-line")]))
     return pr.done()
 
 

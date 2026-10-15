@@ -17,14 +17,25 @@
     индекса, добавленные строки (у первой версии файла — все), которые начинаются с даты ГГГГ-ММ-ДД
     не раньше 2026-10-10: такая строка обязана быть «ГГГГ-ММ-ДД ЧЧ:ММ <вид>: <текст>», вид — из
     закрытого списка (решение владельца, заседание, ворота, документ, пуск, слияние, находка),
-    иначе log-line.
+    иначе log-line; «результат и куда он попадает» (норма методики, methodology.md раздел 9 п. 8,
+    промпты С1 и С3 task-sessions.md) — только у задач, заведённых не раньше 2026-10-15 14:20 (первая
+    запись log.md папки с датой и временем): вторая строка spec.md и третья строка plan.md — дословно
+    «Документ задачи: после сдачи история; где действует результат — current.md в этой папке, если он
+    есть» (result-line); в spec.md есть заголовок «Результат и куда он попадает» вне огороженного кода, в
+    его разделе — непустое содержание, а строка «нет: результат — код» (если есть) несёт фразу о том,
+    что сдаётся (result-section); результат назван (строки «нет: результат — код» в разделе нет), а в
+    папке уже есть result.md — в папке есть current.md (result-current).
 Не проверяет: содержание документов, остальные файлы задач (result.md, profile.log, материалы
     task/), записи log.md без даты в начале строки, с датой раньше 2026-10-10 и вне индекса (в
     режимах дерева, коммита и CI добавленных строк нет), usage.log, вложенные папки задач, вторую строку plan.md (база ревизии); честность строки
     журнала («пишется по ходу» судится приёмкой); предел подписи в режимах дерева и коммита и CI
-    (там нет добавленных строк); k больше N и неверное поле времени (остаются подписью, как в панели).
-Правило: doc/canon/process.md (цикл сессий методики, «Журнал хода progress.log») и формат машинных
-    мест методики.
+    (там нет добавленных строк); k больше N и неверное поле времени (остаются подписью, как в панели);
+    по норме о результате — задачи, заведённые раньше 2026-10-15 14:20, и папки без log.md с датой;
+    current.md до появления result.md (его создаёт шаг плана в реализации); содержание current.md,
+    метки копий, единственность действующего текста и честность строки «нет: результат — код» (это
+    проверка С6, п. 5 методики); в режиме коммита — папки, где коммит не меняет spec.md или plan.md.
+Правило: doc/canon/process.md (цикл сессий методики, «Журнал хода progress.log», «Результат и куда он
+    попадает») и формат машинных мест методики.
 
 Пометок-исключений у этого стража нет.
 """
@@ -57,6 +68,14 @@ LOG_ENTRY = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} (реше
 LOG_FROM = "2026-10-10"
 LOG_KINDS = "решение владельца, заседание, ворота, документ, пуск, слияние, находка"
 SIGNATURE_MAX = 80
+# «результат и куда он попадает» (слово владельца, 2026-10-15, чат оркестратора; задача 047): формы строк — дословно из
+# промптов С1 и С3 методики (unitcraft/ai-dev-methodology @ 03d28d0); судятся задачи, заведённые не раньше RESULT_FROM
+RESULT_FROM = "2026-10-15 14:20"
+RESULT_LINE = "Документ задачи: после сдачи история; где действует результат — current.md в этой папке, если он есть"
+RESULT_HEAD = re.compile(r"^#{1,6}[ \t]+Результат и куда он попадает[ \t]*$")
+ANY_HEAD = re.compile(r"^#{1,6}[ \t]")
+NO_RESULT_LINE = re.compile(r"^[ \t]*(?:[-*][ \t]+)?«?нет: результат — код»?(.*)$")
+LOG_STARTED = re.compile(r"^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}) ")
 
 
 def first_line(text):
@@ -142,8 +161,59 @@ def check_log_md(path, data, source, rep):
                     "(вид — один из: %s)" % (LOG_FROM, LOG_KINDS))
 
 
+def task_started(folder, by_path, source, cache):
+    """Дата и время первой записи log.md папки задачи («ГГГГ-ММ-ДД ЧЧ:ММ») или None."""
+    if folder not in cache:
+        cache[folder] = None
+        entry = by_path.get(folder + "/log.md")
+        data = source.read(entry) if entry is not None and entry.mode != "160000" else None
+        if data is not None:
+            for line in data.decode("utf-8", "replace").lstrip("﻿").split("\n"):
+                m = LOG_STARTED.match(line)
+                if m:
+                    cache[folder] = m.group(1)
+                    break
+    return cache[folder]
+
+
+def text_lines(text):
+    return [line.rstrip("\r") for line in text.lstrip("﻿").split("\n")]
+
+
+def check_result_line(path, text, number, rep):
+    lines = text_lines(text)
+    if len(lines) < number or lines[number - 1] != RESULT_LINE:
+        rep.add(path, number, "result-line", "строка %d не «%s» (промпты С1 и С3 методики)" % (number, RESULT_LINE))
+
+
+def check_result_section(path, text, folder, paths, rep):
+    """Раздел «Результат и куда он попадает» в spec.md; current.md, если результат назван и result.md уже есть."""
+    lines = text_lines(guardlib.strip_fenced(text.lstrip("﻿")))
+    start = next((i for i, line in enumerate(lines) if RESULT_HEAD.match(line)), None)
+    if start is None:
+        rep.add(path, None, "result-section", "нет раздела «Результат и куда он попадает» (промпт С1 методики, п. 7)")
+        return
+    body = []
+    for line in lines[start + 1:]:
+        if ANY_HEAD.match(line):
+            break
+        body.append(line)
+    if not any(line.strip() for line in body):
+        rep.add(path, start + 1, "result-section", "раздел «Результат и куда он попадает» пуст")
+        return
+    no_result = [NO_RESULT_LINE.match(line) for line in body]
+    no_result = [m for m in no_result if m]
+    for m in no_result:
+        if not m.group(1).strip(" \t;:,.—–-"):
+            rep.add(path, start + 1, "result-section", "строка «нет: результат — код» без фразы, что именно сдаётся")
+    if not no_result and folder + "/result.md" in paths and folder + "/current.md" not in paths:
+        rep.add(path, start + 1, "result-current", "результат назван, result.md уже есть, а current.md в папке задачи нет")
+
+
 def judge(source, args, rep):
     count = 0
+    by_path = None
+    started = {}
     for entry in source.changed():
         if LOG_FILE.match(entry.path) and entry.mode != "160000":
             data = source.read(entry)
@@ -170,6 +240,16 @@ def judge(source, args, rep):
             check_status_line(entry.path, text, rep)
             if name == "spec.md":
                 check_unique_ids(entry.path, text.lstrip("\ufeff"), rep)
+            if by_path is None:
+                by_path = dict((e.path, e) for e in source.entries())
+            folder = entry.path.rsplit("/", 1)[0]
+            since = task_started(folder, by_path, source, started)
+            if since is not None and since >= RESULT_FROM:
+                if name == "spec.md":
+                    check_result_line(entry.path, text, 2, rep)
+                    check_result_section(entry.path, text, folder, by_path, rep)
+                else:
+                    check_result_line(entry.path, text, 3, rep)
         else:
             check_review_line(entry.path, m.group(2), text, rep)
     return guardlib.Outcome(count=count)
