@@ -21,7 +21,8 @@
 | Документация частей | README корня и частей (`opencode-plugin/README.md` и т.д.) |
 
 Не Канон: задачи и всё в их папках — спецификации, планы, проверки, журналы ([doc/tasks/](../tasks/README.md)),
-черновики (статус «черновик»), исследования ([doc/research/](../research/)), архив ([doc/archive/](../archive/plans/README.md)).
+черновики (статус «черновик»), открытые вопросы ([doc/open-questions.md](../open-questions.md), правила — в
+[process.md](process.md), «Открытые вопросы»), исследования ([doc/research/](../research/)), архив ([doc/archive/](../archive/plans/README.md)).
 Новая часть Канона появляется здесь тем же коммитом, что её заводит.
 
 ## Параметры для раннера

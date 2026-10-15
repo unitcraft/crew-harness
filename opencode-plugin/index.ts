@@ -34,6 +34,7 @@
 
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, watch, writeFileSync } from "node:fs"
 import path from "node:path"
+import { overdueProblems } from "./open-questions.ts"
 import {
   type Card,
   type Letter,
@@ -1809,6 +1810,7 @@ export default {
         const row = await sessionFromDb(probe.session)
         if (!row) out.push("база OpenCode (opencode.db) не читается или в ней нет session_v2 — модель и простой вкладок не видны")
       }
+      out.push(...(await overdueProblems(projects)))
       return out
     }
 
