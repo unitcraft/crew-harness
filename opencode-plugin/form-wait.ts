@@ -64,12 +64,19 @@ export function addForm(session: string, f: PendingForm, dir = FORMS) {
   save(file, [...list, f])
 }
 
-export function removeForm(session: string | undefined, id: string, dir = FORMS) {
+/** Returns the sessions whose record was removed (the record names its session; the event of a reply may not). */
+export function removeForm(session: string | undefined, id: string, dir = FORMS): string[] {
   const files = session ? [fileOf(session, dir)] : existsSync(dir) ? readdirSync(dir).filter((n) => n.endsWith(".json")).map((n) => path.join(dir, n)) : []
+  const out: string[] = []
   for (const file of files) {
     const list = readJson<PendingForm[]>(file) ?? []
-    if (list.some((x) => x.id === id)) save(file, list.filter((x) => x.id !== id))
+    const hit = list.find((x) => x.id === id)
+    if (!hit) continue
+    save(file, list.filter((x) => x.id !== id))
+    const s = hit.session ?? session
+    if (s) out.push(s)
   }
+  return out
 }
 
 /** Change one record in place (by id; the session is known or searched in all files). Returns the record after the change. */
@@ -161,7 +168,8 @@ function firstOptions(form: any): string[] | undefined {
 
 const same = (a?: string, b?: string) => (a ?? "").replace(/\s+/g, " ").trim().toLowerCase() === (b ?? "").replace(/\s+/g, " ").trim().toLowerCase()
 
-export function handleFormEvent(ev: any, now = Date.now(), dir = FORMS) {
+/** onReplied: the owner answered the question of this session (task 052: the mark "stuck" of the tab goes at once). */
+export function handleFormEvent(ev: any, now = Date.now(), dir = FORMS, onReplied?: (session: string) => void) {
   try {
     const e = ev?.event && typeof ev.event === "object" && ev.event.type ? ev.event : ev
     const type = String(e?.type ?? "")
@@ -194,7 +202,8 @@ export function handleFormEvent(ev: any, now = Date.now(), dir = FORMS) {
       const id = body.id ?? body.form?.id
       if (!id) return
       const sid = body.sessionID ?? body.form?.sessionID
-      removeForm(sid ? String(sid) : undefined, String(id), dir)
+      const sessions = removeForm(sid ? String(sid) : undefined, String(id), dir)
+      if (onReplied) for (const s of new Set(sessions.length ? sessions : sid ? [String(sid)] : [])) onReplied(s)
     } else if (type === "form.cancelled") {
       // not an answer: the record stays and the repeat starts (formTick)
       const id = body.id ?? body.form?.id
@@ -205,8 +214,8 @@ export function handleFormEvent(ev: any, now = Date.now(), dir = FORMS) {
   } catch {}
 }
 
-export async function startFormWait(ctx: any, log: (line: string) => void): Promise<void> {
-  const handler = (ev: any) => handleFormEvent(ev)
+export async function startFormWait(ctx: any, log: (line: string) => void, onReplied?: (session: string) => void): Promise<void> {
+  const handler = (ev: any) => handleFormEvent(ev, Date.now(), FORMS, onReplied)
   try {
     if (typeof ctx?.event?.subscribe !== "function") throw new Error("no ctx.event.subscribe")
     const r = await ctx.event.subscribe((ev: any) => handler(ev))

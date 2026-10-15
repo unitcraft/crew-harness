@@ -164,7 +164,9 @@ export const QUEUE = path.join(BASE, "queue") // queue/<роль>/*.json — п�
 for (const d of [CARDS, INBOX, READ, QUEUE]) mkdirSync(d, { recursive: true }) // delivering/ — по мере надобности
 
 export type Spawned = { by: string; task: string; tier: string; status: "running" | "done" | "closed"; at: number; qid: string }
-export type Card = { session: string; role: string; auto: boolean; spawned?: Spawned; task?: { project: string; n: number }; review?: { project: string; n: number }; titleShown?: string; title: string; directory: string; repo: string; project?: string; lock_wait?: { project: string; n: number; at: number }; model?: string; modelAt?: number; modelFrom?: "request" | "db"; modelCheckedAt?: number; busy?: boolean; busySince?: number; wokeAt?: number; pid: number; updated: number }
+// busySince — время последнего запроса модели (ставится на каждом шаге хода); turnStart — первого запроса хода: по нему lastTurn
+// видит весь ход (задача 052: вызов инструмента в раннем шаге, а последний шаг — только текст, и ход читался пустым)
+export type Card = { session: string; role: string; auto: boolean; spawned?: Spawned; task?: { project: string; n: number }; review?: { project: string; n: number }; titleShown?: string; title: string; directory: string; repo: string; project?: string; lock_wait?: { project: string; n: number; at: number }; model?: string; modelAt?: number; modelFrom?: "request" | "db"; modelCheckedAt?: number; busy?: boolean; busySince?: number; turnStart?: number; wokeAt?: number; pid: number; updated: number }
 export type Letter = { id: string; from_role: string; from_session: string; to: string; text: string; time: number; tier?: Tier; wake?: boolean; qid?: string; reply_to?: string }
 
 // НАСТРОЙКИ ПРОЕКТА — settings.ts: файл `.opencode/crew-harness.json` из репозитория настроек (закоммиченный),
@@ -1161,6 +1163,24 @@ export function saveObligations(session: string, list: Obligation[]) {
   mkdirSync(OBLIGATIONS, { recursive: true })
   if (!list.length) rmSync(obligationFile(session), { force: true })
   else writeFileSync(obligationFile(session), JSON.stringify(list, null, 1))
+}
+/** Снять «застряла» со всех обязательств сессии (задача 052): рабочий ход, ход или слово владельца, ответ владельца на вопросник.
+ *  Счётчики — заново, как после crew_task push; записи без stuckAt (до задачи 043) — так же. На каждое снятое — строка журнала
+ *  `unstuck <сессия> for <qid>: <причина>`. Возвращает qid снятых. */
+export function clearStuck(session: string, why: string): string[] {
+  const list = obligationsOf(session)
+  const hit = list.filter((o) => o.stuck)
+  if (!hit.length) return []
+  for (const o of hit) {
+    o.stuck = false
+    delete o.stuckAt
+    delete o.stuckWhat
+    o.empty = 0
+    o.nudges = 0
+    log(`unstuck ${session} for ${o.qid}: ${why}`)
+  }
+  saveObligations(session, list)
+  return hit.map((o) => o.qid)
 }
 export function addObligation(session: string, o: Obligation) {
   const list = obligationsOf(session).filter((x) => x.qid !== o.qid)

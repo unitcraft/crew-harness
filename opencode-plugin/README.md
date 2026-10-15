@@ -369,7 +369,8 @@ in the tab — the record becomes "владелец вмешался" and the co
 A question or a task is the recipient's obligation until it answers (`reply_to: qid`). Windows on
 Claude often stop mid-task after writing a status; the plugin keeps them going — by the end of a
 turn, not by a timer. The turn's facts come from OpenCode's database (messages between the turn's
-start and its `idle` row): a turn with a tool call is a working one, a turn without one is empty.
+start — its first model request, not the last step — and its `idle` row): a turn with a tool call in any step is a working
+one, a turn without one is empty.
 
 - a turn ended without the answer → a reminder right away; a working turn resets the empty counter and the
   reminder counter (task 043: a long task done in working turns is not "stuck"; a turn the database does not show
@@ -380,6 +381,11 @@ start and its `idle` row): a turn with a tool call is a working one, a turn with
   records it, and `/crew` and the side panel show "застряла с ЧЧ:ММ: <что>" under the tab until the mark is cleared;
   `crew_task {action: "push", n, to?}` wakes it again (the executor, or the reviewer with `to: "reviewer"`; the call about a
   stuck review names `to: "reviewer"`) and clears "stuck"; the answer or the submit settles the obligation;
+- "stuck" also goes by itself (task 052), for all obligations of the tab and with a log line `unstuck <session> for <qid>:
+  <reason>`: a working turn of the tab (before any early exit of the reminder: answer modes, an open question, a watch), a
+  turn where the owner wrote, the owner's word in the tab (on the nearest pass, not at the end of the turn) and the owner's
+  reply to the tab's question form (at once); old marks without a time follow the same rules. While the tab waits for the
+  owner (a question form, a question to the owner) `/crew` and the side panel do not show it as stuck;
 - a task session deleted in OpenCode (three deliveries in a row fail with `NotFoundError`) or a task session without a card
   (three passes in a row) → one letter to the task's author with what to do (`crew_task reassign` for an executor) and a
   note in the task's history, no repeats;

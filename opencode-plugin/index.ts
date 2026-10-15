@@ -102,6 +102,7 @@ import {
   askedClosedWhy,
   ASKED_STALE_MS,
   saveObligations,
+  clearStuck,
   commonDoctor,
   DOCTOR_FILE,
   settingsProblems,
@@ -345,6 +346,8 @@ export default {
     // ЗАНЯТОСТЬ: busy ставится в хуке запроса (context), снимается строкой `idle` в базе после busySince (таймер).
     function setBusy(card: Card, busy: boolean) {
       const fresh = readJson<Card>(cardFile(card.session)) ?? card
+      // начало хода (задача 052) — первый запрос; следующие шаги того же хода его не сдвигают
+      fresh.turnStart = busy ? (fresh.busy && fresh.turnStart ? fresh.turnStart : now()) : undefined
       fresh.busy = busy
       fresh.busySince = busy ? now() : undefined
       if (!busy) fresh.wokeAt = undefined // конец хода увиден обычным путём
@@ -381,7 +384,20 @@ export default {
     // вкладка застряла: напоминаний больше нет, спросившему вызов (письмо и уведомление в окне). Ход, в котором писал
     // владелец, — без напоминания (владелец ведёт вкладку сам), счётчик с нуля. Снимает застревание crew_task push.
     async function nudge(card: Card) {
-      // РЕЖИМЫ ОТВЕТА НА ВОПРОСЫ (задача 007, ADR-0010): решение — первой строкой, до проверки обязательств (сессия задачи, сдавшая
+      // ВКЛАДКА ОЖИЛА (задача 052; владелец, 2026-10-15, «заводи 052»): рабочий ход или ход, где писал владелец, снимает «застряла»
+      // первым делом — до режимов ответа, сторожа потока и «ждёт по-честному» (наблюдение, открытый вопрос): раньше снятие стояло
+      // после этих выходов, и вкладка, работавшая между вопросами, оставалась «застрявшей». Ход читается от его начала (turnStart):
+      // от последнего запроса (busySince) видно только последний шаг, обычно текст без инструментов, и рабочий ход читался пустым
+      const since = card.turnStart ?? card.busySince ?? 0
+      let turn: Awaited<ReturnType<typeof lastTurn>> = undefined
+      let turnRead = false
+      let revived: string[] = []
+      if (obligationsOf(card.session).some((o) => o.stuck)) {
+        turn = await lastTurn(card.session, since)
+        turnRead = true
+        if (turn?.tools || turn?.owner) revived = clearStuck(card.session, turn.tools ? "a working turn" : "the owner wrote in the tab")
+      }
+      // РЕЖИМЫ ОТВЕТА НА ВОПРОСЫ (задача 007, ADR-0010): решение — сразу после снятия «застряла», до проверки обязательств (сессия задачи, сдавшая
       // отчёт, тоже получает ответ) и до пересылки вопроса и условия !turn?.owner (ход, начатый словом владельца, тоже). Режимы
       // выключены — ход не читается, дальше всё как раньше. handled — ни пересылки, ни «Не завершено», счётчики не растут.
       const cfgA = loadConfig(card.directory)
@@ -395,7 +411,7 @@ export default {
       const list = obligationsOf(card.session)
       if (!list.length) return
       const cfg = cfgA
-      const turn = await lastTurn(card.session, card.busySince ?? 0)
+      if (!turnRead) turn = await lastTurn(card.session, since)
       const t = now()
       // СТОРОЖ ПОТОКА (план 002.4): ход сессии задачи кончился вопросом — это не «остановилась», а «упёрлась». Вместо
       // «продолжай» (приёмщики #1 и #3 nova 2026-10-05 получили по 5–6 таких и стояли часами: вливать им было нельзя)
@@ -432,19 +448,8 @@ export default {
       }
       let changed = false
       for (const o of list) {
-        // ВКЛАДКА ОЖИЛА САМА (владелец, 2026-10-15, «по рекомендации»): рабочий ход снимает «застряла» — иначе работающая
-        // вкладка показывалась застрявшей до ручного crew_task push; счётчики начинаются заново, как после push
-        if (o.stuck && turn?.tools) {
-          o.stuck = false
-          delete o.stuckAt
-          delete o.stuckWhat
-          o.empty = 0
-          o.nudges = 0
-          changed = true
-          log(`unstuck ${card.session} for ${o.qid}: a working turn`)
-          continue
-        }
-        if (o.stuck) continue
+        // снятое в начале хода (ВКЛАДКА ОЖИЛА) — без напоминания на этом ходу: счётчики начинаются заново, как после push
+        if (o.stuck || revived.includes(o.qid)) continue
         changed = true
         if (turn?.owner) {
           o.empty = 0
@@ -1018,6 +1023,10 @@ export default {
           removeStatus(c.session)
           continue
         }
+        // СЛОВО ВЛАДЕЛЬЦА СНИМАЕТ «ЗАСТРЯЛА» (задача 052): на ближайшем проходе, не в конце хода. Запись без stuckAt (до задачи 043) —
+        // по словам после старта процесса службы: время отметки неизвестно, а слово до неё отметку бы не сняло
+        const stuckNow = obligationsOf(c.session).filter((o) => o.stuck)
+        if (stuckNow.length && (await ownerWordAfter(c.session, Math.min(...stuckNow.map((o) => o.stuckAt ?? PROCESS_START)))) > 0) clearStuck(c.session, "the owner wrote in the tab")
         // «работает» — ещё и по базе: ход открыт и обновляется (ход, продолженный самим OpenCode после перезапуска,
         // плагин не доставлял — признака busy у карточки нет; сводка писала «стоит», а сессия работала, 2026-10-05)
         // вопрос владельцу на экране (инструмент question ждёт ответа дольше окна открытого хода) - не залипший ход (задача 040)
@@ -1613,7 +1622,8 @@ export default {
     }
 
     cleanupForms()
-    void startFormWait(ctx, log).catch(() => {}) // ожидание по встроенному вопроснику (task 026), всегда включено
+    // ответ владельца на вопросник снимает «застряла» у всех обязательств вкладки сразу (задача 052)
+    void startFormWait(ctx, log, (s) => void clearStuck(s, "the owner answered the question form")).catch(() => {}) // ожидание по встроенному вопроснику (task 026), всегда включено
     if (probeEnabled()) void startEventProbe(ctx, log).catch(() => {}) // проба событий (task 026), по умолчанию выкл
 
     // Один проход доставки: зовут таймер (страховка, раз в POLL_MS = 1 с) и fs.watch ящиков (сразу).

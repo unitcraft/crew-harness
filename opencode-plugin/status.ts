@@ -44,7 +44,8 @@ export type Status = {
   task?: { n: number; status: string; as: "executor" | "reviewer"; title: string; steps?: StepView[]; checking?: string }
   /** Открытые задачи, поставленные этой сессией. */
   tasks: { n: number; status: string; priority: string; title: string }[]
-  /** Вкладка застряла (задача 043, L3): с какого времени и по чему; держится, пока признак не снят (push, ответ, сдача). */
+  /** Вкладка застряла (задача 043, L3): с какого времени и по чему; держится, пока признак не снят (push, ответ, сдача, рабочий ход,
+   *  слово или ответ владельца — задача 052). Пока вкладка ждёт владельца (state owner: вопросник, вопрос владельцу), не показывается. */
   stuck?: { at?: number; what: string }[]
   /** Когда владельцу последний раз показали «ждёт вас» (повтор по owner_reminder_min). */
   notified?: number
@@ -109,8 +110,17 @@ export type StatusInput = {
   hungSince?: number
 }
 
-/** Состояние одной сессии из её данных. Порядок важности: ход > вопрос владельцу > наблюдение > ответ > задачи. */
+/** Состояние одной сессии из её данных. Порядок важности: ход > вопрос владельцу > наблюдение > ответ > задачи. Вкладка, которая
+ *  ждёт владельца (state owner), застрявшей не показывается (задача 052; владелец, 2026-10-15, «заводи 052»): стоит она за
+ *  владельцем, а не сама; отметка в обязательствах остаётся и снимается ответом владельца. */
 export function statusOf(x: StatusInput): Status {
+  const s = statusOfAll(x)
+  if (s.state !== "owner" || !s.stuck) return s
+  const { stuck: _hidden, ...rest } = s
+  return rest
+}
+
+function statusOfAll(x: StatusInput): Status {
   const { card, now } = x
   const watches: Watch[] = x.watches ?? watchesOf(card.session)
   const ref = card.task ?? card.review
