@@ -13,11 +13,13 @@
     по форме «<код> <k>/<N> <подпись>» (journal-line, с адресом «файл:строка»), без пути машины
     (journal-path; определение одно со стражем секретов, lib/machine_paths.py) и, только в режиме
     индекса у добавленных строк журнала, который уже есть в HEAD, с подписью (без поля времени
-    [ЧЧ:ММ] или [ГГГГ-ММ-ДД ЧЧ:ММ]) не длиннее 80 знаков (journal-long); log.md — только в режиме
+    [ЧЧ:ММ] или [ГГГГ-ММ-ДД ЧЧ:ММ]) не длиннее 80 знаков (journal-long), а строка остановки «стоп:» — с видом
+    из списка вопрос, план, ревизия, требования, ворота (journal-stop); log.md — только в режиме
     индекса, добавленные строки (у первой версии файла — все), которые начинаются с даты ГГГГ-ММ-ДД
     не раньше 2026-10-10: такая строка обязана быть «ГГГГ-ММ-ДД ЧЧ:ММ <вид>: <текст>», вид — из
     закрытого списка (решение владельца, заседание, ворота, документ, пуск, слияние, находка),
-    иначе log-line; «результат и куда он попадает» (норма методики, methodology.md раздел 9 п. 8,
+    иначе log-line; сообщения journal-line, journal-long, journal-stop и log-line называют правило, что именно не так,
+    ожидаемую форму, пример верной строки и инструмент плагина (progress_line, log_line; задача 049); «результат и куда он попадает» (норма методики, methodology.md раздел 9 п. 8,
     промпты С1 и С3 task-sessions.md) — только у задач, заведённых не раньше 2026-10-15 14:20 (первая
     запись log.md папки с датой и временем): вторая строка spec.md и третья строка plan.md — дословно
     «Документ задачи: после сдачи история; где действует результат — current.md в этой папке, если он
@@ -29,7 +31,8 @@
     task/), записи log.md без даты в начале строки, с датой раньше 2026-10-10 и вне индекса (в
     режимах дерева, коммита и CI добавленных строк нет), usage.log, вложенные папки задач, вторую строку plan.md (база ревизии); честность строки
     журнала («пишется по ходу» судится приёмкой); предел подписи в режимах дерева и коммита и CI
-    (там нет добавленных строк); k больше N и неверное поле времени (остаются подписью, как в панели);
+    (там нет добавленных строк), вид остановки там же и в прежних строках; порядок строк сессии (старт первой
+    строкой, по строке на единицу, номер захода) — его проверяет инструмент progress_line при записи; k больше N и неверное поле времени (остаются подписью, как в панели);
     по норме о результате — задачи, заведённые раньше 2026-10-15 14:20, и папки без log.md с датой;
     current.md до появления result.md (его создаёт шаг плана в реализации); содержание current.md,
     метки копий, единственность действующего текста и честность строки «нет: результат — код» (это
@@ -68,6 +71,14 @@ LOG_ENTRY = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} (реше
 LOG_FROM = "2026-10-10"
 LOG_KINDS = "решение владельца, заседание, ворота, документ, пуск, слияние, находка"
 SIGNATURE_MAX = 80
+STOP_KINDS = "вопрос, план, ревизия, требования, ворота"
+STOP_KIND_LIST = ("вопрос", "план", "ревизия", "требования", "ворота")
+STOP_WORD = re.compile(r"^стоп:[ \t]*([^ \t.,:;!—–-]*)")
+# сообщения стража называют правило, ожидаемую форму и пример (задача 049: агенты не видели, что именно не так)
+TOOL_HINT = "в окне OpenCode строку собирает инструмент %s"
+JOURNAL_EXAMPLE = "«С2 3/34 [2026-10-15 16:20] spec.md прочитан целиком»"
+LOG_EXAMPLE = "«2026-10-15 16:20 документ: spec.md передан на С2»"
+LOG_TIME = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}(?![0-9])")
 # «результат и куда он попадает» (слово владельца, 2026-10-15, чат оркестратора; задача 047): формы строк — дословно из
 # промптов С1 и С3 методики (unitcraft/ai-dev-methodology @ 03d28d0); судятся задачи, заведённые не раньше RESULT_FROM
 RESULT_FROM = "2026-10-15 14:20"
@@ -136,14 +147,46 @@ def check_progress_log(path, data, source, rep):
         if line == "":
             continue  # пустая строка форму не нарушает (на нынешних журналах их нет, Д-11 о ней молчит)
         if parse_progress_line(line) is None:
-            rep.add(path, number, "journal-line", "строка не по форме «<код> <k>/<N> <подпись>»")
+            rep.add(path, number, "journal-line", "строка не по форме «<код> <k>/<N> [ГГГГ-ММ-ДД ЧЧ:ММ] <подпись>»: код без "
+                    "пробелов, пробел, два числа ASCII-цифрами через «/», пробел, непустая подпись (методика, task-runner.md, "
+                    "«Строки progress.log»); пример %s; %s" % (JOURNAL_EXAMPLE, TOOL_HINT % "progress_line"))
         if machine_paths.find_machine_paths(line):
             rep.add(path, number, "journal-path", "в строке путь машины")
     added = source.added_lines(path)
     for number, text in added or ():
         parsed = parse_progress_line(text.rstrip("\r"))
-        if parsed is not None and len(signature_without_time(parsed[3])) > SIGNATURE_MAX:
-            rep.add(path, number, "journal-long", "подпись добавленной строки длиннее %d знаков" % SIGNATURE_MAX)
+        if parsed is None:
+            continue
+        signature = signature_without_time(parsed[3])
+        if len(signature) > SIGNATURE_MAX:
+            rep.add(path, number, "journal-long", "подпись добавленной строки — %d знаков, предел %d без поля времени (методика: "
+                    "«подпись без времени — не длиннее 80 знаков»); сократи на %d, подробности — в отчёт или log.md; пример %s; "
+                    "%s, он не пропускает длинную подпись" % (len(signature), SIGNATURE_MAX, len(signature) - SIGNATURE_MAX,
+                                                         JOURNAL_EXAMPLE, TOOL_HINT % "progress_line"))
+        m = STOP_WORD.match(signature)
+        if m and m.group(1) not in STOP_KIND_LIST:
+            found = "вид «%s» не из списка" % m.group(1) if m.group(1) else "вид не назван"
+            rep.add(path, number, "journal-stop", "строка остановки: %s; форма «стоп: <вид> — <причина>», вид — одно из слов: %s "
+                    "(методика, task-runner.md, «Строки progress.log»); пример «С2 5/40 [2026-10-15 16:20] стоп: вопрос — нужен "
+                    "ответ о составе описи»; %s (kind stop)" % (found, STOP_KINDS, TOOL_HINT % "progress_line"))
+
+
+def log_line_fault(text):
+    """Что именно не так в записи log.md с датой: время, вид или двоеточие."""
+    m = LOG_TIME.match(text)
+    if not m:
+        return "после даты нет времени «ЧЧ:ММ» через пробел"
+    rest = text[m.end():]
+    if not rest.startswith(" "):
+        return "после времени нет пробела"
+    rest = rest[1:]
+    for kind in LOG_KINDS.split(", "):
+        if rest.startswith(kind):
+            return "после вида «%s» нет двоеточия с пробелом" % kind
+    head = rest.split(":", 1)[0] if ":" in rest else ""
+    if head and len(head) <= 40:
+        return "вид «%s» не из списка" % head
+    return "нет вида с двоеточием после времени"
 
 
 def check_log_md(path, data, source, rep):
@@ -157,8 +200,9 @@ def check_log_md(path, data, source, rep):
         text = text.rstrip("\r")
         m = LOG_DATED.match(text)
         if m and m.group(1) >= LOG_FROM and not LOG_ENTRY.match(text):
-            rep.add(path, number, "log-line", "запись с датой не раньше %s не по форме «ГГГГ-ММ-ДД ЧЧ:ММ <вид>: <текст>» "
-                    "(вид — один из: %s)" % (LOG_FROM, LOG_KINDS))
+            rep.add(path, number, "log-line", "запись с датой не раньше %s не по форме «ГГГГ-ММ-ДД ЧЧ:ММ <вид>: <текст>»: %s "
+                    "(вид — один из: %s; Канон, process.md, «Дата в каждой записи журналов»); пример %s; %s" % (
+                        LOG_FROM, log_line_fault(text), LOG_KINDS, LOG_EXAMPLE, TOOL_HINT % "log_line"))
 
 
 def task_started(folder, by_path, source, cache):

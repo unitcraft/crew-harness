@@ -22,7 +22,10 @@
     spec.md или третья plan.md не дословно по промптам С1 и С3, нет раздела, пустой раздел, строка «нет:
     результат — код» без фразы, результат назван при result.md без current.md, заголовок только в
     огороженном коде; не красные — более ранняя задача, папка без log.md, CRLF и BOM, настоящие spec.md
-    и plan.md репозитория.
+    и plan.md репозитория; задача 049 — строки, на которых споткнулись агенты в задачах 031 и 045: остановка с
+    видом не из списка и без вида (journal-stop, только у добавленных строк в индексе; каждый вид списка и
+    слово «стопор» не красные), подписи 93 и 87 знаков, строка «?/?», вид записи log.md — код сессии, запись
+    без времени и без двоеточия: сообщение называет правило, что не так, пример и инструмент плагина.
 Не проверяет: содержание документов.
 Правило: doc/canon/process.md (цикл сессий методики, «Журнал хода progress.log», «Результат и куда он
     попадает»); AC-14 и AC-18 задач.
@@ -231,6 +234,49 @@ def main():
         stlib.expect(proc, 1, "FAIL: check-task-docs: 1 нарушений")
         assert stlib.has_line(proc, "FAIL %s:5: journal-long:" % journal) and not stlib.has_line(proc, "%s:4:" % journal), proc.out
 
+    # задача 049: строки, на которых споткнулись агенты (задачи 031 и 045), — понятное сообщение с правилом, формой и примером
+    case_031_stop = "С2в9 5/40 [2026-10-14 03:21] стоп: ресурсный блокер; прочитано 5/40, предметный вердикт не вынесен"
+    case_045_c1 = "С1 31/32 [2026-10-15 12:13] опись source inventory пересчитана: 31 файл и бриф; 013 расхождение закреплений зафиксировано"
+    case_045_retry2 = "С2д2 6/34 [2026-10-15 15:31] 031 spec.md fully reread: closed format, REQ/AC/DNC, examples, owner questions, history"
+
+    def journal_index(added):
+        repo = fresh(good_j)
+        stlib.write_files(repo, {journal: good_j[journal] + "\n".join(added) + "\n"})
+        stlib.git(repo, env, "add", "--", journal)
+        return repo, check(repo, "--index")
+
+    def red_case_031_stop():
+        repo, proc = journal_index([case_031_stop])
+        stlib.expect(proc, 1, "FAIL: check-task-docs: 1 нарушений")
+        assert stlib.has_line(proc, "FAIL %s:4: journal-stop:" % journal), proc.out
+        for part in ("«ресурсный» не из списка", "вопрос, план, ревизия, требования, ворота", "стоп: вопрос — ", "progress_line"):
+            assert part in proc.out, (part, proc.out)
+        stlib.expect(check(repo), 0, "ок: осмотрено 7 файлов задач")  # в дереве вид остановки не судится
+
+    def red_stop_without_kind():
+        _, proc = journal_index(["С1 2/2 [10:40] стоп:"])
+        stlib.expect(proc, 1, "FAIL: check-task-docs: 1 нарушений")
+        assert stlib.has_line(proc, "FAIL %s:4: journal-stop:" % journal) and "вид не назван" in proc.out, proc.out
+
+    def legit_stop_kinds():
+        _, proc = journal_index(["С1 2/2 [10:4%d] стоп: %s — причина" % (i, w) for i, w in enumerate(("вопрос", "план", "ревизия", "требования"))]
+                                + ["С1 2/2 [10:45] стоп:ворота — без пробела", "С1 2/2 [10:46] стопор не остановка"])
+        assert proc.returncode == 0 and "FAIL" not in proc.out, proc.out
+
+    def red_long_cases_045():
+        _, proc = journal_index([case_045_c1, case_045_retry2])
+        stlib.expect(proc, 1, "FAIL: check-task-docs: 2 нарушений")
+        assert stlib.has_line(proc, "FAIL %s:4: journal-long:" % journal) and stlib.has_line(proc, "FAIL %s:5: journal-long:" % journal), proc.out
+        for part in ("— 93 знаков, предел 80", "сократи на 13", "— 87 знаков", "сократи на 7", "пример «С2 3/34 [2026-10-15 16:20]", "progress_line"):
+            assert part in proc.out, (part, proc.out)
+
+    def red_line_message():
+        proc = check(fresh(dict(good_j, **{journal: "С1 0/2 старт\nС2д ?/? неизвестно\n"})))
+        stlib.expect(proc, 1, "FAIL: check-task-docs: 1 нарушений")
+        assert stlib.has_line(proc, "FAIL %s:2: journal-line:" % journal), proc.out
+        for part in ("ASCII-цифрами", "пример «С2 3/34", "progress_line"):
+            assert part in proc.out, (part, proc.out)
+
     # log.md: новый формат записей с 2026-10-10 (по слову владельца, 2026-10-09)
     log_md = "doc/tasks/001-x/log.md"
     old_log = "Методика: x @ abc\n2026-10-08 решение владельца: старая запись в прежнем виде\n2026-10-09 просто так, прежний вид\n"
@@ -264,6 +310,18 @@ def main():
                 stlib.expect(proc, 1, "FAIL: check-task-docs: %d нарушений" % len(expect_red))
                 for number in expect_red:
                     assert stlib.has_line(proc, "FAIL %s:%d: log-line:" % (log_md, number)), proc.out
+        return fn
+
+    def log_message(added, parts):
+        """Одна запись не по форме в индексе: сообщение называет, что именно не так, пример и log_line."""
+        def fn():
+            repo = log_repo()
+            stlib.write_files(repo, {log_md: old_log + added + "\n"})
+            stlib.git(repo, env, "add", "--", log_md)
+            proc = check(repo, "--index")
+            stlib.expect(proc, 1, "FAIL: check-task-docs: 1 нарушений")
+            for part in parts + ("пример «2026-10-15 16:20 документ: ", "log_line"):
+                assert part in proc.out, (part, proc.out)
         return fn
 
     def log_tree_and_commit_not_judged():
@@ -380,6 +438,14 @@ def main():
     pr.probe("красная", "log.md: нет двоеточия после вида", log_index(["2026-10-11 10:00 ворота x"], {4: 0}))
     pr.probe("красная", "log.md: верная и неверная подряд — красная вторая", log_index(["2026-10-10 10:00 ворота: ок", "2026-10-12 10:00 ждём"], {5: 0}))
     pr.probe("красная", "log.md: первая версия файла с записью не по форме", log_index(["Методика: x @ abc", "2026-10-10 10:00 мнение: x"], {2: 0}, first=True))
+    pr.probe("красная", "задача 049, случай 031 С2-9: остановка с видом «ресурсный» (индекс) — правило, список, пример", red_case_031_stop)
+    pr.probe("красная", "задача 049: остановка без вида (индекс)", red_stop_without_kind)
+    pr.probe("законное", "задача 049: остановка с каждым видом списка, «стоп:» без пробела, слово «стопор» — не красные", legit_stop_kinds)
+    pr.probe("красная", "задача 049, случаи 045 С1 и С2 (повтор 2): подписи 93 и 87 знаков — сколько сократить и пример", red_long_cases_045)
+    pr.probe("красная", "задача 049: строка «?/?» — сообщение называет форму, пример и progress_line", red_line_message)
+    pr.probe("красная", "задача 049, случай 031: вид записи log.md — код сессии", log_message("2026-10-13 16:32 С1п5: запись", ("вид «С1п5» не из списка",)))
+    pr.probe("красная", "задача 049: log.md без времени — сообщение называет время", log_message("2026-10-13 ворота: x", ("нет времени «ЧЧ:ММ»",)))
+    pr.probe("красная", "задача 049: log.md без двоеточия после вида — сообщение называет двоеточие", log_message("2026-10-13 10:00 ворота x", ("после вида «ворота» нет двоеточия",)))
     pr.probe("красная", "журнал: строка без k/N", red_j({journal: "С1 0/2 старт\nбез формы\n"}, "journal-line", journal + ":2"))
     pr.probe("красная", "журнал: строка из одних пробелов", red_j({journal: "С1 0/2 старт\n   \n"}, "journal-line", journal + ":2"))
     pr.probe("красная", "журнал: строка без подписи", red_j({journal: "С1 0/2 старт\nС1 1/2\n"}, "journal-line", journal + ":2"))
