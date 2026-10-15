@@ -15,10 +15,13 @@
     индекса у добавленных строк журнала, который уже есть в HEAD, с подписью (без поля времени
     [ЧЧ:ММ] или [ГГГГ-ММ-ДД ЧЧ:ММ]) не длиннее 80 знаков (journal-long), а строка остановки «стоп:» — с видом
     из списка вопрос, план, ревизия, требования, ворота (journal-stop), строка «поправка:» — по форме «поправка: к строке
-    «<начало, до 30 знаков>» — <что не так>» (journal-fix); journal-long и journal-stop не судят строку, исправленную позже в файле
-    строкой той же сессии (тот же код): поправкой с началом этой строки (всей строки, подписи или подписи без поля времени), а итоговую
+    «<начало подписи после времени, от 10 до 30 знаков, а если подпись короче — вся>» — <что не так>», начало — начало подписи
+    прежней строки того же кода (journal-fix); «готово» при k меньше N из строки «старт» своей сессии, не исправленное позже строкой
+    «стоп: <вид из списка>» того же кода с тем же k (journal-done; сессия — строки кода от строки запуска или первой строки до итоговой,
+    после итоговой её продолжают только повтор с тем же k и «стоп:» после «готово»); journal-long и journal-stop не судят строку,
+    исправленную позже в файле строкой той же сессии (тот же код): поправкой с началом подписи этой строки после поля времени, а итоговую
     строку («готово», «стоп:», и с ошибкой в ключевом слове) — только её повтором с тем же k и ключевым словом в верной форме
-    (задача 050; методика unitcraft/ai-dev-methodology @ 09e86c1); log.md — только в режиме
+    (задачи 050 и 053; методика unitcraft/ai-dev-methodology @ d5f1e80); log.md — только в режиме
     индекса, добавленные строки (у первой версии файла — все), которые начинаются с даты ГГГГ-ММ-ДД
     не раньше 2026-10-10: такая строка обязана быть «ГГГГ-ММ-ДД ЧЧ:ММ <вид>: <текст>», вид — из
     закрытого списка (решение владельца, заседание, ворота, документ, пуск, слияние, находка),
@@ -37,8 +40,11 @@
     журнала («пишется по ходу» судится приёмкой); предел подписи в режимах дерева и коммита и CI
     (там нет добавленных строк), вид остановки там же и в прежних строках; порядок строк сессии (старт первой
     строкой, по строке на единицу, номер захода) — его проверяет инструмент progress_line при записи; k больше N и неверное поле времени (остаются подписью, как в панели);
-    «готово» при k меньше N и неисправленную ошибку ключевого слова итоговой строки (существенные находки приёмки по методике, страж их
-    не держит: исправить их можно только новой строкой, а не правкой прежней); поправку после итоговой строки (её не принимает progress_line);
+    «готово» без строки «старт» или после второй, строку после итоговой (существенные находки приёмки по методике, страж их не держит:
+    новой строкой их не исправить, красный страж требовал бы переписать журнал, а прежние строки не переписываются; progress_line таких
+    строк не пишет); неисправленную ошибку ключевого слова итоговой строки (ошибка, только если строка осталась последней в сессии, а при
+    записи этого не видно; судит приёмка); поправку после итоговой строки (её не принимает progress_line); прежние
+    строки истории (не добавленные) по правилам задачи 053 — задним числом их не исправить, не переписав историю;
     по норме о результате — задачи, заведённые раньше 2026-10-15 14:20, и папки без log.md с датой;
     current.md до появления result.md (его создаёт шаг плана в реализации); содержание current.md,
     метки копий, единственность действующего текста и честность строки «нет: результат — код» (это
@@ -80,11 +86,15 @@ SIGNATURE_MAX = 80
 STOP_KINDS = "вопрос, план, ревизия, требования, ворота"
 STOP_KIND_LIST = ("вопрос", "план", "ревизия", "требования", "ворота")
 STOP_WORD = re.compile(r"^стоп:[ \t]*([^ \t.,:;!—–-]*)")
-# строка-поправка (задача 050; методика unitcraft/ai-dev-methodology @ 09e86c1, task-runner.md, «Строки progress.log»): ключевое слово
-# «поправка» с двоеточием, начало ошибочной строки — до 30 знаков в кавычках «»
+# строка-поправка (задачи 050 и 053; методика unitcraft/ai-dev-methodology @ d5f1e80, task-runner.md, «Строки progress.log»): ключевое
+# слово «поправка» с двоеточием, начало подписи ошибочной строки после времени — от 10 до 30 знаков (короче — вся подпись) в кавычках «»
 CORRECTION_WORD = re.compile(r"^поправка:")
 CORRECTION_FORM = re.compile(r"^поправка: к строке «([^«»]{1,30})» — \S")
+CORRECTION_MIN = 10
 CORRECTION_EXAMPLE = "«С1 31/32 [2026-10-15 12:14] поправка: к строке «опись source inventory» — подпись 93 знака»"
+KEYWORD_START = re.compile(r"^старт(?:$|[ \t.,:;!—–-])")
+KEYWORD_LAUNCH = re.compile(r"^запуск(?:$|[ \t.,:;!—–-])")
+DONE_EXAMPLE = "«С6 7/7 [2026-10-15 16:20] стоп: ворота — N в старте завышено»"
 # итоговая строка, в том числе с ошибкой в ключевом слове («Готово», «стоп» без двоеточия): её исправляет только повтор с тем же k
 FINAL_LIKE = re.compile(r"^(готово|стоп)(?:$|[ \t.,:;!—–-])", re.IGNORECASE)
 KEYWORD_DONE = re.compile(r"^готово(?:$|[ \t.,:;!—–-])")
@@ -173,10 +183,9 @@ def well_formed_final(signature, word):
 
 
 def corrected(lines, number, parsed):
-    """Исправлена ли ошибка формы строки number (задача 050, методика 09e86c1): позже в файле есть строка той же сессии (тот же код) —
-    поправка «поправка: к строке «<начало>» — …», где начало — начало всей строки, её подписи или подписи без поля времени; итоговую
-    строку («готово», «стоп:», и с ошибкой в ключевом слове) исправляет только её повтор с тем же k и ключевым словом в верной форме."""
-    raw = lines[number - 1]
+    """Исправлена ли ошибка формы строки number (задачи 050 и 053, методика d5f1e80): позже в файле есть строка той же сессии (тот же
+    код) — поправка «поправка: к строке «<начало>» — …», где начало — начало подписи после поля времени; итоговую строку («готово»,
+    «стоп:», и с ошибкой в ключевом слове) исправляет только её повтор с тем же k и ключевым словом в верной форме."""
     code, k, _, signature = parsed
     text = signature_without_time(signature)
     final = FINAL_LIKE.match(text)
@@ -190,7 +199,68 @@ def corrected(lines, number, parsed):
                 return True
             continue
         m = CORRECTION_FORM.match(later_text)
-        if m and (raw.startswith(m.group(1)) or signature.startswith(m.group(1)) or text.startswith(m.group(1))):
+        if m and text.startswith(m.group(1)):
+            return True
+    return False
+
+
+def correction_fault(lines, number, code, quote):
+    """Что не так с началом в поправке (методика d5f1e80): это начало подписи после времени прежней строки того же кода, от 10 до 30
+    знаков, а если подпись короче — вся подпись; иначе None."""
+    earlier = []
+    for line in lines[:number - 1]:
+        other = parse_progress_line(line)
+        if other is not None and other[0] == code:
+            earlier.append(signature_without_time(other[3]))
+    starts = [text for text in earlier if text.startswith(quote)]
+    if not starts:
+        return "начало «%s» — не начало подписи (после поля времени) ни одной прежней строки кода %s" % (quote, code)
+    if len(quote) < CORRECTION_MIN and quote not in starts:
+        return "начало «%s» короче %d знаков, а подпись длиннее" % (quote, CORRECTION_MIN)
+    return None
+
+
+def session_start(lines, number, code):
+    """N из строки «старт» сессии строки number, если строка «старт» в сессии одна; иначе None. Сессия — строки кода от строки запуска
+    (или первой строки) до итоговой; после итоговой её продолжают только повтор с тем же k и «стоп:» после «готово» с тем же k, другая
+    строка открывает новую сессию; упавший k — новая сессия без старта (так читают progress_line и панель; методика d5f1e80)."""
+    start_n, starts, last_k, final = None, 0, -1, None
+    for line in lines[:number]:
+        other = parse_progress_line(line)
+        if other is None or other[0] != code:
+            continue
+        _, k, n, signature = other
+        text = signature_without_time(signature)
+        if CORRECTION_WORD.match(text):
+            continue
+        if KEYWORD_LAUNCH.match(text) and k == 0 and n == 0:
+            start_n, starts, last_k, final = None, 0, -1, None
+            continue
+        word = FINAL_LIKE.match(text)
+        word = word.group(1).lower() if word else None
+        if final is not None:
+            if k == last_k and (word == final or (final == "готово" and text.startswith("стоп:"))):
+                final = word
+                continue
+            start_n, starts, last_k, final = None, 0, -1, None
+        if KEYWORD_START.match(text):
+            if last_k < 0:
+                start_n, starts, last_k = n, 1, k
+            else:
+                starts += 1
+        elif last_k >= 0 and k < last_k:
+            start_n, starts, last_k = None, 0, k
+        else:
+            last_k = k
+        final = word
+    return start_n if starts == 1 else None
+
+
+def low_done_fixed(lines, number, code, k):
+    """«готово» при k меньше N исправлено позже строкой «стоп: <вид из списка>» того же кода с тем же k."""
+    for later in lines[number:]:
+        other = parse_progress_line(later)
+        if other is not None and other[0] == code and other[1] == k and well_formed_final(signature_without_time(other[3]), "стоп"):
             return True
     return False
 
@@ -212,10 +282,21 @@ def check_progress_log(path, data, source, rep):
         if parsed is None:
             continue
         signature = signature_without_time(parsed[3])
-        if CORRECTION_WORD.match(signature) and not CORRECTION_FORM.match(signature):
-            rep.add(path, number, "journal-fix", "строка-поправка не по форме «поправка: к строке «<начало ошибочной строки, до 30 "
-                    "знаков>» — <что не так>» (методика, task-runner.md, «Строки progress.log»); пример %s; %s (kind correction)" % (
-                        CORRECTION_EXAMPLE, TOOL_HINT % "progress_line"))
+        if CORRECTION_WORD.match(signature):
+            form = CORRECTION_FORM.match(signature)
+            fault = None if not form or number > len(lines) else correction_fault(lines, number, parsed[0], form.group(1))
+            if not form or fault:
+                rep.add(path, number, "journal-fix", "строка-поправка не по форме «поправка: к строке «<начало подписи ошибочной строки "
+                        "после времени, от 10 до 30 знаков, а если подпись короче — вся>» — <что не так>»%s (методика, task-runner.md, "
+                        "«Строки progress.log»); пример %s; %s (kind correction)" % (
+                            ": " + fault if fault else "", CORRECTION_EXAMPLE, TOOL_HINT % "progress_line"))
+        if KEYWORD_DONE.match(signature) and number <= len(lines):
+            start_n = session_start(lines, number, parsed[0])
+            if start_n is not None and parsed[1] < start_n and not low_done_fixed(lines, number, parsed[0], parsed[1]):
+                rep.add(path, number, "journal-done", "«готово» при k=%d, а N из строки «старт» — %d: такое «готово» завершением не "
+                        "считается (методика, task-runner.md, «Строки progress.log»: k сравнивается с N из строки «старт»); прежняя "
+                        "строка не переписывается — допиши «стоп: <вид> — <причина>» с тем же k, например %s; %s (kind stop), он "
+                        "такого «готово» не пишет" % (parsed[1], start_n, DONE_EXAMPLE, TOOL_HINT % "progress_line"))
         fault_long = len(signature) > SIGNATURE_MAX
         fault_stop = stop_fault(signature)
         if (fault_long or fault_stop) and number <= len(lines) and corrected(lines, number, parsed):

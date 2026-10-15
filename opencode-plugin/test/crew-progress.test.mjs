@@ -202,10 +202,13 @@ const now0 = at(12, 0)
     const e25 = entryAt(["С5 0/14 старт", line], now0 - 25 * 3_600_000, now0)
     cell(`AC-23 «${line.slice(0, 7)}»: gone after 24 hours and not abandoned`, !e25.shown && !e25.abandoned, show(e25))
   }
-  for (const line of ["С5 14/14 готово", "С5 15/14 готово", "С5 12/14 готово", "С5 14/14 [10:05] готово — итог"]) {
+  for (const line of ["С5 14/14 готово", "С5 15/14 готово", "С5 14/14 [10:05] готово — итог"]) {
     const e = entryAt(["С5 0/14 старт", "С5 11/14 шаг", line], at(10, 6), at(10, 8))
     cell(`AC-23 «${line}»: state 2 (the word outranks the count)`, e.state === 2, show(e))
   }
+  // task 053 (methodology d5f1e80): «готово» with k below N of the start line is not a finish - read by k and N, the session still goes
+  const low = entryAt(["С5 0/14 старт", "С5 11/14 шаг", "С5 12/14 готово"], at(10, 6), at(10, 8))
+  cell("AC-23 «С5 12/14 готово» after «0/14 старт»: not a finish (task 053), the session goes", low.state === 5, show(low))
   for (const line of ["С5 14/14 стоп: ворота — x", "С5 15/14 стоп: ворота — x"]) {
     const e = entryAt(["С5 0/14 старт", line], now0, now0)
     cell(`AC-23 «${line.slice(0, 7)} стоп»: state 1`, e.state === 1 && e.kind === "ворота", show(e))

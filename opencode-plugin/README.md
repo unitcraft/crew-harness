@@ -309,22 +309,25 @@ are narrow: no shell, append only, a fixed file name, the path must stay inside 
 file system comes back as a refusal, earlier lines are never rewritten. A refusal is the answer `Не записано: <reason>`, nothing is
 written; the reason names the rule, the expected form and an example call.
 
-`progress_line` `{file, code, kind, k, n, pass, stop, text}` (task 049): the agent names the kind of the line and the numbers, the tool
-builds the line `<code> k/N [YYYY-MM-DD HH:MM] <signature>` itself and checks it against the earlier lines of the same session code in
-the file (rules: methodology, `task-runner.md`, "Строки `progress.log`"):
+`progress_line` `{file, code, kind, k, n, pass, stop, text, to}` (tasks 049, 050, 053): the agent names the kind of the line and the
+numbers, the tool builds the line `<code> k/N [YYYY-MM-DD HH:MM] <signature>` itself and checks it against the earlier lines of the same
+session in the file (rules: methodology `d5f1e80`, `task-runner.md`, "Строки `progress.log`"). A session is the lines of its code from a
+launch line (or its first line) to its final line; after the final line only its repeat with the same k and keyword and `стоп:` after
+`готово` with the same k belong to it, any other line of the code opens a new session (the panel reads it the same way):
 
 | kind | input | line | refused when |
 |---|---|---|---|
-| `start` | `n`, `pass` (required for a review code С2, С4, С6), `text` optional | `С2 0/34 [..] старт заход 1 — опись 34 источника` | no `n`; review code without `pass`; `text` begins with a keyword |
-| `step` (default) | `k`, `n`, `text` (or the old `unit: "k/N"`) | `С2 1/34 [..] spec.md прочитан целиком` | no start line of the session; after `готово`; `k` not previous + 1 (a jump names the missing units, a repeat names the next one); `k > n`; `text` begins with старт, готово, стоп or запуск |
-| `done` | `text` optional | `С2 34/34 [..] готово — отчёт сохранён` | units before N not written; no start; a second `готово` |
-| `stop` | `stop` (вопрос, план, ревизия, требования, ворота), `text` = reason | `С2 5/34 [..] стоп: вопрос — нужен ответ` | kind missing or outside the list; no reason |
-| `launch` | `text` optional | `С5 0/0 [..] запуск` | - |
+| `start` | `n`, `pass` (required for a review code С2, С4, С6), `text` optional | `С2 0/34 [..] старт заход 1 — опись 34 источника` | no `n`; review code without `pass`; `text` begins with a keyword; the session already has lines and no final line (one start per session) |
+| `step` (default) | `k`, `n`, `text` (or the old `unit: "k/N"`) | `С2 1/34 [..] spec.md прочитан целиком` | no start line of the session; after the final line (`готово` or `стоп:`: the work after an answer goes on in a new session that begins with `start`); `k` not previous + 1 (a jump names the missing units, a repeat names the next one); `k > n`; `text` begins with a keyword |
+| `done` | `text` optional | `С2 34/34 [..] готово — отчёт сохранён` (`9/8 готово` after `0/8 старт`: k is compared with N of the start line, k above N is fine) | units before N not written; k below N of the start line, no start line or a second one (stop instead); after `стоп:`; a repeat with another k |
+| `stop` | `stop` (вопрос, план, ревизия, требования, ворота), `text` = reason | `С2 5/34 [..] стоп: вопрос — нужен ответ` | kind missing or outside the list; no reason; after a `готово` that is a finish (after `готово` with k below N of the start it is the fix, with the same k); a repeat that changes a kind of the list |
+| `correction` | `to` = the start of the signature after the time of the wrong line, `text` = what is wrong | `С2 2/5 [..] поправка: к строке «опись source inventory» — подпись 93 знака` (current k, not a unit; 10 to 30 characters of the signature, the whole one if shorter) | no line of the session; after the final line (fix it by its repeat); `to` is not the start of a signature of the session (the whole line with code and time is refused) |
+| `launch` | - | - | always: the agent does not write the launch line, the runner or the orchestrator marks the session (task 053) |
 
 The whole signature (everything after the time field) is at most 80 characters, as in the methodology; a longer one is refused with
-the number of characters to cut. `start` and `launch` create a missing `progress.log` in an existing folder; other kinds need the file.
-`?/?` is no longer written: neither the guard nor the panel reads it as a line. A session continues after `стоп` with the next unit;
-a new `start` of the same code opens a new session. The answer `Записано: <line>` is followed by the next step (for example
+the number of characters to cut. `start` creates a missing `progress.log` in an existing folder; other kinds need the file.
+`?/?` is no longer written: neither the guard nor the panel reads it as a line. After `стоп:` the session writes no units; a new
+`start` of the same code after a final line opens a new session. The answer `Записано: <line>` is followed by the next step (for example
 `следующая — k: 5`). Commands that only ask the clock (`date +%H:%M`, `Get-Date -Format HH:mm`) are refused by the `opencode-windows-env`
 plugin; these tools are the allowed way to put the time into the journals.
 

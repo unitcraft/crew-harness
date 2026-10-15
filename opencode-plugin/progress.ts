@@ -134,6 +134,16 @@ export function keywordOf(text: string): Keyword | undefined {
  */
 export const isCorrection = (l: Line) => keywordOf(l.text) === "поправка"
 
+/**
+ * Итоговая строка, в том числе с ошибкой в ключевом слове («Готово», «стоп» без двоеточия): после неё строки той же сессии — только её
+ * повтор с тем же k и ключевым словом и `стоп:` после `готово` с тем же k (методика d5f1e80, task-runner.md, «Строки progress.log»).
+ */
+const FINAL_LIKE_RE = /^(готово|стоп)(?:$|[ 	.,:;!—–-])/i
+export const finalOf = (text: string): "done" | "stop" | undefined => {
+  const m = FINAL_LIKE_RE.exec(text)
+  return m ? (m[1].toLowerCase() === "готово" ? "done" : "stop") : undefined
+}
+
 /** Вид остановки: первое слово после `стоп:` (пробелы необязательны), если оно из списка; иначе undefined — «вид не назван». */
 export function stopKind(text: string): string | undefined {
   if (!text.startsWith("стоп:")) return undefined
@@ -178,12 +188,19 @@ export type Session = {
   rows: Line[]
   /** строка запуска, прикреплённая к сессии, или единственная строка записи «запуск без старта» */
   launch?: Line
+  /**
+   * сессию открыла строка `старт`, а прежняя сессия того же кода не закончилась итоговой строкой и строки запуска между ними нет: по
+   * методике это вторая строка `старт` той же сессии, и её `готово` завершением не читается (задача 053, методика d5f1e80)
+   */
+  restart?: boolean
 }
 
 /**
  * Журнал → сессии (Д-03). Сессию начинает строка `k = 0`, смена кода или падение k; строка запуска прикрепляется к сессии
  * того же кода, строка которой идёт следом (`старт` или, если «старт» пропущен, строка с k > 0); иначе это запись
  * «запуск без старта». Новый запуск после запуска или сессии того же кода открывает следующую сессию.
+ * Задача 053 (методика d5f1e80): после итоговой строки (`готово`, `стоп:`, и с ошибкой в ключевом слове) сессию продолжают только её повтор
+ * с тем же k и ключевым словом и `стоп:` после `готово` с тем же k; любая другая строка того же кода открывает новую сессию.
  */
 const SESSIONS = new WeakMap<Line[], Session[]>()
 export function sessionsOf(lines: Line[]): Session[] {
@@ -193,12 +210,29 @@ export function sessionsOf(lines: Line[]): Session[] {
   const count = new Map<string, number>()
   let cur: Session | undefined
   let lastK = -1
-  const open = (code: string, launch?: Line) => {
+  const lastByCode = new Map<string, Session>()
+  const open = (code: string, launch?: Line, restart?: boolean) => {
     const ordinal = (count.get(code) ?? 0) + 1
     count.set(code, ordinal)
-    cur = { code, ordinal, key: `${code}#${ordinal}`, rows: [], ...(launch ? { launch } : {}) }
+    cur = { code, ordinal, key: `${code}#${ordinal}`, rows: [], ...(launch ? { launch } : {}), ...(restart ? { restart } : {}) }
     out.push(cur)
+    lastByCode.set(code, cur)
     lastK = -1
+  }
+  // строка того же кода после итоговой строки сессии, кроме её повтора и «стоп:» после «готово» с тем же k
+  const afterFinal = (s: Session, l: Line) => {
+    if (!s.rows.length) return false
+    const last = lastOf(s)
+    const f = finalOf(last.text)
+    if (!f || l.k !== last.k) return !!f
+    const g = finalOf(l.text)
+    return !(g === f || (f === "done" && keywordOf(l.text) === "стоп"))
+  }
+  // строка старт, а прежняя сессия кода не закончена: вторая строка старт той же сессии по методике
+  const restartOf = (l: Line) => {
+    if (keywordOf(l.text) !== "старт") return false
+    const prev = lastByCode.get(l.code)
+    return !!prev && prev.rows.length > 0 && !finalOf(lastOf(prev).text)
   }
   for (const l of lines) {
     if (isLaunch(l)) {
@@ -211,7 +245,7 @@ export function sessionsOf(lines: Line[]): Session[] {
       // поправка той же сессии: не открывает сессию и не меняет k (задача 050)
       cur!.rows.push(l)
       continue
-    } else if (l.code !== cur.code || l.k === 0 || l.k < lastK) open(l.code)
+    } else if (l.code !== cur.code || l.k === 0 || l.k < lastK || afterFinal(cur, l)) open(l.code, undefined, restartOf(l))
     cur!.rows.push(l)
     lastK = l.k
   }
@@ -273,11 +307,24 @@ export function growthOf(s: Session): Line {
   return rows[i]
 }
 
-/** Состояние последней строки по таблице REQ-04 (первая подходящая строка таблицы). */
-export function stateOf(last: Line, moment: Moment, now: number, th: Thresholds): { state: State; kind?: string } {
+/**
+ * Завершение `готово` (задача 053, методика d5f1e80): в сессии одна строка `старт`, и k не меньше N из неё (`9/8 готово` после `0/8 старт` —
+ * завершение, `7/7 готово` после `0/10 старт` — нет); `готово` без строки старт или после второй строки старт завершением не читается.
+ */
+export function finishes(s: Session, last: Line = lastOf(s)): boolean {
+  if (keywordOf(last.text) !== "готово" || s.restart) return false
+  const starts = s.rows.filter((l) => keywordOf(l.text) === "старт")
+  return starts.length === 1 && last.k >= starts[0].n
+}
+
+/**
+ * Состояние последней строки по таблице REQ-04 (первая подходящая строка таблицы); `finished` — `готово` читается как завершение
+ * (см. {@link finishes}); иначе строка читается по k и N, как строка без ключевого слова.
+ */
+export function stateOf(last: Line, moment: Moment, now: number, th: Thresholds, finished = true): { state: State; kind?: string } {
   const kw = keywordOf(last.text)
   if (kw === "стоп") return { state: 1, kind: stopKind(last.text) }
-  if (kw === "готово" && last.n > 0) return { state: 2 }
+  if (kw === "готово" && last.n > 0 && finished) return { state: 2 }
   if (last.n === 0) return { state: kw === "запуск" ? 3 : 4 }
   if (last.k >= last.n) return { state: 7 }
   return { state: now - moment.at > th.staleMs ? 6 : 5 }
@@ -312,7 +359,7 @@ export function entryOf(session: Session, fileMtime: number, now: number, th: Th
   const last = lastOf(session)
   const m = momentOf(last, fileMtime, now)
   // «идёт» или «давно нет вестей» — по росту k: строка с тем же k и поправка тишину не прерывают (задача 050)
-  const st = stateOf(last, momentOf(growthOf(session), fileMtime, now), now, th)
+  const st = stateOf(last, momentOf(growthOf(session), fileMtime, now), now, th, finishes(session, last))
   return {
     session,
     last,
