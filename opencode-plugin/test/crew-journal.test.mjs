@@ -13,7 +13,7 @@ const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-journal-"))
 process.env.XDG_DATA_HOME = path.join(tmp, "data")
 process.env.CREW_HARNESS_PRESENCE ??= "all"
 const plugin = (await import("../index.ts")).default
-const { progressLine, logLine, usageLine, noteLoopLag, maxLoopLagSince, resetLoopLagForTest } = await import("../journal.ts")
+const { progressLine, logLine, usageLine, noteLoopLag, maxLoopLagSince, resetLoopLagForTest, isLauncherCard } = await import("../journal.ts")
 const { parseLine, keywordOf, stopKind, sessionsOf, entryOf, DEFAULT_THRESHOLDS } = await import("../progress.ts")
 
 let fail = 0
@@ -395,6 +395,44 @@ const isoLocalOf = (d) => {
   cell("053: every line has the journal form", all.every((x) => parseLine(x)), JSON.stringify(all))
 }
 
+// ---- task 053, the launcher (methodology ab2a4ef: the launch is written by the one who launches): in the manual cycle the integrator tab
+// launches the sessions; progress_line kind launch from the launcher writes «<code> 0/0 [time] запуск №<n>» (n = 1 + the largest launch
+// number in progress.log and log.md) and the record «<time> пуск: запуск №<n> <code> [time]» into log.md of the same folder; the agent of a
+// session is refused; log_line takes the launch record from the launcher only ----
+{
+  const tdir = path.join(base, "doc", "tasks", "053-r")
+  mkdirSync(tdir, { recursive: true })
+  const f = "doc/tasks/053-r/progress.log"
+  const abs = path.join(tdir, "progress.log")
+  const lmd = path.join(tdir, "log.md")
+  const L = { launcher: true }
+  const rd = (x) => (exists(x) ? read(x) : "")
+  const l1 = progressLine({ file: f, code: "С5", kind: "launch" }, base, at(18, 0), L)
+  cell("launcher: the first launch creates progress.log with «запуск №1»", l1.ok && l1.line === "С5 0/0 [2026-10-09 18:00] запуск №1" && rd(abs) === l1.line + "\n", JSON.stringify(l1))
+  cell("launcher: the record «запуск №1 С5 [time]» is written into log.md of the folder", exists(lmd) && rd(lmd) === "2026-10-09 18:00 пуск: запуск №1 С5 [2026-10-09 18:00]\n", exists(lmd) ? rd(lmd) : "no log.md")
+  const st = progressLine({ file: f, code: "С5", kind: "start", n: 2 }, base, at(18, 1))
+  cell("launcher: the agent of the session then writes its start", st.ok && st.line.startsWith("С5 0/2 "), JSON.stringify(st))
+  writeFileSync(lmd, rd(lmd) + "2026-10-09 18:02 пуск: запуск №5 С6 [2026-10-09 18:02]\n")
+  const l6 = progressLine({ file: f, code: "С6", kind: "launch" }, base, at(18, 3), L)
+  cell("launcher: the number is 1 + the largest launch number in progress.log and log.md", l6.ok && l6.line === "С6 0/0 [2026-10-09 18:03] запуск №6" && rd(lmd).endsWith("2026-10-09 18:03 пуск: запуск №6 С6 [2026-10-09 18:03]\n"), JSON.stringify([l6, rd(lmd)]))
+  const snapP = rd(abs)
+  const snapL = rd(lmd)
+  const dup = progressLine({ file: f, code: "С6", kind: "launch", launch: 5 }, base, at(18, 4), L)
+  cell("launcher refused: a launch number that was already used (№5 in log.md)", dup.ok === false && /№5.*уже/.test(dup.reason) && rd(abs) === snapP && rd(lmd) === snapL, JSON.stringify(dup))
+  const l7 = progressLine({ file: f, code: "С6", kind: "launch", launch: 7 }, base, at(18, 5), L)
+  cell("launcher: a free number given by the launcher is taken", l7.ok && l7.line === "С6 0/0 [2026-10-09 18:05] запуск №7", JSON.stringify(l7))
+  const ag = progressLine({ file: f, code: "С6", kind: "launch" }, base, at(18, 6))
+  cell("launcher refused: the agent of a session gets no launch line and no record", ag.ok === false && /запуск.*не пишет/.test(ag.reason) && rd(lmd).split("\n").filter(Boolean).length === 3, JSON.stringify(ag))
+  const rec = logLine({ file: "doc/tasks/053-r/log.md", kind: "пуск", text: "запуск №8 С7 [2026-10-09 18:07]" }, base, at(18, 7), L)
+  cell("launcher: log_line takes the launch record from the launcher", rec.ok && rec.line === "2026-10-09 18:07 пуск: запуск №8 С7 [2026-10-09 18:07]", JSON.stringify(rec))
+  // the rule the machine checks: the calling tab holds the integrator role of its project and has no task or review of its own
+  cell("launcher: an integrator tab holding the role, without a task, is the launcher", isLauncherCard({ role: "integrator", session: "s" }, true) === true, "")
+  cell("launcher: a tab of role integrator that does not hold the role is no launcher", isLauncherCard({ role: "integrator", session: "s" }, false) === false, "")
+  cell("launcher: an executor (worker with a task) is no launcher", isLauncherCard({ role: "worker", session: "s", task: { project: "p", n: 1 } }, false) === false, "")
+  cell("launcher: an acceptor (a tab with a review) is no launcher even as integrator", isLauncherCard({ role: "integrator", session: "s", review: { project: "p", n: 1 } }, true) === false, "")
+  cell("launcher: no card - no launcher", isLauncherCard(undefined, true) === false, "")
+}
+
 // ---- log_line ----
 {
   const ldir = path.join(base, "doc", "tasks", "049-l")
@@ -557,6 +595,9 @@ const now = new Date(Date.UTC(2026, 9, 9, 10, 30, 0))
   cell("usage tool reads the session card of the calling session", /^Записано/.test(u.content) && calls.get.includes("ses_t") && last.session === "ses_t" && last.model === "anthropic/claude-sonnet-5-5" && last.tokens.cache_write === 400, JSON.stringify([u, last]))
   const un = await tools.usage_line.execute({ file: "doc/tasks/007-x/progress.log", code: "С5д", result: "x" }, { sessionID: "ses_t" })
   cell("usage tool refuses a wrong file", /^Не записано/.test(un.content), JSON.stringify(un))
+  // task 053: the plugin asks who calls - a tab that is not the integrator gets no launch line
+  const la = await tools.progress_line.execute({ file: rel, code: "С9", kind: "launch" }, { sessionID: "ses_t" })
+  cell("progress tool refuses a launch from a tab that is not the integrator", /^Не записано: строку запуск/.test(la.content) && !read(log).includes("С9 0/0"), JSON.stringify(la))
   stop?.()
 }
 
