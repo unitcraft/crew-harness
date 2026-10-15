@@ -48,6 +48,7 @@ beat()
 const heart = setInterval(beat, 300)
 
 const mod = await import("../index.ts")
+const ctxTools = []
 const ctx = {
   location: { directory: proj },
   options: { projects: { proj } },
@@ -57,7 +58,7 @@ const ctx = {
     synthetic: async () => {},
     hook: async () => {},
   },
-  tool: { transform: async () => {} },
+  tool: { transform: async (f) => f({ add: (t) => ctxTools.push(t) }) },
 }
 const logPath = path.join(os.tmpdir(), "opencode-plugins.log")
 const logText = () => {
@@ -89,6 +90,11 @@ cell("hung: state owner with the text", st(A)?.state === "owner" && /ход за
 cell("live turn updated a minute ago: not hung", st(B)?.state === "working", JSON.stringify(st(B)))
 cell("turn with a running watch: not hung", st(C)?.state !== "owner", JSON.stringify(st(C)))
 cell("agent-switched a minute ago is not model activity: hung", st(D)?.state === "owner" && /ход завис/.test(st(D)?.question ?? ""), JSON.stringify(st(D)))
+// task 048: this OpenCode has no session.interrupt - the self-recovery is off, the log and crew_doctor say so, the owner is told as before
+cell("no session.interrupt: the probe says self-recovery is off", /hung turn self-recovery: off \(no session\.interrupt/.test(fresh()), fresh().split("\n").filter((l) => /self-recovery/.test(l)).join(" | "))
+const doctor = ctxTools.find((t) => t.name === "crew_doctor")
+const dr = doctor ? String((await doctor.execute({}, { sessionID: B }))?.content ?? "") : "no crew_doctor"
+cell("crew_doctor names the missing session.interrupt", /session\.interrupt/.test(dr) && /Esc/.test(dr), dr)
 await wait(1500)
 cell("the line is not repeated", fresh().split("\n").filter((l) => /hung turn:/.test(l)).length === 2, "repeated")
 
