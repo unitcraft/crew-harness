@@ -10,7 +10,7 @@ const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-lostq-"))
 process.env.XDG_DATA_HOME = tmp
 const fw = await import("../form-wait.ts")
 const core = await import("../core.ts")
-const { statusOf, formatStatuses, sidebarLines, waitingLine } = await import("../status.ts")
+const { statusOf, formatStatuses, sidebarLines, waitingLine, stuckText } = await import("../status.ts")
 
 let fail = 0
 const cell = (name, ok, detail) => {
@@ -183,7 +183,7 @@ await safe("f", async () => {
   card("sesC", "crew-harness", "worker", "#40 вопрос")
   if (!fw.askText) throw new Error("askText is not there yet")
   const text = fw.askText(T0 + 70 * MIN)
-  cell("f: the summary line", /^Ждут вас: \d+, старейший \d\d:\d\d/.test(text), text.split("\n")[0])
+  cell("f: the summary line", /^Ждут вас: \d+ · с \d\d:\d\d/.test(text), text.split("\n")[0])
   cell("f: project, tab, text and options of a question", text.includes("nova") && text.includes("Интегратор") && text.includes("Какой цвет?") && text.includes("Синий (Recommended)") && text.includes("Красный"), text)
   cell("f: how long it waits", /ждёт 7\d мин|ждёт 1 ч/.test(text), text)
   cell("f: the question without an answer is told apart", /без ответа, нужен владелец/.test(text), text)
@@ -196,11 +196,13 @@ await safe("g", async () => {
   const list = [st("s1", "owner", T0 + 10 * MIN), st("s2", "owner", T0 + 5 * MIN, "crew-harness"), st("s3", "working", T0)]
   const line = waitingLine(list, T0 + 20 * MIN)
   const hmOf = (t) => new Date(t).toTimeString().slice(0, 5)
-  cell("g: waitingLine", line === `Ждут вас: 2, старейший ${hmOf(T0 + 5 * MIN)}`, String(line))
+  cell("g: waitingLine names the time and the project of the oldest wait", line === `Ждут вас: 2 · с ${hmOf(T0 + 5 * MIN)} · crew-harness`, String(line))
+  cell("g: a task tab is named by its number and role", waitingLine([{ ...st("s9", "owner", T0), title: "#85 исп ✓◐ приёмка Accept" }], T0) === `Ждут вас: 1 · с ${hmOf(T0)} · nova #85 исп`, String(waitingLine([{ ...st("s9", "owner", T0), title: "#85 исп ✓◐ приёмка Accept" }], T0)))
+  cell("g: a stuck mark without a time has no question mark", stuckText({ what: "приёмка #85" }) === "застряла: приёмка #85" && !sidebarLines([{ ...st("s4", "working", T0), stuck: [{ what: "приёмка #85" }] }], T0, "nova").rows.some((r) => /\?/.test(r.what)), JSON.stringify(sidebarLines([{ ...st("s4", "working", T0), stuck: [{ what: "приёмка #85" }] }], T0, "nova").rows))
   cell("g: nothing waits, no line", waitingLine([st("s3", "working", T0)], T0) === undefined, "")
   cell("g: /crew starts with the line", formatStatuses(list, T0 + 20 * MIN).split("\n")[0] === line, formatStatuses(list, T0 + 20 * MIN).split("\n")[0])
   const side = sidebarLines(list, T0 + 20 * MIN, "nova")
-  cell("g: the side panel has the same line, for all projects", side.rows[0]?.what === line.slice(0, 28) && /Ждут вас: 2/.test(side.rows[0].what), JSON.stringify(side.rows[0]))
+  cell("g: the side panel has the same line, for all projects", side.rows[0]?.what === line && /Ждут вас: 2/.test(side.rows[0].what), JSON.stringify(side.rows[0]))
 })
 
 // (h) the notice: at the first sight, then every 30 minutes, not more often

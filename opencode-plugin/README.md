@@ -161,7 +161,7 @@ if the tab has no running turn, the plugin wakes it with a service message that 
 to call `question` again. At most 3 repeats, at least 2 minutes apart, and not in the first 3 minutes after a start of the
 service (the windows get time to show their questions again); then the record says "без ответа, нужен владелец" and nothing wakes
 the tab any more. The plugin never answers for you and never picks the recommended option.
-Every window shows one line `Ждут вас: N, старейший ЧЧ:ММ` (in `/crew` and the side panel); `/ask` lists the open questions
+Every window shows one line `Ждут вас: N · с ЧЧ:ММ · <project> <#N role>` (the time and the source of the oldest wait, so a window of another project sees the question is not its own) (in `/crew` and the side panel); `/ask` lists the open questions
 (project, tab, how long it waits, text and options). A question gives a notice at once and again every 30 minutes while it is
 open. With `owner_system_notify: true` the project also gets a Windows system notification (built-in PowerShell, no installs and no rights;
 off by default).

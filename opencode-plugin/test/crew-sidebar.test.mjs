@@ -26,8 +26,8 @@ const list = [
 ]
 const v = sidebarLines(list, now, "nova")
 cell("the title names the project", v.title === "Crew · nova", v.title)
-// task 040: one summary line "Ждут вас: N, старейший ЧЧ:ММ" (all projects) opens the rows
-cell("the summary line is first", v.rows[0].what === "Ждут вас: 1, старейший 01:42" && v.rows[0].tone === "accent" && !v.rows[0].who, JSON.stringify(v.rows[0]))
+// task 040: one summary line "Ждут вас: N · с ЧЧ:ММ · проект" (all projects) opens the rows
+cell("the summary line is first", v.rows[0].what === "Ждут вас: 1 · с 01:42 · nova" && v.rows[0].tone === "accent" && !v.rows[0].who, JSON.stringify(v.rows[0]))
 cell("the one waiting for the owner is next and marked", v.rows[1].who === "интегр." && v.rows[1].mark === "▶" && v.rows[1].what === "ждёт вас 01:42" && v.rows[1].tone === "accent", JSON.stringify(v.rows[1]))
 cell("a task session is named by its role", v.rows.some((r) => r.who === "#2 исп" && r.what === "работает 12 мин") && v.rows.some((r) => r.who === "#2 прм" && r.what.startsWith("⧗ очередь: CI")), JSON.stringify(v.rows))
 cell("a task state is shown with its mark and word", v.rows.some((r) => r.who === "#3 прм" && r.what === "↻ доработка"), JSON.stringify(v.rows))

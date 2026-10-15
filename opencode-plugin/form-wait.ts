@@ -370,7 +370,7 @@ export function formReminders(now: number, notify: (session: string, f: PendingF
 export function askText(now = Date.now(), dir = FORMS): string {
   const list = allForms(now, dir)
   if (!list.length) return "Открытых вопросов к вам нет."
-  const out = [`Ждут вас: ${list.length}, старейший ${hm(list[0].form.at)}`, ""]
+  const out = [`Ждут вас: ${list.length} · с ${hm(list[0].form.at)}`, ""]
   for (const { session, form: f } of list) {
     const card = readJson<any>(path.join(CARDS, `${safeKey(session)}.json`))
     const who = `${card?.project ?? "?"} · ${card?.role ?? "?"}${card?.title && card.title !== session ? ` «${card.title}»` : ""}`

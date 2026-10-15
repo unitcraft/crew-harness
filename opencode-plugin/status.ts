@@ -236,12 +236,16 @@ const fit = (line: string, n = DIALOG_WIDTH) => (line.length > n ? `${line.slice
 /** Шаги приёмки одной строкой: ✓ отмечен, ▶ идёт, · впереди (– не отмечен в отчёте). */
 export const stepBar = (steps: { id: string; result?: string }[], checking?: string) => steps.map((a) => (a.result ? "✓" : a.id === checking ? "▶" : "·")).join("")
 
-/** Единая сводная строка «Ждут вас: N, старейший ЧЧ:ММ» (все проекты): /crew, боковая панель, /ask. Никто не ждёт — undefined. */
+/** Единая сводная строка «Ждут вас: N · с ЧЧ:ММ · проект #N роль» (все проекты): /crew, боковая панель, /ask. Время и
+ *  источник — у самого давнего ожидания; источник назван, чтобы в окне другого проекта было видно, что вопрос не его
+ *  (владелец, 2026-10-15: «смущают» одинаковые строки в окнах всех проектов). Никто не ждёт — undefined. */
 export function waitingLine(list: Status[], _now = Date.now()): string | undefined {
   const w = list.filter((s) => s.state === "owner")
   if (!w.length) return undefined
-  const oldest = Math.min(...w.map((s) => s.since ?? Infinity))
-  return `Ждут вас: ${w.length}${Number.isFinite(oldest) ? `, старейший ${hm(oldest)}` : ""}`
+  const oldest = w.reduce((a, b) => ((b.since ?? Infinity) < (a.since ?? Infinity) ? b : a))
+  const label = /^#\d+ \S+/.exec(oldest.title ?? "")?.[0]
+  const where = [oldest.project, label].filter(Boolean).join(" ")
+  return `Ждут вас: ${w.length}${oldest.since ? ` · с ${hm(oldest.since)}` : ""}${where ? ` · ${where}` : ""}`
 }
 
 /** Текст сводки /crew: проекты (свой первым), в проекте — сначала ждущие владельца. */
@@ -289,7 +293,7 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
 }
 
 /** «застряла с 12:30: задача #5 «…» — 2 хода подряд…» (задача 043, L3). */
-export const stuckText = (k: { at?: number; what: string }) => `застряла с ${hm(k.at)}: ${k.what}`
+export const stuckText = (k: { at?: number; what: string }) => (k.at ? `застряла с ${hm(k.at)}: ${k.what}` : `застряла: ${k.what}`)
 
 /** Принятые и не убранные после всех напоминаний (задача 043, M18a): «#5 «…» принята и не убрана 3 ч». */
 export function uncleanedLines(project: string, now = Date.now()): string[] {
@@ -403,7 +407,7 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string)
   }
   const sorted = mine.slice().sort((a, b) => ORDER[a.state] - ORDER[b.state] || who(a).localeCompare(who(b)))
   const rows: SideRow[] = []
-  // одна сводная строка на все окна (по всем проектам, не только по этому): «Ждут вас: N, старейший ЧЧ:ММ»
+  // одна сводная строка на все окна (по всем проектам, не только по этому): «Ждут вас: N · с ЧЧ:ММ · проект #N роль»
   const sum = waitingLine(list, now)
   if (sum) rows.push({ mark: " ", who: "", what: sum, tone: "accent" })
   for (const s of sorted.slice(0, SIDE_MAX)) {
@@ -423,7 +427,7 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string)
     if (cur) rows.push({ mark: " ", who: "", what: `↳ ${short(cur.text.replace(/[`*_]/g, ""), 26)}`, tone: "muted" })
     if (waiting && stepsLine) rows.push({ mark: " ", who: "", what: `↳ ${stepsLine}`, tone: "muted" })
     // застряла (задача 043, L3): строка, пока признак не снят
-    if (s.stuck?.length) rows.push({ mark: " ", who: "", what: `⚠ застряла с ${hm(s.stuck[0].at)}`, tone: "accent" })
+    if (s.stuck?.length) rows.push({ mark: " ", who: "", what: s.stuck[0].at ? `⚠ застряла с ${hm(s.stuck[0].at)}` : "⚠ застряла", tone: "accent" })
     // название задачи — по номеру не вспомнить, о чём она (владелец, 2026-10-07); последней подстрокой, чтобы строки шагов остались на своих местах
     if (s.task?.title) rows.push({ mark: " ", who: "", what: `↳ ${short(s.task.title.replace(/[`*_«»]/g, ""), 26)}`, tone: "muted" })
   }
