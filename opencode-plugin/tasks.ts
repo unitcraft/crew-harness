@@ -206,14 +206,31 @@ export function listTasks(project?: string): Task[] {
   return out.sort((a, b) => a.project.localeCompare(b.project) || a.n - b.n)
 }
 
-/** Новая задача: следующий свободный номер проекта, файл создаётся атомарно. */
+/** Номера папок задач проекта `doc/tasks/NNN-<slug>/` в каталоге `dir` (нет папки — пусто). */
+export function docTaskNumbers(dir: string | undefined): number[] {
+  if (!dir) return []
+  try {
+    const d = path.join(dir, "doc", "tasks")
+    if (!existsSync(d)) return []
+    return readdirSync(d)
+      .map((f) => /^(\d{3})-/.exec(f)?.[1])
+      .filter(Boolean)
+      .map(Number)
+  } catch {
+    return []
+  }
+}
+
+/** Новая задача: следующий свободный номер проекта (после номеров папок doc/tasks проекта), файл создаётся атомарно. */
 // place — место задачи (worktree, ветка) по номеру и слагу: пишется ВМЕСТЕ с задачей, первой же записью. Раньше его
 // дописывали вторым сохранением, и сервер, подхватив задачу между ними, запускал её без места (план 002.6, дефект 3).
 export function createTask(fields: Omit<Task, "n" | "history" | "created" | "updated" | "executors" | "attempt" | "slug"> & { slug?: string }, place?: (n: number, slug: string) => Partial<Task>): Task {
   const dir = path.join(TASKS, safeKey(fields.project))
   mkdirSync(dir, { recursive: true })
   const used = readdirSync(dir).map((f) => /^(\d+)\.json$/.exec(f)?.[1]).filter(Boolean).map(Number)
-  let n = used.length ? Math.max(...used) + 1 : 1
+  // ВРЕМЕННО (владелец, 2026-10-15): номер поручения не совпадает с номером папки doc/tasks/NNN-* проекта — счёт идёт
+  // после наибольшего из обоих, пока две нумерации не сведены в одну. Папок нет (проект их не ведёт) — счёт как раньше.
+  let n = Math.max(0, ...used, ...docTaskNumbers(fields.directory)) + 1
   const now = Date.now()
   for (;;) {
     const t: Task = { ...fields, slug: fields.slug ?? slugify(fields.title), n, executors: [], attempt: 1, history: [{ at: now, by: fields.author, status: fields.status, note: "поставлена" }], created: now, updated: now }
