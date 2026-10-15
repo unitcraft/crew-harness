@@ -1314,10 +1314,11 @@ export const HELP = `crew-harness — письма между вкладками
        (на момент постановки; переживают перезапуск сервера).
   crew_role {role, force?}    — сменить роль: crew_role {role: "integrator"}.
   crew_inbox {limit?}         — доставленные письма и число ждущих.
-  crew_spawn {goal, criteria, ...} — только интегратор: задача #N в новой сессии (работает и без окна).
+  crew_spawn {goal, criteria, ...} — только интегратор: задача в новой сессии (работает и без окна); task, session, part_of —
+                                сессия задачи с папкой и подзадача (раздел ЗАДАЧИ).
        kind: "plan"          — задача-план (раздел ПЛАНИРОВАНИЕ ниже).
   crew_task {action, n?}      — задачи по номеру: list, view (show — синоним); интегратору ещё assign, push, reassign, cancel,
-                                priority, order, plan_decide; приёмщику — review, check, round (план), precheck, merge, unlock, rework
+                                priority, order, plan_decide, deliver (задачу с сессиями — на приёмку); приёмщику — review, check, round (план), precheck, merge, unlock, rework
                                 (sync: true — только влить свежую целевую ветку, не круг доработки), accept, cleanup (cleaned — старое имя). assign — открытой вкладке владельца;
                                 сессия задачи ведёт одну задачу и закрывается после cleanup: продолжение работы того же
                                 исполнителя — новой задачей (crew_spawn), assign на сессию задачи отказывает.
@@ -1367,8 +1368,24 @@ acceptor — роль приёмщика (разделяемая) при нас�
 перезапуском OpenCode, плагин подхватывает письмом «продолжай». Служебным письмам плагина не отвечают.
 Спросивший ждёт ответ crew_wait в том же ходе — ответ приходит туда, без отдельного пробуждения.
 
-ЗАДАЧИ. У задачи номер #N (сквозной в проекте, только растёт; при доработке и передаче не меняется) — по нему её
-называют владелец, интегратор и crew_list; заголовок сессии задачи — «#N название».
+ЗАДАЧИ. Одна задача — один номер. В проекте с папками задач (настройка tasks_dir, по умолчанию doc/tasks; включена, когда
+каталог есть в целевой ветке) номер задачи — номер её папки NNN-<slug>/, в показе «045» (три цифры, без «#»); запись плагина
+носит тот же номер. В проекте без папок у задачи номер #N (сквозной в проекте, только растёт; при доработке и передаче не
+меняется). По номеру задачу называют владелец, интегратор и crew_list; заголовок сессии — «045 исп название» («#N исп название»).
+  Новая задача в проекте с папками: номер — 1 + наибольший из записей и папок во всех рабочих деревьях и ветках (локальных и
+    origin); плагин пишет папку на ветку задачи и коммитит её (task/message.md — поле message дословно, без него — шаблон из полей;
+    log.md — первая строка); основную копию не трогает. Папка уже есть — crew_spawn {task: N, goal} заводит запись с её номером.
+  Сессия задачи — один запуск агента внутри задачи (исполнитель «исп», приёмщик «прм», сессии методики С1, С2, С3п, С4…), своего
+    номера у неё нет: crew_spawn {task: N, session: "С4", goal} — сессия «045 С4-3» (код и его порядковый номер в задаче) с номером
+    запуска №n (сквозной в задаче; строки «запуск №n» в progress.log и «пуск» в log.md пишет плагин). Проверяющие С2, С4, С6 по
+    умолчанию работают в своём дереве от ветки задачи (place: own), остальные — в дереве задачи (place: task). Сессия методики
+    сдаёт работу интегратору (crew_task submit), приёмки плагина у неё нет; задача ждёт следующей сессии (статус idle). Приёмка
+    плагина — одна на задачу: у задачи с одной сессией «исп» — после её сдачи, у задачи с сессиями — по crew_task {action:
+    "deliver", n, text}.
+  Подзадача — отдельная задача со своим номером и папкой: crew_spawn {part_of: N, ...}; первая строка её task/message.md —
+    «Часть задачи NNN «…».», в log.md родителя — строка о заведении. Правило: своя приёмка или отдельное попадание в main —
+    подзадача; следующий шаг той же работы (проверка, правка по находкам, продолжение, передача) — сессия.
+  Агент вне OpenCode берёт номер тем же счётом: node scripts/task-number.mjs --dir <дерево> --title "<название>".
   crew_spawn {title?, goal, criteria, boundaries?, open_questions?, tier?, priority?, role?, parent?} — новая сессия: без цели и
     критериев приёмки задача не ставится (проект может требовать больше — task_fields); модель по ступени (по умолчанию, пока набор не
     включён: heavy — claude-code/opus, medium — sonnet, light — haiku; проект меняет spawn_models; включённый набор профилей
@@ -1408,6 +1425,7 @@ acceptor — роль приёмщика (разделяемая) при нас�
   Настройки: plans_dir, plan_approver, plan_acceptance, plan_grades, plan_clean_rounds, plan_rounds_max, plan_steps (crew_config guide).
 
 СТАТУСЫ ЗАДАЧИ: starting (сессия создаётся) → running (в работе) → submitted (сдана) → reviewing (на приёмке) ⇄ rework (на доработке);
+idle (задача с сессиями методики между сессиями: сессия сдана интегратору, следующей нет);
 approval (задача-план ждёт согласования) → accepted (принята и влита, ждёт уборки) → done (принята и убрана) | cancelled (отменена).
 
 ПРИЁМКА. Исполнитель сдаёт работу действием crew_task {action: "submit", n, text} (qid знать не нужно); сдал — задача сдана (интегратора отчёт не будит), второй отчёт не отправляется.
@@ -1939,7 +1957,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
   const isIntegrator = (me: Card) => me.role === "integrator" && holdsExclusive(roleKey(projOf(me), "integrator"), me.session)
   const notIntegrator = (me: Card) => ({ content: `Это может только интегратор проекта ${projOf(me)} (crew_role {role: "integrator"}).` })
   const taskInput = {
-    title: str("Short title (it becomes the session title: #N title)"),
+    title: str("Short title (it becomes the session title: 045 исп title, #N исп title without task folders)"),
     goal: str("Goal: what has to be true when the task is done"),
     criteria: str("Acceptance criteria: what is run, what must be green, what proves it (and the 'feed it something wrong' probe)"),
     boundaries: str("Boundaries: what is NOT done in this task"),
@@ -2254,7 +2272,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         priority: isPriority(input.priority) ? input.priority : cfg.defaultPriority, tier: recTier, role, model,
         author: me.session, author_role: keyOf(me), qid: newQid(), status: "starting", kind: "spawn", executor: plannedSessionId(), directory: me.directory,
         ...(plan ? { plan } : {}),
-      }, (n, slug) => taskPlace(me.directory, cfg, n, slug, project))
+      }, (n, slug) => taskPlace(me.directory, cfg, n, slug, project), ((fo) => (fo ? { used: usedNumbers(fo.top, fo.rel) } : {}))(plan ? folderInfo(me.directory, cfg) : undefined)) // задача-план в проекте с папками — номер не повторяет номер папки
       if (chosen && !("refuse" in chosen)) stampProfile(t, "executor", t.executor!, chosen, !!t.worktree)
       else if (!chosen) stampClamp(t, "executor", t.executor!, stageOfLaunch({ plan: input.kind === "plan" }, "executor"), model, tier, tierCut.from)
       const par = parseParent(input.parent)
@@ -2323,6 +2341,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         grades: { type: "object", description: "round: remarks per grade id of plan_grades", additionalProperties: { type: "number" } },
         sync: { type: "boolean", description: "rework: only merge the fresh target branch, not a round" },
         all: { type: "boolean", description: "list: include finished and cancelled", default: false },
+        message: str("assign in a project with task folders: the full text of task/message.md of the new folder; without it a template from the fields"),
         ...taskInput,
       },
       required: ["action"],
@@ -2354,17 +2373,29 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const extra = parseExtra(input.extra, cfg)
         if ("error" in extra) return { content: `Задача не поставлена: ${extra.error}` }
         const title = String(input.title ?? "").trim() || String(input.goal).split(/\r?\n/)[0].slice(0, 60)
+        // проект с папками задач (задача 058): номер — номер новой папки, папка коммитится на ветке задачи, вкладка — сессия «исп»
+        const fm = folderInfo(target.directory, cfg)
         const t = createTask({
           project, title, goal: String(input.goal).trim(), criteria: input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(),
           ...(extra.value ? { extra: extra.value } : {}),
           priority: isPriority(input.priority) ? input.priority : cfg.defaultPriority, tier: "medium", role: target.role, model: target.model,
           author: me.session, author_role: keyOf(me), qid: newQid(), status: "running", kind: "assign", executor: target.session, directory: target.directory,
-        }, (n, slug) => taskPlace(target.directory, cfg, n, slug, project))
+        }, (n, slug) => taskPlace(target.directory, cfg, fm ? pad3(n) : n, slug, project), fm ? { used: usedNumbers(fm.top, fm.rel), fill: (n, slug) => ({ folder: `${fm.rel}/${folderName(n, slug)}`, sessions: [{ code: EXECUTOR_CODE, k: 1, launch: 1, session: target.session, status: "running", goal: String(input.goal).trim(), place: "task", started: Date.now() }] }) } : {})
+        if (fm && t.folder && t.branch) {
+          const own = String(input.message ?? "")
+          const base = baseRef(fm.top, cfg.targetBranch)
+          const c = commitFiles(fm.top, t.branch, base, { [`${t.folder}/task/message.md`]: own.trim() ? own : templateMessage(t), [`${t.folder}/log.md`]: firstLogLine(t, own.trim() ? "текст интегратора (поле message)" : "шаблон из полей задачи", cfg.targetBranch) }, `Add task ${pad3(t.n)}: ${t.slug}`)
+          if (!c.ok) {
+            taskEvent(t, me.session, "cancelled", `папка не заведена: ${c.error}`)
+            return { content: `Задача ${taskRef(t)} не заведена: папку ${t.folder}/ не удалось записать на ветку ${t.branch} (${c.error}). Номер ${pad3(t.n)} остаётся пропуском.` }
+          }
+          taskEvent(t, me.session, undefined, `папка ${t.folder}/ заведена на ветке ${t.branch} (коммит ${c.commit.slice(0, 8)})`)
+        }
         target.task = { project, n: t.n }
         saveCard(target)
         postLetter(target.session, { id: taskLetterId(t), from_role: keyOf(me), from_session: me.session, to: target.session, time: Date.now(), qid: t.qid, text: formatTaskLetter(t) })
         host.posted([target.session])
-        return { content: `Задача ${taskNo(t)} «${t.title}» отдана вкладке ${target.session} (${tabStatus(target)}). Пока задача открыта, вкладку будят, даже если её закроют. Сдача — crew_task {action: "submit", n: ${t.n}, text}.` }
+        return { content: `Задача ${taskNo(t)} «${t.title}» отдана вкладке ${target.session} (${tabStatus(target)})${t.folder ? `; папка ${t.folder}/ на ветке ${t.branch}` : ""}. Пока задача открыта, вкладку будят, даже если её закроют. Сдача — crew_task {action: "submit", n: ${t.n}, text}.` }
       }
       if (action === "order") {
         if (!isIntegrator(me)) return notIntegrator(me)
@@ -2379,7 +2410,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           project, title, goal: String(input.goal).trim(), criteria: input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(),
           priority: isPriority(input.priority) ? input.priority : cfg.defaultPriority, tier: "medium", role: "integrator",
           author: me.session, author_role: keyOf(me), qid: newQid(), status: "running", kind: "order", order_to: m[1], directory: me.directory,
-        })
+        }, undefined, ((fo) => (fo ? { used: usedNumbers(fo.top, fo.rel) } : {}))(folderInfo(me.directory, cfg))) // заказ — номер из того же счёта, без папки (вопрос В-08)
         const to = roleKey(m[1], "integrator")
         postLetter(to, {
           id: `order-${safeKey(project)}-${t.n}`, from_role: keyOf(me), from_session: me.session, to, time: Date.now(),

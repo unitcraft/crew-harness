@@ -436,13 +436,50 @@ one, a turn without one is empty.
 ## Tasks
 
 Task statuses: `starting` → `running` → `submitted` → `reviewing` ⇄ `rework`; `approval` (a plan task waits for approval);
-`accepted` (landed, cleanup ahead) → `done` (accepted and cleaned up); `cancelled`. Task files written before 2026-10-14 may say
+`accepted` (landed, cleanup ahead) → `done` (accepted and cleaned up); `cancelled`; `idle` (a task led by method sessions
+between two sessions: the last one submitted to the integrator, no review yet). Task files written before 2026-10-14 may say
 `cleaned` instead of `done`: it is read as `done` (no migration of the files). The action that finishes a task is `crew_task cleanup`
 (`cleaned` still works as its old name). `crew_task view` and `crew_config view` are the main names; `show` is a synonym.
 
-A task has a number `#N` (per project, only grows, kept through rework and reassignment) — the
-owner, the integrator and `crew_list` call it by that; a task session's title is `#N title`. The
-journal is `tasks/<project>/<N>.json` in the mailbox.
+**One task, one number (task 058).** In a project with task folders (the key `tasks_dir`, default `doc/tasks`; on when that
+folder is in the target branch, `""` turns it off) the task number is the number of its folder `NNN-<slug>/`, shown as `045`
+(three digits, no `#`); the plugin's record has the same number. In a project without folders (Nova) a task has a number `#N`
+(per project, only grows, kept through rework and reassignment), as before. The owner, the integrator and `crew_list` call a
+task by its number; a session's title is `045 исп title` (`#N исп title` without folders). The journal is
+`tasks/<project>/<N>.json` in the mailbox.
+
+- **A new task with a folder.** The number is 1 + the largest of the project's records and of the folder numbers in every
+  working tree of the repository (`git worktree list`, uncommitted folders too) and in every local and `origin` branch
+  (`git ls-tree`); the record file is created atomically (flag `wx`), so two windows never get one number. The plugin writes
+  the folder on the task branch (`task/message.md` = the field `message` word for word, without it a template from the
+  fields; `log.md` with its first line `ГГГГ-ММ-ДД ЧЧ:ММ документ: задание заведено …`) and commits it there (signed off,
+  `Add task NNN: <slug>`) without a working copy; the main copy of the target branch is never written. `{n}` of
+  `branch_name` and `worktree_name` is three digits (`task/045-…`). A folder made outside the plugin: `crew_spawn {task: N,
+  goal}` makes the record N without a folder commit; no folder with that number — refused. An agent outside OpenCode takes
+  a number the same way: `node scripts/task-number.mjs --dir <tree> --title "<title>"` (answers JSON `{n, number, folder,
+  path}` and writes the folder into that tree; the agent commits it).
+- **A task session** is one launch of an agent inside the task — the executor (`исп`), the reviewer (`прм`), a method session
+  (`С1`, `С2`, `С3п`, `С4`…) — with no task number of its own: `crew_spawn {task: N, session: "С4", goal, place?}` adds a
+  session to the record of task N. Its ident is `045 С4-3` (the code and its ordinal in the task) plus the launch number
+  `№n` (through the task, the same as `запуск №n` of the progress journal); before the session starts the plugin writes
+  `С4 0/0 [ГГГГ-ММ-ДД ЧЧ:ММ] запуск №3` into `progress.log` of the copy where it works and `пуск: запуск №3 С4 [время] — 045
+  С4-3 …` into `log.md` of the task (the forms of `progress_line` / `log_line`). Review sessions `С2`, `С4`, `С6` work by
+  default in their own tree and branch `task/045-s4-3` from the task branch (`place: "own"`, recorded as a side branch for
+  cleanup), the others in the task tree (`place: "task"`). A method session submits to the integrator (`crew_task submit`
+  wakes it, `log.md` gets `документ: С4-3 сдала: …`); the task waits for the next session (status `idle`). The plugin's
+  review is one per task: after the submit of a task with a single `исп` session, as before, and for a task with method
+  sessions after `crew_task {action: "deliver", n, text}`. `reassign` of a task with sessions gives the same code the next
+  ordinal and a new launch number; the old session is marked handed.
+- **A sub-task** is a task of its own: `crew_spawn {part_of: N, …}` — own number and folder, the first line of its
+  `task/message.md` is `Часть задачи NNN «…».`, the parent's `log.md` gets `документ: заведена подзадача MMM «…»` (no tree of
+  the parent — a letter to the integrator with that line); the records link `part_of` / `parts`. The rule: an own acceptance
+  or an own landing in `main` — a sub-task; the next step of the same work — a session.
+- **Transition.** Old records keep their numbers and their show (`#57 исп`). A closed old record with the number of a folder
+  moves unchanged to `tasks/<project>/legacy/<N>.json` when that task gets its record (shown by `crew_task list all`); an
+  open one refuses with its title. An order (`crew_task order`) takes its number from the same count and makes no folder.
+- **The show.** The "Crew" panel puts the task line `045 <title>` over its sessions `↳ прм`, `↳ С4-3`; `/crew` lists them
+  under `045 «<title>»`; the line "Ждут вас" names `045 прм`; notices, letters and answers name the task `045` and the
+  session `045 С4-3`.
 
 - `crew_spawn {title?, goal, criteria, boundaries?, open_questions?, extra?, tier?, priority?, role?, parent?}` (the
   integrator only) starts task `#N` in a new session, with or without a window. No task without a
@@ -460,7 +497,8 @@ journal is `tasks/<project>/<N>.json` in the mailbox.
   {n, text?}` (wake a stalled executor now), `reassign {n, text?}` (a new session, the same number, a
   summary of what was done; `text` refines the goal: it goes into the new session's first letter as a
   block «УТОЧНЕНИЕ ПРИ ПЕРЕДАЧЕ» before the old goal, wins where they differ and stays in the task
-  history and `view`; refine with this call, not with a second letter), `cancel {n}`, `priority {n, priority}`.
+  history and `view`; refine with this call, not with a second letter), `cancel {n}`, `priority {n, priority}`, `deliver {n,
+  text}` (a task with method sessions goes to the plugin's review once).
 - The executor submits with `crew_task {action: "submit", n, text}` (`submit - executor - n, text`):
   no qid needed; `text` is the report (what was done, how it was checked, what is left). It covers
   the first submission, the one after rework or after a sync, and a plan task with the form check. The task is

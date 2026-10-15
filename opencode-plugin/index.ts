@@ -496,7 +496,7 @@ export default {
             time: t,
             text: `Вкладка ${keyOf(card)} (сессия ${card.session}) застряла: ${what} — ${why}. Напоминаний больше не будет. Подтолкни (${pushHint}), передай другой сессии (reassign) или загляни в неё сам.`,
           })
-          noticeAuthor(o.from_session, projOf(card), { sessionID: card.session, title: task ? `${taskNo(task)} застряла` : `${keyOf(card)} застряла`, message: short(task ? `«${task.title}» · ${why}` : why, 80), duration: 15_000 }, true)
+          noticeAuthor(o.from_session, projOf(card), { sessionID: card.session, title: task ? `${((s) => (s && s.code !== EXECUTOR_CODE ? sessionRef(task, s) : taskNo(task)))(sessionOf(task, card.session))} застряла` : `${keyOf(card)} застряла`, message: short(task ? `«${task.title}» · ${why}` : why, 80), duration: 15_000 }, true)
           if (task && (task.qid === o.qid || isReview)) taskEvent(task, PLUGIN_SENDER, undefined, `${isReview ? "приёмка застряла" : "застряла"}: ${why}`)
           log(`stuck ${card.session} for ${o.qid} (empty ${o.empty}, pushes ${o.nudges})`)
           continue

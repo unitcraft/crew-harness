@@ -5,7 +5,9 @@
     захода, номера требований, строки хода); молчаливо испорченная первая строка запускает проверку
     заново поверх утверждённого документа или теряет заход, а строка журнала не по форме пропадает
     из панели хода без шума.
-Проверяет: в doc/tasks/*/ — первая строка spec.md и plan.md начинается с «Статус: черновик» или
+Проверяет: номер папки задачи doc/tasks/NNN-<slug>/ не повторяется — две папки с одним номером NNN красные (task-number-dup,
+    адрес — обе папки; задача 058: одна задача — один номер; в режиме коммита — только если коммит меняет одну из них);
+    в doc/tasks/*/ — первая строка spec.md и plan.md начинается с «Статус: черновик» или
     «Статус: утверждено»; первая строка spec-review-N.md, plan-review-N.md, review-N.md и
     delivery-review-N.md — «Заход N: существенных K, поверхностных M, проб P» с числами и N как в
     имени файла; номера REQ-NN, AC-NN, DNC-NN в начале строки spec.md не повторяются; progress.log —
@@ -57,8 +59,8 @@
     current.md до появления result.md (его создаёт шаг плана в реализации); содержание current.md,
     метки копий, единственность действующего текста и честность строки «нет: результат — код» (это
     проверка С6, п. 5 методики); в режиме коммита — папки, где коммит не меняет spec.md или plan.md.
-Правило: doc/canon/process.md (цикл сессий методики, «Журнал хода progress.log», «Результат и куда он
-    попадает») и формат машинных мест методики.
+Правило: doc/canon/process.md (цикл сессий методики, «Журнал хода progress.log», «Задача, сессия, подзадача», «Результат и
+    куда он попадает») и формат машинных мест методики.
 
 Пометок-исключений у этого стража нет.
 """
@@ -126,6 +128,8 @@ RESULT_HEAD = re.compile(r"^#{1,6}[ \t]+Результат и куда он по
 ANY_HEAD = re.compile(r"^#{1,6}[ \t]")
 NO_RESULT_LINE = re.compile(r"^[ \t]*(?:[-*][ \t]+)?«?нет: результат — код»?(.*)$")
 LOG_STARTED = re.compile(r"^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}) ")
+# папка задачи с номером (задача 058): номер — цифры до первого дефиса
+TASK_FOLDER = re.compile(r"^(doc/tasks/([0-9]{3,})-[^/]+)/")
 
 
 def first_line(text):
@@ -469,8 +473,28 @@ def check_result_section(path, text, folder, paths, rep):
         rep.add(path, start + 1, "result-current", "результат назван, result.md уже есть, а current.md в папке задачи нет")
 
 
+def check_number_dup(source, changed, rep):
+    """Две папки задач с одним номером NNN (задача 058): по нарушению на каждую папку, в тексте — обе."""
+    folders = {}
+    for entry in source.entries():
+        m = TASK_FOLDER.match(entry.path)
+        if m:
+            folders.setdefault(int(m.group(2)), set()).add(m.group(1))
+    for number in sorted(folders):
+        names = sorted(folders[number])
+        if len(names) < 2:
+            continue
+        if source.mode == "commit" and not any(p.startswith(f + "/") for f in names for p in changed):
+            continue
+        for folder in names:
+            rep.add(folder, None, "task-number-dup", "номер %03d у двух папок задач: %s — одна задача — один номер (Канон, process.md, "
+                    "«Задача, сессия, подзадача»); новой задаче номер выдают crew_spawn плагина или scripts/task-number.mjs, "
+                    "переименуй одну из папок на свободный номер" % (number, " и ".join(names)))
+
+
 def judge(source, args, rep):
     count = 0
+    check_number_dup(source, [e.path for e in source.changed()], rep)
     by_path = None
     started = {}
     for entry in source.changed():

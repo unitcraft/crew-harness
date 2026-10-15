@@ -449,7 +449,7 @@ export async function ensureWorktree(repoDir: string, worktree: string, branch: 
 // worktree и ветки из-за сбоя чтения настроек). Ищем по шаблонам настроек с номером задачи и любым slug: ветки
 // branch_name (локальные; на origin — при cleanup local+remote) и worktree worktree_name (ownership ниже).
 // Плагин сам не удаляет (это действие наружу): список уходит автору задачи.
-const templateRe = (tpl: string, v: { repo: string; n: number; project: string }) =>
+const templateRe = (tpl: string, v: { repo: string; n: number | string; project: string }) =>
   new RegExp(
     "^" +
       tpl
@@ -486,7 +486,8 @@ function worktreesOf(porcelain: string): { path: string; branch?: string }[] {
   return out
 }
 export function ownership(t: Task, cfg: CrewConfig, repo: string) {
-  const v = { repo, n: t.n, project: t.project }
+  // {n} задачи с папкой — три цифры (задача 058): task/045-…, ветки сессий task/045-s4-3 — тоже её
+  const v = { repo, n: t.folder ? String(t.n).padStart(3, "0") : t.n, project: t.project }
   const branchRe = templateRe(cfg.branchName, v)
   // ветки, начатые по шаблону, и их «отростки» (t6-…-cand, t6-diag): номер задачи в начале имени ветки
   const prefix = cfg.branchName.split("{slug}")[0]

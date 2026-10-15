@@ -54,6 +54,14 @@ cell("help says the bounds clamp the tier of crew_spawn and a check stage withou
 // task 020: waiting for a remote CI does not load the machine and must not take the machine-queue slot
 cell("help says a remote-CI wait goes with machine: false and machine: true is for heavy commands", /удалённ\S* CI[^]*?machine: false/.test(help) && /machine: true[^]*?только для тяжёлых/.test(help), "missing")
 
+// task 058: one task, one number — the model in the words «задача», «сессия задачи», «подзадача»; no word «поручение» (AC-11)
+for (const w of ["tasks_dir", "Сессия задачи", "Подзадача", "part_of", "deliver", "«045 С4-3»", "запуска №n", "Часть задачи NNN", "scripts/task-number.mjs", "idle"]) {
+  cell(`help names «${w}» (task 058)`, help.includes(w), "missing")
+}
+const texts = [help, ...Object.values(tools).map((t) => `${t.description ?? ""} ${JSON.stringify(t.args ?? t.input ?? t.parameters ?? {})}`)].join("\n")
+cell("AC-11: neither the help nor a tool description has the word «поручение»", !/поручени/i.test(texts), (/.{0,60}поручени.{0,60}/i.exec(texts) ?? [""])[0])
+cell("the crew_spawn description names task, session, part_of and the rule", /session/.test(tools.crew_spawn.description) && /part_of/.test(tools.crew_spawn.description) && /own acceptance or an own landing in main - a sub-task/.test(tools.crew_spawn.description), "missing")
+
 cell("the server registers no /crew-help command (it is a window command, see crew-instant-commands.test)", !commands["crew-help"] && synthetics.length === 0 && prompts.length === 0, JSON.stringify(Object.keys(commands)))
 
 const ev = { sessionID: "sesHELP01", system: [] }

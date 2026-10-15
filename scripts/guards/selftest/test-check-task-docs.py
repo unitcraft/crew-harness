@@ -36,7 +36,8 @@
     методика ab2a4ef — «готово» при k меньше N исправляют и «готово — N завышено: …» с тем же k, и дальнейшие единицы (не красные);
     в журнале, начатом не раньше 2026-10-16 (первая строка с датой), добавленная строка запуска — «запуск №<n>», номер не повторяется,
     запись «запуск №<n> <код>» есть в log.md папки (journal-launch), время — [ГГГГ-ММ-ДД ЧЧ:ММ] (journal-time); журнал, начатый раньше,
-    запуск без номера и [ЧЧ:ММ] не судятся (переход).
+    запуск без номера и [ЧЧ:ММ] не судятся (переход); задача 058 — две папки 050-a и 050-b красные (task-number-dup у обеих
+    папок), разные номера и папка без номера не красные, повтор номера, которого коммит не касается, в режиме коммита не судится.
 Не проверяет: содержание документов.
 Правило: doc/canon/process.md (цикл сессий методики, «Журнал хода progress.log», «Результат и куда он
     попадает»); AC-14 и AC-18 задач.
@@ -134,6 +135,32 @@ def main():
     pr.probe("красная", "повторный DNC", red({"doc/tasks/001-x/spec.md": "Статус: черновик\nDNC-02 a\nDNC-02 b\n"}, "dup-id", "doc/tasks/001-x/spec.md:3"))
     pr.probe("иной-синтаксис", "строка статуса с регистром не в начале", red({"doc/tasks/001-x/plan.md": " Статус: утверждено\n"}, "task-status", "doc/tasks/001-x/plan.md:1"))
     pr.probe("иной-синтаксис", "пустой файл spec.md", red({"doc/tasks/001-x/spec.md": ""}, "task-status", "doc/tasks/001-x/spec.md:1"))
+    # задача 058, AC-12: одна задача — один номер; две папки с одним номером NNN — task-number-dup с адресом обеих папок
+    dup = {"doc/tasks/050-a/log.md": "x\n", "doc/tasks/050-b/log.md": "x\n"}
+
+    def red_dup():
+        files = dict(good)
+        files.update(dup)
+        proc = check(fresh(files))
+        stlib.expect(proc, 1, "FAIL: check-task-docs: 2 нарушений")
+        for folder in ("doc/tasks/050-a", "doc/tasks/050-b"):
+            assert stlib.has_line(proc, "FAIL %s: task-number-dup: номер 050 у двух папок задач: doc/tasks/050-a и doc/tasks/050-b" % folder), proc.out
+
+    def legit_numbers_differ():
+        files = dict(good)
+        files.update({"doc/tasks/050-a/log.md": "x\n", "doc/tasks/051-b/log.md": "x\n", "doc/tasks/notes/a.md": "x\n"})
+        stlib.expect(check(fresh(files)), 0, "ок: осмотрено 8 файлов задач")
+
+    def commit_dup_untouched():
+        files = dict(good)
+        files.update(dup)
+        repo = fresh(files)
+        sha = stlib.commit_file(repo, env, "doc/tasks/001-x/review-3.md", GOOD_REVIEW % 3 + "ещё\n", "other")
+        stlib.expect(check(repo, "--commit", sha), 0, "ок: осмотрено 1 файлов задач")
+
+    pr.probe("красная", "две папки 050-a и 050-b — task-number-dup у обеих", red_dup)
+    pr.probe("законное", "папки 050-a и 051-b и папка без номера — разные номера", legit_numbers_differ)
+    pr.probe("законное", "режим коммита: повтор номера, которого коммит не касается, не судится", commit_dup_untouched)
     pr.probe("мишень", "нет документов задач — мишень потеряна", no_task_docs)
     pr.probe("мишень", "пустой репозиторий — мишень потеряна", empty_repo)
     # ------------------------------------------------------------------------------------------------
@@ -439,7 +466,9 @@ def main():
         assert len(bad) == 1 and bool(mod.parse_progress_line(bad[0])) == vec["invalidBytes"]["isLine"] and "\ufffd" in bad[0], bad
 
     def run_all_accepts_real_copies():
-        files = real_journals()
+        # номер 001 занят папкой каркаса (stlib.SKELETON, doc/tasks/001-x): копия 001-crew-service дала бы повтор номера (task-number-dup)
+        files = dict((k, v) for k, v in real_journals().items() if not k.startswith("doc/tasks/001-"))
+        assert len(files) >= 2, "мишень: отслеживаемых журналов кроме 001 меньше двух: %d" % len(files)
         base2 = pr.mkdtemp()
         env2 = stlib.isolated_env(base2, {"CREW_PRIVATE_NAMES_FILE": stlib.names_file(base2, ["zz-no-such-" + "name-zz"])})
         repo = stlib.hooked_repo(base2, env2, extra=files, install=False)
