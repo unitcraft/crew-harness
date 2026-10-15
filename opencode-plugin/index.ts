@@ -431,6 +431,18 @@ export default {
       }
       let changed = false
       for (const o of list) {
+        // ВКЛАДКА ОЖИЛА САМА (владелец, 2026-10-15, «по рекомендации»): рабочий ход снимает «застряла» — иначе работающая
+        // вкладка показывалась застрявшей до ручного crew_task push; счётчики начинаются заново, как после push
+        if (o.stuck && turn?.tools) {
+          o.stuck = false
+          delete o.stuckAt
+          delete o.stuckWhat
+          o.empty = 0
+          o.nudges = 0
+          changed = true
+          log(`unstuck ${card.session} for ${o.qid}: a working turn`)
+          continue
+        }
         if (o.stuck) continue
         changed = true
         if (turn?.owner) {
