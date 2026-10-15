@@ -34,6 +34,9 @@ export type Status = {
   detail: string
   /** Вопрос владельцу (state owner): последние строки ответа. */
   question?: string
+  /** Ход кончился фразой ожидания (WAITING_PHRASES), а не строкой с «?»: в question — эта фраза; показ — «ждёт указаний»,
+   *  значок WAIT_MARK (задача 056). Подталкивание то же, что у вопроса. */
+  wait?: true
   /** Вопрос встроенного вопросника (form-wait.ts): уведомления по нему ведёт formWatch, не общий повтор owner_reminder_min. */
   formId?: string
   watches: { id: string; note?: string; started?: number; minutes: number }[]
@@ -70,23 +73,34 @@ export function stepProgress(task: Status["task"]): string | undefined {
  * Отрицание перед глаголом («не жду», «ни», «not», «no need for») не срабатывает; прошедшее («ждал») глаголом не считается.
  */
 export const WAITING_PHRASES: RegExp[] = [
-  /(?<![а-яё])(?<!не\s)(?<!ни\s)(?:жду|ждёт|ждем|ждём|ожидаю|ожидает|ожидаем)(?![а-яё])(?:(?!\sбез\s)[^.!?\n,;:]){0,60}?(?<![а-яё])(?:вашего|владельц|разрешени|слова|решени|согласи|подтвержден|GO(?![а-яё\w]))/i,
+  /(?<![а-яё])(?<!не\s)(?<!ни\s)(?:жду|ждёт|ждем|ждём|ожидаю|ожидает|ожидаем)(?![а-яё])(?:(?!\sбез\s)[^.!?\n,;:]){0,60}?(?<![а-яё])(?:вашего|владельц|разрешени|слова|решени|согласи|подтвержден|указани|GO(?![а-яё\w]))/i,
   /(?<![a-z])(?<!not\s)(?<!n't\s)(?<!no\s)(?:awaiting|waiting for|needs?)(?![a-z])(?:(?!\swithout\s)[^.!?\n,;:]){0,60}?(?<![a-z])(?:your|owner)(?![a-z])[^.!?\n,;:]{0,40}?(?<![a-z])(?:GO|approval|decision|confirmation|permission)(?![a-z])/i,
   /(?<![а-яё])пока не получу(?![а-яё])[^.!?\n]{0,60}?(?<![а-яё])(?:разрешени|слов|решени|подтвержден|GO(?![а-яё\w]))/i,
   /(?<![а-яё])(?<!не\s)(?:просит|просим|запрашивает)(?![а-яё])[^.!?\n,;:]{0,60}?(?<![а-яё])(?:разрешени|согласи|GO(?![а-яё\w]))/i,
 ]
 
 /** Ожидание не владельца, а приёмки, проверки, слияния, наблюдения или другой сессии: «жду решения приёмки». Вырезается до положительных фраз. */
-const NOT_OWNER_WAIT = /(?<![а-яё])((?:жду|ждёт|ждем|ждём|ожидаю|ожидает|ожидаем)(?![а-яё]))\s+(?:решени|ответ|результат|вердикт|слов|итог)[а-яё]*\s+(?:приёмк|приемк|приёмщик|приемщик|CI(?![a-z])|проверк|слиян|наблюден|воркер|исполнител)[а-яё]*/gi
+const NOT_OWNER_WAIT = /(?<![а-яё])((?:жду|ждёт|ждем|ждём|ожидаю|ожидает|ожидаем)(?![а-яё]))\s+(?:решени|ответ|результат|вердикт|слов|итог|указани)[а-яё]*\s+(?:приёмк|приемк|приёмщик|приемщик|CI(?![a-z])|проверк|слиян|наблюден|воркер|исполнител)[а-яё]*/gi
 
-/** Ответ кончается вопросом или фразой ожидания слова владельца: такая строка среди последних трёх непустых (за ней бывает подпись). */
-export function endsWithQuestion(text: string): string | undefined {
+/** Ответ кончается вопросом или фразой ожидания слова владельца: такая строка среди последних трёх непустых (за ней бывает подпись).
+ *  wait — строка без «?» в конце, найдена по фразе ожидания (задача 056: показывается «ждёт указаний», а не «вопрос»). */
+export function endOfTurn(text: string): { text: string; wait: boolean } | undefined {
   const waits = (l: string) => { const c = l.replace(NOT_OWNER_WAIT, "$1 "); return WAITING_PHRASES.some((r) => r.test(c)) }
+  const asks = (l: string) => /\?[)»"*_`]*$/.test(l)
   const lines = text.replace(/\r/g, "").split("\n").map((l) => l.trim()).filter(Boolean)
   const tail = lines.slice(-3)
-  const i = tail.map((l) => /\?[)»"*_`]*$/.test(l) || waits(l)).lastIndexOf(true)
+  const i = tail.map((l) => asks(l) || waits(l)).lastIndexOf(true)
   if (i < 0) return undefined
-  return tail[i].length > 300 ? `${tail[i].slice(0, 300)}…` : tail[i]
+  return { text: tail[i].length > 300 ? `${tail[i].slice(0, 300)}…` : tail[i], wait: !asks(tail[i]) }
+}
+
+/** Строка вопроса или ожидания в конце хода — для сторожа потока и подталкивания (index.ts): вопрос и ожидание не различает. */
+export const endsWithQuestion = (text: string): string | undefined => endOfTurn(text)?.text
+
+/** «ждёт указаний интегратора» — от кого, если фраза его называет; иначе «ждёт указаний». */
+export function waitLabel(phrase = ""): string {
+  const from = /интегратор/i.test(phrase) ? " интегратора" : /владельц/i.test(phrase) ? " владельца" : ""
+  return `ждёт указаний${from}`
 }
 
 const hm = (t?: number) => (t ? new Date(t).toTimeString().slice(0, 5) : "?")
@@ -166,8 +180,12 @@ function statusOfAll(x: StatusInput): Status {
   // в /crew, но без уведомления; «owner» с уведомлением — только у вкладок владельца.
   // исполнитель, сдавший задачу (submitted/reviewing/accepted), по роли ждёт приёмщика: «жду решения приёмки» — не вопрос
   const handedOver = !!card.task && !!own && ["submitted", "reviewing", "accepted"].includes(own.status)
-  const q = x.end && !x.end.ownerAfter && !handedOver ? endsWithQuestion(x.end.text) : undefined
-  if (q && !card.spawned) return { ...base, state: "owner", since: x.end!.at, question: q, detail: `ждёт вас с ${hm(x.end!.at)}: ${q}` }
+  // ход кончился фразой ожидания, а не вопросом (задача 056): то же состояние, отметка wait и подпись без слова «вопрос»
+  const e = x.end && !x.end.ownerAfter && !handedOver ? endOfTurn(x.end.text) : undefined
+  const q = e?.text
+  const w = e?.wait ? { wait: true as const } : {}
+  if (q && !card.spawned) return { ...base, state: "owner", since: x.end!.at, question: q, ...w, detail: `ждёт вас с ${hm(x.end!.at)}: ${q}` }
+  if (q && e?.wait) return { ...base, state: "question", since: x.end!.at, question: q, ...w, detail: `${waitLabel(q)} с ${hm(x.end!.at)}: ${q}` }
   if (q) return { ...base, state: "question", since: x.end!.at, question: q, detail: `ждёт ответа (интегратора или вас) с ${hm(x.end!.at)}: ${q}` }
   if (watches.length) {
     const w = watches[0]
@@ -240,6 +258,11 @@ export function readStatuses(): Status[] {
 /** Значки вкладок (владелец, 2026-10-15: «? — ждёт вас; ▶ — задал вопрос текстом, ждёт ответа интегратора (или вашего);»):
  *  панель, /crew, /ask. */
 export const MARK: Partial<Record<State, string>> = { owner: "?", question: "▶", working: "•" }
+/** Значок вкладки, чей ход кончился фразой ожидания, а не вопросом (задача 056; владелец, 2026-10-15: значок «не похожий на
+ *  вопрос»): «‖» — пауза в одну колонку («⏸» в терминале бывает шириной в две, «…» — знак обрезки строки). */
+export const WAIT_MARK = "‖"
+/** Значок вкладки: ждёт указаний — WAIT_MARK, иначе по состоянию (MARK). */
+export const markOf = (s: Pick<Status, "state" | "wait">): string | undefined => (s.wait && (s.state === "owner" || s.state === "question") ? WAIT_MARK : MARK[s.state])
 const ORDER: Record<State, number> = { owner: 0, question: 1, working: 2, watch: 3, reply: 4, task: 5, tasks: 6, idle: 7 }
 
 /** Ширина строки окна /crew (диалог OpenCode ~74 знака): длиннее — перенос, и список рвётся (владелец 2026-10-07:
@@ -274,7 +297,7 @@ export function waitingRows(list: Status[], width = SIDE_WIDTH): SideRow[] {
   const oldest = oldestWait(w)
   const rows: SideRow[] = [
     { mark: " ", who: "", what: `Ждут вас: ${w.length}${oldest.since ? ` · с ${hm(oldest.since)}` : ""}`, tone: "accent", flush: true },
-    { mark: "?", who: "", what: `? ${[oldest.project, tabOf(oldest)].filter(Boolean).join(" ")}`, tone: "accent", flush: true },
+    { mark: markOf(oldest) ?? "?", who: "", what: `${markOf(oldest) ?? "?"} ${[oldest.project, tabOf(oldest)].filter(Boolean).join(" ")}`, tone: "accent", flush: true },
   ]
   const q = oldest.question?.replace(/[`*_]/g, "").replace(/\s+/g, " ").trim()
   if (q) rows.push({ mark: " ", who: "", what: fit(`  ↳ ${q}`, width), tone: "muted", flush: true })
@@ -299,7 +322,7 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
       const model = s.model ? ` [${s.model.replace(/^.*\//, "")}]` : ""
       const prog = s.task?.as === "reviewer" ? stepProgress(s.task) : undefined
       // вопрос владельцу — целиком (его и читают), остальное — строкой по ширине окна; значки — как в панели (MARK)
-      const row = `  ${s.state === "owner" || s.state === "question" ? `${MARK[s.state]} ` : ""}${short(who, 40)}${model} — ${s.detail}`
+      const row = `  ${s.state === "owner" || s.state === "question" ? `${markOf(s)} ` : ""}${short(who, 40)}${model} — ${s.detail}`
       out.push(s.state === "owner" ? row : fit(row))
       if (s.askedStale?.length) out.push(fit(`      вопрос устарел: ${s.askedStale.map((a) => `к ${a.to} с ${hm(a.at)} (${minutes(a.at, now)})`).join(", ")}`))
       for (const k of s.stuck ?? []) out.push(fit(`      ⚠ ${stuckText(k)}`))
@@ -424,7 +447,7 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
       case "owner":
         return `ждёт вас ${hm(s.since)}`
       case "question":
-        return "вопрос — ждёт ответа"
+        return s.wait ? "ждёт указаний" : "вопрос — ждёт ответа"
       case "working":
         return s.since ? `работает ${minutes(s.since, now)}` : "работает"
       case "watch":
@@ -451,11 +474,13 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
     const prog = waiting ? undefined : stepsLine
     const waitFor = waiting ? waitText(what(s), s.since, now) : undefined
     rows.push({
-      mark: MARK[s.state] ?? " ",
+      mark: markOf(s) ?? " ",
       who: who(s),
       what: short(prog ?? waitFor ?? what(s), 20),
       tone: (s.state === "owner" || s.state === "question" ? "accent" : s.state === "idle" ? "muted" : "base") as SideRow["tone"],
     })
+    // вопрос или фраза ожидания сессии задачи — строкой под ней (задача 056): видно, о чём она стоит
+    if (s.state === "question" && s.question) rows.push({ mark: " ", who: "", what: `↳ ${short(s.question.replace(/[`*_]/g, ""), 26)}`, tone: "muted" })
     const cur = s.task?.as === "reviewer" && prog?.startsWith("проверка") ? s.task.steps!.find((a) => a.id === s.task!.checking) : undefined
     if (cur) rows.push({ mark: " ", who: "", what: `↳ ${short(cur.text.replace(/[`*_]/g, ""), 26)}`, tone: "muted" })
     if (waiting && stepsLine) rows.push({ mark: " ", who: "", what: `↳ ${stepsLine}`, tone: "muted" })

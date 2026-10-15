@@ -376,7 +376,10 @@ export function formReminders(now: number, notify: (session: string, f: PendingF
 }
 
 /** A tab that waits for the owner without a record in forms/: its turn ended with a question (status.ts, state "owner"). */
-export type EndedWait = { session: string; project?: string; role: string; title: string; since?: number; question?: string }
+export type EndedWait = { session: string; project?: string; role: string; title: string; since?: number; question?: string; wait?: true }
+/** The mark of a tab whose turn ended with a waiting phrase, not a question (task 056): the same as WAIT_MARK in status.ts
+ *  (not imported: status.ts imports this module). */
+const WAIT_MARK = "‖"
 
 /** /ask: the open questions to the owner - project, tab, how long, text and options; `ended` - the tabs whose turn ended
  *  with a question (task 055: /ask names every tab that waits, not only the questionnaire ones). */
@@ -391,9 +394,9 @@ export function askText(now = Date.now(), dir = FORMS, ended: EndedWait[] = []):
     return m < 120 ? `${m} мин` : `${Math.floor(m / 60)} ч ${m % 60} мин`
   }
   for (const e of more) {
-    out.push(`? ${e.project ?? "?"} · ${e.role}${e.title && e.title !== e.session ? ` «${e.title}»` : ""}${e.since ? ` — ждёт ${ago(e.since)} (с ${hm(e.since)})` : ""}`)
+    out.push(`${e.wait ? WAIT_MARK : "?"} ${e.project ?? "?"} · ${e.role}${e.title && e.title !== e.session ? ` «${e.title}»` : ""}${e.since ? ` — ${e.wait ? "ждёт указаний" : "ждёт"} ${ago(e.since)} (с ${hm(e.since)})` : ""}`)
     if (e.question) out.push(`   ${e.question}`)
-    out.push(`   Сессия ${e.session}: ход кончился вопросом — откройте вкладку и ответьте.`)
+    out.push(`   Сессия ${e.session}: ${e.wait ? "ход кончился ожиданием ваших указаний — откройте вкладку и напишите, что дальше." : "ход кончился вопросом — откройте вкладку и ответьте."}`)
     out.push("")
   }
   for (const { session, form: f } of list) {

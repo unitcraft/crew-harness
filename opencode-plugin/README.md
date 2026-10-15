@@ -146,7 +146,11 @@ kept in its record, so a restart or a later role change does not alter them ([pl
 The window's right panel shows a "Crew" block under "Context": the sessions of the project of the tab on screen —
 the ones waiting for you first, who is working and how long, who waits for what — refreshed every 2 s
 ([plan 003.2](../doc/archive/plans/003.2-sidebar.md)). Marks of a tab (the same in `/crew` and `/ask`): `?` — waits for you;
-`▶` — asked a question in text and waits for the integrator (or you); `•` — its turn is going. The window closes the tab of a task or review session two minutes after its task was merged (accepted — before the cleanup: an open tab keeps the server watching the task's folder, and Windows will not remove it) or cancelled, unless its turn is going or
+`▶` — asked a question in text and waits for the integrator (or you), labelled `вопрос — ждёт ответа` with the question
+under it; `‖` — its turn ended with a waiting phrase and no question mark («жду дальнейших указаний», «ожидаю вашего
+решения»), labelled `ждёт указаний` (`ждёт указаний интегратора` in `/crew` when the phrase names the integrator) with the
+phrase under it — such a tab gets no "continue" either, the same as a question (task 056); a tab of yours waiting with such a
+phrase is counted in "Ждут вас" with `‖`, not `?`; `•` — its turn is going. The window closes the tab of a task or review session two minutes after its task was merged (accepted — before the cleanup: an open tab keeps the server watching the task's folder, and Windows will not remove it) or cancelled, unless its turn is going or
 the tab is on screen (the owner's own tabs are left alone; the session stays in the history). `/crew-config` shows the project's settings in effect, each with where it comes from (default, the committed file,
 `local`), like `crew_config show`. `/crew-doctor` shows the service's last self-check (made at start and every 10 minutes), like `crew_doctor`. `/crew` in any window (also in the Ctrl+P palette) shows, without a model turn, every session of the projects:
 working, **waiting for you** (its last answer ends with a question and you have not written since), waiting for a
@@ -168,7 +172,7 @@ the tab any more. The plugin never answers for you and never picks the recommend
 Every window shows who waits for you, over all projects. `/crew` starts with one line `Ждут вас: N · с ЧЧ:ММ · <project> <#N role>`
 (the time and the source of the oldest wait, so a window of another project sees the question is not its own). The side panel
 shows it on three lines, so the narrow panel cuts nothing you need: `Ждут вас: N · с ЧЧ:ММ`; `? <project> <#N role>` — the tab
-that waits longest, whole; `↳ <question>` — the start of its question, cut to the panel (no question text, no third line).
+that waits longest, whole (`‖` when its turn ended with a waiting phrase); `↳ <question>` — the start of its question, cut to the panel (no question text, no third line).
 `/ask` lists every tab that waits (project, tab, how long it waits, text and options): the questionnaire questions and the
 tabs whose turn ended with a question. A question gives a notice at once and again every 30 minutes while it is
 open. With `owner_system_notify: true` the project also gets a Windows system notification (built-in PowerShell, no installs and no rights;
