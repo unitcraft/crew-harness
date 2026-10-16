@@ -165,7 +165,7 @@ cell("reassign with text: the refinement block is in the first letter, before th
 cell("reassign with text: the old goal stays and is marked as the original one", L.includes("сделать два") && !L.includes("ЦЕЛЬ: сделать два") && /действует уточнение/.test(L), L)
 const t2c = tasks.loadTask("proj", 2)
 cell("reassign with text: the text is in the task history", t2c.history.some((h) => h.note?.includes("делай только парсер, вывод не трогай")), JSON.stringify(t2c.history))
-const show2 = await call("crew_task", "sesOWNER1", { action: "view", n: 2 })
+const show2 = await call("crew_task", "sesOWNER1", { action: "show", n: 2 })
 cell("reassign with text: view shows the refinement", /уточнение при передаче: делай только парсер/.test(show2), show2)
 cell("reassign with text: the answer names the refinement", /с уточнением цели/.test(re2), re2)
 

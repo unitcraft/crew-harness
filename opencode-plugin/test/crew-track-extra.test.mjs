@@ -27,7 +27,7 @@ const accepted = () => {
 {
   const n = accepted()
   cell("TR-1 an old record has no side and reads as empty", rec(n).side === undefined)
-  const shown = await call("crew_task", REV, { action: "view", n })
+  const shown = await call("crew_task", REV, { action: "show", n })
   cell("TR-1b view works without the field and has no side line", !/побочные ветки/.test(shown), shown)
   const r = await call("crew_task", REV, { action: "cleanup", n })
   cell("TR-1c cleanup of an old record works as before", rec(n).status === "done", r)
@@ -49,7 +49,7 @@ const accepted = () => {
   const a = await call("crew_task", REV, { action: "track", n, branch: `old-name-${n}-final` })
   const b = await call("crew_task", REV, { action: "track", n, branch: `old-name-${n}-final` })
   cell("TR-3 track adds once, the second call says already recorded", rec(n).side?.length === 1 && /Записано/.test(a) && /Уже записано/.test(b), a + b)
-  const shown = await call("crew_task", REV, { action: "view", n })
+  const shown = await call("crew_task", REV, { action: "show", n })
   cell("TR-3b view shows the side list", /побочные ветки.*old-name-/.test(shown), shown)
   const bad = await call("crew_task", REV, { action: "track", n })
   cell("TR-3c track without branch and worktree is refused", /нужна branch/.test(bad) && rec(n).side.length === 1, bad)
