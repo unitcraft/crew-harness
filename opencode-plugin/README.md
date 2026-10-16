@@ -150,7 +150,7 @@ the ones waiting for you first, who is working and how long, who waits for what 
 under it; `‖` — its turn ended with a waiting phrase and no question mark («жду дальнейших указаний», «ожидаю вашего
 решения»), labelled `ждёт указаний` (`ждёт указаний интегратора` in `/crew` when the phrase names the integrator) with the
 phrase under it — such a tab gets no "continue" either, the same as a question (task 056); a tab of yours waiting with such a
-phrase is counted in "Ждут вас" with `‖`, not `?`; `⚠` — the tab recorded a gate (`log_line` kind `ворота`), its turn ended, and no question to you is open: labelled `ждёт вашего решения, вопроса нет` (task 062, see `log_line` below); `•` — its turn is going. The window closes the tab of a task or review session two minutes after its task was merged (accepted — before the cleanup: an open tab keeps the server watching the task's folder, and Windows will not remove it) or cancelled, unless its turn is going or
+phrase is counted in "Ждут вас" with `‖`, not `?`; `⚠` — the tab recorded a gate (`log_line` kind `ворота`), its turn ended, and no question to you is open: labelled `ждёт вашего решения, вопроса нет` (task 062, see `log_line` below); `◷` — the tab stands idle with an open task and no question to you, labelled `простаивает …` (task 063, see below); `•` — its turn is going. The window closes the tab of a task or review session two minutes after its task was merged (accepted — before the cleanup: an open tab keeps the server watching the task's folder, and Windows will not remove it) or cancelled, unless its turn is going or
 the tab is on screen (the owner's own tabs are left alone; the session stays in the history). `/crew-config` shows the project's settings in effect, each with where it comes from (default, the committed file,
 `local`), like `crew_config show`. `/crew-doctor` shows the service's last self-check (made at start and every 10 minutes), like `crew_doctor`. `/crew` in any window (also in the Ctrl+P palette) shows, without a model turn, every session of the projects:
 working, **waiting for you** (its last answer ends with a question and you have not written since), waiting for a
@@ -158,6 +158,25 @@ watch, for an answer to its question, for its task's review or rework, for its o
 first, the ones waiting for you on top. A session that starts waiting for you puts a notice into every live window
 (with Open; a system notification when the window is not focused, if OpenCode's `attention.notifications` is on)
 and repeats it every `owner_reminder_min` minutes (15; 0 — once) until you answer ([plan 003](../doc/archive/plans/003-status.md)).
+
+### An idle tab between sessions is marked and woken (task 063)
+
+A tab that set tasks (the integrator, as a rule) may stop with nothing going: the next session of a task is not launched, a
+session waits for its word, and no question to you is open (owner, 2026-10-16: «что-то застряло?»). The tab **stands idle** when
+its state is "waiting for its own tasks" (no turn going, no question to you — a form, a question mark or a waiting phrase at the
+end of the turn, a gate of task 062 —, no `crew_watch`, no own question with `expect_reply` waiting, no own task), the tab is open in a
+window, and among its open tasks one stands — between sessions (status `idle`), or its executor or reviewer waits for the tab
+(marked stuck towards it, or its turn ended with a question) — while no other task goes, or some session waits for the tab. A
+task goes in `starting`, `running`, `rework` (the executor works), `submitted` (the plugin assigns a reviewer; the flow watch raises a
+long wait), `reviewing`, `accepted` (the reviewer) and `approval` (the plan waits for you in `/plans`). The stand starts at the end of
+the tab's last turn or at the last change of the standing tasks, whichever is later. Past `idle_tab_minutes` (20; 0 — off) the tab
+gets ONE letter «Ты простаиваешь N мин: у задачи <…> нет идущей сессии … и нет вопроса владельцу. Сделай следующий шаг цикла или
+задай вопрос владельцу инструментом question», and `/crew` and the side panel show `◷ простаивает с ЧЧ:ММ (N мин), вопроса владельцу
+нет: 061 между сессиями` (the tab does not count in "Ждут вас": it waits for nobody). An empty turn in answer to the letter keeps the
+episode (no second letter, the mark comes back); the episode ends with a working turn of the tab (a tool call), your word in the tab,
+an open question to you, a watch, a launched session, or a change of the standing tasks; a new stand past the threshold is a new
+episode with its own letter. The episode with a sent letter is kept in `idle-tabs/<session>.json`, so a restart of the service
+does not repeat the letter.
 
 ### A question to the owner is not lost (task 040)
 

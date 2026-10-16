@@ -120,6 +120,7 @@ import {
   stampClamp,
   stampProfile,
   ownerWordAfter,
+  workedAfter,
   lastUserAt,
   idleFactsAfter,
   pendingTool,
@@ -131,8 +132,9 @@ import { DECISION_RU, readApprovals, removeApproval } from "./approvals.ts"
 import { runRetention } from "./retention.ts"
 import { allSteps, nextPlanNumber, parsePlan, stepDeps } from "./plans.ts"
 import { dropWatch, openWatchesBySession, pollWatches, requestWatch, watchesOf } from "./watch.ts"
-import { endOfTurn, endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
+import { type Status, endOfTurn, endsWithQuestion, markNotified, readStatuses, removeStatus, saveStatus, statusOf, withIdle } from "./status.ts"
 import { clearGate, GATE_LETTER, gateOf, markGateLetter, noteGate } from "./gate-stop.ts"
+import { clearIdle as clearIdleTab, holdIdle, idleBlockers, idleLetter, idleOf, idleWhat, waitsOn } from "./idle-tab.ts" // clearIdle в setup — снятие занятости карточки
 import { type Task, taskRef, acceptedAt, ago, byPriority, createTask, rounds, slugify, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
 import { countedOpen, waitingCleanup, ACCEPTED_REMINDERS_MAX, acceptedReminderId, acceptedReminders, letterTime } from "./tasks.ts"
 import { EXECUTOR_CODE, sesLabel, sessionOf, sessionRef, taskNo } from "./tasks.ts"
@@ -1025,6 +1027,7 @@ export default {
       }
       const formOpen = new Set(allForms(t).map((x) => x.session))
       const watchesBy = openWatchesBySession() // одно чтение папки наблюдений на проход (их сотни: завершённые хранятся сутки)
+      const saved = new Map(readStatuses().map((x) => [x.session, x])) // состояния прошлого прохода: кто из сессий задач ждёт автора (задача 063)
       for (const c of cards) {
         if (c.pid !== process.pid && pidAlive(c.pid)) continue // вкладка другого живого сервера
         const tab = tabOf(c.session, windows)
@@ -1032,6 +1035,7 @@ export default {
         const live = !!tab || (!!c.spawned && c.spawned.status !== "closed") || ws.length > 0 || listTasks(c.project).some((x) => x.author === c.session && isOpen(x))
         if (!live) {
           removeStatus(c.session)
+          clearIdleTab(c.session)
           continue
         }
         // СЛОВО ВЛАДЕЛЬЦА СНИМАЕТ «ЗАСТРЯЛА» (задача 052): на ближайшем проходе, не в конце хода. Запись без stuckAt (до задачи 043) —
@@ -1065,7 +1069,9 @@ export default {
           }
         }
         const gate = await gateStep(c, busy, end, formOpen.has(c.session), t)
-        const s = statusOf({ card: c, busy, busySince: c.busySince, end, asked: asked.get(c.session) ?? [], askedStale: askedStale.get(c.session) ?? [], now: t, watches: ws, ...(staleSince ? { staleSince } : {}), ...(hungSince ? { hungSince } : {}), ...(gate ? { gate } : {}) })
+        const s0 = statusOf({ card: c, busy, busySince: c.busySince, end, asked: asked.get(c.session) ?? [], askedStale: askedStale.get(c.session) ?? [], now: t, watches: ws, ...(staleSince ? { staleSince } : {}), ...(hungSince ? { hungSince } : {}), ...(gate ? { gate } : {}) })
+        const idle = await idleStep(c, s0, end, !!tab, saved, t)
+        const s = idle ? withIdle(s0, idle, t) : s0
         const prev = saveStatus(s)
         // РЕЖИМЫ ОТВЕТА НА ВОПРОСЫ (задача 007, ADR-0010): решение принимается раньше блока уведомлений. Режимы выключены —
         // ничего не читается и прежний путь идёт как был. handled — «ждёт вас» по этому ходу подавлено целиком; остаток вопросов
@@ -1129,6 +1135,38 @@ export default {
         log(`gate stop without a question: ${c.session} reminded`)
       }
       return { at: g.at }
+    }
+
+    // ПРОСТОЙ ВКЛАДКИ МЕЖДУ СЕССИЯМИ (задача 063, idle-tab.ts; владелец, 2026-10-16: «что-то застряло?»). Вкладка «ждёт своих задач» (state
+    // tasks: хода нет, вопроса владельцу нет, наблюдения нет, своего вопроса с expect_reply нет, своей задачи нет), открыта в окне, и у неё
+    // стоящая задача (между сессиями или её сессия ждёт её указаний) без идущей сессии рядом либо с ждущей сессией — дольше idle_tab_minutes.
+    // Начало эпизода — конец её последнего хода или изменение стоящих задач (что позже); после письма — закреплено в idle-tabs/, так что
+    // пустой ход в ответ на письмо его не сдвигает. Кончают эпизод: другое состояние (вопрос, наблюдение…), запуск сессии, ход с работой
+    // после письма, слово владельца после письма, изменение стоящих задач. Письмо — одно на эпизод; отметка ◷ — в сводках (withIdle).
+    async function idleStep(c: Card, s: Status, end: { at: number } | undefined, open: boolean, saved: Map<string, Status>, t: number): Promise<{ since: number; what: string[] } | undefined> {
+      if (s.state === "working") return undefined // ход идёт (и ход, начатый письмом): эпизод не трогается, отметки нет
+      const ep = idleOf(c.session, undefined, t)
+      const min = loadConfig(c.directory).idleTabMin
+      const b = s.state === "tasks" && open && min > 0 ? idleBlockers(c.session, listTasks(c.project).filter((x) => x.author === c.session && isOpen(x)), (sid) => waitsOn(sid, c.session, saved)) : undefined
+      if (!b?.idle) {
+        if (ep) clearIdleTab(c.session)
+        return undefined
+      }
+      let since = Math.max(end?.at ?? 0, b.at)
+      if (ep) {
+        const over = b.at > ep.since || (await ownerWordAfter(c.session, ep.letter)) > 0 || (await workedAfter(c.session, ep.letter))
+        if (over) clearIdleTab(c.session)
+        else since = ep.since
+      }
+      if (!since || t - since < min * 60_000) return undefined
+      const what = idleWhat(b.items)
+      if (!idleOf(c.session, undefined, t)) {
+        const id = `idle-${safeKey(c.session)}-${since}`
+        if (!letterExistsFor(c.session, id)) postLetter(c.session, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: c.session, time: t, text: idleLetter((t - since) / 60_000, b.items) })
+        holdIdle(c.session, since, t)
+        log(`idle tab: ${keyOf(c)} (${c.session}) stands since ${hm(since)}: ${what.join("; ")}; reminded`)
+      }
+      return { since, what }
     }
 
     // ВОПРОС ВЛАДЕЛЬЦУ НЕ ПРОПАДАЕТ МОЛЧА (задача 040, form-wait.ts). Раз в FORM_EVERY_MS: (1) запись о вопросе встроенного вопросника открыта,

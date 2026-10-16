@@ -18,6 +18,7 @@ import { FORM_MAX_REPEATS, pendingForms } from "./form-wait.ts"
 import { lockWaitLine } from "./review.ts"
 import { type Task, ACCEPTED_REMINDERS_MAX, acceptedAt, acceptedReminders, isOpen, listTasks, loadTask, sesLabel, sessionOf, taskNo } from "./tasks.ts"
 import { GATE_MARK } from "./gate-stop.ts"
+import { IDLE_MARK } from "./idle-tab.ts"
 import { type Watch, watchesOf } from "./watch.ts"
 
 export const STATUS = path.join(BASE, "status")
@@ -41,6 +42,9 @@ export type Status = {
   /** Вкладка остановилась на воротах без вопроса владельцу (задача 062, gate-stop.ts): state owner, значок GATE_MARK, подпись «ждёт вашего решения,
    *  вопроса нет». Снимается открытым вопросом или словом владельца. */
   gate?: true
+  /** Вкладка простаивает (задача 063, idle-tab.ts): state tasks, у её задачи нет идущей сессии или сессия ждёт её указаний, вопроса
+   *  владельцу нет, дольше idle_tab_minutes. since — начало эпизода, what — что стоит («061 между сессиями»). Значок IDLE_MARK. */
+  idleTab?: { since: number; what: string[] }
   /** Вопрос встроенного вопросника (form-wait.ts): уведомления по нему ведёт formWatch, не общий повтор owner_reminder_min. */
   formId?: string
   watches: { id: string; note?: string; started?: number; minutes: number }[]
@@ -246,6 +250,13 @@ function statusOfAll(x: StatusInput): Status {
   return base
 }
 
+/** Отметка простоя (задача 063): состояние остаётся tasks — вкладка не ждёт владельца и в «Ждут вас» не входит, — подпись называет простой,
+ *  отсутствие вопроса и что стоит. Не tasks — без изменений (ход, вопрос, наблюдение старше простоя). */
+export function withIdle(s: Status, idle: { since: number; what: string[] }, now: number): Status {
+  if (s.state !== "tasks") return s
+  return { ...s, idleTab: idle, detail: `простаивает с ${hm(idle.since)} (${minutes(idle.since, now)}), вопроса владельцу нет: ${idle.what.join("; ")}` }
+}
+
 const comparable = (s: Status) => JSON.stringify({ ...s, updated: 0 })
 
 /** Записать состояние, если оно изменилось; notified переносится из прежнего. Возвращает прежнее. */
@@ -288,7 +299,8 @@ export const MARK: Partial<Record<State, string>> = { owner: "?", question: "▶
  *  вопрос»): «‖» — пауза в одну колонку («⏸» в терминале бывает шириной в две, «…» — знак обрезки строки). */
 export const WAIT_MARK = "‖"
 /** Значок вкладки: ждёт указаний — WAIT_MARK, иначе по состоянию (MARK). */
-export const markOf = (s: Pick<Status, "state" | "wait"> & { gate?: true }): string | undefined => (s.gate && s.state === "owner" ? GATE_MARK : s.wait && (s.state === "owner" || s.state === "question") ? WAIT_MARK : MARK[s.state])
+export const markOf = (s: Pick<Status, "state" | "wait"> & { gate?: true; idleTab?: Status["idleTab"] }): string | undefined =>
+  s.gate && s.state === "owner" ? GATE_MARK : s.wait && (s.state === "owner" || s.state === "question") ? WAIT_MARK : s.idleTab && s.state === "tasks" ? IDLE_MARK : MARK[s.state]
 const ORDER: Record<State, number> = { owner: 0, question: 1, working: 2, watch: 3, reply: 4, task: 5, tasks: 6, idle: 7 }
 
 /** Ширина строки окна /crew (диалог OpenCode ~74 знака): длиннее — перенос, и список рвётся (владелец 2026-10-07:
@@ -351,7 +363,7 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
       const model = s.model ? ` [${s.model.replace(/^.*\//, "")}]` : ""
       const prog = s.task?.as === "reviewer" ? stepProgress(s.task) : undefined
       // вопрос владельцу — целиком (его и читают), остальное — строкой по ширине окна; значки — как в панели (MARK)
-      const row = `${pad}${s.state === "owner" || s.state === "question" ? `${markOf(s)} ` : ""}${short(who, 40)}${model} — ${s.detail}`
+      const row = `${pad}${s.state === "owner" || s.state === "question" || (s.idleTab && s.state === "tasks") ? `${markOf(s)} ` : ""}${short(who, 40)}${model} — ${s.detail}`
       out.push(s.state === "owner" ? row : fit(row))
       if (s.askedStale?.length) out.push(fit(`${pad}    вопрос устарел: ${s.askedStale.map((a) => `к ${a.to} с ${hm(a.at)} (${minutes(a.at, now)})`).join(", ")}`))
       for (const k of s.stuck ?? []) out.push(fit(`${pad}    ⚠ ${stuckText(k)}`))
@@ -499,7 +511,7 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
       case "task":
         return s.task ? (WORD_OF_TASK[s.task.status] ?? s.task.status) : "задача"
       case "tasks":
-        return `ждёт задач (${s.tasks.length})`
+        return s.idleTab ? `простаивает ${Math.max(0, Math.round((now - s.idleTab.since) / 60_000))}м` : `ждёт задач (${s.tasks.length})`
       default:
         return "свободна"
     }
@@ -531,8 +543,10 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
       mark: markOf(s) ?? " ",
       who: g ? ` ↳ ${s.task!.label ?? (s.task!.as === "reviewer" ? "прм" : "исп")}` : who(s),
       what: short(prog ?? waitFor ?? what(s), 20),
-      tone: (s.state === "owner" || s.state === "question" ? "accent" : s.state === "idle" ? "muted" : "base") as SideRow["tone"],
+      tone: (s.state === "owner" || s.state === "question" || s.idleTab ? "accent" : s.state === "idle" ? "muted" : "base") as SideRow["tone"],
     })
+    // простой (задача 063): что стоит — строкой под вкладкой
+    if (s.idleTab && s.state === "tasks") rows.push({ mark: " ", who: "", what: `↳ ${short(s.idleTab.what.join("; "), 26)}`, tone: "muted" })
     // вопрос или фраза ожидания сессии задачи — строкой под ней (задача 056): видно, о чём она стоит
     if (s.state === "question" && s.question) rows.push({ mark: " ", who: "", what: `↳ ${short(s.question.replace(/[`*_]/g, ""), 26)}`, tone: "muted" })
     const cur = s.task?.as === "reviewer" && prog?.startsWith("проверка") ? s.task.steps!.find((a) => a.id === s.task!.checking) : undefined

@@ -45,6 +45,7 @@ stops at the first failing file.
 | | `peers-push` | empty turns, `stuck`, a turn cut off by a restart is resumed |
 | | `peers-flowwatch` | a question at the end of a task turn goes to the author; stalled merge lock and review |
 | | `peers-status` | session status, questions to the owner, notices and reminders |
+| | `crew-idle-tab` | an idle tab (task 063): a tab with a task between sessions (or a session waiting for its word), no question to the owner, past `idle_tab_minutes` gets one letter and the mark `◷`; an executor at work, `crew_watch`, a question to the owner, a going turn, `expect_reply`, a gate of task 062, a closed tab get nothing; an empty turn keeps the episode, a working turn, the owner's word and a launched session end it |
 | | `peers-sidebar` | the "Peers" block lines in the window |
 | Tasks | `peers-tasks` | the task journal: unique numbers, session id before create, required fields, push / reassign |
 | | `crew-task-numbers` | one task, one number (task 058): the number of a new task after the records and the folders of every working tree, local and origin branch; `tasks_dir` on and off; two processes of `scripts/task-number.mjs` get different numbers and both folders |

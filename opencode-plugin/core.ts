@@ -219,6 +219,8 @@ export type CrewConfig = {
   ownerSystemNotify: boolean
   machineSlots: number
   stallMin: number
+  /** простой вкладки между сессиями, минут (idle_tab_minutes, задача 063); 0 — не будить */
+  idleTabMin: number
   /** принятая, но не очищенная задача: через столько минут — письма приёмщику и автору (0 — нет) */
   acceptedReminderMin: number
   plansDir: string
@@ -389,6 +391,7 @@ export function loadConfig(dir: string): CrewConfig {
     ownerSystemNotify: j.owner_system_notify === true,
     machineSlots: num(j.machine_slots, 1),
     stallMin: num(j.stall_minutes, 30),
+    idleTabMin: num(j.idle_tab_minutes, 20),
     acceptedReminderMin: num(j.accepted_reminder_min, 30),
     plansDir: typeof j.plans_dir === "string" && j.plans_dir.trim() ? j.plans_dir.trim() : "docs/plans",
     tasksDir: typeof j.tasks_dir === "string" ? j.tasks_dir.trim() : "doc/tasks",
@@ -775,6 +778,29 @@ export async function ownerWordAfter(sessionID: string, at: number): Promise<num
     return 0
   } catch {
     return 0
+  } finally {
+    try {
+      db?.close()
+    } catch {}
+  }
+}
+
+/** После момента at в сессии был ход с работой: ответ модели с вызовом инструмента (задача 063: такой ход кончает эпизод простоя). */
+export async function workedAfter(sessionID: string, at: number): Promise<boolean> {
+  if (!sessionID || !existsSync(dbFile())) return false
+  let db: any
+  try {
+    db = await openDb()
+    const rows = db.prepare("select data from session_message where session_id = ? and type = 'assistant' and time_created > ? order by time_created limit 200").all(sessionID, at) as any[]
+    return rows.some((r) => {
+      try {
+        return (JSON.parse(r.data)?.content ?? []).some((c: any) => c?.type === "tool")
+      } catch {
+        return false
+      }
+    })
+  } catch {
+    return false
   } finally {
     try {
       db?.close()
