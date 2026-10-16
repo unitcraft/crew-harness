@@ -91,6 +91,13 @@ LOG_FILE = re.compile(r"^doc/tasks/[^/]+/log\.md$")
 LOG_DATED = re.compile(r"^([0-9]{4}-[0-9]{2}-[0-9]{2})(?![0-9])")
 LOG_ENTRY = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} (решение владельца|заседание|ворота|документ|пуск|слияние|находка): ")
 LOG_FROM = "2026-10-10"
+# задача 062 (методика unitcraft/ai-dev-methodology @ 0b0e6d4, раздел 4): остановка на воротах заканчивается вопросом владельцу; строка log.md о
+# воротах называет канал и время вопроса — слово «канал» и время ЧЧ:ММ после «ворота: »; судятся задачи, заведённые не раньше GATE_FROM
+LOG_GATE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} ворота: (.*)$")
+GATE_CHANNEL = re.compile(r"канал", re.I)
+GATE_TIME = re.compile(r"(?<![0-9:])(?:[01][0-9]|2[0-3]):[0-5][0-9](?![0-9:])")
+GATE_FROM = "2026-10-16 17:00"
+GATE_EXAMPLE = "«2026-10-16 18:00 ворота: В2, вопрос владельцу задан в окне OpenCode, канал question, 17:55»"
 LOG_KINDS = "решение владельца, заседание, ворота, документ, пуск, слияние, находка"
 SIGNATURE_MAX = 80
 STOP_KINDS = "вопрос, план, ревизия, требования, ворота"
@@ -408,6 +415,21 @@ def log_line_fault(text):
     return "нет вида с двоеточием после времени"
 
 
+def check_log_gate(path, number, text, rep):
+    m = LOG_GATE.match(text)
+    if not m:
+        return
+    rest = m.group(1)
+    lack = []
+    if not GATE_CHANNEL.search(rest):
+        lack.append("слова «канал» (где задан вопрос)")
+    if not GATE_TIME.search(rest):
+        lack.append("времени вопроса «ЧЧ:ММ»")
+    if lack:
+        rep.add(path, number, "log-gate", "запись «ворота» задачи, заведённой не раньше %s, без %s: остановка на воротах заканчивается вопросом владельцу, строка называет "
+                "канал и время вопроса (Канон, process.md, «Остановка на воротах — вопрос владельцу»; методика @ 0b0e6d4); пример %s" % (GATE_FROM, " и ".join(lack), GATE_EXAMPLE))
+
+
 def check_log_md(path, data, source, rep):
     """log.md: добавленные в индексе строки с датой не раньше LOG_FROM — по шаблону новой записи."""
     if source.mode != "index":
@@ -415,8 +437,16 @@ def check_log_md(path, data, source, rep):
     added = source.added_lines(path)
     if added is None:  # первая версия файла (или репозиторий без коммитов): все строки добавлены
         added = list(enumerate(data.decode("utf-8", "replace").split("\n"), 1))
+    gated = False  # задача 062: задача заведена не раньше GATE_FROM (первая запись с датой и временем)
+    for line in data.decode("utf-8", "replace").lstrip("﻿").split("\n"):
+        sm = LOG_STARTED.match(line)
+        if sm:
+            gated = sm.group(1) >= GATE_FROM
+            break
     for number, text in added:
         text = text.rstrip("\r")
+        if gated:
+            check_log_gate(path, number, text, rep)
         m = LOG_DATED.match(text)
         if m and m.group(1) >= LOG_FROM and not LOG_ENTRY.match(text):
             rep.add(path, number, "log-line", "запись с датой не раньше %s не по форме «ГГГГ-ММ-ДД ЧЧ:ММ <вид>: <текст>»: %s "
