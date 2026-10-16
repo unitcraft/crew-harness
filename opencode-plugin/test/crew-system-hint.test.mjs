@@ -46,6 +46,7 @@ cell("the hint forbids a prose question at the end of the answer", /do not ask a
 cell("the hint carries the task rule built in: a task only on the owner's word, a proposal with a reason is allowed", /Create a task \(crew_spawn, crew_task assign or order\) only when the owner says to create one/.test(h1) && /you may propose creating a task and explain why/.test(h1), h1)
 cell("the hint names what is not a task", /Not tasks: an answer to a question, a fact check, an analysis, an edit of 1-3 lines/.test(h1) && /a repeat of an already cancelled task/.test(h1), h1)
 cell("the hint tells to write everything the owner reads, letters to other tabs too, in the owner's language (Russian by default)", /Everything the owner reads \(replies, questions, option texts, reasons, letters to other tabs and task reports\) is in Russian/.test(h1), h1)
+cell("the hint says that a stop at a gate, and a report that needs the owner's decision, end with the question tool (task 062)", /A stop at a gate, and any report that needs the owner's decision, ends with the question tool, not with a summary/.test(h1), h1)
 cell("the hint is byte-identical between requests", h1 === h2 && h1.length > 0, `${h1.length} vs ${h2.length}`)
 
 stop?.()

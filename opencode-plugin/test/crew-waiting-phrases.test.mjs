@@ -23,6 +23,14 @@ const yes = [
   "Жду решения приёмки и вашего разрешения на пуш.",
   "Всё сделано.\nЖду вашего GO.\nСТОП: ожидание",
 ]
+// task 062: the live phrase of the source (2026-10-16, the integrator stopped at a gate without a question) and its kin
+yes.push(
+  "Остановлено до вашего решения; спецификация ещё не утверждена, чистая серия не принята.",
+  "Сводка выше.\nОстановлено до вашего решения.",
+  "Работа остановлена до решения владельца.",
+  "Остановлено, нужно решение владельца по воротам.",
+  "Всё записано, до вашего слова ничего не вливаю.",
+)
 const no = [
   "не жду разрешения",
   "Не требуется ваше разрешение.",
@@ -44,6 +52,12 @@ const no = [
   "Жду вердикта приёмщика и слияния.",
   "Ожидаю ответа воркера.",
   "Жду решения CI.",
+  // task 062: the new phrases do not fire on a decision that is already made, or a stop with no decision in it
+  "Остановлено: решение принято, продолжаю.",
+  "Остановлено по решению владельца, которое получено.",
+  "Остановлено, ничего не требуется.",
+  "Не останавливался, решения не жду.",
+  "Сделано до вашего прихода.",
 ]
 for (const t of yes) { const r = status.endsWithQuestion(t); cell(`yes: ${t}`, typeof r === "string" && r.length > 0, String(r)) }
 for (const t of no) { const r = status.endsWithQuestion(t); cell(`no: ${t}`, r === undefined, String(r)) }
