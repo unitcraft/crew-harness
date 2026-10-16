@@ -134,7 +134,7 @@ import { allSteps, nextPlanNumber, parsePlan, stepDeps } from "./plans.ts"
 import { dropWatch, openWatchesBySession, pollWatches, requestWatch, watchesOf } from "./watch.ts"
 import { type Status, endOfTurn, endsWithQuestion, markNotified, readStatuses, removeStatus, saveStatus, statusOf, withIdle } from "./status.ts"
 import { clearGate, GATE_LETTER, gateOf, markGateLetter, noteGate, WAIT_LETTER } from "./gate-stop.ts"
-import { clearIdle as clearIdleTab, holdIdle, idleBlockers, idleLetter, idleOf, idleWhat, waitsOn } from "./idle-tab.ts" // clearIdle в setup — снятие занятости карточки
+import { type RunCtx, type SessionFact, clearIdle as clearIdleTab, holdIdle, idleBlockers, idleLetter, idleOf, idleWhat, newestWaiting, waitsOn } from "./idle-tab.ts" // clearIdle в setup — снятие занятости карточки
 import { type Task, taskRef, acceptedAt, ago, byPriority, createTask, rounds, slugify, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
 import { countedOpen, waitingCleanup, ACCEPTED_REMINDERS_MAX, acceptedReminderId, acceptedReminders, letterTime } from "./tasks.ts"
 import { EXECUTOR_CODE, sesLabel, sessionOf, sessionRef, taskNo } from "./tasks.ts"
@@ -1185,17 +1185,50 @@ export default {
       return { at: g.at }
     }
 
+    // ТО ЖЕ ПРАВИЛО ПО СТАТУСУ ЗАДАЧИ (задача 070). Что известно об исполнителях рабочих задач автора: сводки прошлого прохода (saved) и база ходов.
+    // Сводки нет и визитка не будится (вкладки нет, сессия закрыта, задачи не держит) — живой сессии нет. Ход идёт, наблюдение, вопрос
+    // владельцу, свой вопрос — законное ожидание (silentSince не задан; вопрос автору ловит waitsOn). Остальное (свободна, стоит между
+    // ходами) — молчит с конца последнего хода или с последнего непрочитанного письма. Адресат заказа — сводка интегратора проекта-адресата:
+    // есть ли он в окне и идёт ли у него ход.
+    const LAWFUL = ["working", "watch", "owner", "reply", "question"]
+    async function runCtx(tasks: Task[], saved: Map<string, Status>, t: number, min: number): Promise<RunCtx> {
+      const facts = new Map<string, SessionFact>()
+      for (const x of tasks) {
+        const sid = x.executor
+        if (!sid || x.kind === "order" || x.kind === "external" || !["starting", "running", "rework"].includes(x.status) || facts.has(sid)) continue
+        const st = saved.get(sid)
+        if (st) facts.set(sid, LAWFUL.includes(st.state) ? { live: true } : { live: true, silentSince: Math.max(await idleAt(sid), newestWaiting(sid)) })
+        else {
+          // сводки ещё нет (сессия только появилась или служба только поднялась): живая сессия ждёт первого прохода, не молчит
+          const card = readJson<Card>(cardFile(sid))
+          facts.set(sid, { live: !!card && mayWakeCard(card) })
+        }
+      }
+      return {
+        now: t,
+        minMs: min * 60_000,
+        session: (sid) => facts.get(sid) ?? { live: true },
+        addressee: (project) => {
+          const tabs = [...saved.values()].filter((x) => x.project === project && x.role === "integrator")
+          return { window: tabs.length > 0, working: tabs.some((x) => x.state === "working") }
+        },
+      }
+    }
+
     // ПРОСТОЙ ВКЛАДКИ МЕЖДУ СЕССИЯМИ (задача 063, idle-tab.ts; владелец, 2026-10-16: «что-то застряло?»). Вкладка «ждёт своих задач» (state
     // tasks: хода нет, вопроса владельцу нет, наблюдения нет, своего вопроса с expect_reply нет, своей задачи нет), открыта в окне, и у неё
     // стоящая задача (между сессиями или её сессия ждёт её указаний) без идущей сессии рядом либо с ждущей сессией — дольше idle_tab_minutes.
     // Начало эпизода — конец её последнего хода или изменение стоящих задач (что позже); после письма — закреплено в idle-tabs/, так что
     // пустой ход в ответ на письмо его не сдвигает. Кончают эпизод: другое состояние (вопрос, наблюдение…), запуск сессии, ход с работой
     // после письма, слово владельца после письма, изменение стоящих задач. Письмо — одно на эпизод; отметка ◷ — в сводках (withIdle).
+    // Задача 070: стоящей считается и рабочая задача (starting, running, rework) без исполнителя, без живой сессии исполнителя, с молчащим
+    // исполнителем и заказ в другой проект, который никто не взял, — дольше того же порога (runCtx, idle-tab.ts standing).
     async function idleStep(c: Card, s: Status, end: { at: number } | undefined, open: boolean, saved: Map<string, Status>, t: number): Promise<{ since: number; what: string[] } | undefined> {
       if (s.state === "working") return undefined // ход идёт (и ход, начатый письмом): эпизод не трогается, отметки нет
       const ep = idleOf(c.session, undefined, t)
       const min = loadConfig(c.directory).idleTabMin
-      const b = s.state === "tasks" && open && min > 0 ? idleBlockers(c.session, listTasks(c.project).filter((x) => x.author === c.session && isOpen(x)), (sid) => waitsOn(sid, c.session, saved)) : undefined
+      const mine = s.state === "tasks" && open && min > 0 ? listTasks(c.project).filter((x) => x.author === c.session && isOpen(x)) : []
+      const b = mine.length ? idleBlockers(c.session, mine, (sid) => waitsOn(sid, c.session, saved), await runCtx(mine, saved, t, min)) : undefined
       if (!b?.idle) {
         if (ep) clearIdleTab(c.session)
         return undefined

@@ -209,6 +209,20 @@ an open question to you, a watch, a launched session, or a change of the standin
 episode with its own letter. The episode with a sent letter is kept in `idle-tabs/<session>.json`, so a restart of the service
 does not repeat the letter.
 
+**The same rule by the status of the task (task 070).** The status "going" does not yet mean that somebody works (owner, 2026-10-17:
+«никто не работает?»). A task in `starting`, `running` or `rework` **stands** when it has no executor (`#96 без исполнителя`), when the
+plugin knows no live session of its executor (`сессии исполнителя нет`: no summary of the session and the card does not wake), or when the
+executor is **silent** — its turn ended, and it waits for nothing: no `crew_watch`, no question to you, no own question, no letter in
+delivery, no going turn (`#92 исполнитель молчит с 10:24`). The silence is counted from the end of the executor's last turn, the newest
+unread letter to it, or the last change of the task, whichever is later, and must last `idle_tab_minutes` too (one setting for both
+rules). Unlike "between sessions", such a task is not excused by another task that goes: another task does not revive a dead one. An
+**order** into another project (`kind: order`) has no executor by construction, so it is not "a task without an executor": it goes while
+the integrator of the addressee took it (`child`) or works a turn now, and stands when nobody took it for `idle_tab_minutes` — named apart
+(`#96 заказ не взят: nova-bignum.integrator вне окна`, or `в окне, но не взял`). A silent executor that asks the tab (the state
+"question") or is stuck towards it still reads as "waits for the tab" of task 063. `submitted`, `reviewing`, `accepted` and `approval`
+stay as before. The letter adds the steps: reassign (`crew_task reassign`), write to the executor (`crew_send`), cancel (`crew_task cancel`);
+for an order — ask the owner whether he opens the window of the addressee, or cancel the order.
+
 ### A question to the owner is not lost (task 040)
 
 A question of the built-in questionnaire (`question`) is kept as a record in `forms/` until it is answered. `form.replied`
