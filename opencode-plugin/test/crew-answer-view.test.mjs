@@ -105,7 +105,7 @@ const crew = (now = Date.now()) => status.formatStatuses([st(SIDS[0])], now, "pr
   const long = A.answerSideRow("proj", Date.now())
   // the longest combination: four-digit counts; the panel prints 32 characters
   const wide = { mark: " ", who: "", what: "авто 24ч: 9999 · вмеш. 9999", tone: "muted" }
-  cell("AC-32 ширина", status.sideText(wide).length <= 32 && status.sideText(wide) === `    ${wide.what}` && status.sideText(long ?? wide).length <= 32, status.sideText(wide))
+  cell("AC-32 ширина", status.sideText(wide).length <= 32 && status.sideText(wide) === wide.what && status.sideText(long ?? wide).length <= 32, status.sideText(wide))
   const none = status.sidebarLines([st(SIDS[0])], Date.now(), "no-such-project").rows
   const future = status.sidebarLines([st(SIDS[0])], Date.now() + 3 * 24 * 3_600_000, "proj").rows
   cell("AC-32 нет строки при N=0", !none.some((r) => /^авто 24ч:/.test(r.what)) && !future.some((r) => /^авто 24ч:/.test(r.what)) && A.answerSideRow("proj", Date.now() + 3 * 24 * 3_600_000) === undefined, JSON.stringify([none, future]))

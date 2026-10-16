@@ -32,13 +32,13 @@ const list = [
 const v = sidebarLines(list, now, "crew-harness")
 const printed = v.rows.map((r) => sideText(r))
 // task 064: the heading wraps by words onto two rows at most
-const head = printed.findIndex((l) => l.startsWith("  045 "))
-cell("the panel: one task line «045 <title>» over its sessions", head >= 0 && printed.filter((l) => l.startsWith("  045 ")).length === 1 && printed[head] === "  045 Реестры контрактов и" && printed[head + 1] === "  полный JSONC-регламент", JSON.stringify(printed))
-cell("the panel: the sessions under it — «↳ прм», «↳ С4-3» with marks, the finished «С3п-2» folded (task 064)", printed[head + 2] === "?  ↳ прм    ждёт вас 22:10" && printed[head + 3] === "   ↳ С4-3   ↻ доработка" && printed[head + 4] === "   ✓ сдано 1 сессия", JSON.stringify(printed.slice(head, head + 5)))
+const head = printed.findIndex((l) => l.startsWith("045 "))
+cell("the panel: one task line «045 <title>» over its sessions", head >= 0 && printed.filter((l) => l.startsWith("045 ")).length === 1 && printed[head] === "045 Реестры контрактов и" && printed[head + 1] === "· полный JSONC-регламент", JSON.stringify(printed))
+cell("the panel: the sessions under it — «↳ прм», «↳ С4-3» with marks, the finished «С3п-2» folded (task 064)", printed[head + 2] === "↳ ? прм  ждёт вас 22:10" && printed[head + 3] === "↳ С4-3  ↻ доработка" && printed[head + 4] === "↳ ✓ сдано 1 сессия", JSON.stringify(printed.slice(head, head + 5)))
 cell("the panel: no «#45» and no title sub-row under the sessions", !printed.some((l) => l.includes("#45")) && printed.filter((l) => l.includes("Реестры")).length === 1, JSON.stringify(printed))
 cell("the panel: every row fits 32 columns", printed.every((l) => l.length <= 32), JSON.stringify(printed.filter((l) => l.length > 32)))
 const nova = sidebarLines(list, now, "nova").rows.map((r) => sideText(r))
-cell("the panel of a project without folders: «• #88 план», then «исп  работает 12 мин» (task 064)", nova.indexOf("• #88 план") >= 0 && nova[nova.indexOf("• #88 план") + 1] === "  исп  работает 12 мин" && !nova.some((l) => l.includes("088")), JSON.stringify(nova))
+cell("the panel of a project without folders: «• #88 план», then «исп  работает 12 мин» (task 064)", nova.indexOf("• #88 план") >= 0 && nova[nova.indexOf("• #88 план") + 1] === "↳ исп  работает 12 мин" && !nova.some((l) => l.includes("088")), JSON.stringify(nova))
 
 // the line "Ждут вас"
 cell("«Ждут вас» names the project and «045 прм»", waitingLine(list, now) === "Ждут вас: 1 · с 22:10 · crew-harness 045 прм", waitingLine(list, now))

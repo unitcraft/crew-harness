@@ -213,7 +213,7 @@ await safe("g", async () => {
   cell("g: nothing waits, no line", waitingLine([st("s3", "working", T0)], T0) === undefined, "")
   cell("g: /crew starts with the line", formatStatuses(list, T0 + 20 * MIN).split("\n")[0] === line, formatStatuses(list, T0 + 20 * MIN).split("\n")[0])
   const side = sidebarLines(list, T0 + 20 * MIN, "nova")
-  cell("g: the side panel has the count and the time, for all projects", side.rows[0]?.what === `Ждут вас: 2 · с ${hmOf(T0 + 5 * MIN)}` && side.rows[1]?.what === "? crew-harness интегр." && side.rows[2]?.what === "  ↳ q", JSON.stringify(side.rows.slice(0, 3)))
+  cell("g: the side panel has the count and the time, for all projects", side.rows[0]?.what === `Ждут вас: 2 · с ${hmOf(T0 + 5 * MIN)}` && side.rows[1]?.what === "? crew-harness интегр." && side.rows[2]?.what === "↳ q", JSON.stringify(side.rows.slice(0, 3)))
 })
 
 // (h) the notice: at the first sight, then every 30 minutes, not more often

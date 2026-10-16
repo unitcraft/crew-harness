@@ -357,11 +357,11 @@ export function waitingRows(list: Status[], width = SIDE_WIDTH): SideRow[] {
   if (!w.length) return []
   const oldest = oldestWait(w)
   const rows: SideRow[] = [
-    { mark: " ", who: "", what: `Ждут вас: ${w.length}${oldest.since ? ` · с ${hm(oldest.since)}` : ""}`, tone: "accent", flush: true },
-    { mark: markOf(oldest) ?? "?", who: "", what: `${markOf(oldest) ?? "?"} ${[oldest.project, tabOf(oldest)].filter(Boolean).join(" ")}`, tone: "accent", flush: true },
+    { mark: " ", who: "", what: `Ждут вас: ${w.length}${oldest.since ? ` · с ${hm(oldest.since)}` : ""}`, tone: "accent" },
+    { mark: markOf(oldest) ?? "?", who: "", what: `${markOf(oldest) ?? "?"} ${[oldest.project, tabOf(oldest)].filter(Boolean).join(" ")}`, tone: "accent" },
   ]
   const q = oldest.question?.replace(/[`*_]/g, "").replace(/\s+/g, " ").trim()
-  if (q) rows.push({ mark: " ", who: "", what: fit(`  ↳ ${q}`, width), tone: "muted", flush: true })
+  if (q) rows.push({ mark: " ", who: "", what: fit(`↳ ${q}`, width), tone: "muted" })
   return rows
 }
 
@@ -508,15 +508,25 @@ export function acceptanceReports(project: string, now = Date.now()): string[] {
 // БОКОВАЯ ПАНЕЛЬ ОКНА (план 003.2, 2026-10-06; владелец: «в этой области можно выводить активные сессии и обновлять в
 // реальном времени?»). Строки блока «Crew» под «Context»: кто чего ждёт в проекте вкладки на экране, ждущие владельца
 // первыми. Чистая функция — рисует sidebar.tsx, проверяет тест.
-/** flush — строка печатается как есть, с первой колонки (строки «Ждут вас», задача 055; название задачи, задача 064).
- *  role — строка состояния вкладки задачи под её названием (задача 064, п. 6): печатается «  прм  ждёт указаний»; who и mark
- *  остаются для логики (какая вкладка, её значок), значок напечатан в строке названия; indent — отступ строки состояния (5 — у сессии
- *  методики под строкой её вида, role тогда пустая). */
-export type SideRow = { mark: string; who: string; what: string; tone: "accent" | "base" | "muted"; flush?: boolean; role?: string; indent?: number }
+/** Строка панели. what — её текст; lead — то, что печатается перед ним (у строки вкладки: «↳ прм  », «интегр.   »; у остальных
+ *  нет), mark и who остаются для логики (какая вкладка, её значок). Иерархия панели — знаком и цветом, не отступом (задача 068;
+ *  владелец, 2026-10-17: «сейчас показывается каша», «название задачи белым цветом, под элементы серым»): название задачи — тон
+ *  base, продолжение названия — «· », всё под задачей — тон muted и начинается со знака «↳», тон accent — у вкладки, что ждёт
+ *  владельца, и у строк «⚠». Ни одна строка не начинается пробелом. */
+export type SideRow = { mark: string; who: string; what: string; tone: "accent" | "base" | "muted"; lead?: string }
 /** Строка панели как она печатается (ширина панели ~32 знака: длиннее — перенос, и список выглядит разрезанным; OpenCode
- *  2.0.23 даёт панели 42 колонки, под текст после отступов — около 37). Подстрока (who пустой) — с отступом под «что», без колонки «кто». */
+ *  2.0.23 даёт панели 42 колонки, под текст после отступов — около 37).
+ *
+ *  ПОЧЕМУ НЕ ОТСТУПАМИ (разбор задачи 068, по исходникам OpenTUI и пробному рендеру, а не по догадке). Начальные пробелы строки
+ *  отрисовщик окна НЕ отбрасывает: текст `<text>` проходит TextNodeRenderable → StyledText → текстовый буфер без обрезки, и тестовый
+ *  рендер (тот же OpenTUI под Bun) печатает «  исп  работает» и «    ↳ шаги» ровно как строку, в том числе внутри прокручиваемого
+ *  блока панели и после обновления сигнала. Теряется другое: когда строка длиннее блока, перенос по словам (wrapMode «word» по
+ *  умолчанию) начинает продолжение с первой колонки, без отступа, — поэтому строки не длиннее SIDE_WIDTH. А «каша» — наш рисунок:
+ *  заголовок задачи без значка, продолжение названия и строка роли начинались с одних и тех же двух пробелов, то есть стояли в одной
+ *  колонке; отступ — слабый признак вложенности, на него нельзя класть смысл. Поэтому правило одно: строка сама говорит, кто она
+ *  (значок, «·», «↳», «⚠»), и красится в свой тон, а sideText не добавляет пробелов ни к одной строке. */
 export const SIDE_WIDTH = 32
-export const sideText = (r: SideRow, width = SIDE_WIDTH) => (r.flush ? r.what : r.role !== undefined ? `${" ".repeat(r.indent ?? 2)}${r.role ? `${r.role}  ` : ""}${r.what}` : r.who ? `${r.mark} ${r.who.padEnd(9).slice(0, 9)} ${r.what}` : `    ${r.what}`).slice(0, width)
+export const sideText = (r: SideRow, width = SIDE_WIDTH) => `${r.lead ?? ""}${r.what}`.slice(0, width)
 /** Название задачи для показа: без разметки и кавычек «», одной строкой. */
 export const titleText = (t: string) => t.replace(/[`*_«»]/g, "").replace(/\s+/g, " ").trim()
 /** Перенос по словам (задача 064, п. 6; владелец, 2026-10-17: «по рекомендации» — «название первой строкой, перенос не больше
@@ -551,11 +561,20 @@ export function wrapWords(text: string, width: number, max = 2): string[] {
 }
 const WORD_OF_TASK: Record<string, string> = { submitted: "✓ сдана", reviewing: "✓◐ приёмка", rework: "↻ доработка", approval: "◇ согласование", accepted: "✓✓◐ влита", running: "в работе", starting: "запуск", idle: "ждёт сессии", handed: "↷ передана" }
 const SIDE_MAX = 9
-/** «что» ждущей вкладки с длительностью ожидания: «⧗ CI t34 40м» (длительность — в конце, обрезается текст перед ней). */
-export function waitText(text: string, since: number | undefined, now: number): string {
-  if (!since) return text
+/** «что» ждущей вкладки с длительностью ожидания (задача 068, п. 3; владелец, 2026-10-17: «⧗ ждать отдель… 580м» теряет суть): сначала суть,
+ *  время ожидания — в конце последней строки. Суть переносится по словам не больше чем на две строки шириной width; не влезла
+ *  вместе со временем — обрезается суть («…»), время остаётся. Нет времени (since) — суть как есть. */
+export function waitText(text: string, since: number | undefined, now: number, width = 20): string[] {
+  const lines = wrapWords(text, width)
+  if (!since || !lines.length) return lines.length ? lines : [text]
   const dur = ` ${Math.max(0, Math.round((now - since) / 60_000))}м`
-  return `${short(text, 20 - dur.length)}${dur}`
+  const last = lines[lines.length - 1]
+  if (last.length + dur.length <= width) lines[lines.length - 1] = `${last}${dur}`
+  else {
+    const room = width - dur.length - 1
+    lines[lines.length - 1] = `${last.replace(/…$/, "").slice(0, room).trimEnd()}…${dur}`
+  }
+  return lines
 }
 export function sidebarLines(list: Status[], now = Date.now(), project?: string, width = SIDE_WIDTH): { title: string; rows: SideRow[]; foot: string } {
   const mine = project ? list.filter((s) => (s.project ?? "?") === project) : list
@@ -596,23 +615,28 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
     if (!k) sorted.push(s)
     else if (!sorted.some((x) => tkey(x) === k)) sorted.push(...live.filter((x) => tkey(x) === k).sort((a, b) => ORDER[a.state] - ORDER[b.state] || Number(!!a.task?.ended) - Number(!!b.task?.ended) || who(a).localeCompare(who(b))))
   }
-  const toneOf = (s: Status) => (s.state === "owner" || s.state === "question" || s.idleTab ? "accent" : s.state === "idle" ? "muted" : "base") as SideRow["tone"]
+  // вкладка, которой нужно внимание (ждёт вас, задала вопрос, простаивает): тон accent; иначе строка вкладки без задачи — base
+  // (idle — muted), а строка под названием задачи — muted (задача 068)
+  const needs = (s: Status) => s.state === "owner" || s.state === "question" || !!s.idleTab
+  const toneOf = (s: Status) => (needs(s) ? "accent" : s.state === "idle" ? "muted" : "base") as SideRow["tone"]
+  const subTone = (s: Status) => (needs(s) ? "accent" : "muted") as SideRow["tone"]
   const rows: SideRow[] = []
   // «Ждут вас» на все окна (по всем проектам, не только по этому): сколько и с какого времени, кто ждёт дольше всех, начало вопроса
   rows.push(...waitingRows(list, width))
   // название задачи — первой строкой (задача 064, п. 6; владелец, 2026-10-17: «непонятно что за задачи, я по памяти не помню,
   // показывай название задачи»): номер и название, перенос по словам не больше чем на две строки, дальше «…». У задачи с папкой —
-  // без значка (значки — у сессий), у задачи без папки — значок самой важной вкладки (first: она первая в группе)
+  // без значка (значки — у сессий), у задачи без папки — значок самой важной вкладки (first: она первая в группе). Название —
+  // тон base (accent — если эта вкладка ждёт вас), продолжение названия начинается с «· » вместо пробелов (задача 068)
   const heading = (first: Status) => {
     const g = first.task!.group
     wrapWords(`${first.task!.ref ?? `#${first.task!.n}`} ${titleText(first.task!.title)}`, width - 2).forEach((l, k) => {
       const m = k || g ? " " : (markOf(first) ?? " ")
-      rows.push({ mark: m, who: "", what: `${m} ${l}`, tone: g ? "base" : toneOf(first), flush: true })
+      rows.push({ mark: m, who: "", what: k ? `· ${l}` : m.trim() ? `${m} ${l}` : l, tone: g || !needs(first) ? "base" : "accent" })
     })
   }
   const doneRow = (k: string) => {
     const n = sorted0.filter((x) => finished(x) && tkey(x) === k).length
-    if (n) rows.push({ mark: " ", who: "", what: `   ✓ сдано ${n} ${n % 10 === 1 && n % 100 !== 11 ? "сессия" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? "сессии" : "сессий"}`, tone: "muted", flush: true })
+    if (n) rows.push({ mark: " ", who: "", what: `↳ ✓ сдано ${n} ${n % 10 === 1 && n % 100 !== 11 ? "сессия" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? "сессии" : "сессий"}`, tone: "muted" })
   }
   const shown = sorted.slice(0, SIDE_MAX)
   let last: string | undefined
@@ -622,33 +646,31 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
     last = k
     const g = !!s.task?.group
     const plain = s.task && !g ? s.task : undefined
-    const tone = toneOf(s)
+    // строка под названием задачи — тон muted, accent у ждущей вкладки; вкладка без задачи (интегратор) — своя строка со значком
+    const tone = s.task ? subTone(s) : toneOf(s)
     const mark = markOf(s) ?? " "
+    const shownMark = mark.trim() ? `${mark} ` : ""
     const role = s.task ? (s.task.as === "reviewer" ? "прм" : "исп") : ""
     // сессия методики с видом (задача 064, п. 7): «↳ С2-5 проверка разбора» строкой (перенос — как у названия), состояние — под ней
-    const kind = g && s.task!.label && s.task!.kind ? `↳ ${s.task!.label} ${s.task!.kind}` : undefined
-    if (kind) wrapWords(kind, width - 5).forEach((l, i) => rows.push({ mark: i ? " " : mark, who: "", what: i ? `     ${l}` : `${mark}  ${l}`, tone, flush: true }))
+    const kind = g && s.task!.label && s.task!.kind ? `${shownMark}${s.task!.label} ${s.task!.kind}` : undefined
+    if (kind) wrapWords(kind, width - 2).forEach((l, i) => rows.push({ mark: i ? " " : mark, who: "", what: `↳ ${l}`, tone }))
+    // что печатается перед текстом строки: «↳ прм  » (вкладка задачи), «↳ ? С4-3  » (сессия задачи с папкой), «↳ » (состояние сессии
+    // с видом), «? интегр.   » (вкладка без задачи)
+    const lead = kind ? "↳ " : plain ? `↳ ${role}  ` : g ? `↳ ${shownMark}${s.task!.label ?? role}  ` : `${shownMark}${who(s).padEnd(9).slice(0, 9)} `
     // приёмка по шагам: «проверка 3/13: fixture — название» вместо «работает», переносом по словам; ждущая вкладка (наблюдение, очередь
-    // машины, ответ) показывает, чего ждёт, и сколько; шаги — строкой под ней
+    // машины, ответ) показывает, чего ждёт, и сколько (суть, время в конце: waitText); шаги — строкой под ней
     const stepsLine = s.state !== "owner" && s.state !== "question" ? stepProgress(s.task) : undefined
     const waiting = s.state === "watch" || s.state === "reply"
     const prog = waiting ? undefined : stepsLine
-    const waitFor = waiting ? waitText(what(s), s.since, now) : undefined
-    const lead = plain ? 2 + role.length + 2 : kind ? 5 : 12
-    const text = prog ? wrapWords(prog, width - lead) : [short(waitFor ?? what(s), 20)]
-    rows.push({
-      mark,
-      who: g ? ` ↳ ${s.task!.label ?? role}` : who(s),
-      what: text[0],
-      tone,
-      ...(plain ? { role } : kind ? { role: "", indent: 5 } : {}),
-    })
-    for (const l of text.slice(1)) rows.push({ mark: " ", who: "", what: `${" ".repeat(lead)}${l}`, tone, flush: true })
+    const room = width - lead.length
+    const text = prog ? wrapWords(prog, room) : waiting ? waitText(what(s), s.since, now, room) : [short(what(s), room)]
+    rows.push({ mark, who: g ? (s.task!.label ?? role) : who(s), what: text[0], tone, lead })
+    for (const l of text.slice(1)) rows.push({ mark: " ", who: "", what: `↳ ${l}`, tone })
     // простой (задача 063): что стоит — строкой под вкладкой
-    if (s.idleTab && s.state === "tasks") rows.push({ mark: " ", who: "", what: `↳ ${short(s.idleTab.what.join("; "), 26)}`, tone: "muted" })
+    if (s.idleTab && s.state === "tasks") rows.push({ mark: " ", who: "", what: `↳ ${short(s.idleTab.what.join("; "), width - 2)}`, tone: "muted" })
     // вопрос или фраза ожидания сессии задачи — строкой под ней (задача 056): видно, о чём она стоит
-    if (s.state === "question" && s.question) rows.push({ mark: " ", who: "", what: `↳ ${short(s.question.replace(/[`*_]/g, ""), 26)}`, tone: "muted" })
-    if (waiting && stepsLine) rows.push({ mark: " ", who: "", what: `↳ ${stepsLine}`, tone: "muted" })
+    if (s.state === "question" && s.question) rows.push({ mark: " ", who: "", what: `↳ ${short(s.question.replace(/[`*_]/g, ""), width - 2)}`, tone: "muted" })
+    if (waiting && stepsLine) rows.push({ mark: " ", who: "", what: `↳ ${short(stepsLine, width - 2)}`, tone: "muted" })
     // застряла (задача 043, L3): строка, пока признак не снят
     if (s.stuck?.length) rows.push({ mark: " ", who: "", what: s.stuck[0].at ? `⚠ застряла с ${hm(s.stuck[0].at)}` : "⚠ застряла", tone: "accent" })
     if (g && k && tkey(shown[idx + 1] ?? ({} as Status)) !== k) doneRow(k)

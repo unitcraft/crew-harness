@@ -33,7 +33,7 @@ cell("who waits: the project and the tab on the second line", sideText(v.rows[1]
 cell("the one waiting for the owner is next and marked", v.rows[2].who === "интегр." && v.rows[2].mark === "?" && v.rows[2].what === "ждёт вас 01:42" && v.rows[2].tone === "accent", JSON.stringify(v.rows[2]))
 cell("a task session is named by its role", v.rows.some((r) => r.who === "#2 исп" && r.what === "работает 12 мин") && v.rows.some((r) => r.who === "#2 прм" && r.what.startsWith("⧗ очередь: CI")), JSON.stringify(v.rows))
 cell("a task state is shown with its mark and word (a reviewer waits for the rework, task 064)", v.rows.some((r) => r.who === "#3 прм" && r.what === "↻ ждёт доработки"), JSON.stringify(v.rows))
-cell("rows fit the narrow panel (32 columns) without wrapping", v.rows.every((r) => (r.who ? 2 + 9 + 1 + r.what.length : sideText(r).length) <= 32), JSON.stringify(v.rows.map((r) => r.what)))
+cell("rows fit the narrow panel (32 columns) without wrapping", v.rows.every((r) => sideText(r).length <= 32), JSON.stringify(v.rows.map((r) => r.what)))
 {
   // acceptance in progress: "проверка 2/3: guards" on the reviewer's row, the step's text under it
   const steps = [{ id: "tests", text: "тесты", result: "12/12" }, { id: "guards", text: "стражи зелёные: `NOVA_GATE_TIER=loop bash scripts/gate.sh` на всех платформах" }, { id: "notes", text: "заметки" }]
@@ -41,8 +41,8 @@ cell("rows fit the narrow panel (32 columns) without wrapping", v.rows.every((r)
   const sv = sidebarLines([r], Date.now(), "proj")
   // task 064: the title first, the step with its short name wrapped under the role
   const k = sv.rows.findIndex((x) => x.who === "#5 прм")
-  cell("printed rows, the step's second row included, fit the panel without wrapping", k > 0 && sv.rows.every((x) => sideText(x).length <= 32 && !sideText(x).endsWith(" ")) && sideText(sv.rows[k + 1]).startsWith("       "), JSON.stringify(sv.rows.map(sideText)))
-  cell("the reviewer's row shows the step in progress", sv.rows[k]?.what.startsWith("проверка 2/3: guards") && sideText(sv.rows[k + 1]) === "       стражи зелёные", JSON.stringify(sv.rows))
+  cell("printed rows, the step's second row included, fit the panel without wrapping", k > 0 && sv.rows.every((x) => sideText(x).length <= 32 && !sideText(x).endsWith(" ") && !sideText(x).startsWith(" ")) && sideText(sv.rows[k + 1]) === "↳ стражи зелёные", JSON.stringify(sv.rows.map(sideText)))
+  cell("the reviewer's row shows the step in progress", sv.rows[k]?.what.startsWith("проверка 2/3: guards") && sideText(sv.rows[k + 1]) === "↳ стражи зелёные", JSON.stringify(sv.rows))
   const text = formatStatuses([r], Date.now(), "proj")
   cell("/crew shows the steps on one line and the step in progress", /шаги 1\/3 ✓▶·/.test(text) && /▶ guards: стражи/.test(text) && !/notes/.test(text), text)
   cell("/crew lines fit the dialog without wrapping", text.split("\n").every((l) => l.length <= 72), text)
@@ -53,12 +53,12 @@ cell("rows fit the narrow panel (32 columns) without wrapping", v.rows.every((r)
   const w = { session: "sW", project: "proj", role: "worker", title: "#22", state: "watch", since: Date.now() - 40 * 60_000, detail: "", watches: [{ id: "w", note: "когда сдвинется main", started: Date.now() - 40 * 60_000, minutes: 90 }], asked: [], tasks: [], updated: Date.now(), task: { n: 22, status: "reviewing", as: "reviewer", title: "t", steps } }
   const sv = sidebarLines([w], Date.now(), "proj")
   const k = sv.rows.findIndex((x) => x.who === "#22 прм")
-  cell("a waiting reviewer shows the wait with minutes, not the steps", sv.rows[k]?.what.startsWith("⧗ ") && /40м$/.test(sv.rows[k].what) && sv.rows[k].what.length <= 20, JSON.stringify(sv.rows))
+  cell("a waiting reviewer shows the wait with minutes, not the steps", sv.rows[k]?.what.startsWith("⧗ ") && /40м$/.test(sv.rows[k].what) && sideText(sv.rows[k]).length <= 32, JSON.stringify(sv.rows))
   cell("the steps go on a muted row under the wait", sv.rows[k + 1]?.what === "↳ шаги 10/12" && sv.rows[k + 1].tone === "muted", JSON.stringify(sv.rows))
   cell("the printed rows of a waiting reviewer fit the panel", sv.rows.every((x) => sideText(x).length <= 32), JSON.stringify(sv.rows.map(sideText)))
   const idle = { ...w, state: "task", watches: [], since: undefined }
   const iv = sidebarLines([idle], Date.now(), "proj")
-  cell("a reviewer that waits for nothing still shows its steps", iv.rows.length === 2 && sideText(iv.rows[0]) === "  #22 t" && iv.rows[1].what === "шаги 10/12", JSON.stringify(iv.rows))
+  cell("a reviewer that waits for nothing still shows its steps", iv.rows.length === 2 && sideText(iv.rows[0]) === "#22 t" && iv.rows[1].what === "шаги 10/12", JSON.stringify(iv.rows))
 }
 {
   // task 055: the owner saw "Ждут вас: 1 · с 18:55 · clau" - the project and the tab were cut off by the panel width
@@ -69,19 +69,19 @@ cell("rows fit the narrow panel (32 columns) without wrapping", v.rows.every((r)
   const printed = sv.rows.map((r) => sideText(r))
   cell("055: three lines - how many and since when", printed[0] === "Ждут вас: 1 · с 18:55", JSON.stringify(printed))
   cell("055: the second line names the project, the task and the role in full", printed[1] === "? claude-limits #33 исп", JSON.stringify(printed))
-  cell("055: the third line is the start of the question, cut to the panel", printed[2].startsWith("  ↳ Продолжать #31") && printed[2].endsWith("…") && printed[2].length === 32 && sv.rows[2].tone === "muted", JSON.stringify(printed))
+  cell("055: the third line is the start of the question, cut to the panel", printed[2].startsWith("↳ Продолжать #31") && printed[2].endsWith("…") && printed[2].length === 32 && sv.rows[2].tone === "muted", JSON.stringify(printed))
   cell("055: every printed line fits the panel", printed.every((l) => l.length <= 32), JSON.stringify(printed))
   // a narrower panel: the project and the tab stay whole, only the question is cut
   const nv = sidebarLines([w], since + 60_000, "claude-limits", 24)
   const np = nv.rows.map((r) => sideText(r, 24))
-  cell("055: a narrower panel keeps the project and the tab", np[1] === "? claude-limits #33 исп" && np[2].startsWith("  ↳ Продолжать") && np[2].endsWith("…") && np.every((l) => l.length <= 24), JSON.stringify(np))
+  cell("055: a narrower panel keeps the project and the tab", np[1] === "? claude-limits #33 исп" && np[2].startsWith("↳ Продолжать") && np[2].endsWith("…") && np.every((l) => l.length <= 24), JSON.stringify(np))
   // a wait with no question text: no third line
   const nq = sidebarLines([{ ...w, question: undefined }], since + 60_000, "claude-limits")
   cell("055: no question text - no question line", sideText(nq.rows[1]) === "? claude-limits #33 исп" && sideText(nq.rows[2]) === "? #33 лимиты" && nq.rows[3].who === "#33 исп", JSON.stringify(nq.rows.map((r) => sideText(r))))
   // the oldest wait is named, from another project too
   const older = st("sO", "owner", { project: "nova", role: "integrator", since: since - 30 * 60_000, question: "Вливать?" })
   const ov = sidebarLines([w, older], since + 60_000, "claude-limits").rows.map((r) => sideText(r))
-  cell("055: the oldest wait of all projects is named", ov[0] === "Ждут вас: 2 · с 18:25" && ov[1] === "? nova интегр." && ov[2] === "  ↳ Вливать?", JSON.stringify(ov))
+  cell("055: the oldest wait of all projects is named", ov[0] === "Ждут вас: 2 · с 18:25" && ov[1] === "? nova интегр." && ov[2] === "↳ Вливать?", JSON.stringify(ov))
 }
 {
   // task 055, the owner (2026-10-15): "? — ждёт вас; ▶ — задал вопрос текстом, ждёт ответа интегратора (или вашего)"
@@ -115,7 +115,7 @@ cell("rows fit the narrow panel (32 columns) without wrapping", v.rows.every((r)
   // a tab of the owner (not spawned) waiting with a phrase: waits for you, the summary marks it as a wait, the phrase under it
   const ow = st("o56", "owner", { project: "nova", role: "integrator", since: t, wait: true, question: "Жду вашего решения по плану.", detail: "ждёт вас с 10:00: Жду вашего решения по плану." })
   const ov = sidebarLines([ow], t, "nova")
-  cell("056: the summary of an owner's waiting tab is not marked ?", sideText(ov.rows[1]) === `${w?.mark} nova интегр.` && sideText(ov.rows[2]).startsWith("  ↳ Жду вашего"), JSON.stringify(ov.rows.map((r) => sideText(r))))
+  cell("056: the summary of an owner's waiting tab is not marked ?", sideText(ov.rows[1]) === `${w?.mark} nova интегр.` && sideText(ov.rows[2]).startsWith("↳ Жду вашего"), JSON.stringify(ov.rows.map((r) => sideText(r))))
   cell("056: its row is marked as a wait", ov.rows.find((r) => r.who === "интегр.")?.mark === w?.mark, JSON.stringify(ov.rows))
 }
 cell("a task row has its title on the row above it, so the number says what the task is (task 064)", v.rows.some((x, i) => x.who === "#2 исп" && sideText(v.rows[i - 1]) === "• #2 x"), JSON.stringify(v.rows))

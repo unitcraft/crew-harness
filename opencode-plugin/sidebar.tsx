@@ -3,6 +3,8 @@
 // «Context» и «MCP»; JSX плагина окна OpenCode компилирует сам (Solid + opentui) и даёт свой рантайм. Строки — из
 // status/ (их пишет плагин сервиса), раз в 2 с; логика строк — status.ts sidebarLines (под тестом). Подключается из
 // tui.ts через import() с защитой: не заработало — блока нет, остальное в окне работает.
+// Рисунок (задача 068): иерархию несут знак и цвет строки, а не отступ — название задачи тон base, всё под ней тон muted со знаком «↳»,
+// accent у ждущего вас и у «⚠»; строка печатается как есть (sideText), без начальных пробелов. Тон → цвет темы окна — color() ниже.
 import { createSignal, For, onCleanup } from "solid-js"
 import { readStatuses, sideText, sidebarLines } from "./status.ts"
 import { str } from "./dialog-size.ts"
