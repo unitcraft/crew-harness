@@ -32,7 +32,7 @@ cell("the summary line is first", v.rows[0].what === "Ждут вас: 1 · с 0
 cell("who waits: the project and the tab on the second line", sideText(v.rows[1]) === "? nova интегр." && v.rows[1].tone === "accent", JSON.stringify(v.rows[1]))
 cell("the one waiting for the owner is next and marked", v.rows[2].who === "интегр." && v.rows[2].mark === "?" && v.rows[2].what === "ждёт вас 01:42" && v.rows[2].tone === "accent", JSON.stringify(v.rows[2]))
 cell("a task session is named by its role", v.rows.some((r) => r.who === "#2 исп" && r.what === "работает 12 мин") && v.rows.some((r) => r.who === "#2 прм" && r.what.startsWith("⧗ очередь: CI")), JSON.stringify(v.rows))
-cell("a task state is shown with its mark and word", v.rows.some((r) => r.who === "#3 прм" && r.what === "↻ доработка"), JSON.stringify(v.rows))
+cell("a task state is shown with its mark and word (a reviewer waits for the rework, task 064)", v.rows.some((r) => r.who === "#3 прм" && r.what === "↻ ждёт доработки"), JSON.stringify(v.rows))
 cell("rows fit the narrow panel (32 columns) without wrapping", v.rows.every((r) => (r.who ? 2 + 9 + 1 + r.what.length : sideText(r).length) <= 32), JSON.stringify(v.rows.map((r) => r.what)))
 {
   // acceptance in progress: "проверка 2/3: guards" on the reviewer's row, the step's text under it

@@ -92,6 +92,34 @@ cell("7: the panel wraps the step by words under the role", r1 >= 0 && rp[r1 + 1
 cell("7: the step's text is not repeated on a row under it", !rp.some((l) => l.includes("↳ подсунь")), JSON.stringify(rp))
 cell("7: the reviewer's rows fit the panel", rp.every((l) => l.length <= 32), JSON.stringify(rp.filter((l) => l.length > 32)))
 
+// item 8 (the owner, 2026-10-17, «по рекомендации»): (a) a task without a folder - the number and the title once, as a heading, its
+// tabs under it («исп  ↻ доработка», «прм  ↻ ждёт доработки»), the mark on the left is the most important tab's; (b) a task with a
+// folder - its finished sessions on one row «✓ сдано N сессий» under the live ones, the whole list in /crew; the rows freed go to live tabs
+const ex = st("e85", "question", { since: at(0, 5), question: "Базу опустить?", title: "#85 исп", task: { n: 85, status: "rework", as: "executor", title: long }, detail: "ждёт ответа (интегратора или вас) с 00:05: Базу опустить?" })
+const rw = st("p85", "task", { title: "#85 прм", task: { n: 85, status: "rework", as: "reviewer", title: long }, detail: "приёмка: ждёт доработки" })
+const ap = sidebarLines([rw, ex, list[1]], now, "nova").rows.map((r) => sideText(r))
+cell("8a: the task's number and title once", ap.filter((l) => l.includes("#85")).length === 1 && ap.filter((l) => l.includes("Accept")).length === 1, JSON.stringify(ap))
+const a85 = ap.indexOf("▶ #85 Accept Oracle evaluation")
+cell("8a: the heading has the mark of the most important tab", a85 >= 0 && ap[a85 + 1] === "  repair after the second…", JSON.stringify(ap))
+cell("8a: its tabs under it - the executor with its question, then the reviewer", ap[a85 + 2] === "  исп  вопрос — ждёт ответа" && ap[a85 + 3] === "    ↳ Базу опустить?" && ap[a85 + 4] === "  прм  ↻ ждёт доработки", JSON.stringify(ap.slice(a85, a85 + 5)))
+cell("8a: another task keeps its own heading", ap.includes("• #2 Short title"), JSON.stringify(ap))
+const g8 = (status, label, extra = {}) => ({ n: 45, status, as: "executor", title: "Канон", ref: "045", group: true, label, ...extra })
+const live = st("sR8", "owner", { project: "crew-harness", since: at(0, 10), title: "045 прм", question: "вливать?", detail: "ждёт вас с 00:10: вливать?", task: { n: 45, status: "reviewing", as: "reviewer", title: "Канон", ref: "045", group: true } })
+const done = [
+  st("d1", "task", { project: "crew-harness", title: "045 С1-1", detail: "сдана 23:00", task: g8("submitted", "С1-1", { ended: at(0, 1) }) }),
+  st("d2", "task", { project: "crew-harness", title: "045 С2-1", detail: "сдана 23:10", task: g8("submitted", "С2-1", { ended: at(0, 2) }) }),
+  st("d3", "task", { project: "crew-harness", title: "045 С3п-2", detail: "передана другой сессии", task: g8("handed", "С3п-2", { ended: at(0, 3) }) }),
+]
+const others = Array.from({ length: 8 }, (_, i) => st(`i8${i}`, "idle", { project: "crew-harness" }))
+const bv = sidebarLines([live, ...done, ...others], now, "crew-harness")
+const bp = bv.rows.map((r) => sideText(r))
+const b45 = bp.indexOf("  045 Канон")
+cell("8b: the live session under the heading, the finished ones on one row", b45 >= 0 && bp[b45 + 1] === "?  ↳ прм    ждёт вас 00:10" && bp[b45 + 2] === "   ✓ сдано 3 сессии", JSON.stringify(bp))
+cell("8b: no row of a finished session", !bp.some((l) => /С1-1|С2-1|С3п-2/.test(l)), JSON.stringify(bp))
+cell("8b: the rows freed go to live tabs - nine live tabs, no «+N»", !/\+\d/.test(bv.foot) && bv.rows.filter((r) => r.who).length === 9, JSON.stringify({ foot: bv.foot, n: bv.rows.filter((r) => r.who).length }))
+const bc = formatStatuses([live, ...done], now, "crew-harness")
+cell("8b: /crew lists every session", /С1-1/.test(bc) && /С2-1/.test(bc) && /С3п-2/.test(bc), bc)
+
 rmSync(tmp, { recursive: true, force: true })
 console.log(fail ? `crew-task-title-row.test: FAIL ${fail}` : "crew-task-title-row.test ok")
 process.exit(fail ? 1 : 0)

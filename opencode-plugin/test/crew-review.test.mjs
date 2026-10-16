@@ -139,7 +139,7 @@ const started = await call("crew_task", "sesREVIEW1", { action: "check", n: 1, s
 cell("check without a result starts the step", task(1).checking?.step === "tests" && /1\/3/.test(started), started)
 const st = await import("../status.ts")
 const view = { n: 1, status: "reviewing", as: "reviewer", title: "x", steps: task(1).steps.map((a) => ({ id: a.id, text: a.text, ...(task(1).checks?.[a.id] ? { result: task(1).checks[a.id] } : {}) })), checking: task(1).checking.step }
-cell("the window shows the step in progress", st.stepProgress(view) === "проверка 1/3: tests", st.stepProgress(view))
+cell("the window shows the step in progress, its id and short name (task 064)", st.stepProgress(view) === "проверка 1/3: tests — тесты зелёные", st.stepProgress(view))
 const marked = await call("crew_task", "sesREVIEW1", { action: "check", n: 1, step: "tests", result: "зелёные: 12/12" })
 cell("check with a result marks the step and ends it", task(1).checks?.tests === "зелёные: 12/12" && !task(1).checking && /1\/3/.test(marked) && /guards/.test(marked), marked)
 const noChecks = await call("crew_task", "sesREVIEW1", { action: "accept", n: 1 })

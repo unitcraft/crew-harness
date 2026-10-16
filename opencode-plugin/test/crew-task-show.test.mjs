@@ -34,7 +34,7 @@ const printed = v.rows.map((r) => sideText(r))
 // task 064: the heading wraps by words onto two rows at most
 const head = printed.findIndex((l) => l.startsWith("  045 "))
 cell("the panel: one task line «045 <title>» over its sessions", head >= 0 && printed.filter((l) => l.startsWith("  045 ")).length === 1 && printed[head] === "  045 Реестры контрактов и" && printed[head + 1] === "  полный JSONC-регламент", JSON.stringify(printed))
-cell("the panel: the sessions under it — «↳ прм», «↳ С4-3», «↳ С3п-2» — with marks", printed[head + 2] === "?  ↳ прм    ждёт вас 22:10" && printed[head + 3] === "   ↳ С4-3   ↻ доработка" && printed[head + 4] === "   ↳ С3п-2  ✓ сдана", JSON.stringify(printed.slice(head, head + 5)))
+cell("the panel: the sessions under it — «↳ прм», «↳ С4-3» with marks, the finished «С3п-2» folded (task 064)", printed[head + 2] === "?  ↳ прм    ждёт вас 22:10" && printed[head + 3] === "   ↳ С4-3   ↻ доработка" && printed[head + 4] === "   ✓ сдано 1 сессия", JSON.stringify(printed.slice(head, head + 5)))
 cell("the panel: no «#45» and no title sub-row under the sessions", !printed.some((l) => l.includes("#45")) && printed.filter((l) => l.includes("Реестры")).length === 1, JSON.stringify(printed))
 cell("the panel: every row fits 32 columns", printed.every((l) => l.length <= 32), JSON.stringify(printed.filter((l) => l.length > 32)))
 const nova = sidebarLines(list, now, "nova").rows.map((r) => sideText(r))
