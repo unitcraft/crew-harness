@@ -1,0 +1,250 @@
+// Self-test of task 063: an idle tab with an open task and no question to the owner is marked and woken (node >= 24):
+//   node test/crew-idle-tab.test.mjs
+// IT-1 the store of an episode (idle-tab.ts): hold, read, clear. IT-2 the rule over the tasks of the tab (idleBlockers): a task between
+//      sessions stands; a running executor goes; a session that waits for the tab (stuck towards it, or a question) makes the tab idle
+//      even when another task goes; submitted, accepted and approval go. IT-3 who waits for the tab (waitsOn). IT-4 the letter.
+// IT-5 the status: the mark ◷, the text in /crew and the side panel; the tab is not counted in "Ждут вас". IT-6 the setting
+//      idle_tab_minutes (default 20). IT-7 the plugin: the source (a tab with a task between sessions, no question, past the
+//      threshold) gets ONE letter and the mark; each lawful wait (an executor works, crew_watch, a question to the owner, a turn
+//      going, an own question with expect_reply, a gate of task 062, a closed tab) gets nothing; an empty turn keeps the episode;
+//      a working turn, the owner's word and a launched session end it.
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import os from "node:os"
+import path from "node:path"
+import { DatabaseSync } from "node:sqlite"
+
+const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-idle-tab-"))
+process.env.XDG_DATA_HOME = tmp
+process.env.CREW_HARNESS_POLL_MS = "100"
+process.env.CREW_HARNESS_STATUS_MS = "100"
+process.env.CREW_HARNESS_FORM_MS = "100"
+const dbPath = path.join(tmp, "opencode.db")
+process.env.CREW_HARNESS_DB = dbPath
+delete process.env.CREW_HARNESS_PRESENCE
+const proj = path.join(tmp, "proj")
+mkdirSync(path.join(proj, ".opencode"), { recursive: true })
+// threshold 3 s: the fixtures stand 2 minutes, the checks of "the mark is gone" run well inside 3 s
+writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ idle_tab_minutes: 0.05 }))
+
+let fail = 0
+const cell = (name, ok, detail = "") => {
+  console.log(`${ok ? "ok  " : "FAIL"} ${name}${ok ? "" : " :: " + detail}`)
+  if (!ok) fail++
+}
+const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+const tryImport = (p) => import(p).catch((e) => (console.log(`import ${p}: ${String(e).split("\n")[0]}`), null))
+
+const core = await import("../core.ts")
+const tasks = await import("../tasks.ts")
+const fw = await import("../form-wait.ts")
+const status = await import("../status.ts")
+const schema = await import("../config-schema.ts")
+const watch = await import("../watch.ts")
+const gs = await import("../gate-stop.ts")
+const it = await tryImport("../idle-tab.ts")
+
+const T0 = Date.now() - 120_000
+const mkTask = (project, n, author, st, extra = {}) => ({
+  project, n, title: `задача ${n}`, slug: `t${n}`, goal: "цель", priority: "P2", tier: "medium", role: "worker", author, author_role: "integrator",
+  qid: `q${n}`, status: st, kind: "assign", executors: [], attempt: 1, directory: proj, history: [], created: T0 - 60_000, updated: T0 - 60_000, ...extra,
+})
+
+// ---- IT-1 the store
+{
+  const dir = path.join(tmp, "idle-unit")
+  it?.holdIdle?.("sesU1", 1000, 5000, dir)
+  const r = it?.idleOf?.("sesU1", dir, 6000)
+  cell("IT-1a holdIdle writes the episode (start and letter time), idleOf reads it", r?.since === 1000 && r?.letter === 5000, JSON.stringify(r))
+  it?.clearIdle?.("sesU1", dir)
+  cell("IT-1b clearIdle removes it", it?.idleOf?.("sesU1", dir, 6000) === undefined && !!it?.clearIdle, "")
+  cell("IT-1c the mark is ◷", it?.IDLE_MARK === "◷", String(it?.IDLE_MARK))
+}
+
+// ---- IT-2 the rule over the tasks
+{
+  const none = () => undefined
+  const b = (list, w = none) => it?.idleBlockers?.("me", list, w)
+  const idle = mkTask("p", 1, "me", "idle")
+  const run = mkTask("p", 2, "me", "running", { executor: "sesE2" })
+  const rev = mkTask("p", 3, "me", "reviewing", { executor: "sesE3", reviewer: "sesR3" })
+  const r1 = b([idle])
+  cell("IT-2a a task between sessions and nothing going: idle, the task is named, kind between", r1?.idle === true && r1.items?.length === 1 && r1.items[0].kind === "between" && r1.items[0].task?.n === 1, JSON.stringify(r1))
+  cell("IT-2b an executor works: not idle", b([run])?.idle === false, JSON.stringify(b([run])))
+  cell("IT-2c a task between sessions and another one running: not idle (the tab may wait for it)", b([idle, run])?.idle === false, JSON.stringify(b([idle, run])))
+  const waits = (sid) => (sid === "sesR3" ? T0 : undefined)
+  const r4 = b([run, rev], waits)
+  cell("IT-2d the reviewer waits for the tab: idle even with a running task, kind waits, its time", r4?.idle === true && r4.items?.length === 1 && r4.items[0].kind === "waits" && r4.items[0].task?.n === 3 && r4.at >= T0, JSON.stringify(r4))
+  for (const st of ["submitted", "accepted", "approval", "starting", "rework", "reviewing"]) cell(`IT-2e status ${st} goes: not idle`, b([mkTask("p", 4, "me", st, { executor: "sesE4", reviewer: "sesR4" })])?.idle === false, JSON.stringify(b([mkTask("p", 4, "me", st)])))
+  cell("IT-2f no tasks: not idle", b([])?.idle === false, JSON.stringify(b([])))
+  const r7 = b([{ ...idle, updated: T0 + 5000 }])
+  cell("IT-2g the start of the stand is the change of the standing task", r7?.at === T0 + 5000, JSON.stringify(r7))
+}
+
+// ---- IT-3 who waits for the tab
+{
+  core.addObligation("sesW1", { qid: "qw1", from_session: "me3", from_role: "integrator", at: T0, nudges: 0, stuck: true, stuckAt: T0 + 10 })
+  core.addObligation("sesW2", { qid: "qw2", from_session: "other", from_role: "integrator", at: T0, nudges: 0, stuck: true, stuckAt: T0 + 10 })
+  core.addObligation("sesW3", { qid: "qw3", from_session: "me3", from_role: "integrator", at: T0, nudges: 0 })
+  const saved = new Map([["sesW4", { state: "question", since: T0 + 20 }], ["sesW5", { state: "working", since: T0 }]])
+  const w = (sid) => it?.waitsOn?.(sid, "me3", saved)
+  cell("IT-3a stuck towards the tab: waits, since the mark", w("sesW1") === T0 + 10, String(w("sesW1")))
+  cell("IT-3b stuck towards another tab: does not wait for this one", w("sesW2") === undefined, String(w("sesW2")))
+  cell("IT-3c an obligation that is not stuck: works, does not wait", w("sesW3") === undefined, String(w("sesW3")))
+  cell("IT-3d a session in the state question: waits, since its question", w("sesW4") === T0 + 20, String(w("sesW4")))
+  cell("IT-3e a working session does not wait", w("sesW5") === undefined, String(w("sesW5")))
+}
+
+// ---- IT-4 the letter
+{
+  const items = [{ kind: "between", task: mkTask("p", 61, "me", "idle", { folder: "doc/tasks/061-x", title: "Спека" }) }, { kind: "waits", task: mkTask("p", 22, "me", "submitted", { title: "Приёмка" }), who: "прм" }]
+  const l = it?.idleLetter?.(25, items) ?? ""
+  cell("IT-4a the letter: idle N min, the task without a going session, no question to the owner, the next step or the question tool", /^Ты простаиваешь 25 мин: /.test(l) && /061 «Спека» нет идущей сессии/.test(l) && /#22 прм.*ждёт твоих указаний/.test(l) && /нет вопроса владельцу/.test(l) && /Сделай следующий шаг цикла/.test(l) && /инструментом question/.test(l), l)
+  const what = it?.idleWhat?.(items) ?? []
+  cell("IT-4b the text for the owner: between sessions, waits for instructions", what.join("; ") === "061 между сессиями; #22 прм ждёт указаний", JSON.stringify(what))
+}
+
+// ---- IT-5 the status
+{
+  const NOW = 100_000_000
+  const base = status.statusOf({ card: { project: "p63", role: "integrator", title: "x", session: "sesS5" }, busy: false, asked: [], now: NOW, watches: [] })
+  const s = status.withIdle ? status.withIdle({ ...base, state: "tasks", detail: "ждёт своих задач: 061 между сессиями" }, { since: NOW - 35 * 60_000, what: ["061 между сессиями"] }, NOW) : undefined
+  cell("IT-5a withIdle: the state stays tasks, the field idleTab, the text names the stand and the missing question", s?.state === "tasks" && s.idleTab?.since === NOW - 35 * 60_000 && /^простаивает с \d\d:\d\d \(35 мин\), вопроса владельцу нет: 061 между сессиями$/.test(s.detail), JSON.stringify(s))
+  cell("IT-5b the mark is ◷", !!s && status.markOf(s) === "◷", String(s && status.markOf(s)))
+  const list = s ? status.formatStatuses([s], NOW) : ""
+  cell("IT-5c /crew: the row has ◷ and the text; no «Ждут вас» (the tab does not wait for the owner)", /◷ .*простаивает с/.test(list) && !/Ждут вас/.test(list), list)
+  const side = s ? status.sidebarLines([s], NOW) : { rows: [] }
+  cell("IT-5d the side panel: the row has ◷ and «простаивает 35м», the task under it", side.rows.some((r) => r.mark === "◷" && /простаивает 35м/.test(r.what) && r.tone === "accent") && side.rows.some((r) => /061 между сессиями/.test(r.what)), JSON.stringify(side.rows))
+  cell("IT-5e without idleTab nothing changes: no mark", status.markOf({ ...base, state: "tasks" }) === undefined, String(status.markOf({ ...base, state: "tasks" })))
+}
+
+// ---- IT-6 the setting
+{
+  const k = schema.SCHEMA.find((x) => x.key === "idle_tab_minutes")
+  cell("IT-6a the schema has idle_tab_minutes: int, default 20, group Подталкивание, 0 switches it off", k?.kind?.type === "int" && k.default === 20 && k.group === "Подталкивание" && /0 — не/.test(k.question), JSON.stringify(k))
+  cell("IT-6b loadConfig reads it: default 20, the project value", core.loadConfig(path.join(tmp, "nowhere")).idleTabMin === 20 && core.loadConfig(proj).idleTabMin === 0.05, JSON.stringify([core.loadConfig(path.join(tmp, "nowhere")).idleTabMin, core.loadConfig(proj).idleTabMin]))
+}
+
+// ---- IT-7 the plugin
+const db = new DatabaseSync(dbPath)
+db.exec("create table session_v2 (id text primary key, directory text, title text, parent_id text, time_archived integer, time_idle integer, time_viewed integer, time_suspended integer)")
+db.exec("create table session_message (id text primary key, session_id text, type text, seq integer, time_created integer, time_updated integer, data text)")
+let seq = 0
+const msg = (session, type, data, at = Date.now()) => db.prepare("insert into session_message values (?, ?, ?, ?, ?, ?, ?)").run(`m${++seq}`, session, type, seq, at, at, JSON.stringify(data))
+// I1 the source; I2 an executor works; I3 crew_watch; I4 a question form; I5 its turn goes; I6 a reviewer waits for it (and another task
+// runs); I7 its question with expect_reply waits; I8 a gate of task 062; I9 a closed tab. X* - the executors and reviewers.
+const TABS = ["sesI1", "sesI2", "sesI3", "sesI4", "sesI5", "sesI6", "sesI7", "sesI8", "sesX2", "sesX6", "sesX6b", "sesX7"]
+const ALL = [...TABS, "sesI9"]
+for (const s of ALL) db.prepare("insert into session_v2 values (?, ?, ?, null, null, null, null, null)").run(s, proj, s)
+
+const mod = await import("../index.ts")
+const hooks = {}
+const tools = {}
+const prompts = []
+const ctx = {
+  location: { directory: proj },
+  session: {
+    get: async ({ sessionID }) => ({ id: sessionID, title: sessionID, location: { directory: proj }, time: {} }),
+    prompt: async (p) => void prompts.push(p),
+    synthetic: async () => {},
+    update: async () => {},
+    hook: async (name, cb) => (hooks[name] = cb),
+  },
+  tool: { transform: async (fn) => fn({ add: (t) => (tools[t.name] = t) }) },
+  command: { list: async () => [], transform: async () => {} },
+  events: { on: async () => {} },
+}
+const WPID = 636363
+mkdirSync(core.WINDOWS, { recursive: true })
+const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now(), tabs: TABS.map((sessionID) => ({ sessionID, active: true, busy: sessionID === "sesI5" })) }))
+beat()
+const heart = setInterval(beat, 300)
+
+for (const s of ALL) {
+  msg(s, "user", { text: "поручение" }, T0)
+  msg(s, "assistant", { content: [{ type: "text", text: "Сводка выше." }] }, T0 + 1)
+  msg(s, "idle", { outcome: "completed" }, T0 + 2)
+}
+const stop = await mod.default.setup(ctx)
+for (const s of ALL) await hooks.context({ sessionID: s, system: [], model: { id: "opus", providerID: "claude-code" } })
+// the request of the context hook marks a card busy; the turns of the fixtures ended two minutes ago
+for (const s of ALL) core.saveCard({ ...core.readJson(core.cardFile(s)), busy: false })
+const P = core.readJson(core.cardFile("sesI1"))?.project
+const putTask = (t) => {
+  mkdirSync(path.dirname(tasks.taskFile(P, t.n)), { recursive: true })
+  writeFileSync(tasks.taskFile(P, t.n), JSON.stringify(t, null, 1))
+}
+putTask(mkTask(P, 61, "sesI1", "idle", { title: "Спека" }))
+putTask(mkTask(P, 62, "sesI2", "running", { executor: "sesX2" }))
+putTask(mkTask(P, 63, "sesI3", "idle"))
+putTask(mkTask(P, 64, "sesI4", "idle"))
+putTask(mkTask(P, 65, "sesI5", "idle"))
+putTask(mkTask(P, 66, "sesI6", "running", { executor: "sesX6b" }))
+putTask(mkTask(P, 22, "sesI6", "reviewing", { executor: "sesX2", reviewer: "sesX6", review_qid: "qr22", review_letter: `review-${P}-22-1`, reviewers: [], title: "Приёмка" }))
+putTask(mkTask(P, 67, "sesI7", "idle"))
+putTask(mkTask(P, 68, "sesI8", "idle"))
+putTask(mkTask(P, 69, "sesI9", "idle"))
+core.addObligation("sesX6", { qid: "qr22", from_session: "sesI6", from_role: "integrator", at: T0, nudges: 0, task: "приёмка #22", stuck: true, stuckAt: T0 - 30_000, stuckWhat: "приёмка #22 — 3 хода подряд" })
+core.addObligation("sesX7", { qid: "q7ask", from_session: "sesI7", from_role: "integrator", at: Date.now(), nudges: 0 })
+mkdirSync(watch.WATCHES, { recursive: true })
+writeFileSync(path.join(watch.WATCHES, "w63.json"), JSON.stringify({ id: "w63", session: "sesI3", command: "x", cwd: proj, note: "CI", minutes: 120, created: Date.now(), status: "running", pid: process.pid, started: Date.now() }))
+fw.handleFormEvent({ type: "form.created", data: { form: { id: "frm_i4", sessionID: "sesI4", title: "Questions", metadata: { kind: "question" }, fields: [{ key: "q0", description: "Запускать следующую сессию?", options: [{ label: "Да (Recommended)" }, { label: "Нет" }] }] } } })
+core.saveCard({ ...core.readJson(core.cardFile("sesI5")), busy: true, busySince: Date.now() })
+gs.noteGate("sesI8", "ворота", T0 + 1)
+
+const letters = (s) => prompts.filter((p) => p.sessionID === s && /Ты простаиваешь/.test(p.text))
+const stOf = (s) => core.readJson(path.join(status.STATUS, `${s}.json`))
+const endTurn = (s, content, owner) => {
+  const at = Date.now()
+  if (owner) msg(s, "user", { text: owner }, at - 2)
+  msg(s, "assistant", { content }, at - 1)
+  msg(s, "idle", { outcome: "completed" }, at)
+  core.saveCard({ ...core.readJson(core.cardFile(s)), busy: false })
+}
+
+await wait(2500)
+const l1 = letters("sesI1")
+cell("IT-7a the source: a task between sessions, no question, past the threshold - ONE letter naming the task", l1.length === 1 && /задачи #61 «Спека» нет идущей сессии/.test(l1[0].text) && /инструментом question/.test(l1[0].text), JSON.stringify(prompts.map((p) => [p.sessionID, p.text.slice(0, 90)])))
+const s1 = stOf("sesI1")
+cell("IT-7b its status: tasks, idleTab, «простаивает … вопроса владельцу нет: #61 между сессиями»", s1?.state === "tasks" && !!s1.idleTab && /^простаивает с .*вопроса владельцу нет: #61 между сессиями$/.test(s1.detail), JSON.stringify(s1))
+cell("IT-7c an executor works: no letter, no mark", letters("sesI2").length === 0 && !stOf("sesI2")?.idleTab, JSON.stringify(stOf("sesI2")))
+cell("IT-7d crew_watch is open: no letter, the state watch", letters("sesI3").length === 0 && stOf("sesI3")?.state === "watch" && !stOf("sesI3")?.idleTab, JSON.stringify(stOf("sesI3")))
+cell("IT-7e a question to the owner is open: no letter, the state owner", letters("sesI4").length === 0 && stOf("sesI4")?.state === "owner" && !stOf("sesI4")?.idleTab, JSON.stringify(stOf("sesI4")))
+cell("IT-7f its turn goes: no letter, the state working", letters("sesI5").length === 0 && stOf("sesI5")?.state === "working" && !stOf("sesI5")?.idleTab, JSON.stringify(stOf("sesI5")))
+const l6 = letters("sesI6")
+cell("IT-7g a reviewer waits for the tab (another task runs): ONE letter naming the waiting session", l6.length === 1 && /#22 прм.*ждёт твоих указаний/.test(l6[0].text) && !!stOf("sesI6")?.idleTab, JSON.stringify([l6.map((p) => p.text), stOf("sesI6")]))
+cell("IT-7h its own question with expect_reply waits: no letter, the state reply", letters("sesI7").length === 0 && stOf("sesI7")?.state === "reply", JSON.stringify(stOf("sesI7")))
+cell("IT-7i a gate without a question (task 062): its own letter and mark, no idle letter", letters("sesI8").length === 0 && prompts.some((p) => p.sessionID === "sesI8" && /без вопроса владельцу/.test(p.text)) && stOf("sesI8")?.gate === true, JSON.stringify(stOf("sesI8")))
+cell("IT-7j a closed tab: no letter, no mark", letters("sesI9").length === 0 && !stOf("sesI9")?.idleTab, JSON.stringify(stOf("sesI9")))
+await wait(1500)
+cell("IT-7k no second letter in the same episode", letters("sesI1").length === 1 && letters("sesI6").length === 1, JSON.stringify([letters("sesI1").length, letters("sesI6").length]))
+
+// an empty turn (the answer to the letter, no tools): the episode goes on, the mark comes back, no letter
+endTurn("sesI1", [{ type: "text", text: "Понял, жду." }])
+await wait(1500)
+cell("IT-7l an empty turn keeps the episode: the mark, still one letter", letters("sesI1").length === 1 && !!stOf("sesI1")?.idleTab, JSON.stringify([letters("sesI1").length, stOf("sesI1")]))
+
+// the owner's word in sesI6 ends its episode
+endTurn("sesI6", [{ type: "text", text: "Принято." }], "посмотри приёмку")
+await wait(800)
+cell("IT-7m the owner's word ends the episode: the mark is gone", !stOf("sesI6")?.idleTab, JSON.stringify(stOf("sesI6")))
+
+// a working turn of sesI1 ends the episode; a new stand past the threshold is a new episode with its own letter
+endTurn("sesI1", [{ type: "tool", name: "read", state: { status: "completed" } }, { type: "text", text: "Прочитал журнал." }])
+await wait(800)
+cell("IT-7n a working turn ends the episode: the mark is gone", !stOf("sesI1")?.idleTab && letters("sesI1").length === 1, JSON.stringify([letters("sesI1").length, stOf("sesI1")]))
+await wait(3500)
+cell("IT-7o a new stand past the threshold: a new episode, the second letter", letters("sesI1").length === 2 && !!stOf("sesI1")?.idleTab, JSON.stringify([letters("sesI1").length, stOf("sesI1")]))
+
+// the next session is launched: the task runs, the mark is gone, no letter
+putTask({ ...mkTask(P, 61, "sesI1", "running", { executor: "sesX2", title: "Спека" }), updated: Date.now() })
+await wait(1000)
+cell("IT-7p a launched session ends the episode: the mark is gone", !stOf("sesI1")?.idleTab && !it?.idleOf?.("sesI1"), JSON.stringify(stOf("sesI1")))
+await wait(3500)
+cell("IT-7q and no new letter while the session goes", letters("sesI1").length === 2, String(letters("sesI1").length))
+
+clearInterval(heart)
+stop?.()
+db.close()
+rmSync(tmp, { recursive: true, force: true })
+console.log(fail ? `crew-idle-tab.test: FAIL ${fail}` : "crew-idle-tab.test ok")
+process.exit(fail ? 1 : 0)
