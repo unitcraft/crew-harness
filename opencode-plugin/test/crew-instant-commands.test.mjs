@@ -122,54 +122,61 @@ await new Promise((r) => setTimeout(r, 3600))
   cell("/crew-help shows the help at once in the window dialog; no server call, no model turn", /crew_inbox/.test(msg(out)) && serverCalls.length === 0, JSON.stringify(last(out))?.slice(0, 120))
   cell("the help lists the verbs of /crew-sets and /crew-profiles from the one table (the same texts as the menu)", Core.SETS_VERB_HELP.every((v) => msg(out).includes(v.verb)) && Core.PROFILES_VERB_HELP.filter((v) => !v.bare).every((v) => msg(out).includes(v.what)), "")
 
-  // the menu: the table and every verb with «what it does and with which arguments»
-  api.ui.dialog.select = async (o) => (out.asked.push(o), "__table")
+  // the first level is the pick of the sets (task 066); behind «other actions» the menu has every verb with «what it does and with which arguments»
+  const menuScript = ["__verbs", undefined]
+  api.ui.dialog.select = async (o) => (out.asked.push(o), menuScript.shift())
   await slashOf(out, "crew-sets").run()
   const menu = out.asked.at(-1)
-  cell("/crew-sets: the menu has the table and every verb of runSetsCommand, each with its arguments and what it does", menu.options[0].value === "__table" && Core.SETS_VERB_HELP.every((v) => menu.options.some((o) => o.value === v.verb && o.description.includes(v.what) && o.description.startsWith(v.verb + (v.usage ? " " + v.usage : "")))), JSON.stringify(menu.options.map((o) => o.value)))
+  cell("/crew-sets: the menu has ls first and every verb of runSetsCommand, each with its arguments and what it does", menu.options[0].value === "ls" && Core.SETS_VERB_HELP.every((v) => menu.options.some((o) => o.value === v.verb && o.description.includes(v.what) && o.description.startsWith(v.verb + (v.usage ? " " + v.usage : "")))), JSON.stringify(menu.options.map((o) => o.value)))
   cell("the verbs of the menu are exactly the verbs the command accepts (no verb is missing, none is invented)", JSON.stringify(Core.SETS_VERB_HELP.map((v) => v.verb)) === JSON.stringify((await import("../profile-cmd.ts")).SETS_VERBS) && JSON.stringify(Core.PROFILES_VERB_HELP.map((v) => v.verb).sort()) === JSON.stringify([...(await import("../profile-cmd.ts")).PROFILES_VERBS].sort()), "")
+  await slashOf(out, "crew-sets").run("show")
   const shown = out.shown.map((x) => x.message)
-  cell("the dialog «Загрузка…» is shown first, then the table of the sets (the heavy part runs after)", shown.at(-2) === "Загрузка…" && /cross-kimi/.test(shown.at(-1)) && /kimi-only/.test(shown.at(-1)), JSON.stringify(shown.map((m) => m.slice(0, 30))))
-  cell("in the window the texts name the menu items, the slash form stays in brackets as a note", /пункт «show» меню \/crew-sets \(\/crew-sets show \[имя\]\)/.test(msg(out)) && /пункт «use» меню \/crew-sets \(\/crew-sets use <имя>\)/.test(msg(out)), msg(out).slice(-300))
-  await slashOf(out, "crew-profiles").run()
+  cell("the dialog «Загрузка…» is shown first, then the answer (the heavy part runs after)", shown.at(-2) === "Загрузка…" && /Набор не включён/.test(shown.at(-1)), JSON.stringify(shown.map((m) => m.slice(0, 30))))
+  cell("in the window the texts name the menu items, the slash form stays in brackets as a note", /пункт «show» меню \/crew-sets \(\/crew-sets show <имя>\)/.test(msg(out)) && /пункт «use» меню \/crew-sets \(\/crew-sets use <имя>\)/.test(msg(out)), msg(out).slice(-300))
+  await slashOf(out, "crew-profiles").run("show")
   cell("/crew-profiles table: family, tier -> model, window", /claude\s+heavy\s+claude-code\/opus/.test(msg(out)), JSON.stringify(last(out))?.slice(0, 200))
 
   // a verb with arguments opens the input with the format of this verb; the changing verbs run through the same functions
   const fileHash = sha(file)
-  let script = ["use", "use no-such-set"]
+  let script = ["__verbs", "new", "new zzz-tmp"]
   api.ui.dialog.select = async (o) => (out.asked.push(o), script.shift())
   api.ui.dialog.prompt = async (o) => (out.asked.push(o), script.shift())
   await slashOf(out, "crew-sets").run()
   const ask = out.asked.at(-1)
-  cell("the input of «use» has the title, the format and an example of this verb, the verb already typed", ask.title.startsWith("/crew-sets use") && Core.SETS_VERB_HELP.every((v) => ask.title.includes(v.verb)) && Object.values(ask).every((x) => typeof x === "string") && ask.placeholder.includes("use <имя> — например: use cross-kimi") && ask.value === "use ", JSON.stringify(ask))
-  cell("a typed verb runs the same command: use with an unknown name is refused with the list of names, nothing changed", /Не сделано/.test(msg(out)) && /cross-kimi/.test(msg(out)) && sha(file) === fileHash, JSON.stringify(last(out))?.slice(0, 200))
-  script = ["use", "use cross-kimi"]
+  cell("the input of «new» has the title, the format and an example of this verb, the verb already typed", ask.title.startsWith("/crew-sets new") && Core.SETS_VERB_HELP.every((v) => ask.title.includes(v.verb)) && Object.values(ask).every((x) => typeof x === "string") && ask.placeholder.includes("new <имя> [from <имя>] — например: new my-set from default") && ask.value === "new ", JSON.stringify(ask))
+  cell("a typed verb runs the same command: new creates the set in the file, nothing else changed", /Готово: создан пустой набор «zzz-tmp»/.test(msg(out)), JSON.stringify(last(out))?.slice(0, 200))
+  await slashOf(out, "crew-sets").run("delete zzz-tmp")
+  const hashUse = sha(file)
+  await slashOf(out, "crew-sets").run("use no-such-set")
+  cell("a typed use with an unknown name is refused with the list of names, nothing changed", /Не сделано/.test(msg(out)) && /cross-kimi/.test(msg(out)) && sha(file) === hashUse, JSON.stringify(last(out))?.slice(0, 200))
+  script = ["__verbs", "use", "cross-kimi"]
   await slashOf(out, "crew-sets").run()
   cell("use <set> from the window writes profile_set into the file of the project (no layer, no commit)", /cross-kimi/.test(msg(out)) && L.profileState(root).name === "cross-kimi" && JSON.parse(readFileSync(file, "utf8")).profile_set === "cross-kimi" && sha(file) !== fileHash, JSON.stringify([last(out), L.profileState(root).name])?.slice(0, 300))
-  script = ["use", "cross-codex-not"] // typed without the verb: the verb is added
+  script = ["__verbs", "new", "zzz-two"] // typed without the verb: the verb is added
   await slashOf(out, "crew-sets").run()
-  cell("a line typed without the verb gets the verb of the item", /Не сделано/.test(msg(out)) && /cross-codex-not/.test(msg(out)), msg(out).slice(0, 200))
-  script = ["check"]
+  cell("a line typed without the verb gets the verb of the item", /Готово: создан пустой набор «zzz-two»/.test(msg(out)), msg(out).slice(0, 200))
+  await slashOf(out, "crew-sets").run("delete zzz-two")
+  script = ["__verbs", "check"]
   await slashOf(out, "crew-sets").run()
   cell("check shows the catalog from the snapshot of the server plugin with its age, and compares the models", /Каталог моделей OpenCode: снимок плагина сервиса, .* назад/.test(msg(out)) && !/каталог недоступен/.test(msg(out)), msg(out).slice(0, 400))
   const n = out.shown.length
   script = [undefined]
   await slashOf(out, "crew-sets").run()
-  cell("Esc on the menu does nothing (no text, no change)", out.shown.length === n, String(out.shown.length))
-  script = ["use", "  "]
+  cell("Esc on the pick does nothing (no text, no change)", out.shown.length === n, String(out.shown.length))
+  script = ["__verbs", "new", "  "]
   await slashOf(out, "crew-sets").run()
   cell("a verb with required arguments and an empty input does nothing", out.shown.length === n, String(out.shown.length))
-  script = ["check"]
+  script = ["__verbs", "check"]
   await slashOf(out, "crew-profiles").run()
   cell("a verb without required arguments (check) runs at once from the menu", /Загрузка/.test(out.shown.at(-2).message) && out.shown.length === n + 2, JSON.stringify(out.shown.slice(-2)).slice(0, 200))
   // the snapshot is old / absent: the reason is named
   const keep = readFileSync(Cat.CATALOG_FILE, "utf8")
   rmSync(Cat.CATALOG_FILE)
-  script = ["check"]
+  script = ["__verbs", "check"]
   await slashOf(out, "crew-sets").run()
   cell("no snapshot: check says the catalog is unavailable and names the reason", /каталог недоступен: плагин сервиса ещё не записал снимок/.test(msg(out)), msg(out).slice(0, 300))
   writeFileSync(Cat.CATALOG_FILE, JSON.stringify({ at: Date.now() - 3 * 3600_000, models: JSON.parse(keep).models }))
-  script = ["check"]
+  script = ["__verbs", "check"]
   await slashOf(out, "crew-sets").run()
   cell("an old snapshot is not used, the reason names its age", /каталог недоступен: снимок каталога старый \(3 ч назад\)/.test(msg(out)), msg(out).slice(0, 300))
   writeFileSync(Cat.CATALOG_FILE, keep)
@@ -179,10 +186,10 @@ await new Promise((r) => setTimeout(r, 3600))
 {
   // the same without the worker thread: the process of the window does the work after «Загрузка…»
   process.env.CREW_HARNESS_NO_WORKER = "1"
-  const { api, out } = mkApi(["__table"])
+  const { api, out } = mkApi(["claude"])
   const stop = Tui.default.setup(api)
   await slashOf(out, "crew-profiles").run()
-  cell("without the worker the same answer arrives (the fallback in the process of the window)", out.shown.at(-2)?.message === "Загрузка…" && /claude\s+heavy/.test(msg(out)), JSON.stringify(out.shown.map((x) => x.message.slice(0, 20))))
+  cell("without the worker the same answer arrives (the fallback in the process of the window)", out.shown.at(-2)?.message === "Загрузка…" && /Семья «claude»/.test(msg(out)), JSON.stringify(out.shown.map((x) => x.message.slice(0, 20))))
   delete process.env.CREW_HARNESS_NO_WORKER
   stop?.()
 }
@@ -193,12 +200,12 @@ await new Promise((r) => setTimeout(r, 3600))
     { id: "claude-code", models: { opus: { id: "opus" }, sonnet: { id: "sonnet" }, haiku: { id: "haiku" } } },
     { id: "kimi-code-plan-global", models: { "k3-256k": { id: "k3-256k" } } },
   ]
-  const { api, out } = mkApi(["check"], prov)
+  const { api, out } = mkApi(["__verbs", "check"], prov)
   const stop = Tui.default.setup(api)
   await slashOf(out, "crew-sets").run()
   cell("with the provider list in the window the models are compared with it (the note names the source)", /Каталог моделей OpenCode: список окна OpenCode/.test(msg(out)), msg(out).slice(0, 400))
   stop?.()
-  const { api: api2, out: out2 } = mkApi(["check"], [{ id: "claude-code", models: { opus: { id: "opus" } } }])
+  const { api: api2, out: out2 } = mkApi(["__verbs", "check"], [{ id: "claude-code", models: { opus: { id: "opus" } } }])
   const stop2 = Tui.default.setup(api2)
   await slashOf(out2, "crew-sets").run()
   cell("a model of the sets missing from the window catalog is named", /нет в каталоге OpenCode/.test(msg(out2)), msg(out2).slice(0, 400))
@@ -256,9 +263,9 @@ await new Promise((r) => setTimeout(r, 3600))
   // without arguments the menu opens: "", spaces, undefined (the palette and the hint of the slash list give undefined or "")
   for (const empty of ["", "   ", undefined]) {
     let menus = 0
-    api.ui.dialog.select = async (o) => (menus++, o.options[0].value === "__table" ? undefined : "x")
+    api.ui.dialog.select = async (o) => (menus++, o.options.at(-1).value === "__verbs" ? undefined : "x")
     await slashOf(out, "crew-sets").run(empty)
-    cell(`run(${JSON.stringify(empty)}) opens the menu (the table and the verbs)`, menus === 1, String(menus))
+    cell(`run(${JSON.stringify(empty)}) opens the pick (the sets and other actions)`, menus === 1, String(menus))
   }
   stop?.()
 }

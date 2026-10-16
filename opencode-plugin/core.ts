@@ -1275,8 +1275,11 @@ export const limitsText = (w: { context?: number; input?: number; output?: numbe
 
 // ГЛАГОЛЫ КОМАНД ОКНА /crew-sets и /crew-profiles — ЕДИНСТВЕННОЕ место с описанием каждого (правка 003, 2026-10-08): из него собраны
 // строка «Глаголы …» в отказах profile-cmd.ts, раздел справки (HELP, /crew-help) и меню команд окна (tui.ts). Порядок — как в строке отказов.
+/** Слово view снято (задача 066): сессия агента, помнящая его, получает подсказку, а не «неизвестное действие». */
+export const VIEW_GONE = "Команды view больше нет, используй show."
 export type VerbHelp = { verb: string; usage: string; what: string; example: string; bare?: boolean }
 export const SETS_VERB_HELP: VerbHelp[] = [
+  { verb: "ls", usage: "", what: "список наборов: ● у включённого, модели в строке; в окне — выбор стрелками, Enter включает набор (list — то же)", example: "ls", bare: true },
   { verb: "show", usage: "[имя] [этап|all]", what: "набор кратко: таблица этапов и ступеней с короткими именами моделей; этап или all — подробно; без имени — включённый", example: "show cross-kimi приёмка", bare: true },
   { verb: "use", usage: "<имя>", what: "включить набор для всех этапов: имя записывается в profile_set файла проекта (без коммита)", example: "use cross-kimi" },
   { verb: "off", usage: "", what: "выключить набор: убрать profile_set из файла проекта; модели новых сессий снова по spawn_models", example: "off", bare: true },
@@ -1288,6 +1291,7 @@ export const SETS_VERB_HELP: VerbHelp[] = [
   { verb: "check", usage: "", what: "проверить данные и контексты; ничего не меняет", example: "check", bare: true },
 ]
 export const PROFILES_VERB_HELP: VerbHelp[] = [
+  { verb: "ls", usage: "", what: "список семей: ступень → модель, окно; в окне — выбор стрелками, Enter показывает семью (list — то же)", example: "ls", bare: true },
   { verb: "show", usage: "[<семья>]", what: "таблицу подробно или одну семью с наборами, которые на неё ссылаются", example: "show claude", bare: true },
   { verb: "set", usage: "<семья> <ступень|all> <модель[#вариант]> <context> output=<n> [input=<n>] [variant=<вариант>]", what: "создать или изменить запись справочника; all — все три ступени", example: "set kimi heavy kimi-code-plan-global/k3-256k 220000 output=131072" },
   { verb: "new", usage: "<семья> [from <семья>]", what: "новая семья: три пустые записи или копия", example: "new codex2 from codex" },
@@ -1343,12 +1347,12 @@ export const HELP = `crew-harness — письма между вкладками
   crew_spawn {goal, criteria, ...} — только интегратор: задача в новой сессии (работает и без окна); task, session, part_of —
                                 сессия задачи с папкой и подзадача (раздел ЗАДАЧИ).
        kind: "plan"          — задача-план (раздел ПЛАНИРОВАНИЕ ниже).
-  crew_task {action, n?}      — задачи по номеру: list, view (show — синоним); интегратору ещё assign, push, reassign, cancel,
+  crew_task {action, n?}      — задачи по номеру: list, show; интегратору ещё assign, push, reassign, cancel,
                                 priority, order, plan_decide, deliver (задачу с сессиями — на приёмку); приёмщику — review, check, round (план), precheck, merge, unlock, rework
                                 (sync: true — только влить свежую целевую ветку, не круг доработки), accept, cleanup (cleaned — старое имя). assign — открытой вкладке владельца;
                                 сессия задачи ведёт одну задачу и закрывается после cleanup: продолжение работы того же
                                 исполнителя — новой задачей (crew_spawn), assign на сессию задачи отказывает.
-  crew_config {action}        — настройки проекта: guide (опросник для владельца), view (что действует и откуда; show — прежнее имя, работает),
+  crew_config {action}        — настройки проекта: guide (опросник для владельца), show (что действует и откуда),
                                 set {values} (интегратор; пишет рабочую копию файла настроек, действует с коммита), apply_template (интегратор;
                                 дописывает стандартный шаблон моделей: claude/codex/kimi, набор codex, потолок light; ключи проекта не трогает).
                                 Проект без моделей (нет profile_set, spawn_models, allow_default_models) отказывает crew_spawn без явного model.
@@ -1368,7 +1372,7 @@ export const HELP = `crew-harness — письма между вкладками
                                 набор profile_sets — раскладка этапов по семьям и ступеням (наборов в файле может быть много); включённый набор
                                 profile_set — какой набор действует сейчас (может быть не включён ни один). Справочник и наборы пишет
                                 интегратор (crew_config set); включает и выключает набор только человек (/crew-sets use, /crew-sets off).
-                                Вопрос «какие наборы есть?» — смотри crew_config view: первая строка «наборов в файле: N». Пример ответа:
+                                Вопрос «какие наборы есть?» — смотри crew_config show: первая строка «наборов в файле: N». Пример ответа:
                                 «в файле 7 наборов (default, claude, …), включён: нет»; не «наборов нет» — «не включён» и «нет наборов» разное.
   Глаголы (в окне — пункты меню команды):
 ${verbHelpText()}
@@ -1428,7 +1432,7 @@ acceptor — роль приёмщика (разделяемая) при нас�
   crew_task {action: "push", n, text?, to?} — подтолкнуть остановившуюся вкладку сейчас: to "executor" (по умолчанию) — исполнителя, "reviewer" — приёмщика (счётчик напоминаний — с нуля).
   crew_task {action: "reassign", n, text?} — передать задачу новой сессии под тем же номером со сводкой сделанного; text —
     уточнение цели: идёт в первое письмо новой сессии перед прежней целью (уточнять тем же вызовом, не вторым письмом).
-  crew_task {action: "cancel", n, text?} / {action: "priority", n, priority} / {action: "view", n} (show — прежнее имя, работает) / {action: "list"}.
+  crew_task {action: "cancel", n, text?} / {action: "priority", n, priority} / {action: "show", n} / {action: "list"}.
   crew_task {action: "order", to: "<проект>.integrator", goal, criteria, ...} — заказ в другой проект: его интегратор
     делает работу своими задачами (crew_spawn {parent: "<проект>#N"}); заказ идёт за ними: принята у него — заказ
     выполнен (сводка без пробуждения), отменена — тебе вызов.
@@ -1465,7 +1469,7 @@ reviewer; места worker не занимает), и merge, accept, cleanup р
 приёмщик, сменивший роль, их теряет. Исполнитель задачи её не вливает и не принимает. Интегратор принятое не
 перепроверяет. Приёмщик: crew_task review → rework {text} | check {step} → проверка → check {step, result} по каждому шагу (ход видно в окне) → merge (замок вливания проекта) → accept {commit?}
 (плагин проверит обязательные шаги приёмки и что ветка или коммит в целевой ветке) → очистка → cleanup (плагин
-проверит, что worktree и ветка удалены). Улики сохранить — cleanup {n, keep:[путь, …]} (до 8 путей: worktree репозитория или папка в папке деревьев проекта; основное дерево и ветки нельзя; такое дерево уборка не проверяет, ответ: «Сохранено: <путь> (не проверялось уборкой)»); удалять их не нужно, ветку задачи удалить по-прежнему надо (если она выбрана в сохранённом дереве — там git checkout --detach, затем git branch -D; ответ cleanup подскажет). Побочные ветки и деревья задачи (диагностические, предпроверка, итоговая ветка от опубликованной) записывает crew_task {action: "track", n, branch?, worktree?} (исполнитель, приёмщик, интегратор; без дублей; ветки integrate/tN и integrate/tN-* плагин записывает сам при precheck, accept и cleanup; список виден в view); cleanup убирает всё записанное, кроме деревьев из keep. Потом сессии задачи закрываются, интегратору тихая сводка.
+проверит, что worktree и ветка удалены). Улики сохранить — cleanup {n, keep:[путь, …]} (до 8 путей: worktree репозитория или папка в папке деревьев проекта; основное дерево и ветки нельзя; такое дерево уборка не проверяет, ответ: «Сохранено: <путь> (не проверялось уборкой)»); удалять их не нужно, ветку задачи удалить по-прежнему надо (если она выбрана в сохранённом дереве — там git checkout --detach, затем git branch -D; ответ cleanup подскажет). Побочные ветки и деревья задачи (диагностические, предпроверка, итоговая ветка от опубликованной) записывает crew_task {action: "track", n, branch?, worktree?} (исполнитель, приёмщик, интегратор; без дублей; ветки integrate/tN и integrate/tN-* плагин записывает сам при precheck, accept и cleanup; список виден в show); cleanup убирает всё записанное, кроме деревьев из keep. Потом сессии задачи закрываются, интегратору тихая сводка.
 ПРЕДПРОВЕРКА ВЛИВАНИЯ (настройка проекта merge_precheck; по умолчанию required — включена). Порядок приёмщика: review → check → precheck → CI без замка → precheck candidate → merge → accept → отдельная cleanup → cleanup.
 Замок во время подготовки кандидата и CI не брать. crew_task precheck {n} замок не берёт: плагин читает вершину origin и называет её;
 влей её вместе с веткой задачи в интеграционный candidate (например, integrate/tN), прогони полный CI проекта и сохрани точный commit кандидата;
@@ -1480,7 +1484,7 @@ merge без предпроверки отклоняется: сначала pre
 Шаги acceptance проекта порядок приёмки не описывают: его задаёт плагин (merge_precheck, accepted_slot); crew_doctor предупреждает о шаге, который его пересказывает.
 По умолчанию accepted_slot: free — принятая задача ждёт уборки и место в inflight_limit не занимает (cleanup_limit ограничивает
 число ждущих); прежнее поведение (занимает место до cleanup) — ключ accepted_slot: hold. task_extra_fields — дополнительные поля задачи проекта: crew_spawn и assign
-принимают extra {id: строка}; значения видны исполнителю, приёмщику и в view.
+принимают extra {id: строка}; значения видны исполнителю, приёмщику и в show.
 
 ДРУГОЙ ПРОЕКТ. Писать в чужой проект можно только его интегратору (настройка проекта-получателя inbound: integrator
 по умолчанию; any — всем; none — никому). Работа для другого проекта — заказом, а не письмом его воркерам.
@@ -2189,7 +2193,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         "goal, criteria - required (the project may require more: boundaries, open_questions; task_fields). title? priority? P0..P3.",
         "The task text of a new task with a folder (no task:, part_of included) follows one template: «# Задание: <title>», a header, then sections «Чего хочет владелец», «Что нужно», «Критерии приёмки», «Результат и куда он попадает», «Связи», «Границы» in this order; an empty section is «нет: <why>». Without message the plugin builds it from the fields: owner_words (required: the owner's words word for word with date and source, e.g. - «сделай X» (владелец, 2026-10-17, чат оркестратора)), goal (paragraphs and «- » lines become the numbered points of «Что нужно»), criteria, result (required: where the result lands, or «нет: результат — код: <what is delivered>»), links? (Зависит от / Блокирует / Пересекается (файлы) / Начинается после), boundaries?; absent links or boundaries become «нет: … не передано». Without owner_words with a date or without result - a refusal naming what to add; a message without the template's sections is refused too. A project without task folders and a session of a task (task: N) need none of these fields.",
         "tier heavy|medium|light - picks the model: by default claude-code opus|sonnet|haiku, spawn_models of the project overrides; an enabled model-profile set (/crew-sets) overrides both for the stage it describes (the tier then picks the tier inside the set's family). model - explicit provider/id[#variant]; required when the project has no model settings (ask the owner first).",
-        "role? - role of the new session, default worker. extra {id: one line up to 300 characters} - the project's extra task fields (task_extra_fields; crew_config view lists them). parent \"project#N\" - the order of another project this task fulfils.",
+        "role? - role of the new session, default worker. extra {id: one line up to 300 characters} - the project's extra task fields (task_extra_fields; crew_config show lists them). parent \"project#N\" - the order of another project this task fulfils.",
         "Limits: the project caps running tasks per role (spawn_limits) and open tasks (inflight_limit). By default (accepted_slot: free) accepted tasks waiting for cleanup do not take a place in inflight_limit; cleanup_limit bounds them.",
         "kind: plan - a PLAN TASK: the executor writes no code, only a plan file. Steps:",
         "1. goal = the original task the plan must solve (criteria are not needed); plan_parent = number of the parent plan for a sub-plan.",
@@ -2334,12 +2338,12 @@ export function makeTools(host: CrewHost): CrewTool[] {
       [
         "Tasks of the caller's project, by number (045 for a task with a folder, #N without). One line per action: action - who may - parameters - what it does. Roles: integrator = the tab that plans and starts the project's tasks; executor = the session doing the task; reviewer = the tab that checks and lands a submitted task (a free worker tab, a session started for it, the acceptor role when the project says reviewer: acceptor, or the integrator). Texts that go to another tab (submit report, rework remarks, order, push and cancel texts) are read by the owner too: write them in the owner's language named in your system block.",
         "list - anyone - all? - open tasks by priority; all=true adds finished and cancelled ones.",
-        "view - anyone - n - details and history of a task, with its steps, side branches and worktrees (show is a synonym).",
-        "assign - integrator - session, goal, criteria, title?, boundaries?, open_questions?, priority?, extra? - give a task to an existing open tab instead of a new session; the tab is woken while the task is open. Refused for the integrator's own session (unless the project sets allow_self_assign) and for a session that already runs a task. extra {id: one line} fills the project's extra task fields (task_extra_fields, see crew_config view). In a project with task folders the task text follows the template of crew_spawn: owner_words and result required, links? boundaries? message?",
+        "show - anyone - n - details and history of a task, with its steps, side branches and worktrees.",
+        "assign - integrator - session, goal, criteria, title?, boundaries?, open_questions?, priority?, extra? - give a task to an existing open tab instead of a new session; the tab is woken while the task is open. Refused for the integrator's own session (unless the project sets allow_self_assign) and for a session that already runs a task. extra {id: one line} fills the project's extra task fields (task_extra_fields, see crew_config show). In a project with task folders the task text follows the template of crew_spawn: owner_words and result required, links? boundaries? message?",
         "order - integrator - to \"project.integrator\", goal, criteria, ... - order work from another project: its integrator does it with its own tasks; when its task is accepted the order is done (a quiet summary to you), when cancelled you get a call.",
         "push - integrator - n, text?, to? - nudge a stalled tab now (the reminder counter starts over): to \"executor\" (default) wakes the executor, to \"reviewer\" wakes the reviewer of the task.",
         "deliver - integrator - n, text - a task led by method sessions (status idle: the last session submitted to you) goes to the plugin's review once: text is the report for the reviewer (what is ready to land). A task with a single executor session goes to review on its submit, as before.",
-        "reassign - integrator - n, text? - hand the task to a new session under the same number with a summary of what was done (a task session: the same code, the next ordinal and a new launch number; the old one is marked handed). text = a refinement of the goal: it goes into the new session's first letter as a block before the old goal, wins where they differ and stays in the task history (view). Refine the goal with this same call, never with a second letter after the handover: the new session would start on the old goal and report twice.",
+        "reassign - integrator - n, text? - hand the task to a new session under the same number with a summary of what was done (a task session: the same code, the next ordinal and a new launch number; the old one is marked handed). text = a refinement of the goal: it goes into the new session's first letter as a block before the old goal, wins where they differ and stays in the task history (show). Refine the goal with this same call, never with a second letter after the handover: the new session would start on the old goal and report twice.",
         "cancel - integrator - n, text? - cancel the task; text goes to the executor. Releases the merge lock if the task held it.",
         "priority - integrator - n, priority P0..P3 - change the priority.",
         "submit - executor - n, text - submit the task's work with the report (what was done, how it was checked, what is left); no qid is needed. The first submission, one after rework or after a sync (the reviewer is woken), a plan task (the plan file and its form are checked). Already submitted: refused.",
@@ -2359,7 +2363,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
     input: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["list", "view", "show", "assign", "order", "push", "reassign", "cancel", "priority", "track", "plan_decide", "submit", "deliver", "review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleanup", "cleaned"] },
+        action: { type: "string", enum: ["list", "show", "assign", "order", "push", "reassign", "cancel", "priority", "track", "plan_decide", "submit", "deliver", "review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleanup", "cleaned"] },
         to: str("order: the other project's integrator, \"project.integrator\"; push: \"executor\" (default) or \"reviewer\""),
         keep: { type: "array", maxItems: 8, items: { type: "string" }, description: "cleanup: up to 8 worktree paths to keep as evidence" },
         checks: { type: "object", description: "accept: report per acceptance step {step id: what proves it}", additionalProperties: { type: "string" } },
@@ -2389,7 +2393,8 @@ export function makeTools(host: CrewHost): CrewTool[] {
       const me = await host.touch(sessionID)
       if (!me) return { content: "Задачи видит только вкладка." }
       const project = projOf(me)
-      const action = ((a) => (a === "view" ? "show" : a === "cleaned" ? "cleanup" : a))(String(input.action ?? ""))
+      if (String(input.action ?? "") === "view") return { content: VIEW_GONE }
+      const action = ((a) => (a === "cleaned" ? "cleanup" : a))(String(input.action ?? ""))
       if (action === "list") {
         const ts = listTasks(project).filter((t) => input.all || isOpen(t)).sort(byPriority)
         // старые записи с номерами папок, перенесённые в legacy/ (задача 058), — в полном списке
@@ -2465,7 +2470,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           ].filter(Boolean).join("\n"),
         })
         host.posted([to])
-        return { content: `Заказ ${taskNo(t)} «${t.title}» отправлен интегратору ${m[1]}. Его ход виден в crew_task {action: "view", n: ${t.n}}; выполнен — придёт сводка.` }
+        return { content: `Заказ ${taskNo(t)} «${t.title}» отправлен интегратору ${m[1]}. Его ход виден в crew_task {action: "show", n: ${t.n}}; выполнен — придёт сводка.` }
       }
       const t = findTask(me, input.n)
       if (!t) return { content: `Задачи #${input.n} в проекте ${project} нет.` }
@@ -2938,7 +2943,7 @@ ${lockStillYours(stillHeld.n)}` : "") }
       [
         "The project's settings (.opencode/crew-harness.json in its settings repository). One line per action: action - who may - parameters - what it does.",
         "guide - anyone - questions for the owner on every key (current value, options, recommendation, why): ask them in text and record the answers.",
-        "view - anyone - effective values and where each comes from (default, the committed file, the local option of opencode.jsonc), plus uncommitted edits (show is a synonym). Model profiles come first: model_profiles = families/tiers -> model, profile_sets = named sets of stages, profile_set = the enabled set (only a person changes it, /crew-sets use|off); the summary says 'sets in the file: N; enabled: name or none' - never answer 'no sets' from 'not enabled'; details: crew_help.",
+        "show - anyone - effective values and where each comes from (default, the committed file, the local option of opencode.jsonc), plus uncommitted edits. Model profiles come first: model_profiles = families/tiers -> model, profile_sets = named sets of stages, profile_set = the enabled set (only a person changes it, /crew-sets use|off); the summary says 'sets in the file: N; enabled: name or none' - never answer 'no sets' from 'not enabled'; details: crew_help.",
         "set - integrator - values {key: value; null removes a key} - checks every value and writes the working copy; it applies once committed to the settings branch. Keys changed by people only (profile_set, answer_mode, answer_max) are refused.",
         "apply_template - integrator - writes the standard template (families claude/codex/kimi, sets, profile_set codex, tier_max light, branch and worktree names) into the file; the project's own keys win; commit the file or the old state stays.",
         "Planning keys (plan tasks: crew_spawn kind plan): plans_dir (folder of plan files in the repository, default docs/plans), plan_approver (owner = the owner decides with /plans in the window; integrator = the integrator decides with crew_task plan_decide), plan_acceptance (steps of the plan recheck: id, text, required), plan_grades (grades of remarks and which of them keep a round clean), plan_clean_rounds, plan_rounds_max, plan_steps (auto|manual: start the tasks of a landed plan's steps automatically). project_rules - English text appended to the end of every tab's system block. owner_language - the owner's language as an English name (default Russian): every tab writes what the owner reads in it, letters to other tabs included.",
@@ -2946,7 +2951,7 @@ ${lockStillYours(stillHeld.n)}` : "") }
     input: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["guide", "view", "show", "set", "apply_template"] },
+        action: { type: "string", enum: ["guide", "show", "set", "apply_template"] },
         values: { type: "object", description: "set: {key: value}; null removes a key" },
       },
       required: ["action"],
@@ -2960,7 +2965,8 @@ ${lockStillYours(stillHeld.n)}` : "") }
       const local = (p && currentLocal[p.name]) || {}
       const effective = { ...committed, ...local }
       const sourceOf = (k: string) => (k in local ? "local в opencode.jsonc" : k in committed ? (p?.dir ? `файл, ветка ${p.branch}` : "файл (прежняя форма)") : "по умолчанию")
-      const action = String(input.action ?? "") === "view" ? "show" : String(input.action ?? "")
+      if (String(input.action ?? "") === "view") return { content: VIEW_GONE }
+      const action = String(input.action ?? "")
       if (action === "guide") return { content: guideText(effective, sourceOf) }
       if (action === "show") return { content: configShowText(me.directory, projOf(me)) }
       if (action === "apply_template") {
@@ -2995,7 +3001,7 @@ ${lockStillYours(stillHeld.n)}` : "") }
         const links = linkErrorsOfWrite(p.dir, values)
         if (links.length) return { content: `Не записано (файл не тронут):\n${links.map((e) => `- ${e}`).join("\n")}` }
         const file = writeSettings(p.dir, values)
-        return { content: `Записано в ${file}: ${Object.keys(values).join(", ")}. Действует после коммита в ветку ${p.branch} репозитория ${p.repo} (по методологии проекта); до коммита действуют прежние значения — crew_config {action: "view"} покажет незакоммиченное.` }
+        return { content: `Записано в ${file}: ${Object.keys(values).join(", ")}. Действует после коммита в ветку ${p.branch} репозитория ${p.repo} (по методологии проекта); до коммита действуют прежние значения — crew_config {action: "show"} покажет незакоммиченное.` }
       }
       return { content: `Неизвестное действие «${action}».` }
     },

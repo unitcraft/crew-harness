@@ -18,9 +18,10 @@
 // ещё и attention.notify: системное уведомление, когда окно не в фокусе (настройка OpenCode attention.notifications).
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { DOCTOR_FILE, NOTICES, WINDOWS, cardFile, helpFor, log, readJson, verbHelpOf } from "./core.ts"
+import { DOCTOR_FILE, NOTICES, WINDOWS, cardFile, helpFor, log, readJson } from "./core.ts"
 import { readCatalog } from "./model-catalog.ts"
 import { str } from "./dialog-size.ts"
+import { runFlow } from "./sets-flow.ts"
 import { doctorText, formatStatuses, readStatuses } from "./status.ts"
 import { askText } from "./form-wait.ts"
 import { listTasks, loadTask, taskNo } from "./tasks.ts"
@@ -299,47 +300,19 @@ export default {
     // Меню команды: «Таблица» и все глаголы с краткой строкой «что делает и с какими аргументами» (описания — core.ts, VERB_HELP:
     // тот же источник, что у /crew-help и у строки отказов); глагол с аргументами открывает ввод с форматом именно этого глагола
     const verbCommand = (kind: "sets" | "profiles") => async (given?: unknown) => {
-      const name = `/crew-${kind}`
-      const helps = verbHelpOf(kind)
       // АРГУМЕНТЫ СЛЭШ-КОМАНДЫ (проба 2026-10-09, сборка OpenCode 2.0.23): команда окна со slash.arguments = true получает при отправке
       // «/crew-sets use kimi» всё после имени строкой (run("use kimi")) и перехватывает ввод ДО отправки модели вкладки; без флага
       // такая строка уходила модели как обычное сообщение. «/crew-sets» без аргументов, из палитры или из подсказки — пустая строка
-      // или undefined: открывается меню.
+      // или undefined: открывается выбор набора (семьи), ls делает то же. Ход выбора — sets-flow.ts (задача 066, пп. 8–9).
+      const dialog = api.ui?.dialog
+      if (!dialog?.select) return
       const typedArgs = typeof given === "string" ? given.trim() : ""
-      let text: string | undefined = typedArgs || undefined
-      if (text === undefined) {
-        const dialog = api.ui?.dialog
-        // ответ на пустой ввод от отмены не отличить, поэтому таблица — пункт меню, а не пустая строка
-        const pick: string | undefined = await dialog?.select?.({
-          title: name,
-          options: [
-            { title: "Таблица", value: "__table", description: kind === "sets" ? "все наборы, включённый отмечен" : "семья, ступень → модель, окно" },
-            ...helps.map((v) => ({ title: v.verb, value: v.verb, description: `${v.verb}${v.usage ? " " + v.usage : ""} — ${v.what}` })),
-          ],
-        })
-        if (!pick) return
-        if (pick === "__table") text = ""
-        else {
-          const v = helps.find((h) => h.verb === pick)!
-          if (v.bare) text = v.verb
-          else {
-            // ВВОД ТОЛЬКО СТРОКАМИ (дефект 2026-10-08): description у dialog.prompt - функция, чей результат окно вставляет в свой блок;
-            // элемент <text> оттуда роняет окно (TextNodeRenderable only accepts strings). Подсказка со списком глаголов - в заголовке
-            // (строка), формат и пример - в placeholder (строка).
-            const allVerbs = helps.map((h) => h.verb).join(" ")
-            const typed: string | undefined = await dialog?.prompt?.({ title: str(`${name} ${v.verb} · глаголы: ${allVerbs}`), placeholder: str(`${v.verb} ${v.usage} — например: ${v.example}`), value: str(`${v.verb} `) })
-            if (typed === undefined) return
-            const t = typed.trim()
-            const rest = t.startsWith(v.verb) ? t.slice(v.verb.length).trim() : t // строка могла прийти с глаголом или без него
-            if (!rest && /^<[^>]*>/.test(v.usage)) return // нужные аргументы не введены
-            text = `${v.verb}${rest ? " " + rest : ""}`
-          }
-        }
-      }
-      const title = `crew-harness — ${name}${text ? " " + text : ""}`
-      showText({ title, message: "Загрузка…" })
-      const out = await offThread({ kind, dir: tabDir(), text, ...catalogForOp() })
-      showText({ title, message: out })
+      await runFlow(kind, typedArgs, {
+        select: (o) => dialog.select(o),
+        prompt: async (o) => (await dialog.prompt?.(o)) as string | undefined,
+        load: (text) => offThread({ kind, dir: tabDir(), text, ...catalogForOp() }),
+        show: (title, message) => showText({ title, message }),
+      })
     }
     const commands = [
       { id: "crew-harness.status", title: "Crew: кто чего ждёт", group: "Crew", slash: { name: "crew" }, palette: true, run: showStatus },

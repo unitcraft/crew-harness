@@ -117,7 +117,7 @@ bump() // normalises the working file once
 // ---- AC-07: tables, show, use, reset; no turn of the model ----
 cell("the plugin of the server registers no /crew-sets and /crew-profiles (they are window commands, see crew-instant-commands.test)", !commands["crew-sets"] && !commands["crew-profiles"], Object.keys(commands).join())
 let r = await sets("")
-cell("AC-07 /crew-sets without an argument: a table of all sets with the four stages, none enabled", ["default", "cross-kimi", "cross-codex", "kimi-only", "разработка", "приёмка", "планирование", "приёмка плана", "claude/task", "kimi/heavy"].every((w) => r.includes(w)) && /Включён: нет/.test(r) && !r.includes("●  ") , r)
+cell("AC-07 /crew-sets without an argument (task 066: = ls): a row per set with the models of the stages, none enabled", ["default", "cross-kimi", "cross-codex", "kimi-only", "opus/sonnet/haiku", "k3-256k", "gpt-5.5"].every((w) => r.includes(w)) && /Включён: нет/.test(r) && !/^● [a-z]/m.test(r) && !/claude\/task|kimi\/heavy/.test(r), r)
 r = await profs("")
 cell("AC-07 /crew-profiles without an argument: the table family, tier -> model, window", /claude\s+heavy\s+claude-code\/opus\s+контекст 720K · вывод до 64K/.test(r) && /codex\s+heavy\s+openai\/gpt-5\.5\s+контекст 525K · ввод 461K · вывод до 128K/.test(r), r)
 r = await profs("show")

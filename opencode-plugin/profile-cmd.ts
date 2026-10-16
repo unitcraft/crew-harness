@@ -22,8 +22,8 @@ export type CmdDeps = {
   catalogWhy?: string
 }
 
-export const SETS_VERBS = ["show", "use", "off", "set", "unset", "new", "rename", "delete", "check"]
-export const PROFILES_VERBS = ["show", "set", "new", "rename", "delete", "check"]
+export const SETS_VERBS = ["ls", "show", "use", "off", "set", "unset", "new", "rename", "delete", "check"]
+export const PROFILES_VERBS = ["ls", "show", "set", "new", "rename", "delete", "check"]
 /** Глаголы прежнего локального слоя: убраны вместе со слоем (ADR-0014); на них — короткий ответ, а не «неизвестный глагол». */
 const GONE_VERBS = ["save", "reset"]
 
@@ -275,7 +275,7 @@ export function profilesEditVerb(dir: string, verb: string, args: string[]): { o
 
 import path from "node:path"
 import { PROFILES_README_URL } from "./paths.ts"
-import { DEFAULT_SPAWN_MODELS, LIMIT_RU, fmtTokens, limitsText, loadConfig, settingsContext, verbUsageList } from "./core.ts"
+import { DEFAULT_SPAWN_MODELS, LIMIT_RU, VIEW_GONE, fmtTokens, limitsText, loadConfig, settingsContext, verbUsageList } from "./core.ts"
 import { projectFor } from "./settings.ts"
 import { listTasks } from "./tasks.ts"
 import * as W from "./profile-windows.ts"
@@ -313,24 +313,75 @@ function reviewerWindowLine(root: string, model: string): string {
   return `контекст профиля здесь не применяется (приёмка идёт в основной папке): модель ${model} берёт контекст из рукописных и глобальных настроек: ${fieldsText(f)}${src}`
 }
 
+/** Метки ядра набора по четырём этапам: «модель» этапа (для task — модели трёх ступеней через «/»), этапы с одной меткой — в группе. */
+function setGroups(ps: L.PState, n: string, shorts: Map<string, string>): { label: string; stages: string[] }[] {
+  const out: { label: string; stages: string[] }[] = []
+  for (const r of gridOf(ps, (ps.data.sets as any)[n]).filter((x) => (STAGE_ORDER as readonly string[]).includes(x.st))) {
+    const label = !r.eff || !r.cols ? "spawn_models" : [...new Set(r.cols.map((c) => (c.key ? shorts.get(c.key)! : "нет профиля")))].join("/")
+    const g = out.find((x) => x.label === label)
+    if (g) g.stages.push(P.STAGE_RU[r.st])
+    else out.push({ label, stages: [P.STAGE_RU[r.st]] })
+  }
+  return out
+}
+/** Модели ядра всех наборов в порядке появления: ключ «провайдер/id#вариант» → профиль (для коротких имён и расшифровки). */
+function modelsOfSets(ps: L.PState, names: string[]): { keys: string[]; first: Map<string, any> } {
+  const keys: string[] = []
+  const first = new Map<string, any>()
+  for (const n of names)
+    for (const r of gridOf(ps, (ps.data.sets as any)[n]).filter((x) => (STAGE_ORDER as readonly string[]).includes(x.st)))
+      for (const c of r.cols ?? []) if (c.key && !first.has(c.key)) (first.set(c.key, c.p), keys.push(c.key))
+  return { keys, first }
+}
+const groupsText = (g: { label: string; stages: string[] }[]): string[] => (g.length === 1 ? [g[0].label] : g.map((x) => `${x.label}: ${x.stages.join(", ")}`))
+
+/** /crew-sets ls (и команда без слов): набор в строке, ● у включённого, модели вместо «семья/режим», расшифровка коротких имён. */
 export function setsTable(ps: L.PState): string {
   const names = setNames(ps.data)
-  const lines = [`Наборы проекта ${ps.project}. Включён: ${ps.name ? `«${ps.name}» (имя в файле проекта)` : "нет (набор не применяется, модели — по spawn_models)"}.`]
-  if (!names.length) lines.push(`Наборов нет. Готовый пример файла (справочник и наборы) — в разделе README о профилях моделей:\n${PROFILES_README_URL}\nСкопируйте пример в .opencode/crew-harness.json проекта (или передайте агенту: crew_config set) и коммитьте файл.`)
+  const lines = [`Наборы проекта ${ps.project}. Включён: ${ps.name ? `«${ps.name}».` : "нет (модели — по spawn_models)."}`]
+  if (!names.length) lines.push(`Наборов нет. Готовый пример файла (справочник и наборы) — в разделе README о профилях моделей:
+${PROFILES_README_URL}
+Скопируйте пример в .opencode/crew-harness.json проекта (или передайте агенту: crew_config set) и коммитьте файл.`)
   else {
-    const col = (n: string, st: P.Stage) => {
-      const c = P.cellsOf((ps.data.sets as any)[n]).find(([s]) => s === st)
-      return c ? P.cellText(c[1]) : "—"
+    const { keys, first } = modelsOfSets(ps, names)
+    const shorts = shortModelNames(keys)
+    const w0 = Math.max(...names.map((n) => [...n].length)) + 2
+    for (const n of names) {
+      const text = groupsText(setGroups(ps, n, shorts))
+      text.forEach((t, i) => lines.push(i === 0 ? `${n === ps.name ? "● " : "  "}${pad(n, w0)}${t}` : `${" ".repeat(2 + w0)}${t}`))
     }
-    const w0 = Math.max(4, ...names.map((n) => [...n].length))
-    const widths = STAGE_ORDER.map((st) => Math.max([...P.STAGE_RU[st]].length, ...names.map((n) => [...col(n, st)].length)))
-    lines.push(`  ${pad("имя", w0 + 2)}${STAGE_ORDER.map((st, i) => pad(P.STAGE_RU[st], widths[i] + 2)).join("")}`.trimEnd())
-    for (const n of names) lines.push(`${n === ps.name ? "● " : "  "}${pad(n, w0 + 2)}${STAGE_ORDER.map((st, i) => pad(col(n, st), widths[i] + 2)).join("")}`.trimEnd())
-    lines.push(`● — включённый набор. Подробно: ${ref("/crew-sets show [имя]", "show")}; включить: ${ref("/crew-sets use <имя>", "use")}.`)
+    lines.push(...legendOf(keys, first, shorts).lines)
+    lines.push("● — включённый. По этапам: show <имя>; включить: use <имя>.")
   }
-  if (ps.state.message) lines.push(`! ${ps.state.message}`)
-  for (const w of ps.state.warnings) lines.push(`! ${w.text}`)
+  if (ps.state.message) lines.push(`⚠ ${ps.state.message}`)
+  for (const w of ps.state.warnings) lines.push(`⚠ ${w.text}`)
   return lines.join("\n")
+}
+
+/** Данные для выбора в окне (dialog.select): наборы или семьи; с аргументом-набором — его описанные этапы. Строка JSON. */
+function pickJson(ps: L.PState, kind: "sets" | "profiles", args: string[]): string {
+  if (kind === "sets") {
+    if (args[0]) {
+      const set = (ps.data.sets as any)?.[args[0]]
+      return JSON.stringify({ items: P.cellsOf(set).map(([st, c]) => ({ value: st, title: P.STAGE_RU[st], description: P.cellText(c) })) })
+    }
+    const names = setNames(ps.data)
+    const { keys } = modelsOfSets(ps, names)
+    const shorts = shortModelNames(keys)
+    return JSON.stringify({ current: ps.name, items: names.map((n) => ({ value: n, title: `${n === ps.name ? "● " : "  "}${n}`, description: groupsText(setGroups(ps, n, shorts)).join(" · ") })) })
+  }
+  const fams = Object.keys(isObj(ps.data.profiles) ? ps.data.profiles : {}).sort()
+  const keys = fams.flatMap((f) => P.PROFILE_TIERS.map((t) => (ps.data.profiles as any)[f][t]).filter((p) => p && !P.isEmptyProfile(p)).map((p) => P.modelWithVariant(p)))
+  const shorts = shortModelNames(keys)
+  return JSON.stringify({
+    items: fams.map((f) => {
+      const per = P.PROFILE_TIERS.map((t) => {
+        const p = (ps.data.profiles as any)[f][t]
+        return { t, name: p && !P.isEmptyProfile(p) ? shorts.get(P.modelWithVariant(p))! : "пусто" }
+      })
+      return { value: f, title: f, description: per.every((x) => x.name === per[0].name) ? per[0].name : per.map((x) => `${x.t} ${x.name}`).join(" · ") }
+    }),
+  })
 }
 
 export function profilesTable(ps: L.PState): string {
@@ -415,6 +466,19 @@ export function shortModelNames(models: string[]): Map<string, string> {
   return new Map(items.map((x) => [x.k, name(x)]))
 }
 
+/** Расшифровка коротких имён: «имя — полное имя · контекст · вывод»; длинная строка делится на две. */
+function legendOf(keys: string[], first: Map<string, any>, shorts: Map<string, string>): { lines: string[]; models: Map<string, P.Win> } {
+  const lines: string[] = []
+  const models = new Map<string, P.Win>()
+  for (const k of keys) {
+    const p = first.get(k)
+    const head = `  ${shorts.get(k)} — ${P.modelText(p)}`
+    const lim = limitsText(winOf(p))
+    lines.push(...([...`${head} · ${lim}`].length <= SETS_VIEW_WIDTH ? [`${head} · ${lim}`] : [head, `      ${lim}`]))
+    if (!models.has(P.baseModel(p))) models.set(P.baseModel(p), winOf(p))
+  }
+  return { lines, models }
+}
 type Col = { key?: string; p?: any; need?: string }
 type Row = { st: P.Stage; eff?: P.Effective; cols?: Col[] }
 /** Модель каждой ступени задачи (heavy, medium, light) на каждом этапе набора — по тем же правилам, что выбирает запуск сессии. */
@@ -474,15 +538,9 @@ async function briefParts(ps: L.PState, n: string, deps: CmdDeps, opts: { extraK
       else table.push(`${label}${r.cols.map((c, i) => (i < 2 ? pad(nm(c), widths[i]) : nm(c))).join("")}`.trimEnd())
     }
   }
-  const legend: string[] = []
-  const models = new Map<string, P.Win>()
-  for (const k of keys) {
-    const p = first.get(k)
-    const head = `  ${shorts.get(k)} — ${P.modelText(p)}`
-    const lim = limitsText(winOf(p))
-    legend.push(...([...`${head} · ${lim}`].length <= SETS_VIEW_WIDTH ? [`${head} · ${lim}`] : [head, `      ${lim}`]))
-    if (!models.has(P.baseModel(p))) models.set(P.baseModel(p), winOf(p))
-  }
+  const lg = legendOf(keys, first, shorts)
+  const legend = lg.lines
+  const models = lg.models
   const warns: string[] = []
   const errs = P.checkData(ps.data, n).errors
   for (const e of errs) warns.push(fit(`⚠ ${e.text}`))
@@ -742,7 +800,10 @@ async function dispatch(kind: "sets" | "profiles", dir: string, text: string, de
   windowMenu = !!deps.window
   const verbs = kind === "sets" ? SETS_VERBS : PROFILES_VERBS
   const bad = (why: string) => `${why}\n${usageLine(kind)}`
-  if (!verb) {
+  if (verb === "view") return VIEW_GONE
+  if (verb === "__pick") return pickJson(L.profileState(dir), kind, args)
+  if (!verb || verb === "ls" || verb === "list") {
+    if (verb && args.length) return bad("ls без аргументов.")
     const ps = L.profileState(dir)
     return kind === "sets" ? setsTable(ps) : profilesTable(ps)
   }
