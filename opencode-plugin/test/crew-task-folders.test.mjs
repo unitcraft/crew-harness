@@ -105,7 +105,10 @@ await events["session.idle"]({ properties: { sessionID: "sesINTEG1" } })
 await call("crew_role", "sesINTEG1", { role: "integrator" })
 
 // ---- AC-03: a new task — the folder on the task branch, the main copy untouched ----
-const message = "# Задание: Страж повтора номера\n\nСлова владельца (владелец, 2026-10-15): «заводи».\n"
+// the text by the template of the Canon (task 065): the plugin takes it word for word only with the template's sections
+const message = "# Задание: Страж повтора номера\n\nЗаказчик: владелец.\nРепозиторий: proj, ветка main. Дата задания: 2026-10-15.\nИсточник: чат.\n\n" +
+  "## Чего хочет владелец\n\n- «заводи» (владелец, 2026-10-15, чат)\n\n## Что нужно\n\n1. страж ловит повтор номера папки\n\n## Критерии приёмки\n\n- красное правило\n\n" +
+  "## Результат и куда он попадает\n\nнет: результат — код: страж\n\n## Связи\n\nнет: задача одна\n\n## Границы\n\nнет: границ нет\n"
 const a3 = await call("crew_spawn", "sesINTEG1", { title: "Страж повтора номера", goal: "страж ловит повтор номера папки", criteria: "красное правило", message })
 await wait()
 const t59 = task(59)
@@ -190,7 +193,7 @@ const d45 = task(45)
 cell("AC-06: after deliver the task goes to the plugin's review as before", ["submitted", "reviewing"].includes(d45?.status) && d45?.report === "задача готова к вливанию", JSON.stringify({ dl, st: d45?.status }))
 
 // ---- AC-07: a sub-task ----
-const sp = await call("crew_spawn", "sesINTEG1", { part_of: 45, title: "Срочный страж", goal: "починить страж", criteria: "зелёный" })
+const sp = await call("crew_spawn", "sesINTEG1", { part_of: 45, title: "Срочный страж", goal: "починить страж", criteria: "зелёный", owner_words: "- «почини» (владелец, 2026-10-15, чат)", result: "нет: результат — код: страж" })
 await wait()
 const t60 = task(60)
 let msg60 = ""
@@ -215,7 +218,7 @@ cell("AC-10: an open old record with the number refuses with its title", a14.inc
 // REQ-03: assign in a project with folders makes the folder on the task branch too; the tab is the session «исп»
 await hooks.context({ sessionID: "sesTAB2", system: [], model: { id: "x", providerID: "y" } })
 await events["session.idle"]({ properties: { sessionID: "sesTAB2" } })
-const as = await call("crew_task", "sesINTEG1", { action: "assign", session: "sesTAB2", title: "Ручная задача", goal: "сделать руками", criteria: "готово" })
+const as = await call("crew_task", "sesINTEG1", { action: "assign", session: "sesTAB2", title: "Ручная задача", goal: "сделать руками", criteria: "готово", owner_words: "- «сделай» (владелец, 2026-10-15, чат)", result: "нет: результат — код: proj/" })
 const ta = tasks.listTasks("proj").find((x) => x.kind === "assign")
 let msgA = ""
 try {

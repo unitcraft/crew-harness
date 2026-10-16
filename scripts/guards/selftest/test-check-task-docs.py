@@ -727,6 +727,91 @@ def main():
              rh_check({rh + "spec.md": "Статус: черновик\n" + rh_line + "\n```\n## Результат и куда он попадает\nформат X\n```\n"}, [(rh + "spec.md", "result-section")]))
     pr.probe("иной-синтаксис", "результат: current.md в обратных кавычках — не дословная строка промпта",
              rh_check({rh + "spec.md": rh_spec.replace("current.md в этой", "`current.md` в этой")}, [(rh + "spec.md:2", "result-line")]))
+    # ------------------------------------------------------------------------------------------------
+    # образец задания task/message.md (задача 065; Канон, process.md, «Задание task/message.md»): задачи с 2026-10-17 01:00
+    # ------------------------------------------------------------------------------------------------
+    mm = "doc/tasks/066-n/"
+    mm_msg = mm + "task/message.md"
+    mm_text = ("# Задание: Образец\n\nЗаказчик: владелец.\nРепозиторий: crew-harness, ветка main. Дата задания: 2026-10-17.\n"
+               "Источник: чат оркестратора.\n\n## Чего хочет владелец (его слова, 2026-10-17, чат оркестратора)\n\n- «сделай»\n\n"
+               "## Что нужно\n\n1. сделать\n\n## Критерии приёмки\n\n- тест зелёный\n\n## Результат и куда он попадает\n\n"
+               "нет: результат — код: scripts/guards/\n\n## Связи\n\nнет: задача одна\n\n## Границы\n\n- чужое не трогать\n")
+    mm_good = dict(good)
+    mm_good.update({mm_msg: mm_text, mm + "log.md": "2026-10-17 01:00 документ: задание заведено\n"})
+
+    def mm_check(change, expect_red=None, drop=()):
+        """expect_red — список (где, правило) или None (зелёное); drop — файлы, которых в папке нет."""
+        def fn():
+            files = dict(mm_good)
+            files.update(change)
+            for name in drop:
+                files.pop(name, None)
+            proc = check(fresh(files))
+            if expect_red is None:
+                assert proc.returncode == 0 and "FAIL" not in proc.out, proc.out
+            else:
+                stlib.expect(proc, 1, "FAIL: check-task-docs: %d нарушений" % len(expect_red))
+                for where, rule in expect_red:
+                    assert stlib.has_line(proc, "FAIL %s: %s:" % (where, rule)), proc.out
+        return fn
+
+    def mm_real_messages():
+        # настоящие task/message.md и log.md репозитория: задачи до даты правила не судятся (063, 064, 065 и прежние)
+        proc = stlib.run(("git", "ls-files", "-z", "--", "doc/tasks/*/task/message.md", "doc/tasks/*/log.md"), cwd=stlib.REPO, env=env)
+        names = [x for x in proc.out.split("\0") if x]
+        assert any(n.endswith("/task/message.md") for n in names), "мишень: отслеживаемых task/message.md нет"
+        files = {}
+        for name in names:
+            with open(os.path.join(stlib.REPO, *name.split("/")), "rb") as handle:
+                files[name] = handle.read()
+        out = check(fresh(files))
+        assert ": message-" not in out.out, out.out
+
+    def mm_commit_mode():
+        repo = fresh(mm_good)
+        sha = stlib.commit_file(repo, env, mm_msg, mm_text.replace("## Связи\n\nнет: задача одна\n\n", ""), "msg")
+        proc = check(repo, "--commit", sha)
+        stlib.expect(proc, 1, "FAIL: check-task-docs: 1 нарушений")
+        assert stlib.has_line(proc, "FAIL %s: message-section:" % mm_msg), proc.out
+
+    def mm_message_names_rule():
+        files = dict(mm_good)
+        files[mm_msg] = mm_text.replace("## Связи\n\nнет: задача одна\n\n", "")
+        proc = check(fresh(files))
+        for part in ("«Связи»", "process.md", "нет: <почему>"):
+            assert part in proc.out, (part, proc.out)
+
+    no_links = mm_text.replace("## Связи\n\nнет: задача одна\n\n", "")
+    pr.probe("законное", "задание: новая задача по образцу", mm_check({}))
+    pr.probe("законное", "задание: подзадача — первая строка «Часть задачи NNN «…».» перед заголовком",
+             mm_check({mm_msg: "Часть задачи 045 «Реестры».\n\n" + mm_text}))
+    pr.probe("законное", "задание: дата в теле раздела слов владельца, а не в заголовке",
+             mm_check({mm_msg: mm_text.replace(" (его слова, 2026-10-17, чат оркестратора)", "").replace("- «сделай»", "- «сделай» (владелец, 2026-10-17, чат)")}))
+    pr.probe("законное", "задание: дополнительный раздел «Открытые вопросы» после «Границы»",
+             mm_check({mm_msg: mm_text + "\n## Открытые вопросы\n\nВ-01 кому?\n"}))
+    pr.probe("законное", "задание: CRLF и BOM", mm_check({mm_msg: ("﻿" + mm_text.replace("\n", "\r\n")).encode("utf-8")}))
+    pr.probe("законное", "задание: задача заведена раньше 2026-10-17 01:00 (00:59) — прежний вид не судится",
+             mm_check({mm + "log.md": "2026-10-17 00:59 документ: задание заведено\n", mm_msg: "# Задание: Старое\n\n## Цель\n\nтекст\n"}))
+    pr.probe("законное", "задание: папка без log.md — не судится", mm_check({mm_msg: "# Задание: x\n"}, drop=(mm + "log.md",)))
+    pr.probe("законное", "задание: настоящие task/message.md репозитория не судятся новым правилом", mm_real_messages)
+    pr.probe("красная", "задание: нет раздела «Связи»", mm_check({mm_msg: no_links}, [(mm_msg, "message-section")]))
+    pr.probe("красная", "задание: сообщение называет раздел, правило Канона и «нет: <почему>»", mm_message_names_rule)
+    pr.probe("красная", "задание: «Границы» раньше «Связи»",
+             mm_check({mm_msg: no_links + "\n## Связи\n\nнет: задача одна\n"}, [(mm_msg, "message-section")]))
+    pr.probe("красная", "задание: пустой раздел «Критерии приёмки»",
+             mm_check({mm_msg: mm_text.replace("- тест зелёный\n\n", "")}, [(mm_msg + ":15", "message-section")]))
+    pr.probe("красная", "задание: «нет:» без причины",
+             mm_check({mm_msg: mm_text.replace("нет: задача одна", "нет:")}, [(mm_msg + ":25", "message-section")]))
+    pr.probe("красная", "задание: нет заголовка «# Задание: …»",
+             mm_check({mm_msg: mm_text.replace("# Задание: Образец\n\n", "")}, [(mm_msg, "message-title")]))
+    pr.probe("красная", "задание: слова владельца без даты",
+             mm_check({mm_msg: mm_text.replace(" (его слова, 2026-10-17, чат оркестратора)", "")}, [(mm_msg + ":7", "message-owner")]))
+    pr.probe("красная", "задание: граница — задача заведена ровно 2026-10-17 01:00 судится", mm_check({mm_msg: no_links}, [(mm_msg, "message-section")]))
+    pr.probe("красная", "задание: режим коммита судит изменённый task/message.md", mm_commit_mode)
+    pr.probe("иной-синтаксис", "задание: заголовок раздела внутри огороженного кода не считается",
+             mm_check({mm_msg: mm_text.replace("## Связи\n\nнет: задача одна\n", "```\n## Связи\n\nнет: задача одна\n```\n")}, [(mm_msg, "message-section")]))
+    pr.probe("иной-синтаксис", "задание: раздел третьего уровня «### Связи» — не раздел образца",
+             mm_check({mm_msg: mm_text.replace("## Связи", "### Связи")}, [(mm_msg, "message-section")]))
     return pr.done()
 
 
