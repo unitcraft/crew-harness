@@ -136,7 +136,7 @@ cell("the short view carries no path of a settings file and no tier slice or inh
 r = await sets("show same")
 {
   const w = lines(r).filter((l) => l.startsWith("⚠"))
-  cell("warning: the check on the same family as its author is one line naming the stages and the other family", w.length === 1 && /^⚠ приёмка, приёмка сдачи — на той же семье claude, что авторы; есть codex$/.test(w[0]), r)
+  cell("warning: the check on the same family as its author is one line naming the stages and the other family", w.length === 1 && /^⚠ приёмка, приёмка сдачи на той же семье claude, что авторы; есть codex$/.test(w[0]), r)
 }
 r = await sets("show ghost")
 cell("warning: a model out of the catalog of OpenCode is one line", lines(r).some((l) => l === "⚠ модели openai/gpt-9-ghost нет в каталоге OpenCode"), r)
@@ -170,16 +170,16 @@ cell("show without a set enabled still says so", /Набор не включён
 await sets("use kimi-twin")
 r = await sets("use kimi-only")
 {
-  const l = lines(r)
+  // the warnings that do not belong to the stages (a hole in another set, a hand-written window of the main folder) are separate lines
+  const l = lines(r).filter((x) => !/^⚠ (набор «hole»|в основной папке проекта)/.test(x))
   cell("use, windows unchanged: the summary, the stages collapsed, `окна прежние`, the warning, one closing line, the hint (snapshot)",
-    same(l.slice(0, 7), [
+    same(l.slice(0, 6), [
       "Набор «kimi-only» включён (был «kimi-twin»); новые сессии пойдут на нём, перезапуск не нужен.",
       "все этапы: heavy/medium/light → k3-256k",
       "  k3-256k — kimi-code-plan-global/k3-256k",
       "      контекст 220K · вывод до 131072",
       "окна прежние",
       "⚠ все приёмки на той же семье kimi, что авторы; есть claude",
-      l[6],
     ]) && /^Без коммита; файлы окон: записано \d+, снято \d+ \(деревьев задач: \d+\); приёмка — по рукописным настройкам\.$/.test(l[6]) && l[7] === "Подробно: /crew-sets show <этап> или show all" && l.length === 8, r)
 }
 r = await sets("use mixed")

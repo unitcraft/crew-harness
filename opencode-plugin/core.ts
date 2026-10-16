@@ -1277,7 +1277,7 @@ export const limitsText = (w: { context?: number; input?: number; output?: numbe
 // строка «Глаголы …» в отказах profile-cmd.ts, раздел справки (HELP, /crew-help) и меню команд окна (tui.ts). Порядок — как в строке отказов.
 export type VerbHelp = { verb: string; usage: string; what: string; example: string; bare?: boolean }
 export const SETS_VERB_HELP: VerbHelp[] = [
-  { verb: "show", usage: "[имя]", what: "набор подробно: модель, ступень и контекст по этапам; без имени — включённый", example: "show cross-kimi", bare: true },
+  { verb: "show", usage: "[имя] [этап|all]", what: "набор кратко: таблица этапов и ступеней с короткими именами моделей; этап или all — подробно; без имени — включённый", example: "show cross-kimi приёмка", bare: true },
   { verb: "use", usage: "<имя>", what: "включить набор для всех этапов: имя записывается в profile_set файла проекта (без коммита)", example: "use cross-kimi" },
   { verb: "off", usage: "", what: "выключить набор: убрать profile_set из файла проекта; модели новых сессий снова по spawn_models", example: "off", bare: true },
   { verb: "set", usage: "<имя> <этап> <семья>/<ступень>", what: "изменить клетку набора", example: "set cross-kimi develop_accept kimi/heavy" },

@@ -71,8 +71,9 @@ export function applyEdit(dir: string, command: string, mutate: (c: MutateCtx) =
   L.syncSnapshot(dir)
   const files = L.syncProjectFiles(dir)
   commitEdit(ps.project, command, m.what, m.from, m.to)
-  const note = files.written.length || files.removed.length ? ` Файлы окон в деревьях задач пересчитаны: записано ${files.written.length}, снято ${files.removed.length}.` : ""
-  return { ok: true, text: `Готово: ${m.what} (записано в файл проекта, без коммита).${note}`, what: m.what }
+  const note = files.written.length || files.removed.length ? `
+Файлы окон в деревьях задач: записано ${files.written.length}, снято ${files.removed.length}.` : ""
+  return { ok: true, text: `Готово: ${m.what}. Без коммита.${note}`, what: m.what }
 }
 
 const cellsString = (set: any): string =>
@@ -101,7 +102,7 @@ export function setsEditVerb(dir: string, verb: string, args: string[]): { ok: b
       const cell = P.parseCell(cellWord)
       if (typeof cell === "string") return bad(cell)
       if (!isObj(ps.data.sets?.[name])) return bad(`набора «${name}» нет (есть: ${listSets(ps.data)}); новый — /crew-sets new ${name}`)
-      return applyEdit(dir, command, ({ draft, data }) => (L.dSetCell(draft, name, st, cell), { what: `набор «${name}»: этап «${P.STAGE_RU[st]}» — ${P.cellText(cell)}`, from: P.rawCell((data.sets as any)[name], st) ? P.cellText(P.rawCell((data.sets as any)[name], st)) : undefined, to: P.cellText(cell) }))
+      return applyEdit(dir, command, ({ draft, data }) => (L.dSetCell(draft, name, st, cell), { what: `набор «${name}»: этап «${P.STAGE_RU[st]}» — ${P.cellText(cell)}${P.rawCell((data.sets as any)[name], st) ? ` (было ${P.cellText(P.rawCell((data.sets as any)[name], st))})` : ""}`, from: P.rawCell((data.sets as any)[name], st) ? P.cellText(P.rawCell((data.sets as any)[name], st)) : undefined, to: P.cellText(cell) }))
     }
     case "unset": {
       if (args.length !== 2) return bad("нужно: unset <имя> <этап>")
@@ -362,16 +363,187 @@ export function showFamily(ps: L.PState, family?: string): string {
   return lines.join("\n")
 }
 
-export function showSet(ps: L.PState, name: string | undefined, dir: string): string {
+// ---------------------------------------------------------------------------------------------------------------------
+// Краткий вид набора (задача 066): таблица «этап × ступень» с короткими именами моделей, расшифровка, предупреждения одной
+// строкой, подсказка. Подробности (наследование, срезы ступеней, откуда контекст) — по этапу: showSetFull.
+
+/** Ширина диалога /crew (DIALOG_WIDTH в status.ts: импортировать нельзя — тот тянет ядро; самотест сверяет). */
+export const SETS_VIEW_WIDTH = 72
+const fit = (s: string, n = SETS_VIEW_WIDTH): string => {
+  const a = [...s]
+  return a.length > n ? a.slice(0, n - 1).join("") + "…" : s
+}
+const BRANDS = ["claude", "gpt", "gemini", "kimi", "glm", "qwen", "llama", "deepseek", "mistral", "grok"]
+const MODIFIERS = ["fast", "mini", "nano", "pro", "turbo", "preview", "latest", "thinking", "flash", "lite", "max"]
+/** Ступени имени модели от короткой к полной: слово модели; id без провайдера; «провайдер/id». */
+function nameLevels(base: string): string[] {
+  const id = base.includes("/") ? base.slice(base.indexOf("/") + 1) : base
+  const toks = id.split("-")
+  const alpha = (t: string) => /^[a-z]+$/i.test(t)
+  const num = (t: string) => /^\d+(\.\d+)*$/.test(t)
+  const out: string[] = []
+  if (toks.every((t) => alpha(t) || num(t))) {
+    const w = toks.filter(alpha)
+    const brand = (t: string) => BRANDS.includes(t.toLowerCase())
+    if (w.length === 1 && !brand(w[0])) out.push(w[0])
+    else if (w.length === 2 && brand(w[0]) && !brand(w[1]) && !MODIFIERS.includes(w[1].toLowerCase())) out.push(w[1])
+  }
+  for (const x of [id, base]) if (!out.includes(x)) out.push(x)
+  return out
+}
+/**
+ * Короткие имена моделей («провайдер/id[#вариант]» → «luna», «luna·high»). Правило: слово модели без марки, версии и
+ * провайдера; если у двух разных моделей имя одно — обе берут имя ступенью полнее (id без провайдера, затем с провайдером), так
+ * что две разные модели никогда не получают одно имя. Вариант (#усилие) добавляется как «·вариант».
+ */
+export function shortModelNames(models: string[]): Map<string, string> {
+  const items = [...new Set(models)].map((k) => ({ k, lv: nameLevels(P.baseModel(k)), at: 0, v: P.variantOf(k) }))
+  const name = (x: (typeof items)[number]) => x.lv[x.at] + (x.v ? `·${x.v}` : "")
+  for (let pass = 0; pass < 4; pass++) {
+    const by = new Map<string, typeof items>()
+    for (const x of items) by.set(name(x), [...(by.get(name(x)) ?? []), x])
+    let moved = false
+    for (const g of by.values())
+      if (g.length > 1)
+        for (const x of g)
+          if (x.at < x.lv.length - 1) {
+            x.at++
+            moved = true
+          }
+    if (!moved) break
+  }
+  return new Map(items.map((x) => [x.k, name(x)]))
+}
+
+type Col = { key?: string; p?: any; need?: string }
+type Row = { st: P.Stage; eff?: P.Effective; cols?: Col[] }
+/** Модель каждой ступени задачи (heavy, medium, light) на каждом этапе набора — по тем же правилам, что выбирает запуск сессии. */
+function gridOf(ps: L.PState, set: any): Row[] {
+  const cut = (t: P.PTier) => P.clampTier(t, ps.state.bounds)
+  return P.STAGES.map((st) => {
+    const eff = P.effectiveCell(set, st, ps.data.profiles as any)
+    if (!eff) return { st }
+    const cell = eff.cell
+    const fam = (ps.data.profiles as any)?.[cell.family]
+    const colOf = (t: P.PTier): Col => {
+      const p = isObj(fam?.[t]) && !P.isEmptyProfile(fam[t]) ? fam[t] : undefined
+      return p ? { key: P.modelWithVariant(p), p } : { need: `${cell.family}/${t}` }
+    }
+    const cols = P.PROFILE_TIERS.map((t) => colOf(cell.tier === "task" ? cut(eff.lower ? (P.lowerTier(t) as P.PTier) : t).tier : cut(cell.tier as P.PTier).tier))
+    return { st, eff, cols }
+  })
+}
+const tripleOf = (r?: Row): string => (r?.cols ? r.cols.map((c) => c.key ?? "∅").join("|") : "")
+
+const hintLine = (): string => (windowMenu ? "Подробно: пункт «show» меню /crew-sets (show <этап> или show all)" : "Подробно: /crew-sets show <этап> или show all")
+
+type Brief = { table: string[]; legend: string[]; warns: string[]; shorts: Map<string, string> }
+/** Таблица, расшифровка и предупреждения набора n. extraKeys — модели, которым нужны имена в той же раскладке (use); catalog — сверять с каталогом. */
+async function briefParts(ps: L.PState, n: string, deps: CmdDeps, opts: { extraKeys?: string[]; catalog?: boolean } = {}): Promise<Brief> {
+  const set = (ps.data.sets as any)[n]
+  const rows = gridOf(ps, set)
+  const keys: string[] = []
+  const first = new Map<string, any>()
+  for (const r of rows)
+    for (const c of r.cols ?? [])
+      if (c.key && !first.has(c.key)) {
+        first.set(c.key, c.p)
+        keys.push(c.key)
+      }
+  const shorts = shortModelNames([...keys, ...(opts.extraKeys ?? [])])
+  const nm = (c: Col) => (c.key ? shorts.get(c.key)! : "нет профиля")
+  const table: string[] = []
+  const whole = rows.every((r) => r.eff && r.cols && r.cols.every((c) => c.key)) && rows.every((r) => tripleOf(r) === tripleOf(rows[0]))
+  if (whole) {
+    const names = rows[0].cols!.map(nm)
+    table.push(names.every((x) => x === names[0]) ? `все этапы: ${P.PROFILE_TIERS.join("/")} → ${names[0]}` : `все этапы: ${P.PROFILE_TIERS.map((t, i) => `${t} → ${names[i]}`).join(" · ")}`)
+  } else {
+    const w0 = Math.max(...rows.map((r) => [...P.STAGE_RU[r.st]].length), 4) + 2
+    const srcOf = (r: Row) => (r.eff?.how === "inherited" && r.cols ? rows.find((x) => x.st === r.eff!.from) : undefined)
+    const asSrc = (r: Row) => {
+      const s = srcOf(r)
+      return s && tripleOf(s) === tripleOf(r) ? s : undefined
+    }
+    const widths = P.PROFILE_TIERS.map((t, i) => Math.max(t.length, ...rows.filter((r) => r.cols && !asSrc(r)).map((r) => [...nm(r.cols![i])].length)) + 2)
+    table.push(`${pad("этап", w0)}${P.PROFILE_TIERS.map((t, i) => (i < 2 ? pad(t, widths[i]) : t)).join("")}`)
+    for (const r of rows) {
+      const label = pad(P.STAGE_RU[r.st], w0)
+      const src = asSrc(r)
+      if (!r.eff || !r.cols) table.push(`${label}не описан: по spawn_models`)
+      else if (src) table.push(`${label}как «${P.STAGE_RU[src.st]}»`)
+      else table.push(`${label}${r.cols.map((c, i) => (i < 2 ? pad(nm(c), widths[i]) : nm(c))).join("")}`.trimEnd())
+    }
+  }
+  const legend: string[] = []
+  const models = new Map<string, P.Win>()
+  for (const k of keys) {
+    const p = first.get(k)
+    const head = `  ${shorts.get(k)} — ${P.modelText(p)}`
+    const lim = limitsText(winOf(p))
+    legend.push(...([...`${head} · ${lim}`].length <= SETS_VIEW_WIDTH ? [`${head} · ${lim}`] : [head, `      ${lim}`]))
+    if (!models.has(P.baseModel(p))) models.set(P.baseModel(p), winOf(p))
+  }
+  const warns: string[] = []
+  const errs = P.checkData(ps.data, n).errors
+  for (const e of errs) warns.push(fit(`⚠ ${e.text}`))
+  if (!errs.length) {
+    const need = new Map<string, string[]>()
+    for (const r of rows) for (const c of r.cols ?? []) if (c.need && !(need.get(c.need) ?? []).includes(P.STAGE_RU[r.st])) need.set(c.need, [...(need.get(c.need) ?? []), P.STAGE_RU[r.st]])
+    for (const [k, st] of need) warns.push(fit(`⚠ нет профиля ${k} (после среза ступеней): ${st.map((x) => `«${x}»`).join(", ")}`))
+  }
+  const groups = new Map<string, P.SameFamilyPair[]>()
+  for (const pr of P.sameFamilyPairs(set, ps.data.profiles as any)) groups.set(`${pr.family}|${pr.other}`, [...(groups.get(`${pr.family}|${pr.other}`) ?? []), pr])
+  for (const g of groups.values()) {
+    const { family, other } = g[0]
+    if (g.length === 1) warns.push(fit(`⚠ «${P.STAGE_RU[g[0].check]}» на той же семье ${family}, что «${P.STAGE_RU[g[0].author]}»; есть ${other}`))
+    else if (g.length === Object.keys(P.AUTHOR_OF).length) warns.push(fit(`⚠ все приёмки на той же семье ${family}, что авторы; есть ${other}`))
+    else warns.push(fit(`⚠ ${g.slice(0, 2).map((x) => P.STAGE_RU[x.check]).join(", ")}${g.length > 2 ? ` и ещё ${g.length - 2}` : ""} на той же семье ${family}, что авторы; есть ${other}`))
+  }
+  if (opts.catalog !== false) {
+    const cat = await catalogOf(deps)
+    if (cat)
+      for (const m of models.keys()) {
+        const [prov, ...rest] = m.split("/")
+        if (!cat.some((x) => x.providerID === prov && x.modelID === rest.join("/"))) warns.push(fit(`⚠ модели ${m} нет в каталоге OpenCode`))
+      }
+  }
+  return { table, legend, warns, shorts }
+}
+
+/** Разбор слов show: [набор] [этап|all]; набор, если первое слово — имя набора (имя набора главнее одноимённого слова этапа). */
+function parseShowArgs(ps: L.PState, args: string[]): { set?: string; only?: P.Stage | "all" } | { error: string } {
+  let set: string | undefined
+  let rest = args
+  if (args.length && setNames(ps.data).includes(args[0])) {
+    set = args[0]
+    rest = args.slice(1)
+  }
+  if (!rest.length) return { set }
+  const word = rest.join("-")
+  if (word.toLowerCase() === "all") return { set, only: "all" }
+  const st = P.stageOfWord(word)
+  if (st) return { set, only: st }
+  if (!set && rest.length === 1) return { error: `Набора или этапа «${rest[0]}» нет (наборы: ${listSets(ps.data)}; этапы: ${P.STAGES_TEXT}, или all).` }
+  return { error: `Этап «${rest.join(" ")}» не годится: ${P.STAGES_TEXT} (или русские названия), либо all.` }
+}
+
+export async function showSet(ps: L.PState, name: string | undefined, dir: string, deps: CmdDeps = {}, only?: P.Stage | "all"): Promise<string> {
   const n = name ?? ps.name
   if (!n) return `Набор не включён (имени нет в файле проекта). Покажи любой: ${ref("/crew-sets show <имя>", "show")}; включить: ${ref("/crew-sets use <имя>", "use")}.`
   const set = (ps.data.sets as any)?.[n]
   if (!isObj(set)) return `Набора «${n}» нет (есть: ${listSets(ps.data)}).`
+  if (only) return showSetFull(ps, n, set, dir, only)
+  const b = await briefParts(ps, n, deps)
+  return [fit(`Набор «${n}» — ${n === ps.name ? "включён" : "выключен"}`), ...b.table, ...b.legend, ...b.warns, hintLine()].join("\n")
+}
+
+/** Подробный вид: прежний полный текст набора (all) или один его этап. */
+function showSetFull(ps: L.PState, n: string, set: any, dir: string, only: P.Stage | "all"): string {
   const root = mainFolder(dir)
   const lines = [`Набор «${n}»${n === ps.name ? ` — включён (имя в файле проекта)` : " — не включён"}:`]
   const bounds = ps.state.bounds
   const cut = (t: P.PTier) => P.clampTier(t, bounds)
-  for (const st of P.STAGES) {
+  for (const st of only === "all" ? P.STAGES : [only]) {
     const eff = P.effectiveCell(set, st, ps.data.profiles as any)
     const cell = eff?.cell
     if (!eff || !cell) {
@@ -403,8 +575,9 @@ export function showSet(ps: L.PState, name: string | undefined, dir: string): st
       if (p) lines.push(front ? `      контекст профиля в рабочем дереве задачи: ${limitsText(winOf(p))}` : `      ${winLine(P.baseModel(p))}`)
     }
   }
-  for (const e of P.checkData(ps.data, n).errors) lines.push(`! ${e.text}`)
-  for (const t of P.sameFamilyNotes(set, ps.data.profiles as any)) lines.push(`  заметка: ${t}`)
+  const mine = (t: string) => only === "all" || t.includes(`этап «${P.STAGE_RU[only]}»`) || !/этап «/.test(t)
+  for (const e of P.checkData(ps.data, n).errors) if (mine(e.text)) lines.push(`! ${e.text}`)
+  for (const pr of P.sameFamilyPairs(set, ps.data.profiles as any)) if (only === "all" || pr.check === only || pr.author === only) lines.push(`  заметка: ${pr.text}`)
   return lines.join("\n")
 }
 
@@ -438,7 +611,8 @@ async function windowWarnings(ps: L.PState, models: Map<string, P.Win>, dir: str
   return [...W.windowNotes(mainFolder(dir), W.qualifying(ps.project, listTasks(ps.project)), models), ...(await catalogWarnings(models, deps, full))]
 }
 
-function updownLines(before: Map<string, P.Win>, after: Map<string, P.Win>, root: string): string[] {
+/** Окна «было → стало» по короткому имени модели; ничего не изменилось — одна строка «окна прежние». Уменьшенный контекст — строка ⚠. */
+function windowLines(before: Map<string, P.Win>, after: Map<string, P.Win>, root: string, shorts: Map<string, string>): string[] {
   const out: string[] = []
   const reserved = W.reservedOf(root)?.value
   const fmt = (w: P.Win | undefined) => (w ? limitsText(w) : "контекста нет в рукописных настройках")
@@ -447,13 +621,14 @@ function updownLines(before: Map<string, P.Win>, after: Map<string, P.Win>, root
     const b = before.get(m) ?? chainAsWin(root, m)
     const a = after.get(m) ?? chainAsWin(root, m)
     if (JSON.stringify(b) === JSON.stringify(a)) continue
-    out.push(`  ${m}: ${fmt(b)} → ${after.has(m) ? fmt(a) : `${fmt(a)} (набор контекст не задаёт — из рукописных настроек)`}`)
+    const label = shorts.get(m) ?? m
+    out.push(`окно ${label}: ${fmt(b)} → ${after.has(m) ? fmt(a) : `${fmt(a)} (из рукописных настроек)`}`)
     const bt = b ? (b.input ?? b.context) : undefined
     const at = a ? (a.input ?? a.context) : undefined
-    if (bt !== undefined && at !== undefined && at < bt) shrunk.push(`${m} (порог сжатия ${reserved !== undefined ? `${fmtTokens(bt - reserved)} → ${fmtTokens(at - reserved)}` : `контекст ${fmtTokens(bt)} → ${fmtTokens(at)}`})`)
+    if (bt !== undefined && at !== undefined && at < bt) shrunk.push(`${label} (порог сжатия ${reserved !== undefined ? `${fmtTokens(bt - reserved)} → ${fmtTokens(at - reserved)}` : `контекст ${fmtTokens(bt)} → ${fmtTokens(at)}`})`)
   }
-  if (!out.length) out.push("  контексты моделей этого набора совпадают с прежними — файл пределов не изменился")
-  if (shrunk.length) out.push(`Контекст уменьшен: ${shrunk.join(", ")}. Вкладки, чей контекст уже больше нового порога, сожмутся на следующем ходе (порог — контекст минус compaction.reserved; у моделей с вводом — ввод минус reserved).`)
+  if (!out.length) out.push("окна прежние")
+  if (shrunk.length) out.push(`⚠ Контекст уменьшен: ${shrunk.join(", ")}; вкладки выше порога сожмутся на следующем ходе.`)
   return out
 }
 
@@ -472,16 +647,6 @@ function reviewerModels(data: P.Data, name: string, bounds?: P.Bounds): string[]
   return [...out]
 }
 
-/** Что изменилось в окнах при смене набора (use): было → стало, окно приёмки, заметки об окнах. */
-function changeBody(before: L.PState, after: L.PState, dir: string): string[] {
-  const root = mainFolder(dir)
-  const am = windowsOfActive(after)
-  const lines = ["Контекст сессий в рабочих деревьях задач (было → стало), применится на следующем ходе каждой сессии:", ...updownLines(windowsOfActive(before), am, root)]
-  if (after.state.usable) for (const m of reviewerModels(after.state.usable.data, after.state.usable.name, after.state.bounds)) lines.push(`Приёмка и приёмка плана: ${reviewerWindowLine(root, m)}.`)
-  for (const w of W.windowNotes(root, W.qualifying(after.project, listTasks(after.project)), am)) lines.push(`Предупреждение: ${w}`)
-  return lines
-}
-
 async function useSet(dir: string, name: string | undefined, deps: CmdDeps): Promise<string> {
   const ps = L.profileState(dir)
   const command = "crew-sets use"
@@ -497,21 +662,23 @@ async function useSet(dir: string, name: string | undefined, deps: CmdDeps): Pro
   const files = L.syncProjectFiles(dir)
   const after = L.profileState(dir)
   commitEdit(ps.project, command, "включён набор", ps.name, name)
+  const root = mainFolder(dir)
   const models = windowsOfActive(after)
-  const lines: string[] = []
-  lines.push(`Включён набор «${name}» (записано в profile_set файла проекта, без коммита; ${ps.name ? `было «${ps.name}»` : "набор не был включён"}). Перезапуск не нужен.`)
-  const cellOf = (st: P.Stage) => {
-    const c = P.cellsOf((after.data.sets as any)[name]).find(([s]) => s === st)
-    return c ? P.cellText(c[1]) : "не описан (spawn_models)"
-  }
-  lines.push("Этапы: " + STAGE_ORDER.map((st) => `${P.STAGE_RU[st]} — ${cellOf(st)}`).join("; ") + ".")
-  lines.push(...changeBody(ps, after, dir))
+  const wasModels = windowsOfActive(ps)
+  // первая строка — итог; ниже только изменившееся: этапы и модели (одинаковое схлопнуто), окна «было → стало», ⚠, одна строка про файлы
+  const b = await briefParts(after, name, deps, { extraKeys: [...wasModels.keys(), ...models.keys()], catalog: false })
+  const lines: string[] = [`Набор «${name}» включён${ps.name ? ` (был «${ps.name}»)` : ""}; новые сессии пойдут на нём, перезапуск не нужен.`]
+  lines.push(...b.table, ...b.legend)
+  lines.push(...windowLines(wasModels, models, root, b.shorts))
+  lines.push(...b.warns)
   const wts = W.qualifying(ps.project, listTasks(ps.project))
-  lines.push(`Файлы окон: записано ${files.written.length}, снято ${files.removed.length}; задач с рабочим деревом сейчас ${wts.length}. Задачи без рабочего дерева (исполнитель в основной папке) окон профиля не получают.`)
   const cfg = loadConfig(dir)
-  if (cfg.reviewer === "integrator" && P.cellsOf((after.data.sets as any)[name]).some(([s, c]) => (s === "develop_accept" || s === "plan_accept") && c.tier !== "task")) lines.push("Предупреждение: в проекте reviewer: integrator — приёмку ведёт вкладка интегратора на её модели; набор приёмку не меняет (модель открытой вкладки плагин не переключает).")
-  for (const w of after.state.warnings) lines.push(`Предупреждение: ${w.text}`)
-  for (const w of await catalogWarnings(models, deps, false)) lines.push(`Предупреждение: ${w}`)
+  if (cfg.reviewer === "integrator" && P.cellsOf((after.data.sets as any)[name]).some(([s, c]) => (s === "develop_accept" || s === "plan_accept") && c.tier !== "task")) lines.push("⚠ в проекте reviewer: integrator — приёмку ведёт вкладка интегратора на её модели; набор приёмку не меняет (модель открытой вкладки плагин не переключает).")
+  for (const x of after.state.warnings) lines.push(`⚠ ${x.text}`)
+  for (const x of await catalogWarnings(models, deps, false)) lines.push(`⚠ ${x}`)
+  for (const x of W.windowNotes(root, wts, models)) lines.push(`⚠ ${x}`)
+  lines.push(`Без коммита; файлы окон: записано ${files.written.length}, снято ${files.removed.length} (деревьев задач: ${wts.length}); приёмка — по рукописным настройкам.`)
+  lines.push(hintLine())
   return lines.join("\n")
 }
 
@@ -527,39 +694,44 @@ function offSet(dir: string): string {
   L.syncSnapshot(dir)
   L.syncProjectFiles(dir)
   commitEdit(ps.project, command, "набор выключен", ps.name, undefined)
-  return `Набор «${ps.name}» выключен: profile_set убран из файла проекта (рабочая копия, без коммита; если имя уже закоммичено, оно вернётся из коммита — закоммитьте файл или верните набор командой use). Новые сессии идут по spawn_models. Перезапуск не нужен; наборы и справочник на месте, включить снова: ${ref("/crew-sets use <имя>", "use")}.`
+  return [
+    `Набор «${ps.name}» выключен; новые сессии пойдут по spawn_models, перезапуск не нужен.`,
+    "profile_set убран из файла проекта без коммита: если имя уже закоммичено, оно вернётся из коммита — закоммитьте файл.",
+    `Наборы и справочник на месте; включить снова: ${ref("/crew-sets use <имя>", "use")}.`,
+  ].join("\n")
 }
 
 async function checkReport(dir: string, deps: CmdDeps): Promise<string> {
   const ps = L.profileState(dir)
   const root = mainFolder(dir)
-  const lines = [`Проверка профилей проекта ${ps.project}${deps.version ? ` (OpenCode ${deps.version})` : ""}: данные не меняются.`]
-  if (deps.catalogNote) lines.push(`Каталог моделей OpenCode: ${deps.catalogNote}.`)
-  lines.push(`Включён: ${ps.name ? `«${ps.name}» (файл проекта), строка ${ps.state.row} таблицы исходов` : "набор не включён"}.`)
-  if (ps.state.message) lines.push(`! ${ps.state.message}`)
+  const warn: string[] = []
+  const info: string[] = [`Проект ${ps.project}${deps.version ? ` (OpenCode ${deps.version})` : ""}; проверка ничего не меняет.`]
+  if (deps.catalogNote) info.push(`Каталог моделей OpenCode: ${deps.catalogNote}.`)
+  info.push(`Включён: ${ps.name ? `«${ps.name}» (файл проекта), строка ${ps.state.row} таблицы исходов` : "набор не включён"}.`)
+  if (ps.state.message) warn.push(ps.state.message)
   const all = P.checkData(ps.data, ps.name)
-  for (const e of all.errors) lines.push(`! ${e.text}`)
-  for (const w of all.warnings) lines.push(`! ${w.text}`)
+  for (const e of all.errors) warn.push(e.text)
+  for (const w of all.warnings) warn.push(w.text)
   // пустые записи, на которые кто-то ссылается (пустую ступень без ссылок не называем); конфликты окон других наборов
   for (const name of setNames(ps.data)) {
     if (name === ps.name) continue
-    for (const e of P.emptyRefs(ps.data, name)) lines.push(`! ${e.text}`)
-    for (const c of P.windowsOfSet(ps.data, name).conflicts) lines.push(`! ${c.text} — use этого набора откажет`)
+    for (const e of P.emptyRefs(ps.data, name)) warn.push(e.text)
+    for (const c of P.windowsOfSet(ps.data, name).conflicts) warn.push(`${c.text} — use этого набора откажет`)
   }
   // расхождение с spawn_models (набор default повторяет прежнее поведение только при равенстве)
   const cfg = loadConfig(dir)
   for (const t of P.PROFILE_TIERS) {
     const p = (ps.data.profiles as any)?.claude?.[t]
     const want = cfg.spawnModels[t] ?? DEFAULT_SPAWN_MODELS[t]
-    if (isObj(p) && !P.isEmptyProfile(p) && P.baseModel(p) !== want) lines.push(`! модель профиля claude/${t} (${p.model}) не равна spawn_models.${t} (${want}): набор с клетками claude/task изменит выбор моделей новых сессий`)
+    if (isObj(p) && !P.isEmptyProfile(p) && P.baseModel(p) !== want) warn.push(`модель профиля claude/${t} (${p.model}) не равна spawn_models.${t} (${want}): набор с клетками claude/task изменит выбор моделей новых сессий`)
   }
   const models = windowsOfActive(ps)
-  for (const w of await windowWarnings(ps, models, dir, deps, true)) lines.push(`! ${w}`)
-  for (const p of L.problemsOf(ps)) if (!lines.some((l) => l.includes(p))) lines.push(`! ${p}`)
+  for (const w of await windowWarnings(ps, models, dir, deps, true)) warn.push(w)
+  for (const p of L.problemsOf(ps)) if (!warn.some((l) => l.includes(p))) warn.push(p)
   const old = L.legacyLayerText(ps.project)
-  if (old) lines.push(`! ${old}`)
+  if (old) warn.push(old)
+  const lines = [warn.length ? `Проверка профилей: замечаний ${warn.length}, ниже.` : "Проверка профилей: замечаний нет.", ...warn.map((w) => `⚠ ${w}`), ...info]
   if (ps.state.usable) for (const m of reviewerModels(ps.state.usable.data, ps.state.usable.name, ps.state.bounds)) lines.push(`Приёмка и приёмка плана: ${reviewerWindowLine(root, m)}.`)
-  if (lines.length === 2) lines.push("Замечаний нет.")
   return lines.join("\n")
 }
 
@@ -578,9 +750,11 @@ async function dispatch(kind: "sets" | "profiles", dir: string, text: string, de
   if (!verbs.includes(verb)) return bad(`Неизвестный глагол «${verb}».`)
   switch (verb) {
     case "show": {
-      if (args.length > 1) return bad("show принимает не больше одного имени.")
       const ps = L.profileState(dir)
-      return kind === "sets" ? showSet(ps, args[0], dir) : showFamily(ps, args[0])
+      if (kind === "profiles") return args.length > 1 ? bad("show принимает не больше одного имени.") : showFamily(ps, args[0])
+      const a = parseShowArgs(ps, args)
+      if ("error" in a) return a.error
+      return showSet(ps, a.set, dir, deps, a.only)
     }
     case "use":
       if (kind !== "sets" || args.length !== 1) return bad("use принимает ровно одно имя набора.")

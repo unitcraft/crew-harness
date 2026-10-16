@@ -308,17 +308,19 @@ export function effectiveCell(set: any, stage: Stage, profiles?: Families): Effe
  * же семье, что автор, хотя в справочнике есть другая. Только заметка: модель по набору не меняется (запись «семья та же:
  * причина» делает владелец, плагин причины не знает).
  */
-export function sameFamilyNotes(set: any, profiles?: Families): string[] {
-  const out: string[] = []
+export type SameFamilyPair = { check: Stage; author: Stage; family: string; other: string; text: string }
+export function sameFamilyPairs(set: any, profiles?: Families): SameFamilyPair[] {
+  const out: SameFamilyPair[] = []
   for (const [check, author] of Object.entries(AUTHOR_OF) as [Stage, Stage][]) {
     const c = effectiveCell(set, check, profiles)
     const a = effectiveCell(set, author, profiles)
     if (!c || !a || c.cell.family !== a.cell.family) continue
     const other = otherFamily(profiles, a.cell)
-    if (other) out.push(`«${STAGE_RU[check]}» идёт на той же семье ${c.cell.family}, что «${STAGE_RU[author]}»; в справочнике есть другая (${other}) — правило проверки на другой семье моделей`)
+    if (other) out.push({ check, author, family: c.cell.family, other, text: `«${STAGE_RU[check]}» идёт на той же семье ${c.cell.family}, что «${STAGE_RU[author]}»; в справочнике есть другая (${other}) — правило проверки на другой семье моделей` })
   }
   return out
 }
+export const sameFamilyNotes = (set: any, profiles?: Families): string[] => sameFamilyPairs(set, profiles).map((p) => p.text)
 
 // ---- границы ступеней проекта (задача 016) --------------------------------------------------------------------------------
 

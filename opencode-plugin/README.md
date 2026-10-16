@@ -782,7 +782,7 @@ JSON in `.opencode/crew-harness.json` (any reader sees them without this plugin;
   the tier of the task, then one lower); the plugin stores and shows them, the sessions of the specification and delivery are
   still run by the orchestrator. A cell is `{"family": "claude", "tier": "heavy"}`; the tier `task` means «the tier of the
   task» (the default behaviour). A stage without a cell (and nothing to inherit) keeps the model of `spawn_models`.
-  A check stage without a cell goes by `spawn_models` (the owner's decision of task 003). The old name `accept` stays a readable alias of `develop_accept` (the settings file of this repository still uses it; nothing rewrites it). A check on the same family as its author while another family exists is only noted by `/crew-sets show` (the rule «the
+  A check stage without a cell goes by `spawn_models` (the owner's decision of task 003). The old name `accept` stays a readable alias of `develop_accept` (the settings file of this repository still uses it; nothing rewrites it). A check on the same family as its author while another family exists is only warned about by `/crew-sets show` with one ⚠ line (the rule «the
   reviewer is on another model family», ADR-0013). Names of sets: lowercase Latin
   letters, digits, dashes, up to 40 characters, not a word of the commands or a word kept from the removed ones (`use`, `reset`, `all`, `list`, `show`, `set`,
   `unset`, `new`, `rename`, `delete`, `check`, `save`, `from`).
@@ -812,8 +812,8 @@ the set is switched off, the task is accepted or cancelled, or its folder is gon
 
 **The window of a profile applies only to sessions in the worktree of a task (development, planning).** The review
 sessions (`develop_accept`, `plan_accept`) run in the main folder: their model comes from the set, but their window comes from the
-owner's general hand-written settings for that model; `use`, `check` and `/crew-sets show` say so and print the number
-and the file. The root of the project and the main folders get no file, and a task without a worktree gets none. A
+owner's general hand-written settings for that model; `check` and the detailed `/crew-sets show <stage>` say so and print the number
+and the file; `use` has one short line about it. The root of the project and the main folders get no file, and a task without a worktree gets none. A
 hand-written `.opencode/opencode.jsonc` in the same folder is stronger than the file of the plugin there (the plugin
 names such a case, with the file and the value, in `use`, `check` and `crew_doctor`); an explicit `autoCompactWindow` of
 the `claude-code` provider is stronger than the window for Claude Code and is never rewritten — only named. For a model
@@ -835,8 +835,9 @@ Commands of the window (answers are shown in a dialog at once, no turn of the mo
 | Command | What it does |
 |---|---|
 | `/crew-sets` | a table of all sets, the enabled one marked |
-| `/crew-sets show [name]` | a set in detail: model, tier and effective window per stage; the enabled one if no name |
-| `/crew-sets use <name>` | enable a set (writes `profile_set` into the file of the project): what changed, the windows «was → became», the compaction of smaller windows |
+| `/crew-sets show [name]` | a set in short: a table stage x tier (heavy, medium, light) with short model names (`luna`, `opus`), `как «stage»` for an inherited stage that does not differ, one line `all stages: …` when all are alike, a legend (full name, context, output; once per model), one ⚠ line per warning (the check on the same family as its author, a model out of the catalog, a missing profile), a hint; the enabled one if no name. Width of the window `/crew`, no line is wrapped |
+| `/crew-sets show [name] <stage>` / `show [name] all` | the detailed view: everything the table hides — inheritance and its tier, the clamp by the tier bounds, the tiers of the task, the window of the profile in the worktree, the window of the review sessions with the number and the file, the errors and the full notes; `all` is the whole former text. A set named like a stage wins as the first word; `show <name> <stage>` is unambiguous |
+| `/crew-sets use <name>` | enable a set (writes `profile_set` into the file of the project). The first line is the result («the set is on, was «…», new sessions go on it, no restart»); below only what changed: the stages and models (alike are collapsed), the windows «was → became» per short name or `windows unchanged`, ⚠ lines (a smaller window is compacted on the next turn of a tab: the threshold is the context minus `compaction.reserved`, for a model with an input limit the input minus `reserved`), one line about the files of the windows (a task without a worktree gets none) and the review windows (taken from the hand-written settings) |
 | `/crew-sets set <name> <stage> <family>/<tier>` | change a cell (stages: `develop`, `develop_accept` (also `accept`), `plan`, `plan_accept`, `spec`, `spec_accept`, `delivery`, `delivery_accept` or Russian words) |
 | `/crew-sets unset <name> <stage>` | remove a cell: the stage goes back to `spawn_models` |
 | `/crew-sets new <name> [from <other>]`, `rename <a> <b>`, `delete <name>` | create (empty or a copy), rename (the enabled name follows), delete (not the enabled one) |
@@ -844,7 +845,9 @@ Commands of the window (answers are shown in a dialog at once, no turn of the mo
 | `/crew-profiles show [<family>]` | the table in detail or one family with the sets that refer to it |
 | `/crew-profiles set <family> <tier\|all> <model> <context> output=<n> [input=<n>]` | create or change a record; `all` changes the three tiers in one check |
 | `/crew-profiles new <family> [from <other>]`, `rename <a> <b>`, `delete <family> [<tier>]` | three empty records or a copy; rename updates every set; delete is refused while a set refers to the record |
-| `check` (both commands) | the whole table and the sets against the catalog of OpenCode («not checked» when the catalog is unavailable), hand-written windows, the explicit threshold, empty records, links; changes nothing |
+| `check` (both commands) | the first line is the summary (`no remarks` or their count), then ⚠ lines and the facts about the environment: the whole table and the sets against the catalog of OpenCode («not checked» when the catalog is unavailable), hand-written windows, the explicit threshold, empty records, links; changes nothing |
+
+The answers follow one pattern: the first line is the result in one sentence (`Готово: …` for an edit, with «was» for `set`; the set is on for `use`; the summary for `check`), below only what changed or what needs attention. `/crew-sets show` is the place for the rest.
 
 Edits act at once, without a commit and without any layer between: every command rewrites the three keys (`model_profiles`,
 `profile_sets`, `profile_set`) of the file `.opencode/crew-harness.json` in the working copy of the settings folder, in one
