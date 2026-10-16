@@ -275,6 +275,16 @@ export default {
       const card = route ? readJson<any>(cardFile(route)) : undefined
       return card?.directory || process.cwd()
     }
+    // имя проекта из карточки вкладки: по нему, а не по папке вкладки, команды окна находят проект и его настройки (задача 067)
+    const tabProject = (): string | undefined => {
+      let route: string | undefined
+      try {
+        const r = api.ui?.router?.current?.()
+        route = r?.type === "session" ? r.sessionID : undefined
+      } catch {}
+      const card = route ? readJson<any>(cardFile(route)) : undefined
+      return typeof card?.project === "string" && card.project ? card.project : undefined
+    }
     const showHelp = () => {
       let text: string
       try {
@@ -310,7 +320,7 @@ export default {
       await runFlow(kind, typedArgs, {
         select: (o) => dialog.select(o),
         prompt: async (o) => (await dialog.prompt?.(o)) as string | undefined,
-        load: (text) => offThread({ kind, dir: tabDir(), text, ...catalogForOp() }),
+        load: (text) => offThread({ kind, dir: tabDir(), project: tabProject(), text, ...catalogForOp() }),
         show: (title, message) => showText({ title, message }),
       })
     }

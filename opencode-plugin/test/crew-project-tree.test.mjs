@@ -176,12 +176,18 @@ cell("crew_config apply_template from a tree of a virtual project writes the set
 const fst = L.profileState(foreignTree)
 const fw = L.writeDraft(fst, L.draftOf(fst))
 cell("a tab outside every project: the write is refused with its own text", fw.ok === false && /папка вкладки .* не относится к проекту/.test(fw.error ?? "") && !/прежней формой/.test(fw.error ?? ""), JSON.stringify(fw))
-const fuse = await Cmd.runSetsCommand(foreignTree, "use kimi")
-cell("a tab outside every project: /crew-sets use says so", /не относится к проекту/.test(fuse) && !/прежней формой/.test(fuse), fuse)
+const fuse = await ops.execOp({ kind: "sets", dir: foreignTree, project: "foreignrepo", text: "use kimi" })
+cell("a tab outside every project: /crew-sets use says so (the window command)", /не относится к проекту/.test(fuse) && !/прежней формой/.test(fuse) && !/набора/.test(fuse), fuse)
 const fset = await call("sesForeignTree", { action: "set", values: { inflight_limit: 3 } })
 cell("a tab outside every project: crew_config set says so", /не относится к проекту/.test(fset) && !/прежней формой/.test(fset), fset)
+await tools.crew_role.execute({ role: "integrator", force: true }, { sessionID: "sesForeignMain" })
 const ftmpl = await call("sesForeignMain", { action: "apply_template" })
-cell("a tab outside every project in the main folder of its repository: the same text (the integrator role may be missing, then the role answer)", /не относится к проекту|только интегратор/.test(ftmpl) && !/прежней формой/.test(ftmpl), ftmpl)
+cell("a tab outside every project, in the main folder of its repository: the same text", /не относится к проекту/.test(ftmpl) && !/прежней формой/.test(ftmpl), ftmpl)
+
+const fshow = await call("sesForeignTree", { action: "show" })
+cell("a tab outside every project: crew_config show says the folder is not a project folder", /Папка вкладки .* не относится к проекту плагина/.test(fshow) && !/прежняя форма/.test(fshow), fshow.slice(0, 300))
+const { mainTreeOf } = await import("../settings.ts")
+cell("mainTreeOf: a tree gives its main folder, a plain folder gives nothing", same(mainTreeOf(alphaTree), alpha) && same(mainTreeOf(alpha), alpha) && mainTreeOf(path.join(tmp, "nowhere")) === undefined, JSON.stringify([mainTreeOf(alphaTree), mainTreeOf(path.join(tmp, "nowhere"))]))
 
 // ---- the old form of the options ----
 core.setProjects(oldProjects, {})

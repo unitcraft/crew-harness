@@ -25,7 +25,17 @@ background); a task session may run with no window at all. Formerly `opencode-pe
   (`nova.integrator`). A plain role means the sender's own project; `project.role` reaches another
   project; `all` is every open tab of the own project, `project.all` of another one; a session id
   (`ses_...`) reaches exactly that tab. A tab belongs to the project with the longest matching
-  root, a tab outside every root to the project named after its repository;
+  root, a tab outside every root to the project named after its repository. **The project of a tab
+  and its settings folder are found by the project, not by the folder the tab stands in** (task 067):
+  the card of the tab names its project (`cards/<session>.json`, field `project`), and a tab that
+  moved into the working tree of a task — a tree lies outside the project root — keeps it. Without
+  the name the plugin asks git which repository the folder belongs to (`git rev-parse
+  --git-common-dir` points at the `.git` of the main working folder; the folder name is never
+  guessed) and takes the project whose root holds that main folder. Reading and writing
+  (`/crew-sets use`, `/crew-profiles`, `crew_config show|set|apply_template`, the window files) go to
+  the settings folder of the main working folder of the project; the committed copy of the file in
+  a task branch does not stand in for it. A tab in a folder that belongs to no project is refused
+  with «папка вкладки … не относится к проекту», not with the old-form text;
 - **project settings live in a settings repository**, not in the tab's working copy (a project can
   be a folder of many repositories, like `C:/work/nova`). The plugin options list settings
   folders — any folder inside a git repository; the file `.opencode/crew-harness.json` there
@@ -48,7 +58,7 @@ background); a task session may run with no window at all. Formerly `opencode-pe
   The plugin option `retention_days` (default 7, `0` is off; formerly `keep_days`) makes a once-a-day pass remove delivered letters, empty mailbox folders and the cards and statuses of closed tabs older than that; open questions, undelivered letters, open tabs and task records are never touched.
 
   `local` holds machine-specific values on top of the file. The old options form
-  `{ "nova": "C:/work/nova" }` still works (settings are then walked up from the tab);
+  `{ "nova": "C:/work/nova" }` still works (settings are then walked up from the tab folder, or from the project root when the tab stands in a working tree outside it);
   `crew_doctor` suggests the new form. **`crew_config`**: `guide` — a questionnaire for the owner on
   every key (current value, options, recommendation, why; asked in text); `show` — what applies and
   where from (default, the committed file, `local`), plus uncommitted edits; `set {values}` — the

@@ -10,7 +10,7 @@ import os from "node:os"
 import path from "node:path"
 import { BASE as CREW_BASE, dataDir } from "./paths.ts"
 import { rotateLog } from "./housekeeping.ts"
-import { type Projects, parseProjects as parseProjectsWith, projectFor, rawSettingsFor, readSettingsFolder, workingSettings, writeSettings } from "./settings.ts"
+import { type Projects, outsideProject, parseProjects as parseProjectsWith, projectFor, rawSettingsFor, readSettingsFolder, workingSettings, writeSettings } from "./settings.ts"
 import { SCHEMA, guideText, invalid } from "./config-schema.ts"
 import { type AnswerMap, answerNotes, normalizeAnswerMax, normalizeAnswerMode } from "./answer-parse.ts"
 import { EXTRA_FIELDS_MAX, EXTRA_ID_RE, RESERVED_FIELD_IDS, OWNER_LANGUAGE_RE, DEFAULT_OWNER_LANGUAGE } from "./config-schema.ts"
@@ -87,8 +87,9 @@ export const settingsContext = (): { projects: Projects; local: Record<string, a
 
 /** Действующие настройки проекта каталога dir: значение и откуда оно (crew_config show и команда окна /crew-config). */
 export function configShowText(dir: string, fallbackName = "?", compact = false): string {
-  const p = projectFor(dir, currentProjects)
-  const committed = p?.dir ? readSettingsFolder(p.dir).raw : rawSettingsFor(dir, currentProjects, {})
+  // fallbackName — имя проекта из карточки вкладки: по нему проект находится, даже если вкладка стоит в рабочем дереве вне корня
+  const p = projectFor(dir, currentProjects, fallbackName)
+  const committed = p?.dir ? readSettingsFolder(p.dir).raw : rawSettingsFor(dir, currentProjects, {}, fallbackName)
   const local = (p && currentLocal[p.name]) || {}
   const effective = { ...committed, ...local }
   const sourceOf = (k: string) => (k in local ? "local в opencode.jsonc" : k in committed ? (p?.dir ? `файл, ветка ${p.branch}` : "файл (прежняя форма)") : "по умолчанию")
@@ -104,7 +105,11 @@ export function configShowText(dir: string, fallbackName = "?", compact = false)
   // профили — не JSON в строку, а таблицы в блоке «Профили моделей» ниже; здесь только указание на них
   const profileKeys = ["model_profiles", "profile_sets"]
   const rows = SCHEMA.map((s) => `  ${s.key} = ${profileKeys.includes(s.key) && effective[s.key] !== undefined ? `(${Object.keys(effective[s.key] ?? {}).length} шт., таблицей ниже)` : s.key === "profile_set" && effective[s.key] === undefined ? "(не включён)" : shown(effective[s.key] ?? s.default)} — ${sourceOf(s.key)}${answerNote(s.key)}`)
-  const head = p?.dir ? `Проект ${p.name}: настройки ${path.join(p.dir, ".opencode", "crew-harness.json")}, читается ветка ${p.branch} (${p.repo}).` : `Проект ${fallbackName}: прежняя форма опций — настройки из рабочей копии вверх от каталога вкладки.`
+  const head = p?.dir
+    ? `Проект ${p.name}: настройки ${path.join(p.dir, ".opencode", "crew-harness.json")}, читается ветка ${p.branch} (${p.repo}).`
+    : p
+      ? `Проект ${p.name}: прежняя форма опций — настройки из рабочей копии вверх от корня проекта.`
+      : `Папка вкладки ${dir.replace(/\\/g, "/")} не относится к проекту плагина (ни корень, ни рабочее дерево репозитория проекта): настройки — из файла вверх от этой папки, если он есть, иначе по умолчанию.`
   let pending = ""
   if (p?.dir) {
     const work = workingSettings(p.dir).raw
@@ -113,7 +118,7 @@ export function configShowText(dir: string, fallbackName = "?", compact = false)
   }
   let prof = ""
   try {
-    prof = profilesShow(dir)
+    prof = profilesShow(dir, fallbackName)
   } catch (e) {
     log(`profiles show failed: ${e}`)
   }
@@ -140,9 +145,10 @@ function repoName(dir: string): string {
   return name
 }
 
-export function projectOf(dir: string, projects: Projects): string {
+/** Проект каталога; name — проект из карточки вкладки (задача 067: по имени, а не по папке, где вкладка сейчас стоит). */
+export function projectOf(dir: string, projects: Projects, name?: string): string {
   if (!dir) return "local"
-  return projectFor(dir, projects)?.name ?? projectSlug(repoName(dir))
+  return projectFor(dir, projects, name)?.name ?? projectSlug(repoName(dir))
 }
 
 // Адрес: `ses_…` (сессия), `all` / `<проект>.all` (все окна проекта), `<роль>` / `<проект>.<роль>`.
@@ -2888,7 +2894,7 @@ ${lockStillYours(stillHeld.n)}` : "") }
       if (action === "reassign") {
         // модель по включённому набору на момент передачи (REQ-32): набор и профиль проверяются ДО снятия прежнего исполнителя,
         // чтобы отказ не оставил задачу без исполнителя; без набора — модель записи, как прежде
-        const chosen = resolveStageProfile(profileState(t.directory).state, stageOfLaunch(t, "executor"), { inputTier: t.tier })
+        const chosen = resolveStageProfile(profileState(t.directory, t.project).state, stageOfLaunch(t, "executor"), { inputTier: t.tier })
         if (chosen && "refuse" in chosen) return { content: `Не передано: ${chosen.refuse}. Прежний исполнитель остался на задаче.` }
         // уточнение цели — в то же первое письмо новой сессии (задача 057), а не вторым письмом после старта
         const refine = String(input.text ?? "").trim()
@@ -2960,8 +2966,8 @@ ${lockStillYours(stillHeld.n)}` : "") }
     execute: async (input: any, sessionID: string) => {
       const me = await host.touch(sessionID)
       if (!me) return { content: "Настройки видит только вкладка." }
-      const p = projectFor(me.directory, projects)
-      const committed = p?.dir ? readSettingsFolder(p.dir).raw : rawSettingsFor(me.directory, projects, {})
+      const p = projectFor(me.directory, projects, me.project) // проект — по карточке вкладки и по репозиторию, не только по её папке (задача 067)
+      const committed = p?.dir ? readSettingsFolder(p.dir).raw : rawSettingsFor(me.directory, projects, {}, me.project)
       const local = (p && currentLocal[p.name]) || {}
       const effective = { ...committed, ...local }
       const sourceOf = (k: string) => (k in local ? "local в opencode.jsonc" : k in committed ? (p?.dir ? `файл, ветка ${p.branch}` : "файл (прежняя форма)") : "по умолчанию")
@@ -2971,7 +2977,8 @@ ${lockStillYours(stillHeld.n)}` : "") }
       if (action === "show") return { content: configShowText(me.directory, projOf(me)) }
       if (action === "apply_template") {
         if (!isIntegrator(me)) return notIntegrator(me)
-        if (!p?.dir) return { content: `Проект ${projOf(me)} задан прежней формой опций: записать некуда. Переведи его на репозиторий настроек — в opencode.jsonc "projects": ["<папка с .opencode/crew-harness.json>"].` }
+        if (!p) return { content: outsideProject(me.directory).replace(/^./, (c) => c.toUpperCase()) + "." }
+        if (!p.dir) return { content: `Проект ${p.name} задан прежней формой опций: записать некуда. Переведи его на репозиторий настроек — в opencode.jsonc "projects": ["<папка с .opencode/crew-harness.json>"].` }
         const { values, added } = mergeTemplate(workingSettings(p.dir).raw)
         if (!added.length) return { content: `Шаблон ничего не добавил: все его ключи у проекта уже есть (файл не тронут).` }
         const file = writeSettings(p.dir, values)
@@ -2979,7 +2986,8 @@ ${lockStillYours(stillHeld.n)}` : "") }
       }
       if (action === "set") {
         if (!isIntegrator(me)) return notIntegrator(me)
-        if (!p?.dir) return { content: `Проект ${projOf(me)} задан прежней формой опций: записать некуда. Переведи его на репозиторий настроек — в opencode.jsonc "projects": ["<папка с .opencode/crew-harness.json>"].` }
+        if (!p) return { content: outsideProject(me.directory).replace(/^./, (c) => c.toUpperCase()) + "." }
+        if (!p.dir) return { content: `Проект ${p.name} задан прежней формой опций: записать некуда. Переведи его на репозиторий настроек — в opencode.jsonc "projects": ["<папка с .opencode/crew-harness.json>"].` }
         const values = input.values
         if (!values || typeof values !== "object" || Array.isArray(values) || !Object.keys(values).length) return { content: "Нужно values: {ключ: значение}." }
         if (Object.prototype.hasOwnProperty.call(values, "profile_set")) return { content: "Не записано (файл не тронут):\n- profile_set: имя набора меняет человек (команда окна /crew-sets use либо правка файла); вызовом set его не записывают" }

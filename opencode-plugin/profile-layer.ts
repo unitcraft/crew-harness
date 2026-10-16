@@ -11,7 +11,7 @@ import { createHash } from "node:crypto"
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { BASE } from "./paths.ts"
-import { SETTINGS_FILE, projectFor, rawSettingsFor, workingSettings, writeSettings } from "./settings.ts"
+import { SETTINGS_FILE, legacyBase, outsideProject, projectFor, rawSettingsFor, workingSettings, writeSettings } from "./settings.ts"
 import { limitsText, log, projectOf, settingsContext } from "./core.ts"
 import * as P from "./profiles.ts"
 import { type Task, listTasks, taskNo } from "./tasks.ts"
@@ -115,6 +115,7 @@ function workingKeys(folder: string): Record<string, any> | "bad" | undefined {
 
 /** Записать черновик в рабочую копию файла проекта одной атомарной записью (три ключа; остальное не трогается). */
 export function writeDraft(ps: PState, d: Draft): { ok: true; file: string } | { ok: false; error: string } {
+  if (!ps.known) return { ok: false, error: outsideProject(ps.tab) }
   if (!ps.folder) return { ok: false, error: "проект задан прежней формой опций: писать некуда (переведи его на папку настроек)" }
   // ключ, заданный поправкой local в опциях плагина, сильнее файла: правка файла ничего бы не изменила
   const over = settingsContext().local[ps.project] ?? {}
@@ -130,6 +131,10 @@ export function writeDraft(ps: PState, d: Draft): { ok: true; file: string } | {
 
 export type PState = {
   project: string
+  /** папка вкладки, по которой спрошено состояние */
+  tab: string
+  /** проект найден среди проектов плагина (по имени из карточки, по корню или по основной папке репозитория дерева) */
+  known: boolean
   /** папка настроек проекта (новая форма опций; прежняя — папка найденного файла) или undefined */
   folder?: string
   /** настройки проекта; три ключа профилей — из рабочей копии файла */
@@ -153,12 +158,14 @@ export function writeSnapshot(project: string, s: P.Snapshot) {
 }
 export const dropSnapshot = (project: string) => void rmSync(snapshotFile(project), { force: true })
 
-/** Состояние профилей проекта каталога dir: файл, действующие данные, снимок и строка таблицы исходов. */
-export function profileState(dir0: string): PState {
+/** Состояние профилей проекта каталога dir: файл, действующие данные, снимок и строка таблицы исходов.
+ *  project — имя проекта из карточки вкладки или задачи (задача 067): проект и папка настроек находятся по нему и по репозиторию
+ *  дерева, а не по папке, в которой вкладка стоит; рабочее дерево задачи читает и пишет основную папку проекта. */
+export function profileState(dir0: string, projectName?: string): PState {
   const { projects, local } = settingsContext()
-  const project = projectOf(dir0, projects)
-  const p = projectFor(dir0, projects)
-  let raw = rawSettingsFor(dir0, projects, local) ?? {}
+  const project = projectOf(dir0, projects, projectName)
+  const p = projectFor(dir0, projects, projectName)
+  let raw = rawSettingsFor(dir0, projects, local, projectName) ?? {}
   const w = p?.dir ? workingKeys(p.dir) : undefined
   if (isObj(w)) {
     const over = (p && local[p.name]) || {}
@@ -174,16 +181,16 @@ export function profileState(dir0: string): PState {
   const snapshot = readSnapshot(project)
   const state = P.stateRow(name, data, snapshot)
   state.bounds = P.boundsOf(raw)
-  return { project, folder: p?.dir ?? (p ? legacyFolder(dir0) : undefined), raw, data, name, snapshot, state }
+  return { project, tab: dir0, known: !!p, folder: p?.dir ?? (p ? legacyFolder(legacyBase(dir0, p)) : undefined), raw, data, name, snapshot, state }
 }
 
 /** Проход сервиса: снимок создаётся на первом допустимом проходе при включённом наборе и обновляется, отбрасывается на строках 1 и 7.
  *  Возвращает состояние. */
-export function syncSnapshot(dir0: string): PState {
-  const st = profileState(dir0)
+export function syncSnapshot(dir0: string, projectName?: string): PState {
+  const st = profileState(dir0, projectName)
   if (st.state.row === 2 && st.name) writeSnapshot(st.project, P.snapshotOf(st.data, st.name))
   else if (st.state.row === 1 || st.state.row === 7) dropSnapshot(st.project)
-  return profileState(dir0)
+  return profileState(dir0, projectName)
 }
 
 /** Подпись входных данных: когда меняется, файлы окон и снимок пересчитываются. */
@@ -216,8 +223,8 @@ export function problemsOf(ps: PState): string[] {
 // ---- показ и проверка связей для crew_config ---------------------------------------------------------------------------
 
 /** Итог по профилям одной строкой: сколько наборов в файле и какой включён (два разных случая: наборов нет / набор не включён). */
-export function profilesSummary(dir0: string): string {
-  const ps = profileState(dir0)
+export function profilesSummary(dir0: string, projectName?: string): string {
+  const ps = profileState(dir0, projectName)
   const names = Object.keys(isObj(ps.data.sets) ? ps.data.sets : {})
   const on = ps.name ? `включён: ${ps.name}` : "включён: нет"
   const tail = !names.length ? "наборов в файле нет вообще" : ps.name ? "" : "наборы есть, но ни один не включён (модели новых сессий — по spawn_models)"
@@ -225,14 +232,14 @@ export function profilesSummary(dir0: string): string {
 }
 
 /** Блок «Профили моделей» для crew_config show и /crew-config (пусто, если у проекта нет профилей, наборов и имени). */
-export function profilesShow(dir0: string): string {
-  const ps = profileState(dir0)
+export function profilesShow(dir0: string, projectName?: string): string {
+  const ps = profileState(dir0, projectName)
   const has = (v: any) => isObj(v) && Object.keys(v).length > 0
   const b = ps.state.bounds
   if (!has(ps.data.profiles) && !has(ps.data.sets) && !ps.name && !b?.min && !b?.max && !b?.error) return ""
   const lines: string[] = []
   if (b?.min || b?.max) lines.push(`Границы ступеней: ${b.min ? `не ниже ${b.min}` : ""}${b.min && b.max ? ", " : ""}${b.max ? `не выше ${b.max}` : ""} (tier_min, tier_max).`)
-  lines.push(profilesSummary(dir0))
+  lines.push(profilesSummary(dir0, projectName))
   lines.push(`  состояние: ${ps.name ? `включён набор «${ps.name}» (файл проекта)` : "набор не включён"}${ps.state.row === 2 || ps.state.row === 1 ? "" : `; строка ${ps.state.row} таблицы исходов`}.`)
   if (has(ps.data.profiles)) {
     lines.push("Справочник (семья, ступень -> модель · вариант, окно):")
@@ -266,14 +273,14 @@ export function linkErrorsOfWrite(folder: string, values: Record<string, any>): 
 // ---- файлы окон по состоянию ------------------------------------------------------------------------------------------
 
 /** Файлы окон проекта привести к состоянию: записать, обновить, снять (проход сервиса, use, правка). */
-export function syncProjectFiles(dir0: string): SyncReport & { plan: WindowPlan } {
-  const ps = profileState(dir0)
+export function syncProjectFiles(dir0: string, projectName?: string): SyncReport & { plan: WindowPlan } {
+  const ps = profileState(dir0, projectName)
   const plan = windowPlanOf(ps.state)
   return { ...syncWindows(ps.project, listTasks(ps.project), plan), plan }
 }
 /** Файл окон для одной задачи до первого хода её сессии (REQ-22); сбой записи не срывает запуск. */
 export function syncTaskFile(t: Task): SyncReport {
-  const ps = profileState(t.directory)
+  const ps = profileState(t.directory, t.project)
   return syncTaskWindow(ps.project, t, windowPlanOf(ps.state))
 }
 
@@ -285,7 +292,7 @@ export function profileProblems(service = false): string[] {
     const dir0 = p.dir ?? p.rootPath
     if (!dir0) continue
     try {
-      const ps = profileState(dir0)
+      const ps = profileState(dir0, p.name)
       const lay = service ? legacyLayerNote(ps.project) : legacyLayerText(ps.project)
       if (lay) out.push(lay)
       out.push(...problemsOf(ps), ...windowProblems(ps.project, listTasks(ps.project), windowPlanOf(ps.state)))

@@ -719,7 +719,7 @@ export default {
         saveCard(card)
         mine.set(card.session, card)
         // след профиля приёмки (задача 003): набор, этап, семья, ступень; окно у приёмки — общие настройки (general)
-        const rch = t.review_model ? resolveStageProfile(profileState(t.directory).state, stageOfLaunch(t, "reviewer"), { taskTier: t.tier }) : undefined
+        const rch = t.review_model ? resolveStageProfile(profileState(t.directory, t.project).state, stageOfLaunch(t, "reviewer"), { taskTier: t.tier }) : undefined
         if (rch && !("refuse" in rch) && rch.model === model) stampProfile(t, "reviewer", t.reviewer, rch, false)
         else if (!t.review_model) stampClamp(t, "reviewer", t.reviewer, stageOfLaunch(t, "reviewer"), model, tierCut.tier, tierCut.from)
         await reviewerAssigned(t, card)
@@ -825,7 +825,7 @@ export default {
         }
         // ПРОФИЛЬ ПРИЁМКИ ПО ВКЛЮЧЁННОМУ НАБОРУ (задача 003). Ветка reviewer: integrator выше от набора не зависит. Этап описан, а
         // профиль не находится — приёмщика нет: задача остаётся «сдана», интегратору одно письмо (постоянный id), строка в crew_doctor.
-        const pstate = profileState(t.directory).state
+        const pstate = profileState(t.directory, t.project).state
         const rstage = stageOfLaunch(t, "reviewer")
         const chosen = resolveStageProfile(pstate, rstage, { taskTier: t.tier })
         if (chosen && "refuse" in chosen) {
@@ -892,16 +892,16 @@ export default {
         const dir = p.dir ?? p.rootPath
         if (!dir) continue
         try {
-          const ps = profileState(dir)
+          const ps = profileState(dir, p.name)
           const sig = stateSignature(ps)
           if (profileSigs.get(p.name) !== sig) {
             changed = true
             profileSigs.set(p.name, sig)
-            const after = syncSnapshot(dir)
+            const after = syncSnapshot(dir, p.name)
             profileSigs.set(p.name, stateSignature(after))
           }
           // файлы окон в деревьях задач: первый проход после старта безусловно, дальше — сверка с набором и задачами (задача 003, REQ-09)
-          const rep = syncProjectFiles(dir)
+          const rep = syncProjectFiles(dir, p.name)
           if (rep.written.length || rep.removed.length) log(`profile windows of ${p.name}: written ${rep.written.length}, removed ${rep.removed.length}`)
           for (const e of rep.errors) log(`profile windows of ${p.name}: ${e}`)
         } catch (e) {
@@ -1367,7 +1367,7 @@ export default {
           saveTask(pt)
         }
         // модель шагов — этап разработки набора (задача 003): отказ — шаги в этот проход не ставятся, автору одно письмо
-        const stepChoice = resolveStageProfile(profileState(pt.directory).state, "develop", { autoPlan: true })
+        const stepChoice = resolveStageProfile(profileState(pt.directory, pt.project).state, "develop", { autoPlan: true })
         if (stepChoice && "refuse" in stepChoice) {
           const rid = `plan-steps-refused-${safeKey(pt.project)}-${pt.n}-${safeKey(stepChoice.refuse).slice(0, 60)}`
           if (!letterExists(pt.author, rid)) postLetter(pt.author, { id: rid, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: pt.author, time: now(), text: `План ${pt.plan.n}: шаги не ставятся — ${stepChoice.refuse}. Исправь профили или переключи набор (/crew-sets, /crew-profiles); шаги встанут сами.` })

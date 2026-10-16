@@ -261,19 +261,65 @@ export function parseProjects(opt: any, log: (s: string) => void = () => {}): Pr
   return out.sort((a, b) => b.root.length - a.root.length)
 }
 
-/** Проект каталога: самый длинный подходящий корень. */
-export function projectFor(dir: string, projects: Projects): Project | undefined {
+// ПРОЕКТ ВКЛАДКИ (задача 067, 2026-10-17). Папка вкладки — не проект: интегратор переезжает в рабочие деревья задач (session_move), а
+// дерево лежит вне корня проекта, и по префиксу корня проект не находился (`/crew-sets use` отвечал «задан прежней формой опций»).
+// Проект ищется так: 1) по имени — карточка вкладки хранит поле project (плагин пишет его сам; у вкладки задачи или приёмки это
+// проект задачи, где бы ни лежало дерево); 2) по корню — самый длинный подходящий корень, как раньше; 3) по основной папке
+// репозитория: рабочее дерево знает, чьё оно — `git rev-parse --git-common-dir` указывает на `.git` основного репозитория
+// (ссылку делает сам git, имя папки дерева не угадывается), и проектом дерева будет проект, в корне которого лежит эта основная папка.
+// `git worktree list` даёт то же, но спрашивает репозиторий проекта, а дереву нужен ответ из его собственной папки.
+const mainTrees = new Map<string, { at: number; main: string | undefined }>()
+const TREE_MISS_MS = 30_000 // «не в репозитории» перепроверяется (папка могла стать репозиторием); найденное не меняется
+/** Основная рабочая папка репозитория, к которому подключена папка dir (для основной папки — она сама); нет репозитория — undefined. */
+export function mainTreeOf(dir: string, now = Date.now()): string | undefined {
   if (!dir) return undefined
-  const d = normPath(dir)
-  return projects.find((p) => d === p.root || d.startsWith(p.root + "/"))
+  const key = path.resolve(dir)
+  const hit = mainTrees.get(key)
+  if (hit && (hit.main || now - hit.at < TREE_MISS_MS)) return hit.main
+  let main: string | undefined
+  try {
+    const common = path.resolve(key, git(key, ["rev-parse", "--git-common-dir"]).trim())
+    // основная рабочая папка — над `.git`; у голого репозитория и подмодуля такой папки нет — проекта у них не бывает
+    if (path.basename(common).toLowerCase() === ".git") main = canon(path.dirname(common))
+  } catch {}
+  mainTrees.set(key, { at: now, main })
+  return main
 }
 
+const rootMatch = (d: string, projects: Projects) => projects.find((p) => d === p.root || d.startsWith(p.root + "/"))
+
+/** Проект вкладки: имя из карточки (name), иначе самый длинный подходящий корень каталога, иначе корень основной папки репозитория каталога. */
+export function projectFor(dir: string, projects: Projects, name?: string): Project | undefined {
+  const n = typeof name === "string" ? name.trim().toLowerCase() : ""
+  if (n) {
+    const byName = projects.find((p) => p.name === n)
+    if (byName) return byName
+  }
+  if (!dir) return undefined
+  const hit = rootMatch(normPath(dir), projects)
+  if (hit) return hit
+  const main = mainTreeOf(dir)
+  return main ? rootMatch(normPath(main), projects) : undefined
+}
+
+/** Каталог dir лежит под корнем проекта p (а не найден по имени или как рабочее дерево вне корня). */
+export const inRoot = (dir: string, p: Project): boolean => {
+  const d = normPath(dir)
+  return d === p.root || d.startsWith(p.root + "/")
+}
+/** Откуда читать и искать файл настроек прежней формы: сам каталог под корнем, иначе корень проекта (дерево ветки не подменяет основную папку). */
+export const legacyBase = (dir: string, p: Project | undefined): string => (p && !inRoot(dir, p) ? (p.rootPath ?? p.root) : dir)
+
+/** Папка вкладки не относится ни к одному проекту плагина: фраза отказа, с маленькой буквы. */
+export const outsideProject = (dir: string): string =>
+  `папка вкладки ${dir.replace(/\\/g, "/")} не относится к проекту: она вне корней проектов плагина (opencode.jsonc) и не рабочее дерево репозитория проекта — открой вкладку в папке проекта или в рабочем дереве его задачи`
+
 /** Сырые настройки проекта: файл из репозитория настроек (+ локальная поправка) или прежний поиск вверх от каталога. */
-export function rawSettingsFor(dir: string, projects: Projects, local: Record<string, any> = {}): any {
-  const p = projectFor(dir, projects)
+export function rawSettingsFor(dir: string, projects: Projects, local: Record<string, any> = {}, name?: string): any {
+  const p = projectFor(dir, projects, name)
   let raw: any
   if (p?.dir) raw = readSettingsFolder(p.dir).raw
-  else raw = legacyWalk(dir)
+  else raw = legacyWalk(legacyBase(dir, p))
   const over = p ? local[p.name] : undefined
   return over && typeof over === "object" ? { ...raw, ...over } : raw
 }
