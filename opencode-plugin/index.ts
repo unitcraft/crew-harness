@@ -131,13 +131,14 @@ import { DECISION_RU, readApprovals, removeApproval } from "./approvals.ts"
 import { runRetention } from "./retention.ts"
 import { allSteps, nextPlanNumber, parsePlan, stepDeps } from "./plans.ts"
 import { dropWatch, openWatchesBySession, pollWatches, requestWatch, watchesOf } from "./watch.ts"
-import { endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
+import { endOfTurn, endsWithQuestion, markNotified, removeStatus, saveStatus, statusOf } from "./status.ts"
+import { clearGate, GATE_LETTER, gateOf, markGateLetter, noteGate } from "./gate-stop.ts"
 import { type Task, taskRef, acceptedAt, ago, byPriority, createTask, rounds, slugify, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
 import { countedOpen, waitingCleanup, ACCEPTED_REMINDERS_MAX, acceptedReminderId, acceptedReminders, letterTime } from "./tasks.ts"
 import { EXECUTOR_CODE, sesLabel, sessionOf, sessionRef, taskNo } from "./tasks.ts"
 import { profileProblems, profileState, stateSignature, syncProjectFiles, syncSnapshot, syncTaskFile } from "./profile-layer.ts"
 import { cellOfState, clampTier, resolveStageProfile, splitLaunchModel, stageOfLaunch, tabFitsCell } from "./profiles.ts"
-import { allForms, cleanupForms, formReminders, formTick, settleOnRequest, startFormWait } from "./form-wait.ts"
+import { allForms, cleanupForms, formReminders, formTick, pendingForms, settleOnRequest, startFormWait } from "./form-wait.ts"
 import { systemToast } from "./toast-win.ts"
 import { probeEnabled, startEventProbe } from "./event-probe.ts"
 import { catalogModels, writeCatalog } from "./model-catalog.ts"
@@ -1063,7 +1064,8 @@ export default {
             ends.set(c.session, { at, end })
           }
         }
-        const s = statusOf({ card: c, busy, busySince: c.busySince, end, asked: asked.get(c.session) ?? [], askedStale: askedStale.get(c.session) ?? [], now: t, watches: ws, ...(staleSince ? { staleSince } : {}), ...(hungSince ? { hungSince } : {}) })
+        const gate = await gateStep(c, busy, end, formOpen.has(c.session), t)
+        const s = statusOf({ card: c, busy, busySince: c.busySince, end, asked: asked.get(c.session) ?? [], askedStale: askedStale.get(c.session) ?? [], now: t, watches: ws, ...(staleSince ? { staleSince } : {}), ...(hungSince ? { hungSince } : {}), ...(gate ? { gate } : {}) })
         const prev = saveStatus(s)
         // РЕЖИМЫ ОТВЕТА НА ВОПРОСЫ (задача 007, ADR-0010): решение принимается раньше блока уведомлений. Режимы выключены —
         // ничего не читается и прежний путь идёт как был. handled — «ждёт вас» по этому ходу подавлено целиком; остаток вопросов
@@ -1094,6 +1096,39 @@ export default {
         markNotified(c.session, t)
         log(`owner wanted by ${c.session}${fresh ? "" : " (reminder)"}`)
       }
+    }
+
+    // ВОРОТА БЕЗ ВОПРОСА (задача 062; владелец, 2026-10-16: «меня никто ничего не спросил, это ошибка в работе»). Вкладка записала log_line
+    // «ворота», а вопроса владельцу у неё нет (gate-stop.ts хранит остановку; log_line запоминает её, только если вопросника нет). Ход кончился,
+    // вопрос не задан (нет записи forms/ и нет «?» в конце хода) — вкладке ОДНО письмо «задай вопрос через question» и отметка «⚠ ждёт вашего
+    // решения, вопроса нет» в сводках (возвращается gate для statusOf). Снимают: открытый вопрос, «?» в конце хода, слово владельца. Фраза
+    // ожидания («до вашего решения») вопросом не считается. Идущий ход — без письма: вопрос может быть задан в нём. Письмо — раз на остановку.
+    async function gateStep(c: Card, busy: boolean, end: { at: number; text: string; ownerAfter: boolean } | undefined, formIsOpen: boolean, t: number): Promise<{ at: number } | undefined> {
+      const g = gateOf(c.session, undefined, t)
+      if (!g) return undefined
+      if (formIsOpen) {
+        clearGate(c.session)
+        return undefined
+      }
+      // слово владельца после записи снимает остановку и в идущем ходе (после его слова вкладка работает); ownerAfter не годится: слово,
+      // с которого начался ход, тоже «после прошлого конца»
+      if ((await ownerWordAfter(c.session, g.at)) > 0) {
+        clearGate(c.session)
+        return undefined
+      }
+      if (busy || !end || end.at <= g.at) return undefined
+      const e = endOfTurn(end.text)
+      if (e && !e.wait) {
+        clearGate(c.session)
+        return undefined
+      }
+      if (!g.letter) {
+        const id = `gate-${safeKey(c.session)}-${g.at}`
+        if (!letterExistsFor(c.session, id)) postLetter(c.session, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: c.session, time: t, text: GATE_LETTER })
+        markGateLetter(c.session, t)
+        log(`gate stop without a question: ${c.session} reminded`)
+      }
+      return { at: g.at }
     }
 
     // ВОПРОС ВЛАДЕЛЬЦУ НЕ ПРОПАДАЕТ МОЛЧА (задача 040, form-wait.ts). Раз в FORM_EVERY_MS: (1) запись о вопросе встроенного вопросника открыта,
@@ -1797,13 +1832,14 @@ export default {
           type: "text",
           text:
             `crew-harness: You are the crew-harness tab with the role "${card.role}" in project ${projOf(card)} (address ${keyOf(card)}), repository ${card.repo || "?"}, session ${card.session}. ` +
-            `Name a task with its title: "#31 "merge lock"" at the first mention in a reply, then just "#31". ` +
-            `Ask the owner for a decision with the question tool: one decision, 2-4 options, the recommended one first marked "(Recommended)" with the reason; ` +
-            `do not ask a question in prose at the end of a reply - only the question tool reaches the owner. ` +
-            `Everything the owner reads (replies, questions, option texts, reasons, letters to other tabs and task reports) is in ${cfg.ownerLanguage}; code, commands and identifiers stay as they are. ` +
-            `Create a task (crew_spawn, crew_task assign or order) only when the owner says to create one; you may propose creating a task and explain why. ` +
+            `Name a task with its title: "#31 "merge lock"" at the first mention, then just "#31". ` +
+            `Ask the owner for a decision with the question tool: one decision, 2-4 options, the recommended one first marked "(Recommended)" with the reason. ` +
+            `A stop at a gate, and any report that needs the owner's decision, ends with the question tool, not with a summary; ` +
+            `a question in prose does not reach the owner. ` +
+            `Everything the owner reads (replies, questions, option texts, reasons, letters to other tabs and task reports) is in ${cfg.ownerLanguage}; code, commands and identifiers stay unchanged. ` +
+            `Create a task (crew_spawn, crew_task assign or order) only when the owner says so; you may propose one with a reason. ` +
             `A task changes code or texts on main and needs independent acceptance. ` +
-            `Not tasks: an answer to a question, a fact check, an analysis, an edit of 1-3 lines (made by the integrator, or by a worker on the owner's word), a repeat of an already cancelled task. ` +
+            `Not tasks: an answer, a fact check, an analysis, an edit of 1-3 lines (the integrator's, or a worker's on the owner's word), a repeat of a cancelled task. ` +
             `Help on the tools: crew_help.` +
             (rules ? ` Project rules: ${rules}` : ""),
         })
@@ -1870,6 +1906,8 @@ export default {
           const c = readJson<Card>(cardFile(sid)) ?? mine.get(sid)
           return !!c && isLauncherCard(c, holdsExclusive(roleKey(projOf(c), "integrator"), sid))
         },
+        // ворота без вопроса (задача 062): вопрос владельцу открыт — запись в forms/; текстовый вопрос появляется только в конце хода, его видит проход сводок
+        gate: { open: (sid) => pendingForms(sid, now()).length > 0, note: (sid, text) => void noteGate(sid, text, now()) },
       })
     } catch (e) {
       log(`journal tools failed: ${e}`)

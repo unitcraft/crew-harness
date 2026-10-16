@@ -17,6 +17,7 @@ import { divergenceLineFor, unconfiguredLineFor } from "./config-diverge.ts"
 import { FORM_MAX_REPEATS, pendingForms } from "./form-wait.ts"
 import { lockWaitLine } from "./review.ts"
 import { type Task, ACCEPTED_REMINDERS_MAX, acceptedAt, acceptedReminders, isOpen, listTasks, loadTask, sesLabel, sessionOf, taskNo } from "./tasks.ts"
+import { GATE_MARK } from "./gate-stop.ts"
 import { type Watch, watchesOf } from "./watch.ts"
 
 export const STATUS = path.join(BASE, "status")
@@ -37,6 +38,9 @@ export type Status = {
   /** Ход кончился фразой ожидания (WAITING_PHRASES), а не строкой с «?»: в question — эта фраза; показ — «ждёт указаний»,
    *  значок WAIT_MARK (задача 056). Подталкивание то же, что у вопроса. */
   wait?: true
+  /** Вкладка остановилась на воротах без вопроса владельцу (задача 062, gate-stop.ts): state owner, значок GATE_MARK, подпись «ждёт вашего решения,
+   *  вопроса нет». Снимается открытым вопросом или словом владельца. */
+  gate?: true
   /** Вопрос встроенного вопросника (form-wait.ts): уведомления по нему ведёт formWatch, не общий повтор owner_reminder_min. */
   formId?: string
   watches: { id: string; note?: string; started?: number; minutes: number }[]
@@ -79,6 +83,11 @@ export const WAITING_PHRASES: RegExp[] = [
   /(?<![a-z])(?<!not\s)(?<!n't\s)(?<!no\s)(?:awaiting|waiting for|needs?)(?![a-z])(?:(?!\swithout\s)[^.!?\n,;:]){0,60}?(?<![a-z])(?:your|owner)(?![a-z])[^.!?\n,;:]{0,40}?(?<![a-z])(?:GO|approval|decision|confirmation|permission)(?![a-z])/i,
   /(?<![а-яё])пока не получу(?![а-яё])[^.!?\n]{0,60}?(?<![а-яё])(?:разрешени|слов|решени|подтвержден|GO(?![а-яё\w]))/i,
   /(?<![а-яё])(?<!не\s)(?:просит|просим|запрашивает)(?![а-яё])[^.!?\n,;:]{0,60}?(?<![а-яё])(?:разрешени|согласи|GO(?![а-яё\w]))/i,
+  // задача 062, только дополнение к записи «ворота» (gate-stop.ts): живая фраза остановки на воротах без вопроса, 2026-10-16 —
+  // «Остановлено до вашего решения; спецификация ещё не утверждена…». «до вашего решения / слова», «остановлено … решени(е)»
+  // (кроме «решение принято / получено»)
+  /(?<![а-яё])до (?:вашего|владельца)\s+(?:решени|слова|разрешени|подтвержден|указани)/i,
+  /(?<![а-яё])остановлен[а-яё]*(?![а-яё])[^.!?\n]{0,60}?(?<![а-яё])решени[а-яё]*(?![^.!?\n]{0,40}(?:принят|получен))/i,
 ]
 
 /** Ожидание не владельца, а приёмки, проверки, слияния, наблюдения или другой сессии: «жду решения приёмки». Вырезается до положительных фраз. */
@@ -124,6 +133,8 @@ export type StatusInput = {
   staleSince?: number
   /** ход завис: модель молчит с этого времени, строки idle нет (core.ts hungTurn) */
   hungSince?: number
+  /** Остановка на воротах без вопроса (index.ts: ход вкладки кончился, вопроса нет): с какого времени */
+  gate?: { at: number }
 }
 
 /** Состояние одной сессии из её данных. Порядок важности: ход > вопрос владельцу > наблюдение > ответ > задачи. Вкладка, которая
@@ -188,6 +199,12 @@ function statusOfAll(x: StatusInput): Status {
   const e = x.end && !x.end.ownerAfter && !handedOver ? endOfTurn(x.end.text) : undefined
   const q = e?.text
   const w = e?.wait ? { wait: true as const } : {}
+  // ВОРОТА БЕЗ ВОПРОСА (задача 062): запись «ворота» есть, а вопроса владельцу нет (ни вопросника, ни «?» в конце хода) — вкладка ждёт владельца,
+  // но он об этом не знает. Фраза ожидания вопросом не считается: отметка ворот старше значка паузы
+  if (x.gate && (!e || e.wait)) {
+    const q = "ворота записаны, вопрос владельцу не задан"
+    return { ...base, state: "owner", since: x.gate.at, gate: true, question: q, detail: `ждёт вашего решения, вопроса нет (ворота с ${hm(x.gate.at)})` }
+  }
   if (q && !card.spawned) return { ...base, state: "owner", since: x.end!.at, question: q, ...w, detail: `ждёт вас с ${hm(x.end!.at)}: ${q}` }
   if (q && e?.wait) return { ...base, state: "question", since: x.end!.at, question: q, ...w, detail: `${waitLabel(q)} с ${hm(x.end!.at)}: ${q}` }
   if (q) return { ...base, state: "question", since: x.end!.at, question: q, detail: `ждёт ответа (интегратора или вас) с ${hm(x.end!.at)}: ${q}` }
@@ -271,7 +288,7 @@ export const MARK: Partial<Record<State, string>> = { owner: "?", question: "▶
  *  вопрос»): «‖» — пауза в одну колонку («⏸» в терминале бывает шириной в две, «…» — знак обрезки строки). */
 export const WAIT_MARK = "‖"
 /** Значок вкладки: ждёт указаний — WAIT_MARK, иначе по состоянию (MARK). */
-export const markOf = (s: Pick<Status, "state" | "wait">): string | undefined => (s.wait && (s.state === "owner" || s.state === "question") ? WAIT_MARK : MARK[s.state])
+export const markOf = (s: Pick<Status, "state" | "wait"> & { gate?: true }): string | undefined => (s.gate && s.state === "owner" ? GATE_MARK : s.wait && (s.state === "owner" || s.state === "question") ? WAIT_MARK : MARK[s.state])
 const ORDER: Record<State, number> = { owner: 0, question: 1, working: 2, watch: 3, reply: 4, task: 5, tasks: 6, idle: 7 }
 
 /** Ширина строки окна /crew (диалог OpenCode ~74 знака): длиннее — перенос, и список рвётся (владелец 2026-10-07:
@@ -470,7 +487,7 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
   const what = (s: Status): string => {
     switch (s.state) {
       case "owner":
-        return `ждёт вас ${hm(s.since)}`
+        return s.gate ? "ворота, вопроса нет" : `ждёт вас ${hm(s.since)}`
       case "question":
         return s.wait ? "ждёт указаний" : "вопрос — ждёт ответа"
       case "working":

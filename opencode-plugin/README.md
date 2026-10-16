@@ -150,7 +150,7 @@ the ones waiting for you first, who is working and how long, who waits for what 
 under it; `‖` — its turn ended with a waiting phrase and no question mark («жду дальнейших указаний», «ожидаю вашего
 решения»), labelled `ждёт указаний` (`ждёт указаний интегратора` in `/crew` when the phrase names the integrator) with the
 phrase under it — such a tab gets no "continue" either, the same as a question (task 056); a tab of yours waiting with such a
-phrase is counted in "Ждут вас" with `‖`, not `?`; `•` — its turn is going. The window closes the tab of a task or review session two minutes after its task was merged (accepted — before the cleanup: an open tab keeps the server watching the task's folder, and Windows will not remove it) or cancelled, unless its turn is going or
+phrase is counted in "Ждут вас" with `‖`, not `?`; `⚠` — the tab recorded a gate (`log_line` kind `ворота`), its turn ended, and no question to you is open: labelled `ждёт вашего решения, вопроса нет` (task 062, see `log_line` below); `•` — its turn is going. The window closes the tab of a task or review session two minutes after its task was merged (accepted — before the cleanup: an open tab keeps the server watching the task's folder, and Windows will not remove it) or cancelled, unless its turn is going or
 the tab is on screen (the owner's own tabs are left alone; the session stays in the history). `/crew-config` shows the project's settings in effect, each with where it comes from (default, the committed file,
 `local`), like `crew_config show`. `/crew-doctor` shows the service's last self-check (made at start and every 10 minutes), like `crew_doctor`. `/crew` in any window (also in the Ctrl+P palette) shows, without a model turn, every session of the projects:
 working, **waiting for you** (its last answer ends with a question and you have not written since), waiting for a
@@ -354,6 +354,16 @@ plugin; these tools are the allowed way to put the time into the journals.
 named `log.md`; `kind` is one of решение владельца, заседание, ворота, документ, пуск, слияние, находка (the guard rule `log-line`); one
 entry per call, one line, up to 2000 characters; a file without a final newline gets one first; the file may be created only in an
 existing folder. Example: `log_line {file: "doc/tasks/007-x/log.md", kind: "решение владельца", text: "владелец, 2026-10-15, чат: «да»"}`.
+
+A stop at a gate ends with a question to the owner (task 062; owner, 2026-10-16). An entry of kind `ворота` is always written, never refused.
+If the calling tab has no open question to the owner (no record in `forms/`), the answer adds «Ворота записаны, но вопроса владельцу нет:
+задай его сейчас инструментом question — вопрос, рекомендация, довод», and the plugin notes the stop (`gates/<session>.json`). When the turn of
+that tab ends and still no question is open, the tab gets ONE letter «ты остановился на воротах без вопроса владельцу — задай его через
+question» (not again for the same stop), and `/crew`, `/ask`, the side panel and the notice show `⚠ ждёт вашего решения, вопроса нет`; the
+tab counts in «Ждут вас». The stop is cleared by an open question (a questionnaire record, or a question mark at the end of the turn) or by
+the owner's word in the tab. A waiting phrase («остановлено до вашего решения») is no question: the mark `⚠` replaces `‖`. The system hint of
+the tabs carries the rule in one sentence. The phrases «до вашего решения», «остановлено … решение» are recognised as waiting phrases too, but
+only as a supplement to the record.
 
 `usage_line` `{file, code, result}`: appends ONE JSON line (format version `"v":1`) to a file named `usage.log`; the file may
 be created only when a `progress.log` lies in the same folder. The agent passes the file, the session code and the result

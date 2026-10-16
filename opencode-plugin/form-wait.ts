@@ -11,6 +11,7 @@
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { CARDS, readJson, safeKey } from "./core.ts"
+import { clearGate, GATE_MARK } from "./gate-stop.ts"
 import { BASE } from "./paths.ts"
 
 export const FORMS = path.join(BASE, "forms")
@@ -62,6 +63,8 @@ export function addForm(session: string, f: PendingForm, dir = FORMS) {
   const list = readJson<PendingForm[]>(file) ?? []
   if (list.some((x) => x.id === f.id)) return
   save(file, [...list, f])
+  // вопрос владельцу открыт: остановка на воротах без вопроса (задача 062) кончилась
+  if (dir === FORMS) clearGate(session)
 }
 
 /** Returns the sessions whose record was removed (the record names its session; the event of a reply may not). */
@@ -376,7 +379,7 @@ export function formReminders(now: number, notify: (session: string, f: PendingF
 }
 
 /** A tab that waits for the owner without a record in forms/: its turn ended with a question (status.ts, state "owner"). */
-export type EndedWait = { session: string; project?: string; role: string; title: string; since?: number; question?: string; wait?: true }
+export type EndedWait = { session: string; project?: string; role: string; title: string; since?: number; question?: string; wait?: true; gate?: true }
 /** The mark of a tab whose turn ended with a waiting phrase, not a question (task 056): the same as WAIT_MARK in status.ts
  *  (not imported: status.ts imports this module). */
 const WAIT_MARK = "‖"
@@ -394,9 +397,9 @@ export function askText(now = Date.now(), dir = FORMS, ended: EndedWait[] = []):
     return m < 120 ? `${m} мин` : `${Math.floor(m / 60)} ч ${m % 60} мин`
   }
   for (const e of more) {
-    out.push(`${e.wait ? WAIT_MARK : "?"} ${e.project ?? "?"} · ${e.role}${e.title && e.title !== e.session ? ` «${e.title}»` : ""}${e.since ? ` — ${e.wait ? "ждёт указаний" : "ждёт"} ${ago(e.since)} (с ${hm(e.since)})` : ""}`)
+    out.push(`${e.gate ? GATE_MARK : e.wait ? WAIT_MARK : "?"} ${e.project ?? "?"} · ${e.role}${e.title && e.title !== e.session ? ` «${e.title}»` : ""}${e.since ? ` — ${e.gate ? "ждёт вашего решения, вопроса нет," : e.wait ? "ждёт указаний" : "ждёт"} ${ago(e.since)} (с ${hm(e.since)})` : ""}`)
     if (e.question) out.push(`   ${e.question}`)
-    out.push(`   Сессия ${e.session}: ${e.wait ? "ход кончился ожиданием ваших указаний — откройте вкладку и напишите, что дальше." : "ход кончился вопросом — откройте вкладку и ответьте."}`)
+    out.push(`   Сессия ${e.session}: ${e.gate ? "остановилась на воротах без вопроса — откройте вкладку и спросите, что решить; плагин уже напомнил ей задать вопрос." : e.wait ? "ход кончился ожиданием ваших указаний — откройте вкладку и напишите, что дальше." : "ход кончился вопросом — откройте вкладку и ответьте."}`)
     out.push("")
   }
   for (const { session, form: f } of list) {

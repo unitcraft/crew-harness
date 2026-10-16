@@ -9,6 +9,7 @@
 import { execFileSync } from "node:child_process"
 import { appendFileSync, existsSync, readFileSync, statSync } from "node:fs"
 import path from "node:path"
+import { GATE_ANSWER } from "./gate-stop.ts"
 import { finalOf, isOverstated, keywordOf, parseJournal, stopKind, STOP_KINDS, type Line } from "./progress.ts"
 
 const pad2 = (n: number) => String(n).padStart(2, "0")
@@ -536,7 +537,10 @@ export function usageLine(input: UsageInput, base: string, env: UsageEnv): { ok:
 
 // ---- регистрация инструментов ----
 // Отдельным вызовом ctx.tool.transform; сбой регистрации не ломает плагин.
-export async function registerJournalTools(ctx: any, log: (s: string) => void, opts: { launcher?: (sessionID: string) => boolean } = {}): Promise<void> {
+const kind = (input: any) => String(input?.kind ?? "").trim().toLowerCase()
+// gate (задача 062): записи вида «ворота» — open(сессия): у вкладки есть открытый вопрос владельцу; note(сессия, текст): запомнить остановку без вопроса
+export type GateOpts = { open: (sessionID: string) => boolean; note: (sessionID: string, text: string) => void }
+export async function registerJournalTools(ctx: any, log: (s: string) => void, opts: { launcher?: (sessionID: string) => boolean; gate?: GateOpts } = {}): Promise<void> {
   const base = () => String(ctx?.location?.directory ?? process.cwd())
   // запускающий ли вызывающая вкладка (index.ts: визитка и замок роли integrator); сбой проверки — не запускающий
   const launcherOf = (context: any): boolean => {
@@ -603,7 +607,7 @@ export async function registerJournalTools(ctx: any, log: (s: string) => void, o
         name: "log_line",
         description:
           "The way to write an entry of the task log (log.md): appends ONE line 'YYYY-MM-DD HH:MM <kind>: <text>' with the machine date and time (never type the time by hand or ask the clock). " +
-          "kind is one of: решение владельца, заседание, ворота, документ, пуск, слияние, находка. One entry - one call, one line (no line breaks), up to 2000 characters. The launch record 'запуск №<n> <code> [time]' is written by the launcher (the integrator tab, better via progress_line kind launch), never by the agent of a session. " +
+          "kind is one of: решение владельца, заседание, ворота, документ, пуск, слияние, находка. One entry - one call, one line (no line breaks), up to 2000 characters. A gate entry (kind ворота) is an owner stop: the owner is asked with the question tool, and when no question is open the answer says so. The launch record 'запуск №<n> <code> [time]' is written by the launcher (the integrator tab, better via progress_line kind launch), never by the agent of a session. " +
           "File named log.md inside the project folder; created only in an existing folder. Example: {file: 'doc/tasks/007-x/log.md', kind: 'решение владельца', text: 'владелец, 2026-10-15, чат: «по рекомендации»'}.",
         input: {
           type: "object",
@@ -619,6 +623,19 @@ export async function registerJournalTools(ctx: any, log: (s: string) => void, o
           if (!r.ok) {
             log(`log_line refused: ${r.reason}`)
             return { content: `Не записано: ${r.reason}` }
+          }
+          // ВОРОТА БЕЗ ВОПРОСА (задача 062): запись не отклоняется; нет открытого вопроса владельцу — ответ велит задать его сейчас
+          // (инструмент question), плагин запоминает остановку: письмо вкладке и отметка в сводках — по концу её хода (index.ts)
+          const sid = String(context?.sessionID ?? "")
+          if (kind(input) === "ворота" && sid && opts.gate) {
+            try {
+              if (!opts.gate.open(sid)) {
+                opts.gate.note(sid, r.line)
+                return { content: `Записано в log.md: ${r.line}\n${GATE_ANSWER}` }
+              }
+            } catch (e) {
+              log(`log_line: gate check failed: ${e}`)
+            }
           }
           return { content: `Записано в log.md: ${r.line}` }
         },

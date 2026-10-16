@@ -39,16 +39,17 @@ const gs = await tryImport("../gate-stop.ts")
 // ---- GS-1 the gate store
 {
   const dir = path.join(tmp, "gates-unit")
-  const g = gs?.noteGate?.("sesG1", "остановка", 1000, dir)
-  cell("GS-1a noteGate writes the stop with the time and gateOf reads it", g?.at === 1000 && gs?.gateOf("sesG1", dir)?.at === 1000, JSON.stringify(gs?.gateOf?.("sesG1", dir)))
-  const again = gs?.noteGate?.("sesG1", "ещё раз", 2000, dir)
-  cell("GS-1b a second note of an open stop keeps the first one (one stop - one letter)", again?.at === 1000 && gs?.gateOf("sesG1", dir)?.at === 1000, JSON.stringify(again))
-  gs?.markGateLetter?.("sesG1", 3000, dir)
-  cell("GS-1c the letter time is kept in the record", gs?.gateOf("sesG1", dir)?.letter === 3000, JSON.stringify(gs?.gateOf?.("sesG1", dir)))
-  gs?.noteGate?.("sesG1", "после письма", 4000, dir)
-  cell("GS-1d a note after the letter does not erase the letter mark", gs?.gateOf("sesG1", dir)?.letter === 3000, JSON.stringify(gs?.gateOf?.("sesG1", dir)))
+  const B = Date.now() - 10_000
+  const g = gs?.noteGate?.("sesG1", "остановка", B, dir)
+  cell("GS-1a noteGate writes the stop with the time and gateOf reads it", g?.at === B && gs?.gateOf("sesG1", dir)?.at === B, JSON.stringify(gs?.gateOf?.("sesG1", dir)))
+  const again = gs?.noteGate?.("sesG1", "ещё раз", B + 1000, dir)
+  cell("GS-1b a second note of an open stop keeps the first one (one stop - one letter)", again?.at === B && gs?.gateOf("sesG1", dir)?.at === B, JSON.stringify(again))
+  gs?.markGateLetter?.("sesG1", B + 2000, dir)
+  cell("GS-1c the letter time is kept in the record", gs?.gateOf("sesG1", dir)?.letter === B + 2000, JSON.stringify(gs?.gateOf?.("sesG1", dir)))
+  gs?.noteGate?.("sesG1", "после письма", B + 3000, dir)
+  cell("GS-1d a note after the letter does not erase the letter mark", gs?.gateOf("sesG1", dir)?.letter === B + 2000, JSON.stringify(gs?.gateOf?.("sesG1", dir)))
   gs?.clearGate?.("sesG1", dir)
-  cell("GS-1e clearGate removes the record; a new stop after that is a new record", gs?.gateOf("sesG1", dir) === undefined && gs?.noteGate?.("sesG1", "новая", 5000, dir)?.at === 5000, "")
+  cell("GS-1e clearGate removes the record; a new stop after that is a new record", gs?.gateOf("sesG1", dir) === undefined && gs?.noteGate?.("sesG1", "новая", B + 4000, dir)?.at === B + 4000, "")
   cell("GS-1f the mark is ⚠ and the answer of the tool is the wording of the task", gs?.GATE_MARK === "⚠" && /^Ворота записаны, но вопроса владельцу нет: задай его сейчас инструментом question — вопрос, рекомендация, довод/.test(gs?.GATE_ANSWER ?? ""), String(gs?.GATE_ANSWER))
 }
 
@@ -119,6 +120,7 @@ const letters = (s) => prompts.filter((p) => p.sessionID === s && /без воп
 const stOf = (s) => core.readJson(path.join(status.STATUS, `${s}.json`))
 const gateOf = (s) => (gs?.gateOf ? gs.gateOf(s) : undefined)
 const T0 = Date.now() - 60_000
+msg("sesGATE5", "idle", { outcome: "completed" }, T0 - 5000) // an earlier turn ended; the owner's word below starts the turn that writes the gate
 for (const s of SESS) {
   msg(s, "user", { text: "поручение" }, T0)
   msg(s, "assistant", { content: [{ type: "text", text: "работаю" }] }, T0 + 1)
@@ -177,7 +179,7 @@ cell("GS-4j and the stop is cleared", !gateOf("sesGATE4"), JSON.stringify(gateOf
 // a tab that works now gets nothing: the letter waits for the end of the turn
 await logLine("sesGATE5")
 await wait(1200)
-cell("GS-4k the turn is not over (no idle row after the stop): no letter, no mark yet", letters("sesGATE5").length === 0 && !stOf("sesGATE5")?.gate, JSON.stringify([letters("sesGATE5").length, stOf("sesGATE5")]))
+cell("GS-4k the turn is not over (no idle row after the stop): no letter, no mark yet, the stop is kept (the word that started the turn is not a word after the stop)", letters("sesGATE5").length === 0 && !stOf("sesGATE5")?.gate && !!gateOf("sesGATE5"), JSON.stringify([letters("sesGATE5").length, stOf("sesGATE5")]))
 
 clearInterval(heart)
 stop?.()
