@@ -8,6 +8,10 @@
 //      threshold) gets ONE letter and the mark; each lawful wait (an executor works, crew_watch, a question to the owner, a turn
 //      going, an own question with expect_reply, a gate of task 062, a closed tab) gets nothing; an empty turn keeps the episode;
 //      a working turn, the owner's word and a launched session end it.
+// Task 070 (the same rule by the status of the task): IT-8 the rule over the facts of the executor (idleBlockers, 4th argument): a task
+//      running/rework/starting without an executor, without a live session, or with a silent one past the threshold stands even when
+//      another task goes; an order that nobody took stands, named apart. IT-9 the plugin: the same sources get ONE letter and the mark;
+//      a working executor, crew_watch and a taken order get nothing; a word of the executor ends the episode.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -80,6 +84,44 @@ const mkTask = (project, n, author, st, extra = {}) => ({
   cell("IT-2g the start of the stand is the change of the standing task", r7?.at === T0 + 5000, JSON.stringify(r7))
 }
 
+// ---- IT-8 the rule over the facts of the executor (task 070)
+{
+  const NOW = 50_000_000
+  const MIN = 20 * 60_000
+  const none = () => undefined
+  const live = () => ({ live: true })
+  const mk = (st, extra = {}) => mkTask("p", 81, "me", st, { kind: "spawn", executor: "sesE81", updated: NOW - 30 * 60_000, ...extra })
+  const ctx = (o = {}) => ({ now: NOW, minMs: MIN, session: live, addressee: () => ({ window: false, working: false }), ...o })
+  const run = (list, o) => it?.idleBlockers?.("me", list, none, ctx(o))
+  const silent = (min) => ({ session: () => ({ live: true, silentSince: NOW - min * 60_000 }) })
+  const r1 = run([mk("running", { executor: undefined })])
+  cell("IT-8a running without an executor past the threshold: idle, kind nosession", r1?.idle === true && r1.items?.[0]?.kind === "nosession" && !r1.items[0].lost && r1.items[0].task?.n === 81, JSON.stringify(r1))
+  const r2 = run([mk("running")], { session: () => ({ live: false }) })
+  cell("IT-8b an executor without a live session: idle, kind nosession, lost", r2?.idle === true && r2.items?.[0]?.kind === "nosession" && r2.items[0].lost === true, JSON.stringify(r2))
+  const r3 = run([mk("rework")], silent(25))
+  cell("IT-8c a silent executor (rework) past the threshold: idle, kind silent, since its silence", r3?.idle === true && r3.items?.[0]?.kind === "silent" && r3.at === NOW - 25 * 60_000, JSON.stringify(r3))
+  cell("IT-8d a silent executor, but the silence is shorter than the threshold: not idle", run([mk("rework")], silent(5))?.idle === false, JSON.stringify(run([mk("rework")], silent(5))))
+  cell("IT-8e no executor, but the task changed 5 min ago: not idle (the start is on its way)", run([mk("starting", { executor: undefined, updated: NOW - 5 * 60_000 })])?.idle === false, "")
+  cell("IT-8f an executor at work or lawfully waiting (live, no silence): not idle", run([mk("running")])?.idle === false, "")
+  const r7 = run([mk("running", { executor: undefined }), mkTask("p", 82, "me", "running", { kind: "spawn", executor: "sesE82", updated: NOW - 30 * 60_000 })])
+  cell("IT-8g a dead task stands even while another one goes", r7?.idle === true && r7.items?.length === 1 && r7.items[0].task?.n === 81, JSON.stringify(r7))
+  const ord = (extra = {}) => mk("running", { kind: "order", order_to: "otherproj", executor: undefined, ...extra })
+  const r8 = run([ord()])
+  cell("IT-8h an order nobody took, the addressee is not in a window: idle, kind order, the addressee, window false", r8?.idle === true && r8.items?.[0]?.kind === "order" && r8.items[0].to === "otherproj" && r8.items[0].window === false, JSON.stringify(r8))
+  cell("IT-8i an order that was taken (child): not idle", run([ord({ child: { project: "otherproj", n: 3 } })])?.idle === false, "")
+  cell("IT-8j an order whose addressee works a turn now: not idle", run([ord()], { addressee: () => ({ window: true, working: true }) })?.idle === false, "")
+  const r11 = run([ord()], { addressee: () => ({ window: true, working: false }) })
+  cell("IT-8k an order, the addressee is in a window but did not take it: idle, window true", r11?.idle === true && r11.items?.[0]?.window === true, JSON.stringify(r11))
+  cell("IT-8l a fresh order (5 min): not idle", run([ord({ updated: NOW - 5 * 60_000 })])?.idle === false, "")
+  cell("IT-8m without the 4th argument the old rule: a task without an executor goes", it?.idleBlockers?.("me", [mk("running", { executor: undefined })], none)?.idle === false, "")
+  const w = run([mk("rework")], silent(25))
+  const what = (r) => it?.idleWhat?.(r?.items ?? []) ?? []
+  const whats = [...what(r1), ...what(r2), ...what(w), ...what(r8), ...what(r11)]
+  cell("IT-8n the text for the owner names the reason apart: no executor / no session / silent since HH:MM / order not taken", whats[0] === "#81 без исполнителя" && whats[1] === "#81 сессии исполнителя нет" && /^#81 исполнитель молчит с \d\d:\d\d$/.test(whats[2] ?? "") && whats[3] === "#81 заказ не взят: otherproj.integrator вне окна" && whats[4] === "#81 заказ не взят: otherproj.integrator в окне, но не взял", JSON.stringify(whats))
+  const l = it?.idleLetter?.(25, [...(r1?.items ?? []), ...(w?.items ?? []), ...(r8?.items ?? [])]) ?? ""
+  cell("IT-8o the letter names the three reasons and the steps (reassign, cancel, ask the owner)", /нет исполнителя/.test(l) && /исполнитель задачи #81.*молчит с \d\d:\d\d/.test(l) && /заказ #81.*никто не взял.*otherproj\.integrator вне окна/.test(l) && /crew_task reassign/.test(l) && /cancel/.test(l) && /инструментом question/.test(l), l)
+}
+
 // ---- IT-3 who waits for the tab
 {
   core.addObligation("sesW1", { qid: "qw1", from_session: "me3", from_role: "integrator", at: T0, nudges: 0, stuck: true, stuckAt: T0 + 10 })
@@ -132,7 +174,10 @@ let seq = 0
 const msg = (session, type, data, at = Date.now()) => db.prepare("insert into session_message values (?, ?, ?, ?, ?, ?, ?)").run(`m${++seq}`, session, type, seq, at, at, JSON.stringify(data))
 // I1 the source; I2 an executor works; I3 crew_watch; I4 a question form; I5 its turn goes; I6 a reviewer waits for it (and another task
 // runs); I7 its question with expect_reply waits; I8 a gate of task 062; I9 a closed tab. X* - the executors and reviewers.
-const TABS = ["sesI1", "sesI2", "sesI3", "sesI4", "sesI5", "sesI6", "sesI7", "sesI8", "sesX2", "sesX6", "sesX6b", "sesX7"]
+// Task 070: J1..J6 - authors (J1 a task without an executor, J2 a silent executor Y2, J3 an order nobody took, J4 an executor Y4 at work, J5 an
+// executor Y5 under crew_watch, J6 an order that was taken). An executor of a running task works (busy): X2, X6b, Y4.
+const TABS = ["sesI1", "sesI2", "sesI3", "sesI4", "sesI5", "sesI6", "sesI7", "sesI8", "sesX2", "sesX6", "sesX6b", "sesX7", "sesJ1", "sesJ2", "sesJ3", "sesJ4", "sesJ5", "sesJ6", "sesY2", "sesY4", "sesY5"]
+const BUSY = new Set(["sesI5", "sesX2", "sesX6b", "sesY4"])
 const ALL = [...TABS, "sesI9"]
 for (const s of ALL) db.prepare("insert into session_v2 values (?, ?, ?, null, null, null, null, null)").run(s, proj, s)
 
@@ -155,7 +200,7 @@ const ctx = {
 }
 const WPID = 636363
 mkdirSync(core.WINDOWS, { recursive: true })
-const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now(), tabs: TABS.map((sessionID) => ({ sessionID, active: true, busy: sessionID === "sesI5" })) }))
+const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now(), tabs: TABS.map((sessionID) => ({ sessionID, active: true, busy: BUSY.has(sessionID) })) }))
 beat()
 const heart = setInterval(beat, 300)
 
@@ -189,8 +234,18 @@ core.addObligation("sesX7", { qid: "q7ask", from_session: "sesI7", from_role: "i
 mkdirSync(watch.WATCHES, { recursive: true })
 writeFileSync(path.join(watch.WATCHES, "w63.json"), JSON.stringify({ id: "w63", session: "sesI3", command: "x", cwd: proj, note: "CI", minutes: 120, created: Date.now(), status: "running", pid: process.pid, started: Date.now() }))
 fw.handleFormEvent({ type: "form.created", data: { form: { id: "frm_i4", sessionID: "sesI4", title: "Questions", metadata: { kind: "question" }, fields: [{ key: "q0", description: "Запускать следующую сессию?", options: [{ label: "Да (Recommended)" }, { label: "Нет" }] }] } } })
-core.saveCard({ ...core.readJson(core.cardFile("sesI5")), busy: true, busySince: Date.now() })
+for (const b of BUSY) core.saveCard({ ...core.readJson(core.cardFile(b)), busy: true, busySince: Date.now() })
 gs.noteGate("sesI8", "ворота", T0 + 1)
+
+// task 070
+putTask(mkTask(P, 71, "sesJ1", "running", { kind: "spawn" }))
+putTask(mkTask(P, 72, "sesJ2", "rework", { kind: "spawn", executor: "sesY2" }))
+putTask(mkTask(P, 73, "sesJ3", "running", { kind: "order", order_to: "otherproj" }))
+putTask(mkTask(P, 74, "sesJ4", "running", { kind: "spawn", executor: "sesY4" }))
+putTask(mkTask(P, 75, "sesJ5", "running", { kind: "spawn", executor: "sesY5" }))
+putTask(mkTask(P, 76, "sesJ6", "running", { kind: "order", order_to: "otherproj", child: { project: "otherproj", n: 9 } }))
+core.saveCard({ ...core.readJson(core.cardFile("sesY2")), task: { project: P, n: 72 } })
+writeFileSync(path.join(watch.WATCHES, "w70.json"), JSON.stringify({ id: "w70", session: "sesY5", command: "x", cwd: proj, note: "CI", minutes: 120, created: Date.now(), status: "running", pid: process.pid, started: Date.now() }))
 
 const letters = (s) => prompts.filter((p) => p.sessionID === s && /Ты простаиваешь/.test(p.text))
 const stOf = (s) => core.readJson(path.join(status.STATUS, `${s}.json`))
@@ -242,6 +297,29 @@ await wait(1000)
 cell("IT-7p a launched session ends the episode: the mark is gone", !stOf("sesI1")?.idleTab && !it?.idleOf?.("sesI1"), JSON.stringify(stOf("sesI1")))
 await wait(3500)
 cell("IT-7q and no new letter while the session goes", letters("sesI1").length === 2, String(letters("sesI1").length))
+
+// ---- IT-9 task 070: the same rule by the status of the task
+{
+  const j1 = letters("sesJ1")
+  cell("IT-9a a running task without an executor: ONE letter «нет исполнителя», the mark", j1.length === 1 && /задачи #71 «задача 71» нет исполнителя/.test(j1[0].text) && !!stOf("sesJ1")?.idleTab && /#71 без исполнителя/.test(stOf("sesJ1")?.detail ?? ""), JSON.stringify([j1.map((p) => p.text), stOf("sesJ1")]))
+  const j2 = letters("sesJ2")
+  cell("IT-9b a task on rework, the executor is silent: ONE letter «молчит с», the mark", j2.length === 1 && /исполнитель задачи #72 «задача 72» молчит с \d\d:\d\d/.test(j2[0].text) && !!stOf("sesJ2")?.idleTab && /#72 исполнитель молчит с/.test(stOf("sesJ2")?.detail ?? ""), JSON.stringify([j2.map((p) => p.text), stOf("sesJ2")]))
+  const j3 = letters("sesJ3")
+  cell("IT-9c an order nobody took, the addressee is not in a window: ONE letter naming the addressee, the mark", j3.length === 1 && /заказ #73 «задача 73» никто не взял: интегратор otherproj\.integrator вне окна/.test(j3[0].text) && !!stOf("sesJ3")?.idleTab && /#73 заказ не взят/.test(stOf("sesJ3")?.detail ?? ""), JSON.stringify([j3.map((p) => p.text), stOf("sesJ3")]))
+  cell("IT-9d an executor at work: no letter, no mark", letters("sesJ4").length === 0 && !stOf("sesJ4")?.idleTab, JSON.stringify(stOf("sesJ4")))
+  cell("IT-9e an executor under crew_watch: no letter, no mark", letters("sesJ5").length === 0 && !stOf("sesJ5")?.idleTab, JSON.stringify(stOf("sesJ5")))
+  cell("IT-9f an order that was taken: no letter, no mark", letters("sesJ6").length === 0 && !stOf("sesJ6")?.idleTab, JSON.stringify(stOf("sesJ6")))
+  await wait(1500)
+  cell("IT-9g no second letter in the same episode", letters("sesJ1").length === 1 && letters("sesJ2").length === 1 && letters("sesJ3").length === 1, JSON.stringify(["sesJ1", "sesJ2", "sesJ3"].map((s) => letters(s).length)))
+  // the executor speaks (a turn ends now): its silence starts anew, the mark of its author is gone
+  endTurn("sesY2", [{ type: "tool", name: "read", state: { status: "completed" } }, { type: "text", text: "Доработал." }])
+  await wait(1000)
+  cell("IT-9h the executor speaks: the mark of its author is gone, no second letter", !stOf("sesJ2")?.idleTab && letters("sesJ2").length === 1, JSON.stringify([letters("sesJ2").length, stOf("sesJ2")]))
+  // the task is cancelled: nothing stands
+  putTask({ ...mkTask(P, 71, "sesJ1", "cancelled", { kind: "spawn" }), updated: Date.now() })
+  await wait(1000)
+  cell("IT-9i a cancelled task stands no more: the mark is gone", !stOf("sesJ1")?.idleTab, JSON.stringify(stOf("sesJ1")))
+}
 
 clearInterval(heart)
 stop?.()
