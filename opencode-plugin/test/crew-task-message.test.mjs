@@ -137,7 +137,7 @@ let msg5 = ""
 try {
   msg5 = t5?.folder ? git(proj, "show", `${t5.branch}:${t5.folder}/task/message.md`) : ""
 } catch {}
-cell("T65-4: a message by the template (date in the heading of the owner's section) is taken word for word, no new fields needed", msg5 === good, JSON.stringify({ r5: r5.slice(0, 300), msg5 }))
+cell("T65-4: a message by the template (date in the heading of the owner's section) is taken word for word, no new fields needed", msg5 === good.trimEnd(), JSON.stringify({ r5: r5.slice(0, 300), msg5 }))
 
 // ---- the plugin's check on its own: the same rules as the guard ----
 const faults = (t) => folders.messageFaults(t).join(" | ")

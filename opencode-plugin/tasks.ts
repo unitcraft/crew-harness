@@ -106,6 +106,10 @@ export type Task = {
   criteria?: string
   boundaries?: string
   open_questions?: string
+  /** задание по образцу (задача 065): слова владельца дословно с датой и источником, результат и куда он попадает, связи с задачами */
+  owner_words?: string
+  result?: string
+  links?: string
   /** дополнительные поля проекта (task_extra_fields): {id: значение}; подписи берутся из настроек в момент письма */
   extra?: Record<string, string>
   priority: Priority

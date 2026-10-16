@@ -502,8 +502,8 @@ task by its number; a session's title is `045 исп title` (`#N исп title` w
 - **A new task with a folder.** The number is 1 + the largest of the project's records and of the folder numbers in every
   working tree of the repository (`git worktree list`, uncommitted folders too) and in every local and `origin` branch
   (`git ls-tree`); the record file is created atomically (flag `wx`), so two windows never get one number. The plugin writes
-  the folder on the task branch (`task/message.md` = the field `message` word for word, without it a template from the
-  fields; `log.md` with its first line `ГГГГ-ММ-ДД ЧЧ:ММ документ: задание заведено …`) and commits it there (signed off,
+  the folder on the task branch (`task/message.md` = the field `message` word for word, without it the text built from the
+  fields by the template below; `log.md` with its first line `ГГГГ-ММ-ДД ЧЧ:ММ документ: задание заведено …`) and commits it there (signed off,
   `Add task NNN: <slug>`) without a working copy; the main copy of the target branch is never written. `{n}` of
   `branch_name` and `worktree_name` is three digits (`task/045-…`). A folder made outside the plugin: `crew_spawn {task: N,
   goal}` makes the record N without a folder commit; no folder with that number — refused. An agent outside OpenCode takes
@@ -525,6 +525,23 @@ task by its number; a session's title is `045 исп title` (`#N исп title` w
   `task/message.md` is `Часть задачи NNN «…».`, the parent's `log.md` gets `документ: заведена подзадача MMM «…»` (no tree of
   the parent — a letter to the integrator with that line); the records link `part_of` / `parts`. The rule: an own acceptance
   or an own landing in `main` — a sub-task; the next step of the same work — a session.
+- **One template of the task text (task 065).** `task/message.md` of every new task follows the template of the Canon
+  (`doc/canon/process.md`, «Задание task/message.md»): `# Задание: <title>`, a header (customer, repository and branch,
+  date, source), then the second-level sections «Чего хочет владелец», «Что нужно», «Критерии приёмки», «Результат и куда
+  он попадает», «Связи», «Границы» in this order; an empty section is written `нет: <why>`, not dropped. Without `message`,
+  `crew_spawn` (a new task or a sub-task) and `crew_task assign` in a project with folders build the text from the fields:
+  `owner_words` — the owner's words word for word with date and source (`- «сделай X» (владелец, 2026-10-17, чат
+  оркестратора)`), required and must carry a date `ГГГГ-ММ-ДД`; `goal` — its paragraphs and `- ` lines become the numbered
+  points of «Что нужно» (an already numbered goal stays as it is); `criteria`; `result` — where the result lands, or `нет:
+  результат — код: <what is delivered>`, required; `links` — lines «Зависит от», «Блокирует», «Пересекается (файлы)»,
+  «Начинается после» (task-sessions.md of the methodology); `boundaries`; `open_questions` go after «Границы». Absent `links`
+  or `boundaries` become `нет: интегратор … не назвал (поле … не передано)`. Without `owner_words` with a date or without
+  `result` the call is refused before any number or folder is taken, and the answer names the field with an example; a
+  `message` without the template's title and sections (in order, not empty, `нет:` with a reason, a date in the owner's
+  section) is refused the same way. Old calls stay valid where no task text is written: a project without task folders
+  (`#N`) and a session of an existing task (`crew_spawn {task: N, session, goal}`) need none of the new fields. The guard
+  `scripts/guards/check-task-docs.py` (`message-title`, `message-section`, `message-owner`) checks the same rules for tasks
+  started from 2026-10-17 01:00.
 - **Transition.** Old records keep their numbers and their show (`#57 исп`). A closed old record with the number of a folder
   moves unchanged to `tasks/<project>/legacy/<N>.json` when that task gets its record (shown by `crew_task list all`); an
   open one refuses with its title. An order (`crew_task order`) takes its number from the same count and makes no folder.
@@ -532,7 +549,7 @@ task by its number; a session's title is `045 исп title` (`#N исп title` w
   sessions folded into `✓ сдано N сессий` (task 064); `/crew` lists them all under `045 <title>`; the line "Ждут вас" names `045 прм`; notices, letters and answers name the task `045` and the
   session `045 С4-3`.
 
-- `crew_spawn {title?, goal, criteria, boundaries?, open_questions?, extra?, tier?, priority?, role?, parent?}` (the
+- `crew_spawn {title?, goal, criteria, owner_words?, result?, links?, boundaries?, open_questions?, message?, extra?, tier?, priority?, role?, parent?}` (the
   integrator only) starts task `#N` in a new session, with or without a window. No task without a
   goal and acceptance criteria (the project may require more: `task_fields`); model by tier
   (by default `claude-code/opus` / `sonnet` / `haiku`, `spawn_models` overrides; an enabled set of model profiles overrides both for the stages it describes — see [Model profiles](#model-profiles-sets-of-models-and-windows-by-stage)); a limit of running tasks per

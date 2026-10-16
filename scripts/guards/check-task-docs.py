@@ -40,7 +40,12 @@
     есть» (result-line); в spec.md есть заголовок «Результат и куда он попадает» вне огороженного кода, в
     его разделе — непустое содержание, а строка «нет: результат — код» (если есть) несёт фразу о том,
     что сдаётся (result-section); результат назван (строки «нет: результат — код» в разделе нет), а в
-    папке уже есть result.md — в папке есть current.md (result-current).
+    папке уже есть result.md — в папке есть current.md (result-current); образец задания (задача 065) — только у задач, заведённых
+    не раньше 2026-10-17 01:00 (первая запись log.md с датой и временем): в task/message.md до первого раздела есть заголовок
+    «# Задание: <название>» (message-title), разделы второго уровня «Чего хочет владелец», «Что нужно», «Критерии приёмки»,
+    «Результат и куда он попадает», «Связи», «Границы» есть все и в этом порядке (пояснение в скобках после названия допустимо),
+    ни один не пуст и «нет:» в них — с причиной (message-section), в разделе слов владельца есть дата ГГГГ-ММ-ДД в заголовке или
+    теле, если раздел не «нет: …» (message-owner).
 Не проверяет: содержание документов, остальные файлы задач (result.md, profile.log, материалы
     task/), записи log.md без даты в начале строки, с датой раньше 2026-10-10 и вне индекса (в
     режимах дерева, коммита и CI добавленных строк нет), usage.log, вложенные папки задач, вторую строку plan.md (база ревизии); честность строки
@@ -58,9 +63,11 @@
     по норме о результате — задачи, заведённые раньше 2026-10-15 14:20, и папки без log.md с датой;
     current.md до появления result.md (его создаёт шаг плана в реализации); содержание current.md,
     метки копий, единственность действующего текста и честность строки «нет: результат — код» (это
-    проверка С6, п. 5 методики); в режиме коммита — папки, где коммит не меняет spec.md или plan.md.
+    проверка С6, п. 5 методики); в режиме коммита — папки, где коммит не меняет spec.md или plan.md; по образцу задания — задачи,
+    заведённые раньше 2026-10-17 01:00, папки без log.md с датой, шапку задания, дополнительные разделы, дословность слов владельца
+    и честность «нет: <почему>» (судит приёмка), задание в режиме коммита, если коммит не меняет task/message.md.
 Правило: doc/canon/process.md (цикл сессий методики, «Журнал хода progress.log», «Задача, сессия, подзадача», «Результат и
-    куда он попадает») и формат машинных мест методики.
+    куда он попадает», «Задание task/message.md») и формат машинных мест методики.
 
 Пометок-исключений у этого стража нет.
 """
@@ -137,6 +144,19 @@ NO_RESULT_LINE = re.compile(r"^[ \t]*(?:[-*][ \t]+)?«?нет: результа�
 LOG_STARTED = re.compile(r"^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}) ")
 # папка задачи с номером (задача 058): номер — цифры до первого дефиса
 TASK_FOLDER = re.compile(r"^(doc/tasks/([0-9]{3,})-[^/]+)/")
+# образец задания task/message.md (слово владельца, 2026-10-17, чат оркестратора; задача 065): заголовок «# Задание: …», разделы второго
+# уровня по порядку, не пустые, «нет:» с причиной, дата в разделе слов владельца; судятся задачи, заведённые не раньше MESSAGE_FROM
+MESSAGE_FILE = re.compile(r"^(doc/tasks/[^/]+)/task/message\.md$")
+MESSAGE_FROM = "2026-10-17 01:00"
+MESSAGE_SECTIONS = ("Чего хочет владелец", "Что нужно", "Критерии приёмки", "Результат и куда он попадает", "Связи", "Границы")
+MESSAGE_TITLE = re.compile(r"^#[ \t]+Задание:[ \t]*\S")
+MESSAGE_HEAD = re.compile(r"^##[ \t]+(.+?)[ \t]*$")
+MESSAGE_ANY_HEAD = re.compile(r"^#{1,2}[ \t]")
+MESSAGE_PAREN = re.compile(r"[ \t]*\(.*\)$")
+MESSAGE_NONE = re.compile(r"^[ \t]*(?:[-*][ \t]+)?нет:")
+MESSAGE_BARE_NONE = re.compile(r"^[ \t]*(?:[-*][ \t]+)?нет:[ \t.,;:—–-]*$")
+MESSAGE_DATE = re.compile(r"(?<![0-9])[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])(?![0-9])")
+MESSAGE_RULE = "Канон, process.md, «Задание task/message.md»"
 
 
 def first_line(text):
@@ -503,6 +523,52 @@ def check_result_section(path, text, folder, paths, rep):
         rep.add(path, start + 1, "result-current", "результат назван, result.md уже есть, а current.md в папке задачи нет")
 
 
+def check_message(path, text, rep):
+    """task/message.md задачи, заведённой не раньше MESSAGE_FROM: заголовок, разделы образца по порядку, не пустые, дата у слов владельца."""
+    lines = text_lines(guardlib.strip_fenced(text.lstrip("﻿")))
+    heads = []
+    for number, line in enumerate(lines, 1):
+        m = MESSAGE_HEAD.match(line)
+        if m:
+            heads.append((number, MESSAGE_PAREN.sub("", m.group(1)).strip(), line))
+    first = heads[0][0] if heads else len(lines) + 1
+    if not any(MESSAGE_TITLE.match(line) for line in lines[:first - 1]):
+        rep.add(path, None, "message-title", "нет заголовка «# Задание: <название>» перед разделами (%s)" % MESSAGE_RULE)
+    found = []
+    for name in MESSAGE_SECTIONS:
+        hit = next((h for h in heads if h[1] == name), None)
+        if hit is None:
+            rep.add(path, None, "message-section", "нет раздела «%s»: разделы образца — %s, заголовки второго уровня «## …» в этом "
+                    "порядке, пустой раздел пишется «нет: <почему>», а не пропускается (%s)" % (
+                        name, ", ".join("«%s»" % x for x in MESSAGE_SECTIONS), MESSAGE_RULE))
+        else:
+            found.append((name, hit))
+    for (prev_name, prev), (name, hit) in zip(found, found[1:]):
+        if hit[0] < prev[0]:
+            rep.add(path, hit[0], "message-section", "раздел «%s» стоит раньше «%s»: порядок образца — %s (%s)" % (
+                name, prev_name, ", ".join("«%s»" % x for x in MESSAGE_SECTIONS), MESSAGE_RULE))
+    for name, (number, _, head) in found:
+        body = []
+        for line in lines[number:]:
+            if MESSAGE_ANY_HEAD.match(line):
+                break
+            body.append(line)
+        filled = [line for line in body if line.strip()]
+        if not filled:
+            rep.add(path, number, "message-section", "раздел «%s» пуст — пустой раздел пишется «нет: <почему>» (%s)" % (name, MESSAGE_RULE))
+            continue
+        bare = next((i for i, line in enumerate(body) if MESSAGE_BARE_NONE.match(line)), None)
+        if bare is not None:
+            rep.add(path, number + 1 + bare, "message-section", "в разделе «%s» «нет:» без причины — пишется «нет: <почему>» (%s)" % (
+                name, MESSAGE_RULE))
+            continue
+        if name == MESSAGE_SECTIONS[0] and not MESSAGE_DATE.search(head) and not any(MESSAGE_DATE.search(line) for line in body) \
+                and not MESSAGE_NONE.match(filled[0]):
+            rep.add(path, number, "message-owner", "в разделе «%s» нет даты ГГГГ-ММ-ДД: слова владельца — дословно, с датой и источником "
+                    "(AGENTS.md, п. 2; %s); пример «- «сделай X» (владелец, 2026-10-17, чат оркестратора)» или заголовок «## %s (его "
+                    "слова, 2026-10-17, чат оркестратора)»" % (name, MESSAGE_RULE, name))
+
+
 def check_number_dup(source, changed, rep):
     """Две папки задач с одним номером NNN (задача 058): по нарушению на каждую папку, в тексте — обе."""
     folders = {}
@@ -528,6 +594,16 @@ def judge(source, args, rep):
     by_path = None
     started = {}
     for entry in source.changed():
+        mm = MESSAGE_FILE.match(entry.path)
+        if mm and entry.mode != "160000":
+            if by_path is None:
+                by_path = dict((e.path, e) for e in source.entries())
+            since = task_started(mm.group(1), by_path, source, started)
+            data = source.read(entry) if since is not None and since >= MESSAGE_FROM else None
+            if data is not None:
+                count += 1
+                check_message(entry.path, data.decode("utf-8", "replace"), rep)
+            continue
         if LOG_FILE.match(entry.path) and entry.mode != "160000":
             data = source.read(entry)
             if data is not None:
@@ -574,4 +650,4 @@ def judge(source, args, rep):
 
 if __name__ == "__main__":
     sys.exit(guardlib.run("check-task-docs", "файлов задач", judge,
-                          lost="нет ни одного spec.md, plan.md, progress.log, log.md или файла проверки в doc/tasks/*/"))
+                          lost="нет ни одного spec.md, plan.md, progress.log, log.md, task/message.md новой задачи или файла проверки в doc/tasks/*/"))

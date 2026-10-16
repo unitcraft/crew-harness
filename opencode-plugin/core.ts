@@ -23,7 +23,7 @@ import { DEFAULT_FORM, PLAN_ACCEPTANCE, PLAN_MERGE_ACCEPTANCE, type PlanForm, al
 import { type Task, type TaskPlan, type TaskSession, WORKING_STATUSES, EXECUTOR_CODE, taskRef, taskNo, sessionOf, sessionRef, sesLabel, methodSession, moveToLegacy, listLegacy, slugify, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { countedOpen, waitingCleanup } from "./tasks.ts"
 import { baseRef, branchExists, commitFiles, ensureBranch, findFolder, folderName, pad3, usedNumbers } from "./task-numbers.ts"
-import { firstLogLine, folderInfo, nextLaunch, readFolderFile, taskLog, templateMessage, titleOfMessage } from "./task-folders.ts"
+import { firstLogLine, folderInfo, messageRefusal, nextLaunch, readFolderFile, taskLog, templateMessage, titleOfMessage } from "./task-folders.ts"
 import { acceptanceFromFile } from "./acceptance-file.ts"
 import { acceptWarning, acceptedTip, beginPrecheck, finishPrecheck, gateMerge, landedFresh, landingLine, markPrecheckStale, neighbourHints, precheckLines, unlockMerge } from "./precheck.ts"
 import { addSide, autoTrack, cleanupDone, removeSide, sideItems, cleanupSteps, fileAt, holdsMergeLock, isMerged, keptOnBranch, keptPaths, mergeHolder, releaseMergeLock, resolveKeep, reworkLetter, sameFs, takeMergeLock } from "./review.ts"
@@ -1412,8 +1412,11 @@ acceptor — роль приёмщика (разделяемая) при нас�
     «Часть задачи NNN «…».», в log.md родителя — строка о заведении. Правило: своя приёмка или отдельное попадание в main —
     подзадача; следующий шаг той же работы (проверка, правка по находкам, продолжение, передача) — сессия.
   Агент вне OpenCode берёт номер тем же счётом: node scripts/task-number.mjs --dir <дерево> --title "<название>".
-  crew_spawn {title?, goal, criteria, boundaries?, open_questions?, tier?, priority?, role?, parent?} — новая сессия: без цели и
-    критериев приёмки задача не ставится (проект может требовать больше — task_fields); модель по ступени (по умолчанию, пока набор не
+  crew_spawn {title?, goal, criteria, owner_words, result, links?, boundaries?, open_questions?, tier?, priority?, role?, parent?} —
+    новая сессия: без цели и критериев приёмки задача не ставится (проект может требовать больше — task_fields); задание новой
+    задачи с папкой — по образцу (разделы «Чего хочет владелец», «Что нужно», «Критерии приёмки», «Результат и куда он попадает»,
+    «Связи», «Границы»; пустой — «нет: <почему>»): без message собирается из полей, без owner_words с датой и без result — отказ,
+    message без разделов образца — отказ; модель по ступени (по умолчанию, пока набор не
     включён: heavy — claude-code/opus, medium — sonnet, light — haiku; проект меняет spawn_models; включённый набор профилей
     моделей — /crew-sets — переопределяет модель этапа, tier на входе выбирает ступень внутри семьи набора; ступень всегда в границах
     проекта tier_min и tier_max, если они заданы); лимит работающих на роль —
@@ -1988,10 +1991,15 @@ export function makeTools(host: CrewHost): CrewTool[] {
     criteria: str("Acceptance criteria: what is run, what must be green, what proves it (and the 'feed it something wrong' probe)"),
     boundaries: str("Boundaries: what is NOT done in this task"),
     open_questions: str("Open questions: each with an addressee and a default"),
+    owner_words: str("The owner's words word for word with date and source: - «…» (владелец, ГГГГ-ММ-ДД, чат оркестратора). Required for a new task with a folder when message is absent (section «Чего хочет владелец» of task/message.md)"),
+    result: str("Result and where it lands: the place where it acts (e.g. doc/canon/process.md, section «…») or «нет: результат — код: <what is delivered>». Required for a new task with a folder when message is absent"),
+    links: str("Links to other tasks (task-sessions.md of the methodology): lines «Зависит от», «Блокирует», «Пересекается (файлы)», «Начинается после», tasks by their folder paths; absent - «нет: … не передано»"),
     priority: { type: "string", enum: [...PRIORITIES], description: "P0 emergency, P1 first queue, P2 normal (default from the project), P3 when hands are free" },
     extra: { type: "object", description: "crew_spawn and assign: values of the project's extra task fields {id: one line up to 300 characters}; the ids are declared by the project (task_extra_fields, see crew_config show)", additionalProperties: { type: "string" } },
   }
   const missingFields = (input: any, cfg: CrewConfig) => cfg.taskFields.filter((f) => !String(input[f] ?? "").trim())
+  /** Поля задания по образцу (задача 065): только непустые — запись задачи без них остаётся прежней. */
+  const messageFieldsOf = (input: any) => Object.fromEntries((["owner_words", "result", "links"] as const).map((k) => [k, String(input[k] ?? "").trim()]).filter(([, v]) => v))
   const FIELD_RU: Record<string, string> = { goal: "цель (goal)", criteria: "критерии приёмки (criteria)", boundaries: "границы (boundaries)", open_questions: "открытые вопросы (open_questions)" }
   const newQid = () => `q${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
   const findTask = (me: Card | undefined, n: any): Task | undefined => (me && Number.isInteger(Number(n)) ? loadTask(projOf(me), Number(n)) : undefined)
@@ -2072,7 +2080,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
     const { me, project, cfg, fm, input, taskNum, code, partOf, role, model, recTier, chosen, extra } = a
     const goal = String(input.goal ?? "").trim()
     const prio = isPriority(input.priority) ? input.priority : cfg.defaultPriority
-    const common = { project, goal, boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(), ...(extra ? { extra } : {}), priority: prio, tier: recTier, role, model, author: me.session, author_role: keyOf(me), qid: newQid(), status: "idle" as const, kind: "spawn" as const, directory: me.directory }
+    const common = { project, goal, boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(), ...messageFieldsOf(input), ...(extra ? { extra } : {}), priority: prio, tier: recTier, role, model, author: me.session, author_role: keyOf(me), qid: newQid(), status: "idle" as const, kind: "spawn" as const, directory: me.directory }
     const placeOf = (n: number, slug: string) => taskPlace(me.directory, cfg, pad3(n), slug, project)
     let t: Task
     let made = ""
@@ -2121,10 +2129,13 @@ export function makeTools(host: CrewHost): CrewTool[] {
           parentTitle = titleOfMessage(ph[0].name, readFolderFile(fm.top, fm.rel, ph[0], "task/message.md"))
         }
       }
+      // задание по образцу Канона (задача 065): message без разделов образца или нет owner_words и result — отказ до номера и папки
+      const refusal = messageRefusal(input)
+      if (refusal) return { content: refusal }
       const used = usedNumbers(fm.top, fm.rel)
       t = createTask({ ...common, title: a.title, criteria: input.criteria?.trim(), ...(partOf !== undefined ? { part_of: partOf } : {}) }, placeOf, { used, fill: (n, slug) => ({ folder: `${fm.rel}/${folderName(n, slug)}`, sessions: [] }) })
       const own = String(input.message ?? "")
-      const text = (partOf !== undefined ? `Часть задачи ${pad3(partOf)} «${parentTitle.replace(/[«»]/g, "")}».\n\n` : "") + (own.trim() ? own : templateMessage(t))
+      const text = (partOf !== undefined ? `Часть задачи ${pad3(partOf)} «${parentTitle.replace(/[«»]/g, "")}».\n\n` : "") + (own.trim() ? own : templateMessage(t, new Date(), { target: cfg.targetBranch }))
       const base = baseRef(fm.top, cfg.targetBranch)
       let sha = ""
       try {
@@ -2176,6 +2187,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         "A task session is a part of the task, not a task: session \"<code>\" (С1, С2, С3п, С4…; default исп = the executor) adds a session to task N: ident 045 С4-3 (code and its ordinal in the task) plus the launch number №n; the plugin writes the launch lines into progress.log and log.md of the folder. A method session submits to you (crew_task submit), with no plugin review; the plugin's review of the task starts once, after crew_task deliver. place: own (default for С2/С4/С6) - its own worktree and branch task/NNN-<code>-<k> from the task branch; task (default for the others) - the task worktree.",
         "A sub-task (part_of: N) is a task of its own: own number and folder, the first line of its task/message.md is «Часть задачи NNN «…».», a line in the parent's log.md. The rule: an own acceptance or an own landing in main - a sub-task; the next step of the same work (a check, a fix by findings, a continuation, a handover) - a session.",
         "goal, criteria - required (the project may require more: boundaries, open_questions; task_fields). title? priority? P0..P3.",
+        "The task text of a new task with a folder (no task:, part_of included) follows one template: «# Задание: <title>», a header, then sections «Чего хочет владелец», «Что нужно», «Критерии приёмки», «Результат и куда он попадает», «Связи», «Границы» in this order; an empty section is «нет: <why>». Without message the plugin builds it from the fields: owner_words (required: the owner's words word for word with date and source, e.g. - «сделай X» (владелец, 2026-10-17, чат оркестратора)), goal (paragraphs and «- » lines become the numbered points of «Что нужно»), criteria, result (required: where the result lands, or «нет: результат — код: <what is delivered>»), links? (Зависит от / Блокирует / Пересекается (файлы) / Начинается после), boundaries?; absent links or boundaries become «нет: … не передано». Without owner_words with a date or without result - a refusal naming what to add; a message without the template's sections is refused too. A project without task folders and a session of a task (task: N) need none of these fields.",
         "tier heavy|medium|light - picks the model: by default claude-code opus|sonnet|haiku, spawn_models of the project overrides; an enabled model-profile set (/crew-sets) overrides both for the stage it describes (the tier then picks the tier inside the set's family). model - explicit provider/id[#variant]; required when the project has no model settings (ask the owner first).",
         "role? - role of the new session, default worker. extra {id: one line up to 300 characters} - the project's extra task fields (task_extra_fields; crew_config view lists them). parent \"project#N\" - the order of another project this task fulfils.",
         "Limits: the project caps running tasks per role (spawn_limits) and open tasks (inflight_limit). By default (accepted_slot: free) accepted tasks waiting for cleanup do not take a place in inflight_limit; cleanup_limit bounds them.",
@@ -2199,7 +2211,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         session: str("Code of the task session: С1, С2, С3п, С4…; default исп (the executor)"),
         part_of: str("Number of the parent task: the new task is its sub-task (own number and folder)"),
         place: { type: "string", enum: ["own", "task"], description: "Where the session works: own - its own worktree and branch from the task branch (default for С2, С4, С6), task - the task worktree" },
-        message: str("Full text of task/message.md of a new task folder (with the owner's words and date); without it the plugin writes a template from the fields"),
+        message: str("Full text of task/message.md of a new task folder by the template (title, header, the six sections in order; the owner's words with date); without it the plugin builds the text from the fields"),
         parent: str("The order of another project this task fulfils: \"project#N\" (from the order letter)"),
       },
       additionalProperties: false,
@@ -2323,7 +2335,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         "Tasks of the caller's project, by number (045 for a task with a folder, #N without). One line per action: action - who may - parameters - what it does. Roles: integrator = the tab that plans and starts the project's tasks; executor = the session doing the task; reviewer = the tab that checks and lands a submitted task (a free worker tab, a session started for it, the acceptor role when the project says reviewer: acceptor, or the integrator). Texts that go to another tab (submit report, rework remarks, order, push and cancel texts) are read by the owner too: write them in the owner's language named in your system block.",
         "list - anyone - all? - open tasks by priority; all=true adds finished and cancelled ones.",
         "view - anyone - n - details and history of a task, with its steps, side branches and worktrees (show is a synonym).",
-        "assign - integrator - session, goal, criteria, title?, boundaries?, open_questions?, priority?, extra? - give a task to an existing open tab instead of a new session; the tab is woken while the task is open. Refused for the integrator's own session (unless the project sets allow_self_assign) and for a session that already runs a task. extra {id: one line} fills the project's extra task fields (task_extra_fields, see crew_config view).",
+        "assign - integrator - session, goal, criteria, title?, boundaries?, open_questions?, priority?, extra? - give a task to an existing open tab instead of a new session; the tab is woken while the task is open. Refused for the integrator's own session (unless the project sets allow_self_assign) and for a session that already runs a task. extra {id: one line} fills the project's extra task fields (task_extra_fields, see crew_config view). In a project with task folders the task text follows the template of crew_spawn: owner_words and result required, links? boundaries? message?",
         "order - integrator - to \"project.integrator\", goal, criteria, ... - order work from another project: its integrator does it with its own tasks; when its task is accepted the order is done (a quiet summary to you), when cancelled you get a call.",
         "push - integrator - n, text?, to? - nudge a stalled tab now (the reminder counter starts over): to \"executor\" (default) wakes the executor, to \"reviewer\" wakes the reviewer of the task.",
         "deliver - integrator - n, text - a task led by method sessions (status idle: the last session submitted to you) goes to the plugin's review once: text is the report for the reviewer (what is ready to land). A task with a single executor session goes to review on its submit, as before.",
@@ -2367,7 +2379,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         grades: { type: "object", description: "round: remarks per grade id of plan_grades", additionalProperties: { type: "number" } },
         sync: { type: "boolean", description: "rework: only merge the fresh target branch, not a round" },
         all: { type: "boolean", description: "list: include finished and cancelled", default: false },
-        message: str("assign in a project with task folders: the full text of task/message.md of the new folder; without it a template from the fields"),
+        message: str("assign in a project with task folders: the full text of task/message.md of the new folder by the template (as crew_spawn); without it the text is built from the fields"),
         ...taskInput,
       },
       required: ["action"],
@@ -2401,8 +2413,11 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const title = String(input.title ?? "").trim() || String(input.goal).split(/\r?\n/)[0].slice(0, 60)
         // проект с папками задач (задача 058): номер — номер новой папки, папка коммитится на ветке задачи, вкладка — сессия «исп»
         const fm = folderInfo(target.directory, cfg)
+        // задание по образцу Канона (задача 065) — те же поля и отказы, что у crew_spawn
+        const refusal = fm ? messageRefusal(input) : undefined
+        if (refusal) return { content: refusal }
         const t = createTask({
-          project, title, goal: String(input.goal).trim(), criteria: input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(),
+          project, title, goal: String(input.goal).trim(), criteria: input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(), ...messageFieldsOf(input),
           ...(extra.value ? { extra: extra.value } : {}),
           priority: isPriority(input.priority) ? input.priority : cfg.defaultPriority, tier: "medium", role: target.role, model: target.model,
           author: me.session, author_role: keyOf(me), qid: newQid(), status: "running", kind: "assign", executor: target.session, directory: target.directory,
@@ -2410,7 +2425,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         if (fm && t.folder && t.branch) {
           const own = String(input.message ?? "")
           const base = baseRef(fm.top, cfg.targetBranch)
-          const c = commitFiles(fm.top, t.branch, base, { [`${t.folder}/task/message.md`]: own.trim() ? own : templateMessage(t), [`${t.folder}/log.md`]: firstLogLine(t, own.trim() ? "текст интегратора (поле message)" : "шаблон из полей задачи", cfg.targetBranch) }, `Add task ${pad3(t.n)}: ${t.slug}`)
+          const c = commitFiles(fm.top, t.branch, base, { [`${t.folder}/task/message.md`]: own.trim() ? own : templateMessage(t, new Date(), { target: cfg.targetBranch, via: "crew_task assign" }), [`${t.folder}/log.md`]: firstLogLine(t, own.trim() ? "текст интегратора (поле message)" : "шаблон из полей задачи", cfg.targetBranch) }, `Add task ${pad3(t.n)}: ${t.slug}`)
           if (!c.ok) {
             taskEvent(t, me.session, "cancelled", `папка не заведена: ${c.error}`)
             return { content: `Задача ${taskRef(t)} не заведена: папку ${t.folder}/ не удалось записать на ветку ${t.branch} (${c.error}). Номер ${pad3(t.n)} остаётся пропуском.` }
