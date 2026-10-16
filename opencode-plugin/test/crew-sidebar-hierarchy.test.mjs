@@ -87,6 +87,13 @@ const wc = waitText("⧗ очередь: сборка всех платформ 
 cell("waitText: a very long essence is cut, the time stays", wc.length === 2 && wc[1].endsWith("… 597м") && wc.every((l) => l.length <= 25), JSON.stringify(wc))
 cell("waitText: no wait time - the essence as it is", JSON.stringify(waitText("⧗ CI", undefined, now, 25)) === JSON.stringify(["⧗ CI"]), "")
 
+// item 6 (the owner, 2026-10-17, "по рекомендации"): the plain names of the kinds - one list for the panel, the "Ход работ" block and /crew
+const { SESSION_WORDS, sessionName } = await import("../progress.ts")
+const { sessionKind } = await import("../status.ts")
+cell("6: С1 - «спецификация», С1п - «правка спецификации», С2 - «проверка спецификации»", SESSION_WORDS["С1"] === "спецификация" && SESSION_WORDS["С1п"] === "правка спецификации" && SESSION_WORDS["С2"] === "проверка спецификации", JSON.stringify([SESSION_WORDS["С1"], SESSION_WORDS["С1п"], SESSION_WORDS["С2"]]))
+cell("6: the other kinds are as they were, the codes stay", ["С3 план", "С3п правка плана", "С4 проверка плана", "С5 реализация", "С5д продолжение реализации", "С5п правка реализации", "С6 проверка реализации", "С7 сдача", "С7п правка сдачи", "С8 проверка сдачи", "С9 разбор обратной связи"].every((x) => sessionName(x.split(" ")[0]) === x) && sessionName("С2") === "С2 проверка спецификации", "")
+cell("6: the panel takes the same words (one list)", sessionKind("С1") === "спецификация" && sessionKind("С2") === "проверка спецификации", `${sessionKind("С1")} / ${sessionKind("С2")}`)
+
 rmSync(tmp, { recursive: true, force: true })
 console.log(fail ? `crew-sidebar-hierarchy.test: FAIL ${fail}` : "crew-sidebar-hierarchy.test ok")
 process.exit(fail ? 1 : 0)
