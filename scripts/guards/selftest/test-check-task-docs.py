@@ -386,6 +386,39 @@ def main():
                 assert part in proc.out, (part, proc.out)
         return fn
 
+    # задача 062 (методика 0b0e6d4, раздел 4): строка log.md вида «ворота» называет канал и время вопроса владельцу — у задач, начатых не раньше 2026-10-16 17:00
+    glog = "doc/tasks/002-g/log.md"
+    def gate_index(start, added, expect_red=None, parts=()):
+        def fn():
+            repo = fresh(dict(good_j))
+            old = start + " документ: задача заведена\n"
+            stlib.write_files(repo, {glog: old})
+            stlib.git(repo, env, "add", "--", glog)
+            stlib.git(repo, env, "commit", "-q", "-m", "base log")
+            stlib.write_files(repo, {glog: old + "\n".join(added) + "\n"})
+            stlib.git(repo, env, "add", "--", glog)
+            proc = check(repo, "--index")
+            if expect_red is None:
+                assert proc.returncode == 0 and "FAIL" not in proc.out, proc.out
+            else:
+                stlib.expect(proc, 1, "FAIL: check-task-docs: %d нарушений" % len(expect_red))
+                for number in expect_red:
+                    assert stlib.has_line(proc, "FAIL %s:%d: log-gate:" % (glog, number)), proc.out
+                for part in parts:
+                    assert part in proc.out, (part, proc.out)
+        return fn
+
+    NEW = "2026-10-16 17:30"
+    GATE_OK = "2026-10-16 18:00 ворота: В2 пройдены, вопрос задан в окне OpenCode, канал question, 17:55"
+    pr.probe("красная", "задача 062: «ворота» новой задачи без канала и времени — правило, форма, пример", gate_index(NEW, ["2026-10-16 18:00 ворота: В2, остановились"], [2], ("канал", "ЧЧ:ММ", "ворота")))
+    pr.probe("красная", "задача 062: «ворота» с каналом, но без времени вопроса", gate_index(NEW, ["2026-10-16 18:00 ворота: В2, вопрос задан в канале question"], [2]))
+    pr.probe("красная", "задача 062: «ворота» со временем, но без слова «канал»", gate_index(NEW, ["2026-10-16 18:00 ворота: В2, вопрос задан в 17:55"], [2]))
+    pr.probe("красная", "задача 062: верная и неверная подряд — красная вторая", gate_index(NEW, [GATE_OK, "2026-10-16 18:10 ворота: В3 без вопроса"], [3]))
+    pr.probe("законное", "задача 062: «ворота» с каналом и временем вопроса", gate_index(NEW, [GATE_OK]))
+    pr.probe("законное", "задача 062: другие виды записей новой задачи отметки не требуют", gate_index(NEW, ["2026-10-16 18:00 документ: spec.md", "2026-10-16 18:01 решение владельца: принято"]))
+    pr.probe("законное", "задача 062: задача, начатая раньше введения, — «ворота» без отметки не красные (переход)", gate_index("2026-10-16 16:47", ["2026-10-16 18:00 ворота: В2, остановились"]))
+    pr.probe("законное", "задача 062: задача без записи с временем в начале — не судится", gate_index("Методика: x @ abc\n2026-10-09", ["2026-10-16 18:00 ворота: В2"]))
+
     def log_tree_and_commit_not_judged():
         repo = log_repo()
         sha = stlib.commit_file(repo, env, log_md, old_log + "2026-10-10 без вида и времени\n", "bad log")
