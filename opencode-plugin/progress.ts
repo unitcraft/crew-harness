@@ -392,7 +392,8 @@ export function entryOf(session: Session, fileMtime: number, now: number, th: Th
   }
 }
 
-const SESSION_WORDS: Record<string, string> = {
+/** Виды сессий методики словами — единый перечень (задача 064, п. 7): панель «Ход работ» (sessionName) и панель «Crew» (status.ts sessionKind). */
+export const SESSION_WORDS: Record<string, string> = {
   "С1": "разбор",
   "С1п": "правка разбора",
   "С2": "проверка разбора",

@@ -145,7 +145,16 @@ kept in its record, so a restart or a later role change does not alter them ([pl
 
 The window's right panel shows a "Crew" block under "Context": the sessions of the project of the tab on screen —
 the ones waiting for you first, who is working and how long, who waits for what — refreshed every 2 s
-([plan 003.2](../doc/archive/plans/003.2-sidebar.md)). Marks of a tab (the same in `/crew` and `/ask`): `?` — waits for you;
+([plan 003.2](../doc/archive/plans/003.2-sidebar.md)). A task is shown once (task 064): its number and title lead, as a heading
+wrapped by words onto two rows at most and cut with `…` (`‖ #85 Accept Oracle evaluation`), the mark on the left being its most
+important tab's; under it a row per tab with the role and the state (`исп  вопрос — ждёт ответа`, `прм  ↻ ждёт доработки`), and under
+that, as before, the question or the waiting phrase and the steps. A reviewer's step in progress names its id and a short name taken
+from the step's text (`проверка 3/12: sabotage — подсунь негодное`, wrapped the same way). A task with a folder heads its sessions
+the same way (`061 Канон и актуальная методика`, no mark: the sessions carry theirs); a session of the methodology shows its code and
+the name of its kind (`↳ С2-5 проверка разбора`, the state on the row under it; the names come from one list, the same as in the
+"Ход работ" block; a code outside it takes the short name of the session's goal), and the finished sessions fold into one row
+`✓ сдано N сессий`, so the rows they freed go to live tabs. `/crew` shows the title whole, once per task, and lists every session.
+Marks of a tab (the same in `/crew` and `/ask`): `?` — waits for you;
 `▶` — asked a question in text and waits for the integrator (or you), labelled `вопрос — ждёт ответа` with the question
 under it; `‖` — its turn ended with a waiting phrase and no question mark («жду дальнейших указаний», «ожидаю вашего
 решения»), labelled `ждёт указаний` (`ждёт указаний интегратора` in `/crew` when the phrase names the integrator) with the
@@ -506,8 +515,8 @@ task by its number; a session's title is `045 исп title` (`#N исп title` w
 - **Transition.** Old records keep their numbers and their show (`#57 исп`). A closed old record with the number of a folder
   moves unchanged to `tasks/<project>/legacy/<N>.json` when that task gets its record (shown by `crew_task list all`); an
   open one refuses with its title. An order (`crew_task order`) takes its number from the same count and makes no folder.
-- **The show.** The "Crew" panel puts the task line `045 <title>` over its sessions `↳ прм`, `↳ С4-3`; `/crew` lists them
-  under `045 «<title>»`; the line "Ждут вас" names `045 прм`; notices, letters and answers name the task `045` and the
+- **The show.** The "Crew" panel puts the task line `045 <title>` over its sessions `↳ прм`, `↳ С4-3 проверка плана`, finished
+  sessions folded into `✓ сдано N сессий` (task 064); `/crew` lists them all under `045 <title>`; the line "Ждут вас" names `045 прм`; notices, letters and answers name the task `045` and the
   session `045 С4-3`.
 
 - `crew_spawn {title?, goal, criteria, boundaries?, open_questions?, extra?, tier?, priority?, role?, parent?}` (the

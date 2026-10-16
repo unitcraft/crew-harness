@@ -16,7 +16,8 @@ import { answerLines, answerSideRow } from "./answer.ts"
 import { divergenceLineFor, unconfiguredLineFor } from "./config-diverge.ts"
 import { FORM_MAX_REPEATS, pendingForms } from "./form-wait.ts"
 import { lockWaitLine } from "./review.ts"
-import { type Task, ACCEPTED_REMINDERS_MAX, acceptedAt, acceptedReminders, isOpen, listTasks, loadTask, sesLabel, sessionOf, taskNo } from "./tasks.ts"
+import { type Task, ACCEPTED_REMINDERS_MAX, EXECUTOR_CODE, acceptedAt, acceptedReminders, isOpen, listTasks, loadTask, sesLabel, sessionOf, taskNo } from "./tasks.ts"
+import { SESSION_WORDS } from "./progress.ts"
 import { GATE_MARK } from "./gate-stop.ts"
 import { IDLE_MARK } from "./idle-tab.ts"
 import { type Watch, watchesOf } from "./watch.ts"
@@ -54,7 +55,7 @@ export type Status = {
   /** Своя задача (исполнитель или приёмщик). ref — номер задачи в показе («045» с папкой, «#57» без, задача 058); label — сессия
    *  методики («С4-3»); group — задача с папкой: панель и /crew группируют её сессии под строкой задачи; status у сессии методики —
    *  её собственный (сдана — submitted, передана — handed), ended — когда сдана. */
-  task?: { n: number; status: string; as: "executor" | "reviewer"; title: string; steps?: StepView[]; checking?: string; ref?: string; label?: string; group?: true; ended?: number }
+  task?: { n: number; status: string; as: "executor" | "reviewer"; title: string; steps?: StepView[]; checking?: string; ref?: string; label?: string; group?: true; ended?: number; kind?: string }
   /** Открытые задачи, поставленные этой сессией. */
   tasks: { n: number; status: string; priority: string; title: string }[]
   /** Вкладка застряла (задача 043, L3): с какого времени и по чему; держится, пока признак не снят (push, ответ, сдача, рабочий ход,
@@ -73,9 +74,21 @@ export function stepProgress(task: Status["task"]): string | undefined {
   if (!task?.steps?.length || !["reviewing", "accepted"].includes(task.status)) return undefined
   const total = task.steps.length
   const i = task.checking ? task.steps.findIndex((a) => a.id === task.checking) : -1
-  if (i >= 0 && !task.steps[i].result) return `проверка ${i + 1}/${total}: ${task.checking}`
+  // шаг — id и короткое название из его текста (задача 064, п. 7; владелец, 2026-10-17: «название шагов и сессий надо показывать»)
+  const name = i >= 0 ? shortName(task.steps[i].text) : ""
+  if (i >= 0 && !task.steps[i].result) return `проверка ${i + 1}/${total}: ${task.checking}${name && name !== task.checking ? ` — ${name}` : ""}`
   return `шаги ${task.steps.filter((a) => a.result).length}/${total}`
 }
+
+/** Короткое название из текста шага или цели сессии: до первого «:», «;», «.», « — » или «(», без разметки. */
+export const shortName = (text = ""): string => {
+  const t = text.replace(/[`*_]/g, "").replace(/\s+/g, " ").trim()
+  const m = /[:;.](?=\s|$)|\s[—–]\s|\s\(/.exec(t)
+  return (m ? t.slice(0, m.index) : t).trim()
+}
+/** Вид сессии задачи словами (задача 064, п. 7): по коду из единого перечня методики (progress.ts SESSION_WORDS); код вне перечня
+ *  (С2м и подобные) — по записи сессии в задаче (её цель); у исполнителя и без цели — нет. */
+export const sessionKind = (code: string, goal?: string): string | undefined => SESSION_WORDS[code] ?? (code !== EXECUTOR_CODE && goal ? shortName(goal) || undefined : undefined)
 
 /**
  * Фразы ожидания слова владельца без знака «?» («жду вашего разрешения», «awaiting your GO»). ЕДИНЫЙ перечень: расширяется по
@@ -173,7 +186,7 @@ function statusOfAll(x: StatusInput): Status {
     watches: watches.map((w) => ({ id: w.id, note: w.note, started: w.started, minutes: w.minutes })),
     asked: x.asked,
     ...(x.askedStale?.length ? { askedStale: x.askedStale } : {}),
-    ...(own ? { task: { n: own.n, status: ses && ses.status !== "running" ? (ses.status === "submitted" ? "submitted" : ses.status === "handed" ? "handed" : "cancelled") : own.status, as: card.task ? ("executor" as const) : ("reviewer" as const), title: own.title, ...(stepsOf(own) ? { steps: stepsOf(own) } : {}), ...(own.checking ? { checking: own.checking.step } : {}), ...(own.folder ? { ref: taskNo(own), group: true as const } : {}), ...(ses && ses.code !== "исп" ? { label: sesLabel(ses) } : {}), ...(ses?.ended && ses.status !== "running" ? { ended: ses.ended } : {}) } } : {}),
+    ...(own ? { task: { n: own.n, status: ses && ses.status !== "running" ? (ses.status === "submitted" ? "submitted" : ses.status === "handed" ? "handed" : "cancelled") : own.status, as: card.task ? ("executor" as const) : ("reviewer" as const), title: own.title, ...(stepsOf(own) ? { steps: stepsOf(own) } : {}), ...(own.checking ? { checking: own.checking.step } : {}), ...(own.folder ? { ref: taskNo(own), group: true as const } : {}), ...(ses && ses.code !== "исп" ? { label: sesLabel(ses), ...(sessionKind(ses.code, ses.goal) ? { kind: sessionKind(ses.code, ses.goal) } : {}) } : {}), ...(ses?.ended && ses.status !== "running" ? { ended: ses.ended } : {}) } } : {}),
     tasks: authored.map((t) => ({ n: t.n, status: t.status, priority: t.priority, title: t.title })),
     ...(stuck.length ? { stuck } : {}),
     updated: now,
@@ -359,11 +372,15 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
     out.push(`${p}${waiting ? ` — ВАС ЖДУТ: ${waiting}` : ""}`)
     const one = (s: Status, pad: string) => {
       // у сессии задачи с папкой номер — в строке задачи над ней (задача 058): «С4-3 исп», «прм»
-      const who = s.task?.group ? `${s.task.label ? `${s.task.label} ` : ""}${s.task.as === "reviewer" ? "прм" : "исп"}` : s.task ? s.title : `${s.role}${s.title && s.title !== s.session ? ` · ${s.title}` : ""}`
+      // сессия методики с видом (задача 064, п. 7): «С2-5 проверка разбора» вместо роли
+      const who = s.task?.group ? (s.task.label && s.task.kind ? `${s.task.label} ${s.task.kind}` : `${s.task.label ? `${s.task.label} ` : ""}${s.task.as === "reviewer" ? "прм" : "исп"}`) : s.task ? s.title : `${s.role}${s.title && s.title !== s.session ? ` · ${s.title}` : ""}`
       const model = s.model ? ` [${s.model.replace(/^.*\//, "")}]` : ""
       const prog = s.task?.as === "reviewer" ? stepProgress(s.task) : undefined
       // вопрос владельцу — целиком (его и читают), остальное — строкой по ширине окна; значки — как в панели (MARK)
-      const row = `${pad}${s.state === "owner" || s.state === "question" || (s.idleTab && s.state === "tasks") ? `${markOf(s)} ` : ""}${short(who, 40)}${model} — ${s.detail}`
+      const mark = s.state === "owner" || s.state === "question" || (s.idleTab && s.state === "tasks") ? `${markOf(s)} ` : ""
+      // вкладка задачи без папки (задача 064, пп. 6, 8): номер и название — заголовком над вкладками задачи, здесь роль и состояние
+      const plain = s.task && !s.task.group ? s.task : undefined
+      const row = plain ? `${pad}    ${plain.as === "reviewer" ? "прм" : "исп"}${model} — ${s.detail}` : `${pad}${mark}${short(who, 40)}${model} — ${s.detail}`
       out.push(s.state === "owner" ? row : fit(row))
       if (s.askedStale?.length) out.push(fit(`${pad}    вопрос устарел: ${s.askedStale.map((a) => `к ${a.to} с ${hm(a.at)} (${minutes(a.at, now)})`).join(", ")}`))
       for (const k of s.stuck ?? []) out.push(fit(`${pad}    ⚠ ${stuckText(k)}`))
@@ -374,18 +391,23 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
         if (cur) out.push(fit(`${pad}    ▶ ${cur.id}: ${short(cur.text, 120)}`))
       }
     }
+    // задача — одним заголовком (задачи 058, 064): номер и название целиком, у задачи без папки — со значком самой важной вкладки;
+    // под ним её вкладки по состоянию, сданные и переданные сессии — после работающих
+    const tk = (s: Status) => (s.task ? (s.task.group ? `g${s.task.ref ?? s.task.n}` : `t${s.task.n}`) : undefined)
     const shown = new Set<string>()
     for (const s of items) {
-      if (!s.task?.group) {
+      const key = tk(s)
+      if (!key) {
         one(s, "  ")
         continue
       }
-      const key = s.task.ref ?? String(s.task.n)
       if (shown.has(key)) continue
       shown.add(key)
-      out.push(fit(`  ${key} «${short(s.task.title.replace(/[«»]/g, ""), 50)}»`))
-      // в группе: по состоянию, сданные и переданные сессии — после работающих
-      for (const x of items.filter((y) => y.task?.group && (y.task.ref ?? String(y.task.n)) === key).sort((a, b) => ORDER[a.state] - ORDER[b.state] || Number(!!a.task?.ended) - Number(!!b.task?.ended))) one(x, "    ")
+      const group = items.filter((y) => tk(y) === key).sort((a, b) => ORDER[a.state] - ORDER[b.state] || Number(!!a.task?.ended) - Number(!!b.task?.ended))
+      const lead = group[0]
+      const mark = !s.task!.group && (lead.state === "owner" || lead.state === "question" || (lead.idleTab && lead.state === "tasks")) ? `${markOf(lead)} ` : ""
+      out.push(`  ${mark}${s.task!.ref ?? `#${s.task!.n}`} ${titleText(s.task!.title)}`.trimEnd())
+      for (const x of group) one(x, s.task!.group ? "    " : "  ")
     }
     out.push(...planLines(p))
     out.push(...uncleanedLines(p, now))
@@ -478,12 +500,47 @@ export function acceptanceReports(project: string, now = Date.now()): string[] {
 // БОКОВАЯ ПАНЕЛЬ ОКНА (план 003.2, 2026-10-06; владелец: «в этой области можно выводить активные сессии и обновлять в
 // реальном времени?»). Строки блока «Crew» под «Context»: кто чего ждёт в проекте вкладки на экране, ждущие владельца
 // первыми. Чистая функция — рисует sidebar.tsx, проверяет тест.
-/** flush — строка печатается как есть, с первой колонки (строки «Ждут вас», задача 055). */
-export type SideRow = { mark: string; who: string; what: string; tone: "accent" | "base" | "muted"; flush?: boolean }
+/** flush — строка печатается как есть, с первой колонки (строки «Ждут вас», задача 055; название задачи, задача 064).
+ *  role — строка состояния вкладки задачи под её названием (задача 064, п. 6): печатается «  прм  ждёт указаний»; who и mark
+ *  остаются для логики (какая вкладка, её значок), значок напечатан в строке названия; indent — отступ строки состояния (5 — у сессии
+ *  методики под строкой её вида, role тогда пустая). */
+export type SideRow = { mark: string; who: string; what: string; tone: "accent" | "base" | "muted"; flush?: boolean; role?: string; indent?: number }
 /** Строка панели как она печатается (ширина панели ~32 знака: длиннее — перенос, и список выглядит разрезанным; OpenCode
  *  2.0.23 даёт панели 42 колонки, под текст после отступов — около 37). Подстрока (who пустой) — с отступом под «что», без колонки «кто». */
 export const SIDE_WIDTH = 32
-export const sideText = (r: SideRow, width = SIDE_WIDTH) => (r.flush ? r.what : r.who ? `${r.mark} ${r.who.padEnd(9).slice(0, 9)} ${r.what}` : `    ${r.what}`).slice(0, width)
+export const sideText = (r: SideRow, width = SIDE_WIDTH) => (r.flush ? r.what : r.role !== undefined ? `${" ".repeat(r.indent ?? 2)}${r.role ? `${r.role}  ` : ""}${r.what}` : r.who ? `${r.mark} ${r.who.padEnd(9).slice(0, 9)} ${r.what}` : `    ${r.what}`).slice(0, width)
+/** Название задачи для показа: без разметки и кавычек «», одной строкой. */
+export const titleText = (t: string) => t.replace(/[`*_«»]/g, "").replace(/\s+/g, " ").trim()
+/** Перенос по словам (задача 064, п. 6; владелец, 2026-10-17: «по рекомендации» — «название первой строкой, перенос не больше
+ *  чем на две строки, дальше «…»»): не больше max строк шириной width; не влезло — последняя строка кончается «…». Слово длиннее
+ *  строки режется. */
+export function wrapWords(text: string, width: number, max = 2): string[] {
+  const words = text.split(" ").filter(Boolean)
+  const lines: string[] = []
+  let cur = ""
+  let i = 0
+  while (i < words.length && lines.length < max) {
+    const next = cur ? `${cur} ${words[i]}` : words[i]
+    if (next.length <= width) {
+      cur = next
+      i++
+      continue
+    }
+    if (!cur) {
+      cur = words[i].slice(0, width)
+      words[i] = words[i].slice(width)
+    }
+    lines.push(cur)
+    cur = ""
+  }
+  if (cur) lines.push(cur)
+  if (i < words.length && lines.length) {
+    let last = lines[lines.length - 1]
+    while (last.length + 1 > width && last.includes(" ")) last = last.slice(0, last.lastIndexOf(" "))
+    lines[lines.length - 1] = `${last.slice(0, width - 1)}…`
+  }
+  return lines
+}
 const WORD_OF_TASK: Record<string, string> = { submitted: "✓ сдана", reviewing: "✓◐ приёмка", rework: "↻ доработка", approval: "◇ согласование", accepted: "✓✓◐ влита", running: "в работе", starting: "запуск", idle: "ждёт сессии", handed: "↷ передана" }
 const SIDE_MAX = 9
 /** «что» ждущей вкладки с длительностью ожидания: «⧗ CI t34 40м» (длительность — в конце, обрезается текст перед ней). */
@@ -509,7 +566,8 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
       case "reply":
         return `ждёт ответа от ${s.asked[0]?.to ?? "?"}`
       case "task":
-        return s.task ? (WORD_OF_TASK[s.task.status] ?? s.task.status) : "задача"
+        // приёмщик задачи на доработке ждёт её (задача 064, п. 8: «прм  ↻ ждёт доработки»)
+        return s.task ? (s.task.as === "reviewer" && s.task.status === "rework" ? "↻ ждёт доработки" : (WORD_OF_TASK[s.task.status] ?? s.task.status)) : "задача"
       case "tasks":
         return s.idleTab ? `простаивает ${Math.max(0, Math.round((now - s.idleTab.since) / 60_000))}м` : `ждёт задач (${s.tasks.length})`
       default:
@@ -517,45 +575,84 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
     }
   }
   const sorted0 = mine.slice().sort((a, b) => ORDER[a.state] - ORDER[b.state] || who(a).localeCompare(who(b)))
-  // задача с папкой (задача 058): её сессии подряд, под строкой задачи «045 название» — на месте самой важной из них
-  const gkey = (s: Status) => (s.task?.group ? (s.task.ref ?? String(s.task.n)) : undefined)
+  // ЗАДАЧА — ОДНИМ ЗАГОЛОВКОМ (задача 058; задача 064, п. 8; владелец, 2026-10-17, «по рекомендации»): вкладки одной задачи подряд, под
+  // строкой «номер название» — на месте самой важной из них. У задачи с папкой — по номеру папки, без папки — по номеру задачи.
+  // Законченные сессии задачи с папкой (сданы, переданы, закрыты; не ждут вас и не работают) — одной строкой «✓ сдано N сессий» под
+  // живыми, в счёт строк панели (SIDE_MAX) не идут; полный список — в /crew
+  const tkey = (s: Status) => (s.task ? (s.task.group ? `g${s.task.ref ?? s.task.n}` : `t${s.task.n}`) : undefined)
+  const finished = (s: Status) => !!s.task?.group && !!s.task.label && ["submitted", "handed", "cancelled"].includes(s.task.status) && s.state !== "owner" && s.state !== "question" && s.state !== "working"
+  const live = sorted0.filter((s) => !finished(s))
   const sorted: Status[] = []
-  for (const s of sorted0) {
-    const k = gkey(s)
+  for (const s of live) {
+    const k = tkey(s)
     if (!k) sorted.push(s)
-    else if (!sorted.some((x) => gkey(x) === k)) sorted.push(...sorted0.filter((x) => gkey(x) === k).sort((a, b) => ORDER[a.state] - ORDER[b.state] || Number(!!a.task?.ended) - Number(!!b.task?.ended)))
+    else if (!sorted.some((x) => tkey(x) === k)) sorted.push(...live.filter((x) => tkey(x) === k).sort((a, b) => ORDER[a.state] - ORDER[b.state] || Number(!!a.task?.ended) - Number(!!b.task?.ended) || who(a).localeCompare(who(b))))
   }
+  const toneOf = (s: Status) => (s.state === "owner" || s.state === "question" || s.idleTab ? "accent" : s.state === "idle" ? "muted" : "base") as SideRow["tone"]
   const rows: SideRow[] = []
   // «Ждут вас» на все окна (по всем проектам, не только по этому): сколько и с какого времени, кто ждёт дольше всех, начало вопроса
   rows.push(...waitingRows(list, width))
-  let lastGroup: string | undefined
-  for (const s of sorted.slice(0, SIDE_MAX)) {
-    const g = gkey(s)
-    if (g && g !== lastGroup) rows.push({ mark: " ", who: "", what: `${g} ${s.task!.title.replace(/[`*_«»]/g, "")}`.slice(0, width), tone: "base", flush: true })
-    lastGroup = g
-    // приёмка по шагам: «проверка 3/13: fixture» вместо «работает», под строкой — что проверяет шаг
-    // ждущая вкладка (наблюдение, очередь машины, ответ) показывает, чего ждёт, и сколько; шаги — строкой под ней
+  // название задачи — первой строкой (задача 064, п. 6; владелец, 2026-10-17: «непонятно что за задачи, я по памяти не помню,
+  // показывай название задачи»): номер и название, перенос по словам не больше чем на две строки, дальше «…». У задачи с папкой —
+  // без значка (значки — у сессий), у задачи без папки — значок самой важной вкладки (first: она первая в группе)
+  const heading = (first: Status) => {
+    const g = first.task!.group
+    wrapWords(`${first.task!.ref ?? `#${first.task!.n}`} ${titleText(first.task!.title)}`, width - 2).forEach((l, k) => {
+      const m = k || g ? " " : (markOf(first) ?? " ")
+      rows.push({ mark: m, who: "", what: `${m} ${l}`, tone: g ? "base" : toneOf(first), flush: true })
+    })
+  }
+  const doneRow = (k: string) => {
+    const n = sorted0.filter((x) => finished(x) && tkey(x) === k).length
+    if (n) rows.push({ mark: " ", who: "", what: `   ✓ сдано ${n} ${n % 10 === 1 && n % 100 !== 11 ? "сессия" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? "сессии" : "сессий"}`, tone: "muted", flush: true })
+  }
+  const shown = sorted.slice(0, SIDE_MAX)
+  let last: string | undefined
+  shown.forEach((s, idx) => {
+    const k = tkey(s)
+    if (k && k !== last) heading(s)
+    last = k
+    const g = !!s.task?.group
+    const plain = s.task && !g ? s.task : undefined
+    const tone = toneOf(s)
+    const mark = markOf(s) ?? " "
+    const role = s.task ? (s.task.as === "reviewer" ? "прм" : "исп") : ""
+    // сессия методики с видом (задача 064, п. 7): «↳ С2-5 проверка разбора» строкой (перенос — как у названия), состояние — под ней
+    const kind = g && s.task!.label && s.task!.kind ? `↳ ${s.task!.label} ${s.task!.kind}` : undefined
+    if (kind) wrapWords(kind, width - 5).forEach((l, i) => rows.push({ mark: i ? " " : mark, who: "", what: i ? `     ${l}` : `${mark}  ${l}`, tone, flush: true }))
+    // приёмка по шагам: «проверка 3/13: fixture — название» вместо «работает», переносом по словам; ждущая вкладка (наблюдение, очередь
+    // машины, ответ) показывает, чего ждёт, и сколько; шаги — строкой под ней
     const stepsLine = s.state !== "owner" && s.state !== "question" ? stepProgress(s.task) : undefined
     const waiting = s.state === "watch" || s.state === "reply"
     const prog = waiting ? undefined : stepsLine
     const waitFor = waiting ? waitText(what(s), s.since, now) : undefined
+    const lead = plain ? 2 + role.length + 2 : kind ? 5 : 12
+    const text = prog ? wrapWords(prog, width - lead) : [short(waitFor ?? what(s), 20)]
     rows.push({
-      mark: markOf(s) ?? " ",
-      who: g ? ` ↳ ${s.task!.label ?? (s.task!.as === "reviewer" ? "прм" : "исп")}` : who(s),
-      what: short(prog ?? waitFor ?? what(s), 20),
-      tone: (s.state === "owner" || s.state === "question" || s.idleTab ? "accent" : s.state === "idle" ? "muted" : "base") as SideRow["tone"],
+      mark,
+      who: g ? ` ↳ ${s.task!.label ?? role}` : who(s),
+      what: text[0],
+      tone,
+      ...(plain ? { role } : kind ? { role: "", indent: 5 } : {}),
     })
+    for (const l of text.slice(1)) rows.push({ mark: " ", who: "", what: `${" ".repeat(lead)}${l}`, tone, flush: true })
     // простой (задача 063): что стоит — строкой под вкладкой
     if (s.idleTab && s.state === "tasks") rows.push({ mark: " ", who: "", what: `↳ ${short(s.idleTab.what.join("; "), 26)}`, tone: "muted" })
     // вопрос или фраза ожидания сессии задачи — строкой под ней (задача 056): видно, о чём она стоит
     if (s.state === "question" && s.question) rows.push({ mark: " ", who: "", what: `↳ ${short(s.question.replace(/[`*_]/g, ""), 26)}`, tone: "muted" })
-    const cur = s.task?.as === "reviewer" && prog?.startsWith("проверка") ? s.task.steps!.find((a) => a.id === s.task!.checking) : undefined
-    if (cur) rows.push({ mark: " ", who: "", what: `↳ ${short(cur.text.replace(/[`*_]/g, ""), 26)}`, tone: "muted" })
     if (waiting && stepsLine) rows.push({ mark: " ", who: "", what: `↳ ${stepsLine}`, tone: "muted" })
     // застряла (задача 043, L3): строка, пока признак не снят
     if (s.stuck?.length) rows.push({ mark: " ", who: "", what: s.stuck[0].at ? `⚠ застряла с ${hm(s.stuck[0].at)}` : "⚠ застряла", tone: "accent" })
-    // название задачи — по номеру не вспомнить, о чём она (владелец, 2026-10-07); последней подстрокой, чтобы строки шагов остались на своих местах
-    if (s.task?.title && !g) rows.push({ mark: " ", who: "", what: `↳ ${short(s.task.title.replace(/[`*_«»]/g, ""), 26)}`, tone: "muted" })
+    if (g && k && tkey(shown[idx + 1] ?? ({} as Status)) !== k) doneRow(k)
+  })
+  // задачи с папкой, у которых все сессии закончены: заголовок и строка «✓ сдано N»
+  const folded = new Set<string>()
+  for (const s of sorted0.filter(finished)) {
+    const k = tkey(s)!
+    if (live.some((x) => tkey(x) === k) || folded.has(k)) continue
+    folded.add(k)
+    heading(s)
+    doneRow(k)
   }
   const auto = answerSideRow(project, now)
   if (auto) rows.push(auto)

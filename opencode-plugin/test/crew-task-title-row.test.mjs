@@ -75,13 +75,13 @@ cell("7: a code outside the list takes its name from its record in the task (the
 const g7 = (as, status, label, extra = {}) => ({ n: 45, status, as, title: "Канон", ref: "045", group: true, ...(label ? { label } : {}), ...extra })
 const ses = [
   st("s25", "owner", { project: "crew-harness", since: at(0, 10), title: "045 С2-5", detail: "ждёт вас с 00:10: вливать?", question: "вливать?", task: g7("executor", "running", "С2-5", { kind: "проверка разбора" }) }),
-  st("s51", "task", { project: "crew-harness", title: "045 С5п-1", detail: "сдана 00:05", task: g7("executor", "submitted", "С5п-1", { kind: "правка реализации" }) }),
+  st("s51", "task", { project: "crew-harness", title: "045 С5п-1", detail: "на доработке — стоит", task: g7("executor", "rework", "С5п-1", { kind: "правка реализации" }) }),
 ]
 const sp = sidebarLines(ses, now, "crew-harness").rows.map((r) => sideText(r))
 const k25 = sp.indexOf("?  ↳ С2-5 проверка разбора")
 cell("7: the panel - the session's code and the name of its kind, its mark first", k25 >= 0, JSON.stringify(sp))
 cell("7: the state of the session on the row under its name", sp[k25 + 1] === "     ждёт вас 00:10", JSON.stringify(sp.slice(k25, k25 + 2)))
-cell("7: another session the same way", sp.includes("   ↳ С5п-1 правка реализации") && sp[sp.indexOf("   ↳ С5п-1 правка реализации") + 1] === "     ✓ сдана", JSON.stringify(sp))
+cell("7: another live session the same way (a finished one is folded, item 8)", sp.includes("   ↳ С5п-1 правка реализации") && sp[sp.indexOf("   ↳ С5п-1 правка реализации") + 1] === "     ↻ доработка", JSON.stringify(sp))
 cell("7: the rows fit the panel", sp.every((l) => l.length <= 32), JSON.stringify(sp.filter((l) => l.length > 32)))
 const steps = Array.from({ length: 12 }, (_, i) => ({ id: i === 2 ? "sabotage" : "s" + i, text: i === 2 ? "подсунь негодное: проверка падает на испорченном входе `bad.json`" : "шаг " + i, ...(i < 2 ? { result: "ok" } : {}) }))
 const rv = st("r85", "working", { since: now - 60_000, title: "#85 прм", task: { n: 85, status: "reviewing", as: "reviewer", title: "Oracle", steps, checking: "sabotage" } })
