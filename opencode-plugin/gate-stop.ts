@@ -13,7 +13,9 @@ export const GATES = path.join(BASE, "gates")
 /** A stop older than this is forgotten (the tab is long gone, or the owner answered somewhere the plugin did not see). */
 export const GATE_TTL_MS = 12 * 3_600_000
 
-export type Gate = { session: string; at: number; text: string; letter?: number }
+/** kind "wait" (task 064, item 10): not a log_line entry, but a turn of a tab of the owner that ended with a phrase of waiting for the
+ *  owner's decision (WAITING_PHRASES) while no question form was open; at is the end of that turn, text the phrase. */
+export type Gate = { session: string; at: number; text: string; letter?: number; kind?: "wait" }
 
 /** The mark of a tab that stopped at a gate with no question to the owner (next to MARK and WAIT_MARK in status.ts, tasks 055/056). */
 export const GATE_MARK = "⚠"
@@ -25,6 +27,12 @@ export const GATE_ANSWER = "Ворота записаны, но вопроса �
 export const GATE_LETTER =
   "Ты остановился на воротах без вопроса владельцу. Задай его сейчас инструментом question: один вопрос, 2–4 варианта, рекомендация первым вариантом с пометкой (Recommended), довод рядом. " +
   "Сводка в окне вопроса не заменяет: владелец не видит, что решение ждёт его. Вопрос уже открыт или ворота были только записью — ничего не делай."
+
+/** The letter to the tab whose turn ended with a phrase of waiting for the owner's decision and no question (task 064, item 10; the
+ *  owner, 2026-10-17: "остановка на ваших воротах должна заканчиваться вопросом - исправь"). */
+export const WAIT_LETTER =
+  "Ты ждёшь решения владельца, но вопроса нет: задай его сейчас инструментом question — вопрос, рекомендация, довод (один вопрос, 2–4 варианта, рекомендация первым вариантом с пометкой (Recommended)). " +
+  "Фраза ожидания в ответе вопроса не заменяет: владельцу не на что ответить. Вопрос уже открыт или решение владельца не нужно — ничего не делай."
 
 const fileOf = (session: string, dir: string) => path.join(dir, `${safeKey(session)}.json`)
 
@@ -47,10 +55,10 @@ export function gateOf(session: string, dir = GATES, now = Date.now()): Gate | u
 }
 
 /** Note a stop. An open stop is kept as it is (one stop - one letter): a second entry "ворота" of the same stop changes nothing. */
-export function noteGate(session: string, text: string, at = Date.now(), dir = GATES): Gate {
+export function noteGate(session: string, text: string, at = Date.now(), dir = GATES, kind?: "wait"): Gate {
   const have = gateOf(session, dir, at)
   if (have) return have
-  const g: Gate = { session, at, text: String(text).slice(0, 300) }
+  const g: Gate = { session, at, text: String(text).slice(0, 300), ...(kind ? { kind } : {}) }
   save(fileOf(session, dir), g, dir)
   return g
 }

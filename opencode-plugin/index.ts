@@ -133,7 +133,7 @@ import { runRetention } from "./retention.ts"
 import { allSteps, nextPlanNumber, parsePlan, stepDeps } from "./plans.ts"
 import { dropWatch, openWatchesBySession, pollWatches, requestWatch, watchesOf } from "./watch.ts"
 import { type Status, endOfTurn, endsWithQuestion, markNotified, readStatuses, removeStatus, saveStatus, statusOf, withIdle } from "./status.ts"
-import { clearGate, GATE_LETTER, gateOf, markGateLetter, noteGate } from "./gate-stop.ts"
+import { clearGate, GATE_LETTER, gateOf, markGateLetter, noteGate, WAIT_LETTER } from "./gate-stop.ts"
 import { clearIdle as clearIdleTab, holdIdle, idleBlockers, idleLetter, idleOf, idleWhat, waitsOn } from "./idle-tab.ts" // clearIdle в setup — снятие занятости карточки
 import { type Task, taskRef, acceptedAt, ago, byPriority, createTask, rounds, slugify, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
 import { countedOpen, waitingCleanup, ACCEPTED_REMINDERS_MAX, acceptedReminderId, acceptedReminders, letterTime } from "./tasks.ts"
@@ -668,6 +668,24 @@ export default {
           log(`task ${taskNo(t)} (${t.project}) ${t.status}: session ${sid} closed`)
         }
       }
+      // УСТАРЕВШАЯ ПРИВЯЗКА (задача 064, п. 9): вкладка владельца (не сессия задачи), чья задача закрыта (влита или отменена), — привязка
+      // снимается: вкладка снова своей роли, письма и сводки её задачей не зовут. Сессии задач остаются привязаны: по ним окно закрывает вкладку
+      for (const c of allCards()) {
+        if (c.spawned) continue
+        const closed = (r?: { project: string; n: number }) => {
+          const x = r ? loadTask(r.project, r.n) : undefined
+          return !!x && (x.status === "done" || x.status === "cancelled")
+        }
+        const dropTask = closed(c.task)
+        const dropReview = closed(c.review)
+        if (!dropTask && !dropReview) continue
+        const fresh = readJson<Card>(cardFile(c.session))
+        if (!fresh) continue
+        if (dropTask) delete fresh.task
+        if (dropReview) delete fresh.review
+        saveCard(fresh)
+        log(`stale task binding of ${c.session} dropped`)
+      }
       // прежний путь (сессия под задачу без журнала): закрыть по отчёту
       for (const c of allCards()) {
         if (c.task || c.review || c.spawned?.status !== "done" || c.busy || (c.pid !== process.pid && pidAlive(c.pid))) continue
@@ -1109,8 +1127,21 @@ export default {
     // вопрос не задан (нет записи forms/ и нет «?» в конце хода) — вкладке ОДНО письмо «задай вопрос через question» и отметка «⚠ ждёт вашего
     // решения, вопроса нет» в сводках (возвращается gate для statusOf). Снимают: открытый вопрос, «?» в конце хода, слово владельца. Фраза
     // ожидания («до вашего решения») вопросом не считается. Идущий ход — без письма: вопрос может быть задан в нём. Письмо — раз на остановку.
-    async function gateStep(c: Card, busy: boolean, end: { at: number; text: string; ownerAfter: boolean } | undefined, formIsOpen: boolean, t: number): Promise<{ at: number } | undefined> {
-      const g = gateOf(c.session, undefined, t)
+    //
+    // ОЖИДАНИЕ РЕШЕНИЯ ВЛАДЕЛЬЦА ТЕКСТОМ (задача 064, п. 10; владелец, 2026-10-17: «Это нарушает правило из задачи 062: остановка на ваших
+    // воротах должна заканчиваться вопросом - исправь»). Ход вкладки владельца (не сессии задачи: её ожидание адресовано интегратору, задача
+    // 056) кончился фразой ожидания решения владельца (WAITING_PHRASES, без «?» в конце), вопросника нет — та же остановка, вид «wait»: одно
+    // письмо (WAIT_LETTER) и отметка ⚠ вместо «ждёт вас». Граница: ход, кончившийся «?», — вопрос текстом, владелец видит его и отвечает
+    // словом; фраза ожидания вопросом не является — отвечать не на что. Фраза, называющая другую вкладку (интегратора, исполнителя,
+    // приёмщика, сессию), — не ожидание владельца. Снимают: вопросник, «?» в конце хода, слово владельца, ход с работой после фразы; пустой
+    // ход («понял») отметку держит без нового письма.
+    const OTHER_PARTY = /интегратор|исполнител|при[её]мщик|при[её]мк|воркер|сесси/i
+    async function gateStep(c: Card, busy: boolean, end: { at: number; text: string; ownerAfter: boolean } | undefined, formIsOpen: boolean, t: number): Promise<{ at: number; wait?: true; text?: string } | undefined> {
+      let g = gateOf(c.session, undefined, t)
+      if (!g && !busy && end && !end.ownerAfter && !c.spawned && !formIsOpen) {
+        const e = endOfTurn(end.text)
+        if (e?.wait && !OTHER_PARTY.test(e.text)) g = noteGate(c.session, e.text, end.at, undefined, "wait")
+      }
       if (!g) return undefined
       if (formIsOpen) {
         clearGate(c.session)
@@ -1121,6 +1152,23 @@ export default {
       if ((await ownerWordAfter(c.session, g.at)) > 0) {
         clearGate(c.session)
         return undefined
+      }
+      if (g.kind === "wait") {
+        if (busy || !end) return undefined
+        if (end.at > g.at) {
+          const e2 = endOfTurn(end.text)
+          if ((e2 && !e2.wait) || (await workedAfter(c.session, g.at))) {
+            clearGate(c.session)
+            return undefined
+          }
+        }
+        if (!g.letter) {
+          const id = `wait-${safeKey(c.session)}-${g.at}`
+          if (!letterExistsFor(c.session, id)) postLetter(c.session, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: c.session, time: t, text: WAIT_LETTER })
+          markGateLetter(c.session, t)
+          log(`owner awaited by a phrase without a question: ${c.session} reminded`)
+        }
+        return { at: g.at, wait: true, text: g.text }
       }
       if (busy || !end || end.at <= g.at) return undefined
       const e = endOfTurn(end.text)

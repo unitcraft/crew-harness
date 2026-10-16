@@ -159,7 +159,7 @@ Marks of a tab (the same in `/crew` and `/ask`): `?` — waits for you;
 under it; `‖` — its turn ended with a waiting phrase and no question mark («жду дальнейших указаний», «ожидаю вашего
 решения»), labelled `ждёт указаний` (`ждёт указаний интегратора` in `/crew` when the phrase names the integrator) with the
 phrase under it — such a tab gets no "continue" either, the same as a question (task 056); a tab of yours waiting with such a
-phrase is counted in "Ждут вас" with `‖`, not `?`; `⚠` — the tab recorded a gate (`log_line` kind `ворота`), its turn ended, and no question to you is open: labelled `ждёт вашего решения, вопроса нет` (task 062, see `log_line` below); `◷` — the tab stands idle with an open task and no question to you, labelled `простаивает …` (task 063, see below); `•` — its turn is going. The window closes the tab of a task or review session two minutes after its task was merged (accepted — before the cleanup: an open tab keeps the server watching the task's folder, and Windows will not remove it) or cancelled, unless its turn is going or
+phrase is counted in "Ждут вас" with `‖`, not `?`, and once the plugin sees no question form open it turns into `⚠` (task 064, below); `⚠` — the tab recorded a gate (`log_line` kind `ворота`), its turn ended, and no question to you is open: labelled `ждёт вашего решения, вопроса нет` (task 062, see `log_line` below); `◷` — the tab stands idle with an open task and no question to you, labelled `простаивает …` (task 063, see below); `•` — its turn is going. The window closes the tab of a task or review session two minutes after its task was merged (accepted — before the cleanup: an open tab keeps the server watching the task's folder, and Windows will not remove it) or cancelled, unless its turn is going or
 the tab is on screen (the owner's own tabs are left alone; the session stays in the history). `/crew-config` shows the project's settings in effect, each with where it comes from (default, the committed file,
 `local`), like `crew_config show`. `/crew-doctor` shows the service's last self-check (made at start and every 10 minutes), like `crew_doctor`. `/crew` in any window (also in the Ctrl+P palette) shows, without a model turn, every session of the projects:
 working, **waiting for you** (its last answer ends with a question and you have not written since), waiting for a
@@ -392,6 +392,19 @@ tab counts in «Ждут вас». The stop is cleared by an open question (a qu
 the owner's word in the tab. A waiting phrase («остановлено до вашего решения») is no question: the mark `⚠` replaces `‖`. The system hint of
 the tabs carries the rule in one sentence. The phrases «до вашего решения», «остановлено … решение» are recognised as waiting phrases too, but
 only as a supplement to the record.
+
+The same holds with no record at all (task 064; owner, 2026-10-17): when a turn of a tab of yours (not a task session — its wait goes to
+the integrator) ends with a phrase of waiting for your decision («ждёт отдельного решения владельца…») and no question form is open, the
+plugin notes the stop of kind `wait`, the tab gets ONE letter «Ты ждёшь решения владельца, но вопроса нет: задай его сейчас инструментом
+question — вопрос, рекомендация, довод», and the summaries show `⚠ ждёт вашего решения, вопроса нет` with the phrase instead of «ждёт вас».
+The border: a turn ending with a question mark is a question in text — you see it and answer with a word, so no letter; a phrase is no
+question — there is nothing to answer. A phrase naming another tab (the integrator, an executor, a reviewer, a session) is not a wait for you.
+An open question, a question mark at the end of a later turn, your word, or a later turn with work clears it; an empty turn («понял») keeps
+the mark without a new letter.
+
+A tab bound to a closed task (task 064): a tab whose task is merged or cancelled, and an integrator tab always, is shown by its role, not
+as the task's executor (in the rows and in «Ждут вас»); the plugin drops the binding of a tab of yours (not of a task session) once its task
+is closed.
 
 `usage_line` `{file, code, result}`: appends ONE JSON line (format version `"v":1`) to a file named `usage.log`; the file may
 be created only when a `progress.log` lies in the same folder. The agent passes the file, the session code and the result

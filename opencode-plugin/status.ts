@@ -43,6 +43,8 @@ export type Status = {
   /** Вкладка остановилась на воротах без вопроса владельцу (задача 062, gate-stop.ts): state owner, значок GATE_MARK, подпись «ждёт вашего решения,
    *  вопроса нет». Снимается открытым вопросом или словом владельца. */
   gate?: true
+  /** Отметка ворот поставлена не записью «ворота», а фразой ожидания решения владельца без вопроса (задача 064, п. 10). */
+  gateWait?: true
   /** Вкладка простаивает (задача 063, idle-tab.ts): state tasks, у её задачи нет идущей сессии или сессия ждёт её указаний, вопроса
    *  владельцу нет, дольше idle_tab_minutes. since — начало эпизода, what — что стоит («061 между сессиями»). Значок IDLE_MARK. */
   idleTab?: { since: number; what: string[] }
@@ -150,8 +152,9 @@ export type StatusInput = {
   staleSince?: number
   /** ход завис: модель молчит с этого времени, строки idle нет (core.ts hungTurn) */
   hungSince?: number
-  /** Остановка на воротах без вопроса (index.ts: ход вкладки кончился, вопроса нет): с какого времени */
-  gate?: { at: number }
+  /** Остановка на воротах без вопроса (index.ts: ход вкладки кончился, вопроса нет): с какого времени; wait — не запись «ворота», а ход
+   *  вкладки владельца кончился фразой ожидания его решения (задача 064, п. 10), text — эта фраза */
+  gate?: { at: number; wait?: true; text?: string }
 }
 
 /** Состояние одной сессии из её данных. Порядок важности: ход > вопрос владельцу > наблюдение > ответ > задачи. Вкладка, которая
@@ -172,6 +175,9 @@ function statusOfAll(x: StatusInput): Status {
   // сессия задачи с папкой (задача 058): у сессии методики своё состояние
   const ses = own && card.task ? sessionOf(own, card.session) : undefined
   const authored = listTasks(card.project).filter((t) => t.author === card.session && isOpen(t))
+  // УСТАРЕВШАЯ ПРИВЯЗКА (задача 064, п. 9; владелец, 2026-10-17, «по рекомендации»): вкладка, чья задача закрыта (отменена, влита), и вкладка
+  // интегратора показываются по своей роли, а не как исполнитель задачи («#73 исп» у интегратора, подхватившего когда-то отменённую #73)
+  const shown = own && isOpen(own) && card.role !== "integrator" ? own : undefined
   const stuck = obligationsOf(card.session)
     .filter((o) => o.stuck)
     .map((o) => ({ ...(o.stuckAt ? { at: o.stuckAt } : {}), what: o.stuckWhat ?? (o.task ? o.task : `вопрос ${o.qid}`) }))
@@ -186,7 +192,7 @@ function statusOfAll(x: StatusInput): Status {
     watches: watches.map((w) => ({ id: w.id, note: w.note, started: w.started, minutes: w.minutes })),
     asked: x.asked,
     ...(x.askedStale?.length ? { askedStale: x.askedStale } : {}),
-    ...(own ? { task: { n: own.n, status: ses && ses.status !== "running" ? (ses.status === "submitted" ? "submitted" : ses.status === "handed" ? "handed" : "cancelled") : own.status, as: card.task ? ("executor" as const) : ("reviewer" as const), title: own.title, ...(stepsOf(own) ? { steps: stepsOf(own) } : {}), ...(own.checking ? { checking: own.checking.step } : {}), ...(own.folder ? { ref: taskNo(own), group: true as const } : {}), ...(ses && ses.code !== "исп" ? { label: sesLabel(ses), ...(sessionKind(ses.code, ses.goal) ? { kind: sessionKind(ses.code, ses.goal) } : {}) } : {}), ...(ses?.ended && ses.status !== "running" ? { ended: ses.ended } : {}) } } : {}),
+    ...(shown ? { task: { n: shown.n, status: ses && ses.status !== "running" ? (ses.status === "submitted" ? "submitted" : ses.status === "handed" ? "handed" : "cancelled") : shown.status, as: card.task ? ("executor" as const) : ("reviewer" as const), title: shown.title, ...(stepsOf(shown) ? { steps: stepsOf(shown) } : {}), ...(shown.checking ? { checking: shown.checking.step } : {}), ...(shown.folder ? { ref: taskNo(shown), group: true as const } : {}), ...(ses && ses.code !== "исп" ? { label: sesLabel(ses), ...(sessionKind(ses.code, ses.goal) ? { kind: sessionKind(ses.code, ses.goal) } : {}) } : {}), ...(ses?.ended && ses.status !== "running" ? { ended: ses.ended } : {}) } } : {}),
     tasks: authored.map((t) => ({ n: t.n, status: t.status, priority: t.priority, title: t.title })),
     ...(stuck.length ? { stuck } : {}),
     updated: now,
@@ -218,7 +224,9 @@ function statusOfAll(x: StatusInput): Status {
   const w = e?.wait ? { wait: true as const } : {}
   // ВОРОТА БЕЗ ВОПРОСА (задача 062): запись «ворота» есть, а вопроса владельцу нет (ни вопросника, ни «?» в конце хода) — вкладка ждёт владельца,
   // но он об этом не знает. Фраза ожидания вопросом не считается: отметка ворот старше значка паузы
+  // Фраза ожидания решения владельца без вопроса (задача 064, п. 10; gate.wait): та же отметка, подпись без слова «ворота», вопрос — сама фраза
   if (x.gate && (!e || e.wait)) {
+    if (x.gate.wait) return { ...base, state: "owner", since: x.gate.at, gate: true, gateWait: true, question: `вопроса нет: ${x.gate.text ?? ""}`.trim(), detail: `ждёт вашего решения, вопроса нет (с ${hm(x.gate.at)})${x.gate.text ? `: ${x.gate.text}` : ""}` }
     const q = "ворота записаны, вопрос владельцу не задан"
     return { ...base, state: "owner", since: x.gate.at, gate: true, question: q, detail: `ждёт вашего решения, вопроса нет (ворота с ${hm(x.gate.at)})` }
   }
@@ -556,7 +564,7 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
   const what = (s: Status): string => {
     switch (s.state) {
       case "owner":
-        return s.gate ? "ворота, вопроса нет" : `ждёт вас ${hm(s.since)}`
+        return s.gate ? (s.gateWait ? "решение, вопроса нет" : "ворота, вопроса нет") : `ждёт вас ${hm(s.since)}`
       case "question":
         return s.wait ? "ждёт указаний" : "вопрос — ждёт ответа"
       case "working":
