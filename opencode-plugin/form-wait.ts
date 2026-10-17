@@ -8,9 +8,13 @@
 // call `question` again - at most FORM_MAX_REPEATS times, FORM_REPEAT_GAP_MS apart; then the record says "no answer, the
 // owner is needed" and nothing wakes the tab any more. The plugin NEVER answers for the owner and never picks the
 // recommended option: it only repeats the question and shows who is waiting (/ask, the summary line, notices).
+//
+// TASK 078: a tab that keeps asking after the owner answered (answer-loop.ts) is not woken any more: a form of such a tab is not repeated
+// and its reminders to the owner say "loop".
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { CARDS, readJson, safeKey } from "./core.ts"
+import { loopLine, loopNote, loopOf, LOOP_HINT, noteAsk } from "./answer-loop.ts"
 import { clearGate, GATE_MARK } from "./gate-stop.ts"
 import { BASE } from "./paths.ts"
 
@@ -292,6 +296,8 @@ export function handleFormEvent(ev: any, now = Date.now(), dir = FORMS, onReplie
       const strict = (x: PendingForm) => x === old || (key !== undefined && formKey(x.question, x.options, x.title) === key)
       // task 073: or the old form is in the repeat and this form has the same options (the tab found its own words)
       const stale = before.filter((x) => !x.replacedBy && (strict(x) || repeatedWith(x, { at: now, options })))
+      // task 078: the loop counts the forms of a tab by the time they were made (the record may keep the older time of a repeated question)
+      noteAsk(session, { id: String(form.id), at: now, question, options }, dir)
       addForm(
         session,
         {
@@ -444,6 +450,8 @@ export async function formTick(deps: FormDeps, now = Date.now(), dir = FORMS): P
         if (f.at < deps.processStart && now - deps.processStart < FORM_RESTART_GRACE_MS) continue // the window may still show it
       }
       if (f.exhausted) continue
+      // task 078: a tab in a loop on its question is not woken (its answers still reach it; the owner sees the loop)
+      if (loopOf(session, dir)) continue
       // the first repeat of a cancelled form needs no pause (the owner just closed it); the others wait the gap
       const need = f.wokeAt ? FORM_REPEAT_GAP_MS : f.cancelled ? 0 : FORM_REPEAT_GAP_MS
       if (now - (f.wokeAt ?? f.cancelled ?? f.at) < need) continue
@@ -485,7 +493,8 @@ export function formReminders(now: number, notify: (session: string, f: PendingF
   for (const { session, form: f } of allForms(now, dir)) {
     if (f.notifiedAt && now - f.notifiedAt < every) continue
     const q = f.question ?? f.title ?? "вопрос во встроенном вопроснике"
-    const message = f.exhausted ? `без ответа, нужен владелец: ${q}` : q
+    const lp = loopOf(session, dir)
+    const message = lp ? loopLine({ n: lp.n, question: q }) : f.exhausted ? `без ответа, нужен владелец: ${q}` : q
     if (notify(session, f, message) === false) continue
     updateForm(session, f.id, (x) => void (x.notifiedAt = now), dir)
     sent++
@@ -521,7 +530,8 @@ export function askText(now = Date.now(), dir = FORMS, ended: EndedWait[] = []):
     const card = readJson<any>(path.join(CARDS, `${safeKey(session)}.json`))
     const who = `${card?.project ?? "?"} · ${card?.role ?? "?"}${card?.title && card.title !== session ? ` «${card.title}»` : ""}`
     const waited = Math.max(0, Math.round((now - f.at) / 60_000))
-    const how = f.exhausted ? ` — без ответа, нужен владелец (повторов было ${f.repeats ?? 0})` : f.repeats ? ` — повтор ${f.repeats} из ${FORM_MAX_REPEATS}` : f.cancelled ? " — закрыт без ответа, будет повторён" : ""
+    const lp = loopOf(session, dir)
+    const how = lp ? ` — вкладка зациклилась на вопросе (${loopNote(lp.n)}); ${LOOP_HINT}` : f.exhausted ? ` — без ответа, нужен владелец (повторов было ${f.repeats ?? 0})` : f.repeats ? ` — повтор ${f.repeats} из ${FORM_MAX_REPEATS}` : f.cancelled ? " — закрыт без ответа, будет повторён" : ""
     out.push(`? ${who} — ждёт ${waited < 120 ? `${waited} мин` : `${Math.floor(waited / 60)} ч ${waited % 60} мин`} (с ${hm(f.at)})${how}`)
     out.push(`   ${f.question ?? f.title ?? "вопрос во встроенном вопроснике"}`)
     if (f.options?.length) out.push(`   Варианты: ${f.options.join("; ")}`)

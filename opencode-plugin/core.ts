@@ -817,6 +817,30 @@ export async function workedAfter(sessionID: string, at: number): Promise<boolea
   }
 }
 
+/** Задача 078: в сессии между моментами since и until был рабочий ход - ответ модели с вызовом инструмента, КРОМЕ question (вопрос владельцу
+ *  работой не считается: так вкладка в цикле «вопрос - ответ - тот же вопрос» не отличается от стоящей). */
+export async function workedBeyondQuestion(sessionID: string, since: number, until = Number.MAX_SAFE_INTEGER): Promise<boolean> {
+  if (!sessionID || !existsSync(dbFile())) return false
+  let db: any
+  try {
+    db = await openDb()
+    const rows = db.prepare("select data from session_message where session_id = ? and type = 'assistant' and time_created > ? and time_created < ? order by time_created limit 300").all(sessionID, since, until) as any[]
+    return rows.some((r) => {
+      try {
+        return (JSON.parse(r.data)?.content ?? []).some((c: any) => c?.type === "tool" && c?.name !== "question")
+      } catch {
+        return false
+      }
+    })
+  } catch {
+    return false
+  } finally {
+    try {
+      db?.close()
+    } catch {}
+  }
+}
+
 /** Время последней строки `user` сессии (письма плагина тоже строки user) — дешёвый признак «в диалоге что-то появилось». */
 export async function lastUserAt(sessionID: string): Promise<number> {
   if (!sessionID || !existsSync(dbFile())) return 0

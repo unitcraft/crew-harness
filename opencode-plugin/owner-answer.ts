@@ -6,6 +6,7 @@
 // прерывает ход, кладёт письмо, пишет журнал и историю задачи; итог — в самом файле-ответе (status applied | refused, why).
 import { existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs"
 import path from "node:path"
+import { noteAnswered } from "./answer-loop.ts"
 import { readJson } from "./core.ts"
 import { FORMS, type PendingForm, addForm, allForms, removeForm, replacedForms, settleDuplicates } from "./form-wait.ts"
 import { BASE } from "./paths.ts"
@@ -117,6 +118,8 @@ export async function answerTick(deps: AnswerDeps, now = Date.now(), dir = ANSWE
       deps.say(`owner answer ${a.id} not applied: the turn of ${r.session} was not interrupted: ${i.why}`)
       continue
     }
+    // задача 078: ответ записан до письма — отметка «доставлено» (index.ts) найдёт его по id письма; цикл «вопрос — ответ — тот же вопрос» считается по этим записям
+    noteAnswered(r.session, r.form, `owner-answer-${a.id}`, now, formsDir)
     deps.letter(r.session, answerLetter(r.form, r.answer, a.quote), `owner-answer-${a.id}`)
     deps.history(r.session, answerNote(r.form, r.answer, a.quote))
     finish(file, a, { status: "applied", form: r.form.id, session: r.session, answer: r.answer, done: now })

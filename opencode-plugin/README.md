@@ -375,6 +375,22 @@ the event «ответ владельца через оркестратора»,
 (`status: refused`, `why`) and in the log. Only files in the local data folder of the service are read; whoever can write there
 can forge an answer, the same border as the mailbox — the log line and the task event are the signal.
 
+#### A tab that asks again after your answer (task 078)
+
+A tab may keep asking the same question although you answered it from outside the window: the queue of the OpenCode server holds old
+service messages ahead of the letters with your answers, so the model sees «ask again» or «continue» and calls `question` each time (live
+case: task #94, four answers, nine questions in five hours). The plugin cannot see that queue, so it counts what it sees: a form of the
+tab made **after the letter with your answer was handed to the tab**, with **no working turn in between** (a tool call other than
+`question`), and **the same ask** as the answered form (the same number of options with the same labels in the same order - a label may be
+a whole-word prefix of the other, «Разрешить» and «Разрешить Phase 1»; with no options, the same text). **The third such form in a row
+opens the loop** (`forms/loops/`, `LOOP_AFTER`). An answer that was not delivered (the tab is busy, the letter waits), a working turn
+between the questions, other questions and two forms only are not a loop. While the loop is open: the reminder «Не завершено» and the repeats
+of a lost question stop (your answers still reach the tab); you get **one row** - state «waiting for you», the mark `↻`, «вкладка зациклилась
+на вопросе: <вопрос> (ответ дан N раз); переназначьте задачу (crew_task reassign) или напишите вкладке прямо» in the panel, `/crew` (the
+counter `loop: N` in the project line) and `/ask`; the author of the task gets **one letter** with the way out (`crew_task reassign` with
+your answer in the goal) and a line in the task history. The loop is cleared by a working turn of the tab, your word in the tab, a
+reassigned or closed task, a closed tab.
+
 ### A hung turn is interrupted and resumed by the plugin (tasks 036, 048)
 
 A tab whose window says the turn runs, while the model has been silent for 15 minutes (`CREW_HARNESS_HUNG_MS`) with no

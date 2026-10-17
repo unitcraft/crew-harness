@@ -121,6 +121,7 @@ import {
   stampProfile,
   ownerWordAfter,
   workedAfter,
+  workedBeyondQuestion,
   lastUserAt,
   idleFactsAfter,
   pendingTool,
@@ -140,7 +141,7 @@ import { countedOpen, waitingCleanup, ACCEPTED_REMINDERS_MAX, acceptedReminderId
 import { EXECUTOR_CODE, sesLabel, sessionOf, sessionRef, taskNo } from "./tasks.ts"
 import { profileProblems, profileState, stateSignature, syncProjectFiles, syncSnapshot, syncTaskFile } from "./profile-layer.ts"
 import { cellOfState, clampTier, resolveStageProfile, splitLaunchModel, stageOfLaunch, tabFitsCell } from "./profiles.ts"
-import { allForms, cleanupForms, formLookEvery, formReminders, formTick, pendingForms, settleOnRequest, startFormWait } from "./form-wait.ts"
+import { allForms, cleanupForms, FORM_RESTART_GRACE_MS, formLookEvery, formReminders, formTick, pendingForms, settleOnRequest, startFormWait } from "./form-wait.ts"
 import { systemToast } from "./toast-win.ts"
 import { probeEnabled, startEventProbe } from "./event-probe.ts"
 import { catalogModels, writeCatalog } from "./model-catalog.ts"
@@ -149,6 +150,7 @@ import { ensureWorktree, fileAtAsync, gitTraces, leftoversOf, mergeHolder, merge
 import { precheckLines, releaseLandedLock } from "./precheck.ts"
 import { isLauncherCard, noteLoopLag, registerJournalTools } from "./journal.ts"
 import { answerTick } from "./owner-answer.ts"
+import { clearLoop, loopLetter, loopOf, loopTick, noteDelivered } from "./answer-loop.ts"
 import { writeLaunch } from "./task-folders.ts"
 import { type ResumeTry, RESUME_WINDOW_MS, canInterrupt, interruptTurn, resumeLetter, resumeNote, resumeVerdict } from "./hung-resume.ts"
 import { compactionSummaryText } from "./compaction-summary.ts"
@@ -344,6 +346,8 @@ export default {
           else if (typeof ctx.session.synthetic === "function") await capped(ctx.session.synthetic({ sessionID: card.session, text, resume: false }))
           else await ctx.session.prompt({ sessionID: card.session, text, resume: false }) // OpenCode без synthetic: лишний шаг, но без хода
           confirmLetters(claimed)
+          // задача 078: письмо с ответом владельца ушло вкладке — с этого момента вопрос после него считается звеном цикла (answer-loop.ts)
+          for (const l of letters) noteDelivered(card.session, l.id, now())
           deliveryFails.delete(card.session)
           delivered(card, letters, windows)
           log(`delivered${wake ? "" : " quietly"} ${letters.map((l) => l.id).join(",")} -> ${card.session} (${keyOf(card)})`)
@@ -410,6 +414,16 @@ export default {
         turn = await lastTurn(card.session, since)
         turnRead = true
         if (turn?.tools || turn?.owner) revived = clearStuck(card.session, turn.tools ? "a working turn" : "the owner wrote in the tab")
+      }
+      // ВКЛАДКА В ЦИКЛЕ НА ВОПРОСЕ (задача 078, answer-loop.ts): владелец уже ответил, а она спрашивает снова — напоминание «продолжай» ей не уходит
+      // (в очереди сервера и без него стоят старые сообщения, каждое новое только удлиняет цикл); рабочий ход вкладки цикл снимает здесь же
+      const lp = loopOf(card.session)
+      if (lp) {
+        if (await workedBeyondQuestion(card.session, lp.since)) clearLoop(card.session, "a working turn of the tab", undefined, log)
+        else {
+          log(`nudge skipped ${card.session}: the tab is in a loop on its question`)
+          return
+        }
       }
       // РЕЖИМЫ ОТВЕТА НА ВОПРОСЫ (задача 007, ADR-0010): решение — сразу после снятия «застряла», до проверки обязательств (сессия задачи, сдавшая
       // отчёт, тоже получает ответ) и до пересылки вопроса и условия !turn?.owner (ход, начатый словом владельца, тоже). Режимы
@@ -1331,6 +1345,35 @@ export default {
         },
         say: (line) => log(line),
       }, now())
+      // ЦИКЛ НА ВОПРОСЕ (задача 078, answer-loop.ts): форма после доставленного ответа, без рабочего хода между ними, трижды подряд
+      await loopTick(
+        {
+          worked: (s, since, until) => workedBeyondQuestion(s, since, until),
+          ownerWrote: async (s, since) => (await ownerWordAfter(s, since)) > 0,
+          // вкладка закрыта: нет в окне; сессия задачи без окна жива, пока задача открыта. Первые минуты после старта службы окна ещё не отметились
+          alive: (s) => {
+            if (now() - PROCESS_START < FORM_RESTART_GRACE_MS) return true
+            const c = readJson<Card>(cardFile(s))
+            return !!tabOf(s, liveWindows()) || (!!c?.spawned && holdsOpenTask(c))
+          },
+          task: (s) => {
+            const c = readJson<Card>(cardFile(s))
+            const t = c?.task ? loadTask(c.task.project, c.task.n) : undefined
+            return t && t.executor === s && isOpen(t) ? { project: t.project, n: t.n } : undefined
+          },
+          tell: (s, lp) => {
+            const t = lp.task ? loadTask(lp.task.project, lp.task.n) : undefined
+            if (!t || !t.author || t.author === s) return
+            const c = readJson<Card>(cardFile(s))
+            const id = `loop-${safeKey(s)}-${safeKey(lp.forms[0] ?? String(lp.since))}`
+            if (letterExistsFor(t.author, id)) return
+            postLetter(t.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: t.author, time: now(), text: loopLetter({ who: c ? keyOf(c) : s, session: s, loop: lp, task: String(t.n) }) })
+            taskEvent(t, PLUGIN_SENDER, undefined, `вкладка зациклилась на вопросе «${lp.question.slice(0, 150)}»: владелец ответил ${lp.n} раз, ответы доставлены, а вкладка спрашивает снова; автору задачи написано`)
+          },
+          say: (line) => log(line),
+        },
+        now(),
+      )
       formReminders(now(), (session, f, message) => {
         const c = readJson<Card>(cardFile(session))
         const title = `${short(sessionLabel(session, c ? keyOf(c) : session), 40)} ждёт вас`

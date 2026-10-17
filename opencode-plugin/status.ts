@@ -18,6 +18,7 @@ import { FORM_MAX_REPEATS, pendingForms } from "./form-wait.ts"
 import { lockWaitLine, lockWaiters } from "./review.ts"
 import { type Task, ACCEPTED_REMINDERS_MAX, EXECUTOR_CODE, acceptedAt, acceptedReminders, isOpen, listTasks, loadTask, sesLabel, sessionOf, taskNo } from "./tasks.ts"
 import { CREW_STATE_WORDS, ROLE_WORDS, SESSION_KIND, SESSION_WORDS, TASK_WORDS } from "./progress.ts"
+import { LOOP_HINT, LOOP_MARK, LOOP_WORD, loopLine, loopOf } from "./answer-loop.ts"
 import { GATE_MARK } from "./gate-stop.ts"
 import { IDLE_MARK } from "./idle-tab.ts"
 import { type Watch, watchesOf } from "./watch.ts"
@@ -48,6 +49,10 @@ export type Status = {
   /** state owner, но «вопрос» — служебный текст плагина, а не слово вкладки (задача 077): lost — окно считает ход идущим, а сервер свободен;
    *  hung — ход завис. /crew называет такое словом (CREW_STATE_WORDS), а не русским предложением из question и detail. */
   sys?: "lost" | "hung"
+  /** Вкладка зациклилась на вопросе (задача 078, answer-loop.ts): владелец ответил n раз, ответы доставлены, а она спрашивает снова. State owner, значок
+   *  LOOP_MARK, подпись «вкладка зациклилась на вопросе…» с предложением (переназначить, написать вкладке). Снимается рабочим ходом, словом владельца,
+   *  сменой задачи, закрытием вкладки. */
+  loop?: { n: number; question: string }
   /** Вкладка простаивает (задача 063, idle-tab.ts): state tasks, у её задачи нет идущей сессии или сессия ждёт её указаний, вопроса
    *  владельцу нет, дольше idle_tab_minutes. since — начало эпизода, what — что стоит («061 между сессиями»). Значок IDLE_MARK. */
   idleTab?: { since: number; what: string[] }
@@ -210,6 +215,12 @@ function statusOfAll(x: StatusInput): Status {
   }
   // встроенный вопросник OpenCode (события form.*, form-wait.ts): адресован человеку всегда, и у вкладки владельца, и у сессии задачи
   const form = pendingForms(card.session, now)[0]
+  // ЦИКЛ НА ВОПРОСЕ (задача 078): владелец ответил, письма доставлены, вкладка спрашивает снова и не работает — ждёт владельца, пока он не переназначит задачу
+  const lp = loopOf(card.session)
+  if (lp) {
+    const q = loopLine({ n: lp.n, question: form?.question ?? lp.question })
+    return { ...base, state: "owner", since: lp.since, question: q, ...(form ? { formId: form.id } : {}), loop: { n: lp.n, question: form?.question ?? lp.question }, detail: `${q}; ${LOOP_HINT}` }
+  }
   if (form) {
     const q = form.question ?? form.title ?? "вопрос во встроенном вопроснике"
     const tail = form.exhausted ? "без ответа, нужен владелец" : form.repeats ? `повтор ${form.repeats} из ${FORM_MAX_REPEATS}` : form.cancelled ? "закрыт без ответа, будет повторён" : ""
@@ -323,8 +334,8 @@ export const MARK: Partial<Record<State, string>> = { owner: "?", question: "▶
  *  вопрос»): «‖» — пауза в одну колонку («⏸» в терминале бывает шириной в две, «…» — знак обрезки строки). */
 export const WAIT_MARK = "‖"
 /** Значок вкладки: ждёт указаний — WAIT_MARK, иначе по состоянию (MARK). */
-export const markOf = (s: Pick<Status, "state" | "wait"> & { gate?: true; idleTab?: Status["idleTab"] }): string | undefined =>
-  s.gate && s.state === "owner" ? GATE_MARK : s.wait && (s.state === "owner" || s.state === "question") ? WAIT_MARK : s.idleTab && s.state === "tasks" ? IDLE_MARK : MARK[s.state]
+export const markOf = (s: Pick<Status, "state" | "wait"> & { gate?: true; loop?: Status["loop"]; idleTab?: Status["idleTab"] }): string | undefined =>
+  s.loop && s.state === "owner" ? LOOP_MARK : s.gate && s.state === "owner" ? GATE_MARK : s.wait && (s.state === "owner" || s.state === "question") ? WAIT_MARK : s.idleTab && s.state === "tasks" ? IDLE_MARK : MARK[s.state]
 const ORDER: Record<State, number> = { owner: 0, question: 1, working: 2, watch: 3, reply: 4, task: 5, tasks: 6, idle: 7 }
 
 /** Ширина строки окна /crew (диалог OpenCode ~74 знака): длиннее — перенос, и список рвётся (владелец 2026-10-07:
@@ -518,6 +529,8 @@ function countersOf(project: string, items: Status[], otherPlans: number, now: n
   if (rp.length) parts.push(`reports ${rp.join(" ")}`)
   const stale = items.reduce((n, s) => n + (s.askedStale?.length ?? 0), 0)
   if (stale) parts.push(`stale asks ${stale}`)
+  const loops = items.filter((s) => s.loop).length
+  if (loops) parts.push(`${LOOP_WORD}: ${loops}`)
   const an = answerCounts(project, now)
   if (an?.auto) parts.push(`answers ${an.auto} (${an.stepped} owner)`)
   if (an?.forYou) parts.push(`for you ${an.forYou}`)
