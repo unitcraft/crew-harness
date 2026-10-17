@@ -146,7 +146,7 @@ r = await sets("use splitset")
     "Разработка: luna / sol / astra по размеру задачи (без изменений)",
     "Планирование: haiku / sonnet / opus по размеру задачи (было luna / sol / astra по размеру задачи)",
     "Приёмка: k3-256k (было haiku / sonnet / opus по размеру задачи)",
-    "Идущие сессии остаются на прежних моделях (сейчас 1: #99); новые пойдут на модели набора, перезапуск не нужен.",
+    "Идущих сессий на прежних моделях нет; новые пойдут на модели набора, перезапуск не нужен.",
   ]), r)
   cell("split stages: `Приёмка` stands once for both checks and `Приёмка плана` is not repeated", (r.match(/^Приёмка/gm) ?? []).length === 1 && !/Приёмка плана/.test(r), r)
 }
@@ -165,12 +165,14 @@ cell("use when no set was enabled: no `(был …)`, the old side is `по spaw
   const raw = JSON.parse(readFileSync(file, "utf8"))
   raw.tier_max = "light"
   writeFileSync(file, JSON.stringify(raw, null, 2))
+  git(cfgDir, "commit", "-q", "-a", "-m", "tier bound")
   bump()
   await sets("use kimiset")
   r = await sets("use codexset")
   cell("use with tier_max light: one name per stage (the bound cut the tiers) and a line naming the bound", lines(r)[1] === "Работа:   luna  (было k3-256k)" && lines(r)[2] === "Приёмка:  luna  (было те же)" && lines(r).includes("Ступени ограничены проектом: не выше light (tier_max).") && /Контекст модели: 525K, ввод 461K, вывод до 128K \(у «kimiset» было 220K, вывод до 131072\)\./.test(r), r)
   delete raw.tier_max
   writeFileSync(file, JSON.stringify(raw, null, 2))
+  git(cfgDir, "commit", "-q", "-a", "-m", "tier bound off")
   bump()
 }
 
@@ -188,7 +190,7 @@ cell("a family not used by the enabled set (snapshot): the tiers with `то же
 cell("the family screen has no `Ссылаются`, no `(этап «…», codex/task)` cells", !/Ссылаются|этап «|codex\/task/.test(r), r)
 await sets("use codexset")
 r = await profs("show codex")
-cell("a family used by the enabled set: the closing line names the stages", lines(r).at(-1) === "Включён набор «codexset» — эта семья используется: разработка, приёмка, планирование, приёмка плана.", r)
+cell("a family used by the enabled set: the closing line names the stages", lines(r).at(-1) === "Включён набор «codexset» — эта семья используется: разработка, приёмка, планирование, приёмка плана; по наследству: разбор, приёмка разбора, сдача, приёмка сдачи.", r)
 r = await profs("show kimi")
 cell("a family that the enabled set does not use says so", /^Включён набор «codexset» — эта семья сейчас не используется\.$/m.test(r), r)
 r = await profs("show lone")

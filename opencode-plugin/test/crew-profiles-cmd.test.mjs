@@ -124,7 +124,7 @@ r = await profs("show")
 cell("AC-07 /crew-profiles show without a name: the whole table in detail", /kimi\s+light/.test(r), r)
 r = await profs("show codex")
 cell("limits wording: the answers of both commands carry no bare number pairs and no English field names (контекст, ввод, вывод до)", !/\d{6}\/\d{4,6}/.test(r) && (await sets("show cross-kimi")).includes("контекст") && !/context \d/.test(await profs("")) && !/output \d/.test(await profs("")), r)
-cell("AC-07 /crew-profiles show <family>: the three tiers with the references of the sets", /heavy: openai\/gpt-5\.5 — контекст 525K · ввод 461K · вывод до 128K/.test(r) && /cross-codex/.test(r), r)
+cell("AC-07 /crew-profiles show <family> (task 075): the three tiers, the sets that use the family by stage words, whether the enabled set uses it", /heavy\s+gpt-5\.5\s+контекст 525K, ввод 461K, вывод 128K/.test(r) && /^Используют наборы: cross-codex \(приёмка, приёмка плана\)\.$/m.test(r) && /^Набор не включён — модели по spawn_models\.$/m.test(r), r)
 r = await sets("show")
 cell("AC-07 show without a name and without an enabled set says so", /Набор не включён/.test(r), r)
 const hashFile0 = sha(file)
@@ -133,7 +133,7 @@ r = await sets("use no-such-set")
 cell("AC-07 use with an unknown name: refusal with the list of the names; nothing changed", /Не сделано/.test(r) && /no-such-set/.test(r) && /cross-kimi/.test(r) && sha(file) === hashFile0, r)
 cell("AC-17 a refused edit leaves one `profile edit refused` line and no `profile edit:` line", refusedLines().length === 1 && editLines().length === 0, JSON.stringify([refusedLines().length, editLines().length]))
 r = await sets("use cross-kimi")
-cell("AC-07 use (task 066): the first line is the result and says restart is not needed; the windows of the reviewers are one short line", /^Набор «cross-kimi» включён; новые сессии пойдут на нём, перезапуск не нужен\./.test(r) && /приёмка — по рукописным настройкам/.test(r) && !/Приёмка и приёмка плана: контекст профиля здесь не применяется/.test(r), r)
+cell("AC-07 use (task 075): the first line is the result, restart is not needed, the stages by words, no service words (the reviewer window is in the detailed view)", /^Набор «cross-kimi» включён$/m.test(r) && /^Новые сессии пойдут на модели набора, перезапуск не нужен\.$/m.test(r) && /^Приёмка:\s+k3-256k\s+\(было те же\)$/m.test(r) && /^Не закоммичено — это локальная настройка проекта\.$/m.test(r) && !/рукописным настройкам|Приёмка и приёмка плана: контекст профиля здесь не применяется|файлы окон/.test(r), r)
 cell("AC-07 the details of the reviewer window (the number of the hand-written settings) are in the detailed view of the stage", await (async () => { const d = await sets("show приёмка"); return /контекст профиля здесь не применяется/.test(d) && /модель kimi-code-plan-global\/k3-256k берёт контекст из рукописных и глобальных настроек: контекст 262144 · вывод до 131072/.test(d) })(), "")
 cell("AC-21 use writes profile_set into the working copy of the file at once, atomically, without a commit; the data in force are the file", sha(file) !== hashFile0 && readFileJson().profile_set === "cross-kimi" && st().name === "cross-kimi" && commits() === commits0 && JSON.parse(git(cfgDir, "show", "HEAD:.opencode/crew-harness.json")).profile_set === undefined, st().name)
 cell("AC-21 the write left no temporary file and no layer file", !existsSync(`${file}.${process.pid}.tmp`) && !existsSync(L.layerFile("cmdproj")), "left")
@@ -161,8 +161,8 @@ cell("AC-07 no turn of the model: every answer is a service message", prompts.le
 
 // ---- AC-09: the text about a smaller window ----
 r = await sets("use kimi-only")
-cell("AC-09 use names the smaller window and the new threshold; the tabs above it are compacted on their next turn", /Контекст уменьшен/.test(r) && /порог сжатия 242144 → 200K/.test(r) && /сожмутся на следующем ходе/.test(r) && /контекст 262144 · вывод до 131072 → контекст 220K · вывод до 131072/.test(r), r)
-cell("AC-22 use kimi-only passes without the refusal of equal windows: one model, one window in the answer", !/Не сделано/.test(r) && (r.match(/^окно k3-256k:/gm) ?? []).length === 1, r)
+cell("AC-09 use names the smaller window and the new threshold; the tabs above it are compacted on their next turn", /Контекст уменьшен/.test(r) && /порог сжатия 242144 → 200K/.test(r) && /сожмутся на следующем ходе/.test(r) && /^Контекст модели: 220K, вывод до 131072\.$/m.test(r), r)
+cell("AC-22 use kimi-only passes without the refusal of equal windows: one model, one window in the answer", !/Не сделано/.test(r) && (r.match(/^Контекст модели:/gm) ?? []).length === 1, r)
 
 // ---- AC-25: an explicit threshold of Claude Code is named and not touched ----
 const explicitFile = path.join(root, ".opencode", "opencode-claude-code-provider.json")

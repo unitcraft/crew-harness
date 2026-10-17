@@ -172,18 +172,20 @@ r = await sets("use kimi-only")
 {
   // the warnings that do not belong to the stages (a hole in another set, a hand-written window of the main folder) are separate lines
   const l = lines(r).filter((x) => !/^⚠ (набор «hole»|в основной папке проекта)/.test(x))
-  cell("use, windows unchanged: the summary, the stages collapsed, `окна прежние`, the warning, one closing line, the hint (snapshot)",
-    same(l.slice(0, 6), [
-      "Набор «kimi-only» включён (был «kimi-twin»); новые сессии пойдут на нём, перезапуск не нужен.",
-      "все этапы: heavy/medium/light → k3-256k",
-      "  k3-256k — kimi-code-plan-global/k3-256k",
-      "      контекст 220K · вывод до 131072",
-      "окна прежние",
-      "⚠ все приёмки на той же семье kimi, что авторы; есть claude",
-    ]) && /^Без коммита; файлы окон: записано \d+, снято \d+ \(деревьев задач: \d+\); приёмка — по рукописным настройкам\.$/.test(l[6]) && l[7] === "Подробно: /crew-sets show <этап> или show all" && l.length === 8, r)
+  cell("use, nothing changed (task 075): the summary, `без изменений`, the window, the warning, `не закоммичено`, the hint (snapshot)",
+    same(l, [
+      "Набор «kimi-only» включён (был «kimi-twin»)",
+      "Работа:   k3-256k  (без изменений)",
+      "Приёмка:  k3-256k  (без изменений)",
+      "Новые сессии пойдут на k3-256k, перезапуск не нужен.",
+      "Контекст модели: 220K, вывод до 131072.",
+      "⚠ Приёмка на той же семье, что и работа: проверяет та же модель, что пишет. Другая семья есть: claude.",
+      "Не закоммичено — это локальная настройка проекта.",
+      "Подробно: /crew-sets show <этап> или show all",
+    ]), r)
 }
 r = await sets("use mixed")
-cell("use, windows changed: the table, then the windows `was -> became` per short name, no old paragraph", /^Набор «mixed» включён \(был «kimi-only»\)/.test(r) && /^этап /m.test(r) && /^окно k3-256k: контекст 220K · вывод до 131072 → /m.test(r) && /^окно haiku: /m.test(r) && !/Контекст сессий в рабочих деревьях|Этапы:|Файлы окон: записано|Приёмка и приёмка плана: контекст профиля здесь/.test(r), r)
+cell("use, windows changed (task 075): the stages by words with `было`, the groups of windows, no table, no old paragraph", /^Набор «mixed» включён \(был «kimi-only»\)$/m.test(r) && /^Разработка:\s+haiku \/ sonnet \/ opus по размеру задачи\s+\(было k3-256k\)$/m.test(r) && /^Контекст: haiku — 220K, вывод до 32K; sonnet, opus — 720K, вывод до 64K; gpt-5\.5 — 525K, ввод 461K, вывод до 128K \(у «kimi-only» было 220K, вывод до 131072\)\.$/m.test(r) && !/^этап /m.test(r) && !/Контекст сессий в рабочих деревьях|Этапы:|Файлы окон: записано|Приёмка и приёмка плана: контекст профиля здесь|^окно /m.test(r), r)
 r = await sets("use kimi-only")
 cell("use: a smaller window gives one warning line with the old and new threshold", /^⚠ Контекст уменьшен: k3-256k \(порог сжатия 242144 → 200K\); вкладки выше порога сожмутся на следующем ходе\.$/m.test(r), r)
 await sets("use mixed")

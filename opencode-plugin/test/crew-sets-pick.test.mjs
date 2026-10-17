@@ -138,7 +138,7 @@ const run = async (script, args, name = "crew-sets") => {
   out = await run([undefined], undefined)
   cell("Esc on the pick shows nothing and changes nothing", out.shown.length === 0 && L.profileState(root).name === "kimi-only", String(out.shown.length))
   out = await run(["default"], undefined)
-  cell("Enter on a set enables it and shows the short result (the first line), no restart; «Загрузка…» first", out.shown[0]?.message === "Загрузка…" && /^Набор «default» включён \(был «kimi-only»\); новые сессии пойдут на нём, перезапуск не нужен\./.test(msg(out)) && L.profileState(root).name === "default" && out.asked.length === 1, JSON.stringify([out.shown.map((x) => x.message.slice(0, 40)), L.profileState(root).name]))
+  cell("Enter on a set enables it and shows the short result (the first line), no restart; «Загрузка…» first", out.shown[0]?.message === "Загрузка…" && /^Набор «default» включён \(был «kimi-only»\)\n/.test(msg(out)) && /перезапуск не нужен\./.test(msg(out)) && L.profileState(root).name === "default" && out.asked.length === 1, JSON.stringify([out.shown.map((x) => x.message.slice(0, 40)), L.profileState(root).name]))
   for (const word of ["ls", "list", "  ls  "]) {
     out = await run(["__esc"], word)
     cell(`typed «${word.trim()}» opens the same pick`, out.asked.length === 1 && out.asked[0].options.some((o) => o.value === "kimi-only"), JSON.stringify(out.asked))
@@ -173,7 +173,7 @@ const run = async (script, args, name = "crew-sets") => {
   let out = await run(["codex"], undefined, "crew-profiles")
   const pick = out.asked[0]
   cell("/crew-profiles opens a pick of the families with the models of the tiers in the description", same(pick.options.slice(0, 3).map((o) => o.value), ["claude", "codex", "kimi"]) && pick.options[0].description === "heavy opus · medium sonnet · light haiku" && pick.options[2].description === "k3-256k" && pick.options.at(-1).value === "__verbs" && strings(pick), JSON.stringify(pick))
-  cell("Enter on a family shows the family", /^Семья «codex» проекта cmdproj:/.test(msg(out)), msg(out))
+  cell("Enter on a family shows the family", /^Семья «codex» \(проект cmdproj\)\n/.test(msg(out)), msg(out))
   await run([], "new fam from kimi", "crew-profiles")
   out = await run(["__verbs", "delete", "fam", "__all"], undefined, "crew-profiles")
   cell("delete from the menu: the list of the families, then a pick of a tier or the whole family, no text", out.asked.every((a) => a.kind === "select") && same(out.asked.at(-1).options.map((o) => o.value), ["__all", "heavy", "medium", "light"]) && /^Готово: семья «fam» удалена/.test(msg(out)), JSON.stringify(out.asked.at(-1)) + msg(out))
