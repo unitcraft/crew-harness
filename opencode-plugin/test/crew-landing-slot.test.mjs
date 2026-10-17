@@ -169,35 +169,39 @@ let planNo = 0
 // Each scenario has a project of its own and nothing is deleted under the auto plan. The step pass reads the plan task and the
 // settings, then waits for git (await), then writes the plan task back from that snapshot. With one project and reset() between the
 // scenarios, a pass that was waiting for git at the moment of reset() wrote the previous scenario's plan task (2 steps put, the
-// old limits) over the new task with the same number and put a third step: "spawned 3" in about 4 runs of 10 (task 074).
-const scenario = async (label, cfg, prep) => {
+// old limits) over the new task with the same number and put a third step: "spawned 3" in 9 of 20 single runs (task 074).
+// The wait is for the condition, not for a time: the pass has read the plan (plan.total is set) and put the steps the limits allow
+// (`want`); only then a short settle shows that no step comes after them. A fixed 1.4 s was not enough under load ("spawned 0").
+const scenario = async (label, cfg, prep, want) => {
   PROJECT = `scn-${label}`
   settings(cfg)
   rmSync(path.join(tasks.TASKS, PROJECT), { recursive: true, force: true })
   prep?.()
   planNo = planTask().n
-  await wait(1_400)
-  const n1 = spawnedOf()
-  return n1
+  const passed = () => tasks.loadTask(PROJECT, planNo)?.plan?.total === 3
+  await until(() => passed() && spawnedOf() >= want, 60_000)
+  if (!passed()) return -1 // the pass never read the plan: "nothing put" would prove nothing
+  await wait(800)
+  return spawnedOf()
 }
 let n = await scenario("hold", { inflight_limit: 2, accepted_slot: "hold" }, () => {
   accepted(60, "sesREVA")
   accepted(60, "sesREVB")
-})
+}, 0)
 cell("AC-04 hold: two accepted tasks fill inflight_limit 2, no step is put", n === 0, `spawned ${n}`)
 n = await scenario("free", { inflight_limit: 2, accepted_slot: "free", cleanup_limit: 5 }, () => {
   accepted(60, "sesREVA")
   accepted(60, "sesREVB")
-})
+}, 2)
 cell("AC-04 free: the accepted tasks are not counted, two steps are put and the third waits for the limit", n === 2, `spawned ${n}`)
 n = await scenario("cleanup_limit", { inflight_limit: 5, accepted_slot: "free", cleanup_limit: 2 }, () => {
   accepted(60, "sesREVA")
   accepted(60, "sesREVB")
-})
+}, 0)
 cell("AC-04 cleanup_limit: two waiting for cleanup stop the auto plan", n === 0, `spawned ${n}`)
 const waitingOne = all().find((t) => t.status === "accepted")
 tasks.taskEvent(waitingOne, "sesREVA", "done", "очищена")
-await until(() => spawnedOf() > 0, 4_000)
+await until(() => spawnedOf() > 0, 60_000)
 cell("AC-04 после cleanup: one cleaned up (1 waiting < 2) and the steps are put", spawnedOf() >= 1, `spawned ${spawnedOf()}`)
 settings({})
 for (const l of ["hold", "free", "cleanup_limit"]) rmSync(path.join(tasks.TASKS, `scn-${l}`), { recursive: true, force: true }) // no other cell looks at them
