@@ -233,9 +233,24 @@ rules). Unlike "between sessions", such a task is not excused by another task th
 **order** into another project (`kind: order`) has no executor by construction, so it is not "a task without an executor": it goes while
 the integrator of the addressee took it (`child`) or works a turn now, and stands when nobody took it for `idle_tab_minutes` — named apart
 (`#96 заказ не взят: nova-bignum.integrator вне окна`, or `в окне, но не взял`). A silent executor that asks the tab (the state
-"question") or is stuck towards it still reads as "waits for the tab" of task 063. `submitted`, `reviewing`, `accepted` and `approval`
-stay as before. The letter adds the steps: reassign (`crew_task reassign`), write to the executor (`crew_send`), cancel (`crew_task cancel`);
-for an order — ask the owner whether he opens the window of the addressee, or cancel the order.
+"question") or is stuck towards it still reads as "waits for the tab" of task 063. `submitted`, `reviewing` and `approval`
+stay as before (`accepted` — task 076, below). The letter adds the steps: reassign (`crew_task reassign`), write to the executor
+(`crew_send`), cancel (`crew_task cancel`); for an order — ask the owner whether he opens the window of the addressee, or cancel the
+order.
+
+**An accepted task nobody cleans up (task 076).** The reminders of an accepted task that is not cleaned up stop after the fifth
+one (task 043), and the status `accepted` used to read as "goes" for ever: on Nova a task waited nine hours for a cleanup plan while
+all five letters were read (owner, 2026-10-17: «6 — по рекомендации»). Now an `accepted` task **stands** when all five reminders
+have gone to its author, its reviewer does not lead the cleanup, and `idle_tab_minutes` (no new key) have passed since the latest of
+the last reminder, the reviewer's silence and the last change of the task. The reviewer **leads** the cleanup while its turn goes, a
+question to you or its own question with `expect_reply` is open, or it asks the author; a `crew_watch` of the reviewer leads it only
+when it was started within the threshold — an older watch with no turn and no change of the task is waiting without progress. A
+reviewer without a live session (or a task without a reviewer) does not lead. Fewer than five reminders, a younger stand, and a
+cleaned task (`done`) are out of the rule; as with the other stands, another task that goes does not excuse it. The author gets ONE
+letter «задача #N … принята в ЧЧ:ММ, все 5 напоминаний об уборке ушли, а приёмщик её не ведёт» (write to the reviewer with
+`crew_send`, or clean up and call `crew_task cleanup` yourself) and the mark `◷`: `#N принята, уборка ждёт приёмщика с ЧЧ:ММ`
+(the time of the acceptance). The episode ends as the others do: a working turn of the tab, your word, a cleaned task, a turn of the
+reviewer.
 
 ### A question to the owner is not lost (task 040)
 
@@ -695,7 +710,8 @@ The integrator stays free for the owner and does not re-check accepted work:
   no longer counts in `inflight_limit` (`crew_spawn` and the steps of an auto plan count it separately); `cleanup_limit`
   (10, `0` — no limit) stops new work (not `P0`) when that many accepted tasks wait for cleanup, naming them. The tab of an
   accepted task is still woken and reminded (`accepted_reminder_min`; the reminder repeats every `accepted_reminder_min`, at most
-  5 times per acceptance, then `/crew` shows "принята и не убрана N ч"), `crew_task list` and `show` mark it "ждёт уборки";
+  5 times per acceptance, then `/crew` shows "принята и не убрана N ч" and the author's tab gets the idle mark `◷` when the reviewer
+  does not lead the cleanup, task 076), `crew_task list` and `show` mark it "ждёт уборки";
   `OPEN_STATUSES` and `isOpen` are not changed;
 - `merge_precheck: "required"` (the default since the owner's decision of 2026-10-09; the explicit `off` returns the previous
   behaviour: `merge` takes the lock at once): `merge` without a green precheck is refused with text that names the next step

@@ -360,6 +360,13 @@ export function acceptedReminders(t: Task, at = acceptedAt(t)): number {
   while (k < ACCEPTED_REMINDERS_MAX && letterExists(t.author, acceptedReminderId(t, at, k + 1))) k++
   return k
 }
+/** Когда ушло последнее из напоминаний «принята и не очищена» автору по этой приёмке (задача 076). Письма убрала уборка ящика (времени
+ *  не узнать) — самый ранний срок последнего: приёмка + (предел - 1) интервалов accepted_reminder_min. */
+export function lastAcceptedReminder(t: Task, at: number, accMin: number): number {
+  let last = 0
+  for (let k = 1; k <= ACCEPTED_REMINDERS_MAX; k++) last = Math.max(last, letterTime(t.author, acceptedReminderId(t, at, k)))
+  return last || at + (ACCEPTED_REMINDERS_MAX - 1) * accMin * 60_000
+}
 /** Время письма id в ящике key (непрочитанное или доставленное); убранное уборкой — 0. */
 export function letterTime(key: string, id: string): number {
   for (const d of [INBOX, READ]) {

@@ -134,9 +134,9 @@ import { allSteps, nextPlanNumber, parsePlan, stepDeps } from "./plans.ts"
 import { dropWatch, openWatchesBySession, pollWatches, requestWatch, watchesOf } from "./watch.ts"
 import { type Status, endOfTurn, endsWithQuestion, markNotified, readStatuses, removeStatus, saveStatus, statusOf, withIdle } from "./status.ts"
 import { clearGate, GATE_LETTER, gateOf, markGateLetter, noteGate, WAIT_LETTER } from "./gate-stop.ts"
-import { type RunCtx, type SessionFact, clearIdle as clearIdleTab, holdIdle, idleBlockers, idleLetter, idleOf, idleWhat, newestWaiting, waitsOn } from "./idle-tab.ts" // clearIdle в setup — снятие занятости карточки
+import { type CleanupFact, type RunCtx, type SessionFact, clearIdle as clearIdleTab, holdIdle, idleBlockers, idleLetter, idleOf, idleWhat, newestWaiting, waitsOn } from "./idle-tab.ts" // clearIdle в setup — снятие занятости карточки
 import { type Task, taskRef, acceptedAt, ago, byPriority, createTask, rounds, slugify, isOpen, letterExists, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId, tasksChanged } from "./tasks.ts"
-import { countedOpen, waitingCleanup, ACCEPTED_REMINDERS_MAX, acceptedReminderId, acceptedReminders, letterTime } from "./tasks.ts"
+import { countedOpen, waitingCleanup, ACCEPTED_REMINDERS_MAX, acceptedReminderId, acceptedReminders, lastAcceptedReminder, letterTime } from "./tasks.ts"
 import { EXECUTOR_CODE, sesLabel, sessionOf, sessionRef, taskNo } from "./tasks.ts"
 import { profileProblems, profileState, stateSignature, syncProjectFiles, syncSnapshot, syncTaskFile } from "./profile-layer.ts"
 import { cellOfState, clampTier, resolveStageProfile, splitLaunchModel, stageOfLaunch, tabFitsCell } from "./profiles.ts"
@@ -1192,6 +1192,8 @@ export default {
     // ходами) — молчит с конца последнего хода или с последнего непрочитанного письма. Адресат заказа — сводка интегратора проекта-адресата:
     // есть ли он в окне и идёт ли у него ход.
     const LAWFUL = ["working", "watch", "owner", "reply", "question"]
+    // Приёмщик ведёт уборку (задача 076), пока ход идёт или он ждёт законно, кроме наблюдения: наблюдение без прогресса — не ведение
+    const LEADING = ["working", "owner", "reply", "question"]
     async function runCtx(tasks: Task[], saved: Map<string, Status>, t: number, min: number): Promise<RunCtx> {
       const facts = new Map<string, SessionFact>()
       for (const x of tasks) {
@@ -1205,10 +1207,37 @@ export default {
           facts.set(sid, { live: !!card && mayWakeCard(card) })
         }
       }
+      // Принятые, не очищенные (задача 076): сколько напоминаний ушло автору и когда последнее; ведёт ли приёмщик уборку (только когда
+      // все напоминания ушли — иначе правило не смотрит). Не ведёт: сводки нет и сессия не будится; его состояние не из ведущих (ход идёт,
+      // вопрос владельцу, свой вопрос, вопрос автору); наблюдение, начатое давно, — молчание с его начала (приёмщик ждёт без прогресса).
+      const cleanups = new Map<number, CleanupFact>()
+      for (const x of tasks) {
+        if (x.status !== "accepted") continue
+        const at = acceptedAt(x)
+        const sent = acceptedReminders(x, at)
+        if (sent < ACCEPTED_REMINDERS_MAX) {
+          cleanups.set(x.n, { sent, lastAt: 0 })
+          continue
+        }
+        const lastAt = lastAcceptedReminder(x, at, loadConfig(x.directory).acceptedReminderMin)
+        const sid = x.reviewer
+        const st = sid ? saved.get(sid) : undefined
+        let idleSince: number | undefined
+        if (!sid) idleSince = 0
+        else if (!st) {
+          const card = readJson<Card>(cardFile(sid))
+          idleSince = card && mayWakeCard(card) ? undefined : 0
+        } else if (!LEADING.includes(st.state)) {
+          const quiet = Math.max(await idleAt(sid!), newestWaiting(sid!))
+          idleSince = st.state === "watch" ? Math.max(quiet, ...(st.watches ?? []).map((w) => w.started ?? 0)) : quiet
+        }
+        cleanups.set(x.n, { sent, lastAt, idleSince })
+      }
       return {
         now: t,
         minMs: min * 60_000,
         session: (sid) => facts.get(sid) ?? { live: true },
+        cleanup: (x) => cleanups.get(x.n) ?? { sent: 0, lastAt: 0 },
         addressee: (project) => {
           const tabs = [...saved.values()].filter((x) => x.project === project && x.role === "integrator")
           return { window: tabs.length > 0, working: tabs.some((x) => x.state === "working") }

@@ -11,11 +11,18 @@
 // нет, или он молчит дольше порога и ничего не ждёт. Такая задача СТОИТ, и в отличие от «между сессиями» её не оправдывает другая идущая
 // задача автора: мёртвую задачу чужая работа не оживит. Заказ в другой проект (kind order) исполнителя не имеет по построению; он идёт, пока
 // его взяли (child) или адресат работает, и стоит, когда его никто не взял дольше порога, — отдельной причиной.
+//
+// ТО ЖЕ ПРАВИЛО ДЛЯ ПРИНЯТОЙ, НО НЕ ОЧИЩЕННОЙ ЗАДАЧИ (задача 076; владелец, 2026-10-17: «6 — по рекомендации»). Статус accepted «идёт», пока
+// приёмщик убирает, и плагин напоминает об уборке каждые accepted_reminder_min, не больше ACCEPTED_REMINDERS_MAX раз (задача 043). После
+// последнего письма плагин молчал, а автор не простаивал: на Нове задача #91 девять часов ждала плана уборки, приёмщик ждал наблюдением.
+// Теперь принятая задача СТОИТ, когда все напоминания ушли, приёмщик уборку не ведёт и с последнего из писем, его молчания и последнего
+// изменения задачи прошло idle_tab_minutes. Уборку ведёт приёмщик, у которого идёт ход, открыт вопрос (владельцу или с expect_reply) или
+// только что начато наблюдение (его started моложе порога); наблюдение старше порога без хода и изменений задачи — не ведение.
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { INBOX, obligationsOf, readJson, safeKey } from "./core.ts"
 import { BASE } from "./paths.ts"
-import { type Task, EXECUTOR_CODE, sesLabel, sessionOf, taskNo, taskRef } from "./tasks.ts"
+import { type Task, ACCEPTED_REMINDERS_MAX, EXECUTOR_CODE, acceptedAt, sesLabel, sessionOf, taskNo, taskRef } from "./tasks.ts"
 
 export const IDLE_DIR = path.join(BASE, "idle-tabs")
 /** Эпизод старше этого забывается (вкладка давно закрыта или служба не видела, что эпизод кончился). */
@@ -26,13 +33,16 @@ export const IDLE_MARK = "◷"
 export type IdleEpisode = { session: string; since: number; letter: number }
 /** Стоящая задача: between — между сессиями; waits — её сессия (who: «исп», «прм», «С4-2») ждёт указаний автора; nosession — идёт по статусу,
  *  а исполнителя нет (lost — id записан, но живой сессии нет); silent — исполнитель молчит с at; order — заказ в проект to не взят (window —
- *  интегратор адресата в окне, но не взял). */
-export type IdleItem = { kind: "between" | "waits" | "nosession" | "silent" | "order"; task: Task; who?: string; at?: number; lost?: true; to?: string; window?: boolean }
+ *  интегратор адресата в окне, но не взял); cleanup — принята, все напоминания об уборке ушли, а приёмщик её не ведёт (acc — когда приняли). */
+export type IdleItem = { kind: "between" | "waits" | "nosession" | "silent" | "order" | "cleanup"; task: Task; who?: string; at?: number; lost?: true; to?: string; window?: boolean; acc?: number }
+/** Что известно об уборке принятой задачи (задача 076): sent — сколько напоминаний ушло автору, lastAt — когда ушло последнее, idleSince — с
+ *  какого времени приёмщик её не ведёт (0 — приёмщика или живой сессии нет; нет значения — ведёт: ход идёт, вопрос, свежее наблюдение). */
+export type CleanupFact = { sent: number; lastAt: number; idleSince?: number }
 /** Что известно о сессии исполнителя: live — плагин её знает (есть сводка); silentSince — с какого времени у неё нет хода и она ничего не ждёт
  *  (нет — работает или ждёт законно: ход идёт, наблюдение, вопрос владельцу, свой вопрос). */
 export type SessionFact = { live: boolean; silentSince?: number }
 /** Данные для правила по статусу задачи (задача 070): now и порог, факт о сессии, интегратор проекта-адресата заказа. */
-export type RunCtx = { now: number; minMs: number; session: (sid: string) => SessionFact; addressee: (project: string) => { window: boolean; working: boolean } }
+export type RunCtx = { now: number; minMs: number; session: (sid: string) => SessionFact; addressee: (project: string) => { window: boolean; working: boolean }; cleanup?: (t: Task) => CleanupFact }
 
 const fileOf = (session: string, dir: string) => path.join(dir, `${safeKey(session)}.json`)
 
@@ -99,6 +109,15 @@ function standing(t: Task, run: RunCtx): IdleItem | undefined {
   return aged(at) ? { kind: "silent", task: t, at } : undefined
 }
 
+/** Принятая задача стоит? Да — все напоминания ушли, приёмщик уборку не ведёт, и с последнего письма, его молчания и изменения задачи прошёл
+ *  порог (стоит с самого позднего из трёх). Иначе идёт; без фактов об уборке (cleanup не задан) — прежнее правило, идёт. */
+function uncleaned(t: Task, run: RunCtx): IdleItem | undefined {
+  const f = run.cleanup?.(t)
+  if (!f || f.sent < ACCEPTED_REMINDERS_MAX || f.idleSince === undefined) return undefined
+  const at = Math.max(f.lastAt, f.idleSince, t.updated ?? 0)
+  return run.now - at >= run.minMs ? { kind: "cleanup", task: t, at, acc: acceptedAt(t) } : undefined
+}
+
 /** Открытые статусы, в которых задача идёт без автора: исполнитель работает (starting, running, rework), приёмщика назначает плагин и
  *  поднимает сторож потока (submitted), приёмщик ведёт приёмку и уборку (reviewing, accepted), план ждёт владельца (approval). */
 const GOING = ["starting", "running", "rework", "submitted", "reviewing", "accepted", "approval"]
@@ -119,7 +138,7 @@ export function idleBlockers(me: string, tasks: Task[], waits: (sid: string | un
     if (sid) items.push({ kind: "waits", task: t, who: who(sid), at: waits(sid) })
     else if (t.status === "idle") items.push({ kind: "between", task: t })
     else if (GOING.includes(t.status)) {
-      const dead = run && WORKING.includes(t.status) ? standing(t, run) : undefined
+      const dead = !run ? undefined : WORKING.includes(t.status) ? standing(t, run) : t.status === "accepted" ? uncleaned(t, run) : undefined
       if (dead) items.push(dead)
       else going = true
     }
@@ -140,6 +159,7 @@ export const idleWhat = (items: IdleItem[]): string[] =>
     if (x.kind === "nosession") return x.lost ? `${no} сессии исполнителя нет` : `${no} без исполнителя`
     if (x.kind === "silent") return `${no} исполнитель молчит с ${hm(x.at)}`
     if (x.kind === "order") return `${no} заказ не взят: ${x.to}.integrator ${x.window ? "в окне, но не взял" : "вне окна"}`
+    if (x.kind === "cleanup") return `${no} принята, уборка ждёт приёмщика с ${hm(x.acc)}`
     return `${no} ${x.who ?? "исп"} ждёт указаний`
   })
 
@@ -150,16 +170,19 @@ export function idleLetter(minutes: number, items: IdleItem[]): string {
     if (x.kind === "nosession") return x.lost ? `у задачи ${taskRef(x.task)} нет живой сессии исполнителя` : `у задачи ${taskRef(x.task)} нет исполнителя`
     if (x.kind === "silent") return `исполнитель задачи ${taskRef(x.task)} молчит с ${hm(x.at)}: хода нет, наблюдения и вопроса нет`
     if (x.kind === "order") return `заказ ${taskRef(x.task)} никто не взял: интегратор ${x.to}.integrator ${x.window ? "в окне, но заказ не взял" : "вне окна, письмо ждёт"}`
+    if (x.kind === "cleanup") return `задача ${taskRef(x.task)} принята в ${hm(x.acc)}, все ${ACCEPTED_REMINDERS_MAX} напоминаний об уборке ушли, а приёмщик её не ведёт: хода, вопроса и свежего наблюдения нет`
     return `сессия ${taskNo(x.task)} ${x.who ?? "исп"} (${taskRef(x.task).slice(taskNo(x.task).length + 1)}) ждёт твоих указаний`
   }
   const what = items.map(one).join("; ")
   const dead = items.some((x) => x.kind === "nosession" || x.kind === "silent")
   const order = items.some((x) => x.kind === "order")
+  const clean = items.find((x) => x.kind === "cleanup")
   return (
     `Ты простаиваешь ${Math.max(1, Math.round(minutes))} мин: ${what} — и нет вопроса владельцу. ` +
     `Сделай следующий шаг цикла (запусти сессию, ответь ждущей сессии) или задай вопрос владельцу инструментом question — вопрос, рекомендация, довод. ` +
     (dead ? `Задачу без исполнителя или с молчащим исполнителем передай (crew_task reassign), напиши исполнителю (crew_send) или отмени (crew_task cancel). ` : "") +
     (order ? `Заказ, который адресат не взял, — спроси владельца, откроет ли он окно адресата, или отмени заказ (crew_task cancel). ` : "") +
+    (clean ? `Принятую задачу ${taskNo(clean.task)} убери сам или добейся уборки: напиши приёмщику, что мешает (crew_send), либо убери дерево и ветки и вызови crew_task {action: "cleanup", n: ${clean.task.n}} — отказ назовёт, что осталось. ` : "") +
     `Ждёшь законно — открой crew_watch или вопрос с expect_reply.`
   )
 }
