@@ -7,6 +7,7 @@
 import { createSignal, For, onCleanup } from "solid-js"
 import { cardFile, readJson } from "./core.ts"
 import { str } from "./dialog-size.ts"
+import { toneStyle } from "./attention-color.ts" // лист без импортов и без UI (задача 082): цвет тона одной функцией на оба блока
 
 const EVERY_MS = 2_000
 
@@ -33,15 +34,12 @@ function ProgressBlock(props: { api: any; sessionID?: string }) {
     .catch(() => {})
   const timer = setInterval(() => setRows(read()), EVERY_MS)
   onCleanup(() => clearInterval(timer))
-  const color = (tone: string) => {
-    const t = props.api?.theme?.text ?? {}
-    return tone === "accent" ? (t.accent ?? t.primary ?? t.base) : tone === "muted" ? t.muted : t.base
-  }
+  const style = (tone: string) => toneStyle(props.api?.theme, tone)
   return (
     <box flexDirection="column">
       {rows().length ? (
         <box flexDirection="column" marginTop={1}>
-          <For each={rows()}>{(r) => <text fg={color(r.tone)}>{str(r.text)}</text>}</For>
+          <For each={rows()}>{(r) => <text fg={style(r.tone).fg} attributes={style(r.tone).attributes}>{str(r.text)}</text>}</For>
         </box>
       ) : null}
     </box>

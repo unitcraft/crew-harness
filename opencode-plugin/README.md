@@ -190,6 +190,14 @@ a question) with its rows, the heading of its task, and the `⚠` rows (`⚠ з�
 integrator with no task is a row of its own with its mark and the role (`? интегр.   ждёт вас 01:42`). A wait for a watch or a
 queue puts the essence first and the time at the end of the last row (`↳ прм  ⧗ ждать отдельный cleanup` / `↳ plan #91 597м`); when
 the essence does not fit in two rows it is cut with `…` and the time stays.
+
+**The colour of what waits for you (task 082).** The rows that need you (`Ждут вас: N`, a tab that waits, asked or paused, `⚠ …`) are
+drawn in the theme's **warning** colour, not in the plain white: the owner saw «ждёт указаний» merge with the titles, because the theme
+of OpenCode 2.x has no `text.accent` or `text.primary` (its colours are `text.base`, `text.muted` and `text.feedback.*.base`; the accent
+is the hue `hue.accent`), so the old expression fell to the plain colour. One function, `toneStyle()` in `attention-color.ts`, serves both
+blocks ("Crew" and "Ход работ"): the warning colour, then the accent, then the primary, the first one that differs from both the plain text
+and the grey (compared by value). When none does, or the theme has no such fields at all, the row keeps the plain colour but is drawn
+**bold**, a sign visible without colour. The tones `base` and `muted` are not touched.
 Marks of a tab (the same in `/crew` and `/ask`): `?` — waits for you;
 `▶` — asked a question in text and waits for the integrator (or you), labelled `вопрос — ждёт ответа` (the word `question` in `/crew`) with the question
 under it; `‖` — its turn ended with a waiting phrase and no question mark («жду дальнейших указаний», «ожидаю вашего
