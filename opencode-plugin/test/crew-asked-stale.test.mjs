@@ -95,7 +95,7 @@ cell("a closed addressee session closes the question", st("sesA3").state !== "re
 cell("a question older than ASKED_STALE_MIN does not hold the reply state", st("sesA4").state !== "reply" && !st("sesA4").asked.length && st("sesA4").askedStale?.[0]?.qid === "qOLD", JSON.stringify(st("sesA4")))
 cell("a fresh unanswered question still gives reply", st("sesA5").state === "reply" && st("sesA5").asked[0].qid === "qFRESH", JSON.stringify(st("sesA5")))
 const text = status.formatStatuses(status.readStatuses(), Date.now(), "proj")
-cell("/crew shows the stale question on its own line, not as waiting", /вопрос устарел: к .*sesD4|вопрос устарел: к proj\./.test(text) && !/ждёт ответа от [^\n]*\n[^\n]*вопрос устарел/.test(text.replace(/ждёт ответа от/g, "x")) , text)
+cell("/crew counts the stale question (stale asks), the session stays out of the reply state", /stale asks 1\b/.test(text) && !/вопрос устарел/.test(text) && st("sesA4").state !== "reply", text)
 cell("the stale constant is 120 minutes", core.ASKED_STALE_MIN === 120, String(core.ASKED_STALE_MIN))
 
 clearInterval(heart)

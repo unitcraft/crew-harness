@@ -165,7 +165,7 @@ export default {
       } catch {}
       const list = readStatuses()
       const mine = list.find((s) => s.session === route)?.project
-      showText({ title: "crew-harness — кто чего ждёт", message: formatStatuses(list, Date.now(), mine) })
+      showText({ title: "crew-harness — who waits for what", message: formatStatuses(list, Date.now(), mine) })
     }
     // /ask: вопросы, которые ждут владельца (задача 040) - проект, вкладка, сколько ждёт, текст вопроса и варианты; из forms/, без хода модели
     const showAsk = () => {

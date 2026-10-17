@@ -12,12 +12,12 @@ import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync }
 import path from "node:path"
 import { type Card, obligationsOf, readJson, safeKey } from "./core.ts"
 import { BASE } from "./paths.ts"
-import { answerLines, answerSideRow } from "./answer.ts"
+import { answerCounts, answerSideRow } from "./answer.ts"
 import { divergenceLineFor, unconfiguredLineFor } from "./config-diverge.ts"
 import { FORM_MAX_REPEATS, pendingForms } from "./form-wait.ts"
-import { lockWaitLine } from "./review.ts"
+import { lockWaitLine, lockWaiters } from "./review.ts"
 import { type Task, ACCEPTED_REMINDERS_MAX, EXECUTOR_CODE, acceptedAt, acceptedReminders, isOpen, listTasks, loadTask, sesLabel, sessionOf, taskNo } from "./tasks.ts"
-import { SESSION_WORDS } from "./progress.ts"
+import { CREW_STATE_WORDS, ROLE_WORDS, SESSION_KIND, SESSION_WORDS, TASK_WORDS } from "./progress.ts"
 import { GATE_MARK } from "./gate-stop.ts"
 import { IDLE_MARK } from "./idle-tab.ts"
 import { type Watch, watchesOf } from "./watch.ts"
@@ -45,6 +45,9 @@ export type Status = {
   gate?: true
   /** Отметка ворот поставлена не записью «ворота», а фразой ожидания решения владельца без вопроса (задача 064, п. 10). */
   gateWait?: true
+  /** state owner, но «вопрос» — служебный текст плагина, а не слово вкладки (задача 077): lost — окно считает ход идущим, а сервер свободен;
+   *  hung — ход завис. /crew называет такое словом (CREW_STATE_WORDS), а не русским предложением из question и detail. */
+  sys?: "lost" | "hung"
   /** Вкладка простаивает (задача 063, idle-tab.ts): state tasks, у её задачи нет идущей сессии или сессия ждёт её указаний, вопроса
    *  владельцу нет, дольше idle_tab_minutes. since — начало эпизода, what — что стоит («061 между сессиями»). Значок IDLE_MARK. */
   idleTab?: { since: number; what: string[] }
@@ -199,11 +202,11 @@ function statusOfAll(x: StatusInput): Status {
   }
   if (x.staleSince) {
     const q = `окно считает ход идущим, а сервер свободен с ${hm(x.staleSince)}: сообщение, видимо, не дошло — нажмите Esc в окне и отправьте его снова`
-    return { ...base, state: "owner", since: x.staleSince, question: q, detail: q }
+    return { ...base, state: "owner", since: x.staleSince, question: q, detail: q, sys: "lost" }
   }
   if (x.hungSince) {
     const q = `ход завис с ${hm(x.hungSince)} (${minutes(x.hungSince, now)}): нажмите Esc в окне и напишите «продолжай»`
-    return { ...base, state: "owner", since: x.hungSince, question: q, detail: q }
+    return { ...base, state: "owner", since: x.hungSince, question: q, detail: q, sys: "hung" }
   }
   // встроенный вопросник OpenCode (события form.*, form-wait.ts): адресован человеку всегда, и у вкладки владельца, и у сессии задачи
   const form = pendingForms(card.session, now)[0]
@@ -328,19 +331,16 @@ const ORDER: Record<State, number> = { owner: 0, question: 1, working: 2, watch:
  *  «выглядит некрасиво»). Строка обрезается с «…». */
 export const DIALOG_WIDTH = 72
 const fit = (line: string, n = DIALOG_WIDTH) => (line.length > n ? `${line.slice(0, n - 1)}…` : line)
-/** Шаги приёмки одной строкой: ✓ отмечен, ▶ идёт, · впереди (– не отмечен в отчёте). */
-export const stepBar = (steps: { id: string; result?: string }[], checking?: string) => steps.map((a) => (a.result ? "✓" : a.id === checking ? "▶" : "·")).join("")
 
-/** Единая сводная строка «Ждут вас: N · с ЧЧ:ММ · проект #N роль» (все проекты): /crew, боковая панель, /ask. Время и
- *  источник — у самого давнего ожидания; источник назван, чтобы в окне другого проекта было видно, что вопрос не его
- *  (владелец, 2026-10-15: «смущают» одинаковые строки в окнах всех проектов). Никто не ждёт — undefined. */
+/** Сводная строка «Waiting for you: N · since ЧЧ:ММ · проект задача роль» (все проекты): первая строка /crew (задача 077: английская, подпись
+ *  панели «Ждут вас» не менялась). Время и источник — у самого давнего ожидания; источник назван, чтобы в окне другого проекта было видно,
+ *  что вопрос не его (владелец, 2026-10-15: «смущают» одинаковые строки в окнах всех проектов). Никто не ждёт — undefined. */
 export function waitingLine(list: Status[], _now = Date.now()): string | undefined {
   const w = list.filter((s) => s.state === "owner")
   if (!w.length) return undefined
   const oldest = oldestWait(w)
-  const label = TAB_RE.exec(oldest.title ?? "")?.[0]
-  const where = [oldest.project, label].filter(Boolean).join(" ")
-  return `Ждут вас: ${w.length}${oldest.since ? ` · с ${hm(oldest.since)}` : ""}${where ? ` · ${where}` : ""}`
+  const where = [oldest.project, tabRef(oldest)].filter(Boolean).join(" ")
+  return `Waiting for you: ${w.length}${oldest.since ? ` · since ${hm(oldest.since)}` : ""}${where ? ` · ${where}` : ""}`
 }
 
 const oldestWait = (w: Status[]) => w.reduce((a, b) => ((b.since ?? Infinity) < (a.since ?? Infinity) ? b : a))
@@ -365,144 +365,203 @@ export function waitingRows(list: Status[], width = SIDE_WIDTH): SideRow[] {
   return rows
 }
 
-/** Текст сводки /crew: проекты (свой первым), в проекте — сначала ждущие владельца. */
+// ЭКРАН /crew (задача 077; владелец, 2026-10-17: «в /crew нужно уменьшить количество текста до минимума, оставшийся сделай на анг.,
+// общается crew должен на моем языке»). По проекту: название; вкладки и задачи — значок, номер и название как есть, роль и состояние одним
+// английским словом (CREW_STATE_WORDS, progress.ts), возраст ожидания, у сессии задачи с папкой — код и вид (SESSION_KIND); вопрос владельцу —
+// своей строкой «↳», как есть. Не больше одной строки на вкладку. Остальное (планы, неочищенные задачи, отчёты, автоответы, устаревшие
+// вопросы, замок, настройки) — счётчиками в строке проекта. Содержимое вкладок и владельца не переводится: язык общения вкладок —
+// owner_language проекта (core.ts, подсказка вкладкам); /crew только показывает их слова и ничего не подменяет.
+
+/** Возраст ожидания для /crew: «35m», «10h», «2d». */
+export function ageText(from: number | undefined, now: number): string {
+  if (!from) return ""
+  const m = Math.max(0, Math.round((now - from) / 60_000))
+  return m < 120 ? `${m}m` : m < 2880 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`
+}
+/** Роль вкладки задачи словом: exec / rev. */
+const roleWord = (t: NonNullable<Status["task"]>) => (t.as === "reviewer" ? ROLE_WORDS.reviewer : ROLE_WORDS.executor)
+/** Вкладка ждущего — то, что открыть: «#33 exec» (задача и роль), «045 С4-3» (сессия задачи), иначе роль («integrator»). */
+const tabRef = (s: Status) => (s.task ? `${s.task.ref ?? `#${s.task.n}`} ${s.task.label ?? roleWord(s.task)}` : s.role)
+/** Сессия методики закончена (сдана, передана, закрыта) и не ждёт владельца и не работает: в /crew — счётом «N done», как в панели
+ *  (то же правило, что finished() в sidebarLines). */
+const finishedSession = (s: Status) => !!s.task?.group && !!s.task.label && ["submitted", "handed", "cancelled"].includes(s.task.status) && s.state !== "owner" && s.state !== "question" && s.state !== "working"
+/** Вид сессии методики по-английски: по коду из SESSION_KIND; код вне перечня — цель сессии как есть (содержимое), у исполнителя — нет. */
+const kindOf = (t: NonNullable<Status["task"]>): string | undefined => (t.label ? (SESSION_KIND[t.label.replace(/-\d+$/, "")] ?? t.kind) : undefined)
+/** Кто это в строке: «С2-5 spec review», «exec», «rev», роль вкладки без задачи (с названием, только если таких ролей в проекте несколько). */
+const whoOf = (s: Status, dup: Set<string>): string => {
+  const t = s.task
+  if (t) return t.group && t.label ? `${t.label} ${kindOf(t) ?? roleWord(t)}` : roleWord(t)
+  return dup.has(s.role) && s.title && s.title !== s.session ? `${s.role} · ${short(s.title, 24)}` : s.role
+}
+/** Состояние вкладки словом и возрастом: «waiting you 35m», «watch gate 12m», «reply from proj.integrator 50m». */
+export function stateText(s: Status, now: number): string {
+  const age = (t?: number) => (t ? ` ${ageText(t, now)}` : "")
+  if (s.sys) return `${CREW_STATE_WORDS[s.sys === "hung" ? "hung" : "lost"]}${age(s.since)}`
+  switch (s.state) {
+    case "owner":
+      return `${CREW_STATE_WORDS[s.gate ? "gate" : "owner"]}${age(s.since)}`
+    case "question":
+      return `${CREW_STATE_WORDS[s.wait ? "paused" : "question"]}${age(s.since)}`
+    case "working":
+      return `${CREW_STATE_WORDS.working}${age(s.since)}`
+    case "watch": {
+      const w = s.watches[0]
+      return `${CREW_STATE_WORDS[w && !w.started ? "queued" : "watch"]}${w?.note ? ` ${short(w.note, 30)}` : ""}${age(s.since)}${s.watches.length > 1 ? ` +${s.watches.length - 1}` : ""}`
+    }
+    case "reply":
+      return `${CREW_STATE_WORDS.reply}${s.asked.length ? ` from ${s.asked.map((a) => a.to).join(", ")}` : ""}${age(s.since)}`
+    case "task": {
+      const t = s.task
+      if (!t) return "task"
+      if (t.label && ["submitted", "handed", "cancelled"].includes(t.status)) return CREW_STATE_WORDS[t.status === "submitted" ? "done" : t.status === "handed" ? "handed" : "closed"]
+      return TASK_WORDS[t.status] ?? t.status
+    }
+    case "tasks":
+      return s.idleTab ? `${CREW_STATE_WORDS.stalled}${age(s.idleTab.since)}` : `${CREW_STATE_WORDS.tasks} ${s.tasks.length}`
+    default:
+      return CREW_STATE_WORDS.idle
+  }
+}
+/** Слова строки вкладки после состояния: шаг приёмки «3/13» (у приёмщика) и «⚠ stuck 9h» (застряла, задача 043). */
+const extrasOf = (s: Status, now: number): string => {
+  const steps = s.task?.as === "reviewer" && s.state !== "owner" && s.state !== "question" ? stepProgress(s.task)?.match(/\d+\/\d+/)?.[0] : undefined
+  const k = s.stuck?.[0]
+  return `${steps ? ` ${steps}` : ""}${k ? ` ⚠ stuck${k.at ? ` ${ageText(k.at, now)}` : ""}` : ""}`
+}
+/** Вопрос владельцу как есть, одной строкой; служебные тексты плагина (sys, ворота без фразы) вопросом не считаются. */
+const questionOf = (s: Status): string | undefined => {
+  if (s.state !== "owner" || s.sys) return undefined
+  const q = s.gate ? (s.gateWait ? s.question?.replace(/^вопроса нет:\s*/, "") : undefined) : s.question
+  return q?.replace(/\s+/g, " ").trim() || undefined
+}
+/** Значок строки: только у вкладок, которым нужно внимание (как в панели). */
+const rowMark = (s: Status) => (s.state === "owner" || s.state === "question" || (s.idleTab && s.state === "tasks") ? `${markOf(s)} ` : "")
+
+/** Текст /crew: проекты (свой первым), в проекте — сначала ждущие владельца. */
 export function formatStatuses(list: Status[], now = Date.now(), first?: string): string {
-  if (!list.length) return "Сессий проекта не видно: плагин сервиса ещё не записал состояние (status/)."
+  if (!list.length) return "No sessions yet: the service plugin has not written status/ yet."
   const byProject = new Map<string, Status[]>()
   for (const s of list) byProject.set(s.project ?? "?", [...(byProject.get(s.project ?? "?") ?? []), s])
   const names = [...byProject.keys()].sort((a, b) => (a === first ? -1 : b === first ? 1 : a.localeCompare(b)))
   const out: string[] = []
+  const sleeping: string[] = []
   const sum = waitingLine(list, now)
   if (sum) out.push(sum)
   for (const p of names) {
     const items = byProject.get(p)!.sort((a, b) => ORDER[a.state] - ORDER[b.state] || a.title.localeCompare(b.title))
-    const waiting = items.filter((s) => s.state === "owner").length
-    out.push(`${p}${waiting ? ` — ВАС ЖДУТ: ${waiting}` : ""}`)
-    const one = (s: Status, pad: string) => {
-      // у сессии задачи с папкой номер — в строке задачи над ней (задача 058): «С4-3 исп», «прм»
-      // сессия методики с видом (задача 064, п. 7): «С2-5 проверка спецификации» вместо роли
-      const who = s.task?.group ? (s.task.label && s.task.kind ? `${s.task.label} ${s.task.kind}` : `${s.task.label ? `${s.task.label} ` : ""}${s.task.as === "reviewer" ? "прм" : "исп"}`) : s.task ? s.title : `${s.role}${s.title && s.title !== s.session ? ` · ${s.title}` : ""}`
-      const model = s.model ? ` [${s.model.replace(/^.*\//, "")}]` : ""
-      const prog = s.task?.as === "reviewer" ? stepProgress(s.task) : undefined
-      // вопрос владельцу — целиком (его и читают), остальное — строкой по ширине окна; значки — как в панели (MARK)
-      const mark = s.state === "owner" || s.state === "question" || (s.idleTab && s.state === "tasks") ? `${markOf(s)} ` : ""
-      // вкладка задачи без папки (задача 064, пп. 6, 8): номер и название — заголовком над вкладками задачи, здесь роль и состояние
-      const plain = s.task && !s.task.group ? s.task : undefined
-      const row = plain ? `${pad}    ${plain.as === "reviewer" ? "прм" : "исп"}${model} — ${s.detail}` : `${pad}${mark}${short(who, 40)}${model} — ${s.detail}`
-      out.push(s.state === "owner" ? row : fit(row))
-      if (s.askedStale?.length) out.push(fit(`${pad}    вопрос устарел: ${s.askedStale.map((a) => `к ${a.to} с ${hm(a.at)} (${minutes(a.at, now)})`).join(", ")}`))
-      for (const k of s.stuck ?? []) out.push(fit(`${pad}    ⚠ ${stuckText(k)}`))
-      if (prog) {
-        const steps = s.task!.steps!
-        const cur = steps.find((a) => a.id === s.task!.checking && !a.result)
-        out.push(fit(`${pad}    шаги ${steps.filter((a) => a.result).length}/${steps.length} ${stepBar(steps, s.task!.checking)}`))
-        if (cur) out.push(fit(`${pad}    ▶ ${cur.id}: ${short(cur.text, 120)}`))
-      }
+    // тихие вкладки без задачи (свободные, ждут своих задач) — в заголовке проекта: «proj · integrator idle», «proj · 3 idle»
+    const quiet = items.filter((s) => !s.task && !s.stuck?.length && (s.state === "idle" || (s.state === "tasks" && !s.idleTab)))
+    const body = items.filter((s) => !quiet.includes(s))
+    const idle = quiet.filter((s) => s.state === "idle")
+    const quietParts = [
+      ...(idle.length ? [idle.length === 1 ? `${idle[0].role} ${CREW_STATE_WORDS.idle}` : `${idle.length} ${CREW_STATE_WORDS.idle}`] : []),
+      ...quiet.filter((s) => s.state === "tasks").map((s) => `${s.role} ${stateText(s, now)}`),
+    ]
+    const lines: string[] = []
+    const roles = body.filter((s) => !s.task).map((s) => s.role)
+    const dup = new Set(roles.filter((r, i) => roles.indexOf(r) !== i))
+    // строка вкладки: «значок кто  состояние возраст шаги ⚠»; вопрос владельцу — своей строкой под ней
+    const row = (s: Status, pad: string) => {
+      lines.push(`${pad}${rowMark(s)}${whoOf(s, dup)}  ${stateText(s, now)}${extrasOf(s, now)}`)
+      const q = questionOf(s)
+      if (q) lines.push(`${pad}    ↳ ${q}`)
     }
-    // задача — одним заголовком (задачи 058, 064): номер и название целиком, у задачи без папки — со значком самой важной вкладки;
-    // под ним её вкладки по состоянию, сданные и переданные сессии — после работающих
+    // задача — одним заголовком (задачи 058, 064): номер и название целиком; под ним её вкладки по состоянию. Вкладки задачи без папки,
+    // у которых нет вопроса владельцу, — на строке заголовка; сданные сессии задачи с папкой — счётом «N done»
     const tk = (s: Status) => (s.task ? (s.task.group ? `g${s.task.ref ?? s.task.n}` : `t${s.task.n}`) : undefined)
     const shown = new Set<string>()
-    for (const s of items) {
+    for (const s of body) {
       const key = tk(s)
       if (!key) {
-        one(s, "  ")
+        row(s, "  ")
         continue
       }
       if (shown.has(key)) continue
       shown.add(key)
-      const group = items.filter((y) => tk(y) === key).sort((a, b) => ORDER[a.state] - ORDER[b.state] || Number(!!a.task?.ended) - Number(!!b.task?.ended))
+      const group = body.filter((y) => tk(y) === key).sort((a, b) => ORDER[a.state] - ORDER[b.state] || Number(!!a.task?.ended) - Number(!!b.task?.ended))
       const lead = group[0]
-      const mark = !s.task!.group && (lead.state === "owner" || lead.state === "question" || (lead.idleTab && lead.state === "tasks")) ? `${markOf(lead)} ` : ""
-      out.push(`  ${mark}${s.task!.ref ?? `#${s.task!.n}`} ${titleText(s.task!.title)}`.trimEnd())
-      for (const x of group) one(x, s.task!.group ? "    " : "  ")
+      const title = `${s.task!.ref ?? `#${s.task!.n}`} ${titleText(s.task!.title)}`
+      if (s.task!.group) {
+        const done = group.filter(finishedSession).length
+        lines.push(`  ${title}${done ? ` · ${done} ${CREW_STATE_WORDS.done}` : ""}`)
+        for (const x of group.filter((y) => !finishedSession(y))) row(x, "    ")
+      } else if (group.some((x) => x.state === "owner" || x.state === "question")) {
+        lines.push(`  ${rowMark(lead)}${title}`.trimEnd())
+        for (const x of group) row(x, "    ")
+      } else {
+        lines.push(`  ${title} — ${group.map((x) => `${whoOf(x, dup)} ${stateText(x, now)}${extrasOf(x, now)}`).join(" · ")}`)
+      }
     }
-    out.push(...planLines(p))
-    out.push(...uncleanedLines(p, now))
-    out.push(...acceptanceReports(p, now))
-    out.push(...answerLines(p, now))
-    const lw = lockWaitLine(p, now)
-    if (lw) out.push(`  ${lw}`)
-    const dv = divergenceLineFor(p)
-    if (dv) out.push(`  ${dv}`)
-    const uc = unconfiguredLineFor(p)
-    if (uc) out.push(`  ${uc}`)
+    // планы: ждущий согласования владельца — своей строкой, остальные — счётчиком
+    const plans = plansOf(p)
+    for (const t of plans.approval) lines.push(`  ◇ plan ${t.plan!.n} ${t.title.replace(/^план \S+: /, "")} — ${TASK_WORDS.approval}${t.plan!.stuck ? " (rounds out)" : ""} · /plans`)
+    // проект, где ничего не идёт (только свободные вкладки, счётчиков нет), — в одну последнюю строку «idle: …»
+    const counters = countersOf(p, items, plans.other, now)
+    if (!lines.length && !counters && !quiet.some((s) => s.state === "tasks")) {
+      sleeping.push(p)
+      continue
+    }
+    out.push([p, ...quietParts, ...(counters ? [counters] : [])].join(" · "), ...lines)
   }
-  out.push(`(${hm(now)}; обновляется раз в несколько секунд)`)
+  if (sleeping.length) out.push(`${CREW_STATE_WORDS.idle}: ${sleeping.join(", ")}`)
   return out.join("\n")
 }
 
-/** «застряла с 12:30: задача #5 «…» — 2 хода подряд…» (задача 043, L3). */
-export const stuckText = (k: { at?: number; what: string }) => (k.at ? `застряла с ${hm(k.at)}: ${k.what}` : `застряла: ${k.what}`)
+/** Строка-счётчик проекта: всё, что не вкладка и не вопрос владельцу. Каждый счётчик называет номера и часы там, где их мало; подробности —
+ *  в своих местах (README плагина, «/crew»): crew_task list / show, /plans, /crew-doctor, панель. Нет ничего — undefined. */
+function countersOf(project: string, items: Status[], otherPlans: number, now: number): string | undefined {
+  const parts: string[] = []
+  if (otherPlans) parts.push(`plans ${otherPlans}`)
+  const un = uncleanedOf(project, now)
+  if (un.length) parts.push(`uncleaned ${un.map((u) => `${u.ref} ${u.age}`).join(", ")}`)
+  const rp = reportsOf(project, now)
+  if (rp.length) parts.push(`reports ${rp.join(" ")}`)
+  const stale = items.reduce((n, s) => n + (s.askedStale?.length ?? 0), 0)
+  if (stale) parts.push(`stale asks ${stale}`)
+  const an = answerCounts(project, now)
+  if (an?.auto) parts.push(`answers ${an.auto} (${an.stepped} owner)`)
+  if (an?.forYou) parts.push(`for you ${an.forYou}`)
+  const lw = lockWaiters(project)
+  if (lw.length) parts.push(`lock ${lw.map((x) => `#${x.n} ${ageText(x.at, now)}`).join(", ")}`)
+  const diverge = !!divergenceLineFor(project)
+  const bare = !!unconfiguredLineFor(project)
+  if (diverge) parts.push("⚠ off-branch")
+  if (bare) parts.push("⚠ no models")
+  if (diverge || bare) parts.push("/crew-doctor")
+  return parts.length ? parts.join(" · ") : undefined
+}
 
-/** Принятые и не убранные после всех напоминаний (задача 043, M18a): «#5 «…» принята и не убрана 3 ч». */
-export function uncleanedLines(project: string, now = Date.now()): string[] {
+/** Принятые и не убранные после всех напоминаний (задача 043, M18a): «#5 28h» — в счётчике «uncleaned». */
+export function uncleanedOf(project: string, now = Date.now()): { ref: string; age: string }[] {
   let list: Task[] = []
   try {
     list = listTasks(project).filter((t) => t.status === "accepted" && acceptedReminders(t) >= ACCEPTED_REMINDERS_MAX)
   } catch {}
-  return list.map((t) => {
-    const m = Math.max(0, Math.round((now - acceptedAt(t)) / 60_000))
-    return fit(`  ⚠ ${taskNo(t)} «${short(t.title, 30)}» принята и не убрана ${m >= 60 ? `${Math.round(m / 60)} ч` : `${m} мин`} — напоминаний было ${ACCEPTED_REMINDERS_MAX}, нужен crew_task cleanup`)
-  })
+  return list.map((t) => ({ ref: taskNo(t), age: ageText(acceptedAt(t), now) }))
 }
 
 const short = (x: string, n: number) => {
   const one = x.replace(/\s+/g, " ").trim()
   return one.length > n ? `${one.slice(0, n - 1)}…` : one
 }
-/** Планы проекта для /crew (план 004): на перепроверке, на согласовании, в работе — с ходом шагов. */
-export function planLines(project: string): string[] {
+/** Планы проекта для /crew (план 004): на согласовании владельца — approval, остальные (на перепроверке, в работе) — числом other. */
+export function plansOf(project: string): { approval: Task[]; other: number } {
   let list: Task[] = []
   try {
     list = listTasks(project).filter((t) => t.plan && !(t.status === "done" && t.plan.finished) && t.status !== "cancelled")
   } catch {}
-  const out: string[] = []
-  for (const t of list) {
-    const p = t.plan!
-    const last = p.rounds.at(-1)
-    const r = p.rounds.length
-    const state =
-      t.status === "starting" || t.status === "running"
-        ? `пишется (задача ${taskNo(t)})`
-        : t.status === "submitted" || t.status === "reviewing"
-          ? p.approval && p.approval.decision !== "no"
-            ? "согласован владельцем — вливается"
-            : `перепроверка: раунд ${r + 1}, чистых подряд ${p.clean}`
-          : t.status === "rework"
-            ? `доработка после ${p.approval?.decision === "no" ? "замечаний владельца" : `раунда ${r}${last ? ` (${last.line?.replace(/^раунд \d+, [\d-]+ — /, "") ?? `блокирующих ${last.blocking}, существенных ${last.significant}`})` : ""}`}`
-            : t.status === "approval"
-              ? `◇ ждёт вашего согласования${p.stuck ? " (раунды кончились)" : ""} — /plans`
-              : t.status === "accepted"
-                ? "влит, очистка"
-                : (() => {
-                    const ids = Object.entries(p.spawned ?? {})
-                    const closed = ids.filter(([, n]) => loadTask(project, n)?.status === "done").length
-                    const going = ids.filter(([, n]) => { const x = loadTask(project, n); return !!x && isOpen(x) }).map(([id]) => id)
-                    return `в работе: шаги ${closed}/${p.total ?? "?"}${going.length ? `, идут ${going.join(", ")}` : ""}`
-                  })()
-    out.push(fit(`  план ${p.n} «${short(t.title.replace(/^план \S+: /, ""), 30)}» — ${state}`, DIALOG_WIDTH - 2))
-  }
-  return out.length ? ["  планы:", ...out.map((l) => `  ${l}`)] : []
+  const approval = list.filter((t) => t.status === "approval")
+  return { approval, other: list.length - approval.length }
 }
 
 const REPORT_MS = 24 * 3_600_000
-/** Отчёты приёмки за сутки: задачи, принятые с шагами, — каждый шаг с тем, чем подтверждён (владелец: «+ отчёт в конце»). */
-export function acceptanceReports(project: string, now = Date.now()): string[] {
+/** Отчёты приёмки за сутки: задачи, принятые или влитые с шагами (до трёх, свежие первыми) — в счётчике «reports #N»; шаги — crew_task show. */
+export function reportsOf(project: string, now = Date.now()): string[] {
   let done: Task[] = []
   try {
     done = listTasks(project).filter((t) => ["accepted", "done"].includes(t.status) && t.checks && now - t.updated < REPORT_MS)
   } catch {}
-  const out: string[] = []
-  for (const t of done.sort((a, b) => b.updated - a.updated).slice(0, 3)) {
-    const ids = t.steps?.length ? t.steps.map((a) => a.id) : Object.keys(t.checks!)
-    const ok = ids.filter((id) => t.checks![id]).length
-    out.push(fit(`  отчёт приёмки ${taskNo(t)} «${short(t.title, 30)}» — ${t.status === "done" ? "влита" : "принята"} ${hm(t.updated)}`))
-    out.push(fit(`      шаги ${ok}/${ids.length} ${ids.map((id) => (t.checks![id] ? "✓" : "–")).join("")}`))
-    const skipped = ids.filter((id) => !t.checks![id])
-    if (skipped.length) out.push(fit(`      – не отмечены (необязательные): ${skipped.join(", ")}`))
-  }
-  return out
+  return done.sort((a, b) => b.updated - a.updated).slice(0, 3).map((t) => taskNo(t))
 }
 
 // БОКОВАЯ ПАНЕЛЬ ОКНА (план 003.2, 2026-10-06; владелец: «в этой области можно выводить активные сессии и обновлять в

@@ -44,7 +44,7 @@ cell("rows fit the narrow panel (32 columns) without wrapping", v.rows.every((r)
   cell("printed rows, the step's second row included, fit the panel without wrapping", k > 0 && sv.rows.every((x) => sideText(x).length <= 32 && !sideText(x).endsWith(" ") && !sideText(x).startsWith(" ")) && sideText(sv.rows[k + 1]) === "↳ стражи зелёные", JSON.stringify(sv.rows.map(sideText)))
   cell("the reviewer's row shows the step in progress", sv.rows[k]?.what.startsWith("проверка 2/3: guards") && sideText(sv.rows[k + 1]) === "↳ стражи зелёные", JSON.stringify(sv.rows))
   const text = formatStatuses([r], Date.now(), "proj")
-  cell("/crew shows the steps on one line and the step in progress", /шаги 1\/3 ✓▶·/.test(text) && /▶ guards: стражи/.test(text) && !/notes/.test(text), text)
+  cell("/crew shows the step count of the reviewer on its row (2/3), not the steps", /rev +working \d+m 2\/3/.test(text) && !/notes|guards/.test(text), text)
   cell("/crew lines fit the dialog without wrapping", text.split("\n").every((l) => l.length <= 72), text)
 }
 {
@@ -111,7 +111,7 @@ cell("rows fit the narrow panel (32 columns) without wrapping", v.rows.every((r)
   cell("056: the rows fit the panel", sv.rows.every((r) => sideText(r).length <= 32), JSON.stringify(sv.rows.map((r) => sideText(r))))
   const ct = formatStatuses([wq, qq], t, "nova").split("\n")
   const c22 = ct.indexOf(`  ${w?.mark} #22 x`)
-  cell("056: /crew marks the waiting tab like the panel, without 'вопрос'", c22 > 0 && /^      прм — ждёт указаний/.test(ct[c22 + 1]) && !/вопрос/.test(ct[c22 + 1]), ct.join("\n"))
+  cell("056: /crew marks the waiting tab like the panel, with the word paused (not question)", c22 > 0 && /^ {4}\S rev +paused/.test(ct[c22 + 1]) && !/question/.test(ct[c22 + 1]), ct.join("\n"))
   // a tab of the owner (not spawned) waiting with a phrase: waits for you, the summary marks it as a wait, the phrase under it
   const ow = st("o56", "owner", { project: "nova", role: "integrator", since: t, wait: true, question: "Жду вашего решения по плану.", detail: "ждёт вас с 10:00: Жду вашего решения по плану." })
   const ov = sidebarLines([ow], t, "nova")

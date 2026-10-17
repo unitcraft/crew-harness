@@ -6,7 +6,7 @@
 // Закрыто по умолчанию: любой сбой, сомнение и неготовность — вопрос остаётся владельцу, ошибка идёт в журнал службы.
 import { linkSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { type Card, type CrewConfig, type TurnEnd, PLUGIN_SENDER, letterExistsFor, log, obligationsOf, postLetter, safeKey, sessionLabel } from "./core.ts"
+import { type Card, type CrewConfig, type TurnEnd, PLUGIN_SENDER, letterExistsFor, log, obligationsOf, postLetter, safeKey } from "./core.ts"
 import { loadTask, taskEvent, taskRef } from "./tasks.ts"
 import { BASE } from "./paths.ts"
 import { type Block, type ClassifyCtx, answerModesOn, classify, parseTurn } from "./answer-parse.ts"
@@ -445,7 +445,7 @@ async function decide(input: AnswerInput): Promise<AnswerResult> {
 }
 
 // ПОКАЗ -------------------------------------------------------------------------------------------------------------
-// Раздел «Автоответы» сводки /crew и строка боковой панели. Журнал читается целиком, но файлы разбираются заново только когда
+// Счётчики автоответов для /crew (answerCounts, задача 077) и строка боковой панели. Журнал читается целиком, но файлы разбираются заново только когда
 // они изменились (время и размер), поэтому перерисовка панели не читает диск на каждый кадр.
 
 const fileCache = new Map<string, { mtime: number; size: number; rec?: AnswerRecord }>()
@@ -497,34 +497,15 @@ function readAllCached(now: number): AnswerRecord[] {
   return out
 }
 
-const WIDTH = 72 // ширина строки окна /crew, как DIALOG_WIDTH в status.ts (импортировать нельзя: status.ts импортирует этот файл)
-const fit72 = (line: string) => (line.length > WIDTH ? `${line.slice(0, WIDTH - 1)}…` : line)
-const one = (s: string, n: number) => {
-  const t = s.replace(/\s+/g, " ").trim()
-  return t.length > n ? `${t.slice(0, n - 1)}…` : t
-}
-const hmOf = (t: number) => new Date(t).toTimeString().slice(0, 5)
-const refOf = (r: AnswerRecord) => (r.task ? `#${r.task}` : one(sessionLabel(r.session, r.session), 28))
-
-/** Строки раздела «Автоответы» для /crew (REQ-17): ответы за 24 часа и вопросы, которые ждут слова владельца. Нет ни того ни другого — пусто. */
-export function answerLines(project: string, now = Date.now()): string[] {
+/** Счётчики раздела автоответов для /crew (REQ-17, задача 077): ответы за 24 часа, из них со вмешательством владельца, и вопросы, которые
+ *  ждут слова владельца (остаток хода). Подробности — в истории задачи (`crew_task show`); строки с вопросами и ответами /crew больше не
+ *  печатает. Нет ни того ни другого — undefined. */
+export function answerCounts(project: string, now = Date.now()): { auto: number; stepped: number; forYou: number } | undefined {
   const all = readAllCached(now).filter((r) => r.project === project)
-  const day = all.filter((r) => r.kind === "a" && now - r.answeredAt <= DAY_MS).sort((a, b) => b.answeredAt - a.answeredAt)
-  const waiting = all.filter((r) => r.kind === "r" && r.state === "остаток: ждёт слова владельца" && now - r.askedAt <= DAY_MS).sort((a, b) => b.askedAt - a.askedAt)
-  const out: string[] = []
-  if (day.length) {
-    out.push(fit72(`  автоответы за 24 ч: ${day.length}, вмешался владелец: ${day.filter((r) => r.state === "владелец вмешался").length}`))
-    for (const r of day.slice(0, 6)) {
-      out.push(fit72(`    ${hmOf(r.answeredAt)} ${refOf(r)} · ${r.type ?? "?"} · ${r.mode ?? "?"}`))
-      out.push(fit72(`      ${r.who ?? "?"} · ${r.state}: «${one(r.question, 26)}» → «${one(r.answer, 22)}»`))
-    }
-    if (day.length > 6) out.push(`    … и ещё ${day.length - 6}`)
-  }
-  for (const r of waiting.slice(0, 4)) {
-    out.push(fit72(`  ждёт слова владельца: ${refOf(r)}`))
-    for (const it of (r.rest ?? []).slice(0, 4)) out.push(fit72(`    ${it.n ? `В-${String(it.n).padStart(2, "0")}` : "вопрос"} ${one(it.head, 40)} (${it.reason})`))
-  }
-  return out
+  const day = all.filter((r) => r.kind === "a" && now - r.answeredAt <= DAY_MS)
+  const waiting = all.filter((r) => r.kind === "r" && r.state === "остаток: ждёт слова владельца" && now - r.askedAt <= DAY_MS)
+  if (!day.length && !waiting.length) return undefined
+  return { auto: day.length, stepped: day.filter((r) => r.state === "владелец вмешался").length, forYou: waiting.length }
 }
 
 export type SideRowLike = { mark: string; who: string; what: string; tone: "accent" | "base" | "muted" }

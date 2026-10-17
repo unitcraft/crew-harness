@@ -10,7 +10,7 @@ const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-lostq-"))
 process.env.XDG_DATA_HOME = tmp
 const fw = await import("../form-wait.ts")
 const core = await import("../core.ts")
-const { statusOf, formatStatuses, sidebarLines, waitingLine, stuckText } = await import("../status.ts")
+const { statusOf, formatStatuses, sidebarLines, waitingLine } = await import("../status.ts")
 
 let fail = 0
 const cell = (name, ok, detail) => {
@@ -207,9 +207,10 @@ await safe("g", async () => {
   const list = [st("s1", "owner", T0 + 10 * MIN), st("s2", "owner", T0 + 5 * MIN, "crew-harness"), st("s3", "working", T0)]
   const line = waitingLine(list, T0 + 20 * MIN)
   const hmOf = (t) => new Date(t).toTimeString().slice(0, 5)
-  cell("g: waitingLine names the time and the project of the oldest wait", line === `Ждут вас: 2 · с ${hmOf(T0 + 5 * MIN)} · crew-harness`, String(line))
-  cell("g: a task tab is named by its number and role", waitingLine([{ ...st("s9", "owner", T0), title: "#85 исп ✓◐ приёмка Accept" }], T0) === `Ждут вас: 1 · с ${hmOf(T0)} · nova #85 исп`, String(waitingLine([{ ...st("s9", "owner", T0), title: "#85 исп ✓◐ приёмка Accept" }], T0)))
-  cell("g: a stuck mark without a time has no question mark", stuckText({ what: "приёмка #85" }) === "застряла: приёмка #85" && !sidebarLines([{ ...st("s4", "working", T0), stuck: [{ what: "приёмка #85" }] }], T0, "nova").rows.some((r) => /\?/.test(r.what)), JSON.stringify(sidebarLines([{ ...st("s4", "working", T0), stuck: [{ what: "приёмка #85" }] }], T0, "nova").rows))
+  cell("g: waitingLine names the time and the project of the oldest wait", line === `Waiting for you: 2 · since ${hmOf(T0 + 5 * MIN)} · crew-harness integrator`, String(line))
+  const tabTask = { ...st("s9", "owner", T0), task: { n: 85, status: "reviewing", as: "executor", title: "Accept" } }
+  cell("g: a task tab is named by its number and role", waitingLine([tabTask], T0) === `Waiting for you: 1 · since ${hmOf(T0)} · nova #85 exec`, String(waitingLine([tabTask], T0)))
+  cell("g: a stuck mark without a time has no question mark", /⚠ stuck$/m.test(formatStatuses([{ ...st("s4", "working", T0), stuck: [{ what: "приёмка #85" }] }], T0)) && !sidebarLines([{ ...st("s4", "working", T0), stuck: [{ what: "приёмка #85" }] }], T0, "nova").rows.some((r) => /\?/.test(r.what)), formatStatuses([{ ...st("s4", "working", T0), stuck: [{ what: "приёмка #85" }] }], T0))
   cell("g: nothing waits, no line", waitingLine([st("s3", "working", T0)], T0) === undefined, "")
   cell("g: /crew starts with the line", formatStatuses(list, T0 + 20 * MIN).split("\n")[0] === line, formatStatuses(list, T0 + 20 * MIN).split("\n")[0])
   const side = sidebarLines(list, T0 + 20 * MIN, "nova")

@@ -438,8 +438,8 @@ cell("M07", "running, kind assign, the owner's tab is closed: reconcile records 
   const rf = lettersRe("sesRV18", /не очищена/)
   const af = lettersRe(AUTH.pf, new RegExp(`#${T.m18.n} .*не очищена`))
   const view = status.formatStatuses(status.readStatuses(), Date.now(), "pf")
-  const line = new RegExp(`#${T.m18.n} «[^»]*» принята и не убрана 1 ч`)
-  cell("M18a", "accepted and still not cleaned up: the reminder repeats every accepted_reminder_min, 5 times per acceptance (reviewer and author), then silence and the line 'не убрана N ч' in /crew", rf.length === 5 && af.length === 5 && line.test(view), JSON.stringify({ rf: rf.length, af: af.length, view: view.split("\n").filter((l) => /не убрана|pf/.test(l)) }))
+  const line = new RegExp(`uncleaned [^\\n]*#${T.m18.n} \\d+[mhd]`)
+  cell("M18a", "accepted and still not cleaned up: the reminder repeats every accepted_reminder_min, 5 times per acceptance (reviewer and author), then silence and the counter 'uncleaned #N Ч' in /crew", rf.length === 5 && af.length === 5 && line.test(view), JSON.stringify({ rf: rf.length, af: af.length, view: view.split("\n").filter((l) => /uncleaned|pf/.test(l)) }))
 }
 
 // ===== rows decided by the end of a turn =====
@@ -455,15 +455,24 @@ await until(() => lettersRe(AUTH.pw, /застряла/).some((l) => new RegExp(
   await turn("sesEX31")
   cell("T1c", "stuck: no more reminders after that", sent("sesEX31", /Не завершено/).length === before, `${sent("sesEX31", /Не завершено/).length} vs ${before}`)
   // L3: "stuck since HH:MM: what" stays in /crew and in the sidebar until the mark is cleared
-  const stuckRe = /застряла с \d\d:\d\d: задача #\d+/
   const view = () => status.formatStatuses(status.readStatuses(), Date.now(), "pw")
+  // the block of a task in /crew: its heading and the rows under it (a quiet task - the heading alone, the tabs on it)
+  const taskBlock = (n) => {
+    const ls = view().split("\n")
+    const i = ls.findIndex((l) => new RegExp(`^  (\\S+ )?#${n} `).test(l))
+    if (i < 0) return ""
+    let j = i + 1
+    while (j < ls.length && /^ {4}/.test(ls[j])) j++
+    return ls.slice(i, j).join("\n")
+  }
+  const stuckRe = { test: () => /⚠ stuck/.test(taskBlock(T.t1.n)) }
   const side = () => status.sidebarLines(status.readStatuses(), Date.now(), "pw").rows.map((r) => status.sideText(r))
   await until(() => stuckRe.test(view()), 4000)
-  const row = view().split("\n").find((l) => stuckRe.test(l)) ?? ""
-  cell("T1d", "stuck: the line 'застряла с ЧЧ:ММ: <что>' is shown in /crew under the tab and in the sidebar", row.includes(`#${T.t1.n}`) && side().some((l) => /застряла с \d\d:\d\d/.test(l)), JSON.stringify({ row, side: side() }))
+  const row = taskBlock(T.t1.n)
+  cell("T1d", "stuck: '⚠ stuck <age>' is shown in /crew on the tab of the task and 'застряла с ЧЧ:ММ' in the sidebar", /⚠ stuck/.test(row) && side().some((l) => /застряла с \d\d:\d\d/.test(l)), JSON.stringify({ row, side: side() }))
   await call("crew_role", AUTH.pw, { role: "integrator" })
   await call("crew_task", AUTH.pw, { action: "push", n: T.t1.n, text: "доделай" })
-  const t1Line = () => view().split("\n").some((l) => l.includes(`задача #${T.t1.n} `) && /застряла с/.test(l))
+  const t1Line = () => /⚠ stuck/.test(taskBlock(T.t1.n))
   await until(() => !t1Line(), 8000) // the status pass may take more than 4 s on a loaded machine (task 048 measure: 2.0-3.8 s)
   cell("T1e", "crew_task push clears the mark: the line is gone from /crew", !t1Line(), view())
 }

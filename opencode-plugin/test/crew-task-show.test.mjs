@@ -41,17 +41,17 @@ const nova = sidebarLines(list, now, "nova").rows.map((r) => sideText(r))
 cell("the panel of a project without folders: «• #88 план», then «исп  работает 12 мин» (task 064)", nova.indexOf("• #88 план") >= 0 && nova[nova.indexOf("• #88 план") + 1] === "↳ исп  работает 12 мин" && !nova.some((l) => l.includes("088")), JSON.stringify(nova))
 
 // the line "Ждут вас"
-cell("«Ждут вас» names the project and «045 прм»", waitingLine(list, now) === "Ждут вас: 1 · с 22:10 · crew-harness 045 прм", waitingLine(list, now))
+cell("«Waiting for you» names the project and «045 rev»", waitingLine(list, now) === "Waiting for you: 1 · since 22:10 · crew-harness 045 rev", waitingLine(list, now))
 cell("the panel's second line names the tab to open: «045 прм»", printed[1] === "? crew-harness 045 прм", JSON.stringify(printed.slice(0, 3)))
 
 // /crew
 const text = formatStatuses(list, now, "crew-harness")
 const lines = text.split("\n")
-const h = lines.indexOf("  045 Реестры контрактов и полный JSONC-регламент")
+const h = lines.indexOf("  045 Реестры контрактов и полный JSONC-регламент · 1 done")
 cell("/crew: the task line «045 «<title>»»", h > 0, text)
-cell("/crew: the sessions under it without the task number", lines[h + 1] === "    ? прм — ждёт вас с 22:10: вливать?" && lines[h + 2] === "    С4-3 исп [gpt-6.1-sol] — на доработке — стоит" && lines[h + 3] === "    С3п-2 исп — сдана 21:39", JSON.stringify(lines.slice(h, h + 4)))
-cell("/crew: the waiting summary first", lines[0] === "Ждут вас: 1 · с 22:10 · crew-harness 045 прм", lines[0])
-cell("/crew: a project without folders - «#88 план», then «исп — …» (task 064)", lines.indexOf("  #88 план") > 0 && lines[lines.indexOf("  #88 план") + 1].startsWith("      исп — "), text)
+cell("/crew: the live sessions under it, the finished one counted in the heading", lines[h + 1] === "    ? rev  waiting you 20m" && lines[h + 2] === "        ↳ вливать?" && lines[h + 3] === "    С4-3 plan review  rework" && !lines.some((l) => l.includes("С3п-2")), JSON.stringify(lines.slice(h, h + 5)))
+cell("/crew: the waiting summary first", lines[0] === "Waiting for you: 1 · since 22:10 · crew-harness 045 rev", lines[0])
+cell("/crew: a project without folders - «#88 план» with its tab on the same line (task 064, 077)", lines.includes("  #88 план — exec working 12m"), text)
 cell("/crew lines fit the dialog (the question line aside)", lines.filter((l) => !l.includes("? прм")).every((l) => l.length <= 72), text)
 
 // the number in the texts

@@ -1,5 +1,5 @@
 // Self-test of the show of the automatic answers (task 007, REQ-17, REQ-18; node >= 24):  node test/crew-answer-view.test.mjs
-// The section "Автоответы" of /crew (formatStatuses), the line of the side panel (sidebarLines, sideText), the event of the task in
+// The counters of the auto-answers in /crew (formatStatuses: answers N (M owner), for you K), the line of the side panel (sidebarLines, sideText), the event of the task in
 // crew_task show, the files status/<session>.json that the answers must not change, and the word of the owner that turns a record
 // into "владелец вмешался". The answers are made by answerTurn over a real database of turns; the plugin runs, so the status files
 // are the real ones. The code comes from CREW_PLUGIN_DIR (a copy with stubs) or from the folder above.
@@ -43,9 +43,8 @@ const crew = (now = Date.now()) => status.formatStatuses([st(SIDS[0])], now, "pr
   await answer(sid, block(1, "Как назвать функцию?", { rec: "parseBlock" }))
   const text = crew()
   const rec = A.readRecords(sid, "a")[0]
-  const need = ["автоответы за 24 ч: 1", new Date(rec.answeredAt).toTimeString().slice(0, 5), "implementation", "recommendations", "дан", "рекомендация", "Как назвать функцию?", "parseBlock"]
-  const missing = need.filter((x) => !text.includes(x))
-  cell("AC-19 раздел", missing.length === 0 && /proj\.worker|sesView01|#\d+/.test(text), JSON.stringify([missing, text]))
+  // the section of /crew is a counter (task 077); the question and the answer are in crew_task show (AC-19 show)
+  cell("AC-19 раздел", rec.state === "дан" && /answers 1 \(0 owner\)/.test(text) && !/автоответы|Как назвать функцию|parseBlock/.test(text), text)
 }
 {
   // the event in crew_task show
@@ -84,7 +83,7 @@ const crew = (now = Date.now()) => status.formatStatuses([st(SIDS[0])], now, "pr
   H.ownerSays(sid, "стоп, назови иначе", Date.now())
   await H.wait(1200)
   const rec = A.readRecords(sid, "a")[0]
-  cell("AC-20 вмешался", rec.state === "владелец вмешался" && /вмешался владелец: 1/.test(crew()) && /владелец вмешался/.test(crew()), JSON.stringify([rec.state, crew()]))
+  cell("AC-20 вмешался", rec.state === "владелец вмешался" && /answers \d+ \(1 owner\)/.test(crew()), JSON.stringify([rec.state, crew()]))
 }
 
 // ---- AC-30 б: the line of /crew for the rest ----------------------------------------------------------------------------------
@@ -94,7 +93,7 @@ const crew = (now = Date.now()) => status.formatStatuses([st(SIDS[0])], now, "pr
   saveCard(sid)
   await answer(sid, [block(1, "Первый вопрос?"), "", block(2, "Второй вопрос?", { rec: null })].join(NL))
   const text = crew()
-  cell("AC-30 б /crew", /ждёт слова владельца:/.test(text) && /В-02 Второй вопрос\?/.test(text) && /нет рекомендации/.test(text), text)
+  cell("AC-30 б /crew", /for you 1/.test(text) && !/В-02|ждёт слова владельца/.test(text), text)
 }
 
 // ---- AC-32: the line of the side panel -----------------------------------------------------------------------------------------

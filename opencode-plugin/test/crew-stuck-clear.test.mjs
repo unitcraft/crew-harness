@@ -134,7 +134,7 @@ const idleRow = (sid, at = Date.now()) => {
   const side = status.sidebarLines(status.readStatuses(), Date.now(), "proj").rows.map((r) => status.sideText(r))
   cell("6 a tab with an open question form (waits for the owner): no stuck in its status", st(sid)?.state === "owner" && !st(sid)?.stuck, JSON.stringify(st(sid)))
   cell("6a the obligation itself keeps the mark (only the view hides it): nothing is cleared by a mere open form", !!ob(sid)?.stuck, JSON.stringify(ob(sid)))
-  cell("6b a stuck tab without a form still shows 'застряла с ЧЧ:ММ' in /crew and in the sidebar", !!st(ctl)?.stuck?.length && /застряла с \d\d:\d\d/.test(view) && side.some((l) => /застряла/.test(l)), JSON.stringify({ ctl: st(ctl)?.stuck, side }))
+  cell("6b a stuck tab without a form still shows ⚠ stuck in /crew and the 'застряла с ЧЧ:ММ' in the sidebar", !!st(ctl)?.stuck?.length && /⚠ stuck/.test(view) && side.some((l) => /застряла/.test(l)), JSON.stringify({ ctl: st(ctl)?.stuck, side }))
   forms.removeForm(sid, "frmSC07")
 }
 

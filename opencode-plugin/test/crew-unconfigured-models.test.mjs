@@ -91,7 +91,7 @@ const d1 = await call("crew_doctor", "sesINTEG1")
 cell("doctor: project is not configured: models", /проект proj не настроен: модели/.test(d1), d1)
 
 const row = { session: "s1", role: "integrator", title: "int", state: "idle", detail: "idle", project: "proj", watches: [] }
-cell("/crew summary: the same line for the project", /проект proj не настроен: модели/.test(status.formatStatuses([row])), status.formatStatuses([row]))
+cell("/crew: the counter ⚠ no models for the project (the text is in /crew-doctor)", /⚠ no models/.test(status.formatStatuses([row])), status.formatStatuses([row]))
 
 // 4. allow_default_models: true passes as before
 writeCfg({ task_fields: ["goal", "criteria"], worktrees: "wt", branch_name: "p{n}-{slug}", spawn_limits: { worker: 10 }, allow_default_models: true })
@@ -101,7 +101,7 @@ const r4 = await call("crew_spawn", "sesINTEG1", { ...IN, title: "u", tier: "lig
 const t2 = tasks.loadTask("proj", 2)
 cell("allow_default_models: default model as before", t2?.model === "claude-code/haiku", r4 + JSON.stringify(t2))
 await call("crew_doctor", "sesINTEG1")
-cell("/crew summary: no line with allow_default_models", !/не настроен: модели/.test(status.formatStatuses([row])), status.formatStatuses([row]))
+cell("/crew: no counter with allow_default_models", !/⚠ no models/.test(status.formatStatuses([row])), status.formatStatuses([row]))
 cell("doctor: no warning with allow_default_models", !/не настроен: модели/.test(await call("crew_doctor", "sesINTEG1")), "warned")
 
 // 5. apply_template

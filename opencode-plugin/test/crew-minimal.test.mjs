@@ -3,8 +3,8 @@
 // на моем языке". /crew (formatStatuses) shows, per project: the name, the tabs that wait for the owner (the question as is, on its own
 // line), the tasks with their tabs - the mark, the number and the title as they are, the role and the state in ONE short English word,
 // the age of the wait, for a session of a task with a folder its code and kind ("С2-5 spec review") - and everything else
-// (plans, uncleaned tasks, reports, auto-answers, stale asks, the lock, the settings) as ONE counter line. The labels are English and
-// come from one list next to the words of the panel (progress.ts: STATE_WORDS, TASK_WORDS, SESSION_KIND, ROLE_WORDS); the content
+// (plans, uncleaned tasks, reports, auto-answers, stale asks, the lock, the settings) as counters on the line of the project. The labels are English and
+// come from one list next to the words of the panel (progress.ts: CREW_STATE_WORDS, TASK_WORDS, SESSION_KIND, ROLE_WORDS); the content
 // that tabs and the owner write (titles, questions, goals) is shown as it is. The panel keeps its Russian words.
 //
 // The snapshot below is a live-like set: a tab waiting for the owner, a task without a folder with a question (rows), a task without a
@@ -85,8 +85,8 @@ cell("1b: no text of the plugin's own sentence (detail) is printed", !text.inclu
 cell("1c: no model in brackets, no footer with the time", !/\[[^\]]+\]/.test(text) && !/обновляется|updated every/i.test(text), text)
 
 // 2. the words come from one list next to the words of the panel
-const W = progress.STATE_WORDS ?? {}
-cell("2a: STATE_WORDS: waiting you / question / working / watch / reply / idle", W.owner === "waiting you" && W.question === "question" && W.working === "working" && W.watch === "watch" && W.reply === "reply" && W.idle === "idle", JSON.stringify(W))
+const W = progress.CREW_STATE_WORDS ?? {}
+cell("2a: CREW_STATE_WORDS: waiting you / question / working / watch / reply / idle", W.owner === "waiting you" && W.question === "question" && W.working === "working" && W.watch === "watch" && W.reply === "reply" && W.idle === "idle", JSON.stringify(W))
 const K = progress.SESSION_KIND ?? {}
 cell("2b: SESSION_KIND: the kinds of the methodology in English", K["С1"] === "spec" && K["С1п"] === "spec fix" && K["С2"] === "spec review" && K["С3"] === "plan" && K["С3п"] === "plan fix" && K["С4"] === "plan review" && K["С5"] === "work" && K["С5п"] === "work fix" && K["С6"] === "work review" && K["С7"] === "delivery" && K["С8"] === "delivery review", JSON.stringify(K))
 cell("2c: the words of the panel stay Russian (SESSION_WORDS)", progress.SESSION_WORDS["С2"] === "проверка спецификации" && progress.SESSION_WORDS["С5"] === "реализация", JSON.stringify(progress.SESSION_WORDS))
@@ -94,8 +94,8 @@ cell("2c: the words of the panel stay Russian (SESSION_WORDS)", progress.SESSION
 // 3. the head: the summary of the wait over all projects, the project is a name only
 const oldest = hm(NOW - 35 * MIN)
 cell("3a: the first line - who waits, since when, the oldest wait", lines[0] === `Waiting for you: 2 · since ${oldest} · proj integrator`, lines[0])
-cell("3b: the project line is the name only (no count, no Russian)", lines[1] === "proj", lines[1])
-cell("3c: a project with only an idle tab - one line", lines.includes("other · integrator idle") && !lines.some((l) => /^ +integrator +idle/.test(l)), text)
+cell("3b: the project line is the name and the counters (no count of waiting tabs: the first line has it)", lines[1].split(" · ")[0] === "proj" && !/waiting|ВАС/.test(lines[1]), lines[1])
+cell("3c: a project with only an idle tab and no counters - a name on the last line «idle: …», no rows", lines.at(-1) === "idle: other" && !lines.some((l) => /^ +integrator +idle/.test(l)) && !lines.includes("other"), text)
 
 // 4. the tabs that wait for the owner: the row and the question on its own line, as it is
 const iInt = lines.indexOf("  ? integrator  waiting you 35m")
@@ -123,8 +123,8 @@ cell("7c: a stalled tab (◷) - the word and the age", lines.includes("  ◷ arc
 // 8. everything else is one counter line, nothing is lost: the numbers say where to look
 const plansRow = lines.find((l) => /plan 8/.test(l))
 cell("8a: the plan that waits for the owner - its own row with /plans", plansRow === "  ◇ plan 8 длина фрагмента — approval · /plans" || /^ +◇ plan 8 .*approval.*\/plans$/.test(plansRow ?? ""), String(plansRow))
-const counter = lines.find((l) => /^ +\+ /.test(l)) ?? ""
-cell("8b: one counter line per project, after the tabs", lines.filter((l) => /^ +\+ /.test(l)).length === 1 && lines.indexOf(counter) > i61, text)
+const counter = lines[1]
+cell("8b: the counters are on the line of the project, one line, no line of their own", counter.startsWith("proj · ") && !lines.some((l) => /^ +\+ /.test(l)), text)
 cell("8c: plans counted, uncleaned with the number and the hours, reports with numbers, stale asks counted", /plans 1/.test(counter) && new RegExp(`uncleaned #${unclean.n} 28h`).test(counter) && new RegExp(`reports (#${unclean.n} #${merged.n}|#${merged.n} #${unclean.n})`).test(counter) && /stale asks 1/.test(counter), counter)
 cell("8d: the old blocks are gone (plans:, report of the acceptance, unclean line, stale-question line)", !/планы:|отчёт приёмки|не убрана|вопрос устарел|автоответы/.test(text), text)
 
@@ -133,12 +133,35 @@ const tabs = list.filter((s) => s.project === "proj").length
 const questions = lines.filter((l) => /^ +↳ /.test(l)).length
 cell("9a: the owner's questions have their own lines: two", questions === 2, String(questions))
 cell("9b: the screen is short: lines <= tabs + tasks + questions + projects + 3", lines.length <= tabs + 3 + questions + 2 + 3, `${lines.length} lines for ${tabs} tabs`)
-cell("9c: no line is a sentence of the plugin: only the question lines are longer than 72", lines.filter((l) => l.length > 72 && !l.includes("↳")).length === 0, JSON.stringify(lines.filter((l) => l.length > 72)))
+cell("9c: a tab row is short: no row of a tab is longer than 72 columns (a question line and a task heading carry content and may be)", lines.filter((l) => /^ {2,4}\S/.test(l) && !l.includes("↳") && !/^ +(#|\d{3} )/.test(l) && !l.includes(" — ")).every((l) => l.length <= 72), JSON.stringify(lines.filter((l) => l.length > 72)))
 
 // 10. the panel is untouched (it keeps its Russian words and marks)
 const side = status.sidebarLines(list, NOW, "proj")
 const sideText = side.rows.map((r) => status.sideText(r)).join("\n")
 cell("10: the panel keeps its Russian words (ждёт вас, ход ...)", /ждёт вас/.test(sideText) && /ход \d+ · ждут \d+/.test(side.foot), sideText + "\n" + side.foot)
+
+// 12. the plugin's own states are words, not Russian sentences; a stuck tab is never folded away
+{
+  const l = [
+    st("h", "owner", { project: "p2", role: "integrator", since: NOW - 3 * MIN, sys: "hung", question: "ход завис с 10:00 (3 мин): нажмите Esc в окне" }),
+    st("lo", "owner", { project: "p2", role: "worker", since: NOW - 4 * MIN, sys: "lost", question: "окно считает ход идущим, а сервер свободен" }),
+    st("g", "owner", { project: "p2", role: "scribe", since: NOW - 5 * MIN, gate: true, question: "ворота записаны, вопрос владельцу не задан" }),
+    st("gw", "owner", { project: "p2", role: "tester", since: NOW - 6 * MIN, gate: true, gateWait: true, question: "вопроса нет: Остановлено до вашего решения." }),
+    st("q", "question", { project: "p2", role: "analyst", since: NOW - 7 * MIN, question: "Базу опустить?" }),
+    st("wq", "watch", { project: "p2", role: "builder", since: NOW - 8 * MIN, watches: [{ id: "w", note: "очередь машины", minutes: 30 }] }),
+    st("stk", "idle", { project: "p2", role: "keeper", stuck: [{ at: NOW - 130 * MIN, what: "причина" }] }),
+  ]
+  const t = status.formatStatuses(l, NOW, "p2")
+  const ls = t.split(String.fromCharCode(10))
+  console.log(t)
+  cell("12a: a hung turn and a lost message are words (hung · Esc, no turn · Esc) with no sentence under them", ls.includes("  ? integrator  hung · Esc 3m") && ls.includes("  ? worker  no turn · Esc 4m") && !t.includes("нажмите") && !t.includes("сервер свободен"), t)
+  cell("12b: a gate without a phrase is the word gate; with a phrase of the tab - the phrase as it is under it", ls.includes("  ⚠ scribe  gate 5m") && ls.includes("  ⚠ tester  gate 6m") && ls.includes("      ↳ Остановлено до вашего решения.") && !t.includes("ворота записаны"), t)
+  cell("12c: a question to the integrator is a word; a watch in the queue is queued with its note", ls.includes("  ▶ analyst  question 7m") && ls.includes("  builder  queued очередь машины 8m"), t)
+  cell("12d: a stuck tab keeps its row (not folded into the header): ⚠ stuck with the age", ls.includes("  keeper  idle ⚠ stuck 2h") && !/p2 · .*idle/.test(ls[1]), t)
+  let r2 = t
+  for (const c of ["Остановлено до вашего решения.", "очередь машины", "Базу опустить?"]) r2 = r2.split(c).join("")
+  cell("12e: no Russian word outside the content in these states either", (r2.match(/[А-Яа-яЁё]+/g) ?? []).length === 0, JSON.stringify(r2.match(/[А-Яа-яЁё]+/g)))
+}
 
 // 11. nothing at all: the empty screen is English too
 const empty = status.formatStatuses([], NOW)

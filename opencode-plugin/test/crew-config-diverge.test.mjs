@@ -32,18 +32,18 @@ const cell = (n, ok, d) => { console.log(`${ok ? "ok  " : "FAIL"} ${n}${ok ? "" 
 commit({ answer_max: 1 })
 let p = doctor()
 cell("same files: doctor silent", diverge(p).length === 0, JSON.stringify(p))
-cell("same files: /crew silent", !sum().includes("не на ветке"), sum())
+cell("same files: /crew silent", !sum().includes("⚠ off-branch"), sum())
 cell("same files: panel silent", !side().includes("не на ветке"), side())
 
 write({ answer_max: 1, tier_max: "light" })
 p = doctor()
 cell("key only in working copy: doctor warns with key", diverge(p).length === 1 && diverge(p)[0].includes("tier_max") && diverge(p)[0].includes("действуют те, что на ветке"), JSON.stringify(p))
 cell("warning names only the differing key", !diverge(p)[0]?.includes("answer_max"), JSON.stringify(p))
-cell("key only in working copy: /crew line", sum().includes("не на ветке: tier_max"), sum())
+cell("key only in working copy: /crew counter (⚠ off-branch, the keys are in /crew-doctor)", sum().includes("⚠ off-branch") && sum().includes("/crew-doctor"), sum())
 cell("key only in working copy: panel line", side().includes("не на ветке: tier_max"), side())
 
 commit({ answer_max: 1, tier_max: "light" })
-cell("after commit: warning gone", diverge(doctor()).length === 0 && !sum().includes("не на ветке"), sum())
+cell("after commit: warning gone", diverge(doctor()).length === 0 && !sum().includes("⚠ off-branch"), sum())
 
 const bare = path.join(tmp, "proj2", "s2")
 mkdirSync(path.join(bare, ".opencode"), { recursive: true })

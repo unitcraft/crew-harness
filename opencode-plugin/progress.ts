@@ -410,6 +410,65 @@ export const SESSION_WORDS: Record<string, string> = {
   "С9": "разбор обратной связи",
 }
 
+// СЛОВА ЭКРАНА /crew (задача 077; владелец, 2026-10-17: «в /crew нужно уменьшить количество текста до минимума, оставшийся сделай на
+// анг.»). Подписи экрана — английские, короткие, ОДНИМ перечнем рядом со словами панели; содержимое, которое пишут вкладки и владелец
+// (названия задач, вопросы, цели сессий), не переводится. Русские слова панели (SESSION_WORDS выше, подписи боковой панели) не
+// меняются: панель узкая и считает ширину по своим словам.
+/** Состояние вкладки одним словом (status.ts stateText). Имя с CREW_: STATE_WORDS выше — слова таблицы «Ход работ», другое. */
+export const CREW_STATE_WORDS: Record<string, string> = {
+  owner: "waiting you",
+  gate: "gate", // остановка на воротах без вопроса владельцу
+  hung: "hung · Esc", // ход завис: нажмите Esc в окне и напишите «продолжай»
+  lost: "no turn · Esc", // окно считает ход идущим, а сервер свободен: Esc и повторить сообщение
+  question: "question", // задала вопрос текстом: ждёт ответа интегратора (или владельца)
+  paused: "paused", // ход кончился фразой ожидания («жду указаний»)
+  working: "working",
+  watch: "watch",
+  queued: "queued", // наблюдение стоит в очереди машины
+  reply: "reply", // ждёт ответа на свой вопрос: «reply from <кто>»
+  tasks: "tasks", // ждёт своих задач
+  stalled: "stalled", // простаивает: задача есть, сессии нет, вопроса владельцу нет
+  idle: "idle",
+  done: "done", // сессия методики сдана
+  handed: "handed", // сессия методики передана другой
+  closed: "closed", // сессия методики закрыта
+}
+/** Состояние задачи для вкладки её исполнителя или приёмщика. */
+export const TASK_WORDS: Record<string, string> = {
+  starting: "starting",
+  running: "running",
+  submitted: "submitted",
+  reviewing: "in review",
+  rework: "rework",
+  approval: "approval",
+  accepted: "accepted",
+  done: "done",
+  cancelled: "cancelled",
+  idle: "between",
+}
+/** Роль вкладки задачи (исполнитель, приёмщик). */
+export const ROLE_WORDS = { executor: "exec", reviewer: "rev" } as const
+/** Виды сессий методики по-английски для /crew — по перечню методики (task-runner.md: коды сессий; циклы spec, plan, review, delivery).
+ *  Код вне перечня (С2м и подобные) /crew показывает целью сессии (status.ts sessionKind). */
+export const SESSION_KIND: Record<string, string> = {
+  "С1": "spec",
+  "С1п": "spec fix",
+  "С2": "spec review",
+  "С3": "plan",
+  "С3п": "plan fix",
+  "С4": "plan review",
+  "С5": "work",
+  "С5д": "work resume",
+  "С5п": "work fix",
+  "С6": "work review",
+  "С7": "delivery",
+  "С7п": "delivery fix",
+  "С8": "delivery review",
+  "С9": "feedback",
+  "КОММИТ": "commit",
+  "ПУШ": "push",
+}
+
 /** Сессия словами: «С5 реализация»; КОММИТ, ПУШ и неизвестный код — как есть (REQ-08). */
 export const sessionName = (code: string) => (SESSION_WORDS[code] ? `${code} ${SESSION_WORDS[code]}` : code)
 

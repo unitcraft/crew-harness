@@ -402,8 +402,8 @@ const logTail = () => {
   await pass(sid, nowFake)
   const side = A.answerSideRow("proj", nowFake)
   const nAfter = Number(/авто 24ч: (\d+)/.exec(side?.what ?? "")?.[1] ?? 0)
-  const lines = A.answerLines("proj", nowFake).join("\n")
-  cell("REQ-17 ответ на старый ход виден", recs(sid, "a").length === 1 && nAfter === nBefore + 1 && /автоответы за 24 ч/.test(lines), JSON.stringify([nBefore, nAfter, lines.slice(0, 200)]))
+  const counts = A.answerCounts("proj", nowFake)
+  cell("REQ-17 ответ на старый ход виден", recs(sid, "a").length === 1 && nAfter === nBefore + 1 && counts?.auto === nAfter, JSON.stringify([nBefore, nAfter, counts]))
   // (b) the term of the storage runs from the answer: an answer given now to a turn of 5 days ago lives 30 days from now, not 25
   const five = "sesAge00003"
   saveCard(five)

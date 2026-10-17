@@ -68,8 +68,8 @@ background); a task session may run with no window at all. Formerly `opencode-pe
   file, the project's own keys win, nothing is overwritten, and the file still has to be committed to the target branch.
   **A project without model settings** (no enabled `profile_set`, no `spawn_models`, no `allow_default_models: true`)
   refuses `crew_spawn` without an explicit `model`: the refusal tells the integrator to ask the owner (`question`) —
-  apply the template, use the model of the calling session, or choose otherwise. `crew_doctor` and `/crew` show
-  «проект X не настроен: модели» for such projects. `allow_default_models: true` keeps the built-in defaults on purpose.
+  apply the template, use the model of the calling session, or choose otherwise. `crew_doctor` shows
+  «проект X не настроен: модели» for such projects (`/crew` shows the counter `⚠ no models`). `allow_default_models: true` keeps the built-in defaults on purpose.
   The keys: `config-schema.ts`;
 - **roles**: a new tab is `worker` (shared: tabs within it differ by session id; `assistant` is an
   alias). `integrator` is exclusive, one holder per project, plus the project's `exclusive_roles`
@@ -151,7 +151,7 @@ is the only way: Claude Code's own background tasks (`run_in_background`, Monito
 
 **The machine queue.** `machine: true` marks a command that loads the machine (a gate, a build, a full test run):
 it waits for a slot in the project's machine queue — `machine_slots` at a time (1; 0 — no limit), in the order they
-were set; the time limit counts from the start. `crew_watch` says how many are ahead, `/crew` shows it queued, the
+were set; the time limit counts from the start. `crew_watch` says how many are ahead, `/crew` shows it as `queued`, the
 letter says how long it waited. Use it only for heavy commands: waiting for a remote CI (a `gh` or `check-push-proven-by-ci` polling loop with a pause)
 and anything else that does not load the machine goes with `machine: false`, or it holds the slot while other windows'
 heavy runs stand idle. Ordinary watches and other projects do not wait ([plan 002.2](../doc/archive/plans/002.2-machine-queue.md)).
@@ -177,7 +177,7 @@ from the step's text (`проверка 3/12: sabotage — подсунь нег
 the same way (`061 Канон и актуальная методика`, no mark: the sessions carry theirs); a session of the methodology shows its code and
 the name of its kind (`↳ С2-5 проверка спецификации`, the state on the row under it; the names come from one list, the same as in the
 "Ход работ" block; a code outside it takes the short name of the session's goal), and the finished sessions fold into one row
-`✓ сдано N сессий`, so the rows they freed go to live tabs. `/crew` shows the title whole, once per task, and lists every session.
+`✓ сдано N сессий`, so the rows they freed go to live tabs. `/crew` is a different, minimal screen: see «The `/crew` screen» below.
 
 **How the panel is drawn (task 068).** The hierarchy is a sign and a colour, never an indent: no row of the panel starts with a space
 (the window keeps leading spaces, but a wrapped row restarts at the first column and two rows that start with the same two spaces
@@ -191,18 +191,72 @@ integrator with no task is a row of its own with its mark and the role (`? ин�
 queue puts the essence first and the time at the end of the last row (`↳ прм  ⧗ ждать отдельный cleanup` / `↳ plan #91 597м`); when
 the essence does not fit in two rows it is cut with `…` and the time stays.
 Marks of a tab (the same in `/crew` and `/ask`): `?` — waits for you;
-`▶` — asked a question in text and waits for the integrator (or you), labelled `вопрос — ждёт ответа` with the question
+`▶` — asked a question in text and waits for the integrator (or you), labelled `вопрос — ждёт ответа` (the word `question` in `/crew`) with the question
 under it; `‖` — its turn ended with a waiting phrase and no question mark («жду дальнейших указаний», «ожидаю вашего
-решения»), labelled `ждёт указаний` (`ждёт указаний интегратора` in `/crew` when the phrase names the integrator) with the
+решения»), labelled `ждёт указаний` (the word `paused` in `/crew`) with the
 phrase under it — such a tab gets no "continue" either, the same as a question (task 056); a tab of yours waiting with such a
 phrase is counted in "Ждут вас" with `‖`, not `?`, and once the plugin sees no question form open it turns into `⚠` (task 064, below); `⚠` — the tab recorded a gate (`log_line` kind `ворота`), its turn ended, and no question to you is open: labelled `ждёт вашего решения, вопроса нет` (task 062, see `log_line` below); `◷` — the tab stands idle with an open task and no question to you, labelled `простаивает …` (task 063, see below); `•` — its turn is going. The window closes the tab of a task or review session two minutes after its task was merged (accepted — before the cleanup: an open tab keeps the server watching the task's folder, and Windows will not remove it) or cancelled, unless its turn is going or
 the tab is on screen (the owner's own tabs are left alone; the session stays in the history). `/crew-config` shows the project's settings in effect, each with where it comes from (default, the committed file,
-`local`), like `crew_config show`. `/crew-doctor` shows the service's last self-check (made at start and every 10 minutes), like `crew_doctor`. `/crew` in any window (also in the Ctrl+P palette) shows, without a model turn, every session of the projects:
-working, **waiting for you** (its last answer ends with a question and you have not written since), waiting for a
-watch, for an answer to its question, for its task's review or rework, for its own tasks, or idle — your project
-first, the ones waiting for you on top. A session that starts waiting for you puts a notice into every live window
+`local`), like `crew_config show`. `/crew-doctor` shows the service's last self-check (made at start and every 10 minutes), like `crew_doctor`. `/crew` in any window (also in the Ctrl+P palette) shows, without a model turn, the sessions of the projects in the
+minimal form of «The `/crew` screen» below: working, **waiting for you** (its last answer ends with a question and you have not
+written since), waiting for a watch, for an answer to its question, for its task's review or rework, for its own tasks, or
+idle — your project first, the ones waiting for you on top. A session that starts waiting for you puts a notice into every live window
 (with Open; a system notification when the window is not focused, if OpenCode's `attention.notifications` is on)
 and repeats it every `owner_reminder_min` minutes (15; 0 — once) until you answer ([plan 003](../doc/archive/plans/003-status.md)).
+
+### The `/crew` screen (task 077)
+
+The owner (2026-10-17): «в /crew нужно уменьшить количество текста до минимума, оставшийся сделай на анг., общается crew должен на моем
+языке». `/crew` (`formatStatuses` in `status.ts`) shows the minimum and its labels are **English and short**; what tabs and the owner
+write (titles of tasks, questions, options, goals of sessions, the note of a watch) is shown **as it is** and is never translated. The
+language the tabs write in is `owner_language` of the project (above): `/crew` only shows their words and substitutes nothing — the
+question of a tab is printed whole (spaces folded to one line), the title of a task is printed whole. The side panel keeps its own
+Russian words and drawing (task 068); `/crew-sets`, `/crew-profiles`, `/crew-progress` are not touched.
+
+```
+Waiting for you: 4 · since 15:22 · nova #94 rev
+crew-harness
+  ? integrator  waiting you 39m
+      ↳ <the question of the tab, as it is>
+  061 Канон и актуальная методика · 26 done
+    ‖ С2-5 spec review  paused 22h
+  #22 <title> — exec submitted · rev in review 12/12 ⚠ stuck 34h
+nova · uncleaned #91 29h · reports #91 #98 #99 · ⚠ off-branch · /crew-doctor
+  ? #94 <title>
+    ? exec  waiting you 46m
+        ↳ <the question of the tab, as it is>
+    rev  working 5m 2/3
+  ◇ plan 8 <title> — approval · /plans
+idle: ai-dev-methodology
+```
+
+- **One line per tab**, plus its own `↳` line for the question to the owner. The mark is that of the panel (`?`, `▶`, `‖`, `⚠`, `◷`), the
+  number is the number of the task as it is shown everywhere (`#94`, `061`), the role is `exec` / `rev`, a session of a task with a folder
+  is its code and kind (`С2-5 spec review`), then one state word and how long (`35m`, `10h`, `2d`). A task without a folder whose tabs
+  ask the owner nothing is one line: the heading and its tabs after `—`. Finished sessions of a task with a folder are not listed:
+  `· 26 done` (the same rule as the panel's «✓ сдано N сессий»).
+- **The first line** is the one «Waiting for you» for all projects: how many, since when (the oldest), and the project and the tab to open.
+  The project line is its name and the counters; a project with only free tabs and nothing to count is on the last line `idle: …`.
+- **The words** are one list next to the words of the panel, in `progress.ts`: `CREW_STATE_WORDS` (`waiting you`, `question`, `paused`,
+  `working`, `watch`, `queued`, `reply`, `tasks`, `stalled`, `idle`, `gate`, `hung · Esc`, `no turn · Esc`, `done`), `TASK_WORDS` (`submitted`,
+  `in review`, `rework`, `accepted`, …), `ROLE_WORDS` (`exec`, `rev`), `SESSION_KIND` (the kinds of the methodology: `spec`, `spec fix`,
+  `spec review`, `plan`, `plan fix`, `plan review`, `work`, `work resume`, `work fix`, `work review`, `delivery`, `delivery fix`,
+  `delivery review`, `feedback`; a code outside the list shows the goal of the session). `SESSION_WORDS` and the words of the panel stay
+  Russian. `hung · Esc` and `no turn · Esc` name the two states of the plugin itself (a hung turn; a message that did not reach the
+  server), recorded in the field `sys` of the status file.
+- **Counters** (on the line of the project, only those that are not zero): `plans N` (plans being written or rechecked; a plan that waits
+  for you is its own row `◇ plan N … approval · /plans`), `uncleaned #N Ч` (accepted and not cleaned after all reminders), `reports #N …` (accepted or
+  merged tasks with a report of the last day, up to three), `stale asks N`, `answers N (M owner)` (automatic answers of the last
+  24 hours and how many the owner took over), `for you K` (questions the answers left to the owner), `lock #N Ч` (waiting for the merge lock),
+  `⚠ off-branch` (settings in the working copy differ from the branch) and `⚠ no models` (the project has no model settings), with
+  `/crew-doctor`.
+- **Where the rest is now.** The model of a tab: `crew_list`, `/crew-profiles`, the field `model` of `status/<session>.json`. The sentence of
+  the state (`detail`) and the reason of «stuck» (`stuck[].what`), the stale questions (`askedStale`): the same file. The text and the
+  short name of the step being checked: the side panel («проверка 3/13: id — название»), `crew_task show N` (the steps and the report).
+  The finished sessions of a task: the journal of the task folder (`log.md`) and the record of the task. The plans, their rounds and steps:
+  `/plans`, `crew_task list` and `show` of the plan's task. The questions and answers of automatic answers: the history of the task
+  (`crew_task show`), the line «авто 24ч» of the panel. The lock and the settings: the panel (`ждут замок`, `⚠ не на ветке`), `crew_doctor`
+  (`/crew-doctor`) and `crew_config show`. The screen no longer ends with a line of time: it does not refresh by itself.
 
 ### An idle tab between sessions is marked and woken (task 063)
 
@@ -216,8 +270,8 @@ task goes in `starting`, `running`, `rework` (the executor works), `submitted` (
 long wait), `reviewing`, `accepted` (the reviewer) and `approval` (the plan waits for you in `/plans`). The stand starts at the end of
 the tab's last turn or at the last change of the standing tasks, whichever is later. Past `idle_tab_minutes` (20; 0 — off) the tab
 gets ONE letter «Ты простаиваешь N мин: у задачи <…> нет идущей сессии … и нет вопроса владельцу. Сделай следующий шаг цикла или
-задай вопрос владельцу инструментом question», and `/crew` and the side panel show `◷ простаивает с ЧЧ:ММ (N мин), вопроса владельцу
-нет: 061 между сессиями` (the tab does not count in "Ждут вас": it waits for nobody). An empty turn in answer to the letter keeps the
+задай вопрос владельцу инструментом question», and the side panel shows `◷ простаивает с ЧЧ:ММ (N мин), вопроса владельцу
+нет: 061 между сессиями` and `/crew` the row `◷ integrator  stalled 35m` (the tab does not count in "Ждут вас": it waits for nobody). An empty turn in answer to the letter keeps the
 episode (no second letter, the mark comes back); the episode ends with a working turn of the tab (a tool call), your word in the tab,
 an open question to you, a watch, a launched session, or a change of the standing tasks; a new stand past the threshold is a new
 episode with its own letter. The episode with a sent letter is kept in `idle-tabs/<session>.json`, so a restart of the service
@@ -271,7 +325,7 @@ cannot be closed by its own keys. So every window the plugin opens (`/crew`, `/c
 holds the keys longer than 0.3 s the plugin closes the window itself, tells you in a notice, and the question stays open and on the screen; open the
 command again if you still need it (now the window lies over the question, which is safe). Windows of OpenCode itself (palette, model picker) are not
 guarded. Code: `dialog-guard.ts`, self-test `crew-esc-question`.
-Every window shows who waits for you, over all projects. `/crew` starts with one line `Ждут вас: N · с ЧЧ:ММ · <project> <#N role>`
+Every window shows who waits for you, over all projects. `/crew` starts with one line `Waiting for you: N · since ЧЧ:ММ · <project> <#N role>`
 (the time and the source of the oldest wait, so a window of another project sees the question is not its own). The side panel
 shows it on three lines, so the narrow panel cuts nothing you need: `Ждут вас: N · с ЧЧ:ММ`; `? <project> <#N role>` — the tab
 that waits longest, whole (`‖` when its turn ended with a waiting phrase); `↳ <question>` — the start of its question, cut to the panel (no question text, no third line).
@@ -483,7 +537,7 @@ A stop at a gate ends with a question to the owner (task 062; owner, 2026-10-16)
 If the calling tab has no open question to the owner (no record in `forms/`), the answer adds «Ворота записаны, но вопроса владельцу нет:
 задай его сейчас инструментом question — вопрос, рекомендация, довод», and the plugin notes the stop (`gates/<session>.json`). When the turn of
 that tab ends and still no question is open, the tab gets ONE letter «ты остановился на воротах без вопроса владельцу — задай его через
-question» (not again for the same stop), and `/crew`, `/ask`, the side panel and the notice show `⚠ ждёт вашего решения, вопроса нет`; the
+question» (not again for the same stop), and `/crew` (the word `gate` after `⚠`), `/ask`, the side panel and the notice show `⚠ ждёт вашего решения, вопроса нет`; the
 tab counts in «Ждут вас». The stop is cleared by an open question (a questionnaire record, or a question mark at the end of the turn) or by
 the owner's word in the tab. A waiting phrase («остановлено до вашего решения») is no question: the mark `⚠` replaces `‖`. The system hint of
 the tabs carries the rule in one sentence. The phrases «до вашего решения», «остановлено … решение» are recognised as waiting phrases too, but
@@ -541,8 +595,8 @@ with the recommendation, the list of the gates "только слово влад
 numbers of the questions that are left. It is not the owner's word: слово владельца старше автоответа.
 
 **Where to look and how to take it back.** Every answer is a file in `answers/` of the mailbox (kept 30 days from the answer, then removed) and a note in the
-history of the task (`crew_task show`); the section "Автоответы" of `/crew` and the line "авто 24ч: N · вмеш. M" of the side panel
-show the answers of the last 24 hours and the questions that wait for the owner's word. There is no command to take an answer back: write
+history of the task (`crew_task show`); the counters `answers N (M owner)` and `for you K` of `/crew` and the line "авто 24ч: N · вмеш. M" of the side panel
+count the answers of the last 24 hours and the questions that wait for the owner's word (their text is in the history of the task). There is no command to take an answer back: write
 in the tab — the record becomes "владелец вмешался" and the count of answers in a row starts over. Without the keys nothing changes.
 
 ## Obligations instead of a push controller
@@ -559,7 +613,7 @@ one, a turn without one is empty.
 - `push_empty_turns` (3) empty turns in a row or `push_max` (20) reminders without a working turn → the tab is stuck: no
   more reminders, the asker gets a call (a letter and a notice in its window; when the asker's tab is closed, the notice goes
   to the live windows of the project, or to all live windows when the project has none), the task's history
-  records it, and `/crew` and the side panel show "застряла с ЧЧ:ММ: <что>" under the tab until the mark is cleared;
+  records it, and `/crew` (`⚠ stuck 9h` on the row of the tab) and the side panel (`⚠ застряла с ЧЧ:ММ`) show it until the mark is cleared; the reason is in the letter and in `stuck[].what` of `status/<session>.json`;
   `crew_task {action: "push", n, to?}` wakes it again (the executor, or the reviewer with `to: "reviewer"`; the call about a
   stuck review names `to: "reviewer"`) and clears "stuck"; the answer or the submit settles the obligation;
 - "stuck" also goes by itself (task 052), for all obligations of the tab and with a log line `unstuck <session> for <qid>:
@@ -642,7 +696,7 @@ task by its number; a session's title is `045 исп title` (`#N исп title` w
   moves unchanged to `tasks/<project>/legacy/<N>.json` when that task gets its record (shown by `crew_task list all`); an
   open one refuses with its title. An order (`crew_task order`) takes its number from the same count and makes no folder.
 - **The show.** The "Crew" panel puts the task line `045 <title>` over its sessions `↳ прм`, `↳ С4-3 проверка плана`, finished
-  sessions folded into `✓ сдано N сессий` (task 064); `/crew` lists them all under `045 <title>`; the line "Ждут вас" names `045 прм`; notices, letters and answers name the task `045` and the
+  sessions folded into `✓ сдано N сессий` (task 064); `/crew` lists the live ones under `045 <title>` and counts the finished (`· N done`); its first line "Waiting for you" names `045 rev`, the panel's "Ждут вас" `045 прм`; notices, letters and answers name the task `045` and the
   session `045 С4-3`.
 
 - `crew_spawn {title?, goal, criteria, owner_words?, result?, links?, boundaries?, open_questions?, message?, extra?, tier?, priority?, role?, parent?}` (the
@@ -710,7 +764,7 @@ The integrator stays free for the owner and does not re-check accepted work:
   no longer counts in `inflight_limit` (`crew_spawn` and the steps of an auto plan count it separately); `cleanup_limit`
   (10, `0` — no limit) stops new work (not `P0`) when that many accepted tasks wait for cleanup, naming them. The tab of an
   accepted task is still woken and reminded (`accepted_reminder_min`; the reminder repeats every `accepted_reminder_min`, at most
-  5 times per acceptance, then `/crew` shows "принята и не убрана N ч" and the author's tab gets the idle mark `◷` when the reviewer
+  5 times per acceptance, then `/crew` counts it: `uncleaned #N Ч`, and the author's tab gets the idle mark `◷` when the reviewer
   does not lead the cleanup, task 076), `crew_task list` and `show` mark it "ждёт уборки";
   `OPEN_STATUSES` and `isOpen` are not changed;
 - `merge_precheck: "required"` (the default since the owner's decision of 2026-10-09; the explicit `off` returns the previous
@@ -735,7 +789,7 @@ The integrator stays free for the owner and does not re-check accepted work:
   or `unlock` of the first one (with `merge_precheck: required` the gate always does this). A reviewer refused with "lock busy" is
   recorded in its own card (`lock_wait`, gone with the tab); when the lock is released (or found abandoned) every such live reviewer of the
   project gets a letter "lock is free" (no queue, no reservation; the lock is still taken atomically by whoever calls `merge` first), and
-  `/crew` and the panel show one line "ждут замок: #N (мин)". A broken settings file of the old (no settings repository) form keeps the last good
+  the panel shows one line "ждут замок: #N (мин)" and `/crew` the counter `lock #N Ч`. A broken settings file of the old (no settings repository) form keeps the last good
   settings and is named by `crew_doctor`.
   then does not ask for the lock (only while the record is still green and of this round: a record marked stale by `rework`, `unlock`,
   a new review or `reassign` loses the mark). The release does not depend on `stall_minutes`. It counts the merge as done once the
@@ -834,9 +888,8 @@ boundaries. A step starts when:
 
 Order is by priority (the step's, else the phase's), then by plan order. A `[подплан]` step becomes a
 plan task. A step task is accepted only with «✅ СДЕЛАНО <date>, commit» in its heading in the target
-branch. When every step is closed, the author is asked to close the plan. `/crew` shows each plan:
-written, rechecked (round, clean rounds), waiting for approval, or in progress (steps closed/total,
-which are running).
+branch. When every step is closed, the author is asked to close the plan. `/crew` shows a plan that waits for approval as a row (`◇ plan N … approval · /plans`) and counts the others (`plans N`);
+the rounds and the steps are in `crew_task show` of the plan's task.
 
 Marks: plan `🔴 ОТКРЫТ / 🟡 В РАБОТЕ / ✅ ЗАКРЫТ / ❌ ОТМЕНЁН`, step `⏳ В РАБОТЕ / ✅ СДЕЛАНО`, criterion
 `✅ ВЫПОЛНЕНО / ⬜`, question `❔ / ✅`.

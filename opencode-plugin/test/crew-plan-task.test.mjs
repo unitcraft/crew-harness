@@ -138,7 +138,9 @@ cell("round 3 is again a new session", !!r3 && ![r1, r2].includes(r3), JSON.stri
 const v3 = await roundBy(r3, { blocking: 0, significant: 0, cosmetic: 0 })
 cell("two clean rounds in a row: the plan goes to the owner", task().status === "approval" && /согласование владельцу/.test(v3), JSON.stringify({ st: task().status, v3 }))
 const st = await import("../status.ts")
-cell("/crew lists the plan waiting for approval", st.planLines("proj").some((l) => /план 8 «длина фрагмента» — ◇ ждёт вашего согласования — \/plans/.test(l)), JSON.stringify(st.planLines("proj")))
+const idleRow = [{ session: "x", role: "worker", title: "x", state: "idle", detail: "d", project: "proj", watches: [], asked: [], tasks: [] }]
+const view1 = st.formatStatuses(idleRow, Date.now(), "proj")
+cell("/crew lists the plan waiting for approval (its own row with /plans)", st.plansOf("proj").approval.some((t) => t.plan.n === "8") && /◇ plan 8 длина фрагмента — approval · \/plans/.test(view1), view1)
 cell("the history records every round", task().history.filter((h) => /перепроверка: раунд/.test(h.note ?? "")).length === 3, JSON.stringify(task().history.map((h) => h.note)))
 
 // 5. the owner is notified; /plans writes the decision; "return" -> the author gets the owner's remarks
@@ -224,7 +226,7 @@ const close = async (id) => {
 await close("Ф.1.1")
 await until(() => !!byStep("Ф.1.2"), 20_000)
 cell("Ф.1.1 closed: Ф.1.2 starts", !!byStep("Ф.1.2") && !byStep("Ф.2.1"), JSON.stringify(tasks.listTasks("proj").map((x) => [x.n, x.plan_step?.step])))
-cell("/crew shows the plan's progress", st.planLines("proj").some((l) => /план 8 .* в работе: шаги 1\/3, идут Ф\.1\.2/.test(l)), JSON.stringify(st.planLines("proj")))
+cell("/crew counts the plan in progress (plans N)", st.plansOf("proj").other >= 1 && /plans [1-9]/.test(st.formatStatuses(idleRow, Date.now(), "proj")), JSON.stringify(st.plansOf("proj").other))
 await close("Ф.1.2")
 await until(() => !!byStep("Ф.2.1"), 20_000)
 const sub = byStep("Ф.2.1")

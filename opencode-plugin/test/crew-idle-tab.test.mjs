@@ -189,7 +189,7 @@ const mkTask = (project, n, author, st, extra = {}) => ({
   cell("IT-5a withIdle: the state stays tasks, the field idleTab, the text names the stand and the missing question", s?.state === "tasks" && s.idleTab?.since === NOW - 35 * 60_000 && /^простаивает с \d\d:\d\d \(35 мин\), вопроса владельцу нет: 061 между сессиями$/.test(s.detail), JSON.stringify(s))
   cell("IT-5b the mark is ◷", !!s && status.markOf(s) === "◷", String(s && status.markOf(s)))
   const list = s ? status.formatStatuses([s], NOW) : ""
-  cell("IT-5c /crew: the row has ◷ and the text; no «Ждут вас» (the tab does not wait for the owner)", /◷ .*простаивает с/.test(list) && !/Ждут вас/.test(list), list)
+  cell("IT-5c /crew: the row has ◷ and the word stalled; no «Waiting for you» (the tab does not wait for the owner)", /◷ integrator +stalled 35m/.test(list) && !/Waiting for you/.test(list), list)
   const side = s ? status.sidebarLines([s], NOW) : { rows: [] }
   cell("IT-5d the side panel: the row has ◷ and «простаивает 35м», the task under it", side.rows.some((r) => r.mark === "◷" && /простаивает 35м/.test(r.what) && r.tone === "accent") && side.rows.some((r) => /061 между сессиями/.test(r.what)), JSON.stringify(side.rows))
   cell("IT-5e without idleTab nothing changes: no mark", status.markOf({ ...base, state: "tasks" }) === undefined, String(status.markOf({ ...base, state: "tasks" })))
