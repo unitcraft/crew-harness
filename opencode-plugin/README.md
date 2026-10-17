@@ -228,7 +228,7 @@ crew-harness
       ↳ <the question of the tab, as it is>
   061 Канон и актуальная методика · 26 done
     ‖ С2-5 spec review  paused 22h
-  #22 <title> — exec submitted · rev in review 12/12 ⚠ stuck 34h
+  022 <title> — exec submitted · rev in review 12/12 ⚠ stuck 34h
 nova · uncleaned #91 29h · reports #91 #98 #99 · ⚠ off-branch · /crew-doctor
   ? #94 <title>
     ? exec  waiting you 46m
@@ -239,7 +239,7 @@ idle: ai-dev-methodology
 ```
 
 - **One line per tab**, plus its own `↳` line for the question to the owner. The mark is that of the panel (`?`, `▶`, `‖`, `⚠`, `◷`), the
-  number is the number of the task as it is shown everywhere (`#94`, `061`), the role is `exec` / `rev`, a session of a task with a folder
+  number is the number of the task as it is shown everywhere (`#94`, `061`, `022`), the role is `exec` / `rev`, a session of a task with a folder
   is its code and kind (`С2-5 spec review`), then one state word and how long (`35m`, `10h`, `2d`). A task without a folder whose tabs
   ask the owner nothing is one line: the heading and its tabs after `—`. Finished sessions of a task with a folder are not listed:
   `· 26 done` (the same rule as the panel's «✓ сдано N сессий»).
@@ -685,7 +685,8 @@ between two sessions: the last one submitted to the integrator, no review yet). 
 **One task, one number (task 058).** In a project with task folders (the key `tasks_dir`, default `doc/tasks`; on when that
 folder is in the target branch, `""` turns it off) the task number is the number of its folder `NNN-<slug>/`, shown as `045`
 (three digits, no `#`); the plugin's record has the same number. In a project without folders (Nova) a task has a number `#N`
-(per project, only grows, kept through rework and reassignment), as before. The owner, the integrator and `crew_list` call a
+(per project, only grows, kept through rework and reassignment), as before; a task of the project crew-harness is shown with three digits (`022`,
+`1000` above 999) with a folder or without (task 083: one function, `taskNo`, writes the number everywhere). The owner, the integrator and `crew_list` call a
 task by its number; a session's title is `045 исп title` (`#N исп title` without folders). The journal is
 `tasks/<project>/<N>.json` in the mailbox.
 

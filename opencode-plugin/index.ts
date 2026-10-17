@@ -1604,9 +1604,9 @@ export default {
         if (lock && lockTask && t - lock.at > stall) {
           const id = `stall-lock-${safeKey(project)}-${lock.n}-${lock.at}`
           if (!letterExists(lockTask.author, id)) {
-            postLetter(lockTask.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: lockTask.author, time: t, text: `Замок слияния проекта ${project} держит приёмка #${lock.n} «${lockTask.title}» (сессия ${lock.session}) с ${hhmm(lock.at)} — ${Math.round((t - lock.at) / 60_000)} мин; остальные слияния ждут. Держателю: вызвать accept ${lock.n} после успешного слияния и пуша или unlock ${lock.n}, если слияние прервано; при merge_precheck: required плагин сам отпускает замок, когда проверенный кандидат уже на вершине origin. Узнай у приёмщика, что мешает (crew_send {to: "${lock.session}", text: "..."}), и помоги или реши; без владельца не решить — спроси владельца.` })
-            noticeAuthor(lockTask.author, project, { sessionID: lock.session, title: `Замок слияния ${project}: #${lock.n} держит ${Math.round((t - lock.at) / 60_000)} мин`, message: short(`«${lockTask.title}» · письмо ждёт автора (${lockTask.author_role}) в ящике`, 80), duration: 15_000 }, false)
-            log(`stall: merge lock of ${project} #${lock.n} held since ${lock.at}`)
+            postLetter(lockTask.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: lockTask.author, time: t, text: `Замок слияния проекта ${project} держит приёмка ${taskNo(lockTask)} «${lockTask.title}» (сессия ${lock.session}) с ${hhmm(lock.at)} — ${Math.round((t - lock.at) / 60_000)} мин; остальные слияния ждут. Держателю: вызвать accept ${lock.n} после успешного слияния и пуша или unlock ${lock.n}, если слияние прервано; при merge_precheck: required плагин сам отпускает замок, когда проверенный кандидат уже на вершине origin. Узнай у приёмщика, что мешает (crew_send {to: "${lock.session}", text: "..."}), и помоги или реши; без владельца не решить — спроси владельца.` })
+            noticeAuthor(lockTask.author, project, { sessionID: lock.session, title: `Замок слияния ${project}: ${taskNo(lockTask)} держит ${Math.round((t - lock.at) / 60_000)} мин`, message: short(`«${lockTask.title}» · письмо ждёт автора (${lockTask.author_role}) в ящике`, 80), duration: 15_000 }, false)
+            log(`stall: merge lock of ${project} ${taskNo(lockTask)} held since ${lock.at}`)
           }
         }
         // ПРИНЯТА, НО НЕ ОЧИЩЕНА (план 002.6, дефект 2): держит место в inflight_limit. Через accepted_reminder_min —
@@ -1645,7 +1645,7 @@ export default {
           const id = `stall-review-${safeKey(project)}-${x.n}-${since}`
           if (letterExists(x.author, id)) continue
           const busy = list.filter((y) => y.review_kind === "spawn" && y.reviewer && isOpen(y) && y.status !== "rework" && y.n !== x.n)
-          postLetter(x.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.author, time: t, text: `Задача ${taskNo(x)} «${x.title}» сдана в ${hhmm(since)} и ${Math.round((t - since) / 60_000)} мин ждёт приёмщика: места приёмщиков (spawn_limits.${loadConfig(x.directory).reviewer === "acceptor" ? "acceptor" : "reviewer"}) заняты — ${busy.map((y) => `#${y.n} ${statusRu(y.status)}`).join(", ") || "?"}. Разберись, почему те приёмки стоят (письмо приёмщику), или подними предел приёмщиков (crew_config).` })
+          postLetter(x.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.author, time: t, text: `Задача ${taskNo(x)} «${x.title}» сдана в ${hhmm(since)} и ${Math.round((t - since) / 60_000)} мин ждёт приёмщика: места приёмщиков (spawn_limits.${loadConfig(x.directory).reviewer === "acceptor" ? "acceptor" : "reviewer"}) заняты — ${busy.map((y) => `${taskNo(y)} ${statusRu(y.status)}`).join(", ") || "?"}. Разберись, почему те приёмки стоят (письмо приёмщику), или подними предел приёмщиков (crew_config).` })
           noticeAuthor(x.author, project, { title: `${taskNo(x)} ждёт приёмщика ${Math.round((t - since) / 60_000)} мин`, message: short(`«${x.title}» · места приёмщиков заняты, письмо ждёт автора в ящике`, 80), duration: 15_000 }, false)
           log(`stall: ${taskNo(x)} of ${project} waits for a reviewer since ${since}`)
         }

@@ -278,7 +278,7 @@ import { readdirSync } from "node:fs"
 import { BASE, PROFILES_README_URL } from "./paths.ts"
 import { DEFAULT_SPAWN_MODELS, LIMIT_RU, VIEW_GONE, fmtTokens, limitsText, loadConfig, readJson, settingsContext, verbUsageList } from "./core.ts"
 import { projectFor } from "./settings.ts"
-import { listTasks } from "./tasks.ts"
+import { listTasks, taskNo } from "./tasks.ts"
 import * as W from "./profile-windows.ts"
 
 const STAGE_ORDER = P.CORE_STAGES
@@ -852,7 +852,7 @@ function liveSessions(project: string): LiveSession[] | undefined {
     const s = readJson<any>(path.join(dir, f))
     if (!s || s.project !== project || !isObj(s.task) || !s.model || s.task.ended) continue
     if (!(s.task.as === "reviewer" ? REVIEWER_BUSY : EXECUTOR_BUSY).includes(String(s.task.status))) continue
-    out.push({ ref: String(s.task.ref ?? `#${s.task.n}`), n: Number(s.task.n), title: String(s.task.title ?? ""), model: P.baseModel(String(s.model)) })
+    out.push({ ref: String(s.task.ref ?? taskNo({ project: s.project, n: s.task.n })), n: Number(s.task.n), title: String(s.task.title ?? ""), model: P.baseModel(String(s.model)) })
   }
   return out
 }

@@ -270,7 +270,7 @@ export const restSummary = (rest: RestItem[], max = 240) => {
 
 function restLetterText(card: Card, key: string, end: TurnEnd, rest: RestItem[]): string {
   const ref = card.task ?? card.review
-  const what = ref ? `${card.review && !card.task ? "приёмка задачи" : "задача"} ${taskRef({ n: ref.n })}` : "вопрос"
+  const what = ref ? `${card.review && !card.task ? "приёмка задачи" : "задача"} ${taskRef({ project: ref.project, n: ref.n, folder: loadTask(ref.project, ref.n)?.folder })}` : "вопрос"
   const tail = end.text.replace(/\r/g, "").trim().slice(-700)
   return `${what}: вкладка ${key} (сессия ${card.session}) остановилась с вопросами, которых по настройке проекта закрыть нельзя, работа стоит до ответа:\n${rest.map(restLine).join("\n")}\n\nКонец её ответа:\n${tail}\n\nОтветь ей сам: crew_send {to: "${card.session}", text: "..."}. Решить без владельца нельзя — спроси владельца (вопросом в конце своего хода).`
 }

@@ -200,7 +200,7 @@ function statusOfAll(x: StatusInput): Status {
     watches: watches.map((w) => ({ id: w.id, note: w.note, started: w.started, minutes: w.minutes })),
     asked: x.asked,
     ...(x.askedStale?.length ? { askedStale: x.askedStale } : {}),
-    ...(shown ? { task: { n: shown.n, status: ses && ses.status !== "running" ? (ses.status === "submitted" ? "submitted" : ses.status === "handed" ? "handed" : "cancelled") : shown.status, as: card.task ? ("executor" as const) : ("reviewer" as const), title: shown.title, ...(stepsOf(shown) ? { steps: stepsOf(shown) } : {}), ...(shown.checking ? { checking: shown.checking.step } : {}), ...(shown.folder ? { ref: taskNo(shown), group: true as const } : {}), ...(ses && ses.code !== "исп" ? { label: sesLabel(ses), ...(sessionKind(ses.code, ses.goal) ? { kind: sessionKind(ses.code, ses.goal) } : {}) } : {}), ...(ses?.ended && ses.status !== "running" ? { ended: ses.ended } : {}) } } : {}),
+    ...(shown ? { task: { n: shown.n, status: ses && ses.status !== "running" ? (ses.status === "submitted" ? "submitted" : ses.status === "handed" ? "handed" : "cancelled") : shown.status, as: card.task ? ("executor" as const) : ("reviewer" as const), title: shown.title, ...(stepsOf(shown) ? { steps: stepsOf(shown) } : {}), ...(shown.checking ? { checking: shown.checking.step } : {}), ref: taskNo(shown), ...(shown.folder ? { group: true as const } : {}), ...(ses && ses.code !== "исп" ? { label: sesLabel(ses), ...(sessionKind(ses.code, ses.goal) ? { kind: sessionKind(ses.code, ses.goal) } : {}) } : {}), ...(ses?.ended && ses.status !== "running" ? { ended: ses.ended } : {}) } } : {}),
     tasks: authored.map((t) => ({ n: t.n, status: t.status, priority: t.priority, title: t.title })),
     ...(stuck.length ? { stuck } : {}),
     updated: now,
@@ -355,10 +355,13 @@ export function waitingLine(list: Status[], _now = Date.now()): string | undefin
 }
 
 const oldestWait = (w: Status[]) => w.reduce((a, b) => ((b.since ?? Infinity) < (a.since ?? Infinity) ? b : a))
-/** Начало заголовка сессии задачи: «#33 исп», «045 прм», «045 С4-3» (задача 058). */
+/** Номер своей задачи в показе (задача 083): ref сводки, а у сводки прежней версии без ref — тот же номер из tasks.ts по проекту сводки. */
+const refOf = (s: Pick<Status, "project" | "task">) => s.task!.ref ?? taskNo({ project: s.project, n: s.task!.n })
+/** Начало заголовка сессии задачи: «022 исп», «#94 исп», «045 прм», «045 С4-3» (задача 058). */
 const TAB_RE = /^(?:#\d+|\d{3,}) \S+/
 /** Вкладка ждущего — то, что открыть: «#33 исп» (задача и роль), «045 С4-3» (сессия задачи), иначе роль («интегр.»). */
-const tabOf = (s: Status) => TAB_RE.exec(s.title ?? "")?.[0] ?? (s.task ? `${s.task.ref ?? `#${s.task.n}`} ${s.task.label ?? (s.task.as === "reviewer" ? "прм" : "исп")}` : s.role === "integrator" ? "интегр." : s.role)
+// заголовок, названный до задачи 083 («#22 исп»), показывается по нынешнему правилу: номер проекта crew-harness — тремя цифрами
+const tabOf = (s: Status) => TAB_RE.exec(s.title ?? "")?.[0].replace(/^#(\d+)/, (_, n) => taskNo({ project: s.project, n })) ?? (s.task ? `${refOf(s)} ${s.task.label ?? (s.task.as === "reviewer" ? "прм" : "исп")}` : s.role === "integrator" ? "интегр." : s.role)
 
 /** «Ждут вас» в боковой панели (задача 055; владелец, 2026-10-15: «не вижу кто меня ждет?» — одна строка
  *  «Ждут вас: 1 · с 18:55 · clau» обрезалась по ширине панели). Три строки, все проекты: сколько и с какого времени; кто ждёт
@@ -392,7 +395,7 @@ export function ageText(from: number | undefined, now: number): string {
 /** Роль вкладки задачи словом: exec / rev. */
 const roleWord = (t: NonNullable<Status["task"]>) => (t.as === "reviewer" ? ROLE_WORDS.reviewer : ROLE_WORDS.executor)
 /** Вкладка ждущего — то, что открыть: «#33 exec» (задача и роль), «045 С4-3» (сессия задачи), иначе роль («integrator»). */
-const tabRef = (s: Status) => (s.task ? `${s.task.ref ?? `#${s.task.n}`} ${s.task.label ?? roleWord(s.task)}` : s.role)
+const tabRef = (s: Status) => (s.task ? `${refOf(s)} ${s.task.label ?? roleWord(s.task)}` : s.role)
 /** Сессия методики закончена (сдана, передана, закрыта) и не ждёт владельца и не работает: в /crew — счётом «N done», как в панели
  *  (то же правило, что finished() в sidebarLines). */
 const finishedSession = (s: Status) => !!s.task?.group && !!s.task.label && ["submitted", "handed", "cancelled"].includes(s.task.status) && s.state !== "owner" && s.state !== "question" && s.state !== "working"
@@ -491,7 +494,7 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
       shown.add(key)
       const group = body.filter((y) => tk(y) === key).sort((a, b) => ORDER[a.state] - ORDER[b.state] || Number(!!a.task?.ended) - Number(!!b.task?.ended))
       const lead = group[0]
-      const title = `${s.task!.ref ?? `#${s.task!.n}`} ${titleText(s.task!.title)}`
+      const title = `${refOf(s)} ${titleText(s.task!.title)}`
       if (s.task!.group) {
         const done = group.filter(finishedSession).length
         lines.push(`  ${title}${done ? ` · ${done} ${CREW_STATE_WORDS.done}` : ""}`)
@@ -535,7 +538,7 @@ function countersOf(project: string, items: Status[], otherPlans: number, now: n
   if (an?.auto) parts.push(`answers ${an.auto} (${an.stepped} owner)`)
   if (an?.forYou) parts.push(`for you ${an.forYou}`)
   const lw = lockWaiters(project)
-  if (lw.length) parts.push(`lock ${lw.map((x) => `#${x.n} ${ageText(x.at, now)}`).join(", ")}`)
+  if (lw.length) parts.push(`lock ${lw.map((x) => `${taskNo({ project, n: x.n })} ${ageText(x.at, now)}`).join(", ")}`)
   const diverge = !!divergenceLineFor(project)
   const bare = !!unconfiguredLineFor(project)
   if (diverge) parts.push("⚠ off-branch")
@@ -651,7 +654,7 @@ export function waitText(text: string, since: number | undefined, now: number, w
 export function sidebarLines(list: Status[], now = Date.now(), project?: string, width = SIDE_WIDTH): { title: string; rows: SideRow[]; foot: string } {
   const mine = project ? list.filter((s) => (s.project ?? "?") === project) : list
   // панель узкая (~32 знака): кто — до 9 знаков, что — до 20, иначе строка переносится
-  const who = (s: Status) => (s.task ? `#${s.task.n} ${s.task.as === "reviewer" ? "прм" : "исп"}` : s.role === "integrator" ? "интегр." : s.role.slice(0, 9))
+  const who = (s: Status) => (s.task ? `${refOf(s)} ${s.task.as === "reviewer" ? "прм" : "исп"}` : s.role === "integrator" ? "интегр." : s.role.slice(0, 9))
   const what = (s: Status): string => {
     switch (s.state) {
       case "owner":
@@ -701,7 +704,7 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
   // тон base (accent — если эта вкладка ждёт вас), продолжение названия начинается с «· » вместо пробелов (задача 068)
   const heading = (first: Status) => {
     const g = first.task!.group
-    wrapWords(`${first.task!.ref ?? `#${first.task!.n}`} ${titleText(first.task!.title)}`, width - 2).forEach((l, k) => {
+    wrapWords(`${refOf(first)} ${titleText(first.task!.title)}`, width - 2).forEach((l, k) => {
       const m = k || g ? " " : (markOf(first) ?? " ")
       rows.push({ mark: m, who: "", what: k ? `· ${l}` : m.trim() ? `${m} ${l}` : l, tone: g || !needs(first) ? "base" : "accent" })
     })

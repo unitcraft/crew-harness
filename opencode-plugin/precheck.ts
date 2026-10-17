@@ -178,8 +178,8 @@ export function precheckLines(t: Task, session: string): string[] {
   else out.push(`предпроверка: устарела (${rec.stale?.reason ?? "причина не записана"}), была на ${short(rec.base)}`)
   const h = mergeHolder(t.project)
   if (h && h.session === session && h.n === t.n) out.push(`замок вливания: твой с ${hm(h.at)}${rec.lock_on ? `, на вершине ${short(rec.lock_on.tip)}` : ""}`)
-  else if (h && h.session === session) out.push(`замок вливания: твой, но для задачи #${h.n}, не для этой`)
-  else if (h) out.push(`замок вливания: у другого приёмщика (задача #${h.n})`)
+  else if (h && h.session === session) out.push(`замок вливания: твой, но для задачи ${taskNo({ project: t.project, n: h.n })}, не для этой`)
+  else if (h) out.push(`замок вливания: у другого приёмщика (задача ${taskNo({ project: t.project, n: h.n })})`)
   else out.push("замок: нет")
   return out
 }
@@ -294,8 +294,8 @@ export async function finishPrecheck(t: Task, session: string, target: string, i
 export function unlockMerge(t: Task, session: string): string {
   const h = mergeHolder(t.project)
   if (!h) return `Замка вливания проекта ${t.project} нет — отпускать нечего.`
-  if (h.session !== session) return `Замок вливания проекта ${t.project} не твой (держит приёмщик задачи #${h.n}); чужой замок unlock не снимает.`
-  if (h.n !== t.n) return `Твой замок вливания — для задачи #${h.n}, а не ${taskNo(t)}: unlock {n: ${h.n}}.`
+  if (h.session !== session) return `Замок вливания проекта ${t.project} не твой (держит приёмщик задачи ${taskNo({ project: t.project, n: h.n })}); чужой замок unlock не снимает.`
+  if (h.n !== t.n) return `Твой замок вливания — для задачи ${taskNo({ project: t.project, n: h.n })}, а не ${taskNo(t)}: unlock {n: ${h.n}}.`
   releaseMergeLock(t.project, session, t.n)
   markPrecheckStale(t, "замок отпущен")
   taskEvent(t, session, undefined, "замок вливания отпущен (unlock); предпроверка устарела")
@@ -325,7 +325,7 @@ export async function releaseLandedLock(project: string, target: string): Promis
   releaseMergeLock(project, lock.session, lock.n)
   cur.precheck = { ...cur.precheck, landed: { tip: tip.tip, at: Date.now() } }
   taskEvent(cur, "crew-harness", undefined, `замок отпущен: слияние на вершине ${short(tip.tip)} (проверенный кандидат ${short(rec.candidate)} уже в ${target}); дальше accept, уборка без замка`)
-  return `merge lock of ${project} #${lock.n} released: landed on ${short(tip.tip)}`
+  return `merge lock of ${project} ${taskNo({ project, n: lock.n })} released: landed on ${short(tip.tip)}`
 }
 
 // ---- ВОРОТА `merge` (REQ-08, REQ-12). Четыре сверки — однострочные функции с маркерами `GATE:*`: доказательство красного
@@ -374,7 +374,7 @@ export async function gateMerge(t: Task, session: string, target: string): Promi
   }
   // 3. держание замка — до любого takeMergeLock
   const holder = mergeHolder(project)
-  if (holder && holder.session === session && holder.n !== t.n) return refuse(`замок у тебя уже для #${holder.n}; сначала accept, rework или unlock по ней`)
+  if (holder && holder.session === session && holder.n !== t.n) return refuse(`замок у тебя уже для ${taskNo({ project, n: holder.n })}; сначала accept, rework или unlock по ней`)
   const hadLock = !!holder && holder.session === session && holder.n === t.n
   // 4. повтор держателя: ветка уже влита (вершина сдвинута самим вливанием)
   if (hadLock) {
@@ -391,7 +391,7 @@ export async function gateMerge(t: Task, session: string, target: string): Promi
   }
   // 5. замок
   const got = takeMergeLock(project, session, t.n)
-  if (!got.ok) return { text: `Замок вливания проекта ${project} у приёмщика задачи #${got.holder.n} (сессия ${got.holder.session}) с ${hm(got.holder.at)}. Дождись (спроси позже ещё раз) — вливать одновременно нельзя. Твоя предпроверка остаётся действующей, пока ${target} не сдвинется.` }
+  if (!got.ok) return { text: `Замок вливания проекта ${project} у приёмщика задачи ${taskNo({ project, n: got.holder.n })} (сессия ${got.holder.session}) с ${hm(got.holder.at)}. Дождись (спроси позже ещё раз) — вливать одновременно нельзя. Твоя предпроверка остаётся действующей, пока ${target} не сдвинется.` }
   const stamp = mergeHolder(project)?.at // метка этого экземпляра замка: по ней шаги 6–9 узнают «мой» замок, а не взятый параллельным вызовом
   // 6. вершина — под замком
   const tip = await readTip(dir, target)

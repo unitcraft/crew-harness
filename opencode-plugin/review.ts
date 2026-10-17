@@ -107,7 +107,7 @@ export function lockWaiters(project: string): { session: string; n: number; at: 
 /** Строка «ждут замок: #N (мин)» для /crew и панели; нет ждущих — undefined. */
 export function lockWaitLine(project: string, now = Date.now()): string | undefined {
   const w = lockWaiters(project)
-  return w.length ? `ждут замок: ${w.map((x) => `#${x.n} (${Math.max(0, Math.round((now - x.at) / 60_000))} мин)`).join(", ")}` : undefined
+  return w.length ? `ждут замок: ${w.map((x) => `${taskNo({ project, n: x.n })} (${Math.max(0, Math.round((now - x.at) / 60_000))} мин)`).join(", ")}` : undefined
 }
 /** Замок свободен: письмо «замок свободен» каждому ждущему и снять запись; замок за это время мог уйти — отказ merge запишет снова. */
 export function wakeLockWaiters(project: string, abandoned = false): number {
@@ -115,7 +115,7 @@ export function wakeLockWaiters(project: string, abandoned = false): number {
   const waiters = lockWaiters(project)
   const at = Date.now()
   for (const w of waiters) {
-    postLetter(w.session, { id: `lock-free-${safeKey(project)}-${at}-${safeKey(w.session)}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: w.session, time: at, text: `Замок вливания проекта ${project} свободен. Ты ждал его для задачи #${w.n}: вызови crew_task {action: "merge", n: ${w.n}} (замок выдаётся тому, кто успел первым; проиграешь — снова встанешь в ждущие).` })
+    postLetter(w.session, { id: `lock-free-${safeKey(project)}-${at}-${safeKey(w.session)}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: w.session, time: at, text: `Замок вливания проекта ${project} свободен. Ты ждал его для задачи ${taskNo({ project, n: w.n })}: вызови crew_task {action: "merge", n: ${w.n}} (замок выдаётся тому, кто успел первым; проиграешь — снова встанешь в ждущие).` })
     setLockWait(w.session, undefined)
   }
   return waiters.length

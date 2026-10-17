@@ -1236,7 +1236,7 @@ export function sessionLabel(session: string, fallback: string): string {
   // номер задачи — как в показе (задача 058): «045» у задачи с папкой, у сессии методики — «045 С4-3»
   const no = (r: { project: string; n: number }, as: "task" | "review") => {
     const t = loadTask(r.project, r.n)
-    if (!t) return `#${r.n}`
+    if (!t) return taskNo({ project: r.project, n: r.n })
     const s = as === "task" ? sessionOf(t, session) : undefined
     return s && s.code !== EXECUTOR_CODE ? sessionRef(t, s) : taskNo(t)
   }
@@ -1477,8 +1477,8 @@ acceptor — роль приёмщика (разделяемая) при нас�
 
 ЗАДАЧИ. Одна задача — один номер. В проекте с папками задач (настройка tasks_dir, по умолчанию doc/tasks; включена, когда
 каталог есть в целевой ветке) номер задачи — номер её папки NNN-<slug>/, в показе «045» (три цифры, без «#»); запись плагина
-носит тот же номер. В проекте без папок у задачи номер #N (сквозной в проекте, только растёт; при доработке и передаче не
-меняется). По номеру задачу называют владелец, интегратор и crew_list; заголовок сессии — «045 исп название» («#N исп название»).
+носит тот же номер. В проекте без папок у задачи номер N (сквозной в проекте, только растёт; при доработке и передаче не
+меняется), в показе «#N»; задачи проекта crew-harness подписываются тремя цифрами («022») и без папки. По номеру задачу называют владелец, интегратор и crew_list; заголовок сессии — «045 исп название» («#N исп название»).
   Новая задача в проекте с папками: номер — 1 + наибольший из записей и папок во всех рабочих деревьях и ветках (локальных и
     origin); плагин пишет папку на ветку задачи и коммитит её (task/message.md — поле message дословно, без него — шаблон из полей;
     log.md — первая строка); основную копию не трогает. Папка уже есть — crew_spawn {task: N, goal} заводит запись с её номером.
@@ -2067,7 +2067,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
   const isIntegrator = (me: Card) => me.role === "integrator" && holdsExclusive(roleKey(projOf(me), "integrator"), me.session)
   const notIntegrator = (me: Card) => ({ content: `Это может только интегратор проекта ${projOf(me)} (crew_role {role: "integrator"}).` })
   const taskInput = {
-    title: str("Short title (it becomes the session title: 045 исп title, #N исп title without task folders)"),
+    title: str("Short title (it becomes the session title: 045 исп title; #N исп title for a task without a folder in a project other than crew-harness)"),
     goal: str("Goal: what has to be true when the task is done"),
     criteria: str("Acceptance criteria: what is run, what must be green, what proves it (and the 'feed it something wrong' probe)"),
     boundaries: str("Boundaries: what is NOT done in this task"),
@@ -2192,8 +2192,8 @@ export function makeTools(host: CrewHost): CrewTool[] {
         }
         // папки нет в целевой ветке — ветка задачи идёт от ветки, где папка лежит (основную копию не трогаем)
         if (!inTarget && t.branch && !branchExists(fm.top, t.branch)) ensureBranch(fm.top, t.branch, hit.ref!)
-        if (old) taskEvent(t, me.session, undefined, `старая запись #${taskNum} «${old.title}» перенесена в legacy/ без изменений`)
-        made = `Запись задачи ${taskRef(t)} заведена по папке ${t.folder}/${moved ? ` (старая закрытая запись #${taskNum} «${old!.title}» перенесена в legacy/)` : ""}. `
+        if (old) taskEvent(t, me.session, undefined, `старая запись ${taskNo({ project, n: taskNum! })} «${old.title}» перенесена в legacy/ без изменений`)
+        made = `Запись задачи ${taskRef(t)} заведена по папке ${t.folder}/${moved ? ` (старая закрытая запись ${taskNo({ project, n: taskNum! })} «${old!.title}» перенесена в legacy/)` : ""}. `
       }
     } else {
       // подзадача: родитель — запись задачи с папкой или папка без записи
@@ -2264,7 +2264,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
     description:
       [
         "Integrator only: start a task in a new session (it runs in the OpenCode server even with no window). The report comes back as an answer to the task's qid: crew_wait {qid}. Manage tasks with crew_task. The owner reads title, goal and criteria too: write them in the owner's language named in your system block.",
-        "One task, one number. In a project with task folders (tasks_dir, default doc/tasks, present in the target branch) the task number is the number of its folder NNN-<slug>/, shown as 045; without folders it is the plugin's #N. A new task: the plugin takes 1 + the largest number of the records and of the folders in every working tree and branch, writes the folder (task/message.md = message word for word, or a template from the fields when message is absent; log.md with its first line) on the task branch and commits it there; the main copy is never written. task: N - a task whose folder already exists (no folder commit; refused when no folder has that number).",
+        "One task, one number. In a project with task folders (tasks_dir, default doc/tasks, present in the target branch) the task number is the number of its folder NNN-<slug>/, shown as 045; without folders it is the plugin's number, shown #N (the tasks of the project crew-harness are shown with three digits, 022, with or without a folder). A new task: the plugin takes 1 + the largest number of the records and of the folders in every working tree and branch, writes the folder (task/message.md = message word for word, or a template from the fields when message is absent; log.md with its first line) on the task branch and commits it there; the main copy is never written. task: N - a task whose folder already exists (no folder commit; refused when no folder has that number).",
         "A task session is a part of the task, not a task: session \"<code>\" (С1, С2, С3п, С4…; default исп = the executor) adds a session to task N: ident 045 С4-3 (code and its ordinal in the task) plus the launch number №n; the plugin writes the launch lines into progress.log and log.md of the folder. A method session submits to you (crew_task submit), with no plugin review; the plugin's review of the task starts once, after crew_task deliver. place: own (default for С2/С4/С6) - its own worktree and branch task/NNN-<code>-<k> from the task branch; task (default for the others) - the task worktree.",
         "A sub-task (part_of: N) is a task of its own: own number and folder, the first line of its task/message.md is «Часть задачи NNN «…».», a line in the parent's log.md. The rule: an own acceptance or an own landing in main - a sub-task; the next step of the same work (a check, a fix by findings, a continuation, a handover) - a session.",
         "goal, criteria - required (the project may require more: boundaries, open_questions; task_fields). title? priority? P0..P3.",
@@ -2413,7 +2413,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
     name: "crew_task",
     description:
       [
-        "Tasks of the caller's project, by number (045 for a task with a folder, #N without). One line per action: action - who may - parameters - what it does. Roles: integrator = the tab that plans and starts the project's tasks; executor = the session doing the task; reviewer = the tab that checks and lands a submitted task (a free worker tab, a session started for it, the acceptor role when the project says reviewer: acceptor, or the integrator). Texts that go to another tab (submit report, rework remarks, order, push and cancel texts) are read by the owner too: write them in the owner's language named in your system block.",
+        "Tasks of the caller's project, by number (045 for a task with a folder or of the project crew-harness, #N without). One line per action: action - who may - parameters - what it does. Roles: integrator = the tab that plans and starts the project's tasks; executor = the session doing the task; reviewer = the tab that checks and lands a submitted task (a free worker tab, a session started for it, the acceptor role when the project says reviewer: acceptor, or the integrator). Texts that go to another tab (submit report, rework remarks, order, push and cancel texts) are read by the owner too: write them in the owner's language named in your system block.",
         "list - anyone - all? - open tasks by priority; all=true adds finished and cancelled ones.",
         "show - anyone - n - details and history of a task, with its steps, side branches and worktrees.",
         "assign - integrator - session, goal, criteria, title?, boundaries?, open_questions?, priority?, extra? - give a task to an existing open tab instead of a new session; the tab is woken while the task is open. Refused for the integrator's own session (unless the project sets allow_self_assign) and for a session that already runs a task. extra {id: one line} fills the project's extra task fields (task_extra_fields, see crew_config show). In a project with task folders the task text follows the template of crew_spawn: owner_words and result required, links? boundaries? message?",
@@ -2550,7 +2550,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         return { content: `Заказ ${taskNo(t)} «${t.title}» отправлен интегратору ${m[1]}. Его ход виден в crew_task {action: "show", n: ${t.n}}; выполнен — придёт сводка.` }
       }
       const t = findTask(me, input.n)
-      if (!t) return { content: `Задачи #${input.n} в проекте ${project} нет.` }
+      if (!t) return { content: `Задачи ${taskNo({ project, n: input.n })} в проекте ${project} нет.` }
       if (action === "show") {
         const lines = [
           taskRow(t),
@@ -2763,8 +2763,8 @@ export function makeTools(host: CrewHost): CrewTool[] {
             return { content: `Замок вливания проекта ${project} твой, выдан на вершину ${tcfg.targetBranch} ${g.granted}. ${landingLine(t, tcfg.targetBranch) || `Влей ${t.branch ? `ветку ${t.branch}` : "работу"} (кандидата, проверенного на этой вершине) в ${tcfg.targetBranch}, запушь`} Затем вызови crew_task {action: "accept", n: ${t.n}, checks: {...}${t.branch ? "" : ', commit: "<хэш>"'}}. ${LOCK_RULE}` }
           }
           const r = takeMergeLock(project, me.session, t.n, tcfg.mergeLockPerTask)
-          if (!r.ok && r.holder.session === me.session) return { content: `Замок вливания проекта ${project} у тебя уже для задачи #${r.holder.n}: сначала accept, rework или unlock по ней (в проекте merge_lock_per_task: on).` }
-          if (!r.ok) return { content: `Замок вливания проекта ${project} у приёмщика задачи #${r.holder.n} (сессия ${r.holder.session}) с ${hhmm(r.holder.at)}. Дождись (спроси позже ещё раз) — вливать одновременно нельзя.` }
+          if (!r.ok && r.holder.session === me.session) return { content: `Замок вливания проекта ${project} у тебя уже для задачи ${taskNo({ project, n: r.holder.n })}: сначала accept, rework или unlock по ней (в проекте merge_lock_per_task: on).` }
+          if (!r.ok) return { content: `Замок вливания проекта ${project} у приёмщика задачи ${taskNo({ project, n: r.holder.n })} (сессия ${r.holder.session}) с ${hhmm(r.holder.at)}. Дождись (спроси позже ещё раз) — вливать одновременно нельзя.` }
           taskEvent(t, me.session, undefined, "замок вливания взят")
           return { content: `Замок вливания проекта ${project} твой. Влей ${t.branch ? `ветку ${t.branch}` : "работу"} в ${tcfg.targetBranch}, запушь и вызови crew_task {action: "accept", n: ${t.n}, checks: {...}${t.branch ? "" : ', commit: "<хэш>"'}}. ${LOCK_RULE}` }
         }
@@ -3410,8 +3410,8 @@ export function propagateToParent(t: Task): string[] {
     postLetter(order.author, {
       id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: order.author, time: Date.now(), ...(done ? { wake: false } : {}),
       text: done
-        ? `Заказ #${order.n} «${order.title}» выполнен проектом ${t.project} (задача ${taskNo(t)} принята и влита${t.commit ? `, коммит ${t.commit}` : ""}).`
-        : `Заказ #${order.n} «${order.title}»: задачу ${t.project} ${taskNo(t)} отменили. Спроси интегратора ${t.project} (crew_send {to: "${t.project}.integrator"}) или отмени заказ (crew_task {action: "cancel", n: ${order.n}}).`,
+        ? `Заказ ${taskNo(order)} «${order.title}» выполнен проектом ${t.project} (задача ${taskNo(t)} принята и влита${t.commit ? `, коммит ${t.commit}` : ""}).`
+        : `Заказ ${taskNo(order)} «${order.title}»: задачу ${t.project} ${taskNo(t)} отменили. Спроси интегратора ${t.project} (crew_send {to: "${t.project}.integrator"}) или отмени заказ (crew_task {action: "cancel", n: ${order.n}}).`,
     })
     sent.push(order.author)
   }

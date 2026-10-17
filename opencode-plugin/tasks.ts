@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from "n
 import path from "node:path"
 import { INBOX, READ, type Priority, type Tier, readJson, safeKey } from "./core.ts"
 import { idsHas } from "./housekeeping.ts"
-import { BASE } from "./paths.ts"
+import { BASE, CREW_DIR } from "./paths.ts"
 
 // путь — из paths.ts (модуль без зависимостей: core и tasks импортируют друг друга, а BASE ядра здесь ещё не готов)
 export const TASKS = path.join(BASE, "tasks")
@@ -25,11 +25,19 @@ export const OPEN_STATUSES: TaskStatus[] = ["starting", "running", "submitted", 
 /** статусы, в которых исполнитель работает (может сдавать отчёт) */
 export const WORKING_STATUSES: TaskStatus[] = ["starting", "running", "rework"]
 export type TaskEvent = { at: number; by: string; status?: TaskStatus; note?: string }
-/** Номер задачи в показе (задача 058): у задачи с папкой — номер папки тремя цифрами без «#» («045»), без папки — «#88», как раньше. */
-export const taskNo = (t: { n: number | string; folder?: string }): string => (t.folder ? String(t.n).padStart(3, "0") : `#${t.n}`)
+/** Проект самого плагина (crew-harness): его задачи подписываются тремя цифрами, есть у задачи папка или нет (задача 083). */
+export const OWN_PROJECT = CREW_DIR
+/** Номер задачи в показе — ЕДИНСТВЕННОЕ место, где он пишется владельцу, вкладке и письму (задача 083; владелец, 2026-10-17: «по
+ *  рекомендации»). Задача проекта crew-harness — три цифры с нулями слева без «#» («022», «081»; больше 999 — как есть: «1000»),
+ *  есть у неё папка или нет; задача с папкой другого проекта — номер папки тремя цифрами (задача 058); остальные задачи других
+ *  проектов — «#94». Проект передаётся явно (t.project): наличие папки о нём не говорит. Без проекта и без папки — «#N». */
+export const taskNo = (t: { n: number | string; project?: string; folder?: string }): string => {
+  const n = String(t.n)
+  return /^[0-9]+$/.test(n) && (t.folder || t.project === OWN_PROJECT) ? n.padStart(3, "0") : `#${n}`
+}
 /** «#31 «замок вливания»» — номер задачи с названием: по одному номеру не вспомнить, о чём она (владелец, 2026-10-07); у задачи с
  *  папкой — «045 «…»» (задача 058). */
-export const taskRef = (t: { n: number | string; title?: string; folder?: string }, max = 40): string => {
+export const taskRef = (t: { n: number | string; project?: string; title?: string; folder?: string }, max = 40): string => {
   const title = (t.title ?? "").replace(/[«»]/g, "").replace(/\s+/g, " ").trim()
   return title ? `${taskNo(t)} «${title.length > max ? `${title.slice(0, max - 1)}…` : title}»` : taskNo(t)
 }
@@ -70,7 +78,7 @@ export const methodSession = (t: { sessions?: TaskSession[]; executor?: string }
   return s && s.code !== EXECUTOR_CODE ? s : undefined
 }
 /** «045 С4-3» — сессия задачи; у исполнителя и приёмщика — «060 исп» / «060 прм». */
-export const sessionRef = (t: { n: number | string; folder?: string }, s: { code: string; k: number }) => `${taskNo(t)} ${sesLabel(s)}`
+export const sessionRef = (t: { n: number | string; project?: string; folder?: string }, s: { code: string; k: number }) => `${taskNo(t)} ${sesLabel(s)}`
 
 /** Как запущена сессия при включённом наборе: этап, набор, семья, ступень, модель и откуда окно (profile — файл окон
  *  в worktree; snapshot — по снимку; general — окно из общих настроек: приёмка, задача без worktree, набор недопустим). */
