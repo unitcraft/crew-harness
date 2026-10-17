@@ -10,7 +10,7 @@
 
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { type Card, obligationsOf, readJson, safeKey } from "./core.ts"
+import { type Card, type Obligation, obligationsOf, readJson, safeKey } from "./core.ts"
 import { BASE } from "./paths.ts"
 import { answerCounts, answerSideRow } from "./answer.ts"
 import { divergenceLineFor, unconfiguredLineFor } from "./config-diverge.ts"
@@ -165,6 +165,25 @@ export type StatusInput = {
   gate?: { at: number; wait?: true; text?: string }
 }
 
+/** Задача 084 (владелец, 2026-10-17, «по рекомендации»): обязательство «застряла» ждать больше нечего, если его задача сдана за эту роль: приёмщик —
+ *  задача принята, влита, отменена, вернулась исполнителю на доработку или у неё другой приёмщик; исполнитель — задача уже сдана (submitted и дальше,
+ *  отменена) или у неё другой исполнитель. Записи задачи нет (очищена) — тоже. Вопрос без задачи и задача, всё ещё ждущая этой вкладки, — не сняты.
+ *  Запись обязательства не меняется: отметку только не показываем. Возвращает причину или undefined. */
+export function obligationMoot(o: Obligation, card: Pick<Card, "session" | "project" | "task" | "review">): string | undefined {
+  if (!o.task) return undefined
+  const mine = card.project ? listTasks(card.project) : []
+  const ref = card.task ?? card.review
+  const t = mine.find((x) => x.review_qid === o.qid || x.qid === o.qid) ?? (ref ? loadTask(ref.project, ref.n) : undefined)
+  if (!t || (t.review_qid !== o.qid && t.qid !== o.qid)) return "задачи нет"
+  // приёмщик: qid обязательства - review_qid задачи (у старых задач без него - qid задачи, и запись зовёт «приёмка N»)
+  if (t.review_qid === o.qid || (!t.review_qid && o.task.startsWith("приёмка "))) {
+    if (t.reviewer && t.reviewer !== card.session) return "у задачи другой приёмщик"
+    return ["accepted", "done", "cancelled", "rework", "starting", "running"].includes(t.status) ? `приёмка не ждёт: задача ${t.status}` : undefined
+  }
+  if (t.executor && t.executor !== card.session) return "у задачи другой исполнитель"
+  return ["submitted", "reviewing", "accepted", "done", "cancelled"].includes(t.status) ? `задача уже сдана: ${t.status}` : undefined
+}
+
 /** Состояние одной сессии из её данных. Порядок важности: ход > вопрос владельцу > наблюдение > ответ > задачи. Вкладка, которая
  *  ждёт владельца (state owner), застрявшей не показывается (задача 052; владелец, 2026-10-15, «заводи 052»): стоит она за
  *  владельцем, а не сама; отметка в обязательствах остаётся и снимается ответом владельца. */
@@ -187,7 +206,7 @@ function statusOfAll(x: StatusInput): Status {
   // интегратора показываются по своей роли, а не как исполнитель задачи («#73 исп» у интегратора, подхватившего когда-то отменённую #73)
   const shown = own && isOpen(own) && card.role !== "integrator" ? own : undefined
   const stuck = obligationsOf(card.session)
-    .filter((o) => o.stuck)
+    .filter((o) => o.stuck && !obligationMoot(o, card))
     .map((o) => ({ ...(o.stuckAt ? { at: o.stuckAt } : {}), what: o.stuckWhat ?? (o.task ? o.task : `вопрос ${o.qid}`) }))
   const base: Status = {
     session: card.session,
@@ -347,13 +366,15 @@ const fit = (line: string, n = DIALOG_WIDTH) => (line.length > n ? `${line.slice
  *  панели «Ждут вас» не менялась). Время и источник — у самого давнего ожидания; источник назван, чтобы в окне другого проекта было видно,
  *  что вопрос не его (владелец, 2026-10-15: «смущают» одинаковые строки в окнах всех проектов). Никто не ждёт — undefined. */
 export function waitingLine(list: Status[], _now = Date.now()): string | undefined {
-  const w = list.filter((s) => s.state === "owner")
+  const w = waitingOf(list)
   if (!w.length) return undefined
   const oldest = oldestWait(w)
   const where = [oldest.project, tabRef(oldest)].filter(Boolean).join(" ")
   return `Waiting for you: ${w.length}${oldest.since ? ` · since ${hm(oldest.since)}` : ""}${where ? ` · ${where}` : ""}`
 }
 
+/** Кто ждёт владельца (задача 084): один источник числа - «Ждут вас» в панели, первая строка /crew и «ждут N» внизу панели считают по нему. */
+export const waitingOf = (list: Status[]) => list.filter((s) => s.state === "owner")
 const oldestWait = (w: Status[]) => w.reduce((a, b) => ((b.since ?? Infinity) < (a.since ?? Infinity) ? b : a))
 /** Номер своей задачи в показе (задача 083): ref сводки, а у сводки прежней версии без ref — тот же номер из tasks.ts по проекту сводки. */
 const refOf = (s: Pick<Status, "project" | "task">) => s.task!.ref ?? taskNo({ project: s.project, n: s.task!.n })
@@ -367,7 +388,7 @@ const tabOf = (s: Status) => TAB_RE.exec(s.title ?? "")?.[0].replace(/^#(\d+)/, 
  *  «Ждут вас: 1 · с 18:55 · clau» обрезалась по ширине панели). Три строки, все проекты: сколько и с какого времени; кто ждёт
  *  дольше всех — проект и вкладка, что открыть (не обрезаются); начало вопроса по ширине панели (нет текста — нет строки). */
 export function waitingRows(list: Status[], width = SIDE_WIDTH): SideRow[] {
-  const w = list.filter((s) => s.state === "owner")
+  const w = waitingOf(list)
   if (!w.length) return []
   const oldest = oldestWait(w)
   const rows: SideRow[] = [
@@ -772,7 +793,9 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
   const watching = mine.filter((s) => s.state === "watch").length
   const queued = mine.filter((s) => s.state === "watch" && s.watches[0] && !s.watches[0].started).length
   const more = sorted.length > SIDE_MAX ? ` · +${sorted.length - SIDE_MAX}` : ""
-  return { title: `Crew${project ? ` · ${project}` : ""}`, rows, foot: `ход ${working} · ждут ${watching}${queued ? ` (очередь ${queued})` : ""}${more} · /crew` }
+  // «ждут» - то же число, что «Ждут вас» (задача 084; владелец видел «Ждут вас: 2» и внизу «ждут 0»); наблюдения - отдельным значком ⧗, как в строках
+  const watch = watching ? ` · ⧗ ${watching}${queued ? ` (очередь ${queued})` : ""}` : ""
+  return { title: `Crew${project ? ` · ${project}` : ""}`, rows, foot: `ход ${working} · ждут ${waitingOf(list).length}${watch}${more} · /crew` }
 }
 
 /** Текст /crew-doctor: последняя самопроверка сервиса (DOCTOR_FILE) и её время. */

@@ -399,6 +399,19 @@ counter `loop: N` in the project line) and `/ask`; the author of the task gets *
 your answer in the goal) and a line in the task history. The loop is cleared by a working turn of the tab, your word in the tab, a
 reassigned or closed task, a closed tab.
 
+#### An exhausted question is not a wait once the tab went on (task 084)
+
+A question whose repeats are used up («без ответа, нужен владелец») stays the state `owner` only while nothing else happened to the tab.
+Once the tab **worked after it** (a turn runs, or a turn ended after the form was exhausted - a letter was handed over and taken) or **made a
+newer form**, the exhausted form is spent: it gives the tab no `owner` state, and it is not in «Ждут вас», in `/ask` or in the reminders. The
+record stays in `forms/` (`resumed` is the time the service saw the tab go on; `crew-answer` still sees the form and takes an answer to it).
+A form with repeats left, a plain open question and the loop of task 078 wait as before. Likewise the mark `⚠ застряла` / `⚠ stuck` is not shown
+when the task is already past the tab: the review of a task that is accepted, done, cancelled, back with the executor on rework, or has another
+reviewer; the work of a task that is already submitted (or accepted, done, cancelled) or has another executor; a task whose record is gone. A task
+that still waits for that very tab (a review of a submitted task, the work of a running task or one on rework) and a stuck question keep the mark;
+the obligation itself is not rewritten. The foot of the side panel counts «ждут» by the same list as «Ждут вас» (the number of tabs that wait for
+you); the watches (gates, a commit to main) are counted next to it with the mark `⧗`, e.g. `ход 1 · ждут 2 · ⧗ 1 (очередь 1)`.
+
 #### Service messages do not pile up behind a waiting question (task 080)
 
 A turn with the `question` tool is held by the OpenCode server for up to an hour, and the server hands the model **one** queued message per

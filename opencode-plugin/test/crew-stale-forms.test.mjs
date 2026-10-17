@@ -94,7 +94,9 @@ await safe("d", async () => {
   // another text AND other options: another question (strict rule), both open. (Another text with the SAME options of a form in the
   // repeat is the case of task 073, test/crew-stale-forms-repeat.test.mjs: there the old form is replaced.)
   fw.handleFormEvent(created("frm_d2", "sesD", "Иначе сформулированный другой вопрос?", ["Совсем", "Другие варианты"]), T0 + 12 * MIN)
-  cell("d: a reworded question with other options is another question (strict rule), both open", open("sesD", T0 + 13 * MIN).join() === "frm_d1,frm_d2", open("sesD", T0 + 13 * MIN).join())
+  // task 084: the old form is exhausted, so the newer question of the tab takes over as the wait for the owner: the old one is spent (not open,
+  // but not replaced either - the record stays as history and crew-answer still sees it)
+  cell("d: a reworded question with other options is another question (strict rule), not replaced; the exhausted old one is spent (task 084)", open("sesD", T0 + 13 * MIN).join() === "frm_d2" && !rec("sesD", "frm_d1")?.replacedBy && fw.allForms(T0 + 13 * MIN).some((x) => x.form.id === "frm_d1"), open("sesD", T0 + 13 * MIN).join())
 })
 
 // (e) the old repeat path is kept: a form in the repeat state is taken over with the same text, the count goes on

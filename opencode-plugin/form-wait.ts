@@ -63,6 +63,21 @@ export type PendingForm = {
   replacedAt?: number
   /** task 073: set only when the tab did not repeat the words: the old form was in the repeat and the new one has the same options */
   replacedReason?: string
+  /** task 084: the form is exhausted and the tab worked after that (a turn is running, or one ended): nobody waits for the owner on it any more; the record stays as history */
+  resumed?: number
+}
+
+/**
+ * Task 084 (owner, 2026-10-17, "по рекомендации"): an EXHAUSTED form is not a wait for the owner any more once the tab went on: it worked after
+ * the form was exhausted (`resumed`, set by formTick), or it made a newer form (a later record of the same file that is not replaced).
+ * The record stays in forms/ (history; crew-answer still sees it). A form that is not exhausted is a live wait, as before.
+ * `list` is the records of the tab in the order of the asks.
+ */
+export function spentForm(f: PendingForm, list: PendingForm[]): boolean {
+  if (!f.exhausted) return false
+  if (f.resumed) return true
+  const i = list.indexOf(f)
+  return i >= 0 && list.slice(i + 1).some((x) => !!x && !x.replacedBy)
 }
 
 /** Task 073: the reason written on a form replaced by a new form with the same options (other words) while it was in the repeat. */
@@ -118,7 +133,7 @@ export function updateForm(session: string | undefined, id: string, patch: (f: P
 
 export function pendingForms(session: string, now = Date.now(), dir = FORMS): PendingForm[] {
   const list = readJson<PendingForm[]>(fileOf(session, dir))
-  return Array.isArray(list) ? list.filter((f) => f && typeof f.at === "number" && now - f.at < FORM_TTL_MS && !f.replacedBy) : []
+  return Array.isArray(list) ? list.filter((f) => f && typeof f.at === "number" && now - f.at < FORM_TTL_MS && !f.replacedBy && !spentForm(f, list)) : []
 }
 
 /** Setup: drop wait files whose forms are all stale. */
@@ -361,7 +376,7 @@ export async function startFormWait(ctx: any, log: (line: string) => void, onRep
 
 // ---------------------------------------------------------------------------------------------------------------------
 // TASK 040. All records with their sessions (stale ones are not counted, the files are cleaned by cleanupForms).
-export function allForms(now = Date.now(), dir = FORMS, replaced = false): { session: string; form: PendingForm }[] {
+export function allForms(now = Date.now(), dir = FORMS, replaced = false, waiting = false): { session: string; form: PendingForm }[] {
   const out: { session: string; form: PendingForm }[] = []
   try {
     if (!existsSync(dir)) return out
@@ -369,11 +384,14 @@ export function allForms(now = Date.now(), dir = FORMS, replaced = false): { ses
       if (!n.endsWith(".json")) continue
       const list = readJson<PendingForm[]>(path.join(dir, n))
       if (!Array.isArray(list)) continue
-      for (const f of list) if (f && typeof f.at === "number" && now - f.at < FORM_TTL_MS && !!f.replacedBy === replaced) out.push({ session: f.session ?? n.replace(/\.json$/, ""), form: f })
+      for (const f of list) if (f && typeof f.at === "number" && now - f.at < FORM_TTL_MS && !!f.replacedBy === replaced && !(waiting && spentForm(f, list))) out.push({ session: f.session ?? n.replace(/\.json$/, ""), form: f })
     }
   } catch {}
   return out.sort((a, b) => a.form.at - b.form.at)
 }
+
+/** Task 084: the forms the owner is waited on for: allForms without the spent ones (exhausted, and the tab went on). /ask and the reminders count these. */
+export const waitingForms = (now = Date.now(), dir = FORMS) => allForms(now, dir, false, true)
 
 /** Task 071: the history - forms the tab replaced with a newer one (not open questions; an answer to them is refused with the new id). */
 export const replacedForms = (now = Date.now(), dir = FORMS) => allForms(now, dir, true)
@@ -431,6 +449,14 @@ export async function formTick(deps: FormDeps, now = Date.now(), dir = FORMS): P
     try {
       const key = `${session}/${f.id}`
       const tab = await deps.tab(session)
+      // task 084: an exhausted form is spent once the tab worked after it was exhausted - a turn runs now, or one ended since (the tab was
+      // not busy when the form was exhausted, so any later turn is new). The record stays; nobody waits for the owner on it any more.
+      if (f.exhausted && !f.resumed && (tab.busy || (await deps.idle(session, f.exhausted)))) {
+        updateForm(session, f.id, (x) => void (x.resumed = now), dir)
+        goneSince.delete(key)
+        say(`form ${f.id} of ${session}: the tab worked after "no answer after the repeats" - not a wait for the owner any more`)
+        continue
+      }
       if (tab.busy) {
         goneSince.delete(key)
         continue
@@ -497,7 +523,7 @@ export async function settleOnRequest(session: string, now: number, ownerWrote: 
  */
 export function formReminders(now: number, notify: (session: string, f: PendingForm, message: string) => boolean | void, dir = FORMS, every = FORM_REMIND_MS): number {
   let sent = 0
-  for (const { session, form: f } of allForms(now, dir)) {
+  for (const { session, form: f } of waitingForms(now, dir)) {
     if (f.notifiedAt && now - f.notifiedAt < every) continue
     const q = f.question ?? f.title ?? "вопрос во встроенном вопроснике"
     const lp = loopOf(session, dir)
@@ -518,7 +544,7 @@ const WAIT_MARK = "‖"
 /** /ask: the open questions to the owner - project, tab, how long, text and options; `ended` - the tabs whose turn ended
  *  with a question (task 055: /ask names every tab that waits, not only the questionnaire ones). */
 export function askText(now = Date.now(), dir = FORMS, ended: EndedWait[] = []): string {
-  const list = allForms(now, dir)
+  const list = waitingForms(now, dir)
   const more = ended.filter((e) => !list.some((x) => x.session === e.session))
   if (!list.length && !more.length) return "Открытых вопросов к вам нет."
   const first = Math.min(...list.map((x) => x.form.at), ...more.map((e) => e.since ?? Infinity))

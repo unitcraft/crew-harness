@@ -120,7 +120,7 @@ cell("rows fit the narrow panel (32 columns) without wrapping", v.rows.every((r)
 }
 cell("a task row has its title on the row above it, so the number says what the task is (task 064)", v.rows.some((x, i) => x.who === "#2 исп" && sideText(v.rows[i - 1]) === "• #2 x"), JSON.stringify(v.rows))
 cell("another project's sessions are not shown", !v.rows.some((r) => r.who === "worker" && r.what.startsWith("работает")), JSON.stringify(v.rows))
-cell("at most 9 rows, the rest in the foot", v.rows.filter((x) => x.who).length === 9 && /\+5 · \/crew/.test(v.foot) && /ход 1 · ждут 1 \(очередь 1\)/.test(v.foot),JSON.stringify({ n: v.rows.length, foot: v.foot }))
+cell("at most 9 rows, the rest in the foot", v.rows.filter((x) => x.who).length === 9 && /\+5 · \/crew/.test(v.foot) && /ход 1 · ждут 1 · ⧗ 1 \(очередь 1\)/.test(v.foot) && sideText(v.rows[0]).startsWith('Ждут вас: 1'),JSON.stringify({ n: v.rows.length, foot: v.foot }))
 
 // the window plugin loads under Node, where sidebar.tsx cannot be compiled: the import fails quietly
 const mod = await import("../tui.ts")

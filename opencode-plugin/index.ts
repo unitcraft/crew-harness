@@ -143,7 +143,7 @@ import { countedOpen, waitingCleanup, ACCEPTED_REMINDERS_MAX, acceptedReminderId
 import { EXECUTOR_CODE, sesLabel, sessionOf, sessionRef, taskNo } from "./tasks.ts"
 import { profileProblems, profileState, stateSignature, syncProjectFiles, syncSnapshot, syncTaskFile } from "./profile-layer.ts"
 import { cellOfState, clampTier, resolveStageProfile, splitLaunchModel, stageOfLaunch, tabFitsCell } from "./profiles.ts"
-import { allForms, cleanupForms, FORM_RESTART_GRACE_MS, formLookEvery, formReminders, formTick, pendingForms, settleOnRequest, startFormWait } from "./form-wait.ts"
+import { cleanupForms, FORM_RESTART_GRACE_MS, formLookEvery, formReminders, formTick, pendingForms, settleOnRequest, startFormWait, waitingForms } from "./form-wait.ts"
 import { systemToast } from "./toast-win.ts"
 import { probeEnabled, startEventProbe } from "./event-probe.ts"
 import { catalogModels, writeCatalog } from "./model-catalog.ts"
@@ -1087,7 +1087,7 @@ export default {
           into.set(o.from_session, [...(into.get(o.from_session) ?? []), { qid: o.qid, to: keyOf(c), at: o.at }])
         }
       }
-      const formOpen = new Set(allForms(t).map((x) => x.session))
+      const formOpen = new Set(waitingForms(t).map((x) => x.session))
       const watchesBy = openWatchesBySession() // одно чтение папки наблюдений на проход (их сотни: завершённые хранятся сутки)
       const saved = new Map(readStatuses().map((x) => [x.session, x])) // состояния прошлого прохода: кто из сессий задач ждёт автора (задача 063)
       for (const c of cards) {
