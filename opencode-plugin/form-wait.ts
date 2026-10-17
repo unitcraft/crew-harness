@@ -51,6 +51,9 @@ export type PendingForm = {
   exhausted?: number
   /** the owner was last reminded at this time (notice in the windows) */
   notifiedAt?: number
+  /** task 071: the tab asked the same question (same text and options) with this newer form: this one is history, not an open question */
+  replacedBy?: string
+  replacedAt?: number
 }
 
 const fileOf = (session: string, dir = FORMS) => path.join(dir, `${safeKey(session)}.json`)
@@ -103,7 +106,7 @@ export function updateForm(session: string | undefined, id: string, patch: (f: P
 
 export function pendingForms(session: string, now = Date.now(), dir = FORMS): PendingForm[] {
   const list = readJson<PendingForm[]>(fileOf(session, dir))
-  return Array.isArray(list) ? list.filter((f) => f && typeof f.at === "number" && now - f.at < FORM_TTL_MS) : []
+  return Array.isArray(list) ? list.filter((f) => f && typeof f.at === "number" && now - f.at < FORM_TTL_MS && !f.replacedBy) : []
 }
 
 /** Setup: drop wait files whose forms are all stale. */
@@ -176,6 +179,58 @@ function firstOptions(form: any): string[] | undefined {
 
 const same = (a?: string, b?: string) => (a ?? "").replace(/\s+/g, " ").trim().toLowerCase() === (b ?? "").replace(/\s+/g, " ").trim().toLowerCase()
 
+const norm = (t?: string) => (t ?? "").replace(/\s+/g, " ").trim().toLowerCase()
+
+/** Task 071: what makes two forms of one tab "the same question": the text and the options, both, in the same order, compared
+ *  without case and spacing. No text - no key (a form without a text is never taken for a repeat); nothing is guessed by closeness. */
+export function formKey(question?: string, options?: string[], title?: string): string | undefined {
+  const q = norm(question)
+  // the text of the form header is the fallback of firstQuestion (no question field found): then the question is not known
+  return q && q !== norm(title) ? `${q}\u0001${(options ?? []).map(norm).join("\u0002")}` : undefined
+}
+
+function markReplaced(session: string, id: string, by: string, now: number, dir = FORMS) {
+  updateForm(session, id, (f) => {
+    f.replacedBy = by
+    f.replacedAt = now
+  }, dir)
+}
+
+/**
+ * Task 071: forms that piled up before the rule (or whose event came in some other way): in every file, of the open forms with
+ * the same question (formKey) only the newest stays, the older ones become "replaced" (the record stays as history). The order of
+ * the list is the order of the asks. Returns what it closed; a second pass finds nothing.
+ */
+export function settleDuplicates(dir = FORMS, now = Date.now()): { session: string; id: string; by: string }[] {
+  const out: { session: string; id: string; by: string }[] = []
+  try {
+    if (!existsSync(dir)) return out
+    for (const n of readdirSync(dir)) {
+      if (!n.endsWith(".json")) continue
+      const file = path.join(dir, n)
+      const list = readJson<PendingForm[]>(file)
+      if (!Array.isArray(list)) continue
+      const newest = new Map<string, PendingForm>()
+      for (const f of list) {
+        const key = f && !f.replacedBy ? formKey(f.question, f.options, f.title) : undefined
+        if (key !== undefined) newest.set(key, f)
+      }
+      let changed = false
+      for (const f of list) {
+        const key = f && !f.replacedBy ? formKey(f.question, f.options, f.title) : undefined
+        const last = key !== undefined ? newest.get(key) : undefined
+        if (!last || last === f) continue
+        f.replacedBy = last.id
+        f.replacedAt = now
+        out.push({ session: f.session ?? n.replace(/\.json$/, ""), id: f.id, by: last.id })
+        changed = true
+      }
+      if (changed) save(file, list)
+    }
+  } catch {}
+  return out
+}
+
 /** onReplied: the owner answered the question of this session (task 052: the mark "stuck" of the tab goes at once). */
 export function handleFormEvent(ev: any, now = Date.now(), dir = FORMS, onReplied?: (session: string) => void) {
   try {
@@ -188,10 +243,14 @@ export function handleFormEvent(ev: any, now = Date.now(), dir = FORMS, onReplie
       const session = String(form.sessionID)
       const question = firstQuestion(form)
       const options = firstOptions(form)
+      const before = readJson<PendingForm[]>(fileOf(session, dir)) ?? []
+      if (before.some((x) => x.id === String(form.id))) return // a copy of the event: nothing to do (an old copy must not replace a newer form)
       // the model repeats a lost question: the new form takes the record over and keeps the count (otherwise every repeat
       // would start from zero and the loop would never end)
-      const old = (readJson<PendingForm[]>(fileOf(session, dir)) ?? []).find((x) => x.id !== String(form.id) && (x.cancelled || x.repeats) && same(x.question, question))
-      if (old) removeForm(session, old.id, dir)
+      const old = before.find((x) => !x.replacedBy && (x.cancelled || x.repeats) && same(x.question, question))
+      // task 071: the same question again (same text and options) - every older open form of it is replaced, the record stays as history
+      const key = formKey(question, options, form.title)
+      const stale = before.filter((x) => !x.replacedBy && (x === old || (key !== undefined && formKey(x.question, x.options, x.title) === key)))
       addForm(
         session,
         {
@@ -206,6 +265,7 @@ export function handleFormEvent(ev: any, now = Date.now(), dir = FORMS, onReplie
         },
         dir,
       )
+      for (const x of stale) markReplaced(session, x.id, String(form.id), now, dir)
     } else if (type === "form.replied") {
       const id = body.id ?? body.form?.id
       if (!id) return
@@ -251,7 +311,7 @@ export async function startFormWait(ctx: any, log: (line: string) => void, onRep
 
 // ---------------------------------------------------------------------------------------------------------------------
 // TASK 040. All records with their sessions (stale ones are not counted, the files are cleaned by cleanupForms).
-export function allForms(now = Date.now(), dir = FORMS): { session: string; form: PendingForm }[] {
+export function allForms(now = Date.now(), dir = FORMS, replaced = false): { session: string; form: PendingForm }[] {
   const out: { session: string; form: PendingForm }[] = []
   try {
     if (!existsSync(dir)) return out
@@ -259,11 +319,14 @@ export function allForms(now = Date.now(), dir = FORMS): { session: string; form
       if (!n.endsWith(".json")) continue
       const list = readJson<PendingForm[]>(path.join(dir, n))
       if (!Array.isArray(list)) continue
-      for (const f of list) if (f && typeof f.at === "number" && now - f.at < FORM_TTL_MS) out.push({ session: f.session ?? n.replace(/\.json$/, ""), form: f })
+      for (const f of list) if (f && typeof f.at === "number" && now - f.at < FORM_TTL_MS && !!f.replacedBy === replaced) out.push({ session: f.session ?? n.replace(/\.json$/, ""), form: f })
     }
   } catch {}
   return out.sort((a, b) => a.form.at - b.form.at)
 }
+
+/** Task 071: the history - forms the tab replaced with a newer one (not open questions; an answer to them is refused with the new id). */
+export const replacedForms = (now = Date.now(), dir = FORMS) => allForms(now, dir, true)
 
 const hm = (t?: number) => (t ? new Date(t).toTimeString().slice(0, 5) : "?")
 const lostState = (f: PendingForm) => !!(f.cancelled || f.repeats)
@@ -311,6 +374,7 @@ export function formLookEvery(now = Date.now(), dir = FORMS, every = 5_000): num
  */
 export async function formTick(deps: FormDeps, now = Date.now(), dir = FORMS): Promise<void> {
   const say = deps.say ?? (() => {})
+  for (const x of settleDuplicates(dir, now)) say(`form ${x.id} of ${x.session}: replaced by ${x.by} (the same question asked again)`)
   for (const { session, form: f } of allForms(now, dir)) {
     try {
       const key = `${session}/${f.id}`

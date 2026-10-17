@@ -7,7 +7,7 @@
 import { existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { readJson } from "./core.ts"
-import { FORMS, type PendingForm, addForm, allForms, removeForm } from "./form-wait.ts"
+import { FORMS, type PendingForm, addForm, allForms, removeForm, replacedForms, settleDuplicates } from "./form-wait.ts"
 import { BASE } from "./paths.ts"
 
 export const ANSWERS = path.join(BASE, "answers")
@@ -34,13 +34,23 @@ export type OwnerAnswer = {
 
 const clean = (s: string) => s.replace(/\(recommended\)|\(рекомендуется\)/gi, "").replace(/\s+/g, " ").trim().toLowerCase()
 
-/** Какая форма и какой ответ. Чистая функция: её проверяет test/crew-owner-answer.test.mjs. */
-export function resolveAnswer(a: OwnerAnswer, forms: { session: string; form: PendingForm }[], done: OwnerAnswer[]): { ok: true; session: string; form: PendingForm; answer: string } | { ok: false; why: string } {
+/** Какая форма и какой ответ. Чистая функция: её проверяет test/crew-owner-answer.test.mjs. `replaced` — записи, которые вкладка заменила
+ *  новой формой того же вопроса (задача 071): ответ на такую форму отказывается с id новой. */
+export function resolveAnswer(a: OwnerAnswer, forms: { session: string; form: PendingForm }[], done: OwnerAnswer[], replaced: { session: string; form: PendingForm }[] = []): { ok: true; session: string; form: PendingForm; answer: string } | { ok: false; why: string } {
   if (!a || typeof a.quote !== "string" || !a.quote.trim()) return { ok: false, why: "no quote of the owner's word" }
   if (!a.form && !a.session) return { ok: false, why: "no form id and no session" }
   if (!a.option && !(a.text ?? "").trim()) return { ok: false, why: "no option and no text" }
   const hits = forms.filter((x) => (a.form ? x.form.id === a.form || x.form.rid === a.form : true) && (a.session ? x.session === a.session : true))
   if (!hits.length) {
+    // задача 071: форму заменила новая форма того же вопроса — отказ называет форму, на которую нужно ответить (цепочка замен идёт до открытой)
+    let old = a.form ? replaced.find((x) => x.form.id === a.form && (!a.session || x.session === a.session)) : undefined
+    for (let n = 0; old?.form.replacedBy && n < 20; n++) {
+      const by = old.form.replacedBy
+      if (forms.some((x) => x.form.id === by)) return { ok: false, why: `вопрос задан заново формой ${by}, ответьте на неё` }
+      const next = replaced.find((x) => x.form.id === by)
+      if (!next) return { ok: false, why: `вопрос задан заново формой ${by}, но она уже закрыта: открытого вопроса нет` }
+      old = next
+    }
     const prev = done.find((d) => d.status === "applied" && d.id !== a.id && ((a.form && d.form === a.form) || (!a.form && a.session && d.session === a.session)))
     return { ok: false, why: prev ? `already answered (answer ${prev.id})` : "no open question form" }
   }
@@ -84,11 +94,13 @@ export async function answerTick(deps: AnswerDeps, now = Date.now(), dir = ANSWE
   if (!existsSync(dir)) return
   const files = readdirSync(dir).filter((n) => n.endsWith(".json")).sort()
   const all = files.map((n) => ({ file: path.join(dir, n), a: readJson<OwnerAnswer>(path.join(dir, n)) }))
+  // задача 071: накопленные дубли закрываются до разбора ответов — ответ на старую форму получит подсказку, а не уйдёт в никуда
+  if (all.some((x) => x.a && !x.a.status)) for (const x of settleDuplicates(formsDir, now)) deps.say(`form ${x.id} of ${x.session}: replaced by ${x.by} (the same question asked again)`)
   for (const { file, a } of all) {
     if (!a || a.status) continue
     a.id ??= path.basename(file, ".json")
     const done = all.map((x) => x.a).filter((x): x is OwnerAnswer => !!x && !!x.status)
-    const r = resolveAnswer(a, allForms(now, formsDir), done)
+    const r = resolveAnswer(a, allForms(now, formsDir), done, replacedForms(now, formsDir))
     if (!r.ok) {
       finish(file, a, { status: "refused", why: r.why, done: now })
       a.status = "refused"

@@ -31,14 +31,15 @@ const read = (f) => {
   }
 }
 
-function openForms() {
+// replaced=true — история: формы, которые вкладка заменила новой формой того же вопроса (задача 071); они не открыты
+function openForms(replaced = false) {
   const out = []
   if (!existsSync(FORMS)) return out
   for (const n of readdirSync(FORMS).filter((n) => n.endsWith(".json"))) {
     const list = read(path.join(FORMS, n))
     if (!Array.isArray(list)) continue
     for (const f of list) {
-      if (!f || typeof f.at !== "number" || Date.now() - f.at >= TTL) continue
+      if (!f || typeof f.at !== "number" || Date.now() - f.at >= TTL || !!f.replacedBy !== replaced) continue
       const session = f.session ?? n.replace(/\.json$/, "")
       const card = read(path.join(CARDS, `${safeKey(session)}.json`)) ?? {}
       const project = card.project ?? (card.directory ? path.basename(card.directory) : "?")
@@ -70,6 +71,16 @@ const quote = opt("--quote")
 if (!quote || !quote.trim()) (console.error("нужна цитата слова владельца: --quote \"…\""), process.exit(2))
 if (!option && !text) (console.error("нужен вариант (--option) или свой текст (--text)"), process.exit(2))
 const hits = forms.filter((x) => x.form.id === target || x.form.rid === target || x.session === target || x.key === target)
+if (!hits.length) {
+  // задача 071: вопрос задан заново — назвать форму, на которую нужно ответить
+  const old = openForms(true).find((x) => x.form.id === target || x.form.rid === target)
+  if (old) {
+    const by = old.form.replacedBy
+    const open = forms.find((x) => x.form.id === by)
+    console.error(open ? `вопрос задан заново формой ${by}, ответьте на неё` : `вопрос задан заново формой ${by}, но открытого вопроса нет`)
+    process.exit(1)
+  }
+}
 if (hits.length !== 1) {
   console.error(hits.length ? `под «${target}» ${hits.length} вопросника — назовите форму: ${hits.map((x) => x.form.id).join(", ")}` : `открытого вопросника «${target}» нет; список — без аргументов`)
   process.exit(1)

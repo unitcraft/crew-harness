@@ -127,25 +127,30 @@ await safe("f", async () => {
 
 // (g) the answer to a replaced form is refused with the new id; the answer to the new one goes
 await safe("g", async () => {
-  const forms = fw.allForms(T0 + 60 * MIN)
-  const replaced = fw.replacedForms(T0 + 60 * MIN)
-  cell("g: replacedForms lists the history records", replaced.some((x) => x.form.id === "frm_a1") && replaced.every((x) => x.form.replacedBy), JSON.stringify(replaced.map((x) => x.form.id)))
-  const r = oa.resolveAnswer({ id: "x1", at: 1, form: "frm_a1", option: "1", quote: "по рекомендации" }, forms, [], replaced)
-  cell("g: resolveAnswer refuses a replaced form and names the new one", r.ok === false && /заново формой frm_a2/.test(r.why) && /ответьте на неё/.test(r.why), JSON.stringify(r))
-  const r2 = oa.resolveAnswer({ id: "x2", at: 1, form: "frm_a1", option: "1", quote: "q" }, forms, [], [])
-  cell("g: without the history it is the old plain refusal", r2.ok === false && /no open question form/.test(r2.why), JSON.stringify(r2))
-
-  // end to end through the pass over the answer files
   fw.handleFormEvent(created("frm_h1", "sesH"), T0)
   fw.handleFormEvent(created("frm_h2", "sesH"), T0 + 10 * MIN)
+  const forms = fw.allForms(T0 + 60 * MIN)
+  const replaced = fw.replacedForms(T0 + 60 * MIN)
+  cell("g: replacedForms lists the history records", replaced.some((x) => x.form.id === "frm_h1") && replaced.every((x) => x.form.replacedBy), JSON.stringify(replaced.map((x) => x.form.id)))
+  const r = oa.resolveAnswer({ id: "x1", at: 1, form: "frm_h1", option: "1", quote: "по рекомендации" }, forms, [], replaced)
+  cell("g: resolveAnswer refuses a replaced form and names the new one", r.ok === false && /заново формой frm_h2/.test(r.why) && /ответьте на неё/.test(r.why), JSON.stringify(r))
+  const r2 = oa.resolveAnswer({ id: "x2", at: 1, form: "frm_h1", option: "1", quote: "q" }, forms, [], [])
+  cell("g: without the history it is the old plain refusal", r2.ok === false && /no open question form/.test(r2.why), JSON.stringify(r2))
+
+  const r3 = oa.resolveAnswer({ id: "x3", at: 1, form: "frm_a1", option: "1", quote: "q" }, forms, [], replaced)
+  cell("g: if the new form is already closed the refusal says so", r3.ok === false && /frm_a2/.test(r3.why) && /закрыта/.test(r3.why), JSON.stringify(r3))
+
+  // end to end through the pass over the answer files
   const dir = path.join(tmp, "answers-071")
   mkdirSync(dir, { recursive: true })
   const put = (name, a) => writeFileSync(path.join(dir, `${name}.json`), JSON.stringify({ id: name, at: 1, quote: "по рекомендации", option: "1", ...a }))
   put("a-old", { form: "frm_h1", session: "sesH" })
-  put("a-new", { form: "frm_h2", session: "sesH" })
   const letters = []
   const interrupted = []
-  await oa.answerTick({ interrupt: async (s) => (interrupted.push(s), { ok: true }), letter: (s, t, id) => letters.push(id), history: () => {}, say: () => {} }, T0 + 20 * MIN, dir)
+  const answerDeps = { interrupt: async (s) => (interrupted.push(s), { ok: true }), letter: (s, t, id) => letters.push(id), history: () => {}, say: () => {} }
+  await oa.answerTick(answerDeps, T0 + 20 * MIN, dir)
+  put("a-new", { form: "frm_h2", session: "sesH" })
+  await oa.answerTick(answerDeps, T0 + 20 * MIN, dir)
   const old = core.readJson(path.join(dir, "a-old.json"))
   const neu = core.readJson(path.join(dir, "a-new.json"))
   cell("g: the answer to the replaced form is refused with the hint, no interrupt", old?.status === "refused" && /заново формой frm_h2, ответьте на неё/.test(old.why), JSON.stringify(old))

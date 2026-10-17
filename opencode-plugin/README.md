@@ -251,6 +251,17 @@ tabs whose turn ended with a question. A question gives a notice at once and aga
 open. With `owner_system_notify: true` the project also gets a Windows system notification (built-in PowerShell, no installs and no rights;
 off by default).
 
+### The same question asked again closes the old form (task 071)
+
+A tab that asks the same question again (the text and the options are the same, both, in the same order; case and spacing do not
+count, nothing is guessed by closeness) gets a new form, and the old form of that tab becomes «replaced»: its record stays in
+`forms/` as history (`replacedBy`, `replacedAt`), but it is no longer an open question - it is not in `/ask`, in «Ждут вас», in the
+panel, in `crew-answer` or in the reminders, and the plugin never wakes the tab for it. An answer to it is refused with
+«вопрос задан заново формой <id>, ответьте на неё». A form of another text or other options, a form of another tab, and a form
+of a tab whose turn is long over and that was not asked again all stay open: the question is still the owner's. Duplicates that
+piled up before the rule are closed by the same rule at the first pass of the plugin (the tick of the lost questions and the
+pass over the answer files).
+
 ### Your answer to a question from outside the window (task 059)
 
 On your word in the orchestrator chat, the orchestrator can pass your answer to an open questionnaire of any tab:
