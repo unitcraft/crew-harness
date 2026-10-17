@@ -146,7 +146,7 @@ import { systemToast } from "./toast-win.ts"
 import { probeEnabled, startEventProbe } from "./event-probe.ts"
 import { catalogModels, writeCatalog } from "./model-catalog.ts"
 import { forEachBudget, background, stepBudget } from "./async-git.ts"
-import { ensureWorktree, fileAtAsync, gitTraces, leftoversOf, mergeHolder, mergeLockAbandoned, reviewLetter, wakeLockWaiters } from "./review.ts"
+import { addSide, ensureWorktree, fileAtAsync, gitTraces, leftoversOf, mergeHolder, mergeLockAbandoned, reviewLetter, sameFs, wakeLockWaiters } from "./review.ts"
 import { precheckLines, releaseLandedLock } from "./precheck.ts"
 import { isLauncherCard, noteLoopLag, registerJournalTools } from "./journal.ts"
 import { answerTick } from "./owner-answer.ts"
@@ -1722,6 +1722,15 @@ export default {
     const startBlocked = new Map<string, number>() // задача → когда повторить запуск, отложенный из-за дерева
     const startFailed = new Map<string, string>() // задача → причина последнего сбоя создания сессии (resumeTasks скажет автору)
     const START_RETRY_MS = Number(process.env.CREW_HARNESS_START_RETRY_MS) || 120_000
+    // Дерево на ветке принадлежит ДРУГОЙ открытой задаче проекта (её дерево, дерево её сессии или записанное track): её название или undefined (задача 079)
+    const foreignTree = (t: Task) => (tree: string): string | undefined => {
+      for (const o of listTasks(t.project)) {
+        if (o.n === t.n || !isOpen(o)) continue
+        const trees = [o.worktree, ...(o.sessions ?? []).map((x) => x.worktree), ...(o.side ?? []).map((x) => x.worktree)]
+        if (trees.some((x) => sameFs(x, tree))) return `задачей ${taskRef(o)} «${o.title}»`
+      }
+      return undefined
+    }
     async function startTask(t0: Task): Promise<{ session?: string; error?: string }> {
       const key = `${t0.project}#${t0.n}`
       if (startingNow.has(key)) return { error: "запуск уже идёт" }
@@ -1758,8 +1767,14 @@ export default {
               return { error: why }
             }
             if (cfg.worktrees && !insideDir(t.worktree, cfg.worktrees)) return refuse(`worktree ${t.worktree} вне папки деревьев проекта ${cfg.worktrees}`)
-            const w = await ensureWorktree(t.directory, t.worktree, t.branch, cfg.targetBranch)
+            const w = await ensureWorktree(t.directory, t.worktree, t.branch, cfg.targetBranch, { foreign: foreignTree(t) })
             if (!w.ok) return refuse(`worktree ${t.worktree} не создан: ${w.error}`)
+            // на ветке уже стоит дерево (подготовлено вручную, записано track): запись задачи выравнивается по нему (задача 079)
+            if (w.adopted && w.path && !sameFs(w.path, t.worktree)) {
+              taskEvent(t, PLUGIN_SENDER, undefined, `дерево задачи — ${w.path}: на ветке ${t.branch} оно уже стоит (по настройкам было бы ${t.worktree}); второе не создаётся`)
+              t.worktree = w.path
+              saveTask(t)
+            }
             dir = t.worktree
             if (w.warn) log(`task ${taskNo(t)} (${t.project}): ${w.warn}`)
             if (w.note) {
@@ -1769,7 +1784,7 @@ export default {
             if (!t.worktree_ready) {
               t.worktree_ready = true
               saveTask(t)
-              taskEvent(t, PLUGIN_SENDER, undefined, `worktree ${t.worktree}, ветка ${t.branch}${w.created ? " — создан плагином" : " — уже был"}`)
+              taskEvent(t, PLUGIN_SENDER, undefined, `worktree ${t.worktree}, ветка ${t.branch}${w.created ? " — создан плагином" : w.adopted ? " — уже стоял на ветке, создан не плагином" : " — уже был"}`)
             }
             // СЕССИЯ ЗАДАЧИ С ПАПКОЙ (задача 058): своё дерево и ветка от ветки задачи (place own) и строки запуска в журналах папки —
             // до старта сессии; повтор оборванного запуска строк не дублирует (номер запуска уже записан — строка не пишется)
@@ -1777,8 +1792,15 @@ export default {
             if (ses && t.folder) {
               if (ses.place === "own" && ses.worktree && ses.branch) {
                 if (cfg.worktrees && !insideDir(ses.worktree, cfg.worktrees)) return refuse(`дерево сессии ${ses.worktree} вне папки деревьев проекта ${cfg.worktrees}`)
-                const ws = await ensureWorktree(t.directory, ses.worktree, ses.branch, t.branch)
+                const ws = await ensureWorktree(t.directory, ses.worktree, ses.branch, t.branch, { foreign: foreignTree(t) })
                 if (!ws.ok) return refuse(`дерево сессии ${ses.worktree} не создано: ${ws.error}`)
+                // дерево ветки сессии уже стоит (сделано вручную): запись сессии называет его путь, уборка видит его (задача 079)
+                if (ws.adopted && ws.path && !sameFs(ws.path, ses.worktree)) {
+                  taskEvent(t, PLUGIN_SENDER, undefined, `дерево сессии ${sesLabel(ses)} — ${ws.path}: на ветке ${ses.branch} оно уже стоит (по настройкам было бы ${ses.worktree}); второе не создаётся`)
+                  ses.worktree = ws.path
+                  saveTask(t)
+                  addSide(t, [{ worktree: ws.path }], PLUGIN_SENDER, true)
+                }
                 dir = ses.worktree
               }
               const why = writeLaunch(t, ses, dir)

@@ -687,6 +687,14 @@ task by its number; a session's title is `045 исп title` (`#N исп title` w
   review is one per task: after the submit of a task with a single `исп` session, as before, and for a task with method
   sessions after `crew_task {action: "deliver", n, text}`. `reassign` of a task with sessions gives the same code the next
   ordinal and a new launch number; the old session is marked handed.
+- **The tree of a session is the tree that already stands on its branch** (task 079). Before it makes a tree for the task or for
+  an own-tree session, the plugin asks `git worktree list`: a tree made by hand on that branch (for example recorded by
+  `crew_task track`) is used as it is, the record of the task (`worktree`) or of the session is aligned to its path in the same
+  step, and no second `git worktree add` runs on a busy branch; the launch lines go into that tree. A branch held by the main copy
+  of the project or by the tree of another open task is a refusal naming that path (the author gets a letter, the start repeats
+  by itself once the cause is gone); files and branches are never moved or deleted. A recorded path whose folder is gone (git still
+  remembers the registration) is made again at the same path from the branch, with the commits intact. A tree the plugin makes
+  itself, from the settings, is made as before.
 - **A sub-task** is a task of its own: `crew_spawn {part_of: N, …}` — own number and folder, the first line of its
   `task/message.md` is `Часть задачи NNN «…».`, the parent's `log.md` gets `документ: заведена подзадача MMM «…»` (no tree of
   the parent — a letter to the integrator with that line); the records link `part_of` / `parts`. The rule: an own acceptance

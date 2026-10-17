@@ -403,13 +403,36 @@ export function reworkLetter(t: Task, text: string, by: string): string {
 // БАЗА — ОПУБЛИКОВАННАЯ ВЕТКА (задача 022, 2026-10-11): до создания ветки плагин делает `git fetch origin <база>` (асинхронно,
 // с пределом времени) и строит ветку от origin/<база>; нет remote или fetch не вышел — прежняя локальная база и warn.
 // Локальная ветка отличается от опубликованной — note с числами (чужие коммиты и локальную ветку плагин не двигает).
-export async function ensureWorktree(repoDir: string, worktree: string, branch: string, base: string): Promise<{ ok: boolean; created: boolean; error?: string; warn?: string; note?: string }> {
+// ДЕРЕВО, КОТОРОЕ УЖЕ СТОИТ НА ВЕТКЕ (задача 079, 2026-10-17). Дерево, подготовленное вручную (интегратор записал его crew_task track,
+// сессию перевели в него), плагин не видел: по настройкам путь свободен, и он делал `git worktree add` на ветке, уже выбранной в
+// другом дереве, — git отказывал, запуск сессии откладывался и повторялся каждые две минуты (задача 061).
+// Теперь дерево на ветке берётся как есть: возвращается его путь (запись задачи или сессии выравнивается по нему), второе не создаётся.
+// Исключения — отказ с путём: ветку держит основная копия проекта (там плагин сессию не открывает) или дерево другой задачи
+// (rules.foreign). Дерево записано, а папки нет (удалена руками, git её ещё помнит) — создаётся заново: `worktree add --force`, ветка
+// и коммиты целы. Файлы и ветки не переносятся и не удаляются.
+export type TreeRules = {
+  /** дерево по пути принадлежит ДРУГОЙ задаче проекта: её название для отказа; иначе undefined */
+  foreign?: (tree: string) => string | undefined
+}
+export async function ensureWorktree(repoDir: string, worktree: string, branch: string, base: string, rules: TreeRules = {}): Promise<{ ok: boolean; created: boolean; path?: string; adopted?: boolean; error?: string; warn?: string; note?: string }> {
   try {
     if (existsSync(worktree)) {
       const head = (await gitA(worktree, ["rev-parse", "--abbrev-ref", "HEAD"])).trim()
-      return head === branch ? { ok: true, created: false } : { ok: false, created: false, error: `в ${worktree} ветка ${head}, а не ${branch}` }
+      return head === branch ? { ok: true, created: false, path: worktree } : { ok: false, created: false, error: `в ${worktree} ветка ${head}, а не ${branch}` }
     }
     const top = (await gitA(repoDir, ["rev-parse", "--show-toplevel"])).trim()
+    const listed = worktreesOf(await gitA(top, ["worktree", "list", "--porcelain"]))
+    const held = listed.filter((w) => w.branch === branch)
+    const live = held.find((w) => existsSync(w.path))
+    if (live) {
+      const shown = live.path.replace(/\\/g, "/")
+      if (listed[0] && sameFs(live.path, listed[0].path)) return { ok: false, created: false, error: `ветка ${branch} выбрана в основной копии проекта ${shown}, а сессию задачи там плагин не открывает — верни основной копии целевую ветку` }
+      const other = rules.foreign?.(live.path)
+      if (other) return { ok: false, created: false, error: `ветка ${branch} занята деревом ${shown}: оно записано за ${other}, не за этой задачей` }
+      return { ok: true, created: false, adopted: true, path: shown, note: `на ветке ${branch} уже стоит дерево ${shown} — сессия работает в нём, второе не создаётся` }
+    }
+    // путь помнит git, а папки нет (или ветку помнит дерево с исчезнувшей папкой): без --force `worktree add` отказывает
+    const stale = held.length > 0 || listed.some((w) => sameFs(w.path, worktree))
     mkdirSync(path.dirname(worktree), { recursive: true })
     let exists = true
     try {
@@ -437,10 +460,13 @@ export async function ensureWorktree(repoDir: string, worktree: string, branch: 
         warn = `не удалось обновить origin/${base} (${String(e?.message ?? e).split(String.fromCharCode(10))[0].slice(0, 120)}) — ветка задачи построена от локальной ${base}`
       }
     }
-    await gitA(top, exists ? ["worktree", "add", worktree, branch] : ["worktree", "add", ...(start === base ? [] : ["--no-track"]), "-b", branch, worktree, start], 120_000)
-    return { ok: true, created: true, ...(warn ? { warn } : {}), ...(note ? { note } : {}) }
+    const force = stale ? ["--force"] : []
+    await gitA(top, exists ? ["worktree", "add", ...force, worktree, branch] : ["worktree", "add", ...force, ...(start === base ? [] : ["--no-track"]), "-b", branch, worktree, start], 120_000)
+    return { ok: true, created: true, path: worktree, ...(warn ? { warn } : {}), ...(note ? { note } : {}) }
   } catch (e: any) {
-    return { ok: false, created: false, error: String(e?.message ?? e).split("\n")[0].slice(0, 300) }
+    // причину называет git (строка «fatal: …»); первая строка «Command failed: git …» её скрывала
+    const fatal = String(e?.stderr ?? "").split(/\r?\n/).map((l) => l.trim()).filter((l) => /^(fatal|error):/.test(l)).pop()
+    return { ok: false, created: false, error: (fatal ?? String(e?.message ?? e).split("\n")[0]).slice(0, 300) }
   }
 }
 

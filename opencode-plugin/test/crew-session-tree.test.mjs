@@ -101,6 +101,8 @@ const realOf = (p) => {
   }
 }
 const norm = (p) => (p ? realOf(p).split(path.sep).join("/").toLowerCase() : "")
+// the text names the path (git prints the long form, slashes forward)
+const names = (text, p) => String(text).split("\\").join("/").toLowerCase().includes(norm(p))
 const same = (a, b) => !!a && !!b && norm(a) === norm(b)
 const trees = () => git(proj, "worktree", "list", "--porcelain").split(/\r?\n\r?\n/).filter(Boolean).map((b) => ({ path: b.match(/^worktree (.+)$/m)?.[1], branch: b.match(/^branch refs\/heads\/(.+)$/m)?.[1] }))
 const treesOn = (branch) => trees().filter((t) => t.branch === branch)
@@ -177,8 +179,8 @@ tasks.saveTask({ ...t4, worktree: foreign })
 const a4 = await call("crew_spawn", "sesINTEG1", { task: 3, session: "С3п", goal: "g", place: "task" })
 await wait()
 const letter4 = lettersTo("sesINTEG1").find((l) => /Задача 003 .*не запущена/.test(l.text))?.text ?? ""
-cell("foreign: the session is not started, the answer names the tree that holds the branch", /не запущена/.test(a4) && a4.includes(foreign.replace(/\\/g, "/")) || a4.includes(foreign), a4)
-cell("foreign: the author is told with the path of that tree", letter4.includes("003") && (letter4.includes(foreign) || letter4.includes(foreign.replace(/\\/g, "/"))), letter4)
+cell("foreign: the session is not started, the answer names the tree that holds the branch", /не запущена/.test(a4) && names(a4, foreign), a4)
+cell("foreign: the author is told with the path of that tree", letter4.includes("003") && names(letter4, foreign), letter4)
 cell("foreign: no new tree, the tree of the other task is not touched", trees().filter((t) => t.branch === t3.branch).length === 1 && same(trees().find((t) => t.branch === t3.branch).path, foreign) && !existsSync(path.join(wtRoot, `proj-003-${t3.slug}`)), JSON.stringify(trees()))
 cell("foreign: the record of the task 003 does not take the foreign tree", !same(task(3)?.worktree, foreign), String(task(3)?.worktree))
 
@@ -192,7 +194,7 @@ git(proj, "checkout", "-q", t5.branch)
 const a5 = await call("crew_spawn", "sesINTEG1", { task: 5, session: "С3п", goal: "g", place: "task" })
 await wait()
 git(proj, "checkout", "-q", "main")
-cell("main copy: the session is not started and the answer names the main copy", /не запущена/.test(a5) && (a5.includes(proj) || a5.includes(proj.replace(/\\/g, "/"))) && !existsSync(path.join(wtRoot, `proj-005-${t5.slug}`)), a5)
+cell("main copy: the session is not started and the refusal says the main copy holds the branch, with its path", /не запущена/.test(a5) && /выбрана в основной копии проекта/.test(a5) && names(a5, proj) && !existsSync(path.join(wtRoot, `proj-005-${t5.slug}`)), a5)
 
 // ---- 6. a session of its own (place own): the tree for its branch made by hand is taken ----
 const own1 = path.join(wtRoot, "hand-s4-1")
