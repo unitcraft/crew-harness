@@ -380,7 +380,7 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
     out.push(`${p}${waiting ? ` — ВАС ЖДУТ: ${waiting}` : ""}`)
     const one = (s: Status, pad: string) => {
       // у сессии задачи с папкой номер — в строке задачи над ней (задача 058): «С4-3 исп», «прм»
-      // сессия методики с видом (задача 064, п. 7): «С2-5 проверка разбора» вместо роли
+      // сессия методики с видом (задача 064, п. 7): «С2-5 проверка спецификации» вместо роли
       const who = s.task?.group ? (s.task.label && s.task.kind ? `${s.task.label} ${s.task.kind}` : `${s.task.label ? `${s.task.label} ` : ""}${s.task.as === "reviewer" ? "прм" : "исп"}`) : s.task ? s.title : `${s.role}${s.title && s.title !== s.session ? ` · ${s.title}` : ""}`
       const model = s.model ? ` [${s.model.replace(/^.*\//, "")}]` : ""
       const prog = s.task?.as === "reviewer" ? stepProgress(s.task) : undefined
@@ -651,7 +651,7 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
     const mark = markOf(s) ?? " "
     const shownMark = mark.trim() ? `${mark} ` : ""
     const role = s.task ? (s.task.as === "reviewer" ? "прм" : "исп") : ""
-    // сессия методики с видом (задача 064, п. 7): «↳ С2-5 проверка разбора» строкой (перенос — как у названия), состояние — под ней
+    // сессия методики с видом (задача 064, п. 7): «↳ С2-5 проверка спецификации» строкой (перенос — как у названия), состояние — под ней
     const kind = g && s.task!.label && s.task!.kind ? `${shownMark}${s.task!.label} ${s.task!.kind}` : undefined
     if (kind) wrapWords(kind, width - 2).forEach((l, i) => rows.push({ mark: i ? " " : mark, who: "", what: `↳ ${l}`, tone }))
     // что печатается перед текстом строки: «↳ прм  » (вкладка задачи), «↳ ? С4-3  » (сессия задачи с папкой), «↳ » (состояние сессии

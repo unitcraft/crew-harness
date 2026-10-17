@@ -71,16 +71,16 @@ cell("/crew: the heading of a task with a folder - the whole title, no «»", gt
 const st7 = await import("../status.ts")
 const { sessionName } = await import("../progress.ts")
 const kind = st7.sessionKind
-cell("7: the kinds of the methodology by code", typeof kind === "function" && kind("С2") === "проверка разбора" && kind("С1п") === "правка разбора" && kind("С5п") === "правка реализации" && kind("С9") === "разбор обратной связи" && kind("С6") === "проверка реализации", typeof kind)
+cell("7: the kinds of the methodology by code", typeof kind === "function" && kind("С2") === "проверка спецификации" && kind("С1п") === "правка спецификации" && kind("С5п") === "правка реализации" && kind("С9") === "разбор обратной связи" && kind("С6") === "проверка реализации", typeof kind)
 cell("7: one list - the panel of the progress names the same kind", typeof kind === "function" && sessionName("С4") === `С4 ${kind("С4")}`, "")
 cell("7: a code outside the list takes its name from its record in the task (the goal), else none", typeof kind === "function" && kind("С2м", "мини-проверка разбора: только REQ и AC") === "мини-проверка разбора" && kind("С2м") === undefined && kind("исп") === undefined, typeof kind === "function" ? String(kind("С2м", "мини-проверка разбора: только REQ и AC")) : "")
 const g7 = (as, status, label, extra = {}) => ({ n: 45, status, as, title: "Канон", ref: "045", group: true, ...(label ? { label } : {}), ...extra })
 const ses = [
-  st("s25", "owner", { project: "crew-harness", since: at(0, 10), title: "045 С2-5", detail: "ждёт вас с 00:10: вливать?", question: "вливать?", task: g7("executor", "running", "С2-5", { kind: "проверка разбора" }) }),
+  st("s25", "owner", { project: "crew-harness", since: at(0, 10), title: "045 С2-5", detail: "ждёт вас с 00:10: вливать?", question: "вливать?", task: g7("executor", "running", "С2-5", { kind: "проверка спецификации" }) }),
   st("s51", "task", { project: "crew-harness", title: "045 С5п-1", detail: "на доработке — стоит", task: g7("executor", "rework", "С5п-1", { kind: "правка реализации" }) }),
 ]
 const sp = sidebarLines(ses, now, "crew-harness").rows.map((r) => sideText(r))
-const k25 = sp.indexOf("↳ ? С2-5 проверка разбора")
+const k25 = sp.indexOf("↳ ? С2-5 проверка спецификации")
 cell("7: the panel - the session's code and the name of its kind, its mark first", k25 >= 0, JSON.stringify(sp))
 cell("7: the state of the session on the row under its name", sp[k25 + 1] === "↳ ждёт вас 00:10", JSON.stringify(sp.slice(k25, k25 + 2)))
 cell("7: another live session the same way (a finished one is folded, item 8)", sp.includes("↳ С5п-1 правка реализации") && sp[sp.indexOf("↳ С5п-1 правка реализации") + 1] === "↳ ↻ доработка", JSON.stringify(sp))

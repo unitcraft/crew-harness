@@ -161,7 +161,7 @@ important tab's; under it a row per tab with the role and the state (`↳ исп
 that, as before, the question or the waiting phrase and the steps. A reviewer's step in progress names its id and a short name taken
 from the step's text (`проверка 3/12: sabotage — подсунь негодное`, wrapped the same way). A task with a folder heads its sessions
 the same way (`061 Канон и актуальная методика`, no mark: the sessions carry theirs); a session of the methodology shows its code and
-the name of its kind (`↳ С2-5 проверка разбора`, the state on the row under it; the names come from one list, the same as in the
+the name of its kind (`↳ С2-5 проверка спецификации`, the state on the row under it; the names come from one list, the same as in the
 "Ход работ" block; a code outside it takes the short name of the session's goal), and the finished sessions fold into one row
 `✓ сдано N сессий`, so the rows they freed go to live tabs. `/crew` shows the title whole, once per task, and lists every session.
 
@@ -170,7 +170,7 @@ the name of its kind (`↳ С2-5 проверка разбора`, the state on 
 read as one column, so an indent is no sign). The title of a task is **white** (the theme's base text colour) and starts with the
 tab's mark (`• #98 Разобрать provenance`) or, with no mark, with the number; the second row of a long title starts with `·` and is
 white too. Everything under the title is **grey** (the theme's muted colour) and starts with `↳`: the row of a tab or a session
-(`↳ исп  работает 12 мин`, `↳ ? С2-5 проверка разбора`), a wrapped rest of a row (`↳ plan #91 597м`), the steps, the question or the
+(`↳ исп  работает 12 мин`, `↳ ? С2-5 проверка спецификации`), a wrapped rest of a row (`↳ plan #91 597м`), the steps, the question or the
 waiting phrase, `↳ ✓ сдано N сессий`. The accent colour stays for what needs you: a tab that waits for you (or stands idle, or asked
 a question) with its rows, the heading of its task, and the `⚠` rows (`⚠ застряла с ЧЧ:ММ`, `⚠ не на ветке: …`). A tab of an
 integrator with no task is a row of its own with its mark and the role (`? интегр.   ждёт вас 01:42`). A wait for a watch or a
