@@ -46,7 +46,7 @@ const ps = { project: "p", data, raw: {}, state: { warnings: [] }, name: "s" }
 const t = Cmd.profilesTable(ps)
 cell("/crew-profiles table shows 'model · variant'", t.includes(`${K} · low`) && t.includes(`${K} · high`), t)
 const f = Cmd.showFamily(ps, "kimi")
-cell("/crew-profiles show <family> shows the variant", f.includes(`${K} · low`), f)
+cell("/crew-profiles show <family> shows the variant (task 075: the model without the provider)", f.includes("k3-256k · low") && f.includes("k3-256k · high"), f)
 rmSync(tmp, { recursive: true, force: true })
 console.log(fail ? `${fail} FAILED` : "all ok")
 process.exit(fail ? 1 : 0)
