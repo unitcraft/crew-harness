@@ -9,6 +9,9 @@
 // owner is needed" and nothing wakes the tab any more. The plugin NEVER answers for the owner and never picks the
 // recommended option: it only repeats the question and shows who is waiting (/ask, the summary line, notices).
 //
+// TASK 080: a repeat is made only for a LOST question: the turn is not alive (a `question` tool still pending in the database counts as alive,
+// index.ts) and no message stands in the queue of the server (queue-gate.ts); the letter is also held by the gate of the delivery.
+//
 // TASK 078: a tab that keeps asking after the owner answered (answer-loop.ts) is not woken any more: a form of such a tab is not repeated
 // and its reminders to the owner say "loop".
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
@@ -401,6 +404,8 @@ export type FormDeps = {
   ownerWrote(session: string, since: number): Promise<boolean>
   /** send the service message to the tab; `id` is stable, so a copy of the call is the same letter */
   wake(session: string, text: string, id: string): void | Promise<void>
+  /** task 080: how many messages stand in the queue of the server for the tab; a repeat is not made while any stands (the turn is about to start, the question may come back by itself) */
+  queued?(session: string): Promise<number>
   say?(line: string): void
 }
 
@@ -460,6 +465,8 @@ export async function formTick(deps: FormDeps, now = Date.now(), dir = FORMS): P
         say(`form ${f.id} of ${session}: no answer after ${FORM_MAX_REPEATS} repeats, the owner is needed`)
         continue
       }
+      // task 080: something stands in the queue of the server - the tab will have a turn without our repeat; no repeat is counted or made
+      if (deps.queued && (await deps.queued(session)) > 0) continue
       const n = (f.repeats ?? 0) + 1
       const rid = f.rid ?? f.id
       updateForm(session, f.id, (x) => ((x.repeats = n), (x.wokeAt = now), (x.rid ??= rid)), dir)

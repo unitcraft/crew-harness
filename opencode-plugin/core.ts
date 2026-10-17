@@ -496,6 +496,31 @@ async function openDb(): Promise<any> {
   }
 }
 
+/** Задача 080: тексты сообщений, которые СТОЯТ в очереди сервера вкладки (session_inbox, доставка queue), от старого к новому; ТОЛЬКО ЧТЕНИЕ.
+ *  Таблицы нет (прежняя версия сервера, тестовая база без неё) или база не читается - пусто: правила очереди тогда не вмешиваются. */
+export async function queuedTexts(sessionID: string): Promise<string[]> {
+  if (!sessionID || !existsSync(dbFile())) return []
+  let db: any
+  try {
+    db = await openDb()
+    const rows = db.prepare("select payload from session_inbox where session_id = ? order by enqueued_seq").all(sessionID) as any[]
+    return rows.map((r) => {
+      try {
+        const t = JSON.parse(r.payload)?.text
+        return typeof t === "string" ? t : ""
+      } catch {
+        return ""
+      }
+    })
+  } catch {
+    return []
+  } finally {
+    try {
+      db?.close()
+    } catch {}
+  }
+}
+
 export async function modelFromDb(sessionID: string): Promise<{ model: string; at: number } | undefined> {
   let db: any
   try {
@@ -1111,12 +1136,31 @@ export function hasQuietIn(keys: string[]): boolean {
   return false
 }
 
-export function claimLetters(key: string, claimId: string): Claimed[] {
+/** Письма, которые ждут в ящиках `keys`, как лежат (по имени файла), без захвата (задача 080: решение, какие письма уйдут, до захвата). */
+export function peekLetters(keys: string[]): Letter[] {
+  const out: Letter[] = []
+  for (const k of keys) {
+    const d = path.join(INBOX, safeKey(k))
+    if (!existsSync(d)) continue
+    for (const f of readdirSync(d).filter((f) => f.endsWith(".json")).sort()) {
+      const l = readJson<Letter>(path.join(d, f))
+      if (l) out.push(l)
+    }
+  }
+  return out
+}
+
+/** `take` (задача 080) - какие письма захватывать; остальные остаются в ящике нетронутыми. */
+export function claimLetters(key: string, claimId: string, take?: (letter: Letter) => boolean): Claimed[] {
   const dir = path.join(INBOX, safeKey(key))
   if (!existsSync(dir)) return []
   const claimDir = path.join(DELIVERING, claimId, safeKey(key))
   const out: Claimed[] = []
   for (const f of readdirSync(dir).filter((f) => f.endsWith(".json")).sort()) {
+    if (take) {
+      const peek = readJson<Letter>(path.join(dir, f))
+      if (peek && !take(peek)) continue
+    }
     mkdirSync(claimDir, { recursive: true })
     try {
       renameSync(path.join(dir, f), path.join(claimDir, f))

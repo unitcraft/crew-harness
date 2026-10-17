@@ -84,6 +84,8 @@ import {
   pidAlive,
   postLetter,
   claimLetters,
+  peekLetters,
+  queuedTexts,
   confirmLetters,
   releaseLetters,
   recoverClaims,
@@ -151,6 +153,7 @@ import { precheckLines, releaseLandedLock } from "./precheck.ts"
 import { isLauncherCard, noteLoopLag, registerJournalTools } from "./journal.ts"
 import { answerTick } from "./owner-answer.ts"
 import { clearLoop, loopLetter, loopOf, loopTick, noteDelivered } from "./answer-loop.ts"
+import { factsOf, isOwnerAnswer, nudgeHold, serviceKindOf, verdicts } from "./queue-gate.ts"
 import { writeLaunch } from "./task-folders.ts"
 import { type ResumeTry, RESUME_WINDOW_MS, canInterrupt, interruptTurn, resumeLetter, resumeNote, resumeVerdict } from "./hung-resume.ts"
 import { compactionSummaryText } from "./compaction-summary.ts"
@@ -238,6 +241,7 @@ export default {
     // в живом окне, или сессии под задачу (core.ts, «ПРИСУТСТВИЕ»); одни тихие — session.synthetic без хода.
     // Ответ, которого получатель ждёт в crew_wait, не трогается: его заберёт сам crew_wait в тот же ход.
     const held = new Set<string>()
+    const heldLog = new Map<string, number>()
     const delivering = new Set<string>()
     const keysOf = (card: Card) => [keyOf(card), card.role, card.session]
     // Идёт ли ход: у открытой вкладки это знает её окно (плагин окна, раз в секунду); у сессии под задачу окна нет —
@@ -314,7 +318,24 @@ export default {
       if (open) held.delete(card.session)
       delivering.add(card.session)
       try {
-        let claimed = keys.flatMap((k) => claimLetters(k, `${process.pid}-${now()}`))
+        // СЛУЖЕБНЫЕ ПИСЬМА И ОЧЕРЕДЬ СЕРВЕРА (задача 080, queue-gate.ts): напоминание или повтор не ставится в очередь, пока в ней ждёт вопрос владельцу,
+        // вместе с письмом-ответом, и вторым того же вида; такие письма ждут в ящике (устаревшие читаются без отправки). Письма людей, вкладок и ответ
+        // владельца не трогаются.
+        const waiting = peekLetters(keys)
+        const verdict = waiting.some((l) => serviceKindOf(l)) ? verdicts(waiting, await factsOf(card.session, { answerPass: waiting.some(isOwnerAnswer), now: now() })) : undefined
+        const verdictOf = (l: Letter) => verdict?.get(l.id) ?? (serviceKindOf(l) ? "hold" : "send") // служебное письмо, пришедшее между осмотром и захватом, ждёт следующего прохода
+        // устаревшие - отдельным захватом (confirmLetters убирает всю папку захвата), потом остальные
+        const stale = keys.flatMap((k) => claimLetters(k, `${process.pid}d-${now()}`, (l) => verdictOf(l) === "drop"))
+        let claimed = keys.flatMap((k) => claimLetters(k, `${process.pid}-${now()}`, (l) => verdictOf(l) === "send"))
+        if (stale.length) {
+          confirmLetters(stale)
+          log(`service letters not sent to ${card.session}, the reason is stale or a message of the kind stands in the queue: ${stale.map((c) => c.letter.id).join(",")}`)
+        }
+        const heldN = waiting.filter((l) => verdictOf(l) === "hold").length
+        if (heldN && !claimed.length) {
+          if (heldLog.get(card.session) !== heldN) log(`${heldN} service letter(s) of ${card.session} wait: a question to the owner is open, or the queue of the server is not free`)
+          heldLog.set(card.session, heldN)
+        } else heldLog.delete(card.session)
         const awaited = waitingFor(card.session)
         const back = claimed.filter((c) => awaited && c.letter.reply_to === awaited)
         if (back.length) releaseLetters(back)
@@ -474,6 +495,14 @@ export default {
           return
         }
       }
+      // ОЧЕРЕДЬ СЕРВЕРА (задача 080, queue-gate.ts): пока в вкладке ждёт вопрос владельцу, сразу после ответа владельца (до рабочего хода или
+      // stall_minutes) и пока такое же напоминание стоит в очереди сервера, напоминание не делается: счётчики не растут, письмо не ждёт в ящике
+      const hold = await nudgeHold(card.session, { now: t, stallMs: cfg.stallMin * 60_000, worked: (since) => workedBeyondQuestion(card.session, since) })
+      if (hold) {
+        log(`nudge skipped ${card.session}: ${hold}`)
+        return
+      }
+      list.splice(0, list.length, ...obligationsOf(card.session)) // чтение базы выше заняло время: push или ответ могли изменить обязательства (запись ниже не должна затирать их)
       let changed = false
       for (const o of list) {
         // снятое в начале хода (ВКЛАДКА ОЖИЛА) — без напоминания на этом ходу: счётчики начинаются заново, как после push
@@ -1316,8 +1345,11 @@ export default {
             // окно или визитка говорит «идёт», а база ходов не видит (после перезапуска): не занята. Вопрос на экране (инструмент ждёт) - занята
             if (busy && !(await pendingTool(s)) && (await staleBusy(s, now()))) busy = false
             if (!busy && !tab && (await openTurn(s, now()))) busy = true
+            // задача 080: инструмент question ещё ждёт ответа в базе - ход жив, вопрос на экране, а не потерян (окно может не считать такой ход идущим)
+            if (!busy && (await pendingTool(s))) busy = true
             return { open, busy }
           },
+          queued: async (s) => (await queuedTexts(s)).length,
           idle: (s, since) => idleFactsAfter(s, since),
           ownerWrote: async (s, since) => (await ownerWordAfter(s, since)) > 0,
           wake: (s, text, id) => {

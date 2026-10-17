@@ -164,7 +164,7 @@ await safe("pure", async () => {
   cell("pure: the module queue-gate.ts exists", !!qg && typeof qg.serviceKindOf === "function" && typeof qg.verdict === "function", "no ../queue-gate.ts")
   if (!qg) return
   const mk = (id, from = core.PLUGIN_SENDER) => ({ id, from_session: from })
-  cell("pure: nudge, repeat, idle, hung-resume, gate, stall are service kinds", ["1792-nudge-q1", "form-repeat-frm_a-1", "idle-ses_a-1", "hung-resume-ses_a-1", "gate-ses_a-1", "stall-left-nova-3-x"].every((id) => !!qg.serviceKindOf(mk(id))), "")
+  cell("pure: nudge, repeat, idle, hung-resume, gate, stall, accepted, resume, retry are service kinds", ["1792-nudge-q1", "form-repeat-frm_a-1", "idle-ses_a-1", "hung-resume-ses_a-1", "gate-ses_a-1", "stall-left-nova-3-x", "stale-accepted-nova-3-9", "resume-ses_a-1", "retry-ses_a-1"].every((id) => !!qg.serviceKindOf(mk(id))), "")
   cell("pure: a letter of a person or tab is no service kind, even with such an id", !qg.serviceKindOf(mk("1792-nudge-q1", "ses_other")) && !qg.serviceKindOf(mk("owner-answer-1")) && !qg.serviceKindOf(mk("task-proj-1-1")) && !qg.serviceKindOf(mk("watch-1")), "")
   const f = (x) => ({ formOpen: false, repeatRids: [], standing: [], queueRows: 0, answerPass: false, livePending: false, ...x })
   cell("pure: a reminder goes with nothing in the way", qg.verdict(mk("1-nudge-q"), f()) === "send", qg.verdict(mk("1-nudge-q"), f()))
@@ -267,6 +267,24 @@ await safe("P", async () => {
   letter(P, "owner-answer-by-hand-1", "Ответ владельца на ваш вопрос «x»: Да. Вопросник закрыт прерыванием хода; не задавайте этот вопрос снова, продолжайте с этим ответом.")
   void id
   cell("P: the letter with the owner's answer goes although a form is open", await until(() => queued(P, "Ответ владельца").length === 1, 5000), JSON.stringify(queue(P).map((x) => x.slice(0, 60))))
+})
+
+// ---------- the threshold: the reminders resume after a working turn or after stall_minutes ----------
+await safe("T", async () => {
+  if (!qg) return cell("T: the module queue-gate.ts exists", false, "no ../queue-gate.ts")
+  const al = await import("../answer-loop.ts")
+  const Z = "ses_Z"
+  const t0 = Date.now()
+  al.noteAnswered(Z, { id: "frm_z", at: t0 - 1000 }, "owner-answer-z", t0)
+  const no = async () => false
+  const yes = async () => true
+  const min = 60_000
+  cell("T: right after the answer the reminder waits", !!(await qg.nudgeHold(Z, { now: t0 + 5_000, stallMs: 30 * min, worked: no })), "no hold")
+  cell("T: ... after a working turn it does not", (await qg.nudgeHold(Z, { now: t0 + 5_000, stallMs: 30 * min, worked: yes })) === undefined, "held")
+  cell("T: ... after stall_minutes it does not, though the tab did no work", (await qg.nudgeHold(Z, { now: t0 + 31 * min, stallMs: 30 * min, worked: no })) === undefined, "held")
+  cell("T: ... just before stall_minutes it still waits", !!(await qg.nudgeHold(Z, { now: t0 + 29 * min, stallMs: 30 * min, worked: no })), "no hold")
+  al.noteDelivered(Z, "owner-answer-z", t0 + 20 * min)
+  cell("T: the threshold counts from the moment the letter was handed to the tab", !!(await qg.nudgeHold(Z, { now: t0 + 31 * min, stallMs: 30 * min, worked: no })) && (await qg.nudgeHold(Z, { now: t0 + 51 * min, stallMs: 30 * min, worked: no })) === undefined, "wrong threshold")
 })
 
 clearInterval(heart)

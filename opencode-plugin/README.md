@@ -391,6 +391,22 @@ counter `loop: N` in the project line) and `/ask`; the author of the task gets *
 your answer in the goal) and a line in the task history. The loop is cleared by a working turn of the tab, your word in the tab, a
 reassigned or closed task, a closed tab.
 
+#### Service messages do not pile up behind a waiting question (task 080)
+
+A turn with the `question` tool is held by the OpenCode server for up to an hour, and the server hands the model **one** queued message per
+turn, the oldest. If the plugin queued a reminder or a repeat behind it, the queue grew by one per turn and the letters with your answers
+stood at its tail (task #94: four messages for five hours, none of the four answers reached the model). So the plugin splits its letters
+(`queue-gate.ts`). **Service** ones (the reminder «Не завершено», the repeat of a lost question, the reminders about idle time, a hung turn,
+a stop at a gate, a leftover or a task not cleaned up) vanish when their reason is gone; **needed** ones (letters of people and tabs, your
+answer, tasks, results of watches) are never held, except until the end of the current turn, as before. The rules: (1) while the tab has an
+open form of a question to you, no service letter goes into the queue - it waits in the mailbox and goes after the wait; the one exception
+is the repeat of a **lost** question, and then only one, only when the turn is not alive (a `question` tool still pending in the database
+counts as alive) and nothing stands in the queue; (2) after your answer from outside the window the letter with the answer goes first and
+alone - no «Не завершено» in the same pass, and none until a working turn of the tab or until `stall_minutes` after the letter was handed
+to the tab; (3) a service letter of a kind that already stands in the queue (`session_inbox`, read only) is not queued again. The reminders
+about cleanup and idle time are not lost - they are postponed. The plugin log says `nudge skipped …: <reason>` and `N service letter(s) of
+<session> wait`.
+
 ### A hung turn is interrupted and resumed by the plugin (tasks 036, 048)
 
 A tab whose window says the turn runs, while the model has been silent for 15 minutes (`CREW_HARNESS_HUNG_MS`) with no

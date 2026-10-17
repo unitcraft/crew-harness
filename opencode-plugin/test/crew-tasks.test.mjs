@@ -133,6 +133,7 @@ core.saveObligations(s2, obl)
 const denied = await call("crew_task", "sesOWNER1", { action: "push", n: 2 })
 cell("a worker may not push", /только интегратор/.test(denied), denied)
 await turnEnds(s2)
+for (let i = 0; i < 40 && !core.obligationsOf(s2).some((o) => o.nudges === 3); i++) await wait(50) // the reminder of the turn end is made asynchronously (task 080: it also reads the queue): let it finish before the push
 await call("crew_task", "sesINTEG1", { action: "push", n: 2, text: "доделай тесты" })
 await wait()
 cell("push wakes the executor", got(s2, "Подталкивание по задаче #2").length === 1 && got(s2, "доделай тесты").length === 1, JSON.stringify(got(s2, "Подталк")))

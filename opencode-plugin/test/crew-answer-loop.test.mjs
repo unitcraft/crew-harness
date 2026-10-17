@@ -28,7 +28,7 @@ process.env.CREW_HARNESS_DB = dbPath
 delete process.env.CREW_HARNESS_PRESENCE
 const proj = path.join(tmp, "proj")
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
-writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ push_empty_turns: 50, push_max: 50 }))
+writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ push_empty_turns: 50, push_max: 50, stall_minutes: 0 }))
 
 const db = new DatabaseSync(dbPath)
 db.exec("create table session_v2 (id text primary key, directory text, title text, parent_id text, time_archived integer, time_idle integer, time_viewed integer, time_suspended integer)")
@@ -174,6 +174,16 @@ async function endTurn(tab, content = [{ type: "tool", name: "question" }], outc
   await events["session.idle"]({ properties: { sessionID: tab } })
 }
 const settle = () => wait(700)
+/** task 080: an open form holds the reminder "Не завершено" (queue-gate.ts), so a check of the reminder takes the record of the form away for the moment and puts it back */
+async function withoutForm(tab, id, fn) {
+  const rec = fw.allForms().find((x) => x.session === tab && x.form.id === id)
+  if (rec) fw.removeForm(tab, id)
+  try {
+    return await fn()
+  } finally {
+    if (rec) fw.addForm(tab, rec.form)
+  }
+}
 /** n rounds: ask, answer, delivered; the (n+1)-th ask is made and not answered */
 async function rounds(tab, list, opt = {}) {
   let last
@@ -209,8 +219,10 @@ await safe("A", async () => {
   await settle()
   cell("A: after one answer and one more ask there is no loop", !loopOf(A), JSON.stringify(stateOf(A).loop))
   // control: before the loop the end of a turn gets the reminder (the nudge works in this setup)
-  await endTurn(A)
-  cell("A: before the loop a turn end gets the reminder 'Не завершено'", await until(() => got(A, "Не завершено").length >= 1, 4000), JSON.stringify(delivered.filter((d) => d.sessionID === A).map((d) => d.text.slice(0, 80))))
+  await withoutForm(A, asksA[1], async () => {
+    await endTurn(A)
+    cell("A: before the loop a turn end gets the reminder 'Не завершено'", await until(() => got(A, "Не завершено").length >= 1, 4000), JSON.stringify(delivered.filter((d) => d.sessionID === A).map((d) => d.text.slice(0, 80))))
+  })
   await answer(A, asksA[1])
   asksA.push(await ask(A, LIVE[2]))
   await settle()
@@ -234,8 +246,10 @@ await safe("A", async () => {
   cell("A: the author gets ONE letter: the tab, the question, the answers, reassign with the answer in the goal", lt.length === 1 && /ответил 3 раза/.test(lt[0].text) && /crew_task \{action: "reassign"/.test(lt[0].text) && /ses_A/.test(lt[0].text) && /Phase‑1 GO/.test(lt[0].text), JSON.stringify(lt.map((x) => x.text.slice(0, 300))))
   // the reminders stop
   const before = got(A, "Не завершено").length
-  await endTurn(A)
-  await wait(900)
+  await withoutForm(A, asksA[3], async () => {
+    await endTurn(A)
+    await wait(900)
+  })
   cell("A: while the loop is open the end of a turn gets no reminder", got(A, "Не завершено").length === before, `${before} -> ${got(A, "Не завершено").length}`)
   // a lost question is not repeated either
   const open4 = asksA[3]
@@ -324,8 +338,10 @@ await safe("E", async () => {
   await settle()
   cell("E: two forms after answers - no loop", !loopOf(E), JSON.stringify(stateOf(E).loop))
   // the control of the reminders: no loop, the same turn end gets the reminder
-  await endTurn(E)
-  cell("E: control - without a loop the end of a turn gets the reminder", await until(() => got(E, "Не завершено").length >= 1, 4000), "no reminder")
+  await withoutForm(E, forms[E], async () => {
+    await endTurn(E)
+    cell("E: control - without a loop the end of a turn gets the reminder", await until(() => got(E, "Не завершено").length >= 1, 4000), "no reminder")
+  })
   // the control of the repeat: a cancelled question of a tab with no loop is returned to it
   fw.updateForm(E, forms[E], (f) => void (f.cancelled = Date.now() - 1000))
   cell("E: control - a cancelled question of a tab with no loop is repeated", await until(() => got(E, "не получил ответа").length >= 1, 5000), "no repeat")

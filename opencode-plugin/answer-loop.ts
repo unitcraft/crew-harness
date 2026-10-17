@@ -138,6 +138,14 @@ export function noteDelivered(session: string, letter: string, at: number, forms
   } catch {}
 }
 
+/** Task 080: the last answer of the owner from outside the window that the plugin handed to the tab: when it was applied and, if the server
+ *  took the letter, when. The reminders "Не завершено" wait for a working turn after it (queue-gate.ts). */
+export function lastAnswer(session: string, formsDir = FORMS_DIR): { answered: number; delivered?: number } | undefined {
+  const st = readJson<LoopState>(fileOf(session, formsDir))
+  const a = st && Array.isArray(st.asks) ? [...st.asks].reverse().find((x) => x.answered) : undefined
+  return a?.answered ? { answered: a.answered, ...(a.delivered ? { delivered: a.delivered } : {}) } : undefined
+}
+
 /** The open loop of the tab (sync: status.ts, nudge, formTick read it). */
 export function loopOf(session: string, formsDir = FORMS_DIR): Loop | undefined {
   const st = readJson<LoopState>(fileOf(session, formsDir))
