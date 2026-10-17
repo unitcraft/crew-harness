@@ -23,6 +23,11 @@ export const FORM_MAX_REPEATS = 3
 export const FORM_REPEAT_GAP_MS = Number(process.env.CREW_HARNESS_FORM_REPEAT_GAP_MS) || 2 * 60_000
 export const FORM_REMIND_MS = Number(process.env.CREW_HARNESS_FORM_REMIND_MS) || 30 * 60_000
 export const FORM_GONE_MS = Number(process.env.CREW_HARNESS_FORM_GONE_MS) || 20_000
+/** TASK 069: a question closed WITHOUT an answer (Esc, a window that took the keys) is known at once from form.cancelled, so the tab waits only for the end of
+ *  its turn (FORM_CANCEL_GONE_MS) and not for the long time of a question that vanished unseen; while such a question waits to be returned the service looks
+ *  every FORM_HOT_LOOK_MS instead of the usual time. */
+export const FORM_CANCEL_GONE_MS = Number(process.env.CREW_HARNESS_FORM_CANCEL_GONE_MS) || 3_000
+export const FORM_HOT_LOOK_MS = 1_000
 export const FORM_RESTART_GRACE_MS = Number(process.env.CREW_HARNESS_FORM_RESTART_GRACE_MS) || 3 * 60_000
 /** A model request this soon after the question is the question itself, not a new turn. */
 const FORM_SELF_MS = 3_000
@@ -292,6 +297,11 @@ export type FormDeps = {
 const goneSince = new Map<string, number>()
 export const resetFormTick = () => goneSince.clear()
 
+/** How soon the service must look at the records again: every `every` ms, but every FORM_HOT_LOOK_MS while a question cancelled without an answer has not yet been returned to its tab. */
+export function formLookEvery(now = Date.now(), dir = FORMS, every = 5_000): number {
+  return allForms(now, dir).some((x) => x.form.cancelled && !x.form.wokeAt && !x.form.exhausted) ? Math.min(every, FORM_HOT_LOOK_MS) : every
+}
+
 /**
  * One look at all open records. A record whose tab has no running turn for FORM_GONE_MS in a row (the question may still be
  * on the screen only while the turn runs: the tool waits for the answer) is lost: the tab is woken, at most
@@ -312,7 +322,7 @@ export async function formTick(deps: FormDeps, now = Date.now(), dir = FORMS): P
       if (!tab.open) continue
       const since = goneSince.get(key) ?? now
       if (!goneSince.has(key)) goneSince.set(key, now)
-      if (now - since < FORM_GONE_MS) continue
+      if (now - since < (f.cancelled ? FORM_CANCEL_GONE_MS : FORM_GONE_MS)) continue
       if (lostState(f)) {
         if (await deps.ownerWrote(session, f.at)) {
           removeForm(session, f.id, dir)

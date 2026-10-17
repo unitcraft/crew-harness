@@ -140,7 +140,7 @@ import { countedOpen, waitingCleanup, ACCEPTED_REMINDERS_MAX, acceptedReminderId
 import { EXECUTOR_CODE, sesLabel, sessionOf, sessionRef, taskNo } from "./tasks.ts"
 import { profileProblems, profileState, stateSignature, syncProjectFiles, syncSnapshot, syncTaskFile } from "./profile-layer.ts"
 import { cellOfState, clampTier, resolveStageProfile, splitLaunchModel, stageOfLaunch, tabFitsCell } from "./profiles.ts"
-import { allForms, cleanupForms, formReminders, formTick, pendingForms, settleOnRequest, startFormWait } from "./form-wait.ts"
+import { allForms, cleanupForms, formLookEvery, formReminders, formTick, pendingForms, settleOnRequest, startFormWait } from "./form-wait.ts"
 import { systemToast } from "./toast-win.ts"
 import { probeEnabled, startEventProbe } from "./event-probe.ts"
 import { catalogModels, writeCatalog } from "./model-catalog.ts"
@@ -1225,7 +1225,7 @@ export default {
     const FORM_EVERY_MS = Number(process.env.CREW_HARNESS_FORM_MS) || 5_000
     let formAt = 0
     async function formWatch() {
-      if (now() - formAt < FORM_EVERY_MS) return
+      if (now() - formAt < formLookEvery(now(), undefined, FORM_EVERY_MS)) return // вопрос, отменённый без ответа, вкладке возвращается за секунды (задача 069)
       formAt = now()
       const windows = liveWindows()
       await formTick(

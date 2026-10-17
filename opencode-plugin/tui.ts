@@ -24,6 +24,7 @@ import { str } from "./dialog-size.ts"
 import { runFlow } from "./sets-flow.ts"
 import { doctorText, formatStatuses, readStatuses } from "./status.ts"
 import { askText } from "./form-wait.ts"
+import { installDialogGuard } from "./dialog-guard.ts"
 import { listTasks, loadTask, taskNo } from "./tasks.ts"
 import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
 
@@ -34,6 +35,8 @@ export default {
   id: "crew-harness.window",
   setup(api: any) {
     mkdirSync(WINDOWS, { recursive: true })
+    // окно плагина закрывается само, когда его клавиши забрал вопрос, пришедший под него (задача 069, dialog-guard.ts): иначе Esc «закрыть окно» отменяет вопрос
+    const unguard = installDialogGuard(api, (line) => log(`dialog guard: ${line} pid=${process.pid}`))
     const file = path.join(WINDOWS, `${process.pid}.json`)
     const notices = path.join(NOTICES, String(process.pid))
 
@@ -362,6 +365,7 @@ export default {
     const timer = setInterval(beat, BEAT_MS)
     return () => {
       clearInterval(timer)
+      unguard()
       clearTimeout(warmTimer)
       try {
         worker?.terminate?.()

@@ -219,6 +219,15 @@ if the tab has no running turn, the plugin wakes it with a service message that 
 to call `question` again. At most 3 repeats, at least 2 minutes apart, and not in the first 3 minutes after a start of the
 service (the windows get time to show their questions again); then the record says "без ответа, нужен владелец" and nothing wakes
 the tab any more. The plugin never answers for you and never picks the recommended option.
+A question you cancelled with Esc (`form.cancelled`) is returned faster: once its turn has ended the tab is asked again after 3 seconds
+(`CREW_HARNESS_FORM_CANCEL_GONE_MS`), the service looks every second until that is done, a busy tab and your own word in the tab still hold it back.
+**A window of the plugin over a question (task 069).** In OpenCode the keys go to ONE handler, the one of the keyboard mode pushed last: a dialog
+pushes `modal`, the questionnaire pushes `form`. A question that is open before a window of the plugin is safe (Esc closes only the window). A
+question that arrives while the window is open takes the keys at once: Esc would cancel it, Enter would answer it with the first option, and the window
+cannot be closed by its own keys. So every window the plugin opens (`/crew`, `/crew-sets`, `/plans`, menus and inputs) is guarded: when another mode
+holds the keys longer than 0.3 s the plugin closes the window itself, tells you in a notice, and the question stays open and on the screen; open the
+command again if you still need it (now the window lies over the question, which is safe). Windows of OpenCode itself (palette, model picker) are not
+guarded. Code: `dialog-guard.ts`, self-test `crew-esc-question`.
 Every window shows who waits for you, over all projects. `/crew` starts with one line `Ждут вас: N · с ЧЧ:ММ · <project> <#N role>`
 (the time and the source of the oldest wait, so a window of another project sees the question is not its own). The side panel
 shows it on three lines, so the narrow panel cuts nothing you need: `Ждут вас: N · с ЧЧ:ММ`; `? <project> <#N role>` — the tab
