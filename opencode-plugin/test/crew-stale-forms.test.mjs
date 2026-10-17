@@ -91,9 +91,10 @@ await safe("d", async () => {
   const deps = { processStart: T0 - 60 * MIN, tab: async () => ({ open: true, busy: false }), idle: async () => undefined, ownerWrote: async () => false, wake: (s, t, id) => woken.push(id), say: () => {} }
   for (let i = 1; i <= 5; i++) await fw.formTick(deps, T0 + (30 + i * 4) * MIN)
   cell("d: an exhausted form of a quiet tab, not repeated, stays open", open("sesD", T0 + 11 * MIN).join() === "frm_d1" && !rec("sesD", "frm_d1")?.replacedBy, JSON.stringify(file("sesD")))
-  // a repeat with another text (the live case of ses_ee37: the tab re-asked with its own words) does not close it either
-  fw.handleFormEvent(created("frm_d2", "sesD", "Иначе сформулированный тот же вопрос?"), T0 + 12 * MIN)
-  cell("d: a reworded question is another question (strict rule), both open", open("sesD", T0 + 13 * MIN).join() === "frm_d1,frm_d2", open("sesD", T0 + 13 * MIN).join())
+  // another text AND other options: another question (strict rule), both open. (Another text with the SAME options of a form in the
+  // repeat is the case of task 073, test/crew-stale-forms-repeat.test.mjs: there the old form is replaced.)
+  fw.handleFormEvent(created("frm_d2", "sesD", "Иначе сформулированный другой вопрос?", ["Совсем", "Другие варианты"]), T0 + 12 * MIN)
+  cell("d: a reworded question with other options is another question (strict rule), both open", open("sesD", T0 + 13 * MIN).join() === "frm_d1,frm_d2", open("sesD", T0 + 13 * MIN).join())
 })
 
 // (e) the old repeat path is kept: a form in the repeat state is taken over with the same text, the count goes on

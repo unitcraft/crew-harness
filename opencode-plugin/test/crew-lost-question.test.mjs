@@ -121,8 +121,8 @@ await safe("c", async () => {
   fw.handleFormEvent(created("frm_e2", "sesE"), T0 + 4 * MIN)
   const again = fw.pendingForms("sesE", T0 + 4 * MIN)
   cell("c: the repeated question replaces the record and keeps the count", again.length === 1 && again[0].id === "frm_e2" && again[0].repeats === 1 && !again[0].cancelled, JSON.stringify(again))
-  // a question with another text is a separate record
-  fw.handleFormEvent(created("frm_e3", "sesE", "Совсем другой вопрос?"), T0 + 5 * MIN)
+  // a question with another text and other options is a separate record (with the same options it would replace a form in the repeat: task 073)
+  fw.handleFormEvent(created("frm_e3", "sesE", "Совсем другой вопрос?", ["Да", "Нет"]), T0 + 5 * MIN)
   cell("c: another text is another record", fw.pendingForms("sesE", T0 + 5 * MIN).length === 2, JSON.stringify(fw.pendingForms("sesE", T0 + 5 * MIN)))
 })
 

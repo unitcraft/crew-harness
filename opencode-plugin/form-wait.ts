@@ -54,7 +54,12 @@ export type PendingForm = {
   /** task 071: the tab asked the same question (same text and options) with this newer form: this one is history, not an open question */
   replacedBy?: string
   replacedAt?: number
+  /** task 073: set only when the tab did not repeat the words: the old form was in the repeat and the new one has the same options */
+  replacedReason?: string
 }
+
+/** Task 073: the reason written on a form replaced by a new form with the same options (other words) while it was in the repeat. */
+export const REPLACED_REPEAT = "повтор тем же набором вариантов"
 
 const fileOf = (session: string, dir = FORMS) => path.join(dir, `${safeKey(session)}.json`)
 
@@ -189,10 +194,31 @@ export function formKey(question?: string, options?: string[], title?: string): 
   return q && q !== norm(title) ? `${q}\u0001${(options ?? []).map(norm).join("\u0002")}` : undefined
 }
 
-function markReplaced(session: string, id: string, by: string, now: number, dir = FORMS) {
+/** Task 073: the options as one key: labels in the same order, case and spacing ignored. No options - no key (a free-text question is never matched). */
+const optsKey = (options?: string[]): string | undefined => (options && options.length ? options.map(norm).join("\u0002") : undefined)
+
+/** Task 073: the plugin itself asked the tab to ask again (a wake was sent; an exhausted form had all of them). A form that was only cancelled is not yet: the tab has not been prompted. */
+const inRepeat = (f: PendingForm) => (f.repeats ?? 0) > 0 || !!f.exhausted
+
+/** Task 073: when the tab was first prompted. The record keeps only the last wake, so the first one is exact only for one wake; for more the Esc time (or the ask) is the bound. */
+const firstWakeAt = (f: PendingForm) => ((f.repeats ?? 0) === 1 && f.wokeAt ? f.wokeAt : (f.cancelled ?? f.at))
+
+/**
+ * Task 073: is the old form `o` replaced by the form `n` of the same tab although the words differ? Yes, when `o` is in the repeat and `n`
+ * was made after the tab was first prompted, with the same options (all labels, same order; at least one). Only in the repeat: there the
+ * plugin itself pushed the tab to ask this question again, so a new form with the same options is the answer to that push.
+ */
+export function repeatedWith(o: PendingForm, n: { at: number; options?: string[] }): boolean {
+  if (o.replacedBy || !inRepeat(o) || n.at <= firstWakeAt(o)) return false
+  const k = optsKey(o.options)
+  return k !== undefined && k === optsKey(n.options)
+}
+
+function markReplaced(session: string, id: string, by: string, now: number, dir = FORMS, reason?: string) {
   updateForm(session, id, (f) => {
     f.replacedBy = by
     f.replacedAt = now
+    if (reason) f.replacedReason = reason
   }, dir)
 }
 
@@ -201,8 +227,8 @@ function markReplaced(session: string, id: string, by: string, now: number, dir 
  * the same question (formKey) only the newest stays, the older ones become "replaced" (the record stays as history). The order of
  * the list is the order of the asks. Returns what it closed; a second pass finds nothing.
  */
-export function settleDuplicates(dir = FORMS, now = Date.now()): { session: string; id: string; by: string }[] {
-  const out: { session: string; id: string; by: string }[] = []
+export function settleDuplicates(dir = FORMS, now = Date.now()): { session: string; id: string; by: string; reason?: string }[] {
+  const out: { session: string; id: string; by: string; reason?: string }[] = []
   try {
     if (!existsSync(dir)) return out
     for (const n of readdirSync(dir)) {
@@ -223,6 +249,19 @@ export function settleDuplicates(dir = FORMS, now = Date.now()): { session: stri
         f.replacedBy = last.id
         f.replacedAt = now
         out.push({ session: f.session ?? n.replace(/\.json$/, ""), id: f.id, by: last.id })
+        changed = true
+      }
+      // task 073: a form in the repeat is replaced by the newest later form of the tab with the same options (other words)
+      for (let i = 0; i < list.length; i++) {
+        const f = list[i]
+        if (!f || f.replacedBy) continue
+        let by: PendingForm | undefined
+        for (let j = list.length - 1; j > i && !by; j--) if (list[j] && repeatedWith(f, list[j])) by = list[j]
+        if (!by) continue
+        f.replacedBy = by.id
+        f.replacedAt = now
+        f.replacedReason = REPLACED_REPEAT
+        out.push({ session: f.session ?? n.replace(/\.json$/, ""), id: f.id, by: by.id, reason: REPLACED_REPEAT })
         changed = true
       }
       if (changed) save(file, list)
@@ -250,7 +289,9 @@ export function handleFormEvent(ev: any, now = Date.now(), dir = FORMS, onReplie
       const old = before.find((x) => !x.replacedBy && (x.cancelled || x.repeats) && same(x.question, question))
       // task 071: the same question again (same text and options) - every older open form of it is replaced, the record stays as history
       const key = formKey(question, options, form.title)
-      const stale = before.filter((x) => !x.replacedBy && (x === old || (key !== undefined && formKey(x.question, x.options, x.title) === key)))
+      const strict = (x: PendingForm) => x === old || (key !== undefined && formKey(x.question, x.options, x.title) === key)
+      // task 073: or the old form is in the repeat and this form has the same options (the tab found its own words)
+      const stale = before.filter((x) => !x.replacedBy && (strict(x) || repeatedWith(x, { at: now, options })))
       addForm(
         session,
         {
@@ -265,7 +306,7 @@ export function handleFormEvent(ev: any, now = Date.now(), dir = FORMS, onReplie
         },
         dir,
       )
-      for (const x of stale) markReplaced(session, x.id, String(form.id), now, dir)
+      for (const x of stale) markReplaced(session, x.id, String(form.id), now, dir, strict(x) ? undefined : REPLACED_REPEAT)
     } else if (type === "form.replied") {
       const id = body.id ?? body.form?.id
       if (!id) return
@@ -374,7 +415,7 @@ export function formLookEvery(now = Date.now(), dir = FORMS, every = 5_000): num
  */
 export async function formTick(deps: FormDeps, now = Date.now(), dir = FORMS): Promise<void> {
   const say = deps.say ?? (() => {})
-  for (const x of settleDuplicates(dir, now)) say(`form ${x.id} of ${x.session}: replaced by ${x.by} (the same question asked again)`)
+  for (const x of settleDuplicates(dir, now)) say(`form ${x.id} of ${x.session}: replaced by ${x.by} (${x.reason ?? "the same question asked again"})`)
   for (const { session, form: f } of allForms(now, dir)) {
     try {
       const key = `${session}/${f.id}`

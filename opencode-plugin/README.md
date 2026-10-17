@@ -262,6 +262,17 @@ of a tab whose turn is long over and that was not asked again all stay open: the
 piled up before the rule are closed by the same rule at the first pass of the plugin (the tick of the lost questions and the
 pass over the answer files).
 
+#### The same options in the repeat (task 073)
+
+One more case closes the old form, only inside the repeat: the plugin itself asked the tab to ask again (the form was woken at least once, or
+the repeats are used up: «без ответа, нужен владелец»), and the tab then made a new form of the same tab with **the same options** - all
+labels, in the same order, case and spacing do not count - but in other words. The old form becomes «replaced» as in 071 (`replacedBy`,
+`replacedAt`, and `replacedReason`: «повтор тем же набором вариантов»), an answer to it is refused with the new id, and the plugin never
+wakes the tab for it. The new form must be made after the first wake. Not covered: a form that is not in the repeat (even with the same
+options - «Да» / «Нет» of two different questions stay two), a form that was cancelled but not yet woken, other options (a subset, a
+superset, another order), a form without options, another tab, and a tab that went on without asking again (that form goes by the
+12 hours term). Duplicates that piled up are closed by the same pass as in 071.
+
 ### Your answer to a question from outside the window (task 059)
 
 On your word in the orchestrator chat, the orchestrator can pass your answer to an open questionnaire of any tab:

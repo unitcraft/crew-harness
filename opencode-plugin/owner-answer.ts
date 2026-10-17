@@ -95,7 +95,7 @@ export async function answerTick(deps: AnswerDeps, now = Date.now(), dir = ANSWE
   const files = readdirSync(dir).filter((n) => n.endsWith(".json")).sort()
   const all = files.map((n) => ({ file: path.join(dir, n), a: readJson<OwnerAnswer>(path.join(dir, n)) }))
   // задача 071: накопленные дубли закрываются до разбора ответов — ответ на старую форму получит подсказку, а не уйдёт в никуда
-  if (all.some((x) => x.a && !x.a.status)) for (const x of settleDuplicates(formsDir, now)) deps.say(`form ${x.id} of ${x.session}: replaced by ${x.by} (the same question asked again)`)
+  if (all.some((x) => x.a && !x.a.status)) for (const x of settleDuplicates(formsDir, now)) deps.say(`form ${x.id} of ${x.session}: replaced by ${x.by} (${x.reason ?? "the same question asked again"})`)
   for (const { file, a } of all) {
     if (!a || a.status) continue
     a.id ??= path.basename(file, ".json")
