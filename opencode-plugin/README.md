@@ -126,6 +126,20 @@ next message. So:
   gets the answer there, not as a second wake;
 - an ack-only letter ("ok", "спасибо") is not sent.
 
+## The summary at context compaction (`compaction_summary`)
+
+When a tab's context reaches the threshold, OpenCode 2.0.26 writes a summary itself, by a template that is fixed in its build
+(Objective, Requirements, Decisions, Work State, Next Move, Relevant Files, Important Context) and added as the last message of the
+compaction request. Left alone it lists commit and file hashes, card and session numbers, reviewers' process remarks and state the owner has
+already changed. The plugin uses the session hook `compaction` (same payload as `context`: `system`, `messages`, `tools`, `model`, `agent`) and
+adds one rule to the system part of that request (`compaction-summary.ts`): the five sections of the pattern — what the owner decided
+(verbatim, with date and source), open questions to the owner, what runs and what waits, where the documents are (paths), what must not be done — go
+under the headings of the template (the build accepts a summary only with one of them), 1–1.5 thousand characters a section, up to 6 thousand
+in all, hashes and numbers only when the work cannot go on without them. The pattern itself lives in one place, the Canon: [Сводка при
+сжатии контекста](../doc/canon/process.md#сводка-при-сжатии-контекста). The setting **`compaction_summary`** (default `true`) turns the rule off
+(`false` leaves the summary to OpenCode). Not for tabs of the `claude-code` provider (Claude Code compacts those itself) and not for
+provider-native compaction. The rule is a request, not a barrier: the plugin cannot see the summary text.
+
 ## Waiting for something long: `crew_watch`
 
 `crew_watch {command, note?, minutes?}` -- the plugin runs a waiting command (Git Bash, the tab's directory) in the

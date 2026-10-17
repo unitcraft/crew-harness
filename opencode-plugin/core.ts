@@ -198,6 +198,8 @@ export type CrewConfig = {
   projectRules: string
   /** язык владельца (owner_language, задача 054): английское имя языка для правила системного блока; умолчание Russian */
   ownerLanguage: string
+  /** сводка при сжатии контекста по образцу Канона (compaction_summary, задача 072): правило идёт в запрос сжатия вкладки OpenCode; по умолчанию включено */
+  compactionSummary: boolean
   tiers: Record<Tier, string[]>
   spawnLimits: Record<string, number>
   spawnModels: Partial<Record<Tier, string>>
@@ -376,6 +378,7 @@ export function loadConfig(dir: string): CrewConfig {
     exclusive: new Set([...BASE_EXCLUSIVE, ...roles]),
     projectRules: typeof j.project_rules === "string" ? j.project_rules.trim() : "",
     ownerLanguage: typeof j.owner_language === "string" && OWNER_LANGUAGE_RE.test(j.owner_language.trim()) ? j.owner_language.trim() : DEFAULT_OWNER_LANGUAGE,
+    compactionSummary: j.compaction_summary !== false,
     tiers,
     spawnLimits,
     spawnModels,
@@ -2952,7 +2955,7 @@ ${lockStillYours(stillHeld.n)}` : "") }
         "show - anyone - effective values and where each comes from (default, the committed file, the local option of opencode.jsonc), plus uncommitted edits. Model profiles come first: model_profiles = families/tiers -> model, profile_sets = named sets of stages, profile_set = the enabled set (only a person changes it, /crew-sets use|off); the summary says 'sets in the file: N; enabled: name or none' - never answer 'no sets' from 'not enabled'; details: crew_help.",
         "set - integrator - values {key: value; null removes a key} - checks every value and writes the working copy; it applies once committed to the settings branch. Keys changed by people only (profile_set, answer_mode, answer_max) are refused.",
         "apply_template - integrator - writes the standard template (families claude/codex/kimi, sets, profile_set codex, tier_max light, branch and worktree names) into the file; the project's own keys win; commit the file or the old state stays.",
-        "Planning keys (plan tasks: crew_spawn kind plan): plans_dir (folder of plan files in the repository, default docs/plans), plan_approver (owner = the owner decides with /plans in the window; integrator = the integrator decides with crew_task plan_decide), plan_acceptance (steps of the plan recheck: id, text, required), plan_grades (grades of remarks and which of them keep a round clean), plan_clean_rounds, plan_rounds_max, plan_steps (auto|manual: start the tasks of a landed plan's steps automatically). project_rules - English text appended to the end of every tab's system block. owner_language - the owner's language as an English name (default Russian): every tab writes what the owner reads in it, letters to other tabs included.",
+        "Planning keys (plan tasks: crew_spawn kind plan): plans_dir (folder of plan files in the repository, default docs/plans), plan_approver (owner = the owner decides with /plans in the window; integrator = the integrator decides with crew_task plan_decide), plan_acceptance (steps of the plan recheck: id, text, required), plan_grades (grades of remarks and which of them keep a round clean), plan_clean_rounds, plan_rounds_max, plan_steps (auto|manual: start the tasks of a landed plan's steps automatically). project_rules - English text appended to the end of every tab's system block. owner_language - the owner's language as an English name (default Russian): every tab writes what the owner reads in it, letters to other tabs included. compaction_summary - true by default: OpenCode tabs are asked for a short summary by the pattern of the Canon when their context is compacted (the session hook compaction); false leaves the summary to OpenCode.",
       ].join("\n"),
     input: {
       type: "object",

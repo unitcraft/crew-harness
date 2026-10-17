@@ -151,6 +151,7 @@ import { isLauncherCard, noteLoopLag, registerJournalTools } from "./journal.ts"
 import { answerTick } from "./owner-answer.ts"
 import { writeLaunch } from "./task-folders.ts"
 import { type ResumeTry, RESUME_WINDOW_MS, canInterrupt, interruptTurn, resumeLetter, resumeNote, resumeVerdict } from "./hung-resume.ts"
+import { compactionSummaryText } from "./compaction-summary.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
 
@@ -1966,6 +1967,29 @@ export default {
         log(`context failed: ${e}`)
       }
     })
+
+    // СВОДКА ПРИ СЖАТИИ (задача 072). Сжатие — отдельный запрос модели; его системную часть строит хук сессии `compaction` (тот же снимок,
+    // что у `context`). Шаблон сводки зашит в OpenCode и идёт последним сообщением, поэтому плагин дополняет только систему: правило из
+    // Канона (doc/canon/process.md, «Сводка при сжатии контекста») — в compaction-summary.ts. Вкладкам claude-code текст не нужен: их сжимает
+    // сам Claude Code. Выключается настройкой compaction_summary.
+    try {
+      await ctx.session.hook("compaction", async (ev: any) => {
+        try {
+          const sid = String(ev?.sessionID ?? "")
+          if (!sid || !Array.isArray(ev?.system)) return
+          if (ev?.model?.providerID === "claude-code") return
+          const card = await touch(sid)
+          if (!card) return
+          const cfg = loadConfig(card.directory)
+          if (!cfg.compactionSummary) return
+          ev.system.push({ type: "text", text: compactionSummaryText(cfg.ownerLanguage) })
+        } catch (e) {
+          log(`compaction failed: ${e}`)
+        }
+      })
+    } catch (e) {
+      log(`compaction hook unavailable: ${e}`)
+    }
 
     // ЗАПРОС ВКЛАДКИ — источник модели (хук model.request V2: {sessionID, agent, model, kind}).
     try {
