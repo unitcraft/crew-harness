@@ -12,6 +12,12 @@
 //      running/rework/starting without an executor, without a live session, or with a silent one past the threshold stands even when
 //      another task goes; an order that nobody took stands, named apart. IT-9 the plugin: the same sources get ONE letter and the mark;
 //      a working executor, crew_watch and a taken order get nothing; a word of the executor ends the episode.
+// Task 076 (an accepted task nobody cleans up): IT-10 the rule over the facts of the cleanup (idleBlockers, RunCtx.cleanup): an accepted
+//      task whose reminders (ACCEPTED_REMINDERS_MAX) all went, whose reviewer does not lead the cleanup and which did not change for the
+//      threshold since the last reminder stands, named apart; a reviewer at work, fewer reminders, a younger stand, a cleaned task do not.
+//      IT-11 the plugin: the same sources (a silent reviewer, a reviewer under an old crew_watch) get ONE letter and the mark; a reviewer
+//      at work, a fresh crew_watch, four letters, a young last letter and a cleaned task get nothing; the cleanup and the word of the
+//      reviewer end the episode.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -122,6 +128,36 @@ const mkTask = (project, n, author, st, extra = {}) => ({
   cell("IT-8o the letter names the three reasons and the steps (reassign, cancel, ask the owner)", /нет исполнителя/.test(l) && /исполнитель задачи #81.*молчит с \d\d:\d\d/.test(l) && /заказ #81.*никто не взял.*otherproj\.integrator вне окна/.test(l) && /crew_task reassign/.test(l) && /cancel/.test(l) && /инструментом question/.test(l), l)
 }
 
+// ---- IT-10 the rule over the facts of the cleanup (task 076)
+{
+  const NOW = 60_000_000
+  const MIN = 20 * 60_000
+  const none = () => undefined
+  const ACC_AT = NOW - 3 * 3_600_000
+  const acc = (extra = {}) => mkTask("p", 91, "me", "accepted", { kind: "spawn", executor: "sesE91", reviewer: "sesR91", updated: NOW - 60 * 60_000, history: [{ status: "accepted", at: ACC_AT }], ...extra })
+  const fact = (o = {}) => ({ sent: tasks.ACCEPTED_REMINDERS_MAX, lastAt: NOW - 30 * 60_000, idleSince: NOW - 40 * 60_000, ...o })
+  const ctx = (c, o = {}) => ({ now: NOW, minMs: MIN, session: () => ({ live: true }), addressee: () => ({ window: false, working: false }), ...(c ? { cleanup: () => c } : {}), ...o })
+  const run = (list, c, o) => it?.idleBlockers?.("me", list, none, ctx(c, o))
+  const r1 = run([acc()], fact())
+  cell("IT-10a all reminders went, the reviewer does not lead the cleanup, the stand is past the threshold: idle, kind cleanup, since the last reminder", r1?.idle === true && r1.items?.length === 1 && r1.items[0].kind === "cleanup" && r1.items[0].task?.n === 91 && r1.at === NOW - 30 * 60_000, JSON.stringify(r1))
+  cell("IT-10b the reviewer leads the cleanup (a turn goes, a question, a fresh watch: no idleSince): not idle", run([acc()], fact({ idleSince: undefined }))?.idle === false, "")
+  cell("IT-10c the last reminder is younger than the threshold: not idle", run([acc()], fact({ lastAt: NOW - 5 * 60_000 }))?.idle === false, "")
+  cell("IT-10d fewer reminders than the maximum: not idle", run([acc()], fact({ sent: tasks.ACCEPTED_REMINDERS_MAX - 1 }))?.idle === false, "")
+  cell("IT-10e the task changed 5 min ago: not idle", run([acc({ updated: NOW - 5 * 60_000 })], fact())?.idle === false, "")
+  cell("IT-10f the reviewer fell silent 5 min ago (the last reminder is older): not idle", run([acc()], fact({ idleSince: NOW - 5 * 60_000 }))?.idle === false, "")
+  cell("IT-10g a cleaned task (done) is out of the rule", run([acc({ status: "done" })], fact())?.idle === false, "")
+  cell("IT-10h without the cleanup facts the old rule: an accepted task goes", run([acc()], undefined)?.idle === false && it?.idleBlockers?.("me", [acc()], none)?.idle === false, "")
+  const r9 = run([acc(), mkTask("p", 92, "me", "running", { kind: "spawn", executor: "sesE92", updated: NOW - 30 * 60_000 })], fact())
+  cell("IT-10i the accepted task stands even while another one goes", r9?.idle === true && r9.items?.length === 1 && r9.items[0].task?.n === 91, JSON.stringify(r9))
+  const r10 = run([acc({ reviewer: undefined })], fact({ idleSince: 0 }))
+  cell("IT-10j no reviewer at all (idleSince 0): idle", r10?.idle === true && r10.items?.[0]?.kind === "cleanup", JSON.stringify(r10))
+  const what = it?.idleWhat?.(r1?.items ?? []) ?? []
+  const hhmm = new Date(ACC_AT).toTimeString().slice(0, 5)
+  cell("IT-10k the text for the owner: accepted, the cleanup waits for the reviewer since the acceptance", what.join(";") === `#91 принята, уборка ждёт приёмщика с ${hhmm}`, JSON.stringify(what))
+  const l = it?.idleLetter?.(35, r1?.items ?? []) ?? ""
+  cell("IT-10l the letter: the task is accepted, all reminders went, the reviewer does not lead, the next steps", /^Ты простаиваешь 35 мин: /.test(l) && /задача #91 «задача 91» принята/.test(l) && /приёмщик/.test(l) && /crew_send/.test(l) && /crew_task \{action: "cleanup"/.test(l) && /инструментом question/.test(l), l)
+}
+
 // ---- IT-3 who waits for the tab
 {
   core.addObligation("sesW1", { qid: "qw1", from_session: "me3", from_role: "integrator", at: T0, nudges: 0, stuck: true, stuckAt: T0 + 10 })
@@ -176,8 +212,11 @@ const msg = (session, type, data, at = Date.now()) => db.prepare("insert into se
 // runs); I7 its question with expect_reply waits; I8 a gate of task 062; I9 a closed tab. X* - the executors and reviewers.
 // Task 070: J1..J6 - authors (J1 a task without an executor, J2 a silent executor Y2, J3 an order nobody took, J4 an executor Y4 at work, J5 an
 // executor Y5 under crew_watch, J6 an order that was taken). An executor of a running task works (busy): X2, X6b, Y4.
-const TABS = ["sesI1", "sesI2", "sesI3", "sesI4", "sesI5", "sesI6", "sesI7", "sesI8", "sesX2", "sesX6", "sesX6b", "sesX7", "sesJ1", "sesJ2", "sesJ3", "sesJ4", "sesJ5", "sesJ6", "sesY2", "sesY4", "sesY5"]
-const BUSY = new Set(["sesI5", "sesX2", "sesX6b", "sesY4"])
+// Task 076: K1..K7 - authors of accepted tasks #91..#97 with their reviewers Z1..Z7 (K1 a silent reviewer, K2 a reviewer under a crew_watch
+// of long ago, K3 a reviewer at work (busy), K4 a reviewer under a fresh crew_watch, K5 four reminders only, K6 the fifth reminder is
+// young, K7 a cleaned task). The letters of the reminders lie in the read letters of the author.
+const TABS = ["sesI1", "sesI2", "sesI3", "sesI4", "sesI5", "sesI6", "sesI7", "sesI8", "sesX2", "sesX6", "sesX6b", "sesX7", "sesJ1", "sesJ2", "sesJ3", "sesJ4", "sesJ5", "sesJ6", "sesY2", "sesY4", "sesY5", "sesK1", "sesK2", "sesK3", "sesK4", "sesK5", "sesK6", "sesK7", "sesZ1", "sesZ2", "sesZ3", "sesZ4", "sesZ5", "sesZ6", "sesZ7"]
+const BUSY = new Set(["sesI5", "sesX2", "sesX6b", "sesY4", "sesZ3"])
 const ALL = [...TABS, "sesI9"]
 for (const s of ALL) db.prepare("insert into session_v2 values (?, ?, ?, null, null, null, null, null)").run(s, proj, s)
 
@@ -246,6 +285,28 @@ putTask(mkTask(P, 75, "sesJ5", "running", { kind: "spawn", executor: "sesY5" }))
 putTask(mkTask(P, 76, "sesJ6", "running", { kind: "order", order_to: "otherproj", child: { project: "otherproj", n: 9 } }))
 core.saveCard({ ...core.readJson(core.cardFile("sesY2")), task: { project: P, n: 72 } })
 writeFileSync(path.join(watch.WATCHES, "w70.json"), JSON.stringify({ id: "w70", session: "sesY5", command: "x", cwd: proj, note: "CI", minutes: 120, created: Date.now(), status: "running", pid: process.pid, started: Date.now() }))
+
+// task 076: an accepted task, `sent` reminders in the read letters of the author; a letter with a time in the future is a young one
+const FAR = 3 * 3_600_000
+const putAccepted = (n, author, reviewer, sent, times, extra = {}) => {
+  const at = Date.now() - FAR
+  const t = mkTask(P, n, author, "accepted", { kind: "spawn", executor: `sesE${n}`, reviewer, history: [{ status: "accepted", at }], updated: at, ...extra })
+  putTask(t)
+  const dir = path.join(core.READ, core.safeKey(author))
+  mkdirSync(dir, { recursive: true })
+  for (let k = 1; k <= sent; k++) writeFileSync(path.join(dir, `${tasks.acceptedReminderId(t, at, k)}.json`), JSON.stringify({ id: tasks.acceptedReminderId(t, at, k), time: times[k - 1] ?? times[times.length - 1] }))
+  core.saveCard({ ...core.readJson(core.cardFile(reviewer)), task: { project: P, n } })
+}
+const OLD = [Date.now() - 150 * 60_000, Date.now() - 120 * 60_000, Date.now() - 90 * 60_000, Date.now() - 60 * 60_000, Date.now() - 30 * 60_000]
+putAccepted(91, "sesK1", "sesZ1", 5, OLD)
+putAccepted(92, "sesK2", "sesZ2", 5, OLD)
+putAccepted(93, "sesK3", "sesZ3", 5, OLD)
+putAccepted(94, "sesK4", "sesZ4", 5, OLD)
+putAccepted(95, "sesK5", "sesZ5", 4, [...OLD.slice(0, 3), Date.now() + 3_600_000]) // the fourth is young: the plugin sends no fifth
+putAccepted(96, "sesK6", "sesZ6", 5, [...OLD.slice(0, 4), Date.now() + 3_600_000])
+putAccepted(97, "sesK7", "sesZ7", 5, OLD, { status: "done" })
+writeFileSync(path.join(watch.WATCHES, "w76a.json"), JSON.stringify({ id: "w76a", session: "sesZ2", command: "x", cwd: proj, note: "ждать отдельный cleanup plan", minutes: 720, created: T0 - 3_600_000, status: "running", pid: process.pid, started: T0 - 3_600_000 }))
+writeFileSync(path.join(watch.WATCHES, "w76b.json"), JSON.stringify({ id: "w76b", session: "sesZ4", command: "x", cwd: proj, note: "gate", minutes: 120, created: Date.now() + 600_000, status: "running", pid: process.pid, started: Date.now() + 600_000 }))
 
 const letters = (s) => prompts.filter((p) => p.sessionID === s && /Ты простаиваешь/.test(p.text))
 const stOf = (s) => core.readJson(path.join(status.STATUS, `${s}.json`))
@@ -319,6 +380,29 @@ cell("IT-7q and no new letter while the session goes", letters("sesI1").length =
   putTask({ ...mkTask(P, 71, "sesJ1", "cancelled", { kind: "spawn" }), updated: Date.now() })
   await wait(1000)
   cell("IT-9i a cancelled task stands no more: the mark is gone", !stOf("sesJ1")?.idleTab, JSON.stringify(stOf("sesJ1")))
+}
+
+// ---- IT-11 task 076: an accepted task nobody cleans up
+{
+  const k1 = letters("sesK1")
+  cell("IT-11a the reviewer is silent after the fifth reminder: ONE letter naming the accepted task, the mark, the text for the owner", k1.length === 1 && /задача #91 «задача 91» принята/.test(k1[0].text) && !!stOf("sesK1")?.idleTab && /#91 принята, уборка ждёт приёмщика с \d\d:\d\d/.test(stOf("sesK1")?.detail ?? ""), JSON.stringify([k1.map((p) => p.text), stOf("sesK1")]))
+  const k2 = letters("sesK2")
+  cell("IT-11b the reviewer waits under a crew_watch of long ago (the case of Nova #91): ONE letter and the mark", k2.length === 1 && !!stOf("sesK2")?.idleTab && stOf("sesZ2")?.state === "watch", JSON.stringify([k2.map((p) => p.text), stOf("sesK2"), stOf("sesZ2")?.state]))
+  cell("IT-11c the reviewer works a turn: no letter, no mark", letters("sesK3").length === 0 && !stOf("sesK3")?.idleTab && stOf("sesZ3")?.state === "working", JSON.stringify([stOf("sesK3"), stOf("sesZ3")?.state]))
+  cell("IT-11d the reviewer is under a fresh crew_watch: no letter, no mark", letters("sesK4").length === 0 && !stOf("sesK4")?.idleTab && stOf("sesZ4")?.state === "watch", JSON.stringify([stOf("sesK4"), stOf("sesZ4")?.state]))
+  cell("IT-11e only four reminders went: no letter, no mark", letters("sesK5").length === 0 && !stOf("sesK5")?.idleTab, JSON.stringify(stOf("sesK5")))
+  cell("IT-11f the fifth reminder is younger than the threshold: no letter, no mark", letters("sesK6").length === 0 && !stOf("sesK6")?.idleTab, JSON.stringify(stOf("sesK6")))
+  cell("IT-11g a cleaned task: no letter, no mark", letters("sesK7").length === 0 && !stOf("sesK7")?.idleTab, JSON.stringify(stOf("sesK7")))
+  await wait(1500)
+  cell("IT-11h no second letter in the same episode", letters("sesK1").length === 1 && letters("sesK2").length === 1, JSON.stringify([letters("sesK1").length, letters("sesK2").length]))
+  // the reviewer of #92 works (a turn with a tool): its silence starts anew, the mark of the author is gone, no second letter
+  endTurn("sesZ2", [{ type: "tool", name: "read", state: { status: "completed" } }, { type: "text", text: "Проверил." }])
+  await wait(1000)
+  cell("IT-11i the reviewer speaks: the mark of the author is gone, no second letter", !stOf("sesK2")?.idleTab && letters("sesK2").length === 1, JSON.stringify([letters("sesK2").length, stOf("sesK2")]))
+  // the task is cleaned up: nothing stands
+  putTask({ ...core.readJson(tasks.taskFile(P, 91)), status: "done", updated: Date.now() })
+  await wait(1000)
+  cell("IT-11j a cleaned task stands no more: the mark is gone", !stOf("sesK1")?.idleTab && !it?.idleOf?.("sesK1"), JSON.stringify(stOf("sesK1")))
 }
 
 clearInterval(heart)
