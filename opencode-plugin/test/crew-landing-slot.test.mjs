@@ -92,8 +92,10 @@ await hooks.context({ sessionID: "sesINTEG1", system: [], model: { id: "x", prov
 await events["session.idle"]({ properties: { sessionID: "sesINTEG1" } })
 await call("crew_role", { role: "integrator" })
 
+/** the project the helpers work in: "proj" for the cells that go through crew_spawn, a project of its own for each AC-04 scenario */
+let PROJECT = "proj"
 const mk = (status, extra = {}) => {
-  const t = tasks.createTask({ project: "proj", title: `задача ${status}`, goal: "g", criteria: "c", priority: "P2", tier: "light", role: "worker", model: "claude-code/haiku", author: "sesINTEG1", author_role: "proj.integrator", qid: `q${Math.random().toString(36).slice(2, 8)}`, status, kind: "spawn", directory: proj })
+  const t = tasks.createTask({ project: PROJECT, title: `задача ${status}`, goal: "g", criteria: "c", priority: "P2", tier: "light", role: "worker", model: "claude-code/haiku", author: "sesINTEG1", author_role: "proj.integrator", qid: `q${Math.random().toString(36).slice(2, 8)}`, status, kind: "spawn", directory: proj })
   Object.assign(t, extra)
   tasks.saveTask(t)
   return t
@@ -105,8 +107,8 @@ const accepted = (ageMin, reviewer) => {
   tasks.saveTask(t)
   return t
 }
-const reset = () => rmSync(path.join(tasks.TASKS, "proj"), { recursive: true, force: true })
-const all = () => tasks.listTasks("proj")
+const reset = () => rmSync(path.join(tasks.TASKS, PROJECT), { recursive: true, force: true })
+const all = () => tasks.listTasks(PROJECT)
 const spawn = (extra = {}) => call("crew_spawn", { title: "новая", goal: "g", criteria: "c", ...extra })
 const started = (s) => /запущена/.test(s)
 /** four open tasks (three working, one on review) and one accepted */
@@ -162,11 +164,16 @@ cell("AC-03 c5: with accepted_slot hold cleanup_limit does not act", started(c5)
 // ---- AC-04: the steps of an auto plan (a done, approved plan task; its file is in the target branch)
 const planTask = () =>
   mk("done", { title: "план 9", executor: "sesEXP", reviewer: "sesREVP", plan: { n: "9", file: "docs/plans/9-demo.md", source: "демо", rounds: [], clean: 2, approval: { decision: "ok", at: Date.now() } } })
-const spawnedOf = () => Object.keys(tasks.loadTask("proj", planNo)?.plan?.spawned ?? {}).length
+const spawnedOf = () => Object.keys(tasks.loadTask(PROJECT, planNo)?.plan?.spawned ?? {}).length
 let planNo = 0
+// Each scenario has a project of its own and nothing is deleted under the auto plan. The step pass reads the plan task and the
+// settings, then waits for git (await), then writes the plan task back from that snapshot. With one project and reset() between the
+// scenarios, a pass that was waiting for git at the moment of reset() wrote the previous scenario's plan task (2 steps put, the
+// old limits) over the new task with the same number and put a third step: "spawned 3" in about 4 runs of 10 (task 074).
 const scenario = async (label, cfg, prep) => {
+  PROJECT = `scn-${label}`
   settings(cfg)
-  reset()
+  rmSync(path.join(tasks.TASKS, PROJECT), { recursive: true, force: true })
   prep?.()
   planNo = planTask().n
   await wait(1_400)
@@ -193,6 +200,8 @@ tasks.taskEvent(waitingOne, "sesREVA", "done", "очищена")
 await until(() => spawnedOf() > 0, 4_000)
 cell("AC-04 после cleanup: one cleaned up (1 waiting < 2) and the steps are put", spawnedOf() >= 1, `spawned ${spawnedOf()}`)
 settings({})
+for (const l of ["hold", "free", "cleanup_limit"]) rmSync(path.join(tasks.TASKS, `scn-${l}`), { recursive: true, force: true }) // no other cell looks at them
+PROJECT = "proj"
 
 // ---- AC-05: the tab of an accepted task is still woken, reminded and marked
 reset()
