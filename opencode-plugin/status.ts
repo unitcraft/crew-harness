@@ -89,6 +89,18 @@ export function stepProgress(task: Status["task"]): string | undefined {
   if (i >= 0 && !task.steps[i].result) return `проверка ${i + 1}/${total}: ${task.checking}${name && name !== task.checking ? ` — ${name}` : ""}`
   return `шаги ${task.steps.filter((a) => a.result).length}/${total}`
 }
+/**
+ * Кому принадлежит строка шагов приёмки (задача 087; владелец, 2026-10-18: «почему повторяются суб-записи»): шаги и текущая проверка
+ * хранятся на задаче, поэтому их несут вкладки всех её сессий, а проверяет шаги только приёмщик. Строка — одна на задачу: у приёмщика
+ * (`holder`); нет приёмщика среди показываемых вкладок, а шаги есть — одна строка под названием задачи (`orphan`).
+ * `group` — показываемые вкладки одной задачи.
+ */
+export function stepsPlace(group: Status[]): { holder?: Status; orphan?: string } {
+  const holder = group.find((x) => x.task?.as === "reviewer")
+  if (holder) return { holder }
+  const orphan = group.map((x) => stepProgress(x.task)).find((x) => x)
+  return orphan ? { orphan } : {}
+}
 
 /** Короткое название из текста шага или цели сессии: до первого «:», «;», «.», « — » или «(», без разметки. */
 export const shortName = (text = ""): string => {
@@ -458,8 +470,8 @@ export function stateText(s: Status, now: number): string {
   }
 }
 /** Слова строки вкладки после состояния: шаг приёмки «3/13» (у приёмщика) и «⚠ stuck 9h» (застряла, задача 043). */
-const extrasOf = (s: Status, now: number): string => {
-  const steps = s.task?.as === "reviewer" && s.state !== "owner" && s.state !== "question" ? stepProgress(s.task)?.match(/\d+\/\d+/)?.[0] : undefined
+const extrasOf = (s: Status, now: number, holder?: Status): string => {
+  const steps = holder === s && s.state !== "owner" && s.state !== "question" ? stepProgress(s.task)?.match(/\d+\/\d+/)?.[0] : undefined
   const k = s.stuck?.[0]
   return `${steps ? ` ${steps}` : ""}${k ? ` ⚠ stuck${k.at ? ` ${ageText(k.at, now)}` : ""}` : ""}`
 }
@@ -496,8 +508,8 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
     const roles = body.filter((s) => !s.task).map((s) => s.role)
     const dup = new Set(roles.filter((r, i) => roles.indexOf(r) !== i))
     // строка вкладки: «значок кто  состояние возраст шаги ⚠»; вопрос владельцу — своей строкой под ней
-    const row = (s: Status, pad: string) => {
-      lines.push(`${pad}${rowMark(s)}${whoOf(s, dup)}  ${stateText(s, now)}${extrasOf(s, now)}`)
+    const row = (s: Status, pad: string, holder?: Status) => {
+      lines.push(`${pad}${rowMark(s)}${whoOf(s, dup)}  ${stateText(s, now)}${extrasOf(s, now, holder)}`)
       const q = questionOf(s)
       if (q) lines.push(`${pad}    ↳ ${q}`)
     }
@@ -515,16 +527,19 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
       shown.add(key)
       const group = body.filter((y) => tk(y) === key).sort((a, b) => ORDER[a.state] - ORDER[b.state] || Number(!!a.task?.ended) - Number(!!b.task?.ended))
       const lead = group[0]
+      // шаги приёмки — один раз на задачу (задача 087): у приёмщика, а без него — на строке названия («шаги 3/13»)
+      const { holder, orphan } = stepsPlace(group.filter((y) => !finishedSession(y)))
+      const onTitle = orphan ? ` · шаги ${orphan.match(/\d+\/\d+/)?.[0] ?? ""}`.trimEnd() : ""
       const title = `${refOf(s)} ${titleText(s.task!.title)}`
       if (s.task!.group) {
         const done = group.filter(finishedSession).length
-        lines.push(`  ${title}${done ? ` · ${done} ${CREW_STATE_WORDS.done}` : ""}`)
-        for (const x of group.filter((y) => !finishedSession(y))) row(x, "    ")
+        lines.push(`  ${title}${onTitle}${done ? ` · ${done} ${CREW_STATE_WORDS.done}` : ""}`)
+        for (const x of group.filter((y) => !finishedSession(y))) row(x, "    ", holder)
       } else if (group.some((x) => x.state === "owner" || x.state === "question")) {
-        lines.push(`  ${rowMark(lead)}${title}`.trimEnd())
-        for (const x of group) row(x, "    ")
+        lines.push(`  ${rowMark(lead)}${title}${onTitle}`.trimEnd())
+        for (const x of group) row(x, "    ", holder)
       } else {
-        lines.push(`  ${title} — ${group.map((x) => `${whoOf(x, dup)} ${stateText(x, now)}${extrasOf(x, now)}`).join(" · ")}`)
+        lines.push(`  ${title}${onTitle} — ${group.map((x) => `${whoOf(x, dup)} ${stateText(x, now)}${extrasOf(x, now, holder)}`).join(" · ")}`)
       }
     }
     // планы: ждущий согласования владельца — своей строкой, остальные — счётчиком
@@ -735,10 +750,21 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
     if (n) rows.push({ mark: " ", who: "", what: `↳ ✓ сдано ${n} ${n % 10 === 1 && n % 100 !== 11 ? "сессия" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? "сессии" : "сессий"}`, tone: "muted" })
   }
   const shown = sorted.slice(0, SIDE_MAX)
+  // строка шагов приёмки — один раз на задачу (задача 087; владелец, 2026-10-18: «почему повторяются суб-записи»): у приёмщика, а без
+  // приёмщика среди показываемых вкладок — одна строка под названием задачи; у исполнителя и других сессий её нет
+  const placed = new Map<string, ReturnType<typeof stepsPlace>>()
+  for (const s of shown) {
+    const k = tkey(s)
+    if (k && !placed.has(k)) placed.set(k, stepsPlace(shown.filter((x) => tkey(x) === k)))
+  }
   let last: string | undefined
   shown.forEach((s, idx) => {
     const k = tkey(s)
-    if (k && k !== last) heading(s)
+    if (k && k !== last) {
+      heading(s)
+      const orphan = placed.get(k)?.orphan
+      if (orphan) wrapWords(orphan, width - 2).forEach((l) => rows.push({ mark: " ", who: "", what: `↳ ${l}`, tone: "muted" }))
+    }
     last = k
     const g = !!s.task?.group
     const plain = s.task && !g ? s.task : undefined
@@ -755,7 +781,7 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
     const lead = kind ? "↳ " : plain ? `↳ ${role}  ` : g ? `↳ ${shownMark}${s.task!.label ?? role}  ` : `${shownMark}${who(s).padEnd(9).slice(0, 9)} `
     // приёмка по шагам: «проверка 3/13: fixture — название» вместо «работает», переносом по словам; ждущая вкладка (наблюдение, очередь
     // машины, ответ) показывает, чего ждёт, и сколько (суть, время в конце: waitText); шаги — строкой под ней
-    const stepsLine = s.state !== "owner" && s.state !== "question" ? stepProgress(s.task) : undefined
+    const stepsLine = k && placed.get(k)?.holder === s && s.state !== "owner" && s.state !== "question" ? stepProgress(s.task) : undefined
     const waiting = s.state === "watch" || s.state === "reply"
     const prog = waiting ? undefined : stepsLine
     const room = width - lead.length

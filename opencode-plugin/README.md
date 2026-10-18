@@ -173,7 +173,9 @@ the ones waiting for you first, who is working and how long, who waits for what 
 wrapped by words onto two rows at most and cut with `…` (`‖ #85 Accept Oracle evaluation`), the mark on the left being its most
 important tab's; under it a row per tab with the role and the state (`↳ исп  вопрос — ждёт ответа`, `↳ прм  ↻ ждёт доработки`), and under
 that, as before, the question or the waiting phrase and the steps. A reviewer's step in progress names its id and a short name taken
-from the step's text (`проверка 3/12: sabotage — подсунь негодное`, wrapped the same way). A task with a folder heads its sessions
+from the step's text (`проверка 3/12: sabotage — подсунь негодное`, wrapped the same way). The steps line stands once per task, under the
+reviewer (the executor and the other sessions have none; with no reviewer among the shown tabs it is one row under the title; `/crew` follows
+the same rule). A task with a folder heads its sessions
 the same way (`061 Канон и актуальная методика`, no mark: the sessions carry theirs); a session of the methodology shows its code and
 the name of its kind (`↳ С2-5 проверка спецификации`, the state on the row under it; the names come from one list, the same as in the
 "Ход работ" block; a code outside it takes the short name of the session's goal), and the finished sessions fold into one row
