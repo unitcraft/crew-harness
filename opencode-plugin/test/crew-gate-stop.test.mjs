@@ -29,6 +29,11 @@ const cell = (name, ok, detail = "") => {
   if (!ok) fail++
 }
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+// Task 088: a pause before a check that something HAPPENED (a letter, a mark, a mark gone) is a condition awaited up to 60 s; the pauses
+// that stand for "nothing happens" (no second letter, no letter at all) stay as they were.
+const until = async (cond, ms = 60_000) => {
+  for (const end = Date.now() + ms; !cond() && Date.now() < end; ) await wait(100)
+}
 const tryImport = (p) => import(p).catch((e) => (console.log(`import ${p}: ${String(e).split("\n")[0]}`), null))
 
 const core = await import("../core.ts")
@@ -103,7 +108,8 @@ const ctx = {
 }
 const WPID = 626262
 mkdirSync(core.WINDOWS, { recursive: true })
-const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now(), tabs: SESS.map((sessionID) => ({ sessionID, active: true, busy: false })) }))
+// dated 30 s ahead: a window of 3 s freshness would look closed when this process is slow on a loaded machine (task 088)
+const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now() + 30_000, tabs: SESS.map((sessionID) => ({ sessionID, active: true, busy: false })) }))
 beat()
 const heart = setInterval(beat, 300)
 
@@ -142,7 +148,7 @@ cell("GS-2f no session in the call: written, plain answer", /^Записано �
 
 // ---- GS-4 the plugin: letter, mark, clearing
 await endTurn("sesGATE1", "Остановлено до вашего решения; спецификация ещё не утверждена, чистая серия не принята.", Date.now() + 200)
-await wait(2500)
+await until(() => letters("sesGATE1").length >= 1 && stOf("sesGATE1")?.gate === true)
 const l1 = letters("sesGATE1")
 cell("GS-4a the turn ended with the gate and no question: ONE letter to the tab (question tool, recommendation, reason)", l1.length === 1 && /question/.test(l1[0].text) && /рекомендац/.test(l1[0].text) && /довод/.test(l1[0].text), JSON.stringify(prompts.map((p) => [p.sessionID, p.text.slice(0, 80)])))
 const s1 = stOf("sesGATE1")
@@ -150,7 +156,7 @@ cell("GS-4b the status: ждёт вашего решения, вопроса н�
 await wait(1500)
 cell("GS-4c no second letter for the same stop", letters("sesGATE1").length === 1, String(letters("sesGATE1").length))
 fw.handleFormEvent({ type: "form.created", data: { form: { id: "frm_g1", sessionID: "sesGATE1", title: "Questions", metadata: { kind: "question" }, fields: [{ key: "q0", description: "Принять серию?", options: [{ label: "Да (Recommended)" }, { label: "Нет" }] }] } } })
-await wait(800)
+await until(() => !gateOf("sesGATE1") && !stOf("sesGATE1")?.gate)
 const s1b = stOf("sesGATE1")
 cell("GS-4d an open question clears the mark and the stop", !gateOf("sesGATE1") && !s1b?.gate, JSON.stringify([gateOf("sesGATE1"), s1b]))
 
@@ -162,17 +168,18 @@ cell("GS-4e a stop with an open question: no letter, no mark", letters("sesGATE2
 // the owner writes after the stop: the mark goes, no more letters
 await logLine("sesGATE3")
 await endTurn("sesGATE3", "Сводка выше, ворота записаны.", Date.now() + 200)
-await wait(2000)
+await until(() => letters("sesGATE3").length >= 1 && stOf("sesGATE3")?.gate === true)
 cell("GS-4f another tab gets its own letter and the mark", letters("sesGATE3").length === 1 && stOf("sesGATE3")?.gate === true, JSON.stringify([letters("sesGATE3").length, stOf("sesGATE3")]))
 msg("sesGATE3", "user", { text: "ок, смотрю, продолжай" }, Date.now() + 100)
-await wait(1500)
+await until(() => !gateOf("sesGATE3") && !stOf("sesGATE3")?.gate)
 cell("GS-4g the owner's word clears the mark and the stop", !gateOf("sesGATE3") && !stOf("sesGATE3")?.gate, JSON.stringify([gateOf("sesGATE3"), stOf("sesGATE3")]))
 cell("GS-4h still one letter", letters("sesGATE3").length === 1, String(letters("sesGATE3").length))
 
 // the turn ends with a question mark (the text question): it is a question - no letter
 await logLine("sesGATE4")
 await endTurn("sesGATE4", "Итог по серии.\n\nПринять серию?", Date.now() + 200)
-await wait(1800)
+await until(() => stOf("sesGATE4")?.state === "owner" && !gateOf("sesGATE4"))
+await wait(500) // and no letter
 cell("GS-4i a question mark at the end of the turn counts as a question: no letter, ordinary owner state", letters("sesGATE4").length === 0 && stOf("sesGATE4")?.state === "owner" && !stOf("sesGATE4")?.gate, JSON.stringify([letters("sesGATE4").length, stOf("sesGATE4")]))
 cell("GS-4j and the stop is cleared", !gateOf("sesGATE4"), JSON.stringify(gateOf("sesGATE4")))
 

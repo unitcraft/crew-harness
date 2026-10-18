@@ -4,8 +4,11 @@
 //   AC-18: the lock is older than MERGE_STALE_MS, 7 processes call merge — one winner (5 rounds); a second winner is a finding
 //          outside this task (the lock itself is task 006), the cell then fails and the finding goes to result.md;
 //   AC-19: the record is green and the lock was taken by one process; another process (a new start of the modules) continues:
-//          accept passes, a merge on a shifted tip is refused.
-import { spawn } from "node:child_process"
+//          accept passes, a merge on a shifted tip is refused;
+//   AC-19b: the release of the lock of a landed candidate (releaseLandedLock) is two writes — the lock file and the landing mark of
+//          the record; the seam `betweenLandedSteps` stops the service exactly between them, and a second process makes accept in
+//          that window (a real process, run synchronously inside the seam) or the service dies there (the seam throws).
+import { execFileSync, spawn } from "node:child_process"
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { harness, reporter } from "./landing-harness.mjs"
@@ -114,6 +117,86 @@ clearLock()
   H.moveOrigin()
   const [d] = await runChildren([["sesR2", { action: "merge", n: u.n }]])
   cell("AC-19 merge: after the restart a repeat of merge on a shifted tip is refused, the lock is free, the record is stale", granted(c) && /сдвинулась/.test(d.text) && !H.holder() && T(u.n).precheck.state === "stale", `${c.text} | ${d.text}`)
+}
+
+// ---- AC-19b: the window between the two steps of the release of the lock of a landed candidate (task 088). The seam stops the service
+// pass between the steps; inside it another process (a real child process, run synchronously) makes accept. A deterministic probe: it
+// does not wait for a lucky moment, it stands in the window. The service of this process (flow pass, 200 ms) is the one that stops there.
+{
+  const syncAccept = (sid, n) => {
+    const sync = path.join(H.tmp, `sync-window-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`)
+    mkdirSync(sync, { recursive: true })
+    writeFileSync(path.join(sync, "go"), "1")
+    let out = ""
+    try {
+      out = execFileSync(process.execPath, [CHILD, H.tmp, sync, "0", sid, JSON.stringify(SIDS), JSON.stringify({ action: "accept", n })], { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "pipe"], timeout: 120_000 })
+    } catch (e) {
+      out = `${e.stdout ?? ""}`
+    }
+    rmSync(sync, { recursive: true, force: true })
+    const m = /^RESULT (.*)$/m.exec(out)
+    return m ? JSON.parse(m[1]) : `NO RESULT: ${out.slice(-300)}`
+  }
+  /** a task on review with a green record, the lock held by its reviewer and the checked candidate not yet landed */
+  const locked = async (sid) => {
+    const t = H.reviewing({ reviewer: sid })
+    await call("crew_task", sid, { action: "precheck", n: t.n })
+    git(proj, "fetch", "-q", "origin")
+    H.candidate(`integrate/t${t.n}`, { merge: t.branch })
+    await call("crew_task", sid, { action: "precheck", n: t.n, candidate: `integrate/t${t.n}`, result: "CI зелёный" })
+    await call("crew_task", sid, { action: "merge", n: t.n })
+    return t
+  }
+  const seen = {}
+  const stopAt = (fn) => {
+    precheck.seams.betweenLandedSteps = () => {
+      delete precheck.seams.betweenLandedSteps // once: the next pass of the service goes through
+      seen.holder = H.holder()
+      seen.landed = !!T(seen.n).precheck.landed
+      fn()
+      seen.done = true
+    }
+  }
+
+  // a second process makes accept inside the window
+  {
+    const t = await locked("sesR3")
+    seen.n = t.n
+    seen.done = false
+    stopAt(() => (seen.accept = syncAccept("sesR3", t.n)))
+    H.land(`integrate/t${t.n}`)
+    await H.until(() => seen.done && !H.holder(), 120_000)
+    cell(
+      "AC-19b window: accept of another process between the two steps of the lock release passes (the lock or the landing mark is there)",
+      seen.done && typeof seen.accept === "string" && /принята/.test(seen.accept) && T(t.n).status === "accepted" && !H.holder() && (!!seen.holder || seen.landed),
+      `${seen.accept} | lock ${JSON.stringify(seen.holder)} landed ${seen.landed}`,
+    )
+  }
+  // the service dies inside the window: the state is recoverable — the next pass finishes the release, once, and accept passes
+  {
+    const t = await locked("sesR4")
+    seen.n = t.n
+    seen.done = false
+    seen.accept = undefined
+    precheck.seams.betweenLandedSteps = () => {
+      delete precheck.seams.betweenLandedSteps
+      seen.holder = H.holder()
+      seen.landed = !!T(t.n).precheck.landed
+      seen.done = true
+      throw new Error("the service died between the steps (probe)")
+    }
+    H.land(`integrate/t${t.n}`)
+    await H.until(() => seen.done, 60_000)
+    await H.until(() => !H.holder(), 30_000)
+    const hist = H.history(t.n).filter((h) => /замок отпущен: слияние/.test(h))
+    const a = await call("crew_task", "sesR4", { action: "accept", n: t.n })
+    cell(
+      "AC-19b crash: a death between the steps leaves the lock or the landing mark; the next pass finishes the release (one note), accept passes",
+      seen.done && (!!seen.holder || seen.landed) && !H.holder() && !!T(t.n).precheck.landed === true && hist.length === 1 && T(t.n).status === "accepted" && !/Сначала замок/.test(a),
+      `lock ${JSON.stringify(seen.holder)} landed ${seen.landed} | notes ${hist.length} | ${a}`,
+    )
+  }
+  delete precheck.seams.betweenLandedSteps
 }
 
 // ---- Г-7: an empty record of the task is a refusal, the lock is not issued

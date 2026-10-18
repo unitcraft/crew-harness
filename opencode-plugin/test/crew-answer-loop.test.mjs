@@ -79,7 +79,8 @@ const E = mkTab("E") // two forms after answers only; also the control of the re
 mkdirSync(core.WINDOWS, { recursive: true })
 const WPID = 616161
 const open = new Set([AUTH, ...names])
-const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now(), tabs: [...open].map((sessionID) => ({ sessionID, active: sessionID === AUTH, busy: !!busyOf[sessionID] })) }))
+// dated 30 s ahead: a window of 3 s freshness would look closed when this process is slow on a loaded machine (task 088)
+const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now() + 30_000, tabs: [...open].map((sessionID) => ({ sessionID, active: sessionID === AUTH, busy: !!busyOf[sessionID] })) }))
 beat()
 const heart = setInterval(beat, 300)
 
@@ -117,7 +118,9 @@ const safe = async (name, fn) => {
   }
 }
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
-const until = async (f, ms = 8000) => {
+// Task 088: the limit of a condition is 60 s on every call (was 4-8 s): the end of an awaited event comes later on a loaded machine;
+// the pauses 'settle' (700 ms) and wait(600..1500) stay: they stand for 'nothing happens' (no loop, no reminder, no repeat)
+const until = async (f, ms = 60_000) => {
   const end = Date.now() + ms
   while (Date.now() < end) {
     if (await f()) return true
@@ -159,9 +162,9 @@ async function ask(tab, [text, options], { work = false } = {}) {
 async function answer(tab, id, { delivery = true } = {}) {
   const name = `ans-${id}`
   put(name, { form: id, session: tab, option: "1", quote: "по рекомендации (владелец, чат оркестратора, 2026-10-17)" })
-  const ok = await until(() => result(name)?.status === "applied", 8000)
+  const ok = await until(() => result(name)?.status === "applied", 60_000)
   if (!ok) throw new Error(`answer ${name} not applied: ${JSON.stringify(result(name))}`)
-  if (delivery && !(await until(() => existsSync(path.join(core.READ, core.safeKey(tab), `owner-answer-${name}.json`)), 8000))) throw new Error(`the letter of ${name} was not delivered`)
+  if (delivery && !(await until(() => existsSync(path.join(core.READ, core.safeKey(tab), `owner-answer-${name}.json`)), 60_000))) throw new Error(`the letter of ${name} was not delivered`)
   await wait(40)
 }
 const loopOf = (s) => stateOf(s).loop
@@ -221,7 +224,7 @@ await safe("A", async () => {
   // control: before the loop the end of a turn gets the reminder (the nudge works in this setup)
   await withoutForm(A, asksA[1], async () => {
     await endTurn(A)
-    cell("A: before the loop a turn end gets the reminder 'Не завершено'", await until(() => got(A, "Не завершено").length >= 1, 4000), JSON.stringify(delivered.filter((d) => d.sessionID === A).map((d) => d.text.slice(0, 80))))
+    cell("A: before the loop a turn end gets the reminder 'Не завершено'", await until(() => got(A, "Не завершено").length >= 1, 60_000), JSON.stringify(delivered.filter((d) => d.sessionID === A).map((d) => d.text.slice(0, 80))))
   })
   await answer(A, asksA[1])
   asksA.push(await ask(A, LIVE[2]))
@@ -230,7 +233,7 @@ await safe("A", async () => {
   await answer(A, asksA[2])
   asksA.push(await ask(A, LIVE[3]))
   // the third ask after delivered answers, with a drifted label: the loop is open
-  const opened = await until(() => !!loopOf(A), 4000)
+  const opened = await until(() => !!loopOf(A), 60_000)
   cell("A: the third ask after answers opens the loop", opened, JSON.stringify(stateOf(A)))
   // the repeats of a lost question that went before the loop (the times of this test are short) are not counted below
   const repeats0 = got(A, "не получил ответа").length
@@ -240,7 +243,7 @@ await safe("A", async () => {
   cell("A: /crew counts the loop: `loop: 1`", /loop: 1/.test(status.formatStatuses([st], Date.now())), status.formatStatuses([st], Date.now()))
   cell("A: /ask names it once", (fw.askText().match(/зациклилась на вопросе/g) ?? []).length === 1, fw.askText())
   // the author of the task: ONE letter
-  await until(() => got(AUTH, "зациклился на вопросе").length >= 1, 4000)
+  await until(() => got(AUTH, "зациклился на вопросе").length >= 1, 60_000)
   await wait(600)
   const lt = got(AUTH, "зациклился на вопросе")
   cell("A: the author gets ONE letter: the tab, the question, the answers, reassign with the answer in the goal", lt.length === 1 && /ответил 3 раза/.test(lt[0].text) && /crew_task \{action: "reassign"/.test(lt[0].text) && /ses_A/.test(lt[0].text) && /Phase‑1 GO/.test(lt[0].text), JSON.stringify(lt.map((x) => x.text.slice(0, 300))))
@@ -260,14 +263,14 @@ await safe("A", async () => {
   await answer(A, open4)
   cell("A: the answer of the owner is still delivered while the loop is open", existsSync(path.join(core.READ, core.safeKey(A), `owner-answer-ans-${open4}.json`)), "not in read/")
   asksA.push(await ask(A, LIVE[4]))
-  await until(() => loopOf(A)?.n === 4, 4000)
+  await until(() => loopOf(A)?.n === 4, 60_000)
   cell("A: the fifth ask: the same loop, the number of answers grows to 4, still one letter", loopOf(A)?.n === 4 && got(AUTH, "зациклился на вопросе").length === 1, JSON.stringify({ loop: loopOf(A), letters: got(AUTH, "зациклился на вопросе").length }))
 })
 
 // ---------- the clearing: a working turn, the owner's word, a reassigned task, a closed tab ----------
 async function loopOn(tab) {
   await rounds(tab, [LIVE[0], LIVE[1], LIVE[2], LIVE[3]])
-  return until(() => !!loopOf(tab), 4000)
+  return until(() => !!loopOf(tab), 60_000)
 }
 await safe("clear", async () => {
   const [l2, l3, l4, l5] = await Promise.all([loopOn(A2), loopOn(A3), loopOn(A4), loopOn(A5)])
@@ -275,7 +278,7 @@ await safe("clear", async () => {
   await wait(200)
   // 1. a working turn of the tab (a tool call other than question)
   msg(A2, "assistant", { content: [{ type: "tool", name: "bash" }, { type: "text", text: "приступаю к сборке" }] })
-  cell("clear: a working turn of the tab clears the loop", l2 && (await until(() => !loopOf(A2), 4000)), JSON.stringify(stateOf(A2).loop))
+  cell("clear: a working turn of the tab clears the loop", l2 && (await until(() => !loopOf(A2), 60_000)), JSON.stringify(stateOf(A2).loop))
   cell("clear: ... and the row of the owner goes back to the form of the tab", l2 && stateOf(A2).state === "owner" && !/зациклилась/.test(stateOf(A2).detail) && status.markOf(stateOf(A2)) === "?", JSON.stringify(stateOf(A2)))
   // a call of `question` alone is not work
   msg(A3, "assistant", { content: [{ type: "tool", name: "question" }] })
@@ -283,16 +286,16 @@ await safe("clear", async () => {
   cell("clear: a turn with only `question` keeps the loop", l3 && !!loopOf(A3), JSON.stringify(stateOf(A3).loop))
   // 2. the owner writes in the tab
   msg(A3, "user", { text: "я тут, продолжай по ответу выше" })
-  cell("clear: the owner's word in the tab clears the loop", l3 && (await until(() => !loopOf(A3), 4000)), JSON.stringify(stateOf(A3).loop))
+  cell("clear: the owner's word in the tab clears the loop", l3 && (await until(() => !loopOf(A3), 60_000)), JSON.stringify(stateOf(A3).loop))
   // 3. the task goes to another session
   const t4 = tasks.loadTask("proj", taskOf[A4].n)
   t4.executor = "ses_other_executor"
   tasks.saveTask(t4)
-  cell("clear: a reassigned task clears the loop", l4 && (await until(() => !loopOf(A4), 4000)), JSON.stringify(stateOf(A4).loop))
+  cell("clear: a reassigned task clears the loop", l4 && (await until(() => !loopOf(A4), 60_000)), JSON.stringify(stateOf(A4).loop))
   // 4. the tab is closed
   open.delete(A5)
   beat()
-  cell("clear: a closed tab clears the loop", l5 && (await until(() => !loopOf(A5), 4000)), JSON.stringify(stateOf(A5).loop))
+  cell("clear: a closed tab clears the loop", l5 && (await until(() => !loopOf(A5), 60_000)), JSON.stringify(stateOf(A5).loop))
   cell("clear: no loop of A, the others stay as they were", !!loopOf(A), JSON.stringify(stateOf(A).loop))
 })
 
@@ -340,11 +343,11 @@ await safe("E", async () => {
   // the control of the reminders: no loop, the same turn end gets the reminder
   await withoutForm(E, forms[E], async () => {
     await endTurn(E)
-    cell("E: control - without a loop the end of a turn gets the reminder", await until(() => got(E, "Не завершено").length >= 1, 4000), "no reminder")
+    cell("E: control - without a loop the end of a turn gets the reminder", await until(() => got(E, "Не завершено").length >= 1, 60_000), "no reminder")
   })
   // the control of the repeat: a cancelled question of a tab with no loop is returned to it
   fw.updateForm(E, forms[E], (f) => void (f.cancelled = Date.now() - 1000))
-  cell("E: control - a cancelled question of a tab with no loop is repeated", await until(() => got(E, "не получил ответа").length >= 1, 5000), "no repeat")
+  cell("E: control - a cancelled question of a tab with no loop is repeated", await until(() => got(E, "не получил ответа").length >= 1, 60_000), "no repeat")
 })
 
 clearInterval(heart)

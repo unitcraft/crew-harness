@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.join(here, "..")
-// the files that were flaky under load (task 085); `npm run test:stable` runs them
+// the files that were flaky under load (tasks 085, 088); `npm run test:stable` runs them
 export const STABLE_FILES = [
   "crew-landing-golden",
   "crew-progress",
@@ -32,12 +32,26 @@ export const STABLE_FILES = [
   "crew-plan-task",
   "crew-landing-slot",
   "crew-mcp",
+  // task 088: the lock release race and the rest of the files that were red under load
+  "crew-landing-race",
+  "crew-landing-release",
+  "crew-nudge-matrix",
+  "crew-answer-flow",
+  "crew-landing-tip",
+  "crew-landing-gate",
+  "crew-review",
+  "crew-idle-tab",
+  "crew-esc-question",
+  "crew-owner-wait",
+  "crew-submit",
+  "crew-gate-stop",
+  "crew-answer-loop",
 ]
 
 const args = process.argv.slice(2)
 let runs = 10
 let jobs = 8
-let timeoutS = 600
+let timeoutS = 1800 // crew-landing-gate alone takes about 4 minutes, several times that on a loaded machine (task 088)
 let all = false
 let cores = 0
 const names = []

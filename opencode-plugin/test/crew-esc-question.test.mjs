@@ -35,6 +35,11 @@ const cell = (name, ok, detail) => {
   if (!ok) fail++
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+// Task 088: a pause before a check that something HAPPENED (the window opened, the guard closed it) is a condition awaited up to 60 s;
+// the pauses that stand for "nothing happens" (an untouched window is not closed, a new question is left alone) stay as they were.
+const until = async (cond, ms = 60_000) => {
+  for (const end = Date.now() + ms; !cond() && Date.now() < end; ) await sleep(20)
+}
 
 const session = "ses_esc_demo"
 mkdirSync(path.dirname(core.cardFile(session)), { recursive: true })
@@ -123,7 +128,7 @@ const open = (w) => w.stack.length > 0
   const stop = Tui.default.setup(w.api)
   w.ask()
   void run(w, "crew-help")
-  await sleep(250)
+  await until(() => open(w))
   const mode = w.key("escape")
   cell("question first, window later: Esc closes the window and the question stays open", mode === "modal" && !open(w) && w.question.cancelled === false && w.question.answered === false, JSON.stringify({ mode, open: open(w), q: w.question.cancelled }))
   stop()
@@ -134,10 +139,10 @@ const open = (w) => w.stack.length > 0
   const w = mkWindow()
   const stop = Tui.default.setup(w.api)
   void run(w, "crew-help")
-  await sleep(60)
+  await until(() => open(w) && w.modes.at(-1)?.name === "modal")
   cell("the window is open and the keyboard is the window's", open(w) && w.modes.at(-1)?.name === "modal", JSON.stringify(w.modes))
   w.ask()
-  await sleep(400)
+  await until(() => !open(w) && w.toasts.length >= 1)
   cell("a question arrives under the window: the window is closed by the plugin, at once", !open(w), JSON.stringify({ stack: w.stack.length, modes: w.modes.map((m) => m.name) }))
   cell("the question is not cancelled and not answered by that; it holds the keyboard and is on the screen", w.question.cancelled === false && w.question.answered === false && w.modes.at(-1)?.name === "form", JSON.stringify({ q: w.question, modes: w.modes.map((m) => m.name) }))
   cell("the owner is told why the window went (a notice in the window)", w.toasts.length === 1 && /вопрос/i.test(`${w.toasts[0].title ?? ""} ${w.toasts[0].message ?? ""}`), JSON.stringify(w.toasts))
@@ -151,11 +156,11 @@ const open = (w) => w.stack.length > 0
   const stop = Tui.default.setup(w.api)
   let ended = false
   const done = Promise.resolve(run(w, "crew-sets")).then(() => (ended = true))
-  await sleep(60)
+  await until(() => open(w) && !!w.asked)
   cell("the menu /crew-sets is open (dialog.select)", open(w) && !!w.asked, JSON.stringify(w.asked))
   w.ask()
-  await sleep(400)
-  await Promise.race([done, sleep(500)])
+  await until(() => !open(w))
+  await Promise.race([done, sleep(60_000)])
   cell("a question under the menu: the menu is closed, its command ends, the question is whole", !open(w) && ended && w.question.cancelled === false && w.question.answered === false, JSON.stringify({ open: open(w), ended, q: w.question }))
   stop()
 }
@@ -180,13 +185,13 @@ const open = (w) => w.stack.length > 0
   const w = mkWindow()
   const stop = Tui.default.setup(w.api)
   void run(w, "crew-help")
-  await sleep(60)
+  await until(() => open(w))
   const first = w.stack[0]
   w.dialog.show(() => null, () => {}) // a second window instead of the first (as showText(title, "Загрузка…") -> showText(title, text))
   await sleep(60)
   cell("a replaced window: still one dialog and still guarded", w.stack.length === 1 && w.stack[0] !== first, JSON.stringify(w.stack.length))
   w.ask()
-  await sleep(400)
+  await until(() => !open(w))
   cell("a question under the replaced window: it closes too", !open(w) && w.question.cancelled === false, JSON.stringify({ open: open(w), q: w.question }))
   stop()
 }
@@ -197,7 +202,8 @@ const open = (w) => w.stack.length > 0
   delete w.api.keymap.mode
   const stop = Tui.default.setup(w.api)
   void run(w, "crew-help")
-  await sleep(300)
+  await until(() => open(w))
+  await sleep(300) // and it stays
   cell("no keyboard modes in the API: the window opens and stays, nothing throws", open(w), "")
   // the model of the window reproduces the source when nothing guards the window: the question arrives, the owner presses Esc to
   // close the window - the key goes to the question, the question is cancelled, the window is still there

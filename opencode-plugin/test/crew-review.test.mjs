@@ -77,6 +77,12 @@ const cell = (name, ok, detail) => {
   if (!ok) fail++
 }
 const wait = (ms = 500) => new Promise((r) => setTimeout(r, ms))
+// Task 088: a pause before a check that something HAPPENED is a condition awaited up to 60 s (until); a short pause (settle) stays after
+// it where the same check also counts "nothing else happened"; pauses that give the plugin time to do nothing wrong stay as they were.
+const until = async (cond, ms = 60_000) => {
+  for (const end = Date.now() + ms; !cond() && Date.now() < end; ) await wait(100)
+}
+const settle = () => wait(300)
 const got = (s, t) => delivered.filter((d) => d.sessionID === s && d.text.includes(t))
 const call = async (name, sid, input = {}) => (await tools[name].execute(input, { sessionID: sid })).content
 const turnEnds = async (sid) => {
@@ -89,7 +95,8 @@ const task = (n) => tasks.loadTask("proj", n)
 const WPID = 818181
 const tabs = ["sesINTEG1", "sesREVIEW1"].map((sessionID, i) => ({ sessionID, active: i === 0, busy: false }))
 mkdirSync(core.WINDOWS, { recursive: true })
-const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now(), tabs }))
+// dated 30 s ahead: git runs synchronously here and stops this process's timer, a window of 3 s freshness would look closed (task 088)
+const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now() + 30_000, tabs }))
 beat()
 const heart = setInterval(beat, 300)
 for (const t of tabs) await turnEnds(t.sessionID)
@@ -100,7 +107,7 @@ const sp1 = await call("crew_spawn", "sesINTEG1", { title: "фича", goal: "с
 const ex1 = task(1).executor
 cell("task 001 started with worktree and branch from the settings", /wt.proj-1-ficha/.test(task(1).worktree ?? "") && task(1).branch === "p1-ficha", JSON.stringify({ wt: task(1).worktree, b: task(1).branch, sp1 }))
 // plan 002.3: the plugin created the worktree and the branch, the executor's session runs there
-await wait(300)
+await until(() => task(1).worktree_ready === true && existsSync(task(1).worktree ?? ""))
 cell("the plugin created the task's worktree on its branch", existsSync(task(1).worktree) && git(task(1).worktree, "rev-parse", "--abbrev-ref", "HEAD") === "p1-ficha" && task(1).worktree_ready === true, JSON.stringify({ wt: task(1).worktree, ready: task(1).worktree_ready }))
 cell("the executor's session is located in the worktree", sessions.get(ex1)?.location?.directory === task(1).worktree, JSON.stringify(sessions.get(ex1)?.location))
 cell("the task letter says the worktree is ready", got(ex1, "WORKTREE ГОТОВ").length === 1 && got(ex1, "git worktree add").length === 0, JSON.stringify(got(ex1, "ЗАДАЧА").map((d) => d.text.slice(0, 300))))
@@ -108,10 +115,15 @@ cell("the task letter lists the project's acceptance steps for the executor", go
 writeFileSync(path.join(task(1).worktree, "f.txt"), "feature\n")
 git(task(1).worktree, "add", "-A")
 git(task(1).worktree, "commit", "-q", "-m", "feature")
-await wait()
+// the deliveries of the start have ended before the count below: the count stops growing
+for (let last = -1, i = 0; last !== delivered.length && i < 40; i++) {
+  last = delivered.length
+  await wait(150)
+}
 const integBefore = delivered.filter((d) => d.sessionID === "sesINTEG1").length
 await call("crew_send", ex1, { to: "sesINTEG1", text: "фича готова, тесты зелёные", reply_to: task(1).qid })
-await wait(800)
+await until(() => task(1).reviewer === "sesREVIEW1" && got("sesREVIEW1", "ПРИЁМКА задачи 001").length >= 1)
+await wait(300) // "the report does not wake the integrator" and "exactly one letter" count what did NOT happen
 const toInteg = delivered.filter((d) => d.sessionID === "sesINTEG1").slice(integBefore)
 cell("the report does not wake the integrator", toInteg.every((d) => d.synthetic), JSON.stringify(toInteg.map((d) => d.text.slice(0, 80))))
 cell("the free open worker tab becomes the reviewer", task(1).reviewer === "sesREVIEW1" && task(1).review_kind === "tab", JSON.stringify({ r: task(1).reviewer, k: task(1).review_kind }))
@@ -125,7 +137,7 @@ cell("accept before review is refused", /на приёмке/.test(early), early
 const notMine = await call("crew_task", "sesINTEG1", { action: "review", n: 1 })
 cell("only the reviewer reviews (not the integrator)", /только его/.test(notMine), notMine)
 await call("crew_task", "sesREVIEW1", { action: "review", n: 1 })
-await wait()
+await until(() => task(1).status === "reviewing" && got(ex1, "на приёмке у").some((d) => d.synthetic))
 cell("review starts; the executor learns it quietly", task(1).status === "reviewing" && got(ex1, "на приёмке у").some((d) => d.synthetic), JSON.stringify(got(ex1, "приёмке")))
 const noLock = await call("crew_task", "sesREVIEW1", { action: "accept", n: 1, checks: { tests: "ok", guards: "ok" } })
 cell("accept without the merge lock is refused", /Сначала замок вливания/.test(noLock), noLock)
@@ -168,7 +180,8 @@ cell("the leftovers reminder of 001 does not name the new task's branch or workt
 git(proj, "worktree", "remove", task(1).worktree)
 for (const b of ["p1-ficha", "p1-ficha-cand"]) git(proj, "branch", "-D", b)
 const cl = await call("crew_task", "sesREVIEW1", { action: "cleanup", n: 1 })
-await wait(800)
+await until(() => task(1).status === "done" && core.allCards().find((c) => c.session === ex1)?.spawned?.status === "closed" && got(ex1, "✓✓ Задача 001 «фича» принята").length >= 1 && got("sesINTEG1", "принята и влита").length >= 1 && updates.some((u) => u.sessionID === ex1 && u.title === "001 исп ✓✓ готово фича"))
+await settle()
 cell("cleanup: the task is cleaned up while the new task's branch and worktree stay", task(1).status === "done" && git(proj, "branch", "--list", "p99-novaya").includes("p99-novaya"), cl)
 git(proj, "worktree", "remove", newWt)
 git(proj, "branch", "-D", "p99-novaya", "zz-unrelated")
@@ -192,45 +205,50 @@ await wait(300)
 await call("crew_send", ex2, { to: "sesINTEG1", text: "готово 2", reply_to: task(2).qid })
 await wait(400)
 await call("crew_send", ex3, { to: "sesINTEG1", text: "готово 3", reply_to: task(3).qid })
-await wait(600)
+await wait(600) // nobody can review: the pause is for "nothing happens"
 cell("while nobody can review, both wait", !task(2).reviewer && !task(3).reviewer, JSON.stringify({ t2: task(2).reviewer, t3: task(3).reviewer }))
 tabs[1].busy = false
 beat()
-await wait(800)
+await until(() => task(3).reviewer === "sesREVIEW1")
+await settle() // the P3 task must stay without a reviewer
 cell("the freed tab goes to P1, not to the earlier P3", task(3).reviewer === "sesREVIEW1" && !task(2).reviewer, JSON.stringify({ t2: task(2).reviewer, t3: task(3).reviewer }))
 settings(1)
-await wait(800)
+await until(() => task(2).review_kind === "spawn" && !!task(2).reviewer && sessions.has(task(2).reviewer))
+await settle()
 const rv2 = task(2).reviewer
 cell("the other task gets a new review session", task(2).review_kind === "spawn" && sessions.has(rv2) && sessions.get(rv2).title === "002 прм обычная", JSON.stringify({ rv2, s: sessions.get(rv2) }))
 // plan 002.7: with the default reviewer ("worker") the review session keeps role worker, as before the acceptor role
 cell("the default reviewer: the review session's role is worker", core.loadConfig(proj).reviewer === "worker" && core.allCards().find((c) => c.session === rv2)?.role === "worker", JSON.stringify(core.allCards().find((c) => c.session === rv2)?.role))
 cell("no reviewer is the author or the executor", [1, 2, 3].every((n) => task(n).reviewer !== task(n).author && task(n).reviewer !== task(n).executor), "same")
-await wait()
+await until(() => got(rv2, "ПРИЁМКА задачи 002").length >= 1)
+await settle() // exactly one letter
 cell("the review session gets the review letter", got(rv2, "ПРИЁМКА задачи 002").length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === rv2).map((d) => d.text.slice(0, 60))))
 
 // 4. rework, resubmission, rework_max
 await call("crew_task", "sesREVIEW1", { action: "review", n: 3 })
 await call("crew_task", "sesREVIEW1", { action: "rework", n: 3, text: "нет теста на пустой ввод" })
-await wait()
+await until(() => task(3).status === "rework" && got(ex3, "нет теста на пустой ввод").some((d) => !d.synthetic))
 cell("rework: the executor is woken with the remarks", task(3).status === "rework" && got(ex3, "нет теста на пустой ввод").some((d) => !d.synthetic), JSON.stringify(got(ex3, "ДОРАБОТКА")))
 await turnEnds(ex3)
 await call("crew_send", ex3, { to: "sesINTEG1", text: "добавил тест", reply_to: task(3).qid })
-await wait()
-await wait(800)
+await until(() => task(3).status === "submitted" && got("sesREVIEW1", "Доработка задачи 003 «срочная» сдана").length >= 1)
+await settle() // exactly one letter
 cell("resubmission wakes the same reviewer", task(3).status === "submitted" && task(3).reviewer === "sesREVIEW1" && got("sesREVIEW1", "Доработка задачи 003 «срочная» сдана").length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "sesREVIEW1").map((d) => d.text.slice(0, 160))))
 // a return only to merge the fresh main (plan 002.6, defect 4): not a rework round, rework_max (1 here) is not hit
 await call("crew_task", "sesREVIEW1", { action: "review", n: 3 })
 const syncAns = await call("crew_task", "sesREVIEW1", { action: "rework", n: 3, sync: true })
-await wait()
+await until(() => task(3).status === "rework" && got(ex3, "СИНХРОНИЗАЦИЯ задачи 003").some((d) => !d.synthetic) && got(ex3, "влей свежую main").length >= 1)
+await settle()
 cell("rework {sync: true} wakes the executor to merge the fresh main", task(3).status === "rework" && got(ex3, "СИНХРОНИЗАЦИЯ задачи 003").some((d) => !d.synthetic) && got(ex3, "влей свежую main").length >= 1, JSON.stringify(got(ex3, "СИНХРОНИЗАЦИЯ").map((d) => d.text.slice(0, 200))))
 cell("a sync return is not a rework round: no rework_max call", task(3).rework === 1 && task(3).syncs === 1 && !got("sesINTEG1", "уходит на доработку 2-й раз").length && /в rework_max не идёт/.test(syncAns), JSON.stringify({ r: task(3).rework, s: task(3).syncs, syncAns }))
 await turnEnds(ex3)
 await call("crew_send", ex3, { to: "sesINTEG1", text: "влил свежий main", reply_to: task(3).qid })
-await wait(800)
+await until(() => task(3).status === "submitted" && got("sesREVIEW1", "Доработка задачи 003 «срочная» сдана").length >= 2)
+await settle() // exactly two letters
 cell("resubmission after a sync wakes the reviewer again", task(3).status === "submitted" && got("sesREVIEW1", "Доработка задачи 003 «срочная» сдана").length === 2, JSON.stringify(delivered.filter((d) => d.sessionID === "sesREVIEW1").map((d) => d.text.slice(0, 120))))
 await call("crew_task", "sesREVIEW1", { action: "review", n: 3 })
 await call("crew_task", "sesREVIEW1", { action: "rework", n: 3, text: "и ещё одно" })
-await wait()
+await until(() => got("sesINTEG1", "уходит на доработку 2-й раз").some((d) => !d.synthetic))
 cell("over rework_max the integrator gets a call", got("sesINTEG1", "уходит на доработку 2-й раз").some((d) => !d.synthetic), JSON.stringify(got("sesINTEG1", "доработку")))
 
 // 5. the merge lock is one per project
@@ -267,10 +285,12 @@ cell("the review sessions are at the limit: 004 waits for a reviewer", !task(4).
 
 // 8. rework does not hold the reviewer's place (the methodology: waiting for someone else's step blocks nothing)
 await call("crew_task", rv2, { action: "rework", n: 2, text: "добавь проверку" })
-await wait(800)
+await until(() => task(2).status === "rework" && task(4).review_kind === "spawn" && !!task(4).reviewer && task(4).reviewer !== rv2)
+await settle()
 cell("002 on rework frees the place: 004 gets a review session", task(2).status === "rework" && task(4).review_kind === "spawn" && !!task(4).reviewer && task(4).reviewer !== rv2, JSON.stringify({ s2: task(2).status, r4: task(4).reviewer, k4: task(4).review_kind }))
 await call("crew_send", ex2, { to: "sesINTEG1", text: "доработал 2", reply_to: task(2).qid })
-await wait(800)
+await until(() => task(2).reviewer === rv2 && task(2).status === "submitted" && got(rv2, "доработал 2").length >= 1)
+await settle()
 cell("the resubmission goes back to the same reviewer at once", task(2).reviewer === rv2 && task(2).status === "submitted" && got(rv2, "доработал 2").length >= 1, JSON.stringify({ r2: task(2).reviewer, s2: task(2).status, n: got(rv2, "доработал 2").length }))
 
 clearInterval(heart)

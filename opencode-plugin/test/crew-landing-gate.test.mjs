@@ -4,6 +4,7 @@
 // was checked; the tip is read UNDER the lock; every refusal after the first take of the lock leaves it free; a repeat of the holder
 // is told "already merged" when the task branch is in the target branch; the record and the lock are checked again after the read.
 // The code comes from CREW_PLUGIN_DIR when the proof of red (test/landing-red.mjs) runs a copy with one stubbed check.
+import { spawn } from "node:child_process"
 import net from "node:net"
 import { existsSync, readdirSync, statSync } from "node:fs"
 import path from "node:path"
@@ -23,6 +24,14 @@ const merge = (t, sid = REV) => call("crew_task", sid, { action: "merge", n: t.n
 const accept = (t, sid = REV, input = {}) => call("crew_task", sid, { action: "accept", n: t.n, ...input })
 const clearLock = () => review.releaseMergeLock("proj", review.mergeHolder("proj")?.session ?? "")
 const short = (h) => h.slice(0, 7)
+/** how long a trivial git process takes to start and end now: the measure of the load of the machine in this very process (task 088) */
+const spawnLag = () =>
+  new Promise((resolve) => {
+    const t = Date.now()
+    const p = spawn("git", ["--version"], { stdio: "ignore", windowsHide: true })
+    p.on("close", () => resolve(Date.now() - t))
+    p.on("error", () => resolve(Date.now() - t))
+  })
 /** a task on review with a green record on the current tip of the origin; the candidate has the task branch merged in */
 const green = async (more = {}) => {
   const t = H.reviewing(more)
@@ -170,10 +179,16 @@ if (section("AC-11")) {
   const port = silent.address().port
   const t = await green()
   git(proj, "remote", "set-url", "origin", `http://127.0.0.1:${port}/r.git`)
+  const lagBefore = await spawnLag()
   const t0 = Date.now()
   const r = await merge(t)
-  await H.wait(1500)
-  cell("AC-11 merge молчит: a silent server — refused with the text of the failure after the term, the lock is free, no git process with the port is left", /Замок не выдан/.test(r) && !H.holder() && H.gitProcs(String(port)).length === 0 && Date.now() - t0 < 30_000, r)
+  const spent = Date.now() - t0
+  // the processes are gone a moment after the kill: awaited as a condition (up to 30 s), not a fixed 1.5 s pause
+  await H.until(() => H.gitProcs(String(port)).length === 0, 30_000)
+  // the limit is the term of the read plus a margin that grows with the time a trivial git process takes now (30 times the larger of
+  // two measures, at most 30 s), not an absolute 30 s
+  const slackMs = Math.min(30_000, 30 * Math.max(lagBefore, await spawnLag()))
+  cell("AC-11 merge молчит: a silent server — refused with the text of the failure after the term, the lock is free, no git process with the port is left", /Замок не выдан/.test(r) && !H.holder() && H.gitProcs(String(port)).length === 0 && spent < precheck.TIP_TIMEOUT_MS + 10_000 + slackMs, `${r} | ${spent} ms, slack ${slackMs} ms`)
   console.log(`процессов git с этим адресом: ${H.gitProcs(String(port)).length} (AC-11 merge молчит, ${Math.round((Date.now() - t0) / 100) / 10} s)`)
   git(proj, "remote", "set-url", "origin", url0)
   silent.close()

@@ -851,8 +851,11 @@ The integrator stays free for the owner and does not re-check accepted work:
   call `unlock {n}`; `cleanup` does not release the lock (there is none by then). The answers say it at the moment of the action: `accept`, `rework` and `cancel` report that they released the lock (only when it was held), and `cleanup` warns when the session still holds it. While it is held, only the merge and the
   push happen under it. The service pass releases the lock by itself when the held task's checked candidate (the green
   record) is already an ancestor of the target tip on `origin` (`git ls-remote` with the 20 s term and `merge-base`
-  on local objects, no fetch, nothing written but the history note "замок отпущен: слияние на вершине" and a log line);
-  it does nothing when the tip cannot be read, the record is not green, or the lock is held for another task; `accept`
+  on local objects, no fetch, nothing written but the history note "замок отпущен: слияние на вершине" and a log line).
+  The landing mark of the record is written first and the lock is removed second (task 088): between the two steps a second process
+  still sees a held lock or a landed record, never "no lock and no mark", and a pass that died between them leaves the lock with a
+  ready mark, which the next pass just removes (the note is written once).
+  It does nothing when the tip cannot be read, the record is not green, or the lock is held for another task; `accept`
   The lock knows its task: `accept`, `rework`, `cancel`, `unlock` release it only for the task they act on. With
   `merge_lock_per_task: on` (default `off`, the previous behaviour) a `merge` of another task by the holder is refused until `accept`, `rework`
   or `unlock` of the first one (with `merge_precheck: required` the gate always does this). A reviewer refused with "lock busy" is

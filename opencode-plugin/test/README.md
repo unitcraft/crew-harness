@@ -4,7 +4,7 @@
 npm test                              # all self-tests, node >= 24
 node test/crew-remote.test.mjs       # one test
 npm run test:parallel                 # all self-tests, 8 files at a time (test/stable.mjs --all --runs 1)
-npm run test:stable                   # the files that were flaky under load, 10 runs each, 8 at a time
+npm run test:stable                   # the files that were flaky under load (tasks 085, 088: 31 files), 10 runs each, 8 at a time
 node test/stable.mjs --runs 5 --cores 2 crew-push   # a chosen file under load: 8 runs on 2 cores (Windows)
 ```
 
@@ -103,7 +103,8 @@ stops at the first failing file.
 | | `crew-landing-release` | the service releases the merge lock once the checked candidate is in the origin tip (not on a failed or local read, a not green record, another task or session); the line of the `merge` reply; accept after the release needs no lock |
 | | `crew-landing-keep` | `cleaned {n, keep:[paths]}` keeps a worktree as evidence: the tree by the name template and `t.worktree` are skipped by the cleanup check, the record `kept` and the history line, the answer line; bad paths (missing, a branch, the repository root, outside the worktree folder, more than 8, not an array) are refused with no record; the branch of the task is still required; the repeated `cleaned` counts `kept`; a vanished tree does not hinder |
 | | `crew-landing-tip` | heavy: reading the tip of the target branch, the term and the process tree of `git ls-remote` on silent, closed and unreachable addresses |
-| | `crew-landing-race` | heavy: child processes — 8 reviewers at one lock, a stale lock taken by 7, a restart in the middle of a landing |
+| | `crew-landing-race` | heavy: child processes — 8 reviewers at one lock, a stale lock taken by 7, a restart in the middle of a landing; the lock release of a landed candidate stopped between its two steps (seam `betweenLandedSteps`): accept of another process passes in the window, and a service that died there is finished by the next pass (task 088) |
+| | `crew-acceptance-text-doctor` | the doctor warns when, with `merge_precheck: required`, a project's acceptance step text describes the acceptance order itself (only a warning); in the `npm test` list since task 088 |
 | Question answering (task 007) | `crew-answer-golden` | the texts of the base (notices, the forwarded question, `/crew`, the side panel, `crew_config`, `crew_help`, letters) are the same without the new keys and with `answer_mode` owner; the old pass on a pack of blocks and on five texts; the status files; shared snapshot `answer-golden.json` and the base snapshot `answer-golden-base.json` |
 | | `crew-answer-config` | the keys `answer_mode` and `answer_max`: refusals of `crew_config set`, the questionnaire, reading back, the doctor, values of a wrong form |
 | | `crew-answer-parse` | the parse of the answer of a session: blocks, fields, the block-question, the reasons of the rest |

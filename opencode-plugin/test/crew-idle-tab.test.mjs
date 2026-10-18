@@ -42,6 +42,11 @@ const cell = (name, ok, detail = "") => {
   if (!ok) fail++
 }
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+// Task 088: a pause before a check that something HAPPENED (a letter, a mark, a mark gone) is a condition awaited up to 60 s; the pauses
+// that stand for "nothing more happens" (no second letter in the same episode, no new letter while the session goes) stay as they were.
+const until = async (cond, ms = 60_000) => {
+  for (const end = Date.now() + ms; !cond() && Date.now() < end; ) await wait(100)
+}
 const tryImport = (p) => import(p).catch((e) => (console.log(`import ${p}: ${String(e).split("\n")[0]}`), null))
 
 const core = await import("../core.ts")
@@ -239,7 +244,9 @@ const ctx = {
 }
 const WPID = 636363
 mkdirSync(core.WINDOWS, { recursive: true })
-const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now(), tabs: TABS.map((sessionID) => ({ sessionID, active: true, busy: BUSY.has(sessionID) })) }))
+// dated 30 s ahead: a window counts as live for 3 s after its beat, and under load this process misses a beat; an open tab then looks
+// closed and its letter is held (task 088). This test does not check the freshness of a window.
+const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now() + 30_000, tabs: TABS.map((sessionID) => ({ sessionID, active: true, busy: BUSY.has(sessionID) })) }))
 beat()
 const heart = setInterval(beat, 300)
 
@@ -318,7 +325,13 @@ const endTurn = (s, content, owner) => {
   core.saveCard({ ...core.readJson(core.cardFile(s)), busy: false })
 }
 
-await wait(2500)
+await until(
+  () =>
+    letters("sesI1").length >= 1 && !!stOf("sesI1")?.idleTab && letters("sesI6").length >= 1 && !!stOf("sesI6")?.idleTab &&
+    prompts.some((p) => p.sessionID === "sesI8" && /без вопроса владельцу/.test(p.text)) && stOf("sesI8")?.gate === true &&
+    stOf("sesI3")?.state === "watch" && stOf("sesI4")?.state === "owner" && stOf("sesI5")?.state === "working" && stOf("sesI7")?.state === "reply",
+)
+await wait(500) // the rows "no letter" are read from the same passes
 const l1 = letters("sesI1")
 cell("IT-7a the source: a task between sessions, no question, past the threshold - ONE letter naming the task", l1.length === 1 && /задачи 061 «Спека» нет идущей сессии/.test(l1[0].text) && /инструментом question/.test(l1[0].text), JSON.stringify(prompts.map((p) => [p.sessionID, p.text.slice(0, 90)])))
 const s1 = stOf("sesI1")
@@ -337,30 +350,32 @@ cell("IT-7k no second letter in the same episode", letters("sesI1").length === 1
 
 // an empty turn (the answer to the letter, no tools): the episode goes on, the mark comes back, no letter
 endTurn("sesI1", [{ type: "text", text: "Понял, жду." }])
-await wait(1500)
+await until(() => !!stOf("sesI1")?.idleTab)
+await wait(1500) // and still one letter
 cell("IT-7l an empty turn keeps the episode: the mark, still one letter", letters("sesI1").length === 1 && !!stOf("sesI1")?.idleTab, JSON.stringify([letters("sesI1").length, stOf("sesI1")]))
 
 // the owner's word in sesI6 ends its episode
 endTurn("sesI6", [{ type: "text", text: "Принято." }], "посмотри приёмку")
-await wait(800)
+await until(() => !stOf("sesI6")?.idleTab)
 cell("IT-7m the owner's word ends the episode: the mark is gone", !stOf("sesI6")?.idleTab, JSON.stringify(stOf("sesI6")))
 
 // a working turn of sesI1 ends the episode; a new stand past the threshold is a new episode with its own letter
 endTurn("sesI1", [{ type: "tool", name: "read", state: { status: "completed" } }, { type: "text", text: "Прочитал журнал." }])
-await wait(800)
+await until(() => !stOf("sesI1")?.idleTab)
 cell("IT-7n a working turn ends the episode: the mark is gone", !stOf("sesI1")?.idleTab && letters("sesI1").length === 1, JSON.stringify([letters("sesI1").length, stOf("sesI1")]))
-await wait(3500)
+await until(() => letters("sesI1").length >= 2 && !!stOf("sesI1")?.idleTab)
 cell("IT-7o a new stand past the threshold: a new episode, the second letter", letters("sesI1").length === 2 && !!stOf("sesI1")?.idleTab, JSON.stringify([letters("sesI1").length, stOf("sesI1")]))
 
 // the next session is launched: the task runs, the mark is gone, no letter
 putTask({ ...mkTask(P, 61, "sesI1", "running", { executor: "sesX2", title: "Спека" }), updated: Date.now() })
-await wait(1000)
+await until(() => !stOf("sesI1")?.idleTab && !it?.idleOf?.("sesI1"))
 cell("IT-7p a launched session ends the episode: the mark is gone", !stOf("sesI1")?.idleTab && !it?.idleOf?.("sesI1"), JSON.stringify(stOf("sesI1")))
 await wait(3500)
 cell("IT-7q and no new letter while the session goes", letters("sesI1").length === 2, String(letters("sesI1").length))
 
 // ---- IT-9 task 070: the same rule by the status of the task
 {
+  await until(() => letters("sesJ1").length >= 1 && letters("sesJ2").length >= 1 && letters("sesJ3").length >= 1 && !!stOf("sesJ1")?.idleTab && !!stOf("sesJ2")?.idleTab && !!stOf("sesJ3")?.idleTab)
   const j1 = letters("sesJ1")
   cell("IT-9a a running task without an executor: ONE letter «нет исполнителя», the mark", j1.length === 1 && /задачи 071 «задача 71» нет исполнителя/.test(j1[0].text) && !!stOf("sesJ1")?.idleTab && /071 без исполнителя/.test(stOf("sesJ1")?.detail ?? ""), JSON.stringify([j1.map((p) => p.text), stOf("sesJ1")]))
   const j2 = letters("sesJ2")
@@ -374,16 +389,17 @@ cell("IT-7q and no new letter while the session goes", letters("sesI1").length =
   cell("IT-9g no second letter in the same episode", letters("sesJ1").length === 1 && letters("sesJ2").length === 1 && letters("sesJ3").length === 1, JSON.stringify(["sesJ1", "sesJ2", "sesJ3"].map((s) => letters(s).length)))
   // the executor speaks (a turn ends now): its silence starts anew, the mark of its author is gone
   endTurn("sesY2", [{ type: "tool", name: "read", state: { status: "completed" } }, { type: "text", text: "Доработал." }])
-  await wait(1000)
+  await until(() => !stOf("sesJ2")?.idleTab)
   cell("IT-9h the executor speaks: the mark of its author is gone, no second letter", !stOf("sesJ2")?.idleTab && letters("sesJ2").length === 1, JSON.stringify([letters("sesJ2").length, stOf("sesJ2")]))
   // the task is cancelled: nothing stands
   putTask({ ...mkTask(P, 71, "sesJ1", "cancelled", { kind: "spawn" }), updated: Date.now() })
-  await wait(1000)
+  await until(() => !stOf("sesJ1")?.idleTab)
   cell("IT-9i a cancelled task stands no more: the mark is gone", !stOf("sesJ1")?.idleTab, JSON.stringify(stOf("sesJ1")))
 }
 
 // ---- IT-11 task 076: an accepted task nobody cleans up
 {
+  await until(() => letters("sesK1").length >= 1 && letters("sesK2").length >= 1 && !!stOf("sesK1")?.idleTab && !!stOf("sesK2")?.idleTab)
   const k1 = letters("sesK1")
   cell("IT-11a the reviewer is silent after the fifth reminder: ONE letter naming the accepted task, the mark, the text for the owner", k1.length === 1 && /задача 091 «задача 91» принята/.test(k1[0].text) && !!stOf("sesK1")?.idleTab && /091 принята, уборка ждёт приёмщика с \d\d:\d\d/.test(stOf("sesK1")?.detail ?? ""), JSON.stringify([k1.map((p) => p.text), stOf("sesK1")]))
   const k2 = letters("sesK2")
@@ -397,11 +413,11 @@ cell("IT-7q and no new letter while the session goes", letters("sesI1").length =
   cell("IT-11h no second letter in the same episode", letters("sesK1").length === 1 && letters("sesK2").length === 1, JSON.stringify([letters("sesK1").length, letters("sesK2").length]))
   // the reviewer of 092 works (a turn with a tool): its silence starts anew, the mark of the author is gone, no second letter
   endTurn("sesZ2", [{ type: "tool", name: "read", state: { status: "completed" } }, { type: "text", text: "Проверил." }])
-  await wait(1000)
+  await until(() => !stOf("sesK2")?.idleTab)
   cell("IT-11i the reviewer speaks: the mark of the author is gone, no second letter", !stOf("sesK2")?.idleTab && letters("sesK2").length === 1, JSON.stringify([letters("sesK2").length, stOf("sesK2")]))
   // the task is cleaned up: nothing stands
   putTask({ ...core.readJson(tasks.taskFile(P, 91)), status: "done", updated: Date.now() })
-  await wait(1000)
+  await until(() => !stOf("sesK1")?.idleTab && !it?.idleOf?.("sesK1"))
   cell("IT-11j a cleaned task stands no more: the mark is gone", !stOf("sesK1")?.idleTab && !it?.idleOf?.("sesK1"), JSON.stringify(stOf("sesK1")))
 }
 

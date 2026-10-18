@@ -113,7 +113,7 @@ export function originTip(dir: string, target: string, opts: { timeoutMs?: numbe
 }
 
 // ---- швы для тестов (РП-02): по умолчанию пусты, производственный путь их нигде не заполняет
-export const seams: { readTip?: typeof originTip; afterTip?: () => void | Promise<void>; afterMerged?: () => void } = {}
+export const seams: { readTip?: typeof originTip; afterTip?: () => void | Promise<void>; afterMerged?: () => void; betweenLandedSteps?: () => void } = {}
 const readTip = (dir: string, target: string) => (seams.readTip ?? originTip)(dir, target)
 
 const short = (h: string) => h.slice(0, 7)
@@ -322,9 +322,17 @@ export async function releaseLandedLock(project: string, target: string): Promis
   if (!holdsFor(project, lock.session, lock.n, lock.at)) return undefined // за время чтения замок сменился
   const cur = loadTask(project, lock.n)
   if (!cur || cur.status !== "reviewing" || !cur.precheck || cur.precheck.state !== "green" || cur.precheck.green_at !== rec.green_at) return undefined
+  // Два шага, порядок важен (задача 088): СНАЧАЛА отметка `landed` с записью в историю (одна запись файла задачи), и только потом замок.
+  // Между шагами другой процесс видит «отметка есть, замок держится»: accept держателя проходит по замку, accept по отметке — тоже.
+  // Обратный порядок («замок отпущен, отметки нет») давал окно, в котором accept отказывал «Сначала замок вливания», а смерть службы
+  // в нём оставляла такую задачу насовсем (вершина уже сдвинулась, повторный merge невозможен). Теперь смерть между шагами оставляет
+  // замок при готовой отметке: следующий проход службы видит отметку, не пишет её и событие второй раз и просто снимает замок.
+  if (!cur.precheck.landed) {
+    cur.precheck = { ...cur.precheck, landed: { tip: tip.tip, at: Date.now() } }
+    taskEvent(cur, "crew-harness", undefined, `замок отпущен: слияние на вершине ${short(tip.tip)} (проверенный кандидат ${short(rec.candidate)} уже в ${target}); дальше accept, уборка без замка`)
+  }
+  seams.betweenLandedSteps?.()
   releaseMergeLock(project, lock.session, lock.n)
-  cur.precheck = { ...cur.precheck, landed: { tip: tip.tip, at: Date.now() } }
-  taskEvent(cur, "crew-harness", undefined, `замок отпущен: слияние на вершине ${short(tip.tip)} (проверенный кандидат ${short(rec.candidate)} уже в ${target}); дальше accept, уборка без замка`)
   return `merge lock of ${project} ${taskNo({ project, n: lock.n })} released: landed on ${short(tip.tip)}`
 }
 

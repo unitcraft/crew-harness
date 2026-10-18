@@ -271,7 +271,7 @@ const hole = (id, name, wanted, detail) => {
   }
 }
 const wait = (ms = 400) => new Promise((r) => setTimeout(r, ms))
-const until = async (cond, ms = 8_000) => {
+const until = async (cond, ms = 60_000) => {
   for (const end = Date.now() + ms; !cond() && Date.now() < end; ) await wait(100)
 }
 const letters = (to) =>
@@ -288,7 +288,10 @@ const sent = (s, re) => delivered.filter((d) => d.sessionID === s && re.test(d.t
 const WPID = 626262
 mkdirSync(core.WINDOWS, { recursive: true })
 const tabNames = [...Object.values(AUTH).filter((s) => s !== AUTH.pc), "sesFT", "sesFAA", "sesFAW", "sesFQ1", "sesFQ2"]
-const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now(), tabs: tabNames.map((sessionID, i) => ({ sessionID, active: i === 0, busy: false })) }))
+// The beat is dated 30 s ahead: a window counts as live for WINDOW_STALE_MS (3 s) after its beat, and this process stops its own timer
+// while it runs git or the database synchronously (seconds on a loaded machine), so the fake window went stale between two beats and an
+// open tab looked closed. This test does not check the freshness of a window (task 088, as in crew-profiles-select).
+const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now() + 30_000, tabs: tabNames.map((sessionID, i) => ({ sessionID, active: i === 0, busy: false })) }))
 beat()
 const heart = setInterval(beat, 300)
 const seenNotices = []
@@ -309,11 +312,37 @@ async function turn(session, { tools: withTool = false } = {}) {
   msg(session, "idle", { outcome: "succeeded" })
   await events["session.idle"]({ properties: { sessionID: session } })
   await wait(450)
+  // the reminder may still be on its way on a loaded machine: wait until the deliveries stop coming (as in crew-push)
+  for (let last = -1, i = 0; last !== delivered.length && i < 40; i++) {
+    last = delivered.length
+    await wait(150)
+  }
 }
 const call = async (name, sid, input = {}) => (await tools[name].execute(input, { sessionID: sid })).content
 
 // ===== rows decided by the passes of the loop =====
 await until(() => tasks.loadTask("pw", T.m01.n)?.status === "running" && letters(AUTH.pz).some((l) => /ждёт приёмщика/.test(l.text)) && T.m09 && tasks.loadTask("ps", T.m09.n)?.reviewer && tasks.loadTask("pi", T.m11.n)?.reviewer && tasks.loadTask("pa", T.m13.n)?.reviewer && tasks.loadTask("pq", T.m14.n)?.reviewer && letters(AUTH.pf).some((l) => /не очищена/.test(l.text)) && letters(AUTH.ph).some((l) => /не очищена/.test(l.text)))
+// the rows below read what the passes have done; each positive one is awaited as a condition (the 60 s limit of until), the pause after
+// it stays for the rows that count "exactly one" and "nothing else" (task 088)
+await until(
+  () =>
+    creates.filter((r) => r.id === "ses_m01plan").length === 1 && !!oblig("ses_m01plan", T.m01.qid) && sent("ses_m01plan", /ЗАДАЧА/).length >= 1 &&
+    failCreates >= 2 && lettersRe(AUTH.pw, new RegExp(`${String(T.m02.n).padStart(3, "0")} .*не запущена`)).length >= 1 &&
+    !!oblig("sesEX03", T.m03.qid) && !!oblig("sesEX04", T.m04.qid) &&
+    sent("sesEX05", /исправь пустой ввод/).length >= 1 && !!oblig("sesEX05", T.m05.qid) && sent("sesEX06", /влей свежий main/).length >= 1 && !!oblig("sesEX06", T.m06.qid) &&
+    !!oblig("sesOWN7", T.m07.qid) &&
+    sent("sesFT", /ПРИЁМКА/).length >= 1 && tasks.loadTask("ps", T.m09.n)?.reviewer && sent(tasks.loadTask("ps", T.m09.n).reviewer, /ПРИЁМКА/).length >= 1 &&
+    reviewFails >= 2 && lettersRe(AUTH.pr, /сессию приёмки создать не удалось/).length >= 1 &&
+    sent(AUTH.pi, /ПРИЁМКА/).length >= 1 &&
+    tasks.loadTask("pa", T.m12.n)?.reviewer && tasks.loadTask("pa", T.m13.n)?.reviewer &&
+    lettersRe("sesRV15", /Доработка задачи/).length >= 1 &&
+    !!oblig("sesRV16", T.m16.review_qid) && sent("sesRV16", /ПРИЁМКА/).length >= 1 &&
+    lettersRe(AUTH.pw, /Замок слияния проекта pw/).length >= 1 &&
+    lettersRe("sesRV18", /не очищена/).length >= 1 && lettersRe("sesRV19", /не очищена/).length >= 1 &&
+    noticesFor(undefined).some((x) => /ждёт согласования/.test(x.title)) && lettersRe(AUTH.pn, /ждёт твоего согласования/).length >= 1 &&
+    core.readJson(core.cardFile("sesEX22"))?.spawned?.status === "closed" && core.readJson(core.cardFile("sesEX23"))?.spawned?.status === "closed",
+  60_000,
+)
 await wait(1500)
 
 // M01 starting
@@ -469,13 +498,13 @@ await until(() => noticesFor("sesEX31").some((n) => /застряла/.test(n.ti
   }
   const stuckRe = { test: () => /⚠ stuck/.test(taskBlock(T.t1.n)) }
   const side = () => status.sidebarLines(status.readStatuses(), Date.now(), "pw").rows.map((r) => status.sideText(r))
-  await until(() => stuckRe.test(view()), 4000)
+  await until(() => stuckRe.test(view()), 60_000)
   const row = taskBlock(T.t1.n)
   cell("T1d", "stuck: '⚠ stuck <age>' is shown in /crew on the tab of the task and 'застряла с ЧЧ:ММ' in the sidebar", /⚠ stuck/.test(row) && side().some((l) => /застряла с \d\d:\d\d/.test(l)), JSON.stringify({ row, side: side() }))
   await call("crew_role", AUTH.pw, { role: "integrator" })
   await call("crew_task", AUTH.pw, { action: "push", n: T.t1.n, text: "доделай" })
   const t1Line = () => /⚠ stuck/.test(taskBlock(T.t1.n))
-  await until(() => !t1Line(), 8000) // the status pass may take more than 4 s on a loaded machine (task 048 measure: 2.0-3.8 s)
+  await until(() => !t1Line(), 60_000) // the status pass may take more than 4 s on a loaded machine (task 048 measure: 2.0-3.8 s)
   cell("T1e", "crew_task push clears the mark: the line is gone from /crew", !t1Line(), view())
 }
 // T2: reviewer, empty turns
@@ -490,7 +519,7 @@ await until(() => lettersRe(AUTH.pt, /застряла/).length > 0)
   cell("T2d", "reviewing: the 'review stuck' letter tells to push the REVIEWER (crew_task push with to: reviewer)", c.length === 1 && new RegExp(`crew_task \\{action: "push", n: ${T.t2.n}, to: "reviewer"`).test(c[0].text), JSON.stringify(c.map((l) => l.text)))
   // a stuck tab that comes back to work by itself: a working turn clears the mark (owner, 2026-10-15: «по рекомендации»)
   await turn("sesRV32", { tools: true })
-  await until(() => !oblig("sesRV32", T.t2.review_qid)?.stuck, 3000)
+  await until(() => !oblig("sesRV32", T.t2.review_qid)?.stuck, 60_000)
   const back = oblig("sesRV32", T.t2.review_qid)
   cell("T2e", "reviewing: a working turn of a stuck reviewer clears the mark and its time, the counters start over", !!back && !back.stuck && !back.stuckAt && !back.empty && !back.nudges, JSON.stringify(back))
 }
@@ -542,10 +571,10 @@ hole("T9", "a turn ended while the service was down (card of a dead process, obl
 {
   await call("crew_role", AUTH.pt, { role: "integrator" })
   const out = await call("crew_task", AUTH.pt, { action: "push", n: T.t10.n, text: "поторопись с приёмкой" })
-  for (let i = 0; i < 20 && !sent("sesEX40", /Подталкивание по задаче/).length; i++) await wait(250)
+  await until(() => sent("sesEX40", /Подталкивание по задаче/).length, 60_000)
   cell("T10a", "crew_task push on a task under review: the executor gets the letter", sent("sesEX40", /Подталкивание по задаче/).length === 1, out)
   const outRev = await call("crew_task", AUTH.pt, { action: "push", n: T.t10.n, to: "reviewer", text: "поторопись с приёмкой" })
-  for (let i = 0; i < 20 && !sent("sesRV40", /Подталкивание по задаче/).length; i++) await wait(250)
+  await until(() => sent("sesRV40", /Подталкивание по задаче/).length, 60_000)
   cell("T10b", "crew_task push with to: reviewer on a task under review: the reviewer gets the letter (owner, 2026-10-15: the target is chosen by `to`, the default stays the executor)", sent("sesRV40", /Подталкивание по задаче/).length === 1, outRev)
 }
 

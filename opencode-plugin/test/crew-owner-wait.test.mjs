@@ -30,6 +30,11 @@ const cell = (name, ok, detail = "") => {
   if (!ok) fail++
 }
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+// Task 088: a pause before a check that something HAPPENED (a letter, a mark, a mark gone) is a condition awaited up to 60 s; the pauses
+// that stand for "nothing happens" (no second letter, no letter at all, the mark is kept) stay as they were.
+const until = async (cond, ms = 60_000) => {
+  for (const end = Date.now() + ms; !cond() && Date.now() < end; ) await wait(100)
+}
 
 const core = await import("../core.ts")
 const fw = await import("../form-wait.ts")
@@ -91,7 +96,8 @@ const ctx = {
 }
 const WPID = 646464
 mkdirSync(core.WINDOWS, { recursive: true })
-const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now(), tabs: SESS.map((sessionID) => ({ sessionID, active: true, busy: false })) }))
+// dated 30 s ahead: a window of 3 s freshness would look closed when this process is slow on a loaded machine (task 088)
+const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now() + 30_000, tabs: SESS.map((sessionID) => ({ sessionID, active: true, busy: false })) }))
 beat()
 const heart = setInterval(beat, 300)
 
@@ -115,7 +121,7 @@ const SOURCE = "085 ждёт отдельного решения владель�
 
 // item 10: the source - a tab of the owner ends with the phrase, no question form
 await endTurn("sesOW1", SOURCE, Date.now() + 100)
-await wait(2500)
+await until(() => letters("sesOW1").length >= 1 && stOf("sesOW1")?.gate === true)
 const l1 = letters("sesOW1")
 cell("10a the source: ONE letter to the tab - the question tool, a recommendation, a reason", l1.length === 1 && /задай его сейчас инструментом question — вопрос, рекомендация, довод/.test(l1[0].text), JSON.stringify(prompts.map((p) => [p.sessionID, p.text.slice(0, 90)])))
 const s1 = stOf("sesOW1")
@@ -129,12 +135,13 @@ await endTurn("sesOW1", "Понял.", Date.now() + 100)
 await wait(1500)
 cell("10e an empty turn keeps the mark, no new letter", stOf("sesOW1")?.gate === true && letters("sesOW1").length === 1, JSON.stringify([stOf("sesOW1"), letters("sesOW1").length]))
 msg("sesOW1", "user", { text: "возобновляй 085" }, Date.now() + 100)
-await wait(1500)
+await until(() => !stOf("sesOW1")?.gate)
 cell("10f the owner's word clears the mark", !stOf("sesOW1")?.gate, JSON.stringify(stOf("sesOW1")))
 
 // a question in text: the owner sees it and can answer by a word - no letter, the ordinary «ждёт вас»
 await endTurn("sesOW2", "085 ждёт решения.\n\nВозобновить 085?", Date.now() + 100)
-await wait(2000)
+await until(() => stOf("sesOW2")?.state === "owner")
+await wait(1000) // and no letter
 cell("10g a question at the end of the turn is a question: no letter, ordinary owner state with ?", letters("sesOW2").length === 0 && stOf("sesOW2")?.state === "owner" && !stOf("sesOW2")?.gate && status.markOf(stOf("sesOW2")) === "?", JSON.stringify([letters("sesOW2").length, stOf("sesOW2")]))
 
 // a question form is open: no letter, no mark
@@ -145,10 +152,11 @@ cell("10h a question form is open: no letter, no gate mark", letters("sesOW3").l
 
 // a working turn clears the mark
 await endTurn("sesOW4", SOURCE, Date.now() + 100)
-await wait(2000)
+await until(() => letters("sesOW4").length >= 1 && stOf("sesOW4")?.gate === true)
 cell("10i another tab gets its letter and the mark", letters("sesOW4").length === 1 && stOf("sesOW4")?.gate === true, JSON.stringify([letters("sesOW4").length, stOf("sesOW4")]))
 await endTurn("sesOW4", "Сделал проверку, всё зелёное.", Date.now() + 100, true)
-await wait(2000)
+await until(() => !stOf("sesOW4")?.gate)
+await wait(1000) // and no second letter
 cell("10j a working turn clears the mark, no second letter", !stOf("sesOW4")?.gate && letters("sesOW4").length === 1, JSON.stringify([stOf("sesOW4"), letters("sesOW4").length]))
 
 // a phrase that waits for another tab (the integrator) is not a wait for the owner
@@ -164,7 +172,7 @@ cell("10l a task session: no letter, no mark", letters("sesOW6").length === 0 &&
 const pj = card("sesOW7")?.project ?? "proj"
 putTask(pj, 73, "cancelled", { executors: ["sesOW7"] })
 core.saveCard({ ...card("sesOW7"), role: "integrator", task: { project: pj, n: 73 } })
-await wait(2000)
+await until(() => card("sesOW7") && !card("sesOW7").task)
 cell("9h the binding of an integrator tab to a cancelled task is dropped", card("sesOW7") && !card("sesOW7").task, JSON.stringify(card("sesOW7")))
 
 clearInterval(heart)

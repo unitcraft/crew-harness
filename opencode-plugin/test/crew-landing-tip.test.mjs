@@ -114,6 +114,19 @@ const procs = () => {
   return (r.stdout ?? "").split("\n").filter((l) => /^\s*\d+\s+git/.test(l))
 }
 const withAddress = (needle) => procs().filter((l) => l.includes(needle))
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+/** wait for a condition up to a limit (a positive "will happen" is a condition, not a fixed pause; task 088) */
+const until = async (cond, ms = 60_000) => {
+  for (const end = Date.now() + ms; !cond() && Date.now() < end; ) await sleep(250)
+}
+/** how long a trivial git process takes to start and end now: the measure of the load of the machine in this very process */
+const spawnLag = () =>
+  new Promise((resolve) => {
+    const t = Date.now()
+    const p = spawn("git", ["--version"], { stdio: "ignore", windowsHide: true })
+    p.on("close", () => resolve(Date.now() - t))
+    p.on("error", () => resolve(Date.now() - t))
+  })
 const silent = await new Promise((resolve) => {
   const s = net.createServer((sock) => sock.on("error", () => {})) // accepts and says nothing
   s.listen(0, "127.0.0.1", () => resolve(s))
@@ -128,10 +141,10 @@ const closedPort = await new Promise((resolve) => {
 })
 // control of the check itself: a git process of this test is visible in the list while it waits, and killTree (by its number) removes it
 const ctl = spawn("git", ["ls-remote", `http://127.0.0.1:${silentPort}/control.git`], { stdio: "ignore", windowsHide: true, detached: process.platform !== "win32" })
-await new Promise((r) => setTimeout(r, 2500))
+await until(() => withAddress("control.git").length >= 1)
 const seen = withAddress("control.git").length
 killTree(ctl)
-await new Promise((r) => setTimeout(r, 2000))
+await until(() => withAddress("control.git").length === 0)
 cell("AC-11 контроль: the process list sees a waiting git process, and killTree by its number removes the whole tree", seen >= 1 && withAddress("control.git").length === 0, `seen ${seen}, left ${withAddress("control.git").length}`)
 const sshHere = spawnSync("ssh", ["-V"], { encoding: "utf8", windowsHide: true }).error === undefined
 const cases = [
@@ -143,6 +156,7 @@ const cases = [
   ...(sshHere ? [["AC-11 ssh", `ssh://127.0.0.1:${silentPort}/r.git`, String(silentPort)]] : []),
 ]
 const repos = cases.map(([, url], i) => mkRepo(`net-${i}`, url))
+const lagBefore = await spawnLag()
 const t0 = Date.now()
 const results = await Promise.all(
   cases.map(async ([name, , needle], i) => {
@@ -152,10 +166,18 @@ const results = await Promise.all(
   }),
 )
 const wall = Date.now() - t0
-await new Promise((r) => setTimeout(r, 1500)) // the tree is gone a moment after the kill
+// the limits "the term + a margin" are measured against the machine of this very run: the margin grows with the time a trivial git
+// process takes to start (30 times the larger of two measures around the cases, at most 30 s: the cases still run in parallel,
+// serial they would take five terms)
+const slackMs = Math.min(30_000, 30 * Math.max(lagBefore, await spawnLag()))
+const anyLeft = () => {
+  const ps = procs()
+  return cases.some(([, , needle]) => ps.some((l) => l.includes(needle)))
+}
+for (let i = 0; i < 40 && anyLeft(); i++) await sleep(250) // the tree is gone a moment after the kill (a condition, up to 10 s)
 for (const { name, needle, r, secs } of results) {
   const left = withAddress(needle)
-  cell(`${name}: a failure with the text of the cause (${secs} s), not 'moved' or 'not moved'`, !r.ok && r.kind === "fail" && r.error.length > 10 && secs <= TIP_TIMEOUT_MS / 1000 + 5, JSON.stringify(r))
+  cell(`${name}: a failure with the text of the cause (${secs} s), not 'moved' or 'not moved'`, !r.ok && r.kind === "fail" && r.error.length > 10 && secs <= TIP_TIMEOUT_MS / 1000 + 5 + slackMs / 1000, JSON.stringify(r))
   cell(`${name} процессы: after the term no git process with ${needle} is left`, left.length === 0, left.join(" | "))
   console.log(`процессов git с этим адресом: ${left.length} (${name})`)
 }
@@ -163,7 +185,7 @@ if (!sshHere) console.log("не проверено: нет ssh (AC-11 ssh) — �
 const longest = Math.max(...results.map((x) => x.secs))
 console.log(`AC-11: ${results.length} cases in parallel, the longest ${longest} s, ${Math.round(wall / 100) / 10} s in all`)
 cell("AC-11 срок: a silent server is cut off by the term of the plugin (the term is not shorter than it should be)", results.filter((x) => /молчит/.test(x.name)).every((x) => x.secs >= 14), JSON.stringify(results.map((x) => [x.name, x.secs])))
-cell("AC-11 общее время: the cases run in parallel, in about one term", wall < TIP_TIMEOUT_MS + 12_000, `${wall} ms`)
+cell("AC-11 общее время: the cases run in parallel, in about one term", wall < TIP_TIMEOUT_MS + 12_000 + slackMs, `${wall} ms (slack ${slackMs} ms)`)
 silent.close()
 
 rmSync(tmp, { recursive: true, force: true })
