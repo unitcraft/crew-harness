@@ -1,0 +1,31 @@
+# nova.toml - crew_harness: the CrewHarness product on Nova.
+#
+# Layout (the same as claude-limits): ALL `.nv` UNDER `src/`, not one file in the package
+# root. Owner's rule 2026-09-07 ("никаких .nv файлов в корне"), stricter than the spec, which
+# leaves the flat layout legal but not recommended.
+#
+# No `bin/` anywhere: the entry point is plainly `src/crew_harness.nv`, built binaries go to
+# `target/` (or are ignored if `nova build` drops them beside the source, see .gitignore).
+#
+# `src/engine/` is the state machine engine, `src/chat/` the demo machine (a chat session with
+# an agent); tests are peer files `*_test.nv` beside the sources. Build: Nova Oracle 0.1.0,
+# Clang, see `spikes/env/README.md`; engine and its tests: `src/engine/README.md`.
+#
+# No dependencies yet: the engine uses only `std`. `nova.lock.toml` fixes the build.
+
+[lib]
+src = "src"
+
+[package]
+name = "crew_harness"
+version = "0.1.0"
+description = "CrewHarness product on Nova: state machine engine with self-contained events, chat session with an agent"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/unitcraft/crew-harness"
+
+# [[bin]] is declared by the spec but not read by Oracle 0.1.0 (claude-limits recorded the same);
+# kept as the single record of the entry point. Build it with an explicit path:
+# `nova build src/crew_harness.nv`.
+[[bin]]
+name = "crew-harness"
+path = "src/crew_harness.nv"

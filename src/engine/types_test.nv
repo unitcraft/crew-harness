@@ -1,0 +1,69 @@
+// types_test.nv - the closed list of failures, the kinds of events and the envelope of an incoming event.
+module crew_harness.engine
+
+test "fail codes: the closed list has exactly ten codes with the names of the specification" {
+    mut names = []str.new()
+    for code in FailCode.all() { names.push(code.name()) }
+    assert(names.len() == 10)
+    assert(names[0] == "NoResult")
+    assert(names[1] == "ModelRefused")
+    assert(names[2] == "ConnectionLost")
+    assert(names[3] == "FormNotFixed")
+    assert(names[4] == "Timeout")
+    assert(names[5] == "Cancelled")
+    assert(names[6] == "StoppedByHuman")
+    assert(names[7] == "CeilingReached")
+    assert(names[8] == "MaxTokens")
+    assert(names[9] == "MaxTurnRequests")
+}
+
+test "fail codes: every name parses back to its code, the names are distinct" {
+    for code in FailCode.all() {
+        match FailCode.parse(code.name()) {
+            Some(back) => assert(back.name() == code.name())
+            None => assert(false)
+        }
+    }
+    mut seen = []str.new()
+    for code in FailCode.all() {
+        assert(!seen.contains(code.name()))
+        seen.push(code.name())
+    }
+}
+
+test "fail codes: a text outside the closed list is not a code, and maps to NoResult" {
+    assert(FailCode.parse("SomethingNew") == None)
+    assert(FailCode.parse("") == None)
+    assert(FailCode.of("SomethingNew").name() == "NoResult")
+    assert(FailCode.of("Timeout").name() == "Timeout")
+}
+
+fn kind_of(name str) -> EventKind => match name {
+    "Input" => Input
+    "Progress" => Progress
+    "Answered" => Answered
+    "Refused" => Refused
+    _ => Expired
+}
+
+test "event kinds: only a final answer, a refusal and an expired term close a request" {
+    assert(!kind_of("Input").closes_request())
+    assert(!kind_of("Progress").closes_request())
+    assert(kind_of("Answered").closes_request())
+    assert(kind_of("Refused").closes_request())
+    assert(kind_of("Expired").closes_request())
+    assert(!kind_of("Input").is_request_bound())
+    assert(kind_of("Progress").is_request_bound())
+    assert(kind_of("Expired").is_request_bound())
+}
+
+test "incoming event: the creator fills the content, the envelope is empty until the engine stamps it" {
+    ro e = Event.word("user_message", "hello")
+    assert(e.id == "")
+    assert(e.trace == "")
+    assert(e.step == 0)
+    assert(e.at == 0)
+    assert(e.name == "user_message")
+    assert(e.input == "hello")
+    assert(e.request == None)
+}

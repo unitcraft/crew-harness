@@ -1,0 +1,26 @@
+// machine.nv - the protocol of a state machine (spec rules 8, 13: a step is a pure function).
+//
+// Source: state-machine-engine-automaton.md, protocol `Automaton` (reduced to what the MVP needs).
+// The methodology generalises the engine over `State`, `Event`, `Input`, `Output`; Oracle 0.1.0 does not
+// compile that (see README.md, "Oracle 0.1.0"), so the state crosses the protocol as encoded text:
+// a machine keeps its own typed state and encodes it at the border (`step` decodes, computes, encodes).
+
+module crew_harness.engine
+
+/// Machine: what the engine requires of a machine. The match is structural: a type with these
+/// methods is a machine, no `impl` is needed.
+///
+/// `step` is a PURE function of the old state and the event: no input-output, no clock, no random,
+/// nothing read from outside - everything it may use is in `state` and `event` (the event is
+/// self-contained). Its signature has no effects, so Oracle rejects a raw effect call inside it at compile time (`E_RAW_EFFECT_OP_UNDECLARED`);
+/// a call of a function that carries an effect is rejected with `--strict-effects`.
+export type Machine protocol {
+    // The name of the machine for the journal.
+    @name() -> str
+    // The encoded initial state.
+    @initial() -> str
+    // The name of an encoded state for the journal line envelope ("Idle", "Awaiting", ...).
+    @state_name(state str) -> str
+    // One step: the new encoded state and the outputs, in the order of execution.
+    @step(state str, event Event) -> StepResult
+}

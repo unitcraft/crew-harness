@@ -1,0 +1,591 @@
+// chat_engine_test.nv - the engine with the demo machine over the in-memory world.
+//
+// Every property of the engine is shown on the chat session: one request - one answer, restart by a
+// repeated entry, cancel, idle term, the journal, the snapshot, UTF-8.
+module crew_harness.chat
+
+import crew_harness.engine.{Engine, MemoryWorld, Event, EventKind, FailCode, Response, Reply, Rejection, JournalEntry, Journal, Store, Agent, start_engine, resume_engine, memory_journal, memory_store, memory_agent, memory_time, decode_snapshot}
+
+// ----- helpers: one `with` over the four handlers of a world -----
+
+fn begin(mut world MemoryWorld) -> Engine[ChatSession] {
+    with Journal = memory_journal(world), Store = memory_store(world), Agent = memory_agent(world), Time = memory_time(world) {
+        start_engine(chat_session(), "chat-1")
+    }
+}
+
+fn resumed(mut world MemoryWorld) -> Engine[ChatSession] {
+    with Journal = memory_journal(world), Store = memory_store(world), Agent = memory_agent(world), Time = memory_time(world) {
+        match resume_engine(chat_session(), "chat-1") {
+            Some(e) => e
+            None => panic("no snapshot to resume from")
+        }
+    }
+}
+
+fn has_snapshot(mut world MemoryWorld) -> bool {
+    with Journal = memory_journal(world), Store = memory_store(world), Agent = memory_agent(world), Time = memory_time(world) {
+        match resume_engine(chat_session(), "chat-1") {
+            Some(e) => true
+            None => false
+        }
+    }
+}
+
+fn feed(mut e Engine[ChatSession], mut world MemoryWorld, event Event) -> () {
+    with Journal = memory_journal(world), Store = memory_store(world), Agent = memory_agent(world), Time = memory_time(world) {
+        e.feed(event)
+    }
+}
+
+fn accept_only(mut e Engine[ChatSession], mut world MemoryWorld, event Event) -> () {
+    with Journal = memory_journal(world), Store = memory_store(world), Agent = memory_agent(world), Time = memory_time(world) {
+        e.accept(event)
+    }
+}
+
+fn dispatch(mut e Engine[ChatSession], mut world MemoryWorld) -> () {
+    with Journal = memory_journal(world), Store = memory_store(world), Agent = memory_agent(world), Time = memory_time(world) {
+        e.dispatch()
+    }
+}
+
+fn pump(mut e Engine[ChatSession], mut world MemoryWorld) -> int {
+    with Journal = memory_journal(world), Store = memory_store(world), Agent = memory_agent(world), Time = memory_time(world) {
+        e.pump()
+    }
+}
+
+fn state_name(e Engine[ChatSession]) -> str => chat_session().state_name(e.machine_state())
+
+// The reply of the final answer, None when the session has no answer.
+fn reply_of(e Engine[ChatSession]) -> Option[Reply[str]] {
+    match e.outcome() {
+        Some(response) => match response {
+            Answer(reply) => Some(reply)
+            Refusal(rejection) => None
+        }
+        None => None
+    }
+}
+
+// The rejection of the final refusal, None when the session has no refusal.
+fn rejection_of(e Engine[ChatSession]) -> Option[Rejection] {
+    match e.outcome() {
+        Some(response) => match response {
+            Answer(reply) => None
+            Refusal(rejection) => Some(rejection)
+        }
+        None => None
+    }
+}
+
+// The text of the answer, "" when there is none; and the refusal reason, "" when there is none.
+fn answer_of(e Engine[ChatSession]) -> str {
+    match reply_of(e) {
+        Some(reply) => reply.result
+        None => ""
+    }
+}
+
+fn refusal_of(e Engine[ChatSession]) -> str {
+    match rejection_of(e) {
+        Some(rejection) => rejection.reason.name()
+        None => ""
+    }
+}
+
+fn of_kind(entries []JournalEntry, kind str) -> []JournalEntry {
+    mut out = []JournalEntry.new()
+    for entry in entries {
+        if entry.kind == kind { out.push(entry) }
+    }
+    out
+}
+
+fn kinds_of(entries []JournalEntry, kind str) -> int {
+    mut n = 0
+    for entry in entries {
+        if entry.kind == kind { n += 1 }
+    }
+    n
+}
+
+// ----- start and the first request -----
+
+test "engine: start is step 1, saves the first snapshot and writes the start line" {
+    mut world = MemoryWorld.at(1000)
+    ro e = begin(world)
+    assert(e.step_number() == 1)
+    assert(world.saves == 1)
+    assert(e.trace() == "t1000-chat-1")
+    assert(!e.is_finished())
+    ro entries = world.entries()
+    assert(entries.len() == 1)
+    assert(entries[0].kind == "start")
+    assert(entries[0].step == 1)
+    assert(entries[0].cause == "start-1")
+    assert(entries[0].state == "Idle")
+    assert(entries[0].at == 1000)
+    assert(entries[0].trace == "t1000-chat-1")
+}
+
+test "engine: a user message opens the request agent-1 and sends it once, with the envelope" {
+    mut world = MemoryWorld.at(1000)
+    mut e = begin(world)
+    feed(e, world, user_says("hello"))
+    assert(state_name(e) == "Awaiting")
+    assert(world.sent.len() == 1)
+    ro request = world.sent[0]
+    assert(request.id == "agent-1")
+    assert(request.attempt == 1)
+    assert(request.party == "agent")
+    assert(request.input == "hello")
+    assert(request.idle_term == 30000)
+    assert(request.trace == "t1000-chat-1")
+    assert(request.step == 2)
+    assert(e.open_ids().len() == 1)
+    assert(e.open_ids()[0] == "agent-1")
+    assert(e.step_number() == 2)
+}
+
+test "engine: the event is stamped on acceptance - id from the kind and the counter, the clock, the step" {
+    mut world = MemoryWorld.at(1000)
+    mut e = begin(world)
+    world.advance(250)
+    feed(e, world, user_says("hello"))
+    ro entries = world.entries()
+    ro on_event = of_kind(entries, "event")
+    assert(on_event.len() == 1)
+    assert(on_event[0].cause == "input-2")
+    assert(on_event[0].step == 2)
+    assert(on_event[0].at == 1250)
+}
+
+test "engine: the journal lines of a step carry the state the machine waits in after the step" {
+    mut world = MemoryWorld.at(1000)
+    mut e = begin(world)
+    feed(e, world, user_says("hello"))
+    feed(e, world, agent_done("agent-1"))
+    ro entries = world.entries()
+    for entry in entries {
+        if entry.step == 1 { assert(entry.state == "Idle") }
+        if entry.step == 2 { assert(entry.state == "Awaiting") }
+        if entry.step == 3 { assert(entry.state == "Done") }
+    }
+    assert(of_kind(entries, "sent")[0].state == "Awaiting")
+}
+
+// ----- the answer, the refusal -----
+
+test "engine: chunks and the final answer finish the session with the accumulated text" {
+    mut world = MemoryWorld.at(1000)
+    mut e = begin(world)
+    feed(e, world, user_says("hi"))
+    feed(e, world, agent_chunk("agent-1", "Hel"))
+    feed(e, world, agent_chunk("agent-1", "lo"))
+    assert(state_name(e) == "Awaiting")
+    assert(!e.is_finished())
+    assert(e.open_ids().len() == 1)
+    feed(e, world, agent_done("agent-1"))
+    assert(state_name(e) == "Done")
+    assert(e.is_finished())
+    assert(answer_of(e) == "Hello")
+    assert(e.open_ids().len() == 0)
+    assert(world.cancelled.len() == 0)
+}
+
+test "engine: the outcome of a finished session is an Answer that returns the request, party, trace and step" {
+    mut world = MemoryWorld.at(1000)
+    mut e = begin(world)
+    feed(e, world, user_says("hi"))
+    feed(e, world, agent_chunk("agent-1", "ok"))
+    feed(e, world, agent_done("agent-1"))
+    match reply_of(e) {
+        Some(reply) => {
+            assert(reply.result == "ok")
+            assert(reply.party == "ChatSession")
+            assert(reply.request == "chat-1")
+            assert(reply.trace == "t1000-chat-1")
+        }
+        None => assert(false)
+    }
+}
+
+test "engine: a refusal of the agent closes the request and ends the session with that reason" {
+    mut world = MemoryWorld.at(1000)
+    mut e = begin(world)
+    feed(e, world, user_says("hi"))
+    feed(e, world, agent_refused("agent-1", FailCode.ModelRefused))
+    assert(state_name(e) == "Failed")
+    assert(e.is_finished())
+    assert(refusal_of(e) == "ModelRefused")
+    assert(e.open_ids().len() == 0)
+}
+
+// ----- one request - one answer -----
+
+test "engine: a second answer to a closed request is discarded and the journal remembers it" {
+    mut world = MemoryWorld.at(1000)
+    mut e = begin(world)
+    feed(e, world, user_says("hi"))
+    feed(e, world, agent_chunk("agent-1", "x"))
+    feed(e, world, agent_done("agent-1"))
+    ro before_step = e.step_number()
+    ro before_state = e.machine_state()
+    feed(e, world, agent_done("agent-1"))
+    assert(e.machine_state() == before_state)
+    assert(answer_of(e) == "x")
+    assert(e.step_number() == before_step + 1)
+    assert(world.sent.len() == 1)
+    ro entries = world.entries()
+    assert(kinds_of(entries, "discarded") == 1)
+    ro discarded = of_kind(entries, "discarded")
+    assert(discarded[0].request == "agent-1")
+    assert(discarded[0].text.contains("closed"))
+    assert(discarded[0].step == before_step + 1)
+}
+
+test "engine: a late chunk of a closed request is discarded too, and does not reopen anything" {
+    mut world = MemoryWorld.at(1000)
+    mut e = begin(world)
+    feed(e, world, user_says("hi"))
+    feed(e, world, agent_done("agent-1"))
+    feed(e, world, agent_chunk("agent-1", "late"))
+    assert(answer_of(e) == "")
+    assert(e.open_ids().len() == 0)
+    assert(kinds_of(world.entries(), "discarded") == 1)
+}
+
+test "engine: an answer to a request nobody opened is discarded as unknown" {
+    mut world = MemoryWorld.at(1000)
+    mut e = begin(world)
+    feed(e, world, user_says("hi"))
+    ro before = e.machine_state()
+    feed(e, world, agent_done("agent-7"))
+    assert(e.machine_state() == before)
+    assert(e.open_ids().len() == 1)
+    ro discarded = of_kind(world.entries(), "discarded")
+    assert(discarded.len() == 1)
+    assert(discarded[0].request == "agent-7")
+    assert(discarded[0].text.contains("unknown"))
+}
+
+// ----- cancel -----
+
+test "engine: cancel by the user cancels the open request at the agent and ends the session" {
+    mut world = MemoryWorld.at(1000)
+    mut e = begin(world)
+    feed(e, world, user_says("hi"))
+    feed(e, world, user_cancels())
+    assert(state_name(e) == "Failed")
+    assert(e.is_finished())
+    assert(refusal_of(e) == "StoppedByHuman")
+    assert(e.open_ids().len() == 0)
+    assert(world.cancelled.len() == 1)
+    assert(world.cancelled[0] == "agent-1")
+    ro entries = world.entries()
+    assert(kinds_of(entries, "cancel") == 1)
+    assert(kinds_of(entries, "cancel_sent") == 1)
+}
+
+test "engine: an answer that comes after the cancel is discarded as a reply to a closed request" {
+    mut world = MemoryWorld.at(1000)
+    mut e = begin(world)
+    feed(e, world, user_says("hi"))
+    feed(e, world, user_cancels())
+    feed(e, world, agent_done("agent-1"))
+    assert(refusal_of(e) == "StoppedByHuman")
+    assert(answer_of(e) == "")
+    ro discarded = of_kind(world.entries(), "discarded")
+    assert(discarded.len() == 1)
+    assert(discarded[0].text.contains("closed"))
+}
+
+test "engine: cancel before any request ends the session and cancels nothing" {
+    mut world = MemoryWorld.at(1000)
+    mut e = begin(world)
+    feed(e, world, user_cancels())
+    assert(refusal_of(e) == "StoppedByHuman")
+    assert(world.cancelled.len() == 0)
+    assert(world.sent.len() == 0)
+}
+
+// ----- idle term -----
+
+test "engine: an agent silent for longer than the idle term ends the session with Timeout and is cancelled" {
+    mut world = MemoryWorld.at(1000)
+    mut e = begin(world)
+    feed(e, world, user_says("hi"))
+    world.advance(29000)
+    assert(pump(e, world) == 0)
+    assert(!e.is_finished())
+    world.advance(1001)
+    assert(pump(e, world) == 1)
+    assert(state_name(e) == "Failed")
+    assert(refusal_of(e) == "Timeout")
+    assert(e.open_ids().len() == 0)
+    assert(world.cancelled.len() == 1)
+    assert(world.cancelled[0] == "agent-1")
+}
+
+test "engine: a chunk renews the idle term - the term counts the silence, not the age of the request" {
+    mut world = MemoryWorld.at(1000)
+    mut e = begin(world)
+    feed(e, world, user_says("hi"))
+    world.advance(29000)
+    world.deliver(agent_chunk("agent-1", "a"))
+    assert(pump(e, world) == 1)
+    world.advance(29000)
+    assert(pump(e, world) == 0)
+    assert(!e.is_finished())
+    world.advance(2000)
+    assert(pump(e, world) == 1)
+    assert(refusal_of(e) == "Timeout")
+}
+
+test "engine: an answer that comes after the timeout is discarded" {
+    mut world = MemoryWorld.at(1000)
+    mut e = begin(world)
+    feed(e, world, user_says("hi"))
+    world.advance(31000)
+    pump(e, world)
+    world.deliver(agent_done("agent-1"))
+    pump(e, world)
+    assert(refusal_of(e) == "Timeout")
+    assert(answer_of(e) == "")
+    assert(kinds_of(world.entries(), "discarded") == 1)
+}
+
+test "engine: pump takes the incoming events of the agent in the order of arrival" {
+    mut world = MemoryWorld.at(1000)
+    mut e = begin(world)
+    feed(e, world, user_says("hi"))
+    world.deliver(agent_chunk("agent-1", "one "))
+    world.deliver(agent_chunk("agent-1", "two"))
+    world.deliver(agent_done("agent-1"))
+    assert(pump(e, world) == 3)
+    assert(answer_of(e) == "one two")
+    assert(pump(e, world) == 0)
+}
+
+// ----- restart by a repeated entry -----
+
+test "restart after the request was opened: no second send, the answer arrives, the result is the same" {
+    mut world = MemoryWorld.at(1000)
+    mut e1 = begin(world)
+    feed(e1, world, user_says("привет"))
+    assert(world.sent.len() == 1)
+    // the process dies here: e1 is gone, the world survives
+    mut e2 = resumed(world)
+    assert(state_name(e2) == "Awaiting")
+    assert(e2.open_ids().len() == 1)
+    assert(e2.open_ids()[0] == "agent-1")
+    assert(e2.trace() == "t1000-chat-1")
+    dispatch(e2, world)
+    pump(e2, world)
+    assert(world.sent.len() == 1)
+    world.deliver(agent_chunk("agent-1", "Здравствуй"))
+    world.deliver(agent_done("agent-1"))
+    assert(pump(e2, world) == 2)
+    assert(e2.is_finished())
+    assert(answer_of(e2) == "Здравствуй")
+    assert(world.sent.len() == 1)
+
+    // the same story without a restart
+    mut control = MemoryWorld.at(1000)
+    mut c = begin(control)
+    feed(c, control, user_says("привет"))
+    feed(c, control, agent_chunk("agent-1", "Здравствуй"))
+    feed(c, control, agent_done("agent-1"))
+    assert(answer_of(c) == answer_of(e2))
+    assert(c.machine_state() == e2.machine_state())
+    assert(state_name(c) == state_name(e2))
+}
+
+test "restart after the answer: the finished session stays finished, nothing is sent, a repeated answer is discarded" {
+    mut world = MemoryWorld.at(1000)
+    mut e1 = begin(world)
+    feed(e1, world, user_says("hi"))
+    feed(e1, world, agent_chunk("agent-1", "fine"))
+    feed(e1, world, agent_done("agent-1"))
+    ro answer = answer_of(e1)
+    mut e2 = resumed(world)
+    assert(e2.is_finished())
+    assert(state_name(e2) == "Done")
+    assert(answer_of(e2) == answer)
+    assert(e2.open_ids().len() == 0)
+    dispatch(e2, world)
+    assert(world.sent.len() == 1)
+    feed(e2, world, agent_done("agent-1"))
+    assert(answer_of(e2) == answer)
+    assert(world.sent.len() == 1)
+    assert(world.cancelled.len() == 0)
+    ro discarded = of_kind(world.entries(), "discarded")
+    assert(discarded.len() == 1)
+    assert(discarded[0].text.contains("closed"))
+}
+
+test "restart after the commit but before the send: the request is sent now, exactly once" {
+    mut world = MemoryWorld.at(1000)
+    mut e1 = begin(world)
+    accept_only(e1, world, user_says("hi"))
+    assert(world.sent.len() == 0)
+    assert(e1.open_ids().len() == 1)
+    // the process dies between the commit and the send
+    mut e2 = resumed(world)
+    dispatch(e2, world)
+    assert(world.sent.len() == 1)
+    assert(world.sent[0].id == "agent-1")
+    assert(world.sent[0].input == "hi")
+    dispatch(e2, world)
+    assert(world.sent.len() == 1)
+    mut e3 = resumed(world)
+    dispatch(e3, world)
+    assert(world.sent.len() == 1)
+}
+
+test "restart: the restart is a step of its own, the numbers go on without gaps and the trace is the same" {
+    mut world = MemoryWorld.at(1000)
+    mut e1 = begin(world)
+    feed(e1, world, user_says("hi"))
+    ro before = e1.step_number()
+    mut e2 = resumed(world)
+    assert(e2.step_number() == before + 1)
+    assert(e2.trace() == e1.trace())
+    ro restart = of_kind(world.entries(), "restart")
+    assert(restart.len() == 1)
+    assert(restart[0].step == before + 1)
+    assert(restart[0].cause == "restart-3")
+}
+
+test "restart: the attempt counter is not touched by the restart, the next request would not repeat an id" {
+    mut world = MemoryWorld.at(1000)
+    mut e1 = begin(world)
+    feed(e1, world, user_says("hi"))
+    mut e2 = resumed(world)
+    match world.snapshots.get("chat-1") {
+        Some(snapshot) => match decode_snapshot(snapshot) {
+            Some(state) => {
+                assert(state.counters.len() == 1)
+                assert(state.counters[0].party == "agent")
+                assert(state.counters[0].attempts == 1)
+            }
+            None => assert(false)
+        }
+        None => assert(false)
+    }
+}
+
+test "restart: without a snapshot there is nothing to resume" {
+    mut world = MemoryWorld.at(1000)
+    assert(!has_snapshot(world))
+}
+
+// ----- the journal and the snapshot -----
+
+test "journal: every line parses, the trace is one, the step numbers have no gaps and agree with the snapshot" {
+    mut world = MemoryWorld.at(1000)
+    mut e1 = begin(world)
+    feed(e1, world, user_says("hi"))
+    feed(e1, world, agent_chunk("agent-1", "a"))
+    mut e2 = resumed(world)
+    dispatch(e2, world)
+    feed(e2, world, agent_done("agent-1"))
+    feed(e2, world, agent_done("agent-1"))
+    feed(e2, world, agent_done("agent-9"))
+    ro entries = world.entries()
+    assert(entries.len() == world.journal.len())
+    ro last = e2.step_number()
+    mut seen = []int.new()
+    mut previous = 0
+    for entry in entries {
+        assert(entry.trace == e2.trace())
+        assert(entry.step >= previous)
+        assert(entry.cause.byte_len() > 0)
+        assert(entry.state.byte_len() > 0)
+        assert(entry.step >= 1 && entry.step <= last)
+        previous = entry.step
+        if !seen.contains(entry.step) { seen.push(entry.step) }
+    }
+    assert(seen.len() == last)
+    match world.snapshots.get("chat-1") {
+        Some(snapshot) => assert(snapshot.step == last)
+        None => assert(false)
+    }
+}
+
+test "journal: a request line and its send mark carry the request id; every commit saved the snapshot" {
+    mut world = MemoryWorld.at(1000)
+    mut e = begin(world)
+    feed(e, world, user_says("hi"))
+    feed(e, world, agent_done("agent-1"))
+    ro entries = world.entries()
+    ro requests = of_kind(entries, "request")
+    ro sent = of_kind(entries, "sent")
+    assert(requests.len() == 1)
+    assert(sent.len() == 1)
+    assert(requests[0].request == "agent-1")
+    assert(sent[0].request == "agent-1")
+    assert(kinds_of(entries, "closed") == 1)
+    assert(kinds_of(entries, "finish") == 1)
+    assert(world.saves == e.step_number())
+}
+
+// ----- UTF-8 -----
+
+test "UTF-8: Cyrillic goes through the request, the journal, the snapshot and the answer without loss" {
+    mut world = MemoryWorld.at(1000)
+    mut e = begin(world)
+    feed(e, world, user_says("Привет, как дела? Ёжик, щётка"))
+    assert(world.sent[0].input == "Привет, как дела? Ёжик, щётка")
+    feed(e, world, agent_chunk("agent-1", "Отлично, "))
+    feed(e, world, agent_chunk("agent-1", "спасибо"))
+    feed(e, world, agent_done("agent-1"))
+    assert(answer_of(e) == "Отлично, спасибо")
+    mut in_journal = false
+    for line in world.journal {
+        if line.contains("Привет, как дела? Ёжик, щётка") { in_journal = true }
+    }
+    assert(in_journal)
+    match world.snapshots.get("chat-1") {
+        Some(snapshot) => assert(snapshot.data.contains("Отлично, спасибо"))
+        None => assert(false)
+    }
+    mut e2 = resumed(world)
+    assert(answer_of(e2) == "Отлично, спасибо")
+}
+
+// ----- determinism -----
+
+test "determinism: the same story in two worlds gives the same journal and the same snapshot, line by line" {
+    mut a = MemoryWorld.at(5000)
+    mut ea = begin(a)
+    feed(ea, a, user_says("привет"))
+    a.advance(40)
+    feed(ea, a, agent_chunk("agent-1", "part"))
+    a.advance(40)
+    feed(ea, a, agent_done("agent-1"))
+
+    mut b = MemoryWorld.at(5000)
+    mut eb = begin(b)
+    feed(eb, b, user_says("привет"))
+    b.advance(40)
+    feed(eb, b, agent_chunk("agent-1", "part"))
+    b.advance(40)
+    feed(eb, b, agent_done("agent-1"))
+
+    assert(a.journal.len() == b.journal.len())
+    mut i = 0
+    while i < a.journal.len() {
+        assert(a.journal[i] == b.journal[i])
+        i += 1
+    }
+    match a.snapshots.get("chat-1") {
+        Some(sa) => match b.snapshots.get("chat-1") {
+            Some(sb) => assert(sa.data == sb.data)
+            None => assert(false)
+        }
+        None => assert(false)
+    }
+}

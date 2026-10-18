@@ -1,0 +1,6 @@
+// crew_harness.nv - entry point of the crew-harness binary (a placeholder: the server comes in a later task).
+module crew_harness.crew_harness
+
+fn main() {
+    println("crew-harness 0.1.0")
+}

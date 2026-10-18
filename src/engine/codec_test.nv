@@ -1,0 +1,102 @@
+// codec_test.nv - the journal line and the snapshot: JSON, one line, UTF-8 as it is.
+module crew_harness.engine
+
+fn sample_entry() -> JournalEntry => {
+    trace: "t1000-chat-1", step: 3, cause: "answered-4", state: "Awaiting", request: "agent-1",
+    at: 1500, kind: "note", text: "получено: привет, \"мир\"\nвторая строка"
+}
+
+test "journal line: one line, no line break, the envelope fields are in it" {
+    ro line = journal_line(sample_entry())
+    assert(line.byte_len() > 0)
+    assert(!line.contains("\n"))
+    assert(line.contains("\"trace\":\"t1000-chat-1\""))
+    assert(line.contains("\"step\":3"))
+    assert(line.contains("\"kind\":\"note\""))
+    assert(line.contains("\"request\":\"agent-1\""))
+    assert(line.contains("\"at\":1500"))
+}
+
+test "journal line: parses back to the same entry, Cyrillic and a line break inside the text included" {
+    ro entry = sample_entry()
+    match parse_journal_line(journal_line(entry)) {
+        Some(back) => {
+            assert(back.trace == entry.trace)
+            assert(back.step == entry.step)
+            assert(back.cause == entry.cause)
+            assert(back.state == entry.state)
+            assert(back.request == entry.request)
+            assert(back.at == entry.at)
+            assert(back.kind == entry.kind)
+            assert(back.text == entry.text)
+        }
+        None => assert(false)
+    }
+}
+
+test "journal line: Cyrillic is written as it is, not as escapes" {
+    ro line = journal_line(sample_entry())
+    assert(line.contains("привет"))
+    assert(!line.contains("u043"))
+    assert(!line.contains("u044"))
+}
+
+test "journal line: a line that is not an entry is not parsed" {
+    assert(parse_journal_line("") == None)
+    assert(parse_journal_line("not json") == None)
+    assert(parse_journal_line("{\"trace\":\"x\"}") == None)
+    assert(parse_journal_line("[1,2,3]") == None)
+}
+
+fn sample_state() -> EngineState {
+    mut s = EngineState.fresh("t1000-chat-1", "{\"state\":\"Awaiting\",\"user\":\"привет\",\"reply\":\"\"}")
+    s.step = 4
+    s.event_counter = 5
+    s.open.push({ id: "agent-2", party: "agent", attempt: 2, step: 4, input: "вопрос", idle_term: 30000, deadline: 61500 })
+    s.closed.push("agent-1")
+    s.counters.push({ party: "agent", attempts: 2 })
+    s
+}
+
+test "snapshot: the engine state is saved with its step" {
+    ro snap = encode_snapshot(sample_state())
+    assert(snap.step == 4)
+    assert(snap.data.byte_len() > 0)
+}
+
+test "snapshot: restores the same state, the open request with its input and deadline included" {
+    ro s = sample_state()
+    match decode_snapshot(encode_snapshot(s)) {
+        Some(back) => {
+            assert(back.trace == s.trace)
+            assert(back.step == 4)
+            assert(back.event_counter == 5)
+            assert(back.machine_state == s.machine_state)
+            assert(back.open.len() == 1)
+            assert(back.open[0].id == "agent-2")
+            assert(back.open[0].party == "agent")
+            assert(back.open[0].attempt == 2)
+            assert(back.open[0].step == 4)
+            assert(back.open[0].input == "вопрос")
+            assert(back.open[0].idle_term == 30000)
+            assert(back.open[0].deadline == 61500)
+            assert(back.closed.len() == 1)
+            assert(back.closed[0] == "agent-1")
+            assert(back.counters.len() == 1)
+            assert(back.counters[0].attempts == 2)
+            assert(back.final_kind == "")
+        }
+        None => assert(false)
+    }
+}
+
+test "snapshot: the Cyrillic text is in the saved data as it is" {
+    ro snap = encode_snapshot(sample_state())
+    assert(snap.data.contains("привет"))
+    assert(snap.data.contains("вопрос"))
+}
+
+test "snapshot: a damaged snapshot is not restored" {
+    assert(decode_snapshot({ step: 1, data: "" }) == None)
+    assert(decode_snapshot({ step: 1, data: "{\"trace\":1}" }) == None)
+}

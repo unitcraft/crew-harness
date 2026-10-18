@@ -1,0 +1,95 @@
+// memory.nv - in-memory handlers of the effects for tests (the real ones - file, ACP - are the next tasks).
+//
+// `MemoryWorld` is the whole outside world of one test: the journal lines, the snapshots, the inbox
+// of the agent, what was sent to it, and the clock. Several engines over the same world model a
+// restart: the world survives, the engine does not.
+module crew_harness.engine
+
+import std.collections.hash_map.{HashMap}
+import std.time.duration
+
+/// MemoryWorld: the outside world of an engine, in memory.
+export type MemoryWorld {
+    journal []str,
+    snapshots HashMap[str, Snapshot],
+    inbox []Event,
+    sent []Request[str],
+    cancelled []str,
+    clock_ms int,
+    saves int
+}
+
+/// A new empty world with the clock at `clock_ms`.
+export fn MemoryWorld.at(clock_ms int) -> MemoryWorld => {
+    journal: []str.new(), snapshots: HashMap[str, Snapshot].new(), inbox: []Event.new(),
+    sent: []Request[str].new(), cancelled: []str.new(), clock_ms, saves: 0
+}
+
+/// Move the clock forward.
+export fn MemoryWorld mut @advance(ms int) -> () {
+    @clock_ms = @clock_ms + ms
+}
+
+/// An event arrives from the agent.
+export fn MemoryWorld mut @deliver(event Event) -> () {
+    @inbox.push(event)
+}
+
+/// The journal, parsed. Lines that are not entries are skipped.
+export fn MemoryWorld @entries() -> []JournalEntry {
+    mut out = []JournalEntry.new()
+    for line in @journal {
+        match parse_journal_line(line) {
+            Some(entry) => out.push(entry)
+            None => ()
+        }
+    }
+    out
+}
+
+/// The handler of `Journal`: lines in the world, in the order of writing.
+export fn memory_journal(mut world MemoryWorld) -> Effect[Journal] {
+    effect Journal {
+        write(entry) -> () {
+            world.journal.push(journal_line(entry))
+        }
+        read_all() -> []JournalEntry => world.entries()
+    }
+}
+
+/// The handler of `Store`: the last snapshot per session id.
+export fn memory_store(mut world MemoryWorld) -> Effect[Store] {
+    effect Store {
+        save(id, snapshot) -> () {
+            world.snapshots.insert(id, snapshot)
+            world.saves = world.saves + 1
+        }
+        load(id) -> Option[Snapshot] => world.snapshots.get(id)
+    }
+}
+
+/// The handler of `Agent`: what is sent is remembered, what is in the inbox is received in order.
+export fn memory_agent(mut world MemoryWorld) -> Effect[Agent] {
+    effect Agent {
+        send(request) -> () {
+            world.sent.push(request)
+        }
+        receive() -> Option[Event] {
+            if world.inbox.len() == 0 { return None }
+            return Some(world.inbox.remove(0))
+        }
+        cancel(request_id) -> () {
+            world.cancelled.push(request_id)
+        }
+    }
+}
+
+/// The handler of `Time`: the clock of the world, it moves only by `advance`.
+export fn memory_time(mut world MemoryWorld) -> Effect[Time] {
+    effect Time {
+        now() -> Timestamp => world.clock_ms.to_unix_millis()
+        now_monotonic() -> Monotonic => (world.clock_ms * 1_000_000).to_monotonic_nanos()
+        local_offset_sec() -> int => 0
+        sleep(d) -> () => ()
+    }
+}

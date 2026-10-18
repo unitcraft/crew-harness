@@ -1,0 +1,32 @@
+// effects.nv - the outside world of the engine: four effects (spec rule 8: only the executor writes).
+//
+// Source: state-machine-engine-automaton.md, effects `Storage`, `Journal`, `Link`; here the
+// concrete types are used, because Oracle 0.1.0 has no generic effects in this shape and the
+// methodology itself fixes the concrete wire types. The clock is the standard `Time` effect.
+//
+// Handlers: tests use the in-memory ones (`memory.nv`); the real ones (file, ACP) are the next tasks.
+// A failed operation is not an error value: a real handler that cannot write stops the process
+// (the step is then not committed - spec rule 13), so the operations return plain values.
+
+module crew_harness.engine
+
+/// Journal: the append-only log of the events and steps. `read_all` returns the entries written so
+/// far in the order of writing; the engine reads it at resume to know which requests were already sent.
+export type Journal effect {
+    fn write(entry JournalEntry) -> ()
+    fn read_all() -> []JournalEntry
+}
+
+/// Store: snapshots by session id; `save` replaces, `load` returns the last saved one.
+export type Store effect {
+    fn save(id str, snapshot Snapshot) -> ()
+    fn load(id str) -> Option[Snapshot]
+}
+
+/// Agent: the link to the agent. `send` sends a request, `receive` returns the next incoming event
+/// without waiting (None - nothing arrived), `cancel` tells the agent that the request is cancelled.
+export type Agent effect {
+    fn send(request Request[str]) -> ()
+    fn receive() -> Option[Event]
+    fn cancel(request_id str) -> ()
+}

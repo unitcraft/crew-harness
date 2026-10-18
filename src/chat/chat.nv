@@ -1,0 +1,241 @@
+// chat.nv - the demo machine: a chat session with an agent.
+//
+// The MVP machine of the product ("a chat session with an agent"); on it the properties of the engine
+// are shown. It lives beside the engine, not in it: the engine does not know it (the module `engine` does
+// not import `chat`), the machine knows the engine only through its types.
+//
+// States: Idle (waits for a user message), Awaiting (a request to the agent is open), Done (the agent
+// answered), Failed (refused, cancelled by the user, no answer in time).
+// Events: UserMessage(text), AgentChunk(text), AgentDone, AgentRefused(code), Cancel, Timeout.
+// Outputs: send a request to the agent, write a journal line, save the snapshot, cancel the request, finish.
+//
+// `step` is a pure function of the encoded state and the event: no input-output, no clock, no random.
+// The typed core is `chat_step` (state and event as sum types); `ChatSession.step` is the border: it decodes
+// the state text, maps the engine event to a `ChatEvent`, calls the core and encodes the new state.
+module crew_harness.chat
+
+import crew_harness.engine.{Event, EventKind, Output, SendOrder, LogNote, CancelOrder, Conclusion, StepResult, FailCode}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+/// ChatState: where the session is.
+export type ChatState enum
+    | Idle
+    | Awaiting { user str, reply str }
+    | Done { reply str }
+    | Failed { code FailCode }
+
+/// ChatEvent: what happens to the session, as the machine understands the events of the engine.
+export type ChatEvent enum
+    | UserMessage(str)
+    | AgentChunk(str)
+    | AgentDone
+    | AgentRefused(FailCode)
+    | Cancel
+    | Timeout
+
+/// ChatStep: the typed result of a step.
+export type ChatStep { state ChatState, outputs []Output }
+
+/// ChatSession: the machine. `party` is the id of the agent as a party of requests, `idle_term` the idle term in ms.
+export type ChatSession { party str, idle_term int }
+
+/// The session with the default agent party and the idle term of 30 seconds.
+export fn chat_session() -> ChatSession => { party: "agent", idle_term: 30000 }
+
+// ----- the text form of the state -----
+
+fn put(mut o JsonObject, key str, value JsonValue) -> () {
+    ro replaced = o.insert(key, value)
+}
+
+fn text_of(o JsonObject, key str) -> Option[str] {
+    match o.get(key) {
+        Some(v) => v.str()
+        None => None
+    }
+}
+
+/// The state as one line of JSON.
+export fn encode_chat_state(state ChatState) -> str {
+    mut o = JsonObject.new()
+    match state {
+        Idle => put(o, "state", JsonValue.str("Idle"))
+        Awaiting { user, reply } => {
+            put(o, "state", JsonValue.str("Awaiting"))
+            put(o, "user", JsonValue.str(user))
+            put(o, "reply", JsonValue.str(reply))
+        }
+        Done { reply } => {
+            put(o, "state", JsonValue.str("Done"))
+            put(o, "reply", JsonValue.str(reply))
+        }
+        Failed { code } => {
+            put(o, "state", JsonValue.str("Failed"))
+            put(o, "code", JsonValue.str(code.name()))
+        }
+    }
+    JsonValue.object(o).to_str()
+}
+
+/// The state from its text; text that is not a state of the machine is `None`.
+export fn decode_chat_state(text str) -> Option[ChatState] {
+    ro o = match Json.parse(text) {
+        Ok(v) => v.object()?
+        Err(e) => return None
+    }
+    ro name = text_of(o, "state")?
+    if name == "Idle" { return Some(Idle) }
+    if name == "Awaiting" {
+        ro user = text_of(o, "user")?
+        ro reply = text_of(o, "reply")?
+        return Some(Awaiting { user, reply })
+    }
+    if name == "Done" {
+        ro reply = text_of(o, "reply")?
+        return Some(Done { reply })
+    }
+    if name == "Failed" {
+        ro code = text_of(o, "code")?
+        return Some(Failed { code: FailCode.of(code) })
+    }
+    None
+}
+
+/// The name of a state.
+export fn chat_state_name(state ChatState) -> str => match state {
+    Idle => "Idle"
+    Awaiting { user, reply } => "Awaiting"
+    Done { reply } => "Done"
+    Failed { code } => "Failed"
+}
+
+// ----- the events -----
+
+/// The event of the machine for an event of the engine; `None` - the machine does not know it.
+export fn chat_event_of(event Event) -> Option[ChatEvent] {
+    match event.kind {
+        EventKind.Input => {
+            if event.name == "user_message" { return Some(UserMessage(event.input)) }
+            if event.name == "cancel" { return Some(Cancel) }
+            None
+        }
+        EventKind.Progress => Some(AgentChunk(event.input))
+        EventKind.Answered => Some(AgentDone)
+        EventKind.Refused => Some(AgentRefused(FailCode.of(event.input)))
+        EventKind.Expired => Some(Timeout)
+    }
+}
+
+/// The events of the outside world as the creator of an event builds them (the envelope is stamped by the engine).
+export fn user_says(text str) -> Event => Event.word("user_message", text)
+
+export fn user_cancels() -> Event => Event.word("cancel", "")
+
+export fn agent_chunk(request str, text str) -> Event => Event.incoming(EventKind.Progress, "agent_chunk", Some(request), text)
+
+export fn agent_done(request str) -> Event => Event.incoming(EventKind.Answered, "agent_done", Some(request), "")
+
+export fn agent_refused(request str, code FailCode) -> Event => Event.incoming(EventKind.Refused, "agent_refused", Some(request), code.name())
+
+// ----- the step -----
+
+fn note(text str) -> Output => Output.Log(LogNote { text })
+
+fn finish_answer(text str) -> Output => Output.Finish(Conclusion { failure: None, text })
+
+fn finish_refusal(code FailCode, text str) -> Output => Output.Finish(Conclusion { failure: Some(code), text })
+
+fn event_label(event ChatEvent) -> str => match event {
+    UserMessage(text) => "user message"
+    AgentChunk(text) => "agent chunk"
+    AgentDone => "agent done"
+    AgentRefused(code) => "agent refused"
+    Cancel => "cancel"
+    Timeout => "timeout"
+}
+
+// An event the state does not expect: nothing changes, a note is left.
+fn ignored(state ChatState, event ChatEvent) -> ChatStep {
+    ChatStep { state, outputs: [note("ignored: ${event_label(event)} in ${chat_state_name(state)}")] }
+}
+
+/// The typed core of the machine: the new state and the outputs for a state and an event. Pure.
+export fn chat_step(session ChatSession, state ChatState, event ChatEvent) -> ChatStep {
+    match state {
+        Idle => match event {
+            UserMessage(text) => ChatStep {
+                state: Awaiting { user: text, reply: "" },
+                outputs: [
+                    note("user message: ${text}"),
+                    Output.Send(SendOrder { party: session.party, input: text, idle_term: session.idle_term }),
+                    Output.Save
+                ]
+            }
+            Cancel => ChatStep {
+                state: Failed { code: FailCode.StoppedByHuman },
+                outputs: [note("cancelled by the user before the request"), finish_refusal(FailCode.StoppedByHuman, "cancelled by the user"), Output.Save]
+            }
+            _ => ignored(state, event)
+        }
+        Awaiting { user, reply } => match event {
+            AgentChunk(text) => ChatStep {
+                state: Awaiting { user, reply: "${reply}${text}" },
+                outputs: [note("agent chunk: ${text}"), Output.Save]
+            }
+            AgentDone => ChatStep {
+                state: Done { reply },
+                outputs: [note("agent done"), finish_answer(reply), Output.Save]
+            }
+            AgentRefused(code) => ChatStep {
+                state: Failed { code },
+                outputs: [note("agent refused: ${code.name()}"), finish_refusal(code, "the agent refused"), Output.Save]
+            }
+            Cancel => ChatStep {
+                state: Failed { code: FailCode.StoppedByHuman },
+                outputs: [
+                    note("cancelled by the user while waiting"),
+                    Output.Cancel(CancelOrder { party: session.party }),
+                    finish_refusal(FailCode.StoppedByHuman, "cancelled by the user"),
+                    Output.Save
+                ]
+            }
+            Timeout => ChatStep {
+                state: Failed { code: FailCode.Timeout },
+                outputs: [note("no answer in time"), finish_refusal(FailCode.Timeout, "no answer in time"), Output.Save]
+            }
+            _ => ignored(state, event)
+        }
+        Done { reply } => ignored(state, event)
+        Failed { code } => ignored(state, event)
+    }
+}
+
+// ----- the machine for the engine (protocol `Machine`) -----
+
+/// The name of the machine for the journal.
+export fn ChatSession @name() -> str => "ChatSession"
+
+/// The encoded initial state: Idle.
+export fn ChatSession @initial() -> str => encode_chat_state(Idle)
+
+/// The name of an encoded state; text that is not a state is "Broken".
+export fn ChatSession @state_name(state str) -> str {
+    match decode_chat_state(state) {
+        Some(s) => chat_state_name(s)
+        None => "Broken"
+    }
+}
+
+/// One step on encoded values: pure, everything it uses is in `state` and `event`.
+export fn ChatSession @step(state str, event Event) -> StepResult {
+    match decode_chat_state(state) {
+        None => StepResult { state, outputs: [note("defect: the state is not a chat state, nothing changed")] }
+        Some(current) => match chat_event_of(event) {
+            None => StepResult { state, outputs: [note("ignored: unknown event ${event.name}")] }
+            Some(chat_event) => {
+                ro result = chat_step(@, current, chat_event)
+                StepResult { state: encode_chat_state(result.state), outputs: result.outputs }
+            }
+        }
+    }
+}

@@ -1,0 +1,150 @@
+// codec.nv - text forms: a journal line and a snapshot (JSON, UTF-8, non-ASCII text is written as it is).
+//
+// Source: state-machine-spec.md rule 31 (the envelope of a journal line: trace, step number, cause,
+// state name, request id, time) and rules 12, 22 (what a snapshot keeps). The format is a line of
+// JSON, as the task fixes; the standard `std.encoding.json` writes and reads it.
+module crew_harness.engine
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+fn put(mut o JsonObject, key str, value JsonValue) -> () {
+    ro replaced = o.insert(key, value)
+}
+
+fn text_of(o JsonObject, key str) -> Option[str] {
+    match o.get(key) {
+        Some(v) => v.str()
+        None => None
+    }
+}
+
+fn int_of(o JsonObject, key str) -> Option[int] {
+    match o.get(key) {
+        Some(v) => v.int()
+        None => None
+    }
+}
+
+fn list_of(o JsonObject, key str) -> Option[[]JsonValue] {
+    match o.get(key) {
+        Some(v) => v.array()
+        None => None
+    }
+}
+
+fn object_of(text str) -> Option[JsonObject] {
+    match Json.parse(text) {
+        Ok(v) => v.object()
+        Err(e) => None
+    }
+}
+
+/// The journal line of an entry: one line of JSON without a line break.
+export fn journal_line(entry JournalEntry) -> str {
+    mut o = JsonObject.new()
+    put(o, "trace", JsonValue.str(entry.trace))
+    put(o, "step", JsonValue.int(entry.step))
+    put(o, "cause", JsonValue.str(entry.cause))
+    put(o, "state", JsonValue.str(entry.state))
+    put(o, "request", JsonValue.str(entry.request))
+    put(o, "at", JsonValue.int(entry.at))
+    put(o, "kind", JsonValue.str(entry.kind))
+    put(o, "text", JsonValue.str(entry.text))
+    JsonValue.object(o).to_str()
+}
+
+/// Parse a journal line; a line that is not a journal entry is `None`.
+export fn parse_journal_line(line str) -> Option[JournalEntry] {
+    ro o = object_of(line)?
+    ro trace = text_of(o, "trace")?
+    ro step = int_of(o, "step")?
+    ro cause = text_of(o, "cause")?
+    ro state = text_of(o, "state")?
+    ro request = text_of(o, "request")?
+    ro at = int_of(o, "at")?
+    ro kind = text_of(o, "kind")?
+    ro text = text_of(o, "text")?
+    Some({ trace, step, cause, state, request, at, kind, text })
+}
+
+fn open_to_json(r OpenRequest) -> JsonValue {
+    mut o = JsonObject.new()
+    put(o, "id", JsonValue.str(r.id))
+    put(o, "party", JsonValue.str(r.party))
+    put(o, "attempt", JsonValue.int(r.attempt))
+    put(o, "step", JsonValue.int(r.step))
+    put(o, "input", JsonValue.str(r.input))
+    put(o, "idle_term", JsonValue.int(r.idle_term))
+    put(o, "deadline", JsonValue.int(r.deadline))
+    JsonValue.object(o)
+}
+
+fn open_from_json(v JsonValue) -> Option[OpenRequest] {
+    ro o = v.object()?
+    ro id = text_of(o, "id")?
+    ro party = text_of(o, "party")?
+    ro attempt = int_of(o, "attempt")?
+    ro step = int_of(o, "step")?
+    ro input = text_of(o, "input")?
+    ro idle_term = int_of(o, "idle_term")?
+    ro deadline = int_of(o, "deadline")?
+    Some({ id, party, attempt, step, input, idle_term, deadline })
+}
+
+fn counter_to_json(c PartyCounter) -> JsonValue {
+    mut o = JsonObject.new()
+    put(o, "party", JsonValue.str(c.party))
+    put(o, "attempts", JsonValue.int(c.attempts))
+    JsonValue.object(o)
+}
+
+fn counter_from_json(v JsonValue) -> Option[PartyCounter] {
+    ro o = v.object()?
+    ro party = text_of(o, "party")?
+    ro attempts = int_of(o, "attempts")?
+    Some({ party, attempts })
+}
+
+/// The snapshot of the engine state.
+export fn encode_snapshot(state EngineState) -> Snapshot {
+    mut open = []JsonValue.new()
+    for r in state.open { open.push(open_to_json(r)) }
+    mut closed = []JsonValue.new()
+    for id in state.closed { closed.push(JsonValue.str(id)) }
+    mut counters = []JsonValue.new()
+    for c in state.counters { counters.push(counter_to_json(c)) }
+    mut o = JsonObject.new()
+    put(o, "trace", JsonValue.str(state.trace))
+    put(o, "step", JsonValue.int(state.step))
+    put(o, "event_counter", JsonValue.int(state.event_counter))
+    put(o, "machine_state", JsonValue.str(state.machine_state))
+    put(o, "open", JsonValue.array(open))
+    put(o, "closed", JsonValue.array(closed))
+    put(o, "counters", JsonValue.array(counters))
+    put(o, "final_kind", JsonValue.str(state.final_kind))
+    put(o, "final_text", JsonValue.str(state.final_text))
+    put(o, "final_code", JsonValue.str(state.final_code))
+    put(o, "final_step", JsonValue.int(state.final_step))
+    { step: state.step, data: JsonValue.object(o).to_str() }
+}
+
+/// Restore the engine state from a snapshot; a damaged snapshot is `None`.
+export fn decode_snapshot(snapshot Snapshot) -> Option[EngineState] {
+    ro o = object_of(snapshot.data)?
+    ro trace = text_of(o, "trace")?
+    ro step = int_of(o, "step")?
+    ro event_counter = int_of(o, "event_counter")?
+    ro machine_state = text_of(o, "machine_state")?
+    ro final_kind = text_of(o, "final_kind")?
+    ro final_text = text_of(o, "final_text")?
+    ro final_code = text_of(o, "final_code")?
+    ro final_step = int_of(o, "final_step")?
+    mut open = []OpenRequest.new()
+    for item in list_of(o, "open")? { open.push(open_from_json(item)?) }
+    mut closed = []str.new()
+    for item in list_of(o, "closed")? { closed.push(item.str()?) }
+    mut counters = []PartyCounter.new()
+    for item in list_of(o, "counters")? { counters.push(counter_from_json(item)?) }
+    if step != snapshot.step { return None }
+    Some({ trace, step, event_counter, machine_state, open, closed, counters, final_kind, final_text, final_code, final_step })
+}
