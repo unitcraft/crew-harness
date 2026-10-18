@@ -1,0 +1,5 @@
+2026-10-18 13:40 документ: задание заведено по слову владельца («project_settings делаешь? что по рекомендации?»); материал — task/message.md; быстрый путь; основа — origin/main 6d6663d
+2026-10-18 13:57 находка: красная проба до кода (crew-project-settings-key, 33 проверки) на копии исходного кода: project_settings не даёт проектов, оба ключа дают чужой список, строки врача пусты; после правки зелёные
+2026-10-18 13:57 документ: код — settings.ts (projectsOption, optionKeyLines, settingsNotes), core.ts (saveProjects, loadProjects, OPENCODE_CREW_PROJECTS, тексты crew_config и crew_doctor), index.ts, status.ts, tui.ts, profile-layer.ts; README; старые тесты и golden не менялись
+2026-10-18 13:57 находка: полный набор исполнителя — 0 красных из 127 запусков (4 одновременно); стражи — ок 8, FAIL 0
+2026-10-18 14:21 находка: независимая проверка оркестратора: diff прочитан (10 файлов); crew-project-settings-key, crew-project, crew-config, crew-settings, crew-config-diverge, crew-profiles-select, crew-profiles-cmd, crew-profiles-layer, crew-cfgtool, crew-help — зелёные по одному; стражи — ок 8, FAIL 0; полный прогон — перед пушем
