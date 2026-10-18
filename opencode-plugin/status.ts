@@ -16,6 +16,8 @@ import { answerCounts, answerSideRow } from "./answer.ts"
 import { divergenceLineFor, unconfiguredLineFor } from "./config-diverge.ts"
 import { FORM_MAX_REPEATS, pendingForms } from "./form-wait.ts"
 import { lockWaitLine, lockWaiters } from "./review.ts"
+import { refreshRouteStale } from "./task-folders.ts"
+import { ROUTE_RU, STALE_WARNING } from "./route.ts"
 import { type Task, ACCEPTED_REMINDERS_MAX, EXECUTOR_CODE, acceptedAt, acceptedReminders, isOpen, listTasks, loadTask, sesLabel, sessionOf, taskNo } from "./tasks.ts"
 import { CREW_STATE_WORDS, ROLE_WORDS, SESSION_KIND, SESSION_WORDS, TASK_WORDS } from "./progress.ts"
 import { LOOP_HINT, LOOP_MARK, LOOP_WORD, loopLine, loopOf } from "./answer-loop.ts"
@@ -65,7 +67,7 @@ export type Status = {
   /** Своя задача (исполнитель или приёмщик). ref — номер задачи в показе («045», задачи 058, 086); label — сессия
    *  методики («С4-3»); group — задача с папкой: панель и /crew группируют её сессии под строкой задачи; status у сессии методики —
    *  её собственный (сдана — submitted, передана — handed), ended — когда сдана. */
-  task?: { n: number; status: string; as: "executor" | "reviewer"; title: string; steps?: StepView[]; checking?: string; ref?: string; label?: string; group?: true; ended?: number; kind?: string }
+  task?: { n: number; status: string; as: "executor" | "reviewer"; title: string; steps?: StepView[]; checking?: string; ref?: string; label?: string; group?: true; ended?: number; kind?: string; route?: "fast"; routeStale?: true }
   /** Открытые задачи, поставленные этой сессией. */
   tasks: { n: number; status: string; priority: string; title: string }[]
   /** Вкладка застряла (задача 043, L3): с какого времени и по чему; держится, пока признак не снят (push, ответ, сдача, рабочий ход,
@@ -217,6 +219,8 @@ function statusOfAll(x: StatusInput): Status {
   // УСТАРЕВШАЯ ПРИВЯЗКА (задача 064, п. 9; владелец, 2026-10-17, «по рекомендации»): вкладка, чья задача закрыта (отменена, влита), и вкладка
   // интегратора показываются по своей роли, а не как исполнитель задачи («#73 исп» у интегратора, подхватившего когда-то отменённую #73)
   const shown = own && isOpen(own) && card.role !== "integrator" ? own : undefined
+  // маршрут (задача 092): постановка быстрого пути изменена после слова завода — запись помечается здесь же, при показе
+  if (shown?.route === "fast") refreshRouteStale(shown)
   const stuck = obligationsOf(card.session)
     .filter((o) => o.stuck && !obligationMoot(o, card))
     .map((o) => ({ ...(o.stuckAt ? { at: o.stuckAt } : {}), what: o.stuckWhat ?? (o.task ? o.task : `вопрос ${o.qid}`) }))
@@ -231,7 +235,7 @@ function statusOfAll(x: StatusInput): Status {
     watches: watches.map((w) => ({ id: w.id, note: w.note, started: w.started, minutes: w.minutes })),
     asked: x.asked,
     ...(x.askedStale?.length ? { askedStale: x.askedStale } : {}),
-    ...(shown ? { task: { n: shown.n, status: ses && ses.status !== "running" ? (ses.status === "submitted" ? "submitted" : ses.status === "handed" ? "handed" : "cancelled") : shown.status, as: card.task ? ("executor" as const) : ("reviewer" as const), title: shown.title, ...(stepsOf(shown) ? { steps: stepsOf(shown) } : {}), ...(shown.checking ? { checking: shown.checking.step } : {}), ref: taskNo(shown), ...(shown.folder ? { group: true as const } : {}), ...(ses && ses.code !== "исп" ? { label: sesLabel(ses), ...(sessionKind(ses.code, ses.goal) ? { kind: sessionKind(ses.code, ses.goal) } : {}) } : {}), ...(ses?.ended && ses.status !== "running" ? { ended: ses.ended } : {}) } } : {}),
+    ...(shown ? { task: { n: shown.n, status: ses && ses.status !== "running" ? (ses.status === "submitted" ? "submitted" : ses.status === "handed" ? "handed" : "cancelled") : shown.status, as: card.task ? ("executor" as const) : ("reviewer" as const), title: shown.title, ...(stepsOf(shown) ? { steps: stepsOf(shown) } : {}), ...(shown.checking ? { checking: shown.checking.step } : {}), ref: taskNo(shown), ...(shown.folder ? { group: true as const } : {}), ...(ses && ses.code !== "исп" ? { label: sesLabel(ses), ...(sessionKind(ses.code, ses.goal) ? { kind: sessionKind(ses.code, ses.goal) } : {}) } : {}), ...(ses?.ended && ses.status !== "running" ? { ended: ses.ended } : {}), ...(shown.route === "fast" ? { route: "fast" as const } : {}), ...(shown.route === "fast" && shown.route_word_stale ? { routeStale: true as const } : {}) } } : {}),
     tasks: authored.map((t) => ({ n: t.n, status: t.status, priority: t.priority, title: t.title })),
     ...(stuck.length ? { stuck } : {}),
     updated: now,
@@ -531,16 +535,21 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
       // шаги приёмки — один раз на задачу (задача 087): у приёмщика, а без него — на строке названия («шаги 3/13»)
       const { holder, orphan } = stepsPlace(group.filter((y) => !finishedSession(y)))
       const onTitle = orphan ? ` · шаги ${orphan.match(/\d+\/\d+/)?.[0] ?? ""}`.trimEnd() : ""
-      const title = `${refOf(s)} ${titleText(s.task!.title)}`
+      // маршрут (задача 092): у быстрой задачи — слово «быстрый» на строке названия, под ней предупреждение решения 51
+      const title = `${refOf(s)} ${titleText(s.task!.title)}${group.some((x) => x.task?.route) ? ` · ${ROUTE_RU.fast}` : ""}`
+      const staleLine = group.some((x) => x.task?.routeStale) ? `    ⚠ ${STALE_WARNING}` : undefined
       if (s.task!.group) {
         const done = group.filter(finishedSession).length
         lines.push(`  ${title}${onTitle}${done ? ` · ${done} ${CREW_STATE_WORDS.done}` : ""}`)
+        if (staleLine) lines.push(staleLine)
         for (const x of group.filter((y) => !finishedSession(y))) row(x, "    ", holder)
       } else if (group.some((x) => x.state === "owner" || x.state === "question")) {
         lines.push(`  ${rowMark(lead)}${title}${onTitle}`.trimEnd())
+        if (staleLine) lines.push(staleLine)
         for (const x of group) row(x, "    ", holder)
       } else {
         lines.push(`  ${title}${onTitle} — ${group.map((x) => `${whoOf(x, dup)} ${stateText(x, now)}${extrasOf(x, now, holder)}`).join(" · ")}`)
+        if (staleLine) lines.push(staleLine)
       }
     }
     // планы: ждущий согласования владельца — своей строкой, остальные — счётчиком
@@ -741,10 +750,12 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
   // тон base (accent — если эта вкладка ждёт вас), продолжение названия начинается с «· » вместо пробелов (задача 068)
   const heading = (first: Status) => {
     const g = first.task!.group
-    wrapWords(`${refOf(first)} ${titleText(first.task!.title)}`, width - 2).forEach((l, k) => {
+    wrapWords(`${refOf(first)} ${titleText(first.task!.title)}${first.task!.route ? ` · ${ROUTE_RU.fast}` : ""}`, width - 2).forEach((l, k) => {
       const m = k || g ? " " : (markOf(first) ?? " ")
       rows.push({ mark: m, who: "", what: k ? `· ${l}` : m.trim() ? `${m} ${l}` : l, tone: g || !needs(first) ? "base" : "accent" })
     })
+    // решение 51 (задача 092): постановка изменена после слова завода — две строки под названием
+    if (first.task!.routeStale) for (const l of ["⚠ правка после слова завода", "↳ нужно новое слово владельца"]) rows.push({ mark: " ", who: "", what: l, tone: "accent" })
   }
   const doneRow = (k: string) => {
     const n = sorted0.filter((x) => finished(x) && tkey(x) === k).length

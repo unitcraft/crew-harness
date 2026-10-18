@@ -12,6 +12,7 @@ import path from "node:path"
 import { INBOX, READ, type Priority, type Tier, readJson, safeKey } from "./core.ts"
 import { idsHas } from "./housekeeping.ts"
 import { BASE } from "./paths.ts"
+import type { RouteFields } from "./route.ts"
 
 // путь — из paths.ts (модуль без зависимостей: core и tasks импортируют друг друга, а BASE ядра здесь ещё не готов)
 export const TASKS = path.join(BASE, "tasks")
@@ -103,7 +104,7 @@ export type PrecheckRecord = {
   landed?: { tip: string; at: number }
 }
 
-export type Task = {
+export type Task = RouteFields & {
   project: string
   n: number
   title: string

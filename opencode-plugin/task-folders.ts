@@ -8,7 +8,8 @@ import { execFileSync } from "node:child_process"
 import { buildProgress, logLine, ymdhm } from "./journal.ts"
 import { parseJournal } from "./progress.ts"
 import { type FolderHit, pad3, tasksDirOn, repoTop } from "./task-numbers.ts"
-import { type Task, type TaskSession, sesLabel, sessionRef, taskNo } from "./tasks.ts"
+import { type Task, type TaskSession, saveTask, sesLabel, sessionRef, taskNo } from "./tasks.ts"
+import { STALE_WARNING, markStale, routeLogText } from "./route.ts"
 
 /** Папки задач проекта каталога dir включены: корень репозитория и каталог задач; иначе undefined. */
 export function folderInfo(dir: string, cfg: { tasksDir: string; targetBranch: string }): { top: string; rel: string } | undefined {
@@ -85,7 +86,7 @@ export function numberedPoints(goal: string): string {
 export type MessageFields = Pick<Task, "title" | "goal" | "criteria" | "boundaries" | "open_questions" | "author_role" | "owner_words" | "result" | "links"> & { project?: string }
 
 /** Задание по образцу из полей задачи (интегратор не передал текст message): разделы по порядку, цель пунктами, пустой — «нет: …». */
-export function templateMessage(t: MessageFields, now: Date = new Date(), opts: { target?: string; via?: string } = {}): string {
+export function templateMessage(t: MessageFields, now: Date = new Date(), opts: { target?: string; via?: string; numberCriteria?: boolean } = {}): string {
   const none = (field: string, what: string) => `нет: интегратор ${what} не назвал (поле ${field} не передано)`
   const part = (name: string, body: string | undefined, field: string, what: string) => ["", `## ${name}`, "", body?.trim() || none(field, what)]
   return [
@@ -96,7 +97,7 @@ export function templateMessage(t: MessageFields, now: Date = new Date(), opts: 
     `Источник: слова владельца с датой — раздел «${OWNER_SECTION}».`,
     ...part(OWNER_SECTION, t.owner_words, "owner_words", "слов владельца"),
     ...part("Что нужно", numberedPoints(t.goal ?? ""), "goal", "цели"),
-    ...part("Критерии приёмки", t.criteria, "criteria", "критериев приёмки"),
+    ...part("Критерии приёмки", opts.numberCriteria && t.criteria?.trim() ? numberedPoints(t.criteria) : t.criteria, "criteria", "критериев приёмки"),
     ...part("Результат и куда он попадает", t.result, "result", "места результата"),
     ...part("Связи", t.links, "links", "связей"),
     ...part("Границы", t.boundaries, "boundaries", "границ"),
@@ -152,6 +153,39 @@ export function messageRefusal(input: { message?: unknown; owner_words?: unknown
   else if (!DATE_RE.test(words)) lack.push(`в owner_words нет даты ГГГГ-ММ-ДД — допиши дату и источник, например "${OWNER_EXAMPLE}"`)
   if (!String(input.result ?? "").trim()) lack.push("нет поля result — результат и куда он попадает: действующее место (например doc/canon/process.md, раздел «…») или «нет: результат — код: <что сдаётся>»")
   return lack.length ? `Задача не поставлена: задание task/message.md пишется по образцу (${TEMPLATE_REF}); ${lack.join("; ")}. Повтори вызов с этими полями (links и boundaries — по желанию) или передай message по образцу.` : undefined
+}
+
+/** Строка журнала задачи о маршруте: «ГГГГ-ММ-ДД ЧЧ:ММ документ: маршрут: быстрый, основание: …, источник: человек, слово завода: «…» (дата)» (задача 092). */
+export function routeLogLine(t: Parameters<typeof routeLogText>[0], now: Date = new Date()): string {
+  return `${ymdhm(now)} документ: ${routeLogText(t)}
+`
+}
+
+/** Текст task/message.md задачи с папкой: из дерева задачи (на диске), а когда дерева нет — из её ветки. Прочесть нельзя — undefined (о правке ничего не известно). */
+export function readTaskMessage(t: Pick<Task, "folder" | "worktree" | "branch" | "directory">): string | undefined {
+  if (!t.folder) return undefined
+  const rel = path.join(...String(t.folder).split("/"), "task", "message.md")
+  if (t.worktree) {
+    try {
+      return readFileSync(path.join(t.worktree, rel), "utf8")
+    } catch {}
+  }
+  if (!t.branch || !t.directory) return undefined
+  try {
+    return execFileSync("git", ["-C", t.directory, "show", `${t.branch}:${String(t.folder)}/task/message.md`], { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"] })
+  } catch {
+    return undefined
+  }
+}
+
+/** Решение 51 как данные: постановка быстрого пути изменена после слова завода — запись помечается route_word_stale, серия чистых заходов обнуляется, в
+ *  журнале задачи и в истории записи строка. Идемпотентно: помеченная запись не пишется заново. Вызывается при показе и при шагах crew_task. Возвращает true, если пометила. */
+export function refreshRouteStale(t: Task): boolean {
+  if (t.route !== "fast" || t.route_word_stale || !t.route_message_hash) return false
+  if (!markStale(t, readTaskMessage(t))) return false
+  saveTask(t)
+  taskLog(t, "документ", `${STALE_WARNING} (хеш постановки разошёлся); серия чистых заходов обнулена`)
+  return true
 }
 
 /** Первая строка log.md новой задачи. */

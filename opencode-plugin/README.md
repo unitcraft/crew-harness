@@ -799,6 +799,89 @@ task by its number; a session's title is `045 исп title`. The journal is
   executor of `submit`. `review` of a task still in rework names the same command for the
   executor. The executor's session stays open for rework until the task is done.
 
+### The route of a task («Маршрут задачи», task 092)
+
+The methodology makes the **route** of a task data: «полный» (full) or «быстрый» (fast), chosen before the first costly work, with the numbers of the
+cycle as data of the task ([task-runner-states.md](https://github.com/unitcraft/ai-dev-methodology/blob/main/task-runner-states.md), «Маршруты»,
+«Инварианты маршрута», «Проверки реализации»; [task-runner.md](https://github.com/unitcraft/ai-dev-methodology/blob/main/task-runner.md), «Параметры маршрута»).
+A fast route is a setting of the cycle, not an exception: the invariants of the route are not switched off by it or by any project setting. The plugin does the
+part that needs no runner: **the data in the task record, the check of the brief of the fast path, the rule of decision 51 as data, the display and a line of
+the journal**. The gate В14, the copy of the brief (`spec.md`), the return to the full path and the restart at В14 are the engine of the product, not the plugin.
+
+**The fields of the record** (English names; a record written before has none of them and is read as the full route, see below):
+
+| Methodology term | Field | Values |
+|---|---|---|
+| маршрут | `route` | `full` (default) or `fast` |
+| основание_маршрута | `route_basis` | text |
+| источник_выбора_маршрута («правило», «помощник», «человек») | `route_source` | `rule`, `helper` or `human` |
+| предложение_маршрута | `route_proposal` | `full` or `fast` (the rule applied to the section «Признаки маршрута» of the brief, or what the integrator passed) |
+| слово_завода | `route_word` | the owner's «заводи N» word for word with the date and the source |
+| дата_слова_завода | `route_word_date` | `ГГГГ-ММ-ДД` (absent in the input: the date inside the word) |
+| чистых_подряд | `clean_runs` | integer, default 2 full / 1 fast, **not below 1** |
+| потолок_заходов | `ceiling` | integer ≥ 1, default 4 full / 2 fast |
+| проб_в_чистом | `probes` | integer, default 3, **not below 3** |
+| сдача_сжата | `delivery_compressed` | bool, default `false` |
+| перечень_источников | `sources_list` | list of strings (default: the line «Перечень источников» of the brief) |
+| серия_чистых (заходов) | `clean_series` | the counter of the series (0); `clean_runs` is the number the cycle *requires*, it is never zeroed |
+| хеш постановки на слове завода; статус «черновик» → ворота В5 | `route_message_hash`, `route_word_stale` (`route_stale_at`) | decision 51, below |
+
+*Divergence from the task text:* task 092 says «серии чистых заходов обнуляются (поле `clean_runs`)» but also gives `clean_runs` the minimum 1 and the defaults 2 and 1.
+One field cannot be both the required number and the series, so the series is the separate `clean_series`; the required `clean_runs` stays.
+
+**Old records.** A record without `route` is read as `full`, source `rule`, basis «задача начата до введения маршрутов», with the numbers of the full route (test 14 of the
+methodology); reading never rewrites the file. Records made by `assign`, `order` and the steps of a plan have no route fields either and read the same way.
+
+**`crew_spawn {route: "fast", route_word, route_word_date?, ...}`.** Without `route` the task goes the full route and the record gets the fields of the full route.
+`route` can only be `full` or `fast`. The fast path needs all of the following; otherwise nothing is made (no record, no branch) and the answer is
+«Задача не поставлена: быстрый путь требует: …» — the route stays full, a task is never made without an explicit decision:
+
+- `route_word` is not empty and contains «заводи» (any case); the date is `ГГГГ-ММ-ДД`, given or found in the word; the choice is made by a human (`route_source: human`, the default for fast);
+- the brief (`task/message.md`, the text the plugin commits) has at least one point in «Критерии приёмки» and a line with the branch. *Divergences from the methodology:*
+  the methodology asks for criteria `AC-N` and a line `Ветка: <имя>`; the plugin accepts a numbered point, a `-` point or `AC-N` as a point, and the project's own form
+  «Репозиторий: …, ветка …» as the branch line (the template writes it), besides `Ветка: <имя>`. With a brief built from the fields the criteria are numbered by the plugin;
+- the numbers (`clean_runs`, `ceiling`, `probes`, `delivery_compressed` in the input, or the project's `route_defaults`) are not under the minimum of the methodology
+  (`clean_runs` 1, `probes` 3) and the list of weakenings is empty. This holds on **both** routes: a number below the minimum is refused with its reason. The settings
+  of the fast route under the minimum refuse the fast path (the task can still go the full route); the settings of the **full** route under the minimum stop every task
+  until fixed (there is no safer route than the full one).
+
+In a project without task folders there is no brief: the fast path is refused («постановки task/message.md нет»). A session of an open task (`task: N`) takes no `route`: the route of
+an open task is changed by `crew_task route`. A fast task with a folder gets in its `log.md`, in the first commit, the line `документ: маршрут: быстрый, основание: …, источник: человек, слово завода: «…» (ГГГГ-ММ-ДД)`,
+and the same line goes to the history of the record. The route is not a field of the journal's envelope: the history events carry it only as text.
+
+**Decision 51 as data** (task-runner-states.md, «Решения при переводе» 48, 51; tests 21 and 23). The record of the fast route keeps the hash of the brief as it was at the
+word (`route_message_hash`; the line ends of Windows and trailing blanks are not an edit). When `task/message.md` of the task (the task's worktree, else its branch) differs
+after the word, the record is marked `route_word_stale: true`, `clean_series` is zeroed, the history and `log.md` get a line; the numbers, the word and the trace stay.
+The warning «⚠ постановка изменена после слова завода: нужно новое слово владельца» is printed by `crew_task list`, `crew_task show` and every next step of `crew_task` with that task, and shown
+in `/crew` and in the panel, until the word is renewed. The check runs when the task is shown and at a step of `crew_task` (idempotent: the event is written once). It covers the data only:
+the gate В5, the phase «РАЗБОР» and the re-run of the implementation belong to the engine.
+
+**`crew_task {action: "route", n, route, ...}`** (integrator; an open task). `route: "full"` needs `text` — the reason, which becomes the basis in the journal; the word is emptied,
+`clean_series` is zeroed, the trace is kept. `route: "fast"` with a new `route_word` (+ `route_word_date`) renews the word of a marked task: the same conditions as at the start,
+the brief is read again, the new hash is kept, the mark is removed, the series start over. The line `документ: маршрут: …` goes to `log.md` of the task.
+
+**Display.** `crew_task list` and `show` and `/crew` mark a fast task with the word «быстрый» on the line of its title, the panel — on the heading («045 Название · быстрый»); a marked
+task has the warning line under it (in the panel two rows: «⚠ правка после слова завода», «↳ нужно новое слово владельца»). `show` prints the route line with the source, the basis, the word and the numbers.
+
+**The project's settings: `route_defaults`** in `.opencode/crew-harness.json` (a person or `crew_config set`; the schema checks the shape, a value under the minimum can be written
+and is refused at the choice of the route). No key — the values of the methodology:
+
+```json
+"route_defaults": {
+  "full": { "ceiling": 4, "clean_runs": 2, "probes": 3, "delivery_compressed": false, "weakenings": [] },
+  "fast": { "ceiling": 2, "clean_runs": 1, "probes": 3, "delivery_compressed": false, "weakenings": [] },
+  "thresholds": { "max_sources": 3, "max_parts": 2, "max_risk": "low" }
+}
+```
+
+(`максимум_источников`, `максимум_частей`, `допустимый_риск` of the methodology are `thresholds.max_sources`, `max_parts`, `max_risk` — `low`, `medium`, `high`.) The thresholds are used by the rule
+that proposes the route (`route.ts`, `classify`): no features → «полный», «признаки не записаны»; a feature missing → «признаки неполны: …»; a helper's «полный» → «полный», source `helper`; a feature over its
+threshold → «полный», «признак выходит за порог: …»; otherwise «быстрый». The proposal is recorded in `route_proposal` and does not decide: the owner's word is older than the rule (test 10).
+
+**What the tests of the methodology cover here** (the data side only; `test/crew-task-route.test.mjs`): 3 (the check of the settings: clean runs 0, probes 2, weakenings → refused with the reason; the passage to В14 is the engine's),
+4, 9, 10, 14, 15 (the route in the journal line, not in the envelope), 19 (the cycle input of a record under the minimum is refused: `cycleInput`), 21 and 23 (the data part: the hash diverges → the mark, the series zeroed), 22.
+Not covered, the engine is needed: 1, 2, 5–8, 11–13, 16 (the copy `spec.md` is not made), 17, 18, 20, 24, 25.
+
 ## Review and merge
 
 The integrator stays free for the owner and does not re-check accepted work:

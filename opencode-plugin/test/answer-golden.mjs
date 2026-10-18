@@ -82,14 +82,14 @@ const mask = (s) => {
   for (const p of [...spellings].map((x) => x.replaceAll("\\", "/")).sort((a, b) => b.length - a.length)) r = r.split(p).join("<TMP>")
   return r.replace(/\b\d\d:\d\d\b/g, "HH:MM")
 }
-// the lines of the new keys are left out of guide and show (see the header)
+// the lines of the new keys (answer_*, route_defaults of task 092) are left out of guide and show (see the header)
 const dropNew = (key, text) => {
   if (!key.startsWith("config: ")) return text
   const lines = text.split("\n")
   const keep = []
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i]
-    if (/^\s*(- )?answer_/.test(l)) continue
+    if (/^\s*(- )?(answer_|route_defaults)/.test(l)) continue
     if (/ОТВЕТЫ НА ВОПРОСЫ/.test(l)) {
       if (keep.length && keep[keep.length - 1] === "") keep.pop()
       continue

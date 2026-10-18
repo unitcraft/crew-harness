@@ -23,7 +23,8 @@ import { DEFAULT_FORM, PLAN_ACCEPTANCE, PLAN_MERGE_ACCEPTANCE, type PlanForm, al
 import { type Task, type TaskPlan, type TaskSession, WORKING_STATUSES, EXECUTOR_CODE, taskRef, taskNo, sessionOf, sessionRef, sesLabel, methodSession, moveToLegacy, listLegacy, slugify, acceptedAt, ago, byPriority, rounds, createTask, fillName, isOpen, listTasks, loadTask, plannedSessionId, saveTask, statusRu, taskEvent, taskLetterId } from "./tasks.ts"
 import { countedOpen, waitingCleanup } from "./tasks.ts"
 import { baseRef, branchExists, commitFiles, ensureBranch, findFolder, folderName, pad3, usedNumbers } from "./task-numbers.ts"
-import { firstLogLine, folderInfo, messageRefusal, nextLaunch, readFolderFile, taskLog, templateMessage, titleOfMessage } from "./task-folders.ts"
+import { firstLogLine, folderInfo, messageRefusal, nextLaunch, readFolderFile, readTaskMessage, refreshRouteStale, routeLogLine, taskLog, templateMessage, titleOfMessage } from "./task-folders.ts"
+import { STALE_WARNING, applyRouteChange, hasRouteInput, planRoute, routeLogText, routeSettingsOf, routeView, ROUTE_RU, type RouteSettings } from "./route.ts"
 import { acceptanceFromFile } from "./acceptance-file.ts"
 import { acceptWarning, acceptedTip, beginPrecheck, finishPrecheck, gateMerge, landedFresh, landingLine, markPrecheckStale, neighbourHints, precheckLines, unlockMerge } from "./precheck.ts"
 import { addSide, autoTrack, cleanupDone, removeSide, sideItems, cleanupSteps, fileAt, holdsMergeLock, isMerged, keptOnBranch, keptPaths, mergeHolder, releaseMergeLock, resolveKeep, reworkLetter, sameFs, takeMergeLock } from "./review.ts"
@@ -265,6 +266,8 @@ export type CrewConfig = {
   answerMax: number
   /** allow_self_assign: интегратору можно назначить задачу на собственную сессию (по умолчанию нет, задача 035) */
   allowSelfAssign: boolean
+  /** числа цикла по маршрутам и пороги выбора (route_defaults, задача 092) поверх значений методики */
+  routeDefaults: RouteSettings
 }
 export type ExtraField = { id: string; label: string; hint?: string }
 export const TASK_FIELDS = ["goal", "criteria", "boundaries", "open_questions"] as const
@@ -424,6 +427,7 @@ export function loadConfig(dir: string): CrewConfig {
     answerMode: normalizeAnswerMode(j.answer_mode).map,
     answerMax: normalizeAnswerMax(j.answer_max),
     allowSelfAssign: j.allow_self_assign === true,
+    routeDefaults: routeSettingsOf(j.route_defaults),
   }
 }
 
@@ -1424,8 +1428,10 @@ export const HELP = `crew-harness — письма между вкладками
   crew_spawn {goal, criteria, ...} — только интегратор: задача в новой сессии (работает и без окна); task, session, part_of —
                                 сессия задачи с папкой и подзадача (раздел ЗАДАЧИ).
        kind: "plan"          — задача-план (раздел ПЛАНИРОВАНИЕ ниже).
+       route: "fast"         — быстрый путь (задача 092): нужны route_word («заводи N» владельца дословно, с датой) и полная постановка
+                                (критерии приёмки пунктами, строка с веткой); иначе отказ «быстрый путь требует: …». Подробнее — раздел ЗАДАЧИ.
   crew_task {action, n?}      — задачи по номеру: list, show; интегратору ещё assign, push, reassign, cancel,
-                                priority, order, plan_decide, deliver (задачу с сессиями — на приёмку); приёмщику — review, check, round (план), precheck, merge, unlock, rework
+                                priority, route (маршрут задачи записью), order, plan_decide, deliver (задачу с сессиями — на приёмку); приёмщику — review, check, round (план), precheck, merge, unlock, rework
                                 (sync: true — только влить свежую целевую ветку, не круг доработки), accept, cleanup (cleaned — старое имя). assign — открытой вкладке владельца;
                                 сессия задачи ведёт одну задачу и закрывается после cleanup: продолжение работы того же
                                 исполнителя — новой задачей (crew_spawn), assign на сессию задачи отказывает.
@@ -1489,6 +1495,11 @@ acceptor — роль приёмщика (разделяемая) при нас�
     сдаёт работу интегратору (crew_task submit), приёмки плагина у неё нет; задача ждёт следующей сессии (статус idle). Приёмка
     плагина — одна на задачу: у задачи с одной сессией «исп» — после её сдачи, у задачи с сессиями — по crew_task {action:
     "deliver", n, text}.
+  Маршрут задачи (задача 092) — данные записи: route «full» (по умолчанию) или «fast», числа цикла ceiling/clean_runs/probes (не ниже
+    минимумов методики: 1 и 3), route_word — слово владельца «заводи N» дословно с датой. crew_spawn {route: "fast", route_word, ...} ставит быстрый
+    путь, если постановка полна (пункты «Критерии приёмки» и строка с веткой), иначе отказ «быстрый путь требует: …». Правка task/message.md после слова
+    помечает запись (route_word_stale): в list, show и каждом шаге crew_task предупреждение «постановка изменена после слова завода: нужно новое слово
+    владельца»; crew_task {action: "route", n, route: "fast", route_word} обновляет слово, {route: "full", text: "<причина>"} возвращает на полный путь.
   Подзадача — отдельная задача со своим номером и папкой: crew_spawn {part_of: N, ...}; первая строка её task/message.md —
     «Часть задачи NNN «…».», в log.md родителя — строка о заведении. Правило: своя приёмка или отдельное попадание в main —
     подзадача; следующий шаг той же работы (проверка, правка по находкам, продолжение, передача) — сессия.
@@ -2079,6 +2090,20 @@ export function makeTools(host: CrewHost): CrewTool[] {
     priority: { type: "string", enum: [...PRIORITIES], description: "P0 emergency, P1 first queue, P2 normal (default from the project), P3 when hands are free" },
     extra: { type: "object", description: "crew_spawn and assign: values of the project's extra task fields {id: one line up to 300 characters}; the ids are declared by the project (task_extra_fields, see crew_config show)", additionalProperties: { type: "string" } },
   }
+  // МАРШРУТ ЗАДАЧИ (задача 092): поля входа crew_spawn и crew_task route; имена зарезервированы в config-schema.ts (RESERVED_FIELD_IDS)
+  const routeInput = {
+    route: { type: "string", enum: ["full", "fast"], description: "Route of the task (the methodology: data of the task): full (default) or fast. fast needs: task/message.md with the numbered points of «Критерии приёмки» and a branch line («Репозиторий: …, ветка …» or «Ветка: …»), route_word with «заводи» and its date; otherwise the answer says «быстрый путь требует: …» and no task is made. The invariants of the route are not switched off by it" },
+    route_word: str("fast: the owner's word «заводи <number>» word for word with the date and the source, e.g. «заводи 093» (владелец, 2026-10-18, чат оркестратора); required, must contain «заводи»"),
+    route_word_date: str("fast: the date of the word, ГГГГ-ММ-ДД; absent - taken from route_word"),
+    route_basis: str("The basis of the route choice (default: the owner's word and the proposal of the rule for fast)"),
+    route_source: { type: "string", enum: ["rule", "helper", "human"], description: "Who chose the route (fast is chosen by the word of a human: human, the default for fast; rule - the default for full)" },
+    route_proposal: { type: "string", enum: ["full", "fast"], description: "What the rule or the helper proposed (default: the rule applied to the section «Признаки маршрута» of the brief)" },
+    clean_runs: { type: "number", description: "Clean runs in a row (default 2 for full, 1 for fast; not below 1)" },
+    ceiling: { type: "number", description: "Ceiling of rounds (default 4 for full, 2 for fast)" },
+    probes: { type: "number", description: "Probes in a clean run (default 3; not below 3)" },
+    delivery_compressed: { type: "boolean", description: "The delivery report in one paragraph (default false)" },
+    sources_list: { type: "array", items: { type: "string" }, description: "The list of sources from the brief (default: «Перечень источников» of «Признаки маршрута»)" },
+  }
   const missingFields = (input: any, cfg: CrewConfig) => cfg.taskFields.filter((f) => !String(input[f] ?? "").trim())
   /** Поля задания по образцу (задача 065): только непустые — запись задачи без них остаётся прежней. */
   const messageFieldsOf = (input: any) => Object.fromEntries((["owner_words", "result", "links"] as const).map((k) => [k, String(input[k] ?? "").trim()]).filter(([, v]) => v))
@@ -2131,7 +2156,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
     taskEvent(t, sessionID, "idle", `сессия ${sesLabel(s)} сдана${why ? ` (log.md не записан: ${why})` : ""}`)
     return undefined
   }
-  const taskRow = (t: Task) => `${taskNo(t)} ${t.priority} ${statusRu(t.status)} «${t.title}» — ${t.executor ? `исполнитель ${t.executor}` : "без исполнителя"}${t.kind === "assign" ? " (вкладка владельца)" : ""}${t.reviewer ? `, приёмщик ${t.reviewer}` : ""}${t.status === "accepted" && loadConfig(t.directory).acceptedSlot === "free" ? " — ждёт уборки" : ""}`
+  const taskRow = (t: Task) => `${taskNo(t)} ${t.priority} ${statusRu(t.status)} «${t.title}»${t.route === "fast" ? ` · ${ROUTE_RU.fast}` : ""} — ${t.executor ? `исполнитель ${t.executor}` : "без исполнителя"}${t.kind === "assign" ? " (вкладка владельца)" : ""}${t.reviewer ? `, приёмщик ${t.reviewer}` : ""}${t.status === "accepted" && loadConfig(t.directory).acceptedSlot === "free" ? " — ждёт уборки" : ""}`
 
   // Задача очищена: всё закрыто. Интегратору и исполнителю — тихие сводки (без пробуждения); сессии задачи закроет
   // плагин (заголовок «#N ✓✓»).
@@ -2174,6 +2199,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
       if (old && isOpen(old)) {
         if (!["idle", "running", "starting", "rework"].includes(old.status))
           return { content: `Сессия не запущена: задача ${taskRef(old)} ${statusRu(old.status)} — сессию добавляют до передачи на приёмку (deliver) или после возврата на доработку.` }
+        if (hasRouteInput(input)) return { content: `Сессия не запущена: маршрут (route и его поля) выбирается при постановке задачи, а у открытой задачи ${taskRef(old)} его меняют записью: crew_task {action: "route", n: ${old.n}, route: "full", text: "<причина>"} или с новым словом владельца.` }
         t = old
       } else {
         const hits = findFolder(fm.top, fm.rel, taskNum)
@@ -2185,15 +2211,22 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const inTarget = onBranch.find((h) => h.ref === cfg.targetBranch || h.ref === `origin/${cfg.targetBranch}`)
         const hit = inTarget ?? onBranch[0]
         const ftitle = String(input.title ?? "").trim() || titleOfMessage(hit.name, readFolderFile(fm.top, fm.rel, hit, "task/message.md"))
+        // маршрут задачи (задача 092): постановка быстрого пути проверяется по тексту папки до того, как запись заведена или старая перенесена
+        const rp = planRoute(input, readFolderFile(fm.top, fm.rel, hit, "task/message.md"), cfg.routeDefaults)
+        if (!rp.ok) return { content: rp.refusal }
         const moved = old ? moveToLegacy(project, taskNum) : ""
         try {
-          t = createTask({ ...common, title: ftitle, slug: hit.name.replace(/^\d+-/, ""), criteria: input.criteria?.trim() || `по заданию ${fm.rel}/${hit.name}/task/message.md` }, placeOf, { n: taskNum, fill: () => ({ folder: `${fm.rel}/${hit.name}`, sessions: [] }) })
+          t = createTask({ ...common, ...rp.fields, title: ftitle, slug: hit.name.replace(/^\d+-/, ""), criteria: input.criteria?.trim() || `по заданию ${fm.rel}/${hit.name}/task/message.md` }, placeOf, { n: taskNum, fill: () => ({ folder: `${fm.rel}/${hit.name}`, sessions: [] }) })
         } catch (e: any) {
           return { content: `Задача не поставлена: запись ${taskNum} в этот миг завёл другой процесс (${e?.code ?? e}). Повтори.` }
         }
         // папки нет в целевой ветке — ветка задачи идёт от ветки, где папка лежит (основную копию не трогаем)
         if (!inTarget && t.branch && !branchExists(fm.top, t.branch)) ensureBranch(fm.top, t.branch, hit.ref!)
         if (old) taskEvent(t, me.session, undefined, `старая запись ${taskNo({ project, n: taskNum! })} «${old.title}» перенесена в legacy/ без изменений`)
+        if (t.route === "fast") {
+          taskEvent(t, me.session, undefined, routeLogText(t))
+          taskLog(t, "документ", routeLogText(t))
+        }
         made = `Запись задачи ${taskRef(t)} заведена по папке ${t.folder}/${moved ? ` (старая закрытая запись ${taskNo({ project, n: taskNum! })} «${old!.title}» перенесена в legacy/)` : ""}. `
       }
     } else {
@@ -2214,16 +2247,19 @@ export function makeTools(host: CrewHost): CrewTool[] {
       // задание по образцу Канона (задача 065): message без разделов образца или нет owner_words и result — отказ до номера и папки
       const refusal = messageRefusal(input)
       if (refusal) return { content: refusal }
-      const used = usedNumbers(fm.top, fm.rel)
-      t = createTask({ ...common, title: a.title, criteria: input.criteria?.trim(), ...(partOf !== undefined ? { part_of: partOf } : {}) }, placeOf, { used, fill: (n, slug) => ({ folder: `${fm.rel}/${folderName(n, slug)}`, sessions: [] }) })
+      // текст задания собирается до записи задачи: по нему проверяется постановка быстрого пути (задача 092), от него берётся хеш слова завода
       const own = String(input.message ?? "")
-      const text = (partOf !== undefined ? `Часть задачи ${pad3(partOf)} «${parentTitle.replace(/[«»]/g, "")}».\n\n` : "") + (own.trim() ? own : templateMessage(t, new Date(), { target: cfg.targetBranch }))
+      const text = (partOf !== undefined ? `Часть задачи ${pad3(partOf)} «${parentTitle.replace(/[«»]/g, "")}».\n\n` : "") + (own.trim() ? own : templateMessage({ ...common, title: a.title, criteria: input.criteria?.trim() } as any, new Date(), { target: cfg.targetBranch, numberCriteria: input.route === "fast" }))
+      const rp = planRoute(input, text, cfg.routeDefaults)
+      if (!rp.ok) return { content: rp.refusal }
+      const used = usedNumbers(fm.top, fm.rel)
+      t = createTask({ ...common, ...rp.fields, title: a.title, criteria: input.criteria?.trim(), ...(partOf !== undefined ? { part_of: partOf } : {}) }, placeOf, { used, fill: (n, slug) => ({ folder: `${fm.rel}/${folderName(n, slug)}`, sessions: [] }) })
       const base = baseRef(fm.top, cfg.targetBranch)
       let sha = ""
       try {
         sha = execFileSync("git", ["-C", fm.top, "rev-parse", "--short", base], { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"] }).trim()
       } catch {}
-      const files = { [`${t.folder}/task/message.md`]: text, [`${t.folder}/log.md`]: firstLogLine(t, own.trim() ? "текст интегратора (поле message)" : "шаблон из полей задачи", `${cfg.targetBranch} ${sha}`.trim()) }
+      const files = { [`${t.folder}/task/message.md`]: text, [`${t.folder}/log.md`]: firstLogLine(t, own.trim() ? "текст интегратора (поле message)" : "шаблон из полей задачи", `${cfg.targetBranch} ${sha}`.trim()) + (t.route === "fast" ? routeLogLine(t) : "") }
       const c = t.branch ? commitFiles(fm.top, t.branch, base, files, `Add task ${pad3(t.n)}: ${t.slug}`) : ({ ok: false, error: "у задачи нет ветки" } as const)
       if (!c.ok) {
         taskEvent(t, me.session, "cancelled", `папка не заведена: ${c.error}`)
@@ -2241,8 +2277,9 @@ export function makeTools(host: CrewHost): CrewTool[] {
         // дерева родителя нет — строку в его log.md пишет интегратор: письмо с готовым текстом
         if (why) postLetter(me.session, { id: `subtask-${safeKey(project)}-${t.n}`, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: me.session, time: Date.now(), wake: false, text: `Подзадача ${taskRef(t)} заведена как часть задачи ${pad3(partOf)}; в log.md родителя строку не записал (${why}). Запиши её сам: log_line {kind: "документ", text: "${line}"}.` })
       }
+      if (t.route === "fast") taskEvent(t, me.session, undefined, routeLogText(t))
       fresh = true
-      made = `Задача ${taskRef(t)} заведена: папка ${t.folder}/ на ветке ${t.branch}`
+      made = `Задача ${taskRef(t)} заведена: папка ${t.folder}/ на ветке ${t.branch}${t.route === "fast" ? `; маршрут быстрый по слову владельца ${t.route_word_date} (числа цикла: потолок ${t.ceiling}, чистых ${t.clean_runs}, проб ${t.probes})` : ""}`
     }
     const s = startSession(t, code, goal, input.place, cfg, me.session)
     t.model = model
@@ -2269,6 +2306,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         "A task session is a part of the task, not a task: session \"<code>\" (С1, С2, С3п, С4…; default исп = the executor) adds a session to task N: ident 045 С4-3 (code and its ordinal in the task) plus the launch number №n; the plugin writes the launch lines into progress.log and log.md of the folder. A method session submits to you (crew_task submit), with no plugin review; the plugin's review of the task starts once, after crew_task deliver. place: own (default for С2/С4/С6) - its own worktree and branch task/NNN-<code>-<k> from the task branch; task (default for the others) - the task worktree.",
         "A sub-task (part_of: N) is a task of its own: own number and folder, the first line of its task/message.md is «Часть задачи NNN «…».», a line in the parent's log.md. The rule: an own acceptance or an own landing in main - a sub-task; the next step of the same work (a check, a fix by findings, a continuation, a handover) - a session.",
         "goal, criteria - required (the project may require more: boundaries, open_questions; task_fields). title? priority? P0..P3.",
+        "route? full (default) | fast (task 092): the route of the task is data of the record (route, route_basis, route_source, route_proposal, route_word, route_word_date, clean_runs, ceiling, probes, delivery_compressed, sources_list). fast needs the owner's word in route_word («заводи <number>» word for word with the date) and a complete brief (numbered «Критерии приёмки», a branch line); without them the answer is «быстрый путь требует: …» and no task is made. Numbers below the methodology's minimum (clean_runs 1, probes 3) are refused on both routes; the project's route_defaults set the numbers. A brief edited after the word marks the task (route_word_stale): crew_task route renews the word or returns to full.",
         "The task text of a new task with a folder (no task:, part_of included) follows one template: «# Задание: <title>», a header, then sections «Чего хочет владелец», «Что нужно», «Критерии приёмки», «Результат и куда он попадает», «Связи», «Границы» in this order; an empty section is «нет: <why>». Without message the plugin builds it from the fields: owner_words (required: the owner's words word for word with date and source, e.g. - «сделай X» (владелец, 2026-10-17, чат оркестратора)), goal (paragraphs and «- » lines become the numbered points of «Что нужно»), criteria, result (required: where the result lands, or «нет: результат — код: <what is delivered>»), links? (Зависит от / Блокирует / Пересекается (файлы) / Начинается после), boundaries?; absent links or boundaries become «нет: … не передано». Without owner_words with a date or without result - a refusal naming what to add; a message without the template's sections is refused too. A project without task folders and a session of a task (task: N) need none of these fields.",
         "tier heavy|medium|light - picks the model: by default claude-code opus|sonnet|haiku, spawn_models of the project overrides; an enabled model-profile set (/crew-sets) overrides both for the stage it describes (the tier then picks the tier inside the set's family). model - explicit provider/id[#variant]; required when the project has no model settings (ask the owner first).",
         "role? - role of the new session, default worker. extra {id: one line up to 300 characters} - the project's extra task fields (task_extra_fields; crew_config show lists them). parent \"project#N\" - the order of another project this task fulfils.",
@@ -2295,6 +2333,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         place: { type: "string", enum: ["own", "task"], description: "Where the session works: own - its own worktree and branch from the task branch (default for С2, С4, С6), task - the task worktree" },
         message: str("Full text of task/message.md of a new task folder by the template (title, header, the six sections in order; the owner's words with date); without it the plugin builds the text from the fields"),
         parent: str("The order of another project this task fulfils: \"project#N\" (from the order letter)"),
+        ...routeInput,
       },
       additionalProperties: false,
     },
@@ -2386,7 +2425,12 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const file = path.posix.join(cfg.plansDir.replace(/\\/g, "/"), cfg.planName.replace(/\{n\}/g, n).replace(/\{slug\}/g, slugify(title)))
         plan = { n, file, source: String(input.goal).trim(), ...(parentPlan ? { parent: parentPlan } : {}), rounds: [], clean: 0 }
       }
+      // маршрут задачи (задача 092): у проекта без папок задач постановки task/message.md нет — быстрый путь отказывает, полный записывается явно
+      if (plan && hasRouteInput(input)) return { content: "Задача не поставлена: route и его поля — для задачи с папкой, не для задачи-плана." }
+      const rp = plan ? undefined : planRoute(input, undefined, cfg.routeDefaults)
+      if (rp && !rp.ok) return { content: rp.refusal }
       const t = createTask({
+        ...(rp?.ok ? rp.fields : {}),
         project, title: plan ? `план ${plan.n}: ${title}` : title, goal: String(input.goal).trim(), criteria: plan ? "критерии приёмки плана (план 004): А — против исходной задачи, Б — правильность составления" : input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(),
         ...(extra.value ? { extra: extra.value } : {}),
         priority: isPriority(input.priority) ? input.priority : cfg.defaultPriority, tier: recTier, role, model,
@@ -2424,6 +2468,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         "reassign - integrator - n, text? - hand the task to a new session under the same number with a summary of what was done (a task session: the same code, the next ordinal and a new launch number; the old one is marked handed). text = a refinement of the goal: it goes into the new session's first letter as a block before the old goal, wins where they differ and stays in the task history (show). Refine the goal with this same call, never with a second letter after the handover: the new session would start on the old goal and report twice.",
         "cancel - integrator - n, text? - cancel the task; text goes to the executor. Releases the merge lock if the task held it.",
         "priority - integrator - n, priority P0..P3 - change the priority.",
+        "route - integrator - n, route full|fast, text (the reason, required for full), route_word and route_word_date (fast) - change the route of an open task BY A RECORD (task 092). To full: the reason becomes the basis, the word of the owner is emptied, the series of clean runs is zeroed, the trace stays. A new word «заводи <number>» (fast) renews the word of a task marked route_word_stale (the brief was edited after the word: the warning «постановка изменена после слова завода: нужно новое слово владельца» shows in list, show and every step until then) and re-reads the brief. A line «маршрут: …» goes to log.md of the task.",
         "submit - executor - n, text - submit the task's work with the report (what was done, how it was checked, what is left); no qid is needed. The first submission, one after rework or after a sync (the reviewer is woken), a plan task (the plan file and its form are checked). Already submitted: refused.",
         "track - executor, reviewer, integrator - n, branch?, worktree? - record a side branch or worktree of the task (no duplicates) so cleanup removes it; branches integrate/t<N> and integrate/t<N>-* are recorded by the plugin itself.",
         "plan_decide - integrator, only the plan task's author, only when the project's plan_approver is integrator - n, decision ok|ok-shortcuts|no, text (required with no) - decide a plan that passed the recheck rounds and waits for approval (status approval). ok = approved with no shortcuts; ok-shortcuts = approved, the shortcuts written in the plan stay; no = back to the executor, text lists what to change, the rounds start over. With plan_approver: owner (default) the owner decides in the window with /plans and this action is refused.",
@@ -2441,7 +2486,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
     input: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["list", "show", "assign", "order", "push", "reassign", "cancel", "priority", "track", "plan_decide", "submit", "deliver", "review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleanup", "cleaned"] },
+        action: { type: "string", enum: ["list", "show", "assign", "order", "push", "reassign", "cancel", "priority", "track", "plan_decide", "submit", "deliver", "review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleanup", "cleaned", "route"] },
         to: str("order: the other project's integrator, \"project.integrator\"; push: \"executor\" (default) or \"reviewer\""),
         keep: { type: "array", maxItems: 8, items: { type: "string" }, description: "cleanup: up to 8 worktree paths to keep as evidence" },
         checks: { type: "object", description: "accept: report per acceptance step {step id: what proves it}", additionalProperties: { type: "string" } },
@@ -2463,6 +2508,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         all: { type: "boolean", description: "list: include finished and cancelled", default: false },
         message: str("assign in a project with task folders: the full text of task/message.md of the new folder by the template (as crew_spawn); without it the text is built from the fields"),
         ...taskInput,
+        ...routeInput,
       },
       required: ["action"],
       additionalProperties: false,
@@ -2491,6 +2537,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const cfg = configFor(me)
         const missing = missingFields(input, cfg)
         if (missing.length) return { content: `Задача не поставлена: нет полей ${missing.map((f) => FIELD_RU[f] ?? f).join(", ")}.` }
+        if (hasRouteInput(input)) return { content: "Задача не поставлена: маршрут (route и его поля) выбирается при постановке crew_spawn; задачу, отданную вкладке, ведут полным путём, а маршрут открытой задачи меняют записью crew_task {action: \"route\"}." }
         const extra = parseExtra(input.extra, cfg)
         if ("error" in extra) return { content: `Задача не поставлена: ${extra.error}` }
         const title = String(input.title ?? "").trim() || String(input.goal).split(/\r?\n/)[0].slice(0, 60)
@@ -2552,9 +2599,21 @@ export function makeTools(host: CrewHost): CrewTool[] {
       }
       const t = findTask(me, input.n)
       if (!t) return { content: `Задачи ${taskNo({ project, n: input.n })} в проекте ${project} нет.` }
+      if (action === "route") {
+        if (!isIntegrator(me)) return notIntegrator(me)
+        if (!isOpen(t)) return { content: `Задача ${taskRef(t)} ${statusRu(t.status)}: маршрут закрытой задачи не меняют.` }
+        const res = applyRouteChange(t, input, readTaskMessage(t), configFor(me).routeDefaults, me.session)
+        if (!res.ok) return { content: res.refusal }
+        saveTask(t)
+        const why = t.folder ? taskLog(t, "документ", res.line) : "у задачи нет папки"
+        host.posted([])
+        return { content: `Маршрут задачи ${taskRef(t)} записан: ${res.line}.${why ? ` (В log.md задачи не записано: ${why}; запиши строку сам: log_line {kind: "документ", text: "${res.line.replace(/"/g, "'")}"}.)` : ""}` }
+      }
       if (action === "show") {
+        const rv = routeView(t)
         const lines = [
           taskRow(t),
+          t.route === "fast" ? `${routeLogText(t)}; числа цикла: потолок ${rv.ceiling}, чистых подряд ${rv.clean_runs} (серия ${rv.clean_series}), проб ${rv.probes}, сдача ${rv.delivery_compressed ? "сжата" : "не сжата"}${rv.proposal ? `; предложение правила: ${ROUTE_RU[rv.proposal]}` : ""}` : "",
           `автор ${t.author_role} (${t.author}), ступень ${t.tier}${t.model ? `, модель ${t.model}` : ""}, qid ${t.qid}`,
           t.worktree ? `worktree ${t.worktree}, ветка ${t.branch}` : t.branch ? `ветка ${t.branch}` : "",
           t.refinement ? `уточнение при передаче: ${t.refinement.text} (${hhmm(t.refinement.at)})` : "",
@@ -3217,6 +3276,29 @@ ${lockStillYours(stillHeld.n)}` : "") }
     description: "Help for crew-harness: the tools with examples, addressing, roles, delivery and presence, questions and answers, tasks for the integrator.",
     input: { type: "object", properties: {}, additionalProperties: false },
     execute: async (_input: any, sessionID: string) => ({ content: helpFor(readJson<Card>(cardFile(String(sessionID ?? "")))?.directory || host.defaultDir) }),
+  }
+
+  // РЕШЕНИЕ 51 КАК ДАННЫЕ (задача 092): постановка быстрого пути изменена после слова завода — запись помечена, предупреждение идёт в ответе list, show и
+  // каждого шага crew_task, пока слово не обновлено (crew_task route) или задача не возвращена на полный путь
+  const taskStep = crewTask.execute
+  crewTask.execute = async (input: any, sessionID: string) => {
+    const r = await taskStep(input, sessionID)
+    try {
+      const me = readJson<Card>(cardFile(String(sessionID ?? "")))
+      if (!me || typeof r?.content !== "string") return r
+      const project = projOf(me)
+      const list = input?.action === "list" ? listTasks(project).filter((x) => input.all || isOpen(x)) : Number.isInteger(Number(input?.n)) && input?.n !== undefined && input?.n !== null ? [loadTask(project, Number(input.n))].filter((x): x is Task => !!x) : []
+      const warn: string[] = []
+      for (const x of list) {
+        if (x.route !== "fast" || !isOpen(x)) continue
+        refreshRouteStale(x)
+        if (x.route_word_stale) warn.push(`⚠ ${taskRef(x)}: ${STALE_WARNING}`)
+      }
+      return warn.length ? { ...r, content: `${r.content}\n${warn.join("\n")}` } : r
+    } catch (e: any) {
+      log(`crew_task route warning failed: ${e?.message ?? e}`)
+      return r
+    }
   }
 
   return [crewList, crewRole, crewSend, crewWait, crewWatch, crewTimer, crewSpawn, crewTask, crewConfig, crewInbox, crewDoctor, crewHelp]

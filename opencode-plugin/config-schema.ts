@@ -23,6 +23,7 @@ export type Kind =
   | { type: "profiles" }
   | { type: "extraFields" }
   | { type: "answerMap" }
+  | { type: "routeDefaults" }
 /** humanOnly — ключ ставит человек (команда окна use либо правка файла); crew_config set его не пишет.
  *  humanHow — как ставит человек, одной фразой для опросника и отказа set (у profile_set поля нет: его фраза прежняя дословно) */
 export type Setting = { key: string; kind: Kind; default: any; question: string; why: string; recommend?: string; group: string; humanOnly?: boolean; humanHow?: string }
@@ -30,7 +31,7 @@ export type Setting = { key: string; kind: Kind; default: any; question: string;
 const TIERS = ["heavy", "medium", "light"]
 /** Встроенные поля задачи и входа crew_spawn / crew_task: id полей проекта (task_extra_fields) с ними не совпадает. Список живёт
  *  здесь, а не в core.ts: core.ts импортирует эту схему, обратный импорт образовал бы цикл; тест сверяет его с полями входа. */
-export const RESERVED_FIELD_IDS = ["title", "goal", "criteria", "boundaries", "open_questions", "owner_words", "result", "links", "priority", "tier", "role", "model", "kind", "parent", "plan_parent", "task", "session", "part_of", "place", "message", "n", "action", "extra", "__proto__", "constructor", "prototype"]
+export const RESERVED_FIELD_IDS = ["title", "goal", "criteria", "boundaries", "open_questions", "owner_words", "result", "links", "route", "route_basis", "route_source", "route_proposal", "route_word", "route_word_date", "clean_runs", "ceiling", "probes", "delivery_compressed", "sources_list", "priority", "tier", "role", "model", "kind", "parent", "plan_parent", "task", "session", "part_of", "place", "message", "n", "action", "extra", "__proto__", "constructor", "prototype"]
 export const EXTRA_FIELDS_MAX = 8
 export const EXTRA_ID_RE = /^[a-z0-9_]{1,31}$/
 /** Язык владельца (задача 054): английское имя языка — оно встаёт в английский системный блок вкладки; не предложение,
@@ -59,6 +60,7 @@ export const SCHEMA: Setting[] = [
   { key: "accepted_slot", group: "Задачи", kind: { type: "enum", options: ["hold", "free"] }, default: "free", question: "Занимает ли принятая, но не очищенная задача место в inflight_limit?", why: "free (по умолчанию): принятая не занимает место, её уборку считает отдельный счётчик cleanup_limit, и новая работа ставится, пока приёмщики убирают; hold: занимает место до cleanup, как было до задачи 005", recommend: "free; hold — только если проекту нужно прежнее поведение" },
   { key: "cleanup_limit", group: "Задачи", kind: { type: "int" }, default: 10, question: "Сколько принятых, но не очищенных задач допустимо, прежде чем новую работу перестанут ставить (0 — без предела)?", why: "действует только при accepted_slot: free; отказ называет ждущие уборки поимённо; P0 проходит мимо", recommend: "10 (вдвое больше типичного inflight_limit 5)" },
   { key: "task_extra_fields", group: "Задачи", kind: { type: "extraFields" }, default: [], question: "Какие дополнительные поля задачи объявляет проект (id, подпись в письмах, подсказка)?", why: "значения идут в запись задачи, письма исполнителю и приёмщику и в show; плагин их только хранит и доставляет, проверяет их скрипт проекта (например, диапазон номеров реестра); до 8 полей", recommend: "не задавать, пока скрипту проекта не нужны свои поля" },
+  { key: "route_defaults", group: "Задачи", kind: { type: "routeDefaults" }, default: {}, question: "Какие числа цикла у маршрутов задачи (full, fast) и какие пороги выбора быстрого пути (thresholds)?", why: "числа маршрута — данные задачи: ceiling (потолок заходов), clean_runs (чистых заходов подряд), probes (проб в чистом заходе), delivery_compressed (сжатая сдача), weakenings (ослабления — допустим только пустой список); пороги — max_sources, max_parts, max_risk (low, medium, high). Не ниже минимумов методики: clean_runs 1, probes 3 — настройка ниже отвергается при выборе маршрута (быстрый путь — отказ crew_spawn route fast, полный — задача не создаётся). Нет ключа — значения методики: полный 4/2/3, быстрый 2/1/3, пороги 3, 2, low", recommend: "не задавать: значения методики" },
   { key: "tasks_dir", group: "Задачи", kind: { type: "string", allowEmpty: true }, default: "doc/tasks", question: "В каком каталоге репозитория лежат папки задач NNN-<slug>/ (пусто — папок задач в проекте нет)?", why: "папки включены, когда каталог есть в целевой ветке: номер задачи — номер её папки, crew_spawn заводит папку (task/message.md, log.md) на ветке задачи, сессии методики — части задачи без своих номеров (задача 058); без папок номер задачи — номер записи плагина (#N)", recommend: "doc/tasks, если проект ведёт задачи папками; иначе пусто" },
   { key: "push_empty_turns", group: "Подталкивание", kind: { type: "int" }, default: 3, question: "Сколько пустых ходов подряд (без инструментов) считать застреванием?", why: "дальше напоминаний нет, интегратору вызов", recommend: "3" },
   { key: "stall_minutes", group: "Подталкивание", kind: { type: "int" }, default: 30, question: "Через сколько минут затянувшееся (замок вливания держат, сданная задача ждёт приёмщика) поднимать интегратору (0 — не поднимать)?", why: "приёмка может упереться в запрет и стоять часами, пока кто-то не заметит", recommend: "30" },
@@ -108,6 +110,37 @@ const ROLE_RE = /^[a-z][a-z0-9-]{0,40}$/
 const isObj = (v: any) => !!v && typeof v === "object" && !Array.isArray(v)
 const isInt = (v: any) => Number.isInteger(v) && v >= 0
 
+/** route_defaults (задача 092): {full: {...}, fast: {...}, thresholds: {...}}; все ключи необязательны. Форму проверяет схема; значения ниже минимума методики
+ *  она пропускает — их отвергает выбор маршрута (проверка 3 методики), чтобы настройку можно было записать и увидеть отказ с причиной. */
+function routeDefaultsError(key: string, v: any): string | undefined {
+  const shape = `${key}: {"full": {...}, "fast": {...}, "thresholds": {...}}; в full и fast — ceiling, clean_runs, probes (целые), delivery_compressed (true|false), weakenings (список строк); в thresholds — max_sources, max_parts (целые), max_risk (low|medium|high)`
+  if (!isObj(v)) return shape
+  const int = (x: any) => Number.isInteger(x) && x >= 0
+  for (const [name, side] of Object.entries(v)) {
+    if (!isObj(side)) return shape
+    if (name === "full" || name === "fast") {
+      for (const [k, x] of Object.entries(side as any)) {
+        if (["ceiling", "clean_runs", "probes"].includes(k)) {
+          if (!int(x)) return `${key}.${name}.${k}: целое число ≥ 0`
+        } else if (k === "delivery_compressed") {
+          if (typeof x !== "boolean") return `${key}.${name}.${k}: true или false`
+        } else if (k === "weakenings") {
+          if (!Array.isArray(x) || !x.every((e) => typeof e === "string")) return `${key}.${name}.${k}: список строк`
+        } else return `${key}.${name}: неизвестный ключ «${k}»; ${shape}`
+      }
+    } else if (name === "thresholds") {
+      for (const [k, x] of Object.entries(side as any)) {
+        if (k === "max_sources" || k === "max_parts") {
+          if (!int(x)) return `${key}.thresholds.${k}: целое число ≥ 0`
+        } else if (k === "max_risk") {
+          if (!["low", "medium", "high"].includes(x as any)) return `${key}.thresholds.max_risk: low, medium или high`
+        } else return `${key}.thresholds: неизвестный ключ «${k}»; ${shape}`
+      }
+    } else return `${key}: неизвестный ключ «${name}»; ${shape}`
+  }
+  return undefined
+}
+
 /** Проверить значение ключа; вернуть текст ошибки или undefined. */
 export function invalid(key: string, v: any): string | undefined {
   const s = SCHEMA.find((x) => x.key === key)
@@ -148,6 +181,8 @@ export function invalid(key: string, v: any): string | undefined {
       return invalidProfileKey(key, v)
     case "answerMap":
       return answerModeError(v)
+    case "routeDefaults":
+      return routeDefaultsError(key, v)
     case "extraFields":
       return Array.isArray(v) && v.length <= EXTRA_FIELDS_MAX && v.every((f) => isObj(f) && typeof f.id === "string" && EXTRA_ID_RE.test(f.id) && !RESERVED_FIELD_IDS.includes(f.id) && typeof f.label === "string" && f.label.trim() && (f.hint === undefined || typeof f.hint === "string")) && new Set(v.map((f: any) => f.id)).size === v.length
         ? undefined
