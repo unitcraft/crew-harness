@@ -1,0 +1,75 @@
+module child_echo
+
+import std.io.{IoError, write_all}
+import std.os.{Command, Child, ChildStdin, ChildStdout, Stdio}
+
+fn pipe_in(o Option[ChildStdin]) -> ChildStdin {
+    match o {
+        Some(consume s) => s
+        None => panic("stdin was asked to be piped")
+    }
+}
+
+fn pipe_out(o Option[ChildStdout]) -> ChildStdout {
+    match o {
+        Some(consume s) => s
+        None => panic("stdout was asked to be piped")
+    }
+}
+
+// Count '\n' bytes in the first n bytes of buf.
+fn count_newlines(buf []u8, n int) -> int {
+    mut k = 0
+    mut i = 0
+    while i < n {
+        if buf[i] == (10 as u8) { k += 1 }
+        i += 1
+    }
+    k
+}
+
+// Send two JSON lines, read two reply lines, close stdin, wait; returns the child's exit code.
+fn converse(mut child Child) Proc Io -> Result[int, IoError] {
+    consume tx = pipe_in(child.take_stdin())
+    consume rx = pipe_out(child.take_stdout())
+    match write_all(tx, "{\"id\":1,\"method\":\"ping\"}\n".bytes()) {
+        Ok(_) => ()
+        Err(e) => return Err(e)
+    }
+    match write_all(tx, "{\"id\":2,\"method\":\"pong\"}\n".bytes()) {
+        Ok(_) => ()
+        Err(e) => return Err(e)
+    }
+    mut buf []u8 = []u8.new()
+    buf.resize(4096, 0 as u8)
+    mut lines = 0
+    while lines < 2 {
+        match rx.read(buf) {
+            Ok(0) => break
+            Ok(n) => {
+                print(unsafe { buf[..n].to_str_unchecked() })
+                lines += count_newlines(buf, n)
+            }
+            Err(e) => return Err(e)
+        }
+    }
+    tx.close()
+    match child.wait() {
+        Ok(st) => Ok(st.code())
+        Err(e) => Err(e)
+    }
+}
+
+fn main() Proc Io -> () {
+    ro cmd = Command.new("node").arg("child_echo_child.js").stdin(Stdio.Piped).stdout(Stdio.Piped)
+    match cmd.start() {
+        Ok(consume started) => {
+            consume child = started
+            match converse(child) {
+                Ok(code) => println("child exit code: ${code}")
+                Err(e) => println("error: ${e}")
+            }
+        }
+        Err(e) => println("start failed: ${e}")
+    }
+}

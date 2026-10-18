@@ -1,0 +1,6 @@
+# build output, never committed
+target/
+*.exe
+*.obj
+*.pdb
+*.ilk

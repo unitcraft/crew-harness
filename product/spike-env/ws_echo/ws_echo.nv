@@ -1,0 +1,46 @@
+module ws_echo
+
+import polaris.{Router, ServerRequest, ServerResponse, WebSocketUpgrade, StatusCode}
+import polaris.ws.{WebSocket, Message}
+import polaris.net.{ServerPolicy}
+import polaris.serve.{serve_router}
+import std.net.{TcpListener}
+import std.os.{args}
+
+const PAGE str = "<!doctype html><html><head><meta charset=\"utf-8\"><title>ws_echo</title></head><body><h1>ws_echo</h1><input id=\"m\" value=\"hello\"><button id=\"b\">send</button><pre id=\"log\"></pre><script>const log=document.getElementById('log');const ws=new WebSocket('ws://'+location.host+'/ws');ws.onmessage=e=>log.textContent+='echo: '+e.data+'\n';ws.onopen=()=>log.textContent+='open\n';document.getElementById('b').onclick=()=>ws.send(document.getElementById('m').value);</script></body></html>"
+
+fn ws_echo_handler(req ServerRequest) -> ServerResponse {
+    match WebSocketUpgrade.from_request(req) {
+        Ok(up) => up.on_upgrade(fn(sock WebSocket) Net -> () {
+            consume w = sock
+            mut running = true
+            while running {
+                match w.recv() {
+                    Ok(Some(Message.Text(t)))   => { ro _ = w.send(Message.Text(t)) }
+                    Ok(Some(Message.Binary(b))) => { ro _ = w.send(Message.Binary(b)) }
+                    Ok(Some(_))                 => ()
+                    Ok(None)                    => { running = false }
+                    Err(_)                      => { running = false }
+                }
+            }
+            ro _ = w.close(1000, "bye")
+        })
+        Err(e) => e.into_response()
+    }
+}
+
+fn build_router() -> Router =>
+    Router.new()
+        .get("/", fn(req ServerRequest) -> ServerResponse => ServerResponse.html(StatusCode.OK, PAGE))!!
+        .get("/health", fn(req ServerRequest) -> ServerResponse => ServerResponse.text(StatusCode.OK, "ok"))!!
+        .get("/ws", ws_echo_handler)!!
+
+// usage: ws_echo [port]   (default 18091); binds 127.0.0.1 only
+fn main() Os Net Time Detach -> () {
+    ro argv = args()
+    ro port = if argv.len() > 1 { argv[1] } else { "18091" }
+    ro app = build_router()
+    consume listener = TcpListener.bind("127.0.0.1:${port}")!!
+    println("listening on http://127.0.0.1:${port} -- Ctrl+C to stop")
+    serve_router(listener, app, ServerPolicy.new())
+}

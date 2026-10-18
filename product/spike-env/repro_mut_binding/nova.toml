@@ -1,0 +1,8 @@
+[package]
+name = "repro_mut_binding"
+version = "0.1.0"
+
+[dependencies]
+polaris = { git = "https://github.com/nv-lang/nova-polaris", version = "0.2" }
+http = { git = "https://github.com/nv-lang/nova-http", version = "0.2" }
+tls = { git = "https://github.com/nv-lang/nova-tls", version = "0.2" }

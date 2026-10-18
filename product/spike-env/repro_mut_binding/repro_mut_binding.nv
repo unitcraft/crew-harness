@@ -1,0 +1,20 @@
+// Minimal reproduction for the Nova integrator: the WebSocket handler exactly as written in
+// the polaris docs (docs/websocket.md) and polaris examples/08-websocket-echo (`mut w = sock`)
+// is rejected by Oracle 0.1.0. The accepted form is `consume w = sock` (see ../ws_echo.nv).
+//
+//   cd repro_mut_binding && nova check repro_mut_binding.nv
+//   -> [E_VIEW_BINDING_FORBIDDEN] and [D157-consume-via-view] on `w.close(...)`
+module repro_mut_binding
+
+import polaris.{ServerRequest, ServerResponse, WebSocketUpgrade}
+import polaris.ws.{WebSocket, Message}
+
+fn ws_echo_handler(req ServerRequest) -> ServerResponse {
+    match WebSocketUpgrade.from_request(req) {
+        Ok(up) => up.on_upgrade(fn(sock WebSocket) Net -> () {
+            mut w = sock
+            ro _ = w.close(1000, "bye")
+        })
+        Err(e) => e.into_response()
+    }
+}
