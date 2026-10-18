@@ -1,0 +1,82 @@
+[
+  {
+    "path": "AGENTS.md",
+    "sha256": "82f4d85ff3beebfd9a833401dd8e17729ea2e3ce2b745caf5d57d4b53ebed52c",
+    "bytes": 15874
+  },
+  {
+    "path": "README.md",
+    "sha256": "2c7b47e2f40cb071954d874819ec7ad84958b6bcd812ced97101d9b8642d1dac",
+    "bytes": 3284
+  },
+  {
+    "path": "doc/canon/README.md",
+    "sha256": "6964a0670a93486dc424d98d49f68b1feff98f59d14425f81ba914a60797b378",
+    "bytes": 4869
+  },
+  {
+    "path": "doc/canon/process.md",
+    "sha256": "a5bfc6892bf65694f523336cdfae2f9d23abbb734bb15f260629dedcbe08b5c9",
+    "bytes": 59331
+  },
+  {
+    "path": "doc/canon/decisions/README.md",
+    "sha256": "8fcae1e40be5d7eae251071b0d9d5c73d26423cfa8d077ea904c58fe033ee315",
+    "bytes": 5269
+  },
+  {
+    "path": "doc/canon/decisions/ADR-0001-work-by-methodology.md",
+    "sha256": "a7ccb5d95812757493a4caffe3aa5a610ff47ed8512a6d260c9ec6838fa53a90",
+    "bytes": 3728
+  },
+  {
+    "path": "doc/canon/decisions/ADR-0002-repository-layout.md",
+    "sha256": "23a7cb419488cf9a998ea47efbabff985aff137c62b5e5c763cb3f73f1b2325b",
+    "bytes": 2917
+  },
+  {
+    "path": "doc/canon/decisions/ADR-0003-go-first-then-nova.md",
+    "sha256": "4ae17f2ad4818c3d7555f52fb0bb7a166d8067899ff5aa2c5266f2fd7e5d4a19",
+    "bytes": 4860
+  },
+  {
+    "path": "doc/canon/decisions/ADR-0004-agent-drivers-on-subscriptions.md",
+    "sha256": "eabc04b334d6aecf45db5588cb912c7db14caa24c0fde0e280c2f85f79d02909",
+    "bytes": 3949
+  },
+  {
+    "path": "doc/canon/decisions/ADR-0005-own-browser-console.md",
+    "sha256": "7982cb9fafc1b6a8c9059c7aa02eadb757b460382a141fe3cdf450277240e378",
+    "bytes": 3184
+  },
+  {
+    "path": "doc/canon/decisions/ADR-0006-public-repository.md",
+    "sha256": "d850556fed553d312394126ad8242e68536155eedaa357256880e3ac048928ba",
+    "bytes": 4848
+  },
+  {
+    "path": "doc/canon/decisions/ADR-0007-plan-in-task-epics.md",
+    "sha256": "f70bc4f6c6087da5bdeef12b1ccbafd1de887f3579d6b00d48a25a40c6190319",
+    "bytes": 5278
+  },
+  {
+    "path": "doc/canon/decisions/ADR-0008-model-profiles-layer-and-window-files.md",
+    "sha256": "d1363e40675c55e82280d8b58e2f1b8fd0bf140c285be5f560f3b75c65e1a640",
+    "bytes": 5357
+  },
+  {
+    "path": "doc/canon/decisions/ADR-0009-merge-precheck-without-lock.md",
+    "sha256": "4a37c181bb88851cd286bb03baf82a2c1339b45f480f69419c4b798d182b7efb",
+    "bytes": 5026
+  },
+  {
+    "path": "doc/canon/decisions/ADR-0010-question-answering-modes.md",
+    "sha256": "d78146f409deba2f621d5dd06396e33015e7d25dd96cc41ff3072575b34f9bb6",
+    "bytes": 4983
+  },
+  {
+    "path": "doc/canon/decisions/ADR-0011-one-task-message-template.md",
+    "sha256": "b3a0e1a4fa97f1a26374a9884532be1533f94a1249483581b7c73b05353b9f38",
+    "bytes": 5694
+  }
+]

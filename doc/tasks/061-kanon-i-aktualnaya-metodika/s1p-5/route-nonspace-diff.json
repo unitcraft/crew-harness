@@ -1,0 +1,38 @@
+{
+  "C36": {
+    "old": [
+      "C36 M711: порог>1нормы/механизм;intent3поля,факты+свежийсобеседник≤10,спорно,записьreviewtask/log",
+      "Dintentполя:goalref/boundary/baseexcerpts; promptref,A/Bexchange, Gintegerlimit;notnewrootfield",
+      "У+Вточныенормаcount/context/prompt/signatures.045порог/триполя/спорно/двеместазаписиразличимы;registry/OQне«норма»дляcount"
+    ],
+    "current": [
+      "C36 M711: порог>1 нормы/механизм; intent3 поля, факты+свежий собеседник≤10, спорно, запись review task/log",
+      "D intent поля: goal ref/boundary/base excerpts; prompt ref, A/Bexchange, G integer limit; not new root field",
+      "У+В: неизвестны точные contracts для count норм/context/prompt/signatures. Для 045 различимы порог, три поля, пометка «спорно» и два места записи; registry/OQ не считаются нормой для этого count."
+    ]
+  },
+  "C55": {
+    "old": [
+      "C55 Rgate-decision: decision→outcome и target",
+      "G117triggerkindgate-decisionrefnamespacegate/idfromgate/valueлокdecision;edge.onowner_decisionsignaturerequiredgateId/decisionId;edgeoutcomeroute-triggerregistrymatrix",
+      "Уформы+В**точнаяматрицаunknown**,payload/domain/availabilityunknown;045unsupported-catalogневыбратьoutcomeпоимени/whitelistdigest"
+    ],
+    "current": [
+      "C55 Rgate-decision: decision→outcome и target",
+      "G, 031:117: trigger.kind=gate-decision, ref.namespace=gate, ref.id=gate узла edge.from, value=локальный decision.id. Edge.on — событие kind=owner_decision с required gateId/decisionId. Edge.outcome задаётся точной матрицей route-trigger registry.",
+      "У формы+В**точная матрица unknown**, payload/domain/availability unknown; 045 unsupported-catalog не выбрать outcome по имени/whitelistdigest"
+    ]
+  },
+  "C58": {
+    "old": [
+      "C58 Registry/signaturesполногокомплекта",
+      "V31/97/504:16kindclosed,version/digest,≤1binding/kind;predicateCatalog45толькоbuiltinимена,неsignatures;Dprompt/Tcontext/Aeffects/Punit",
+      "Уформы+Вполныйauthority/signaturesнеполучен;045В05независимоотCanon. Matchingcatalogнужен,ноодиндigest/whitelistнеoperation/неполнота"
+    ],
+    "current": [
+      "C58 Registry/signatures полного комплекта",
+      "V31/97/504:16 kind closed, version/digest,≤1 binding/kind; predicateCatalog45 только builtin имена, не signatures; D prompt/T context/A effects/P unit",
+      "У формы+В: полный утверждённый каталог и signatures ещё не получены. В-05 решён только как путь проектирования в 045, не как доказанная полнота. Matching catalog необходим, но один digest или whitelist не подтверждает operation и не доказывает полноту. Требования ко всем 16 видам и matching version/digest не ослаблены."
+    ]
+  }
+}

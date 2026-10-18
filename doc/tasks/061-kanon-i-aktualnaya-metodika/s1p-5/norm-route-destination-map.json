@@ -1,0 +1,2963 @@
+{
+  "normative_delta": [
+    {
+      "anchor": "M01",
+      "old_current_source": "10–15→10",
+      "meaning_and_disposition": "**Норма / условие / provenance:** История редакций в Git, реестр практики\n\n**Canon / code evidence / disposition и будущий шаг:** README7–25; EØ; DX, не переносить историю как норму",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C60": [
+          "C60 Q5/P/M history/presentation/starter kit dispositions",
+          "V coverage kind/disposition/reason; D procedural OQ поля, не runtime новые ключи",
+          "У/Д данных уже принятой Q5 процедуры 9d391ba/process125–144; О внешних Q вопросов; DX для неприменимых presentation/starterkit/frozen историй с reason в method-delta. 045 не выкинуть Q5 как«вопрос»и не импортировать off signoff policy"
+        ]
+      },
+      "destinations": {
+        "DX": "- **DX**: перенос не нужен: внешний служебный/исторический/производный файл или непринятый вопрос. Обоснование в каждой строке; это не blanket исключение normative anchors."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "M02",
+      "old_current_source": "∅после 158→154–155",
+      "meaning_and_disposition": "**Норма / условие / provenance:** Оркестратор вне списка решает с доводом в log; owner список+ворота; сомнение owner\n\n**Canon / code evidence / disposition и будущий шаг:** process15–24/199–225, ADR0010; EG не полное исполнение; D5/D0. P46 unconfirmed — provenance, не off. Q86–87 — вопрос, не отмена gates",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C54": [
+          "C54 M154/1552/R689–707: owner closed list/defaults/gates",
+          "gates 40: ownerRequired boolean; true→defaultDecision null, decisions≥1; false→local decision non-null; decision 41 counterEffects=[]; effects 42 payload signature/confirmation",
+          "У/Д известных гейт политик+В фактическое решение/effect contract; 045 не autoanswer owner-gate, не effect-kind"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий.",
+        "D5": "- **D5**: `process.md`, «Режимы ответа на вопросы» и «Роли»; шаг «Сверить границы решений» — сохранить ADR0010 и owner gates, D0 для нового внешнего текста. Новое отличие только новым ADR, не молчаливой правкой принятого."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "M03",
+      "old_current_source": "269→266",
+      "meaning_and_disposition": "**Норма / условие / provenance:** DoD: результат на действующем месте, не только task\n\n**Canon / code evidence / disposition и будущий шаг:** process175–197; EØ смысловой приёмки; D1, source→место в AC05",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C49": [
+          "C49 M541/S122/183/192/317–324: first transfer current, immutable approved, one place/copies/literal строки",
+          "D literal current.md, requiredBy/fields/markers, без numberBinding если нет{N}; V source/dest; A/G transfer order",
+          "У для формы+Д адресов после ворот, В exact transfer/tool grammar; 045 current061 первый Canon перенос не ждёт format, копии не 2 нормы. Единственность смыслов приёмкой, не JSON-only"
+        ]
+      },
+      "destinations": {
+        "D1": "- **D1**: process/«Результат и куда он попадает», шаг «Согласовать действующие места и указатели». В-02 уже выбрал адресное уточнение и новый ADR/реестр/входную ссылку; содержание формата и версии ещё отдельно утверждаются. Сохранить более строгое проектное правило и current при первом любом переносе (REQ-05/AC-05), не ждать формата."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "M04",
+      "old_current_source": "544→541, части 1–2",
+      "meaning_and_disposition": "**Норма / условие / provenance:** Всё не-код и читаемый людьми контракт в коде; ровно одно конкретное место/status/шаг не позже проверки реализации\n\n**Canon / code evidence / disposition и будущий шаг:** process183–193; EØ; D1, будущие шаги в trace; default «код» без этой оценки запрещён",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C49": [
+          "C49 M541/S122/183/192/317–324: first transfer current, immutable approved, one place/copies/literal строки",
+          "D literal current.md, requiredBy/fields/markers, без numberBinding если нет{N}; V source/dest; A/G transfer order",
+          "У для формы+Д адресов после ворот, В exact transfer/tool grammar; 045 current061 первый Canon перенос не ждёт format, копии не 2 нормы. Единственность смыслов приёмкой, не JSON-only"
+        ]
+      },
+      "destinations": {
+        "D1": "- **D1**: process/«Результат и куда он попадает», шаг «Согласовать действующие места и указатели». В-02 уже выбрал адресное уточнение и новый ADR/реестр/входную ссылку; содержание формата и версии ещё отдельно утверждаются. Сохранить более строгое проектное правило и current при первом любом переносе (REQ-05/AC-05), не ждать формата."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "M05",
+      "old_current_source": "тот же hunk, части 3–4",
+      "meaning_and_disposition": "**Норма / условие / provenance:** Самодостаточность; approved immutable; копии/метки/исключения форматов; current только адреса, reader сначала current\n\n**Canon / code evidence / disposition и будущий шаг:** process187–197, ADRindex3–6; EØ; D1. Не править 031 после ворот, только новый format к В02",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C49": [
+          "C49 M541/S122/183/192/317–324: first transfer current, immutable approved, one place/copies/literal строки",
+          "D literal current.md, requiredBy/fields/markers, без numberBinding если нет{N}; V source/dest; A/G transfer order",
+          "У для формы+Д адресов после ворот, В exact transfer/tool grammar; 045 current061 первый Canon перенос не ждёт format, копии не 2 нормы. Единственность смыслов приёмкой, не JSON-only"
+        ]
+      },
+      "destinations": {
+        "D1": "- **D1**: process/«Результат и куда он попадает», шаг «Согласовать действующие места и указатели». В-02 уже выбрал адресное уточнение и новый ADR/реестр/входную ссылку; содержание формата и версии ещё отдельно утверждаются. Сохранить более строгое проектное правило и current при первом любом переносе (REQ-05/AC-05), не ждать формата."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "M06",
+      "old_current_source": "тот же hunk, части 5–6",
+      "meaning_and_disposition": "**Норма / условие / provenance:** Current тем же шагом переноса и при смене места обновляется; чужой repo отдельный MR/задача; новое ADR со связью\n\n**Canon / code evidence / disposition и будущий шаг:** process183–197, AGENTS16; EØ; D1. First-transfer уточнён S192, не ждать format",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C49": [
+          "C49 M541/S122/183/192/317–324: first transfer current, immutable approved, one place/copies/literal строки",
+          "D literal current.md, requiredBy/fields/markers, без numberBinding если нет{N}; V source/dest; A/G transfer order",
+          "У для формы+Д адресов после ворот, В exact transfer/tool grammar; 045 current061 первый Canon перенос не ждёт format, копии не 2 нормы. Единственность смыслов приёмкой, не JSON-only"
+        ]
+      },
+      "destinations": {
+        "D1": "- **D1**: process/«Результат и куда он попадает», шаг «Согласовать действующие места и указатели». В-02 уже выбрал адресное уточнение и новый ADR/реестр/входную ссылку; содержание формата и версии ещё отдельно утверждаются. Сохранить более строгое проектное правило и current при первом любом переносе (REQ-05/AC-05), не ждать формата."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "M07",
+      "old_current_source": "∅после 711→709–711",
+      "meaning_and_disposition": "**Норма / условие / provenance:** Порог: >1 нормы или механизм; норма=абзац/пункт M/task-*, не registry/OQ. Замысел 3 поля; свежий собеседник другой семьи если доступен,≤10, факты без рассуждений, спорно/запись\n\n**Canon / code evidence / disposition и будущий шаг:** process5–12 не отключает; EØ; D0: внешняя основа, текст не пересказывать. В task review instructions применять по этому anchor; текущая ограниченная С1п не создаёт подагентов",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C36": [
+          "C36 M711: порог>1 нормы/механизм; intent3 поля, факты+свежий собеседник≤10, спорно, запись review task/log",
+          "D intent поля: goal ref/boundary/base excerpts; prompt ref, A/Bexchange, G integer limit; not new root field",
+          "У+В: неизвестны точные contracts для count норм/context/prompt/signatures. Для 045 различимы порог, три поля, пометка «спорно» и два места записи; registry/OQ не считаются нормой для этого count."
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "M08",
+      "old_current_source": "тот же hunk→711",
+      "meaning_and_disposition": "**Норма / условие / provenance:** Замысел — не доказательство/не отклонённая находка/не сокращает цикл/не согласование/не заход; без границы для норм самой проверки, mixed split\n\n**Canon / code evidence / disposition и будущий шаг:** process5–12; EØ; D0, условия не терять при применении задания проверяющим",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C37": [
+          "C37 M711/1570: intent не agreement/не review/не доказательство; boundary не пишется для norms about review, mixed split",
+          "D prompt/context/disposition fields; G существующие review/meeting ветви, не cycle.stage=intent",
+          "У+В точная classification/context schema; 045 не использовать optional согласование как off замысла, не прибавлять чистый заход"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "M09",
+      "old_current_source": "тот же hunk→712",
+      "meaning_and_disposition": "**Норма / условие / provenance:** Первая строка линзы обход — граница, иначе вернуть; граница не исключает цель; выход за границу сам требует классификации\n\n**Canon / code evidence / disposition и будущий шаг:** process5–12; EØ; D0. Не превращать авторскую границу в иммунитет",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C38": [
+          "C38 M712: первая boundary строка/возврат если нет, сама boundary проверяема целью",
+          "D required field multiplicity one+grammar/onInvalid gate/error, A/B source goal check",
+          "У+В exact grammar/predicate/return outcomes unknown; 045 граница не может вырезать дефект цели, нет валидности по одному required=true"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "M10",
+      "old_current_source": "тот же hunk→713",
+      "meaning_and_disposition": "**Норма / условие / provenance:** База до первой правки + база цикла; «не по адресу» только выдержка и не внесла/не опаснее/не опирается/не должна закрыть; бремя автора/сомнение внесена; цель/дефект не вне предмета\n\n**Canon / code evidence / disposition и будущий шаг:** process5–12; EØ; D0, доказательство в review, не grep/hash",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C39": [
+          "C39 M713: base hash/выдержка+5 условий«не по адресу», бремя автора/сомнение внесена",
+          "V commit/source; D base excerpt/обоснование; predicates44/97+G outcomes",
+          "У+В semantic predicate inputs/result outcomes unknown; 045 на каждую находку проверить не привнесла/не опаснее/не опирается/не должна закрыть/база доказана, а goal не вне предмета"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "M11",
+      "old_current_source": "тот же hunk→713",
+      "meaning_and_disposition": "**Норма / условие / provenance:** Whole-read + связь для расширения соседей; вопрос 4 поля, reviewer предлагает/автор вносит; >3 critical-equivalent сигнал owner; privacy не вне предмета\n\n**Canon / code evidence / disposition и будущий шаг:** process125–144/AGENTS15; EØ; D0+D4, существующая процедура вопросов не отменена",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C40": [
+          "C40 M713: whole-read/связь соседей; OQ4 поля;>3 critical equiv сигнал; privacy не выносится",
+          "D read list/link evidence/OQ fields question/addressee/default/deadline; G counter min/max и A owner notification",
+          "У/Д для известных 4 полей/порога+В точная critical classification/notification/context signature. 045 полнота whole-read и source privacy не по JSON PASS"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий.",
+        "D4": "- **D4**: `process.md`, «Открытые вопросы»,125–144; шаг «Сверить уже принятое основание вопросов» — сохранить pin9d391ba и project дополнения, не импортировать новые нерешённые вопросы как решения."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "M12",
+      "old_current_source": "тот же hunk→714",
+      "meaning_and_disposition": "**Норма / условие / provenance:** Ответ в порядке сузить/ослабить/удалить/вопрос; новое имя/правило отдельная задача; выбор старого чтения vs новое правило по цели; открыто+не утверждать опровергнутое+вопрос оформлен\n\n**Canon / code evidence / disposition и будущий шаг:** process5–12/125–144; EØ; D0/D4. Не создавать новую задачу без owner word",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C41": [
+          "C41 M714: сузить/ослабить/удалить/вопрос; new vs clarification; открыто+не утверждает опровержение+вопрос в проекте",
+          "D disposition/marker/OQ record, prompt; G route/только namespace allowed",
+          "У+В semantic classifier/payload contracts; 045 не автосоздание задачи, а declared gate при new concept, старый смысл не отменяется"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий.",
+        "D4": "- **D4**: `process.md`, «Открытые вопросы»,125–144; шаг «Сверить уже принятое основание вопросов» — сохранить pin9d391ba и project дополнения, не импортировать новые нерешённые вопросы как решения."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "M13",
+      "old_current_source": "тот же hunk→714",
+      "meaning_and_disposition": "**Норма / условие / provenance:** Одна попытка/раздельные исправления; новая существенная→откат+вопрос; «не по адресу» не откат; last ceiling исключение по§18\n\n**Canon / code evidence / disposition и будущий шаг:** process5–12; EØ; D0, старые потолки не сбрасывать",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C42": [
+          "C42 M714: одна попытка, раздельность, новая существенная→откат+OQ, не по адресу не откат, last ceiling исключение",
+          "G cycle/ceiling/repairRoute/counters/route effects, A/B revert intention+V previous hash",
+          "У+В точные findings/version/rollback signatures; 045 история и счётчик не обнуляются, последний заход проверить отдельно"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "M14",
+      "old_current_source": "тот же hunk→715",
+      "meaning_and_disposition": "**Норма / условие / provenance:** Неисполненная спец пометка; существенная требует вход+две чтения/нет итога; дописать трассу/иначе поверхностная; опровержение подтверждает следующий; implementation свидетель\n\n**Canon / code evidence / disposition и будущий шаг:** process5–12; EØ; D0. Не снижать критичность лишь по отсутствию runtime",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C43": [
+          "C43 M715: «не прогонялось», конкретный input+2 readings/нет итога; следующий подтверждает опровержение; impl свидетель",
+          "D marker/trace fields/required/multiplicity, D prompt, V source; A/G review order",
+          "У+В exact trace grammar/implementation evidence contract; 045 серьёзность не снижается по отсутствию runtime, трасса не один ярлык"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "M15",
+      "old_current_source": "тот же hunk→715–718",
+      "meaning_and_disposition": "**Норма / условие / provenance:** Таблица legal/illegal/why, судья каждой формы, batch/version/change-list; нормы о проверке только исполнимость 2–3 цикла/история, mixed split;718 причина/наблюдение\n\n**Canon / code evidence / disposition и будущий шаг:** process5–12; EØ; D0, применение не runtime PASS, причину не новый override",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C44": [
+          "C44 M715: legal/illegal/why таблица, судья формы, version batch/change list",
+          "D fields/table grammar, V manifest versions/coverage, A publication intent G owner required",
+          "У/Д известных обязательств таблицы/судьи; В publication/versioned consumer contract. 045/013 не подтверждает reader, пуш сейчас запрещён"
+        ],
+        "C45": [
+          "C45 M716: нормы о самой проверке — исполнимость 2–3 цикла/история, без обхода; mix остальные две линзы",
+          "D prompt/review sections/history records; G existing stage review/meeting, integer parameters; lens69 не ordinary",
+          "У+В exact applicability/context/history signature; 045 не выдумывать cycle.stage=executability, не подменять прогоны именем lens"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "M16",
+      "old_current_source": "1110→1118–1119",
+      "meaning_and_disposition": "**Норма / условие / provenance:** Checklist: действующий результат вне task\n\n**Canon / code evidence / disposition и будущий шаг:** process175–197; EØ; D1. Для 045 нужен отдельный per anchor/per DNC протокол плана, ссылка Canon не исправление плана",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C49": [
+          "C49 M541/S122/183/192/317–324: first transfer current, immutable approved, one place/copies/literal строки",
+          "D literal current.md, requiredBy/fields/markers, без numberBinding если нет{N}; V source/dest; A/G transfer order",
+          "У для формы+Д адресов после ворот, В exact transfer/tool grammar; 045 current061 первый Canon перенос не ждёт format, копии не 2 нормы. Единственность смыслов приёмкой, не JSON-only"
+        ]
+      },
+      "destinations": {
+        "D1": "- **D1**: process/«Результат и куда он попадает», шаг «Согласовать действующие места и указатели». В-02 уже выбрал адресное уточнение и новый ADR/реестр/входную ссылку; содержание формата и версии ещё отдельно утверждаются. Сохранить более строгое проектное правило и current при первом любом переносе (REQ-05/AC-05), не ждать формата."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "M17",
+      "old_current_source": "∅после 1540→1550–1551",
+      "meaning_and_disposition": "**Норма / условие / provenance:** Second opinion перед рекомендацией с последствиями; fresh/different family if available; facts-only≤10; log текст/итог, recommendation строка/ref; default on/explicit owner-off; не помощник/не проверка/не owner decision\n\n**Canon / code evidence / disposition и будущий шаг:** process199–225/README40 off только helpers; EG не механизм opinion; D0+D5. P45partial не отключение, R232 профиль отдельно",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C32": [
+          "C32 M1550: условие перед рекомендацией/до owner decision; default on/explicit off; не helper/не judge",
+          "D prompt/source+parameters 56 required/default по G, A/G предварительный шаг и отключение по решению",
+          "У+В policy context/availability/decision event signature; 045 «helpers off»не норма отключения opinion, owner closed list не автоматизировать"
+        ],
+        "C33": [
+          "C33 M1550/R232: fresh/different family если доступна; совпадение в ответе",
+          "D prompt+document fields для политики/факта fresh/family+ A/B selector result; НЕ profiles.family",
+          "У условной декларации+В selector name/inputs/доступные согласованные поставщики/семья output domain/nullability/availability unknown. 045 отдельный внешний selector contract, не придуманный API"
+        ],
+        "C34": [
+          "C34 R232: класс A/reasoning/effort3 или 4, отдельная модель",
+          "profiles 51–54/311 defaults/stageRules/limits; profileValue **ровно tier/effort/reasoning/budget: string|null**, registry values; tier limits heavy/medium/light|null",
+          "У формы+В matching profile-stage/value и отображение A→tier/3–4 values; Д только известных условий. 045 family нельзя пятым ключом; выбор модели снаружи/с внешним selector"
+        ],
+        "C35": [
+          "C35 M1550: facts-only,≤10 messages, слабое место, log переданный текст/итог, reply вердикт/ref, разошлись оба",
+          "D prompt/fields required/grammar, integer parameter bounds G, A/G order и message counter; V log ref",
+          "У+В exact message/record/context signature и availability; 045 нужны каждое текстовое обязательство и контроль≤10, не одно имя lens"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий.",
+        "D5": "- **D5**: `process.md`, «Режимы ответа на вопросы» и «Роли»; шаг «Сверить границы решений» — сохранить ADR0010 и owner gates, D0 для нового внешнего текста. Новое отличие только новым ADR, не молчаливой правкой принятого."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "M18",
+      "old_current_source": "1551→1562;1559→1570",
+      "meaning_and_disposition": "**Норма / условие / provenance:** Язык принимающего без режима; замысел НЕ согласование; согласование условно по цене/проверяемости и после макета\n\n**Canon / code evidence / disposition и будущий шаг:** AGENTS17/core инструкция не смысловой контроль; EØ; D0. Не выключать замысел тем, что optional согласование ещё не прогнано",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C37": [
+          "C37 M711/1570: intent не agreement/не review/не доказательство; boundary не пишется для norms about review, mixed split",
+          "D prompt/context/disposition fields; G существующие review/meeting ветви, не cycle.stage=intent",
+          "У+В точная classification/context schema; 045 не использовать optional согласование как off замысла, не прибавлять чистый заход"
+        ],
+        "C50": [
+          "C50 M1562: язык принимающего без optional режима",
+          "D prompt/context instruction+V source coverage; optional subsystem 68 только если режим включён, не условие языка письма",
+          "У/Д инструкции+В receiver-language/context/translation evidence contract; 045 не обещать смысловой контролёр по owner_language"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "M19",
+      "old_current_source": "1699→1710",
+      "meaning_and_disposition": "**Норма / условие / provenance:** Подпись frozen снимка, внешний перечень\n\n**Canon / code evidence / disposition и будущий шаг:** DX, provenance, не переносить чужую таблицу/заморозку; живые выводы не исключать по одному названию\n\n\n## S: все 12 hunks (S01 содержит две независимые вставки)",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C60": [
+          "C60 Q5/P/M history/presentation/starter kit dispositions",
+          "V coverage kind/disposition/reason; D procedural OQ поля, не runtime новые ключи",
+          "У/Д данных уже принятой Q5 процедуры 9d391ba/process125–144; О внешних Q вопросов; DX для неприменимых presentation/starterkit/frozen историй с reason в method-delta. 045 не выкинуть Q5 как«вопрос»и не импортировать off signoff policy"
+        ]
+      },
+      "destinations": {
+        "DX": "- **DX**: перенос не нужен: внешний служебный/исторический/производный файл или непринятый вопрос. Обоснование в каждой строке; это не blanket исключение normative anchors."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "S01a",
+      "old_current_source": "66→66",
+      "meaning_and_disposition": "**Обязательство / условие:** Old: целый prompt первым, cwd/путь; **уточнения цели в old НЕТ**. Current добавляет machine-tail общий+сессионный/код/единицу\n\n**Canon / code / disposition:** process66–88; EJ/EL лишь часть; D0+D3, нет переноса общего prompt в Canon",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C46": [
+          "C46 S66/R105–120: машинный хвост 2 части/код/единица/инструмент если есть/session tail приоритет",
+          "D promptregistry hash/substitutions+sourceRef 93; D doc instruction, A/Btool availability",
+          "У+В exact prompt/context/tool contracts; 045 приоритет profile исключения нельзя потерять в общем prompt"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий.",
+        "D3": "- **D3**: `process.md`, «Журнал хода progress.log»,60–121; шаг «Сверить принятое журнальное основание» — сохранить проектные инструмент/дату/парный запуск/переход старых журналов; общую норму не копировать второй раз. Менять код/настройки эта задача не разрешает."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "S01b",
+      "old_current_source": "66→66",
+      "meaning_and_disposition": "**Обязательство / условие:** Если цель уточнена — в том же первом сообщении перед old message, дата/source/действует уточнение, old не удалять\n\n**Canon / code / disposition:** AGENTS2 сохраняет слово, отдельный механизм не доказан; EØ; D0, применять при запуске, не подделывать старый source",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C47": [
+          "C47 S66: уточнение перед old message с датой/source/пометкой, old сохранить",
+          "D prompt/документ fields и A/B preserve old/write clarification/V source",
+          "У+В exact document storage/action signature; 045 не подменять old anchor текущим смыслом, не переписывать историю"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "S02",
+      "old_current_source": "69→69",
+      "meaning_and_disposition": "**Обязательство / условие:** Новая без history; перед повтором закрыть агента и все команды; каждый launch парно до агента/номер\n\n**Canon / code / disposition:** process77–88; EL/EJ регистрация не stop group; D3/D0",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C01": [
+          "C01 R89/93/160/591: порядковый номер каждого запуска, max+1",
+          "A декларация registration до request, B context/event-field илисовместимый snapshot; session34 не экземпляр запуска",
+          "У форма+В: имя вычисляющего output, integer домен/доступность max из state/log и signature не получены. 045 запросить подтверждённый номер/операцию, не выдумывать builtin max"
+        ],
+        "C02": [
+          "C02 R89/160: код и граница сессии от регистрации",
+          "sessions34code: string, kind закрыт; A registration event/codepayload+B; PlaunchMarker отдельный",
+          "У+В: exact code/source/full payload signature и required availability после registration неизвестны. 045 отдельно от статического справочника sessions"
+        ],
+        "C03": [
+          "C03 R159/592: running/регистрация **до запроса**",
+          "A упорядоченные edges/actions, on/outcome по event signature; G route↔edge, REQ27/29",
+          "У+В: save/request operation names, порядок confirmation/result и signatures unknown. 045 не объявлять atomic/order по одному TaskSession.launch"
+        ],
+        "C04": [
+          "C04 R152: atomic save после изменений/перед воротами",
+          "A state persist intention+G порядок before gate; runtime atomic write исключён 329",
+          "У+В: persist payload/atomicity/подтверждающее событие неизвестны; ES plugin сохраняет Task, не state. 045 нужен external contract, но target declaration непуст"
+        ],
+        "C05": [
+          "C05 R160/592: append-only launch record перед строкой launch",
+          "A registration→linewrite, B typed payload; V source cover",
+          "У+В: append contract/record required fields/nullability/domain/commit availability unknown. 045 требуется намерение и ordering, не root mutable array"
+        ],
+        "C06": [
+          "C06 R160/592: длина progress.log **до launch**",
+          "A/B context или event-field, T для согласованного домена offset; mutable value external",
+          "У+В: units(length bytes/other), safe integer bound, requiredness/name output/signature unknown. 045 не подставлять offset самого запроса вместо до line"
+        ],
+        "C07": [
+          "C07 R593–594: offsets **после launch** для progress/profile",
+          "A две отдельные декларации snapshot, B outputs полностью совместимы T",
+          "У+В: каждая из двух length signature/domain/availability unknown; 045 два атрибута, не одно off_p до launch"
+        ],
+        "C08": [
+          "C08 R160/591–595: время запуска",
+          "A event/context payload, T тип времени только по registry; неавторский clock literal",
+          "У+В: epoch/string/precision/timezone/nullability/name clock output не объявлены нормой. 045 запросить time contract, не придумывать тип API"
+        ],
+        "C09": [
+          "C09 R89/159/590: именованная process group до старта",
+          "A external effect создания→request, B group output; T type по signature",
+          "У+В: identifier string/integer/OS handle и result schema/name/required availability unknown. 045 effect confirmation/result, не псевдооперация stop-group по имени"
+        ],
+        "C10": [
+          "C10 R89/159/681: **время старта группы**, сверка identity",
+          "A/Bgroup identity+starttime перед cleanup; whole-domain T",
+          "У+В: конкретный тип/time precision/identity predicate args/results/domain и availability unknown. 045 нельзя остановить чужой reused PID по одному номеру"
+        ],
+        "C11": [
+          "C11 R89/574/600–601: stop **всей** группы и запущенных команд до retry/exit",
+          "A external effect→подтверждение пустоты→G ветвь retry/exit;325/327/329",
+          "У+В: stop/empty check signatures, scope all commands, success/failure outcomes unknown. 045 нужно покрыть все отказ/retry/inactivity/stop ветви, нет пропуска как«runtime»"
+        ],
+        "C12": [
+          "C12 R574/600–601: meeting failed/halt vs вне meeting exit/В13",
+          "G route/gate/exhaustive outcomes, A result payload",
+          "У+В: mapping результатов stop/failed/halt/confirmation unknown; 045 не выбирать другой outcome/target из догадки"
+        ],
+        "C13": [
+          "C13 R594/277: result-count snapshot до call, С5/С5д только прирост этой сессии",
+          "D result fields+grammar, A/Bsnapshot с nonnull required integer output при required получателе; G recompute только совместимая ссылка",
+          "У+В: name count output/единица old+new/fieldSchema/availability signature unknown. 045 не объявлять формулу new-old регламента, неполный общий result"
+        ],
+        "C14": [
+          "C14 R602: tail от после launch offset **только текущий code**",
+          "A/Btail inputs(code, offset), P декларация progress связи, REQ19/27/29",
+          "У+В: exact tail operation/inputs/output grammar+availability unknown. 045 оба аргумента отдельно с source, не строки любого роли кода"
+        ],
+        "C15": [
+          "C15 R681: cleanup прежней group **только под lock**, сверить starttime",
+          "A/G lock→identity→stop→empty check; lock runtime не JSON key",
+          "У+В: lock ownership/acquire/release/identity inputs/confirmation unknown; 045 декларативный порядок каждого эффекта, not whole external reason"
+        ],
+        "C16": [
+          "C16 R681/608: нет group→найти процессы task или В13; существенный journal violation→log, не autorepair",
+          "A/Btask process lookup/log event+G В13fallback, D log field; разные ветви по source",
+          "У+В: lookup scope/result/availability и journal diagnostic/log signature unknown по отдельности. 045 не останавливать процессы по маске и не автоисправлять запрет"
+        ],
+        "C29": [
+          "C29 S69/M707: новая без history, whole-read, immutable version",
+          "D sessions agent/role/promptRef; D документ version/summary, V source hash; A launch policy",
+          "У для декларации в prompt/doc+В exact fresh launch/selector/context signature/availability. 045 не равнять repeatable с fresh history, не claim фактического выполнения"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий.",
+        "D3": "- **D3**: `process.md`, «Журнал хода progress.log»,60–121; шаг «Сверить принятое журнальное основание» — сохранить проектные инструмент/дату/парный запуск/переход старых журналов; общую норму не копировать второй раз. Менять код/настройки эта задача не разрешает."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "S03",
+      "old_current_source": "∅после 81→82",
+      "meaning_and_disposition": "**Обязательство / условие:** Current артефакт будущего переноса\n\n**Canon / code / disposition:** process175–197; EØ; D1, не создавать сейчас",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C49": [
+          "C49 M541/S122/183/192/317–324: first transfer current, immutable approved, one place/copies/literal строки",
+          "D literal current.md, requiredBy/fields/markers, без numberBinding если нет{N}; V source/dest; A/G transfer order",
+          "У для формы+Д адресов после ворот, В exact transfer/tool grammar; 045 current061 первый Canon перенос не ждёт format, копии не 2 нормы. Единственность смыслов приёмкой, не JSON-only"
+        ]
+      },
+      "destinations": {
+        "D1": "- **D1**: process/«Результат и куда он попадает», шаг «Согласовать действующие места и указатели». В-02 уже выбрал адресное уточнение и новый ADR/реестр/входную ссылку; содержание формата и версии ещё отдельно утверждаются. Сохранить более строгое проектное правило и current при первом любом переносе (REQ-05/AC-05), не ждать формата."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "S04",
+      "old_current_source": "86–87→87–88",
+      "meaning_and_disposition": "**Обязательство / условие:** Log фиксирует каждый запуск; агент не пишет launcher log\n\n**Canon / code / disposition:** process77–101; EJ/EL; D3",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C01": [
+          "C01 R89/93/160/591: порядковый номер каждого запуска, max+1",
+          "A декларация registration до request, B context/event-field илисовместимый snapshot; session34 не экземпляр запуска",
+          "У форма+В: имя вычисляющего output, integer домен/доступность max из state/log и signature не получены. 045 запросить подтверждённый номер/операцию, не выдумывать builtin max"
+        ],
+        "C02": [
+          "C02 R89/160: код и граница сессии от регистрации",
+          "sessions34code: string, kind закрыт; A registration event/codepayload+B; PlaunchMarker отдельный",
+          "У+В: exact code/source/full payload signature и required availability после registration неизвестны. 045 отдельно от статического справочника sessions"
+        ],
+        "C18": [
+          "C18 R89: одна agent start, launch отдельно, k неубывает",
+          "P103–107 counted vs zero-unit/node unit/grammar; A проверка истории",
+          "У/Д для известной формы start/launch; В для исторического предиката/context signature. 045 не подменять launch 0/0 агентским стартом"
+        ]
+      },
+      "destinations": {
+        "D3": "- **D3**: `process.md`, «Журнал хода progress.log»,60–121; шаг «Сверить принятое журнальное основание» — сохранить проектные инструмент/дату/парный запуск/переход старых журналов; общую норму не копировать второй раз. Менять код/настройки эта задача не разрешает."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "S05",
+      "old_current_source": "∅после 106→108–111",
+      "meaning_and_disposition": "**Обязательство / условие:** Задача/spec/ворота; сессия=запуск; подзадача=пункт без ворот\n\n**Canon / code / disposition:** process151–160 по owner2026-10-15: иной смысл подзадачи, явный semantic override; EL модель запуска не устанавливает смысл; D2",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C48": [
+          "C48 S110: иной project смысл подзадачи",
+          "D prompt/source coverage+sessions kind/code/phases; V override provenance",
+          "У/Д нормативной декларации override, не shape изменение; 045 отдельные задачи только разрешённым scope, не из общего слова"
+        ]
+      },
+      "destinations": {
+        "D2": "- **D2**: `process.md`, «Задача, сессия, подзадача», строки 151–160; шаг «Назвать смысловой override терминов» — не менять уже выбранный владельцем смысл, явно противопоставить внешнему S110. Если требуется новое решение — отдельные ворота, не новый смысл по умолчанию."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "S06",
+      "old_current_source": "117→122",
+      "meaning_and_disposition": "**Обязательство / условие:** Вторая строка spec про current\n\n**Canon / code / disposition:** process175–197; EØ; D1/D0, первая/вторая сохранены в 061",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C49": [
+          "C49 M541/S122/183/192/317–324: first transfer current, immutable approved, one place/copies/literal строки",
+          "D literal current.md, requiredBy/fields/markers, без numberBinding если нет{N}; V source/dest; A/G transfer order",
+          "У для формы+Д адресов после ворот, В exact transfer/tool grammar; 045 current061 первый Canon перенос не ждёт format, копии не 2 нормы. Единственность смыслов приёмкой, не JSON-only"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий.",
+        "D1": "- **D1**: process/«Результат и куда он попадает», шаг «Согласовать действующие места и указатели». В-02 уже выбрал адресное уточнение и новый ADR/реестр/входную ссылку; содержание формата и версии ещё отдельно утверждаются. Сохранить более строгое проектное правило и current при первом любом переносе (REQ-05/AC-05), не ждать формата."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "S07",
+      "old_current_source": "∅после 128→134–137",
+      "meaning_and_disposition": "**Обязательство / условие:** Результат/место/шаг либо честный код; не названное место→вопрос с сроком\n\n**Canon / code / disposition:** process183–197; EØ; D1, В02 не ответ автора",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C49": [
+          "C49 M541/S122/183/192/317–324: first transfer current, immutable approved, one place/copies/literal строки",
+          "D literal current.md, requiredBy/fields/markers, без numberBinding если нет{N}; V source/dest; A/G transfer order",
+          "У для формы+Д адресов после ворот, В exact transfer/tool grammar; 045 current061 первый Canon перенос не ждёт format, копии не 2 нормы. Единственность смыслов приёмкой, не JSON-only"
+        ]
+      },
+      "destinations": {
+        "D1": "- **D1**: process/«Результат и куда он попадает», шаг «Согласовать действующие места и указатели». В-02 уже выбрал адресное уточнение и новый ADR/реестр/входную ссылку; содержание формата и версии ещё отдельно утверждаются. Сохранить более строгое проектное правило и current при первом любом переносе (REQ-05/AC-05), не ждать формата."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "S08",
+      "old_current_source": "141→150",
+      "meaning_and_disposition": "**Обязательство / условие:** При правке spec сохранить вторую строку\n\n**Canon / code / disposition:** process175–197; EØ; D1/D0, неизменность literal проверяется",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C49": [
+          "C49 M541/S122/183/192/317–324: first transfer current, immutable approved, one place/copies/literal строки",
+          "D literal current.md, requiredBy/fields/markers, без numberBinding если нет{N}; V source/dest; A/G transfer order",
+          "У для формы+Д адресов после ворот, В exact transfer/tool grammar; 045 current061 первый Canon перенос не ждёт format, копии не 2 нормы. Единственность смыслов приёмкой, не JSON-only"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий.",
+        "D1": "- **D1**: process/«Результат и куда он попадает», шаг «Согласовать действующие места и указатели». В-02 уже выбрал адресное уточнение и новый ADR/реестр/входную ссылку; содержание формата и версии ещё отдельно утверждаются. Сохранить более строгое проектное правило и current при первом любом переносе (REQ-05/AC-05), не ждать формата."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "S09",
+      "old_current_source": "174→183",
+      "meaning_and_disposition": "**Обязательство / условие:** Третья строка plan про current\n\n**Canon / code / disposition:** process175–197; EØ; D1/D0, plan сейчас не создаётся",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C49": [
+          "C49 M541/S122/183/192/317–324: first transfer current, immutable approved, one place/copies/literal строки",
+          "D literal current.md, requiredBy/fields/markers, без numberBinding если нет{N}; V source/dest; A/G transfer order",
+          "У для формы+Д адресов после ворот, В exact transfer/tool grammar; 045 current061 первый Canon перенос не ждёт format, копии не 2 нормы. Единственность смыслов приёмкой, не JSON-only"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий.",
+        "D1": "- **D1**: process/«Результат и куда он попадает», шаг «Согласовать действующие места и указатели». В-02 уже выбрал адресное уточнение и новый ADR/реестр/входную ссылку; содержание формата и версии ещё отдельно утверждаются. Сохранить более строгое проектное правило и current при первом любом переносе (REQ-05/AC-05), не ждать формата."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "S10",
+      "old_current_source": "182→191–192",
+      "meaning_and_disposition": "**Обязательство / условие:** Каждый результат отдельный шаг/DoD; первый перенос current, прочие дополняют/копии; исключение только честный код\n\n**Canon / code / disposition:** process175–197; EØ; D1/REQ05/AC05, включая Canon-first",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C49": [
+          "C49 M541/S122/183/192/317–324: first transfer current, immutable approved, one place/copies/literal строки",
+          "D literal current.md, requiredBy/fields/markers, без numberBinding если нет{N}; V source/dest; A/G transfer order",
+          "У для формы+Д адресов после ворот, В exact transfer/tool grammar; 045 current061 первый Canon перенос не ждёт format, копии не 2 нормы. Единственность смыслов приёмкой, не JSON-only"
+        ]
+      },
+      "destinations": {
+        "D1": "- **D1**: process/«Результат и куда он попадает», шаг «Согласовать действующие места и указатели». В-02 уже выбрал адресное уточнение и новый ADR/реестр/входную ссылку; содержание формата и версии ещё отдельно утверждаются. Сохранить более строгое проектное правило и current при первом любом переносе (REQ-05/AC-05), не ждать формата."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "S11",
+      "old_current_source": "201→211",
+      "meaning_and_disposition": "**Обязательство / условие:** При правке plan сохранить третью строку\n\n**Canon / code / disposition:** process175–197; EØ; D1/D0",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C49": [
+          "C49 M541/S122/183/192/317–324: first transfer current, immutable approved, one place/copies/literal строки",
+          "D literal current.md, requiredBy/fields/markers, без numberBinding если нет{N}; V source/dest; A/G transfer order",
+          "У для формы+Д адресов после ворот, В exact transfer/tool grammar; 045 current061 первый Canon перенос не ждёт format, копии не 2 нормы. Единственность смыслов приёмкой, не JSON-only"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий.",
+        "D1": "- **D1**: process/«Результат и куда он попадает», шаг «Согласовать действующие места и указатели». В-02 уже выбрал адресное уточнение и новый ADR/реестр/входную ссылку; содержание формата и версии ещё отдельно утверждаются. Сохранить более строгое проектное правило и current при первом любом переносе (REQ-05/AC-05), не ждать формата."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "S12",
+      "old_current_source": "307→317–324",
+      "meaning_and_disposition": "**Обязательство / условие:** С6 все места/current/сверка копии/единственность поиском/ссылки/метки/literal строки/MR/код как контракт; gitdiffstat только task в repo\n\n**Canon / code / disposition:** process187–197 строже по всему Canon; EØ; D1; pin старых задач сохранить, формальный guard неполная приёмка\n\n\n## R: все 15 hunks с разнесёнными атрибутами",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C49": [
+          "C49 M541/S122/183/192/317–324: first transfer current, immutable approved, one place/copies/literal строки",
+          "D literal current.md, requiredBy/fields/markers, без numberBinding если нет{N}; V source/dest; A/G transfer order",
+          "У для формы+Д адресов после ворот, В exact transfer/tool grammar; 045 current061 первый Canon перенос не ждёт format, копии не 2 нормы. Единственность смыслов приёмкой, не JSON-only"
+        ]
+      },
+      "destinations": {
+        "D1": "- **D1**: process/«Результат и куда он попадает», шаг «Согласовать действующие места и указатели». В-02 уже выбрал адресное уточнение и новый ADR/реестр/входную ссылку; содержание формата и версии ещё отдельно утверждаются. Сохранить более строгое проектное правило и current при первом любом переносе (REQ-05/AC-05), не ждать формата."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "R01",
+      "old_current_source": "24→24",
+      "meaning_and_disposition": "**Обязательство / условие:** Коды А/Ф/Л по линзам\n\n**Canon / code / disposition:** process88; EL неполный meeting runner; D3/D0",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C30": [
+          "C30 M707: ordinary С2 линзы со своим разделом/счётом/пробами",
+          "D prompt instruction+documents[].fields/grammar/required/multiplicity; **lens 69 sessionId ТОЛЬКО meeting**",
+          "У/Д для описания разделов в документе, В точные prompt/grammar contracts. 045 не помещать agent С2 sessionId в lenses, не«исправлять»kind агента ради ссылки. Обычный `spec-review-{N}.md` с разделами двух линз не требует токена `{lens}`/каталога meeting-линз"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий.",
+        "D3": "- **D3**: `process.md`, «Журнал хода progress.log»,60–121; шаг «Сверить принятое журнальное основание» — сохранить проектные инструмент/дату/парный запуск/переход старых журналов; общую норму не копировать второй раз. Менять код/настройки эта задача не разрешает."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "R02",
+      "old_current_source": "78→78",
+      "meaning_and_disposition": "**Обязательство / условие:** Порядковый launch№ в progress\n\n**Canon / code / disposition:** process77–86; EJ/EL; D3",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C01": [
+          "C01 R89/93/160/591: порядковый номер каждого запуска, max+1",
+          "A декларация registration до request, B context/event-field илисовместимый snapshot; session34 не экземпляр запуска",
+          "У форма+В: имя вычисляющего output, integer домен/доступность max из state/log и signature не получены. 045 запросить подтверждённый номер/операцию, не выдумывать builtin max"
+        ],
+        "C02": [
+          "C02 R89/160: код и граница сессии от регистрации",
+          "sessions34code: string, kind закрыт; A registration event/codepayload+B; PlaunchMarker отдельный",
+          "У+В: exact code/source/full payload signature и required availability после registration неизвестны. 045 отдельно от статического справочника sessions"
+        ],
+        "C18": [
+          "C18 R89: одна agent start, launch отдельно, k неубывает",
+          "P103–107 counted vs zero-unit/node unit/grammar; A проверка истории",
+          "У/Д для известной формы start/launch; В для исторического предиката/context signature. 045 не подменять launch 0/0 агентским стартом"
+        ]
+      },
+      "destinations": {
+        "D3": "- **D3**: `process.md`, «Журнал хода progress.log»,60–121; шаг «Сверить принятое журнальное основание» — сохранить проектные инструмент/дату/парный запуск/переход старых журналов; общую норму не копировать второй раз. Менять код/настройки эта задача не разрешает."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "R03",
+      "old_current_source": "84→84",
+      "meaning_and_disposition": "**Обязательство / условие:** Журнал сигнал, артефакт/independent review доказательство; не антифальсификация\n\n**Canon / code / disposition:** process63/102–104; EJ не доказывает честность строки; D3",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C26": [
+          "C26 R84/87/94/277: единица доказана артефактом; своевременный step, skip по artifact",
+          "D result fields multiplicity+P unit+A/B artifact check; predicates44/97 только внешний whitelist",
+          "У+В exact artifact/context/clock/predicate contracts; 045 число строк/готово не доказательство выполненного, никакого semantic PASS по count"
+        ]
+      },
+      "destinations": {
+        "D3": "- **D3**: `process.md`, «Журнал хода progress.log»,60–121; шаг «Сверить принятое журнальное основание» — сохранить проектные инструмент/дату/парный запуск/переход старых журналов; общую норму не копировать второй раз. Менять код/настройки эта задача не разрешает."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "R04",
+      "old_current_source": "88–91→88–91: keyword",
+      "meaning_and_disposition": "**Обязательство / условие:** Целое слово/знак после; стоп/поправка colon; start одна/agent первая; session по registered launch, линзы по code\n\n**Canon / code / disposition:** process66–101; EJ/EL; D3,031semantic conflict в impact, не только refs",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C17": [
+          "C17 R88: whole keyword/допустимый знак после, ready colon",
+          "P grammar ref103, НО direct 259/309/540 exact готово без colon",
+          "**С**: требуются новые REQ/AC/пары в отдельной редакции; grammar не override. У формы/P отдельно, shape Ф не доказан"
+        ],
+        "C18": [
+          "C18 R89: одна agent start, launch отдельно, k неубывает",
+          "P103–107 counted vs zero-unit/node unit/grammar; A проверка истории",
+          "У/Д для известной формы start/launch; В для исторического предиката/context signature. 045 не подменять launch 0/0 агентским стартом"
+        ]
+      },
+      "destinations": {
+        "D3": "- **D3**: `process.md`, «Журнал хода progress.log»,60–121; шаг «Сверить принятое журнальное основание» — сохранить проектные инструмент/дату/парный запуск/переход старых журналов; общую норму не копировать второй раз. Менять код/настройки эта задача не разрешает."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "R05",
+      "old_current_source": "тот же hunk: lifetime",
+      "meaning_and_disposition": "**Обязательство / условие:** Group именована до старта, id+starttime, остановить всех и команды перед retry/нет процессов; manual закрыть окно\n\n**Canon / code / disposition:** process77–88 ручная часть; EL не runtime; D3/D0, декларации REQ27/29 не выкинуть",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C09": [
+          "C09 R89/159/590: именованная process group до старта",
+          "A external effect создания→request, B group output; T type по signature",
+          "У+В: identifier string/integer/OS handle и result schema/name/required availability unknown. 045 effect confirmation/result, не псевдооперация stop-group по имени"
+        ],
+        "C10": [
+          "C10 R89/159/681: **время старта группы**, сверка identity",
+          "A/Bgroup identity+starttime перед cleanup; whole-domain T",
+          "У+В: конкретный тип/time precision/identity predicate args/results/domain и availability unknown. 045 нельзя остановить чужой reused PID по одному номеру"
+        ],
+        "C11": [
+          "C11 R89/574/600–601: stop **всей** группы и запущенных команд до retry/exit",
+          "A external effect→подтверждение пустоты→G ветвь retry/exit;325/327/329",
+          "У+В: stop/empty check signatures, scope all commands, success/failure outcomes unknown. 045 нужно покрыть все отказ/retry/inactivity/stop ветви, нет пропуска как«runtime»"
+        ],
+        "C12": [
+          "C12 R574/600–601: meeting failed/halt vs вне meeting exit/В13",
+          "G route/gate/exhaustive outcomes, A result payload",
+          "У+В: mapping результатов stop/failed/halt/confirmation unknown; 045 не выбирать другой outcome/target из догадки"
+        ],
+        "C15": [
+          "C15 R681: cleanup прежней group **только под lock**, сверить starttime",
+          "A/G lock→identity→stop→empty check; lock runtime не JSON key",
+          "У+В: lock ownership/acquire/release/identity inputs/confirmation unknown; 045 декларативный порядок каждого эффекта, not whole external reason"
+        ],
+        "C16": [
+          "C16 R681/608: нет group→найти процессы task или В13; существенный journal violation→log, не autorepair",
+          "A/Btask process lookup/log event+G В13fallback, D log field; разные ветви по source",
+          "У+В: lookup scope/result/availability и journal diagnostic/log signature unknown по отдельности. 045 не останавливать процессы по маске и не автоисправлять запрет"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий.",
+        "D3": "- **D3**: `process.md`, «Журнал хода progress.log»,60–121; шаг «Сверить принятое журнальное основание» — сохранить проектные инструмент/дату/парный запуск/переход старых журналов; общую норму не копировать второй раз. Менять код/настройки эта задача не разрешает."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "R06",
+      "old_current_source": "тот же hunk: correction",
+      "meaning_and_disposition": "**Обязательство / условие:** append-only quote10–30/вся короткая, текущий k, не единица/не живость; skip/late-start не чинит\n\n**Canon / code / disposition:** process89–104; EJ; D3",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C19": [
+          "C19 R90: correction quote10–30/вся короткая, current k/append-only",
+          "P grammar+unit, D quoted history/context через B, A проверка; 309append-only",
+          "У условной формы+В exact grammar/history signature, не просто regex. 045 новые пары для current k/quote и отрицательных случаев"
+        ],
+        "C20": [
+          "C20 R90/275: correction не единица/не живость",
+          "P unit rule99–101 и A/G counter effect только в route; B context declared T",
+          "У+В: numerator/timer input signature/outcomes unknown. 045 коррекция не increment/не refresh таймера; runtime evidence отдельно"
+        ]
+      },
+      "destinations": {
+        "D3": "- **D3**: `process.md`, «Журнал хода progress.log»,60–121; шаг «Сверить принятое журнальное основание» — сохранить проектные инструмент/дату/парный запуск/переход старых журналов; общую норму не копировать второй раз. Менять код/настройки эта задача не разрешает."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "R07",
+      "old_current_source": "тот же hunk: done",
+      "meaning_and_disposition": "**Обязательство / условие:** Сравнить со startN, k>N;   no-start/second-start не completion; final повтор same k/keyword; low N три исхода/overstated с artifact; new session только запускающий\n\n**Canon / code / disposition:** process70–107; EJ startN, не artifact; D3, отдельная изолирующая N пара в impact",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C21": [
+          "C21 R91/716: done сравнить со **startN**, k>N допустим",
+          "P105/309/540 N/N и 101 agent N приоритет; A/Bstart snapshot/predicate",
+          "У для ссылочной формы+В history/unit/context signature; нужно явно оценить semantic REQ/AC/пары start binding, не объявлять прежний final N достаточным"
+        ],
+        "C22": [
+          "C22 R91/716: k<startN с обоснованным«N завышено»может completion",
+          "P историческая N/N форма 105/309/540 не покрывает исключение; D reason/артефакт+A проверка",
+          "**С**по исключению N; У форма grammar/doc+В exact grammar/artifact signature. 045 отдельная изолирующая пара ниже, не 0/2→1/1"
+        ],
+        "C23": [
+          "C23 R91/94: финальная ошибка→same k/same keyword повтор, low N→stop/дальше/обоснование",
+          "P grammar+history A/B; произвольная запись после final незаконна",
+          "У+В history predicate/outcomes/availability; semantic пары current должны утверждаться, не одна grammar ref"
+        ],
+        "C24": [
+          "C24 R91/716: done без start/после второго start не completion",
+          "P105/309/540 уже отвергает нет start; A/B count start/full history",
+          "У известного ограничения+В exact history signature; 045 контроли 0 start/2 start отдельны"
+        ]
+      },
+      "destinations": {
+        "D3": "- **D3**: `process.md`, «Журнал хода progress.log»,60–121; шаг «Сверить принятое журнальное основание» — сохранить проектные инструмент/дату/парный запуск/переход старых журналов; общую норму не копировать второй раз. Менять код/настройки эта задача не разрешает."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "R08",
+      "old_current_source": "93→93–94",
+      "meaning_and_disposition": "**Обязательство / условие:** Только launcher launch+парный log; форма поверхностна, существенные исключения списком; skip по artifact\n\n**Canon / code / disposition:** process77–104; EJ/EL лишь формальная часть; D3",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C18": [
+          "C18 R89: одна agent start, launch отдельно, k неубывает",
+          "P103–107 counted vs zero-unit/node unit/grammar; A проверка истории",
+          "У/Д для известной формы start/launch; В для исторического предиката/context signature. 045 не подменять launch 0/0 агентским стартом"
+        ],
+        "C25": [
+          "C25 R92: пять stop kinds и причина",
+          "P50/109/263/309/540 точно множество 5 без дублей, stop grammar; не success/zero-unit",
+          "У/Д: нормы/closed enum достаточны для данных; выполнение grammar при matching registry. 045 surprise/нет вида/нет причины отдельные негативы"
+        ],
+        "C26": [
+          "C26 R84/87/94/277: единица доказана артефактом; своевременный step, skip по artifact",
+          "D result fields multiplicity+P unit+A/B artifact check; predicates44/97 только внешний whitelist",
+          "У+В exact artifact/context/clock/predicate contracts; 045 число строк/готово не доказательство выполненного, никакого semantic PASS по count"
+        ]
+      },
+      "destinations": {
+        "D3": "- **D3**: `process.md`, «Журнал хода progress.log»,60–121; шаг «Сверить принятое журнальное основание» — сохранить проектные инструмент/дату/парный запуск/переход старых журналов; общую норму не копировать второй раз. Менять код/настройки эта задача не разрешает."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "R09",
+      "old_current_source": "104→105–120",
+      "meaning_and_disposition": "**Обязательство / условие:** Каждый«Сессия»новый start, full machine-tail, инструмент если есть,**сессионная часть старше общей включая profile**\n\n**Canon / code / disposition:** process66–76/88; EJ инструмент есть, не передача всего prompt; D3/D0",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C27": [
+          "C27 R109–120: длина подписи 80/clock/source, tool если есть/session tail старше общего",
+          "P grammar/hasDate: boolean, D prompt/source/substitutions; clock actual external",
+          "У/Д известных literal ограничений+В tool availability/clock/prompt contract. 045 не изобретать opencode journal runtime operation из имени инструмента"
+        ],
+        "C46": [
+          "C46 S66/R105–120: машинный хвост 2 части/код/единица/инструмент если есть/session tail приоритет",
+          "D promptregistry hash/substitutions+sourceRef 93; D doc instruction, A/Btool availability",
+          "У+В exact prompt/context/tool contracts; 045 приоритет profile исключения нельзя потерять в общем prompt"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий.",
+        "D3": "- **D3**: `process.md`, «Журнал хода progress.log»,60–121; шаг «Сверить принятое журнальное основание» — сохранить проектные инструмент/дату/парный запуск/переход старых журналов; общую норму не копировать второй раз. Менять код/настройки эта задача не разрешает."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "R10",
+      "old_current_source": "143→159–160",
+      "meaning_and_disposition": "**Обязательство / условие:** Running group/time до request; launches append-only номер/code/offset/time/group/time\n\n**Canon / code / disposition:** process33 manual override; ES не runtime state, EL без полей; D0/override сохранить, в impact намерения отдельно",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C01": [
+          "C01 R89/93/160/591: порядковый номер каждого запуска, max+1",
+          "A декларация registration до request, B context/event-field илисовместимый snapshot; session34 не экземпляр запуска",
+          "У форма+В: имя вычисляющего output, integer домен/доступность max из state/log и signature не получены. 045 запросить подтверждённый номер/операцию, не выдумывать builtin max"
+        ],
+        "C02": [
+          "C02 R89/160: код и граница сессии от регистрации",
+          "sessions34code: string, kind закрыт; A registration event/codepayload+B; PlaunchMarker отдельный",
+          "У+В: exact code/source/full payload signature и required availability после registration неизвестны. 045 отдельно от статического справочника sessions"
+        ],
+        "C03": [
+          "C03 R159/592: running/регистрация **до запроса**",
+          "A упорядоченные edges/actions, on/outcome по event signature; G route↔edge, REQ27/29",
+          "У+В: save/request operation names, порядок confirmation/result и signatures unknown. 045 не объявлять atomic/order по одному TaskSession.launch"
+        ],
+        "C04": [
+          "C04 R152: atomic save после изменений/перед воротами",
+          "A state persist intention+G порядок before gate; runtime atomic write исключён 329",
+          "У+В: persist payload/atomicity/подтверждающее событие неизвестны; ES plugin сохраняет Task, не state. 045 нужен external contract, но target declaration непуст"
+        ],
+        "C05": [
+          "C05 R160/592: append-only launch record перед строкой launch",
+          "A registration→linewrite, B typed payload; V source cover",
+          "У+В: append contract/record required fields/nullability/domain/commit availability unknown. 045 требуется намерение и ordering, не root mutable array"
+        ],
+        "C06": [
+          "C06 R160/592: длина progress.log **до launch**",
+          "A/B context или event-field, T для согласованного домена offset; mutable value external",
+          "У+В: units(length bytes/other), safe integer bound, requiredness/name output/signature unknown. 045 не подставлять offset самого запроса вместо до line"
+        ],
+        "C07": [
+          "C07 R593–594: offsets **после launch** для progress/profile",
+          "A две отдельные декларации snapshot, B outputs полностью совместимы T",
+          "У+В: каждая из двух length signature/domain/availability unknown; 045 два атрибута, не одно off_p до launch"
+        ],
+        "C08": [
+          "C08 R160/591–595: время запуска",
+          "A event/context payload, T тип времени только по registry; неавторский clock literal",
+          "У+В: epoch/string/precision/timezone/nullability/name clock output не объявлены нормой. 045 запросить time contract, не придумывать тип API"
+        ],
+        "C09": [
+          "C09 R89/159/590: именованная process group до старта",
+          "A external effect создания→request, B group output; T type по signature",
+          "У+В: identifier string/integer/OS handle и result schema/name/required availability unknown. 045 effect confirmation/result, не псевдооперация stop-group по имени"
+        ],
+        "C10": [
+          "C10 R89/159/681: **время старта группы**, сверка identity",
+          "A/Bgroup identity+starttime перед cleanup; whole-domain T",
+          "У+В: конкретный тип/time precision/identity predicate args/results/domain и availability unknown. 045 нельзя остановить чужой reused PID по одному номеру"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "R11",
+      "old_current_source": "∅после 214→232–233",
+      "meaning_and_disposition": "**Обязательство / условие:** Opinion класс A/reasoning/effort3, для security/money/data/norm 4; different family if available; отдельная модель проекта\n\n**Canon / code / disposition:** process240–244 профиль не доказывает selector; EØ; D0, не менять модели этой сессии",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C33": [
+          "C33 M1550/R232: fresh/different family если доступна; совпадение в ответе",
+          "D prompt+document fields для политики/факта fresh/family+ A/B selector result; НЕ profiles.family",
+          "У условной декларации+В selector name/inputs/доступные согласованные поставщики/семья output domain/nullability/availability unknown. 045 отдельный внешний selector contract, не придуманный API"
+        ],
+        "C34": [
+          "C34 R232: класс A/reasoning/effort3 или 4, отдельная модель",
+          "profiles 51–54/311 defaults/stageRules/limits; profileValue **ровно tier/effort/reasoning/budget: string|null**, registry values; tier limits heavy/medium/light|null",
+          "У формы+В matching profile-stage/value и отображение A→tier/3–4 values; Д только известных условий. 045 family нельзя пятым ключом; выбор модели снаружи/с внешним selector"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "R12",
+      "old_current_source": "256–258→275–277",
+      "meaning_and_disposition": "**Обязательство / условие:** Correction не k, завершение startN, таймер по росту k; С5/С5д только новый artifact count, С5п findings, distinct k без start/correction/repeat\n\n**Canon / code / disposition:** process63/102–108; EJ частично, полный artifact/timer EØ; D3/D0",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C13": [
+          "C13 R594/277: result-count snapshot до call, С5/С5д только прирост этой сессии",
+          "D result fields+grammar, A/Bsnapshot с nonnull required integer output при required получателе; G recompute только совместимая ссылка",
+          "У+В: name count output/единица old+new/fieldSchema/availability signature unknown. 045 не объявлять формулу new-old регламента, неполный общий result"
+        ],
+        "C20": [
+          "C20 R90/275: correction не единица/не живость",
+          "P unit rule99–101 и A/G counter effect только в route; B context declared T",
+          "У+В: numerator/timer input signature/outcomes unknown. 045 коррекция не increment/не refresh таймера; runtime evidence отдельно"
+        ],
+        "C26": [
+          "C26 R84/87/94/277: единица доказана артефактом; своевременный step, skip по artifact",
+          "D result fields multiplicity+P unit+A/B artifact check; predicates44/97 только внешний whitelist",
+          "У+В exact artifact/context/clock/predicate contracts; 045 число строк/готово не доказательство выполненного, никакого semantic PASS по count"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий.",
+        "D3": "- **D3**: `process.md`, «Журнал хода progress.log»,60–121; шаг «Сверить принятое журнальное основание» — сохранить проектные инструмент/дату/парный запуск/переход старых журналов; общую норму не копировать второй раз. Менять код/настройки эта задача не разрешает."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "R13",
+      "old_current_source": "555→574",
+      "meaning_and_disposition": "**Обязательство / условие:** Вне совещания stop останавливает group перед exit\n\n**Canon / code / disposition:** process33 manual; EØ; D0+manual override, декларативный effect в impact",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C11": [
+          "C11 R89/574/600–601: stop **всей** группы и запущенных команд до retry/exit",
+          "A external effect→подтверждение пустоты→G ветвь retry/exit;325/327/329",
+          "У+В: stop/empty check signatures, scope all commands, success/failure outcomes unknown. 045 нужно покрыть все отказ/retry/inactivity/stop ветви, нет пропуска как«runtime»"
+        ],
+        "C12": [
+          "C12 R574/600–601: meeting failed/halt vs вне meeting exit/В13",
+          "G route/gate/exhaustive outcomes, A result payload",
+          "У+В: mapping результатов stop/failed/halt/confirmation unknown; 045 не выбирать другой outcome/target из догадки"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "R14",
+      "old_current_source": "571–572→590–595",
+      "meaning_and_disposition": "**Обязательство / условие:** Group до request, n=max launches/log+1; save append launch до line; offset после линии/profile и result-count snapshot; running до call\n\n**Canon / code / disposition:** process77–88/33; EL только часть, ES не подтверждение runtime; D0/D3",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C01": [
+          "C01 R89/93/160/591: порядковый номер каждого запуска, max+1",
+          "A декларация registration до request, B context/event-field илисовместимый snapshot; session34 не экземпляр запуска",
+          "У форма+В: имя вычисляющего output, integer домен/доступность max из state/log и signature не получены. 045 запросить подтверждённый номер/операцию, не выдумывать builtin max"
+        ],
+        "C02": [
+          "C02 R89/160: код и граница сессии от регистрации",
+          "sessions34code: string, kind закрыт; A registration event/codepayload+B; PlaunchMarker отдельный",
+          "У+В: exact code/source/full payload signature и required availability после registration неизвестны. 045 отдельно от статического справочника sessions"
+        ],
+        "C03": [
+          "C03 R159/592: running/регистрация **до запроса**",
+          "A упорядоченные edges/actions, on/outcome по event signature; G route↔edge, REQ27/29",
+          "У+В: save/request operation names, порядок confirmation/result и signatures unknown. 045 не объявлять atomic/order по одному TaskSession.launch"
+        ],
+        "C04": [
+          "C04 R152: atomic save после изменений/перед воротами",
+          "A state persist intention+G порядок before gate; runtime atomic write исключён 329",
+          "У+В: persist payload/atomicity/подтверждающее событие неизвестны; ES plugin сохраняет Task, не state. 045 нужен external contract, но target declaration непуст"
+        ],
+        "C05": [
+          "C05 R160/592: append-only launch record перед строкой launch",
+          "A registration→linewrite, B typed payload; V source cover",
+          "У+В: append contract/record required fields/nullability/domain/commit availability unknown. 045 требуется намерение и ordering, не root mutable array"
+        ],
+        "C06": [
+          "C06 R160/592: длина progress.log **до launch**",
+          "A/B context или event-field, T для согласованного домена offset; mutable value external",
+          "У+В: units(length bytes/other), safe integer bound, requiredness/name output/signature unknown. 045 не подставлять offset самого запроса вместо до line"
+        ],
+        "C07": [
+          "C07 R593–594: offsets **после launch** для progress/profile",
+          "A две отдельные декларации snapshot, B outputs полностью совместимы T",
+          "У+В: каждая из двух length signature/domain/availability unknown; 045 два атрибута, не одно off_p до launch"
+        ],
+        "C08": [
+          "C08 R160/591–595: время запуска",
+          "A event/context payload, T тип времени только по registry; неавторский clock literal",
+          "У+В: epoch/string/precision/timezone/nullability/name clock output не объявлены нормой. 045 запросить time contract, не придумывать тип API"
+        ],
+        "C09": [
+          "C09 R89/159/590: именованная process group до старта",
+          "A external effect создания→request, B group output; T type по signature",
+          "У+В: identifier string/integer/OS handle и result schema/name/required availability unknown. 045 effect confirmation/result, не псевдооперация stop-group по имени"
+        ],
+        "C10": [
+          "C10 R89/159/681: **время старта группы**, сверка identity",
+          "A/Bgroup identity+starttime перед cleanup; whole-domain T",
+          "У+В: конкретный тип/time precision/identity predicate args/results/domain и availability unknown. 045 нельзя остановить чужой reused PID по одному номеру"
+        ],
+        "C13": [
+          "C13 R594/277: result-count snapshot до call, С5/С5д только прирост этой сессии",
+          "D result fields+grammar, A/Bsnapshot с nonnull required integer output при required получателе; G recompute только совместимая ссылка",
+          "У+В: name count output/единица old+new/fieldSchema/availability signature unknown. 045 не объявлять формулу new-old регламента, неполный общий result"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий.",
+        "D3": "- **D3**: `process.md`, «Журнал хода progress.log»,60–121; шаг «Сверить принятое журнальное основание» — сохранить проектные инструмент/дату/парный запуск/переход старых журналов; общую норму не копировать второй раз. Менять код/настройки эта задача не разрешает."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "R15",
+      "old_current_source": "577–579→600–602",
+      "meaning_and_disposition": "**Обязательство / условие:** Постоянный отказ/retry/бездействие→stop all+verify; meeting failed/halt; tail с off_p только текущий code\n\n**Canon / code / disposition:** process33/87–88; EØ; D0, не выдавать сигнатуру stop-group за API",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C11": [
+          "C11 R89/574/600–601: stop **всей** группы и запущенных команд до retry/exit",
+          "A external effect→подтверждение пустоты→G ветвь retry/exit;325/327/329",
+          "У+В: stop/empty check signatures, scope all commands, success/failure outcomes unknown. 045 нужно покрыть все отказ/retry/inactivity/stop ветви, нет пропуска как«runtime»"
+        ],
+        "C12": [
+          "C12 R574/600–601: meeting failed/halt vs вне meeting exit/В13",
+          "G route/gate/exhaustive outcomes, A result payload",
+          "У+В: mapping результатов stop/failed/halt/confirmation unknown; 045 не выбирать другой outcome/target из догадки"
+        ],
+        "C14": [
+          "C14 R602: tail от после launch offset **только текущий code**",
+          "A/Btail inputs(code, offset), P декларация progress связи, REQ19/27/29",
+          "У+В: exact tail operation/inputs/output grammar+availability unknown. 045 оба аргумента отдельно с source, не строки любого роли кода"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "R16",
+      "old_current_source": "∅после 584→608",
+      "meaning_and_disposition": "**Обязательство / условие:** Существенные journal нарушения→log, не autorepair turn\n\n**Canon / code / disposition:** process95–121; EJ неполный runner; D3/D0",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C16": [
+          "C16 R681/608: нет group→найти процессы task или В13; существенный journal violation→log, не autorepair",
+          "A/Btask process lookup/log event+G В13fallback, D log field; разные ветви по source",
+          "У+В: lookup scope/result/availability и journal diagnostic/log signature unknown по отдельности. 045 не останавливать процессы по маске и не автоисправлять запрет"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий.",
+        "D3": "- **D3**: `process.md`, «Журнал хода progress.log»,60–121; шаг «Сверить принятое журнальное основание» — сохранить проектные инструмент/дату/парный запуск/переход старых журналов; общую норму не копировать второй раз. Менять код/настройки эта задача не разрешает."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "R17",
+      "old_current_source": "∅после 656→681",
+      "meaning_and_disposition": "**Обязательство / условие:** Cleanup прежней group только после lock, проверить starttime; нет group fallback task processes/иначе В13\n\n**Canon / code / disposition:** process33 manual; EØ; D0, конкретный внешний контракт/декларация в impact",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C10": [
+          "C10 R89/159/681: **время старта группы**, сверка identity",
+          "A/Bgroup identity+starttime перед cleanup; whole-domain T",
+          "У+В: конкретный тип/time precision/identity predicate args/results/domain и availability unknown. 045 нельзя остановить чужой reused PID по одному номеру"
+        ],
+        "C15": [
+          "C15 R681: cleanup прежней group **только под lock**, сверить starttime",
+          "A/G lock→identity→stop→empty check; lock runtime не JSON key",
+          "У+В: lock ownership/acquire/release/identity inputs/confirmation unknown; 045 декларативный порядок каждого эффекта, not whole external reason"
+        ],
+        "C16": [
+          "C16 R681/608: нет group→найти процессы task или В13; существенный journal violation→log, не autorepair",
+          "A/Btask process lookup/log event+G В13fallback, D log field; разные ветви по source",
+          "У+В: lookup scope/result/availability и journal diagnostic/log signature unknown по отдельности. 045 не останавливать процессы по маске и не автоисправлять запрет"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    },
+    {
+      "anchor": "R18",
+      "old_current_source": "∅после 690→716",
+      "meaning_and_disposition": "**Обязательство / условие:** Приёмочные примеры keywords/correction/startN/final exceptions/launch authority/retry all/quote\n\n**Canon / code / disposition:** process60–121; EJ узкое; D3/D0, данные пар не факт полного runtime PASS",
+      "REQ": [
+        "REQ-02",
+        "REQ-03"
+      ],
+      "AC": [
+        "AC-01",
+        "AC-02",
+        "AC-05",
+        "AC-08"
+      ],
+      "routes": {
+        "C17": [
+          "C17 R88: whole keyword/допустимый знак после, ready colon",
+          "P grammar ref103, НО direct 259/309/540 exact готово без colon",
+          "**С**: требуются новые REQ/AC/пары в отдельной редакции; grammar не override. У формы/P отдельно, shape Ф не доказан"
+        ],
+        "C18": [
+          "C18 R89: одна agent start, launch отдельно, k неубывает",
+          "P103–107 counted vs zero-unit/node unit/grammar; A проверка истории",
+          "У/Д для известной формы start/launch; В для исторического предиката/context signature. 045 не подменять launch 0/0 агентским стартом"
+        ],
+        "C19": [
+          "C19 R90: correction quote10–30/вся короткая, current k/append-only",
+          "P grammar+unit, D quoted history/context через B, A проверка; 309append-only",
+          "У условной формы+В exact grammar/history signature, не просто regex. 045 новые пары для current k/quote и отрицательных случаев"
+        ],
+        "C20": [
+          "C20 R90/275: correction не единица/не живость",
+          "P unit rule99–101 и A/G counter effect только в route; B context declared T",
+          "У+В: numerator/timer input signature/outcomes unknown. 045 коррекция не increment/не refresh таймера; runtime evidence отдельно"
+        ],
+        "C21": [
+          "C21 R91/716: done сравнить со **startN**, k>N допустим",
+          "P105/309/540 N/N и 101 agent N приоритет; A/Bstart snapshot/predicate",
+          "У для ссылочной формы+В history/unit/context signature; нужно явно оценить semantic REQ/AC/пары start binding, не объявлять прежний final N достаточным"
+        ],
+        "C22": [
+          "C22 R91/716: k<startN с обоснованным«N завышено»может completion",
+          "P историческая N/N форма 105/309/540 не покрывает исключение; D reason/артефакт+A проверка",
+          "**С**по исключению N; У форма grammar/doc+В exact grammar/artifact signature. 045 отдельная изолирующая пара ниже, не 0/2→1/1"
+        ],
+        "C23": [
+          "C23 R91/94: финальная ошибка→same k/same keyword повтор, low N→stop/дальше/обоснование",
+          "P grammar+history A/B; произвольная запись после final незаконна",
+          "У+В history predicate/outcomes/availability; semantic пары current должны утверждаться, не одна grammar ref"
+        ],
+        "C24": [
+          "C24 R91/716: done без start/после второго start не completion",
+          "P105/309/540 уже отвергает нет start; A/B count start/full history",
+          "У известного ограничения+В exact history signature; 045 контроли 0 start/2 start отдельны"
+        ],
+        "C25": [
+          "C25 R92: пять stop kinds и причина",
+          "P50/109/263/309/540 точно множество 5 без дублей, stop grammar; не success/zero-unit",
+          "У/Д: нормы/closed enum достаточны для данных; выполнение grammar при matching registry. 045 surprise/нет вида/нет причины отдельные негативы"
+        ],
+        "C26": [
+          "C26 R84/87/94/277: единица доказана артефактом; своевременный step, skip по artifact",
+          "D result fields multiplicity+P unit+A/B artifact check; predicates44/97 только внешний whitelist",
+          "У+В exact artifact/context/clock/predicate contracts; 045 число строк/готово не доказательство выполненного, никакого semantic PASS по count"
+        ],
+        "C27": [
+          "C27 R109–120: длина подписи 80/clock/source, tool если есть/session tail старше общего",
+          "P grammar/hasDate: boolean, D prompt/source/substitutions; clock actual external",
+          "У/Д известных literal ограничений+В tool availability/clock/prompt contract. 045 не изобретать opencode journal runtime operation из имени инструмента"
+        ],
+        "C28": [
+          "C28 R103/215/716: неизвестный N не 0; zero-unit только КОММИТ/ПУШ без profile/done",
+          "P99–107 точные union/node/sessioncode/ref; profiles311 не отключаются",
+          "У/Д семантики zero-unit; В unit names/signatures/availability. 045 не unit.none и не counted null; profile launch может быть, profile hint нет"
+        ]
+      },
+      "destinations": {
+        "D0": "- **D0**: внешняя основа действует по `process.md:5–12`/ADR0001, перенос текста не нужен. Будущий шаг «Внести выбранное основание Канона» после утверждения spec и ворот переноса реализует уже выбранные В-01/В-01а: README/«Параметры для раннера», строка версии, process/«Основа» и правило явного перехода с полномочиями. Применимые внешние нормы не пересказываются. Каждая строка D0 проверяется по своему anchor; обозначение не отменяет её условий.",
+        "D3": "- **D3**: `process.md`, «Журнал хода progress.log»,60–121; шаг «Сверить принятое журнальное основание» — сохранить проектные инструмент/дату/парный запуск/переход старых журналов; общую норму не копировать второй раз. Менять код/настройки эта задача не разрешает."
+      },
+      "check": "Первичный source → точные условия/closed limits → route → destination; unknown не PASS"
+    }
+  ],
+  "all_routes": [
+    {
+      "route": "C01",
+      "source_and_closed_crosswalk": [
+        "C01 R89/93/160/591: порядковый номер каждого запуска, max+1",
+        "A декларация registration до request, B context/event-field илисовместимый snapshot; session34 не экземпляр запуска",
+        "У форма+В: имя вычисляющего output, integer домен/доступность max из state/log и signature не получены. 045 запросить подтверждённый номер/операцию, не выдумывать builtin max"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C02",
+      "source_and_closed_crosswalk": [
+        "C02 R89/160: код и граница сессии от регистрации",
+        "sessions34code: string, kind закрыт; A registration event/codepayload+B; PlaunchMarker отдельный",
+        "У+В: exact code/source/full payload signature и required availability после registration неизвестны. 045 отдельно от статического справочника sessions"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C03",
+      "source_and_closed_crosswalk": [
+        "C03 R159/592: running/регистрация **до запроса**",
+        "A упорядоченные edges/actions, on/outcome по event signature; G route↔edge, REQ27/29",
+        "У+В: save/request operation names, порядок confirmation/result и signatures unknown. 045 не объявлять atomic/order по одному TaskSession.launch"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C04",
+      "source_and_closed_crosswalk": [
+        "C04 R152: atomic save после изменений/перед воротами",
+        "A state persist intention+G порядок before gate; runtime atomic write исключён 329",
+        "У+В: persist payload/atomicity/подтверждающее событие неизвестны; ES plugin сохраняет Task, не state. 045 нужен external contract, но target declaration непуст"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C05",
+      "source_and_closed_crosswalk": [
+        "C05 R160/592: append-only launch record перед строкой launch",
+        "A registration→linewrite, B typed payload; V source cover",
+        "У+В: append contract/record required fields/nullability/domain/commit availability unknown. 045 требуется намерение и ordering, не root mutable array"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C06",
+      "source_and_closed_crosswalk": [
+        "C06 R160/592: длина progress.log **до launch**",
+        "A/B context или event-field, T для согласованного домена offset; mutable value external",
+        "У+В: units(length bytes/other), safe integer bound, requiredness/name output/signature unknown. 045 не подставлять offset самого запроса вместо до line"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C07",
+      "source_and_closed_crosswalk": [
+        "C07 R593–594: offsets **после launch** для progress/profile",
+        "A две отдельные декларации snapshot, B outputs полностью совместимы T",
+        "У+В: каждая из двух length signature/domain/availability unknown; 045 два атрибута, не одно off_p до launch"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C08",
+      "source_and_closed_crosswalk": [
+        "C08 R160/591–595: время запуска",
+        "A event/context payload, T тип времени только по registry; неавторский clock literal",
+        "У+В: epoch/string/precision/timezone/nullability/name clock output не объявлены нормой. 045 запросить time contract, не придумывать тип API"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C09",
+      "source_and_closed_crosswalk": [
+        "C09 R89/159/590: именованная process group до старта",
+        "A external effect создания→request, B group output; T type по signature",
+        "У+В: identifier string/integer/OS handle и result schema/name/required availability unknown. 045 effect confirmation/result, не псевдооперация stop-group по имени"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C10",
+      "source_and_closed_crosswalk": [
+        "C10 R89/159/681: **время старта группы**, сверка identity",
+        "A/Bgroup identity+starttime перед cleanup; whole-domain T",
+        "У+В: конкретный тип/time precision/identity predicate args/results/domain и availability unknown. 045 нельзя остановить чужой reused PID по одному номеру"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C11",
+      "source_and_closed_crosswalk": [
+        "C11 R89/574/600–601: stop **всей** группы и запущенных команд до retry/exit",
+        "A external effect→подтверждение пустоты→G ветвь retry/exit;325/327/329",
+        "У+В: stop/empty check signatures, scope all commands, success/failure outcomes unknown. 045 нужно покрыть все отказ/retry/inactivity/stop ветви, нет пропуска как«runtime»"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C12",
+      "source_and_closed_crosswalk": [
+        "C12 R574/600–601: meeting failed/halt vs вне meeting exit/В13",
+        "G route/gate/exhaustive outcomes, A result payload",
+        "У+В: mapping результатов stop/failed/halt/confirmation unknown; 045 не выбирать другой outcome/target из догадки"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C13",
+      "source_and_closed_crosswalk": [
+        "C13 R594/277: result-count snapshot до call, С5/С5д только прирост этой сессии",
+        "D result fields+grammar, A/Bsnapshot с nonnull required integer output при required получателе; G recompute только совместимая ссылка",
+        "У+В: name count output/единица old+new/fieldSchema/availability signature unknown. 045 не объявлять формулу new-old регламента, неполный общий result"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C14",
+      "source_and_closed_crosswalk": [
+        "C14 R602: tail от после launch offset **только текущий code**",
+        "A/Btail inputs(code, offset), P декларация progress связи, REQ19/27/29",
+        "У+В: exact tail operation/inputs/output grammar+availability unknown. 045 оба аргумента отдельно с source, не строки любого роли кода"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C15",
+      "source_and_closed_crosswalk": [
+        "C15 R681: cleanup прежней group **только под lock**, сверить starttime",
+        "A/G lock→identity→stop→empty check; lock runtime не JSON key",
+        "У+В: lock ownership/acquire/release/identity inputs/confirmation unknown; 045 декларативный порядок каждого эффекта, not whole external reason"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C16",
+      "source_and_closed_crosswalk": [
+        "C16 R681/608: нет group→найти процессы task или В13; существенный journal violation→log, не autorepair",
+        "A/Btask process lookup/log event+G В13fallback, D log field; разные ветви по source",
+        "У+В: lookup scope/result/availability и journal diagnostic/log signature unknown по отдельности. 045 не останавливать процессы по маске и не автоисправлять запрет"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C17",
+      "source_and_closed_crosswalk": [
+        "C17 R88: whole keyword/допустимый знак после, ready colon",
+        "P grammar ref103, НО direct 259/309/540 exact готово без colon",
+        "**С**: требуются новые REQ/AC/пары в отдельной редакции; grammar не override. У формы/P отдельно, shape Ф не доказан"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C18",
+      "source_and_closed_crosswalk": [
+        "C18 R89: одна agent start, launch отдельно, k неубывает",
+        "P103–107 counted vs zero-unit/node unit/grammar; A проверка истории",
+        "У/Д для известной формы start/launch; В для исторического предиката/context signature. 045 не подменять launch 0/0 агентским стартом"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C19",
+      "source_and_closed_crosswalk": [
+        "C19 R90: correction quote10–30/вся короткая, current k/append-only",
+        "P grammar+unit, D quoted history/context через B, A проверка; 309append-only",
+        "У условной формы+В exact grammar/history signature, не просто regex. 045 новые пары для current k/quote и отрицательных случаев"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C20",
+      "source_and_closed_crosswalk": [
+        "C20 R90/275: correction не единица/не живость",
+        "P unit rule99–101 и A/G counter effect только в route; B context declared T",
+        "У+В: numerator/timer input signature/outcomes unknown. 045 коррекция не increment/не refresh таймера; runtime evidence отдельно"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C21",
+      "source_and_closed_crosswalk": [
+        "C21 R91/716: done сравнить со **startN**, k>N допустим",
+        "P105/309/540 N/N и 101 agent N приоритет; A/Bstart snapshot/predicate",
+        "У для ссылочной формы+В history/unit/context signature; нужно явно оценить semantic REQ/AC/пары start binding, не объявлять прежний final N достаточным"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C22",
+      "source_and_closed_crosswalk": [
+        "C22 R91/716: k<startN с обоснованным«N завышено»может completion",
+        "P историческая N/N форма 105/309/540 не покрывает исключение; D reason/артефакт+A проверка",
+        "**С**по исключению N; У форма grammar/doc+В exact grammar/artifact signature. 045 отдельная изолирующая пара ниже, не 0/2→1/1"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C23",
+      "source_and_closed_crosswalk": [
+        "C23 R91/94: финальная ошибка→same k/same keyword повтор, low N→stop/дальше/обоснование",
+        "P grammar+history A/B; произвольная запись после final незаконна",
+        "У+В history predicate/outcomes/availability; semantic пары current должны утверждаться, не одна grammar ref"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C24",
+      "source_and_closed_crosswalk": [
+        "C24 R91/716: done без start/после второго start не completion",
+        "P105/309/540 уже отвергает нет start; A/B count start/full history",
+        "У известного ограничения+В exact history signature; 045 контроли 0 start/2 start отдельны"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C25",
+      "source_and_closed_crosswalk": [
+        "C25 R92: пять stop kinds и причина",
+        "P50/109/263/309/540 точно множество 5 без дублей, stop grammar; не success/zero-unit",
+        "У/Д: нормы/closed enum достаточны для данных; выполнение grammar при matching registry. 045 surprise/нет вида/нет причины отдельные негативы"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C26",
+      "source_and_closed_crosswalk": [
+        "C26 R84/87/94/277: единица доказана артефактом; своевременный step, skip по artifact",
+        "D result fields multiplicity+P unit+A/B artifact check; predicates44/97 только внешний whitelist",
+        "У+В exact artifact/context/clock/predicate contracts; 045 число строк/готово не доказательство выполненного, никакого semantic PASS по count"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C27",
+      "source_and_closed_crosswalk": [
+        "C27 R109–120: длина подписи 80/clock/source, tool если есть/session tail старше общего",
+        "P grammar/hasDate: boolean, D prompt/source/substitutions; clock actual external",
+        "У/Д известных literal ограничений+В tool availability/clock/prompt contract. 045 не изобретать opencode journal runtime operation из имени инструмента"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C28",
+      "source_and_closed_crosswalk": [
+        "C28 R103/215/716: неизвестный N не 0; zero-unit только КОММИТ/ПУШ без profile/done",
+        "P99–107 точные union/node/sessioncode/ref; profiles311 не отключаются",
+        "У/Д семантики zero-unit; В unit names/signatures/availability. 045 не unit.none и не counted null; profile launch может быть, profile hint нет"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C29",
+      "source_and_closed_crosswalk": [
+        "C29 S69/M707: новая без history, whole-read, immutable version",
+        "D sessions agent/role/promptRef; D документ version/summary, V source hash; A launch policy",
+        "У для декларации в prompt/doc+В exact fresh launch/selector/context signature/availability. 045 не равнять repeatable с fresh history, не claim фактического выполнения"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C30",
+      "source_and_closed_crosswalk": [
+        "C30 M707: ordinary С2 линзы со своим разделом/счётом/пробами",
+        "D prompt instruction+documents[].fields/grammar/required/multiplicity; **lens 69 sessionId ТОЛЬКО meeting**",
+        "У/Д для описания разделов в документе, В точные prompt/grammar contracts. 045 не помещать agent С2 sessionId в lenses, не«исправлять»kind агента ради ссылки. Обычный `spec-review-{N}.md` с разделами двух линз не требует токена `{lens}`/каталога meeting-линз"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C31",
+      "source_and_closed_crosswalk": [
+        "C31 M707/Sreview: номер захода/Версия/summary/readlist/3 пробы, обе обязательные линзы",
+        "D summary 305 закрытый N/K/M/P object grammar, review numberBinding121 summary field, not pass units; D другие поля+G minimumProbesParam",
+        "У/Д известных текстовых/числовых ограничений+В grammar output/prompt signature. 045 счёт по линзе не одна общая summary без разделов"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C32",
+      "source_and_closed_crosswalk": [
+        "C32 M1550: условие перед рекомендацией/до owner decision; default on/explicit off; не helper/не judge",
+        "D prompt/source+parameters 56 required/default по G, A/G предварительный шаг и отключение по решению",
+        "У+В policy context/availability/decision event signature; 045 «helpers off»не норма отключения opinion, owner closed list не автоматизировать"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C33",
+      "source_and_closed_crosswalk": [
+        "C33 M1550/R232: fresh/different family если доступна; совпадение в ответе",
+        "D prompt+document fields для политики/факта fresh/family+ A/B selector result; НЕ profiles.family",
+        "У условной декларации+В selector name/inputs/доступные согласованные поставщики/семья output domain/nullability/availability unknown. 045 отдельный внешний selector contract, не придуманный API"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C34",
+      "source_and_closed_crosswalk": [
+        "C34 R232: класс A/reasoning/effort3 или 4, отдельная модель",
+        "profiles 51–54/311 defaults/stageRules/limits; profileValue **ровно tier/effort/reasoning/budget: string|null**, registry values; tier limits heavy/medium/light|null",
+        "У формы+В matching profile-stage/value и отображение A→tier/3–4 values; Д только известных условий. 045 family нельзя пятым ключом; выбор модели снаружи/с внешним selector"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C35",
+      "source_and_closed_crosswalk": [
+        "C35 M1550: facts-only,≤10 messages, слабое место, log переданный текст/итог, reply вердикт/ref, разошлись оба",
+        "D prompt/fields required/grammar, integer parameter bounds G, A/G order и message counter; V log ref",
+        "У+В exact message/record/context signature и availability; 045 нужны каждое текстовое обязательство и контроль≤10, не одно имя lens"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C36",
+      "source_and_closed_crosswalk": [
+        "C36 M711: порог>1 нормы/механизм; intent3 поля, факты+свежий собеседник≤10, спорно, запись review task/log",
+        "D intent поля: goal ref/boundary/base excerpts; prompt ref, A/Bexchange, G integer limit; not new root field",
+        "У+В: неизвестны точные contracts для count норм/context/prompt/signatures. Для 045 различимы порог, три поля, пометка «спорно» и два места записи; registry/OQ не считаются нормой для этого count."
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C37",
+      "source_and_closed_crosswalk": [
+        "C37 M711/1570: intent не agreement/не review/не доказательство; boundary не пишется для norms about review, mixed split",
+        "D prompt/context/disposition fields; G существующие review/meeting ветви, не cycle.stage=intent",
+        "У+В точная classification/context schema; 045 не использовать optional согласование как off замысла, не прибавлять чистый заход"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C38",
+      "source_and_closed_crosswalk": [
+        "C38 M712: первая boundary строка/возврат если нет, сама boundary проверяема целью",
+        "D required field multiplicity one+grammar/onInvalid gate/error, A/B source goal check",
+        "У+В exact grammar/predicate/return outcomes unknown; 045 граница не может вырезать дефект цели, нет валидности по одному required=true"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C39",
+      "source_and_closed_crosswalk": [
+        "C39 M713: base hash/выдержка+5 условий«не по адресу», бремя автора/сомнение внесена",
+        "V commit/source; D base excerpt/обоснование; predicates44/97+G outcomes",
+        "У+В semantic predicate inputs/result outcomes unknown; 045 на каждую находку проверить не привнесла/не опаснее/не опирается/не должна закрыть/база доказана, а goal не вне предмета"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C40",
+      "source_and_closed_crosswalk": [
+        "C40 M713: whole-read/связь соседей; OQ4 поля;>3 critical equiv сигнал; privacy не выносится",
+        "D read list/link evidence/OQ fields question/addressee/default/deadline; G counter min/max и A owner notification",
+        "У/Д для известных 4 полей/порога+В точная critical classification/notification/context signature. 045 полнота whole-read и source privacy не по JSON PASS"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C41",
+      "source_and_closed_crosswalk": [
+        "C41 M714: сузить/ослабить/удалить/вопрос; new vs clarification; открыто+не утверждает опровержение+вопрос в проекте",
+        "D disposition/marker/OQ record, prompt; G route/только namespace allowed",
+        "У+В semantic classifier/payload contracts; 045 не автосоздание задачи, а declared gate при new concept, старый смысл не отменяется"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C42",
+      "source_and_closed_crosswalk": [
+        "C42 M714: одна попытка, раздельность, новая существенная→откат+OQ, не по адресу не откат, last ceiling исключение",
+        "G cycle/ceiling/repairRoute/counters/route effects, A/B revert intention+V previous hash",
+        "У+В точные findings/version/rollback signatures; 045 история и счётчик не обнуляются, последний заход проверить отдельно"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C43",
+      "source_and_closed_crosswalk": [
+        "C43 M715: «не прогонялось», конкретный input+2 readings/нет итога; следующий подтверждает опровержение; impl свидетель",
+        "D marker/trace fields/required/multiplicity, D prompt, V source; A/G review order",
+        "У+В exact trace grammar/implementation evidence contract; 045 серьёзность не снижается по отсутствию runtime, трасса не один ярлык"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C44",
+      "source_and_closed_crosswalk": [
+        "C44 M715: legal/illegal/why таблица, судья формы, version batch/change list",
+        "D fields/table grammar, V manifest versions/coverage, A publication intent G owner required",
+        "У/Д известных обязательств таблицы/судьи; В publication/versioned consumer contract. 045/013 не подтверждает reader, пуш сейчас запрещён"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C45",
+      "source_and_closed_crosswalk": [
+        "C45 M716: нормы о самой проверке — исполнимость 2–3 цикла/история, без обхода; mix остальные две линзы",
+        "D prompt/review sections/history records; G existing stage review/meeting, integer parameters; lens69 не ordinary",
+        "У+В exact applicability/context/history signature; 045 не выдумывать cycle.stage=executability, не подменять прогоны именем lens"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C46",
+      "source_and_closed_crosswalk": [
+        "C46 S66/R105–120: машинный хвост 2 части/код/единица/инструмент если есть/session tail приоритет",
+        "D promptregistry hash/substitutions+sourceRef 93; D doc instruction, A/Btool availability",
+        "У+В exact prompt/context/tool contracts; 045 приоритет profile исключения нельзя потерять в общем prompt"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C47",
+      "source_and_closed_crosswalk": [
+        "C47 S66: уточнение перед old message с датой/source/пометкой, old сохранить",
+        "D prompt/документ fields и A/B preserve old/write clarification/V source",
+        "У+В exact document storage/action signature; 045 не подменять old anchor текущим смыслом, не переписывать историю"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C48",
+      "source_and_closed_crosswalk": [
+        "C48 S110: иной project смысл подзадачи",
+        "D prompt/source coverage+sessions kind/code/phases; V override provenance",
+        "У/Д нормативной декларации override, не shape изменение; 045 отдельные задачи только разрешённым scope, не из общего слова"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C49",
+      "source_and_closed_crosswalk": [
+        "C49 M541/S122/183/192/317–324: first transfer current, immutable approved, one place/copies/literal строки",
+        "D literal current.md, requiredBy/fields/markers, без numberBinding если нет{N}; V source/dest; A/G transfer order",
+        "У для формы+Д адресов после ворот, В exact transfer/tool grammar; 045 current061 первый Canon перенос не ждёт format, копии не 2 нормы. Единственность смыслов приёмкой, не JSON-only"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C50",
+      "source_and_closed_crosswalk": [
+        "C50 M1562: язык принимающего без optional режима",
+        "D prompt/context instruction+V source coverage; optional subsystem 68 только если режим включён, не условие языка письма",
+        "У/Д инструкции+В receiver-language/context/translation evidence contract; 045 не обещать смысловой контролёр по owner_language"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C51",
+      "source_and_closed_crosswalk": [
+        "C51 R169/385/720/M707: immutable pin/hashes/approval не устаревший",
+        "V manifest files1..128/sourceRef/coverage/report339; approval hash не field регламента",
+        "У/Д pin/hashes данных+В реальный approval/runtime evidence; 045 новый source hash инвалидирует отчёт, commit-only неполнота"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C52",
+      "source_and_closed_crosswalk": [
+        "C52 031REQ04/ОТВ 01: schemaVersion vs regulationVersion vs reader",
+        "root.schemaVersion major.minor; manifest.regulationVersion major.minor.patch; compatibility.minReaderVersion major.minor;03119/23/28/279/281/500/568/670",
+        "У раздельной формы+О выбор редакции/reader на В02; semantic-only не авто bump/не автосохранение. 045 при new key нужна новая schemaVersion+политика, недостаточно менять ref"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C53",
+      "source_and_closed_crosswalk": [
+        "C53 Каждый применимый M/S/R/Q procedural anchor→coverage",
+        "V62/323/343: represented nonempty targets, external/not_requirement reason; sourceFile из manifest; REQ/AC/DNC typed refs",
+        "У/Д адресов из утверждённой нормы+В где подписи unknown; 045 runtime external не разрешает убрать статические декларации A; hash не coverage"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C54",
+      "source_and_closed_crosswalk": [
+        "C54 M154/1552/R689–707: owner closed list/defaults/gates",
+        "gates 40: ownerRequired boolean; true→defaultDecision null, decisions≥1; false→local decision non-null; decision 41 counterEffects=[]; effects 42 payload signature/confirmation",
+        "У/Д известных гейт политик+В фактическое решение/effect contract; 045 не autoanswer owner-gate, не effect-kind"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C55",
+      "source_and_closed_crosswalk": [
+        "C55 Rgate-decision: decision→outcome и target",
+        "G, 031:117: trigger.kind=gate-decision, ref.namespace=gate, ref.id=gate узла edge.from, value=локальный decision.id. Edge.on — событие kind=owner_decision с required gateId/decisionId. Edge.outcome задаётся точной матрицей route-trigger registry.",
+        "У формы+В**точная матрица unknown**, payload/domain/availability unknown; 045 unsupported-catalog не выбрать outcome по имени/whitelistdigest"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C56",
+      "source_and_closed_crosswalk": [
+        "C56 R702/722: commit/message-check/push/send отдельно",
+        "REQ12:295 отдельные nodes/session/gates;138 terminal no outgoing, gate не terminal; G route exact",
+        "У/Д нормативной последовательности+В effects/confirmation/result signatures. 045 submit 061 не deliver/owner approval, пуш не вызывается картой"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C57",
+      "source_and_closed_crosswalk": [
+        "C57 R705/329: recovery/start/abort/confirm/resume/next node/idempotency",
+        "A/G events/routes/typed bindings по REQ29; next node→nodes, idempotency key payload/B по matching T",
+        "У+В exact recovery event/kind/key type/domain/required availability unknown для каждого типа события. 045 не выдавать declared idempotency за exactly-once runtime"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C58",
+      "source_and_closed_crosswalk": [
+        "C58 Registry/signatures полного комплекта",
+        "V31/97/504:16 kind closed, version/digest,≤1 binding/kind; predicateCatalog45 только builtin имена, не signatures; D prompt/T context/A effects/P unit",
+        "У формы+В: полный утверждённый каталог и signatures ещё не получены. В-05 решён только как путь проектирования в 045, не как доказанная полнота. Matching catalog необходим, но один digest или whitelist не подтверждает operation и не доказывает полноту. Требования ко всем 16 видам и matching version/digest не ослаблены."
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C59",
+      "source_and_closed_crosswalk": [
+        "C59 Сценарии 013, REQ32/UNKNOWN08",
+        "scenarioContract 67 version major.minor/ref ID@version, requiredLinks unique REQ/AC/DNC/source; expectedKinds unique поднабор state/actions/error,≥1 state/actions;146 steps continuous eventIndex/error last",
+        "У оболочки+В initial state/event/payload/state/actions/error signatures/availability и approved contract 013 нет. 045 не объявлять совместимость schemaVersion или draft 013"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    },
+    {
+      "route": "C60",
+      "source_and_closed_crosswalk": [
+        "C60 Q5/P/M history/presentation/starter kit dispositions",
+        "V coverage kind/disposition/reason; D procedural OQ поля, не runtime новые ключи",
+        "У/Д данных уже принятой Q5 процедуры 9d391ba/process125–144; О внешних Q вопросов; DX для неприменимых presentation/starterkit/frozen историй с reason в method-delta. 045 не выкинуть Q5 как«вопрос»и не импортировать off signoff policy"
+      ],
+      "REQ": [
+        "REQ-03",
+        "REQ-04",
+        "REQ-05"
+      ],
+      "AC": [
+        "AC-02",
+        "AC-03",
+        "AC-05",
+        "AC-08"
+      ],
+      "destination": "format.md: самодостаточный контракт/версии/пары/покрытие; для unknown signatures — отдельные ворота каталога045",
+      "check": "Первичные 031/методика → каждый атрибут и внешняя неизвестность → отдельное утверждение; форма не runtime PASS"
+    }
+  ]
+}

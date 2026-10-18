@@ -1,0 +1,36 @@
+command: python doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probes.py semantics
+stdout:
+P3 profile exact4: base=True; +family=False; -budget=False
+
+P3 integer[1,10] source nullable=False required=True [1,10] -> True
+
+P3 integer[1,10] source nullable=True required=True [1,10] -> False
+
+P3 integer[1,10] source nullable=False required=False [1,10] -> False
+
+P3 integer[1,10] source nullable=False required=True [0,10] -> False
+
+P3 completion [1, 2, True, True, 1] -> True
+
+P3 completion [1, 2, False, True, 1] -> False
+
+P3 completion [1, 2, True, False, 1] -> False
+
+P3 completion [2, 2, False, True, 1] -> True
+
+P3 completion [3, 2, False, True, 1] -> True
+
+P3 completion [2, 2, False, True, 0] -> False
+
+P3 completion [2, 2, False, True, 2] -> False
+
+P3: runtime values external does not erase REQ27/29 declarative intentions
+
+P3 Canon-first/current-now/format-later=True; current-only-at-format=False
+
+P3 semantic conflict != shape gap; conditional1.0 != chosen version/compatibility
+
+
+stderr:
+
+exit: 0

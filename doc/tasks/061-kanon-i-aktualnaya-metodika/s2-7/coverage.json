@@ -1,0 +1,3046 @@
+{
+  "atoms": [
+    {
+      "id": "A01",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          9,
+          14
+        ],
+        "text": "### A01 / 3\n\n**Один проверяемый атом:** Заказчик, дата, генерация задания\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** Не требование: метаданные происхождения; сама :3 и FACT-01, не разрешение менять scope\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 15,
+        "text": "| A01 / 3; заказчик/дата/генерация | Оставлен → C-A01 | Только метаданные, не требование и не разрешение менять scope | З | Сопоставлены :3 и FACT-01; авторство задания не выдано за слово владельца |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:3",
+      "own_comparison": "Метаданные отделены от полномочия: строка заказчика не становится разрешением владельца.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A02",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          15,
+          20
+        ],
+        "text": "### A02 / 7\n\n**Один проверяемый атом:** Сейчас анализ и черновик spec\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A02: шесть текущих документов и разрешённые новые аналитические части/evidence; без реализации\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 16,
+        "text": "| A02 / 7; анализ и draft | Сужен → C-A02, DNC-04 | Четыре root-документа и новые evidence; прежние шесть редактируемых документов сняты | О, Н | Перечень разрешённых файлов в DNC-04 против старого C-A02 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:7",
+      "own_comparison": "Шесть документов заменены четырьмя по новому назначению; отсутствие реализации сохранено DNC04.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A03",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          21,
+          26
+        ],
+        "text": "### A03 / 7\n\n**Один проверяемый атом:** Это отдельно разрешённая задача\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A03: имеющийся `task/message.md`, не разрешение повторно создавать задачу\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 17,
+        "text": "| A03 / 7; отдельное разрешение задачи | Оставлен → C-A03 | Используется существующая 061, новую не создавать | З, О | FACT-01 и DNC-03 не заводят новую задачу |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:7",
+      "own_comparison": "Существующая 061, а не новая задача: FACT01 совместим с DNC03.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A04",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          27,
+          32
+        ],
+        "text": "### A04 / 7\n\n**Один проверяемый атом:** Проверки/правки под тем же номером\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A04: сессия 061 С1п-5 и submit n61; новые номера запрещены\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 18,
+        "text": "| A04 / 7; один номер правок/проверок | Оставлен → C-A04 | С1п-7 и submit n61; без новых номеров | З, Н | Назначение и финальный протокол адресованы 061 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:7",
+      "own_comparison": "Следующие сессии остаются в 061; новые номера запрещены, submit не означает приёмку.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A05",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          33,
+          38
+        ],
+        "text": "### A05 / 7\n\n**Один проверяемый атом:** Независимая С2 и отдельные решения владельца\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** AC-07/08; отдельная свежая полная С2, не авторская приёмка\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 19,
+        "text": "| A05 / 7; независимая С2 и решения | Сужен → C-A05, FACT-05, «Будущие ворота» | Одна полная С2 на Sol; сняты ссылки на AC-08 и форматные ворота | О | Следующая С2=7, автор не утверждает себя/план |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:7",
+      "own_comparison": "Форматные AC08 сняты; свежая полная С2 и отдельное утверждение остались FACT05/стр61.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A06",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          39,
+          44
+        ],
+        "text": "### A06 / 7\n\n**Один проверяемый атом:** Пока без Canon и реализации\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** DNC-01/04; ранние baseline и сравнение after текущей авторской сессии\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 20,
+        "text": "| A06 / 7; пока без Канона/реализации | Оставлен → DNC-01/04 | Авторский этап не переносит норму | З, О | REQ-05 отложен до ворот, protected-check сверяет Canon |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:7",
+      "own_comparison": "Текущая правка не переносит Канон; будущий REQ05 не разрешение автору.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A07",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          45,
+          50
+        ],
+        "text": "### A07 / 9\n\n**Один проверяемый атом:** Проверить delta методики/раннера\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-02, AC-01; `method-delta.md` с old/current\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 21,
+        "text": "| A07 / 9; delta методики/раннера | Оставлен → REQ-02, AC-01 | Поадресная old/current карта смысла | З | method-delta M/S/R содержит anchors и границы, не только темы |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:9",
+      "own_comparison": "Old/current delta по каждому смыслу осталась в REQ02/AC01 и M/S/R.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A08",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          51,
+          56
+        ],
+        "text": "### A08 / 9\n\n**Один проверяемый атом:** Обновить план и устранить блокеры\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-04/AC-03; `analysis.md`, «Блокеры 045», маршрут в будущую правку плана 045, сейчас не план 061\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 22,
+        "text": "| A08 / 9; план/блокеры 045 | Снят → C-A08 | Нет deliverable/ворот 045, не исправлять её план | О | В результате/воротах spec нет закрытия блокеров 045 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:9",
+      "own_comparison": "Обновление плана 045 исключено, а не отложено до завершения061.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A09",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          57,
+          62
+        ],
+        "text": "### A09 / 9\n\n**Один проверяемый атом:** Выяснить результат/статус 031\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-03/AC-02; approved commit в `031-impact.md`, не переоткрытие 031\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 23,
+        "text": "| A09 / 9; статус/результат 031 | Снят → C-A09 | Исследование 031 снято; immutable input отдельно A36 | О | REQ-03 не переиспользован; 031 только FACT-04/DNC-01 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:9",
+      "own_comparison": "Исследовать статус031 больше не требуется; запрет менять approved сохранён отдельно.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A10",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          63,
+          68
+        ],
+        "text": "### A10 / 9\n\n**Один проверяемый атом:** Перевести Канон на последнюю методику\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-05/06, AC-05/06; раздел результата и решения В-01/В-01а\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 24,
+        "text": "| A10 / 9; перевод Канона | Оставлен → REQ-05/06, AC-05/06 | Реальное внесение после ворот, не только анализ | З, О | В разделе результата есть перенос и последующая проверка |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:9",
+      "own_comparison": "REQ05/06 обязывают реальный перенос и свежесть; сдача исследования не конец061.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A11",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          69,
+          74
+        ],
+        "text": "### A11 / 9\n\n**Один проверяемый атом:** Явный переход с историей\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-06/AC-07, DNC-03; ответ владельца и append-only переход, не старые pins\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 25,
+        "text": "| A11 / 9; явный переход/история | Оставлен → AC-07, DNC-03 | Append-only old/new/reason, полномочия | П | Все три поля и запрет переписывания есть в AC-07 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:9",
+      "own_comparison": "AC07 сохраняет append-only old/new/reason и источник решения; DNC03 запрещает ретроправку.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A12",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          75,
+          80
+        ],
+        "text": "### A12 / 9\n\n**Один проверяемый атом:** Не обновлять main/push автоматически\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A12, DNC-04; protected baseline и отсутствие git/live действий\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 26,
+        "text": "| A12 / 9; не авто main/push | Оставлен → C-A12, DNC-04 | Никаких git/live действий автора | З | Разрешённые действия не включают commit/merge/push |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:9",
+      "own_comparison": "Запрет git/live в DNC04 действует независимо от будущих ворот полной задачи.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A13",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          81,
+          86
+        ],
+        "text": "### A13 / 11\n\n**Один проверяемый атом:** Итог полной задачи — действующий Канон\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-05/AC-05; Canon destination в таблице первого переноса\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 27,
+        "text": "| A13 / 11; итог — действующий Канон | Оставлен → REQ-05, AC-05 | Исследование не завершает полную 061 | З, О | FACT-01 и «Результат» требуют внесения и сверки |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:11",
+      "own_comparison": "AC05 требует действующий текст и проверку; одна таблица анализа не достаточна.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A14",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          87,
+          92
+        ],
+        "text": "### A14 / 11\n\n**Один проверяемый атом:** Правило pin и начатых задач\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-06/AC-07; выбранный В-01 и все его условия в owner-gate-decisions\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 28,
+        "text": "| A14 / 11; pin/активные задачи | Оставлен → REQ-06, AC-07 | Вся политика В-01, не просто commit | П | Метка/commit, пачка, полномочия и отсутствие автомассовости сохранены |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:11",
+      "own_comparison": "Все части В01 в AC07: старт, tag/commit, выпуск пачкой, запись, полномочия, история, нет массовости.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A15",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          93,
+          98
+        ],
+        "text": "### A15 / 11\n\n**Один проверяемый атом:** Не ограничиваться массовыми ссылками/latest\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-02/06; method-delta и drift-процедура, не один grep\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 29,
+        "text": "| A15 / 11; не массовая замена/latest | Оставлен → REQ-02/06 | Delta и свежесть, не один grep | З, П | INFERENCE-01 и AC-06 требуют содержательной сверки |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:11",
+      "own_comparison": "INFERENCE01 и REQ02/06 запрещают подмену delta заменой ссылок/main.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A16",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          99,
+          104
+        ],
+        "text": "### A16 / 11\n\n**Один проверяемый атом:** Различить норму/override/код/обещание\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-01/02; disposition и code boundary в method-delta\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 30,
+        "text": "| A16 / 11; норма/override/код/обещание | Оставлен → REQ-01/02 | Независимые оси обязательности и evidence | З | partial не выключатель, EØ не отменяет норму |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:11",
+      "own_comparison": "Норма, применимость, override, практика, вопрос и код разведены, partial не отключение.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A17",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          105,
+          110
+        ],
+        "text": "### A17 / 11\n\n**Один проверяемый атом:** Релевантные контракты 031 целиком\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-03/AC-02; per-attribute crosswalk и closed limits\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 31,
+        "text": "| A17 / 11; релевантный 031 целиком | Снят → C-A17 | Повторный аудит закрытого контракта не нужен | О | Нет требования читать 031 целиком в AC-01/05 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:11",
+      "own_comparison": "Полное чтение031 снято правомерно; AC01 не требует скрытого crosswalk.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A18",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          111,
+          116
+        ],
+        "text": "### A18 / 11\n\n**Один проверяемый атом:** Не предрешать достаточность/изменение 031\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** AC-08; три оси, В-02, UNKNOWN-01\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 32,
+        "text": "| A18 / 11; не предрешать достаточность 031 | Сужен → C-A18, DNC-02 | Не делать вывод совместимости; оценка достаточности/редакции снята | О | FACT-04 не объявляет 031 достаточным/недостаточным |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:11",
+      "own_comparison": "Оценка достаточности031 снята; DNC02 оставляет запрет необоснованной совместимости.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A19",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          117,
+          122
+        ],
+        "text": "### A19 / 13\n\n**Один проверяемый атом:** Current pin и latest только на момент проверки\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** FACT-02, REQ-06/AC-06; `a449bd2…`, повторная upstream-проверка перед внесением ещё нужна\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 33,
+        "text": "| A19 / 13; current/latest на момент | Оставлен → FACT-02, REQ-06 | Исследовательский current отдельно от upstream/pin | З, П | SHA в FACT-02 не назван последним на будущих воротах |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:13",
+      "own_comparison": "FACT02 явно ограничивает current столбцом; UNKNOWN01 не выдаёт его за latest.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A20",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          123,
+          128
+        ],
+        "text": "### A20 / 13\n\n**Один проверяемый атом:** Сравнить с old f333efa\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-02/AC-01; immutable old Git anchors в method-delta\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 34,
+        "text": "| A20 / 13; old f333efa | Оставлен → REQ-02, AC-01 | Old неизменяем, anchors Git | З | В method-delta O имеет полный SHA, old S66 без уточнения |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:13",
+      "own_comparison": "Oldf333efa сохранён, оба immutable SHA названы в method:7; не заменён новым upstream.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A21",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          129,
+          134
+        ],
+        "text": "### A21 / 13\n\n**Один проверяемый атом:** 16 paths, algorithm не изменён\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-02; пофайловая карта и raw byte comparison, не 16 новых норм\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 35,
+        "text": "| A21 / 13; 16 paths/algorithm | Оставлен → C-A21, REQ-02 | Исторический diff 16, algorithm raw без delta | З | F01–F16 и raw LF hash сверены отдельно от свежести |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:13",
+      "own_comparison": "F01–16 остаются описью исторического delta; algorithm отдельно неизменённый, не новая норма.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A22",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          135,
+          140
+        ],
+        "text": "### A22 / 13\n\n**Один проверяемый атом:** Отдельно ab2a4ef и принятые overrides\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-01/02; method-delta «Принятые основания», process60–121\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 36,
+        "text": "| A22 / 13; ab2 и overrides | Оставлен → REQ-01/02 | Уже принятые основания отделены от нового delta | З | method-delta «Принятые основания» сохраняет ab2 и Q5 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:13",
+      "own_comparison": "Принятое ab2 и Q5 отделены от новых R11/вопросов, не дублируют обязательства.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A23",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          141,
+          146
+        ],
+        "text": "### A23 / 13\n\n**Один проверяемый атом:** Git-объекты внешнего клона, без копии методики\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A23: source pins/path/ranges, read-map; в новых файлах только адреса/краткий анализ, не копия внешнего пакета\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 37,
+        "text": "| A23 / 13; Git blobs/без копии | Оставлен → C-A23, REQ-01 | Readonly Git, адреса/хеши, не копия основы в проекте | З, О | Evidence содержит локаторы и анализ, не полный пакет внешней методики |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:13",
+      "own_comparison": "Локаторы/хеши вместо копирования внешней основы; REQ01 сохраняет запрет пересказа.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A24",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          147,
+          152
+        ],
+        "text": "### A24 / 13\n\n**Один проверяемый атом:** Учитывать опубликованную основу 4236e4a\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A24: это исходная основа задания, не нынешняя plugin evidence; последняя явно отделена как 492c166\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 38,
+        "text": "| A24 / 13; опубликованная 4236e4a | Оставлен → C-A24 | Это исходная база постановки, не нынешняя code evidence | З | method-delta называет код 492c166, а не live/4236e4a |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:13",
+      "own_comparison": "4236e4a относится к исходному заданию; кодовые claims адресованы492c166, не live.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A25",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          153,
+          158
+        ],
+        "text": "### A25 / 13\n\n**Один проверяемый атом:** Своя ветка/дерево от origin/main\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A25: подготовленное интегратором дерево/ветка; новых refs эта сессия не создаёт\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 39,
+        "text": "| A25 / 13; своё дерево/ветка | Оставлен → C-A25 | Подготовленное spec/061-canon-fixes-r2, refs не создавать | Н | before/git-state HEAD/ветка совпадают с назначением |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:13",
+      "own_comparison": "Предподготовленное дерево вместо создания refs самим автором — сессионное уточнение, не новая цель.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A26",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          159,
+          164
+        ],
+        "text": "### A26 / 13\n\n**Один проверяемый атом:** Не трогать live/чужие изменения main\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A26, DNC-01/04; baseline своего дерева, live не читается как code evidence\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 40,
+        "text": "| A26 / 13; live/чужое main | Оставлен → C-A26, DNC-01/04 | Только своё дерево, существовавшее не затирать | З, Н | before включает existing untracked и open-questions/log |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:13",
+      "own_comparison": "DNC01/04 не позволяют затереть чужую main/inputs; whole-tree заявлен отдельно проверяемо.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A27",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          165,
+          170
+        ],
+        "text": "### A27 / 15\n\n**Один проверяемый атом:** Начать с Canon/ссылок/AGENTS/config read-only\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A27: read-map с собственным Canon/ADR чтением и config view; baseline защищает config\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 41,
+        "text": "| A27 / 15; вход Канона/AGENTS/config | Оставлен → C-A27 | Читать ссылки применимого Канона, не править config | З | read-map фиксирует README первым, process/AGENTS/config/ADR |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Canon/AGENTS/config остаются readonly применимыми входами; авторская read-map не мой PASS.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A28",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          171,
+          176
+        ],
+        "text": "### A28 / 15\n\n**Один проверяемый атом:** Полностью применимые правила методики\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A28: method-delta и read-map называют точные собственные ranges; полное чтение чужой сессии не присваивается\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 42,
+        "text": "| A28 / 15; полностью применимые правила | Оставлен → C-A28, REQ-01 | Собственное чтение первичных anchors, чужое не присваивать | З | read-map/source-addendum отделяет Git-чтение от старых reviews |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Первичные нормы обязательны по условиям; hashes и чужая глубина не заменяют чтения.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A29",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          177,
+          182
+        ],
+        "text": "### A29 / 15\n\n**Один проверяемый атом:** Конкретные diff/ranges\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-02/AC-01; каждый hunk16paths в method-delta\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 43,
+        "text": "| A29 / 15; конкретные diff/ranges | Оставлен → REQ-02, AC-01 | Hunk и отдельные смыслы, не counts | З | Каждому M/S/R/F соответствует адрес и проверка |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Все M/S/R/F имеют old/current anchors; полнота смысла требует первичной сверки, не счёта.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A30",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          183,
+          188
+        ],
+        "text": "### A30 / 15\n\n**Один проверяемый атом:** Цикл/роли/прогресс\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-02/03; method-delta M/R/S и crosswalk progress/gates\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 44,
+        "text": "| A30 / 15; цикл/роли/прогресс | Сужен → REQ-02, method-delta M02/R01–R18 | Нормы цикла сохранены; expressibility в 031 снята | О, З | Роли/gates/journal разобраны без маршрутизации формата |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Цикл/роли/прогресс остаются нормами; только представление в031 снято, не весь атом.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A31",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          189,
+          194
+        ],
+        "text": "### A31 / 15\n\n**Один проверяемый атом:** Запуск/повтор/state.launches\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-03; отдельные атрибуты launch в 031-impact, mutable state снаружи\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 45,
+        "text": "| A31 / 15; запуск/retry/state.launches | Сужен → REQ-02, method-delta R05/R10/R13–R17 | Внешние условия и manual override остаются; проектирование данных снято | О, З | TaskSession не выдан за runtime state, норма не отменена |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Launch/retry/state условия остаются R05/10/13–17; сняты лишь декларации формата.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A32",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          195,
+          200
+        ],
+        "text": "### A32 / 15\n\n**Один проверяемый атом:** Чтение/порядок переносов\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-05/AC-05; раздел первого переноса и проверка immediate current при Canon-first\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 46,
+        "text": "| A32 / 15; чтение/порядок переноса | Оставлен → REQ-05, AC-05 | Первый любой перенос сразу current | З, П | Даже один README требует указателя тем же шагом |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Первый любой перенос создаёт current немедленно, в том числе один README.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A33",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          201,
+          206
+        ],
+        "text": "### A33 / 15\n\n**Один проверяемый атом:** Second opinion/проверка норм\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-01/02/03; method-delta и полевые маршруты протокола, не смешивать с помощником\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 47,
+        "text": "| A33 / 15; opinion/проверка норм | Сужен → REQ-01/02, M07–M18 | Обязательность/практика отдельно; полевой форматный маршрут снят | О, З | M17 не отключён helpers; M07–M15 не названы необязательными |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Opinion/сходимость остаются M07–18/REQ02; поля031 не нужны для действия нормы.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A34",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          207,
+          212
+        ],
+        "text": "### A34 / 15\n\n**Один проверяемый атом:** Открытый вопрос не норма и не ответ\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-01; OQ5 процедура отделена от вопросов 7–87\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 48,
+        "text": "| A34 / 15; OQ не норма/ответ | Оставлен → REQ-01, F04/D4 | Q5 процедура отдельно от вопросов | З | Вопрос о норме не отменяет процедуру или действующую норму |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Q5 процедура отдельно от вопросов; UNKNOWN не отменяет обязательного правила.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A35",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          213,
+          218
+        ],
+        "text": "### A35 / 15\n\n**Один проверяемый атом:** Не пересказывать внешнюю основу в Canon\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-01/05; disposition «внешняя основа, перенос текста не нужен», только проектные отличия\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 49,
+        "text": "| A35 / 15; не пересказывать основу | Оставлен → REQ-01/05, D0 | В process только точное отличие с причиной | З | D0 не предлагает импорт M/R/S текстов |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "REQ01/05 и D0 ограничивают process точными отличиями с причинами, не копией основы.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A36",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          219,
+          224
+        ],
+        "text": "### A36 / 17\n\n**Один проверяемый атом:** Approved031 immutable commit/input\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** DNC-01, REQ-05; approved hashes и protected baseline, никогда target\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 50,
+        "text": "| A36 / 17; approved031 immutable | Сужен → DNC-01, FACT-04 | Сохранность остаётся; использование как активного исследования снято | О | У 031 нет destination правки даже после ворот |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:17",
+      "own_comparison": "Approved031 immutable SHA сохранён FACT04/DNC01, но не назначен повторный аудит.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A37",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          225,
+          230
+        ],
+        "text": "### A37 / 17\n\n**Один проверяемый атом:** Учитывать связанный пакет и историю reviews\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A37: source-inventory/read-map, исторические reviews не переписываются и не объявлены своими прочитанными целиком\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 51,
+        "text": "| A37 / 17; пакет/история reviews | Сужен → C-A37 | История readonly; её полный повторный аудит снят | О | source-inventory сохранён, чужая глубина чтения не названа своей |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:17",
+      "own_comparison": "Исторические reviews не превращены в обязательное чтение и не присвоены автором проверки.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A38",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          231,
+          236
+        ],
+        "text": "### A38 / 17\n\n**Один проверяемый атом:** Progress/launch/correction/retry\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-03/AC-02;031-impact поатрибутно, обе progress-пары\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 52,
+        "text": "| A38 / 17; progress/launch/correction/retry в 031 | Снят → C-A38 | Форматный crosswalk/пары не требуются | О | R04–R08 сохраняют норму, не назначают 031/пары |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:17",
+      "own_comparison": "Crosswalk progress031 снят; R04–08 отдельно сохраняют журнальные обязанности.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A39",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          237,
+          242
+        ],
+        "text": "### A39 / 17\n\n**Один проверяемый атом:** Fresh reviewers/линзы/второе мнение\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-03; meeting-only lens, prompt/doc и внешний selector в crosswalk\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 53,
+        "text": "| A39 / 17; fresh reviewers/линзы/opinion в 031 | Снят → C-A39 | Expressibility 031 снята; нормы opinion отдельно A33 | О | Нет meeting-only/API проектирования, M17/R11 остаются |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:17",
+      "own_comparison": "Meeting/selector expressibility снята; fresh/opinion нормативно остаются через A33/M17.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A40",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          243,
+          248
+        ],
+        "text": "### A40 / 17\n\n**Один проверяемый атом:** Versions/refs/signatures\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-03/AC-08; отдельные data/semantic/shape оси и В-02/03\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 54,
+        "text": "| A40 / 17; versions/refs/signatures 031 | Снят → C-A40 | Не выбирать версии/контракт данных | О | Нынешние REQ/AC не назначают форматных versions ворот |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:17",
+      "own_comparison": "Нет выбора schemaVersion/versions/refs формата в активном результате.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A41",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          249,
+          254
+        ],
+        "text": "### A41 / 17\n\n**Один проверяемый атом:** Машинные формы/gate outcomes\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-03; closed document/progress/gate routes в crosswalk\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 55,
+        "text": "| A41 / 17; machine forms/outcomes 031 | Снят → C-A41 | Не проектировать машинные формы | О | Результат только Канон/указатель, не документ формата |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:17",
+      "own_comparison": "Машинные gate forms031 не являются поставкой Канона; REQ/AC их не требуют.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A42",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          255,
+          260
+        ],
+        "text": "### A42 / 17\n\n**Один проверяемый атом:** На каждый delta anchor/место 031/verdict\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-02/03, AC-01/02; join method-delta→031-impact\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 56,
+        "text": "| A42 / 17; delta anchor/место031/verdict | Сужен → REQ-02, AC-01 | Anchors/verdict Канона остаются; join к 031 снят | О | В каждой строке M/S/R destination D*, не crosswalk deliverable |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:17",
+      "own_comparison": "Source anchor/verdict остаются REQ02/AC01, обязательный join к031 отсутствует.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A43",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          261,
+          266
+        ],
+        "text": "### A43 / 17\n\n**Один проверяемый атом:** ID не существующая operation\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** DNC-02; matching registry и unknown signature boundary, В-03\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 57,
+        "text": "| A43 / 17; ID не operation | Сужен → DNC-02 | Честность evidence остаётся; поиск signatures снят | О | EL/ES названы частичными свидетельствами, не runtime API |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:17",
+      "own_comparison": "ID не доказывает API: DNC02 и узкие EL/ES не обещают signatures.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A44",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          267,
+          272
+        ],
+        "text": "### A44 / 19\n\n**Один проверяемый атом:** 045 только из авторского дерева\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A44: служебный locator вне публичных файлов; raw SHA/status и read-map\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 58,
+        "text": "| A44 / 19; 045 из авторского дерева | Снят → C-A44 | Новый просмотр дерева 045 не назначается | О | read-map не присваивает старое внешнее чтение |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:19",
+      "own_comparison": "Новый доступ к авторскому дереву045 не требуется для суженного результата.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A45",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          273,
+          278
+        ],
+        "text": "### A45 / 19\n\n**Один проверяемый атом:** Читать spec/plan/review4/log, fixes по нужде\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A45: read-map, неизменные inputs; не выдавать историческое чтение за своё\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 59,
+        "text": "| A45 / 19; spec/plan/review/log045 | Снят → C-A45 | Повторный аудит 045 снят | О | Нет этих файлов в обязательных источниках AC-05 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:19",
+      "own_comparison": "Spec/plan/review045 не обязательные входы; блокеры045 не критерии061.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A46",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          279,
+          284
+        ],
+        "text": "### A46 / 19\n\n**Один проверяемый атом:** Точные SHA spec/plan045\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A46: spec685245…; прежний plan150c98… сохранён, текущий plan4856a2… с append решения; before/after внешних файлов\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 60,
+        "text": "| A46 / 19; SHA045 | Снят → C-A46 | Новая аттестация внешнего дерева не deliverable | О | Старые SHA остались в readonly истории, не объявлены свежими |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:19",
+      "own_comparison": "Исторические SHA045 не названы свежими; повторная аттестация снята.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A47",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          285,
+          290
+        ],
+        "text": "### A47 / 19\n\n**Один проверяемый атом:** Не дублировать 045/#22/не сбрасывать историю\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A47, DNC-03: нет новых задач/refs, submit только 061\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 61,
+        "text": "| A47 / 19; не дублировать045/#22/историю | Оставлен → C-A47, FACT-04, DNC-03 | Не возобновлять/не дублировать, пауза до владельца | О, З | Готовность 061 прямо не возобновляет #22 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:19",
+      "own_comparison": "Пауза045/#22 до нового слова, без автоактивации после061, сохранена FACT04.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A48",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          291,
+          296
+        ],
+        "text": "### A48 / 19\n\n**Один проверяемый атом:** Checklist/test ручного review и DNC\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-04/AC-03; analysis «Блокеры 045 и 013», DNC-08 отдельно обе части\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 62,
+        "text": "| A48 / 19; checklist/test045/DNC | Снят → C-A48 | Устранение блока плана 045 снято | О | AC-05 проверяет Канон, не чужой план |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:19",
+      "own_comparison": "Checklist чужого плана не стал AC05; там только проверка действующего Канона.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A49",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          297,
+          302
+        ],
+        "text": "### A49 / 19\n\n**Один проверяемый атом:** В-05 открытый источник registry\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** UNKNOWN-03, REQ-04, В-03/В-05: путь проектирования в 045 выбран, полнота 16 kinds/signatures не утверждена\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 63,
+        "text": "| A49 / 19; источник registry В-05 | Снят → C-A49 | В-05 только история, не UNKNOWN/вопрос на воротах | О | spec UNKNOWN не требует каталог и не переспрашивает путь |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:19",
+      "own_comparison": "Нет UNKNOWN/ворот полноты каталога; В05 прямо архивирован.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A50",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          303,
+          308
+        ],
+        "text": "### A50 / 19\n\n**Один проверяемый атом:** Разделить маршруты Canon/045/031/внешний\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-04/05, AC-03/08; analysis и три оси 031-impact\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 64,
+        "text": "| A50 / 19; разделить Canon/045/031/внешний | Сужен → C-A50, REQ-05, DNC-01 | Только канонический маршрут; остальные сняты/readonly | О | Таблица результата не содержит внешних поставок |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:19",
+      "own_comparison": "Разделение маршрутов сохранено сужением: только Canon, остальные readonly/сняты.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A51",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          309,
+          314
+        ],
+        "text": "### A51 / 19\n\n**Один проверяемый атом:** Сейчас 045 не править\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A51, DNC-01; внешние before/after/status, не только обещание\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 65,
+        "text": "| A51 / 19; 045 не править | Оставлен → DNC-01, C-A51 | Ограничение, не исследование | О, З | Запрет сохранён независимо от завершения Канона |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:19",
+      "own_comparison": "Запрет менять045 остаётся без зависимости от готовности061.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A52",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          315,
+          320
+        ],
+        "text": "### A52 / 21\n\n**Один проверяемый атом:** 013 read-only spec/log/task/list\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A52: read-map и source-inventory, отдельное дерево\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 66,
+        "text": "| A52 / 21; 013 readonly spec/log/task/list | Сужен → C-A52, DNC-01 | Не менять 013; требование нового чтения снято | О | В AC-01/05 нет повторного list/spec013 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:21",
+      "own_comparison": "013 не изменять; новое чтение её spec/log/list снято, не замаскировано под полноту.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A53",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          321,
+          326
+        ],
+        "text": "### A53 / 21\n\n**Один проверяемый атом:** Черновик, reader/whitelist не подтверждены\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** FACT-05, UNKNOWN-03, AC-04; 013spec1/message46–49/log42\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 67,
+        "text": "| A53 / 21; draft/reader не подтверждены | Сужен → DNC-02, C-A53 | Не заявлять runtime/совместимость; новая аттестация статуса снята | О | Нет утверждения свежего отсутствия кода013 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:21",
+      "own_comparison": "DNC02 запрещает ложный runtime; текущая редакция не делает свежий вывод о наличии кода013.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A54",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          327,
+          332
+        ],
+        "text": "### A54 / 21\n\n**Один проверяемый атом:** Не возобновлять 013\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A54: ни запусков/задач/заказов 013, ни изменения дерева\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 68,
+        "text": "| A54 / 21; не возобновлять013 | Оставлен → DNC-01, C-A54 | Ни запуска, ни заказа, ни нового номера013 | О, З | Продолжение ограничено будущей С2 061 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:21",
+      "own_comparison": "Не возобновлять013 явно FACT04/DNC01; нет поручения её интегратору.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A55",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          333,
+          338
+        ],
+        "text": "### A55 / 21\n\n**Один проверяемый атом:** Проверить наличие src/runner_core сейчас\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** AC-04; read-only list/exists/status, отсутствие не совместимость\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 69,
+        "text": "| A55 / 21; проверить src/runner_core | Снят → C-A55 | Новый list/exists013 не нужен | О | AC-04 в архиве, отсутствие кода не используется как PASS |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:21",
+      "own_comparison": "Новый list/exists013 не критерий; отсутствие reader не основание PASS.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A56",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          339,
+          344
+        ],
+        "text": "### A56 / 21\n\n**Один проверяемый атом:** Описание runner не реализация\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-02/AC-04; method-delta code boundary и analysis013\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 70,
+        "text": "| A56 / 21; описание не реализация | Сужен → REQ-02, DNC-02 | Общая граница evidence остаётся; повторный аудит013 снят | О | EØ не равен ни доказанному отсутствию, ни отмене нормы |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:21",
+      "own_comparison": "Описание≠реализация остаётся REQ02/DNC02/EØ; только повторное исследование013 снято.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A57",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          345,
+          350
+        ],
+        "text": "### A57 / 21\n\n**Один проверяемый атом:** Plugin только узкие свидетельства\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** FACT-06/REQ-02; база 492c166, конкретные callsites, не полный runtime API\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 71,
+        "text": "| A57 / 21; plugin узкий свидетель | Оставлен → REQ-02, method-delta EJ/EL/ES/EG | Callsite/база/ограничение, не API раннера | З | Именованные кодовые места проверены первично отдельно от live |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:21",
+      "own_comparison": "Узкие callsites и кодовая база названы; полнота runtime из них не следует.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A58",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          351,
+          356
+        ],
+        "text": "### A58 / 23\n\n**Один проверяемый атом:** Выход analysis и draft spec\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A58: шесть корневых черновиков и явная аналитическая часть owner-gate-decisions\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 72,
+        "text": "| A58 / 23; выход analysis/draft spec | Сужен → C-A58, FACT-01 | Четыре root-файла; старые вспомогательные карты readonly | О, Н | Дополнение описи только в scope-revision-2 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:23",
+      "own_comparison": "Разрешённые четыре root-документа отделены от readonly source inventory/owner decisions.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A59",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          357,
+          362
+        ],
+        "text": "### A59 / 23\n\n**Один проверяемый атом:** FACT/UNKNOWN/REQ/AC/DNC отдельно, result-section\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A59: spec заголовки/первые строки; ID count в probes, не proof coverage\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 73,
+        "text": "| A59 / 23; FACT/UNKNOWN/REQ/AC/DNC/result | Оставлен → C-A59 | Раздельные абзацы/раздел результата | З | spec имеет все разделы, снятые ID не переиспользованы |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:23",
+      "own_comparison": "FACT/UNKNOWN/REQ/AC/DNC/result присутствуют; снятые ID не заняты новыми требованиями.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A60",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          363,
+          368
+        ],
+        "text": "### A60 / 23\n\n**Один проверяемый атом:** Exact sources и глубина чтения\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A60: source-inventory + own read-map; hash не чтение\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 74,
+        "text": "| A60 / 23; exact sources/глубина | Оставлен → C-A60, AC-01 | Свои диапазоны/хеши/усечения, hash не чтение | З | read-map называет реальную глубину и ограничения |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:23",
+      "own_comparison": "Read-map/hash/ranges и раскрытие усечений остаются, hash не прочтение.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A61",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          369,
+          374
+        ],
+        "text": "### A61 / 23\n\n**Один проверяемый атом:** Raw hash/status013/045 до/после без копий\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A61: read-map fingerprints внешних файлов; полные пакеты не копируются\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 75,
+        "text": "| A61 / 23; raw before/after013/045 | Снят → C-A61 | Новое исследование внешних пакетов снято; их история сохранена | О | Нет ложной свежей before/after аттестации внешних деревьев |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:23",
+      "own_comparison": "Внешние before/after013/045 больше не нужны; их старые доказательства не представлены свежими.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A62",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          375,
+          380
+        ],
+        "text": "### A62 / 23\n\n**Один проверяемый атом:** Лёгкий воспроизводимый счёт\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A62: probes/команда count; итоговые реальные числа, не обязательные 38/83\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 76,
+        "text": "| A62 / 23; лёгкий счёт | Оставлен → C-A62 | Реальные REQ/AC/DNC/atoms, не цель по количеству | З | Пробы считают ID отдельно от смысловой проверки |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:23",
+      "own_comparison": "4REQ/4AC/4DNC и94ID — опись, а не критерий полноты содержания.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A63",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          381,
+          386
+        ],
+        "text": "### A63 / 23\n\n**Один проверяемый атом:** Границы новой редакции 031/отдельное approval\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-05/AC-08/В-02; место выбрано, содержание/версии отдельно утверждаются, approved031 immutable\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 77,
+        "text": "| A63 / 23; новая редакция031/approval | Сужен → C-A63, DNC-01/02 | Не менять approved/не утверждать новое; разработка редакции снята | О | В-02 не будущие ворота текущей 061 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:23",
+      "own_comparison": "Нельзя менять approved или самопринимать редакцию; создание новой031 снято целиком.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A64",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          387,
+          392
+        ],
+        "text": "### A64 / 25\n\n**Один проверяемый атом:** Прогресс только progress_line\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A64: корневой progress.log; ручной подмены нет\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 78,
+        "text": "| A64 / 25; progress_line | Оставлен → C-A64 | Только инструмент, не ручные строки | З, Н | Собственные start/step вызваны инструментом |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:25",
+      "own_comparison": "Progress только инструментом, без ручной подмены; к семантике Канона не добавляет цели.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A65",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          393,
+          398
+        ],
+        "text": "### A65 / 25\n\n**Один проверяемый атом:** Start первой, N единиц, step немедленно\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A65: первоначальная С1 считала источники; нынешнее назначение — шесть законченных пунктов программы, N6, step сразу после каждого\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 79,
+        "text": "| A65 / 25; start/N/немедленный step | Сужен → C-A65 | N6 пунктов программы, не старое число источников | Н | Start до чтения, step после каждого законченного пункта |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:25",
+      "own_comparison": "N6 авторского назначения заменяет исходный счёт источников; нашей С2 предписан собственный N8.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A66",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          399,
+          404
+        ],
+        "text": "### A66 / 25\n\n**Один проверяемый атом:** Агент не пишет launch/log регистрации\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A66: log неизменен, свои progress append-only; launcher уже записал №19, известное смещение карточки №18 не чинится\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 80,
+        "text": "| A66 / 25; launcher не автор | Оставлен → C-A66 | Единственный launch28 интегратора; отставание карточки не чинить | Н | Автор не вызывает launch/не правит log; старые №19/18 только история |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:25",
+      "own_comparison": "Регистрация запуска не агентская; отставание карточки не разрешает ремонт истории.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A67",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          405,
+          410
+        ],
+        "text": "### A67 / 25\n\n**Один проверяемый атом:** Одна строка profile по формату методики\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A67: одна собственная append-only строка profile.log в конце, требуемое свидетельство сдачи\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 81,
+        "text": "| A67 / 25; profile одна строка | Оставлен → C-A67 | Одна append-only рекомендация по R-формату при сдаче | З | Форма сверяется с первичным runner, не меняет модель/config |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:25",
+      "own_comparison": "Одна профильная рекомендация при сдаче, не смена модели/config.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A68",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          411,
+          416
+        ],
+        "text": "### A68 / 25\n\n**Один проверяемый атом:** Публичность, без machine locators/private names\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A68: AGENTS15/ADR0006, публичные source anchors относительные; locator только в read-only командах\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 82,
+        "text": "| A68 / 25; публичность | Оставлен → C-A68, DNC-01 | Без machine paths/приватных имён в evidence | З, AGENTS:97–103 | Локатор передаётся команде отдельно, не публикуется payload .git |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:25",
+      "own_comparison": "Публичность не снята владельцем и распространяется на evidence, пути только относительные.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A69",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          417,
+          422
+        ],
+        "text": "### A69 / 25\n\n**Один проверяемый атом:** При отказе точный код/ответ, не ручной журнал\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A69: если отказ возникнет — точная передача ответа интегратору; успешный start/steps не отказ. Не фабриковать пример реального отказа\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 83,
+        "text": "| A69 / 25; отказ инструмента | Оставлен → C-A69 | Если отказ — точный ответ; не ручная подмена | З | Успешный progress не представлен как отказ; ошибки проб сохраняются |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:25",
+      "own_comparison": "Реальный отказ инструментов сообщается точно, искусственный пример не выдаётся за сбой.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A70",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          423,
+          428
+        ],
+        "text": "### A70 / 25\n\n**Один проверяемый атом:** crew_task submit, НЕ deliver/accept\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A70: финальный submit n61 с указанием С1п; отдельное сообщение интегратору, не приёмка\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 84,
+        "text": "| A70 / 25; submit не deliver | Оставлен → C-A70 | Submit 61 интегратору после автора | З, Н | Протокол завершения не включает accept/deliver |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:25",
+      "own_comparison": "Submit61 интегратору не deliver/accept; полномочие утверждения не присвоено.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A71",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          429,
+          434
+        ],
+        "text": "### A71 / 25\n\n**Один проверяемый атом:** После финальной строки не продолжать/self-retry\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A71: все пробы ДО done; после только учёт/submit/доклад, следующую проверку назначает интегратор\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 85,
+        "text": "| A71 / 25; не работа после done | Оставлен → C-A71 | После done лишь учёт/submit/доклад | З, Н | Финальные пробы/заморозка предшествуют done |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:25",
+      "own_comparison": "После done только учёт/submit; все предметные проверки до финальной строки.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A72",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          435,
+          440
+        ],
+        "text": "### A72 / 25\n\n**Один проверяемый атом:** Никакой автоматической реализации\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A72, DNC-04: только разрешённые drafts/NEW evidence, protected comparison\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 86,
+        "text": "| A72 / 25; не auto implementation | Оставлен → DNC-04, C-A72 | Только разрешённый авторский пакет | О, З | Нет правки Canon/code и новых нормативных файлов |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:25",
+      "own_comparison": "DNC04 запрещает реализацию автоматически после сдачи черновика.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A73",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          441,
+          446
+        ],
+        "text": "### A73 / 29\n\n**Один проверяемый атом:** Матрица old→current→Canon→code→031/045\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-02/03; method-delta/crosswalk, не одна тематическая таблица\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 87,
+        "text": "| A73 / 29; old→current→Canon→code→031/045 | Сужен → REQ-02, AC-01 | Первые четыре оси сохраняются; 031/045 сняты | О | M/S/R/F дают source/Canon/code/последствие без снятых deliverables |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:29",
+      "own_comparison": "Old/current/Canon/code остались, 031/045 оси сняты; матрица не потеряла первые четыре.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A74",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          447,
+          452
+        ],
+        "text": "### A74 / 29\n\n**Один проверяемый атом:** Источники и квалификация evidence\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-01/AC-01; норма/условие/override/provenance отдельно\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 88,
+        "text": "| A74 / 29; квалификация evidence | Оставлен → REQ-01, AC-01 | Норма/условие/override/практика раздельно | З | P partial/unconfirmed не изменяют обязательность M07/M17/M02 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:29",
+      "own_comparison": "Provenance partial/unconfirmed не меняет норму/применимость/override.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A75",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          453,
+          458
+        ],
+        "text": "### A75 / 29\n\n**Один проверяемый атом:** Каждое несовпадение — место/последствие\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-02/AC-01; disposition/destination в method-delta\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 89,
+        "text": "| A75 / 29; адрес/последствие несовпадения | Оставлен → REQ-02, AC-01 | Каждому fragment — destination/check | З | Проверены конкретные M/S/R строки, не только семь D букв |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:29",
+      "own_comparison": "Конкретный consequence/destination/check обязателен каждому нормативному fragment.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A76",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          459,
+          464
+        ],
+        "text": "### A76 / 31\n\n**Один проверяемый атом:** Конкретный маршрут обоих блокеров 045\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-04/AC-03; analysis, отдельные plan-checklist и registry ворота\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 90,
+        "text": "| A76 / 31; оба блокера045 | Снят → C-A76 | Закрытие блокеров не критерий 061 | О | В нынешних AC и результате нет маршрута закрытия045 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:31",
+      "own_comparison": "Оба блокера045 сняты, а не перенесены в ворота061 косвенной ссылкой.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A77",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          465,
+          470
+        ],
+        "text": "### A77 / 31\n\n**Один проверяемый атом:** Без придуманных signatures/compatibility/PASS\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** DNC-02; per-attribute unknowns crosswalk, В-03\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 91,
+        "text": "| A77 / 31; не выдумывать signatures/PASS | Сужен → DNC-02 | Честность доказательств остаётся; signatures аудит снят | О | Анализ не обещает полный registry/совместимость |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:31",
+      "own_comparison": "Запрет выдуманных signatures/compatibility/PASS сохранён, каталоговый аудит снят.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A78",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          471,
+          476
+        ],
+        "text": "### A78 / 31\n\n**Один проверяемый атом:** Данные/shape/внешний контракт разделены\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-03/AC-08; дополнительно семантика отдельно, не исчезает из-за прежней shape\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 92,
+        "text": "| A78 / 31; data/shape/внешний контракт | Снят → C-A78 | Форматные оси/оценки сняты | О | Текущий результат не задаёт данных/shape/reader |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:31",
+      "own_comparison": "Форматные data/shape/контракт оси сняты; не смешаны с нормативными осями REQ01.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A79",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          477,
+          482
+        ],
+        "text": "### A79 / 31\n\n**Один проверяемый атом:** Новый approved format не создан, история цела\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** DNC-01/03; proposed destination absent и protected hash check\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 93,
+        "text": "| A79 / 31; новый format не создан/история | Сужен → C-A79, DNC-01/03 | Сохранность/не создавать остаются; проверка готовности формата снята | О | Снимок покрывает историю, а не вывод новой редакции |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:31",
+      "own_comparison": "Сохранность approved/history и запрет создавать формат остались DNC, не поставка.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A80",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          483,
+          488
+        ],
+        "text": "### A80 / 33\n\n**Один проверяемый атом:** Scope полной задачи и действующее место\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-05/AC-05; result-section и first-transfer таблица\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 94,
+        "text": "| A80 / 33; scope/действующее место | Сужен → REQ-05, AC-05 | Канон/ADR/указатель, не формат | О | Таблица назначений spec исчерпывает нынешний результат |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:33",
+      "own_comparison": "Действующее место полной задачи — Canon/ADR, current указатель; не format.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A81",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          489,
+          494
+        ],
+        "text": "### A81 / 33\n\n**Один проверяемый атом:** В задаче исследование/история и будущий current\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A81: current пока отсутствует; после переноса только указатель, не вторая норма\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 95,
+        "text": "| A81 / 33; история/current | Оставлен → C-A81, REQ-05, AC-05 | Текущая сессия без current; первый реальный перенос с ним | З | Указатель не содержит норму; не откладывается до result.md |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:33",
+      "own_comparison": "Current не нужен до первого переноса, затем немедленно и только адреса/история.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A82",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          495,
+          500
+        ],
+        "text": "### A82 / 33\n\n**Один проверяемый атом:** Без молчаливых pins/сбросов/автоапрува\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-06/AC-07, DNC-03; В-01, история сохранена\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 96,
+        "text": "| A82 / 33; pins/потолки/autoapprove | Оставлен → AC-07, DNC-03, FACT-05 | Старые серии и полномочия не сбрасываются | П, О | Следующие номера/статусы не объявлены положительной серией |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:33",
+      "own_comparison": "FACT05 сохраняет NOT VERIFIED/С4 потолок, AC07/DNC03 сохраняют pins и полномочия.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A83",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          501,
+          506
+        ],
+        "text": "### A83 / 33\n\n**Один проверяемый атом:** Реальные решения владельца и следующая независимая С2\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A83: В-01/В-01а решены, В-02 условен по содержанию, В-03 путь выбран; далее отдельная свежая полная С2\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 97,
+        "text": "| A83 / 33; решения/следующаяС2 | Сужен → C-A83, FACT-05, «Будущие ворота» | В-01/01а остаются; В-02/03/05 архив; одна полная С2 на Sol | О, П | Автор не назначает С2 и не начинает план |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:33",
+      "own_comparison": "Одна С2 наSol и отдельные ворота; В02/03/05 не переспрашиваются как активные условия.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A84",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          507,
+          512
+        ],
+        "text": "### A84 / 37\n\n**Один проверяемый атом:** Только своё подготовленное дерево/ветка/папка\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A84: session_move первым действием; запись baseline, без новых refs\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 98,
+        "text": "| A84 / 37; своё дерево/папка | Оставлен → C-A84 | Первый session_move в подготовленное дерево | Н | Вызов move предшествовал start, before HEAD/branch сохранены |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:37",
+      "own_comparison": "Первое session_move/свой before — ограничение сессии, не предмет будущего продукта.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A85",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          513,
+          518
+        ],
+        "text": "### A85 / 37\n\n**Один проверяемый атом:** Не менять Canon/AGENTS/plugin/config/031/045/013/методику\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A85, DNC-01: точные protected repo paths, внешние hashes/status, immutable Git objects\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 99,
+        "text": "| A85 / 37; запрет правок защищённого | Оставлен → DNC-01, C-A85 | Canon/AGENTS/code/config/история/внешнее readonly | З, Н | protected-check сравнивает весь before, не выбранные три файла |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:37",
+      "own_comparison": "Canon/AGENTS/code/config/history/внешние inputs защищены; авторские claims ещё проверяются.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A86",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          519,
+          524
+        ],
+        "text": "### A86 / 37\n\n**Один проверяемый атом:** Без plan/JSONC/schema/registry/runtime/общего validator\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A86: допустимый список файлов baseline; check.py только разовое evidence сохранности, не validator продукта\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 100,
+        "text": "| A86 / 37; без plan/data/runtime/validator | Оставлен → C-A86, DNC-04 | Только разовые test-only evidence, не продукт | З, Н | Скрипты находятся в новом scope-revision-2, план не тронут |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:37",
+      "own_comparison": "Нет плана/JSONC/runtime/общего validator; разовые evidence не продуктовая поставка.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A87",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          525,
+          530
+        ],
+        "text": "### A87 / 37\n\n**Один проверяемый атом:** Без git/live/delete/restart/cleanup\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A87, DNC-04: отсутствие таких команд, сохранность protected; refs не создавались\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 101,
+        "text": "| A87 / 37; git/live/delete/restart/cleanup | Оставлен → C-A87, DNC-04 | Никаких таких действий | З, Н | Команды ограничены show/diff/ls-remote/status и лёгкими пробами |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:37",
+      "own_comparison": "Запрет git/live/delete/restart/cleanup сохранён DNC04, будущий перенос требует ворот.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A88",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          531,
+          536
+        ],
+        "text": "### A88 / 37\n\n**Один проверяемый атом:** Без дочерних задач/скрытых подагентов\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A88: новых задач/подагентов не создаётся; исходы делает одна С1п\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 102,
+        "text": "| A88 / 37; без дочерних/агентов | Оставлен → C-A88, DNC-03 | Один автор, без скрытой делегации | З, Н | Не вызваны spawn/assign/order/subagent |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:37",
+      "own_comparison": "Новые задачи/подагенты запрещены, одна авторская правка не делегирована автоматически.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A89",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          537,
+          542
+        ],
+        "text": "### A89 / 37\n\n**Один проверяемый атом:** Лёгкие read-only, тяжёлое только очередь+согласование\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A89: только чтение/Git show/лёгкие Python-проверки; тяжёлое не требуется и не запущено, очередь не обходится\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 103,
+        "text": "| A89 / 37; лёгкое/очередь | Оставлен → C-A89, DNC-04 | Тяжёлое не требуется и не запускается | З, Н | Нет build/npm test/full guard; только малые read-only/probes |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:37",
+      "own_comparison": "Тяжёлые прогоны не требуются для документационной проверки и не разрешены.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A90",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          543,
+          548
+        ],
+        "text": "### A90 / 37\n\n**Один проверяемый атом:** Не менять модели/лимиты\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A90: config защищён baseline, модель не переключается\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 104,
+        "text": "| A90 / 37; модели/лимиты | Оставлен → C-A90, DNC-03 | Sol по единственному разрешению, config неизменен | О | Snapshot охватывает .opencode и не исключает model config |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:37",
+      "own_comparison": "Единственное исключениеSol не меняет общих моделей/лимитов/config.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A91",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          549,
+          554
+        ],
+        "text": "### A91 / 37\n\n**Один проверяемый атом:** Далее С2 по интегратору, не auto acceptance\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A91: submit и остановка автора; отдельная свежая С2 не назначается самим автором\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 105,
+        "text": "| A91 / 37; С2 интегратор/noautoaccept | Оставлен → C-A91, «Будущие ворота» | После submit остановиться | З, О | Следующая С2 не запущена автором |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:37",
+      "own_comparison": "Автор сдаёт и останавливается; следующая С2 только назначением интегратора.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A92",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          555,
+          560
+        ],
+        "text": "### A92 / 41\n\n**Один проверяемый атом:** Выбор pin/перехода,031, внешнего scope у владельца\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** AC-07/08, В-01/02/03; решения owner-gate-decisions, не авторский выбор\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 106,
+        "text": "| A92 / 41; pin/031/внешний scope владелец | Сужен → AC-07, C-A92 | Pin-полномочия остаются; формат/внешние ворота сняты | О, П | Автор не выбирает commit перехода по наблюдению upstream |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:41",
+      "own_comparison": "Pin-полномочие сохранено AC07, форматные решения сняты, наблюдение commit не выбор.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A93",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          561,
+          566
+        ],
+        "text": "### A93 / 41\n\n**Один проверяемый атом:** До выбора только факты/варианты\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A93: draft; выбранное направление не готовые REQ/AC/пары/версии/каталог, нет внешних задач/контрактов\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 107,
+        "text": "| A93 / 41; до выбора факты/варианты | Сужен → C-A93, FACT-05, DNC-02 | Draft не утверждение/не перенос; снятые варианты не проектируются | О, П | Статус не присваивает новое approval по старым воротам |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:41",
+      "own_comparison": "Draft/выбранное направление не approval ненаписанного результата или реализация.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "A94",
+      "old": {
+        "path": "scope-revision-1/before/spec-trace.md",
+        "range": [
+          567,
+          575
+        ],
+        "text": "### A94 / 41\n\n**Один проверяемый атом:** Обязательную цель не подменять вопросами о деталях\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-05/06; конечное внесение обязательно после ворот, исследование не полная сдача\n\n\nПеречитаны все строки класса «не требование»: **1, A01**, причина — только метаданные происхождения. Ни одно пожелание/ограничение не списано в этот класс. Заголовки/пустые строки исходника — структура 16 абзацев, не скрытые требования. Все 93 содержательных атома имеют REQ/AC/DNC или отдельный C-Axx; количество не заменяет ручную сверку формулировок. Изменение исходной единицы прогресса нынешним назначением указано в A65, не переписано в старой постановке.\n"
+      },
+      "current": {
+        "path": "spec-trace.md",
+        "line": 108,
+        "text": "| A94 / 41; цель не подменять деталями | Сужен → REQ-05/06, FACT-01 | Обязательное внесение Канона остаётся; просмотр031 снят | О, З | Полная 061 не завершена сдачей анализа и не ждёт формата |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:41",
+      "own_comparison": "Обязательное внесение/проверка Канона сохранены, требование смотреть031 снято отдельно.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    }
+  ],
+  "fragments": [
+    {
+      "id": "F01",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          33,
+          38
+        ],
+        "text": "### F01 `AGENTS.md`\n\n**Old → current hunk/смысл:** O58–59→C58–62: реестр, frozen перечень, граница проверки\n\n**Класс / Canon-code / destination:** Внешние правила правки самой методики/provenance. DX: не импортировать чужую frozen таблицу/запреты; живую норму границы брать M713, не внешний AGENTS. Код EØ\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 453,
+        "text": "| F01 | Оставлен → F01/DX, К | Внешний AGENTS/provenance; живые нормы отдельно M10 | Frozen перечень чужого проекта не перенесён в наш Канон |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Внешний frozen перечень не наша норма; M10 живую проверочную границу не исключает.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "F02",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          39,
+          44
+        ],
+        "text": "### F02 `README.md`\n\n**Old → current hunk/смысл:** O15→C15: completeness назван реестром практики\n\n**Класс / Canon-code / destination:** Provenance/navigation; DX, проект README7–25 уже отличает Канон/историю. Не новая норма\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 454,
+        "text": "| F02 | Оставлен → F02/DX, К | Navigation, не новая норма | README различает внешнюю основу/реестр/историю |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Навигационное переименование реестра не требует импорта вCanon.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "F03",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          45,
+          50
+        ],
+        "text": "### F03 `completeness-check.md`\n\n**Old → current hunk/смысл:** O1→C1; O3–5→C3; O7–1135→C5; O1139→C9; O1141–1167→C11; ∅после 1170→C15–24; ∅после 1187→C42–49\n\n**Класс / Canon-code / destination:** Реестр/provenance: удалённая история доступна 962172e, а не потеря норм. Новые 15–24: связи/абзацы/журналы/публичность/рекомендации/слово/язык/процессы/область;42–49: результат/сходимость/замысел/opinion/роль/термин/язык/уточнение. D0 для нормативных оригиналов, DX для переноса реестра; P не отменяет норму по partial/unconfirmed. EØ\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 455,
+        "text": "| F03 | Оставлен → F03/DX + нормативные оригиналы D0, К | Все hunks P1/3/5/9/11/15–24/42–49 | Статусы реестра не используются как off; отдельные оригиналы перечислены ниже |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Provenance реестра и все нормативные оригиналы P15–24/42–49 разделены; статусы не off.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "F04",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          51,
+          56
+        ],
+        "text": "### F04 `doc/open-questions.md`\n\n**Old → current hunk/смысл:** 12 hunks: O5–13→C5;15→7;17→9;23→15;26→∅;34–51→25–26;55→30;70→45;74→49–54;77→∅;∅после 78→58–61;81→64–87\n\n**Класс / Canon-code / destination:** **C5 процедура**, D4, уже принята 9d391ba, не вопрос. Остальное: история расчётов/источники/нерешённые вопросы §§1–12, DX; частично принятый «ответ без роста» проверяется отдельно по M714. Q3 не отменяет процедурный заголовок. EØ\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 456,
+        "text": "| F04 | Оставлен → F04/D4+DX, К | Q5 процедура отдельно, остальные вопросы не принятые решения | В current Q5 тот же источник9d391ba; Q3 не отменяет заголовок |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Q5 процедура D4; нерешённые вопросы DX не становятся решением, заголовок Q не отменяет правило.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "F05",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          57,
+          62
+        ],
+        "text": "### F05 `methodology.md`\n\n**Old → current hunk/смысл:** 10 hunks, M01–M19 ниже\n\n**Класс / Canon-code / destination:** Нормы/условия/provenance различены ниже\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 457,
+        "text": "| F05 | Оставлен → M01–M19, К | Каждый из10 hunks разложен на смыслы | Нет замены M709–718 одним словом «опытная» |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Все десять hunks разложены M01–19, не исчезли сходимость/opinion под словом partial.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "F06",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          63,
+          68
+        ],
+        "text": "### F06 `presentations/methodology.html`\n\n**Old → current hunk/смысл:** ∅после O79→C80–81; O86→C88–102; O98→C114\n\n**Класс / Canon-code / destination:** Производное отображение ролей/opinion/результата и перенумерация секций. DX: не нормативный оригинал, сайт не target061; проверено по diff, не визуально\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 458,
+        "text": "| F06 | Оставлен → F06/DX, К | Производная HTML методики, не destination061 | Diff не ошибочно засчитан визуальным тестом/нормативным оригиналом |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Производный HTML, нормативные оригиналы M читаются отдельно; визуальный PASS не заявлен.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "F07",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          69,
+          74
+        ],
+        "text": "### F07 `presentations/task-sessions.html`\n\n**Old → current hunk/смысл:** ∅после O102→C103–104\n\n**Класс / Canon-code / destination:** Производное отображение терминов/уточнения/current. DX, исходные обязанности в S01–S12\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 459,
+        "text": "| F07 | Оставлен → F07/DX, К | Производный sessions HTML | S05/S10, а не HTML задают норму терминов/current |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "HTMLsessions не destination, S01–12 сохраняют первичную обязанность.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "F08",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          75,
+          80
+        ],
+        "text": "### F08 `starter-kit/README.md`\n\n**Old → current hunk/смысл:** ∅после 33→34–35;∅после 45→48;54→57;117–120→120–122\n\n**Класс / Canon-code / destination:** Лицензии в корень/индекс, default signoff политика комплекта. DX: не обновление guards проекта. AGENTS4 требует -s, собственное отличие сохраняется; команда add комплекта не разрешает команды 061\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 460,
+        "text": "| F08 | Оставлен → F08/DX, К | Starter-kit licenses/signoff default | Команда комплекта не разрешает git действия автора; AGENTS4 остаётся |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Лицензии/подпись starter-kit не обновление проектных guards; -s остаётся обязательным.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "F09",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          81,
+          86
+        ],
+        "text": "### F09 `starter-kit/scripts/guards/guards.conf`\n\n**Old → current hunk/смысл:** O33–36→C33–37, signoff off\n\n**Класс / Canon-code / destination:** Default переносимого комплекта, DX; проектная обязательная подпись остаётся AGENTS4, не молчаливое принятие off\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 461,
+        "text": "| F09 | Оставлен → F09/DX, К | Signoff off — default внешнего комплекта | Наш обязательный -s не заменён off |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Default signoff off чужого комплекта не проектный override AGENTS4.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "F10",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          87,
+          92
+        ],
+        "text": "### F10 `starter-kit/scripts/guards/selftest/test-commit-msg.py`\n\n**Old → current hunk/смысл:** O41→C41–42; O188→C189–193\n\n**Класс / Canon-code / destination:** Строгий тестовый профиль и фиксированная committer date для amend. DX: самотест комплекта, не процесс/запуск 061; не исполнялся\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 462,
+        "text": "| F10 | Оставлен → F10/DX, К | Строгий selftest/committer date | Тестовый профиль не объявлен проектной политикой/прогоном |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Strict профиль selftest и дата amend не правило процесса061.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "F11",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          93,
+          98
+        ],
+        "text": "### F11 `starter-kit/scripts/guards/selftest/test-commit-range.py`\n\n**Old → current hunk/смысл:** O32→C32–33\n\n**Класс / Canon-code / destination:** Строгий профиль самотеста, DX, не норма 061\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 463,
+        "text": "| F11 | Оставлен → F11/DX, К | Strict selftest | Нет запуска внешнего теста и нового правила061 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Strict test не требует исполнения в061 и не доказывает её норму.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "F12",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          99,
+          104
+        ],
+        "text": "### F12 `starter-kit/scripts/guards/selftest/test-guard-commit-message.py`\n\n**Old → current hunk/смысл:** ∅после 242→C243–250;∅после 289→C298\n\n**Класс / Canon-code / destination:** Штатный no-signoff контроль отдельно от strict negative tests, DX; не отменяет project -s\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 464,
+        "text": "| F12 | Оставлен → F12/DX, К | Default no-signoff отдельно от strict negative | Negative tests не выданы за отмену подписи проекта |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "No-signoff default/test различие сохранено, подпись проекта не отключена.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "F13",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          105,
+          110
+        ],
+        "text": "### F13 `starter-kit/scripts/guards/selftest/test-pre-push.py`\n\n**Old → current hunk/смысл:** O35→C35–36\n\n**Класс / Canon-code / destination:** Строгий профиль самотеста, DX; не запускать pre-push061\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 465,
+        "text": "| F13 | Оставлен → F13/DX, К | Strict pre-push selftest | Не назначен запуск pre-push061 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Чужой pre-push selftest не разрешение запускать pre-push061.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "F14",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          111,
+          116
+        ],
+        "text": "### F14 `starter-kit/verify-portability.sh`\n\n**Old → current hunk/смысл:** O63→C63; O174→C174;∅после 276→C277–294;∅после 410→C429\n\n**Класс / Canon-code / destination:** Лицензии в проверяемом комплекте/индексе/HEAD + проба case_licenses. DX: переносимость комплекта, не обновление Канона; не запускалось\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 466,
+        "text": "| F14 | Оставлен → F14/DX, К | Portability/licenses checks | Не предложена замена guards проекта/фиктивный PASS |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Licenses portability DX, не замена guards и не фиктивный тест результата.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "F15",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          117,
+          122
+        ],
+        "text": "### F15 `task-runner.md`\n\n**Old → current hunk/смысл:** 15 hunks, R01–R18 ниже\n\n**Класс / Canon-code / destination:** Ручное принятое ab2 отдельно от программных обязанностей\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 467,
+        "text": "| F15 | Оставлен → R01–R18, К | 15 hunks, manual/runtime квалифицированы отдельно | R11 new opinion не превращает всё R в новый журнал061 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Все R01–18 отдельно, ранее принятое ab2 отличено от нового R11.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "F16",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          123,
+          129
+        ],
+        "text": "### F16 `task-sessions.md`\n\n**Old → current hunk/смысл:** 12 hunks, S01–S12 ниже\n\n**Класс / Canon-code / destination:** Подготовка/промпты/перенос/приёмка\n\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 468,
+        "text": "| F16 | Оставлен → S01a–S12, К | 12 hunks, обе вставки S66 раздельно | Old S66 не содержит уточнения цели, new содержит |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Обе части S66 и остальные hunks отдельно; old не получил нового уточнения задним числом.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "M01",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          132,
+          137
+        ],
+        "text": "### M01 10–15→10\n\n**Норма / условие / provenance:** История редакций в Git, реестр практики\n\n**Canon / code evidence / disposition и будущий шаг:** README7–25; EØ; DX, не переносить историю как норму\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 469,
+        "text": "| M01 | Оставлен → M01/DX, К | История Git/реестр, не нормативный импорт | История редакций не стала правилом проекта |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "История редакций Git/реестр остаётся provenance, не новая нормаCanonical.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "M02",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          138,
+          143
+        ],
+        "text": "### M02 ∅после 158→154–155\n\n**Норма / условие / provenance:** Оркестратор вне списка решает с доводом в log; owner список+ворота; сомнение owner\n\n**Canon / code evidence / disposition и будущий шаг:** process15–24/199–225, ADR0010; EG не полное исполнение; D5/D0. P46 unconfirmed — provenance, не off. Q86–87 — вопрос, не отмена gates\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 470,
+        "text": "| M02 | Оставлен → M02/D5+D0, К/П | Кто решает, довод/log, closed list/gates/сомнение | Unconfirmed P46 не выключает полномочия; ADR0010 сохранён |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Закрытый список/gates/сомнение owner, остальные решения с доводом/log; D5 не отменяет D0.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "M03",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          144,
+          149
+        ],
+        "text": "### M03 269→266\n\n**Норма / условие / provenance:** DoD: результат на действующем месте, не только task\n\n**Canon / code evidence / disposition и будущий шаг:** process175–197; EØ смысловой приёмки; D1, source→место в AC05\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 471,
+        "text": "| M03 | Сужен → M03/D1, К/О | Результат на своём месте для Канона; контракт031 снят | Spec AC-05 требует реального места/сверки, не анализа только |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "DoD действующего результата остаётся для Канона, снят только форматный результат031.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "M04",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          150,
+          155
+        ],
+        "text": "### M04 544→541, части 1–2\n\n**Норма / условие / provenance:** Всё не-код и читаемый людьми контракт в коде; ровно одно конкретное место/status/шаг не позже проверки реализации\n\n**Canon / code evidence / disposition и будущий шаг:** process183–193; EØ; D1, будущие шаги в trace; default «код» без этой оценки запрещён\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 472,
+        "text": "| M04 | Сужен → M04/D1, К/О | Один destination/status/шаг, включая human-readable code; форматная поставка снята | README/process/ADR названы конкретно, честный «код» не подменяет документ |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Любой не-код и human-readable контракт в коде требуют одного места/status/шага; нельзя defaultкод.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "M05",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          156,
+          161
+        ],
+        "text": "### M05 тот же hunk, части 3–4\n\n**Норма / условие / provenance:** Самодостаточность; approved immutable; копии/метки/исключения форматов; current только адреса, reader сначала current\n\n**Canon / code evidence / disposition и будущий шаг:** process187–197, ADRindex3–6; EØ; D1. Не править 031 после ворот, только новый format к В02\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 473,
+        "text": "| M05 | Сужен → M05/D1, К/О | Самодостаточность/immutable/копии/метки/исключения/current-first остаются; новый format снят | Нет требования создавать031; current только адреса, approved не target |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Самодостаточность/immutable/copy/labels/исключения/current-first сохранены, новая031 не назначена.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "M06",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          162,
+          167
+        ],
+        "text": "### M06 тот же hunk, части 5–6\n\n**Норма / условие / provenance:** Current тем же шагом переноса и при смене места обновляется; чужой repo отдельный MR/задача; новое ADR со связью\n\n**Canon / code evidence / disposition и будущий шаг:** process183–197, AGENTS16; EØ; D1. First-transfer уточнён S192, не ждать format\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 474,
+        "text": "| M06 | Сужен → M06/D1, К/О | Одновременный current/смена места/новый ADR со связью; внешняя поставка не назначена | Первый даже ADR сразу с current, следующий дополняет |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Тот же шаг current/смена места/новый связанныйADR сохранены, внешняя поставка не назначена.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "M07",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          168,
+          173
+        ],
+        "text": "### M07 ∅после 711→709–711\n\n**Норма / условие / provenance:** Порог: >1 нормы или механизм; норма=абзац/пункт M/task-*, не registry/OQ. Замысел 3 поля; свежий собеседник другой семьи если доступен,≤10, факты без рассуждений, спорно/запись\n\n**Canon / code evidence / disposition и будущий шаг:** process5–12 не отключает; EØ; D0: внешняя основа, текст не пересказывать. В task review instructions применять по этому anchor; текущая ограниченная С1п не создаёт подагентов\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 475,
+        "text": "| M07 | Оставлен → M07/D0, К | Порог >1 нормы/механизм, 3 поля, fresh/different if available/≤10/facts/spорное/запись | Условия/исключения источника сохранены; partial не отменяет замысел |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Порог>1/механизм, три поля, fresh/family if available/facts≤10/spорное/запись остались D0.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "M08",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          174,
+          179
+        ],
+        "text": "### M08 тот же hunk→711\n\n**Норма / условие / provenance:** Замысел — не доказательство/не отклонённая находка/не сокращает цикл/не согласование/не заход; без границы для норм самой проверки, mixed split\n\n**Canon / code evidence / disposition и будущий шаг:** process5–12; EØ; D0, условия не терять при применении задания проверяющим\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 476,
+        "text": "| M08 | Оставлен → M08/D0, К | Замысел не proof/не отклонённая находка/не цикл/не согласование; mixed split | Авторская граница не освобождает от проверки цели |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Замысел не proof/не отклонённая находка/не цикл/не согласование, mixed split не утрачен.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "M09",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          180,
+          185
+        ],
+        "text": "### M09 тот же hunk→712\n\n**Норма / условие / provenance:** Первая строка линзы обход — граница, иначе вернуть; граница не исключает цель; выход за границу сам требует классификации\n\n**Canon / code evidence / disposition и будущий шаг:** process5–12; EØ; D0. Не превращать авторскую границу в иммунитет\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 477,
+        "text": "| M09 | Оставлен → M09/D0, К | Граница первая, проверяема, выход классифицируется | Не допускается граница, исключающая цель |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Первая строка границы/запрет исключить цель/классификация выхода остаются, D0 не иммунитет.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "M10",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          186,
+          191
+        ],
+        "text": "### M10 тот же hunk→713\n\n**Норма / условие / provenance:** База до первой правки + база цикла; «не по адресу» только выдержка и не внесла/не опаснее/не опирается/не должна закрыть; бремя автора/сомнение внесена; цель/дефект не вне предмета\n\n**Canon / code evidence / disposition и будущий шаг:** process5–12; EØ; D0, доказательство в review, не grep/hash\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 478,
+        "text": "| M10 | Оставлен → M10/D0, К | База+базацикла, все условия «не по адресу», бремя/сомнение | Не заменены доказательства одной меткой/hash |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "База до правки+базацикла и все условия не-по-адресу/бремя/сомнение сохранены, не hash-only.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "M11",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          192,
+          197
+        ],
+        "text": "### M11 тот же hunk→713\n\n**Норма / условие / provenance:** Whole-read + связь для расширения соседей; вопрос 4 поля, reviewer предлагает/автор вносит; >3 critical-equivalent сигнал owner; privacy не вне предмета\n\n**Canon / code evidence / disposition и будущий шаг:** process125–144/AGENTS15; EØ; D0+D4, существующая процедура вопросов не отменена\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 479,
+        "text": "| M11 | Оставлен → M11/D0+D4, К | Whole read/связь/4 поля/авторвносит/>3сигнал/privacy | Нет blanket выноса по границе; privacy не вне scope |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Whole-read/связь/четыре поля/авторвносит/>3сигнал/privacy остаются D0/D4.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "M12",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          198,
+          203
+        ],
+        "text": "### M12 тот же hunk→714\n\n**Норма / условие / provenance:** Ответ в порядке сузить/ослабить/удалить/вопрос; новое имя/правило отдельная задача; выбор старого чтения vs новое правило по цели; открыто+не утверждать опровергнутое+вопрос оформлен\n\n**Canon / code evidence / disposition и будущий шаг:** process5–12/125–144; EØ; D0/D4. Не создавать новую задачу без owner word\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 480,
+        "text": "| M12 | Оставлен → M12/D0+D4, К | Порядок без роста, новое понятие vs уточнение, условия OQ | Новая задача не создаётся автором; открытый вопрос не стал ответом |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Сначала сужение/ослабление/удаление/вопрос; новое vs уточнение и условия OQ не отменены.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "M13",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          204,
+          209
+        ],
+        "text": "### M13 тот же hunk→714\n\n**Норма / условие / provenance:** Одна попытка/раздельные исправления; новая существенная→откат+вопрос; «не по адресу» не откат; last ceiling исключение по§18\n\n**Canon / code evidence / disposition и будущий шаг:** process5–12; EØ; D0, старые потолки не сбрасывать\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 481,
+        "text": "| M13 | Оставлен → M13/D0, К | Одна попытка/раздельность/новаясущественная→откат/исключениеceiling | Потолки и история не сброшены правкой |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Одна попытка/раздельность/новаясущественная/откат/исключениеceiling сохранены без сброса истории.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "M14",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          210,
+          215
+        ],
+        "text": "### M14 тот же hunk→715\n\n**Норма / условие / provenance:** Неисполненная спец пометка; существенная требует вход+две чтения/нет итога; дописать трассу/иначе поверхностная; опровержение подтверждает следующий; implementation свидетель\n\n**Canon / code evidence / disposition и будущий шаг:** process5–12; EØ; D0. Не снижать критичность лишь по отсутствию runtime\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 482,
+        "text": "| M14 | Оставлен → M14/D0, К | Не прогонялось/trace/два итога/опровержение/implementation witness | EØ не снижает критичность автоматически |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Неисполненность маркировать, конкретный вход/два чтения/трасса/следующий проверяющий, не снять по runtime.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "M15",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          216,
+          221
+        ],
+        "text": "### M15 тот же hunk→715–718\n\n**Норма / условие / provenance:** Таблица legal/illegal/why, судья каждой формы, batch/version/change-list; нормы о проверке только исполнимость 2–3 цикла/история, mixed split;718 причина/наблюдение\n\n**Canon / code evidence / disposition и будущий шаг:** process5–12; EØ; D0, применение не runtime PASS, причину не новый override\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 483,
+        "text": "| M15 | Оставлен → M15/D0, К | Legal/illegal/why, судья, batch/version, нормы проверки2–3цикла/mixed/reason | Норма проверки не требует самопроверки линзой обхода; практика отдельно |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Legal/illegal/why/судья/batch/version/mixed и 2–3цикла для проверочных норм не исчезли.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "M16",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          222,
+          227
+        ],
+        "text": "### M16 1110→1118–1119\n\n**Норма / условие / provenance:** Checklist: действующий результат вне task\n\n**Canon / code evidence / disposition и будущий шаг:** process175–197; EØ; D1. Для 045 нужен отдельный per anchor/per DNC протокол плана, ссылка Canon не исправление плана\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 484,
+        "text": "| M16 | Сужен → M16/D1, К/О | Checklist результата Канона; протокол плана045 снят | В consequence больше нет задания закрыть блокер045 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Проверка мест результата остаётся AC05; задача чинить checklist045 снята.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "M17",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          228,
+          233
+        ],
+        "text": "### M17 ∅после 1540→1550–1551\n\n**Норма / условие / provenance:** Second opinion перед рекомендацией с последствиями; fresh/different family if available; facts-only≤10; log текст/итог, recommendation строка/ref; default on/explicit owner-off; не помощник/не проверка/не owner decision\n\n**Canon / code evidence / disposition и будущий шаг:** process199–225/README40 off только helpers; EG не механизм opinion; D0+D5. P45partial не отключение, R232 профиль отдельно\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 485,
+        "text": "| M17 | Оставлен → M17/D0+D5, К | Opinion default on/owner-off, facts≤10/fresh/different/log/recommendation, неhelper/неgate | Отключение helpers и partial не отключают opinion; профильR11 отдельно |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Opinion перед consequential recommendation, defaulton/owner-off/facts/fresh/log/ref/неhelper не отменён.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "M18",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          234,
+          239
+        ],
+        "text": "### M18 1551→1562;1559→1570\n\n**Норма / условие / provenance:** Язык принимающего без режима; замысел НЕ согласование; согласование условно по цене/проверяемости и после макета\n\n**Canon / code evidence / disposition и будущий шаг:** AGENTS17/core инструкция не смысловой контроль; EØ; D0. Не выключать замысел тем, что optional согласование ещё не прогнано\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 486,
+        "text": "| M18 | Оставлен → M18/D0, К | Язык принимающего независимо режима; замысел≠условное согласование | AGENTS17 реализует язык как правило, не доказывает смысловой контролёр |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Язык принимающего не зависит от режима; замысел отдельно от optional согласования.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "M19",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          240,
+          246
+        ],
+        "text": "### M19 1699→1710\n\n**Норма / условие / provenance:** Подпись frozen снимка, внешний перечень\n\n**Canon / code evidence / disposition и будущий шаг:** DX, provenance, не переносить чужую таблицу/заморозку; живые выводы не исключать по одному названию\n\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 487,
+        "text": "| M19 | Оставлен → M19/DX, К | Подпись исторического frozen перечня | Чужая frozen таблица не импортирована и не иммунитет живым выводам |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Frozen подпись DX, не иммунитет живой норме проверки.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "S01a",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          249,
+          254
+        ],
+        "text": "### S01a 66→66\n\n**Обязательство / условие:** Old: целый prompt первым, cwd/путь; **уточнения цели в old НЕТ**. Current добавляет machine-tail общий+сессионный/код/единицу\n\n**Canon / code / disposition:** process66–88; EJ/EL лишь часть; D0+D3, нет переноса общего prompt в Canon\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 488,
+        "text": "| S01a | Оставлен → S01a/D0+D3, К | Machine-tail/код/единица, старый prompt/cwd | EJ/EL не объявлены передачей всего prompt |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Первое полное сообщение/cwd + общий/сессионный machine-tail/code/unit остаются D0/D3.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "S01b",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          255,
+          260
+        ],
+        "text": "### S01b 66→66\n\n**Обязательство / условие:** Если цель уточнена — в том же первом сообщении перед old message, дата/source/действует уточнение, old не удалять\n\n**Canon / code / disposition:** AGENTS2 сохраняет слово, отдельный механизм не доказан; EØ; D0, применять при запуске, не подделывать старый source\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 489,
+        "text": "| S01b | Оставлен → S01b/D0, К | Уточнение перед old, дата/source/old сохранён | Новая ownerinput не переписывает исходную постановку |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Уточнение раньше old с датой/source, old сохранить; ни историческая постановка ни новый scope не потеряны.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "S02",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          261,
+          266
+        ],
+        "text": "### S02 69→69\n\n**Обязательство / условие:** Новая без history; перед повтором закрыть агента и все команды; каждый launch парно до агента/номер\n\n**Canon / code / disposition:** process77–88; EL/EJ регистрация не stop group; D3/D0\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 490,
+        "text": "| S02 | Оставлен → S02/D3+D0, К | Новаябезhistory/stopall/retry/парныйlaunchдоагента | EL регистрирует, но не доказывает stopgroup |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Новая безhistory/stopall перед повтором/парныйlaunch доагента остаются, EL не stopgroup.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "S03",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          267,
+          272
+        ],
+        "text": "### S03 ∅после 81→82\n\n**Обязательство / условие:** Current артефакт будущего переноса\n\n**Canon / code / disposition:** process175–197; EØ; D1, не создавать сейчас\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 491,
+        "text": "| S03 | Сужен → S03/D1, К/О | Артефакт current при переносе Канона; форматное назначение снято | Автор не создаёт current до переноса |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Current будущий артефакт при реальном переносе, не обязанность создать при draft.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "S04",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          273,
+          278
+        ],
+        "text": "### S04 86–87→87–88\n\n**Обязательство / условие:** Log фиксирует каждый запуск; агент не пишет launcher log\n\n**Canon / code / disposition:** process77–101; EJ/EL; D3\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 492,
+        "text": "| S04 | Оставлен → S04/D3, К | Каждый launch log, не агент | Author progress не содержит собственного launch |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Каждый launch log запускающего, не агентский; журнал не даёт право переписывать историю.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "S05",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          279,
+          284
+        ],
+        "text": "### S05 ∅после 106→108–111\n\n**Обязательство / условие:** Задача/spec/ворота; сессия=запуск; подзадача=пункт без ворот\n\n**Canon / code / disposition:** process151–160 по owner2026-10-15: иной смысл подзадачи, явный semantic override; EL модель запуска не устанавливает смысл; D2\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 493,
+        "text": "| S05 | Оставлен → S05/D2, К | Термин методики и project semantic override раздельно | Подзадача проекта не сведена к счётчику; источник/приёмка сохранены |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Задача/spec/ворота, сессия=запуск, подзадача=пункт; иной project смысл явно override D2.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "S06",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          285,
+          290
+        ],
+        "text": "### S06 117→122\n\n**Обязательство / условие:** Вторая строка spec про current\n\n**Canon / code / disposition:** process175–197; EØ; D1/D0, первая/вторая сохранены в 061\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 494,
+        "text": "| S06 | Оставлен → S06/D1+D0, К | Служебная строка spec о current | Literal current-строка сохранена; ранее квалифицированный сдвиг не новая правка |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Служебная current-строка сохранена буквально; сдвиг со2на3 квалифицирован, не новое требование этой правки.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "S07",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          291,
+          296
+        ],
+        "text": "### S07 ∅после 128→134–137\n\n**Обязательство / условие:** Результат/место/шаг либо честный код; не названное место→вопрос с сроком\n\n**Canon / code / disposition:** process183–197; EØ; D1, В02 не ответ автора\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 495,
+        "text": "| S07 | Сужен → S07/D1, К/О | Канонические destination/шаг/честныйкод/вопросеслинетместа; снятые места не выбирать | Spec result table самодостаточна без восстановления В02 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Место/status/шаг или честныйкод/вопроссосроком сохранены, снятые destinations не переоткрыты.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "S08",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          297,
+          302
+        ],
+        "text": "### S08 141→150\n\n**Обязательство / условие:** При правке spec сохранить вторую строку\n\n**Canon / code / disposition:** process175–197; EØ; D1/D0, неизменность literal проверяется\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 496,
+        "text": "| S08 | Оставлен → S08/D1+D0, К | При правке сохранить current-строку | Сравнение raw before/new на literal смысл/строку, не переутверждение031 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Сохранить literal current-строку при правке, approved история immutable.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "S09",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          303,
+          308
+        ],
+        "text": "### S09 174→183\n\n**Обязательство / условие:** Третья строка plan про current\n\n**Canon / code / disposition:** process175–197; EØ; D1/D0, plan сейчас не создаётся\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 497,
+        "text": "| S09 | Оставлен → S09/D1+D0, К | Третья строка будущего plan о current | Старый plan readonly, обязанность следующему автору не потеряна |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Будущий plan имеет третью current-строку; старый план не надо править сейчас.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "S10",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          309,
+          314
+        ],
+        "text": "### S10 182→191–192\n\n**Обязательство / условие:** Каждый результат отдельный шаг/DoD; первый перенос current, прочие дополняют/копии; исключение только честный код\n\n**Canon / code / disposition:** process175–197; EØ; D1/REQ05/AC05, включая Canon-first\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 498,
+        "text": "| S10 | Сужен → S10/D1, К/О | Каждый результат/DoD/первыйcurrent/пополнение/копии/честныйкод остаются; формат снят | Один README уже требует current, ждать остальных нельзя |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Каждый результат отдельный шаг/DoD; первыйcurrent/дальшеадреса/copies/честныйкод остались.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "S11",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          315,
+          320
+        ],
+        "text": "### S11 201→211\n\n**Обязательство / условие:** При правке plan сохранить третью строку\n\n**Canon / code / disposition:** process175–197; EØ; D1/D0\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 499,
+        "text": "| S11 | Оставлен → S11/D1+D0, К | Сохранение третьей строки plan | В этой сессии plan не правится |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Третью строкуplan при правке сохранить, план текущей сессии не создаётся.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "S12",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          321,
+          327
+        ],
+        "text": "### S12 307→317–324\n\n**Обязательство / условие:** С6 все места/current/сверка копии/единственность поиском/ссылки/метки/literal строки/MR/код как контракт; gitdiffstat только task в repo\n\n**Canon / code / disposition:** process187–197 строже по всему Canon; EØ; D1; pin старых задач сохранить, формальный guard неполная приёмка\n\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 500,
+        "text": "| S12 | Сужен → S12/D1, К/О | Все канонические места/current/copy/unique/links/literal/MR/codecontract;031 редакция снята | Проектный запрет ссылок строже для всего Канона; guard не semantic PASS |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Все действующие места/current/unique/copy/labels/links/literal/MR/codecontract сохранены D1.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "R01",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          330,
+          335
+        ],
+        "text": "### R01 24→24\n\n**Обязательство / условие:** Коды А/Ф/Л по линзам\n\n**Canon / code / disposition:** process88; EL неполный meeting runner; D3/D0\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 501,
+        "text": "| R01 | Сужен → R01/D3+D0, К/О | Нормативные коды линз; их форматное кодирование снято | Ручная часть process88 и EL не полный meeting runner |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Коды А/Ф/Л нормативно сохраняются, форматное кодирование031 снято.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "R02",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          336,
+          341
+        ],
+        "text": "### R02 78→78\n\n**Обязательство / условие:** Порядковый launch№ в progress\n\n**Canon / code / disposition:** process77–86; EJ/EL; D3\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 502,
+        "text": "| R02 | Сужен → R02/D3, К/О | Launch номер; перенос в формат031 снят | Парный запуск остаётся правилом process77–86 |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Номерlaunch и парнаярегистрация не сняты с отказом от031.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "R03",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          342,
+          347
+        ],
+        "text": "### R03 84→84\n\n**Обязательство / условие:** Журнал сигнал, артефакт/independent review доказательство; не антифальсификация\n\n**Canon / code / disposition:** process63/102–104; EJ не доказывает честность строки; D3\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 503,
+        "text": "| R03 | Сужен → R03/D3, К/О | Сигнал≠доказательство; форматный маршрут снят | EJ не подтверждает честность артефакта |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Журнал сигнал, доказательство по артефакту/review; EJ не антифальсификация.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "R04",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          348,
+          353
+        ],
+        "text": "### R04 88–91→88–91: keyword\n\n**Обязательство / условие:** Целое слово/знак после; стоп/поправка colon; start одна/agent первая; session по registered launch, линзы по code\n\n**Canon / code / disposition:** process66–101; EJ/EL; D3,031semantic conflict в impact, не только refs\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 504,
+        "text": "| R04 | Сужен → R04/D3, К/О | Keyword/start/session/launch/lenses; expressibility031 снята | Old→new норма сохранена без новой форматной REQ/AC |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Keyword/colon/первыйединыйstart/sessionregistered/lenscode сохранены, expressibility снята.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "R05",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          354,
+          359
+        ],
+        "text": "### R05 тот же hunk: lifetime\n\n**Обязательство / условие:** Group именована до старта, id+starttime, остановить всех и команды перед retry/нет процессов; manual закрыть окно\n\n**Canon / code / disposition:** process77–88 ручная часть; EL не runtime; D3/D0, декларации REQ27/29 не выкинуть\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 505,
+        "text": "| R05 | Сужен → R05/D3+D0, К/О | Lifetime/id+time/stopall/retry/manual; декларации031 сняты | Наличие launch не доказывает остановку группы |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Идентичность группы/id+time до запуска и stopall перед retry/manual закрыть окно сохранены.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "R06",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          360,
+          365
+        ],
+        "text": "### R06 тот же hunk: correction\n\n**Обязательство / условие:** append-only quote10–30/вся короткая, текущий k, не единица/не живость; skip/late-start не чинит\n\n**Canon / code / disposition:** process89–104; EJ; D3\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 506,
+        "text": "| R06 | Сужен → R06/D3, К/О | Append-only correction/quote/k/notlife/skip;031 маршрут снят | Не допускается correction как новая единица/живость |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Quote10–30/короткая целиком/k текущий/notunit/notlife/skipнечинит остаются D3.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "R07",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          366,
+          371
+        ],
+        "text": "### R07 тот же hunk: done\n\n**Обязательство / условие:** Сравнить со startN, k>N;   no-start/second-start не completion; final повтор same k/keyword; low N три исхода/overstated с artifact; new session только запускающий\n\n**Canon / code / disposition:** process70–107; EJ startN, не artifact; D3, отдельная изолирующая N пара в impact\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 507,
+        "text": "| R07 | Сужен → R07/D3, К/О | StartN/overstated/повтор/исключения/launcher; форматные пары сняты | K сравнивается со startN, не финальным denominator |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "StartN, k>N, invalid no/secondstart, samefinal, три исходаlowN и launcher-only остались.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "R08",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          372,
+          377
+        ],
+        "text": "### R08 93→93–94\n\n**Обязательство / условие:** Только launcher launch+парный log; форма поверхностна, существенные исключения списком; skip по artifact\n\n**Canon / code / disposition:** process77–104; EJ/EL лишь формальная часть; D3\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 508,
+        "text": "| R08 | Сужен → R08/D3, К/О | Launcher pair/исключения/skipartifact; форматный маршрут снят | Форма поверхностна только вне перечисленных существенных исключений |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Launcher pair/формаповерхностна кроме списка/skipпоартефакту сохранены, не blanket простить.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "R09",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          378,
+          383
+        ],
+        "text": "### R09 104→105–120\n\n**Обязательство / условие:** Каждый«Сессия»новый start, full machine-tail, инструмент если есть,**сессионная часть старше общей включая profile**\n\n**Canon / code / disposition:** process66–76/88; EJ инструмент есть, не передача всего prompt; D3/D0\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 509,
+        "text": "| R09 | Сужен → R09/D3+D0, К/О | Новыйsession/start/fulltail/tool/sessionpriority;031 представление снято | Сессионная часть старше общей включая profile |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "КаждаяСессия новыйstart/fulltail/tool/sessionpriority включаяprofile сохраняются D3/D0.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "R10",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          384,
+          389
+        ],
+        "text": "### R10 143→159–160\n\n**Обязательство / условие:** Running group/time до request; launches append-only номер/code/offset/time/group/time\n\n**Canon / code / disposition:** process33 manual override; ES не runtime state, EL без полей; D0/override сохранить, в impact намерения отдельно\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 510,
+        "text": "| R10 | Сужен → R10/D0+manualoverride, К/О | Условия running/appendlaunch доrequest остаются; новые данные сняты | ES tmp+renameTask не выдан за state, отсутствие реализации не off |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Runninggroup/time+appendlaunch доrequest/offset/code/number/time сохранены условнораннеру; ES не state.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "R11",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          390,
+          395
+        ],
+        "text": "### R11 ∅после 214→232–233\n\n**Обязательство / условие:** Opinion класс A/reasoning/effort3, для security/money/data/norm 4; different family if available; отдельная модель проекта\n\n**Canon / code / disposition:** process240–244 профиль не доказывает selector; EØ; D0, не менять модели этой сессии\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 511,
+        "text": "| R11 | Сужен → R11/D0, К/О | Opinion профильA/3–4/different/отдельнаямодель; форматное представление снято | Профиль не доказательство селектора и не разрешение менять config |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Opinion A/reasoning/effort3–4/familyifavailable/отдельная модель; config менять нельзя.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "R12",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          396,
+          401
+        ],
+        "text": "### R12 256–258→275–277\n\n**Обязательство / условие:** Correction не k, завершение startN, таймер по росту k; С5/С5д только новый artifact count, С5п findings, distinct k без start/correction/repeat\n\n**Canon / code / disposition:** process63/102–108; EJ частично, полный artifact/timer EØ; D3/D0\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 512,
+        "text": "| R12 | Сужен → R12/D3+D0, К/О | K/timer/startN/artifactcount/distinct/С5д/С5п;формат снят | Correction не сбрасывает безпрогресса и не считается единицей |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Distinctk/correctionnotunit/startN/timer/artifactcountsС5/С5д/С5п сохранены безruntimeclaim.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "R13",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          402,
+          407
+        ],
+        "text": "### R13 555→574\n\n**Обязательство / условие:** Вне совещания stop останавливает group перед exit\n\n**Canon / code / disposition:** process33 manual; EØ; D0+manual override, декларативный effect в impact\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 513,
+        "text": "| R13 | Сужен → R13/D0+manualoverride, К/О | Stop group передexit условногораннера; effect проектирование снято | Норма stop не исчезла из-за EØ |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Stopgroup передexit остаётся условием раннера/manualoverride; effectконтракт не проектировать.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "R14",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          408,
+          413
+        ],
+        "text": "### R14 571–572→590–595\n\n**Обязательство / условие:** Group до request, n=max launches/log+1; save append launch до line; offset после линии/profile и result-count snapshot; running до call\n\n**Canon / code / disposition:** process77–88/33; EL только часть, ES не подтверждение runtime; D0/D3\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 514,
+        "text": "| R14 | Сужен → R14/D0+D3, К/О | Group/maxnumber/save-beforeline/offset/snapshot/running;031 данные сняты | EL часть порядка, не весь runtime; все условия остаются источником |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Group/maxnumber/savebeforeline/offset/profile/resultsnapshot/running порядок сохранён, EL узкий.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "R15",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          414,
+          419
+        ],
+        "text": "### R15 577–579→600–602\n\n**Обязательство / условие:** Постоянный отказ/retry/бездействие→stop all+verify; meeting failed/halt; tail с off_p только текущий code\n\n**Canon / code / disposition:** process33/87–88; EØ; D0, не выдавать сигнатуру stop-group за API\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 515,
+        "text": "| R15 | Сужен → R15/D0, К/О | Retry/fail/inactivity/stopall/verify/meeting/tail; API проектирование снято | Нельзя выдать псевдокод за существующую операцию |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Retry/permanentfail/inactivity stopall+verify/meetinghalt/tailcode сохранены, псевдокод не API.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "R16",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          420,
+          425
+        ],
+        "text": "### R16 ∅после 584→608\n\n**Обязательство / условие:** Существенные journal нарушения→log, не autorepair turn\n\n**Canon / code / disposition:** process95–121; EJ неполный runner; D3/D0\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 516,
+        "text": "| R16 | Сужен → R16/D3+D0, К/О | Journal существенные→log, не autorepair;031 маршрут снят | Нынешняя карта не требует автоматического нового хода |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Существенноеjournalнарушение log, не новыйautomaticturn; снят только форматный маршрут.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "R17",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          426,
+          431
+        ],
+        "text": "### R17 ∅после 656→681\n\n**Обязательство / условие:** Cleanup прежней group только после lock, проверить starttime; нет group fallback task processes/иначе В13\n\n**Canon / code / disposition:** process33 manual; EØ; D0, конкретный внешний контракт/декларация в impact\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 517,
+        "text": "| R17 | Сужен → R17/D0, К/О | Lock→timecheck→cleanup/fallback/В13; внешнийконтракт снят | Не перепутаны проверка identity и право останавливать чужой процесс |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Lock доcleanup, starttimecheck/fallback/В13 сохранены; внешнее API не выдумано.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    },
+    {
+      "id": "R18",
+      "old": {
+        "path": "scope-revision-1/before/method-delta.md",
+        "range": [
+          432,
+          438
+        ],
+        "text": "### R18 ∅после 690→716\n\n**Обязательство / условие:** Приёмочные примеры keywords/correction/startN/final exceptions/launch authority/retry all/quote\n\n**Canon / code / disposition:** process60–121; EJ узкое; D3/D0, данные пар не факт полного runtime PASS\n\n"
+      },
+      "current": {
+        "path": "method-delta.md",
+        "line": 518,
+        "text": "| R18 | Сужен → R18/D3+D0, К/О | Внешние примеры keyword/correction/startN/exceptions/authority/retry/quote остаются; пары031 сняты | Источник примеров сохранён, runtime PASS не заявлен |"
+      },
+      "basis": "owner-input:3–15; owner-gate-decisions:8–22; task/message:15",
+      "own_comparison": "Keyword/correction/startN/exceptions/launchauthority/retryall/quote примеры сохранены нормой, пары031 сняты.",
+      "outcome": "Смысловая сверка old→current выполнена; сохранённая часть найдена, снятая допустима. Первичные нормы проверяются отдельно в N4."
+    }
+  ]
+}

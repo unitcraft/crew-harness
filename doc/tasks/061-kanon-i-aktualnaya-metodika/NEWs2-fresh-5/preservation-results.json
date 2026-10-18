@@ -1,0 +1,95 @@
+{
+  "protected_count_before": 610,
+  "protected_count_after": 610,
+  "changed": [],
+  "removed": [],
+  "unexpected_added": [],
+  "head_equal": true,
+  "git_file": {
+    "sha256": "741e6b5bfc2977a31fab7c5bf0e2c6b098db8b1e3cd6ab58266ba184b629da42",
+    "bytes": 72
+  },
+  "subject": {
+    "spec.md": {
+      "sha256": "231f86a46022d5e592a2d9b001e8ee00e4ffb180094701f82c79dee88dcc4570",
+      "bytes": 33427,
+      "frozen_equal": true,
+      "manifest_equal": true
+    },
+    "analysis.md": {
+      "sha256": "e830c14b03532526583b1bf2e520bfc5479f10cb34d16d15060cae21393ce3af",
+      "bytes": 14830,
+      "frozen_equal": true,
+      "manifest_equal": true
+    },
+    "031-impact.md": {
+      "sha256": "7b6414860e7eab13981758c8fc5bfdb4df6b9dfff9f248ae76506dc53f7ca2cb",
+      "bytes": 53104,
+      "frozen_equal": true,
+      "manifest_equal": true
+    },
+    "spec-trace.md": {
+      "sha256": "f83c3b36d5c4f846d0a0c8d1e7daaa972c9e040f7aa8942231bb71b0746e9038",
+      "bytes": 43116,
+      "frozen_equal": true,
+      "manifest_equal": true
+    },
+    "method-delta.md": {
+      "sha256": "c3ec6b250aef815b37a10afd2d1a28728630816739b357a7f25e6ecedef0e065",
+      "bytes": 34174,
+      "frozen_equal": true,
+      "manifest_equal": true
+    },
+    "source-inventory.md": {
+      "sha256": "17bcbc65e7337143eb8d45557dfbc495d025a3880e08e383b48c5ec92fae320b",
+      "bytes": 16390,
+      "frozen_equal": true,
+      "manifest_equal": true
+    },
+    "owner-gate-decisions.md": {
+      "sha256": "af2adfbcec277365a40d48684776921a4467930c3ed55024c77dbe60cc1cd2c9",
+      "bytes": 9082,
+      "frozen_equal": true,
+      "manifest_equal": true
+    }
+  },
+  "plugin": {
+    "journal.ts": {
+      "git_bytes": 58601,
+      "git_sha256": "211eb4324489886444287bb5a266adacfffd55185d4e9f64923a563967006e93",
+      "worktree_equal": true
+    },
+    "task-folders.ts": {
+      "git_bytes": 9078,
+      "git_sha256": "6e13014ad6fe52a61d27b2ec3110df0d9f3f531365fbd3856cdd869fa31dadd7",
+      "worktree_equal": true
+    },
+    "tasks.ts": {
+      "git_bytes": 29835,
+      "git_sha256": "c5eade92e01b73a37b0e78b83c8228fd1e5f548aa1fb06360f7049fcab919896",
+      "worktree_equal": true
+    },
+    "core.ts": {
+      "git_bytes": 309494,
+      "git_sha256": "75543b85249bd6d135b917c2bb3347c0140f33ea222afc4ad90d023f03b29384",
+      "worktree_equal": true
+    },
+    "index.ts": {
+      "git_bytes": 154772,
+      "git_sha256": "e37562e25903e72067fd39fe463ea6d864dd8dd043f1d690e11b5532e0b6f5f1",
+      "worktree_equal": true
+    },
+    "README.md": {
+      "git_bytes": 88498,
+      "git_sha256": "d16abd39650d4b5158b37a4a0d3a3dcaf5c31185b6ac714eef51887d700c13f9",
+      "worktree_equal": true
+    },
+    "progress.ts": {
+      "git_bytes": 37088,
+      "git_sha256": "baf360da61c51447b60d07d74f1c4201a9939b47a923c7b82f839e09cf426f41",
+      "worktree_equal": true
+    }
+  },
+  "proposed_current_exists": false,
+  "proposed_format_exists": false
+}

@@ -1,0 +1,25 @@
+{
+  "old": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+  "new": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+  "bytes": 14465,
+  "sha256": "cb16e307232d5a39f1cc4d5db74e8f457a709c118a7ba60e07ee1910ecc2c62c",
+  "exit": 0,
+  "paths": [
+    "AGENTS.md",
+    "README.md",
+    "completeness-check.md",
+    "doc/open-questions.md",
+    "methodology.md",
+    "presentations/methodology.html",
+    "presentations/task-sessions.html",
+    "starter-kit/README.md",
+    "starter-kit/scripts/guards/guards.conf",
+    "starter-kit/scripts/guards/selftest/test-commit-msg.py",
+    "starter-kit/scripts/guards/selftest/test-commit-range.py",
+    "starter-kit/scripts/guards/selftest/test-guard-commit-message.py",
+    "starter-kit/scripts/guards/selftest/test-pre-push.py",
+    "starter-kit/verify-portability.sh",
+    "task-runner.md",
+    "task-sessions.md"
+  ]
+}

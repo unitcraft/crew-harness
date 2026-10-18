@@ -1,0 +1,16 @@
+{
+  "protected_count": 608,
+  "changed_protected": [],
+  "unexpected_new_project_files": [],
+  "external_equal": {
+    "045": true,
+    "013": true,
+    "method": true
+  },
+  "dotgit_before_missing": true,
+  "dotgit_after_only_not_before": {
+    "sha256": "d87b5472f365aeff8558032d4686af35ed8d2095c1b298a295e7f1a1429beb63",
+    "bytes": 72
+  },
+  "head_after": "492c166fbd12e00a6a924efab065f6adb4bd91f6"
+}

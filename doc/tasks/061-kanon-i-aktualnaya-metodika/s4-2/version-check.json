@@ -1,0 +1,59 @@
+{
+  "files": [
+    {
+      "file": "plan.md",
+      "bytes": 39374,
+      "lines": 116,
+      "sha256": "2b8bd91ae59453104b2c09f02b218261628a86848291ea2b88845e81e0157f9b",
+      "frozen_equal": true
+    },
+    {
+      "file": "analysis.md",
+      "bytes": 14830,
+      "lines": 61,
+      "sha256": "e830c14b03532526583b1bf2e520bfc5479f10cb34d16d15060cae21393ce3af",
+      "frozen_equal": true
+    },
+    {
+      "file": "031-impact.md",
+      "bytes": 53104,
+      "lines": 444,
+      "sha256": "7b6414860e7eab13981758c8fc5bfdb4df6b9dfff9f248ae76506dc53f7ca2cb",
+      "frozen_equal": true
+    },
+    {
+      "file": "spec-trace.md",
+      "bytes": 43116,
+      "lines": 645,
+      "sha256": "f83c3b36d5c4f846d0a0c8d1e7daaa972c9e040f7aa8942231bb71b0746e9038",
+      "frozen_equal": true
+    },
+    {
+      "file": "method-delta.md",
+      "bytes": 34174,
+      "lines": 445,
+      "sha256": "c3ec6b250aef815b37a10afd2d1a28728630816739b357a7f25e6ecedef0e065",
+      "frozen_equal": true
+    },
+    {
+      "file": "source-inventory.md",
+      "bytes": 16390,
+      "lines": 399,
+      "sha256": "17bcbc65e7337143eb8d45557dfbc495d025a3880e08e383b48c5ec92fae320b",
+      "frozen_equal": true
+    },
+    {
+      "file": "owner-gate-decisions.md",
+      "bytes": 9082,
+      "lines": 65,
+      "sha256": "af2adfbcec277365a40d48684776921a4467930c3ed55024c77dbe60cc1cd2c9",
+      "frozen_equal": true
+    }
+  ],
+  "spec_changed_lines": [
+    1,
+    127
+  ],
+  "spec_current_sha": "359819ee6b75d789b94853ac7054742c1c675597e6aee3d05f36ad43abd11c0b",
+  "spec_frozen_sha": "231f86a46022d5e592a2d9b001e8ee00e4ffb180094701f82c79dee88dcc4570"
+}

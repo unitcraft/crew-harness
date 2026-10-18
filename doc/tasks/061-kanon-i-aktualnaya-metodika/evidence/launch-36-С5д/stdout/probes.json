@@ -1,0 +1,44 @@
+{
+  "command": "python -B safe_io.py paths",
+  "cwd": "assigned worktree root",
+  "exit": 0,
+  "results": [
+    {
+      "id": "B1",
+      "actual": "DENY:EXISTING",
+      "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-34-\u04215/before.json",
+      "unchanged": true
+    },
+    {
+      "id": "B2",
+      "actual": "DENY:EXISTING",
+      "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/expected.json",
+      "unchanged": true
+    },
+    {
+      "id": "B3",
+      "actual": "DENY:OUTSIDE",
+      "io": "memory only"
+    },
+    {
+      "id": "B4",
+      "actual": "DENY:HASH",
+      "source": "doc/canon/README.md",
+      "original": "b1f38d8faca5d1154b597ffb58de1ddfe464db5bb44d4a83155c6cdbbc8e05cf",
+      "mutant": "eabcf701de9c2221d0284ce71ce33414d1ca388e90ce92bdba75b3ec04cb4780",
+      "nameset_unchanged": true,
+      "io": "mutant in memory only"
+    },
+    {
+      "id": "B5",
+      "actual": "ALLOW",
+      "declared_absent_output": "after.json"
+    },
+    {
+      "id": "B6",
+      "actual": "DENY:COLLISION",
+      "io": "existing E not reopened or overwritten"
+    }
+  ],
+  "semantic_validator": false
+}

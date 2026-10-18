@@ -1,0 +1,7 @@
+{
+  "command": "python <061>/s4-3/probe_controls.py",
+  "at": "2026-10-17T22:35:22.374032+03:00",
+  "exit": 0,
+  "stdout": "controls.stdout.txt",
+  "stderr": "controls.stderr.txt"
+}

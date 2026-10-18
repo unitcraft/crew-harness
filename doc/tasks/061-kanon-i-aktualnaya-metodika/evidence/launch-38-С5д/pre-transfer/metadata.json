@@ -1,0 +1,46 @@
+{
+  "source": "preparation-fast-1/transfer-authorization.md; решение владельца 2026-10-18",
+  "pin": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+  "targets": [
+    {
+      "path": "doc/canon/README.md",
+      "exists": true,
+      "bytes": 4654,
+      "sha256": "b1f38d8faca5d1154b597ffb58de1ddfe464db5bb44d4a83155c6cdbbc8e05cf",
+      "matches_early_before": true
+    },
+    {
+      "path": "doc/canon/process.md",
+      "exists": true,
+      "bytes": 43312,
+      "sha256": "1f3edf393dc194bb74baf8ee332e564bdaf8476c5609a60a2c23ccbf0171e210",
+      "matches_early_before": true
+    },
+    {
+      "path": "doc/canon/decisions/README.md",
+      "exists": true,
+      "bytes": 5010,
+      "sha256": "f16270148caccfb7d6171930bd1a00c8463f14c15a69b20bc91c417ecb8351c6",
+      "matches_early_before": true
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/result.md",
+      "exists": true,
+      "bytes": 8290,
+      "sha256": "1ef402ff3b9a679e722766de366b2b898b5679b1dd3466437bf313e149e15d2c",
+      "matches_early_before": true
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/current.md",
+      "exists": false
+    },
+    {
+      "path": "doc/canon/decisions/ADR-0012-canon-methodology-version.md",
+      "exists": false
+    }
+  ],
+  "rootlog_original_prefix_preserved": true,
+  "rootlog_pretransfer_bytes": 181094,
+  "rootlog_pretransfer_sha256": "356b0d7760217cde26a4c5dbe6780b015f9ea3215f6f0a6909248af11e8c7cb9",
+  "target_known": "12c79b66c14a96cca6b5e7178dcefaed84d557e5"
+}

@@ -1,0 +1,406 @@
+{
+  "session": "С5д-3, запуск38",
+  "status": "Авторский перенос выполнен; независимая Sol ещё не проводилась, полная061 не принята",
+  "authority": "preparation-fast-1/transfer-authorization.md; владелец2026-10-18",
+  "base": "492c166fbd12e00a6a924efab065f6adb4bd91f6",
+  "pin": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+  "known_target": "12c79b66c14a96cca6b5e7178dcefaed84d557e5",
+  "files": [
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/after.json",
+      "bytes": 356160,
+      "sha256": "72bc6dfe77a13f9bbbbe404bd7c398cea4f8b80c7afb1db3a1c0328154d37958"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/baseline.md",
+      "bytes": 1149,
+      "sha256": "fbb330b2213c64171a8ca925d028c5ca21c0ed1ea3b79f7df3d8124e0825f583"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/before.json",
+      "bytes": 336094,
+      "sha256": "0bb81a21c5de27e610734eeb6bad238b7432494e641969063db630471b7a7dfd"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/coverage.md",
+      "bytes": 182833,
+      "sha256": "69c7487129931ff7350826a9ccae40154af6104132f65c5ed8c88cf551569024"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/decisions.md",
+      "bytes": 8542,
+      "sha256": "529fa2f8a191e17db305bb37f1282e1fe1592e5b9f7becb42c831338aee0d418"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/delta.patch",
+      "bytes": 645474,
+      "sha256": "d8c196cdee78df6471b8b7c3b4f0235365e30f0bd90cba5ac8e60188e82d6aa6"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/expected.md",
+      "bytes": 1705,
+      "sha256": "870c10c67aa3ac6cc4596563433a94e8dd6e74a9ae9d1cbb66f234bdbcc8d5f8"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/fingerprints.md",
+      "bytes": 1917,
+      "sha256": "b8cf78639305317a1cd0df60e68511c9d70953070bea01e07fc4a344ad01f5d8"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/full-diff.patch",
+      "bytes": 20520,
+      "sha256": "7348a44542d7f728c383322f5a7a12d6ef350afa49a1f9181643b1a08ef77b44"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/frozen-comparison.json",
+      "bytes": 9585,
+      "sha256": "caa1f36a006d476111025c8fc67d1d6ca3b4c578212312592dc276764259bfd5"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/O-C.patch",
+      "bytes": 397368,
+      "sha256": "b7ed7a35984eed2144c205ba4e449d46a876946c0125166922619e6df5263a7e"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/observed/completeness-check.md",
+      "bytes": 52115,
+      "sha256": "9a1cd1dc31cfee5546dccae9da0b442a4deed53e63fd7c82d2c7ea4eb8f57710"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/observed/doc/open-questions.md",
+      "bytes": 38893,
+      "sha256": "91cfcc153903045777566b1363596b015870439ea87071a57a18283c59df832f"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/observed/methodology.md",
+      "bytes": 78250,
+      "sha256": "224cd557cf200ff02e15c42c9acf6742b3ffdb33688f65296bfaf7c665f552f6"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/observed/README.md",
+      "bytes": 1948,
+      "sha256": "5b58f94c64bc10753fce39d0cf9d9378de97f18192fa404761d9dd890e4b20d5"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/observed/task-algorithm.md",
+      "bytes": 53217,
+      "sha256": "dea3c5ce72073192901be3d57cd2c14d40c67405dba245fc3555eee9d0051b92"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/observed/task-runner.md",
+      "bytes": 83211,
+      "sha256": "078612fc62527b59d570a77e3e8c214a6dbd68d6f669e795f322456794fdfa38"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/observed/task-sessions.md",
+      "bytes": 49638,
+      "sha256": "dfb92c9c9117ccdb7fbfcfd2d15f3c4095d45f58d1b0669bcf0ca9faad732a6d"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/observed-engine-head.txt",
+      "bytes": 22179,
+      "sha256": "69fd81698e60637e1bb9fe4003e50b4011aa0115289c2f2a02c81e9e6909642d"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/observed-meeting-head.txt",
+      "bytes": 12601,
+      "sha256": "9da7550cb725949a863788a3d2a9b0b89a7c63d36767541a02ffa7a6c8928fd6"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/observed-spec-tail.txt",
+      "bytes": 55632,
+      "sha256": "8ca50ae9ebdccf83784dc0a964cb29d07d15d11632e6411fad35f15ed54a663a"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/pin/completeness-check.md",
+      "bytes": 47646,
+      "sha256": "9b23a71cc2b2356ef356fc464e6a521333503aa34f7c02738f8436eedbf07f98"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/pin/doc/open-questions.md",
+      "bytes": 29299,
+      "sha256": "1208beecae8cfe741c99b2b87cd2742f16d596a8d9aba575505f1c05d3945937"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/pin/methodology.md",
+      "bytes": 79014,
+      "sha256": "871b54969c3d39de435dad2831328a2e2b5259bfbf3e2e377d259becaf16ff9c"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/pin/README.md",
+      "bytes": 1948,
+      "sha256": "5b58f94c64bc10753fce39d0cf9d9378de97f18192fa404761d9dd890e4b20d5"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/pin/task-algorithm.md",
+      "bytes": 53217,
+      "sha256": "dea3c5ce72073192901be3d57cd2c14d40c67405dba245fc3555eee9d0051b92"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/pin/task-runner.md",
+      "bytes": 82121,
+      "sha256": "cc189086e4f9350de82c5496a7fccdb32a7dfa3271f1a83b4d4b045864da041f"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/pin/task-sessions.md",
+      "bytes": 48898,
+      "sha256": "d32107d6a6ecc1521f6f58daecfe643c6763d5bbbb2bda4de3b863bac30da21c"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/pin-runner-tail.txt",
+      "bytes": 17633,
+      "sha256": "9b8e023a2e823e7e4637297312bb42dd4accf9fc6720cd9383473f5bfb752476"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/source-index.json",
+      "bytes": 6322,
+      "sha256": "3f72efdf2e832a5b6824e7532f73b14badaae86379681b3f95bc7a76b157d133"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/AGENTS.md",
+      "bytes": 15874,
+      "sha256": "82f4d85ff3beebfd9a833401dd8e17729ea2e3ce2b745caf5d57d4b53ebed52c"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/ADR-0001-work-by-methodology.md",
+      "bytes": 3728,
+      "sha256": "a7ccb5d95812757493a4caffe3aa5a610ff47ed8512a6d260c9ec6838fa53a90"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/ADR-0002-repository-layout.md",
+      "bytes": 2917,
+      "sha256": "23a7cb419488cf9a998ea47efbabff985aff137c62b5e5c763cb3f73f1b2325b"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/ADR-0003-go-first-then-nova.md",
+      "bytes": 4860,
+      "sha256": "4ae17f2ad4818c3d7555f52fb0bb7a166d8067899ff5aa2c5266f2fd7e5d4a19"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/ADR-0004-agent-drivers-on-subscriptions.md",
+      "bytes": 3949,
+      "sha256": "eabc04b334d6aecf45db5588cb912c7db14caa24c0fde0e280c2f85f79d02909"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/ADR-0005-own-browser-console.md",
+      "bytes": 3184,
+      "sha256": "7982cb9fafc1b6a8c9059c7aa02eadb757b460382a141fe3cdf450277240e378"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/ADR-0006-public-repository.md",
+      "bytes": 4848,
+      "sha256": "d850556fed553d312394126ad8242e68536155eedaa357256880e3ac048928ba"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/ADR-0007-plan-in-task-epics.md",
+      "bytes": 5278,
+      "sha256": "f70bc4f6c6087da5bdeef12b1ccbafd1de887f3579d6b00d48a25a40c6190319"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/ADR-0008-model-profiles-layer-and-window-files.md",
+      "bytes": 5357,
+      "sha256": "d1363e40675c55e82280d8b58e2f1b8fd0bf140c285be5f560f3b75c65e1a640"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/ADR-0009-merge-precheck-without-lock.md",
+      "bytes": 5026,
+      "sha256": "4a37c181bb88851cd286bb03baf82a2c1339b45f480f69419c4b798d182b7efb"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/ADR-0010-question-answering-modes.md",
+      "bytes": 4983,
+      "sha256": "d78146f409deba2f621d5dd06396e33015e7d25dd96cc41ff3072575b34f9bb6"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/ADR-0011-one-task-message-template.md",
+      "bytes": 5694,
+      "sha256": "b3a0e1a4fa97f1a26374a9884532be1533f94a1249483581b7c73b05353b9f38"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/README.md",
+      "bytes": 5269,
+      "sha256": "8fcae1e40be5d7eae251071b0d9d5c73d26423cfa8d077ea904c58fe033ee315"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/process.md",
+      "bytes": 59331,
+      "sha256": "a5bfc6892bf65694f523336cdfae2f9d23abbb734bb15f260629dedcbe08b5c9"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/README.md",
+      "bytes": 4869,
+      "sha256": "6964a0670a93486dc424d98d49f68b1feff98f59d14425f81ba914a60797b378"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/README.md",
+      "bytes": 3284,
+      "sha256": "2c7b47e2f40cb071954d874819ec7ad84958b6bcd812ced97101d9b8642d1dac"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target-index.json",
+      "bytes": 2693,
+      "sha256": "8aee1bf8d1ad33ba52b49728f79bd6785d72c34ab1946dca05815edbc62a0471"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/observations-end.json",
+      "bytes": 544,
+      "sha256": "282bd018297de9c45b9eb90a1f4518fa5fc9eb8e0740c103b25f9d0a889632ba"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/observations-start.json",
+      "bytes": 526,
+      "sha256": "ff60d1e3efca7fb110f031388ebefaa20c717f81078f17d3a8e3fd59d5e8d6ff"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/pre-transfer/measurement-correction.md",
+      "bytes": 1704,
+      "sha256": "625aeec30989211800e2b89fb46b881e6dc0c5099b1397f739e6a08ef0847060"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/pre-transfer/metadata.json",
+      "bytes": 1533,
+      "sha256": "f6d4cdd89e9d68ee025bc90a23d3c698ba41da1df90314528ae518489215dd56"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/pre-transfer/preparation-fast-1.md",
+      "bytes": 8842,
+      "sha256": "940cbd2ad30932a2d8647fa209882b37c38676ac49d80b47a48227e0fd5009f6"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/pre-transfer/result.md",
+      "bytes": 8290,
+      "sha256": "1ef402ff3b9a679e722766de366b2b898b5679b1dd3466437bf313e149e15d2c"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/probe-results.md",
+      "bytes": 7089,
+      "sha256": "54536f70113d5d2e2fae2a60d7d6d9741b26d84062bfd802435be01946c22824"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/probes.md",
+      "bytes": 6149,
+      "sha256": "a496bb67b6238dcee7d143ae8feb2576c008b24b4b07345345bbfd8c6500783b"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/proposed/doc/canon/decisions/ADR-0012-canon-methodology-version.md",
+      "bytes": 3711,
+      "sha256": "5a4cb836a390c997cab445e91b4d1b50a2382450c54300061471dd8ea585e571"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/proposed/doc/canon/decisions/README.md",
+      "bytes": 5472,
+      "sha256": "432bb2c01d7788b238a7c9c809b919f4684601f410beb71ed8d9bd93e27d4d33"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/proposed/doc/canon/process.md",
+      "bytes": 63492,
+      "sha256": "663e1ba1e29ef5a9eb65592f55161610377db49131c0a31fbd11b06ebc581128"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/proposed/doc/canon/README.md",
+      "bytes": 5262,
+      "sha256": "78f1a5098703fd6fb54183895101af43d968ebd13f16cb3de6f7767faef36b8d"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/read-map.md",
+      "bytes": 4655,
+      "sha256": "ae71213ef8cb10823207956f46dd206d3bb4d6ec3e3df92ca0f2eedf53af8896"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/transfer-after.json",
+      "bytes": 371479,
+      "sha256": "69612e1fe608b4ac2ce0879c00ad6073e08abb7a196d9aa1b6f5d1e49d228b34"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/transfer-coverage.md",
+      "bytes": 12713,
+      "sha256": "fd873b97f0e10fc2f26fa1b37fc203cbe64a981206bc462bc7b0d0aa31335fb1"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/transfer-expected.md",
+      "bytes": 3611,
+      "sha256": "57a2d6774bf9900643f6527d64bbaeb9215b269bde7a915e752bc1d5296f8c8b"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/transfer-fingerprints.md",
+      "bytes": 2903,
+      "sha256": "f637f22fed9518bd8cc07c71dca2848081951a09a132a1d2aa06a5805dccc59f"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/transfer-own.patch",
+      "bytes": 20974,
+      "sha256": "8a8b96297256f314bea3c4a497b62b261dc84df5d41edd11f0425a892be34188"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/transfer-privacy-qualification.md",
+      "bytes": 2610,
+      "sha256": "aa4bbbb9a66f762d2caadd7ee49f04a8d97cb086f58002fe4f88f89366bcf292"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/transfer-probe-results.md",
+      "bytes": 3195,
+      "sha256": "ddd284c0d4109ba1f6b0f3603a948df5f58abfb816268812804d212695dc0fb7"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/transfer-probes.md",
+      "bytes": 4173,
+      "sha256": "5be649f7dcb3ce7b1ceffabc551e5a0f5da904ddbc121e57557fa126eeffe949"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/transfer-target.patch",
+      "bytes": 19774,
+      "sha256": "4ea0ca7cd9fbe043c95a3fbd7cc98f8f7ab3375aa869213710e05e40b5eaf667"
+    }
+  ],
+  "landed_and_report": [
+    {
+      "path": "doc/canon/README.md",
+      "bytes": 5063,
+      "sha256": "0b5b3977ff7b37a9d3db19fc464a8d6aa2d02c122d2c7a717205999700817f94"
+    },
+    {
+      "path": "doc/canon/process.md",
+      "bytes": 47479,
+      "sha256": "9e9fe27edbec1feac2f89046caec3c38737233e78e3e089e36e9e4e3f27a9cc8"
+    },
+    {
+      "path": "doc/canon/decisions/README.md",
+      "bytes": 5186,
+      "sha256": "01ddd3c3642013b4d6578f69aa50305f26c79de27bf06b73bc31196daa6eb738"
+    },
+    {
+      "path": "doc/canon/decisions/ADR-0012-canon-methodology-version.md",
+      "bytes": 4792,
+      "sha256": "e47531eeedd452e6f6e4c3efcea1a7a0542c5836b542e278c229ae1813911a08"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/current.md",
+      "bytes": 1191,
+      "sha256": "df8e25eb9975d97dd501e61259ebcabe1d917b316631376958a00ed81d69f6fa"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/result.md",
+      "bytes": 17167,
+      "sha256": "e51e2a4c66ffb8b925fa1e0e01713444bbd51d0e2191d62114b50324ff3784ac"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/preparation-fast-1.md",
+      "bytes": 13317,
+      "sha256": "17f65c832af8f199355bc513a53d3726ec4f6e27d623d254366d00e7f8e48c92"
+    }
+  ],
+  "old_frozen": {
+    "launch36": 59,
+    "launch37": 11,
+    "evidence": "inputs/frozen-comparison.json"
+  },
+  "history_and_errors": [
+    "Ранняя неполная подготовка c550 и конечный b293 drift сохранены, новым полномочием не превращены в semantic PASS",
+    "Первый after38 встретил concurrent rootlog/authorization, его ошибка и поправка сохранены",
+    "Последний assertion transfer-after сработал на общем поисковом шаблоне публичного ADR, квалификация в transfer-privacy-qualification.md; исходный raw hit не скрыт",
+    "Дополнительный qualification output после after перечислен здесь, исходный pending nameset не расширялся задним числом",
+    "Prior opinion/независимаяС6 не получены, будущаяSol не объявлена прошлым согласием"
+  ],
+  "pending_accounting": "После manifest только progress/profile/usage append и plugin submit log; исходные префиксы проверены, будущие bytes здесь не аттестуются",
+  "self_reference": "Manifest не хеширует сам себя; SHA печатается инструментом."
+}

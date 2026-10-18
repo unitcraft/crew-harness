@@ -1,0 +1,5 @@
+P1: full owner quotes match primary records; catalog points=5
+P1 path/approval/completeness=True/False/False -> ready=False
+P1 path/approval/completeness=True/True/False -> ready=False
+P1 path/approval/completeness=True/True/True -> ready=True
+P1 mutation path-as-approval: rejected; no source was changed

@@ -1,0 +1,177 @@
+[
+  {
+    "source": "method",
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "README.md",
+    "bytes": 1839,
+    "sha256": "30657809889a3f79ac9c68a63d977578815a88d753b301bfec0dbac7e3c2498f"
+  },
+  {
+    "source": "method",
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "methodology.md",
+    "bytes": 363338,
+    "sha256": "60ace58356ab48a9cff2634765c160545572526604dad8eacc6cbead492043ed"
+  },
+  {
+    "source": "method",
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "task-algorithm.md",
+    "bytes": 51475,
+    "sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96"
+  },
+  {
+    "source": "method",
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "task-sessions.md",
+    "bytes": 52142,
+    "sha256": "6aaa3e1c38381ddf6cfb22ab490487631d03678a0193495521c16814dc08dcec"
+  },
+  {
+    "source": "method",
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "task-runner.md",
+    "bytes": 122709,
+    "sha256": "10396a7b7e8fb7b70553647b7204858bbe3ae5861b06b4c45f55a6b55bf4371f"
+  },
+  {
+    "source": "method",
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "completeness-check.md",
+    "bytes": 205871,
+    "sha256": "a9006507e0fc208a3a572ae2da671cf602afd2668f703974e5b8005169c6e8fc"
+  },
+  {
+    "source": "method",
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "doc/open-questions.md",
+    "bytes": 14629,
+    "sha256": "22e6dc2f2de2e09a5219342bbc3cf919025a0af7d0bf0c8f816b80aed706f37d"
+  },
+  {
+    "source": "method",
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "README.md",
+    "bytes": 1861,
+    "sha256": "0590d3648413073e0f090df02d0613d87b5423ac4ce6548f6e6dbb14fadd1c2f"
+  },
+  {
+    "source": "method",
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "methodology.md",
+    "bytes": 385080,
+    "sha256": "b404b8d89b659956884fea74f27ed9e317881d4ff35ecf22019d9b40664c6295"
+  },
+  {
+    "source": "method",
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "task-algorithm.md",
+    "bytes": 51475,
+    "sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96"
+  },
+  {
+    "source": "method",
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "task-sessions.md",
+    "bytes": 58883,
+    "sha256": "64b221cde012f6e8d05c94fa6a467e4c5ce999bfd8071878caa3e85b8d57214d"
+  },
+  {
+    "source": "method",
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "task-runner.md",
+    "bytes": 141522,
+    "sha256": "178fd0f1055bbdd190a4c8d4a5316566ea7be00829f9883cbfb9fde6a2a16a85"
+  },
+  {
+    "source": "method",
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "completeness-check.md",
+    "bytes": 47447,
+    "sha256": "3fd55d79b4a5dc59e87c914db89327e432b96f027ee8250e60de4f24aa2368a8"
+  },
+  {
+    "source": "method",
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "doc/open-questions.md",
+    "bytes": 28960,
+    "sha256": "68b3c3a220795a6fdad7b80b6ecab93c47796dffbecfe40c0a308eabf2d53616"
+  },
+  {
+    "source": "method",
+    "commit": "78ed75838ef58073153e5343c9483bc462721a31",
+    "path": "README.md",
+    "bytes": 1861,
+    "sha256": "0590d3648413073e0f090df02d0613d87b5423ac4ce6548f6e6dbb14fadd1c2f"
+  },
+  {
+    "source": "method",
+    "commit": "78ed75838ef58073153e5343c9483bc462721a31",
+    "path": "methodology.md",
+    "bytes": 387098,
+    "sha256": "107013a0a8df1033760dff0efe2c0911a2e92d61c07a0ccee78d2c6ed27ee291"
+  },
+  {
+    "source": "method",
+    "commit": "78ed75838ef58073153e5343c9483bc462721a31",
+    "path": "task-algorithm.md",
+    "bytes": 51475,
+    "sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96"
+  },
+  {
+    "source": "method",
+    "commit": "78ed75838ef58073153e5343c9483bc462721a31",
+    "path": "task-sessions.md",
+    "bytes": 60653,
+    "sha256": "55b8bf4854104563c56bf08fe7b5957f865d9040e99205965f6e458dd993a452"
+  },
+  {
+    "source": "method",
+    "commit": "78ed75838ef58073153e5343c9483bc462721a31",
+    "path": "task-runner.md",
+    "bytes": 141522,
+    "sha256": "178fd0f1055bbdd190a4c8d4a5316566ea7be00829f9883cbfb9fde6a2a16a85"
+  },
+  {
+    "source": "method",
+    "commit": "78ed75838ef58073153e5343c9483bc462721a31",
+    "path": "completeness-check.md",
+    "bytes": 49608,
+    "sha256": "6fa0007cbcadb7116d863989c9b302e04a546c471fa103b034891afa49c6a87d"
+  },
+  {
+    "source": "method",
+    "commit": "78ed75838ef58073153e5343c9483bc462721a31",
+    "path": "doc/open-questions.md",
+    "bytes": 29783,
+    "sha256": "f1872a151d0aaceb39737d8d2109bd3c2b8a43c7a0c6666745be83c78c0e906b"
+  },
+  {
+    "source": "031",
+    "commit": "4b48c50eef1fb46af4f074a80511979b16e515e3",
+    "path": "doc/tasks/031-runner-regulation-in-plugin/spec.md",
+    "bytes": 177306,
+    "sha256": "a9fc97dd622bfe486c46ff00e87baf0b4a2469a2174f1ea2f84f0d6052755829"
+  },
+  {
+    "source": "031",
+    "commit": "4b48c50eef1fb46af4f074a80511979b16e515e3",
+    "path": "doc/tasks/031-runner-regulation-in-plugin/spec-trace.md",
+    "bytes": 82011,
+    "sha256": "8af75b276ea92302bdb41d45a7ca0a34522af0d0e0f5fa129078fa9403166d48"
+  },
+  {
+    "source": "031",
+    "commit": "4b48c50eef1fb46af4f074a80511979b16e515e3",
+    "path": "doc/tasks/031-runner-regulation-in-plugin/log.md",
+    "bytes": 56464,
+    "sha256": "de0f724a355bf0e920e22994cd8566f900e1ef67fec1efbb5163aa7e3e693943"
+  },
+  {
+    "source": "031",
+    "commit": "4b48c50eef1fb46af4f074a80511979b16e515e3",
+    "path": "doc/tasks/031-runner-regulation-in-plugin/task/message.md",
+    "bytes": 6800,
+    "sha256": "f8cb1bae2cdf41996cf45ee3979d18b053f172424948e8e968b04b7611c8587d"
+  }
+]

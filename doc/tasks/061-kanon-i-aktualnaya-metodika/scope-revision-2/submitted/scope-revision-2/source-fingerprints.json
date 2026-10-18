@@ -1,0 +1,240 @@
+[
+  {
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "AGENTS.md",
+    "bytes": 12877,
+    "sha256": "a39139938a116019b18804760d80d8078ad033402eec66809715dff268d25a0e",
+    "crlf": 0
+  },
+  {
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "AGENTS.md",
+    "bytes": 14844,
+    "sha256": "c17b6c9fc7e8e1223a60039688fb681950246590342d287e4625d4ecc4c79108",
+    "crlf": 0
+  },
+  {
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "README.md",
+    "bytes": 1839,
+    "sha256": "30657809889a3f79ac9c68a63d977578815a88d753b301bfec0dbac7e3c2498f",
+    "crlf": 0
+  },
+  {
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "README.md",
+    "bytes": 1861,
+    "sha256": "0590d3648413073e0f090df02d0613d87b5423ac4ce6548f6e6dbb14fadd1c2f",
+    "crlf": 0
+  },
+  {
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "completeness-check.md",
+    "bytes": 205871,
+    "sha256": "a9006507e0fc208a3a572ae2da671cf602afd2668f703974e5b8005169c6e8fc",
+    "crlf": 0
+  },
+  {
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "completeness-check.md",
+    "bytes": 47447,
+    "sha256": "3fd55d79b4a5dc59e87c914db89327e432b96f027ee8250e60de4f24aa2368a8",
+    "crlf": 0
+  },
+  {
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "doc/open-questions.md",
+    "bytes": 14629,
+    "sha256": "22e6dc2f2de2e09a5219342bbc3cf919025a0af7d0bf0c8f816b80aed706f37d",
+    "crlf": 0
+  },
+  {
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "doc/open-questions.md",
+    "bytes": 28960,
+    "sha256": "68b3c3a220795a6fdad7b80b6ecab93c47796dffbecfe40c0a308eabf2d53616",
+    "crlf": 0
+  },
+  {
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "methodology.md",
+    "bytes": 363338,
+    "sha256": "60ace58356ab48a9cff2634765c160545572526604dad8eacc6cbead492043ed",
+    "crlf": 0
+  },
+  {
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "methodology.md",
+    "bytes": 385080,
+    "sha256": "b404b8d89b659956884fea74f27ed9e317881d4ff35ecf22019d9b40664c6295",
+    "crlf": 0
+  },
+  {
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "presentations/methodology.html",
+    "bytes": 15202,
+    "sha256": "455353c709c6413d4c58e615e8dd6d089e7910dccd068c44c5dd9a2fb8682a0e",
+    "crlf": 0
+  },
+  {
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "presentations/methodology.html",
+    "bytes": 21668,
+    "sha256": "844b14af6e91c8028a384bedc0289b579af4bcb24307f0824e51b5d497fbe200",
+    "crlf": 0
+  },
+  {
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "presentations/task-sessions.html",
+    "bytes": 14462,
+    "sha256": "17cf4434044d0b338e7a0c75aebe3b0917b23a0c8926dbda19588c6bcfbf6a4f",
+    "crlf": 0
+  },
+  {
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "presentations/task-sessions.html",
+    "bytes": 16070,
+    "sha256": "a9d3073cf7d30b4608750f89f847bb39ebcb706c2d5cf539b693a1cd624f0db7",
+    "crlf": 0
+  },
+  {
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "starter-kit/README.md",
+    "bytes": 40433,
+    "sha256": "ee006baa6662c90cf67a81483ad360110b7c1a9fee061b2b60605dab17cc8809",
+    "crlf": 0
+  },
+  {
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "starter-kit/README.md",
+    "bytes": 40785,
+    "sha256": "da6a60e1521bdc6a668aede00416d8671bd44fd0c9826b9a23951ffe98d77ef7",
+    "crlf": 0
+  },
+  {
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "starter-kit/scripts/guards/guards.conf",
+    "bytes": 6091,
+    "sha256": "e7458e4b185cd5da5b253657a74b59e4de0110b9df9241f75250ffc87fcb9867",
+    "crlf": 0
+  },
+  {
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "starter-kit/scripts/guards/guards.conf",
+    "bytes": 6272,
+    "sha256": "20be7312078c67a2e70a300487a0a3ade07ab087210d69fa80bff1378cec4d2e",
+    "crlf": 0
+  },
+  {
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "starter-kit/scripts/guards/selftest/test-commit-msg.py",
+    "bytes": 10942,
+    "sha256": "fea3e782b47796a71e7b152050318b948253027236f0e2bd5e938715a9c09200",
+    "crlf": 0
+  },
+  {
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "starter-kit/scripts/guards/selftest/test-commit-msg.py",
+    "bytes": 11307,
+    "sha256": "063a50620efb79749cbbc70b62a84b894ce735daf835008a76ad1b97d8e11f52",
+    "crlf": 0
+  },
+  {
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "starter-kit/scripts/guards/selftest/test-commit-range.py",
+    "bytes": 10602,
+    "sha256": "0c9e31619b84b1897cf2cbf6d2872d99681d7913ea12ec36bf7ed4c38d085ff0",
+    "crlf": 0
+  },
+  {
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "starter-kit/scripts/guards/selftest/test-commit-range.py",
+    "bytes": 10695,
+    "sha256": "41cab7d975ce683681477e4d4e4c1118aaf4639948135a6a67f6c2819e73b1ff",
+    "crlf": 0
+  },
+  {
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "starter-kit/scripts/guards/selftest/test-guard-commit-message.py",
+    "bytes": 21070,
+    "sha256": "b00b26dc3bcdeac367192ff99374aae26026617a1588df1ba9728425a10f8929",
+    "crlf": 0
+  },
+  {
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "starter-kit/scripts/guards/selftest/test-guard-commit-message.py",
+    "bytes": 21871,
+    "sha256": "833b26d94617fc3fe18801e809d166a7e4c5fe4749b7154a2c385b2a22855a6c",
+    "crlf": 0
+  },
+  {
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "starter-kit/scripts/guards/selftest/test-pre-push.py",
+    "bytes": 12227,
+    "sha256": "9be5cca20593caad97d706f247039f5da136ec5a275a26f92bfe847a13faf8af",
+    "crlf": 0
+  },
+  {
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "starter-kit/scripts/guards/selftest/test-pre-push.py",
+    "bytes": 12320,
+    "sha256": "e6ce0aee86e9ba78d6a0d09d58f54d069f1d2a1608c1f97adf19adc08b016793",
+    "crlf": 0
+  },
+  {
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "starter-kit/verify-portability.sh",
+    "bytes": 22626,
+    "sha256": "394ee4e7ed03716859a1adeb65e927894392911d11aa0a11d16900c71a8aaa0c",
+    "crlf": 0
+  },
+  {
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "starter-kit/verify-portability.sh",
+    "bytes": 23425,
+    "sha256": "1a379610dfcb0c78e7d1263330e8c3247488532e1511f5be2968835acb22ccec",
+    "crlf": 0
+  },
+  {
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "task-runner.md",
+    "bytes": 122709,
+    "sha256": "10396a7b7e8fb7b70553647b7204858bbe3ae5861b06b4c45f55a6b55bf4371f",
+    "crlf": 0
+  },
+  {
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "task-runner.md",
+    "bytes": 141522,
+    "sha256": "178fd0f1055bbdd190a4c8d4a5316566ea7be00829f9883cbfb9fde6a2a16a85",
+    "crlf": 0
+  },
+  {
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "task-sessions.md",
+    "bytes": 52142,
+    "sha256": "6aaa3e1c38381ddf6cfb22ab490487631d03678a0193495521c16814dc08dcec",
+    "crlf": 0
+  },
+  {
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "task-sessions.md",
+    "bytes": 58883,
+    "sha256": "64b221cde012f6e8d05c94fa6a467e4c5ce999bfd8071878caa3e85b8d57214d",
+    "crlf": 0
+  },
+  {
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "task-algorithm.md",
+    "bytes": 51475,
+    "sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96",
+    "crlf": 0
+  },
+  {
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "task-algorithm.md",
+    "bytes": 51475,
+    "sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96",
+    "crlf": 0
+  }
+]

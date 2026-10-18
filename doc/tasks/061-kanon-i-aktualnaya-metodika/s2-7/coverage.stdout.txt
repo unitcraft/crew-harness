@@ -1,0 +1,1 @@
+{"atoms": 94, "fragments": 66, "unique": true}

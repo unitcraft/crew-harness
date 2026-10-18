@@ -1,0 +1,1 @@
+Единица 1: собственный before всех файлов, pycache только stat; три точных префикса после старта С6. Разрешены новые evidence/launch-39-С6 и review-1.md, append progress/profile/usage; log.md только плагин. Перед каждой записью resolved path gate и exclusive new. Положительные и отрицательные документальные пробы определяются отдельно до запуска.

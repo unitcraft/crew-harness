@@ -1,0 +1,393 @@
+{
+  "checks": {
+    "patch six destinations": false,
+    "old reproduces doc/canon/README.md": true,
+    "same semantic hunks doc/canon/README.md": true,
+    "content mutation rejected doc/canon/README.md": true,
+    "old reproduces doc/canon/process.md": true,
+    "same semantic hunks doc/canon/process.md": true,
+    "content mutation rejected doc/canon/process.md": true,
+    "old reproduces doc/canon/decisions/README.md": true,
+    "same semantic hunks doc/canon/decisions/README.md": true,
+    "content mutation rejected doc/canon/decisions/README.md": true,
+    "old reproduces doc/canon/decisions/ADR-0012-canon-methodology-version.md": true,
+    "old reproduces doc/tasks/061-kanon-i-aktualnaya-metodika/current.md": true,
+    "version actual": true,
+    "version negative rejected": true,
+    "accepted decision": true,
+    "current absence rejected": true,
+    "all local links exist": false,
+    "current pointers only": true,
+    "power present после уже состоявшихся ворот или приёмки переход решает владелец": true,
+    "power mutation rejected после уже состоявшихся ворот или приёмки переход решает владелец": true,
+    "power present массового автоматического перехода нет": true,
+    "power mutation rejected массового автоматического перехода нет": true,
+    "power present Отключены только эти помощники, не второе мнение": true,
+    "power mutation rejected Отключены только эти помощники, не второе мнение": true,
+    "current immediate not predicate": true,
+    "semantic subtask": true,
+    "no late witness import": true,
+    "general drift retained": true,
+    "result append": true,
+    "unchanged Открытые вопросы": true,
+    "unchanged Режимы ответа на вопросы": true,
+    "unchanged journal": true,
+    "target preserved Задание task/message.md": true,
+    "target preserved Сводка при сжатии контекста": true,
+    "target preserved Режимы ответа на вопросы": true,
+    "target preserved Открытые вопросы": true,
+    "target gate preserved": true,
+    "target ADR0011 row preserved": true,
+    "manifest exact": true,
+    "manifest entries actual": true,
+    "pin source README.md": false,
+    "pin source methodology.md": false,
+    "pin source task-sessions.md": false,
+    "pin source task-runner.md": false,
+    "before38 protected": true,
+    "unique with positive controls": true,
+    "duplicate negative rejected": true
+  },
+  "failed": [
+    "patch six destinations",
+    "all local links exist",
+    "pin source README.md",
+    "pin source methodology.md",
+    "pin source task-sessions.md",
+    "pin source task-runner.md"
+  ],
+  "local_links": [
+    {
+      "file": "doc/canon/README.md",
+      "link": "decisions/README.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/README.md",
+      "link": "process.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/README.md",
+      "link": "../../AGENTS.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/README.md",
+      "link": "decisions/README.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/README.md",
+      "link": "../tasks/README.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/README.md",
+      "link": "../open-questions.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/README.md",
+      "link": "process.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/README.md",
+      "link": "../research/",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/README.md",
+      "link": "../archive/plans/README.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/README.md",
+      "link": "process.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/README.md",
+      "link": "decisions/ADR-0012-canon-methodology-version.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/README.md",
+      "link": "process.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/README.md",
+      "link": "process.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/README.md",
+      "link": "process.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "README.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "decisions/ADR-0001-work-by-methodology.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "../../AGENTS.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "decisions/ADR-0010-question-answering-modes.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "../../AGENTS.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "decisions/ADR-0004-agent-drivers-on-subscriptions.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "../../AGENTS.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "../../scripts/guards/check-task-docs.py",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "decisions/ADR-0007-plan-in-task-epics.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "../tasks/001-crew-service/",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "decisions/ADR-0006-public-repository.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "decisions/README.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "../../scripts/guards/check-task-docs.py",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "../open-questions.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "../../AGENTS.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "../../scripts/guards/check-open-questions.py",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "../../scripts/task-number.mjs",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "../../scripts/guards/check-task-docs.py",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "../../AGENTS.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "README.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "../../scripts/guards/check-task-docs.py",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "decisions/ADR-0010-question-answering-modes.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "../tasks/017-doc-guard/",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/process.md",
+      "link": "decisions/ADR-0009-merge-precheck-without-lock.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/decisions/README.md",
+      "link": "../../tasks/NNN-<slug>/",
+      "exists": false
+    },
+    {
+      "file": "doc/canon/decisions/README.md",
+      "link": "ADR-NNNN-<slug>.md",
+      "exists": false
+    },
+    {
+      "file": "doc/canon/decisions/README.md",
+      "link": "ADR-0001-work-by-methodology.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/decisions/README.md",
+      "link": "ADR-0002-repository-layout.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/decisions/README.md",
+      "link": "ADR-0003-go-first-then-nova.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/decisions/README.md",
+      "link": "ADR-0004-agent-drivers-on-subscriptions.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/decisions/README.md",
+      "link": "ADR-0005-own-browser-console.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/decisions/README.md",
+      "link": "ADR-0006-public-repository.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/decisions/README.md",
+      "link": "ADR-0007-plan-in-task-epics.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/decisions/README.md",
+      "link": "ADR-0008-model-profiles-layer-and-window-files.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/decisions/README.md",
+      "link": "ADR-0009-merge-precheck-without-lock.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/decisions/README.md",
+      "link": "ADR-0010-question-answering-modes.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/decisions/README.md",
+      "link": "ADR-0012-canon-methodology-version.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/decisions/ADR-0012-canon-methodology-version.md",
+      "link": "../process.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/decisions/ADR-0012-canon-methodology-version.md",
+      "link": "../README.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/decisions/ADR-0012-canon-methodology-version.md",
+      "link": "../../tasks/061-kanon-i-aktualnaya-metodika/",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/decisions/ADR-0012-canon-methodology-version.md",
+      "link": "ADR-0001-work-by-methodology.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/decisions/ADR-0012-canon-methodology-version.md",
+      "link": "ADR-0007-plan-in-task-epics.md",
+      "exists": true
+    },
+    {
+      "file": "doc/canon/decisions/ADR-0012-canon-methodology-version.md",
+      "link": "ADR-0010-question-answering-modes.md",
+      "exists": true
+    },
+    {
+      "file": "doc/tasks/061-kanon-i-aktualnaya-metodika/current.md",
+      "link": "../../canon/README.md",
+      "exists": true
+    },
+    {
+      "file": "doc/tasks/061-kanon-i-aktualnaya-metodika/current.md",
+      "link": "../../canon/process.md",
+      "exists": true
+    },
+    {
+      "file": "doc/tasks/061-kanon-i-aktualnaya-metodika/current.md",
+      "link": "../../canon/process.md",
+      "exists": true
+    },
+    {
+      "file": "doc/tasks/061-kanon-i-aktualnaya-metodika/current.md",
+      "link": "../../canon/decisions/ADR-0012-canon-methodology-version.md",
+      "exists": true
+    },
+    {
+      "file": "doc/tasks/061-kanon-i-aktualnaya-metodika/current.md",
+      "link": "../../canon/decisions/README.md",
+      "exists": true
+    }
+  ],
+  "search": {
+    "Первый любой фактический перенос результата создаёт": [
+      "doc/canon/process.md"
+    ],
+    "Смысловое отличие:": [
+      "doc/canon/process.md"
+    ],
+    "Наличие профиля не доказывает автоматическое исполнение второго мнения": [
+      "doc/canon/process.md"
+    ]
+  },
+  "manifest_mismatches": [],
+  "before38_changed": [],
+  "before38_missing": [],
+  "actual_hashes": {
+    "doc/canon/README.md": "0b5b3977ff7b37a9d3db19fc464a8d6aa2d02c122d2c7a717205999700817f94",
+    "doc/canon/process.md": "9e9fe27edbec1feac2f89046caec3c38737233e78e3e089e36e9e4e3f27a9cc8",
+    "doc/canon/decisions/README.md": "01ddd3c3642013b4d6578f69aa50305f26c79de27bf06b73bc31196daa6eb738",
+    "doc/canon/decisions/ADR-0012-canon-methodology-version.md": "e47531eeedd452e6f6e4c3efcea1a7a0542c5836b542e278c229ae1813911a08",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/current.md": "df8e25eb9975d97dd501e61259ebcabe1d917b316631376958a00ed81d69f6fa"
+  },
+  "boundary": "Текстовая реконструкция splitlines; raw целостность отдельно SHA. Только память, не git apply, не runtime."
+}

@@ -1,0 +1,12 @@
+{
+  "command": [
+    "git",
+    "ls-remote",
+    "https://github.com/unitcraft/ai-dev-methodology",
+    "refs/heads/main"
+  ],
+  "observed_at": "2026-10-17T14:46:53.926788+03:00",
+  "exit": 0,
+  "stdout": "6747f401e4e1a9c6feb45bf5fefbca70c542dadd\trefs/heads/main\n",
+  "stderr": ""
+}

@@ -1,0 +1,33 @@
+{
+  "results": [
+    {
+      "path": "scope-revision-1/before/spec.md",
+      "bytes": 33834,
+      "expected": "359819ee6b75d789b94853ac7054742c1c675597e6aee3d05f36ad43abd11c0b",
+      "actual": "359819ee6b75d789b94853ac7054742c1c675597e6aee3d05f36ad43abd11c0b",
+      "ok": true
+    },
+    {
+      "path": "s1p-5/submitted/spec.md",
+      "bytes": 33427,
+      "expected": "231f86a46022d5e592a2d9b001e8ee00e4ffb180094701f82c79dee88dcc4570",
+      "actual": "231f86a46022d5e592a2d9b001e8ee00e4ffb180094701f82c79dee88dcc4570",
+      "ok": true
+    },
+    {
+      "path": "spec-review-6.md",
+      "bytes": 15641,
+      "expected": "5cb83ebeafa39cdaef8c87cf403de11b7c3b7537cb2027b18977baeb66e18e1b",
+      "actual": "5cb83ebeafa39cdaef8c87cf403de11b7c3b7537cb2027b18977baeb66e18e1b",
+      "ok": true
+    },
+    {
+      "path": "plan.md",
+      "bytes": 62906,
+      "expected": "c34e3a5f55a3364bc2a70bca5de41c8090e3e1a48d63e4e9ce21f4cb56f952be",
+      "actual": "c34e3a5f55a3364bc2a70bca5de41c8090e3e1a48d63e4e9ce21f4cb56f952be",
+      "ok": true
+    }
+  ],
+  "exit": 0
+}

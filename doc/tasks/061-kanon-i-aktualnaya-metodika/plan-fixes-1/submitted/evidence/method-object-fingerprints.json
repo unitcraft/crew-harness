@@ -1,0 +1,78 @@
+{
+  "version": "78ed75838ef58073153e5343c9483bc462721a31",
+  "files": {
+    "README.md": {
+      "git_blob": {
+        "sha256": "0590d3648413073e0f090df02d0613d87b5423ac4ce6548f6e6dbb14fadd1c2f",
+        "bytes": 1861
+      },
+      "checkout_raw": {
+        "sha256": "0590d3648413073e0f090df02d0613d87b5423ac4ce6548f6e6dbb14fadd1c2f",
+        "bytes": 1861
+      },
+      "equal_raw": true,
+      "equal_after_checkout_CRLF_to_LF": true
+    },
+    "methodology.md": {
+      "git_blob": {
+        "sha256": "107013a0a8df1033760dff0efe2c0911a2e92d61c07a0ccee78d2c6ed27ee291",
+        "bytes": 387098
+      },
+      "checkout_raw": {
+        "sha256": "107013a0a8df1033760dff0efe2c0911a2e92d61c07a0ccee78d2c6ed27ee291",
+        "bytes": 387098
+      },
+      "equal_raw": true,
+      "equal_after_checkout_CRLF_to_LF": true
+    },
+    "task-algorithm.md": {
+      "git_blob": {
+        "sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96",
+        "bytes": 51475
+      },
+      "checkout_raw": {
+        "sha256": "8a0004dbfd8b6d8f9889abeb8ee02f3bf87ea9af6309ca2a21b8cfdca9eead8d",
+        "bytes": 51845
+      },
+      "equal_raw": false,
+      "equal_after_checkout_CRLF_to_LF": true
+    },
+    "task-sessions.md": {
+      "git_blob": {
+        "sha256": "55b8bf4854104563c56bf08fe7b5957f865d9040e99205965f6e458dd993a452",
+        "bytes": 60653
+      },
+      "checkout_raw": {
+        "sha256": "55b8bf4854104563c56bf08fe7b5957f865d9040e99205965f6e458dd993a452",
+        "bytes": 60653
+      },
+      "equal_raw": true,
+      "equal_after_checkout_CRLF_to_LF": true
+    },
+    "task-runner.md": {
+      "git_blob": {
+        "sha256": "178fd0f1055bbdd190a4c8d4a5316566ea7be00829f9883cbfb9fde6a2a16a85",
+        "bytes": 141522
+      },
+      "checkout_raw": {
+        "sha256": "178fd0f1055bbdd190a4c8d4a5316566ea7be00829f9883cbfb9fde6a2a16a85",
+        "bytes": 141522
+      },
+      "equal_raw": true,
+      "equal_after_checkout_CRLF_to_LF": true
+    },
+    "completeness-check.md": {
+      "git_blob": {
+        "sha256": "6fa0007cbcadb7116d863989c9b302e04a546c471fa103b034891afa49c6a87d",
+        "bytes": 49608
+      },
+      "checkout_raw": {
+        "sha256": "6fa0007cbcadb7116d863989c9b302e04a546c471fa103b034891afa49c6a87d",
+        "bytes": 49608
+      },
+      "equal_raw": true,
+      "equal_after_checkout_CRLF_to_LF": true
+    }
+  },
+  "qualification": "Git blob raw LF отличён от raw checkout. Raw checkout совпадает с ранним снимком; при CRLF отдельно доказано равенство после LF-нормализации. Это не отдельный ранний снимок Gitdatabase."
+}

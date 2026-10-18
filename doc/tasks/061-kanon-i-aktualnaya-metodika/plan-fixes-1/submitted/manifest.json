@@ -1,0 +1,167 @@
+{
+  "plan.md": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan.md",
+    "sha256": "c34e3a5f55a3364bc2a70bca5de41c8090e3e1a48d63e4e9ce21f4cb56f952be",
+    "bytes": 62906
+  },
+  "plan-fixes-1.md": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1.md",
+    "sha256": "025c4603c10630d42e19b3e8cb3f8215f398d873e1387ad86dd14f12ff8c4664",
+    "bytes": 9822
+  },
+  "evidence/after.json": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/after.json",
+    "sha256": "8d1f222b31a3e2a58778f4bbf1ad3f45d866d063a8db2ddb108e84d9f4b990ab",
+    "bytes": 181320
+  },
+  "evidence/approved031-after.json": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/approved031-after.json",
+    "sha256": "4a4d555d4dc86541fc21b297ed6f11daa69709a53d9f5ca570b4f72f8ee925d9",
+    "bytes": 2635
+  },
+  "evidence/approved031-before.json": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/approved031-before.json",
+    "sha256": "4a4d555d4dc86541fc21b297ed6f11daa69709a53d9f5ca570b4f72f8ee925d9",
+    "bytes": 2635
+  },
+  "evidence/baseline.json": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/baseline.json",
+    "sha256": "109875c1809aeb29a257375b00d01701df296b1afb359de7a5987c3671ef938f",
+    "bytes": 168734
+  },
+  "evidence/baseline.md": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/baseline.md",
+    "sha256": "47f4f866aa172016246bff036769699663657e408f769505140ea17e9c590e30",
+    "bytes": 552
+  },
+  "evidence/change-map.md": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/change-map.md",
+    "sha256": "652579ae5abb2b4686fb07605e12116c0cb0c26714394c0191aa1ffb41dc837a",
+    "bytes": 11761
+  },
+  "evidence/diff-map.json": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/diff-map.json",
+    "sha256": "3e32df9e5e6f32432d3e35865dc3dbb55bf740770c6003fa581f096fa1696f10",
+    "bytes": 3150
+  },
+  "evidence/expected.json": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/expected.json",
+    "sha256": "7df4d18a9f6cd82afafcff59fe354198c817438cc6338eac089f45d0f2584621",
+    "bytes": 863
+  },
+  "evidence/external-after.json": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/external-after.json",
+    "sha256": "0acdab287f7f0ab83a03263c67a74be3c5791130dfa0d34d4dec270495cee122",
+    "bytes": 184264
+  },
+  "evidence/external-before.json": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/external-before.json",
+    "sha256": "69e9e629d3585e1707eae5b8637e6583d66562c3f706964e78848dfe3d538b40",
+    "bytes": 184264
+  },
+  "evidence/external-status-notes.json": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/external-status-notes.json",
+    "sha256": "c200bda39814a2678c39f7a31b7cd633d014a732b6b5c6e8beb471f30143b938",
+    "bytes": 573
+  },
+  "evidence/final-2-after.json": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/final-2-after.json",
+    "sha256": "cedbcf93743aee8b59c4055b13e1f7a210991cc0263ba5e80acc54ef199877f2",
+    "bytes": 181927
+  },
+  "evidence/final-2-preservation-expected.json": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/final-2-preservation-expected.json",
+    "sha256": "708439c014f527e74e5a61959adf8cad9f97bc2f70c82ca4fbd42571ae8cb728",
+    "bytes": 228017
+  },
+  "evidence/final-after.json": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/final-after.json",
+    "sha256": "4420e3dfedba48c30d83c05f91e0d8c9f5b451a1df30b435fdb911577b38029f",
+    "bytes": 181490
+  },
+  "evidence/final-approved031-after.json": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/final-approved031-after.json",
+    "sha256": "4a4d555d4dc86541fc21b297ed6f11daa69709a53d9f5ca570b4f72f8ee925d9",
+    "bytes": 2635
+  },
+  "evidence/final-external-after.json": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/final-external-after.json",
+    "sha256": "0acdab287f7f0ab83a03263c67a74be3c5791130dfa0d34d4dec270495cee122",
+    "bytes": 184264
+  },
+  "evidence/final-external-status-notes.json": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/final-external-status-notes.json",
+    "sha256": "c200bda39814a2678c39f7a31b7cd633d014a732b6b5c6e8beb471f30143b938",
+    "bytes": 573
+  },
+  "evidence/final-preservation-expected.json": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/final-preservation-expected.json",
+    "sha256": "708439c014f527e74e5a61959adf8cad9f97bc2f70c82ca4fbd42571ae8cb728",
+    "bytes": 228017
+  },
+  "evidence/final_check.py": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/final_check.py",
+    "sha256": "af4d08cd8d57495ccc0968c34e30190687e7c88cbdccf1f725e68d69b083f7b9",
+    "bytes": 9716
+  },
+  "evidence/fingerprints.md": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/fingerprints.md",
+    "sha256": "fd0dc7c3bce158c0ad9f6dc752cc7d8c26b41967fea418cafcb9e424614a2489",
+    "bytes": 2938
+  },
+  "evidence/full-diff.patch": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/full-diff.patch",
+    "sha256": "c1376c70d342ce7723f58e1e0bfe1a9640cf0adb267789ef0201f366d4bc3025",
+    "bytes": 91820
+  },
+  "evidence/method-object-fingerprints.json": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/method-object-fingerprints.json",
+    "sha256": "9a075ceb7a635bff2d0d6480a7dc522110e458f435e68f6a3393f33779cf120f",
+    "bytes": 2766
+  },
+  "evidence/plan-before.md": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/plan-before.md",
+    "sha256": "2b8bd91ae59453104b2c09f02b218261628a86848291ea2b88845e81e0157f9b",
+    "bytes": 39374
+  },
+  "evidence/preservation-expected.json": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/preservation-expected.json",
+    "sha256": "708439c014f527e74e5a61959adf8cad9f97bc2f70c82ca4fbd42571ae8cb728",
+    "bytes": 228017
+  },
+  "evidence/probe-results.json": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/probe-results.json",
+    "sha256": "ff3746d2bae75e0e599ce4b9d9a70c996b0da867d87da9f6554bfa99bbd674a0",
+    "bytes": 2441
+  },
+  "evidence/probe-results.md": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/probe-results.md",
+    "sha256": "64c22576a1873fdbd5a5250ecf4b3db2651d04f1d2d748348b06384c38051b41",
+    "bytes": 9409
+  },
+  "evidence/probes.md": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/probes.md",
+    "sha256": "a8f4e530cae315055c6b4314168dc4acdc95b8ccb16b0fe743145b709d7811f7",
+    "bytes": 4677
+  },
+  "evidence/probe_plan.py": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/probe_plan.py",
+    "sha256": "97192ffd283385d20a0dadaeda3755c514542e7214b82c83e5c110a65fb215ad",
+    "bytes": 7458
+  },
+  "evidence/qualification.md": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/qualification.md",
+    "sha256": "ef4b04b8177e661543d72306df97d5acdc67607b0cdc8bddb012ac2f03db173b",
+    "bytes": 5368
+  },
+  "evidence/read-map.md": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/read-map.md",
+    "sha256": "891436520a0ea872c438b840117a7f53eb354654cd1338fa0ef752df45cc19d3",
+    "bytes": 4541
+  },
+  "evidence/fixtures/stale.md": {
+    "source": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/fixtures/stale.md",
+    "sha256": "df76abe16a3bb0dfbe25e499907ccbebc855efe47b733ae6ce994bb02c07bdba",
+    "bytes": 36
+  }
+}

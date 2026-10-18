@@ -1,0 +1,102 @@
+[
+  {
+    "id": "A1",
+    "route": "README-first",
+    "gate4": true,
+    "current_same_step": true,
+    "expected": "ALLOW"
+  },
+  {
+    "id": "A2",
+    "route": "ADR-first",
+    "gate4": true,
+    "current_same_step": true,
+    "expected": "ALLOW"
+  },
+  {
+    "id": "A3",
+    "route": "README-first",
+    "gate4": true,
+    "current_same_step": false,
+    "expected": "DENY:CURRENT-FIRST"
+  },
+  {
+    "id": "A4",
+    "route": "process-early",
+    "gate4": false,
+    "current_same_step": true,
+    "expected": "DENY:GATE4"
+  },
+  {
+    "id": "A5",
+    "route": "next-transfer",
+    "gate4": true,
+    "current_same_step": true,
+    "expected": "ALLOW:APPEND-ADDRESSES"
+  },
+  {
+    "id": "B1",
+    "route": "old-before",
+    "expected": "DENY:EXISTING"
+  },
+  {
+    "id": "B2",
+    "route": "old-expected",
+    "expected": "DENY:EXISTING"
+  },
+  {
+    "id": "B3",
+    "route": "foreign-destination",
+    "expected": "DENY:OUTSIDE"
+  },
+  {
+    "id": "B4",
+    "route": "before-content-mutant",
+    "expected": "DENY:HASH"
+  },
+  {
+    "id": "B5",
+    "route": "fresh-assigned-output",
+    "expected": "ALLOW"
+  },
+  {
+    "id": "B6",
+    "route": "existing-E",
+    "expected": "DENY:COLLISION"
+  },
+  {
+    "id": "V1",
+    "route": "same-commit-gates",
+    "expected": "ALLOW"
+  },
+  {
+    "id": "V2",
+    "route": "drift-same-scope",
+    "expected": "DENY:RECOMPARE-REGATE"
+  },
+  {
+    "id": "V3",
+    "route": "post-gate-integrator",
+    "expected": "DENY:OWNER"
+  },
+  {
+    "id": "V4",
+    "route": "post-gate-owner-old-new-reason",
+    "expected": "ALLOW:APPEND"
+  },
+  {
+    "id": "V5",
+    "route": "partial-no-runtime",
+    "expected": "NORM-ON:MANUAL-EVIDENCE-BOUNDARY"
+  },
+  {
+    "id": "V6",
+    "route": "require-031-or-045",
+    "expected": "DENY:REMOVED-SCOPE"
+  },
+  {
+    "id": "V7",
+    "route": "D0-external",
+    "expected": "ALLOW:NO-PARAPHRASE"
+  }
+]

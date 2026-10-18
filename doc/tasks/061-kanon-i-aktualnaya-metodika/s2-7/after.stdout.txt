@@ -1,0 +1,1 @@
+{"files": 690, "bytes": 13361186, "git_file": {"path": ".git", "bytes": 67, "sha256": "a295e493deb183f85e264062ef4fef9dc704bbc31125b9940337023a169c2887"}, "head": {"exit": 0, "stdout": "492c166fbd12e00a6a924efab065f6adb4bd91f6\n", "stderr": ""}, "branch": {"exit": 0, "stdout": "review/061-scope-r7\n", "stderr": ""}}

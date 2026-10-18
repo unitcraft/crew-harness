@@ -1,0 +1,308 @@
+[
+  {
+    "version": "pin",
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "methodology.md",
+    "full_blob_sha256": "b404b8d89b659956884fea74f27ed9e317881d4ff35ecf22019d9b40664c6295",
+    "full_blob_bytes": 385080,
+    "lines": 2009,
+    "saved_ranges": [
+      [
+        104,
+        111
+      ],
+      [
+        145,
+        159
+      ],
+      [
+        260,
+        270
+      ],
+      [
+        537,
+        545
+      ],
+      [
+        705,
+        720
+      ],
+      [
+        875,
+        912
+      ],
+      [
+        1116,
+        1123
+      ],
+      [
+        1460,
+        1486
+      ],
+      [
+        1515,
+        1528
+      ],
+      [
+        1547,
+        1597
+      ]
+    ],
+    "source": "git show"
+  },
+  {
+    "version": "pin",
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "task-sessions.md",
+    "full_blob_sha256": "64b221cde012f6e8d05c94fa6a467e4c5ce999bfd8071878caa3e85b8d57214d",
+    "full_blob_bytes": 58883,
+    "lines": 416,
+    "saved_ranges": [
+      [
+        1,
+        112
+      ],
+      [
+        118,
+        156
+      ],
+      [
+        178,
+        262
+      ],
+      [
+        263,
+        352
+      ]
+    ],
+    "source": "git show"
+  },
+  {
+    "version": "pin",
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "task-runner.md",
+    "full_blob_sha256": "178fd0f1055bbdd190a4c8d4a5316566ea7be00829f9883cbfb9fde6a2a16a85",
+    "full_blob_bytes": 141522,
+    "lines": 723,
+    "saved_ranges": [
+      [
+        1,
+        320
+      ]
+    ],
+    "source": "git show"
+  },
+  {
+    "version": "pin",
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "task-algorithm.md",
+    "full_blob_sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96",
+    "full_blob_bytes": 51475,
+    "lines": 370,
+    "saved_ranges": [
+      [
+        1,
+        420
+      ]
+    ],
+    "source": "git show"
+  },
+  {
+    "version": "pin",
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "README.md",
+    "full_blob_sha256": "0590d3648413073e0f090df02d0613d87b5423ac4ce6548f6e6dbb14fadd1c2f",
+    "full_blob_bytes": 1861,
+    "lines": 24,
+    "saved_ranges": [
+      [
+        1,
+        80
+      ]
+    ],
+    "source": "git show"
+  },
+  {
+    "version": "pin",
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "doc/open-questions.md",
+    "full_blob_sha256": "68b3c3a220795a6fdad7b80b6ecab93c47796dffbecfe40c0a308eabf2d53616",
+    "full_blob_bytes": 28960,
+    "lines": 87,
+    "saved_ranges": [
+      [
+        1,
+        110
+      ]
+    ],
+    "source": "git show"
+  },
+  {
+    "version": "pin",
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "completeness-check.md",
+    "full_blob_sha256": "3fd55d79b4a5dc59e87c914db89327e432b96f027ee8250e60de4f24aa2368a8",
+    "full_blob_bytes": 47447,
+    "lines": 52,
+    "saved_ranges": [
+      [
+        1,
+        80
+      ]
+    ],
+    "source": "git show"
+  },
+  {
+    "version": "observed",
+    "commit": "c550d028b943dd8f1f3a3c65c65473567269c289",
+    "path": "methodology.md",
+    "full_blob_sha256": "4f7556aaac15dd8efe099a9c35a79d2fe2ae541b2a87851abc4f4945bae4953f",
+    "full_blob_bytes": 388174,
+    "lines": 2011,
+    "saved_ranges": [
+      [
+        104,
+        111
+      ],
+      [
+        145,
+        159
+      ],
+      [
+        260,
+        270
+      ],
+      [
+        537,
+        545
+      ],
+      [
+        705,
+        720
+      ],
+      [
+        875,
+        912
+      ],
+      [
+        1116,
+        1123
+      ],
+      [
+        1460,
+        1486
+      ],
+      [
+        1515,
+        1528
+      ],
+      [
+        1547,
+        1597
+      ]
+    ],
+    "source": "git show"
+  },
+  {
+    "version": "observed",
+    "commit": "c550d028b943dd8f1f3a3c65c65473567269c289",
+    "path": "task-sessions.md",
+    "full_blob_sha256": "55b8bf4854104563c56bf08fe7b5957f865d9040e99205965f6e458dd993a452",
+    "full_blob_bytes": 60653,
+    "lines": 428,
+    "saved_ranges": [
+      [
+        1,
+        112
+      ],
+      [
+        118,
+        156
+      ],
+      [
+        178,
+        262
+      ],
+      [
+        263,
+        352
+      ]
+    ],
+    "source": "git show"
+  },
+  {
+    "version": "observed",
+    "commit": "c550d028b943dd8f1f3a3c65c65473567269c289",
+    "path": "task-runner.md",
+    "full_blob_sha256": "d73ebccaa93871ac8e82e8e8b20c0a23c7e5cae806b92044233379c2c51fce44",
+    "full_blob_bytes": 106917,
+    "lines": 378,
+    "saved_ranges": [
+      [
+        1,
+        320
+      ]
+    ],
+    "source": "git show"
+  },
+  {
+    "version": "observed",
+    "commit": "c550d028b943dd8f1f3a3c65c65473567269c289",
+    "path": "task-algorithm.md",
+    "full_blob_sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96",
+    "full_blob_bytes": 51475,
+    "lines": 370,
+    "saved_ranges": [
+      [
+        1,
+        420
+      ]
+    ],
+    "source": "git show"
+  },
+  {
+    "version": "observed",
+    "commit": "c550d028b943dd8f1f3a3c65c65473567269c289",
+    "path": "README.md",
+    "full_blob_sha256": "0590d3648413073e0f090df02d0613d87b5423ac4ce6548f6e6dbb14fadd1c2f",
+    "full_blob_bytes": 1861,
+    "lines": 24,
+    "saved_ranges": [
+      [
+        1,
+        80
+      ]
+    ],
+    "source": "git show"
+  },
+  {
+    "version": "observed",
+    "commit": "c550d028b943dd8f1f3a3c65c65473567269c289",
+    "path": "doc/open-questions.md",
+    "full_blob_sha256": "471342a0a10946821d20eeb83f78695309005c440e79c7091c0db0262dee2ec0",
+    "full_blob_bytes": 38514,
+    "lines": 97,
+    "saved_ranges": [
+      [
+        1,
+        110
+      ]
+    ],
+    "source": "git show"
+  },
+  {
+    "version": "observed",
+    "commit": "c550d028b943dd8f1f3a3c65c65473567269c289",
+    "path": "completeness-check.md",
+    "full_blob_sha256": "c167b90e9d7ae370bc75b703da428c97955393b1f5b84e5209fd9acb21ad7d9d",
+    "full_blob_bytes": 51904,
+    "lines": 55,
+    "saved_ranges": [
+      [
+        1,
+        80
+      ]
+    ],
+    "source": "git show"
+  }
+]

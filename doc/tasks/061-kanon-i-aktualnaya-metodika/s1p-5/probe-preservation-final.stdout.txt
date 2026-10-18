@@ -1,0 +1,6 @@
+P6 normative records changed beyond whitespace=REQ-05,AC-01,AC-02,AC-06,AC-07,AC-08
+P6 normative source-route-destination links=50; D0-D5/DX retained with conditions
+P6 full crosswalk source/REQ/AC/destination/check links=60; unresolved signatures retained
+P6 original baseline449 remains a prefix of supplement459; protected unchanged=453
+P6 exact changed paths=6 allowed subjects; nested immutable journals unchanged=37
+P6 no plan061/current061/format; no writes to history, code, Canon or config detected

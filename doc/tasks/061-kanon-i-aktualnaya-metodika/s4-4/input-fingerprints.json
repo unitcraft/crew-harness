@@ -1,0 +1,87 @@
+{
+  "inputs": [
+    {
+      "path": "spec.md",
+      "bytes": 21695,
+      "lines": 84,
+      "sha256": "043aa8155cae35cd07f50baaec118e89da5fcb163067645262859531813490bc",
+      "equals_approved": true
+    },
+    {
+      "path": "analysis.md",
+      "bytes": 11876,
+      "lines": 48,
+      "sha256": "118f93ea382c6b2981330e982b3b4edbea435e9447d2c3e61e9e22bb20f55363",
+      "equals_approved": true
+    },
+    {
+      "path": "spec-trace.md",
+      "bytes": 31313,
+      "lines": 133,
+      "sha256": "fa7c65d484ab4bcb83f6fe0149957f77e1c57ae462acddd7dee7cf5b2a671b06",
+      "equals_approved": true
+    },
+    {
+      "path": "method-delta.md",
+      "bytes": 57470,
+      "lines": 545,
+      "sha256": "29f03927ea8a2ef7e2de108bc369e901320c506ab7296908a7872240dc5e3044",
+      "equals_approved": true
+    },
+    {
+      "path": "plan.md",
+      "bytes": 41036,
+      "lines": 404,
+      "sha256": "362d4958ff43fa325e92a976dd642b7283954891af44c05d369b66a8ab175314"
+    }
+  ],
+  "code": [
+    {
+      "path": "opencode-plugin/journal.ts",
+      "git_exit": 0,
+      "blob_sha256": "211eb4324489886444287bb5a266adacfffd55185d4e9f64923a563967006e93",
+      "worktree_sha256": "211eb4324489886444287bb5a266adacfffd55185d4e9f64923a563967006e93",
+      "lf_equal": true
+    },
+    {
+      "path": "opencode-plugin/task-folders.ts",
+      "git_exit": 0,
+      "blob_sha256": "6e13014ad6fe52a61d27b2ec3110df0d9f3f531365fbd3856cdd869fa31dadd7",
+      "worktree_sha256": "6e13014ad6fe52a61d27b2ec3110df0d9f3f531365fbd3856cdd869fa31dadd7",
+      "lf_equal": true
+    },
+    {
+      "path": "opencode-plugin/index.ts",
+      "git_exit": 0,
+      "blob_sha256": "e37562e25903e72067fd39fe463ea6d864dd8dd043f1d690e11b5532e0b6f5f1",
+      "worktree_sha256": "e37562e25903e72067fd39fe463ea6d864dd8dd043f1d690e11b5532e0b6f5f1",
+      "lf_equal": true
+    },
+    {
+      "path": "opencode-plugin/tasks.ts",
+      "git_exit": 0,
+      "blob_sha256": "c5eade92e01b73a37b0e78b83c8228fd1e5f548aa1fb06360f7049fcab919896",
+      "worktree_sha256": "c5eade92e01b73a37b0e78b83c8228fd1e5f548aa1fb06360f7049fcab919896",
+      "lf_equal": true
+    },
+    {
+      "path": "opencode-plugin/core.ts",
+      "git_exit": 0,
+      "blob_sha256": "75543b85249bd6d135b917c2bb3347c0140f33ea222afc4ad90d023f03b29384",
+      "worktree_sha256": "75543b85249bd6d135b917c2bb3347c0140f33ea222afc4ad90d023f03b29384",
+      "lf_equal": true
+    }
+  ],
+  "paths": {
+    "doc/canon/README.md": true,
+    "doc/canon/process.md": true,
+    "doc/canon/decisions/README.md": true,
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/current.md": false,
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/result.md": false
+  },
+  "branch_verify": {
+    "exit": 0,
+    "stdout": "492c166fbd12e00a6a924efab065f6adb4bd91f6\n",
+    "stderr": ""
+  }
+}

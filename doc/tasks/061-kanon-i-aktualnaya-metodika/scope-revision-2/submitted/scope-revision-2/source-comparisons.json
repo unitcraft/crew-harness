@@ -1,0 +1,26 @@
+{
+  "changed_paths": [
+    "AGENTS.md",
+    "README.md",
+    "completeness-check.md",
+    "doc/open-questions.md",
+    "methodology.md",
+    "presentations/methodology.html",
+    "presentations/task-sessions.html",
+    "starter-kit/README.md",
+    "starter-kit/scripts/guards/guards.conf",
+    "starter-kit/scripts/guards/selftest/test-commit-msg.py",
+    "starter-kit/scripts/guards/selftest/test-commit-range.py",
+    "starter-kit/scripts/guards/selftest/test-guard-commit-message.py",
+    "starter-kit/scripts/guards/selftest/test-pre-push.py",
+    "starter-kit/verify-portability.sh",
+    "task-runner.md",
+    "task-sessions.md"
+  ],
+  "algorithm_old_current_ab2_equal": true,
+  "algorithm_lf_sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96",
+  "algorithm_artificial_crlf_sha256": "8a0004dbfd8b6d8f9889abeb8ee02f3bf87ea9af6309ca2a21b8cfdca9eead8d",
+  "q5_9d_current_equal": true,
+  "ab2_current_runner_diff": "diff --git a/task-runner.md b/task-runner.md\nindex 9a0d20f..5c5c53a 100644\n--- a/task-runner.md\n+++ b/task-runner.md\n@@ -231,0 +232,2 @@ state\n+**Второе мнение** (`methodology.md`, раздел 18) идёт на классе A с включённым размышлением и усилием 3; при вопросе о безопасности, деньгах, данных или правке нормы — усилие 4; семья — другая, чем у агента, среди согласованных поставщиков, если доступно, совпадение называется (`methodology.md`, раздел 18). Модель второго мнения проект задаёт отдельно от основной модели класса.\n+\n",
+  "command_policy": "Только show/diff; без fetch/изменения refs. repo передан аргументом, локатор не публикуется."
+}

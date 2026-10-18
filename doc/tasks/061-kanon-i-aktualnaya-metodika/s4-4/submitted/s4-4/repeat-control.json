@@ -1,0 +1,20 @@
+{
+  "commands": [
+    {
+      "mode": "prepare",
+      "exit": 1,
+      "stdout": "",
+      "stderr": "STOP existing fixtures/before\n"
+    },
+    {
+      "mode": "run",
+      "exit": 1,
+      "stdout": "",
+      "stderr": "STOP existing actual\n"
+    }
+  ],
+  "actual_hash_before": "24dfbd411fca7b6f233754a6e4c6445c11a6f7818ffa51cb470030a9ab3be746",
+  "actual_hash_after": "24dfbd411fca7b6f233754a6e4c6445c11a6f7818ffa51cb470030a9ab3be746",
+  "unchanged": true,
+  "expected": "оба STOP/exit1; actual неизменен"
+}

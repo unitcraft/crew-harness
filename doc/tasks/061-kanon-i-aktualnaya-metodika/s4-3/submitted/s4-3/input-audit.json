@@ -1,0 +1,270 @@
+{
+  "approved4": {
+    "spec.md": {
+      "root": {
+        "bytes": 21695,
+        "sha256": "043aa8155cae35cd07f50baaec118e89da5fcb163067645262859531813490bc"
+      },
+      "frozen": {
+        "bytes": 21695,
+        "sha256": "043aa8155cae35cd07f50baaec118e89da5fcb163067645262859531813490bc"
+      },
+      "expected": {
+        "bytes": 21695,
+        "sha256": "043aa8155cae35cd07f50baaec118e89da5fcb163067645262859531813490bc"
+      },
+      "ok": true
+    },
+    "analysis.md": {
+      "root": {
+        "bytes": 11876,
+        "sha256": "118f93ea382c6b2981330e982b3b4edbea435e9447d2c3e61e9e22bb20f55363"
+      },
+      "frozen": {
+        "bytes": 11876,
+        "sha256": "118f93ea382c6b2981330e982b3b4edbea435e9447d2c3e61e9e22bb20f55363"
+      },
+      "expected": {
+        "bytes": 11876,
+        "sha256": "118f93ea382c6b2981330e982b3b4edbea435e9447d2c3e61e9e22bb20f55363"
+      },
+      "ok": true
+    },
+    "spec-trace.md": {
+      "root": {
+        "bytes": 31313,
+        "sha256": "fa7c65d484ab4bcb83f6fe0149957f77e1c57ae462acddd7dee7cf5b2a671b06"
+      },
+      "frozen": {
+        "bytes": 31313,
+        "sha256": "fa7c65d484ab4bcb83f6fe0149957f77e1c57ae462acddd7dee7cf5b2a671b06"
+      },
+      "expected": {
+        "bytes": 31313,
+        "sha256": "fa7c65d484ab4bcb83f6fe0149957f77e1c57ae462acddd7dee7cf5b2a671b06"
+      },
+      "ok": true
+    },
+    "method-delta.md": {
+      "root": {
+        "bytes": 57470,
+        "sha256": "29f03927ea8a2ef7e2de108bc369e901320c506ab7296908a7872240dc5e3044"
+      },
+      "frozen": {
+        "bytes": 57470,
+        "sha256": "29f03927ea8a2ef7e2de108bc369e901320c506ab7296908a7872240dc5e3044"
+      },
+      "expected": {
+        "bytes": 57470,
+        "sha256": "29f03927ea8a2ef7e2de108bc369e901320c506ab7296908a7872240dc5e3044"
+      },
+      "ok": true
+    }
+  },
+  "submitted": {
+    "plan.md": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1.md": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/after.json": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/before.json": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/boundary.md": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/coverage.md": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/expected-probes.json": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/final-check.json": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/finalize.py": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/git-after.status.txt": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/git-before.json": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/input-fingerprints.json": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/manual-results.md": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/old-plan.md": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/old-to-new-plan.diff": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/path_probe.py": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/preconditions.md": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/probe-before.json": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/probe-inputs/bad-shell.md": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/probe-inputs/no-base.md": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/probe-inputs/no-branch.md": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/probe-inputs/occupied-E/before.json": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/probe-inputs/old/before.json": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/probe-inputs/old/expected.json": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/probe-inputs/old/notes.md": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/probe-inputs/original.md": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/probe-results.json": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/probe.stdout.txt": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/probes.md": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/qualification.md": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/read-map.md": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/read_git.py": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/snapshot.py": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/source-comparison.json": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/source-reads.jsonl": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/upstream-delta.diff": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/upstream.json": {
+      "ok": true,
+      "primary_equal": true
+    },
+    "plan-scope-1/upstream.py": {
+      "ok": true,
+      "primary_equal": true
+    }
+  },
+  "author_internal": {
+    "before_count": 1256,
+    "after_count": 1256,
+    "removed": [],
+    "added": [],
+    "changed": [
+      "doc/tasks/061-kanon-i-aktualnaya-metodika/plan.md"
+    ],
+    "after_other_fields": {
+      "comparison": {
+        "changed": [
+          "doc/tasks/061-kanon-i-aktualnaya-metodika/plan.md"
+        ],
+        "added": [],
+        "before_count": 1256,
+        "after_count": 1256
+      }
+    }
+  },
+  "preflight": {
+    "count": 684,
+    "mismatch": [
+      "doc/tasks/061-kanon-i-aktualnaya-metodika/progress.log"
+    ]
+  },
+  "plan": {
+    "bytes": 41036,
+    "sha256": "362d4958ff43fa325e92a976dd642b7283954891af44c05d369b66a8ab175314",
+    "lines": 404
+  },
+  "git": {
+    "head": {
+      "exit": 0,
+      "stdout": "492c166fbd12e00a6a924efab065f6adb4bd91f6\n",
+      "stderr": ""
+    },
+    "branch": {
+      "exit": 0,
+      "stdout": "review/061-plan-r3\n",
+      "stderr": ""
+    },
+    "task_ref": {
+      "exit": 0,
+      "stdout": "492c166fbd12e00a6a924efab065f6adb4bd91f6\n",
+      "stderr": ""
+    },
+    "base_date": {
+      "exit": 0,
+      "stdout": "492c166fbd12e00a6a924efab065f6adb4bd91f6 2026-10-16\n",
+      "stderr": ""
+    }
+  }
+}

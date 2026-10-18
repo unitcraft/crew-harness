@@ -1,0 +1,293 @@
+{
+  "spec-trace.md": {
+    "anchors": 94,
+    "nonspace_changes": {
+      "A02": {
+        "old": [
+          "A02 / 7",
+          "Сейчас анализ и черновик spec",
+          "C-A02: четыре корневых черновика и fixes-4, без реализации; выход этой С1п уточнён письмом назначения"
+        ],
+        "current": [
+          "A02 / 7",
+          "Сейчас анализ и черновик spec",
+          "C-A02: шесть текущих документов и разрешённые новые аналитические части/evidence; без реализации"
+        ]
+      },
+      "A04": {
+        "old": [
+          "A04 / 7",
+          "Проверки/правки под тем же номером",
+          "C-A04: сессия 061 С1п-4 и submit n61; новые номера запрещены"
+        ],
+        "current": [
+          "A04 / 7",
+          "Проверки/правки под тем же номером",
+          "C-A04: сессия 061 С1п-5 и submit n61; новые номера запрещены"
+        ]
+      },
+      "A05": {
+        "old": [
+          "A05 / 7",
+          "Независимая С2 и отдельные решения владельца",
+          "AC-07/08, будущая группа проверок; fixes-4 не приёмка"
+        ],
+        "current": [
+          "A05 / 7",
+          "Независимая С2 и отдельные решения владельца",
+          "AC-07/08; отдельная свежая полная С2, не авторская приёмка"
+        ]
+      },
+      "A06": {
+        "old": [
+          "A06 / 7",
+          "Пока без Canon и реализации",
+          "DNC-01/04; `s1p-4/protected-before.json` и сравнение after"
+        ],
+        "current": [
+          "A06 / 7",
+          "Пока без Canon и реализации",
+          "DNC-01/04; ранние baseline и сравнение after текущей авторской сессии"
+        ]
+      },
+      "A10": {
+        "old": [
+          "A10 / 9",
+          "Перевести Канон на последнюю методику",
+          "REQ-05/06, AC-05/06; раздел результата и В-01/01а"
+        ],
+        "current": [
+          "A10 / 9",
+          "Перевести Канон на последнюю методику",
+          "REQ-05/06, AC-05/06; раздел результата и решения В-01/В-01а"
+        ]
+      },
+      "A12": {
+        "old": [
+          "A12 / 9",
+          "Не обновлять main/push автоматически",
+          "C-A12, DNC-04; protected baseline, отсутствие git/live действий в fixes-4"
+        ],
+        "current": [
+          "A12 / 9",
+          "Не обновлять main/push автоматически",
+          "C-A12, DNC-04; protected baseline и отсутствие git/live действий"
+        ]
+      },
+      "A14": {
+        "old": [
+          "A14 / 11",
+          "Правило pin и начатых задач",
+          "REQ-06/AC-07; В-01, ответ не предрешён"
+        ],
+        "current": [
+          "A14 / 11",
+          "Правило pin и начатых задач",
+          "REQ-06/AC-07; выбранный В-01 и все его условия в owner-gate-decisions"
+        ]
+      },
+      "A32": {
+        "old": [
+          "A32 / 15",
+          "Чтение/порядок переносов",
+          "REQ-05/AC-05; first-transfer таблица, пробыМ1"
+        ],
+        "current": [
+          "A32 / 15",
+          "Чтение/порядок переносов",
+          "REQ-05/AC-05; раздел первого переноса и проверка immediate current при Canon-first"
+        ]
+      },
+      "A46": {
+        "old": [
+          "A46 / 19",
+          "Точные SHA spec/plan045",
+          "C-A46: spec685245…/plan150c98…; before/after внешних файлов в read-map"
+        ],
+        "current": [
+          "A46 / 19",
+          "Точные SHA spec/plan045",
+          "C-A46: spec685245…; прежний plan150c98… сохранён, текущий plan4856a2… с append решения; before/after внешних файлов"
+        ]
+      },
+      "A48": {
+        "old": [
+          "A48 / 19",
+          "Checklist/test ручного review и DNC",
+          "REQ-04/AC-03; analysis «Правка плана045», DNC08 отдельно обе части"
+        ],
+        "current": [
+          "A48 / 19",
+          "Checklist/test ручного review и DNC",
+          "REQ-04/AC-03; analysis «Блокеры 045 и 013», DNC-08 отдельно обе части"
+        ]
+      },
+      "A49": {
+        "old": [
+          "A49 / 19",
+          "В-05 открытый источник registry",
+          "UNKNOWN-03, REQ-04, В-03; перечень16kinds/signatures, не закрывается Canon"
+        ],
+        "current": [
+          "A49 / 19",
+          "В-05 открытый источник registry",
+          "UNKNOWN-03, REQ-04, В-03/В-05: путь проектирования в 045 выбран, полнота 16 kinds/signatures не утверждена"
+        ]
+      },
+      "A58": {
+        "old": [
+          "A58 / 23",
+          "Выход analysis и draft spec",
+          "C-A58: корневые черновики; fixes-4 адресно описывает поставку"
+        ],
+        "current": [
+          "A58 / 23",
+          "Выход analysis и draft spec",
+          "C-A58: шесть корневых черновиков и явная аналитическая часть owner-gate-decisions"
+        ]
+      },
+      "A63": {
+        "old": [
+          "A63 / 23",
+          "Границы новой редакции031/отдельное approval",
+          "REQ-05/AC-08/В-02; format proposed, immutable approved"
+        ],
+        "current": [
+          "A63 / 23",
+          "Границы новой редакции 031/отдельное approval",
+          "REQ-05/AC-08/В-02; место выбрано, содержание/версии отдельно утверждаются, approved031 immutable"
+        ]
+      },
+      "A65": {
+        "old": [
+          "A65 / 25",
+          "Start первой, N единиц, step немедленно",
+          "C-A65: первоначальная С1 считала источники; назначение С1п-4 явно заменяет единицу на М1/М2/М3/К1, N4; собственные start/step после исходов"
+        ],
+        "current": [
+          "A65 / 25",
+          "Start первой, N единиц, step немедленно",
+          "C-A65: первоначальная С1 считала источники; нынешнее назначение — шесть законченных пунктов программы, N6, step сразу после каждого"
+        ]
+      },
+      "A66": {
+        "old": [
+          "A66 / 25",
+          "Агент не пишет launch/log регистрации",
+          "C-A66: журнал/log защищены кроме append-only своих progress; регистрация15 уже интегратора, расхождение14 не чинится"
+        ],
+        "current": [
+          "A66 / 25",
+          "Агент не пишет launch/log регистрации",
+          "C-A66: log неизменен, свои progress append-only; launcher уже записал №19, известное смещение карточки №18 не чинится"
+        ]
+      },
+      "A83": {
+        "old": [
+          "A83 / 33",
+          "Реальные owner choices и next independent С2",
+          "C-A83: spec В-01/01а/02/03, fixes-4: две предметные + сводная впереди"
+        ],
+        "current": [
+          "A83 / 33",
+          "Реальные решения владельца и следующая независимая С2",
+          "C-A83: В-01/В-01а решены, В-02 условен по содержанию, В-03 путь выбран; далее отдельная свежая полная С2"
+        ]
+      },
+      "A91": {
+        "old": [
+          "A91 / 37",
+          "Далее С2 по интегратору, не auto acceptance",
+          "C-A91: submit, остановка после группы авторских исходов; fixes-4 не approval"
+        ],
+        "current": [
+          "A91 / 37",
+          "Далее С2 по интегратору, не auto acceptance",
+          "C-A91: submit и остановка автора; отдельная свежая С2 не назначается самим автором"
+        ]
+      },
+      "A92": {
+        "old": [
+          "A92 / 41",
+          "Выбор pin/перехода,031,внешнего scope у владельца",
+          "AC-07/08, В-01/02/03; рекомендации не ответы"
+        ],
+        "current": [
+          "A92 / 41",
+          "Выбор pin/перехода,031, внешнего scope у владельца",
+          "AC-07/08, В-01/02/03; решения owner-gate-decisions, не авторский выбор"
+        ]
+      },
+      "A93": {
+        "old": [
+          "A93 / 41",
+          "До выбора только факты/варианты",
+          "C-A93: status draft, UNKNOWN сохранены, никаких внешних задач/контрактов"
+        ],
+        "current": [
+          "A93 / 41",
+          "До выбора только факты/варианты",
+          "C-A93: draft; выбранное направление не готовые REQ/AC/пары/версии/каталог, нет внешних задач/контрактов"
+        ]
+      }
+    }
+  },
+  "method-delta.md": {
+    "anchors": 66,
+    "nonspace_changes": {
+      "R03": {
+        "old": [
+          "R03 84→84",
+          "Журналсигнал, артефакт/independentreviewдоказательство;неантифальсификация",
+          "process63/102–104; EJнечестность; D3"
+        ],
+        "current": [
+          "R03 84→84",
+          "Журнал сигнал, артефакт/independent review доказательство; не антифальсификация",
+          "process63/102–104; EJ не доказывает честность строки; D3"
+        ]
+      }
+    }
+  },
+  "031-impact.md": {
+    "anchors": 60,
+    "nonspace_changes": {
+      "C36": {
+        "old": [
+          "C36 M711: порог>1нормы/механизм;intent3поля,факты+свежийсобеседник≤10,спорно,записьreviewtask/log",
+          "Dintentполя:goalref/boundary/baseexcerpts; promptref,A/Bexchange, Gintegerlimit;notnewrootfield",
+          "У+Вточныенормаcount/context/prompt/signatures.045порог/триполя/спорно/двеместазаписиразличимы;registry/OQне«норма»дляcount"
+        ],
+        "current": [
+          "C36 M711: порог>1 нормы/механизм; intent3 поля, факты+свежий собеседник≤10, спорно, запись review task/log",
+          "D intent поля: goal ref/boundary/base excerpts; prompt ref, A/Bexchange, G integer limit; not new root field",
+          "У+В: неизвестны точные contracts для count норм/context/prompt/signatures. Для 045 различимы порог, три поля, пометка «спорно» и два места записи; registry/OQ не считаются нормой для этого count."
+        ]
+      },
+      "C55": {
+        "old": [
+          "C55 Rgate-decision: decision→outcome и target",
+          "G117triggerkindgate-decisionrefnamespacegate/idfromgate/valueлокdecision;edge.onowner_decisionsignaturerequiredgateId/decisionId;edgeoutcomeroute-triggerregistrymatrix",
+          "Уформы+В**точнаяматрицаunknown**,payload/domain/availabilityunknown;045unsupported-catalogневыбратьoutcomeпоимени/whitelistdigest"
+        ],
+        "current": [
+          "C55 Rgate-decision: decision→outcome и target",
+          "G, 031:117: trigger.kind=gate-decision, ref.namespace=gate, ref.id=gate узла edge.from, value=локальный decision.id. Edge.on — событие kind=owner_decision с required gateId/decisionId. Edge.outcome задаётся точной матрицей route-trigger registry.",
+          "У формы+В**точная матрица unknown**, payload/domain/availability unknown; 045 unsupported-catalog не выбрать outcome по имени/whitelistdigest"
+        ]
+      },
+      "C58": {
+        "old": [
+          "C58 Registry/signaturesполногокомплекта",
+          "V31/97/504:16kindclosed,version/digest,≤1binding/kind;predicateCatalog45толькоbuiltinимена,неsignatures;Dprompt/Tcontext/Aeffects/Punit",
+          "Уформы+Вполныйauthority/signaturesнеполучен;045В05независимоотCanon. Matchingcatalogнужен,ноодиндigest/whitelistнеoperation/неполнота"
+        ],
+        "current": [
+          "C58 Registry/signatures полного комплекта",
+          "V31/97/504:16 kind closed, version/digest,≤1 binding/kind; predicateCatalog45 только builtin имена, не signatures; D prompt/T context/A effects/P unit",
+          "У формы+В: полный утверждённый каталог и signatures ещё не получены. В-05 решён только как путь проектирования в 045, не как доказанная полнота. Matching catalog необходим, но один digest или whitelist не подтверждает operation и не доказывает полноту. Требования ко всем 16 видам и matching version/digest не ослаблены."
+        ]
+      }
+    }
+  }
+}

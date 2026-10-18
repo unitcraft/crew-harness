@@ -1,0 +1,33 @@
+{
+  "before_count": 685,
+  "after_count": 685,
+  "protected_count": 682,
+  "changed_protected": [],
+  "added_unexpected": [],
+  "removed": [],
+  "journal_prefixes": {
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/usage.log": true,
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/progress.log": true,
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/profile.log": true
+  },
+  "preflight_count": 684,
+  "preflight_prefix_mismatch": [],
+  "own_extra_over_preflight": [
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/review-setup/integrator-preflight.json"
+  ],
+  "submitted_count": 38,
+  "submitted_mismatch": [],
+  "author_count": 1256,
+  "author_after_count": 1256,
+  "author_changed": [
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/plan.md"
+  ],
+  "author_removed": [],
+  "author_added": [],
+  "author_before_plan_matches_old": true,
+  "author_after_plan_matches_current": true,
+  "author_spec_unchanged": true,
+  "head_unchanged": true,
+  "branch_unchanged": true,
+  "status_without_own_unchanged": true
+}

@@ -1,0 +1,260 @@
+{
+  "spec.md": {
+    "bytes": 21388,
+    "sha256": "a32f27b01103078cdc3041ec704b00cc1a35c026bf7d9d61b169d4c505cadab4",
+    "crlf": 0,
+    "lf": 84
+  },
+  "analysis.md": {
+    "bytes": 11876,
+    "sha256": "118f93ea382c6b2981330e982b3b4edbea435e9447d2c3e61e9e22bb20f55363",
+    "crlf": 0,
+    "lf": 48
+  },
+  "spec-trace.md": {
+    "bytes": 31215,
+    "sha256": "a8f8c1f228da6506f0c9371189dfb73267086e84631ec88ebea2750aca2a2708",
+    "crlf": 0,
+    "lf": 131
+  },
+  "method-delta.md": {
+    "bytes": 57470,
+    "sha256": "29f03927ea8a2ef7e2de108bc369e901320c506ab7296908a7872240dc5e3044",
+    "crlf": 0,
+    "lf": 545
+  },
+  "scope-revision-2.md": {
+    "bytes": 13879,
+    "sha256": "567855d0fcbce073808b6176fa71fea27f2e971b43e52cf4bdac835440b33790",
+    "crlf": 0,
+    "lf": 60
+  },
+  "scope-revision-2/after-git-state.json": {
+    "bytes": 43905,
+    "sha256": "8c9856c91420a91f1f60882db2b1c2b29966a68b2e69e109b01f8a5754352c28",
+    "crlf": 17,
+    "lf": 17
+  },
+  "scope-revision-2/after-manifest.json": {
+    "bytes": 191809,
+    "sha256": "069023751d2ae3e0ee61e9cd9a8394797258db87c9b2f0968b3fbee71790a1d4",
+    "crlf": 4422,
+    "lf": 4422
+  },
+  "scope-revision-2/analysis.md.diff": {
+    "bytes": 29548,
+    "sha256": "ade3f5680320316a4684e2b89f720b7c2fbf1a91721dfb4f2b166bebbef03bcd",
+    "crlf": 99,
+    "lf": 99
+  },
+  "scope-revision-2/before/analysis.md": {
+    "bytes": 17441,
+    "sha256": "b4db7e330788bb3f8da230ab8ed40345d8444342d4c1c87dbb909c5801dcfdf6",
+    "crlf": 0,
+    "lf": 69
+  },
+  "scope-revision-2/before/git-state.json": {
+    "bytes": 41492,
+    "sha256": "629236439f1e3524c9a2c2e9b8752dc83eb6682b80f0d8a8a3ac9e9b04e5000b",
+    "crlf": 17,
+    "lf": 17
+  },
+  "scope-revision-2/before/manifest.json": {
+    "bytes": 191809,
+    "sha256": "eef195aa90d04420ae2c72ac8c0dd1d7ec61cd8e6111dde037da2e656f1dab55",
+    "crlf": 4422,
+    "lf": 4422
+  },
+  "scope-revision-2/before/method-delta.md": {
+    "bytes": 35376,
+    "sha256": "6e77dd61ef26e03417004681ad52205d109ac91a6c26116e5685ad562e01a88a",
+    "crlf": 0,
+    "lf": 449
+  },
+  "scope-revision-2/before/spec-trace.md": {
+    "bytes": 44170,
+    "sha256": "4007a000c94a81921e3b20148953950094a76162fe5f9898a94b07066b7db9ed",
+    "crlf": 0,
+    "lf": 649
+  },
+  "scope-revision-2/before/spec.md": {
+    "bytes": 30878,
+    "sha256": "d532591dab15272455f13cd5061042aa49795847cb24cd76c3a90e80865b1619",
+    "crlf": 0,
+    "lf": 136
+  },
+  "scope-revision-2/check_immutable.py": {
+    "bytes": 950,
+    "sha256": "a50b45187a3b81b78ea441cd28e7bb946df1327a25c4cc746aa6968737ce75c4",
+    "crlf": 0,
+    "lf": 17
+  },
+  "scope-revision-2/document-fingerprints.json": {
+    "bytes": 1928,
+    "sha256": "4f7c3cb01f0a7b00758d434f7297b1002ef7c50118439126486cb4a50b4df93d",
+    "crlf": 66,
+    "lf": 66
+  },
+  "scope-revision-2/finalize.py": {
+    "bytes": 3419,
+    "sha256": "7b09503f3796bf3d0ab5691fe521e90a71a20efb65c412af39e4ab87f71177ec",
+    "crlf": 0,
+    "lf": 54
+  },
+  "scope-revision-2/git-read-events.jsonl": {
+    "bytes": 12777,
+    "sha256": "0a352524f2917abd5698b9d41fa0f7f768b8c33942b2bfba67d2e378baffe5b9",
+    "crlf": 35,
+    "lf": 35
+  },
+  "scope-revision-2/immutable-input-check.json": {
+    "bytes": 1105,
+    "sha256": "ad8d2aea327a4ae8e664eeb89c2e064c342e4236a31cd6b2ae225ede34d88270",
+    "crlf": 33,
+    "lf": 33
+  },
+  "scope-revision-2/manual-scenarios.json": {
+    "bytes": 9920,
+    "sha256": "ac301646d3599636fe4d488015846621dfbbf1d53f36204f66ba6e932db1ada3",
+    "crlf": 0,
+    "lf": 93
+  },
+  "scope-revision-2/method-delta.md.diff": {
+    "bytes": 38830,
+    "sha256": "8fb7e451c26a865d681ee1329c542d5dd28abb29a117b2e8999328d3e5e88ca8",
+    "crlf": 235,
+    "lf": 235
+  },
+  "scope-revision-2/probe-inputs/injected-format-spec.txt": {
+    "bytes": 21579,
+    "sha256": "76e363d9928ccc93f9f0e82142d0e39c1f65334afcd650fcf4c5fb71f092c60f",
+    "crlf": 86,
+    "lf": 86
+  },
+  "scope-revision-2/probe-inputs/missing-M07-delta.txt": {
+    "bytes": 57726,
+    "sha256": "0dbb7cb4a71ea32415a99f9aa3462cb800eaa48ed139fd2c9b674ad993974347",
+    "crlf": 544,
+    "lf": 544
+  },
+  "scope-revision-2/probe-inputs/missing-owner-spec.txt": {
+    "bytes": 21366,
+    "sha256": "89636e84f910d4f27dd1f8d0b1a2c85e09faddf703367ed3e91a610cd895867c",
+    "crlf": 84,
+    "lf": 84
+  },
+  "scope-revision-2/probe-run-1.json": {
+    "bytes": 24012,
+    "sha256": "db5279678847ddf93fb8c6179c41f3ac560f04376e6d3619ebe5d90313a1e361",
+    "crlf": 298,
+    "lf": 298
+  },
+  "scope-revision-2/probe-run-1.stdout.txt": {
+    "bytes": 5667,
+    "sha256": "792592f9e76cfa7be4bd754e4e2bfa89e9e9aed606d6a558b781cd824a5a177a",
+    "crlf": 23,
+    "lf": 23
+  },
+  "scope-revision-2/probes.md": {
+    "bytes": 7066,
+    "sha256": "61ffd4497b696d8da50defd76276c20abdc780e12d480febb9664b1f0bfcbe1f",
+    "crlf": 0,
+    "lf": 27
+  },
+  "scope-revision-2/protected-check.json": {
+    "bytes": 346,
+    "sha256": "b270a171b82ec3ef1b7a6d6508a05b6e3158b3f024f8531037f666870522b0e3",
+    "crlf": 11,
+    "lf": 11
+  },
+  "scope-revision-2/qualification.md": {
+    "bytes": 3350,
+    "sha256": "56dde7dbfb422162528e5c8da7a2f5abc1591a5a99e7d4cb082e55b68cd47d8b",
+    "crlf": 0,
+    "lf": 13
+  },
+  "scope-revision-2/read-map.md": {
+    "bytes": 5209,
+    "sha256": "42567504a1c7eca5d08da4a3e09d60692ae3780bf00ec4b22103b01f136369fa",
+    "crlf": 0,
+    "lf": 36
+  },
+  "scope-revision-2/read_git.py": {
+    "bytes": 1840,
+    "sha256": "99950fba4f8ac4e9e07013048ef9d71d2bf052d8b1f80c1bca138ec83f1cc68c",
+    "crlf": 0,
+    "lf": 30
+  },
+  "scope-revision-2/regression.md": {
+    "bytes": 8912,
+    "sha256": "425cc4b1b631af9b8d2997d3a494502f2c3610edda04d32c9618476c017156a8",
+    "crlf": 0,
+    "lf": 36
+  },
+  "scope-revision-2/run_probes.py": {
+    "bytes": 7723,
+    "sha256": "059f85b714a1fb508c30bba7fc15088059fe77be2f8cddfa33d761963c18b751",
+    "crlf": 0,
+    "lf": 93
+  },
+  "scope-revision-2/session-contract.md": {
+    "bytes": 2629,
+    "sha256": "916fe18bdffb84bc588460dc5e96d1b1101b345816385d9d19ad57b6abf24625",
+    "crlf": 0,
+    "lf": 13
+  },
+  "scope-revision-2/snapshot.py": {
+    "bytes": 2670,
+    "sha256": "c73d184e7722ea0ea4bb7e0831689de37572619cb5745ef0ee60aa9891d87967",
+    "crlf": 0,
+    "lf": 40
+  },
+  "scope-revision-2/source-addendum.md": {
+    "bytes": 7514,
+    "sha256": "f37eca36f82fae19b6c0a2ef1a5d9ba5a6d53ce710eda75696ef6685982bd12c",
+    "crlf": 0,
+    "lf": 27
+  },
+  "scope-revision-2/source-comparisons.json": {
+    "bytes": 1946,
+    "sha256": "54054f2bfd0a9fd79b70d10d6b932fed9fef1fc8ecbe8678772f7224efed4752",
+    "crlf": 26,
+    "lf": 26
+  },
+  "scope-revision-2/source-facts.stdout.txt": {
+    "bytes": 1955,
+    "sha256": "b5783a3cdd33ba3787da145f417ee122f4410908685768fdd4ca664361f0bda6",
+    "crlf": 27,
+    "lf": 27
+  },
+  "scope-revision-2/source-fingerprints.json": {
+    "bytes": 8012,
+    "sha256": "65c968fd95dcf5596cdb87ca0e2f4d873ec4ab504b2ac8208b7a4d77db0d28ac",
+    "crlf": 240,
+    "lf": 240
+  },
+  "scope-revision-2/source_facts.py": {
+    "bytes": 1784,
+    "sha256": "1ed4c0e046bfc6dc1660df89095f7129351ccee2b948290dab4257fa9d40d7a6",
+    "crlf": 0,
+    "lf": 31
+  },
+  "scope-revision-2/spec-trace.md.diff": {
+    "bytes": 76972,
+    "sha256": "2186b8c47a0b8ed9f008d7742ee9d5cee39b6ee0d4e63a0ccdbf0fd052c04b5c",
+    "crlf": 770,
+    "lf": 770
+  },
+  "scope-revision-2/spec.md.diff": {
+    "bytes": 51883,
+    "sha256": "8da3d3ecbbaba51b62104bde7f4c29b81325215ab3f6b4c09a38b061cd57e8e5",
+    "crlf": 179,
+    "lf": 179
+  },
+  "scope-revision-2/upstream.json": {
+    "bytes": 272,
+    "sha256": "cc532ab72e1d8481b7e07f88bfddbae5942f43717d2375bc4373e0c59aef35a3",
+    "crlf": 9,
+    "lf": 9
+  }
+}

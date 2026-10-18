@@ -1,0 +1,9 @@
+{
+  "author_plan_sha256": "362d4958ff43fa325e92a976dd642b7283954891af44c05d369b66a8ab175314",
+  "root_approved_sha256": "2c9c23c6ac80bdf33e928510987cfbad150fbe75c4cb2290ead6ede91139f0f1",
+  "root_bytes": 41329,
+  "only_first_line_changed": true,
+  "first_line": "Статус: утверждено владельцем, 2026-10-17, question «061: утверждение плана»; разрешена только подготовка шагов 1–3, перенос после отдельных ворот 4; источник — plan-approval-2026-10-17/owner-input.md и log.md.",
+  "approval_source": "owner-input.md; log.md",
+  "assembly_manifest_scope": "Состояние до изменения первой строки статуса; не изменяется задним числом"
+}

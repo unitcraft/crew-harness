@@ -1,0 +1,37 @@
+{
+  "changed_paths": [
+    "AGENTS.md",
+    "README.md",
+    "completeness-check.md",
+    "doc/open-questions.md",
+    "methodology.md",
+    "presentations/methodology.html",
+    "presentations/task-sessions.html",
+    "starter-kit/README.md",
+    "starter-kit/scripts/guards/guards.conf",
+    "starter-kit/scripts/guards/selftest/test-commit-msg.py",
+    "starter-kit/scripts/guards/selftest/test-commit-range.py",
+    "starter-kit/scripts/guards/selftest/test-guard-commit-message.py",
+    "starter-kit/scripts/guards/selftest/test-pre-push.py",
+    "starter-kit/verify-portability.sh",
+    "task-runner.md",
+    "task-sessions.md"
+  ],
+  "algorithm_equal": true,
+  "algorithm_bytes": 51475,
+  "algorithm_sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96",
+  "Q5_equal": true,
+  "ab2_runner_diff": "diff --git a/task-runner.md b/task-runner.md\nindex 9a0d20f..5c5c53a 100644\n--- a/task-runner.md\n+++ b/task-runner.md\n@@ -231,0 +232,2 @@ state\n+**Второе мнение** (`methodology.md`, раздел 18) идёт на классе A с включённым размышлением и усилием 3; при вопросе о безопасности, деньгах, данных или правке нормы — усилие 4; семья — другая, чем у агента, среди согласованных поставщиков, если доступно, совпадение называется (`methodology.md`, раздел 18). Модель второго мнения проект задаёт отдельно от основной модели класса.\n+\n"
+}
+{
+  "command": [
+    "git",
+    "ls-remote",
+    "https://github.com/unitcraft/ai-dev-methodology",
+    "refs/heads/main"
+  ],
+  "observed_at": "2026-10-17T14:46:53.926788+03:00",
+  "exit": 0,
+  "stdout": "6747f401e4e1a9c6feb45bf5fefbca70c542dadd\trefs/heads/main\n",
+  "stderr": ""
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "name": "upstream",
+    "source": "https://github.com/unitcraft/ai-dev-methodology",
+    "ref": "refs/heads/main",
+    "at": "2026-10-18T04:38:01.738322+03:00",
+    "exit": 0,
+    "stdout": "b29369daf8f98504f7cff117a7adffb1608269c1\trefs/heads/main\n",
+    "stderr": ""
+  },
+  {
+    "name": "target",
+    "source": "origin",
+    "ref": "refs/heads/main",
+    "at": "2026-10-18T04:38:02.479629+03:00",
+    "exit": 0,
+    "stdout": "12c79b66c14a96cca6b5e7178dcefaed84d557e5\trefs/heads/main\n",
+    "stderr": ""
+  }
+]

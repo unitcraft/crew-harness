@@ -1,0 +1,16 @@
+[
+  {
+    "path": "spec-trace.md",
+    "cells_above_100": [
+      {
+        "line": 116,
+        "column": 3,
+        "chars": 120
+      }
+    ]
+  },
+  {
+    "path": "method-delta.md",
+    "cells_above_100": []
+  }
+]

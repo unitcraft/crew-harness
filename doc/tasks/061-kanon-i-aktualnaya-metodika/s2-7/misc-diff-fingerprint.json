@@ -1,0 +1,18 @@
+{
+  "paths": [
+    "AGENTS.md",
+    "README.md",
+    "presentations/methodology.html",
+    "presentations/task-sessions.html",
+    "starter-kit/README.md",
+    "starter-kit/scripts/guards/guards.conf",
+    "starter-kit/scripts/guards/selftest/test-commit-msg.py",
+    "starter-kit/scripts/guards/selftest/test-commit-range.py",
+    "starter-kit/scripts/guards/selftest/test-guard-commit-message.py",
+    "starter-kit/scripts/guards/selftest/test-pre-push.py",
+    "starter-kit/verify-portability.sh"
+  ],
+  "exit": 0,
+  "bytes": 26491,
+  "sha256": "a86528cfbed2f0399fe17c5949d0bc3a64c356fb7890df3bdfae4fa2dbf94dc8"
+}

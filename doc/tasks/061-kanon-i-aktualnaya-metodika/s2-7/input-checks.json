@@ -1,0 +1,39 @@
+{
+  "spec-trace.md": {
+    "old_lines": 645,
+    "nearest_lines": 649,
+    "common_body_equal": true
+  },
+  "method-delta.md": {
+    "old_lines": 445,
+    "nearest_lines": 449,
+    "common_body_equal": true
+  },
+  "root": [
+    {
+      "path": "spec.md",
+      "bytes": 21388,
+      "sha256": "a32f27b01103078cdc3041ec704b00cc1a35c026bf7d9d61b169d4c505cadab4"
+    },
+    {
+      "path": "analysis.md",
+      "bytes": 11876,
+      "sha256": "118f93ea382c6b2981330e982b3b4edbea435e9447d2c3e61e9e22bb20f55363"
+    },
+    {
+      "path": "spec-trace.md",
+      "bytes": 31215,
+      "sha256": "a8f8c1f228da6506f0c9371189dfb73267086e84631ec88ebea2750aca2a2708"
+    },
+    {
+      "path": "method-delta.md",
+      "bytes": 57470,
+      "sha256": "29f03927ea8a2ef7e2de108bc369e901320c506ab7296908a7872240dc5e3044"
+    },
+    {
+      "path": "scope-revision-2.md",
+      "bytes": 13879,
+      "sha256": "567855d0fcbce073808b6176fa71fea27f2e971b43e52cf4bdac835440b33790"
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "moment": "2026-10-17T21:41:05.898330+03:00",
+  "upstream": "https://github.com/unitcraft/ai-dev-methodology",
+  "ref": "refs/heads/main",
+  "command": [
+    "git",
+    "ls-remote",
+    "https://github.com/unitcraft/ai-dev-methodology",
+    "refs/heads/main"
+  ],
+  "exit": 0,
+  "stdout": "0e00954d360036a3a926c12c4a79452faf1c261f\trefs/heads/main\n",
+  "stderr": "",
+  "commit": "0e00954d360036a3a926c12c4a79452faf1c261f",
+  "local_object_exit": 0,
+  "diff_exit": 0,
+  "changed_paths": [
+    "AGENTS.md",
+    "completeness-check.md",
+    "doc/open-questions.md",
+    "methodology.md",
+    "presentations/methodology.html",
+    "state-machine-spec.md",
+    "task-runner-meeting-pseudocode.md",
+    "task-runner-meeting-states.md",
+    "task-runner-pseudocode.md",
+    "task-runner.md",
+    "task-sessions.md"
+  ],
+  "files": {
+    "AGENTS.md": {
+      "exit": 0,
+      "bytes": 15700,
+      "sha256": "b359052aed3bde47bdb2dcdfc9a9da07d59af81d5fe3362b68cd0a777b34424c"
+    },
+    "completeness-check.md": {
+      "exit": 0,
+      "bytes": 49913,
+      "sha256": "e4ae113e5ddb5b391a7108d23f84865bf6a8c47475f30f7789ed475c3ff0ccca"
+    },
+    "doc/open-questions.md": {
+      "exit": 0,
+      "bytes": 36756,
+      "sha256": "dc2bd57e10fdb1d60cc7c5dac81a4af17635a627ee3678192dd3e8f7058b8785"
+    },
+    "methodology.md": {
+      "exit": 0,
+      "bytes": 388174,
+      "sha256": "4f7556aaac15dd8efe099a9c35a79d2fe2ae541b2a87851abc4f4945bae4953f"
+    },
+    "presentations/methodology.html": {
+      "exit": 0,
+      "bytes": 23190,
+      "sha256": "d33f67b884d281564aa9d59a6cb0b246226146c7ecb71e2984ea3606194ee7c7"
+    },
+    "state-machine-spec.md": {
+      "exit": 0,
+      "bytes": 48740,
+      "sha256": "1a2e50bf03d717924a21fe01fd87e565c12e97cff60dcf9fcf816bafa8495e8f"
+    },
+    "task-runner-meeting-pseudocode.md": {
+      "exit": 0,
+      "bytes": 6577,
+      "sha256": "64ddea8e996dea7f848c5fffa84c6d56d31713d41754186a099aaf6b4fca7d02"
+    },
+    "task-runner-meeting-states.md": {
+      "exit": 0,
+      "bytes": 70607,
+      "sha256": "b56a6d682598c5e896f9c202512dba4d2b427f35822d8e949d8c9c1d2d58868d"
+    },
+    "task-runner-pseudocode.md": {
+      "exit": 0,
+      "bytes": 34047,
+      "sha256": "b33cb01fa4a72fcc0374c30e1f5d34ff222a97a110a94f4c0c73941ee9e191ba"
+    },
+    "task-runner.md": {
+      "exit": 0,
+      "bytes": 106689,
+      "sha256": "0a5d12008f01f83e15b6c91357b426b0e8a2f58749b4d20fff7e0eaf140df883"
+    },
+    "task-sessions.md": {
+      "exit": 0,
+      "bytes": 60653,
+      "sha256": "55b8bf4854104563c56bf08fe7b5957f865d9040e99205965f6e458dd993a452"
+    }
+  }
+}

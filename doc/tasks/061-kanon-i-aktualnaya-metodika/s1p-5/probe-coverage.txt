@@ -1,0 +1,10 @@
+command: python doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probes.py coverage
+stdout:
+P2: atoms94/paragraphs16; REQ6/AC8/DNC4; F16/M19/S13/R18; C60; all links mapped
+
+P2: count/link audit is not an independent semantic completeness verdict
+
+
+stderr:
+
+exit: 0

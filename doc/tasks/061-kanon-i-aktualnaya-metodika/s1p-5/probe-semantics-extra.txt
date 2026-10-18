@@ -1,0 +1,11 @@
+command: python doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/semantic-extra.py
+stdout:
+profile base: True
+profile +family: False
+profile -budget: False
+lens.sessionId kind=meeting: True
+lens.sessionId kind=agent: False
+lens.sessionId kind=human: False
+stderr:
+
+exit: 0

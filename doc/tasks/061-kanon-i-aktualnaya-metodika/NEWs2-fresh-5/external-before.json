@@ -1,0 +1,778 @@
+{
+  "045": {
+    "head": "b18cc5052b6183d9c15fc1833006f1cb86481a3c",
+    "status": "?? doc/tasks/045-runner-registry-jsonc/\n",
+    "files": {
+      "doc/tasks/045-runner-registry-jsonc/coordination-decisions.md": {
+        "sha256": "2a39f82bb98152f2b00a972d8105b935fe267737e505efd82c7218bfa447bb00",
+        "bytes": 1866
+      },
+      "doc/tasks/045-runner-registry-jsonc/current.md": {
+        "sha256": "4d849fb02670ed6c003866e0090792f0c0fff3ef6a6e71d8544c142be1162cf3",
+        "bytes": 966
+      },
+      "doc/tasks/045-runner-registry-jsonc/log.md": {
+        "sha256": "8679a884f426e98e997b65977d96ba098d267b6cb9005c9d8a9a98597d84c4b3",
+        "bytes": 51565
+      },
+      "doc/tasks/045-runner-registry-jsonc/plan-fixes-1.md": {
+        "sha256": "6bb2d83d3d607f654be23d7a9a662a161f30fcbdf240990d0234581e34a563d0",
+        "bytes": 5418
+      },
+      "doc/tasks/045-runner-registry-jsonc/plan-fixes-2.md": {
+        "sha256": "88c0a8807e16805bbb04103867263a2018d70ba7a487a99be3df74df37727448",
+        "bytes": 4487
+      },
+      "doc/tasks/045-runner-registry-jsonc/plan-fixes-3-inventory-negative.txt": {
+        "sha256": "4bf9d0969c00a0b44c99385d8bd3506cd2e654d9d9ebd0fb9735d7183ce416bc",
+        "bytes": 3069
+      },
+      "doc/tasks/045-runner-registry-jsonc/plan-fixes-3-inventory-positive.txt": {
+        "sha256": "ef665dff63170e0756f2c4448ef9c8b6d41cc9811046f5fc5c398e6432a69bfc",
+        "bytes": 3069
+      },
+      "doc/tasks/045-runner-registry-jsonc/plan-fixes-3.md": {
+        "sha256": "22c0088c0688b5167580c0f16b446650b22735d4445fbcae1064c9b862bfe918",
+        "bytes": 2918
+      },
+      "doc/tasks/045-runner-registry-jsonc/plan-review-1.md": {
+        "sha256": "33c8da0397ab3b3580ae0dcf8b9875f96f1e0ca638dbea8f3a2faad3721a9a10",
+        "bytes": 14758
+      },
+      "doc/tasks/045-runner-registry-jsonc/plan-review-2.md": {
+        "sha256": "a92eabb4418b21177550a960c84dd8262dc1953faf267a390bff0f7095080db5",
+        "bytes": 12749
+      },
+      "doc/tasks/045-runner-registry-jsonc/plan-review-3.md": {
+        "sha256": "d7fdd93f1762acbce7f03b14e3a8a69c1e29b7bec794037f4d7c93265a010eb4",
+        "bytes": 12365
+      },
+      "doc/tasks/045-runner-registry-jsonc/plan-review-4.md": {
+        "sha256": "ea0d84e953159a18d27b18eb5d8097806478960fe6327749a72afa928c05e6a9",
+        "bytes": 10898
+      },
+      "doc/tasks/045-runner-registry-jsonc/plan.md": {
+        "sha256": "4856a2410418ecce9cbff8c5656ab9229135f87db6e4ebde17ebd362b2e23857",
+        "bytes": 65136
+      },
+      "doc/tasks/045-runner-registry-jsonc/profile.log": {
+        "sha256": "51722a3630ee40521b33748ac86f75b42cb7d8877b7b49c5c03f5e02845fa8ce",
+        "bytes": 467
+      },
+      "doc/tasks/045-runner-registry-jsonc/progress.log": {
+        "sha256": "823735738cbf832dfc317ca04d31a65bd47fef9c706d2920b0f5e1d098c6862b",
+        "bytes": 4215
+      },
+      "doc/tasks/045-runner-registry-jsonc/spec-review-1.md": {
+        "sha256": "910f73ee9b3a7248cb71b0171646bd0ef7350d41fa9348466dee37aa23fd9c25",
+        "bytes": 25924
+      },
+      "doc/tasks/045-runner-registry-jsonc/spec-review-2.md": {
+        "sha256": "c6984ba5a2be6fb7c7517c42abc00e9cdf93c277fb9bdbeb17e37bb8cff616d2",
+        "bytes": 26038
+      },
+      "doc/tasks/045-runner-registry-jsonc/spec-trace.md": {
+        "sha256": "5d27240a9589b56ac39a7707ab05bb96a074c889a932632dd43b086a12e7241b",
+        "bytes": 27513
+      },
+      "doc/tasks/045-runner-registry-jsonc/spec.md": {
+        "sha256": "685245b64f33424e225e340898399b49084f39b20f66469b58637fe96cc05ed8",
+        "bytes": 46637
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/copy-normalization.md": {
+        "sha256": "8f07403beeb51d7403c5ab0912214e44fc7a7c88a7c92fee4a778082f10c16eb",
+        "bytes": 2953
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/fingerprints.txt": {
+        "sha256": "015fb6a929e1966105a0e68a0d9761f6a8ffffb5cd2c771b1d571cdb974d98d9",
+        "bytes": 765
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/progress.log": {
+        "sha256": "6c6c2f1a86d4b08edff9319f224b54d2313edce3f66af480df7a7baa0325dd0e",
+        "bytes": 975
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/read-map.md": {
+        "sha256": "d93f3b3bf9f8fcbc0acb73672c8136805d7c6d54bb2123a54bf630eeed4d208e",
+        "bytes": 7154
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-2/copy-normalization.md": {
+        "sha256": "19b2949f08124b1757719017b1e3314e4403708c4a1e014049481e99227992ab",
+        "bytes": 2205
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-2/probes.md": {
+        "sha256": "52cba0a0f58303cd67a857a42b21bedefa9e82eda10921b4cdd8dd07e5527b33",
+        "bytes": 6233
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-2/progress.log": {
+        "sha256": "df09056d145d7e33bfb1538f8fd4a44c869b45834d3bdef51c5a814f0bb477b4",
+        "bytes": 4938
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-2/read-map.md": {
+        "sha256": "104bd7c3fcc9ca7c1a832fdb08cdf30144a7ee5fbab7ec2892d5cec16936b4a2",
+        "bytes": 3193
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-1/evidence-scope.md": {
+        "sha256": "71b2aa77f1c1094433babcece8b6d54d8c945bc104168cda21a19563555b9042",
+        "bytes": 1353
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-1/log.md": {
+        "sha256": "821daf32502a267182fb8f3077a603ac4b1f07046a6a0d4a98b46ef87a6936de",
+        "bytes": 297
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-1/progress.log": {
+        "sha256": "985d62832bedaeb9fe14e5110e895e2608b9750560d87d70b3588db6416601d8",
+        "bytes": 1343
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-2/launch.md": {
+        "sha256": "0a2502c073d59b81afa692955a6a55b6b4d30e3fd4e639d945037932ceac1e6c",
+        "bytes": 1750
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-2/profile.log": {
+        "sha256": "b84de0c3e27f5f958a7b243c934c963f5dc6279fe2fea90dbbcab500b8dffbe5",
+        "bytes": 280
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-2/progress.log": {
+        "sha256": "f0597e03f57472c88470170cdd92f3ff5513d093d143dc516ec814795c779145",
+        "bytes": 1498
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-3/launch.md": {
+        "sha256": "e3592d7de9c186fc9fbb96d9e258e5e6ed19ff2d87d7ef0feaa109541fa1073b",
+        "bytes": 1738
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-3/profile.log": {
+        "sha256": "edfc1b045113677cfb9872fe51dcd9825760e98736dd4a270d73b2e3c17a0050",
+        "bytes": 741
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-3/progress.log": {
+        "sha256": "dedd827ce6edf6781826b2341a93666a2264cc8bf7e4c3dd6a9ed97a995adf84",
+        "bytes": 1719
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4/launch.md": {
+        "sha256": "efb309b538eff87c3f534be1e78de3584786616a7fab02005ed0590aca26fbee",
+        "bytes": 1232
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4/log.md": {
+        "sha256": "09195bb0d5d97e787f14753594e83652e9a5ce77d1ec4214314783ef21cc6d33",
+        "bytes": 68
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4/progress.log": {
+        "sha256": "d213d712cc85aea00b2f07932890634334736a22402ede72860c9e3e9203d581",
+        "bytes": 257
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4-r2/launch.md": {
+        "sha256": "51e1cb597d715ab5fb346215c702b1fd0c624351711ed849185c92ec9521b469",
+        "bytes": 1817
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4-r2/log.md": {
+        "sha256": "7255aee719a9aaa4ec92452038ed37f4f26cfdb715aa7cb169f9d5f69da2cbb4",
+        "bytes": 68
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4-r2/probes.md": {
+        "sha256": "a6a73885b9293c3a38f5f56f8751e94a4469402031035f1cc760d876df22eab2",
+        "bytes": 6246
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4-r2/profile.log": {
+        "sha256": "e1e44a526388c43841acf41b5e6cd5405bbafc0d13fcf78bc03bb6b9d5ca163a",
+        "bytes": 328
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4-r2/progress.log": {
+        "sha256": "d022548916ebf37e0441856c504b9bdfc45eaebf97d0226dd930a7ce691992b2",
+        "bytes": 2216
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4-r2/qualification.md": {
+        "sha256": "5b2f1ffdf5ef0d554de5a057286ca95993950a56caeab5e7159b617198e25f18",
+        "bytes": 1991
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4-r2/read-map.md": {
+        "sha256": "883d3be06eef81475cd1086109f078e15bd2584753fdbc0b48873bb91978a614",
+        "bytes": 4135
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/log.md": {
+        "sha256": "31c2e7828e9d571e403f0f2f871ac49cdd98bf1bcc4193b5504d27126fa3acba",
+        "bytes": 43803
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/plan-fixes-1.md": {
+        "sha256": "6bb2d83d3d607f654be23d7a9a662a161f30fcbdf240990d0234581e34a563d0",
+        "bytes": 5418
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/plan-fixes-2.md": {
+        "sha256": "88c0a8807e16805bbb04103867263a2018d70ba7a487a99be3df74df37727448",
+        "bytes": 4487
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/plan-fixes-3-inventory-negative.txt": {
+        "sha256": "4bf9d0969c00a0b44c99385d8bd3506cd2e654d9d9ebd0fb9735d7183ce416bc",
+        "bytes": 3069
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/plan-fixes-3-inventory-positive.txt": {
+        "sha256": "ef665dff63170e0756f2c4448ef9c8b6d41cc9811046f5fc5c398e6432a69bfc",
+        "bytes": 3069
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/plan-fixes-3.md": {
+        "sha256": "22c0088c0688b5167580c0f16b446650b22735d4445fbcae1064c9b862bfe918",
+        "bytes": 2918
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/plan-review-1.md": {
+        "sha256": "33c8da0397ab3b3580ae0dcf8b9875f96f1e0ca638dbea8f3a2faad3721a9a10",
+        "bytes": 14758
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/plan-review-2.md": {
+        "sha256": "a92eabb4418b21177550a960c84dd8262dc1953faf267a390bff0f7095080db5",
+        "bytes": 12749
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/plan-review-3.md": {
+        "sha256": "d7fdd93f1762acbce7f03b14e3a8a69c1e29b7bec794037f4d7c93265a010eb4",
+        "bytes": 12365
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/plan.md": {
+        "sha256": "150c9826fc1be49a63cbd8754491c88063c9eca02d145519040d1da51c6711e4",
+        "bytes": 58552
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/progress.log": {
+        "sha256": "823735738cbf832dfc317ca04d31a65bd47fef9c706d2920b0f5e1d098c6862b",
+        "bytes": 4215
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/spec-trace.md": {
+        "sha256": "5d27240a9589b56ac39a7707ab05bb96a074c889a932632dd43b086a12e7241b",
+        "bytes": 27513
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/spec.md": {
+        "sha256": "685245b64f33424e225e340898399b49084f39b20f66469b58637fe96cc05ed8",
+        "bytes": 46637
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-3/inputs/log.md": {
+        "sha256": "85c6abcacefe4f4e67456ed2950ee5f42859e71339a3c65f94ef9cde2da1a71e",
+        "bytes": 33179
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-3/inputs/plan-fixes-1.md": {
+        "sha256": "6bb2d83d3d607f654be23d7a9a662a161f30fcbdf240990d0234581e34a563d0",
+        "bytes": 5418
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-3/inputs/plan-fixes-2.md": {
+        "sha256": "88c0a8807e16805bbb04103867263a2018d70ba7a487a99be3df74df37727448",
+        "bytes": 4487
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-3/inputs/plan-review-1.md": {
+        "sha256": "33c8da0397ab3b3580ae0dcf8b9875f96f1e0ca638dbea8f3a2faad3721a9a10",
+        "bytes": 14758
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-3/inputs/plan-review-2.md": {
+        "sha256": "a92eabb4418b21177550a960c84dd8262dc1953faf267a390bff0f7095080db5",
+        "bytes": 12749
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-3/inputs/plan.md": {
+        "sha256": "b4c4cdf6d86ee80110fcfe070df654ce68d42d61fc396f585b298fb6c687b80f",
+        "bytes": 56365
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-3/inputs/progress.log": {
+        "sha256": "823735738cbf832dfc317ca04d31a65bd47fef9c706d2920b0f5e1d098c6862b",
+        "bytes": 4215
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-3/inputs/spec-trace.md": {
+        "sha256": "5d27240a9589b56ac39a7707ab05bb96a074c889a932632dd43b086a12e7241b",
+        "bytes": 27513
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-3/inputs/spec.md": {
+        "sha256": "685245b64f33424e225e340898399b49084f39b20f66469b58637fe96cc05ed8",
+        "bytes": 46637
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-2/inputs/log.md": {
+        "sha256": "a27edd3a93c2149729e04c9b0921f739953f6df883abaedf08e5e627987cfe91",
+        "bytes": 26390
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-2/inputs/plan-fixes-1.md": {
+        "sha256": "6bb2d83d3d607f654be23d7a9a662a161f30fcbdf240990d0234581e34a563d0",
+        "bytes": 5418
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-2/inputs/plan-review-1.md": {
+        "sha256": "33c8da0397ab3b3580ae0dcf8b9875f96f1e0ca638dbea8f3a2faad3721a9a10",
+        "bytes": 14758
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-2/inputs/plan.md": {
+        "sha256": "c2d01556f683752bcef1ca3baf17a9b8182120b58c56caee3cf0dda8cf23c65b",
+        "bytes": 43476
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-2/inputs/spec-trace.md": {
+        "sha256": "5d27240a9589b56ac39a7707ab05bb96a074c889a932632dd43b086a12e7241b",
+        "bytes": 27513
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-2/inputs/spec.md": {
+        "sha256": "685245b64f33424e225e340898399b49084f39b20f66469b58637fe96cc05ed8",
+        "bytes": 46637
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-1/inputs/log.md": {
+        "sha256": "077e9c639b60cf749ee282db98a4fdd8583518b26d28c8ed2d4fa41b0a7bbb88",
+        "bytes": 20762
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-1/inputs/plan.md": {
+        "sha256": "c0c2bc746f625d95429fe06ea749e85d382cfc848540d8020824744559e5e295",
+        "bytes": 37590
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-1/inputs/spec-review-1.md": {
+        "sha256": "910f73ee9b3a7248cb71b0171646bd0ef7350d41fa9348466dee37aa23fd9c25",
+        "bytes": 25924
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-1/inputs/spec-review-2.md": {
+        "sha256": "c6984ba5a2be6fb7c7517c42abc00e9cdf93c277fb9bdbeb17e37bb8cff616d2",
+        "bytes": 26038
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-1/inputs/spec-trace.md": {
+        "sha256": "5d27240a9589b56ac39a7707ab05bb96a074c889a932632dd43b086a12e7241b",
+        "bytes": 27513
+      },
+      "doc/tasks/045-runner-registry-jsonc/s4-1/inputs/spec.md": {
+        "sha256": "685245b64f33424e225e340898399b49084f39b20f66469b58637fe96cc05ed8",
+        "bytes": 46637
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-2/inputs/log.md": {
+        "sha256": "3fb2a7882859358ff002a63de61dbf0ac7d52b1cf6a6cf81231e190abb7d801e",
+        "bytes": 8668
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-2/inputs/progress.log": {
+        "sha256": "ce5f1ea6e12fecb36a0bb1bcec2dfb969d78824e2a3ca377687cd570b2436fce",
+        "bytes": 560
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-2/inputs/spec-trace.md": {
+        "sha256": "4264d81bfbaf0919be021b1dad0e8df411491d88f325b61b2b8901aa22761f28",
+        "bytes": 21380
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-2/inputs/spec.md": {
+        "sha256": "162dda6bf9c29e52e6abcc0ce22d3f69d7d2cbddfdc1d95819340afeab04ad58",
+        "bytes": 37483
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/attempt-1/qualification.md": {
+        "sha256": "33e22c4dedf15706c44c93e39600dc499d8c33196126102c1fb33fafee053431",
+        "bytes": 1248
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/attempt-1/spec-review-1.md": {
+        "sha256": "a6f2a858b329973750cf13d4249384e0629de286a77b24e3f144ee6f8abc35cb",
+        "bytes": 23757
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/retry-1/progress.log": {
+        "sha256": "583626ce9de993d5efe2d1b7f234b5cc7981381eb5561a4e498e1cfe057a03b0",
+        "bytes": 123
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/retry-1/qualification.md": {
+        "sha256": "8ed59ab1785c035ac0d1091b8e1ff73bce9d8f1c7abdf6ce7a60bc9387cc0f91",
+        "bytes": 668
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/retry-1/read-map.md": {
+        "sha256": "5004ad5bda3d4e8b6220a70328fe4b338bcfb648aba84c45c810c543fb9c880f",
+        "bytes": 2588
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/retry-2/progress.log": {
+        "sha256": "d4a7719c3c94b23f380d504b7cacd54d44556226d0836c2f3ef77b91b24e0d7c",
+        "bytes": 3717
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/retry-2/qualification.md": {
+        "sha256": "178c48108b0aa9e839c480a0a3b9d1980f97d4a550ff280ef204bb73ae10d6e0",
+        "bytes": 629
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/retry-2/read-map.md": {
+        "sha256": "9733e85f28180aa367abfeb260f03a5d27615cb00efa3c54ba53235fb4c6b53b",
+        "bytes": 5243
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/retry-3/progress.log": {
+        "sha256": "6e5bef57ebd59dff90961a094f1ea9a202548291c8b30f80699b847a04bf91de",
+        "bytes": 1915
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/retry-3/qualification.md": {
+        "sha256": "33859949186c801b437f118a687711e1fa99deb256c8a43ec2fea2bf0c7dc826",
+        "bytes": 679
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/retry-3/read-map.md": {
+        "sha256": "bc20f5da19dc4040ea2e1517a092a9eb46a7b191a147f8375cc814cd5a34e20c",
+        "bytes": 2968
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/retry-4/progress.log": {
+        "sha256": "910ec7ee26fa7a3fc5ec47267f8ed5ea7e78fe1cb912d097f373e6ba20e31d13",
+        "bytes": 1740
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/retry-4/qualification.md": {
+        "sha256": "52b4cf1b095312e4f185eb42ec70d85cf6efb778232cef577f0660e7ddf76ac0",
+        "bytes": 732
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/retry-4/read-map.md": {
+        "sha256": "0e80f2931730d2b8e2eece78b595c41c0b8e048e5c211e4c43cfc5aa2f9f9d56",
+        "bytes": 1306
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/retry-4/fingerprints/start.txt": {
+        "sha256": "63be44d6523177a716fead8a9f7c3af1a601dbf39b071a62fbf5307ad7e39e6b",
+        "bytes": 576
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/retry-3/fingerprints/start.txt": {
+        "sha256": "63be44d6523177a716fead8a9f7c3af1a601dbf39b071a62fbf5307ad7e39e6b",
+        "bytes": 576
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/retry-2/fingerprints/start.txt": {
+        "sha256": "46fd544aadf30e9a0bd13e76253c583d7ede62db3ee17b14c9f49944ec5ef831",
+        "bytes": 900
+      },
+      "doc/tasks/045-runner-registry-jsonc/s2-1/retry-1/fingerprints/start.txt": {
+        "sha256": "d0940bc27af7cb9e5a8810befeb7240e4761bc58a0e4089ca8f9619a76c92106",
+        "bytes": 912
+      }
+    },
+    "src_exists": false,
+    "runner_core_exists": false
+  },
+  "013": {
+    "head": "7f2b0f6ea2f9ad55258a17eb614ed03b627ce596",
+    "status": " M doc/tasks/013-runner-core/log.md\n M doc/tasks/013-runner-core/task/message.md\n?? doc/tasks/013-runner-core/profile.log\n?? doc/tasks/013-runner-core/progress.log\n?? doc/tasks/013-runner-core/spec-review-1.md\n?? doc/tasks/013-runner-core/spec-review-2.md\n?? doc/tasks/013-runner-core/spec-review-3.md\n?? doc/tasks/013-runner-core/spec.md\n",
+    "files": {
+      "doc/tasks/013-runner-core/log.md": {
+        "sha256": "434e218c66362a3bccaeb5cecd3f621e4c6817dda4115be80d169cbc19c0f263",
+        "bytes": 42991
+      },
+      "doc/tasks/013-runner-core/profile.log": {
+        "sha256": "dc18461245b6e9f4a50d9be8d4e0893ab00a5e70c5658b60f5e74e4c181c6684",
+        "bytes": 1542
+      },
+      "doc/tasks/013-runner-core/progress.log": {
+        "sha256": "615179dc168552bda427c879ba3fea327d455915b8916eed4afb91884d6eeb87",
+        "bytes": 8978
+      },
+      "doc/tasks/013-runner-core/spec-review-1.md": {
+        "sha256": "42d9088e652ff5491605311cf0e390ffcb264125740815b16a67b4f56e53c23e",
+        "bytes": 26409
+      },
+      "doc/tasks/013-runner-core/spec-review-2.md": {
+        "sha256": "36ea2c33f54d8b1264e77115c634bdb03c80fe7932bd2b36a151e0489a75758c",
+        "bytes": 28770
+      },
+      "doc/tasks/013-runner-core/spec-review-3.md": {
+        "sha256": "90e23e283c9c4ce4f0d25c09559b5151044884d6a5958ac678642a49d31781b7",
+        "bytes": 28882
+      },
+      "doc/tasks/013-runner-core/spec.md": {
+        "sha256": "f86a69f3cd2c76cf5a4aa1a35ac720dcd5b8c28c560c6b5150ec9526e93eb376",
+        "bytes": 112194
+      },
+      "doc/tasks/013-runner-core/task/message.md": {
+        "sha256": "88d6a8f9cdac4cd73ba5d0e49e1c8ed1d3f1fbd772741410e8437bd8e2e8f4a9",
+        "bytes": 9868
+      }
+    },
+    "src_exists": false,
+    "runner_core_exists": false
+  },
+  "method": {
+    "head": "78ed75838ef58073153e5343c9483bc462721a31",
+    "status": "",
+    "files": {
+      "AGENTS.md": {
+        "sha256": "c17b6c9fc7e8e1223a60039688fb681950246590342d287e4625d4ecc4c79108",
+        "bytes": 14844
+      },
+      "CLAUDE.md": {
+        "sha256": "d631d88045f74623d568adfb4783b72e3d1b732330d749bc6c72e6648d4581d3",
+        "bytes": 12
+      },
+      "completeness-check.md": {
+        "sha256": "6fa0007cbcadb7116d863989c9b302e04a546c471fa103b034891afa49c6a87d",
+        "bytes": 49608
+      },
+      "LICENSE": {
+        "sha256": "9532b9ed2c7142015c098e273aac19c21cdbcad642bdb533ba34023be37287d1",
+        "bytes": 464
+      },
+      "LICENSE-CC-BY-4.0": {
+        "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+        "bytes": 18657
+      },
+      "methodology.md": {
+        "sha256": "107013a0a8df1033760dff0efe2c0911a2e92d61c07a0ccee78d2c6ed27ee291",
+        "bytes": 387098
+      },
+      "README.md": {
+        "sha256": "0590d3648413073e0f090df02d0613d87b5423ac4ce6548f6e6dbb14fadd1c2f",
+        "bytes": 1861
+      },
+      "task-acceptance.md": {
+        "sha256": "bc05e1a1d3f6180600985fbccd4db4739d2ad22bb167942d9b93f71ea9bf9e00",
+        "bytes": 1828
+      },
+      "task-algorithm.md": {
+        "sha256": "8a0004dbfd8b6d8f9889abeb8ee02f3bf87ea9af6309ca2a21b8cfdca9eead8d",
+        "bytes": 51845
+      },
+      "task-runner.md": {
+        "sha256": "178fd0f1055bbdd190a4c8d4a5316566ea7be00829f9883cbfb9fde6a2a16a85",
+        "bytes": 141522
+      },
+      "task-sessions.md": {
+        "sha256": "55b8bf4854104563c56bf08fe7b5957f865d9040e99205965f6e458dd993a452",
+        "bytes": 60653
+      },
+      ".opencode/crew-harness.json": {
+        "sha256": "04e4625f0a977a086e009d336619b7cee397d66ec1db975f80de9eb2065c8a40",
+        "bytes": 2879
+      },
+      "doc/open-questions.md": {
+        "sha256": "f1872a151d0aaceb39737d8d2109bd3c2b8a43c7a0c6666745be83c78c0e906b",
+        "bytes": 29783
+      },
+      "presentations/methodology.html": {
+        "sha256": "d33f67b884d281564aa9d59a6cb0b246226146c7ecb71e2984ea3606194ee7c7",
+        "bytes": 23190
+      },
+      "presentations/presentation.css": {
+        "sha256": "0271f1f22b4ddd3656d8f5431d07d245127b89acd08fccf9cab53e85585ebc06",
+        "bytes": 11413
+      },
+      "presentations/task-algorithm.html": {
+        "sha256": "9b889c374eb9f8011d7bf55ab64dd41563feda9487907dd4c027e5a77112a905",
+        "bytes": 11084
+      },
+      "presentations/task-runner.html": {
+        "sha256": "c33c98669761076c075cec07a4f384175bb8fa7cac27e18dbc87f60dbd1946a2",
+        "bytes": 42722
+      },
+      "presentations/task-sessions.html": {
+        "sha256": "a9d3073cf7d30b4608750f89f847bb39ebcb706c2d5cf539b693a1cd624f0db7",
+        "bytes": 16070
+      },
+      "starter-kit/.gitattributes": {
+        "sha256": "7588ec45acf0df2a11836dd55ddb14b2cd49a6c7fc4ebf60e3e40755eb284787",
+        "bytes": 615
+      },
+      "starter-kit/LICENSE-APACHE": {
+        "sha256": "c2022ca17fd8d19d6d044b43f272aeeb044402b77a75171c906d25ce64ffca9d",
+        "bytes": 11525
+      },
+      "starter-kit/LICENSE-MIT": {
+        "sha256": "9c815f5a2b01c6278ee447633dc88728e315c37c4e8bc63b6c11871bda9704f4",
+        "bytes": 1125
+      },
+      "starter-kit/README.md": {
+        "sha256": "da6a60e1521bdc6a668aede00416d8671bd44fd0c9826b9a23951ffe98d77ef7",
+        "bytes": 40785
+      },
+      "starter-kit/verify-portability.sh": {
+        "sha256": "1a379610dfcb0c78e7d1263330e8c3247488532e1511f5be2968835acb22ccec",
+        "bytes": 23425
+      },
+      "starter-kit/.claude/settings.json": {
+        "sha256": "4f881ac9b45a0a735ef22d6d6c2fc0f822fcc303265398c7efe455631d465ef7",
+        "bytes": 421
+      },
+      "starter-kit/scripts/install-hooks.sh": {
+        "sha256": "004aced0635d67aa5fa4dfad091ff596310643d8bb84ceacf246ba0582287e90",
+        "bytes": 5915
+      },
+      "starter-kit/scripts/agent-hooks/guard-git.py": {
+        "sha256": "24ace7cf91c295683e9fd543c96e767eb4afa64719eeabfb2a961da5c216542d",
+        "bytes": 19489
+      },
+      "starter-kit/scripts/githooks/commit-msg": {
+        "sha256": "6b4dfd83151f0f9e3959fac3ea6aabc8627997fcb8f22b92d5602470cb8ce609",
+        "bytes": 2092
+      },
+      "starter-kit/scripts/githooks/pre-commit": {
+        "sha256": "16072906b8e151d7049dfc62a06ce9317476a7c32b62e1c78cb21fd6f471e9da",
+        "bytes": 2172
+      },
+      "starter-kit/scripts/githooks/pre-push": {
+        "sha256": "f7d8159d1e751bbbf740424b4177b3dcafb89e3c5bf0492087c4e432d3c8a449",
+        "bytes": 4498
+      },
+      "starter-kit/scripts/guards/check-md-links.py": {
+        "sha256": "2ade4c1c7cf48b8b66a8f42398b2a65c0f4516f5f1e93fc2eddca083f78f3f27",
+        "bytes": 10474
+      },
+      "starter-kit/scripts/guards/check-no-status-table.py": {
+        "sha256": "507d0f90bdb49fa659ee341633270ff3942a0ffb19d7c381df3399e3dfe8ecf6",
+        "bytes": 4858
+      },
+      "starter-kit/scripts/guards/check-private-names.py": {
+        "sha256": "9acdd3ca3ad395575183cd02caca7a16483065846de71619eb88c176ffb4997b",
+        "bytes": 3141
+      },
+      "starter-kit/scripts/guards/check-ratchet.py": {
+        "sha256": "5f8e731c86148c060b649cb7df7d6bfacdc2c9020ea01178ec38e5ed28455d8d",
+        "bytes": 14213
+      },
+      "starter-kit/scripts/guards/check-task-docs.py": {
+        "sha256": "1e14b5711a7ef6dd15cc23af52b3642b93c5fcbae0d32acf5bf4e5a675af1574",
+        "bytes": 5862
+      },
+      "starter-kit/scripts/guards/check-tests-have-checks.py": {
+        "sha256": "87d93cec81c8c05f3912f8792794a7518d3683c4ec6102c25a38366af37c472d",
+        "bytes": 3109
+      },
+      "starter-kit/scripts/guards/check-text-hygiene.py": {
+        "sha256": "7801ef3dc2326395b3275bbbd93809dd04042c9a180673ac069d81266a18c035",
+        "bytes": 5519
+      },
+      "starter-kit/scripts/guards/check-wiring.py": {
+        "sha256": "c4b863db80aac9065cb34c794a69a64998da78951c7f5a887598143501ec6f50",
+        "bytes": 12545
+      },
+      "starter-kit/scripts/guards/ci-mask.sh": {
+        "sha256": "d7ca0795c0ec0f5385a3f765c50b7cb7aadebd22bd2580096a654835fc089701",
+        "bytes": 2715
+      },
+      "starter-kit/scripts/guards/commit-range.sh": {
+        "sha256": "65f8657e6c145a868ca9c4838d057900db723f2b1f2ebf2559357dde5039bc0d",
+        "bytes": 4099
+      },
+      "starter-kit/scripts/guards/guard-commit-message.py": {
+        "sha256": "4f662642eba741f7e18ccb8b2956f6888f98100c3327337ceec9797194a38cf0",
+        "bytes": 8882
+      },
+      "starter-kit/scripts/guards/guard-secrets.py": {
+        "sha256": "8dbf69d3d0c8b96c41c99e99da38f46232648bf32ce1872df436e512bba15c94",
+        "bytes": 7328
+      },
+      "starter-kit/scripts/guards/guards.conf": {
+        "sha256": "20be7312078c67a2e70a300487a0a3ade07ab087210d69fa80bff1378cec4d2e",
+        "bytes": 6272
+      },
+      "starter-kit/scripts/guards/probe-empty-root.sh": {
+        "sha256": "f787a71f098bbbcf0bb063bfff09c40fc8f0e02f846ff8ba426173b3bcb8a93a",
+        "bytes": 4829
+      },
+      "starter-kit/scripts/guards/prove-red.sh": {
+        "sha256": "280d844fc60269dc5ae43e379ad4ca4a0e04d8498dcec22632217de92e16ecab",
+        "bytes": 6933
+      },
+      "starter-kit/scripts/guards/ratchet.txt": {
+        "sha256": "4cdc3ff6497c36b3480e0cc158ab05fd99bc6587f8886e94d30adad1144bbff3",
+        "bytes": 361
+      },
+      "starter-kit/scripts/guards/run-all.sh": {
+        "sha256": "dd656435cffea676f2151caf3b7a264333da141fd89980939062cb6a4bb3ff59",
+        "bytes": 5774
+      },
+      "starter-kit/scripts/guards/lib/conf.py": {
+        "sha256": "9fb5d493215e93801144b425c5c47bba31562878b83ea8e489593afe6541023b",
+        "bytes": 16491
+      },
+      "starter-kit/scripts/guards/lib/find-python.sh": {
+        "sha256": "402cabe065e72caccccc96e6da9f161539d3ef37c244e1eeb012770bfc69a733",
+        "bytes": 2246
+      },
+      "starter-kit/scripts/guards/lib/guardlib.py": {
+        "sha256": "c1181813fea99c902e98269f6c1be0ca5e9289efc33edbe04f1883b5f2a24275",
+        "bytes": 18899
+      },
+      "starter-kit/scripts/guards/lib/machine_paths.py": {
+        "sha256": "ff85d7d92517129d88ffa409320613fc56106c865bfeea80db187f141423dcab",
+        "bytes": 2728
+      },
+      "starter-kit/scripts/guards/lib/message.py": {
+        "sha256": "86bd240159dfb8872b121b477d57ab146c4762d9104b7cf7abb2b1233fbceeae",
+        "bytes": 3122
+      },
+      "starter-kit/scripts/guards/lib/names.py": {
+        "sha256": "78760a696ba0e6545b52b5123101191c2c06c19ee580bb090b68e98a36d19985",
+        "bytes": 4701
+      },
+      "starter-kit/scripts/guards/probe/probe-log.yml.tmpl": {
+        "sha256": "d052779f2408fd5ae5336061b1768064aaa79e960de7c3ed7191901d9e91e208",
+        "bytes": 2590
+      },
+      "starter-kit/scripts/guards/selftest/run-selftests.sh": {
+        "sha256": "c6f07c108df4b67eca1053fb45f7b8ff64f8597cdbe29da7be5f22a78f782e24",
+        "bytes": 3296
+      },
+      "starter-kit/scripts/guards/selftest/stlib.py": {
+        "sha256": "0555dca7a715cdc4c0d8c6fb7bb95fb190b95b70d997179f1a8eac12a30f4b4d",
+        "bytes": 14136
+      },
+      "starter-kit/scripts/guards/selftest/test-check-md-links.py": {
+        "sha256": "1b2d2c70d348360ddf292adfb7d50ce6a8a9dc5e0fcfc771f25d2c4279a66fe0",
+        "bytes": 11793
+      },
+      "starter-kit/scripts/guards/selftest/test-check-no-status-table.py": {
+        "sha256": "9ec4ed9b781898cc8fb98ca86f717a093fd6ff7d4614a58d19e6b08af8f77704",
+        "bytes": 8370
+      },
+      "starter-kit/scripts/guards/selftest/test-check-private-names.py": {
+        "sha256": "cb55b1124bee295a2eb5ab5af4781039c53b3128d91c7fcff465d1ad0926d961",
+        "bytes": 11640
+      },
+      "starter-kit/scripts/guards/selftest/test-check-ratchet.py": {
+        "sha256": "0f19fabf8fa0bb5d7f3945e14c2652cddcce11fb803ab4198ff2a0ffc7fa02ae",
+        "bytes": 17547
+      },
+      "starter-kit/scripts/guards/selftest/test-check-task-docs.py": {
+        "sha256": "d6ccd8c11ff7b26bcfef20462ff1927d053297c66086284626b42730afde235c",
+        "bytes": 11255
+      },
+      "starter-kit/scripts/guards/selftest/test-check-tests-have-checks.py": {
+        "sha256": "944a7c9502cdc829649430488187547788ccb5ad2cc2f17573939bb918c9f98c",
+        "bytes": 7192
+      },
+      "starter-kit/scripts/guards/selftest/test-check-text-hygiene.py": {
+        "sha256": "73193d5c6b63e59caf0dcd85f67fb8d43c5a8045e2116444b5e5d395cd679100",
+        "bytes": 9899
+      },
+      "starter-kit/scripts/guards/selftest/test-check-wiring.py": {
+        "sha256": "15ace0db22c10cf9b92d8c0e51d5c5be1f87b182c12a5422c99cc656c31e3349",
+        "bytes": 15531
+      },
+      "starter-kit/scripts/guards/selftest/test-ci-mask.py": {
+        "sha256": "3aae2d4934f37104ec24ff1944e0deddaf33f4899df84c33b21672f2e89755f6",
+        "bytes": 6278
+      },
+      "starter-kit/scripts/guards/selftest/test-commit-msg.py": {
+        "sha256": "063a50620efb79749cbbc70b62a84b894ce735daf835008a76ad1b97d8e11f52",
+        "bytes": 11307
+      },
+      "starter-kit/scripts/guards/selftest/test-commit-range.py": {
+        "sha256": "41cab7d975ce683681477e4d4e4c1118aaf4639948135a6a67f6c2819e73b1ff",
+        "bytes": 10695
+      },
+      "starter-kit/scripts/guards/selftest/test-guard-commit-message.py": {
+        "sha256": "833b26d94617fc3fe18801e809d166a7e4c5fe4749b7154a2c385b2a22855a6c",
+        "bytes": 21871
+      },
+      "starter-kit/scripts/guards/selftest/test-guard-git.py": {
+        "sha256": "09e4b6e52663e7258253686b97fc35d85f51963d780f3266ffc5ca80de181f76",
+        "bytes": 21618
+      },
+      "starter-kit/scripts/guards/selftest/test-guard-secrets.py": {
+        "sha256": "960f30305cbdc0e59b9f7311ba2efe8b880ac046f5514e292e332da421d598f1",
+        "bytes": 12344
+      },
+      "starter-kit/scripts/guards/selftest/test-guardlib.py": {
+        "sha256": "d34cf5c3192da6c8a0a350e244e3a586480bb0eb82583a73130769faa4d14f2a",
+        "bytes": 19713
+      },
+      "starter-kit/scripts/guards/selftest/test-install-hooks.py": {
+        "sha256": "43d8b44dcc21e191448fab762356f575a45c8aa834ab30f22a705ada1f019b4f",
+        "bytes": 8911
+      },
+      "starter-kit/scripts/guards/selftest/test-pre-commit.py": {
+        "sha256": "1b6525ce4e91709b2194de9c2c066ae62d5b8080ed3faa58b24030cd369528d0",
+        "bytes": 10388
+      },
+      "starter-kit/scripts/guards/selftest/test-pre-push.py": {
+        "sha256": "e6ce0aee86e9ba78d6a0d09d58f54d069f1d2a1608c1f97adf19adc08b016793",
+        "bytes": 12320
+      },
+      "starter-kit/scripts/guards/selftest/test-probe-empty-root.py": {
+        "sha256": "ec6b52ae450d12b74b0367d2377cfe7b642e6563c9c118193def5e9f2f46d828",
+        "bytes": 4597
+      },
+      "starter-kit/scripts/guards/selftest/test-prove-red.py": {
+        "sha256": "0fe2344711c841f029b7ee2a5fb1d9af4e30584d961b43677c2dd71ffe455a10",
+        "bytes": 9031
+      },
+      "starter-kit/scripts/guards/selftest/test-run-all.py": {
+        "sha256": "abf75688ab98a39eb49aac556dade74fd4be8680a6e3b69b646fd3771df3d54a",
+        "bytes": 11900
+      },
+      "starter-kit/.github/workflows/guards.yml": {
+        "sha256": "1296fac9972a1325d301ee20539f45b64b7ab067902af3d4b95e7516be81f620",
+        "bytes": 4202
+      },
+      ".github/workflows/pages.yml": {
+        "sha256": "14dd6b37c57e481e339a6807c2456a4c74b5d97075cd9af9014036c658fa2f1b",
+        "bytes": 1001
+      }
+    },
+    "src_exists": false,
+    "runner_core_exists": false
+  }
+}

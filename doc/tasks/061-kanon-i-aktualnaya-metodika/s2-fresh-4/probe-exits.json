@@ -1,0 +1,23 @@
+[
+  {
+    "command": [
+      "python",
+      "doc\\tasks\\061-kanon-i-aktualnaya-metodika\\s2-fresh-4\\probe-integrity.py"
+    ],
+    "exit": 0
+  },
+  {
+    "command": [
+      "node",
+      "doc\\tasks\\061-kanon-i-aktualnaya-metodika\\s2-fresh-4\\probe-progress.mjs"
+    ],
+    "exit": 0
+  },
+  {
+    "command": [
+      "node",
+      "doc\\tasks\\061-kanon-i-aktualnaya-metodika\\s2-fresh-4\\probe-authority.mjs"
+    ],
+    "exit": 0
+  }
+]

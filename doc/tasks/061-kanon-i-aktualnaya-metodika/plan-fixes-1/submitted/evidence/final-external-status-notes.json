@@ -1,0 +1,7 @@
+{
+  "045": {
+    "before": "## task/22-reestry-kontraktov-i-polnyy-jsonc-reglam...origin/main [behind 111]\n?? doc/tasks/045-runner-registry-jsonc/\n",
+    "after": "## task/22-reestry-kontraktov-i-polnyy-jsonc-reglam...origin/main [behind 124]\n?? doc/tasks/045-runner-registry-jsonc/\n",
+    "qualification": "Отличается только счёт behind при неизменных HEAD/файлах; внешние tracking refs не менялись этой сессией. Это наблюдение, не полное совпадение status."
+  }
+}

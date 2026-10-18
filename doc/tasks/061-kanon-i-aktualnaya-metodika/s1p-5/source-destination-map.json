@@ -1,0 +1,1080 @@
+[
+  {
+    "atom": "A01",
+    "message_line": 3,
+    "meaning_and_link": "**Один проверяемый атом:** Заказчик, дата, генерация задания\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** Не требование: метаданные происхождения; сама :3 и FACT-01, не разрешение менять scope",
+    "destination_and_check": [
+      [
+        "не переносится: метаданные",
+        "сверка происхождения message:3"
+      ]
+    ]
+  },
+  {
+    "atom": "A02",
+    "message_line": 7,
+    "meaning_and_link": "**Один проверяемый атом:** Сейчас анализ и черновик spec\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A02: шесть текущих документов и разрешённые новые аналитические части/evidence; без реализации",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A02: шесть текущих документов и разрешённые новые аналитические части/evidence; без реализации"
+      ]
+    ]
+  },
+  {
+    "atom": "A03",
+    "message_line": 7,
+    "meaning_and_link": "**Один проверяемый атом:** Это отдельно разрешённая задача\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A03: имеющийся `task/message.md`, не разрешение повторно создавать задачу",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A03: имеющийся `task/message.md`, не разрешение повторно создавать задачу"
+      ]
+    ]
+  },
+  {
+    "atom": "A04",
+    "message_line": 7,
+    "meaning_and_link": "**Один проверяемый атом:** Проверки/правки под тем же номером\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A04: сессия 061 С1п-5 и submit n61; новые номера запрещены",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A04: сессия 061 С1п-5 и submit n61; новые номера запрещены"
+      ]
+    ]
+  },
+  {
+    "atom": "A05",
+    "message_line": 7,
+    "meaning_and_link": "**Один проверяемый атом:** Независимая С2 и отдельные решения владельца\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** AC-07/08; отдельная свежая полная С2, не авторская приёмка",
+    "destination_and_check": [
+      [
+        "назначение из раздела результата/адресной карты",
+        "AC-07/08; отдельная свежая полная С2, не авторская приёмка"
+      ]
+    ]
+  },
+  {
+    "atom": "A06",
+    "message_line": 7,
+    "meaning_and_link": "**Один проверяемый атом:** Пока без Canon и реализации\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** DNC-01/04; ранние baseline и сравнение after текущей авторской сессии",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "DNC-01/04; ранние baseline и сравнение after текущей авторской сессии"
+      ]
+    ]
+  },
+  {
+    "atom": "A07",
+    "message_line": 9,
+    "meaning_and_link": "**Один проверяемый атом:** Проверить delta методики/раннера\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-02, AC-01; `method-delta.md` с old/current",
+    "destination_and_check": [
+      [
+        "README/process и адреса D0-D5/DX",
+        "AC-01: сверка каждого source anchor и code boundary"
+      ]
+    ]
+  },
+  {
+    "atom": "A08",
+    "message_line": 9,
+    "meaning_and_link": "**Один проверяемый атом:** Обновить план и устранить блокеры\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-04/AC-03; `analysis.md`, «Блокеры 045», маршрут в будущую правку плана 045, сейчас не план 061",
+    "destination_and_check": [
+      [
+        "будущая правка плана/каталога 045; сейчас только анализ061",
+        "AC-03/04: каждый anchor/DNC и read-only013"
+      ]
+    ]
+  },
+  {
+    "atom": "A09",
+    "message_line": 9,
+    "meaning_and_link": "**Один проверяемый атом:** Выяснить результат/статус 031\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-03/AC-02; approved commit в `031-impact.md`, не переоткрытие 031",
+    "destination_and_check": [
+      [
+        "src/runner_core/regulation/format.md после содержательных ворот",
+        "AC-02/08: поля, пары, версии и source coverage"
+      ]
+    ]
+  },
+  {
+    "atom": "A10",
+    "message_line": 9,
+    "meaning_and_link": "**Один проверяемый атом:** Перевести Канон на последнюю методику\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-05/06, AC-05/06; раздел результата и решения В-01/В-01а",
+    "destination_and_check": [
+      [
+        "README/process/новыйADR; format.md отдельно после ворот",
+        "AC-05: поадресная сверка и current при первом переносе"
+      ],
+      [
+        "README/process и append переходящих log",
+        "AC-06/07: upstream/drift и полномочия перехода"
+      ]
+    ]
+  },
+  {
+    "atom": "A11",
+    "message_line": 9,
+    "meaning_and_link": "**Один проверяемый атом:** Явный переход с историей\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-06/AC-07, DNC-03; ответ владельца и append-only переход, не старые pins",
+    "destination_and_check": [
+      [
+        "README/process и append переходящих log",
+        "AC-06/07: upstream/drift и полномочия перехода"
+      ]
+    ]
+  },
+  {
+    "atom": "A12",
+    "message_line": 9,
+    "meaning_and_link": "**Один проверяемый атом:** Не обновлять main/push автоматически\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A12, DNC-04; protected baseline и отсутствие git/live действий",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A12, DNC-04; protected baseline и отсутствие git/live действий"
+      ]
+    ]
+  },
+  {
+    "atom": "A13",
+    "message_line": 11,
+    "meaning_and_link": "**Один проверяемый атом:** Итог полной задачи — действующий Канон\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-05/AC-05; Canon destination в таблице первого переноса",
+    "destination_and_check": [
+      [
+        "README/process/новыйADR; format.md отдельно после ворот",
+        "AC-05: поадресная сверка и current при первом переносе"
+      ]
+    ]
+  },
+  {
+    "atom": "A14",
+    "message_line": 11,
+    "meaning_and_link": "**Один проверяемый атом:** Правило pin и начатых задач\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-06/AC-07; выбранный В-01 и все его условия в owner-gate-decisions",
+    "destination_and_check": [
+      [
+        "README/process и append переходящих log",
+        "AC-06/07: upstream/drift и полномочия перехода"
+      ]
+    ]
+  },
+  {
+    "atom": "A15",
+    "message_line": 11,
+    "meaning_and_link": "**Один проверяемый атом:** Не ограничиваться массовыми ссылками/latest\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-02/06; method-delta и drift-процедура, не один grep",
+    "destination_and_check": [
+      [
+        "README/process и адреса D0-D5/DX",
+        "AC-01: сверка каждого source anchor и code boundary"
+      ],
+      [
+        "README/process и append переходящих log",
+        "AC-06/07: upstream/drift и полномочия перехода"
+      ]
+    ]
+  },
+  {
+    "atom": "A16",
+    "message_line": 11,
+    "meaning_and_link": "**Один проверяемый атом:** Различить норму/override/код/обещание\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-01/02; disposition и code boundary в method-delta",
+    "destination_and_check": [
+      [
+        "process/Основа; внешняя основа без копии",
+        "AC-01: disposition/условия/override"
+      ],
+      [
+        "README/process и адреса D0-D5/DX",
+        "AC-01: сверка каждого source anchor и code boundary"
+      ]
+    ]
+  },
+  {
+    "atom": "A17",
+    "message_line": 11,
+    "meaning_and_link": "**Один проверяемый атом:** Релевантные контракты 031 целиком\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-03/AC-02; per-attribute crosswalk и closed limits",
+    "destination_and_check": [
+      [
+        "src/runner_core/regulation/format.md после содержательных ворот",
+        "AC-02/08: поля, пары, версии и source coverage"
+      ]
+    ]
+  },
+  {
+    "atom": "A18",
+    "message_line": 11,
+    "meaning_and_link": "**Один проверяемый атом:** Не предрешать достаточность/изменение 031\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** AC-08; три оси, В-02, UNKNOWN-01",
+    "destination_and_check": [
+      [
+        "назначение из раздела результата/адресной карты",
+        "AC-08; три оси, В-02, UNKNOWN-01"
+      ]
+    ]
+  },
+  {
+    "atom": "A19",
+    "message_line": 13,
+    "meaning_and_link": "**Один проверяемый атом:** Current pin и latest только на момент проверки\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** FACT-02, REQ-06/AC-06; `a449bd2…`, повторная upstream-проверка перед внесением ещё нужна",
+    "destination_and_check": [
+      [
+        "README/process и append переходящих log",
+        "AC-06/07: upstream/drift и полномочия перехода"
+      ]
+    ]
+  },
+  {
+    "atom": "A20",
+    "message_line": 13,
+    "meaning_and_link": "**Один проверяемый атом:** Сравнить с old f333efa\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-02/AC-01; immutable old Git anchors в method-delta",
+    "destination_and_check": [
+      [
+        "README/process и адреса D0-D5/DX",
+        "AC-01: сверка каждого source anchor и code boundary"
+      ]
+    ]
+  },
+  {
+    "atom": "A21",
+    "message_line": 13,
+    "meaning_and_link": "**Один проверяемый атом:** 16 paths, algorithm не изменён\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-02; пофайловая карта и raw byte comparison, не 16 новых норм",
+    "destination_and_check": [
+      [
+        "README/process и адреса D0-D5/DX",
+        "AC-01: сверка каждого source anchor и code boundary"
+      ]
+    ]
+  },
+  {
+    "atom": "A22",
+    "message_line": 13,
+    "meaning_and_link": "**Один проверяемый атом:** Отдельно ab2a4ef и принятые overrides\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-01/02; method-delta «Принятые основания», process60–121",
+    "destination_and_check": [
+      [
+        "process/Основа; внешняя основа без копии",
+        "AC-01: disposition/условия/override"
+      ],
+      [
+        "README/process и адреса D0-D5/DX",
+        "AC-01: сверка каждого source anchor и code boundary"
+      ]
+    ]
+  },
+  {
+    "atom": "A23",
+    "message_line": 13,
+    "meaning_and_link": "**Один проверяемый атом:** Git-объекты внешнего клона, без копии методики\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A23: source pins/path/ranges, read-map; в новых файлах только адреса/краткий анализ, не копия внешнего пакета",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A23: source pins/path/ranges, read-map; в новых файлах только адреса/краткий анализ, не копия внешнего пакета"
+      ]
+    ]
+  },
+  {
+    "atom": "A24",
+    "message_line": 13,
+    "meaning_and_link": "**Один проверяемый атом:** Учитывать опубликованную основу 4236e4a\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A24: это исходная основа задания, не нынешняя plugin evidence; последняя явно отделена как 492c166",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A24: это исходная основа задания, не нынешняя plugin evidence; последняя явно отделена как 492c166"
+      ]
+    ]
+  },
+  {
+    "atom": "A25",
+    "message_line": 13,
+    "meaning_and_link": "**Один проверяемый атом:** Своя ветка/дерево от origin/main\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A25: подготовленное интегратором дерево/ветка; новых refs эта сессия не создаёт",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A25: подготовленное интегратором дерево/ветка; новых refs эта сессия не создаёт"
+      ]
+    ]
+  },
+  {
+    "atom": "A26",
+    "message_line": 13,
+    "meaning_and_link": "**Один проверяемый атом:** Не трогать live/чужие изменения main\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A26, DNC-01/04; baseline своего дерева, live не читается как code evidence",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A26, DNC-01/04; baseline своего дерева, live не читается как code evidence"
+      ]
+    ]
+  },
+  {
+    "atom": "A27",
+    "message_line": 15,
+    "meaning_and_link": "**Один проверяемый атом:** Начать с Canon/ссылок/AGENTS/config read-only\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A27: read-map с собственным Canon/ADR чтением и config view; baseline защищает config",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A27: read-map с собственным Canon/ADR чтением и config view; baseline защищает config"
+      ]
+    ]
+  },
+  {
+    "atom": "A28",
+    "message_line": 15,
+    "meaning_and_link": "**Один проверяемый атом:** Полностью применимые правила методики\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A28: method-delta и read-map называют точные собственные ranges; полное чтение чужой сессии не присваивается",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A28: method-delta и read-map называют точные собственные ranges; полное чтение чужой сессии не присваивается"
+      ]
+    ]
+  },
+  {
+    "atom": "A29",
+    "message_line": 15,
+    "meaning_and_link": "**Один проверяемый атом:** Конкретные diff/ranges\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-02/AC-01; каждый hunk16paths в method-delta",
+    "destination_and_check": [
+      [
+        "README/process и адреса D0-D5/DX",
+        "AC-01: сверка каждого source anchor и code boundary"
+      ]
+    ]
+  },
+  {
+    "atom": "A30",
+    "message_line": 15,
+    "meaning_and_link": "**Один проверяемый атом:** Цикл/роли/прогресс\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-02/03; method-delta M/R/S и crosswalk progress/gates",
+    "destination_and_check": [
+      [
+        "README/process и адреса D0-D5/DX",
+        "AC-01: сверка каждого source anchor и code boundary"
+      ],
+      [
+        "src/runner_core/regulation/format.md после содержательных ворот",
+        "AC-02/08: поля, пары, версии и source coverage"
+      ]
+    ]
+  },
+  {
+    "atom": "A31",
+    "message_line": 15,
+    "meaning_and_link": "**Один проверяемый атом:** Запуск/повтор/state.launches\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-03; отдельные атрибуты launch в 031-impact, mutable state снаружи",
+    "destination_and_check": [
+      [
+        "src/runner_core/regulation/format.md после содержательных ворот",
+        "AC-02/08: поля, пары, версии и source coverage"
+      ]
+    ]
+  },
+  {
+    "atom": "A32",
+    "message_line": 15,
+    "meaning_and_link": "**Один проверяемый атом:** Чтение/порядок переносов\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-05/AC-05; раздел первого переноса и проверка immediate current при Canon-first",
+    "destination_and_check": [
+      [
+        "README/process/новыйADR; format.md отдельно после ворот",
+        "AC-05: поадресная сверка и current при первом переносе"
+      ]
+    ]
+  },
+  {
+    "atom": "A33",
+    "message_line": 15,
+    "meaning_and_link": "**Один проверяемый атом:** Second opinion/проверка норм\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-01/02/03; method-delta и полевые маршруты протокола, не смешивать с помощником",
+    "destination_and_check": [
+      [
+        "process/Основа; внешняя основа без копии",
+        "AC-01: disposition/условия/override"
+      ],
+      [
+        "README/process и адреса D0-D5/DX",
+        "AC-01: сверка каждого source anchor и code boundary"
+      ]
+    ]
+  },
+  {
+    "atom": "A34",
+    "message_line": 15,
+    "meaning_and_link": "**Один проверяемый атом:** Открытый вопрос не норма и не ответ\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-01; OQ5 процедура отделена от вопросов 7–87",
+    "destination_and_check": [
+      [
+        "process/Основа; внешняя основа без копии",
+        "AC-01: disposition/условия/override"
+      ]
+    ]
+  },
+  {
+    "atom": "A35",
+    "message_line": 15,
+    "meaning_and_link": "**Один проверяемый атом:** Не пересказывать внешнюю основу в Canon\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-01/05; disposition «внешняя основа, перенос текста не нужен», только проектные отличия",
+    "destination_and_check": [
+      [
+        "process/Основа; внешняя основа без копии",
+        "AC-01: disposition/условия/override"
+      ],
+      [
+        "README/process/новыйADR; format.md отдельно после ворот",
+        "AC-05: поадресная сверка и current при первом переносе"
+      ]
+    ]
+  },
+  {
+    "atom": "A36",
+    "message_line": 17,
+    "meaning_and_link": "**Один проверяемый атом:** Approved031 immutable commit/input\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** DNC-01, REQ-05; approved hashes и protected baseline, никогда target",
+    "destination_and_check": [
+      [
+        "README/process/новыйADR; format.md отдельно после ворот",
+        "AC-05: поадресная сверка и current при первом переносе"
+      ]
+    ]
+  },
+  {
+    "atom": "A37",
+    "message_line": 17,
+    "meaning_and_link": "**Один проверяемый атом:** Учитывать связанный пакет и историю reviews\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A37: source-inventory/read-map, исторические reviews не переписываются и не объявлены своими прочитанными целиком",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A37: source-inventory/read-map, исторические reviews не переписываются и не объявлены своими прочитанными целиком"
+      ]
+    ]
+  },
+  {
+    "atom": "A38",
+    "message_line": 17,
+    "meaning_and_link": "**Один проверяемый атом:** Progress/launch/correction/retry\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-03/AC-02;031-impact поатрибутно, обе progress-пары",
+    "destination_and_check": [
+      [
+        "src/runner_core/regulation/format.md после содержательных ворот",
+        "AC-02/08: поля, пары, версии и source coverage"
+      ]
+    ]
+  },
+  {
+    "atom": "A39",
+    "message_line": 17,
+    "meaning_and_link": "**Один проверяемый атом:** Fresh reviewers/линзы/второе мнение\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-03; meeting-only lens, prompt/doc и внешний selector в crosswalk",
+    "destination_and_check": [
+      [
+        "src/runner_core/regulation/format.md после содержательных ворот",
+        "AC-02/08: поля, пары, версии и source coverage"
+      ]
+    ]
+  },
+  {
+    "atom": "A40",
+    "message_line": 17,
+    "meaning_and_link": "**Один проверяемый атом:** Versions/refs/signatures\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-03/AC-08; отдельные data/semantic/shape оси и В-02/03",
+    "destination_and_check": [
+      [
+        "src/runner_core/regulation/format.md после содержательных ворот",
+        "AC-02/08: поля, пары, версии и source coverage"
+      ]
+    ]
+  },
+  {
+    "atom": "A41",
+    "message_line": 17,
+    "meaning_and_link": "**Один проверяемый атом:** Машинные формы/gate outcomes\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-03; closed document/progress/gate routes в crosswalk",
+    "destination_and_check": [
+      [
+        "src/runner_core/regulation/format.md после содержательных ворот",
+        "AC-02/08: поля, пары, версии и source coverage"
+      ]
+    ]
+  },
+  {
+    "atom": "A42",
+    "message_line": 17,
+    "meaning_and_link": "**Один проверяемый атом:** На каждый delta anchor/место 031/verdict\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-02/03, AC-01/02; join method-delta→031-impact",
+    "destination_and_check": [
+      [
+        "README/process и адреса D0-D5/DX",
+        "AC-01: сверка каждого source anchor и code boundary"
+      ],
+      [
+        "src/runner_core/regulation/format.md после содержательных ворот",
+        "AC-02/08: поля, пары, версии и source coverage"
+      ]
+    ]
+  },
+  {
+    "atom": "A43",
+    "message_line": 17,
+    "meaning_and_link": "**Один проверяемый атом:** ID не существующая operation\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** DNC-02; matching registry и unknown signature boundary, В-03",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "DNC-02; matching registry и unknown signature boundary, В-03"
+      ]
+    ]
+  },
+  {
+    "atom": "A44",
+    "message_line": 19,
+    "meaning_and_link": "**Один проверяемый атом:** 045 только из авторского дерева\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A44: служебный locator вне публичных файлов; raw SHA/status и read-map",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A44: служебный locator вне публичных файлов; raw SHA/status и read-map"
+      ]
+    ]
+  },
+  {
+    "atom": "A45",
+    "message_line": 19,
+    "meaning_and_link": "**Один проверяемый атом:** Читать spec/plan/review4/log, fixes по нужде\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A45: read-map, неизменные inputs; не выдавать историческое чтение за своё",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A45: read-map, неизменные inputs; не выдавать историческое чтение за своё"
+      ]
+    ]
+  },
+  {
+    "atom": "A46",
+    "message_line": 19,
+    "meaning_and_link": "**Один проверяемый атом:** Точные SHA spec/plan045\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A46: spec685245…; прежний plan150c98… сохранён, текущий plan4856a2… с append решения; before/after внешних файлов",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A46: spec685245…; прежний plan150c98… сохранён, текущий plan4856a2… с append решения; before/after внешних файлов"
+      ]
+    ]
+  },
+  {
+    "atom": "A47",
+    "message_line": 19,
+    "meaning_and_link": "**Один проверяемый атом:** Не дублировать 045/#22/не сбрасывать историю\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A47, DNC-03: нет новых задач/refs, submit только 061",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A47, DNC-03: нет новых задач/refs, submit только 061"
+      ]
+    ]
+  },
+  {
+    "atom": "A48",
+    "message_line": 19,
+    "meaning_and_link": "**Один проверяемый атом:** Checklist/test ручного review и DNC\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-04/AC-03; analysis «Блокеры 045 и 013», DNC-08 отдельно обе части",
+    "destination_and_check": [
+      [
+        "будущая правка плана/каталога 045; сейчас только анализ061",
+        "AC-03/04: каждый anchor/DNC и read-only013"
+      ]
+    ]
+  },
+  {
+    "atom": "A49",
+    "message_line": 19,
+    "meaning_and_link": "**Один проверяемый атом:** В-05 открытый источник registry\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** UNKNOWN-03, REQ-04, В-03/В-05: путь проектирования в 045 выбран, полнота 16 kinds/signatures не утверждена",
+    "destination_and_check": [
+      [
+        "будущая правка плана/каталога 045; сейчас только анализ061",
+        "AC-03/04: каждый anchor/DNC и read-only013"
+      ]
+    ]
+  },
+  {
+    "atom": "A50",
+    "message_line": 19,
+    "meaning_and_link": "**Один проверяемый атом:** Разделить маршруты Canon/045/031/внешний\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-04/05, AC-03/08; analysis и три оси 031-impact",
+    "destination_and_check": [
+      [
+        "будущая правка плана/каталога 045; сейчас только анализ061",
+        "AC-03/04: каждый anchor/DNC и read-only013"
+      ],
+      [
+        "README/process/новыйADR; format.md отдельно после ворот",
+        "AC-05: поадресная сверка и current при первом переносе"
+      ]
+    ]
+  },
+  {
+    "atom": "A51",
+    "message_line": 19,
+    "meaning_and_link": "**Один проверяемый атом:** Сейчас 045 не править\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A51, DNC-01; внешние before/after/status, не только обещание",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A51, DNC-01; внешние before/after/status, не только обещание"
+      ]
+    ]
+  },
+  {
+    "atom": "A52",
+    "message_line": 21,
+    "meaning_and_link": "**Один проверяемый атом:** 013 read-only spec/log/task/list\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A52: read-map и source-inventory, отдельное дерево",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A52: read-map и source-inventory, отдельное дерево"
+      ]
+    ]
+  },
+  {
+    "atom": "A53",
+    "message_line": 21,
+    "meaning_and_link": "**Один проверяемый атом:** Черновик, reader/whitelist не подтверждены\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** FACT-05, UNKNOWN-03, AC-04; 013spec1/message46–49/log42",
+    "destination_and_check": [
+      [
+        "назначение из раздела результата/адресной карты",
+        "FACT-05, UNKNOWN-03, AC-04; 013spec1/message46–49/log42"
+      ]
+    ]
+  },
+  {
+    "atom": "A54",
+    "message_line": 21,
+    "meaning_and_link": "**Один проверяемый атом:** Не возобновлять 013\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A54: ни запусков/задач/заказов 013, ни изменения дерева",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A54: ни запусков/задач/заказов 013, ни изменения дерева"
+      ]
+    ]
+  },
+  {
+    "atom": "A55",
+    "message_line": 21,
+    "meaning_and_link": "**Один проверяемый атом:** Проверить наличие src/runner_core сейчас\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** AC-04; read-only list/exists/status, отсутствие не совместимость",
+    "destination_and_check": [
+      [
+        "назначение из раздела результата/адресной карты",
+        "AC-04; read-only list/exists/status, отсутствие не совместимость"
+      ]
+    ]
+  },
+  {
+    "atom": "A56",
+    "message_line": 21,
+    "meaning_and_link": "**Один проверяемый атом:** Описание runner не реализация\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-02/AC-04; method-delta code boundary и analysis013",
+    "destination_and_check": [
+      [
+        "README/process и адреса D0-D5/DX",
+        "AC-01: сверка каждого source anchor и code boundary"
+      ]
+    ]
+  },
+  {
+    "atom": "A57",
+    "message_line": 21,
+    "meaning_and_link": "**Один проверяемый атом:** Plugin только узкие свидетельства\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** FACT-06/REQ-02; база 492c166, конкретные callsites, не полный runtime API",
+    "destination_and_check": [
+      [
+        "README/process и адреса D0-D5/DX",
+        "AC-01: сверка каждого source anchor и code boundary"
+      ]
+    ]
+  },
+  {
+    "atom": "A58",
+    "message_line": 23,
+    "meaning_and_link": "**Один проверяемый атом:** Выход analysis и draft spec\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A58: шесть корневых черновиков и явная аналитическая часть owner-gate-decisions",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A58: шесть корневых черновиков и явная аналитическая часть owner-gate-decisions"
+      ]
+    ]
+  },
+  {
+    "atom": "A59",
+    "message_line": 23,
+    "meaning_and_link": "**Один проверяемый атом:** FACT/UNKNOWN/REQ/AC/DNC отдельно, result-section\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A59: spec заголовки/первые строки; ID count в probes, не proof coverage",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A59: spec заголовки/первые строки; ID count в probes, не proof coverage"
+      ]
+    ]
+  },
+  {
+    "atom": "A60",
+    "message_line": 23,
+    "meaning_and_link": "**Один проверяемый атом:** Exact sources и глубина чтения\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A60: source-inventory + own read-map; hash не чтение",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A60: source-inventory + own read-map; hash не чтение"
+      ]
+    ]
+  },
+  {
+    "atom": "A61",
+    "message_line": 23,
+    "meaning_and_link": "**Один проверяемый атом:** Raw hash/status013/045 до/после без копий\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A61: read-map fingerprints внешних файлов; полные пакеты не копируются",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A61: read-map fingerprints внешних файлов; полные пакеты не копируются"
+      ]
+    ]
+  },
+  {
+    "atom": "A62",
+    "message_line": 23,
+    "meaning_and_link": "**Один проверяемый атом:** Лёгкий воспроизводимый счёт\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A62: probes/команда count; итоговые реальные числа, не обязательные 38/83",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A62: probes/команда count; итоговые реальные числа, не обязательные 38/83"
+      ]
+    ]
+  },
+  {
+    "atom": "A63",
+    "message_line": 23,
+    "meaning_and_link": "**Один проверяемый атом:** Границы новой редакции 031/отдельное approval\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-05/AC-08/В-02; место выбрано, содержание/версии отдельно утверждаются, approved031 immutable",
+    "destination_and_check": [
+      [
+        "README/process/новыйADR; format.md отдельно после ворот",
+        "AC-05: поадресная сверка и current при первом переносе"
+      ]
+    ]
+  },
+  {
+    "atom": "A64",
+    "message_line": 25,
+    "meaning_and_link": "**Один проверяемый атом:** Прогресс только progress_line\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A64: корневой progress.log; ручной подмены нет",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A64: корневой progress.log; ручной подмены нет"
+      ]
+    ]
+  },
+  {
+    "atom": "A65",
+    "message_line": 25,
+    "meaning_and_link": "**Один проверяемый атом:** Start первой, N единиц, step немедленно\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A65: первоначальная С1 считала источники; нынешнее назначение — шесть законченных пунктов программы, N6, step сразу после каждого",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A65: первоначальная С1 считала источники; нынешнее назначение — шесть законченных пунктов программы, N6, step сразу после каждого"
+      ]
+    ]
+  },
+  {
+    "atom": "A66",
+    "message_line": 25,
+    "meaning_and_link": "**Один проверяемый атом:** Агент не пишет launch/log регистрации\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A66: log неизменен, свои progress append-only; launcher уже записал №19, известное смещение карточки №18 не чинится",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A66: log неизменен, свои progress append-only; launcher уже записал №19, известное смещение карточки №18 не чинится"
+      ]
+    ]
+  },
+  {
+    "atom": "A67",
+    "message_line": 25,
+    "meaning_and_link": "**Один проверяемый атом:** Одна строка profile по формату методики\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A67: одна собственная append-only строка profile.log в конце, требуемое свидетельство сдачи",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A67: одна собственная append-only строка profile.log в конце, требуемое свидетельство сдачи"
+      ]
+    ]
+  },
+  {
+    "atom": "A68",
+    "message_line": 25,
+    "meaning_and_link": "**Один проверяемый атом:** Публичность, без machine locators/private names\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A68: AGENTS15/ADR0006, публичные source anchors относительные; locator только в read-only командах",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A68: AGENTS15/ADR0006, публичные source anchors относительные; locator только в read-only командах"
+      ]
+    ]
+  },
+  {
+    "atom": "A69",
+    "message_line": 25,
+    "meaning_and_link": "**Один проверяемый атом:** При отказе точный код/ответ, не ручной журнал\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A69: если отказ возникнет — точная передача ответа интегратору; успешный start/steps не отказ. Не фабриковать пример реального отказа",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A69: если отказ возникнет — точная передача ответа интегратору; успешный start/steps не отказ. Не фабриковать пример реального отказа"
+      ]
+    ]
+  },
+  {
+    "atom": "A70",
+    "message_line": 25,
+    "meaning_and_link": "**Один проверяемый атом:** crew_task submit, НЕ deliver/accept\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A70: финальный submit n61 с указанием С1п; отдельное сообщение интегратору, не приёмка",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A70: финальный submit n61 с указанием С1п; отдельное сообщение интегратору, не приёмка"
+      ]
+    ]
+  },
+  {
+    "atom": "A71",
+    "message_line": 25,
+    "meaning_and_link": "**Один проверяемый атом:** После финальной строки не продолжать/self-retry\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A71: все пробы ДО done; после только учёт/submit/доклад, следующую проверку назначает интегратор",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A71: все пробы ДО done; после только учёт/submit/доклад, следующую проверку назначает интегратор"
+      ]
+    ]
+  },
+  {
+    "atom": "A72",
+    "message_line": 25,
+    "meaning_and_link": "**Один проверяемый атом:** Никакой автоматической реализации\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A72, DNC-04: только разрешённые drafts/NEW evidence, protected comparison",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A72, DNC-04: только разрешённые drafts/NEW evidence, protected comparison"
+      ]
+    ]
+  },
+  {
+    "atom": "A73",
+    "message_line": 29,
+    "meaning_and_link": "**Один проверяемый атом:** Матрица old→current→Canon→code→031/045\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-02/03; method-delta/crosswalk, не одна тематическая таблица",
+    "destination_and_check": [
+      [
+        "README/process и адреса D0-D5/DX",
+        "AC-01: сверка каждого source anchor и code boundary"
+      ],
+      [
+        "src/runner_core/regulation/format.md после содержательных ворот",
+        "AC-02/08: поля, пары, версии и source coverage"
+      ]
+    ]
+  },
+  {
+    "atom": "A74",
+    "message_line": 29,
+    "meaning_and_link": "**Один проверяемый атом:** Источники и квалификация evidence\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-01/AC-01; норма/условие/override/provenance отдельно",
+    "destination_and_check": [
+      [
+        "process/Основа; внешняя основа без копии",
+        "AC-01: disposition/условия/override"
+      ]
+    ]
+  },
+  {
+    "atom": "A75",
+    "message_line": 29,
+    "meaning_and_link": "**Один проверяемый атом:** Каждое несовпадение — место/последствие\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-02/AC-01; disposition/destination в method-delta",
+    "destination_and_check": [
+      [
+        "README/process и адреса D0-D5/DX",
+        "AC-01: сверка каждого source anchor и code boundary"
+      ]
+    ]
+  },
+  {
+    "atom": "A76",
+    "message_line": 31,
+    "meaning_and_link": "**Один проверяемый атом:** Конкретный маршрут обоих блокеров 045\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-04/AC-03; analysis, отдельные plan-checklist и registry ворота",
+    "destination_and_check": [
+      [
+        "будущая правка плана/каталога 045; сейчас только анализ061",
+        "AC-03/04: каждый anchor/DNC и read-only013"
+      ]
+    ]
+  },
+  {
+    "atom": "A77",
+    "message_line": 31,
+    "meaning_and_link": "**Один проверяемый атом:** Без придуманных signatures/compatibility/PASS\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** DNC-02; per-attribute unknowns crosswalk, В-03",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "DNC-02; per-attribute unknowns crosswalk, В-03"
+      ]
+    ]
+  },
+  {
+    "atom": "A78",
+    "message_line": 31,
+    "meaning_and_link": "**Один проверяемый атом:** Данные/shape/внешний контракт разделены\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-03/AC-08; дополнительно семантика отдельно, не исчезает из-за прежней shape",
+    "destination_and_check": [
+      [
+        "src/runner_core/regulation/format.md после содержательных ворот",
+        "AC-02/08: поля, пары, версии и source coverage"
+      ]
+    ]
+  },
+  {
+    "atom": "A79",
+    "message_line": 31,
+    "meaning_and_link": "**Один проверяемый атом:** Новый approved format не создан, история цела\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** DNC-01/03; proposed destination absent и protected hash check",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "DNC-01/03; proposed destination absent и protected hash check"
+      ]
+    ]
+  },
+  {
+    "atom": "A80",
+    "message_line": 33,
+    "meaning_and_link": "**Один проверяемый атом:** Scope полной задачи и действующее место\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-05/AC-05; result-section и first-transfer таблица",
+    "destination_and_check": [
+      [
+        "README/process/новыйADR; format.md отдельно после ворот",
+        "AC-05: поадресная сверка и current при первом переносе"
+      ]
+    ]
+  },
+  {
+    "atom": "A81",
+    "message_line": 33,
+    "meaning_and_link": "**Один проверяемый атом:** В задаче исследование/история и будущий current\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A81: current пока отсутствует; после переноса только указатель, не вторая норма",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A81: current пока отсутствует; после переноса только указатель, не вторая норма"
+      ]
+    ]
+  },
+  {
+    "atom": "A82",
+    "message_line": 33,
+    "meaning_and_link": "**Один проверяемый атом:** Без молчаливых pins/сбросов/автоапрува\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-06/AC-07, DNC-03; В-01, история сохранена",
+    "destination_and_check": [
+      [
+        "README/process и append переходящих log",
+        "AC-06/07: upstream/drift и полномочия перехода"
+      ]
+    ]
+  },
+  {
+    "atom": "A83",
+    "message_line": 33,
+    "meaning_and_link": "**Один проверяемый атом:** Реальные решения владельца и следующая независимая С2\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A83: В-01/В-01а решены, В-02 условен по содержанию, В-03 путь выбран; далее отдельная свежая полная С2",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A83: В-01/В-01а решены, В-02 условен по содержанию, В-03 путь выбран; далее отдельная свежая полная С2"
+      ]
+    ]
+  },
+  {
+    "atom": "A84",
+    "message_line": 37,
+    "meaning_and_link": "**Один проверяемый атом:** Только своё подготовленное дерево/ветка/папка\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A84: session_move первым действием; запись baseline, без новых refs",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A84: session_move первым действием; запись baseline, без новых refs"
+      ]
+    ]
+  },
+  {
+    "atom": "A85",
+    "message_line": 37,
+    "meaning_and_link": "**Один проверяемый атом:** Не менять Canon/AGENTS/plugin/config/031/045/013/методику\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A85, DNC-01: точные protected repo paths, внешние hashes/status, immutable Git objects",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A85, DNC-01: точные protected repo paths, внешние hashes/status, immutable Git objects"
+      ]
+    ]
+  },
+  {
+    "atom": "A86",
+    "message_line": 37,
+    "meaning_and_link": "**Один проверяемый атом:** Без plan/JSONC/schema/registry/runtime/общего validator\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A86: допустимый список файлов baseline; check.py только разовое evidence сохранности, не validator продукта",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A86: допустимый список файлов baseline; check.py только разовое evidence сохранности, не validator продукта"
+      ]
+    ]
+  },
+  {
+    "atom": "A87",
+    "message_line": 37,
+    "meaning_and_link": "**Один проверяемый атом:** Без git/live/delete/restart/cleanup\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A87, DNC-04: отсутствие таких команд, сохранность protected; refs не создавались",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A87, DNC-04: отсутствие таких команд, сохранность protected; refs не создавались"
+      ]
+    ]
+  },
+  {
+    "atom": "A88",
+    "message_line": 37,
+    "meaning_and_link": "**Один проверяемый атом:** Без дочерних задач/скрытых подагентов\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A88: новых задач/подагентов не создаётся; исходы делает одна С1п",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A88: новых задач/подагентов не создаётся; исходы делает одна С1п"
+      ]
+    ]
+  },
+  {
+    "atom": "A89",
+    "message_line": 37,
+    "meaning_and_link": "**Один проверяемый атом:** Лёгкие read-only, тяжёлое только очередь+согласование\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A89: только чтение/Git show/лёгкие Python-проверки; тяжёлое не требуется и не запущено, очередь не обходится",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A89: только чтение/Git show/лёгкие Python-проверки; тяжёлое не требуется и не запущено, очередь не обходится"
+      ]
+    ]
+  },
+  {
+    "atom": "A90",
+    "message_line": 37,
+    "meaning_and_link": "**Один проверяемый атом:** Не менять модели/лимиты\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A90: config защищён baseline, модель не переключается",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A90: config защищён baseline, модель не переключается"
+      ]
+    ]
+  },
+  {
+    "atom": "A91",
+    "message_line": 37,
+    "meaning_and_link": "**Один проверяемый атом:** Далее С2 по интегратору, не auto acceptance\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A91: submit и остановка автора; отдельная свежая С2 не назначается самим автором",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A91: submit и остановка автора; отдельная свежая С2 не назначается самим автором"
+      ]
+    ]
+  },
+  {
+    "atom": "A92",
+    "message_line": 41,
+    "meaning_and_link": "**Один проверяемый атом:** Выбор pin/перехода,031, внешнего scope у владельца\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** AC-07/08, В-01/02/03; решения owner-gate-decisions, не авторский выбор",
+    "destination_and_check": [
+      [
+        "назначение из раздела результата/адресной карты",
+        "AC-07/08, В-01/02/03; решения owner-gate-decisions, не авторский выбор"
+      ]
+    ]
+  },
+  {
+    "atom": "A93",
+    "message_line": 41,
+    "meaning_and_link": "**Один проверяемый атом:** До выбора только факты/варианты\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** C-A93: draft; выбранное направление не готовые REQ/AC/пары/версии/каталог, нет внешних задач/контрактов",
+    "destination_and_check": [
+      [
+        "не переносится как новая норма: constraint исполнения",
+        "C-A93: draft; выбранное направление не готовые REQ/AC/пары/версии/каталог, нет внешних задач/контрактов"
+      ]
+    ]
+  },
+  {
+    "atom": "A94",
+    "message_line": 41,
+    "meaning_and_link": "**Один проверяемый атом:** Обязательную цель не подменять вопросами о деталях\n\n**REQ/AC либо отдельный constraint; точное свидетельство/граница:** REQ-05/06; конечное внесение обязательно после ворот, исследование не полная сдача",
+    "destination_and_check": [
+      [
+        "README/process/новыйADR; format.md отдельно после ворот",
+        "AC-05: поадресная сверка и current при первом переносе"
+      ],
+      [
+        "README/process и append переходящих log",
+        "AC-06/07: upstream/drift и полномочия перехода"
+      ]
+    ]
+  }
+]

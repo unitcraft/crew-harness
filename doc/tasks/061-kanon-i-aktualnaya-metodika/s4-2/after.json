@@ -1,0 +1,45 @@
+{
+  "own": {
+    "count": 618,
+    "changed": [],
+    "missing": [],
+    "head_before": "492c166fbd12e00a6a924efab065f6adb4bd91f6",
+    "head_after": "492c166fbd12e00a6a924efab065f6adb4bd91f6",
+    "git_file": {
+      "path": ".git",
+      "bytes": 66,
+      "sha256": "7215ff0c8ea38f3890184cf197c68049ea6d44b4421e05e4e82c74e347f8cad0"
+    },
+    "git_payload_published": false,
+    "branch": "review/061-plan-r2",
+    "status_after": "M doc/open-questions.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/031-impact.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/NEWs3-1/baseline.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/NEWs3-1/fingerprints.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/NEWs3-1/preconditions.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/NEWs3-1/probes.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/NEWs3-1/qualification.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/NEWs3-1/read-map.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/analysis.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/catalog-owner-decision-2026-10-16.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/method-delta.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/methodology-catalog-response-2026-10-16.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/owner-gate-decisions.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/plan.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/progress.log\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/review-setup/integrator-preflight.json\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/submitted-sha256.json\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/submitted/031-impact.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/submitted/analysis.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/submitted/method-delta.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/submitted/owner-gate-decisions.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/submitted/source-inventory.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/submitted/spec-trace.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/submitted/spec.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s3-1-submitted/manifest.json\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s3-1-submitted/plan.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/after.json\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/before.json\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/build_coverage.py\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/check_preservation.py\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/coverage.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/executability.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/external-before.json\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/external-checks.json\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/external-supplement.json\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/fingerprints.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/git-object-fingerprints.json\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/lenses.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/preconditions.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/probe_paths.py\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/probes.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/qualification.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/read-map.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/read_source.py\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/upstream-check.json\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/version-check.json\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/source-inventory.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/spec-trace.md\n?? doc/tasks/061-kanon-i-aktualnaya-metodika/spec.md",
+    "unapproved_new_paths": []
+  },
+  "external": {
+    "method": {
+      "count": 78,
+      "changed": [],
+      "missing": [],
+      "head_before": "78ed75838ef58073153e5343c9483bc462721a31",
+      "head_after": "78ed75838ef58073153e5343c9483bc462721a31",
+      "status_equal": true
+    },
+    "045": {
+      "count": 615,
+      "changed": [],
+      "missing": [],
+      "head_before": "b18cc5052b6183d9c15fc1833006f1cb86481a3c",
+      "head_after": "b18cc5052b6183d9c15fc1833006f1cb86481a3c",
+      "status_equal": true
+    },
+    "013": {
+      "count": 355,
+      "changed": [],
+      "missing": [],
+      "head_before": "7f2b0f6ea2f9ad55258a17eb614ed03b627ce596",
+      "head_after": "7f2b0f6ea2f9ad55258a17eb614ed03b627ce596",
+      "status_equal": true
+    }
+  },
+  "scope": "Own: all early existing project files incl hidden and .git FILE; exclude only s4-2/, future plan-review-2.md, exact root task progress/profile/usage. External: early existing files except .git directories and node_modules directories; .git files included. Git internal databases not traversed."
+}

@@ -1,0 +1,43 @@
+{
+  "comparison_pin": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+  "observed_local_head": "78ed75838ef58073153e5343c9483bc462721a31",
+  "remote_checked": false,
+  "adopted_as_pin": false,
+  "files": {
+    "completeness-check.md": {
+      "sha256": "6fa0007cbcadb7116d863989c9b302e04a546c471fa103b034891afa49c6a87d",
+      "bytes": 49608,
+      "hunks": [
+        "@@ -46,0 +47,2 @@"
+      ]
+    },
+    "doc/open-questions.md": {
+      "sha256": "f1872a151d0aaceb39737d8d2109bd3c2b8a43c7a0c6666745be83c78c0e906b",
+      "bytes": 29783,
+      "hunks": [
+        "@@ -87,0 +88 @@"
+      ]
+    },
+    "methodology.md": {
+      "sha256": "107013a0a8df1033760dff0efe2c0911a2e92d61c07a0ccee78d2c6ed27ee291",
+      "bytes": 387098,
+      "hunks": [
+        "@@ -155,0 +156,2 @@"
+      ]
+    },
+    "presentations/methodology.html": {
+      "sha256": "d33f67b884d281564aa9d59a6cb0b246226146c7ecb71e2984ea3606194ee7c7",
+      "bytes": 23190,
+      "hunks": [
+        "@@ -80,0 +81 @@"
+      ]
+    },
+    "task-sessions.md": {
+      "sha256": "55b8bf4854104563c56bf08fe7b5957f865d9040e99205965f6e458dd993a452",
+      "bytes": 60653,
+      "hunks": [
+        "@@ -233,0 +234,12 @@"
+      ]
+    }
+  }
+}

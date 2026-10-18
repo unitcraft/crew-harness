@@ -1,0 +1,15 @@
+Protected files unchanged=453; changed=6 authorized subjects
+External 045: identical=True; files=102
+External 013: identical=True; files=354
+External method: identical=True; files=0
+Frozen spec.md: exact=True bytes=33427 sha256=231f86a46022d5e592a2d9b001e8ee00e4ffb180094701f82c79dee88dcc4570
+Frozen analysis.md: exact=True bytes=14830 sha256=e830c14b03532526583b1bf2e520bfc5479f10cb34d16d15060cae21393ce3af
+Frozen 031-impact.md: exact=True bytes=53104 sha256=7b6414860e7eab13981758c8fc5bfdb4df6b9dfff9f248ae76506dc53f7ca2cb
+Frozen spec-trace.md: exact=True bytes=43116 sha256=f83c3b36d5c4f846d0a0c8d1e7daaa972c9e040f7aa8942231bb71b0746e9038
+Frozen method-delta.md: exact=True bytes=34174 sha256=c3ec6b250aef815b37a10afd2d1a28728630816739b357a7f25e6ecedef0e065
+Frozen source-inventory.md: exact=True bytes=16390 sha256=17bcbc65e7337143eb8d45557dfbc495d025a3880e08e383b48c5ec92fae320b
+Frozen owner-gate-decisions.md: exact=True bytes=9082 sha256=af2adfbcec277365a40d48684776921a4467930c3ed55024c77dbe60cc1cd2c9
+Primary pinned/current byte areas unchanged=84; hashes listed in fresh-review-inputs
+fresh-review-inputs bytes=26959
+spec-review-3 unchanged=True
+No plan/current/format created; frozen r3 inputs and all existing history retained

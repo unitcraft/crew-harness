@@ -1,0 +1,734 @@
+{
+  "changed_paths": [
+    "AGENTS.md",
+    "README.md",
+    "completeness-check.md",
+    "doc/open-questions.md",
+    "methodology.md",
+    "presentations/methodology.html",
+    "presentations/task-sessions.html",
+    "starter-kit/README.md",
+    "starter-kit/scripts/guards/guards.conf",
+    "starter-kit/scripts/guards/selftest/test-commit-msg.py",
+    "starter-kit/scripts/guards/selftest/test-commit-range.py",
+    "starter-kit/scripts/guards/selftest/test-guard-commit-message.py",
+    "starter-kit/scripts/guards/selftest/test-pre-push.py",
+    "starter-kit/verify-portability.sh",
+    "task-runner.md",
+    "task-sessions.md"
+  ],
+  "algorithm_equal": true,
+  "algorithm_bytes": 51475,
+  "algorithm_sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96",
+  "Q5_equal": true,
+  "ab2_runner_diff": "diff --git a/task-runner.md b/task-runner.md\nindex 9a0d20f..5c5c53a 100644\n--- a/task-runner.md\n+++ b/task-runner.md\n@@ -231,0 +232,2 @@ state\n+**Второе мнение** (`methodology.md`, раздел 18) идёт на классе A с включённым размышлением и усилием 3; при вопросе о безопасности, деньгах, данных или правке нормы — усилие 4; семья — другая, чем у агента, среди согласованных поставщиков, если доступно, совпадение называется (`methodology.md`, раздел 18). Модель второго мнения проект задаёт отдельно от основной модели класса.\n+\n",
+  "blob_fingerprints": [
+    {
+      "ref": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+      "path": "AGENTS.md",
+      "bytes": 12877,
+      "sha256": "a39139938a116019b18804760d80d8078ad033402eec66809715dff268d25a0e"
+    },
+    {
+      "ref": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+      "path": "README.md",
+      "bytes": 1839,
+      "sha256": "30657809889a3f79ac9c68a63d977578815a88d753b301bfec0dbac7e3c2498f"
+    },
+    {
+      "ref": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+      "path": "completeness-check.md",
+      "bytes": 205871,
+      "sha256": "a9006507e0fc208a3a572ae2da671cf602afd2668f703974e5b8005169c6e8fc"
+    },
+    {
+      "ref": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+      "path": "doc/open-questions.md",
+      "bytes": 14629,
+      "sha256": "22e6dc2f2de2e09a5219342bbc3cf919025a0af7d0bf0c8f816b80aed706f37d"
+    },
+    {
+      "ref": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+      "path": "methodology.md",
+      "bytes": 363338,
+      "sha256": "60ace58356ab48a9cff2634765c160545572526604dad8eacc6cbead492043ed"
+    },
+    {
+      "ref": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+      "path": "presentations/methodology.html",
+      "bytes": 15202,
+      "sha256": "455353c709c6413d4c58e615e8dd6d089e7910dccd068c44c5dd9a2fb8682a0e"
+    },
+    {
+      "ref": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+      "path": "presentations/task-sessions.html",
+      "bytes": 14462,
+      "sha256": "17cf4434044d0b338e7a0c75aebe3b0917b23a0c8926dbda19588c6bcfbf6a4f"
+    },
+    {
+      "ref": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+      "path": "starter-kit/README.md",
+      "bytes": 40433,
+      "sha256": "ee006baa6662c90cf67a81483ad360110b7c1a9fee061b2b60605dab17cc8809"
+    },
+    {
+      "ref": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+      "path": "starter-kit/scripts/guards/guards.conf",
+      "bytes": 6091,
+      "sha256": "e7458e4b185cd5da5b253657a74b59e4de0110b9df9241f75250ffc87fcb9867"
+    },
+    {
+      "ref": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+      "path": "starter-kit/scripts/guards/selftest/test-commit-msg.py",
+      "bytes": 10942,
+      "sha256": "fea3e782b47796a71e7b152050318b948253027236f0e2bd5e938715a9c09200"
+    },
+    {
+      "ref": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+      "path": "starter-kit/scripts/guards/selftest/test-commit-range.py",
+      "bytes": 10602,
+      "sha256": "0c9e31619b84b1897cf2cbf6d2872d99681d7913ea12ec36bf7ed4c38d085ff0"
+    },
+    {
+      "ref": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+      "path": "starter-kit/scripts/guards/selftest/test-guard-commit-message.py",
+      "bytes": 21070,
+      "sha256": "b00b26dc3bcdeac367192ff99374aae26026617a1588df1ba9728425a10f8929"
+    },
+    {
+      "ref": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+      "path": "starter-kit/scripts/guards/selftest/test-pre-push.py",
+      "bytes": 12227,
+      "sha256": "9be5cca20593caad97d706f247039f5da136ec5a275a26f92bfe847a13faf8af"
+    },
+    {
+      "ref": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+      "path": "starter-kit/verify-portability.sh",
+      "bytes": 22626,
+      "sha256": "394ee4e7ed03716859a1adeb65e927894392911d11aa0a11d16900c71a8aaa0c"
+    },
+    {
+      "ref": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+      "path": "task-runner.md",
+      "bytes": 122709,
+      "sha256": "10396a7b7e8fb7b70553647b7204858bbe3ae5861b06b4c45f55a6b55bf4371f"
+    },
+    {
+      "ref": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+      "path": "task-sessions.md",
+      "bytes": 52142,
+      "sha256": "6aaa3e1c38381ddf6cfb22ab490487631d03678a0193495521c16814dc08dcec"
+    },
+    {
+      "ref": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+      "path": "AGENTS.md",
+      "bytes": 14844,
+      "sha256": "c17b6c9fc7e8e1223a60039688fb681950246590342d287e4625d4ecc4c79108"
+    },
+    {
+      "ref": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+      "path": "README.md",
+      "bytes": 1861,
+      "sha256": "0590d3648413073e0f090df02d0613d87b5423ac4ce6548f6e6dbb14fadd1c2f"
+    },
+    {
+      "ref": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+      "path": "completeness-check.md",
+      "bytes": 47447,
+      "sha256": "3fd55d79b4a5dc59e87c914db89327e432b96f027ee8250e60de4f24aa2368a8"
+    },
+    {
+      "ref": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+      "path": "doc/open-questions.md",
+      "bytes": 28960,
+      "sha256": "68b3c3a220795a6fdad7b80b6ecab93c47796dffbecfe40c0a308eabf2d53616"
+    },
+    {
+      "ref": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+      "path": "methodology.md",
+      "bytes": 385080,
+      "sha256": "b404b8d89b659956884fea74f27ed9e317881d4ff35ecf22019d9b40664c6295"
+    },
+    {
+      "ref": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+      "path": "presentations/methodology.html",
+      "bytes": 21668,
+      "sha256": "844b14af6e91c8028a384bedc0289b579af4bcb24307f0824e51b5d497fbe200"
+    },
+    {
+      "ref": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+      "path": "presentations/task-sessions.html",
+      "bytes": 16070,
+      "sha256": "a9d3073cf7d30b4608750f89f847bb39ebcb706c2d5cf539b693a1cd624f0db7"
+    },
+    {
+      "ref": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+      "path": "starter-kit/README.md",
+      "bytes": 40785,
+      "sha256": "da6a60e1521bdc6a668aede00416d8671bd44fd0c9826b9a23951ffe98d77ef7"
+    },
+    {
+      "ref": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+      "path": "starter-kit/scripts/guards/guards.conf",
+      "bytes": 6272,
+      "sha256": "20be7312078c67a2e70a300487a0a3ade07ab087210d69fa80bff1378cec4d2e"
+    },
+    {
+      "ref": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+      "path": "starter-kit/scripts/guards/selftest/test-commit-msg.py",
+      "bytes": 11307,
+      "sha256": "063a50620efb79749cbbc70b62a84b894ce735daf835008a76ad1b97d8e11f52"
+    },
+    {
+      "ref": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+      "path": "starter-kit/scripts/guards/selftest/test-commit-range.py",
+      "bytes": 10695,
+      "sha256": "41cab7d975ce683681477e4d4e4c1118aaf4639948135a6a67f6c2819e73b1ff"
+    },
+    {
+      "ref": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+      "path": "starter-kit/scripts/guards/selftest/test-guard-commit-message.py",
+      "bytes": 21871,
+      "sha256": "833b26d94617fc3fe18801e809d166a7e4c5fe4749b7154a2c385b2a22855a6c"
+    },
+    {
+      "ref": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+      "path": "starter-kit/scripts/guards/selftest/test-pre-push.py",
+      "bytes": 12320,
+      "sha256": "e6ce0aee86e9ba78d6a0d09d58f54d069f1d2a1608c1f97adf19adc08b016793"
+    },
+    {
+      "ref": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+      "path": "starter-kit/verify-portability.sh",
+      "bytes": 23425,
+      "sha256": "1a379610dfcb0c78e7d1263330e8c3247488532e1511f5be2968835acb22ccec"
+    },
+    {
+      "ref": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+      "path": "task-runner.md",
+      "bytes": 141522,
+      "sha256": "178fd0f1055bbdd190a4c8d4a5316566ea7be00829f9883cbfb9fde6a2a16a85"
+    },
+    {
+      "ref": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+      "path": "task-sessions.md",
+      "bytes": 58883,
+      "sha256": "64b221cde012f6e8d05c94fa6a467e4c5ce999bfd8071878caa3e85b8d57214d"
+    }
+  ],
+  "events": [
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "diff",
+        "--name-only",
+        "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+        "a449bd2e218e04384d1d42e0c1bffe892495e298"
+      ],
+      "exit": 0,
+      "bytes": 500,
+      "sha256": "a7ac8d31e2b19d7b77987a8059b9544f32975344dd837340bdc4e5d31b9e072b",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "f333efa319e445efe029ee6963b477ca8fe3bc1c:task-algorithm.md"
+      ],
+      "exit": 0,
+      "bytes": 51475,
+      "sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "a449bd2e218e04384d1d42e0c1bffe892495e298:task-algorithm.md"
+      ],
+      "exit": 0,
+      "bytes": 51475,
+      "sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "ab2a4efda1d5b16a76f43ac1cd4aa245d5aed9b0:task-algorithm.md"
+      ],
+      "exit": 0,
+      "bytes": 51475,
+      "sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "9d391bad999674c27a52dc5d1e9dae9a61d8c033:doc/open-questions.md"
+      ],
+      "exit": 0,
+      "bytes": 26282,
+      "sha256": "15cf3ccf769403ffc24914740fd0ce23e57a14ed84f667896e0488bc2ce834a8",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "a449bd2e218e04384d1d42e0c1bffe892495e298:doc/open-questions.md"
+      ],
+      "exit": 0,
+      "bytes": 28960,
+      "sha256": "68b3c3a220795a6fdad7b80b6ecab93c47796dffbecfe40c0a308eabf2d53616",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "diff",
+        "--unified=0",
+        "ab2a4efda1d5b16a76f43ac1cd4aa245d5aed9b0",
+        "a449bd2e218e04384d1d42e0c1bffe892495e298",
+        "--",
+        "task-runner.md"
+      ],
+      "exit": 0,
+      "bytes": 796,
+      "sha256": "900176e7da67ff8c4ba241062c1dd85de2c98097b70c04d82c0296163271a914",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "f333efa319e445efe029ee6963b477ca8fe3bc1c:AGENTS.md"
+      ],
+      "exit": 0,
+      "bytes": 12877,
+      "sha256": "a39139938a116019b18804760d80d8078ad033402eec66809715dff268d25a0e",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "f333efa319e445efe029ee6963b477ca8fe3bc1c:README.md"
+      ],
+      "exit": 0,
+      "bytes": 1839,
+      "sha256": "30657809889a3f79ac9c68a63d977578815a88d753b301bfec0dbac7e3c2498f",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "f333efa319e445efe029ee6963b477ca8fe3bc1c:completeness-check.md"
+      ],
+      "exit": 0,
+      "bytes": 205871,
+      "sha256": "a9006507e0fc208a3a572ae2da671cf602afd2668f703974e5b8005169c6e8fc",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "f333efa319e445efe029ee6963b477ca8fe3bc1c:doc/open-questions.md"
+      ],
+      "exit": 0,
+      "bytes": 14629,
+      "sha256": "22e6dc2f2de2e09a5219342bbc3cf919025a0af7d0bf0c8f816b80aed706f37d",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "f333efa319e445efe029ee6963b477ca8fe3bc1c:methodology.md"
+      ],
+      "exit": 0,
+      "bytes": 363338,
+      "sha256": "60ace58356ab48a9cff2634765c160545572526604dad8eacc6cbead492043ed",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "f333efa319e445efe029ee6963b477ca8fe3bc1c:presentations/methodology.html"
+      ],
+      "exit": 0,
+      "bytes": 15202,
+      "sha256": "455353c709c6413d4c58e615e8dd6d089e7910dccd068c44c5dd9a2fb8682a0e",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "f333efa319e445efe029ee6963b477ca8fe3bc1c:presentations/task-sessions.html"
+      ],
+      "exit": 0,
+      "bytes": 14462,
+      "sha256": "17cf4434044d0b338e7a0c75aebe3b0917b23a0c8926dbda19588c6bcfbf6a4f",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "f333efa319e445efe029ee6963b477ca8fe3bc1c:starter-kit/README.md"
+      ],
+      "exit": 0,
+      "bytes": 40433,
+      "sha256": "ee006baa6662c90cf67a81483ad360110b7c1a9fee061b2b60605dab17cc8809",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "f333efa319e445efe029ee6963b477ca8fe3bc1c:starter-kit/scripts/guards/guards.conf"
+      ],
+      "exit": 0,
+      "bytes": 6091,
+      "sha256": "e7458e4b185cd5da5b253657a74b59e4de0110b9df9241f75250ffc87fcb9867",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "f333efa319e445efe029ee6963b477ca8fe3bc1c:starter-kit/scripts/guards/selftest/test-commit-msg.py"
+      ],
+      "exit": 0,
+      "bytes": 10942,
+      "sha256": "fea3e782b47796a71e7b152050318b948253027236f0e2bd5e938715a9c09200",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "f333efa319e445efe029ee6963b477ca8fe3bc1c:starter-kit/scripts/guards/selftest/test-commit-range.py"
+      ],
+      "exit": 0,
+      "bytes": 10602,
+      "sha256": "0c9e31619b84b1897cf2cbf6d2872d99681d7913ea12ec36bf7ed4c38d085ff0",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "f333efa319e445efe029ee6963b477ca8fe3bc1c:starter-kit/scripts/guards/selftest/test-guard-commit-message.py"
+      ],
+      "exit": 0,
+      "bytes": 21070,
+      "sha256": "b00b26dc3bcdeac367192ff99374aae26026617a1588df1ba9728425a10f8929",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "f333efa319e445efe029ee6963b477ca8fe3bc1c:starter-kit/scripts/guards/selftest/test-pre-push.py"
+      ],
+      "exit": 0,
+      "bytes": 12227,
+      "sha256": "9be5cca20593caad97d706f247039f5da136ec5a275a26f92bfe847a13faf8af",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "f333efa319e445efe029ee6963b477ca8fe3bc1c:starter-kit/verify-portability.sh"
+      ],
+      "exit": 0,
+      "bytes": 22626,
+      "sha256": "394ee4e7ed03716859a1adeb65e927894392911d11aa0a11d16900c71a8aaa0c",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "f333efa319e445efe029ee6963b477ca8fe3bc1c:task-runner.md"
+      ],
+      "exit": 0,
+      "bytes": 122709,
+      "sha256": "10396a7b7e8fb7b70553647b7204858bbe3ae5861b06b4c45f55a6b55bf4371f",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "f333efa319e445efe029ee6963b477ca8fe3bc1c:task-sessions.md"
+      ],
+      "exit": 0,
+      "bytes": 52142,
+      "sha256": "6aaa3e1c38381ddf6cfb22ab490487631d03678a0193495521c16814dc08dcec",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "a449bd2e218e04384d1d42e0c1bffe892495e298:AGENTS.md"
+      ],
+      "exit": 0,
+      "bytes": 14844,
+      "sha256": "c17b6c9fc7e8e1223a60039688fb681950246590342d287e4625d4ecc4c79108",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "a449bd2e218e04384d1d42e0c1bffe892495e298:README.md"
+      ],
+      "exit": 0,
+      "bytes": 1861,
+      "sha256": "0590d3648413073e0f090df02d0613d87b5423ac4ce6548f6e6dbb14fadd1c2f",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "a449bd2e218e04384d1d42e0c1bffe892495e298:completeness-check.md"
+      ],
+      "exit": 0,
+      "bytes": 47447,
+      "sha256": "3fd55d79b4a5dc59e87c914db89327e432b96f027ee8250e60de4f24aa2368a8",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "a449bd2e218e04384d1d42e0c1bffe892495e298:doc/open-questions.md"
+      ],
+      "exit": 0,
+      "bytes": 28960,
+      "sha256": "68b3c3a220795a6fdad7b80b6ecab93c47796dffbecfe40c0a308eabf2d53616",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "a449bd2e218e04384d1d42e0c1bffe892495e298:methodology.md"
+      ],
+      "exit": 0,
+      "bytes": 385080,
+      "sha256": "b404b8d89b659956884fea74f27ed9e317881d4ff35ecf22019d9b40664c6295",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "a449bd2e218e04384d1d42e0c1bffe892495e298:presentations/methodology.html"
+      ],
+      "exit": 0,
+      "bytes": 21668,
+      "sha256": "844b14af6e91c8028a384bedc0289b579af4bcb24307f0824e51b5d497fbe200",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "a449bd2e218e04384d1d42e0c1bffe892495e298:presentations/task-sessions.html"
+      ],
+      "exit": 0,
+      "bytes": 16070,
+      "sha256": "a9d3073cf7d30b4608750f89f847bb39ebcb706c2d5cf539b693a1cd624f0db7",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "a449bd2e218e04384d1d42e0c1bffe892495e298:starter-kit/README.md"
+      ],
+      "exit": 0,
+      "bytes": 40785,
+      "sha256": "da6a60e1521bdc6a668aede00416d8671bd44fd0c9826b9a23951ffe98d77ef7",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "a449bd2e218e04384d1d42e0c1bffe892495e298:starter-kit/scripts/guards/guards.conf"
+      ],
+      "exit": 0,
+      "bytes": 6272,
+      "sha256": "20be7312078c67a2e70a300487a0a3ade07ab087210d69fa80bff1378cec4d2e",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "a449bd2e218e04384d1d42e0c1bffe892495e298:starter-kit/scripts/guards/selftest/test-commit-msg.py"
+      ],
+      "exit": 0,
+      "bytes": 11307,
+      "sha256": "063a50620efb79749cbbc70b62a84b894ce735daf835008a76ad1b97d8e11f52",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "a449bd2e218e04384d1d42e0c1bffe892495e298:starter-kit/scripts/guards/selftest/test-commit-range.py"
+      ],
+      "exit": 0,
+      "bytes": 10695,
+      "sha256": "41cab7d975ce683681477e4d4e4c1118aaf4639948135a6a67f6c2819e73b1ff",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "a449bd2e218e04384d1d42e0c1bffe892495e298:starter-kit/scripts/guards/selftest/test-guard-commit-message.py"
+      ],
+      "exit": 0,
+      "bytes": 21871,
+      "sha256": "833b26d94617fc3fe18801e809d166a7e4c5fe4749b7154a2c385b2a22855a6c",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "a449bd2e218e04384d1d42e0c1bffe892495e298:starter-kit/scripts/guards/selftest/test-pre-push.py"
+      ],
+      "exit": 0,
+      "bytes": 12320,
+      "sha256": "e6ce0aee86e9ba78d6a0d09d58f54d069f1d2a1608c1f97adf19adc08b016793",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "a449bd2e218e04384d1d42e0c1bffe892495e298:starter-kit/verify-portability.sh"
+      ],
+      "exit": 0,
+      "bytes": 23425,
+      "sha256": "1a379610dfcb0c78e7d1263330e8c3247488532e1511f5be2968835acb22ccec",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "a449bd2e218e04384d1d42e0c1bffe892495e298:task-runner.md"
+      ],
+      "exit": 0,
+      "bytes": 141522,
+      "sha256": "178fd0f1055bbdd190a4c8d4a5316566ea7be00829f9883cbfb9fde6a2a16a85",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "<readonly-methodology>",
+        "show",
+        "a449bd2e218e04384d1d42e0c1bffe892495e298:task-sessions.md"
+      ],
+      "exit": 0,
+      "bytes": 58883,
+      "sha256": "64b221cde012f6e8d05c94fa6a467e4c5ce999bfd8071878caa3e85b8d57214d",
+      "stderr": ""
+    }
+  ]
+}

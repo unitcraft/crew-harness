@@ -1,0 +1,29 @@
+{
+  "existing_before": 1761,
+  "after_before_outputs": 1774,
+  "changed": [],
+  "missing": [],
+  "unexpected_new": [],
+  "prefixes": {
+    "progress.log": true,
+    "profile.log": true,
+    "usage.log": true
+  },
+  "privacy_pattern_hits": [],
+  "new": [
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/check.py",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/corrected-check.py",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/expected.md",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/identity.txt",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/manual-results.md",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/probe-results-corrected.json",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/probe-results.json",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/probes.md",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/profile.log.prefix",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/progress.log.prefix",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/read-map.md",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/usage.log.prefix",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/whole-before.json"
+  ],
+  "qualification": "Снимок до записи себя/preservation/manifest/review и финального accounting. Pending outputs явно разрешены. Pycache только stat; .git только hash/size. Generated config уже отсутствовал на before39; его исчезновение между другими измерениями не действие С6."
+}

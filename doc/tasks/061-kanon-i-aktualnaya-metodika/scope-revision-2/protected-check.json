@@ -1,0 +1,11 @@
+{
+  "files_before": 1105,
+  "files_after": 1105,
+  "changed": [
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/analysis.md",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/method-delta.md",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/spec-trace.md",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/spec.md"
+  ],
+  "unexpected": []
+}

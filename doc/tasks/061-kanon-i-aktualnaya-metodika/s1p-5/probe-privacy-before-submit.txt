@@ -1,0 +1,8 @@
+command: python doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probes.py privacy
+stdout:
+Scoped actual privacy rules: files=54 errors=0
+
+
+stderr:
+
+exit: 0

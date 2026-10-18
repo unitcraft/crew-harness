@@ -1,0 +1,61 @@
+{
+  "session": "С6п запуск 37",
+  "base": "492c166fbd12e00a6a924efab065f6f6adb4bd91f6",
+  "before_entries": 1674,
+  "after_entries": 1674,
+  "protected_changed": [],
+  "missing_existing": [],
+  "new_outside_evidence": [],
+  "prefixes": {
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/profile.log": true,
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/progress.log": false,
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/usage.log": true
+  },
+  "evidence": [
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-37-С6п/before.json",
+      "bytes": 278314,
+      "sha256": "ca1c474e687059a31252ad9df32ff364fb0b125e426965f0a89db0d4077b533c"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-37-С6п/expected.json",
+      "bytes": 975,
+      "sha256": "fbd388886c94f901fa74c6ad8d9fe669c0e7cb4a987d1205e64fdcb2e7b741d0"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-37-С6п/read-map.md",
+      "bytes": 2128,
+      "sha256": "5b8bec9abf18c37b4491d9f481bdb7cfd2f7b349d2953c640b5f9cb30e4fe37a"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-37-С6п/coverage.md",
+      "bytes": 4760,
+      "sha256": "8f932bf3b3dd0c3a91b9269b8c85c90b928a4c80966513f36aa8c4f345834708"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-37-С6п/probes.md",
+      "bytes": 2891,
+      "sha256": "dc7d85d65dc7151468eecfdad87a5eea7cd4af5eb4de04c51293ff328ec51eb5"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-37-С6п/probe-results.md",
+      "bytes": 4510,
+      "sha256": "a6851d741ad836cc89b9ee2f90df47cd2f5a3c2b6fa68af4497a75581643e241"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-37-С6п/qualification.md",
+      "bytes": 3736,
+      "sha256": "922bf6c652494c36cc8198141edaf2ed2a175d61457cae0ba3f1708c5770e729"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-37-С6п/fingerprints.md",
+      "bytes": 2092,
+      "sha256": "573128efd151b489a0f0d1089802eb4435f024698b134b7537eca81265738554"
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/preparation-review-1.md",
+      "bytes": 7005,
+      "sha256": "664f6bd0bfee23390826fadb86649e54a271f9a5520198795c8978201091ffba"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+[
+  {
+    "probe": 1,
+    "command": [
+      "python.exe",
+      "probe_structure.py"
+    ],
+    "expected_exit": 0,
+    "exit": 0,
+    "stdout": "REQ: input=[1, 2, 3, 4, 5, 6], expected=1..6; positive=PASS; mutation 01->99 rejected=PASS\nAC: input=[1, 2, 3, 4, 5, 6, 7, 8], expected=1..8; positive=PASS; mutation 01->99 rejected=PASS\nDNC: input=[1, 2, 3, 4], expected=1..4; positive=PASS; mutation 01->99 rejected=PASS\nspec.md: bytes=33427, root=frozen=manifest; append-LF rejected=PASS\nanalysis.md: bytes=14830, root=frozen=manifest; append-LF rejected=PASS\n031-impact.md: bytes=53104, root=frozen=manifest; append-LF rejected=PASS\nspec-trace.md: bytes=43116, root=frozen=manifest; append-LF rejected=PASS\nmethod-delta.md: bytes=34174, root=frozen=manifest; append-LF rejected=PASS\nsource-inventory.md: bytes=16390, root=frozen=manifest; append-LF rejected=PASS\nowner-gate-decisions.md: bytes=9082, root=frozen=manifest; append-LF rejected=PASS\nA: 94 consecutive unique headings; missing-last rejected=PASS\nC: 60 consecutive unique headings; missing-last rejected=PASS\nОграничение: hashes/ID не доказывают смысловую полноту.\n",
+    "stderr": ""
+  },
+  {
+    "probe": 2,
+    "command": [
+      "node",
+      "probe_progress.mjs"
+    ],
+    "expected_exit": 0,
+    "exit": 0,
+    "stdout": "{\"name\":\"точное готово\",\"input\":\"С2 0/2 старт заход 5\\nС2 2/2 готово\",\"expected\":true,\"actual\":true,\"lastK\":2}\n{\"name\":\"знак после слова\",\"input\":\"С2 0/2 старт заход 5\\nС2 2/2 готово: проверено\",\"expected\":true,\"actual\":true,\"lastK\":2}\n{\"name\":\"не целое слово\",\"input\":\"С2 0/2 старт заход 5\\nС2 2/2 готовность\",\"expected\":false,\"actual\":false,\"lastK\":2}\n{\"name\":\"изолированное N исключение\",\"input\":\"С2 0/2 старт заход 5\\nС2 1/2 готово — N завышено: входов один\",\"expected\":true,\"actual\":true,\"lastK\":1}\n{\"name\":\"та же дробь без исключения\",\"input\":\"С2 0/2 старт заход 5\\nС2 1/2 готово\",\"expected\":false,\"actual\":false,\"lastK\":1}\n{\"name\":\"подмена знаменателя\",\"input\":\"С2 0/2 старт заход 5\\nС2 1/1 готово\",\"expected\":false,\"actual\":false,\"lastK\":1}\n{\"name\":\"нет старта\",\"input\":\"С2 2/2 готово\",\"expected\":false,\"actual\":false,\"lastK\":2}\n{\"name\":\"второй старт\",\"input\":\"С2 0/2 старт заход 5\\nС2 0/2 старт заход 5\\nС2 2/2 готово\",\"expected\":false,\"actual\":false,\"lastK\":2}\n{\"name\":\"k выше N\",\"input\":\"С2 0/2 старт заход 5\\nС2 3/2 готово\",\"expected\":true,\"actual\":true,\"lastK\":3}\n{\"name\":\"поправка не повышает k\",\"input\":\"С2 0/2 старт заход 5\\nС2 1/2 часть\\nС2 1/2 поправка: к строке «часть» — уточнение\",\"expected\":false,\"actual\":false,\"lastK\":1}\nОграничение: parser принимает синтаксическую N-оговорку, правдивость артефакта не проверяет.\n",
+    "stderr": ""
+  },
+  {
+    "probe": 3,
+    "command": [
+      "python.exe",
+      "probe_transfer.py"
+    ],
+    "expected_exit": 0,
+    "exit": 0,
+    "stdout": "{\"name\": \"Canon-first, format ждёт\", \"input\": {\"first\": true, \"current\": true, \"format\": false, \"content_gate\": false, \"versions_checked\": false, \"drift\": false, \"new_gate\": false, \"edit_approved\": false, \"six_to_013\": false, \"six_gate\": false}, \"expected\": true, \"actual\": true}\n{\"name\": \"Canon-first, current отложен\", \"input\": {\"first\": true, \"current\": false, \"format\": false, \"content_gate\": false, \"versions_checked\": false, \"drift\": false, \"new_gate\": false, \"edit_approved\": false, \"six_to_013\": false, \"six_gate\": false}, \"expected\": false, \"actual\": false}\n{\"name\": \"drift без ворот\", \"input\": {\"first\": true, \"current\": true, \"format\": false, \"content_gate\": false, \"versions_checked\": false, \"drift\": true, \"new_gate\": false, \"edit_approved\": false, \"six_to_013\": false, \"six_gate\": false}, \"expected\": false, \"actual\": false}\n{\"name\": \"drift повторно согласован\", \"input\": {\"first\": true, \"current\": true, \"format\": false, \"content_gate\": false, \"versions_checked\": false, \"drift\": true, \"new_gate\": true, \"edit_approved\": false, \"six_to_013\": false, \"six_gate\": false}, \"expected\": true, \"actual\": true}\n{\"name\": \"format по одному выбранному месту\", \"input\": {\"first\": true, \"current\": true, \"format\": true, \"content_gate\": false, \"versions_checked\": false, \"drift\": false, \"new_gate\": false, \"edit_approved\": false, \"six_to_013\": false, \"six_gate\": false}, \"expected\": false, \"actual\": false}\n{\"name\": \"format после проверки и ворот\", \"input\": {\"first\": true, \"current\": true, \"format\": true, \"content_gate\": true, \"versions_checked\": true, \"drift\": false, \"new_gate\": false, \"edit_approved\": false, \"six_to_013\": false, \"six_gate\": false}, \"expected\": true, \"actual\": true}\n{\"name\": \"approved переписан после ворот\", \"input\": {\"first\": true, \"current\": true, \"format\": true, \"content_gate\": true, \"versions_checked\": true, \"drift\": false, \"new_gate\": false, \"edit_approved\": true, \"six_to_013\": false, \"six_gate\": false}, \"expected\": false, \"actual\": false}\n{\"name\": \"путь045 якобы разрешил шесть видов\", \"input\": {\"first\": true, \"current\": true, \"format\": false, \"content_gate\": false, \"versions_checked\": false, \"drift\": false, \"new_gate\": false, \"edit_approved\": false, \"six_to_013\": true, \"six_gate\": false}, \"expected\": false, \"actual\": false}\n{\"name\": \"шесть видов отдельно утверждены\", \"input\": {\"first\": true, \"current\": true, \"format\": false, \"content_gate\": false, \"versions_checked\": false, \"drift\": false, \"new_gate\": false, \"edit_approved\": false, \"six_to_013\": true, \"six_gate\": true}, \"expected\": true, \"actual\": true}\nОграничение: модель фиксирует прочитанные запреты, не доказывает их машинное исполнение.\n",
+    "stderr": ""
+  }
+]

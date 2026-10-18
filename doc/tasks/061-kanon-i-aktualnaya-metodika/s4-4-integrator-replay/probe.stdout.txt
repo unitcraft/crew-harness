@@ -1,0 +1,46 @@
+{
+  "actual": {
+    "same_names": true,
+    "changed": [
+      "old/expected.json"
+    ],
+    "exclusion_existing": "STOP",
+    "occupied": "STOP",
+    "fresh": "ALLOW",
+    "form": {
+      "valid": [],
+      "no-base": [
+        "base"
+      ],
+      "no-branch": [
+        "branch"
+      ],
+      "no-checkbox": [
+        "checkbox"
+      ]
+    }
+  },
+  "expected": {
+    "same_names": true,
+    "changed": [
+      "old/expected.json"
+    ],
+    "exclusion_existing": "STOP",
+    "occupied": "STOP",
+    "fresh": "ALLOW",
+    "form": {
+      "valid": [],
+      "no-base": [
+        "base"
+      ],
+      "no-branch": [
+        "branch"
+      ],
+      "no-checkbox": [
+        "checkbox"
+      ]
+    }
+  },
+  "equal": true,
+  "exit": 0
+}

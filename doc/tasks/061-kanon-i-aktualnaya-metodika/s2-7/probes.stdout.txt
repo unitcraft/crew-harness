@@ -1,0 +1,19 @@
+G1 / Канон без формата: expected=Допустимый scope; actual=Допустимый scope; match=True
+G1 / Скрытая новая031: expected=Недопустимый scope; actual=Недопустимый scope; match=True
+G1 / Только исследование: expected=Не завершает061; actual=Не завершает061; match=True
+G1 / Пауза не возобновление: expected=Запрещено; actual=Запрещено; match=True
+G1 / Честная условнаяAGENTS: expected=Допустимо; actual=Допустимо; match=True
+G2 / MixedA31 сохранён: expected=Сохранён; actual=Сохранён; match=True
+G2 / MixedA31 утрачен при94ID: expected=Обнаружена потеря канонической части; actual=Обнаружена потеря канонической части; match=True
+G2 / M17D0 не off: expected=Сохранён; actual=Сохранён; match=True
+G2 / M17DX при66ID: expected=Обнаружена отмена нормы без полномочия; actual=Обнаружена отмена нормы без полномочия; match=True
+G2 / D0 ссылка, не пересказ: expected=Допустимо; actual=Допустимо; match=True
+G2 / D0 превращён в копию: expected=Запрещено; actual=Запрещено; match=True
+G3 / ПервыйADR, затемprocess: expected=Допустимый порядок; actual=Допустимый порядок; match=True
+G3 / Current задержан доresult: expected=Нарушение first-current; actual=Нарушение first-current; match=True
+G3 / Stableupstream: expected=Нет блокировки по drift; actual=Нет блокировки по drift; match=True
+G3 / Незначимыйdrift: expected=Перенос остановлен; actual=Перенос остановлен; match=True
+G3 / Владелец после ворот: expected=Полномочие соблюдено; actual=Полномочие соблюдено; match=True
+G3 / Интегратор после приёмки: expected=Нет полномочия; actual=Нет полномочия; match=True
+G3 / Наблюдениеlatest не pin: expected=Запрещено; actual=Запрещено; match=True
+{"groups": 3, "controls": 18, "id_counts": {"original_atoms": 94, "mutant_atoms": 94, "original_fragments": 66, "mutant_fragments": 66}, "matched": 18, "exit": 0}

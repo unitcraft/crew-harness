@@ -1,0 +1,13 @@
+{
+  "B-unchanged": [],
+  "B-same-names-mutated-content": ["old/before.json"],
+  "B-occupied": "STOP",
+  "B-fresh": "FRESH",
+  "B-exclude-existing": "DENY",
+  "B-exclude-new": "ALLOW",
+  "C-original": [],
+  "C-no-base": ["base"],
+  "C-no-branch": ["branch"],
+  "C-no-checkbox": ["checkbox"],
+  "C-no-current-line": ["current-line"]
+}

@@ -1,0 +1,14 @@
+{
+  "P2": {
+    "same_names_changed_bytes": "обнаружена подмена old/before.json",
+    "exclude_existing_before": "отказ",
+    "occupied_E": "отказ",
+    "fresh_E": "допустим"
+  },
+  "P4": {
+    "original": [],
+    "no_base": ["base"],
+    "no_branch": ["branch"],
+    "bad_shell": ["current", "section:DoD", "checkbox"]
+  }
+}

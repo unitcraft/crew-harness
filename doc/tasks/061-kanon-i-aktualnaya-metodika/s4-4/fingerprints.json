@@ -1,0 +1,60 @@
+{
+  "own_git_file": {
+    "path": ".git",
+    "bytes": 66,
+    "sha256": "5cc58ebf7ade6fec18c60578ea96ce8be9fe824d9b53d39a5fe93de8b32d4394"
+  },
+  "author_old_plan_matches_before": true,
+  "author_new_plan_matches_after": true,
+  "whole_tree": {
+    "before_count": 685,
+    "after_count": 685,
+    "changed": [],
+    "missing": [],
+    "added": [],
+    "head_equal": true,
+    "branch_equal": true,
+    "status_except_own_equal": true,
+    "prefixes_equal": true
+  },
+  "prefixes": {
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/profile.log": {
+      "initial": {
+        "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/profile.log",
+        "bytes": 2383,
+        "sha256": "2166c12da493efecb34e4be2ec3dabd0fda8ad5db28138bc442c5a769aad1db2"
+      },
+      "current": {
+        "bytes": 2383,
+        "sha256": "2166c12da493efecb34e4be2ec3dabd0fda8ad5db28138bc442c5a769aad1db2"
+      },
+      "prefix_equal": true
+    },
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/progress.log": {
+      "initial": {
+        "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/progress.log",
+        "bytes": 10186,
+        "sha256": "5e0a06214116ebf8b6551f423a2771783433115b0f3bd5ed57af1302a4a4337f"
+      },
+      "current": {
+        "bytes": 10969,
+        "sha256": "6c414a9b2418eff35c6fac85d09f8d7fc81aac316e7c98e9c559a4fe3cd08a9b"
+      },
+      "prefix_equal": true
+    },
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/usage.log": {
+      "initial": {
+        "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/usage.log",
+        "bytes": 1900,
+        "sha256": "6c59b7705f5ba7ce9d0cb7add2555371cdb9ae4be80cf3169b32858c142f08b7"
+      },
+      "current": {
+        "bytes": 1900,
+        "sha256": "6c59b7705f5ba7ce9d0cb7add2555371cdb9ae4be80cf3169b32858c142f08b7"
+      },
+      "prefix_equal": true
+    }
+  },
+  "initial_snapshot_sha256": "0e8f66b3ec4d545acc103c4a23402150c6b88c1b21f2c88a7fae4126f7fd016c",
+  "after_snapshot_sha256": "8d392bcc80110645b6d9de38869b62edb0fe6b95a2e1f5b341b58c2d3e939127"
+}

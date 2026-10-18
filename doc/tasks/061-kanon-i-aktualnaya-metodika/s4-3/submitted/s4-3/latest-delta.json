@@ -1,0 +1,20 @@
+{
+  "old": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+  "new": "25bef953cf0cfd7a28c7d4650bab7d7a4731d537",
+  "bytes": 189031,
+  "sha256": "3360cd0e6985defec09ded17ee49bec201efd6ebe3f084eb8c0e20064a87ce08",
+  "exit": 0,
+  "paths": [
+    "AGENTS.md",
+    "completeness-check.md",
+    "doc/open-questions.md",
+    "methodology.md",
+    "presentations/methodology.html",
+    "state-machine-spec.md",
+    "task-runner-meeting-pseudocode.md",
+    "task-runner-meeting-states.md",
+    "task-runner-pseudocode.md",
+    "task-runner.md",
+    "task-sessions.md"
+  ]
+}

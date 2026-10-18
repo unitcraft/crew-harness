@@ -1,0 +1,24 @@
+B-unchanged: {"expected": [], "actual": [], "ok": true}
+
+B-same-names-mutated-content: {"expected": ["old/before.json"], "actual": ["old/before.json"], "ok": true}
+
+B-occupied: {"expected": "STOP", "actual": "STOP", "ok": true}
+
+B-fresh: {"expected": "FRESH", "actual": "FRESH", "ok": true}
+
+B-exclude-existing: {"expected": "DENY", "actual": "DENY", "ok": true}
+
+B-exclude-new: {"expected": "ALLOW", "actual": "ALLOW", "ok": true}
+
+C-original: {"expected": [], "actual": [], "ok": true}
+
+C-no-base: {"expected": ["base"], "actual": ["base"], "ok": true}
+
+C-no-branch: {"expected": ["branch"], "actual": ["branch"], "ok": true}
+
+C-no-checkbox: {"expected": ["checkbox"], "actual": ["checkbox"], "ok": true}
+
+C-no-current-line: {"expected": ["current-line"], "actual": ["current-line"], "ok": true}
+
+ИТОГ: групп команд 2, случаев 11, расхождений 0
+

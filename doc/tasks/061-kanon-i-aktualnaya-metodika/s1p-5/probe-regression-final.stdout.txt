@@ -1,0 +1,9 @@
+P4 routes changed beyond whitespace=C36,C55,C58
+P4 spec.md: bytes=33427 table_cells=0 S30000_warning=True
+P4 analysis.md: bytes=14830 table_cells=0 S30000_warning=False
+P4 031-impact.md: bytes=53104 table_cells=0 S30000_warning=True
+P4 spec-trace.md: bytes=43116 table_cells=0 S30000_warning=True
+P4 method-delta.md: bytes=34174 table_cells=0 S30000_warning=True
+P4 source-inventory.md: bytes=16390 table_cells=0 S30000_warning=False
+P4 owner-gate-decisions.md: bytes=9082 table_cells=0 S30000_warning=False
+P4 IDs, code examples and whitespace are checked separately from semantic claims

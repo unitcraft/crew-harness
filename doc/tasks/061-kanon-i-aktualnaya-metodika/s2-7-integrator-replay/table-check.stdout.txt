@@ -1,0 +1,1 @@
+[{"path": "spec-trace.md", "count": 1, "first": [{"line": 116, "column": 3, "chars": 120}]}, {"path": "method-delta.md", "count": 0, "first": []}]

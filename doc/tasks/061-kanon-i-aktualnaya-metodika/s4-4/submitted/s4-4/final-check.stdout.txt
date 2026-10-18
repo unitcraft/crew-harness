@@ -1,0 +1,11 @@
+{
+  "before_count": 685,
+  "after_count": 685,
+  "changed": [],
+  "missing": [],
+  "added": [],
+  "head_equal": true,
+  "branch_equal": true,
+  "status_except_own_equal": true,
+  "prefixes_equal": true
+}

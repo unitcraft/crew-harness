@@ -1,0 +1,602 @@
+{
+  "author_internal": {
+    "before": 1256,
+    "after": 1256,
+    "changed": [
+      "doc/tasks/061-kanon-i-aktualnaya-metodika/plan.md"
+    ],
+    "missing": [],
+    "added": [],
+    "spec_unchanged": true
+  },
+  "manifests": {
+    "plan-scope-1/submitted": [
+      {
+        "path": "plan.md",
+        "expected": {
+          "bytes": 41036,
+          "sha256": "362d4958ff43fa325e92a976dd642b7283954891af44c05d369b66a8ab175314"
+        },
+        "actual": {
+          "bytes": 41036,
+          "sha256": "362d4958ff43fa325e92a976dd642b7283954891af44c05d369b66a8ab175314"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1.md",
+        "expected": {
+          "bytes": 10290,
+          "sha256": "12322295f257fe120873182b5121414ab461a4df489ea1aeb0d103b68d54f20d"
+        },
+        "actual": {
+          "bytes": 10290,
+          "sha256": "12322295f257fe120873182b5121414ab461a4df489ea1aeb0d103b68d54f20d"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/after.json",
+        "expected": {
+          "bytes": 232161,
+          "sha256": "f1cd8f714888ea9ce3904a0834982dc6fefdf7ae1e10504198e25394617bc2e0"
+        },
+        "actual": {
+          "bytes": 232161,
+          "sha256": "f1cd8f714888ea9ce3904a0834982dc6fefdf7ae1e10504198e25394617bc2e0"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/before.json",
+        "expected": {
+          "bytes": 221910,
+          "sha256": "66255df4c3a445b79e46566a4f906d3fd4457f0940bc58e83eff8a6035849726"
+        },
+        "actual": {
+          "bytes": 221910,
+          "sha256": "66255df4c3a445b79e46566a4f906d3fd4457f0940bc58e83eff8a6035849726"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/boundary.md",
+        "expected": {
+          "bytes": 3146,
+          "sha256": "e29a32ff7fc48b19b5bc08e1dade4b778a085dd5eca945c147db329c7906d902"
+        },
+        "actual": {
+          "bytes": 3146,
+          "sha256": "e29a32ff7fc48b19b5bc08e1dade4b778a085dd5eca945c147db329c7906d902"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/coverage.md",
+        "expected": {
+          "bytes": 8942,
+          "sha256": "5a52cfd6d19b3dc465e0ba79be8d01e5504880fc7071de30593c5e6309f73879"
+        },
+        "actual": {
+          "bytes": 8942,
+          "sha256": "5a52cfd6d19b3dc465e0ba79be8d01e5504880fc7071de30593c5e6309f73879"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/expected-probes.json",
+        "expected": {
+          "bytes": 361,
+          "sha256": "6099449c1c5af99d90d0eceae7106de2ea0b4192b84bc3617707b584207d5d2e"
+        },
+        "actual": {
+          "bytes": 361,
+          "sha256": "6099449c1c5af99d90d0eceae7106de2ea0b4192b84bc3617707b584207d5d2e"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/final-check.json",
+        "expected": {
+          "bytes": 403,
+          "sha256": "bfa6bf23a63add0432e644de6548536b924ba54d9d0f41975ba63a90bb7ae214"
+        },
+        "actual": {
+          "bytes": 403,
+          "sha256": "bfa6bf23a63add0432e644de6548536b924ba54d9d0f41975ba63a90bb7ae214"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/finalize.py",
+        "expected": {
+          "bytes": 1749,
+          "sha256": "00501b035d29f6e5aa8002d68e694d7c0247257899ce5d3328a6c9a79a106cc6"
+        },
+        "actual": {
+          "bytes": 1749,
+          "sha256": "00501b035d29f6e5aa8002d68e694d7c0247257899ce5d3328a6c9a79a106cc6"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/git-after.status.txt",
+        "expected": {
+          "bytes": 55857,
+          "sha256": "660ca6b6d2975b713f55182a6e739770111bc1c38c7ec5355a26fca7e6239e47"
+        },
+        "actual": {
+          "bytes": 55857,
+          "sha256": "660ca6b6d2975b713f55182a6e739770111bc1c38c7ec5355a26fca7e6239e47"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/git-before.json",
+        "expected": {
+          "bytes": 54117,
+          "sha256": "e0b4a308098a3774a4394a78d108ed4b3230828395cebc82a790b692839f8fea"
+        },
+        "actual": {
+          "bytes": 54117,
+          "sha256": "e0b4a308098a3774a4394a78d108ed4b3230828395cebc82a790b692839f8fea"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/input-fingerprints.json",
+        "expected": {
+          "bytes": 763,
+          "sha256": "c69f5cfa04800a8465a4dd7481ef1845e8960b4520fd5c4a1bff4678ae16c335"
+        },
+        "actual": {
+          "bytes": 763,
+          "sha256": "c69f5cfa04800a8465a4dd7481ef1845e8960b4520fd5c4a1bff4678ae16c335"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/manual-results.md",
+        "expected": {
+          "bytes": 10344,
+          "sha256": "49f654c28a1e6c92e3b7165ed21d3ffae804669209c4e1b0af7227cc269de808"
+        },
+        "actual": {
+          "bytes": 10344,
+          "sha256": "49f654c28a1e6c92e3b7165ed21d3ffae804669209c4e1b0af7227cc269de808"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/old-plan.md",
+        "expected": {
+          "bytes": 62906,
+          "sha256": "c34e3a5f55a3364bc2a70bca5de41c8090e3e1a48d63e4e9ce21f4cb56f952be"
+        },
+        "actual": {
+          "bytes": 62906,
+          "sha256": "c34e3a5f55a3364bc2a70bca5de41c8090e3e1a48d63e4e9ce21f4cb56f952be"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/old-to-new-plan.diff",
+        "expected": {
+          "bytes": 104184,
+          "sha256": "945db36b341c53f9af838df7c7ff5c6a6e30a448f1c05e01ee9373c54d107434"
+        },
+        "actual": {
+          "bytes": 104184,
+          "sha256": "945db36b341c53f9af838df7c7ff5c6a6e30a448f1c05e01ee9373c54d107434"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/path_probe.py",
+        "expected": {
+          "bytes": 4168,
+          "sha256": "c6995ac30568b5b821abe924e21a52b78ee953788f5ee5fbcea1ed1232a0b229"
+        },
+        "actual": {
+          "bytes": 4168,
+          "sha256": "c6995ac30568b5b821abe924e21a52b78ee953788f5ee5fbcea1ed1232a0b229"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/preconditions.md",
+        "expected": {
+          "bytes": 9669,
+          "sha256": "88f7298d9e295c09411922e3c5de03666ac5eccc0e1def047b0cb258be87170a"
+        },
+        "actual": {
+          "bytes": 9669,
+          "sha256": "88f7298d9e295c09411922e3c5de03666ac5eccc0e1def047b0cb258be87170a"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/probe-before.json",
+        "expected": {
+          "bytes": 714,
+          "sha256": "4a3f194bef7547baaf603af2fe767d142d83bbcef880f8dc552b3fe05573d367"
+        },
+        "actual": {
+          "bytes": 714,
+          "sha256": "4a3f194bef7547baaf603af2fe767d142d83bbcef880f8dc552b3fe05573d367"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/probe-inputs/bad-shell.md",
+        "expected": {
+          "bytes": 41263,
+          "sha256": "fe994db740ad87ef6946b5b4711b8e89793a2960416f125da99483ed7eddd2c0"
+        },
+        "actual": {
+          "bytes": 41263,
+          "sha256": "fe994db740ad87ef6946b5b4711b8e89793a2960416f125da99483ed7eddd2c0"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/probe-inputs/no-base.md",
+        "expected": {
+          "bytes": 41408,
+          "sha256": "dcf9870b540b8d580ccd2db3c44848a71109c43a030b09ea0b864f983fb81aca"
+        },
+        "actual": {
+          "bytes": 41408,
+          "sha256": "dcf9870b540b8d580ccd2db3c44848a71109c43a030b09ea0b864f983fb81aca"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/probe-inputs/no-branch.md",
+        "expected": {
+          "bytes": 41392,
+          "sha256": "795a55a8f738fea353f8659c0dc9ca2001135e020f102063396ce04b9ebbbb52"
+        },
+        "actual": {
+          "bytes": 41392,
+          "sha256": "795a55a8f738fea353f8659c0dc9ca2001135e020f102063396ce04b9ebbbb52"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/probe-inputs/occupied-E/before.json",
+        "expected": {
+          "bytes": 27,
+          "sha256": "919866ba644fd46ba33a5cc495b9151ca6514456926c81301dc4702b5f83fad2"
+        },
+        "actual": {
+          "bytes": 27,
+          "sha256": "919866ba644fd46ba33a5cc495b9151ca6514456926c81301dc4702b5f83fad2"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/probe-inputs/old/before.json",
+        "expected": {
+          "bytes": 33,
+          "sha256": "bd52e2a94073d06071062c44efdeb13f7887d4c3019a5cc7a6e11c861cc7a852"
+        },
+        "actual": {
+          "bytes": 33,
+          "sha256": "bd52e2a94073d06071062c44efdeb13f7887d4c3019a5cc7a6e11c861cc7a852"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/probe-inputs/old/expected.json",
+        "expected": {
+          "bytes": 35,
+          "sha256": "388d316c862efe4206ab2d3153b0b1eb61b5d47cf411ee62557cc612a08d7167"
+        },
+        "actual": {
+          "bytes": 35,
+          "sha256": "388d316c862efe4206ab2d3153b0b1eb61b5d47cf411ee62557cc612a08d7167"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/probe-inputs/old/notes.md",
+        "expected": {
+          "bytes": 41,
+          "sha256": "bf627979969358f005ecb1aef3461d02580f635fa53598ba818ef8dbadfb4f03"
+        },
+        "actual": {
+          "bytes": 41,
+          "sha256": "bf627979969358f005ecb1aef3461d02580f635fa53598ba818ef8dbadfb4f03"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/probe-inputs/original.md",
+        "expected": {
+          "bytes": 41440,
+          "sha256": "de5531742d2b51e237b71f3389e1708fc89c7684c4d65905698f18b1d6e0fd16"
+        },
+        "actual": {
+          "bytes": 41440,
+          "sha256": "de5531742d2b51e237b71f3389e1708fc89c7684c4d65905698f18b1d6e0fd16"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/probe-results.json",
+        "expected": {
+          "bytes": 503,
+          "sha256": "3ae5264f77dbfbfc5279b8a758039c931f1346661071c8ce9e76cbe471a059e3"
+        },
+        "actual": {
+          "bytes": 503,
+          "sha256": "3ae5264f77dbfbfc5279b8a758039c931f1346661071c8ce9e76cbe471a059e3"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/probe.stdout.txt",
+        "expected": {
+          "bytes": 505,
+          "sha256": "24447c0090a6f972dcd5721d5eec53ae6ec53cd6c4f39f27c20a53b354feae4d"
+        },
+        "actual": {
+          "bytes": 505,
+          "sha256": "24447c0090a6f972dcd5721d5eec53ae6ec53cd6c4f39f27c20a53b354feae4d"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/probes.md",
+        "expected": {
+          "bytes": 4287,
+          "sha256": "b284f41ec8ac9f8322e2cab0d2738fee3bb1c0e4aa037bd0049750b1390f4539"
+        },
+        "actual": {
+          "bytes": 4287,
+          "sha256": "b284f41ec8ac9f8322e2cab0d2738fee3bb1c0e4aa037bd0049750b1390f4539"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/qualification.md",
+        "expected": {
+          "bytes": 5553,
+          "sha256": "23f1c27e03e1948e13a309eeddc917cd5e0bb9173d94483ce69a3869641c4a2b"
+        },
+        "actual": {
+          "bytes": 5553,
+          "sha256": "23f1c27e03e1948e13a309eeddc917cd5e0bb9173d94483ce69a3869641c4a2b"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/read-map.md",
+        "expected": {
+          "bytes": 5001,
+          "sha256": "2f1b4796b6b1403eaddb3a1782270e282cc5cb6f258c438098245f968b008726"
+        },
+        "actual": {
+          "bytes": 5001,
+          "sha256": "2f1b4796b6b1403eaddb3a1782270e282cc5cb6f258c438098245f968b008726"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/read_git.py",
+        "expected": {
+          "bytes": 829,
+          "sha256": "1bb9cb40e5204e2add5ba3b889faa2665dc49413b36af4df017198c7bf69943c"
+        },
+        "actual": {
+          "bytes": 829,
+          "sha256": "1bb9cb40e5204e2add5ba3b889faa2665dc49413b36af4df017198c7bf69943c"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/snapshot.py",
+        "expected": {
+          "bytes": 2051,
+          "sha256": "84ecb77ca2f9c07f92295981fb2574e3a87a18bad90f17a8df80a3091c277203"
+        },
+        "actual": {
+          "bytes": 2051,
+          "sha256": "84ecb77ca2f9c07f92295981fb2574e3a87a18bad90f17a8df80a3091c277203"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/source-comparison.json",
+        "expected": {
+          "bytes": 5977,
+          "sha256": "ad0d1416870a8eebee8522dc2bb63d1a86e63ee7b27d1d8bb13826247d723a6e"
+        },
+        "actual": {
+          "bytes": 5977,
+          "sha256": "ad0d1416870a8eebee8522dc2bb63d1a86e63ee7b27d1d8bb13826247d723a6e"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/source-reads.jsonl",
+        "expected": {
+          "bytes": 1582,
+          "sha256": "7ce0b47b8c67fb16acfd540629474fc13b2e6e3c8d25f045617d7cefe5a96204"
+        },
+        "actual": {
+          "bytes": 1582,
+          "sha256": "7ce0b47b8c67fb16acfd540629474fc13b2e6e3c8d25f045617d7cefe5a96204"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/upstream-delta.diff",
+        "expected": {
+          "bytes": 861,
+          "sha256": "9bcbb5380dfa77b622c9cda5310f6baf4583fd15ebb88ec7b67198cde2cf4b5a"
+        },
+        "actual": {
+          "bytes": 861,
+          "sha256": "9bcbb5380dfa77b622c9cda5310f6baf4583fd15ebb88ec7b67198cde2cf4b5a"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/upstream.json",
+        "expected": {
+          "bytes": 2684,
+          "sha256": "9c27e58b7611739eb35a7421f4ac0e858cdeb023f43175b301200144a99a853f"
+        },
+        "actual": {
+          "bytes": 2684,
+          "sha256": "9c27e58b7611739eb35a7421f4ac0e858cdeb023f43175b301200144a99a853f"
+        },
+        "equal": true
+      },
+      {
+        "path": "plan-scope-1/upstream.py",
+        "expected": {
+          "bytes": 2640,
+          "sha256": "d9cf469c2fb0c00adea8fafe9ad4f3dcbad225ca2cf374789f503063b584dfcd"
+        },
+        "actual": {
+          "bytes": 2640,
+          "sha256": "d9cf469c2fb0c00adea8fafe9ad4f3dcbad225ca2cf374789f503063b584dfcd"
+        },
+        "equal": true
+      }
+    ],
+    "scope-approval-2026-10-17/approved": [
+      {
+        "path": "spec.md",
+        "expected": {
+          "bytes": 21695,
+          "sha256": "043aa8155cae35cd07f50baaec118e89da5fcb163067645262859531813490bc"
+        },
+        "actual": {
+          "bytes": 21695,
+          "sha256": "043aa8155cae35cd07f50baaec118e89da5fcb163067645262859531813490bc"
+        },
+        "equal": true
+      },
+      {
+        "path": "analysis.md",
+        "expected": {
+          "bytes": 11876,
+          "sha256": "118f93ea382c6b2981330e982b3b4edbea435e9447d2c3e61e9e22bb20f55363"
+        },
+        "actual": {
+          "bytes": 11876,
+          "sha256": "118f93ea382c6b2981330e982b3b4edbea435e9447d2c3e61e9e22bb20f55363"
+        },
+        "equal": true
+      },
+      {
+        "path": "spec-trace.md",
+        "expected": {
+          "bytes": 31313,
+          "sha256": "fa7c65d484ab4bcb83f6fe0149957f77e1c57ae462acddd7dee7cf5b2a671b06"
+        },
+        "actual": {
+          "bytes": 31313,
+          "sha256": "fa7c65d484ab4bcb83f6fe0149957f77e1c57ae462acddd7dee7cf5b2a671b06"
+        },
+        "equal": true
+      },
+      {
+        "path": "method-delta.md",
+        "expected": {
+          "bytes": 57470,
+          "sha256": "29f03927ea8a2ef7e2de108bc369e901320c506ab7296908a7872240dc5e3044"
+        },
+        "actual": {
+          "bytes": 57470,
+          "sha256": "29f03927ea8a2ef7e2de108bc369e901320c506ab7296908a7872240dc5e3044"
+        },
+        "equal": true
+      }
+    ]
+  },
+  "commands": [
+    {
+      "args": [
+        "git",
+        "show",
+        "-s",
+        "--format=%H %cs",
+        "HEAD"
+      ],
+      "exit": 0,
+      "stdout": "492c166fbd12e00a6a924efab065f6adb4bd91f6 2026-10-16\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "git",
+        "--version"
+      ],
+      "exit": 0,
+      "stdout": "git version 2.56.0.windows.2\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "python",
+        "--version"
+      ],
+      "exit": 0,
+      "stdout": "Python 3.14.4\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "rg",
+        "--version"
+      ],
+      "exit": null,
+      "error": "executable not found"
+    },
+    {
+      "args": [
+        "git",
+        "grep",
+        "-n",
+        "--",
+        "writeLaunch(t,",
+        "opencode-plugin/index.ts"
+      ],
+      "exit": 0,
+      "stdout": "opencode-plugin/index.ts:1557:              const why = writeLaunch(t, ses, dir)\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "git",
+        "grep",
+        "-n",
+        "--",
+        "progressLine(",
+        "opencode-plugin/index.ts"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "launch_pair": {
+    "progress.log": [
+      {
+        "line": 112,
+        "text": "С4 0/0 [2026-10-17 22:46] запуск №33"
+      }
+    ],
+    "log.md": [
+      {
+        "line": 120,
+        "text": "2026-10-17 22:46 пуск: запуск №33 С4 [2026-10-17 22:46]"
+      }
+    ]
+  }
+}

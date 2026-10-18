@@ -1,0 +1,6 @@
+{
+  "P1": {"D0_without_override": "external_only", "literal_old_instruction": "defect", "justified_override_before_gate": "stop"},
+  "P2": {"old_assigned_existing": 5, "qualification_exists": true, "old_coverage_exists": false, "new_paths_distinct": true, "stale_write": "FileExistsError", "stale_hash_preserved": true, "old_before_protected": true, "broad_history_exclusion": "reject"},
+  "P3": {"new_form": true, "old_form": false, "missing_base_mutation": false, "steps": [1,2,3,4,5,6,7]},
+  "P4": {"canon_with_current": "allow", "canon_without_current_format_later": "stop", "format_first_with_current_and_approvals": "allow", "drift_same_scope": "stop_delta_repeat_gate", "drift_changed_scope": "stop_delta_repeat_gate", "shape_without_compatibility": "return_owner", "three_versions_not_approved": "stop", "passed_gate_pin_integrator_only": "stop_owner"}
+}

@@ -1,0 +1,22 @@
+{
+  "occupied-E/before.json": {
+    "bytes": 9,
+    "sha256": "f552e1ee6261f13793bda2c7517fbf0cbc3388d238eba38c2df8d89e7ead50c2"
+  },
+  "old/before.json": {
+    "bytes": 11,
+    "sha256": "fe6357e0b6fcbb44f9eba5d350eb892455a25d2434703dc634390506946171c7"
+  },
+  "old/expected.json": {
+    "bytes": 13,
+    "sha256": "ee55b74b4addcbfea72971c351c3357f9e0fdf94a925db988a0a38b28a80539f"
+  },
+  "old/notes.md": {
+    "bytes": 51,
+    "sha256": "c03365ba9f822129cb2cf96db24649c4abd4cbb7a5047d4659d7241ca3edd2c0"
+  },
+  "old/nested/progress.log": {
+    "bytes": 11,
+    "sha256": "43966677aa7f935606eede2a869b4cfe7d5ff9f5f673bbe8bcbab10b62f74fdb"
+  }
+}

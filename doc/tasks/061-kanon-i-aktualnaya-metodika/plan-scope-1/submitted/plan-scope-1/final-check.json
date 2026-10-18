@@ -1,0 +1,16 @@
+{
+  "head": "492c166fbd12e00a6a924efab065f6adb4bd91f6",
+  "branch": "plan/061-canon-only",
+  "changed_protected": [
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/plan.md"
+  ],
+  "current_exists": false,
+  "approved_raw_equal": {
+    "spec.md": true,
+    "analysis.md": true,
+    "spec-trace.md": true,
+    "method-delta.md": true
+  },
+  "source_read_records": 6,
+  "coverage_atoms": 94
+}

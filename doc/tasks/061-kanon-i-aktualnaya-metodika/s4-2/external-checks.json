@@ -1,0 +1,191 @@
+[
+  {
+    "subject": "method",
+    "command": [
+      "git",
+      "remote",
+      "get-url",
+      "origin"
+    ],
+    "expected": "https://github.com/unitcraft/ai-dev-methodology[.git]",
+    "exit": 0,
+    "stdout": "https://github.com/unitcraft/ai-dev-methodology.git\n",
+    "stderr": ""
+  },
+  {
+    "subject": "method",
+    "command": [
+      "git",
+      "ls-remote",
+      "origin",
+      "refs/heads/main"
+    ],
+    "expected": "78ed75838ef58073153e5343c9483bc462721a31 refs/heads/main",
+    "exit": 0,
+    "stdout": "78ed75838ef58073153e5343c9483bc462721a31\trefs/heads/main\n",
+    "stderr": ""
+  },
+  {
+    "subject": "method",
+    "command": [
+      "git",
+      "rev-parse",
+      "HEAD"
+    ],
+    "expected": "полный commit из плана",
+    "exit": 0,
+    "stdout": "78ed75838ef58073153e5343c9483bc462721a31\n",
+    "stderr": ""
+  },
+  {
+    "subject": "method",
+    "command": [
+      "git",
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all"
+    ],
+    "expected": "состояние собственного external-before без наших записей",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "subject": "045",
+    "command": [
+      "git",
+      "rev-parse",
+      "HEAD"
+    ],
+    "expected": "полный commit из плана",
+    "exit": 0,
+    "stdout": "b18cc5052b6183d9c15fc1833006f1cb86481a3c\n",
+    "stderr": ""
+  },
+  {
+    "subject": "045",
+    "command": [
+      "git",
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all"
+    ],
+    "expected": "состояние собственного external-before без наших записей",
+    "exit": 0,
+    "stdout": "?? doc/tasks/045-runner-registry-jsonc/coordination-decisions.md\n?? doc/tasks/045-runner-registry-jsonc/current.md\n?? doc/tasks/045-runner-registry-jsonc/log.md\n?? doc/tasks/045-runner-registry-jsonc/plan-fixes-1.md\n?? doc/tasks/045-runner-registry-jsonc/plan-fixes-2.md\n?? doc/tasks/045-runner-registry-jsonc/plan-fixes-3-inventory-negative.txt\n?? doc/tasks/045-runner-registry-jsonc/plan-fixes-3-inventory-positive.txt\n?? doc/tasks/045-runner-registry-jsonc/plan-fixes-3.md\n?? doc/tasks/045-runner-registry-jsonc/plan-review-1.md\n?? doc/tasks/045-runner-registry-jsonc/plan-review-2.md\n?? doc/tasks/045-runner-registry-jsonc/plan-review-3.md\n?? doc/tasks/045-runner-registry-jsonc/plan-review-4.md\n?? doc/tasks/045-runner-registry-jsonc/plan.md\n?? doc/tasks/045-runner-registry-jsonc/profile.log\n?? doc/tasks/045-runner-registry-jsonc/progress.log\n?? doc/tasks/045-runner-registry-jsonc/s2-1/attempt-1/qualification.md\n?? doc/tasks/045-runner-registry-jsonc/s2-1/attempt-1/spec-review-1.md\n?? doc/tasks/045-runner-registry-jsonc/s2-1/copy-normalization.md\n?? doc/tasks/045-runner-registry-jsonc/s2-1/fingerprints.txt\n?? doc/tasks/045-runner-registry-jsonc/s2-1/progress.log\n?? doc/tasks/045-runner-registry-jsonc/s2-1/read-map.md\n?? doc/tasks/045-runner-registry-jsonc/s2-1/retry-1/fingerprints/start.txt\n?? doc/tasks/045-runner-registry-jsonc/s2-1/retry-1/progress.log\n?? doc/tasks/045-runner-registry-jsonc/s2-1/retry-1/qualification.md\n?? doc/tasks/045-runner-registry-jsonc/s2-1/retry-1/read-map.md\n?? doc/tasks/045-runner-registry-jsonc/s2-1/retry-2/fingerprints/start.txt\n?? doc/tasks/045-runner-registry-jsonc/s2-1/retry-2/progress.log\n?? doc/tasks/045-runner-registry-jsonc/s2-1/retry-2/qualification.md\n?? doc/tasks/045-runner-registry-jsonc/s2-1/retry-2/read-map.md\n?? doc/tasks/045-runner-registry-jsonc/s2-1/retry-3/fingerprints/start.txt\n?? doc/tasks/045-runner-registry-jsonc/s2-1/retry-3/progress.log\n?? doc/tasks/045-runner-registry-jsonc/s2-1/retry-3/qualification.md\n?? doc/tasks/045-runner-registry-jsonc/s2-1/retry-3/read-map.md\n?? doc/tasks/045-runner-registry-jsonc/s2-1/retry-4/fingerprints/start.txt\n?? doc/tasks/045-runner-registry-jsonc/s2-1/retry-4/progress.log\n?? doc/tasks/045-runner-registry-jsonc/s2-1/retry-4/qualification.md\n?? doc/tasks/045-runner-registry-jsonc/s2-1/retry-4/read-map.md\n?? doc/tasks/045-runner-registry-jsonc/s2-2/copy-normalization.md\n?? doc/tasks/045-runner-registry-jsonc/s2-2/inputs/log.md\n?? doc/tasks/045-runner-registry-jsonc/s2-2/inputs/progress.log\n?? doc/tasks/045-runner-registry-jsonc/s2-2/inputs/spec-trace.md\n?? doc/tasks/045-runner-registry-jsonc/s2-2/inputs/spec.md\n?? doc/tasks/045-runner-registry-jsonc/s2-2/probes.md\n?? doc/tasks/045-runner-registry-jsonc/s2-2/progress.log\n?? doc/tasks/045-runner-registry-jsonc/s2-2/read-map.md\n?? doc/tasks/045-runner-registry-jsonc/s4-1/evidence-scope.md\n?? doc/tasks/045-runner-registry-jsonc/s4-1/inputs/log.md\n?? doc/tasks/045-runner-registry-jsonc/s4-1/inputs/plan.md\n?? doc/tasks/045-runner-registry-jsonc/s4-1/inputs/spec-review-1.md\n?? doc/tasks/045-runner-registry-jsonc/s4-1/inputs/spec-review-2.md\n?? doc/tasks/045-runner-registry-jsonc/s4-1/inputs/spec-trace.md\n?? doc/tasks/045-runner-registry-jsonc/s4-1/inputs/spec.md\n?? doc/tasks/045-runner-registry-jsonc/s4-1/log.md\n?? doc/tasks/045-runner-registry-jsonc/s4-1/progress.log\n?? doc/tasks/045-runner-registry-jsonc/s4-2/inputs/log.md\n?? doc/tasks/045-runner-registry-jsonc/s4-2/inputs/plan-fixes-1.md\n?? doc/tasks/045-runner-registry-jsonc/s4-2/inputs/plan-review-1.md\n?? doc/tasks/045-runner-registry-jsonc/s4-2/inputs/plan.md\n?? doc/tasks/045-runner-registry-jsonc/s4-2/inputs/spec-trace.md\n?? doc/tasks/045-runner-registry-jsonc/s4-2/inputs/spec.md\n?? doc/tasks/045-runner-registry-jsonc/s4-2/launch.md\n?? doc/tasks/045-runner-registry-jsonc/s4-2/profile.log\n?? doc/tasks/045-runner-registry-jsonc/s4-2/progress.log\n?? doc/tasks/045-runner-registry-jsonc/s4-3/inputs/log.md\n?? doc/tasks/045-runner-registry-jsonc/s4-3/inputs/plan-fixes-1.md\n?? doc/tasks/045-runner-registry-jsonc/s4-3/inputs/plan-fixes-2.md\n?? doc/tasks/045-runner-registry-jsonc/s4-3/inputs/plan-review-1.md\n?? doc/tasks/045-runner-registry-jsonc/s4-3/inputs/plan-review-2.md\n?? doc/tasks/045-runner-registry-jsonc/s4-3/inputs/plan.md\n?? doc/tasks/045-runner-registry-jsonc/s4-3/inputs/progress.log\n?? doc/tasks/045-runner-registry-jsonc/s4-3/inputs/spec-trace.md\n?? doc/tasks/045-runner-registry-jsonc/s4-3/inputs/spec.md\n?? doc/tasks/045-runner-registry-jsonc/s4-3/launch.md\n?? doc/tasks/045-runner-registry-jsonc/s4-3/profile.log\n?? doc/tasks/045-runner-registry-jsonc/s4-3/progress.log\n?? doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/log.md\n?? doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/plan-fixes-1.md\n?? doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/plan-fixes-2.md\n?? doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/plan-fixes-3-inventory-negative.txt\n?? doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/plan-fixes-3-inventory-positive.txt\n?? doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/plan-fixes-3.md\n?? doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/plan-review-1.md\n?? doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/plan-review-2.md\n?? doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/plan-review-3.md\n?? doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/plan.md\n?? doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/progress.log\n?? doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/spec-trace.md\n?? doc/tasks/045-runner-registry-jsonc/s4-4-r2/inputs/spec.md\n?? doc/tasks/045-runner-registry-jsonc/s4-4-r2/launch.md\n?? doc/tasks/045-runner-registry-jsonc/s4-4-r2/log.md\n?? doc/tasks/045-runner-registry-jsonc/s4-4-r2/probes.md\n?? doc/tasks/045-runner-registry-jsonc/s4-4-r2/profile.log\n?? doc/tasks/045-runner-registry-jsonc/s4-4-r2/progress.log\n?? doc/tasks/045-runner-registry-jsonc/s4-4-r2/qualification.md\n?? doc/tasks/045-runner-registry-jsonc/s4-4-r2/read-map.md\n?? doc/tasks/045-runner-registry-jsonc/s4-4/launch.md\n?? doc/tasks/045-runner-registry-jsonc/s4-4/log.md\n?? doc/tasks/045-runner-registry-jsonc/s4-4/progress.log\n?? doc/tasks/045-runner-registry-jsonc/spec-review-1.md\n?? doc/tasks/045-runner-registry-jsonc/spec-review-2.md\n?? doc/tasks/045-runner-registry-jsonc/spec-trace.md\n?? doc/tasks/045-runner-registry-jsonc/spec.md\n",
+    "stderr": ""
+  },
+  {
+    "subject": "013",
+    "command": [
+      "git",
+      "rev-parse",
+      "HEAD"
+    ],
+    "expected": "полный commit из плана",
+    "exit": 0,
+    "stdout": "7f2b0f6ea2f9ad55258a17eb614ed03b627ce596\n",
+    "stderr": ""
+  },
+  {
+    "subject": "013",
+    "command": [
+      "git",
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all"
+    ],
+    "expected": "состояние собственного external-before без наших записей",
+    "exit": 0,
+    "stdout": " M doc/tasks/013-runner-core/log.md\n M doc/tasks/013-runner-core/task/message.md\n?? doc/tasks/013-runner-core/profile.log\n?? doc/tasks/013-runner-core/progress.log\n?? doc/tasks/013-runner-core/spec-review-1.md\n?? doc/tasks/013-runner-core/spec-review-2.md\n?? doc/tasks/013-runner-core/spec-review-3.md\n?? doc/tasks/013-runner-core/spec.md\n",
+    "stderr": ""
+  },
+  {
+    "subject": "045",
+    "path": "spec.md",
+    "bytes": 46637,
+    "sha256": "685245b64f33424e225e340898399b49084f39b20f66469b58637fe96cc05ed8"
+  },
+  {
+    "subject": "045",
+    "path": "plan.md",
+    "bytes": 65136,
+    "sha256": "4856a2410418ecce9cbff8c5656ab9229135f87db6e4ebde17ebd362b2e23857"
+  },
+  {
+    "subject": "045",
+    "path": "current.md",
+    "bytes": 966,
+    "sha256": "4d849fb02670ed6c003866e0090792f0c0fff3ef6a6e71d8544c142be1162cf3"
+  },
+  {
+    "subject": "013",
+    "path": "spec.md",
+    "bytes": 112194,
+    "sha256": "f86a69f3cd2c76cf5a4aa1a35ac720dcd5b8c28c560c6b5150ec9526e93eb376"
+  },
+  {
+    "subject": "013",
+    "path": "task/message.md",
+    "bytes": 9868,
+    "sha256": "88d6a8f9cdac4cd73ba5d0e49e1c8ed1d3f1fbd772741410e8437bd8e2e8f4a9"
+  },
+  {
+    "subject": "013",
+    "path": "log.md",
+    "bytes": 42991,
+    "sha256": "434e218c66362a3bccaeb5cecd3f621e4c6817dda4115be80d169cbc19c0f263"
+  },
+  {
+    "subject": "045",
+    "command": [
+      "git",
+      "ls-files",
+      "src/runner_core"
+    ],
+    "expected": "не утверждает runtime",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "subject": "013",
+    "command": [
+      "git",
+      "ls-files",
+      "src/runner_core"
+    ],
+    "expected": "не утверждает runtime",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "subject": "method",
+    "commit": "f333efa319e445efe029ee6963b477ca8fe3bc1c",
+    "path": "task-algorithm.md",
+    "bytes": 51475,
+    "sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96"
+  },
+  {
+    "subject": "method",
+    "commit": "a449bd2e218e04384d1d42e0c1bffe892495e298",
+    "path": "task-algorithm.md",
+    "bytes": 51475,
+    "sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96"
+  },
+  {
+    "subject": "method",
+    "commit": "78ed75838ef58073153e5343c9483bc462721a31",
+    "path": "task-algorithm.md",
+    "bytes": 51475,
+    "sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96"
+  },
+  {
+    "subject": "method",
+    "commit": "ab2a4efda1d5b16a76f43ac1cd4aa245d5aed9b0",
+    "path": "task-algorithm.md",
+    "bytes": 51475,
+    "sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96"
+  }
+]

@@ -1,0 +1,17 @@
+# Кодовый свидетель: только raw 492c166
+
+База `492c166fbd12e00a6a924efab065f6adb4bd91f6`, не живая копия. Прочитаны exact ranges из Git; семь файлов рабочего дерева побайтно равны соответствующим blobs. Импорт pure функций в единственной Node-пробе потому относится к той же версии. Это не обзор всего плагина.
+
+- `journal.ts:1–441`: `sessionState` хранит startN/starts, игнорирует correction для k; `buildProgress` различает start/step/done/stop/launch/correction, проверяет low-N и форму, строит строку; `progressLine` — writer, при launch сначала log, затем progress; `logLine` проверяет kind/границу пути/роль. Writer не вызывался пробой. Он не проверяет правдивость причины по артефакту и не исполняет run_task.
+- `progress.ts:1–158,187–267,304–341`: parseJournal/keywordOf, sessionsOf, finishes/lowDone, growthOf — чистое чтение in-memory bytes. Двоеточие после готово принимается как whole keyword; startN отличается от finalN. «N завышено» здесь marker, не доказанная правда. Панель не объявляется валидатором 031.
+- `task-folders.ts:1–146`: nextLaunch берёт максимум из записи сессий и журналов task/session trees; writeLaunch сначала log, потом progress, запрещает основную копию; taskLog узко дописывает. Нет state.launches offset/group/starttime record.
+- `tasks.ts:1–95,200–245`: TaskSession содержит code/k/launch/session/status/place/worktree/branch/started/ended/report, но не mutable progress/profile offset, process group или время старта группы. Started — не group starttime. saveTask использует temp+rename с ограниченным повтором файловых ошибок; это Task record, не state.json раннера. TaskEvent/history не replace runtime state.
+- `index.ts:1535–1575,1860–1878`: writeLaunch до ctx.session.create, syncTaskFile и регистрация journal tools/проверка launcher card. Данный callsite подтверждает узкий порядок регистрации, не полную остановку групп или stateful run_task.
+- `core.ts:1450–1487`: HELP говорит о owner gates/answer_mode/письмах; helpFor возвращает текст. Инструкция не механизм второго мнения/семантического контролёра.
+- `README.md:322–369,450–475`: описаны узкие journals и методическая сдача интегратору, separate review/deliver. README348 честно ограничивает инструмент/панель: ?/? не пишется; это не отменяет внешнюю норму unknown N для будущего полного runner. Map не объявляет текущий инструмент его полной реализацией.
+
+Сверка с авторскими EJ/EL/ES/EG/EØ: утверждения о startN/correction/append-only, парном launch, Task temp+rename и owner instruction подтверждены. Расширения на atomic runtime state, all-process stop/retry/cleanup или authoritative registry/signatures нет. Различий, меняющих смысл этих заявлений 061, не найдено.
+
+Node-проба подтвердила eight completion fixtures, correction k/growth и три builder outcomes. Выводы и отрицательные контроли — probes.md. Два первоначальных ошибочных ожидания probes раскрыты в qualification.md; это ошибки тестового ожидания проверяющего, не source defects. SDK/runtime/filewriter не запускались. Полные plugin tests не нужны: production diff нет.
+
+013: при первичном и финальном осмотрах отдельного дерева нет src/runner_core и вообще src; spec draft, log42 сохраняет паузу. Восьми защищённых task files и HEAD/status достаточно для заявленных read-only границ; не аттестуется сохранность всего неотносящегося содержимого чужого дерева. Смысловая step-signature в draft не превращена в TypeScript/Nova API.

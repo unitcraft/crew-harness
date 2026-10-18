@@ -1,0 +1,622 @@
+{
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/031-impact.md": {
+    "sha256": "c51eb183767c05cbf0424a8bb76b48d780d0ef3042c5f0160b6e8079486aa535",
+    "bytes": 39678
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/analysis.md": {
+    "sha256": "3eb3ca892dc83f75bae19518469695820b96bbd90fed83b544b4913b636b3d6d",
+    "bytes": 10778
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/log.md": {
+    "sha256": "d000d2c149bb80e28a300ce98f07d67108084bbc296e699c31c62f008242bb3e",
+    "bytes": 43957
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/method-delta.md": {
+    "sha256": "f16e138ac0037980de02e7e853147ac173081bff50fb3652739df5d6d5de5565",
+    "bytes": 28006
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1-2/analysis.partial.md": {
+    "sha256": "eae37874ea6095a5e3f05f3d40f6700eebbde63bc42d554459b5e66396d3a525",
+    "bytes": 10944
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1-2/profile.partial.log": {
+    "sha256": "84e32b52bf9ff45bf22772cce6ff11ec6231831b2f15b1d5249ae2db20c38c60",
+    "bytes": 465
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1-2/progress.partial.log": {
+    "sha256": "c8abe800de0d66f518508b83ffbdf46835bef2a77f16108d37f4de4d673e8ccf",
+    "bytes": 1963
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1-2/README.md": {
+    "sha256": "f6246bf5c0c708ff24460e4350cd469c2c123b41f49fd69e602566acba449d86",
+    "bytes": 1200
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1-2/spec.partial.md": {
+    "sha256": "24bea4cb75a19940466e3ccac980ea627a50659e456caad85a14fd3b1003a271",
+    "bytes": 13898
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-1/031-impact.md": {
+    "sha256": "7f1c35995d2b46b4225446e40a2b32e82f989cb9923c22733b7320d030fe2d90",
+    "bytes": 11968
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-1/analysis.md": {
+    "sha256": "87ff961cfbe64e3c62c70cb2a9389718995048e4e858458450440dd27db80689",
+    "bytes": 25099
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-1/profile.log": {
+    "sha256": "d87a0e1b7ec3d6c8663e45ea790c22e7e11bfebf6fb1666a153bc1a41479673b",
+    "bytes": 1071
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-1/progress.log": {
+    "sha256": "c65e3e20b1ac115b28d9dd0594ae8f9d3cc72b704ae0fccef8eb9879902100e8",
+    "bytes": 7249
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-1/spec-fixes-1.md": {
+    "sha256": "a66e4ef69aeed7871c349f4f71cd7504450b18055b77b7e3454b6cb58cef410b",
+    "bytes": 9177
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-1/spec-trace.md": {
+    "sha256": "e37f5be9c3ac1247cea2b3648c6aab9e8cf8e4f7ea9e75b70bdd238d18c9ead3",
+    "bytes": 5742
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-1/spec.md": {
+    "sha256": "ffc75fab4beb496e89d2b7e1720ee58a0152cb196395bd8c1e322cc205057cce",
+    "bytes": 30609
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-2/031-impact.md": {
+    "sha256": "ca070827b3803e7949f57564dd8e8446b0033a21a6c81953a3938097aec99eb6",
+    "bytes": 14233
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-2/analysis.md": {
+    "sha256": "e7c1b5a1e5ecffb17656d4fce1c92d4eb7e84e0b977de2a9daf6fe54fc122392",
+    "bytes": 26348
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-2/profile.log": {
+    "sha256": "d4cebf99e35402bb6cf7f453ac8e2abd9305ec6ac973815b3cc71c4428552e95",
+    "bytes": 1522
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-2/progress.log": {
+    "sha256": "e40ce17a9daf26a07febb1742f0961dd8db96ccee39807b1e82e644e25869ea1",
+    "bytes": 7835
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-2/spec-fixes-1.md": {
+    "sha256": "ce32b012ec465e25470d6b505a41ac997582295fb3721026d42fdacbd479427b",
+    "bytes": 10623
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-2/spec-fixes-2.md": {
+    "sha256": "8eacb63e8aa11ff2192e750a8cf6b7006b28f0eb21c0bc52b90687c3e1148a3a",
+    "bytes": 11703
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-2/spec-trace.md": {
+    "sha256": "c43d4595c52db088265626213411c58e067198bf6eae358a0f1aa90de1dc3e05",
+    "bytes": 7029
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-2/spec.md": {
+    "sha256": "404a2f857f330daa0ea59f2074c2e12a1483052cce5aa896552a53b62dad1c78",
+    "bytes": 32611
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-2/usage.log": {
+    "sha256": "93037816ab52bd18d8b4fc5c36539b9d1b53522d2385d8a7338a4833f09e34db",
+    "bytes": 626
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-3/check.py": {
+    "sha256": "de4df6eda923139c78e8e5feaa0cc7a39df5b7aaa3a06dc29f5da532bc81fec6",
+    "bytes": 4621
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-3/inputs-at-submit/031-impact.md": {
+    "sha256": "c79ac11b03a81ec4150175560b299410b687adb92720682e305b392e40d8135c",
+    "bytes": 15309
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-3/inputs-at-submit/analysis.md": {
+    "sha256": "56375053b9cb580f48796ba2234f9747741ee9963a20b5854ddee6bd0aff0734",
+    "bytes": 28505
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-3/inputs-at-submit/log.md": {
+    "sha256": "c4725cd308cda7126e97fadef9acfac56746385d9e52d8962d555da0ea8ccaca",
+    "bytes": 24316
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-3/inputs-at-submit/profile.log": {
+    "sha256": "3ceb321c52d1518fe95b707227a3ec1354ede4f1e8b3e649e14108e7906063f6",
+    "bytes": 1922
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-3/inputs-at-submit/progress.log": {
+    "sha256": "0717bd6e937581fd50741eb412b29eec747e5bd35bc67d209b61a537adda9d9d",
+    "bytes": 8385
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-3/inputs-at-submit/spec-fixes-1.md": {
+    "sha256": "fdce445416e0b24fef4f524c95f5c279ef1838aa95d91bc9846aae2ad3b2772b",
+    "bytes": 11411
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-3/inputs-at-submit/spec-fixes-2.md": {
+    "sha256": "2dee3927afe251847e619d78795108c236796303bab1e2836e6ab9e900c2de89",
+    "bytes": 12393
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-3/inputs-at-submit/spec-fixes-3.md": {
+    "sha256": "24c044576c4f8ab861ace1d2cc3ce5cb4c3e9aabde7937373c7503099f1400a4",
+    "bytes": 13980
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-3/inputs-at-submit/spec-trace.md": {
+    "sha256": "5f9bb73dbe9d0bd078878e7ec444253a670ea630ec8ef3fa1273e27002ce647f",
+    "bytes": 10150
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-3/inputs-at-submit/spec.md": {
+    "sha256": "a9156e7135f4abbf8d46d585432a2ce3ae6942d7a6f73da3c96f007dcb846b64",
+    "bytes": 39482
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-3/inputs-at-submit/usage.log": {
+    "sha256": "97e80f25833e57ca46f0e8f77d4c206cbd91e2e5829229c8259dd3e8ace1958c",
+    "bytes": 1301
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/check.py": {
+    "sha256": "33b4b3b40fec892b5eb72a50527f50b50b029c89187a494ce04abf20eb2c0998",
+    "bytes": 9568
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/external-after.json": {
+    "sha256": "e193d4b94ec2fa29e2fb382c76db2543716b0cf0d348c656addce4c39d29abc5",
+    "bytes": 1022
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/external-before.json": {
+    "sha256": "e193d4b94ec2fa29e2fb382c76db2543716b0cf0d348c656addce4c39d29abc5",
+    "bytes": 1022
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/integrator-correction.md": {
+    "sha256": "74ed84cdb6f9acfaf1d582f102bfb5f2d7db19967e038d4f7d679f02b872c7ab",
+    "bytes": 2231
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/probes.md": {
+    "sha256": "b31343d664736012546d51cf33c395d67db6b9fc0cca19cb294251a3bc685c5b",
+    "bytes": 9612
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/protected-after.json": {
+    "sha256": "3fc7fcc7cb7ff950041b079101fab3c4abce39348fbc1489235a5a485b7df4c0",
+    "bytes": 56
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/protected-before.json": {
+    "sha256": "889c56dcaa7abd68fdaf8b2724a47dafeb1e6e2c854dd80f8f466d5e2681b2da",
+    "bytes": 86023
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/read-map.md": {
+    "sha256": "a848803c51373e056a877828973021a70d32980c481c284fbe2f7301a61177bf",
+    "bytes": 5112
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/submitted/031-impact.md": {
+    "sha256": "c51eb183767c05cbf0424a8bb76b48d780d0ef3042c5f0160b6e8079486aa535",
+    "bytes": 39678
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/submitted/analysis.md": {
+    "sha256": "3eb3ca892dc83f75bae19518469695820b96bbd90fed83b544b4913b636b3d6d",
+    "bytes": 10778
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/submitted/log.md": {
+    "sha256": "39e835a7ea10b1f04f4b30dcfd466b54f5c464133362c4458038c25723404d2d",
+    "bytes": 41782
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/submitted/method-delta.md": {
+    "sha256": "f16e138ac0037980de02e7e853147ac173081bff50fb3652739df5d6d5de5565",
+    "bytes": 28006
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/submitted/profile.log": {
+    "sha256": "2166c12da493efecb34e4be2ec3dabd0fda8ad5db28138bc442c5a769aad1db2",
+    "bytes": 2383
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/submitted/progress.log": {
+    "sha256": "652b01a1aa045b65b45dcc93140ae0a40a50802eddaa91c9c1b2b7387066de2c",
+    "bytes": 9198
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/submitted/source-inventory.md": {
+    "sha256": "c490f9efce3452e484623479a7a17c37171c5bba4b70683e44caed613fdad347",
+    "bytes": 9153
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/submitted/spec-fixes-4.md": {
+    "sha256": "acad089e36eb3c9ed8d4a47f26e07f72f42d6f7825100a201ac59d189d68735e",
+    "bytes": 17180
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/submitted/spec-trace.md": {
+    "sha256": "9c09f9e299ba983831f67d2e5e34cd93b79daac1a8f3383146e301c3718805f1",
+    "bytes": 28603
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/submitted/spec.md": {
+    "sha256": "ba00a5ded005655ff40ea6aaa24547589fcd0a379ce9e4adbe91eec4d63065af",
+    "bytes": 34726
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/submitted/usage.log": {
+    "sha256": "6c59b7705f5ba7ce9d0cb7add2555371cdb9ae4be80cf3169b32858c142f08b7",
+    "bytes": 1900
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-1-incomplete/launch.md": {
+    "sha256": "47ca6d752ffb91a9615bfdc69b1c11366b6d17c9fff72f8ff5c9b3331b17723f",
+    "bytes": 2324
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-1-incomplete/profile.partial.log": {
+    "sha256": "4edce7e653b8ad415e6a4a003607517d3b73cc2b2cbaa864dd7ace0707c97e3c",
+    "bytes": 1163
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-1-incomplete/progress.partial.log": {
+    "sha256": "d36ce35fc10efb4be8beedfc052778ac7c9c68a8c535080f487b664accb62809",
+    "bytes": 6950
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-1-incomplete/spec-review-1.partial.md": {
+    "sha256": "3dcecce99e4a38e1c35985f8004620d9dae1e7582e06157cdf0dd6bfc8fce5ea",
+    "bytes": 11873
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/contract/baseline.json": {
+    "sha256": "9b69f930ba510b18fa9b427b611ff3f404eddbb14bb618f658c41e8a4efe8e97",
+    "bytes": 20932
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/contract/boundaries.md": {
+    "sha256": "4e37820dba081c056af14f21c8ff00116595c16c2eb3676af3817676616ce2ae",
+    "bytes": 9910
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/contract/fingerprints.md": {
+    "sha256": "4cf7876358ce0dd59f1d68c45e1215689fefd9c80a6985c1936abdff6d7d2fc2",
+    "bytes": 5736
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/contract/matrix.md": {
+    "sha256": "5551327671c86bb6d36f1c2e9b228e77a94f2f0899e5cd7937b4aa7cdc469895",
+    "bytes": 18168
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/contract/probes.md": {
+    "sha256": "82b13c94d83919a86a41ca00453f2b1e35a93a1ce3661d6fdb47b947fe981f68",
+    "bytes": 12025
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/contract/qualification.md": {
+    "sha256": "05dd35644a4989ff453d4ae345e04ce7ab9165d89c32615ff939a67ba6c1ebc8",
+    "bytes": 5660
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/contract/read-map.md": {
+    "sha256": "08d72d81dfeac9831e94e5237ccc5ecc0e50a4e8dd95f4127b64babb9b05c9ff",
+    "bytes": 13694
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/contract/report.md": {
+    "sha256": "a2eecd72c7544eae3177d48629d5ca7aea9105d604b7b6e389246598facd9d9c",
+    "bytes": 16442
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/contract/reviewer-profile.log": {
+    "sha256": "690075a8ec050b6b1d202e05b8e5f886f12a49c0eac6f5511b3e4759a87c5953",
+    "bytes": 2461
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/contract/reviewer-progress.log": {
+    "sha256": "d3293bc05f2a77ad3a959397ed7f7a1a14d4bcd83204f7e7173813d69544a233",
+    "bytes": 9688
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/contract/reviewer-usage.log": {
+    "sha256": "f71ceac0d8908ed9a1e3994bd987749892830a0a808bd42dc2c1c1f59057d81c",
+    "bytes": 1970
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/inputs/031-impact.md": {
+    "sha256": "c79ac11b03a81ec4150175560b299410b687adb92720682e305b392e40d8135c",
+    "bytes": 15309
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/inputs/analysis.md": {
+    "sha256": "56375053b9cb580f48796ba2234f9747741ee9963a20b5854ddee6bd0aff0734",
+    "bytes": 28505
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/inputs/spec-fixes-1.md": {
+    "sha256": "fdce445416e0b24fef4f524c95f5c279ef1838aa95d91bc9846aae2ad3b2772b",
+    "bytes": 11411
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/inputs/spec-fixes-2.md": {
+    "sha256": "2dee3927afe251847e619d78795108c236796303bab1e2836e6ab9e900c2de89",
+    "bytes": 12393
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/inputs/spec-fixes-3.md": {
+    "sha256": "24c044576c4f8ab861ace1d2cc3ce5cb4c3e9aabde7937373c7503099f1400a4",
+    "bytes": 13980
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/inputs/spec-trace.md": {
+    "sha256": "5f9bb73dbe9d0bd078878e7ec444253a670ea630ec8ef3fa1273e27002ce647f",
+    "bytes": 10150
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/inputs/spec.md": {
+    "sha256": "a9156e7135f4abbf8d46d585432a2ce3ae6942d7a6f73da3c96f007dcb846b64",
+    "bytes": 39482
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/methodology/baseline.json": {
+    "sha256": "b58ae5b44c29b69871f4986c89420c1fc8e4bb35d4d136f65deaf6fd0a28c24b",
+    "bytes": 33492
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/methodology/check.py": {
+    "sha256": "01e737c281f7698d353f239e6bf32830f018948fa9e71ebc71cb385b53821aa3",
+    "bytes": 3533
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/methodology/delta.md": {
+    "sha256": "0422378cec8a8423c56d98c76754abd9c200a24465f2fdbcb0458e2bf795fc7b",
+    "bytes": 20076
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/methodology/fingerprints.md": {
+    "sha256": "4178dc5e2bdc5393d89b96c9052fb3efef476eb9d313fca6d2d30fe157201795",
+    "bytes": 6048
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/methodology/fragment-map.md": {
+    "sha256": "952eddb2aceb4bdc750fa27ae47fe7a943435b37ed33f4c1b64cd0ea2c12d7c1",
+    "bytes": 11818
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/methodology/probes.md": {
+    "sha256": "3a436ec82ed4faa74264fa8a5ad8804447340775475488d1db04a5ad212444bf",
+    "bytes": 10758
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/methodology/qualification.md": {
+    "sha256": "ae1209fbe9e42eceb68d2455985a574caf6551e69899293cba72becfa4b40bde",
+    "bytes": 6542
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/methodology/read-map.md": {
+    "sha256": "9972ba970bd9b53d55fa3d34c90114ac48996a17bef09bf3bffd5e3857ace15b",
+    "bytes": 12863
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/methodology/report.md": {
+    "sha256": "0c8e819380ed888c355fd37d40facd758566b8bad21a752e24f2b683e7d8d81f",
+    "bytes": 17613
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/methodology/reviewer-profile.log": {
+    "sha256": "7e7e6651a42d3ab801ae587ee8d7fab50d5239d5d5a55858deeafc5ed79a84b3",
+    "bytes": 2417
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/methodology/reviewer-progress.log": {
+    "sha256": "96e1f1333184abc7d9006a104960888fb1587fcbd6cc398c2884929abf58def0",
+    "bytes": 9629
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/methodology/reviewer-usage.log": {
+    "sha256": "a1b0c2046ada8b7df644776d531e9a7cc9a337c9d8e1d507e359d720a3345184",
+    "bytes": 1974
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/program.md": {
+    "sha256": "d15a793713f94a7f5edf11cf01fb9e14e4c705787882859233db2bc06ba69abd",
+    "bytes": 8166
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/after.json": {
+    "sha256": "ce96daf42731b082a4a17c2f6ac7635e87e8969961fbd0e69e8df60d828634ed",
+    "bytes": 37086
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/before-expanded.json": {
+    "sha256": "ce96daf42731b082a4a17c2f6ac7635e87e8969961fbd0e69e8df60d828634ed",
+    "bytes": 37086
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/before.json": {
+    "sha256": "acde6bfde284b3a6844a71613543777d9f3decdcb0659cfdfe36a5793aa4e544",
+    "bytes": 21893
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/boundaries.md": {
+    "sha256": "3d64fb19b72bee34488937dee4e86e07dee067b84b0752bb2380ff48a8f07ac4",
+    "bytes": 4590
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/check.py": {
+    "sha256": "07035acb575eff61268f283b8531187a965375df529ad9d332ee4269b73f6b43",
+    "bytes": 9461
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/coverage.md": {
+    "sha256": "bbe76d354b93ae0993fc83a1ce33530fb0cb97f4502b0698e4e47e21e6a2d89e",
+    "bytes": 12037
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/external-after.json": {
+    "sha256": "b3973c77fd779db76ef1836d9e34607ab78efa04449c7aa495cebd2bbe337593",
+    "bytes": 12697
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/external-before.json": {
+    "sha256": "b3973c77fd779db76ef1836d9e34607ab78efa04449c7aa495cebd2bbe337593",
+    "bytes": 12697
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/fingerprints.md": {
+    "sha256": "fc56d4afe5609ba1933a86712f7997ffd35f1bd2050de4d24895fd1c2f7e8585",
+    "bytes": 5105
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/previous-findings.md": {
+    "sha256": "d071cd2e1e047c34da8a90d32e8db34a3162603ccae34bc31012fc30e90902d6",
+    "bytes": 2860
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/probes.md": {
+    "sha256": "59c8c2d75ddb41077a086506f9457958cd7b08f91dc647b8bd4eb35ac32ddc69",
+    "bytes": 9032
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/qualification.md": {
+    "sha256": "c701f9431fb5278a315242d96dc2e0da5fa6a790586218f999ac587bb6f69f45",
+    "bytes": 7232
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/read-map.md": {
+    "sha256": "b190f071bf3f442be0ffa3ee764fa9067e978036ee12eccdbe71db2062052936",
+    "bytes": 7772
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/reviewer-profile.log": {
+    "sha256": "86b1e6448648e8a1bf6cdc548e925903b297e3c3acee339868558045985bcb5d",
+    "bytes": 2461
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/reviewer-progress.log": {
+    "sha256": "1d7221d8a13ed3d74cdca8350a9ad8eb1377d6dd4131f2eccbe0f71241f9adbd",
+    "bytes": 9611
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/reviewer-usage.log": {
+    "sha256": "2a34df8bfdc314f73ec833a7e11525221948b81ea0e8c23e3de38526cc608175",
+    "bytes": 2035
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/stitches.md": {
+    "sha256": "8841e1360ec6935022563998baec7b95d821ff7096b310468d80d679993437eb",
+    "bytes": 7414
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-2/inputs/031-impact.md": {
+    "sha256": "c51eb183767c05cbf0424a8bb76b48d780d0ef3042c5f0160b6e8079486aa535",
+    "bytes": 39678
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-2/inputs/analysis.md": {
+    "sha256": "3eb3ca892dc83f75bae19518469695820b96bbd90fed83b544b4913b636b3d6d",
+    "bytes": 10778
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-2/inputs/method-delta.md": {
+    "sha256": "f16e138ac0037980de02e7e853147ac173081bff50fb3652739df5d6d5de5565",
+    "bytes": 28006
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-2/inputs/source-inventory.md": {
+    "sha256": "18085182e7d6cb9b6a72ad6e25606996faf858c8f83b40d5a58765c3b8449955",
+    "bytes": 9152
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-2/inputs/spec-fixes-4.md": {
+    "sha256": "acad089e36eb3c9ed8d4a47f26e07f72f42d6f7825100a201ac59d189d68735e",
+    "bytes": 17180
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-2/inputs/spec-trace.md": {
+    "sha256": "9c09f9e299ba983831f67d2e5e34cd93b79daac1a8f3383146e301c3718805f1",
+    "bytes": 28603
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-2/inputs/spec.md": {
+    "sha256": "ba00a5ded005655ff40ea6aaa24547589fcd0a379ce9e4adbe91eec4d63065af",
+    "bytes": 34726
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-2/program.md": {
+    "sha256": "4164c5396b16ccf8a9536813325951ff9076e462d6acb2ecc6d5e1b36ad20715",
+    "bytes": 8433
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol/fingerprints.md": {
+    "sha256": "53b3e61222e7990c242622cc05831dcc97e627ae80007e28115e73c039007ce0",
+    "bytes": 7481
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol/inputs/031-impact.md": {
+    "sha256": "f023b0905ecbc45f81251235430cac32d47114157d2ebb7729d7900354a702c2",
+    "bytes": 10435
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol/inputs/analysis.md": {
+    "sha256": "6b688b9676f134f789f05065de466ee8998803e46a8725e0242e78ca2d120132",
+    "bytes": 21089
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol/inputs/log.md": {
+    "sha256": "81805bbe11840baa80d64df34ead97340a3ef2175000c7fd0b033efb2235f834",
+    "bytes": 10012
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol/inputs/profile.log": {
+    "sha256": "351135f8992d8d15911eb6f987f6f006a9b203db4ae431680879fd74ca6c9779",
+    "bytes": 787
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol/inputs/progress.log": {
+    "sha256": "f4bad707440fb62560317c7a15a0bb35f4ddc043dfd8d704110d96e072561c98",
+    "bytes": 6344
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol/inputs/spec.md": {
+    "sha256": "f69daa1e55ed0283887ec05d35aa3f3c509d21abed78ad10dfc64167c20f756a",
+    "bytes": 18011
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol/inputs/task/message.md": {
+    "sha256": "45354b28004cc46168ef5b4f7c4b4a1070b46ff18981b5238d5648ae13d73727",
+    "bytes": 15872
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol/launch.md": {
+    "sha256": "21ce82e8ab183f5c6e7580a947ff36676fd43e5c19c3932c130be9bc92b0b3c2",
+    "bytes": 1833
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol/probes.md": {
+    "sha256": "befe6b7168722a3da25334e56b2723cc78e4675c8fcad9829512fc10b56f6794",
+    "bytes": 18001
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol/qualification.md": {
+    "sha256": "b0eac09c562a1be29b5f320a7f899f48b4fb7df57a40d54f76903a6a5a24ab1e",
+    "bytes": 3827
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol/read-map.md": {
+    "sha256": "e5fce8f58cc91215279d5741f7adaf376d098a80135fac6c8a278be1a80b9406",
+    "bytes": 7931
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol/reviewer-profile.log": {
+    "sha256": "439a83e43c089e597a2e962f1c8e2ef9990bbd91ab7e3513bcec2264d85371b7",
+    "bytes": 1225
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol/reviewer-progress.log": {
+    "sha256": "97cfbf8a5d4818d37a36ec75d20ceb1f8d9ef618f3b532cb46ab8c7337bc8e1f",
+    "bytes": 11061
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol/reviewer-usage.log": {
+    "sha256": "f9efb973f739f755ea34ee392902ac08ff4826d5b7805afb35d859a24f72fbfe",
+    "bytes": 631
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol-r2/fingerprints.md": {
+    "sha256": "cbfc3069549f2aeb35efb3b42eef6292a2248bc79e6ffb5d459f053945ae8db7",
+    "bytes": 3184
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol-r2/inputs/031-impact.md": {
+    "sha256": "ca070827b3803e7949f57564dd8e8446b0033a21a6c81953a3938097aec99eb6",
+    "bytes": 14233
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol-r2/inputs/analysis.md": {
+    "sha256": "e7c1b5a1e5ecffb17656d4fce1c92d4eb7e84e0b977de2a9daf6fe54fc122392",
+    "bytes": 26348
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol-r2/inputs/spec-fixes-1.md": {
+    "sha256": "ce32b012ec465e25470d6b505a41ac997582295fb3721026d42fdacbd479427b",
+    "bytes": 10623
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol-r2/inputs/spec-fixes-2.md": {
+    "sha256": "8eacb63e8aa11ff2192e750a8cf6b7006b28f0eb21c0bc52b90687c3e1148a3a",
+    "bytes": 11703
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol-r2/inputs/spec-trace.md": {
+    "sha256": "c43d4595c52db088265626213411c58e067198bf6eae358a0f1aa90de1dc3e05",
+    "bytes": 7029
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol-r2/inputs/spec.md": {
+    "sha256": "404a2f857f330daa0ea59f2074c2e12a1483052cce5aa896552a53b62dad1c78",
+    "bytes": 32611
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol-r2/partial-assessment.md": {
+    "sha256": "f9a7e0fc44d00d500ad660e960b2fd28a09243880509454e4e28d903e68b1ee8",
+    "bytes": 9041
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol-r2/probes.md": {
+    "sha256": "fdb2efd3204eb78e3a8e547e4af53b678067df58971f89ece9f63875f9c1c792",
+    "bytes": 6447
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol-r2/qualification.md": {
+    "sha256": "e358530a4aea2890a77dec9f28658a02a3a644ec29eb0e4433dc8acebfe200c4",
+    "bytes": 2797
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol-r2/read-map.md": {
+    "sha256": "d041a1cdd421a8fb2bfc2ff77cda778f2667d1d71171a623d6e0b2d6b203001a",
+    "bytes": 4504
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol-r2/reviewer-profile.log": {
+    "sha256": "8e2b91cb6247432fa48e0af42a7350d1288a73079fda7a63af1edaf3516900c0",
+    "bytes": 1981
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol-r2/reviewer-progress.log": {
+    "sha256": "8461096f9b32885157571a7365dcf78f4e09ea64965e47947bc5250cdfe4012e",
+    "bytes": 10429
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol-r2/reviewer-usage.log": {
+    "sha256": "30668ea7a7a2415890e1b6ba89246335a29400b1be0d3e66ff1786f79ce28595",
+    "bytes": 1277
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/source-inventory.md": {
+    "sha256": "18085182e7d6cb9b6a72ad6e25606996faf858c8f83b40d5a58765c3b8449955",
+    "bytes": 9152
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/spec-fixes-1.md": {
+    "sha256": "fdce445416e0b24fef4f524c95f5c279ef1838aa95d91bc9846aae2ad3b2772b",
+    "bytes": 11411
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/spec-fixes-2.md": {
+    "sha256": "2dee3927afe251847e619d78795108c236796303bab1e2836e6ab9e900c2de89",
+    "bytes": 12393
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/spec-fixes-3.md": {
+    "sha256": "24c044576c4f8ab861ace1d2cc3ce5cb4c3e9aabde7937373c7503099f1400a4",
+    "bytes": 13980
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/spec-fixes-4.md": {
+    "sha256": "acad089e36eb3c9ed8d4a47f26e07f72f42d6f7825100a201ac59d189d68735e",
+    "bytes": 17180
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/spec-review-1.md": {
+    "sha256": "8ead97a4a9be526e5e4460bd5afa426cfdbd707f547436083049c14488d4c8bf",
+    "bytes": 29587
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/spec-review-2.md": {
+    "sha256": "b26425287cb0add502c3c39dd2c50890b9aef4043998cf3df2ac6a23f32574c6",
+    "bytes": 25850
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/spec-trace.md": {
+    "sha256": "9c09f9e299ba983831f67d2e5e34cd93b79daac1a8f3383146e301c3718805f1",
+    "bytes": 28603
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/spec.md": {
+    "sha256": "ba00a5ded005655ff40ea6aaa24547589fcd0a379ce9e4adbe91eec4d63065af",
+    "bytes": 34726
+  },
+  "doc/tasks/061-kanon-i-aktualnaya-metodika/task/message.md": {
+    "sha256": "45354b28004cc46168ef5b4f7c4b4a1070b46ff18981b5238d5648ae13d73727",
+    "bytes": 15872
+  }
+}

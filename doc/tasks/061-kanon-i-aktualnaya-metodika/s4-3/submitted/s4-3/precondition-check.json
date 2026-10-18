@@ -1,0 +1,177 @@
+{
+  "objects": {
+    "f333efa319e445efe029ee6963b477ca8fe3bc1c": {
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    "a449bd2e218e04384d1d42e0c1bffe892495e298": {
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    "0e00954d360036a3a926c12c4a79452faf1c261f": {
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    "25bef953cf0cfd7a28c7d4650bab7d7a4731d537": {
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  },
+  "algorithm": {
+    "f333efa319e445efe029ee6963b477ca8fe3bc1c": {
+      "exit": 0,
+      "bytes": 51475,
+      "sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96"
+    },
+    "a449bd2e218e04384d1d42e0c1bffe892495e298": {
+      "exit": 0,
+      "bytes": 51475,
+      "sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96"
+    },
+    "0e00954d360036a3a926c12c4a79452faf1c261f": {
+      "exit": 0,
+      "bytes": 51475,
+      "sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96"
+    },
+    "25bef953cf0cfd7a28c7d4650bab7d7a4731d537": {
+      "exit": 0,
+      "bytes": 51475,
+      "sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96"
+    }
+  },
+  "late_paths": {
+    "a449bd2e218e04384d1d42e0c1bffe892495e298": {
+      "paths": [
+        "AGENTS.md",
+        "completeness-check.md",
+        "doc/open-questions.md",
+        "methodology.md",
+        "presentations/methodology.html",
+        "state-machine-spec.md",
+        "task-runner-meeting-pseudocode.md",
+        "task-runner-meeting-states.md",
+        "task-runner-pseudocode.md",
+        "task-runner.md",
+        "task-sessions.md"
+      ],
+      "bytes": 377748,
+      "sha256": "727a9782357d52fc93c0861a643541c2f162f01e6bef77c075c5c3d5e8fd8c68"
+    },
+    "0e00954d360036a3a926c12c4a79452faf1c261f": {
+      "paths": [
+        "completeness-check.md",
+        "doc/open-questions.md",
+        "state-machine-spec.md",
+        "task-runner-meeting-states.md"
+      ],
+      "bytes": 246680,
+      "sha256": "2c2b0e100a70bffb8b774cd79da6f80e7d829a4fab96a0ef242e2c59db82fe64"
+    }
+  },
+  "blobs": {
+    "AGENTS.md": {
+      "exit": 0,
+      "bytes": 15700,
+      "sha256": "b359052aed3bde47bdb2dcdfc9a9da07d59af81d5fe3362b68cd0a777b34424c"
+    },
+    "completeness-check.md": {
+      "exit": 0,
+      "bytes": 51904,
+      "sha256": "c167b90e9d7ae370bc75b703da428c97955393b1f5b84e5209fd9acb21ad7d9d"
+    },
+    "doc/open-questions.md": {
+      "exit": 0,
+      "bytes": 38515,
+      "sha256": "279ab21805ec51926bef567a0f479d477bd40f08f64f5610d316d348aa397b17"
+    },
+    "methodology.md": {
+      "exit": 0,
+      "bytes": 388174,
+      "sha256": "4f7556aaac15dd8efe099a9c35a79d2fe2ae541b2a87851abc4f4945bae4953f"
+    },
+    "presentations/methodology.html": {
+      "exit": 0,
+      "bytes": 23190,
+      "sha256": "d33f67b884d281564aa9d59a6cb0b246226146c7ecb71e2984ea3606194ee7c7"
+    },
+    "state-machine-spec.md": {
+      "exit": 0,
+      "bytes": 60997,
+      "sha256": "886fb516fa5d6c83df4c9d1793f9ee8861fd117b9df081198fc407308a4ed1ce"
+    },
+    "task-runner-meeting-pseudocode.md": {
+      "exit": 0,
+      "bytes": 6577,
+      "sha256": "64ddea8e996dea7f848c5fffa84c6d56d31713d41754186a099aaf6b4fca7d02"
+    },
+    "task-runner-meeting-states.md": {
+      "exit": 0,
+      "bytes": 78864,
+      "sha256": "8c70c8824a64ba8d67c487956a6c6c5fe1252213808741c673f9a5e1520c171d"
+    },
+    "task-runner-pseudocode.md": {
+      "exit": 0,
+      "bytes": 34047,
+      "sha256": "b33cb01fa4a72fcc0374c30e1f5d34ff222a97a110a94f4c0c73941ee9e191ba"
+    },
+    "task-runner.md": {
+      "exit": 0,
+      "bytes": 106689,
+      "sha256": "0a5d12008f01f83e15b6c91357b426b0e8a2f58749b4d20fff7e0eaf140df883"
+    },
+    "task-sessions.md": {
+      "exit": 0,
+      "bytes": 60653,
+      "sha256": "55b8bf4854104563c56bf08fe7b5957f865d9040e99205965f6e458dd993a452"
+    },
+    "task-algorithm.md": {
+      "exit": 0,
+      "bytes": 51475,
+      "sha256": "ff55cf734d3fe816178f7c46718cd4e8322b73cac8d64efdf955b166dc079e96"
+    },
+    "README.md": {
+      "exit": 0,
+      "bytes": 1861,
+      "sha256": "0590d3648413073e0f090df02d0613d87b5423ac4ce6548f6e6dbb14fadd1c2f"
+    }
+  },
+  "tools": {
+    "git": {
+      "exit": 0,
+      "stdout": "git version 2.56.0.windows.2\n",
+      "stderr": ""
+    },
+    "python": {
+      "exit": 0,
+      "stdout": "Python 3.14.4\r\n",
+      "stderr": ""
+    },
+    "rg_on_PATH": false,
+    "rg_cached": {
+      "exit": 0,
+      "stdout": "ripgrep 15.1.0 (rev af60c2de9d)\n\nfeatures:+pcre2\nsimd(compile):+SSE2,-SSSE3,-AVX2\nsimd(runtime):+SSE2,+SSSE3,+AVX2\n\nPCRE2 10.45 is available (JIT is available)\n",
+      "stderr": "",
+      "bytes": 4266496,
+      "sha256": "decdd4992f3f1b9a5ef9898f1b40ab16886d579d6516b4efd3d5eaa19364e408"
+    }
+  },
+  "ab2_delta": {
+    "exit": 0,
+    "stdout": "diff --git a/task-runner.md b/task-runner.md\nindex 9a0d20f..5c5c53a 100644\n--- a/task-runner.md\n+++ b/task-runner.md\n@@ -229,6 +229,8 @@ state\n | СДАЧА | КОММИТ, ПУШ | B | 1 | выкл, если модель позволяет | diff + 10 тыс. |\n | ОБРАТНАЯ_СВЯЗЬ | С9 | A | 3 | вкл | материалы + spec + result + feedback + 40 тыс. |\n \n+**Второе мнение** (`methodology.md`, раздел 18) идёт на классе A с включённым размышлением и усилием 3; при вопросе о безопасности, деньгах, данных или правке нормы — усилие 4; семья — другая, чем у агента, среди согласованных поставщиков, если доступно, совпадение называется (`methodology.md`, раздел 18). Модель второго мнения проект задаёт отдельно от основной модели класса.\n+\n **Подсказка агента.** После каждой сессии, кроме КОММИТ и ПУШ, агент пишет строку `ПРОФИЛЬ от <код>`. Она действует на один следующий запуск, какая бы сессия ни пошла по маршруту, и стирается после него; в log.md — «ПРОФИЛЬ от <код> применён к <код>». Порядок сравнения: класс C < B < A, усилие 1 < … < 5, размышление выкл < вкл, бюджет — по числу. Правила:\n \n - совет выше по классу берётся только там, где умолчание допускает выбор (фаза СДАЧА); в остальных фазах класс задачи не меняется, совет пишется в log.md;\n",
+    "bytes": 1924,
+    "sha256": "ec98d51de012c73013d59ffe1aa2fe8318f00d3a5bccab0fec3da7826a47a3fc"
+  },
+  "Q5_equal": true,
+  "destinations": {
+    "doc/canon/README.md": true,
+    "doc/canon/process.md": true,
+    "doc/canon/decisions/README.md": true,
+    "AGENTS.md": true,
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/current.md": false,
+    "doc/canon/decisions/ADR-0011-canon-update.md": false
+  }
+}

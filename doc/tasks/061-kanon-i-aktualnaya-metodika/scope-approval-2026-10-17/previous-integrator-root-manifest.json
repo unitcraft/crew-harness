@@ -1,0 +1,18 @@
+{
+  "spec.md": {
+    "bytes": 33834,
+    "sha256": "359819ee6b75d789b94853ac7054742c1c675597e6aee3d05f36ad43abd11c0b"
+  },
+  "analysis.md": {
+    "bytes": 14830,
+    "sha256": "e830c14b03532526583b1bf2e520bfc5479f10cb34d16d15060cae21393ce3af"
+  },
+  "spec-trace.md": {
+    "bytes": 43116,
+    "sha256": "f83c3b36d5c4f846d0a0c8d1e7daaa972c9e040f7aa8942231bb71b0746e9038"
+  },
+  "method-delta.md": {
+    "bytes": 34174,
+    "sha256": "c3ec6b250aef815b37a10afd2d1a28728630816739b357a7f25e6ecedef0e065"
+  }
+}

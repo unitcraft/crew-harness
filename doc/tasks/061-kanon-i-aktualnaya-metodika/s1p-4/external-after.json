@@ -1,0 +1,16 @@
+{
+  "045/spec.md": "685245b64f33424e225e340898399b49084f39b20f66469b58637fe96cc05ed8",
+  "045/plan.md": "150c9826fc1be49a63cbd8754491c88063c9eca02d145519040d1da51c6711e4",
+  "045/plan-review-4.md": "ea0d84e953159a18d27b18eb5d8097806478960fe6327749a72afa928c05e6a9",
+  "045/log.md": "8679a884f426e98e997b65977d96ba098d267b6cb9005c9d8a9a98597d84c4b3",
+  "045/rev-parse": "b18cc5052b6183d9c15fc1833006f1cb86481a3c\n",
+  "045/status": "?? ./\n",
+  "013/spec.md": "f86a69f3cd2c76cf5a4aa1a35ac720dcd5b8c28c560c6b5150ec9526e93eb376",
+  "013/task/message.md": "88d6a8f9cdac4cd73ba5d0e49e1c8ed1d3f1fbd772741410e8437bd8e2e8f4a9",
+  "013/log.md": "434e218c66362a3bccaeb5cecd3f621e4c6817dda4115be80d169cbc19c0f263",
+  "013/rev-parse": "7f2b0f6ea2f9ad55258a17eb614ed03b627ce596\n",
+  "013/status": " M log.md\n M task/message.md\n?? profile.log\n?? progress.log\n?? spec-review-1.md\n?? spec-review-2.md\n?? spec-review-3.md\n?? spec.md\n",
+  "013/src": false,
+  "013/src/runner_core": false,
+  "013/tracked-src": ""
+}

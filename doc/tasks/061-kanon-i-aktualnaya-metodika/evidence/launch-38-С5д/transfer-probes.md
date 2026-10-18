@@ -1,0 +1,13 @@
+# После переноса — ранние expected и inputs документальных проб
+
+До invocation. Первичные основания: pin a449 M154/266/541/709–718/1550–1552; S110/192/317–324; owner-gate14/22; новое разрешение transfer-authorization1–82. Меняются только конкретные проектные отличия, а не поздние схемы.
+
+A. Exact transfer/current-first: новые README/process должны называть полный a449; accepted ADR0012 и реестр/вход должны соответствовать реальному решению. Current создан тем же patch, что первый перенос, все его относительные ссылки разрешаются и содержат только действующие адреса. Позитив — фактический пакет; негативы в памяти: заменить a449 на c550, удалить current из набора, выдать ADR draft за accepted → отказ по соответствующему source. Выполнить named manual VERSION/CURRENT плюс read-only поиск/сравнение строк, отдельно записать actual; это не runtime.
+
+B. Сохранность/соседи: whole-before всехexisting против after, разрешены exact mutable names и append result/accounting/rootlogintegrator; rootlog и result raw prefixes должны сохраниться. AGENTS/code/config/старые ADR/root4/plan/старыеE immutable; существующий pycache только metadata. Позитив — исходные bytes; негатив — MUTANT только в памяти при том же nameset должен изменить sha. Новые current/ADR должны отсутствовать в earlybefore/pretransfermetadata. Мутация старого before.json недопустима, даже без смены имён. Не писать отрицательные fixtures в старые/чужие пути.
+
+C. Норма/полномочие/исключение: D0 оригиналом; partial не off; helpers не opinion; D2 отдельная приёмка != пунктбезворот; D3 не вносит позднее Ф→Св. Позитив — конкретное разрешение владельца на a449 и сохранённая общая drift-политика. Негатив — распространить исключение061 на все будущие задачи или назвать старый literal latest-DoD исполненным → отказ. Критерии REQ-06/AC-06 изменены конкретным решением, история не правится. Будущая независимая Sol не уже состоявшаяся С6/opinion.
+
+D. Patch применимости: из исходных Git blobs492 получить только собственные изменения Canon; тот же набор изменений наложить В ПАМЯТИ на уже сохранённый exact target12c79. Общие изменяемые фрагменты должны находиться однозначно. Registry target сохраняет0011 и добавляет0012, process target сохраняет task/message/gates/compaction/answer modes, AGENTS4/8 и configзащита не меняются. Сохранить два patch. Любой неприменимый hunk — конкретный конфликт, не молчаливый импорт всего target.
+
+Поиск actual corpus вне doc/tasks: read-only git grep и Python по untracked nameset, без установки rg. Известный положительный контроль — новая фраза о первом фактическом переносе в process; отдельный negative/positive in-memory literal control. Документальное E/F/G, A–D продукта N/A, suites/guards/build/runtime не запускать.

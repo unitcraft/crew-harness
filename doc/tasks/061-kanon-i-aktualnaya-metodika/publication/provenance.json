@@ -1,0 +1,3605 @@
+{
+  "status": "Публичные копии, не новые early snapshots и не исправление исторических вердиктов",
+  "authority": "владелец, 2026-10-18, question «061: упаковка истории»: «Архив и копии (Recommended)»",
+  "source": "исходный task061 и красный кандидат1 сохранены без изменений",
+  "archive": {
+    "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/publication/originals.zip",
+    "sha256": "bc74652419ddcacb749fdc5368acdf02faf83204f9cf1a123a264d93d4fe9e5b",
+    "raw_files": 1187
+  },
+  "raw_manifest_entry": "RAW-MANIFEST.json",
+  "archive_only": [
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/launch-registration/s4-4/progress.log",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-1/progress.log",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-2/progress.log",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-3/inputs-at-submit/progress.log",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/submitted/progress.log",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol/inputs/progress.log",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/fixtures/old/nested/progress.log",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/submitted/s4-3/fixtures/old/nested/progress.log",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/launch-registration/s4-4/log.md",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-3/inputs-at-submit/log.md",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/submitted/log.md",
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol/inputs/log.md"
+  ],
+  "raw_hash_meaning": "Прежние manifests/before/after/hashes относятся к точным архивным оригиналам, не к нынешним производным.",
+  "link_policy": "Если контекст относительной ссылки отсутствует в выдержке, исходная цель сохранена как данные; активная ссылка ведёт к архиву, а не к выдуманной странице.",
+  "metadata_only_not_archived": [
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/__pycache__/safe_io.cpython-314.pyc",
+      "kind": "metadata-only, not in publication candidate",
+      "size": 2769,
+      "mtime_ns": 1792275059420240500
+    }
+  ],
+  "changes": [
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/author-setup/integrator-preflight.json",
+      "raw_sha256": "0a5636722ed925bb8bc59bc13dc85ae8b0cbd95fef0e71ae06ed581bc08c5a5b",
+      "public_sha256": "075188f298993ed87be576cdb482372ebf1437723b7b2d6cd9c0cd97082735d2",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/catalog-decision-2026-10-16/045-before.json",
+      "raw_sha256": "3b35b20e7754015ca13dc78292a02f29083874eb3285bfa7b4b743946ee7ded9",
+      "public_sha256": "d9b648e3ba1e232e05dfdba67fa67abadc5d15c2c37c4f5708c7ed2ae3188b80",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-34-С5/baseline-correction.md",
+      "raw_sha256": "e58952b0bc4d2b3d87a9b4464926a1dd8680c84ec4c9a12daad250710266854c",
+      "public_sha256": "2302fc8e40d9f005702b0015de7cfc38c51744248a03b4e20a358c8c177630b1",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-34-С5/baseline.md",
+      "raw_sha256": "c934cd407e7fe316084df3a6aaa3d9db09fac86b4763c600b5e71d1e1fed1cf5",
+      "public_sha256": "253b30de26107c1668cba54929c4dba14bcecf82fc364cdb9f382506d0600527",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-34-С5/before-corrected.json",
+      "raw_sha256": "0d93c2fc8b8b8509f2702ccab3a779453d69a85a92d647a9b1ea24a8f859d44e",
+      "public_sha256": "250df3af7b1c75477463a28b4abac3b390f53eadaf7f6716a527f93221fceafc",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-34-С5/before.json",
+      "raw_sha256": "a4882778ca36bbe20e7ddca6224d42a3ba330a03f323d6098ecf2f15240873ad",
+      "public_sha256": "508732c07ce9978c10043b215eb5582d5e026390f92598d520d0528681f952dc",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/decisions.md",
+      "raw_sha256": "01ec6102e2a5d6b922e2083a09db84deaf21c5a4a82a4ab5b8158496e0ad25c7",
+      "public_sha256": "5a5d67b4b1741a2372b0418fb6694226a18c124c7dc4d9bf1983d9b45c6011b5",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/stdout/C--methodology.md",
+      "raw_sha256": "b404b8d89b659956884fea74f27ed9e317881d4ff35ecf22019d9b40664c6295",
+      "public_sha256": "a28ea9ba394a1bf84f48ea547a0ea00dc245128ba784f55957b0787899410c78",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/stdout/C--README.md",
+      "raw_sha256": "0590d3648413073e0f090df02d0613d87b5423ac4ce6548f6e6dbb14fadd1c2f",
+      "public_sha256": "4636abfcadbbed62ed4ede06e93eca40b02dac7517cb740fa6450e04f6b44669",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/stdout/C--task-acceptance.md",
+      "raw_sha256": "bc05e1a1d3f6180600985fbccd4db4739d2ad22bb167942d9b93f71ea9bf9e00",
+      "public_sha256": "a77db84517c9ec966d6a6a3694ab8ac55dd6a29f0b936f5cdfc2577e0210605c",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/stdout/C--task-runner.md",
+      "raw_sha256": "178fd0f1055bbdd190a4c8d4a5316566ea7be00829f9883cbfb9fde6a2a16a85",
+      "public_sha256": "586add4ccf7ed28c2452d38b240b2c51b6a0bd27f42b179c995f100fc0ef9523",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/stdout/C--task-sessions.md",
+      "raw_sha256": "64b221cde012f6e8d05c94fa6a467e4c5ce999bfd8071878caa3e85b8d57214d",
+      "public_sha256": "acfca461be20ef80713323cd2867b290b06a2f12acadcedfb17f41853f5d7137",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/stdout/latest--methodology.md",
+      "raw_sha256": "4f7556aaac15dd8efe099a9c35a79d2fe2ae541b2a87851abc4f4945bae4953f",
+      "public_sha256": "91f5b752f8c63cd7d9774f5a36949252c84f2cf5e2138687c716889c3b529e93",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/stdout/latest--README.md",
+      "raw_sha256": "0590d3648413073e0f090df02d0613d87b5423ac4ce6548f6e6dbb14fadd1c2f",
+      "public_sha256": "4636abfcadbbed62ed4ede06e93eca40b02dac7517cb740fa6450e04f6b44669",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/stdout/latest--state-machine-spec.md",
+      "raw_sha256": "9d1a9c12aca67386497df97b29204ff843c4740da3379de6cf6d63b1d8d68cc1",
+      "public_sha256": "edaeaa2c87b5407153069956255f2814120fefd618c481d5aff4e65d2178cc79",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/stdout/latest--task-acceptance.md",
+      "raw_sha256": "bc05e1a1d3f6180600985fbccd4db4739d2ad22bb167942d9b93f71ea9bf9e00",
+      "public_sha256": "a77db84517c9ec966d6a6a3694ab8ac55dd6a29f0b936f5cdfc2577e0210605c",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/stdout/latest--task-runner-meeting-pseudocode.md",
+      "raw_sha256": "a21dfd0da493f9731191750e06000677faf93ef492d54424be75025fa31f6df9",
+      "public_sha256": "e7c436f0b31d005b5ec59e46d6fd22f5041f058bc889d2df1b953a1ef6a154f6",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/stdout/latest--task-runner-meeting-states.md",
+      "raw_sha256": "81a95ee25cf73aade747ca24ecabaa6692b64f3348224bdc6780bfb617266e26",
+      "public_sha256": "87f3d8e09b10d98f74aa6ab8b4427bb6c0845d66e445cdcbb38f6169d609572e",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/stdout/latest--task-runner-pseudocode.md",
+      "raw_sha256": "da1df6d8b4998c6b6f2698a137c63a7ce080556f580bea07acc5a114904abd1f",
+      "public_sha256": "a6687197310b4c37d1a51e7e2732a740ad69071dfa43b06a3d3d8a8caa10fe71",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/stdout/latest--task-runner.md",
+      "raw_sha256": "fa98d1894ae3a6886d6776fe022bbcc0f9f067c2f4172df04856e94ac4f9ffc3",
+      "public_sha256": "3b847adf978a32142a8746840afba74a27f95b58f4977227831a17c9a7539688",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/stdout/latest--task-sessions.md",
+      "raw_sha256": "55b8bf4854104563c56bf08fe7b5957f865d9040e99205965f6e458dd993a452",
+      "public_sha256": "f8600293b0c3bd639cfee2f57c6d46129ae6370d949d9b9afbb8a305bea5da0c",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/stdout/O--methodology.md",
+      "raw_sha256": "60ace58356ab48a9cff2634765c160545572526604dad8eacc6cbead492043ed",
+      "public_sha256": "1e28032caf7f463b8913299558d0fd090b4926485ec51d18f8936ea759c18057",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/stdout/O--README.md",
+      "raw_sha256": "30657809889a3f79ac9c68a63d977578815a88d753b301bfec0dbac7e3c2498f",
+      "public_sha256": "186f8cbd6e78a2f235adeeab0219f48a0c15aa79d00895273f2ef14035001116",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/stdout/O--task-acceptance.md",
+      "raw_sha256": "bc05e1a1d3f6180600985fbccd4db4739d2ad22bb167942d9b93f71ea9bf9e00",
+      "public_sha256": "a77db84517c9ec966d6a6a3694ab8ac55dd6a29f0b936f5cdfc2577e0210605c",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/stdout/O--task-runner.md",
+      "raw_sha256": "10396a7b7e8fb7b70553647b7204858bbe3ae5861b06b4c45f55a6b55bf4371f",
+      "public_sha256": "dba61f5dd565e99e30349231c91158c7b2a05648d9c7f3342a155289955024d5",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/stdout/O--task-sessions.md",
+      "raw_sha256": "6aaa3e1c38381ddf6cfb22ab490487631d03678a0193495521c16814dc08dcec",
+      "public_sha256": "2fef11fb515241b56768b2b313ab7bbffbae69015f731aea35f8c326e73b8815",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/submitted/decisions.md",
+      "raw_sha256": "01ec6102e2a5d6b922e2083a09db84deaf21c5a4a82a4ab5b8158496e0ad25c7",
+      "public_sha256": "98fbfbf70b0267fccbbe16b36ea53ca78452dd2db127797156bcb41abc2d6c4b",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/submitted/stdout/C--methodology.md",
+      "raw_sha256": "b404b8d89b659956884fea74f27ed9e317881d4ff35ecf22019d9b40664c6295",
+      "public_sha256": "ea3fae02e10ff1c5073b240a3c6062a887796ae68153cd46f4ba2c6cd4a9a750",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/submitted/stdout/C--README.md",
+      "raw_sha256": "0590d3648413073e0f090df02d0613d87b5423ac4ce6548f6e6dbb14fadd1c2f",
+      "public_sha256": "5657ea740d8bb9e4e7bb6c18cf8b51358ca77fb1f232da55c9a9bb29d4f9ef1d",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/submitted/stdout/C--task-acceptance.md",
+      "raw_sha256": "bc05e1a1d3f6180600985fbccd4db4739d2ad22bb167942d9b93f71ea9bf9e00",
+      "public_sha256": "35ac9cde235e077ccb6db81d6d5ffd3cbee1f2584b7f8de7c584950130e0655e",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/submitted/stdout/C--task-runner.md",
+      "raw_sha256": "178fd0f1055bbdd190a4c8d4a5316566ea7be00829f9883cbfb9fde6a2a16a85",
+      "public_sha256": "0707c2875ff24cd3ae370442b118ee42774780e2950627213c850fc425a98ae9",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/submitted/stdout/C--task-sessions.md",
+      "raw_sha256": "64b221cde012f6e8d05c94fa6a467e4c5ce999bfd8071878caa3e85b8d57214d",
+      "public_sha256": "d10350ba0e2681926b0149c8a657fbd2f8f470e742a1b745fb0bc3cc2961847f",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/submitted/stdout/latest--methodology.md",
+      "raw_sha256": "4f7556aaac15dd8efe099a9c35a79d2fe2ae541b2a87851abc4f4945bae4953f",
+      "public_sha256": "f7d1a11e8e37f507ec083339f845671510835890aeab28be30815a0e30b899da",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/submitted/stdout/latest--README.md",
+      "raw_sha256": "0590d3648413073e0f090df02d0613d87b5423ac4ce6548f6e6dbb14fadd1c2f",
+      "public_sha256": "5657ea740d8bb9e4e7bb6c18cf8b51358ca77fb1f232da55c9a9bb29d4f9ef1d",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/submitted/stdout/latest--state-machine-spec.md",
+      "raw_sha256": "9d1a9c12aca67386497df97b29204ff843c4740da3379de6cf6d63b1d8d68cc1",
+      "public_sha256": "0d5dcf6f7882dbcd8e1e6142a0f3212f282dbeb5ab4bd3490b128d9112cc29c6",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/submitted/stdout/latest--task-acceptance.md",
+      "raw_sha256": "bc05e1a1d3f6180600985fbccd4db4739d2ad22bb167942d9b93f71ea9bf9e00",
+      "public_sha256": "35ac9cde235e077ccb6db81d6d5ffd3cbee1f2584b7f8de7c584950130e0655e",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/submitted/stdout/latest--task-runner-meeting-pseudocode.md",
+      "raw_sha256": "a21dfd0da493f9731191750e06000677faf93ef492d54424be75025fa31f6df9",
+      "public_sha256": "a9979d6c8b36b36f02b699e3d47c5160ff76c06c8bc09ea4af40e0a402715cdf",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/submitted/stdout/latest--task-runner-meeting-states.md",
+      "raw_sha256": "81a95ee25cf73aade747ca24ecabaa6692b64f3348224bdc6780bfb617266e26",
+      "public_sha256": "17f500c05533f82ccfd824c196e4bc88f2a8fc903370011ed24a2c78e7a6186c",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/submitted/stdout/latest--task-runner-pseudocode.md",
+      "raw_sha256": "da1df6d8b4998c6b6f2698a137c63a7ce080556f580bea07acc5a114904abd1f",
+      "public_sha256": "8f1e5ec88b89052edf53e23e4db642f4d4f15e0d7af13dc5c3049fc994e26d0d",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/submitted/stdout/latest--task-runner.md",
+      "raw_sha256": "fa98d1894ae3a6886d6776fe022bbcc0f9f067c2f4172df04856e94ac4f9ffc3",
+      "public_sha256": "c4f2af1a2e0ca7cbbbe17d2f0a6cd1c2b301617c62c4a043225a36763c68081e",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/submitted/stdout/latest--task-sessions.md",
+      "raw_sha256": "55b8bf4854104563c56bf08fe7b5957f865d9040e99205965f6e458dd993a452",
+      "public_sha256": "929baf2d7f5bdea07244141ee1a1a34ffd621f5466bd3640174a103f60a70d8e",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/submitted/stdout/O--methodology.md",
+      "raw_sha256": "60ace58356ab48a9cff2634765c160545572526604dad8eacc6cbead492043ed",
+      "public_sha256": "2c6a701f404e9de295103742f295c17dd851bb125a622e2860f78532cefe950d",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/submitted/stdout/O--README.md",
+      "raw_sha256": "30657809889a3f79ac9c68a63d977578815a88d753b301bfec0dbac7e3c2498f",
+      "public_sha256": "92c3c2489ca340d3e6704e0b1c9febc25e98581a33b21110ac9389dd2a0434f4",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/submitted/stdout/O--task-acceptance.md",
+      "raw_sha256": "bc05e1a1d3f6180600985fbccd4db4739d2ad22bb167942d9b93f71ea9bf9e00",
+      "public_sha256": "35ac9cde235e077ccb6db81d6d5ffd3cbee1f2584b7f8de7c584950130e0655e",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/submitted/stdout/O--task-runner.md",
+      "raw_sha256": "10396a7b7e8fb7b70553647b7204858bbe3ae5861b06b4c45f55a6b55bf4371f",
+      "public_sha256": "809a18d545bd93c7314665eff096cc1dc48ca74b222bd9d3406f710b68c266d1",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-36-С5д/submitted/stdout/O--task-sessions.md",
+      "raw_sha256": "6aaa3e1c38381ddf6cfb22ab490487631d03678a0193495521c16814dc08dcec",
+      "public_sha256": "5bf0b29b9dc1fb0dec63ca61e140780eba2430534d6bba1337abacb2c758bae9",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/frozen-comparison.json",
+      "raw_sha256": "caa1f36a006d476111025c8fc67d1d6ca3b4c578212312592dc276764259bfd5",
+      "public_sha256": "7e6095917c4c6c56c2559254d4357d0831094784fb5837a0dfe950564321ad6e",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/observed/README.md",
+      "raw_sha256": "5b58f94c64bc10753fce39d0cf9d9378de97f18192fa404761d9dd890e4b20d5",
+      "public_sha256": "a3096ccc9c084bfd7c99e30031c8d0782db2d69dd3ea6daf303004640ff0c3b2",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/observed/task-runner.md",
+      "raw_sha256": "078612fc62527b59d570a77e3e8c214a6dbd68d6f669e795f322456794fdfa38",
+      "public_sha256": "a19fcb16ef7479bc0d50bf0d621256d6207ee26799b64ec94f61cb271db6e600",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/pin/README.md",
+      "raw_sha256": "5b58f94c64bc10753fce39d0cf9d9378de97f18192fa404761d9dd890e4b20d5",
+      "public_sha256": "a3096ccc9c084bfd7c99e30031c8d0782db2d69dd3ea6daf303004640ff0c3b2",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/source-index.json",
+      "raw_sha256": "3f72efdf2e832a5b6824e7532f73b14badaae86379681b3f95bc7a76b157d133",
+      "public_sha256": "8fdd9dbe0492c94c5868ae763e2943ee27a464b71c3d8c418bb4d2baaecc3f8b",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/ADR-0002-repository-layout.md",
+      "raw_sha256": "23a7cb419488cf9a998ea47efbabff985aff137c62b5e5c763cb3f73f1b2325b",
+      "public_sha256": "bf1fbef8a5f8a9c6b339066bd143176890d4f94051d5cceacd720a0eb88005bc",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/ADR-0003-go-first-then-nova.md",
+      "raw_sha256": "4ae17f2ad4818c3d7555f52fb0bb7a166d8067899ff5aa2c5266f2fd7e5d4a19",
+      "public_sha256": "38f1bb7cc06c6610f1a18446b72089868b0d464f7a903bcd8bd67bf96ee7b83d",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/ADR-0004-agent-drivers-on-subscriptions.md",
+      "raw_sha256": "eabc04b334d6aecf45db5588cb912c7db14caa24c0fde0e280c2f85f79d02909",
+      "public_sha256": "09864b01d1a9c76fe39cd5b6204926bd985be688600506495520af1b0a393446",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/ADR-0005-own-browser-console.md",
+      "raw_sha256": "7982cb9fafc1b6a8c9059c7aa02eadb757b460382a141fe3cdf450277240e378",
+      "public_sha256": "c6ad2822cf6ded8b71166f4fb0c572e18b26f93528536f9c78e03e008dd4fe45",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/ADR-0006-public-repository.md",
+      "raw_sha256": "d850556fed553d312394126ad8242e68536155eedaa357256880e3ac048928ba",
+      "public_sha256": "7c2958d47b97bf4813c65094edf0e59b73cbec4399f1ef17b6eda76885dd21ca",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/ADR-0007-plan-in-task-epics.md",
+      "raw_sha256": "f70bc4f6c6087da5bdeef12b1ccbafd1de887f3579d6b00d48a25a40c6190319",
+      "public_sha256": "0016bf6e96c2ef17e7b41b6ae518e6c82661bbfb5c98b20aa7552a85b46faa36",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/ADR-0008-model-profiles-layer-and-window-files.md",
+      "raw_sha256": "d1363e40675c55e82280d8b58e2f1b8fd0bf140c285be5f560f3b75c65e1a640",
+      "public_sha256": "10808c486ef763720559f100760a49385c52c8ec346b167fdf9c0a00896fb9a1",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/ADR-0009-merge-precheck-without-lock.md",
+      "raw_sha256": "4a37c181bb88851cd286bb03baf82a2c1339b45f480f69419c4b798d182b7efb",
+      "public_sha256": "a311c13beb98615731895f4e834cd11967046f7adb398a9f56a2bee8f2431801",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/ADR-0010-question-answering-modes.md",
+      "raw_sha256": "d78146f409deba2f621d5dd06396e33015e7d25dd96cc41ff3072575b34f9bb6",
+      "public_sha256": "fb1badb698337e8401bab50cf40e0b4f413435a6533206fea9b766e29dc0b84d",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/decisions/ADR-0011-one-task-message-template.md",
+      "raw_sha256": "b3a0e1a4fa97f1a26374a9884532be1533f94a1249483581b7c73b05353b9f38",
+      "public_sha256": "86dd435f61e32d6a69cb14e24cf7b005ad83dc53e08e3bec6bc6da2e1c2a3fc6",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/process.md",
+      "raw_sha256": "a5bfc6892bf65694f523336cdfae2f9d23abbb734bb15f260629dedcbe08b5c9",
+      "public_sha256": "77386d645926c5dda44be3622538f82d903239b3cbe6980d07ec7ed01a3c9a2f",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/doc/canon/README.md",
+      "raw_sha256": "6964a0670a93486dc424d98d49f68b1feff98f59d14425f81ba914a60797b378",
+      "public_sha256": "3f2f737c0a20c8f369cdd37af69e97a26cda4367d99edd9cbb821afed5ca9dbf",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/inputs/target/README.md",
+      "raw_sha256": "2c7b47e2f40cb071954d874819ec7ad84958b6bcd812ced97101d9b8642d1dac",
+      "public_sha256": "00df78b2fd5e562b8a4c1037649a2719206c07bebe4d6695e0a2846ada397062",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/observations-end.json",
+      "raw_sha256": "282bd018297de9c45b9eb90a1f4518fa5fc9eb8e0740c103b25f9d0a889632ba",
+      "public_sha256": "5fef305ea0ff14330877330be534187ee38a4479b339aa1865ce16909fb687cb",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/proposed/doc/canon/decisions/ADR-0012-canon-methodology-version.md",
+      "raw_sha256": "5a4cb836a390c997cab445e91b4d1b50a2382450c54300061471dd8ea585e571",
+      "public_sha256": "5c8bf9747998b7bfca5359d04ec3e0788a47c3484f3faec0501d67f162be432b",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/proposed/doc/canon/decisions/README.md",
+      "raw_sha256": "432bb2c01d7788b238a7c9c809b919f4684601f410beb71ed8d9bd93e27d4d33",
+      "public_sha256": "f1a195e1f159a9b93ada0de59855438712da8e83016278cae9ee6d797819bc13",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/proposed/doc/canon/process.md",
+      "raw_sha256": "663e1ba1e29ef5a9eb65592f55161610377db49131c0a31fbd11b06ebc581128",
+      "public_sha256": "9fdc14f8e3aa65dccccf602f6503cf93567fe060d4519697a37edc5db4ad9122",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-38-С5д/proposed/doc/canon/README.md",
+      "raw_sha256": "78f1a5098703fd6fb54183895101af43d968ebd13f16cb3de6f7767faef36b8d",
+      "public_sha256": "69f612df0cf005f1fc43c80c825a2441c218eb57a07bee08526246b2e3c6d025",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/profile.log.prefix",
+      "raw_sha256": "6436862e3847f922c6bffcd2d80a870d25f0b319c321b445709197180f6f6dab",
+      "public_sha256": "b27acebe6fce1e2dd07a6c74b3cf99eb66fc70bd4e26d922bd8ad7f7d29622c8",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/gate-regression-3-to-5.json",
+      "raw_sha256": "c5127f11f9646f49565d957b45aaad1fb2ae28acaf26ec38ba2e7b46da0eb441",
+      "public_sha256": "43f2e180a0b8727dfcba35f6efccaa959af17b39455df3df7d7e5884e9f3ea56",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/NEWs2-fresh-5/after.json",
+      "raw_sha256": "142dd7ad6b1f939ccda6320f3e4ddd0341294ac58d959e9d25a7946f0402c846",
+      "public_sha256": "967bfd9d3629b0ff57fc53766edd19988b68966bb7ee57260c74cd5375c5f998",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/NEWs2-fresh-5/before.json",
+      "raw_sha256": "487709708c722fcefa0fdd7e1635f7fe40fd78d46367c4831578b2ce1b535800",
+      "public_sha256": "7beee07c9373dd3079e1438f3533793f5fc61e22116cffc6565ff3ef96c10fd6",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/NEWs2-fresh-5/external-after-final.json",
+      "raw_sha256": "bc15cfb299d617411a0b304824727be7cda9fc05a1dd1e2f6a9d018d5365ec62",
+      "public_sha256": "113f89565d88f0f8007cffb140b3cd4e8c14eae9cd31f08ceacb1fa3212f5cc5",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/NEWs2-fresh-5/external-after-step4.json",
+      "raw_sha256": "bc15cfb299d617411a0b304824727be7cda9fc05a1dd1e2f6a9d018d5365ec62",
+      "public_sha256": "113f89565d88f0f8007cffb140b3cd4e8c14eae9cd31f08ceacb1fa3212f5cc5",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/NEWs2-fresh-5/external-before.json",
+      "raw_sha256": "443ad8eae4e9c9c219ac1445dbb70061958fa2bad5ee7282ec67f24232567af7",
+      "public_sha256": "1e11d7660e9b1bdf2bbc4a4e1bc30ccc10fb22c3f73ccba5e77adc426d631a4e",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/NEWs2-fresh-5/prepared-input-preflight.json",
+      "raw_sha256": "7dbace2e6a164d71e8f3181604082acfc9f5e872f12c9687dfcbd99028bee86e",
+      "public_sha256": "deed0c125fef2e56ab4c3b85d24b0f566137168ffd3b32beb7f2a450632fa9c2",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/NEWs2-fresh-5/preservation-results.json",
+      "raw_sha256": "6fd631c74d76345fe3bba9029bca4df9f07545bc3fa35d580c8acbfc5a8c2e35",
+      "public_sha256": "4889e8ee26369680e295705d47f71ee2a06781c62d822851f2b5fb505d7d98b0",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/NEWs2-fresh-5/probe-results.json",
+      "raw_sha256": "9d5ef9d47e02d235ff8549cfc983e244d94ec32d95bf587411365d8ab4fc1010",
+      "public_sha256": "11626bbb8adae7cdb09caf94e2ba843157374987f41ca5b1d6d806d1e8e5b740",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/NEWs2-fresh-5/read-events.jsonl",
+      "raw_sha256": "2adef88f01654e84719299c9e8372c6853eec5d680e0221a13d1ceacd05104c7",
+      "public_sha256": "2454be8555a1a3faea22126350d312a663ecf671a7ebebade1e59b7fdaa761de",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/NEWs2-fresh-5/reviewer-profile.log",
+      "raw_sha256": "9672848d333dc06fa70b38cb4724a3c4075bc335c38394187f79c3799448aa1b",
+      "public_sha256": "d2260d12cda7371f6ef3690be171fbae3239abafd1e6ed7e28b684faa6fc3b81",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/NEWs2-fresh-5/subject-before.json",
+      "raw_sha256": "3a3c48330f80e90da41f35a87f768cf2201a79e61058f066919095094ee6b180",
+      "public_sha256": "4c4efdaad62224f74ede97d1ae83fb58c41000e905ae0aebb1b48a6955d2c5e7",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/NEWs3-1/author-profile.log",
+      "raw_sha256": "0a682661a502628012ee7e30e8f0d0fadad8f6e734cdaefb393bf7f4cf04fe41",
+      "public_sha256": "e0dd53d04bcb019d261932b861f9cedf6f7466ad525027523ae16d3a5ba4292b",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-approval-2026-10-17/assembly-manifest.json",
+      "raw_sha256": "85110cdfcc6f2946dbfdb5d780ec865e703b1bcbf0947824984c8aac2e6f933d",
+      "public_sha256": "72a5adc05a73279f00881f57be448529e73c2c539d28277cf1dffcdd2a2ab400",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-approval-2026-10-17/status-annotation.json",
+      "raw_sha256": "9b64b9c9086a364355fd5d5107858430c02a029250b0c3d046ec209c57e78341",
+      "public_sha256": "54c16f008948cdb3de13f8f81a49cd0935d8d0b9654e52f638458d6266bf3611",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/after.json",
+      "raw_sha256": "8d1f222b31a3e2a58778f4bbf1ad3f45d866d063a8db2ddb108e84d9f4b990ab",
+      "public_sha256": "5598df04b231a41ac678d6bf8c8d6875578b3fe479f5436ee8a190bbe98d49db",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/approved031-after.json",
+      "raw_sha256": "4a4d555d4dc86541fc21b297ed6f11daa69709a53d9f5ca570b4f72f8ee925d9",
+      "public_sha256": "ef33193f15d3cdf98243de8f7694e7cb180223a07c70569bddb17e6b1861ac19",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/approved031-before.json",
+      "raw_sha256": "4a4d555d4dc86541fc21b297ed6f11daa69709a53d9f5ca570b4f72f8ee925d9",
+      "public_sha256": "ef33193f15d3cdf98243de8f7694e7cb180223a07c70569bddb17e6b1861ac19",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/author-profile.log",
+      "raw_sha256": "58d86618b67f9d2015594805c219e8a2a21f58a1ccd1034ff97bf249d1eaab4b",
+      "public_sha256": "4c4a3af326ed86c077dd39744331aafc9ce422addb3492b32f687c359c0c5ad8",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/baseline.json",
+      "raw_sha256": "109875c1809aeb29a257375b00d01701df296b1afb359de7a5987c3671ef938f",
+      "public_sha256": "90b96e44f33bb0edf6e6fdba455ebc7f937a177600d03d9a6cebdc7ad9d56565",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/baseline.md",
+      "raw_sha256": "47f4f866aa172016246bff036769699663657e408f769505140ea17e9c590e30",
+      "public_sha256": "f24b69ce3cabafc6754a3144ab97d26179107c74a1708be25b012ca34f987310",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/diff-map.json",
+      "raw_sha256": "3e32df9e5e6f32432d3e35865dc3dbb55bf740770c6003fa581f096fa1696f10",
+      "public_sha256": "a014f93e140f8560fcde90c08416f8dc3867beae667a1aa72cedbd50e97f4206",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/external-after.json",
+      "raw_sha256": "0acdab287f7f0ab83a03263c67a74be3c5791130dfa0d34d4dec270495cee122",
+      "public_sha256": "f48234f4c6c9931120e37ecb40a352aa0031d0597d72f7e4643720cbc5692ba8",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/external-before.json",
+      "raw_sha256": "69e9e629d3585e1707eae5b8637e6583d66562c3f706964e78848dfe3d538b40",
+      "public_sha256": "e1b483b65026d376bda3ba7b61149fe57154254599f1dbd5929e96d796e404b1",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/external-status-notes.json",
+      "raw_sha256": "c200bda39814a2678c39f7a31b7cd633d014a732b6b5c6e8beb471f30143b938",
+      "public_sha256": "c42c230102018cdc388788b05fad95cdf1dbdc6f1542698da628700306471908",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/final-2-after.json",
+      "raw_sha256": "cedbcf93743aee8b59c4055b13e1f7a210991cc0263ba5e80acc54ef199877f2",
+      "public_sha256": "2182d217d23478901448218d29783df5e2411e10269db8b866647eb12121eb8d",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/final-2-preservation-expected.json",
+      "raw_sha256": "708439c014f527e74e5a61959adf8cad9f97bc2f70c82ca4fbd42571ae8cb728",
+      "public_sha256": "ae354b98f588855cf3ed8e6b189abf3d57f386f341001ad3e82b70f5e763c250",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/final-after.json",
+      "raw_sha256": "4420e3dfedba48c30d83c05f91e0d8c9f5b451a1df30b435fdb911577b38029f",
+      "public_sha256": "5ee32f058f9788976cebd54bfe1ad73af3e491319d258839d31ff5f7f7adb340",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/final-approved031-after.json",
+      "raw_sha256": "4a4d555d4dc86541fc21b297ed6f11daa69709a53d9f5ca570b4f72f8ee925d9",
+      "public_sha256": "ef33193f15d3cdf98243de8f7694e7cb180223a07c70569bddb17e6b1861ac19",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/final-external-after.json",
+      "raw_sha256": "0acdab287f7f0ab83a03263c67a74be3c5791130dfa0d34d4dec270495cee122",
+      "public_sha256": "f48234f4c6c9931120e37ecb40a352aa0031d0597d72f7e4643720cbc5692ba8",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/final-external-status-notes.json",
+      "raw_sha256": "c200bda39814a2678c39f7a31b7cd633d014a732b6b5c6e8beb471f30143b938",
+      "public_sha256": "c42c230102018cdc388788b05fad95cdf1dbdc6f1542698da628700306471908",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/final-preservation-expected.json",
+      "raw_sha256": "708439c014f527e74e5a61959adf8cad9f97bc2f70c82ca4fbd42571ae8cb728",
+      "public_sha256": "ae354b98f588855cf3ed8e6b189abf3d57f386f341001ad3e82b70f5e763c250",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/fingerprints.md",
+      "raw_sha256": "fd0dc7c3bce158c0ad9f6dc752cc7d8c26b41967fea418cafcb9e424614a2489",
+      "public_sha256": "3c0771b80c949bffdc1b85e2d5b690dc484a3bb47a6a147df71dea47f83e65e0",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/method-object-fingerprints.json",
+      "raw_sha256": "9a075ceb7a635bff2d0d6480a7dc522110e458f435e68f6a3393f33779cf120f",
+      "public_sha256": "74eae2611e48c2efbfa499d114f3542a4eb1712341dda5b36286e20a3fc95274",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/preservation-expected.json",
+      "raw_sha256": "708439c014f527e74e5a61959adf8cad9f97bc2f70c82ca4fbd42571ae8cb728",
+      "public_sha256": "ae354b98f588855cf3ed8e6b189abf3d57f386f341001ad3e82b70f5e763c250",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/probe-results.json",
+      "raw_sha256": "ff3746d2bae75e0e599ce4b9d9a70c996b0da867d87da9f6554bfa99bbd674a0",
+      "public_sha256": "bda7e04d378feb8e6144e962687d784101d98cdfc69773e8647df33b75d8683a",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/submitted/evidence/after.json",
+      "raw_sha256": "8d1f222b31a3e2a58778f4bbf1ad3f45d866d063a8db2ddb108e84d9f4b990ab",
+      "public_sha256": "5598df04b231a41ac678d6bf8c8d6875578b3fe479f5436ee8a190bbe98d49db",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/submitted/evidence/approved031-after.json",
+      "raw_sha256": "4a4d555d4dc86541fc21b297ed6f11daa69709a53d9f5ca570b4f72f8ee925d9",
+      "public_sha256": "ef33193f15d3cdf98243de8f7694e7cb180223a07c70569bddb17e6b1861ac19",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/submitted/evidence/approved031-before.json",
+      "raw_sha256": "4a4d555d4dc86541fc21b297ed6f11daa69709a53d9f5ca570b4f72f8ee925d9",
+      "public_sha256": "ef33193f15d3cdf98243de8f7694e7cb180223a07c70569bddb17e6b1861ac19",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/submitted/evidence/baseline.json",
+      "raw_sha256": "109875c1809aeb29a257375b00d01701df296b1afb359de7a5987c3671ef938f",
+      "public_sha256": "90b96e44f33bb0edf6e6fdba455ebc7f937a177600d03d9a6cebdc7ad9d56565",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/submitted/evidence/baseline.md",
+      "raw_sha256": "47f4f866aa172016246bff036769699663657e408f769505140ea17e9c590e30",
+      "public_sha256": "ea58d55cab3c3e4cdba320bf9c44ba0724916d80b4e00ae12285ace0b59586a6",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/submitted/evidence/diff-map.json",
+      "raw_sha256": "3e32df9e5e6f32432d3e35865dc3dbb55bf740770c6003fa581f096fa1696f10",
+      "public_sha256": "a014f93e140f8560fcde90c08416f8dc3867beae667a1aa72cedbd50e97f4206",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/submitted/evidence/external-after.json",
+      "raw_sha256": "0acdab287f7f0ab83a03263c67a74be3c5791130dfa0d34d4dec270495cee122",
+      "public_sha256": "f48234f4c6c9931120e37ecb40a352aa0031d0597d72f7e4643720cbc5692ba8",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/submitted/evidence/external-before.json",
+      "raw_sha256": "69e9e629d3585e1707eae5b8637e6583d66562c3f706964e78848dfe3d538b40",
+      "public_sha256": "e1b483b65026d376bda3ba7b61149fe57154254599f1dbd5929e96d796e404b1",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/submitted/evidence/external-status-notes.json",
+      "raw_sha256": "c200bda39814a2678c39f7a31b7cd633d014a732b6b5c6e8beb471f30143b938",
+      "public_sha256": "c42c230102018cdc388788b05fad95cdf1dbdc6f1542698da628700306471908",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/submitted/evidence/final-2-after.json",
+      "raw_sha256": "cedbcf93743aee8b59c4055b13e1f7a210991cc0263ba5e80acc54ef199877f2",
+      "public_sha256": "2182d217d23478901448218d29783df5e2411e10269db8b866647eb12121eb8d",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/submitted/evidence/final-2-preservation-expected.json",
+      "raw_sha256": "708439c014f527e74e5a61959adf8cad9f97bc2f70c82ca4fbd42571ae8cb728",
+      "public_sha256": "ae354b98f588855cf3ed8e6b189abf3d57f386f341001ad3e82b70f5e763c250",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/submitted/evidence/final-after.json",
+      "raw_sha256": "4420e3dfedba48c30d83c05f91e0d8c9f5b451a1df30b435fdb911577b38029f",
+      "public_sha256": "5ee32f058f9788976cebd54bfe1ad73af3e491319d258839d31ff5f7f7adb340",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/submitted/evidence/final-approved031-after.json",
+      "raw_sha256": "4a4d555d4dc86541fc21b297ed6f11daa69709a53d9f5ca570b4f72f8ee925d9",
+      "public_sha256": "ef33193f15d3cdf98243de8f7694e7cb180223a07c70569bddb17e6b1861ac19",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/submitted/evidence/final-external-after.json",
+      "raw_sha256": "0acdab287f7f0ab83a03263c67a74be3c5791130dfa0d34d4dec270495cee122",
+      "public_sha256": "f48234f4c6c9931120e37ecb40a352aa0031d0597d72f7e4643720cbc5692ba8",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/submitted/evidence/final-external-status-notes.json",
+      "raw_sha256": "c200bda39814a2678c39f7a31b7cd633d014a732b6b5c6e8beb471f30143b938",
+      "public_sha256": "c42c230102018cdc388788b05fad95cdf1dbdc6f1542698da628700306471908",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/submitted/evidence/final-preservation-expected.json",
+      "raw_sha256": "708439c014f527e74e5a61959adf8cad9f97bc2f70c82ca4fbd42571ae8cb728",
+      "public_sha256": "ae354b98f588855cf3ed8e6b189abf3d57f386f341001ad3e82b70f5e763c250",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/submitted/evidence/fingerprints.md",
+      "raw_sha256": "fd0dc7c3bce158c0ad9f6dc752cc7d8c26b41967fea418cafcb9e424614a2489",
+      "public_sha256": "f29e2997a361a40488422a332865c0b07e98f0ff7d3ee6051d8d25a8b995828b",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/submitted/evidence/method-object-fingerprints.json",
+      "raw_sha256": "9a075ceb7a635bff2d0d6480a7dc522110e458f435e68f6a3393f33779cf120f",
+      "public_sha256": "74eae2611e48c2efbfa499d114f3542a4eb1712341dda5b36286e20a3fc95274",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/submitted/evidence/preservation-expected.json",
+      "raw_sha256": "708439c014f527e74e5a61959adf8cad9f97bc2f70c82ca4fbd42571ae8cb728",
+      "public_sha256": "ae354b98f588855cf3ed8e6b189abf3d57f386f341001ad3e82b70f5e763c250",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/submitted/evidence/probe-results.json",
+      "raw_sha256": "ff3746d2bae75e0e599ce4b9d9a70c996b0da867d87da9f6554bfa99bbd674a0",
+      "public_sha256": "bda7e04d378feb8e6144e962687d784101d98cdfc69773e8647df33b75d8683a",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-fixes-1/submitted/manifest.json",
+      "raw_sha256": "ed2db862daf8a29880af59dd33099192e7b7a2ebb754766691ff4bdb25a8267d",
+      "public_sha256": "79e968e5427f9ecba7869188399f119ed2349cf3b7413e77bc0554167d0cd77b",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/after.json",
+      "raw_sha256": "f1cd8f714888ea9ce3904a0834982dc6fefdf7ae1e10504198e25394617bc2e0",
+      "public_sha256": "618f634134dd50eb7fc4bb0ed3d66fe78f829b82f630132465f7d6d60ba41c55",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/author-profile.log",
+      "raw_sha256": "b5e7bd123b3a8429db5b4b20fcc5969184be29ba610b238ce0d3e5dff00b2f69",
+      "public_sha256": "9df33da14985dd5e4a429754b271dcdf83d6c978e7d76836697d66f9f6442c77",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/before.json",
+      "raw_sha256": "66255df4c3a445b79e46566a4f906d3fd4457f0940bc58e83eff8a6035849726",
+      "public_sha256": "e258a80d5697442953882484b344e28a046dabe064aa5c6370dcd3de690e6356",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/final-check.json",
+      "raw_sha256": "bfa6bf23a63add0432e644de6548536b924ba54d9d0f41975ba63a90bb7ae214",
+      "public_sha256": "d659351238d9bb2feb0280857ab7ec283477f4b9e62197d3bb7a3346d2596477",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/git-before.json",
+      "raw_sha256": "e0b4a308098a3774a4394a78d108ed4b3230828395cebc82a790b692839f8fea",
+      "public_sha256": "cc36be5c8f093ef4b6153e02924ac0932594488d9973d463ac1b5694c743d597",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/input-fingerprints.json",
+      "raw_sha256": "c69f5cfa04800a8465a4dd7481ef1845e8960b4520fd5c4a1bff4678ae16c335",
+      "public_sha256": "03ac5fb8e61cc4eba4ea9e929f00829b3dfb884a0c70820badc0fffd01dce56e",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/probe-before.json",
+      "raw_sha256": "4a3f194bef7547baaf603af2fe767d142d83bbcef880f8dc552b3fe05573d367",
+      "public_sha256": "f5a85256320be601f539ac805c386200533081b584ce6f5e0fff214fb82a6df5",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/probe-inputs/bad-shell.md",
+      "raw_sha256": "fe994db740ad87ef6946b5b4711b8e89793a2960416f125da99483ed7eddd2c0",
+      "public_sha256": "c647388960073859ff7b52ac26b7945c99910f0bfd1c4da63434721b4b6ba4e8",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/probe-inputs/no-base.md",
+      "raw_sha256": "dcf9870b540b8d580ccd2db3c44848a71109c43a030b09ea0b864f983fb81aca",
+      "public_sha256": "ca455778a92585414e2acfe673e44f5d7ab74f5353f4fcfb94db6df40306b405",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/probe-inputs/no-branch.md",
+      "raw_sha256": "795a55a8f738fea353f8659c0dc9ca2001135e020f102063396ce04b9ebbbb52",
+      "public_sha256": "8d4706beb1cb8f8b24f10deacd5de9b88adb2c1c377a9ff106477b4a053b9ae7",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/probe-inputs/occupied-E/before.json",
+      "raw_sha256": "919866ba644fd46ba33a5cc495b9151ca6514456926c81301dc4702b5f83fad2",
+      "public_sha256": "caaf7bcdf92b344751d0857dd055c41799ae03aab227dc835484c739f427b59d",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/probe-inputs/old/before.json",
+      "raw_sha256": "bd52e2a94073d06071062c44efdeb13f7887d4c3019a5cc7a6e11c861cc7a852",
+      "public_sha256": "e15cebab9a6a3194330f0639012e251a9e80ad7ed1afd966cf0da48b0a1d7d5c",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/probe-inputs/old/expected.json",
+      "raw_sha256": "388d316c862efe4206ab2d3153b0b1eb61b5d47cf411ee62557cc612a08d7167",
+      "public_sha256": "47bdff087c347b354a47fe545540f9992fbd460fbf429882ab1cdf308f62b0b3",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/probe-inputs/old/notes.md",
+      "raw_sha256": "bf627979969358f005ecb1aef3461d02580f635fa53598ba818ef8dbadfb4f03",
+      "public_sha256": "767c2aa0f02fd70b4b921914be064ca437a10f4e4860723b6d7570697cdc7e1e",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/probe-inputs/original.md",
+      "raw_sha256": "de5531742d2b51e237b71f3389e1708fc89c7684c4d65905698f18b1d6e0fd16",
+      "public_sha256": "a4fcdbf1341723eade6f07ce63c3fc892e228358f275aa1bd8545281dc7c51b8",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/probe-results.json",
+      "raw_sha256": "3ae5264f77dbfbfc5279b8a758039c931f1346661071c8ce9e76cbe471a059e3",
+      "public_sha256": "07bbc63907e5c958345e1326f3d7b5d942e287372002632b89726db1c05fd3ce",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/probe.stdout.txt",
+      "raw_sha256": "24447c0090a6f972dcd5721d5eec53ae6ec53cd6c4f39f27c20a53b354feae4d",
+      "public_sha256": "3d2edb22fc84a6ae2b3dcc34cb13618d3b3b882074a6ee51439ab3eb58a03c4d",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/source-comparison.json",
+      "raw_sha256": "ad0d1416870a8eebee8522dc2bb63d1a86e63ee7b27d1d8bb13826247d723a6e",
+      "public_sha256": "84222bfcae389b615656e61f374c4dfa4cd578fea6804cd19e9e0317936bb70b",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/source-reads.jsonl",
+      "raw_sha256": "7ce0b47b8c67fb16acfd540629474fc13b2e6e3c8d25f045617d7cefe5a96204",
+      "public_sha256": "b98ba0ca2b6fd31c8cb54b142e14408bfbc4b313aeae20ec6e100e8bc2e441ed",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/submitted/manifest.json",
+      "raw_sha256": "274271f6f72176db461eee6f8a9395a16ddeb4bb8fe18c19083e39b4f1dd0a89",
+      "public_sha256": "b7f9bfee78fa686f7534dad44b45324dd6f78f2ed8913efdac619ee6acd37458",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/submitted/plan-scope-1/after.json",
+      "raw_sha256": "f1cd8f714888ea9ce3904a0834982dc6fefdf7ae1e10504198e25394617bc2e0",
+      "public_sha256": "618f634134dd50eb7fc4bb0ed3d66fe78f829b82f630132465f7d6d60ba41c55",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/submitted/plan-scope-1/before.json",
+      "raw_sha256": "66255df4c3a445b79e46566a4f906d3fd4457f0940bc58e83eff8a6035849726",
+      "public_sha256": "e258a80d5697442953882484b344e28a046dabe064aa5c6370dcd3de690e6356",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/submitted/plan-scope-1/final-check.json",
+      "raw_sha256": "bfa6bf23a63add0432e644de6548536b924ba54d9d0f41975ba63a90bb7ae214",
+      "public_sha256": "d659351238d9bb2feb0280857ab7ec283477f4b9e62197d3bb7a3346d2596477",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/submitted/plan-scope-1/git-before.json",
+      "raw_sha256": "e0b4a308098a3774a4394a78d108ed4b3230828395cebc82a790b692839f8fea",
+      "public_sha256": "cc36be5c8f093ef4b6153e02924ac0932594488d9973d463ac1b5694c743d597",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/submitted/plan-scope-1/input-fingerprints.json",
+      "raw_sha256": "c69f5cfa04800a8465a4dd7481ef1845e8960b4520fd5c4a1bff4678ae16c335",
+      "public_sha256": "03ac5fb8e61cc4eba4ea9e929f00829b3dfb884a0c70820badc0fffd01dce56e",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/submitted/plan-scope-1/probe-before.json",
+      "raw_sha256": "4a3f194bef7547baaf603af2fe767d142d83bbcef880f8dc552b3fe05573d367",
+      "public_sha256": "f5a85256320be601f539ac805c386200533081b584ce6f5e0fff214fb82a6df5",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/submitted/plan-scope-1/probe-inputs/bad-shell.md",
+      "raw_sha256": "fe994db740ad87ef6946b5b4711b8e89793a2960416f125da99483ed7eddd2c0",
+      "public_sha256": "5aa09a57508d08cafac3e5a8e18f98c019adcc2cf41d85008c90664f470061e1",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/submitted/plan-scope-1/probe-inputs/no-base.md",
+      "raw_sha256": "dcf9870b540b8d580ccd2db3c44848a71109c43a030b09ea0b864f983fb81aca",
+      "public_sha256": "45d434e3c4baa99b350e7df231b015644032a03c602e1bcace361db33b76bf88",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/submitted/plan-scope-1/probe-inputs/no-branch.md",
+      "raw_sha256": "795a55a8f738fea353f8659c0dc9ca2001135e020f102063396ce04b9ebbbb52",
+      "public_sha256": "123f4de919c6a164c65e109ed18a7444f24d247439e995698ee74760d6cf63dd",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/submitted/plan-scope-1/probe-inputs/occupied-E/before.json",
+      "raw_sha256": "919866ba644fd46ba33a5cc495b9151ca6514456926c81301dc4702b5f83fad2",
+      "public_sha256": "caaf7bcdf92b344751d0857dd055c41799ae03aab227dc835484c739f427b59d",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/submitted/plan-scope-1/probe-inputs/old/before.json",
+      "raw_sha256": "bd52e2a94073d06071062c44efdeb13f7887d4c3019a5cc7a6e11c861cc7a852",
+      "public_sha256": "e15cebab9a6a3194330f0639012e251a9e80ad7ed1afd966cf0da48b0a1d7d5c",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/submitted/plan-scope-1/probe-inputs/old/expected.json",
+      "raw_sha256": "388d316c862efe4206ab2d3153b0b1eb61b5d47cf411ee62557cc612a08d7167",
+      "public_sha256": "47bdff087c347b354a47fe545540f9992fbd460fbf429882ab1cdf308f62b0b3",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/submitted/plan-scope-1/probe-inputs/old/notes.md",
+      "raw_sha256": "bf627979969358f005ecb1aef3461d02580f635fa53598ba818ef8dbadfb4f03",
+      "public_sha256": "42cfb45f025d1f2632b4951c490279abb68f71a481fb6d48412f27e28a4ae68e",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/submitted/plan-scope-1/probe-inputs/original.md",
+      "raw_sha256": "de5531742d2b51e237b71f3389e1708fc89c7684c4d65905698f18b1d6e0fd16",
+      "public_sha256": "d8a2cddcb411e172bcd4c08e4f462b09c3f890c949ecfedfb31e1beebb768a14",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/submitted/plan-scope-1/probe-results.json",
+      "raw_sha256": "3ae5264f77dbfbfc5279b8a758039c931f1346661071c8ce9e76cbe471a059e3",
+      "public_sha256": "07bbc63907e5c958345e1326f3d7b5d942e287372002632b89726db1c05fd3ce",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/submitted/plan-scope-1/probe.stdout.txt",
+      "raw_sha256": "24447c0090a6f972dcd5721d5eec53ae6ec53cd6c4f39f27c20a53b354feae4d",
+      "public_sha256": "3d2edb22fc84a6ae2b3dcc34cb13618d3b3b882074a6ee51439ab3eb58a03c4d",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/submitted/plan-scope-1/source-comparison.json",
+      "raw_sha256": "ad0d1416870a8eebee8522dc2bb63d1a86e63ee7b27d1d8bb13826247d723a6e",
+      "public_sha256": "84222bfcae389b615656e61f374c4dfa4cd578fea6804cd19e9e0317936bb70b",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/submitted/plan-scope-1/source-reads.jsonl",
+      "raw_sha256": "7ce0b47b8c67fb16acfd540629474fc13b2e6e3c8d25f045617d7cefe5a96204",
+      "public_sha256": "b98ba0ca2b6fd31c8cb54b142e14408bfbc4b313aeae20ec6e100e8bc2e441ed",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/submitted/plan-scope-1/upstream.json",
+      "raw_sha256": "9c27e58b7611739eb35a7421f4ac0e858cdeb023f43175b301200144a99a853f",
+      "public_sha256": "da4401991dbbaf839a0efd9e3e7b29c7775824a18820d9d4193f6b928b5b34e0",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1/upstream.json",
+      "raw_sha256": "9c27e58b7611739eb35a7421f4ac0e858cdeb023f43175b301200144a99a853f",
+      "public_sha256": "da4401991dbbaf839a0efd9e3e7b29c7775824a18820d9d4193f6b928b5b34e0",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1-integrator-replay/probe-before.json",
+      "raw_sha256": "4a3f194bef7547baaf603af2fe767d142d83bbcef880f8dc552b3fe05573d367",
+      "public_sha256": "f5a85256320be601f539ac805c386200533081b584ce6f5e0fff214fb82a6df5",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1-integrator-replay/probe-results.json",
+      "raw_sha256": "3ae5264f77dbfbfc5279b8a758039c931f1346661071c8ce9e76cbe471a059e3",
+      "public_sha256": "07bbc63907e5c958345e1326f3d7b5d942e287372002632b89726db1c05fd3ce",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/plan-scope-1-integrator-replay/probe.stdout.txt",
+      "raw_sha256": "24447c0090a6f972dcd5721d5eec53ae6ec53cd6c4f39f27c20a53b354feae4d",
+      "public_sha256": "3d2edb22fc84a6ae2b3dcc34cb13618d3b3b882074a6ee51439ab3eb58a03c4d",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/profile.log",
+      "raw_sha256": "8ca463ea8fb9b44c6a96c62243799fa7911b74363d5b269eeeed99a0e8b5eebf",
+      "public_sha256": "7ec75778cb4a23b7b46dd25e521a4063a5063d11e3bb0a77b1baaa357ad2597f",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-1/analysis.md",
+      "raw_sha256": "87ff961cfbe64e3c62c70cb2a9389718995048e4e858458450440dd27db80689",
+      "public_sha256": "5cfa5cf2860970ffcc676df84a83d602b494da4d071bb1344396d8ec6e68f2a6",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-1/profile.log",
+      "raw_sha256": "d87a0e1b7ec3d6c8663e45ea790c22e7e11bfebf6fb1666a153bc1a41479673b",
+      "public_sha256": "78423a656606cde407c652ef30bc35a5c157f19191706afa55bd6662558bad89",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-1/spec.md",
+      "raw_sha256": "ffc75fab4beb496e89d2b7e1720ee58a0152cb196395bd8c1e322cc205057cce",
+      "public_sha256": "930b209e96ab90a1ec06f9138e220139683966523568d7264ce3f220e024c26b",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-2/analysis.md",
+      "raw_sha256": "e7c1b5a1e5ecffb17656d4fce1c92d4eb7e84e0b977de2a9daf6fe54fc122392",
+      "public_sha256": "d7dd1bfbef577b962cf5d8a125f4215fb396a9ed378ab2af116ca9e6abb3c2f6",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-2/profile.log",
+      "raw_sha256": "d4cebf99e35402bb6cf7f453ac8e2abd9305ec6ac973815b3cc71c4428552e95",
+      "public_sha256": "15ddcfd0d3e0be2425244316593f949d07800607410251264e39146f34cec70d",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-2/spec.md",
+      "raw_sha256": "404a2f857f330daa0ea59f2074c2e12a1483052cce5aa896552a53b62dad1c78",
+      "public_sha256": "d96a360242f66a82e0db56575e23b1ca506046fb8382974368c909d0a980bf4e",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-3/inputs-at-submit/analysis.md",
+      "raw_sha256": "56375053b9cb580f48796ba2234f9747741ee9963a20b5854ddee6bd0aff0734",
+      "public_sha256": "777c174a793f2aa499b8124da24a2efdf1b130124a4ff9daf9a3ffcac8a11e2b",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-3/inputs-at-submit/profile.log",
+      "raw_sha256": "3ceb321c52d1518fe95b707227a3ec1354ede4f1e8b3e649e14108e7906063f6",
+      "public_sha256": "eb55706948614fb68dc8f16d386a0a9dc82e0d08c646faf85d34dd8228c8ff8d",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-3/inputs-at-submit/spec.md",
+      "raw_sha256": "a9156e7135f4abbf8d46d585432a2ce3ae6942d7a6f73da3c96f007dcb846b64",
+      "public_sha256": "bc2c968107b40fce51183f52da9396553c8a4255236f57a5df8631f31e64a248",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/external-after.json",
+      "raw_sha256": "e193d4b94ec2fa29e2fb382c76db2543716b0cf0d348c656addce4c39d29abc5",
+      "public_sha256": "2a976cca3aefa2586c858fdaeae7b4034b95d450fcc5f5e865c587ca901e4140",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/external-before.json",
+      "raw_sha256": "e193d4b94ec2fa29e2fb382c76db2543716b0cf0d348c656addce4c39d29abc5",
+      "public_sha256": "2a976cca3aefa2586c858fdaeae7b4034b95d450fcc5f5e865c587ca901e4140",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/protected-after.json",
+      "raw_sha256": "3fc7fcc7cb7ff950041b079101fab3c4abce39348fbc1489235a5a485b7df4c0",
+      "public_sha256": "4bcfe67846536f7e7fedc795f5a51e675a7696027a002f326d2187f42266714f",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/protected-before.json",
+      "raw_sha256": "889c56dcaa7abd68fdaf8b2724a47dafeb1e6e2c854dd80f8f466d5e2681b2da",
+      "public_sha256": "6e03b95c92692284209137de79aed1fca3917fbeaf5da1fba3a9afaa4b79a876",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-4/submitted/profile.log",
+      "raw_sha256": "2166c12da493efecb34e4be2ec3dabd0fda8ad5db28138bc442c5a769aad1db2",
+      "public_sha256": "5dba1f20f7af19b0901f91215c0ed27e1a282455a01e99779b5caca7e2cf4773",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/afterfiles.json",
+      "raw_sha256": "379ba7b9264381f30ffcd3569191123e8af49c4af93da08cd4ab97c7922f0b68",
+      "public_sha256": "c88c1a4f3b4070581833e25b3bf7e4df52fcfac691a95967524b5a488cad5424",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/anchor-change-ledger.json",
+      "raw_sha256": "edab1c95f636c2b15038f1d016984b54910cba10248a373c0210a4ca198d7bea",
+      "public_sha256": "6609fbf0a588466c4c94cb0fe99394e64730a101b8a0c0c7132c56c995533ada",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/author-profile.log",
+      "raw_sha256": "65fa3c24aba4d0dfb0813b2421aacf6624d7adffa0a87155aa30a422b7d55b20",
+      "public_sha256": "c4edf99d6c02f3158aabd7e54d24616afda3715c498ba33ec8ad25807f41eac1",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/baseline-supplement.json",
+      "raw_sha256": "e96dfb591bb9343ae7a2eecae5a1e9754ea9bd3047fdb0d293d4ef386578ebb2",
+      "public_sha256": "a66efd55c847a4be94077a4e27028d0e2842f69b9c7dda7692dd1e31611bd5b8",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/baselinefiles.json",
+      "raw_sha256": "e54fd1432b00857417620701e9d3f6d615113fdb768f4c56d13c04bc87c119f8",
+      "public_sha256": "fb82f65d088021555b28dfdb9c57f8d732862d4695e5db373186eee971991c2a",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/external-after.json",
+      "raw_sha256": "f2767c5b060fd0d06c7f67c9e5702f9d3ff533c3507cfbd06dcb657079936dd8",
+      "public_sha256": "c05acb8095b87c610ee6443eb59badd4de8f63b76ffcbaba7c48fac200be5be8",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/external-at-final.json",
+      "raw_sha256": "f2767c5b060fd0d06c7f67c9e5702f9d3ff533c3507cfbd06dcb657079936dd8",
+      "public_sha256": "c05acb8095b87c610ee6443eb59badd4de8f63b76ffcbaba7c48fac200be5be8",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/external-before.json",
+      "raw_sha256": "f2767c5b060fd0d06c7f67c9e5702f9d3ff533c3507cfbd06dcb657079936dd8",
+      "public_sha256": "c05acb8095b87c610ee6443eb59badd4de8f63b76ffcbaba7c48fac200be5be8",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/frozen-r3-to-current.diff",
+      "raw_sha256": "cf20944902116903e08026ec2b311f43ba2a5459075c077b7b11e073da7f1514",
+      "public_sha256": "8794394674aedec7be1b5273817aba4841e6bf855688de3158aa6f7e21b5d407",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/integrator-before-import/spec.md",
+      "raw_sha256": "2200cac5f406a9b4193c64a910f8de7ac297a7884331f710b4ef4b0ff1f37a1c",
+      "public_sha256": "0ff1fe97758693be9a76741723682dff6402e0a4cebc3a02c4cbd7ec5814013d",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/local-method-observation.json",
+      "raw_sha256": "f501240f23f374464f98d0c23bc3c72a63d34dacc62cbe99ef3ef549f2ba8f9b",
+      "public_sha256": "43ba71d26bc85da0a331e217d183e67b09d7ad37c86cd8e08e7d5e0e3a2341be",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/norm-route-destination-map.json",
+      "raw_sha256": "b0c99be0975b04c82965f3c88ab39b357f68ca42439ea742d7a12490dacc917c",
+      "public_sha256": "1478fc43446d57c1fb7d684f98acbe634c7d49d9745386950811988ef06fbd02",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/primary-at-submit.json",
+      "raw_sha256": "4866872156300200bede33fd5c5b5902c0a9791ce44a3457eb93a98ccddc257b",
+      "public_sha256": "8c476a4c6ad9e3d227da4efd91eda0c2f76192994f872ea381ddfddbc8cb4ebd",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/primary-fingerprints.json",
+      "raw_sha256": "4866872156300200bede33fd5c5b5902c0a9791ce44a3457eb93a98ccddc257b",
+      "public_sha256": "8c476a4c6ad9e3d227da4efd91eda0c2f76192994f872ea381ddfddbc8cb4ebd",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-coverage-final.stdout.txt",
+      "raw_sha256": "01558d9ec737829f812c44b9e1d9cfcbac9bb10d89093e6bd2c13e13fc06541e",
+      "public_sha256": "4529eecc5c19854de87981d4ed74adc36c15d8480859c56ac33c0e464fb9613f",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-coverage-final.txt",
+      "raw_sha256": "e2158ee59b90d117ac00323eaf3cfe717937dcfbe30aac0c57b57f85f5542018",
+      "public_sha256": "f2544ce6031db5234f5e1f6f9199b4b47396f36c006beace61e102e23023d633",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-coverage-submit.stdout.txt",
+      "raw_sha256": "4bc4d60e56572eb6517bc1991a5aa7eaa601b1649848a757b7ffaf9c6e2bdf29",
+      "public_sha256": "e8a7bec0bb8613ff6592b276091eb41ab018ee2ef3addb876e2bb34eaa506597",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-coverage-submit.txt",
+      "raw_sha256": "a09f5f9813ec2df329d30195c4e2b22ba7f03c94d85b87ea31fbd4d6a9cc536f",
+      "public_sha256": "c2b9d8e09fae1d7cee3f6099619d3c5413369ce87429941e6c3fd6dd9b16bf5a",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-coverage.txt",
+      "raw_sha256": "e2158ee59b90d117ac00323eaf3cfe717937dcfbe30aac0c57b57f85f5542018",
+      "public_sha256": "f2544ce6031db5234f5e1f6f9199b4b47396f36c006beace61e102e23023d633",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-decisions-final.stdout.txt",
+      "raw_sha256": "796a73bac89958856ed27234584c47cd7ba19cda145de0fe3061860039bb477a",
+      "public_sha256": "8424fa180c19555608da4a00ba7ce8bc7c2d7850cb57b2578c7e44f187a0f657",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-decisions-final.txt",
+      "raw_sha256": "d982487c4b84d6256c37ce5e6fca7c84b6e5bb3dd9b61d13edcfb78a6fc2b929",
+      "public_sha256": "7d539221d69dc463bbe0578c2e2d8d55b564cc503c303399b2ef495d2cc5b0d7",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-decisions.txt",
+      "raw_sha256": "d982487c4b84d6256c37ce5e6fca7c84b6e5bb3dd9b61d13edcfb78a6fc2b929",
+      "public_sha256": "7d539221d69dc463bbe0578c2e2d8d55b564cc503c303399b2ef495d2cc5b0d7",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-final-submit.stdout.txt",
+      "raw_sha256": "0306c69c910501488c38e0a3ee3e4fb5ca4636eea060952309806ac109c94f6e",
+      "public_sha256": "ed3006380cbbfe93d1bb4068be6fdaa81e3eb8a93ad60cc094aef8123c65a7ce",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-final-submit.txt",
+      "raw_sha256": "99e024a468cac1d08e931b8418850dcca763f8a43d66cd1e076af352ac27ce13",
+      "public_sha256": "6e139c95cc9c832a7ab8235c8f90cb322eea96429bc4082ad9d21f966b0ba5e1",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-final.stdout.txt",
+      "raw_sha256": "f235ab213a1508227f2ce306847b7820db73356d4d31861b49093a1120cc5fe8",
+      "public_sha256": "f5b671ace24aa1feff71159f835ee036c22ce55324ff6262d4895dc6c566f8a0",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-final.txt",
+      "raw_sha256": "94efb83b887fdce1ce6b9623bb95847968c6ee7bdba0746f5e4d3f2fc34ab392",
+      "public_sha256": "aa50cf37c37f9a13ebfda4c502c7953212cf92d4e494ba1484e09856376de257",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-preservation-final.stdout.txt",
+      "raw_sha256": "8a2e610d3550666cc1c930d4bde083aa212ef706a6f216ead955151aaff4b0a2",
+      "public_sha256": "eb8f07cf48f2054e9defeefd48672e9626f68a7adf7f71ff3d365e7df8833221",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-preservation-final.txt",
+      "raw_sha256": "ff8cd2be3543f172c156f527d9a35d9ade07a19b744ceb90c4bf8000404e94bd",
+      "public_sha256": "33af419620e0019970449770bc57de5abef01e8d2a938cc1bfc969dafba8da2f",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-privacy-before-submit.stdout.txt",
+      "raw_sha256": "be2f8dd4f347bc872a17f83e019a043d366c639f731bb9b6e59bff7d3f5a4f3b",
+      "public_sha256": "9d1b4da8d72cb5029eee6fa0a7a0b94f72681ca9ef0ac105cf6526ab6be78c17",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-privacy-before-submit.txt",
+      "raw_sha256": "e26c0f671be7dadc62b56d6247ec040dccf435c49310b47156a777c97cbb958f",
+      "public_sha256": "ef66326aa162e52583734f15491b92c045e39dd4d8cf2d9bf98c832a93a6183d",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-privacy-final.stdout.txt",
+      "raw_sha256": "80e5637109fceafa86013873163620b1ac7d92327a2f37e1d62e58ce6500204a",
+      "public_sha256": "0f1a6b1d3c6037631ca99777bdb341b671eb8c6972ec7a2a8c77415cc9181f5c",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-privacy-final.txt",
+      "raw_sha256": "70fbfd7c00d453eaa4ce0fe9c970c9b4efd26843aa7f6ccfb12e53e394ed8ca7",
+      "public_sha256": "3a0e06b76f692908f681b4fb23bdce2aba86c7ff389ed2304bf4541840560a47",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-raw-final.stdout.txt",
+      "raw_sha256": "e7015096043f37febe69a6776b95fc22bbb9f6556adff541e71ef075d77af686",
+      "public_sha256": "5b9dca33befc8d041e36374e180fe5f7f907078cf865a33a4949705efb9d5b03",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-raw-final.txt",
+      "raw_sha256": "822987c5bf921c2f8e9e6035feeda8ab97226c4539d5a974abef27878917abc0",
+      "public_sha256": "aaef856ac7140195327e0ab1326d188c4b5846e62b3bf15a592289e34ec53ef2",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-raw.txt",
+      "raw_sha256": "822987c5bf921c2f8e9e6035feeda8ab97226c4539d5a974abef27878917abc0",
+      "public_sha256": "aaef856ac7140195327e0ab1326d188c4b5846e62b3bf15a592289e34ec53ef2",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-regression-final.stdout.txt",
+      "raw_sha256": "945a87be4d81a7ad57d6f67897c688718a803fc5fd30284080dadefa2758726c",
+      "public_sha256": "68bb1308eeda00bfe6ec7f449286009890dc385405648040b500f44e8347f2d7",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-regression-final.txt",
+      "raw_sha256": "7315729868b52fcadf1ccc0d6dcce2fea65d115e973c93f51023425d5a35b332",
+      "public_sha256": "7140575e675b1c738fa61bec8754cf1aab3496fc86e36ee6a3dbaae5984448b1",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-regression.txt",
+      "raw_sha256": "61800e1f2546491b8d27ff8378605eba7681248e14b597b95936d90f8cc0e2d6",
+      "public_sha256": "8abe49ca36ec40a274e9e4a70245f8d1073972628d518a873288b83d6d37f4b3",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-semantics-extra.txt",
+      "raw_sha256": "53166db34efedfa45861faca9dde9dff8554da50b6b4bf8a6c70efe108b462a2",
+      "public_sha256": "d8bd110446834b35902e2745c5bf0af0d244b89f70a7ccd2d64ee401bfb7a9d8",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-semantics-final.stdout.txt",
+      "raw_sha256": "0f6cf409baf746797d77c49893d8b2c79c1639d1f97d9565daca086f704b4b65",
+      "public_sha256": "73e15881ee745f1adc25466c5a4fb791be7f774a2a752ae5e2e09be9ed2598cc",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-semantics-final.txt",
+      "raw_sha256": "c65f6578913b23f62116dde3d62470d5a8c4badeb1450e72e9842a38969df2ca",
+      "public_sha256": "38137908df46408ad2b47c7edbf0f51eaeced37d16762de40e9e219f9980c54f",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/probe-semantics.txt",
+      "raw_sha256": "c65f6578913b23f62116dde3d62470d5a8c4badeb1450e72e9842a38969df2ca",
+      "public_sha256": "38137908df46408ad2b47c7edbf0f51eaeced37d16762de40e9e219f9980c54f",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/route-nonspace-diff.json",
+      "raw_sha256": "628e6b215a4f4b128105d18b9750e6007ab5f52588be65eb4d65715449f37b0d",
+      "public_sha256": "774d1962992a858493bb1104949a05b1ec6c26c03580efa485fbd1c9446fcad3",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/source-destination-map.json",
+      "raw_sha256": "c69c4fbd64bd2e59d1a3391bf3ef3d32e55fb4a4dddd1ffe52a4690227f2c5a5",
+      "public_sha256": "3be3fcb98713c959e9d87128b5d1fab520b64ebef3808a540a1338fcbc7a613d",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/spacing-proposed.json",
+      "raw_sha256": "836cc706c5eadcc885e517b4c135066ec958589e22cacfc021a596067333830a",
+      "public_sha256": "2691b1b420e09676b080ebde60d5458c2104d0fc42cb2b4020a78df0cd7d5598",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s1p-5/submitted-sha256.json",
+      "raw_sha256": "b361e0bb37df9498b08a967918be1ede53ea7c68bcd6709a7ba82373241474d0",
+      "public_sha256": "a14d41d95de66c099159f0b7ed0789f2c96c3e2a95051c9b15356c6170dbed26",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-6/prepared-input-preflight.json",
+      "raw_sha256": "9c1d72ca2f8f927328291cdf2b7b5517a4d9041a5e22855b3a6225c98bc9eef2",
+      "public_sha256": "4eb2055214e73423efab1e75de8d545bcf9dab11612ac0185784c7ef003bdae3",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-6/reviewer-before-original.csv",
+      "raw_sha256": "c9230b2dc475a0245cf15fff4d3c8a783ace79aebdfd9589674361db0a18208e",
+      "public_sha256": "1e550093a78eca357a50daac275793caabda9d7eecff8fc8b33757d4740f65a8",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-6/reviewer-profile.log",
+      "raw_sha256": "99b7a871f640b21586d0eb2fe3b52888668b3a7e509f296e2be9503530320cce",
+      "public_sha256": "7762ce444f3a28fbe0e018030ac79ed188ae2aa9a6699c102f49945103cbc5d0",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/after.json",
+      "raw_sha256": "becb47bd840ffb0892d9d03ac5977dc400cf5f496229f56dd692c573a36291f4",
+      "public_sha256": "f47d263f3945bd615fddb7f150b871688b2d5846ea5e5073956419c47d87ff56",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/after.stdout.txt",
+      "raw_sha256": "02eeb9eb98d547dfda4e4cc791adedbd3a6505fdfcf8f72d81703ace52e56c9c",
+      "public_sha256": "5f11160b60f6741ffaee64e2a8f7991ec9702522f125b3347253119e7e9b2e46",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/before.json",
+      "raw_sha256": "3bec016c3e73680dacd811473fb54b4e35f7f007a3a126cff69d442499c8e8fd",
+      "public_sha256": "f3d89422fc6f55ad29b30f28f442b13a2827fe86e4cf9bf2175d148b718603d0",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/coverage.json",
+      "raw_sha256": "e49ce13dba33c2df7379040062f6e788a0514c4d6f4a455edfb05b051807ee6c",
+      "public_sha256": "bcf712b8b22ece2d0afcf2694de721b228aac1a94acfe89380f1efa933f70572",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/coverage.stdout.txt",
+      "raw_sha256": "1071aaee5494ae1e1f7e153b0fcace47223cbaa48cff7aac75e3d718eced407c",
+      "public_sha256": "a351169c1a18cadb63cfdc03042ba49d5ceb33f7cd0886dfa13e7bcc17925e45",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/freeze-audit.json",
+      "raw_sha256": "4efdb9c7fb72016e7452db9cf095d1e11a69643a75cbdf079577adbb45c3c24e",
+      "public_sha256": "ead3a9abe82d44d8e189e3dc6c55718ce550b733e84ae023ad8a3968bd871bc3",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/freeze.stdout.txt",
+      "raw_sha256": "33f71e8926991f53716fe8863f77a56223ad1d2fd853224e4736177d2f44fd77",
+      "public_sha256": "a13b62e11aecb64c3c7eefa4080ec133d1d20350a381cb70431c4148b0fcf5ec",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/input-checks.json",
+      "raw_sha256": "f3352e7c8f007a3fea287f539cdd42acff0c4a978aca397fe60df3e77eea4315",
+      "public_sha256": "d39cc4bb3378da95083d1af4281599116bbaeef68dec868facd6a47171d4e1f8",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/input-checks.stdout.txt",
+      "raw_sha256": "f3352e7c8f007a3fea287f539cdd42acff0c4a978aca397fe60df3e77eea4315",
+      "public_sha256": "d39cc4bb3378da95083d1af4281599116bbaeef68dec868facd6a47171d4e1f8",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/inputs/method-M17-mutant.md",
+      "raw_sha256": "c687e5e0c27afe6f1e882ffecc2cd104cc1260c70119937fa2155deb822e53c8",
+      "public_sha256": "34b88688e2c62ebe5c29cdf7043febad0a0156ef6697354a2cfeb030fc6ca644",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/inputs/trace-A31-mutant.md",
+      "raw_sha256": "59091cafca149bf0f755d3e5fa4e2dd487de4e3c4982d91e3bff4bd85a730275",
+      "public_sha256": "42a0c3047dfa62954d9271156384eb4809846fc56387906cbe7e3bf70a9d733b",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/manifest.json",
+      "raw_sha256": "9dea20bd27df2bc5913fc22fa9a3d4a83a6279bc57268c69e82275c904d2e105",
+      "public_sha256": "084539614631a8239572d2fe83b6365a45d67ebc6e83910d14610af9d9b98374",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/misc-diff-fingerprint.json",
+      "raw_sha256": "6e9120ca039e7a10e55e4230ab5fd8da3a794780b98a441a92d0fb1a74fda3e9",
+      "public_sha256": "2eb9b3d4fdf17d6a39ffd5ae5a4ac45da3f4d564c1c5117a2150ca53904eef5a",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/prepared-input-preflight.json",
+      "raw_sha256": "c527496b66c302a45e67ff3378247ad9c82c6d83a3a987f4d2e136274fd40a39",
+      "public_sha256": "2ee8a75b8ac8c41d80b3f479463f7497eff1ab5e32e427f194a0936928a5a321",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/probes.json",
+      "raw_sha256": "759866e05f2716b4a6d99321bd6fd183ac31133ea51c2b089d92769158cb490a",
+      "public_sha256": "e9f4cf2da13333bb20b40ac4c5b88802de6a74b7e21d23e72fdf727b214092f6",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/probes.stdout.txt",
+      "raw_sha256": "8f9342c92d205520fed32e54c2911d53d3664bfac097bac953b9ca0f0b022d92",
+      "public_sha256": "5ed4bab52a28704862f5a688381dcd8b11a153dd71f723048db03ad9b8337b54",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/protected-audit.json",
+      "raw_sha256": "f6fd6fe8ff92fe3aa3fde57f3c1b1d6cba5d1963628edf4738c5006bb084ca34",
+      "public_sha256": "6a144928769f3e21f4fc2377d0c985ae985619fd24047bf615901230357b4e94",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/protected-audit.stdout.txt",
+      "raw_sha256": "70d064611665ce7b65b17fc7538ff1e673b85e38d448f3f1ad4530e6880d3c1c",
+      "public_sha256": "0419f24ef0806783a31723caa368f786d7259a3a84aca716b57f8b344d59f381",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/read-events.jsonl",
+      "raw_sha256": "fb166cb325384333075708a6e405d6700ba6dff0823bb19eea66e5e1a6dbbb1f",
+      "public_sha256": "b87fe87a4aad4d512ea305f60ce1af4980e8d12eb2124ffc28a0637e58888674",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/reviewer-profile.log",
+      "raw_sha256": "9c234fb82e2098bf24980966abbaced3663308ff53b9dd51f93b5ee9248067a2",
+      "public_sha256": "0ed0cad115d6a498b79e7f91e7f149f5862f25384c3da13d593d2f3aee47b77d",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/source-facts.json",
+      "raw_sha256": "e0819dd4019307cdad1db83698f27d799f445f6354884e64dc9bcd112c0d3426",
+      "public_sha256": "592047e5c62b0eb7ebd6c511e783f05fd75841bd077726db9fbcd1e6d7e03968",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/source-facts.stdout.txt",
+      "raw_sha256": "318957b37a24406c85f837420e3e42acf2138feb9c205c682e7a49f1ce8bc130",
+      "public_sha256": "62e768256e01e625ba8746b55c59d822174d3d8b323c2737dd63ab7ebe0f397e",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/table-check.json",
+      "raw_sha256": "2bc435f69673d41d8813f6cf31740249fc4d8c44b83ed875e5c95d78ee47b1b6",
+      "public_sha256": "90ac45171acf611f5de788ecd883542f3dbeb8f512778ba995607ba9cb46c537",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/table-check.stdout.txt",
+      "raw_sha256": "35b8b822ec394952d2a4523ffead12d0d1a2780fb1f243490e07610cf9bba353",
+      "public_sha256": "a56d67197877b85dbcf59dfb99e28bb5b1aeb475f0357012cbc589909180abc2",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7/upstream.json",
+      "raw_sha256": "41658d8b38b5625920494fbea7ae333e31190eeaa903bda0bb12445bc3d0cef8",
+      "public_sha256": "73a37a840d153602a812d8f8f5c4cb2366b537089f5af7f8df3b7618b41c878e",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7-integrator-replay/probes.json",
+      "raw_sha256": "759866e05f2716b4a6d99321bd6fd183ac31133ea51c2b089d92769158cb490a",
+      "public_sha256": "e9f4cf2da13333bb20b40ac4c5b88802de6a74b7e21d23e72fdf727b214092f6",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7-integrator-replay/probes.stdout.txt",
+      "raw_sha256": "8f9342c92d205520fed32e54c2911d53d3664bfac097bac953b9ca0f0b022d92",
+      "public_sha256": "5ed4bab52a28704862f5a688381dcd8b11a153dd71f723048db03ad9b8337b54",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7-integrator-replay/table-check.json",
+      "raw_sha256": "2bc435f69673d41d8813f6cf31740249fc4d8c44b83ed875e5c95d78ee47b1b6",
+      "public_sha256": "90ac45171acf611f5de788ecd883542f3dbeb8f512778ba995607ba9cb46c537",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-7-integrator-replay/table-check.stdout.txt",
+      "raw_sha256": "35b8b822ec394952d2a4523ffead12d0d1a2780fb1f243490e07610cf9bba353",
+      "public_sha256": "a56d67197877b85dbcf59dfb99e28bb5b1aeb475f0357012cbc589909180abc2",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-fresh-4/fingerprints/comparison.json",
+      "raw_sha256": "f1e5e91d79dd101579bb2f7dbba11aa648e854d12658bec6a3f48db93a30629c",
+      "public_sha256": "98e3d2b627aaf8dc264fbd3640fafcff494009bad2e6a746431865a8ce07b40b",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-fresh-4/fingerprints/external-after.json",
+      "raw_sha256": "7087059d1ca7b3251e95db749f8eb4c3d334f7ed99966cdabbb6e45bc5fca04c",
+      "public_sha256": "1fa4661e1b266c70726c6e665c524d936b1be7f315d3df65f659bd14ffcf5073",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-fresh-4/fingerprints/external-before.json",
+      "raw_sha256": "7087059d1ca7b3251e95db749f8eb4c3d334f7ed99966cdabbb6e45bc5fca04c",
+      "public_sha256": "1fa4661e1b266c70726c6e665c524d936b1be7f315d3df65f659bd14ffcf5073",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-fresh-4/fingerprints/protected-after.json",
+      "raw_sha256": "5d23cf8eeb4f12c812c502a284f0eaad7b9acf4eeb3f825616e912d358aca257",
+      "public_sha256": "651768533833e080e39766419abccb36093089c09b9a042490f29ae1cd552ce9",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-fresh-4/fingerprints/protected-before.json",
+      "raw_sha256": "5d23cf8eeb4f12c812c502a284f0eaad7b9acf4eeb3f825616e912d358aca257",
+      "public_sha256": "651768533833e080e39766419abccb36093089c09b9a042490f29ae1cd552ce9",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-fresh-4/fingerprints/source-git-bytes.json",
+      "raw_sha256": "27afb691315ab6c8915b9407b9a77fb11f389e430a62033878151161d99122bb",
+      "public_sha256": "1b50c14eccb768e2ac8147b35051991fd04ae1832c4509fdc4080d6749c7bd5b",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-fresh-4/probe-1.stdout.txt",
+      "raw_sha256": "74b047c4f6f8b38bf815785ce918e78e246ffa5747d60fdce9851cab07e84b93",
+      "public_sha256": "55ab36dcc62dcd788f2c2c3f8aa2d574840f5ce35bd1b8e4d1ecfa7b20396e13",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-fresh-4/probe-exits.json",
+      "raw_sha256": "277a869f1f03d6fe7742dd6a8b65207964881b91ee1dd866842fe4c9e73beefa",
+      "public_sha256": "bc17c7bf740b16ce68a16468de97de98f722a03425f74538413296e48260718f",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/contract/baseline.json",
+      "raw_sha256": "9b69f930ba510b18fa9b427b611ff3f404eddbb14bb618f658c41e8a4efe8e97",
+      "public_sha256": "9805f3074f655d33ed28d6a18267664343119329304a05653c44f889a0affd8d",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/contract/reviewer-profile.log",
+      "raw_sha256": "690075a8ec050b6b1d202e05b8e5f886f12a49c0eac6f5511b3e4759a87c5953",
+      "public_sha256": "f013d77fb3cee3892a5809e27ba3bdf6f2f73f0f66db0d8de9ea1cabadd8792a",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/inputs/analysis.md",
+      "raw_sha256": "56375053b9cb580f48796ba2234f9747741ee9963a20b5854ddee6bd0aff0734",
+      "public_sha256": "777c174a793f2aa499b8124da24a2efdf1b130124a4ff9daf9a3ffcac8a11e2b",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/inputs/spec.md",
+      "raw_sha256": "a9156e7135f4abbf8d46d585432a2ce3ae6942d7a6f73da3c96f007dcb846b64",
+      "public_sha256": "bc2c968107b40fce51183f52da9396553c8a4255236f57a5df8631f31e64a248",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/methodology/baseline.json",
+      "raw_sha256": "b58ae5b44c29b69871f4986c89420c1fc8e4bb35d4d136f65deaf6fd0a28c24b",
+      "public_sha256": "20f1ba012c56c89ea41f3b939351159d5013c6a059d2e1c9e3befa78e00ef7aa",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/methodology/reviewer-profile.log",
+      "raw_sha256": "7e7e6651a42d3ab801ae587ee8d7fab50d5239d5d5a55858deeafc5ed79a84b3",
+      "public_sha256": "65df3ea3a13f45943303284c45ac350bb97595d5b9e3e2e84cb6e0497052aa4a",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/after.json",
+      "raw_sha256": "ce96daf42731b082a4a17c2f6ac7635e87e8969961fbd0e69e8df60d828634ed",
+      "public_sha256": "4ae8ae1b2ebe7ddba8f407a7dae4aabf50abe434bc359bc918fca2c6ed828534",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/before-expanded.json",
+      "raw_sha256": "ce96daf42731b082a4a17c2f6ac7635e87e8969961fbd0e69e8df60d828634ed",
+      "public_sha256": "4ae8ae1b2ebe7ddba8f407a7dae4aabf50abe434bc359bc918fca2c6ed828534",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/before.json",
+      "raw_sha256": "acde6bfde284b3a6844a71613543777d9f3decdcb0659cfdfe36a5793aa4e544",
+      "public_sha256": "e5e180a9979ef9ede90d876aa0b0fd69af41c19425bd2fbe07518622ba4d563f",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/external-after.json",
+      "raw_sha256": "b3973c77fd779db76ef1836d9e34607ab78efa04449c7aa495cebd2bbe337593",
+      "public_sha256": "330643b2659d847c9e4d26d3168403c743153cff933dfbe0042cf72dff527618",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/external-before.json",
+      "raw_sha256": "b3973c77fd779db76ef1836d9e34607ab78efa04449c7aa495cebd2bbe337593",
+      "public_sha256": "330643b2659d847c9e4d26d3168403c743153cff933dfbe0042cf72dff527618",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-1/summary/reviewer-profile.log",
+      "raw_sha256": "86b1e6448648e8a1bf6cdc548e925903b297e3c3acee339868558045985bcb5d",
+      "public_sha256": "8d5b2e79efb41d6de4769b70bef8b248934c83f8a78f723e716b4fff1ced7985",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-2/contract/baseline-after.json",
+      "raw_sha256": "43cb9085cae07b4acc24602f6f02a272fc5db1e3126f4fc0c3dc1ff172f794dd",
+      "public_sha256": "64b717e7d275bad2393dd1e4ae0c4b2f719580e6efe186634d253f228afd0a8c",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-2/contract/baseline-before.json",
+      "raw_sha256": "43cb9085cae07b4acc24602f6f02a272fc5db1e3126f4fc0c3dc1ff172f794dd",
+      "public_sha256": "64b717e7d275bad2393dd1e4ae0c4b2f719580e6efe186634d253f228afd0a8c",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-2/contract/reviewer-profile.log",
+      "raw_sha256": "edcc16e948c23ad2ae85a916f355c062f640e1eb97f45e31ed21dd3c52d4c2ea",
+      "public_sha256": "009cb78511d9d196b5a6c09f106be4fcbe6beec048d3eee840e5b5b44db8c4e3",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-2/methodology/protected-after.json",
+      "raw_sha256": "610ef4fe8fcbd6ada1d8b67cc84ee2bb4acbc5b4941353d0f7616468e3d3b418",
+      "public_sha256": "e73e8161b4cc9faf10292602e13152dee27b5f0a76851d77b6bda864faee72e8",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-2/methodology/protected-before.json",
+      "raw_sha256": "610ef4fe8fcbd6ada1d8b67cc84ee2bb4acbc5b4941353d0f7616468e3d3b418",
+      "public_sha256": "e73e8161b4cc9faf10292602e13152dee27b5f0a76851d77b6bda864faee72e8",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-2/methodology/repo-after.json",
+      "raw_sha256": "29a69e82c93a008b95e22f3e1d3b8908c47f3cf83cdde50d6a189887e8ce5216",
+      "public_sha256": "a306040ff34f9cd675c462838343b13672c358d1601f0ed0987090ef14eba6aa",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-2/methodology/repo-before.json",
+      "raw_sha256": "29a69e82c93a008b95e22f3e1d3b8908c47f3cf83cdde50d6a189887e8ce5216",
+      "public_sha256": "a306040ff34f9cd675c462838343b13672c358d1601f0ed0987090ef14eba6aa",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-2/methodology/reviewer-profile.log",
+      "raw_sha256": "2c6d6716a7c4af22901250c9eca158b5161305fafbd241d7c987a6c8e2505e26",
+      "public_sha256": "1e9b00dbafe63244ae40a6dbcb8b6120423c3e9313beb54f9ec75c6af8837fa0",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-2/summary/external-after.json",
+      "raw_sha256": "fe8118256e5327e9192a93b456e95dfd8b8859dece7b454e7bc2545d5bb52b66",
+      "public_sha256": "c77d07e90d1f8a52f23c2eade3e4a0bae90f3fb094ca6bf4360fb7800231a6f4",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-2/summary/external-before.json",
+      "raw_sha256": "fe8118256e5327e9192a93b456e95dfd8b8859dece7b454e7bc2545d5bb52b66",
+      "public_sha256": "c77d07e90d1f8a52f23c2eade3e4a0bae90f3fb094ca6bf4360fb7800231a6f4",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-2/summary/protected-after.json",
+      "raw_sha256": "5ba115e1e50a16536ea2ed5fc2624584daf2a1abb9434d11f07ecef08142eb39",
+      "public_sha256": "63315319b954eb6a35cbba0630866b90dd2fd253f657d2f446153ccba0895877",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-2/summary/protected-before.json",
+      "raw_sha256": "5ba115e1e50a16536ea2ed5fc2624584daf2a1abb9434d11f07ecef08142eb39",
+      "public_sha256": "63315319b954eb6a35cbba0630866b90dd2fd253f657d2f446153ccba0895877",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-partition-2/summary/reviewer-profile.log",
+      "raw_sha256": "d89de4b2d40ef82d6df0abe843256dd7f47500f5af79c5fde0c9c681ea5f7dca",
+      "public_sha256": "3383fcf9a77a71964091048578d32b937bb92b76ef5fe6e7be827409af448dab",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol-r2/inputs/analysis.md",
+      "raw_sha256": "e7c1b5a1e5ecffb17656d4fce1c92d4eb7e84e0b977de2a9daf6fe54fc122392",
+      "public_sha256": "358aa708ccd9744a222d8c2b4cfafa90fab1bbba7da715b6a4d4ca8fe112087f",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol-r2/inputs/spec.md",
+      "raw_sha256": "404a2f857f330daa0ea59f2074c2e12a1483052cce5aa896552a53b62dad1c78",
+      "public_sha256": "be5ceae2198d361d84c32ca8456442a4ef1ed4594b3a008722c5688583c376a7",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s2-sol-r2/reviewer-profile.log",
+      "raw_sha256": "8e2b91cb6247432fa48e0af42a7350d1288a73079fda7a63af1edaf3516900c0",
+      "public_sha256": "a96e1ca620bbb84505d4c0721113037a923bcf3d40c4cf5acf983297d33a4a52",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s3-1-submitted/manifest.json",
+      "raw_sha256": "f48f09be21cdaef25a53d1722f7504fd2810f87f7ad093920f6738c655d9301c",
+      "public_sha256": "5ea8fb0e42062506f18329279c8604ff02cb7be9a823bcdcfa9be02a07be8426",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-1/prepared-input-preflight.json",
+      "raw_sha256": "26cd48e76f7c15b4ec311a962177fea006fb59e588c0ba1c457b92ac341645d5",
+      "public_sha256": "95138f52c02b0590f4a9bad7c1dfaccb8040434b955b123bb87283c073d34214",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/after.json",
+      "raw_sha256": "0ae44db0dd57e7b91bf846457bbf1a885bd64173793f38ba5f202a864a9f1651",
+      "public_sha256": "155f7a072ffc0447b0229dc18020031407248ed30c635291c5f13e9ebeb56152",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/before.json",
+      "raw_sha256": "aea7d5cb70ddffb2d0641067fbc4ede556c569b6df11ae6e1ffa18f4aa3afe73",
+      "public_sha256": "233c5d10e18bc9a21656bef7df673b5feba5ad133376bb2332e9c8a9e330d962",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/coverage.md",
+      "raw_sha256": "8caeec353b405309e822eea6ddd03c1618fa58aa05844b47208aa6a9c5db31b3",
+      "public_sha256": "b06682fdfdad1f3a3ca1a6a5a1c3515f86522300fa28c93bc0d2669c834ed06f",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/external-before.json",
+      "raw_sha256": "47cfddbb72470c2666bf7fe68f67fac8e113502da8a3cb82aade6e1f4e19f667",
+      "public_sha256": "81612d495fa2e6b8d464dc2f7bebff2eb6f3a2c5f191e45a2a10e1e83abad7d6",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/external-checks.json",
+      "raw_sha256": "d6bd4084157dd8730df060db6011ea314378e096ebc39aaa8785140c9fa08d02",
+      "public_sha256": "48528d5320cfc85730035195a8a9da6b215a6c317fd7db3729bb59b8e7981fee",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/external-supplement.json",
+      "raw_sha256": "a7c1255e10a14625e29e9e024e851763a631ab561f041e46214c775f5166a11a",
+      "public_sha256": "0e19092ea0ac0a11c03c296e945b76d5b14a917d7ccb089ed9ab657bd3366382",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/git-object-fingerprints.json",
+      "raw_sha256": "068b8508eead9d468d64983507c003259ab95aed26319c801b153c6b43ec5b85",
+      "public_sha256": "1add071fdb81224ea34db72884108f938cbad7998e9d53590cf17a8fd39b1fbb",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/prepared-input-preflight.json",
+      "raw_sha256": "c53d5781cbca6d8fa05b592138932ea17ba6d12c3fa95c850764e706455c6155",
+      "public_sha256": "7baecf3b00eab9abfce7922357257b252a0b68834cefd16692b56eb75bec217f",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/upstream-check.json",
+      "raw_sha256": "0c545ff8c5567a5570ca8ed7304772ecddb0999b4e993be874dd3574e70d00c0",
+      "public_sha256": "640536b3d101b768e899223cb0eb13d25f331d0334b733c3b82a66abb4f0d7ef",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-2/version-check.json",
+      "raw_sha256": "e3fe32107e614f2eab0e9c766cb17f14e31ace37f08fd6dd20618226d26db482",
+      "public_sha256": "1500c70f2d9781ab600c9553d91c4f889010ed8dfd3943574c7e021c50615e35",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/after-git.json",
+      "raw_sha256": "beb61c7d80b4fbdb1e2022d21732c8e92663aee629d06663140c9184733eb090",
+      "public_sha256": "134f3d6ef7365dd71ca5bb6d9846b471fc923597a71062640818b82059d38962",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/after.json",
+      "raw_sha256": "91748df00906c45b39e63a336ce85114c26119b18724e9e59e6f3ab78272969a",
+      "public_sha256": "bb813a48d98d6bb31182aa3dba8f4508b59365cae4ddbd88883a7fd64631560a",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/before-git.json",
+      "raw_sha256": "521979718e918b8a822b1d9857e5465a86fe6b2fac5e86812a187c9cb58a832e",
+      "public_sha256": "e7404ca25cee7075f29c4a1188749f207fa15f5da8196601f8a1bc8b6e840b17",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/before.json",
+      "raw_sha256": "7f0434ca8d39448ca51ddcfd6849744caedab15a384184bc1e314d4740f736d3",
+      "public_sha256": "d19a35cb674e0d783343b5bb4f0dd842b0f3abb15760acf45ee69c9da89477cc",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/controls-run.json",
+      "raw_sha256": "be1c4e841f23158e6d7fecbb2b2c0dd17033f2f33dc998b348dee8ccec57fbef",
+      "public_sha256": "268ceb1293d2b3b6078a23a17707dbcee2cbdcf02176375e92151876d832be03",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/controls.stdout.txt",
+      "raw_sha256": "f0577e8759e36730c4dbb8a752c8e9e97f288f57cc6963cb63f01c8f4b3207cf",
+      "public_sha256": "23ce4f27e0bf6c4c12437db908bebdeb794ad933699285ecef316b8cb886cf2c",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/derived-delta.json",
+      "raw_sha256": "d1079c10def71e6cd98bc228c64c89510fd215c0b905abcdc49ba3e044323023",
+      "public_sha256": "1edd5983267c13a0ea5b0df9a318267e94aa9b894c4d04c46fc6fcc7c431b5ec",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/final-readonly.json",
+      "raw_sha256": "d45d8642f6322aeafc5ff1a3d12251135aed8ef69d6a713951e67ec613582e87",
+      "public_sha256": "821052c69ab12df06048b97b39a3854d7e792337d9ace67fcdc79b4667c9205a",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/historical-delta.json",
+      "raw_sha256": "5f4a2dac5fb7eee48a02720164cfecb7ecd0017f7b1ec5acaa829c055206f947",
+      "public_sha256": "d307790cfc6da143aa56a574ad7768ca5d222faad1dd665996aee2036a312cc7",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/input-audit.json",
+      "raw_sha256": "af3ac944415124dd1f91ebc10f7e8a2f7673963703eb56381fed0f95f4e5854e",
+      "public_sha256": "4763a6111983d5fb1b958b6bf1cd4c53fd0d4652ca6a0f37900c77ae89374fa0",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/latest-delta.json",
+      "raw_sha256": "28c92ef308a5db4486481342534a5295f470500628ff112d9f28e33284fa929d",
+      "public_sha256": "12c2647de98e9a0e7897a6aa4ded26a7cb07fa717258cc30204498e5b7b7d2f3",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/precondition-check.json",
+      "raw_sha256": "8bdae0332e4828ba29b64a1139ef9bb8ccb396ebc4b0be0ac0b4e0108bb4a3fb",
+      "public_sha256": "2baf88575aa2fcc852a9d2be72d29366a24a2d39d0d03f98794e19a95e6eb1dc",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/precondition.stdout.txt",
+      "raw_sha256": "4dc99c4db263a2a0437d2510de383ea1663723de62103e676277a32330e01de7",
+      "public_sha256": "e44527ad248163dd633cb6b3ceaba63a841b9c67f5d2da579cb2b99d88b16504",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/prepared-input-preflight.json",
+      "raw_sha256": "3d6b6d9b37f95f68e04a3dff4e74e044baaaec09abc4b2e8dfe2f39c51d0edf8",
+      "public_sha256": "be09f106b2e6f9a9d32ac5608c131e948adcbe64d03674a9e13fc8f15904ba83",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/readonly-results.json",
+      "raw_sha256": "56821fdf2b5b3500587eef3259b1be3aa6fc978b705369963b3e365da7362383",
+      "public_sha256": "9f554f09c10634e8609c87b27af04c5e32cf2ce86475362eeac24e0256714ca0",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/readonly.stdout.txt",
+      "raw_sha256": "1f73eabb05aca02c117f64da653ebfaef04ff2ecd27eeb1b6a2ea7537eb7a190",
+      "public_sha256": "e6126218f8db3b4c6cd34e72a01c50be02413985d0ec8447f9033696a470daf0",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/reviewer-profile.log",
+      "raw_sha256": "8cdaa8be4495684d05793d9947fd53c3a75a96292ff459fb4ee49956ae326214",
+      "public_sha256": "2fc2c888a2ff69c4c05ffbfc61599d7c7c055494fe5685f05df33970ac17eb52",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/source-reads.jsonl",
+      "raw_sha256": "fb0c5e4021c829b428c0dae56e9c7292213f4a4f8daad31e9ad61ef562815504",
+      "public_sha256": "ef060843c9e4b214478ab0036944bc32025cc6a7ab7d197a9d1ec010037e0095",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/submitted/manifest.json",
+      "raw_sha256": "f7528cf525cc0f457baf3a05f4e2394f98afd598fcf9a7bc11e470e8b40becf3",
+      "public_sha256": "906d96f3416c39b25f5c804296b02ae01876f42860b6153c83430677ec31f6e5",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/submitted/s4-3/after-git.json",
+      "raw_sha256": "beb61c7d80b4fbdb1e2022d21732c8e92663aee629d06663140c9184733eb090",
+      "public_sha256": "134f3d6ef7365dd71ca5bb6d9846b471fc923597a71062640818b82059d38962",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/submitted/s4-3/after.json",
+      "raw_sha256": "91748df00906c45b39e63a336ce85114c26119b18724e9e59e6f3ab78272969a",
+      "public_sha256": "bb813a48d98d6bb31182aa3dba8f4508b59365cae4ddbd88883a7fd64631560a",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/submitted/s4-3/before-git.json",
+      "raw_sha256": "521979718e918b8a822b1d9857e5465a86fe6b2fac5e86812a187c9cb58a832e",
+      "public_sha256": "e7404ca25cee7075f29c4a1188749f207fa15f5da8196601f8a1bc8b6e840b17",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/submitted/s4-3/before.json",
+      "raw_sha256": "7f0434ca8d39448ca51ddcfd6849744caedab15a384184bc1e314d4740f736d3",
+      "public_sha256": "d19a35cb674e0d783343b5bb4f0dd842b0f3abb15760acf45ee69c9da89477cc",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/submitted/s4-3/controls-run.json",
+      "raw_sha256": "be1c4e841f23158e6d7fecbb2b2c0dd17033f2f33dc998b348dee8ccec57fbef",
+      "public_sha256": "268ceb1293d2b3b6078a23a17707dbcee2cbdcf02176375e92151876d832be03",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/submitted/s4-3/controls.stdout.txt",
+      "raw_sha256": "f0577e8759e36730c4dbb8a752c8e9e97f288f57cc6963cb63f01c8f4b3207cf",
+      "public_sha256": "23ce4f27e0bf6c4c12437db908bebdeb794ad933699285ecef316b8cb886cf2c",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/submitted/s4-3/derived-delta.json",
+      "raw_sha256": "d1079c10def71e6cd98bc228c64c89510fd215c0b905abcdc49ba3e044323023",
+      "public_sha256": "1edd5983267c13a0ea5b0df9a318267e94aa9b894c4d04c46fc6fcc7c431b5ec",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/submitted/s4-3/final-readonly.json",
+      "raw_sha256": "d45d8642f6322aeafc5ff1a3d12251135aed8ef69d6a713951e67ec613582e87",
+      "public_sha256": "821052c69ab12df06048b97b39a3854d7e792337d9ace67fcdc79b4667c9205a",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/submitted/s4-3/historical-delta.json",
+      "raw_sha256": "5f4a2dac5fb7eee48a02720164cfecb7ecd0017f7b1ec5acaa829c055206f947",
+      "public_sha256": "d307790cfc6da143aa56a574ad7768ca5d222faad1dd665996aee2036a312cc7",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/submitted/s4-3/input-audit.json",
+      "raw_sha256": "af3ac944415124dd1f91ebc10f7e8a2f7673963703eb56381fed0f95f4e5854e",
+      "public_sha256": "4763a6111983d5fb1b958b6bf1cd4c53fd0d4652ca6a0f37900c77ae89374fa0",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/submitted/s4-3/latest-delta.json",
+      "raw_sha256": "28c92ef308a5db4486481342534a5295f470500628ff112d9f28e33284fa929d",
+      "public_sha256": "12c2647de98e9a0e7897a6aa4ded26a7cb07fa717258cc30204498e5b7b7d2f3",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/submitted/s4-3/precondition-check.json",
+      "raw_sha256": "8bdae0332e4828ba29b64a1139ef9bb8ccb396ebc4b0be0ac0b4e0108bb4a3fb",
+      "public_sha256": "2baf88575aa2fcc852a9d2be72d29366a24a2d39d0d03f98794e19a95e6eb1dc",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/submitted/s4-3/precondition.stdout.txt",
+      "raw_sha256": "4dc99c4db263a2a0437d2510de383ea1663723de62103e676277a32330e01de7",
+      "public_sha256": "e44527ad248163dd633cb6b3ceaba63a841b9c67f5d2da579cb2b99d88b16504",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/submitted/s4-3/readonly-results.json",
+      "raw_sha256": "56821fdf2b5b3500587eef3259b1be3aa6fc978b705369963b3e365da7362383",
+      "public_sha256": "9f554f09c10634e8609c87b27af04c5e32cf2ce86475362eeac24e0256714ca0",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/submitted/s4-3/readonly.stdout.txt",
+      "raw_sha256": "1f73eabb05aca02c117f64da653ebfaef04ff2ecd27eeb1b6a2ea7537eb7a190",
+      "public_sha256": "e6126218f8db3b4c6cd34e72a01c50be02413985d0ec8447f9033696a470daf0",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/submitted/s4-3/source-reads.jsonl",
+      "raw_sha256": "fb0c5e4021c829b428c0dae56e9c7292213f4a4f8daad31e9ad61ef562815504",
+      "public_sha256": "ef060843c9e4b214478ab0036944bc32025cc6a7ab7d197a9d1ec010037e0095",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/submitted/s4-3/upstream.json",
+      "raw_sha256": "570c51bb0d91310bdbd92cf6dcca1e86e39e892a19cc63e9473a233e46357238",
+      "public_sha256": "74bb8dcf8369e4f0cbded31acf1c99f3c656cbd8b3eae1da8061a59e2b22364c",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-3/upstream.json",
+      "raw_sha256": "570c51bb0d91310bdbd92cf6dcca1e86e39e892a19cc63e9473a233e46357238",
+      "public_sha256": "74bb8dcf8369e4f0cbded31acf1c99f3c656cbd8b3eae1da8061a59e2b22364c",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/after.json",
+      "raw_sha256": "8d392bcc80110645b6d9de38869b62edb0fe6b95a2e1f5b341b58c2d3e939127",
+      "public_sha256": "7b2f1b41c475251bbc8c2f5c6dbbb5dd5343f2b228baad09164753680524e872",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/before.json",
+      "raw_sha256": "0e8f66b3ec4d545acc103c4a23402150c6b88c1b21f2c88a7fae4126f7fd016c",
+      "public_sha256": "da3765c23f003f99cbecf6809c1e3a4d9fcef3d5fbd789f0e08ef758e3e9717b",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/checks.json",
+      "raw_sha256": "a87f5b518cfdeafa078c44a8a0b15c50f8ed34f605fb44151b7b8c1d408072d1",
+      "public_sha256": "d22d9357c620119cb2733debfe5eb2eb982bc6466eeb0b3bf6443e2db1a04fe0",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/final-after.json",
+      "raw_sha256": "9e1d1bb0b7928b3ed3374ba018c66e00ad7e2ea949ab01bae1f0f53909dbdf8a",
+      "public_sha256": "01005733d5230a2c7dde5a95d74000a7db891f3ed8b6334842d44379bf676c82",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/final-check.stdout.txt",
+      "raw_sha256": "fcad441a629a6cddf5b1515d9429f3701f2b7e8cc5425bfd05577f6c9c256713",
+      "public_sha256": "219c28e5d57f24f80ae648c4ced05c42efd75f093e632ad494db02d468f6df05",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/fingerprints.json",
+      "raw_sha256": "9fd27372d6c4c295bf5270d8c3983819189fadf427704b0ad8984176f09b1bcd",
+      "public_sha256": "a4f716a327a7d727cb9265c704a5033af9c27bc50e096320c1a0328e859f1252",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/input-fingerprints.json",
+      "raw_sha256": "1798a2a7dcedd7586dbbb59bfeb23fb7449f5eaec778128125c0b1db8e956bcc",
+      "public_sha256": "6f75d5fea98be4048c70c5e8e7b0ba22beba6a864b8eced4f5c64001cb0e9533",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/prepared-input-preflight.json",
+      "raw_sha256": "e37a1f9ef09d55125ba05627b2ad4592eb4bcd9f3900210286ec6c3031efb6ec",
+      "public_sha256": "81cad0e591fa5d467e451cbf42900c46ea0e68628174b06998b745be05c8bbd4",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/repeat-control.json",
+      "raw_sha256": "6da814ee36850d87edb9ad973dd28d52419c8ca6749ab3b58e6e15bc5da1603e",
+      "public_sha256": "0f0ff0c8001d7e77f11642b1e3e42e0b30d506ca0404de89b192d83adf35ddb2",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/reviewer-profile.log",
+      "raw_sha256": "5f93f36cafc70f774772b959252ecdaa7620a3e62047ec6402be893440bddc14",
+      "public_sha256": "b7e539e865c1ddbd74b1dbbd97bb995b091a6018437ce19df40658de779cee76",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/source-reads.jsonl",
+      "raw_sha256": "e5306c31411334aa6475570c2ef5b8327a8328ce29c5e3c4b2e296876cf00d0d",
+      "public_sha256": "0add2660749aa227c0a4634635a8640fd22e242cd602923af4a668304486d4a0",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/submitted/manifest.json",
+      "raw_sha256": "4ea86bf975f27e482332d642ddec4900b6c36229b3a31d7441dcd6387b6fbc93",
+      "public_sha256": "0e44b5c655e2b0f69c23893b0fe268f1d71829db1ed0e7cc086007e88965ea94",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/submitted/s4-4/after.json",
+      "raw_sha256": "8d392bcc80110645b6d9de38869b62edb0fe6b95a2e1f5b341b58c2d3e939127",
+      "public_sha256": "7b2f1b41c475251bbc8c2f5c6dbbb5dd5343f2b228baad09164753680524e872",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/submitted/s4-4/before.json",
+      "raw_sha256": "0e8f66b3ec4d545acc103c4a23402150c6b88c1b21f2c88a7fae4126f7fd016c",
+      "public_sha256": "da3765c23f003f99cbecf6809c1e3a4d9fcef3d5fbd789f0e08ef758e3e9717b",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/submitted/s4-4/checks.json",
+      "raw_sha256": "a87f5b518cfdeafa078c44a8a0b15c50f8ed34f605fb44151b7b8c1d408072d1",
+      "public_sha256": "d22d9357c620119cb2733debfe5eb2eb982bc6466eeb0b3bf6443e2db1a04fe0",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/submitted/s4-4/final-after.json",
+      "raw_sha256": "9e1d1bb0b7928b3ed3374ba018c66e00ad7e2ea949ab01bae1f0f53909dbdf8a",
+      "public_sha256": "01005733d5230a2c7dde5a95d74000a7db891f3ed8b6334842d44379bf676c82",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/submitted/s4-4/final-check.stdout.txt",
+      "raw_sha256": "fcad441a629a6cddf5b1515d9429f3701f2b7e8cc5425bfd05577f6c9c256713",
+      "public_sha256": "219c28e5d57f24f80ae648c4ced05c42efd75f093e632ad494db02d468f6df05",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/submitted/s4-4/fingerprints.json",
+      "raw_sha256": "9fd27372d6c4c295bf5270d8c3983819189fadf427704b0ad8984176f09b1bcd",
+      "public_sha256": "a4f716a327a7d727cb9265c704a5033af9c27bc50e096320c1a0328e859f1252",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/submitted/s4-4/input-fingerprints.json",
+      "raw_sha256": "1798a2a7dcedd7586dbbb59bfeb23fb7449f5eaec778128125c0b1db8e956bcc",
+      "public_sha256": "6f75d5fea98be4048c70c5e8e7b0ba22beba6a864b8eced4f5c64001cb0e9533",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/submitted/s4-4/repeat-control.json",
+      "raw_sha256": "6da814ee36850d87edb9ad973dd28d52419c8ca6749ab3b58e6e15bc5da1603e",
+      "public_sha256": "0f0ff0c8001d7e77f11642b1e3e42e0b30d506ca0404de89b192d83adf35ddb2",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/submitted/s4-4/source-reads.jsonl",
+      "raw_sha256": "e5306c31411334aa6475570c2ef5b8327a8328ce29c5e3c4b2e296876cf00d0d",
+      "public_sha256": "0add2660749aa227c0a4634635a8640fd22e242cd602923af4a668304486d4a0",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/submitted/s4-4/upstream.json",
+      "raw_sha256": "ee20d70454180c322ea446a1c1b22f59dced27c8ed0ba7570b1f6396ce28ff65",
+      "public_sha256": "7fd24d7b0f58dd538ee8c73059f1afffcad788ce732b3f91410d1727e634e289",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/s4-4/upstream.json",
+      "raw_sha256": "ee20d70454180c322ea446a1c1b22f59dced27c8ed0ba7570b1f6396ce28ff65",
+      "public_sha256": "7fd24d7b0f58dd538ee8c73059f1afffcad788ce732b3f91410d1727e634e289",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-approval-2026-10-17/approved-manifest.json",
+      "raw_sha256": "7ccd6af4578020c7df9fe6c56e676d2e974eff8d8ac87e28aa435bc758e60722",
+      "public_sha256": "5f9d19b8a0072a8a8b60b117c5ccce21691d10c8edaf510f8999606874e43ad5",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-approval-2026-10-17/previous-integrator-root/analysis.md",
+      "raw_sha256": "e830c14b03532526583b1bf2e520bfc5479f10cb34d16d15060cae21393ce3af",
+      "public_sha256": "134e2f44234d108ce10936e501f1454498c77f7356ab3e5421a99014522bc7ee",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-approval-2026-10-17/previous-integrator-root/spec.md",
+      "raw_sha256": "359819ee6b75d789b94853ac7054742c1c675597e6aee3d05f36ad43abd11c0b",
+      "public_sha256": "9839de4b4df0df4d2d87c8ef78b55b7cd1e285f9b52b9e9570dafc56412162ca",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-approval-2026-10-17/previous-integrator-root-manifest.json",
+      "raw_sha256": "025709dcf46df4608d988cd0abc42e1d07f679d1a233e3b619487cf9277003b5",
+      "public_sha256": "599a599bb70dc3b0bf0eece6bcd597c79c5a1f5135ba7165d20d527200d36ff1",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-1/after-manifest.json",
+      "raw_sha256": "aeb7fbe835c8195f5dd6038ed6e2293d2313e87373c269f3f06b1b8cbc8bfaa9",
+      "public_sha256": "30663ddc605290a574aec8cedcd59d72ae4db7b1a6a23c2f30a47be11c544361",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-1/analysis.md.diff",
+      "raw_sha256": "06d1269ac2cae339b6173d2f1049b067e791930a74529f6ac0854cfe8899677d",
+      "public_sha256": "501182154adb58532cde159f4aed18a14f483fdf256a017c272f9ce0f86f59b3",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-1/author-profile.log",
+      "raw_sha256": "841bc28b465da1a3faa19e616662c2b9a7f1d86a22aed558c6145f28a921773a",
+      "public_sha256": "ec66702b501fece31d7a9c2246971f5bc43c5454c24cd0d268ef15102026143c",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-1/before-manifest.json",
+      "raw_sha256": "efdf1d78a2054aa3790ae340d6bc5afc7832420cce4d4dab02f1982389f8018c",
+      "public_sha256": "b04c5dd65605177587e4dd3a93bfcee3a46801a294dedc1fea8583dbd22c5c98",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-1/method-delta.md.diff",
+      "raw_sha256": "70c99d2b3399bd2de1c377818be9b9ed463332a0fc218e24ea7646ae4e8b63d0",
+      "public_sha256": "1856d997295b728cba435d80697801f2e37fa0338a2bcc6590b0a9876235020c",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-1/spec-trace.md.diff",
+      "raw_sha256": "3f0a93f75d13fcce353deec7c336111224303dee50061d582ed643137ba3fedf",
+      "public_sha256": "1132302b6208a66964485ce86d4e302113291a44177ae63789458ad5a2a0a8a8",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-1/spec.md.diff",
+      "raw_sha256": "27b4692bb5ee99dd0cfcceca8561d1678697aad9c60ba2e0ca99458da4dc39f9",
+      "public_sha256": "3bf187a12761cca14f79a9727d251ef405cf7fcd9a90a7f696336ec3f1359fda",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-1/submitted/after-manifest.json",
+      "raw_sha256": "aeb7fbe835c8195f5dd6038ed6e2293d2313e87373c269f3f06b1b8cbc8bfaa9",
+      "public_sha256": "30663ddc605290a574aec8cedcd59d72ae4db7b1a6a23c2f30a47be11c544361",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-1/submitted/analysis.md",
+      "raw_sha256": "b4db7e330788bb3f8da230ab8ed40345d8444342d4c1c87dbb909c5801dcfdf6",
+      "public_sha256": "bc2bf5a7f1b631f14eb0140f6a4154599cd25296cc4d106d9db7c995bbdebe6d",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-1/submitted/analysis.md.diff",
+      "raw_sha256": "06d1269ac2cae339b6173d2f1049b067e791930a74529f6ac0854cfe8899677d",
+      "public_sha256": "501182154adb58532cde159f4aed18a14f483fdf256a017c272f9ce0f86f59b3",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-1/submitted/before-manifest.json",
+      "raw_sha256": "efdf1d78a2054aa3790ae340d6bc5afc7832420cce4d4dab02f1982389f8018c",
+      "public_sha256": "b04c5dd65605177587e4dd3a93bfcee3a46801a294dedc1fea8583dbd22c5c98",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-1/submitted/manifest.json",
+      "raw_sha256": "1a08f7aaa5a2c4f997f830c958d51cfe7cc8af4cf36670a53df0e64f8de2b5a9",
+      "public_sha256": "366d90d18700a357647c461a1345739c7aaf093e0af7681af87dc2b550bace65",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-1/submitted/method-delta.md.diff",
+      "raw_sha256": "70c99d2b3399bd2de1c377818be9b9ed463332a0fc218e24ea7646ae4e8b63d0",
+      "public_sha256": "1856d997295b728cba435d80697801f2e37fa0338a2bcc6590b0a9876235020c",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-1/submitted/spec-trace.md",
+      "raw_sha256": "4007a000c94a81921e3b20148953950094a76162fe5f9898a94b07066b7db9ed",
+      "public_sha256": "1d1766ca326288839c23b1e6a85139f9e3b71be11c2da0da59d13ab44224adf6",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-1/submitted/spec-trace.md.diff",
+      "raw_sha256": "3f0a93f75d13fcce353deec7c336111224303dee50061d582ed643137ba3fedf",
+      "public_sha256": "1132302b6208a66964485ce86d4e302113291a44177ae63789458ad5a2a0a8a8",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-1/submitted/spec.md",
+      "raw_sha256": "d532591dab15272455f13cd5061042aa49795847cb24cd76c3a90e80865b1619",
+      "public_sha256": "484be6e5873c4ef99c487825c4a2bd1ae852fd240d485d4eca36391b3b2f96c9",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-1/submitted/spec.md.diff",
+      "raw_sha256": "27b4692bb5ee99dd0cfcceca8561d1678697aad9c60ba2e0ca99458da4dc39f9",
+      "public_sha256": "3bf187a12761cca14f79a9727d251ef405cf7fcd9a90a7f696336ec3f1359fda",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/after-git-state.json",
+      "raw_sha256": "8c9856c91420a91f1f60882db2b1c2b29966a68b2e69e109b01f8a5754352c28",
+      "public_sha256": "b5126e2cf07f9b884d10c6c7c05dab1d5c422a08e1e5fcbeb0795811694f2df5",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/after-manifest.json",
+      "raw_sha256": "069023751d2ae3e0ee61e9cd9a8394797258db87c9b2f0968b3fbee71790a1d4",
+      "public_sha256": "a1d46803a82333e96acec49c1ab6ba915782528492c4c7f398238c5b659d3337",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/analysis.md.diff",
+      "raw_sha256": "ade3f5680320316a4684e2b89f720b7c2fbf1a91721dfb4f2b166bebbef03bcd",
+      "public_sha256": "782bff5a9deb3ab7c9ed2ce2cf9e219ed94e9267271af00bee964ad7a9d844cd",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/author-profile.log",
+      "raw_sha256": "4bf55df466b1dfcef8d5fc878b9d6a498c537580e82f0c9de858a7ef647a2f37",
+      "public_sha256": "911e0b21869b21b9afc6d0c0e5486c7d3895a3f795be04cc590e8da154795d87",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/before/analysis.md",
+      "raw_sha256": "b4db7e330788bb3f8da230ab8ed40345d8444342d4c1c87dbb909c5801dcfdf6",
+      "public_sha256": "bc2bf5a7f1b631f14eb0140f6a4154599cd25296cc4d106d9db7c995bbdebe6d",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/before/git-state.json",
+      "raw_sha256": "629236439f1e3524c9a2c2e9b8752dc83eb6682b80f0d8a8a3ac9e9b04e5000b",
+      "public_sha256": "e6e29208a3e3d27d3884c53d3d2d7bcea165db5cb7c96ca769a877ccb66e1896",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/before/manifest.json",
+      "raw_sha256": "eef195aa90d04420ae2c72ac8c0dd1d7ec61cd8e6111dde037da2e656f1dab55",
+      "public_sha256": "b3d9e2b5e751774ae1ee9d844b9f08bd23143d10b77281371d404aeb88e0cb10",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/before/spec-trace.md",
+      "raw_sha256": "4007a000c94a81921e3b20148953950094a76162fe5f9898a94b07066b7db9ed",
+      "public_sha256": "1d1766ca326288839c23b1e6a85139f9e3b71be11c2da0da59d13ab44224adf6",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/before/spec.md",
+      "raw_sha256": "d532591dab15272455f13cd5061042aa49795847cb24cd76c3a90e80865b1619",
+      "public_sha256": "4ad842a972cb7c4204aa1fe82c414e134d453d3337212b295da405e3e1efe35c",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/document-fingerprints.json",
+      "raw_sha256": "4f7c3cb01f0a7b00758d434f7297b1002ef7c50118439126486cb4a50b4df93d",
+      "public_sha256": "0b2ea389bc419e58ceed237166f9fb88331ed96f39a1a3881844d794115e6bc9",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/git-read-events.jsonl",
+      "raw_sha256": "0a352524f2917abd5698b9d41fa0f7f768b8c33942b2bfba67d2e378baffe5b9",
+      "public_sha256": "65f7a54a47ed6b5d04e342df6f22f3b52199a177b6ce43bc9cb7fc1a4ec72f88",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/immutable-input-check.json",
+      "raw_sha256": "ad8d2aea327a4ae8e664eeb89c2e064c342e4236a31cd6b2ae225ede34d88270",
+      "public_sha256": "c5bfd388c3d81402bd39a76b6ed05880da452720e4ac2577b8df7d4a08734891",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/method-delta.md.diff",
+      "raw_sha256": "8fb7e451c26a865d681ee1329c542d5dd28abb29a117b2e8999328d3e5e88ca8",
+      "public_sha256": "76557b8b703acc1d6316434b550655eec4d8f5b7a569a464621f4dbf2292fff0",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/probe-inputs/injected-format-spec.txt",
+      "raw_sha256": "76e363d9928ccc93f9f0e82142d0e39c1f65334afcd650fcf4c5fb71f092c60f",
+      "public_sha256": "cd95682c6601f96e5ebc7c54995cc27093c3f48ffa6e91179fd2e710b182b691",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/probe-inputs/missing-M07-delta.txt",
+      "raw_sha256": "0dbb7cb4a71ea32415a99f9aa3462cb800eaa48ed139fd2c9b674ad993974347",
+      "public_sha256": "3d7afbf7ae1e46ab3eb030b1d5bfc45d25143cdbb4fa0e94e09900af4778eec7",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/probe-inputs/missing-owner-spec.txt",
+      "raw_sha256": "89636e84f910d4f27dd1f8d0b1a2c85e09faddf703367ed3e91a610cd895867c",
+      "public_sha256": "050786670bf008290a1ea70ca7682c71c34420c9d64b51744f368f2404ae399e",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/probe-run-1.json",
+      "raw_sha256": "db5279678847ddf93fb8c6179c41f3ac560f04376e6d3619ebe5d90313a1e361",
+      "public_sha256": "4321686271fa2ec23c271b40503fd2e8118bd20b9fc135fe77bbe6f96965c08e",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/probe-run-1.stdout.txt",
+      "raw_sha256": "792592f9e76cfa7be4bd754e4e2bfa89e9e9aed606d6a558b781cd824a5a177a",
+      "public_sha256": "d644d2135b8bce3b240d8b9acfb1964230ab16f178168a52a2b1d801882cc081",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/protected-check.json",
+      "raw_sha256": "b270a171b82ec3ef1b7a6d6508a05b6e3158b3f024f8531037f666870522b0e3",
+      "public_sha256": "2006d96639f1dca532038e139b1a1a9e2041f6e973a27a76c7f2031b9459885b",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/source-comparisons.json",
+      "raw_sha256": "54054f2bfd0a9fd79b70d10d6b932fed9fef1fc8ecbe8678772f7224efed4752",
+      "public_sha256": "091ecfdd70d36751066ed483e813b43185e6e0e7d0581ad298cbbbb26f4ccd40",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/source-facts.stdout.txt",
+      "raw_sha256": "b5783a3cdd33ba3787da145f417ee122f4410908685768fdd4ca664361f0bda6",
+      "public_sha256": "fbca807be85b3191aa2dc5809985a911ddec22a362d71d8543243ddeec7ea889",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/source-fingerprints.json",
+      "raw_sha256": "65c968fd95dcf5596cdb87ca0e2f4d873ec4ab504b2ac8208b7a4d77db0d28ac",
+      "public_sha256": "b501e12b85bdee2121bd932516d2e08d5cb37b23f046e4e4468db90b231866eb",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/spec-trace.md.diff",
+      "raw_sha256": "2186b8c47a0b8ed9f008d7742ee9d5cee39b6ee0d4e63a0ccdbf0fd052c04b5c",
+      "public_sha256": "d2e8d0ffa0d32267e26e2d2139614764b6b74fc84c45b946c30fb6f00fd8c2b5",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/spec.md.diff",
+      "raw_sha256": "8da3d3ecbbaba51b62104bde7f4c29b81325215ab3f6b4c09a38b061cd57e8e5",
+      "public_sha256": "15f886ee74bef6f71bc5a1998a332ad4cf035720b51a8b1357af972c875823fb",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/manifest.json",
+      "raw_sha256": "848e717efb3be8d8ab4650439125221d134b5b9e7d20827fd614cb3a628f7bdd",
+      "public_sha256": "6d150e454db29ba7f3dc413eaf6e353ea3ec360557fec5e2ad3534707c467b6f",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/after-git-state.json",
+      "raw_sha256": "8c9856c91420a91f1f60882db2b1c2b29966a68b2e69e109b01f8a5754352c28",
+      "public_sha256": "b5126e2cf07f9b884d10c6c7c05dab1d5c422a08e1e5fcbeb0795811694f2df5",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/after-manifest.json",
+      "raw_sha256": "069023751d2ae3e0ee61e9cd9a8394797258db87c9b2f0968b3fbee71790a1d4",
+      "public_sha256": "a1d46803a82333e96acec49c1ab6ba915782528492c4c7f398238c5b659d3337",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/analysis.md.diff",
+      "raw_sha256": "ade3f5680320316a4684e2b89f720b7c2fbf1a91721dfb4f2b166bebbef03bcd",
+      "public_sha256": "782bff5a9deb3ab7c9ed2ce2cf9e219ed94e9267271af00bee964ad7a9d844cd",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/before/analysis.md",
+      "raw_sha256": "b4db7e330788bb3f8da230ab8ed40345d8444342d4c1c87dbb909c5801dcfdf6",
+      "public_sha256": "6aad8db8cfe591011cac637dff296e5b0340b10380d7cbdedbda2b4fbe5d2d0e",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/before/git-state.json",
+      "raw_sha256": "629236439f1e3524c9a2c2e9b8752dc83eb6682b80f0d8a8a3ac9e9b04e5000b",
+      "public_sha256": "e6e29208a3e3d27d3884c53d3d2d7bcea165db5cb7c96ca769a877ccb66e1896",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/before/manifest.json",
+      "raw_sha256": "eef195aa90d04420ae2c72ac8c0dd1d7ec61cd8e6111dde037da2e656f1dab55",
+      "public_sha256": "b3d9e2b5e751774ae1ee9d844b9f08bd23143d10b77281371d404aeb88e0cb10",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/before/spec-trace.md",
+      "raw_sha256": "4007a000c94a81921e3b20148953950094a76162fe5f9898a94b07066b7db9ed",
+      "public_sha256": "ecf001429411ad1e856c1ea4f5ea44562cd3e6be866afdee3c7eeae57bc85b0e",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/before/spec.md",
+      "raw_sha256": "d532591dab15272455f13cd5061042aa49795847cb24cd76c3a90e80865b1619",
+      "public_sha256": "a47721bfbb5781bea6414082eaf37fb96a9d6391d1836a0ad65421e57a9e903c",
+      "reasons": [
+        "неработающие ссылки выдержки оформлены как исторические цели со ссылкой на точный архив"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/document-fingerprints.json",
+      "raw_sha256": "4f7c3cb01f0a7b00758d434f7297b1002ef7c50118439126486cb4a50b4df93d",
+      "public_sha256": "0b2ea389bc419e58ceed237166f9fb88331ed96f39a1a3881844d794115e6bc9",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/git-read-events.jsonl",
+      "raw_sha256": "0a352524f2917abd5698b9d41fa0f7f768b8c33942b2bfba67d2e378baffe5b9",
+      "public_sha256": "65f7a54a47ed6b5d04e342df6f22f3b52199a177b6ce43bc9cb7fc1a4ec72f88",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/immutable-input-check.json",
+      "raw_sha256": "ad8d2aea327a4ae8e664eeb89c2e064c342e4236a31cd6b2ae225ede34d88270",
+      "public_sha256": "c5bfd388c3d81402bd39a76b6ed05880da452720e4ac2577b8df7d4a08734891",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/method-delta.md.diff",
+      "raw_sha256": "8fb7e451c26a865d681ee1329c542d5dd28abb29a117b2e8999328d3e5e88ca8",
+      "public_sha256": "76557b8b703acc1d6316434b550655eec4d8f5b7a569a464621f4dbf2292fff0",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/probe-inputs/injected-format-spec.txt",
+      "raw_sha256": "76e363d9928ccc93f9f0e82142d0e39c1f65334afcd650fcf4c5fb71f092c60f",
+      "public_sha256": "cd95682c6601f96e5ebc7c54995cc27093c3f48ffa6e91179fd2e710b182b691",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/probe-inputs/missing-M07-delta.txt",
+      "raw_sha256": "0dbb7cb4a71ea32415a99f9aa3462cb800eaa48ed139fd2c9b674ad993974347",
+      "public_sha256": "3d7afbf7ae1e46ab3eb030b1d5bfc45d25143cdbb4fa0e94e09900af4778eec7",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/probe-inputs/missing-owner-spec.txt",
+      "raw_sha256": "89636e84f910d4f27dd1f8d0b1a2c85e09faddf703367ed3e91a610cd895867c",
+      "public_sha256": "050786670bf008290a1ea70ca7682c71c34420c9d64b51744f368f2404ae399e",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/probe-run-1.json",
+      "raw_sha256": "db5279678847ddf93fb8c6179c41f3ac560f04376e6d3619ebe5d90313a1e361",
+      "public_sha256": "4321686271fa2ec23c271b40503fd2e8118bd20b9fc135fe77bbe6f96965c08e",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/probe-run-1.stdout.txt",
+      "raw_sha256": "792592f9e76cfa7be4bd754e4e2bfa89e9e9aed606d6a558b781cd824a5a177a",
+      "public_sha256": "d644d2135b8bce3b240d8b9acfb1964230ab16f178168a52a2b1d801882cc081",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/protected-check.json",
+      "raw_sha256": "b270a171b82ec3ef1b7a6d6508a05b6e3158b3f024f8531037f666870522b0e3",
+      "public_sha256": "2006d96639f1dca532038e139b1a1a9e2041f6e973a27a76c7f2031b9459885b",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/source-comparisons.json",
+      "raw_sha256": "54054f2bfd0a9fd79b70d10d6b932fed9fef1fc8ecbe8678772f7224efed4752",
+      "public_sha256": "091ecfdd70d36751066ed483e813b43185e6e0e7d0581ad298cbbbb26f4ccd40",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/source-facts.stdout.txt",
+      "raw_sha256": "b5783a3cdd33ba3787da145f417ee122f4410908685768fdd4ca664361f0bda6",
+      "public_sha256": "fbca807be85b3191aa2dc5809985a911ddec22a362d71d8543243ddeec7ea889",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/source-fingerprints.json",
+      "raw_sha256": "65c968fd95dcf5596cdb87ca0e2f4d873ec4ab504b2ac8208b7a4d77db0d28ac",
+      "public_sha256": "b501e12b85bdee2121bd932516d2e08d5cb37b23f046e4e4468db90b231866eb",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/spec-trace.md.diff",
+      "raw_sha256": "2186b8c47a0b8ed9f008d7742ee9d5cee39b6ee0d4e63a0ccdbf0fd052c04b5c",
+      "public_sha256": "d2e8d0ffa0d32267e26e2d2139614764b6b74fc84c45b946c30fb6f00fd8c2b5",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/spec.md.diff",
+      "raw_sha256": "8da3d3ecbbaba51b62104bde7f4c29b81325215ab3f6b4c09a38b061cd57e8e5",
+      "public_sha256": "15f886ee74bef6f71bc5a1998a332ad4cf035720b51a8b1357af972c875823fb",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/submitted/scope-revision-2/upstream.json",
+      "raw_sha256": "cc532ab72e1d8481b7e07f88bfddbae5942f43717d2375bc4373e0c59aef35a3",
+      "public_sha256": "08fbbd5398b5ba17d55fda58eb71b36e886d37cfe0a92aa00e96cb41ae2dc144",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2/upstream.json",
+      "raw_sha256": "cc532ab72e1d8481b7e07f88bfddbae5942f43717d2375bc4373e0c59aef35a3",
+      "public_sha256": "08fbbd5398b5ba17d55fda58eb71b36e886d37cfe0a92aa00e96cb41ae2dc144",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2-integrator-replay/probe-run-1.json",
+      "raw_sha256": "db5279678847ddf93fb8c6179c41f3ac560f04376e6d3619ebe5d90313a1e361",
+      "public_sha256": "4321686271fa2ec23c271b40503fd2e8118bd20b9fc135fe77bbe6f96965c08e",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/scope-revision-2-integrator-replay/probe-run-1.stdout.txt",
+      "raw_sha256": "792592f9e76cfa7be4bd754e4e2bfa89e9e9aed606d6a558b781cd824a5a177a",
+      "public_sha256": "d644d2135b8bce3b240d8b9acfb1964230ab16f178168a52a2b1d801882cc081",
+      "reasons": [
+        "BOM/переводы строк/явное представление ошибочных кодовых единиц"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/spec-review-6.md",
+      "raw_sha256": "5cb83ebeafa39cdaef8c87cf403de11b7c3b7537cb2027b18977baeb66e18e1b",
+      "public_sha256": "8d7417e6eed51eb2a56cea8164def3440789f3a28a5fe204440395ede2f43f84",
+      "reasons": [
+        "пробелы машинного заголовка; числа/вердикт не изменены"
+      ]
+    },
+    {
+      "path": "doc/tasks/061-kanon-i-aktualnaya-metodika/spec.md",
+      "raw_sha256": "043aa8155cae35cd07f50baaec118e89da5fcb163067645262859531813490bc",
+      "public_sha256": "0dd6b94d183c43047245838187573f5f748da871e11b3ec1ed18fd982eb0cc6f",
+      "reasons": [
+        "служебная строка документа перемещена на строку2; основание утверждения сохранено"
+      ]
+    }
+  ]
+}

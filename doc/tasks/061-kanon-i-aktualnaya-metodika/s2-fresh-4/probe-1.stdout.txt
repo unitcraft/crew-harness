@@ -1,0 +1,8 @@
+spec.md: исходный=root=frozen=manifest; мутация +SPACE отвергнута
+analysis.md: исходный=root=frozen=manifest; мутация +SPACE отвергнута
+031-impact.md: исходный=root=frozen=manifest; мутация +SPACE отвергнута
+spec-trace.md: исходный=root=frozen=manifest; мутация +SPACE отвергнута
+method-delta.md: исходный=root=frozen=manifest; мутация +SPACE отвергнута
+source-inventory.md: исходный=root=frozen=manifest; мутация +SPACE отвергнута
+owner-gate-decisions.md: исходный=root=frozen=manifest; мутация +SPACE отвергнута
+Проба 1: 7 положительных и 7 отрицательных контролей; без записи входов

@@ -1,0 +1,80 @@
+{
+  "protected_mismatches": [],
+  "prefixes": {
+    "progress.log": true,
+    "profile.log": true,
+    "usage.log": true
+  },
+  "privacy_pattern_hits": [],
+  "outputs": {
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/check.py": {
+      "size": 9417,
+      "sha256": "6f261fb456a5eb7aaca36363558be2bf9d17d1034be3b9f9955c1871b5bbdd2b"
+    },
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/corrected-check.py": {
+      "size": 1110,
+      "sha256": "fd1edb191b3188c11f830d0f064e4b3bfefd67fdc8382f09763735f4768a8bf1"
+    },
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/expected.md": {
+      "size": 533,
+      "sha256": "1ba036f91298941ccdd78b0bc6d8c150270c638f0b11ea9ec00a6fe387bb1075"
+    },
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/identity.txt": {
+      "size": 78,
+      "sha256": "97750a60383ead599fa3dcb53547247387963f111e9faf821c143798ee417328"
+    },
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/manifest.json": {
+      "size": 3011,
+      "sha256": "8093dae97c7a02d14e03392397012e1291231ca6e9fac5446b2cc3b58e1840a7"
+    },
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/manual-results.md": {
+      "size": 8554,
+      "sha256": "303a42eace0c8da794990e8c6f309a5fe2d9378d56a853b5be8de32f21de334e"
+    },
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/preservation.json": {
+      "size": 1809,
+      "sha256": "b97e2a6659a2e56b061a8624be411984c91ce9fe523532ea60e0810253ccbaf8"
+    },
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/probe-results-corrected.json": {
+      "size": 11559,
+      "sha256": "5655dfd1a3472060b55d3eb083d83b3e4a32ac8e9ad2a61c26fd467745f959b8"
+    },
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/probe-results.json": {
+      "size": 11995,
+      "sha256": "a3496d4e3a3e198dfeb101c39739760f73200d895425c0e72a7d1e96b67c390d"
+    },
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/probes.md": {
+      "size": 3351,
+      "sha256": "0d7da65fa59cd0a21d57da7bc6c4358916c3f9e041ccae35a629ae9cf6f876d8"
+    },
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/profile.log.prefix": {
+      "size": 3183,
+      "sha256": "6436862e3847f922c6bffcd2d80a870d25f0b319c321b445709197180f6f6dab"
+    },
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/progress.log.prefix": {
+      "size": 14241,
+      "sha256": "f15ea8c6f839c21ff3962fbe82359acdec4f95372f3e27959dd31878fb7c83d2"
+    },
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/read-map.md": {
+      "size": 2405,
+      "sha256": "cae90bfa3f3f69b3ce5e742c7a8d53eefe9fb749116234776b22854ea7028001"
+    },
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/usage.log.prefix": {
+      "size": 4419,
+      "sha256": "c0a544303333c1fdd286d8169b0120c2ffb51be863b91f8905f59d881179ef0c"
+    },
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/whole-after.json": {
+      "size": 382705,
+      "sha256": "72c6a973731d749a254ebe8ba9268ac59a06f5cd8238ab2f772b7c36b2a5963c"
+    },
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/evidence/launch-39-С6/whole-before.json": {
+      "size": 379719,
+      "sha256": "aa980a8b96cd67420cd82b1c3eaa0835b60ee702394187b3aded0c3ba240780b"
+    },
+    "doc/tasks/061-kanon-i-aktualnaya-metodika/review-1.md": {
+      "size": 18529,
+      "sha256": "6cb22b6ebb9a7943d098774692e1fd04db61f6d9c3ad262c14a3dabb6335ebd7"
+    }
+  },
+  "pending": "Только эта запись final-check и plugin submit log; после submit остановка."
+}

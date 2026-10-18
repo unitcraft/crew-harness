@@ -1,0 +1,28 @@
+{
+  "own_before_count": 690,
+  "own_after_count": 690,
+  "changed": [],
+  "added": [],
+  "git_same": {
+    "head": true,
+    "branch": true
+  },
+  "status_existing_same": true,
+  "preflight_count": 692,
+  "submitted_count": 43,
+  "author_claim_comparison": {
+    "before_count": 1105,
+    "after_count": 1105,
+    "changed": [
+      "doc/tasks/061-kanon-i-aktualnaya-metodika/analysis.md",
+      "doc/tasks/061-kanon-i-aktualnaya-metodika/method-delta.md",
+      "doc/tasks/061-kanon-i-aktualnaya-metodika/spec-trace.md",
+      "doc/tasks/061-kanon-i-aktualnaya-metodika/spec.md"
+    ],
+    "unchanged": 1101
+  },
+  "exit": 0,
+  "preflight_bad": [],
+  "submitted_bad": [],
+  "author_actual_bad": []
+}
