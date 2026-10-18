@@ -15,13 +15,15 @@ module crew_harness.engine
 import std.time.duration
 
 /// Engine: runs one machine for one session. `to_send` and `to_cancel` are the orders committed
-/// and not yet dispatched.
+/// and not yet dispatched; `to_ack` are the source keys of events that the journal shows as committed
+/// before a restart and that the agent handler is told about again (see the effect `Agent`, `ack`).
 export type Engine[M] {
     machine M,
     id str,
     state EngineState,
     to_send []Request[str],
-    to_cancel []str
+    to_cancel []str,
+    to_ack []str
 }
 
 fn now_ms() Time -> int => Time.now().unix_millis()
@@ -100,7 +102,7 @@ export fn start_engine[M Machine](machine M, id str) Journal Store Time -> Engin
     ro trace = "t${now}-${id}"
     mut state = EngineState.fresh(trace, machine.initial())
     state.event_counter = 1
-    mut e Engine[M] = { machine, id, state, to_send: []Request[str].new(), to_cancel: []str.new() }
+    mut e Engine[M] = { machine, id, state, to_send: []Request[str].new(), to_cancel: []str.new(), to_ack: []str.new() }
     mut entries = []JournalEntry.new()
     entries.push(entry_of(trace, 1, "start-1", "", now, "start", "machine ${machine.name()}"))
     e.commit(1, entries)
@@ -120,16 +122,53 @@ export fn resume_engine[M Machine](machine M, id str) Journal Store Time -> Opti
     }
 }
 
+// The source key of an incoming event in the text of its journal line ("progress/agent_chunk src=acp-7"), None - there is none.
+fn source_of(text str) -> Option[str] {
+    ro at = text.find(" src=")?
+    Some(text[at + 5..])
+}
+
+// Which lines of the journal belong to steps that did not commit and were then taken over by a restart? A step that did not
+// commit leaves lines with the number that the next restart takes for its own line (the restart is a step of its own and the
+// snapshot of the last commit does not know the dead step), and the restart line is written AFTER them. So, walking from the
+// end, a line whose step number is not below the number of a restart line that comes later in the file belongs to a step that
+// did not commit (rule 13): it must not count as sent, cancelled or accepted. Returns one flag per line (1 - such a line).
+fn overtaken_lines(all []JournalEntry, trace str) -> []int {
+    mut flags = []int.new()
+    flags.resize(all.len(), 0)
+    mut cut = -1
+    mut i = all.len() - 1
+    while i >= 0 {
+        ro entry = all[i]
+        if entry.trace == trace {
+            ro live = cut < 0 || entry.step < cut
+            if !live { flags[i] = 1 }
+            if live && entry.kind == "restart" { cut = entry.step }
+        }
+        i -= 1
+    }
+    flags
+}
+
 fn restart[M Machine](machine M, id str, state EngineState) Journal Store Time -> Engine[M] {
     ro now = now_ms()
     mut sent = []str.new()
     mut cancels = []str.new()
     mut cancels_sent = []str.new()
+    mut committed_sources = []str.new()
     mut rolled_back = 0
-    for entry in Journal.read_all() {
-        if entry.trace == state.trace {
+    ro journal = Journal.read_all()
+    ro overtaken = overtaken_lines(journal, state.trace)
+    mut at = 0
+    for entry in journal {
+        if entry.trace == state.trace && overtaken[at] == 0 {
             if entry.step > state.step {
                 rolled_back += 1
+            } else if entry.kind == "event" {
+                match source_of(entry.text) {
+                    Some(key) => committed_sources.push(key)
+                    None => ()
+                }
             } else if entry.kind == "sent" {
                 sent.push(entry.request)
             } else if entry.kind == "cancel" {
@@ -138,8 +177,9 @@ fn restart[M Machine](machine M, id str, state EngineState) Journal Store Time -
                 cancels_sent.push(entry.request)
             }
         }
+        at += 1
     }
-    mut e Engine[M] = { machine, id, state, to_send: []Request[str].new(), to_cancel: []str.new() }
+    mut e Engine[M] = { machine, id, state, to_send: []Request[str].new(), to_cancel: []str.new(), to_ack: []str.new() }
     mut unsent = 0
     for r in state.open {
         if !sent.contains(r.id) {
@@ -150,6 +190,7 @@ fn restart[M Machine](machine M, id str, state EngineState) Journal Store Time -
     for cid in cancels {
         if !cancels_sent.contains(cid) { e.to_cancel.push(cid) }
     }
+    e.to_ack = committed_sources
     e.state.event_counter += 1
     ro step = state.step + 1
     ro cause = "restart-${e.state.event_counter}"
@@ -180,7 +221,7 @@ fn Engine[M Machine] mut @commit(step int, entries []JournalEntry) Journal Store
 }
 
 // One output of the machine applied to the engine data; the journal lines are collected in `entries`.
-fn Engine[M Machine] mut @apply(output Output, step int, cause str, now int, mut entries []JournalEntry) -> () {
+fn Engine[M Machine] mut @apply(output StepOutput, step int, cause str, now int, mut entries []JournalEntry) -> () {
     match output {
         Log(note) => entries.push(entry_of(@state.trace, step, cause, "", now, "note", note.text))
         Save => entries.push(entry_of(@state.trace, step, cause, "", now, "snapshot", "snapshot of step ${step} ordered"))
@@ -242,7 +283,8 @@ export fn Engine[M Machine] mut @accept(raw Event) Journal Store Time -> () {
         None => ""
     }
     mut entries = []JournalEntry.new()
-    entries.push(entry_of(@state.trace, step, event.id, rid, now, "event", "${event.kind.name()}/${event.name}"))
+    ro source = if raw.id.byte_len() > 0 { " src=${raw.id}" } else { "" }
+    entries.push(entry_of(@state.trace, step, event.id, rid, now, "event", "${event.kind.name()}/${event.name}${source}"))
 
     // a reply of a request that is not open is discarded and remembered (spec rule 17), the machine does not see it
     if event.kind.is_request_bound() {
@@ -285,9 +327,13 @@ fn Engine[M Machine] @mark(kind str, request str, text str) Time -> JournalEntry
     entry_in(entry_of(@state.trace, @state.step, "dispatch", request, now_ms(), kind, text), @machine.state_name(@state.machine_state))
 }
 
-/// Send what the commits have ordered and nobody has sent yet: the requests, then the cancels.
+/// Tell the agent handler which incoming events are committed (after a restart), then send what the commits have ordered
+/// and nobody has sent yet: the requests, then the cancels.
 /// Every send leaves a mark in the journal ("sent", "cancel_sent"); the marks tell a restart what is done.
 export fn Engine[M Machine] mut @dispatch() Journal Agent Time -> () {
+    ro acks = @to_ack
+    @to_ack = []str.new()
+    for key in acks { Agent.ack(key) }
     ro requests = @to_send
     @to_send = []Request[str].new()
     for request in requests {
@@ -309,7 +355,7 @@ export fn Engine[M Machine] mut @feed(raw Event) Journal Store Agent Time -> () 
 }
 
 /// Take what is due: send the pending orders, accept the incoming events of the agent in the order of
-/// arrival, then make an `Expired` event for every open request whose idle term passed.
+/// arrival (each is acknowledged to the agent handler after its step is committed), then make an `Expired` event for every open request whose idle term passed.
 /// Returns the number of steps made.
 export fn Engine[M Machine] mut @pump() Journal Store Agent Time -> int {
     mut made = 0
@@ -318,7 +364,10 @@ export fn Engine[M Machine] mut @pump() Journal Store Agent Time -> int {
     while more {
         match Agent.receive() {
             Some(event) => {
-                @feed(event)
+                // the step is committed by `accept`; only then the handler is told that the event is the engine's
+                @accept(event)
+                if event.id.byte_len() > 0 { Agent.ack(event.id) }
+                @dispatch()
                 made += 1
             }
             None => { more = false }

@@ -1,0 +1,15 @@
+module repro_acp.fluent_assign_back
+
+// Oracle 0.1.0: the setters of `Command` change it in place and return it (`-> @`). Assigning the result back to the
+// variable (`command = command.arg("a")`, natural in a loop over the arguments) does not compile: the C assigns a
+// pointer to a value (`assigning to 'NovaValue_Command' from incompatible type 'NovaValue_Command *'`).
+// Dropping the result (`command.arg("a")` as a statement) compiles and works.
+// Expected: PASS. Actual: CC-FAIL.
+
+import std.os.{Command}
+
+test "assign the result of a fluent setter back" {
+    mut command = Command.new("node")
+    for a in ["one", "two"] { command = command.arg(a) }
+    assert(true)
+}

@@ -13,6 +13,8 @@ task 090 (`doc/tasks/090-product-env-spike/`).
 | `acp/` | `acp_initialize.mjs`: one `initialize` request to `opencode acp` over stdio, no login, no session | exit code 0 and the printed version |
 | `repro_mut_binding/` | minimal reproduction of a Polaris documentation example that Oracle 0.1.0 rejects | see "Known problems" |
 | `repro_engine/` | minimal reproductions of six Oracle 0.1.0 defects found while writing the state machine engine (task 091) | see "Known problems", items 8-13 |
+| `repro_acp/` | minimal reproductions of Oracle 0.1.0 defects found while writing the ACP client (task 095) | see "Known problems", items 14-18 and 20 |
+| `repro_child_pipes/` | a program: pipes of a child process that now and then do not come back (task 095) | see "Known problems", item 19 |
 
 Binaries, `target/` and downloaded archives are not committed (`.gitignore`).
 
@@ -159,3 +161,33 @@ generic record as `Option[Response[str]]` once produced C with the inner enum wi
 `ro response Response[str] = Answer(...)`, fixed it), and an anonymous record literal of a generic record as the argument of
 `push` (`v.push({ id, input })` with `Request[str]`) was rejected by the code generator with `anonymous record literal without
 spread not supported in codegen` (a function returning the record fixed it).
+
+Found by task 095 (the ACP client, `src/acp/`, and the file handlers, `src/storage/`); the reproductions are in `repro_acp/`
+(the same form as `repro_engine/`: one directory per defect under `src/`, a test file that must PASS and does not):
+
+14. **`user_output_vs_std_os`**: a user type named `Output` (the engine had one) breaks the C (`field has incomplete type
+    'NovaValue_Output'`) as soon as a module of the compile unit imports `std.os`, whose `Output` is the result of
+    `Command.output()`. The checker says nothing. The engine type is now `StepOutput`.
+15. **`char_param_str_literal`**: `trim_end_matches` takes a `char`. A one-character string literal (`"\r"`) is refused by the checker for a plain `str` receiver, but when the
+    receiver is the loop variable of `for part in text.split(...)` it passes the checker and the C gets a `nova_str` for a `nova_char`. `strip_suffix` compiles.
+16. **`fluent_assign_back`**: the setters of `Command` change it in place and return it (`-> @`); `command = command.arg(a)`
+    does not compile (a pointer assigned to a value in the C). A statement `command.arg(a)` works.
+17. **`atomic_in_record_copy`**: an `AtomicInt` put into a record is a copy of the variable; a store through the variable is not seen through the
+    field. A value that a fiber and the holder of a record share must be a channel (`Chan[int]`, a reference).
+18. **`consume_capture_vs_field`**: the name of a `consume` binding captured by a fiber body is a C macro; a field with the same name used in
+    the body (`done.tx` in `spawn consume tx { ... }`) is rewritten by the preprocessor and the C does not compile. Rename the binding.
+19. **`repro_child_pipes`** (a program, not a test): the pipes of a child process now and then do not come back. A write to the stdin of a
+    child parks and never returns - neither when the child dies, nor when a `supervised(timeout:)` around it expires (a cancel of a
+    `spawn`ed scope does end a write that is merely blocked on a full pipe); a fiber started with `detach` is not seen again; a binary that
+    has finished its tests does not exit (the runtime prints `NOVA_RUNTIME_DUMP reason=pre-exit-drain-10s-remote-1` after 10 s and waits for
+    ever). It shows up about once in 400-3000 starts of a child, much oftener when the machine is busy and when the fibers are `detach`ed
+    one by one. In the ACP client what helped: all the fibers of a client in one `supervised` scope of a detached keeper fiber, the writer in a scope
+    that can be cancelled, and a `close()` that waits for the fibers to end (100 runs of the 40-process test binary in a row, none hung; before,
+    about one in twenty).
+20. **`output_over_4k`**: a test binary blocks on its stdout when its lines (`  PASS: <name>` per test) come to more than 4096 bytes and nobody reads
+    the pipe. `nova test` of one unit reads it; `nova test <dir>` over several units that run at once did not, and killed the idle binary after
+    about 70 s (`TIMEOUT`). Keep the output of a unit under 4 KB: split it, shorten the names.
+
+Also met in task 095 and not reduced: `exists` is a reserved word (a function of that name is a syntax error); the names of
+functions are one namespace per folder, so the peer test files of a module cannot declare a helper twice; a test that fails
+before it closes its ACP client leaves the agent process alive and `nova test` then waits for the pipes of that process.

@@ -1,0 +1,259 @@
+// files.nv - the file handlers of the effects `Journal` and `Store` of the engine (task 095).
+//
+// The data folder holds, per session, three files named by the session id:
+//   <id>.journal   the journal: one line of JSON per entry (the format of `journal_line`), appended;
+//   <id>.snapshot  the snapshot: one JSON object, replaced as a whole (a temporary file, then a rename);
+//   <id>.inbox     the incoming events of the ACP client that are not acknowledged yet (src/acp).
+// A session id is checked (`valid_session_name`): letters, digits, dot, dash and underscore, not starting with a dot,
+// no two dots in a row, at most 128 characters - so a name cannot hold a separator, a drive letter or `..`
+// and a path never leaves the data folder.
+//
+// A failed write is not an error value: the effects return plain values, a handler that cannot write stops the
+// process (`panic`), the step is then not committed (rule 13 of the specification).
+//
+// Why a module of its own and not `src/engine/`: the engine knows effects and in-memory handlers only; the
+// files bring `std.fs` into the program and the engine must stay free of it.
+module crew_harness.storage
+
+import crew_harness.engine.{Journal, Store, JournalEntry, Snapshot, journal_line, parse_journal_line}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+import std.fs.{Fs, real_fs, File, Path, read, create_dir_all, rename, metadata, remove_file}
+import std.io.{write_all}
+
+const MAX_NAME = 128
+
+/// Is this text a name that is safe inside the data folder?
+export fn valid_session_name(name str) -> bool {
+    ro bytes = name.bytes()
+    if bytes.len() == 0 || bytes.len() > MAX_NAME { return false }
+    if bytes[0] == (46 as u8) { return false }
+    mut previous_dot = false
+    for b in bytes {
+        ro letter = (b >= (97 as u8) && b <= (122 as u8)) || (b >= (65 as u8) && b <= (90 as u8))
+        ro digit = b >= (48 as u8) && b <= (57 as u8)
+        ro dot = b == (46 as u8)
+        ro mark = b == (45 as u8) || b == (95 as u8)
+        if !(letter || digit || dot || mark) { return false }
+        if dot && previous_dot { return false }
+        previous_dot = dot
+    }
+    true
+}
+
+/// The data folder: created with its parents; false when it cannot be (a file is in the way, no rights).
+export fn open_data_dir(root str) -> bool {
+    ro path = Path.from_bytes(root.bytes())
+    with Fs = real_fs() {
+        match create_dir_all(path) {
+            Err(e) => false
+            Ok(done) => match metadata(path) {
+                Ok(meta) => meta.is_dir()
+                Err(e) => false
+            }
+        }
+    }
+}
+
+/// The path of a file of a session inside the data folder; None when the session id or the extension is not a safe name.
+export fn session_path(root str, session str, ext str) -> Option[Path] {
+    if !valid_session_name(session) || !valid_session_name(ext) { return None }
+    Some(Path.from_bytes(root.bytes()).join("${session}.${ext}"))
+}
+
+// Does the file end with a line break (or does not exist, or is empty)? A journal that does not was torn in a write.
+fn ends_cleanly(path Path) Fs -> bool {
+    match File.open(path) {
+        Err(e) => true
+        Ok(consume f) => {
+            mut clean = true
+            match f.metadata() {
+                Err(e) => ()
+                Ok(meta) => {
+                    if meta.len() > 0 {
+                        mut last []u8 = []u8.new()
+                        last.resize(1, 0 as u8)
+                        match f.read_at(last, meta.len() - 1) {
+                            Ok(n) => { clean = n == 0 || last[0] == (10 as u8) }
+                            Err(e) => ()
+                        }
+                    }
+                }
+            }
+            match f.close() {
+                Ok(done) => ()
+                Err(e) => ()
+            }
+            clean
+        }
+    }
+}
+
+/// Append one line (a line break is added) to a file, creating it; a torn last line is first ended by a line break,
+/// so the new line is not glued to it. True when the line is written and synced.
+export fn append_line(path Path, line str) Fs -> bool {
+    ro prefix = if ends_cleanly(path) { "" } else { "\n" }
+    match File.append(path) {
+        Err(e) => false
+        Ok(consume f) => {
+            ro written = write_all(f, "${prefix}${line}\n".bytes())
+            mut ok = false
+            match written {
+                Ok(done) => { ok = true }
+                Err(e) => ()
+            }
+            match f.sync_data() {
+                Ok(done) => ()
+                Err(e) => { ok = false }
+            }
+            match f.close() {
+                Ok(done) => ()
+                Err(e) => { ok = false }
+            }
+            ok
+        }
+    }
+}
+
+/// The non-empty lines of a file in order ("\r" at the end cut); a missing or unreadable file has none. The bytes are read
+/// as they are and a broken UTF-8 sequence (a tear inside a letter) is replaced, so one torn line never hides the others.
+export fn read_lines(path Path) Fs -> []str {
+    mut out = []str.new()
+    match read(path) {
+        Err(e) => out
+        Ok(bytes) => {
+            for raw in bytes.to_str_lossy().split("\n") {
+                ro line = raw.strip_suffix("\r") ?? raw
+                if line.byte_len() > 0 { out.push(line) }
+            }
+            out
+        }
+    }
+}
+
+/// Replace the whole file: the text goes to a temporary file beside it, is synced, and the file is renamed over the old
+/// one. A process that dies leaves the old file or the new one, never half of a file. A temporary file left by an earlier
+/// dead process is simply overwritten. True when the file is replaced.
+export fn replace_file(path Path, text str) Fs -> bool {
+    ro tmp = Path.from_bytes("${path.display()}.tmp".bytes())
+    match File.create(tmp) {
+        Err(e) => false
+        Ok(consume f) => {
+            mut ok = false
+            match write_all(f, text.bytes()) {
+                Ok(done) => { ok = true }
+                Err(e) => ()
+            }
+            match f.sync_all() {
+                Ok(done) => ()
+                Err(e) => { ok = false }
+            }
+            match f.close() {
+                Ok(done) => ()
+                Err(e) => { ok = false }
+            }
+            if !ok {
+                ro removed = remove_file(tmp)
+                return false
+            }
+            match rename(tmp, path) {
+                Ok(done) => true
+                Err(e) => {
+                    ro removed = remove_file(tmp)
+                    false
+                }
+            }
+        }
+    }
+}
+
+fn snapshot_of(step int, data str) -> Snapshot => { step, data }
+
+fn put(mut o JsonObject, key str, value JsonValue) -> () {
+    ro replaced = o.insert(key, value)
+}
+
+fn snapshot_text(snapshot Snapshot) -> str {
+    mut o = JsonObject.new()
+    put(o, "step", JsonValue.int(snapshot.step))
+    put(o, "data", JsonValue.str(snapshot.data))
+    JsonValue.object(o).to_str()
+}
+
+// The snapshot of a file text; None when the text is not a snapshot.
+fn parse_snapshot(text str) -> Option[Snapshot] {
+    ro value = match Json.parse(text) {
+        Ok(v) => v
+        Err(e) => return None
+    }
+    ro o = value.object()?
+    ro step = o.get("step")?.int()?
+    ro data = o.get("data")?.str()?
+    Some(snapshot_of(step, data))
+}
+
+fn path_or_stop(root str, session str, ext str) -> Path {
+    match session_path(root, session, ext) {
+        Some(p) => p
+        None => panic("the session name is not a safe file name: ${session}")
+    }
+}
+
+/// The handler of `Journal` for one session: `<root>/<session>.journal`. Lines that are not entries (a torn last line) are
+/// skipped by `read_all`. A session name that is not safe stops the program at once.
+export fn file_journal(root str, session str) -> Effect[Journal] {
+    ro path = path_or_stop(root, session, "journal")
+    effect Journal {
+        write(entry) -> () {
+            with Fs = real_fs() {
+                if !append_line(path, journal_line(entry)) {
+                    panic("the journal cannot be written: ${path.display()}")
+                }
+            }
+        }
+        read_all() -> []JournalEntry {
+            mut out = []JournalEntry.new()
+            with Fs = real_fs() {
+                for line in read_lines(path) {
+                    match parse_journal_line(line) {
+                        Some(entry) => out.push(entry)
+                        None => ()
+                    }
+                }
+            }
+            out
+        }
+    }
+}
+
+/// The handler of `Store`: `<root>/<id>.snapshot` per session. `save` replaces the file as a whole; `load` of a missing
+/// file or of a name that is not safe is None; a file that exists and is not a snapshot comes back as a snapshot the engine
+/// rejects (step -1), so a damaged snapshot is never taken for "no session" and the session is never started over it.
+/// A `save` under a name that is not safe stops the program.
+export fn file_store(root str) -> Effect[Store] {
+    effect Store {
+        save(id, snapshot) -> () {
+            ro path = path_or_stop(root, id, "snapshot")
+            with Fs = real_fs() {
+                if !replace_file(path, snapshot_text(snapshot)) {
+                    panic("the snapshot cannot be saved: ${path.display()}")
+                }
+            }
+        }
+        load(id) -> Option[Snapshot] {
+            match session_path(root, id, "snapshot") {
+                None => None
+                Some(path) => {
+                    with Fs = real_fs() {
+                        match read(path) {
+                            Err(e) => None
+                            Ok(bytes) => match parse_snapshot(bytes.to_str_lossy()) {
+                                Some(snapshot) => Some(snapshot)
+                                None => Some(snapshot_of(-1, ""))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

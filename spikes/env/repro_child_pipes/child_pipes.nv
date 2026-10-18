@@ -1,0 +1,177 @@
+// repro_child_pipes - Oracle 0.1.0 on Windows: a pipe write to a child process that never comes back, found by the ACP client of
+// the product (task 095). A PROGRAM, not a test: it starts `node child_echo_child.js` 400 times, each time with the three
+// fibers the ACP client uses (a stdout reader, a stdin writer, a watcher that owns the Child), writes three lines, waits for the
+// echo, kills the child and asks the writer to end.
+//
+//     cd spikes/env/repro_child_pipes
+//     nova build child_pipes.nv
+//     .\child_pipes.exe          # about 45 s
+//
+// Expected: `rounds 400, echo missing 0, writer stuck 0` and the process ends.
+// Actual: now and then (once in 400 rounds in the first run, none in the next 2400; much more often when the machine is busy
+// and the fibers are `detach`ed one by one as here) a round prints `WRITER STUCK`: the writer is parked in `write_all` and does
+// not come back, neither when the child dies nor on cancel of its scope; then the program prints its last line and does NOT
+// exit: the runtime dumps its state after 10 s (`NOVA_RUNTIME_DUMP reason=pre-exit-drain-10s-remote-1`) and waits for ever.
+// Inside the ACP client (`src/acp/link.nv`) the same defect shows as a binary of tests that never ends, one run in twenty or
+// so under load, and as a first line (`initialize`) that is written and never answered. What helped there: all fibers of
+// a client in one `supervised` scope of a keeper fiber, and a `close()` that waits for the end of the fibers.
+//
+// A `writer marks` line (12 - waiting for a line, 10 - before the write, 11 - after it, 13 - loop end, 14 - stdin closed)
+// tells where the writer stopped.
+
+module repro_child_pipes
+
+import std.io.{write_all}
+import std.os.{Command, Child, ChildStdin, ChildStdout, Stdio, Signal, Tree}
+import std.concurrency.nvchan.{Chan, ChanTx, ChanRx}
+
+fn pipe_in(o Option[ChildStdin]) -> ChildStdin {
+    match o {
+        Some(consume s) => s
+        None => panic("no stdin")
+    }
+}
+
+fn pipe_out(o Option[ChildStdout]) -> ChildStdout {
+    match o {
+        Some(consume s) => s
+        None => panic("no stdout")
+    }
+}
+
+fn reader(consume rx ChildStdout, got ChanTx[int]) Proc -> () {
+    mut buf []u8 = []u8.new()
+    buf.resize(4096, 0 as u8)
+    mut reading = true
+    while reading {
+        match rx.read(buf) {
+            Ok(0) => { reading = false }
+            Ok(n) => { ro ok = got.send(n) }
+            Err(e) => { reading = false }
+        }
+    }
+    rx.close()
+    ro end = got.send(-1)
+}
+
+fn writer(consume tx ChildStdin, lines ChanRx[str], done ChanTx[int], marks ChanTx[int]) Proc -> () {
+    mut writing = true
+    while writing {
+        ro m1 = marks.try_send(12)
+        match lines.recv() {
+            Some(line) => {
+                ro m2 = marks.try_send(10)
+                match write_all(tx, "${line}\n".bytes()) {
+                    Ok(x) => { ro m3 = marks.try_send(11) }
+                    Err(e) => { writing = false }
+                }
+            }
+            None => { writing = false }
+        }
+    }
+    ro m4 = marks.try_send(13)
+    tx.close()
+    ro m5 = marks.try_send(14)
+    ro ok = done.send(1)
+}
+
+fn watcher(consume child Child, kill ChanRx[int], lines ChanTx[str]) Proc -> () {
+    mut waiting = true
+    mut killed = false
+    while waiting {
+        if !killed {
+            match kill.try_recv() {
+                Some(s) => { killed = true }
+                None => ()
+            }
+        }
+        if killed {
+            ro k = child.kill(Signal.Kill)
+        }
+        match child.wait_timeout(25.to_millis()) {
+            Ok(Some(st)) => { waiting = false }
+            Ok(None) => ()
+            Err(e) => { waiting = false }
+        }
+    }
+    child.release()
+    lines.close()
+}
+
+// one round: start, write three lines with pauses, wait for the echoes, stop; returns 0 ok, 1 echo missing, 2 writer stuck
+fn round() Proc Detach Time -> int {
+    mut cmd = Command.new("node")
+    cmd.arg("child_echo_child.js")
+    cmd.stdin(Stdio.Piped)
+    cmd.stdout(Stdio.Piped)
+    cmd.tree(Tree.Group)
+    match cmd.start() {
+        Err(e) => 3
+        Ok(consume started) => {
+            consume child = started
+            consume win = pipe_in(child.take_stdin())
+            consume rout = pipe_out(child.take_stdout())
+            ro got = Chan[int].new(64)
+            ro lines = Chan[str].new(64)
+            ro done = Chan[int].new(4)
+            ro killing = Chan[int].new(4)
+            ro marks = Chan[int].new(64)
+            detach consume rout { reader(rout, got.tx) }
+            detach consume win { writer(win, lines.rx, done.tx, marks.tx) }
+            detach consume child { watcher(child, killing.rx, lines.tx) }
+            mut result = 0
+            ro a = lines.tx.try_send("{\"a\":1}")
+            5.to_millis().sleep()
+            ro b = lines.tx.try_send("{\"b\":2}")
+            5.to_millis().sleep()
+            ro c = lines.tx.try_send("{\"c\":3}")
+            mut bytes = 0
+            mut spins = 0
+            while bytes < 3 * 12 && spins < 300 {
+                match got.rx.try_recv() {
+                    Some(n) => { if n > 0 { bytes += n } }
+                    None => { 10.to_millis().sleep(); spins += 1 }
+                }
+            }
+            if bytes < 3 * 12 { result = 1 }
+            // stop it the way the client does: kill
+            ro k = killing.tx.try_send(1)
+            lines.tx.close()
+            mut waits = 0
+            mut finished = false
+            while waits < 200 && !finished {
+                match done.rx.try_recv() {
+                    Some(x) => { finished = true }
+                    None => { 10.to_millis().sleep(); waits += 1 }
+                }
+            }
+            if !finished {
+                result = 2
+                mut last = -1
+                mut seen = true
+                mut all = ""
+                while seen {
+                    match marks.rx.try_recv() {
+                        Some(m) => { last = m; all = "${all} ${m}" }
+                        None => { seen = false }
+                    }
+                }
+                println("  writer marks (12 recv, 10 before write, 11 after write, 13 loop end, 14 stdin closed):${all}")
+            }
+            result
+        }
+    }
+}
+
+fn main() Proc Io Detach Time -> () {
+    mut bad_echo = 0
+    mut stuck = 0
+    mut i = 0
+    while i < 400 {
+        ro r = round()
+        if r == 1 { bad_echo += 1; println("round ${i}: echo missing") }
+        if r == 2 { stuck += 1; println("round ${i}: WRITER STUCK") }
+        i += 1
+    }
+    println("rounds ${i}, echo missing ${bad_echo}, writer stuck ${stuck}")
+}

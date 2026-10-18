@@ -1,0 +1,28 @@
+module repro_acp.user_output_vs_std_os
+
+// Oracle 0.1.0: a user type named `Output` passes the checker, but as soon as the module (or any module of the
+// same compile unit) imports `std.os`, whose `Output` is the result of `Command.output()`, the generated C
+// has two `Output` and the C compiler stops (`field has incomplete type 'NovaValue_Output'`).
+// Without the import of `std.os` it compiles. The engine of the product called its type `Output` and renamed it
+// to `StepOutput` for this reason (task 095).
+// Expected: PASS (or a checker error that names the clash). Actual: CC-FAIL.
+
+import std.os.{Os, real_os, pid}
+
+export type Output enum
+    | Log(str)
+    | Done
+
+fn describe(o Output) -> str => match o {
+    Log(text) => text
+    Done => "done"
+}
+
+fn my_pid() -> int {
+    with Os = real_os() { pid() }
+}
+
+test "a user enum named Output next to std.os" {
+    assert(describe(Output.Log("x")) == "x")
+    assert(my_pid() > 0)
+}

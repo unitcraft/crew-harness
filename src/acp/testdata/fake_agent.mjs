@@ -1,0 +1,214 @@
+// A fake ACP agent for the tests of src/acp (task 095): JSON-RPC 2.0 over stdio, one message per line.
+//   node fake_agent.mjs [--no-initialize] [--no-session] [--auth-error]
+// Answers `initialize` and `session/new`; what a `session/prompt` does depends on the first word of the prompt text:
+//   (anything else)  an echo in three chunks, then end_turn
+//   tools            unknown update, tool_call, tool_call_update, plan, usage_update, thought, a chunk, end_turn
+//   permission       a tool_call, then session/request_permission; the chunk tells what the client decided
+//   fs               asks the client for fs/read_text_file and terminal/create; the chunk tells the error codes
+//   slow             a chunk, then waits for session/cancel and answers stopReason cancelled (a late chunk first)
+//   crash            a chunk, then exits with code 3
+//   silent           says nothing at all for this prompt (the process stays alive)
+//   dup              a chunk twice, the final answer twice, a chunk after the answer
+//   refuse | maxtokens | maxrequests   the stop reason refusal | max_tokens | max_turn_requests
+//   error            a JSON-RPC error instead of the answer
+//   fragment         Cyrillic and an emoji; one line is written in two pieces cut inside a letter, two lines in one write
+//   noeol            a chunk, then the final answer WITHOUT a line break, then the process exits
+//   caps             a chunk with the clientCapabilities that came with initialize
+//   cancelcount      a chunk with the number of session/cancel notifications received so far
+// The process writes `fake-agent: ready` to stderr when it starts.
+import { createInterface } from "node:readline";
+
+// A guard for the tests: a test that fails before it closes its client would leave this process alive, and the test
+// binary (which waits for the pipes of the process) with it; the process ends by itself after 25 seconds (a test takes
+// a few seconds at most, and `nova test` stops a binary that runs for a minute).
+setTimeout(() => process.exit(0), 25000);
+
+const args = process.argv.slice(2);
+const noInitialize = args.includes("--no-initialize");
+const noSession = args.includes("--no-session");
+const authError = args.includes("--auth-error");
+
+const SESSION = "sess_fake_1";
+let clientCaps = null;
+let cancels = 0;
+let cancelWaiter = null;
+let nextAgentId = 100;
+const pendingAgentCalls = new Map(); // id -> resolve
+
+function write(obj) {
+  process.stdout.write(JSON.stringify(obj) + "\n");
+}
+function update(update) {
+  write({ jsonrpc: "2.0", method: "session/update", params: { sessionId: SESSION, update } });
+}
+function chunk(text) {
+  update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text } });
+}
+function respond(id, result) {
+  write({ jsonrpc: "2.0", id, result });
+}
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+function callClient(method, params) {
+  const id = nextAgentId++;
+  return new Promise((resolve) => {
+    pendingAgentCalls.set(id, resolve);
+    write({ jsonrpc: "2.0", id, method, params });
+  });
+}
+
+async function prompt(id, params) {
+  const first = params.prompt && params.prompt[0];
+  const text = first && first.type === "text" ? first.text : "";
+  const word = text.split(" ")[0];
+  switch (word) {
+    case "tools": {
+      update({ sessionUpdate: "available_commands_update", availableCommands: [] });
+      update({ sessionUpdate: "tool_call", toolCallId: "call_001", title: "Чтение src/main.nv", kind: "read", status: "pending" });
+      update({ sessionUpdate: "tool_call_update", toolCallId: "call_001", status: "completed", content: [{ type: "content", content: { type: "text", text: "файл прочитан" } }] });
+      update({ sessionUpdate: "plan", entries: [{ content: "Проверить", priority: "high", status: "pending" }] });
+      update({ sessionUpdate: "usage_update", used: 53000, size: 200000, cost: { amount: 0.045, currency: "USD" } });
+      update({ sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "думаю" } });
+      update({ sessionUpdate: "hologram_chunk", x: 1 });
+      chunk("Готово");
+      return respond(id, { stopReason: "end_turn" });
+    }
+    case "permission": {
+      update({ sessionUpdate: "tool_call", toolCallId: "call_p1", title: "Записать result.md", kind: "edit", status: "pending" });
+      const answer = await callClient("session/request_permission", {
+        sessionId: SESSION,
+        toolCall: { toolCallId: "call_p1", title: "Записать result.md", kind: "edit" },
+        options: [
+          { optionId: "allow-once", name: "Allow once", kind: "allow_once" },
+          { optionId: "reject-once", name: "Reject", kind: "reject_once" },
+        ],
+      });
+      const outcome = answer && answer.result && answer.result.outcome;
+      const told = outcome ? (outcome.outcome === "selected" ? "selected:" + outcome.optionId : outcome.outcome) : "no-answer";
+      chunk("permission: " + told);
+      return respond(id, { stopReason: told === "cancelled" ? "cancelled" : "end_turn" });
+    }
+    case "fs": {
+      const a = await callClient("fs/read_text_file", { sessionId: SESSION, path: "C:/work/x.txt" });
+      const b = await callClient("terminal/create", { sessionId: SESSION, command: "echo" });
+      chunk("fs: " + (a.error ? a.error.code : "ok") + " terminal: " + (b.error ? b.error.code : "ok"));
+      return respond(id, { stopReason: "end_turn" });
+    }
+    case "slow": {
+      chunk("started");
+      await new Promise((resolve) => { cancelWaiter = resolve; setTimeout(resolve, 15000); });
+      chunk("late chunk after cancel");
+      return respond(id, { stopReason: "cancelled" });
+    }
+    case "crash": {
+      chunk("about to crash");
+      setTimeout(() => process.exit(3), 30);
+      return;
+    }
+    case "silent":
+      return;
+    case "dup": {
+      chunk("once");
+      chunk("once");
+      respond(id, { stopReason: "end_turn" });
+      respond(id, { stopReason: "end_turn" });
+      chunk("after the end");
+      return;
+    }
+    case "refuse":
+      return respond(id, { stopReason: "refusal" });
+    case "maxtokens":
+      return respond(id, { stopReason: "max_tokens" });
+    case "maxrequests":
+      return respond(id, { stopReason: "max_turn_requests" });
+    case "error":
+      return write({ jsonrpc: "2.0", id, error: { code: -32603, message: "internal failure of the fake agent" } });
+    case "fragment": {
+      const line = JSON.stringify({ jsonrpc: "2.0", method: "session/update", params: { sessionId: SESSION, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Привет, мир 🙂" } } } }) + "\n";
+      const bytes = Buffer.from(line, "utf8");
+      const cut = bytes.indexOf(0xd0) + 1; // inside the first Cyrillic letter (its lead byte and its second byte)
+      process.stdout.write(bytes.subarray(0, cut));
+      await sleep(60);
+      process.stdout.write(bytes.subarray(cut));
+      await sleep(30);
+      // two messages in one write
+      const two = JSON.stringify({ jsonrpc: "2.0", method: "session/update", params: { sessionId: SESSION, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: " раз" } } } }) + "\n" +
+        JSON.stringify({ jsonrpc: "2.0", method: "session/update", params: { sessionId: SESSION, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: " два" } } } }) + "\n";
+      process.stdout.write(two);
+      await sleep(30);
+      return respond(id, { stopReason: "end_turn" });
+    }
+    case "noeol": {
+      chunk("last words");
+      await sleep(30);
+      process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, result: { stopReason: "end_turn" } }), () => process.exit(0));
+      return;
+    }
+    case "caps":
+      chunk("caps: " + JSON.stringify(clientCaps));
+      return respond(id, { stopReason: "end_turn" });
+    case "cancelcount":
+      chunk("cancels: " + cancels);
+      return respond(id, { stopReason: "end_turn" });
+    default: {
+      const words = ("Echo: " + text).split(" ");
+      for (let i = 0; i < words.length; i++) {
+        chunk((i === 0 ? "" : " ") + words[i]);
+        await sleep(5);
+      }
+      return respond(id, { stopReason: "end_turn" });
+    }
+  }
+}
+
+function handle(line) {
+  let msg;
+  try {
+    msg = JSON.parse(line);
+  } catch {
+    return;
+  }
+  // an answer to a call of the agent
+  if (msg.id !== undefined && msg.method === undefined) {
+    const resolve = pendingAgentCalls.get(msg.id);
+    if (resolve) {
+      pendingAgentCalls.delete(msg.id);
+      resolve(msg);
+    }
+    return;
+  }
+  if (msg.method === "session/cancel") {
+    cancels++;
+    if (cancelWaiter) cancelWaiter();
+    return;
+  }
+  switch (msg.method) {
+    case "initialize":
+      clientCaps = msg.params && msg.params.clientCapabilities;
+      if (noInitialize) return;
+      if (authError) return write({ jsonrpc: "2.0", id: msg.id, error: { code: -32000, message: "Authentication required" } });
+      return respond(msg.id, {
+        protocolVersion: 1,
+        agentCapabilities: { loadSession: false, promptCapabilities: { image: false, audio: false, embeddedContext: false } },
+        agentInfo: { name: "fake-agent", title: "Fake ACP agent", version: "0.0.1" },
+        authMethods: [],
+      });
+    case "session/new":
+      if (noSession) return;
+      return respond(msg.id, { sessionId: SESSION });
+    case "session/prompt":
+      if (!msg.params || msg.params.sessionId !== SESSION) {
+        return write({ jsonrpc: "2.0", id: msg.id, error: { code: -32602, message: "unknown session" } });
+      }
+      prompt(msg.id, msg.params);
+      return;
+    default:
+      if (msg.id !== undefined) write({ jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: "Method not found: " + msg.method } });
+  }
+}
+
+process.stderr.write("fake-agent: ready\n");
+const rl = createInterface({ input: process.stdin, terminal: false });
+rl.on("line", handle);
+rl.on("close", () => process.exit(0));

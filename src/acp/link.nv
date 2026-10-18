@@ -1,0 +1,250 @@
+// link.nv - the child process of the agent and the fibers around it.
+//
+// A process pipe read BLOCKS the fiber that reads it (it parks it, the scheduler goes on), and `Agent.receive` must not
+// wait. So the process is surrounded by fibers that talk to the rest of the program only through channels:
+//   reader   reads the stdout of the process, cuts it into lines (`LineSplitter`), sends them as "line"; at the end of
+//            the stream sends the last line that had no line break and then "eof";
+//   errors   reads the stderr (an agent that writes much to a pipe nobody reads stops), sends "stderr" lines, drops them when full;
+//   writer   takes lines from the outgoing channel and writes them to the stdin of the process; closes the stdin at the end;
+//   watcher  owns the `Child`: waits for its end in small steps, kills the whole process tree when asked, then closes the
+//            outgoing channel (the writer ends) and sends "exit".
+// Reading and writing never wait for each other. The program side calls only `try_send` and `try_recv`.
+//
+// All of it lives in ONE structured scope (`supervised`) of a detached "keeper" fiber that also starts the process, so that
+// every pipe operation is made by a fiber of a real scope, as the standard library's own process tests do. (A first version
+// `detach`ed each of the four fibers on its own; about one run of the test binary in twenty then hung: a pipe write that never
+// came back, a fiber started and never seen again. The same code in a `supervised` scope did not.) The keeper is `detach`ed
+// (it outlives the function that starts the link, so the effect `Detach` is in the signatures that start a link). Other
+// Oracle 0.1.0 limits that shaped this file: an `AtomicInt` put into a record is a COPY of the variable (a counter set by a fiber
+// is never seen through the record), so everything crosses by channels; a `consume` type (`Child`, the pipes) cannot be a field of a record, so each of
+// them is given to the fiber that owns it; the name of a captured `consume` binding is a C macro, so it must differ from every
+// field name used in the body (`marks.tx` is broken by a binding named `tx`).
+module crew_harness.acp
+
+import std.concurrency.nvchan.{Chan, ChanTx, ChanRx}
+import std.fs.{Path}
+import std.io.{write_all}
+import std.os.{Command, Child, ChildStdin, ChildStdout, ChildStderr, Stdio, Signal, Tree}
+
+/// Inbound: what the fibers around the process tell the program.
+///  - kind "line": a line of the stdout (`text`);
+///  - kind "stderr": a line of the stderr;
+///  - kind "eof": the stdout is closed (the process is over, or closed it);
+///  - kind "exit": the process ended with `code` (-1: its end could not be waited for).
+export type Inbound { kind str, text str, code int }
+
+/// AgentLink: the three channels of a started process. `out` takes the lines to write (without a line break) - the writer adds
+/// it; a closed `out` closes the stdin; `inb` brings what the fibers tell; a number sent to `kill` kills the process tree.
+export type AgentLink { out ChanTx[str], inb ChanRx[Inbound], kill ChanTx[int] }
+
+fn inbound_of(kind str, text str, code int) -> Inbound => { kind, text, code }
+
+fn stdin_of(o Option[ChildStdin]) -> ChildStdin {
+    match o {
+        Some(consume s) => s
+        None => panic("the stdin of the agent was asked to be piped")
+    }
+}
+
+fn stdout_of(o Option[ChildStdout]) -> ChildStdout {
+    match o {
+        Some(consume s) => s
+        None => panic("the stdout of the agent was asked to be piped")
+    }
+}
+
+fn stderr_of(o Option[ChildStderr]) -> ChildStderr {
+    match o {
+        Some(consume s) => s
+        None => panic("the stderr of the agent was asked to be piped")
+    }
+}
+
+fn read_stdout(consume rx ChildStdout, inb ChanTx[Inbound]) Proc -> () {
+    mut buf []u8 = []u8.new()
+    buf.resize(8192, 0 as u8)
+    mut splitter = LineSplitter.new()
+    mut reading = true
+    while reading {
+        match rx.read(buf) {
+            Ok(0) => { reading = false }
+            Ok(n) => {
+                for line in splitter.feed(buf[..n]) {
+                    ro sent = inb.send(inbound_of("line", line, 0))
+                }
+            }
+            Err(e) => { reading = false }
+        }
+    }
+    match splitter.flush() {
+        Some(rest) => {
+            ro sent = inb.send(inbound_of("line", rest, 0))
+        }
+        None => ()
+    }
+    ro told = inb.send(inbound_of("eof", "", 0))
+    rx.close()
+}
+
+fn read_stderr(consume rx ChildStderr, inb ChanTx[Inbound]) Proc -> () {
+    mut buf []u8 = []u8.new()
+    buf.resize(4096, 0 as u8)
+    mut splitter = LineSplitter.new()
+    mut reading = true
+    while reading {
+        match rx.read(buf) {
+            Ok(0) => { reading = false }
+            Ok(n) => {
+                for line in splitter.feed(buf[..n]) {
+                    // a full channel drops the line: the log of an agent is never worth stopping it
+                    ro sent = inb.try_send(inbound_of("stderr", line, 0))
+                }
+            }
+            Err(e) => { reading = false }
+        }
+    }
+    match splitter.flush() {
+        Some(rest) => {
+            ro sent = inb.try_send(inbound_of("stderr", rest, 0))
+        }
+        None => ()
+    }
+    rx.close()
+}
+
+// The marks the writer leaves for the watcher: 1 - a write begins, 2 - it ended.
+fn write_loop(consume tx ChildStdin, source ChanRx[str], marks ChanTx[int]) Proc -> () {
+    mut writing = true
+    while writing {
+        match source.recv() {
+            Some(line) => {
+                ro began = marks.try_send(1)
+                match write_all(tx, "${line}\n".bytes()) {
+                    Ok(done) => ()
+                    Err(e) => { writing = false }
+                }
+                ro ended = marks.try_send(2)
+            }
+            None => { writing = false }
+        }
+    }
+    tx.close()
+}
+
+// The writer runs in a scope of its own that can be cancelled: a write to a pipe that is parked on a completion that never
+// comes is ended by `stop.cancel()` (the watcher does it when a write has lasted too long, and when the process is gone).
+fn write_stdin(consume tx ChildStdin, source ChanRx[str], marks ChanTx[int], stop CancelToken) Proc -> () {
+    ro outcome = supervised(cancel: stop) {
+        spawn consume tx { write_loop(tx, source, marks) }
+        0
+    }
+}
+
+fn link_now_ms() Time -> int => Time.now().unix_millis()
+
+// A write that has not come back for this long will not: the stdin of the process is broken.
+const STUCK_WRITE_MS = 10000
+
+fn watch_child(consume child Child, kill ChanRx[int], inb ChanTx[Inbound], out ChanTx[str], marks ChanRx[int], stop CancelToken) Proc Time -> () {
+    mut waiting = true
+    mut killed = false
+    mut code = -1
+    mut writing_since = -1
+    while waiting {
+        mut more = true
+        while more {
+            match marks.try_recv() {
+                Some(mark) => { writing_since = if mark == 1 { link_now_ms() } else { -1 } }
+                None => { more = false }
+            }
+        }
+        if !killed {
+            match kill.try_recv() {
+                Some(signal) => { killed = true }
+                None => ()
+            }
+            if writing_since >= 0 && link_now_ms() - writing_since > STUCK_WRITE_MS {
+                // cut the write, and the process with it
+                stop.cancel()
+                killed = true
+            }
+        }
+        // asked to kill: ask again at every turn until the process is gone (a kill that comes while the process is still
+        // starting may find nothing to kill)
+        if killed {
+            ro done = child.kill(Signal.Kill)
+        }
+        match child.wait_timeout(25.to_millis()) {
+            Ok(Some(status)) => {
+                code = status.code()
+                waiting = false
+            }
+            Ok(None) => ()
+            Err(e) => { waiting = false }
+        }
+    }
+    // the process is gone: nobody will read the lines still to be written; closing the outgoing channel ends the writer, and a
+    // write that is still parked is cancelled
+    stop.cancel()
+    child.release()
+    out.close()
+    ro told = inb.send(inbound_of("exit", "", code))
+}
+
+// The body of the keeper fiber: start the process, tell the starter how it went ("" - well, else the reason), then keep the
+// fibers around it in one scope until all of them are over.
+fn keep_link(program str, args []str, dir str, inbound ChanTx[Inbound], outbound ChanRx[str], outbound_end ChanTx[str], killing ChanRx[int], started ChanTx[str]) Proc Time -> () {
+    mut command = Command.new(program)
+    // the setters change the command in place and return it; assigning the result back (`command = command.arg(a)`) does
+    // not compile on Oracle 0.1.0 (a pointer assigned to a value), so the result is dropped
+    for a in args { command.arg(a) }
+    command.stdin(Stdio.Piped)
+    command.stdout(Stdio.Piped)
+    command.stderr(Stdio.Piped)
+    command.tree(Tree.Group)
+    if dir.byte_len() > 0 { command.dir(Path.from_bytes(dir.bytes())) }
+    match command.start() {
+        Err(e) => {
+            ro told = started.send("cannot start ${program}: ${e}")
+        }
+        Ok(consume spawned) => {
+            consume child = spawned
+            // the names of the consumed pipes differ from every field name used in the bodies below (see the head of the file)
+            consume stdin_pipe = stdin_of(child.take_stdin())
+            consume stdout_pipe = stdout_of(child.take_stdout())
+            consume stderr_pipe = stderr_of(child.take_stderr())
+            ro marks = Chan[int].new(64)
+            ro stop = CancelToken.new()
+            ro told = started.send("")
+            supervised {
+                spawn consume stdout_pipe { read_stdout(stdout_pipe, inbound) }
+                spawn consume stderr_pipe { read_stderr(stderr_pipe, inbound) }
+                spawn consume stdin_pipe { write_stdin(stdin_pipe, outbound, marks.tx, stop) }
+                watch_child(child, killing, inbound, outbound_end, marks.rx, stop)
+            }
+        }
+    }
+}
+
+/// Start the agent: `program` with `args`, in the folder `dir` ("" - the folder of this process). The process, its pipes
+/// and the fibers around them are the link; a program that cannot be started is an `Err` with the reason.
+export fn connect(program str, args []str, dir str) Proc Detach Time -> Result[AgentLink, str] {
+    ro inbound = Chan[Inbound].new(2048)
+    ro outbound = Chan[str].new(2048)
+    ro killing = Chan[int].new(4)
+    ro started = Chan[str].new(1)
+    detach { keep_link(program, args, dir, inbound.tx, outbound.rx, outbound.tx, killing.rx, started.tx) }
+    match started.rx.recv() {
+        Some(reason) => {
+            if reason.byte_len() > 0 { return Err(reason) }
+            Ok(AgentLink { out: outbound.tx, inb: inbound.rx, kill: killing.tx })
+        }
+        None => Err("the keeper of ${program} ended before the process was started")
+    }
+}
+
+/// Ask the watcher to kill the process tree and close the stdin.
+export fn AgentLink @stop() -> () {
+    ro asked = @kill.try_send(1)
+    @out.close()
+}

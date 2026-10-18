@@ -1,0 +1,256 @@
+// files_test.nv - the file handlers of Journal and Store: lines appended, snapshots replaced as a whole,
+// names that cannot leave the data folder, a torn last line, a restart over the same folder.
+module crew_harness.storage
+
+import crew_harness.engine.{Journal, Store, JournalEntry, Snapshot}
+import std.fs.{Fs, real_fs, Path, read_text, write_text, remove_dir_all, try_exists}
+import std.os.{Os, real_os, temp_dir, pid}
+
+// A clean data folder of one test, outside the repository: <temp>/crew-storage-test-<pid>-<name>.
+fn fresh_root(name str) -> str {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-storage-test-${id}-${name}")
+    with Fs = real_fs() {
+        ro removed = remove_dir_all(dir)
+    }
+    dir.display()
+}
+
+fn entry_at(step int, text str) -> JournalEntry => {
+    trace: "t1-chat-1", step, cause: "input-${step}", state: "Idle", request: "", at: 1000 + step, kind: "note", text
+}
+
+fn present(path Path) -> bool {
+    with Fs = real_fs() {
+        match try_exists(path) {
+            Ok(b) => b
+            Err(e) => false
+        }
+    }
+}
+
+fn text_of(path Path) -> str {
+    with Fs = real_fs() {
+        match read_text(path) {
+            Ok(t) => t
+            Err(e) => "<unreadable>"
+        }
+    }
+}
+
+fn path_of(root str, session str, ext str) -> Path {
+    match session_path(root, session, ext) {
+        Some(p) => p
+        None => panic("no path for ${session}")
+    }
+}
+
+fn xs(n int) -> str {
+    mut out = ""
+    mut i = 0
+    while i < n {
+        out = "${out}x"
+        i += 1
+    }
+    out
+}
+
+// ----- names -----
+
+test "session name: letters, digits, dot, dash and underscore are fine" {
+    assert(valid_session_name("chat-1"))
+    assert(valid_session_name("s_2.x"))
+    assert(valid_session_name("T1792314000000-chat-42"))
+}
+
+test "session name: empty, dots, separators, drive letters, spaces, a leading dot and too long are not names" {
+    assert(!valid_session_name(""))
+    assert(!valid_session_name("."))
+    assert(!valid_session_name(".."))
+    assert(!valid_session_name("..\\x"))
+    assert(!valid_session_name("../x"))
+    assert(!valid_session_name("a/b"))
+    assert(!valid_session_name("a\\b"))
+    assert(!valid_session_name("c:x"))
+    assert(!valid_session_name("a b"))
+    assert(!valid_session_name(".hidden"))
+    assert(!valid_session_name("сессия"))
+    assert(!valid_session_name("a..b"))
+    assert(!valid_session_name(xs(129)))
+    assert(valid_session_name(xs(128)))
+}
+
+test "session path: inside the data folder, with the extension; a bad name or extension has no path" {
+    ro root = fresh_root("paths")
+    match session_path(root, "chat-1", "journal") {
+        Some(p) => {
+            assert(p.display().ends_with("chat-1.journal"))
+            match p.parent() {
+                Some(par) => assert(par.display() == Path.from_bytes(root.bytes()).display())
+                None => assert(false)
+            }
+        }
+        None => assert(false)
+    }
+    match session_path(root, "../outside", "journal") {
+        Some(p) => assert(false)
+        None => assert(true)
+    }
+    match session_path(root, "chat-1", "../x") {
+        Some(p) => assert(false)
+        None => assert(true)
+    }
+}
+
+// ----- the data folder -----
+
+test "data folder: created with its parents at the start, a second call changes nothing, a file in the way is a failure" {
+    ro root = fresh_root("dir")
+    ro nested = "${root}/a/b"
+    assert(open_data_dir(nested))
+    assert(present(Path.from_bytes(nested.bytes())))
+    assert(open_data_dir(nested))
+    with Fs = real_fs() {
+        ro w = write_text(Path.from_bytes("${root}/file".bytes()), "x")
+    }
+    assert(!open_data_dir("${root}/file"))
+}
+
+// ----- the journal -----
+
+test "journal: lines are appended in the order of writing and read back whole, Cyrillic as it is" {
+    ro root = fresh_root("journal")
+    assert(open_data_dir(root))
+    with Journal = file_journal(root, "chat-1") {
+        Journal.write(entry_at(1, "первая"))
+        Journal.write(entry_at(2, "second \"quoted\"\nwith a break"))
+        Journal.write(entry_at(3, "third"))
+        ro all = Journal.read_all()
+        assert(all.len() == 3)
+        assert(all[0].text == "первая")
+        assert(all[1].text == "second \"quoted\"\nwith a break")
+        assert(all[2].step == 3)
+    }
+    ro text = text_of(path_of(root, "chat-1", "journal"))
+    assert(text.contains("первая"))
+    assert(!text.contains("u043"))
+    // one JSON object per line: three lines
+    mut lines = 0
+    for line in text.split("\n") {
+        if line.byte_len() > 0 { lines += 1 }
+    }
+    assert(lines == 3)
+}
+
+test "journal: one file per session, a restart (a new handler over the same folder) sees the old lines and appends" {
+    ro root = fresh_root("journal-restart")
+    assert(open_data_dir(root))
+    with Journal = file_journal(root, "chat-1") {
+        Journal.write(entry_at(1, "a"))
+    }
+    with Journal = file_journal(root, "chat-2") {
+        Journal.write(entry_at(1, "other session"))
+    }
+    with Journal = file_journal(root, "chat-1") {
+        assert(Journal.read_all().len() == 1)
+        Journal.write(entry_at(2, "b"))
+        ro all = Journal.read_all()
+        assert(all.len() == 2)
+        assert(all[1].text == "b")
+    }
+    with Journal = file_journal(root, "chat-2") {
+        assert(Journal.read_all().len() == 1)
+    }
+}
+
+test "journal: a missing file is an empty journal" {
+    ro root = fresh_root("journal-empty")
+    assert(open_data_dir(root))
+    with Journal = file_journal(root, "chat-9") {
+        assert(Journal.read_all().len() == 0)
+    }
+}
+
+test "journal: a torn last line (the process died inside a write) is skipped, and the next line is not glued to it" {
+    ro root = fresh_root("journal-torn")
+    assert(open_data_dir(root))
+    with Journal = file_journal(root, "chat-1") {
+        Journal.write(entry_at(1, "a"))
+    }
+    ro path = path_of(root, "chat-1", "journal")
+    ro good = text_of(path)
+    with Fs = real_fs() {
+        ro w = write_text(path, "${good}{\"trace\":\"t1-chat-1\",\"step\":2,\"ca")
+    }
+    with Journal = file_journal(root, "chat-1") {
+        assert(Journal.read_all().len() == 1)
+        Journal.write(entry_at(3, "after the tear"))
+        ro all = Journal.read_all()
+        assert(all.len() == 2)
+        assert(all[0].text == "a")
+        assert(all[1].text == "after the tear")
+    }
+}
+
+// ----- the snapshot -----
+
+test "store: the last saved snapshot is loaded, a save replaces the whole file" {
+    ro root = fresh_root("store")
+    assert(open_data_dir(root))
+    with Store = file_store(root) {
+        assert(Store.load("chat-1") == None)
+        Store.save("chat-1", Snapshot { step: 1, data: "{\"a\":1,\"long\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"}" })
+        Store.save("chat-1", Snapshot { step: 2, data: "{\"b\":\"мир\"}" })
+        match Store.load("chat-1") {
+            Some(s) => {
+                assert(s.step == 2)
+                assert(s.data == "{\"b\":\"мир\"}")
+            }
+            None => assert(false)
+        }
+        Store.save("chat-2", Snapshot { step: 7, data: "{}" })
+        match Store.load("chat-2") {
+            Some(s) => assert(s.step == 7)
+            None => assert(false)
+        }
+    }
+    // one file per session; no temporary file stays
+    assert(present(path_of(root, "chat-1", "snapshot")))
+    assert(!present(path_of(root, "chat-1", "snapshot.tmp")))
+}
+
+test "store: a restart sees the snapshot; a temporary file left by a dead process does not block the next save" {
+    ro root = fresh_root("store-restart")
+    assert(open_data_dir(root))
+    with Store = file_store(root) {
+        Store.save("chat-1", Snapshot { step: 3, data: "{\"k\":1}" })
+    }
+    with Fs = real_fs() {
+        ro w = write_text(path_of(root, "chat-1", "snapshot.tmp"), "half a snap")
+    }
+    with Store = file_store(root) {
+        match Store.load("chat-1") {
+            Some(s) => assert(s.step == 3)
+            None => assert(false)
+        }
+        Store.save("chat-1", Snapshot { step: 4, data: "{\"k\":2}" })
+        match Store.load("chat-1") {
+            Some(s) => {
+                assert(s.step == 4)
+                assert(s.data == "{\"k\":2}")
+            }
+            None => assert(false)
+        }
+    }
+}
+
+test "store: a name with a separator or dots loads nothing and touches nothing outside the folder" {
+    ro root = fresh_root("store-names")
+    assert(open_data_dir(root))
+    with Store = file_store(root) {
+        assert(Store.load("../x") == None)
+        assert(Store.load("a/b") == None)
+        assert(Store.load("") == None)
+    }
+}

@@ -1,0 +1,218 @@
+// e2e_test.nv - the engine, the chat machine, the FILE journal and snapshot, and the ACP handler over a fake agent:
+// a whole turn, and the death of the process after an event was taken and before it was committed.
+module crew_harness.acp_live
+
+import crew_harness.acp.{AcpConfig, AcpClient, open_client, acp_agent}
+import crew_harness.engine.{Engine, Event, EventKind, Journal, Store, Agent, MemoryWorld, JournalEntry, start_engine, resume_engine, memory_time, FailCode}
+import crew_harness.chat.{ChatSession, chat_session, user_says, user_cancels}
+import crew_harness.storage.{open_data_dir, file_journal, file_store}
+import std.fs.{Fs, real_fs, remove_dir_all}
+import std.os.{Os, real_os, temp_dir, pid}
+
+fn data_root(name str) -> str {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-acp-e2e-${id}-${name}")
+    with Fs = real_fs() {
+        ro removed = remove_dir_all(dir)
+    }
+    dir.display()
+}
+
+fn e2e_config(root str) -> AcpConfig {
+    ro base = fake_config([])
+    { program: base.program, args: base.args, cwd: base.cwd, inbox_path: "${root}/chat-1.inbox" }
+}
+
+fn e2e_begin(root str, mut world MemoryWorld, mut client AcpClient) -> Engine[ChatSession] {
+    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Agent = acp_agent(client), Time = memory_time(world) {
+        start_engine(chat_session(), "chat-1")
+    }
+}
+
+fn e2e_resume(root str, mut world MemoryWorld, mut client AcpClient) -> Engine[ChatSession] {
+    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Agent = acp_agent(client), Time = memory_time(world) {
+        match resume_engine(chat_session(), "chat-1") {
+            Some(e) => e
+            None => panic("no snapshot")
+        }
+    }
+}
+
+fn e2e_feed(root str, mut e Engine[ChatSession], mut world MemoryWorld, mut client AcpClient, event Event) -> () {
+    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Agent = acp_agent(client), Time = memory_time(world) {
+        e.feed(event)
+    }
+}
+
+fn e2e_pump(root str, mut e Engine[ChatSession], mut world MemoryWorld, mut client AcpClient) -> int {
+    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Agent = acp_agent(client), Time = memory_time(world) {
+        e.pump()
+    }
+}
+
+// pump (with the clock of the world, frozen) and sleep (with the real clock) until the session ends
+fn run_to_end(root str, mut e Engine[ChatSession], mut world MemoryWorld, mut client AcpClient, rounds int) Time -> bool {
+    mut i = 0
+    while i < rounds {
+        ro made = e2e_pump(root, e, world, client)
+        if e.is_finished() { return true }
+        10.to_millis().sleep()
+        i += 1
+    }
+    e.is_finished()
+}
+
+fn e2e_entries(root str) -> []JournalEntry {
+    with Journal = file_journal(root, "chat-1") {
+        Journal.read_all()
+    }
+}
+
+fn occurrences(hay str, needle str) -> int {
+    mut n = 0
+    for part in hay.split(needle) { n += 1 }
+    n - 1
+}
+
+fn answer_text(e Engine[ChatSession]) -> str {
+    match e.outcome() {
+        Some(response) => match response {
+            Answer(reply) => reply.result
+            Refusal(rejection) => "<refusal ${rejection.reason.name()}>"
+        }
+        None => "<none>"
+    }
+}
+
+test "e2e: whole turn, every event acknowledged" {
+    ro root = data_root("turn")
+    assert(open_data_dir(root))
+    mut world = MemoryWorld.at(1000)
+    mut client = start_with(e2e_config(root))
+    mut e = e2e_begin(root, world, client)
+    e2e_feed(root, e, world, client, user_says("привет мир"))
+    assert(run_to_end(root, e, world, client, 1000))
+    assert(answer_text(e) == "Echo: привет мир")
+    assert(client.unacked() == 0)
+    // the journal has the key of every event that came from the agent
+    mut with_key = 0
+    for entry in e2e_entries(root) {
+        if entry.kind == "event" && entry.text.contains("src=acp-") { with_key += 1 }
+    }
+    assert(with_key >= 4)
+    client.close()
+}
+
+test "e2e: tools and plan are not in the answer" {
+    ro root = data_root("tools")
+    assert(open_data_dir(root))
+    mut world = MemoryWorld.at(1000)
+    mut client = start_with(e2e_config(root))
+    mut e = e2e_begin(root, world, client)
+    e2e_feed(root, e, world, client, user_says("tools"))
+    assert(run_to_end(root, e, world, client, 1000))
+    assert(answer_text(e) == "Готово")
+    client.close()
+}
+
+test "e2e: death before commit: event taken again once" {
+    ro root = data_root("death")
+    assert(open_data_dir(root))
+    mut world = MemoryWorld.at(1000)
+    mut client1 = start_with(e2e_config(root))
+    mut e1 = e2e_begin(root, world, client1)
+    e2e_feed(root, e1, world, client1, user_says("one two"))
+    // take the first chunk by hand and "die" before accept: nothing of it is in the journal or the snapshot
+    mut taken = []Event.new()
+    with Agent = acp_agent(client1) {
+        taken = collect_until("agent_chunk", 10000)
+    }
+    assert(taken.len() >= 1)
+    ro key = last_of(taken).id
+    ro text = last_of(taken).input
+    ro committed_step = e1.step_number()
+    client1.close()
+    for entry in e2e_entries(root) { assert(!entry.text.contains("src=${key}")) }
+
+    // the new process: a new client over the same inbox file, the engine resumed from the files
+    mut client2 = start_with(e2e_config(root))
+    assert(client2.unacked() >= 1)
+    mut e2 = e2e_resume(root, world, client2)
+    assert(e2.step_number() == committed_step + 1)      // the restart is a step of its own
+    ro made = e2e_pump(root, e2, world, client2)
+    assert(made >= 1)
+    // the event came again with the same key, was committed once and acknowledged
+    mut times = 0
+    for entry in e2e_entries(root) {
+        if entry.kind == "event" && entry.text.ends_with(" src=${key}") { times += 1 }
+    }
+    assert(times == 1)
+    // the answer so far holds that chunk exactly once
+    assert(occurrences(e2.machine_state(), text) == 1)
+    client2.close()
+}
+
+test "e2e: silent agent ends with Timeout, cancel sent" {
+    ro root = data_root("silent")
+    assert(open_data_dir(root))
+    mut world = MemoryWorld.at(1000)
+    mut client = start_with(e2e_config(root))
+    mut e = e2e_begin(root, world, client)
+    e2e_feed(root, e, world, client, user_says("silent"))
+    assert(!e.is_finished())
+    ro quiet = e2e_pump(root, e, world, client)
+    assert(quiet == 0)
+    world.advance(31000)
+    assert(e2e_pump(root, e, world, client) == 1)
+    assert(e.is_finished())
+    assert(answer_text(e) == "<refusal Timeout>")
+    client.close()
+}
+
+test "e2e: agent process dies: ConnectionLost" {
+    ro root = data_root("crash")
+    assert(open_data_dir(root))
+    mut world = MemoryWorld.at(1000)
+    mut client = start_with(e2e_config(root))
+    mut e = e2e_begin(root, world, client)
+    e2e_feed(root, e, world, client, user_says("crash"))
+    assert(run_to_end(root, e, world, client, 1000))
+    assert(answer_text(e) == "<refusal ConnectionLost>")
+    client.close()
+}
+
+test "e2e: user cancel, late answer discarded" {
+    ro root = data_root("cancel")
+    assert(open_data_dir(root))
+    mut world = MemoryWorld.at(1000)
+    mut client = start_with(e2e_config(root))
+    mut e = e2e_begin(root, world, client)
+    e2e_feed(root, e, world, client, user_says("slow"))
+    mut i = 0
+    while i < 300 && e.machine_state().contains("started") == false {
+        ro made = e2e_pump(root, e, world, client)
+        10.to_millis().sleep()
+        i += 1
+    }
+    assert(e.machine_state().contains("started"))
+    e2e_feed(root, e, world, client, user_cancels())
+    assert(e.is_finished())
+    assert(answer_text(e) == "<refusal StoppedByHuman>")
+    // the agent answers late: its chunk and its stop reason are discarded, the client acknowledges them after the commit
+    mut j = 0
+    while j < 300 {
+        ro made = e2e_pump(root, e, world, client)
+        10.to_millis().sleep()
+        j += 1
+        if j >= 30 && client.unacked() == 0 { break }
+    }
+    mut discarded = 0
+    for entry in e2e_entries(root) {
+        if entry.kind == "discarded" { discarded += 1 }
+    }
+    assert(discarded >= 2)
+    assert(client.unacked() == 0)
+    assert(answer_text(e) == "<refusal StoppedByHuman>")
+    client.close()
+}

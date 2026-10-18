@@ -1,0 +1,238 @@
+// jsonrpc_test.nv - JSON-RPC 2.0 lines of ACP: parsing, building, and the splitting of a byte stream into lines.
+module crew_harness.acp
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+fn j(text str) -> JsonValue {
+    match Json.parse(text) {
+        Ok(v) => v
+        Err(e) => panic("bad json in a test: ${text}")
+    }
+}
+
+fn str_at(v JsonValue, key str) -> str {
+    match v.object() {
+        Some(o) => match o.get(key) {
+            Some(x) => x.str() ?? "<not a string>"
+            None => "<missing>"
+        }
+        None => "<not an object>"
+    }
+}
+
+fn int_at(v JsonValue, key str) -> int {
+    match v.object() {
+        Some(o) => match o.get(key) {
+            Some(x) => x.int() ?? -999
+            None => -998
+        }
+        None => -997
+    }
+}
+
+// ----- parsing -----
+
+test "parse call: id, method, params" {
+    match parse_rpc("{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"session/request_permission\",\"params\":{\"sessionId\":\"s1\"}}") {
+        RpcCall { id, method, params } => {
+            assert(id.to_str() == "5")
+            assert(method == "session/request_permission")
+            assert(str_at(params, "sessionId") == "s1")
+        }
+        _ => assert(false)
+    }
+}
+
+test "parse call: a string id stays a string" {
+    match parse_rpc("{\"jsonrpc\":\"2.0\",\"id\":\"abc-1\",\"method\":\"fs/read_text_file\",\"params\":{}}") {
+        RpcCall { id, method, params } => assert(id.to_str() == "\"abc-1\"")
+        _ => assert(false)
+    }
+}
+
+test "parse notification: method, no id" {
+    match parse_rpc("{\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"s1\",\"update\":{\"sessionUpdate\":\"agent_message_chunk\"}}}") {
+        RpcNote { method, params } => {
+            assert(method == "session/update")
+            assert(str_at(params, "sessionId") == "s1")
+        }
+        _ => assert(false)
+    }
+}
+
+test "parse call: no params means null" {
+    match parse_rpc("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}") {
+        RpcCall { id, method, params } => assert(params.is_null())
+        _ => assert(false)
+    }
+}
+
+test "parse result: id and result" {
+    match parse_rpc("{\"jsonrpc\":\"2.0\",\"id\":0,\"result\":{\"protocolVersion\":1}}") {
+        RpcResult { id, result } => {
+            assert(id.to_str() == "0")
+            assert(int_at(result, "protocolVersion") == 1)
+        }
+        _ => assert(false)
+    }
+}
+
+test "parse error: id, code, message" {
+    match parse_rpc("{\"jsonrpc\":\"2.0\",\"id\":2,\"error\":{\"code\":-32000,\"message\":\"Authentication required\"}}") {
+        RpcFailure { id, code, message } => {
+            assert(id.to_str() == "2")
+            assert(code == -32000)
+            assert(message == "Authentication required")
+        }
+        _ => assert(false)
+    }
+}
+
+test "parse: Cyrillic stays as it is" {
+    match parse_rpc("{\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"text\":\"Привет, мир\"}}") {
+        RpcNote { method, params } => assert(str_at(params, "text") == "Привет, мир")
+        _ => assert(false)
+    }
+}
+
+test "parse: not JSON, not an object, no method: garbage" {
+    match parse_rpc("not json at all") {
+        RpcGarbage { text } => assert(text == "not json at all")
+        _ => assert(false)
+    }
+    match parse_rpc("[1,2,3]") {
+        RpcGarbage { text } => assert(true)
+        _ => assert(false)
+    }
+    match parse_rpc("{\"jsonrpc\":\"2.0\",\"id\":3}") {
+        RpcGarbage { text } => assert(true)
+        _ => assert(false)
+    }
+    match parse_rpc("") {
+        RpcGarbage { text } => assert(true)
+        _ => assert(false)
+    }
+}
+
+// ----- building -----
+
+test "build request: one line with version, id, method" {
+    ro line = rpc_request_line(7, "session/new", j("{\"cwd\":\"C:/work/p\",\"mcpServers\":[]}"))
+    assert(!line.contains("\n"))
+    match parse_rpc(line) {
+        RpcCall { id, method, params } => {
+            assert(id.to_str() == "7")
+            assert(method == "session/new")
+            assert(str_at(params, "cwd") == "C:/work/p")
+        }
+        _ => assert(false)
+    }
+    assert(line.contains("\"jsonrpc\":\"2.0\""))
+}
+
+test "build notification: no id" {
+    ro line = rpc_notification_line("session/cancel", j("{\"sessionId\":\"s1\"}"))
+    assert(!line.contains("\"id\""))
+    match parse_rpc(line) {
+        RpcNote { method, params } => {
+            assert(method == "session/cancel")
+            assert(str_at(params, "sessionId") == "s1")
+        }
+        _ => assert(false)
+    }
+}
+
+test "build result: echoes number or string id" {
+    ro number = rpc_result_line(j("5"), j("{\"outcome\":{\"outcome\":\"cancelled\"}}"))
+    match parse_rpc(number) {
+        RpcResult { id, result } => assert(id.to_str() == "5")
+        _ => assert(false)
+    }
+    ro text = rpc_result_line(j("\"abc\""), j("{}"))
+    match parse_rpc(text) {
+        RpcResult { id, result } => assert(id.to_str() == "\"abc\"")
+        _ => assert(false)
+    }
+}
+
+test "build error: code, message, Cyrillic" {
+    ro line = rpc_error_line(j("9"), -32601, "метод не поддерживается: fs/read_text_file")
+    assert(line.contains("метод"))
+    match parse_rpc(line) {
+        RpcFailure { id, code, message } => {
+            assert(id.to_str() == "9")
+            assert(code == -32601)
+            assert(message == "метод не поддерживается: fs/read_text_file")
+        }
+        _ => assert(false)
+    }
+}
+
+// ----- the splitting of a byte stream into lines -----
+
+test "lines: two messages in one read" {
+    mut s = LineSplitter.new()
+    ro lines = s.feed("{\"a\":1}\n{\"b\":2}\n".bytes())
+    assert(lines.len() == 2)
+    assert(lines[0] == "{\"a\":1}")
+    assert(lines[1] == "{\"b\":2}")
+    assert(s.flush() == None)
+}
+
+test "lines: a message torn into two reads" {
+    mut s = LineSplitter.new()
+    assert(s.feed("{\"a\":".bytes()).len() == 0)
+    ro lines = s.feed("1}\n".bytes())
+    assert(lines.len() == 1)
+    assert(lines[0] == "{\"a\":1}")
+}
+
+test "lines: a letter torn inside its two bytes" {
+    ro all = "{\"t\":\"привет\"}\n".bytes()
+    // cut inside the second letter: bytes of 'п' are the first two after the quote
+    mut cut = 0
+    mut i = 0
+    while i < all.len() {
+        if all[i] == (0xD0 as u8) { cut = i + 1; break }
+        i += 1
+    }
+    mut s = LineSplitter.new()
+    assert(s.feed(all[..cut]).len() == 0)
+    ro lines = s.feed(all[cut..])
+    assert(lines.len() == 1)
+    assert(lines[0] == "{\"t\":\"привет\"}")
+}
+
+test "lines: last line without break comes at flush" {
+    mut s = LineSplitter.new()
+    ro lines = s.feed("{\"a\":1}\n{\"b\":2}".bytes())
+    assert(lines.len() == 1)
+    match s.flush() {
+        Some(rest) => assert(rest == "{\"b\":2}")
+        None => assert(false)
+    }
+    assert(s.flush() == None)
+}
+
+test "lines: CRLF cut, empty lines skipped" {
+    mut s = LineSplitter.new()
+    ro lines = s.feed("{\"a\":1}\r\n\n\r\n{\"b\":2}\n".bytes())
+    assert(lines.len() == 2)
+    assert(lines[0] == "{\"a\":1}")
+    assert(lines[1] == "{\"b\":2}")
+}
+
+test "lines: one byte at a time" {
+    ro all = "{\"a\":\"мир\"}\n{\"b\":2}\n".bytes()
+    mut s = LineSplitter.new()
+    mut got = []str.new()
+    mut i = 0
+    while i < all.len() {
+        ro out = s.feed(all[i..i + 1])
+        for line in out { got.push(line) }
+        i += 1
+    }
+    assert(got.len() == 2)
+    assert(got[0] == "{\"a\":\"мир\"}")
+    assert(got[1] == "{\"b\":2}")
+}

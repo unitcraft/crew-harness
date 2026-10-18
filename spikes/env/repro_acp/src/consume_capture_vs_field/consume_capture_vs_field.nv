@@ -1,0 +1,42 @@
+module repro_acp.consume_capture_vs_field
+
+// Oracle 0.1.0: the name of a `consume` binding that a fiber body captures becomes a C macro (`#define tx _consume_tx_8`).
+// A field access with the same name in the same body (`done.tx`) is rewritten by the preprocessor too, and the C does not
+// compile ("no member named '_consume_tx_8' in 'struct Nova_ChanPair'"). The checker says nothing.
+// Rename the binding (`stdin_pipe`) and it compiles.
+// Expected: PASS. Actual: CC-FAIL.
+
+import std.os.{Command, ChildStdin, Stdio}
+import std.concurrency.nvchan.{Chan, ChanTx}
+
+fn close_it(consume pipe ChildStdin, done ChanTx[int]) -> () {
+    pipe.close()
+    ro sent = done.send(1)
+}
+
+test "a captured consume binding named like a field used in the body" {
+    mut cmd = Command.new("node")
+    cmd.arg("-e")
+    cmd.arg("0")
+    cmd.stdin(Stdio.Piped)
+    match cmd.start() {
+        Err(e) => assert(false)
+        Ok(consume started) => {
+            consume child = started
+            match child.take_stdin() {
+                Some(consume tx) => {
+                    ro done = Chan[int].new(2)
+                    supervised {
+                        spawn consume tx { close_it(tx, done.tx) }
+                    }
+                    assert(done.rx.try_recv() == Some(1))
+                }
+                None => assert(false)
+            }
+            match child.wait() {
+                Ok(st) => assert(true)
+                Err(e) => assert(false)
+            }
+        }
+    }
+}

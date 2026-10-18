@@ -1,0 +1,142 @@
+// ack_test.nv - an event taken from `Agent.receive` is the handler's until the engine acknowledges it after the commit.
+// The handler keeps the events it handed out ("taken") and, with an inbox file, hands them out again after a restart.
+module crew_harness.acp_live
+
+import crew_harness.acp.{AcpConfig, AcpClient, open_client, acp_agent}
+import crew_harness.engine.{Agent, Event, EventKind}
+import std.fs.{Fs, real_fs, Path, remove_dir_all, create_dir_all, write_text, read_text}
+import std.os.{Os, real_os, temp_dir, pid}
+
+// an inbox file in a clean folder of this test
+fn inbox_file(name str) -> str {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-acp-inbox-${id}-${name}")
+    with Fs = real_fs() {
+        ro removed = remove_dir_all(dir)
+        ro made = create_dir_all(dir)
+    }
+    dir.join("chat-1.inbox").display()
+}
+
+fn with_inbox(path str) -> AcpConfig {
+    ro base = fake_config([])
+    { program: base.program, args: base.args, cwd: base.cwd, inbox_path: path }
+}
+
+// take exactly `n` events without acknowledging them
+fn take(n int) Agent Time -> []Event {
+    mut out = []Event.new()
+    ro deadline = now_ms() + 10000
+    while out.len() < n && now_ms() < deadline {
+        match Agent.receive() {
+            Some(e) => out.push(e)
+            None => 10.to_millis().sleep()
+        }
+    }
+    out
+}
+
+test "ack: taken stays unacked until ack; ack is idempotent" {
+    mut client = start([])
+    with Agent = acp_agent(client) {
+        Agent.send(req("agent-1", "a b"))
+        ro events = collect_turn(10000)
+        assert(events.len() >= 3)
+        assert(client.unacked() == events.len())
+        Agent.ack(events[0].id)
+        assert(client.unacked() == events.len() - 1)
+        Agent.ack(events[0].id)
+        Agent.ack("acp-9999")
+        Agent.ack("")
+        assert(client.unacked() == events.len() - 1)
+        for e in events { Agent.ack(e.id) }
+        assert(client.unacked() == 0)
+    }
+    client.close()
+}
+
+test "ack: unacked events come again after a restart" {
+    ro path = inbox_file("redeliver")
+    mut first = start_with(with_inbox(path))
+    mut taken = []Event.new()
+    with Agent = acp_agent(first) {
+        Agent.send(req("agent-1", "one two three"))
+        taken = take(3)
+        assert(taken.len() == 3)
+        // the third is never acknowledged, nor the second: the process dies
+        Agent.ack(taken[0].id)
+    }
+    first.close()
+
+    mut second = start_with(with_inbox(path))
+    // the events the first client had parsed (maybe more than the three taken) and nobody acknowledged
+    ro n = second.unacked()
+    assert(n >= 2)
+    with Agent = acp_agent(second) {
+        ro again = take(n)
+        assert(again.len() == n)
+        assert(again[0].id == taken[1].id)
+        assert(again[1].id == taken[2].id)
+        assert(again[0].name == taken[1].name)
+        assert(again[0].input == taken[1].input)
+        assert(again[1].input == taken[2].input)
+        assert(again[0].kind == taken[1].kind)
+        for e in again { assert(request_of(e) == "agent-1") }
+        // nothing else is there: the new process has not been asked anything
+        ro quiet = collect_quiet(200)
+        assert(quiet.len() == 0)
+        for e in again { Agent.ack(e.id) }
+    }
+    second.close()
+
+    mut third = start_with(with_inbox(path))
+    assert(third.unacked() == 0)
+    third.close()
+}
+
+test "ack: new keys do not collide with recovered ones" {
+    ro path = inbox_file("keys")
+    mut first = start_with(with_inbox(path))
+    mut old = []Event.new()
+    with Agent = acp_agent(first) {
+        Agent.send(req("agent-1", "a"))
+        old = collect_turn(10000)
+    }
+    first.close()
+    mut second = start_with(with_inbox(path))
+    with Agent = acp_agent(second) {
+        ro redelivered = take(old.len())
+        assert(redelivered.len() == old.len())
+        Agent.send(req("agent-2", "b"))
+        ro fresh = collect_turn(10000)
+        for f in fresh {
+            for o in old { assert(f.id != o.id) }
+        }
+    }
+    second.close()
+}
+
+test "ack: a torn last inbox line is ignored" {
+    ro path = inbox_file("torn")
+    mut first = start_with(with_inbox(path))
+    with Agent = acp_agent(first) {
+        Agent.send(req("agent-1", "a"))
+        ro events = collect_turn(10000)
+        assert(events.len() >= 2)
+    }
+    first.close()
+    ro good = with Fs = real_fs() {
+        match read_text(Path.from_bytes(path.bytes())) {
+            Ok(t) => t
+            Err(e) => panic("no inbox file")
+        }
+    }
+    with Fs = real_fs() {
+        ro w = write_text(Path.from_bytes(path.bytes()), "${good}{\"t\":\"event\",\"seq\":99,\"ki")
+    }
+    mut second = start_with(with_inbox(path))
+    assert(second.unacked() >= 2)
+    for item in second.unacked_keys() { assert(item != "acp-99") }
+    second.close()
+}

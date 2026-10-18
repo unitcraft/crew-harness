@@ -1,0 +1,250 @@
+module repro_acp.output_over_4k
+
+// Oracle 0.1.0 / `nova test` on Windows: a test binary prints one line per test, "  PASS: <name>". A binary whose lines come to more than 4096 bytes
+// (the Windows pipe buffer) blocks on its stdout until someone reads the pipe. `nova test` on ONE unit reads it in time. `nova test <dir>` over
+// several units that run together (the default is as many jobs as CPUs) did not read it, and the binary was killed by the limit of
+// about 70 s: "TIMEOUT <unit> # killed after 70000ms", with a binary that was idle (no CPU, no children). Run this folder together with
+// other units, e.g. `cd spikes/env/repro_acp; nova test src` (the other repro folders there fail to compile, that is their point; copy
+// this folder next to two or three healthy units to see the timeout), or start the binary by hand with its stdout piped and unread.
+// The ACP tests of the product are split in several units whose lines stay under 4096 bytes each, and test names are kept short.
+// Expected: PASS in every case. Actual: TIMEOUT when several units run together.
+
+test "output filler number 01, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 02, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 03, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 04, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 05, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 06, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 07, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 08, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 09, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 10, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 11, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 12, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 13, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 14, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 15, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 16, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 17, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 18, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 19, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 20, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 21, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 22, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 23, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 24, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 25, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 26, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 27, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 28, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 29, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 30, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 31, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 32, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 33, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 34, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 35, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 36, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 37, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 38, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 39, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 40, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 41, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 42, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 43, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 44, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 45, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 46, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 47, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 48, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 49, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 50, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 51, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 52, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 53, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 54, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 55, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 56, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 57, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 58, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 59, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}
+
+test "output filler number 60, a test name of about one hundred characters long, to make the output of the unit big" {
+    assert(true)
+}

@@ -4,7 +4,7 @@
 // repeated entry, cancel, idle term, the journal, the snapshot, UTF-8.
 module crew_harness.chat
 
-import crew_harness.engine.{Engine, MemoryWorld, Event, EventKind, FailCode, Response, Reply, Rejection, JournalEntry, Journal, Store, Agent, start_engine, resume_engine, memory_journal, memory_store, memory_agent, memory_time, decode_snapshot}
+import crew_harness.engine.{Engine, MemoryWorld, Event, EventKind, FailCode, Response, Reply, Rejection, JournalEntry, Journal, Store, Agent, start_engine, resume_engine, memory_journal, memory_store, memory_agent, memory_time, decode_snapshot, journal_line}
 
 // ----- helpers: one `with` over the four handlers of a world -----
 
@@ -149,7 +149,7 @@ test "engine: a user message opens the request agent-1 and sends it once, with t
     assert(e.step_number() == 2)
 }
 
-test "engine: the event is stamped on acceptance - id from the kind and the counter, the clock, the step" {
+test "engine: the event is stamped: id, clock, step" {
     mut world = MemoryWorld.at(1000)
     mut e = begin(world)
     world.advance(250)
@@ -195,7 +195,7 @@ test "engine: chunks and the final answer finish the session with the accumulate
     assert(world.cancelled.len() == 0)
 }
 
-test "engine: the outcome of a finished session is an Answer that returns the request, party, trace and step" {
+test "engine: the outcome is an Answer with request, party, trace, step" {
     mut world = MemoryWorld.at(1000)
     mut e = begin(world)
     feed(e, world, user_says("hi"))
@@ -313,7 +313,7 @@ test "engine: cancel before any request ends the session and cancels nothing" {
 
 // ----- idle term -----
 
-test "engine: an agent silent for longer than the idle term ends the session with Timeout and is cancelled" {
+test "engine: a silent agent ends with Timeout and is cancelled" {
     mut world = MemoryWorld.at(1000)
     mut e = begin(world)
     feed(e, world, user_says("hi"))
@@ -329,7 +329,7 @@ test "engine: an agent silent for longer than the idle term ends the session wit
     assert(world.cancelled[0] == "agent-1")
 }
 
-test "engine: a chunk renews the idle term - the term counts the silence, not the age of the request" {
+test "engine: a chunk renews the idle term" {
     mut world = MemoryWorld.at(1000)
     mut e = begin(world)
     feed(e, world, user_says("hi"))
@@ -371,7 +371,7 @@ test "engine: pump takes the incoming events of the agent in the order of arriva
 
 // ----- restart by a repeated entry -----
 
-test "restart after the request was opened: no second send, the answer arrives, the result is the same" {
+test "restart after the request: no second send, same result" {
     mut world = MemoryWorld.at(1000)
     mut e1 = begin(world)
     feed(e1, world, user_says("привет"))
@@ -403,7 +403,7 @@ test "restart after the request was opened: no second send, the answer arrives, 
     assert(state_name(c) == state_name(e2))
 }
 
-test "restart after the answer: the finished session stays finished, nothing is sent, a repeated answer is discarded" {
+test "restart after the answer: stays finished, nothing sent" {
     mut world = MemoryWorld.at(1000)
     mut e1 = begin(world)
     feed(e1, world, user_says("hi"))
@@ -445,7 +445,7 @@ test "restart after the commit but before the send: the request is sent now, exa
     assert(world.sent.len() == 1)
 }
 
-test "restart: the restart is a step of its own, the numbers go on without gaps and the trace is the same" {
+test "restart: a step of its own, no gaps, same trace" {
     mut world = MemoryWorld.at(1000)
     mut e1 = begin(world)
     feed(e1, world, user_says("hi"))
@@ -459,7 +459,7 @@ test "restart: the restart is a step of its own, the numbers go on without gaps 
     assert(restart[0].cause == "restart-3")
 }
 
-test "restart: the attempt counter is not touched by the restart, the next request would not repeat an id" {
+test "restart: the attempt counter is kept, ids do not repeat" {
     mut world = MemoryWorld.at(1000)
     mut e1 = begin(world)
     feed(e1, world, user_says("hi"))
@@ -484,7 +484,7 @@ test "restart: without a snapshot there is nothing to resume" {
 
 // ----- the journal and the snapshot -----
 
-test "journal: every line parses, the trace is one, the step numbers have no gaps and agree with the snapshot" {
+test "journal: lines parse, one trace, steps without gaps" {
     mut world = MemoryWorld.at(1000)
     mut e1 = begin(world)
     feed(e1, world, user_says("hi"))
@@ -515,7 +515,7 @@ test "journal: every line parses, the trace is one, the step numbers have no gap
     }
 }
 
-test "journal: a request line and its send mark carry the request id; every commit saved the snapshot" {
+test "journal: request line and send mark carry the request id" {
     mut world = MemoryWorld.at(1000)
     mut e = begin(world)
     feed(e, world, user_says("hi"))
@@ -534,7 +534,7 @@ test "journal: a request line and its send mark carry the request id; every comm
 
 // ----- UTF-8 -----
 
-test "UTF-8: Cyrillic goes through the request, the journal, the snapshot and the answer without loss" {
+test "UTF-8: Cyrillic goes through request, journal, snapshot, answer" {
     mut world = MemoryWorld.at(1000)
     mut e = begin(world)
     feed(e, world, user_says("Привет, как дела? Ёжик, щётка"))
@@ -558,7 +558,7 @@ test "UTF-8: Cyrillic goes through the request, the journal, the snapshot and th
 
 // ----- determinism -----
 
-test "determinism: the same story in two worlds gives the same journal and the same snapshot, line by line" {
+test "determinism: two worlds give the same journal and snapshot" {
     mut a = MemoryWorld.at(5000)
     mut ea = begin(a)
     feed(ea, a, user_says("привет"))
@@ -588,4 +588,97 @@ test "determinism: the same story in two worlds gives the same journal and the s
         }
         None => assert(false)
     }
+}
+
+// ----- acknowledgement of incoming events (task 095) -----
+
+test "ack: sent after the commit, key in the journal line" {
+    mut world = MemoryWorld.at(1000)
+    mut e = begin(world)
+    feed(e, world, user_says("hi"))
+    ro saves_before = world.saves
+    world.deliver(Event.from_source("acp-7", agent_chunk("agent-1", "a")))
+    assert(pump(e, world) == 1)
+    assert(world.acked.len() == 1)
+    assert(world.acked[0] == "acp-7")
+    // at the moment of the ack the snapshot of the step was already saved (the commit point)
+    assert(world.saves_at_ack[0] == saves_before + 1)
+    ro on_event = of_kind(world.entries(), "event")
+    assert(on_event[on_event.len() - 1].text.contains("src=acp-7"))
+}
+
+test "ack: an event without a key is not acknowledged" {
+    mut world = MemoryWorld.at(1000)
+    mut e = begin(world)
+    feed(e, world, user_says("hi"))
+    world.deliver(agent_chunk("agent-1", "a"))
+    assert(pump(e, world) == 1)
+    assert(world.acked.len() == 0)
+}
+
+test "ack: a discarded event is acknowledged too" {
+    mut world = MemoryWorld.at(1000)
+    mut e = begin(world)
+    feed(e, world, user_says("hi"))
+    feed(e, world, agent_done("agent-1"))
+    world.deliver(Event.from_source("acp-9", agent_chunk("agent-1", "late")))
+    assert(pump(e, world) == 1)
+    assert(world.acked.len() == 1)
+    assert(world.acked[0] == "acp-9")
+}
+
+test "ack: restart re-acknowledges the committed key only" {
+    mut world = MemoryWorld.at(1000)
+    mut e1 = begin(world)
+    feed(e1, world, user_says("hi"))
+    accept_only(e1, world, Event.from_source("acp-1", agent_chunk("agent-1", "one ")))
+    // the process dies here: the step of acp-1 is committed, the ack was not made
+    assert(world.acked.len() == 0)
+    mut e2 = resumed(world)
+    pump(e2, world)
+    assert(world.acked.len() == 1)
+    assert(world.acked[0] == "acp-1")
+    // a second restart acknowledges it once more (the ack is idempotent for the handler) and nothing else
+    mut e3 = resumed(world)
+    pump(e3, world)
+    assert(world.acked.len() == 2)
+    assert(world.acked[1] == "acp-1")
+}
+
+test "ack: an uncommitted event is not acknowledged" {
+    mut world = MemoryWorld.at(1000)
+    mut e1 = begin(world)
+    feed(e1, world, user_says("hi"))
+    // taken from the agent, the process dies before accept: nothing in the journal, no ack
+    mut e2 = resumed(world)
+    pump(e2, world)
+    assert(world.acked.len() == 0)
+}
+
+// the line of an incoming event written by a step that died before its snapshot
+fn dead_event_line(trace str, step int, key str) -> JournalEntry => {
+    trace, step, cause: "progress-9", state: "Awaiting", request: "agent-1", at: 1500, kind: "event", text: "progress/agent_chunk src=${key}"
+}
+
+test "ack: dead step lines are not committed after the next restart" {
+    mut world = MemoryWorld.at(1000)
+    mut e1 = begin(world)
+    feed(e1, world, user_says("hi"))
+    // a step that did not commit: its journal lines are there, its snapshot is not
+    world.journal.push(journal_line(dead_event_line(e1.trace(), e1.step_number() + 1, "acp-1")))
+    // the restart takes the number of the dead step for its own line and saves the snapshot of that number
+    mut e2 = resumed(world)
+    pump(e2, world)
+    assert(world.acked.len() == 0)
+    // the process dies again before anything else is committed: the old lines now carry a number that the snapshot has,
+    // but they stand BEFORE the restart line of that number, so they are still the lines of a step that did not commit
+    mut e3 = resumed(world)
+    pump(e3, world)
+    assert(world.acked.len() == 0)
+    // and the event that was really committed afterwards is acknowledged by the next restart
+    accept_only(e3, world, Event.from_source("acp-1", agent_chunk("agent-1", "again")))
+    mut e4 = resumed(world)
+    pump(e4, world)
+    assert(world.acked.len() == 1)
+    assert(world.acked[0] == "acp-1")
 }

@@ -1,0 +1,341 @@
+// project.nv - the projection "ACP -> engine event -> page event": pure functions, the table is in README.md.
+//
+// ACP -> engine. `project_update` turns the `update` of a `session/update` into a name and an input of an engine event;
+// `progress_event` puts it into an `Event` (kind Progress, bound to the request in flight). What the table does not
+// know is NOT dropped: it becomes the event `acp_skipped` (the engine journals every event), without an error.
+// The ends of a turn are `stop_event` (the stop reason of `session/prompt`) and `refused_event` (a failure with a code).
+//
+// Engine -> page. `page_event` turns a stamped `Event` into the JSON line of the page (task 093, "the format of the
+// event": `{ id, trace, step, kind, input, time }`, `input` an object): `name` becomes `kind`, `at` becomes `time`, the
+// `input` text becomes an object. An event the page has no kind for gives None. The `turn` code of the turn is given by
+// the caller: the page names a turn by the code of its `user_message`.
+module crew_harness.acp
+
+import crew_harness.engine.{Event, EventKind, FailCode}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+/// Projection: the name and the input of the engine event that an update of ACP becomes.
+export type Projection { name str, input str }
+
+fn get_of(v JsonValue, key str) -> Option[JsonValue] {
+    ro o = v.object()?
+    o.get(key)
+}
+
+fn text_field(v JsonValue, key str) -> Option[str] {
+    ro field = get_of(v, key)?
+    field.str()
+}
+
+fn int_field(v JsonValue, key str) -> Option[int] {
+    ro field = get_of(v, key)?
+    field.int()
+}
+
+fn proj(name str, input str) -> Projection => { name, input }
+
+fn skipped(what str) -> Projection => proj("acp_skipped", what)
+
+/// The key of a JSON-RPC id as text: a number as it is, a string without quotes.
+export fn rpc_key(id JsonValue) -> str {
+    match id.str() {
+        Some(s) => s
+        None => id.to_str()
+    }
+}
+
+/// The kinds of tools the page knows; the rest (including `switch_mode`) is `other`.
+export fn tool_kind(acp_kind str) -> str {
+    if acp_kind == "read" || acp_kind == "edit" || acp_kind == "delete" || acp_kind == "move" || acp_kind == "search" {
+        return acp_kind
+    }
+    if acp_kind == "execute" || acp_kind == "think" || acp_kind == "fetch" { return acp_kind }
+    "other"
+}
+
+fn known_status(status str) -> bool => status == "pending" || status == "in_progress" || status == "completed" || status == "failed"
+
+// The text of the content of a tool call: the texts of the content blocks, a line for a diff and for a terminal, one per line.
+fn detail_of(content JsonValue) -> str {
+    ro items = match content.array() {
+        Some(list) => list
+        None => return ""
+    }
+    mut parts = []str.new()
+    for item in items {
+        ro kind = text_field(item, "type") ?? ""
+        if kind == "content" {
+            match get_of(item, "content") {
+                Some(block) => match text_field(block, "text") {
+                    Some(text) => parts.push(text)
+                    None => ()
+                }
+                None => ()
+            }
+        } else if kind == "diff" {
+            parts.push("diff: ${text_field(item, "path") ?? "?"}")
+        } else if kind == "terminal" {
+            parts.push("terminal: ${text_field(item, "terminalId") ?? "?"}")
+        }
+    }
+    parts.join("\n")
+}
+
+fn chunk_projection(update JsonValue, name str, label str) -> Projection {
+    match get_of(update, "content") {
+        None => skipped("${label}: no content")
+        Some(block) => {
+            ro kind = text_field(block, "type") ?? "?"
+            match text_field(block, "text") {
+                Some(text) => if kind == "text" { proj(name, text) } else { skipped("${label}: ${kind}") }
+                None => skipped("${label}: ${kind}")
+            }
+        }
+    }
+}
+
+fn tool_call_projection(update JsonValue) -> Projection {
+    ro id = match text_field(update, "toolCallId") {
+        Some(x) => x
+        None => return skipped("tool_call: no toolCallId")
+    }
+    mut o = JsonObject.new()
+    put(o, "id", JsonValue.str(id))
+    put(o, "title", JsonValue.str(text_field(update, "title") ?? ""))
+    put(o, "kind", JsonValue.str(tool_kind(text_field(update, "kind") ?? "other")))
+    ro status = text_field(update, "status") ?? "pending"
+    put(o, "status", JsonValue.str(if known_status(status) { status } else { "pending" }))
+    match get_of(update, "content") {
+        Some(content) => {
+            ro detail = detail_of(content)
+            if detail.byte_len() > 0 { put(o, "detail", JsonValue.str(detail)) }
+        }
+        None => ()
+    }
+    proj("tool_call", JsonValue.object(o).to_str())
+}
+
+fn tool_call_update_projection(update JsonValue) -> Projection {
+    ro id = match text_field(update, "toolCallId") {
+        Some(x) => x
+        None => return skipped("tool_call_update: no toolCallId")
+    }
+    mut o = JsonObject.new()
+    put(o, "id", JsonValue.str(id))
+    match text_field(update, "status") {
+        Some(status) => if known_status(status) { put(o, "status", JsonValue.str(status)) }
+        None => ()
+    }
+    match get_of(update, "content") {
+        Some(content) => {
+            ro detail = detail_of(content)
+            if detail.byte_len() > 0 { put(o, "detail", JsonValue.str(detail)) }
+        }
+        None => ()
+    }
+    proj("tool_call_update", JsonValue.object(o).to_str())
+}
+
+fn usage_projection(update JsonValue) -> Projection {
+    ro used = match int_field(update, "used") {
+        Some(x) => x
+        None => return skipped("usage_update: no used")
+    }
+    ro size = match int_field(update, "size") {
+        Some(x) => x
+        None => return skipped("usage_update: no size")
+    }
+    mut o = JsonObject.new()
+    put(o, "used", JsonValue.int(used))
+    put(o, "size", JsonValue.int(size))
+    match get_of(update, "cost") {
+        Some(cost) => if !cost.is_null() { put(o, "cost", cost) }
+        None => ()
+    }
+    proj("usage_update", JsonValue.object(o).to_str())
+}
+
+/// The `update` of a `session/update` as the name and the input of an engine event. What is not in the table is
+/// `acp_skipped` with the name of the update as input.
+export fn project_update(update JsonValue) -> Projection {
+    ro kind = match text_field(update, "sessionUpdate") {
+        Some(k) => k
+        None => return skipped("no sessionUpdate")
+    }
+    if kind == "agent_message_chunk" { return chunk_projection(update, "agent_chunk", kind) }
+    if kind == "agent_thought_chunk" { return chunk_projection(update, "agent_thought", kind) }
+    if kind == "tool_call" { return tool_call_projection(update) }
+    if kind == "tool_call_update" { return tool_call_update_projection(update) }
+    if kind == "plan" {
+        ro entries = match get_of(update, "entries") {
+            Some(e) => e
+            None => JsonValue.array([]JsonValue.new())
+        }
+        mut o = JsonObject.new()
+        put(o, "entries", entries)
+        return proj("plan", JsonValue.object(o).to_str())
+    }
+    if kind == "usage_update" { return usage_projection(update) }
+    skipped(kind)
+}
+
+/// A `session/request_permission` of the agent as the name and the input of an engine event. The `request` of the input is
+/// the key of the JSON-RPC id: the decision of the owner names it.
+export fn project_permission(rpc_id JsonValue, params JsonValue) -> Projection {
+    ro call = match get_of(params, "toolCall") {
+        Some(c) => c
+        None => JsonValue.null()
+    }
+    ro call_id = text_field(call, "toolCallId") ?? ""
+    ro title = text_field(call, "title") ?? ""
+    mut options = []JsonValue.new()
+    match get_of(params, "options") {
+        Some(list) => match list.array() {
+            Some(items) => {
+                for item in items {
+                    mut option = JsonObject.new()
+                    put(option, "id", JsonValue.str(text_field(item, "optionId") ?? ""))
+                    put(option, "name", JsonValue.str(text_field(item, "name") ?? ""))
+                    put(option, "kind", JsonValue.str(text_field(item, "kind") ?? ""))
+                    options.push(JsonValue.object(option))
+                }
+            }
+            None => ()
+        }
+        None => ()
+    }
+    mut o = JsonObject.new()
+    put(o, "request", JsonValue.str(rpc_key(rpc_id)))
+    put(o, "tool_call", JsonValue.str(call_id))
+    put(o, "action", JsonValue.str(tool_kind(text_field(call, "kind") ?? "other")))
+    put(o, "detail", JsonValue.str(if title.byte_len() > 0 { title } else { call_id }))
+    put(o, "options", JsonValue.array(options))
+    proj("permission_request", JsonValue.object(o).to_str())
+}
+
+/// The engine event of a projection. Bound to the request in flight (kind Progress); with no request (`""`) there is
+/// nothing to belong to and the engine would discard it, so it is a word from outside, `acp_note`, that the engine journals.
+export fn progress_event(request str, p Projection) -> Event {
+    if request.byte_len() == 0 { return Event.word("acp_note", "${p.name}: ${p.input}") }
+    Event.incoming(EventKind.Progress, p.name, Some(request), p.input)
+}
+
+/// A refusal of the request with a code of the closed list.
+export fn refused_event(request str, code FailCode) -> Event =>
+    Event.incoming(EventKind.Refused, "agent_refused", Some(request), code.name())
+
+/// The end of a turn by the stop reason of `session/prompt`: `end_turn` is the answer, the others are refusals with the
+/// codes of the table; a reason the table does not know is `NoResult`.
+export fn stop_event(request str, stop_reason str) -> Event {
+    if stop_reason == "end_turn" {
+        return Event.incoming(EventKind.Answered, "agent_done", Some(request), "")
+    }
+    if stop_reason == "max_tokens" { return refused_event(request, FailCode.MaxTokens) }
+    if stop_reason == "max_turn_requests" { return refused_event(request, FailCode.MaxTurnRequests) }
+    if stop_reason == "refusal" { return refused_event(request, FailCode.ModelRefused) }
+    if stop_reason == "cancelled" { return refused_event(request, FailCode.StoppedByHuman) }
+    refused_event(request, FailCode.NoResult)
+}
+
+// ----- engine event -> page event -----
+
+/// PageInput: the kind and the input object of a page event.
+type PageInput { kind str, input JsonValue }
+
+fn page_input(kind str, input JsonValue) -> Option[PageInput] => Some(PageInput { kind, input })
+
+fn turn_object(turn str) -> JsonObject {
+    mut o = JsonObject.new()
+    put(o, "turn", JsonValue.str(turn))
+    o
+}
+
+// The input text of an event as a JSON object; None - it is not one.
+fn object_input(e Event) -> Option[JsonValue] {
+    ro value = match Json.parse(e.input) {
+        Ok(v) => v
+        Err(err) => return None
+    }
+    if value.is_object() { Some(value) } else { None }
+}
+
+fn text_input(e Event, turn str) -> Option[PageInput] {
+    mut o = turn_object(turn)
+    put(o, "text", JsonValue.str(e.input))
+    page_input(e.name, JsonValue.object(o))
+}
+
+fn turn_only(kind str, turn str) -> Option[PageInput] => page_input(kind, JsonValue.object(turn_object(turn)))
+
+fn with_turn(kind str, value JsonValue, turn str) -> Option[PageInput] {
+    mut o = value.object()?
+    put(o, "turn", JsonValue.str(turn))
+    page_input(kind, JsonValue.object(o))
+}
+
+fn permission_input(value JsonValue, turn str) -> Option[PageInput] {
+    mut o = turn_object(turn)
+    put(o, "request", JsonValue.str(text_field(value, "request") ?? ""))
+    put(o, "action", JsonValue.str(text_field(value, "action") ?? "other"))
+    put(o, "detail", JsonValue.str(text_field(value, "detail") ?? ""))
+    page_input("permission_request", JsonValue.object(o))
+}
+
+fn refusal_input(reason str, turn str) -> Option[PageInput] {
+    mut o = turn_object(turn)
+    put(o, "reason", JsonValue.str(reason))
+    page_input("agent_refused", JsonValue.object(o))
+}
+
+fn page_input_of(e Event, turn str) -> Option[PageInput] {
+    match e.kind {
+        EventKind.Input => {
+            if e.name == "user_message" { return text_input(e, turn) }
+            if e.name == "cancel" { return turn_only("cancel", turn) }
+            if e.name == "permission_decision" {
+                ro value = object_input(e)?
+                return page_input("permission_decision", value)
+            }
+            None
+        }
+        EventKind.Progress => {
+            if e.name == "agent_chunk" { return text_input(e, turn) }
+            if e.name == "tool_call" {
+                ro value = object_input(e)?
+                return with_turn("tool_call", value, turn)
+            }
+            if e.name == "tool_call_update" || e.name == "usage_update" {
+                ro value = object_input(e)?
+                return page_input(e.name, value)
+            }
+            if e.name == "permission_request" {
+                ro value = object_input(e)?
+                return permission_input(value, turn)
+            }
+            None
+        }
+        EventKind.Answered => {
+            if e.name == "agent_done" { return turn_only("agent_done", turn) }
+            None
+        }
+        EventKind.Refused => {
+            if e.name == "agent_refused" { return refusal_input(e.input, turn) }
+            None
+        }
+        EventKind.Expired => refusal_input("Timeout", turn)
+    }
+}
+
+/// The JSON line of the page for a stamped engine event; None - the page has no kind for it (a plan, a thought, a skipped
+/// update, a note, a name nobody knows) or the input is not what the kind needs.
+export fn page_event(e Event, turn str) -> Option[str] {
+    ro page = page_input_of(e, turn)?
+    mut o = JsonObject.new()
+    put(o, "id", JsonValue.str(e.id))
+    put(o, "trace", JsonValue.str(e.trace))
+    put(o, "step", JsonValue.int(e.step))
+    put(o, "kind", JsonValue.str(page.kind))
+    put(o, "input", page.input)
+    put(o, "time", JsonValue.int(e.at))
+    Some(JsonValue.object(o).to_str())
+}

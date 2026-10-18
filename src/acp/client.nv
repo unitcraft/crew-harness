@@ -1,0 +1,684 @@
+// client.nv - the ACP client over stdio and the handler of the effect `Agent` on it.
+//
+// What it speaks (Agent Client Protocol, JSON-RPC 2.0, one message per line): `initialize`, `session/new`,
+// `session/prompt` and `session/cancel` of ours; `session/update` (chunks, tools, plans, usage) and `session/request_permission`
+// of the agent. Files and terminal of the client are NOT declared at `initialize`; if the agent asks for them anyway (`fs/*`,
+// `terminal/*`, any method we do not know) it gets the error -32601 "method not found" and a note for the journal.
+//
+// The client does not run anything by itself: the handler's operations (`send`, `receive`, `cancel`, `ack`) and `poll` do the
+// work, driven by the pump of the engine. `receive` first takes what the fibers around the process have brought
+// (`poll`: the handshake moves on, lines become events), then hands out one event or None - it never waits.
+//
+// The phases: `initializing` (initialize sent), `opening` (session/new sent), `ready`, `dead` (the process ended),
+// `failed` (the agent refused the handshake), `closed` (we closed it).
+//
+// Acknowledgement (see README, "How an event is acknowledged"): every event gets a source key `acp-<n>` in `Event.id`. It is
+// written to the inbox file (when the config has one) BEFORE it is handed out. `receive` moves it to "taken"; `ack(key)` -
+// which the engine calls after the commit of the step - forgets it. A restart hands out again, first, what was not
+// acknowledged. The numbers never go back, not even after the file is compacted, so a key is never used for two events.
+module crew_harness.acp
+
+import crew_harness.engine.{Agent, Event, EventKind, Request, FailCode}
+import crew_harness.storage.{append_line, read_lines, replace_file}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+import std.fs.{Fs, real_fs, Path}
+
+/// AcpConfig: how to start the agent. `program` and `args` - the command (by default `opencode acp`); `cwd` - the absolute
+/// folder of the session (`session/new` needs it, and the process is started there); `inbox_path` - the file of the
+/// unacknowledged events, "" - none (the events live in memory only).
+export type AcpConfig { program str, args []str, cwd str, inbox_path str }
+
+/// The default config: `opencode acp` in the folder `cwd`, no inbox file.
+export fn default_config(cwd str) -> AcpConfig => { program: "opencode", args: ["acp"], cwd, inbox_path: "" }
+
+type AcpQueued { request str, text str }
+
+type AcpOption { id str, kind str }
+
+type AcpPending { key str, id JsonValue, options []AcpOption }
+
+type AcpInboxItem { seq int, event Event }
+
+/// AcpClient: one agent process, one session. Mutable: `poll`, `decide` and the operations of the handler change it.
+export type AcpClient {
+    config AcpConfig,
+    link AgentLink,
+    phase str,
+    next_rpc int,
+    init_rpc int,
+    new_rpc int,
+    prompt_rpc int,
+    session str,
+    agent str,
+    queue []AcpQueued,
+    active str,
+    permissions []AcpPending,
+    ready []AcpInboxItem,
+    taken []AcpInboxItem,
+    next_seq int,
+    stderr str,
+    exit_code int,
+    last_error str
+}
+
+const STDERR_KEEP = 4000
+
+fn parse_value(text str) -> JsonValue {
+    match Json.parse(text) {
+        Ok(v) => v
+        Err(e) => panic("a constant that is not JSON: ${text}")
+    }
+}
+
+fn initialize_params() -> JsonValue =>
+    parse_value("{\"protocolVersion\":1,\"clientCapabilities\":{\"fs\":{\"readTextFile\":false,\"writeTextFile\":false},\"terminal\":false},\"clientInfo\":{\"name\":\"crew-harness\",\"title\":\"CrewHarness\",\"version\":\"0.1.0\"}}")
+
+fn new_session_params(cwd str) -> JsonValue {
+    mut o = JsonObject.new()
+    put(o, "cwd", JsonValue.str(cwd))
+    put(o, "mcpServers", JsonValue.array([]JsonValue.new()))
+    JsonValue.object(o)
+}
+
+fn prompt_params(session str, text str) -> JsonValue {
+    mut block = JsonObject.new()
+    put(block, "type", JsonValue.str("text"))
+    put(block, "text", JsonValue.str(text))
+    mut blocks = []JsonValue.new()
+    blocks.push(JsonValue.object(block))
+    mut o = JsonObject.new()
+    put(o, "sessionId", JsonValue.str(session))
+    put(o, "prompt", JsonValue.array(blocks))
+    JsonValue.object(o)
+}
+
+fn session_params(session str) -> JsonValue {
+    mut o = JsonObject.new()
+    put(o, "sessionId", JsonValue.str(session))
+    JsonValue.object(o)
+}
+
+fn outcome_result(outcome str, option str) -> JsonValue {
+    mut inner = JsonObject.new()
+    put(inner, "outcome", JsonValue.str(outcome))
+    if option.byte_len() > 0 { put(inner, "optionId", JsonValue.str(option)) }
+    mut o = JsonObject.new()
+    put(o, "outcome", JsonValue.object(inner))
+    JsonValue.object(o)
+}
+
+fn field(v JsonValue, key str) -> Option[JsonValue] {
+    ro o = v.object()?
+    o.get(key)
+}
+
+fn field_text(v JsonValue, key str) -> Option[str] {
+    ro f = field(v, key)?
+    f.str()
+}
+
+fn field_int(v JsonValue, key str) -> Option[int] {
+    ro f = field(v, key)?
+    f.int()
+}
+
+// ----- the inbox file: lines of JSON, "seq" (the next number), "event" and "ack" -----
+
+fn kind_of_name(name str) -> Option[EventKind] {
+    if name == "input" { return Some(EventKind.Input) }
+    if name == "progress" { return Some(EventKind.Progress) }
+    if name == "answered" { return Some(EventKind.Answered) }
+    if name == "refused" { return Some(EventKind.Refused) }
+    if name == "expired" { return Some(EventKind.Expired) }
+    None
+}
+
+fn event_line(seq int, e Event) -> str {
+    mut o = JsonObject.new()
+    put(o, "t", JsonValue.str("event"))
+    put(o, "seq", JsonValue.int(seq))
+    put(o, "kind", JsonValue.str(e.kind.name()))
+    put(o, "name", JsonValue.str(e.name))
+    match e.request {
+        Some(r) => put(o, "request", JsonValue.str(r))
+        None => put(o, "request", JsonValue.null())
+    }
+    put(o, "input", JsonValue.str(e.input))
+    JsonValue.object(o).to_str()
+}
+
+fn ack_line(seq int) -> str {
+    mut o = JsonObject.new()
+    put(o, "t", JsonValue.str("ack"))
+    put(o, "seq", JsonValue.int(seq))
+    JsonValue.object(o).to_str()
+}
+
+fn seq_line(next int) -> str {
+    mut o = JsonObject.new()
+    put(o, "t", JsonValue.str("seq"))
+    put(o, "next", JsonValue.int(next))
+    JsonValue.object(o).to_str()
+}
+
+fn key_of(seq int) -> str => "acp-${seq}"
+
+fn item_of(seq int, event Event) -> AcpInboxItem => { seq, event }
+
+// The event of a line of the inbox file; None - the line is not an event.
+fn parse_event_line(v JsonValue) -> Option[AcpInboxItem] {
+    ro seq = field_int(v, "seq")?
+    ro kind = kind_of_name(field_text(v, "kind")?)?
+    ro name = field_text(v, "name")?
+    ro input = field_text(v, "input")?
+    ro request = match field(v, "request") {
+        Some(r) => r.str()
+        None => None
+    }
+    ro raw = Event.incoming(kind, name, request, input)
+    Some(item_of(seq, Event.from_source(key_of(seq), raw)))
+}
+
+/// What a restart finds in the inbox file: the events nobody acknowledged, in the order of their numbers, and the next number.
+type AcpRecovered { items []AcpInboxItem, next int }
+
+fn recovered_of(items []AcpInboxItem, next int) -> AcpRecovered => { items, next }
+
+fn recover_inbox(path str) Fs -> AcpRecovered {
+    mut items = []AcpInboxItem.new()
+    mut acked = []int.new()
+    mut next = 1
+    for line in read_lines(Path.from_bytes(path.bytes())) {
+        match Json.parse(line) {
+            Err(e) => ()
+            Ok(v) => {
+                ro tag = field_text(v, "t") ?? ""
+                if tag == "seq" {
+                    ro n = field_int(v, "next") ?? 1
+                    if n > next { next = n }
+                } else if tag == "ack" {
+                    ro seq = field_int(v, "seq") ?? 0
+                    acked.push(seq)
+                } else if tag == "event" {
+                    match parse_event_line(v) {
+                        Some(item) => {
+                            items.push(item)
+                            if item.seq + 1 > next { next = item.seq + 1 }
+                        }
+                        None => ()
+                    }
+                }
+            }
+        }
+    }
+    mut open = []AcpInboxItem.new()
+    for item in items {
+        if !acked.contains(item.seq) { open.push(item) }
+    }
+    recovered_of(open, next)
+}
+
+// Compact the inbox file: the next number and the unacknowledged events only.
+fn compact_inbox(path str, recovered AcpRecovered) Fs -> () {
+    mut lines = []str.new()
+    lines.push(seq_line(recovered.next))
+    for item in recovered.items { lines.push(event_line(item.seq, item.event)) }
+    ro done = replace_file(Path.from_bytes(path.bytes()), "${lines.join("\n")}\n")
+}
+
+fn tail_of(text str) -> str {
+    ro n = text.byte_len()
+    if n <= STDERR_KEEP { return text }
+    ro at = n - STDERR_KEEP
+    text[at..]
+}
+
+// ----- opening -----
+
+/// Start the agent process and the handshake (`initialize` goes out at once; `session/new` follows when the agent answers,
+/// on the next `poll`). With an inbox file, the events that were not acknowledged before come back first.
+export fn open_client(config AcpConfig) Proc Detach Time -> Result[AcpClient, str] {
+    match connect(config.program, config.args, config.cwd) {
+        Err(reason) => Err(reason)
+        Ok(link) => {
+            mut ready = []AcpInboxItem.new()
+            mut next = 1
+            if config.inbox_path.byte_len() > 0 {
+                with Fs = real_fs() {
+                    ro recovered = recover_inbox(config.inbox_path)
+                    compact_inbox(config.inbox_path, recovered)
+                    ready = recovered.items
+                    next = recovered.next
+                }
+            }
+            mut client = AcpClient {
+                config, link, phase: "initializing", next_rpc: 0, init_rpc: -1, new_rpc: -1, prompt_rpc: -1,
+                session: "", agent: "", queue: []AcpQueued.new(), active: "", permissions: []AcpPending.new(),
+                ready, taken: []AcpInboxItem.new(), next_seq: next, stderr: "", exit_code: -2, last_error: ""
+            }
+            client.init_rpc = client.next_id()
+            client.say(rpc_request_line(client.init_rpc, "initialize", initialize_params()))
+            Ok(client)
+        }
+    }
+}
+
+fn AcpClient mut @next_id() -> int {
+    ro id = @next_rpc
+    @next_rpc = id + 1
+    id
+}
+
+// A line to the process; false - the process does not take it (closed).
+fn AcpClient @say(line str) -> () {
+    ro queued = @link.out.try_send(line)
+}
+
+// ----- events: the source key, the file, the queues -----
+
+fn AcpClient mut @push(event Event) -> () {
+    ro seq = @next_seq
+    @next_seq = seq + 1
+    ro stamped = Event.from_source(key_of(seq), event)
+    if @config.inbox_path.byte_len() > 0 {
+        with Fs = real_fs() {
+            ro written = append_line(Path.from_bytes(@config.inbox_path.bytes()), event_line(seq, stamped))
+            if !written { panic("the inbox cannot be written: ${@config.inbox_path}") }
+        }
+    }
+    @ready.push(item_of(seq, stamped))
+}
+
+fn AcpClient mut @note(text str) -> () {
+    @push(Event.word("acp_note", text))
+}
+
+fn AcpClient mut @refuse(request str, code FailCode) -> () {
+    @push(refused_event(request, code))
+}
+
+// ----- the end of the process, the failure of the handshake -----
+
+fn AcpClient mut @refuse_everything(code FailCode) -> () {
+    if @active.byte_len() > 0 {
+        @refuse(@active, code)
+        @active = ""
+        @prompt_rpc = -1
+    }
+    ro waiting = @queue
+    @queue = []AcpQueued.new()
+    for q in waiting { @refuse(q.request, code) }
+    @permissions = []AcpPending.new()
+}
+
+fn AcpClient mut @process_ended() -> () {
+    if @phase == "dead" || @phase == "failed" || @phase == "closed" { return }
+    @phase = "dead"
+    @refuse_everything(FailCode.ConnectionLost)
+}
+
+fn AcpClient mut @fail_handshake(why str) -> () {
+    @last_error = why
+    @phase = "failed"
+    @refuse_everything(FailCode.NoResult)
+    @link.stop()
+}
+
+// ----- one line of the agent -----
+
+fn AcpClient mut @on_result(id JsonValue, result JsonValue) -> () {
+    ro key = rpc_key(id)
+    if key == "${@init_rpc}" && @phase == "initializing" {
+        @agent = match field(result, "agentInfo") {
+            Some(info) => field_text(info, "name") ?? ""
+            None => ""
+        }
+        @phase = "opening"
+        @new_rpc = @next_id()
+        @say(rpc_request_line(@new_rpc, "session/new", new_session_params(@config.cwd)))
+        return
+    }
+    if key == "${@new_rpc}" && @phase == "opening" {
+        match field_text(result, "sessionId") {
+            Some(session) => {
+                @session = session
+                @phase = "ready"
+            }
+            None => @fail_handshake("session/new answered without a sessionId")
+        }
+        return
+    }
+    if @prompt_rpc >= 0 && key == "${@prompt_rpc}" {
+        ro reason = field_text(result, "stopReason") ?? ""
+        ro request = @active
+        @active = ""
+        @prompt_rpc = -1
+        @push(stop_event(request, reason))
+        return
+    }
+    @note("a response nobody waits for: id ${key}")
+}
+
+fn AcpClient mut @on_failure(id JsonValue, code int, message str) -> () {
+    ro key = rpc_key(id)
+    ro why = "${code} ${message}"
+    if key == "${@init_rpc}" && @phase == "initializing" {
+        @fail_handshake("initialize failed: ${why}")
+        return
+    }
+    if key == "${@new_rpc}" && @phase == "opening" {
+        @fail_handshake("session/new failed: ${why}")
+        return
+    }
+    if @prompt_rpc >= 0 && key == "${@prompt_rpc}" {
+        ro request = @active
+        @active = ""
+        @prompt_rpc = -1
+        @last_error = "session/prompt failed: ${why}"
+        @refuse(request, FailCode.NoResult)
+        return
+    }
+    @note("an error response nobody waits for: id ${key}: ${why}")
+}
+
+fn AcpClient mut @on_update(params JsonValue) -> () {
+    ro session = field_text(params, "sessionId") ?? ""
+    if @session.byte_len() > 0 && session != @session {
+        @note("an update of another session: ${session}")
+        return
+    }
+    ro update = match field(params, "update") {
+        Some(u) => u
+        None => JsonValue.null()
+    }
+    @push(progress_event(@active, project_update(update)))
+}
+
+fn AcpClient mut @on_permission(id JsonValue, params JsonValue) -> () {
+    if @active.byte_len() == 0 {
+        // nobody is asked: no request is open, there is no owner to ask - the answer is "cancelled"
+        @say(rpc_result_line(id, outcome_result("cancelled", "")))
+        @note("a permission request while no turn is open: answered cancelled")
+        return
+    }
+    mut options = []AcpOption.new()
+    match field(params, "options") {
+        Some(list) => match list.array() {
+            Some(items) => {
+                for item in items {
+                    options.push(AcpOption { id: field_text(item, "optionId") ?? "", kind: field_text(item, "kind") ?? "" })
+                }
+            }
+            None => ()
+        }
+        None => ()
+    }
+    ro projection = project_permission(id, params)
+    @permissions.push(AcpPending { key: rpc_key(id), id, options })
+    @push(progress_event(@active, projection))
+}
+
+fn AcpClient mut @on_call(id JsonValue, method str, params JsonValue) -> () {
+    if method == "session/request_permission" {
+        @on_permission(id, params)
+        return
+    }
+    @say(rpc_error_line(id, -32601, "method not supported: ${method}"))
+    @note("a request that is not supported: ${method}")
+}
+
+fn AcpClient mut @on_line(text str) -> () {
+    match parse_rpc(text) {
+        RpcResult { id, result } => @on_result(id, result)
+        RpcFailure { id, code, message } => @on_failure(id, code, message)
+        RpcNote { method, params } => {
+            if method == "session/update" {
+                @on_update(params)
+            } else {
+                @note("a notification that is not used: ${method}")
+            }
+        }
+        RpcCall { id, method, params } => @on_call(id, method, params)
+        RpcGarbage { text } => {
+            ro shown = if text.byte_len() > 200 { text[..200] } else { text }
+            @note("a line that is not JSON-RPC: ${shown}")
+        }
+    }
+}
+
+fn AcpClient mut @take(item Inbound) -> () {
+    if item.kind == "line" {
+        @on_line(item.text)
+    } else if item.kind == "stderr" {
+        @stderr = tail_of("${@stderr}${item.text}\n")
+    } else if item.kind == "exit" {
+        @exit_code = item.code
+    } else if item.kind == "eof" {
+        @process_ended()
+    }
+}
+
+// Send the next waiting prompt when the session is open and no turn is in flight.
+fn AcpClient mut @drive() -> () {
+    if @phase != "ready" || @prompt_rpc >= 0 || @queue.len() == 0 { return }
+    ro next = @queue.remove(0)
+    @active = next.request
+    @prompt_rpc = @next_id()
+    @say(rpc_request_line(@prompt_rpc, "session/prompt", prompt_params(@session, next.text)))
+}
+
+/// Take what the fibers around the process have brought: the handshake moves on, lines become events, the next
+/// waiting prompt goes out. Never waits.
+export fn AcpClient mut @poll() -> () {
+    if @phase == "closed" { return }
+    mut more = true
+    while more && @phase != "closed" {
+        match @link.inb.try_recv() {
+            Some(item) => @take(item)
+            None => { more = false }
+        }
+    }
+    @drive()
+}
+
+// ----- the handler of the effect Agent -----
+
+fn AcpClient mut @enqueue(request Request[str]) -> () {
+    if @phase == "dead" || @phase == "closed" {
+        @refuse(request.id, FailCode.ConnectionLost)
+        return
+    }
+    if @phase == "failed" {
+        @refuse(request.id, FailCode.NoResult)
+        return
+    }
+    @queue.push(AcpQueued { request: request.id, text: request.input })
+    @poll()
+}
+
+fn AcpClient mut @cancel_request(request_id str) -> () {
+    mut rest = []AcpQueued.new()
+    mut removed = false
+    for q in @queue {
+        if q.request == request_id { removed = true } else { rest.push(q) }
+    }
+    @queue = rest
+    if removed { return }
+    if @active != request_id || @phase == "dead" || @phase == "closed" || @phase == "failed" { return }
+    @say(rpc_notification_line("session/cancel", session_params(@session)))
+    // the protocol: every request for permission that is still open of a cancelled turn is answered "cancelled"
+    ro open = @permissions
+    @permissions = []AcpPending.new()
+    for p in open { @say(rpc_result_line(p.id, outcome_result("cancelled", ""))) }
+}
+
+fn AcpClient mut @next_event() -> Option[Event] {
+    @poll()
+    if @ready.len() == 0 { return None }
+    ro item = @ready.remove(0)
+    @taken.push(item)
+    Some(item.event)
+}
+
+fn AcpClient mut @acknowledge(source str) -> () {
+    mut found = -1
+    mut kept_taken = []AcpInboxItem.new()
+    for item in @taken {
+        if item.event.id == source { found = item.seq } else { kept_taken.push(item) }
+    }
+    @taken = kept_taken
+    mut kept_ready = []AcpInboxItem.new()
+    for item in @ready {
+        if item.event.id == source { found = item.seq } else { kept_ready.push(item) }
+    }
+    @ready = kept_ready
+    if found < 0 || @config.inbox_path.byte_len() == 0 { return }
+    with Fs = real_fs() {
+        ro written = append_line(Path.from_bytes(@config.inbox_path.bytes()), ack_line(found))
+        if !written { panic("the inbox cannot be written: ${@config.inbox_path}") }
+    }
+}
+
+/// The handler of `Agent` over a client. `send` queues the request (one turn at a time, in the order of sending),
+/// `receive` takes what has come and hands out one event or None, `cancel` cancels a waiting or a running turn,
+/// `ack` forgets an event the engine has committed.
+export fn acp_agent(mut client AcpClient) -> Effect[Agent] {
+    effect Agent {
+        send(request) -> () {
+            client.enqueue(request)
+        }
+        receive() -> Option[Event] => client.next_event()
+        cancel(request_id) -> () {
+            client.cancel_request(request_id)
+        }
+        ack(source) -> () {
+            client.acknowledge(source)
+        }
+    }
+}
+
+// ----- the owner's decision -----
+
+fn option_for(options []AcpOption, wanted []str) -> Option[str] {
+    for kind in wanted {
+        for o in options {
+            if o.kind == kind { return Some(o.id) }
+        }
+    }
+    None
+}
+
+/// The decision of the owner about a request for permission, by the key of the request (`request` of the permission event).
+/// `decision` is "allow", "deny" or the id of one of the options; true - the agent was answered. A key nobody asked, a
+/// request already answered, a decision no option fits: false, nothing is sent and the request stays open.
+export fn AcpClient mut @decide(key str, decision str) -> bool {
+    mut found = -1
+    mut index = 0
+    for p in @permissions {
+        if p.key == key { found = index }
+        index += 1
+    }
+    if found < 0 { return false }
+    ro pending = @permissions[found]
+    mut chosen Option[str] = None
+    if decision == "allow" {
+        chosen = option_for(pending.options, ["allow_once", "allow_always"])
+    } else if decision == "deny" {
+        chosen = option_for(pending.options, ["reject_once", "reject_always"])
+    } else {
+        for o in pending.options {
+            if o.id == decision { chosen = Some(o.id) }
+        }
+    }
+    match chosen {
+        None => false
+        Some(option) => {
+            mut rest = []AcpPending.new()
+            for p in @permissions {
+                if p.key != key { rest.push(p) }
+            }
+            @permissions = rest
+            @say(rpc_result_line(pending.id, outcome_result("selected", option)))
+            true
+        }
+    }
+}
+
+/// The same from an engine event named `permission_decision` whose input is `{"request": key, "decision": ...}`;
+/// any other event is not a decision (false).
+export fn AcpClient mut @decide_event(event Event) -> bool {
+    if event.name != "permission_decision" { return false }
+    ro value = match Json.parse(event.input) {
+        Ok(v) => v
+        Err(e) => return false
+    }
+    ro key = field_text(value, "request") ?? ""
+    ro decision = field_text(value, "decision") ?? ""
+    if key.byte_len() == 0 || decision.byte_len() == 0 { return false }
+    @decide(key, decision)
+}
+
+// ----- closing and looking -----
+
+/// Close the client: the process tree is killed and the fibers around it are waited for (two seconds at most); nothing comes
+/// out of a closed client any more.
+export fn AcpClient mut @close() Time -> () {
+    if @phase == "closed" { return }
+    @phase = "closed"
+    @link.stop()
+    // Wait (for two seconds at most) until the fibers around the process are over: the process is gone ("exit" - the last thing the
+    // watcher tells) and its stdout is closed ("eof"). A caller that goes on, or a program that ends, while they are still
+    // finishing meets the exit-time hangs of Oracle 0.1.0 (see README, "Oracle 0.1.0").
+    mut seen_exit = false
+    mut seen_eof = false
+    mut spins = 0
+    while !(seen_exit && seen_eof) && spins < 200 {
+        match @link.inb.try_recv() {
+            Some(item) => {
+                if item.kind == "exit" {
+                    seen_exit = true
+                    @exit_code = item.code
+                } else if item.kind == "eof" {
+                    seen_eof = true
+                }
+            }
+            None => {
+                10.to_millis().sleep()
+                spins += 1
+            }
+        }
+    }
+}
+
+/// The phase: initializing, opening, ready, dead, failed or closed.
+export fn AcpClient @phase() -> str => @phase
+
+/// The id of the session of the agent ("" until `session/new` is answered).
+export fn AcpClient @session_id() -> str => @session
+
+/// The name of the agent from its answer to `initialize`.
+export fn AcpClient @agent_name() -> str => @agent
+
+/// The last part of what the agent wrote to its stderr.
+export fn AcpClient @stderr_tail() -> str => @stderr
+
+/// The reason of the last failure ("" - none): a refused handshake, an error answer to a prompt.
+export fn AcpClient @last_error() -> str => @last_error
+
+/// The number of events that were not acknowledged: handed out or waiting to be.
+export fn AcpClient @unacked() -> int => @taken.len() + @ready.len()
+
+/// The source keys of those events: handed out first, then waiting.
+export fn AcpClient @unacked_keys() -> []str {
+    mut keys = []str.new()
+    for item in @taken { keys.push(item.event.id) }
+    for item in @ready { keys.push(item.event.id) }
+    keys
+}
+
+/// The keys of the requests for permission that wait for the owner.
+export fn AcpClient @pending_permissions() -> []str {
+    mut keys = []str.new()
+    for p in @permissions { keys.push(p.key) }
+    keys
+}

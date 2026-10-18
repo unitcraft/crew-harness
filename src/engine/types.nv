@@ -74,14 +74,14 @@ export type CancelOrder { party str }
 /// Some is a refusal with that reason.
 export type Conclusion { failure Option[FailCode], text str }
 
-/// Output: a command of a machine to the engine (a step is a pure function, the engine applies the outputs).
+/// StepOutput: a command of a machine to the engine (a step is a pure function, the engine applies the outputs).
 ///  - Send: send a request;
 ///  - Log: write a line to the journal;
 ///  - Cancel: cancel the open request of a party;
 ///  - Save: save the snapshot (in the MVP every commit saves it anyway, the order is explicit and
 ///    leaves a journal mark);
 ///  - Finish: the machine has ended; the engine cancels what is still open and records the outcome.
-export type Output enum
+export type StepOutput enum
     | Send(SendOrder)
     | Log(LogNote)
     | Cancel(CancelOrder)
@@ -89,7 +89,7 @@ export type Output enum
     | Finish(Conclusion)
 
 /// StepResult: what `step` returns - the new state (encoded) and the outputs in the order of execution.
-export type StepResult { state str, outputs []Output }
+export type StepResult { state str, outputs []StepOutput }
 
 /// JournalEntry: one line of the journal with the trace envelope (spec rule 31).
 /// `cause` is the id of the event the step began with, `state` the name of the machine state,
@@ -193,6 +193,13 @@ export fn EventKind @closes_request() -> bool => match @ {
 /// An incoming event with an empty envelope: the engine stamps `id`, `trace`, `step` and `at`.
 export fn Event.incoming(kind EventKind, name str, request Option[str], input str) -> Event => {
     id: "", trace: "", step: 0, kind, name, request, input, at: 0
+}
+
+/// The same incoming event with a source key in `id`: the key by which the handler of the agent knows the event
+/// and the engine acknowledges it after the commit (see the effect `Agent`, `ack`).
+export fn Event.from_source(key str, event Event) -> Event => {
+    id: key, trace: event.trace, step: event.step, kind: event.kind, name: event.name,
+    request: event.request, input: event.input, at: event.at
 }
 
 /// A word from outside that belongs to no request.

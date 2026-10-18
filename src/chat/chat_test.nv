@@ -2,7 +2,7 @@
 module crew_harness.chat
 
 import std.text
-import crew_harness.engine.{Event, EventKind, Output, SendOrder, LogNote, CancelOrder, Conclusion, FailCode, StepResult}
+import crew_harness.engine.{Event, EventKind, StepOutput, SendOrder, LogNote, CancelOrder, Conclusion, FailCode, StepResult}
 
 fn stamped(kind EventKind, name str, request Option[str], input str) -> Event => {
     id: "e-1", trace: "t-1", step: 2, kind, name, request, input, at: 1000
@@ -16,7 +16,7 @@ fn expired() -> Event => stamped(EventKind.Expired, "timeout", Some("agent-1"), 
 fn cancelled() -> Event => stamped(EventKind.Input, "cancel", None, "")
 
 // A compact text of the outputs, to compare and to look at.
-fn summary(outputs []Output) -> str {
+fn summary(outputs []StepOutput) -> str {
     mut parts = []str.new()
     for o in outputs {
         match o {
@@ -58,7 +58,7 @@ test "chat: chunks of the agent accumulate in the state and keep the session wai
     assert(summary(r4.outputs) == "Log,Finish(answer:Hello),Save")
 }
 
-test "chat: a refusal of the agent ends the session with the code of the refusal, for every code of the list" {
+test "chat: a refusal ends the session with its code, every code" {
     for code in FailCode.all() {
         ro r1 = run(chat_session().initial(), said("hi"))
         ro r2 = run(r1.state, refused(code.name()))
@@ -73,7 +73,7 @@ test "chat: a refusal with a code outside the closed list is NoResult" {
     assert(summary(r2.outputs) == "Log,Finish(refusal:NoResult),Save")
 }
 
-test "chat: the cancel of the user in Awaiting cancels the request and ends the session as stopped by a human" {
+test "chat: user cancel in Awaiting stops the session as human" {
     ro r1 = run(chat_session().initial(), said("hi"))
     ro r2 = run(r1.state, cancelled())
     assert(name_of(r2.state) == "Failed")
@@ -127,7 +127,7 @@ test "chat: step is deterministic - the same state and event give the same resul
     assert(summary(a2.outputs) == summary(b2.outputs))
 }
 
-test "chat: the event is self-contained - a different envelope of the same content gives the same result" {
+test "chat: the event is self-contained, the envelope is not read" {
     ro first = run(chat_session().initial(), said("hi"))
     ro r1 = run(first.state, chunk("part"))
     ro moved = Event {
@@ -139,7 +139,7 @@ test "chat: the event is self-contained - a different envelope of the same conte
     assert(summary(r2.outputs) == summary(r1.outputs))
 }
 
-test "chat: the machine does not read the clock - a very late event gives the same result as an early one" {
+test "chat: the machine does not read the clock" {
     ro start = chat_session().initial()
     ro early = run(start, said("hi"))
     ro late_event = Event {
@@ -176,4 +176,18 @@ test "chat: garbage instead of a state is not a state" {
     assert(decode_chat_state("") == None)
     assert(decode_chat_state("{\"state\":\"Mystery\"}") == None)
     assert(decode_chat_state("not json") == None)
+}
+
+test "chat: tool and permission events are not answer text" {
+    ro r1 = run(chat_session().initial(), said("hi"))
+    ro tool = stamped(EventKind.Progress, "tool_call", Some("agent-1"), "{\"id\":\"c1\",\"title\":\"t\"}")
+    ro r2 = run(r1.state, tool)
+    assert(r2.state == r1.state)
+    assert(summary(r2.outputs) == "Log")
+    ro permission = stamped(EventKind.Progress, "permission_request", Some("agent-1"), "{\"request\":\"5\"}")
+    ro r3 = run(r2.state, permission)
+    assert(r3.state == r1.state)
+    ro r4 = run(r3.state, chunk("text"))
+    ro r5 = run(r4.state, done())
+    assert(summary(r5.outputs) == "Log,Finish(answer:text),Save")
 }

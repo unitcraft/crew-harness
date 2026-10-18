@@ -14,7 +14,7 @@
 // the state text, maps the engine event to a `ChatEvent`, calls the core and encodes the new state.
 module crew_harness.chat
 
-import crew_harness.engine.{Event, EventKind, Output, SendOrder, LogNote, CancelOrder, Conclusion, StepResult, FailCode}
+import crew_harness.engine.{Event, EventKind, StepOutput, SendOrder, LogNote, CancelOrder, Conclusion, StepResult, FailCode}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 
 /// ChatState: where the session is.
@@ -34,7 +34,7 @@ export type ChatEvent enum
     | Timeout
 
 /// ChatStep: the typed result of a step.
-export type ChatStep { state ChatState, outputs []Output }
+export type ChatStep { state ChatState, outputs []StepOutput }
 
 /// ChatSession: the machine. `party` is the id of the agent as a party of requests, `idle_term` the idle term in ms.
 export type ChatSession { party str, idle_term int }
@@ -119,7 +119,12 @@ export fn chat_event_of(event Event) -> Option[ChatEvent] {
             if event.name == "cancel" { return Some(Cancel) }
             None
         }
-        EventKind.Progress => Some(AgentChunk(event.input))
+        EventKind.Progress => {
+            // only a chunk of text is a part of the answer; a tool, a plan, a usage count, a permission request and the like
+            // renew the idle term (the engine does that by the kind) and are for the journal and the page
+            if event.name == "agent_chunk" { return Some(AgentChunk(event.input)) }
+            None
+        }
         EventKind.Answered => Some(AgentDone)
         EventKind.Refused => Some(AgentRefused(FailCode.of(event.input)))
         EventKind.Expired => Some(Timeout)
@@ -139,11 +144,11 @@ export fn agent_refused(request str, code FailCode) -> Event => Event.incoming(E
 
 // ----- the step -----
 
-fn note(text str) -> Output => Output.Log(LogNote { text })
+fn note(text str) -> StepOutput => StepOutput.Log(LogNote { text })
 
-fn finish_answer(text str) -> Output => Output.Finish(Conclusion { failure: None, text })
+fn finish_answer(text str) -> StepOutput => StepOutput.Finish(Conclusion { failure: None, text })
 
-fn finish_refusal(code FailCode, text str) -> Output => Output.Finish(Conclusion { failure: Some(code), text })
+fn finish_refusal(code FailCode, text str) -> StepOutput => StepOutput.Finish(Conclusion { failure: Some(code), text })
 
 fn event_label(event ChatEvent) -> str => match event {
     UserMessage(text) => "user message"
@@ -167,41 +172,41 @@ export fn chat_step(session ChatSession, state ChatState, event ChatEvent) -> Ch
                 state: Awaiting { user: text, reply: "" },
                 outputs: [
                     note("user message: ${text}"),
-                    Output.Send(SendOrder { party: session.party, input: text, idle_term: session.idle_term }),
-                    Output.Save
+                    StepOutput.Send(SendOrder { party: session.party, input: text, idle_term: session.idle_term }),
+                    StepOutput.Save
                 ]
             }
             Cancel => ChatStep {
                 state: Failed { code: FailCode.StoppedByHuman },
-                outputs: [note("cancelled by the user before the request"), finish_refusal(FailCode.StoppedByHuman, "cancelled by the user"), Output.Save]
+                outputs: [note("cancelled by the user before the request"), finish_refusal(FailCode.StoppedByHuman, "cancelled by the user"), StepOutput.Save]
             }
             _ => ignored(state, event)
         }
         Awaiting { user, reply } => match event {
             AgentChunk(text) => ChatStep {
                 state: Awaiting { user, reply: "${reply}${text}" },
-                outputs: [note("agent chunk: ${text}"), Output.Save]
+                outputs: [note("agent chunk: ${text}"), StepOutput.Save]
             }
             AgentDone => ChatStep {
                 state: Done { reply },
-                outputs: [note("agent done"), finish_answer(reply), Output.Save]
+                outputs: [note("agent done"), finish_answer(reply), StepOutput.Save]
             }
             AgentRefused(code) => ChatStep {
                 state: Failed { code },
-                outputs: [note("agent refused: ${code.name()}"), finish_refusal(code, "the agent refused"), Output.Save]
+                outputs: [note("agent refused: ${code.name()}"), finish_refusal(code, "the agent refused"), StepOutput.Save]
             }
             Cancel => ChatStep {
                 state: Failed { code: FailCode.StoppedByHuman },
                 outputs: [
                     note("cancelled by the user while waiting"),
-                    Output.Cancel(CancelOrder { party: session.party }),
+                    StepOutput.Cancel(CancelOrder { party: session.party }),
                     finish_refusal(FailCode.StoppedByHuman, "cancelled by the user"),
-                    Output.Save
+                    StepOutput.Save
                 ]
             }
             Timeout => ChatStep {
                 state: Failed { code: FailCode.Timeout },
-                outputs: [note("no answer in time"), finish_refusal(FailCode.Timeout, "no answer in time"), Output.Save]
+                outputs: [note("no answer in time"), finish_refusal(FailCode.Timeout, "no answer in time"), StepOutput.Save]
             }
             _ => ignored(state, event)
         }

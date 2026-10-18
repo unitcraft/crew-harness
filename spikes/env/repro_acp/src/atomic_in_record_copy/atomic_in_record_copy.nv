@@ -1,0 +1,15 @@
+module repro_acp.atomic_in_record_copy
+
+// Oracle 0.1.0: an `AtomicInt` put into a record is a COPY of the variable: a store through the variable is not seen through the field,
+// and the other way round. A counter that a fiber and the record's holder have to share (the ACP client first kept the end of the
+// process of the agent in one, set by the fiber that waits for the process) must be a channel (`Chan[int]`, a reference) instead.
+// Expected: PASS. Actual: the assert fails (0 instead of 7).
+
+type Holder { flag AtomicInt }
+
+test "a store through the variable is seen through the field of the record" {
+    mut flag = AtomicInt.new(0)
+    ro holder = Holder { flag }
+    flag.store(7)
+    assert(holder.flag.load() == 7)
+}

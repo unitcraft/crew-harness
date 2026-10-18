@@ -1,0 +1,49 @@
+// real_agent_test.nv - the real `opencode acp` through the client: initialize and session/new, NO prompt, so no model
+// is called and no key or login is used. It runs only when the environment variable CREW_REAL_ACP is 1 (a machine
+// without OpenCode must not fail the suite):
+//     $env:CREW_REAL_ACP = "1"; nova test src/acp
+module crew_harness.acp_live
+
+import crew_harness.acp.{AcpConfig, AcpClient, open_client, acp_agent}
+import std.fs.{Fs, real_fs, Path, create_dir_all, remove_dir_all}
+import std.os.{Os, real_os, env, temp_dir, pid}
+
+// On Windows the program is an npm shim, a .cmd file.
+#cfg(target_os = "windows")
+fn opencode_program() -> str => "opencode.cmd"
+
+#cfg(!target_os = "windows")
+fn opencode_program() -> str => "opencode"
+
+fn empty_project_dir() -> str {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-real-acp-${id}")
+    with Fs = real_fs() {
+        ro removed = remove_dir_all(dir)
+        ro made = create_dir_all(dir)
+    }
+    dir.display()
+}
+
+test "real agent: opencode acp initialize and session/new" {
+    ro asked = with Os = real_os() { env("CREW_REAL_ACP") }
+    match asked {
+        None => println("skipped: CREW_REAL_ACP is not set")
+        Some(value) => {
+            if value != "1" {
+                println("skipped: CREW_REAL_ACP is not 1")
+            } else {
+                ro config AcpConfig = { program: opencode_program(), args: ["acp"], cwd: empty_project_dir(), inbox_path: "" }
+                mut client = start_with(config)
+                ro ready = wait_phase(client, "ready", 60000)
+                println("real agent: phase=${client.phase()} name=${client.agent_name()} session=${client.session_id()}")
+                println("real agent: stderr tail=${client.stderr_tail()}")
+                assert(ready)
+                assert(client.session_id().byte_len() > 0)
+                assert(client.agent_name().byte_len() > 0)
+                client.close()
+            }
+        }
+    }
+}

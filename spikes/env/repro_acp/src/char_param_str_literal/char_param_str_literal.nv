@@ -1,0 +1,16 @@
+module repro_acp.char_param_str_literal
+
+// Oracle 0.1.0: `trim_end_matches` takes a `char`. A one-character STRING literal is refused by the checker when the receiver is a plain
+// `str` (E_NO_MATCHING_OVERLOAD, correct), but when the receiver is the loop variable of `for part in text.split(...)` the checker lets it
+// pass and the generated C hands a `nova_str` to a `nova_char` parameter.
+// Expected: the same checker error as for the plain receiver, or PASS. Actual: CC-FAIL "passing 'const nova_str' to parameter of
+// incompatible type 'nova_char'". (`part.strip_suffix("\r") ?? part` compiles and does the same.)
+
+test "trim_end_matches with a string literal on a loop variable" {
+    mut lines = 0
+    for part in "one\r\ntwo\r\n".split("\n") {
+        ro line = part.trim_end_matches("\r")
+        if line.byte_len() > 0 { lines += 1 }
+    }
+    assert(lines == 2)
+}

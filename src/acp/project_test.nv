@@ -1,0 +1,298 @@
+// project_test.nv - the projection "ACP -> engine event -> page event": pure functions, one row of the table per test.
+module crew_harness.acp
+
+import crew_harness.engine.{Event, EventKind, FailCode}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+// (j, str_at and int_at are in jsonrpc_test.nv, the same module)
+
+fn request_of(e Event) -> str {
+    match e.request {
+        Some(r) => r
+        None => "<none>"
+    }
+}
+
+// the page event as parsed JSON, a null object when there is none
+fn page_of(e Event, turn str) -> JsonValue {
+    match page_event(e, turn) {
+        Some(text) => j(text)
+        None => JsonValue.null()
+    }
+}
+
+fn input_of(page JsonValue) -> JsonValue {
+    match page.object() {
+        Some(o) => match o.get("input") {
+            Some(v) => v
+            None => JsonValue.null()
+        }
+        None => JsonValue.null()
+    }
+}
+
+fn stamped(kind EventKind, name str, request str, input str) -> Event => {
+    id: "${name}-4", trace: "t1000-chat-1", step: 5, kind, name, request: Some(request), input, at: 1792314001300
+}
+
+// ----- ACP update -> engine event -----
+
+test "update: agent_message_chunk is agent_chunk" {
+    ro p = project_update(j("{\"sessionUpdate\":\"agent_message_chunk\",\"content\":{\"type\":\"text\",\"text\":\"Привет, \"}}"))
+    assert(p.name == "agent_chunk")
+    assert(p.input == "Привет, ")
+    ro e = progress_event("agent-1", p)
+    assert(e.kind == EventKind.Progress)
+    assert(e.name == "agent_chunk")
+    assert(request_of(e) == "agent-1")
+    assert(e.input == "Привет, ")
+}
+
+test "update: agent_thought_chunk is agent_thought" {
+    ro p = project_update(j("{\"sessionUpdate\":\"agent_thought_chunk\",\"content\":{\"type\":\"text\",\"text\":\"думаю\"}}"))
+    assert(p.name == "agent_thought")
+    assert(p.input == "думаю")
+}
+
+test "update: non-text chunk is skipped" {
+    ro p = project_update(j("{\"sessionUpdate\":\"agent_message_chunk\",\"content\":{\"type\":\"image\",\"data\":\"AAAA\",\"mimeType\":\"image/png\"}}"))
+    assert(p.name == "acp_skipped")
+    assert(p.input.contains("agent_message_chunk"))
+    assert(p.input.contains("image"))
+}
+
+test "update: tool_call has id, title, kind, status, detail" {
+    ro p = project_update(j("{\"sessionUpdate\":\"tool_call\",\"toolCallId\":\"call_001\",\"title\":\"Чтение src/main.nv\",\"kind\":\"read\",\"status\":\"pending\",\"content\":[{\"type\":\"content\",\"content\":{\"type\":\"text\",\"text\":\"файл прочитан\"}}]}"))
+    assert(p.name == "tool_call")
+    ro input = j(p.input)
+    assert(str_at(input, "id") == "call_001")
+    assert(str_at(input, "title") == "Чтение src/main.nv")
+    assert(str_at(input, "kind") == "read")
+    assert(str_at(input, "status") == "pending")
+    assert(str_at(input, "detail") == "файл прочитан")
+}
+
+test "update: tool_call unknown kind/status, defaults" {
+    ro a = j(project_update(j("{\"sessionUpdate\":\"tool_call\",\"toolCallId\":\"c1\",\"title\":\"t\",\"kind\":\"switch_mode\",\"status\":\"weird\"}")).input)
+    assert(str_at(a, "kind") == "other")
+    assert(str_at(a, "status") == "pending")
+    ro b = j(project_update(j("{\"sessionUpdate\":\"tool_call\",\"toolCallId\":\"c2\",\"title\":\"t\"}")).input)
+    assert(str_at(b, "kind") == "other")
+    assert(str_at(b, "status") == "pending")
+}
+
+test "update: tool_call diff is a line with the path" {
+    ro p = project_update(j("{\"sessionUpdate\":\"tool_call\",\"toolCallId\":\"c3\",\"title\":\"Правка\",\"kind\":\"edit\",\"status\":\"in_progress\",\"content\":[{\"type\":\"diff\",\"path\":\"C:/work/p/a.txt\",\"oldText\":null,\"newText\":\"x\"}]}"))
+    ro input = j(p.input)
+    assert(str_at(input, "kind") == "edit")
+    assert(str_at(input, "detail").contains("C:/work/p/a.txt"))
+}
+
+test "update: tool_call without id is skipped" {
+    ro p = project_update(j("{\"sessionUpdate\":\"tool_call\",\"title\":\"no id\"}"))
+    assert(p.name == "acp_skipped")
+}
+
+test "update: tool_call_update keeps only fields that came" {
+    ro p = project_update(j("{\"sessionUpdate\":\"tool_call_update\",\"toolCallId\":\"call_001\",\"status\":\"completed\",\"content\":[{\"type\":\"content\",\"content\":{\"type\":\"text\",\"text\":\"готово\"}}]}"))
+    assert(p.name == "tool_call_update")
+    ro input = j(p.input)
+    assert(str_at(input, "id") == "call_001")
+    assert(str_at(input, "status") == "completed")
+    assert(str_at(input, "detail") == "готово")
+    ro q = j(project_update(j("{\"sessionUpdate\":\"tool_call_update\",\"toolCallId\":\"call_002\",\"status\":\"failed\"}")).input)
+    assert(str_at(q, "id") == "call_002")
+    assert(str_at(q, "detail") == "<missing>")
+}
+
+test "update: plan keeps the entries" {
+    ro p = project_update(j("{\"sessionUpdate\":\"plan\",\"entries\":[{\"content\":\"Проверить\",\"priority\":\"high\",\"status\":\"pending\"}]}"))
+    assert(p.name == "plan")
+    assert(p.input.contains("Проверить"))
+}
+
+test "update: usage_update has used, size, cost" {
+    ro p = project_update(j("{\"sessionUpdate\":\"usage_update\",\"used\":53000,\"size\":200000,\"cost\":{\"amount\":0.045,\"currency\":\"USD\"}}"))
+    assert(p.name == "usage_update")
+    ro input = j(p.input)
+    assert(int_at(input, "used") == 53000)
+    assert(int_at(input, "size") == 200000)
+    assert(p.input.contains("USD"))
+    ro bare = j(project_update(j("{\"sessionUpdate\":\"usage_update\",\"used\":10,\"size\":100}")).input)
+    assert(int_at(bare, "used") == 10)
+    assert(!project_update(j("{\"sessionUpdate\":\"usage_update\",\"used\":10,\"size\":100}")).input.contains("cost"))
+}
+
+test "update: usage_update without numbers is skipped" {
+    ro p = project_update(j("{\"sessionUpdate\":\"usage_update\",\"used\":\"many\"}"))
+    assert(p.name == "acp_skipped")
+}
+
+test "update: unknown ones are acp_skipped, named" {
+    ro known_but_unused = project_update(j("{\"sessionUpdate\":\"available_commands_update\",\"availableCommands\":[]}"))
+    assert(known_but_unused.name == "acp_skipped")
+    assert(known_but_unused.input.contains("available_commands_update"))
+    ro invented = project_update(j("{\"sessionUpdate\":\"hologram_chunk\",\"x\":1}"))
+    assert(invented.name == "acp_skipped")
+    assert(invented.input.contains("hologram_chunk"))
+    ro nameless = project_update(j("{\"x\":1}"))
+    assert(nameless.name == "acp_skipped")
+    ro not_an_object = project_update(j("[1,2]"))
+    assert(not_an_object.name == "acp_skipped")
+    ro user_echo = project_update(j("{\"sessionUpdate\":\"user_message_chunk\",\"content\":{\"type\":\"text\",\"text\":\"echo\"}}"))
+    assert(user_echo.name == "acp_skipped")
+}
+
+test "update: no open request makes the note acp_note" {
+    ro p = project_update(j("{\"sessionUpdate\":\"available_commands_update\",\"availableCommands\":[]}"))
+    ro e = progress_event("", p)
+    assert(e.kind == EventKind.Input)
+    assert(e.name == "acp_note")
+    assert(e.request == None)
+}
+
+// ----- permission -----
+
+test "permission: key, action, title, options" {
+    ro p = project_permission(j("5"), j("{\"sessionId\":\"s1\",\"toolCall\":{\"toolCallId\":\"call_9\",\"title\":\"Записать result.md\",\"kind\":\"edit\"},\"options\":[{\"optionId\":\"allow-once\",\"name\":\"Allow once\",\"kind\":\"allow_once\"},{\"optionId\":\"reject-once\",\"name\":\"Reject\",\"kind\":\"reject_once\"}]}"))
+    assert(p.name == "permission_request")
+    ro input = j(p.input)
+    assert(str_at(input, "request") == "5")
+    assert(str_at(input, "action") == "edit")
+    assert(str_at(input, "detail") == "Записать result.md")
+    assert(p.input.contains("allow-once"))
+    assert(p.input.contains("reject_once"))
+}
+
+test "permission: string id, no title or kind" {
+    ro p = project_permission(j("\"abc\""), j("{\"toolCall\":{\"toolCallId\":\"call_9\"},\"options\":[]}"))
+    ro input = j(p.input)
+    assert(str_at(input, "request") == "abc")
+    assert(str_at(input, "action") == "other")
+    assert(str_at(input, "detail") == "call_9")
+}
+
+test "rpc key: number and string id" {
+    assert(rpc_key(j("12")) == "12")
+    assert(rpc_key(j("\"abc\"")) == "abc")
+}
+
+// ----- the end of the turn -----
+
+test "stop: end_turn is agent_done" {
+    ro e = stop_event("agent-1", "end_turn")
+    assert(e.kind == EventKind.Answered)
+    assert(e.name == "agent_done")
+    assert(request_of(e) == "agent-1")
+}
+
+test "stop: other reasons are refusals with codes" {
+    ro a = stop_event("agent-1", "max_tokens")
+    assert(a.kind == EventKind.Refused)
+    assert(a.name == "agent_refused")
+    assert(a.input == "MaxTokens")
+    assert(stop_event("agent-1", "max_turn_requests").input == "MaxTurnRequests")
+    assert(stop_event("agent-1", "refusal").input == "ModelRefused")
+    assert(stop_event("agent-1", "cancelled").input == "StoppedByHuman")
+    // a reason the table does not know is no result, never an invented code
+    assert(stop_event("agent-1", "something_new").input == "NoResult")
+    assert(FailCode.parse(stop_event("agent-1", "something_new").input) != None)
+}
+
+test "refusal event: code name and request" {
+    ro e = refused_event("agent-2", FailCode.ConnectionLost)
+    assert(e.kind == EventKind.Refused)
+    assert(e.input == "ConnectionLost")
+    assert(request_of(e) == "agent-2")
+}
+
+// ----- the kinds of tools -----
+
+test "tool kind: known ones, other for the rest" {
+    assert(tool_kind("read") == "read")
+    assert(tool_kind("edit") == "edit")
+    assert(tool_kind("delete") == "delete")
+    assert(tool_kind("move") == "move")
+    assert(tool_kind("search") == "search")
+    assert(tool_kind("execute") == "execute")
+    assert(tool_kind("think") == "think")
+    assert(tool_kind("fetch") == "fetch")
+    assert(tool_kind("switch_mode") == "other")
+    assert(tool_kind("") == "other")
+    assert(tool_kind("teleport") == "other")
+}
+
+// ----- engine event -> page event -----
+
+test "page: user_message with turn, text, time" {
+    ro e Event = { id: "input-2", trace: "t1000-chat-1", step: 2, kind: EventKind.Input, name: "user_message", request: None, input: "привет", at: 1792314001000 }
+    ro page = page_of(e, "t1")
+    assert(str_at(page, "id") == "input-2")
+    assert(str_at(page, "trace") == "t1000-chat-1")
+    assert(int_at(page, "step") == 2)
+    assert(str_at(page, "kind") == "user_message")
+    assert(int_at(page, "time") == 1792314001000)
+    assert(str_at(input_of(page), "turn") == "t1")
+    assert(str_at(input_of(page), "text") == "привет")
+}
+
+test "page: chunk, done, refused, cancel" {
+    ro chunk = page_of(stamped(EventKind.Progress, "agent_chunk", "agent-1", "мир"), "t1")
+    assert(str_at(chunk, "kind") == "agent_chunk")
+    assert(str_at(input_of(chunk), "text") == "мир")
+    assert(str_at(input_of(chunk), "turn") == "t1")
+    ro done = page_of(stamped(EventKind.Answered, "agent_done", "agent-1", ""), "t1")
+    assert(str_at(done, "kind") == "agent_done")
+    assert(str_at(input_of(done), "turn") == "t1")
+    ro refused = page_of(stamped(EventKind.Refused, "agent_refused", "agent-1", "ModelRefused"), "t1")
+    assert(str_at(refused, "kind") == "agent_refused")
+    assert(str_at(input_of(refused), "reason") == "ModelRefused")
+    ro cancel = page_of(stamped(EventKind.Input, "cancel", "x", ""), "t1")
+    assert(str_at(cancel, "kind") == "cancel")
+    assert(str_at(input_of(cancel), "turn") == "t1")
+}
+
+test "page: timeout is a refusal Timeout" {
+    ro page = page_of(stamped(EventKind.Expired, "timeout", "agent-1", ""), "t1")
+    assert(str_at(page, "kind") == "agent_refused")
+    assert(str_at(input_of(page), "reason") == "Timeout")
+}
+
+test "page: tool_call, tool_call_update, usage_update" {
+    ro call = page_of(stamped(EventKind.Progress, "tool_call", "agent-1", "{\"id\":\"c1\",\"title\":\"Чтение\",\"kind\":\"read\",\"status\":\"pending\"}"), "t1")
+    assert(str_at(call, "kind") == "tool_call")
+    assert(str_at(input_of(call), "id") == "c1")
+    assert(str_at(input_of(call), "title") == "Чтение")
+    assert(str_at(input_of(call), "turn") == "t1")
+    ro upd = page_of(stamped(EventKind.Progress, "tool_call_update", "agent-1", "{\"id\":\"c1\",\"status\":\"completed\"}"), "t1")
+    assert(str_at(upd, "kind") == "tool_call_update")
+    assert(str_at(input_of(upd), "status") == "completed")
+    ro usage = page_of(stamped(EventKind.Progress, "usage_update", "agent-1", "{\"used\":10,\"size\":100}"), "t1")
+    assert(str_at(usage, "kind") == "usage_update")
+    assert(int_at(input_of(usage), "used") == 10)
+}
+
+test "page: permission request and decision" {
+    ro req = page_of(stamped(EventKind.Progress, "permission_request", "agent-1", "{\"request\":\"5\",\"action\":\"edit\",\"detail\":\"Записать result.md\",\"options\":[]}"), "t1")
+    assert(str_at(req, "kind") == "permission_request")
+    assert(str_at(input_of(req), "request") == "5")
+    assert(str_at(input_of(req), "action") == "edit")
+    assert(str_at(input_of(req), "detail") == "Записать result.md")
+    assert(str_at(input_of(req), "turn") == "t1")
+    ro decision = page_of(stamped(EventKind.Input, "permission_decision", "x", "{\"request\":\"5\",\"decision\":\"allow\"}"), "t1")
+    assert(str_at(decision, "kind") == "permission_decision")
+    assert(str_at(input_of(decision), "request") == "5")
+    assert(str_at(input_of(decision), "decision") == "allow")
+}
+
+test "page: kinds without a page counterpart give None" {
+    assert(page_event(stamped(EventKind.Progress, "plan", "agent-1", "{\"entries\":[]}"), "t1") == None)
+    assert(page_event(stamped(EventKind.Progress, "agent_thought", "agent-1", "думаю"), "t1") == None)
+    assert(page_event(stamped(EventKind.Progress, "acp_skipped", "agent-1", "hologram_chunk"), "t1") == None)
+    assert(page_event(stamped(EventKind.Input, "acp_note", "x", "available_commands_update"), "t1") == None)
+    assert(page_event(stamped(EventKind.Progress, "never_heard_of_it", "agent-1", "x"), "t1") == None)
+}
+
+test "page: tool event with non-object input gives None" {
+    assert(page_event(stamped(EventKind.Progress, "tool_call", "agent-1", "not json"), "t1") == None)
+}

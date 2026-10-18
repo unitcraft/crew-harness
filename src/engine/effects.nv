@@ -24,9 +24,19 @@ export type Store effect {
 }
 
 /// Agent: the link to the agent. `send` sends a request, `receive` returns the next incoming event
-/// without waiting (None - nothing arrived), `cancel` tells the agent that the request is cancelled.
+/// without waiting (None - nothing arrived), `cancel` tells the agent that the request is cancelled,
+/// `ack` confirms an incoming event.
+///
+/// Acknowledgement: an event returned by `receive` is not yet the engine's. The handler keeps it as
+/// "taken, not confirmed" and hands it out again after a restart. The event carries its source key
+/// in `Event.id` (the creator of an incoming event may fill it; the engine stamps its own id and keeps
+/// the key in the journal line of the step as `src=<key>`). The engine calls `ack(key)` after the
+/// step of the event is committed, and after a restart for every key that the journal shows as
+/// committed (the process may have died between the commit and the `ack`). `ack` is idempotent.
+/// An event without a source key (an empty `id`) is never acknowledged.
 export type Agent effect {
     fn send(request Request[str]) -> ()
     fn receive() -> Option[Event]
     fn cancel(request_id str) -> ()
+    fn ack(source str) -> ()
 }

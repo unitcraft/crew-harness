@@ -1,0 +1,166 @@
+// jsonrpc.nv - JSON-RPC 2.0 over stdio as ACP uses it: one message per line.
+//
+// Parsing (`parse_rpc`) and building (`rpc_*_line`) are pure functions of text; `LineSplitter` cuts a stream of bytes
+// into lines without caring where the reads end: a message may come in pieces, two messages in one read, the last one
+// without a line break, a letter torn between two reads. The splitter works on bytes, so UTF-8 is never cut by it.
+//
+// The `id` of a message is kept as `JsonValue` (a number or a string): an answer to a request of the peer must echo the
+// id exactly as it came.
+module crew_harness.acp
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+/// RpcMessage: a line of the peer, classified.
+///  - RpcCall: a request of the peer (it has an id and a method, an answer is expected);
+///  - RpcNote: a notification (a method and no id);
+///  - RpcResult: the answer to a request of ours;
+///  - RpcFailure: the error answer to a request of ours (`id` is null when the peer could not tell which);
+///  - RpcGarbage: not JSON, not an object, or an object that is none of the above.
+export type RpcMessage enum
+    | RpcCall { id JsonValue, method str, params JsonValue }
+    | RpcNote { method str, params JsonValue }
+    | RpcResult { id JsonValue, result JsonValue }
+    | RpcFailure { id JsonValue, code int, message str }
+    | RpcGarbage { text str }
+
+fn put(mut o JsonObject, key str, value JsonValue) -> () {
+    ro replaced = o.insert(key, value)
+}
+
+fn field_of(o JsonObject, key str) -> JsonValue {
+    match o.get(key) {
+        Some(v) => v
+        None => JsonValue.null()
+    }
+}
+
+fn garbage(line str) -> RpcMessage => RpcGarbage { text: line }
+
+/// Classify one line.
+export fn parse_rpc(line str) -> RpcMessage {
+    ro value = match Json.parse(line) {
+        Ok(v) => v
+        Err(e) => return garbage(line)
+    }
+    ro o = match value.object() {
+        Some(x) => x
+        None => return garbage(line)
+    }
+    ro id = field_of(o, "id")
+    ro method = match o.get("method") {
+        Some(m) => m.str()
+        None => None
+    }
+    match method {
+        Some(name) => {
+            if o.contains("id") && !id.is_null() {
+                return RpcCall { id, method: name, params: field_of(o, "params") }
+            }
+            return RpcNote { method: name, params: field_of(o, "params") }
+        }
+        None => ()
+    }
+    if o.contains("result") && o.contains("id") {
+        return RpcResult { id, result: field_of(o, "result") }
+    }
+    match o.get("error") {
+        Some(err) => match err.object() {
+            Some(eo) => {
+                ro code = match eo.get("code") {
+                    Some(c) => c.int() ?? 0
+                    None => 0
+                }
+                ro message = match eo.get("message") {
+                    Some(m) => m.str() ?? ""
+                    None => ""
+                }
+                return RpcFailure { id, code, message }
+            }
+            None => return garbage(line)
+        }
+        None => ()
+    }
+    garbage(line)
+}
+
+fn versioned() -> JsonObject {
+    mut o = JsonObject.new()
+    put(o, "jsonrpc", JsonValue.str("2.0"))
+    o
+}
+
+/// A request line: `{"jsonrpc":"2.0","id":N,"method":...,"params":...}`, without the line break.
+export fn rpc_request_line(id int, method str, params JsonValue) -> str {
+    mut o = versioned()
+    put(o, "id", JsonValue.int(id))
+    put(o, "method", JsonValue.str(method))
+    put(o, "params", params)
+    JsonValue.object(o).to_str()
+}
+
+/// A notification line (no id, no answer expected).
+export fn rpc_notification_line(method str, params JsonValue) -> str {
+    mut o = versioned()
+    put(o, "method", JsonValue.str(method))
+    put(o, "params", params)
+    JsonValue.object(o).to_str()
+}
+
+/// The answer to a request of the peer: the id is echoed as it came.
+export fn rpc_result_line(id JsonValue, result JsonValue) -> str {
+    mut o = versioned()
+    put(o, "id", id)
+    put(o, "result", result)
+    JsonValue.object(o).to_str()
+}
+
+/// The error answer to a request of the peer.
+export fn rpc_error_line(id JsonValue, code int, message str) -> str {
+    mut o = versioned()
+    put(o, "id", id)
+    mut e = JsonObject.new()
+    put(e, "code", JsonValue.int(code))
+    put(e, "message", JsonValue.str(message))
+    put(o, "error", JsonValue.object(e))
+    JsonValue.object(o).to_str()
+}
+
+// ----- the splitting of a byte stream into lines -----
+
+/// LineSplitter: the bytes read so far that do not yet end in a line break.
+export type LineSplitter { pending []u8 }
+
+/// An empty splitter.
+export fn LineSplitter.new() -> LineSplitter => { pending: []u8.new() }
+
+// The text of a line of bytes: a "\r" at the end is cut, a broken UTF-8 sequence is replaced; None - the line is empty.
+fn line_of(bytes []u8) -> Option[str] {
+    mut n = bytes.len()
+    if n > 0 && bytes[n - 1] == (13 as u8) { n -= 1 }
+    if n == 0 { return None }
+    Some(bytes[..n].to_str_lossy())
+}
+
+/// Feed the bytes of one read; the complete lines in it come out in order (empty lines are skipped).
+export fn LineSplitter mut @feed(chunk []u8) -> []str {
+    mut out = []str.new()
+    for b in chunk {
+        if b == (10 as u8) {
+            match line_of(@pending) {
+                Some(line) => out.push(line)
+                None => ()
+            }
+            @pending = []u8.new()
+        } else {
+            @pending.push(b)
+        }
+    }
+    out
+}
+
+/// The end of the stream: what is left without a line break is the last line.
+export fn LineSplitter mut @flush() -> Option[str] {
+    ro rest = line_of(@pending)
+    @pending = []u8.new()
+    rest
+}
