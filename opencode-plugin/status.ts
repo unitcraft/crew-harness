@@ -583,6 +583,8 @@ function countersOf(project: string, items: Status[], otherPlans: number, now: n
   const an = answerCounts(project, now)
   if (an?.auto) parts.push(`answers ${an.auto} (${an.stepped} owner)`)
   if (an?.forYou) parts.push(`for you ${an.forYou}`)
+  if (an?.forms) parts.push(`form answers ${an.forms}`)
+  if (an?.formsToYou) parts.push(`form to you ${an.formsToYou} (${an.formsWhy})`)
   const lw = lockWaiters(project)
   if (lw.length) parts.push(`lock ${lw.map((x) => `${taskNo({ project, n: x.n })} ${ageText(x.at, now)}`).join(", ")}`)
   const diverge = !!divergenceLineFor(project)

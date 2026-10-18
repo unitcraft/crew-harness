@@ -153,6 +153,7 @@ import { addSide, ensureWorktree, fileAtAsync, gitTraces, leftoversOf, mergeHold
 import { precheckLines, releaseLandedLock } from "./precheck.ts"
 import { isLauncherCard, noteLoopLag, registerJournalTools } from "./journal.ts"
 import { answerTick } from "./owner-answer.ts"
+import { autoNotes, autoTick } from "./form-auto.ts"
 import { clearLoop, loopLetter, loopOf, loopTick, noteDelivered } from "./answer-loop.ts"
 import { factsOf, isOwnerAnswer, nudgeHold, serviceKindOf, verdicts } from "./queue-gate.ts"
 import { writeLaunch } from "./task-folders.ts"
@@ -1335,21 +1336,22 @@ export default {
       if (now() - formAt < formLookEvery(now(), undefined, FORM_EVERY_MS)) return // вопрос, отменённый без ответа, вкладке возвращается за секунды (задача 069)
       formAt = now()
       const windows = liveWindows()
+      const formTab = async (s: string) => {
+        const c = readJson<Card>(cardFile(s))
+        const tab = tabOf(s, windows)
+        const open = !!tab || (!!c && mayWakeCard(c, windows))
+        let busy = tab ? !!tab.tab.busy : !!c?.busy
+        // окно или визитка говорит «идёт», а база ходов не видит (после перезапуска): не занята. Вопрос на экране (инструмент ждёт) - занята
+        if (busy && !(await pendingTool(s)) && (await staleBusy(s, now()))) busy = false
+        if (!busy && !tab && (await openTurn(s, now()))) busy = true
+        // задача 080: инструмент question ещё ждёт ответа в базе - ход жив, вопрос на экране, а не потерян (окно может не считать такой ход идущим)
+        if (!busy && (await pendingTool(s))) busy = true
+        return { open, busy }
+      }
       await formTick(
         {
           processStart: PROCESS_START,
-          tab: async (s) => {
-            const c = readJson<Card>(cardFile(s))
-            const tab = tabOf(s, windows)
-            const open = !!tab || (!!c && mayWakeCard(c, windows))
-            let busy = tab ? !!tab.tab.busy : !!c?.busy
-            // окно или визитка говорит «идёт», а база ходов не видит (после перезапуска): не занята. Вопрос на экране (инструмент ждёт) - занята
-            if (busy && !(await pendingTool(s)) && (await staleBusy(s, now()))) busy = false
-            if (!busy && !tab && (await openTurn(s, now()))) busy = true
-            // задача 080: инструмент question ещё ждёт ответа в базе - ход жив, вопрос на экране, а не потерян (окно может не считать такой ход идущим)
-            if (!busy && (await pendingTool(s))) busy = true
-            return { open, busy }
-          },
+          tab: formTab,
           queued: async (s) => (await queuedTexts(s)).length,
           idle: (s, since) => idleFactsAfter(s, since),
           ownerWrote: async (s, since) => (await ownerWordAfter(s, since)) > 0,
@@ -1357,6 +1359,23 @@ export default {
             if (letterExistsFor(s, id)) return
             postLetter(s, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: s, time: now(), text })
           },
+          say: (line) => log(line),
+        },
+        now(),
+      )
+      // АВТООТВЕТ НА ФОРМЫ ВСТРОЕННОГО ВОПРОСНИКА (задача 096, form-auto.ts): по answer_mode проекта форма с единственной пометкой «(Recommended)» у первого
+      // варианта, вне закрытого списка, закрывается через answer_delay_sec: плагин кладёт файл-ответ в answers/, доставка — answerTick ниже (прерывание хода и письмо)
+      await autoTick(
+        {
+          config: (s) => {
+            const c = readJson<Card>(cardFile(s))
+            if (!c?.directory) return undefined
+            const cfg = loadConfig(c.directory)
+            return { mode: cfg.answerMode, max: cfg.answerMax, delaySec: cfg.answerDelaySec, project: c.project, ...(c.task ? { task: c.task.n } : {}) }
+          },
+          tab: formTab,
+          ownerWrote: async (s, since) => (await ownerWordAfter(s, since)) > 0,
+          ownerWordAfter: (s, at) => ownerWordAfter(s, at),
           say: (line) => log(line),
         },
         now(),
@@ -1369,9 +1388,11 @@ export default {
         },
         history: (s, note) => {
           const c = readJson<Card>(cardFile(s))
+          const tag = /[answer [^]]+]/.exec(note)?.[0]
           for (const ref of [c?.task, c?.review]) {
             const task = ref ? loadTask(ref.project, ref.n) : undefined
-            if (task && (task.executor === s || task.reviewer === s)) taskEvent(task, PLUGIN_SENDER, undefined, note)
+            // запись события повторяется после перезапуска (задача 096): с тем же id ответа второй раз она не пишется
+            if (task && (task.executor === s || task.reviewer === s) && !(tag && task.history.some((h) => h.note?.includes(tag)))) taskEvent(task, PLUGIN_SENDER, undefined, note)
           }
           void clearStuck(s, "the owner answered the question form from outside")
           if (c) void deliver(c)
@@ -2163,6 +2184,7 @@ export default {
       },
       startTask,
       doctor,
+      doctorNotes: () => autoNotes(now()),
     })
     const toEditor = (t: (typeof tools)[number]) => ({ name: t.name, description: t.description, input: t.input, execute: (input: any, context: any) => t.execute(input, context?.sessionID) })
     await ctx.tool.transform((editor: any) => {
@@ -2194,7 +2216,7 @@ export default {
     const runDoctor = async () => {
       const problems = [...(await doctor()), ...commonDoctor(), ...settingsProblems(projects, settingsContext().local), ...profileProblems()]
       try {
-        writeFileSync(DOCTOR_FILE, JSON.stringify({ at: Date.now(), problems, notes: settingsNotes() }))
+        writeFileSync(DOCTOR_FILE, JSON.stringify({ at: Date.now(), problems, notes: [...settingsNotes(), ...autoNotes(now())] }))
       } catch {}
       const said = problems.join(" | ")
       if (said === doctorSaid) return

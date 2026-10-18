@@ -78,6 +78,24 @@ cell("AC-08 guide", ok8 && /\{"implementation": "recommendations"\}/.test(am) &&
 const prof = await call("sesINT", { action: "set", values: { profile_set: "x" } })
 cell("AC-08 profile_set refusal text is unchanged", prof === "Не записано (файл не тронут):\n- profile_set: имя набора меняет человек (команда окна /crew-sets use либо правка файла); вызовом set его не записывают", prof)
 
+const parse2 = await load("answer-parse.ts")
+const err = (k, v) => schema.invalid(k, v) ?? ""
+
+// task 096: answer_delay_sec (seconds before the automatic answer to a form of the questionnaire) belongs to the person as well
+const delayOf = () => core.loadConfig(work).answerDelaySec
+const s4 = await call("sesINT", { action: "set", values: { answer_delay_sec: 0 } })
+cell("096 set answer_delay_sec is refused, the file stays", /Не записано/.test(s4) && /answer_delay_sec/.test(s4) && /человек/.test(s4) && readFileSync(file, "utf8") === before, s4)
+const dl = lines("answer_delay_sec")[0] ?? ""
+cell("096 guide names answer_delay_sec (value, recommendation, reason, the person sets it)", /Сейчас: 60/.test(dl) && /Рекомендация: \S/.test(dl) && /Зачем: \S/.test(dl) && /Ставит человек/.test(dl) && !/crew-sets/.test(dl), dl)
+cell("096 default of answer_delay_sec is 60", delayOf() === 60, String(delayOf()))
+commit({ answer_delay_sec: 0 })
+cell("096 answer_delay_sec 0 is read as 0 (at once)", delayOf() === 0 && err("answer_delay_sec", 0) === "" && err("answer_delay_sec", 90) === "", delayOf() + " | " + err("answer_delay_sec", 0))
+commit({ answer_delay_sec: -5 })
+cell("096 a negative answer_delay_sec is read as 60 and named by invalid", delayOf() === 60 && /answer_delay_sec/.test(err("answer_delay_sec", -5)) && /answer_delay_sec/.test(err("answer_delay_sec", 1.5)), delayOf() + " | " + err("answer_delay_sec", -5))
+cell("096 doctor names a bad answer_delay_sec", settings.settingsProblems(settings.parseProjects({ projects: [cfgDir] })).some((p) => /answer_delay_sec/.test(p)), "")
+commit({})
+cell("096 parse: normalizeAnswerDelay", parse2.normalizeAnswerDelay(undefined) === 60 && parse2.normalizeAnswerDelay(0) === 0 && parse2.normalizeAnswerDelay(30) === 30 && parse2.normalizeAnswerDelay(-1) === 60 && parse2.normalizeAnswerDelay("5") === 60 && parse2.normalizeAnswerDelay(1.5) === 60, "")
+
 // AC-07: the key gate is not accepted
 const s3 = await call("sesINT", { action: "set", values: { answer_mode: { gate: "recommendations" } } })
 cell("AC-07 set", /Не записано/.test(s3) && readFileSync(file, "utf8") === before, s3)
@@ -92,7 +110,6 @@ const clean = settings.settingsProblems(settings.parseProjects({ projects: [cfgD
 cell("AC-07 doctor control: no key, no problem", !clean.some((p) => /answer_/.test(p)), JSON.stringify(clean))
 
 // AC-09: values of a wrong form are read as absent; invalid names the error
-const err = (k, v) => schema.invalid(k, v) ?? ""
 commit({ answer_mode: { plan: "auto" } })
 cell("AC-09 a", modeOf() === "{}" && /answer_mode/.test(err("answer_mode", { plan: "auto" })), modeOf() + " | " + err("answer_mode", { plan: "auto" }))
 commit({ answer_mode: { plan: "agent" } })

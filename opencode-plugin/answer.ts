@@ -10,6 +10,7 @@ import { type Card, type CrewConfig, type TurnEnd, PLUGIN_SENDER, letterExistsFo
 import { loadTask, taskEvent, taskRef } from "./tasks.ts"
 import { BASE } from "./paths.ts"
 import { type Block, type ClassifyCtx, answerModesOn, classify, parseTurn } from "./answer-parse.ts"
+import { autoStats, heldShort } from "./form-auto.ts"
 
 export const ANSWERS = path.join(BASE, "answers")
 /** Записи журнала хранятся не меньше 30 суток от ответа; читатель пропускает более старые, чистка удаляет их (purgeOld). */
@@ -500,18 +501,21 @@ function readAllCached(now: number): AnswerRecord[] {
 /** Счётчики раздела автоответов для /crew (REQ-17, задача 077): ответы за 24 часа, из них со вмешательством владельца, и вопросы, которые
  *  ждут слова владельца (остаток хода). Подробности — в истории задачи (`crew_task show`); строки с вопросами и ответами /crew больше не
  *  печатает. Нет ни того ни другого — undefined. */
-export function answerCounts(project: string, now = Date.now()): { auto: number; stepped: number; forYou: number } | undefined {
+export function answerCounts(project: string, now = Date.now()): { auto: number; stepped: number; forYou: number; forms?: number; formsToYou?: number; formsWhy?: string } | undefined {
   const all = readAllCached(now).filter((r) => r.project === project)
   const day = all.filter((r) => r.kind === "a" && now - r.answeredAt <= DAY_MS)
   const waiting = all.filter((r) => r.kind === "r" && r.state === "остаток: ждёт слова владельца" && now - r.askedAt <= DAY_MS)
-  if (!day.length && !waiting.length) return undefined
-  return { auto: day.length, stepped: day.filter((r) => r.state === "владелец вмешался").length, forYou: waiting.length }
+  // задача 096: формы встроенного вопросника, на которые ответил плагин, и те, что он оставил владельцу (с причинами)
+  const fs = autoStats(project, now)
+  if (!day.length && !waiting.length && !fs.answered && !fs.heldTotal) return undefined
+  return { auto: day.length, stepped: day.filter((r) => r.state === "владелец вмешался").length, forYou: waiting.length, ...(fs.answered ? { forms: fs.answered } : {}), ...(fs.heldTotal ? { formsToYou: fs.heldTotal, formsWhy: heldShort(fs) } : {}) }
 }
 
 export type SideRowLike = { mark: string; who: string; what: string; tone: "accent" | "base" | "muted" }
 /** Строка боковой панели «авто 24ч: N · вмеш. M» (REQ-17, AC-32); N = 0 — строки нет. Без проекта — по всем проектам журнала. */
 export function answerSideRow(project?: string, now = Date.now()): SideRowLike | undefined {
   const day = readAllCached(now).filter((r) => r.kind === "a" && now - r.answeredAt <= DAY_MS && (!project || r.project === project))
-  if (!day.length) return undefined
-  return { mark: " ", who: "", what: `авто 24ч: ${day.length} · вмеш. ${day.filter((r) => r.state === "владелец вмешался").length}`, tone: "muted" }
+  const fs = autoStats(project, now) // задача 096: ответы плагина на формы входят в счёт, ушедшие владельцу — отдельным числом
+  if (!day.length && !fs.answered && !fs.heldTotal) return undefined
+  return { mark: " ", who: "", what: `авто 24ч: ${day.length + fs.answered} · вмеш. ${day.filter((r) => r.state === "владелец вмешался").length}${fs.heldTotal ? ` · вам: ${fs.heldTotal}` : ""}`, tone: "muted" }
 }

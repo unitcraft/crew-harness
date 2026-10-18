@@ -329,7 +329,8 @@ tab close it too (so a false "waiting for you" goes away at once; the 12-hour TT
 if the tab has no running turn, the plugin wakes it with a service message that holds the question text and the options and asks
 to call `question` again. At most 3 repeats, at least 2 minutes apart, and not in the first 3 minutes after a start of the
 service (the windows get time to show their questions again); then the record says "без ответа, нужен владелец" and nothing wakes
-the tab any more. The plugin never answers for you and never picks the recommended option.
+the tab any more. The plugin does not answer for you here and never picks the recommended option for a LOST question; a form that is open
+and on the screen may be answered by the project's own setting (`answer_mode`, below, task 096) - never otherwise.
 A question you cancelled with Esc (`form.cancelled`) is returned faster: once its turn has ended the tab is asked again after 3 seconds
 (`CREW_HARNESS_FORM_CANCEL_GONE_MS`), the service looks every second until that is done, a busy tab and your own word in the tab still hold it back.
 **A window of the plugin over a question (task 069).** In OpenCode the keys go to ONE handler, the one of the keyboard mode pushed last: a dialog
@@ -388,6 +389,8 @@ the event «ответ владельца через оркестратора»,
 (or it is already answered), no such option, no quote, the interrupt failed (the question stays open): the reason is in the file
 (`status: refused`, `why`) and in the log. Only files in the local data folder of the service are read; whoever can write there
 can forge an answer, the same border as the mailbox — the log line and the task event are the signal.
+The record of the answer is made BEFORE the turn is interrupted (`status: applying`, with the form and the answer in the file); a restart between the steps
+finishes the answer: no second interrupt once it was made, no second letter (the id is stable), no lost answer.
 
 #### A tab that asks again after your answer (task 078)
 
@@ -657,6 +660,28 @@ numbers of the questions that are left. It is not the owner's word: слово �
 history of the task (`crew_task show`); the counters `answers N (M owner)` and `for you K` of `/crew` and the line "авто 24ч: N · вмеш. M" of the side panel
 count the answers of the last 24 hours and the questions that wait for the owner's word (their text is in the history of the task). There is no command to take an answer back: write
 in the tab — the record becomes "владелец вмешался" and the count of answers in a row starts over. Without the keys nothing changes.
+
+**The forms of the built-in questionnaire (task 096).** The same mode answers a form of the `question` tool (a record of `forms/`) with no text block and
+no `Тип:`/`Автоответ:` lines (owner, 2026-10-19: "I was sure these were automatic answers to the questionnaires"; ADR-0010, the supplement of 2026-10-19). The plugin
+closes a form by itself when ALL of this holds: the mode of the type of the question is `recommendations` (the type of a form is `default`, or the
+`Тип:` in its text); exactly one option is marked `(Recommended)` and it is the first (no mark, two marks or the mark elsewhere - the owner); the question is not on
+the **closed list**; the limit `answer_max` of automatic answers in a row for the session is not spent (an answer of the owner or his word in the tab starts the
+count over); the form is open (not replaced, not stale, not cancelled with Esc, not in the repeat of a lost question) and the tab has a running turn; the form is
+at least `answer_delay_sec` seconds old. A doubt (a parse failure, an unknown type, more than one question, a multiple choice, a loop of task 078) is the owner too.
+- `answer_delay_sec` — seconds between the form and the answer (60; `0` — at once); a person sets it like `answer_mode` (`crew_config set` refuses it, the plugin never writes
+  the keys `answer_*`). You answer first in the window, or write in the tab: your answer wins and no automatic answer is made.
+- The **closed list** (`CLOSED_LIST` in `form-auto.ts`, a table with a test for every row; the words are looked for in the question and in the text of the recommended option):
+  the gates of the methodology (approval of the specification and the plan, push to `main`, merge, deletion and cleanup, restart of the service, a live check, the result and
+  the handover, the ceiling of rounds), `Тип: gate`, tag / release / publish / asset / pin, force, password, key, token, money, the words "слово владельца",
+  the keys `answer_*`, lifting a prohibition or a border of the task ("разрешить … вне границ", widening the scope), shared environments. The vocabulary is open and errs
+  toward the owner. Questions of the acceptance sessions are NOT closed by a rule of their own any more (owner, 2026-10-19); only this list stays.
+- Delivery is the answer of task 059 (`owner-answer.ts`) with the source `plugin`: the file `answers/auto-<form id>.json` (one per form - the name is the "once" mark), the interrupt
+  of the turn, a service letter «Ответ по настройке проекта (answer_mode: recommendations, тип …), не слово владельца», an event of the task (`[answer auto-…]`) and a log
+  line `owner answer auto-… applied`. If the interrupt fails the form stays open for the owner (one try).
+- Show: `forms/auto/<form id>.json` is a marker of every form of a project with the mode on (left to the owner with the reason, or sent / applied / failed). `/crew` counts
+  `form answers N` and `form to you K (closed, no rec, limit, doubt, failed)` of the last 24 hours, the side panel row says `авто 24ч: N · вмеш. M · вам: K`, and `crew_doctor` adds a note
+  with the count, the time of the last closing and the reasons. There is no command to take an answer back: write in the tab (your word is older than the answer), as for text answers.
+Without the key (or with `owner`) nothing changes.
 
 ## Obligations instead of a push controller
 

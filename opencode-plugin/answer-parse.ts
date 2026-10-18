@@ -60,13 +60,18 @@ export function modeFor(map: AnswerMap, type: string): AnswerMode {
 /** Включён ли хоть один тип из трёх (с учётом default): единственное место решения «режимы включены». */
 export const answerModesOn = (map: AnswerMap): boolean => (["requirements", "plan", "implementation"] as const).some((t) => modeFor(map, t) !== "owner")
 
+/** Задержка автоответа на форму встроенного вопросника, секунд (задача 096): целое ≥ 0, иначе 60; 0 — сразу. */
+export const ANSWER_DELAY_DEFAULT = 60
+export const normalizeAnswerDelay = (raw: unknown): number => (typeof raw === "number" && Number.isInteger(raw) && raw >= 0 ? raw : ANSWER_DELAY_DEFAULT)
+
 /** Предел ответов подряд: целое ≥ 1, иначе 3. */
 export const normalizeAnswerMax = (raw: unknown): number => (typeof raw === "number" && Number.isInteger(raw) && raw >= 1 ? raw : ANSWER_MAX_DEFAULT)
 
 /** Замечания по обоим ключам для показа и врача: что в файле не принято и почему. */
-export function answerNotes(rawMode: unknown, rawMax: unknown): string[] {
+export function answerNotes(rawMode: unknown, rawMax: unknown, rawDelay?: unknown): string[] {
   const notes = normalizeAnswerMode(rawMode).notes
   if (rawMax !== undefined && rawMax !== null && normalizeAnswerMax(rawMax) === ANSWER_MAX_DEFAULT && rawMax !== ANSWER_MAX_DEFAULT) notes.push(`answer_max: нужно целое число ≥ 1, значение не принято (действует ${ANSWER_MAX_DEFAULT})`)
+  if (rawDelay !== undefined && rawDelay !== null && normalizeAnswerDelay(rawDelay) === ANSWER_DELAY_DEFAULT && rawDelay !== ANSWER_DELAY_DEFAULT) notes.push(`answer_delay_sec: нужно целое число секунд ≥ 0, значение не принято (действует ${ANSWER_DELAY_DEFAULT})`)
   return notes
 }
 

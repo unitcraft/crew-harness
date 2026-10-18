@@ -12,7 +12,7 @@ import { BASE as CREW_BASE, dataDir } from "./paths.ts"
 import { rotateLog } from "./housekeeping.ts"
 import { type Projects, outsideProject, parseProjects as parseProjectsWith, projectFor, rawSettingsFor, readSettingsFolder, workingSettings, writeSettings } from "./settings.ts"
 import { SCHEMA, guideText, invalid } from "./config-schema.ts"
-import { type AnswerMap, answerNotes, normalizeAnswerMax, normalizeAnswerMode } from "./answer-parse.ts"
+import { type AnswerMap, answerNotes, normalizeAnswerDelay, normalizeAnswerMax, normalizeAnswerMode } from "./answer-parse.ts"
 import { EXTRA_FIELDS_MAX, EXTRA_ID_RE, RESERVED_FIELD_IDS, OWNER_LANGUAGE_RE, DEFAULT_OWNER_LANGUAGE } from "./config-schema.ts"
 export { PROJECT_RE, type Project, type Projects, settingsProblems, settingsNotes } from "./settings.ts"
 import { PROJECT_RE, settingsProblems, settingsNotes, modelsDefined } from "./settings.ts"
@@ -101,7 +101,7 @@ export function configShowText(dir: string, fallbackName = "?", compact = false)
     return compact && j.length > 120 ? `${j.slice(0, 117)}…` : j
   }
   // замечания к ключам answer_*: что в файле не принято (под строкой ключа)
-  const answerNote = (k: string) => (k === "answer_mode" || k === "answer_max" ? answerNotes(k === "answer_mode" ? effective.answer_mode : undefined, k === "answer_max" ? effective.answer_max : undefined).map((n) => `
+  const answerNote = (k: string) => (k === "answer_mode" || k === "answer_max" || k === "answer_delay_sec" ? answerNotes(k === "answer_mode" ? effective.answer_mode : undefined, k === "answer_max" ? effective.answer_max : undefined, k === "answer_delay_sec" ? effective.answer_delay_sec : undefined).map((n) => `
     ! ${n}`).join("") : "")
   // профили — не JSON в строку, а таблицы в блоке «Профили моделей» ниже; здесь только указание на них
   const profileKeys = ["model_profiles", "profile_sets"]
@@ -264,6 +264,8 @@ export type CrewConfig = {
   answerMode: AnswerMap
   /** предел ответов по рекомендации подряд одной сессии (answer_max) */
   answerMax: number
+  /** секунд до автоответа плагина на форму встроенного вопросника (answer_delay_sec, задача 096); 0 — сразу */
+  answerDelaySec: number
   /** allow_self_assign: интегратору можно назначить задачу на собственную сессию (по умолчанию нет, задача 035) */
   allowSelfAssign: boolean
   /** числа цикла по маршрутам и пороги выбора (route_defaults, задача 092) поверх значений методики */
@@ -426,6 +428,7 @@ export function loadConfig(dir: string): CrewConfig {
     extraFields: extraFieldsOf(j.task_extra_fields),
     answerMode: normalizeAnswerMode(j.answer_mode).map,
     answerMax: normalizeAnswerMax(j.answer_max),
+    answerDelaySec: normalizeAnswerDelay(j.answer_delay_sec),
     allowSelfAssign: j.allow_self_assign === true,
     routeDefaults: routeSettingsOf(j.route_defaults),
   }
@@ -1593,6 +1596,14 @@ merge без предпроверки отклоняется: сначала pre
 по ним жди слов владельца. Рекомендуемое значение для владельца — \`{"implementation": "recommendations"}\`, для \`requirements\` и \`plan\` — \`owner\`;
 число ответов — счётчик answers в /crew, сами ответы — история задачи (crew_task show).
 
+ФОРМЫ ВСТРОЕННОГО ВОПРОСНИКА (инструмент question). При answer_mode: recommendations плагин сам закрывает формы встроенного вопросника рекомендацией через
+answer_delay_sec секунд (60 по умолчанию; ключ ставит человек, владелец успевает ответить сам, его ответ главнее). Условия все сразу: у ПЕРВОГО варианта единственная
+пометка «(Recommended)» (нет пометки, две пометки или пометка не у первого — вопрос владельцу); вопрос не из закрытого списка (ворота методики, tag и выпуск, force,
+пароль, ключ, токен, деньги, «слово владельца», ключи answer_*, снятие запретов и границ задачи; слова ищутся в вопросе и в рекомендованном варианте); в форме один
+вопрос без множественного выбора; предел answer_max подряд не исчерпан. Тип вопроса — default или «Тип: …» в тексте; вопрос про ворота объявляй «Тип: gate». Придёт
+служебное письмо «Ответ по настройке проекта (answer_mode: recommendations, тип <тип>), не слово владельца»: форма закрыта прерыванием хода, не задавай вопрос заново,
+продолжай с этим ответом. Закрытый список — это закрытый список слов в коде (form-auto.ts); сомнение уходит владельцу.
+
 КОНТРОЛЬНЫЙ ВОПРОС. Вопрос вида «кто тут integrator проекта X?» (адресован роли или всем) отвечает вкладка, которая
 им является: «я integrator проекта X». Остальные молчат — ответ на чужой вопрос это лишний ход у спрашивающего.
 Проверка связи: письмо с просьбой ответить одной строкой «дошло, время»; ответ — crew_send с reply_to.`
@@ -1737,6 +1748,8 @@ export type CrewHost = {
   roleTaken(me: Card): void
   startTask(t: Task): Promise<{ session?: string; error?: string }>
   doctor(): Promise<string[]>
+  /** справка низкой важности для crew_doctor (не проблема): сводка автоответов на формы за сутки (задача 096) */
+  doctorNotes?(): string[]
 }
 
 export type CrewTool = { name: string; description: string; input: any; execute(input: any, sessionID: string): Promise<{ content: string }> }
@@ -3191,7 +3204,7 @@ ${lockStillYours(stillHeld.n)}` : "") }
     input: { type: "object", properties: {}, additionalProperties: false },
     execute: async (_input: any, sessionID: string) => {
       const problems = [...(await host.doctor()), ...commonDoctor(sessionID), ...settingsProblems(projects, currentLocal), ...profileProblems()]
-      const notes = settingsNotes() // справка низкой важности: не проблема, зелёный вердикт не отменяет
+      const notes = [...settingsNotes(), ...(host.doctorNotes?.() ?? [])] // справка низкой важности: не проблема, зелёный вердикт не отменяет
       const tail = notes.length ? `\nК сведению:\n${notes.map((p) => `- ${p}`).join("\n")}` : ""
       return { content: (problems.length ? `crew_doctor — есть проблемы:\n${problems.map((p) => `- ${p}`).join("\n")}` : "crew_doctor: всё в порядке (окна отмечаются, ящик пишется, нужные возможности OpenCode на месте).") + tail }
     },

@@ -31,4 +31,11 @@ cell("AC-25 опросник", /Рекомендация:/.test(gl) && /Заче
 cell("AC-25 рекомендуемое значение", help.includes(RECOMMENDED) && help.includes(PHRASE) && readme.includes(RECOMMENDED) && readme.includes(PHRASE) && guide.includes(RECOMMENDED) && guide.includes(PHRASE), JSON.stringify([help.includes(RECOMMENDED), help.includes(PHRASE), readme.includes(RECOMMENDED), readme.includes(PHRASE), guide.includes(RECOMMENDED), guide.includes(PHRASE)]))
 cell("AC-20 справка", /слово владельца старше автоответа/.test(help) && /слово владельца старше автоответа|older than/.test(readme), "rule")
 
+// task 096: the forms of the questionnaire are answered by the same mode
+const mh2 = missing(help, ["answer_delay_sec", "(Recommended)", "формы встроенного вопросника", "закрытый список"])
+cell("096 справка: формы вопросника, задержка, закрытый список", mh2.length === 0, JSON.stringify(mh2))
+const mr2 = missing(readme, ["answer_delay_sec", "(Recommended)", "closed list", "form-auto.ts", "forms/auto"])
+cell("096 README: the forms, the delay, the closed list", mr2.length === 0, JSON.stringify(mr2))
+const adr = readFileSync(path.join(PLUGIN, "..", "doc", "canon", "decisions", "ADR-0010-question-answering-modes.md"), "utf8")
+cell("096 ADR-0010: the supplement of 2026-10-19 (forms, closed list, delay, the exception for acceptance lifted)", /Дополнение 2026-10-19/.test(adr) && /формы/.test(adr) && /закрытый список/i.test(adr) && /answer_delay_sec/.test(adr) && /приёмк/.test(adr), "")
 R.done(H)

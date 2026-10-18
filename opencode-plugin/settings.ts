@@ -464,7 +464,7 @@ export function settingsProblems(projects: Projects, local: Record<string, any> 
   for (const p of projects) {
     if (!p.dir) continue
     const raw = readSettingsFolder(p.dir).raw
-    for (const n of answerNotes(raw?.answer_mode, raw?.answer_max)) out.push(`проект ${p.name}: ${n}`)
+    for (const n of answerNotes(raw?.answer_mode, raw?.answer_max, raw?.answer_delay_sec)) out.push(`проект ${p.name}: ${n}`)
     // шаги приёмки — один источник (задача 027): и файл Канона, и тексты в настройках — ошибка; плагин берёт файл
     if (typeof raw?.acceptance_file === "string" && raw.acceptance_file.trim() && Array.isArray(raw?.acceptance) && raw.acceptance.length)
       out.push(`проект ${p.name}: шаги приёмки заданы и файлом Канона, и текстами в настройках: оставь один источник — acceptance_file`)

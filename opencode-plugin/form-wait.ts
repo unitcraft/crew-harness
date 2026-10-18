@@ -63,6 +63,14 @@ export type PendingForm = {
   replacedAt?: number
   /** task 073: set only when the tab did not repeat the words: the old form was in the repeat and the new one has the same options */
   replacedReason?: string
+  /** task 096: when this form appeared (at may keep the older time of a repeated question): the delay of the automatic answer counts from here */
+  born?: number
+  /** task 096: facts for the automatic answer: the whole text of the first question and the title (not cut to 200), the descriptions of the options (parallel to options),
+   *  how many questions the form has (the automatic answer needs exactly one), whether it is a multiple choice */
+  full?: string
+  optDesc?: string[]
+  nq?: number
+  multi?: boolean
   /** task 084: the form is exhausted and the tab worked after that (a turn is running, or one ended): nobody waits for the owner on it any more; the record stays as history */
   resumed?: number
 }
@@ -204,6 +212,28 @@ function firstOptions(form: any): string[] | undefined {
   return walk(form?.fields ?? form?.questions ?? form, 0)
 }
 
+/** Task 096: what the automatic answer reads and cannot get from the cut question and the labels: see PendingForm. Nothing is guessed: a shape that is not known gives no fact. */
+export function formFacts(form: any): Pick<PendingForm, "full" | "optDesc" | "nq" | "multi"> {
+  const out: Pick<PendingForm, "full" | "optDesc" | "nq" | "multi"> = {}
+  const list = Array.isArray(form?.fields) ? form.fields : Array.isArray(form?.questions) ? form.questions : undefined
+  if (list) out.nq = list.length
+  const first = list?.[0]
+  const text = (v: any): string => (typeof v === "string" ? v : "")
+  const parts: string[] = []
+  for (const v of [form?.title, ...(first && typeof first === "object" ? ["question", "description", "prompt", "text", "label", "title", "header"].map((k) => first[k]) : [])]) {
+    const t = text(v).replace(/\s+/g, " ").trim()
+    if (t && !parts.includes(t)) parts.push(t)
+  }
+  if (parts.length) out.full = parts.join("\n").slice(0, 3000)
+  const opts = first && typeof first === "object" ? (["options", "choices", "enum"].map((k) => first[k]).find((x) => Array.isArray(x)) as any[] | undefined) : undefined
+  if (opts?.length) {
+    const d = opts.slice(0, 8).map((o: any) => (o && typeof o === "object" ? ["description", "detail", "hint", "help"].map((k) => text(o[k])).filter(Boolean).join(" ").replace(/\s+/g, " ").trim().slice(0, 600) : ""))
+    if (d.some(Boolean)) out.optDesc = d
+  }
+  if ((list ?? []).some((f: any) => f && typeof f === "object" && (f.multiple === true || /multi|checkbox/i.test(String(f.type ?? f.kind ?? ""))))) out.multi = true
+  return out
+}
+
 const same = (a?: string, b?: string) => (a ?? "").replace(/\s+/g, " ").trim().toLowerCase() === (b ?? "").replace(/\s+/g, " ").trim().toLowerCase()
 
 const norm = (t?: string) => (t ?? "").replace(/\s+/g, " ").trim().toLowerCase()
@@ -326,6 +356,8 @@ export function handleFormEvent(ev: any, now = Date.now(), dir = FORMS, onReplie
           ...(options ? { options } : {}),
           kind: "question",
           session,
+          born: now,
+          ...formFacts(form),
           ...(old ? { rid: old.rid ?? old.id, repeats: old.repeats, wokeAt: old.wokeAt, notifiedAt: old.notifiedAt } : {}),
         },
         dir,

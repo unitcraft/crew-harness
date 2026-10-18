@@ -46,6 +46,8 @@ export const STABLE_FILES = [
   "crew-submit",
   "crew-gate-stop",
   "crew-answer-loop",
+  // task 096: timing of the delay and the interrupt
+  "crew-form-auto-flow",
 ]
 
 const args = process.argv.slice(2)

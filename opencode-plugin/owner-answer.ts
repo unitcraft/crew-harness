@@ -9,6 +9,7 @@ import path from "node:path"
 import { noteAnswered } from "./answer-loop.ts"
 import { readJson } from "./core.ts"
 import { FORMS, type PendingForm, addForm, allForms, removeForm, replacedForms, settleDuplicates } from "./form-wait.ts"
+import { autoLetter, autoNote } from "./form-auto.ts"
 import { BASE } from "./paths.ts"
 
 export const ANSWERS = path.join(BASE, "answers")
@@ -26,11 +27,22 @@ export type OwnerAnswer = {
   text?: string
   /** цитата слова владельца из чата оркестратора */
   quote: string
-  status?: "applied" | "refused"
+  /** applying — запись об ответе сделана и форма взята, но шаги доставки ещё не все выполнены (задача 096: после перезапуска они достраиваются) */
+  status?: "applying" | "applied" | "refused"
   why?: string
   done?: number
   /** что передано вкладке */
   answer?: string
+  /** задача 096: ответ положил плагин по настройке answer_mode (автоответ на форму); без этого поля — слово владельца через оркестратора */
+  source?: "plugin"
+  mode?: string
+  type?: string
+  project?: string
+  task?: number
+  /** запись формы на момент взятия (для письма, возврата формы и достройки после перезапуска) */
+  snap?: PendingForm
+  /** прерывание хода выполнено в это время (после перезапуска не повторяется) */
+  interrupted?: number
 }
 
 const clean = (s: string) => s.replace(/\(recommended\)|\(рекомендуется\)/gi, "").replace(/\s+/g, " ").trim().toLowerCase()
@@ -75,7 +87,7 @@ export const answerLetter = (f: PendingForm, answer: string, quote: string) =>
   `Вопросник закрыт прерыванием хода; не задавайте этот вопрос снова, продолжайте с этим ответом.`
 
 /** Запись в истории задачи вкладки. */
-export const answerNote = (f: PendingForm, answer: string, quote: string) => `ответ владельца через оркестратора на вопрос «${(f.question ?? f.title ?? "").slice(0, 150)}»: ${answer.slice(0, 200)} (слово владельца: «${quote.trim().slice(0, 200)}»)`
+export const answerNote = (f: PendingForm, answer: string, quote: string, id?: string) => `ответ владельца через оркестратора на вопрос «${(f.question ?? f.title ?? "").slice(0, 150)}»: ${answer.slice(0, 200)} (слово владельца: «${quote.trim().slice(0, 200)}»)${id ? ` [answer ${id}]` : ""}`
 
 function finish(file: string, a: OwnerAnswer, patch: Partial<OwnerAnswer>) {
   const tmp = `${file}.${process.pid}.${Date.now()}.tmp`
@@ -98,33 +110,62 @@ export async function answerTick(deps: AnswerDeps, now = Date.now(), dir = ANSWE
   // задача 071: накопленные дубли закрываются до разбора ответов — ответ на старую форму получит подсказку, а не уйдёт в никуда
   if (all.some((x) => x.a && !x.a.status)) for (const x of settleDuplicates(formsDir, now)) deps.say(`form ${x.id} of ${x.session}: replaced by ${x.by} (${x.reason ?? "the same question asked again"})`)
   for (const { file, a } of all) {
-    if (!a || a.status) continue
+    if (!a || a.status === "applied" || a.status === "refused") continue
     a.id ??= path.basename(file, ".json")
-    const done = all.map((x) => x.a).filter((x): x is OwnerAnswer => !!x && !!x.status)
-    const r = resolveAnswer(a, allForms(now, formsDir), done, replacedForms(now, formsDir))
-    if (!r.ok) {
-      finish(file, a, { status: "refused", why: r.why, done: now })
-      a.status = "refused"
-      deps.say(`owner answer ${a.id} not applied: ${r.why}`)
-      continue
+    let session: string
+    let form: PendingForm
+    let answer: string
+    if (a.status === "applying") {
+      // задача 096: запись об ответе сделана и форма взята, но процесс умер до конца. Шаги достраиваются: прерывание — если его ещё не было,
+      // письмо и событие повторяются с теми же id (второго письма и второй записи в истории не будет), итог ставится в конце
+      if (!a.snap || !a.session || typeof a.answer !== "string") {
+        finish(file, a, { status: "refused", why: "the record was taken but lost its form: nothing to finish", done: now })
+        a.status = "refused"
+        deps.say(`owner answer ${a.id} not applied: the record was taken but lost its form`)
+        continue
+      }
+      ;({ session, snap: form, answer } = { session: a.session, snap: a.snap, answer: a.answer })
+      deps.say(`owner answer ${a.id}: finishing after a restart (${a.interrupted ? "the turn was interrupted before" : "the turn is not interrupted yet"})`)
+    } else {
+      const done = all.map((x) => x.a).filter((x): x is OwnerAnswer => !!x && !!x.status)
+      const r = resolveAnswer(a, allForms(now, formsDir), done, replacedForms(now, formsDir))
+      if (!r.ok) {
+        finish(file, a, { status: "refused", why: r.why, done: now })
+        a.status = "refused"
+        deps.say(`owner answer ${a.id} not applied: ${r.why}`)
+        continue
+      }
+      ;({ session, form, answer } = r)
+      // запись о взятии — до снятия записи формы и до прерывания (задача 096): умер процесс между шагами — файл помнит форму и ответ
+      finish(file, a, { status: "applying", form: form.id, session, answer, snap: form })
+      Object.assign(a, { status: "applying", form: form.id, session, answer, snap: form })
+      // запись снимается до прерывания: событие form.cancelled от прерывания не должно начать повтор (задача 040)
+      removeForm(session, form.id, formsDir)
     }
-    // запись снимается до прерывания: событие form.cancelled от прерывания не должно начать повтор (задача 040)
-    removeForm(r.session, r.form.id, formsDir)
-    const i = await deps.interrupt(r.session)
-    if (!i.ok) {
-      addForm(r.session, r.form, formsDir)
-      finish(file, a, { status: "refused", why: `the turn was not interrupted: ${i.why}`, done: now })
-      a.status = "refused"
-      deps.say(`owner answer ${a.id} not applied: the turn of ${r.session} was not interrupted: ${i.why}`)
-      continue
+    if (!a.interrupted) {
+      const i = await deps.interrupt(session)
+      if (!i.ok) {
+        addForm(session, form, formsDir)
+        finish(file, a, { status: "refused", why: `the turn was not interrupted: ${i.why}`, done: now })
+        a.status = "refused"
+        deps.say(`owner answer ${a.id} not applied: the turn of ${session} was not interrupted: ${i.why}`)
+        continue
+      }
+      finish(file, a, { interrupted: now })
+      a.interrupted = now
     }
     // задача 078: ответ записан до письма — отметка «доставлено» (index.ts) найдёт его по id письма; цикл «вопрос — ответ — тот же вопрос» считается по этим записям
-    noteAnswered(r.session, r.form, `owner-answer-${a.id}`, now, formsDir)
-    deps.letter(r.session, answerLetter(r.form, r.answer, a.quote), `owner-answer-${a.id}`)
-    deps.history(r.session, answerNote(r.form, r.answer, a.quote))
-    finish(file, a, { status: "applied", form: r.form.id, session: r.session, answer: r.answer, done: now })
-    Object.assign(a, { status: "applied", form: r.form.id, session: r.session })
-    deps.say(`owner answer ${a.id} applied: form ${r.form.id} of ${r.session} closed by interrupt, the answer "${r.answer.slice(0, 80)}" sent as a letter (owner's word: "${a.quote.slice(0, 80)}")`)
+    noteAnswered(session, form, `owner-answer-${a.id}`, now, formsDir)
+    const plugin = a.source === "plugin"
+    deps.letter(session, plugin ? autoLetter(form.question ?? form.title ?? "вопрос", answer, a.type ?? "default") : answerLetter(form, answer, a.quote), `owner-answer-${a.id}`)
+    deps.history(session, plugin ? autoNote(form.question ?? form.title ?? "", answer, a.type ?? "default", a.id) : answerNote(form, answer, a.quote, a.id))
+    finish(file, a, { status: "applied", form: form.id, session, answer, done: now })
+    Object.assign(a, { status: "applied", form: form.id, session })
+    deps.say(
+      plugin
+        ? `owner answer ${a.id} applied: form ${form.id} of ${session} closed by interrupt, the answer "${answer.slice(0, 80)}" sent as a letter (by answer_mode ${a.mode ?? "recommendations"}, type ${a.type ?? "default"}; not the owner's word)`
+        : `owner answer ${a.id} applied: form ${form.id} of ${session} closed by interrupt, the answer "${answer.slice(0, 80)}" sent as a letter (owner's word: "${a.quote.slice(0, 80)}")`,
+    )
   }
 }
 
