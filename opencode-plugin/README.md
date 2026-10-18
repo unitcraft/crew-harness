@@ -645,8 +645,8 @@ refuses them) — [ADR-0010](../doc/canon/decisions/ADR-0010-question-answering-
 **The form of a question.** A session asks in text: a block `В-01 …?` with the lines `Тип: requirements|plan|implementation|gate`,
 `Рекомендация: …` and `Автоответ: допустим`, and «?» в конце строки with the question: the recommendation is one paragraph without blank lines (a blank line ends the value), the question ends the line and the fields stand on separate lines below it. In the words of the Canon: вопрос заканчивай знаком «?» в конце строки, поля — отдельными строками ниже. A question is closed only when all of this
 holds at once: the type is declared and is not `gate`, the mode of the type is `recommendations`, the recommendation is not empty, the
-permission `Автоответ: допустим` stands, no word of the gates is in its text, the session is not a review session, the limit is not
-spent, and the parse went through. Anything else — and any doubt — stays with the owner, who gets one notice with what is left.
+permission `Автоответ: допустим` stands, no word of the gates is in its text, the limit is not
+spent (a review session is not an exception any more - owner, 2026-10-19, task 097), and the parse went through. Anything else — and any doubt — stays with the owner, who gets one notice with what is left.
 A question about the gates is declared `gate`: approval of `spec.md` and `plan.md` and of a plan, push, merge, deletion, restart or
 switch of the service, publication, money, shared environments, giving up a requirement, the ceiling of rounds and handing over.
 The list of the words of the gates is open and errs towards the owner (`answer-parse.ts`); on the blocks of the question packs of
@@ -670,11 +670,17 @@ count over); the form is open (not replaced, not stale, not cancelled with Esc, 
 at least `answer_delay_sec` seconds old. A doubt (a parse failure, an unknown type, more than one question, a multiple choice, a loop of task 078) is the owner too.
 - `answer_delay_sec` — seconds between the form and the answer (60; `0` — at once); a person sets it like `answer_mode` (`crew_config set` refuses it, the plugin never writes
   the keys `answer_*`). You answer first in the window, or write in the tab: your answer wins and no automatic answer is made.
-- The **closed list** (`CLOSED_LIST` in `form-auto.ts`, a table with a test for every row; the words are looked for in the question and in the text of the recommended option):
-  the gates of the methodology (approval of the specification and the plan, push to `main`, merge, deletion and cleanup, restart of the service, a live check, the result and
-  the handover, the ceiling of rounds), `Тип: gate`, tag / release / publish / asset / pin, force, password, key, token, money, the words "слово владельца",
-  the keys `answer_*`, lifting a prohibition or a border of the task ("разрешить … вне границ", widening the scope), shared environments. The vocabulary is open and errs
-  toward the owner. Questions of the acceptance sessions are NOT closed by a rule of their own any more (owner, 2026-10-19); only this list stays.
+- The **closed list** (`CLOSED_LIST` in `form-auto.ts`; task 097). A form stays with the owner when the question **proposes an action** of the list, or the **recommended option** (label and
+  description) contains such an action. A word of the list in the description of the situation closes nothing ("red on `main`", "found at the handover", a guard named `gate-…`):
+  the first version looked for the words anywhere and sent about 70 % of the questions to the owner, two thirds of them for such a word (measure of 2026-10-18). The table is
+  "action -> patterns + examples": every row has verbs in the form that proposes ("запушить", "пушим", "approve"), objects, nominal actions that close after a word of proposal
+  ("разрешить push", "нужен релиз") or alone in a heading / label / short question, the examples that must close (`yes`) and those that must not (`no`), a cell in
+  `test/crew-form-auto.test.mjs` for each. A row is added by a line, without a change of the logic. The rows: gates of the methodology (pass / lift / bypass a gate), approval of
+  the specification and the plan, the result and the handover, push to `main` or a server, merge, deletion and cleanup, restart or switch of the service, a live check,
+  tag / release / publish / asset / pin, force, password / token / key, money, the owner's word ("продолжить без слова владельца"), the keys `answer_*`, the files of the settings,
+  lifting a prohibition or a border of the task, giving up a requirement, the ceiling of rounds ("сверх лимита"), widening of the rights, shared environments; plus `Тип: gate`.
+  A negated action ("без push", "не удалять") is not a proposal. The vocabulary is open and errs toward the owner (a doubt - to the owner). Questions of the acceptance sessions
+  are NOT closed by a rule of their own (owner, 2026-10-19), neither in forms nor in text blocks; only this list and the words of the gates stay.
 - Delivery is the answer of task 059 (`owner-answer.ts`) with the source `plugin`: the file `answers/auto-<form id>.json` (one per form - the name is the "once" mark), the interrupt
   of the turn, a service letter «Ответ по настройке проекта (answer_mode: recommendations, тип …), не слово владельца», an event of the task (`[answer auto-…]`) and a log
   line `owner answer auto-… applied`. If the interrupt fails the form stays open for the owner (one try).

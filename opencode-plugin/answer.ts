@@ -372,7 +372,7 @@ async function decide(input: AnswerInput): Promise<AnswerResult> {
       decisions.push({ block: b, existing, closed: true })
       continue
     }
-    const ctx: ClassifyCtx = { map: cfg.answerMode, review: !!card.review, count: seriesCount(records, session, end.at) + pending, max: cfg.answerMax }
+    const ctx: ClassifyCtx = { map: cfg.answerMode, count: seriesCount(records, session, end.at) + pending, max: cfg.answerMax }
     const v = classify(b, ctx)
     if (v.closed) pending++
     decisions.push({ block: b, closed: v.closed, ...(v.closed ? {} : { reason: v.reason }) })

@@ -80,9 +80,13 @@ const emptyType = P.classify(P.parseTurn("В-01 Вопрос?\nТип:\nРеко
 const otherType = P.classify(P.parseTurn("В-01 Вопрос?\nТип: другое\nРекомендация: так\nАвтоответ: допустим").blocks[0], ctx())
 cell("AC-06", noType.reason === "нет типа/признака/неизвестный тип" && emptyType.reason === "нет типа/признака/неизвестный тип" && otherType.reason === "нет типа/признака/неизвестный тип" && closedBy("В-01 Вопрос?\nТип: plan\nРекомендация: так").every((c) => !c) && closedBy("В-01 Вопрос?\nТип: plan\nРекомендация: так\nАвтоответ: допустим (после слияния)").every((c) => !c), j([noType, emptyType, otherType]))
 
-// REQ-07: the reasons of the rest are a closed list of nine; a review session and the types of the owner mode
-const rv = P.classify(P.parseTurn("В-01 Вопрос?\nТип: plan\nРекомендация: так\nАвтоответ: допустим").blocks[0], ctx({ review: true }))
-cell("REQ-07 reasons", P.REST_REASONS.length === 9 && new Set(P.REST_REASONS).size === 9 && rv.reason === "сессия приёмки" && P.FAILURE_REASON === "сбой разбора", j([P.REST_REASONS.length, rv]))
+// REQ-07: the reasons of the rest are a closed list of eight (task 097: the reason "сессия приёмки" is gone - the owner lifted the exception
+// for the acceptance sessions in the text path too, 2026-10-19); a block of a review session is classified like any other
+const rvBlock = P.parseTurn("В-01 Вопрос?\nТип: plan\nРекомендация: так\nАвтоответ: допустим").blocks[0]
+const rv = P.classify(rvBlock, ctx({ review: true }))
+cell("REQ-07 reasons", P.REST_REASONS.length === 8 && new Set(P.REST_REASONS).size === 8 && !P.REST_REASONS.includes("сессия приёмки") && P.FAILURE_REASON === "сбой разбора", j([P.REST_REASONS.length, rv]))
+cell("097 review session: the flag of a review session no longer sends the block to the owner (closed like any block)", rv.closed === true && P.classify(rvBlock, ctx({ review: false })).closed === true, j(rv))
+cell("097 review session: the words of the gates still send the block of a review session to the owner", P.classify(P.parseTurn("В-01 Влить ветку?\nТип: plan\nРекомендация: да\nАвтоответ: допустим").blocks[0], ctx({ review: true })).reason === "ворота (слова)", "")
 
 // REQ-11: the parse does not throw on a hostile input; a failure is the owner's
 cell("REQ-11 no throw", [undefined, null, 5, "", "\r\n\r\n", "В-", "В-99999999999999999999999 ?", "?".repeat(5000)].every((t) => { try { return Array.isArray(P.parseTurn(t).blocks) } catch { return false } }), "throw")

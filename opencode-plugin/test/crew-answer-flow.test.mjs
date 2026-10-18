@@ -256,12 +256,13 @@ const noWake = (sid) => H.letters(sid).filter((l) => /Не завершено/.t
   const rv = taskSession({ review: { project: "proj", n: 1 } })
   await sessionTurn(rv.sid, [block({ q: "Вливай?", type: "implementation", rec: "да" }), SEEN].join(NL))
   const rv2 = taskSession({ review: { project: "proj", n: 1 } })
-  await sessionTurn(rv2.sid, [block({ q: "Задача готова, всё зелёное, закрываем?", type: "implementation", rec: "закрываем" }), SEEN].join(NL), { ready: (s) => forAuthor(s, /^answer-rest-/).length >= 1 })
+  await sessionTurn(rv2.sid, [block({ q: "Задача готова, всё зелёное, закрываем?", type: "implementation", rec: "закрываем" }), SEEN].join(NL), { ready: (s) => hasA(s) })
   const pl = taskSession({}, { plan: { n: "7", file: "docs/plans/7-x.md", source: "s", rounds: [], clean: 0 } })
   await sessionTurn(pl.sid, [block({ q: "Согласовать план?", type: "requirements", rec: "да" }), SEEN].join(NL), { ready: (s) => forAuthor(s, /^answer-rest-/).length >= 1 })
   const ok = taskSession({}, { plan: { n: "8", file: "docs/plans/8-x.md", source: "s", rounds: [], clean: 0 } })
   await sessionTurn(ok.sid, [block({ q: "Как назвать раздел?", type: "requirements", rec: "Контекст" }), SEEN].join(NL), { ready: (s) => hasA(s) })
-  cell("AC-05 г", recsOf(rv.sid).filter((r) => r.kind === "a").length === 0 && recsOf(rv2.sid).filter((r) => r.kind === "a").length === 0 && recsOf(pl.sid).filter((r) => r.kind === "a").length === 0 && /сессия приёмки/.test(JSON.stringify(recsOf(rv2.sid, "r")[0]?.rest)) && forAuthor(rv2.sid, /^answer-rest-/).length === 1 && forAuthor(pl.sid, /^answer-rest-/).length === 1, JSON.stringify([recsOf(rv.sid), recsOf(rv2.sid), recsOf(pl.sid)]))
+  // task 097: the acceptance session is NOT an exception any more (owner, 2026-10-19): a question without the words of the gates is answered, the words still rest
+  cell("AC-05 г", recsOf(rv.sid).filter((r) => r.kind === "a").length === 0 && recsOf(rv2.sid).filter((r) => r.kind === "a").length === 1 && recsOf(pl.sid).filter((r) => r.kind === "a").length === 0 && !/сессия приёмки/.test(JSON.stringify(recsOf(rv2.sid, "r"))) && forAuthor(rv2.sid, /^answer-rest-/).length === 0 && forAuthor(pl.sid, /^answer-rest-/).length === 1, JSON.stringify([recsOf(rv.sid), recsOf(rv2.sid), recsOf(pl.sid)]))
   cell("AC-05 д", recsOf(ok.sid, "a").length === 1, JSON.stringify(recsOf(ok.sid)))
 }
 

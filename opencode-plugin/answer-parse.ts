@@ -255,7 +255,6 @@ export const REST_REASONS = [
   "блок без полей",
   "ворота (тип gate)",
   "ворота (слова)",
-  "сессия приёмки",
   "режим owner для типа",
   "предел автоответов",
   "нет «?» в конце строки",
@@ -266,8 +265,6 @@ export const FAILURE_REASON = "сбой разбора"
 
 export type ClassifyCtx = {
   map: AnswerMap
-  /** карточка сессии содержит review (сессия приёмки) */
-  review: boolean
   /** ответов подряд, уже данных до этого блока */
   count: number
   max: number
@@ -338,15 +335,14 @@ const rest = (reason: RestReason): Verdict => ({ closed: false, reason })
 
 /**
  * Блок-вопрос закрывается рекомендацией только при всех условиях сразу (REQ-05). Порядок — от самого строгого: блок без полей;
- * тип gate и неизвестный тип; сессия приёмки; слова ворот; режим типа; рекомендация; разрешающий признак; предел;
- * «?» в конце строки. Сбой — остаток.
+ * тип gate и неизвестный тип; слова ворот; режим типа; рекомендация; разрешающий признак; предел; «?» в конце строки.
+ * Сбой — остаток. Сессия приёмки не исключение (слово владельца, 2026-10-19; задача 097): её вопросы идут тем же путём, ворота держат слова.
  */
 export function classify(block: Block, ctx: ClassifyCtx): Verdict {
   try {
     if (!block.hasFields) return rest("блок без полей")
     if (block.forceOwner) return rest(block.type === "gate" ? "ворота (тип gate)" : "нет типа/признака/неизвестный тип")
     if (!(/* GATE:type< */ (QUESTION_TYPES as readonly string[]).includes(block.type ?? "") /* GATE:type> */)) return rest(block.type === "gate" ? "ворота (тип gate)" : "нет типа/признака/неизвестный тип")
-    if (/* GATE:review< */ ctx.review /* GATE:review> */) return rest("сессия приёмки")
     if (/* GATE:words< */ gateWord(block.checkText) /* GATE:words> */) return rest("ворота (слова)")
     if (/* GATE:mode< */ modeFor(ctx.map, block.type!) /* GATE:mode> */ === "owner") return rest("режим owner для типа")
     if (!(/* GATE:rec< */ block.recommended /* GATE:rec> */)) return rest("нет рекомендации")

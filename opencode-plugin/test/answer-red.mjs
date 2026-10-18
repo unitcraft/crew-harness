@@ -1,8 +1,8 @@
 // The proof of red of the question-answering tests (task 007; node >= 24):
-//   node test/answer-red.mjs                 all runs: 0 (the base), 1..12 and 14..17 (stubs), 13 (no stubs); prints "answer-red ok"
+//   node test/answer-red.mjs                 all runs: 0 (the base), 1..3, 5..12 and 14..17 (stubs; the stub 4 GATE:review is gone, task 097), 13 (no stubs); prints "answer-red ok"
 //   node test/answer-red.mjs --run <k>       one run
-//   node test/answer-red.mjs --markers-only  checks that each of the 17 markers GATE:<name> stands in the code exactly once
-//   node test/answer-red.mjs --control       the control: the marker GATE:review is taken out of a copy -- the script must fall with
+//   node test/answer-red.mjs --markers-only  checks that each of the 16 markers GATE:<name> stands in the code exactly once
+//   node test/answer-red.mjs --control       the control: the marker GATE:limit is taken out of a copy -- the script must fall with
 //                                            "маркер не найден" (prints "control ok")
 // Run 0: the code of the base revision (git archive of $BASE, ANSWER_BASE or the merge base with origin/main) and the snapshot of its
 // texts; the tests that need the new modules fail whole, the cells that must be green on the base are listed. Runs 1..12: a copy of
@@ -30,7 +30,6 @@ const MARKERS = {
   flag: ["answer-parse.ts", "true"],
   type: ["answer-parse.ts", "true"],
   rec: ["answer-parse.ts", "true"],
-  review: ["answer-parse.ts", "false"],
   limit: ["answer-parse.ts", "false"],
   words: ["answer-parse.ts", "undefined"],
   owner: ["answer.ts", "false"],
@@ -51,7 +50,6 @@ const STUBS = [
   { n: 1, name: "GATE:words", markers: ["words"], tests: { "crew-answer-gate": ["AC-05 а stem:*", "AC-05 б Т-7 *", "AC-05 з", "AC-05 и"] } },
   { n: 2, name: "GATE:flag", markers: ["flag"], tests: { "crew-answer-parse": ["AC-06", "AC-29 10"] } },
   { n: 3, name: "GATE:type", markers: ["type"], tests: { "crew-answer-parse": ["AC-06", "AC-29 3"], "crew-answer-flow": ["AC-04"] } },
-  { n: 4, name: "GATE:review", markers: ["review"], tests: { "crew-answer-flow": ["AC-05 г"] } },
   { n: 5, name: "GATE:limit", markers: ["limit"], tests: { "crew-answer-journal": ["AC-14 счёт", "AC-14 пачка из трёх", "AC-14 после остатка"], "crew-answer-flow": ["AC-14 пакет"] } },
   { n: 6, name: "GATE:owner", markers: ["owner"], tests: { "crew-answer-flow": ["AC-11 a"] } },
   { n: 7, name: "GATE:once (exists, once-link, once-letter)", markers: ["exists", "once-link", "once-letter"], tests: { "crew-answer-journal": ["AC-17 письмо в доставке", "AC-17 повтор прохода", "AC-17 второй процесс"] } },
@@ -184,10 +182,10 @@ try {
     const copy = path.join(tmp, "control")
     copyCode(copy)
     const f = path.join(copy, "answer-parse.ts")
-    writeFileSync(f, readFileSync(f, "utf8").replace(pairRe("review"), "ctx.review")) // the pair of the marker is taken out
+    writeFileSync(f, readFileSync(f, "utf8").replace(pairRe("limit"), "ctx.count >= ctx.max")) // the pair of the marker is taken out
     let msg = ""
     try {
-      applyStubs(["review"], copy)
+      applyStubs(["limit"], copy)
     } catch (e) {
       msg = String(e.message)
     }

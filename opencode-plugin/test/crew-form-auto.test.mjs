@@ -33,8 +33,15 @@ try {
   process.exit(1)
 }
 
-// ---- the closed list: one cell per item ------------------------------------------------------------------------------
+// ---- the closed list: a table "action -> patterns + examples that do not close" (task 097) --------------------------------
+// Owner, 2026-10-19: "не задавайте и не тормозите" - the plugin asks the owner only for the closed list. A question is closed when it
+// PROPOSES an action of the list (a verb + an object, or a nominal action after a word of proposal), or when the RECOMMENDED option
+// itself contains such an action. A word of the list in the description of the situation ("red on main", "found at the handover")
+// closes nothing. Every row of CLOSED_LIST has patterns (act) and two kinds of examples: `yes` (closes by this row) and `no` (does not).
+// The old cells (task 096) were phrases that name the action: they stay; the phrases that only MENTIONED a word moved to MENTION below.
 const CLOSED = [
+  ["gates", "Пройти ворота приёмки без слова владельца?"],
+  ["gates", "Снять gate перед следующим шагом?"],
   ["gates", "Это ворота методики?"],
   ["gates", "Нужен gate перед следующим шагом?"],
   ["accept", "Принять результат задачи?"],
@@ -63,26 +70,124 @@ const CLOSED = [
   ["force", "Применить force к ветке?"],
   ["secret", "Использовать пароль из файла?"],
   ["secret", "Записать токен в настройки?"],
-  ["secret", "Выдать новый ключ?"],
+  ["secret", "Выдать новый API key?"],
   ["money", "Оплатить подписку?"],
   ["money", "Потратить деньги на квоту?"],
   ["owner-word", "Это решение требует слова владельца?"],
   ["answer-keys", "Поменять answer_mode проекта?"],
   ["answer-keys", "Увеличить answer_max до 10?"],
   ["answer-keys", "Выставить answer_delay_sec в ноль?"],
+  ["config", "Поправить .opencode/crew-harness.json?"],
   ["boundaries", "Разрешить правку вне границ задачи?"],
   ["boundaries", "Расширить объём задачи на соседний модуль?"],
   ["boundaries", "Снять запрет на правку чужого репозитория?"],
+  ["waive", "Отказаться от требования про журнал?"],
   ["ceiling", "Добавить ещё один раунд сверх потолка?"],
+  ["ceiling", "Разрешить одну проверку сверх прежнего лимита?"],
+  ["rights", "Расширить права исполнителя на соседний проект?"],
   ["environments", "Менять общую среду разработки?"],
 ]
 for (const [id, text] of CLOSED) {
   const hits = fa.closedHits(text).map((h) => h.id)
   cell(`closed list [${id}]: «${text}»`, hits.includes(id), JSON.stringify(hits))
 }
-cell("closed list: every rule has an id, a reason and a table entry", fa.CLOSED_LIST.length >= 15 && fa.CLOSED_LIST.every((r) => r.id && r.why && (r.any?.length || r.all?.length)), JSON.stringify(fa.CLOSED_LIST.map((r) => r.id)))
+// the table itself: patterns, `yes` and `no` examples in every row; the examples are run as cells (a row is extended by a line, no logic)
+cell("closed list: every rule has an id, a reason and patterns", fa.CLOSED_LIST.length >= 18 && fa.CLOSED_LIST.every((r) => r.id && r.why && Array.isArray(r.act) && r.act.length > 0), JSON.stringify(fa.CLOSED_LIST.map((r) => r.id)))
+cell("closed list: every rule has at least 2 closing and 2 not-closing examples", fa.CLOSED_LIST.every((r) => Array.isArray(r.yes) && r.yes.length >= 2 && Array.isArray(r.no) && r.no.length >= 2), JSON.stringify(fa.CLOSED_LIST.filter((r) => !(r.yes?.length >= 2 && r.no?.length >= 2)).map((r) => r.id)))
 cell("closed list: every rule of the table is covered by a cell above", fa.CLOSED_LIST.every((r) => CLOSED.some(([id]) => id === r.id)), JSON.stringify(fa.CLOSED_LIST.filter((r) => !CLOSED.some(([id]) => id === r.id)).map((r) => r.id)))
+for (const r of fa.CLOSED_LIST) {
+  for (const ex of r.yes ?? []) {
+    const hits = fa.exampleHits(ex).map((h) => h.id)
+    cell(`closed list [${r.id}] closes: «${ex}»`, hits.includes(r.id), JSON.stringify(hits))
+  }
+  for (const ex of r.no ?? []) {
+    const hits = fa.exampleHits(ex).map((h) => h.id)
+    cell(`closed list [${r.id}] does NOT close: «${ex}»`, !hits.includes(r.id), JSON.stringify(hits))
+  }
+}
+// the situations that only MENTION a word of the list close nothing (any row); the words come from the real journal of 2026-10-18
+const MENTION = [
+  "Красный на main: страж check-wiring пришёл коммитом без адреса плана.",
+  "Найден при сдаче задачи, дефект открыт.",
+  "Прогнать gate-tool локально? Хук требует зелёный вердикт gate-tool на вливаемый хеш.",
+  "Слияние несёт новый файл, хук требует свежий вердикт.",
+  "Merge/precheck пока не запускались.",
+  "Guards публикации красные на старых выдержках и форматах.",
+  "После удаления регистрации старая задача осталась в другом проекте.",
+  "Разделить выпускную работу и исправление плагина?",
+  "Для следующего шага требуется согласованная очередь машины партнёра.",
+  "Простой межпроцессный gate не проверен.",
+  "Канон и pin не изменены, оригиналы сохранены.",
+  "Результат принят, замечаний нет. Спецификация утверждена вчера.",
+  "До потолка остался один заход; пятичасовая квота исчерпана.",
+  "Служба перезапущена владельцем, плагин подгружен.",
+  "Лимит токенов на сегодня исчерпан.",
+  "Проверить ключи в таблице реестра и сравнить хеши.",
+]
+for (const text of MENTION) cell(`closed list: a mention «${text.slice(0, 60)}» closes nothing`, fa.closedHits(text).length === 0, JSON.stringify(fa.closedHits(text)))
 for (const text of ["Какой формат отчёта выбрать?", "Начать с теста или с кода?", "Разрешить Phase 1 сразу?", "Вариант A или вариант B для таблицы?", "Как назвать новую функцию?"]) cell(`closed list: neutral «${text}» passes`, fa.closedHits(text).length === 0, JSON.stringify(fa.closedHits(text)))
+// safety: phrasings of real gates that must still close, in the forms the sessions write (a recall battery, task 097); an example with " => " is a question and the recommended option
+const RECALL = [
+  "Пушим в main?", "Можно запушить в main прямо сейчас?", "Разрешаете запушить ветку?", "Выполнить git push origin main?", "Нужно ли делать пуш?", "Откатить main на прошлый коммит?",
+  "Сливаем ветку в main?", "Можно вливать?", "Влить задачу 12 в основную ветку?", "Делаем merge?", "Можно мержить?", "Выполнить git merge --ff-only?", "Разрешить слияние?", "Rebase onto main?",
+  "Удалить ветку task/12?", "Удаляем рабочее дерево?", "Можно убрать старые ветки?", "Очистить worktrees после слияния?", "Стереть папку с результатами?", "git branch -d task/12?", "Сделать cleanup?",
+  "Выпускаем 0.3.0?", "Ставим тег v1.2?", "Публикуем релиз?", "Опубликовать в npm?", "Создать release 0.3.0?", "Deploy to production?",
+  "Перезапускаем службу?", "Можно перезапустить opencode?", "Остановить службу и запустить заново?", "Переключить службу на новую версию?",
+  "Утверждаем план?", "Утвердить spec.md?", "Одобряем спецификацию?", "Принимаем задачу?", "Принять работу исполнителя?", "Подтвердить сдачу?", "Закрываем задачу 12 как принятую?", "Accept the result?",
+  "Использовать --force?", "Force-push?", "Введите пароль для сервера?", "Передать токен доступа агенту?", "Добавить API ключ в настройки?", "Оплатить квоту?", "Купить подписку на модель?",
+  "Расширить права агента?", "Выдать доступ к соседнему репозиторию?", "Разрешить работу вне границ задачи?", "Выйти за границы задачи?", "Пропустить проверки стражей?", "Отключить хуки?",
+  "Поменять answer_max?", "Отредактировать .opencode/crew-harness.json?", "Отказаться от критерия приёмки?", "Превысить потолок раундов?", "Менять общую среду?", "Запустить боевую проверку?", "Править рабочую копию main?",
+  "Что делаем с веткой? => Запушить в main (Recommended)", "Как поступить? => Удалить ветку (Recommended)", "Продолжаем? => Слить в main (Recommended)", "Что дальше? => Принять (Recommended)", "Как? => Опубликовать (Recommended)",
+  "Как? => Утвердить план (Recommended)", "Что делаем? => Перезапустить службу (Recommended)", "Что делаем? => Продолжить || Запушить ветку и влить в main",
+]
+for (const text of RECALL) cell(`recall: «${text}» stays with the owner`, fa.exampleHits(text).length > 0, "")
+for (const text of ["Исправить баг сейчас или после рефакторинга?", "Использовать Map или объект?", "Назвать функцию parse или read?", "Запустить тесты сначала или сборку?", "Добавить тест на граничный случай?", "Вынести функцию в отдельный файл?", "Прогнать полный набор тестов?", "Продолжить текущим заходом?", "Какую модель взять для проверки?"]) cell(`recall: neutral «${text}» passes`, fa.exampleHits(text).length === 0, JSON.stringify(fa.exampleHits(text)))
+// the recommended option is scanned too: its label and description, with the question as the context of the objects
+cell("closed list: the label of the recommended option proposes a push", fa.closedHits("Что делаем с веткой?", "Запушить в origin (Recommended)").some((h) => h.id === "push"), "")
+cell("closed list: the description of the recommended option proposes a deletion of a branch", fa.closedHits("Что делаем с веткой?", "Убрать", "Удалить ветку и рабочее дерево").some((h) => h.id === "delete"), "")
+cell("closed list: a bare verb in the label takes its object from the question", fa.closedHits("Что делаем с результатом приёмки?", "Принять (Recommended)").some((h) => h.id === "accept"), JSON.stringify(fa.closedHits("Что делаем с результатом приёмки?", "Принять (Recommended)")))
+cell("closed list: a negated action does not propose it", fa.closedHits("Как поступить с веткой?", "Оставить (Recommended)", "Без push и без удаления ветки").length === 0, JSON.stringify(fa.closedHits("Как поступить с веткой?", "Оставить (Recommended)", "Без push и без удаления ветки")))
+
+// ---- the real journal of 2026-10-18 (task 097): the questions the owner answered "по рекомендации", impersonal text -----------------
+// The 23 forms whose answer was the option "(Recommended)" (the journal answers/ of the plugin data, read only; the letters keep the first
+// 200 characters of the question). Names of people, models, projects and hashes are replaced; the verbs and the objects are as they were.
+// "hold": the rule that must keep the form with the owner (the real gates); "auto": the plugin may close it.
+const REAL = [
+  ["auto", "Разрешить уже работающей модели A перенести готовую дельту в Канон рабочего дерева (шаги 5–9 плана), сохранив abc1234 и новые нормы целевой ветки, затем провести одну независимую проверку модели A вместо модели B?", "Перенос + модель A"],
+  ["auto", "Приёмка #5 «Исправить сравнение и проверить ключи» встала на сборке кандидата: слияние несёт tool/tool.toml (путь яруса tool), хук требует свежий зелёный вердикт gate-tool на вливаемый хеш, а письмо пр", "Прогнать gate-tool локально"],
+  ["auto", "Для разрешённой вами задачи `proj-b` выяснилось, что корень сателлита относится к отдельному техническому проекту `proj-b`; интегратор соседнего проекта не может напрямую назначить там исполнителя. Разре", "Разрешить координатора"],
+  ["ceiling", "Модель B исчерпала пятичасовую квоту. Проверка С2-4 дошла до 3/6, итогового отчёта нет; артефакты сохранены. Рекомендую для приоритетной задачи разрешить одну заменяющую проверку модели A сверх прежнего лимита, затем снов", "Одна модель A"],
+  ["accept", "Работа 61: перенос на abc1234 проверен независимой моделью A — 0 существенных, 0 поверхностных находок. Рекомендую принять документальный результат с раскрытыми оговорками (одна семья, мнение получено после переноса", "Принять и готовить"],
+  ["auto", "Стражи публикации красные на старых выдержках и форматах, а не на внесённом Каноне. Рекомендую сохранить точные оригиналы в архиве с manifest, а открытые документы подготовить как явно обозначенные пу", "Архив и копии"],
+  ["approval", "Проверка С2-5 нашла одну коллизию. Рекомендую точечно исправить AC-05 и утвердить требования: каждому эффекту — стабильный `(O, effectID)`; при close до его admission — ноль допусков/исполнений; разрешённый эф", "Исправить и утвердить"],
+  ["push", "Работа 61: кандидат `abc1234` от свежего main полностью зелёный локально; просрочено: 0. Разрешить push только ветки кандидата для серверного CI и штатную техническую приёмку публикационного пакета? Рекомен", "Ветка и приёмка"],
+  ["auto", "Как продолжить приёмку 1? Точные PR refs и связанные runs получены, но все три existing checks — FAILURE, а product work отсутствует. Merge/precheck пока не запускались.", "Вернуть на выполнение"],
+  ["auto", "Выбрано «сначала завершить сателлит 1», но её global registration уже снята: координатор сменился, а worker/приёмщик остались в проекте proj-b и не могут штатно общаться. Рекомендую временно вернуть ро", "Временно вернуть"],
+  ["approval", "Утвердить план перехода реестра на «reg N»? Читающих мест одно (scan.py), учителей формы четыре (PR-шаблон, rules-for-agents.md, шапка check.sh, handoff.md).", "Всё одним слиянием, без окна"],
+  ["auto", "Лёгкие проверки пройдены; product commits внесены в сателлитную ветку. Для следующего обязательного шага требуется согласованная очередь машины партнёра: Linux cold build всех 18 архивов и строгий guard; зат", "Ждать партнёра"],
+  ["answer-keys", "В правилах CrewHarness изменение answer_mode разрешено только человеку: правкой .opencode/crew-harness.json и коммитом. Поэтому изменение не выполнено, интегратор CrewHarness уведомлён. Как поступаем?", "Вручную"],
+  ["auto", "Штатной отмены осиротевшей задачи 1 без возврата проекта сейчас нет: отмена заказа 102 дочернюю задачу не останавливает. Рекомендую разрешить одну С3 модели A существующей 81 «Блокировка закрытых сессий и их о", "Один план модели A"],
+  ["auto", "После удаления регистрации старая задача `proj-b` 1 осталась в другом проекте на доработке. CrewHarness подтвердил: отмена заказа 102 её не отменит, а штатной команды отменить задачу чужог", "Спланировать безопасный fence"],
+  ["auto", "Разрешаете отделить выпускную работу 94 от общего исправления плагина 81, сохранив обязательный доказанный адресный fence старой сессии перед любым повтором Phase 1? Это решение о порядке, **не разр", "Отделить при fence"],
+  ["auto", "Реестр №1887 (ОТКРЫТАЯ, найдена при сдаче 103): check-guard-wiring красный на main — страж check-foo пришёл коммитом abc1234 с шапкой в 3 строки без адреса плана и вне guard-w", "Строка долга в базе"],
+  ["auto", "Приёмка 103 подтвердила на исходном `main` отдельный открытый дефект №1887: ночной `check-guard-wiring` красный из-за недокументированной шапки `check-foo.sh` и отсутствующей записи b", "Да, отдельная задача"],
+  ["auto", "Реестр №1887 (ОТКРЫТАЯ, найдена при сдаче 103): check-guard-wiring красный на main — страж check-foo пришёл коммитом abc1234 с шапкой в 3 строки без адреса плана и вне guard-w", "Строка долга в базе"],
+  ["auto", "Работа 103 завершена с 16:40, но подтверждение слота от занятого интегратора не приходит почти час. Новых активных этапов в списке нет. Рекомендую зарезервировать освободившийся слот за одной уже р", "Выделить слот"],
+  ["auto", "План 81 готов. Для соблюдения требований предложены SQLite и новый нативный Windows-broker с ограниченными правами процессов; реальная работоспособность ещё не доказана. Рекомендую разрешить одному и", "RED и прототип"],
+  ["auto", "Прототип пока не даёт нужного доказательства: A фактически не закрывается в тесте, watch запускается до close, а простой межпроцессный gate не проверен. Рекомендую одну ограниченную доработку обычным ", "Одна доработка"],
+  ["auto", "Вторая попытка неполная: A.effect проверен до запуска watch, а два процесса запущены последовательно. Причины найдены, raw и оставшаяся fixture сохранены; тяжёлые компоненты не обоснованы. Рекомендую ", "Одна модель A на пробы"],
+]
+const realJudge = (q, label) => fa.judgeForm({ id: "frm_r", at: 1, born: 1, title: "Questions", question: q.slice(0, 200), full: q, options: [`${label} (Recommended)`], nq: 1, kind: "question" }, { mode: { default: "recommendations" } })
+let realAuto = 0
+REAL.forEach(([want, q, label], i) => {
+  const j = realJudge(q, label)
+  if (j.ok) realAuto++
+  if (want === "auto") cell(`real journal #${i + 1}: «${label}» is closed by the plugin`, j.ok === true, JSON.stringify(j))
+  else cell(`real journal #${i + 1}: «${label}» stays with the owner by the rule «${want}»`, j.ok === false && j.reason === "closed" && fa.closedHits(q, `${label} (Recommended)`).some((h) => h.id === want), JSON.stringify([j, fa.closedHits(q, label)]))
+})
+// the 24th answer of the same day (after the measure of task 096): a technical question "confirm that the old tab is closed" - the plan is only context
+cell("real journal #24: «Закрыта, запускай» is closed by the plugin (the word «плану» stands before the verb «подтвердите»)", realJudge("Новый изолированный Phase 1 runner прошёл короткую независимую статическую проверку; исходные архивы и SHA совпали с прежним манифестом. Для запуска по упрощённому плану подтвердите: закрыта ли старая", "Закрыта, запускай").ok === true, "")
+cell("real journal: 23 forms, the plugin closes at least 60 % (was 7 of 23); the 6 real gates (accept, approval x2, push, answer keys, ceiling) all stay", REAL.length === 23 && realAuto / REAL.length >= 0.6 && REAL.filter(([w]) => w !== "auto").length === 6, `${realAuto} of ${REAL.length}`)
 
 // ---- judgeForm: the rules on one form ---------------------------------------------------------------------------------
 const REC = { default: "recommendations" }
@@ -109,6 +214,10 @@ cell("judge: a word of the closed list in the title -> closed", why(J({ title: "
 cell("judge: a word of the closed list in the recommended option -> closed", why(J({ options: ["Выпустить релиз (Recommended)", "Нет"] })) === "closed", "")
 cell("judge: a word of the closed list in the description of the recommended option -> closed", why(J({ optDesc: ["Оплатить и продолжить", ""] })) === "closed", "")
 cell("judge: a closed word only in ANOTHER option does not close", ok(J({ options: ["Короткий (Recommended)", "Нет, не пушить"], optDesc: ["", "удалить всё"] })), JSON.stringify(J({ options: ["Короткий (Recommended)", "Нет, не пушить"] })))
+cell("judge (097): a word of the gates in the description of the situation closes nothing", ok(J({ full: "На main красный, найден при сдаче 103, gate-tool не проходит. Как продолжить?", question: "На main красный, найден при сдаче 103, gate-tool не проходит. Как продолжить?" })), JSON.stringify(J({ full: "На main красный, найден при сдаче 103. Как продолжить?" })))
+cell("judge (097): a neutral question whose RECOMMENDED option proposes a push is closed", why(J({ options: ["Запушить ветку в origin (Recommended)", "Оставить локально"] })) === "closed", JSON.stringify(J({ options: ["Запушить ветку в origin (Recommended)", "Оставить локально"] })))
+cell("judge (097): the description of the recommended option may mention a word of the gates without proposing it", ok(J({ optDesc: ["Короткий; на main красный после слияния", ""] })), JSON.stringify(J({ optDesc: ["Короткий; на main красный после слияния", ""] })))
+cell("judge (097): the rule and the word of the hit are named in the reason", J({ full: "Влить в main?", question: "Влить в main?" }).rule === "merge" && /влить/.test(J({ full: "Влить в main?", question: "Влить в main?" }).why), JSON.stringify(J({ full: "Влить в main?" })))
 cell("judge: the closed list wins over a missing mark", why(J({ full: "Влить в main?", options: ["Да", "Нет"] })) === "closed", "")
 cell("judge: the whole text is read, not the 200 characters of the record", why(J({ question: "Какой формат?", full: `Какой формат? ${"слово ".repeat(60)} затем перезапустить службу` })) === "closed", "")
 
