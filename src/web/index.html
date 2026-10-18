@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Пульт CrewHarness</title>
+<!-- Стили и скрипт — ОТДЕЛЬНЫЕ ФАЙЛЫ, а не встроенные блоки: страницу отдаёт сервис целиком с
+     запретом встроенного кода (CSP), и страница со встроенным <style> или <script> пуста.
+     Ничего не грузится с чужих адресов: ни шрифты, ни скрипты, ни картинки.
+     Видимого текста в этом файле нет: все надписи рисует view.js из strings.js. -->
+<link rel="stylesheet" href="app.css">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<div class="app" id="app" data-pane="list">
+  <aside class="side" id="side"></aside>
+  <main class="main" id="main"></main>
+</div>
+
+<footer class="status" id="status" role="status" aria-live="polite"></footer>
+
+<div class="overlay" id="overlay" hidden></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
