@@ -37,15 +37,19 @@ background); a task session may run with no window at all. Formerly `opencode-pe
   a task branch does not stand in for it. A tab in a folder that belongs to no project is refused
   with «папка вкладки … не относится к проекту», not with the old-form text;
 - **project settings live in a settings repository**, not in the tab's working copy (a project can
-  be a folder of many repositories, like `C:/work/nova`). The plugin options list settings
-  folders — any folder inside a git repository; the file `.opencode/crew-harness.json` there
+  be a folder of many repositories, like `C:/work/nova`). The plugin option `project_settings` lists
+  settings folders (not projects) — any folder inside a git repository; the old name `projects` stays a
+  synonym: it is read when `project_settings` is not set (both set: `project_settings` acts, `projects` is
+  ignored and `crew_doctor` names the entries that differ; only `projects` as a list: it works, `crew_doctor`
+  adds one low-importance note «ключ projects переименован в project_settings; прежнее имя работает» below its
+  verdict, not a problem). The file `.opencode/crew-harness.json` there
   names the project and its root (relative to the folder) and is read **committed** from the
   default branch (`git show`; another branch: its `"branch"` field), never from the working copy:
 
   ```jsonc
   "plugins": [
     { "package": "C:/work/crew-harness/opencode-plugin",
-      "options": { "projects": ["C:/work/nova/nova-settings", "C:/work/tools"],
+      "options": { "project_settings": ["C:/work/nova/nova-settings", "C:/work/tools"],
                    "local": { "nova": { "spawn_models": { "light": "kimi/k3" } } } } }
   ]
   ```
@@ -58,7 +62,7 @@ background); a task session may run with no window at all. Formerly `opencode-pe
   The plugin option `retention_days` (default 7, `0` is off; formerly `keep_days`) makes a once-a-day pass remove delivered letters, empty mailbox folders and the cards and statuses of closed tabs older than that; open questions, undelivered letters, open tabs and task records are never touched.
 
   `local` holds machine-specific values on top of the file. The old options form
-  `{ "nova": "C:/work/nova" }` still works (settings are then walked up from the tab folder, or from the project root when the tab stands in a working tree outside it);
+  `{ "nova": "C:/work/nova" }` (only under the old name `projects`) still works (settings are then walked up from the tab folder, or from the project root when the tab stands in a working tree outside it);
   `crew_doctor` suggests the new form. **`crew_config`**: `guide` — a questionnaire for the owner on
   every key (current value, options, recommendation, why; asked in text); `show` — what applies and
   where from (default, the committed file, `local`), plus uncommitted edits; `set {values}` — the
@@ -1182,8 +1186,8 @@ OPENCODE_CREW_SESSION=<opencode session id> node mcp.ts   # node >= 24
 
 - it acts for the one OpenCode session in `OPENCODE_CREW_SESSION` (the provider sets it per
   request) and writes to the same mailbox (`XDG_DATA_HOME` as for OpenCode);
-- the project list is not repeated: the plugin writes its `projects` and `local` options to
-  `<mailbox>/projects.json` at load (`OPENCODE_CREW_PROJECTS`, JSON of the `projects` value,
+- the project list is not repeated: the plugin writes its `project_settings` (or `projects`) and `local` options to
+  `<mailbox>/projects.json` at load (`OPENCODE_CREW_PROJECTS`, JSON of the `project_settings` value,
   overrides);
 - delivery stays with the plugin (the letter goes into the OpenCode session); a task started from
   MCP is written to the journal and the plugin starts it on its next pass; a `crew_watch` from MCP is

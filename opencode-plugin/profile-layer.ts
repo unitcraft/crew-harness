@@ -116,7 +116,7 @@ function workingKeys(folder: string): Record<string, any> | "bad" | undefined {
 /** Записать черновик в рабочую копию файла проекта одной атомарной записью (три ключа; остальное не трогается). */
 export function writeDraft(ps: PState, d: Draft): { ok: true; file: string } | { ok: false; error: string } {
   if (!ps.known) return { ok: false, error: outsideProject(ps.tab) }
-  if (!ps.folder) return { ok: false, error: "проект задан прежней формой опций: писать некуда (переведи его на папку настроек)" }
+  if (!ps.folder) return { ok: false, error: "проект задан прежней формой опций: писать некуда (переведи его на папку настроек: ключ project_settings в opencode.jsonc)" }
   // ключ, заданный поправкой local в опциях плагина, сильнее файла: правка файла ничего бы не изменила
   const over = settingsContext().local[ps.project] ?? {}
   const shadowed = P.PROFILE_KEYS.filter((k) => k in over)

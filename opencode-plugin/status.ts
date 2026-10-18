@@ -826,9 +826,10 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
 }
 
 /** Текст /crew-doctor: последняя самопроверка сервиса (DOCTOR_FILE) и её время. */
-export function doctorText(d: { at: number; problems: string[] } | undefined, now = Date.now()): string {
+export function doctorText(d: { at: number; problems: string[]; notes?: string[] } | undefined, now = Date.now()): string {
   if (!d?.at) return "Самопроверки ещё не было: сервис делает её через 10 с после запуска плагина и раз в 10 минут."
   const when = `проверено в ${hm(d.at)} (${minutes(d.at, now) || "0 мин"} назад)`
-  if (!d.problems?.length) return `Всё в порядке: окна отмечаются, ящик пишется, настройки проектов читаются, нужные возможности OpenCode на месте.\n\n${when}`
-  return `Есть проблемы:\n${d.problems.map((p) => `- ${p}`).join("\n")}\n\n${when}`
+  const notes = d.notes?.length ? `\n\nК сведению:\n${d.notes.map((p) => `- ${p}`).join("\n")}` : "" // справка низкой важности, не проблема
+  if (!d.problems?.length) return `Всё в порядке: окна отмечаются, ящик пишется, настройки проектов читаются, нужные возможности OpenCode на месте.${notes}\n\n${when}`
+  return `Есть проблемы:\n${d.problems.map((p) => `- ${p}`).join("\n")}${notes}\n\n${when}`
 }

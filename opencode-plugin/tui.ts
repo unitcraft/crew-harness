@@ -243,7 +243,7 @@ export default {
     }
     // /crew-doctor: последняя самопроверка сервиса (он пишет её при запуске и раз в 10 минут)
     const showDoctor = () => {
-      const d = readJson<{ at: number; problems: string[] }>(DOCTOR_FILE)
+      const d = readJson<{ at: number; problems: string[]; notes?: string[] }>(DOCTOR_FILE)
       showText({ title: "crew-harness — самопроверка", message: doctorText(d) })
     }
     // /crew-progress: что сейчас идёт (задача 004) — ход фоновых сессий методики по `progress.log` всех рабочих деревьев репозитория

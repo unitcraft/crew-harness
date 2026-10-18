@@ -2,18 +2,21 @@
 //
 // Проект бывает виртуальным: C:/work/nova — папка с многими репозиториями, сама не репозиторий. Поэтому
 // настройки проекта живут в РЕПОЗИТОРИИ НАСТРОЕК, а не в рабочей папке вкладки:
-//   opencode.jsonc:  "options": { "projects": ["C:/work/nova/nova-settings", "C:/work/tools"] }
+//   opencode.jsonc:  "options": { "project_settings": ["C:/work/nova/nova-settings", "C:/work/tools"] }
 //   <папка>/.opencode/crew-harness.json:  { "project": "nova", "root": "..", ... }
 // Папка — любая внутри git-репозитория. Имя проекта — поле "project" (нет — имя папки); корень — "root" от папки
 // (нет — сама папка). Файл читается ЗАКОММИЧЕННЫМ из ветки по умолчанию (`git show <ветка>:<путь>`; другая ветка —
 // поле "branch"): незакоммиченная правка не действует, worktree и ветки кода на настройки не влияют.
 //
-// Прежняя форма опций `{ "nova": "C:/work/nova" }` читается дальше: имя → корень, а настройки — по-старому
+// Ключ называется project_settings: он перечисляет папки настроек, а не проекты (задача 089). Прежнее имя `projects` — синоним:
+// читается, если project_settings не задан; заданы оба — действует project_settings, crew_doctor говорит о расхождении.
+//
+// Прежняя форма опций `{ "nova": "C:/work/nova" }` (только под именем `projects`) читается дальше: имя → корень, а настройки — по-старому
 // из `.opencode/crew-harness.json` вверх от каталога вкладки (рабочая копия). Старое имя nova-peers.json больше не
 // читается (решение №16 плана 002 выполнено: nv-lang перешёл на репозиторий настроек 2026-10-05).
 //
 // Машинно-зависимое (модели по ступеням) — необязательная поправка в опциях плагина:
-//   "options": { "projects": [...], "local": { "nova": { "spawn_models": { "light": "kimi/k3" } } } }
+//   "options": { "project_settings": [...], "local": { "nova": { "spawn_models": { "light": "kimi/k3" } } } }
 
 import { execFileSync } from "node:child_process"
 import { background, gitAsync } from "./async-git.ts"
@@ -236,10 +239,50 @@ export function readSettingsFolder(folder: string, now = Date.now()): Folder {
 }
 
 
+/** Основной ключ опций со списком папок настроек (задача 089); `projects` — прежнее имя, синоним. */
+export const PROJECT_SETTINGS_KEY = "project_settings"
+export const PROJECTS_KEY_OLD = "projects"
+const given = (v: unknown) => v !== undefined && v !== null
+
+/** Значение ключа папок настроек: project_settings, а если он не задан — projects. */
+export function projectsOption(opt: any): any {
+  return given(opt?.[PROJECT_SETTINGS_KEY]) ? opt[PROJECT_SETTINGS_KEY] : opt?.[PROJECTS_KEY_OLD]
+}
+
+/** Записи значения ключа для сравнения: список — папки, прежняя форма — «имя: корень». */
+const entriesOf = (v: any): string[] =>
+  Array.isArray(v) ? v.filter((x) => typeof x === "string" && x).map((x) => normPath(x)) : v && typeof v === "object" ? Object.entries(v).map(([n, r]) => `${String(n).toLowerCase()}: ${typeof r === "string" ? normPath(r) : String(r)}`) : []
+
+/** Что сказать врачу о ключах опций: problems — мешают зелёному вердикту, notes — справка низкой важности. */
+export function optionKeyLines(opt: any): { problems: string[]; notes: string[] } {
+  const problems: string[] = []
+  const notes: string[] = []
+  const main = opt?.[PROJECT_SETTINGS_KEY]
+  const old = opt?.[PROJECTS_KEY_OLD]
+  if (given(main) && given(old)) {
+    const a = entriesOf(main)
+    const b = entriesOf(old)
+    const onlyMain = a.filter((x) => !b.includes(x))
+    const onlyOld = b.filter((x) => !a.includes(x))
+    if (onlyMain.length || onlyOld.length)
+      problems.push(
+        `в опциях плагина заданы оба ключа, project_settings и projects: действует project_settings, projects игнорируется; расходятся записи${onlyOld.length ? ` — только в projects: ${onlyOld.join(", ")}` : ""}${onlyMain.length ? ` — только в project_settings: ${onlyMain.join(", ")}` : ""}; убери projects из opencode.jsonc`,
+      )
+    else notes.push(`в опциях плагина заданы оба ключа, project_settings и projects, с одинаковыми записями: действует project_settings, projects игнорируется; убери projects из opencode.jsonc`)
+  } else if (given(old) && Array.isArray(old)) notes.push(`ключ projects переименован в project_settings; прежнее имя работает`)
+  if (given(main) && !Array.isArray(main)) problems.push(`ключ project_settings — список папок настроек ["<папка с .opencode/crew-harness.json>"]; прежняя форма «имя → корень» работает только под прежним именем projects`)
+  return { problems, notes }
+}
+// Строки врача по последним разобранным опциям (их ставит parseProjects: плагин и MCP-сервер разбирают опции один раз при загрузке).
+let optionLines: { problems: string[]; notes: string[] } = { problems: [], notes: [] }
+/** Справочные строки врача (низкая важность, не проблема): например, про прежнее имя ключа. */
+export const settingsNotes = (): string[] => optionLines.notes
+
 /** Опции плагина → проекты. Новая форма — массив папок настроек; прежняя — объект имя → корень. */
 export function parseProjects(opt: any, log: (s: string) => void = () => {}): Projects {
   const out: Projects = []
-  const list = opt?.projects
+  optionLines = optionKeyLines(opt)
+  const list = projectsOption(opt)
   if (Array.isArray(list)) {
     for (const folder of list) {
       if (typeof folder !== "string" || !folder) continue
@@ -415,7 +458,7 @@ export function unconfiguredLine(name: string): string {
 }
 
 export function settingsProblems(projects: Projects, local: Record<string, any> = {}): string[] {
-  const out = projects.flatMap((p) => p.problems ?? [])
+  const out = [...optionLines.problems, ...projects.flatMap((p) => p.problems ?? [])]
   for (const p of projects) if (p.legacy) out.push(`проект ${p.name}: настройки в файле с прежним именем ${p.legacy} — переименуй в .opencode/crew-harness.json (git mv) и закоммить`)
   // настройка, которая не может сработать: ключ gate в answer_mode, режим agent, неверный answer_max (задача 007)
   for (const p of projects) {
@@ -442,6 +485,6 @@ export function settingsProblems(projects: Projects, local: Record<string, any> 
     if (!modelsDefined(rawSettingsFor(p.rootPath ?? p.root, projects, local))) out.push(`${unconfiguredLine(p.name)} (нет profile_set, spawn_models и allow_default_models: crew_spawn откажет; crew_config {action: "apply_template"} или crew_config guide)`)
   }
   const old = projects.filter((p) => !p.dir).map((p) => p.name)
-  if (old.length) out.push(`проекты ${old.join(", ")} заданы прежней формой опций (имя → корень); новая — список папок настроек: "projects": ["<папка с .opencode/crew-harness.json>"], файл называет проект и root (doc/archive/plans/002-tasks.md, «Где живут настройки проекта»)`)
+  if (old.length) out.push(`проекты ${old.join(", ")} заданы прежней формой опций (имя → корень); новая — список папок настроек: "project_settings": ["<папка с .opencode/crew-harness.json>"], файл называет проект и root (doc/archive/plans/002-tasks.md, «Где живут настройки проекта»)`)
   return [...new Set(out)]
 }

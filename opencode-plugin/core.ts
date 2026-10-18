@@ -14,8 +14,8 @@ import { type Projects, outsideProject, parseProjects as parseProjectsWith, proj
 import { SCHEMA, guideText, invalid } from "./config-schema.ts"
 import { type AnswerMap, answerNotes, normalizeAnswerMax, normalizeAnswerMode } from "./answer-parse.ts"
 import { EXTRA_FIELDS_MAX, EXTRA_ID_RE, RESERVED_FIELD_IDS, OWNER_LANGUAGE_RE, DEFAULT_OWNER_LANGUAGE } from "./config-schema.ts"
-export { PROJECT_RE, type Project, type Projects, settingsProblems } from "./settings.ts"
-import { PROJECT_RE, settingsProblems, modelsDefined } from "./settings.ts"
+export { PROJECT_RE, type Project, type Projects, settingsProblems, settingsNotes } from "./settings.ts"
+import { PROJECT_RE, settingsProblems, settingsNotes, modelsDefined } from "./settings.ts"
 import { background } from "./async-git.ts"
 import { mergeTemplate } from "./config-template.ts"
 import { DECISION_RU, type Decision, writeApproval } from "./approvals.ts"
@@ -1590,13 +1590,14 @@ merge без предпроверки отклоняется: сначала pre
 export const helpFor = (_dir: string): string => HELP
 
 // СПИСОК ПРОЕКТОВ — ОДИН, в опциях плагина (opencode.jsonc). Плагин при загрузке кладёт опции в ящик
-// (`projects.json`: {projects, local}), MCP-сервер читает оттуда и разбирает так же: второй копии списка руками нет,
-// и `проект.роль` у обоих хозяев совпадает. OPENCODE_CREW_PROJECTS (JSON значения `projects`) — переопределение.
+// (`projects.json`: {project_settings и/или projects как в опциях, local}), MCP-сервер читает оттуда и разбирает так же:
+// второй копии списка руками нет, и `проект.роль` у обоих хозяев совпадает. OPENCODE_CREW_PROJECTS (JSON значения
+// `project_settings`) — переопределение.
 const PROJECTS_FILE = path.join(BASE, "projects.json")
 export function saveProjects(opt: any) {
   try {
     const tmp = `${PROJECTS_FILE}.${process.pid}.tmp`
-    writeFileSync(tmp, JSON.stringify({ projects: opt?.projects ?? {}, local: opt?.local ?? {} }, null, 1))
+    writeFileSync(tmp, JSON.stringify({ project_settings: opt?.project_settings, projects: opt?.projects, local: opt?.local ?? {} }, null, 1))
     renameSync(tmp, PROJECTS_FILE)
   } catch (e) {
     log(`projects save failed: ${e}`)
@@ -1608,7 +1609,7 @@ export function loadProjects(): Projects {
   let opt: any = readJson<any>(PROJECTS_FILE) ?? {}
   if (env) {
     try {
-      opt = { ...opt, projects: JSON.parse(env) }
+      opt = { ...opt, project_settings: JSON.parse(env), projects: undefined }
     } catch (e) {
       log(`OPENCODE_CREW_PROJECTS ignored: ${e}`)
     }
@@ -3049,7 +3050,7 @@ ${lockStillYours(stillHeld.n)}` : "") }
       if (action === "apply_template") {
         if (!isIntegrator(me)) return notIntegrator(me)
         if (!p) return { content: outsideProject(me.directory).replace(/^./, (c) => c.toUpperCase()) + "." }
-        if (!p.dir) return { content: `Проект ${p.name} задан прежней формой опций: записать некуда. Переведи его на репозиторий настроек — в opencode.jsonc "projects": ["<папка с .opencode/crew-harness.json>"].` }
+        if (!p.dir) return { content: `Проект ${p.name} задан прежней формой опций: записать некуда. Переведи его на репозиторий настроек — в opencode.jsonc "project_settings": ["<папка с .opencode/crew-harness.json>"].` }
         const { values, added } = mergeTemplate(workingSettings(p.dir).raw)
         if (!added.length) return { content: `Шаблон ничего не добавил: все его ключи у проекта уже есть (файл не тронут).` }
         const file = writeSettings(p.dir, values)
@@ -3058,7 +3059,7 @@ ${lockStillYours(stillHeld.n)}` : "") }
       if (action === "set") {
         if (!isIntegrator(me)) return notIntegrator(me)
         if (!p) return { content: outsideProject(me.directory).replace(/^./, (c) => c.toUpperCase()) + "." }
-        if (!p.dir) return { content: `Проект ${p.name} задан прежней формой опций: записать некуда. Переведи его на репозиторий настроек — в opencode.jsonc "projects": ["<папка с .opencode/crew-harness.json>"].` }
+        if (!p.dir) return { content: `Проект ${p.name} задан прежней формой опций: записать некуда. Переведи его на репозиторий настроек — в opencode.jsonc "project_settings": ["<папка с .opencode/crew-harness.json>"].` }
         const values = input.values
         if (!values || typeof values !== "object" || Array.isArray(values) || !Object.keys(values).length) return { content: "Нужно values: {ключ: значение}." }
         if (Object.prototype.hasOwnProperty.call(values, "profile_set")) return { content: "Не записано (файл не тронут):\n- profile_set: имя набора меняет человек (команда окна /crew-sets use либо правка файла); вызовом set его не записывают" }
@@ -3131,7 +3132,9 @@ ${lockStillYours(stillHeld.n)}` : "") }
     input: { type: "object", properties: {}, additionalProperties: false },
     execute: async (_input: any, sessionID: string) => {
       const problems = [...(await host.doctor()), ...commonDoctor(sessionID), ...settingsProblems(projects, currentLocal), ...profileProblems()]
-      return { content: problems.length ? `crew_doctor — есть проблемы:\n${problems.map((p) => `- ${p}`).join("\n")}` : "crew_doctor: всё в порядке (окна отмечаются, ящик пишется, нужные возможности OpenCode на месте)." }
+      const notes = settingsNotes() // справка низкой важности: не проблема, зелёный вердикт не отменяет
+      const tail = notes.length ? `\nК сведению:\n${notes.map((p) => `- ${p}`).join("\n")}` : ""
+      return { content: (problems.length ? `crew_doctor — есть проблемы:\n${problems.map((p) => `- ${p}`).join("\n")}` : "crew_doctor: всё в порядке (окна отмечаются, ящик пишется, нужные возможности OpenCode на месте).") + tail }
     },
   }
 

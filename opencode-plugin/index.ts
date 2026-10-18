@@ -110,6 +110,7 @@ import {
   commonDoctor,
   DOCTOR_FILE,
   settingsProblems,
+  settingsNotes,
   helpFor,
   saveProjects,
   setProjects,
@@ -2193,7 +2194,7 @@ export default {
     const runDoctor = async () => {
       const problems = [...(await doctor()), ...commonDoctor(), ...settingsProblems(projects, settingsContext().local), ...profileProblems()]
       try {
-        writeFileSync(DOCTOR_FILE, JSON.stringify({ at: Date.now(), problems }))
+        writeFileSync(DOCTOR_FILE, JSON.stringify({ at: Date.now(), problems, notes: settingsNotes() }))
       } catch {}
       const said = problems.join(" | ")
       if (said === doctorSaid) return
