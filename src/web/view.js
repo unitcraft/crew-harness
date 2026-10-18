@@ -1,16 +1,52 @@
-// view.js — рисование DOM по модели. Никакой логики «что произошло»: это в state.js.
+// view.js — рисование DOM по модели. Никакой логики «что произошло»: это в state.js и lists.js.
 //
 // Правила, на которых держится безопасность и спокойный вид:
 //   * текст из событий попадает в DOM ТОЛЬКО через textContent / createTextNode — никакой
 //     разметки из данных (проверка страницы ищет innerHTML и родню);
 //   * каркас строится один раз; при каждой перерисовке меняется только то, что изменилось,
 //     поэтому ответ агента растёт без мерцания, а черновик в поле ввода не пропадает;
-//   * прокрутка вниз только если владелец уже был у конца: читающего историю не дёргаем.
+//   * прокрутка вниз только если владелец уже был у конца: читающего историю не дёргаем;
+//   * значки — один спрайт icons.svg (<use>), цвет берут из темы; ширина полоски и кольца контекста
+//     ставится свойством --fill / --ring через CSSOM, а не атрибутом style (его запрещает CSP).
 
 import { t } from './strings.js';
-import { STATE_KEYS, sessionList, splitBlocks } from './state.js';
+import {
+  STATE_KEYS, sessionList, splitBlocks, filterSessions, groupSessions, effectivePins, timeline, paragraphs, inlineSpans,
+  workSummary, usagePercent, usageLevel, tokenParts, durationLabel, agoParts, fileParts, taskSummary,
+} from './state.js';
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
 const NEAR_BOTTOM_PX = 48;
+const FOLD_DIFFS = 3;
+const FOLD_OUTPUTS = 4;
+const FOLD_TASKS = 3;
+const MAX_ROWS = 8;
+const WIDE_QUERY = '(min-width: 1101px)';
+
+// Таблицы значков и подписей — литералами, чтобы проверка страницы и проверка строк видели каждый ключ.
+const TOOL_ICON = {
+  read: 'i-eye', edit: 'i-pencil', delete: 'i-trash', move: 'i-move', search: 'i-search',
+  execute: 'i-terminal', think: 'i-think', fetch: 'i-globe', other: 'i-dot',
+};
+const TOOL_LABEL = {
+  read: 'tool.read', edit: 'tool.edit', delete: 'tool.delete', move: 'tool.move', search: 'tool.search',
+  execute: 'tool.execute', think: 'tool.think', fetch: 'tool.fetch', other: 'tool.other',
+};
+const TOOL_STATUS = {
+  pending: 'status.pending', in_progress: 'status.in_progress', completed: 'status.completed',
+  failed: 'status.failed', cancelled: 'status.cancelled',
+};
+const TASK_STATUS = {
+  running: 'task.running', completed: 'task.completed', failed: 'task.failed', stopped: 'task.stopped',
+};
+const TASK_ICON = { running: 'i-clock', completed: 'i-check', failed: 'i-x', stopped: 'i-stop' };
+const PERM_ICON = { allow: 'i-check', deny: 'i-x', cancelled: 'i-stop', wait: 'i-clock' };
+const FILE_ICON = { create: 'i-file-plus', edit: 'i-file-edit', delete: 'i-file-x' };
+const THEME_ICON = { system: 'i-monitor', light: 'i-sun', dark: 'i-moon' };
+const THEME_LABEL = { system: 'theme.system', light: 'theme.light', dark: 'theme.dark' };
+const DECISION_KEY = { allow: 'chat.perm_allowed', deny: 'chat.perm_denied', cancelled: 'chat.perm_cancelled' };
+const UNIT_KEY = { d: 'unit.d', h: 'unit.h', m: 'unit.m', s: 'unit.s' };
+const AGO_KEY = { now: 'ago.now', min: 'ago.min', hour: 'ago.hour', day: 'ago.day' };
 
 function h(doc, tag, props = {}, ...children) {
   const node = doc.createElement(tag);
@@ -24,16 +60,37 @@ function h(doc, tag, props = {}, ...children) {
   return node;
 }
 
+function svgNode(doc, tag, attrs = {}) {
+  const node = doc.createElementNS(SVG_NS, tag);
+  for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, String(value));
+  return node;
+}
+
+/** Значок из спрайта icons.svg: id — литерал вида 'i-имя'. */
+function icon(doc, id, extra = '') {
+  const svg = svgNode(doc, 'svg', { class: extra ? `icon ${extra}` : 'icon', 'aria-hidden': 'true', focusable: 'false' });
+  svg.append(svgNode(doc, 'use', { href: `icons.svg#${id}` }));
+  return svg;
+}
+
 /**
  * @param doc       document
- * @param refs      { side, main, app, status, overlay } — корневые узлы из index.html
- * @param deps      { agents, now, handlers }
- *   handlers: onSelect(trace), onBack(), onNewToggle(open), onCreate({agent, name}),
- *             onSend(trace, text) -> bool, onCancel(trace), onDecide(trace, request, decision)
+ * @param refs      { side, main, rail, app, status, overlay } — корневые узлы из index.html
+ * @param deps      { agents, modes, models, efforts, now, handlers }
+ *   handlers: onSelect(trace), onBack(), onNewToggle(open, project?), onCreate({agent, name, project}),
+ *             onSend(trace, text) -> bool, onCancel(trace), onDecide(trace, request, decision),
+ *             onPin(trace, pinned), onTheme(), onCopy(text)
  */
 export function createView(doc, refs, deps) {
-  const { agents, now, handlers } = deps;
+  const {
+    agents, modes, models, efforts, now, handlers,
+  } = deps;
+  const win = doc.defaultView;
   const drafts = new Map();
+  const open = new Set(); // раскрытые строки и карточки по ключу: переживают перерисовку
+  let query = '';
+  let railOpen = null; // null — «как задано шириной», true/false — выбор владельца
+  let current = { session: undefined, ui: undefined };
 
   const agentLabel = (id) => {
     const a = agents.find((x) => x.id === id);
@@ -49,88 +106,187 @@ export function createView(doc, refs, deps) {
       : d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
   }
 
-  // ---------------------------------------------------------------- список сессий
+  const durationText = (ms) => durationLabel(ms).map(([n, u]) => t(UNIT_KEY[u], { n })).join(' ');
+  const agoText = (ms) => {
+    const a = agoParts(ms, now());
+    return t(AGO_KEY[a.unit], { n: a.n });
+  };
+  function tokensText(n) {
+    const { value, unit } = tokenParts(n);
+    const shown = String(value).replace('.', ',');
+    if (unit === 'k') return t('tokens.k', { n: shown });
+    if (unit === 'm') return t('tokens.m', { n: shown });
+    return shown;
+  }
 
-  const newButton = h(doc, 'button', { type: 'button', class: 'primary', text: t('sessions.new') });
+  // ---------------------------------------------------------------- левая колонка
+
+  const themeButton = h(doc, 'button', { type: 'button', class: 'icon-btn' });
+  const search = h(doc, 'input', {
+    type: 'search', class: 'search-input', autocomplete: 'off', placeholder: t('sessions.search'), 'aria-label': t('sessions.search'),
+  });
+  const newButton = h(doc, 'button', { type: 'button', class: 'new-btn' }, icon(doc, 'i-plus'), h(doc, 'span', { text: t('sessions.new') }));
   const agentSelect = h(doc, 'select', { id: 'new-agent' });
   for (const a of agents) {
     agentSelect.append(h(doc, 'option', { value: a.id, disabled: a.disabled === true, text: t(a.labelKey) }));
   }
   const nameInput = h(doc, 'input', { id: 'new-name', type: 'text', autocomplete: 'off', placeholder: t('sessions.new_name_placeholder') });
+  const projectInput = h(doc, 'input', { id: 'new-project', type: 'text', autocomplete: 'off', placeholder: t('sessions.new_project_placeholder') });
   const createButton = h(doc, 'button', { type: 'submit', class: 'primary', text: t('sessions.new_create') });
   const closeButton = h(doc, 'button', { type: 'button', text: t('sessions.new_close') });
   const newForm = h(doc, 'form', { class: 'new-form', hidden: true },
     h(doc, 'label', { for: 'new-agent' }, t('sessions.new_agent'), agentSelect),
     h(doc, 'label', { for: 'new-name' }, t('sessions.new_name'), nameInput),
+    h(doc, 'label', { for: 'new-project' }, t('sessions.new_project'), projectInput),
     h(doc, 'div', { class: 'actions' }, closeButton, createButton));
-  const list = h(doc, 'ul', { class: 'session-list' });
+  const groupsBox = h(doc, 'nav', { class: 'groups', 'aria-label': t('sessions.title') });
   const listEmpty = h(doc, 'p', { class: 'empty', text: t('sessions.empty') });
+  const notFound = h(doc, 'p', { class: 'empty', text: t('sessions.not_found'), hidden: true });
 
   refs.side.replaceChildren(
-    h(doc, 'div', { class: 'side-head' }, h(doc, 'h2', { text: t('sessions.title') }), newButton),
-    newForm, list, listEmpty,
+    h(doc, 'div', { class: 'side-head' }, h(doc, 'h2', { text: t('sessions.title') }), themeButton),
+    h(doc, 'div', { class: 'side-tools' },
+      h(doc, 'label', { class: 'search' }, icon(doc, 'i-search'), search),
+      newButton),
+    newForm, groupsBox, listEmpty, notFound,
   );
 
+  themeButton.addEventListener('click', () => handlers.onTheme());
   newButton.addEventListener('click', () => handlers.onNewToggle(newForm.hidden));
   closeButton.addEventListener('click', () => handlers.onNewToggle(false));
   newForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    handlers.onCreate({ agent: agentSelect.value, name: nameInput.value.trim() });
+    handlers.onCreate({ agent: agentSelect.value, name: nameInput.value.trim(), project: projectInput.value.trim() });
     nameInput.value = '';
   });
+  search.addEventListener('input', () => { query = search.value; if (current.ui) renderList(current.model, current.ui); });
 
   let listSig = '';
-  function renderList(model, ui) {
-    const sessions = sessionList(model);
-    const sig = JSON.stringify([ui.selected, sessions.map((s) => [s.id, s.name, s.agent, s.state, s.updatedAt])]);
-    listEmpty.hidden = sessions.length > 0;
-    if (sig === listSig) return;
-    listSig = sig;
-    list.replaceChildren(...sessions.map((s) => {
-      const item = h(doc, 'button', {
-        type: 'button',
-        class: 'session-item',
-        'aria-current': s.id === ui.selected ? 'true' : 'false',
-        title: t('sessions.time_title', { time: formatTime(s.updatedAt) }),
-      },
-      h(doc, 'span', { class: 'session-row' },
-        h(doc, 'span', { class: 'session-name', text: s.name }),
-        h(doc, 'span', { class: 'session-time', text: formatTime(s.updatedAt) })),
-      h(doc, 'span', { class: 'session-row' },
-        h(doc, 'span', { class: 'session-agent', text: agentLabel(s.agent) }),
-        h(doc, 'span', { class: 'badge', 'data-state': s.state, text: t(STATE_KEYS[s.state]) })));
-      item.addEventListener('click', () => handlers.onSelect(s.id));
-      return h(doc, 'li', {}, item);
-    }));
+  function sessionRow({ session: s, depth }, ui, pins) {
+    const active = s.id === ui.selected;
+    const pinned = pins.has(s.id);
+    const stateLabel = t(STATE_KEYS[s.state]);
+    const item = h(doc, 'button', {
+      type: 'button',
+      class: 'session-item',
+      'aria-current': active ? 'true' : 'false',
+      title: t('sessions.time_title', { state: stateLabel, time: formatTime(s.updatedAt) }),
+    },
+    depth > 0 ? h(doc, 'span', { class: 'corner', 'aria-hidden': 'true' }) : false,
+    depth > 0 ? h(doc, 'span', { class: 'sr', text: t('sessions.child') }) : false,
+    h(doc, 'span', { class: 'session-name', text: s.name }),
+    h(doc, 'span', { class: 'dot', 'data-state': s.state, 'aria-hidden': 'true' }),
+    h(doc, 'span', { class: 'sr', text: stateLabel }));
+    item.addEventListener('click', () => handlers.onSelect(s.id));
+    const pinLabel = `${pinned ? t('sessions.unpin') : t('sessions.pin')}: ${s.name}`;
+    const pin = h(doc, 'button', {
+      type: 'button', class: 'pin-btn', 'aria-pressed': pinned ? 'true' : 'false', 'aria-label': pinLabel, title: pinLabel,
+    }, icon(doc, 'i-pin'));
+    pin.addEventListener('click', () => handlers.onPin(s.id, !pinned));
+    const cls = ['session', active ? 'is-active' : '', pinned ? 'is-pinned' : ''].filter(Boolean).join(' ');
+    return h(doc, 'li', { class: cls, 'data-depth': Math.min(depth, 2) }, item, pin);
   }
 
-  // ---------------------------------------------------------------- чат
+  function groupNode(title, rows, ui, pins, project) {
+    const head = h(doc, 'div', { class: 'group-head' }, h(doc, 'h3', { text: title }));
+    if (project !== undefined) {
+      const label = t('sessions.group_add', { project: title });
+      const add = h(doc, 'button', { type: 'button', class: 'icon-btn small', 'aria-label': label, title: label }, icon(doc, 'i-plus'));
+      add.addEventListener('click', () => handlers.onNewToggle(true, project));
+      head.append(add);
+    }
+    return h(doc, 'section', { class: 'group' }, head, h(doc, 'ul', { class: 'group-list' }, ...rows.map((r) => sessionRow(r, ui, pins))));
+  }
+
+  function renderList(model, ui) {
+    const all = sessionList(model);
+    const pins = effectivePins(all, ui.pins);
+    const groups = groupSessions(filterSessions(all, query), { pinned: pins });
+    const rowSig = (r) => [r.depth, r.session.id, r.session.name, r.session.state, r.session.updatedAt];
+    const sig = JSON.stringify([ui.selected, query, groups.pinned.map(rowSig), groups.projects.map((p) => [p.project, p.rows.map(rowSig)])]);
+    const shown = groups.pinned.length + groups.projects.length;
+    listEmpty.hidden = all.length > 0;
+    notFound.hidden = !(all.length > 0 && shown === 0);
+    if (sig === listSig) return;
+    listSig = sig;
+    const nodes = [];
+    if (groups.pinned.length > 0) nodes.push(groupNode(t('sessions.pinned'), groups.pinned, ui, pins));
+    for (const p of groups.projects) nodes.push(groupNode(p.project || t('sessions.no_project'), p.rows, ui, pins, p.project));
+    groupsBox.replaceChildren(...nodes);
+  }
+
+  // ---------------------------------------------------------------- центр: заголовок и разговор
+
+  const backButton = h(doc, 'button', { type: 'button', class: 'icon-btn chat-back', 'aria-label': t('chat.back'), title: t('chat.back') }, icon(doc, 'i-back'));
+  const title = h(doc, 'h2');
+  const agentText = h(doc, 'span', { class: 'agent-name' });
+  const stateBadge = h(doc, 'span', { class: 'badge' });
+  const titleBlock = h(doc, 'div', { class: 'title-block', hidden: true }, title, h(doc, 'div', { class: 'sub' }, agentText, stateBadge));
+  const railButton = h(doc, 'button', { type: 'button', class: 'icon-btn', 'aria-label': t('rail.toggle'), title: t('rail.toggle'), 'aria-pressed': 'true' }, icon(doc, 'i-panel'));
+  const topbar = h(doc, 'header', { class: 'topbar' }, backButton, titleBlock, railButton);
 
   const pick = h(doc, 'p', { class: 'pick', text: t('chat.pick') });
-  const backButton = h(doc, 'button', { type: 'button', class: 'chat-back', text: t('chat.back') });
-  const title = h(doc, 'h2');
-  const stateBadge = h(doc, 'span', { class: 'badge' });
-  const log = h(doc, 'div', { class: 'log', role: 'log', 'aria-live': 'off' });
+  const thread = h(doc, 'div', { class: 'thread' });
+  const log = h(doc, 'div', { class: 'log', role: 'log', 'aria-live': 'off' }, thread);
   const emptyChat = h(doc, 'p', { class: 'empty', text: t('chat.empty') });
-  const input = h(doc, 'textarea', { id: 'composer-input', rows: 3, placeholder: t('chat.placeholder'), 'aria-label': t('chat.input_label') });
-  const sendButton = h(doc, 'button', { type: 'button', class: 'primary', text: t('chat.send') });
-  const cancelButton = h(doc, 'button', { type: 'button', class: 'cancel danger', text: t('chat.cancel'), hidden: true });
-  const chat = h(doc, 'section', { class: 'chat', hidden: true },
-    h(doc, 'div', { class: 'chat-head' }, backButton, title, stateBadge),
-    log,
-    h(doc, 'div', { class: 'composer' }, input, sendButton, cancelButton));
-  refs.main.replaceChildren(pick, chat);
+
+  // поле ввода
+  const input = h(doc, 'textarea', {
+    id: 'composer-input', rows: 1, placeholder: t('composer.placeholder'), 'aria-label': t('chat.input_label'),
+  });
+  const attach = h(doc, 'button', {
+    type: 'button', class: 'icon-btn', disabled: true, 'aria-label': t('composer.attach'), title: t('composer.attach'),
+  }, icon(doc, 'i-plus'));
+  const mic = h(doc, 'button', {
+    type: 'button', class: 'icon-btn', disabled: true, 'aria-label': t('composer.voice'), title: t('composer.voice'),
+  }, icon(doc, 'i-mic'));
+  const cancelButton = h(doc, 'button', { type: 'button', class: 'cancel-btn', hidden: true }, icon(doc, 'i-stop'), h(doc, 'span', { text: t('chat.cancel') }));
+  const sendButton = h(doc, 'button', { type: 'button', class: 'send-btn' }, icon(doc, 'i-send'), h(doc, 'span', { text: t('chat.send') }));
+  const box = h(doc, 'div', { class: 'box' }, input,
+    h(doc, 'div', { class: 'box-row' }, attach, h(doc, 'span', { class: 'grow' }), mic, cancelButton, sendButton));
+
+  function selectField(id, labelKey, items) {
+    const select = h(doc, 'select', { id });
+    for (const it of items) select.append(h(doc, 'option', { value: it.id, disabled: it.disabled === true, text: t(it.labelKey) }));
+    return { select, node: h(doc, 'label', { class: 'opt', for: id }, h(doc, 'span', { class: 'sr', text: t(labelKey) }), select) };
+  }
+  const modeField = selectField('opt-mode', 'composer.mode_label', modes);
+  const agentField = selectField('opt-agent', 'composer.agent_label', agents);
+  const modelField = selectField('opt-model', 'composer.model_label', models);
+  const effortField = selectField('opt-effort', 'composer.effort_label', efforts);
+  effortField.select.value = 'high';
+
+  const ringFill = svgNode(doc, 'circle', { class: 'ring-fill', cx: 12, cy: 12, r: 9, pathLength: 100 });
+  const ring = svgNode(doc, 'svg', { class: 'ring', viewBox: '0 0 24 24', role: 'img' });
+  ring.append(svgNode(doc, 'circle', { class: 'ring-track', cx: 12, cy: 12, r: 9 }), ringFill);
+  const ringBox = h(doc, 'span', { class: 'ring-box' });
+  ringBox.append(ring);
+
+  const composer = h(doc, 'div', { class: 'composer' },
+    box,
+    h(doc, 'p', { class: 'hint', text: t('composer.hint') }),
+    h(doc, 'div', { class: 'options' }, modeField.node, h(doc, 'span', { class: 'grow' }), agentField.node, modelField.node, effortField.node, ringBox));
+
+  const chat = h(doc, 'section', { class: 'chat', hidden: true }, log, composer);
+  refs.main.replaceChildren(topbar, pick, chat);
 
   backButton.addEventListener('click', () => handlers.onBack());
+  railButton.addEventListener('click', () => {
+    const wide = Boolean(win && win.matchMedia && win.matchMedia(WIDE_QUERY).matches);
+    railOpen = !(railOpen === null ? wide : railOpen);
+    if (current.ui) refs.app.dataset.rail = railOpen ? 'open' : 'closed';
+    railButton.setAttribute('aria-pressed', String(railOpen));
+  });
 
   let currentTrace = null;
-  const nodes = new Map(); // key сообщения -> { node, body, sig }
+  const nodes = new Map(); // key элемента ленты -> { node, sig, item }
 
   function submit() {
     const text = input.value.trim();
     if (!currentTrace || text.length === 0) return;
     if (handlers.onSend(currentTrace, text)) {
       input.value = '';
+      input.rows = 1;
       drafts.delete(currentTrace);
     }
   }
@@ -138,108 +294,335 @@ export function createView(doc, refs, deps) {
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); }
   });
-  input.addEventListener('input', () => { if (currentTrace) drafts.set(currentTrace, input.value); });
+  input.addEventListener('input', () => {
+    input.rows = Math.min(MAX_ROWS, input.value.split('\n').length);
+    if (currentTrace) drafts.set(currentTrace, input.value);
+  });
   cancelButton.addEventListener('click', () => { if (currentTrace) handlers.onCancel(currentTrace); });
 
-  function fillBody(body, text) {
-    const blocks = splitBlocks(text);
-    body.replaceChildren(...blocks.map((b) => (b.type === 'code'
-      ? h(doc, 'pre', {}, h(doc, 'code', { text: b.text, 'data-lang': b.lang || undefined }))
-      : h(doc, 'div', { class: 'text', text: b.text }))));
+  // ---- элементы ленты
+
+  function spans(text) {
+    return inlineSpans(text).map((s) => (s.code ? h(doc, 'code', { class: 'inline', text: s.text }) : doc.createTextNode(s.text)));
   }
 
-  const decisionKey = {
-    allow: 'chat.perm_allowed', deny: 'chat.perm_denied', cancelled: 'chat.perm_cancelled',
-  };
-
-  function buildMessage(m) {
-    const body = h(doc, 'div', { class: 'body' });
-    const extra = h(doc, 'div', { class: 'extra' });
-    let who = '';
-    let cls = 'msg-agent';
-    if (m.role === 'user') { who = t('chat.you'); cls = 'msg-user'; }
-    else if (m.role === 'agent') who = t('chat.agent');
-    else cls = 'msg-perm';
-    const node = h(doc, 'div', { class: `msg ${cls}`, 'data-key': m.key },
-      who ? h(doc, 'div', { class: 'who', text: who }) : false, body, extra);
-    return { node, body, extra, sig: null };
-  }
-
-  function updateMessage(entry, m) {
-    const sig = [m.status, m.text, m.reason, m.decision].join('\u0000');
-    if (sig === entry.sig) return;
-    entry.sig = sig;
-    const { node, body, extra } = entry;
-
-    if (m.role === 'user') {
-      fillBody(body, m.text);
-    } else if (m.role === 'agent') {
-      node.dataset.status = m.status;
-      if (m.text.length === 0 && m.status === 'streaming') {
-        body.replaceChildren(h(doc, 'div', { class: 'thinking', text: t('chat.thinking') }));
-      } else {
-        fillBody(body, m.text);
+  function proseNodes(text) {
+    const out = [];
+    for (const b of splitBlocks(text)) {
+      if (b.type === 'code') {
+        out.push(h(doc, 'pre', {}, h(doc, 'code', { text: b.text, 'data-lang': b.lang || undefined })));
+        continue;
       }
-      if (m.status === 'refused') {
-        extra.replaceChildren(h(doc, 'div', {
-          class: 'note note-refused',
-          text: m.reason ? t('chat.refused', { reason: m.reason }) : t('chat.refused_plain'),
-        }));
-      } else if (m.status === 'error') {
-        extra.replaceChildren(h(doc, 'div', {
-          class: 'note note-error',
-          text: m.reason ? t('chat.error', { message: m.reason }) : t('chat.error_plain'),
-        }));
-      } else if (m.status === 'cancelled') {
-        extra.replaceChildren(h(doc, 'div', { class: 'note', text: t('chat.cancelled') }));
-      } else {
-        extra.replaceChildren();
+      for (const p of paragraphs(b.text)) {
+        if (p.type === 'p') out.push(h(doc, 'p', {}, ...spans(p.text)));
+        else out.push(h(doc, p.type, {}, ...p.items.map((item) => h(doc, 'li', {}, ...spans(item)))));
       }
-    } else {
-      body.replaceChildren(
-        h(doc, 'div', { text: t('chat.perm_line', { action: m.action }) }),
-        m.detail ? h(doc, 'div', { class: 'detail', text: m.detail }) : false,
-      );
-      extra.replaceChildren(h(doc, 'div', {
-        class: 'outcome',
-        'data-decision': m.decision ?? 'wait',
-        text: m.decision === null ? t('chat.perm_waiting') : t(decisionKey[m.decision]),
-      }));
     }
+    return out;
+  }
+
+  const summaryText = (sum) => [
+    t('work.summary', { n: sum.count }),
+    sum.failed > 0 ? t('work.failed', { n: sum.failed }) : '',
+    sum.running > 0 ? t('work.running', { n: sum.running }) : '',
+  ].filter(Boolean).join(' · ');
+
+  function rowLabel(r) {
+    if (r.type === 'tool') return t('work.tool', { kind: t(TOOL_LABEL[r.kind]), title: r.title });
+    if (r.type === 'task') return t('work.task', { status: t(TASK_STATUS[r.status]), title: r.title });
+    return t('work.perm', { action: r.action, decision: r.decision ? t(DECISION_KEY[r.decision]) : t('chat.perm_waiting') });
+  }
+
+  function rowIcon(r) {
+    if (r.type === 'tool') return icon(doc, TOOL_ICON[r.kind]);
+    if (r.type === 'task') return icon(doc, TASK_ICON[r.status]);
+    return icon(doc, PERM_ICON[r.decision ?? 'wait']);
+  }
+
+  function rowStatus(r) {
+    if (r.type === 'tool') return h(doc, 'span', { class: 'row-status', text: t(TOOL_STATUS[r.status]) });
+    if (r.type === 'task') {
+      return r.finishedAt === null
+        ? h(doc, 'span', { class: 'row-status', 'data-since': r.started, text: durationText(now() - r.started) })
+        : h(doc, 'span', { class: 'row-status', text: durationText(r.finishedAt - r.started) });
+    }
+    return false;
+  }
+
+  const rowState = (r) => r.status ?? r.decision ?? 'wait';
+
+  function workRow(r) {
+    const detail = r.type === 'task' ? '' : r.detail;
+    return h(doc, 'div', { class: 'work-row', 'data-state': rowState(r) },
+      rowIcon(r),
+      h(doc, 'div', { class: 'row-main' },
+        h(doc, 'div', { class: 'row-label', text: rowLabel(r) }),
+        detail ? h(doc, 'div', { class: 'row-detail', text: detail }) : false),
+      rowStatus(r));
+  }
+
+  function toggleOpen(key, button, body) {
+    const next = !open.has(key);
+    if (next) open.add(key); else open.delete(key);
+    button.setAttribute('aria-expanded', String(next));
+    if (body) body.hidden = !next;
+  }
+
+  function fillWork(entry, item) {
+    const single = item.rows.length === 1 ? item.rows[0] : null;
+    const isOpen = open.has(item.key);
+    const label = single ? rowLabel(single) : summaryText(workSummary(item.rows));
+    const toggle = h(doc, 'button', { type: 'button', class: 'disclosure', 'aria-expanded': String(isOpen), 'data-state': single ? rowState(single) : 'group' },
+      single ? rowIcon(single) : icon(doc, 'i-bolt'),
+      h(doc, 'span', { class: 'disc-text', text: label }),
+      single ? rowStatus(single) : false,
+      icon(doc, 'i-chevron-right', 'chev'));
+    const body = h(doc, 'div', { class: 'work-body', hidden: !isOpen }, ...(single ? [single] : item.rows).map((r) => workRow(r)));
+    if (single && !single.detail) {
+      // у одиночной строки без подробностей раскрывать нечего: показываем то, что есть
+      body.replaceChildren(h(doc, 'div', { class: 'work-row' }, h(doc, 'div', { class: 'row-main row-detail', text: t('work.no_detail') })));
+    }
+    toggle.addEventListener('click', () => toggleOpen(item.key, toggle, body));
+    entry.node.replaceChildren(toggle, body);
+  }
+
+  function fillDiffs(entry, item) {
+    const key = `more:${item.key}`;
+    const all = open.has(key);
+    const rows = all ? item.rows : item.rows.slice(0, FOLD_DIFFS);
+    const list = h(doc, 'ul', { class: 'diff-list' }, ...rows.map((d) => {
+      const fp = fileParts(d.path);
+      return h(doc, 'li', { class: 'diff-row' },
+        icon(doc, 'i-file'),
+        h(doc, 'span', { class: 'file-name', text: fp.name }),
+        fp.dir ? h(doc, 'span', { class: 'file-dir', text: fp.dir }) : h(doc, 'span', { class: 'file-dir' }),
+        h(doc, 'span', { class: 'counts' },
+          h(doc, 'span', { class: 'plus', text: `+${d.added}` }),
+          h(doc, 'span', { class: 'minus', text: `−${d.removed}` })));
+    }));
+    const more = item.rows.length > FOLD_DIFFS
+      ? h(doc, 'button', { type: 'button', class: 'link-btn', text: all ? t('diffs.hide') : t('diffs.show_all', { n: item.rows.length }) })
+      : h(doc, 'span');
+    more.addEventListener('click', () => {
+      if (all) open.delete(key); else open.add(key);
+      entry.sig = null;
+      fillDiffs(entry, item);
+    });
+    entry.node.replaceChildren(
+      h(doc, 'div', { class: 'card-title', text: t('diffs.title', { n: item.totals.files }) }),
+      list,
+      h(doc, 'div', { class: 'diff-foot' }, more, h(doc, 'span', { class: 'counts' },
+        h(doc, 'span', { class: 'plus', text: `+${item.totals.added}` }),
+        h(doc, 'span', { class: 'minus', text: `−${item.totals.removed}` }))),
+    );
+  }
+
+  function fillItem(entry, item) {
+    const { node } = entry;
+    switch (item.type) {
+      case 'user':
+        node.replaceChildren(h(doc, 'span', { class: 'sr', text: t('chat.you') }), h(doc, 'div', { class: 'bubble' }, ...proseNodes(item.text)));
+        break;
+      case 'text':
+        node.dataset.streaming = String(item.streaming);
+        node.replaceChildren(h(doc, 'span', { class: 'sr', text: t('chat.agent') }), h(doc, 'div', { class: 'prose' }, ...proseNodes(item.text)));
+        break;
+      case 'work':
+        fillWork(entry, item);
+        break;
+      case 'diffs':
+        fillDiffs(entry, item);
+        break;
+      case 'note': {
+        let text = t('chat.cancelled');
+        if (item.tone === 'refused') text = item.reason ? t('chat.refused', { reason: item.reason }) : t('chat.refused_plain');
+        if (item.tone === 'error') text = item.reason ? t('chat.error', { message: item.reason }) : t('chat.error_plain');
+        node.dataset.tone = item.tone;
+        node.replaceChildren(h(doc, 'span', { text }));
+        break;
+      }
+      case 'actions': {
+        const copy = h(doc, 'button', { type: 'button', class: 'icon-btn small', 'aria-label': t('chat.copy'), title: t('chat.copy') }, icon(doc, 'i-copy'));
+        copy.addEventListener('click', () => handlers.onCopy(item.text));
+        node.replaceChildren(copy, h(doc, 'span', { class: 'ago', 'data-ago': item.at, text: agoText(item.at) }));
+        break;
+      }
+      default: {
+        const dots = h(doc, 'span', { class: 'dots', 'aria-hidden': 'true' }, h(doc, 'i'), h(doc, 'i'), h(doc, 'i'));
+        node.replaceChildren(dots, h(doc, 'span', { text: t('chat.running') }),
+          item.since > 0 ? h(doc, 'span', { class: 'elapsed', 'data-since': item.since, text: durationText(now() - item.since) }) : false);
+      }
+    }
+  }
+
+  function makeEntry(item) {
+    const cls = { diffs: 'item card diffs', work: 'item item-work' }[item.type] ?? `item item-${item.type}`;
+    return { node: h(doc, 'div', { class: cls, 'data-key': item.key }), sig: null, item };
   }
 
   function renderChat(model, ui) {
     const session = ui.selected ? model.sessions[ui.selected] : undefined;
     pick.hidden = Boolean(session);
     chat.hidden = !session;
+    titleBlock.hidden = !session;
     if (!session) { currentTrace = null; return; }
 
     if (currentTrace !== session.id) {
       if (currentTrace) drafts.set(currentTrace, input.value);
       currentTrace = session.id;
       nodes.clear();
-      log.replaceChildren();
+      thread.replaceChildren();
       input.value = drafts.get(session.id) ?? '';
+      input.rows = Math.min(MAX_ROWS, Math.max(1, input.value.split('\n').length));
       title.textContent = session.name;
     }
-
+    agentText.textContent = agentLabel(session.agent);
+    agentField.select.value = session.agent;
     stateBadge.textContent = t(STATE_KEYS[session.state]);
     stateBadge.dataset.state = session.state;
     const busy = session.state === 'answering' || session.state === 'permission';
     cancelButton.hidden = !busy;
     sendButton.disabled = busy;
 
+    const pct = usagePercent(session.usage);
+    ring.style.setProperty('--ring', String(pct));
+    ring.dataset.level = usageLevel(pct);
+    ring.setAttribute('aria-label', t('composer.ring', { n: pct }));
+    ringBox.hidden = !session.usage;
+
     const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight <= NEAR_BOTTOM_PX;
-    const fresh = [];
-    for (const m of session.messages) {
-      let entry = nodes.get(m.key);
-      if (!entry) { entry = buildMessage(m); nodes.set(m.key, entry); fresh.push(entry.node); }
-      updateMessage(entry, m);
+    const items = timeline(session);
+    if (items.length === 0) {
+      if (!emptyChat.parentNode) thread.replaceChildren(emptyChat);
+    } else if (emptyChat.parentNode) {
+      emptyChat.remove();
     }
-    if (fresh.length) log.append(...fresh);
-    if (session.messages.length === 0) { if (!emptyChat.parentNode) log.append(emptyChat); }
-    else if (emptyChat.parentNode) emptyChat.remove();
-    if (nearBottom || fresh.length === session.messages.length) log.scrollTop = log.scrollHeight;
+    let created = 0;
+    const alive = new Set();
+    items.forEach((item, i) => {
+      let entry = nodes.get(item.key);
+      if (!entry) { entry = makeEntry(item); nodes.set(item.key, entry); created += 1; }
+      alive.add(item.key);
+      entry.item = item;
+      const sig = JSON.stringify(item);
+      if (sig !== entry.sig) { entry.sig = sig; fillItem(entry, item); }
+      if (thread.children[i] !== entry.node) thread.insertBefore(entry.node, thread.children[i] ?? null);
+    });
+    for (const [key, entry] of nodes) if (!alive.has(key)) { entry.node.remove(); nodes.delete(key); }
+    if (nearBottom || created === items.length) log.scrollTop = log.scrollHeight;
+  }
+
+  // ---------------------------------------------------------------- правая колонка
+
+  function card(titleText, ...children) {
+    return h(doc, 'section', { class: 'card' }, h(doc, 'h3', { class: 'card-title', text: titleText }), ...children);
+  }
+
+  function fileRow(path, iconId) {
+    const fp = fileParts(path);
+    return h(doc, 'li', { class: 'file-row', title: path },
+      icon(doc, iconId),
+      h(doc, 'span', { class: 'file-name', text: fp.name }),
+      h(doc, 'span', { class: 'file-dir', text: fp.dir }));
+  }
+
+  function foldButton(key, total, fold) {
+    if (total <= fold) return false;
+    const showAll = open.has(key);
+    const button = h(doc, 'button', { type: 'button', class: 'link-btn', text: showAll ? t('rail.show_less') : t('rail.show_more', { n: total - fold }) });
+    button.addEventListener('click', () => {
+      if (showAll) open.delete(key); else open.add(key);
+      railSig = '';
+      renderRail(current.session);
+    });
+    return button;
+  }
+
+  function envCard(s) {
+    const row = (iconId, labelKey, value) => h(doc, 'div', { class: 'env-row' },
+      icon(doc, iconId),
+      h(doc, 'dt', { text: t(labelKey) }),
+      h(doc, 'dd', { text: value || t('rail.none'), class: value ? '' : 'muted' }));
+    return card(t('rail.env'), h(doc, 'dl', { class: 'env' },
+      row('i-folder', 'rail.project', s.project),
+      row('i-folder', 'rail.folder', s.folder),
+      row('i-branch', 'rail.branch', s.branch),
+      row('i-terminal', 'rail.agent', agentLabel(s.agent))));
+  }
+
+  function meterNode(pct) {
+    const meter = h(doc, 'span', { class: 'meter', 'data-level': usageLevel(pct), 'aria-hidden': 'true' }, h(doc, 'span', { class: 'meter-fill' }));
+    meter.style.setProperty('--fill', `${pct}%`);
+    return meter;
+  }
+
+  function contextCard(s) {
+    const closed = open.has('ctx-closed');
+    const pct = usagePercent(s.usage);
+    const head = h(doc, 'button', { type: 'button', class: 'card-head', 'aria-expanded': String(!closed) },
+      icon(doc, 'i-chevron-down', 'chev'),
+      h(doc, 'span', { class: 'card-title', text: t('rail.context') }),
+      h(doc, 'span', { class: 'grow' }),
+      s.usage ? h(doc, 'span', { class: 'pct', 'data-level': usageLevel(pct), text: `${pct} %` }) : false,
+      s.usage ? meterNode(pct) : false);
+    const lines = [];
+    if (s.usage) {
+      lines.push(h(doc, 'p', { text: t('rail.ctx_detail', { used: tokensText(s.usage.used), size: tokensText(s.usage.size) }) }));
+      if (s.usage.cost) {
+        const cost = `${s.usage.cost.amount.toFixed(2)} ${s.usage.cost.currency}`.trim();
+        lines.push(h(doc, 'p', { text: t('rail.ctx_cost', { cost }) }));
+      }
+    } else {
+      lines.push(h(doc, 'p', { class: 'muted', text: t('rail.ctx_unknown') }));
+    }
+    const body = h(doc, 'div', { class: 'card-body', hidden: closed }, ...lines);
+    head.addEventListener('click', () => {
+      toggleOpen('ctx-closed', head, null);
+      const nowClosed = open.has('ctx-closed');
+      head.setAttribute('aria-expanded', String(!nowClosed));
+      body.hidden = nowClosed;
+    });
+    return h(doc, 'section', { class: 'card card-context' }, head, body);
+  }
+
+  function outputsCard(s) {
+    const key = 'more:outputs';
+    const rows = open.has(key) ? s.outputs : s.outputs.slice(0, FOLD_OUTPUTS);
+    return card(t('rail.outputs'),
+      s.outputs.length === 0
+        ? h(doc, 'p', { class: 'muted', text: t('rail.outputs_empty') })
+        : h(doc, 'ul', { class: 'file-list' }, ...rows.map((o) => fileRow(o.path, FILE_ICON[o.kind]))),
+      foldButton(key, s.outputs.length, FOLD_OUTPUTS));
+  }
+
+  function tasksCard(s) {
+    const key = 'more:tasks';
+    const sum = taskSummary(s.tasks);
+    const ordered = [...s.tasks].sort((a, b) => (a.status === 'running' ? 0 : 1) - (b.status === 'running' ? 0 : 1));
+    const rows = open.has(key) ? ordered : ordered.slice(0, FOLD_TASKS);
+    const list = h(doc, 'ul', { class: 'task-list' }, ...rows.map((x) => h(doc, 'li', { class: 'task-row', 'data-state': x.status, title: x.title },
+      icon(doc, TASK_ICON[x.status]),
+      h(doc, 'span', { class: 'task-title', text: x.title }),
+      x.finishedAt === null
+        ? h(doc, 'span', { class: 'task-time', 'data-since': x.started, text: durationText(now() - x.started) })
+        : h(doc, 'span', { class: 'task-time', text: durationText(x.finishedAt - x.started) }))));
+    return card(t('rail.tasks'),
+      s.tasks.length === 0 ? h(doc, 'p', { class: 'muted', text: t('rail.tasks_empty') }) : list,
+      foldButton(key, s.tasks.length, FOLD_TASKS),
+      sum.finished > 0 ? h(doc, 'p', { class: 'finished', text: t('rail.tasks_finished', { n: sum.finished }) }) : false);
+  }
+
+  let railSig = '';
+  function renderRail(session) {
+    if (!session) {
+      if (railSig !== 'none') { railSig = 'none'; refs.rail.replaceChildren(h(doc, 'p', { class: 'rail-pick', text: t('rail.pick') })); }
+      return;
+    }
+    const sig = JSON.stringify([session.id, session.project, session.folder, session.branch, session.agent, session.usage, session.outputs,
+      session.tasks.map((x) => [x.id, x.title, x.status, x.started, x.finishedAt]), [...open].filter((k) => k.startsWith('more:') || k === 'ctx-closed')]);
+    if (sig === railSig) return;
+    railSig = sig;
+    refs.rail.replaceChildren(envCard(session), contextCard(session), outputsCard(session), tasksCard(session));
   }
 
   // ---------------------------------------------------------------- диалог разрешения
@@ -290,27 +673,66 @@ export function createView(doc, refs, deps) {
   }
 
   let statusSig = '';
-  function renderStatus(status, flash) {
-    const sig = JSON.stringify([status, flash]);
+  function renderStatus(status, flash, tone) {
+    const sig = JSON.stringify([status, flash, tone]);
     if (sig === statusSig) return;
     statusSig = sig;
     refs.status.dataset.state = status.state;
     refs.status.replaceChildren(
       h(doc, 'span', { class: 'status-dot', 'aria-hidden': 'true' }),
-      h(doc, 'span', { text: `${t('conn.label')}: ${statusText(status)}` }),
-      ...(flash ? [h(doc, 'span', { class: 'status-flash', text: flash })] : []),
+      h(doc, 'span', { class: 'status-text', text: `${t('conn.label')}: ${statusText(status)}` }),
+      ...(flash ? [h(doc, 'span', { class: 'status-flash', 'data-tone': tone, text: flash })] : []),
     );
   }
 
+  // ---------------------------------------------------------------- тема и время
+
+  let themeSig = '';
+  function renderTheme(theme) {
+    if (theme === themeSig) return;
+    themeSig = theme;
+    const label = t(THEME_LABEL[theme]);
+    themeButton.setAttribute('aria-label', label);
+    themeButton.setAttribute('title', label);
+    themeButton.replaceChildren(icon(doc, THEME_ICON[theme]));
+  }
+
+  /** Обновить «идёт 1 мин 36 с» и «5 мин назад», не трогая остальное: вызывается раз в секунду. */
+  function tick() {
+    for (const node of doc.querySelectorAll('[data-since]')) {
+      const text = durationText(now() - Number(node.dataset.since));
+      if (node.textContent !== text) node.textContent = text;
+    }
+    for (const node of doc.querySelectorAll('[data-ago]')) {
+      const text = agoText(Number(node.dataset.ago));
+      if (node.textContent !== text) node.textContent = text;
+    }
+  }
+
+  let formSig = '';
   return {
-    /** ui: { selected, newOpen, pane, flash }; status: { state, seconds? } */
+    tick,
+    /** ui: { selected, newOpen, newProject, pane, flash, theme, pins }; status: { state, seconds? } */
     render(model, ui, status) {
+      const session = ui.selected ? model.sessions[ui.selected] : undefined;
+      current = { model, ui, session };
       refs.app.dataset.pane = ui.pane;
+      refs.app.dataset.rail = railOpen === null ? 'auto' : (railOpen ? 'open' : 'closed');
+      const wide = Boolean(win && win.matchMedia && win.matchMedia(WIDE_QUERY).matches);
+      railButton.setAttribute('aria-pressed', String(railOpen === null ? wide : railOpen));
       newForm.hidden = !ui.newOpen;
+      const form = `${ui.newOpen}:${ui.newProject ?? ''}`;
+      if (form !== formSig) {
+        formSig = form;
+        if (ui.newOpen) projectInput.value = ui.newProject ?? '';
+      }
+      renderTheme(ui.theme);
       renderList(model, ui);
       renderChat(model, ui);
+      renderRail(session);
       renderDialog(model, ui);
-      renderStatus(status, ui.flash);
+      renderStatus(status, ui.flash, ui.flashTone);
+      tick();
     },
   };
 }

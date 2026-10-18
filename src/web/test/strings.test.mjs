@@ -24,12 +24,13 @@ test('каждый t(\'ключ\') в коде ссылается на суще�
   assert.deepEqual(missing, []);
 });
 
-test('значения непусты и по-русски (кроме названия агента)', () => {
+test('значения непусты и по-русски (кроме названия агента и значений без букв)', () => {
   const latinOnly = new Set(['agent.opencode']);
   for (const [key, value] of Object.entries(S)) {
     assert.equal(typeof value, 'string', key);
     assert.ok(value.length > 0, key);
-    if (!latinOnly.has(key)) assert.match(value, /[А-Яа-яЁё]/, `нет кириллицы: ${key}`);
+    const letters = value.replace(/\{[^}]*\}/g, '');
+    if (!latinOnly.has(key) && /\p{L}/u.test(letters)) assert.match(value, /[А-Яа-яЁё]/, `нет кириллицы: ${key}`);
   }
 });
 

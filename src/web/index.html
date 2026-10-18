@@ -5,21 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>Пульт CrewHarness</title>
-<!-- Стили и скрипт — ОТДЕЛЬНЫЕ ФАЙЛЫ, а не встроенные блоки: страницу отдаёт сервис целиком с
+<!-- Стили и скрипты — ОТДЕЛЬНЫЕ ФАЙЛЫ, а не встроенные блоки: страницу отдаёт сервис целиком с
      запретом встроенного кода (CSP), и страница со встроенным <style> или <script> пуста.
-     Ничего не грузится с чужих адресов: ни шрифты, ни скрипты, ни картинки.
+     Ничего не грузится с чужих адресов: ни шрифты, ни скрипты, ни картинки, ни значки (они в icons.svg).
+     theme.js — обычный скрипт без отложенной загрузки: ставит выбранную тему до первой отрисовки,
+     чтобы страница не мигала чужой темой. Всё остальное — модули (app.js).
      Видимого текста в этом файле нет: все надписи рисует view.js из strings.js. -->
 <link rel="stylesheet" href="app.css">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<script src="theme.js"></script>
 </head>
 <body>
 
-<div class="app" id="app" data-pane="list">
-  <aside class="side" id="side"></aside>
+<div class="app" id="app" data-pane="list" data-rail="auto">
+  <div class="side-col">
+    <aside class="side" id="side"></aside>
+    <footer class="status" id="status" role="status" aria-live="polite"></footer>
+  </div>
   <main class="main" id="main"></main>
+  <aside class="rail" id="rail"></aside>
 </div>
-
-<footer class="status" id="status" role="status" aria-live="polite"></footer>
 
 <div class="overlay" id="overlay" hidden></div>
 

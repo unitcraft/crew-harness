@@ -3,13 +3,18 @@
 //   * встроенный <style>/<script>/обработчик/style="" — CSP отказывает, страница пустая;
 //   * локальный href/src/url()/import на несуществующий файл — тихий 404 или белый экран;
 //   * var(--x) без определения — свойство молча пропадает;
-//   * innerHTML и родня — вставка разметки из данных события.
+//   * innerHTML и родня — вставка разметки из данных события;
+//   * значок из модуля без символа в icons.svg — пустое место на странице;
+//   * имя образца в файлах страницы — интерфейс не должен нести чужое название.
 // Запуск руками: node src/web/test/page-check.mjs [папка]
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const REQUIRED = ['index.html', 'app.css', 'app.js'];
+// Имя пространства имён SVG (createElementNS) — не адрес, к которому ходит страница.
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+const REQUIRED = ['index.html', 'app.css', 'app.js', 'icons.svg'];
 
 const EXTERNAL = /(?:(?:https?|wss?):)?\/\/(?!\s)(?:\d{1,3}(?:\.\d{1,3}){3}|\[[0-9A-Fa-f:]+\]|[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})/g;
 
@@ -49,13 +54,16 @@ export function checkPage(webDir) {
   if (problems.length) return { problems, stats: { web } };
 
   const html = read('index.html');
+  const sprite = read('icons.svg');
   const css = read('app.css');
   const jsNames = fs.readdirSync(web).filter((f) => f.endsWith('.js')).sort();
   const markup = stripHtmlComments(html);
   const cssClean = stripCssComments(css);
 
   // 1. внешние ресурсы
-  const scan = [['index.html', markup], ['app.css', cssClean], ...jsNames.map((n) => [n, stripJsComments(read(n))])];
+  // xmlns — не ссылка, а имя пространства имён: из проверки внешних адресов он исключён
+  const spriteClean = stripHtmlComments(sprite).replace(/\sxmlns(?::\w+)?\s*=\s*["'][^"']*["']/g, '');
+  const scan = [['index.html', markup], ['app.css', cssClean], ['icons.svg', spriteClean], ...jsNames.map((n) => [n, stripJsComments(read(n)).replaceAll(SVG_NS, '')])];
   for (const [name, text] of scan) {
     for (const m of text.matchAll(EXTERNAL)) {
       problems.push(`${name}:${lineOf(text, m.index)}: внешняя ссылка ${m[0]}`);
@@ -116,14 +124,37 @@ export function checkPage(webDir) {
     }
   }
 
-  return { problems, stats: { web, defined: defined.size, used: used.size, modules: jsNames.length } };
+  // 7. значки: каждый 'i-имя' из модулей есть в icons.svg; в спрайте нет кода и своих стилей
+  const symbols = new Set([...spriteClean.matchAll(/<symbol\s[^>]*\bid\s*=\s*["']([^"']+)["']/g)].map((m) => m[1]));
+  if (/<script[\s>]/i.test(spriteClean)) problems.push('icons.svg: <script> внутри спрайта');
+  if (/[\s"']style\s*=|<style[\s>]/i.test(spriteClean)) problems.push('icons.svg: встроенные стили внутри спрайта');
+  const refs = new Set();
+  for (const name of jsNames) {
+    const text = stripJsComments(read(name));
+    for (const m of text.matchAll(/['"](i-[a-z0-9-]+)['"]/g)) {
+      refs.add(m[1]);
+      if (!symbols.has(m[1])) problems.push(`${name}:${lineOf(text, m.index)}: значок ${m[1]} не найден в icons.svg`);
+    }
+  }
+
+  // 8. имя образца не должно попадать в интерфейс (комментарии тоже: файлы страницы публичны)
+  const BRAND = /claude|anthropic/i;
+  for (const [name, text] of [['index.html', html], ['app.css', css], ['icons.svg', sprite], ...jsNames.map((n) => [n, read(n)])]) {
+    const m = BRAND.exec(text);
+    if (m) problems.push(`${name}:${lineOf(text, m.index)}: имя образца «${m[0]}» в файле страницы`);
+  }
+
+  return {
+    problems,
+    stats: { web, defined: defined.size, used: used.size, modules: jsNames.length, icons: symbols.size, iconRefs: refs.size },
+  };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const dir = process.argv[2] ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const { problems, stats } = checkPage(dir);
   console.log(`проверяется: ${stats.web}`);
-  if (stats.defined !== undefined) console.log(`переменных определено: ${stats.defined}, использовано: ${stats.used}, модулей: ${stats.modules}`);
+  if (stats.defined !== undefined) console.log(`переменных определено: ${stats.defined}, использовано: ${stats.used}, модулей: ${stats.modules}, значков: ${stats.icons}, ссылок на значки: ${stats.iconRefs}`);
   console.log(`СТРАНИЦА: ${problems.length === 0 ? 'чисто' : 'КРАСНО'}`);
   for (const p of problems) console.log(`  ${p}`);
   process.exit(problems.length === 0 ? 0 : 1);

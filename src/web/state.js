@@ -13,10 +13,25 @@
 //   input  — данные вида (объект)
 //   time   — момент, миллисекунды эпохи
 
+// Чистые функции списка, ленты и подписей живут в lists.js; снаружи всё берётся отсюда.
+export * from './lists.js';
+
 export const KINDS = Object.freeze([
   'session_created', 'user_message', 'agent_chunk', 'agent_done', 'agent_refused',
   'permission_request', 'permission_decision', 'cancel', 'error',
+  // задача 094: рабочие события хода (соответствуют ACP session/update)
+  'usage_update', 'tool_call', 'tool_call_update', 'output_file', 'file_diff',
+  'background_task', 'background_task_update',
 ]);
+
+export const TOOL_KINDS = Object.freeze(['read', 'edit', 'delete', 'move', 'search', 'execute', 'think', 'fetch', 'other']);
+// cancelled ставит редьюсер сам при отмене хода; из потока он тоже принимается
+export const TOOL_STATUSES = Object.freeze(['pending', 'in_progress', 'completed', 'failed', 'cancelled']);
+export const FILE_KINDS = Object.freeze(['create', 'edit', 'delete']);
+export const TASK_STATUSES = Object.freeze(['running', 'completed', 'failed', 'stopped']);
+
+/** Ключ localStorage для выбора темы: 'system' | 'light' | 'dark'. */
+export const THEME_KEY = 'crew-console-theme';
 
 // Ключи подписей состояний в strings.js — полными литералами, чтобы проверка «все ключи
 // использованы» видела их без догадок.
@@ -70,7 +85,16 @@ const agentKey = (turn) => `a:${turn}`;
 const permKey = (request) => `p:${request}`;
 
 function newAgentMessage(turn) {
-  return { key: agentKey(turn), role: 'agent', turn, text: '', chunks: [], status: 'streaming', reason: '' };
+  return { key: agentKey(turn), role: 'agent', turn, text: '', chunks: [], status: 'streaming', reason: '', doneAt: 0 };
+}
+
+const pick = (v, list, fallback) => (list.includes(v) ? v : fallback);
+const count = (v) => (Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
+
+function parseCost(v) {
+  if (isObject(v) && Number.isFinite(v.amount)) return { amount: v.amount, currency: str(v.currency) };
+  if (Number.isFinite(v)) return { amount: v, currency: '' };
+  return null;
 }
 
 /** Сообщение агента по ходу: найти или (если его user_message потерялся) завести. */
@@ -107,6 +131,7 @@ function apply(session, event) {
         ...session,
         state: 'answering',
         pending: null,
+        turnStartedAt: event.time,
         messages: [...session.messages, user, newAgentMessage(userTurn)],
       };
     }
@@ -130,7 +155,7 @@ function apply(session, event) {
         ...session,
         state: 'idle',
         pending: null,
-        messages: putMessage(session.messages, index, { ...message, status: 'done' }),
+        messages: putMessage(session.messages, index, { ...message, status: 'done', doneAt: event.time }),
       };
     }
 
@@ -154,7 +179,7 @@ function apply(session, event) {
         ...session,
         state: 'permission',
         pending: entry,
-        messages: [...session.messages, { key, role: 'permission', ...entry, decision: null }],
+        messages: [...session.messages, { key, role: 'permission', ...entry, step: event.step, decision: null }],
       };
     }
 
@@ -181,7 +206,90 @@ function apply(session, event) {
         if (m.role === 'permission' && m.decision === null) return { ...m, decision: 'cancelled' };
         return m;
       });
-      return { ...session, state: 'cancelled', pending: null, messages };
+      const tools = session.tools.map((x) => (x.status === 'pending' || x.status === 'in_progress' ? { ...x, status: 'cancelled' } : x));
+      const tasks = session.tasks.map((x) => (x.status === 'running' ? { ...x, status: 'stopped', finishedAt: event.time } : x));
+      return { ...session, state: 'cancelled', pending: null, messages, tools, tasks };
+    }
+
+    case 'usage_update': {
+      const { used, size } = input;
+      if (!Number.isFinite(used) || used < 0 || !Number.isFinite(size) || size <= 0) return session;
+      if (session.usage && event.step < session.usage.step) return session;
+      return { ...session, usage: { used, size, cost: parseCost(input.cost), step: event.step } };
+    }
+
+    case 'tool_call': {
+      const id = str(input.id);
+      if (!id || session.tools.some((x) => x.id === id)) return session;
+      const tool = {
+        id,
+        turn,
+        step: event.step,
+        updatedStep: event.step,
+        title: str(input.title, id),
+        kind: pick(input.kind, TOOL_KINDS, 'other'),
+        status: pick(input.status, TOOL_STATUSES, 'pending'),
+        detail: str(input.detail),
+      };
+      return { ...session, tools: [...session.tools, tool] };
+    }
+
+    case 'tool_call_update': {
+      const i = session.tools.findIndex((x) => x.id === str(input.id));
+      if (i < 0 || event.step <= session.tools[i].updatedStep) return session;
+      const old = session.tools[i];
+      const status = pick(input.status, TOOL_STATUSES, old.status);
+      const detail = typeof input.detail === 'string' ? input.detail : old.detail;
+      if (status === old.status && detail === old.detail) return session;
+      return { ...session, tools: session.tools.map((x, j) => (j === i ? { ...old, status, detail, updatedStep: event.step } : x)) };
+    }
+
+    case 'output_file': {
+      const path = str(input.path);
+      if (!path) return session;
+      const kind = pick(input.kind, FILE_KINDS, 'edit');
+      const i = session.outputs.findIndex((x) => x.path === path);
+      if (i < 0) return { ...session, outputs: [...session.outputs, { path, kind, step: event.step }] };
+      const old = session.outputs[i];
+      const merged = old.kind === 'create' && kind === 'edit' ? 'create' : kind;
+      if (merged === old.kind) return session;
+      return { ...session, outputs: session.outputs.map((x, j) => (j === i ? { ...old, kind: merged } : x)) };
+    }
+
+    case 'file_diff': {
+      const path = str(input.path);
+      if (!path) return session;
+      const entry = { path, added: count(input.added), removed: count(input.removed), step: event.step, turn };
+      const i = session.diffs.findIndex((x) => x.path === path);
+      if (i < 0) return { ...session, diffs: [...session.diffs, entry] };
+      if (event.step < session.diffs[i].step) return session;
+      return { ...session, diffs: session.diffs.map((x, j) => (j === i ? entry : x)) };
+    }
+
+    case 'background_task': {
+      const id = str(input.id);
+      if (!id || session.tasks.some((x) => x.id === id)) return session;
+      const status = pick(input.status, TASK_STATUSES, 'running');
+      const task = {
+        id,
+        turn,
+        step: event.step,
+        updatedStep: event.step,
+        title: str(input.title, id),
+        status,
+        started: Number.isFinite(input.started) ? input.started : event.time,
+        finishedAt: status === 'running' ? null : event.time,
+      };
+      return { ...session, tasks: [...session.tasks, task] };
+    }
+
+    case 'background_task_update': {
+      const i = session.tasks.findIndex((x) => x.id === str(input.id));
+      if (i < 0 || event.step <= session.tasks[i].updatedStep) return session;
+      if (!TASK_STATUSES.includes(input.status)) return session;
+      const old = session.tasks[i];
+      const finishedAt = input.status === 'running' ? null : event.time;
+      return { ...session, tasks: session.tasks.map((x, j) => (j === i ? { ...old, status: input.status, finishedAt, updatedStep: event.step } : x)) };
     }
 
     case 'error': {
@@ -219,6 +327,17 @@ export function reduce(model, event) {
       lastStep: event.step,
       messages: [],
       pending: null,
+      project: str(event.input.project),
+      folder: str(event.input.folder),
+      branch: str(event.input.branch),
+      parent: str(event.input.parent),
+      pinned: event.input.pinned === true,
+      usage: null,
+      tools: [],
+      outputs: [],
+      tasks: [],
+      diffs: [],
+      turnStartedAt: 0,
     };
     return { ...model, seen, sessions: { ...model.sessions, [event.trace]: session } };
   }

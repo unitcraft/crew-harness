@@ -26,11 +26,12 @@ function run(events, model = initialModel()) {
 
 const created = () => ev('session_created', { name: 'Тест', agent: 'opencode' }, { step: 0 });
 
-test('виды событий: девять видов минимума', () => {
-  assert.deepEqual([...KINDS].sort(), [
+test('виды событий: девять видов скелета остались (новые проверяет work.test.mjs)', () => {
+  const skeleton = [
     'agent_chunk', 'agent_done', 'agent_refused', 'cancel', 'error',
     'permission_decision', 'permission_request', 'session_created', 'user_message',
-  ]);
+  ];
+  for (const kind of skeleton) assert.ok(KINDS.includes(kind), kind);
 });
 
 test('редьюсер детерминирован: два прогона дают один вид, вход не меняется', () => {

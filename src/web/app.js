@@ -5,13 +5,18 @@
 // транспорт и появляются на экране, только когда вернутся в потоке: пульт состояния не хранит.
 // Здесь живёт лишь то, чего в потоке нет по природе: какая сессия открыта на экране.
 
-import { initialModel, reduce, makeEvent, nextStep } from './state.js';
+import {
+  initialModel, reduce, makeEvent, nextStep, normalizeTheme, nextTheme, THEME_KEY,
+} from './state.js';
 import { t } from './strings.js';
 import { createView } from './view.js';
 import { chooseMode, createTransport } from './transport.js';
-import { AGENTS, createMockServer } from './mock.js';
+import {
+  AGENTS, MODES, MODELS, EFFORTS, createMockServer,
+} from './mock.js';
 
 const FLASH_MS = 4000;
+const TICK_MS = 1000;
 
 const timers = {
   set: (fn, ms) => setTimeout(fn, ms),
@@ -23,11 +28,30 @@ function newId() {
   return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+// Тема: выбор владельца живёт в localStorage (без внешних запросов); недоступное хранилище не ломает страницу.
+function readTheme() {
+  try { return normalizeTheme(globalThis.localStorage.getItem(THEME_KEY)); } catch { return 'system'; }
+}
+function saveTheme(value) {
+  try {
+    if (value === 'system') globalThis.localStorage.removeItem(THEME_KEY);
+    else globalThis.localStorage.setItem(THEME_KEY, value);
+  } catch { /* закрытое хранилище: выбор живёт до перезагрузки */ }
+}
+function applyTheme(value) {
+  const root = document.documentElement;
+  if (value === 'system') root.removeAttribute('data-theme');
+  else root.setAttribute('data-theme', value);
+}
+
 document.title = t('app.title');
 
 let model = initialModel();
 let status = { state: 'connecting' };
-const ui = { selected: null, newOpen: false, pane: 'list', flash: '', awaiting: null };
+const ui = {
+  selected: null, newOpen: false, newProject: '', pane: 'list', flash: '', flashTone: 'error', awaiting: null, theme: readTheme(), pins: {},
+};
+applyTheme(ui.theme);
 
 const ctx = { newId, now: () => Date.now() };
 let view = null;
@@ -54,8 +78,9 @@ function render() {
   timers.set(draw, 60);
 }
 
-function flash(text) {
+function flash(text, tone = 'error') {
   ui.flash = text;
+  ui.flashTone = tone;
   render();
   timers.set(() => { ui.flash = ''; render(); }, FLASH_MS);
 }
@@ -69,12 +94,25 @@ function send(kind, trace, step, input) {
 const handlers = {
   onSelect(trace) { ui.selected = trace; ui.pane = 'chat'; render(); },
   onBack() { ui.pane = 'list'; render(); },
-  onNewToggle(open) { ui.newOpen = open; render(); },
-  onCreate({ agent, name }) {
+  onNewToggle(open, project) { ui.newOpen = open; ui.newProject = open ? (project ?? '') : ''; render(); },
+  onPin(trace, pinned) { ui.pins = { ...ui.pins, [trace]: pinned }; render(); },
+  onTheme() {
+    ui.theme = nextTheme(ui.theme);
+    applyTheme(ui.theme);
+    saveTheme(ui.theme);
+    render();
+  },
+  onCopy(text) {
+    const clip = globalThis.navigator && globalThis.navigator.clipboard;
+    if (!clip || typeof clip.writeText !== 'function') { flash(t('chat.copy_failed')); return; }
+    clip.writeText(text).then(() => flash(t('chat.copied'), 'info'), () => flash(t('chat.copy_failed')));
+  },
+  onCreate({ agent, name, project }) {
     const trace = newId();
     const count = Object.keys(model.sessions).length;
     const title = name || t('sessions.untitled', { n: count + 1 });
-    if (send('session_created', trace, 0, { name: title, agent })) {
+    const input = project ? { name: title, agent, project } : { name: title, agent };
+    if (send('session_created', trace, 0, input)) {
       ui.awaiting = trace;
       ui.newOpen = false;
       render();
@@ -97,9 +135,15 @@ view = createView(document, {
   app: document.getElementById('app'),
   side: document.getElementById('side'),
   main: document.getElementById('main'),
+  rail: document.getElementById('rail'),
   status: document.getElementById('status'),
   overlay: document.getElementById('overlay'),
-}, { agents: AGENTS, now: ctx.now, handlers });
+}, {
+  agents: AGENTS, modes: MODES, models: MODELS, efforts: EFFORTS, now: ctx.now, handlers,
+});
+
+// Раз в секунду обновляются только подписи времени («идёт 1 мин 36 с», «5 мин назад»).
+setInterval(() => view.tick(), TICK_MS);
 
 const picked = chooseMode(location.search, location.protocol, location.host);
 const transport = createTransport({

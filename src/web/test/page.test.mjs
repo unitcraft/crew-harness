@@ -34,6 +34,41 @@ test('настоящая страница чиста', () => {
   assert.deepEqual(problems, []);
   assert.ok(stats.used > 10, 'переменных темы должно быть использовано заметно');
   assert.ok(stats.modules >= 6);
+  assert.ok(stats.icons >= 15, 'в icons.svg должен быть набор значков');
+  assert.ok(stats.iconRefs >= 15, 'значки должны использоваться в модулях');
+});
+
+test('icons.svg найден, каждый значок из модулей в нём есть', () => {
+  assert.ok(fs.existsSync(path.join(web, 'icons.svg')));
+  const sprite = fs.readFileSync(path.join(web, 'icons.svg'), 'utf8');
+  assert.match(sprite, /<symbol id="i-/);
+  assert.doesNotMatch(sprite, /<script|<image|href\s*=\s*["']https?:/i);
+});
+
+test('проба: нет icons.svg — краснеет', () => {
+  const problems = withCopy((d) => fs.rmSync(path.join(d, 'icons.svg')));
+  assert.ok(problems.some((p) => p.includes('icons.svg')), problems.join('\n'));
+});
+
+test('проба: значок из модуля без символа в спрайте — краснеет', () => {
+  const problems = withCopy((d) => edit(d, 'view.js', (s) => `${s}\nconst ghost = 'i-ghost-icon';\n`));
+  assert.ok(problems.some((p) => p.includes('i-ghost-icon')), problems.join('\n'));
+});
+
+test('проба: внешняя ссылка внутри icons.svg — краснеет, пространство имён xmlns — нет', () => {
+  const problems = withCopy((d) => edit(d, 'icons.svg', (s) => s.replace('</svg>', '<use href="https://cdn.example.com/x.svg#a"/></svg>')));
+  assert.ok(problems.some((p) => p.includes('внешняя ссылка')), problems.join('\n'));
+  assert.deepEqual(withCopy(() => {}), []);
+});
+
+test('проба: имя образца в интерфейсе — краснеет', () => {
+  const problems = withCopy((d) => edit(d, 'strings.js', (s) => `${s}\n// Claude\n`));
+  assert.ok(problems.some((p) => p.includes('имя образца')), problems.join('\n'));
+});
+
+test('проба: нет theme.js, на который ссылается index.html — краснеет', () => {
+  const problems = withCopy((d) => fs.rmSync(path.join(d, 'theme.js')));
+  assert.ok(problems.some((p) => p.includes('theme.js')), problems.join('\n'));
 });
 
 test('проба: переименован app.js — краснеет', () => {
@@ -42,7 +77,7 @@ test('проба: переименован app.js — краснеет', () => {
 });
 
 test('проба: ссылка на несуществующий файл в index.html — краснеет', () => {
-  const problems = withCopy((d) => edit(d, 'index.html', (s) => s.replace('app.js', 'нет-такого.js')));
+  const problems = withCopy((d) => edit(d, 'index.html', (s) => s.replace('src="app.js"', 'src="нет-такого.js"')));
   assert.ok(problems.some((p) => p.includes('нет-такого.js')), problems.join('\n'));
 });
 
