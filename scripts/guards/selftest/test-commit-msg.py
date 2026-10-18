@@ -7,7 +7,8 @@
     не ASCII, с путём машины и именем из списка; строка на решётку с именем или кириллицей отклонена при -m и
     -F и не судится в редакторе; строка цитаты на «>» судится в обоих; режим с diff (commit.verbose) и хвост
     за строкой-ножницами; git commit --amend -m без изменений индекса (AC-18); связанное рабочее дерево;
-    нет списка имён - отказ.
+    нет списка имён - отказ; R8 (задача 086): «#31» номера задачи в -m и -F отклонено, «Fixes #12» проходит,
+    комментарий редактора с «#31» не судится.
 Не проверяет: правила стража на уровне функций (test-guard-commit-message.py), пуш (test-pre-push.py).
 Правило: AGENTS.md п.4, п.15; AC-09, AC-18, AC-32 задачи.
 """
@@ -144,6 +145,26 @@ def main():
         stage_new(r)
         attempt(r, ("-s", "-m", "Subject\n\nCo-Authored-By: Bot <bot@example.test>"), expect="co-authored-by")
 
+    def task_hash_red():
+        r = repo()
+        stage_new(r)
+        out = attempt(r, ("-s", "-m", "Part of #31"), expect="task-hash")
+        assert "номер задачи пишется тремя цифрами без #" in out, out
+        attempt(r, ("-s", "-F", msg_file("Subject\n\nBody says task #94 here.\n")), expect="task-hash")
+
+    def legit_issue_ref():
+        r = repo()
+        stage_new(r)
+        attempt(r, ("-s", "-m", "Fix a thing\n\nFixes #12"), ok=True)
+        stage_new(r)
+        attempt(r, ("-s", "-F", msg_file("Another\n\nRefs #3, see PR #7\n")), ok=True)
+
+    def legit_editor_comment_with_number():
+        r = repo()
+        stage_new(r)
+        e = dict(env, GIT_EDITOR=editor_cmd, ST_PREPEND="Subject from editor\n", ST_APPEND="# task #31 in the template\n")
+        attempt(r, ("-s",), e=e, ok=True)
+
     def non_ascii_red():
         r = repo()
         stage_new(r)
@@ -208,9 +229,12 @@ def main():
     pr.probe("законное", "AC-18: --amend -m без изменений индекса", amend_message_only)
     pr.probe("законное", "--amend --no-edit", amend_no_edit)
     pr.probe("законное", "связанное рабочее дерево", linked_worktree)
+    pr.probe("законное", "R8: ссылка на issue (Fixes #12) в -m и -F", legit_issue_ref)
+    pr.probe("законное", "R8: комментарий редактора с #31 не судится", legit_editor_comment_with_number)
     pr.probe("красная", "нет подписи", no_signoff_red)
     pr.probe("красная", "Co-Authored-By", coauthor_red)
     pr.probe("красная", "не ASCII", non_ascii_red)
+    pr.probe("красная", "R8: номер задачи с решёткой в -m и -F", task_hash_red)
     pr.probe("красная", "путь машины в сообщении", machine_path_red)
     pr.probe("красная", "адрес автора не равен настройке установщика", email_mismatch_red)
     pr.probe("красная", "нет настройки установщика (в том числе при GITHUB_ACTIONS)", no_setting_red)

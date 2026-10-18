@@ -100,7 +100,7 @@ const maxN = () => Math.max(0, ...all().map((t) => t.n))
 const lines = (s) => s.split("\n")
 /** the task letter text for the executor session of task t */
 const execLetter = async (t) => {
-  const mine = () => delivered.filter((d) => d.sessionID === t.executor && /ЗАДАЧА(-ПЛАН)? #/.test(d.text))
+  const mine = () => delivered.filter((d) => d.sessionID === t.executor && /ЗАДАЧА(-ПЛАН)? \d{3,}/.test(d.text))
   await until(() => mine().length > 0, 4_000)
   return mine()[0]?.text ?? ""
 }
@@ -210,7 +210,7 @@ const raw = JSON.parse(readFileSync(tasks.taskFile("proj", old.n), "utf8"))
 const noKeys = !("extra" in raw) && !("precheck" in raw)
 const showOld = await call("crew_task", { action: "show", n: old.n })
 const listOld = await call("crew_task", { action: "list" })
-cell("REQ-24 old record: a record without extra is read, shown and listed as before, with no extra lines", noKeys && /^#\d+ P2 в работе/.test(showOld) && !/ДОПОЛНИТЕЛЬНО/.test(showOld + listOld) && fmt(tasks.loadTask("proj", old.n)) === strip(fmt(tasks.loadTask("proj", old.n))), showOld)
+cell("REQ-24 old record: a record without extra is read, shown and listed as before, with no extra lines", noKeys && /^\d{3,} P2 в работе/.test(showOld) && !/ДОПОЛНИТЕЛЬНО/.test(showOld + listOld) && fmt(tasks.loadTask("proj", old.n)) === strip(fmt(tasks.loadTask("proj", old.n))), showOld)
 
 // ---- review-1, finding 2: a declared service name is not read from the prototype of the values object
 reset()

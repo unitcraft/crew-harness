@@ -72,7 +72,7 @@ for (let round = 1; round <= 5; round++) {
   const holder = H.holder()
   cell(
     `AC-16 раунд ${round}: of 8 processes exactly one got the lock, the others were refused naming the holder`,
-    winners.length === 1 && holder?.session === winners[0].sid && losers.length === 7 && losers.every((r) => /Замок вливания проекта proj у приёмщика задачи #\d+ \(сессия sesR\d\)/.test(r.text)),
+    winners.length === 1 && holder?.session === winners[0].sid && losers.length === 7 && losers.every((r) => /Замок вливания проекта proj у приёмщика задачи \d{3,} \(сессия sesR\d\)/.test(r.text)),
     JSON.stringify(res.map((r) => [r.sid, r.code, String(r.text).slice(0, String(r.text).startsWith("NO RESULT") ? 900 : 90)])),
   )
 }
@@ -123,7 +123,7 @@ clearLock()
   mkdirSync(dir, { recursive: true })
   writeFileSync(tasks.taskFile("proj", n), "")
   const r = await call("crew_task", "sesR1", { action: "merge", n })
-  cell("Г-7: an empty task record is a refusal, the lock is not issued", /Задачи #777 в проекте proj нет/.test(r) && !H.holder(), r)
+  cell("Г-7: an empty task record is a refusal, the lock is not issued", /Задачи 777 в проекте proj нет/.test(r) && !H.holder(), r)
 }
 
 done(H)

@@ -28,7 +28,8 @@ const base = (n, extra) => {
 card("sesINTEG1", { role: "integrator" })
 // 6 open tasks, 6 closed ones that were last touched three days ago
 for (let n = 1; n <= 6; n++) {
-  card(`sesEX${n}`, { spawned: { by: "sesINTEG1", task: `t${n}`, tier: "light", status: "running", at: Date.now(), qid: `q${n}` }, task: { project: "proj", n } })
+  // task 086: a tab named by the first edition ("#1 исп t1") is renamed to the three-digit form
+  card(`sesEX${n}`, { title: `#${n} исп t${n}`, titleShown: `#${n} исп t${n}`, spawned: { by: "sesINTEG1", task: `t${n}`, tier: "light", status: "running", at: Date.now(), qid: `q${n}` }, task: { project: "proj", n } })
   base(n, { status: "running", executor: `sesEX${n}` })
 }
 const OLD = Date.now() - 3 * 86_400_000
@@ -67,6 +68,7 @@ const openRenamed = () => new Set(updates.filter((u) => /^sesEX[1-6]$/.test(u.se
 for (const end = Date.now() + 20_000; Date.now() < end && openRenamed() < 6; ) await wait(200)
 await wait(1500)
 cell("every open task session is renamed in the end", openRenamed() === 6, JSON.stringify(updates.map((u) => u.sessionID)))
+cell("task 086: the renamed titles are three digits with no hash (001 исп t1), none keeps the first-edition form", [1, 2, 3, 4, 5, 6].every((n) => updates.some((u) => u.sessionID === `sesEX${n}` && u.title === `00${n} исп t${n}`)) && !updates.some((u) => /#/.test(u.title)), JSON.stringify(updates.map((u) => u.title)))
 cell("old closed task sessions are not renamed", !updates.some((u) => /^sesEX(7|8|9|10|11|12)$/.test(u.sessionID)), JSON.stringify(updates.filter((u) => /^sesEX(7|8|9|10|11|12)$/.test(u.sessionID))))
 // the cap: with 2 per pass the 6 renames are spread over several passes (not all in one go)
 const times = updates.filter((u) => /^sesEX[1-6]$/.test(u.sessionID)).map((u) => u.at)

@@ -45,8 +45,8 @@ core.addObligation("sesINTER1", { qid: "qOLD", from_session: "sesINTEG1", from_r
 
 // ses_retry1 owes a review; its last turn, before this plugin started, failed before the model (no assistant row)
 core.saveCard({ session: "ses_retry1", role: "worker", auto: false, title: "ses_retry1", directory: proj, repo: "proj", project: "proj", pid: 999999, updated: Date.now() })
-core.addObligation("ses_retry1", { qid: "rqOLD", from_session: "sesINTEG1", from_role: "proj.integrator", at: Date.now() - 90_000, nudges: 0, task: "приёмка #7" })
-msg("ses_retry1", "user", { text: "[opencode-peers] ПРИЁМКА задачи #7" }, Date.now() - 60_000)
+core.addObligation("ses_retry1", { qid: "rqOLD", from_session: "sesINTEG1", from_role: "proj.integrator", at: Date.now() - 90_000, nudges: 0, task: "приёмка 007" })
+msg("ses_retry1", "user", { text: "[opencode-peers] ПРИЁМКА задачи 007" }, Date.now() - 60_000)
 msg("ses_retry1", "idle", { outcome: "failed" }, Date.now() - 60_000)
 
 const mod = await import("../index.ts")
@@ -131,7 +131,7 @@ cell("the resume letter names the git traces: the stale index.lock and the merge
   cell("gitTraces follows a worktree's .git file", tr.length === 1 && /rebase/.test(tr[0]), JSON.stringify(tr))
   cell("gitTraces of a clean tree is empty", gitTraces(tmp + "/nowhere").length === 0, "not empty")
 }
-cell("a turn that failed before the plugin started: one 'continue' letter", got("ses_retry1", "кончился ошибкой").length === 1 && got("ses_retry1", "приёмка #7").length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "ses_retry1").map((d) => d.text.slice(0, 200))))
+cell("a turn that failed before the plugin started: one 'continue' letter", got("ses_retry1", "кончился ошибкой").length === 1 && got("ses_retry1", "приёмка 007").length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "ses_retry1").map((d) => d.text.slice(0, 200))))
 cell("the resume letter says how to report", got("sesINTER1", 'reply_to: "qOLD"').length === 1, got("sesINTER1", "прервана")[0]?.text)
 const toPlugin = await call("crew_send", "sesINTER1", { to: "crew-harness", text: "принял, продолжаю" })
 cell("a letter to the plugin itself is refused with a hint", /это сам плагин/.test(toPlugin) && /reply_to/.test(toPlugin), toPlugin)
@@ -140,7 +140,7 @@ cell("a letter to the plugin itself is refused with a hint", /это сам пл
 await call("crew_task", "sesINTEG1", { action: "assign", session: "sesWORK01", title: "парсер", goal: "дописать парсер", criteria: "тесты зелёные" })
 await until(() => got("sesWORK01", "ЗАДАЧА #1").length >= 1)
 const task = tasks.loadTask("proj", 1)
-cell("the task reached the tab", got("sesWORK01", "ЗАДАЧА #1").length === 1, JSON.stringify(delivered.map((d) => d.sessionID)))
+cell("the task reached the tab", got("sesWORK01", "ЗАДАЧА 001").length === 1, JSON.stringify(delivered.map((d) => d.sessionID)))
 const obl = () => core.obligationsOf("sesWORK01").find((o) => o.qid === task.qid)
 
 // 1. working turns: a reminder after each, never stuck. Before them: an owner's message of a turn cut off long ago
@@ -180,8 +180,8 @@ cell("a stuck tab gets no more reminders and no second call", reminders() === 7 
 
 // 4. crew_task push clears "stuck"; reminders start again
 await call("crew_task", "sesINTEG1", { action: "push", n: 1, text: "доделай" })
-await until(() => got("sesWORK01", "Подталкивание по задаче #1").length >= 1)
-cell("push wakes the tab", got("sesWORK01", "Подталкивание по задаче #1").length === 1, "no push")
+await until(() => got("sesWORK01", "Подталкивание по задаче 001").length >= 1)
+cell("push wakes the tab", got("sesWORK01", "Подталкивание по задаче 001").length === 1, "no push")
 cell("push clears stuck and the counters", obl()?.stuck === false && obl()?.empty === 0 && obl()?.nudges === 0, JSON.stringify(obl()))
 await turn()
 cell("after push an empty turn gets a reminder again", reminders() === 8, reminders())
@@ -198,7 +198,7 @@ cell("over push_max: stuck, a call 'reminders without an answer'", obl()?.stuck 
 process.env.CREW_HARNESS_DB = dbPath
 
 // 5b. waiting the honest way (2026-10-06): an open crew_watch or a question waiting for its answer -> no
-// reminders (executor #17 of nova got one a minute while waiting for a commit in main and took to polling in Bash)
+// reminders (executor 017 of nova got one a minute while waiting for a commit in main and took to polling in Bash)
 {
   await call("crew_task", "sesINTEG1", { action: "push", n: 1 })
   const watch = await import("../watch.ts")
@@ -245,7 +245,7 @@ await failedTurn(() => failReminders() >= 2)
 await failedTurn(() => got("sesINTEG1", "ход падает с ошибкой").length >= 1)
 cell("three failed turns: stuck, the call says the turns fail", got("sesINTEG1", "ход падает с ошибкой").length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "sesINTEG1").map((d) => d.text.slice(0, 200))))
 
-// 9. a long provider turn OpenCode itself resumed after a restart (#14 nova, 2026-10-06): the assistant row is written
+// 9. a long provider turn OpenCode itself resumed after a restart (014 nova, 2026-10-06): the assistant row is written
 // at the start and updated only at the end, the card is not busy (the plugin did not start the turn). It is running:
 // letters wait for its end instead of piling up in OpenCode's queue (replayed as seven empty turns after it)
 {
@@ -290,7 +290,7 @@ cell("three failed turns: stuck, the call says the turns fail", got("sesINTEG1",
 // two working reviewers got "работа прервана перезапуском")
 db.prepare("insert into session_v2 values (?, ?, ?, null, null, null, null, ?)").run("ses_run1", proj, "ses_run1", Date.now())
 core.saveCard({ session: "ses_run1", role: "worker", auto: false, title: "ses_run1", directory: proj, repo: "proj", project: "proj", pid: process.pid, updated: Date.now() })
-core.addObligation("ses_run1", { qid: "rqRUN", from_session: "sesINTEG1", from_role: "proj.integrator", at: Date.now(), nudges: 0, task: "приёмка #8" })
+core.addObligation("ses_run1", { qid: "rqRUN", from_session: "sesINTEG1", from_role: "proj.integrator", at: Date.now(), nudges: 0, task: "приёмка 008" })
 const stop2 = await mod.default.setup(ctx)
 await wait(1500)
 const resumes = ["inbox", "read"].flatMap((d) => {

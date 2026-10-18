@@ -25,7 +25,7 @@ const clear = () => review.releaseMergeLock("proj", holder()?.session ?? "")
   H.settings({ merge_lock_per_task: "on" })
   await call("crew_task", REV, { action: "merge", n: a.n })
   const m2 = await call("crew_task", REV, { action: "merge", n: b.n })
-  cell("LT-2 flag on: merge of another task by the holder is refused with the reason", holder()?.n === a.n && new RegExp(`#${a.n}`).test(m2) && /accept|rework|unlock/.test(m2), m2 + JSON.stringify(holder()))
+  cell("LT-2 flag on: merge of another task by the holder is refused with the reason", holder()?.n === a.n && new RegExp(`${String(a.n).padStart(3, "0")}`).test(m2) && /accept|rework|unlock/.test(m2), m2 + JSON.stringify(holder()))
   const m3 = await call("crew_task", REV, { action: "merge", n: a.n })
   cell("LT-3 flag on: repeat merge of the same task is fine", holder()?.n === a.n && /твой/.test(m3), m3)
   // LT-4: rework of b does not release the lock of a

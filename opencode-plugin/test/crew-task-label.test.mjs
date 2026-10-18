@@ -1,9 +1,9 @@
-// Self-test of task 083 (node >= 24):  node test/crew-task-label.test.mjs
-// The owner (2026-10-17): "что такое 081 и #22 — мы разве не унифицировали задачи и распоряжения?"; "по рекомендации": every task of the
-// project crew-harness is labelled with three digits (022, 081), with a task folder or without; the tasks of other projects keep "#94".
-// TL-1 the one function (taskNo, taskRef, sessionRef): crew-harness without a folder - three digits (22 -> 022, 1000 -> 1000), with a
-//      folder - as before; another project - "#N" (a folder wins over the project); no project - "#N" as before.
-// TL-2 the status (statusOf): task.ref is always set, "022" / "081" / "#94"; group only with a folder.
+// Self-test of tasks 083 and 086 (node >= 24):  node test/crew-task-label.test.mjs
+// Task 083 (the owner, 2026-10-17) made the labels of crew-harness three digits; task 086 (2026-10-18: "все задачи всех проектов подписываются
+// тремя цифрами без #") extended that to every project and forbade "#N" (crew-task-hash.test.mjs holds the rule itself). This test keeps the
+// places of 083 one by one: each shows the one label, "022" / "081" / "094", and never a "#".
+// TL-1 the one function (taskNo, taskRef, sessionRef): three digits with a folder and without, for every project.
+// TL-2 the status (statusOf): task.ref is always set, "022" / "081" / "094"; group only with a folder.
 // TL-3 every place that shows the label gives the same one: the waiting line and rows, /crew, the side panel (non-grouped rows), the
 //      title of a group, idle-tab texts, the merge-lock texts (lockWaitLine, precheckLines, unlockMerge), the live sessions of the profiles.
 // TL-4 no place glues "#" and a task number by hand: every "#${...n}" in the sources is a key "project#n" or goes through taskNo.
@@ -40,23 +40,20 @@ check("TL-1 taskNo: crew-harness without a folder - three digits", () => {
   assert.equal(T.taskNo({ project: OWN, n: 22 }), "022")
   assert.equal(T.taskNo({ project: OWN, n: 5 }), "005")
   assert.equal(T.taskNo({ project: OWN, n: 81 }), "081")
-  assert.equal(T.taskNo({ project: OWN, n: 100 }), "100")
   assert.equal(T.taskNo({ project: OWN, n: 1000 }), "1000", "above 999 as it is")
 })
-check("TL-1 taskNo: with a folder - as before; another project - #N; no project - #N", () => {
+check("TL-1 taskNo: with a folder, another project, no project - three digits", () => {
   assert.equal(T.taskNo({ project: OWN, n: 81, folder: "doc/tasks/081-x" }), "081")
   assert.equal(T.taskNo({ project: "nova", n: 45, folder: "doc/tasks/045-x" }), "045")
-  assert.equal(T.taskNo({ project: "nova", n: 94 }), "#94")
-  assert.equal(T.taskNo({ project: "claude-limits", n: 3 }), "#3")
-  assert.equal(T.taskNo({ n: 31 }), "#31")
+  assert.equal(T.taskNo({ project: "nova", n: 94 }), "094")
+  assert.equal(T.taskNo({ n: 31 }), "031")
   assert.equal(T.taskNo({ n: 45, folder: "doc/tasks/045-x" }), "045")
 })
 check("TL-1 taskRef and sessionRef follow taskNo", () => {
   assert.equal(T.taskRef({ project: OWN, n: 22, title: "Реестры контрактов" }), "022 «Реестры контрактов»")
-  assert.equal(T.taskRef({ project: OWN, n: 22 }), "022")
-  assert.equal(T.taskRef({ project: "nova", n: 94, title: "Разбор" }), "#94 «Разбор»")
+  assert.equal(T.taskRef({ project: "nova", n: 94, title: "Разбор" }), "094 «Разбор»")
   assert.equal(T.sessionRef({ project: OWN, n: 22 }, { code: "С4", k: 3 }), "022 С4-3")
-  assert.equal(T.sessionRef({ project: "nova", n: 94 }, { code: "исп", k: 1 }), "#94 исп")
+  assert.equal(T.sessionRef({ project: "nova", n: 94 }, { code: "исп", k: 1 }), "094 исп")
 })
 
 // TL-2
@@ -83,10 +80,10 @@ const stat = (t, as = "executor") =>
 const s22 = stat(t22)
 const s81 = stat(t81)
 const s94 = stat(t94)
-check("TL-2 statusOf: ref is 022 / 081 / #94, group only with a folder", () => {
+check("TL-2 statusOf: ref is 022 / 081 / 094, group only with a folder", () => {
   assert.equal(s22.task?.ref, "022")
   assert.equal(s81.task?.ref, "081")
-  assert.equal(s94.task?.ref, "#94")
+  assert.equal(s94.task?.ref, "094")
   assert.equal(s22.task?.group, undefined)
   assert.equal(s81.task?.group, true)
   assert.equal(s94.task?.group, undefined)
@@ -97,11 +94,11 @@ const bare = (s) => ({ ...s, task: { ...s.task, ref: undefined } })
 const own = (s, st = "owner") => ({ ...s, state: st, since: now - 60_000, question: "Влить?", title: "no title" })
 const lines = (s) => [S.waitingLine([own(s)], now) ?? "", ...S.waitingRows([own(s)]).map((r) => r.what), S.formatStatuses([own(s)], now), ...S.sidebarLines([s], now, s.project).rows.map((r) => S.sideText(r)), ...S.sidebarLines([s], now, s.project).rows.map((r) => r.who)].join("\n")
 for (const [name, mkS, want, notWant] of [
-  ["22", () => s22, "022", "#22"],
-  ["22 without ref", () => bare(s22), "022", "#22"],
-  ["81", () => s81, "081", "#81"],
-  ["94 nova", () => s94, "#94", " 094"],
-  ["94 nova without ref", () => bare(s94), "#94", " 094"],
+  ["22", () => s22, "022", "#"],
+  ["22 without ref", () => bare(s22), "022", "#"],
+  ["81", () => s81, "081", "#"],
+  ["94 nova", () => s94, "094", "#"],
+  ["94 nova without ref", () => bare(s94), "094", "#"],
 ]) {
   check(`TL-3 ${name}: waiting line, rows, /crew and the side panel give ${want}`, () => {
     const text = lines(mkS())
@@ -111,7 +108,7 @@ for (const [name, mkS, want, notWant] of [
 }
 check("TL-3 the waiting line names the tab as 022 исп", () => {
   assert.match(S.waitingLine([own(bare(s22))], now), /crew-harness 022 exec/)
-  assert.match(S.waitingLine([own(bare(s94))], now), /nova #94 exec/)
+  assert.match(S.waitingLine([own(bare(s94))], now), /nova 094 exec/)
   const rows = S.waitingRows([own(bare(s22))]).map((r) => r.what).join("\n")
   assert.match(rows, /crew-harness 022 исп/)
 })
@@ -119,7 +116,7 @@ check("TL-3 the side panel: a working row of a task without folder is 022 исп
   const rows = S.sidebarLines([bare(s22)], now, OWN).rows
   const text = rows.map((r) => `${r.who} | ${S.sideText(r)}`).join("\n")
   assert.ok(/022 исп/.test(text) && /022 task 22/.test(text), text)
-  assert.ok(!/#22/.test(text), text)
+  assert.ok(!text.includes("#"), text)
 })
 
 // idle-tab texts
@@ -130,13 +127,13 @@ const items = [
   { kind: "silent", task: t94, at: now },
   { kind: "nosession", task: t81 },
 ]
-check("TL-3 idle-tab: idleWhat and idleLetter give 022 / #94 / 081", () => {
+check("TL-3 idle-tab: idleWhat and idleLetter give 022 / 094 / 081", () => {
   const what = IT.idleWhat(items).join("\n")
-  assert.ok(what.includes("022 между сессиями") && what.includes("022 прм ждёт указаний") && what.includes("#94 исполнитель молчит") && what.includes("081 без исполнителя"), what)
-  assert.ok(!what.includes("#22") && !what.includes("#81"), what)
+  assert.ok(what.includes("022 между сессиями") && what.includes("022 прм ждёт указаний") && what.includes("094 исполнитель молчит") && what.includes("081 без исполнителя"), what)
+  assert.ok(!what.includes("#"), what)
   const letter = IT.idleLetter(25, items)
-  assert.ok(letter.includes("022 «task 22»") && letter.includes("#94 «task 94»") && letter.includes("081 «task 81»"), letter)
-  assert.ok(!letter.includes("#22") && !letter.includes("#81"), letter)
+  assert.ok(letter.includes("022 «task 22»") && letter.includes("094 «task 94»") && letter.includes("081 «task 81»"), letter)
+  assert.ok(!letter.includes("#"), letter)
 })
 
 // merge lock texts
@@ -155,7 +152,7 @@ check("TL-3 idle-tab: idleWhat and idleLetter give 022 / #94 / 081", () => {
   check("TL-3 lockWaitLine names the waiting task as 022", () => {
     const line = R.lockWaitLine(OWN, now) ?? ""
     assert.ok(line.includes("022 ("), line)
-    assert.ok(!line.includes("#22"), line)
+    assert.ok(!line.includes("#"), line)
     const st = S.formatStatuses([bare(s22)], now)
     void st
     assert.ok((S.formatStatuses([bare(s22)], now)).includes("lock 022"), S.formatStatuses([bare(s22)], now))
@@ -174,6 +171,7 @@ check("TL-3 idle-tab: idleWhat and idleLetter give 022 / #94 / 081", () => {
 check("TL-3 the profile-cmd fallback of a status without ref", () => {
   const src = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "profile-cmd.ts"), "utf8")
   assert.ok(!/`#\$\{s\.task\.n\}`/.test(src), "profile-cmd.ts glues #n by hand")
+  assert.ok(!/s\.task\.ref \?\? /.test(src), "profile-cmd.ts takes the stored ref before taskNo")
 })
 
 // TL-4: no "#${...n}" by hand in the sources

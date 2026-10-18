@@ -104,7 +104,7 @@ export function lockWaiters(project: string): { session: string; n: number; at: 
     .map((c) => ({ session: c.session, n: c.lock_wait!.n, at: c.lock_wait!.at }))
     .sort((a, b) => a.at - b.at)
 }
-/** Строка «ждут замок: #N (мин)» для /crew и панели; нет ждущих — undefined. */
+/** Строка «ждут замок: NNN (мин)» для /crew и панели; нет ждущих — undefined. */
 export function lockWaitLine(project: string, now = Date.now()): string | undefined {
   const w = lockWaiters(project)
   return w.length ? `ждут замок: ${w.map((x) => `${taskNo({ project, n: x.n })} (${Math.max(0, Math.round((now - x.at) / 60_000))} мин)`).join(", ")}` : undefined

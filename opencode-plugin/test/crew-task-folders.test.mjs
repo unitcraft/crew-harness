@@ -41,7 +41,7 @@ git(proj, "commit", "-q", "-m", "init")
 const mainTip = git(proj, "rev-parse", "main")
 const wtRoot = path.join(tmp, "worktrees")
 
-// old records (before task 058): #13 closed, #14 open — numbers that now belong to folders 013 and 014
+// old records (before task 058): 013 closed, 014 open — numbers that now belong to folders 013 and 014
 const store = path.join(tmp, "opencode", "crew-harness", "tasks", "proj")
 mkdirSync(store, { recursive: true })
 const oldRec = (n, status, title) => JSON.stringify({ project: "proj", n, title, slug: "old", goal: "g", priority: "P2", tier: "light", role: "worker", author: "sesOLD", author_role: "proj.integrator", qid: "qOld", status, kind: "spawn", executors: [], attempt: 1, directory: proj, history: [], created: 1, updated: 1 }, null, 1)
@@ -204,7 +204,7 @@ cell("AC-07: the sub-task is a task of its own: 060 with its folder", !!t60?.fol
 cell("AC-07: the first line of its task/message.md is «Часть задачи 045 «…».»", msg60.split("\n")[0] === "Часть задачи 045 «Реестры контрактов».", msg60.split("\n")[0])
 cell("AC-07: the parent lists it in parts and its log.md has a line about it", (task(45)?.parts ?? []).includes(60) && /документ: заведена подзадача 060 «Срочный страж»/.test(read(path.join(taskTree, "doc", "tasks", "045-registry", "log.md"))), JSON.stringify(task(45)?.parts))
 
-// ---- AC-10: an old closed record #13 moves to legacy/ unchanged; an open one refuses ----
+// ---- AC-10: an old closed record 013 moves to legacy/ unchanged; an open one refuses ----
 const a10 = await call("crew_spawn", "sesINTEG1", { task: 13, session: "С1", goal: "продолжение разбора" })
 await wait()
 const legacy = path.join(store, "legacy", "13.json")

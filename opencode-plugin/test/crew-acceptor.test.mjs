@@ -108,7 +108,7 @@ cell("acceptor is a shared role: a second tab joins it", /теперь «accepto
 await call("crew_role", "sesWORKER1", { role: "worker" })
 cell("the default reviewer stays worker without the key", core.loadConfig(path.join(tmp)).reviewer === "worker" && core.loadConfig(proj).reviewer === "acceptor", JSON.stringify(core.loadConfig(proj).reviewer))
 
-// 1. #1 submitted while the acceptor tab is busy: a free WORKER tab is not taken -- a new session with role acceptor
+// 1. 001 submitted while the acceptor tab is busy: a free WORKER tab is not taken -- a new session with role acceptor
 await call("crew_spawn", "sesINTEG1", { title: "фича", goal: "сделать фичу", criteria: "тест зелёный" })
 const ex1 = task(1).executor
 await wait(300)
@@ -121,13 +121,13 @@ const rv1 = task(1).reviewer
 cell("a free worker tab does not become the acceptor", rv1 !== "sesWORKER1", JSON.stringify({ rv1, kind: task(1).review_kind }))
 cell("the review session is born with role acceptor", task(1).review_kind === "spawn" && sessions.has(rv1) && card(rv1)?.role === "acceptor", JSON.stringify({ kind: task(1).review_kind, role: card(rv1)?.role }))
 
-// 3. the review session takes no worker place: spawn_limits.worker 1 and #2 still starts
+// 3. the review session takes no worker place: spawn_limits.worker 1 and 002 still starts
 const sp2 = await call("crew_spawn", "sesINTEG1", { title: "вторая", goal: "g2", criteria: "c2" })
 cell("a review session does not hold a worker place (worker limit 1)", /запущена/.test(sp2) && !!task(2)?.executor, sp2)
 const ex2 = task(2).executor
 await wait(300)
 
-// 5. CREW_* in the command's environment: the executor of #2
+// 5. CREW_* in the command's environment: the executor of 002
 await turnEnds(ex2)
 const exPut = await call("crew_watch", ex2, { command: ENV_ECHO, note: "env-ex" })
 cell("an ordinary command passes the deny check (in the task's worktree)", /поставлено/.test(exPut), exPut)
@@ -142,23 +142,23 @@ const deniedRead = await call("crew_watch", rv1, { command: "cd secrets && bash 
 cell("crew_watch refuses a command reading a denied file", /не поставлено/.test(deniedRead) && /Read\(\.\/\*\*\/\*\.pem\)/.test(deniedRead), deniedRead)
 cell("a refused command is not queued", !watch.watchesOf(ex2).length && !watch.watchesOf(rv1).length, JSON.stringify([...watch.watchesOf(ex2), ...watch.watchesOf(rv1)]))
 
-// 3. #2 submitted: the acceptor tab busy, one review session already open = spawn_limits.acceptor -> #2 waits
+// 3. 002 submitted: the acceptor tab busy, one review session already open = spawn_limits.acceptor -> 002 waits
 writeFileSync(path.join(task(2).worktree, "g.txt"), "g\n")
 git(task(2).worktree, "add", "-A")
 git(task(2).worktree, "commit", "-q", "-m", "g")
 await call("crew_send", ex2, { to: "sesINTEG1", text: "готово 2", reply_to: task(2).qid })
 await wait(1200)
-cell("spawn_limits.acceptor (1) bounds review sessions, not .reviewer (5): #2 waits", task(2).status === "submitted" && !task(2).reviewer, JSON.stringify({ r: task(2).reviewer, k: task(2).review_kind }))
+cell("spawn_limits.acceptor (1) bounds review sessions, not .reviewer (5): 002 waits", task(2).status === "submitted" && !task(2).reviewer, JSON.stringify({ r: task(2).reviewer, k: task(2).review_kind }))
 tabs[2].busy = false
 beat()
 await until(() => !!task(2).reviewer)
-cell("the freed acceptor tab takes #2", task(2).reviewer === "sesACC1" && task(2).review_kind === "tab", JSON.stringify({ r: task(2).reviewer, k: task(2).review_kind }))
+cell("the freed acceptor tab takes 002", task(2).reviewer === "sesACC1" && task(2).review_kind === "tab", JSON.stringify({ r: task(2).reviewer, k: task(2).review_kind }))
 
 // 4. rights: the executor and a stranger are refused; the reviewer reviews and merges
 const byExecutor = await call("crew_task", ex1, { action: "merge", n: 1 })
-cell("the executor cannot merge its own task", /Ты исполнитель задачи #1/.test(byExecutor) && /только его/.test(byExecutor) && !review.mergeHolder("proj"), byExecutor)
+cell("the executor cannot merge its own task", /Ты исполнитель задачи 001/.test(byExecutor) && /только его/.test(byExecutor) && !review.mergeHolder("proj"), byExecutor)
 const byExecutorAcc = await call("crew_task", ex1, { action: "accept", n: 1, checks: { tests: "ok" } })
-cell("the executor cannot accept its own task", /Ты исполнитель задачи #1/.test(byExecutorAcc) && task(1).status !== "accepted", byExecutorAcc)
+cell("the executor cannot accept its own task", /Ты исполнитель задачи 001/.test(byExecutorAcc) && task(1).status !== "accepted", byExecutorAcc)
 const byStranger = await call("crew_task", "sesWORKER1", { action: "merge", n: 1 })
 cell("a stranger worker cannot merge", /только его/.test(byStranger) && !review.mergeHolder("proj"), byStranger)
 await call("crew_task", rv1, { action: "review", n: 1 })

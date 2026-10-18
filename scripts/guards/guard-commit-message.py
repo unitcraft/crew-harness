@@ -8,11 +8,16 @@
     строк цитаты на «>»; R5 адрес автора равен git config crewharness.expectedEmail (пишет
     установщик; нет настройки — красный «запусти установщик»); R6 в сообщении нет пути машины и
     образца из списка запрещённых имён (в том числе в строках на «#» при -m и -F и на «>»);
-    R7 сообщение не пусто. Вердикт называет «сообщение коммита», строку и номер образца, не значение.
-Не проверяет: содержание diff, который редактор показывает при -v; прошлые коммиты; правку истории.
+    R7 сообщение не пусто; R8 «#<число>» в сообщении только как ссылка на issue или PR GitHub
+    (сразу после Fixes, Closes, Resolves, Refs, See, issue, PR, pull; строки на «>» не судятся,
+    шестнадцатеричный цвет и «#слово» — не число): номер задачи пишется тремя цифрами без «#».
+    Вердикт называет «сообщение коммита», строку и номер образца, не значение.
+Не проверяет: содержание diff, который редактор показывает при -v; прошлые коммиты (в пуше и CI
+    судится только диапазон новых коммитов); правку истории; существует ли issue с таким номером.
     В режиме --ci правило R5 не применимо (установщик в CI не запускается) и печатает «судить
     нечего: CI, нет настройки установщика»; адрес автора там сверяется с подписью (R1).
-Правило: AGENTS.md п.4 (сообщение по-английски, подпись, без трейлеров соавторства), п.15.
+Правило: AGENTS.md п.4 (сообщение по-английски, подпись, без трейлеров соавторства, номер задачи
+    тремя цифрами без «#»), п.15.
 
 Вызов из хука commit-msg: --message-file <путь> --mode editor|message (режим задаёт обёртка хука по
 GIT_EDITOR, сам страж среды не читает). Для pre-push и CI: --commit <хеш> (сообщение как сохранено),
@@ -35,6 +40,13 @@ import names  # noqa: E402
 SIGNOFF = re.compile(r"^\s*Signed-off-by:\s*(.*?)\s*<([^<>]*)>\s*$", re.I)
 COAUTHOR = re.compile(r"^\s*Co-authored-by\s*:", re.I)
 IDENT = re.compile(r"^(.*) <([^<>]*)> \d+ [+-]\d{4}$")
+# «#<число>» (задача 086): GitHub превращает его в ссылку на issue или PR этого репозитория; перед решёткой не буква, цифра,
+# «&» (сущность), «/» (чужой репозиторий, путь) и не решётка; после числа не буква и не цифра (цвет «#123abc», «#12ab»).
+HASH_NUMBER = re.compile(r"(?<![\w&/#])#(\d+)(?!\w)")
+# слова, после которых «#N» — ссылка на issue или PR (и список «Closes: #4, #5 and #6»)
+HASH_REF_BEFORE = re.compile(
+    r"(?:^|[^\w])(?:fix(?:es|ed)?|close[sd]?|resolve[sd]?|refs?|see|issues?|prs?|pull(?:\s+requests?)?)"
+    r"[\s:]*(?:#\d+\s*(?:,|and|&)\s*)*$", re.I)
 
 
 def author_of(source, args):
@@ -115,6 +127,18 @@ def check_private(label, lines, patterns, rep):
             rep.add(label, number, "forbidden-name", "образец №%d" % sample)
 
 
+def check_task_hash(label, lines, rep):
+    """R8: «#N» в сообщении - только ссылка на issue или PR GitHub; номер задачи пишется тремя цифрами без решётки."""
+    for number, text in lines:
+        if text.startswith(">"):
+            continue
+        for m in HASH_NUMBER.finditer(text):
+            if HASH_REF_BEFORE.search(text[:m.start()]):
+                continue
+            rep.add(label, number, "task-hash",
+                    "номер задачи пишется тремя цифрами без #; #N закреплено за номером issue GitHub")
+
+
 def judge(source, args, rep):
     if bool(args.commit) == bool(args.message_file):
         raise guardlib.Unavailable("укажите либо --message-file и --mode, либо --commit")
@@ -136,6 +160,7 @@ def judge(source, args, rep):
     check_author(label, author, expected, args.ci, rep)
     check_ascii(label, lines, rep)
     check_private(label, lines, patterns, rep)
+    check_task_hash(label, lines, rep)
     return guardlib.Outcome(count=1)
 
 

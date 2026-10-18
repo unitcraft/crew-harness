@@ -1,8 +1,8 @@
 // Self-test of the show of one task number (task 058, AC-08; node >= 24):  node test/crew-task-show.test.mjs
-// A task with a folder is named by its folder number (045, no «#») and its sessions by code and ordinal (045 С4-3): the "Crew"
+// A task with a folder is named by its folder number (045) and its sessions by code and ordinal (045 С4-3): the "Crew"
 // panel puts the task line «045 <title>» over its sessions «↳ прм», «↳ С4-3» (rows no longer than 32 columns), /crew lists the
 // sessions under «045 <title>» (task 064: the title whole, the panel wraps it onto two rows at most), the line "Ждут вас" names
-// «045 прм», taskRef gives «045 «…»». A task without a folder (Nova): «#88 <title>», the role and the state under it (task 064).
+// «045 прм», taskRef gives «045 «…»». A task without a folder (Nova): «088 <title>», the role and the state under it (task 064).
 import { mkdtempSync, rmSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -25,7 +25,7 @@ const list = [
   st("sR", "owner", { since: at(22, 10), title: `045 прм ${title}`, detail: "ждёт вас с 22:10: вливать?", question: "вливать?", task: g("reviewer", "reviewing") }),
   st("sA", "task", { title: `045 С4-3 исп ↻ доработка ${title}`, model: "openai/gpt-6.1-sol", detail: "на доработке — стоит", task: g("executor", "rework", "С4-3") }),
   st("sB", "task", { title: `045 С3п-2 исп ✓ сдана ${title}`, detail: "сдана 21:39", task: g("executor", "submitted", "С3п-2", { ended: at(21, 39) }) }),
-  st("sN", "working", { project: "nova", since: now - 12 * 60_000, title: "#88 исп план", task: { n: 88, status: "running", as: "executor", title: "план" } }),
+  st("sN", "working", { project: "nova", since: now - 12 * 60_000, title: "088 исп план", task: { n: 88, status: "running", as: "executor", title: "план" } }),
 ]
 
 // the panel
@@ -35,10 +35,10 @@ const printed = v.rows.map((r) => sideText(r))
 const head = printed.findIndex((l) => l.startsWith("045 "))
 cell("the panel: one task line «045 <title>» over its sessions", head >= 0 && printed.filter((l) => l.startsWith("045 ")).length === 1 && printed[head] === "045 Реестры контрактов и" && printed[head + 1] === "· полный JSONC-регламент", JSON.stringify(printed))
 cell("the panel: the sessions under it — «↳ прм», «↳ С4-3» with marks, the finished «С3п-2» folded (task 064)", printed[head + 2] === "↳ ? прм  ждёт вас 22:10" && printed[head + 3] === "↳ С4-3  ↻ доработка" && printed[head + 4] === "↳ ✓ сдано 1 сессия", JSON.stringify(printed.slice(head, head + 5)))
-cell("the panel: no «#45» and no title sub-row under the sessions", !printed.some((l) => l.includes("#45")) && printed.filter((l) => l.includes("Реестры")).length === 1, JSON.stringify(printed))
+cell("the panel: no «045» and no title sub-row under the sessions", !printed.some((l) => l.startsWith("↳") && l.includes("045")) && printed.filter((l) => l.includes("Реестры")).length === 1, JSON.stringify(printed))
 cell("the panel: every row fits 32 columns", printed.every((l) => l.length <= 32), JSON.stringify(printed.filter((l) => l.length > 32)))
 const nova = sidebarLines(list, now, "nova").rows.map((r) => sideText(r))
-cell("the panel of a project without folders: «• #88 план», then «исп  работает 12 мин» (task 064)", nova.indexOf("• #88 план") >= 0 && nova[nova.indexOf("• #88 план") + 1] === "↳ исп  работает 12 мин" && !nova.some((l) => l.includes("088")), JSON.stringify(nova))
+cell("the panel of a project without folders: «• 088 план», then «исп  работает 12 мин» (task 064)", nova.indexOf("• 088 план") >= 0 && nova[nova.indexOf("• 088 план") + 1] === "↳ исп  работает 12 мин" && !nova.some((l) => l.includes("#")), JSON.stringify(nova))
 
 // the line "Ждут вас"
 cell("«Waiting for you» names the project and «045 rev»", waitingLine(list, now) === "Waiting for you: 1 · since 22:10 · crew-harness 045 rev", waitingLine(list, now))
@@ -51,12 +51,12 @@ const h = lines.indexOf("  045 Реестры контрактов и полны
 cell("/crew: the task line «045 «<title>»»", h > 0, text)
 cell("/crew: the live sessions under it, the finished one counted in the heading", lines[h + 1] === "    ? rev  waiting you 20m" && lines[h + 2] === "        ↳ вливать?" && lines[h + 3] === "    С4-3 plan review  rework" && !lines.some((l) => l.includes("С3п-2")), JSON.stringify(lines.slice(h, h + 5)))
 cell("/crew: the waiting summary first", lines[0] === "Waiting for you: 1 · since 22:10 · crew-harness 045 rev", lines[0])
-cell("/crew: a project without folders - «#88 план» with its tab on the same line (task 064, 077)", lines.includes("  #88 план — exec working 12m"), text)
+cell("/crew: a project without folders - «088 план» with its tab on the same line (task 064, 077)", lines.includes("  088 план — exec working 12m"), text)
 cell("/crew lines fit the dialog (the question line aside)", lines.filter((l) => !l.includes("? прм")).every((l) => l.length <= 72), text)
 
 // the number in the texts
-cell("taskRef: «045 «…»» with a folder, «#88 «…»» without", taskRef({ n: 45, title, folder: "doc/tasks/045-x" }).startsWith("045 «Реестры") && taskRef({ n: 88, title: "план" }) === "#88 «план»", taskRef({ n: 45, title, folder: "doc/tasks/045-x" }))
-cell("taskNo and sessionRef: 045, 045 С4-3, 060 исп", taskNo({ n: 45, folder: "x" }) === "045" && sessionRef({ n: 45, folder: "x" }, { code: "С4", k: 3 }) === "045 С4-3" && sessionRef({ n: 60, folder: "x" }, { code: "исп", k: 1 }) === "060 исп" && taskNo({ n: 88 }) === "#88", "")
+cell("taskRef: «045 «…»» with a folder, «088 «…»» without", taskRef({ n: 45, title, folder: "doc/tasks/045-x" }).startsWith("045 «Реестры") && taskRef({ n: 88, title: "план" }) === "088 «план»", taskRef({ n: 45, title, folder: "doc/tasks/045-x" }))
+cell("taskNo and sessionRef: 045, 045 С4-3, 060 исп", taskNo({ n: 45, folder: "x" }) === "045" && sessionRef({ n: 45, folder: "x" }, { code: "С4", k: 3 }) === "045 С4-3" && sessionRef({ n: 60, folder: "x" }, { code: "исп", k: 1 }) === "060 исп" && taskNo({ n: 88 }) === "088", "")
 
 // REQ-01: the journals of the "Ход работ" block are read from the project's tasks_dir
 {

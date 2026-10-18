@@ -125,7 +125,7 @@ const sp1h = await spawn("sesPLAIN", { tier: "heavy" })
 const sp1l = await spawn("sesPLAIN", { tier: "light" })
 const p1 = tasks.listTasks("plain")
 cell("AC-01 no keys: crew_spawn without tier -> spawn_models medium (claude-code/sonnet), with tier heavy/light -> opus / haiku", modelOf(p1[0].executor) === "claude-code/sonnet" && modelOf(p1[1].executor) === "claude-code/opus" && modelOf(p1[2].executor) === "claude-code/haiku" && p1.map((t) => t.tier).join() === "medium,heavy,light", p1.map((t) => modelOf(t.executor) + "/" + t.tier).join())
-cell("AC-01 no keys: the record has no profile stamp and the answer is the old text", !p1[0].profiles && !p1[0].review_model && /Задача #1 запущена .* модель claude-code\/sonnet/.test(sp1), sp1)
+cell("AC-01 no keys: the record has no profile stamp and the answer is the old text", !p1[0].profiles && !p1[0].review_model && /Задача 001 запущена .* модель claude-code\/sonnet/.test(sp1), sp1)
 const spExplicit = mk("explicit", { spawn_models: { heavy: "x/big", medium: "x/mid", light: "x/small" } })
 dirOf.set("sesEXPL", spExplicit)
 const exMod = core.loadConfig(spExplicit)
@@ -142,8 +142,8 @@ cell("016 no set: the bounds are read as settings, a heavy spawn is clamped to m
 {
   const t0 = bndTasks[0]
   const st = t0.profiles?.[0]
-  cell("016 review-1 #3: the clamp without a set is stamped (clamped_from heavy, tier medium, stage develop) and the history says so", !!st && st.clamped_from === "heavy" && st.tier === "medium" && st.stage === "develop" && st.model === "claude-code/sonnet" && /срезана границами проекта heavy → medium/.test(JSON.stringify(t0)), JSON.stringify(t0.profiles))
-  cell("016 review-1 #3: a spawn that is not clamped has no stamp", !bndTasks[1].profiles, JSON.stringify(bndTasks[1].profiles))
+  cell("016 review-1 003: the clamp without a set is stamped (clamped_from heavy, tier medium, stage develop) and the history says so", !!st && st.clamped_from === "heavy" && st.tier === "medium" && st.stage === "develop" && st.model === "claude-code/sonnet" && /срезана границами проекта heavy → medium/.test(JSON.stringify(t0)), JSON.stringify(t0.profiles))
+  cell("016 review-1 003: a spawn that is not clamped has no stamp", !bndTasks[1].profiles, JSON.stringify(bndTasks[1].profiles))
 }
 // a project that has the table and the sets, but no name: nothing applies
 const sp2 = await spawn("sesINTEG", { tier: "heavy" })
@@ -202,7 +202,7 @@ const trb = lastTask("proj")
 setBounds({ max: "medium" })
 const reb = await call("crew_task", "sesINTEG", { action: "reassign", n: trb.n })
 const trb1 = task("proj", trb.n)
-cell("016 review-1 #10: reassign without a set on tier_max medium moves a heavy record to sonnet and writes the clamp", trb.model === "claude-code/opus" && trb1.model === "claude-code/sonnet" && trb1.tier === "medium" && modelOf(trb1.executor) === "claude-code/sonnet" && trb1.profiles?.at(-1)?.clamped_from === "heavy", reb + JSON.stringify(trb1.profiles))
+cell("016 review-1 010: reassign without a set on tier_max medium moves a heavy record to sonnet and writes the clamp", trb.model === "claude-code/opus" && trb1.model === "claude-code/sonnet" && trb1.tier === "medium" && modelOf(trb1.executor) === "claude-code/sonnet" && trb1.profiles?.at(-1)?.clamped_from === "heavy", reb + JSON.stringify(trb1.profiles))
 setBounds({})
 // an interrupted start of the same attempt keeps the model of the record and makes no second session
 failCreate = true
@@ -381,9 +381,9 @@ cell("AC-06(а) the set does not describe accept: the reviewer is a new session 
   setBounds({ max: "light" })
   await call("crew_send", tq.executor, { to: "sesINTEG", text: "done", reply_to: tq.qid })
   const tqr = await reviewed(tq.n)
-  cell("016 review-1 #2: the reviewer without a cell on tier_max light is a haiku session, not opus of the recorded tier", tqr.review_kind === "spawn" && modelOf(tqr.reviewer) === "claude-code/haiku", JSON.stringify([tqr.review_kind, modelOf(tqr.reviewer), tqr.tier]))
+  cell("016 review-1 002: the reviewer without a cell on tier_max light is a haiku session, not opus of the recorded tier", tqr.review_kind === "spawn" && modelOf(tqr.reviewer) === "claude-code/haiku", JSON.stringify([tqr.review_kind, modelOf(tqr.reviewer), tqr.tier]))
   const rs = tqr.profiles?.filter((x) => x.role === "reviewer").at(-1)
-  cell("016 review-1 #3: the reviewer clamp is stamped (clamped_from heavy, stage develop_accept)", rs?.clamped_from === "heavy" && rs.tier === "light" && rs.stage === "develop_accept" && rs.session === tqr.reviewer, JSON.stringify(tqr.profiles))
+  cell("016 review-1 003: the reviewer clamp is stamped (clamped_from heavy, stage develop_accept)", rs?.clamped_from === "heavy" && rs.tier === "light" && rs.stage === "develop_accept" && rs.session === tqr.reviewer, JSON.stringify(tqr.profiles))
   setBounds({})
 }
 
@@ -409,7 +409,7 @@ cell("AC-05 the next round is a NEW session, again on the model of plan_accept",
 
 // ---- auto-plan steps: the develop stage of the set, its tier; without a set medium ----
 const planText = [
-  "# План 8 — длина фрагмента", "", "**Статус:** 🔴 ОТКРЫТ", "**Источник:** задача #1", "**Зависимости:** —", "",
+  "# План 8 — длина фрагмента", "", "**Статус:** 🔴 ОТКРЫТ", "**Источник:** задача 001", "**Зависимости:** —", "",
   "## Зачем", "0 на 3 фикстурах из 12", "## Что уже есть", "одна функция", "## Режим выполнения", "Без упрощений: ДА — 2026-10-08",
   "## Фазы", "### Ф.1 — длина [P1]", "#### Ф.1.1 — лексер [где: lex.nv]", "Что: длина из склеенного текста", "**Приёмка:**", "- ⬜ nova test lex → 12/12",
   "## Не делаем", "оракул", "## Открытые вопросы", "Открытых вопросов нет", "## Решения владельца",
@@ -453,8 +453,8 @@ use(undefined)
 const ptD = mkPlanTask()
 await until(() => stepsOf(ptD.n).length > 0, 60_000)
 const stD = stepsOf(ptD.n)[0]
-cell("016 review-1 #1: auto-plan step without a set and tier_max light runs on light (haiku), not on hard medium", !!stD && stD.model === "claude-code/haiku" && stD.tier === "light", JSON.stringify(stD && [stD.model, stD.tier]))
-cell("016 review-1 #3: that step's record says clamped_from medium", stD?.profiles?.[0]?.clamped_from === "medium" && stD.profiles[0].tier === "light" && stD.profiles[0].stage === "develop", JSON.stringify(stD?.profiles))
+cell("016 review-1 001: auto-plan step without a set and tier_max light runs on light (haiku), not on hard medium", !!stD && stD.model === "claude-code/haiku" && stD.tier === "light", JSON.stringify(stD && [stD.model, stD.tier]))
+cell("016 review-1 003: that step's record says clamped_from medium", stD?.profiles?.[0]?.clamped_from === "medium" && stD.profiles[0].tier === "light" && stD.profiles[0].stage === "develop", JSON.stringify(stD?.profiles))
 // review 2 item 2: a sub-plan step is a plan task, so the clamp record says stage plan, an ordinary step says develop
 {
   const git = (await import("node:child_process")).execFileSync
@@ -472,7 +472,7 @@ const ptE = tasks.createTask({
 })
 await until(() => stepsOf(ptE.n).length > 0, 60_000)
 const stE = stepsOf(ptE.n)[0]
-cell("015 review-2 #2: a sub-plan step without a set is a plan task and its clamp record says stage plan (not develop)", !!stE && !!stE.plan && stE.profiles?.[0]?.clamped_from === "medium" && stE.profiles[0].stage === "plan", JSON.stringify(stE && [!!stE.plan, stE.profiles]))
+cell("015 review-2 002: a sub-plan step without a set is a plan task and its clamp record says stage plan (not develop)", !!stE && !!stE.plan && stE.profiles?.[0]?.clamped_from === "medium" && stE.profiles[0].stage === "plan", JSON.stringify(stE && [!!stE.plan, stE.profiles]))
 setBounds({})
 
 // ---- AC-06(б): the profile of a described stage is not found -> no reviewer, one letter, a line in the doctor; (в) by the snapshot ----
@@ -505,7 +505,7 @@ await until(() => snapName() === "cross-kimi", 60_000)
   await wait(2500)
   cell("AC-06(б) one letter to the integrator with the reason; the repeated passes add no new letter", l1 === 1 && refusedLetters() === 1, String(l1) + "/" + refusedLetters())
   const doc = await call("crew_doctor", "sesINTEG")
-  cell("AC-06(б) crew_doctor has the line: submitted, no reviewer, with the reason", new RegExp(`задача #${nI} .*сдана, приёмщика нет`).test(doc), doc.slice(0, 400))
+  cell("AC-06(б) crew_doctor has the line: submitted, no reviewer, with the reason", new RegExp(`задача ${String(nI).padStart(3, "0")} .*сдана, приёмщика нет`).test(doc), doc.slice(0, 400))
   f.model_profiles.kimi = TABLE.kimi
   writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify(f))
   const tI2 = await reviewed(nI, 60_000)

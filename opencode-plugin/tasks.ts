@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from "n
 import path from "node:path"
 import { INBOX, READ, type Priority, type Tier, readJson, safeKey } from "./core.ts"
 import { idsHas } from "./housekeeping.ts"
-import { BASE, CREW_DIR } from "./paths.ts"
+import { BASE } from "./paths.ts"
 
 // путь — из paths.ts (модуль без зависимостей: core и tasks импортируют друг друга, а BASE ядра здесь ещё не готов)
 export const TASKS = path.join(BASE, "tasks")
@@ -25,18 +25,16 @@ export const OPEN_STATUSES: TaskStatus[] = ["starting", "running", "submitted", 
 /** статусы, в которых исполнитель работает (может сдавать отчёт) */
 export const WORKING_STATUSES: TaskStatus[] = ["starting", "running", "rework"]
 export type TaskEvent = { at: number; by: string; status?: TaskStatus; note?: string }
-/** Проект самого плагина (crew-harness): его задачи подписываются тремя цифрами, есть у задачи папка или нет (задача 083). */
-export const OWN_PROJECT = CREW_DIR
-/** Номер задачи в показе — ЕДИНСТВЕННОЕ место, где он пишется владельцу, вкладке и письму (задача 083; владелец, 2026-10-17: «по
- *  рекомендации»). Задача проекта crew-harness — три цифры с нулями слева без «#» («022», «081»; больше 999 — как есть: «1000»),
- *  есть у неё папка или нет; задача с папкой другого проекта — номер папки тремя цифрами (задача 058); остальные задачи других
- *  проектов — «#94». Проект передаётся явно (t.project): наличие папки о нём не говорит. Без проекта и без папки — «#N». */
+/** Номер задачи в показе — ЕДИНСТВЕННОЕ место, где он пишется владельцу, вкладке и письму (задача 086; владелец, 2026-10-18:
+ *  «все задачи всех проектов подписываются тремя цифрами без # (022, 061, 081, 094) … количество цифр может быть и больше 3»).
+ *  Любая задача любого проекта — номер записи плагина (он же номер папки задачи) с нулями слева до трёх цифр, без «#»: «022», «061»,
+ *  «094»; длиннее трёх цифр — как есть («1000»). «#N» не пишется нигде: GitHub превращает его в ссылку на issue или PR репозитория
+ *  (страж сообщения коммита, R8). Проект и папка подпись не меняют: параметры оставлены, чтобы вызовы не менялись. */
 export const taskNo = (t: { n: number | string; project?: string; folder?: string }): string => {
   const n = String(t.n)
-  return /^[0-9]+$/.test(n) && (t.folder || t.project === OWN_PROJECT) ? n.padStart(3, "0") : `#${n}`
+  return /^[0-9]+$/.test(n) ? String(Number(n)).padStart(3, "0") : n
 }
-/** «#31 «замок вливания»» — номер задачи с названием: по одному номеру не вспомнить, о чём она (владелец, 2026-10-07); у задачи с
- *  папкой — «045 «…»» (задача 058). */
+/** «031 «замок вливания»» — номер задачи с названием: по одному номеру не вспомнить, о чём она (владелец, 2026-10-07). */
 export const taskRef = (t: { n: number | string; project?: string; title?: string; folder?: string }, max = 40): string => {
   const title = (t.title ?? "").replace(/[«»]/g, "").replace(/\s+/g, " ").trim()
   return title ? `${taskNo(t)} «${title.length > max ? `${title.slice(0, max - 1)}…` : title}»` : taskNo(t)

@@ -46,21 +46,21 @@ const putTask = (project, n, st, extra = {}) => {
 {
   putTask("nova", 73, "cancelled", { executors: ["sesINT9"] })
   putTask("nova", 5, "running", { executor: "sesEX9" })
-  const phrase = "#85 ждёт отдельного решения владельца о возобновлении работы."
+  const phrase = "085 ждёт отдельного решения владельца о возобновлении работы."
   const st = (card, extra = {}) => status.statusOf({ card: { project: "nova", auto: false, directory: proj, repo: "nova", pid: 1, updated: NOW, title: card.session, ...card }, busy: false, asked: [], now: NOW, watches: [], ...extra })
   const integ = st({ session: "sesINT9", role: "integrator", task: { project: "nova", n: 73 } }, { end: { at: NOW - 60_000, text: phrase, ownerAfter: false } })
   cell("9a the source: an integrator bound to a cancelled task has no task in its status", !integ.task, JSON.stringify(integ.task))
   const side = status.sidebarLines([integ], NOW, "nova")
   const printed = side.rows.map((r) => status.sideText(r))
-  cell("9b «Ждут вас» names the integrator, not «#73 исп»", printed.some((l) => /nova интегр\./.test(l)) && !printed.some((l) => l.includes("#73")), JSON.stringify(printed))
+  cell("9b «Ждут вас» names the integrator, not «073 исп»", printed.some((l) => /nova интегр\./.test(l)) && !printed.some((l) => l.includes("073")), JSON.stringify(printed))
   cell("9c its row is the integrator's", side.rows.some((r) => r.who === "интегр."), JSON.stringify(side.rows))
-  cell("9d /crew does not name the task either", !status.formatStatuses([integ], NOW, "nova").includes("#73"), status.formatStatuses([integ], NOW, "nova"))
+  cell("9d /crew does not name the task either", !status.formatStatuses([integ], NOW, "nova").includes("073"), status.formatStatuses([integ], NOW, "nova"))
   const worker = st({ session: "sesW9", role: "worker", task: { project: "nova", n: 73 } })
   cell("9e any tab whose task is closed is shown by its role", !worker.task && status.sidebarLines([worker], NOW, "nova").rows.some((r) => r.who === "worker"), JSON.stringify(worker.task))
   const integOpen = st({ session: "sesINT9b", role: "integrator", task: { project: "nova", n: 5 } })
-  cell("9f an integrator bound to an open task is shown by its role too", status.sidebarLines([integOpen], NOW, "nova").rows.some((r) => r.who === "интегр.") && !status.sidebarLines([integOpen], NOW, "nova").rows.some((r) => /#5/.test(status.sideText(r))), JSON.stringify(status.sidebarLines([integOpen], NOW, "nova").rows))
+  cell("9f an integrator bound to an open task is shown by its role too", status.sidebarLines([integOpen], NOW, "nova").rows.some((r) => r.who === "интегр.") && !status.sidebarLines([integOpen], NOW, "nova").rows.some((r) => /005/.test(status.sideText(r))), JSON.stringify(status.sidebarLines([integOpen], NOW, "nova").rows))
   const ex = st({ session: "sesEX9", role: "worker", task: { project: "nova", n: 5 }, spawned: { by: "sesAUTH", task: "x", tier: "light", status: "running", at: NOW } })
-  cell("9g the executor of an open task is still shown by the task", ex.task?.n === 5 && status.sidebarLines([ex], NOW, "nova").rows.some((r) => r.who === "#5 исп"), JSON.stringify(ex.task))
+  cell("9g the executor of an open task is still shown by the task", ex.task?.n === 5 && status.sidebarLines([ex], NOW, "nova").rows.some((r) => r.who === "005 исп"), JSON.stringify(ex.task))
 }
 
 // ---- the plugin
@@ -108,10 +108,10 @@ const letters = (s) => prompts.filter((p) => p.sessionID === s && /Ты ждёш
 const stOf = (s) => core.readJson(path.join(status.STATUS, `${s}.json`))
 const T0 = Date.now() - 60_000
 for (const s of SESS) {
-  msg(s, "user", { text: "#85 чего ждёт?" }, T0)
+  msg(s, "user", { text: "085 чего ждёт?" }, T0)
   msg(s, "assistant", { content: [{ type: "text", text: "смотрю" }] }, T0 + 1)
 }
-const SOURCE = "#85 ждёт отдельного решения владельца о возобновлении работы.\nВозобновлять работу без нового разрешения нельзя."
+const SOURCE = "085 ждёт отдельного решения владельца о возобновлении работы.\nВозобновлять работу без нового разрешения нельзя."
 
 // item 10: the source - a tab of the owner ends with the phrase, no question form
 await endTurn("sesOW1", SOURCE, Date.now() + 100)
@@ -128,17 +128,17 @@ cell("10d no second letter for the same episode", letters("sesOW1").length === 1
 await endTurn("sesOW1", "Понял.", Date.now() + 100)
 await wait(1500)
 cell("10e an empty turn keeps the mark, no new letter", stOf("sesOW1")?.gate === true && letters("sesOW1").length === 1, JSON.stringify([stOf("sesOW1"), letters("sesOW1").length]))
-msg("sesOW1", "user", { text: "возобновляй #85" }, Date.now() + 100)
+msg("sesOW1", "user", { text: "возобновляй 085" }, Date.now() + 100)
 await wait(1500)
 cell("10f the owner's word clears the mark", !stOf("sesOW1")?.gate, JSON.stringify(stOf("sesOW1")))
 
 // a question in text: the owner sees it and can answer by a word - no letter, the ordinary «ждёт вас»
-await endTurn("sesOW2", "#85 ждёт решения.\n\nВозобновить #85?", Date.now() + 100)
+await endTurn("sesOW2", "085 ждёт решения.\n\nВозобновить 085?", Date.now() + 100)
 await wait(2000)
 cell("10g a question at the end of the turn is a question: no letter, ordinary owner state with ?", letters("sesOW2").length === 0 && stOf("sesOW2")?.state === "owner" && !stOf("sesOW2")?.gate && status.markOf(stOf("sesOW2")) === "?", JSON.stringify([letters("sesOW2").length, stOf("sesOW2")]))
 
 // a question form is open: no letter, no mark
-fw.handleFormEvent({ type: "form.created", data: { form: { id: "frm_ow3", sessionID: "sesOW3", title: "Questions", metadata: { kind: "question" }, fields: [{ key: "q0", description: "Возобновить #85?", options: [{ label: "Да (Recommended)" }, { label: "Нет" }] }] } } })
+fw.handleFormEvent({ type: "form.created", data: { form: { id: "frm_ow3", sessionID: "sesOW3", title: "Questions", metadata: { kind: "question" }, fields: [{ key: "q0", description: "Возобновить 085?", options: [{ label: "Да (Recommended)" }, { label: "Нет" }] }] } } })
 await endTurn("sesOW3", SOURCE, Date.now() + 100)
 await wait(2000)
 cell("10h a question form is open: no letter, no gate mark", letters("sesOW3").length === 0 && !stOf("sesOW3")?.gate, JSON.stringify([letters("sesOW3").length, stOf("sesOW3")]))
@@ -152,7 +152,7 @@ await wait(2000)
 cell("10j a working turn clears the mark, no second letter", !stOf("sesOW4")?.gate && letters("sesOW4").length === 1, JSON.stringify([stOf("sesOW4"), letters("sesOW4").length]))
 
 // a phrase that waits for another tab (the integrator) is not a wait for the owner
-await endTurn("sesOW5", "Жду указаний интегратора по #85.", Date.now() + 100)
+await endTurn("sesOW5", "Жду указаний интегратора по 085.", Date.now() + 100)
 // a task session (spawned): its wait goes to the integrator (task 056), not to the owner
 core.saveCard({ ...card("sesOW6"), spawned: { by: "sesOW1", task: "x", tier: "light", status: "running", at: Date.now() } })
 await endTurn("sesOW6", SOURCE, Date.now() + 100)

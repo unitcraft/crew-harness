@@ -123,9 +123,9 @@ const mkTask = (project, n, author, st, extra = {}) => ({
   const w = run([mk("rework")], silent(25))
   const what = (r) => it?.idleWhat?.(r?.items ?? []) ?? []
   const whats = [...what(r1), ...what(r2), ...what(w), ...what(r8), ...what(r11)]
-  cell("IT-8n the text for the owner names the reason apart: no executor / no session / silent since HH:MM / order not taken", whats[0] === "#81 без исполнителя" && whats[1] === "#81 сессии исполнителя нет" && /^#81 исполнитель молчит с \d\d:\d\d$/.test(whats[2] ?? "") && whats[3] === "#81 заказ не взят: otherproj.integrator вне окна" && whats[4] === "#81 заказ не взят: otherproj.integrator в окне, но не взял", JSON.stringify(whats))
+  cell("IT-8n the text for the owner names the reason apart: no executor / no session / silent since HH:MM / order not taken", whats[0] === "081 без исполнителя" && whats[1] === "081 сессии исполнителя нет" && /^081 исполнитель молчит с \d\d:\d\d$/.test(whats[2] ?? "") && whats[3] === "081 заказ не взят: otherproj.integrator вне окна" && whats[4] === "081 заказ не взят: otherproj.integrator в окне, но не взял", JSON.stringify(whats))
   const l = it?.idleLetter?.(25, [...(r1?.items ?? []), ...(w?.items ?? []), ...(r8?.items ?? [])]) ?? ""
-  cell("IT-8o the letter names the three reasons and the steps (reassign, cancel, ask the owner)", /нет исполнителя/.test(l) && /исполнитель задачи #81.*молчит с \d\d:\d\d/.test(l) && /заказ #81.*никто не взял.*otherproj\.integrator вне окна/.test(l) && /crew_task reassign/.test(l) && /cancel/.test(l) && /инструментом question/.test(l), l)
+  cell("IT-8o the letter names the three reasons and the steps (reassign, cancel, ask the owner)", /нет исполнителя/.test(l) && /исполнитель задачи 081.*молчит с \d\d:\d\d/.test(l) && /заказ 081.*никто не взял.*otherproj\.integrator вне окна/.test(l) && /crew_task reassign/.test(l) && /cancel/.test(l) && /инструментом question/.test(l), l)
 }
 
 // ---- IT-10 the rule over the facts of the cleanup (task 076)
@@ -153,9 +153,9 @@ const mkTask = (project, n, author, st, extra = {}) => ({
   cell("IT-10j no reviewer at all (idleSince 0): idle", r10?.idle === true && r10.items?.[0]?.kind === "cleanup", JSON.stringify(r10))
   const what = it?.idleWhat?.(r1?.items ?? []) ?? []
   const hhmm = new Date(ACC_AT).toTimeString().slice(0, 5)
-  cell("IT-10k the text for the owner: accepted, the cleanup waits for the reviewer since the acceptance", what.join(";") === `#91 принята, уборка ждёт приёмщика с ${hhmm}`, JSON.stringify(what))
+  cell("IT-10k the text for the owner: accepted, the cleanup waits for the reviewer since the acceptance", what.join(";") === `091 принята, уборка ждёт приёмщика с ${hhmm}`, JSON.stringify(what))
   const l = it?.idleLetter?.(35, r1?.items ?? []) ?? ""
-  cell("IT-10l the letter: the task is accepted, all reminders went, the reviewer does not lead, the next steps", /^Ты простаиваешь 35 мин: /.test(l) && /задача #91 «задача 91» принята/.test(l) && /приёмщик/.test(l) && /crew_send/.test(l) && /crew_task \{action: "cleanup"/.test(l) && /инструментом question/.test(l), l)
+  cell("IT-10l the letter: the task is accepted, all reminders went, the reviewer does not lead, the next steps", /^Ты простаиваешь 35 мин: /.test(l) && /задача 091 «задача 91» принята/.test(l) && /приёмщик/.test(l) && /crew_send/.test(l) && /crew_task \{action: "cleanup"/.test(l) && /инструментом question/.test(l), l)
 }
 
 // ---- IT-3 who waits for the tab
@@ -176,9 +176,9 @@ const mkTask = (project, n, author, st, extra = {}) => ({
 {
   const items = [{ kind: "between", task: mkTask("p", 61, "me", "idle", { folder: "doc/tasks/061-x", title: "Спека" }) }, { kind: "waits", task: mkTask("p", 22, "me", "submitted", { title: "Приёмка" }), who: "прм" }]
   const l = it?.idleLetter?.(25, items) ?? ""
-  cell("IT-4a the letter: idle N min, the task without a going session, no question to the owner, the next step or the question tool", /^Ты простаиваешь 25 мин: /.test(l) && /061 «Спека» нет идущей сессии/.test(l) && /#22 прм.*ждёт твоих указаний/.test(l) && /нет вопроса владельцу/.test(l) && /Сделай следующий шаг цикла/.test(l) && /инструментом question/.test(l), l)
+  cell("IT-4a the letter: idle N min, the task without a going session, no question to the owner, the next step or the question tool", /^Ты простаиваешь 25 мин: /.test(l) && /061 «Спека» нет идущей сессии/.test(l) && /022 прм.*ждёт твоих указаний/.test(l) && /нет вопроса владельцу/.test(l) && /Сделай следующий шаг цикла/.test(l) && /инструментом question/.test(l), l)
   const what = it?.idleWhat?.(items) ?? []
-  cell("IT-4b the text for the owner: between sessions, waits for instructions", what.join("; ") === "061 между сессиями; #22 прм ждёт указаний", JSON.stringify(what))
+  cell("IT-4b the text for the owner: between sessions, waits for instructions", what.join("; ") === "061 между сессиями; 022 прм ждёт указаний", JSON.stringify(what))
 }
 
 // ---- IT-5 the status
@@ -212,7 +212,7 @@ const msg = (session, type, data, at = Date.now()) => db.prepare("insert into se
 // runs); I7 its question with expect_reply waits; I8 a gate of task 062; I9 a closed tab. X* - the executors and reviewers.
 // Task 070: J1..J6 - authors (J1 a task without an executor, J2 a silent executor Y2, J3 an order nobody took, J4 an executor Y4 at work, J5 an
 // executor Y5 under crew_watch, J6 an order that was taken). An executor of a running task works (busy): X2, X6b, Y4.
-// Task 076: K1..K7 - authors of accepted tasks #91..#97 with their reviewers Z1..Z7 (K1 a silent reviewer, K2 a reviewer under a crew_watch
+// Task 076: K1..K7 - authors of accepted tasks 091..097 with their reviewers Z1..Z7 (K1 a silent reviewer, K2 a reviewer under a crew_watch
 // of long ago, K3 a reviewer at work (busy), K4 a reviewer under a fresh crew_watch, K5 four reminders only, K6 the fifth reminder is
 // young, K7 a cleaned task). The letters of the reminders lie in the read letters of the author.
 const TABS = ["sesI1", "sesI2", "sesI3", "sesI4", "sesI5", "sesI6", "sesI7", "sesI8", "sesX2", "sesX6", "sesX6b", "sesX7", "sesJ1", "sesJ2", "sesJ3", "sesJ4", "sesJ5", "sesJ6", "sesY2", "sesY4", "sesY5", "sesK1", "sesK2", "sesK3", "sesK4", "sesK5", "sesK6", "sesK7", "sesZ1", "sesZ2", "sesZ3", "sesZ4", "sesZ5", "sesZ6", "sesZ7"]
@@ -268,7 +268,7 @@ putTask(mkTask(P, 67, "sesI7", "idle"))
 putTask(mkTask(P, 68, "sesI8", "idle"))
 putTask(mkTask(P, 69, "sesI9", "idle"))
 // stuck after the last word of the owner in sesX6 (an earlier word would clear the mark, task 052)
-core.addObligation("sesX6", { qid: "qr22", from_session: "sesI6", from_role: "integrator", at: T0, nudges: 0, task: "приёмка #22", stuck: true, stuckAt: T0 + 5, stuckWhat: "приёмка #22 — 3 хода подряд" })
+core.addObligation("sesX6", { qid: "qr22", from_session: "sesI6", from_role: "integrator", at: T0, nudges: 0, task: "приёмка 022", stuck: true, stuckAt: T0 + 5, stuckWhat: "приёмка 022 — 3 хода подряд" })
 core.addObligation("sesX7", { qid: "q7ask", from_session: "sesI7", from_role: "integrator", at: Date.now(), nudges: 0 })
 mkdirSync(watch.WATCHES, { recursive: true })
 writeFileSync(path.join(watch.WATCHES, "w63.json"), JSON.stringify({ id: "w63", session: "sesI3", command: "x", cwd: proj, note: "CI", minutes: 120, created: Date.now(), status: "running", pid: process.pid, started: Date.now() }))
@@ -320,15 +320,15 @@ const endTurn = (s, content, owner) => {
 
 await wait(2500)
 const l1 = letters("sesI1")
-cell("IT-7a the source: a task between sessions, no question, past the threshold - ONE letter naming the task", l1.length === 1 && /задачи #61 «Спека» нет идущей сессии/.test(l1[0].text) && /инструментом question/.test(l1[0].text), JSON.stringify(prompts.map((p) => [p.sessionID, p.text.slice(0, 90)])))
+cell("IT-7a the source: a task between sessions, no question, past the threshold - ONE letter naming the task", l1.length === 1 && /задачи 061 «Спека» нет идущей сессии/.test(l1[0].text) && /инструментом question/.test(l1[0].text), JSON.stringify(prompts.map((p) => [p.sessionID, p.text.slice(0, 90)])))
 const s1 = stOf("sesI1")
-cell("IT-7b its status: tasks, idleTab, «простаивает … вопроса владельцу нет: #61 между сессиями»", s1?.state === "tasks" && !!s1.idleTab && /^простаивает с .*вопроса владельцу нет: #61 между сессиями$/.test(s1.detail), JSON.stringify(s1))
+cell("IT-7b its status: tasks, idleTab, «простаивает … вопроса владельцу нет: 061 между сессиями»", s1?.state === "tasks" && !!s1.idleTab && /^простаивает с .*вопроса владельцу нет: 061 между сессиями$/.test(s1.detail), JSON.stringify(s1))
 cell("IT-7c an executor works: no letter, no mark", letters("sesI2").length === 0 && !stOf("sesI2")?.idleTab, JSON.stringify(stOf("sesI2")))
 cell("IT-7d crew_watch is open: no letter, the state watch", letters("sesI3").length === 0 && stOf("sesI3")?.state === "watch" && !stOf("sesI3")?.idleTab, JSON.stringify(stOf("sesI3")))
 cell("IT-7e a question to the owner is open: no letter, the state owner", letters("sesI4").length === 0 && stOf("sesI4")?.state === "owner" && !stOf("sesI4")?.idleTab, JSON.stringify(stOf("sesI4")))
 cell("IT-7f its turn goes: no letter, the state working", letters("sesI5").length === 0 && stOf("sesI5")?.state === "working" && !stOf("sesI5")?.idleTab, JSON.stringify(stOf("sesI5")))
 const l6 = letters("sesI6")
-cell("IT-7g a reviewer waits for the tab (another task runs): ONE letter naming the waiting session", l6.length === 1 && /#22 прм.*ждёт твоих указаний/.test(l6[0].text) && !!stOf("sesI6")?.idleTab, JSON.stringify([l6.map((p) => p.text), stOf("sesI6")]))
+cell("IT-7g a reviewer waits for the tab (another task runs): ONE letter naming the waiting session", l6.length === 1 && /022 прм.*ждёт твоих указаний/.test(l6[0].text) && !!stOf("sesI6")?.idleTab, JSON.stringify([l6.map((p) => p.text), stOf("sesI6")]))
 cell("IT-7h its own question with expect_reply waits: no letter, the state reply", letters("sesI7").length === 0 && stOf("sesI7")?.state === "reply", JSON.stringify(stOf("sesI7")))
 cell("IT-7i a gate without a question (task 062): its own letter and mark, no idle letter", letters("sesI8").length === 0 && prompts.some((p) => p.sessionID === "sesI8" && /без вопроса владельцу/.test(p.text)) && stOf("sesI8")?.gate === true, JSON.stringify(stOf("sesI8")))
 cell("IT-7j a closed tab: no letter, no mark", letters("sesI9").length === 0 && !stOf("sesI9")?.idleTab, JSON.stringify(stOf("sesI9")))
@@ -362,11 +362,11 @@ cell("IT-7q and no new letter while the session goes", letters("sesI1").length =
 // ---- IT-9 task 070: the same rule by the status of the task
 {
   const j1 = letters("sesJ1")
-  cell("IT-9a a running task without an executor: ONE letter «нет исполнителя», the mark", j1.length === 1 && /задачи #71 «задача 71» нет исполнителя/.test(j1[0].text) && !!stOf("sesJ1")?.idleTab && /#71 без исполнителя/.test(stOf("sesJ1")?.detail ?? ""), JSON.stringify([j1.map((p) => p.text), stOf("sesJ1")]))
+  cell("IT-9a a running task without an executor: ONE letter «нет исполнителя», the mark", j1.length === 1 && /задачи 071 «задача 71» нет исполнителя/.test(j1[0].text) && !!stOf("sesJ1")?.idleTab && /071 без исполнителя/.test(stOf("sesJ1")?.detail ?? ""), JSON.stringify([j1.map((p) => p.text), stOf("sesJ1")]))
   const j2 = letters("sesJ2")
-  cell("IT-9b a task on rework, the executor is silent: ONE letter «молчит с», the mark", j2.length === 1 && /исполнитель задачи #72 «задача 72» молчит с \d\d:\d\d/.test(j2[0].text) && !!stOf("sesJ2")?.idleTab && /#72 исполнитель молчит с/.test(stOf("sesJ2")?.detail ?? ""), JSON.stringify([j2.map((p) => p.text), stOf("sesJ2")]))
+  cell("IT-9b a task on rework, the executor is silent: ONE letter «молчит с», the mark", j2.length === 1 && /исполнитель задачи 072 «задача 72» молчит с \d\d:\d\d/.test(j2[0].text) && !!stOf("sesJ2")?.idleTab && /072 исполнитель молчит с/.test(stOf("sesJ2")?.detail ?? ""), JSON.stringify([j2.map((p) => p.text), stOf("sesJ2")]))
   const j3 = letters("sesJ3")
-  cell("IT-9c an order nobody took, the addressee is not in a window: ONE letter naming the addressee, the mark", j3.length === 1 && /заказ #73 «задача 73» никто не взял: интегратор otherproj\.integrator вне окна/.test(j3[0].text) && !!stOf("sesJ3")?.idleTab && /#73 заказ не взят/.test(stOf("sesJ3")?.detail ?? ""), JSON.stringify([j3.map((p) => p.text), stOf("sesJ3")]))
+  cell("IT-9c an order nobody took, the addressee is not in a window: ONE letter naming the addressee, the mark", j3.length === 1 && /заказ 073 «задача 73» никто не взял: интегратор otherproj\.integrator вне окна/.test(j3[0].text) && !!stOf("sesJ3")?.idleTab && /073 заказ не взят/.test(stOf("sesJ3")?.detail ?? ""), JSON.stringify([j3.map((p) => p.text), stOf("sesJ3")]))
   cell("IT-9d an executor at work: no letter, no mark", letters("sesJ4").length === 0 && !stOf("sesJ4")?.idleTab, JSON.stringify(stOf("sesJ4")))
   cell("IT-9e an executor under crew_watch: no letter, no mark", letters("sesJ5").length === 0 && !stOf("sesJ5")?.idleTab, JSON.stringify(stOf("sesJ5")))
   cell("IT-9f an order that was taken: no letter, no mark", letters("sesJ6").length === 0 && !stOf("sesJ6")?.idleTab, JSON.stringify(stOf("sesJ6")))
@@ -385,9 +385,9 @@ cell("IT-7q and no new letter while the session goes", letters("sesI1").length =
 // ---- IT-11 task 076: an accepted task nobody cleans up
 {
   const k1 = letters("sesK1")
-  cell("IT-11a the reviewer is silent after the fifth reminder: ONE letter naming the accepted task, the mark, the text for the owner", k1.length === 1 && /задача #91 «задача 91» принята/.test(k1[0].text) && !!stOf("sesK1")?.idleTab && /#91 принята, уборка ждёт приёмщика с \d\d:\d\d/.test(stOf("sesK1")?.detail ?? ""), JSON.stringify([k1.map((p) => p.text), stOf("sesK1")]))
+  cell("IT-11a the reviewer is silent after the fifth reminder: ONE letter naming the accepted task, the mark, the text for the owner", k1.length === 1 && /задача 091 «задача 91» принята/.test(k1[0].text) && !!stOf("sesK1")?.idleTab && /091 принята, уборка ждёт приёмщика с \d\d:\d\d/.test(stOf("sesK1")?.detail ?? ""), JSON.stringify([k1.map((p) => p.text), stOf("sesK1")]))
   const k2 = letters("sesK2")
-  cell("IT-11b the reviewer waits under a crew_watch of long ago (the case of Nova #91): ONE letter and the mark", k2.length === 1 && !!stOf("sesK2")?.idleTab && stOf("sesZ2")?.state === "watch", JSON.stringify([k2.map((p) => p.text), stOf("sesK2"), stOf("sesZ2")?.state]))
+  cell("IT-11b the reviewer waits under a crew_watch of long ago (the case of Nova 091): ONE letter and the mark", k2.length === 1 && !!stOf("sesK2")?.idleTab && stOf("sesZ2")?.state === "watch", JSON.stringify([k2.map((p) => p.text), stOf("sesK2"), stOf("sesZ2")?.state]))
   cell("IT-11c the reviewer works a turn: no letter, no mark", letters("sesK3").length === 0 && !stOf("sesK3")?.idleTab && stOf("sesZ3")?.state === "working", JSON.stringify([stOf("sesK3"), stOf("sesZ3")?.state]))
   cell("IT-11d the reviewer is under a fresh crew_watch: no letter, no mark", letters("sesK4").length === 0 && !stOf("sesK4")?.idleTab && stOf("sesZ4")?.state === "watch", JSON.stringify([stOf("sesK4"), stOf("sesZ4")?.state]))
   cell("IT-11e only four reminders went: no letter, no mark", letters("sesK5").length === 0 && !stOf("sesK5")?.idleTab, JSON.stringify(stOf("sesK5")))
@@ -395,7 +395,7 @@ cell("IT-7q and no new letter while the session goes", letters("sesI1").length =
   cell("IT-11g a cleaned task: no letter, no mark", letters("sesK7").length === 0 && !stOf("sesK7")?.idleTab, JSON.stringify(stOf("sesK7")))
   await wait(1500)
   cell("IT-11h no second letter in the same episode", letters("sesK1").length === 1 && letters("sesK2").length === 1, JSON.stringify([letters("sesK1").length, letters("sesK2").length]))
-  // the reviewer of #92 works (a turn with a tool): its silence starts anew, the mark of the author is gone, no second letter
+  // the reviewer of 092 works (a turn with a tool): its silence starts anew, the mark of the author is gone, no second letter
   endTurn("sesZ2", [{ type: "tool", name: "read", state: { status: "completed" } }, { type: "text", text: "Проверил." }])
   await wait(1000)
   cell("IT-11i the reviewer speaks: the mark of the author is gone, no second letter", !stOf("sesK2")?.idleTab && letters("sesK2").length === 1, JSON.stringify([letters("sesK2").length, stOf("sesK2")]))

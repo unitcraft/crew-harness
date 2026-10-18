@@ -140,10 +140,10 @@ const letters = (to) =>
 // is read first depends on the speed of the machine (a delivered one moves to read/, a later one is still in inbox/). The snapshot
 // holds the FIRST reminder, so the first one is taken: the text with no number of a repeat (task 085).
 const stale = (to, re) => letters(to).filter((l) => re.test(l.text) && !/Напоминание \d+ из \d+/.test(l.text))
-for (const end = Date.now() + 15_000; Date.now() < end && !(stale("sesREV03", /не очищена/).length && stale("sesINTEG1", /#3 .*не очищена/).length); ) await wait(100)
+for (const end = Date.now() + 15_000; Date.now() < end && !(stale("sesREV03", /не очищена/).length && stale("sesINTEG1", /003 .*не очищена/).length); ) await wait(100)
 await wait(500)
 out["reminder to the reviewer"] = stale("sesREV03", /не очищена/)[0]?.text ?? "(no letter)"
-out["reminder to the author"] = stale("sesINTEG1", /#3 .*не очищена/)[0]?.text ?? "(no letter)"
+out["reminder to the author"] = stale("sesINTEG1", /003 .*не очищена/)[0]?.text ?? "(no letter)"
 
 clearInterval(heart)
 stop?.()

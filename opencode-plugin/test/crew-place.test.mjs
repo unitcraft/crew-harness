@@ -96,10 +96,10 @@ cell("and its session runs in the worktree, not the main copy", sessions.get(t2.
 // 3. a worktree outside <root>/<worktrees>: not started, the author is told
 const outside = path.join(tmp, "elsewhere", "proj-3-x")
 tasks.createTask({ project: "proj", title: "снаружи", goal: "g", criteria: "c", priority: "P2", tier: "light", role: "worker", model: "claude-code/haiku", author: "sesINTEG1", author_role: "proj.integrator", qid: "q3", status: "starting", kind: "spawn", executor: tasks.plannedSessionId(), directory: proj }, () => ({ worktree: outside, branch: "t3-x" }))
-await until(() => lettersTo("sesINTEG1").some((l) => /#3 .*не запущена/.test(l.text)))
+await until(() => lettersTo("sesINTEG1").some((l) => /003 .*не запущена/.test(l.text)))
 const t3 = task(3)
 cell("a worktree outside the project's folder is not started", t3.status === "starting" && !sessions.has(t3.executor) && !existsSync(outside), JSON.stringify({ st: t3.status, s: sessions.has(t3.executor) }))
-cell("the author is told why, once", lettersTo("sesINTEG1").filter((l) => /#3 .*не запущена: worktree .* вне папки деревьев/.test(l.text)).length === 1, JSON.stringify(lettersTo("sesINTEG1").map((l) => l.text.slice(0, 160))))
+cell("the author is told why, once", lettersTo("sesINTEG1").filter((l) => /003 .*не запущена: worktree .* вне папки деревьев/.test(l.text)).length === 1, JSON.stringify(lettersTo("sesINTEG1").map((l) => l.text.slice(0, 160))))
 
 stop?.()
 process.chdir(cwd0)

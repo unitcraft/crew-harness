@@ -182,19 +182,19 @@ T.t1 = mk("pw", { executor: "sesEX31" }) // empty turns of an executor
 spawnedCard("sesEX31", T.t1)
 T.t2 = mk("pt", { status: "reviewing", executor: "sesEX32", reviewer: "sesRV32", review_kind: "tab", review_qid: "rq32x" }) // empty turns of a reviewer
 reviewerCard("sesRV32", T.t2)
-core.addObligation("sesRV32", { qid: "rq32x", from_session: AUTH.pt, from_role: "pt.integrator", at: Date.now(), nudges: 0, task: `приёмка #${T.t2.n}` })
+core.addObligation("sesRV32", { qid: "rq32x", from_session: AUTH.pt, from_role: "pt.integrator", at: Date.now(), nudges: 0, task: `приёмка ${String(T.t2.n).padStart(3, "0")}` })
 T.t3 = mk("pw", { executor: "sesEX33" }) // working turns of an executor: push_max
 spawnedCard("sesEX33", T.t3)
 T.t4 = mk("ph", { status: "accepted", executor: "sesEX34", reviewer: "sesRV34", review_kind: "tab", review_qid: "rq34x" }) // accepted: the reviewer is still nudged
 when(T.t4, "accepted", 1000)
 reviewerCard("sesRV34", T.t4)
-core.addObligation("sesRV34", { qid: "rq34x", from_session: AUTH.ph, from_role: "ph.integrator", at: Date.now(), nudges: 0, task: `приёмка #${T.t4.n}` })
+core.addObligation("sesRV34", { qid: "rq34x", from_session: AUTH.ph, from_role: "ph.integrator", at: Date.now(), nudges: 0, task: `приёмка ${String(T.t4.n).padStart(3, "0")}` })
 T.t5 = mk("pw", { status: "rework", executor: "sesEX35", rework: 1, rework_note: "поправь", reviewer_role: "pw.worker", reviewer: "sesRV35", review_kind: "tab", review_qid: "rq35x" }) // rework: the executor is nudged
 spawnedCard("sesEX35", T.t5)
 core.addObligation("sesEX35", { qid: T.t5.qid, from_session: AUTH.pw, from_role: "pw.integrator", at: Date.now(), nudges: 0, task: T.t5.title })
 T.t6 = mk("pi", { status: "reviewing", executor: "sesEX36", reviewer: AUTH.pi, review_kind: "integrator", review_qid: "rq36x" }) // reviewer: integrator, stuck
 core.saveCard({ ...core.readJson(core.cardFile(AUTH.pi)), review: { project: "pi", n: T.t6.n } })
-core.addObligation(AUTH.pi, { qid: "rq36x", from_session: AUTH.pi, from_role: "pi.integrator", at: Date.now(), nudges: 0, task: `приёмка #${T.t6.n}` })
+core.addObligation(AUTH.pi, { qid: "rq36x", from_session: AUTH.pi, from_role: "pi.integrator", at: Date.now(), nudges: 0, task: `приёмка ${String(T.t6.n).padStart(3, "0")}` })
 T.t7 = mk("pc", { executor: "sesEX37" }) // the author's tab is closed, the executor is stuck
 spawnedCard("sesEX37", T.t7)
 T.t8 = mk("pw", { kind: "assign", executor: "sesOWN8" }) // the owner's closed tab as the executor: the nudge reaches it
@@ -325,7 +325,7 @@ await wait(1500)
 {
   const t = tasks.loadTask("pw", T.m02.n)
   cell("M02", "starting, the session cannot be created: retried on the next passes, the task stays starting", failCreates >= 2 && t.status === "starting", JSON.stringify({ failCreates, st: t.status }))
-  const told = lettersRe(AUTH.pw, new RegExp(`#${T.m02.n} .*не запущена`))
+  const told = lettersRe(AUTH.pw, new RegExp(`${String(T.m02.n).padStart(3, "0")} .*не запущена`))
   cell("M02a", "starting, the session cannot be created: the author gets one letter with the reason (not only the server log)", told.length === 1 && /model service unavailable/.test(told[0].text), JSON.stringify(told.map((l) => l.text.slice(0, 200))))
 }
 // M03 running, obligation lost
@@ -334,7 +334,7 @@ cell("M03", "running: reconcile restores the executor's obligation (qid of the t
 {
   const ob = oblig("sesEX04", T.m04.qid)
   cell("M04", "running, no card of the executor: reconcile still records the obligation", !!ob, "no obligation")
-  const m04re = new RegExp(`#${T.m04.n}\\b.*пропала`)
+  const m04re = new RegExp(`${String(T.m04.n).padStart(3, "0")}\\b.*пропала`)
   await until(() => lettersRe(AUTH.pw, m04re).length > 0)
   const told = lettersRe(AUTH.pw, m04re)
   const hist = tasks.loadTask("pw", T.m04.n).history.filter((h) => /пропала/.test(h.note ?? ""))
@@ -364,7 +364,7 @@ cell("M07", "running, kind assign, the owner's tab is closed: reconcile records 
 {
   const t = tasks.loadTask("pz", T.m10.n)
   const l = lettersRe(AUTH.pz, /ждёт приёмщика/)
-  cell("M10", "submitted, places of reviewers taken (spawn_limits.reviewer 0): no reviewer, after stall_minutes ONE letter to the author", !t.reviewer && l.length === 1 && /#\d+/.test(l[0].text), JSON.stringify({ r: t.reviewer, l: l.map((x) => x.text.slice(0, 100)) }))
+  cell("M10", "submitted, places of reviewers taken (spawn_limits.reviewer 0): no reviewer, after stall_minutes ONE letter to the author", !t.reviewer && l.length === 1 && /\d{3,}/.test(l[0].text), JSON.stringify({ r: t.reviewer, l: l.map((x) => x.text.slice(0, 100)) }))
 }
 // M11 integrator reviews
 {
@@ -398,12 +398,12 @@ cell("M07", "running, kind assign, the owner's tab is closed: reconcile records 
 // M17 merge lock
 {
   const l = lettersRe(AUTH.pw, /Замок слияния проекта pw/)
-  cell("M17", "reviewing, the reviewer holds the merge lock longer than stall_minutes: ONE letter to the author", l.length === 1 && new RegExp(`приёмка #${T.m17.n}`).test(l[0].text), JSON.stringify(l.map((x) => x.text.slice(0, 120))))
+  cell("M17", "reviewing, the reviewer holds the merge lock longer than stall_minutes: ONE letter to the author", l.length === 1 && new RegExp(`приёмка ${String(T.m17.n).padStart(3, "0")}`).test(l[0].text), JSON.stringify(l.map((x) => x.text.slice(0, 120))))
 }
 // M18/M19 accepted not cleaned
 {
   const rf = lettersRe("sesRV18", /не очищена/)
-  const af = lettersRe(AUTH.pf, new RegExp(`#${T.m18.n} .*не очищена`))
+  const af = lettersRe(AUTH.pf, new RegExp(`${String(T.m18.n).padStart(3, "0")} .*не очищена`))
   cell("M18", "accepted, accepted_slot free, over accepted_reminder_min: the reviewer is woken to repeat cleanup (place not held), the author is told", rf.length >= 1 && rf.every((l) => /место в inflight_limit не занимает/.test(l.text) && l.wake !== false) && af.length >= 1, JSON.stringify({ rf: rf.map((l) => l.text.slice(0, 100)), af: af.length }))
   const rh = lettersRe("sesRV19", /не очищена/)
   cell("M19", "accepted, accepted_slot hold: same letters, the text says the place is held", rh.length >= 1 && /держит место в лимите/.test(rh[0].text), JSON.stringify(rh.map((l) => l.text.slice(0, 100))))
@@ -424,7 +424,7 @@ cell("M07", "running, kind assign, the owner's tab is closed: reconcile records 
 }
 // T11 the deleted session
 {
-  const t11re = new RegExp(`#${T.t11.n}\\b.*пропала`)
+  const t11re = new RegExp(`${String(T.t11.n).padStart(3, "0")}\\b.*пропала`)
   await until(() => lettersRe(AUTH.pw, t11re).length > 0)
   await until(() => promptFails >= 5)
   const told = lettersRe(AUTH.pw, t11re)
@@ -436,9 +436,9 @@ cell("M07", "running, kind assign, the owner's tab is closed: reconcile records 
   await until(() => lettersRe("sesRV18", /не очищена/).length >= 5)
   await wait(2000)
   const rf = lettersRe("sesRV18", /не очищена/)
-  const af = lettersRe(AUTH.pf, new RegExp(`#${T.m18.n} .*не очищена`))
+  const af = lettersRe(AUTH.pf, new RegExp(`${String(T.m18.n).padStart(3, "0")} .*не очищена`))
   const view = status.formatStatuses(status.readStatuses(), Date.now(), "pf")
-  const line = new RegExp(`uncleaned [^\\n]*#${T.m18.n} \\d+[mhd]`)
+  const line = new RegExp(`uncleaned [^\\n]*${String(T.m18.n).padStart(3, "0")} \\d+[mhd]`)
   cell("M18a", "accepted and still not cleaned up: the reminder repeats every accepted_reminder_min, 5 times per acceptance (reviewer and author), then silence and the counter 'uncleaned #N Ч' in /crew", rf.length === 5 && af.length === 5 && line.test(view), JSON.stringify({ rf: rf.length, af: af.length, view: view.split("\n").filter((l) => /uncleaned|pf/.test(l)) }))
 }
 
@@ -447,11 +447,11 @@ cell("M07", "running, kind assign, the owner's tab is closed: reconcile records 
 await turn("sesEX31")
 cell("T1a", "running: the end of an empty turn -> a reminder to the executor", sent("sesEX31", /Не завершено: задача/).length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "sesEX31").map((d) => d.text.slice(0, 60))))
 await turn("sesEX31")
-await until(() => lettersRe(AUTH.pw, /застряла/).some((l) => new RegExp(`#${T.t1.n} `).test(l.text)))
+await until(() => lettersRe(AUTH.pw, /застряла/).some((l) => new RegExp(`${String(T.t1.n).padStart(3, "0")} `).test(l.text)))
 // the letter, the notice in the window and the history entry come one after another: all of them are awaited (task 085)
 await until(() => noticesFor("sesEX31").some((n) => /застряла/.test(n.title)) && tasks.loadTask("pw", T.t1.n).history.some((h) => /застряла/.test(h.note ?? "")))
 {
-  const call1 = lettersRe(AUTH.pw, /застряла/).filter((l) => new RegExp(`#${T.t1.n} `).test(l.text))
+  const call1 = lettersRe(AUTH.pw, /застряла/).filter((l) => new RegExp(`${String(T.t1.n).padStart(3, "0")} `).test(l.text))
   cell("T1b", "running: push_empty_turns empty turns in a row -> stuck: ONE letter to the author, a notice in his window, an entry in the task history", call1.length === 1 && noticesFor("sesEX31").some((n) => /застряла/.test(n.title)) && tasks.loadTask("pw", T.t1.n).history.some((h) => /застряла/.test(h.note ?? "")), JSON.stringify({ l: call1.length, n: noticesFor("sesEX31").length }))
   const before = sent("sesEX31", /Не завершено/).length
   await turn("sesEX31")
@@ -461,7 +461,7 @@ await until(() => noticesFor("sesEX31").some((n) => /застряла/.test(n.ti
   // the block of a task in /crew: its heading and the rows under it (a quiet task - the heading alone, the tabs on it)
   const taskBlock = (n) => {
     const ls = view().split("\n")
-    const i = ls.findIndex((l) => new RegExp(`^  (\\S+ )?#${n} `).test(l))
+    const i = ls.findIndex((l) => new RegExp(`^  (\\S+ )?${String(n).padStart(3, "0")} `).test(l))
     if (i < 0) return ""
     let j = i + 1
     while (j < ls.length && /^ {4}/.test(ls[j])) j++
@@ -500,19 +500,19 @@ cell("T3a", "running: working turns (with tools) are reminded after each one, pa
 await wait(600)
 {
   const ob = oblig("sesEX33", T.t3.qid)
-  const calls = lettersRe(AUTH.pw, /застряла/).filter((l) => new RegExp(`задача #${T.t3.n} `).test(l.text))
+  const calls = lettersRe(AUTH.pw, /застряла/).filter((l) => new RegExp(`задача ${String(T.t3.n).padStart(3, "0")} `).test(l.text))
   cell("T3b", "running: the working turns do not make the task stuck: no call to the author, the reminder counter is 1 (reset by each working turn)", calls.length === 0 && ob?.nudges === 1 && !ob?.stuck, JSON.stringify({ ob, calls: calls.map((l) => l.text.slice(0, 120)) }))
 }
 // T4: accepted, reviewer nudged until cleanup
 await turn("sesRV34")
-cell("T4", "accepted: the reviewer is nudged at the end of an empty turn until cleanup (the text names the status 'принята')", sent("sesRV34", /Не завершено: приёмка задачи #\d+ «[^»]*» \(принята\)/).length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "sesRV34").map((d) => d.text.slice(0, 120))))
+cell("T4", "accepted: the reviewer is nudged at the end of an empty turn until cleanup (the text names the status 'принята')", sent("sesRV34", /Не завершено: приёмка задачи \d{3,} «[^»]*» \(принята\)/).length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "sesRV34").map((d) => d.text.slice(0, 120))))
 // T5: rework, the executor nudged
 await turn("sesEX35")
 cell("T5", "rework: the end of an empty turn -> a reminder to the executor", sent("sesEX35", /Не завершено: задача/).length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "sesEX35").map((d) => d.text.slice(0, 80))))
 // T6: reviewer integrator stuck: the letter goes to the stuck tab itself
 await turn(AUTH.pi)
 await turn(AUTH.pi)
-const t6re = new RegExp(`задачи #${T.t6.n} `)
+const t6re = new RegExp(`задачи ${String(T.t6.n).padStart(3, "0")} `)
 await until(() => lettersRe(AUTH.pi, t6re).some((l) => /застряла/.test(l.text)))
 cell("T6", "reviewing, reviewer integrator, stuck: the call letter is addressed to the stuck tab itself (asker = reviewer); the window notice is the only outside sign", lettersRe(AUTH.pi, /застряла/).filter((l) => t6re.test(l.text)).length === 1 && noticesFor(AUTH.pi).some((n) => /застряла/.test(n.title)), JSON.stringify({ l: lettersRe(AUTH.pi, /застряла/).map((l) => l.text.slice(0, 120)), n: noticesFor(AUTH.pi).map((n) => n.title) }))
 {
@@ -529,7 +529,7 @@ await wait(600)
   cell("T7a", "stuck, the author's tab is closed: the call letter is posted and waits in his inbox (not delivered until he opens the tab)", l.length === 1 && l[0].box === "inbox" && sent(AUTH.pc, /застряла/).length === 0, JSON.stringify(l.map((x) => x.box)))
   cell("T7b", "stuck, the author's tab is closed: the notice goes to the live windows (no window of the project here: all live windows)", seenNotices.some((n) => /застряла/.test(n.title) && n.sessionID === "sesEX37"), JSON.stringify(seenNotices.map((n) => n.title)))
   const lockL = lettersRe(AUTH.pc, /Замок слияния проекта pc/)
-  const lockN = seenNotices.filter((n) => /замок/i.test(n.title) && new RegExp(`#${T.t7c.n}\\b`).test(`${n.title} ${n.message}`))
+  const lockN = seenNotices.filter((n) => /замок/i.test(n.title) && new RegExp(`${String(T.t7c.n).padStart(3, "0")}\\b`).test(`${n.title} ${n.message}`))
   cell("T7c", "merge lock held too long, the author's tab is closed: ONE letter waits in his inbox, and ONE notice goes to the live windows", lockL.length === 1 && lockN.length === 1, JSON.stringify({ l: lockL.length, n: seenNotices.map((n) => n.title) }))
 }
 // T8: the owner's closed tab as an executor gets the nudge

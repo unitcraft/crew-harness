@@ -6,7 +6,8 @@
 Проверяет: чистая новая ветка и пуш в существующую ветку проходят; удаление ветки проходит (судить
     нечего); коммит от cherry-pick и от rebase --continue с выдуманным путём машины в файле отклоняет пуш,
     вывод называет коммит и файл и не содержит значения; коммит с не ASCII, без подписи и с именем из списка
-    отклоняет пуш; прежней головы нет локально - отказ «сначала git fetch»; пуш из связанного рабочего дерева.
+    отклоняет пуш; коммит с «#31» номера задачи в сообщении отклоняет пуш, «Fixes #12» проходит (R8, задача 086);
+    прежней головы нет локально - отказ «сначала git fetch»; пуш из связанного рабочего дерева.
 Не проверяет: диапазон сам по себе (test-commit-range.py), стражей по отдельности.
 Правило: AGENTS.md п.15, п.4, п.8; AC-12, AC-32 задачи.
 """
@@ -123,6 +124,22 @@ def main():
         assert "non-ascii" in out, out
         stlib.git(repo, env, "checkout", "-q", "main")
 
+    def task_hash_in_message():
+        name = next_name("th")
+        branch(repo, name)
+        commit_nohooks(repo, "th/f.txt", "x\n", message="Part of #31")
+        out = refused(push(repo, name))
+        assert "task-hash" in out, out
+        stlib.git(repo, env, "checkout", "-q", "main")
+
+    def issue_ref_in_message_passes():
+        name = next_name("ir")
+        branch(repo, name)
+        commit_nohooks(repo, "ir/f.txt", "x\n", message="Fix a thing\n\nFixes #12")
+        proc = push(repo, name)
+        assert proc.returncode == 0, proc.out + proc.err
+        stlib.git(repo, env, "checkout", "-q", "main")
+
     def no_signoff():
         name = next_name("ns")
         branch(repo, name)
@@ -184,6 +201,8 @@ def main():
     pr.probe("красная", "rebase --continue с путём машины в разрешении конфликта", rebase_continue_machine_path)
     pr.probe("красная", "сообщение не ASCII", non_ascii_message)
     pr.probe("красная", "нет подписи", no_signoff)
+    pr.probe("красная", "R8: номер задачи с решёткой в сообщении", task_hash_in_message)
+    pr.probe("законное", "R8: Fixes #12 в сообщении проходит", issue_ref_in_message_passes)
     pr.probe("красная", "имя из списка в файле коммита", forbidden_name_in_file)
     pr.probe("иной-синтаксис", "плохой коммит вторым в ветке: назван именно он", second_commit_is_the_bad_one)
     pr.probe("мишень", "прежней головы нет локально: отказ «сначала git fetch»", old_head_not_fetched)

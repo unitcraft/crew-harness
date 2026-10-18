@@ -20,7 +20,7 @@ const proj = path.join(tmp, "proj")
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
 // stall after 0.01 min (0.6 s); no review sessions, so a submitted task waits for a reviewer
 writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ stall_minutes: 0.01, accepted_reminder_min: 0.01, inflight_limit: 3, accepted_slot: "hold", heavy_commands: ["scripts/gate.sh"], spawn_limits: { reviewer: 0 }, branch_name: "t{n}-{slug}", cleanup: "local" }))
-// the project is a git repository: task #3 was accepted, but its branch and a diagnostic branch stayed
+// the project is a git repository: task 003 was accepted, but its branch and a diagnostic branch stayed
 const { execFileSync } = await import("node:child_process")
 const g = (...a) => execFileSync("git", ["-C", proj, "-c", "user.name=t", "-c", "user.email=t@t", ...a], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
 g("init", "-q", "-b", "main")
@@ -29,7 +29,7 @@ g("add", "-A")
 g("commit", "-q", "-m", "init")
 g("branch", "t3-feat")
 g("branch", "t3-diag")
-g("branch", "t30-other") // another task's number: not a leftover of #3
+g("branch", "t30-other") // another task's number: not a leftover of 003
 
 const db = new DatabaseSync(dbPath)
 db.exec("create table session_v2 (id text primary key, directory text, title text, parent_id text, time_archived integer, time_idle integer, time_viewed integer, time_suspended integer)")
@@ -49,19 +49,19 @@ const base = (n, extra) => {
   tasks.saveTask(t)
   return t
 }
-// #1: on review, its review session holds the merge lock since 10 min ago and has an open review obligation
+// 001: on review, its review session holds the merge lock since 10 min ago and has an open review obligation
 base(1, { status: "reviewing", executor: "sesEX1", reviewer: "sesREV01", review_kind: "spawn", review_qid: "rq1" })
-card("sesREV01", { spawned: { by: "sesINTEG1", task: "приёмка #1", tier: "light", status: "running", at: Date.now(), qid: "rq1" }, review: { project: "proj", n: 1 } })
-core.addObligation("sesREV01", { qid: "rq1", from_session: "sesINTEG1", from_role: "proj.integrator", at: Date.now(), nudges: 0, task: "приёмка #1" })
+card("sesREV01", { spawned: { by: "sesINTEG1", task: "приёмка 001", tier: "light", status: "running", at: Date.now(), qid: "rq1" }, review: { project: "proj", n: 1 } })
+core.addObligation("sesREV01", { qid: "rq1", from_session: "sesINTEG1", from_role: "proj.integrator", at: Date.now(), nudges: 0, task: "приёмка 001" })
 review.takeMergeLock("proj", "sesREV01", 1)
 const lockFile = path.join(core.ROLES, "proj_merge.json")
 writeFileSync(lockFile, JSON.stringify({ ...JSON.parse(readFileSync(lockFile, "utf8")), at: Date.now() - 600_000 }))
-// #2: submitted 10 min ago, no reviewer (no places)
+// 002: submitted 10 min ago, no reviewer (no places)
 const t2 = base(2, { status: "submitted", executor: "sesEX2", report: "сделал 2" })
 t2.history.push({ at: Date.now() - 600_000, by: "sesEX2", status: "submitted", note: "отчёт" })
 tasks.saveTask(t2)
 base(3, { status: "done", slug: "feat", executor: "sesEX3", branch: "t3-feat" })
-// #4: accepted an hour ago and never cleanup (#9 nova: 11.5 h, holding a place in inflight_limit)
+// 004: accepted an hour ago and never cleanup (009 nova: 11.5 h, holding a place in inflight_limit)
 const t4 = base(4, { status: "accepted", executor: "sesEX4", reviewer: "sesREV04", review_kind: "spawn" })
 t4.history.push({ at: Date.now() - 3_600_000, by: "sesREV04", status: "accepted", note: "принята" })
 tasks.saveTask(t4)
@@ -70,7 +70,7 @@ card("sesRUN01", { spawned: { by: "sesINTEG1", task: "x", tier: "light", status:
 msg("sesRUN01", "idle", { outcome: "succeeded" }, Date.now() - 60_000)
 msg("sesRUN01", "assistant", { content: [{ type: "tool", name: "bash" }] })
 
-// #5: accepted, its worktree still there; a watch stands in it (#26 nova, 2026-10-07: the watch waiting for the tree to go
+// 005: accepted, its worktree still there; a watch stands in it (026 nova, 2026-10-07: the watch waiting for the tree to go
 // held the folder, and "git worktree remove" failed with Permission denied)
 const wt5 = path.join(tmp, "wt5")
 mkdirSync(wt5, { recursive: true })
@@ -121,7 +121,7 @@ const stop = await mod.default.setup(ctx)
 
 // 1. the reviewer's turn ends with a question: it goes to the integrator, the reviewer is not told "continue"
 await hooks.context({ sessionID: "sesREV01", system: [], model: { id: "x", providerID: "y" } })
-msg("sesREV01", "user", { text: "[opencode-peers] ПРИЁМКА задачи #1" })
+msg("sesREV01", "user", { text: "[opencode-peers] ПРИЁМКА задачи 001" })
 msg("sesREV01", "assistant", { content: [{ type: "tool", name: "bash" }, { type: "text", text: "Проверки зелёные. Влить в main мне запрещено правилами.\n\nВливать?\n\nСТОП: неавторизовано слияние" }] })
 msg("sesREV01", "idle", { outcome: "succeeded" })
 await events["session.idle"]({ properties: { sessionID: "sesREV01" } })
@@ -134,12 +134,12 @@ cell("the reviewer is not told 'continue'", letters("sesREV01").every((l) => !/�
 await until(() => letters("sesINTEG1").some((l) => /Замок слияния/.test(l.text)))
 await wait(600)
 const lock = letters("sesINTEG1").filter((l) => /Замок слияния/.test(l.text))
-cell("a long-held merge lock is raised to the integrator, once", lock.length === 1 && /приёмка #1/.test(lock[0].text), JSON.stringify(lock.map((l) => l.text.slice(0, 160))))
+cell("a long-held merge lock is raised to the integrator, once", lock.length === 1 && /приёмка 001/.test(lock[0].text), JSON.stringify(lock.map((l) => l.text.slice(0, 160))))
 cell("the lock letter names the holder, the task, the time and the way out (accept after a successful merge and push, or unlock; the service releases a landed lock)", lock.length === 1 && /сессия sesREV\d+/.test(lock[0].text) && /«[^»]+»/.test(lock[0].text) && /с \d\d:\d\d/.test(lock[0].text) && /accept 1 после успешного слияния и пуша или unlock 1, если слияние прервано/.test(lock[0].text) && /при merge_precheck: required плагин сам отпускает замок, когда проверенный кандидат уже на вершине origin/.test(lock[0].text), JSON.stringify(lock.map((l) => l.text)))
 
 // 3. a submitted task waiting for a reviewer
 const wait2 = letters("sesINTEG1").filter((l) => /ждёт приёмщика/.test(l.text))
-cell("a submitted task waiting for a reviewer is raised, once", wait2.length === 1 && /#2/.test(wait2[0].text), JSON.stringify(wait2.map((l) => l.text.slice(0, 160))))
+cell("a submitted task waiting for a reviewer is raised, once", wait2.length === 1 && /002/.test(wait2[0].text), JSON.stringify(wait2.map((l) => l.text.slice(0, 160))))
 
 // 4. a turn continued by OpenCode itself counts as working
 await until(() => {
@@ -164,12 +164,12 @@ await until(() => letters("sesREV04").some((l) => /не очищена/.test(l.t
 await wait(600)
 // the reminder repeats every accepted_reminder_min, at most 5 times per acceptance (task 043): the first one has no number
 const stale = letters("sesREV04").filter((l) => /не очищена/.test(l.text)).sort((x, y) => x.time - y.time)
-cell("the reviewer of a stale accepted task is woken to repeat cleanup (repeats at most 5 times, numbered)", stale.length >= 1 && stale.length <= 5 && /#4/.test(stale[0].text) && /cleanup/.test(stale[0].text) && !/Напоминание \d/.test(stale[0].text) && stale.every((l) => l.wake !== false) && stale.slice(1).every((l, i) => new RegExp(`Напоминание ${i + 2} из 5`).test(l.text)), JSON.stringify(stale.map((l) => l.text.slice(0, 200))))
-const staleA = letters("sesINTEG1").filter((l) => /#4 .*не очищена/.test(l.text))
+cell("the reviewer of a stale accepted task is woken to repeat cleanup (repeats at most 5 times, numbered)", stale.length >= 1 && stale.length <= 5 && /004/.test(stale[0].text) && /cleanup/.test(stale[0].text) && !/Напоминание \d/.test(stale[0].text) && stale.every((l) => l.wake !== false) && stale.slice(1).every((l, i) => new RegExp(`Напоминание ${i + 2} из 5`).test(l.text)), JSON.stringify(stale.map((l) => l.text.slice(0, 200))))
+const staleA = letters("sesINTEG1").filter((l) => /004 .*не очищена/.test(l.text))
 cell("the author is told too (at most 5 times)", staleA.length >= 1 && staleA.length <= 5,JSON.stringify(staleA.map((l) => l.text.slice(0, 200))))
 await tools.crew_role.execute({ role: "integrator" }, { sessionID: "sesINTEG1" })
 const refused = (await tools.crew_spawn.execute({ title: "срочная", goal: "g", criteria: "c", priority: "P1" }, { sessionID: "sesINTEG1" })).content
-cell("a spawn refused by inflight_limit names the accepted, not cleaned up task", /Лимит задач проекта/.test(refused) && /#4 принята 60 мин назад, не очищена/.test(refused), refused)
+cell("a spawn refused by inflight_limit names the accepted, not cleaned up task", /Лимит задач проекта/.test(refused) && /004 принята 60 мин назад, не очищена/.test(refused), refused)
 
 // 7. crew_watch {action: "cancel", id} through the tool (plan 002.6, defect 5)
 const put = (await tools.crew_watch.execute({ command: "sleep 60", machine: true, note: "плохая команда" }, { sessionID: "sesINTEG1" })).content

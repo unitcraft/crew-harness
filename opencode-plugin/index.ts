@@ -963,8 +963,8 @@ export default {
       for (const w of liveWindows()) postNotice(w.pid, { title: "crew: профили моделей — /crew-sets check", message: short(problems.join("; "), 100), duration: 15_000 })
     }
 
-    // ЗАГОЛОВКИ СЕССИЙ ЗАДАЧ — из журнала: «#N название», сдана/закрыта «#N ✓», отменена «#N ✗», передана другой
-    // сессии «#N ↷». Сверяются каждый проход (то, что поменял MCP-сервер или другой процесс, тоже доходит), меняются
+    // ЗАГОЛОВКИ СЕССИЙ ЗАДАЧ — из журнала: «NNN название», сдана/закрыта «NNN ✓», отменена «NNN ✗», передана другой
+    // сессии «NNN ↷»; прежнее название с «#» («#33 исп …») переименовывается тем же проходом. Сверяются каждый проход (то, что поменял MCP-сервер или другой процесс, тоже доходит), меняются
     // через session.update — без хода модели. Вкладки владельца (assign) не переименовываются.
     // СОСТОЯНИЕ СЕССИЙ (план 003, status.ts). Раз в STATUS_EVERY_MS — status/<сессия>.json (сводка /crew окна и внешние
     // проверки, например хук проекта). Сессия закончила ход вопросом владельцу — уведомление во все живые окна (с
@@ -1849,7 +1849,7 @@ export default {
             }
           }
         }
-        // заголовок (задача 058): «045 С4-3 исп Название задачи» у сессии методики, «060 исп …» у исполнителя, «#88 исп …» без папки
+        // заголовок (задача 058): «045 С4-3 исп Название задачи» у сессии методики, «060 исп …» у исполнителя
         const ses0 = sessionOf(t, sid)
         const head = ses0 && ses0.code !== EXECUTOR_CODE ? `${sessionRef(t, ses0)} исп` : `${taskNo(t)} исп`
         await ctx.session.create({ id: sid, title: `${head} ${t.title}`, location: { directory: dir }, metadata: { crewTask: { project: t.project, n: t.n, attempt: t.attempt } }, ...(t.model ? { model: splitLaunchModel(String(t.model)) } : {}) })
@@ -2078,7 +2078,7 @@ export default {
           type: "text",
           text:
             `crew-harness: You are the crew-harness tab with the role "${card.role}" in project ${projOf(card)} (address ${keyOf(card)}), repository ${card.repo || "?"}, session ${card.session}. ` +
-            `Name a task with its title: "#31 "merge lock"" at the first mention, then just "#31". ` +
+            `Name a task with its title: "031 "merge lock"" at the first mention, then just "031". ` +
             `Ask the owner for a decision with the question tool: one decision, 2-4 options, the recommended one first marked "(Recommended)" with the reason. ` +
             `A stop at a gate, and any report that needs the owner's decision, ends with the question tool, not with a summary; ` +
             `a question in prose does not reach the owner. ` +

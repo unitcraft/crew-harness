@@ -58,10 +58,10 @@ const steps3 = [{ id: "s1", text: "первый шаг", result: "ok" }, { id: "
 const steps3done = steps3.map((a) => ({ ...a, result: "ok" }))
 const list = [
   st("sInt", "owner", { role: "integrator", title: "Интегратор проекта", since: NOW - 35 * MIN, question: Q_LONG }),
-  st("sE94", "owner", { title: "#94 исп", since: NOW - 20 * MIN, question: "Разрешить ли сборку?", task: { n: 94, status: "running", as: "executor", title: TITLE94 } }),
-  st("sR94", "working", { title: "#94 прм", since: NOW - 5 * MIN, task: { n: 94, status: "reviewing", as: "reviewer", title: TITLE94, steps: steps3, checking: "s2" } }),
-  st("sE22", "task", { title: "#22 исп", task: { n: 22, status: "submitted", as: "executor", title: TITLE22 } }),
-  st("sR22", "task", { title: "#22 прм", task: { n: 22, status: "reviewing", as: "reviewer", title: TITLE22, steps: steps3done }, stuck: [{ at: NOW - 9 * 60 * MIN, what: "приёмка задачи #22" }] }),
+  st("sE94", "owner", { title: "094 исп", since: NOW - 20 * MIN, question: "Разрешить ли сборку?", task: { n: 94, status: "running", as: "executor", title: TITLE94 } }),
+  st("sR94", "working", { title: "094 прм", since: NOW - 5 * MIN, task: { n: 94, status: "reviewing", as: "reviewer", title: TITLE94, steps: steps3, checking: "s2" } }),
+  st("sE22", "task", { title: "022 исп", task: { n: 22, status: "submitted", as: "executor", title: TITLE22 } }),
+  st("sR22", "task", { title: "022 прм", task: { n: 22, status: "reviewing", as: "reviewer", title: TITLE22, steps: steps3done }, stuck: [{ at: NOW - 9 * 60 * MIN, what: "приёмка задачи 022" }] }),
   st("sQ61", "question", { title: "061 С2-5", wait: true, since: NOW - 590 * MIN, question: "Жду указаний.", task: { n: 61, status: "running", as: "executor", title: TITLE61, ref: "061", group: true, label: "С2-5", kind: "проверка спецификации" } }),
   st("sX61", "working", { title: "061 исп", since: NOW - 3 * MIN, task: { n: 61, status: "running", as: "executor", title: TITLE61, ref: "061", group: true } }),
   st("sD1", "task", { title: "061 С1-1", task: { n: 61, status: "submitted", as: "executor", title: TITLE61, ref: "061", group: true, label: "С1-1", kind: "спецификация", ended: NOW - 900 * MIN } }),
@@ -101,11 +101,11 @@ cell("3c: a project with only an idle tab and no counters - a name on the last l
 const iInt = lines.indexOf("  ? integrator  waiting you 35m")
 cell("4a: a tab of the owner - mark, role, state word, age", iInt > 0, text)
 cell("4b: the question is on the next line, whole", lines[iInt + 1] === `      ↳ ${Q_LONG}`, lines[iInt + 1])
-const i94 = lines.indexOf(`  ? #94 ${TITLE94}`)
+const i94 = lines.indexOf(`  ? 094 ${TITLE94}`)
 cell("4c: a task with a question: the heading with the mark and the whole title, a row per tab", i94 > 0 && lines[i94 + 1] === "    ? exec  waiting you 20m" && lines[i94 + 2] === "        ↳ Разрешить ли сборку?" && lines[i94 + 3] === "    rev  working 5m 2/3", lines.slice(i94, i94 + 4).join("|"))
 
 // 5. a task that asks the owner nothing: one line, tabs folded into the heading
-cell("5a: tabs of a quiet task without a folder are on the heading line", lines.includes(`  #22 ${TITLE22} — exec submitted · rev in review 3/3 ⚠ stuck 9h`), text)
+cell("5a: tabs of a quiet task without a folder are on the heading line", lines.includes(`  022 ${TITLE22} — exec submitted · rev in review 3/3 ⚠ stuck 9h`), text)
 cell("5b: no row of its own for them", !lines.some((l) => /^ +(exec|rev) +submitted/.test(l)), text)
 
 // 6. a task with a folder: live sessions by code and kind, the finished ones by count
@@ -125,7 +125,7 @@ const plansRow = lines.find((l) => /plan 8/.test(l))
 cell("8a: the plan that waits for the owner - its own row with /plans", plansRow === "  ◇ plan 8 длина фрагмента — approval · /plans" || /^ +◇ plan 8 .*approval.*\/plans$/.test(plansRow ?? ""), String(plansRow))
 const counter = lines[1]
 cell("8b: the counters are on the line of the project, one line, no line of their own", counter.startsWith("proj · ") && !lines.some((l) => /^ +\+ /.test(l)), text)
-cell("8c: plans counted, uncleaned with the number and the hours, reports with numbers, stale asks counted", /plans 1/.test(counter) && new RegExp(`uncleaned #${unclean.n} 28h`).test(counter) && new RegExp(`reports (#${unclean.n} #${merged.n}|#${merged.n} #${unclean.n})`).test(counter) && /stale asks 1/.test(counter), counter)
+cell("8c: plans counted, uncleaned with the number and the hours, reports with numbers, stale asks counted", /plans 1/.test(counter) && new RegExp(`uncleaned ${String(unclean.n).padStart(3, "0")} 28h`).test(counter) && new RegExp(`reports (${String(unclean.n).padStart(3, "0")} ${String(merged.n).padStart(3, "0")}|${String(merged.n).padStart(3, "0")} ${String(unclean.n).padStart(3, "0")})`).test(counter) && /stale asks 1/.test(counter), counter)
 cell("8d: the old blocks are gone (plans:, report of the acceptance, unclean line, stale-question line)", !/планы:|отчёт приёмки|не убрана|вопрос устарел|автоответы/.test(text), text)
 
 // 9. the size: not more than one row per tab (the question of the owner has its own line) and the total is short

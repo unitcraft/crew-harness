@@ -98,7 +98,7 @@ time-outs: no window plugin, no wake.
 ## What a letter looks like
 
 ```
-✉ 01:17 · #8 приёмщик nova.worker → nova.integrator
+✉ 01:17 · 008 приёмщик nova.worker → nova.integrator
 <text>
 ↩ ответ — crew_send {to: "ses_…", text: "..."} · письмо соседа, не слово владельца
 ```
@@ -170,7 +170,7 @@ kept in its record, so a restart or a later role change does not alter them ([pl
 The window's right panel shows a "Crew" block under "Context": the sessions of the project of the tab on screen —
 the ones waiting for you first, who is working and how long, who waits for what — refreshed every 2 s
 ([plan 003.2](../doc/archive/plans/003.2-sidebar.md)). A task is shown once (task 064): its number and title lead, as a heading
-wrapped by words onto two rows at most and cut with `…` (`‖ #85 Accept Oracle evaluation`), the mark on the left being its most
+wrapped by words onto two rows at most and cut with `…` (`‖ 085 Accept Oracle evaluation`), the mark on the left being its most
 important tab's; under it a row per tab with the role and the state (`↳ исп  вопрос — ждёт ответа`, `↳ прм  ↻ ждёт доработки`), and under
 that, as before, the question or the waiting phrase and the steps. A reviewer's step in progress names its id and a short name taken
 from the step's text (`проверка 3/12: sabotage — подсунь негодное`, wrapped the same way). The steps line stands once per task, under the
@@ -184,13 +184,13 @@ the name of its kind (`↳ С2-5 проверка спецификации`, the
 **How the panel is drawn (task 068).** The hierarchy is a sign and a colour, never an indent: no row of the panel starts with a space
 (the window keeps leading spaces, but a wrapped row restarts at the first column and two rows that start with the same two spaces
 read as one column, so an indent is no sign). The title of a task is **white** (the theme's base text colour) and starts with the
-tab's mark (`• #98 Разобрать provenance`) or, with no mark, with the number; the second row of a long title starts with `·` and is
+tab's mark (`• 098 Разобрать provenance`) or, with no mark, with the number; the second row of a long title starts with `·` and is
 white too. Everything under the title is **grey** (the theme's muted colour) and starts with `↳`: the row of a tab or a session
-(`↳ исп  работает 12 мин`, `↳ ? С2-5 проверка спецификации`), a wrapped rest of a row (`↳ plan #91 597м`), the steps, the question or the
+(`↳ исп  работает 12 мин`, `↳ ? С2-5 проверка спецификации`), a wrapped rest of a row (`↳ plan 091 597м`), the steps, the question or the
 waiting phrase, `↳ ✓ сдано N сессий`. The accent colour stays for what needs you: a tab that waits for you (or stands idle, or asked
 a question) with its rows, the heading of its task, and the `⚠` rows (`⚠ застряла с ЧЧ:ММ`, `⚠ не на ветке: …`). A tab of an
 integrator with no task is a row of its own with its mark and the role (`? интегр.   ждёт вас 01:42`). A wait for a watch or a
-queue puts the essence first and the time at the end of the last row (`↳ прм  ⧗ ждать отдельный cleanup` / `↳ plan #91 597м`); when
+queue puts the essence first and the time at the end of the last row (`↳ прм  ⧗ ждать отдельный cleanup` / `↳ plan 091 597м`); when
 the essence does not fit in two rows it is cut with `…` and the time stays.
 
 **The colour of what waits for you (task 082).** The rows that need you (`Ждут вас: N`, a tab that waits, asked or paused, `⚠ …`) are
@@ -224,15 +224,15 @@ question of a tab is printed whole (spaces folded to one line), the title of a t
 Russian words and drawing (task 068); `/crew-sets`, `/crew-profiles`, `/crew-progress` are not touched.
 
 ```
-Waiting for you: 4 · since 15:22 · nova #94 rev
+Waiting for you: 4 · since 15:22 · nova 094 rev
 crew-harness
   ? integrator  waiting you 39m
       ↳ <the question of the tab, as it is>
   061 Канон и актуальная методика · 26 done
     ‖ С2-5 spec review  paused 22h
   022 <title> — exec submitted · rev in review 12/12 ⚠ stuck 34h
-nova · uncleaned #91 29h · reports #91 #98 #99 · ⚠ off-branch · /crew-doctor
-  ? #94 <title>
+nova · uncleaned 091 29h · reports 091 098 099 · ⚠ off-branch · /crew-doctor
+  ? 094 <title>
     ? exec  waiting you 46m
         ↳ <the question of the tab, as it is>
     rev  working 5m 2/3
@@ -241,7 +241,7 @@ idle: ai-dev-methodology
 ```
 
 - **One line per tab**, plus its own `↳` line for the question to the owner. The mark is that of the panel (`?`, `▶`, `‖`, `⚠`, `◷`), the
-  number is the number of the task as it is shown everywhere (`#94`, `061`, `022`), the role is `exec` / `rev`, a session of a task with a folder
+  number is the number of the task as it is shown everywhere (`094`, `061`, `022`), the role is `exec` / `rev`, a session of a task with a folder
   is its code and kind (`С2-5 spec review`), then one state word and how long (`35m`, `10h`, `2d`). A task without a folder whose tabs
   ask the owner nothing is one line: the heading and its tabs after `—`. Finished sessions of a task with a folder are not listed:
   `· 26 done` (the same rule as the panel's «✓ сдано N сессий»).
@@ -255,9 +255,9 @@ idle: ai-dev-methodology
   Russian. `hung · Esc` and `no turn · Esc` name the two states of the plugin itself (a hung turn; a message that did not reach the
   server), recorded in the field `sys` of the status file.
 - **Counters** (on the line of the project, only those that are not zero): `plans N` (plans being written or rechecked; a plan that waits
-  for you is its own row `◇ plan N … approval · /plans`), `uncleaned #N Ч` (accepted and not cleaned after all reminders), `reports #N …` (accepted or
+  for you is its own row `◇ plan N … approval · /plans`), `uncleaned NNN Ч` (accepted and not cleaned after all reminders), `reports NNN …` (accepted or
   merged tasks with a report of the last day, up to three), `stale asks N`, `answers N (M owner)` (automatic answers of the last
-  24 hours and how many the owner took over), `for you K` (questions the answers left to the owner), `lock #N Ч` (waiting for the merge lock),
+  24 hours and how many the owner took over), `for you K` (questions the answers left to the owner), `lock NNN Ч` (waiting for the merge lock),
   `⚠ off-branch` (settings in the working copy differ from the branch) and `⚠ no models` (the project has no model settings), with
   `/crew-doctor`.
 - **Where the rest is now.** The model of a tab: `crew_list`, `/crew-profiles`, the field `model` of `status/<session>.json`. The sentence of
@@ -288,15 +288,15 @@ episode with its own letter. The episode with a sent letter is kept in `idle-tab
 does not repeat the letter.
 
 **The same rule by the status of the task (task 070).** The status "going" does not yet mean that somebody works (owner, 2026-10-17:
-«никто не работает?»). A task in `starting`, `running` or `rework` **stands** when it has no executor (`#96 без исполнителя`), when the
+«никто не работает?»). A task in `starting`, `running` or `rework` **stands** when it has no executor (`096 без исполнителя`), when the
 plugin knows no live session of its executor (`сессии исполнителя нет`: no summary of the session and the card does not wake), or when the
 executor is **silent** — its turn ended, and it waits for nothing: no `crew_watch`, no question to you, no own question, no letter in
-delivery, no going turn (`#92 исполнитель молчит с 10:24`). The silence is counted from the end of the executor's last turn, the newest
+delivery, no going turn (`092 исполнитель молчит с 10:24`). The silence is counted from the end of the executor's last turn, the newest
 unread letter to it, or the last change of the task, whichever is later, and must last `idle_tab_minutes` too (one setting for both
 rules). Unlike "between sessions", such a task is not excused by another task that goes: another task does not revive a dead one. An
 **order** into another project (`kind: order`) has no executor by construction, so it is not "a task without an executor": it goes while
 the integrator of the addressee took it (`child`) or works a turn now, and stands when nobody took it for `idle_tab_minutes` — named apart
-(`#96 заказ не взят: nova-bignum.integrator вне окна`, or `в окне, но не взял`). A silent executor that asks the tab (the state
+(`096 заказ не взят: nova-bignum.integrator вне окна`, or `в окне, но не взял`). A silent executor that asks the tab (the state
 "question") or is stuck towards it still reads as "waits for the tab" of task 063. `submitted`, `reviewing` and `approval`
 stay as before (`accepted` — task 076, below). The letter adds the steps: reassign (`crew_task reassign`), write to the executor
 (`crew_send`), cancel (`crew_task cancel`); for an order — ask the owner whether he opens the window of the addressee, or cancel the
@@ -311,8 +311,8 @@ question to you or its own question with `expect_reply` is open, or it asks the 
 when it was started within the threshold — an older watch with no turn and no change of the task is waiting without progress. A
 reviewer without a live session (or a task without a reviewer) does not lead. Fewer than five reminders, a younger stand, and a
 cleaned task (`done`) are out of the rule; as with the other stands, another task that goes does not excuse it. The author gets ONE
-letter «задача #N … принята в ЧЧ:ММ, все 5 напоминаний об уборке ушли, а приёмщик её не ведёт» (write to the reviewer with
-`crew_send`, or clean up and call `crew_task cleanup` yourself) and the mark `◷`: `#N принята, уборка ждёт приёмщика с ЧЧ:ММ`
+letter «задача NNN … принята в ЧЧ:ММ, все 5 напоминаний об уборке ушли, а приёмщик её не ведёт» (write to the reviewer with
+`crew_send`, or clean up and call `crew_task cleanup` yourself) and the mark `◷`: `NNN принята, уборка ждёт приёмщика с ЧЧ:ММ`
 (the time of the acceptance). The episode ends as the others do: a working turn of the tab, your word, a cleaned task, a turn of the
 reviewer.
 
@@ -335,9 +335,9 @@ cannot be closed by its own keys. So every window the plugin opens (`/crew`, `/c
 holds the keys longer than 0.3 s the plugin closes the window itself, tells you in a notice, and the question stays open and on the screen; open the
 command again if you still need it (now the window lies over the question, which is safe). Windows of OpenCode itself (palette, model picker) are not
 guarded. Code: `dialog-guard.ts`, self-test `crew-esc-question`.
-Every window shows who waits for you, over all projects. `/crew` starts with one line `Waiting for you: N · since ЧЧ:ММ · <project> <#N role>`
+Every window shows who waits for you, over all projects. `/crew` starts with one line `Waiting for you: N · since ЧЧ:ММ · <project> <NNN role>`
 (the time and the source of the oldest wait, so a window of another project sees the question is not its own). The side panel
-shows it on three lines, so the narrow panel cuts nothing you need: `Ждут вас: N · с ЧЧ:ММ`; `? <project> <#N role>` — the tab
+shows it on three lines, so the narrow panel cuts nothing you need: `Ждут вас: N · с ЧЧ:ММ`; `? <project> <NNN role>` — the tab
 that waits longest, whole (`‖` when its turn ended with a waiting phrase); `↳ <question>` — the start of its question, cut to the panel (no question text, no third line).
 `/ask` lists every tab that waits (project, tab, how long it waits, text and options): the questionnaire questions and the
 tabs whose turn ended with a question. A question gives a notice at once and again every 30 minutes while it is
@@ -389,7 +389,7 @@ can forge an answer, the same border as the mailbox — the log line and the tas
 
 A tab may keep asking the same question although you answered it from outside the window: the queue of the OpenCode server holds old
 service messages ahead of the letters with your answers, so the model sees «ask again» or «continue» and calls `question` each time (live
-case: task #94, four answers, nine questions in five hours). The plugin cannot see that queue, so it counts what it sees: a form of the
+case: task 094, four answers, nine questions in five hours). The plugin cannot see that queue, so it counts what it sees: a form of the
 tab made **after the letter with your answer was handed to the tab**, with **no working turn in between** (a tool call other than
 `question`), and **the same ask** as the answered form (the same number of options with the same labels in the same order - a label may be
 a whole-word prefix of the other, «Разрешить» and «Разрешить Phase 1»; with no options, the same text). **The third such form in a row
@@ -418,7 +418,7 @@ you); the watches (gates, a commit to main) are counted next to it with the mark
 
 A turn with the `question` tool is held by the OpenCode server for up to an hour, and the server hands the model **one** queued message per
 turn, the oldest. If the plugin queued a reminder or a repeat behind it, the queue grew by one per turn and the letters with your answers
-stood at its tail (task #94: four messages for five hours, none of the four answers reached the model). So the plugin splits its letters
+stood at its tail (task 094: four messages for five hours, none of the four answers reached the model). So the plugin splits its letters
 (`queue-gate.ts`). **Service** ones (the reminder «Не завершено», the repeat of a lost question, the reminders about idle time, a hung turn,
 a stop at a gate, a leftover or a task not cleaned up) vanish when their reason is gone; **needed** ones (letters of people and tabs, your
 answer, tasks, results of watches) are never held, except until the end of the current turn, as before. The rules: (1) while the tab has an
@@ -699,10 +699,15 @@ between two sessions: the last one submitted to the integrator, no review yet). 
 
 **One task, one number (task 058).** In a project with task folders (the key `tasks_dir`, default `doc/tasks`; on when that
 folder is in the target branch, `""` turns it off) the task number is the number of its folder `NNN-<slug>/`, shown as `045`
-(three digits, no `#`); the plugin's record has the same number. In a project without folders (Nova) a task has a number `#N`
-(per project, only grows, kept through rework and reassignment), as before; a task of the project crew-harness is shown with three digits (`022`,
-`1000` above 999) with a folder or without (task 083: one function, `taskNo`, writes the number everywhere). The owner, the integrator and `crew_list` call a
-task by its number; a session's title is `045 исп title` (`#N исп title` without folders). The journal is
+(three digits, no `#`); the plugin's record has the same number. In a project without folders (Nova) a task has a number of the plugin
+(per project, only grows, kept through rework and reassignment), shown the same way, `094`. Every task of every project is shown
+with its number with zeros on the left up to three digits and no `#` (`022`, `061`, `094`; above 999 as it is, `1000`), with a folder or
+without (task 086, replacing the `#N` of its first edition and the rule of task 083 that held for crew-harness only: one function,
+`taskNo`, writes the number everywhere). *Why no `#`:* GitHub turns every `#N` in a commit message, a description or a comment into a link
+to an issue or a pull request of the repository and notifies its people, so the pair "hash and a number" is kept for real issues and
+pull requests, and the commit message guard (`scripts/guards/guard-commit-message.py`, rule R8) refuses it for anything else. A tab still
+titled `#33 исп …` or `61 …` is read as `033 исп` / `061` and renamed by the title pass. The owner, the integrator and `crew_list` call a
+task by its number; a session's title is `045 исп title`. The journal is
 `tasks/<project>/<N>.json` in the mailbox.
 
 - **A new task with a folder.** The number is 1 + the largest of the project's records and of the folder numbers in every
@@ -753,10 +758,10 @@ task by its number; a session's title is `045 исп title` (`#N исп title` w
   `result` the call is refused before any number or folder is taken, and the answer names the field with an example; a
   `message` without the template's title and sections (in order, not empty, `нет:` with a reason, a date in the owner's
   section) is refused the same way. Old calls stay valid where no task text is written: a project without task folders
-  (`#N`) and a session of an existing task (`crew_spawn {task: N, session, goal}`) need none of the new fields. The guard
+  (`NNN`) and a session of an existing task (`crew_spawn {task: N, session, goal}`) need none of the new fields. The guard
   `scripts/guards/check-task-docs.py` (`message-title`, `message-section`, `message-owner`) checks the same rules for tasks
   started from 2026-10-17 01:00.
-- **Transition.** Old records keep their numbers and their show (`#57 исп`). A closed old record with the number of a folder
+- **Transition.** Old records keep their numbers and their show (`057 исп`). A closed old record with the number of a folder
   moves unchanged to `tasks/<project>/legacy/<N>.json` when that task gets its record (shown by `crew_task list all`); an
   open one refuses with its title. An order (`crew_task order`) takes its number from the same count and makes no folder.
 - **The show.** The "Crew" panel puts the task line `045 <title>` over its sessions `↳ прм`, `↳ С4-3 проверка плана`, finished
@@ -764,7 +769,7 @@ task by its number; a session's title is `045 исп title` (`#N исп title` w
   session `045 С4-3`.
 
 - `crew_spawn {title?, goal, criteria, owner_words?, result?, links?, boundaries?, open_questions?, message?, extra?, tier?, priority?, role?, parent?}` (the
-  integrator only) starts task `#N` in a new session, with or without a window. No task without a
+  integrator only) starts task `NNN` in a new session, with or without a window. No task without a
   goal and acceptance criteria (the project may require more: `task_fields`); model by tier
   (by default `claude-code/opus` / `sonnet` / `haiku`, `spawn_models` overrides; an enabled set of model profiles overrides both for the stages it describes — see [Model profiles](#model-profiles-sets-of-models-and-windows-by-stage)); a limit of running tasks per
   role (`spawn_limits`, 3); priority `P0` (emergency) … `P3`, default `P2`. With `worktrees` set the
@@ -784,7 +789,7 @@ task by its number; a session's title is `045 исп title` (`#N исп title` w
 - The executor submits with `crew_task {action: "submit", n, text}` (`submit - executor - n, text`):
   no qid needed; `text` is the report (what was done, how it was checked, what is left). It covers
   the first submission, the one after rework or after a sync, and a plan task with the form check. The task is
-  submitted (title `#N ✓`) — the report does **not** wake the integrator (after rework it wakes the
+  submitted (title `NNN ✓`) — the report does **not** wake the integrator (after rework it wakes the
   reviewer); a second report is refused. An ordinary letter of the executor to the author, the
   integrator or the reviewer is not a report: it is sent as before, and the answer reminds the
   executor of `submit`. `review` of a task still in rework names the same command for the
@@ -811,8 +816,8 @@ The integrator stays free for the owner and does not re-check accepted work:
   keeps them in `kept` and the history says `улики сохранены: <path>`; the task branch must still be deleted (if it is checked out in a kept tree, run `git checkout --detach` there first, then `git branch -D`; the answer of `cleanup` says so); a repeated
   `cleanup` without `keep` keeps skipping them while they exist;
   Side branches and worktrees of a task (task 023): `crew_task {action: "track", n, branch?, worktree?}` (executor, reviewer, integrator; no duplicates) records them in the task's `side` list (`show` shows it; the field is `side` because `extra` holds the project's extra task fields). The plugin records `integrate/t<N>` and `integrate/t<N>-*` and the trees on them itself at precheck, accept and cleaned. `cleanup` removes everything recorded except the trees in `keep` (no force: a dirty tree is reported, not deleted); an unrecorded branch or tree that only matches the name template is still refused, and the refusal offers `track`. Records without `side` read as empty.
-- `done` (after `cleanup`) → the sessions of the task close with a line in their history, titles `#N ✓✓ готово`, the
-  integrator gets a quiet summary. Titles on the way (a mark and a word): `#N ✓ сдана`, `#N ✓◐ приёмка`, `#N ↻ доработка`, `#N ✓✓◐ влита`
+- `done` (after `cleanup`) → the sessions of the task close with a line in their history, titles `NNN ✓✓ готово`, the
+  integrator gets a quiet summary. Titles on the way (a mark and a word): `NNN ✓ сдана`, `NNN ✓◐ приёмка`, `NNN ↻ доработка`, `NNN ✓✓◐ влита`
   accepted;
 - a task on rework does not hold a review session's place (`spawn_limits.reviewer`): the next submitted task gets
   it; the resubmission goes back to the same reviewer at once;
@@ -828,7 +833,7 @@ The integrator stays free for the owner and does not re-check accepted work:
   no longer counts in `inflight_limit` (`crew_spawn` and the steps of an auto plan count it separately); `cleanup_limit`
   (10, `0` — no limit) stops new work (not `P0`) when that many accepted tasks wait for cleanup, naming them. The tab of an
   accepted task is still woken and reminded (`accepted_reminder_min`; the reminder repeats every `accepted_reminder_min`, at most
-  5 times per acceptance, then `/crew` counts it: `uncleaned #N Ч`, and the author's tab gets the idle mark `◷` when the reviewer
+  5 times per acceptance, then `/crew` counts it: `uncleaned NNN Ч`, and the author's tab gets the idle mark `◷` when the reviewer
   does not lead the cleanup, task 076), `crew_task list` and `show` mark it "ждёт уборки";
   `OPEN_STATUSES` and `isOpen` are not changed;
 - `merge_precheck: "required"` (the default since the owner's decision of 2026-10-09; the explicit `off` returns the previous
@@ -853,7 +858,7 @@ The integrator stays free for the owner and does not re-check accepted work:
   or `unlock` of the first one (with `merge_precheck: required` the gate always does this). A reviewer refused with "lock busy" is
   recorded in its own card (`lock_wait`, gone with the tab); when the lock is released (or found abandoned) every such live reviewer of the
   project gets a letter "lock is free" (no queue, no reservation; the lock is still taken atomically by whoever calls `merge` first), and
-  the panel shows one line "ждут замок: #N (мин)" and `/crew` the counter `lock #N Ч`. A broken settings file of the old (no settings repository) form keeps the last good
+  the panel shows one line "ждут замок: NNN (мин)" and `/crew` the counter `lock NNN Ч`. A broken settings file of the old (no settings repository) form keeps the last good
   settings and is named by `crew_doctor`.
   then does not ask for the lock (only while the record is still green and of this round: a record marked stale by `rework`, `unlock`,
   a new review or `reassign` loses the mark). The release does not depend on `stall_minutes`. It counts the merge as done once the
@@ -1051,7 +1056,7 @@ Commands of the window (answers are shown in a dialog at once, no turn of the mo
 | `/crew-sets ls` (also `list`, and the command without words) | the sets with `●` at the enabled one and the models in the cells (short names with a legend; stages with one model are grouped; a `task` cell shows the models of the three tiers `opus/sonnet/haiku`); in the window it is the pick described above |
 | `/crew-sets show [name]` | a set in short: a table stage x tier (heavy, medium, light) with short model names (`luna`, `opus`), `как «stage»` for an inherited stage that does not differ, one line `all stages: …` when all are alike, a legend (full name, context, output; once per model), one ⚠ line per warning (the check on the same family as its author, a model out of the catalog, a missing profile), a hint; the enabled one if no name. Width of the window `/crew`, no line is wrapped |
 | `/crew-sets show [name] <stage>` / `show [name] all` | the detailed answer: everything the table hides — inheritance and its tier, the clamp by the tier bounds, the tiers of the task, the window of the profile in the worktree, the window of the review sessions with the number and the file, the errors and the full notes; `all` is the whole former text. A set named like a stage wins as the first word; `show <name> <stage>` is unambiguous |
-| `/crew-sets use <name>` | enable a set (writes `profile_set` into the file of the project; Enter on a set in the pick does the same). The screen: the first line `Набор «kimi» включён (был «codex»)`; a line per group of stages — `Работа` (development and planning) and `Приёмка` (their checks), or each stage under its own word when they differ — with the model and `(было …)` (alike are collapsed: `(было те же)`, `(без изменений)`); the three tiers of a task are shown as «by the size of the task» (`luna / sol / astra по размеру задачи`), never as heavy/medium/light; a line when the tier bounds of the project cut something, and a line about the stages described apart; **the running sessions** that stay on the old models (`сейчас 2: #94, #98`, then a task, its title and the old model per line; counted from the status files of the plugin: the sessions of the open tasks of this project that work now — an executor in `starting`, `running` or `rework`, a reviewer in `submitted`, `reviewing` or `approval` — whose model is not in the new set; no status folder — no such line; the tabs of the owner and of the integrators are not counted) and where new sessions go (no restart); the window of the model (`Контекст модели: 220K, вывод до 131072 (у «codex» было 525K, ввод 461K, вывод до 128K)`); ⚠ lines (a smaller window is compacted on the next turn of a tab: the threshold is the context minus `compaction.reserved`, for a model with an input limit the input minus `reserved`; the check on the same family as its author; hand-written windows that win); `Не закоммичено — это локальная настройка проекта.`; a line about the window files of the task worktrees only when something was written, removed or failed. The short names with provider and legend, the review windows from the hand-written settings and the details of the stages are in `show` |
+| `/crew-sets use <name>` | enable a set (writes `profile_set` into the file of the project; Enter on a set in the pick does the same). The screen: the first line `Набор «kimi» включён (был «codex»)`; a line per group of stages — `Работа` (development and planning) and `Приёмка` (their checks), or each stage under its own word when they differ — with the model and `(было …)` (alike are collapsed: `(было те же)`, `(без изменений)`); the three tiers of a task are shown as «by the size of the task» (`luna / sol / astra по размеру задачи`), never as heavy/medium/light; a line when the tier bounds of the project cut something, and a line about the stages described apart; **the running sessions** that stay on the old models (`сейчас 2: 094, 098`, then a task, its title and the old model per line; counted from the status files of the plugin: the sessions of the open tasks of this project that work now — an executor in `starting`, `running` or `rework`, a reviewer in `submitted`, `reviewing` or `approval` — whose model is not in the new set; no status folder — no such line; the tabs of the owner and of the integrators are not counted) and where new sessions go (no restart); the window of the model (`Контекст модели: 220K, вывод до 131072 (у «codex» было 525K, ввод 461K, вывод до 128K)`); ⚠ lines (a smaller window is compacted on the next turn of a tab: the threshold is the context minus `compaction.reserved`, for a model with an input limit the input minus `reserved`; the check on the same family as its author; hand-written windows that win); `Не закоммичено — это локальная настройка проекта.`; a line about the window files of the task worktrees only when something was written, removed or failed. The short names with provider and legend, the review windows from the hand-written settings and the details of the stages are in `show` |
 | `/crew-sets set <name> <stage> <family>/<tier>` | change a cell (stages: `develop`, `develop_accept` (also `accept`), `plan`, `plan_accept`, `spec`, `spec_accept`, `delivery`, `delivery_accept` or Russian words) |
 | `/crew-sets unset <name> <stage>` | remove a cell: the stage goes back to `spawn_models` |
 | `/crew-sets new <name> [from <other>]`, `rename <a> <b>`, `delete <name>` | create (empty or a copy), rename (the enabled name follows), delete (not the enabled one) |
@@ -1140,7 +1145,7 @@ is what the tabs in the main folder use — the plugin only names it.
 - **inbound** of the receiving project limits letters from other projects: `integrator` (default:
   only to its integrator), `any`, `none`; a refused letter names the address to use;
 - **an order**: `crew_task {action: "order", to: "beta.integrator", goal, criteria, …}` records task
-  `#N` of kind order in the orderer's journal (no session, no title marks) and sends it to beta's
+  `NNN` of kind order in the orderer's journal (no session, no title marks) and sends it to beta's
   integrator, who does it with its own tasks: `crew_spawn {…, parent: "alpha#N"}`. The order follows
   that task: done → the order is done (a quiet summary to the orderer), cancelled → a call.
 

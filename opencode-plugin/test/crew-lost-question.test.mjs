@@ -180,7 +180,7 @@ await safe("f", async () => {
   mkdirSync(core.CARDS, { recursive: true })
   const card = (session, project, role, title) => writeFileSync(core.cardFile(session), JSON.stringify({ session, project, role, title, directory: tmp, repo: "r", auto: false, pid: process.pid, updated: Date.now() }))
   card("sesA", "nova", "integrator", "Интегратор")
-  card("sesC", "crew-harness", "worker", "#40 вопрос")
+  card("sesC", "crew-harness", "worker", "040 вопрос")
   if (!fw.askText) throw new Error("askText is not there yet")
   const text = fw.askText(T0 + 70 * MIN)
   cell("f: the summary line", /^Ждут вас: \d+ · с \d\d:\d\d/.test(text), text.split("\n")[0])
@@ -188,14 +188,14 @@ await safe("f", async () => {
   cell("f: how long it waits", /ждёт 7\d мин|ждёт 1 ч/.test(text), text)
   cell("f: the question without an answer is told apart", /без ответа, нужен владелец/.test(text), text)
   // task 055: a tab whose turn ended with a question waits for the owner too - /ask names it in full
-  const ended = { session: "sesEnd", project: "claude-limits", role: "worker", title: "#33 исп лимиты", state: "owner", since: T0 + 60 * MIN, question: "Продолжать #31 или переключиться на #33?" }
+  const ended = { session: "sesEnd", project: "claude-limits", role: "worker", title: "033 исп лимиты", state: "owner", since: T0 + 60 * MIN, question: "Продолжать 031 или переключиться на 033?" }
   const both = fw.askText(T0 + 70 * MIN, undefined, [ended])
-  cell("f: /ask lists a question at the end of a turn with its project, tab and text", both.includes("claude-limits · worker «#33 исп лимиты»") && both.includes("Продолжать #31 или переключиться на #33?") && /ждёт 10 мин/.test(both), both)
+  cell("f: /ask lists a question at the end of a turn with its project, tab and text", both.includes("claude-limits · worker «033 исп лимиты»") && both.includes("Продолжать 031 или переключиться на 033?") && /ждёт 10 мин/.test(both), both)
   cell("f: every waiting tab in /ask is marked ? (task 055)", both.split("\n").filter((l) => /^\S/.test(l) && !/^Ждут вас/.test(l)).every((l) => l.startsWith("? ")) && !/^▶/m.test(both), both)
   // task 056: a turn that ended with a waiting phrase is not called a question in /ask and is marked as a wait
-  const waits = { ...ended, session: "sesWait", title: "#34 исп", wait: true, question: "Жду вашего решения по плану." }
+  const waits = { ...ended, session: "sesWait", title: "034 исп", wait: true, question: "Жду вашего решения по плану." }
   const ww = fw.askText(T0 + 70 * MIN, undefined, [waits])
-  const head = ww.split("\n").find((l) => l.includes("«#34 исп»")) ?? ""
+  const head = ww.split("\n").find((l) => l.includes("«034 исп»")) ?? ""
   cell("f: /ask marks a waiting phrase as a wait, not ? (task 056)", !!head && !head.startsWith("? ") && !head.startsWith("▶") && ww.includes("Жду вашего решения по плану.") && /указаний/.test(ww) && !/кончился вопросом/.test(ww), ww)
   cell("f: /ask counts it in the summary line", Number(/^Ждут вас: (\d+)/.exec(both)?.[1]) === Number(/^Ждут вас: (\d+)/.exec(text)?.[1]) + 1, both.split("\n")[0])
   cell("f: nothing open says so", fw.askText(T0 + 70 * MIN, path.join(tmp, "empty-forms")).includes("нет"), "")
@@ -209,8 +209,8 @@ await safe("g", async () => {
   const hmOf = (t) => new Date(t).toTimeString().slice(0, 5)
   cell("g: waitingLine names the time and the project of the oldest wait", line === `Waiting for you: 2 · since ${hmOf(T0 + 5 * MIN)} · crew-harness integrator`, String(line))
   const tabTask = { ...st("s9", "owner", T0), task: { n: 85, status: "reviewing", as: "executor", title: "Accept" } }
-  cell("g: a task tab is named by its number and role", waitingLine([tabTask], T0) === `Waiting for you: 1 · since ${hmOf(T0)} · nova #85 exec`, String(waitingLine([tabTask], T0)))
-  cell("g: a stuck mark without a time has no question mark", /⚠ stuck$/m.test(formatStatuses([{ ...st("s4", "working", T0), stuck: [{ what: "приёмка #85" }] }], T0)) && !sidebarLines([{ ...st("s4", "working", T0), stuck: [{ what: "приёмка #85" }] }], T0, "nova").rows.some((r) => /\?/.test(r.what)), formatStatuses([{ ...st("s4", "working", T0), stuck: [{ what: "приёмка #85" }] }], T0))
+  cell("g: a task tab is named by its number and role", waitingLine([tabTask], T0) === `Waiting for you: 1 · since ${hmOf(T0)} · nova 085 exec`, String(waitingLine([tabTask], T0)))
+  cell("g: a stuck mark without a time has no question mark", /⚠ stuck$/m.test(formatStatuses([{ ...st("s4", "working", T0), stuck: [{ what: "приёмка 085" }] }], T0)) && !sidebarLines([{ ...st("s4", "working", T0), stuck: [{ what: "приёмка 085" }] }], T0, "nova").rows.some((r) => /\?/.test(r.what)), formatStatuses([{ ...st("s4", "working", T0), stuck: [{ what: "приёмка 085" }] }], T0))
   cell("g: nothing waits, no line", waitingLine([st("s3", "working", T0)], T0) === undefined, "")
   cell("g: /crew starts with the line", formatStatuses(list, T0 + 20 * MIN).split("\n")[0] === line, formatStatuses(list, T0 + 20 * MIN).split("\n")[0])
   const side = sidebarLines(list, T0 + 20 * MIN, "nova")

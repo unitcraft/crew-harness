@@ -62,7 +62,7 @@ export type Status = {
   asked: { qid: string; to: string; at: number }[]
   /** Вопросы старше ASKED_STALE_MIN без ответа: в /crew отдельной строкой, состояние reply не держат. */
   askedStale?: { qid: string; to: string; at: number }[]
-  /** Своя задача (исполнитель или приёмщик). ref — номер задачи в показе («045» с папкой, «#57» без, задача 058); label — сессия
+  /** Своя задача (исполнитель или приёмщик). ref — номер задачи в показе («045», задачи 058, 086); label — сессия
    *  методики («С4-3»); group — задача с папкой: панель и /crew группируют её сессии под строкой задачи; status у сессии методики —
    *  её собственный (сдана — submitted, передана — handed), ended — когда сдана. */
   task?: { n: number; status: string; as: "executor" | "reviewer"; title: string; steps?: StepView[]; checking?: string; ref?: string; label?: string; group?: true; ended?: number; kind?: string }
@@ -388,13 +388,14 @@ export function waitingLine(list: Status[], _now = Date.now()): string | undefin
 /** Кто ждёт владельца (задача 084): один источник числа - «Ждут вас» в панели, первая строка /crew и «ждут N» внизу панели считают по нему. */
 export const waitingOf = (list: Status[]) => list.filter((s) => s.state === "owner")
 const oldestWait = (w: Status[]) => w.reduce((a, b) => ((b.since ?? Infinity) < (a.since ?? Infinity) ? b : a))
-/** Номер своей задачи в показе (задача 083): ref сводки, а у сводки прежней версии без ref — тот же номер из tasks.ts по проекту сводки. */
-const refOf = (s: Pick<Status, "project" | "task">) => s.task!.ref ?? taskNo({ project: s.project, n: s.task!.n })
-/** Начало заголовка сессии задачи: «022 исп», «#94 исп», «045 прм», «045 С4-3» (задача 058). */
-const TAB_RE = /^(?:#\d+|\d{3,}) \S+/
-/** Вкладка ждущего — то, что открыть: «#33 исп» (задача и роль), «045 С4-3» (сессия задачи), иначе роль («интегр.»). */
-// заголовок, названный до задачи 083 («#22 исп»), показывается по нынешнему правилу: номер проекта crew-harness — тремя цифрами
-const tabOf = (s: Status) => TAB_RE.exec(s.title ?? "")?.[0].replace(/^#(\d+)/, (_, n) => taskNo({ project: s.project, n })) ?? (s.task ? `${refOf(s)} ${s.task.label ?? (s.task.as === "reviewer" ? "прм" : "исп")}` : s.role === "integrator" ? "интегр." : s.role)
+/** Номер своей задачи в показе (задачи 083, 086): тот же taskNo, что пишет ref сводки; у сводки прежней версии ref мог быть «#22». */
+const refOf = (s: Pick<Status, "project" | "task">) => taskNo({ project: s.project, n: s.task!.n })
+/** Начало заголовка сессии задачи: «022 исп», «045 прм», «045 С4-3» (задачи 058, 086); читается и прежняя форма с «#» («#33 исп» первой
+ *  редакции 086 и Нова до неё) и числа короче трёх цифр: вкладки, названные раньше, пока syncTitles их не переименовал. */
+export const TAB_RE = /^(?:#\d+|\d{3,}) \S+/
+/** Вкладка ждущего — то, что открыть: «033 исп» (задача и роль), «045 С4-3» (сессия задачи), иначе роль («интегр.»). */
+// прежняя форма заголовка («#33 исп») показывается по нынешнему правилу: «033 исп»
+const tabOf = (s: Status) => TAB_RE.exec(s.title ?? "")?.[0].replace(/^#?(\d+)/, (_, d) => taskNo({ n: d })) ?? (s.task ? `${refOf(s)} ${s.task.label ?? (s.task.as === "reviewer" ? "прм" : "исп")}` : s.role === "integrator" ? "интегр." : s.role)
 
 /** «Ждут вас» в боковой панели (задача 055; владелец, 2026-10-15: «не вижу кто меня ждет?» — одна строка
  *  «Ждут вас: 1 · с 18:55 · clau» обрезалась по ширине панели). Три строки, все проекты: сколько и с какого времени; кто ждёт
@@ -427,7 +428,7 @@ export function ageText(from: number | undefined, now: number): string {
 }
 /** Роль вкладки задачи словом: exec / rev. */
 const roleWord = (t: NonNullable<Status["task"]>) => (t.as === "reviewer" ? ROLE_WORDS.reviewer : ROLE_WORDS.executor)
-/** Вкладка ждущего — то, что открыть: «#33 exec» (задача и роль), «045 С4-3» (сессия задачи), иначе роль («integrator»). */
+/** Вкладка ждущего — то, что открыть: «033 exec» (задача и роль), «045 С4-3» (сессия задачи), иначе роль («integrator»). */
 const tabRef = (s: Status) => (s.task ? `${refOf(s)} ${s.task.label ?? roleWord(s.task)}` : s.role)
 /** Сессия методики закончена (сдана, передана, закрыта) и не ждёт владельца и не работает: в /crew — счётом «N done», как в панели
  *  (то же правило, что finished() в sidebarLines). */
@@ -583,7 +584,7 @@ function countersOf(project: string, items: Status[], otherPlans: number, now: n
   return parts.length ? parts.join(" · ") : undefined
 }
 
-/** Принятые и не убранные после всех напоминаний (задача 043, M18a): «#5 28h» — в счётчике «uncleaned». */
+/** Принятые и не убранные после всех напоминаний (задача 043, M18a): «005 28h» — в счётчике «uncleaned». */
 export function uncleanedOf(project: string, now = Date.now()): { ref: string; age: string }[] {
   let list: Task[] = []
   try {
@@ -607,7 +608,7 @@ export function plansOf(project: string): { approval: Task[]; other: number } {
 }
 
 const REPORT_MS = 24 * 3_600_000
-/** Отчёты приёмки за сутки: задачи, принятые или влитые с шагами (до трёх, свежие первыми) — в счётчике «reports #N»; шаги — crew_task show. */
+/** Отчёты приёмки за сутки: задачи, принятые или влитые с шагами (до трёх, свежие первыми) — в счётчике «reports NNN»; шаги — crew_task show. */
 export function reportsOf(project: string, now = Date.now()): string[] {
   let done: Task[] = []
   try {

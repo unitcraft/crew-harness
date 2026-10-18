@@ -24,7 +24,7 @@ const git = (cwd, ...args) => execFileSync("git", ["-C", cwd, "-c", "user.name=t
 const settings = (extra) => writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ allow_default_models: true, spawn_limits: { worker: 20, reviewer: 0 }, stall_minutes: 600, accepted_reminder_min: 0.01, ...extra }))
 settings({})
 const PLAN = [
-  "# План 9 — демо", "", "**Статус:** 🟡 В РАБОТЕ", "**Источник:** задача #1", "**Зависимости:** —", "",
+  "# План 9 — демо", "", "**Статус:** 🟡 В РАБОТЕ", "**Источник:** задача 001", "**Зависимости:** —", "",
   "## Зачем", "демо слота", "## Что уже есть", "ничего", "## Режим выполнения", "Без упрощений: ДА — владелец, 2026-10-08",
   "## Фазы",
   "### Ф.1 — первая [P1]", "#### Ф.1.1 — шаг один [где: a.nv]", "Что: сделать один", "**Приёмка:**", "- ⬜ проверка один → зелёная",
@@ -136,7 +136,7 @@ cell("AC-02 free граница: the next one is refused at 5 counted, the accep
 settings({ inflight_limit: 5, accepted_slot: "hold" })
 fiveBase()
 const sHold = await spawn()
-cell("AC-02 hold: the same data refuse the sixth task, as before", /Лимит задач проекта/.test(sHold) && /#5 принята 60 мин назад, не очищена/.test(sHold) && all().length === 5, sHold)
+cell("AC-02 hold: the same data refuse the sixth task, as before", /Лимит задач проекта/.test(sHold) && /005 принята 60 мин назад, не очищена/.test(sHold) && all().length === 5, sHold)
 
 // ---- AC-03 c1..c5: cleanup_limit 2 and two accepted tasks (the counted open ones are few)
 settings({ inflight_limit: 10, accepted_slot: "free", cleanup_limit: 2 })
@@ -145,7 +145,7 @@ accepted(60, "sesREVA")
 accepted(80, "sesREVB")
 mk("running", { executor: "sesRUN0" })
 const c1 = await spawn()
-cell("AC-03 c1: refused, both waiting tasks named with age and reviewer", /cleanup_limit/.test(c1) && !started(c1) && /#1 принята 60 мин назад, не очищена \(приёмщик sesREVA\)/.test(c1) && /#2 принята 80 мин назад, не очищена \(приёмщик sesREVB\)/.test(c1) && /cleanup/.test(c1) && all().length === 3, c1)
+cell("AC-03 c1: refused, both waiting tasks named with age and reviewer", /cleanup_limit/.test(c1) && !started(c1) && /001 принята 60 мин назад, не очищена \(приёмщик sesREVA\)/.test(c1) && /002 принята 80 мин назад, не очищена \(приёмщик sesREVB\)/.test(c1) && /cleanup/.test(c1) && all().length === 3, c1)
 const c2 = await spawn({ priority: "P0" })
 cell("AC-03 c2: P0 passes both limits", started(c2) && all().length === 4, c2)
 settings({ inflight_limit: 10, accepted_slot: "free", cleanup_limit: 0 })
@@ -218,12 +218,12 @@ cell("AC-05: holdsOpenTask is true for the reviewer of an accepted task, a close
 await until(() => letters("sesREV05").some((l) => /не очищена/.test(l.text)))
 const rem5 = letters("sesREV05").filter((l) => /не очищена/.test(l.text))
 cell("AC-05: the reminder comes through accepted_reminder_min, once, and says that the place is not held (N of M)", rem5.length === 1 && /ждёт уборки, место в inflight_limit не занимает \(ждёт уборки 1 из 4\)/.test(rem5[0].text) && rem5[0].wake !== false, JSON.stringify(rem5.map((l) => l.text)))
-const auth5 = letters("sesINTEG1").filter((l) => new RegExp(`#${a5.n} .*приёмщик sesREV05`).test(l.text))
+const auth5 = letters("sesINTEG1").filter((l) => new RegExp(`${String(a5.n).padStart(3, "0")} .*приёмщик sesREV05`).test(l.text))
 cell("AC-05: the author is told too, in the same words", auth5.length === 1 && /ждёт уборки, место не занимает; ждёт уборки 1 из 4/.test(auth5[0].text), JSON.stringify(auth5.map((l) => l.text)))
 const list5 = await call("crew_task", { action: "list" })
-cell("AC-05: crew_task list marks the accepted task as waiting for cleanup", new RegExp(`#${a5.n} P2 принята «[^»]+» — исполнитель sesEXsesREV05, приёмщик sesREV05 — ждёт уборки`).test(list5), list5)
+cell("AC-05: crew_task list marks the accepted task as waiting for cleanup", new RegExp(`${String(a5.n).padStart(3, "0")} P2 принята «[^»]+» — исполнитель sesEXsesREV05, приёмщик sesREV05 — ждёт уборки`).test(list5), list5)
 const show5 = await call("crew_task", { action: "show", n: a5.n })
-cell("AC-05: crew_task show marks it too", /^#\d+ .* — ждёт уборки$/m.test(show5.split("\n")[0]), show5.split("\n")[0])
+cell("AC-05: crew_task show marks it too", /^\d{3,} .* — ждёт уборки$/m.test(show5.split("\n")[0]), show5.split("\n")[0])
 settings({ inflight_limit: 5, accepted_slot: "hold" })
 const listHold = await call("crew_task", { action: "list" })
 cell("AC-05 hold: no mark at hold", !/ждёт уборки/.test(listHold), listHold)
@@ -245,7 +245,7 @@ const accFree = accepted(60, "sesREV07")
 free.refusal = await spawn()
 await until(() => letters("sesREV07").some((l) => /не очищена/.test(l.text)))
 free.reviewer = letters("sesREV07").find((l) => /не очищена/.test(l.text))?.text ?? ""
-free.author = letters("sesINTEG1").find((l) => new RegExp(`#${accFree.n} .*приёмщик sesREV07`).test(l.text))?.text ?? ""
+free.author = letters("sesINTEG1").find((l) => new RegExp(`${String(accFree.n).padStart(3, "0")} .*приёмщик sesREV07`).test(l.text))?.text ?? ""
 cell("AC-06 free: the refusal by inflight_limit is a real refusal without the words about holding a place", /Лимит задач проекта/.test(free.refusal) && FORBIDDEN.every((re) => !re.test(free.refusal)), free.refusal)
 cell("AC-06 free: the reminders to the reviewer and the author have none of the words", free.reviewer.length > 0 && free.author.length > 0 && [free.reviewer, free.author].every((t) => FORBIDDEN.every((re) => !re.test(t))), JSON.stringify(free))
 reset()
@@ -255,7 +255,7 @@ const accHold = accepted(60, "sesREV08")
 const hold = { refusal: await spawn() }
 await until(() => letters("sesREV08").some((l) => /не очищена/.test(l.text)))
 hold.reviewer = letters("sesREV08").find((l) => /не очищена/.test(l.text))?.text ?? ""
-hold.author = letters("sesINTEG1").find((l) => new RegExp(`#${accHold.n} .*приёмщик sesREV08`).test(l.text))?.text ?? ""
+hold.author = letters("sesINTEG1").find((l) => new RegExp(`${String(accHold.n).padStart(3, "0")} .*приёмщик sesREV08`).test(l.text))?.text ?? ""
 cell("AC-06 hold: the refusal and the reminders say that the accepted tasks hold a place, as before", /Место держат принятые/.test(hold.refusal) && /держит место в лимите задач/.test(hold.reviewer) && /держит место в inflight_limit/.test(hold.author), JSON.stringify(hold))
 cell("AC-06 control: the search finds the words in the hold texts", FORBIDDEN.some((re) => re.test(hold.refusal)) && FORBIDDEN.some((re) => re.test(hold.reviewer)), "not found")
 

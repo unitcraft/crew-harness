@@ -852,7 +852,7 @@ function liveSessions(project: string): LiveSession[] | undefined {
     const s = readJson<any>(path.join(dir, f))
     if (!s || s.project !== project || !isObj(s.task) || !s.model || s.task.ended) continue
     if (!(s.task.as === "reviewer" ? REVIEWER_BUSY : EXECUTOR_BUSY).includes(String(s.task.status))) continue
-    out.push({ ref: String(s.task.ref ?? taskNo({ project: s.project, n: s.task.n })), n: Number(s.task.n), title: String(s.task.title ?? ""), model: P.baseModel(String(s.model)) })
+    out.push({ ref: taskNo({ project: s.project, n: s.task.n }), n: Number(s.task.n), title: String(s.task.title ?? ""), model: P.baseModel(String(s.model)) })
   }
   return out
 }

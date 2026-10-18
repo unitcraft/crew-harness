@@ -131,7 +131,7 @@ if (section("AC-09")) {
   H.moveOrigin()
   clearLock()
   const r2 = await merge(t)
-  cell("AC-09 занят: a busy lock — the old refusal plus 'your precheck stays valid', the lock stays with its holder; after the holder left and the origin moved — refused as moved", /Замок вливания проекта proj у приёмщика задачи #\d+/.test(r1) && /остаётся действующей/.test(r1) && keep?.session === "sesREV2" && /сдвинулась/.test(r2) && !H.holder(), r1 + " | " + r2)
+  cell("AC-09 занят: a busy lock — the old refusal plus 'your precheck stays valid', the lock stays with its holder; after the holder left and the origin moved — refused as moved", /Замок вливания проекта proj у приёмщика задачи \d{3,}/.test(r1) && /остаётся действующей/.test(r1) && keep?.session === "sesREV2" && /сдвинулась/.test(r2) && !H.holder(), r1 + " | " + r2)
 }
 
 // ---- AC-12 merge off
@@ -202,7 +202,7 @@ if (section("AC-15")) {
   const b = await green({ reviewer: "sesINTEG1" })
   const ra = await merge(a, "sesINTEG1")
   const rb = await merge(b, "sesINTEG1")
-  cell("AC-15: the lock is held for A; merge for B is refused naming A, the lock stays for A", /выдан на вершину/.test(ra) && /замок у тебя уже для #\d+/.test(rb) && rb.includes(`#${a.n}`) && H.holder()?.n === a.n && H.holder()?.session === "sesINTEG1", ra + " | " + rb)
+  cell("AC-15: the lock is held for A; merge for B is refused naming A, the lock stays for A", /выдан на вершину/.test(ra) && /замок у тебя уже для \d{3,}/.test(rb) && rb.includes(`${String(a.n).padStart(3, "0")}`) && H.holder()?.n === a.n && H.holder()?.session === "sesINTEG1", ra + " | " + rb)
   clearLock()
   H.settings({ merge_precheck: "required" })
 }
@@ -293,7 +293,7 @@ if (section("AC-35")) {
   const other = H.reviewing({ reviewer: "sesREV2" })
   H.take("sesREV2", other.n)
   const m = await merge(t)
-  cell("AC-35 c5: a lock of another holder stays with him", /у приёмщика задачи #/.test(m) && H.holder()?.session === "sesREV2" && T(t.n).precheck.state === "green", m)
+  cell("AC-35 c5: a lock of another holder stays with him", /у приёмщика задачи \d{3,}/.test(m) && H.holder()?.session === "sesREV2" && T(t.n).precheck.state === "green", m)
   clearLock()
 }
 if (section("AC-35")) {

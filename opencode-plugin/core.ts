@@ -1223,17 +1223,17 @@ const LOCK_FREED = "Замок слияния отпущен."
 const lockStillYours = (n: number) => `Внимание: замок слияния всё ещё у тебя: cleanup его не отпускает; отпусти unlock {n: ${n}}.`
 // ВИД ПИСЬМА (план 003.1, 2026-10-06; владелец: «непонятно, кто кому пишет»). Шапка — когда, кто кому, с ролью в задаче;
 // время первым (владелец 2026-10-07): в длинной шапке оно не теряется в конце строки:
-//   ✉  01:17 · #8 приёмщик nova.worker → nova.integrator
+//   ✉  01:17 · 008 приёмщик nova.worker → nova.integrator
 //   ⚙  01:17 · crew → nova.integrator (служебное, не отвечай)
 // После значка два пробела: окно терминала рисует ✉ и ⚙ широкими, и с одним пробелом значок слипался со временем.
 // По меткам ✉ / ⚙ (и прежней «[opencode-peers]» — письма в истории) плагин отличает свои письма от сообщений владельца.
 export const LETTER_MARKS = ["✉ ", "⚙ ", "[opencode-peers]"] // [opencode-peers] — метка писем в старой истории сессий
 export const isCrewText = (t: string) => LETTER_MARKS.some((m) => t.startsWith(m))
-/** Как назвать сессию в письме: «#8 приёмщик nova.worker», «#3 исполнитель nova.worker» или адрес. */
+/** Как назвать сессию в письме: «008 приёмщик nova.worker», «003 исполнитель nova.worker» или адрес. */
 export function sessionLabel(session: string, fallback: string): string {
   const c = readJson<Card>(cardFile(session))
   const addr = c ? `${c.project ?? "?"}.${normalizeRole(c.role)}` : fallback
-  // номер задачи — как в показе (задача 058): «045» у задачи с папкой, у сессии методики — «045 С4-3»
+  // номер задачи — как в показе (задачи 058, 086): «045», у сессии методики — «045 С4-3»
   const no = (r: { project: string; n: number }, as: "task" | "review") => {
     const t = loadTask(r.project, r.n)
     if (!t) return taskNo({ project: r.project, n: r.n })
@@ -1383,7 +1383,7 @@ const verbHelpText = (): string =>
 
 export const HELP = `crew-harness — письма между вкладками OpenCode на этой машине, в любом репозитории.
 
-СЛОВА. Задачу называй с названием: «#31 «замок вливания»» при первом упоминании в ответе владельцу, письме и отчёте, дальше можно «#31»: по одному номеру не вспомнить, о чём она.
+СЛОВА. Задачу называй с названием: «031 «замок вливания»» при первом упоминании в ответе владельцу, письме и отчёте, дальше можно «031»: по одному номеру не вспомнить, о чём она. Номер задачи — три цифры без «#» (больше тысячи — как есть); «#N» в сообщении коммита, описании и комментарии GitHub превращает в ссылку на issue или PR, поэтому решётка с числом — только для настоящих issue и PR («Fixes #12»), страж сообщения коммита отклоняет остальное.
 Окно — программа OpenCode в терминале. Вкладка — сессия внутри окна (на экране одна, остальные фоновые).
 Письма адресуются вкладкам.
 
@@ -1476,9 +1476,9 @@ acceptor — роль приёмщика (разделяемая) при нас�
 Спросивший ждёт ответ crew_wait в том же ходе — ответ приходит туда, без отдельного пробуждения.
 
 ЗАДАЧИ. Одна задача — один номер. В проекте с папками задач (настройка tasks_dir, по умолчанию doc/tasks; включена, когда
-каталог есть в целевой ветке) номер задачи — номер её папки NNN-<slug>/, в показе «045» (три цифры, без «#»); запись плагина
+каталог есть в целевой ветке) номер задачи — номер её папки NNN-<slug>/, в показе «045»; запись плагина
 носит тот же номер. В проекте без папок у задачи номер N (сквозной в проекте, только растёт; при доработке и передаче не
-меняется), в показе «#N»; задачи проекта crew-harness подписываются тремя цифрами («022») и без папки. По номеру задачу называют владелец, интегратор и crew_list; заголовок сессии — «045 исп название» («#N исп название»).
+меняется), в показе тоже тремя цифрами («094»; больше тысячи — как есть): у всех задач всех проектов одна подпись, без «#» (решётка с числом — ссылка на issue GitHub). По номеру задачу называют владелец, интегратор и crew_list; заголовок сессии — «045 исп название».
   Новая задача в проекте с папками: номер — 1 + наибольший из записей и папок во всех рабочих деревьях и ветках (локальных и
     origin); плагин пишет папку на ветку задачи и коммитит её (task/message.md — поле message дословно, без него — шаблон из полей;
     log.md — первая строка); основную копию не трогает. Папка уже есть — crew_spawn {task: N, goal} заводит запись с её номером.
@@ -1782,7 +1782,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
   const crewList: CrewTool = {
     name: "crew_list",
     description:
-      "List the tabs (sessions) of the caller's project: address project.role, open/closed (open = shown as a tab in a live OpenCode window, on screen or in the background), busy/free, model, letters waiting; all=true lists every project. Marks the caller. Then the open tasks #N of the project.",
+      "List the tabs (sessions) of the caller's project: address project.role, open/closed (open = shown as a tab in a live OpenCode window, on screen or in the background), busy/free, model, letters waiting; all=true lists every project. Marks the caller. Then the open tasks of the project (numbers with three digits, 094).",
     input: {
       type: "object",
       properties: { all: { type: "boolean", description: "List the tabs of every project, not only the caller's", default: false } },
@@ -2067,7 +2067,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
   const isIntegrator = (me: Card) => me.role === "integrator" && holdsExclusive(roleKey(projOf(me), "integrator"), me.session)
   const notIntegrator = (me: Card) => ({ content: `Это может только интегратор проекта ${projOf(me)} (crew_role {role: "integrator"}).` })
   const taskInput = {
-    title: str("Short title (it becomes the session title: 045 исп title; #N исп title for a task without a folder in a project other than crew-harness)"),
+    title: str("Short title (it becomes the session title: 045 исп title)"),
     goal: str("Goal: what has to be true when the task is done"),
     criteria: str("Acceptance criteria: what is run, what must be green, what proves it (and the 'feed it something wrong' probe)"),
     boundaries: str("Boundaries: what is NOT done in this task"),
@@ -2264,7 +2264,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
     description:
       [
         "Integrator only: start a task in a new session (it runs in the OpenCode server even with no window). The report comes back as an answer to the task's qid: crew_wait {qid}. Manage tasks with crew_task. The owner reads title, goal and criteria too: write them in the owner's language named in your system block.",
-        "One task, one number. In a project with task folders (tasks_dir, default doc/tasks, present in the target branch) the task number is the number of its folder NNN-<slug>/, shown as 045; without folders it is the plugin's number, shown #N (the tasks of the project crew-harness are shown with three digits, 022, with or without a folder). A new task: the plugin takes 1 + the largest number of the records and of the folders in every working tree and branch, writes the folder (task/message.md = message word for word, or a template from the fields when message is absent; log.md with its first line) on the task branch and commits it there; the main copy is never written. task: N - a task whose folder already exists (no folder commit; refused when no folder has that number).",
+        "One task, one number. In a project with task folders (tasks_dir, default doc/tasks, present in the target branch) the task number is the number of its folder NNN-<slug>/, shown as 045; without folders it is the plugin's number, shown the same way, 094 (every task of every project is shown with three digits and no hash, 1000 above 999: a hash with a number is a GitHub issue link). A new task: the plugin takes 1 + the largest number of the records and of the folders in every working tree and branch, writes the folder (task/message.md = message word for word, or a template from the fields when message is absent; log.md with its first line) on the task branch and commits it there; the main copy is never written. task: N - a task whose folder already exists (no folder commit; refused when no folder has that number).",
         "A task session is a part of the task, not a task: session \"<code>\" (С1, С2, С3п, С4…; default исп = the executor) adds a session to task N: ident 045 С4-3 (code and its ordinal in the task) plus the launch number №n; the plugin writes the launch lines into progress.log and log.md of the folder. A method session submits to you (crew_task submit), with no plugin review; the plugin's review of the task starts once, after crew_task deliver. place: own (default for С2/С4/С6) - its own worktree and branch task/NNN-<code>-<k> from the task branch; task (default for the others) - the task worktree.",
         "A sub-task (part_of: N) is a task of its own: own number and folder, the first line of its task/message.md is «Часть задачи NNN «…».», a line in the parent's log.md. The rule: an own acceptance or an own landing in main - a sub-task; the next step of the same work (a check, a fix by findings, a continuation, a handover) - a session.",
         "goal, criteria - required (the project may require more: boundaries, open_questions; task_fields). title? priority? P0..P3.",
@@ -2413,7 +2413,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
     name: "crew_task",
     description:
       [
-        "Tasks of the caller's project, by number (045 for a task with a folder or of the project crew-harness, #N without). One line per action: action - who may - parameters - what it does. Roles: integrator = the tab that plans and starts the project's tasks; executor = the session doing the task; reviewer = the tab that checks and lands a submitted task (a free worker tab, a session started for it, the acceptor role when the project says reviewer: acceptor, or the integrator). Texts that go to another tab (submit report, rework remarks, order, push and cancel texts) are read by the owner too: write them in the owner's language named in your system block.",
+        "Tasks of the caller's project, by number (three digits, 045 or 094, with a folder or without). One line per action: action - who may - parameters - what it does. Roles: integrator = the tab that plans and starts the project's tasks; executor = the session doing the task; reviewer = the tab that checks and lands a submitted task (a free worker tab, a session started for it, the acceptor role when the project says reviewer: acceptor, or the integrator). Texts that go to another tab (submit report, rework remarks, order, push and cancel texts) are read by the owner too: write them in the owner's language named in your system block.",
         "list - anyone - all? - open tasks by priority; all=true adds finished and cancelled ones.",
         "show - anyone - n - details and history of a task, with its steps, side branches and worktrees.",
         "assign - integrator - session, goal, criteria, title?, boundaries?, open_questions?, priority?, extra? - give a task to an existing open tab instead of a new session; the tab is woken while the task is open. Refused for the integrator's own session (unless the project sets allow_self_assign) and for a session that already runs a task. extra {id: one line} fills the project's extra task fields (task_extra_fields, see crew_config show). In a project with task folders the task text follows the template of crew_spawn: owner_words and result required, links? boundaries? message?",

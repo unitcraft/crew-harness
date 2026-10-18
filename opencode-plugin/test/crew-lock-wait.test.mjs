@@ -1,6 +1,6 @@
 // Self-test: waking the acceptors that wait for the merge lock (task 011; node >= 24):  node test/crew-lock-wait.test.mjs
 // LW-1: a refusal "lock busy" records the waiter in its card (lock_wait), not in a separate store. LW-2: /crew and the panel show one
-// line "ждут замок: #N (мин)". LW-3: when the lock is released the waiters get a letter "замок свободен" and the record is cleared.
+// line "ждут замок: NNN (мин)". LW-3: when the lock is released the waiters get a letter "замок свободен" and the record is cleared.
 // LW-4: a waiter that takes the lock is not a waiter any more; a closed tab (no live window) is not woken.
 import { readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
@@ -29,8 +29,8 @@ await call("crew_task", A, { action: "merge", n: a.n })
 const refused = await call("crew_task", B, { action: "merge", n: b.n })
 cell("LW-1 refusal: the waiter is recorded in its card", /занят|у приёмщика/.test(refused) && card(B)?.lock_wait?.n === b.n && card(B).lock_wait.project === "proj", refused + JSON.stringify(card(B)))
 const line = review.lockWaitLine("proj", Date.now() + 5 * 60_000)
-cell("LW-2 the line 'ждут замок: #N (мин)'", line === `ждут замок: #${b.n} (5 мин)`, String(line))
-cell("LW-2 /crew carries it (the counter lock #N)", status.formatStatuses([{ session: "x", role: "worker", title: "x", state: "idle", detail: "d", project: "proj", watches: [], asked: [], tasks: [] }], Date.now()).includes("lock #" + b.n), "no line")
+cell("LW-2 the line 'ждут замок: NNN (мин)'", line === `ждут замок: ${String(b.n).padStart(3, "0")} (5 мин)`, String(line))
+cell("LW-2 /crew carries it (the counter lock NNN)", status.formatStatuses([{ session: "x", role: "worker", title: "x", state: "idle", detail: "d", project: "proj", watches: [], asked: [], tasks: [] }], Date.now()).includes("lock " + String(b.n).padStart(3, "0")), "no line")
 cell("LW-2 the panel carries it", status.sidebarLines([], Date.now(), "proj").rows.some((r) => r.what.includes("ждут замок")), "no row")
 await call("crew_task", A, { action: "rework", n: a.n, text: "fix" })
 await H.until(() => /proj свободен/.test(readLetters(B)), 10_000)
