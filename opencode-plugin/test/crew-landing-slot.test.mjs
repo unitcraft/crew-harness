@@ -74,7 +74,8 @@ const cell = (name, ok, detail) => {
   if (!ok) fail++
 }
 const wait = (ms = 400) => new Promise((r) => setTimeout(r, ms))
-const until = async (cond, ms = 8_000) => {
+// the limit is only a stop for a hung test: a pass of a loaded machine (4 times more tests than cores) can take far longer than 8 s (task 085)
+const until = async (cond, ms = 60_000) => {
   for (const end = Date.now() + ms; !cond() && Date.now() < end; ) await wait(100)
 }
 const call = async (name, input) => (await tools[name].execute(input, { sessionID: "sesINTEG1" })).content

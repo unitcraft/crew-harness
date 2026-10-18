@@ -82,7 +82,7 @@ const cell = (name, ok, detail) => {
   if (!ok) fail++
 }
 const wait = (ms = 300) => new Promise((r) => setTimeout(r, ms))
-const until = async (cond, ms = 15_000) => {
+const until = async (cond, ms = 60_000) => {
   for (const end = Date.now() + ms; !cond() && Date.now() < end; ) await wait(100)
   return cond()
 }
@@ -212,7 +212,7 @@ failCreate = false
 cell("AC-32 a start that failed leaves the task `starting` with the model chosen at the launch", ts.status === "starting" && ts.model === "claude-code/haiku", JSON.stringify([ts.status, ts.model]))
 use("kimi-only")
 const n0 = creates.length
-await until(() => task("proj", ts.n).status === "running", 8000)
+await until(() => task("proj", ts.n).status === "running", 60_000)
 const ts2 = task("proj", ts.n)
 cell("AC-32 the retry of the same attempt uses the model of the record even though the set changed; one session", ts2.status === "running" && modelOf(ts2.executor) === "claude-code/haiku" && creates.length === n0 + 1 && creates.filter((x) => x.id === ts2.executor).length === 1, JSON.stringify([ts2.status, modelOf(ts2.executor), creates.length - n0]))
 use(undefined)
@@ -227,7 +227,7 @@ const sessionsBefore = creates.length
   writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify(f))
   use("dev-only")
   L.dropSnapshot("proj")
-  await until(() => L.profileState(proj).state.row !== 2, 3000)
+  await until(() => L.profileState(proj).state.row !== 2, 30_000)
   const r = await spawn("sesINTEG", {})
   cell("AC-06(б) the described stage whose profile is not found refuses with the stage and the profile; no task, no number, no session", /Задача не поставлена/.test(r) && /разработка/.test(r) && /kimi/.test(r) && tasks.listTasks("proj").length === before && creates.length === sessionsBefore, r)
   const planR = await spawn("sesINTEG", { kind: "plan", goal: "g" })
@@ -246,7 +246,7 @@ cell("AC-24 the nested project (its own root inside the root of proj) works as b
 const pl = await spawn("sesPLAIN", { tier: "heavy" })
 cell("AC-24 a project without profiles works as before while another one has a set on", /запущена/.test(pl) && modelOf(lastTask("plain").executor) === "claude-code/opus", pl)
 use("kimi-only")
-await until(() => existsSync(L.snapshotFile("proj")), 8000) // the pass writes the snapshot of the valid state
+await until(() => existsSync(L.snapshotFile("proj")), 60_000) // the pass writes the snapshot of the valid state
 use("no-such-set")
 const bySnap = await spawn("sesINTEG", {})
 const tsn = lastTask("proj")
@@ -285,7 +285,10 @@ delete process.env.CREW_HARNESS_PRESENCE // from now on a tab is open only if a 
 const WPID = 616161
 mkdirSync(core.WINDOWS, { recursive: true })
 const tabsNow = []
-const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now(), tabs: tabsNow }))
+// The beat is dated 30 s ahead: a window counts as live for WINDOW_STALE_MS (3 s) after its beat, and this process stops its own timer
+// while it runs git synchronously (seconds on a loaded machine), so the fake window went stale between two beats and an open tab was
+// "not open" for the choice of a reviewer (task 085). Nothing here tests the staleness of a window.
+const beat = () => writeFileSync(path.join(core.WINDOWS, `${WPID}.json`), JSON.stringify({ pid: WPID, beat: Date.now() + 30_000, tabs: tabsNow }))
 const heart = setInterval(beat, 300)
 const openTab = async (sid, role, model, dir = proj) => {
   dirOf.set(sid, dir)
@@ -311,10 +314,10 @@ const submit = async (input = {}) => {
   await spawn("sesINTEG", input)
   const t = lastTask("proj")
   await call("crew_send", t.executor, { to: "sesINTEG", text: "done", reply_to: t.qid })
-  await until(() => task("proj", t.n).status === "submitted" || task("proj", t.n).reviewer, 5000)
+  await until(() => task("proj", t.n).status === "submitted" || task("proj", t.n).reviewer, 60_000)
   return t.n
 }
-const reviewed = async (n, ms = 12_000) => {
+const reviewed = async (n, ms = 60_000) => {
   await until(() => !!task("proj", n).reviewer, ms)
   await wait(400)
   return task("proj", n)
@@ -430,17 +433,17 @@ const mkPlanTask = () =>
   })
 use("kimi-only")
 const ptA = mkPlanTask()
-await until(() => stepsOf(ptA.n).length > 0, 15_000)
+await until(() => stepsOf(ptA.n).length > 0, 60_000)
 const stA = stepsOf(ptA.n)[0]
 cell("AC-05 auto-plan steps start on the develop stage of the set and its tier (kimi-only: k3, heavy), not on a hard medium", !!stA && stA.model === "kimi-code-plan-global/k3-256k" && stA.tier === "heavy" && stA.profiles?.[0]?.stage === "develop", JSON.stringify(stA && [stA.model, stA.tier, stA.profiles]))
 use(undefined)
 const ptB = mkPlanTask()
-await until(() => stepsOf(ptB.n).length > 0, 15_000)
+await until(() => stepsOf(ptB.n).length > 0, 60_000)
 const stB = stepsOf(ptB.n)[0]
 cell("AC-05 without a set a step runs on spawn_models medium, as before", !!stB && stB.model === "claude-code/sonnet" && stB.tier === "medium" && !stB.profiles, JSON.stringify(stB && [stB.model, stB.tier]))
 use("default")
 const ptC = mkPlanTask()
-await until(() => stepsOf(ptC.n).length > 0, 15_000)
+await until(() => stepsOf(ptC.n).length > 0, 60_000)
 const stC = stepsOf(ptC.n)[0]
 cell("AC-38 default: a step on claude medium, the same as without a set", !!stC && stC.model === "claude-code/sonnet" && stC.tier === "medium", JSON.stringify(stC && [stC.model, stC.tier]))
 
@@ -448,7 +451,7 @@ cell("AC-38 default: a step on claude medium, the same as without a set", !!stC 
 setBounds({ max: "light" })
 use(undefined)
 const ptD = mkPlanTask()
-await until(() => stepsOf(ptD.n).length > 0, 15_000)
+await until(() => stepsOf(ptD.n).length > 0, 60_000)
 const stD = stepsOf(ptD.n)[0]
 cell("016 review-1 #1: auto-plan step without a set and tier_max light runs on light (haiku), not on hard medium", !!stD && stD.model === "claude-code/haiku" && stD.tier === "light", JSON.stringify(stD && [stD.model, stD.tier]))
 cell("016 review-1 #3: that step's record says clamped_from medium", stD?.profiles?.[0]?.clamped_from === "medium" && stD.profiles[0].tier === "light" && stD.profiles[0].stage === "develop", JSON.stringify(stD?.profiles))
@@ -467,7 +470,7 @@ const ptE = tasks.createTask({
   status: "done", kind: "spawn", directory: proj,
   plan: { n: "9", file: "docs/plans/9-podplan.md", source: "s", rounds: [], clean: 2, approval: { decision: "ok", at: Date.now() } },
 })
-await until(() => stepsOf(ptE.n).length > 0, 15_000)
+await until(() => stepsOf(ptE.n).length > 0, 60_000)
 const stE = stepsOf(ptE.n)[0]
 cell("015 review-2 #2: a sub-plan step without a set is a plan task and its clamp record says stage plan (not develop)", !!stE && !!stE.plan && stE.profiles?.[0]?.clamped_from === "medium" && stE.profiles[0].stage === "plan", JSON.stringify(stE && [!!stE.plan, stE.profiles]))
 setBounds({})
@@ -481,12 +484,12 @@ const snapName = () => {
     return undefined
   }
 }
-await until(() => snapName() === "cross-kimi", 8000)
+await until(() => snapName() === "cross-kimi", 60_000)
 {
   const f = JSON.parse(readFileSync(path.join(proj, ".opencode", "crew-harness.json"), "utf8"))
   delete f.model_profiles.kimi
   writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify(f))
-  await until(() => L.profileState(proj).state.row === 3, 5000)
+  await until(() => L.profileState(proj).state.row === 3, 60_000)
   const nH = await submit({})
   const tH = await reviewed(nH)
   cell("AC-06(в) invalid data with a snapshot: the reviewer is started by the snapshot (kimi) and the history says so", modelOf(tH.reviewer) === "kimi-code-plan-global/k3-256k" && tH.history.some((h) => /по снимку/.test(h.note ?? "")), JSON.stringify([modelOf(tH.reviewer), tH.profiles?.at(-1)]))
@@ -497,7 +500,7 @@ await until(() => snapName() === "cross-kimi", 8000)
   const tI = task("proj", nI)
   const refusedLetters = () => delivered.filter((d) => d.sessionID === "sesINTEG" && /приёмщик не назначен/.test(d.text)).length
   cell("AC-06(б) no snapshot, the profile is not found: the task stays «submitted» with no reviewer, no session is created for it", tI.status === "submitted" && !tI.reviewer && !tI.review_kind, JSON.stringify([tI.status, tI.reviewer]))
-  await until(() => refusedLetters() >= 1, 8000)
+  await until(() => refusedLetters() >= 1, 60_000)
   const l1 = refusedLetters()
   await wait(2500)
   cell("AC-06(б) one letter to the integrator with the reason; the repeated passes add no new letter", l1 === 1 && refusedLetters() === 1, String(l1) + "/" + refusedLetters())
@@ -505,7 +508,7 @@ await until(() => snapName() === "cross-kimi", 8000)
   cell("AC-06(б) crew_doctor has the line: submitted, no reviewer, with the reason", new RegExp(`задача #${nI} .*сдана, приёмщика нет`).test(doc), doc.slice(0, 400))
   f.model_profiles.kimi = TABLE.kimi
   writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify(f))
-  const tI2 = await reviewed(nI, 15_000)
+  const tI2 = await reviewed(nI, 60_000)
   cell("AC-06(б) the data is repaired: the reviewer is assigned by itself on the next pass, on the model of the set", !!tI2.reviewer && modelOf(tI2.reviewer) === "kimi-code-plan-global/k3-256k", JSON.stringify([tI2.reviewer, tI2.status]))
 }
 use(undefined)
@@ -520,7 +523,7 @@ use(undefined)
   use("with-extra")
   const before = creates.length
   const nJ = await submit({})
-  const tJ = await reviewed(nJ, 8000)
+  const tJ = await reviewed(nJ, 60_000)
   cell("DNC-09 reviewer: integrator -> the reviewer is the integrator tab, the set does not choose a model, no review session is created", tJ.reviewer === "sesINTEG" && tJ.review_kind === "integrator" && !tJ.review_model && creates.length === before + 1 /* only the executor */, JSON.stringify([tJ.reviewer, tJ.review_kind, creates.length - before]))
   cell("DNC-09 the plugin never calls session.switchModel (no such call in the host stub either)", typeof ctx.session.switchModel === "undefined", "present")
   cell("DNC-09 a set with an unknown stage (coordination) is read, the stage is ignored, the set is valid", L.profileState(proj).state.row === 2 && L.profileState(proj).data.sets["with-extra"].coordination !== undefined, String(L.profileState(proj).state.row))

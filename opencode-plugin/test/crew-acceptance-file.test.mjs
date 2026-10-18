@@ -10,6 +10,7 @@ import { pathToFileURL } from "node:url"
 
 const tmp = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), "crew-acc-file-")))
 process.env.XDG_DATA_HOME = path.join(tmp, "data")
+process.env.TEMP = process.env.TMP = process.env.TMPDIR = tmp // the plugin log lives in os.tmpdir(): a log of its own per run, not the one other parallel runs write (task 085)
 process.env.CREW_HARNESS_POLL_MS = "100"
 process.env.CREW_HARNESS_DB = path.join(tmp, "absent.db")
 process.env.CREW_HARNESS_SETTINGS_TTL_MS = "1"

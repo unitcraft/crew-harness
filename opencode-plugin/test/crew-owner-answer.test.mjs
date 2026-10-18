@@ -10,6 +10,7 @@ import { DatabaseSync } from "node:sqlite"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-owner-answer-"))
 process.env.XDG_DATA_HOME = tmp
+process.env.TEMP = process.env.TMP = process.env.TMPDIR = tmp // the plugin log lives in os.tmpdir(): a log of its own per run, not the one other parallel runs write (task 085)
 process.env.CREW_HARNESS_POLL_MS = "100"
 process.env.CREW_HARNESS_STATUS_MS = "100"
 process.env.CREW_HARNESS_FORM_MS = "100"

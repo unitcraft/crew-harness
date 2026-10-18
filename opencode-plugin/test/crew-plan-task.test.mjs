@@ -61,7 +61,8 @@ const cell = (name, ok, detail) => {
   if (!ok) fail++
 }
 const wait = (ms = 500) => new Promise((r) => setTimeout(r, ms))
-const until = async (cond, ms = 8_000) => {
+// the limit only stops a hung test; a loaded machine is slow, a fixed pause for "it arrives" is not used (task 085)
+const until = async (cond, ms = 60_000) => {
   for (const end = Date.now() + ms; !cond() && Date.now() < end; ) await wait(100)
 }
 const call = async (name, sid, input = {}) => (await tools[name].execute(input, { sessionID: sid })).content
@@ -73,7 +74,7 @@ await call("crew_role", "sesINTEG1", { role: "integrator" })
 
 // 1. a plan task: number after the plans folder, file, worktree, the letter with the source, template and criteria
 const sp = await call("crew_spawn", "sesINTEG1", { kind: "plan", title: "длина фрагмента", goal: "Фрагмент интерполяции получает длину 0 — длина должна браться из склеенного текста" })
-await wait(300)
+await until(() => !!task() && got(task().executor, "ЗАДАЧА-ПЛАН").length > 0)
 const t1 = task()
 cell("a plan task gets the next plan number and its file", t1.plan?.n === "8" && t1.plan.file === "docs/plans/8-dlina-fragmenta.md" && /план 8/.test(t1.title), JSON.stringify({ plan: t1.plan, title: t1.title, sp }))
 const ex = t1.executor
@@ -115,7 +116,7 @@ for (const step of steps) await call("crew_task", r1, { action: "check", n: 1, s
 const badNum = await call("crew_task", r1, { action: "round", n: 1, blocking: "много", significant: 0, cosmetic: 0 })
 cell("a verdict without numbers per gradation is refused", /исла замечаний/i.test(badNum), badNum)
 const v1 = await call("crew_task", r1, { action: "round", n: 1, blocking: 0, significant: 1, cosmetic: 0, text: "[существенное] у Ф.1.1 нет пробы на пустой ввод → добавить критерий" })
-await wait(600)
+await until(() => task().status === "rework" && got(ex, "ЗАМЕЧАНИЯ ПЕРЕПРОВЕРКИ ПЛАНА 8").length > 0)
 cell("a significant remark returns the plan to the author", task().status === "rework" && /вернулся автору/.test(v1) && got(ex, "ЗАМЕЧАНИЯ ПЕРЕПРОВЕРКИ ПЛАНА 8").length === 1, JSON.stringify({ st: task().status, v1 }))
 cell("the round is recorded; the reviewer leaves", task().plan.rounds.length === 1 && task().plan.clean === 0 && !task().reviewer && task().reviewers.includes(r1), JSON.stringify(task().plan))
 
@@ -155,7 +156,6 @@ await until(() => notices().some((n) => /План 8 ждёт согласова�
 cell("the owner gets a notice: the plan waits for approval", notices().some((n) => /План 8 ждёт согласования/.test(n.title) && n.attention), JSON.stringify(notices()))
 approvals.writeApproval({ project: "proj", n: 1, decision: "no", text: "добавь фазу замера до правки" })
 await until(() => task().status === "rework")
-await wait(600)
 await until(() => got(ex, "ЗАМЕЧАНИЯ ВЛАДЕЛЬЦА к плану 8").length > 0)
 cell("'return with remarks': the plan goes back with the owner's words, rounds start over", task().status === "rework" && task().plan.clean === 0 && got(ex, "ЗАМЕЧАНИЯ ВЛАДЕЛЬЦА к плану 8").length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === ex).map((d) => d.text.slice(0, 120))))
 await report("добавил фазу замера")
@@ -191,7 +191,7 @@ git(proj, "branch", "-D", t1.branch)
 const cl = await call("crew_task", rm, { action: "cleanup", n: 1 })
 cell("the plan task is cleaned up", task().status === "done", cl)
 const byStep = (id) => tasks.listTasks("proj").find((x) => x.plan_step?.step === id)
-await until(() => byStep("Ф.1.1")?.status === "running" && got(byStep("Ф.1.1").executor, "ШАГ ПЛАНА").length > 0, 20_000) // the worktree is created asynchronously
+await until(() => byStep("Ф.1.1")?.status === "running" && got(byStep("Ф.1.1").executor, "ШАГ ПЛАНА").length > 0, 60_000) // the worktree is created asynchronously
 const s11 = byStep("Ф.1.1")
 cell("step Ф.1.1 becomes a task: goal, criteria, boundaries, priority of its phase", !!s11 && s11.goal === "длина из склеенного текста" && /12\/12/.test(s11.criteria) && /оракул/.test(s11.boundaries) && /без упрощений/.test(s11.boundaries) && s11.priority === "P1" && s11.title === "8 Ф.1.1 лексер", JSON.stringify(s11))
 cell("Ф.1.2 waits: the same «где» as a running step; Ф.2.1 waits for phase Ф.1", !byStep("Ф.1.2") && !byStep("Ф.2.1"), JSON.stringify(tasks.listTasks("proj").map((x) => [x.n, x.plan_step?.step])))
@@ -218,17 +218,17 @@ cell("with the mark the step is accepted", byStep("Ф.1.1").status === "accepted
 
 // 9. Ф.1.1 closed -> Ф.1.2 starts; Ф.1 closed -> the sub-plan step Ф.2.1 becomes a plan task 8.1; all closed -> letter
 const close = async (id) => {
-  await until(() => ["running", "accepted"].includes(byStep(id)?.status), 20_000) // not in the middle of its start
+  await until(() => ["running", "accepted"].includes(byStep(id)?.status), 60_000) // not in the middle of its start
   const x = byStep(id)
   x.status = "done"
   tasks.saveTask(x)
 }
 await close("Ф.1.1")
-await until(() => !!byStep("Ф.1.2"), 20_000)
+await until(() => !!byStep("Ф.1.2"), 60_000)
 cell("Ф.1.1 closed: Ф.1.2 starts", !!byStep("Ф.1.2") && !byStep("Ф.2.1"), JSON.stringify(tasks.listTasks("proj").map((x) => [x.n, x.plan_step?.step])))
 cell("/crew counts the plan in progress (plans N)", st.plansOf("proj").other >= 1 && /plans [1-9]/.test(st.formatStatuses(idleRow, Date.now(), "proj")), JSON.stringify(st.plansOf("proj").other))
 await close("Ф.1.2")
-await until(() => !!byStep("Ф.2.1"), 20_000)
+await until(() => !!byStep("Ф.2.1"), 60_000)
 const sub = byStep("Ф.2.1")
 cell("phase Ф.1 closed: the sub-plan step becomes plan task 8.1", !!sub && sub.plan?.n === "8.1" && sub.plan.parent === "8" && /батарея фикстур/.test(sub.plan.source), JSON.stringify(sub && { plan: sub.plan, title: sub.title }))
 await close("Ф.2.1")

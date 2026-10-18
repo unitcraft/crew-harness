@@ -3,6 +3,9 @@
 ```sh
 npm test                              # all self-tests, node >= 24
 node test/crew-remote.test.mjs       # one test
+npm run test:parallel                 # all self-tests, 8 files at a time (test/stable.mjs --all --runs 1)
+npm run test:stable                   # the files that were flaky under load, 10 runs each, 8 at a time
+node test/stable.mjs --runs 5 --cores 2 crew-push   # a chosen file under load: 8 runs on 2 cores (Windows)
 ```
 
 Each self-test is a plain Node script, no framework: it prints `ok  <cell>` or `FAIL <cell> :: <detail>`
@@ -13,6 +16,13 @@ stops at the first failing file.
   importing the plugin, so it never touches the real mailbox. `cleanup-tmp.mjs` (first in `npm test`) sweeps
   folders of earlier runs older than an hour — on Windows a folder held by a watch process or an open database
   can outlive its test.
+- **Stable under load and in parallel** (task 085). Tests run side by side, so each run has resources of its own: its temp
+  folder (`TEMP`, `TMP` and `TMPDIR` point to it before the plugin is imported, so the plugin log `opencode-plugins.log` is
+  its own too), its ports (`listen(0)`). A positive "it arrives" is awaited as a condition with a limit
+  (`until(cond, ms)`), never as a fixed pause; a fixed pause stays only where nothing must happen. A speed check compares two
+  measurements taken in the same process at the same moment (a ratio) and measures again on an outlier (`crew-progress`
+  AC-11); no millisecond limit stands for the speed of the machine. `test/stable.mjs` runs files N times, J at a time, and
+  prints the red runs per file; `--cores C` pins it to C cores, which is how a loaded machine is made on purpose.
 - **Red probes.** Some tests take `CREW_MODULE` / `CREW_MCP` (a mutated copy of the plugin) or a
   `CREW_HARNESS_*` switch that breaks one behaviour on purpose: the cell checking it must go red. The header of
   each such test names its probe.

@@ -73,6 +73,12 @@ const cell = (name, ok, detail) => {
   if (!ok) fail++
 }
 const wait = (ms = 400) => new Promise((r) => setTimeout(r, ms))
+// a positive "it arrives" is awaited as a condition with a limit, not as a fixed pause: on a loaded machine the pass comes late (task 085).
+// A fixed pause stays only where nothing must happen.
+const until = async (cond, ms = 20_000) => {
+  for (const end = Date.now() + ms; !cond() && Date.now() < end; ) await wait(50)
+  await wait(100)
+}
 const got = (s, t) => delivered.filter((d) => d.sessionID === s && d.text.includes(t))
 const call = async (name, sid, input = {}) => (await tools[name].execute(input, { sessionID: sid })).content
 const reminders = () => got("sesWORK01", "Не завершено").length
@@ -86,6 +92,11 @@ async function turn({ tools: withTool = false, owner = false } = {}) {
   msg("sesWORK01", "idle", { outcome: "succeeded" })
   await events["session.idle"]({ properties: { sessionID: "sesWORK01" } })
   await wait()
+  // the reminder may still be on its way on a loaded machine: wait until the deliveries stop coming
+  for (let last = -1, i = 0; last !== delivered.length && i < 40; i++) {
+    last = delivered.length
+    await wait(150)
+  }
 }
 
 const WPID = 717171
@@ -102,7 +113,7 @@ for (const s of ["sesINTEG1", "sesWORK01"]) {
 await call("crew_role", "sesINTEG1", { role: "integrator" })
 
 // 0. the turn cut off by a restart is resumed by one letter
-await wait(800)
+await until(() => got("sesINTER1", "прервана перезапуском").length >= 1)
 cell("an interrupted turn gets one 'resume' letter", got("sesINTER1", "прервана перезапуском").length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "sesINTER1")))
 await wait(600)
 cell("and only one", got("sesINTER1", "прервана перезапуском").length === 1, got("sesINTER1", "прервана").length)
@@ -127,7 +138,7 @@ cell("a letter to the plugin itself is refused with a hint", /это сам пл
 
 // the integrator gives sesWORK01 a task
 await call("crew_task", "sesINTEG1", { action: "assign", session: "sesWORK01", title: "парсер", goal: "дописать парсер", criteria: "тесты зелёные" })
-await wait()
+await until(() => got("sesWORK01", "ЗАДАЧА #1").length >= 1)
 const task = tasks.loadTask("proj", 1)
 cell("the task reached the tab", got("sesWORK01", "ЗАДАЧА #1").length === 1, JSON.stringify(delivered.map((d) => d.sessionID)))
 const obl = () => core.obligationsOf("sesWORK01").find((o) => o.qid === task.qid)
@@ -158,7 +169,7 @@ cell("two empty turns: two reminders", reminders() === 7 && obl()?.empty === 2, 
 await turn()
 cell("the third empty turn: no reminder", reminders() === 7, reminders())
 cell("the third empty turn: the tab is stuck", obl()?.stuck === true, JSON.stringify(obl()))
-await wait()
+await until(() => calls() >= 1)
 cell("the asker gets a call", calls() === 1 && got("sesINTEG1", "3 хода подряд остановилась без работы").length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "sesINTEG1").map((d) => d.text.slice(0, 160))))
 const notes = readdirSync(path.join(core.NOTICES, String(WPID))).length
 cell("the asker's window gets a notice", notes >= 1, notes)
@@ -169,7 +180,7 @@ cell("a stuck tab gets no more reminders and no second call", reminders() === 7 
 
 // 4. crew_task push clears "stuck"; reminders start again
 await call("crew_task", "sesINTEG1", { action: "push", n: 1, text: "доделай" })
-await wait()
+await until(() => got("sesWORK01", "Подталкивание по задаче #1").length >= 1)
 cell("push wakes the tab", got("sesWORK01", "Подталкивание по задаче #1").length === 1, "no push")
 cell("push clears stuck and the counters", obl()?.stuck === false && obl()?.empty === 0 && obl()?.nudges === 0, JSON.stringify(obl()))
 await turn()
@@ -221,17 +232,17 @@ cell("after the report no reminders", reminders() === before && !obl(), `${remin
 // stuck, and the call says the turns fail with an error (found live in Ph.7: a reviewer on a model the server lacks).
 const failReminders = () => got("ses_fail01", "Не завершено").length
 await call("crew_send", "sesINTEG1", { to: "ses_fail01", text: "проверь сборку", expect_reply: true })
-await wait(800)
+await until(() => got("ses_fail01", "проверь сборку").length >= 1)
 cell("the question reached the tab", got("ses_fail01", "проверь сборку").length === 1, JSON.stringify(delivered.map((d) => d.sessionID)))
-async function failedTurn() {
+async function failedTurn(seen) {
   msg("ses_fail01", "user", { text: "[opencode-peers] Письмо соседней вкладки" })
   msg("ses_fail01", "idle", { outcome: "failed" })
-  await wait(800) // no idle event: the database fallback of the plugin's pass finds the idle row
+  await until(seen) // no idle event: the database fallback of the plugin's pass finds the idle row
 }
-await failedTurn()
+await failedTurn(() => failReminders() >= 1)
 cell("a turn failed before the model: a reminder", failReminders() === 1, failReminders())
-await failedTurn()
-await failedTurn()
+await failedTurn(() => failReminders() >= 2)
+await failedTurn(() => got("sesINTEG1", "ход падает с ошибкой").length >= 1)
 cell("three failed turns: stuck, the call says the turns fail", got("sesINTEG1", "ход падает с ошибкой").length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "sesINTEG1").map((d) => d.text.slice(0, 200))))
 
 // 9. a long provider turn OpenCode itself resumed after a restart (#14 nova, 2026-10-06): the assistant row is written
@@ -251,7 +262,7 @@ cell("three failed turns: stuck, the call says the turns fail", got("sesINTEG1",
   cell("letters wait for the end of such a turn", !got("ses_long1", "письмо в долгий ход").length, "delivered into a running turn")
   msg("ses_long1", "idle", { outcome: "succeeded" })
   cell("after its idle row the turn is over", !(await core.openTurn("ses_long1", Date.now() + 600_000)), "open")
-  await wait(1200)
+  await until(() => got("ses_long1", "письмо в долгий ход").length >= 1)
   cell("then the waiting letter is delivered", got("ses_long1", "письмо в долгий ход").length === 1, "still waiting")
 }
 
@@ -264,7 +275,7 @@ cell("three failed turns: stuck, the call says the turns fail", got("sesINTEG1",
   msg("ses_stale1", "idle", { outcome: "succeeded" }, Date.now() - 20 * 60_000)
   tabs.push({ sessionID: "ses_stale1", active: false, busy: true })
   core.postLetter("ses_stale1", { id: "stale-l1", from_role: "proj.integrator", from_session: "sesINTEG1", to: "ses_stale1", time: Date.now(), text: "письмо в мнимый ход" })
-  await wait(1500)
+  await until(() => got("ses_stale1", "письмо в мнимый ход").length >= 1)
   cell("a window stuck on 'busy' with an idle server gets its letters", got("ses_stale1", "письмо в мнимый ход").length === 1, "held")
   const stFile = path.join(core.BASE, "status", "ses_stale1.json")
   const readSt = () => { try { return JSON.parse(readFileSync(stFile, "utf8")) } catch { return {} } }

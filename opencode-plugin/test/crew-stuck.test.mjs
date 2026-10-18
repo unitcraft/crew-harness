@@ -8,6 +8,7 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-stuck-"))
 process.env.XDG_DATA_HOME = tmp
+process.env.TEMP = process.env.TMP = process.env.TMPDIR = tmp // the plugin log lives in os.tmpdir(): a log of its own per run, not the one other parallel runs write (task 085)
 process.env.CREW_HARNESS_POLL_MS = "100"
 process.env.CREW_HARNESS_STEP_MS = "300"
 process.env.CREW_HARNESS_PASS_STUCK_MS = "800"

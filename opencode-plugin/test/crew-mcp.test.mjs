@@ -54,6 +54,11 @@ const cell = (name, ok, detail) => {
 }
 const wait = (ms = 400) => new Promise((r) => setTimeout(r, ms))
 const got = (s, t) => delivered.filter((d) => d.sessionID === s && d.text.includes(t))
+// a letter arrives by the plugin's timer: awaited as a condition with a limit, then a short settle for the cells that count letters (task 085)
+const until = async (cond, ms = 60_000) => {
+  for (const end = Date.now() + ms; !cond() && Date.now() < end; ) await wait(50)
+  await wait(150)
+}
 
 // Windows A (nova), B (limits) on the plugin's tools; C is a claude-code window: the plugin's request hook still
 // fires for it (the card), its tools come from MCP.
@@ -119,7 +124,7 @@ try {
   const s1 = (await mcp.call("crew_send", { to: "integrator", text: "from-mcp-own" })).text
   const s2 = (await mcp.call("crew_send", { to: "limits.integrator", text: "from-mcp-cross" })).text
   cell("crew_send answers 'sent'", /Отправлено/.test(s1) && /Отправлено/.test(s2), `${s1} | ${s2}`)
-  await wait()
+  await until(() => got("sesAAAAAA", "from-mcp-own").length >= 1 && got("sesBBBBBB", "from-mcp-cross").length >= 1)
   const own = got("sesAAAAAA", "from-mcp-own")
   cell("'integrator' from the MCP window reaches nova's integrator only", own.length === 1 && got("sesBBBBBB", "from-mcp-own").length === 0, JSON.stringify(delivered))
   cell("the letter is signed with the MCP window's address", /✉ +\d\d:\d\d · nova\.worker → /.test(own[0]?.text ?? "") && /to: "sesCCCCCC"/.test(own[0]?.text ?? ""), own[0]?.text)
@@ -133,7 +138,7 @@ try {
   const rx = (await mcp.call("crew_role", { role: "integrator" })).text
   cell("exclusive role held by a live window is refused through MCP too", /занята/.test(rx), rx)
   await tools.crew_send.execute({ to: "worker", text: "to-the-mcp-window" }, { sessionID: "sesAAAAAA" })
-  await wait()
+  await until(() => got("sesCCCCCC", "to-the-mcp-window").length >= 1)
   cell("a letter to the MCP window's role is delivered into its OpenCode session", got("sesCCCCCC", "to-the-mcp-window").length === 1, JSON.stringify(delivered))
   const inbox = (await mcp.call("crew_inbox")).text
   cell("MCP crew_inbox shows the delivered letter", /Адрес nova\.worker/.test(inbox) && /от nova\.integrator → nova\.worker: to-the-mcp-window/.test(inbox), inbox)
@@ -166,7 +171,7 @@ try {
   const card = JSON.parse(readFileSync(path.join(tmp, "opencode", "crew-harness", "cards", "sesDDDDDD.json"), "utf8"))
   cell("its card has pid 0 (delivered by the plugin's timer)", card.pid === 0 && card.project === "limits", JSON.stringify(card))
   await tools.crew_send.execute({ to: "sesDDDDDD", text: "to-a-fresh-window" }, { sessionID: "sesBBBBBB" })
-  await wait()
+  await until(() => got("sesDDDDDD", "to-a-fresh-window").length >= 1)
   cell("a letter to it is delivered", got("sesDDDDDD", "to-a-fresh-window").length === 1, JSON.stringify(delivered))
 } catch (e) {
   cell("fresh mcp session", false, String(e))

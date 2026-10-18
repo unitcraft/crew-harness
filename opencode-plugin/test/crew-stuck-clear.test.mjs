@@ -16,7 +16,7 @@ const ASK = "sesSCASK"
 const S = (n) => `sesSC${String(n).padStart(2, "0")}`
 const SIDS = [ASK, ...Array.from({ length: 12 }, (_, i) => S(i + 1)), "sesSCPEER"]
 const BASE = { push_empty_turns: 2, push_max: 3, owner_reminder_min: 1 }
-const H = await harness("crew-stuck-clear", { sessions: SIDS, settings: BASE })
+const H = await harness("crew-stuck-clear", { sessions: SIDS, settings: BASE, ownLog: true })
 const { core, msg, db, status } = H
 const forms = await load("form-wait.ts")
 const LETTER = "⚙ 10:00 · crew → x (служебное, не отвечай)" + NL + "письмо"

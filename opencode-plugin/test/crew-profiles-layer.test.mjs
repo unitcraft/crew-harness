@@ -10,6 +10,7 @@ import path from "node:path"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-profiles-layer-"))
 process.env.XDG_DATA_HOME = path.join(tmp, "data")
+process.env.TEMP = process.env.TMP = process.env.TMPDIR = tmp // the plugin log lives in os.tmpdir(): a log of its own per run, not the one other parallel runs write (task 085)
 process.env.CREW_HARNESS_POLL_MS = "100"
 process.env.CREW_HARNESS_DB = path.join(tmp, "absent.db")
 process.env.CREW_HARNESS_SETTINGS_TTL_MS = "600000" // a state read costs ~6 git processes: the cache is dropped by hand after every change

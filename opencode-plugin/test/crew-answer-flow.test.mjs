@@ -44,11 +44,14 @@ const stFile = (sid) => {
   }
 }
 /** a turn of a new tab; waits until the passes of the status have had their say */
-const go = async (text, { settings = undefined, user = "поехали", afterRows, wait = 1300, at } = {}) => {
+// ready(sid): what must have appeared by the end of the wait; awaited as a condition (up to 60 s), because a fixed 1.3 s is too short for
+// a loaded machine (task 085). Without it the old pause alone: the cells that expect "nothing happens" have nothing to wait for.
+const go = async (text, { settings = undefined, user = "поехали", afterRows, wait = 1300, at, ready } = {}) => {
   if (settings !== undefined) settings()
   const sid = nextSid()
   await H.turn(sid, text, { user, afterRows, ...(at ? { at } : {}) })
   await H.wait(wait)
+  if (ready) await H.until(() => ready(sid), 60_000)
   return sid
 }
 const lettersText = (sid) => H.letters(sid).map((l) => l.text).join(NL + "---" + NL)
@@ -120,7 +123,7 @@ const PACK3 = [block({ n: "01", q: "Первый вопрос?", type: "implemen
 // ---- AC-14: a pack at the limit ----------------------------------------------------------------------------------------
 {
   const three = [1, 2, 3].map((i) => block({ n: `0${i}`, q: `Вопрос номер ${i}?`, type: "implementation", rec: `делаем по варианту ${i}` })).join(NL + NL)
-  const sid = await go(three, { settings: () => modes({ default: "recommendations" }, { answer_max: 2 }) })
+  const sid = await go(three, { settings: () => modes({ default: "recommendations" }, { answer_max: 2 }), ready: (s) => recsOf(s, "a").length >= 2 && noticesOf(s).length >= 1 })
   const nt = noticesOf(sid)
   cell("AC-14 пакет", recsOf(sid, "a").map((r) => r.qn).join() === "1,2" && nt.length === 1 && /В-03/.test(nt[0].message) && /предел автоответов/.test(nt[0].message), JSON.stringify([recsOf(sid).map((r) => [r.kind, r.qn]), nt]))
   const two = [1, 2].map((i) => block({ n: `0${i}`, q: `Вопрос номер ${i}?`, type: "implementation", rec: `делаем по варианту ${i}` })).join(NL + NL)

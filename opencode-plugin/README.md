@@ -1228,7 +1228,9 @@ Details: [doc/tasks/026-crew-question/task/probe.md](../doc/tasks/026-crew-quest
 ## Test
 
 ```sh
-npm test   # node >= 24
+npm test                  # node >= 24, one file after another
+npm run test:parallel     # the same files, 8 at a time, the red ones counted by file
+npm run test:stable       # the files that were flaky under load, 10 times each, 8 at a time
 ```
 
 What each test checks, the manual latency checks and what the tests do not cover — [test/README.md](test/README.md).

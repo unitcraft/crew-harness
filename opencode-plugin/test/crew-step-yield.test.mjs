@@ -22,10 +22,13 @@ const run = process.env.CREW_TEST_SYNC === "1" ? async (f, a) => execFileSync(f,
     maxGap = Math.max(maxGap, n - last)
     last = n
   }, 50)
+  const t0 = Date.now()
   await run("node", SLEEP(2000), 8000)
   maxGap = Math.max(maxGap, Date.now() - last) // a blocked loop never got to tick: the gap is still open
+  const took = Date.now() - t0
   clearInterval(iv)
-  cell("a: loop is not blocked by a 2 s command", maxGap < 300, `max gap ${maxGap} ms`)
+  // a blocked loop (the sync way) has one gap as long as the whole command; a busy machine stretches a tick by hundreds of ms, never by the whole command
+  cell("a: loop is not blocked by a 2 s command", maxGap < took / 4, `max gap ${maxGap} ms of ${took} ms`)
 }
 // (b)
 {
@@ -37,7 +40,8 @@ const run = process.env.CREW_TEST_SYNC === "1" ? async (f, a) => execFileSync(f,
     err = e
   }
   const took = Date.now() - t0
-  cell("b: timeout turns into an error quickly and kills the process", !!err && took < 1500 && (err.killed === true || err.signal), `${took} ms, killed=${err?.killed}`)
+  // "quickly": long before the 5 s the command would sleep (a loaded machine is slow to start and to kill a process)
+  cell("b: timeout turns into an error quickly and kills the process", !!err && took < 2500 && (err.killed === true || err.signal), `${took} ms, killed=${err?.killed}`)
 }
 // (c)
 {

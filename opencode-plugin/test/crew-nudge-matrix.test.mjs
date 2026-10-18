@@ -448,6 +448,8 @@ await turn("sesEX31")
 cell("T1a", "running: the end of an empty turn -> a reminder to the executor", sent("sesEX31", /Не завершено: задача/).length === 1, JSON.stringify(delivered.filter((d) => d.sessionID === "sesEX31").map((d) => d.text.slice(0, 60))))
 await turn("sesEX31")
 await until(() => lettersRe(AUTH.pw, /застряла/).some((l) => new RegExp(`#${T.t1.n} `).test(l.text)))
+// the letter, the notice in the window and the history entry come one after another: all of them are awaited (task 085)
+await until(() => noticesFor("sesEX31").some((n) => /застряла/.test(n.title)) && tasks.loadTask("pw", T.t1.n).history.some((h) => /застряла/.test(h.note ?? "")))
 {
   const call1 = lettersRe(AUTH.pw, /застряла/).filter((l) => new RegExp(`#${T.t1.n} `).test(l.text))
   cell("T1b", "running: push_empty_turns empty turns in a row -> stuck: ONE letter to the author, a notice in his window, an entry in the task history", call1.length === 1 && noticesFor("sesEX31").some((n) => /застряла/.test(n.title)) && tasks.loadTask("pw", T.t1.n).history.some((h) => /застряла/.test(h.note ?? "")), JSON.stringify({ l: call1.length, n: noticesFor("sesEX31").length }))

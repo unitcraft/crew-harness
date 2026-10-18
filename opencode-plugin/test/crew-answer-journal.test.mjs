@@ -18,7 +18,7 @@ const run = promisify(execFile)
 const R = reporter("crew-answer-journal.test")
 const cell = R.cell
 const NL = String.fromCharCode(10)
-const H = await harness("crew-answer-journal", { plugin: false })
+const H = await harness("crew-answer-journal", { plugin: false, ownLog: true })
 const { core, tasks } = H
 const A = await load("answer.ts")
 const A2 = await import(pathToFileURL(path.join(PLUGIN, "answer.ts")).href + "?instance=2")
@@ -357,6 +357,8 @@ const logTail = () => {
 }
 
 // ---- the size of the journal: a pass costs the same with a thousand files (review 1, finding 2) ---------------------------------
+// The limit is a ratio to reading all the files of the journal, measured at the same moment, not milliseconds (an absolute 50 ms went
+// red on a loaded machine; idle: the pass 0.1 x, the side row 0.2 x of the reading; a pass that reads the journal costs 1 x or more; task 085)
 {
   const sid = "sesPerf0001"
   modes(3)
@@ -374,6 +376,9 @@ const logTail = () => {
   const first = await pass(sid, clock + 900_000) // 15 minutes after the earlier passes of this test: the purge of the old records is due
   const times = []
   const sides = []
+  const readAll = []
+  // the yardstick is taken inside the same loop, at the same moments: reading every file of the journal once (what a pass would cost if it looked at all of them)
+  const everyFile = readdirSync(A.ANSWERS).filter((f) => f.endsWith(".json"))
   for (let k = 0; k < 6; k++) {
     const t0 = performance.now()
     await pass(sid, clock + 10_000 + k)
@@ -381,11 +386,15 @@ const logTail = () => {
     const t1 = performance.now()
     A.answerSideRow("proj", clock + 10_000 + k)
     sides.push(performance.now() - t1)
+    const t2 = performance.now()
+    for (const f of everyFile) try { readFileSync(path.join(A.ANSWERS, f)) } catch {}
+    readAll.push(performance.now() - t2)
   }
   for (let k = 0; k < 8 && readdirSync(A.ANSWERS).some((f) => Number(/-(\d+)-\d+\.json$/.exec(f)?.[1]) < clock - 30 * DAY); k++) A.purgeOld(clock + 900_000 + k, 0) // the purge removes a bounded number of files at a time
   const files = readdirSync(A.ANSWERS).filter((f) => f.endsWith(".json"))
+  console.log("     REQ-15 pass (min of 6) " + Math.min(...times).toFixed(1) + " ms, side row " + Math.min(...sides).toFixed(1) + " ms, reading all " + everyFile.length + " files " + Math.min(...readAll).toFixed(1) + " ms")
   const stale = files.filter((f) => Number(/-(\d+)-\d+\.json$/.exec(f)?.[1]) < clock - 30 * DAY)
-  cell("REQ-15 журнал 1000 файлов", first.handled && Math.min(...times) < 50 && Math.min(...sides) < 50 && stale.length === 0 && files.filter((f) => f.startsWith("a-sesOther")).length === 300 && recs(sid, "a").length === 1, JSON.stringify({ times: times.map(Math.round), sides: sides.map(Math.round), stale: stale.length, left: files.length }))
+  cell("REQ-15 журнал 1000 файлов", first.handled && Math.min(...times) < 0.5 * Math.min(...readAll) && Math.min(...sides) < Math.min(...readAll) && stale.length === 0 && files.filter((f) => f.startsWith("a-sesOther")).length === 300 && recs(sid, "a").length === 1, JSON.stringify({ times: times.map(Math.round), sides: sides.map(Math.round), readAll: readAll.map(Math.round), stale: stale.length, left: files.length }))
 }
 
 // ---- the age of a record is the time of the answer, not the end of the turn (review 2, finding 1) --------------------------------

@@ -19,10 +19,13 @@ export const load = (f) => import(pathToFileURL(path.join(PLUGIN, f)).href)
  *   sessions: ids of the sessions that get a row in `session_v2` (the first one is the tab of the owner); default four
  *   window: the sessions with a tab in the window (default: all of them); false -- no window at all
  *   plugin: false -- the plugin is not started (the pure modules only); the host objects are still created
+ *   ownLog: true -- TEMP, TMP and TMPDIR point to the folder of the harness, so the plugin log (opencode-plugins.log in os.tmpdir())
+ *           is the log of this run only, not the one parallel runs write too (task 085); the test then reads it with os.tmpdir()
  */
 export async function harness(prefix, opts = {}) {
   const tmp = mkdtempSync(path.join(os.tmpdir(), `${prefix}-`))
   process.env.XDG_DATA_HOME = tmp
+  if (opts.ownLog) process.env.TEMP = process.env.TMP = process.env.TMPDIR = tmp
   process.env.CREW_HARNESS_POLL_MS = "100"
   process.env.CREW_HARNESS_STATUS_MS = "100"
   process.env.CREW_HARNESS_FLOW_MS = "200"
