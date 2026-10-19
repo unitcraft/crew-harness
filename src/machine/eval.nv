@@ -748,11 +748,11 @@ fn fn_record_text(v Value) -> Result[Value, EvalError] {
                     for item in items {
                         match item {
                             Record { name: tuple_name, fields: tuple_fields } => {
-                                ro n = match record_get(tuple_fields, "1") {
+                                ro n = match record_get(tuple_fields, "0") {
                                     Some(Text(s)) => s
                                     _ => return wrong_at("args[0]", "a JournalEvent with text parameters", v)
                                 }
-                                ro x = match record_get(tuple_fields, "2") {
+                                ro x = match record_get(tuple_fields, "1") {
                                     Some(Text(s)) => s
                                     _ => return wrong_at("args[0]", "a JournalEvent with text parameters", v)
                                 }

@@ -20,7 +20,7 @@
     { "name": "began", "type": "int", "initial": { "expr": { "op": "lit", "value": 0 } } },
     { "name": "log", "type": "[]text", "initial": { "expr": { "op": "list", "items": [] } } },
     { "name": "table", "type": "{text: int}", "initial": { "expr": { "op": "dict", "entries": [] } } },
-    { "name": "stop", "type": "text from {\"\", \"done\"}", "initial": { "expr": { "op": "lit", "value": "" } } }
+    { "name": "stop", "type": "\"\" | \"done\"", "initial": { "expr": { "op": "lit", "value": "" } } }
   ],
   "initial": "Start",
   "error_end": "Errored",

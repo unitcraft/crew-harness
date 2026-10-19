@@ -12,6 +12,9 @@ import crew_harness.machine.{Expr, TypeSpec, TypeDefs, FieldDef, RecordDef, Vari
 /// The format tag of the tree.
 export const MACHINE_FORMAT = "machine/2"
 
+/// The version of the table format of the methodology that the tree follows (the optional key `table_format`; absent means this one).
+export const TABLE_FORMAT = "2.5"
+
 fn le(path str, message str) -> LoadError => { path, message }
 
 fn j_obj(v JsonValue, path str) -> Result[JsonObject, LoadError] {
@@ -211,7 +214,7 @@ fn j_fields_or_empty(o JsonObject, key str, defs TypeDefs, path str) -> Result[[
 
 /// The keys of the root object of a machine.
 export fn top_keys() -> []str => [
-    "format", "machine", "version", "title", "types", "constants", "params", "input", "data", "parties", "request_limit", "signals",
+    "format", "table_format", "machine", "version", "title", "types", "constants", "params", "input", "data", "parties", "request_limit", "signals",
     "definitions", "includes", "initial", "error_end", "common_events", "states", "ends", "primitives"
 ]
 
@@ -248,7 +251,7 @@ fn fail_code_def() -> VariantDef {
     VariantDef { name: "FailCode", cases }
 }
 
-fn base_type_names() -> []str => ["int", "float", "text", "bool", "nothing", "full", "from"]
+fn base_type_names() -> []str => ["int", "float", "text", "bool", "nothing", "full", "id"]
 
 // ---- types ----------------------------------------------------------------------------------------------------------------
 
@@ -906,6 +909,8 @@ fn dec_machine(root JsonObject) -> Result[MachineDef, LoadError] {
     j_only(root, top_keys(), "$")?
     ro format = j_need_str(root, "format", "$")?
     if format != MACHINE_FORMAT { return Err(le("$.format", "the format must be ${MACHINE_FORMAT}, got ${format}")) }
+    ro table_format = j_str_or(root, "table_format", TABLE_FORMAT, "$")?
+    if table_format != TABLE_FORMAT { return Err(le("$.table_format", "the table_format must be ${TABLE_FORMAT} (the format of the methodology), got ${table_format}")) }
     ro name = j_need_str(root, "machine", "$")?
     ro version = j_str_or(root, "version", "", "$")?
     ro types = dec_types(root)?

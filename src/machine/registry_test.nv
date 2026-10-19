@@ -214,8 +214,8 @@ test "ps names" {
 }
 
 test "sd count" {
-    assert(standard_registry().primitives.len() == 21)
-    assert(rcount(Reading) == 10)
+    assert(standard_registry().primitives.len() == 22)
+    assert(rcount(Reading) == 11)
     assert(rcount(Writing) == 7)
     assert(rcount(Irreversible) == 4)
     assert(rcount(Pure) == 0)

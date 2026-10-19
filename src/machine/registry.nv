@@ -235,7 +235,7 @@ fn count_spec() -> TypeSpec => IntMin(0)
 
 /// The registry of the pilots: the 17 functions of the meeting that the methodology marks as primitives of the host
 /// (8 reading, 6 writing, 3 irreversible; markup of the 80 functions, `functions-markup.md` of the pilot) and the primitives
-/// of the agent step (`time_now`, `reply_validation`, `close_agent_turn`, and `check_cache`, which the specification of the step
+/// of the agent step (`time_now`, `new_id` of format 2.5, `reply_validation`, `close_agent_turn`, and `check_cache`, which the specification of the step
 /// puts after every accepted result of a turn). Stubs: the names, the types and the classes are the methodology's, the bodies are the host's.
 export fn standard_registry() -> Registry {
     mut reg = new_registry()
@@ -261,6 +261,8 @@ export fn standard_registry() -> Registry {
     std_add(reg, std_prim("move_to_archive", [param("number", count_spec()), param("suffix", count_spec())], NothingType, Irreversible, nothing(), nothing()))
     // the agent step
     std_add(reg, std_prim("time_now", no_params(), IntType, Reading, nothing(), nothing()))
+    // format 2.5, section 7: a built-in primitive of the host; a new identifier (UUID v7), fixed in the event `now` of an operation
+    std_add(reg, std_prim("new_id", no_params(), IdType, Reading, nothing(), nothing()))
     std_add(reg, std_prim("reply_validation", no_params(), VariantType("ReplyCheck"), Reading,
         ["reply_text", "reply_artifact", "agent_request", "objects: session files"], ["service record: form remarks (read by the turn fix)"]))
     std_add(reg, std_prim("close_agent_turn", no_params(), NothingType, Irreversible, nothing(), nothing()))

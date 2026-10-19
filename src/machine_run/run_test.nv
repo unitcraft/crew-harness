@@ -322,10 +322,10 @@ test "defect stops" {
 
 test "scripted host" {
     ro m = calc()
-    mut host = ScriptedHost { at: 4242, replies: [] }
+    mut host = ScriptedHost { at: 4242, replies: [], ids: 0 }
     ro r = run_with(m, m.initial(), start_with("{\"start\":9,\"label\":\"t\"}"), host)
     assert(datum_json(r.state, "began") == "4242")
-    mut scripted = ScriptedHost { at: 1, replies: [ScriptedReply { name: "other", value: Int(5) }] }
+    mut scripted = ScriptedHost { at: 1, replies: [ScriptedReply { name: "other", value: Int(5) }], ids: 0 }
     match scripted.call_primitive("other", []Value.new()) {
         Ok(v) => assert(value_equal(v, Int(5)))
         Err(e) => assert(false)

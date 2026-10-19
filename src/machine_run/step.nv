@@ -210,6 +210,7 @@ fn field_from_text(spec TypeSpec, input str, defs TypeDefs) -> Result[Value, str
     match spec {
         TextType => ()
         TextSet(words) => ()
+        IdType => ()
         IntType => { v = int_of(input)? }
         IntMin(n) => { v = int_of(input)? }
         _ => { v = parse_value(input)? }
@@ -283,6 +284,7 @@ fn answer_value(def MachineDef, state_party str, input str) -> Option[Value] {
     match def.parties[pi].result_spec[0] {
         TextType => Some(Text(input))
         TextSet(words) => Some(Text(input))
+        IdType => Some(Text(input))
         spec => {
             match parse_value(input) {
                 Ok(v) => {
@@ -579,11 +581,11 @@ fn event_of_record(v Value) -> Result[JournalEvent, Fault] {
                     for item in items {
                         match item {
                             Record { name: tn, fields: tf } => {
-                                ro first_text = match record_get(tf, "1") {
+                                ro first_text = match record_get(tf, "0") {
                                     Some(Text(s)) => s
                                     _ => return Err(defect_fault("type_mismatch", "first_text parameter of first_text JournalEvent is first_text pair of texts"))
                                 }
-                                ro second_text = match record_get(tf, "2") {
+                                ro second_text = match record_get(tf, "1") {
                                     Some(Text(s)) => s
                                     _ => return Err(defect_fault("type_mismatch", "first_text parameter of first_text JournalEvent is first_text pair of texts"))
                                 }

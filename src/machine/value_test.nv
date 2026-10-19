@@ -348,8 +348,8 @@ test "tp record" {
         Record { name, fields } => {
             assert(name == "")
             assert(fields.len() == 3)
-            assert(fields[0].name == "1" && fields[2].name == "3")
-            match record_get(fields, "2") {
+            assert(fields[0].name == "0" && fields[2].name == "2")
+            match record_get(fields, "1") {
                 Some(v) => assert(value_equal(v, Text("b")))
                 None => assert(false)
             }
@@ -362,14 +362,14 @@ test "tp record" {
 
 test "tp order" {
     mut items = []Value.new()
-    mut i = 1
-    while i <= 12 {
+    mut i = 0
+    while i < 12 {
         items.push(Int(i))
         i += 1
     }
     match make_tuple(items) {
         Record { name, fields } => {
-            assert(fields[8].name == "9" && fields[9].name == "10" && fields[11].name == "12")
+            assert(fields[8].name == "8" && fields[9].name == "9" && fields[10].name == "10" && fields[11].name == "11")
         }
         _ => assert(false)
     }

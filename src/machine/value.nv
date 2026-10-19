@@ -140,10 +140,10 @@ export fn make_dict(entries []DictEntry) -> Value {
     Dict(out)
 }
 
-/// A tuple: an anonymous record with the positional fields `1`, `2`, ... .
+/// A tuple: an anonymous record with the positional fields `0`, `1`, ... (from zero, as in Nova; format 2.3).
 export fn make_tuple(items []Value) -> Value {
     mut fields = []RecordField.new()
-    mut n = 1
+    mut n = 0
     for item in items {
         put_field(fields, RecordField { name: "${n}", value: item })
         n += 1
@@ -466,7 +466,7 @@ fn text_keys_only(entries []DictEntry) -> bool {
 
 fn is_tuple(name str, fields []RecordField) -> bool {
     if name != "" || fields.len() < 2 { return false }
-    mut n = 1
+    mut n = 0
     for f in fields {
         if f.name != "${n}" { return false }
         n += 1
@@ -605,7 +605,7 @@ fn decode_tuple_tag(o JsonObject, path str, depth int) -> Result[Value, str] {
     mut values = []Value.new()
     mut i = 0
     for item in items {
-        match decode(item, "${path}.${i + 1}", depth + 1) {
+        match decode(item, "${path}.${i}", depth + 1) {
             Ok(value) => values.push(value)
             Err(e) => return Err(e)
         }

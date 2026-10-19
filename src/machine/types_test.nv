@@ -94,7 +94,7 @@ test "ty tuple" {
     assert(tok(spec, make_tuple([Text("x"), Int(2)])))
     assert(!tok(spec, make_tuple([Text("x")])))
     assert(!tok(spec, make_tuple([Text("x"), Int(-2)])))
-    assert(tpath(spec, make_tuple([Int(1), Int(2)])) == "$.1")
+    assert(tpath(spec, make_tuple([Int(1), Int(2)])) == "$.0")
     assert(!tok(spec, make_record("Finding", []RecordField.new())))
 }
 
@@ -147,6 +147,6 @@ test "ty spec text" {
     assert(spec_text(DictType { key: TextType, value: IntType }) == "{text: int}")
     assert(spec_text(FullDictType { key: VariantType("K"), value: IntType }) == "full {K: int}")
     assert(spec_text(TupleType([TextType, IntType])) == "(text, int)")
-    assert(spec_text(TextSet(["a", "b"])) == "text from {\"a\", \"b\"}")
+    assert(spec_text(TextSet(["a", "b"])) == "\"a\" | \"b\"")
     assert(spec_text(NothingType) == "nothing")
 }

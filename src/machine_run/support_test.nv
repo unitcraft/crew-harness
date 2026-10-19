@@ -38,7 +38,7 @@ type Out { state TableState, moved bool, orders []Order }
 
 fn run1(m TableMachine, st TableState, event Incoming) -> Out {
     mut environment = StepEnvironment.new()
-    mut host = ScriptedHost { at: 1000, replies: m.replies }
+    mut host = ScriptedHost { at: 1000, replies: m.replies, ids: 0 }
     ro transition = table_step(m, st, event, environment, host)
     match transition {
         Go(next) => Out { state: next, moved: true, orders: environment.orders }

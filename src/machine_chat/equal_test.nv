@@ -167,7 +167,7 @@ fn step_pair(table TableMachine, p Pair, event Incoming) -> Pair {
     mut ne = StepEnvironment.new()
     ro nt = chat_session().step(p.nova_state, event, ne)
     mut te = StepEnvironment.new()
-    mut host = ScriptedHost { at: event.at, replies: table.replies }
+    mut host = ScriptedHost { at: event.at, replies: table.replies, ids: 0 }
     ro tt = table_step(table, p.table_state, event, te, host)
     ro next_nova = match nt {
         Go(s) => s

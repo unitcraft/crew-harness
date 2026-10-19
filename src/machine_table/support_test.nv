@@ -22,7 +22,7 @@ fn jstr(s str) -> str {
 fn tiny_with(extra_data str, extra_states str, wait_rows str, ends_rows str) -> str {
     ro zero = jl("0")
     ro empty = jl(jstr(""))
-    ro stop_type = jstr("text from {\"\", \"a\", \"b\"}")
+    ro stop_type = jstr("\"\" | \"a\" | \"b\"")
     ro ge2 = jb(">=", jn("n"), jl("2"))
     ro n_name = jn("n")
     ro up = `{"name":"u_attempt","type":"int>=0","initial":{"expr":${zero}},"monotonic":true,"writes":"mechanics"}`

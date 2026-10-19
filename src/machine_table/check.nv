@@ -11,7 +11,7 @@ module crew_harness.machine_table
 import std.text
 import crew_harness.machine.{Expr, TypeDefs, FieldDef, Bind, DefFn, Registry, Position, check_expr_positions, check_call_position, find_primitive, primitive_names, class_word}
 import crew_harness.machine.{ConditionPos, InputPos, ForkEntryPos, OperationEntryPos, EndEntryPos, AcceptPos, ActionPos}
-import crew_harness.machine.{Pure, Reading}
+import crew_harness.machine.{Pure, Reading, Value, Text, TypeSpec, TextSet, IdType, OptionalType, spec_text, is_uuid}
 
 // ---- the places of expressions ------------------------------------------------------------------------------------------
 
@@ -1068,7 +1068,10 @@ fn check_writes_in(mut cx Checker, actions []Action, path str, accept bool) -> (
     for a in actions {
         ro p = "${path}[${i}]"
         match a {
-            AssignAct { target, value } => check_target(cx, target, "${p}.target")
+            AssignAct { target, value } => {
+                check_target(cx, target, "${p}.target")
+                check_literal_target(cx, target, value, "${p}.value")
+            }
             AddAct { target, value } => check_target(cx, target, "${p}.target")
             ForEachAct { var, list, body } => check_writes_in(cx, body, "${p}.body", accept)
             LetAct { name, value, body } => check_writes_in(cx, body, "${p}.body", accept)
@@ -1098,6 +1101,44 @@ fn check_writes_in(mut cx Checker, actions []Action, path str, accept bool) -> (
         }
         i += 1
     }
+}
+
+// ---- the literals against the closed sets and the type id (format 2.5, sections 2 and 10) ----------------------------------------------------
+
+// The problem of a text literal against a type: "" when it fits (a set of literals, an id; under `?` the inner type counts).
+fn text_problem(spec TypeSpec, s str) -> str {
+    match spec {
+        TextSet(words) => {
+            if words.contains(s) { return "" }
+            "\"${s}\" is not in ${spec_text(spec)}"
+        }
+        IdType => {
+            if is_uuid(s) { return "" }
+            "\"${s}\" is not an id (8-4-4-4-12 lower case hexadecimal digits)"
+        }
+        OptionalType(inner) => text_problem(inner, s)
+        _ => ""
+    }
+}
+
+// The problem of an expression that is a text literal against a type.
+fn literal_problem(spec TypeSpec, e Expr) -> str {
+    match e {
+        Lit(v) => match v {
+            Text(s) => text_problem(spec, s)
+            _ => ""
+        }
+        _ => ""
+    }
+}
+
+// An assignment of a literal to a plain datum: the literal must be in the set of the datum, an id must be an id.
+fn check_literal_target(mut cx Checker, target LValue, value Expr, path str) -> () {
+    if target.steps.len() > 0 { return }
+    ro at = find_data(cx.def, target.root)
+    if at < 0 { return }
+    ro problem = literal_problem(cx.def.data[at].spec, value)
+    if problem != "" { cx_issue(cx, path, problem) }
 }
 
 fn check_target(mut cx Checker, target LValue, path str) -> () {
@@ -1212,6 +1253,76 @@ fn check_positions(mut cx Checker) -> () {
     collect_call_names(def, used)
     for pn in used {
         if !def.primitives.contains(pn) { cx_issue(cx, "$.primitives", "the primitive ${pn} is called but not listed in primitives") }
+    }
+}
+
+// ---- the primitive new_id (format 2.5, sections 7 and 10) -------------------------------------------------------------------------------------
+//
+// It may stand only in a binding of the entry of an operation (`let fresh = call(new_id)`), and the binding must be written to the data by the
+// row `now` of that state: the value is fixed in the step, a repeated step takes it from the saved event (rules 12 and 13).
+
+fn reads_name_in_actions(actions []Action, name str) -> bool {
+    for a in actions {
+        match a {
+            AssignAct { target, value } => {
+                if expr_free(value, []str.new()).contains(name) { return true }
+            }
+            AddAct { target, value } => {
+                if expr_free(value, []str.new()).contains(name) { return true }
+            }
+            JournalAct { code, params } => {
+                for q in params {
+                    if expr_free(q.value, []str.new()).contains(name) { return true }
+                }
+            }
+            ForEachAct { var, list, body } => {
+                if reads_name_in_actions(body, name) { return true }
+            }
+            LetAct { name: bound, value, body } => {
+                if reads_name_in_actions(body, name) { return true }
+            }
+            IfAct { cond, then_actions, else_actions } => {
+                if reads_name_in_actions(then_actions, name) || reads_name_in_actions(else_actions, name) { return true }
+            }
+            _ => ()
+        }
+    }
+    false
+}
+
+fn uses_new_id(e Expr) -> bool => primitive_names(e).contains("new_id")
+
+fn check_new_id(mut cx Checker) -> () {
+    ro def = cx.def
+    // the allowed places: the values of the bindings in the entry of an operation
+    mut allowed = []str.new()
+    mut i = 0
+    for st in def.states {
+        if st.kind == OperationKind {
+            mut k = 0
+            for a in st.entry {
+                match a {
+                    BindAct { name, value } => {
+                        if uses_new_id(value) {
+                            allowed.push("$.states[${i}].entry[${k}].value")
+                            mut written = false
+                            for r in st.rows {
+                                if reads_name_in_actions(r.actions, name) { written = true }
+                            }
+                            if !written { cx_issue(cx, "$.states[${i}].entry[${k}]", "the binding ${name} of new_id is not written to the data by a row of the state (format 2.5, section 7)") }
+                        }
+                    }
+                    _ => ()
+                }
+                k += 1
+            }
+        }
+        i += 1
+    }
+    for s in cx.sites {
+        if uses_new_id(s.expr) && !allowed.contains(s.place) {
+            cx_issue(cx, s.place, "new_id may stand only in a binding of the entry of an operation (format 2.5, section 7)")
+        }
     }
 }
 
@@ -1448,7 +1559,10 @@ fn check_data(mut cx Checker) -> () {
         } else {
             match d.initial {
                 NoInitial => cx_issue(cx, "${p}.initial", "a datum needs an initial value")
-                InitialExpr(e) => ()
+                InitialExpr(e) => {
+                    ro problem = literal_problem(d.spec, e)
+                    if problem != "" { cx_issue(cx, "${p}.initial", problem) }
+                }
                 InitialFromInput(f) => {
                     if !def.input.present {
                         cx_issue(cx, "${p}.initial", "from_input needs the section input")
@@ -1662,6 +1776,7 @@ export fn check_machine(def MachineDef, registry Registry) -> []LoadError {
     check_reads(cx)
     check_all_writes(cx)
     check_positions(cx)
+    check_new_id(cx)
     check_journal(cx)
     check_reachable(cx)
     check_ends(cx)

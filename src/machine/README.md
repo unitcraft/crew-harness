@@ -5,7 +5,7 @@ interpreter on Nova runs inside the bare product CrewHarness; the user writes no
 depend on the final syntax of the tables: the dynamic value, the tree of an expression, a pure evaluator, the types of the data and the registry of the
 primitives of the host. Task 106 (`doc/tasks/106-expr-evaluator/`). Task 107 (`doc/tasks/107-table-machine/`) added the interpreter of the table of states on top of this core (see "The interpreter of a machine that is data" below); the next tasks are the translator of the tables of the methodology into the JSON and the transfer of the agent step and of the other machines.
 
-The source of the language is the format of the methodology, version 2.2 (`unitcraft/ai-dev-methodology`, `state-machines/state-machine-table-format.md`, read only), the pilots
+The source of the language is the format of the methodology, version 2.5 (`unitcraft/ai-dev-methodology`, `state-machines/state-machine-table-format.md`, read only), the pilots
 "Agent step" and "Meeting" (the markup of the 80 functions of the meeting, the primitives of the agent step) and the dictionary of the methodology (English names).
 Where the format is silent the choice is marked "decision" below and in `doc/tasks/106-expr-evaluator/analysis.md` and `doc/tasks/107-table-machine/analysis.md`.
 
@@ -54,7 +54,7 @@ One sum type, no generics (Oracle 0.1.0 breaks the C of generic functions with i
 
 - `Dict` keeps its entries in the order of insertion (`keys` and `values` give the order of the first record of a key); its key is any value (text, int, enum value, tuple, record).
   Two dicts with the same entries in a different order are equal and have the same place in the order of values.
-- `Record { name, fields }` keeps its fields sorted by name. A tuple is the anonymous record (name `""`) with the fields `1`, `2`, ... (`t.1`, `t.2`); `make_tuple`.
+- `Record { name, fields }` keeps its fields sorted by name. A tuple is the anonymous record (name `""`) with the fields `0`, `1`, ... (`t.0`, `t.1`: from zero, as in Nova, format 2.3); `make_tuple`.
 - `Variant { type_name, name, fields }` is a case of a sum type; an enum value is a case without fields (`enum_value`).
 - Equality is structural, the order of values is total (null < bool < int < float < text < list < dict < record < variant). An int and a float are never equal.
 - `text(x)`: an int is the decimal form; a float is the shortest decimal form that reads back, `1.0` and `0.0` for whole values, no exponent for
@@ -118,7 +118,7 @@ the check "an `if` does not nest in the branch of another `if`", the sets of val
 
 ## The types
 
-`TypeSpec`: `IntType`, `IntMin(n)` (`int>=n`), `FloatType`, `TextType`, `TextSet(words)` (`text from {...}`), `BoolType`, `NothingType` (the type of "no result", the value is `none`), `OptionalType(T)` (`?T`:
+`TypeSpec`: `IntType`, `IntMin(n)` (`int>=n`), `FloatType`, `TextType`, `TextSet(words)` (the set of literals `"a" | "b"`, two or more; format 2.5), `IdType` (`id`, a text of the form 8-4-4-4-12 lower case hexadecimal digits, format 2.5), `BoolType`, `NothingType` (the type of "no result", the value is `none`), `OptionalType(T)` (`?T`:
 `none` or a `T`, which is the lifting of `T` to `?T`), `ListType(T)`, `DictType { key, value }`, `FullDictType { key, value }` (the key is an enum and every one of its values is a key),
 `TupleType(items)`, `RecordType(name)`, `VariantType(name)`. The named types are declared in `TypeDefs`. `check_value(spec, value, defs)` gives the first mismatch with a path
 (`$.findings[2].severity`, `$["key"][1]`, `$.1` for a tuple field); a record or a case needs every declared field and no other.
@@ -138,7 +138,7 @@ allowed in the place (section 7 of the format):
 `check_call_args` and `check_call_result` check the count and the types of the arguments and the type of the result of a call against the signature. `reads` and `writes` name what a primitive reads or writes without an
 argument (rule 11 of the specification): they join the "Input" of the state of the call.
 
-`standard_registry()` is filled with stubs (the name, the types and the class are the methodology's, the body is the host's) - 21 primitives; `standard_types()` declares the records and variants their signatures use.
+`standard_registry()` is filled with stubs (the name, the types and the class are the methodology's, the body is the host's) - 22 primitives; `standard_types()` declares the records and variants their signatures use.
 
 | Primitive | Parameters | Result | Class |
 |---|---|---|---|
@@ -160,9 +160,10 @@ argument (rule 11 of the specification): they join the "Input" of the state of t
 | `open_for_writing` | `object: text` | nothing | irreversible |
 | `move_to_archive` | `number: int>=0, suffix: int>=0` | nothing | irreversible |
 | `time_now` | - | `int` | reading |
+| `new_id` | - | `id` | reading |
 | `reply_validation` | - | `ReplyCheck` | reading |
 | `close_agent_turn` | - | nothing | irreversible |
-| `check_cache` | `dialog_kind: text from {"main", "delivery"}` | nothing | writing |
+| `check_cache` | `dialog_kind: "main" \| "delivery"` | nothing | writing |
 
 The first 17 are the 17 functions of the meeting that its markup (`functions-markup.md`) makes primitives of the host: 8 reading, 6 writing, 3 irreversible; the last four are the agent step (`check_cache` is the
 check of the cache that the specification of the step puts after every accepted result of a turn; the pilot's code does not have it). No pure primitive: `fingerprint` stays inside `proposal_with_fingerprint`.
@@ -193,10 +194,10 @@ and a restart resumes it. The examples are `machines/*.machine.json` (chat, calc
 
 ## The file `machine/2`
 
-The keys are English, the structure is the format 2.2 of the methodology (sections 1-9, 12, 13) in a tree; the JSON Schema is
+The keys are English, the structure is the format 2.5 of the methodology (sections 1-9, 12, 13) in a tree; the JSON Schema is
 [`schema/machine-2.schema.json`](schema/machine-2.schema.json), the reference is the decoder `src/machine_table/json.nv` (a key the schema does not know is refused; a test compares the
 key lists and the kinds of the schema with the decoder's). Expressions are the trees of the core (`{"op":"name","name":"x"}`, `{"op":"+","left":E,"right":E}`, see the top of `expr.nv`);
-the types are written as the format writes them (`int>=0`, `?text`, `[]Finding`, `{text: int}`, `text from {"a", "b"}`, `full {K: V}`, `(text, int)`).
+the types are written as the format writes them (`int>=0`, `?text`, `[]Finding`, `{text: int}`, `"a" | "b"` (under `?` and `[]` in parentheses, `?("a" | "b")`), `id`, `full {K: V}`, `(text, int)`).
 
 | Key of the root | Meaning (format section) |
 |---|---|

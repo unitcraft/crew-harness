@@ -1,13 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/unitcraft/crew-harness/src/machine/schema/machine-2.schema.json",
-  "title": "machine/2 - a state machine as data (the format of the methodology, version 2.2, in English keys)",
+  "title": "machine/2 - a state machine as data (the format of the methodology, version 2.5, in English keys)",
   "description": "The tree that the interpreter of the product (src/machine_run) runs. The source of the language is state-machines/state-machine-table-format.md of unitcraft/ai-dev-methodology (read only); the keys are English. The decoder in src/machine_table/json.nv is the reference: a key that is not listed here is refused. The checks of the table (reads against the Input, writes against the data, reachability, the classes of the primitives, the exhaustiveness of the Ends) are check.nv and cannot be written in a schema.",
   "type": "object",
   "additionalProperties": false,
   "required": ["format", "machine", "initial", "states", "ends"],
   "properties": {
     "format": { "const": "machine/2" },
+    "table_format": { "const": "2.5", "description": "the version of the table format of the methodology that the tree follows (optional; absent means 2.5)" },
     "machine": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$", "description": "the Latin name of the machine (the name in the journal, `machine_started`)" },
     "version": { "type": "string" },
     "title": { "type": "string" },
@@ -50,7 +51,7 @@
   "$defs": {
     "type": {
       "type": "string",
-      "description": "int, int>=N, float, text, text from {\"a\", \"b\"}, bool, nothing, ?T, []T, {K: V}, full {K: V}, (T1, T2), or the name of a declared record or variant"
+      "description": "int, int>=N, float, text, a set of literals \"a\" | \"b\" (two or more; under ? or [] in parentheses: ?(\"a\" | \"b\")), id (a text of the form 8-4-4-4-12 lower case hexadecimal digits, format 2.5), bool, nothing, ?T, []T, {K: V}, full {K: V}, (T1, T2), or the name of a declared record or variant"
     },
     "expr": {
       "type": "object",

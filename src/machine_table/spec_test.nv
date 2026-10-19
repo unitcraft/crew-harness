@@ -24,11 +24,10 @@ test "spec base" {
 }
 
 test "spec sets" {
-    assert(sp("text from {\"first\", \"retry\"}") == "text from {\"first\", \"retry\"}")
-    assert(sp("text from {\"\", \"a\"}") == "text from {\"\", \"a\"}")
-    assert(sp("text from {}") == "text from {}")
-    assert(sp("?text from {\"allow\", \"deny\"}") == "?text from {\"allow\", \"deny\"}")
-    assert(sp("text from {\"слово\"}") == "text from {\"слово\"}")
+    assert(sp("\"first\" | \"retry\"") == "\"first\" | \"retry\"")
+    assert(sp("\"\" | \"a\"") == "\"\" | \"a\"")
+    assert(sp("?(\"allow\" | \"deny\")") == "?(\"allow\" | \"deny\")")
+    assert(sp("\"слово\" | \"другое\"") == "\"слово\" | \"другое\"")
 }
 
 test "spec compound" {
@@ -47,7 +46,7 @@ test "spec names" {
 }
 
 test "spec refused" {
-    for t in ["", "int>=", "{text int}", "{text: int", "(text)", "(int,", "text from {a}", "text from {\"a\"", "text from", "[]", "?", "int int", "full text", "int>=x"] {
+    for t in ["", "int>=", "{text int}", "{text: int", "(text)", "(int,", "text from {\"a\", \"b\"}", "\"a\"", "text from", "[]", "?", "int int", "full text", "int>=x"] {
         assert(sp_err(t))
     }
 }

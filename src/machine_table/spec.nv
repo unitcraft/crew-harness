@@ -1,12 +1,13 @@
 // spec.nv - the types of the JSON tree written as the format writes them: `int>=0`, `?text`, `[]Finding`, `{text: int}`,
-// `text from {"first", "retry"}`, `full {Kind: text}`, `(text, int)`. The reverse of `spec_text` of the core.
+// `"first" | "retry"`, `id`, `full {Kind: text}`, `(text, int)`. The reverse of `spec_text` of the core.
 //
 // A name that is not one of the base types is a record or a variant of the machine: it must be declared in the `TypeDefs` that the
-// caller passes. `?` and `[]` apply to everything to their right, including `from {...}` (format section 2).
+// caller passes. `?` and `[]` apply to everything to their right; a set of literals under them is in parentheses, `?("a" | "b")`;
+// the form `?"a" | "b"` is not defined (format 2.5, section 2). The old form `text from {...}` is gone.
 module crew_harness.machine_table
 
 import std.text
-import crew_harness.machine.{TypeSpec, TypeDefs, IntType, IntMin, FloatType, TextType, BoolType, NothingType, TextSet, OptionalType, ListType, DictType, FullDictType, TupleType, RecordType, VariantType}
+import crew_harness.machine.{TypeSpec, TypeDefs, IntType, IntMin, FloatType, TextType, BoolType, NothingType, IdType, TextSet, OptionalType, ListType, DictType, FullDictType, TupleType, RecordType, VariantType}
 
 // The text as a list of characters (one `str` each): a byte slice of a text with Cyrillic words would split a code point.
 type SpecReader { text str, items []str, pos int }
@@ -91,21 +92,16 @@ fn sr_number(mut r SpecReader) -> Result[int, str] {
     Ok(if negative { 0 - n } else { n })
 }
 
-fn sr_text_set(mut r SpecReader) -> Result[TypeSpec, str] {
-    if !sr_eat(r, "{") { return sr_fail(r, "'{' is expected after 'text from'") }
+// A set of literals: `"a" | "b"`, two literals or more; the first one is under the reader.
+fn sr_literal_set(mut r SpecReader) -> Result[TypeSpec, str] {
     mut words = []str.new()
-    sr_skip(r)
-    if sr_peek(r) == "}" {
-        r.pos += 1
-        return Ok(TextSet(words))
-    }
     while true {
         ro word = sr_quoted(r)?
         words.push(word)
-        if sr_eat(r, ",") { continue }
-        if sr_eat(r, "}") { break }
-        return sr_fail(r, "',' or '}' is expected")
+        if sr_eat(r, "|") { continue }
+        break
     }
+    if words.len() < 2 { return sr_fail(r, "a set of literals has two values or more") }
     Ok(TextSet(words))
 }
 
@@ -119,14 +115,22 @@ fn sr_named(name str, defs TypeDefs, r SpecReader) -> Result[TypeSpec, str] {
     Err("the type ${name} is not declared (in \"${r.text}\")")
 }
 
+// The type under `?` or `[]`: a set of literals must be in parentheses.
+fn sr_under(mut r SpecReader, defs TypeDefs) -> Result[TypeSpec, str] {
+    sr_skip(r)
+    if sr_peek(r) == "\"" { return sr_fail(r, "a set of literals under ? or [] is written in parentheses") }
+    sr_type(r, defs)
+}
+
 fn sr_type(mut r SpecReader, defs TypeDefs) -> Result[TypeSpec, str] {
     sr_skip(r)
+    if sr_peek(r) == "\"" { return sr_literal_set(r) }
     if sr_eat(r, "?") {
-        ro inner = sr_type(r, defs)?
+        ro inner = sr_under(r, defs)?
         return Ok(OptionalType(inner))
     }
     if sr_eat(r, "[]") {
-        ro inner = sr_type(r, defs)?
+        ro inner = sr_under(r, defs)?
         return Ok(ListType(inner))
     }
     if sr_peek(r) == "{" {
@@ -146,6 +150,12 @@ fn sr_type(mut r SpecReader, defs TypeDefs) -> Result[TypeSpec, str] {
             if sr_eat(r, ",") { continue }
             if sr_eat(r, ")") { break }
             return sr_fail(r, "',' or ')' is expected in a tuple type")
+        }
+        if items.len() == 1 {
+            match items[0] {
+                TextSet(words) => return Ok(items[0])
+                _ => ()
+            }
         }
         if items.len() < 2 { return sr_fail(r, "a tuple type has two fields or more") }
         return Ok(TupleType(items))
@@ -170,10 +180,8 @@ fn sr_type(mut r SpecReader, defs TypeDefs) -> Result[TypeSpec, str] {
     if name == "float" { return Ok(FloatType) }
     if name == "bool" { return Ok(BoolType) }
     if name == "nothing" { return Ok(NothingType) }
-    if name == "text" {
-        if sr_eat(r, "from") { return sr_text_set(r) }
-        return Ok(TextType)
-    }
+    if name == "text" { return Ok(TextType) }
+    if name == "id" { return Ok(IdType) }
     sr_named(name, defs, r)
 }
 

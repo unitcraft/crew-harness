@@ -200,8 +200,8 @@ test "lz coalesce" {
 
 test "ev field" {
     assert(eis_in(field_of(er("f"), "evidence"), Text("e1")))
-    assert(eis_in(field_of(er("t"), "1"), Text("first")))
-    assert(eis_in(field_of(er("t"), "2"), Int(2)))
+    assert(eis_in(field_of(er("t"), "0"), Text("first")))
+    assert(eis_in(field_of(er("t"), "1"), Int(2)))
     assert(eerr_in(field_of(er("f"), "nope")) == "unknown_field@$")
     assert(eerr_in(field_of(er("x"), "a")) == "type_mismatch@$")
     assert(eerr_in(field_of(er("nope"), "a")) == "unknown_name@$.of")
@@ -228,7 +228,7 @@ test "ev tuple key" {
     ro d = DictLit([EntryExpr { key, value: eint_list([7]) }])
     assert(eis(index_of(d, TupleLit([lit_text("lens"), ei(2)])), eints([7])))
     assert(eis(index_of(d, TupleLit([lit_text("lens"), ei(3)])), Null))
-    assert(eis(field_of(key, "2"), Int(2)))
+    assert(eis(field_of(key, "1"), Int(2)))
 }
 
 test "ev let" {
