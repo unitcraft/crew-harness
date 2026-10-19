@@ -49,7 +49,7 @@ signal	остановить от родителя	parent_halt
 signal_field	слово_человека	human_word
 signal_field	автор	author
 signal_field	источник	source
-signal_field	идентификатор_запроса	request_id
+signal_field	идентификатор_запроса	id
 word	сообщение_пользователя	user_message
 word	отмена	cancel
 part	кусок_ответа	agent_chunk

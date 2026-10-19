@@ -168,7 +168,8 @@ export fn translate_report(file_text str) -> TranslateReport => translate_report
 /// The same with the registry of the files of definitions of the caller (the name, the text).
 export fn translate_report_with(file_text str, registry []NamedText) -> TranslateReport {
     ro lines = lines_of(file_text)
-    ro entries = tx_classify(lines)
+    ro classified = tx_classify_full(lines)
+    ro entries = classified.entries
     mut cx = cx_new()
     ro header = header_read(entries, cx)
     ro sections = sections_of(entries, cx)
@@ -383,7 +384,7 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
     if primitives.len() > 0 { root.push(kv("primitives", jstrs(primitives))) }
 
     ro sorted = errors_sorted(cx.errors)
-    TranslateReport { json: tx_text(jobj(root)), errors: errors_quoted(sorted, lines), warnings: []TranslateError.new(), rows_total: cx.rows_total, rows_noted: cx.rows_noted, places: cx.places }
+    TranslateReport { json: tx_text(jobj(root)), errors: errors_quoted(sorted, lines), warnings: errors_quoted(errors_sorted(classified.warnings), lines), rows_total: cx.rows_total, rows_noted: cx.rows_noted, places: cx.places }
 }
 
 /// The first line of the section `## Состояния`: `Начальное состояние: ИМЯ`.

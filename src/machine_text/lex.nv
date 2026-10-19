@@ -231,34 +231,112 @@ fn tx_is_separator(cells []TxCell) -> bool {
     true
 }
 
-/// The entries of the lines of a file, in order. `lines` are the lines without the line feed (a carriage return at the end is cut here).
-fn tx_classify(lines []str) -> []TxEntry {
+/// TxClassified: the entries of a file and the warnings of the reading (P-1 of format 2.7: a line of a paragraph that starts with the word of a key).
+type TxClassified { entries []TxEntry, warnings []TranslateError }
+
+/// The closed list of the key words of a state, a section and a connection (format 4.1): a paragraph that starts with one of them without the list marker is warned about.
+fn prose_keys() -> []str => ["Сторона", "Срок тишины", "Вход", "Правит", "Возвратов формы", "При входе", "При приёме", "Результат", "Кроме", "Предел запросов", "Куда"]
+
+// A line that begins a declaration of the sections `Типы` and `Определения` is not a paragraph even when it follows an empty line outside a block of code.
+fn is_decl_start(text str) -> bool => text.starts_with("тип ") || text.starts_with("вариант ") || text.starts_with("перечисление ") || text.starts_with("определение ")
+
+// A line that begins a connection `Имя(…)`: a name and at once a bracket.
+fn is_call_start(text str) -> bool {
+    mut k = 0
+    for c in text.chars() {
+        ro one = "${c}"
+        if one == "(" { return k > 0 }
+        if !(tx_is_letter(one) || (k > 0 && tx_is_digit(one))) { return false }
+        k += 1
+    }
+    false
+}
+
+// The key word that a line of a paragraph starts with, after the marks that may stand before a key (`-`, a dash, a bullet) and spaces; "" when it starts with none.
+fn prose_key_of(text str) -> str {
+    ro cs = tx_chars(text)
+    mut at = 0
+    while at < cs.len() && (cs[at] == "-" || cs[at] == "–" || cs[at] == "—" || cs[at] == "•" || cs[at] == "*" || tx_is_space(cs[at])) { at += 1 }
+    ro rest = tx_slice(cs, at, cs.len())
+    for key in prose_keys() {
+        if rest.starts_with(key) {
+            ro after = rest[key.byte_len()..]
+            if after == "" || after.starts_with(" ") || after.starts_with(":") || after.starts_with("\t") { return key }
+        }
+    }
+    ""
+}
+
+fn prose_warning(line int, col int, key str) -> TranslateError {
+    tx_err(line, col, "warning", "строка начинается со слова «${key}», но это абзац (комментарий), разбор его пропускает; строка-ключ пишется элементом списка: `- ${key}: …`")
+}
+
+/// The entries of the lines of a file, in order, and the warnings. `lines` are the lines without the line feed (a carriage return at the end is cut here).
+/// Format 2.7 (P-1, P-2): a paragraph (a line after an empty line, outside the tables, the blocks of code and the key lines, with the lines that follow it up to an empty
+/// line) is a comment and gives no entry; the section `## Раскрытие фрагмента …` gives no entry but its heading.
+fn tx_classify_full(lines []str) -> TxClassified {
     mut out = []TxEntry.new()
+    mut warnings = []TranslateError.new()
     mut no = 0
+    mut in_fence = false
+    mut prev_blank = false
+    mut in_para = false
+    mut section = ""
+    mut skipping = false
     for raw in lines {
         no += 1
         ro line = raw.strip_suffix("\r") ?? raw
         ro cs = tx_chars(line)
         mut indent = 0
         while indent < cs.len() && tx_is_space(cs[indent]) { indent += 1 }
-        if indent >= cs.len() { continue }
+        if indent >= cs.len() {
+            prev_blank = true
+            in_para = false
+            continue
+        }
         ro text = tx_slice(cs, indent, cs.len())
-        if text.starts_with("```") { continue }
-        if text.starts_with(">") { continue }
-        if text.starts_with("<!--") { continue }
-        if indent == 0 && text.starts_with("#") {
+        if text.starts_with("```") {
+            in_fence = !in_fence
+            prev_blank = false
+            in_para = false
+            continue
+        }
+        if indent == 0 && text.starts_with("#") && !(in_fence && skipping) {
             mut level = 0
             while level < cs.len() && cs[level] == "#" { level += 1 }
-            out.push(TxEntry { kind: EN_HEAD, level, line: no, indent: 0, shift: 0, text: tx_slice(cs, level, cs.len()).trim_ascii(), cells: []TxCell.new() })
+            ro head_text = tx_slice(cs, level, cs.len()).trim_ascii()
+            if level <= 2 && !in_fence {
+                skipping = level == 2 && head_text.starts_with("Раскрытие фрагмента")
+                section = if level == 2 { head_text } else { "" }
+            }
+            prev_blank = false
+            in_para = false
+            if skipping && level > 2 { continue }
+            out.push(TxEntry { kind: EN_HEAD, level, line: no, indent: 0, shift: 0, text: head_text, cells: []TxCell.new() })
+            continue
+        }
+        if skipping {
+            prev_blank = false
+            continue
+        }
+        if text.starts_with(">") || text.starts_with("<!--") {
+            prev_blank = false
+            in_para = false
             continue
         }
         if indent == 0 && text.starts_with("|") {
+            prev_blank = false
+            in_para = false
             ro cells = tx_split_cells(cs)
             if tx_is_separator(cells) { continue }
             out.push(TxEntry { kind: EN_ROW, level: 0, line: no, indent: 0, shift: 0, text, cells })
             continue
         }
-        if indent == 0 && text.starts_with("---") { continue }
+        if indent == 0 && text.starts_with("---") {
+            prev_blank = false
+            in_para = false
+            continue
+        }
         // an optional list marker `- ` before a line `Ключ: значение` (format 2.6): the entry is the line without the marker, `shift` is the width of
         // the marker with the spaces after it, so the columns of the errors stay the columns of the file
         if indent == 0 && text.starts_with("- ") {
@@ -266,11 +344,38 @@ fn tx_classify(lines []str) -> []TxEntry {
             while k < cs.len() && tx_is_space(cs[k]) { k += 1 }
             ro rest = tx_slice(cs, k, cs.len())
             if kv_colon_text(rest) >= 0 {
+                prev_blank = false
+                in_para = false
                 out.push(TxEntry { kind: EN_TEXT, level: 0, line: no, indent: 0, shift: k, text: rest, cells: []TxCell.new() })
                 continue
             }
         }
+        if indent == 0 && kv_colon_text(text) >= 0 {
+            prev_blank = false
+            in_para = false
+            out.push(TxEntry { kind: EN_TEXT, level: 0, line: no, indent, shift: 0, text, cells: []TxCell.new() })
+            continue
+        }
+        // a line of free text: a line of a paragraph (a comment) or a line of a declaration or a connection
+        mut paragraph = false
+        if !in_fence {
+            if in_para {
+                paragraph = true
+            } else if indent == 0 && prev_blank && section != "Подключения" && text != "—" && !is_decl_start(text) && !is_call_start(text) {
+                paragraph = true
+                in_para = true
+            }
+        }
+        prev_blank = false
+        if paragraph {
+            ro key = prose_key_of(text)
+            if key != "" { warnings.push(prose_warning(no, indent + 1, key)) }
+            continue
+        }
         out.push(TxEntry { kind: EN_TEXT, level: 0, line: no, indent, shift: 0, text, cells: []TxCell.new() })
     }
-    out
+    TxClassified { entries: out, warnings }
 }
+
+/// The entries of the lines of a file, in order (without the warnings).
+fn tx_classify(lines []str) -> []TxEntry => tx_classify_full(lines).entries

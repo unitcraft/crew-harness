@@ -117,6 +117,11 @@ fn sections_of(entries []TxEntry, mut cx TxCx) -> []TxSection {
             ro name = entries[i].text
             mut last = i + 1
             while last < entries.len() && !(entries[last].kind == EN_HEAD && entries[last].level <= 2) { last += 1 }
+            if name.starts_with("Раскрытие фрагмента") {
+                // a reference for the reader (format 2.7, P-2): the reader skips it whole
+                i = last
+                continue
+            }
             if !section_names().contains(name) {
                 note(cx, struct_error(entries[i].line, 4, "неизвестный раздел `${name}`: бывают ${section_names().join(", ")}"))
             } else {

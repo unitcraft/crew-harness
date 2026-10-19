@@ -1,9 +1,10 @@
-// machine_translate.nv - the command of the translator of tables (task 108): a file of a machine in Russian (format 2.5) -> the JSON `machine/2`.
+// machine_translate.nv - the command of the translator of tables (task 108): a file of a machine in Russian (format 2.5, 2.6 or 2.7) -> the JSON `machine/2`.
 //   machine-translate <file.table.md>             the JSON on the standard output, exit code 0; the errors, all of them, on the standard error, exit code 1
 //   machine-translate <file.table.md> --lenient   the JSON of what could be translated even when there are errors (they are still printed)
 //   machine-translate <file.table.md> --summary   the summary of the machine (states, rows, actions) instead of the JSON
 //   machine-translate <file.table.md> --no-check  without the checks of the table (`check_machine`) against the registry of the primitives of the host
-// The errors are `file:line:column: kind: message` and the quoted line; the checks put their issues at the line of the row they come from.
+// The errors are `file:line:column: kind: message` and the quoted line; the checks put their issues at the line of the row they come from. The warnings (kind `warning`, format 2.7) follow
+// them in the same form and do not change the exit code.
 // Build: nova build src/machine_translate.nv -o target/machine-translate.exe
 module crew_harness.machine_translate
 
@@ -41,6 +42,10 @@ fn main() Os Fs Io -> () {
     mut err = stderr()
     for e in report.errors {
         ro written = err.write("${error_text(e, file)}\n".bytes())
+    }
+    // the warnings (format 2.7, P-1) are a list of their own: they do not change the exit code
+    for w in report.warnings {
+        ro written = err.write("${error_text(w, file)}\n".bytes())
     }
     if flag == "--summary" {
         println(render_summary(report.json))
