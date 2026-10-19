@@ -13,6 +13,7 @@ export fn machine_files() -> []NamedText => [
     NamedText { name: "actions.portolan.json", text: embed_str("machines/actions.portolan.json") },
     NamedText { name: "calc.portolan.json", text: embed_str("machines/calc.portolan.json") },
     NamedText { name: "chat.portolan.json", text: embed_str("machines/chat.portolan.json") },
+    NamedText { name: "dialog.portolan.json", text: embed_str("machines/dialog.portolan.json") },
     NamedText { name: "gate.portolan.json", text: embed_str("machines/gate.portolan.json") },
     NamedText { name: "lenses.portolan.json", text: embed_str("machines/lenses.portolan.json") },
     NamedText { name: "variants.portolan.json", text: embed_str("machines/variants.portolan.json") }
@@ -22,7 +23,8 @@ export fn machine_files() -> []NamedText => [
 /// turns them into the JSON above.
 export fn table_files() -> []NamedText => [
     NamedText { name: "agent_step.portolan.txt", text: embed_str("machines/agent_step.portolan.txt") },
-    NamedText { name: "chat.portolan.md", text: embed_str("machines/chat.portolan.md") }
+    NamedText { name: "chat.portolan.md", text: embed_str("machines/chat.portolan.md") },
+    NamedText { name: "dialog.portolan.md", text: embed_str("machines/dialog.portolan.md") }
 ]
 
 /// The scenarios of `scenarios/`, by the name of the file (`chat-basic.scenario.test.json`).
@@ -145,6 +147,43 @@ export fn scenario_files() -> []NamedText => [
     NamedText { name: "chat-tool-and-permission.scenario.test.json", text: embed_str("scenarios/chat-tool-and-permission.scenario.test.json") },
     NamedText { name: "chat-unknown-name.scenario.test.json", text: embed_str("scenarios/chat-unknown-name.scenario.test.json") },
     NamedText { name: "chat-unknown-request.scenario.test.json", text: embed_str("scenarios/chat-unknown-request.scenario.test.json") },
+    NamedText { name: "dialog-answer-while-dead.scenario.test.json", text: embed_str("scenarios/dialog-answer-while-dead.scenario.test.json") },
+    NamedText { name: "dialog-cancel-before-send.scenario.test.json", text: embed_str("scenarios/dialog-cancel-before-send.scenario.test.json") },
+    NamedText { name: "dialog-cancel-idle.scenario.test.json", text: embed_str("scenarios/dialog-cancel-idle.scenario.test.json") },
+    NamedText { name: "dialog-cancel-then-next.scenario.test.json", text: embed_str("scenarios/dialog-cancel-then-next.scenario.test.json") },
+    NamedText { name: "dialog-closed-table-only.scenario.test.json", text: embed_str("scenarios/dialog-closed-table-only.scenario.test.json") },
+    NamedText { name: "dialog-flow-ack-discarded.scenario.test.json", text: embed_str("scenarios/dialog-flow-ack-discarded.scenario.test.json") },
+    NamedText { name: "dialog-flow-ack-restart.scenario.test.json", text: embed_str("scenarios/dialog-flow-ack-restart.scenario.test.json") },
+    NamedText { name: "dialog-flow-ack.scenario.test.json", text: embed_str("scenarios/dialog-flow-ack.scenario.test.json") },
+    NamedText { name: "dialog-flow-answer-after-cancel.scenario.test.json", text: embed_str("scenarios/dialog-flow-answer-after-cancel.scenario.test.json") },
+    NamedText { name: "dialog-flow-answer-after-timeout.scenario.test.json", text: embed_str("scenarios/dialog-flow-answer-after-timeout.scenario.test.json") },
+    NamedText { name: "dialog-flow-cancel-awaiting.scenario.test.json", text: embed_str("scenarios/dialog-flow-cancel-awaiting.scenario.test.json") },
+    NamedText { name: "dialog-flow-cancel-in-window.scenario.test.json", text: embed_str("scenarios/dialog-flow-cancel-in-window.scenario.test.json") },
+    NamedText { name: "dialog-flow-chunk-renews-term.scenario.test.json", text: embed_str("scenarios/dialog-flow-chunk-renews-term.scenario.test.json") },
+    NamedText { name: "dialog-flow-chunks-and-done.scenario.test.json", text: embed_str("scenarios/dialog-flow-chunks-and-done.scenario.test.json") },
+    NamedText { name: "dialog-flow-cyrillic.scenario.test.json", text: embed_str("scenarios/dialog-flow-cyrillic.scenario.test.json") },
+    NamedText { name: "dialog-flow-ignored-chunk.scenario.test.json", text: embed_str("scenarios/dialog-flow-ignored-chunk.scenario.test.json") },
+    NamedText { name: "dialog-flow-ignored-second-message.scenario.test.json", text: embed_str("scenarios/dialog-flow-ignored-second-message.scenario.test.json") },
+    NamedText { name: "dialog-flow-journal-restart-answer.scenario.test.json", text: embed_str("scenarios/dialog-flow-journal-restart-answer.scenario.test.json") },
+    NamedText { name: "dialog-flow-late-chunk.scenario.test.json", text: embed_str("scenarios/dialog-flow-late-chunk.scenario.test.json") },
+    NamedText { name: "dialog-flow-message-opens-request.scenario.test.json", text: embed_str("scenarios/dialog-flow-message-opens-request.scenario.test.json") },
+    NamedText { name: "dialog-flow-pump-order.scenario.test.json", text: embed_str("scenarios/dialog-flow-pump-order.scenario.test.json") },
+    NamedText { name: "dialog-flow-refused-model-refused.scenario.test.json", text: embed_str("scenarios/dialog-flow-refused-model-refused.scenario.test.json") },
+    NamedText { name: "dialog-flow-refused-unknown-code.scenario.test.json", text: embed_str("scenarios/dialog-flow-refused-unknown-code.scenario.test.json") },
+    NamedText { name: "dialog-flow-restart-after-answer.scenario.test.json", text: embed_str("scenarios/dialog-flow-restart-after-answer.scenario.test.json") },
+    NamedText { name: "dialog-flow-restart-after-request.scenario.test.json", text: embed_str("scenarios/dialog-flow-restart-after-request.scenario.test.json") },
+    NamedText { name: "dialog-flow-restart-before-send.scenario.test.json", text: embed_str("scenarios/dialog-flow-restart-before-send.scenario.test.json") },
+    NamedText { name: "dialog-flow-second-answer.scenario.test.json", text: embed_str("scenarios/dialog-flow-second-answer.scenario.test.json") },
+    NamedText { name: "dialog-flow-silent-agent.scenario.test.json", text: embed_str("scenarios/dialog-flow-silent-agent.scenario.test.json") },
+    NamedText { name: "dialog-flow-start.scenario.test.json", text: embed_str("scenarios/dialog-flow-start.scenario.test.json") },
+    NamedText { name: "dialog-flow-timeout-awaiting.scenario.test.json", text: embed_str("scenarios/dialog-flow-timeout-awaiting.scenario.test.json") },
+    NamedText { name: "dialog-flow-tool-and-permission.scenario.test.json", text: embed_str("scenarios/dialog-flow-tool-and-permission.scenario.test.json") },
+    NamedText { name: "dialog-flow-unknown-name.scenario.test.json", text: embed_str("scenarios/dialog-flow-unknown-name.scenario.test.json") },
+    NamedText { name: "dialog-flow-unknown-request.scenario.test.json", text: embed_str("scenarios/dialog-flow-unknown-request.scenario.test.json") },
+    NamedText { name: "dialog-restart-before-send-second.scenario.test.json", text: embed_str("scenarios/dialog-restart-before-send-second.scenario.test.json") },
+    NamedText { name: "dialog-second-turn.scenario.test.json", text: embed_str("scenarios/dialog-second-turn.scenario.test.json") },
+    NamedText { name: "dialog-timeout-then-next.scenario.test.json", text: embed_str("scenarios/dialog-timeout-then-next.scenario.test.json") },
+    NamedText { name: "dialog-turn-ends.scenario.test.json", text: embed_str("scenarios/dialog-turn-ends.scenario.test.json") },
     NamedText { name: "gate-done.scenario.test.json", text: embed_str("scenarios/gate-done.scenario.test.json") },
     NamedText { name: "gate-failure.scenario.test.json", text: embed_str("scenarios/gate-failure.scenario.test.json") },
     NamedText { name: "gate-ignored.scenario.test.json", text: embed_str("scenarios/gate-ignored.scenario.test.json") },
@@ -177,6 +216,9 @@ export fn text_of_file(files []NamedText, name str) -> str {
 /// The text of the machine of the chat session (`machines/chat.portolan.json`).
 export fn chat_machine_text() -> str => text_of_file(machine_files(), "chat.portolan.json")
 
+/// The text of the machine of the many-turn chat session (`machines/dialog.portolan.json`), the translation of `dialog.portolan.md`: the machine that the session server runs.
+export fn dialog_machine_text() -> str => text_of_file(machine_files(), "dialog.portolan.json")
+
 /// The text of the machine of the agent step (`machines/agent_step.portolan.json`), the translation of its table.
 export fn agent_step_machine_text() -> str => text_of_file(machine_files(), "agent_step.portolan.json")
 
@@ -185,6 +227,9 @@ export fn agent_step_table_text() -> str => text_of_file(table_files(), "agent_s
 
 /// The text of the chat machine written as tables (`machines/chat.portolan.md`).
 export fn chat_table_text() -> str => text_of_file(table_files(), "chat.portolan.md")
+
+/// The text of the many-turn chat machine written as tables (`machines/dialog.portolan.md`).
+export fn dialog_table_text() -> str => text_of_file(table_files(), "dialog.portolan.md")
 
 /// The names of the files that the directories hold (read at compile time with `embed_dir`): a test compares them with the lists above, so a
 /// file that is added to a directory and not to its list is found.

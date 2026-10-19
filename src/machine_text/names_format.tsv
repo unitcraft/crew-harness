@@ -72,3 +72,4 @@ word	не засчитан	not_counted
 word	ещё заход	another_pass
 word	ответил	replied
 data	ид_сессии	session_id
+word	закрыть_сессию	close_session

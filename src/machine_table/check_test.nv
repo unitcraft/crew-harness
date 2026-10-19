@@ -235,7 +235,7 @@ test "issue text" {
 
 test "example machines" {
     ro files = machine_files()
-    assert(files.len() == 7)
+    assert(files.len() == 8)
     for f in files {
         ro issues = issues_of(f.text)
         if issues.len() > 0 { panic("${f.name}: ${issues.join(" | ")}") }

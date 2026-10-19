@@ -18,6 +18,7 @@ fn build(name str) -> PortolanMachine => build_from(machine_text(name))
 
 fn chat() -> PortolanMachine => build("chat.portolan.json")
 fn calc() -> PortolanMachine => build("calc.portolan.json")
+fn dialog() -> PortolanMachine => build("dialog.portolan.json")
 fn actions() -> PortolanMachine => build("actions.portolan.json")
 
 // The agent step with the answers of its primitives: the reply is valid, closing the turn answers nothing.

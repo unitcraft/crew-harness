@@ -193,9 +193,12 @@ fn initial_data_of(def MachineDef, table DefTable, input Value) -> Result[Value,
 }
 
 /// The machine from the text of its JSON tree: decoded, checked as a table, made ready. The error is every issue in one text.
-export fn load_portolan_machine(text str, registry Registry) -> Result[PortolanMachine, str] {
+export fn load_portolan_machine(text str, registry Registry) -> Result[PortolanMachine, str] => load_portolan_machine_with(text, registry, []ProjectValue.new())
+
+/// The same with the table "key -> value" of the project (format 2.7, P-9): the server gives the idle term of a chat turn this way (`проект.срок_бездействия`).
+export fn load_portolan_machine_with(text str, registry Registry, overrides []ProjectValue) -> Result[PortolanMachine, str] {
     match load_machine(text, registry) {
-        Ok(def) => portolan_machine(def, registry)
+        Ok(def) => portolan_machine_with(def, registry, overrides)
         Err(issues) => {
             mut lines = []str.new()
             for e in issues { lines.push(issue_text(e)) }
