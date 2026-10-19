@@ -56,8 +56,7 @@ A soft error (an unknown word) does not stop the cell: the translation goes on w
 `case`, `state`, `event`, `method`, `function`, `field`, `data`, `constant`, `variable`, `effect`. A Russian word may have two English ones in two kinds (the datum `расход` is
 `transport_usage`, the field `расход` is `usage`, section 2.15 of the dictionary); the translator asks for the kind it needs (a datum, a field, a type, a case, a function).
 `names_format.tsv` holds what the dictionary does not have: `catalog` (the functions of section 12 of the format as the evaluator names them: `есть` -> `has`), `executor`
-(`вход`, `событие`, `сторона` -> `side`, `состояние`, `запись_перехода` -> `transition_record`, `все_данные`, `трасса`, `номер_шага`: the names of `src/machine_table`, not the
-dictionary's `party` and `transition_note`), `primitive` (`новый_ид` -> `new_id`, version 9), `word`, `signal`, `signal_field`, `part`, and the names of the machines of the product
+(`вход`, `событие`, `сторона` -> `party`, `состояние`, `запись_перехода` -> `transition_note`, `все_данные`, `трасса`, `номер_шага`: the names of `src/machine_table`, equal to the dictionary's since task 109: `party`, `transition_note`), `primitive` (`новый_ид` -> `new_id`, version 9), `word`, `signal`, `signal_field`, `part`, and the names of the machines of the product
 (the chat machine). A name that a table introduces itself (a parameter of a definition, a `пусть`, a variable of a lambda, a name of an event) is looked up under `variable` and, if
 the dictionary has not got it, written in Latin letters (`л` -> `l`, `полученный` -> `received` by the dictionary). The state names come from the heading: `### ПОЛИТИКА — развилка (Policy)`.
 

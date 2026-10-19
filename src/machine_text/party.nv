@@ -136,7 +136,7 @@ fn party_row(r TxEntry, mut cx TxCx) -> Result[TxPartyRow, TranslateError] {
     Ok(TxPartyRow { ru: n.text, en, pairs })
 }
 
-fn sides_columns() -> []str => ["имя", "идентификатор", "вид", "профиль", "слова ворот", "счётчик"]
+fn party_columns() -> []str => ["имя", "идентификатор", "вид", "профиль", "слова ворот", "счётчик"]
 
 /// The section `## Стороны`: the parties; a line `Предел запросов: …` is not supported.
 fn decl_parties(entries []TxEntry, sec TxSection, mut cx TxCx) -> []TxPartyRow {
@@ -145,7 +145,7 @@ fn decl_parties(entries []TxEntry, sec TxSection, mut cx TxCx) -> []TxPartyRow {
     while i < sec.last {
         ro e = entries[i]
         if e.kind == EN_ROW {
-            ro t = tab_read(entries, i, sec.last, sides_columns(), cx)
+            ro t = tab_read(entries, i, sec.last, party_columns(), cx)
             for r in t.rows {
                 cx.rows_total += 1
                 ro before = cx.errors.len()

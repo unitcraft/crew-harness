@@ -28,9 +28,9 @@ catalog	словарь	dict
 catalog	свёртка	fold
 executor	вход	input
 executor	событие	event
-executor	сторона	side
+executor	сторона	party
 executor	состояние	state
-executor	запись_перехода	transition_record
+executor	запись_перехода	transition_note
 executor	все_данные	all_data
 executor	трасса	trace
 executor	номер_шага	step

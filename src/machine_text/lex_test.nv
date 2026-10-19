@@ -144,7 +144,7 @@ test "names get" {
     assert(names_get(n, "type", "КодСбоя") == Some("FailCode"))
     assert(names_get(n, "constant", "СРОК_БЕЗДЕЙСТВИЯ") == Some("IDLE_TERM"))
     assert(names_get(n, "catalog", "обязательно") == Some("require"))
-    assert(names_get(n, "executor", "сторона") == Some("side"))
+    assert(names_get(n, "executor", "сторона") == Some("party"))
     assert(names_get(n, "data", "нет_такого") == None)
     assert(names_first(n, ["variable", "data"], "расход") == Some("transport_usage"))
     assert(names_first(n, ["catalog", "function"], "есть") == Some("has"))

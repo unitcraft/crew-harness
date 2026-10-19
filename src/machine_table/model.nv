@@ -67,7 +67,7 @@ export type PathStep enum
     | KeyStep(Expr)
     | FieldStep(str)
 
-/// LValue: the place an action writes: a datum and the steps into it (`lenses[side].attempt`).
+/// LValue: the place an action writes: a datum and the steps into it (`lenses[party].attempt`).
 export type LValue { root str, steps []PathStep }
 
 /// NamedExpr: a named parameter of a journal event or of a machine error.
@@ -154,7 +154,7 @@ export type MachineDef {
 }
 
 /// The built-in names of the machine (what the executor provides, format 3.1): not data, not constants.
-export fn builtin_names() -> []str => ["input", "event", "side", "state", "trace", "step", "transition_record", "all_data", "end_states"]
+export fn builtin_names() -> []str => ["input", "event", "party", "state", "trace", "step", "transition_note", "all_data", "end_states"]
 
 /// The word of a party kind.
 export fn party_kind_word(kind PartyKind) -> str {

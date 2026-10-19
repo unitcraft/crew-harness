@@ -189,7 +189,7 @@ test "accept block" {
 test "executor names" {
     ro all_data = jn("all_data")
     assert(says(tiny_rows(wait_rows_with(all_data)), "all_data is read by a state whose Input is all the data"))
-    assert(says(tiny_rows(wait_rows_with(jn("transition_record"))), "transition_record is defined in the error end only"))
+    assert(says(tiny_rows(wait_rows_with(jn("transition_note"))), "transition_note is defined in the error end only"))
     assert(says(tiny_rows(wait_rows_with(jn("trace"))), "trace is read in the Input of a nested machine only"))
     assert(says(tiny_rows(wait_rows_with(jn("input"))), "input is read in the table Input"))
 }
@@ -254,9 +254,9 @@ test "set rule" {
 test "error end" {
     ro calc = text_of_file(machine_files(), "calc.machine.json")
     assert(ok_text(calc))
-    assert(says(calc.replace("\"error_end\": \"Errored\",", ""), "transition_record is defined in the error end only"))
+    assert(says(calc.replace("\"error_end\": \"Errored\",", ""), "transition_note is defined in the error end only"))
     assert(says(calc.replace("\"error_end\": \"Errored\",", "\"error_end\": \"Check\","), "must be a state of the kind end"))
-    assert(ok_text(calc.replace("{ \"do\": \"journal_all\" }", "{ \"do\": \"journal_all\" }, { \"do\": \"journal_value\", \"value\": { \"op\": \"name\", \"name\": \"transition_record\" } }")))
+    assert(ok_text(calc.replace("{ \"do\": \"journal_all\" }", "{ \"do\": \"journal_all\" }, { \"do\": \"journal_value\", \"value\": { \"op\": \"name\", \"name\": \"transition_note\" } }")))
 }
 
 test "variants rule" {

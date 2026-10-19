@@ -56,7 +56,7 @@ fn enter_appeal(mut ctx Ctx, st StateDef, mut host PrimitiveHost) -> Result[(), 
     }
     for id in ids {
         ro mark = ctx.locals.len()
-        ctx.locals.push(Binding { name: "side", value: Text(id) })
+        ctx.locals.push(Binding { name: "party", value: Text(id) })
         mut pairs = []ReqField.new()
         mut failed = false
         mut fault = defect_fault("", "")
@@ -344,7 +344,7 @@ fn start_machine(mut ctx Ctx, event Incoming, mut host PrimitiveHost) -> Result[
 fn new_ctx(machine TableMachine, current TableState) -> Ctx {
     Ctx {
         def: machine.def, table: machine.table, name: current.name, started: current.started, input: current.input, data: current.data,
-        event: EventVal { kind: EvTimeout, name: "", id: "", side: "", fields: []RecordField.new(), value: Null, reason: "" },
+        event: EventVal { kind: EvTimeout, name: "", id: "", party: "", fields: []RecordField.new(), value: Null, reason: "" },
         locals: []Binding.new(), record: Null, planned: []Planned.new(), fired: false, finished: false, defect: false, chain: 0
     }
 }
@@ -377,7 +377,7 @@ fn is_answer_kind(k EvKind) -> bool {
 
 // A failure that no row names is read as "no result" (format 4.3): the same event with the reason NoResult.
 fn as_no_result(ev EventVal) -> EventVal {
-    EventVal { kind: ev.kind, name: ev.name, id: ev.id, side: ev.side, fields: ev.fields, value: enum_value("FailCode", "NoResult"), reason: "NoResult" }
+    EventVal { kind: ev.kind, name: ev.name, id: ev.id, party: ev.party, fields: ev.fields, value: enum_value("FailCode", "NoResult"), reason: "NoResult" }
 }
 
 fn run_event(mut ctx Ctx, mut host PrimitiveHost) -> Result[(), Fault] {
@@ -442,7 +442,7 @@ export fn table_step(machine TableMachine, current TableState, event Incoming, m
     mut ctx = new_ctx(machine, current)
     if !current.started {
         if event.kind == EventKind.Input && event.name == "start" {
-            ctx.event = EventVal { kind: EvInput, name: "start", id: event.id, side: "", fields: []RecordField.new(), value: Null, reason: "" }
+            ctx.event = EventVal { kind: EvInput, name: "start", id: event.id, party: "", fields: []RecordField.new(), value: Null, reason: "" }
             match start_machine(ctx, event, host) {
                 Ok(u) => ()
                 Err(f) => handle_fault(ctx, f, host)

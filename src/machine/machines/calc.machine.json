@@ -76,7 +76,7 @@
       {
         "state": "Errored", "n": 1, "when": { "op": "lit", "value": true },
         "answer": { "kind": "refusal", "code": { "op": "variant", "type": "FailCode", "name": "NoResult" },
-                    "text": { "op": "call", "fn": "record_text", "args": [ { "op": "name", "name": "transition_record" } ] } }
+                    "text": { "op": "call", "fn": "record_text", "args": [ { "op": "name", "name": "transition_note" } ] } }
       }
     ]
   }

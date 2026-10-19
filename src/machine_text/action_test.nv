@@ -49,7 +49,7 @@ test "ac journal" {
     assert(ac("журнал(user_message, text: сессия)") == arr([a_journal("user_message", [kv("text", x_name("session"))])]))
     assert(ac("журнал(a_b, p: 1, q: \"x\")") == arr([a_journal("a_b", [kv("p", x_lit(jint(1))), kv("q", x_lit(js("x")))])]))
     assert(ac("журнал(все_данные)") == arr([a_journal_all()]))
-    assert(ac("журнал(запись_перехода)") == arr([a_journal_value(x_name("transition_record"))]))
+    assert(ac("журнал(запись_перехода)") == arr([a_journal_value(x_name("transition_note"))]))
     assert(ac("журнал(событие_журнала(\"c\", k: 1))") == arr([a_journal_value(x_call("journal_event", [x_lit(js("c")), x_lit(js("k")), x_lit(jint(1))]))]))
     assert(ac("журнал(retry_x, retry: текст(число_повторов))") == arr([a_journal("retry_x", [kv("retry", x_call("text", [x_name("retry_count")]))])]))
 }
@@ -135,9 +135,9 @@ test "ac format examples" {
     // format 3.2, 4.4, 4.5
     ro join = a_assign(tgt("stop_reason"), x_bin("+", x_call("non_empty", [x_name("failed_appeal")]), x_lit(js("_halt_meeting"))))
     assert(ac("остановка = непустое(сбойное_обращение) + \"_halt_meeting\"") == arr([join]))
-    ro lens_key = a_target("lenses", [a_step_key(x_name("side"))])
+    ro lens_key = a_target("lenses", [a_step_key(x_name("party"))])
     ro copy = x_with(x_name("l"), [kv("lost", x_lit(jint(0)))])
-    ro local = a_let("l", x_call("require", [x_index(x_name("lenses"), x_name("side"))]), [a_assign(lens_key, copy)])
+    ro local = a_let("l", x_call("require", [x_index(x_name("lenses"), x_name("party"))]), [a_assign(lens_key, copy)])
     assert(ac("пусть л = обязательно(линзы[сторона]) в (линзы[сторона] = { ...л, потери_подряд: 0 })") == arr([local]))
     ro each_key = a_target("lenses", [a_step_key(x_name("l"))])
     ro each_copy = x_with(x_call("require", [x_index(x_name("lenses"), x_name("l"))]), [kv("probes", x_lit(jint(0)))])

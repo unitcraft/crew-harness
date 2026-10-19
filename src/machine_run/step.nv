@@ -39,7 +39,7 @@ type EvKind enum
 
 // The event of the engine read as the event of the machine: `name` is the label of the journal, `fields` the data of a word or of a part,
 // `value` the answer or the reason of the failure, `reason` the case of the failure.
-type EventVal { kind EvKind, name str, id str, side str, fields []RecordField, value Value, reason str }
+type EventVal { kind EvKind, name str, id str, party str, fields []RecordField, value Value, reason str }
 
 type Planned enum
     | PNote(JournalEvent)
@@ -110,7 +110,7 @@ fn event_record(ev EventVal) -> Value {
     mut fields = []RecordField.new()
     for f in ev.fields { fields.push(f) }
     fields.push(RecordField { name: "id", value: Text(ev.id) })
-    fields.push(RecordField { name: "side", value: Text(ev.side) })
+    fields.push(RecordField { name: "party", value: Text(ev.party) })
     make_record("Event", fields)
 }
 
@@ -125,9 +125,9 @@ fn scope_of(ctx Ctx) -> Scope {
     }
     bs.push(Binding { name: "input", value: ctx.input })
     bs.push(Binding { name: "state", value: Text(ctx.name) })
-    bs.push(Binding { name: "side", value: Text(ctx.event.side) })
+    bs.push(Binding { name: "party", value: Text(ctx.event.party) })
     bs.push(Binding { name: "event", value: event_record(ctx.event) })
-    bs.push(Binding { name: "transition_record", value: ctx.record })
+    bs.push(Binding { name: "transition_note", value: ctx.record })
     bs.push(Binding { name: "all_data", value: ctx.data })
     for l in ctx.locals { bs.push(l) }
     Scope { bindings: bs }
@@ -260,8 +260,8 @@ fn decode_fields(fields []FieldDef, input str, defs TypeDefs) -> Result[[]Record
     Ok(out)
 }
 
-// The side of a request id: `lens-2` - `lens` (the id is the party or the element of a set, `-`, the attempt).
-fn side_of(request Option[str]) -> str {
+// The party of a request id: `lens-2` - `lens` (the id is the party or the element of a set, `-`, the attempt).
+fn request_party_of(request Option[str]) -> str {
     match request {
         Some(id) => {
             match id.rfind("-") {
@@ -301,12 +301,12 @@ fn answer_value(def MachineDef, state_party str, input str) -> Option[Value] {
 
 fn read_event(ctx Ctx, event Incoming) -> EventRead {
     ro def = ctx.def
-    ro side = side_of(event.request)
+    ro from_party = request_party_of(event.request)
     match event.kind {
         EventKind.Input => {
             match input_decl(def, event.name) {
                 Some(fields) => match decode_fields(fields, event.input, def.types) {
-                    Ok(vals) => ReadReady(EventVal { kind: EvInput, name: event.name, id: event.id, side, fields: vals, value: Null, reason: "" })
+                    Ok(vals) => ReadReady(EventVal { kind: EvInput, name: event.name, id: event.id, party: from_party, fields: vals, value: Null, reason: "" })
                     Err(m) => ReadMalformed
                 }
                 None => ReadUnknown
@@ -315,7 +315,7 @@ fn read_event(ctx Ctx, event Incoming) -> EventRead {
         EventKind.Progress => {
             match progress_decl(def, event.name) {
                 Some(fields) => match decode_fields(fields, event.input, def.types) {
-                    Ok(vals) => ReadReady(EventVal { kind: EvProgress, name: event.name, id: event.id, side, fields: vals, value: Null, reason: "" })
+                    Ok(vals) => ReadReady(EventVal { kind: EvProgress, name: event.name, id: event.id, party: from_party, fields: vals, value: Null, reason: "" })
                     Err(m) => ReadMalformed
                 }
                 None => ReadUnknown
@@ -325,18 +325,18 @@ fn read_event(ctx Ctx, event Incoming) -> EventRead {
             ro at = find_state(def, ctx.name)
             ro party = if at >= 0 { def.states[at].party } else { "" }
             match answer_value(def, party, event.input) {
-                Some(v) => ReadReady(EventVal { kind: EvAnswer, name: event.name, id: event.id, side, fields: []RecordField.new(), value: v, reason: "" })
+                Some(v) => ReadReady(EventVal { kind: EvAnswer, name: event.name, id: event.id, party: from_party, fields: []RecordField.new(), value: v, reason: "" })
                 None => ReadMalformed
             }
         }
         EventKind.Refused => {
             ro code = FailCode.of(event.input).name()
             ReadReady(EventVal {
-                kind: EvFailure, name: event.name, id: event.id, side, fields: []RecordField.new(),
+                kind: EvFailure, name: event.name, id: event.id, party: from_party, fields: []RecordField.new(),
                 value: enum_value("FailCode", code), reason: code
             })
         }
-        EventKind.Expired => ReadReady(EventVal { kind: EvTimeout, name: event.name, id: event.id, side, fields: []RecordField.new(), value: Null, reason: "" })
+        EventKind.Expired => ReadReady(EventVal { kind: EvTimeout, name: event.name, id: event.id, party: from_party, fields: []RecordField.new(), value: Null, reason: "" })
     }
 }
 

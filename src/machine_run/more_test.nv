@@ -107,14 +107,14 @@ test "set of parties" {
     assert(datum_json(r.state, "to_send") == "[]")
     assert(datum_json(r.state, "order") == "[\"a\",\"b\",\"c\"]")
     ro one = run1(m, r.state, stamped(EventKind.Answered, "answer", Some("b-1"), "two"))
-    assert(summary(one.orders) == "log:lens_answered(side=b;text=two),save")
+    assert(summary(one.orders) == "log:lens_answered(party=b;text=two),save")
     assert(datum_json(one.state, "done") == "[\"b\"]")
     assert(one.state.name == "Ask")
     ro lost = run1(m, one.state, stamped(EventKind.Refused, "failure", Some("a-1"), "Timeout"))
-    assert(summary(lost.orders) == "log:lens_lost(side=a;reason=timeout),save")
+    assert(summary(lost.orders) == "log:lens_lost(party=a;reason=timeout),save")
     ro last = run1(m, lost.state, stamped(EventKind.Answered, "answer", Some("c-1"), "three"))
     assert(last.state.name == "Finished")
-    assert(summary(last.orders) == "log:lens_answered(side=c;text=three),finish:answer:[\"b\",\"a\",\"c\"],save")
+    assert(summary(last.orders) == "log:lens_answered(party=c;text=three),finish:answer:[\"b\",\"a\",\"c\"],save")
 }
 
 test "restart request" {

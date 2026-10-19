@@ -94,7 +94,7 @@
     { "name": "Done", "kind": "end", "reads": [ "total" ] },
     {
       "name": "Errored", "kind": "end", "reads_all": true,
-      "entry": [ { "do": "journal_value", "value": { "op": "name", "name": "transition_record" } }, { "do": "journal_all" } ]
+      "entry": [ { "do": "journal_value", "value": { "op": "name", "name": "transition_note" } }, { "do": "journal_all" } ]
     }
   ],
   "ends": {
@@ -103,7 +103,7 @@
       { "state": "Done", "n": 1, "when": { "op": "lit", "value": true }, "answer": { "kind": "answer", "value": { "op": "name", "name": "total" } } },
       { "state": "Errored", "n": 1, "when": { "op": "lit", "value": true },
         "answer": { "kind": "refusal", "code": { "op": "variant", "type": "FailCode", "name": "NoResult" },
-                    "text": { "op": "call", "fn": "record_text", "args": [ { "op": "name", "name": "transition_record" } ] } } }
+                    "text": { "op": "call", "fn": "record_text", "args": [ { "op": "name", "name": "transition_note" } ] } } }
     ]
   }
 }

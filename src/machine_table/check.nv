@@ -1035,11 +1035,11 @@ fn check_reads(mut cx Checker) -> () {
             }
             if n == "input" && s.area == area_body() { cx_issue(cx, s.place, "input is read in the table Input, the initial values and the invariants only") }
             if n == "all_data" && !(s.state >= 0 && def.states[s.state].reads_all) { cx_issue(cx, s.place, "all_data is read by a state whose Input is all the data (the error end)") }
-            if n == "transition_record" && !(s.state >= 0 && def.states[s.state].name == def.error_end) {
-                cx_issue(cx, s.place, "transition_record is defined in the error end only (A4)")
+            if n == "transition_note" && !(s.state >= 0 && def.states[s.state].name == def.error_end) {
+                cx_issue(cx, s.place, "transition_note is defined in the error end only (A4)")
             }
             if (n == "trace" || n == "step") && !trace_allowed(def, s) { cx_issue(cx, s.place, "${n} is read in the Input of a nested machine only") }
-            if (n == "event" || n == "side") && s.area == area_global() { cx_issue(cx, s.place, "${n} is not defined here") }
+            if (n == "event" || n == "party") && s.area == area_global() { cx_issue(cx, s.place, "${n} is not defined here") }
             if n == "state" && s.area == area_global() { cx_issue(cx, s.place, "state is not defined here") }
         }
         // the hidden reads of the primitives named in the registry join the Input
