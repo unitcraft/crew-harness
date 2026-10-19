@@ -165,8 +165,21 @@ off" check). `.exit` is written atomically as before, no window blinks, `taskkil
 console closes with its last process. Starting takes about 0.4 s (two Git Bash starts; the pass of the plugin waits
 for the pid). Limits: no window and no keyboard, so an interactive program does not belong in a watch;
 `CREW_HARNESS_WATCH_NO_CONSOLE=1` in the service's environment starts a watch the old console-less way (the red probe
-of `test/crew-watch-console.test.mjs`, not a setting). Git Bash helpers forked by the command (`timeout`, `sleep`) can
-outlive `taskkill /T`: Windows does not list them as children of the watch process.
+of `test/crew-watch-console.test.mjs`, not a setting).
+
+**Cancel closes the whole tree (task 101).** `taskkill /T` by the pid of a watch does not reach the `timeout.exe` and
+`sleep.exe` of its command: their Windows parent is a dead fork copy of Git Bash (msys), not the watch process, so a
+cancelled gate or build stayed alive. Every process of a watch's command now carries `CREW_WATCH_ID=<watch id>` in its
+environment (children inherit it, also those whose parent is already dead). Cancel (`crew_watch cancel`, a closed task),
+the time limit (code 124) and the "cut off" check find the processes with that mark in a Git Bash pass (it reads
+`/proc/<pid>/environ` with shell built-ins, and adds the descendants by `PPID` of the marked ones) and close them in one
+`taskkill /T /F`, together with their Windows children; the watch's own pid is added if it is alive (a record made before
+the mark existed). Only processes with the mark of that watch are touched, never a neighbour's; a command that exits by
+itself leaves nothing killed (what it started in the background stays, as before). The record is closed as before
+(`cancelled`, `.exit` written by the script when the command ends on its own). The pass costs one Git Bash start
+(a few tenths of a second) and only happens on cancel, limit and "cut off"; it ends with a marker line, so a Git Bash that
+died at its start under load ("cmalloc would have returned NULL") is not taken for "no processes" and the pass is repeated, and
+the tree is scanned again after the kill (`test/crew-watch-tree.test.mjs`).
 
 **The machine queue.** `machine: true` marks a command that loads the machine (a gate, a build, a full test run):
 it waits for a slot in the project's machine queue — `machine_slots` at a time (1; 0 — no limit), in the order they

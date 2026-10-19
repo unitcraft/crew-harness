@@ -100,19 +100,93 @@ function pidAlive(pid?: number): boolean {
   }
 }
 
+/** Метка наблюдения (задача 101): каждый процесс команды наследует CREW_WATCH_ID=<id> — по ней находят всё дерево команды, в том числе потомков, чьи родители уже мертвы. */
+export const WATCH_MARK = "CREW_WATCH_ID"
+const watchEnv = (w: Watch) => ({ ...process.env, ...(w.env ?? {}), [WATCH_MARK]: w.id })
+
+/** Скрипт Git Bash: pid (Windows-pid под msys, иначе обычный pid) всех процессов с меткой наблюдения $1 и их потомков по PPID.
+ *  Окружение читается из /proc/<pid>/environ встроенными средствами bash (без вилок: весь обход — доли секунды).
+ *  Последняя строка вывода — TREE_END: без неё обход не дошёл до конца (Git Bash под нагрузкой иногда падает на старте с
+ *  «cmalloc would have returned NULL», и тогда вывод пуст — как у дерева без единого процесса). */
+const TREE_END = "CREW_TREE_SCAN_END"
+const TREE_SCRIPT = `
+declare -A parent mark
+for d in /proc/[0-9]*; do
+  p=\${d#/proc/}
+  { read -r pp < $d/ppid; } 2>/dev/null || continue
+  parent[$p]=$pp
+  { while IFS= read -r -d '' kv; do
+    if [[ $kv == "${WATCH_MARK}=$1" ]]; then mark[$p]=1; break; fi
+  done < $d/environ; } 2>/dev/null
+done
+changed=1
+while ((changed)); do
+  changed=0
+  for p in "\${!parent[@]}"; do
+    if [[ -z \${mark[$p]} && -n \${mark[\${parent[$p]}]} ]]; then mark[$p]=1; changed=1; fi
+  done
+done
+for p in "\${!mark[@]}"; do
+  [[ $p == $$ ]] && continue
+  if [[ -r /proc/$p/winpid ]]; then read -r wp < /proc/$p/winpid; echo "$wp"; else echo "$p"; fi
+done
+echo ${TREE_END}
+`
+
+/** pid всех живых процессов дерева команды наблюдения: помеченные его меткой и их потомки. undefined — обход не удался
+ *  (Git Bash не запустился или упал), а не «процессов нет»: пустой массив возвращается только при дочитанном до конца выводе. */
+export function watchTreePids(id: string): number[] | undefined {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    if (attempt) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300)
+    try {
+      const r = spawnSync(gitBash(), ["-c", TREE_SCRIPT, "_", id], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true, timeout: 20_000 })
+      const lines = String(r.stdout ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+      if (lines.pop() !== TREE_END) continue
+      return lines.map(Number).filter((n) => Number.isInteger(n) && n > 0)
+    } catch {}
+  }
+  return undefined
+}
+
+/** Закрыть всё дерево команды (задача 101). `taskkill /T` по pid наблюдения не берёт `timeout.exe` и `sleep.exe`: их родитель в Windows —
+ *  мёртвая копия Git Bash (fork msys). Поэтому дерево собирается по метке окружения (чужие процессы без метки не затрагиваются),
+ *  и все найденные pid закрываются разом, с их Windows-потомками (`/T`); pid самого наблюдения добавляется, если жив
+ *  (запись без метки, начатая прежним кодом). Возвращает число pid, которые пытались закрыть. */
+export function killWatchTree(w: Watch, log: (s: string) => void = () => {}): number {
+  let total = 0
+  // до трёх кругов: пока дерево умирает, его процессы успевают породить новых (сборка, что запускает потомков) — следующий обход их ловит
+  for (let round = 0; round < 3; round++) {
+    const found = watchTreePids(w.id)
+    const pids = new Set(found ?? [])
+    if (round === 0 && w.pid && pidAlive(w.pid)) pids.add(w.pid)
+    if (found && !pids.size) return total
+    if (!found) log(`watch ${w.id}: обход дерева не удался`)
+    total += pids.size
+    try {
+      if (!pids.size) continue
+      if (process.platform === "win32") execFileSync("taskkill", ["/T", "/F", ...[...pids].flatMap((p) => ["/PID", String(p)])], { stdio: "ignore", windowsHide: true, timeout: 20_000 })
+      else for (const p of pids) process.kill(p, "SIGKILL")
+    } catch {
+      // часть pid могла исчезнуть между обходом и убийством: taskkill тогда возвращает ошибку, а остальные уже закрыты; следующий круг проверит
+    }
+  }
+  if (watchTreePids(w.id)?.length !== 0) log(`watch ${w.id}: дерево закрыто не целиком`)
+  return total
+}
+
 /** Windows: запуск с собственной скрытой консолью (задача 100). Служба OpenCode живёт без консоли, а `detached` в Node —
  *  это DETACHED_PROCESS: bash без консоли, и каждая консольная программа его цепочки (cmd, python, vcvars64.bat, cl)
  *  получает свою новую консоль — десятки conhost на одну сборку; при нехватке ресурсов консоли такая программа падает
  *  с 0xC0000142 до первой команды. Здесь внешний bash запускается НЕ откреплённо и скрыто — Windows даёт ему новую
  *  скрытую консоль; он порождает внутренний bash (в консоли внешнего, вне job-объекта Node — не умирает с службой) и
  *  сразу выходит; внутренний пишет свой Windows-pid в `.pid` и ведёт команду. Вся цепочка команды делит одну консоль,
- *  `taskkill /T` по pid внутреннего убивает дерево, консоль закрывается с последним процессом.
+ *  дерево закрывает killWatchTree (метка CREW_WATCH_ID, задача 101), консоль закрывается с последним процессом.
  *  Возвращает pid внутреннего bash или undefined (файл с pid не появился). */
 function startWithConsole(w: Watch, script: string): number | undefined {
   const pidFile = forBash(file(w.id, ".pid"))
   const inner = `echo $(cat /proc/$$/winpid) > ${quote(pidFile + ".tmp")} && mv ${quote(pidFile + ".tmp")} ${quote(pidFile)}; ${script}`
   const outer = `nohup bash -c "$1" </dev/null >/dev/null 2>&1 &`
-  spawnSync(gitBash(), ["-c", outer, "_", inner], { cwd: existsSync(w.cwd) ? w.cwd : undefined, env: { ...process.env, ...(w.env ?? {}) }, stdio: "ignore", windowsHide: true, timeout: 20_000 })
+  spawnSync(gitBash(), ["-c", outer, "_", inner], { cwd: existsSync(w.cwd) ? w.cwd : undefined, env: watchEnv(w), stdio: "ignore", windowsHide: true, timeout: 20_000 })
   for (let i = 0; i < 100; i++) {
     try {
       const pid = Number(readFileSync(file(w.id, ".pid"), "utf8").trim())
@@ -133,7 +207,7 @@ function start(w: Watch, now: number, log: (s: string) => void): Watch {
       if (!pid) log(`watch ${w.id}: pid внутреннего bash не появился за 10 с`)
       return { ...w, status: "running", ...(pid ? { pid } : {}), started: now }
     }
-    const child = spawn(gitBash(), ["-c", script], { cwd: existsSync(w.cwd) ? w.cwd : undefined, env: { ...process.env, ...(w.env ?? {}) }, detached: true, stdio: "ignore", windowsHide: true })
+    const child = spawn(gitBash(), ["-c", script], { cwd: existsSync(w.cwd) ? w.cwd : undefined, env: watchEnv(w), detached: true, stdio: "ignore", windowsHide: true })
     child.on("error", (e) => log(`watch ${w.id}: ${e}`))
     child.unref()
     return { ...w, status: "running", pid: child.pid, started: now }
@@ -227,6 +301,15 @@ export function pollWatches(post: (w: Watch, text: string) => void, log: (s: str
     if (existsSync(exitFile)) code = Number(readFileSync(exitFile, "utf8").trim())
     else if (!pidAlive(w.pid) && now - (w.started ?? w.created) > 10_000 && !existsSync(exitFile)) code = null // пропал без кода
     else continue
+    // предел времени (124) и «оборвано» (нет кода): `timeout` и msys не убивают потомков, native-программы и осиротевшие
+    // процессы остаются — закрыть всё дерево по метке (задача 101); при обычном выходе команды ничего не трогаем
+    if (code === null || code === 124) {
+      try {
+        killWatchTree(w, log)
+      } catch (e) {
+        log(`watch ${w.id}: дерево не закрыто: ${e}`)
+      }
+    }
     const done: Watch = { ...w, status: "done", ended: now, code: Number.isNaN(code) ? null : code }
     let output = ""
     try {
@@ -245,10 +328,10 @@ export function pollWatches(post: (w: Watch, text: string) => void, log: (s: str
 export function dropWatch(w: Watch, log: (s: string) => void = () => {}, now = Date.now(), extra: Partial<Watch> = {}) {
   if (w.status === "requested") {
     rmSync(file(w.id, ".req.json"), { force: true })
-  } else if (w.pid && pidAlive(w.pid)) {
+  } else {
+    // дерево команды — по метке, а не по pid наблюдения (задача 101): процесс наблюдения мог уже умереть, дерево — нет
     try {
-      if (process.platform === "win32") execFileSync("taskkill", ["/T", "/F", "/PID", String(w.pid)], { stdio: "ignore", windowsHide: true, timeout: 10_000 })
-      else process.kill(-w.pid, "SIGTERM")
+      killWatchTree(w, log)
     } catch (e) {
       log(`watch ${w.id}: не остановилось: ${e}`)
     }
