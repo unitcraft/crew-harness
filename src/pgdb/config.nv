@@ -1,0 +1,70 @@
+// config.nv - where and as whom the program connects to PostgreSQL (task 098).
+//
+// A value and its checks, no input/output: the file and the environment are read in src/pgconf. The module has no
+// `std.os` on purpose: a program that holds the engine cannot also hold `std.os` until the type `Output` of the engine is
+// renamed (Oracle 0.1.0, see src/pg/README.md), and the handlers of the engine live beside this module.
+module crew_harness.pgdb
+
+import std.encoding.json.{Json, JsonObject}
+
+/// PgConfig: the five settings of a connection. The password is never printed: `describe` leaves it out, and no error
+/// of this package contains it.
+export type PgConfig { host str, port int, database str, user str, password str }
+
+fn text_key(o JsonObject, key str, fallback str) -> Result[str, str] {
+    match o.get(key) {
+        None => Ok(fallback)
+        Some(v) => match v.str() {
+            Some(s) => Ok(s)
+            None => Err("the setting ${key} must be a string")
+        }
+    }
+}
+
+fn number_key(o JsonObject, key str, fallback int) -> Result[int, str] {
+    match o.get(key) {
+        None => Ok(fallback)
+        Some(v) => match v.int() {
+            Some(n) => Ok(n)
+            None => Err("the setting ${key} must be a whole number")
+        }
+    }
+}
+
+/// A configuration from the text of a settings file: a JSON object with the keys `host`, `port`, `database`, `user`,
+/// `password`; a missing key has its default (`127.0.0.1`, 5432, `crew`, `crew_app`, no password). The text itself is
+/// never quoted in an error: it may hold the password.
+export fn parse_pg_config(text str) -> Result[PgConfig, str] {
+    ro value = match Json.parse(text) {
+        Ok(v) => v
+        Err(e) => return Err("the settings are not JSON")
+    }
+    ro o = match value.object() {
+        Some(x) => x
+        None => return Err("the settings must be a JSON object")
+    }
+    ro host = text_key(o, "host", "127.0.0.1")?
+    ro port = number_key(o, "port", 5432)?
+    ro database = text_key(o, "database", "crew")?
+    ro user = text_key(o, "user", "crew_app")?
+    ro password = text_key(o, "password", "")?
+    Ok(PgConfig { host, port, database, user, password })
+}
+
+fn is_local(host str) -> bool => host == "127.0.0.1" || host == "localhost" || host == "::1"
+
+/// Is the configuration fit to connect? A password, a port in range, names, and a LOCAL host: the driver has no TLS
+/// yet, and the password and the data must not cross a network in the clear (TLS is a task of its own).
+export fn PgConfig @check() -> Result[(), str] {
+    if !is_local(@host) {
+        return Err("the host ${@host} is not local: only 127.0.0.1, localhost and ::1 are allowed until TLS is supported")
+    }
+    if @port < 1 || @port > 65535 { return Err("the port must be 1 to 65535") }
+    if @user.byte_len() == 0 { return Err("the user is empty") }
+    if @database.byte_len() == 0 { return Err("the database is empty") }
+    if @password.byte_len() == 0 { return Err("no password is configured") }
+    Ok(())
+}
+
+/// The configuration for a log line or a message: user, host, port and database. No password.
+export fn PgConfig @describe() -> str => "${@user}@${@host}:${@port}/${@database}"

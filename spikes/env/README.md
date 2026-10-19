@@ -12,9 +12,10 @@ task 090 (`doc/tasks/090-product-env-spike/`).
 | `ws_echo/` | Polaris server on `127.0.0.1`: `GET /` (HTML), `GET /health`, WebSocket echo `/ws` | `ws_echo_check.mjs` (Node) |
 | `acp/` | `acp_initialize.mjs`: one `initialize` request to `opencode acp` over stdio, no login, no session | exit code 0 and the printed version |
 | `repro_mut_binding/` | minimal reproduction of a Polaris documentation example that Oracle 0.1.0 rejects | see "Known problems" |
-| `repro_engine/` | minimal reproductions of six Oracle 0.1.0 defects found while writing the state machine engine (task 091) | see "Known problems", items 8-13 |
+| `repro_engine/` | minimal reproductions of Oracle 0.1.0 defects found while writing the state machine engine (task 091, items 8-13) and its PostgreSQL store (task 098, items 21, 23-25) | see "Known problems", items 8-18 |
 | `repro_acp/` | minimal reproductions of Oracle 0.1.0 defects found while writing the ACP client (task 095) | see "Known problems", items 14-18 and 20 |
 | `repro_child_pipes/` | a program: pipes of a child process that now and then do not come back (task 095) | see "Known problems", item 19 |
+| `repro_pg_event/` | a user record `Event` next to the driver `postgres.pgnet` (task 098, item 22); needs `nova update` (the driver comes from git) | see "Known problems", item 22 |
 
 Binaries, `target/` and downloaded archives are not committed (`.gitignore`).
 
@@ -191,3 +192,32 @@ Found by task 095 (the ACP client, `src/acp/`, and the file handlers, `src/stora
 Also met in task 095 and not reduced: `exists` is a reserved word (a function of that name is a syntax error); the names of
 functions are one namespace per folder, so the peer test files of a module cannot declare a helper twice; a test that fails
 before it closes its ACP client leaves the agent process alive and `nova test` then waits for the pipes of that process.
+
+Found by task 098 (the PostgreSQL store, `src/pg*`); the reproductions are in `repro_engine/src/` (items 21, 23, 24, 25) and
+`repro_pg_event/` (item 22), run the same way:
+
+21. **`std_os_output`** (with the helper module `std_os_output_def`): a user enum named `Output` (the engine has one) in the same
+    program as `std.os`, which exports a value type `Output`. The compiler takes the std type for the user's one: `Output.Log(...)`
+    is E_NO_STATIC_METHOD ("declared in this module and has no static method `Log`"); in the real engine with its peers the same
+    clash reached the C compiler (`returning 'Nova_Output *' from a function with incompatible result type 'NovaValue_Output'`).
+    Any import of `std.os` (even for `env`) is enough. Task 095 renames the engine's type to `StepOutput`; the modules of task 098
+    keep `std.os` out of every module that holds the engine until then.
+22. **`repro_pg_event`**: a user record named `Event` (the engine has one) in the same program as `postgres.pgnet` of the driver
+    nova-postgres: the driver's own file `pgnet/listener.nv` (`ListenerMsg.Event { event: ... }`) is read as a record literal
+    of the user's `Event`, E_MISSING_FIELD_IN_LITERAL in a file of the foreign package. A variant name and an unrelated record
+    name share one table. Task 098 does not import `pgnet`; it repeats its socket loop over `postgres.Session`.
+23. **`handler_op_panic`**: the body of an operation of an effect handler that is only `panic(...)`, for an operation that returns
+    a value (`Option[int]`): the C returns `(nova_int)0` from a function that returns the option (`returning 'nova_int' from a
+    function with incompatible result type 'NovaOpt_nova_int'`). A `panic` in a `match` arm, or after another statement, is fine.
+24. **`handler_op_vec_new`**: `return []int.new()` as a statement in the body of a handler operation: the generated C writes
+    `ctx->cap = cap` for a variable `cap` that does not exist (`use of undeclared identifier 'cap'`). `mut out = []int.new()` and
+    then `out` compiles.
+25. **`nested_module`**: a module in a folder two levels under the source root (`src/nested_module/inner/inner.nv`, no `.nv` in the
+    middle folder), declared as the path from the source root with the package prefix: E_D78_MODULE_PATH_MISMATCH although the
+    "expected (rev-1 legacy)" text printed by the compiler equals the declared one.
+
+Also met in task 098, without a reproduction: `nova test` stops a unit that runs longer than 60 seconds (`--timeout`, the
+default) and prints only `TIMEOUT`, with no sign of which test is slow; a SCRAM login on the unoptimized build costs about a
+quarter of a second (4096 rounds of HMAC in Nova), so a test suite that connects hundreds of times must use md5 logins in its
+temporary server or `--mode release`. `NOVA_DEBUG_RUN_DUMP=1` did not expand the 600-character error text of `nova test` here;
+`nova check <dir>` prints the whole text of a type error.

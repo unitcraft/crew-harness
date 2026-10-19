@@ -1,0 +1,158 @@
+// testkit.nv - support of the PostgreSQL tests (here and in src/pg/store): a database of its own for every test, made
+// with the real migration (src/pg/schema.sql), and a login role that has only the rights of the application role.
+//
+// It is ordinary code of the module and not a `_test.nv` file because the tests of `crew_harness.pgstore` use it
+// too, and a test file cannot be imported. Nothing in the product calls it.
+//
+// The server is a temporary container started by `src/pg/testdb.ps1` (see README.md). The script makes two random
+// passwords for THIS container (the administrator and the test logins) and writes them with the port to
+// `target/pg-test.json`, which is not in the repository; the tests read that file from the root of the repository, where
+// `nova test` runs. There is no environment variable here on purpose: `std.os` cannot be in the same program as the
+// engine until the type `Output` of the engine is renamed (see README.md).
+// No file, no server: a red test with a message, not a silent skip - a green run must mean that the real PostgreSQL was used.
+module crew_harness.pgdb
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+import std.fs.{Fs, real_fs, read_text, Path}
+import std.net.{real_net}
+
+const TEST_ADMIN_USER = "postgres"
+
+fn test_settings() -> JsonObject {
+    ro path = Path.from_bytes("target/pg-test.json".bytes())
+    ro text = with Fs = real_fs() {
+        match read_text(path) {
+            Ok(t) => t
+            Err(e) => panic("no test database: start it with src/pg/testdb.ps1 (it writes target/pg-test.json), see src/pg/README.md")
+        }
+    }
+    match Json.parse(text) {
+        Ok(v) => match v.object() {
+            Some(o) => o
+            None => panic("target/pg-test.json is not a JSON object")
+        }
+        Err(e) => panic("target/pg-test.json is not JSON")
+    }
+}
+
+/// The port of the test server.
+export fn test_port() -> int {
+    ro port = test_settings().get("port")
+    match port {
+        Some(v) => v.int() ?? 0
+        None => 0
+    }
+}
+
+fn setting_text(key str) -> str {
+    ro found = test_settings().get(key)
+    match found {
+        Some(v) => v.str() ?? ""
+        None => panic("target/pg-test.json has no ${key}: run src/pg/testdb.ps1 again")
+    }
+}
+
+/// The password of the login roles of the tests (made by testdb.ps1 for this container).
+export fn test_app_password() -> str => setting_text("app_password")
+
+fn test_admin_password() -> str => setting_text("admin_password")
+
+/// The connection of the administrator of the test server to a database.
+export fn test_admin_on(database str) -> PgConfig => {
+    host: "127.0.0.1", port: test_port(), database, user: TEST_ADMIN_USER, password: test_admin_password()
+}
+
+/// A database of a test: the name, the owner connection, the connection of the application role and its name.
+export type TestDb { name str, admin PgConfig, app PgConfig, role str }
+
+/// Run a query as `cfg` with the simple protocol; the rows are text.
+export fn test_sql(cfg PgConfig, sql str) -> Result[[][]str, PgFault] {
+    with Net = real_net() { pg_rows(cfg, sql) }
+}
+
+/// Run a query that must pass; a fault stops the test with the text.
+export fn test_must_sql(cfg PgConfig, sql str) -> [][]str {
+    match test_sql(cfg, sql) {
+        Ok(rows) => rows
+        Err(f) => panic("test setup: ${f.message} [${f.sqlstate}] in: ${sql}")
+    }
+}
+
+/// The first column of the first row as a number, -1 when there is none.
+export fn test_count(cfg PgConfig, sql str) -> int {
+    ro rows = test_must_sql(cfg, sql)
+    if rows.len() == 0 { return -1 }
+    rows[0][0].to_int() ?? -1
+}
+
+fn schema_text() -> str {
+    ro path = Path.from_bytes("src/pg/schema.sql".bytes())
+    with Fs = real_fs() {
+        match read_text(path) {
+            Ok(t) => t
+            Err(e) => ""
+        }
+    }
+}
+
+/// Migrate with the real script (`src/pg/schema.sql`, read from the root of the repository).
+export fn test_migrate(cfg PgConfig) -> Result[(), PgFault] {
+    ro sql = schema_text()
+    if sql.byte_len() == 0 { return Err(PgFault { sqlstate: "", message: "src/pg/schema.sql is missing or empty" }) }
+    with Net = real_net() { pg_migrate(cfg, sql) }
+}
+
+/// A new database `crew_t_<name>` (an old one of the same name is dropped), migrated, with the login role
+/// `crew_u_<name>` that is a member of `crew_app` and nothing more.
+export fn new_test_db(name str) -> TestDb {
+    ro db = "crew_t_${name}"
+    ro role = "crew_u_${name}"
+    ro root = test_admin_on("postgres")
+    ro dropped = test_must_sql(root, "drop database if exists ${db} with (force)")
+    ro created = test_must_sql(root, "create database ${db}")
+    ro admin = test_admin_on(db)
+    match test_migrate(admin) {
+        Ok(done) => ()
+        Err(f) => panic("test setup: the migration failed: ${f.message} [${f.sqlstate}]")
+    }
+    ro gone = test_must_sql(root, "drop role if exists ${role}")
+    ro made = test_must_sql(root, "create role ${role} login password '${test_app_password()}' in role crew_app")
+    {
+        name: db, admin, role,
+        app: { host: "127.0.0.1", port: test_port(), database: db, user: role, password: test_app_password() }
+    }
+}
+
+/// Drop the database and the role of a test.
+export fn drop_test_db(db TestDb) -> () {
+    ro root = test_admin_on("postgres")
+    ro dropped = test_must_sql(root, "drop database if exists ${db.name} with (force)")
+    ro gone = test_must_sql(root, "drop role if exists ${db.role}")
+}
+
+fn put(mut o JsonObject, key str, value JsonValue) -> () {
+    ro replaced = o.insert(key, value)
+}
+
+/// A line of the journal in the format of the engine (`journal_line`), written here so that the module does not
+/// need the engine: the trace `t1-s`, the cause `input-<step>`, the kind and the text as given.
+export fn test_line(step int, kind str, text str) -> str {
+    mut o = JsonObject.new()
+    put(o, "trace", JsonValue.str("t1-s"))
+    put(o, "step", JsonValue.int(step))
+    put(o, "cause", JsonValue.str("input-${step}"))
+    put(o, "state", JsonValue.str("Idle"))
+    put(o, "request", JsonValue.str(""))
+    put(o, "at", JsonValue.int(1000 + step))
+    put(o, "kind", JsonValue.str(kind))
+    put(o, "text", JsonValue.str(text))
+    JsonValue.object(o).to_str()
+}
+
+/// A small snapshot (a JSON object) of a step.
+export fn test_snap(step int, note str) -> str {
+    mut o = JsonObject.new()
+    put(o, "step", JsonValue.int(step))
+    put(o, "note", JsonValue.str(note))
+    JsonValue.object(o).to_str()
+}

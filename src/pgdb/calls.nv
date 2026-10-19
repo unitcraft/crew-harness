@@ -1,0 +1,132 @@
+// calls.nv - the calls of the application to PostgreSQL on the driver `nova-postgres` (task 098): the two functions of
+// the schema (`crew.save_step`, `crew.load`) and, for the operator and the tests, the migration and a plain query.
+//
+// There is no layer over databases here, and no pool: one call is one connection (connect, one query, close; the socket
+// loop over the pure `Session` of the driver is in wire.nv). The driver is plaintext only, so `PgConfig.check` allows a
+// local host alone. Parameters go as text with the extended
+// protocol (`$1`, `$2`...), so no text of a session or of a line is ever glued into SQL. A fault never contains the
+// password: the messages come from the server and from the driver, which do not know it.
+module crew_harness.pgdb
+
+import std.encoding.json.{Json}
+import postgres.{PgEvent, ParamValue}
+
+/// PgFault: a failed call. `sqlstate` is the SQLSTATE of a server error (`CH001`: the rule of the step, `CH002`: a repeat
+/// that differs, `42501`: no right...), "" for a failure of the connection, the protocol or the configuration.
+export type PgFault { sqlstate str, message str }
+
+/// Loaded: the last snapshot of a session (`step`, `snapshot` as JSON text) and the whole journal of it, one JSON object
+/// per line, in the order of writing.
+export type Loaded { step int, snapshot str, journal []str }
+
+// The rows of the answer as text; the first error of the server is the result.
+fn rows_of(events []PgEvent) -> Result[[][]str, PgFault] {
+    mut rows [][]str = []
+    for ev in events {
+        match ev {
+            Row { values } => {
+                mut cols = []str.new()
+                mut i = 0
+                while i < values.len() {
+                    match values[i].data {
+                        Some(bytes) => match bytes.to_str() {
+                            Ok(t) => cols.push(t)
+                            Err(e) => return Err(PgFault { sqlstate: "", message: "a value of the answer is not UTF-8" })
+                        }
+                        None => cols.push("")
+                    }
+                    i += 1
+                }
+                rows.push(cols)
+            }
+            QueryError { sqlstate, message } => return Err(PgFault { sqlstate, message })
+            _ => ()
+        }
+    }
+    Ok(rows)
+}
+
+fn params_of(values []Option[str]) -> []ParamValue {
+    mut out = []ParamValue.new()
+    for v in values {
+        match v {
+            Some(text) => out.push(ParamValue.text(text))
+            None => out.push(ParamValue.null())
+        }
+    }
+    out
+}
+
+// One connection, one query (simple protocol, or extended when `extended`), close. The configuration is checked first.
+fn run(cfg PgConfig, sql str, params []Option[str], extended bool) Net -> Result[[][]str, PgFault] {
+    match cfg.check() {
+        Ok(done) => ()
+        Err(e) => return Err(PgFault { sqlstate: "", message: "bad configuration: ${e}" })
+    }
+    ro events = round(cfg, sql, params_of(params), extended)?
+    rows_of(events)
+}
+
+fn lines_json(lines []str) -> str {
+    mut out = "["
+    mut first = true
+    for line in lines {
+        out = if first { "${out}${line}" } else { "${out},${line}" }
+        first = false
+    }
+    "${out}]"
+}
+
+/// `crew.save_step`: the snapshot (JSON text; None - none, only for lines added to the committed step) and the lines of
+/// the journal of one step in ONE transaction. `first_seq` Some(0) numbers the lines from 0, so a repeat of the call is
+/// harmless; None puts the lines after the lines the step has. Returns the step. A step that is not the current one or the
+/// next one is the fault `CH001`, a repeat that differs is `CH002`; nothing is written then.
+export fn pg_save_step(cfg PgConfig, session str, step int, snapshot Option[str], lines []str, first_seq Option[int]) Net -> Result[int, PgFault] {
+    ro seq = match first_seq {
+        Some(n) => Some("${n}")
+        None => None
+    }
+    ro params = [Some(session), Some("${step}"), snapshot, Some(lines_json(lines)), seq]
+    ro rows = run(cfg, "select crew.save_step($1, $2::integer, $3::jsonb, $4::jsonb, $5::integer)", params, true)?
+    if rows.len() != 1 { return Err(PgFault { sqlstate: "", message: "save_step returned ${rows.len()} rows" }) }
+    match rows[0][0].to_int() {
+        Ok(n) => Ok(n)
+        Err(e) => Err(PgFault { sqlstate: "", message: "save_step returned a value that is not a step" })
+    }
+}
+
+/// `crew.load`: the last snapshot of the session and its whole journal; None - the session is unknown.
+export fn pg_load(cfg PgConfig, session str) Net -> Result[Option[Loaded], PgFault] {
+    ro rows = run(cfg, "select step, snapshot::text, journal::text from crew.load($1)", [Some(session)], true)?
+    if rows.len() == 0 { return Ok(None) }
+    ro step = match rows[0][0].to_int() {
+        Ok(n) => n
+        Err(e) => return Err(PgFault { sqlstate: "", message: "load returned a step that is not a number" })
+    }
+    ro parsed = match Json.parse(rows[0][2]) {
+        Ok(v) => v
+        Err(e) => return Err(PgFault { sqlstate: "", message: "load returned a journal that is not JSON" })
+    }
+    ro items = match parsed.array() {
+        Some(a) => a
+        None => return Err(PgFault { sqlstate: "", message: "load returned a journal that is not an array" })
+    }
+    mut journal = []str.new()
+    for item in items { journal.push(item.to_str()) }
+    Ok(Some(Loaded { step, snapshot: rows[0][1], journal }))
+}
+
+/// Run a migration script (`src/pg/schema.sql`) as one batch of the simple protocol: one implicit transaction, so a script
+/// that fails changes nothing. The configuration must be the owner of the database, not the application role.
+export fn pg_migrate(cfg PgConfig, sql str) Net -> Result[(), PgFault] {
+    ro none []Option[str] = []
+    ro rows = run(cfg, sql, none, false)?
+    Ok(())
+}
+
+/// One query with the simple protocol; the rows come back as text, NULL as "". For the operator and the tests: the
+/// application itself calls only `pg_save_step` and `pg_load`.
+export fn pg_rows(cfg PgConfig, sql str) Net -> Result[[][]str, PgFault] {
+    ro none []Option[str] = []
+    run(cfg, sql, none, false)
+}

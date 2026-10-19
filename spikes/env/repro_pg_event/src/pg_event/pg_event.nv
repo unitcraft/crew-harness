@@ -1,0 +1,20 @@
+module repro_pg_event.pg_event
+
+// Oracle 0.1.0: a user record named `Event` (the engine of CrewHarness has one) and the module `postgres.pgnet` of the
+// driver nova-postgres in the SAME program: the file `pgnet/listener.nv` of the driver writes the variant constructor
+// `ListenerMsg.Event { event: ... }`, and the compiler reads it as a record literal of the user's `Event`:
+//   error: [E_MISSING_FIELD_IN_LITERAL] record literal `Event{ ... }` does not initialise fields: id, trace, ...
+// at the driver's own file (listener.nv:150). Without the user's `Event` the driver compiles (it has its own tests).
+// A variant name and an unrelated record name share one table in the unit (see also the driver's repro-local/record_enum_tag).
+// CrewHarness does not import `postgres.pgnet`: it repeats the socket loop (60 lines) over the pure core `postgres.Session`.
+// Setup: `nova update` once (it fetches the driver from git), then `nova test src/pg_event`.
+// Expected: PASS. Actual: CODEGEN-FAIL E_MISSING_FIELD_IN_LITERAL in the driver's file.
+
+import postgres.pgnet.{connect}
+
+export type Event { id str, kind str }
+
+test "a user record named Event next to postgres.pgnet" {
+    ro e = Event { id: "a", kind: "b" }
+    assert(e.id == "a")
+}

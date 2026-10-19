@@ -1,0 +1,175 @@
+// handlers_test.nv - the handlers of Journal and Store on a real PostgreSQL, alone (the engine over them is in
+// pg_engine_test.nv): lines wait for the snapshot, marks go at once, death between the journal write and the snapshot save.
+module crew_harness.pgstore
+
+import crew_harness.engine.{Journal, Store, JournalEntry, Snapshot}
+import crew_harness.pgdb.{PgFault, new_test_db, drop_test_db, test_count, test_snap}
+import std.net.{real_net}
+
+fn entry_at(step int, kind str, text str) -> JournalEntry => {
+    trace: "t1-s", step, cause: "input-${step}", state: "Idle", request: "", at: 1000 + step, kind, text
+}
+
+fn unit_ok(result Result[(), PgFault]) -> bool {
+    match result {
+        Ok(done) => true
+        Err(f) => false
+    }
+}
+
+fn write_lines(mut world PgWorld, entries []JournalEntry) -> () {
+    with Journal = pg_journal(world) {
+        for entry in entries { Journal.write(entry) }
+    }
+}
+
+fn save_snapshot(mut world PgWorld, id str, snapshot Snapshot) -> () {
+    with Store = pg_store(world) {
+        Store.save(id, snapshot)
+    }
+}
+
+fn read_all(mut world PgWorld) -> []JournalEntry {
+    with Journal = pg_journal(world) {
+        Journal.read_all()
+    }
+}
+
+fn load_snapshot(mut world PgWorld, id str) -> Option[Snapshot] {
+    with Store = pg_store(world) {
+        Store.load(id)
+    }
+}
+
+fn snap(step int, note str) -> Snapshot => { step, data: test_snap(step, note) }
+
+fn texts_of(entries []JournalEntry) -> []str {
+    mut out = []str.new()
+    for entry in entries { out.push(entry.text) }
+    out
+}
+
+test "handlers: lines of a step wait for the snapshot and all arrive with it, in the order of writing" {
+    ro db = new_test_db("h_wait")
+    mut world = PgWorld.open(db.app, "s-1")
+    write_lines(world, [entry_at(1, "start", "one"), entry_at(1, "note", "two")])
+    assert(read_all(world).len() == 0)
+    assert(test_count(db.admin, "select count(*) from crew.machine_journal") == 0)
+    save_snapshot(world, "s-1", snap(1, "x"))
+    ro all = read_all(world)
+    assert(all.len() == 2)
+    assert(all[0].text == "one" && all[1].text == "two")
+    assert(all[0].step == 1)
+    assert(test_count(db.admin, "select count(*) from crew.machine_snapshot") == 1)
+    drop_test_db(db)
+}
+
+test "handlers: a mark of the committed step goes to the journal at once and stands after the lines of the step" {
+    ro db = new_test_db("h_mark")
+    mut world = PgWorld.open(db.app, "s-1")
+    write_lines(world, [entry_at(1, "start", "a")])
+    save_snapshot(world, "s-1", snap(1, "x"))
+    write_lines(world, [entry_at(1, "sent", "mark")])
+    assert(test_count(db.admin, "select count(*) from crew.machine_journal") == 2)
+    write_lines(world, [entry_at(2, "event", "next step")])
+    save_snapshot(world, "s-1", snap(2, "y"))
+    write_lines(world, [entry_at(2, "sent", "mark 2")])
+    ro all = read_all(world)
+    assert(texts_of(all)[0] == "a" && texts_of(all)[1] == "mark")
+    assert(texts_of(all)[2] == "next step" && texts_of(all)[3] == "mark 2")
+    drop_test_db(db)
+}
+
+test "handlers: a new world over the same session loads the snapshot and then puts marks on the right step" {
+    ro db = new_test_db("h_reload")
+    mut first = PgWorld.open(db.app, "s-1")
+    write_lines(first, [entry_at(1, "start", "a")])
+    save_snapshot(first, "s-1", snap(1, "x"))
+    // the process dies; another one starts
+    mut second = PgWorld.open(db.app, "s-1")
+    match load_snapshot(second, "s-1") {
+        Some(s) => {
+            assert(s.step == 1)
+            assert(s.data.contains("x"))
+        }
+        None => assert(false)
+    }
+    write_lines(second, [entry_at(1, "sent", "mark after the restart")])
+    ro all = read_all(second)
+    assert(all.len() == 2)
+    assert(all[1].text == "mark after the restart")
+    drop_test_db(db)
+}
+
+test "handlers: a session that was never saved loads as None and has an empty journal" {
+    ro db = new_test_db("h_none")
+    mut world = PgWorld.open(db.app, "s-1")
+    assert(load_snapshot(world, "s-1") == None)
+    assert(read_all(world).len() == 0)
+    drop_test_db(db)
+}
+
+test "death between the journal write and the snapshot save: the lines of the step are in no table and no process sees them" {
+    ro db = new_test_db("h_death")
+    mut world = PgWorld.open(db.app, "s-1")
+    write_lines(world, [entry_at(1, "start", "committed")])
+    save_snapshot(world, "s-1", snap(1, "x"))
+    // the step 2 writes its lines ... and the process dies before the snapshot is saved
+    write_lines(world, [entry_at(2, "event", "lost 1"), entry_at(2, "note", "lost 2")])
+    mut after = PgWorld.open(db.app, "s-1")
+    match load_snapshot(after, "s-1") {
+        Some(s) => assert(s.step == 1)
+        None => assert(false)
+    }
+    ro all = read_all(after)
+    assert(all.len() == 1)
+    assert(all[0].text == "committed")
+    assert(test_count(db.admin, "select count(*) from crew.machine_journal where step = 2") == 0)
+    // the step 2 is made again by the next process and passes
+    write_lines(after, [entry_at(2, "event", "again")])
+    save_snapshot(after, "s-1", snap(2, "y"))
+    assert(read_all(after).len() == 2)
+    drop_test_db(db)
+}
+
+test "handlers: a commit that breaks the rule of the step is a fault, and the lines stay out of the table" {
+    ro db = new_test_db("h_fault")
+    mut world = PgWorld.open(db.app, "s-1")
+    write_lines(world, [entry_at(1, "start", "a")])
+    save_snapshot(world, "s-1", snap(1, "x"))
+    // the lines of step 3 with the snapshot of step 3: a number is skipped
+    ro skip = with Net = real_net() {
+        pg_write(world, entry_at(3, "event", "skipped"))
+    }
+    assert(unit_ok(skip))
+    ro committed = with Net = real_net() {
+        pg_commit(world, "s-1", snap(3, "z"))
+    }
+    match committed {
+        Ok(done) => assert(false)
+        Err(f) => assert(f.sqlstate == "CH001")
+    }
+    assert(test_count(db.admin, "select count(*) from crew.machine_journal") == 1)
+    assert(test_count(db.admin, "select count(*) from crew.machine_snapshot") == 1)
+    drop_test_db(db)
+}
+
+test "handlers: a line of a step older than the committed one, a line of another step than the snapshot's, and another session id are faults" {
+    ro db = new_test_db("h_misuse")
+    mut world = PgWorld.open(db.app, "s-1")
+    write_lines(world, [entry_at(1, "start", "a")])
+    save_snapshot(world, "s-1", snap(1, "x"))
+    write_lines(world, [entry_at(2, "event", "b")])
+    save_snapshot(world, "s-1", snap(2, "y"))
+    ro old = with Net = real_net() { pg_write(world, entry_at(1, "sent", "late")) }
+    assert(!unit_ok(old))
+    ro stray = with Net = real_net() {
+        ro queued = pg_write(world, entry_at(3, "event", "c"))
+        pg_commit(world, "s-1", snap(4, "w"))
+    }
+    assert(!unit_ok(stray))
+    ro other = with Net = real_net() { pg_commit(world, "s-2", snap(3, "z")) }
+    assert(!unit_ok(other))
+    assert(test_count(db.admin, "select count(*) from crew.machine_journal") == 2)
+    drop_test_db(db)
+}

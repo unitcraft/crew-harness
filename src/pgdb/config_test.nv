@@ -1,0 +1,79 @@
+// config_test.nv - the connection settings as a value: a JSON text, the checks, no password in the text.
+// The settings file and the environment are in src/pg/conf.
+module crew_harness.pgdb
+
+fn full_text() -> str => "{\"host\":\"localhost\",\"port\":55432,\"database\":\"crew_x\",\"user\":\"crew_login\",\"password\":\"file-test-pw\"}"
+
+fn must_config(text str) -> PgConfig {
+    match parse_pg_config(text) {
+        Ok(c) => c
+        Err(e) => panic("config: ${e}")
+    }
+}
+
+fn check_fails(c PgConfig, word str) -> bool {
+    match c.check() {
+        Ok(done) => false
+        Err(e) => e.contains(word)
+    }
+}
+
+test "config: every key of the text is taken, a missing key has its default" {
+    ro c = must_config(full_text())
+    assert(c.host == "localhost")
+    assert(c.port == 55432)
+    assert(c.database == "crew_x")
+    assert(c.user == "crew_login")
+    assert(c.password == "file-test-pw")
+    ro d = must_config("{\"password\":\"p\"}")
+    assert(d.host == "127.0.0.1")
+    assert(d.port == 5432)
+    assert(d.database == "crew")
+    assert(d.user == "crew_app")
+}
+
+test "config: a text that is not a JSON object, or a key of the wrong type, is an error" {
+    for text in ["", "not json", "[1,2]", "{\"port\":\"5432\"}", "{\"host\":5}", "{\"port\":1.5}"] {
+        match parse_pg_config(text) {
+            Ok(c) => assert(false)
+            Err(e) => assert(e.byte_len() > 0)
+        }
+    }
+}
+
+test "config: the check wants a password, a local host, a port in range and names" {
+    ro good = must_config(full_text())
+    match good.check() {
+        Ok(done) => ()
+        Err(e) => assert(false)
+    }
+    assert(check_fails(must_config("{\"host\":\"db.example.org\",\"password\":\"p\"}"), "local"))
+    assert(check_fails(must_config("{\"host\":\"10.0.0.5\",\"password\":\"p\"}"), "local"))
+    assert(check_fails(must_config("{\"host\":\"localhost.example.org\",\"password\":\"p\"}"), "local"))
+    assert(check_fails(must_config("{\"password\":\"\"}"), "password"))
+    assert(check_fails(must_config("{}"), "password"))
+    assert(check_fails(must_config("{\"port\":0,\"password\":\"p\"}"), "port"))
+    assert(check_fails(must_config("{\"port\":70000,\"password\":\"p\"}"), "port"))
+    assert(check_fails(must_config("{\"user\":\"\",\"password\":\"p\"}"), "user"))
+    assert(check_fails(must_config("{\"database\":\"\",\"password\":\"p\"}"), "database"))
+}
+
+test "config: localhost in its three spellings is local" {
+    for host in ["127.0.0.1", "localhost", "::1"] {
+        ro c PgConfig = { host, port: 5432, database: "crew", user: "crew_app", password: "p" }
+        match c.check() {
+            Ok(done) => ()
+            Err(e) => assert(false)
+        }
+    }
+}
+
+test "config: the description has the user, the host, the port and the database and never the password" {
+    ro c = must_config(full_text())
+    ro text = c.describe()
+    assert(text.contains("crew_login"))
+    assert(text.contains("localhost"))
+    assert(text.contains("55432"))
+    assert(text.contains("crew_x"))
+    assert(!text.contains("file-test-pw"))
+}

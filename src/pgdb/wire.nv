@@ -1,0 +1,107 @@
+// wire.nv - one connection to PostgreSQL: a socket and the pure `Session` of the driver `nova-postgres` (task 098).
+//
+// Why not `postgres.pgnet`, the adapter of the driver itself: its module also holds `listener.nv`, where the variant
+// `ListenerMsg.Event { event: ... }` is read as a record literal of the type `Event` of the ENGINE when both are in one
+// program (E_MISSING_FIELD_IN_LITERAL, see src/pg/README.md and spikes/env/repro_engine). The handlers of the engine and the
+// driver must be in one program, so the socket loop of `pgnet/conn.nv` (about sixty lines: write what the session owes,
+// read a chunk, feed it, collect the events up to ReadyForQuery) is repeated here over the pure core, which has no such clash.
+// Plaintext only, as `pgnet`: `PgConfig.check` allows a local host alone.
+module crew_harness.pgdb
+
+import std.net.{TcpStream}
+import std.encoding.base64.{Base64}
+import std.prelude.effects.{real_random}
+import postgres.{Session, SessionPhase, PgEvent, ParamValue, PostgresError, Ready}
+
+// The client nonce of SCRAM: 18 bytes of the secure randomness of the system (the default handler of `Random`, named here
+// so that the callers need no `Random` in their signatures).
+fn nonce_bytes() -> []u8 {
+    with Random = real_random() { Random.bytes(18) }
+}
+
+fn stop_fault(message str) -> PgFault => { sqlstate: "", message }
+
+// A failure of the session (a frame that does not parse, a rejected authentication): never has the password in it.
+fn session_fault(e PostgresError) -> PgFault => { sqlstate: "", message: e.to_str() }
+
+// Write what the session owes, read a chunk, feed it, collect the events; stop at the ReadyForQuery that closes the answer.
+fn pump(mut stream TcpStream, mut session Session) -> Result[[]PgEvent, PgFault] {
+    mut events []PgEvent = []PgEvent.new()
+    while true {
+        ro out = session.drain()
+        if out.len() > 0 {
+            match stream.write_all(out) {
+                Ok(()) => ()
+                Err(e) => return Err(stop_fault("network: ${e.to_str()}"))
+            }
+        }
+        ro chunk = match stream.read_bytes(65536) {
+            Ok(b) => b
+            Err(e) => return Err(stop_fault("network: ${e.to_str()}"))
+        }
+        if chunk.len() == 0 { return Err(stop_fault("network: the server closed the connection")) }
+        ro evs = match session.feed(chunk) {
+            Ok(e) => e
+            Err(e) => return Err(session_fault(e))
+        }
+        mut i = 0
+        while i < evs.len() {
+            match evs[i] {
+                Ready { .. } => {
+                    return Ok(events)
+                }
+                _ => {
+                    events.push(evs[i])
+                    i += 1
+                }
+            }
+        }
+    }
+    Ok(events)
+}
+
+// The first error of the server among the events, if there is one.
+fn first_error(events []PgEvent) -> Option[PgFault] {
+    for ev in events {
+        match ev {
+            QueryError { sqlstate, message } => return Some(PgFault { sqlstate, message })
+            _ => ()
+        }
+    }
+    None
+}
+
+/// One round on a new connection: connect, authenticate, run `sql` (the simple protocol, or the extended one with `params`
+/// when `extended`), close. The events of the answer up to its ReadyForQuery. A server error in the start-up phase (no
+/// right to log in, no database) is the fault; a server error of the query stays among the events.
+fn round(cfg PgConfig, sql str, params []ParamValue, extended bool) Net -> Result[[]PgEvent, PgFault] {
+    consume stream = match TcpStream.connect("${cfg.host}:${cfg.port}") {
+        Ok(consume s) => s
+        Err(e) => return Err(stop_fault("cannot connect to ${cfg.describe()}: ${e.to_str()}"))
+    }
+    consume session = Session.new(cfg.user, cfg.password, cfg.database, Base64.encode(nonce_bytes()))
+    ro started = pump(stream, session)?
+    match first_error(started) {
+        Some(f) => return Err(f)
+        None => ()
+    }
+    if session.phase() != SessionPhase.Ready {
+        return Err(stop_fault("the connection left the start-up without ReadyForQuery"))
+    }
+    if extended {
+        match session.query_extended(sql, [], params, []) {
+            Ok(()) => ()
+            Err(e) => return Err(session_fault(e))
+        }
+    } else {
+        match session.query(sql) {
+            Ok(()) => ()
+            Err(e) => return Err(session_fault(e))
+        }
+    }
+    ro answer = pump(stream, session)?
+    // polite goodbye: Terminate; a failure of it changes nothing
+    ro farewell = session.close()
+    ro sent = stream.write_all(farewell)
+    Ok(answer)
+}

@@ -11,10 +11,15 @@
 # an agent); tests are peer files `*_test.nv` beside the sources. Build: Nova Oracle 0.1.0,
 # Clang, see `spikes/env/README.md`; engine and its tests: `src/engine/README.md`.
 #
-# No dependencies yet: the engine uses only `std`. `nova.lock.toml` fixes the build.
+# One dependency: the PostgreSQL driver `postgres` (nova-postgres, a foreign package, read only) for the
+# PostgreSQL handlers of `Journal` and `Store` in `src/pg/` (task 098). The rest uses only `std`.
+# `nova.lock.toml` fixes the build.
 
 [lib]
 src = "src"
+
+[dependencies]
+postgres = { git = "https://github.com/nv-lang/nova-postgres", version = "0.1" }
 
 [package]
 name = "crew_harness"

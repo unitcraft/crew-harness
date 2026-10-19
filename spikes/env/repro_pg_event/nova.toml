@@ -1,0 +1,9 @@
+[package]
+name = "repro_pg_event"
+version = "0.1.0"
+
+[lib]
+src = "src"
+
+[dependencies]
+postgres = { git = "https://github.com/nv-lang/nova-postgres", version = "0.1" }

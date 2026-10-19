@@ -1,0 +1,373 @@
+// db_test.nv - the SQL side on a real PostgreSQL: save_step and load, the rules of the step, one transaction,
+// the rights of the application role, the migration.
+module crew_harness.pgdb
+
+import std.encoding.json.{Json}
+import std.net.{real_net}
+
+// ----- helpers -----
+
+// Passwords that are not the right one, made from the right one so that no password is written in this file.
+fn wrong_password() -> str => "${test_app_password()}-wrong"
+
+fn never_printed() -> str => "${test_app_password()}-unused"
+
+fn line_at(step int, text str) -> str => test_line(step, "note", text)
+
+fn snap_at(step int, note str) -> str => test_snap(step, note)
+
+fn save_step(cfg PgConfig, session str, step int, snapshot str, lines []str) -> Result[int, PgFault] {
+    with Net = real_net() { pg_save_step(cfg, session, step, Some(snapshot), lines, Some(0)) }
+}
+
+fn load_session(cfg PgConfig, session str) -> Result[Option[Loaded], PgFault] {
+    with Net = real_net() { pg_load(cfg, session) }
+}
+
+fn loaded_or_stop(cfg PgConfig, session str) -> Loaded {
+    match load_session(cfg, session) {
+        Ok(found) => match found {
+            Some(l) => l
+            None => panic("no session ${session}")
+        }
+        Err(f) => panic("load: ${f.message} [${f.sqlstate}]")
+    }
+}
+
+fn is_error_with(result Result[int, PgFault], sqlstate str) -> bool {
+    match result {
+        Ok(step) => false
+        Err(f) => f.sqlstate == sqlstate
+    }
+}
+
+fn is_ok(result Result[int, PgFault]) -> bool {
+    match result {
+        Ok(step) => true
+        Err(f) => false
+    }
+}
+
+// The "text" field of a journal line.
+fn text_of_line(line str) -> str {
+    match Json.parse(line) {
+        Ok(v) => match v.object() {
+            Some(o) => match o.get("text") {
+                Some(t) => t.str() ?? "<no text>"
+                None => "<no text>"
+            }
+            None => "<not an object>"
+        }
+        Err(e) => "<not json>"
+    }
+}
+
+// ----- the migration -----
+
+test "migration: runs again over a database with data and changes nothing" {
+    ro db = new_test_db("migrate")
+    assert(is_ok(save_step(db.app, "s-1", 1, snap_at(1, "a"), [line_at(1, "x")])))
+    match test_migrate(db.admin) {
+        Ok(done) => ()
+        Err(f) => assert(false)
+    }
+    match test_migrate(db.admin) {
+        Ok(done) => ()
+        Err(f) => assert(false)
+    }
+    ro l = loaded_or_stop(db.app, "s-1")
+    assert(l.step == 1)
+    assert(l.journal.len() == 1)
+    assert(test_count(db.admin, "select count(*) from crew.machine_snapshot") == 1)
+    drop_test_db(db)
+}
+
+test "migration: the tables and the two functions are in the schema crew" {
+    ro db = new_test_db("objects")
+    assert(test_count(db.admin, "select count(*) from pg_tables where schemaname = 'crew'") == 2)
+    assert(test_count(db.admin, "select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'crew' and p.proname in ('save_step', 'load')") == 2)
+    drop_test_db(db)
+}
+
+// ----- save and load -----
+
+test "load: a session nobody saved is None" {
+    ro db = new_test_db("unknown")
+    match load_session(db.app, "nobody") {
+        Ok(found) => match found {
+            Some(l) => assert(false)
+            None => assert(true)
+        }
+        Err(f) => assert(false)
+    }
+    drop_test_db(db)
+}
+
+test "save and load: the last snapshot comes back with the journal of the session in the order of writing" {
+    ro db = new_test_db("saveload")
+    assert(is_ok(save_step(db.app, "s-1", 1, snap_at(1, "first"), [line_at(1, "a"), line_at(1, "b")])))
+    assert(is_ok(save_step(db.app, "s-1", 2, snap_at(2, "second"), [line_at(2, "c")])))
+    ro l = loaded_or_stop(db.app, "s-1")
+    assert(l.step == 2)
+    assert(l.snapshot.contains("second"))
+    assert(!l.snapshot.contains("first"))
+    assert(l.journal.len() == 3)
+    mut texts = []str.new()
+    for line in l.journal { texts.push(text_of_line(line)) }
+    assert(texts[0] == "a")
+    assert(texts[1] == "b")
+    assert(texts[2] == "c")
+    drop_test_db(db)
+}
+
+test "save and load: two sessions are separate" {
+    ro db = new_test_db("two")
+    assert(is_ok(save_step(db.app, "s-a", 1, snap_at(1, "A"), [line_at(1, "only a")])))
+    assert(is_ok(save_step(db.app, "s-b", 1, snap_at(1, "B"), [line_at(1, "only b"), line_at(1, "b too")])))
+    assert(is_ok(save_step(db.app, "s-a", 2, snap_at(2, "A2"), [])))
+    ro a = loaded_or_stop(db.app, "s-a")
+    ro b = loaded_or_stop(db.app, "s-b")
+    assert(a.step == 2)
+    assert(b.step == 1)
+    assert(a.journal.len() == 1)
+    assert(b.journal.len() == 2)
+    assert(b.snapshot.contains("B"))
+    drop_test_db(db)
+}
+
+test "UTF-8: Cyrillic, quotes, a line break and a letter of four bytes go through the snapshot and the journal as they are" {
+    ro db = new_test_db("utf8")
+    ro text = "Привет, \"мир\"\nвторая строка, Ёжик, щётка 😀"
+    assert(is_ok(save_step(db.app, "s-1", 1, "{\"step\":1,\"note\":\"Отлично, спасибо\"}", [line_at(1, text)])))
+    ro l = loaded_or_stop(db.app, "s-1")
+    assert(l.snapshot.contains("Отлично, спасибо"))
+    assert(l.journal.len() == 1)
+    assert(text_of_line(l.journal[0]) == text)
+    // and in the table itself, not as \u escapes
+    ro raw = test_must_sql(db.admin, "select entry->>'text' from crew.machine_journal")
+    assert(raw[0][0] == text)
+    drop_test_db(db)
+}
+
+// ----- the rule of the step -----
+
+test "step: the next step passes, the same step again with the same snapshot and lines is harmless and adds no line" {
+    ro db = new_test_db("repeat")
+    ro lines = [line_at(1, "a"), line_at(1, "b")]
+    assert(is_ok(save_step(db.app, "s-1", 1, snap_at(1, "x"), lines)))
+    assert(is_ok(save_step(db.app, "s-1", 1, snap_at(1, "x"), lines)))
+    assert(is_ok(save_step(db.app, "s-1", 1, snap_at(1, "x"), lines)))
+    assert(test_count(db.admin, "select count(*) from crew.machine_journal") == 2)
+    assert(test_count(db.admin, "select count(*) from crew.machine_snapshot") == 1)
+    assert(is_ok(save_step(db.app, "s-1", 2, snap_at(2, "y"), [line_at(2, "c")])))
+    assert(is_ok(save_step(db.app, "s-1", 2, snap_at(2, "y"), [line_at(2, "c")])))
+    assert(test_count(db.admin, "select count(*) from crew.machine_journal") == 3)
+    drop_test_db(db)
+}
+
+test "step: the first step of a session is 1, a session cannot begin with another number" {
+    ro db = new_test_db("first")
+    assert(is_error_with(save_step(db.app, "s-1", 2, snap_at(2, "x"), [line_at(2, "a")]), "CH001"))
+    assert(!is_ok(save_step(db.app, "s-1", 0, snap_at(0, "x"), [])))
+    assert(test_count(db.admin, "select count(*) from crew.machine_snapshot") == 0)
+    assert(test_count(db.admin, "select count(*) from crew.machine_journal") == 0)
+    drop_test_db(db)
+}
+
+test "step: skipping a number is an error and writes nothing" {
+    ro db = new_test_db("skip")
+    assert(is_ok(save_step(db.app, "s-1", 1, snap_at(1, "x"), [line_at(1, "a")])))
+    assert(is_error_with(save_step(db.app, "s-1", 3, snap_at(3, "z"), [line_at(3, "lost")]), "CH001"))
+    ro l = loaded_or_stop(db.app, "s-1")
+    assert(l.step == 1)
+    assert(l.journal.len() == 1)
+    assert(test_count(db.admin, "select count(*) from crew.machine_journal") == 1)
+    // the right number still works afterwards
+    assert(is_ok(save_step(db.app, "s-1", 2, snap_at(2, "y"), [line_at(2, "b")])))
+    drop_test_db(db)
+}
+
+test "step: going back to a smaller number is an error and writes nothing" {
+    ro db = new_test_db("back")
+    assert(is_ok(save_step(db.app, "s-1", 1, snap_at(1, "x"), [line_at(1, "a")])))
+    assert(is_ok(save_step(db.app, "s-1", 2, snap_at(2, "y"), [line_at(2, "b")])))
+    assert(is_ok(save_step(db.app, "s-1", 3, snap_at(3, "z"), [line_at(3, "c")])))
+    assert(is_error_with(save_step(db.app, "s-1", 1, snap_at(1, "x"), [line_at(1, "a")]), "CH001"))
+    assert(is_error_with(save_step(db.app, "s-1", 2, snap_at(2, "y"), [line_at(2, "b")]), "CH001"))
+    ro l = loaded_or_stop(db.app, "s-1")
+    assert(l.step == 3)
+    assert(l.journal.len() == 3)
+    drop_test_db(db)
+}
+
+test "step: the same step with another snapshot or another line is an error and changes nothing" {
+    ro db = new_test_db("differs")
+    assert(is_ok(save_step(db.app, "s-1", 1, snap_at(1, "x"), [line_at(1, "a")])))
+    assert(is_error_with(save_step(db.app, "s-1", 1, snap_at(1, "OTHER"), [line_at(1, "a")]), "CH002"))
+    assert(is_error_with(save_step(db.app, "s-1", 1, snap_at(1, "x"), [line_at(1, "OTHER")]), "CH002"))
+    ro l = loaded_or_stop(db.app, "s-1")
+    assert(l.snapshot.contains("x"))
+    assert(!l.snapshot.contains("OTHER"))
+    assert(l.journal.len() == 1)
+    drop_test_db(db)
+}
+
+test "lines of a committed step: appended after the lines it has, in the order of the calls, with no snapshot" {
+    ro db = new_test_db("append")
+    assert(is_ok(save_step(db.app, "s-1", 1, snap_at(1, "x"), [line_at(1, "a"), line_at(1, "b")])))
+    assert(is_ok(save_step(db.app, "s-1", 2, snap_at(2, "y"), [line_at(2, "c")])))
+    ro first = with Net = real_net() { pg_save_step(db.app, "s-1", 2, None, [line_at(2, "mark 1")], None) }
+    ro second = with Net = real_net() { pg_save_step(db.app, "s-1", 2, None, [line_at(2, "mark 2"), line_at(2, "mark 3")], None) }
+    assert(is_ok(first))
+    assert(is_ok(second))
+    ro l = loaded_or_stop(db.app, "s-1")
+    assert(l.step == 2)
+    assert(l.journal.len() == 6)
+    mut texts = []str.new()
+    for line in l.journal { texts.push(text_of_line(line)) }
+    assert(texts[0] == "a" && texts[1] == "b" && texts[2] == "c")
+    assert(texts[3] == "mark 1" && texts[4] == "mark 2" && texts[5] == "mark 3")
+    // lines without a snapshot are for the current step only: a new step needs its snapshot, an old one is closed
+    ro no_snapshot = with Net = real_net() { pg_save_step(db.app, "s-1", 3, None, [line_at(3, "x")], None) }
+    ro old_step = with Net = real_net() { pg_save_step(db.app, "s-1", 1, None, [line_at(1, "late")], None) }
+    assert(!is_ok(no_snapshot))
+    assert(!is_ok(old_step))
+    assert(loaded_or_stop(db.app, "s-1").journal.len() == 6)
+    drop_test_db(db)
+}
+
+// ----- one transaction -----
+
+test "one transaction: a line that cannot be stored takes the snapshot of the step down with it" {
+    ro db = new_test_db("atomic")
+    assert(is_ok(save_step(db.app, "s-1", 1, snap_at(1, "x"), [line_at(1, "a")])))
+    // the second line is a number, not an entry: the journal insert fails after the snapshot row was inserted
+    ro bad = with Net = real_net() { pg_save_step(db.app, "s-1", 2, Some(snap_at(2, "y")), [line_at(2, "good"), "5"], Some(0)) }
+    assert(!is_ok(bad))
+    ro l = loaded_or_stop(db.app, "s-1")
+    assert(l.step == 1)
+    assert(l.journal.len() == 1)
+    assert(test_count(db.admin, "select count(*) from crew.machine_snapshot") == 1)
+    assert(test_count(db.admin, "select count(*) from crew.machine_journal") == 1)
+    // the step number 2 is free: the right save passes
+    assert(is_ok(save_step(db.app, "s-1", 2, snap_at(2, "y"), [line_at(2, "good")])))
+    drop_test_db(db)
+}
+
+test "one transaction: a snapshot that cannot be stored takes the lines down with it" {
+    ro db = new_test_db("atomic2")
+    ro bad = with Net = real_net() { pg_save_step(db.app, "s-1", 1, Some("[1,2]"), [line_at(1, "a")], Some(0)) }
+    assert(!is_ok(bad))
+    assert(test_count(db.admin, "select count(*) from crew.machine_snapshot") == 0)
+    assert(test_count(db.admin, "select count(*) from crew.machine_journal") == 0)
+    drop_test_db(db)
+}
+
+test "one transaction: the database itself refuses a line of a step that has no snapshot" {
+    ro db = new_test_db("fk")
+    ro result = test_sql(db.admin, "insert into crew.machine_journal (id, step, seq, entry) values ('s-1', 1, 0, '{}')")
+    match result {
+        Ok(rows) => assert(false)
+        Err(f) => assert(f.sqlstate == "23503")
+    }
+    drop_test_db(db)
+}
+
+// ----- the rights of the application role -----
+
+test "role: the application role cannot read the tables, write them, or create anything in the schema" {
+    ro db = new_test_db("rights")
+    assert(is_ok(save_step(db.app, "s-1", 1, snap_at(1, "x"), [line_at(1, "a")])))
+    for sql in [
+        "select * from crew.machine_snapshot",
+        "select * from crew.machine_journal",
+        "select count(*) from crew.machine_snapshot",
+        "insert into crew.machine_snapshot (id, step, snapshot) values ('s-2', 1, '{}')",
+        "insert into crew.machine_journal (id, step, seq, entry) values ('s-1', 1, 9, '{}')",
+        "update crew.machine_snapshot set step = 9",
+        "delete from crew.machine_journal",
+        "truncate crew.machine_snapshot cascade",
+        "create table crew.extra (a int)"
+    ] {
+        match test_sql(db.app, sql) {
+            Ok(rows) => assert(false)
+            Err(f) => assert(f.sqlstate == "42501")
+        }
+    }
+    assert(test_count(db.admin, "select count(*) from crew.machine_snapshot") == 1)
+    assert(test_count(db.admin, "select count(*) from crew.machine_journal") == 1)
+    drop_test_db(db)
+}
+
+test "role: the application role can run save_step and load, and nothing else of the schema" {
+    ro db = new_test_db("rights2")
+    assert(is_ok(save_step(db.app, "s-1", 1, snap_at(1, "x"), [])))
+    ro rows = test_must_sql(db.app, "select step from crew.load('s-1')")
+    assert(rows.len() == 1)
+    assert(rows[0][0] == "1")
+    drop_test_db(db)
+}
+
+test "role: a login that is not a member of the application role has no access to the schema at all" {
+    ro db = new_test_db("public")
+    ro root = test_admin_on("postgres")
+    ro made = test_must_sql(root, "create role crew_u_stranger login password '${test_app_password()}'")
+    ro stranger PgConfig = { host: "127.0.0.1", port: test_port(), database: db.name, user: "crew_u_stranger", password: test_app_password() }
+    assert(is_error_with(save_step(stranger, "s-1", 1, snap_at(1, "x"), []), "42501"))
+    match load_session(stranger, "s-1") {
+        Ok(found) => assert(false)
+        Err(f) => assert(f.sqlstate == "42501")
+    }
+    ro gone = test_must_sql(root, "drop role crew_u_stranger")
+    drop_test_db(db)
+}
+
+// ----- failures are faults, and the password is not in them -----
+
+test "fault: a wrong password is a fault that does not contain the password" {
+    ro db = new_test_db("wrongpw")
+    ro wrong PgConfig = { host: db.app.host, port: db.app.port, database: db.name, user: db.role, password: wrong_password() }
+    match save_step(wrong, "s-1", 1, snap_at(1, "x"), []) {
+        Ok(step) => assert(false)
+        Err(f) => {
+            assert(f.message.byte_len() > 0)
+            assert(!f.message.contains(wrong_password()))
+            assert(!f.message.contains(test_app_password()))
+        }
+    }
+    drop_test_db(db)
+}
+
+test "SCRAM: a login with a SCRAM-SHA-256 secret connects and works, with the wrong password it is a fault" {
+    ro db = new_test_db("scram")
+    ro root = test_admin_on("postgres")
+    ro gone = test_must_sql(root, "drop role if exists crew_u_scram_login")
+    ro made = test_must_sql(root, "set password_encryption = 'scram-sha-256'; create role crew_u_scram_login login password '${test_app_password()}' in role crew_app")
+    assert(test_count(root, "select count(*) from pg_authid where rolname = 'crew_u_scram_login' and rolpassword like 'SCRAM-SHA-256$%'") == 1)
+    ro scram PgConfig = { host: "127.0.0.1", port: test_port(), database: db.name, user: "crew_u_scram_login", password: test_app_password() }
+    assert(is_ok(save_step(scram, "s-1", 1, snap_at(1, "x"), [line_at(1, "a")])))
+    assert(loaded_or_stop(scram, "s-1").step == 1)
+    ro wrong PgConfig = { host: scram.host, port: scram.port, database: scram.database, user: scram.user, password: wrong_password() }
+    assert(!is_ok(save_step(wrong, "s-1", 2, snap_at(2, "y"), [])))
+    ro dropped = test_must_sql(root, "drop role crew_u_scram_login")
+    drop_test_db(db)
+}
+
+test "fault: no server on the port is a fault, not a hang and not a panic" {
+    ro nowhere PgConfig = { host: "127.0.0.1", port: 1, database: "x", user: "y", password: never_printed() }
+    match save_step(nowhere, "s-1", 1, snap_at(1, "x"), []) {
+        Ok(step) => assert(false)
+        Err(f) => {
+            assert(f.message.byte_len() > 0)
+            assert(!f.message.contains(never_printed()))
+        }
+    }
+}
+
+test "fault: a configuration that is not local is refused before any connection" {
+    ro remote PgConfig = { host: "db.example.org", port: 5432, database: "x", user: "y", password: "p" }
+    match save_step(remote, "s-1", 1, snap_at(1, "x"), []) {
+        Ok(step) => assert(false)
+        Err(f) => assert(f.message.contains("local"))
+    }
+}

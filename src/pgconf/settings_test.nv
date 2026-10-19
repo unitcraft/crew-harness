@@ -1,0 +1,132 @@
+// settings_test.nv - the settings of the connection from a file and from the environment: the environment is over the file.
+module crew_harness.pgconf
+
+import crew_harness.pgdb.{PgConfig, parse_pg_config}
+import std.os.{Os, MockOs, mock_os, real_os, temp_dir, pid}
+import std.fs.{Fs, real_fs, read_text, write_text, create_dir_all, Path}
+
+fn full_text() -> str => "{\"host\":\"localhost\",\"port\":55432,\"database\":\"crew_x\",\"user\":\"crew_login\",\"password\":\"file-test-pw\"}"
+
+fn must_config(text str) -> PgConfig {
+    match parse_pg_config(text) {
+        Ok(c) => c
+        Err(e) => panic("config: ${e}")
+    }
+}
+
+fn temp_file(name str, text str) -> Path {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-pg-config-${id}")
+    ro path = dir.join(name)
+    with Fs = real_fs() {
+        ro made = create_dir_all(dir)
+        ro written = write_text(path, text)
+    }
+    path
+}
+
+test "settings: the environment is over the base, key by key" {
+    mut state = MockOs.new()
+    state.put_env("CREW_PG_HOST", "127.0.0.1")
+    state.put_env("CREW_PG_PORT", "49999")
+    state.put_env("CREW_PG_PASSWORD", "env-test-pw")
+    ro base = must_config(full_text())
+    ro merged = with Os = mock_os(state) { pg_config_env(base) }
+    match merged {
+        Ok(c) => {
+            assert(c.host == "127.0.0.1")
+            assert(c.port == 49999)
+            assert(c.password == "env-test-pw")
+            assert(c.database == "crew_x")
+            assert(c.user == "crew_login")
+        }
+        Err(e) => assert(false)
+    }
+}
+
+test "settings: all five keys of the environment are read" {
+    mut state = MockOs.new()
+    state.put_env("CREW_PG_HOST", "localhost")
+    state.put_env("CREW_PG_PORT", "6543")
+    state.put_env("CREW_PG_DATABASE", "env_db")
+    state.put_env("CREW_PG_USER", "env_user")
+    state.put_env("CREW_PG_PASSWORD", "env-test-pw")
+    ro base = must_config("{}")
+    match with Os = mock_os(state) { pg_config_env(base) } {
+        Ok(c) => {
+            assert(c.host == "localhost" && c.port == 6543 && c.database == "env_db")
+            assert(c.user == "env_user" && c.password == "env-test-pw")
+        }
+        Err(e) => assert(false)
+    }
+}
+
+test "settings: an empty environment changes nothing, a port that is not a number is an error" {
+    mut empty = MockOs.new()
+    ro base = must_config(full_text())
+    match with Os = mock_os(empty) { pg_config_env(base) } {
+        Ok(c) => assert(c.host == base.host && c.port == base.port && c.password == base.password)
+        Err(e) => assert(false)
+    }
+    mut bad = MockOs.new()
+    bad.put_env("CREW_PG_PORT", "five")
+    match with Os = mock_os(bad) { pg_config_env(base) } {
+        Ok(c) => assert(false)
+        Err(e) => assert(e.contains("CREW_PG_PORT"))
+    }
+}
+
+test "settings: a file named by the caller and the environment over it; no file name means the environment alone" {
+    ro path = temp_file("pg.json", full_text())
+    mut state = MockOs.new()
+    state.put_env("CREW_PG_PASSWORD", "env-wins")
+    match with Os = mock_os(state), Fs = real_fs() { pg_config(path.display()) } {
+        Ok(c) => {
+            assert(c.database == "crew_x")
+            assert(c.password == "env-wins")
+        }
+        Err(e) => assert(false)
+    }
+    // no file: the defaults and the environment
+    match with Os = mock_os(state), Fs = real_fs() { pg_config("") } {
+        Ok(c) => {
+            assert(c.host == "127.0.0.1")
+            assert(c.password == "env-wins")
+        }
+        Err(e) => assert(false)
+    }
+    // the file can also be named by CREW_PG_CONFIG
+    mut named = MockOs.new()
+    named.put_env("CREW_PG_CONFIG", path.display())
+    match with Os = mock_os(named), Fs = real_fs() { pg_config("") } {
+        Ok(c) => assert(c.database == "crew_x")
+        Err(e) => assert(false)
+    }
+    // a file that is not there is an error that names the file
+    match with Os = mock_os(state), Fs = real_fs() { pg_config("${path.display()}.missing") } {
+        Ok(c) => assert(false)
+        Err(e) => assert(e.contains("missing"))
+    }
+    // a file that is not JSON is an error that does not print the content
+    ro broken = temp_file("broken.json", "password=never-printed")
+    match with Os = mock_os(state), Fs = real_fs() { pg_config(broken.display()) } {
+        Ok(c) => assert(false)
+        Err(e) => assert(!e.contains("never-printed"))
+    }
+}
+
+test "settings: the example file of the repository is a valid configuration" {
+    ro text = with Fs = real_fs() {
+        match read_text(Path.from_bytes("src/pg/pg.example.json".bytes())) {
+            Ok(t) => t
+            Err(e) => ""
+        }
+    }
+    assert(text.byte_len() > 0)
+    ro c = must_config(text)
+    match c.check() {
+        Ok(done) => ()
+        Err(e) => assert(false)
+    }
+}

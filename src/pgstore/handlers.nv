@@ -1,0 +1,151 @@
+// handlers.nv - the handlers of the effects `Journal` and `Store` of the engine on PostgreSQL (task 098).
+//
+// The engine commits a step as the journal lines first and the snapshot after them (rule 13). Here the lines of a step
+// wait in the memory of the world, and the snapshot carries them to the database: `Store.save` calls `crew.save_step`
+// ONCE, and the snapshot and all the lines of the step are in one transaction - either both or none. A process that dies
+// between the lines and the snapshot leaves nothing in the database; the next process makes the step again.
+// A line of the step that is already committed (the marks "sent" and "cancel_sent" of `dispatch`) goes to the database
+// at once, put after the lines of its step.
+//
+// A failed operation is not an error value: the effects return plain values, a handler that cannot write stops the
+// process (`panic`), the step is then not committed (rule 13). The panic text has the configuration without the
+// password and the message of the server.
+//
+// One `PgWorld` is one session: the engine of a session gets its own. Its handlers are made from it as the memory handlers
+// are made from `MemoryWorld`: `with Journal = pg_journal(world), Store = pg_store(world) { ... }`.
+module crew_harness.pgstore
+
+import crew_harness.engine.{Journal, Store, JournalEntry, Snapshot, journal_line, parse_journal_line}
+import crew_harness.pgdb.{PgConfig, PgFault, pg_save_step, pg_load}
+import std.net.{real_net}
+
+/// PgWorld: the PostgreSQL side of one session. `pending` are the lines of the step being committed that wait for the
+/// snapshot; `committed` is the last step known to be in the database (0 - none; `Store.load` sets it).
+export type PgWorld { cfg PgConfig, session str, pending []JournalEntry, committed int }
+
+/// A world of one session; nothing is read or written yet.
+export fn PgWorld.open(cfg PgConfig, session str) -> PgWorld => {
+    cfg, session, pending: []JournalEntry.new(), committed: 0
+}
+
+fn fault(message str) -> PgFault => { sqlstate: "", message }
+
+/// Write one line. A line of a step newer than the committed one waits for the snapshot of its step; a line of the
+/// committed step goes to the database now; a line of an older step is a fault.
+export fn pg_write(mut world PgWorld, entry JournalEntry) Net -> Result[(), PgFault] {
+    if entry.step > world.committed {
+        world.pending.push(entry)
+        return Ok(())
+    }
+    if entry.step < world.committed {
+        return Err(fault("a journal line of the step ${entry.step} is older than the committed step ${world.committed}"))
+    }
+    match pg_save_step(world.cfg, world.session, entry.step, None, [journal_line(entry)], None) {
+        Ok(step) => Ok(())
+        Err(f) => Err(f)
+    }
+}
+
+/// Commit the step: the snapshot and the waiting lines in one transaction. The lines must be the lines of the step of the
+/// snapshot, and the id must be the session of the world.
+export fn pg_commit(mut world PgWorld, id str, snapshot Snapshot) Net -> Result[(), PgFault] {
+    if id != world.session {
+        return Err(fault("the store of the session ${world.session} was asked to save the session ${id}"))
+    }
+    mut lines = []str.new()
+    for entry in world.pending {
+        if entry.step != snapshot.step {
+            return Err(fault("journal lines of the step ${entry.step} wait to be saved with the snapshot of the step ${snapshot.step}"))
+        }
+        lines.push(journal_line(entry))
+    }
+    match pg_save_step(world.cfg, world.session, snapshot.step, Some(snapshot.data), lines, Some(0)) {
+        Ok(step) => {
+            world.committed = snapshot.step
+            world.pending = []JournalEntry.new()
+            Ok(())
+        }
+        Err(f) => Err(f)
+    }
+}
+
+/// The committed journal of the session in the order of writing; lines that wait for their snapshot are not in it.
+export fn pg_read_all(world PgWorld) Net -> Result[[]JournalEntry, PgFault] {
+    ro found = pg_load(world.cfg, world.session)?
+    mut out = []JournalEntry.new()
+    match found {
+        None => Ok(out)
+        Some(loaded) => {
+            for line in loaded.journal {
+                match parse_journal_line(line) {
+                    Some(entry) => out.push(entry)
+                    None => return Err(fault("the journal of ${world.session} holds a line that is not an entry"))
+                }
+            }
+            Ok(out)
+        }
+    }
+}
+
+/// The last snapshot of the session, None if it was never saved. Remembers its step as committed.
+export fn pg_load_snapshot(mut world PgWorld, id str) Net -> Result[Option[Snapshot], PgFault] {
+    if id != world.session {
+        return Err(fault("the store of the session ${world.session} was asked to load the session ${id}"))
+    }
+    ro found = pg_load(world.cfg, world.session)?
+    match found {
+        None => Ok(None)
+        Some(loaded) => {
+            world.committed = loaded.step
+            Ok(Some(Snapshot { step: loaded.step, data: loaded.snapshot }))
+        }
+    }
+}
+
+fn stop_text(what str, world PgWorld, f PgFault) -> str =>
+    "${what} (${world.cfg.describe()}): ${f.message} [${f.sqlstate}]"
+
+/// The handler of `Journal` for the session of the world. A failed write or read stops the process.
+export fn pg_journal(mut world PgWorld) -> Effect[Journal] {
+    effect Journal {
+        write(entry) -> () {
+            with Net = real_net() {
+                match pg_write(world, entry) {
+                    Ok(done) => ()
+                    Err(f) => panic(stop_text("the journal cannot be written", world, f))
+                }
+            }
+        }
+        read_all() -> []JournalEntry {
+            with Net = real_net() {
+                match pg_read_all(world) {
+                    Ok(entries) => entries
+                    Err(f) => panic(stop_text("the journal cannot be read", world, f))
+                }
+            }
+        }
+    }
+}
+
+/// The handler of `Store` for the session of the world. `save` is the commit point of the step. A failed save or load
+/// stops the process.
+export fn pg_store(mut world PgWorld) -> Effect[Store] {
+    effect Store {
+        save(id, snapshot) -> () {
+            with Net = real_net() {
+                match pg_commit(world, id, snapshot) {
+                    Ok(done) => ()
+                    Err(f) => panic(stop_text("the snapshot cannot be saved", world, f))
+                }
+            }
+        }
+        load(id) -> Option[Snapshot] {
+            with Net = real_net() {
+                match pg_load_snapshot(world, id) {
+                    Ok(found) => found
+                    Err(f) => panic(stop_text("the snapshot cannot be loaded", world, f))
+                }
+            }
+        }
+    }
+}
