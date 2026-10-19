@@ -138,8 +138,15 @@ test "tm parties unsupported" {
     assert(count_kind(nested, "unsupported") >= 1)
     ro profile = tiny_with("| gatekeeper | human или agent по настройке исполнитель_повышенного_внимания(итог ИсходВорот) | — |", "| gatekeeper | human или agent по настройке исполнитель_повышенного_внимания(итог ИсходВорот) | профиль_стороны |")
     assert(note_says(profile, "не поддержано в этой версии: профиль стороны"))
-    ro limit = tiny_with("## Состояния", "Предел запросов: 1\n\n## Состояния")
-    assert(note_says(limit, "не поддержано в этой версии: `Предел запросов`"))
+}
+
+test "tm request limit" {
+    ro limit = tiny_with("## Состояния", "- Предел запросов: 2\n\n## Состояния")
+    ro report = checked(limit)
+    assert(report.errors.len() == 0)
+    assert(report.json.contains("\"request_limit\":{\"op\":\"lit\",\"value\":2}"))
+    assert(!checked(tiny_text()).json.contains("request_limit"))
+    assert(note_says(tiny_with("## Состояния", "Предел запросов: нет_такого\n\n## Состояния"), "нет_такого"))
 }
 
 // ---- the states --------------------------------------------------------------------------------------------------------------

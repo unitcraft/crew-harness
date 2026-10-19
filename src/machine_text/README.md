@@ -85,9 +85,9 @@ checked, a copy of its types, constants and definitions is put in the tree, `inc
 ## Not supported in this version
 
 The format has them, the interpreter of task 107 does not run them, so the translator answers `unsupported` with the line (the rest of the file is translated, `--lenient`):
-the side of the kind `machine` (a nested machine; its row is not translated), the column `профиль` when it is not `—`, the line `Предел запросов`, `Правит: …; проверка: …`,
+the side of the kind `machine` (a nested machine; its row is not translated), the column `профиль` when it is not `—`, `Правит: …; проверка: …`,
 `Возвратов формы: N` with N above zero, a fragment with a non-empty list of nested machines and `вход_заново: запросы_из_к_отправке`, the "Where" `возврат_подготовки`.
-`src/machine_text_eq/cases/unsupported-examples.table.md` has them all; their places are the list of the next task.
+`src/machine_text_eq/cases/unsupported-examples.table.md` has them all; their places are the list of the next task. The line `Предел запросов` is run since task 109 (below, and the README of `src/machine`).
 
 ## Oracle 0.1.0: what shaped the code
 

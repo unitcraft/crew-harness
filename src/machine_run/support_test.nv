@@ -2,7 +2,7 @@
 module crew_harness.machine_run
 
 import std.text
-import crew_harness.machine.{Value, PrimitiveHost, EvalError, Null, standard_registry, machine_files, text_of_file, record_get, value_json}
+import crew_harness.machine.{Value, PrimitiveHost, EvalError, Null, enum_value, standard_registry, machine_files, text_of_file, record_get, value_json}
 import crew_harness.engine.{Incoming, EventKind, Order, StepEnvironment, JournalEvent}
 
 fn machine_text(name str) -> str => text_of_file(machine_files(), name)
@@ -19,6 +19,12 @@ fn build(name str) -> TableMachine => build_from(machine_text(name))
 fn chat() -> TableMachine => build("chat.machine.json")
 fn calc() -> TableMachine => build("calc.machine.json")
 fn actions() -> TableMachine => build("actions.machine.json")
+
+// The agent step with the answers of its primitives: the reply is valid, closing the turn answers nothing.
+fn agent_step() -> TableMachine => with_replies(build("agent_step.machine.json"), [
+    ScriptedReply { name: "reply_validation", value: enum_value("ReplyCheck", "Valid") },
+    ScriptedReply { name: "close_agent_turn", value: Null }
+])
 
 // An event as the engine hands it to a machine: the envelope is stamped.
 fn stamped(kind EventKind, name str, request Option[str], input str) -> Incoming => {

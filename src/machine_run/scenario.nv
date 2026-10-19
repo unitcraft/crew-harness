@@ -41,11 +41,14 @@ export type ScExpect {
     has_sent bool, sent []str, has_cancelled bool, cancelled []str
 }
 
-/// ScStep: one step: the operation, the event, the milliseconds, the expectation.
-export type ScStep { op str, event ScEvent, ms int, expect ScExpect }
+/// ScHost: the answer of a primitive of the host that holds from this step on (the lossless JSON of the core): `"host": {"reply_validation": {...}}`.
+export type ScHost { name str, json str }
 
-/// Scenario: the file `scenario/0`.
-export type Scenario { name str, machine str, start_at int, steps []ScStep }
+/// ScStep: one step: the operation, the event, the milliseconds, the expectation, the answers of the host that change here.
+export type ScStep { op str, event ScEvent, ms int, expect ScExpect, host []ScHost }
+
+/// Scenario: the file `scenario/0`. `params` are the values of parameters of the machine that the project gives (`"params": {"NAME": value}`).
+export type Scenario { name str, machine str, start_at int, steps []ScStep, params []ScHost }
 
 /// StepTrace: what one step left in the world. `journal` are the lines the machine wrote (`code(name=value;...)`), `entries` all the lines of
 /// the step with the envelope, `queue` what waits for the dispatch (`send <id>`, `cancel <id>`) and for `pump` (`in <name>`), `outcome` is
@@ -223,7 +226,7 @@ fn nothing_expected() -> ScExpect => {
 
 fn sj_step(v JsonValue, path str) -> Result[ScStep, LoadError] {
     ro o = sj_obj(v, path)?
-    sj_only(o, ["do", "event", "ms", "expect"], path)?
+    sj_only(o, ["do", "event", "ms", "expect", "host"], path)?
     ro op = sj_str_or(o, "do", "feed", path)?
     if !step_ops().contains(op) { return Err(sle("${path}.do", "the operation of a step must be feed, accept, dispatch, pump, deliver, advance or restart, got ${op}")) }
     mut event = empty_event()
@@ -242,7 +245,17 @@ fn sj_step(v JsonValue, path str) -> Result[ScStep, LoadError] {
     }
     mut expect = nothing_expected()
     if sj_present(o, "expect") { expect = sj_expect(o.get("expect") ?? JsonValue.null(), "${path}.expect")? }
-    Ok(ScStep { op, event, ms, expect })
+    mut host = []ScHost.new()
+    if sj_present(o, "host") {
+        ro ho = sj_obj(o.get("host") ?? JsonValue.null(), "${path}.host")?
+        for k in ho.keys() {
+            match ho.get(k) {
+                Some(x) => host.push(ScHost { name: k, json: x.to_str() })
+                None => ()
+            }
+        }
+    }
+    Ok(ScStep { op, event, ms, expect, host })
 }
 
 /// A scenario from the text of its file; an error says the place.
@@ -252,7 +265,7 @@ export fn parse_scenario(text str) -> Result[Scenario, LoadError] {
         Err(e) => return Err(sle("$", "not valid JSON"))
     }
     ro o = sj_obj(parsed, "$")?
-    sj_only(o, ["format", "machine", "name", "start_at", "steps"], "$")?
+    sj_only(o, ["format", "machine", "name", "start_at", "steps", "params"], "$")?
     ro format = sj_need_str(o, "format", "$")?
     if format != "scenario/0" { return Err(sle("$.format", "the format must be scenario/0, got ${format}")) }
     ro machine = sj_need_str(o, "machine", "$")?
@@ -277,7 +290,17 @@ export fn parse_scenario(text str) -> Result[Scenario, LoadError] {
         steps.push(sj_step(item, "$.steps[${i}]")?)
         i += 1
     }
-    Ok(Scenario { name, machine, start_at, steps })
+    mut params = []ScHost.new()
+    if sj_present(o, "params") {
+        ro po = sj_obj(o.get("params") ?? JsonValue.null(), "$.params")?
+        for k in po.keys() {
+            match po.get(k) {
+                Some(x) => params.push(ScHost { name: k, json: x.to_str() })
+                None => ()
+            }
+        }
+    }
+    Ok(Scenario { name, machine, start_at, steps, params })
 }
 
 // ---- the events ---------------------------------------------------------------------------------------------------------------------
@@ -291,6 +314,7 @@ fn request_of(id str) -> Option[str] {
 export fn scenario_incoming(ev ScEvent) -> Incoming {
     ro request = request_of(ev.request)
     mut incoming = Incoming.incoming(EventKind.Input, ev.name, None, ev.input)
+    if ev.kind == "start" && ev.request != "" { incoming = Incoming.incoming(EventKind.Input, ev.name, request, ev.input) }
     if ev.kind == "progress" { incoming = Incoming.incoming(EventKind.Progress, ev.name, request, ev.input) }
     if ev.kind == "answer" { incoming = Incoming.incoming(EventKind.Answered, ev.name, request, ev.input) }
     if ev.kind == "failure" { incoming = Incoming.incoming(EventKind.Refused, ev.name, request, ev.code) }
@@ -494,9 +518,85 @@ fn compare_step(n int, s ScStep, t StepTrace, mut out []str) -> () {
     if x.has_outcome && x.outcome != t.outcome { out.push("${at}: outcome: expected ${x.outcome}, got ${t.outcome}") }
 }
 
+// The machine with the parameters the scenario gives (the same machine when it gives none).
+fn with_params(machine TableMachine, params []ScHost) -> Result[TableMachine, str] {
+    if params.len() == 0 { return Ok(machine) }
+    mut values = []ScriptedReply.new()
+    for h in params {
+        ro parsed = match Json.parse(h.json) {
+            Ok(j) => j
+            Err(e) => return Err("the parameter ${h.name} is not JSON")
+        }
+        ro v = match value_from_json(parsed) {
+            Ok(x) => x
+            Err(m) => return Err("the parameter ${h.name}: ${m}")
+        }
+        values.push(ScriptedReply { name: h.name, value: v })
+    }
+    ro built = table_machine_with(machine.def, machine.table.registry, values)?
+    Ok(with_replies(built, machine.replies))
+}
+
+// The answers of the host after a step: the answers before, with the ones the step names put over them.
+fn replies_after(before []ScriptedReply, step ScStep) -> Result[[]ScriptedReply, str] {
+    mut out = []ScriptedReply.new()
+    for r in before {
+        mut replaced = false
+        for h in step.host {
+            if h.name == r.name { replaced = true }
+        }
+        if !replaced { out.push(r) }
+    }
+    for h in step.host {
+        ro parsed = match Json.parse(h.json) {
+            Ok(j) => j
+            Err(e) => return Err("the answer of the host ${h.name} is not JSON")
+        }
+        ro v = match value_from_json(parsed) {
+            Ok(x) => x
+            Err(m) => return Err("the answer of the host ${h.name}: ${m}")
+        }
+        out.push(ScriptedReply { name: h.name, value: v })
+    }
+    Ok(out)
+}
+
+/// Run a scenario on a machine that is data with the answers of the primitives of the host that the steps change (`host`): like `drive_scenario`,
+/// but the machine of the engine is made again before a step that has `host`.
+export fn drive_table_scenario(first_machine TableMachine, sc Scenario) -> []StepTrace {
+    ro machine = match with_params(first_machine, sc.params) {
+        Ok(m) => m
+        Err(m) => panic("scenario ${sc.name}: ${m}")
+    }
+    mut world = MemoryWorld.at(sc.start_at)
+    mut e = begin_engine[TableState, TableMachine](machine, world)
+    mut replies = []ScriptedReply.new()
+    for r in machine.replies { replies.push(r) }
+    mut traces = []StepTrace.new()
+    for s in sc.steps {
+        ro from = world.journal.len()
+        if s.host.len() > 0 {
+            match replies_after(replies, s) {
+                Ok(next) => { replies = next }
+                Err(m) => panic("scenario ${sc.name}: ${m}")
+            }
+            e.machine = with_replies(machine, replies)
+        }
+        if s.op == "feed" { engine_feed[TableState, TableMachine](e, world, scenario_incoming(s.event)) }
+        if s.op == "accept" { engine_accept[TableState, TableMachine](e, world, scenario_incoming(s.event)) }
+        if s.op == "dispatch" { engine_dispatch[TableState, TableMachine](e, world) }
+        if s.op == "pump" { ro made = engine_pump[TableState, TableMachine](e, world) }
+        if s.op == "deliver" { world.deliver(scenario_incoming(s.event)) }
+        if s.op == "advance" { world.advance(s.ms) }
+        if s.op == "restart" { e = resumed_engine[TableState, TableMachine](e.machine, world) }
+        traces.push(trace_of[TableState, TableMachine](e.machine, e, world, s.op, from))
+    }
+    traces
+}
+
 /// Run a scenario on a machine that is data and compare every step with what the file expects.
 export fn run_scenario(machine TableMachine, sc Scenario) -> ScenarioRun {
-    ro traces = drive_scenario[TableState, TableMachine](machine, sc)
+    ro traces = drive_table_scenario(machine, sc)
     mut mismatches = []str.new()
     mut i = 0
     for s in sc.steps {

@@ -39,7 +39,7 @@ export fn ScriptedHost mut @call_primitive(name str, args []Value) -> Result[Val
 export fn TableMachine @name() -> str => @def.name
 
 /// The initial state: the initial state of the table; it is started at once when entering it orders nothing, else the event `start` starts it.
-export fn TableMachine @initial() -> TableState => { name: @def.initial, started: @quiet_start, input: Null, data: @initial_data }
+export fn TableMachine @initial() -> TableState => { name: @def.initial, started: @quiet_start, input: Null, data: @initial_data, taken: []str.new() }
 
 /// The name of a state for the journal line.
 export fn TableMachine @state_name(state TableState) -> str => state.name
@@ -63,6 +63,11 @@ export fn TableMachine @encode_state(state TableState) -> str {
     jput(o, "started", JsonValue.bool(state.started))
     jput(o, "input", value_to_json(state.input))
     jput(o, "data", value_to_json(state.data))
+    if state.taken.len() > 0 {
+        mut rows = []JsonValue.new()
+        for t in state.taken { rows.push(JsonValue.str(t)) }
+        jput(o, "taken", JsonValue.array(rows))
+    }
     JsonValue.object(o).to_str()
 }
 
@@ -107,5 +112,22 @@ export fn TableMachine @decode_state(text str) -> Option[TableState] {
         Ok(v) => v
         Err(m) => return None
     }
-    Some(TableState { name, started, input, data })
+    mut taken = []str.new()
+    match o.get("taken") {
+        Some(tv) => {
+            match tv.array() {
+                Some(items) => {
+                    for item in items {
+                        match item.str() {
+                            Some(t) => taken.push(t)
+                            None => ()
+                        }
+                    }
+                }
+                None => ()
+            }
+        }
+        None => ()
+    }
+    Some(TableState { name, started, input, data, taken })
 }

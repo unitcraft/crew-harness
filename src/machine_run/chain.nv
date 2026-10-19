@@ -36,6 +36,78 @@ fn silence_of(mut ctx Ctx, st StateDef, mut host PrimitiveHost) -> Result[int, F
     }
 }
 
+// ---- the mechanics of the contract (rules 14, 15, 18, 21): the attempt counters, the open requests, the request of the call -----------------
+
+fn has_datum(ctx Ctx, name str) -> bool => find_data(ctx.def, name) >= 0
+
+// The texts of a datum that is a list of texts.
+fn texts_of_datum(ctx Ctx, name str) -> []str {
+    mut out = []str.new()
+    match data_get(ctx.data, name) {
+        List(xs) => {
+            for x in xs {
+                match x {
+                    Text(s) => out.push(s)
+                    _ => ()
+                }
+            }
+        }
+        _ => ()
+    }
+    out
+}
+
+// Write a list of texts into a datum without a check of the marks: the mechanics write (`writes: mechanics`).
+fn put_texts(mut ctx Ctx, name str, items []str) -> () {
+    mut values = []Value.new()
+    for s in items { values.push(Text(s)) }
+    ctx.data = data_put(ctx.data, name, List(values))
+}
+
+// A request is open: the mechanics put its id into `open_requests` when it is sent (the machine that does not hold the datum keeps none).
+fn open_add(mut ctx Ctx, id str) -> () {
+    if !has_datum(ctx, "open_requests") { return }
+    mut items = texts_of_datum(ctx, "open_requests")
+    items.push(id)
+    put_texts(ctx, "open_requests", items)
+}
+
+// A request is closed (an outcome, a cancel, an end): its id leaves `open_requests`.
+fn open_remove(mut ctx Ctx, id str) -> () {
+    if !has_datum(ctx, "open_requests") { return }
+    mut keep = []str.new()
+    for r in texts_of_datum(ctx, "open_requests") {
+        if r != id { keep.push(r) }
+    }
+    put_texts(ctx, "open_requests", keep)
+}
+
+// The counter of the attempts of a party grows by one at every send (rule 15): the new number, or 0 when the counter is not a plain datum.
+fn bump_counter(mut ctx Ctx, name str) -> int {
+    if name == "" || name.contains("[") || !has_datum(ctx, name) { return 0 }
+    mut now = 0
+    match data_get(ctx.data, name) {
+        Int(n) => { now = n }
+        _ => ()
+    }
+    ctx.data = data_put(ctx.data, name, Int(now + 1))
+    now + 1
+}
+
+// Is the set of an appeal a datum that the mechanics hand over (`to_send`, `rows_and_mechanics`)?
+fn set_datum_of(ctx Ctx, st StateDef) -> str {
+    for e in st.set {
+        match e {
+            Name(n) => {
+                ro at = find_data(ctx.def, n)
+                if at >= 0 && ctx.def.data[at].writes == RowsAndMechanics { return n }
+            }
+            _ => ()
+        }
+    }
+    ""
+}
+
 fn enter_appeal(mut ctx Ctx, st StateDef, mut host PrimitiveHost) -> Result[(), Fault] {
     ro pi = find_party(ctx.def, st.party)
     if pi < 0 { return Err(defect_fault("unknown_name", "no party ${st.party}")) }
@@ -53,6 +125,10 @@ fn enter_appeal(mut ctx Ctx, st StateDef, mut host PrimitiveHost) -> Result[(), 
         }
     } else {
         ids.push(party.id)
+    }
+    // the limit of the simultaneous requests (rule 21): the open requests of the machine count (a machine with a limit has no set, the build refuses it)
+    if ctx.limit > 0 && texts_of_datum(ctx, "open_requests").len() + ids.len() > ctx.limit {
+        return Err(defect_fault("request_limit", "the limit of ${ctx.limit} simultaneous requests would be passed by the appeal ${st.name}"))
     }
     for id in ids {
         ro mark = ctx.locals.len()
@@ -73,18 +149,15 @@ fn enter_appeal(mut ctx Ctx, st StateDef, mut host PrimitiveHost) -> Result[(), 
         }
         pop_to(ctx, mark)
         if failed { return Err(fault) }
+        // the counter of the attempts of a party grows at every send (rule 15); the elements of a set are counted by the engine
+        mut attempt = 0
+        if st.set.len() == 0 { attempt = bump_counter(ctx, party.counter) }
         plan(ctx, PSend(SendOrder { party: id, input: request_text(pairs), idle_term }))
+        if attempt > 0 { open_add(ctx, "${id}-${attempt}") }
     }
     // a set that is the datum `to_send` is handed over to the requests: the mechanics empty it (rule 21)
-    for e in st.set {
-        match e {
-            Name(n) => {
-                ro at = find_data(ctx.def, n)
-                if at >= 0 && ctx.def.data[at].writes == RowsAndMechanics { ctx.data = data_put(ctx.data, n, List([]Value.new())) }
-            }
-            _ => ()
-        }
-    }
+    ro handed_over = set_datum_of(ctx, st)
+    if handed_over != "" { put_texts(ctx, handed_over, []str.new()) }
     Ok(())
 }
 
@@ -101,12 +174,15 @@ fn failure_of(v Value) -> Result[FailCode, Fault] {
 }
 
 fn enter_end(mut ctx Ctx, st StateDef, mut host PrimitiveHost) -> Result[(), Fault] {
+    // an end cancels every open request (rule 22): the engine does it, the datum follows
+    if has_datum(ctx, "open_requests") { put_texts(ctx, "open_requests", []str.new()) }
     ro mark = ctx.locals.len()
     run_actions(ctx, st.entry, host)?
     for er in ctx.def.end_rows {
         if er.state != st.name { continue }
         ro w = want_bool(run_expr(ctx, er.when, host)?)?
         if !w { continue }
+        ctx.taken.push("end:${st.name}#${er.n}")
         match er.answer {
             AnswerValue(e) => {
                 ro v = run_expr(ctx, e, host)?
@@ -177,6 +253,7 @@ fn run_work_row(mut ctx Ctx, st StateDef, mut host PrimitiveHost) -> Result[Goto
         mut take = true
         if r.cond.len() > 0 { take = want_bool(run_expr(ctx, r.cond[0], host)?)? }
         if take {
+            ctx.taken.push("${st.name}#${r.n}")
             run_actions(ctx, r.actions, host)?
             return Ok(r.next)
         }
@@ -306,7 +383,8 @@ fn input_scope_ctx(ctx Ctx, input Value) -> Ctx {
     }
     Ctx {
         def: ctx.def, table: ctx.table, name: ctx.name, started: ctx.started, input, data: ctx.data, event: ctx.event, locals,
-        record: ctx.record, planned: ctx.planned, fired: ctx.fired, finished: ctx.finished, defect: ctx.defect, chain: ctx.chain
+        record: ctx.record, planned: ctx.planned, fired: ctx.fired, finished: ctx.finished, defect: ctx.defect, chain: ctx.chain,
+        taken: ctx.taken, limit: ctx.limit
     }
 }
 
@@ -331,6 +409,8 @@ fn start_machine(mut ctx Ctx, event Incoming, mut host PrimitiveHost) -> Result[
             }
             ctx.input = input
             ctx.data = data
+            // the request that started the machine is the request of the call (format 9): the executor gives it with the event
+            if has_datum(ctx, "call_request_id") { ctx.data = data_put(ctx.data, "call_request_id", Text(request_text_of(event.request))) }
             ctx.started = true
             ctx.fired = true
             run_chain(ctx, Goto { target: ToState(ctx.def.initial), restart: false }, host)?
@@ -344,8 +424,9 @@ fn start_machine(mut ctx Ctx, event Incoming, mut host PrimitiveHost) -> Result[
 fn new_ctx(machine TableMachine, current TableState) -> Ctx {
     Ctx {
         def: machine.def, table: machine.table, name: current.name, started: current.started, input: current.input, data: current.data,
-        event: EventVal { kind: EvTimeout, name: "", id: "", party: "", fields: []RecordField.new(), value: Null, reason: "" },
-        locals: []Binding.new(), record: Null, planned: []Planned.new(), fired: false, finished: false, defect: false, chain: 0
+        event: EventVal { kind: EvTimeout, name: "", id: "", request: "", party: "", fields: []RecordField.new(), value: Null, reason: "" },
+        locals: []Binding.new(), record: Null, planned: []Planned.new(), fired: false, finished: false, defect: false, chain: 0,
+        taken: []str.new(), limit: machine.limit
     }
 }
 
@@ -377,7 +458,29 @@ fn is_answer_kind(k EvKind) -> bool {
 
 // A failure that no row names is read as "no result" (format 4.3): the same event with the reason NoResult.
 fn as_no_result(ev EventVal) -> EventVal {
-    EventVal { kind: ev.kind, name: ev.name, id: ev.id, party: ev.party, fields: ev.fields, value: enum_value("FailCode", "NoResult"), reason: "NoResult" }
+    EventVal { kind: ev.kind, name: ev.name, id: ev.id, request: ev.request, party: ev.party, fields: ev.fields, value: enum_value("FailCode", "NoResult"), reason: "NoResult" }
+}
+
+// Does the appeal name the term in a row (the event `timeout`, an extension of the product)?
+fn names_timeout(st StateDef) -> bool {
+    for r in st.rows {
+        match r.event {
+            TimeoutEv => return true
+            _ => ()
+        }
+    }
+    for a in st.accept {
+        match a.event {
+            TimeoutEv => return true
+            _ => ()
+        }
+    }
+    false
+}
+
+// The term that passed is the failure "no answer in time" (format 4.3, rule 16) for an appeal whose rows do not name the term themselves.
+fn as_timeout_failure(ev EventVal) -> EventVal {
+    EventVal { kind: EvFailure, name: ev.name, id: ev.id, request: ev.request, party: ev.party, fields: ev.fields, value: enum_value("FailCode", "Timeout"), reason: "Timeout" }
 }
 
 fn run_event(mut ctx Ctx, mut host PrimitiveHost) -> Result[(), Fault] {
@@ -385,6 +488,7 @@ fn run_event(mut ctx Ctx, mut host PrimitiveHost) -> Result[(), Fault] {
     ro common = choose(ctx, ctx.def.common, host)?
     if common.at >= 0 {
         ro row = ctx.def.common[common.at]
+        ctx.taken.push("common#${row.n}")
         ctx.fired = true
         for b in common.binds { ctx.locals.push(b) }
         run_actions(ctx, row.actions, host)?
@@ -395,6 +499,7 @@ fn run_event(mut ctx Ctx, mut host PrimitiveHost) -> Result[(), Fault] {
     ro st = ctx.def.states[at]
     match st.kind {
         AppealKind => {
+            if ctx.event.kind == EvTimeout && !names_timeout(st) { ctx.event = as_timeout_failure(ctx.event) }
             if is_answer_kind(ctx.event.kind) { run_accept(ctx, st, host)? }
             mut chosen = choose(ctx, st.rows, host)?
             if chosen.at < 0 && ctx.event.kind == EvFailure && ctx.event.reason != "NoResult" {
@@ -406,6 +511,7 @@ fn run_event(mut ctx Ctx, mut host PrimitiveHost) -> Result[(), Fault] {
                 return Ok(())
             }
             ro row = st.rows[chosen.at]
+            ctx.taken.push("${st.name}#${row.n}")
             ctx.fired = true
             for b in chosen.binds { ctx.locals.push(b) }
             run_actions(ctx, row.actions, host)?
@@ -433,7 +539,7 @@ fn flush(ctx Ctx, mut environment Environment) -> () {
 fn result_of(ctx Ctx, current TableState) -> Transition[TableState] {
     if ctx.defect { return Stay }
     if !ctx.fired { return Stay }
-    Go(TableState { name: ctx.name, started: ctx.started, input: ctx.input, data: ctx.data })
+    Go(TableState { name: ctx.name, started: ctx.started, input: ctx.input, data: ctx.data, taken: ctx.taken })
 }
 
 /// One step of a machine that is data (see the top of this file). Reads only its arguments; gives its orders to the environment; the
@@ -442,7 +548,7 @@ export fn table_step(machine TableMachine, current TableState, event Incoming, m
     mut ctx = new_ctx(machine, current)
     if !current.started {
         if event.kind == EventKind.Input && event.name == "start" {
-            ctx.event = EventVal { kind: EvInput, name: "start", id: event.id, party: "", fields: []RecordField.new(), value: Null, reason: "" }
+            ctx.event = EventVal { kind: EvInput, name: "start", id: event.id, request: "", party: "", fields: []RecordField.new(), value: Null, reason: "" }
             match start_machine(ctx, event, host) {
                 Ok(u) => ()
                 Err(f) => handle_fault(ctx, f, host)
@@ -466,6 +572,8 @@ export fn table_step(machine TableMachine, current TableState, event Incoming, m
         }
         ReadReady(ev) => {
             ctx.event = ev
+            // the outcome of a request closes it: it leaves the open requests (the engine closed it already)
+            if ev.request != "" && is_answer_kind(ev.kind) { open_remove(ctx, ev.request) }
             ro before = ctx.data
             ro run = run_event(ctx, host)
             match run {

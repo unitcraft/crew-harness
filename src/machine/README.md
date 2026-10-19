@@ -19,7 +19,7 @@ tests under Oracle 0.1.0 and the output of a unit must stay under 4 KB:
 | `src/machine_run/` | `crew_harness.machine_run` | the interpreter `TableMachine`, the state, the host of the primitives, the scenario runner `scenario/0` |
 | `src/machine_chat/` | `crew_harness.machine_chat` | tests only: the proof that the chat machine as data equals the chat machine on Nova |
 | `src/machine_text/` | `crew_harness.machine_text` | the translator of the tables in Russian (format 2.5) into the JSON `machine/2` ([README](../machine_text/README.md), task 108) |
-| `src/machine_text_eq/` | `crew_harness.machine_text_eq` | tests only: the chat table equals the hand-written chat machine on 39 scenarios; the pilot "Agent step", the examples of the format |
+| `src/machine_text_eq/` | `crew_harness.machine_text_eq` | tests only: the chat table equals the hand-written chat machine on 39 scenarios; the pilot "Agent step", the examples of the format; the agent step of the product: the table equals its JSON, every row has a scenario, the journal codes are the methodology's (task 109) |
 
 ## Run the tests (Windows, Nova Oracle 0.1.0)
 
@@ -28,10 +28,10 @@ tests under Oracle 0.1.0 and the output of a unit must stay under 4 KB:
 cd C:/work/crew-harness
 nova test src/machine                # the core: 170 tests
 nova test src/machine_table          # the decoder and the checks: 54 tests
-nova test src/machine_run            # the interpreter and the scenarios: 60 tests
+nova test src/machine_run            # the interpreter and the scenarios (the 75 of the agent step too): 80 tests
 nova test src/machine_chat           # the equality with the chat machine: 11 tests
 nova test src/machine_text           # the translator of the tables: 118 tests
-nova test src/machine_text_eq        # the proofs of the translator: 43 tests
+nova test src/machine_text_eq        # the proofs of the translator and of the agent step: 52 tests
 nova test --strict-effects src       # the same, and an effect used without being declared in a signature is an error
 nova test src --jobs 4               # the whole tree (the PostgreSQL units need the temporary container of src/pg/testdb.ps1)
 ```
@@ -286,9 +286,9 @@ The data view is the one both can show: `Awaiting` the message and the reply, `D
 ## Not implemented (and why)
 
 - `@prepare_return` (rule 24: the preparation is the executor's) - refused by the checks. `trace`, `step` (the envelope of a nested machine call) - allowed by the checks, not bound at run time. A nested machine as a party (`kind: machine`) is decoded and checked; the engine of the product has no nested machines, so `pass` only journals `signal_passed`.
-- A writing primitive that changes data of the machine (`writes` in the registry): `PrimitiveHost` gives back a value only. `profile` of a party, `request_limit`, `edits` / `edit_check`, `form_returns` are decoded and checked, not executed (`SendOrder` has no profile; the engine has no
+- A writing primitive that changes data of the machine (`writes` in the registry): `PrimitiveHost` gives back a value only. `profile` of a party, `edits` / `edit_check`, `form_returns` are decoded and checked, not executed (`SendOrder` has no profile; the engine has no
   return of the form and no check of the object).
-- The data of the mechanics (`open_requests`, the attempt counters) are not kept by the interpreter: the engine keeps the counters (`PartyCounter`) and the open requests. `includes` are checked for shape (name, version, 12-digit hash); the file of definitions is not read; a fragment is the expanded tree.
+- The data of the mechanics (`open_requests`, `call_request_id`, a plain attempt counter) are kept by the interpreter since task 109 (below); the counters of the elements of a set (`lenses[*].attempt`) and the return of a cancelled party to `to_send` are still the engine's / not run. `includes` are checked for shape (name, version, 12-digit hash); the file of definitions is not read; a fragment is the expanded tree.
 - The qualified `answer: Type.Variant`, explicit enum words, the encoding of `all_data` of format 2.2 (item 1 of the pilot's edits) beyond the lossless JSON of the core.
 
 ## Oracle 0.1.0: more limits met in task 107
@@ -312,3 +312,25 @@ Task 108 (`doc/tasks/108-table-translator/`) brought the interpreter from the fo
 - The record `Child` of `expr.nv` is `ExprChild` (item 40 of the survey of Oracle 0.1.0: a program with `import std.os` could not be built).
 - `machines/chat.table.md` is the chat machine as tables; its translation equals `chat.machine.json` (a test compares the trees without `title` and `table_format`) and runs the 39 scenarios of the chat in the same way.
 - `data.nv`: `table_files()`, `chat_table_text()`; `data_dir_names("tables")`.
+
+# The agent step as data (task 109)
+
+`machines/agent_step.table.md` is the machine "Agent step" of the methodology as tables (format 2.6, the key lines are list items, the fragment "Pause" is a connection); `machines/agent_step.machine.json`
+is its translation by `src/machine_translate.nv` (a test compares them byte by byte). It passes the checks of the load without a note `unsupported`: 14 states (37 rows of the states, 4 of the pause,
+6 common events), 13 rows of the ends, 16 definitions, 3 parties, 21 data. The machine is run by the same interpreter as the chat; the user writes no Nova.
+
+What the interpreter got for it (decisions are in `doc/tasks/109-agent-step-machine/analysis.md`):
+
+- **`Предел запросов` (`request_limit`)**: the value is evaluated at the build (an int, at least 1; `TableMachine.limit`, 0 when the line is not written). An appeal that would pass the limit of the requests that
+  the machine holds open is a defect `request_limit`. A machine with a limit and a set of parties is refused at the build (the counters of the elements are the engine's).
+- **The mechanics of the contract** (rules 14, 15, 18, 21): the counter of the attempts of a party (`counter`, a plain datum) grows at every send, the request id is `<id>-<counter>`; the datum `open_requests` gets the id
+  when the request is sent and loses it at the outcome (answer, failure, term), at a cancel and at an end; the datum `call_request_id` is the request that started the machine (the field `request` of the event `start`).
+  A machine that has not got these data does not get them (the chat machine is as it was). Requests to a human (a gate) do not exist in the engine: a gate waits for a word, so `open_requests` holds the requests to agents.
+- **`отменить_открытые`** (`cancel_open`) cancels the open requests of the datum `open_requests`: all, or those of the named party; a machine without the datum cancels the request of the party of the state as before.
+- **A term that passed** is read as the failure `Timeout` by an appeal whose rows do not name the term (the event `timeout`): the failure rows of the format (`сбой(причина ∈ {…НетОтветаВСрок…})`) take it (format 4.3, rule 16).
+- **The mark `taken`** of `TableState`: the rows the last step took (`State#n`, `common#n`, `end:State#n`); it is the proof of the coverage of the rows by the scenarios, not data of the machine.
+- **Scenarios**: the step key `host` (the answers of the primitives of the host from this step on, in the lossless JSON of the core: `reply_validation`, `close_agent_turn`), the file key `params` (the values of the parameters
+  of the machine that the project gives, `table_machine_with`), the field `request` of the event `start`. `scenarios/agent-step-*` are 75 files: a scenario for every row that can be taken (`agent-step-<state>-<n>`,
+  `agent-step-common-<n>`, `agent-step-end-<end>-<n>`) and the flows (`agent-step-flow-*`). Seven rows cannot be taken by any events (the rows `else` of the forks and the row 6 of the common events); the test names them.
+- Not run (still `unsupported`): the profile of a party, `Возвратов формы` above zero, `Правит`, nested machines, `вход_заново: запросы_из_к_отправке`; the coding of `все_данные` by section 5 of the format (composite
+  values are the lossless JSON of the core, enums have no words in the tree).

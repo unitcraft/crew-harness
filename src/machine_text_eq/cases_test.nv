@@ -61,12 +61,11 @@ test "cs files" {
 
 test "cs pilot" {
     ro report = translate_checked(case_text("agent-step.table.md"), standard_registry())
-    assert(report.errors.len() == 1)
-    assert(report.errors[0].kind == "unsupported")
-    assert(report.errors[0].message.contains("`Предел запросов`"))
-    assert(report.errors[0].line == 101)
+    if report.errors.len() > 0 { panic(lines_of_errors(report, "agent-step.table.md")) }
+    assert(report.errors.len() == 0)
     assert(report.rows_noted == 0)
     assert(report.rows_total == 120)
+    assert(report.json.contains("\"request_limit\":{\"op\":\"lit\",\"value\":1}"))
 }
 
 test "cs pilot loads" {
@@ -157,11 +156,10 @@ test "cs examples new id" {
 
 test "cs unsupported" {
     ro report = translate_checked(case_text("unsupported-examples.table.md"), standard_registry())
-    assert(count_of(report, "unsupported") == 7)
+    assert(count_of(report, "unsupported") == 6)
     assert(has_message(report, "сторона `свидетель` вида `machine`"))
     assert(has_message(report, "сторона `автор` вида `machine`"))
     assert(has_message(report, "сторона `линза` вида `machine`"))
-    assert(has_message(report, "`Предел запросов`"))
     assert(has_message(report, "`Правит`"))
     assert(has_message(report, "вложенные машины в подключении фрагмента"))
     assert(has_message(report, "`вход_заново: запросы_из_к_отправке`"))
@@ -176,8 +174,8 @@ test "cs unsupported" {
 
 test "cs unsupported only" {
     ro report = translate_report(case_text("unsupported-examples.table.md"))
-    assert(count_of(report, "unsupported") == 7)
-    assert(report.errors.len() == 7)
+    assert(count_of(report, "unsupported") == 6)
+    assert(report.errors.len() == 6)
     assert(report.rows_total == 61)
     assert(report.rows_noted == 3)
 }
@@ -227,8 +225,23 @@ test "cs defs file errors" {
 }
 
 test "cs cycle hash 26" {
-    ro cycle = "# Определения: арифметика_цикла\n\ndefinitions_version: 1\nformat: 2.6\n\n## Типы\n—\n\n## Константы\n—\n\n## Определения\n\nопределение потолок_исчерпан(номер число≥1, отсчёт число≥1, предел число≥0) -> да/нет =\n  (номер - 1) - отсчёт + 1 >= предел\n"
-    assert(definitions_hash(cycle) == "72cb51803883")
-    assert(definitions_hash(cycle.replace("\n", "\r\n")) == "72cb51803883")
-    assert(definitions_hash(cycle.replace("format: 2.6", "format: 2.5")) == "fb15ba5656e3")
+    ro cycle = `# Определения: арифметика_цикла
+
+- definitions_version: 1
+- format: 2.6
+
+## Типы
+—
+
+## Константы
+—
+
+## Определения
+
+определение потолок_исчерпан(номер число≥1, отсчёт число≥1, предел число≥0) -> да/нет =
+  (номер - 1) - отсчёт + 1 >= предел
+`
+    assert(definitions_hash(cycle) == "1628bec298d9")
+    assert(definitions_hash(cycle.replace("\n", "\r\n")) == "1628bec298d9")
+    assert(definitions_hash(cycle.replace("- format: 2.6", "format: 2.5").replace("- definitions_version", "definitions_version")) == "fb15ba5656e3")
 }

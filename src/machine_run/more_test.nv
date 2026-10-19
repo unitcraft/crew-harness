@@ -55,7 +55,7 @@ test "pause words" {
 
 test "no previous" {
     ro m = gate()
-    ro lost = TableState { name: "Pause", started: true, input: Null, data: m.initial().data }
+    ro lost = TableState { name: "Pause", started: true, input: Null, data: m.initial().data, taken: []str.new() }
     ro r = run1(m, lost, word_in("continue", "{\"author\":\"a\",\"source\":\"s\"}"))
     assert(!r.moved)
     assert(r.state.name == "Pause")

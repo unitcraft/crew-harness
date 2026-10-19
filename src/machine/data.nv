@@ -9,6 +9,7 @@ export type NamedText { name str, text str }
 
 /// The machines of `machines/`, by the name of the file (`chat.machine.json`).
 export fn machine_files() -> []NamedText => [
+    NamedText { name: "agent_step.machine.json", text: embed_str("machines/agent_step.machine.json") },
     NamedText { name: "actions.machine.json", text: embed_str("machines/actions.machine.json") },
     NamedText { name: "calc.machine.json", text: embed_str("machines/calc.machine.json") },
     NamedText { name: "chat.machine.json", text: embed_str("machines/chat.machine.json") },
@@ -20,11 +21,87 @@ export fn machine_files() -> []NamedText => [
 /// The machines written as tables in Russian (format 2.5) in `machines/`, by the name of the file (`chat.table.md`); the translator of `src/machine_text`
 /// turns them into the JSON above.
 export fn table_files() -> []NamedText => [
+    NamedText { name: "agent_step.table.md", text: embed_str("machines/agent_step.table.md") },
     NamedText { name: "chat.table.md", text: embed_str("machines/chat.table.md") }
 ]
 
 /// The scenarios of `scenarios/`, by the name of the file (`chat-basic.scenario.json`).
 export fn scenario_files() -> []NamedText => [
+    NamedText { name: "agent-step-accounting-1.scenario.json", text: embed_str("scenarios/agent-step-accounting-1.scenario.json") },
+    NamedText { name: "agent-step-agent-turn-1.scenario.json", text: embed_str("scenarios/agent-step-agent-turn-1.scenario.json") },
+    NamedText { name: "agent-step-agent-turn-2.scenario.json", text: embed_str("scenarios/agent-step-agent-turn-2.scenario.json") },
+    NamedText { name: "agent-step-agent-turn-3.scenario.json", text: embed_str("scenarios/agent-step-agent-turn-3.scenario.json") },
+    NamedText { name: "agent-step-agent-turn-4.scenario.json", text: embed_str("scenarios/agent-step-agent-turn-4.scenario.json") },
+    NamedText { name: "agent-step-agent-turn-5.scenario.json", text: embed_str("scenarios/agent-step-agent-turn-5.scenario.json") },
+    NamedText { name: "agent-step-agent-turn-6.scenario.json", text: embed_str("scenarios/agent-step-agent-turn-6.scenario.json") },
+    NamedText { name: "agent-step-agent-turn-7.scenario.json", text: embed_str("scenarios/agent-step-agent-turn-7.scenario.json") },
+    NamedText { name: "agent-step-agent-turn-8.scenario.json", text: embed_str("scenarios/agent-step-agent-turn-8.scenario.json") },
+    NamedText { name: "agent-step-agent-turn-9.scenario.json", text: embed_str("scenarios/agent-step-agent-turn-9.scenario.json") },
+    NamedText { name: "agent-step-budget-1.scenario.json", text: embed_str("scenarios/agent-step-budget-1.scenario.json") },
+    NamedText { name: "agent-step-budget-2.scenario.json", text: embed_str("scenarios/agent-step-budget-2.scenario.json") },
+    NamedText { name: "agent-step-budget-3.scenario.json", text: embed_str("scenarios/agent-step-budget-3.scenario.json") },
+    NamedText { name: "agent-step-budget-4.scenario.json", text: embed_str("scenarios/agent-step-budget-4.scenario.json") },
+    NamedText { name: "agent-step-common-1.scenario.json", text: embed_str("scenarios/agent-step-common-1.scenario.json") },
+    NamedText { name: "agent-step-common-2.scenario.json", text: embed_str("scenarios/agent-step-common-2.scenario.json") },
+    NamedText { name: "agent-step-common-3.scenario.json", text: embed_str("scenarios/agent-step-common-3.scenario.json") },
+    NamedText { name: "agent-step-common-4.scenario.json", text: embed_str("scenarios/agent-step-common-4.scenario.json") },
+    NamedText { name: "agent-step-common-5.scenario.json", text: embed_str("scenarios/agent-step-common-5.scenario.json") },
+    NamedText { name: "agent-step-continuation-1.scenario.json", text: embed_str("scenarios/agent-step-continuation-1.scenario.json") },
+    NamedText { name: "agent-step-continuation-2.scenario.json", text: embed_str("scenarios/agent-step-continuation-2.scenario.json") },
+    NamedText { name: "agent-step-end-end-1.scenario.json", text: embed_str("scenarios/agent-step-end-end-1.scenario.json") },
+    NamedText { name: "agent-step-end-errored-1.scenario.json", text: embed_str("scenarios/agent-step-end-errored-1.scenario.json") },
+    NamedText { name: "agent-step-end-halted-1.scenario.json", text: embed_str("scenarios/agent-step-end-halted-1.scenario.json") },
+    NamedText { name: "agent-step-end-halted-10.scenario.json", text: embed_str("scenarios/agent-step-end-halted-10.scenario.json") },
+    NamedText { name: "agent-step-end-halted-11.scenario.json", text: embed_str("scenarios/agent-step-end-halted-11.scenario.json") },
+    NamedText { name: "agent-step-end-halted-2.scenario.json", text: embed_str("scenarios/agent-step-end-halted-2.scenario.json") },
+    NamedText { name: "agent-step-end-halted-3.scenario.json", text: embed_str("scenarios/agent-step-end-halted-3.scenario.json") },
+    NamedText { name: "agent-step-end-halted-4.scenario.json", text: embed_str("scenarios/agent-step-end-halted-4.scenario.json") },
+    NamedText { name: "agent-step-end-halted-5.scenario.json", text: embed_str("scenarios/agent-step-end-halted-5.scenario.json") },
+    NamedText { name: "agent-step-end-halted-6.scenario.json", text: embed_str("scenarios/agent-step-end-halted-6.scenario.json") },
+    NamedText { name: "agent-step-end-halted-7.scenario.json", text: embed_str("scenarios/agent-step-end-halted-7.scenario.json") },
+    NamedText { name: "agent-step-end-halted-8.scenario.json", text: embed_str("scenarios/agent-step-end-halted-8.scenario.json") },
+    NamedText { name: "agent-step-end-halted-9.scenario.json", text: embed_str("scenarios/agent-step-end-halted-9.scenario.json") },
+    NamedText { name: "agent-step-flow-attempts.scenario.json", text: embed_str("scenarios/agent-step-flow-attempts.scenario.json") },
+    NamedText { name: "agent-step-flow-cancel-open.scenario.json", text: embed_str("scenarios/agent-step-flow-cancel-open.scenario.json") },
+    NamedText { name: "agent-step-flow-continue-outside.scenario.json", text: embed_str("scenarios/agent-step-flow-continue-outside.scenario.json") },
+    NamedText { name: "agent-step-flow-death-between.scenario.json", text: embed_str("scenarios/agent-step-flow-death-between.scenario.json") },
+    NamedText { name: "agent-step-flow-failure-no-result.scenario.json", text: embed_str("scenarios/agent-step-flow-failure-no-result.scenario.json") },
+    NamedText { name: "agent-step-flow-failure-unknown-code.scenario.json", text: embed_str("scenarios/agent-step-flow-failure-unknown-code.scenario.json") },
+    NamedText { name: "agent-step-flow-form-fix.scenario.json", text: embed_str("scenarios/agent-step-flow-form-fix.scenario.json") },
+    NamedText { name: "agent-step-flow-happy.scenario.json", text: embed_str("scenarios/agent-step-flow-happy.scenario.json") },
+    NamedText { name: "agent-step-flow-input-missing.scenario.json", text: embed_str("scenarios/agent-step-flow-input-missing.scenario.json") },
+    NamedText { name: "agent-step-flow-other-party.scenario.json", text: embed_str("scenarios/agent-step-flow-other-party.scenario.json") },
+    NamedText { name: "agent-step-flow-parent-wrong-id.scenario.json", text: embed_str("scenarios/agent-step-flow-parent-wrong-id.scenario.json") },
+    NamedText { name: "agent-step-flow-pause-continue.scenario.json", text: embed_str("scenarios/agent-step-flow-pause-continue.scenario.json") },
+    NamedText { name: "agent-step-flow-permission-human.scenario.json", text: embed_str("scenarios/agent-step-flow-permission-human.scenario.json") },
+    NamedText { name: "agent-step-flow-policy-elevated.scenario.json", text: embed_str("scenarios/agent-step-flow-policy-elevated.scenario.json") },
+    NamedText { name: "agent-step-flow-policy-elevated-lens.scenario.json", text: embed_str("scenarios/agent-step-flow-policy-elevated-lens.scenario.json") },
+    NamedText { name: "agent-step-flow-restart-midturn.scenario.json", text: embed_str("scenarios/agent-step-flow-restart-midturn.scenario.json") },
+    NamedText { name: "agent-step-flow-retries-exhausted.scenario.json", text: embed_str("scenarios/agent-step-flow-retries-exhausted.scenario.json") },
+    NamedText { name: "agent-step-flow-stop-in-pause.scenario.json", text: embed_str("scenarios/agent-step-flow-stop-in-pause.scenario.json") },
+    NamedText { name: "agent-step-flow-stop-in-permission.scenario.json", text: embed_str("scenarios/agent-step-flow-stop-in-permission.scenario.json") },
+    NamedText { name: "agent-step-flow-stop-in-window.scenario.json", text: embed_str("scenarios/agent-step-flow-stop-in-window.scenario.json") },
+    NamedText { name: "agent-step-flow-timeout.scenario.json", text: embed_str("scenarios/agent-step-flow-timeout.scenario.json") },
+    NamedText { name: "agent-step-flow-transient-then-answer.scenario.json", text: embed_str("scenarios/agent-step-flow-transient-then-answer.scenario.json") },
+    NamedText { name: "agent-step-pause-1.scenario.json", text: embed_str("scenarios/agent-step-pause-1.scenario.json") },
+    NamedText { name: "agent-step-pause-2.scenario.json", text: embed_str("scenarios/agent-step-pause-2.scenario.json") },
+    NamedText { name: "agent-step-pause-3.scenario.json", text: embed_str("scenarios/agent-step-pause-3.scenario.json") },
+    NamedText { name: "agent-step-pause-4.scenario.json", text: embed_str("scenarios/agent-step-pause-4.scenario.json") },
+    NamedText { name: "agent-step-permission-1.scenario.json", text: embed_str("scenarios/agent-step-permission-1.scenario.json") },
+    NamedText { name: "agent-step-permission-2.scenario.json", text: embed_str("scenarios/agent-step-permission-2.scenario.json") },
+    NamedText { name: "agent-step-policy-1.scenario.json", text: embed_str("scenarios/agent-step-policy-1.scenario.json") },
+    NamedText { name: "agent-step-policy-2.scenario.json", text: embed_str("scenarios/agent-step-policy-2.scenario.json") },
+    NamedText { name: "agent-step-policy-3.scenario.json", text: embed_str("scenarios/agent-step-policy-3.scenario.json") },
+    NamedText { name: "agent-step-reply-validation-1.scenario.json", text: embed_str("scenarios/agent-step-reply-validation-1.scenario.json") },
+    NamedText { name: "agent-step-reply-validation-2.scenario.json", text: embed_str("scenarios/agent-step-reply-validation-2.scenario.json") },
+    NamedText { name: "agent-step-reply-validation-3.scenario.json", text: embed_str("scenarios/agent-step-reply-validation-3.scenario.json") },
+    NamedText { name: "agent-step-reply-validation-4.scenario.json", text: embed_str("scenarios/agent-step-reply-validation-4.scenario.json") },
+    NamedText { name: "agent-step-retry-1.scenario.json", text: embed_str("scenarios/agent-step-retry-1.scenario.json") },
+    NamedText { name: "agent-step-retry-2.scenario.json", text: embed_str("scenarios/agent-step-retry-2.scenario.json") },
+    NamedText { name: "agent-step-retry-3.scenario.json", text: embed_str("scenarios/agent-step-retry-3.scenario.json") },
+    NamedText { name: "agent-step-start-1.scenario.json", text: embed_str("scenarios/agent-step-start-1.scenario.json") },
+    NamedText { name: "agent-step-step-outcome-1.scenario.json", text: embed_str("scenarios/agent-step-step-outcome-1.scenario.json") },
+    NamedText { name: "agent-step-step-outcome-2.scenario.json", text: embed_str("scenarios/agent-step-step-outcome-2.scenario.json") },
     NamedText { name: "calc-before-start.scenario.json", text: embed_str("scenarios/calc-before-start.scenario.json") },
     NamedText { name: "calc-count-up.scenario.json", text: embed_str("scenarios/calc-count-up.scenario.json") },
     NamedText { name: "calc-missing-input.scenario.json", text: embed_str("scenarios/calc-missing-input.scenario.json") },
@@ -99,6 +176,12 @@ export fn text_of_file(files []NamedText, name str) -> str {
 
 /// The text of the machine of the chat session (`machines/chat.machine.json`).
 export fn chat_machine_text() -> str => text_of_file(machine_files(), "chat.machine.json")
+
+/// The text of the machine of the agent step (`machines/agent_step.machine.json`), the translation of its table.
+export fn agent_step_machine_text() -> str => text_of_file(machine_files(), "agent_step.machine.json")
+
+/// The text of the agent step written as tables (`machines/agent_step.table.md`).
+export fn agent_step_table_text() -> str => text_of_file(table_files(), "agent_step.table.md")
 
 /// The text of the chat machine written as tables (`machines/chat.table.md`).
 export fn chat_table_text() -> str => text_of_file(table_files(), "chat.table.md")

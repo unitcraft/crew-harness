@@ -12,6 +12,7 @@ fn machine_named(name str) -> TableMachine {
     if name == "Gate" { return build("gate.machine.json") }
     if name == "Lenses" { return build("lenses.machine.json") }
     if name == "Variants" { return build("variants.machine.json") }
+    if name == "agent_step" { return agent_step() }
     panic("no machine ${name}")
 }
 

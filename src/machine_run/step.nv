@@ -39,7 +39,7 @@ type EvKind enum
 
 // The event of the engine read as the event of the machine: `name` is the label of the journal, `fields` the data of a word or of a part,
 // `value` the answer or the reason of the failure, `reason` the case of the failure.
-type EventVal { kind EvKind, name str, id str, party str, fields []RecordField, value Value, reason str }
+type EventVal { kind EvKind, name str, id str, request str, party str, fields []RecordField, value Value, reason str }
 
 type Planned enum
     | PNote(JournalEvent)
@@ -50,7 +50,7 @@ type Planned enum
 type Ctx {
     def MachineDef, table DefTable, name str, started bool, input Value, data Value,
     event EventVal, locals []Binding, record Value, planned []Planned,
-    fired bool, finished bool, defect bool, chain int
+    fired bool, finished bool, defect bool, chain int, taken []str, limit int
 }
 
 type Fault { defect bool, code str, params []JournalParam, kind str, message str }
@@ -261,14 +261,23 @@ fn decode_fields(fields []FieldDef, input str, defs TypeDefs) -> Result[[]Record
 }
 
 // The party of a request id: `lens-2` - `lens` (the id is the party or the element of a set, `-`, the attempt).
+fn request_text_of(request Option[str]) -> str {
+    match request {
+        Some(id) => id
+        None => ""
+    }
+}
+
+fn party_of_request_id(id str) -> str {
+    match id.rfind("-") {
+        Some(at) => id[..at]
+        None => id
+    }
+}
+
 fn request_party_of(request Option[str]) -> str {
     match request {
-        Some(id) => {
-            match id.rfind("-") {
-                Some(at) => id[..at]
-                None => id
-            }
-        }
+        Some(id) => party_of_request_id(id)
         None => ""
     }
 }
@@ -306,7 +315,7 @@ fn read_event(ctx Ctx, event Incoming) -> EventRead {
         EventKind.Input => {
             match input_decl(def, event.name) {
                 Some(fields) => match decode_fields(fields, event.input, def.types) {
-                    Ok(vals) => ReadReady(EventVal { kind: EvInput, name: event.name, id: event.id, party: from_party, fields: vals, value: Null, reason: "" })
+                    Ok(vals) => ReadReady(EventVal { kind: EvInput, name: event.name, id: event.id, request: request_text_of(event.request), party: from_party, fields: vals, value: Null, reason: "" })
                     Err(m) => ReadMalformed
                 }
                 None => ReadUnknown
@@ -315,7 +324,7 @@ fn read_event(ctx Ctx, event Incoming) -> EventRead {
         EventKind.Progress => {
             match progress_decl(def, event.name) {
                 Some(fields) => match decode_fields(fields, event.input, def.types) {
-                    Ok(vals) => ReadReady(EventVal { kind: EvProgress, name: event.name, id: event.id, party: from_party, fields: vals, value: Null, reason: "" })
+                    Ok(vals) => ReadReady(EventVal { kind: EvProgress, name: event.name, id: event.id, request: request_text_of(event.request), party: from_party, fields: vals, value: Null, reason: "" })
                     Err(m) => ReadMalformed
                 }
                 None => ReadUnknown
@@ -325,18 +334,18 @@ fn read_event(ctx Ctx, event Incoming) -> EventRead {
             ro at = find_state(def, ctx.name)
             ro party = if at >= 0 { def.states[at].party } else { "" }
             match answer_value(def, party, event.input) {
-                Some(v) => ReadReady(EventVal { kind: EvAnswer, name: event.name, id: event.id, party: from_party, fields: []RecordField.new(), value: v, reason: "" })
+                Some(v) => ReadReady(EventVal { kind: EvAnswer, name: event.name, id: event.id, request: request_text_of(event.request), party: from_party, fields: []RecordField.new(), value: v, reason: "" })
                 None => ReadMalformed
             }
         }
         EventKind.Refused => {
             ro code = FailCode.of(event.input).name()
             ReadReady(EventVal {
-                kind: EvFailure, name: event.name, id: event.id, party: from_party, fields: []RecordField.new(),
+                kind: EvFailure, name: event.name, id: event.id, request: request_text_of(event.request), party: from_party, fields: []RecordField.new(),
                 value: enum_value("FailCode", code), reason: code
             })
         }
-        EventKind.Expired => ReadReady(EventVal { kind: EvTimeout, name: event.name, id: event.id, party: from_party, fields: []RecordField.new(), value: Null, reason: "" })
+        EventKind.Expired => ReadReady(EventVal { kind: EvTimeout, name: event.name, id: event.id, request: request_text_of(event.request), party: from_party, fields: []RecordField.new(), value: Null, reason: "" })
     }
 }
 
@@ -706,6 +715,22 @@ fn run_actions(mut ctx Ctx, actions []Action, mut host PrimitiveHost) -> Result[
                 return Err(Fault { defect: false, code, params: ps, kind: "", message: "" })
             }
             CancelOpenAct { party, except } => {
+                if has_datum(ctx, "open_requests") {
+                    // the open requests of the machine (the datum of the contract): all of them, or those of the named party; the nested
+                    // machines of `except` are not run in this version (the translator refuses them)
+                    ro wanted = party_id_of(ctx, party)
+                    mut keep = []str.new()
+                    for rid in texts_of_datum(ctx, "open_requests") {
+                        ro owner = party_of_request_id(rid)
+                        if party == "" || owner == wanted {
+                            plan(ctx, PCancel(CancelOrder { party: owner }))
+                        } else {
+                            keep.push(rid)
+                        }
+                    }
+                    put_texts(ctx, "open_requests", keep)
+                    continue
+                }
                 ro at = find_state(ctx.def, ctx.name)
                 mut who = party
                 if who == "" && at >= 0 { who = ctx.def.states[at].party }
@@ -757,6 +782,7 @@ fn ctx_with(ctx Ctx, left_name str, left_value Value, right_name str, right_valu
     locals.push(Binding { name: right_name, value: right_value })
     Ctx {
         def: ctx.def, table: ctx.table, name: ctx.name, started: ctx.started, input: ctx.input, data: ctx.data, event: ctx.event, locals,
-        record: ctx.record, planned: ctx.planned, fired: ctx.fired, finished: ctx.finished, defect: ctx.defect, chain: ctx.chain
+        record: ctx.record, planned: ctx.planned, fired: ctx.fired, finished: ctx.finished, defect: ctx.defect, chain: ctx.chain,
+        taken: ctx.taken, limit: ctx.limit
     }
 }

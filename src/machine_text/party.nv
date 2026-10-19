@@ -138,7 +138,36 @@ fn party_row(r TxEntry, mut cx TxCx) -> Result[TxPartyRow, TranslateError] {
 
 fn party_columns() -> []str => ["имя", "идентификатор", "вид", "профиль", "слова ворот", "счётчик"]
 
-/// The section `## Стороны`: the parties; a line `Предел запросов: …` is not supported.
+fn limit_expression(line TxKv, mut cx TxCx) -> Result[TxJ, TranslateError] {
+    mut p = lex_segs(line.segs)?
+    ro x = ex_expr(p, cx, sc_empty())?
+    p_end(p)?
+    Ok(x)
+}
+
+/// The line `Предел запросов: выражение` of the section `## Стороны` (format 1, rule 21): the expression, or nothing when the line is not written.
+fn decl_request_limit(entries []TxEntry, sec TxSection, mut cx TxCx) -> []TxJ {
+    mut out = []TxJ.new()
+    mut i = sec.first
+    while i < sec.last {
+        ro e = entries[i]
+        if e.kind == EN_TEXT && kv_colon(e) >= 0 {
+            ro line = kv_read(entries, i)
+            if line.key == "Предел запросов" {
+                match limit_expression(line, cx) {
+                    Ok(x) => { out.push(x) }
+                    Err(err) => note(cx, err)
+                }
+            }
+            i += line.taken
+        } else {
+            i += 1
+        }
+    }
+    out
+}
+
+/// The section `## Стороны`: the parties; the line `Предел запросов: …` is read by `decl_request_limit`.
 fn decl_parties(entries []TxEntry, sec TxSection, mut cx TxCx) -> []TxPartyRow {
     mut out = []TxPartyRow.new()
     mut i = sec.first
@@ -162,7 +191,8 @@ fn decl_parties(entries []TxEntry, sec TxSection, mut cx TxCx) -> []TxPartyRow {
         } else if e.kind == EN_TEXT && kv_colon(e) >= 0 {
             ro line = kv_read(entries, i)
             if line.key == "Предел запросов" {
-                note(cx, TranslateError { line: e.line, col: 1, kind: "unsupported", message: "не поддержано в этой версии: `Предел запросов` (правило 21)", quote: "" })
+                // read by `decl_request_limit`
+                cx.rows_total += 0
             } else {
                 note(cx, struct_error(e.line, 1, "в разделе `Стороны` бывают таблица и строка `Предел запросов: …`"))
             }

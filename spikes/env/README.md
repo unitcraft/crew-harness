@@ -12,7 +12,7 @@ task 090 (`doc/tasks/090-product-env-spike/`).
 | `ws_echo/` | Polaris server on `127.0.0.1`: `GET /` (HTML), `GET /health`, WebSocket echo `/ws` | `ws_echo_check.mjs` (Node) |
 | `acp/` | `acp_initialize.mjs`: one `initialize` request to `opencode acp` over stdio, no login, no session | exit code 0 and the printed version |
 | `repro_mut_binding/` | minimal reproduction of a Polaris documentation example that Oracle 0.1.0 rejects | see "Known problems" |
-| `repro_engine/` | minimal reproductions of Oracle 0.1.0 defects found while writing the state machine engine (task 091, items 8-13), its PostgreSQL store (task 098, items 21, 23-25), its alignment to the dictionary (task 102, items 26-28), the expression evaluator of the machines (task 106, items 33-35), the interpreter of a machine that is data (task 107, items 36-39) and the translator of tables (task 108, items 40-41) | see "Known problems", items 8-41 |
+| `repro_engine/` | minimal reproductions of Oracle 0.1.0 defects found while writing the state machine engine (task 091, items 8-13), its PostgreSQL store (task 098, items 21, 23-25), its alignment to the dictionary (task 102, items 26-28), the expression evaluator of the machines (task 106, items 33-35), the interpreter of a machine that is data (task 107, items 36-39) and the translator of tables (task 108, items 40-41) and the agent step as data (task 109, item 42) | see "Known problems", items 8-42 |
 | `repro_acp/` | minimal reproductions of Oracle 0.1.0 defects found while writing the ACP client (task 095) | see "Known problems", items 14-18 and 20 |
 | `repro_child_pipes/` | a program: pipes of a child process that now and then do not come back (task 095) | see "Known problems", item 19 |
 | `repro_pg_event/` | a user record `Event` next to the driver `postgres.pgnet` (task 098, item 22); needs `nova update` (the driver comes from git) | see "Known problems", item 22 |
@@ -329,3 +329,13 @@ the line with `\` or use a backtick string, which does not process escapes and k
 (`sc_clone`, `p_copy` of the translator), and a `mut` local of an enum is built by recursion instead of a loop (`ex_postfix`); (d) `Sha256.hash_str(bytes)` gives the hex text, `Uuid.v7()` under `with Time = th.fixed_ms(n), Random = th.seeded(k) { ... }`
 (`std.testing.handlers`) is deterministic and works in product code, not only in tests; (e) the failures of a unit are shown by `nova test` cut to 600 characters (the last four of them): the whole list is the output of the test
 binary (`--keep-artifacts`, the directory `nova_tests-<n>` in the temporary folder).
+
+Found by task 109 (the agent step as a machine that is data, `src/machine_run/`, `src/machine_text/`, `src/machine_text_eq/`); the reproduction is in `repro_engine/src/`, run the same way:
+
+42. **`split_index`**: indexing the result of `str.split(sep)` (`parts[0]`, the result is an iterator) passes the checker and the code generator stops with `[INTERNAL-PANIC] [E_CODEGEN_TYPE_UNKNOWN] Index element type unknown for
+    obj_ty="NovaValue_SplitIter"` with the place of the generated expression, not of the source line. Read it with `for part in text.split(sep)` and push to a list.
+
+Also met in task 109, without a reproduction: (a) `import std.fs.{...}` anywhere in a test unit (a debug test that wrote a file) makes every `.join(...)` on a `[]str` of the whole unit `E_RECV_METHOD_MISMATCH` (it resolves to `Path.join`;
+the family of item 32): keep `std.fs` out of units that join lists, or write the file from a program; (b) a unit whose tests run 75 scenarios several times each (the interpreter and a 46 KB machine built for each run) is killed by `nova test` after
+about 100 seconds (`TIMEOUT`): build the machine once per test, run the scenarios once per test; (c) `NOVA_DEBUG_RUN_DUMP=1` does not lengthen the failure text of `nova test` (cut to 600 characters) in this build either: print the tail
+of a long text with a slice.

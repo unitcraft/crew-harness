@@ -257,8 +257,12 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
         None => ()
     }
     mut party_rows = []TxPartyRow.new()
+    mut request_limit = []TxJ.new()
     match section_of(sections, "Стороны") {
-        Some(sec) => { party_rows = decl_parties(entries, sec, cx) }
+        Some(sec) => {
+            party_rows = decl_parties(entries, sec, cx)
+            request_limit = decl_request_limit(entries, sec, cx)
+        }
         None => ()
     }
     match section_of(sections, "Сигналы") {
@@ -367,6 +371,7 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
     mut party_list = []TxJ.new()
     for row in party_rows { party_list.push(party_json(row, parts)) }
     root.push(kv("parties", TxArr(party_list)))
+    if request_limit.len() > 0 { root.push(kv("request_limit", request_limit[0])) }
     if signals.len() > 0 { root.push(kv("signals", TxArr(signals))) }
     if definitions.len() > 0 { root.push(kv("definitions", TxArr(definitions))) }
     if included.includes.len() > 0 { root.push(kv("includes", TxArr(included.includes))) }
