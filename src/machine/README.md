@@ -327,7 +327,7 @@ Task 108 (`doc/tasks/108-table-translator/`) brought the interpreter from the fo
 # The agent step as data (task 109)
 
 `machines/agent_step.portolan.txt` (since task 110 with the extension `.txt`, as the copy of the sample: its prose has the relative links of the folder of the methodology and the guard of the links reads `.md` only) is the machine "Agent step" of the methodology in Portolan (as tables, format 2.6, the key lines are list items, the fragment "Pause" is a connection); `machines/agent_step.portolan.json`
-is its translation by `src/machine_translate.nv` (a test compares them byte by byte). It passes the checks of the load without a note `unsupported`: 14 states (37 rows of the states, 4 of the pause,
+is its translation by the program `portolan` (`portolan compile`, `src/portolan.nv`; a test compares them byte by byte). It passes the checks of the load without a note `unsupported`: 14 states (37 rows of the states, 4 of the pause,
 6 common events), 13 rows of the ends, 16 definitions, 3 parties, 21 data. The machine is run by the same interpreter as the chat; the user writes no Nova.
 
 What the interpreter got for it (decisions are in `doc/tasks/109-agent-step-machine/analysis.md`):

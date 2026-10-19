@@ -9,11 +9,12 @@ Task 108 (`doc/tasks/108-table-translator/`), task 109 (format 2.6), task 110 (f
 ```powershell
 . C:/work/nova/nova-oracle-0.1.0-windows-x86_64/setup-env.ps1          # the leading dot matters
 cd C:/work/crew-harness
-nova build src/machine_translate.nv -o target/machine-translate.exe    # the command
-target/machine-translate.exe src/machine/machines/chat.portolan.md          # the JSON on the standard output, exit code 0
-target/machine-translate.exe machine.portolan.md --summary                          # the summary: states, rows, actions
-target/machine-translate.exe machine.portolan.md --lenient                          # the JSON of what could be translated even when there are errors
-target/machine-translate.exe machine.portolan.json --render --language en   # the reverse way: the file of Portolan for a tree
+powershell -File scripts/build-portolan.ps1                               # builds target/portolan.exe: the program of the translator (task 116, src/portolan_cli/README.md)
+target/portolan.exe compile src/machine/machines/chat.portolan.md           # the JSON on the standard output, exit code 0
+target/portolan.exe summary machine.portolan.md                              # the summary: states, rows, actions
+target/portolan.exe compile machine.portolan.md --lenient                    # the JSON of what could be translated even when there are errors
+target/portolan.exe render machine.portolan.json --language en               # the reverse way: the file of Portolan for a tree
+target/portolan.exe convert machine.portolan.md --language en                # a file in the other language, through the JSON
 nova test src/machine_text                                              # the translator and its table of words: 198 tests (36 of them task 117)
 nova test src/machine_text_unicode                                      # names in any alphabet through the translator and the reverse generator (27 tests, task 117)
 nova test src/machine_text_eq                                           # the proofs: the chat machine, the pilot, the examples, the definitions
@@ -22,6 +23,9 @@ nova test src/machine_text_lang                                         # the tw
 nova test src/machine_text_render                                       # the reverse generator and its circles (49 tests)
 nova test src/machine_agent                                             # the sample of the methodology goes through the translator; the agent step of the product
 nova test src/machine_agent_en                                          # the English sample of the agent step: the translation, the equality with the Russian one, the 75 scenarios
+nova test src/portolan_cli                                         # the program `portolan` on small files: the commands, the errors, the exit codes (task 116)
+nova test src/portolan_eq                                          # the circles of the program on the machines of the product: compile -> render -> compile, convert ru -> en -> ru
+nova test src/portolan_scenarios                                   # `portolan test` on src/machine: the 131 scenarios; `portolan run` of the agent step one by one
 ```
 
 As a library (module `crew_harness.machine_text`):
@@ -70,7 +74,7 @@ files but for the strings of the author (the title, the texts of refusals) and t
 
 `render_machine(machine_json, language) -> RenderReport { text, notes }` (and `render`, `render_machine_with(json, language, copy_includes)`) writes a tree `machine/2` as a file of Portolan in `ru` or `en` in the canonical form of section 1b of the specification: the header `# Машина: <Имя>` with the four items, the eleven sections in order and an empty one as `—` under its heading, the keys of a state as list items in the order Party, Idle term, Edits, Form returns, Input, On accept, On entry, Except, the tables with one space round the bar and `\|` in a cell, the declarations in blocks of code, one on a line, the operators of the language (`→`, `>=`, `...`, `∈`, `≥`, `≤` in a Russian file, ASCII only in an English one), the Latin name of a state in its heading with no brackets, UTF-8, LF, one line feed at the end. The words are the table of words; the names are the dictionary words that the reader takes back to the same Latin name, else the Latin name. An included file of definitions is written as its line of connection (its types, constants and definitions are left out), `copy_includes` writes the copies instead; the states, the data, the common events and the signals of an included fragment are written as the machine's own (a section `Common events`, `Signals`, `Response parts` are the product's extensions and are written when there is something to write). What the tree has and the file cannot say (a nested machine, an unknown node) is a note with the place in the JSON. Nothing of the prose is written, and the title is not: the header holds the Latin name of the machine, so a circle gives the same tree but for `title` and `portolan_version`. The pieces are exported for tests (`render_type_in`, `render_expression_in`, `render_actions_in`).
 
-The command: `machine-translate <file.portolan.json> --render [--language ru|en]` writes the file to the standard output (on Windows the standard output turns a line feed into CR LF; the function returns LF). The circles are tests: tree -> file -> tree on the seven machines of `src/machine/machines/` and on the machines written as files (the chat, the table of the agent step, both samples of the methodology, the pilot, the examples of the format) in both languages, "ru -> en -> ru", and the file of the second pass is the file of the first (the canonical form is a fixed point). `check-portolan-samples.py` of the methodology, run on the generated pair of the agent step (Russian and English), finds one difference, and it is the product's section `Signals` that the table of words of the methodology has not got.
+The command: `portolan render <file.portolan.json> [--language ru|en]` (the program `portolan`, `src/portolan_cli/`, task 116; it replaced `machine-translate --render`) writes the file to the standard output (on Windows the standard output turns a line feed into CR LF; the function returns LF). The circles are tests: tree -> file -> tree on the seven machines of `src/machine/machines/` and on the machines written as files (the chat, the table of the agent step, both samples of the methodology, the pilot, the examples of the format) in both languages, "ru -> en -> ru", and the file of the second pass is the file of the first (the canonical form is a fixed point). `check-portolan-samples.py` of the methodology, run on the generated pair of the agent step (Russian and English), finds one difference, and it is the product's section `Signals` that the table of words of the methodology has not got.
 
 ## Names in any alphabet, byte offsets (task 117)
 
