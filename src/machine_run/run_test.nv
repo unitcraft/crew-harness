@@ -116,6 +116,7 @@ test "state text" {
     ro m = chat()
     ro r1 = run1(m, m.initial(), said("вопрос"))
     ro r2 = run1(m, r1.state, chunk("отве"))
+    // ORACLE-WORKAROUND(36): the list of records made by calls is bound before the loop: `for s in [make(1), make(2)]` over an array literal of calls does not compile; loop over the literal when item 36 is fixed
     ro states = [m.initial(), r1.state, r2.state, run1(m, r2.state, done()).state]
     for s in states {
         ro text = m.encode_state(s)
@@ -196,6 +197,7 @@ test "calc deterministic" {
 
 test "calc state text" {
     ro m = calc()
+    // ORACLE-WORKAROUND(36): the list of records made by calls is bound before the loop: `for s in [make(1), make(2)]` over an array literal of calls does not compile; loop over the literal when item 36 is fixed
     ro states = [m.initial(), started_calc(0).state, started_calc(7).state]
     for st in states {
         ro text = m.encode_state(st)

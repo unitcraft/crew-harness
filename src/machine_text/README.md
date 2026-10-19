@@ -147,6 +147,8 @@ the side of the kind `machine` (a nested machine; its row is not translated), th
 
 ## Oracle 0.1.0: what shaped the code
 
+<!-- ORACLE-WORKAROUND(25, 20): the translator is one module in one folder (`src/machine_text`) and its proofs are sibling folders and units (`src/machine_text_eq`, `_fmt`, `_lang`, `_render`, `_unicode`), because a module in a folder under a module's folder is refused (25) and the output of a unit must stay under 4 KB (20); nested folders and one unit would do when items 25 and 20 are fixed -->
+
 One folder is one module and one unit, so the translator is one module (`crew_harness.machine_text`) in many files, and the proofs that need the chat machine, the cases and the interpreter are
 a unit of their own (`src/machine_text_eq`), with the output of each under 4 KB (item 20). No generics with inferred arguments: the tree of the JSON is a plain sum type (`TxJ`), the
 parser passes a mutable record (`TxP`) and the context (`TxCx`). The names of the types begin with `Tx`: type names are global to the program (items 9, 14, 21, 29, 37-39 and the new item 40).

@@ -2,6 +2,7 @@
 // local variables of the author (the parameters of a definition, `let`, the variables of a lambda and of a loop, the bindings of an event) and the strings of the author.
 module crew_harness.machine_agent_en
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import crew_harness.machine.{standard_registry}

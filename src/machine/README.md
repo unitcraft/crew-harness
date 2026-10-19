@@ -193,6 +193,8 @@ check of the cache that the specification of the step puts after every accepted 
 
 ## Oracle 0.1.0: limits met and the ways round them
 
+<!-- ORACLE-WORKAROUND(25, 20): the interpreter and its proofs are sibling folders (`src/machine`, `src/machine_table`, `src/machine_run`, `src/machine_chat`, `src/machine_dialog`, `src/machine_agent`, ...), one module and one unit each: a module in a folder under a module's folder is refused (25) and the output of a unit must stay under 4 KB (20), so the tests have short names and a big proof is a unit of its own; one module tree and units of any size would do when items 25 and 20 are fixed -->
+
 The rules of the language that cost a compile and the three new defects (items 33-35, with reproductions in `spikes/env/repro_engine/`) are in the survey README. What shaped this code:
 
 - No generics with inferred arguments, no protocols with type parameters: `Value`, `Expr`, `TypeSpec` are plain sum types; the door to the host is the protocol `PrimitiveHost` without parameters, passed as `mut host PrimitiveHost` (as the engine passes `Environment`).

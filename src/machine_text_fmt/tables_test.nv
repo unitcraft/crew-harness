@@ -2,6 +2,7 @@
 // escape off.
 module crew_harness.machine_text_fmt
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 
 fn const_head() -> str => "| имя | тип | значение |\n|---|---|---|\n"

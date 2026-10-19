@@ -58,6 +58,7 @@ export type Pattern enum
     | LitPattern(Value)
     | CasePattern { type_name str, name str, binds []Bind }
 
+// ORACLE-WORKAROUND(34): the guard of an arm is a list of zero or one expression, not an `Option[Expr]` field: an `Option` of an enum held by a record declared before the enum breaks the C (item 34); use `Option[Expr]` when item 34 is fixed
 /// MatchArm: alternatives (`A | B`), an optional guard and the result.
 export type MatchArm { patterns []Pattern, guard []Expr, body Expr }
 

@@ -2,6 +2,7 @@
 // file `agent_step.portolan.json`, the machine passes the checks of the load and is made; the same table without the list markers (format 2.5) gives the same tree.
 module crew_harness.machine_agent
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import crew_harness.machine.{standard_registry, agent_step_table_text, agent_step_machine_text}
 import crew_harness.machine_table.{load_machine}

@@ -2,6 +2,7 @@
 // names, the registry that checks the primitives, the initial data.
 module crew_harness.machine_run
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import crew_harness.machine.{Value, Expr, Binding, Scope, DefTable, DefFn, Registry, TextType, BoolType, check_value}
 import crew_harness.machine.{Null, Int, Text, List, RecordField, eval_defs, make_record, error_text, NoHost, call, name_ref, bin, lambda1}
@@ -23,6 +24,7 @@ fn end_definition() -> DefFn {
 }
 
 fn base_table(def MachineDef, registry Registry, globals []Binding) -> DefTable {
+    // ORACLE-WORKAROUND(45): a copy of a `ro` list (`def.definitions`) built by hand in a loop; write `mut fns = def.definitions` when item 45 is fixed
     mut fns = []DefFn.new()
     for d in def.definitions { fns.push(d) }
     fns.push(end_definition())
@@ -39,6 +41,7 @@ fn eval_global(e Expr, globals []Binding, table DefTable) -> Result[Value, str] 
 }
 
 fn with_binding(globals []Binding, name str, value Value) -> []Binding {
+    // ORACLE-WORKAROUND(45): a copy of a `ro` list (`globals`) built by hand in a loop; write `mut out = globals` when item 45 is fixed
     mut out = []Binding.new()
     for g in globals { out.push(g) }
     out.push(Binding { name, value })
@@ -151,6 +154,7 @@ export fn portolan_machine_with(def MachineDef, registry Registry, overrides []P
 /// The initial data. `input` is the record of the input fields (or Null): a datum `from_input` takes its field, an expression may read `input`.
 fn initial_data_of(def MachineDef, table DefTable, input Value) -> Result[Value, str] {
     mut fields = []RecordField.new()
+    // ORACLE-WORKAROUND(45): a copy of a `ro` list (`table.globals`) built by hand in a loop; write `mut globals = table.globals` when item 45 is fixed
     mut globals = []Binding.new()
     for g in table.globals { globals.push(g) }
     globals.push(Binding { name: "input", value: input })

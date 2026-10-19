@@ -6,6 +6,7 @@
 // definitions, the primitives, the common events, the states, the ends. Every error of every part is kept: the translation does not stop at the first.
 module crew_harness.machine_text
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import crew_harness.machine.{NamedText}
 
@@ -84,6 +85,7 @@ fn error_before(a TranslateError, b TranslateError) -> bool {
     a.col < b.col
 }
 
+// ORACLE-WORKAROUND(41): the list is called `errors_in`, not `errors`: the same name for lists of different types in two functions of a unit is mixed up by the code generator; use a plain name when item 41 is fixed
 fn errors_sorted(errors_in []TranslateError) -> []TranslateError {
     mut out = []TranslateError.new()
     for e in errors_in {

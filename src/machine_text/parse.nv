@@ -37,6 +37,7 @@ fn cx_place(mut cx TxCx, path str, line int) -> () {
     cx.places.push(TxPlace { path, line })
 }
 
+// ORACLE-WORKAROUND(41): the list is called `pairs_in`, not `list` or `pairs`: a name that means a list of one type in one function and a list of another type in another function of the unit is mixed up by the code generator; use plain names when item 41 is fixed
 fn pair_get(pairs_in []TxPair, ru str) -> Option[str] {
     for p in pairs_in {
         if p.ru == ru { return Some(p.en) }
@@ -60,7 +61,7 @@ type TxScope { names []TxPair }
 
 fn sc_empty() -> TxScope => { names: []TxPair.new() }
 
-// A copy (a `mut` binding of a `ro` parameter is refused by Oracle 0.1.0).
+// A copy.
 // ORACLE-WORKAROUND(45): a copy of a `ro` parameter built by hand in a loop; write `mut out = sc.names` when item 45 is fixed
 fn sc_clone(sc TxScope) -> TxScope {
     mut out = []TxPair.new()
@@ -93,7 +94,7 @@ type TxP { toks []TxTok, pos int, end_line int, end_col int, in_let int }
 
 fn p_new(toks []TxTok, line int, col int) -> TxP => { toks, pos: 0, end_line: line, end_col: col, in_let: 0 }
 
-// A copy of a parser that can be moved (a `mut` binding of a `ro` value is refused by Oracle 0.1.0).
+// A copy of a parser that can be moved.
 // ORACLE-WORKAROUND(45): a copy of a `ro` parameter built by hand in a loop; write `mut q = p` when item 45 is fixed
 fn p_copy(p TxP) -> TxP {
     mut toks = []TxTok.new()

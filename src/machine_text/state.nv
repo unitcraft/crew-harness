@@ -2,6 +2,7 @@
 // and of the rows, and the table "Ends" (4.7).
 module crew_harness.machine_text
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 
 /// TxBlock: a state of the file: the heading and the entries [first, last) of its body.

@@ -135,6 +135,7 @@ fn decl_enum(mut p TxP, mut cx TxCx) -> Result[Option[TxJ], TranslateError] {
     Ok(Some(jobj(pairs)))
 }
 
+// ORACLE-WORKAROUND(41): the list is called `pairs_in`, not `list` or `pairs`: a name that means a list of one type in one function and a list of another type in another function of the unit is mixed up by the code generator; use plain names when item 41 is fixed
 fn pair_has_en(pairs_in []TxPair, en str) -> bool {
     for q in pairs_in {
         if q.en == en { return true }

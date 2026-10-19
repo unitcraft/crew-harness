@@ -2,6 +2,7 @@
 // ask for the history run on both machines of the many-turn chat (`dialog_session` on Nova and `PortolanMachine` over `dialog.portolan.json`) and give the same observations.
 module crew_harness.machine_dialog_eq
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import std.encoding.json.{JsonValue, JsonObject}
 import crew_harness.machine.{standard_registry, dialog_machine_text, Int}

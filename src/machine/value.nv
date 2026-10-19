@@ -2,9 +2,8 @@
 //
 // A machine of the product is DATA (a table of states, expressions over a JSON tree), and one interpreter on Nova runs
 // all of them (task 106). The values the expressions work with are of one kind, `Value`: a dynamic sum type with data and
-// no generics - Oracle 0.1.0 breaks the C of generic functions with inferred type arguments and of protocols with
-// parameters (spikes/env/README.md, items 12, 13), so a typed list or a typed dict is a `Value` and the check against a
-// type is made by `check_value` (types.nv), not by the compiler.
+// no generics.
+// ORACLE-WORKAROUND(12, 13): no generics: a generic function with inferred type arguments and a protocol with parameters break the C, so a typed list or a typed dict is a `Value` and the check against a type is made by `check_value` (types.nv), not by the compiler; typed containers would do when items 12 and 13 are fixed
 //
 // The rules (format v2, state-machines/state-machine-portolan-spec.md, sections 2, 3.3 and 12; the owner's decisions of 2026-10-19):
 //  - `text(x)`: an integer is its decimal form; an enum value is the word of its code (`StoppedByHuman` -> `stopped_by_human`,

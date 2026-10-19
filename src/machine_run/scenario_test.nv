@@ -177,6 +177,7 @@ test "no expectation" {
     assert(report_text(run) == "")
 }
 
+// ORACLE-WORKAROUND(12, 13, 26): the type arguments of `drive_scenario` are written out here and in the tests below; infer them when items 12 and 13 are fixed
 test "drive is generic" {
     ro sc = scenario_of("chat-silent-agent.scenario.test.json")
     ro traces = drive_scenario[PortolanState, PortolanMachine](chat(), sc)

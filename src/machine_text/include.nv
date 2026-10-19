@@ -6,6 +6,7 @@
 // `отменить_открытые(кроме: [])` are an ordinary cancel.
 module crew_harness.machine_text
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import crew_harness.machine.{NamedText}
 

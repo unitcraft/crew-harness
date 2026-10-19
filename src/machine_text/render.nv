@@ -6,6 +6,7 @@
 // The circle "file -> JSON -> file -> JSON" gives the same tree but for `title` and `portolan_version` (the header of the canonical file holds the Latin name of the machine).
 module crew_harness.machine_text
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 
 /// RenderReport: the text of the file and the notes about what the JSON has and the file cannot say (each note names the place in the JSON).

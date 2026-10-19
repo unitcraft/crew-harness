@@ -19,6 +19,7 @@
 // step, so a defect gives nothing but its own two.
 module crew_harness.machine_run
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import std.encoding.json.{Json}
 import crew_harness.engine.{Incoming, SendOrder, CancelOrder, Conclusion, FailCode, JournalParam, JournalEvent, journal_event, param}
@@ -107,6 +108,7 @@ fn data_put(data Value, name str, value Value) -> Value {
 }
 
 fn event_record(ev EventVal) -> Value {
+    // ORACLE-WORKAROUND(45): a copy of a `ro` list (`ev.fields`) built by hand in a loop; write `mut fields = ev.fields` when item 45 is fixed
     mut fields = []RecordField.new()
     for f in ev.fields { fields.push(f) }
     fields.push(RecordField { name: "id", value: Text(ev.id) })
@@ -115,6 +117,7 @@ fn event_record(ev EventVal) -> Value {
 }
 
 fn scope_of(ctx Ctx) -> Scope {
+    // ORACLE-WORKAROUND(45): a copy of a `ro` list (`ctx.table.globals`) built by hand in a loop; write `mut bs = ctx.table.globals` when item 45 is fixed
     mut bs = []Binding.new()
     for g in ctx.table.globals { bs.push(g) }
     match ctx.data {
@@ -282,6 +285,7 @@ fn request_party_of(request Option[str]) -> str {
     }
 }
 
+// ORACLE-WORKAROUND(37, 39): the type has a name of its own (`EventRead`, not `Reading`): type names and case names share one table of the program, and a type named like a case of an enum of another module (`Class.Reading`) breaks every use of that case; use a short name when items 37 and 39 are fixed
 type EventRead enum
     | ReadUnknown
     | ReadMalformed
@@ -765,6 +769,7 @@ fn run_actions(mut ctx Ctx, actions []Action, mut host PrimitiveHost) -> Result[
 
 // A copy of the context with two more names in the scope (used to add by the operator of the language).
 fn ctx_with(ctx Ctx, left_name str, left_value Value, right_name str, right_value Value) -> Ctx {
+    // ORACLE-WORKAROUND(45): a copy of a `ro` list (`ctx.locals`) built by hand in a loop; write `mut locals = ctx.locals` when item 45 is fixed
     mut locals = []Binding.new()
     for l in ctx.locals { locals.push(l) }
     locals.push(Binding { name: left_name, value: left_value })

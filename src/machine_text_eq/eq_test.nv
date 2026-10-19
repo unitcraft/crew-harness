@@ -4,6 +4,7 @@
 // transition and the state at the level of one step of the machine.
 module crew_harness.machine_text_eq
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import crew_harness.machine.{scenario_files, standard_registry, chat_machine_text, chat_table_text}
 import crew_harness.engine.{Incoming, Order, StepEnvironment, journal_line}
@@ -74,6 +75,7 @@ fn trace_diff(ta StepTrace, tb StepTrace) -> str {
     ""
 }
 
+// ORACLE-WORKAROUND(12, 13, 26): the type arguments of `drive_scenario` are written out here and in the tests below; infer them when items 12 and 13 are fixed
 fn engine_diff(sc Scenario, first PortolanMachine, second PortolanMachine) -> str {
     ro ta = drive_scenario[PortolanState, PortolanMachine](first, sc)
     ro tb = drive_scenario[PortolanState, PortolanMachine](second, sc)

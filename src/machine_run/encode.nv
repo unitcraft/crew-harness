@@ -8,6 +8,7 @@
 // order of the type, a dict is an object (text keys) or the array of the pairs `[[key,value],...]` (other keys), a tuple is an array.
 module crew_harness.machine_run
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import crew_harness.machine.{Value, Null, Bool, Int, Float, Text, List, Dict, Record, Variant, DictEntry, RecordField, TypeDefs, VariantDef, RecordDef, enum_word, is_enum_type, value_text, code_word}
 
@@ -88,6 +89,7 @@ fn enc_ordered_fields(defs TypeDefs, name str, fields []RecordField) -> []Record
             out
         }
         None => {
+            // ORACLE-WORKAROUND(45): a copy of a `ro` list (`fields`) built by hand in a loop; write `mut same = fields` when item 45 is fixed
             mut same = []RecordField.new()
             for f in fields { same.push(f) }
             same

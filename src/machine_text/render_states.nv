@@ -1,6 +1,7 @@
 // render_states.nv - the reverse generator, the states, the ends, the primitives and the whole file (task 113; the pieces before them are in render_expr.nv and render.nv).
 module crew_harness.machine_text
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import crew_harness.machine.{standard_registry, class_word}
 

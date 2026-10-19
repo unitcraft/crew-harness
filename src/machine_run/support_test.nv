@@ -1,6 +1,7 @@
 // support_test.nv - helpers of the tests of the interpreter: the machines of the data directory, a step with its orders as text.
 module crew_harness.machine_run
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import crew_harness.machine.{Value, PrimitiveHost, EvalError, Null, enum_value, standard_registry, machine_files, text_of_file, record_get, value_json}
 import crew_harness.engine.{Incoming, EventKind, Order, StepEnvironment, JournalEvent}

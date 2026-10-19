@@ -2,6 +2,7 @@
 // The trees are compared as trees (the order of the keys, the spaces and the `title` do not count).
 module crew_harness.machine_text_render
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import crew_harness.machine.{standard_registry, machine_files, text_of_file}

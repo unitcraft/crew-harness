@@ -1,6 +1,7 @@
 // party.nv - the parties (format section 1, `## Стороны`), the signals and the parts of an answer, the definitions (section 8), the primitives (section 7).
 module crew_harness.machine_text
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 
 // ---- the parties -----------------------------------------------------------------------------------------------------------------------

@@ -18,6 +18,7 @@
 // (`input` is the object of the input of the machine). `input` is a text, or an object that is written as JSON.
 module crew_harness.machine_run
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import crew_harness.engine.{Machine, Engine, MemoryWorld, Incoming, EventKind, JournalEntry, Journal, Store, Link, start_engine, resume_engine, memory_journal, memory_store, memory_link, memory_time}
@@ -338,6 +339,7 @@ fn entry_text(e JournalEntry) -> str {
     "${e.event.code}(${parts.join(";")})"
 }
 
+// ORACLE-WORKAROUND(12, 13, 26): the helpers (`begin_engine`, `resumed_engine`, `engine_feed`, `engine_pump`, `drive_scenario`) are generic over the machine and every call writes the type arguments out (`engine_feed[S, M](...)`); infer them when items 12 and 13 are fixed
 fn begin_engine[S, M Machine[S]](machine M, mut world MemoryWorld) -> Engine[M, S] {
     with Journal = memory_journal(world), Store = memory_store(world), Link = memory_link(world), Time = memory_time(world) {
         start_engine[S, M](machine, "chat-1")
@@ -377,6 +379,7 @@ fn engine_pump[S, M Machine[S]](mut e Engine[M, S], mut world MemoryWorld) -> in
     }
 }
 
+// ORACLE-WORKAROUND(10): the answer is read with two nested `match`es, one level each, not `Some(Answer(reply))`: a nested pattern over a generic payload binds a NULL pointer in the C; write the nested pattern when item 10 is fixed
 fn outcome_text[S, M Machine[S]](e Engine[M, S]) -> str {
     match e.outcome() {
         Some(response) => match response {
@@ -569,6 +572,7 @@ export fn scenario_problem(first_machine PortolanMachine, sc Scenario) -> str {
         Ok(m) => m
         Err(m) => return m
     }
+    // ORACLE-WORKAROUND(45): a copy of a `ro` list (`machine.replies`) built by hand in a loop; write `mut replies = machine.replies` when item 45 is fixed
     mut replies = []ScriptedReply.new()
     for r in machine.replies { replies.push(r) }
     for s in sc.steps {
@@ -591,6 +595,7 @@ export fn drive_table_scenario(first_machine PortolanMachine, sc Scenario) -> []
     }
     mut world = MemoryWorld.at(sc.start_at)
     mut e = begin_engine[PortolanState, PortolanMachine](machine, world)
+    // ORACLE-WORKAROUND(45): a copy of a `ro` list (`machine.replies`) built by hand in a loop; write `mut replies = machine.replies` when item 45 is fixed
     mut replies = []ScriptedReply.new()
     for r in machine.replies { replies.push(r) }
     mut traces = []StepTrace.new()

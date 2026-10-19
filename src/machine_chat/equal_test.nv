@@ -3,6 +3,7 @@
 // the engine (journal lines with the envelope, sent and cancelled requests, the outcome, the acknowledgements).
 module crew_harness.machine_chat
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import std.encoding.json.{Json, JsonObject}
 import crew_harness.machine.{scenario_files, standard_registry, chat_machine_text}
@@ -209,6 +210,7 @@ fn events_of(sc Scenario) -> []Incoming {
     out
 }
 
+// ORACLE-WORKAROUND(12, 13, 26): the type arguments of `drive_scenario` are written out here and in the tests below; infer them when items 12 and 13 are fixed
 fn first_run_diff(sc Scenario) -> str {
     ro table = table_chat()
     ro nova = drive_scenario[ChatState, ChatSession](chat_session(), sc)

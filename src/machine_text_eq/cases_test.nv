@@ -2,6 +2,7 @@
 // definitions of the meeting with the file of the cycle arithmetic (the hash of the format), the fragment "Pause".
 module crew_harness.machine_text_eq
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import crew_harness.machine.{standard_registry, Registry, Primitive, ParamSpec, TextType, ListType, Reading, register, NamedText, find_primitive}
 import crew_harness.machine_table.{parse_machine, load_machine}

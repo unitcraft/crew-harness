@@ -2,6 +2,7 @@
 // enum, `yes`/`no`, `none`, the composite values as compact JSON.
 module crew_harness.machine_run
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import crew_harness.machine.{Value, Int, Text, TypeDefs, RecordDef, VariantDef, CaseDef, FieldDef, EnumWord, TextType, IntType, DefTable, DefFn, Binding, Lit, call, enum_value, eval_defs, NoHost, Scope, standard_registry, value_text, value_json}
 

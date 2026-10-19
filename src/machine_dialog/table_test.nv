@@ -2,6 +2,7 @@
 // `dialog.portolan.json`, the machine loads, builds, takes the idle term from the parameter of the project, has no primitives; every row of the table has a scenario (the mark `taken`).
 module crew_harness.machine_dialog
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import std.encoding.json.{Json}
 import crew_harness.machine.{standard_registry, dialog_machine_text, dialog_table_text, scenario_files, NamedText, Int, Text}

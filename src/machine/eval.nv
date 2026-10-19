@@ -78,6 +78,7 @@ export fn empty_scope() -> Scope => { bindings: []Binding.new() }
 
 /// A copy of the scope with one more name.
 export fn scope_with(scope Scope, name str, value Value) -> Scope {
+    // ORACLE-WORKAROUND(45): a copy of a `ro` list (`scope.bindings`) built by hand in a loop; write `mut out = scope.bindings` when item 45 is fixed
     mut out = []Binding.new()
     for b in scope.bindings { out.push(b) }
     out.push(Binding { name, value })
@@ -371,6 +372,7 @@ fn eval_with_field(base Expr, fields []FieldExpr, mut env Env, mut host Primitiv
     match b {
         Record { name, fields: old } => {
             ro changes = eval_fields(fields, "fields", env, host, depth)?
+            // ORACLE-WORKAROUND(45): a copy of a `ro` list (`old`) built by hand in a loop; write `mut out = old` when item 45 is fixed
             mut out = []RecordField.new()
             for f in old { out.push(f) }
             for c in changes {
@@ -851,6 +853,7 @@ fn find_def(table DefTable, name str) -> int {
 fn call_def(d DefFn, args []Expr, mut env Env, mut host PrimitiveHost, depth int) -> Result[Value, EvalError] {
     if args.len() != d.params.len() { return bad_count(d.name, d.params.len(), args.len()) }
     ro values = eval_args(args, env, host, depth)?
+    // ORACLE-WORKAROUND(45): a copy of a `ro` list (`env.table.globals`) built by hand in a loop; write `mut names = env.table.globals` when item 45 is fixed
     mut names = []Binding.new()
     for g in env.table.globals { names.push(g) }
     mut i = 0
@@ -1011,6 +1014,7 @@ fn ev(e Expr, mut env Env, mut host PrimitiveHost, depth int) -> Result[Value, E
 
 /// Evaluate an expression with the definitions of a machine; primitives go to the host. The scope is read, not changed.
 export fn eval_defs(expr Expr, scope Scope, table DefTable, mut host PrimitiveHost) -> Result[Value, EvalError] {
+    // ORACLE-WORKAROUND(45): a copy of a `ro` list (`scope.bindings`) built by hand in a loop; write `mut names = scope.bindings` when item 45 is fixed
     mut names = []Binding.new()
     for b in scope.bindings { names.push(b) }
     mut env = Env { names, steps: 0, table }

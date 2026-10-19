@@ -122,6 +122,7 @@ test "schema keys" {
 test "schema kinds" {
     assert(same_names(branch_consts(def_of("event"), "kind"), event_kind_names()))
     assert(same_names(branch_consts(def_of("action"), "do"), action_names()))
+    // ORACLE-WORKAROUND(33): the variants are bound to a list before the loop: `for x in [A, B]` over a literal list of variants of a user enum does not compile; loop over the literal when item 33 is fixed
     ro states = [AppealKind, OperationKind, ForkKind, EndKind]
     mut words = []str.new()
     for k in states { words.push(state_kind_word(k)) }

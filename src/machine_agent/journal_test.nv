@@ -2,6 +2,7 @@
 // events of the format) with the same parameters: the table of the methodology is copied here as data. Static: the codes the machine writes; dynamic: the codes the scenarios see.
 module crew_harness.machine_agent
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import crew_harness.machine_table.{MachineDef, Action, JournalAct, MachineErrorAct, IfAct, ForEachAct, LetAct, NamedExpr}
 

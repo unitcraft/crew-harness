@@ -2,6 +2,7 @@
 // (no list markers, no blocks of code) are read as before.
 module crew_harness.machine_text_fmt
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import crew_harness.machine_text.{definitions_hash, normalize_definitions, translate_definitions, defs_file_text}
 
