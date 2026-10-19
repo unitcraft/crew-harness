@@ -12,7 +12,7 @@ task 090 (`doc/tasks/090-product-env-spike/`).
 | `ws_echo/` | Polaris server on `127.0.0.1`: `GET /` (HTML), `GET /health`, WebSocket echo `/ws` | `ws_echo_check.mjs` (Node) |
 | `acp/` | `acp_initialize.mjs`: one `initialize` request to `opencode acp` over stdio, no login, no session | exit code 0 and the printed version |
 | `repro_mut_binding/` | minimal reproduction of a Polaris documentation example that Oracle 0.1.0 rejects | see "Known problems" |
-| `repro_engine/` | minimal reproductions of Oracle 0.1.0 defects found while writing the state machine engine (task 091, items 8-13), its PostgreSQL store (task 098, items 21, 23-25), its alignment to the dictionary (task 102, items 26-28), the expression evaluator of the machines (task 106, items 33-35) and the interpreter of a machine that is data (task 107, items 36-39) | see "Known problems", items 8-39 |
+| `repro_engine/` | minimal reproductions of Oracle 0.1.0 defects found while writing the state machine engine (task 091, items 8-13), its PostgreSQL store (task 098, items 21, 23-25), its alignment to the dictionary (task 102, items 26-28), the expression evaluator of the machines (task 106, items 33-35), the interpreter of a machine that is data (task 107, items 36-39) and the translator of tables (task 108, items 40-41) | see "Known problems", items 8-41 |
 | `repro_acp/` | minimal reproductions of Oracle 0.1.0 defects found while writing the ACP client (task 095) | see "Known problems", items 14-18 and 20 |
 | `repro_child_pipes/` | a program: pipes of a child process that now and then do not come back (task 095) | see "Known problems", item 19 |
 | `repro_pg_event/` | a user record `Event` next to the driver `postgres.pgnet` (task 098, item 22); needs `nova update` (the driver comes from git) | see "Known problems", item 22 |
@@ -311,3 +311,21 @@ beside `src/machine`) is a separate module and unit, and a module that imports a
 refused (item 25; `module lib.sub` is accepted by `nova test` but cannot be imported); (d) `mut x = p.field` of a `ro` parameter that holds text or lists is `E_READONLY_COERCE` (restructure with `ro` and
 `match`, or recursion instead of a loop that reassigns a copy of a parameter); a record literal in the argument of `match f(R { ... })` is a syntax error; a match arm that is an assignment needs braces; a test
 that fails inside a loop prints one line, and the text of a failure is cut to 600 characters (read the full list from the test binary with `--keep-artifacts`); (e) `std.text` must be imported for `[]str.join`.
+
+Found by task 108 (the translator of tables in Russian, `src/machine_text/`, and its command `src/machine_translate.nv`); the reproductions are in `repro_engine/src/`, run the same way:
+
+40. **`user_type_child`**: a user record named `Child` (the core of the machines had one, the node of a tree of an expression) next to any import of `std.os`, which has the consume record `Child` of a child
+    process, breaks the compile of the program: `E_CONSUME_KEYWORD_MISSING` ("binding `c` holds a consume-required instance of type `Child`") in the reproduction, `E_MISSING_FIELD_IN_LITERAL` and
+    `E_FIELD_MODULE_PRIVATE` in `std/src/os/proc.nv` when the program is built. The checker does not report the clash at the declaration (the family of items 9, 14, 21, 22, 29, 37-39). The tests of the core
+    did not import `std.os`, so they passed; `nova build src/machine_translate.nv` (it needs `std.os.args`) failed. The record is `ExprChild` now.
+41. **`same_name_other_type`**: a parameter named `list` of the type `[]Pair` in one function and a name `list` bound by a pattern (`Err(list)`) to a `[]Problem` in a test of the same module: the generated C reads the
+    field of the second as a field of the first (`no member named 'code' in 'struct Nova_Pair'`). The two names are in different functions, the types are different and not generic. A different name
+    (`problems`) compiles. The translator and its tests give every list a name of its own by its type (`problems`, `pairs_in`, `errors_in`, `tokens`, `found`).
+
+Also met in task 108, without a reproduction: (a) in the file of a program `import std.fs.{...}` has to come BEFORE the imports of the modules of the product, or `nova build` stops with `E_RECV_METHOD_MISMATCH` (`.join` on a `Vec` resolves to
+`Path.join` although every module imports `std.text`; item 32 is the same family: which `join` a module sees depends on the imports of the program, and on their order); (b) a string has no `+` (`E_STR_CONCAT_PLUS`), a raw newline in `"..."` is refused (`E_STR_RAW_NEWLINE`, D467: end
+the line with `\` or use a backtick string, which does not process escapes and keeps `${...}`), `str.trim` is `trim_ascii`, `str.find` takes the needle only, a type name cannot be written with its module
+(`crew_harness.machine.Value` as a parameter type is a CC-FAIL: import the name); (c) `mut x = p` with `p` a parameter or a pattern binding of a record/enum that holds text or lists is `E_READONLY_COERCE`, so a copy is built in place
+(`sc_clone`, `p_copy` of the translator), and a `mut` local of an enum is built by recursion instead of a loop (`ex_postfix`); (d) `Sha256.hash_str(bytes)` gives the hex text, `Uuid.v7()` under `with Time = th.fixed_ms(n), Random = th.seeded(k) { ... }`
+(`std.testing.handlers`) is deterministic and works in product code, not only in tests; (e) the failures of a unit are shown by `nova test` cut to 600 characters (the last four of them): the whole list is the output of the test
+binary (`--keep-artifacts`, the directory `nova_tests-<n>` in the temporary folder).

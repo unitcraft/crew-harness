@@ -97,7 +97,7 @@ test "eq 39 engine" {
         if d != "" { panic(d) }
         steps += sc.steps.len()
     }
-    assert(steps >= 100)
+    assert(steps == 126)
 }
 
 test "eq 39 own" {
@@ -189,7 +189,7 @@ test "eq 39 machine" {
         if d != "" { panic(d) }
         events += events_of(sc).len()
     }
-    assert(events >= 80)
+    assert(events == 91)
 }
 
 test "eq the same json" {

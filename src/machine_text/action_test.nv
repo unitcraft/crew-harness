@@ -3,7 +3,7 @@ module crew_harness.machine_text
 
 import std.text
 
-fn act_data() -> []str => ["число_повторов", "ход", "остановка", "расход", "использование", "предыдущее", "к_отправке", "линзы", "номер_захода", "ответившие", "ответы_свидетеля", "находки_линзы", "сессия"]
+fn act_data() -> []str => ["число_повторов", "ход", "остановка", "расход", "использование", "предыдущее", "к_отправке", "линзы", "номер_захода", "ответившие", "ответы_свидетеля", "находки_линзы", "сессия", "сбойное_обращение", "порядок_линз"]
 
 // The JSON array of the actions of a text, or `ERR kind: message`.
 fn ac(text str) -> str {
@@ -129,4 +129,23 @@ test "ac places" {
     assert(problems.len() == 2)
     assert(problems[0].col == 21)
     assert(problems[1].col == 44)
+}
+
+test "ac format examples" {
+    // format 3.2, 4.4, 4.5
+    ro join = a_assign(tgt("stop_reason"), x_bin("+", x_call("non_empty", [x_name("failed_appeal")]), x_lit(js("_halt_meeting"))))
+    assert(ac("остановка = непустое(сбойное_обращение) + \"_halt_meeting\"") == arr([join]))
+    ro lens_key = a_target("lenses", [a_step_key(x_name("side"))])
+    ro copy = x_with(x_name("l"), [kv("lost", x_lit(jint(0)))])
+    ro local = a_let("l", x_call("require", [x_index(x_name("lenses"), x_name("side"))]), [a_assign(lens_key, copy)])
+    assert(ac("пусть л = обязательно(линзы[сторона]) в (линзы[сторона] = { ...л, потери_подряд: 0 })") == arr([local]))
+    ro each_key = a_target("lenses", [a_step_key(x_name("l"))])
+    ro each_copy = x_with(x_call("require", [x_index(x_name("lenses"), x_name("l"))]), [kv("probes", x_lit(jint(0)))])
+    assert(ac("для каждого л в порядок_линз: линзы[л] = { ...обязательно(линзы[л]), пробы: 0 }") == arr([a_for_each("l", x_name("lens_order"), [a_assign(each_key, each_copy)])]))
+}
+
+test "ac conditional" {
+    ro cond = x_un("not", x_call("has", [x_name("usage")]))
+    ro body = [a_journal_value(x_call("journal_event", [x_lit(js("c")), x_lit(js("k")), x_lit(jint(1))]))]
+    assert(ac("если не есть(использование) то (журнал(событие_журнала(\"c\", k: 1)))") == arr([a_if(cond, body, [])]))
 }

@@ -7,10 +7,10 @@
 // Build: nova build src/machine_translate.nv -o target/machine-translate.exe
 module crew_harness.machine_translate
 
+// std.fs comes first: with the imports of the modules of the product before it, `.join` on a `Vec` resolves to `Path.join` (Oracle 0.1.0, item 32 of spikes/env/README.md)
 import std.fs.{Fs, Path, read}
 import std.os.{args, exit_process}
 import std.io.{stderr}
-import std.text
 import crew_harness.machine.{standard_registry}
 import crew_harness.machine_text.{translate_report, translate_checked, error_text, render_summary}
 
@@ -21,8 +21,9 @@ fn usage() Io -> () {
 fn main() Os Fs Io -> () {
     ro argv = args()
     if argv.len() < 2 {
+        // without a file: the usage and exit code 0, like `crew-harness` with no arguments; `nova test src` runs every program of the folder once with no arguments
         usage()
-        exit_process(2)
+        return
     }
     ro file = argv[1]
     ro flag = if argv.len() > 2 { argv[2] } else { "" }

@@ -1,0 +1,94 @@
+# machine_text: the translator of tables in Russian into the machine as data
+
+Task 108 (`doc/tasks/108-table-translator/`). A machine is a Markdown file of tables in Russian by the format of the methodology, **version 2.5**
+(`unitcraft/ai-dev-methodology`, `state-machines/state-machine-table-format.md`, read only); the translator turns it into the JSON `machine/2` that the interpreter of
+`src/machine_table` + `src/machine_run` runs. The user writes no Nova. The dictionary of the methodology (version 9, `state-machine-glossary.md`) gives the Latin names.
+
+## Run
+
+```powershell
+. C:/work/nova/nova-oracle-0.1.0-windows-x86_64/setup-env.ps1          # the leading dot matters
+cd C:/work/crew-harness
+nova build src/machine_translate.nv -o target/machine-translate.exe    # the command
+target/machine-translate.exe src/machine/machines/chat.table.md          # the JSON on the standard output, exit code 0
+target/machine-translate.exe table.md --summary                          # the summary: states, rows, actions
+target/machine-translate.exe table.md --lenient                          # the JSON of what could be translated even when there are errors
+nova test src/machine_text                                              # the translator: 118 tests
+nova test src/machine_text_eq                                           # the proofs: the chat machine, the pilot, the examples, the definitions
+```
+
+As a library (module `crew_harness.machine_text`):
+
+| Function | What it does |
+|---|---|
+| `translate(file_text) -> Result[str, []TranslateError]` | the JSON of a machine, or every error |
+| `translate_report(file_text) -> TranslateReport` | the JSON (of what could be translated) with every note, and the counts of the rows (`rows_total`, `rows_noted`) |
+| `translate_checked(file_text, registry) -> TranslateReport` | the same, then the checks of the table `check_machine` against the registry of the primitives of the host; an issue is put at the line of its row |
+| `translate_report_with`, `translate_checked_with` | with the registry of the files of definitions of the caller (`[]NamedText`: the name of the include line, the text) |
+| `translate_definitions(text) -> DefsReport` | a file of definitions (format section 8) alone: version, hash, JSON of types, constants, definitions |
+| `definitions_hash(text)`, `normalize_definitions(text)` | the hash of a file of definitions: 12 hex letters of SHA-256 after the normalization of the format (BOM, LF, no blanks at the end of a line, one LF at the end) |
+| `translate_type(text)`, `translate_types(text)`, `translate_expression(text, data)`, `translate_actions(text, data, parties, empty_lists)` | pieces of a table alone: a type, the declarations of the section `## Типы`, an expression, a list of actions |
+| `render_summary(machine_json) -> str` | the summary of a machine: the header, one line per state with the number of rows and actions, the common events, the ends |
+| `error_text(error, file) -> str` | `file:line:column: kind: message` and the quoted line |
+
+The output is deterministic: two translations of one text give the same bytes (a test compares them, and a test on the chat machine compares the tree with the hand-written one).
+
+## Errors
+
+All errors are listed, not the first one; sorted by place. `TranslateError { line, col, kind, message, quote }`: the line and the column in the file (1-based, in letters), the
+quoted line, and the `kind`:
+
+| kind | Meaning |
+|---|---|
+| `syntax` | the cell cannot be read |
+| `name` | a word that the table of names, or the file itself, does not know; the message gives the nearest word (`; возможно, `x``) |
+| `type` | a type is wrong |
+| `structure` | the shape of the file: the header, the sections, the columns of a table, an extra line |
+| `unsupported` | "не поддержано в этой версии": the format has it, the interpreter of task 107 does not run it (below) |
+| `check` | an issue of `check_machine` (reads against the "Input", writes against the data, classes of the primitives, reachability, exhaustiveness of the ends, `new_id`, a literal outside its set); the message begins with the path in the JSON |
+
+A soft error (an unknown word) does not stop the cell: the translation goes on with the Russian word in its place, so a cell with two unknown words says both. A hard error
+(a cell that does not parse) stops that cell only; the other rows are translated.
+
+## The names
+
+`names.tsv` is made from the dictionary by `python scripts/glossary-names.py <state-machine-glossary.md> > src/machine_text/names.tsv`: `kind<TAB>Russian<TAB>English`, kinds `type`,
+`case`, `state`, `event`, `method`, `function`, `field`, `data`, `constant`, `variable`, `effect`. A Russian word may have two English ones in two kinds (the datum `расход` is
+`transport_usage`, the field `расход` is `usage`, section 2.15 of the dictionary); the translator asks for the kind it needs (a datum, a field, a type, a case, a function).
+`names_format.tsv` holds what the dictionary does not have: `catalog` (the functions of section 12 of the format as the evaluator names them: `есть` -> `has`), `executor`
+(`вход`, `событие`, `сторона` -> `side`, `состояние`, `запись_перехода` -> `transition_record`, `все_данные`, `трасса`, `номер_шага`: the names of `src/machine_table`, not the
+dictionary's `party` and `transition_note`), `primitive` (`новый_ид` -> `new_id`, version 9), `word`, `signal`, `signal_field`, `part`, and the names of the machines of the product
+(the chat machine). A name that a table introduces itself (a parameter of a definition, a `пусть`, a variable of a lambda, a name of an event) is looked up under `variable` and, if
+the dictionary has not got it, written in Latin letters (`л` -> `l`, `полученный` -> `received` by the dictionary). The state names come from the heading: `### ПОЛИТИКА — развилка (Policy)`.
+
+## The file
+
+Markdown, the sections of format section 1 (`## Типы`, `## Константы`, `## Параметры`, `## Вход`, `## Данные`, `## Стороны`, `## Определения`, `## Подключения`, `## Общие события`,
+`## Состояния`, `## Концы`, `## Примитивы`). The rules of the reader: a line that starts with `>` is a comment, three backticks are nothing, `//` ends a line, a line that starts with `|` at the
+first column is a row (`\|` is a bar of the text, a bar in a string literal is not a cell border), an indented line continues the line before it, any other line outside a construction is "лишняя
+строка". Expressions, actions and types are those of sections 2, 3 and 5 (`?T`, `[]T`, `словарь[K, V]`, `полный словарь[K, V]`, tuples, `число≥n`, sets of literals `"a" | "b"`, `ид`; `если`, `пусть`,
+`выбор`, lambdas, `{ ...x, поле: выр }`, `Тип.Вариант { … }`, `вызвать(примитив, …)`; `поле = выр`, `+=`, `поле[ключ] = выр`, `журнал(…)`, `ошибка_машины(…)`, `для каждого`, `если … то (…) иначе (…)`).
+
+Extensions of the product (they are the proposals of section 14 of the format, И-4, that the interpreter has): the section `## Части ответа` (`| сторона | имя | поля |`) and the event
+`часть(имя(поле: имя))` for a part of an answer that keeps the request open; the event `срок` (the term made by the executor); the section `## Сигналы` (`| имя | поля |`) and `сигнал(имя)` in the
+rows of any appeal; `отменить_открытые(сторона: имя)` cancels the open requests of one party. The chat machine (`src/machine/machines/chat.table.md`) uses all four.
+
+**Fragments and definitions.** `## Подключения` holds `Пауза(слово_остановки: …, код_остановки: "…", вложенные: [], отмена_запросов: …, вход_заново: …, право_записи: "…")` (all six parameters; the
+text of the fragment, `fragments/pause.fragment.md`, is compiled in, `<параметр>` is put in before it is read; its data come before the data of the machine, its common events before the
+machine's own, its state `ПАУЗА` after the machine's states) and `определения: <имя> версия <N> хеш <hex12>` (the file is found in the registry by the name, the version and the hash are
+checked, a copy of its types, constants and definitions is put in the tree, `includes` gets the line). `вложенные: []` makes `передать(вложенные, …)` and `отменить_открытые(кроме: вложенные)` plain.
+
+## Not supported in this version
+
+The format has them, the interpreter of task 107 does not run them, so the translator answers `unsupported` with the line (the rest of the file is translated, `--lenient`):
+the side of the kind `machine` (a nested machine; its row is not translated), the column `профиль` when it is not `—`, the line `Предел запросов`, `Правит: …; проверка: …`,
+`Возвратов формы: N` with N above zero, a fragment with a non-empty list of nested machines and `вход_заново: запросы_из_к_отправке`, the "Where" `возврат_подготовки`.
+`src/machine_text_eq/cases/unsupported-examples.table.md` has them all; their places are the list of the next task.
+
+## Oracle 0.1.0: what shaped the code
+
+One folder is one module and one unit, so the translator is one module (`crew_harness.machine_text`) in many files, and the proofs that need the chat machine, the cases and the interpreter are
+a unit of their own (`src/machine_text_eq`), with the output of each under 4 KB (item 20). No generics with inferred arguments: the tree of the JSON is a plain sum type (`TxJ`), the
+parser passes a mutable record (`TxP`) and the context (`TxCx`). The names of the types begin with `Tx`: type names are global to the program (items 9, 14, 21, 29, 37-39 and the new item 40).
+Rules met on the way (items 40-41 of the survey): a local or a parameter with one name and different types in two functions of a unit is mixed up by the code generator (`list`!), a `mut` binding of a
+`ro` value is refused (`sc_clone`, `p_copy`), a record literal after `=>` of its own type is "redundant", strings have no `+`, a raw newline in `"…"` is refused (a backtick string), `str.trim` is `trim_ascii`.

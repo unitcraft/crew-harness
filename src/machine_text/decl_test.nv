@@ -49,7 +49,7 @@ fn first_type_error(text str) -> str {
 
 test "dc enum" {
     ro text = types_json("перечисление ВидВызывающего = Линза | СессияЦикла | ХодЧата | Вратарь")
-    assert(text == "{\"records\":[],\"variants\":[{\"name\":\"CallerKind\",\"cases\":[{\"name\":\"Lens\"},{\"name\":\"LoopSession\"},{\"name\":\"ChatTurn\"},{\"name\":\"Gatekeeper\"}]}]}" || text.contains("\"name\":\"CallerKind\""))
+    assert(text == "{\"records\":[],\"variants\":[{\"name\":\"CallerKind\",\"cases\":[{\"name\":\"Lens\"},{\"name\":\"CycleSession\"},{\"name\":\"ChatTurn\"},{\"name\":\"Gatekeeper\"}]}]}")
     assert(text.contains("\"cases\":[{\"name\":\"Lens\"}"))
 }
 
@@ -94,8 +94,8 @@ test "dc variant" {
     ro text = types_json("вариант ИтогХода {\n  Закончен { текст ?текст, артефакт ?текст }\n  Обрезан { расход РасходТранспорта }\n  ВременнаяОшибка\n  ПостояннаяОшибка\n}\n")
     assert(text.contains("\"variants\":[{\"name\":\"TurnResult\",\"cases\":["))
     assert(text.contains("{\"name\":\"Finished\",\"fields\":[{\"name\":\"text\",\"type\":\"?text\"},{\"name\":\"artifact\",\"type\":\"?text\"}]}"))
-    assert(text.contains("{\"name\":\"TemporaryError\"}") || text.contains("{\"name\":\"Transient"))
-    assert(text.contains("{\"name\":\"Truncated\",\"fields\":[{\"name\":\"usage\",\"type\":\"TransportUsage\"}]}") || text.contains("\"fields\":[{\"name\":\"usage\",\"type\":\"TransportUsage\"}]"))
+    assert(text.contains("{\"name\":\"TransientError\"},{\"name\":\"PermanentError\"}"))
+    assert(text.contains("{\"name\":\"Truncated\",\"fields\":[{\"name\":\"usage\",\"type\":\"TransportUsage\"}]}"))
 }
 
 test "dc type errors" {
@@ -236,7 +236,7 @@ test "dc definitions errors" {
     assert(says(defs_text("определение сумма_целых(а ?число) ?число =\n  а"), "после параметров ожидается `->`"))
     assert(says(defs_text("определение сумма_целых(а ?число) -> ?число\n  а"), "ожидается `=`"))
     assert(says(defs_text("вот что-то лишнее"), "ожидается `определение`"))
-    assert(says(defs_text("определение сумма_целых(а ?число, а ?число) -> ?число =\n  а"), "параметр `а` повторён") || says(defs_text("определение сумма_целых(а ?число, а ?число) -> ?число =\n  а"), "повторён") == false)
+    assert(says(defs_text("определение сумма_целых(а ?число, а ?число) -> ?число =\n  а"), "повторён"))
 }
 
 test "dc reserved name" {

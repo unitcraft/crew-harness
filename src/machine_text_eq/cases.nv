@@ -1,6 +1,6 @@
 // cases.nv - the files of the cases that the tests and the report of the task use, compiled in: the pilot "Agent step" brought to format 2.5, the examples of the format,
 // the examples that this version does not support, the definitions of the meeting and the small machine that includes them.
-module crew_harness.machine_text
+module crew_harness.machine_text_eq
 
 import crew_harness.machine.{NamedText}
 

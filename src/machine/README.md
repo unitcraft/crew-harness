@@ -18,6 +18,8 @@ tests under Oracle 0.1.0 and the output of a unit must stay under 4 KB:
 | `src/machine_table/` | `crew_harness.machine_table` | the model of a machine, the decoder of the JSON tree `machine/2`, the type syntax, the checks of a table |
 | `src/machine_run/` | `crew_harness.machine_run` | the interpreter `TableMachine`, the state, the host of the primitives, the scenario runner `scenario/0` |
 | `src/machine_chat/` | `crew_harness.machine_chat` | tests only: the proof that the chat machine as data equals the chat machine on Nova |
+| `src/machine_text/` | `crew_harness.machine_text` | the translator of the tables in Russian (format 2.5) into the JSON `machine/2` ([README](../machine_text/README.md), task 108) |
+| `src/machine_text_eq/` | `crew_harness.machine_text_eq` | tests only: the chat table equals the hand-written chat machine on 39 scenarios; the pilot "Agent step", the examples of the format |
 
 ## Run the tests (Windows, Nova Oracle 0.1.0)
 
@@ -28,6 +30,8 @@ nova test src/machine                # the core: 170 tests
 nova test src/machine_table          # the decoder and the checks: 54 tests
 nova test src/machine_run            # the interpreter and the scenarios: 60 tests
 nova test src/machine_chat           # the equality with the chat machine: 11 tests
+nova test src/machine_text           # the translator of the tables: 118 tests
+nova test src/machine_text_eq        # the proofs of the translator: 43 tests
 nova test --strict-effects src       # the same, and an effect used without being declared in a signature is an error
 nova test src --jobs 4               # the whole tree (the PostgreSQL units need the temporary container of src/pg/testdb.ps1)
 ```
@@ -291,3 +295,20 @@ The data view is the one both can show: `Awaiting` the message and the reply, `D
 
 The rules that cost a compile and the four reproductions (items 36-39, `spikes/env/repro_engine/src/`) are in the survey README. What shaped this code: a type of the program has a global name (`Next`, `Reading`, `Slot`, `Pair` clash with the standard library, with a case of another enum or with a record of another
 module - the records here are `Goto`, `EventRead`, `ReqField`); `embed_str` reads a file relative to the source; a variable named `b` of a list type can leak into the prelude; a record literal after `=>` of its own type is a "redundant type prefix"; a mutable copy of a field of a `ro` parameter is `E_READONLY_COERCE` (the chain of a step is a recursion over `ro` values).
+
+# Format 2.5 and the translator (task 108)
+
+Task 108 (`doc/tasks/108-table-translator/`) brought the interpreter from the format 2.2 of task 107 to **2.5** and wrote the translator of the tables in Russian ([`src/machine_text/`](../machine_text/README.md)). What changed here:
+
+- **A set of literals** `"a" | "b"` replaces `text from {"a", "b"}` (2.5, T-1): two values or more, under `?` and `[]` in parentheses (`?("a" | "b")`); `spec_text` and `parse_spec` follow; a literal outside the set assigned
+  to a datum, or an initial value outside it, is an issue of the table; at run time every write is checked against the type (`bound_violation`).
+- **`id`** (`IdType`, 2.5, T-2): a text 8-4-4-4-12 of lower case hexadecimal digits (`is_uuid`); checked in `check_value`, so also for a datum, a word, the input of the machine (`input_rejected`, `reason=type`) and the arguments of a primitive.
+- **`new_id`** (reading, no parameters, result `id`), in `standard_registry()`. The check of the table: it may stand only in a binding of the entry of an operation and the binding must be written to the data by a row of that state.
+  `ScriptedHost` answers it with `Uuid.v7()` under `with Time = th.fixed_ms(at), Random = th.seeded(...)` (the stamp of the event and the number of the call in the step): the same step gives the same ids; a scripted reply of the host wins.
+  The host of the product that wants real random ids is another `PrimitiveHost`.
+- **Tuple fields from zero** (2.3): `t.0`, `t.1`; `make_tuple` names them `0`, `1`, ...; the lossless JSON `{"$tuple": [...]}` is the same.
+- The root key **`table_format`** (optional, `"2.5"`; absent means 2.5). The built-in record **`JournalEvent`** (`СобытиеЖурнала`, section 2) beside `FailCode`. The name of an included file of definitions is a name of the registry (any letters, not a path).
+- **Common events (the fragment "Pause", section 9)** read the data of a fragment (the marks `fragment`, `rows_and_fragment`, `mechanics`) without an Input and write the data with the marks `fragment` and `rows_and_fragment`.
+- The record `Child` of `expr.nv` is `ExprChild` (item 40 of the survey of Oracle 0.1.0: a program with `import std.os` could not be built).
+- `machines/chat.table.md` is the chat machine as tables; its translation equals `chat.machine.json` (a test compares the trees without `title` and `table_format`) and runs the 39 scenarios of the chat in the same way.
+- `data.nv`: `table_files()`, `chat_table_text()`; `data_dir_names("tables")`.

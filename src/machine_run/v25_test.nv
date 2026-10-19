@@ -137,3 +137,24 @@ test "v25 word set" {
     assert(bad.state.name == "Wait")
     assert(summary(bad.orders).starts_with("log:event_malformed"))
 }
+
+// A value that is not in the set cannot be written, whatever its way: the write is checked against the type of the datum (a machine error `bound_violation`).
+fn set_write_machine() -> TableMachine {
+    ro data = `{"name":"mode","type":"\"fast\" | \"slow\"","initial":{"expr":{"op":"lit","value":"fast"}}},{"name":"u_attempt","type":"int>=0","initial":{"expr":{"op":"lit","value":0}},"monotonic":true,"writes":"mechanics"}`
+    ro party = `{"name":"user","id":"user","kind":"human","counter":"u_attempt","words":[{"name":"pick","fields":[{"name":"kind","type":"text"}]}]}`
+    ro wait = `{"name":"Wait","kind":"appeal","party":"user","rows":[{"n":1,"event":{"kind":"word","word":"pick","bind":{"kind":"k"}},"actions":[{"do":"assign","target":"mode","value":{"op":"name","name":"k"}}],"to":"Done"}]}`
+    ro done = `{"name":"Done","kind":"end","reads":["mode"]}`
+    ro failed = `{"name":"Errored","kind":"end","reads_all":true}`
+    ro ends = `{"result":"text","rows":[{"state":"Done","n":1,"when":{"op":"lit","value":true},"answer":{"kind":"answer","value":{"op":"name","name":"mode"}}},{"state":"Errored","n":1,"when":{"op":"lit","value":true},"answer":{"kind":"refusal","code":{"op":"variant","type":"FailCode","name":"NoResult"},"text":{"op":"lit","value":"error"}}}]}`
+    build_from(`{"format":"machine/2","machine":"SetWrite","version":"1","data":[${data}],"parties":[${party}],"initial":"Wait","error_end":"Errored","states":[${wait},${done},${failed}],"ends":${ends}}`)
+}
+
+test "v25 set write" {
+    ro m = set_write_machine()
+    ro good = run1(m, m.initial(), word_in("pick", "slow"))
+    assert(good.state.name == "Done")
+    assert(datum_json(good.state, "mode") == "\"slow\"")
+    ro bad = run1(m, m.initial(), word_in("pick", "medium"))
+    assert(bad.state.name == "Errored")
+    assert(summary(bad.orders).contains("machine_error(reason=bound_violation"))
+}

@@ -6,7 +6,7 @@ import std.text
 import crew_harness.machine.{standard_registry, Registry, Primitive, ParamSpec, TextType, ListType, Reading, register, NamedText, find_primitive}
 import crew_harness.machine_table.{parse_machine, load_machine}
 import crew_harness.machine_run.{load_table_machine}
-import crew_harness.machine_text.{translate_report, translate_checked, translate_checked_with, TranslateReport, TranslateError, case_text, case_files, case_dir_names, translate_definitions, DefsReport, definitions_hash, normalize_definitions, render_summary, error_text}
+import crew_harness.machine_text.{translate_report, translate_checked, translate_checked_with, TranslateReport, TranslateError, translate_definitions, DefsReport, definitions_hash, normalize_definitions, render_summary, error_text}
 
 // The registry of the examples: the standard one and the two primitives of the meeting that it lacks.
 fn examples_registry() -> Registry {
@@ -178,7 +178,7 @@ test "cs unsupported only" {
     ro report = translate_report(case_text("unsupported-examples.table.md"))
     assert(count_of(report, "unsupported") == 7)
     assert(report.errors.len() == 7)
-    assert(report.rows_total == 46)
+    assert(report.rows_total == 61)
     assert(report.rows_noted == 3)
 }
 
