@@ -2,8 +2,8 @@
 
 The first slice of the MVP: **open the page in a browser, create a session, talk to an agent.** The server serves the page of
 [`src/web/`](../web/README.md), keeps a WebSocket `/ws` for it, and runs one state machine engine
-([`src/engine`](../engine/README.md)) per session: the machine of a many-turn dialog ([`src/chat`](../chat/chat.nv),
-`dialog_session`), the store and the journal in files ([`src/storage`](../storage/files.nv)) or in PostgreSQL
+([`src/engine`](../engine/README.md)) per session: the machine of a many-turn dialog, **written as data in Portolan and run by `PortolanMachine`**
+(task 114, "The chat runs on Portolan" below), the store and the journal in files ([`src/storage`](../storage/files.nv)) or in PostgreSQL
 ([`src/pg`](../pg/README.md)), the agent over ACP ([`src/acp`](../acp/README.md), by default `opencode acp`). Task 099
 (`doc/tasks/099-session-server/`). Built by **Nova Oracle 0.1.0 on Windows (Clang)**.
 
@@ -86,6 +86,35 @@ The file store needs no database. For `store: pg` the easy way is the permanent 
 is a member of `crew_app`). A server that restarts finds its sessions with `crew.list_sessions()`. An example with `store: pg` and no password:
 `src/server/server-pg.example.json` (the password comes from `CREW_PG_PASSWORD`).
 
+## The chat runs on Portolan
+
+Since task 114 the hub runs every session on the machine of the many-turn chat written as a table of Portolan 2.11,
+[`src/machine/machines/dialog.portolan.md`](../machine/machines/dialog.portolan.md), and not on the machine written in Nova.
+
+- **Where the machine comes from.** `dialog.portolan.json` is the translation of the table by the translator of [`src/machine_text`](../machine_text/README.md)
+  (`nova build src/machine_translate.nv`, no hand edit; a test compares the translation with the committed file). It is compiled into the program
+  (`embed_str` in `src/machine/data.nv`), so the hub needs no file to find it. `src/server/portolan.nv` makes `PortolanMachine` once, when the hub starts
+  (`start_hub`); a machine that cannot be made stops the start with the message `the dialog machine cannot be made: ...`.
+- **The states.** `Idle` (waits for a message), `Awaiting` (a request to the agent is open) and the end `Closed`. After an answer, a refusal, an idle term and a cancel the session
+  goes back to `Idle` and forgets the turn (the data of the turn are cleared, as the state `Idle` of the machine in Nova holds nothing). The journal codes and their parameters, the numbers of requests
+  (`agent-1`, `agent-2`...) and the notes of an event the state does not expect (`event_ignored`) are the same as before. The end `Closed` is reached by the word `close_session`, which only the table has: the
+  hub never sends it (a table needs one reachable end), the machine in Nova takes it for an event of an unknown name.
+- **The idle term.** It is the parameter `IDLE_TERM` of the table with the key of the project `проект.срок_бездействия` (format 2.7, P-9, default 900000 ms). The hub gives it
+  `idle_term_seconds * 1000` of the settings through the table of the parameters of the project (`portolan_machine_with`); nothing else of the settings reaches the machine.
+- **What the page sees.** Nothing changed: `page_event` takes the events of the engine (the journal codes and the names of the events), the states for the page (`Idle`, `Awaiting`)
+  are the names of the states of the table, `/ws` and `src/web/` are as they were.
+- **Snapshots.** The state of a session in the store is now the state of the Portolan machine: `{"state":"Awaiting","started":true,"input":null,"data":{...}}`. A snapshot of the old form
+  (`{"state":"Awaiting","user":...,"reply":...}`) is **not migrated**: there are no such sessions in a product base; the hub does not resume it and writes `the session <id> cannot be resumed: no usable snapshot` to its log.
+  A session of the new form is found by the store after a restart and goes on through `resume_engine`.
+- **Primitives.** The chat has none (`## Примитивы` is empty); the step reads the world through its event only (the clock is the stamp of the event). The default host of the engine is enough,
+  so the server has no host of its own with a real clock: a step stays a function of the state and the event.
+- **How it was checked.** The machine in Nova (`dialog_session`, `src/chat`) stays as the reference. [`src/machine_dialog_eq`](../machine_dialog_eq/equal_test.nv) runs 36 scenarios
+  (`src/machine/scenarios/dialog-*`: the scenarios of `chat_engine_test.nv` moved to the many-turn machine and those of `dialog_test.nv`) on both machines and compares the state, the data, every line of the journal with its envelope,
+  the requests sent and cancelled, the queue, the acknowledgements and the outcome; the same twelve events in four places of the machine alone; every failure code; six deaths and old journals
+  (`inject_test.nv`). [`src/machine_dialog`](../machine_dialog/table_test.nv) takes every row of the table by a scenario (the mark `taken`, 8 rows of 8) and checks the parameter of the idle term.
+  One change of the JSON (a journal code) turns both units red. The ten scenarios of the hub (`testkit.nv`) run over files and over PostgreSQL on the Portolan machine.
+- **No switch.** The hub runs on Portolan only; there is no setting "nova/portolan". Removing `dialog_session` from `src/chat` is for the owner to say.
+
 ## The protocol of `/ws`
 
 One WebSocket text frame is one JSON event (the server may also send an array of events in one frame). The event is the one of
@@ -149,7 +178,7 @@ The page's connection number is the peer port of its socket.
    it with its input), starts the agent process. The session is on disk (or in the database) before the page sees it.
 2. **Talk.** `user_message` is `feed`ed: the machine opens a request, the engine sends it to the ACP client, which queues it (one turn at a time). A timer
    (every few milliseconds) pumps every session: the events of the agent are accepted (journal, snapshot, then the acknowledgement to the client) and shown.
-3. **Many turns.** The machine `dialog_session` goes back to `Idle` after an answer, a refusal, a timeout or a cancel; the request ids are `agent-1`, `agent-2`...
+3. **Many turns.** The machine `DialogSession` (Portolan) goes back to `Idle` after an answer, a refusal, a timeout or a cancel; the request ids are `agent-1`, `agent-2`...
 4. **Restart.** At the start the hub lists the sessions of the store (`list_sessions` of the folder, `crew.list_sessions()` of the database) and resumes each one
    (`resume_engine`, the lines of the page from `Engine.history()`). An agent is started only for a session with an open request. An open request has no
    agent that knows it any more (continuing a turn is `session/load`, not here): it ends with `Timeout` when its idle term passes, and the session goes on.
@@ -166,10 +195,12 @@ The events a live session shows come from the engine itself (`Engine.take_events
 | File | What it is |
 |---|---|
 | `settings.nv` | `ServerSettings`, `parse_server_settings`, `server_settings` (file + environment), `check`, `describe` |
+| `portolan.nv` | `hub_machine`, `hub_machine_from`: the embedded `dialog.portolan.json` as `PortolanMachine` with the idle term of the settings |
 | `hub.nv` | `Hub`: `start_hub`, `attach`, `release`, `handle`, `pump`, `take_output`, `take_log`, `close`; the sessions, the store by the settings, the lines of the page |
 | `stdio.nv` | `run_hub_stdio`: the hub over stdin and stdout |
 | `front/front.nv`, `front/front_settings.nv` | the front: HTTP, `/ws` (frames over two owners of the socket), the router fiber, the hub as a child process |
 | `testkit.nv` | the settings of a test hub with the fake agent, the rig that drives a hub as a page does, the scenarios (shared by the units below) |
+| `portolan_test.nv` | the machine of the hub: made from the embedded table, the idle term, a broken text, an engine in memory, the snapshot |
 | `dialog_test.nv`, `settings_test.nv`, `front/front_settings_test.nv` | tests of the unit `src/server` and `src/server/front` |
 | `../server_live/hub_test.nv`, `../server_pg/hub_pg_test.nv` | the same ten scenarios over files and over PostgreSQL |
 | `test/e2e.mjs`, `test/real-agent.mjs` | Node: the whole server through its door (files, `--pg` on the temporary database, `--pg-docker` on the permanent one); the real `opencode acp` (handshake only) |
@@ -201,7 +232,8 @@ The scenarios (`testkit.nv`), each on a fresh store: two turns of a chat (chunks
 session open and the late words are not shown, restart between turns (the same lines, a page that comes later is told everything), restart in the middle of a
 turn (`Timeout`, the session goes on), the agent dies (`ConnectionLost`, a new agent), two pages on one session, what cannot be done is an error, several
 sessions, an agent that refuses to start. The machine and the engine are tested in memory with the deaths of rules 13 and 34(e) (`dialog_test.nv`): between
-the commit and the send, between the journal line and the snapshot, the agent answering while the process is dead, a cancel committed and not sent.
+the commit and the send, between the journal line and the snapshot, the agent answering while the process is dead, a cancel committed and not sent
+(`dialog_test.nv` runs them on the machine in Nova; `src/machine_dialog_eq` runs the same on both machines).
 
 ## What is not here
 
@@ -218,3 +250,7 @@ included (`Request`/`Response` of `http`, `Session` of the driver, `Message` of 
 the record of the hub is `Dialog`, and the server is two programs; `Stdin.read` waits for a full buffer and pins the worker of its fiber (`#blocking fn` and a buffer of one
 byte); `import std.text` anywhere makes a pattern variable `text` mean the module; the stream handed to the upgrade hook of Polaris is shared, so it is read and written
 through `share()`, not split; a nested module path; the names `a` and `b` in a test file of an imported module and the method `entries` reaching `EmbeddedDir.merge`.
+
+Task 114 added items 44-47 (`spikes/env/README.md`): the record `Row` of the tables of states clashed with the variant `Row` of the driver (it is `TableRow`), a private generic `begin_engine` of the interpreter captured the name
+of the hub's function (it is `begin_session_engine`), a helper of a test file clashed with a private function of its module in the unit of an importer, a record literal in the scrutinee of a `match` is a syntax error.
+Each place that goes round a defect carries `// ORACLE-WORKAROUND(N): ...` (`git grep ORACLE-WORKAROUND`).
