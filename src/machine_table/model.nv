@@ -92,7 +92,7 @@ export type Action enum
 /// Goto: the "Where" of a row; `restart` is the suffix "restart" (rule 18).
 export type Goto { target Target, restart bool }
 
-// ORACLE-WORKAROUND(44): the record is `TableRow`, not `Row`: the driver nova-postgres has a variant `Row` and the compiler keeps one table of type and variant names; call it `Row` again when item 44 is fixed
+// ORACLE-WORKAROUND(48): the record is `TableRow`, not `Row`: the driver nova-postgres has a variant `Row` and the compiler keeps one table of type and variant names; call it `Row` again when item 48 is fixed
 /// TableRow: a row of a table of states: `n` is the number of the row, `cond` is zero or one condition, `is_else` the condition `else`.
 export type TableRow { n int, event EventPat, cond []Expr, is_else bool, actions []Action, next Goto }
 

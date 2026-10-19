@@ -370,7 +370,7 @@ Also met in task 113, without a reproduction: (a) `nova test` kills a unit after
 
 The places in the code that go round an item carry the mark `// ORACLE-WORKAROUND(N): what is gone round; how to simplify when item N is fixed`; `git grep ORACLE-WORKAROUND` finds them.
 
-Found by task 114 (the session server runs on Portolan, `src/server/`, `src/machine_dialog*`); the reproductions are in `repro_server/src/` (item 48, `nova update` first) and `repro_engine/src/` (items 45 and 47), run the same way.
+Found by task 114 (the session server runs on Portolan, `src/server/`, `src/machine_dialog*`); the reproductions are in `repro_server/src/` (item 48, `nova update` first) and `repro_engine/src/` (items 49 and 51), run the same way.
 Every place of the product that goes round one of these items carries the comment `// ORACLE-WORKAROUND(N): ...` (`git grep ORACLE-WORKAROUND` lists them; the comment says how to simplify the code when the item is fixed):
 
 48. **`user_type_vs_driver_variant`**: a user record `Row` (the row of a table of states of the machines that are data, `src/machine_table`) in the same program as the driver nova-postgres, whose protocol enum has the variant
