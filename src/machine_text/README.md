@@ -13,7 +13,7 @@ nova build src/machine_translate.nv -o target/machine-translate.exe    # the com
 target/machine-translate.exe src/machine/machines/chat.table.md          # the JSON on the standard output, exit code 0
 target/machine-translate.exe table.md --summary                          # the summary: states, rows, actions
 target/machine-translate.exe table.md --lenient                          # the JSON of what could be translated even when there are errors
-nova test src/machine_text                                              # the translator: 118 tests
+nova test src/machine_text                                              # the translator: 129 tests
 nova test src/machine_text_eq                                           # the proofs: the chat machine, the pilot, the examples, the definitions
 ```
 
