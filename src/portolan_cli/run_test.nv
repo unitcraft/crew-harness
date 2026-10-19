@@ -241,3 +241,34 @@ test "tt unknown option" {
     assert(ran.code == 2)
     assert(ran.err.contains("unknown option `--lenient`"))
 }
+
+fn tiny_scenario_params() -> str => `{"format":"scenario/0","machine":"Tiny","name":"tiny params","start_at":1000,"params":{"проект.нет_такого":1},"steps":[{"do":"feed","event":{"kind":"start"},"expect":{"state":"Wait"}}]}`
+
+fn tiny_scenario_host() -> str => `{"format":"scenario/0","machine":"Tiny","name":"tiny host","start_at":1000,"steps":[{"do":"feed","event":{"kind":"start"},"host":{"x":{"$bogus":1}},"expect":{"state":"Wait"}}]}`
+
+// A scenario that cannot be run (a parameter that the machine does not have, an answer of the host that is no value) is an error of the file, not a stop of the program.
+test "rn scenario parameter unknown" {
+    ro files = [file("/work/tiny.portolan.json", tiny_json()), file("/work/p.scenario.test.json", tiny_scenario_params())]
+    ro ran = run_with(["run", "/work/tiny.portolan.json", "/work/p.scenario.test.json"], files)
+    assert(ran.code == 1)
+    assert(ran.out == "")
+    assert(ran.err.starts_with("/work/p.scenario.test.json:1:1: scenario: "))
+    assert(ran.err.contains("no parameter has the key"))
+}
+
+test "rn scenario host answer wrong" {
+    ro files = [file("/work/tiny.portolan.json", tiny_json()), file("/work/h.scenario.test.json", tiny_scenario_host())]
+    ro ran = run_with(["run", "/work/tiny.portolan.json", "/work/h.scenario.test.json"], files)
+    assert(ran.code == 1)
+    assert(ran.out == "")
+    assert(ran.err.starts_with("/work/h.scenario.test.json:1:1: scenario: "))
+}
+
+test "tt scenario that cannot be run" {
+    ro files = [file("/work/tiny.portolan.json", tiny_json()), file("/work/p.scenario.test.json", tiny_scenario_params()), file("/work/x.scenario.test.json", tiny_scenario())]
+    ro ran = run_with(["test", "/work"], files)
+    assert(ran.code == 1)
+    assert(ran.out.contains("FAIL /work/p.scenario.test.json"))
+    assert(ran.out.contains("no parameter has the key"))
+    assert(ran.out.ends_with("1 of 2 scenarios passed\n"))
+}

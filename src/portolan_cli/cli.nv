@@ -53,8 +53,9 @@ fn trimmed_dir(dir str) -> str {
     d
 }
 
+// ORACLE-WORKAROUND(49): the function is not named `collect_names`: the registry of the machines has a private one without `Fs`, and under --strict-effects the call there is checked against this one; use the name when item 49 is fixed
 // The files of a folder that `portolan test` reads (scenarios and machines), with the folders under it, in the order of their names; false when the folder cannot be read.
-fn collect_names(dir str, mut names []str) Fs -> bool {
+fn scan_folder(dir str, mut names []str) Fs -> bool {
     match read_dir(path_of(dir)) {
         Err(e) => false
         Ok(entries) => {
@@ -72,7 +73,7 @@ fn collect_names(dir str, mut names []str) Fs -> bool {
                     names.push(full)
                 } else if !name.starts_with(".") {
                     // a folder is read; anything else (a file, a link) fails to be read as a folder and is skipped
-                    ro ignored = collect_names(full, names)
+                    ro ignored = scan_folder(full, names)
                 }
             }
             true
@@ -82,7 +83,7 @@ fn collect_names(dir str, mut names []str) Fs -> bool {
 
 fn folder_files(dir str) Fs -> Option[[]NamedText] {
     mut names = []str.new()
-    if !collect_names(dir, names) { return None }
+    if !scan_folder(dir, names) { return None }
     mut files = []NamedText.new()
     for name in names {
         match read_file(name) {

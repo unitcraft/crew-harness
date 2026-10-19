@@ -562,6 +562,26 @@ fn replies_after(before []ScriptedReply, step ScStep) -> Result[[]ScriptedReply,
     Ok(out)
 }
 
+/// The reason a scenario cannot be run on a machine, or "" when it can: the values of the parameters that the scenario gives and the answers of the host that its steps give must be
+/// right, or `drive_table_scenario` stops with a panic. A program that runs the scenarios of a file asks this first and reports the reason as an error of the file.
+export fn scenario_problem(first_machine PortolanMachine, sc Scenario) -> str {
+    ro machine = match with_params(first_machine, sc.params) {
+        Ok(m) => m
+        Err(m) => return m
+    }
+    mut replies = []ScriptedReply.new()
+    for r in machine.replies { replies.push(r) }
+    for s in sc.steps {
+        if s.host.len() > 0 {
+            match replies_after(replies, s) {
+                Ok(next) => { replies = next }
+                Err(m) => return m
+            }
+        }
+    }
+    ""
+}
+
 /// Run a scenario on a machine that is data with the answers of the primitives of the host that the steps change (`host`): like `drive_scenario`,
 /// but the machine of the engine is made again before a step that has `host`.
 export fn drive_table_scenario(first_machine PortolanMachine, sc Scenario) -> []StepTrace {
