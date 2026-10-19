@@ -2,6 +2,7 @@
 // (section 1b of the specification: the operators of the language, one writing, brackets only where the grammar of section 3 needs them).
 module crew_harness.machine_text
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 
 /// RnCx: the context of one generation: the language, the words, the names, the notes about what the file cannot say, and the words that the file chose for the names it declared (a name is
@@ -71,7 +72,7 @@ fn rn_type_name(cx RnCx, en str) -> str => rn_name(cx, kinds_type(), en)
 fn rn_case_name(cx RnCx, en str) -> str => rn_name(cx, kinds_case(), en)
 
 fn rn_field_name(cx RnCx, en str) -> str {
-    if en != "" && tx_is_digit(tx_slice(tx_chars(en), 0, 1)) { return en }
+    if en != "" && tx_is_digit(tx_at(en, 0)) { return en }
     rn_name(cx, kinds_field(), en)
 }
 
@@ -101,16 +102,27 @@ fn rn_quote(s str) -> str {
 
 // ---- the types ---------------------------------------------------------------------------------------------------------------
 
-/// TyR: the reader of a type string of the JSON.
-type RnTy { cs []str, pos int }
+/// TyR: the reader of a type string of the JSON; `pos` is a BYTE offset in `text` and always the border of a char (the signs of a type are ASCII, a name may be of any alphabet).
+type RnTy { text str, pos int }
+
+fn rn_ty_end(t RnTy) -> bool => t.pos >= t.text.byte_len()
+
+// The char at the place of the reader (U+0000 at the end).
+fn rn_ty_peek(t RnTy) -> char => tx_at(t.text, t.pos)
 
 fn rn_ty_ws(mut t RnTy) -> () {
-    while t.pos < t.cs.len() && t.cs[t.pos] == " " { t.pos += 1 }
+    while !rn_ty_end(t) && rn_ty_peek(t) == ' ' { t.pos += 1 }
 }
 
-fn rn_ty_is(t RnTy, s str) -> bool {
-    ro n = s.chars().count()
-    t.pos + n <= t.cs.len() && tx_slice(t.cs, t.pos, t.pos + n) == s
+fn rn_ty_is(t RnTy, s str) -> bool => t.text[t.pos..].starts_with(s)
+
+// The reader steps over a sign `c` when it stands there.
+fn rn_ty_eat(mut t RnTy, c char) -> bool {
+    if !rn_ty_end(t) && rn_ty_peek(t) == c {
+        t.pos += 1
+        return true
+    }
+    false
 }
 
 // The type under `?` or `[]`: a set of literals is in brackets there.
@@ -122,80 +134,77 @@ fn rn_ty_under(cx RnCx, mut t RnTy) -> str {
 
 fn rn_ty_read(cx RnCx, mut t RnTy) -> str {
     rn_ty_ws(t)
-    if t.pos >= t.cs.len() { return "" }
-    if t.cs[t.pos] == "\"" {
+    if rn_ty_end(t) { return "" }
+    ro n = t.text.byte_len()
+    if rn_ty_peek(t) == '"' {
         // a set of literals "a" | "b"
         mut items = []str.new()
         while true {
             rn_ty_ws(t)
-            if t.pos >= t.cs.len() || t.cs[t.pos] != "\"" { break }
+            if rn_ty_end(t) || rn_ty_peek(t) != '"' { break }
             mut j = t.pos + 1
             mut parts = []str.new()
-            while j < t.cs.len() && t.cs[j] != "\"" {
-                if t.cs[j] == "\\" && j + 1 < t.cs.len() {
-                    parts.push(t.cs[j + 1])
-                    j += 2
+            while j < n && tx_at(t.text, j) != '"' {
+                ro c = tx_at(t.text, j)
+                if c == '\\' && j + 1 < n {
+                    ro e = tx_at(t.text, j + 1)
+                    parts.push(t.text[j + 1..j + 1 + e.len_utf8()])
+                    j += 1 + e.len_utf8()
                     continue
                 }
-                parts.push(t.cs[j])
-                j += 1
+                parts.push(t.text[j..j + c.len_utf8()])
+                j += c.len_utf8()
             }
             items.push(rn_quote(parts.join("")))
-            t.pos = j + 1
+            t.pos = if j < n { j + 1 } else { n }
             rn_ty_ws(t)
-            if t.pos < t.cs.len() && t.cs[t.pos] == "|" {
-                t.pos += 1
-                continue
-            }
+            if rn_ty_eat(t, '|') { continue }
             break
         }
         return items.join(" | ")
     }
-    if t.cs[t.pos] == "?" {
-        t.pos += 1
-        return "?${rn_ty_under(cx, t)}"
-    }
+    if rn_ty_eat(t, '?') { return "?${rn_ty_under(cx, t)}" }
     if rn_ty_is(t, "[]") {
         t.pos += 2
         return "[]${rn_ty_under(cx, t)}"
     }
-    if t.cs[t.pos] == "(" {
-        t.pos += 1
+    if rn_ty_eat(t, '(') {
         mut items = []str.new()
         while true {
             items.push(rn_ty_read(cx, t))
             rn_ty_ws(t)
-            if t.pos < t.cs.len() && t.cs[t.pos] == "," {
-                t.pos += 1
-                continue
-            }
+            if rn_ty_eat(t, ',') { continue }
             break
         }
-        if t.pos < t.cs.len() && t.cs[t.pos] == ")" { t.pos += 1 }
+        rn_ty_eat(t, ')')
         return "(${items.join(", ")})"
     }
-    if rn_ty_is(t, "full {") || t.cs[t.pos] == "{" {
+    if rn_ty_is(t, "full {") || rn_ty_peek(t) == '{' {
         ro full = rn_ty_is(t, "full {")
         t.pos += if full { 6 } else { 1 }
         ro key = rn_ty_read(cx, t)
         rn_ty_ws(t)
-        if t.pos < t.cs.len() && t.cs[t.pos] == ":" { t.pos += 1 }
+        rn_ty_eat(t, ':')
         ro value = rn_ty_read(cx, t)
         rn_ty_ws(t)
-        if t.pos < t.cs.len() && t.cs[t.pos] == "}" { t.pos += 1 }
+        rn_ty_eat(t, '}')
         ro word = if full { rn_kw(cx, "type", "full map") } else { rn_kw(cx, "type", "map") }
         return "${word}[${key}, ${value}]"
     }
     mut j = t.pos
-    while j < t.cs.len() && (tx_is_letter(t.cs[j]) || tx_is_digit(t.cs[j])) { j += 1 }
-    ro name = tx_slice(t.cs, t.pos, j)
+    while j < n {
+        ro d = tx_at(t.text, j)
+        if !(tx_is_letter(d) || tx_is_digit(d)) { break }
+        j += d.len_utf8()
+    }
+    ro name = t.text[t.pos..j]
     t.pos = j
     if name == "int" {
         if rn_ty_is(t, ">=") {
             t.pos += 2
             mut k = t.pos
-            while k < t.cs.len() && tx_is_digit(t.cs[k]) { k += 1 }
-            ro bound = tx_slice(t.cs, t.pos, k)
+            while k < n && tx_is_digit(tx_at(t.text, k)) { k += 1 }
+            ro bound = t.text[t.pos..k]
             t.pos = k
             return if cx.lang == "ru" { "${rn_kw(cx, "type", "int")}≥${bound}" } else { "int>=${bound}" }
         }
@@ -203,7 +212,8 @@ fn rn_ty_read(cx RnCx, mut t RnTy) -> str {
     }
     if name == "float" || name == "text" || name == "bool" || name == "id" || name == "JournalEvent" { return rn_kw(cx, "type", name) }
     if name == "" {
-        t.pos += 1
+        // a sign that no type starts with: it is stepped over, the whole char
+        t.pos += tx_at(t.text, t.pos).len_utf8()
         return ""
     }
     rn_type_name(cx, name)
@@ -211,7 +221,7 @@ fn rn_ty_read(cx RnCx, mut t RnTy) -> str {
 
 /// A type string of the JSON as the type of Portolan in the language: `int>=0` -> `число≥0` / `int>=0`.
 fn rn_type(cx RnCx, ty str) -> str {
-    mut t = RnTy { cs: tx_chars(ty), pos: 0 }
+    mut t = RnTy { text: ty, pos: 0 }
     rn_ty_read(cx, t)
 }
 

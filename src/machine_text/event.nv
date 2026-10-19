@@ -5,6 +5,7 @@
 // interpreter has them: `часть(имя(поле: имя))` for a part of an answer that keeps the request open, and `срок` for the term made by the executor.
 module crew_harness.machine_text
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 
 /// TxEvent: the JSON of the event and the scope with the names that it binds.
@@ -232,11 +233,11 @@ fn where_parse(mut p TxP, mut cx TxCx) -> Result[TxWhere, TranslateError] {
 }
 
 fn state_hint(cx TxCx, ru str) -> str {
-    ro word = tx_chars(ru)
+    ro word []char = ru.chars().collect()
     mut best = ""
     mut best_distance = 1000
     for pair in cx.env.states {
-        ro d = tx_distance(word, tx_chars(pair.ru))
+        ro d = tx_distance_chars(word, pair.ru.chars().collect())
         if d < best_distance {
             best_distance = d
             best = pair.ru

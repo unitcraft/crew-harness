@@ -2,6 +2,7 @@
 // the parts of an answer, the definitions (section 8) and the primitives (section 7), each as its part of the JSON.
 module crew_harness.machine_text
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import crew_harness.machine_table.{fail_code_names}
 
@@ -12,10 +13,9 @@ fn snake_of(name str) -> str {
     mut out = []str.new()
     mut prev_lower = false
     for c in name.chars() {
-        ro one = "${c}"
-        ro upper = one >= "A" && one <= "Z"
+        ro upper = tx_is_upper(c)
         if upper && prev_lower { out.push("_") }
-        out.push(tx_lower(one))
+        out.push(tx_lower_char(c))
         prev_lower = !upper
     }
     out.join("")

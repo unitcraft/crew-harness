@@ -4,6 +4,7 @@
 // the end of the file), and the tree of the machine gets a copy of what the file brings (types, constants, definitions).
 module crew_harness.machine_text
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import std.crypto.sha256.{Sha256}
 import crew_harness.machine.{NamedText}
@@ -41,28 +42,15 @@ export fn defs_file_text(name str) -> str {
 // ---- the hash ----------------------------------------------------------------------------------------------------------------------------
 
 fn trim_end_blanks(line str) -> str {
-    ro cs = tx_chars(line)
-    mut end = cs.len()
-    while end > 0 && (cs[end - 1] == " " || cs[end - 1] == "\t") { end -= 1 }
-    tx_slice(cs, 0, end)
+    mut end = line.byte_len()
+    while end > 0 && (tx_byte(line, end - 1) == 32 || tx_byte(line, end - 1) == 9) { end -= 1 }
+    line[..end]
 }
 
 /// The text of a file of definitions as it is hashed (section 8): no BOM, LF only, no spaces or tabs at the end of a line, one LF at the end.
 export fn normalize_definitions(text str) -> str {
-    mut body = text
-    ro points = text.to_code_points()
-    if points.len() > 0 && points[0] == 65279 {
-        mut rest = []str.new()
-        mut first = true
-        for c in text.chars() {
-            if first {
-                first = false
-            } else {
-                rest.push("${c}")
-            }
-        }
-        body = rest.join("")
-    }
+    // the byte order mark is U+FEFF, three bytes
+    ro body = if text.starts_with("\u{FEFF}") { text[3..] } else { text }
     ro unified = body.replace("\r\n", "\n").replace("\r", "\n")
     mut lines = []str.new()
     for raw in unified.split("\n") { lines.push(trim_end_blanks(raw)) }

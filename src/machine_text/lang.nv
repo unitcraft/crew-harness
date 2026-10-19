@@ -18,21 +18,25 @@ fn version_strict(version str) -> bool => version == "2.9" || version == "2.10" 
 type TxHeaderLine { key str, value str, col int }
 
 fn header_line(line str) -> TxHeaderLine {
-    ro cs = tx_chars(line.strip_suffix("\r") ?? line)
+    ro s = line.strip_suffix("\r") ?? line
+    ro n = s.byte_len()
     mut at = 0
-    if cs.len() > 1 && cs[0] == "-" && tx_is_space(cs[1]) {
-        at = 1
-        while at < cs.len() && tx_is_space(cs[at]) { at += 1 }
+    mut at_col = 0
+    if n > 1 && s.starts_with("-") && tx_is_space(tx_at(s, 1)) {
+        ro (after, skipped) = skip_spaces(s, 1)
+        at = after
+        at_col = 1 + skipped
     }
     mut colon = -1
     mut i = at
-    while i < cs.len() && colon < 0 {
-        if cs[i] == ":" { colon = i }
-        if !tx_is_letter(cs[i]) && !tx_is_digit(cs[i]) && cs[i] != ":" { return TxHeaderLine { key: "", value: "", col: 0 } }
-        i += 1
+    while i < n && colon < 0 {
+        ro c = tx_at(s, i)
+        if c == ':' { colon = i }
+        if !tx_is_name_char(c) && c != ':' { return TxHeaderLine { key: "", value: "", col: 0 } }
+        i += c.len_utf8()
     }
     if colon < 0 { return TxHeaderLine { key: "", value: "", col: 0 } }
-    TxHeaderLine { key: tx_slice(cs, at, colon).trim_ascii(), value: tx_slice(cs, colon + 1, cs.len()).trim_ascii(), col: at + 1 }
+    TxHeaderLine { key: s[at..colon].trim_ascii(), value: s[colon + 1..].trim_ascii(), col: at_col + 1 }
 }
 
 // The language of the word of the header of the first line (`Машина`, `Machine`, `Определения`, `Definitions`, `Фрагмент`, `Fragment`): "ru", "en", or "" when the line is none of them.

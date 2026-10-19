@@ -9,6 +9,7 @@
 // binding, a variable of a lambda) is looked up under `variable` and, when the dictionary has it not, written in Latin letters by `tx_translit`.
 module crew_harness.machine_text
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import std.collections.hash_map.{HashMap}
 
@@ -101,7 +102,9 @@ fn names_first(n TxNames, kinds []str, ru str) -> Option[str] {
 // ---- the nearest word -------------------------------------------------------------------------------------------------------
 
 /// The distance of Levenshtein of two words (by letters).
-fn tx_distance(first []str, second []str) -> int {
+fn tx_distance(first str, second str) -> int => tx_distance_chars(first.chars().collect(), second.chars().collect())
+
+fn tx_distance_chars(first []char, second []char) -> int {
     mut prev = []int.new()
     mut j = 0
     while j <= second.len() {
@@ -129,12 +132,12 @@ fn tx_distance(first []str, second []str) -> int {
 
 /// The hint for an unknown word: `; возможно, `x`` for the nearest word of the kinds when it is near enough, else the empty text.
 fn names_hint(n TxNames, kinds []str, ru str) -> str {
-    ro word = tx_chars(ru)
+    ro word []char = ru.chars().collect()
     mut best = ""
     mut best_distance = 1000
     for row in n.rows {
         if !kinds.contains(row.kind) { continue }
-        ro d = tx_distance(word, tx_chars(row.ru))
+        ro d = tx_distance_chars(word, row.ru.chars().collect())
         if d < best_distance {
             best_distance = d
             best = row.ru
@@ -152,16 +155,18 @@ fn translit_pairs() -> []str => [
     "ф=f", "х=kh", "ц=c", "ч=ch", "ш=sh", "щ=shch", "ъ=", "ы=y", "ь=", "э=e", "ю=yu", "я=ya"
 ]
 
-// The lower case of a letter (Latin or Cyrillic); another character stays.
-fn tx_lower(c str) -> str {
-    ro upper = tx_chars("ABCDEFGHIJKLMNOPQRSTUVWXYZАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ")
-    ro lower = tx_chars("abcdefghijklmnopqrstuvwxyzабвгдеёжзийклмнопрстуфхцчшщъыьэюя")
-    mut i = 0
-    while i < upper.len() {
-        if upper[i] == c { return lower[i] }
-        i += 1
-    }
-    c
+// The lower case of a char (any alphabet that has the case); a char without one stays.
+fn tx_lower_char(c char) -> str {
+    if c >= 'A' && c <= 'Z' { return "${c.to_ascii_lowercase()}" }
+    if (c as int) < 128 { return "${c}" }
+    c.to_lowercase()
+}
+
+/// The lower case of a text, char by char (`Ä` -> `ä`, `Σ` -> `σ`, `Я` -> `я`); a char without a case stays.
+fn tx_lower(s str) -> str {
+    mut out = []str.new()
+    for c in s.chars() { out.push(tx_lower_char(c)) }
+    out.join("")
 }
 
 /// A Russian word in Latin letters (the letters of the table above, lower case; digits and underscores stay). Used only for the names that the
@@ -169,17 +174,17 @@ fn tx_lower(c str) -> str {
 fn tx_translit(ru str) -> str {
     mut out = []str.new()
     for c in ru.chars() {
-        ro one = "${c}"
+        ro one = tx_lower_char(c)
         mut done = false
         for pair in translit_pairs() {
             ro at = pair.find("=") ?? -1
-            if at > 0 && pair[..at] == tx_lower(one) {
+            if at > 0 && pair[..at] == one {
                 out.push(pair[at + 1..])
                 done = true
                 break
             }
         }
-        if !done { out.push(tx_lower(one)) }
+        if !done { out.push(one) }
     }
     out.join("")
 }

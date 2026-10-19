@@ -221,34 +221,37 @@ fn word_user_marks() -> []str => ["kw(", "p_is_kw(", "p_eat_kw(", "p_expect_kw("
 // The literals of a line, the content of each "…" without the escapes read.
 fn line_literals(line str) -> []str {
     mut out = []str.new()
-    ro cs = tx_chars(line)
+    ro n = line.byte_len()
     mut i = 0
-    while i < cs.len() {
-        if cs[i] == "/" && i + 1 < cs.len() && cs[i + 1] == "/" { break }
-        if cs[i] == "\"" {
+    while i < n {
+        ro c = tx_at(line, i)
+        if c == '/' && line[i + 1..].starts_with("/") { break }
+        if c == '"' {
             mut j = i + 1
             mut parts = []str.new()
-            while j < cs.len() && cs[j] != "\"" {
-                if cs[j] == "\\" && j + 1 < cs.len() {
-                    parts.push(cs[j + 1])
-                    j += 2
+            while j < n && tx_at(line, j) != '"' {
+                ro d = tx_at(line, j)
+                if d == '\\' && j + 1 < n {
+                    ro e = tx_at(line, j + 1)
+                    parts.push(line[j + 1..j + 1 + e.len_utf8()])
+                    j += 1 + e.len_utf8()
                     continue
                 }
-                parts.push(cs[j])
-                j += 1
+                parts.push(line[j..j + d.len_utf8()])
+                j += d.len_utf8()
             }
             out.push(parts.join(""))
             i = j + 1
             continue
         }
-        i += 1
+        i += c.len_utf8()
     }
     out
 }
 
 fn is_cyrillic_text(s str) -> bool {
     for c in s.chars() {
-        ro cp = tx_cp("${c}")
+        ro cp = c as int
         if cp >= 1024 && cp <= 1279 { return true }
     }
     false
@@ -302,7 +305,7 @@ test "wt every key listed" {
 fn allowed_marks() -> []str => [
     "p_fail(", "tx_err(", "struct_error(", "cx_error(", "cx_unsupported(", "unsupported(", "note(", "cls_flush(", "foreign_error(", "Err(", "message:",
     "decl_name(", "tr_word(", "tr_word_f(", "decl_name_phrase(", "decl_name_phrase_in(", "ro message =", "ro why =", "ro shown =", "возможно", "конец текста", "строку", "фрагменты не подключены", "подключён:",
-    "английский", "русский", "найдено", "\"а=a\"", "\"ф=f\"", "tx_chars(\"ABC", "tx_chars(\"abc"
+    "английский", "русский", "найдено", "\"а=a\"", "\"ф=f\""
 ]
 
 fn cyrillic_offenders() -> []str {

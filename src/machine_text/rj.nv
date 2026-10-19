@@ -3,6 +3,7 @@
 // `true`, `false`, `null`; a `\uXXXX` escape is not read (the translator never writes one).
 module crew_harness.machine_text
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 
 /// RKV: a key and a value of an object, in the order of the text.
@@ -18,85 +19,96 @@ type RJ enum
     | RArr([]RJ)
     | ROb([]RKV)
 
-/// RjP: the place of the reader in the text.
-type RjP { cs []str, pos int }
+/// RjP: the place of the reader in the text; `pos` is a BYTE offset. The signs of JSON are ASCII, so a byte tells them from the rest; a string is cut at the signs
+/// (the borders of chars) and keeps its letters of any alphabet as they are.
+type RjP { text str, pos int }
 
-fn rj_ws(mut p RjP) -> () {
-    while p.pos < p.cs.len() && (p.cs[p.pos] == " " || p.cs[p.pos] == "\n" || p.cs[p.pos] == "\t" || p.cs[p.pos] == "\r") { p.pos += 1 }
+fn rj_end(p RjP) -> bool => p.pos >= p.text.byte_len()
+
+// The byte at the place of the reader as a number (0 at the end).
+fn rj_peek(p RjP) -> int {
+    if rj_end(p) { return 0 }
+    tx_byte(p.text, p.pos)
 }
 
-fn rj_fail(p RjP, what str) -> str => "${what} at the letter ${p.pos}"
+fn rj_ws(mut p RjP) -> () {
+    while !rj_end(p) && (rj_peek(p) == 32 || rj_peek(p) == 10 || rj_peek(p) == 9 || rj_peek(p) == 13) { p.pos += 1 }
+}
+
+fn rj_fail(p RjP, what str) -> str => "${what} at the byte ${p.pos}"
 
 fn rj_word(mut p RjP, word str) -> bool {
-    ro n = word.chars().count()
-    if p.pos + n > p.cs.len() { return false }
-    if tx_slice(p.cs, p.pos, p.pos + n) != word { return false }
-    p.pos += n
+    if !p.text[p.pos..].starts_with(word) { return false }
+    p.pos += word.byte_len()
     true
 }
 
 fn rj_string(mut p RjP) -> Result[str, str] {
+    ro n = p.text.byte_len()
     p.pos += 1
     mut parts = []str.new()
-    while p.pos < p.cs.len() {
-        ro c = p.cs[p.pos]
-        if c == "\"" {
+    mut run = p.pos
+    while p.pos < n {
+        ro b = rj_peek(p)
+        if b == 34 {
+            parts.push(p.text[run..p.pos])
             p.pos += 1
             return Ok(parts.join(""))
         }
-        if c == "\\" && p.pos + 1 < p.cs.len() {
-            ro e = p.cs[p.pos + 1]
-            if e == "n" {
+        if b == 92 && p.pos + 1 < n {
+            parts.push(p.text[run..p.pos])
+            ro e = tx_at(p.text, p.pos + 1)
+            if e == 'n' {
                 parts.push("\n")
-            } else if e == "t" {
+            } else if e == 't' {
                 parts.push("\t")
-            } else if e == "r" {
+            } else if e == 'r' {
                 parts.push("\r")
-            } else if e == "b" || e == "f" {
+            } else if e == 'b' || e == 'f' {
                 parts.push(" ")
-            } else if e == "u" {
+            } else if e == 'u' {
                 return Err(rj_fail(p, "a \\u escape is not read"))
             } else {
-                parts.push(e)
+                parts.push(p.text[p.pos + 1..p.pos + 1 + e.len_utf8()])
             }
-            p.pos += 2
+            p.pos += 1 + e.len_utf8()
+            run = p.pos
             continue
         }
-        parts.push(c)
         p.pos += 1
     }
     Err(rj_fail(p, "a string is not closed"))
 }
 
-fn rj_number_char(c str) -> bool => (c >= "0" && c <= "9") || c == "-" || c == "+" || c == "." || c == "e" || c == "E"
+fn rj_number_char(b int) -> bool => (b >= 48 && b <= 57) || b == 45 || b == 43 || b == 46 || b == 101 || b == 69
 
 fn rj_value(mut p RjP) -> Result[RJ, str] {
     rj_ws(p)
-    if p.pos >= p.cs.len() { return Err(rj_fail(p, "the text ends")) }
-    ro c = p.cs[p.pos]
-    if c == "{" {
+    if rj_end(p) { return Err(rj_fail(p, "the text ends")) }
+    ro c = rj_peek(p)
+    if c == 123 {
         p.pos += 1
         mut pairs = []RKV.new()
         rj_ws(p)
-        if p.pos < p.cs.len() && p.cs[p.pos] == "}" {
+        if rj_peek(p) == 125 {
             p.pos += 1
             return Ok(ROb(pairs))
         }
         while true {
             rj_ws(p)
-            if p.pos >= p.cs.len() || p.cs[p.pos] != "\"" { return Err(rj_fail(p, "a key is expected")) }
+            if rj_end(p) || rj_peek(p) != 34 { return Err(rj_fail(p, "a key is expected")) }
             ro key = rj_string(p)?
             rj_ws(p)
-            if p.pos >= p.cs.len() || p.cs[p.pos] != ":" { return Err(rj_fail(p, "`:` is expected")) }
+            if rj_end(p) || rj_peek(p) != 58 { return Err(rj_fail(p, "`:` is expected")) }
             p.pos += 1
             ro value = rj_value(p)?
             pairs.push(RKV { key, value })
             rj_ws(p)
-            if p.pos < p.cs.len() && p.cs[p.pos] == "," {
+            if rj_peek(p) == 44 {
                 p.pos += 1
                 continue
             }
-            if p.pos < p.cs.len() && p.cs[p.pos] == "}" {
+            if rj_peek(p) == 125 {
                 p.pos += 1
                 break
             }
@@ -104,22 +116,22 @@ fn rj_value(mut p RjP) -> Result[RJ, str] {
         }
         return Ok(ROb(pairs))
     }
-    if c == "[" {
+    if c == 91 {
         p.pos += 1
         mut items = []RJ.new()
         rj_ws(p)
-        if p.pos < p.cs.len() && p.cs[p.pos] == "]" {
+        if rj_peek(p) == 93 {
             p.pos += 1
             return Ok(RArr(items))
         }
         while true {
             items.push(rj_value(p)?)
             rj_ws(p)
-            if p.pos < p.cs.len() && p.cs[p.pos] == "," {
+            if rj_peek(p) == 44 {
                 p.pos += 1
                 continue
             }
-            if p.pos < p.cs.len() && p.cs[p.pos] == "]" {
+            if rj_peek(p) == 93 {
                 p.pos += 1
                 break
             }
@@ -127,7 +139,7 @@ fn rj_value(mut p RjP) -> Result[RJ, str] {
         }
         return Ok(RArr(items))
     }
-    if c == "\"" {
+    if c == 34 {
         ro s = rj_string(p)?
         return Ok(RStr(s))
     }
@@ -136,8 +148,8 @@ fn rj_value(mut p RjP) -> Result[RJ, str] {
     if rj_word(p, "null") { return Ok(RNull) }
     if rj_number_char(c) {
         mut j = p.pos
-        while j < p.cs.len() && rj_number_char(p.cs[j]) { j += 1 }
-        ro raw = tx_slice(p.cs, p.pos, j)
+        while j < p.text.byte_len() && rj_number_char(tx_byte(p.text, j)) { j += 1 }
+        ro raw = p.text[p.pos..j]
         p.pos = j
         return Ok(RNum(raw))
     }
@@ -146,10 +158,10 @@ fn rj_value(mut p RjP) -> Result[RJ, str] {
 
 /// The tree of a JSON text.
 fn rj_parse(text str) -> Result[RJ, str] {
-    mut p = RjP { cs: tx_chars(text), pos: 0 }
+    mut p = RjP { text, pos: 0 }
     ro v = rj_value(p)?
     rj_ws(p)
-    if p.pos < p.cs.len() { return Err(rj_fail(p, "text after the value")) }
+    if !rj_end(p) { return Err(rj_fail(p, "text after the value")) }
     Ok(v)
 }
 

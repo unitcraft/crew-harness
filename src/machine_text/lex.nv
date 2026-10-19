@@ -7,9 +7,14 @@
 //     (the separator row `|---|---|` is nothing); any other line is a free line, a line that starts with a space continues the free line before it;
 //   - in a row `\|` is a bar of the text (a pipe of a set of literals in a cell), a bar inside a string literal does not end a cell;
 //   - `//` begins a comment up to the end of the line (outside a string literal).
+// The place in a line is a BYTE OFFSET (task 117): the reader walks a line by the chars (`tx_at` decodes the char at an offset, `len_utf8` is its width) and cuts it with `s[from..to]`
+// (a zero-copy view; the cut points are the offsets of the walk, so always the borders of chars). The COLUMN of an error is still a column in letters: it is counted by the chars
+// of the line up to the offset (`tx_cols`), never by bytes. A letter of a name is a letter of any alphabet (`std.unicode`, `tx_is_letter`).
 module crew_harness.machine_text
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
+import std.unicode.{GeneralCategory}
 
 /// TranslateError: a place of the file where the translation cannot go on, or goes on with a reservation. `kind`: `syntax`, `name`, `type`, `structure`,
 /// `unsupported` (not supported in this version), `check` (the checks of the table `check_machine`). `quote` is the line of the file.
@@ -36,62 +41,65 @@ const EN_HEAD = 1
 const EN_ROW = 2
 const EN_TEXT = 3
 
-/// TxCell: a cell of a row: its text without the spaces round it and the column of its first letter.
+/// TxCell: a cell of a row: its text without the spaces round it and the column (in letters) of its first letter.
 type TxCell { text str, col int }
 
 /// TxEntry: a line of the file that is not empty and not a comment. A heading has the `level` and the `text` after the hashes; a row has the cells;
-/// a free line has the `indent` (the number of the spaces before it) and the `text` after them. A line `Ключ: значение` of a known key has the `key` (the English word of the key,
-/// the same in both languages of the file) and the index of the colon in characters, else the key is empty and the colon is -1.
+/// a free line has the `indent` (the number of the spaces before it, in letters) and the `text` after them. A line `Ключ: значение` of a known key has the `key` (the English word of the key,
+/// the same in both languages of the file) and the BYTE offset of the colon in the `text`, else the key is empty and the colon is -1.
 type TxEntry { kind int, level int, line int, indent int, shift int, text str, cells []TxCell, key str, colon int }
 
-fn tx_chars(s str) -> []str {
-    mut out = []str.new()
-    for c in s.chars() { out.push("${c}") }
-    out
-}
+// ---- the chars of a line: byte offsets, the columns, the kinds of a letter -----------------------------------------------------------------
 
-fn tx_slice(items []str, from int, to int) -> str {
-    mut parts = []str.new()
-    mut i = from
-    while i < to {
-        parts.push(items[i])
-        i += 1
+/// The char that starts at the byte offset `at` of `s` (a border of chars, `at` not above the length); U+0000 at the end.
+fn tx_at(s str, at int) -> char {
+    match s[at..].chars().next() {
+        Some(c) => c
+        None => 0 as char
     }
-    parts.join("")
 }
 
-fn tx_is_digit(c str) -> bool => c >= "0" && c <= "9"
+/// The byte at the offset `at` of `s` as a number (`at` below the length); an ASCII sign of the format is one byte, and no byte of a longer char is below 128.
+fn tx_byte(s str, at int) -> int => s.bytes()[at] as int
 
-fn tx_is_space(c str) -> bool => c == " " || c == "\t" || c == " "
+/// The number of the chars of `s[from..to]`: the step of a column over a piece of a line.
+fn tx_cols(s str, from int, to int) -> int => s[from..to].chars().count()
 
-// The code point of a one-letter text.
-fn tx_cp(c str) -> int {
-    ro points = c.to_code_points()
-    if points.len() == 0 { return 0 }
-    points[0]
+fn tx_is_digit(c char) -> bool => c >= '0' && c <= '9'
+
+/// A space of a line: a space, a tab, or any space of Unicode (a no-break space, an ideographic space).
+fn tx_is_space(c char) -> bool {
+    if c == ' ' || c == '\t' { return true }
+    (c as int) >= 128 && c.is_whitespace()
 }
 
-// A letter of a name: Latin, or any letter of the Cyrillic block (U+0400..U+04FF), or an underscore.
-fn tx_is_letter(c str) -> bool {
-    if c == "_" { return true }
-    if (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") { return true }
-    ro cp = tx_cp(c)
-    cp >= 1024 && cp <= 1279
+// A letter of a name: a letter of any alphabet, or an underscore.
+fn tx_is_letter(c char) -> bool {
+    if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' { return true }
+    (c as int) >= 128 && c.is_alphabetic()
 }
+
+// A combining mark (an accent put after a letter written apart): it goes after a letter of a name, never first.
+fn tx_is_mark(c char) -> bool {
+    if (c as int) < 128 { return false }
+    ro category = c.general_category()
+    category == GeneralCategory.Mn || category == GeneralCategory.Mc
+}
+
+// A char that goes after the first letter of a name: a letter, a digit, a mark.
+fn tx_is_name_char(c char) -> bool => tx_is_letter(c) || tx_is_digit(c) || tx_is_mark(c)
 
 fn tx_err(line int, col int, kind str, message str) -> TranslateError => { line, col, kind, message, quote: "" }
 
-/// Does a letter stand in the upper case (Latin or Cyrillic)? Used to tell a type `Использование` from a constant `ПРЕДЕЛ` and a datum.
-fn tx_is_upper(c str) -> bool {
-    if c >= "A" && c <= "Z" { return true }
-    ro cp = tx_cp(c)
-    (cp >= 1040 && cp <= 1071) || cp == 1025
+/// Does a letter stand in the upper case (any alphabet that has one)? Used to tell a type `Использование` from a constant `ПРЕДЕЛ` and a datum.
+fn tx_is_upper(c char) -> bool {
+    if c >= 'A' && c <= 'Z' { return true }
+    (c as int) >= 128 && c.is_uppercase()
 }
 
-fn tx_is_lower(c str) -> bool {
-    if c >= "a" && c <= "z" { return true }
-    ro cp = tx_cp(c)
-    (cp >= 1072 && cp <= 1103) || cp == 1105
+fn tx_is_lower(c char) -> bool {
+    if c >= 'a' && c <= 'z' { return true }
+    (c as int) >= 128 && c.is_lowercase()
 }
 
 // ---- the tokens of a piece of a line ---------------------------------------------------------------------------------------
@@ -103,90 +111,110 @@ fn tx_sym2() -> []str => ["==", "!=", "<=", ">=", "+=", "??", "->"]
 fn tx_sym1() -> []str => ["(", ")", "[", "]", "{", "}", ",", ":", ";", ".", "?", "|", "+", "-", "*", "/", "%", "<", ">", "=", "≥", "≤", "≠", "∈", "→", "—", "…", "!"]
 
 /// The tokens of a piece of text that stands in the line `line` from the column `col0`; a comment `//` ends the piece.
+/// `i` is the byte offset in the text and `col` the column (in letters) of the char at `i`; they go on together.
 fn tx_lex(text str, line int, col0 int) -> Result[[]TxTok, TranslateError] {
-    ro cs = tx_chars(text)
-    ro n = cs.len()
+    ro n = text.byte_len()
     mut out = []TxTok.new()
     mut i = 0
+    mut col = col0
     while i < n {
-        ro c = cs[i]
-        ro col = col0 + i
+        ro c = tx_at(text, i)
+        ro w = c.len_utf8()
         if tx_is_space(c) {
-            i += 1
+            i += w
+            col += 1
             continue
         }
-        if c == "/" && i + 1 < n && cs[i + 1] == "/" { break }
+        if c == '/' && text[i + 1..].starts_with("/") { break }
         if tx_is_letter(c) {
-            mut j = i + 1
-            while j < n && (tx_is_letter(cs[j]) || tx_is_digit(cs[j])) { j += 1 }
-            out.push(TxTok { kind: TK_NAME, text: tx_slice(cs, i, j), line, col })
+            mut j = i + w
+            while j < n {
+                ro d = tx_at(text, j)
+                if !tx_is_name_char(d) { break }
+                j += d.len_utf8()
+            }
+            ro word = text[i..j]
+            out.push(TxTok { kind: TK_NAME, text: word, line, col })
+            col += tx_cols(text, i, j)
             i = j
             continue
         }
         if tx_is_digit(c) {
             mut j = i + 1
-            while j < n && tx_is_digit(cs[j]) { j += 1 }
+            while j < n && tx_is_digit(tx_at(text, j)) { j += 1 }
             mut kind = TK_INT
-            if j + 1 < n && cs[j] == "." && tx_is_digit(cs[j + 1]) {
+            if j + 1 < n && tx_byte(text, j) == 46 && tx_is_digit(tx_at(text, j + 1)) {
                 kind = TK_FLOAT
                 j += 1
-                while j < n && tx_is_digit(cs[j]) { j += 1 }
+                while j < n && tx_is_digit(tx_at(text, j)) { j += 1 }
             }
-            out.push(TxTok { kind, text: tx_slice(cs, i, j), line, col })
+            out.push(TxTok { kind, text: text[i..j], line, col })
+            col += j - i
             i = j
             continue
         }
-        if c == "\"" {
+        if c == '"' {
             mut j = i + 1
+            mut run = j
             mut parts = []str.new()
             mut closed = false
             while j < n {
-                ro d = cs[j]
-                if d == "\\" && j + 1 < n {
-                    ro e = cs[j + 1]
-                    if e == "n" {
+                ro d = tx_at(text, j)
+                if d == '\\' && j + 1 < n {
+                    ro e = tx_at(text, j + 1)
+                    parts.push(text[run..j])
+                    if e == 'n' {
                         parts.push("\n")
-                    } else if e == "t" {
+                    } else if e == 't' {
                         parts.push("\t")
                     } else {
-                        parts.push(e)
+                        parts.push(text[j + 1..j + 1 + e.len_utf8()])
                     }
-                    j += 2
+                    j += 1 + e.len_utf8()
+                    run = j
                     continue
                 }
-                if d == "\"" {
+                if d == '"' {
                     closed = true
                     break
                 }
-                parts.push(d)
-                j += 1
+                j += d.len_utf8()
             }
             if !closed { return Err(tx_err(line, col, "syntax", "строка в кавычках не закрыта")) }
+            parts.push(text[run..j])
             out.push(TxTok { kind: TK_STR, text: parts.join(""), line, col })
+            col += tx_cols(text, i, j + 1)
             i = j + 1
             continue
         }
-        if c == "\\" && i + 1 < n && cs[i + 1] == "|" {
+        if c == '\\' && text[i + 1..].starts_with("|") {
             out.push(TxTok { kind: TK_SYM, text: "|", line, col })
             i += 2
+            col += 2
             continue
         }
-        if i + 3 <= n && tx_slice(cs, i, i + 3) == "..." {
+        ro rest = text[i..]
+        if rest.starts_with("...") {
             out.push(TxTok { kind: TK_SYM, text: "...", line, col })
             i += 3
+            col += 3
             continue
         }
-        if i + 2 <= n {
-            ro two = tx_slice(cs, i, i + 2)
-            if tx_sym2().contains(two) {
-                out.push(TxTok { kind: TK_SYM, text: two, line, col })
-                i += 2
-                continue
-            }
+        mut two = ""
+        for s in tx_sym2() {
+            if rest.starts_with(s) { two = s }
         }
-        if tx_sym1().contains(c) {
-            out.push(TxTok { kind: TK_SYM, text: c, line, col })
-            i += 1
+        if two != "" {
+            out.push(TxTok { kind: TK_SYM, text: two, line, col })
+            i += 2
+            col += 2
+            continue
+        }
+        ro one = text[i..i + w]
+        if tx_sym1().contains(one) {
+            out.push(TxTok { kind: TK_SYM, text: one, line, col })
+            i += w
+            col += 1
             continue
         }
         return Err(tx_err(line, col, "syntax", "недопустимый знак «${c}»"))
@@ -196,34 +224,50 @@ fn tx_lex(text str, line int, col0 int) -> Result[[]TxTok, TranslateError] {
 
 // ---- the entries of a file ---------------------------------------------------------------------------------------------------
 
-// A cell: the text cs[from..to] without the spaces round it, and the column of its first letter.
-fn tx_cell(cs []str, from int, to int) -> TxCell {
+// A cell: the text of `line[from..to]` without the spaces round it, and the column of its first letter; `from_col` is the index in letters of the char at `from`.
+fn tx_cell(line str, from int, to int, from_col int) -> TxCell {
     mut a = from
-    mut b = to
-    while a < b && tx_is_space(cs[a]) { a += 1 }
-    while b > a && tx_is_space(cs[b - 1]) { b -= 1 }
-    TxCell { text: tx_slice(cs, a, b), col: a + 1 }
+    mut col = from_col
+    while a < to {
+        ro c = tx_at(line, a)
+        if !tx_is_space(c) { break }
+        a += c.len_utf8()
+        col += 1
+    }
+    mut end = a
+    mut k = a
+    while k < to {
+        ro c = tx_at(line, k)
+        k += c.len_utf8()
+        if !tx_is_space(c) { end = k }
+    }
+    TxCell { text: line[a..end], col: col + 1 }
 }
 
 // The cells of a row (the line starts with `|`): split at the bars that are not escaped and not in a string literal. The text after the last bar is a
 // cell when it is not empty.
-fn tx_split_cells(cs []str) -> []TxCell {
+fn tx_split_cells(line str) -> []TxCell {
     mut cells = []TxCell.new()
-    ro n = cs.len()
+    ro n = line.byte_len()
     mut start = 1
+    mut start_col = 1
     mut in_str = false
+    mut after_slash = false
     mut i = 1
+    mut ci = 1
     while i < n {
-        ro c = cs[i]
-        ro escaped = cs[i - 1] == "\\"
-        if c == "\"" && !escaped { in_str = !in_str }
-        if c == "|" && !in_str && !escaped {
-            cells.push(tx_cell(cs, start, i))
+        ro c = tx_at(line, i)
+        if c == '"' && !after_slash { in_str = !in_str }
+        if c == '|' && !in_str && !after_slash {
+            cells.push(tx_cell(line, start, i, start_col))
             start = i + 1
+            start_col = ci + 1
         }
-        i += 1
+        after_slash = c == '\\'
+        i += c.len_utf8()
+        ci += 1
     }
-    ro tail = tx_cell(cs, start, n)
+    ro tail = tx_cell(line, start, n, start_col)
     if tail.text != "" { cells.push(tail) }
     cells
 }
@@ -233,8 +277,7 @@ fn tx_is_separator(cells []TxCell) -> bool {
     for cell in cells {
         if cell.text == "" { return false }
         for c in cell.text.chars() {
-            ro one = "${c}"
-            if one != "-" && one != ":" && one != " " { return false }
+            if c != '-' && c != ':' && c != ' ' { return false }
         }
     }
     true
@@ -255,17 +298,19 @@ fn line_keys() -> []str => ["Initial state", "Party", "Idle term", "Edits", "For
 /// The keys of the header of a file.
 fn header_keys() -> []str => ["machine", "machine_version", "format", "definitions_version", "fragment", "language"]
 
-/// TxKvHit: the key of a line `Ключ: значение` (empty when the line is not one) and the index of its colon in characters.
+/// TxKvHit: the key of a line `Ключ: значение` (empty when the line is not one) and the BYTE offset of its colon.
 type TxKvHit { key str, colon int }
 
 fn kv_none() -> TxKvHit => { key: "", colon: -1 }
 
-// The text before the first colon of a line and its index; the line is not a key line when a bracket, `=` or `|` comes first.
-fn kv_head(cs []str) -> TxKvHit {
+// The text before the first colon of a line and its offset; the line is not a key line when a bracket, `=` or `|` comes first. The signs are one byte each, so a byte walk is enough.
+fn kv_head(text str) -> TxKvHit {
+    ro n = text.byte_len()
     mut i = 0
-    while i < cs.len() {
-        if cs[i] == ":" { return TxKvHit { key: tx_slice(cs, 0, i).trim_ascii(), colon: i } }
-        if cs[i] == "(" || cs[i] == "=" || cs[i] == "|" { return kv_none() }
+    while i < n {
+        ro b = tx_byte(text, i)
+        if b == 58 { return TxKvHit { key: text[..i].trim_ascii(), colon: i } }
+        if b == 40 || b == 61 || b == 124 { return kv_none() }
         i += 1
     }
     kv_none()
@@ -273,7 +318,7 @@ fn kv_head(cs []str) -> TxKvHit {
 
 /// Is the text a line `Ключ: значение` with a key of the language of the file? The key is its English word.
 fn kv_hit(text str, w TxWords) -> TxKvHit {
-    ro head = kv_head(tx_chars(text))
+    ro head = kv_head(text)
     if head.colon < 0 { return kv_none() }
     match kw_key(w, "key", head.key) {
         Some(k) => {
@@ -292,7 +337,7 @@ fn kv_hit(text str, w TxWords) -> TxKvHit {
 
 /// The same for a key of the OTHER language (a word that the language of the file does not have).
 fn kv_hit_foreign(text str, w TxWords) -> TxKvHit {
-    ro head = kv_head(tx_chars(text))
+    ro head = kv_head(text)
     if head.colon < 0 { return kv_none() }
     match kw_foreign(w, "key", head.key) {
         Some(k) => {
@@ -326,9 +371,8 @@ fn is_decl_start(text str, w TxWords) -> bool {
 fn is_call_start(text str) -> bool {
     mut k = 0
     for c in text.chars() {
-        ro one = "${c}"
-        if one == "(" { return k > 0 }
-        if !(tx_is_letter(one) || (k > 0 && tx_is_digit(one))) { return false }
+        if c == '(' { return k > 0 }
+        if !(if k == 0 { tx_is_letter(c) } else { tx_is_name_char(c) }) { return false }
         k += 1
     }
     false
@@ -336,10 +380,14 @@ fn is_call_start(text str) -> bool {
 
 // The key word that a line of a paragraph starts with, after the marks that may stand before a key (`-`, a dash, a bullet) and spaces; "" when it starts with none.
 fn prose_key_of(text str, w TxWords) -> str {
-    ro cs = tx_chars(text)
+    ro n = text.byte_len()
     mut at = 0
-    while at < cs.len() && (cs[at] == "-" || cs[at] == "–" || cs[at] == "—" || cs[at] == "•" || cs[at] == "*" || tx_is_space(cs[at])) { at += 1 }
-    ro rest = tx_slice(cs, at, cs.len())
+    while at < n {
+        ro c = tx_at(text, at)
+        if !(c == '-' || c == '–' || c == '—' || c == '•' || c == '*' || tx_is_space(c)) { break }
+        at += c.len_utf8()
+    }
+    ro rest = text[at..]
     for key in prose_keys(w) {
         if rest.starts_with(key) {
             ro after = rest[key.byte_len()..]
@@ -381,12 +429,7 @@ fn cls_flush(mut st TxClsState, touching bool, what str, w TxWords) -> () {
 
 // The name in the heading of an expansion section: the words after `Раскрытие фрагмента` without the quotes `« »` and `"`.
 fn expansion_name(head_text str, prefix str) -> str {
-    mut out = []str.new()
-    for c in head_text[prefix.byte_len()..].chars() {
-        ro one = "${c}"
-        if one != "\"" && one != "«" && one != "»" { out.push(one) }
-    }
-    out.join("").trim_ascii()
+    head_text[prefix.byte_len()..].replace("\"", "").replace("«", "").replace("»", "").trim_ascii()
 }
 
 /// The entries of the lines of a file, in order, the warnings and the errors of the language. `lines` are the lines without the line feed (a carriage return at the end is cut here).
@@ -407,15 +450,22 @@ fn tx_classify_in(lines []str, w TxWords, strict bool, decl_comment bool) -> TxC
     for raw in lines {
         no += 1
         ro line = raw.strip_suffix("\r") ?? raw
-        ro cs = tx_chars(line)
+        ro n = line.byte_len()
+        // `at` is the byte offset of the text after the spaces, `indent` their number in letters
+        mut at = 0
         mut indent = 0
-        while indent < cs.len() && tx_is_space(cs[indent]) { indent += 1 }
-        if indent >= cs.len() {
+        while at < n {
+            ro c = tx_at(line, at)
+            if !tx_is_space(c) { break }
+            at += c.len_utf8()
+            indent += 1
+        }
+        if at >= n {
             cls_flush(st, false, "", w)
             prev_blank = true
             continue
         }
-        ro text = tx_slice(cs, indent, cs.len())
+        ro text = line[at..]
         if text.starts_with("```") {
             cls_flush(st, false, "", w)
             in_fence = !in_fence
@@ -425,8 +475,8 @@ fn tx_classify_in(lines []str, w TxWords, strict bool, decl_comment bool) -> TxC
         if indent == 0 && text.starts_with("#") && !(in_fence && skipping) {
             cls_flush(st, strict, "заголовку", w)
             mut level = 0
-            while level < cs.len() && cs[level] == "#" { level += 1 }
-            ro head_text = tx_slice(cs, level, cs.len()).trim_ascii()
+            while text[level..].starts_with("#") { level += 1 }
+            ro head_text = text[level..].trim_ascii()
             if level <= 2 && !in_fence {
                 skipping = level == 2 && head_text.starts_with(expansion_word)
                 includes = level == 2 && head_text == includes_word
@@ -449,7 +499,7 @@ fn tx_classify_in(lines []str, w TxWords, strict bool, decl_comment bool) -> TxC
         if indent == 0 && text.starts_with("|") {
             cls_flush(st, strict, "таблице", w)
             prev_blank = false
-            ro cells = tx_split_cells(cs)
+            ro cells = tx_split_cells(text)
             if tx_is_separator(cells) { continue }
             st.out.push(TxEntry { kind: EN_ROW, level: 0, line: no, indent: 0, shift: 0, text, cells, key: "", colon: -1 })
             continue
@@ -460,11 +510,18 @@ fn tx_classify_in(lines []str, w TxWords, strict bool, decl_comment bool) -> TxC
             continue
         }
         // an optional list marker `- ` before a line `Ключ: значение` (format 2.6): the entry is the line without the marker, `shift` is the width of
-        // the marker with the spaces after it, so the columns of the errors stay the columns of the file
+        // the marker with the spaces after it (in letters), so the columns of the errors stay the columns of the file
         if indent == 0 && text.starts_with("- ") {
+            ro tn = text.byte_len()
+            mut kb = 1
             mut k = 1
-            while k < cs.len() && tx_is_space(cs[k]) { k += 1 }
-            ro rest = tx_slice(cs, k, cs.len())
+            while kb < tn {
+                ro c = tx_at(text, kb)
+                if !tx_is_space(c) { break }
+                kb += c.len_utf8()
+                k += 1
+            }
+            ro rest = text[kb..]
             ro hit = kv_hit(rest, w)
             if hit.colon >= 0 {
                 cls_flush(st, strict, "элементу списка", w)
@@ -474,7 +531,7 @@ fn tx_classify_in(lines []str, w TxWords, strict bool, decl_comment bool) -> TxC
             }
             if !in_fence {
                 ro foreign = kv_hit_foreign(rest, w)
-                if foreign.colon >= 0 { errors.push(foreign_error(w, no, k + 1, tx_slice(tx_chars(rest), 0, foreign.colon).trim_ascii(), "key", foreign.key)) }
+                if foreign.colon >= 0 { errors.push(foreign_error(w, no, k + 1, rest[..foreign.colon].trim_ascii(), "key", foreign.key)) }
             }
         }
         if indent == 0 {
@@ -487,7 +544,7 @@ fn tx_classify_in(lines []str, w TxWords, strict bool, decl_comment bool) -> TxC
             }
             if !in_fence {
                 ro foreign = kv_hit_foreign(text, w)
-                if foreign.colon >= 0 { errors.push(foreign_error(w, no, 1, tx_slice(tx_chars(text), 0, foreign.colon).trim_ascii(), "key", foreign.key)) }
+                if foreign.colon >= 0 { errors.push(foreign_error(w, no, 1, text[..foreign.colon].trim_ascii(), "key", foreign.key)) }
             }
         }
         // a line of free text: a line of a paragraph (a comment) or a line of a declaration or a connection

@@ -2,6 +2,7 @@
 // with the check of their columns.
 module crew_harness.machine_text
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 
 /// TxSection: a section `## Имя`: the key of its name (the English word of the table of words: `Types`, `Parties`, `Common events`), the heading as it stands in the file, the line of the
@@ -14,36 +15,48 @@ type TxSeg { text str, line int, col int }
 /// TxKv: a line `Ключ: значение`: the key (its English word), the pieces of the value, and the number of the entries it takes.
 type TxKv { key str, segs []TxSeg, line int, taken int }
 
-/// Is the entry a line `Ключ: значение` with a key of the language of the file? Returns the index of the colon in characters, or -1 (the classification of the lines found the key).
+/// Is the entry a line `Ключ: значение` with a key of the language of the file? Returns the BYTE offset of the colon in the text of the entry, or -1 (the classification of the lines found the key).
 fn kv_colon(entry TxEntry) -> int {
     if entry.kind != EN_TEXT || entry.indent != 0 { return -1 }
     entry.colon
+}
+
+// The offset of the first char of `s` from `from` that is no space, and the number of the chars that were skipped.
+fn skip_spaces(s str, from int) -> (int, int) {
+    ro n = s.byte_len()
+    mut at = from
+    mut skipped = 0
+    while at < n {
+        ro c = tx_at(s, at)
+        if !tx_is_space(c) { break }
+        at += c.len_utf8()
+        skipped += 1
+    }
+    (at, skipped)
 }
 
 /// The line `Ключ: значение` at `at` of the entries with its continuation lines (the following free lines that are indented).
 fn kv_read(entries []TxEntry, at int) -> TxKv {
     ro entry = entries[at]
     ro colon = kv_colon(entry)
-    ro cs = tx_chars(entry.text)
     ro key = entry.key
     mut segs = []TxSeg.new()
-    ro rest = tx_slice(cs, colon + 1, cs.len())
-    mut lead = 0
-    ro rcs = tx_chars(rest)
-    while lead < rcs.len() && tx_is_space(rcs[lead]) { lead += 1 }
-    segs.push(TxSeg { text: tx_slice(rcs, lead, rcs.len()), line: entry.line, col: entry.indent + entry.shift + colon + 1 + lead + 1 })
+    ro colon_col = tx_cols(entry.text, 0, colon)
+    ro (lead_at, lead) = skip_spaces(entry.text, colon + 1)
+    segs.push(TxSeg { text: entry.text[lead_at..], line: entry.line, col: entry.indent + entry.shift + colon_col + 1 + lead + 1 })
     mut taken = 1
     while at + taken < entries.len() {
         ro next = entries[at + taken]
         if next.kind != EN_TEXT || next.indent == 0 { break }
         // a continuation line may be an item of a nested list (`  - действие;`, format 2.6): the marker is not a part of the text
+        mut item_at = 0
         mut item_lead = 0
         if next.text.starts_with("- ") {
-            item_lead = 1
-            ro ncs = tx_chars(next.text)
-            while item_lead < ncs.len() && tx_is_space(ncs[item_lead]) { item_lead += 1 }
+            ro (after, skipped) = skip_spaces(next.text, 1)
+            item_at = after
+            item_lead = 1 + skipped
         }
-        segs.push(TxSeg { text: tx_slice(tx_chars(next.text), item_lead, tx_chars(next.text).len()), line: next.line, col: next.indent + item_lead + 1 })
+        segs.push(TxSeg { text: next.text[item_at..], line: next.line, col: next.indent + item_lead + 1 })
         taken += 1
     }
     TxKv { key, segs, line: entry.line, taken }
@@ -157,11 +170,7 @@ fn section_of(sections []TxSection, name str) -> Option[TxSection] {
 // ---- the tables ------------------------------------------------------------------------------------------------------------------
 
 /// The text of a header cell for the comparison: lower case, one space between words.
-fn header_norm(s str) -> str {
-    mut out = []str.new()
-    for c in s.chars() { out.push(tx_lower("${c}")) }
-    out.join("")
-}
+fn header_norm(s str) -> str => tx_lower(s)
 
 /// Does the row start another table (all its cells are words of the columns of the tables)? Two tables may follow each other without a line between them.
 fn row_starts_table(e TxEntry, w TxWords) -> bool {

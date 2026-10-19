@@ -5,6 +5,7 @@
 // the cell goes on with the Russian word in its place, so that one cell with two unknown words says both).
 module crew_harness.machine_text
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 
 /// TxPair: a Russian word and the Latin word of the JSON.
@@ -332,11 +333,10 @@ fn looks_like_type(w str) -> bool {
     mut upper_first = false
     mut has_lower = false
     for c in w.chars() {
-        ro one = "${c}"
         if first {
-            upper_first = tx_is_upper(one)
+            upper_first = tx_is_upper(c)
             first = false
-        } else if tx_is_lower(one) {
+        } else if tx_is_lower(c) {
             has_lower = true
         }
     }

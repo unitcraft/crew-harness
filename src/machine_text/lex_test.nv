@@ -154,9 +154,9 @@ test "names hint" {
     ro n = names_load()
     assert(names_hint(n, ["data"], "запрос_агнта") == "; возможно, `запрос_агента`")
     assert(names_hint(n, ["data"], "совсем_другое_слово_вообще") == "")
-    assert(tx_distance(tx_chars("abc"), tx_chars("abd")) == 1)
-    assert(tx_distance(tx_chars(""), tx_chars("ab")) == 2)
-    assert(tx_distance(tx_chars("ход"), tx_chars("ход")) == 0)
+    assert(tx_distance("abc", "abd") == 1)
+    assert(tx_distance("", "ab") == 2)
+    assert(tx_distance("ход", "ход") == 0)
 }
 
 test "names translit" {
