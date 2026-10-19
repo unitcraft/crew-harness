@@ -98,6 +98,19 @@ if (!args.length) {
     console.log(`  вопрос: ${x.form.question ?? x.form.title ?? "?"}`)
     ;(x.form.options ?? []).forEach((o, i) => console.log(`  ${i + 1}. ${o}`))
   }
+  // 2026-10-20: перекрёстная проверка с панелью: вкладка в состоянии «вопрос»/«владелец» (status/<сессия>.json), у которой нет открытой формы в
+  // списке, — вопрос текстом («ждёт указаний») или потерянная запись формы; её тоже надо показать владельцу, а не молчать.
+  const STATUS = path.join(base, "status")
+  if (existsSync(STATUS)) {
+    const have = new Set(forms.map((x) => x.session))
+    for (const n of readdirSync(STATUS).filter((n) => n.endsWith(".json"))) {
+      const st = read(path.join(STATUS, n))
+      if (!st || !["question", "owner"].includes(st.state) || have.has(n.replace(/\.json$/, ""))) continue
+      const card = read(path.join(CARDS, n)) ?? {}
+      const since = typeof st.since === "number" ? `${Math.round((Date.now() - st.since) / 3_600_000)} ч` : "?"
+      console.log(`БЕЗ ФОРМЫ  ${card.project ?? st.project ?? "?"}  ${card.role ?? st.role ?? "?"}  сессия ${n.replace(/\.json$/, "")}  состояние ${st.state}${st.wait ? " (ждёт указаний: вопрос текстом)" : ""}  ждёт ${since}  ${String(st.title ?? card.title ?? "").slice(0, 70)}`)
+    }
+  }
   process.exit(0)
 }
 const target = args[0]
