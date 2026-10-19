@@ -612,22 +612,11 @@ fn event_of_record(v Value) -> Result[JournalEvent, Fault] {
     }
 }
 
-// The text of a datum in `all_data`: a scalar by `text`, a bool as yes/no, the rest as JSON.
-fn datum_text(v Value) -> str {
-    match v {
-        Bool(b) => if b { "yes" } else { "no" }
-        _ => match value_text(v) {
-            Some(s) => s
-            None => value_json(v)
-        }
-    }
-}
-
 fn all_data_text(ctx Ctx) -> str {
     mut parts = []str.new()
     for d in ctx.def.data {
         if d.name.contains("[") { continue }
-        parts.push("${d.name}=${datum_text(data_get(ctx.data, d.name))}")
+        parts.push("${d.name}=${datum_line(data_get(ctx.data, d.name), ctx.def.types)}")
     }
     parts.join("; ")
 }

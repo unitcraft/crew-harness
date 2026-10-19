@@ -66,7 +66,22 @@ fn same_names(first []str, second []str) -> bool {
     true
 }
 
-// `перечисление Имя = Зн "слово" | Зн "слово" …` (the words are optional); returns the JSON of the variant or None for the built-in FailCode.
+// Is the word of an enum value a Latin word of a code: lower case letters, digits, `_`, the first one a letter?
+fn word_is_code(w str) -> bool {
+    if w == "" { return false }
+    mut first = true
+    for c in w.chars() {
+        ro one = "${c}"
+        ro letter = one >= "a" && one <= "z"
+        ro digit = one >= "0" && one <= "9"
+        if first && !letter { return false }
+        if !letter && !digit && one != "_" { return false }
+        first = false
+    }
+    true
+}
+
+// `перечисление Имя = Зн "слово" | Зн "слово" …` (the words are optional, format 2.7 P-7: the pairs [name, word] go to the key `words`); returns the JSON of the variant or None for the built-in FailCode.
 fn decl_enum(mut p TxP, mut cx TxCx) -> Result[Option[TxJ], TranslateError] {
     ro n = p_tok(p)
     if n.kind != TK_NAME { return Err(p_fail(p, "после `перечисление` ожидается имя типа")) }
@@ -76,6 +91,8 @@ fn decl_enum(mut p TxP, mut cx TxCx) -> Result[Option[TxJ], TranslateError] {
     p_expect(p, "=")?
     mut cases = []TxJ.new()
     mut case_names = []str.new()
+    mut word_pairs = []TxJ.new()
+    mut word_owners = []TxPair.new()
     while true {
         ro c = p_tok(p)
         if c.kind != TK_NAME { return Err(p_fail(p, "ожидается значение перечисления")) }
@@ -85,8 +102,21 @@ fn decl_enum(mut p TxP, mut cx TxCx) -> Result[Option[TxJ], TranslateError] {
         if p_tok(p).kind == TK_STR {
             ro word = p_tok(p)
             p_adv(p)
-            if word.text != snake_of(case_en) {
-                cx_unsupported(cx, word, "слово значения \"${word.text}\" не равно слову кода `${snake_of(case_en)}` (слова значений берутся из имени варианта)")
+            if word.text == "" {
+                cx_error(cx, word, "syntax", "слово значения `${c.text}` не может быть пустым")
+            } else if !word_is_code(word.text) {
+                cx_error(cx, word, "syntax", "слово значения `${c.text}` — \"${word.text}\": слово — латинское слово кода (строчные буквы, цифры, `_`, первая — буква)")
+            } else if pair_has_en(word_owners, word.text) {
+                cx_error(cx, word, "syntax", "слово \"${word.text}\" повторено: оно уже у значения `${pair_owner(word_owners, word.text)}`")
+            } else {
+                word_owners.push(TxPair { ru: c.text, en: word.text })
+                if type_en == "FailCode" {
+                    if word.text != snake_of(case_en) {
+                        cx_unsupported(cx, word, "слово значения \"${word.text}\" у `${c.text}` не равно слову кода движка `${snake_of(case_en)}` (слова КодСбоя — слова движка)")
+                    }
+                } else {
+                    word_pairs.push(TxArr([js(case_en), js(word.text)]))
+                }
             }
         }
         case_names.push(case_en)
@@ -100,7 +130,23 @@ fn decl_enum(mut p TxP, mut cx TxCx) -> Result[Option[TxJ], TranslateError] {
         }
         return Ok(None)
     }
-    Ok(Some(jobj([kv("name", js(type_en)), kv("cases", TxArr(cases))])))
+    mut pairs = [kv("name", js(type_en)), kv("cases", TxArr(cases))]
+    if word_pairs.len() > 0 { pairs.push(kv("words", TxArr(word_pairs))) }
+    Ok(Some(jobj(pairs)))
+}
+
+fn pair_has_en(pairs_in []TxPair, en str) -> bool {
+    for q in pairs_in {
+        if q.en == en { return true }
+    }
+    false
+}
+
+fn pair_owner(pairs_in []TxPair, en str) -> str {
+    for q in pairs_in {
+        if q.en == en { return q.ru }
+    }
+    ""
 }
 
 // `тип Имя { поле тип, … }`.

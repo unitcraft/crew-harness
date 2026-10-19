@@ -254,6 +254,68 @@ fn fail_code_def() -> VariantDef {
     VariantDef { name: "FailCode", cases, words: []EnumWord.new() }
 }
 
+// Is the word of an enum value a Latin word of a code: lower case letters, digits, `_`, the first one a letter?
+fn j_word_ok(w str) -> bool {
+    if w == "" { return false }
+    mut first = true
+    for c in w.chars() {
+        ro one = "${c}"
+        ro letter = one >= "a" && one <= "z"
+        ro digit = one >= "0" && one <= "9"
+        if first && !letter { return false }
+        if !letter && !digit && one != "_" { return false }
+        first = false
+    }
+    true
+}
+
+// The key `words` of a variant that is an enum (format 2.7, section 6, P-7): a list of the pairs ["Name", "word"] in the order of the declaration; the name of a case
+// without fields, the word a Latin word of a code; a case and a word stand once. A variant without the key has no words.
+fn j_enum_words(o JsonObject, type_name str, cases []CaseDef, p str) -> Result[[]EnumWord, LoadError] {
+    mut out = []EnumWord.new()
+    if !j_has(o, "words") { return Ok(out) }
+    ro wp = "${p}.words"
+    ro items = match (o.get("words") ?? JsonValue.null()).array() {
+        Some(a) => a
+        None => return Err(le(wp, "a list of pairs [name, word] is expected"))
+    }
+    mut k = 0
+    for item in items {
+        ro ip = "${wp}[${k}]"
+        ro pair = match item.array() {
+            Some(a) => a
+            None => return Err(le(ip, "a pair [name, word] of two texts is expected"))
+        }
+        if pair.len() != 2 { return Err(le(ip, "a pair [name, word] of two texts is expected")) }
+        ro case_name = match pair[0].str() {
+            Some(t) => t
+            None => return Err(le(ip, "a pair [name, word] of two texts is expected"))
+        }
+        ro word = match pair[1].str() {
+            Some(t) => t
+            None => return Err(le(ip, "a pair [name, word] of two texts is expected"))
+        }
+        mut found = false
+        mut with_fields = false
+        for c in cases {
+            if c.name == case_name {
+                found = true
+                with_fields = c.fields.len() > 0
+            }
+        }
+        if !found { return Err(le(ip, "the case ${case_name} is not in the variant ${type_name}")) }
+        if with_fields { return Err(le(ip, "the case ${case_name} has fields: only a value without fields has a word")) }
+        for seen in out {
+            if seen.name == case_name { return Err(le(ip, "the word of the case ${case_name} is repeated")) }
+            if seen.word == word { return Err(le(ip, "the word ${word} is repeated")) }
+        }
+        if !j_word_ok(word) { return Err(le(ip, "a word is lower case Latin letters, digits and _, the first one a letter, got ${word}")) }
+        out.push(EnumWord { name: case_name, word })
+        k += 1
+    }
+    Ok(out)
+}
+
 // The record `JournalEvent` (`СобытиеЖурнала` of the format, section 2) is built into every machine, like `FailCode`: the code and the list of the pairs (name, text).
 fn journal_event_def() -> RecordDef {
     RecordDef { name: "JournalEvent", fields: [field_def("code", TextType), field_def("params", ListType(TupleType([TextType, TextType])))] }
@@ -316,7 +378,7 @@ fn dec_types(root JsonObject) -> Result[TypeDefs, LoadError] {
     for item in var_items {
         ro p = "$.types.variants[${i}]"
         ro o = j_obj(item, p)?
-        j_only(o, ["name", "cases"], p)?
+        j_only(o, ["name", "cases", "words"], p)?
         ro name = j_need_str(o, "name", p)?
         ro case_items = j_need_arr(o, "cases", p)?
         if case_items.len() == 0 { return Err(le(p, "a variant needs a case")) }
@@ -334,7 +396,8 @@ fn dec_types(root JsonObject) -> Result[TypeDefs, LoadError] {
             cases.push(CaseDef { name: case_name, fields })
             k += 1
         }
-        variants.push(VariantDef { name, cases, words: []EnumWord.new() })
+        ro words = j_enum_words(o, name, cases, p)?
+        variants.push(VariantDef { name, cases, words })
         i += 1
     }
     Ok(TypeDefs { records, variants })

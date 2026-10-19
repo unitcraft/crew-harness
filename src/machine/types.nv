@@ -45,6 +45,31 @@ export type VariantDef { name str, cases []CaseDef, words []EnumWord }
 /// TypeDefs: the named types a check may meet.
 export type TypeDefs { records []RecordDef, variants []VariantDef }
 
+/// The word of a value of an enum (format 2.7, P-7): the word that `words` of the type gives to the case; None when the type has none for it.
+export fn enum_word(defs TypeDefs, type_name str, case_name str) -> Option[str] {
+    for v in defs.variants {
+        if v.name == type_name {
+            for w in v.words {
+                if w.name == case_name { return Some(w.word) }
+            }
+        }
+    }
+    None
+}
+
+/// Is the named type an enum: a variant whose cases have no fields?
+export fn is_enum_type(defs TypeDefs, type_name str) -> bool {
+    for v in defs.variants {
+        if v.name == type_name {
+            for c in v.cases {
+                if c.fields.len() > 0 { return false }
+            }
+            return true
+        }
+    }
+    false
+}
+
 /// TypeCheckError: a value is not of the type; `path` is where in the value (`$.findings[2].severity`).
 export type TypeCheckError { path str, message str }
 

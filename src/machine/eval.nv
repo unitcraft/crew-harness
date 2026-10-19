@@ -909,6 +909,20 @@ fn eval_call(name str, args []Expr, mut env Env, mut host PrimitiveHost, depth i
     if want < 0 { return refuse(UnknownFunction, "no function ${name}") }
     if args.len() != want { return bad_count(name, want, args.len()) }
     ro values = eval_args(args, env, host, depth)?
+    if name == "text" {
+        // the text of an enum value is its word when the type has words (format 2.7, P-7)
+        match values[0] {
+            Variant { type_name, name: case_name, fields } => {
+                if fields.len() == 0 {
+                    match enum_word(env.table.types, type_name, case_name) {
+                        Some(w) => return Ok(Text(w))
+                        None => ()
+                    }
+                }
+            }
+            _ => ()
+        }
+    }
     eval_plain(name, values)
 }
 
