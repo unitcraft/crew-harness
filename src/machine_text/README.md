@@ -40,7 +40,7 @@ The marker `- ` is OPTIONAL when reading (a file of format 2.5, such as `chat.ta
 The body of `При входе` of several actions may be a nested list, one action to an item (`  - пусть сейчас = вызвать(time_now);`), the `;` at the end of an item is kept; an item of a nested list is read as a continuation line without its marker.
 A table after a list item stands at the level of the block after an empty line. `format: 2.6` is read like `format: 2.5`; the key `table_format` of the tree is the format of the file (`2.5` or `2.6`). The hash of the sample file of definitions is `1628bec298d9` (the line `format: 2.6` is a part of the hash).
 
-**Format 2.7 (task 110).** Every mark of the version is run (the marks P-1...P-9 of section 0 of the format); the sample of the methodology (`state-machine-agent-step-table.md`, 2.7, copied as it is into `src/machine_agent/cases/`) is translated whole, with no error.
+**Format 2.7 (task 110).** Every mark of the version is run (the marks P-1...P-9 of section 0 of the format); the sample of the methodology (`state-machine-agent-step.portolan.md`, 2.7, copied as it is into `src/machine_agent/cases/`) is translated whole, with no error.
 
 | Mark | What the translator does |
 |---|---|

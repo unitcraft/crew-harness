@@ -190,10 +190,28 @@ export fn chat_table_text() -> str => text_of_file(table_files(), "chat.table.md
 /// file that is added to a directory and not to its list is found.
 export fn data_dir_names(dir str) -> []str {
     if dir == "machines" { return names_ending(embed_dir("machines").paths(), ".machine.json") }
-    if dir == "tables" { return names_ending(embed_dir("machines").paths(), ".table.md") }
+    if dir == "tables" { return table_names(embed_dir("machines").paths()) }
     if dir == "scenarios" { return embed_dir("scenarios").paths() }
     if dir == "schema" { return embed_dir("schema").paths() }
     []str.new()
+}
+
+/// Is the name the name of a machine written as tables? The language of the tables is named Portolan since the commit f58e18b of the methodology and its files are `*.portolan.md`
+/// (they were `*.table.md`); the translator reads a text, it does not look at the extension, and the product accepts both. A copy kept as `.txt` (its prose links to the files of the
+/// methodology, the guard of the links reads `.md` only) is a table too.
+export fn is_table_name(name str) -> bool {
+    for suffix in [".table.md", ".portolan.md", ".table.txt", ".portolan.txt"] {
+        if name.ends_with(suffix) { return true }
+    }
+    false
+}
+
+fn table_names(names []str) -> []str {
+    mut out = []str.new()
+    for n in names {
+        if is_table_name(n) { out.push(n) }
+    }
+    out
 }
 
 // The names that end with the suffix.

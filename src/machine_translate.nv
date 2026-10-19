@@ -1,8 +1,9 @@
 // machine_translate.nv - the command of the translator of tables (task 108): a file of a machine in Russian (format 2.5, 2.6 or 2.7) -> the JSON `machine/2`.
-//   machine-translate <file.table.md>             the JSON on the standard output, exit code 0; the errors, all of them, on the standard error, exit code 1
-//   machine-translate <file.table.md> --lenient   the JSON of what could be translated even when there are errors (they are still printed)
-//   machine-translate <file.table.md> --summary   the summary of the machine (states, rows, actions) instead of the JSON
-//   machine-translate <file.table.md> --no-check  without the checks of the table (`check_machine`) against the registry of the primitives of the host
+// The file is any text of a machine (`*.portolan.md`, `*.table.md`, `*.txt`): the extension is not looked at.
+//   machine-translate <file>             the JSON on the standard output, exit code 0; the errors, all of them, on the standard error, exit code 1
+//   machine-translate <file> --lenient   the JSON of what could be translated even when there are errors (they are still printed)
+//   machine-translate <file> --summary   the summary of the machine (states, rows, actions) instead of the JSON
+//   machine-translate <file> --no-check  without the checks of the table (`check_machine`) against the registry of the primitives of the host
 // The errors are `file:line:column: kind: message` and the quoted line; the checks put their issues at the line of the row they come from. The warnings (kind `warning`, format 2.7) follow
 // them in the same form and do not change the exit code.
 // Build: nova build src/machine_translate.nv -o target/machine-translate.exe
@@ -16,7 +17,7 @@ import crew_harness.machine.{standard_registry}
 import crew_harness.machine_text.{translate_report, translate_checked, error_text, render_summary}
 
 fn usage() Io -> () {
-    println("machine-translate <file.table.md> [--lenient | --summary | --no-check]")
+    println("machine-translate <file> [--lenient | --summary | --no-check]")
 }
 
 fn main() Os Fs Io -> () {

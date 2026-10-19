@@ -341,7 +341,7 @@ What the interpreter got for it (decisions are in `doc/tasks/109-agent-step-mach
 # Format 2.7 (task 110)
 
 Task 110 (`doc/tasks/110-format-27/`) brought the tree, the interpreter and the translator to format 2.7 of the methodology (marks P-1...P-9 of section 0 of the format). The sample of the agent step of the methodology
-(`state-machine-agent-step-table.md`, 2.7) is translated whole and with no hand edit; the table of the product (`machines/agent_step.table.txt`) is that sample with the two keys of the project in the column "project override".
+(`state-machine-agent-step.portolan.md`, 2.7) is translated whole and with no hand edit; the table of the product (`machines/agent_step.table.txt`) is that sample with the two keys of the project in the column "project override".
 
 - **The tree.** `table_format` may be `2.7`. A variant that is an enum has the optional key **`words`**, the list of the pairs `["Name", "word"]` in the order of the declaration (only the values that have a word; a
   word is lower case Latin letters, digits and `_`, once in the enum, the case has no fields): `VariantDef.words` (`EnumWord { name, word }`). The schema [`machine-2.schema.json`](schema/machine-2.schema.json) and

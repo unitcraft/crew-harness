@@ -1,9 +1,9 @@
-// sample_test.nv - the sample of the methodology (state-machine-agent-step-table.md, format 2.7, copied as it is into `cases/`) goes through the translator without a hand edit: no errors,
+// sample_test.nv - the sample of the methodology (state-machine-agent-step.portolan.md, format 2.7, copied as it is into `cases/`) goes through the translator without a hand edit: no errors,
 // the checks of the table pass, the paragraphs are skipped, the expansion of the fragment is skipped, the JSON is the JSON of the product table but for the keys of the project.
 module crew_harness.machine_agent
 
 import std.text
-import crew_harness.machine.{standard_registry, agent_step_table_text, agent_step_machine_text}
+import crew_harness.machine.{standard_registry, agent_step_table_text, agent_step_machine_text, is_table_name}
 import crew_harness.machine_table.{load_machine}
 import crew_harness.machine_text.{translate_checked, TranslateReport, error_text, render_summary}
 
@@ -57,7 +57,7 @@ test "sm loads" {
     match load_machine(sample_json(), standard_registry()) {
         Ok(def) => {
             assert(def.name == "agent_step")
-            assert(def.version == "table-2.7")
+            assert(def.version == "portolan-2.7")
             assert(def.states.len() == 14)
             assert(def.common.len() == 6)
             assert(def.parties.len() == 3)
@@ -74,14 +74,14 @@ test "sm loads" {
 
 test "sm summary" {
     ro text = render_summary(sample_json())
-    assert(text.starts_with("machine agent_step (version table-2.7): 14 states, 47 rows, "))
+    assert(text.starts_with("machine agent_step (version portolan-2.7): 14 states, 47 rows, "))
     assert(text.contains("  AgentTurn (appeal): 9 rows, 18 actions"))
     assert(text.contains("common events: 6 rows"))
     assert(text.contains("ends: 13 rows"))
 }
 
 test "sm header 27" {
-    assert(sample_json().starts_with("{\"format\":\"machine/2\",\"table_format\":\"2.7\",\"machine\":\"agent_step\",\"version\":\"table-2.7\""))
+    assert(sample_json().starts_with("{\"format\":\"machine/2\",\"table_format\":\"2.7\",\"machine\":\"agent_step\",\"version\":\"portolan-2.7\""))
     assert(sample().contains("- format: 2.7"))
 }
 
@@ -199,4 +199,16 @@ test "sm json differs by keys" {
     assert(plain != product)
     assert(plain == sample_json())
     assert(translate_checked(agent_step_table_text(), standard_registry()).json == product)
+}
+
+test "sm both extensions" {
+    for n in ["a.table.md", "a.portolan.md", "a.table.txt", "a.portolan.txt"] { assert(is_table_name(n)) }
+    for n in ["a.md", "a.json", "a.portolan", "table.md", "a.machine.json", "a.table.json"] { assert(!is_table_name(n)) }
+    // the translator reads the text and not the name of the file: the notes of one text differ only by the name that the caller prints
+    ro broken = translate_checked(sample().replace("число_ходов += 1", "число_ходов +="), standard_registry())
+    assert(broken.errors.len() > 0)
+    ro old_name = error_text(broken.errors[0], "agent_step.table.md")
+    ro new_name = error_text(broken.errors[0], "agent_step.portolan.md")
+    assert(old_name.replace("agent_step.table.md", "F") == new_name.replace("agent_step.portolan.md", "F"))
+    assert(sample_report().json == translate_checked(sample(), standard_registry()).json)
 }
