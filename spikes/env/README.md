@@ -12,7 +12,7 @@ task 090 (`doc/tasks/090-product-env-spike/`).
 | `ws_echo/` | Polaris server on `127.0.0.1`: `GET /` (HTML), `GET /health`, WebSocket echo `/ws` | `ws_echo_check.mjs` (Node) |
 | `acp/` | `acp_initialize.mjs`: one `initialize` request to `opencode acp` over stdio, no login, no session | exit code 0 and the printed version |
 | `repro_mut_binding/` | minimal reproduction of a Polaris documentation example that Oracle 0.1.0 rejects | see "Known problems" |
-| `repro_engine/` | minimal reproductions of Oracle 0.1.0 defects found while writing the state machine engine (task 091, items 8-13), its PostgreSQL store (task 098, items 21, 23-25) and its alignment to the dictionary (task 102, items 26-28) | see "Known problems", items 8-28 |
+| `repro_engine/` | minimal reproductions of Oracle 0.1.0 defects found while writing the state machine engine (task 091, items 8-13), its PostgreSQL store (task 098, items 21, 23-25), its alignment to the dictionary (task 102, items 26-28) and the expression evaluator of the machines (task 106, items 33-35) | see "Known problems", items 8-35 |
 | `repro_acp/` | minimal reproductions of Oracle 0.1.0 defects found while writing the ACP client (task 095) | see "Known problems", items 14-18 and 20 |
 | `repro_child_pipes/` | a program: pipes of a child process that now and then do not come back (task 095) | see "Known problems", item 19 |
 | `repro_pg_event/` | a user record `Event` next to the driver `postgres.pgnet` (task 098, item 22); needs `nova update` (the driver comes from git) | see "Known problems", item 22 |
@@ -271,3 +271,22 @@ as `mut` (`E_READONLY_COERCE`: a record that holds it works); assigning to a `mu
 under the source root (item 25) compiles when declared WITHOUT the package prefix (`module server.front` in `src/server/front/`) and is imported with it (`crew_harness.server.front`);
 Polaris 0.2.4: the stream that `ServerResponse.upgrade` gives its hook is shared with the connection loop, so `TcpStream.into_split()` panics ("live share()-copies"), and a WebSocket that is
 read and written by two fibers must use `share()`; `println` was "undefined identifier" in one module of a program that also imported `std.text`, not reduced (the hub writes to `stdout()` itself).
+
+Found by task 106 (the expression evaluator, `src/machine/`); the reproductions are in `repro_engine/src/`, run the same way:
+
+33. **`for_in_enum_literal`**: `for c in [Pure, Writing]`, an array literal whose items are variants of a user enum without payload, does not compile:
+    CODEGEN-FAIL "for-in: cannot resolve iterator type for expression of C-type 'nova_unit'". A function that returns the list (`-> []Class`) and is
+    iterated is fine, so is a literal list of texts or of ints.
+34. **`option_enum_named_variants`**: an enum with a variant with named fields (`FieldOf { target, name }`) and another variant that holds a list of records with
+    an `Option[ThatEnum]` field, the record declared BEFORE the enum, breaks the C: the generated equality reads the payload as `payload.FieldOf._0` while the
+    struct has the members `target`, `name` (CC-FAIL "no member named '_0'"). The record declared after the enum compiles; so does `[]ThatEnum` instead of the option.
+35. **`result_display`**: a `Result` in an interpolation (`"${r}"`, `r = "5".to_int()`) passes the checker and fails at link time with
+    `undefined symbol: Nova_Result_method_display`. Match on it.
+
+Also met in task 106, without a reproduction (rules of the language that cost a compile each): `ref` is a keyword (a function named `ref` is a syntax error); a string has no `+`
+(`E_STR_CONCAT_PLUS`, use `"${a}${b}"`); `str.len()` is gone (`byte_len()`, `chars().count()`); `mut x = ro_value` of a parameter or of a `ro` binding is `E_READONLY_COERCE`
+(declare the first one `mut`, or build the value in place); returning a `ro` parameter needs a copy (`E_READONLY_COERCE`); a record literal after `->` of the same record type
+is `redundant type prefix` (write `=> { ... }`); a match arm that is an assignment (`Ok(v) => x = v`) followed by another arm on the next line is read as one arm
+(`E_MATCH_ARM_SEP_MISSING`: put the assignment in braces); a `consume` `StringBuilder` must end with `into_str()`; a struct-style variant in a pattern is `Name { a, b }`;
+`nova test src/<dir>` makes ONE unit per folder (the module of the folder), so a module of 160 tests prints one `  PASS: <name>` line each and the whole output must stay
+under 4 KB (item 20): the tests of `src/machine/` have names of 10-20 letters for that reason.
