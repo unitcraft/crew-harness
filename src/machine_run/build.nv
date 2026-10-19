@@ -5,7 +5,7 @@ module crew_harness.machine_run
 import std.text
 import crew_harness.machine.{Value, Expr, Binding, Scope, DefTable, DefFn, Registry, TextType, BoolType, check_value}
 import crew_harness.machine.{Null, Int, Text, List, RecordField, eval_defs, make_record, error_text, NoHost, call, name_ref, bin, lambda1}
-import crew_harness.machine_table.{MachineDef, load_machine, issue_text, find_state, find_party}
+import crew_harness.machine_table.{MachineDef, ParamDef, load_machine, issue_text, find_state, find_party}
 
 /// The names of the end states as a list of texts: the global `end_states` and the definition `end(s)` of the catalog (format 12) use it.
 fn end_state_names(def MachineDef) -> Value {
@@ -52,8 +52,35 @@ export fn table_machine(def MachineDef, registry Registry) -> Result[TableMachin
 /// ProjectValue: a row of the table of the parameters of the project (format 2.7, P-9): the key `проект.<ключ>` and the value.
 export type ProjectValue { key str, value Value }
 
-/// The same with the table "key -> value" of the project (format 2.7, P-9).
+/// The beginning of the key of a parameter of the project (format 2.7, section 1: `проект.<ключ>`).
+export const PROJECT_PREFIX = "проект."
+
+// The full key of a parameter: `проект.` and the key of the column "project override"; empty when the column is `—`.
+fn project_key_full(p ParamDef) -> str {
+    if p.project_key == "" { return "" }
+    "${PROJECT_PREFIX}${p.project_key}"
+}
+
+// The table of the project against the machine: every key has the form `проект.<ключ>`, stands once, and is a key of the column "project override" of some parameter.
+fn project_table_checked(def MachineDef, given_table []ProjectValue) -> Result[(), str] {
+    mut seen = []str.new()
+    for o in given_table {
+        if !o.key.starts_with(PROJECT_PREFIX) { return Err("the key of the project is ${PROJECT_PREFIX}<key>, got ${o.key}") }
+        if seen.contains(o.key) { return Err("the key ${o.key} is given twice") }
+        seen.push(o.key)
+        mut known = false
+        for p in def.params {
+            if project_key_full(p) == o.key { known = true }
+        }
+        if !known { return Err("no parameter has the key ${o.key} in the column \"project override\"") }
+    }
+    Ok(())
+}
+
+/// The same with the table "key -> value" of the project (format 2.7, P-9): a key is `проект.<ключ>` of the column "project override" of a parameter, the value is checked against the
+/// type of that parameter like a default; a key the column does not have refuses the machine.
 export fn table_machine_with(def MachineDef, registry Registry, overrides []ProjectValue) -> Result[TableMachine, str] {
+    project_table_checked(def, overrides)?
     mut globals = []Binding.new()
     globals.push(Binding { name: "end_states", value: end_state_names(def) })
     ro first = base_table(def, registry, globals)
@@ -72,7 +99,7 @@ export fn table_machine_with(def MachineDef, registry Registry, overrides []Proj
         mut given = false
         mut given_value Value = Null
         for o in overrides {
-            if o.key == p.name {
+            if project_key_full(p) != "" && o.key == project_key_full(p) {
                 given = true
                 given_value = o.value
             }

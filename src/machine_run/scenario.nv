@@ -47,7 +47,7 @@ export type ScHost { name str, json str }
 /// ScStep: one step: the operation, the event, the milliseconds, the expectation, the answers of the host that change here.
 export type ScStep { op str, event ScEvent, ms int, expect ScExpect, host []ScHost }
 
-/// Scenario: the file `scenario/0`. `params` are the values of parameters of the machine that the project gives (`"params": {"NAME": value}`).
+/// Scenario: the file `scenario/0`. `params` are the values of parameters of the machine that the project gives, the table of format 2.7 (`"params": {"проект.<ключ>": value}`, P-9).
 export type Scenario { name str, machine str, start_at int, steps []ScStep, params []ScHost }
 
 /// StepTrace: what one step left in the world. `journal` are the lines the machine wrote (`code(name=value;...)`), `entries` all the lines of
@@ -294,6 +294,7 @@ export fn parse_scenario(text str) -> Result[Scenario, LoadError] {
     if sj_present(o, "params") {
         ro po = sj_obj(o.get("params") ?? JsonValue.null(), "$.params")?
         for k in po.keys() {
+            if !k.starts_with(PROJECT_PREFIX) { return Err(sle("$.params", "the key of a parameter is ${PROJECT_PREFIX}<key>, got ${k}")) }
             match po.get(k) {
                 Some(x) => params.push(ScHost { name: k, json: x.to_str() })
                 None => ()

@@ -11,7 +11,8 @@
     "machine": { "type": "string", "description": "the Latin name of the machine the scenario runs on" },
     "name": { "type": "string" },
     "start_at": { "type": "integer", "default": 1000, "description": "the clock of the in-memory world in milliseconds" },
-    "params": { "type": "object", "description": "values of parameters of the machine that the project gives: the name of the parameter and its value in the lossless JSON form of the core" },
+    "params": { "type": "object", "description": "the table of the parameters of the project (format 2.7, P-9): the key `проект.<ключ>` of the column \"project override\" of a parameter and its value in the lossless JSON form of the core; a key the machine does not have refuses the run, a parameter that is not named keeps its default",
+    "propertyNames": { "pattern": "^проект\\." } },
     "steps": { "type": "array", "items": { "$ref": "#/$defs/step" } }
   },
   "$defs": {
@@ -21,7 +22,7 @@
         "kind": { "enum": ["word", "signal", "progress", "answer", "failure", "timeout", "start"] },
         "name": { "type": "string", "description": "required for word, signal and progress; the defaults are answer, failure, timeout, start" },
         "request": { "type": "string", "description": "the id of the request the event answers (agent-1); for `start` the id of the request that started the machine (the request of the call)" },
-        "input": { "type": ["string", "object"], "description": "the text of the input, or an object that is written as JSON (the fields of a word, the input of the start)" },
+        "input": { "type": ["string", "object"], "description": "the data of the event: a word or a signal with one field has the value of the field (a text, `\"ivan\"`, not an object), with several fields an object {field: value}, with none no input; the input of the start is an object (format 2.7, P-8)" },
         "code": { "type": "string", "description": "the failure code of a `failure` event (ModelRefused)" },
         "source": { "type": "string", "description": "the key of the source of the event: the engine acknowledges it after the commit" }
       }
