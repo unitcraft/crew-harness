@@ -10,7 +10,7 @@ import crew_harness.machine.{NamedText}
 
 /// The registry of the files of definitions that come with the translator: the name of the include line and the text of the file.
 fn defs_files() -> []NamedText => [
-    NamedText { name: "арифметика_цикла", text: embed_str("defs/cycle-arithmetic.defs.md") }
+    NamedText { name: "арифметика_цикла", text: embed_str("defs/cycle-arithmetic.portolan.md") }
 ]
 
 /// The text of the file of definitions of the registry with the name; the empty text when there is none.

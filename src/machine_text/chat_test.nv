@@ -1,4 +1,4 @@
-// chat_test.nv - the chat machine written as tables (machines/chat.table.md) and its translation: the same tree as the hand-written chat.machine.json.
+// chat_test.nv - the chat machine written as tables (machines/chat.portolan.md) and its translation: the same tree as the hand-written chat.machine.json.
 module crew_harness.machine_text
 
 import std.text
@@ -7,7 +7,7 @@ import crew_harness.machine.{chat_table_text, chat_machine_text}
 
 fn errors_line(problems []TranslateError) -> str {
     mut parts = []str.new()
-    for e in problems { parts.push(error_text(e, "chat.table.md")) }
+    for e in problems { parts.push(error_text(e, "chat.portolan.md")) }
     parts.join(" ## ")
 }
 

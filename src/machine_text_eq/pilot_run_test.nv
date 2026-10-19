@@ -9,7 +9,7 @@ import crew_harness.machine_run.{TableState, TableMachine, load_table_machine, t
 import crew_harness.machine_text.{translate_checked}
 
 fn agent_machine(check Value) -> TableMachine {
-    ro report = translate_checked(case_text("agent-step.table.md"), standard_registry())
+    ro report = translate_checked(case_text("agent-step.portolan.md"), standard_registry())
     match load_table_machine(report.json, standard_registry()) {
         Ok(m) => with_replies(m, [ScriptedReply { name: "reply_validation", value: check }, ScriptedReply { name: "close_agent_turn", value: Null }])
         Err(e) => panic("the pilot does not build: ${e}")

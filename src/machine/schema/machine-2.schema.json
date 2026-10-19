@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/unitcraft/crew-harness/src/machine/schema/machine-2.schema.json",
   "title": "machine/2 - a state machine as data (the format of the methodology, version 2.7 (2.5 and 2.6 too), in English keys)",
-  "description": "The tree that the interpreter of the product (src/machine_run) runs. The source of the language is state-machines/state-machine-table-format.md of unitcraft/ai-dev-methodology (read only); the keys are English. The decoder in src/machine_table/json.nv is the reference: a key that is not listed here is refused. The checks of the table (reads against the Input, writes against the data, reachability, the classes of the primitives, the exhaustiveness of the Ends) are check.nv and cannot be written in a schema.",
+  "description": "The tree that the interpreter of the product (src/machine_run) runs. The source of the language is state-machines/state-machine-portolan-spec.md of unitcraft/ai-dev-methodology (read only); the keys are English. The decoder in src/machine_table/json.nv is the reference: a key that is not listed here is refused. The checks of the table (reads against the Input, writes against the data, reachability, the classes of the primitives, the exhaustiveness of the Ends) are check.nv and cannot be written in a schema.",
   "type": "object",
   "additionalProperties": false,
   "required": ["format", "machine", "initial", "states", "ends"],

@@ -1,7 +1,7 @@
-# machine_text: the translator of tables in Russian into the machine as data
+# machine_text: the translator of Portolan (tables in Russian) into the machine as data
 
-Task 108 (`doc/tasks/108-table-translator/`), task 109 (format 2.6), task 110 (format 2.7). A machine is a Markdown file of tables in Russian by the format of the methodology, **version 2.5, 2.6 or 2.7**
-(`unitcraft/ai-dev-methodology`, `state-machines/state-machine-table-format.md`, read only); the translator turns it into the JSON `machine/2` that the interpreter of
+Task 108 (`doc/tasks/108-table-translator/`), task 109 (format 2.6), task 110 (format 2.7). A machine is a Markdown file of tables in Russian in Portolan, the language of the methodology (a file `*.portolan.md`; the old `*.table.md` is read too, the translator does not look at the extension), **version 2.5, 2.6 or 2.7**
+(`unitcraft/ai-dev-methodology`, `state-machines/state-machine-portolan-spec.md`, read only); the translator turns it into the JSON `machine/2` that the interpreter of
 `src/machine_table` + `src/machine_run` runs. The user writes no Nova. The dictionary of the methodology (version 9, `state-machine-glossary.md`) gives the Latin names.
 
 ## Run
@@ -10,9 +10,9 @@ Task 108 (`doc/tasks/108-table-translator/`), task 109 (format 2.6), task 110 (f
 . C:/work/nova/nova-oracle-0.1.0-windows-x86_64/setup-env.ps1          # the leading dot matters
 cd C:/work/crew-harness
 nova build src/machine_translate.nv -o target/machine-translate.exe    # the command
-target/machine-translate.exe src/machine/machines/chat.table.md          # the JSON on the standard output, exit code 0
-target/machine-translate.exe table.md --summary                          # the summary: states, rows, actions
-target/machine-translate.exe table.md --lenient                          # the JSON of what could be translated even when there are errors
+target/machine-translate.exe src/machine/machines/chat.portolan.md          # the JSON on the standard output, exit code 0
+target/machine-translate.exe machine.portolan.md --summary                          # the summary: states, rows, actions
+target/machine-translate.exe machine.portolan.md --lenient                          # the JSON of what could be translated even when there are errors
 nova test src/machine_text                                              # the translator: 129 tests
 nova test src/machine_text_eq                                           # the proofs: the chat machine, the pilot, the examples, the definitions
 nova test src/machine_text_fmt                                          # format 2.7: prose, the expansion of a fragment, sets, tables, words, hash (64 tests)
@@ -36,7 +36,7 @@ As a library (module `crew_harness.machine_text`):
 The output is deterministic: two translations of one text give the same bytes (a test compares them, and a test on the chat machine compares the tree with the hand-written one).
 
 **Format 2.6 (task 109).** The key lines of a state (`Сторона`, `Срок тишины`, `Правит`, `Возвратов формы`, `Вход`, `При входе`, `При приёме`, `Кроме`, and `Предел запросов`, `Результат` in their sections) are items of a bullet list: `- Сторона: агент`.
-The marker `- ` is OPTIONAL when reading (a file of format 2.5, such as `chat.table.md`, has none), with and without it the JSON is the same; the columns of the errors stay the columns of the file (`TxEntry.shift` is the width of the marker).
+The marker `- ` is OPTIONAL when reading (a file of format 2.5, such as `chat.portolan.md`, has none), with and without it the JSON is the same; the columns of the errors stay the columns of the file (`TxEntry.shift` is the width of the marker).
 The body of `При входе` of several actions may be a nested list, one action to an item (`  - пусть сейчас = вызвать(time_now);`), the `;` at the end of an item is kept; an item of a nested list is read as a continuation line without its marker.
 A table after a list item stands at the level of the block after an empty line. `format: 2.6` is read like `format: 2.5`; the key `table_format` of the tree is the format of the file (`2.5` or `2.6`). The hash of the sample file of definitions is `1628bec298d9` (the line `format: 2.6` is a part of the hash).
 
@@ -89,7 +89,7 @@ first column is a row (`\|` is a bar of the text, a bar in a string literal is n
 
 Extensions of the product (they are the proposals of section 14 of the format, И-4, that the interpreter has): the section `## Части ответа` (`| сторона | имя | поля |`) and the event
 `часть(имя(поле: имя))` for a part of an answer that keeps the request open; the event `срок` (the term made by the executor); the section `## Сигналы` (`| имя | поля |`) and `сигнал(имя)` in the
-rows of any appeal; `отменить_открытые(сторона: имя)` cancels the open requests of one party. The chat machine (`src/machine/machines/chat.table.md`) uses all four.
+rows of any appeal; `отменить_открытые(сторона: имя)` cancels the open requests of one party. The chat machine (`src/machine/machines/chat.portolan.md`) uses all four.
 
 **Fragments and definitions.** `## Подключения` holds `Пауза(слово_остановки: …, код_остановки: "…", вложенные: [], отмена_запросов: …, вход_заново: …, право_записи: "…")` (all six parameters; the
 text of the fragment, `fragments/pause.fragment.md`, is compiled in, `<параметр>` is put in before it is read; its data come before the data of the machine, its common events before the
@@ -101,7 +101,7 @@ checked, a copy of its types, constants and definitions is put in the tree, `inc
 The format has them, the interpreter of task 107 does not run them, so the translator answers `unsupported` with the line (the rest of the file is translated, `--lenient`):
 the side of the kind `machine` (a nested machine; its row is not translated), the column `профиль` when it is not `—`, `Правит: …; проверка: …`,
 `Возвратов формы: N` with N above zero, a fragment with a non-empty list of nested machines and `вход_заново: запросы_из_к_отправке`, the "Where" `возврат_подготовки`.
-`src/machine_text_eq/cases/unsupported-examples.table.md` has them all; their places are the list of the next task. The line `Предел запросов` is run since task 109 (below, and the README of `src/machine`).
+`src/machine_text_eq/cases/unsupported-examples.portolan.md` has them all; their places are the list of the next task. The line `Предел запросов` is run since task 109 (below, and the README of `src/machine`).
 
 ## Oracle 0.1.0: what shaped the code
 

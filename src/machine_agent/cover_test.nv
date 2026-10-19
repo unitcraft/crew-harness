@@ -123,7 +123,7 @@ fn state_word(name str) -> str {
 fn file_of_row(row str) -> str {
     ro body = row.replace("end:", "")
     match body.find("#") {
-        Some(at) => "agent-step-${state_word(body[..at])}-${body[(at + 1)..]}.scenario.json"
+        Some(at) => "agent-step-${state_word(body[..at])}-${body[(at + 1)..]}.scenario.test.json"
         None => panic("a row without a number: ${row}")
     }
 }

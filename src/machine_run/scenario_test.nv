@@ -57,7 +57,7 @@ test "every scenario" {
 }
 
 test "scenario fields" {
-    ro sc = scenario_of("chat-message-opens-request.scenario.json")
+    ro sc = scenario_of("chat-message-opens-request.scenario.test.json")
     assert(sc.machine == "ChatSession")
     assert(sc.start_at == 1000)
     assert(sc.steps.len() == 1)
@@ -75,10 +75,10 @@ test "scenario fields" {
 }
 
 test "scenario object input" {
-    ro sc = scenario_of("calc-count-up.scenario.json")
+    ro sc = scenario_of("calc-count-up.scenario.test.json")
     assert(sc.steps[0].event.kind == "start")
     assert(sc.steps[0].event.input == "{\"start\":0,\"label\":\"abc\"}")
-    ro gate = scenario_of("gate-pause-continue.scenario.json")
+    ro gate = scenario_of("gate-pause-continue.scenario.test.json")
     assert(gate.steps[1].event.input == "{\"author\":\"ann\",\"source\":\"console\"}")
 }
 
@@ -100,7 +100,7 @@ test "scenario refused" {
 }
 
 test "report of a difference" {
-    ro text = text_of_file(scenario_files(), "chat-message-opens-request.scenario.json")
+    ro text = text_of_file(scenario_files(), "chat-message-opens-request.scenario.test.json")
     ro wrong_state = text.replace("\"state\": \"Awaiting\"", "\"state\": \"Idle\"")
     ro run = run_text(chat(), wrong_state)
     assert(!run_ok(run))
@@ -120,7 +120,7 @@ test "report of a difference" {
 }
 
 test "report of data" {
-    ro text = text_of_file(scenario_files(), "chat-message-opens-request.scenario.json")
+    ro text = text_of_file(scenario_files(), "chat-message-opens-request.scenario.test.json")
     ro run = run_text(chat(), text.replace("\"user\": \"hello\"", "\"user\": \"bye\""))
     assert(!run_ok(run))
     assert(report_text(run).contains("data user"))
@@ -130,7 +130,7 @@ test "report of data" {
 }
 
 test "report of the rest" {
-    ro text = text_of_file(scenario_files(), "chat-message-opens-request.scenario.json")
+    ro text = text_of_file(scenario_files(), "chat-message-opens-request.scenario.test.json")
     ro run = run_text(chat(), text.replace("\"open\": [\"agent-1\"]", "\"open\": [\"agent-2\"]").replace("\"outcome\": \"none\"", "\"outcome\": \"answer:x\"").replace("\"sent\": [\"agent-1\"]", "\"sent\": []"))
     assert(!run_ok(run))
     assert(run.mismatches.len() == 3)
@@ -144,7 +144,7 @@ test "report of the rest" {
 }
 
 test "trace parts" {
-    ro sc = scenario_of("chat-restart-before-send.scenario.json")
+    ro sc = scenario_of("chat-restart-before-send.scenario.test.json")
     ro run = run_scenario(chat(), sc)
     assert(run_ok(run))
     assert(run.traces[0].op == "accept")
@@ -160,7 +160,7 @@ test "trace parts" {
 }
 
 test "trace journal" {
-    ro sc = scenario_of("chat-chunks-and-done.scenario.json")
+    ro sc = scenario_of("chat-chunks-and-done.scenario.test.json")
     ro run = run_scenario(chat(), sc)
     assert(run.traces[1].journal.len() == 1)
     assert(run.traces[1].journal[0] == "agent_chunk(text=Hel)")
@@ -177,7 +177,7 @@ test "no expectation" {
 }
 
 test "drive is generic" {
-    ro sc = scenario_of("chat-silent-agent.scenario.json")
+    ro sc = scenario_of("chat-silent-agent.scenario.test.json")
     ro traces = drive_scenario[TableState, TableMachine](chat(), sc)
     assert(traces.len() == sc.steps.len())
     assert(traces[4].state == "Failed")
@@ -186,7 +186,7 @@ test "drive is generic" {
 }
 
 test "gate scenario" {
-    ro run = run_file("gate-pause-continue.scenario.json")
+    ro run = run_file("gate-pause-continue.scenario.test.json")
     assert(run_ok(run))
     assert(run.traces[1].state == "Pause")
     assert(run.traces[2].sent.len() == 2)
@@ -194,7 +194,7 @@ test "gate scenario" {
 }
 
 test "lenses scenario" {
-    ro run = run_file("lenses-all-answer.scenario.json")
+    ro run = run_file("lenses-all-answer.scenario.test.json")
     assert(run_ok(run))
     assert(run.traces[0].sent.len() == 3)
     assert(run.traces[0].sent[2] == "c-1")
@@ -202,8 +202,8 @@ test "lenses scenario" {
 }
 
 test "scenario twice" {
-    ro first = run_file("calc-count-up.scenario.json")
-    ro second = run_file("calc-count-up.scenario.json")
+    ro first = run_file("calc-count-up.scenario.test.json")
+    ro second = run_file("calc-count-up.scenario.test.json")
     assert(first.traces.len() == second.traces.len())
     assert(first.traces[0].encoded == second.traces[0].encoded)
     assert(first.traces[0].journal.len() == second.traces[0].journal.len())
@@ -234,6 +234,16 @@ test "lists of files" {
     assert(same_names(data_dir_names("tables"), listed(table_files())))
     assert(same_names(data_dir_names("schema"), listed(schema_files())))
     assert(data_dir_names("elsewhere").len() == 0)
+}
+
+test "names by the Portolan" {
+    ro scenarios = scenario_files()
+    assert(scenarios.len() == 131)
+    for f in scenarios { assert(f.name.ends_with(".scenario.test.json")) }
+    ro tables = table_files()
+    assert(tables.len() == 2)
+    for f in tables { assert(f.name.ends_with(".portolan.md") || f.name.ends_with(".portolan.txt")) }
+    assert(machine_files().len() == 7)
 }
 
 test "scenario schema" {
