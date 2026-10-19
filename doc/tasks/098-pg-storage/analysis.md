@@ -34,13 +34,13 @@
 - Стражи: ок 8, FAIL 0.
 - Независимая проверка оркестратора: ветка на свежем `origin/main`, контейнер `postgres:16-alpine` поднят скриптом `testdb.ps1`, `nova test src` — PASS 6 модулей, FAIL 0, 24 с, контейнер удалён, лишних контейнеров нет.
 
-## 4. Новые ограничения Oracle 0.1.0 (воспроизведения в `spikes/env/repro_engine/src/`, `repro_pg_event/`; `spikes/env/README.md`, п. 14–18)
+## 4. Новые ограничения Oracle 0.1.0 (воспроизведения в `spikes/env/repro_engine/src/`, `repro_pg_event/`; `spikes/env/README.md`, п. 21–25)
 
-14. `std.os` и пользовательский `Output` движка в одной программе путаются (095 переименовала тип в `StepOutput`).
-15. Запись `Event` движка и файл драйвера `pgnet/listener.nv` в одной программе: конструктор варианта `ListenerMsg.Event` читается как запись.
-16. Тело операции обработчика эффекта — только `panic(...)`: C возвращает `(nova_int)0`.
-17. `return []T.new()` в операции обработчика: `use of undeclared identifier 'cap'`.
-18. Модуль на два уровня вглубь `src/` отвергается (E_D78_MODULE_PATH_MISMATCH).
+21. `std.os` и пользовательский `Output` движка в одной программе путаются (095 переименовала тип в `StepOutput`).
+22. Запись `Event` движка и файл драйвера `pgnet/listener.nv` в одной программе: конструктор варианта `ListenerMsg.Event` читается как запись.
+23. Тело операции обработчика эффекта — только `panic(...)`: C возвращает `(nova_int)0`.
+24. `return []T.new()` в операции обработчика: `use of undeclared identifier 'cap'`.
+25. Модуль на два уровня вглубь `src/` отвергается (E_D78_MODULE_PATH_MISMATCH).
 
 Без воспроизведения: `nova test` убивает модуль дольше 60 с и печатает только `TIMEOUT`.
 

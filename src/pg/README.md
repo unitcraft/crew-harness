@@ -123,7 +123,7 @@ seconds each.
 
 ## Why three modules (Oracle 0.1.0)
 
-Two defects of Nova Oracle 0.1.0 decide the layout. Reproductions are in `spikes/env/` (items 14 to 18 of its README).
+Two defects of Nova Oracle 0.1.0 decide the layout. Reproductions are in `spikes/env/` (items 21 to 25 of its README).
 
 1. **`std.os` and the engine cannot be in one program.** The engine has an enum `Output`; `std.os` exports a value type
    `Output`; the code generator mixes them up. Task 095 renames the engine's type to `StepOutput` for the same reason. Until
