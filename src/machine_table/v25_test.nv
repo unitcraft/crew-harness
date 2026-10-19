@@ -1,5 +1,5 @@
 // v25_test.nv - format 2.5 on the interpreter side: the set of literals `"a" | "b"`, the built-in type `id`, the primitive `new_id`,
-// the tuple fields from zero, the key `table_format`. Every check is red on the broken table and green on the good one.
+// the tuple fields from zero, the key `portolan_version`. Every check is red on the broken table and green on the good one.
 // (These tests live in this unit because the unit of the core is near the limit of 4 KB of output, item 20 of the survey.)
 module crew_harness.machine_table
 
@@ -196,12 +196,14 @@ test "v25 id literal" {
 }
 
 test "v25 table format" {
-    ro text = tiny().replace("\"machine\":\"Tiny\"", "\"table_format\":\"2.5\",\"machine\":\"Tiny\"")
+    ro text = tiny().replace("\"machine\":\"Tiny\"", "\"portolan_version\":\"2.5\",\"machine\":\"Tiny\"")
     assert(ok_text(text))
-    ro old = tiny().replace("\"machine\":\"Tiny\"", "\"table_format\":\"2.2\",\"machine\":\"Tiny\"")
-    assert(says(old, "table_format"))
-    ro number = tiny().replace("\"machine\":\"Tiny\"", "\"table_format\":2.5,\"machine\":\"Tiny\"")
-    assert(says(number, "table_format"))
+    ro old = tiny().replace("\"machine\":\"Tiny\"", "\"portolan_version\":\"2.2\",\"machine\":\"Tiny\"")
+    assert(says(old, "portolan_version"))
+    ro number = tiny().replace("\"machine\":\"Tiny\"", "\"portolan_version\":2.5,\"machine\":\"Tiny\"")
+    assert(says(number, "portolan_version"))
+    ro former = tiny().replace("\"machine\":\"Tiny\"", "\"table_format\":\"2.5\",\"machine\":\"Tiny\"")
+    assert(says(former, "table_format"))
 }
 
 // ---- the common events of a fragment (format section 9) and the built-in record JournalEvent --------------------------------------------------------

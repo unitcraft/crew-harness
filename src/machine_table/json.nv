@@ -13,11 +13,11 @@ import crew_harness.machine.{Expr, TypeSpec, TypeDefs, FieldDef, RecordDef, Vari
 export const MACHINE_FORMAT = "machine/2"
 
 /// The version of the language Portolan of the methodology that the tree follows (the optional key `portolan_version`; absent means this one). The key was named
-/// `table_format` before task 113: the decoder reads that name as a synonym.
+/// `table_format` before task 113; the old name is not accepted (it is a key the schema does not know).
 export const PORTOLAN_VERSION = "2.5"
 
 /// The versions of the language whose tree this decoder reads (2.6 changed the text of the tables, 2.8-2.10 the words and the writing: the tree stayed).
-export fn portolan_versions() -> []str => ["2.5", "2.6", "2.7", "2.8", "2.9", "2.10"]
+export fn portolan_versions() -> []str => ["2.5", "2.6", "2.7", "2.8", "2.9", "2.10", "2.11"]
 
 fn le(path str, message str) -> LoadError => { path, message }
 
@@ -218,7 +218,7 @@ fn j_fields_or_empty(o JsonObject, key str, defs TypeDefs, path str) -> Result[[
 
 /// The keys of the root object of a machine.
 export fn top_keys() -> []str => [
-    "format", "portolan_version", "table_format", "machine", "version", "title", "types", "constants", "params", "input", "data", "parties", "request_limit", "signals",
+    "format", "portolan_version", "machine", "version", "title", "types", "constants", "params", "input", "data", "parties", "request_limit", "signals",
     "definitions", "includes", "initial", "error_end", "common_events", "states", "ends", "primitives"
 ]
 
@@ -982,13 +982,9 @@ fn dec_machine(root JsonObject) -> Result[MachineDef, LoadError] {
     j_only(root, top_keys(), "$")?
     ro format = j_need_str(root, "format", "$")?
     if format != MACHINE_FORMAT { return Err(le("$.format", "the format must be ${MACHINE_FORMAT}, got ${format}")) }
-    if j_has(root, "portolan_version") && j_has(root, "table_format") {
-        return Err(le("$.table_format", "the keys portolan_version and table_format are both given: table_format is the old name of portolan_version, give one of them"))
-    }
-    ro version_key = if j_has(root, "portolan_version") { "portolan_version" } else { "table_format" }
-    ro language_version = j_str_or(root, version_key, PORTOLAN_VERSION, "$")?
+    ro language_version = j_str_or(root, "portolan_version", PORTOLAN_VERSION, "$")?
     if !portolan_versions().contains(language_version) {
-        return Err(le("$.${version_key}", "the portolan_version must be 2.5, 2.6, 2.7, 2.8, 2.9 or 2.10 (the version of the language of the methodology), got ${language_version}"))
+        return Err(le("$.portolan_version", "the portolan_version must be 2.5, 2.6, 2.7, 2.8, 2.9, 2.10 or 2.11 (the version of the language of the methodology), got ${language_version}"))
     }
     ro name = j_need_str(root, "machine", "$")?
     ro version = j_str_or(root, "version", "", "$")?

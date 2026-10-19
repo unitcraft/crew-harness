@@ -247,9 +247,9 @@ test "names by the Portolan" {
     for f in machine_files() { assert(f.name.ends_with(".portolan.json")) }
 }
 
-test "both names of a compiled machine" {
-    for n in ["a.portolan.json", "a.machine.json"] { assert(is_machine_json_name(n)) }
-    for n in ["a.json", "a.portolan", "a.portolan.md", "a.table.json", "machine.json", "a.scenario.test.json", "a.schema.json"] { assert(!is_machine_json_name(n)) }
+test "name of a compiled machine" {
+    assert(is_machine_json_name("a.portolan.json"))
+    for n in ["a.json", "a.portolan", "a.portolan.md", "a.table.json", "machine.json", "a.scenario.test.json", "a.schema.json", "foo.machine.json", "foo.table.md", "foo.table.txt"] { assert(!is_machine_json_name(n)) }
     assert(data_dir_names("machines").len() == 7)
 }
 
