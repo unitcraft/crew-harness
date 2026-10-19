@@ -18,17 +18,17 @@ fn eints(items []int) -> Value {
     List(out)
 }
 
-fn ev(e Expr) -> Result[Value, EvalError] => eval(e, empty_scope())
+fn ev_plain(e Expr) -> Result[Value, EvalError] => eval(e, empty_scope())
 
 fn eis(e Expr, expected Value) -> bool {
-    match ev(e) {
+    match ev_plain(e) {
         Ok(v) => value_equal(v, expected)
         Err(x) => false
     }
 }
 
 fn eerr(e Expr) -> str {
-    match ev(e) {
+    match ev_plain(e) {
         Ok(v) => "ok"
         Err(x) => "${kind_word(x.kind)}@${x.path}"
     }
@@ -522,7 +522,7 @@ test "pt deep" {
 }
 
 test "pt text" {
-    match ev(en(Add, ei(1), er("q"))) {
+    match ev_plain(en(Add, ei(1), er("q"))) {
         Ok(v) => assert(false)
         Err(x) => {
             assert(x.path == "$.right")

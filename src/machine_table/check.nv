@@ -385,7 +385,7 @@ fn field_names(fields []FieldDef) -> []str {
     out
 }
 
-fn sites_of_row(mut cx Checker, r Row, path str, state int, bound []str) -> () {
+fn sites_of_row(mut cx Checker, r TableRow, path str, state int, bound []str) -> () {
     ro scope = names_with_all(bound, bind_names_of(r.event))
     for c in r.cond { add_site(cx, "${path}.cond", c, ConditionPos, area_body(), state, scope) }
     sites_of_actions(cx, r.actions, "${path}.actions", ActionPos, state, scope)
@@ -924,7 +924,7 @@ fn word_used_in_signal(def MachineDef, word str) -> bool {
     false
 }
 
-fn check_targets_of_row(mut cx Checker, r Row, path str, may_stay bool) -> () {
+fn check_targets_of_row(mut cx Checker, r TableRow, path str, may_stay bool) -> () {
     ro def = cx.def
     match r.next.target {
         ToState(n) => {
@@ -1410,7 +1410,7 @@ fn check_call_actions(mut cx Checker, actions []Action, path str, pos Position) 
 
 // ---- reachability -------------------------------------------------------------------------------------------------------------
 
-fn targets_of_actions_row(r Row, mut out []str) -> () {
+fn targets_of_actions_row(r TableRow, mut out []str) -> () {
     match r.next.target {
         ToState(n) => push_unique(out, n)
         _ => ()

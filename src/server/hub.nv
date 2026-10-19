@@ -6,7 +6,7 @@
 // timer and takes the events of the agents. The caller of the hub is a loop: in the product it reads and writes the pipes of the
 // hub program (stdio.nv), in the tests it is the test.
 //
-// A session = the engine of the dialog machine (`dialog_session`) over the handlers of the store (files or PostgreSQL, by the
+// A session = the engine of the dialog machine (the table `dialog.portolan.md`, run by `PortolanMachine`, task 114) over the handlers of the store (files or PostgreSQL, by the
 // settings) and of the agent (the ACP client over a process). The page sees only what the engine accepted: every accepted
 // event is turned into a page event by `page_event` (task 095), stamped with the id, the step and the time of the engine.
 //   - The id of the page event is "<session>/<engine id>": the page keeps the ids of ALL sessions in one set.
@@ -18,7 +18,7 @@
 module crew_harness.server
 
 import crew_harness.engine.{Engine, Incoming, EventKind, Journal, Store, Link, start_engine, resume_engine, decode_snapshot}
-import crew_harness.chat.{ChatSession, ChatState, dialog_session, user_says, user_cancels}
+import crew_harness.machine_run.{PortolanMachine, PortolanState}
 import crew_harness.acp.{AcpConfig, AcpClient, open_client, acp_link, page_event}
 import crew_harness.storage.{open_data_dir, file_journal, file_store, list_sessions, valid_session_name, session_path}
 import crew_harness.pgstore.{PgWorld, pg_journal, pg_store}
@@ -34,7 +34,7 @@ type Dialog {
     id str,
     name str,
     agent str,
-    engine Engine[ChatSession, ChatState],
+    engine Engine[PortolanMachine, PortolanState],
     world PgWorld,
     clients []AcpClient,
     turn str,
@@ -47,6 +47,7 @@ type Dialog {
 /// Hub: the sessions, the pages, the output not yet taken, the log.
 export type Hub {
     settings ServerSettings,
+    machine PortolanMachine,
     workdir str,
     sessions []Dialog,
     conns []int,
@@ -100,27 +101,27 @@ fn array_text(lines []str) -> str => "[${joined(lines, ",")}]"
 
 // ----- the store, by the settings: the same engine over files or over PostgreSQL -----
 
-fn begin_engine(pg bool, root str, mut world PgWorld, machine ChatSession, id str) Time -> Engine[ChatSession, ChatState] {
+fn begin_session_engine(pg bool, root str, mut world PgWorld, machine PortolanMachine, id str) Time -> Engine[PortolanMachine, PortolanState] {
     if pg {
         with Journal = pg_journal(world), Store = pg_store(world) {
-            start_engine[ChatState, ChatSession](machine, id)
+            start_engine[PortolanState, PortolanMachine](machine, id)
         }
     } else {
         with Journal = file_journal(root, id), Store = file_store(root) {
-            start_engine[ChatState, ChatSession](machine, id)
+            start_engine[PortolanState, PortolanMachine](machine, id)
         }
     }
 }
 
-fn resume_stored(pg bool, root str, mut world PgWorld, machine ChatSession, id str) Time -> Option[Engine[ChatSession, ChatState]] {
+fn resume_stored(pg bool, root str, mut world PgWorld, machine PortolanMachine, id str) Time -> Option[Engine[PortolanMachine, PortolanState]] {
     if pg {
         with Journal = pg_journal(world), Store = pg_store(world) {
             // a damaged snapshot would stop the process (`resume_engine`): look at it first
             match Store.load(id) {
                 None => None
-                Some(snapshot) => match decode_snapshot[ChatState, ChatSession](machine, snapshot) {
+                Some(snapshot) => match decode_snapshot[PortolanState, PortolanMachine](machine, snapshot) {
                     None => None
-                    Some(state) => resume_engine[ChatState, ChatSession](machine, id)
+                    Some(state) => resume_engine[PortolanState, PortolanMachine](machine, id)
                 }
             }
         }
@@ -128,9 +129,9 @@ fn resume_stored(pg bool, root str, mut world PgWorld, machine ChatSession, id s
         with Journal = file_journal(root, id), Store = file_store(root) {
             match Store.load(id) {
                 None => None
-                Some(snapshot) => match decode_snapshot[ChatState, ChatSession](machine, snapshot) {
+                Some(snapshot) => match decode_snapshot[PortolanState, PortolanMachine](machine, snapshot) {
                     None => None
-                    Some(state) => resume_engine[ChatState, ChatSession](machine, id)
+                    Some(state) => resume_engine[PortolanState, PortolanMachine](machine, id)
                 }
             }
         }
@@ -332,7 +333,7 @@ fn Hub mut @ensure_client(at int) Proc Detach Time -> str {
 
 fn Hub @is_awaiting(at int) -> bool {
     ro s = @sessions[at]
-    dialog_session(@settings.idle_term_ms).state_name(s.engine.state()) == "Awaiting"
+    @machine.state_name(s.engine.state()) == "Awaiting"
 }
 
 fn Hub mut @add_session(s Dialog) -> () {
@@ -352,8 +353,9 @@ export fn start_hub(settings ServerSettings) Proc Detach Time Net Fs Os -> Resul
             Err(e) => return Err("the working folder is unknown")
         }
     }
+    ro machine = hub_machine(settings.idle_term_ms)?
     mut hub = Hub {
-        settings, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0
+        settings, machine, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0
     }
     ro pg = settings.store == "pg"
     ro ids = if pg {
@@ -375,8 +377,7 @@ fn Hub mut @resume_session(id str) Proc Detach Time -> () {
     ro pg = @settings.store == "pg"
     ro root = @settings.data_dir
     mut world = PgWorld.open(@settings.pg, id)
-    ro machine = dialog_session(@settings.idle_term_ms)
-    match resume_stored(pg, root, world, machine, id) {
+    match resume_stored(pg, root, world, @machine, id) {
         None => @say_log("the session ${id} cannot be resumed: no usable snapshot")
         Some(engine) => {
             mut s = Dialog { id, name: id, agent: "", engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, started_at: 0, slow_told: false }
@@ -427,7 +428,7 @@ fn Hub mut @create(conn int, trace str, input JsonObject) Proc Detach Time -> ()
             ro pg = @settings.store == "pg"
             ro root = @settings.data_dir
             mut world = PgWorld.open(@settings.pg, trace)
-            ro engine = begin_engine(pg, root, world, dialog_session(@settings.idle_term_ms), trace)
+            ro engine = begin_session_engine(pg, root, world, @machine, trace)
             mut s = Dialog { id: trace, name, agent, engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, started_at: 0, slow_told: false }
             accept_in(pg, root, s, Incoming.word("session_created", meta_text(name, agent, @workdir, project)))
             @add_session(s)
@@ -459,7 +460,7 @@ fn Hub mut @say(trace str, text str) Proc Detach Time -> () {
         return
     }
     mut s = @sessions[at]
-    feed_in(@settings.store == "pg", @settings.data_dir, s, user_says(text))
+    feed_in(@settings.store == "pg", @settings.data_dir, s, Incoming.word("user_message", text))
     @drain(at)
 }
 
@@ -468,7 +469,7 @@ fn Hub mut @cancel(trace str) Proc Detach Time -> () {
     if at < 0 { return }
     mut s = @sessions[at]
     if s.clients.len() == 0 { return }
-    feed_in(@settings.store == "pg", @settings.data_dir, s, user_cancels())
+    feed_in(@settings.store == "pg", @settings.data_dir, s, Incoming.word("cancel", ""))
     @drain(at)
 }
 
@@ -598,7 +599,7 @@ export fn Hub @page_lines(id str) -> []str {
 export fn Hub @state_of(id str) -> str {
     ro at = @find(id)
     if at < 0 { return "" }
-    dialog_session(@settings.idle_term_ms).state_name(@sessions[at].engine.state())
+    @machine.state_name(@sessions[at].engine.state())
 }
 
 /// Does the session have an agent process?
@@ -613,4 +614,14 @@ export fn Hub @attached() -> []int {
     mut out = []int.new()
     for c in @conns { out.push(c) }
     out
+}
+
+/// The name of the machine the sessions run on ("DialogSession").
+export fn Hub @machine_name() -> str => @machine.name()
+
+/// The state of a session as the text of its snapshot (the encoded state of the machine), "" for an unknown session.
+export fn Hub @state_text_of(id str) -> str {
+    ro at = @find(id)
+    if at < 0 { return "" }
+    @machine.encode_state(@sessions[at].engine.state())
 }

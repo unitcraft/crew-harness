@@ -357,6 +357,8 @@ export fn scenario_chat(settings ServerSettings) Proc Detach Time Net Fs Os -> s
     c.expect(line_field(lines[0], "trace") == "s-chat", "the trace is the session")
     c.expect(line_input(lines[0], "name") == "Проба", "the name of the session")
     c.expect(rig.hub.state_of("s-chat") == "Idle", "the session is open for the next message")
+    c.expect(rig.hub.machine_name() == "DialogSession", "the sessions run on the Portolan machine DialogSession")
+    c.expect(rig.hub.state_text_of("s-chat").contains("\"started\":true"), "the snapshot is the state of a Portolan machine")
     rig.shut()
     c.report()
 }

@@ -823,7 +823,7 @@ fn dec_next(o JsonObject, path str) -> Result[Goto, LoadError] {
     }
 }
 
-fn dec_row(v JsonValue, path str) -> Result[Row, LoadError] {
+fn dec_row(v JsonValue, path str) -> Result[TableRow, LoadError] {
     ro o = j_obj(v, path)?
     j_only(o, row_keys(), path)?
     ro n = j_int(j_need(o, "n", path)?, "${path}.n")?
@@ -833,12 +833,12 @@ fn dec_row(v JsonValue, path str) -> Result[Row, LoadError] {
     if is_else && cond.len() > 0 { return Err(le(path, "a row has a condition or else, not both")) }
     ro actions = dec_actions_or_empty(o, "actions", path)?
     ro next = dec_next(o, path)?
-    Ok(Row { n, event, cond, is_else, actions, next })
+    Ok(TableRow { n, event, cond, is_else, actions, next })
 }
 
-fn dec_rows(o JsonObject, key str, path str) -> Result[[]Row, LoadError] {
+fn dec_rows(o JsonObject, key str, path str) -> Result[[]TableRow, LoadError] {
     ro items = j_arr_or_empty(o, key, path)?
-    mut out = []Row.new()
+    mut out = []TableRow.new()
     mut i = 0
     for item in items {
         out.push(dec_row(item, "${path}.${key}[${i}]")?)

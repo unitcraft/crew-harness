@@ -92,8 +92,8 @@ export type Action enum
 /// Goto: the "Where" of a row; `restart` is the suffix "restart" (rule 18).
 export type Goto { target Target, restart bool }
 
-/// Row: a row of a table of states: `n` is the number of the row, `cond` is zero or one condition, `is_else` the condition `else`.
-export type Row { n int, event EventPat, cond []Expr, is_else bool, actions []Action, next Goto }
+/// TableRow: a row of a table of states: `n` is the number of the row, `cond` is zero or one condition, `is_else` the condition `else`.
+export type TableRow { n int, event EventPat, cond []Expr, is_else bool, actions []Action, next Goto }
 
 /// AcceptRow: a row of "On accept" (format 4.4).
 export type AcceptRow { event EventPat, actions []Action }
@@ -131,7 +131,7 @@ export type InputDef { present bool, fields []FieldDef, invariants []Expr }
 export type StateDef {
     name str, kind StateKind, reads []str, reads_all bool,
     party str, set []Expr, silence []Expr, edits str, edit_check str, form_returns int,
-    inputs []InputField, accept []AcceptRow, entry []Action, rows []Row,
+    inputs []InputField, accept []AcceptRow, entry []Action, rows []TableRow,
     except_field str, except_values []str
 }
 
@@ -149,7 +149,7 @@ export type MachineDef {
     constants []ConstDef, params []ParamDef, input InputDef, data []DataDef,
     parties []PartyDef, request_limit []Expr, signals []WordDef,
     definitions []DefFn, includes []IncludeDef,
-    initial str, error_end str, common []Row, states []StateDef,
+    initial str, error_end str, common []TableRow, states []StateDef,
     result_spec []TypeSpec, end_rows []EndRow, primitives []str
 }
 

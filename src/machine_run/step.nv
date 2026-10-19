@@ -24,7 +24,7 @@ import std.encoding.json.{Json}
 import crew_harness.engine.{Incoming, SendOrder, CancelOrder, Conclusion, FailCode, JournalParam, JournalEvent, journal_event, param}
 import crew_harness.machine.{Value, Null, Int, Text, List, Dict, DictEntry, RecordField, Binding, Scope, DefTable, Expr, TypeSpec, PrimitiveHost, EvalError, Binary, Add}
 import crew_harness.machine.{eval_defs, kind_word, make_record, make_tuple, enum_value, value_text, value_json, value_compare, parse_value, value_from_json, record_get, dict_get, check_value, FieldDef, TypeDefs, check_call_args, check_call_result}
-import crew_harness.machine_table.{MachineDef, Row, EventPat, Action, LValue, PathStep, NamedExpr, Bind, WordDef}
+import crew_harness.machine_table.{MachineDef, TableRow, EventPat, Action, LValue, PathStep, NamedExpr, Bind, WordDef}
 import crew_harness.machine_table.{find_state, find_party, find_data}
 
 /// The longest chain of transitions in one step (a loop of forks that never ends is a defect of the table).
@@ -406,7 +406,7 @@ fn hit_of(pat EventPat, ev EventVal) -> Hit {
 }
 
 // The first row of a list that fits the event (the pattern and the condition); at < 0 - none. The bindings of the pattern are in the chosen.
-fn choose(mut ctx Ctx, rows []Row, mut host PrimitiveHost) -> Result[Chosen, Fault] {
+fn choose(mut ctx Ctx, rows []TableRow, mut host PrimitiveHost) -> Result[Chosen, Fault] {
     mut i = 0
     for r in rows {
         ro h = hit_of(r.event, ctx.event)

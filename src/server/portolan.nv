@@ -1,0 +1,23 @@
+// portolan.nv - the machine of the sessions of the hub (task 114): the many-turn chat written as data (`src/machine/machines/dialog.portolan.md`, its JSON is
+// compiled into the program) and run by `PortolanMachine`. The hub makes it once when it starts. The idle term of a turn is the parameter of the project
+// `проект.срок_бездействия` (format 2.7, P-9): the settings give it in milliseconds (`idle_term_seconds` * 1000).
+module crew_harness.server
+
+import crew_harness.machine.{standard_registry, dialog_machine_text, Int}
+import crew_harness.machine_run.{PortolanMachine, ProjectValue, load_portolan_machine_with}
+
+/// The key of the parameter of the idle term in the table of the project.
+export const IDLE_TERM_KEY = "проект.срок_бездействия"
+
+fn idle_term_values(idle_term_ms int) -> []ProjectValue => [ProjectValue { key: IDLE_TERM_KEY, value: Int(idle_term_ms) }]
+
+/// The machine of the sessions from the text of its JSON and the idle term in milliseconds; the error says what is wrong with the machine.
+export fn hub_machine_from(text str, idle_term_ms int) -> Result[PortolanMachine, str] {
+    match load_portolan_machine_with(text, standard_registry(), idle_term_values(idle_term_ms)) {
+        Ok(machine) => Ok(machine)
+        Err(e) => Err("the dialog machine cannot be made: ${e}")
+    }
+}
+
+/// The machine of the sessions: the embedded `dialog.portolan.json` with the idle term of the settings.
+export fn hub_machine(idle_term_ms int) -> Result[PortolanMachine, str] => hub_machine_from(dialog_machine_text(), idle_term_ms)
