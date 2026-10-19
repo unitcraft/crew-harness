@@ -1,0 +1,265 @@
+// lex.nv - the lines of a file of a machine and its words: the entries (headings, rows of tables, free lines) and the tokens.
+//
+// A file of a machine is Markdown (format 2.5, section 1). The reader keeps the number of the line and the column of every word, because every error of the
+// translator says `file:line:column`. Rules of the reader (they are the translator's, the format does not write them down):
+//   - a fence line (three backticks) and an empty line are nothing; a line that starts with `>` is a comment;
+//   - a line that starts with `#` at the first column is a heading (`#`, `##`, `###`); a line that starts with `|` at the first column is a row of a table
+//     (the separator row `|---|---|` is nothing); any other line is a free line, a line that starts with a space continues the free line before it;
+//   - in a row `\|` is a bar of the text (a pipe of a set of literals in a cell), a bar inside a string literal does not end a cell;
+//   - `//` begins a comment up to the end of the line (outside a string literal).
+module crew_harness.machine_text
+
+import std.text
+
+/// TranslateError: a place of the file where the translation cannot go on, or goes on with a reservation. `kind`: `syntax`, `name`, `type`, `structure`,
+/// `unsupported` (not supported in this version), `check` (the checks of the table `check_machine`). `quote` is the line of the file.
+export type TranslateError { line int, col int, kind str, message str, quote str }
+
+/// The text of an error: `file:line:col: kind: message` and the quoted line under it.
+export fn error_text(e TranslateError, file str) -> str {
+    ro head = "${file}:${e.line}:${e.col}: ${e.kind}: ${e.message}"
+    if e.quote == "" { return head }
+    "${head}\n    ${e.quote}"
+}
+
+const TK_NAME = 1
+const TK_INT = 2
+const TK_FLOAT = 3
+const TK_STR = 4
+const TK_SYM = 5
+const TK_EOF = 6
+
+/// TxTok: a word of a line. `kind` is one of the TK_ numbers; `text` is the name, the digits, the content of a string (escapes read), or the symbol.
+type TxTok { kind int, text str, line int, col int }
+
+const EN_HEAD = 1
+const EN_ROW = 2
+const EN_TEXT = 3
+
+/// TxCell: a cell of a row: its text without the spaces round it and the column of its first letter.
+type TxCell { text str, col int }
+
+/// TxEntry: a line of the file that is not empty and not a comment. A heading has the `level` and the `text` after the hashes; a row has the cells;
+/// a free line has the `indent` (the number of the spaces before it) and the `text` after them.
+type TxEntry { kind int, level int, line int, indent int, text str, cells []TxCell }
+
+fn tx_chars(s str) -> []str {
+    mut out = []str.new()
+    for c in s.chars() { out.push("${c}") }
+    out
+}
+
+fn tx_slice(items []str, from int, to int) -> str {
+    mut parts = []str.new()
+    mut i = from
+    while i < to {
+        parts.push(items[i])
+        i += 1
+    }
+    parts.join("")
+}
+
+fn tx_is_digit(c str) -> bool => c >= "0" && c <= "9"
+
+fn tx_is_space(c str) -> bool => c == " " || c == "\t" || c == " "
+
+// A letter of a name: Latin, or any letter of the Cyrillic block, or an underscore.
+fn tx_is_letter(c str) -> bool {
+    if c == "_" { return true }
+    if (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") { return true }
+    c >= "Ѐ" && c <= "ӿ"
+}
+
+fn tx_err(line int, col int, kind str, message str) -> TranslateError => { line, col, kind, message, quote: "" }
+
+/// Does a letter stand in the upper case (Latin or Cyrillic)? Used to tell a type `Использование` from a constant `ПРЕДЕЛ` and a datum.
+fn tx_is_upper(c str) -> bool {
+    if c >= "A" && c <= "Z" { return true }
+    if c >= "А" && c <= "Я" { return true }
+    c == "Ё"
+}
+
+fn tx_is_lower(c str) -> bool {
+    if c >= "a" && c <= "z" { return true }
+    if c >= "а" && c <= "я" { return true }
+    c == "ё"
+}
+
+// ---- the tokens of a piece of a line ---------------------------------------------------------------------------------------
+
+fn tx_sym3() -> []str => ["..."]
+
+fn tx_sym2() -> []str => ["==", "!=", "<=", ">=", "+=", "??", "->"]
+
+fn tx_sym1() -> []str => ["(", ")", "[", "]", "{", "}", ",", ":", ";", ".", "?", "|", "+", "-", "*", "/", "%", "<", ">", "=", "≥", "≤", "∈", "→", "—", "…", "!"]
+
+/// The tokens of a piece of text that stands in the line `line` from the column `col0`; a comment `//` ends the piece.
+fn tx_lex(text str, line int, col0 int) -> Result[[]TxTok, TranslateError] {
+    ro cs = tx_chars(text)
+    ro n = cs.len()
+    mut out = []TxTok.new()
+    mut i = 0
+    while i < n {
+        ro c = cs[i]
+        ro col = col0 + i
+        if tx_is_space(c) {
+            i += 1
+            continue
+        }
+        if c == "/" && i + 1 < n && cs[i + 1] == "/" { break }
+        if tx_is_letter(c) {
+            mut j = i + 1
+            while j < n && (tx_is_letter(cs[j]) || tx_is_digit(cs[j])) { j += 1 }
+            out.push(TxTok { kind: TK_NAME, text: tx_slice(cs, i, j), line, col })
+            i = j
+            continue
+        }
+        if tx_is_digit(c) {
+            mut j = i + 1
+            while j < n && tx_is_digit(cs[j]) { j += 1 }
+            mut kind = TK_INT
+            if j + 1 < n && cs[j] == "." && tx_is_digit(cs[j + 1]) {
+                kind = TK_FLOAT
+                j += 1
+                while j < n && tx_is_digit(cs[j]) { j += 1 }
+            }
+            out.push(TxTok { kind, text: tx_slice(cs, i, j), line, col })
+            i = j
+            continue
+        }
+        if c == "\"" {
+            mut j = i + 1
+            mut parts = []str.new()
+            mut closed = false
+            while j < n {
+                ro d = cs[j]
+                if d == "\\" && j + 1 < n {
+                    ro e = cs[j + 1]
+                    if e == "n" {
+                        parts.push("\n")
+                    } else if e == "t" {
+                        parts.push("\t")
+                    } else {
+                        parts.push(e)
+                    }
+                    j += 2
+                    continue
+                }
+                if d == "\"" {
+                    closed = true
+                    break
+                }
+                parts.push(d)
+                j += 1
+            }
+            if !closed { return Err(tx_err(line, col, "syntax", "строка в кавычках не закрыта")) }
+            out.push(TxTok { kind: TK_STR, text: parts.join(""), line, col })
+            i = j + 1
+            continue
+        }
+        if c == "\\" && i + 1 < n && cs[i + 1] == "|" {
+            out.push(TxTok { kind: TK_SYM, text: "|", line, col })
+            i += 2
+            continue
+        }
+        if i + 3 <= n && tx_slice(cs, i, i + 3) == "..." {
+            out.push(TxTok { kind: TK_SYM, text: "...", line, col })
+            i += 3
+            continue
+        }
+        if i + 2 <= n {
+            ro two = tx_slice(cs, i, i + 2)
+            if tx_sym2().contains(two) {
+                out.push(TxTok { kind: TK_SYM, text: two, line, col })
+                i += 2
+                continue
+            }
+        }
+        if tx_sym1().contains(c) {
+            out.push(TxTok { kind: TK_SYM, text: c, line, col })
+            i += 1
+            continue
+        }
+        return Err(tx_err(line, col, "syntax", "недопустимый знак «${c}»"))
+    }
+    Ok(out)
+}
+
+// ---- the entries of a file ---------------------------------------------------------------------------------------------------
+
+// A cell: the text cs[from..to] without the spaces round it, and the column of its first letter.
+fn tx_cell(cs []str, from int, to int) -> TxCell {
+    mut a = from
+    mut b = to
+    while a < b && tx_is_space(cs[a]) { a += 1 }
+    while b > a && tx_is_space(cs[b - 1]) { b -= 1 }
+    TxCell { text: tx_slice(cs, a, b), col: a + 1 }
+}
+
+// The cells of a row (the line starts with `|`): split at the bars that are not escaped and not in a string literal. The text after the last bar is a
+// cell when it is not empty.
+fn tx_split_cells(cs []str) -> []TxCell {
+    mut cells = []TxCell.new()
+    ro n = cs.len()
+    mut start = 1
+    mut in_str = false
+    mut i = 1
+    while i < n {
+        ro c = cs[i]
+        ro escaped = cs[i - 1] == "\\"
+        if c == "\"" && !escaped { in_str = !in_str }
+        if c == "|" && !in_str && !escaped {
+            cells.push(tx_cell(cs, start, i))
+            start = i + 1
+        }
+        i += 1
+    }
+    ro tail = tx_cell(cs, start, n)
+    if tail.text != "" { cells.push(tail) }
+    cells
+}
+
+fn tx_is_separator(cells []TxCell) -> bool {
+    if cells.len() == 0 { return false }
+    for cell in cells {
+        if cell.text == "" { return false }
+        for c in cell.text.chars() {
+            ro one = "${c}"
+            if one != "-" && one != ":" && one != " " { return false }
+        }
+    }
+    true
+}
+
+/// The entries of the lines of a file, in order. `lines` are the lines without the line feed (a carriage return at the end is cut here).
+fn tx_classify(lines []str) -> []TxEntry {
+    mut out = []TxEntry.new()
+    mut no = 0
+    for raw in lines {
+        no += 1
+        ro line = raw.strip_suffix("\r") ?? raw
+        ro cs = tx_chars(line)
+        mut indent = 0
+        while indent < cs.len() && tx_is_space(cs[indent]) { indent += 1 }
+        if indent >= cs.len() { continue }
+        ro text = tx_slice(cs, indent, cs.len())
+        if text.starts_with("```") { continue }
+        if text.starts_with(">") { continue }
+        if text.starts_with("<!--") { continue }
+        if indent == 0 && text.starts_with("#") {
+            mut level = 0
+            while level < cs.len() && cs[level] == "#" { level += 1 }
+            out.push(TxEntry { kind: EN_HEAD, level, line: no, indent: 0, text: tx_slice(cs, level, cs.len()).trim_ascii(), cells: []TxCell.new() })
+            continue
+        }
+        if indent == 0 && text.starts_with("|") {
+            ro cells = tx_split_cells(cs)
+            if tx_is_separator(cells) { continue }
+            out.push(TxEntry { kind: EN_ROW, level: 0, line: no, indent: 0, text, cells })
+            continue
+        }
+        if indent == 0 && text.starts_with("---") { continue }
+        out.push(TxEntry { kind: EN_TEXT, level: 0, line: no, indent, text, cells: []TxCell.new() })
+    }
+    out
+}

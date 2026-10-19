@@ -7,7 +7,7 @@
 module crew_harness.machine_table
 
 import std.encoding.json.{Json, JsonValue, JsonObject}
-import crew_harness.machine.{Expr, TypeSpec, TypeDefs, FieldDef, RecordDef, VariantDef, CaseDef, Bind, DefFn, expr_from_json, field_def}
+import crew_harness.machine.{Expr, TypeSpec, TypeDefs, FieldDef, RecordDef, VariantDef, CaseDef, Bind, DefFn, expr_from_json, field_def, TextType, ListType, TupleType}
 
 /// The format tag of the tree.
 export const MACHINE_FORMAT = "machine/2"
@@ -251,6 +251,11 @@ fn fail_code_def() -> VariantDef {
     VariantDef { name: "FailCode", cases }
 }
 
+// The record `JournalEvent` (`СобытиеЖурнала` of the format, section 2) is built into every machine, like `FailCode`: the code and the list of the pairs (name, text).
+fn journal_event_def() -> RecordDef {
+    RecordDef { name: "JournalEvent", fields: [field_def("code", TextType), field_def("params", ListType(TupleType([TextType, TextType])))] }
+}
+
 fn base_type_names() -> []str => ["int", "float", "text", "bool", "nothing", "full", "id"]
 
 // ---- types ----------------------------------------------------------------------------------------------------------------
@@ -266,9 +271,10 @@ fn dec_types(root JsonObject) -> Result[TypeDefs, LoadError] {
     }
     // pass 1: the names, so that a field may name a type declared later
     mut names = []str.new()
-    mut skeleton_records = []RecordDef.new()
+    mut skeleton_records = [journal_event_def()]
     mut skeleton_variants = [fail_code_def()]
     names.push("FailCode")
+    names.push("JournalEvent")
     mut i = 0
     for item in rec_items {
         ro p = "$.types.records[${i}]"
@@ -291,7 +297,7 @@ fn dec_types(root JsonObject) -> Result[TypeDefs, LoadError] {
     }
     ro skeleton = TypeDefs { records: skeleton_records, variants: skeleton_variants }
     // pass 2: the fields
-    mut records = []RecordDef.new()
+    mut records = [journal_event_def()]
     mut variants = [fail_code_def()]
     i = 0
     for item in rec_items {

@@ -3,7 +3,7 @@ module crew_harness.machine_run
 
 import std.text
 import std.encoding.json.{Json}
-import crew_harness.machine.{scenario_files, machine_files, schema_files, data_dir_names, NamedText, text_of_file}
+import crew_harness.machine.{scenario_files, machine_files, table_files, schema_files, data_dir_names, NamedText, text_of_file}
 
 // The machine a scenario names.
 fn machine_named(name str) -> TableMachine {
@@ -230,6 +230,7 @@ fn same_names(xs []str, ys []str) -> bool {
 test "lists of files" {
     assert(same_names(data_dir_names("scenarios"), listed(scenario_files())))
     assert(same_names(data_dir_names("machines"), listed(machine_files())))
+    assert(same_names(data_dir_names("tables"), listed(table_files())))
     assert(same_names(data_dir_names("schema"), listed(schema_files())))
     assert(data_dir_names("elsewhere").len() == 0)
 }

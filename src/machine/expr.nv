@@ -180,31 +180,31 @@ export fn expr_depth(e Expr) -> int {
 // ---- children -------------------------------------------------------------------------------------------------------
 
 /// A part of a node with its step in the path (the same steps as the paths of the errors of the evaluator).
-type Child { seg str, expr Expr }
+type ExprChild { seg str, expr Expr }
 
-fn kids_of_list(prefix str, items []Expr) -> []Child {
-    mut out = []Child.new()
+fn kids_of_list(prefix str, items []Expr) -> []ExprChild {
+    mut out = []ExprChild.new()
     mut i = 0
     for item in items {
-        out.push(Child { seg: "${prefix}[${i}]", expr: item })
+        out.push(ExprChild { seg: "${prefix}[${i}]", expr: item })
         i += 1
     }
     out
 }
 
-fn kids_of_fields(fields []FieldExpr) -> []Child {
-    mut out = []Child.new()
-    for f in fields { out.push(Child { seg: "fields.${f.name}", expr: f.value }) }
+fn kids_of_fields(fields []FieldExpr) -> []ExprChild {
+    mut out = []ExprChild.new()
+    for f in fields { out.push(ExprChild { seg: "fields.${f.name}", expr: f.value }) }
     out
 }
 
-fn kid(seg str, e Expr) -> Child => { seg, expr: e }
+fn kid(seg str, e Expr) -> ExprChild => { seg, expr: e }
 
 // The parts of a node in the order they are evaluated.
-fn children(e Expr) -> []Child {
+fn children(e Expr) -> []ExprChild {
     match e {
-        Lit(v) => []Child.new()
-        Name(n) => []Child.new()
+        Lit(v) => []ExprChild.new()
+        Name(n) => []ExprChild.new()
         FieldOf { target, name } => [kid("of", target)]
         IndexOf { target, index } => [kid("of", target), kid("index", index)]
         CallFn { name, args } => kids_of_list("args", args)
@@ -232,7 +232,7 @@ fn children(e Expr) -> []Child {
         ListLit(items) => kids_of_list("items", items)
         TupleLit(items) => kids_of_list("items", items)
         DictLit(entries) => {
-            mut out = []Child.new()
+            mut out = []ExprChild.new()
             mut i = 0
             for en in entries {
                 out.push(kid("entries[${i}].key", en.key))

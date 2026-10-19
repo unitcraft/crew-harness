@@ -992,6 +992,21 @@ fn primitive_reads(cx Checker, e Expr) -> []str {
 
 fn is_data_root(def MachineDef, name str) -> bool => data_roots(def).contains(name)
 
+// The data of a fragment (the marks `fragment`, `rows and fragment`, `mechanics`): the common events read them without an Input (format section 9).
+fn fragment_data_names(def MachineDef) -> []str {
+    mut out = []str.new()
+    for d in def.data {
+        if d.name.contains("[") { continue }
+        match d.writes {
+            FragmentWrite => out.push(d.name)
+            RowsAndFragment => out.push(d.name)
+            MechanicsWrite => out.push(d.name)
+            _ => ()
+        }
+    }
+    out
+}
+
 fn check_reads(mut cx Checker) -> () {
     ro def = cx.def
     ro consts = const_names(def)
@@ -1001,7 +1016,7 @@ fn check_reads(mut cx Checker) -> () {
     // the names of the executor and where they stand
     for s in cx.sites {
         ro free = expr_free(s.expr, s.bound)
-        ro allowed = if s.state >= 0 { state_input_names(def, def.states[s.state]) } else { []str.new() }
+        ro allowed = if s.state >= 0 { state_input_names(def, def.states[s.state]) } else if s.area == area_body() { fragment_data_names(def) } else { []str.new() }
         for n in free {
             if consts.contains(n) { continue }
             if roots.contains(n) {
@@ -1062,22 +1077,22 @@ fn trace_allowed(def MachineDef, s Site) -> bool {
     pi >= 0 && def.parties[pi].kind == MachineParty
 }
 
-fn check_writes_in(mut cx Checker, actions []Action, path str, accept bool) -> () {
+fn check_writes_in(mut cx Checker, actions []Action, path str, accept bool, fragment bool) -> () {
     ro def = cx.def
     mut i = 0
     for a in actions {
         ro p = "${path}[${i}]"
         match a {
             AssignAct { target, value } => {
-                check_target(cx, target, "${p}.target")
+                check_target(cx, target, "${p}.target", fragment)
                 check_literal_target(cx, target, value, "${p}.value")
             }
-            AddAct { target, value } => check_target(cx, target, "${p}.target")
-            ForEachAct { var, list, body } => check_writes_in(cx, body, "${p}.body", accept)
-            LetAct { name, value, body } => check_writes_in(cx, body, "${p}.body", accept)
+            AddAct { target, value } => check_target(cx, target, "${p}.target", fragment)
+            ForEachAct { var, list, body } => check_writes_in(cx, body, "${p}.body", accept, fragment)
+            LetAct { name, value, body } => check_writes_in(cx, body, "${p}.body", accept, fragment)
             IfAct { cond, then_actions, else_actions } => {
-                check_writes_in(cx, then_actions, "${p}.then", accept)
-                check_writes_in(cx, else_actions, "${p}.else", accept)
+                check_writes_in(cx, then_actions, "${p}.then", accept, fragment)
+                check_writes_in(cx, else_actions, "${p}.else", accept, fragment)
             }
             JournalAct { code, params } => {
                 if accept { cx_issue(cx, p, "On accept has no journal (format 4.4)") }
@@ -1141,7 +1156,15 @@ fn check_literal_target(mut cx Checker, target LValue, value Expr, path str) -> 
     if problem != "" { cx_issue(cx, path, problem) }
 }
 
-fn check_target(mut cx Checker, target LValue, path str) -> () {
+fn fragment_may_write(kind WriteKind) -> bool {
+    match kind {
+        FragmentWrite => true
+        RowsAndFragment => true
+        _ => rows_may_write(kind)
+    }
+}
+
+fn check_target(mut cx Checker, target LValue, path str, fragment bool) -> () {
     ro def = cx.def
     ro at = find_data(def, target.root)
     if at < 0 {
@@ -1149,7 +1172,9 @@ fn check_target(mut cx Checker, target LValue, path str) -> () {
         return
     }
     ro d = def.data[at]
-    if !rows_may_write(d.writes) { cx_issue(cx, path, "the datum ${target.root} is written by ${write_kind_word(d.writes)}, not by rows") }
+    ro may = if fragment { fragment_may_write(d.writes) } else { rows_may_write(d.writes) }
+    ro who = if fragment { "rows or a fragment" } else { "rows" }
+    if !may { cx_issue(cx, path, "the datum ${target.root} is written by ${write_kind_word(d.writes)}, not by ${who}") }
     // a path `name[key].field` against the marks of `name[*].field`
     if target.steps.len() == 2 {
         match target.steps[1] {
@@ -1171,15 +1196,15 @@ fn check_all_writes(mut cx Checker) -> () {
         ro p = "$.states[${i}]"
         mut k = 0
         for r in st.rows {
-            check_writes_in(cx, r.actions, "${p}.rows[${k}].actions", false)
+            check_writes_in(cx, r.actions, "${p}.rows[${k}].actions", false, false)
             k += 1
         }
         k = 0
         for a in st.accept {
-            check_writes_in(cx, a.actions, "${p}.accept[${k}].actions", true)
+            check_writes_in(cx, a.actions, "${p}.accept[${k}].actions", true, false)
             k += 1
         }
-        check_writes_in(cx, st.entry, "${p}.entry", false)
+        check_writes_in(cx, st.entry, "${p}.entry", false, false)
         if st.kind != EndKind {
             // the entry of an operation changes no data (rule 29): the changes are in the row
             check_no_data_writes(cx, st.entry, "${p}.entry")
@@ -1190,7 +1215,7 @@ fn check_all_writes(mut cx Checker) -> () {
     }
     i = 0
     for r in def.common {
-        check_writes_in(cx, r.actions, "$.common_events[${i}].actions", false)
+        check_writes_in(cx, r.actions, "$.common_events[${i}].actions", false, true)
         i += 1
     }
 }
@@ -1696,12 +1721,22 @@ fn is_hex12(s str) -> bool {
     true
 }
 
+// The name of a file of definitions in the registry of the host (format section 8): a word of letters of any alphabet, digits and underscores; not a path.
+fn is_registry_name(s str) -> bool {
+    if s.byte_len() == 0 { return false }
+    for c in s.chars() {
+        ro one = "${c}"
+        if one == "/" || one == "\\" || one == ":" || one == "." || one == " " || one == "\"" { return false }
+    }
+    true
+}
+
 fn check_includes(mut cx Checker) -> () {
     mut seen = []str.new()
     mut i = 0
     for inc in cx.def.includes {
         ro p = "$.includes[${i}]"
-        if !is_identifier(inc.name) { cx_issue(cx, "${p}.name", "the name of a definitions file is an identifier") }
+        if !is_registry_name(inc.name) { cx_issue(cx, "${p}.name", "the name of a definitions file is a name of the registry (letters, digits, underscore; not a path)") }
         if seen.contains(inc.name) { cx_issue(cx, "${p}.name", "the file ${inc.name} is included twice") }
         seen.push(inc.name)
         if inc.version == "" { cx_issue(cx, "${p}.version", "the version is missing") }

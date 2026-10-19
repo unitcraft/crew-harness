@@ -4,7 +4,7 @@
 module crew_harness.machine_table
 
 import crew_harness.machine.{Value, IdType, IntType, TextType, TextSet, OptionalType, ListType, DictType, FullDictType, TupleType, Text, Int, Null}
-import crew_harness.machine.{spec_text, check_value, empty_type_defs, make_tuple, standard_registry, find_primitive, Reading, record_get, Record}
+import crew_harness.machine.{spec_text, check_value, empty_type_defs, make_tuple, standard_registry, find_primitive, Reading, record_get, Record, machine_files, text_of_file}
 import std.text
 
 fn uuid_ok() -> str => "0192f3a0-7c1e-7b2a-9d4e-5a6b7c8d9e0f"
@@ -202,4 +202,37 @@ test "v25 table format" {
     assert(says(old, "table_format"))
     ro number = tiny().replace("\"machine\":\"Tiny\"", "\"table_format\":2.5,\"machine\":\"Tiny\"")
     assert(says(number, "table_format"))
+}
+
+// ---- the common events of a fragment (format section 9) and the built-in record JournalEvent --------------------------------------------------------
+
+fn gate_text() -> str => text_of_file(machine_files(), "gate.machine.json")
+
+test "v25 fragment reads" {
+    assert(ok_text(gate_text()))
+    ro rows_datum = gate_text().replace("\"left\": { \"op\": \"name\", \"name\": \"state\" }, \"right\": { \"op\": \"lit\", \"value\": \"Pause\" }", "\"left\": { \"op\": \"name\", \"name\": \"turns\" }, \"right\": { \"op\": \"lit\", \"value\": 0 }")
+    assert(says(rows_datum, "the datum turns is read but is not in the Input of the state (rule 11)"))
+    ro fragment_datum = gate_text().replace("\"left\": { \"op\": \"name\", \"name\": \"state\" }, \"right\": { \"op\": \"lit\", \"value\": \"Pause\" }", "\"left\": { \"op\": \"name\", \"name\": \"agent_attempt\" }, \"right\": { \"op\": \"lit\", \"value\": 0 }")
+    assert(ok_text(fragment_datum))
+}
+
+test "v25 fragment writes" {
+    ro to_rows = gate_text().replace("\"do\": \"assign\", \"target\": \"previous\"", "\"do\": \"assign\", \"target\": \"turns\"")
+    assert(ok_text(to_rows))
+    ro to_mechanics = gate_text().replace("\"do\": \"assign\", \"target\": \"previous\"", "\"do\": \"assign\", \"target\": \"agent_attempt\"")
+    assert(says(to_mechanics, "the datum agent_attempt is written by mechanics, not by rows or a fragment"))
+}
+
+test "v25 journal event" {
+    ro def = "\"definitions\":[{\"name\":\"ev\",\"params\":[],\"result\":\"JournalEvent\",\"body\":${jcall("journal_event", jl(jstr("c")))}}],"
+    assert(ok_text(tiny().replace("\"initial\":\"Wait\"", "${def}\"initial\":\"Wait\"")))
+    assert(says(tiny().replace("\"initial\":\"Wait\"", "${def.replace("JournalEvent", "Nope")}\"initial\":\"Wait\""), "Nope"))
+}
+
+test "v25 include names" {
+    ro inc = tiny().replace("\"data\":[", "\"includes\":[{\"name\":\"арифметика_цикла\",\"version\":\"1\",\"hash\":\"fb15ba5656e3\"}],\"data\":[")
+    assert(ok_text(inc))
+    assert(says(inc.replace("арифметика_цикла", "dir/cycle"), "a name of the registry"))
+    assert(says(inc.replace("арифметика_цикла", "cycle.md"), "a name of the registry"))
+    assert(says(inc.replace("арифметика_цикла", ""), "a name of the registry"))
 }

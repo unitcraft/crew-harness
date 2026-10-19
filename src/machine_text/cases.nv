@@ -1,0 +1,25 @@
+// cases.nv - the files of the cases that the tests and the report of the task use, compiled in: the pilot "Agent step" brought to format 2.5, the examples of the format,
+// the examples that this version does not support, the definitions of the meeting and the small machine that includes them.
+module crew_harness.machine_text
+
+import crew_harness.machine.{NamedText}
+
+/// The files of `cases/` by name.
+export fn case_files() -> []NamedText => [
+    NamedText { name: "agent-step.table.md", text: embed_str("cases/agent-step.table.md") },
+    NamedText { name: "format-examples.table.md", text: embed_str("cases/format-examples.table.md") },
+    NamedText { name: "unsupported-examples.table.md", text: embed_str("cases/unsupported-examples.table.md") },
+    NamedText { name: "meeting-definitions.defs.md", text: embed_str("cases/meeting-definitions.defs.md") },
+    NamedText { name: "meeting-wrapper.table.md", text: embed_str("cases/meeting-wrapper.table.md") }
+]
+
+/// The text of the case with the name; the empty text when there is none.
+export fn case_text(name str) -> str {
+    for f in case_files() {
+        if f.name == name { return f.text }
+    }
+    ""
+}
+
+/// The names of the files that the directory holds (read at compile time): a test compares them with the list above.
+export fn case_dir_names() -> []str => embed_dir("cases").paths()

@@ -17,6 +17,12 @@ export fn machine_files() -> []NamedText => [
     NamedText { name: "variants.machine.json", text: embed_str("machines/variants.machine.json") }
 ]
 
+/// The machines written as tables in Russian (format 2.5) in `machines/`, by the name of the file (`chat.table.md`); the translator of `src/machine_text`
+/// turns them into the JSON above.
+export fn table_files() -> []NamedText => [
+    NamedText { name: "chat.table.md", text: embed_str("machines/chat.table.md") }
+]
+
 /// The scenarios of `scenarios/`, by the name of the file (`chat-basic.scenario.json`).
 export fn scenario_files() -> []NamedText => [
     NamedText { name: "calc-before-start.scenario.json", text: embed_str("scenarios/calc-before-start.scenario.json") },
@@ -94,11 +100,24 @@ export fn text_of_file(files []NamedText, name str) -> str {
 /// The text of the machine of the chat session (`machines/chat.machine.json`).
 export fn chat_machine_text() -> str => text_of_file(machine_files(), "chat.machine.json")
 
+/// The text of the chat machine written as tables (`machines/chat.table.md`).
+export fn chat_table_text() -> str => text_of_file(table_files(), "chat.table.md")
+
 /// The names of the files that the directories hold (read at compile time with `embed_dir`): a test compares them with the lists above, so a
 /// file that is added to a directory and not to its list is found.
 export fn data_dir_names(dir str) -> []str {
-    if dir == "machines" { return embed_dir("machines").paths() }
+    if dir == "machines" { return names_ending(embed_dir("machines").paths(), ".machine.json") }
+    if dir == "tables" { return names_ending(embed_dir("machines").paths(), ".table.md") }
     if dir == "scenarios" { return embed_dir("scenarios").paths() }
     if dir == "schema" { return embed_dir("schema").paths() }
     []str.new()
+}
+
+// The names that end with the suffix.
+fn names_ending(names []str, suffix str) -> []str {
+    mut out = []str.new()
+    for n in names {
+        if n.ends_with(suffix) { out.push(n) }
+    }
+    out
 }

@@ -1,0 +1,191 @@
+// include.nv - the section `## Подключения` (format sections 8 and 9): the fragments (`Пауза(…)`) and the files of definitions (`определения: имя версия N хеш H`).
+//
+// A fragment is a file of its own (here: fragments/pause.fragment.md, compiled in) with parameters; the call names all of them, they are put in the text as
+// `<параметр>` before the text is read, and the data, the common events and the states of the fragment join the machine. A fragment is given the list of
+// the nested machines `вложенные`; the interpreter has no nested machines, so only the empty list is supported: `передать` to nobody and
+// `отменить_открытые(кроме: [])` are an ordinary cancel.
+module crew_harness.machine_text
+
+import std.text
+import crew_harness.machine.{NamedText}
+
+/// TxParam: a parameter of a call of a fragment: the name, the kind (`word`, `string`, `list`) and the text (the words, the content of the string, the names).
+type TxParam { name str, kind str, text str, tok TxTok }
+
+/// TxCall: a call `Имя(параметр: значение, …)` of a fragment.
+type TxCall { name str, line int, tok TxTok, params []TxParam }
+
+fn fragment_files() -> []NamedText => [
+    NamedText { name: "Пауза", text: embed_str("fragments/pause.fragment.md") }
+]
+
+fn pause_params() -> []str => ["слово_остановки", "код_остановки", "вложенные", "отмена_запросов", "вход_заново", "право_записи"]
+
+fn param_value(mut p TxP) -> Result[TxParam, TranslateError] {
+    ro n = p_tok(p)
+    if n.kind != TK_NAME { return Err(p_fail(p, "ожидается имя параметра")) }
+    p_adv(p)
+    p_expect(p, ":")?
+    ro v = p_tok(p)
+    if v.kind == TK_STR {
+        p_adv(p)
+        return Ok(TxParam { name: n.text, kind: "string", text: v.text, tok: n })
+    }
+    if p_is(p, "[") {
+        p_adv(p)
+        mut names = []str.new()
+        while !p_is(p, "]") {
+            ro item = p_tok(p)
+            if item.kind != TK_NAME { return Err(p_fail(p, "в списке ожидаются имена машин")) }
+            p_adv(p)
+            names.push(item.text)
+            if p_eat(p, ",") { continue }
+            break
+        }
+        p_expect(p, "]")?
+        return Ok(TxParam { name: n.text, kind: "list", text: names.join(","), tok: n })
+    }
+    ro phrase = ev_phrase(p)?
+    Ok(TxParam { name: n.text, kind: "word", text: phrase, tok: n })
+}
+
+/// A call of a fragment from the pieces of its lines.
+fn call_read(segs []TxSeg, line int) -> Result[TxCall, TranslateError] {
+    mut p = lex_segs(segs)?
+    ro head = p_tok(p)
+    if head.kind != TK_NAME { return Err(p_fail(p, "ожидается имя фрагмента")) }
+    p_adv(p)
+    p_expect(p, "(")?
+    mut params = []TxParam.new()
+    while !p_is(p, ")") {
+        params.push(param_value(p)?)
+        if p_eat(p, ",") { continue }
+        break
+    }
+    p_expect(p, ")")?
+    p_end(p)?
+    Ok(TxCall { name: head.text, line, tok: head, params })
+}
+
+fn call_param(call TxCall, name str) -> Option[TxParam] {
+    for q in call.params {
+        if q.name == name { return Some(q) }
+    }
+    None
+}
+
+/// The calls of fragments in the section `## Подключения`; the other lines (the files of definitions) are for `defs_includes`.
+fn calls_read(entries []TxEntry, sec TxSection, mut cx TxCx) -> []TxCall {
+    mut out = []TxCall.new()
+    mut i = sec.first
+    while i < sec.last {
+        ro e = entries[i]
+        if e.kind == EN_TEXT && e.indent == 0 && kv_colon(e) < 0 {
+            mut segs = [TxSeg { text: e.text, line: e.line, col: e.indent + 1 }]
+            mut k = i + 1
+            while k < sec.last && entries[k].kind == EN_TEXT && entries[k].indent > 0 {
+                segs.push(TxSeg { text: entries[k].text, line: entries[k].line, col: entries[k].indent + 1 })
+                k += 1
+            }
+            match call_read(segs, e.line) {
+                Ok(call) => out.push(call)
+                Err(err) => note(cx, err)
+            }
+            i = k
+        } else {
+            i += 1
+        }
+    }
+    out
+}
+
+fn behavior_words_cancel() -> []str => ["механика", "без_возврата_в_к_отправке", "прекратить_ход_транспорта"]
+
+fn behavior_words_reenter() -> []str => ["ничего", "запросы_из_к_отправке"]
+
+/// The call of the fragment `Пауза` checked against the parameters of section 9: all six named, the kinds and the values fit. Returns the text of the fragment
+/// with the parameters put in, or None when the call is wrong (the errors are noted).
+fn fragment_text(call TxCall, mut cx TxCx) -> Option[str] {
+    mut source = ""
+    for f in fragment_files() {
+        if f.name == call.name { source = f.text }
+    }
+    if source == "" {
+        note(cx, tx_err(call.tok.line, call.tok.col, "name", "фрагмента `${call.name}` нет в реестре подключаемых файлов (есть: Пауза)"))
+        return None
+    }
+    mut ok = true
+    for name in pause_params() {
+        match call_param(call, name) {
+            Some(q) => ()
+            None => {
+                note(cx, tx_err(call.tok.line, call.tok.col, "structure", "в подключении `${call.name}` не назван параметр `${name}`"))
+                ok = false
+            }
+        }
+    }
+    for q in call.params {
+        if !pause_params().contains(q.name) {
+            note(cx, tx_err(q.tok.line, q.tok.col, "structure", "у фрагмента `${call.name}` нет параметра `${q.name}`"))
+            ok = false
+        }
+    }
+    if !ok { return None }
+    mut text = source
+    for q in call.params {
+        if q.name == "слово_остановки" {
+            if q.kind != "word" { note(cx, tx_err(q.tok.line, q.tok.col, "structure", "`слово_остановки` — слово ворот, без кавычек")) }
+            text = text.replace("<слово_остановки>", q.text)
+        } else if q.name == "код_остановки" {
+            if q.kind != "string" { note(cx, tx_err(q.tok.line, q.tok.col, "structure", "`код_остановки` — текст в кавычках")) }
+            text = text.replace("<код_остановки>", tx_quote(q.text))
+        } else if q.name == "вложенные" {
+            if q.kind != "list" {
+                note(cx, tx_err(q.tok.line, q.tok.col, "structure", "`вложенные` — список машин в скобках `[]`"))
+            } else if q.text == "" {
+                cx.env.empty_lists.push("вложенные")
+            } else {
+                cx_unsupported(cx, q.tok, "вложенные машины в подключении фрагмента (`вложенные: [${q.text}]`)")
+                cx.env.empty_lists.push("вложенные")
+            }
+        } else if q.name == "отмена_запросов" {
+            if !behavior_words_cancel().contains(q.text) {
+                note(cx, tx_err(q.tok.line, q.tok.col, "structure", "`отмена_запросов`: ${behavior_words_cancel().join(", ")}"))
+            }
+        } else if q.name == "вход_заново" {
+            if !behavior_words_reenter().contains(q.text) {
+                note(cx, tx_err(q.tok.line, q.tok.col, "structure", "`вход_заново`: ${behavior_words_reenter().join(", ")}"))
+            } else if q.text == "запросы_из_к_отправке" {
+                cx_unsupported(cx, q.tok, "`вход_заново: запросы_из_к_отправке` (после повторного входа в обращение набора уходят запросы из `к_отправке`)")
+            }
+        } else if q.name == "право_записи" {
+            if q.kind != "string" { note(cx, tx_err(q.tok.line, q.tok.col, "structure", "`право_записи` — примечание в кавычках")) }
+        }
+    }
+    Some(text)
+}
+
+// ---- the signals of the protocol -----------------------------------------------------------------------------------------------------------
+
+/// TxProto: a signal of the call protocol that the fragment reads: the Russian words, the Latin name, the fields (Russian word, Latin name, type).
+type TxProto { ru str, en str, fields []TxPair }
+
+fn protocol_signals() -> []TxProto => [
+    TxProto { ru: "стоп человека", en: "human_stop", fields: [TxPair { ru: "слово_человека", en: "human_word" }, TxPair { ru: "автор", en: "author" }, TxPair { ru: "источник", en: "source" }] },
+    TxProto { ru: "стоп от родителя", en: "parent_stop", fields: [TxPair { ru: "идентификатор_запроса", en: "request_id" }] },
+    TxProto { ru: "отмена_запроса", en: "cancel_request", fields: [TxPair { ru: "идентификатор_запроса", en: "request_id" }] },
+    TxProto { ru: "продолжить от родителя", en: "parent_continue", fields: [TxPair { ru: "идентификатор_запроса", en: "request_id" }] },
+    TxProto { ru: "остановить от родителя", en: "parent_halt", fields: [TxPair { ru: "идентификатор_запроса", en: "request_id" }] }
+]
+
+/// The signals of the protocol put into the environment; returns their JSON (the fields are texts).
+fn protocol_signals_json(mut cx TxCx) -> []TxJ {
+    mut out = []TxJ.new()
+    for s in protocol_signals() {
+        pair_add(cx.env.signals, s.ru, s.en)
+        mut fields = []TxJ.new()
+        for f in s.fields { fields.push(jobj([kv("name", js(f.en)), kv("type", js("text"))])) }
+        out.push(jobj([kv("name", js(s.en)), kv("fields", TxArr(fields))]))
+    }
+    out
+}

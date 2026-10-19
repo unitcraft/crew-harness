@@ -1,0 +1,56 @@
+// machine_translate.nv - the command of the translator of tables (task 108): a file of a machine in Russian (format 2.5) -> the JSON `machine/2`.
+//   machine-translate <file.table.md>             the JSON on the standard output, exit code 0; the errors, all of them, on the standard error, exit code 1
+//   machine-translate <file.table.md> --lenient   the JSON of what could be translated even when there are errors (they are still printed)
+//   machine-translate <file.table.md> --summary   the summary of the machine (states, rows, actions) instead of the JSON
+//   machine-translate <file.table.md> --no-check  without the checks of the table (`check_machine`) against the registry of the primitives of the host
+// The errors are `file:line:column: kind: message` and the quoted line; the checks put their issues at the line of the row they come from.
+// Build: nova build src/machine_translate.nv -o target/machine-translate.exe
+module crew_harness.machine_translate
+
+import std.fs.{Fs, Path, read}
+import std.os.{args, exit_process}
+import std.io.{stderr}
+import std.text
+import crew_harness.machine.{standard_registry}
+import crew_harness.machine_text.{translate_report, translate_checked, error_text, render_summary}
+
+fn usage() Io -> () {
+    println("machine-translate <file.table.md> [--lenient | --summary | --no-check]")
+}
+
+fn main() Os Fs Io -> () {
+    ro argv = args()
+    if argv.len() < 2 {
+        usage()
+        exit_process(2)
+    }
+    ro file = argv[1]
+    ro flag = if argv.len() > 2 { argv[2] } else { "" }
+    ro bytes = match read(Path.from_bytes(file.bytes())) {
+        Ok(b) => b
+        Err(e) => {
+            mut err = stderr()
+            ro written = err.write("machine-translate: cannot read ${file}\n".bytes())
+            exit_process(2)
+            return
+        }
+    }
+    ro text = bytes.to_str_lossy()
+    ro report = if flag == "--no-check" { translate_report(text) } else { translate_checked(text, standard_registry()) }
+    mut err = stderr()
+    for e in report.errors {
+        ro written = err.write("${error_text(e, file)}\n".bytes())
+    }
+    if flag == "--summary" {
+        println(render_summary(report.json))
+        exit_process(if report.errors.len() == 0 { 0 } else { 1 })
+        return
+    }
+    if report.errors.len() > 0 && flag != "--lenient" {
+        ro written = err.write("machine-translate: ${report.errors.len()} errors in ${file} (${report.rows_noted} of ${report.rows_total} rows with notes)\n".bytes())
+        exit_process(1)
+        return
+    }
+    println(report.json)
+    exit_process(if report.errors.len() == 0 { 0 } else { 1 })
+}
