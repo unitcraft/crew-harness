@@ -26,6 +26,7 @@ fn dialog_def() -> MachineDef {
     }
 }
 
+// ORACLE-WORKAROUND(47): the table of the project is built by a function, not by a literal inside the `match` that loads the machine (a record literal in the scrutinee is a syntax error); write it in place when item 47 is fixed
 fn term_value(ms int) -> []ProjectValue => [ProjectValue { key: "проект.срок_бездействия", value: Int(ms) }]
 
 fn dialog_with(ms int) -> PortolanMachine {

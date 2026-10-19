@@ -369,3 +369,23 @@ Also met in task 113, without a reproduction: (a) `nova test` kills a unit after
 (b) on Windows `Output.write` of a program turns every `\n` into `\r\n` when the output goes into a pipe or a file, so the function `render` returns LF and the tests compare LF, and the command writes what it gets; (c) `str.find` and slicing work in bytes, so `"| — |"` is seven bytes, not five; (d) a string has no `+` (`"${a}${b}"`).
 
 The places in the code that go round an item carry the mark `// ORACLE-WORKAROUND(N): what is gone round; how to simplify when item N is fixed`; `git grep ORACLE-WORKAROUND` finds them.
+
+Found by task 114 (the session server runs on Portolan, `src/server/`, `src/machine_dialog*`); the reproductions are in `repro_server/src/` (item 48, `nova update` first) and `repro_engine/src/` (items 45 and 47), run the same way.
+Every place of the product that goes round one of these items carries the comment `// ORACLE-WORKAROUND(N): ...` (`git grep ORACLE-WORKAROUND` lists them; the comment says how to simplify the code when the item is fixed):
+
+48. **`user_type_vs_driver_variant`**: a user record `Row` (the row of a table of states of the machines that are data, `src/machine_table`) in the same program as the driver nova-postgres, whose protocol enum has the variant
+    `Message.Row { values }`, stops the driver's own file `session.nv` (`E_MISSING_FIELD_IN_LITERAL`: the literal `Row { values }` is read as the user's record). A variant name and a type name share one table (the family of items 29, 30, 37).
+    The record is `TableRow` now; the hub is the first program that links the driver and the machines that are data.
+49. **`fn_name_two_modules`**: a PRIVATE generic function `begin[T]` of one module and a function `begin(n int)` of another module of the same program: the call of the second is resolved to the first - "cannot infer
+    type argument `T` ... (returned only - turbofish required)". Names of functions are global to the program even when private (the family of items 9, 14, 21, 39, 43). The hub's `begin_engine` is `begin_session_engine` now
+    (the interpreter of scenarios `src/machine_run` has a private generic `begin_engine`).
+50. **test helper `ev` next to the function `ev`** (no small reproduction; the reproduction is the unit): the test file `src/machine/eval_test.nv` had a helper `ev(e)` and the module has a private `ev(e, env, host, depth)` in
+    `eval.nv`. The unit of the module itself passes; the unit `src/server`, which imports `crew_harness.machine` (through `portolan.nv`), stopped in C: "conflicting types for `nova_fn_12crew_harness7machine2ev`" (the mangled
+    name has no parameters, and the test file of the imported module was compiled into the importer's unit). A small program with the same two functions and an importer PASSES (tried), so the trigger is something more in the graph.
+    The helper is `ev_plain` now; to see the defect, rename it back and run `nova test src/server`.
+51. **`match_record_literal_arg`**: a record literal inside a list literal (or directly) in the argument of the call that is the scrutinee of a `match` is a syntax error ("expected `,` or `]` in array literal, got `{`"): the parser takes
+    the `{` for the block of the `match` (the note (e) of task 110 had the direct form). Bind the value with `ro` (or a function) before the `match`.
+
+Also met in task 114, without a reproduction: (a) a unit that makes a machine that is data for every test (`load_portolan_machine_with`: a 4 KB machine and the translation of a table of names) and runs 36 scenarios on two machines is about 42 s; a unit with the
+translation of the table (`translate_checked`) and the 37 scenarios is about 45 s: both under the limit of about 100 s, in two units (`src/machine_dialog`, `src/machine_dialog_eq`); (b) the failures of a unit are listed up to 4096 bytes: of 21 tests that went red by one
+change of the JSON only 4 were named (see the log of the task).

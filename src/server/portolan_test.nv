@@ -132,6 +132,7 @@ test "hm the snapshot is the state of the Portolan machine" {
 test "hm a snapshot of the machine on Nova is not a state of the hub machine" {
     // sessions of the old form are not migrated (there are none in a product base): the hub says it cannot resume them
     ro m = hm_made(30000)
+    // ORACLE-WORKAROUND(36): two states are encoded one by one, not in `for state in [a(), b()]` (an array literal of calls in a `for` does not compile); loop when item 36 is fixed
     ro idle_text = encode_chat_state(dialog_session(30000).initial())
     assert(m.decode_state(idle_text) == None)
     ro waiting_text = encode_chat_state(user_says_state())

@@ -30,6 +30,7 @@ import std.os.{Os, real_os, cwd}
 /// Outgoing: a text for the page `conn`; conn 0 - for every page that is attached.
 export type Outgoing { conn int, text str }
 
+// ORACLE-WORKAROUND(29): the record is `Dialog`, not `Session` (the driver has a `Session`); name it `Session` when item 29 is fixed
 type Dialog {
     id str,
     name str,
@@ -101,6 +102,7 @@ fn array_text(lines []str) -> str => "[${joined(lines, ",")}]"
 
 // ----- the store, by the settings: the same engine over files or over PostgreSQL -----
 
+// ORACLE-WORKAROUND(45, 26): `begin_engine` of the interpreter (private, generic) captured the name, so this is `begin_session_engine`; the type arguments of `start_engine` are written out (items 12, 13, 26 - the same in `resume_stored` and `decode_snapshot` below); rename it and drop the arguments when items 45 and 12-13 are fixed
 fn begin_session_engine(pg bool, root str, mut world PgWorld, machine PortolanMachine, id str) Time -> Engine[PortolanMachine, PortolanState] {
     if pg {
         with Journal = pg_journal(world), Store = pg_store(world) {
@@ -113,6 +115,7 @@ fn begin_session_engine(pg bool, root str, mut world PgWorld, machine PortolanMa
     }
 }
 
+// ORACLE-WORKAROUND(26): the type arguments of `decode_snapshot` and `resume_engine` are written out; infer them when items 12 and 13 are fixed
 fn resume_stored(pg bool, root str, mut world PgWorld, machine PortolanMachine, id str) Time -> Option[Engine[PortolanMachine, PortolanState]] {
     if pg {
         with Journal = pg_journal(world), Store = pg_store(world) {

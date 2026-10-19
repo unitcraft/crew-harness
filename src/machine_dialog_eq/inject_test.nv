@@ -9,6 +9,7 @@ import crew_harness.engine.{Machine, Engine, MemoryWorld, Incoming, JournalEntry
 import crew_harness.chat.{ChatState, ChatSession, dialog_session, user_says, user_cancels, agent_chunk, agent_done}
 import crew_harness.machine_run.{PortolanState, PortolanMachine, ProjectValue, load_portolan_machine_with}
 
+// ORACLE-WORKAROUND(47): the table of the project is built by a function, not by a literal inside the `match` that loads the machine; write it in place when item 47 is fixed
 fn ij_values() -> []ProjectValue => [ProjectValue { key: "проект.срок_бездействия", value: Int(30000) }]
 
 fn ij_table() -> PortolanMachine {
@@ -20,6 +21,7 @@ fn ij_table() -> PortolanMachine {
 
 fn ij_nova() -> ChatSession => dialog_session(30000)
 
+// ORACLE-WORKAROUND(12, 13, 26): the helpers are generic over the machine and every call writes the type arguments out (`ij_feed[S, M](...)`); infer them when items 12 and 13 are fixed
 fn ij_begin[S, M Machine[S]](machine M, mut world MemoryWorld) -> Engine[M, S] {
     with Journal = memory_journal(world), Store = memory_store(world), Link = memory_link(world), Time = memory_time(world) {
         start_engine[S, M](machine, "dlg-1")

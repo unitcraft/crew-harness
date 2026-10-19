@@ -18,6 +18,7 @@ fn eints(items []int) -> Value {
     List(out)
 }
 
+// ORACLE-WORKAROUND(46): named `ev_plain` because `ev` clashed with the private `ev` of eval.nv in the unit of an importer; name it `ev` when item 46 is fixed
 fn ev_plain(e Expr) -> Result[Value, EvalError] => eval(e, empty_scope())
 
 fn eis(e Expr, expected Value) -> bool {

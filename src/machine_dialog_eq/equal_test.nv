@@ -14,6 +14,7 @@ import crew_harness.machine_table.{fail_code_names}
 
 const TERM = 30000
 
+// ORACLE-WORKAROUND(47): the table of the project is built by a function, not by a literal inside the `match` that loads the machine; write it in place when item 47 is fixed
 fn term_values() -> []ProjectValue => [ProjectValue { key: "проект.срок_бездействия", value: Int(TERM) }]
 
 fn table_dialog() -> PortolanMachine {
@@ -192,6 +193,7 @@ fn events_of(sc Scenario) -> []Incoming {
     out
 }
 
+// ORACLE-WORKAROUND(12, 13, 26): `drive_scenario[ChatState, ChatSession](...)` and `drive_scenario[PortolanState, PortolanMachine](...)` write the type arguments out here and in the tests below; infer them when items 12 and 13 are fixed
 fn first_run_diff(table PortolanMachine, sc Scenario) -> str {
     ro nova = drive_scenario[ChatState, ChatSession](nova_dialog(), sc)
     ro tab = drive_scenario[PortolanState, PortolanMachine](table, sc)

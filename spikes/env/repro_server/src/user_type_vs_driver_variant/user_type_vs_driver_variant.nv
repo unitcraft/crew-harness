@@ -1,0 +1,18 @@
+module repro_server.user_type_vs_driver_variant
+
+// Oracle 0.1.0 (task 114): a user record `Row` (the row of a table of states of the machines that are data) and the driver nova-postgres, which has the variant
+// `Message.Row { values }` of its protocol, in the SAME program: the driver's own file `session.nv` builds `Row { values }` and the compiler reads it as the user's record:
+//   error: [E_MISSING_FIELD_IN_LITERAL] record literal `Row{ ... }` does not initialise fields: n, event, ...
+// in the driver's file. A variant name and a type name share one table (the family of items 29, 30, 37 of the README). The hub, which links the driver and the machines
+// that are data, calls the record `TableRow`.
+// Setup: `nova update` once, then `nova test src/user_type_vs_driver_variant`. Expected: PASS. Actual: CODEGEN-FAIL in the driver's file.
+
+import postgres.{ParamValue}
+
+export type Row { n int, name str }
+
+test "a user record Row next to the driver" {
+    ro r = Row { n: 1, name: "a" }
+    ro p = ParamValue.text(r.name)
+    assert(r.n == 1)
+}
