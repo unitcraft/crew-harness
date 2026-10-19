@@ -92,7 +92,7 @@ test "pc help of unknown command" {
 
 test "pc usage errors share one form" {
     // every wrong use is code 2 and a line `portolan <command>: <reason>` on the standard error
-    // ORACLE-WORKAROUND(48): the list of lists is bound first: `for argv in [["compile"], ...]` does not compile; loop over the list literal when item 48 is fixed
+    // ORACLE-WORKAROUND(52): the list of lists is bound first: `for argv in [["compile"], ...]` does not compile; loop over the list literal when item 48 is fixed
     ro wrong_uses = [["compile"], ["render"], ["convert"], ["check"], ["summary"], ["run"], ["test"], ["run", "a"]]
     for argv in wrong_uses {
         ro ran = run0(argv)

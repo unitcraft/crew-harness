@@ -105,4 +105,4 @@ nova test src/portolan_scenarios --timeout 600      # 16 tests: `test` passes th
 ## What goes round the compiler
 
 The places in the code that go round a defect of Oracle 0.1.0 carry the mark `// ORACLE-WORKAROUND(N)` (`git grep ORACLE-WORKAROUND`; the items are in `spikes/env/README.md`): the type `CmdResult` is not called
-`Outcome` (item 9), the list of lists of the test of the usage errors is bound before the loop (item 48), the first file of a unit imports `std.fs` first (item 32), and the function of the folder scan is not called `collect_names` (item 49).
+`Outcome` (item 9), the list of lists of the test of the usage errors is bound before the loop (item 52), the first file of a unit imports `std.fs` first (item 32), and the function of the folder scan is not called `collect_names` (item 53).
