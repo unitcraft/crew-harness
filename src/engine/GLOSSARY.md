@@ -14,10 +14,10 @@
 
 | Термин | Идентификатор | Где |
 |---|---|---|
-| Запрос (конверт обращения) | `Request[T]` | Спец. 15; движок, «Типы» (`Запрос`) |
+| Запрос (конверт обращения) | `PartyRequest[T]` | Спец. 15; движок, «Типы» (`Запрос`) |
 | Ответ с результатом | `Reply[R]` | там же (`ОтветСРезультатом`) |
 | Ответ с отказом | `Rejection` | там же (`ОтветОтказ`) |
-| Ответ: результат или отказ | `Response[R]` (`Answer`, `Refusal`) | там же (`Исход`). `Outcome[T]` занят прелюдией Нова, свой тип с этим именем ломает C (spikes/env, `repro_engine`, п. 9), поэтому — `Response`, как в блоке «Типы на Нове» методики |
+| Ответ: результат или отказ | `PartyResponse[R]` (`Answer`, `Refusal`) | там же (`Исход`). `Outcome[T]` занят прелюдией Нова, свой тип с этим именем ломает C (spikes/env, `repro_engine`, п. 9), поэтому — `Response`, как в блоке «Типы на Нове» методики |
 | Код сбоя | `FailCode` | Спец. 16; движок, «Типы» (`КодСбоя`); те же десять кодов |
 | Конверт события (приходящее) | `Incoming` | движок, «Типы» (`Входящее[Событие]`); словарь, п. 10: в 091 назывался `Event`. В продукте поля `kind`, `name`, `input`, `trace`, `step`, `at` вместо `party` и `body` (событие машины кодируется парой `name` + `input`) |
 | Событие машины | `ChatEvent` (у машины чата) | словарь: `Event` модуля машины; у демонстрационной машины приставка `Chat` |
@@ -68,10 +68,10 @@
 | идентификатор события `<вид>-<номер>` | `Incoming.id` | Спец. 31 |
 | имя состояния в строке журнала | `JournalEntry.state` | Спец. 31 |
 | событие строки журнала | `JournalEntry.event` (`code`, `params`) | журнал, раздел 1 |
-| идентификатор запроса `<сторона>-<попытка>` | `Request.id` | Спец. 15 |
-| номер попытки | `Request.attempt` | Спец. 15 |
+| идентификатор запроса `<сторона>-<попытка>` | `PartyRequest.id` | Спец. 15 |
+| номер попытки | `PartyRequest.attempt` | Спец. 15 |
 | сторона | `party` | Спец. 15 (`сторона`) |
-| вход запроса | `Request.input` | Спец. 15 |
+| вход запроса | `PartyRequest.input` | Спец. 15 |
 | срок бездействия | `idle_term`, `Waiting.term` | Спец. 15, 16 |
 | момент начала ожидания | `Waiting.sent` | движок, «Типы» (`Ожидание`) |
 | открытые запросы | `EngineState.open_requests` | Спец. 14, 16 |
@@ -130,3 +130,5 @@
 | шаг для движка (протокол `Machine[ChatState]`) | `ChatSession.step(state, incoming, mut environment)` | |
 | граница снимка | `ChatSession.encode_state`, `decode_state` (`encode_chat_state`, `decode_chat_state`) | |
 | события журнала машины | `user_message` (`text`), `cancelled_before_request`, `agent_chunk` (`text`), `agent_done`, `agent_refused` (`code`), `cancelled_while_waiting`, `no_answer_in_time`, `event_ignored` (`event`, `state`), `event_unknown` (`name`) | |
+
+В задании 099 (сервер сессий) типы `Request[T]` и `Response[R]` движка переименованы в `PartyRequest[T]` и `PartyResponse[R]`: в одной программе с Polaris пакет `http` приносит свои `Request` и `Response`, а таблица имён типов в Oracle 0.1.0 одна на всю программу, зависимости включены (`spikes/env/repro_server/`, `user_request_vs_http`). Слова методики остаются прежними. Событие `event_accepted` журнала получило параметр `input` (вход события), `Engine` — методы `take_events` и `history`.

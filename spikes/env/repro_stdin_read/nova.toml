@@ -1,0 +1,3 @@
+[package]
+name = "repro_stdin_read"
+version = "0.1.0"

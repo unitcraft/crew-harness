@@ -36,10 +36,16 @@ export type ChatEvent enum
     | Timeout
 
 /// ChatSession: the machine. `party` is the id of the agent as a party of requests, `idle_term` the idle term in ms.
-export type ChatSession { party str, idle_term int }
+/// `multi` - the session is open for many turns: the end of a turn (answer, refusal, timeout, cancel) brings it back to Idle
+/// instead of ending it; the single-turn session (`multi` false) ends with the first answer or refusal (tasks 091, 095).
+export type ChatSession { party str, idle_term int, multi bool }
 
 /// The session with the default agent party and the idle term of 30 seconds.
-export fn chat_session() -> ChatSession => { party: "agent", idle_term: 30000 }
+export fn chat_session() -> ChatSession => { party: "agent", idle_term: 30000, multi: false }
+
+/// The many-turn session (task 099): after an answer, a refusal, a timeout or a cancel of the turn it stays open and takes the
+/// next message. `idle_term` is the idle term of a turn in milliseconds.
+export fn dialog_session(idle_term int) -> ChatSession => { party: "agent", idle_term, multi: true }
 
 // ----- the text form of the state (the border of the snapshot) -----
 
@@ -166,6 +172,42 @@ fn finish_refusal(code FailCode, text str, mut environment Environment) -> () {
     environment.order_finish(Conclusion { failure: Some(code), text })
 }
 
+// The many-turn session while a request is open: the chunks collect, every end of the turn brings the session back to Idle.
+fn dialog_awaiting(session ChatSession, state ChatState, event ChatEvent, mut environment Environment) -> Transition[ChatState] {
+    match state {
+        Awaiting { user, reply } => match event {
+            AgentChunk(text) => {
+                environment.write_journal(journal_event("agent_chunk", [param("text", text)]))
+                environment.order_save()
+                Go(Awaiting { user, reply: "${reply}${text}" })
+            }
+            AgentDone => {
+                environment.write_journal(journal_event("agent_done", []JournalParam.new()))
+                environment.order_save()
+                Go(Idle)
+            }
+            AgentRefused(code) => {
+                environment.write_journal(journal_event("agent_refused", [param("code", fail_code_word(code))]))
+                environment.order_save()
+                Go(Idle)
+            }
+            Cancel => {
+                environment.write_journal(journal_event("cancelled_while_waiting", []JournalParam.new()))
+                environment.order_cancel(CancelOrder { party: session.party })
+                environment.order_save()
+                Go(Idle)
+            }
+            Timeout => {
+                environment.write_journal(journal_event("no_answer_in_time", []JournalParam.new()))
+                environment.order_save()
+                Go(Idle)
+            }
+            _ => ignored(state, event, environment)
+        }
+        _ => ignored(state, event, environment)
+    }
+}
+
 /// The typed core of the machine: the transition and the orders for a state and an event. Nothing but its arguments is read.
 export fn chat_step(session ChatSession, state ChatState, event ChatEvent, mut environment Environment) -> Transition[ChatState] {
     match state {
@@ -176,7 +218,7 @@ export fn chat_step(session ChatSession, state ChatState, event ChatEvent, mut e
                 environment.order_save()
                 Go(Awaiting { user: text, reply: "" })
             }
-            Cancel => {
+            Cancel => if session.multi { ignored(state, event, environment) } else {
                 environment.write_journal(journal_event("cancelled_before_request", []JournalParam.new()))
                 finish_refusal(FailCode.StoppedByHuman, "cancelled by the user", environment)
                 environment.order_save()
@@ -184,7 +226,7 @@ export fn chat_step(session ChatSession, state ChatState, event ChatEvent, mut e
             }
             _ => ignored(state, event, environment)
         }
-        Awaiting { user, reply } => match event {
+        Awaiting { user, reply } => if session.multi { dialog_awaiting(session, state, event, environment) } else { match event {
             AgentChunk(text) => {
                 environment.write_journal(journal_event("agent_chunk", [param("text", text)]))
                 environment.order_save()
@@ -216,7 +258,7 @@ export fn chat_step(session ChatSession, state ChatState, event ChatEvent, mut e
                 Go(Failed { code: FailCode.Timeout })
             }
             _ => ignored(state, event, environment)
-        }
+        } }
         Done { reply } => ignored(state, event, environment)
         Failed { code } => ignored(state, event, environment)
     }

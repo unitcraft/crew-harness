@@ -1,0 +1,140 @@
+// stdio.nv - the hub as a program: the lines of its stdin are what the pages and the front say, the lines of its stdout are
+// what the hub says to the pages (task 099).
+//
+// Why a program of its own and not a part of the HTTP server: the PostgreSQL driver and Polaris cannot be in one program on
+// Oracle 0.1.0 (a variant `Message` of the driver and the type `Message` of Polaris share one table, see
+// spikes/env/repro_pg_polaris), so the front (HTTP and WebSocket, Polaris) and the hub (engines, agents, the store) are two
+// programs that talk by lines over pipes; the front starts the hub.
+//
+// The lines, one per line, fields separated by a tab (a JSON text has no raw line break or tab):
+//   to the hub:    open <conn> | close <conn> | msg <conn> <page message> | quit
+//   from the hub:  ready | <conn> <message for the page>      (conn 0: for every page)
+// stderr carries the log. The hub ends when it reads `quit` or when its stdin is closed.
+//
+// Oracle 0.1.0: `Stdin.read` waits until the whole buffer is full (or the end of the stream), so a line that is shorter than the
+// buffer would never arrive; the buffer is ONE byte (spikes/env/repro_stdin_read). Reading parks only the fiber that reads.
+module crew_harness.server
+
+import crew_harness.acp.{LineSplitter}
+import std.concurrency.nvchan.{Chan, ChanTx, ChanRx}
+import std.io.{stdin, stdout, stderr, Stdin, IoError}
+
+// The read of stdin waits in C (`fread`) and, if it were made by a fiber, would keep the worker thread of that fiber and starve the
+// fibers queued on it until a byte comes (spikes/env/repro_stdin_read); `#blocking` sends the call to the thread pool.
+#blocking
+fn read_blocking(mut input Stdin, mut buf []u8) Io -> Result[int, IoError] => input.read(buf)
+
+fn read_stdin(tx ChanTx[str]) Io -> () {
+    mut buf []u8 = []u8.new()
+    buf.resize(1, 0 as u8)
+    mut splitter = LineSplitter.new()
+    mut input = stdin()
+    mut reading = true
+    while reading {
+        match read_blocking(input, buf) {
+            Ok(0) => { reading = false }
+            Ok(n) => {
+                for line in splitter.feed(buf[..n]) {
+                    ro sent = tx.send(line)
+                }
+            }
+            Err(e) => { reading = false }
+        }
+    }
+    match splitter.flush() {
+        Some(rest) => {
+            ro sent = tx.send(rest)
+        }
+        None => ()
+    }
+    ro bye = tx.send("quit")
+}
+
+fn to_log(text str) Io -> () {
+    mut err = stderr()
+    ro written = err.write("${text}\n".bytes())
+}
+
+fn to_front(line str) Io -> () {
+    mut out = stdout()
+    ro written = out.write("${line}\n".bytes())
+}
+
+fn conn_of(text str) -> int {
+    match text.to_int() {
+        Ok(n) => n
+        Err(e) => 0
+    }
+}
+
+// One command of the front; false - the hub must end.
+fn apply_command(mut hub Hub, line str) Proc Detach Time -> bool {
+    if line == "quit" { return false }
+    ro first = match line.find("\t") {
+        Some(at) => at
+        None => return true
+    }
+    ro verb = line[..first]
+    ro rest = line[first + 1..]
+    if verb == "open" {
+        hub.attach(conn_of(rest))
+    } else if verb == "close" {
+        hub.release(conn_of(rest))
+    } else if verb == "msg" {
+        match rest.find("\t") {
+            Some(second) => hub.handle(conn_of(rest[..second]), rest[second + 1..])
+            None => ()
+        }
+    }
+    true
+}
+
+// The hub being run: the hub of a result cannot be bound as mutable, a field of a mutable record can be changed.
+type Running { hub Hub }
+
+/// Run the hub over stdin and stdout until `quit` or the end of stdin. 0 - ended well, 1 - it could not start.
+export fn run_hub_stdio(settings ServerSettings) Proc Detach Time Net Fs Os Io -> int {
+    match start_hub(settings) {
+        Err(reason) => {
+            to_log("the hub cannot start: ${reason}")
+            1
+        }
+        Ok(started) => {
+            mut running_hub = Running { hub: started }
+            ro commands = Chan[str].new(4096)
+            detach { read_stdin(commands.tx) }
+            for line in running_hub.hub.take_log() { to_log(line) }
+            to_front("ready")
+            mut running = true
+            while running {
+                mut busy = false
+                mut more = true
+                while more {
+                    match commands.rx.try_recv() {
+                        Some(line) => {
+                            busy = true
+                            if !apply_command(running_hub.hub, line) {
+                                running = false
+                                more = false
+                            }
+                        }
+                        None => { more = false }
+                    }
+                }
+                if running {
+                    ro made = running_hub.hub.pump()
+                    if made > 0 { busy = true }
+                }
+                for o in running_hub.hub.take_output() {
+                    to_front("${o.conn}\t${o.text}")
+                    busy = true
+                }
+                for line in running_hub.hub.take_log() { to_log(line) }
+                if !busy { 8.to_millis().sleep() }
+            }
+            running_hub.hub.close()
+            to_log("the hub ended")
+            0
+        }
+    }
+}

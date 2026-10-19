@@ -1,0 +1,601 @@
+// testkit.nv - support of the tests of the session server (here, in src/server_live and in src/server_pg): the settings of a hub
+// that talks to the fake ACP agent (src/acp/testdata/fake_agent.mjs, Node 22 or newer), a rig that drives a hub as a page does,
+// and the scenarios of the task. A scenario returns "" when everything was as it must be, else the list of what was not.
+//
+// It is ordinary code of the module and not a `_test.nv` file because two test units use it (the same scenarios run over the
+// files and over PostgreSQL: the results must be the same); nothing in the product calls it. The tests look for the root of the
+// repository upward from the working directory (the nearest folder with `nova.toml`).
+module crew_harness.server
+
+import crew_harness.pgdb.{PgConfig}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+import std.fs.{Fs, real_fs, Path, try_exists, remove_dir_all}
+import std.os.{Os, real_os, cwd, temp_dir, pid}
+
+// ----- the settings of a test -----
+
+fn kit_repo_root() -> Path {
+    mut dir = with Os = real_os() {
+        match cwd() {
+            Ok(p) => p
+            Err(e) => panic("no working directory")
+        }
+    }
+    mut hops = 0
+    while hops < 12 {
+        ro marker = dir.join("nova.toml")
+        ro found = with Fs = real_fs() {
+            match try_exists(marker) {
+                Ok(b) => b
+                Err(e) => false
+            }
+        }
+        if found { return dir }
+        match dir.parent() {
+            Some(par) => { dir = par }
+            None => break
+        }
+        hops += 1
+    }
+    panic("nova.toml was not found above the working directory")
+}
+
+fn kit_agent(id str, extra str) -> AgentSpec {
+    ro script = kit_repo_root().join("src").join("acp").join("testdata").join("fake_agent.mjs").display()
+    AgentSpec { id, label: "Fake", program: "node", args: [script, "--live", extra] }
+}
+
+fn kit_data_dir(name str) -> str {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-server-test-${id}-${name}")
+    with Fs = real_fs() {
+        ro removed = remove_dir_all(dir)
+    }
+    dir.display()
+}
+
+fn kit_settings(store str, name str, idle_ms int, pg PgConfig) -> ServerSettings {
+    mut agents = []AgentSpec.new()
+    agents.push(kit_agent("opencode", "--ok"))
+    agents.push(kit_agent("broken", "--auth-error"))
+    ServerSettings {
+        port: 8099, data_dir: kit_data_dir(name), store, pg, agents, idle_term_ms: idle_ms,
+        workdir: kit_repo_root().display(), web_dir: "src/web", hub_program: "", hub_args: []str.new()
+    }
+}
+
+fn kit_no_pg() -> PgConfig => { host: "127.0.0.1", port: 5432, database: "crew", user: "crew_app", password: "" }
+
+/// The settings of a hub over files in a folder of its own, with the fake agent and the idle term of a turn.
+export fn kit_files(name str, idle_ms int) -> ServerSettings => kit_settings("files", name, idle_ms, kit_no_pg())
+
+/// The settings of a hub over PostgreSQL (the connection of the test database), the inbox files in a folder of its own.
+export fn kit_pg(name str, idle_ms int, pg PgConfig) -> ServerSettings => kit_settings("pg", name, idle_ms, pg)
+
+// ----- lines of the page -----
+
+fn kit_object(line str) -> Option[JsonObject] {
+    match Json.parse(line) {
+        Ok(v) => v.object()
+        Err(e) => None
+    }
+}
+
+/// A string field of the line of the page ("" when there is none).
+export fn line_field(line str, key str) -> str {
+    match kit_object(line) {
+        Some(o) => match o.get(key) {
+            Some(v) => v.str() ?? ""
+            None => ""
+        }
+        None => ""
+    }
+}
+
+/// A string field of the `input` of the line ("" when there is none).
+export fn line_input(line str, key str) -> str {
+    match kit_object(line) {
+        Some(o) => match o.get("input") {
+            Some(i) => match i.object() {
+                Some(io) => match io.get(key) {
+                    Some(v) => v.str() ?? ""
+                    None => ""
+                }
+                None => ""
+            }
+            None => ""
+        }
+        None => ""
+    }
+}
+
+/// The step of the line, -1 when there is none.
+export fn line_step(line str) -> int {
+    match kit_object(line) {
+        Some(o) => match o.get("step") {
+            Some(v) => v.int() ?? -1
+            None => -1
+        }
+        None => -1
+    }
+}
+
+/// The kinds of the lines, in order.
+export fn kinds_of(lines []str) -> []str {
+    mut out = []str.new()
+    for line in lines { out.push(line_field(line, "kind")) }
+    out
+}
+
+/// The text of the chunks of the answer of one turn, in the order of their steps.
+export fn answer_of(lines []str, turn str) -> str {
+    mut parts = []str.new()
+    mut steps = []int.new()
+    for line in lines {
+        if line_field(line, "kind") == "agent_chunk" && line_input(line, "turn") == turn {
+            ro step = line_step(line)
+            mut at = steps.len()
+            while at > 0 && step < steps[at - 1] { at -= 1 }
+            steps.insert(at, step)
+            parts.insert(at, line_input(line, "text"))
+        }
+    }
+    joined(parts, "")
+}
+
+/// The first line of this kind after `from`, "" when there is none.
+export fn first_of(lines []str, kind str, from int) -> str {
+    mut at = 0
+    for line in lines {
+        if at >= from && line_field(line, "kind") == kind { return line }
+        at += 1
+    }
+    ""
+}
+
+// The lines of a message of the hub: an array is taken apart; every line is written again by the JSON writer, so that the same
+// line is the same text however it came.
+fn kit_flatten(text str) -> []str {
+    mut out = []str.new()
+    match Json.parse(text) {
+        Ok(v) => match v.array() {
+            Some(items) => {
+                for item in items { out.push(item.to_str()) }
+            }
+            None => out.push(v.to_str())
+        }
+        Err(e) => out.push(text)
+    }
+    out
+}
+
+fn kit_page_text(kind str, trace str, input str) -> str {
+    ro body = match Json.parse(input) {
+        Ok(v) => v
+        Err(e) => panic("the input of a test message is not JSON: ${input}")
+    }
+    mut o = JsonObject.new()
+    ro r1 = o.insert("id", JsonValue.str("page-${kind}-${trace}"))
+    ro r2 = o.insert("trace", JsonValue.str(trace))
+    ro r3 = o.insert("step", JsonValue.int(0))
+    ro r4 = o.insert("kind", JsonValue.str(kind))
+    ro r5 = o.insert("input", body)
+    ro r6 = o.insert("time", JsonValue.int(0))
+    JsonValue.object(o).to_str()
+}
+
+// ----- the rig: a hub driven as a page does -----
+
+/// Heard: a message of the hub and the pages it reached (those attached at that moment).
+export type Heard { conn int, text str, to []int }
+
+/// Rig: a hub and everything it said; `mark` is the place in `heard` after which `until` looks.
+export type Rig { hub Hub, heard []Heard, mark int }
+
+/// Start a hub over the settings; a hub that cannot start stops the test.
+export fn rig_open(settings ServerSettings) Proc Detach Time Net Fs Os -> Rig {
+    match start_hub(settings) {
+        Ok(hub) => Rig { hub, heard: []Heard.new(), mark: 0 }
+        Err(e) => panic("the hub cannot start: ${e}")
+    }
+}
+
+fn Rig mut @collect() -> () {
+    for o in @hub.take_output() {
+        @heard.push(Heard { conn: o.conn, text: o.text, to: if o.conn == 0 { @hub.attached() } else { [o.conn] } })
+    }
+}
+
+/// A page sends an event of this kind about this session; `input` is the JSON text of its input.
+export fn Rig mut @page(conn int, kind str, trace str, input str) Proc Detach Time -> () {
+    @hub.handle(conn, kit_page_text(kind, trace, input))
+    @collect()
+}
+
+/// A page is attached.
+export fn Rig mut @attach(conn int) -> () {
+    @hub.attach(conn)
+    @collect()
+}
+
+/// Forget what was heard so far: `until` looks only at what comes after this.
+export fn Rig mut @forget() -> () {
+    @mark = @heard.len()
+}
+
+/// Pump for `ms` milliseconds.
+export fn Rig mut @run(ms int) Proc Detach Time -> () {
+    ro deadline = Time.now().unix_millis() + ms
+    while Time.now().unix_millis() < deadline {
+        ro made = @hub.pump()
+        @collect()
+        10.to_millis().sleep()
+    }
+}
+
+/// Pump until a message that came after the last success holds the text, at most `limit_ms`. True - it did; the next call looks after that message.
+export fn Rig mut @until(needle str, limit_ms int) Proc Detach Time -> bool {
+    ro deadline = Time.now().unix_millis() + limit_ms
+    while Time.now().unix_millis() < deadline {
+        ro made = @hub.pump()
+        @collect()
+        mut at = @mark
+        while at < @heard.len() {
+            if @heard[at].text.contains(needle) {
+                @mark = at + 1
+                return true
+            }
+            at += 1
+        }
+        10.to_millis().sleep()
+    }
+    false
+}
+
+/// The lines of the page one page has been told, in order (a message with an array is taken apart).
+export fn Rig @lines_for(conn int) -> []str {
+    mut out = []str.new()
+    for h in @heard {
+        if h.to.contains(conn) {
+            for line in kit_flatten(h.text) { out.push(line) }
+        }
+    }
+    out
+}
+
+/// Close the hub: the processes of the agents are killed.
+export fn Rig mut @shut() Time -> () {
+    @hub.close()
+}
+
+// ----- the checks of a scenario -----
+
+/// Check: what a scenario found wrong.
+export type Check { failures []str }
+
+fn Check mut @expect(ok bool, what str) -> () {
+    if !ok { @failures.push(what) }
+}
+
+fn Check @report() -> str => kit_text_with(@failures, "; ")
+
+fn kit_text(lines []str) -> str => joined(lines, "\n")
+
+fn kit_text_with(lines []str, sep str) -> str => joined(lines, sep)
+
+// Where two lists of lines differ: "" when they do not, else the first place and the two lines.
+fn kit_diff(a []str, b []str) -> str {
+    mut at = 0
+    while at < a.len() && at < b.len() {
+        if a[at] != b[at] { return "line ${at}: ${a[at]} <> ${b[at]}" }
+        at += 1
+    }
+    if a.len() != b.len() { return "${a.len()} lines <> ${b.len()} lines" }
+    ""
+}
+
+fn kit_check() -> Check => { failures: []str.new() }
+
+fn kit_unique(lines []str) -> bool {
+    mut seen = []str.new()
+    for line in lines {
+        ro id = line_field(line, "id")
+        if seen.contains(id) { return false }
+        seen.push(id)
+    }
+    true
+}
+
+fn kit_increasing(lines []str) -> bool {
+    mut last = -1
+    for line in lines {
+        ro step = line_step(line)
+        if step <= last { return false }
+        last = step
+    }
+    true
+}
+
+fn kit_with(lines []str, needle str) -> int {
+    mut n = 0
+    for line in lines {
+        if line.contains(needle) { n += 1 }
+    }
+    n
+}
+
+const KIT_DONE = "\"kind\":\"agent_done\""
+
+// ----- the scenarios -----
+
+/// Create a session, talk in it twice: the chunks, the turns, the ids and the steps of the lines.
+export fn scenario_chat(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-chat", "{\"name\":\"Проба\",\"agent\":\"opencode\"}")
+    c.expect(rig.until("\"kind\":\"session_created\"", 3000), "the session is shown")
+    rig.page(1, "user_message", "s-chat", "{\"turn\":\"page-turn\",\"text\":\"привет мир\"}")
+    c.expect(rig.until(KIT_DONE, 15000), "the first turn ends")
+    rig.page(1, "user_message", "s-chat", "{\"turn\":\"page-turn-2\",\"text\":\"второй ход\"}")
+    c.expect(rig.until(KIT_DONE, 15000), "the second turn ends")
+    ro lines = rig.lines_for(1)
+    ro kinds = kinds_of(lines)
+    c.expect(kinds.len() > 0 && kinds[0] == "session_created", "the first line is the session")
+    c.expect(kit_with(lines, "\"kind\":\"user_message\"") == 2, "two messages of the owner")
+    c.expect(kit_with(lines, KIT_DONE) == 2, "two ends of a turn")
+    c.expect(kit_unique(lines), "the ids are unique")
+    c.expect(kit_increasing(lines), "the steps grow")
+    ro first = first_of(lines, "user_message", 0)
+    ro turn1 = line_input(first, "turn")
+    ro second = first_of(lines, "user_message", 3)
+    ro turn2 = line_input(second, "turn")
+    c.expect(turn1.byte_len() > 0 && turn2.byte_len() > 0 && turn1 != turn2, "the turns differ")
+    c.expect(answer_of(lines, turn1) == "Echo: привет мир", "the answer of the first turn: ${answer_of(lines, turn1)}")
+    c.expect(answer_of(lines, turn2) == "Echo: второй ход", "the answer of the second turn: ${answer_of(lines, turn2)}")
+    c.expect(line_field(lines[0], "trace") == "s-chat", "the trace is the session")
+    c.expect(line_input(lines[0], "name") == "Проба", "the name of the session")
+    c.expect(rig.hub.state_of("s-chat") == "Idle", "the session is open for the next message")
+    rig.shut()
+    c.report()
+}
+
+/// The agent asks for permission: the owner allows one request and denies the next.
+export fn scenario_permission(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-perm", "{\"name\":\"Разрешения\",\"agent\":\"opencode\"}")
+    rig.page(1, "user_message", "s-perm", "{\"turn\":\"t1\",\"text\":\"permission go\"}")
+    c.expect(rig.until("\"kind\":\"permission_request\"", 15000), "the request for permission is shown")
+    ro asked = first_of(rig.lines_for(1), "permission_request", 0)
+    ro request = line_input(asked, "request")
+    c.expect(request.byte_len() > 0, "the request has a key")
+    c.expect(line_input(asked, "action") == "edit", "the action of the request")
+    c.expect(rig.hub.state_of("s-perm") == "Awaiting", "the turn waits for the owner")
+    rig.page(1, "permission_decision", "s-perm", "{\"request\":\"${request}\",\"decision\":\"allow\"}")
+    c.expect(rig.until(KIT_DONE, 15000), "the turn ends after the decision")
+    ro lines = rig.lines_for(1)
+    c.expect(kit_with(lines, "permission: selected:allow-once") == 1, "the agent was told: allow")
+    c.expect(kit_with(lines, "\"kind\":\"permission_decision\"") == 1, "the decision is shown")
+    c.expect(kit_with(lines, "\"kind\":\"tool_call\"") >= 1, "the tool call is shown")
+    // the second request is denied
+    rig.page(1, "user_message", "s-perm", "{\"turn\":\"t2\",\"text\":\"permission again\"}")
+    c.expect(rig.until("\"kind\":\"permission_request\"", 15000), "the second request is shown")
+    ro asked2 = first_of(rig.lines_for(1), "permission_request", 0)
+    ro all = rig.lines_for(1)
+    mut second_request = ""
+    mut seen = 0
+    for line in all {
+        if line_field(line, "kind") == "permission_request" {
+            seen += 1
+            if seen == 2 { second_request = line_input(line, "request") }
+        }
+    }
+    c.expect(second_request.byte_len() > 0 && second_request != request, "the second request has a key of its own")
+    rig.page(1, "permission_decision", "s-perm", "{\"request\":\"${second_request}\",\"decision\":\"deny\"}")
+    c.expect(rig.until(KIT_DONE, 15000), "the second turn ends")
+    c.expect(kit_with(rig.lines_for(1), "permission: selected:reject-once") == 1, "the agent was told: deny")
+    // a decision nobody asked for changes nothing
+    ro before = rig.lines_for(1).len()
+    rig.page(1, "permission_decision", "s-perm", "{\"request\":\"999\",\"decision\":\"allow\"}")
+    rig.run(150)
+    c.expect(rig.lines_for(1).len() == before, "a decision nobody asked for is not shown")
+    rig.shut()
+    c.report()
+}
+
+/// The owner cancels a turn: the session stays open, the late words of the agent are not shown, the next turn works.
+export fn scenario_cancel(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-cancel", "{\"name\":\"Отмена\",\"agent\":\"opencode\"}")
+    rig.page(1, "user_message", "s-cancel", "{\"turn\":\"t1\",\"text\":\"slow go\"}")
+    c.expect(rig.until("\"text\":\"started\"", 15000), "the turn has begun")
+    c.expect(rig.hub.state_of("s-cancel") == "Awaiting", "the turn is open")
+    rig.page(1, "cancel", "s-cancel", "{}")
+    c.expect(rig.until("\"kind\":\"cancel\"", 5000), "the cancel is shown")
+    c.expect(rig.hub.state_of("s-cancel") == "Idle", "the session is open after the cancel")
+    // the agent answers the cancelled turn late: a chunk and the stop reason; neither is shown
+    rig.run(600)
+    c.expect(kit_with(rig.lines_for(1), "late chunk") == 0, "the late chunk is not shown")
+    c.expect(kit_with(rig.lines_for(1), "\"kind\":\"agent_refused\"") == 0, "the late stop reason is not shown")
+    rig.page(1, "user_message", "s-cancel", "{\"turn\":\"t2\",\"text\":\"after cancel\"}")
+    c.expect(rig.until(KIT_DONE, 15000), "the next turn ends")
+    c.expect(answer_of(rig.lines_for(1), line_input(first_of(rig.lines_for(1), "user_message", 4), "turn")) == "Echo: after cancel", "the next turn is answered")
+    c.expect(rig.hub.state_of("s-cancel") == "Idle", "the session is open")
+    rig.shut()
+    c.report()
+}
+
+/// The service restarts between two turns: the session, its lines and its next turn.
+export fn scenario_restart_idle(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-rest", "{\"name\":\"Перезапуск\",\"agent\":\"opencode\"}")
+    rig.page(1, "user_message", "s-rest", "{\"turn\":\"t1\",\"text\":\"before restart\"}")
+    c.expect(rig.until(KIT_DONE, 15000), "the first turn ends")
+    ro before = rig.hub.page_lines("s-rest")
+    rig.shut()
+
+    mut again = rig_open(settings)
+    c.expect(again.hub.session_ids().len() == 1 && again.hub.session_ids()[0] == "s-rest", "the session is found")
+    ro after = again.hub.page_lines("s-rest")
+    c.expect(kit_text(after) == kit_text(before), "the lines of the page are the same after the restart")
+    c.expect(again.hub.state_of("s-rest") == "Idle", "the session is idle")
+    c.expect(!again.hub.has_agent("s-rest"), "no agent is started for an idle session")
+    again.attach(7)
+    c.expect(again.lines_for(7).len() == before.len(), "a page that comes after the restart is told everything")
+    again.forget()
+    again.page(7, "user_message", "s-rest", "{\"turn\":\"t2\",\"text\":\"after restart\"}")
+    c.expect(again.until(KIT_DONE, 15000), "the turn after the restart ends")
+    ro lines = again.lines_for(7)
+    ro turn = line_input(first_of(lines, "user_message", before.len()), "turn")
+    c.expect(answer_of(lines, turn) == "Echo: after restart", "the turn after the restart is answered: ${answer_of(lines, turn)} (turn ${turn}, ${lines.len()} lines)")
+    c.expect(kit_unique(lines) && kit_increasing(lines), "the ids are unique and the steps grow across the restart")
+    again.shut()
+    c.report()
+}
+
+/// The service restarts while a turn is open: the request ends with Timeout, the session goes on.
+export fn scenario_restart_open(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-open", "{\"name\":\"Открытый запрос\",\"agent\":\"opencode\"}")
+    rig.page(1, "user_message", "s-open", "{\"turn\":\"t1\",\"text\":\"silent go\"}")
+    rig.run(300)
+    c.expect(rig.hub.state_of("s-open") == "Awaiting", "the turn is open")
+    rig.shut()
+
+    mut again = rig_open(settings)
+    c.expect(again.hub.state_of("s-open") == "Awaiting", "the request is still open after the restart")
+    c.expect(again.hub.has_agent("s-open"), "an agent is started for the open request")
+    again.attach(3)
+    c.expect(again.until("\"reason\":\"Timeout\"", 15000), "the request ends with Timeout")
+    c.expect(again.hub.state_of("s-open") == "Idle", "the session is open after the timeout")
+    again.page(3, "user_message", "s-open", "{\"turn\":\"t2\",\"text\":\"still here\"}")
+    c.expect(again.until(KIT_DONE, 15000), "the next turn ends")
+    ro lines = again.lines_for(3)
+    c.expect(kit_with(lines, "\"kind\":\"agent_refused\"") == 1, "one refusal")
+    c.expect(answer_of(lines, line_input(first_of(lines, "user_message", 2), "turn")) == "Echo: still here", "the next turn is answered")
+    again.shut()
+    c.report()
+}
+
+/// The agent dies in the middle of a turn: the refusal ConnectionLost, and the next message gets a new agent.
+export fn scenario_crash(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-crash", "{\"name\":\"Падение\",\"agent\":\"opencode\"}")
+    rig.page(1, "user_message", "s-crash", "{\"turn\":\"t1\",\"text\":\"crash go\"}")
+    c.expect(rig.until("\"reason\":\"ConnectionLost\"", 15000), "the refusal ConnectionLost is shown")
+    c.expect(kit_with(rig.lines_for(1), "about to crash") == 1, "the word before the crash is shown")
+    c.expect(rig.hub.state_of("s-crash") == "Idle", "the session is open after the crash")
+    rig.page(1, "user_message", "s-crash", "{\"turn\":\"t2\",\"text\":\"after crash\"}")
+    c.expect(rig.until(KIT_DONE, 15000), "the next turn ends with a new agent")
+    ro lines = rig.lines_for(1)
+    c.expect(answer_of(lines, line_input(first_of(lines, "user_message", 3), "turn")) == "Echo: after crash", "the next turn is answered")
+    rig.shut()
+    c.report()
+}
+
+/// Two pages on one session see the same lines; a page that comes later is told the whole story.
+export fn scenario_two_pages(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.attach(2)
+    rig.page(1, "session_created", "s-two", "{\"name\":\"Двое\",\"agent\":\"opencode\"}")
+    rig.page(2, "user_message", "s-two", "{\"turn\":\"t1\",\"text\":\"from the second page\"}")
+    c.expect(rig.until(KIT_DONE, 15000), "the turn ends")
+    rig.attach(3)
+    rig.forget()
+    ro a = rig.lines_for(1)
+    ro b = rig.lines_for(2)
+    ro late = rig.lines_for(3)
+    c.expect(a.len() > 3, "the first page was told")
+    c.expect(kit_text(a) == kit_text(b), "both pages see the same lines")
+    c.expect(kit_diff(late, a) == "", "the page that came later is told the same story: ${kit_diff(late, a)}")
+    rig.page(1, "user_message", "s-two", "{\"turn\":\"t2\",\"text\":\"from the first page\"}")
+    c.expect(rig.until(KIT_DONE, 15000), "the second turn ends")
+    c.expect(kit_diff(rig.lines_for(2), rig.lines_for(3)) == "", "the second and the third page see the same lines: ${kit_diff(rig.lines_for(2), rig.lines_for(3))}")
+    rig.hub.release(2)
+    rig.page(1, "user_message", "s-two", "{\"turn\":\"t3\",\"text\":\"alone\"}")
+    c.expect(rig.until(KIT_DONE, 15000), "the third turn ends")
+    c.expect(rig.lines_for(2).len() < rig.lines_for(1).len(), "a page that went is told nothing more")
+    rig.shut()
+    c.report()
+}
+
+/// What cannot be done is told to the page as an error and nothing is kept.
+export fn scenario_rejects(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-bad", "{\"name\":\"Чужой\",\"agent\":\"nobody\"}")
+    ro lines = rig.lines_for(1)
+    c.expect(lines.len() == 2 && line_field(lines[0], "kind") == "session_created" && line_field(lines[1], "kind") == "error", "an unknown agent is an error")
+    c.expect(line_input(lines[1], "message").contains("nobody"), "the error names the agent")
+    c.expect(rig.hub.session_ids().len() == 0, "nothing is kept")
+    rig.page(1, "session_created", "bad/name", "{\"name\":\"x\",\"agent\":\"opencode\"}")
+    c.expect(rig.lines_for(1).len() == 4, "a name that is not safe is an error too")
+    c.expect(rig.hub.session_ids().len() == 0, "nothing is kept for it either")
+    rig.page(1, "user_message", "nowhere", "{\"turn\":\"t\",\"text\":\"hello\"}")
+    rig.page(1, "cancel", "nowhere", "{}")
+    c.expect(rig.lines_for(1).len() == 4, "a message to an unknown session is not answered")
+    c.expect(rig.hub.take_log().len() > 0, "but it is logged")
+    rig.shut()
+    c.report()
+}
+
+/// Several sessions side by side: independent, found again in order after a restart.
+export fn scenario_many(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-b", "{\"name\":\"Вторая\",\"agent\":\"opencode\"}")
+    rig.page(1, "session_created", "s-a", "{\"name\":\"Первая\",\"agent\":\"opencode\"}")
+    rig.page(1, "user_message", "s-a", "{\"turn\":\"t1\",\"text\":\"alpha\"}")
+    rig.page(1, "user_message", "s-b", "{\"turn\":\"t1\",\"text\":\"beta\"}")
+    c.expect(rig.until(KIT_DONE, 15000), "one turn ends")
+    c.expect(rig.until(KIT_DONE, 15000), "the other ends")
+    ro a = rig.hub.page_lines("s-a")
+    ro b = rig.hub.page_lines("s-b")
+    c.expect(answer_of(a, line_input(first_of(a, "user_message", 0), "turn")) == "Echo: alpha", "the first session has its own answer")
+    c.expect(answer_of(b, line_input(first_of(b, "user_message", 0), "turn")) == "Echo: beta", "the second session has its own answer")
+    c.expect(kit_unique(rig.lines_for(1)), "the ids of different sessions do not meet")
+    rig.shut()
+
+    mut again = rig_open(settings)
+    ro ids = again.hub.session_ids()
+    c.expect(ids.len() == 2 && ids[0] == "s-a" && ids[1] == "s-b", "both sessions are found, in order of their names")
+    c.expect(kit_text(again.hub.page_lines("s-a")) == kit_text(a), "the first session is the same")
+    c.expect(kit_text(again.hub.page_lines("s-b")) == kit_text(b), "the second session is the same")
+    again.attach(5)
+    c.expect(again.lines_for(5).len() == a.len() + b.len(), "a page is told both sessions")
+    again.shut()
+    c.report()
+}
+
+/// An agent that refuses the handshake: the session exists, the page is told, and a message gets a refusal.
+export fn scenario_broken_agent(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-broken", "{\"name\":\"Сломанный\",\"agent\":\"broken\"}")
+    c.expect(rig.until("\"kind\":\"session_created\"", 3000), "the session is shown")
+    c.expect(rig.until("refused to start", 10000), "the page is told that the agent refused to start")
+    ro told = first_of(rig.lines_for(1), "error", 0)
+    c.expect(line_input(told, "message").contains("Authentication required"), "the reason is told: ${line_input(told, "message")}")
+    c.expect(rig.hub.session_ids().len() == 1, "the session is kept")
+    rig.page(1, "user_message", "s-broken", "{\"turn\":\"t\",\"text\":\"hello\"}")
+    c.expect(rig.until("\"kind\":\"agent_refused\"", 10000), "a message gets a refusal")
+    c.expect(rig.hub.state_of("s-broken") == "Idle", "the session stays open")
+    rig.shut()
+    c.report()
+}

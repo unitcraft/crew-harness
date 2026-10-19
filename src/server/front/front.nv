@@ -1,0 +1,324 @@
+// front.nv - the front of the session server on Polaris (task 099): the files of the page, `/ws`, and the hub as a child process.
+//
+// The hub (engines, agents, the store) is a program of its own, `crew-hub` (src/crew_hub.nv), because the PostgreSQL driver and
+// Polaris cannot be in one program on Oracle 0.1.0 (spikes/env/repro_pg_polaris). The front starts it with pipes and passes
+// the page through, line by line (the lines are described in src/server/stdio.nv):
+//   page --WebSocket--> conn fiber --"msg <conn> <text>"--> stdin of the hub
+//   page <--WebSocket-- conn writer <--channel-- router fiber <--"<conn> <text>"-- stdout of the hub
+// A WebSocket is read in one fiber and written in another, over two owners of the socket (`TcpStream.share`): the
+// `WebSocket` type of Polaris is one value for both and cannot be shared by a fiber that waits for a frame and a fiber that
+// has something to say. The framing is the codec of Polaris (`polaris.ws.Frame`); the handshake is its own too (`accept_response`),
+// only the live socket is taken by `ServerResponse.upgrade` before Polaris wraps it.
+//
+// One fiber, the router, owns the list of the pages (a page = a number, its peer port, and the channel to its writer); the conn
+// fibers register with it through a channel. Nothing is shared.
+module server.front
+
+import crew_harness.acp.{AgentLink, connect}
+import polaris.{Router, ServerRequest, ServerResponse, WebSocketUpgrade, StatusCode, HttpError}
+import polaris.static.{Static, serve_path}
+import polaris.ws.{Frame, OpCode, frame_len_hint}
+import polaris.net.{ServerPolicy}
+import polaris.serve.{serve_addr}
+import std.concurrency.nvchan.{Chan, ChanTx, ChanRx}
+import std.fs.{DirFs, Path}
+import std.io.{stderr}
+import std.net.{TcpStream, real_net}
+import std.os.{exit_process}
+
+// What the router tells a writer: 1 - a text, 2 - a pong, 3 - close.
+type WsOut { kind int, text str }
+
+// A page that comes to the router (or goes: `gone`): its number and the channel to its writer.
+type Reg { id int, out ChanTx[WsOut], gone bool }
+
+type Peer { id int, out ChanTx[WsOut] }
+
+fn ws_out(kind int, text str) -> WsOut => { kind, text }
+
+fn log_line(text str) Io -> () {
+    mut err = stderr()
+    ro written = err.write("${text}\n".bytes())
+}
+
+// ----- the pages: one fiber reads, one writes -----
+
+// Write the whole of `data`; false - the socket does not take it.
+fn write_whole(mut wr TcpStream, data []u8) Net -> bool {
+    match wr.write_all(data) {
+        Ok(done) => true
+        Err(e) => false
+    }
+}
+
+fn frame_bytes(op OpCode, payload []u8) -> []u8 => Frame.new(true, op, payload).encode(false)
+
+fn write_pump(consume wr TcpStream, source ChanRx[WsOut]) Net -> () {
+    mut writing = true
+    while writing {
+        match source.recv() {
+            Some(item) => {
+                if item.kind == 1 {
+                    if !write_whole(wr, frame_bytes(OpCode.Text, item.text.bytes())) { writing = false }
+                } else if item.kind == 2 {
+                    if !write_whole(wr, frame_bytes(OpCode.Pong, []u8.new())) { writing = false }
+                } else {
+                    ro sent = write_whole(wr, frame_bytes(OpCode.Close, []u8.new()))
+                    writing = false
+                }
+            }
+            None => { writing = false }
+        }
+    }
+    wr.close()
+}
+
+// A text of the page goes to the hub as one line; a text with a line break cannot (it is not what the page sends).
+fn pass_on(id int, bytes []u8, hub_tx ChanTx[str]) -> () {
+    match bytes.to_str() {
+        Ok(text) => {
+            if !text.contains("\n") && !text.contains("\r") {
+                ro sent = hub_tx.send("msg\t${id}\t${text}")
+            }
+        }
+        Err(e) => ()
+    }
+}
+
+fn read_pump(consume rd TcpStream, id int, hub_tx ChanTx[str], out ChanTx[WsOut]) Net -> () {
+    mut buf []u8 = []u8.new()
+    mut chunk []u8 = []u8.new()
+    chunk.resize(65536, 0 as u8)
+    mut message []u8 = []u8.new()
+    mut is_text = false
+    mut running = true
+    while running {
+        if frame_len_hint(buf).is_some() {
+            match rd.read(chunk) {
+                Ok(0) => {
+                    running = false
+                }
+                Ok(n) => { buf.append(chunk[..n]) }
+                Err(e) => {
+                    running = false
+                }
+            }
+            if buf.len() > 16777216 { running = false }
+        } else {
+            match Frame.decode(buf) {
+                Err(e) => {
+                    running = false
+                }
+                Ok((frame, used)) => {
+                    ro rest []u8 = buf[used..buf.len()]
+                    buf = rest
+                    match frame.opcode() {
+                        OpCode.Ping => { ro sent = out.send(ws_out(2, "")) }
+                        OpCode.Pong => ()
+                        OpCode.Close => {
+                            ro sent = out.send(ws_out(3, ""))
+                            running = false
+                        }
+                        OpCode.Text => {
+                            message = frame.payload()
+                            is_text = true
+                            if frame.fin() {
+                                pass_on(id, message, hub_tx)
+                                message = []u8.new()
+                            }
+                        }
+                        OpCode.Binary => {
+                            message = []u8.new()
+                            is_text = false
+                        }
+                        OpCode.Continuation => {
+                            message.append(frame.payload())
+                            if frame.fin() {
+                                if is_text { pass_on(id, message, hub_tx) }
+                                message = []u8.new()
+                            }
+                            if message.len() > 16777216 { running = false }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    rd.close()
+}
+
+fn serve_page(stream TcpStream, hub_tx ChanTx[str], reg_tx ChanTx[Reg]) Net -> () {
+    consume conn = stream
+    ro id = conn.peer_port()
+    // the stream of the hook has a copy held by the server loop, so it cannot be split into halves: the writer gets a second
+    // owner of the same socket (`share`), the socket is closed by the last one (Oracle 0.1.0 / Polaris 0.2.4, repro_ws_split)
+    consume wr = conn.share()
+    ro outbound = Chan[WsOut].new(4096)
+    ro registered = reg_tx.send(Reg { id, out: outbound.tx, gone: false })
+    ro opened = hub_tx.send("open\t${id}")
+    supervised {
+        spawn consume wr { write_pump(wr, outbound.rx) }
+        read_pump(conn, id, hub_tx, outbound.tx)
+        // the page is gone: the writer ends when its channel is closed
+        outbound.tx.close()
+    }
+    ro left = reg_tx.send(Reg { id, out: outbound.tx, gone: true })
+    ro closed = hub_tx.send("close\t${id}")
+}
+
+// ----- the router fiber: the lines of the hub to the pages -----
+
+fn peer_of(id int, out ChanTx[WsOut]) -> Peer => { id, out }
+
+// Tell a page; false - it cannot be told now (its channel is closed or full): it is skipped, it is dropped when it says it is gone.
+fn tell(p Peer, text str) -> bool => p.out.try_send(ws_out(1, text))
+
+fn route_line(peers []Peer, line str) Io -> () {
+    ro at = match line.find("	") {
+        Some(a) => a
+        None => return
+    }
+    ro head = line[..at]
+    ro text = line[at + 1..]
+    ro conn = match head.to_int() {
+        Ok(n) => n
+        Err(e) => return
+    }
+    for p in peers {
+        if conn == 0 || conn == p.id {
+            if !tell(p, text) { log_line("page ${p.id} cannot be told now") }
+        }
+    }
+}
+
+fn route_loop(link AgentLink, reg_rx ChanRx[Reg]) Io Time Os -> () {
+    mut peers = []Peer.new()
+    mut running = true
+    while running {
+        mut busy = false
+        mut more = true
+        while more {
+            match reg_rx.try_recv() {
+                Some(r) => {
+                    busy = true
+                    mut kept = []Peer.new()
+                    for p in peers {
+                        // a page that comes with the number of a page that went takes the old one out; a page that says it is gone takes out itself
+                        // (the number is the peer port of the socket: a port is not used again while the old socket is still closing)
+                        if p.id != r.id { kept.push(p) }
+                    }
+                    if !r.gone { kept.push(peer_of(r.id, r.out)) }
+                    peers = kept
+                }
+                None => { more = false }
+            }
+        }
+        more = true
+        while more {
+            match link.inb.try_recv() {
+                Some(item) => {
+                    busy = true
+                    if item.kind == "line" {
+                        if item.text != "ready" { route_line(peers, item.text) }
+                    } else if item.kind == "stderr" {
+                        log_line("hub: ${item.text}")
+                    } else if item.kind == "exit" {
+                        log_line("the hub ended (code ${item.code}): the server ends")
+                        exit_process(1)
+                    }
+                }
+                None => { more = false }
+            }
+        }
+        if !busy { 3.to_millis().sleep() }
+    }
+}
+
+// ----- HTTP -----
+
+const CSP = "default-src 'self'; connect-src 'self' ws://localhost:* ws://127.0.0.1:*"
+
+fn with_headers(mut resp ServerResponse) -> ServerResponse {
+    resp.header("Content-Security-Policy", CSP)
+    resp.header("Cache-Control", "no-store")
+    resp
+}
+
+// A browser lets ANY page open a WebSocket to 127.0.0.1; the sessions are the owner's, with an agent that works on his files, so a request
+// whose `Origin` is not this server is refused (a client that is not a browser, as the tests, sends no `Origin`).
+fn origin_allowed(req ServerRequest, port int) -> bool {
+    match req.header("Origin") {
+        None => true
+        Some(origin) => origin == "http://127.0.0.1:${port}" || origin == "http://localhost:${port}"
+    }
+}
+
+fn ws_route(hub_tx ChanTx[str], reg_tx ChanTx[Reg], port int) -> fn(ServerRequest) -> ServerResponse {
+    fn(req ServerRequest) -> ServerResponse {
+        if !origin_allowed(req, port) {
+            return ServerResponse.text(403, "origin not allowed")
+        }
+        match WebSocketUpgrade.from_request(req) {
+            Ok(up) => {
+                mut resp = up.accept_response(None)
+                resp.upgrade(fn(stream TcpStream) Net -> () {
+                    with Net = real_net() { serve_page(stream, hub_tx, reg_tx) }
+                })
+                resp
+            }
+            Err(e) => e.into_response()
+        }
+    }
+}
+
+fn files_route(web_dir str) -> fn(ServerRequest) -> ServerResponse {
+    ro files = DirFs.new(Path.from_bytes(web_dir.bytes()))
+    fn(req ServerRequest) -> ServerResponse {
+        ro wanted = req.param("path") ?? ""
+        mut resp = serve_path(files, Static.new(), wanted, req)
+        with_headers(resp)
+    }
+}
+
+fn build_router(web_dir str, port int, hub_tx ChanTx[str], reg_tx ChanTx[Reg]) -> Result[Router, HttpError] {
+    mut router = Router.new()
+    ro r1 = router.get("/", files_route(web_dir))?
+    ro r2 = router.get("/health", fn(req ServerRequest) -> ServerResponse => ServerResponse.text(StatusCode.OK, "ok"))?
+    ro r3 = router.get("/ws", ws_route(hub_tx, reg_tx, port))?
+    ro r4 = router.get("/{*path}", files_route(web_dir))?
+    Ok(router)
+}
+
+/// Start the hub, then serve the page and `/ws` on 127.0.0.1 at the port of the settings; returns only if the server ends.
+/// `config_file` is passed to the hub as its settings file ("" - it reads the environment alone).
+export fn run_front(settings FrontSettings, config_file str) Proc Net Time Detach Io Os -> () {
+    mut hub_args = []str.new()
+    for a in settings.hub_args { hub_args.push(a) }
+    if config_file.byte_len() > 0 { hub_args.push(config_file) }
+    match connect(settings.hub_program, hub_args, "") {
+        Err(reason) => {
+            log_line("the hub cannot be started: ${reason}")
+            exit_process(2)
+        }
+        Ok(link) => {
+            ro registrations = Chan[Reg].new(256)
+            detach { route_loop(link, registrations.rx) }
+            match build_router(settings.web_dir, settings.port, link.out, registrations.tx) {
+                Err(e) => {
+                    log_line("the routes cannot be set: ${e}")
+                    exit_process(2)
+                }
+                Ok(router) => {
+                    log_line("listening on http://127.0.0.1:${settings.port}/ - Ctrl+C to stop (hub: ${settings.hub_program}, page: ${settings.web_dir})")
+                    match serve_addr("127.0.0.1:${settings.port}", router, ServerPolicy.new()) {
+                        Ok(done) => ()
+                        Err(e) => {
+                            log_line("the server cannot listen on port ${settings.port}: ${e}")
+                            exit_process(2)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

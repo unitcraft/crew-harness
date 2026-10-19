@@ -1,7 +1,7 @@
 // types.nv - the types of the state machine engine (subset of the methodology for the MVP).
 //
 // Source: state-machine-engine-automaton.md, "Types" (Request, Response, FailCode, Incoming, Transition,
-// Waiting, JournalEntry, JournalEvent) and state-machine-spec.md rules 15, 16, 31, translated to English names;
+// Waiting, JournalEntry, JournalEvent; here PartyRequest and PartyResponse, see README.md) and state-machine-spec.md rules 15, 16, 31, translated to English names;
 // the journal is the event with a code and parameters of state-machine-journal.md (version 6 of the dictionary).
 // The dictionary "term -> identifier -> where in the methodology" is GLOSSARY.md beside this file; the table of the
 // differences from the methodology is `doc/tasks/102-align-glossary/mapping.md`.
@@ -28,9 +28,9 @@ export type FailCode enum
     | MaxTokens
     | MaxTurnRequests
 
-/// Request: the envelope of a request to a party (spec rule 15). `id` is the party, "-" and the
+/// PartyRequest: the envelope of a request to a party (spec rule 15). `id` is the party, "-" and the
 /// attempt number (`agent-1`); the engine fills the envelope, a machine only orders a request.
-export type Request[T] { id str, attempt int, party str, input T, idle_term int, trace str, step int }
+export type PartyRequest[T] { id str, attempt int, party str, input T, idle_term int, trace str, step int }
 
 /// Reply: the answer with a result; it returns the same request id, party, trace and step.
 export type Reply[R] { request str, party str, result R, trace str, step int }
@@ -38,8 +38,8 @@ export type Reply[R] { request str, party str, result R, trace str, step int }
 /// Rejection: the answer with a refusal and a reason from the closed list.
 export type Rejection { request str, party str, reason FailCode, text str, trace str, step int }
 
-/// Response: a result or a refusal. Exactly one of the two closes a request (spec rule 16).
-export type Response[R] enum
+/// PartyResponse: a result or a refusal. Exactly one of the two closes a request (spec rule 16).
+export type PartyResponse[R] enum
     | Answer(Reply[R])
     | Refusal(Rejection)
 
@@ -172,6 +172,16 @@ export fn FailCode.parse(text str) -> Option[FailCode] {
 export fn FailCode.of(text str) -> FailCode => match FailCode.parse(text) {
     Some(code) => code
     None => NoResult
+}
+
+/// The kind of an event by its name (`EventKind.name`); a name nobody knows is `None`.
+export fn EventKind.parse(text str) -> Option[EventKind] {
+    if text == "input" { return Some(EventKind.Input) }
+    if text == "progress" { return Some(EventKind.Progress) }
+    if text == "answered" { return Some(EventKind.Answered) }
+    if text == "refused" { return Some(EventKind.Refused) }
+    if text == "expired" { return Some(EventKind.Expired) }
+    None
 }
 
 /// Name of an event kind for the journal.

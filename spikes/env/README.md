@@ -16,6 +16,9 @@ task 090 (`doc/tasks/090-product-env-spike/`).
 | `repro_acp/` | minimal reproductions of Oracle 0.1.0 defects found while writing the ACP client (task 095) | see "Known problems", items 14-18 and 20 |
 | `repro_child_pipes/` | a program: pipes of a child process that now and then do not come back (task 095) | see "Known problems", item 19 |
 | `repro_pg_event/` | a user record `Event` next to the driver `postgres.pgnet` (task 098, item 22); needs `nova update` (the driver comes from git) | see "Known problems", item 22 |
+| `repro_server/` | the PostgreSQL driver and Polaris in one program; user types named like types of `http` and of the driver (task 099, items 29-30); needs `nova update` | see "Known problems", items 29-30 |
+| `repro_stdin_read/` | a program: `Stdin.read` and the worker thread of its fiber (task 099, item 31); `node run.mjs` after `nova build stdin_read.nv` | see "Known problems", item 31 |
+| `repro_text_import/` | a program: `import std.text` and a pattern variable `text` of another module (task 099, item 32); `nova build src/text_import.nv` | see "Known problems", item 32 |
 
 Binaries, `target/` and downloaded archives are not committed (`.gitignore`).
 
@@ -239,3 +242,32 @@ default) and prints only `TIMEOUT`, with no sign of which test is slow; a SCRAM 
 quarter of a second (4096 rounds of HMAC in Nova), so a test suite that connects hundreds of times must use md5 logins in its
 temporary server or `--mode release`. `NOVA_DEBUG_RUN_DUMP=1` did not expand the 600-character error text of `nova test` here;
 `nova check <dir>` prints the whole text of a type error.
+
+Found by task 099 (the session server, `src/server/`); the reproductions are in `repro_server/` (items 29 and 30, `nova update` first, then `nova test src/<name>`),
+`repro_stdin_read/` (31) and `repro_text_import/` (32):
+
+29. **`user_request_vs_http`, `user_session_vs_postgres`**: the table of type names is one for the whole program, **dependencies included**. A user generic record `Request[T]`
+    (the engine had one) next to `http` (every program with Polaris has it) is taken for the `consume` record `Request` of `http`: `E_CONSUME_KEYWORD_MISSING` on a plain binding,
+    `E7310` "type `Request` is not generic" where the user's type is spelled `Request[str]`; `Response[R]` the same way. A user record `Session` next to the driver nova-postgres,
+    which has its own `Session`, stops the driver's own file (`E_MISSING_FIELD_IN_LITERAL`). The engine types are now `PartyRequest` and `PartyResponse`, the record of the hub is
+    `Dialog`. Same family as items 9, 14, 21 and 22 (and 28 of task 102); the checker does not say that two types of one name exist.
+30. **`pg_polaris_message`**: the driver nova-postgres and Polaris cannot be in one program. The driver has a variant `DecodeOutcome.Message { msg, consumed }`, Polaris has the type
+    `Message` (`polaris.ws`); a variant name and a type name share one table, and the driver's file `decode.nv:107` fails (`E7301`). Each package builds alone. The session server is
+    therefore two programs, the front (Polaris) and the hub (the driver), that talk by lines over pipes.
+31. **`repro_stdin_read`** (a program): (a) `Stdin.read(buf)` is `fread` and returns only when `buf` is FULL or at the end of the stream, so a buffer of one byte is the only way to read a line
+    that arrives now; (b) the call waits in C on the worker thread of the fiber that made it, and the fibers queued on that worker do not run until a byte (or the end) comes: with 16
+    workers about one new fiber of sixteen starts late, in the hub "the fourth agent process starts after seconds" (here 282 of 300 short fibers finished in 2 s). The cure: the read
+    in a `#blocking fn` (the form `blocking { }` is removed, D172); 300 of 300.
+32. **`repro_text_import`** (a program): `import std.text` in one module makes a variable named `text`, bound by a record pattern (`Garbage { text } => text.byte_len()`) in another module,
+    mean the module: `E7401` no function `byte_len` in module `text`. The import is needed in `nova build` for `[]str.join` (a `nova test` build has it already, so tests do not show it);
+    without it `join` is "no field or method `join` on type `Vec`", or, with `std.fs.Path` imported, `E_RECV_METHOD_MISMATCH` (it resolves to `Path.join`).
+
+Also met in task 099, without a reproduction: the variables of the test files of an imported module reach the standard library. `EmbeddedDir.merge` (prelude) has `ro b = other.entries()`;
+with a test peer of the module `pgstore` that had `fn same_entries(a []JournalEntry, b []JournalEntry)` in the program, the C of `merge` indexed `b[j]` as a `JournalEntry` (`no member named
+'path' in 'struct Nova_JournalEntry'`) and every program that imported `pgstore` stopped; the parameters and variables named `a` and `b` of the test files of the imported modules are now
+`first` and `second`, and the method `MemoryWorld.entries` is `journal_entries` (the same name as `EmbeddedDir.entries`). A minimal copy of the shape (`fn same(a []Item, b []Item)`
+and `EmbeddedDir.merge` in one test) compiled. Also: `detach` and `blocking` are keywords (a method or a parameter of that name is a syntax error); an unconsumed `Result` value cannot be rebound
+as `mut` (`E_READONLY_COERCE`: a record that holds it works); assigning to a `mut` parameter of a heap type changes only the local name (a warning, by design); a module two folders
+under the source root (item 25) compiles when declared WITHOUT the package prefix (`module server.front` in `src/server/front/`) and is imported with it (`crew_harness.server.front`);
+Polaris 0.2.4: the stream that `ServerResponse.upgrade` gives its hook is shared with the connection loop, so `TcpStream.into_split()` panics ("live share()-copies"), and a WebSocket that is
+read and written by two fibers must use `share()`; `println` was "undefined identifier" in one module of a program that also imported `std.text`, not reduced (the hub writes to `stdout()` itself).

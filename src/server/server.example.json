@@ -1,0 +1,13 @@
+{
+  "port": 8099,
+  "data_dir": "crew-data",
+  "store": "files",
+  "pg": { "host": "127.0.0.1", "port": 5432, "database": "crew", "user": "crew_service" },
+  "agents": [
+    { "id": "opencode", "label": "OpenCode", "program": "opencode.cmd", "args": ["acp"] }
+  ],
+  "idle_term_seconds": 900,
+  "workdir": "",
+  "web_dir": "src/web",
+  "hub": { "program": "target/crew-hub.exe", "args": [] }
+}

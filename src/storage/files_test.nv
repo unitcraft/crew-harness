@@ -254,3 +254,24 @@ test "store: a name with a separator or dots loads nothing and touches nothing o
         assert(Store.load("") == None)
     }
 }
+
+// ----- the list of sessions (task 099) -----
+
+test "list: the sessions of a folder are the names that have a snapshot, in order" {
+    ro root = fresh_root("list")
+    assert(open_data_dir(root))
+    assert(list_sessions(root).len() == 0)
+    with Store = file_store(root), Journal = file_journal(root, "c-3") {
+        Store.save("b-2", snapshot_of(1, "{}"))
+        Store.save("a-1", snapshot_of(1, "{}"))
+        Journal.write(entry_at(1, "only a journal"))
+    }
+    ro found = list_sessions(root)
+    assert(found.len() == 2)
+    assert(found[0] == "a-1")
+    assert(found[1] == "b-2")
+}
+
+test "list: a folder that does not exist has no sessions" {
+    assert(list_sessions(fresh_root("nothing")).len() == 0)
+}

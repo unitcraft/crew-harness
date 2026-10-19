@@ -1,0 +1,19 @@
+module repro_server.user_session_vs_postgres
+
+// Oracle 0.1.0 (task 099): a user record `Session` and the driver nova-postgres (it has its own `Session`, the pure core of the
+// protocol) in the SAME program: the driver's own file `session.nv` builds `Session { ... }` and the compiler reads it as the user's:
+//   error: [E_MISSING_FIELD_IN_LITERAL] record literal `Session{ ... }` does not initialise fields: id, name, ...
+// in the driver's file, and the user's own `Session` is taken for a `consume` type of the driver (E_CONSUME_KEYWORD_MISSING on a
+// plain `ro s = Session { ... }`). The same family as repro_pg_event (a record `Event`) and items 9, 14, 21 of the README: one table of type
+// names for the whole program, dependencies included. The session server calls its record `Dialog`.
+// Setup: `nova update` once, then `nova test src/user_session_vs_postgres`. Expected: PASS. Actual: CODEGEN-FAIL in the driver's file.
+
+import postgres.{ParamValue}
+
+export type Session { id str, name str }
+
+test "a user record Session next to the driver" {
+    ro s = Session { id: "a", name: "b" }
+    ro p = ParamValue.text(s.id)
+    assert(s.name == "b")
+}

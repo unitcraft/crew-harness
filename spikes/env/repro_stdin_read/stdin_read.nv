@@ -1,0 +1,66 @@
+module repro_stdin_read
+
+// Oracle 0.1.0 (task 099): reading the standard input of the program.
+//   1. `Stdin.read(buf)` is `fread`: it returns only when the buffer is FULL (or at the end of the stream). A line shorter than the
+//      buffer never arrives; with a buffer of ONE byte every byte comes at once.
+//   2. The call waits in C on the worker thread of the fiber that made it. The scheduler does not take the worker away: the fibers that
+//      are queued on that worker do not run until a byte (or the end) of stdin comes. With 16 workers about one fiber of sixteen is
+//      lost for as long as nobody writes to the stdin; in CrewHarness that was "the fourth agent process of the hub starts after
+//      seconds, not milliseconds" (the hub reads the lines of the front from its stdin).
+//      The cure: the read in a `#blocking fn` (it goes to the thread pool).
+// This program starts the reader (mode `plain` or `blocking`), starts 300 short fibers (a 5 ms sleep each) one by one and tells how many
+// finished within 2 s while nobody writes to its stdin.
+//   nova build stdin_read.nv; then, from PowerShell (the stdin must stay open and silent):
+//     $p = Start-Process .\stdin_read.exe -ArgumentList plain -RedirectStandardInput <a pipe that stays open> ...
+//   or simply run `node run.mjs`, which does it with a pipe of Node. Expected (both modes): 300 of 300. Actual (`plain`): fewer.
+import std.io.{stdin, Stdin, IoError}
+import std.os.{args, exit_process}
+import std.concurrency.nvchan.{Chan, ChanTx}
+
+#blocking
+fn read_blocking(mut input Stdin, mut buf []u8) Io -> Result[int, IoError] => input.read(buf)
+
+fn read_plain(mut input Stdin, mut buf []u8) Io -> Result[int, IoError] => input.read(buf)
+
+fn reader(pooled bool) Io -> () {
+    mut buf []u8 = []u8.new()
+    buf.resize(1, 0 as u8)
+    mut input = stdin()
+    mut reading = true
+    while reading {
+        ro got = if pooled { read_blocking(input, buf) } else { read_plain(input, buf) }
+        match got {
+            Ok(0) => { reading = false }
+            Ok(n) => ()
+            Err(e) => { reading = false }
+        }
+    }
+}
+
+fn short_fiber(done ChanTx[int]) Time -> () {
+    5.to_millis().sleep()
+    ro told = done.send(1)
+}
+
+fn main() Os Time Detach Io -> () {
+    ro argv = args()
+    ro pooled = argv.len() > 1 && argv[1] == "blocking"
+    detach { reader(pooled) }
+    ro done = Chan[int].new(512)
+    mut started = 0
+    while started < 300 {
+        detach { short_fiber(done.tx) }
+        started += 1
+        1.to_millis().sleep()
+    }
+    ro deadline = Time.now().unix_millis() + 2000
+    mut finished = 0
+    while Time.now().unix_millis() < deadline && finished < 300 {
+        match done.rx.try_recv() {
+            Some(n) => { finished += 1 }
+            None => 2.to_millis().sleep()
+        }
+    }
+    println("${if pooled { "blocking" } else { "plain" }}: ${finished} of 300 short fibers finished within 2 s")
+    exit_process(0)
+}

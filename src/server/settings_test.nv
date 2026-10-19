@@ -1,0 +1,187 @@
+// settings_test.nv - the settings of the session server: a JSON file and the environment over it; the password is in no
+// text that can be printed.
+module crew_harness.server
+
+import std.os.{Os, MockOs, mock_os, real_os, temp_dir, pid}
+import std.fs.{Fs, real_fs, read_text, write_text, create_dir_all, Path}
+
+fn full_settings_text() -> str => "{\"port\":8123,\"data_dir\":\"C:/work/crew-data\",\"store\":\"pg\",\"pg\":{\"host\":\"localhost\",\"port\":55432,\"database\":\"crew_x\",\"user\":\"crew_login\",\"password\":\"file-test-pw\"},\"agents\":[{\"id\":\"opencode\",\"label\":\"OpenCode\",\"program\":\"opencode\",\"args\":[\"acp\"]},{\"id\":\"fake\",\"program\":\"node\",\"args\":[\"a.mjs\",\"--live\"]}],\"idle_term_seconds\":60,\"workdir\":\"C:/work/project\",\"web_dir\":\"web\",\"hub\":{\"program\":\"target/hub.exe\",\"args\":[\"x\"]}}"
+
+fn must_settings(text str) -> ServerSettings {
+    match parse_server_settings(text) {
+        Ok(s) => s
+        Err(e) => panic("settings: ${e}")
+    }
+}
+
+fn settings_file(name str, text str) -> Path {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-server-settings-${id}")
+    ro path = dir.join(name)
+    with Fs = real_fs() {
+        ro made = create_dir_all(dir)
+        ro written = write_text(path, text)
+    }
+    path
+}
+
+fn is_error(result Result[ServerSettings, str]) -> bool {
+    match result {
+        Ok(s) => false
+        Err(e) => true
+    }
+}
+
+test "settings: an empty object has the defaults, opencode acp among them" {
+    ro s = must_settings("{}")
+    assert(s.port == 8099)
+    assert(s.store == "files")
+    assert(s.data_dir == "crew-data")
+    assert(s.idle_term_ms == 900000)
+    assert(s.web_dir == "src/web")
+    assert(s.agents.len() == 1)
+    assert(s.agents[0].id == "opencode")
+    assert(s.agents[0].program == default_opencode_program())
+    assert(s.agents[0].args.len() == 1)
+    assert(s.agents[0].args[0] == "acp")
+}
+
+test "settings: every key of a file is read" {
+    ro s = must_settings(full_settings_text())
+    assert(s.port == 8123)
+    assert(s.data_dir == "C:/work/crew-data")
+    assert(s.store == "pg")
+    assert(s.pg.port == 55432 && s.pg.database == "crew_x" && s.pg.user == "crew_login")
+    assert(s.agents.len() == 2)
+    assert(s.agents[0].label == "OpenCode")
+    assert(s.agents[1].id == "fake")
+    assert(s.agents[1].label == "fake")
+    assert(s.agents[1].args.len() == 2 && s.agents[1].args[1] == "--live")
+    assert(s.idle_term_ms == 60000)
+    assert(s.workdir == "C:/work/project")
+    assert(s.web_dir == "web")
+    assert(s.hub_program == "target/hub.exe")
+    assert(s.hub_args.len() == 1)
+}
+
+test "settings: an agent is found by its id" {
+    ro s = must_settings(full_settings_text())
+    match s.agent("fake") {
+        Some(a) => assert(a.program == "node")
+        None => assert(false)
+    }
+    assert(s.agent("nobody") == None)
+}
+
+test "settings: a wrong file is an error that does not print the content" {
+    assert(is_error(parse_server_settings("not json password=never-printed")))
+    assert(is_error(parse_server_settings("[1]")))
+    assert(is_error(parse_server_settings("{\"port\":\"x\"}")))
+    assert(is_error(parse_server_settings("{\"port\":0}")))
+    assert(is_error(parse_server_settings("{\"store\":\"redis\"}")))
+    assert(is_error(parse_server_settings("{\"agents\":[]}")))
+    assert(is_error(parse_server_settings("{\"agents\":[{\"program\":\"x\"}]}")))
+    assert(is_error(parse_server_settings("{\"agents\":[{\"id\":\"a\"}]}")))
+    assert(is_error(parse_server_settings("{\"idle_term_seconds\":0}")))
+    match parse_server_settings("{\"pg\":{\"password\":\"never-printed\",\"port\":\"x\"}}") {
+        Ok(s) => assert(false)
+        Err(e) => assert(!e.contains("never-printed"))
+    }
+}
+
+test "settings: the description has no password" {
+    ro s = must_settings(full_settings_text())
+    ro text = s.describe()
+    assert(text.contains("8123"))
+    assert(text.contains("pg"))
+    assert(text.contains("opencode"))
+    assert(!text.contains("file-test-pw"))
+}
+
+test "settings: pg without a password does not pass the check, files need none" {
+    ro files = must_settings("{}")
+    match files.check() {
+        Ok(done) => ()
+        Err(e) => assert(false)
+    }
+    ro pg = must_settings("{\"store\":\"pg\"}")
+    match pg.check() {
+        Ok(done) => assert(false)
+        Err(e) => assert(e.contains("password"))
+    }
+    ro ok = must_settings(full_settings_text())
+    match ok.check() {
+        Ok(done) => ()
+        Err(e) => assert(false)
+    }
+}
+
+test "settings: the environment is over the file" {
+    ro path = settings_file("server.json", full_settings_text())
+    mut state = MockOs.new()
+    state.put_env("CREW_SERVER_PORT", "9001")
+    state.put_env("CREW_SERVER_STORE", "files")
+    state.put_env("CREW_SERVER_DATA_DIR", "C:/work/other")
+    state.put_env("CREW_SERVER_AGENT", "node fake.mjs --live")
+    state.put_env("CREW_SERVER_WORKDIR", "C:/work/elsewhere")
+    state.put_env("CREW_SERVER_IDLE_SECONDS", "5")
+    state.put_env("CREW_PG_PASSWORD", "env-pw")
+    match with Os = mock_os(state), Fs = real_fs() { server_settings(path.display()) } {
+        Ok(s) => {
+            assert(s.port == 9001)
+            assert(s.store == "files")
+            assert(s.data_dir == "C:/work/other")
+            assert(s.agents.len() == 1)
+            assert(s.agents[0].id == "opencode")
+            assert(s.agents[0].program == "node")
+            assert(s.agents[0].args.len() == 2 && s.agents[0].args[0] == "fake.mjs")
+            assert(s.workdir == "C:/work/elsewhere")
+            assert(s.idle_term_ms == 5000)
+            assert(s.pg.password == "env-pw")
+            assert(s.pg.database == "crew_x")
+        }
+        Err(e) => assert(false)
+    }
+}
+
+test "settings: the file is named by the argument or by CREW_SERVER_CONFIG, no file means the defaults" {
+    ro path = settings_file("named.json", "{\"port\":8456}")
+    mut empty = MockOs.new()
+    match with Os = mock_os(empty), Fs = real_fs() { server_settings("") } {
+        Ok(s) => assert(s.port == 8099)
+        Err(e) => assert(false)
+    }
+    mut named = MockOs.new()
+    named.put_env("CREW_SERVER_CONFIG", path.display())
+    match with Os = mock_os(named), Fs = real_fs() { server_settings("") } {
+        Ok(s) => assert(s.port == 8456)
+        Err(e) => assert(false)
+    }
+    match with Os = mock_os(empty), Fs = real_fs() { server_settings("${path.display()}.missing") } {
+        Ok(s) => assert(false)
+        Err(e) => assert(e.contains("missing"))
+    }
+    mut bad = MockOs.new()
+    bad.put_env("CREW_SERVER_PORT", "many")
+    match with Os = mock_os(bad), Fs = real_fs() { server_settings("") } {
+        Ok(s) => assert(false)
+        Err(e) => assert(e.contains("CREW_SERVER_PORT"))
+    }
+}
+
+test "settings: the example file of the repository is a valid configuration" {
+    ro text = with Fs = real_fs() {
+        match read_text(Path.from_bytes("src/server/server.example.json".bytes())) {
+            Ok(t) => t
+            Err(e) => ""
+        }
+    }
+    assert(text.byte_len() > 0)
+    ro s = must_settings(text)
+    assert(s.agents.len() >= 1)
+    match s.check() {
+        Ok(done) => ()
+        Err(e) => assert(false)
+    }
+}

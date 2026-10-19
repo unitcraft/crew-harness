@@ -1,0 +1,127 @@
+// front_settings.nv - the part of the settings that the front needs: the port, the folder of the page, the command of the hub.
+//
+// The front reads only these; the hub reads and checks all the settings (the same file, the same environment) and says so on its
+// stderr when they are wrong. The front cannot use `crew_harness.server.ServerSettings`: that module holds the hub, which holds the
+// PostgreSQL driver, and the driver and Polaris cannot be in one program (spikes/env/repro_pg_polaris).
+// The keys and the variables are those of src/server/settings.nv: port / CREW_SERVER_PORT, web_dir / CREW_SERVER_WEB_DIR,
+// hub {program, args} / CREW_SERVER_HUB, the file by the argument or CREW_SERVER_CONFIG.
+module server.front
+
+import std.text
+import std.encoding.json.{Json, JsonValue, JsonObject}
+import std.fs.{Fs, read_text, Path}
+import std.os.{Os, env}
+
+/// FrontSettings: where to listen, where the page is, how to start the hub.
+export type FrontSettings { port int, web_dir str, hub_program str, hub_args []str }
+
+fn fs_env(key str) Os -> Option[str] {
+    match env(key) {
+        Some(v) => if v.byte_len() > 0 { Some(v) } else { None }
+        None => None
+    }
+}
+
+fn fs_words(text str) -> []str {
+    mut out = []str.new()
+    for part in text.split(" ") {
+        if part.byte_len() > 0 { out.push(part) }
+    }
+    out
+}
+
+fn fs_rest(words []str) -> []str {
+    mut rest = []str.new()
+    mut i = 1
+    while i < words.len() {
+        rest.push(words[i])
+        i += 1
+    }
+    rest
+}
+
+fn fs_strings(v JsonValue) -> []str {
+    mut out = []str.new()
+    match v.array() {
+        Some(items) => {
+            for item in items {
+                match item.str() {
+                    Some(s) => out.push(s)
+                    None => ()
+                }
+            }
+        }
+        None => ()
+    }
+    out
+}
+
+fn fs_defaults() -> FrontSettings => { port: 8099, web_dir: "src/web", hub_program: "target/crew-hub.exe", hub_args: []str.new() }
+
+// The settings of a file (the keys that are there; a wrong value is the default - the hub says what is wrong).
+fn fs_from_file(text str) -> FrontSettings {
+    ro base = fs_defaults()
+    ro value = match Json.parse(text) {
+        Ok(v) => v
+        Err(e) => return base
+    }
+    ro o = match value.object() {
+        Some(x) => x
+        None => return base
+    }
+    ro port = match o.get("port") {
+        Some(v) => v.int() ?? base.port
+        None => base.port
+    }
+    ro web_dir = match o.get("web_dir") {
+        Some(v) => v.str() ?? base.web_dir
+        None => base.web_dir
+    }
+    ro hub = match o.get("hub") {
+        Some(h) => h.object()
+        None => None
+    }
+    ro hub_program = match hub {
+        Some(ho) => match ho.get("program") {
+            Some(p) => p.str() ?? base.hub_program
+            None => base.hub_program
+        }
+        None => base.hub_program
+    }
+    ro hub_args = match hub {
+        Some(ho) => match ho.get("args") {
+            Some(a) => fs_strings(a)
+            None => base.hub_args
+        }
+        None => base.hub_args
+    }
+    { port, web_dir, hub_program, hub_args }
+}
+
+/// The settings of the front: the file (the argument, or CREW_SERVER_CONFIG), the environment over it.
+export fn front_settings(file str) Os Fs -> Result[FrontSettings, str] {
+    ro name = if file.byte_len() > 0 { file } else { fs_env("CREW_SERVER_CONFIG") ?? "" }
+    ro base = if name.byte_len() == 0 {
+        fs_defaults()
+    } else {
+        match read_text(Path.from_bytes(name.bytes())) {
+            Ok(t) => fs_from_file(t)
+            Err(e) => return Err("the settings file ${name} cannot be read")
+        }
+    }
+    ro port = match fs_env("CREW_SERVER_PORT") {
+        Some(text) => match text.to_int() {
+            Ok(n) => n
+            Err(e) => return Err("CREW_SERVER_PORT must be a whole number")
+        }
+        None => base.port
+    }
+    if port < 1 || port > 65535 { return Err("the port must be 1 to 65535") }
+    ro hub_words = match fs_env("CREW_SERVER_HUB") {
+        Some(command) => fs_words(command)
+        None => []str.new()
+    }
+    ro hub_program = if hub_words.len() > 0 { hub_words[0] } else { base.hub_program }
+    ro hub_args = if hub_words.len() > 0 { fs_rest(hub_words) } else { base.hub_args }
+    Ok({ port, web_dir: fs_env("CREW_SERVER_WEB_DIR") ?? base.web_dir, hub_program, hub_args })
+}

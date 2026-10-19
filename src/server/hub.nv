@@ -1,0 +1,616 @@
+// hub.nv - the core of the session server (task 099): the sessions, each with an engine of its own, and the page.
+//
+// The hub knows nothing of sockets. The page talks to it in lines of JSON in the format of tasks 093/094 (`src/web/README.md`);
+// the hub is told "a page came" (`attach`), "a page went" (`detach`), "a page said this" (`handle`), and it is asked for its
+// output (`take_output`): a list of `Outgoing`, each for one page (`conn`) or for all of them (`conn` 0). `pump` is called by a
+// timer and takes the events of the agents. The caller of the hub is a loop: in the product it reads and writes the pipes of the
+// hub program (stdio.nv), in the tests it is the test.
+//
+// A session = the engine of the dialog machine (`dialog_session`) over the handlers of the store (files or PostgreSQL, by the
+// settings) and of the agent (the ACP client over a process). The page sees only what the engine accepted: every accepted
+// event is turned into a page event by `page_event` (task 095), stamped with the id, the step and the time of the engine.
+//   - The id of the page event is "<session>/<engine id>": the page keeps the ids of ALL sessions in one set.
+//   - The turn of the page ("turn") is the engine id of the user_message that opened it; the events after it carry it.
+//   - The first event of a session is `session_created` (name, agent, folder), made by the server and kept in the journal like any
+//     other: the journal alone tells the whole story again after a restart (`Engine.history`).
+// What is not an event of the engine and has no place in the journal (the agent could not be started, a wrong session name) is
+// told to the page as a synthetic `error` event, with an id of its own ("srv-<n>"); it is not kept.
+module crew_harness.server
+
+import crew_harness.engine.{Engine, Incoming, EventKind, Journal, Store, Link, start_engine, resume_engine, decode_snapshot}
+import crew_harness.chat.{ChatSession, ChatState, dialog_session, user_says, user_cancels}
+import crew_harness.acp.{AcpConfig, AcpClient, open_client, acp_link, page_event}
+import crew_harness.storage.{open_data_dir, file_journal, file_store, list_sessions, valid_session_name, session_path}
+import crew_harness.pgstore.{PgWorld, pg_journal, pg_store}
+import crew_harness.pgdb.{pg_list}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+import std.net.{real_net}
+import std.os.{Os, real_os, cwd}
+
+/// Outgoing: a text for the page `conn`; conn 0 - for every page that is attached.
+export type Outgoing { conn int, text str }
+
+type Dialog {
+    id str,
+    name str,
+    agent str,
+    engine Engine[ChatSession, ChatState],
+    world PgWorld,
+    clients []AcpClient,
+    turn str,
+    lines []str,
+    announced bool,
+    started_at int,
+    slow_told bool
+}
+
+/// Hub: the sessions, the pages, the output not yet taken, the log.
+export type Hub {
+    settings ServerSettings,
+    workdir str,
+    sessions []Dialog,
+    conns []int,
+    out []Outgoing,
+    log []str,
+    serial int
+}
+
+// ----- small helpers -----
+
+fn jput(mut o JsonObject, key str, value JsonValue) -> () {
+    ro replaced = o.insert(key, value)
+}
+
+fn jobject(text str) -> Option[JsonObject] {
+    match Json.parse(text) {
+        Ok(v) => v.object()
+        Err(e) => None
+    }
+}
+
+fn jtext(o JsonObject, key str) -> str {
+    match o.get(key) {
+        Some(v) => v.str() ?? ""
+        None => ""
+    }
+}
+
+fn jchild(o JsonObject, key str) -> Option[JsonObject] {
+    match o.get(key) {
+        Some(v) => v.object()
+        None => None
+    }
+}
+
+fn now_millis() Time -> int => Time.now().unix_millis()
+
+fn acp_config_of(program str, args []str, cwd str, inbox_path str) -> AcpConfig => { program, args, cwd, inbox_path }
+
+fn joined(parts []str, sep str) -> str {
+    mut out = ""
+    mut first = true
+    for part in parts {
+        out = if first { part } else { "${out}${sep}${part}" }
+        first = false
+    }
+    out
+}
+
+fn array_text(lines []str) -> str => "[${joined(lines, ",")}]"
+
+// ----- the store, by the settings: the same engine over files or over PostgreSQL -----
+
+fn begin_engine(pg bool, root str, mut world PgWorld, machine ChatSession, id str) Time -> Engine[ChatSession, ChatState] {
+    if pg {
+        with Journal = pg_journal(world), Store = pg_store(world) {
+            start_engine[ChatState, ChatSession](machine, id)
+        }
+    } else {
+        with Journal = file_journal(root, id), Store = file_store(root) {
+            start_engine[ChatState, ChatSession](machine, id)
+        }
+    }
+}
+
+fn resume_stored(pg bool, root str, mut world PgWorld, machine ChatSession, id str) Time -> Option[Engine[ChatSession, ChatState]] {
+    if pg {
+        with Journal = pg_journal(world), Store = pg_store(world) {
+            // a damaged snapshot would stop the process (`resume_engine`): look at it first
+            match Store.load(id) {
+                None => None
+                Some(snapshot) => match decode_snapshot[ChatState, ChatSession](machine, snapshot) {
+                    None => None
+                    Some(state) => resume_engine[ChatState, ChatSession](machine, id)
+                }
+            }
+        }
+    } else {
+        with Journal = file_journal(root, id), Store = file_store(root) {
+            match Store.load(id) {
+                None => None
+                Some(snapshot) => match decode_snapshot[ChatState, ChatSession](machine, snapshot) {
+                    None => None
+                    Some(state) => resume_engine[ChatState, ChatSession](machine, id)
+                }
+            }
+        }
+    }
+}
+
+fn accept_in(pg bool, root str, mut s Dialog, event Incoming) Time -> () {
+    if pg {
+        with Journal = pg_journal(s.world), Store = pg_store(s.world) {
+            s.engine.on_arrival(event)
+        }
+    } else {
+        with Journal = file_journal(root, s.id), Store = file_store(root) {
+            s.engine.on_arrival(event)
+        }
+    }
+}
+
+fn feed_in(pg bool, root str, mut s Dialog, event Incoming) Time -> () {
+    if pg {
+        with Journal = pg_journal(s.world), Store = pg_store(s.world), Link = acp_link(s.clients[0]) {
+            s.engine.feed(event)
+        }
+    } else {
+        with Journal = file_journal(root, s.id), Store = file_store(root), Link = acp_link(s.clients[0]) {
+            s.engine.feed(event)
+        }
+    }
+}
+
+fn pump_in(pg bool, root str, mut s Dialog) Time -> int {
+    if pg {
+        with Journal = pg_journal(s.world), Store = pg_store(s.world), Link = acp_link(s.clients[0]) {
+            s.engine.pump()
+        }
+    } else {
+        with Journal = file_journal(root, s.id), Store = file_store(root), Link = acp_link(s.clients[0]) {
+            s.engine.pump()
+        }
+    }
+}
+
+fn history_in(pg bool, root str, mut s Dialog) -> []Incoming {
+    if pg {
+        with Journal = pg_journal(s.world) {
+            s.engine.history()
+        }
+    } else {
+        with Journal = file_journal(root, s.id) {
+            s.engine.history()
+        }
+    }
+}
+
+// ----- events -> lines of the page -----
+
+// The page line of an accepted event, None - the page has no kind for it. `s.turn` follows the user messages.
+fn line_of(mut s Dialog, e Incoming) -> Option[str] {
+    if e.kind == EventKind.Input && e.name == "user_message" { s.turn = e.id }
+    ro shown = Incoming { id: "${s.id}/${e.id}", trace: s.id, step: e.step, kind: e.kind, name: e.name, request: e.request, input: e.input, at: e.at }
+    page_event(shown, s.turn)
+}
+
+fn meta_text(name str, agent str, folder str, project str) -> str {
+    mut o = JsonObject.new()
+    jput(o, "name", JsonValue.str(name))
+    jput(o, "agent", JsonValue.str(agent))
+    jput(o, "folder", JsonValue.str(folder))
+    if project.byte_len() > 0 { jput(o, "project", JsonValue.str(project)) }
+    JsonValue.object(o).to_str()
+}
+
+fn event_line(id str, trace str, step int, kind str, input JsonObject, at int) -> str {
+    mut o = JsonObject.new()
+    jput(o, "id", JsonValue.str(id))
+    jput(o, "trace", JsonValue.str(trace))
+    jput(o, "step", JsonValue.int(step))
+    jput(o, "kind", JsonValue.str(kind))
+    jput(o, "input", JsonValue.object(input))
+    jput(o, "time", JsonValue.int(at))
+    JsonValue.object(o).to_str()
+}
+
+fn error_input(turn str, message str) -> JsonObject {
+    mut input = JsonObject.new()
+    jput(input, "turn", JsonValue.str(turn))
+    jput(input, "message", JsonValue.str(message))
+    input
+}
+
+fn created_input(name str, agent str, folder str) -> JsonObject {
+    mut input = JsonObject.new()
+    jput(input, "name", JsonValue.str(name))
+    jput(input, "agent", JsonValue.str(agent))
+    jput(input, "folder", JsonValue.str(folder))
+    input
+}
+
+fn decision_text(request str, decision str) -> str {
+    mut o = JsonObject.new()
+    jput(o, "request", JsonValue.str(request))
+    jput(o, "decision", JsonValue.str(decision))
+    JsonValue.object(o).to_str()
+}
+
+// ----- the hub -----
+
+fn Hub mut @say_log(text str) -> () {
+    @log.push(text)
+    if @log.len() > 200 { @log.remove(0) }
+}
+
+fn Hub @find(id str) -> int {
+    mut at = 0
+    for s in @sessions {
+        if s.id == id { return at }
+        at += 1
+    }
+    -1
+}
+
+fn Hub mut @send(conn int, text str) -> () {
+    @out.push(Outgoing { conn, text })
+}
+
+// The accepted events of a session become lines of the page; the lines are kept and sent to every page.
+fn Hub mut @drain(at int) Time -> () {
+    mut s = @sessions[at]
+    for e in s.engine.take_events() {
+        match line_of(s, e) {
+            Some(line) => {
+                s.lines.push(line)
+                @send(0, line)
+            }
+            None => ()
+        }
+    }
+}
+
+// A synthetic `error` event for one page (or all): it belongs to no step of the engine and is not kept.
+fn Hub mut @tell_error(conn int, trace str, step int, turn str, message str) Time -> () {
+    @serial += 1
+    @send(conn, event_line("srv-${@serial}", trace, step, "error", error_input(turn, message), now_millis()))
+}
+
+/// A page is attached: it gets everything that happened in every session, one message per session.
+export fn Hub mut @attach(conn int) -> () {
+    if !@conns.contains(conn) { @conns.push(conn) }
+    for s in @sessions {
+        if s.lines.len() > 0 { @send(conn, array_text(s.lines)) }
+    }
+}
+
+/// A page is gone (it is not told anything more).
+export fn Hub mut @release(conn int) -> () {
+    mut rest = []int.new()
+    for c in @conns {
+        if c != conn { rest.push(c) }
+    }
+    @conns = rest
+}
+
+fn Hub @open_config(s Dialog) -> Option[AcpConfig] {
+    match @settings.agent(s.agent) {
+        Some(spec) => {
+            ro inbox = match session_path(@settings.data_dir, s.id, "inbox") {
+                Some(p) => p.display()
+                None => ""
+            }
+            Some(acp_config_of(spec.program, spec.args, @workdir, inbox))
+        }
+        None => None
+    }
+}
+
+// Make sure the session has a live agent: start one if there is none or the old one is gone. "" - well, else the reason.
+fn Hub mut @ensure_client(at int) Proc Detach Time -> str {
+    mut s = @sessions[at]
+    if s.clients.len() > 0 {
+        ro phase = s.clients[0].phase()
+        if phase == "ready" || phase == "initializing" || phase == "opening" { return "" }
+        s.clients[0].close()
+        s.clients = []AcpClient.new()
+    }
+    match @open_config(s) {
+        None => "the agent ${s.agent} is not configured"
+        Some(config) => match open_client(config) {
+            Ok(client) => {
+                s.clients.push(client)
+                s.announced = false
+                s.slow_told = false
+                s.started_at = now_millis()
+                ""
+            }
+            Err(reason) => reason
+        }
+    }
+}
+
+fn Hub @is_awaiting(at int) -> bool {
+    ro s = @sessions[at]
+    dialog_session(@settings.idle_term_ms).state_name(s.engine.state()) == "Awaiting"
+}
+
+fn Hub mut @add_session(s Dialog) -> () {
+    @sessions.push(s)
+}
+
+/// Start the hub: the settings are checked, the data folder is opened, every session of the store is resumed (the engine from
+/// its snapshot and journal, the lines of the page from the journal); an agent is started for a session only if a request of it is open.
+export fn start_hub(settings ServerSettings) Proc Detach Time Net Fs Os -> Result[Hub, str] {
+    settings.check()?
+    if !open_data_dir(settings.data_dir) { return Err("the data folder ${settings.data_dir} cannot be opened") }
+    ro workdir = if settings.workdir.byte_len() > 0 {
+        settings.workdir
+    } else {
+        match with Os = real_os() { cwd() } {
+            Ok(p) => p.display()
+            Err(e) => return Err("the working folder is unknown")
+        }
+    }
+    mut hub = Hub {
+        settings, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0
+    }
+    ro pg = settings.store == "pg"
+    ro ids = if pg {
+        match with Net = real_net() { pg_list(settings.pg) } {
+            Ok(list) => list
+            Err(f) => return Err("the sessions cannot be listed: ${f.message}")
+        }
+    } else {
+        list_sessions(settings.data_dir)
+    }
+    for id in ids {
+        hub.resume_session(id)
+    }
+    hub.say_log("started: ${settings.describe()}; ${hub.sessions.len()} session(s) resumed")
+    Ok(hub)
+}
+
+fn Hub mut @resume_session(id str) Proc Detach Time -> () {
+    ro pg = @settings.store == "pg"
+    ro root = @settings.data_dir
+    mut world = PgWorld.open(@settings.pg, id)
+    ro machine = dialog_session(@settings.idle_term_ms)
+    match resume_stored(pg, root, world, machine, id) {
+        None => @say_log("the session ${id} cannot be resumed: no usable snapshot")
+        Some(engine) => {
+            mut s = Dialog { id, name: id, agent: "", engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, started_at: 0, slow_told: false }
+            mut saw_created = false
+            for e in history_in(pg, root, s) {
+                if e.name == "session_created" && e.kind == EventKind.Input && !saw_created {
+                    saw_created = true
+                    match jobject(e.input) {
+                        Some(meta) => {
+                            s.name = if jtext(meta, "name").byte_len() > 0 { jtext(meta, "name") } else { id }
+                            s.agent = jtext(meta, "agent")
+                        }
+                        None => ()
+                    }
+                }
+                match line_of(s, e) {
+                    Some(line) => s.lines.push(line)
+                    None => ()
+                }
+            }
+            @add_session(s)
+            if engine.open_ids().len() > 0 {
+                ro reason = @ensure_client(@sessions.len() - 1)
+                if reason.byte_len() > 0 { @say_log("the agent of ${id} cannot be started: ${reason}") }
+            }
+        }
+    }
+}
+
+// ----- what the page says -----
+
+fn Hub mut @create(conn int, trace str, input JsonObject) Proc Detach Time -> () {
+    ro name = if jtext(input, "name").byte_len() > 0 { jtext(input, "name") } else { trace }
+    ro agent = jtext(input, "agent")
+    ro project = jtext(input, "project")
+    if !valid_session_name(trace) {
+        @send(conn, event_line("srv-new", trace, 0, "session_created", created_input(name, agent, @workdir), now_millis()))
+        @tell_error(conn, trace, 1, "", "the session name is not valid: letters, digits, dot, dash and underscore")
+        return
+    }
+    if @find(trace) >= 0 { return }
+    match @settings.agent(agent) {
+        None => {
+            @send(conn, event_line("srv-new", trace, 0, "session_created", created_input(name, agent, @workdir), now_millis()))
+            @tell_error(conn, trace, 1, "", "unknown agent: ${agent}")
+        }
+        Some(spec) => {
+            ro pg = @settings.store == "pg"
+            ro root = @settings.data_dir
+            mut world = PgWorld.open(@settings.pg, trace)
+            ro engine = begin_engine(pg, root, world, dialog_session(@settings.idle_term_ms), trace)
+            mut s = Dialog { id: trace, name, agent, engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, started_at: 0, slow_told: false }
+            accept_in(pg, root, s, Incoming.word("session_created", meta_text(name, agent, @workdir, project)))
+            @add_session(s)
+            ro at = @sessions.len() - 1
+            @drain(at)
+            ro reason = @ensure_client(at)
+            if reason.byte_len() > 0 {
+                @say_log("the agent of ${trace} cannot be started: ${reason}")
+                @tell_error(0, trace, @sessions[at].engine.step_number(), "", "the agent ${agent} cannot be started: ${reason}")
+            }
+        }
+    }
+}
+
+fn Hub mut @say(trace str, text str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 {
+        @say_log("a message to an unknown session: ${trace}")
+        return
+    }
+    if text.byte_len() == 0 { return }
+    if @is_awaiting(at) {
+        @say_log("a message to ${trace} while a turn is open: ignored")
+        return
+    }
+    ro reason = @ensure_client(at)
+    if reason.byte_len() > 0 {
+        @tell_error(0, trace, @sessions[at].engine.step_number(), "", "the agent cannot be started: ${reason}")
+        return
+    }
+    mut s = @sessions[at]
+    feed_in(@settings.store == "pg", @settings.data_dir, s, user_says(text))
+    @drain(at)
+}
+
+fn Hub mut @cancel(trace str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    mut s = @sessions[at]
+    if s.clients.len() == 0 { return }
+    feed_in(@settings.store == "pg", @settings.data_dir, s, user_cancels())
+    @drain(at)
+}
+
+fn Hub mut @decide(trace str, request str, decision str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    mut s = @sessions[at]
+    if s.clients.len() == 0 { return }
+    ro event = Incoming.word("permission_decision", decision_text(request, decision))
+    if s.clients[0].decide_event(event) {
+        feed_in(@settings.store == "pg", @settings.data_dir, s, event)
+        @drain(at)
+    } else {
+        @say_log("a decision for ${trace} that nobody asked: request ${request}")
+    }
+}
+
+/// A page said something: an event in the format of the page (`session_created`, `user_message`, `cancel`, `permission_decision`).
+/// Anything else is ignored and logged.
+export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
+    ro o = match jobject(text) {
+        Some(x) => x
+        None => {
+            @say_log("a message that is not a JSON object from page ${conn}")
+            return
+        }
+    }
+    ro kind = jtext(o, "kind")
+    ro trace = jtext(o, "trace")
+    ro input = match jchild(o, "input") {
+        Some(x) => x
+        None => JsonObject.new()
+    }
+    if trace.byte_len() == 0 {
+        @say_log("a message without a trace from page ${conn}")
+        return
+    }
+    if kind == "session_created" {
+        @create(conn, trace, input)
+    } else if kind == "user_message" {
+        @say(trace, jtext(input, "text"))
+    } else if kind == "cancel" {
+        @cancel(trace)
+    } else if kind == "permission_decision" {
+        @decide(trace, jtext(input, "request"), jtext(input, "decision"))
+    } else {
+        @say_log("a message of the kind ${kind} from page ${conn}: ignored")
+    }
+}
+
+// The first time an agent is ready, or has refused to start, is told: to the log, and a refusal to the page.
+fn Hub mut @watch_agent(at int) Time -> () {
+    mut s = @sessions[at]
+    if s.announced { return }
+    ro phase = s.clients[0].phase()
+    if !s.slow_told && phase != "ready" && phase != "failed" && now_millis() - s.started_at > 10000 {
+        s.slow_told = true
+        @say_log("the agent of ${s.id} is still starting (phase ${phase}): ${s.clients[0].stderr_tail()}")
+    }
+    if phase == "ready" {
+        s.announced = true
+        @say_log("the agent of ${s.id} is ready: ${s.clients[0].agent_name()}")
+    } else if phase == "failed" {
+        s.announced = true
+        ro why = s.clients[0].last_error()
+        @say_log("the agent of ${s.id} refused to start: ${why}")
+        @tell_error(0, s.id, s.engine.step_number(), "", "the agent refused to start: ${why}")
+    }
+}
+
+/// The work of a moment: the agents are asked for what they have, the engines take it. Returns the number of steps made.
+export fn Hub mut @pump() Proc Detach Time -> int {
+    mut made = 0
+    mut at = 0
+    while at < @sessions.len() {
+        mut s = @sessions[at]
+        if s.clients.len() > 0 {
+            made += pump_in(@settings.store == "pg", @settings.data_dir, s)
+            @drain(at)
+            @watch_agent(at)
+        }
+        at += 1
+    }
+    made
+}
+
+/// What the hub has to say to the pages, in order; the list is emptied.
+export fn Hub mut @take_output() -> []Outgoing {
+    ro out = @out
+    @out = []Outgoing.new()
+    out
+}
+
+/// The lines of the log since the last call.
+export fn Hub mut @take_log() -> []str {
+    ro out = @log
+    @log = []str.new()
+    out
+}
+
+/// Close the agents of all sessions (their processes are killed). The store has nothing to close.
+export fn Hub mut @close() Time -> () {
+    for s in @sessions {
+        mut mine = s
+        if mine.clients.len() > 0 {
+            mine.clients[0].close()
+            mine.clients = []AcpClient.new()
+        }
+    }
+}
+
+/// The ids of the sessions, in the order they were found or made.
+export fn Hub @session_ids() -> []str {
+    mut out = []str.new()
+    for s in @sessions { out.push(s.id) }
+    out
+}
+
+/// The page lines of a session since its beginning (what a page that attaches now receives).
+export fn Hub @page_lines(id str) -> []str {
+    ro at = @find(id)
+    if at < 0 { return []str.new() }
+    @sessions[at].lines
+}
+
+/// The name of the state of the machine of a session ("Idle", "Awaiting"), "" for an unknown session.
+export fn Hub @state_of(id str) -> str {
+    ro at = @find(id)
+    if at < 0 { return "" }
+    dialog_session(@settings.idle_term_ms).state_name(@sessions[at].engine.state())
+}
+
+/// Does the session have an agent process?
+export fn Hub @has_agent(id str) -> bool {
+    ro at = @find(id)
+    if at < 0 { return false }
+    @sessions[at].clients.len() > 0
+}
+
+/// The pages that are attached now (a copy: the list of the hub changes).
+export fn Hub @attached() -> []int {
+    mut out = []int.new()
+    for c in @conns { out.push(c) }
+    out
+}

@@ -1,0 +1,18 @@
+module repro_server.pg_polaris_message
+
+// Oracle 0.1.0 (task 099): the PostgreSQL driver nova-postgres and Polaris in the SAME program. The driver has a variant
+// `DecodeOutcome.Message { msg, consumed }` (decode.nv), Polaris has the type `Message` (polaris.ws, an enum of Text/Binary/Ping/Pong);
+// a variant name and an unrelated type name share one table, and the driver's own file stops the build:
+//   error: [E7301] cannot return value of type `Result[Message, PostgresError]` from a function declared `-> Result[DecodeOutcome, PostgresError]`
+// at nova-postgres src/decode.nv:107. Each package compiles alone. So the session server of CrewHarness is TWO programs: the front
+// (Polaris) and the hub (engines, agents, PostgreSQL), talking by lines over pipes.
+// Setup: `nova update` once, then `nova test src/pg_polaris_message`. Expected: PASS. Actual: CODEGEN-FAIL in the driver's decode.nv.
+
+import postgres.{ParamValue}
+import polaris.{Router, StatusCode}
+
+test "the driver and Polaris in one program" {
+    ro p = ParamValue.text("x")
+    ro r = Router.new()
+    assert(StatusCode.OK.code() == 200)
+}

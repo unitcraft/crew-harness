@@ -116,6 +116,15 @@ export fn pg_load(cfg PgConfig, session str) Net -> Result[Option[Loaded], PgFau
     Ok(Some(Loaded { step, snapshot: rows[0][1], journal }))
 }
 
+/// `crew.list_sessions`: the ids of all sessions of the database, once each, in the order of the names.
+export fn pg_list(cfg PgConfig) Net -> Result[[]str, PgFault] {
+    ro none []Option[str] = []
+    ro rows = run(cfg, "select id from crew.list_sessions()", none, true)?
+    mut ids = []str.new()
+    for row in rows { ids.push(row[0]) }
+    Ok(ids)
+}
+
 /// Run a migration script (`src/pg/schema.sql`) as one batch of the simple protocol: one implicit transaction, so a script
 /// that fails changes nothing. The configuration must be the owner of the database, not the application role.
 export fn pg_migrate(cfg PgConfig, sql str) Net -> Result[(), PgFault] {

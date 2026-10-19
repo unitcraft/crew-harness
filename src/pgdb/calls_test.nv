@@ -94,10 +94,10 @@ test "migration: runs again over a database with data and changes nothing" {
     drop_test_db(db)
 }
 
-test "migration: the tables and the two functions are in the schema crew" {
+test "migration: the tables and the three functions are in the schema crew" {
     ro db = new_test_db("objects")
     assert(test_count(db.admin, "select count(*) from pg_tables where schemaname = 'crew'") == 2)
-    assert(test_count(db.admin, "select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'crew' and p.proname in ('save_step', 'load')") == 2)
+    assert(test_count(db.admin, "select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'crew' and p.proname in ('save_step', 'load', 'list_sessions')") == 3)
     drop_test_db(db)
 }
 
@@ -134,16 +134,16 @@ test "save and load: the last snapshot comes back with the journal of the sessio
 
 test "save and load: two sessions are separate" {
     ro db = new_test_db("two")
-    assert(is_ok(save_step(db.app, "s-a", 1, snap_at(1, "A"), [line_at(1, "only a")])))
-    assert(is_ok(save_step(db.app, "s-b", 1, snap_at(1, "B"), [line_at(1, "only b"), line_at(1, "b too")])))
-    assert(is_ok(save_step(db.app, "s-a", 2, snap_at(2, "A2"), [])))
-    ro a = loaded_or_stop(db.app, "s-a")
-    ro b = loaded_or_stop(db.app, "s-b")
-    assert(a.step == 2)
-    assert(b.step == 1)
-    assert(a.journal.len() == 1)
-    assert(b.journal.len() == 2)
-    assert(b.snapshot.contains("B"))
+    assert(is_ok(save_step(db.app, "s-first", 1, snap_at(1, "A"), [line_at(1, "only first")])))
+    assert(is_ok(save_step(db.app, "s-second", 1, snap_at(1, "B"), [line_at(1, "only second"), line_at(1, "second too")])))
+    assert(is_ok(save_step(db.app, "s-first", 2, snap_at(2, "A2"), [])))
+    ro first = loaded_or_stop(db.app, "s-first")
+    ro second = loaded_or_stop(db.app, "s-second")
+    assert(first.step == 2)
+    assert(second.step == 1)
+    assert(first.journal.len() == 1)
+    assert(second.journal.len() == 2)
+    assert(second.snapshot.contains("B"))
     drop_test_db(db)
 }
 
@@ -331,6 +331,46 @@ test "role: a login that is not a member of the application role has no access t
         Err(f) => assert(f.sqlstate == "42501")
     }
     ro gone = test_must_sql(root, "drop role crew_u_stranger")
+    drop_test_db(db)
+}
+
+// ----- the list of sessions (task 099) -----
+
+fn listed(cfg PgConfig) -> []str {
+    with Net = real_net() {
+        match pg_list(cfg) {
+            Ok(ids) => ids
+            Err(f) => panic("list: ${f.message} [${f.sqlstate}]")
+        }
+    }
+}
+
+test "list: no session in a new database, then the ids of the sessions once each, in order" {
+    ro db = new_test_db("list")
+    assert(listed(db.app).len() == 0)
+    assert(is_ok(save_step(db.app, "b-2", 1, snap_at(1, "x"), [line_at(1, "x")])))
+    assert(is_ok(save_step(db.app, "a-1", 1, snap_at(1, "x"), [])))
+    assert(is_ok(save_step(db.app, "b-2", 2, snap_at(2, "y"), [line_at(2, "y")])))
+    ro ids = listed(db.app)
+    assert(ids.len() == 2)
+    assert(ids[0] == "a-1")
+    assert(ids[1] == "b-2")
+    drop_test_db(db)
+}
+
+test "list: a login that is not a member of the application role cannot list" {
+    ro db = new_test_db("listpublic")
+    ro root = test_admin_on("postgres")
+    ro old = test_must_sql(root, "drop role if exists crew_u_stranger2")
+    ro made = test_must_sql(root, "create role crew_u_stranger2 login password '${test_app_password()}'")
+    ro stranger PgConfig = { host: "127.0.0.1", port: test_port(), database: db.name, user: "crew_u_stranger2", password: test_app_password() }
+    with Net = real_net() {
+        match pg_list(stranger) {
+            Ok(ids) => assert(false)
+            Err(f) => assert(f.sqlstate == "42501")
+        }
+    }
+    ro gone = test_must_sql(root, "drop role crew_u_stranger2")
     drop_test_db(db)
 }
 

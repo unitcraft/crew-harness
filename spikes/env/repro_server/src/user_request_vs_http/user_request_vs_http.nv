@@ -1,0 +1,23 @@
+module repro_server.user_request_vs_http
+
+// Oracle 0.1.0 (task 099): a user generic record `Request[T]` (the engine of CrewHarness had one; it is now `PartyRequest`) and the
+// package `http` (it is in every program that imports Polaris) in the SAME program. The compiler takes the record `Request` of `http`
+// (method, url, headers... and `consume`) for the user's one:
+//   error: [E_CONSUME_KEYWORD_MISSING] binding `r` holds a consume-required instance of type `Request`   (the type of `http`)
+// and, in a module that spells `Request[str]` in a signature or a field (the engine of CrewHarness did):
+//   error: [E7310] type `Request` is not generic - it takes no type arguments, but 1 was provided
+//   error: [E_RECORD_UNKNOWN_FIELD] record `Request` has no field `id`
+// `Response[R]` clashes the same way. The checker does not say that two types of one name exist.
+// Setup: `nova update` once, then `nova test src/user_request_vs_http`. Expected: PASS. Actual: type errors.
+
+import polaris.{StatusCode}
+
+export type Request[T] { id str, input T }
+
+fn make() -> Request[str] => { id: "a", input: "b" }
+
+test "a user generic Request next to Polaris" {
+    ro r = make()
+    assert(r.id == "a")
+    assert(StatusCode.OK.code() == 200)
+}

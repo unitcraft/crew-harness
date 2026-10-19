@@ -5,7 +5,7 @@
 module crew_harness.chat
 
 import std.encoding.json.{JsonValue, JsonObject}
-import crew_harness.engine.{Engine, MemoryWorld, Incoming, EventKind, FailCode, Response, Reply, Rejection, JournalEntry, Journal, Store, Link, start_engine, resume_engine, memory_journal, memory_store, memory_link, memory_time, decode_snapshot, journal_line, journal_event, param}
+import crew_harness.engine.{Engine, MemoryWorld, Incoming, EventKind, FailCode, PartyResponse, Reply, Rejection, JournalEntry, Journal, Store, Link, start_engine, resume_engine, memory_journal, memory_store, memory_link, memory_time, decode_snapshot, journal_line, journal_event, param}
 
 // ----- helpers: one `with` over the four handlers of a world -----
 
@@ -124,7 +124,7 @@ test "engine: start is step 1, saves the first snapshot and writes the start lin
     assert(world.saves == 1)
     assert(e.trace() == "t1000-chat-1")
     assert(!e.is_finished())
-    ro entries = world.entries()
+    ro entries = world.journal_entries()
     assert(entries.len() == 1)
     assert(entries[0].event.code == "machine_started")
     assert(entries[0].step == 1)
@@ -158,7 +158,7 @@ test "engine: the event is stamped: id, clock, step" {
     mut e = begin(world)
     world.advance(250)
     feed(e, world, user_says("hello"))
-    ro entries = world.entries()
+    ro entries = world.journal_entries()
     ro on_event = of_code(entries, "event_accepted")
     assert(on_event.len() == 1)
     assert(on_event[0].cause == "input-2")
@@ -171,7 +171,7 @@ test "engine: the journal lines of a step carry the state the machine waits in a
     mut e = begin(world)
     feed(e, world, user_says("hello"))
     feed(e, world, agent_done("agent-1"))
-    ro entries = world.entries()
+    ro entries = world.journal_entries()
     for entry in entries {
         if entry.step == 1 { assert(entry.state == "Idle") }
         if entry.step == 2 { assert(entry.state == "Awaiting") }
@@ -242,7 +242,7 @@ test "engine: a second answer to a closed request is discarded and the journal r
     assert(answer_of(e) == "x")
     assert(e.step_number() == before_step + 1)
     assert(world.sent.len() == 1)
-    ro entries = world.entries()
+    ro entries = world.journal_entries()
     assert(codes_of(entries, "reply_discarded") == 1)
     ro discarded = of_code(entries, "reply_discarded")
     assert(discarded[0].request == "agent-1")
@@ -258,7 +258,7 @@ test "engine: a late chunk of a closed request is discarded too, and does not re
     feed(e, world, agent_chunk("agent-1", "late"))
     assert(answer_of(e) == "")
     assert(e.open_ids().len() == 0)
-    assert(codes_of(world.entries(), "reply_discarded") == 1)
+    assert(codes_of(world.journal_entries(), "reply_discarded") == 1)
 }
 
 test "engine: an answer to a request nobody opened is discarded as unknown" {
@@ -269,7 +269,7 @@ test "engine: an answer to a request nobody opened is discarded as unknown" {
     feed(e, world, agent_done("agent-7"))
     assert(encoded(e) == before)
     assert(e.open_ids().len() == 1)
-    ro discarded = of_code(world.entries(), "reply_discarded")
+    ro discarded = of_code(world.journal_entries(), "reply_discarded")
     assert(discarded.len() == 1)
     assert(discarded[0].request == "agent-7")
     assert(discarded[0].event.value_of("reason") == Some("unknown_request"))
@@ -288,7 +288,7 @@ test "engine: cancel by the user cancels the open request at the agent and ends 
     assert(e.open_ids().len() == 0)
     assert(world.cancelled.len() == 1)
     assert(world.cancelled[0] == "agent-1")
-    ro entries = world.entries()
+    ro entries = world.journal_entries()
     assert(codes_of(entries, "cancel_ordered") == 1)
     assert(codes_of(entries, "cancel_sent") == 1)
 }
@@ -301,7 +301,7 @@ test "engine: an answer that comes after the cancel is discarded as a reply to a
     feed(e, world, agent_done("agent-1"))
     assert(refusal_of(e) == "StoppedByHuman")
     assert(answer_of(e) == "")
-    ro discarded = of_code(world.entries(), "reply_discarded")
+    ro discarded = of_code(world.journal_entries(), "reply_discarded")
     assert(discarded.len() == 1)
     assert(discarded[0].event.value_of("reason") == Some("closed_request"))
 }
@@ -358,7 +358,7 @@ test "engine: an answer that comes after the timeout is discarded" {
     pump(e, world)
     assert(refusal_of(e) == "Timeout")
     assert(answer_of(e) == "")
-    assert(codes_of(world.entries(), "reply_discarded") == 1)
+    assert(codes_of(world.journal_entries(), "reply_discarded") == 1)
 }
 
 test "engine: pump takes the incoming events of the agent in the order of arrival" {
@@ -425,7 +425,7 @@ test "restart after the answer: stays finished, nothing sent" {
     assert(answer_of(e2) == answer)
     assert(world.sent.len() == 1)
     assert(world.cancelled.len() == 0)
-    ro discarded = of_code(world.entries(), "reply_discarded")
+    ro discarded = of_code(world.journal_entries(), "reply_discarded")
     assert(discarded.len() == 1)
     assert(discarded[0].event.value_of("reason") == Some("closed_request"))
 }
@@ -457,7 +457,7 @@ test "restart: a step of its own, no gaps, same trace" {
     mut e2 = resumed(world)
     assert(e2.step_number() == before + 1)
     assert(e2.trace() == e1.trace())
-    ro restart = of_code(world.entries(), "engine_resumed")
+    ro restart = of_code(world.journal_entries(), "engine_resumed")
     assert(restart.len() == 1)
     assert(restart[0].step == before + 1)
     assert(restart[0].cause == "restart-3")
@@ -498,7 +498,7 @@ test "journal: lines parse, one trace, steps without gaps" {
     feed(e2, world, agent_done("agent-1"))
     feed(e2, world, agent_done("agent-1"))
     feed(e2, world, agent_done("agent-9"))
-    ro entries = world.entries()
+    ro entries = world.journal_entries()
     assert(entries.len() == world.journal.len())
     ro last = e2.step_number()
     mut seen = []int.new()
@@ -524,7 +524,7 @@ test "journal: request line and send mark carry the request id" {
     mut e = begin(world)
     feed(e, world, user_says("hi"))
     feed(e, world, agent_done("agent-1"))
-    ro entries = world.entries()
+    ro entries = world.journal_entries()
     ro requests = of_code(entries, "request_ordered")
     ro sent = of_code(entries, "request_sent")
     assert(requests.len() == 1)
@@ -563,30 +563,30 @@ test "UTF-8: Cyrillic goes through request, journal, snapshot, answer" {
 // ----- determinism -----
 
 test "determinism: two worlds give the same journal and snapshot" {
-    mut a = MemoryWorld.at(5000)
-    mut ea = begin(a)
-    feed(ea, a, user_says("привет"))
-    a.advance(40)
-    feed(ea, a, agent_chunk("agent-1", "part"))
-    a.advance(40)
-    feed(ea, a, agent_done("agent-1"))
+    mut first = MemoryWorld.at(5000)
+    mut ea = begin(first)
+    feed(ea, first, user_says("привет"))
+    first.advance(40)
+    feed(ea, first, agent_chunk("agent-1", "part"))
+    first.advance(40)
+    feed(ea, first, agent_done("agent-1"))
 
-    mut b = MemoryWorld.at(5000)
-    mut eb = begin(b)
-    feed(eb, b, user_says("привет"))
-    b.advance(40)
-    feed(eb, b, agent_chunk("agent-1", "part"))
-    b.advance(40)
-    feed(eb, b, agent_done("agent-1"))
+    mut second = MemoryWorld.at(5000)
+    mut eb = begin(second)
+    feed(eb, second, user_says("привет"))
+    second.advance(40)
+    feed(eb, second, agent_chunk("agent-1", "part"))
+    second.advance(40)
+    feed(eb, second, agent_done("agent-1"))
 
-    assert(a.journal.len() == b.journal.len())
+    assert(first.journal.len() == second.journal.len())
     mut i = 0
-    while i < a.journal.len() {
-        assert(a.journal[i] == b.journal[i])
+    while i < first.journal.len() {
+        assert(first.journal[i] == second.journal[i])
         i += 1
     }
-    match a.snapshots.get("chat-1") {
-        Some(sa) => match b.snapshots.get("chat-1") {
+    match first.snapshots.get("chat-1") {
+        Some(sa) => match second.snapshots.get("chat-1") {
             Some(sb) => assert(sa.data == sb.data)
             None => assert(false)
         }
@@ -607,7 +607,7 @@ test "ack: sent after the commit, key in the journal line" {
     assert(world.acked[0] == "acp-7")
     // at the moment of the ack the snapshot of the step was already saved (the commit point)
     assert(world.saves_at_ack[0] == saves_before + 1)
-    ro on_event = of_code(world.entries(), "event_accepted")
+    ro on_event = of_code(world.journal_entries(), "event_accepted")
     assert(on_event[on_event.len() - 1].event.value_of("source") == Some("acp-7"))
 }
 
@@ -730,7 +730,7 @@ test "old journal: a restart over lines of the old form reads the marks, sends n
     accept_only(e1, world, Incoming.from_source("acp-1", agent_chunk("agent-1", "one ")))
     assert(world.sent.len() == 1)
     mut old = []str.new()
-    for entry in world.entries() { old.push(old_line(entry)) }
+    for entry in world.journal_entries() { old.push(old_line(entry)) }
     world.journal = old
     mut e2 = resumed(world)
     dispatch(e2, world)
@@ -740,6 +740,6 @@ test "old journal: a restart over lines of the old form reads the marks, sends n
     assert(world.acked.len() == 1)
     assert(world.acked[0] == "acp-1")
     // the new restart line stands after the old lines
-    ro restart = of_code(world.entries(), "engine_resumed")
+    ro restart = of_code(world.journal_entries(), "engine_resumed")
     assert(restart.len() == 1)
 }

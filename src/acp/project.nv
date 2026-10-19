@@ -296,6 +296,11 @@ fn page_input_of(e Incoming, turn str) -> Option[PageInput] {
                 ro value = object_input(e)?
                 return page_input("permission_decision", value)
             }
+            // the first word of a session of the server (task 099): its name, the agent, the folder - the input is the page's own
+            if e.name == "session_created" {
+                ro value = object_input(e)?
+                return page_input("session_created", value)
+            }
             None
         }
         EventKind.Progress => {

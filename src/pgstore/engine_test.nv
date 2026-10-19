@@ -93,7 +93,7 @@ fn journal_of(use_pg bool, mut mem MemoryWorld, mut pg PgWorld) -> []JournalEntr
     if use_pg {
         with Journal = pg_journal(pg) { Journal.read_all() }
     } else {
-        mem.entries()
+        mem.journal_entries()
     }
 }
 
@@ -128,11 +128,11 @@ fn same_entry(x JournalEntry, y JournalEntry) -> bool =>
     x.trace == y.trace && x.step == y.step && x.cause == y.cause && x.state == y.state
         && x.request == y.request && x.at == y.at && same_event(x.event, y.event)
 
-fn same_entries(a []JournalEntry, b []JournalEntry) -> bool {
-    if a.len() != b.len() { return false }
+fn same_entries(first []JournalEntry, second []JournalEntry) -> bool {
+    if first.len() != second.len() { return false }
     mut i = 0
-    while i < a.len() {
-        if !same_entry(a[i], b[i]) { return false }
+    while i < first.len() {
+        if !same_entry(first[i], second[i]) { return false }
         i += 1
     }
     true
@@ -160,12 +160,12 @@ fn answer_text(e Engine[ChatSession, ChatState]) -> str {
 }
 
 // The two runs agree on everything the world can see.
-fn assert_same(a Engine[ChatSession, ChatState], b Engine[ChatSession, ChatState], ja []JournalEntry, jb []JournalEntry, sa Option[Snapshot], sb Option[Snapshot]) -> () {
-    assert(a.step_number() == b.step_number())
-    assert(encode_chat_state(a.state()) == encode_chat_state(b.state()))
-    assert(a.is_finished() == b.is_finished())
-    assert(a.open_ids().len() == b.open_ids().len())
-    assert(answer_text(a) == answer_text(b))
+fn assert_same(first Engine[ChatSession, ChatState], second Engine[ChatSession, ChatState], ja []JournalEntry, jb []JournalEntry, sa Option[Snapshot], sb Option[Snapshot]) -> () {
+    assert(first.step_number() == second.step_number())
+    assert(encode_chat_state(first.state()) == encode_chat_state(second.state()))
+    assert(first.is_finished() == second.is_finished())
+    assert(first.open_ids().len() == second.open_ids().len())
+    assert(answer_text(first) == answer_text(second))
     assert(ja.len() > 0)
     assert(same_entries(ja, jb))
     assert(snapshot_data(sa) == snapshot_data(sb))

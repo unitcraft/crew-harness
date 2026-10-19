@@ -1,0 +1,102 @@
+// hub_pg_test.nv - the session server over POSTGRESQL with the fake ACP agent (task 099): the same scenarios as in src/server_live
+// (over files), and the same results. Needs the temporary database of src/pg/testdb.ps1 (see src/pg/README.md); no database is a
+// red test with a message, not a skip.
+module crew_harness.server_pg
+
+import crew_harness.server.{kit_pg, scenario_chat, scenario_permission, scenario_cancel, scenario_restart_idle, scenario_restart_open, scenario_crash, scenario_two_pages, scenario_rejects, scenario_many, scenario_broken_agent}
+import crew_harness.pgdb.{new_test_db, drop_test_db, test_count}
+
+fn clean(report str) -> () {
+    if report.byte_len() > 0 { println("NOT AS IT MUST BE: ${report}") }
+    assert(report == "")
+}
+
+test "pg: two turns of a chat" {
+    ro db = new_test_db("hub_chat")
+    ro report = scenario_chat(kit_pg("pgchat", 30000, db.app))
+    ro stored = test_count(db.admin, "select count(distinct id) from crew.machine_snapshot")
+    drop_test_db(db)
+    clean(report)
+    assert(stored == 1)
+}
+
+test "pg: permission asked, allowed, denied" {
+    ro db = new_test_db("hub_perm")
+    ro report = scenario_permission(kit_pg("pgperm", 30000, db.app))
+    ro stored = test_count(db.admin, "select count(distinct id) from crew.machine_snapshot")
+    drop_test_db(db)
+    clean(report)
+    assert(stored == 1)
+}
+
+test "pg: a cancel keeps the session open" {
+    ro db = new_test_db("hub_cancel")
+    ro report = scenario_cancel(kit_pg("pgcancel", 30000, db.app))
+    ro stored = test_count(db.admin, "select count(distinct id) from crew.machine_snapshot")
+    drop_test_db(db)
+    clean(report)
+    assert(stored == 1)
+}
+
+test "pg: restart between turns" {
+    ro db = new_test_db("hub_restart")
+    ro report = scenario_restart_idle(kit_pg("pgrestart", 30000, db.app))
+    ro stored = test_count(db.admin, "select count(distinct id) from crew.machine_snapshot")
+    drop_test_db(db)
+    clean(report)
+    assert(stored == 1)
+}
+
+test "pg: restart in the middle of a turn" {
+    ro db = new_test_db("hub_open")
+    ro report = scenario_restart_open(kit_pg("pgopen", 2000, db.app))
+    ro stored = test_count(db.admin, "select count(distinct id) from crew.machine_snapshot")
+    drop_test_db(db)
+    clean(report)
+    assert(stored == 1)
+}
+
+test "pg: the agent dies" {
+    ro db = new_test_db("hub_crash")
+    ro report = scenario_crash(kit_pg("pgcrash", 30000, db.app))
+    ro stored = test_count(db.admin, "select count(distinct id) from crew.machine_snapshot")
+    drop_test_db(db)
+    clean(report)
+    assert(stored == 1)
+}
+
+test "pg: two pages, one session" {
+    ro db = new_test_db("hub_two")
+    ro report = scenario_two_pages(kit_pg("pgtwo", 30000, db.app))
+    ro stored = test_count(db.admin, "select count(distinct id) from crew.machine_snapshot")
+    drop_test_db(db)
+    clean(report)
+    assert(stored == 1)
+}
+
+test "pg: what cannot be done is an error" {
+    ro db = new_test_db("hub_rejects")
+    ro report = scenario_rejects(kit_pg("pgrejects", 30000, db.app))
+    ro stored = test_count(db.admin, "select count(distinct id) from crew.machine_snapshot")
+    drop_test_db(db)
+    clean(report)
+    assert(stored == 0)
+}
+
+test "pg: several sessions" {
+    ro db = new_test_db("hub_many")
+    ro report = scenario_many(kit_pg("pgmany", 30000, db.app))
+    ro stored = test_count(db.admin, "select count(distinct id) from crew.machine_snapshot")
+    drop_test_db(db)
+    clean(report)
+    assert(stored == 2)
+}
+
+test "pg: an agent that refuses to start" {
+    ro db = new_test_db("hub_broken")
+    ro report = scenario_broken_agent(kit_pg("pgbroken", 30000, db.app))
+    ro stored = test_count(db.admin, "select count(distinct id) from crew.machine_snapshot")
+    drop_test_db(db)
+    clean(report)
+    assert(stored == 1)
+}

@@ -17,7 +17,7 @@ module crew_harness.storage
 
 import crew_harness.engine.{Journal, Store, JournalEntry, Snapshot, journal_line, parse_journal_line}
 import std.encoding.json.{Json, JsonValue, JsonObject}
-import std.fs.{Fs, real_fs, File, Path, read, create_dir_all, rename, metadata, remove_file}
+import std.fs.{Fs, real_fs, File, Path, read, read_dir, create_dir_all, rename, metadata, remove_file}
 import std.io.{write_all}
 
 const MAX_NAME = 128
@@ -256,4 +256,34 @@ export fn file_store(root str) -> Effect[Store] {
             }
         }
     }
+}
+
+/// The ids of the sessions in the data folder: the names that have a `<id>.snapshot` file, in the order of the names. A folder
+/// that does not exist has none. A file whose name is not a safe session name is not a session.
+export fn list_sessions(root str) -> []str {
+    mut names = []str.new()
+    with Fs = real_fs() {
+        match read_dir(Path.from_bytes(root.bytes())) {
+            Err(e) => ()
+            Ok(entries) => {
+                for entry in entries {
+                    match entry.name_str() {
+                        Some(file) => match file.strip_suffix(".snapshot") {
+                            Some(id) => if entry.is_file() && valid_session_name(id) { names.push(id) }
+                            None => ()
+                        }
+                        None => ()
+                    }
+                }
+            }
+        }
+    }
+    // a plain insertion sort: the folder holds a few hundred names at the most
+    mut sorted = []str.new()
+    for name in names {
+        mut at = sorted.len()
+        while at > 0 && name < sorted[at - 1] { at -= 1 }
+        sorted.insert(at, name)
+    }
+    sorted
 }

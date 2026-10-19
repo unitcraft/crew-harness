@@ -37,7 +37,7 @@ export type Store effect {
 /// committed (the process may have died between the commit and the `ack`). `ack` is idempotent.
 /// An event without a source key (an empty `id`) is never acknowledged.
 export type Link effect {
-    fn send(request Request[str]) -> ()
+    fn send(request PartyRequest[str]) -> ()
     fn receive() -> Option[Incoming]
     fn cancel(request_id str) -> ()
     fn ack(source str) -> ()

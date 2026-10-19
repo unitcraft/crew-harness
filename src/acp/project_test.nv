@@ -73,12 +73,12 @@ test "update: tool_call has id, title, kind, status, detail" {
 }
 
 test "update: tool_call unknown kind/status, defaults" {
-    ro a = j(project_update(j("{\"sessionUpdate\":\"tool_call\",\"toolCallId\":\"c1\",\"title\":\"t\",\"kind\":\"switch_mode\",\"status\":\"weird\"}")).input)
-    assert(str_at(a, "kind") == "other")
-    assert(str_at(a, "status") == "pending")
-    ro b = j(project_update(j("{\"sessionUpdate\":\"tool_call\",\"toolCallId\":\"c2\",\"title\":\"t\"}")).input)
-    assert(str_at(b, "kind") == "other")
-    assert(str_at(b, "status") == "pending")
+    ro first = j(project_update(j("{\"sessionUpdate\":\"tool_call\",\"toolCallId\":\"c1\",\"title\":\"t\",\"kind\":\"switch_mode\",\"status\":\"weird\"}")).input)
+    assert(str_at(first, "kind") == "other")
+    assert(str_at(first, "status") == "pending")
+    ro second = j(project_update(j("{\"sessionUpdate\":\"tool_call\",\"toolCallId\":\"c2\",\"title\":\"t\"}")).input)
+    assert(str_at(second, "kind") == "other")
+    assert(str_at(second, "status") == "pending")
 }
 
 test "update: tool_call diff is a line with the path" {
@@ -187,14 +187,14 @@ test "stop: end_turn is agent_done" {
 }
 
 test "stop: other reasons are refusals with codes" {
-    ro a = stop_event("agent-1", "max_tokens")
-    assert(a.kind == EventKind.Refused)
-    assert(a.name == "agent_refused")
-    assert(a.input == "MaxTokens")
+    ro first = stop_event("agent-1", "max_tokens")
+    assert(first.kind == EventKind.Refused)
+    assert(first.name == "agent_refused")
+    assert(first.input == "MaxTokens")
     assert(stop_event("agent-1", "max_turn_requests").input == "MaxTurnRequests")
     assert(stop_event("agent-1", "refusal").input == "ModelRefused")
     assert(stop_event("agent-1", "cancelled").input == "StoppedByHuman")
-    // a reason the table does not know is no result, never an invented code
+    // first reason the table does not know is no result, never an invented code
     assert(stop_event("agent-1", "something_new").input == "NoResult")
     assert(FailCode.parse(stop_event("agent-1", "something_new").input) != None)
 }
@@ -295,4 +295,14 @@ test "page: kinds without a page counterpart give None" {
 
 test "page: tool event with non-object input gives None" {
     assert(page_event(stamped(EventKind.Progress, "tool_call", "agent-1", "not json"), "t1") == None)
+}
+
+test "page: session_created is passed on with its input" {
+    ro text = "{\"name\":\"Проба\",\"agent\":\"opencode\",\"folder\":\"C:/work/x\"}"
+    ro page = page_of(stamped(EventKind.Input, "session_created", "x", text), "t1")
+    assert(str_at(page, "kind") == "session_created")
+    assert(str_at(input_of(page), "name") == "Проба")
+    assert(str_at(input_of(page), "agent") == "opencode")
+    assert(str_at(input_of(page), "folder") == "C:/work/x")
+    assert(page_event(stamped(EventKind.Input, "session_created", "x", "not json"), "t1") == None)
 }

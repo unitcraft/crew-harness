@@ -1,0 +1,292 @@
+// settings.nv - the settings of the session server from a JSON file and from the environment (task 099).
+//
+// The file is a JSON object; every key is optional (see `src/server/server.example.json`):
+//   port, data_dir, store ("files" or "pg"), pg {host, port, database, user, password}, agents [{id, label, program, args}],
+//   idle_term_seconds, workdir, web_dir, hub {program, args}
+// The environment is over the file, key by key:
+//   CREW_SERVER_PORT, CREW_SERVER_STORE, CREW_SERVER_DATA_DIR, CREW_SERVER_AGENT (the command of the one agent "opencode",
+//   words separated by spaces), CREW_SERVER_WORKDIR, CREW_SERVER_WEB_DIR, CREW_SERVER_IDLE_SECONDS, CREW_SERVER_HUB (the command
+//   that starts the hub, words separated by spaces) and the CREW_PG_* variables of `crew_harness.pgconf`.
+// The file is named by the argument or, when that is empty, by CREW_SERVER_CONFIG. The password lives in the environment or in a
+// file outside the repository; it is in no error and no description.
+module crew_harness.server
+
+import std.text
+import crew_harness.pgdb.{PgConfig, parse_pg_config}
+import crew_harness.pgconf.{pg_config_env}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+import std.fs.{Fs, read_text, Path}
+import std.os.{Os, env}
+
+/// AgentSpec: an agent the page can choose: the id the page names it by, the label, the command.
+export type AgentSpec { id str, label str, program str, args []str }
+
+/// ServerSettings: everything the server is told. `store` is "files" or "pg"; `data_dir` holds the files of the file store
+/// and, in both modes, the inbox files of the ACP client; `idle_term_ms` is the idle term of a turn; `workdir` is the folder
+/// the agents work in ("" - the folder of the server); `hub_program` and `hub_args` start the hub (the front only).
+export type ServerSettings {
+    port int,
+    data_dir str,
+    store str,
+    pg PgConfig,
+    agents []AgentSpec,
+    idle_term_ms int,
+    workdir str,
+    web_dir str,
+    hub_program str,
+    hub_args []str
+}
+
+fn st_text(o JsonObject, key str, fallback str) -> Result[str, str] {
+    match o.get(key) {
+        None => Ok(fallback)
+        Some(v) => match v.str() {
+            Some(s) => Ok(s)
+            None => Err("the setting ${key} must be a string")
+        }
+    }
+}
+
+fn st_number(o JsonObject, key str, fallback int) -> Result[int, str] {
+    match o.get(key) {
+        None => Ok(fallback)
+        Some(v) => match v.int() {
+            Some(n) => Ok(n)
+            None => Err("the setting ${key} must be a whole number")
+        }
+    }
+}
+
+fn st_words(v JsonValue, what str) -> Result[[]str, str] {
+    ro items = match v.array() {
+        Some(a) => a
+        None => return Err("${what} must be a list of strings")
+    }
+    mut out = []str.new()
+    for item in items {
+        match item.str() {
+            Some(s) => out.push(s)
+            None => return Err("${what} must be a list of strings")
+        }
+    }
+    Ok(out)
+}
+
+fn st_agent(v JsonValue) -> Result[AgentSpec, str] {
+    ro o = match v.object() {
+        Some(x) => x
+        None => return Err("an agent must be an object")
+    }
+    ro id = st_text(o, "id", "")?
+    ro program = st_text(o, "program", "")?
+    if id.byte_len() == 0 { return Err("an agent needs an id") }
+    if program.byte_len() == 0 { return Err("the agent ${id} needs a program") }
+    ro label = st_text(o, "label", id)?
+    ro args = match o.get("args") {
+        Some(a) => st_words(a, "the args of the agent ${id}")?
+        None => []str.new()
+    }
+    Ok(AgentSpec { id, label, program, args })
+}
+
+// On Windows OpenCode is an npm shim, a .cmd file, and a process cannot be started from the bare name.
+#cfg(target_os = "windows")
+fn st_opencode_program() -> str => "opencode.cmd"
+
+#cfg(!target_os = "windows")
+fn st_opencode_program() -> str => "opencode"
+
+/// The program of the default agent: `opencode.cmd` on Windows, `opencode` elsewhere.
+export fn default_opencode_program() -> str => st_opencode_program()
+
+fn st_default_agents() -> []AgentSpec {
+    mut out = []AgentSpec.new()
+    out.push(AgentSpec { id: "opencode", label: "OpenCode", program: st_opencode_program(), args: ["acp"] })
+    out
+}
+
+fn st_object(v JsonValue, what str) -> Result[JsonObject, str] {
+    match v.object() {
+        Some(o) => Ok(o)
+        None => Err("${what} must be an object")
+    }
+}
+
+/// The settings from the text of a file; the text is never quoted in an error.
+export fn parse_server_settings(text str) -> Result[ServerSettings, str] {
+    ro value = match Json.parse(text) {
+        Ok(v) => v
+        Err(e) => return Err("the settings are not JSON")
+    }
+    ro o = st_object(value, "the settings")?
+    ro port = st_number(o, "port", 8099)?
+    if port < 1 || port > 65535 { return Err("the port must be 1 to 65535") }
+    ro data_dir = st_text(o, "data_dir", "crew-data")?
+    ro store = st_text(o, "store", "files")?
+    if store != "files" && store != "pg" { return Err("the store must be files or pg") }
+    ro pg = match o.get("pg") {
+        Some(p) => {
+            ro po = st_object(p, "the setting pg")?
+            match parse_pg_config(JsonValue.object(po).to_str()) {
+                Ok(c) => c
+                Err(e) => return Err("the setting pg: ${e}")
+            }
+        }
+        None => parse_pg_config("{}")?
+    }
+    ro agents = match o.get("agents") {
+        Some(list) => {
+            ro items = match list.array() {
+                Some(a) => a
+                None => return Err("the setting agents must be a list")
+            }
+            if items.len() == 0 { return Err("the setting agents must name at least one agent") }
+            mut out = []AgentSpec.new()
+            for item in items { out.push(st_agent(item)?) }
+            out
+        }
+        None => st_default_agents()
+    }
+    ro idle_seconds = st_number(o, "idle_term_seconds", 900)?
+    if idle_seconds < 1 { return Err("idle_term_seconds must be 1 or more") }
+    ro workdir = st_text(o, "workdir", "")?
+    ro web_dir = st_text(o, "web_dir", "src/web")?
+    mut hub_program = "target/crew-hub.exe"
+    mut hub_args = []str.new()
+    match o.get("hub") {
+        Some(h) => {
+            ro ho = st_object(h, "the setting hub")?
+            hub_program = st_text(ho, "program", hub_program)?
+            match ho.get("args") {
+                Some(a) => { hub_args = st_words(a, "the args of the hub")? }
+                None => ()
+            }
+        }
+        None => ()
+    }
+    Ok(ServerSettings { port, data_dir, store, pg, agents, idle_term_ms: idle_seconds * 1000, workdir, web_dir, hub_program, hub_args })
+}
+
+fn st_env(key str) Os -> Option[str] {
+    match env(key) {
+        Some(v) => if v.byte_len() > 0 { Some(v) } else { None }
+        None => None
+    }
+}
+
+fn st_split(text str) -> []str {
+    mut out = []str.new()
+    for part in text.split(" ") {
+        if part.byte_len() > 0 { out.push(part) }
+    }
+    out
+}
+
+fn st_env_number(key str) Os -> Result[Option[int], str] {
+    match st_env(key) {
+        None => Ok(None)
+        Some(text) => match text.to_int() {
+            Ok(n) => Ok(Some(n))
+            Err(e) => Err("${key} must be a whole number")
+        }
+    }
+}
+
+// The words after the first one.
+fn st_rest(words []str) -> []str {
+    mut rest = []str.new()
+    mut i = 1
+    while i < words.len() {
+        rest.push(words[i])
+        i += 1
+    }
+    rest
+}
+
+// The one agent "opencode" of the command in the variable.
+fn st_one_agent(words []str) -> []AgentSpec {
+    mut one = []AgentSpec.new()
+    one.push(AgentSpec { id: "opencode", label: "OpenCode", program: words[0], args: st_rest(words) })
+    one
+}
+
+/// The settings: the file `file` (or the one named by CREW_SERVER_CONFIG when `file` is empty; no file means the defaults),
+/// then the environment over it. The error never quotes the content of the file.
+export fn server_settings(file str) Os Fs -> Result[ServerSettings, str] {
+    ro name = if file.byte_len() > 0 { file } else { st_env("CREW_SERVER_CONFIG") ?? "" }
+    ro base = if name.byte_len() == 0 {
+        parse_server_settings("{}")?
+    } else {
+        ro text = match read_text(Path.from_bytes(name.bytes())) {
+            Ok(t) => t
+            Err(e) => return Err("the settings file ${name} cannot be read")
+        }
+        match parse_server_settings(text) {
+            Ok(s) => s
+            Err(e) => return Err("${e} (file ${name})")
+        }
+    }
+    ro pg = pg_config_env(base.pg)?
+    ro port = st_env_number("CREW_SERVER_PORT")?
+    ro idle = st_env_number("CREW_SERVER_IDLE_SECONDS")?
+    ro agent_words = match st_env("CREW_SERVER_AGENT") {
+        Some(command) => st_split(command)
+        None => []str.new()
+    }
+    ro agents = if agent_words.len() > 0 { st_one_agent(agent_words) } else { base.agents }
+    ro hub_words = match st_env("CREW_SERVER_HUB") {
+        Some(command) => st_split(command)
+        None => []str.new()
+    }
+    ro hub_program = if hub_words.len() > 0 { hub_words[0] } else { base.hub_program }
+    ro hub_args = if hub_words.len() > 0 { st_rest(hub_words) } else { base.hub_args }
+    ro idle_term_ms = match idle {
+        Some(n) => n * 1000
+        None => base.idle_term_ms
+    }
+    ro merged = ServerSettings {
+        port: port ?? base.port,
+        data_dir: st_env("CREW_SERVER_DATA_DIR") ?? base.data_dir,
+        store: st_env("CREW_SERVER_STORE") ?? base.store,
+        pg,
+        agents,
+        idle_term_ms,
+        workdir: st_env("CREW_SERVER_WORKDIR") ?? base.workdir,
+        web_dir: st_env("CREW_SERVER_WEB_DIR") ?? base.web_dir,
+        hub_program,
+        hub_args
+    }
+    if merged.store != "files" && merged.store != "pg" { return Err("the store must be files or pg") }
+    if merged.port < 1 || merged.port > 65535 { return Err("the port must be 1 to 65535") }
+    if merged.idle_term_ms < 1000 { return Err("the idle term must be 1 second or more") }
+    Ok(merged)
+}
+
+/// Is the configuration fit to start? The store "pg" needs a configuration that `PgConfig.check` accepts (a local host and a password).
+export fn ServerSettings @check() -> Result[(), str] {
+    if @agents.len() == 0 { return Err("no agent is configured") }
+    if @data_dir.byte_len() == 0 { return Err("the data folder is empty") }
+    if @store == "pg" {
+        match @pg.check() {
+            Ok(done) => ()
+            Err(e) => return Err("the store pg: ${e}")
+        }
+    }
+    Ok(())
+}
+
+/// The settings for a log line: no password.
+export fn ServerSettings @describe() -> str {
+    mut ids = []str.new()
+    for a in @agents { ids.push(a.id) }
+    ro store = if @store == "pg" { "pg ${@pg.describe()}" } else { "files in ${@data_dir}" }
+    "port ${@port}, store ${store}, agents ${ids.join(",")}, idle term ${@idle_term_ms / 1000} s"
+}
+
+/// The agent with this id.
+export fn ServerSettings @agent(id str) -> Option[AgentSpec] {
+    for a in @agents {
+        if a.id == id { return Some(a) }
+    }
+    None
+}

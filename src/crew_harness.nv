@@ -1,6 +1,27 @@
-// crew_harness.nv - entry point of the crew-harness binary (a placeholder: the server comes in a later task).
+// crew_harness.nv - the entry point of the crew-harness binary (task 099): the session server, its front. It serves the page
+// of src/web/ and the WebSocket /ws on 127.0.0.1 and starts the hub (src/crew_hub.nv) as a child process.
+//   crew-harness serve [settings.json]      (the file may also be named by CREW_SERVER_CONFIG; see src/server/README.md)
+//   crew-harness                            prints the version and the usage and ends (a test of the entry point runs it)
+// Build both programs: nova build src/crew_hub.nv -o target/crew-hub.exe; nova build src/crew_harness.nv -o target/crew-harness.exe
 module crew_harness.crew_harness
 
-fn main() {
-    println("crew-harness 0.1.0")
+import crew_harness.server.front.{run_front, front_settings}
+import std.os.{args, exit_process}
+import std.io.{stderr}
+
+fn main() Os Fs Proc Net Time Detach Io -> () {
+    ro argv = args()
+    if argv.len() < 2 || argv[1] != "serve" {
+        println("crew-harness 0.1.0 - usage: crew-harness serve [settings.json]")
+        return
+    }
+    ro file = if argv.len() > 2 { argv[2] } else { "" }
+    match front_settings(file) {
+        Err(reason) => {
+            mut err = stderr()
+            ro written = err.write("crew-harness: ${reason}\n".bytes())
+            exit_process(2)
+        }
+        Ok(settings) => run_front(settings, file)
+    }
 }

@@ -27,7 +27,7 @@ fn run(state ChatState, event Incoming) -> Run {
     }
 }
 
-fn same(a ChatState, b ChatState) -> bool => encode_chat_state(a) == encode_chat_state(b)
+fn same(first ChatState, second ChatState) -> bool => encode_chat_state(first) == encode_chat_state(second)
 
 // A compact text of the orders, to compare and to look at.
 fn summary(orders []Order) -> str {
@@ -149,12 +149,12 @@ test "chat: an event of a name the machine does not know is a journal event, not
 
 test "chat: step is deterministic - the same state and event give the same result every time" {
     ro start = chat_session().initial()
-    ro a = run(start, said("hi"))
-    ro b = run(start, said("hi"))
-    assert(same(a.state, b.state))
-    assert(summary(a.orders) == summary(b.orders))
-    ro a2 = run(a.state, chunk("x"))
-    ro b2 = run(b.state, chunk("x"))
+    ro first = run(start, said("hi"))
+    ro second = run(start, said("hi"))
+    assert(same(first.state, second.state))
+    assert(summary(first.orders) == summary(second.orders))
+    ro a2 = run(first.state, chunk("x"))
+    ro b2 = run(second.state, chunk("x"))
     assert(same(a2.state, b2.state))
     assert(summary(a2.orders) == summary(b2.orders))
 }

@@ -3,16 +3,15 @@
 The handlers of the effects `Store` (`save`, `load`) and `Journal` (`write`, `read_all`) of the engine
 ([`src/engine`](../engine/README.md)) on PostgreSQL, written straight on the driver
 [nova-postgres](https://github.com/nv-lang/nova-postgres) (a foreign package, read only). There is **no layer over databases**
-here and none is waited for: the SQL is PostgreSQL's, the calls are two functions. Task 098
-(`doc/tasks/098-pg-storage/`); the next step is the session server (`src/server/`), which gives a `PgWorld` to the engine of
-every session.
+here and none is waited for: the SQL is PostgreSQL's, the calls are three functions (`list_sessions` came in task 099). Task 098
+(`doc/tasks/098-pg-storage/`); the session server (`src/server/`, task 099) gives a `PgWorld` to the engine of every session when its `store` is `pg`.
 
 This directory holds the SQL and the scripts; the Nova code is in three modules beside it (why three: see "Why three
 modules").
 
 | Path | What it is |
 |---|---|
-| `src/pg/schema.sql` | the migration: schema `crew`, two tables, two functions, the role `crew_app`, the rights. Safe to run again |
+| `src/pg/schema.sql` | the migration: schema `crew`, two tables, three functions, the role `crew_app`, the rights. Safe to run again |
 | `src/pg/pg.example.json` | an example of the settings file (a placeholder password; a real one goes to the environment) |
 | `src/pg/testdb.ps1` | starts and stops the temporary PostgreSQL in Docker for the tests |
 | `src/pgdb/` | module `crew_harness.pgdb`: `PgConfig`, the calls `pg_save_step`, `pg_load`, `pg_migrate`, `pg_rows`, the socket loop (`wire.nv`), the test support (`testkit.nv`) |
@@ -27,6 +26,7 @@ crew.machine_journal (id text, step int, seq int,        entry jsonb)           
                                                                                   foreign key (id, step) -> machine_snapshot
 crew.save_step(id text, step int, snapshot jsonb, lines jsonb, first_seq int default null) returns int
 crew.load(id text) returns table (step int, snapshot jsonb, journal jsonb)
+crew.list_sessions() returns table (id text)                                          -- task 099: the ids of all sessions, in order
 ```
 
 `id` is the id of the session (1 to 128 characters). One snapshot row is kept per step (the history stays; pruning is not done
@@ -52,7 +52,7 @@ session is unknown. Both come from one statement, so they agree.
 
 **The application role.** `crew_app` has no login and no password in the migration. A deployment makes a login that is a member
 of it (`create role crew_service login password '...' in role crew_app`) and the program connects as that login. The role
-can run `crew.save_step` and `crew.load` and **nothing else**: it cannot `select`, write or truncate the tables, and cannot create
+can run `crew.save_step`, `crew.load` and `crew.list_sessions` and **nothing else**: it cannot `select`, write or truncate the tables, and cannot create
 anything in the schema. The functions run with the rights of their owner (`security definer`, `search_path` fixed). Nobody but
 the owner touches the tables (the tests check this with real `select`s that must fail with 42501).
 
@@ -121,7 +121,7 @@ seconds each.
 
 | Unit | Tests | What they show |
 |---|---|---|
-| `src/pgdb` | 27 | the migration (twice, with data), save and load, UTF-8, the rule of the step (next, repeat, gap, back, first), a repeat that differs, lines added to a committed step, one transaction (a bad line takes the snapshot down, a bad snapshot takes the lines down), the rights of the role, the stranger login, SCRAM, the faults and the password, the settings value |
+| `src/pgdb` | 29 | the migration (twice, with data), save and load, UTF-8, the rule of the step (next, repeat, gap, back, first), a repeat that differs, lines added to a committed step, one transaction (a bad line takes the snapshot down, a bad snapshot takes the lines down), the rights of the role, the stranger login, SCRAM, the faults and the password, the settings value |
 | `src/pgconf` | 5 | the environment over the file, the file named by the caller or by `CREW_PG_CONFIG`, errors without the content of the file, the example file |
 | `src/pgstore` | 16 | the handlers alone (lines wait for the snapshot, marks go at once, a new world after a restart, death between the lines and the snapshot, misuse) and **the engine with the chat machine on them**: the same story in memory and on PostgreSQL (conversation with Cyrillic and a four-byte letter, cancel, idle term, refusal) gives the same journal, snapshot and answer; restart in a new world, death before the send, death between the journal and the snapshot, two sessions |
 
@@ -152,7 +152,6 @@ operation whose body is only `panic(...)` does not compile, and `return []T.new(
 - TLS (the driver has none; the settings refuse a host that is not local), a connection pool, reconnect and retry (a failed call
   stops the process; the restart finds the last committed step), pruning of old snapshots.
 - PostgREST (later, and only under the role `crew_app`), roles other than `crew_app`, creating the application login (by hand).
-- The session server (`src/server/`) that makes one `PgWorld` per session; the journal of the machines only: the `log.md` of a task
-  stays a file.
+- The journal of the machines only: the `log.md` of a task stays a file. (The session server, `src/server/`, makes one `PgWorld` per session.)
 - The file handlers (task 095, `src/storage/`) stay as the fallback; both sets of handlers have the same effects.
 - A test of two writers at the same moment (the advisory lock is in the SQL; the tests are single-threaded).

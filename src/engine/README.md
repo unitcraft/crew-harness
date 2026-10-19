@@ -7,8 +7,8 @@ the engine on Nova, built by **Nova Oracle 0.1.0 on Windows (Clang)**, with test
 (`doc/tasks/091-product-engine/`). Task 095 (`doc/tasks/095-acp-client/`) added the real handlers of the effects: the ACP client
 and the handler of `Link` (`src/acp/`) and the file `Journal` and `Store` (`src/storage/`); task 098 the PostgreSQL ones (`src/pg*`).
 Task 102 (`doc/tasks/102-align-glossary/`) brought the names to the dictionary of the methodology (version 6): `Incoming`, `Link`,
-`Transition`, `Environment`, `Waiting`, the journal event with a code and parameters, and the typed state of the machine. The next task is
-the session server.
+`Transition`, `Environment`, `Waiting`, the journal event with a code and parameters, and the typed state of the machine. Task 099
+(`doc/tasks/099-session-server/`) is the session server (`src/server/`): it runs one engine per session and took three small things from the engine (below).
 
 The engine is a SUBSET of the methodology (`unitcraft/ai-dev-methodology`, `state-machine-engine-automaton.md` and the
 norms `state-machine-spec.md`, rules 12-25, 31, 35) for the MVP "a chat session with an agent". The dictionary
@@ -43,7 +43,7 @@ All `.nv` files are under `src/` (owner's rule 2026-09-07, as in `claude-limits`
 
 | File | What it is |
 |---|---|
-| `src/engine/types.nv` | `FailCode`, `Request[T]`, `Reply[R]`, `Rejection`, `Response[R]`, `EventKind`, `Incoming`, `Transition[S]`, `SendOrder`, `CancelOrder`, `Conclusion`, `JournalParam`, `JournalEvent`, `JournalEntry`, `Snapshot`, `Waiting`, `OpenRequest`, `EngineState[S]` |
+| `src/engine/types.nv` | `FailCode`, `PartyRequest[T]`, `Reply[R]`, `Rejection`, `PartyResponse[R]`, `EventKind`, `Incoming`, `Transition[S]`, `SendOrder`, `CancelOrder`, `Conclusion`, `JournalParam`, `JournalEvent`, `JournalEntry`, `Snapshot`, `Waiting`, `OpenRequest`, `EngineState[S]` |
 | `src/engine/machine.nv` | the protocols `Machine[S]` (`name`, `initial`, `state_name`, `step`, `encode_state`, `decode_state`) and `Environment` (`write_journal`, `order_send`, `order_cancel`, `order_save`, `order_finish`); `Order` and `StepEnvironment`, the environment that records the orders of a step |
 | `src/engine/effects.nv` | the effects `Journal` (`write`, `read_all`), `Store` (`save`, `load`), `Link` (`send`, `receive`, `cancel`, `ack`); the clock is the standard `Time` |
 | `src/engine/codec.nv` | the journal line and the snapshot as JSON (`journal_line`, `parse_journal_line`, `encode_snapshot`, `decode_snapshot`) |
@@ -109,6 +109,20 @@ A line of the old form (`"kind":"sent","text":"attempt 1"`) is still read: the c
 so a restart reads the marks of a journal that the old engine wrote and sends nothing again. A snapshot keeps
 the state of the machine as an object under `state`; a snapshot of the old form (`machine_state` as an encoded text, `idle_term` and `deadline`
 of an open request) is still read.
+
+## What the session server took from the engine (task 099)
+
+- **The input in the journal.** The journal event `event_accepted` carries the input of the event as the parameter `input` (only when it is not
+  empty; a journal written before reads the same, with an empty input). The journal stays a structure, a code and parameters, with no text of
+  its own; and with the input the journal alone tells the whole conversation again after a restart.
+- **`Engine.take_events()`** hands out the events accepted since the last call, stamped (id, trace, step, time), in the order of acceptance; a
+  discarded event (rule 17) is not among them. The server turns them into the lines of the page.
+- **`Engine.history()`** (effect `Journal`) rebuilds the same stamped events from the committed journal: the `event_accepted` lines of the trace,
+  without the events the engine discarded (`reply_discarded`) and without the lines of a step that never committed (a restart took its number over,
+  or it is newer than the snapshot). `EventKind.parse` is the inverse of `EventKind.name`.
+- **A many-turn machine.** `dialog_session` (module `chat`) goes back to `Idle` after an answer, a refusal, a timeout or a cancel of the turn and never
+  gives `order_finish`; the next message opens `agent-2`. Tests with the deaths of rules 13 and 34(e): `src/server/dialog_test.nv`.
+- **`MemoryWorld.journal_entries()`** was `entries()`; the name collided with `EmbeddedDir.entries` of the prelude (see `spikes/env/README.md`, "Also met in task 099").
 
 ## Restart by a repeated entry
 
@@ -185,8 +199,8 @@ Not in the MVP (the list for the next tasks):
 
 ## Oracle 0.1.0: what shaped the code
 
-What the engine uses and Oracle compiled without a workaround: records, sum types, generic records `Request[T]`, `Reply[R]`,
-`Response[R]`, `Engine[M, S]`, `EngineState[S]`, `Transition[S]`, a structural protocol with a bound `M Machine[S]` (with the type
+What the engine uses and Oracle compiled without a workaround: records, sum types, generic records `PartyRequest[T]`, `Reply[R]`,
+`PartyResponse[R]`, `Engine[M, S]`, `EngineState[S]`, `Transition[S]`, a structural protocol with a bound `M Machine[S]` (with the type
 arguments of the free functions written out), a protocol parameter `mut environment Environment`, effects with handlers captured over mutable
 memory (`with Journal = ..., Store = ..., Link = ..., Time = ... { ... }`), the standard `Time` effect with a hand-made
 handler, `std.encoding.json` (writes Cyrillic as it is), `?` on `Option`, test blocks in peer files, `--strict-effects`.
@@ -201,7 +215,8 @@ What needed a workaround (reproductions: `spikes/env/repro_engine/`, items 8-13 
   uses `match`;
 - a record literal in the head of a `match` is a syntax error -> a name is bound before the `match`;
 - a protocol-typed record field cannot be called through -> `Engine[M, S]` is generic over the machine type;
-- a user type named `Outcome` clashes with the prelude's -> the type is called `Response`, as in the methodology's own "Types on Nova";
+- a user type named `Outcome` clashes with the prelude's -> the type is called `PartyResponse` (it was `Response`, as in the methodology's own "Types on Nova", until `http` took that name too, below);
+- user types named `Request` and `Response` clash with the types of `http`, which every program with Polaris has -> `PartyRequest` and `PartyResponse` (task 099, `spikes/env/repro_server/`, `user_request_vs_http`);
 - a user type named `Output` clashes with `std.os.Output` as soon as a module of the program imports `std.os` (the ACP client
   does) -> the type was called `StepOutput` (task 095, `spikes/env/repro_acp/`, `user_output_vs_std_os`); task 102 removed it (the machine
   gives its orders to the `Environment`);
@@ -228,7 +243,7 @@ tests: [`src/acp/README.md`](../acp/README.md), "How an event is acknowledged".
 ## Where it goes next
 
 1. (done in task 095) `src/acp/` and `src/storage/`.
-2. The session server and the console (`src/server/`): HTTP and WebSocket on Polaris, one `Engine` per session, restart of the
+2. (done in task 099) The session server (`src/server/`, [README](../server/README.md)): HTTP and WebSocket on Polaris, one `Engine` per session, restart of the
    service by `resume_engine` for every session with a snapshot.
 3. From the "not in the MVP" list in the order the product needs it: stop/continue of a human (rules 23-24), a set of parties,
    nested machines.

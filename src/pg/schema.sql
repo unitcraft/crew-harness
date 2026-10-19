@@ -10,7 +10,8 @@
 --   crew.machine_journal   the lines of the journal: (session, step, seq), seq counts from 0 inside a step;
 --   crew.save_step         the only way to write: the snapshot and the lines of a step in ONE transaction;
 --   crew.load              the only way to read: the last snapshot and the whole journal of a session;
---   crew_app               the role of the application: it may run the two functions and nothing else.
+--   crew.list_sessions     the ids of the sessions (task 099);
+--   crew_app               the role of the application: it may run the three functions and nothing else.
 -- The application logs in with a role that is a member of crew_app (create it by hand, with the password of the
 -- deployment: `create role crew_service login password '...' in role crew_app`); no password is in this file.
 
@@ -155,12 +156,26 @@ as $$
     limit 1
 $$;
 
--- The rights. Nobody but the owner touches the tables; the application role runs the two functions.
+-- list_sessions(): the ids of all sessions, once each, in the order of the names (the server finds its sessions with it
+-- when it starts).
+create or replace function crew.list_sessions()
+returns table (id text)
+language sql
+stable
+security definer
+set search_path = pg_catalog, crew
+as $$
+    select distinct s.id from crew.machine_snapshot s order by s.id
+$$;
+
+-- The rights. Nobody but the owner touches the tables; the application role runs the three functions.
 revoke all on schema crew from public;
 revoke all on all tables in schema crew from public;
 revoke all on all tables in schema crew from crew_app;
 grant usage on schema crew to crew_app;
 revoke all on function crew.save_step(text, integer, jsonb, jsonb, integer) from public;
 revoke all on function crew.load(text) from public;
+revoke all on function crew.list_sessions() from public;
 grant execute on function crew.save_step(text, integer, jsonb, jsonb, integer) to crew_app;
 grant execute on function crew.load(text) to crew_app;
+grant execute on function crew.list_sessions() to crew_app;

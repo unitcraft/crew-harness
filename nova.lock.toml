@@ -5,9 +5,41 @@
 version = 1
 
 [[package]]
+name = "compress"
+source = "git"
+git = "https://github.com/nv-lang/nova-compress"
+pin = "version:>=0.1.0, <0.2.0"
+version = "0.1.3"
+commit = "c4c387fdf145280b7253ede7bf992fe6fbb35359"
+
+[[package]]
+name = "http"
+source = "git"
+git = "https://github.com/nv-lang/nova-http"
+pin = "version:>=0.2.0, <0.3.0"
+version = "0.2.1"
+commit = "5505f31c4ef814ac9f9fdb111878a67aa170c5df"
+
+[[package]]
+name = "polaris"
+source = "git"
+git = "https://github.com/nv-lang/nova-polaris"
+pin = "version:>=0.2.0, <0.3.0"
+version = "0.2.4"
+commit = "24f9d1757868e0d682217606c7c8fdf0e5037881"
+
+[[package]]
 name = "postgres"
 source = "git"
 git = "https://github.com/nv-lang/nova-postgres"
 pin = "version:>=0.1.0, <0.2.0"
 version = "0.1.0"
 commit = "8a46520269cf430e3f9d7a78ad9ae729ed23af8a"
+
+[[package]]
+name = "tls"
+source = "git"
+git = "https://github.com/nv-lang/nova-tls"
+pin = "version:>=0.2.0, <0.3.0"
+version = "0.2.1"
+commit = "01d323b6423d69fd5c54216667134313033f8644"

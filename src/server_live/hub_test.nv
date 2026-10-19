@@ -1,0 +1,50 @@
+// hub_test.nv - the session server over FILES with the fake ACP agent (task 099): the scenarios of crew_harness.server/testkit.nv.
+// The same scenarios run over PostgreSQL in src/server_pg: the results must be the same.
+module crew_harness.server_live
+
+import crew_harness.server.{kit_files, scenario_chat, scenario_permission, scenario_cancel, scenario_restart_idle, scenario_restart_open, scenario_crash, scenario_two_pages, scenario_rejects, scenario_many, scenario_broken_agent}
+
+fn clean(report str) -> () {
+    if report.byte_len() > 0 { println("NOT AS IT MUST BE: ${report}") }
+    assert(report == "")
+}
+
+test "files: two turns of a chat" {
+    clean(scenario_chat(kit_files("chat", 30000)))
+}
+
+test "files: permission asked, allowed, denied" {
+    clean(scenario_permission(kit_files("perm", 30000)))
+}
+
+test "files: a cancel keeps the session open" {
+    clean(scenario_cancel(kit_files("cancel", 30000)))
+}
+
+test "files: restart between turns" {
+    clean(scenario_restart_idle(kit_files("restart", 30000)))
+}
+
+test "files: restart in the middle of a turn" {
+    clean(scenario_restart_open(kit_files("open", 2000)))
+}
+
+test "files: the agent dies" {
+    clean(scenario_crash(kit_files("crash", 30000)))
+}
+
+test "files: two pages, one session" {
+    clean(scenario_two_pages(kit_files("two", 30000)))
+}
+
+test "files: what cannot be done is an error" {
+    clean(scenario_rejects(kit_files("rejects", 30000)))
+}
+
+test "files: several sessions" {
+    clean(scenario_many(kit_files("many", 30000)))
+}
+
+test "files: an agent that refuses to start" {
+    clean(scenario_broken_agent(kit_files("broken", 30000)))
+}

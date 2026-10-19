@@ -18,7 +18,7 @@
 // acknowledged. The numbers never go back, not even after the file is compacted, so a key is never used for two events.
 module crew_harness.acp
 
-import crew_harness.engine.{Link, Incoming, EventKind, Request, FailCode}
+import crew_harness.engine.{Link, Incoming, EventKind, PartyRequest, FailCode}
 import crew_harness.storage.{append_line, read_lines, replace_file}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import std.fs.{Fs, real_fs, Path}
@@ -224,6 +224,12 @@ fn compact_inbox(path str, recovered AcpRecovered) Fs -> () {
     lines.push(seq_line(recovered.next))
     for item in recovered.items { lines.push(event_line(item.seq, item.event)) }
     ro done = replace_file(Path.from_bytes(path.bytes()), "${lines.join("\n")}\n")
+}
+
+// The first 200 bytes of a line for a note. (A function: a variable bound by a pattern and named `text` is taken for the module
+// `std.text` as soon as any module of the program imports it, Oracle 0.1.0, spikes/env/repro_text_import.)
+fn shortened(line str) -> str {
+    if line.byte_len() > 200 { line[..200] } else { line }
 }
 
 fn tail_of(text str) -> str {
@@ -439,10 +445,7 @@ fn AcpClient mut @on_line(text str) -> () {
             }
         }
         RpcCall { id, method, params } => @on_call(id, method, params)
-        RpcGarbage { text } => {
-            ro shown = if text.byte_len() > 200 { text[..200] } else { text }
-            @note("a line that is not JSON-RPC: ${shown}")
-        }
+        RpcGarbage { text } => @note("a line that is not JSON-RPC: ${shortened(text)}")
     }
 }
 
@@ -483,7 +486,7 @@ export fn AcpClient mut @poll() -> () {
 
 // ----- the handler of the effect Link -----
 
-fn AcpClient mut @enqueue(request Request[str]) -> () {
+fn AcpClient mut @enqueue(request PartyRequest[str]) -> () {
     if @phase == "dead" || @phase == "closed" {
         @refuse(request.id, FailCode.ConnectionLost)
         return

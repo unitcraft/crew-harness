@@ -7,19 +7,22 @@
 # No `bin/` anywhere: the entry point is plainly `src/crew_harness.nv`, built binaries go to
 # `target/` (or are ignored if `nova build` drops them beside the source, see .gitignore).
 #
-# `src/engine/` is the state machine engine, `src/chat/` the demo machine (a chat session with
-# an agent); tests are peer files `*_test.nv` beside the sources. Build: Nova Oracle 0.1.0,
+# `src/engine/` is the state machine engine, `src/chat/` the machine of a chat session with an agent; tests are peer files `*_test.nv` beside the sources. Build: Nova Oracle 0.1.0,
 # Clang, see `spikes/env/README.md`; engine and its tests: `src/engine/README.md`.
 #
-# One dependency: the PostgreSQL driver `postgres` (nova-postgres, a foreign package, read only) for the
-# PostgreSQL handlers of `Journal` and `Store` in `src/pg/` (task 098). The rest uses only `std`.
-# `nova.lock.toml` fixes the build.
+# Dependencies (foreign packages, read only): the PostgreSQL driver `postgres` (nova-postgres) for the PostgreSQL handlers of
+# `Journal` and `Store` in `src/pg*` (task 098), and Polaris (`polaris`, with its `http` and `tls`) for the front of the session
+# server, `src/server/front/` (task 099). The two cannot be in one program on Oracle 0.1.0, so the hub (`src/crew_hub.nv`) holds
+# the driver and the front (`src/crew_harness.nv`) holds Polaris; the rest uses only `std`. `nova.lock.toml` fixes the build.
 
 [lib]
 src = "src"
 
 [dependencies]
 postgres = { git = "https://github.com/nv-lang/nova-postgres", version = "0.1" }
+polaris = { git = "https://github.com/nv-lang/nova-polaris", version = "0.2" }
+http = { git = "https://github.com/nv-lang/nova-http", version = "0.2" }
+tls = { git = "https://github.com/nv-lang/nova-tls", version = "0.2" }
 
 [package]
 name = "crew_harness"
@@ -34,3 +37,7 @@ repository = "https://github.com/unitcraft/crew-harness"
 [[bin]]
 name = "crew-harness"
 path = "src/crew_harness.nv"
+
+[[bin]]
+name = "crew-hub"
+path = "src/crew_hub.nv"

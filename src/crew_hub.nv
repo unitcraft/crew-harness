@@ -1,0 +1,27 @@
+// crew_hub.nv - the entry point of the hub of the session server (task 099): the engines, the agents and the store, over stdin and
+// stdout. The front (HTTP and WebSocket) starts it; it can also be started by hand to look at the lines it speaks.
+//   crew-hub [settings.json]        (the file may also be named by CREW_SERVER_CONFIG; see src/server/README.md)
+// Build: nova build src/crew_hub.nv -o target/crew-hub.exe
+module crew_harness.crew_hub
+
+import crew_harness.server.{server_settings, run_hub_stdio}
+import std.os.{args, exit_process}
+import std.io.{stderr}
+
+fn main() Os Fs Proc Detach Time Net Io -> () {
+    ro argv = args()
+    ro file = if argv.len() > 1 { argv[1] } else { "" }
+    match server_settings(file) {
+        Err(reason) => {
+            mut err = stderr()
+            ro written = err.write("crew-hub: ${reason}\n".bytes())
+            exit_process(2)
+        }
+        Ok(settings) => {
+            ro code = run_hub_stdio(settings)
+            // an explicit exit: the fiber that reads stdin is parked until the front closes it, and a program with a parked fiber
+            // does not end by itself (Oracle 0.1.0, spikes/env/README.md item 19)
+            exit_process(code)
+        }
+    }
+}

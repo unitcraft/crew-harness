@@ -1,5 +1,5 @@
 // A fake ACP agent for the tests of src/acp (task 095): JSON-RPC 2.0 over stdio, one message per line.
-//   node fake_agent.mjs [--no-initialize] [--no-session] [--auth-error]
+//   node fake_agent.mjs [--no-initialize] [--no-session] [--auth-error] [--live]
 // Answers `initialize` and `session/new`; what a `session/prompt` does depends on the first word of the prompt text:
 //   (anything else)  an echo in three chunks, then end_turn
 //   tools            unknown update, tool_call, tool_call_update, plan, usage_update, thought, a chunk, end_turn
@@ -21,9 +21,10 @@ import { createInterface } from "node:readline";
 // A guard for the tests: a test that fails before it closes its client would leave this process alive, and the test
 // binary (which waits for the pipes of the process) with it; the process ends by itself after 25 seconds (a test takes
 // a few seconds at most, and `nova test` stops a binary that runs for a minute).
-setTimeout(() => process.exit(0), 25000);
-
+// (`--live`, for the session server: no guard, the server closes the agent itself.)
 const args = process.argv.slice(2);
+if (!args.includes("--live")) setTimeout(() => process.exit(0), 25000);
+
 const noInitialize = args.includes("--no-initialize");
 const noSession = args.includes("--no-session");
 const authError = args.includes("--auth-error");

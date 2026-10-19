@@ -4,7 +4,7 @@
 module crew_harness.acp_live
 
 import crew_harness.acp.{AcpConfig, AcpClient, open_client, acp_link}
-import crew_harness.engine.{Link, Incoming, EventKind, Request, FailCode}
+import crew_harness.engine.{Link, Incoming, EventKind, PartyRequest, FailCode}
 import std.fs.{Fs, real_fs, Path, try_exists}
 import std.os.{Os, real_os, cwd}
 
@@ -55,7 +55,7 @@ fn start_with(config AcpConfig) Proc Detach Time -> AcpClient {
 
 fn start(extra []str) Proc Detach Time -> AcpClient => start_with(fake_config(extra))
 
-fn req(id str, text str) -> Request[str] => {
+fn req(id str, text str) -> PartyRequest[str] => {
     id, attempt: 1, party: "agent", input: text, idle_term: 0, trace: "t1", step: 1
 }
 
