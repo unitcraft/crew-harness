@@ -520,7 +520,7 @@ fn compare_step(n int, s ScStep, t StepTrace, mut out []str) -> () {
 }
 
 // The machine with the parameters the scenario gives (the same machine when it gives none).
-fn with_params(machine TableMachine, params []ScHost) -> Result[TableMachine, str] {
+fn with_params(machine PortolanMachine, params []ScHost) -> Result[PortolanMachine, str] {
     if params.len() == 0 { return Ok(machine) }
     mut values = []ProjectValue.new()
     for h in params {
@@ -534,7 +534,7 @@ fn with_params(machine TableMachine, params []ScHost) -> Result[TableMachine, st
         }
         values.push(ProjectValue { key: h.name, value: v })
     }
-    ro built = table_machine_with(machine.def, machine.table.registry, values)?
+    ro built = portolan_machine_with(machine.def, machine.table.registry, values)?
     Ok(with_replies(built, machine.replies))
 }
 
@@ -564,13 +564,13 @@ fn replies_after(before []ScriptedReply, step ScStep) -> Result[[]ScriptedReply,
 
 /// Run a scenario on a machine that is data with the answers of the primitives of the host that the steps change (`host`): like `drive_scenario`,
 /// but the machine of the engine is made again before a step that has `host`.
-export fn drive_table_scenario(first_machine TableMachine, sc Scenario) -> []StepTrace {
+export fn drive_table_scenario(first_machine PortolanMachine, sc Scenario) -> []StepTrace {
     ro machine = match with_params(first_machine, sc.params) {
         Ok(m) => m
         Err(m) => panic("scenario ${sc.name}: ${m}")
     }
     mut world = MemoryWorld.at(sc.start_at)
-    mut e = begin_engine[TableState, TableMachine](machine, world)
+    mut e = begin_engine[PortolanState, PortolanMachine](machine, world)
     mut replies = []ScriptedReply.new()
     for r in machine.replies { replies.push(r) }
     mut traces = []StepTrace.new()
@@ -583,20 +583,20 @@ export fn drive_table_scenario(first_machine TableMachine, sc Scenario) -> []Ste
             }
             e.machine = with_replies(machine, replies)
         }
-        if s.op == "feed" { engine_feed[TableState, TableMachine](e, world, scenario_incoming(s.event)) }
-        if s.op == "accept" { engine_accept[TableState, TableMachine](e, world, scenario_incoming(s.event)) }
-        if s.op == "dispatch" { engine_dispatch[TableState, TableMachine](e, world) }
-        if s.op == "pump" { ro made = engine_pump[TableState, TableMachine](e, world) }
+        if s.op == "feed" { engine_feed[PortolanState, PortolanMachine](e, world, scenario_incoming(s.event)) }
+        if s.op == "accept" { engine_accept[PortolanState, PortolanMachine](e, world, scenario_incoming(s.event)) }
+        if s.op == "dispatch" { engine_dispatch[PortolanState, PortolanMachine](e, world) }
+        if s.op == "pump" { ro made = engine_pump[PortolanState, PortolanMachine](e, world) }
         if s.op == "deliver" { world.deliver(scenario_incoming(s.event)) }
         if s.op == "advance" { world.advance(s.ms) }
-        if s.op == "restart" { e = resumed_engine[TableState, TableMachine](e.machine, world) }
-        traces.push(trace_of[TableState, TableMachine](e.machine, e, world, s.op, from))
+        if s.op == "restart" { e = resumed_engine[PortolanState, PortolanMachine](e.machine, world) }
+        traces.push(trace_of[PortolanState, PortolanMachine](e.machine, e, world, s.op, from))
     }
     traces
 }
 
 /// Run a scenario on a machine that is data and compare every step with what the file expects.
-export fn run_scenario(machine TableMachine, sc Scenario) -> ScenarioRun {
+export fn run_scenario(machine PortolanMachine, sc Scenario) -> ScenarioRun {
     ro traces = drive_table_scenario(machine, sc)
     mut mismatches = []str.new()
     mut i = 0

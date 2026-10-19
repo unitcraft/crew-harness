@@ -1,4 +1,4 @@
-// chain.nv - the chain of a step: where a row leads, the entry of the four kinds of states, the ends, the faults, the start, `table_step`.
+// chain.nv - the chain of a step: where a row leads, the entry of the four kinds of states, the ends, the faults, the start, `portolan_step`.
 module crew_harness.machine_run
 
 import std.text
@@ -421,7 +421,7 @@ fn start_machine(mut ctx Ctx, event Incoming, mut host PrimitiveHost) -> Result[
 
 // ---- the step ---------------------------------------------------------------------------------------------------------------------
 
-fn new_ctx(machine TableMachine, current TableState) -> Ctx {
+fn new_ctx(machine PortolanMachine, current PortolanState) -> Ctx {
     Ctx {
         def: machine.def, table: machine.table, name: current.name, started: current.started, input: current.input, data: current.data,
         event: EventVal { kind: EvTimeout, name: "", id: "", request: "", party: "", fields: []RecordField.new(), value: Null, reason: "" },
@@ -536,15 +536,15 @@ fn flush(ctx Ctx, mut environment Environment) -> () {
     if ctx.fired && !ctx.defect { environment.order_save() }
 }
 
-fn result_of(ctx Ctx, current TableState) -> Transition[TableState] {
+fn result_of(ctx Ctx, current PortolanState) -> Transition[PortolanState] {
     if ctx.defect { return Stay }
     if !ctx.fired { return Stay }
-    Go(TableState { name: ctx.name, started: ctx.started, input: ctx.input, data: ctx.data, taken: ctx.taken })
+    Go(PortolanState { name: ctx.name, started: ctx.started, input: ctx.input, data: ctx.data, taken: ctx.taken })
 }
 
 /// One step of a machine that is data (see the top of this file). Reads only its arguments; gives its orders to the environment; the
 /// primitives of the machine go to the host.
-export fn table_step(machine TableMachine, current TableState, event Incoming, mut environment Environment, mut host PrimitiveHost) -> Transition[TableState] {
+export fn portolan_step(machine PortolanMachine, current PortolanState, event Incoming, mut environment Environment, mut host PrimitiveHost) -> Transition[PortolanState] {
     mut ctx = new_ctx(machine, current)
     if !current.started {
         if event.kind == EventKind.Input && event.name == "start" {

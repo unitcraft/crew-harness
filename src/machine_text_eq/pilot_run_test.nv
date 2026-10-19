@@ -5,12 +5,12 @@ module crew_harness.machine_text_eq
 import std.text
 import crew_harness.machine.{standard_registry, enum_value, Value, Null}
 import crew_harness.engine.{Incoming, EventKind, StepEnvironment, Order}
-import crew_harness.machine_run.{TableState, TableMachine, load_table_machine, table_step, ScriptedHost, ScriptedReply, with_replies}
+import crew_harness.machine_run.{PortolanState, PortolanMachine, load_portolan_machine, portolan_step, ScriptedHost, ScriptedReply, with_replies}
 import crew_harness.machine_text.{translate_checked}
 
-fn agent_machine(check Value) -> TableMachine {
+fn agent_machine(check Value) -> PortolanMachine {
     ro report = translate_checked(case_text("agent-step.portolan.md"), standard_registry())
-    match load_table_machine(report.json, standard_registry()) {
+    match load_portolan_machine(report.json, standard_registry()) {
         Ok(m) => with_replies(m, [ScriptedReply { name: "reply_validation", value: check }, ScriptedReply { name: "close_agent_turn", value: Null }])
         Err(e) => panic("the pilot does not build: ${e}")
     }
@@ -38,12 +38,12 @@ fn event_of(kind EventKind, name str, request Option[str], input str, at int) ->
     id: "e-${at}", trace: "t-1", step: 2, kind, name, request, input, at
 }
 
-type Moved { state TableState, orders []Order, moved bool }
+type Moved { state PortolanState, orders []Order, moved bool }
 
-fn move_on(m TableMachine, st TableState, ev Incoming) -> Moved {
+fn move_on(m PortolanMachine, st PortolanState, ev Incoming) -> Moved {
     mut environment = StepEnvironment.new()
     mut host = ScriptedHost { at: ev.at, replies: m.replies, ids: 0 }
-    ro t = table_step(m, st, ev, environment, host)
+    ro t = portolan_step(m, st, ev, environment, host)
     match t {
         Go(next) => Moved { state: next, orders: environment.orders, moved: true }
         Stay => Moved { state: st, orders: environment.orders, moved: false }

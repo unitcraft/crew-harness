@@ -7,12 +7,12 @@ import crew_harness.machine.{standard_registry}
 
 test "loads" {
     for name in ["chat.portolan.json", "calc.portolan.json", "actions.portolan.json", "gate.portolan.json", "lenses.portolan.json", "variants.portolan.json"] {
-        match load_table_machine(machine_text(name), standard_registry()) {
+        match load_portolan_machine(machine_text(name), standard_registry()) {
             Ok(m) => assert(m.def.states.len() >= 3)
             Err(e) => assert(e == "")
         }
     }
-    match load_table_machine("{}", standard_registry()) {
+    match load_portolan_machine("{}", standard_registry()) {
         Ok(m) => assert(false)
         Err(e) => assert(e.contains("format"))
     }

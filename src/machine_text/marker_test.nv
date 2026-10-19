@@ -115,7 +115,7 @@ test "mk format 2.6" {
     ro text = tiny_text().replace("format: 2.5", "format: 2.6")
     ro report = checked(text)
     assert(report.errors.len() == 0)
-    assert(report.json.starts_with("{\"format\":\"machine/2\",\"table_format\":\"2.6\",\"machine\":\"Tiny\""))
-    assert(report.json.replace("\"table_format\":\"2.6\"", "\"table_format\":\"2.5\"") == json_of(tiny_text()))
+    assert(report.json.starts_with("{\"format\":\"machine/2\",\"portolan_version\":\"2.6\",\"machine\":\"Tiny\""))
+    assert(report.json.replace("\"portolan_version\":\"2.6\"", "\"portolan_version\":\"2.5\"") == json_of(tiny_text()))
     assert(note_says(tiny_text().replace("format: 2.5", "format: 2.8"), "читает формат 2.5, 2.6 или 2.7"))
 }

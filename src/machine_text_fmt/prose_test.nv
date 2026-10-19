@@ -28,7 +28,7 @@ test "pr base clean" {
     if report.errors.len() > 0 { panic(first_error_of(report)) }
     assert(report.errors.len() == 0)
     assert(report.warnings.len() == 0)
-    assert(report.json.starts_with("{\"format\":\"machine/2\",\"table_format\":\"2.7\",\"machine\":\"Tiny\""))
+    assert(report.json.starts_with("{\"format\":\"machine/2\",\"portolan_version\":\"2.7\",\"machine\":\"Tiny\""))
     assert(report.rows_total > 8)
 }
 

@@ -87,8 +87,9 @@ test "wd table format" {
     assert(ok_text(tiny().replace("\"format\":\"machine/2\",", "\"format\":\"machine/2\",\"table_format\":\"2.7\",")))
     assert(ok_text(tiny().replace("\"format\":\"machine/2\",", "\"format\":\"machine/2\",\"table_format\":\"2.6\",")))
     assert(ok_text(tiny().replace("\"format\":\"machine/2\",", "\"format\":\"machine/2\",\"table_format\":\"2.5\",")))
-    assert(says(tiny().replace("\"format\":\"machine/2\",", "\"format\":\"machine/2\",\"table_format\":\"2.8\","), "must be 2.5, 2.6 or 2.7"))
-    assert(table_formats().len() == 3)
+    assert(ok_text(tiny().replace("\"format\":\"machine/2\",", "\"format\":\"machine/2\",\"table_format\":\"2.8\",")))
+    assert(says(tiny().replace("\"format\":\"machine/2\",", "\"format\":\"machine/2\",\"table_format\":\"2.11\","), "must be 2.5, 2.6, 2.7, 2.8, 2.9 or 2.10"))
+    assert(portolan_versions().len() == 6)
 }
 
 test "wd schema" {

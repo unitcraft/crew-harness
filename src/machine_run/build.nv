@@ -47,7 +47,7 @@ fn with_binding(globals []Binding, name str, value Value) -> []Binding {
 
 /// A machine ready to run. The constants and the parameters are evaluated in order (a later one may read an earlier one); a wrong
 /// value of a type, an error of the evaluator or an initial value that does not fit its datum refuses the machine.
-export fn table_machine(def MachineDef, registry Registry) -> Result[TableMachine, str] => table_machine_with(def, registry, []ProjectValue.new())
+export fn portolan_machine(def MachineDef, registry Registry) -> Result[PortolanMachine, str] => portolan_machine_with(def, registry, []ProjectValue.new())
 
 /// ProjectValue: a row of the table of the parameters of the project (format 2.7, P-9): the key `проект.<ключ>` and the value.
 export type ProjectValue { key str, value Value }
@@ -79,7 +79,7 @@ fn project_table_checked(def MachineDef, given_table []ProjectValue) -> Result[(
 
 /// The same with the table "key -> value" of the project (format 2.7, P-9): a key is `проект.<ключ>` of the column "project override" of a parameter, the value is checked against the
 /// type of that parameter like a default; a key the column does not have refuses the machine.
-export fn table_machine_with(def MachineDef, registry Registry, overrides []ProjectValue) -> Result[TableMachine, str] {
+export fn portolan_machine_with(def MachineDef, registry Registry, overrides []ProjectValue) -> Result[PortolanMachine, str] {
     project_table_checked(def, overrides)?
     mut globals = []Binding.new()
     globals.push(Binding { name: "end_states", value: end_state_names(def) })
@@ -145,7 +145,7 @@ export fn table_machine_with(def MachineDef, registry Registry, overrides []Proj
             _ => return Err("the request limit must be an int")
         }
     }
-    Ok(TableMachine { def, table, initial_data: data, quiet_start: quiet, replies: []ScriptedReply.new(), limit })
+    Ok(PortolanMachine { def, table, initial_data: data, quiet_start: quiet, replies: []ScriptedReply.new(), limit })
 }
 
 /// The initial data. `input` is the record of the input fields (or Null): a datum `from_input` takes its field, an expression may read `input`.
@@ -193,9 +193,9 @@ fn initial_data_of(def MachineDef, table DefTable, input Value) -> Result[Value,
 }
 
 /// The machine from the text of its JSON tree: decoded, checked as a table, made ready. The error is every issue in one text.
-export fn load_table_machine(text str, registry Registry) -> Result[TableMachine, str] {
+export fn load_portolan_machine(text str, registry Registry) -> Result[PortolanMachine, str] {
     match load_machine(text, registry) {
-        Ok(def) => table_machine(def, registry)
+        Ok(def) => portolan_machine(def, registry)
         Err(issues) => {
             mut lines = []str.new()
             for e in issues { lines.push(issue_text(e)) }
@@ -205,8 +205,8 @@ export fn load_table_machine(text str, registry Registry) -> Result[TableMachine
 }
 
 /// The same machine with the answers of the primitives of its default host (`ScriptedHost`).
-export fn with_replies(machine TableMachine, replies []ScriptedReply) -> TableMachine {
-    TableMachine {
+export fn with_replies(machine PortolanMachine, replies []ScriptedReply) -> PortolanMachine {
+    PortolanMachine {
         def: machine.def, table: machine.table, initial_data: machine.initial_data, quiet_start: machine.quiet_start, replies, limit: machine.limit
     }
 }

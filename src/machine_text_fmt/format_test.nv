@@ -24,11 +24,11 @@ test "fm versions" {
     ro v27 = base_json()
     ro v26 = json_of(replaced(base_text(), "- format: 2.7", "- format: 2.6"))
     ro v25 = json_of(replaced(base_text(), "- format: 2.7", "- format: 2.5"))
-    assert(v27.contains("\"table_format\":\"2.7\""))
-    assert(v26.contains("\"table_format\":\"2.6\""))
-    assert(v25.contains("\"table_format\":\"2.5\""))
-    assert(v26.replace("\"table_format\":\"2.6\"", "\"table_format\":\"2.7\"") == v27)
-    assert(v25.replace("\"table_format\":\"2.5\"", "\"table_format\":\"2.7\"") == v27)
+    assert(v27.contains("\"portolan_version\":\"2.7\""))
+    assert(v26.contains("\"portolan_version\":\"2.6\""))
+    assert(v25.contains("\"portolan_version\":\"2.5\""))
+    assert(v26.replace("\"portolan_version\":\"2.6\"", "\"portolan_version\":\"2.7\"") == v27)
+    assert(v25.replace("\"portolan_version\":\"2.5\"", "\"portolan_version\":\"2.7\"") == v27)
 }
 
 test "fm unknown version" {
@@ -47,7 +47,7 @@ test "fm old style" {
     ro report = checked(old)
     if report.errors.len() > 0 { panic(first_error_of(report)) }
     ro plain = base_json()
-    assert(report.json.replace("\"table_format\":\"2.5\"", "\"table_format\":\"2.7\"") == plain)
+    assert(report.json.replace("\"portolan_version\":\"2.5\"", "\"portolan_version\":\"2.7\"") == plain)
     ro mixed = replaced(base_text(), "- Сторона: вратарь", "Сторона: вратарь")
     assert(same_json(mixed, plain))
 }

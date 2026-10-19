@@ -38,7 +38,7 @@ The output is deterministic: two translations of one text give the same bytes (a
 **Format 2.6 (task 109).** The key lines of a state (`Сторона`, `Срок тишины`, `Правит`, `Возвратов формы`, `Вход`, `При входе`, `При приёме`, `Кроме`, and `Предел запросов`, `Результат` in their sections) are items of a bullet list: `- Сторона: агент`.
 The marker `- ` is OPTIONAL when reading (a file of format 2.5, such as `chat.portolan.md`, has none), with and without it the JSON is the same; the columns of the errors stay the columns of the file (`TxEntry.shift` is the width of the marker).
 The body of `При входе` of several actions may be a nested list, one action to an item (`  - пусть сейчас = вызвать(time_now);`), the `;` at the end of an item is kept; an item of a nested list is read as a continuation line without its marker.
-A table after a list item stands at the level of the block after an empty line. `format: 2.6` is read like `format: 2.5`; the key `table_format` of the tree is the format of the file (`2.5` or `2.6`). The hash of the sample file of definitions is `1628bec298d9` (the line `format: 2.6` is a part of the hash).
+A table after a list item stands at the level of the block after an empty line. `format: 2.6` is read like `format: 2.5`; the key `portolan_version` of the tree (`table_format` before task 113) is the format of the file (`2.5` or `2.6`). The hash of the sample file of definitions is `1628bec298d9` (the line `format: 2.6` is a part of the hash).
 
 **Format 2.7 (task 110).** Every mark of the version is run (the marks P-1...P-9 of section 0 of the format); the sample of the methodology (`state-machine-agent-step.portolan.md`, 2.7, copied as it is into `src/machine_agent/cases/`) is translated whole, with no error.
 
@@ -49,7 +49,7 @@ A table after a list item stands at the level of the block after an empty line. 
 | P-5 sets | A set of literals `"a" \| "b"` is a type everywhere a type stands: the argument of `словарь[K, V]` and `полный словарь[K, V]`, the result and the parameter of a definition, a cell "type"; the brackets only under `?` and `[]` (the message says so). |
 | P-6 tables | A separator row (a line of `-`, `:`, spaces and bars `|`) is skipped; `\|` in a cell is a bar of the text (also in a string literal), the escape is taken off. |
 | P-7 words | The enum with words `перечисление Имя = Зн "слово" \| …` has the key `words` in the JSON: the list of the pairs `["Name", "word"]` in the order of the declaration (only of the values that have a word); an enum without words has no key. A word is a Latin word of a code (`[a-z][a-z0-9_]*`), not empty, once in the enum; the words of the built-in `КодСбоя` are the words of the engine (another word is `unsupported`) and do not go to the tree. |
-| names | The field of a signal `идентификатор_запроса` is `id` (the dictionary) instead of `request_id`; `table_format` of the tree is `2.5`, `2.6` or `2.7`. The hash of the sample file of definitions is `446ddf8041c0` (the line `- format: 2.7` is a part of the hash; `1628bec298d9` was the hash of 2.6). |
+| names | The field of a signal `идентификатор_запроса` is `id` (the dictionary) instead of `request_id`; `portolan_version` of the tree is `2.5`, `2.6` or `2.7`. The hash of the sample file of definitions is `446ddf8041c0` (the line `- format: 2.7` is a part of the hash; `1628bec298d9` was the hash of 2.6). |
 
 ## Errors
 

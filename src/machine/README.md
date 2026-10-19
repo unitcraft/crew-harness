@@ -16,7 +16,7 @@ tests under Oracle 0.1.0 and the output of a unit must stay under 4 KB:
 |---|---|---|
 | `src/machine/` | `crew_harness.machine` | the core (task 106) and the data files compiled into the binary: `schema/`, `machines/`, `scenarios/` |
 | `src/machine_table/` | `crew_harness.machine_table` | the model of a machine, the decoder of the JSON tree `machine/2`, the type syntax, the checks of a table |
-| `src/machine_run/` | `crew_harness.machine_run` | the interpreter `TableMachine`, the state, the host of the primitives, the scenario runner `scenario/0` |
+| `src/machine_run/` | `crew_harness.machine_run` | the interpreter `PortolanMachine`, the state, the host of the primitives, the scenario runner `scenario/0` |
 | `src/machine_chat/` | `crew_harness.machine_chat` | tests only: the proof that the chat machine as data equals the chat machine on Nova |
 | `src/machine_text/` | `crew_harness.machine_text` | the translator of Portolan (the tables in Russian, format 2.5) into the JSON `machine/2` ([README](../machine_text/README.md), task 108) |
 | `src/machine_text_eq/` | `crew_harness.machine_text_eq` | tests only: the chat table equals the hand-written chat machine on 39 scenarios; the pilot "Agent step", the examples of the format |
@@ -197,7 +197,7 @@ The rules of the language that cost a compile and the three new defects (items 3
 # The interpreter of a machine that is data (task 107)
 
 `src/machine_table/` reads and checks a machine, `src/machine_run/` runs it. A machine is ONE JSON file, `format: "machine/2"`; the interpreter gives the protocol
-`Machine[TableState]` of the engine, so `start_engine[TableState, TableMachine](machine, id)` runs it with the journal, the snapshots and the link of the product,
+`Machine[PortolanState]` of the engine, so `start_engine[PortolanState, PortolanMachine](machine, id)` runs it with the journal, the snapshots and the link of the product,
 and a restart resumes it. The examples are `machines/*.portolan.json` (chat, calc, actions, gate, lenses, variants), their scenarios `scenarios/*.scenario.test.json`.
 
 ## The file `machine/2`
@@ -244,8 +244,8 @@ the definitions (no recursion, no catalog name, the number of arguments); an `if
 
 ## The interpreter
 
-`table_step(machine, state, event, environment, host)` is the whole `step` (`Machine[TableState].step` calls it with the default `ScriptedHost`). It reads its arguments only; the clock is the stamp of the event (`time_now` of the default
-host), any other primitive goes to the `PrimitiveHost` that is passed in. The state is `TableState { name, started, input, data }` - values of the core, written as one JSON object under `state` of the snapshot.
+`portolan_step(machine, state, event, environment, host)` is the whole `step` (`Machine[PortolanState].step` calls it with the default `ScriptedHost`). It reads its arguments only; the clock is the stamp of the event (`time_now` of the default
+host), any other primitive goes to the `PrimitiveHost` that is passed in. The state is `PortolanState { name, started, input, data }` - values of the core, written as one JSON object under `state` of the snapshot.
 
 The order of a step: the event of the engine is read as the event of the machine (`Input` - a word or a signal by name, with the fields decoded from `input`: one field is the text itself or a number or a JSON value by its type, several fields are a JSON object;
 `Progress` - a part of an answer; `Answered` - the answer, its type is the `result` of the party of the appeal (a text, or a JSON value of the core); `Refused` - a failure with the case of `FailCode`; `Expired` - the term). A name no party and no signal knows is the journal event
@@ -311,10 +311,10 @@ Task 108 (`doc/tasks/108-table-translator/`) brought the interpreter from the fo
   `ScriptedHost` answers it with `Uuid.v7()` under `with Time = th.fixed_ms(at), Random = th.seeded(...)` (the stamp of the event and the number of the call in the step): the same step gives the same ids; a scripted reply of the host wins.
   The host of the product that wants real random ids is another `PrimitiveHost`.
 - **Tuple fields from zero** (2.3): `t.0`, `t.1`; `make_tuple` names them `0`, `1`, ...; the lossless JSON `{"$tuple": [...]}` is the same.
-- The root key **`table_format`** (optional, `"2.5"`; absent means 2.5). The built-in record **`JournalEvent`** (`СобытиеЖурнала`, section 2) beside `FailCode`. The name of an included file of definitions is a name of the registry (any letters, not a path).
+- The root key **`portolan_version`** (optional, `"2.5"` ... `"2.10"`; absent means 2.5; the version of the language Portolan that the tree follows; task 113 renamed the key from `table_format`, which is still read as a synonym - a tree that has both is refused). The built-in record **`JournalEvent`** (`СобытиеЖурнала`, section 2) beside `FailCode`. The name of an included file of definitions is a name of the registry (any letters, not a path).
 - **Common events (the fragment "Pause", section 9)** read the data of a fragment (the marks `fragment`, `rows_and_fragment`, `mechanics`) without an Input and write the data with the marks `fragment` and `rows_and_fragment`.
 - The record `Child` of `expr.nv` is `ExprChild` (item 40 of the survey of Oracle 0.1.0: a program with `import std.os` could not be built).
-- `machines/chat.portolan.md` is the chat machine in Portolan (as tables); its translation equals `chat.portolan.json` (a test compares the trees without `title` and `table_format`) and runs the 39 scenarios of the chat in the same way.
+- `machines/chat.portolan.md` is the chat machine in Portolan (as tables); its translation equals `chat.portolan.json` (a test compares the trees without `title` and `portolan_version`) and runs the 39 scenarios of the chat in the same way.
 - `data.nv`: `table_files()`, `chat_table_text()`; `data_dir_names("tables")`.
 
 # The agent step as data (task 109)
@@ -325,16 +325,16 @@ is its translation by `src/machine_translate.nv` (a test compares them byte by b
 
 What the interpreter got for it (decisions are in `doc/tasks/109-agent-step-machine/analysis.md`):
 
-- **`Предел запросов` (`request_limit`)**: the value is evaluated at the build (an int, at least 1; `TableMachine.limit`, 0 when the line is not written). An appeal that would pass the limit of the requests that
+- **`Предел запросов` (`request_limit`)**: the value is evaluated at the build (an int, at least 1; `PortolanMachine.limit`, 0 when the line is not written). An appeal that would pass the limit of the requests that
   the machine holds open is a defect `request_limit`. A machine with a limit and a set of parties is refused at the build (the counters of the elements are the engine's).
 - **The mechanics of the contract** (rules 14, 15, 18, 21): the counter of the attempts of a party (`counter`, a plain datum) grows at every send, the request id is `<id>-<counter>`; the datum `open_requests` gets the id
   when the request is sent and loses it at the outcome (answer, failure, term), at a cancel and at an end; the datum `call_request_id` is the request that started the machine (the field `request` of the event `start`).
   A machine that has not got these data does not get them (the chat machine is as it was). Requests to a human (a gate) do not exist in the engine: a gate waits for a word, so `open_requests` holds the requests to agents.
 - **`отменить_открытые`** (`cancel_open`) cancels the open requests of the datum `open_requests`: all, or those of the named party; a machine without the datum cancels the request of the party of the state as before.
 - **A term that passed** is read as the failure `Timeout` by an appeal whose rows do not name the term (the event `timeout`): the failure rows of the format (`сбой(причина ∈ {…НетОтветаВСрок…})`) take it (format 4.3, rule 16).
-- **The mark `taken`** of `TableState`: the rows the last step took (`State#n`, `common#n`, `end:State#n`); it is the proof of the coverage of the rows by the scenarios, not data of the machine.
+- **The mark `taken`** of `PortolanState`: the rows the last step took (`State#n`, `common#n`, `end:State#n`); it is the proof of the coverage of the rows by the scenarios, not data of the machine.
 - **Scenarios**: the step key `host` (the answers of the primitives of the host from this step on, in the lossless JSON of the core: `reply_validation`, `close_agent_turn`), the file key `params` (the values of the parameters
-  of the machine that the project gives, `table_machine_with`), the field `request` of the event `start`. `scenarios/agent-step-*` are 75 files: a scenario for every row that can be taken (`agent-step-<state>-<n>`,
+  of the machine that the project gives, `portolan_machine_with`), the field `request` of the event `start`. `scenarios/agent-step-*` are 75 files: a scenario for every row that can be taken (`agent-step-<state>-<n>`,
   `agent-step-common-<n>`, `agent-step-end-<end>-<n>`) and the flows (`agent-step-flow-*`). Seven rows cannot be taken by any events (the rows `else` of the forks and the row 6 of the common events); the test names them.
 - Not run (still `unsupported`): the profile of a party, `Возвратов формы` above zero, `Правит`, nested machines, `вход_заново: запросы_из_к_отправке`.
 
@@ -343,7 +343,7 @@ What the interpreter got for it (decisions are in `doc/tasks/109-agent-step-mach
 Task 110 (`doc/tasks/110-format-27/`) brought the tree, the interpreter and the translator to format 2.7 of the methodology (marks P-1...P-9 of section 0 of the format). The sample of the agent step of the methodology
 (`state-machine-agent-step.portolan.md`, 2.7) is translated whole and with no hand edit; the table of the product (`machines/agent_step.portolan.txt`) is that sample with the two keys of the project in the column "project override".
 
-- **The tree.** `table_format` may be `2.7`. A variant that is an enum has the optional key **`words`**, the list of the pairs `["Name", "word"]` in the order of the declaration (only the values that have a word; a
+- **The tree.** `portolan_version` may be `2.7`. A variant that is an enum has the optional key **`words`**, the list of the pairs `["Name", "word"]` in the order of the declaration (only the values that have a word; a
   word is lower case Latin letters, digits and `_`, once in the enum, the case has no fields): `VariantDef.words` (`EnumWord { name, word }`). The schema [`machine-2.schema.json`](schema/machine-2.schema.json) and
   a test of the unit `machine_table` say the same keys. `text(x)` takes the word (`enum_word(defs, type, case)`); the core `value_text` does not know the types and stays as it was.
 - **`все_данные`** (`журнал(все_данные)`, the event `machine_data` with the one parameter `data`, section 5 of the format): `name=value; ...` in the order of the table of data (the data of the fragments first, the paths
@@ -351,9 +351,9 @@ Task 110 (`doc/tasks/110-format-27/`) brought the tree, the interpreter and the 
   is its WORD (without a word - the name of the value as the tree has it, `FailCode` - the word of the engine). A list, a dict, a record, a variant with fields and a tuple are compact JSON (`src/machine_run/encode.nv`:
   no spaces, UTF-8, the quote, the backslash and the control signs escaped by RFC 8259 with lower case `\u00xx`): `none` is `null`, a bool is `true`/`false`, a record is an object with the fields in the order of its type,
   a variant with fields is `{"Name":{fields}}`, an enum value and a variant without fields are a string, a dict is an object (text keys) or the array of the pairs `[[key,value],...]`, a tuple is an array.
-- **The table of the project (P-9).** `table_machine_with(def, registry, params)` takes `[]ProjectValue { key, value }`: the key is `проект.<ключ>` (`PROJECT_PREFIX`), `<ключ>` is the `project_key` of a parameter
+- **The table of the project (P-9).** `portolan_machine_with(def, registry, params)` takes `[]ProjectValue { key, value }`: the key is `проект.<ключ>` (`PROJECT_PREFIX`), `<ключ>` is the `project_key` of a parameter
   (the column "project override"). A key that has no such parameter, a key twice, a key not of the form `проект.…` refuse the machine (`Err` before anything is evaluated); the value is checked against the type of the
-  parameter like a default (a full dict by the rules of section 2); a parameter that is not named keeps its default. `table_machine(def, registry)` is `table_machine_with(def, registry, [])`. A scenario (`scenario/0`)
+  parameter like a default (a full dict by the rules of section 2); a parameter that is not named keeps its default. `portolan_machine(def, registry)` is `portolan_machine_with(def, registry, [])`. A scenario (`scenario/0`)
   carries the same table as `params` (`"params": {"проект.политика_разрешений": {...}}`); a key of another form is a mistake of the file.
 - **P-8, the data of an event of a scenario.** A word or a signal with ONE field has the value of the field as the `input` (a text: `"ivan"`, `"other-1"`), with several fields an object `{field: value}`, with none no `input`
   (it was so since task 109; the schema `scenario/0` and tests of the unit `machine_run` say it).

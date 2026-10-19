@@ -8,7 +8,7 @@ import crew_harness.machine_table.{parse_machine, load_machine}
 test "tm clean" {
     ro report = checked(tiny_text())
     assert(report.errors.len() == 0)
-    assert(report.json.starts_with("{\"format\":\"machine/2\",\"table_format\":\"2.5\",\"machine\":\"Tiny\""))
+    assert(report.json.starts_with("{\"format\":\"machine/2\",\"portolan_version\":\"2.5\",\"machine\":\"Tiny\""))
     assert(report.rows_total > 0 && report.rows_noted == 0)
 }
 

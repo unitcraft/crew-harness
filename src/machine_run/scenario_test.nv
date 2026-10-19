@@ -6,7 +6,7 @@ import std.encoding.json.{Json}
 import crew_harness.machine.{scenario_files, machine_files, table_files, schema_files, data_dir_names, is_machine_json_name, NamedText, text_of_file}
 
 // The machine a scenario names.
-fn machine_named(name str) -> TableMachine {
+fn machine_named(name str) -> PortolanMachine {
     if name == "ChatSession" { return chat() }
     if name == "Calc" { return calc() }
     if name == "Gate" { return build("gate.portolan.json") }
@@ -28,7 +28,7 @@ fn run_file(file str) -> ScenarioRun {
     run_scenario(machine_named(sc.machine), sc)
 }
 
-fn run_text(machine TableMachine, text str) -> ScenarioRun {
+fn run_text(machine PortolanMachine, text str) -> ScenarioRun {
     match parse_scenario(text) {
         Ok(sc) => run_scenario(machine, sc)
         Err(e) => panic("${e.path}: ${e.message}")
@@ -178,7 +178,7 @@ test "no expectation" {
 
 test "drive is generic" {
     ro sc = scenario_of("chat-silent-agent.scenario.test.json")
-    ro traces = drive_scenario[TableState, TableMachine](chat(), sc)
+    ro traces = drive_scenario[PortolanState, PortolanMachine](chat(), sc)
     assert(traces.len() == sc.steps.len())
     assert(traces[4].state == "Failed")
     assert(traces[4].cancelled.len() == 1)

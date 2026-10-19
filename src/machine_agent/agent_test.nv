@@ -5,7 +5,7 @@ module crew_harness.machine_agent
 import std.text
 import crew_harness.machine.{standard_registry, agent_step_table_text, agent_step_machine_text}
 import crew_harness.machine_table.{load_machine}
-import crew_harness.machine_run.{load_table_machine}
+import crew_harness.machine_run.{load_portolan_machine}
 import crew_harness.machine_text.{translate_checked, translate_report, TranslateReport, error_text, render_summary}
 
 fn agent_report() -> TranslateReport => translate_checked(agent_step_table_text(), standard_registry())
@@ -50,7 +50,7 @@ test "ag loads" {
 }
 
 test "ag builds" {
-    match load_table_machine(agent_step_machine_text(), standard_registry()) {
+    match load_portolan_machine(agent_step_machine_text(), standard_registry()) {
         Ok(m) => {
             assert(m.name() == "agent_step")
             assert(m.limit == 1)
@@ -68,7 +68,7 @@ test "ag summary" {
     assert(text.contains("ends: 13 rows"))
 }
 
-// The table without the list markers and with the old continuation lines, format 2.5: the tree is the same but the key `table_format`.
+// The table without the list markers and with the old continuation lines, format 2.5: the tree is the same but the key `portolan_version`.
 fn without_markers(text str) -> str {
     mut lines = []str.new()
     for line in text.split("\n") {
@@ -88,5 +88,5 @@ test "ag markers optional" {
     assert(plain != agent_step_table_text())
     ro report = translate_checked(plain, standard_registry())
     if report.errors.len() > 0 { panic(errors_text(report)) }
-    assert(report.json.replace("\"table_format\":\"2.5\"", "\"table_format\":\"2.7\"") == agent_step_machine_text())
+    assert(report.json.replace("\"portolan_version\":\"2.5\"", "\"portolan_version\":\"2.7\"") == agent_step_machine_text())
 }

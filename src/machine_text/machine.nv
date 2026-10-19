@@ -353,7 +353,7 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
     }
 
     // the JSON
-    mut root = [kv("format", js("machine/2")), kv("table_format", js(if header.format == "2.7" { "2.7" } else if header.format == "2.6" { "2.6" } else { "2.5" })), kv("machine", js(header.machine)), kv("version", js(header.version))]
+    mut root = [kv("format", js("machine/2")), kv("portolan_version", js(if header.format == "2.7" { "2.7" } else if header.format == "2.6" { "2.6" } else { "2.5" })), kv("machine", js(header.machine)), kv("version", js(header.version))]
     if header.title != "" { root.push(kv("title", js(header.title))) }
     if types.records.len() > 0 || types.variants.len() > 0 {
         mut tp = []TxKV.new()

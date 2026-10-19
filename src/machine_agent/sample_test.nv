@@ -81,7 +81,7 @@ test "sm summary" {
 }
 
 test "sm header 27" {
-    assert(sample_json().starts_with("{\"format\":\"machine/2\",\"table_format\":\"2.7\",\"machine\":\"agent_step\",\"version\":\"portolan-2.7\""))
+    assert(sample_json().starts_with("{\"format\":\"machine/2\",\"portolan_version\":\"2.7\",\"machine\":\"agent_step\",\"version\":\"portolan-2.7\""))
     assert(sample().contains("- format: 2.7"))
 }
 

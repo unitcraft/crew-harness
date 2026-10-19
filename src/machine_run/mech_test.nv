@@ -8,7 +8,7 @@ import crew_harness.machine.{scenario_files, text_of_file, standard_registry}
 fn agent_text() -> str => machine_text("agent_step.portolan.json")
 
 fn load_err(text str) -> str {
-    match load_table_machine(text, standard_registry()) {
+    match load_portolan_machine(text, standard_registry()) {
         Ok(m) => "ok"
         Err(e) => e
     }

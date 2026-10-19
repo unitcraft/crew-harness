@@ -83,7 +83,7 @@ fn more_data() -> str {
 }
 
 // The calc machine with more data; its overflow ends in the ERROR end, which writes all the data.
-fn full_machine() -> TableMachine {
+fn full_machine() -> PortolanMachine {
     ro base = machine_text("calc.portolan.json")
     ro with_types = base.replace("\"data\": [", more_types())
     ro stop_end = "\"initial\": { \"expr\": { \"op\": \"lit\", \"value\": \"\" } } }"

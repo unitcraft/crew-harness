@@ -7,21 +7,21 @@ import crew_harness.engine.{Incoming, EventKind, Order, StepEnvironment, Journal
 
 fn machine_text(name str) -> str => text_of_file(machine_files(), name)
 
-fn build_from(text str) -> TableMachine {
-    match load_table_machine(text, standard_registry()) {
+fn build_from(text str) -> PortolanMachine {
+    match load_portolan_machine(text, standard_registry()) {
         Ok(m) => m
         Err(e) => panic("the machine does not load: ${e}")
     }
 }
 
-fn build(name str) -> TableMachine => build_from(machine_text(name))
+fn build(name str) -> PortolanMachine => build_from(machine_text(name))
 
-fn chat() -> TableMachine => build("chat.portolan.json")
-fn calc() -> TableMachine => build("calc.portolan.json")
-fn actions() -> TableMachine => build("actions.portolan.json")
+fn chat() -> PortolanMachine => build("chat.portolan.json")
+fn calc() -> PortolanMachine => build("calc.portolan.json")
+fn actions() -> PortolanMachine => build("actions.portolan.json")
 
 // The agent step with the answers of its primitives: the reply is valid, closing the turn answers nothing.
-fn agent_step() -> TableMachine => with_replies(build("agent_step.portolan.json"), [
+fn agent_step() -> PortolanMachine => with_replies(build("agent_step.portolan.json"), [
     ScriptedReply { name: "reply_validation", value: enum_value("ReplyCheck", "Valid") },
     ScriptedReply { name: "close_agent_turn", value: Null }
 ])
@@ -40,12 +40,12 @@ fn expired() -> Incoming => stamped(EventKind.Expired, "timeout", Some("agent-1"
 fn cancelled() -> Incoming => stamped(EventKind.Input, "cancel", None, "")
 
 // The result of one step: the state, whether the machine moved (Go), the orders it gave.
-type Out { state TableState, moved bool, orders []Order }
+type Out { state PortolanState, moved bool, orders []Order }
 
-fn run1(m TableMachine, st TableState, event Incoming) -> Out {
+fn run1(m PortolanMachine, st PortolanState, event Incoming) -> Out {
     mut environment = StepEnvironment.new()
     mut host = ScriptedHost { at: 1000, replies: m.replies, ids: 0 }
-    ro transition = table_step(m, st, event, environment, host)
+    ro transition = portolan_step(m, st, event, environment, host)
     match transition {
         Go(next) => Out { state: next, moved: true, orders: environment.orders }
         Stay => Out { state: st, moved: false, orders: environment.orders }
@@ -53,9 +53,9 @@ fn run1(m TableMachine, st TableState, event Incoming) -> Out {
 }
 
 // The same with a host of the test (to see the calls of the primitives).
-fn run_with(m TableMachine, st TableState, event Incoming, mut host PrimitiveHost) -> Out {
+fn run_with(m PortolanMachine, st PortolanState, event Incoming, mut host PrimitiveHost) -> Out {
     mut environment = StepEnvironment.new()
-    ro transition = table_step(m, st, event, environment, host)
+    ro transition = portolan_step(m, st, event, environment, host)
     match transition {
         Go(next) => Out { state: next, moved: true, orders: environment.orders }
         Stay => Out { state: st, moved: false, orders: environment.orders }
@@ -96,7 +96,7 @@ fn summary(orders []Order) -> str {
 }
 
 // A datum of the state (Null when there is none).
-fn datum(st TableState, name str) -> Value {
+fn datum(st PortolanState, name str) -> Value {
     match st.data {
         Record { name: record_name, fields } => match record_get(fields, name) {
             Some(v) => v
@@ -106,10 +106,10 @@ fn datum(st TableState, name str) -> Value {
     }
 }
 
-fn datum_json(st TableState, name str) -> str => value_json(datum(st, name))
+fn datum_json(st PortolanState, name str) -> str => value_json(datum(st, name))
 
 // The states one after another: each event is applied to the state the previous one left; the last Out comes back.
-fn run_all(m TableMachine, first TableState, events []Incoming) -> Out {
+fn run_all(m PortolanMachine, first PortolanState, events []Incoming) -> Out {
     mut out = Out { state: first, moved: false, orders: []Order.new() }
     for e in events { out = run1(m, out.state, e) }
     out

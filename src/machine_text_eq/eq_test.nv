@@ -7,7 +7,7 @@ module crew_harness.machine_text_eq
 import std.text
 import crew_harness.machine.{scenario_files, standard_registry, chat_machine_text, chat_table_text}
 import crew_harness.engine.{Incoming, Order, StepEnvironment, journal_line}
-import crew_harness.machine_run.{TableState, TableMachine, Scenario, StepTrace, load_table_machine, table_step, ScriptedHost, drive_scenario, parse_scenario, scenario_incoming, run_scenario, run_ok, report_text}
+import crew_harness.machine_run.{PortolanState, PortolanMachine, Scenario, StepTrace, load_portolan_machine, portolan_step, ScriptedHost, drive_scenario, parse_scenario, scenario_incoming, run_scenario, run_ok, report_text}
 import crew_harness.machine_text.{translate, error_text}
 
 fn translated_json() -> str {
@@ -17,16 +17,16 @@ fn translated_json() -> str {
     }
 }
 
-fn machine_from(json str) -> TableMachine {
-    match load_table_machine(json, standard_registry()) {
+fn machine_from(json str) -> PortolanMachine {
+    match load_portolan_machine(json, standard_registry()) {
         Ok(m) => m
         Err(e) => panic("the chat machine does not load: ${e}")
     }
 }
 
-fn translated_machine() -> TableMachine => machine_from(translated_json())
+fn translated_machine() -> PortolanMachine => machine_from(translated_json())
 
-fn written_machine() -> TableMachine => machine_from(chat_machine_text())
+fn written_machine() -> PortolanMachine => machine_from(chat_machine_text())
 
 fn chat_scenarios() -> []Scenario {
     mut out = []Scenario.new()
@@ -73,9 +73,9 @@ fn trace_diff(a StepTrace, b StepTrace) -> str {
     ""
 }
 
-fn engine_diff(sc Scenario, first TableMachine, second TableMachine) -> str {
-    ro a = drive_scenario[TableState, TableMachine](first, sc)
-    ro b = drive_scenario[TableState, TableMachine](second, sc)
+fn engine_diff(sc Scenario, first PortolanMachine, second PortolanMachine) -> str {
+    ro a = drive_scenario[PortolanState, PortolanMachine](first, sc)
+    ro b = drive_scenario[PortolanState, PortolanMachine](second, sc)
     if a.len() != b.len() { return "${sc.name}: ${a.len()} traces / ${b.len()}" }
     mut i = 0
     while i < a.len() {
@@ -131,15 +131,15 @@ fn order_text(orders []Order) -> str {
     parts.join(",")
 }
 
-type StepPair { a_state TableState, b_state TableState, a_text str, b_text str, a_moved bool, b_moved bool }
+type StepPair { a_state PortolanState, b_state PortolanState, a_text str, b_text str, a_moved bool, b_moved bool }
 
-fn step_pair(first TableMachine, second TableMachine, p StepPair, event Incoming) -> StepPair {
+fn step_pair(first PortolanMachine, second PortolanMachine, p StepPair, event Incoming) -> StepPair {
     mut ae = StepEnvironment.new()
     mut ahost = ScriptedHost { at: event.at, replies: first.replies, ids: 0 }
-    ro at = table_step(first, p.a_state, event, ae, ahost)
+    ro at = portolan_step(first, p.a_state, event, ae, ahost)
     mut be = StepEnvironment.new()
     mut bhost = ScriptedHost { at: event.at, replies: second.replies, ids: 0 }
-    ro bt = table_step(second, p.b_state, event, be, bhost)
+    ro bt = portolan_step(second, p.b_state, event, be, bhost)
     ro next_a = match at {
         Go(s) => s
         Stay => p.a_state
@@ -167,7 +167,7 @@ fn events_of(sc Scenario) -> []Incoming {
     out
 }
 
-fn machine_diff(sc Scenario, first TableMachine, second TableMachine) -> str {
+fn machine_diff(sc Scenario, first PortolanMachine, second PortolanMachine) -> str {
     mut p = StepPair { a_state: first.initial(), b_state: second.initial(), a_text: "", b_text: "", a_moved: false, b_moved: false }
     mut i = 0
     for e in events_of(sc) {
