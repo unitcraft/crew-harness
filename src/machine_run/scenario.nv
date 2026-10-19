@@ -363,7 +363,7 @@ fn outcome_text[S, M Machine[S]](e Engine[M, S]) -> str {
 }
 
 fn trace_of[S, M Machine[S]](machine M, e Engine[M, S], world MemoryWorld, op str, from int) -> StepTrace {
-    ro all = world.entries()
+    ro all = world.journal_entries()
     mut entries = []JournalEntry.new()
     mut journal = []str.new()
     mut i = 0
