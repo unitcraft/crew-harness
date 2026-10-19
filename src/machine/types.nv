@@ -63,13 +63,14 @@ export fn spec_text(spec TypeSpec) -> str {
         NothingType => "nothing"
         IdType => "id"
         TextSet(words) => {
-            mut out = ""
+            consume sb = StringBuilder.new()
             mut first = true
             for w in words {
-                out = if first { "\"${w}\"" } else { "${out} | \"${w}\"" }
+                if !first { sb.append(" | ") }
+                sb.append("\"${w}\"")
                 first = false
             }
-            out
+            sb.into_str()
         }
         OptionalType(inner) => "?${wrapped_text(inner)}"
         ListType(inner) => "[]${wrapped_text(inner)}"
