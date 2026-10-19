@@ -1,6 +1,6 @@
 // cover_test.nv - every row of the table "Agent step" has a scenario: the rows that the scenarios of `scenarios/agent-step-*` took (the mark `taken` of the state after every step) are
 // compared with the rows of the machine; a row that no scenario takes is red. The rows that cannot be taken by any sequence of events are named here with the reason.
-module crew_harness.machine_text_eq
+module crew_harness.machine_agent
 
 import std.text
 import std.encoding.json.{Json}

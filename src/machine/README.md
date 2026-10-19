@@ -19,7 +19,8 @@ tests under Oracle 0.1.0 and the output of a unit must stay under 4 KB:
 | `src/machine_run/` | `crew_harness.machine_run` | the interpreter `TableMachine`, the state, the host of the primitives, the scenario runner `scenario/0` |
 | `src/machine_chat/` | `crew_harness.machine_chat` | tests only: the proof that the chat machine as data equals the chat machine on Nova |
 | `src/machine_text/` | `crew_harness.machine_text` | the translator of the tables in Russian (format 2.5) into the JSON `machine/2` ([README](../machine_text/README.md), task 108) |
-| `src/machine_text_eq/` | `crew_harness.machine_text_eq` | tests only: the chat table equals the hand-written chat machine on 39 scenarios; the pilot "Agent step", the examples of the format; the agent step of the product: the table equals its JSON, every row has a scenario, the journal codes are the methodology's (task 109) |
+| `src/machine_text_eq/` | `crew_harness.machine_text_eq` | tests only: the chat table equals the hand-written chat machine on 39 scenarios; the pilot "Agent step", the examples of the format |
+| `src/machine_agent/` | `crew_harness.machine_agent` | tests only: the agent step of the product (task 109): the table equals its JSON, every row has a scenario, the journal codes are the methodology's, the illustration of the methodology |
 
 ## Run the tests (Windows, Nova Oracle 0.1.0)
 
@@ -27,11 +28,12 @@ tests under Oracle 0.1.0 and the output of a unit must stay under 4 KB:
 . C:/work/nova/nova-oracle-0.1.0-windows-x86_64/setup-env.ps1     # the leading dot matters
 cd C:/work/crew-harness
 nova test src/machine                # the core: 170 tests
-nova test src/machine_table          # the decoder and the checks: 54 tests
-nova test src/machine_run            # the interpreter and the scenarios (the 75 of the agent step too): 80 tests
+nova test src/machine_table          # the decoder and the checks: 71 tests
+nova test src/machine_run            # the interpreter and the scenarios (the 75 of the agent step too): 79 tests
 nova test src/machine_chat           # the equality with the chat machine: 11 tests
-nova test src/machine_text           # the translator of the tables: 118 tests
-nova test src/machine_text_eq        # the proofs of the translator and of the agent step: 52 tests
+nova test src/machine_text           # the translator of the tables: 129 tests
+nova test src/machine_text_eq        # the proofs of the translator: 44 tests
+nova test src/machine_agent          # the proofs of the agent step: 14 tests
 nova test --strict-effects src       # the same, and an effect used without being declared in a signature is an error
 nova test src --jobs 4               # the whole tree (the PostgreSQL units need the temporary container of src/pg/testdb.ps1)
 ```

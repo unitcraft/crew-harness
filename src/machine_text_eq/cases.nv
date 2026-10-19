@@ -7,7 +7,6 @@ import crew_harness.machine.{NamedText}
 /// The files of `cases/` by name.
 export fn case_files() -> []NamedText => [
     NamedText { name: "agent-step.table.md", text: embed_str("cases/agent-step.table.md") },
-    NamedText { name: "agent-step-methodology.table.txt", text: embed_str("cases/agent-step-methodology.table.txt") },
     NamedText { name: "format-examples.table.md", text: embed_str("cases/format-examples.table.md") },
     NamedText { name: "unsupported-examples.table.md", text: embed_str("cases/unsupported-examples.table.md") },
     NamedText { name: "meeting-definitions.defs.md", text: embed_str("cases/meeting-definitions.defs.md") },

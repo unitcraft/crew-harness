@@ -1,6 +1,6 @@
 // agent_test.nv - the machine "Agent step" of the product: the table `machines/agent_step.table.md` (format 2.6) translates without a note, its translation is the committed
 // file `agent_step.machine.json`, the machine passes the checks of the load and is made; the same table without the list markers (format 2.5) gives the same tree.
-module crew_harness.machine_text_eq
+module crew_harness.machine_agent
 
 import std.text
 import crew_harness.machine.{standard_registry, agent_step_table_text, agent_step_machine_text}
@@ -95,7 +95,7 @@ test "ag markers optional" {
 // what the translator says about it: the first wave of the places (prose lines in the sections, the expansion of the fragment beside the line of the connection, a repeated
 // state PAUSE). The report for the methodology is in doc/tasks/109-agent-step-machine/analysis.md.
 test "ag methodology file" {
-    ro report = translate_checked(case_text("agent-step-methodology.table.txt"), standard_registry())
+    ro report = translate_checked(methodology_text(), standard_registry())
     mut places = []str.new()
     for e in report.errors { places.push("${e.line}:${e.col} ${e.kind}") }
     assert(report.errors.len() == 25)
