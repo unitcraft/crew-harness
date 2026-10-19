@@ -96,6 +96,7 @@ The tests need a real PostgreSQL. A temporary container, on a random port of `12
 powershell -File src/pg/testdb.ps1          # starts it and writes target/pg-test.json (the port and the passwords of this container)
 . C:/work/nova/nova-oracle-0.1.0-windows-x86_64/setup-env.ps1
 nova test src                               # everything; the PostgreSQL tests are src/pgdb, src/pgconf, src/pgstore
+nova test src --jobs 4                     # recommended with all 9 units: the default 16 jobs can push src/acp_live past the 60 s limit
 nova test --strict-effects src
 powershell -File src/pg/testdb.ps1 -Stop    # stops and removes the container
 ```
