@@ -19,6 +19,7 @@ fn rn_cx(lang str) -> RnCx {
     }
 }
 
+// ORACLE-WORKAROUND(45): a copy of a `ro` list built by hand in a loop; `mut out = items` when item 45 is fixed (the same in `rn_with`)
 fn rn_copy(items []str) -> []str {
     mut out = []str.new()
     for i in items { out.push(i) }
@@ -254,6 +255,7 @@ fn rn_sub(mut cx RnCx, v RJ, locals []str, min int) -> str {
     text
 }
 
+// ORACLE-WORKAROUND(45): the list is copied by hand into a new one; `mut out = locals` when item 45 is fixed
 fn rn_with(locals []str, name str) -> []str {
     mut out = []str.new()
     for l in locals { out.push(l) }

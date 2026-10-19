@@ -6,6 +6,7 @@ module crew_harness.machine_text
 import std.text
 
 /// RKV: a key and a value of an object, in the order of the text.
+// ORACLE-WORKAROUND(44): the record is declared BEFORE the sum type `RJ` that lists it (after it the C of a `match` on `ROb(pairs)` is wrong); put it after `RJ`, or inside it, when item 44 is fixed
 type RKV { key str, value RJ }
 
 /// RJ: a JSON value; `RNum` holds the number as its text.

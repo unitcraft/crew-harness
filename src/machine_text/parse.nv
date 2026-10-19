@@ -8,6 +8,7 @@ module crew_harness.machine_text
 import std.text
 
 /// TxPair: a Russian word and the Latin word of the JSON.
+// ORACLE-WORKAROUND(39): the type names are global to the program, so the pair is `TxPair` and not `Pair`; the `Tx` prefix of every type of the translator can go when item 39 is fixed
 type TxPair { ru str, en str }
 
 /// TxEnv: the names that the file itself introduces, collected before the sections are translated: states (the Latin name is in the heading), the data,
@@ -59,6 +60,7 @@ type TxScope { names []TxPair }
 fn sc_empty() -> TxScope => { names: []TxPair.new() }
 
 // A copy (a `mut` binding of a `ro` parameter is refused by Oracle 0.1.0).
+// ORACLE-WORKAROUND(45): a copy of a `ro` parameter built by hand in a loop; write `mut out = sc.names` when item 45 is fixed
 fn sc_clone(sc TxScope) -> TxScope {
     mut out = []TxPair.new()
     for p in sc.names { out.push(p) }
@@ -91,6 +93,7 @@ type TxP { toks []TxTok, pos int, end_line int, end_col int, in_let int }
 fn p_new(toks []TxTok, line int, col int) -> TxP => { toks, pos: 0, end_line: line, end_col: col, in_let: 0 }
 
 // A copy of a parser that can be moved (a `mut` binding of a `ro` value is refused by Oracle 0.1.0).
+// ORACLE-WORKAROUND(45): a copy of a `ro` parameter built by hand in a loop; write `mut q = p` when item 45 is fixed
 fn p_copy(p TxP) -> TxP {
     mut toks = []TxTok.new()
     for t in p.toks { toks.push(t) }

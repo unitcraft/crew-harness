@@ -12,7 +12,7 @@ task 090 (`doc/tasks/090-product-env-spike/`).
 | `ws_echo/` | Polaris server on `127.0.0.1`: `GET /` (HTML), `GET /health`, WebSocket echo `/ws` | `ws_echo_check.mjs` (Node) |
 | `acp/` | `acp_initialize.mjs`: one `initialize` request to `opencode acp` over stdio, no login, no session | exit code 0 and the printed version |
 | `repro_mut_binding/` | minimal reproduction of a Polaris documentation example that Oracle 0.1.0 rejects | see "Known problems" |
-| `repro_engine/` | minimal reproductions of Oracle 0.1.0 defects found while writing the state machine engine (task 091, items 8-13), its PostgreSQL store (task 098, items 21, 23-25), its alignment to the dictionary (task 102, items 26-28), the expression evaluator of the machines (task 106, items 33-35), the interpreter of a machine that is data (task 107, items 36-39) and the translator of tables (task 108, items 40-41) the agent step as data (task 109, item 42) and format 2.7 of the tables (task 110, item 43) | see "Known problems", items 8-43 |
+| `repro_engine/` | minimal reproductions of Oracle 0.1.0 defects found while writing the state machine engine (task 091, items 8-13), its PostgreSQL store (task 098, items 21, 23-25), its alignment to the dictionary (task 102, items 26-28), the expression evaluator of the machines (task 106, items 33-35), the interpreter of a machine that is data (task 107, items 36-39) and the translator of tables (task 108, items 40-41) the agent step as data (task 109, item 42), format 2.7 of the tables (task 110, item 43) and the reverse generator of Portolan (task 113, items 44-47) | see "Known problems", items 8-47 |
 | `repro_acp/` | minimal reproductions of Oracle 0.1.0 defects found while writing the ACP client (task 095) | see "Known problems", items 14-18 and 20 |
 | `repro_child_pipes/` | a program: pipes of a child process that now and then do not come back (task 095) | see "Known problems", item 19 |
 | `repro_pg_event/` | a user record `Event` next to the driver `postgres.pgnet` (task 098, item 22); needs `nova update` (the driver comes from git) | see "Known problems", item 22 |
@@ -351,3 +351,21 @@ while the summary of `nova test` keeps the last four failures cut to 600 charact
 (`src/machine_text_fmt/expand_test`), not the tests of a unit: `--filter "ex tail"` runs nothing (`PASS: 0  FAIL: 0`); (c) a raw string in backticks cannot hold a backtick (it ends the string), so a test that needs a block of code (three backticks) builds it by a helper 
 and `${...}` inside the raw string; (d) a translation of a machine with the checks of the table costs about 0.15 s for a machine of 3 KB and about 1 s for the sample of 46 KB (the table of names is read each time), so the proofs of the translator are split by folders (`src/machine_text_fmt` beside `src/machine_text`: 64 tests, about 45 s with the build) and a test translates a text once; the output of a unit must stay under 4 KB anyway (item 20); 
 (e) in a test of the interpreter a record literal as an argument of `match f(R { ... })` is a syntax error (bind it with `ro` first), and a record literal after `=>` of its own type is a "redundant type prefix" (items of task 106 again).
+
+Found by task 113 (two languages of Portolan and the reverse generator, `src/machine_text*`); the reproduction is in `repro_engine/src/`, run the same way:
+
+44. **`record_after_enum_list`**: a sum type with a variant that holds a list of a record, the record declared AFTER the sum type and holding the sum type (`type Js enum | JsObj([]Pair)`, then `type Pair { key str, value Js }`), breaks the C of a `match`
+    on it: the payload bound by the pattern (`JsObj(pairs)`) is a `Vec<nova_int>`, and `for q in pairs { q.key }` is CC-FAIL "member reference base type 'nova_int' is not a structure or union". The record declared BEFORE the sum type compiles (the `TxJ` and `TxKV` of the
+    translator are written so); item 34 is the same family from the other side.
+
+45. **`mut_of_ro_param`**: `mut out = items` with `items` a parameter without `mut` (or a `ro` binding) that holds a list or a text is `E_READONLY_COERCE`; a copy has to be built by hand in a loop. The translator does it in `sc_clone`, `p_copy` (task 108),
+    `rn_copy`, `rn_with` (task 113). A plain copy of a value would do.
+46. **`assign_mut_param`**: assigning a new list to a `mut` PARAMETER of a heap type (`items = []str.new()`) changes only the local name; the caller's list stays as it was (the compiler warns). The state of the classification of the lines
+    keeps its lists in the fields of a `mut` record and assigns a field (`TxClsState` in `cls_flush`).
+47. **`leak_ab`** (a working sample, PASS; the defect is not reduced): a unit that imports a module whose test files have a function with the parameters `a`, `b` of a record type gets the C of the prelude method `EmbeddedDir.merge` wrong (`no member named 'path' in 'struct Nova_StepTrace'`),
+    when the program embeds a file; seen in the unit `src/machine_text_render`, which imports `machine_text_eq` (its `eq_test.nv` had `trace_diff(a StepTrace, b StepTrace)`; the parameters are `ta`, `tb` now). The family of item (b) of task 107 and of item 32/35 notes of task 099. Rename the parameters.
+
+Also met in task 113, without a reproduction: (a) `nova test` kills a unit after 96-151 s on a loaded machine (`TIMEOUT ... killed after ...ms`) although the tests are right: `--timeout 600` lets the unit finish (the unit `machine_text_eq` takes 59 s on an empty machine and 150 s on a busy one);
+(b) on Windows `Output.write` of a program turns every `\n` into `\r\n` when the output goes into a pipe or a file, so the function `render` returns LF and the tests compare LF, and the command writes what it gets; (c) `str.find` and slicing work in bytes, so `"| — |"` is seven bytes, not five; (d) a string has no `+` (`"${a}${b}"`).
+
+The places in the code that go round an item carry the mark `// ORACLE-WORKAROUND(N): what is gone round; how to simplify when item N is fixed`; `git grep ORACLE-WORKAROUND` finds them.

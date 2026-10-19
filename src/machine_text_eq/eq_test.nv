@@ -58,6 +58,7 @@ fn same_list(xs []str, ys []str) -> bool {
 }
 
 // The two traces of a step compared; "" when equal, else what differs.
+// ORACLE-WORKAROUND(47): the parameters are `ta`, `tb`, not `a`, `b`: a unit that imports this module gets the prelude `EmbeddedDir.merge` wrong from the names `a`, `b`; rename to `a`, `b` when item 47 is fixed (the same for the locals of `engine_diff`)
 fn trace_diff(ta StepTrace, tb StepTrace) -> str {
     if ta.state != tb.state { return "state ${ta.state} / ${tb.state}" }
     if ta.encoded != tb.encoded { return "data ${ta.encoded} / ${tb.encoded}" }

@@ -357,6 +357,7 @@ fn prose_warning(line int, col int, key str) -> TranslateError {
 type TxParaLine { line int, indent int, text str }
 
 /// TxClsState: what the classification has so far: the entries, the warnings, the open paragraph (its lines wait for what follows them) and whether it is a comment for certain (a declaration outside a block of code).
+// ORACLE-WORKAROUND(46): the lists are fields of a `mut` record and are assigned as fields, because assigning a `mut` parameter changes only the local name; pass the lists as `mut` parameters when item 46 is fixed
 type TxClsState { out []TxEntry, warnings []TranslateError, para []TxParaLine, forced bool }
 
 // The open paragraph ends. `touching`: it ends against a table, a heading or a list item with no empty line between (format 2.9, Я-12): its lines are no paragraph, the reader takes

@@ -18,9 +18,12 @@ tests under Oracle 0.1.0 and the output of a unit must stay under 4 KB:
 | `src/machine_table/` | `crew_harness.machine_table` | the model of a machine, the decoder of the JSON tree `machine/2`, the type syntax, the checks of a table |
 | `src/machine_run/` | `crew_harness.machine_run` | the interpreter `PortolanMachine`, the state, the host of the primitives, the scenario runner `scenario/0` |
 | `src/machine_chat/` | `crew_harness.machine_chat` | tests only: the proof that the chat machine as data equals the chat machine on Nova |
-| `src/machine_text/` | `crew_harness.machine_text` | the translator of Portolan (the tables in Russian, format 2.5) into the JSON `machine/2` ([README](../machine_text/README.md), task 108) |
+| `src/machine_text/` | `crew_harness.machine_text` | the translator of Portolan (the tables in Russian or English, format 2.5 - 2.11) into the JSON `machine/2` and the reverse generator JSON -> Portolan ([README](../machine_text/README.md), tasks 108, 113) |
 | `src/machine_text_eq/` | `crew_harness.machine_text_eq` | tests only: the chat table equals the hand-written chat machine on 39 scenarios; the pilot "Agent step", the examples of the format |
 | `src/machine_agent/` | `crew_harness.machine_agent` | tests only: the agent step of the product (task 109): the table equals its JSON, every row has a scenario, the journal codes are the methodology's; task 110: the sample of the methodology (format 2.7) is translated whole and the product table is that sample with two project keys |
+| `src/machine_text_lang/` | `crew_harness.machine_text_lang` | tests only (task 113): the two languages of Portolan - an English file gives the JSON of the Russian one, a word of the other language is an error with its line, the news of 2.9 - 2.11 |
+| `src/machine_text_render/` | `crew_harness.machine_text_render` | tests only (task 113): the reverse generator - the canonical form, the circles "tree - file - tree" in both languages on every machine |
+| `src/machine_agent_en/` | `crew_harness.machine_agent_en` | tests only (task 113): the English sample of the agent step of the methodology goes through the translator, equals the Russian one and runs the 75 scenarios |
 | `src/machine_text_fmt/` | `crew_harness.machine_text_fmt` | tests only (task 110): format 2.7 in the translator - prose and warnings, the expansion of a fragment, sets of literals, separators and `\|`, enum words, the hash of the sample of definitions |
 
 ## Run the tests (Windows, Nova Oracle 0.1.0)
@@ -29,13 +32,16 @@ tests under Oracle 0.1.0 and the output of a unit must stay under 4 KB:
 . C:/work/nova/nova-oracle-0.1.0-windows-x86_64/setup-env.ps1     # the leading dot matters
 cd C:/work/crew-harness
 nova test src/machine                # the core: 170 tests
-nova test src/machine_table          # the decoder and the checks: 81 tests
-nova test src/machine_run            # the interpreter and the scenarios (the 75 of the agent step too): 105 tests
+nova test src/machine_table          # the decoder and the checks: 85 tests
+nova test src/machine_run            # the interpreter and the scenarios (the 75 of the agent step too): 111 tests
 nova test src/machine_chat           # the equality with the chat machine: 11 tests
-nova test src/machine_text           # the translator of Portolan: 129 tests
-nova test src/machine_text_eq        # the proofs of the translator: 44 tests
-nova test src/machine_agent          # the proofs of the agent step and of the sample of the methodology: 28 tests
-nova test src/machine_text_fmt       # format 2.7 in the translator: 64 tests
+nova test src/machine_text           # the translator of Portolan and its table of words: 162 tests
+nova test src/machine_text_eq        # the proofs of the translator: 45 tests
+nova test src/machine_agent          # the proofs of the agent step and of the sample of the methodology: 29 tests
+nova test src/machine_text_fmt       # format 2.7 in the translator: 65 tests
+nova test src/machine_text_lang      # the two languages of Portolan, the news of 2.9 - 2.11: 53 tests
+nova test src/machine_text_render    # the reverse generator JSON -> Portolan and its circles: 49 tests
+nova test src/machine_agent_en       # the English sample of the agent step (75 scenarios too): 14 tests (slow, about a minute)
 nova test --strict-effects src       # the same, and an effect used without being declared in a signature is an error
 nova test src --jobs 4               # the whole tree (the PostgreSQL units need the temporary container of src/pg/testdb.ps1)
 ```
@@ -52,7 +58,7 @@ is refused by Oracle 0.1.0 (item 25 there), so the interpreter's units are sibli
 | `expr.nv` | `Expr`, the tree of an expression, its JSON form (`expr_from_json`, `expr_to_json`), builders, `expr_depth` |
 | `eval.nv` | `eval(expr, scope)`, `eval_with(expr, scope, host)`, `EvalError`, the protocol `PrimitiveHost` |
 | `registry.nv` | `Primitive`, `Registry`, the class of a primitive in the position of a call, `standard_registry()` and `standard_types()` |
-| `data.nv` | the data files of the directories `schema/`, `machines/`, `scenarios/` compiled in (`embed_str`), `machine_files()`, `scenario_files()`, `schema_files()`; the names: a machine in Portolan is `*.portolan.md` (or `.portolan.txt`; the old `*.table.md` and `*.table.txt` are still accepted by `is_table_name`), a compiled machine (the JSON `machine/2`) is `*.portolan.json` (it was `*.machine.json`; `is_machine_json_name` accepts both names for the transitional period, our files carry the new one), a scenario is `*.scenario.test.json` (task 112) |
+| `data.nv` | the data files of the directories `schema/`, `machines/`, `scenarios/` compiled in (`embed_str`), `machine_files()`, `scenario_files()`, `schema_files()`; the names: a machine in Portolan is `*.portolan.md` (or `.portolan.txt`; `is_table_name` takes these two names only), a compiled machine (the JSON `machine/2`) is `*.portolan.json` (`is_machine_json_name` takes this name only), a scenario is `*.scenario.test.json` (task 112; there is no transitional period for the former names, Portolan 2.11) |
 | `*_test.nv` | 170 tests, more than 750 checks (the `assert` lines; loops repeat them) |
 
 ## The value
@@ -311,7 +317,7 @@ Task 108 (`doc/tasks/108-table-translator/`) brought the interpreter from the fo
   `ScriptedHost` answers it with `Uuid.v7()` under `with Time = th.fixed_ms(at), Random = th.seeded(...)` (the stamp of the event and the number of the call in the step): the same step gives the same ids; a scripted reply of the host wins.
   The host of the product that wants real random ids is another `PrimitiveHost`.
 - **Tuple fields from zero** (2.3): `t.0`, `t.1`; `make_tuple` names them `0`, `1`, ...; the lossless JSON `{"$tuple": [...]}` is the same.
-- The root key **`portolan_version`** (optional, `"2.5"` ... `"2.10"`; absent means 2.5; the version of the language Portolan that the tree follows; task 113 renamed the key from `table_format`, which is still read as a synonym - a tree that has both is refused). The built-in record **`JournalEvent`** (`СобытиеЖурнала`, section 2) beside `FailCode`. The name of an included file of definitions is a name of the registry (any letters, not a path).
+- The root key **`portolan_version`** (optional, `"2.5"` ... `"2.11"`; absent means 2.5; the version of the language Portolan that the tree follows; task 113 renamed the key from `table_format`, the old name is a key the schema does not know and the loader refuses it). The built-in record **`JournalEvent`** (`СобытиеЖурнала`, section 2) beside `FailCode`. The name of an included file of definitions is a name of the registry (any letters, not a path).
 - **Common events (the fragment "Pause", section 9)** read the data of a fragment (the marks `fragment`, `rows_and_fragment`, `mechanics`) without an Input and write the data with the marks `fragment` and `rows_and_fragment`.
 - The record `Child` of `expr.nv` is `ExprChild` (item 40 of the survey of Oracle 0.1.0: a program with `import std.os` could not be built).
 - `machines/chat.portolan.md` is the chat machine in Portolan (as tables); its translation equals `chat.portolan.json` (a test compares the trees without `title` and `portolan_version`) and runs the 39 scenarios of the chat in the same way.
@@ -358,4 +364,12 @@ Task 110 (`doc/tasks/110-format-27/`) brought the tree, the interpreter and the 
 - **P-8, the data of an event of a scenario.** A word or a signal with ONE field has the value of the field as the `input` (a text: `"ivan"`, `"other-1"`), with several fields an object `{field: value}`, with none no `input`
   (it was so since task 109; the schema `scenario/0` and tests of the unit `machine_run` say it).
 - **Names by the dictionary.** The field `идентификатор_запроса` of a signal is `id` (it was `request_id`, which is not a name of the dictionary); the datum `call_request_id` of the mechanics is the dictionary's `запрос_вызова`.
-- Tests of the task: `nova test src/machine_table` (81 tests), `src/machine_run` (105), `src/machine_agent` (28), `src/machine_text_fmt` (64).
+- Tests of the task: `nova test src/machine_table` (85 tests), `src/machine_run` (111), `src/machine_agent` (29), `src/machine_text_fmt` (65).
+
+# Portolan 2.11, two languages, the reverse generator (task 113)
+
+Task 113 (`doc/tasks/113-portolan-bilingual/`). The names: the interpreter is `PortolanMachine` (`PortolanState`, `portolan_machine`, `portolan_machine_with`, `load_portolan_machine`, `portolan_step`; they were `TableMachine`, `TableState`,
+`table_machine`, `table_machine_with`, `load_table_machine`, `table_step`). The key of the tree is `portolan_version` with the values `2.5` ... `2.11` (the decoder has `portolan_versions()`; the old `table_format` is refused as an unknown key). There is no
+transitional period for the former names of the files (Portolan 2.11, Я-22): `is_table_name` takes `*.portolan.md` and `*.portolan.txt`, `is_machine_json_name` takes `*.portolan.json`, nothing else. The translator reads a file in Russian or in English by the line
+`- language: ru|en` and writes the same tree (`src/machine_text`, [README](../machine_text/README.md)); the reverse generator writes a tree back as a file of Portolan in either language. The tests: `nova test src/machine_table` (85), `src/machine_run` (111),
+`src/machine_text` (162), `src/machine_text_lang` (53), `src/machine_text_render` (49), `src/machine_agent_en` (14).

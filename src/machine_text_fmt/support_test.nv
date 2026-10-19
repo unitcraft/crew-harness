@@ -7,6 +7,7 @@ import crew_harness.machine.{standard_registry}
 import crew_harness.machine_text.{translate_checked, TranslateReport, TranslateError, error_text}
 
 // Three backticks: a block of code. A raw string cannot hold them, so they are put in.
+// ORACLE-WORKAROUND(43): the helper is `ticks`, not `fence`: a user function `fence` clashes with the C function of the runtime; rename to `fence` when item 43 is fixed
 fn ticks() -> str => "```"
 
 // A small machine of format 2.7: the header, types in a block of code, constants, a parameter, the input, the data, a gate, a fork, two ends. The key lines are list items.

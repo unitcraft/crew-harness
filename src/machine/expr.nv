@@ -180,6 +180,7 @@ export fn expr_depth(e Expr) -> int {
 // ---- children -------------------------------------------------------------------------------------------------------
 
 /// A part of a node with its step in the path (the same steps as the paths of the errors of the evaluator).
+// ORACLE-WORKAROUND(40): named `ExprChild`, not `Child`, because `std.os` has a type `Child`; rename back to `Child` when item 40 is fixed
 type ExprChild { seg str, expr Expr }
 
 fn kids_of_list(prefix str, items []Expr) -> []ExprChild {
