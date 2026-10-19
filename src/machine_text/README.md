@@ -36,7 +36,7 @@ The output is deterministic: two translations of one text give the same bytes (a
 **Format 2.6 (task 109).** The key lines of a state (`Сторона`, `Срок тишины`, `Правит`, `Возвратов формы`, `Вход`, `При входе`, `При приёме`, `Кроме`, and `Предел запросов`, `Результат` in their sections) are items of a bullet list: `- Сторона: агент`.
 The marker `- ` is OPTIONAL when reading (a file of format 2.5, such as `chat.table.md`, has none), with and without it the JSON is the same; the columns of the errors stay the columns of the file (`TxEntry.shift` is the width of the marker).
 The body of `При входе` of several actions may be a nested list, one action to an item (`  - пусть сейчас = вызвать(time_now);`), the `;` at the end of an item is kept; an item of a nested list is read as a continuation line without its marker.
-A table after a list item stands at the level of the block after an empty line. `format: 2.6` is read like `format: 2.5`; the key `table_format` of the tree is the format of the file (`2.5` or `2.6`). The hash of the sample file of definitions is `72cb51803883` (the line `format: 2.6` is a part of the hash).
+A table after a list item stands at the level of the block after an empty line. `format: 2.6` is read like `format: 2.5`; the key `table_format` of the tree is the format of the file (`2.5` or `2.6`). The hash of the sample file of definitions is `1628bec298d9` (the line `format: 2.6` is a part of the hash).
 
 ## Errors
 
