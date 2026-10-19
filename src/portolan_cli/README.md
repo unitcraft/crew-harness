@@ -75,7 +75,7 @@ $p = "target/portolan.exe"
 & $p convert target/chat.en.portolan.md --language ru -o target/chat.ru.portolan.md       # back to Russian (through the JSON)
 & $p summary target/chat.portolan.json                                                    # the states, the rows, the actions
 & $p run src/machine/machines/chat.portolan.json src/machine/scenarios/chat-message-opens-request.scenario.test.json   # ok
-& $p test src/machine                                                                     # 131 of 131 scenarios passed
+& $p test src/machine                                                                     # 168 of 168 scenarios passed
 ```
 
 An error in a file (a transition leads to a state that is not there; the quoted line is cut here):
@@ -97,7 +97,7 @@ Each unit is a folder; `nova test` runs a unit with all its `*_test.nv` files (t
 ```powershell
 nova test src/portolan_cli --timeout 600            # 119 tests: help, version, compile, render, convert, check, summary, run, test on a small machine (Russian and English), the errors and the codes
 nova test src/portolan_eq --timeout 600             # 30 tests: compile -> render -> compile and convert ru -> en -> ru give an equal JSON on the 7 machines of the product, the commands are the functions of the translator
-nova test src/portolan_scenarios --timeout 600      # 16 tests: `test` passes the 131 scenarios of src/machine, `run` passes the 75 of the agent step one by one, the chat, the small machines
+nova test src/portolan_scenarios --timeout 600      # 16 tests: `test` passes the 168 scenarios of src/machine, `run` passes the 75 of the agent step one by one, the chat, the small machines
 ```
 
 `--timeout 600`: on a loaded machine `nova test` kills a unit after about 100 seconds (`spikes/env/README.md`, task 113); the units of the circles take 60-90 s. The program itself is checked on real files in the log of the task.

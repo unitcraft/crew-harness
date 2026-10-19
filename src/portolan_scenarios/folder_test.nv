@@ -10,21 +10,25 @@ import crew_harness.machine.{NamedText, machine_files, scenario_files, text_of_f
 test "ps test folder all scenarios" {
     ro ran = run_with(["test", "/machine"], machine_folder())
     assert(ran.err == "")
-    assert(ran.out == "131 of 131 scenarios passed\n")
+    ro total = scenario_files().len()
+    assert(ran.out == "${total} of ${total} scenarios passed\n")
     assert(ran.code == 0)
 }
 
-test "ps scenario files are 131" {
-    assert(scenario_files().len() == 131)
+test "ps scenario families" {
+    // the families of the folder (the total grows with the machines: task 114 added the 37 of the dialog)
     assert(scenarios_with("agent-step-").len() == 75)
     assert(scenarios_with("chat-").len() == 39)
+    assert(scenarios_with("dialog-").len() == 37)
+    assert(scenario_files().len() == 168)
 }
 
 test "ps test folder verbose" {
     ro ran = run_with(["test", "/machine", "-v"], machine_folder())
     assert(ran.code == 0)
-    assert(count_lines_with(ran.out, "ok /machine/scenarios/") == 131)
-    assert(ran.out.ends_with("131 of 131 scenarios passed\n"))
+    ro total = scenario_files().len()
+    assert(count_lines_with(ran.out, "ok /machine/scenarios/") == total)
+    assert(ran.out.ends_with("${total} of ${total} scenarios passed\n"))
 }
 
 test "ps test folder from a table only" {
