@@ -66,6 +66,7 @@ test "hm a term below zero is refused naming the parameter" {
 
 // ----- an engine over the hub machine in memory -----
 
+// ORACLE-WORKAROUND(12, 13, 26): the type arguments of `start_engine`, `resume_engine` and `decode_snapshot` are written out here and below; infer them when items 12 and 13 are fixed
 fn hm_begin(m PortolanMachine, mut world MemoryWorld) -> Engine[PortolanMachine, PortolanState] {
     with Journal = memory_journal(world), Store = memory_store(world), Link = memory_link(world), Time = memory_time(world) {
         start_engine[PortolanState, PortolanMachine](m, "hub-1")

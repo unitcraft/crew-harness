@@ -1,5 +1,6 @@
 // front_settings_test.nv - the settings of the front: the port, the folder of the page, the command of the hub; a file and the
 // environment over it (the keys are those of src/server/settings.nv).
+// ORACLE-WORKAROUND(25): the module is declared `module server.front` (without the package prefix): a module two folders under the source root cannot be declared with the full path; declare it with the prefix when item 25 is fixed
 module server.front
 
 import std.os.{Os, MockOs, mock_os, real_os, temp_dir, pid}

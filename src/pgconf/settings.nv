@@ -6,9 +6,8 @@
 //   CREW_PG_HOST, CREW_PG_PORT, CREW_PG_DATABASE, CREW_PG_USER, CREW_PG_PASSWORD
 // (an empty variable is the same as an unset one). The password may live in the environment alone, so that no file holds it.
 //
-// The module is apart from `crew_harness.pgdb` because of `std.os`: a program that holds the engine cannot hold `std.os`
-// until the type `Output` of the engine is renamed (Oracle 0.1.0, src/pg/README.md). The program that starts the sessions
-// reads the settings here and gives the value `PgConfig` to the handlers.
+// The program that starts the sessions reads the settings here and gives the value `PgConfig` to the handlers.
+// ORACLE-WORKAROUND(21, 14): the module is apart from `crew_harness.pgdb` because of `std.os`: a user type `Output` (the engine had one, it is gone since task 102) breaks the C of a program that also holds `std.os`; the split was not tried again, so merge this module into `pgdb` (check that a program with the engine and `std.os` builds) when items 14 and 21 are fixed
 module crew_harness.pgconf
 
 import crew_harness.pgdb.{PgConfig, parse_pg_config}

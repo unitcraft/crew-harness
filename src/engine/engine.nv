@@ -11,12 +11,12 @@
 // A process that dies between 4 and 5 sends nothing; `resume_engine` finds the requests that were
 // ordered but have no send mark in the journal and sends exactly those (rule 12: no second send).
 //
-// The type arguments of the free functions (`start_engine[ChatState, ChatSession](...)`) are written out: inferred, they break
-// the C of Oracle 0.1.0 (README.md, "Oracle 0.1.0").
+// ORACLE-WORKAROUND(12, 13, 26): the type arguments of the free functions (`start_engine[ChatState, ChatSession](...)`) are written out: inferred, they break the C; infer them when items 12 and 13 are fixed
 module crew_harness.engine
 
 import std.time.duration
 
+// ORACLE-WORKAROUND(11): the record is generic over the machine type (`Engine[M, S]`, `M Machine[S]`), not a record with a field of the protocol type: a call through a protocol-typed field breaks the C; a field `machine Machine[S]` would do when item 11 is fixed
 /// Engine: runs one machine for one session. `to_send` and `to_cancel` are the orders committed
 /// and not yet dispatched; `to_ack` are the source keys of events that the journal shows as committed
 /// before a restart and that the handler of the link is told about again (see the effect `Link`, `ack`);
@@ -33,6 +33,7 @@ export type Engine[M, S] {
 
 fn now_ms() Time -> int => Time.now().unix_millis()
 
+// ORACLE-WORKAROUND(54): the records are made by functions (`request_of`, `reply_of`), because a literal of a generic record with its type arguments (`PartyRequest[str] { ... }`) is a syntax error; write the literals in place when item 54 is fixed
 fn request_of(id str, attempt int, party str, input str, idle_term int, trace str, step int) -> PartyRequest[str] => {
     id, attempt, party, input, idle_term, trace, step
 }

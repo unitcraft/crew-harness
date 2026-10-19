@@ -4,6 +4,7 @@
 // other side (the agent) acts in the window.
 module crew_harness.server
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import crew_harness.engine.{Engine, MemoryWorld, Incoming, EventKind, FailCode, JournalEntry, Order, StepEnvironment, Transition, Journal, Store, Link, start_engine, resume_engine, memory_journal, memory_store, memory_link, memory_time, journal_line, journal_event, param}
 import crew_harness.chat.{ChatSession, ChatState, dialog_session, chat_session, encode_chat_state, user_says, user_cancels, agent_chunk, agent_done, agent_refused}
@@ -102,6 +103,7 @@ test "dialog: the single-turn session is unchanged" {
 
 // ----- the engine over the dialog in memory -----
 
+// ORACLE-WORKAROUND(12, 13, 26): the type arguments of `start_engine` and `resume_engine` are written out here and in the helpers below; infer them when items 12 and 13 are fixed
 fn d_begin(mut world MemoryWorld) -> Engine[ChatSession, ChatState] {
     with Journal = memory_journal(world), Store = memory_store(world), Link = memory_link(world), Time = memory_time(world) {
         start_engine[ChatState, ChatSession](dialog_session(30000), "dlg-1")

@@ -162,6 +162,8 @@ per ack until the next start compacts it.
 
 ## Oracle 0.1.0: what shaped the code
 
+<!-- ORACLE-WORKAROUND(20, 25): the tests are two units (`src/acp` and `src/acp_live`) with short test names: a test binary blocks on a stdout that nobody reads when its lines come to more than 4096 bytes (20), and a unit is a folder (25); one unit would do when item 20 is fixed -->
+
 Reproductions of the new defects: `spikes/env/repro_acp/` (run one: `cd spikes/env/repro_acp; nova test src/<name>`; `repro_child_pipes` is a program).
 
 - a user type named `Output` breaks the C once `std.os` is imported (its `Output` is the result of `Command.output()`):

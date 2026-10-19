@@ -260,6 +260,7 @@ fn engine_state_of[S](o JsonObject, snapshot_step int, state S) -> Option[Engine
 export fn decode_snapshot[S, M Machine[S]](machine M, snapshot Snapshot) -> Option[EngineState[S]] {
     ro o = object_of(snapshot.data)?
     ro state_text = state_text_of(o)?
+    // ORACLE-WORKAROUND(27): `match` on the option of the machine, not `?`: the operator `?` on an `Option` of a sum type inside a generic function writes a type name that does not exist in the C; use `?` when item 27 is fixed
     match machine.decode_state(state_text) {
         None => None
         Some(state) => engine_state_of[S](o, snapshot.step, state)

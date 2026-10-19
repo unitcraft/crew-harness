@@ -47,6 +47,5 @@ try {
 }
 
 console.log(failed === 0 ? "ALL PASSED" : `${failed} FAILED`);
-// process.exitCode, not process.exit(): on Windows Node 24 process.exit() right after closing
-// a WebSocket can abort with a libuv assertion (UV_HANDLE_CLOSING in async.c).
+// ORACLE-WORKAROUND(7): process.exitCode, not process.exit(): on Windows Node 24 process.exit() right after closing a WebSocket can abort with a libuv assertion (UV_HANDLE_CLOSING in async.c); call process.exit() when item 7 is fixed (it is a defect of Node, not of Nova)
 process.exitCode = failed === 0 ? 0 : 1;

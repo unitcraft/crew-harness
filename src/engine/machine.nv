@@ -2,8 +2,7 @@
 //
 // Source: state-machine-engine-automaton.md, protocols `Machine` and `Environment` (reduced to what the MVP needs).
 // The methodology generalises the machine over `State` and the other types; here `Machine[S]` is generic over the state only.
-// Oracle 0.1.0 compiles that when the type arguments of a free function are written out (see README.md, "Oracle 0.1.0"),
-// so the state of the machine is typed in the engine and is encoded only at the border of the snapshot.
+// ORACLE-WORKAROUND(12, 13, 26): a generic protocol compiles only when the type arguments of a free function are written out; the state of the machine is typed in the engine and is encoded only at the border of the snapshot; infer the arguments when items 12 and 13 are fixed
 
 module crew_harness.engine
 

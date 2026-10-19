@@ -2,6 +2,7 @@
 // and the environment that records the orders of a step.
 module crew_harness.engine
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 
 test "fail codes: the closed list has exactly ten codes with the names of the specification" {

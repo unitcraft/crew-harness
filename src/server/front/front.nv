@@ -1,7 +1,6 @@
 // front.nv - the front of the session server on Polaris (task 099): the files of the page, `/ws`, and the hub as a child process.
 //
-// The hub (engines, agents, the store) is a program of its own, `crew-hub` (src/crew_hub.nv), because the PostgreSQL driver and
-// Polaris cannot be in one program on Oracle 0.1.0 (spikes/env/repro_pg_polaris). The front starts it with pipes and passes
+// The hub (engines, agents, the store) is a program of its own, `crew-hub` (src/crew_hub.nv); the front starts it with pipes and passes
 // the page through, line by line (the lines are described in src/server/stdio.nv):
 //   page --WebSocket--> conn fiber --"msg <conn> <text>"--> stdin of the hub
 //   page <--WebSocket-- conn writer <--channel-- router fiber <--"<conn> <text>"-- stdout of the hub
@@ -12,6 +11,8 @@
 //
 // One fiber, the router, owns the list of the pages (a page = a number, its peer port, and the channel to its writer); the conn
 // fibers register with it through a channel. Nothing is shared.
+// ORACLE-WORKAROUND(30): the front is a program of its own (and the hub another, `src/crew_hub.nv`), because the PostgreSQL driver and Polaris cannot be in one program; one program would do when item 30 is fixed
+// ORACLE-WORKAROUND(25): the module is declared `module server.front` (without the package prefix) and imported as `crew_harness.server.front`: a module two folders under the source root cannot be declared with the full path; declare it with the prefix when item 25 is fixed
 module server.front
 
 import crew_harness.acp.{AgentLink, connect}
@@ -150,8 +151,7 @@ fn read_pump(consume rd TcpStream, id int, hub_tx ChanTx[str], out ChanTx[WsOut]
 fn serve_page(stream TcpStream, hub_tx ChanTx[str], reg_tx ChanTx[Reg]) Net -> () {
     consume conn = stream
     ro id = conn.peer_port()
-    // the stream of the hook has a copy held by the server loop, so it cannot be split into halves: the writer gets a second
-    // owner of the same socket (`share`), the socket is closed by the last one (Oracle 0.1.0 / Polaris 0.2.4, repro_ws_split)
+    // ORACLE-WORKAROUND(56): the stream of the hook has a copy held by the server loop, so it cannot be split into halves (`into_split()` panics): the writer gets a second owner of the same socket (`share`), the socket is closed by the last one; split the stream when item 56 is fixed
     consume wr = conn.share()
     ro outbound = Chan[WsOut].new(4096)
     ro registered = reg_tx.send(Reg { id, out: outbound.tx, gone: false })

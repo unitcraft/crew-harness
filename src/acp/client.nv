@@ -226,8 +226,8 @@ fn compact_inbox(path str, recovered AcpRecovered) Fs -> () {
     ro done = replace_file(Path.from_bytes(path.bytes()), "${lines.join("\n")}\n")
 }
 
-// The first 200 bytes of a line for a note. (A function: a variable bound by a pattern and named `text` is taken for the module
-// `std.text` as soon as any module of the program imports it, Oracle 0.1.0, spikes/env/repro_text_import.)
+// The first 200 bytes of a line for a note.
+// ORACLE-WORKAROUND(32): a function, not a pattern variable named `text` in the place of use: a variable bound by a pattern and named `text` is taken for the module `std.text` as soon as any module of the program imports it; inline it when item 32 is fixed
 fn shortened(line str) -> str {
     if line.byte_len() > 200 { line[..200] } else { line }
 }
@@ -631,7 +631,8 @@ export fn AcpClient mut @close() Time -> () {
     @link.stop()
     // Wait (for two seconds at most) until the fibers around the process are over: the process is gone ("exit" - the last thing the
     // watcher tells) and its stdout is closed ("eof"). A caller that goes on, or a program that ends, while they are still
-    // finishing meets the exit-time hangs of Oracle 0.1.0 (see README, "Oracle 0.1.0").
+    // finishing meets the exit-time hangs (see README, "Oracle 0.1.0").
+    // ORACLE-WORKAROUND(19): `close` waits (two seconds at most) for the end of the process and of its stdout before it returns: a binary whose fibers are still finishing does not exit and a pipe write now and then does not come back; do not wait when item 19 is fixed
     mut seen_exit = false
     mut seen_eof = false
     mut spins = 0

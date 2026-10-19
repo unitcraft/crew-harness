@@ -11,6 +11,7 @@ import crew_harness.chat.{ChatSession, ChatState, chat_session, encode_chat_stat
 
 // ----- helpers: one `with` over the four handlers; use_pg picks the database or the memory -----
 
+// ORACLE-WORKAROUND(12, 13, 26): the type arguments of `start_engine` and `resume_engine` are written out here and in the helpers below; infer them when items 12 and 13 are fixed
 fn begin(use_pg bool, mut mem MemoryWorld, mut pg PgWorld) -> Engine[ChatSession, ChatState] {
     if use_pg {
         with Journal = pg_journal(pg), Store = pg_store(pg), Link = memory_link(mem), Time = memory_time(mem) {
@@ -128,6 +129,7 @@ fn same_entry(x JournalEntry, y JournalEntry) -> bool =>
     x.trace == y.trace && x.step == y.step && x.cause == y.cause && x.state == y.state
         && x.request == y.request && x.at == y.at && same_event(x.event, y.event)
 
+// ORACLE-WORKAROUND(47): the parameters are `first`, `second` (and `ja`, `jb` below), not `a`, `b`: a unit that imports this module gets the prelude `EmbeddedDir.merge` wrong from the names `a`, `b` of a record type; rename to `a`, `b` when item 47 is fixed
 fn same_entries(first []JournalEntry, second []JournalEntry) -> bool {
     if first.len() != second.len() { return false }
     mut i = 0
@@ -149,6 +151,7 @@ fn snapshot_data(s Option[Snapshot]) -> str {
     }
 }
 
+// ORACLE-WORKAROUND(10): the answer is read with two nested `match`es, one level each, not `Some(Answer(reply))`: a nested pattern over a generic payload binds a NULL pointer in the C; write the nested pattern when item 10 is fixed
 fn answer_text(e Engine[ChatSession, ChatState]) -> str {
     match e.outcome() {
         Some(response) => match response {

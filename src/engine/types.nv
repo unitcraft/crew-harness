@@ -6,11 +6,8 @@
 // The dictionary "term -> identifier -> where in the methodology" is GLOSSARY.md beside this file; the table of the
 // differences from the methodology is `doc/tasks/102-align-glossary/mapping.md`.
 //
-// Oracle 0.1.0 limits that shaped these types (reproductions: README.md, "Oracle 0.1.0"):
-//  - a generic sum type with a `str` payload variant does not compile (`Output[I]` with `Log(str)`),
-//    so the sum types here are not generic or carry records; `Transition[S]` is generic over its payload only;
-//  - a generic protocol and a record generic over the state compile when the type arguments of a free function
-//    are written out (`start_engine[ChatState, ChatSession](...)`); inferred, they break the C.
+// ORACLE-WORKAROUND(8): a generic sum type with a `str` payload variant does not compile (`Output[I]` with `Log(str)`), so the sum types here are not generic or carry records and `Transition[S]` is generic over its payload only; make them generic over the payload when item 8 is fixed
+// ORACLE-WORKAROUND(12, 13, 26): a generic protocol and a record generic over the state compile only when the type arguments of a free function are written out (`start_engine[ChatState, ChatSession](...)`); infer them when items 12 and 13 are fixed
 
 module crew_harness.engine
 
@@ -28,6 +25,7 @@ export type FailCode enum
     | MaxTokens
     | MaxTurnRequests
 
+// ORACLE-WORKAROUND(29): the types are `PartyRequest` and `PartyResponse`, not `Request` and `Response`: the names clash with the types of `http` (and `Response` was once `Outcome`, item 9); name them as the methodology does when items 29 and 9 are fixed
 /// PartyRequest: the envelope of a request to a party (spec rule 15). `id` is the party, "-" and the
 /// attempt number (`agent-1`); the engine fills the envelope, a machine only orders a request.
 export type PartyRequest[T] { id str, attempt int, party str, input T, idle_term int, trace str, step int }

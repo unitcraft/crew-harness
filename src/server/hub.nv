@@ -103,7 +103,7 @@ fn array_text(lines []str) -> str => "[${joined(lines, ",")}]"
 
 // ----- the store, by the settings: the same engine over files or over PostgreSQL -----
 
-// ORACLE-WORKAROUND(49, 26): `begin_engine` of the interpreter (private, generic) captured the name, so this is `begin_session_engine`; the type arguments of `start_engine` are written out (items 12, 13, 26 - the same in `resume_stored` and `decode_snapshot` below); rename it and drop the arguments when items 45 and 12-13 are fixed
+// ORACLE-WORKAROUND(49, 12, 13, 26): `begin_engine` of the interpreter (private, generic) captured the name, so this is `begin_session_engine`; the type arguments of `start_engine` are written out (the same in `resume_stored` and `decode_snapshot` below); rename it to `begin_engine` when item 49 is fixed and drop the arguments when items 12 and 13 are fixed
 fn begin_session_engine(pg bool, root str, mut world PgWorld, machine PortolanMachine, id str) Time -> Engine[PortolanMachine, PortolanState] {
     if pg {
         with Journal = pg_journal(world), Store = pg_store(world) {

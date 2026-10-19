@@ -24,6 +24,7 @@ fn e2e_config(root str) -> AcpConfig {
     { program: base.program, args: base.args, cwd: base.cwd, inbox_path: "${root}/chat-1.inbox" }
 }
 
+// ORACLE-WORKAROUND(12, 13, 26): the type arguments of `start_engine` and `resume_engine` are written out here and in the helpers below; infer them when items 12 and 13 are fixed
 fn e2e_begin(root str, mut world MemoryWorld, mut client AcpClient) -> Engine[ChatSession, ChatState] {
     with Journal = file_journal(root, "chat-1"), Store = file_store(root), Link = acp_link(client), Time = memory_time(world) {
         start_engine[ChatState, ChatSession](chat_session(), "chat-1")
@@ -78,6 +79,7 @@ fn occurrences(hay str, needle str) -> int {
 // The state of the machine as text, to look into it.
 fn state_text(e Engine[ChatSession, ChatState]) -> str => encode_chat_state(e.state())
 
+// ORACLE-WORKAROUND(10): the answer is read with two nested `match`es, one level each, not `Some(Answer(reply))`: a nested pattern over a generic payload binds a NULL pointer in the C; write the nested pattern when item 10 is fixed
 fn answer_text(e Engine[ChatSession, ChatState]) -> str {
     match e.outcome() {
         Some(response) => match response {

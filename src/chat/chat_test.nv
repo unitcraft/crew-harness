@@ -1,6 +1,7 @@
 // chat_test.nv - the chat session as a machine: `step` takes a state, an event and an environment, nothing else.
 module crew_harness.chat
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import crew_harness.engine.{Incoming, EventKind, Order, StepEnvironment, Transition, FailCode}
 
@@ -27,6 +28,7 @@ fn run(state ChatState, event Incoming) -> Run {
     }
 }
 
+// ORACLE-WORKAROUND(47): the parameters are `first`, `second`, not `a`, `b`: a unit that imports this module gets the prelude `EmbeddedDir.merge` wrong from the names `a`, `b` of a record type; rename to `a`, `b` when item 47 is fixed
 fn same(first ChatState, second ChatState) -> bool => encode_chat_state(first) == encode_chat_state(second)
 
 // A compact text of the orders, to compare and to look at.
@@ -184,6 +186,7 @@ test "chat: the machine does not read the clock" {
 }
 
 test "chat: the state is encoded and decoded without loss, for every state" {
+    // ORACLE-WORKAROUND(33, 36): the variants are bound to a list before the loop: `for x in [A, B]` over a literal list of variants of a user enum (or of values made by calls) does not compile; loop over the literal when items 33 and 36 are fixed
     ro states = []ChatState.of(Idle, Awaiting { user: "вопрос", reply: "отве" }, Done { reply: "готово" }, Failed { code: FailCode.Timeout })
     for s in states {
         ro text = chat_session().encode_state(s)

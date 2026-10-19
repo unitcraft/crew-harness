@@ -172,6 +172,8 @@ seconds each.
 
 ## Why three modules (Oracle 0.1.0)
 
+<!-- ORACLE-WORKAROUND(21, 22, 25): the code is three modules, `src/pgdb`, `src/pgconf`, `src/pgstore` (and not `src/pg/db`, a module two folders under the source root, 25): `std.os` is kept out of the module that holds the engine (21) and `postgres.pgnet` is not used next to the engine (22); one module would do when items 21, 22 and 25 are fixed -->
+
 Two defects of Nova Oracle 0.1.0 decide the layout. Reproductions are in `spikes/env/` (items 21 to 25 of its README).
 
 1. **`std.os` and the engine cannot be in one program.** The engine has an enum `Output`; `std.os` exports a value type

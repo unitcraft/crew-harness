@@ -2,6 +2,7 @@
 // standard output, what goes to the standard error, the exit code. Nothing here touches a file, so every command is the same function in a test and in the program.
 module crew_harness.portolan_cli
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import crew_harness.machine.{NamedText, standard_registry}
 import crew_harness.machine_table.{load_machine, parse_machine, issue_text}

@@ -1,8 +1,7 @@
 // config.nv - where and as whom the program connects to PostgreSQL (task 098).
 //
-// A value and its checks, no input/output: the file and the environment are read in src/pgconf. The module has no
-// `std.os` on purpose: a program that holds the engine cannot also hold `std.os` until the type `Output` of the engine is
-// renamed (Oracle 0.1.0, see src/pg/README.md), and the handlers of the engine live beside this module.
+// A value and its checks, no input/output: the file and the environment are read in src/pgconf.
+// ORACLE-WORKAROUND(21, 14): the module has no `std.os` on purpose: a user type `Output` (the engine had one, it is gone since task 102) breaks the C of a program that also holds `std.os`, and the handlers of the engine live beside this module; the split was not tried again, read the environment here (and merge `pgconf`) when items 14 and 21 are fixed
 module crew_harness.pgdb
 
 import std.encoding.json.{Json, JsonObject}

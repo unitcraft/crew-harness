@@ -42,9 +42,9 @@ if (Test-Path $settings) {
 }
 
 $name = 'crew-pg-test-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
-# md5 for the test logins: a connection with SCRAM costs about a quarter of a second on the unoptimized build of the driver
-# (4096 rounds of HMAC in Nova), and the tests make hundreds of connections. A login created with a SCRAM secret still
-# authenticates with SCRAM under this setting (the test "SCRAM login" makes one).
+# ORACLE-WORKAROUND(57): md5 for the test logins: a connection with SCRAM costs about a quarter of a second on the unoptimized build of the driver
+# (4096 rounds of HMAC in Nova), and the tests make hundreds of connections; use SCRAM for all the logins when item 57 is fixed.
+# A login created with a SCRAM secret still authenticates with SCRAM under this setting (the test "SCRAM login" makes one).
 docker run --rm -d --name $name -e "POSTGRES_PASSWORD=$adminPw" -e 'POSTGRES_INITDB_ARGS=--auth-host=md5' -p '127.0.0.1::5432' $Image -c password_encryption=md5 | Out-Null
 $port = 0
 for ($i = 0; $i -lt 60; $i++) {

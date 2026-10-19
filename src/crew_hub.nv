@@ -19,8 +19,7 @@ fn main() Os Fs Proc Detach Time Net Io -> () {
         }
         Ok(settings) => {
             ro code = run_hub_stdio(settings)
-            // an explicit exit: the fiber that reads stdin is parked until the front closes it, and a program with a parked fiber
-            // does not end by itself (Oracle 0.1.0, spikes/env/README.md item 19)
+            // ORACLE-WORKAROUND(19): an explicit exit: the fiber that reads stdin is parked until the front closes it, and a program with a parked fiber does not end by itself; return from `main` when item 19 is fixed
             exit_process(code)
         }
     }

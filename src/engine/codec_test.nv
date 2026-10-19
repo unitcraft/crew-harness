@@ -166,6 +166,7 @@ test "snapshot: the typed state is an object under state, not an encoded text" {
 
 test "snapshot: restores the same state, the open request with its input and waiting included" {
     ro s = sample_state()
+    // ORACLE-WORKAROUND(12, 13, 26): the type arguments of `decode_snapshot` and `encode_snapshot` are written out here and in the tests below; infer them when items 12 and 13 are fixed
     match decode_snapshot[Mode, Stub](stub(), encode_snapshot[Mode, Stub](stub(), s)) {
         Some(back) => {
             assert(back.trace == s.trace)

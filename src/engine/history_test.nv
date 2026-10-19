@@ -17,6 +17,7 @@ fn echo() -> EchoMachine => { tag: "echo" }
 
 fn echo_begin(mut world MemoryWorld) -> Engine[EchoMachine, str] {
     with Journal = memory_journal(world), Store = memory_store(world), Link = memory_link(world), Time = memory_time(world) {
+        // ORACLE-WORKAROUND(12, 13, 26): the type arguments of `start_engine` and `resume_engine` are written out here and below; infer them when items 12 and 13 are fixed
         start_engine[str, EchoMachine](echo(), "s-1")
     }
 }
@@ -131,6 +132,7 @@ test "events: history leaves out the lines of a step that was never committed" {
 }
 
 test "events: the kind of an event is named and parsed" {
+    // ORACLE-WORKAROUND(33): the variants are bound to a list before the loop: `for x in [A, B]` over a literal list of variants of a user enum does not compile; loop over the literal when item 33 is fixed
     ro kinds = []EventKind.of(EventKind.Input, EventKind.Progress, EventKind.Answered, EventKind.Refused, EventKind.Expired)
     for kind in kinds {
         match EventKind.parse(kind.name()) {

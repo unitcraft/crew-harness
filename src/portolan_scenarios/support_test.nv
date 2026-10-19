@@ -29,7 +29,8 @@ fn run_with(argv []str, files []NamedText) -> Ran {
     Ran { code, out: cap.out_bytes().to_str_lossy(), err: cap.err_bytes().to_str_lossy() }
 }
 
-// Every folder above the file is there (the memory file system makes the last one only).
+// Every folder above the file is there.
+// ORACLE-WORKAROUND(55): the memory file system makes only the LAST folder of `create_dir_all`, so every folder above the file is made one by one; make the path in one call when item 55 is fixed
 fn make_parents(path str) Fs -> () {
     mut names = []str.new()
     for part in path.split("/") { names.push(part) }

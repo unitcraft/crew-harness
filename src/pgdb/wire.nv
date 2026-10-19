@@ -1,10 +1,11 @@
 // wire.nv - one connection to PostgreSQL: a socket and the pure `Session` of the driver `nova-postgres` (task 098).
 //
 // Why not `postgres.pgnet`, the adapter of the driver itself: its module also holds `listener.nv`, where the variant
-// `ListenerMsg.Event { event: ... }` is read as a record literal of the event envelope of the ENGINE (called by the same name before task 102, `Incoming` now) when both are in one
-// program (E_MISSING_FIELD_IN_LITERAL, see src/pg/README.md and spikes/env/repro_engine). The handlers of the engine and the
+// `ListenerMsg.Event { event: ... }` was read as a record literal of the event envelope of the ENGINE (called by the same name before task 102, `Incoming` now) when both are in one
+// program (E_MISSING_FIELD_IN_LITERAL, see src/pg/README.md and spikes/env/repro_pg_event). The handlers of the engine and the
 // driver must be in one program, so the socket loop of `pgnet/conn.nv` (about sixty lines: write what the session owes,
 // read a chunk, feed it, collect the events up to ReadyForQuery) is repeated here over the pure core, which has no such clash.
+// ORACLE-WORKAROUND(22): the socket loop of `pgnet/conn.nv` is repeated here instead of using `postgres.pgnet`; the clash was with the engine's `Event`, renamed `Incoming` in task 102, and whether `pgnet` fits next to the engine now was not tried: use `pgnet` and drop this loop when item 22 is fixed (or tried)
 // Plaintext only, as `pgnet`: `PgConfig.check` allows a local host alone.
 module crew_harness.pgdb
 

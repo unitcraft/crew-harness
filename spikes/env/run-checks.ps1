@@ -17,6 +17,7 @@ function Step($name, [scriptblock]$body) {
 }
 function Build($dir, $file) {
     Push-Location (Join-Path $here $dir)
+    # ORACLE-WORKAROUND(5): the output of `nova build` is filtered, because dozens of lint warnings from the dependency packages hide the real errors; print the whole output when item 5 is fixed
     try { cmd /c "nova build $file 2>&1" | Where-Object { $_ -match '^built|error' } } finally { Pop-Location }
     if (-not (Test-Path (Join-Path (Join-Path $here $dir) ($file -replace '\.nv$', '.exe')))) { throw "no exe" }
     $global:LASTEXITCODE = 0

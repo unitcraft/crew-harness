@@ -11,6 +11,7 @@
 // file outside the repository; it is in no error and no description.
 module crew_harness.server
 
+// ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import crew_harness.pgdb.{PgConfig, parse_pg_config}
 import crew_harness.pgconf.{pg_config_env}

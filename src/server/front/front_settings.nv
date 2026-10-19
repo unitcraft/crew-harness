@@ -2,9 +2,11 @@
 //
 // The front reads only these; the hub reads and checks all the settings (the same file, the same environment) and says so on its
 // stderr when they are wrong. The front cannot use `crew_harness.server.ServerSettings`: that module holds the hub, which holds the
-// PostgreSQL driver, and the driver and Polaris cannot be in one program (spikes/env/repro_pg_polaris).
+// PostgreSQL driver (see the mark 30 below).
 // The keys and the variables are those of src/server/settings.nv: port / CREW_SERVER_PORT, web_dir / CREW_SERVER_WEB_DIR,
 // hub {program, args} / CREW_SERVER_HUB, the file by the argument or CREW_SERVER_CONFIG.
+// ORACLE-WORKAROUND(30): the front reads its own part of the settings, because the module of the settings holds the hub, which holds the PostgreSQL driver, and the driver and Polaris cannot be in one program; use `ServerSettings` when item 30 is fixed
+// ORACLE-WORKAROUND(25): the module is declared `module server.front` (without the package prefix) and imported as `crew_harness.server.front`: a module two folders under the source root cannot be declared with the full path; declare it with the prefix when item 25 is fixed
 module server.front
 
 import std.text

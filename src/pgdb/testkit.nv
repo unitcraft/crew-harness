@@ -7,8 +7,8 @@
 // The server is a temporary container started by `src/pg/testdb.ps1` (see README.md). The script makes two random
 // passwords for THIS container (the administrator and the test logins) and writes them with the port to
 // `target/pg-test.json`, which is not in the repository; the tests read that file from the root of the repository, where
-// `nova test` runs. There is no environment variable here on purpose: `std.os` cannot be in the same program as the
-// engine until the type `Output` of the engine is renamed (see README.md).
+// `nova test` runs.
+// ORACLE-WORKAROUND(21, 14): there is no environment variable here on purpose, the port is read from a file: `std.os` cannot be in the same program as a user type `Output` (the engine had one, it is gone since task 102); the split was not tried again, use `env` when items 14 and 21 are fixed
 // No file, no server: a red test with a message, not a silent skip - a green run must mean that the real PostgreSQL was used.
 module crew_harness.pgdb
 

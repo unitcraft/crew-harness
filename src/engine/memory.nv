@@ -37,6 +37,7 @@ export fn MemoryWorld mut @deliver(event Incoming) -> () {
     @inbox.push(event)
 }
 
+// ORACLE-WORKAROUND(47): the method is `journal_entries`, not `entries`: `entries` is the name of the prelude method `EmbeddedDir.entries`, and a name taken from a test file of an imported module reaches the prelude `EmbeddedDir.merge`; name it `entries` when item 47 is fixed
 /// The journal, parsed. Lines that are not entries are skipped.
 export fn MemoryWorld @journal_entries() -> []JournalEntry {
     mut out = []JournalEntry.new()

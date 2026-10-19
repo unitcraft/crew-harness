@@ -1,26 +1,24 @@
 // stdio.nv - the hub as a program: the lines of its stdin are what the pages and the front say, the lines of its stdout are
 // what the hub says to the pages (task 099).
 //
-// Why a program of its own and not a part of the HTTP server: the PostgreSQL driver and Polaris cannot be in one program on
-// Oracle 0.1.0 (a variant `Message` of the driver and the type `Message` of Polaris share one table, see
-// spikes/env/repro_pg_polaris), so the front (HTTP and WebSocket, Polaris) and the hub (engines, agents, the store) are two
-// programs that talk by lines over pipes; the front starts the hub.
+// Why a program of its own and not a part of the HTTP server: the front (HTTP and WebSocket, Polaris) and the hub (engines, agents, the
+// store) are two programs that talk by lines over pipes; the front starts the hub.
+// ORACLE-WORKAROUND(30): the PostgreSQL driver and Polaris cannot be in one program (a variant `Message` of the driver and the type `Message` of Polaris share one table; spikes/env/repro_server/src/pg_polaris_message), so the hub is a program of its own, that talks to the front by lines over pipes; one program (the hub inside the server) would do when item 30 is fixed
 //
 // The lines, one per line, fields separated by a tab (a JSON text has no raw line break or tab):
 //   to the hub:    open <conn> | close <conn> | msg <conn> <page message> | quit
 //   from the hub:  ready | <conn> <message for the page>      (conn 0: for every page)
 // stderr carries the log. The hub ends when it reads `quit` or when its stdin is closed.
 //
-// Oracle 0.1.0: `Stdin.read` waits until the whole buffer is full (or the end of the stream), so a line that is shorter than the
-// buffer would never arrive; the buffer is ONE byte (spikes/env/repro_stdin_read). Reading parks only the fiber that reads.
+// ORACLE-WORKAROUND(31): `Stdin.read` waits until the whole buffer is full (or the end of the stream), so a line that is shorter than the buffer would never arrive; the buffer is ONE byte; read a chunk when item 31 is fixed.
+// Reading parks only the fiber that reads.
 module crew_harness.server
 
 import crew_harness.acp.{LineSplitter}
 import std.concurrency.nvchan.{Chan, ChanTx, ChanRx}
 import std.io.{stdin, stdout, stderr, Stdin, IoError}
 
-// The read of stdin waits in C (`fread`) and, if it were made by a fiber, would keep the worker thread of that fiber and starve the
-// fibers queued on it until a byte comes (spikes/env/repro_stdin_read); `#blocking` sends the call to the thread pool.
+// ORACLE-WORKAROUND(31): the read of stdin waits in C (`fread`) and, if it were made by a fiber, would keep the worker thread of that fiber and starve the fibers queued on it until a byte comes; `#blocking` sends the call to the thread pool; call `Stdin.read` in the fiber when item 31 is fixed
 #blocking
 fn read_blocking(mut input Stdin, mut buf []u8) Io -> Result[int, IoError] => input.read(buf)
 
