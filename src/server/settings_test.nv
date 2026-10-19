@@ -185,3 +185,23 @@ test "settings: the example file of the repository is a valid configuration" {
         Err(e) => assert(false)
     }
 }
+
+test "settings: the example of the store pg has no password and is refused until the environment gives one" {
+    ro text = with Fs = real_fs() {
+        match read_text(Path.from_bytes("src/server/server-pg.example.json".bytes())) {
+            Ok(t) => t
+            Err(e) => ""
+        }
+    }
+    assert(text.byte_len() > 0)
+    ro s = must_settings(text)
+    assert(s.store == "pg")
+    assert(s.pg.port == 15432)
+    assert(s.pg.database == "crew")
+    assert(s.pg.user == "crew_service")
+    assert(s.pg.password == "")
+    match s.check() {
+        Ok(done) => assert(false)
+        Err(e) => assert(e.contains("pg"))
+    }
+}

@@ -1,10 +1,16 @@
 // e2e.mjs - the whole session server through its door, as a page uses it (task 099): the front and the hub are started as programs
 // (target/crew-harness.exe and target/crew-hub.exe), the agent is the fake ACP agent of src/acp/testdata, the client is a WebSocket
 // of Node (Node 22 or newer, global WebSocket and fetch).
-//   node src/server/test/e2e.mjs [port]        exit code 0 = every check passed
+//   node src/server/test/e2e.mjs [port]                 the store in files; exit code 0 = every check passed
+//   node src/server/test/e2e.mjs --pg [port]            the store pg on the TEMPORARY PostgreSQL of src/pg/testdb.ps1 (task 115): the same
+//                                                       checks, then the sessions are looked for in the database
+//   node src/server/test/e2e.mjs --pg-docker [port]     the store pg on the PERMANENT PostgreSQL of src/pg/db.ps1 (container crew-harness-pg),
+//                                                       on a database of its own, crew_e2e, made and dropped here (the data of the owner,
+//                                                       the database crew, are not touched); then `db.ps1 down`, `db.ps1 up`, and the
+//                                                       sessions must be there after it
 // Run it from the root of the repository, after: nova build src/crew_hub.nv -o target/crew-hub.exe;
 //                                               nova build src/crew_harness.nv -o target/crew-harness.exe
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import net from "node:net";
@@ -12,14 +18,78 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const port = Number(process.argv[2] ?? 18099);
+const argv = process.argv.slice(2);
+const mode = argv.includes("--pg-docker") ? "pg-docker" : argv.includes("--pg") ? "pg" : "files";
+const port = Number(argv.find((a) => /^\d+$/.test(a)) ?? 18099);
 const exe = (name) => path.join(root, "target", `${name}.exe`);
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "crew-e2e-"));
 const configFile = path.join(dir, "server.json");
+
+// ----- the database (modes pg and pg-docker) -----
+
+const E2E_DB = "crew_e2e";
+const pg = { container: "", host: "127.0.0.1", port: 0, database: E2E_DB, user: "", password: "" };
+const mask = (text) => (pg.password ? String(text).split(pg.password).join("***") : String(text));
+function stopWith(message) {
+  console.log(`FAIL ${message}`);
+  console.log("NOT RUN: the database is not there");
+  try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* nothing to remove */ }
+  process.exit(1);
+}
+// SQL goes to psql in the container over stdin (a password is never on a command line); the administrator of the container
+function psql(database, text) {
+  const r = spawnSync("docker", ["exec", "-i", pg.container, "psql", "-U", "postgres", "-d", database, "-v", "ON_ERROR_STOP=1", "-q", "-t", "-A"],
+    { input: text, encoding: "utf8" });
+  if (r.status !== 0) throw new Error(`psql in ${pg.container} failed: ${mask(r.stderr || r.error || "")}`.trim());
+  return r.stdout.trim();
+}
+const dbScript = (...a) => spawnSync("powershell", ["-NoProfile", "-File", path.join(root, "src/pg/db.ps1"), ...a], { encoding: "utf8" });
+function provision() {
+  if (spawnSync("docker", ["info"], { encoding: "utf8" }).status !== 0) {
+    stopWith(`Docker is not running: start Docker Desktop (the mode ${mode} needs a PostgreSQL in Docker)`);
+  }
+  if (mode === "pg") {
+    // the temporary container of src/pg/testdb.ps1: random passwords of that container, md5 logins
+    const settings = path.join(root, "target/pg-test.json");
+    if (!fs.existsSync(settings)) stopWith("target/pg-test.json is not there: start the temporary PostgreSQL first: powershell -File src/pg/testdb.ps1");
+    const t = JSON.parse(fs.readFileSync(settings, "utf8"));
+    Object.assign(pg, { container: t.container, port: t.port, user: "crew_e2e_user", password: t.app_password });
+    try {
+      psql("postgres", `drop database if exists ${E2E_DB} with (force)`);
+      psql("postgres", `drop role if exists ${pg.user}`);
+      psql("postgres", `create database ${E2E_DB}`);
+    } catch (e) { stopWith(String(e.message ?? e)); }
+    const schema = spawnSync("docker", ["exec", "-i", pg.container, "psql", "-U", "postgres", "-d", E2E_DB, "-v", "ON_ERROR_STOP=1", "-q", "-f", "-"],
+      { input: fs.readFileSync(path.join(root, "src/pg/schema.sql")), encoding: "utf8" });
+    if (schema.status !== 0) stopWith(`the schema was not applied: ${mask(schema.stderr)}`);
+    try { psql("postgres", `create role ${pg.user} login password '${pg.password}' in role crew_app`); } catch (e) { stopWith(String(e.message ?? e)); }
+  } else {
+    // the permanent container of src/pg/db.ps1 and its settings file outside the repository
+    dbScript("dropdb", "-Database", E2E_DB); // a leftover of an earlier run
+    const up = dbScript("up", "-Database", E2E_DB);
+    if (up.status !== 0) stopWith(`db.ps1 up failed: ${(up.stderr || up.stdout || "").trim()}`);
+    const file = process.env.CREW_PG_DB_SETTINGS || path.join(os.homedir(), ".config", "crew-harness", "pg.json");
+    const t = JSON.parse(fs.readFileSync(file, "utf8"));
+    Object.assign(pg, { container: t.container, port: t.port, user: t.service_user, password: t.service_password });
+  }
+  // the login must really work and the schema must be there: a message now, not a hang later
+  let n;
+  try { n = psql(E2E_DB, "select count(*) from crew.list_sessions()"); } catch (e) { stopWith(String(e.message ?? e)); }
+  if (n !== "0") stopWith(`the database ${E2E_DB} is not empty (${n} sessions)`);
+}
+function unprovision() {
+  try {
+    if (mode === "pg") { psql("postgres", `drop database if exists ${E2E_DB} with (force)`); psql("postgres", `drop role if exists ${pg.user}`); }
+    else if (mode === "pg-docker") dbScript("dropdb", "-Database", E2E_DB);
+  } catch (e) { console.log(`warning: the clean-up of ${E2E_DB} failed: ${e.message}`); }
+}
+if (mode !== "files") provision();
+
 fs.writeFileSync(configFile, JSON.stringify({
   port,
   data_dir: path.join(dir, "data"),
-  store: "files",
+  store: mode === "files" ? "files" : "pg",
+  ...(mode === "files" ? {} : { pg: { host: pg.host, port: pg.port, database: pg.database, user: pg.user } }), // no password in the file
   agents: [{ id: "opencode", label: "Fake", program: "node", args: [path.join(root, "src/acp/testdata/fake_agent.mjs"), "--live"] }],
   idle_term_seconds: 3,
   workdir: root,
@@ -39,10 +109,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let front = null;
 let frontLog = "";
 async function startFront() {
-  front = spawn(exe("crew-harness"), ["serve", configFile], { stdio: ["ignore", "pipe", "pipe"], cwd: root });
+  // the password of the database is in the environment of the front (and of the hub it starts), not in a file or on a command line
+  const env = mode === "files" ? process.env : { ...process.env, CREW_PG_PASSWORD: pg.password };
+  front = spawn(exe("crew-harness"), ["serve", configFile], { stdio: ["ignore", "pipe", "pipe"], cwd: root, env });
+  let exited = false;
+  front.once("exit", () => { exited = true; });
   front.stderr.on("data", (d) => { frontLog += d.toString(); });
   front.stdout.on("data", (d) => { frontLog += d.toString(); });
-  for (let i = 0; i < 100; i += 1) {
+  for (let i = 0; i < 100 && !exited; i += 1) {
     try {
       const r = await fetch(`http://127.0.0.1:${port}/health`);
       if (r.status === 200) return true;
@@ -224,12 +298,59 @@ try {
   const ums2 = () => c.of("s-chat").filter((e) => e.kind === "user_message");
   await c.waitFor((e) => e.trace === "s-chat" && e.kind === "user_message" && e.input.text === "old session");
   check("an old session answers after the restart", !!(await c.waitFor(() => c.text("s-chat", ums2().at(-1).input.turn) === "Echo: old session")));
+  await c.waitFor(() => c.of("s-chat").at(-1)?.kind === "agent_done");
   c.close();
+
+  // ----- the store pg: the sessions are in the database, and the password is nowhere it should not be -----
+  if (mode !== "files") {
+    const traces = ["s-chat", "s-perm", "s-cancel", "s-crash", "s-rest"];
+    const ids = psql(E2E_DB, "select string_agg(id, ',' order by id) from crew.list_sessions()").split(",");
+    check("the sessions are in the database", traces.every((t) => ids.includes(t)), ids.join(","));
+    const lines = Number(psql(E2E_DB, "select count(*) from crew.machine_journal"));
+    check("the journal of the engine is in the database", lines >= 40, String(lines));
+    check("the password is in no line of the log of the front", !frontLog.includes(pg.password));
+    check("the password is not in the settings file of the server", !fs.readFileSync(configFile, "utf8").includes(pg.password));
+  }
+
+  // ----- the permanent database: down, up, and the data of the volume are there -----
+  if (mode === "pg-docker") {
+    const traces = ["s-chat", "s-perm", "s-cancel", "s-crash", "s-rest"];
+    // as the page does: an event is kept once by its id (an event of the moment of the connection may come twice), in the order of the steps
+    const story = (page_, t) => [...new Map(page_.of(t).map((e) => [e.id, e])).values()].sort((x, y) => x.step - y.step);
+    const before = Object.fromEntries(traces.map((t) => [t, JSON.stringify(story(c, t))]));
+    await stopFront();
+    const down = dbScript("down");
+    const state = spawnSync("docker", ["container", "inspect", "-f", "{{.State.Status}}", pg.container], { encoding: "utf8" }).stdout.trim();
+    check("db.ps1 down stops the container", down.status === 0 && state !== "running", state);
+    const up = dbScript("up", "-Database", E2E_DB);
+    check("db.ps1 up starts it again", up.status === 0, (up.stderr || up.stdout || "").trim());
+    check("the volume keeps the sessions of the database", psql(E2E_DB, "select count(*) from crew.list_sessions()") === String(traces.length));
+    check("the front starts again on the restarted database", await startFront(), frontLog);
+    const d = page();
+    await d.opened;
+    for (let i = 0; i < 300 && !traces.every((t) => d.of(t).length > 0); i += 1) await sleep(50);
+    await sleep(200);
+    check("the sessions are all there after down and up", traces.every((t) => d.of(t).length > 0));
+    const differ = (t) => {
+      const was = JSON.parse(before[t]);
+      const now = story(d, t);
+      const i = was.findIndex((e, k) => JSON.stringify(e) !== JSON.stringify(now[k]));
+      return `${t}: ${was.length} lines before, ${now.length} after, first difference at ${i}: ${JSON.stringify(was[i])} / ${JSON.stringify(now[i])}`;
+    };
+    check("every session has the same lines after down and up", traces.every((t) => JSON.stringify(story(d, t)) === before[t]),
+      traces.filter((t) => JSON.stringify(story(d, t)) !== before[t]).map(differ).join("; "));
+    const done = () => d.of("s-chat").filter((e) => e.kind === "agent_done").length;
+    const doneBefore = done();
+    d.send("user_message", "s-chat", { turn: "p4", text: "after down" });
+    check("a session goes on after down and up", !!(await d.waitFor(() => done() > doneBefore)));
+    d.close();
+  }
 } catch (e) {
   check("the run", false, String(e?.stack ?? e));
 } finally {
   await stopFront();
   await sleep(300);
+  if (mode !== "files") unprovision();
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* the agents may still hold the folder for a moment */ }
 }
 

@@ -45,6 +45,23 @@ copy src\server\server.example.json C:\work\crew-server.json      # edit: port, 
 with neither the defaults apply (port 8099, files in `crew-data`, the agent `opencode acp`, hub `target/crew-hub.exe`).
 The hub alone (`target\crew-hub.exe settings.json`) prints `ready` and then waits for lines; it is how the tests drive it.
 
+### Run on PostgreSQL with one command
+
+```powershell
+powershell -File src/server/run-pg.ps1          # from a console window, in the root of the repository; Ctrl+C stops the server
+```
+
+It starts (or finds) the permanent PostgreSQL in Docker (`src/pg/db.ps1 up`: the container `crew-harness-pg`, the volume with the data, the login
+`crew_service`), says the two `nova build` commands above if `target/crew-hub.exe` or `target/crew-harness.exe` is missing, writes
+`~/.config/crew-harness/server-pg.json` once (`store: pg`, the `pg` block **without a password**; a file that exists is kept), puts the password
+from `~/.config/crew-harness/pg.json` (outside the repository) into `CREW_PG_PASSWORD` **of that process only** and runs `crew-harness serve`.
+The password is in no file of the repository, no line of the output and no command line. Docker not running: a message and exit code 1.
+`-ServerPort 8100` is another port of the page (`CREW_SERVER_PORT`), `-Agent "node a.mjs --live"` another agent (`CREW_SERVER_AGENT`),
+`-Config`, `-ServerConfig`, `-Port`, `-Database` name other files, the port of the database and another database. By hand it is
+`powershell -File src/pg/db.ps1 env -ShowPassword | Invoke-Expression`, then `.\target\crew-harness.exe serve src\server\server-pg.example.json`
+(the example file has the same keys as the written one). The sessions stay in the volume: they survive a restart of the server and `db.ps1 down` / `db.ps1 up`
+(`test/e2e.mjs --pg-docker` checks both).
+
 ## Settings
 
 A JSON file; every key is optional. The environment is over the file, key by key. Only test values are in the repository
@@ -64,9 +81,10 @@ and no error (`describe()` leaves it out).
 | `hub` {`program`,`args`} | `CREW_SERVER_HUB` (words separated by spaces) | `target/crew-hub.exe` | how the front starts the hub |
 | - | `CREW_SERVER_CONFIG` | - | the settings file, when no argument names it |
 
-The file store needs no database. For `store: pg` start a database and migrate it (`psql -f src/pg/schema.sql` as the owner, a login that
-is a member of `crew_app`; see [`src/pg/README.md`](../pg/README.md)); a server that restarts finds its sessions with
-`crew.list_sessions()`.
+The file store needs no database. For `store: pg` the easy way is the permanent database in Docker (`run-pg.ps1` above, [`src/pg/README.md`](../pg/README.md),
+"The permanent database in Docker"); by hand: start a database and migrate it (`psql -f src/pg/schema.sql` as the owner, a login that
+is a member of `crew_app`). A server that restarts finds its sessions with `crew.list_sessions()`. An example with `store: pg` and no password:
+`src/server/server-pg.example.json` (the password comes from `CREW_PG_PASSWORD`).
 
 ## The protocol of `/ws`
 
@@ -154,8 +172,9 @@ The events a live session shows come from the engine itself (`Engine.take_events
 | `testkit.nv` | the settings of a test hub with the fake agent, the rig that drives a hub as a page does, the scenarios (shared by the units below) |
 | `dialog_test.nv`, `settings_test.nv`, `front/front_settings_test.nv` | tests of the unit `src/server` and `src/server/front` |
 | `../server_live/hub_test.nv`, `../server_pg/hub_pg_test.nv` | the same ten scenarios over files and over PostgreSQL |
-| `test/e2e.mjs`, `test/real-agent.mjs` | Node: the whole server through its door; the real `opencode acp` (handshake only) |
-| `server.example.json` | the example of the settings |
+| `test/e2e.mjs`, `test/real-agent.mjs` | Node: the whole server through its door (files, `--pg` on the temporary database, `--pg-docker` on the permanent one); the real `opencode acp` (handshake only) |
+| `server.example.json`, `server-pg.example.json` | the examples of the settings: the file store, and the store pg on the database of `db.ps1` (no password) |
+| `run-pg.ps1` | the server on the permanent PostgreSQL in Docker with one command (task 115) |
 
 The module of the front is declared `module server.front` (without the package prefix) and imported as `crew_harness.server.front`: a module two folders under the
 source root cannot be declared with the full path on Oracle 0.1.0 (item 25 of `spikes/env/README.md`; this form compiles and resolves).
@@ -170,6 +189,11 @@ nova test src/server_pg                                # the same over PostgreSQ
 powershell -File src/pg/testdb.ps1 -Stop
 nova build src/crew_hub.nv -o target/crew-hub.exe; nova build src/crew_harness.nv -o target/crew-harness.exe
 node src/server/test/e2e.mjs                           # the whole server, 35 checks (fake agent)
+powershell -File src/pg/testdb.ps1                     # the same on PostgreSQL: the temporary container, then
+node src/server/test/e2e.mjs --pg                      #   39 checks (the sessions and the journal are looked for in the database)
+powershell -File src/pg/testdb.ps1 -Stop
+node src/server/test/e2e.mjs --pg-docker               # the same on the permanent container, on its own database crew_e2e (made and dropped here;
+                                                       #   the database crew is not touched), then db.ps1 down, db.ps1 up and the sessions are there: 46 checks
 node src/server/test/real-agent.mjs                    # the real opencode: initialize and session/new, no model, no key
 ```
 

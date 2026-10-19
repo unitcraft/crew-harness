@@ -14,6 +14,7 @@ modules").
 | `src/pg/schema.sql` | the migration: schema `crew`, two tables, three functions, the role `crew_app`, the rights. Safe to run again |
 | `src/pg/pg.example.json` | an example of the settings file (a placeholder password; a real one goes to the environment) |
 | `src/pg/testdb.ps1` | starts and stops the temporary PostgreSQL in Docker for the tests |
+| `src/pg/db.ps1` | the **permanent** PostgreSQL of the product in Docker: `up`, `status`, `down`, `psql`, `backup`, `restore`, `reset`, `env`, `serve-config` (task 115; see "The permanent database in Docker") |
 | `src/pgdb/` | module `crew_harness.pgdb`: `PgConfig`, the calls `pg_save_step`, `pg_load`, `pg_migrate`, `pg_rows`, the socket loop (`wire.nv`), the test support (`testkit.nv`) |
 | `src/pgconf/` | module `crew_harness.pgconf`: the settings from a file and the environment (`pg_config`) |
 | `src/pgstore/` | module `crew_harness.pgstore`: `PgWorld`, `pg_store`, `pg_journal` |
@@ -90,6 +91,50 @@ alone. Defaults: `127.0.0.1`, 5432, `crew`, `crew_app`, no password (which `chec
 `PgConfig.check` also refuses a host that is not local (`127.0.0.1`, `localhost`, `::1`): the driver has no TLS yet, so neither
 the password nor the data may cross a network; TLS is a task of its own. Every call checks the configuration first.
 The password is in no error and no log line; `describe()` leaves it out.
+
+## The permanent database in Docker
+
+`src/pg/db.ps1` runs the PostgreSQL the product keeps its sessions in, in Docker, with one command (task 115; `testdb.ps1` stays for the tests and
+is a different, temporary container). It works with **one container, `crew-harness-pg`, and one volume, `crew-harness-pg-data`**, and with nothing
+else: the other containers and volumes of the machine and any PostgreSQL service of the machine are not touched (no `prune`, no other name). If Docker
+is not running it says so and ends with code 1.
+
+```powershell
+powershell -File src/pg/db.ps1 up                  # first run: image postgres:16-alpine, the container, the database crew, schema.sql, the login crew_service
+powershell -File src/pg/db.ps1 status              # container, port, volume, version, schema (tables, functions), sessions, a real login with the password
+powershell -File src/pg/db.ps1 down                # stop the container; the volume (the data) stays
+powershell -File src/pg/db.ps1 psql                # psql inside the container as the administrator (-Sql "select ..." for one command)
+powershell -File src/pg/db.ps1 backup C:/work/crew.dump    # pg_dump (custom format); no file name: backups/ beside the settings file
+powershell -File src/pg/db.ps1 restore C:/work/crew.dump   # replaces the database; the present state is dumped to backups/ first
+powershell -File src/pg/db.ps1 reset -Force        # removes the container AND THE VOLUME: all data; without -Force it only explains and stops
+powershell -File src/pg/db.ps1 env                 # the variables the server needs (CREW_PG_*), without the password; -ShowPassword prints it
+powershell -File src/pg/db.ps1 serve-config        # writes the settings of the server with store pg, no password
+```
+
+- **`up` is safe to repeat.** An existing container is only started (or left running), `schema.sql` is applied again (it is written for that), the
+  login is made once and **its password is never changed afterwards**. The container is made with `--restart unless-stopped`; the port is
+  `127.0.0.1:15432` (`-Port 15433` changes it: the container is re-created, the volume and the data stay; only the local address is ever published).
+- **Passwords.** Two random passwords (the administrator `postgres` and the login `crew_service`, a member of `crew_app`) are made on the first `up`
+  and written to `~/.config/crew-harness/pg.json` (`-Config <file>` names another), **outside the repository**; on Windows only the owner of the
+  file keeps access to it. Besides them the file holds the container, the volume, the port and the database. No command prints a password except
+  `env -ShowPassword`; the SQL that holds one goes to `psql` over stdin, never on a command line; a message with a password in it is shown with `***`.
+  The settings file lost while the container lives: `up` makes new passwords and sets them in the database (the local login of the container
+  is trusted, so the administrator password is not needed for this).
+- **The database is `crew`.** `-Database crew_x` (a lower case name) makes one more database in the same container, with the
+  schema (the tests of `src/server/test/e2e.mjs --pg-docker` use `crew_e2e` and drop it with `db.ps1 dropdb -Database crew_e2e`; `dropdb` drops only
+  a database named `crew_<something>`, never `crew`). `psql`, `backup`, `restore` act on `-Database` too.
+- **Backup and restore.** `backup` is `pg_dump -Fc` of one database (roles are not in it; `up` makes `crew_app` and the login again). `restore`
+  replaces the data, so it first dumps the present state to `~/.config/crew-harness/backups/<database>-before-restore-<time>.dump`, then runs
+  `pg_restore --clean --if-exists --single-transaction` and applies `schema.sql` again; a failed restore leaves the database as it was.
+- **Reset.** `reset -Force` removes the container, the volume and the settings file (its passwords belong to the removed volume). The next `up` starts
+  from nothing. It is the only command that loses data; make a `backup` first.
+- **What is not touched:** any other container, volume, network or image of Docker, the PostgreSQL services of the machine, the repository (no
+  password or path of the machine is written to it).
+- **Speed.** The login uses SCRAM (the default of PostgreSQL 16): a call of the server is one connection, which is a quarter of a second on the
+  unoptimized build of the driver (see "The handlers"). The tests use md5 logins of the temporary container for that reason.
+
+The server on this database: [`src/server/run-pg.ps1`](../server/README.md) (`powershell -File src/server/run-pg.ps1`) does `up`, takes the password
+from the settings file into the environment of the server process and starts it.
 
 ## Run the tests
 
