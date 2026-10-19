@@ -21,7 +21,8 @@ const base = ["crew-harness", "opencode-peers", "nova-peers"].map((n) => path.jo
 const FORMS = path.join(base, "forms")
 const CARDS = path.join(base, "cards")
 const ANSWERS = path.join(base, "answers")
-const TTL = 12 * 3_600_000
+// 2026-10-20: было 12 часов, и вопросы, ждавшие владельца дольше (удержанные по закрытому списку: слияние, приёмка), пропадали из списка; теперь 14 суток
+const TTL = Number(process.env.CREW_ANSWER_TTL_H ?? 24 * 14) * 3_600_000
 const safeKey = (k) => k.replace(/[^A-Za-z0-9_-]/g, "_")
 const read = (f) => {
   try {
@@ -46,7 +47,40 @@ function openForms(replaced = false) {
       out.push({ session, form: f, project, key: `${project}.${card.role ?? "?"}` })
     }
   }
+  if (!replaced) {
+    addHeld(out)
+    // вкладка, задавшая новый вопрос, старый оставила (ответ пришёл или ход идёт дальше): по вкладке живёт самый новый
+    const newest = new Map()
+    for (const x of out) if (!newest.has(x.session) || newest.get(x.session) < x.form.at) newest.set(x.session, x.form.at)
+    for (let i = out.length - 1; i >= 0; i--) if (out[i].form.at < newest.get(out[i].session)) out.splice(i, 1)
+  }
   return out.sort((a, b) => a.form.at - b.form.at)
+}
+
+// 2026-10-20: форма, которую плагин УДЕРЖАЛ для владельца по закрытому списку (forms/auto/<форма>.json, state «held»), могла выпасть
+// из forms/<сессия>.json (чистка записей) и пропасть из списка, хотя вопрос висит в окне. Добавляем такие формы: варианты — из
+// forms/loops/<сессия>.json (там они записаны), если ответа на форму ещё нет. Возраст и причина удержания печатаются.
+function addHeld(out) {
+  const AUTO = path.join(FORMS, "auto")
+  if (!existsSync(AUTO)) return
+  const known = new Set(out.map((x) => x.form.id))
+  const answered = new Set()
+  if (existsSync(ANSWERS)) {
+    for (const n of readdirSync(ANSWERS).filter((n) => n.endsWith(".json"))) {
+      const a = read(path.join(ANSWERS, n))
+      if (a?.form && (a.status === "applied" || a.status === undefined)) answered.add(a.form)
+    }
+  }
+  for (const n of readdirSync(AUTO).filter((n) => n.endsWith(".json"))) {
+    const h = read(path.join(AUTO, n))
+    if (!h || h.state !== "held" || known.has(h.id) || answered.has(h.id) || typeof h.at !== "number" || Date.now() - h.at >= TTL) continue
+    const loops = read(path.join(FORMS, "loops", `${safeKey(h.session)}.json`))
+    const ask = (loops?.asks ?? []).find((a) => a.form === h.id)
+    if (ask?.answered) continue
+    const card = read(path.join(CARDS, `${safeKey(h.session)}.json`)) ?? {}
+    const project = card.project ?? h.project ?? "?"
+    out.push({ session: h.session, form: { id: h.id, at: h.at, question: h.question, options: ask?.options ?? [], held: h.why ?? h.reason ?? true }, project, key: `${project}.${card.role ?? "?"}` })
+  }
 }
 
 const args = process.argv.slice(2)
@@ -58,7 +92,9 @@ const forms = openForms()
 if (!args.length) {
   if (!forms.length) console.log("открытых вопросников нет")
   for (const x of forms) {
-    console.log(`${x.project}  ${x.key}  сессия ${x.session}  форма ${x.form.id}${x.form.exhausted ? "  (без ответа после повторов)" : ""}`)
+    const age = Math.round((Date.now() - x.form.at) / 60000)
+    const ageText = age >= 120 ? `${Math.round(age / 60)} ч` : `${age} мин`
+    console.log(`${x.project}  ${x.key}  сессия ${x.session}  форма ${x.form.id}  (ждёт ${ageText})${x.form.held ? `  [удержана для владельца: ${x.form.held}]` : ""}${x.form.exhausted ? "  (без ответа после повторов)" : ""}`)
     console.log(`  вопрос: ${x.form.question ?? x.form.title ?? "?"}`)
     ;(x.form.options ?? []).forEach((o, i) => console.log(`  ${i + 1}. ${o}`))
   }
