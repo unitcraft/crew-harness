@@ -225,3 +225,10 @@ test "cs defs file errors" {
     assert(defs_has(report, "три раздела по порядку"))
     assert(defs_has(report, "в файле определений нет `вызвать`"))
 }
+
+test "cs cycle hash 26" {
+    ro cycle = "# Определения: арифметика_цикла\n\ndefinitions_version: 1\nformat: 2.6\n\n## Типы\n—\n\n## Константы\n—\n\n## Определения\n\nопределение потолок_исчерпан(номер число≥1, отсчёт число≥1, предел число≥0) -> да/нет =\n  (номер - 1) - отсчёт + 1 >= предел\n"
+    assert(definitions_hash(cycle) == "72cb51803883")
+    assert(definitions_hash(cycle.replace("\n", "\r\n")) == "72cb51803883")
+    assert(definitions_hash(cycle.replace("format: 2.6", "format: 2.5")) == "fb15ba5656e3")
+}

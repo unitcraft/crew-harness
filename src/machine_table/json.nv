@@ -15,6 +15,9 @@ export const MACHINE_FORMAT = "machine/2"
 /// The version of the table format of the methodology that the tree follows (the optional key `table_format`; absent means this one).
 export const TABLE_FORMAT = "2.5"
 
+/// The versions of the table format whose tree this decoder reads (2.6 changed the text of the tables, not the tree).
+export fn table_formats() -> []str => ["2.5", "2.6"]
+
 fn le(path str, message str) -> LoadError => { path, message }
 
 fn j_obj(v JsonValue, path str) -> Result[JsonObject, LoadError] {
@@ -916,7 +919,7 @@ fn dec_machine(root JsonObject) -> Result[MachineDef, LoadError] {
     ro format = j_need_str(root, "format", "$")?
     if format != MACHINE_FORMAT { return Err(le("$.format", "the format must be ${MACHINE_FORMAT}, got ${format}")) }
     ro table_format = j_str_or(root, "table_format", TABLE_FORMAT, "$")?
-    if table_format != TABLE_FORMAT { return Err(le("$.table_format", "the table_format must be ${TABLE_FORMAT} (the format of the methodology), got ${table_format}")) }
+    if !table_formats().contains(table_format) { return Err(le("$.table_format", "the table_format must be 2.5 or 2.6 (the format of the methodology), got ${table_format}")) }
     ro name = j_need_str(root, "machine", "$")?
     ro version = j_str_or(root, "version", "", "$")?
     ro types = dec_types(root)?

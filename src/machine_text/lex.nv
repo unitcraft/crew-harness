@@ -41,7 +41,7 @@ type TxCell { text str, col int }
 
 /// TxEntry: a line of the file that is not empty and not a comment. A heading has the `level` and the `text` after the hashes; a row has the cells;
 /// a free line has the `indent` (the number of the spaces before it) and the `text` after them.
-type TxEntry { kind int, level int, line int, indent int, text str, cells []TxCell }
+type TxEntry { kind int, level int, line int, indent int, shift int, text str, cells []TxCell }
 
 fn tx_chars(s str) -> []str {
     mut out = []str.new()
@@ -249,17 +249,28 @@ fn tx_classify(lines []str) -> []TxEntry {
         if indent == 0 && text.starts_with("#") {
             mut level = 0
             while level < cs.len() && cs[level] == "#" { level += 1 }
-            out.push(TxEntry { kind: EN_HEAD, level, line: no, indent: 0, text: tx_slice(cs, level, cs.len()).trim_ascii(), cells: []TxCell.new() })
+            out.push(TxEntry { kind: EN_HEAD, level, line: no, indent: 0, shift: 0, text: tx_slice(cs, level, cs.len()).trim_ascii(), cells: []TxCell.new() })
             continue
         }
         if indent == 0 && text.starts_with("|") {
             ro cells = tx_split_cells(cs)
             if tx_is_separator(cells) { continue }
-            out.push(TxEntry { kind: EN_ROW, level: 0, line: no, indent: 0, text, cells })
+            out.push(TxEntry { kind: EN_ROW, level: 0, line: no, indent: 0, shift: 0, text, cells })
             continue
         }
         if indent == 0 && text.starts_with("---") { continue }
-        out.push(TxEntry { kind: EN_TEXT, level: 0, line: no, indent, text, cells: []TxCell.new() })
+        // an optional list marker `- ` before a line `Ключ: значение` (format 2.6): the entry is the line without the marker, `shift` is the width of
+        // the marker with the spaces after it, so the columns of the errors stay the columns of the file
+        if indent == 0 && text.starts_with("- ") {
+            mut k = 1
+            while k < cs.len() && tx_is_space(cs[k]) { k += 1 }
+            ro rest = tx_slice(cs, k, cs.len())
+            if kv_colon_text(rest) >= 0 {
+                out.push(TxEntry { kind: EN_TEXT, level: 0, line: no, indent: 0, shift: k, text: rest, cells: []TxCell.new() })
+                continue
+            }
+        }
+        out.push(TxEntry { kind: EN_TEXT, level: 0, line: no, indent, shift: 0, text, cells: []TxCell.new() })
     }
     out
 }

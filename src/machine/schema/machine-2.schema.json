@@ -8,7 +8,7 @@
   "required": ["format", "machine", "initial", "states", "ends"],
   "properties": {
     "format": { "const": "machine/2" },
-    "table_format": { "const": "2.5", "description": "the version of the table format of the methodology that the tree follows (optional; absent means 2.5)" },
+    "table_format": { "enum": ["2.5", "2.6"], "description": "the version of the table format of the methodology that the tree follows (optional; absent means 2.5)" },
     "machine": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$", "description": "the Latin name of the machine (the name in the journal, `machine_started`)" },
     "version": { "type": "string" },
     "title": { "type": "string" },

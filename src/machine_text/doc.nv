@@ -18,10 +18,9 @@ fn kv_keys() -> []str => [
     "Предел запросов", "Инвариант", "machine", "machine_version", "format", "definitions_version", "fragment", "определения"
 ]
 
-/// Is the entry a line `Ключ: значение` with a known key? Returns the index of the colon in characters, or -1.
-fn kv_colon(entry TxEntry) -> int {
-    if entry.kind != EN_TEXT || entry.indent != 0 { return -1 }
-    ro cs = tx_chars(entry.text)
+/// Is the text a line `Ключ: значение` with a known key? Returns the index of the colon in characters, or -1.
+fn kv_colon_text(text str) -> int {
+    ro cs = tx_chars(text)
     mut i = 0
     while i < cs.len() {
         if cs[i] == ":" {
@@ -35,6 +34,12 @@ fn kv_colon(entry TxEntry) -> int {
     -1
 }
 
+/// Is the entry a line `Ключ: значение` with a known key? Returns the index of the colon in characters, or -1.
+fn kv_colon(entry TxEntry) -> int {
+    if entry.kind != EN_TEXT || entry.indent != 0 { return -1 }
+    kv_colon_text(entry.text)
+}
+
 /// The line `Ключ: значение` at `at` of the entries with its continuation lines (the following free lines that are indented).
 fn kv_read(entries []TxEntry, at int) -> TxKv {
     ro entry = entries[at]
@@ -46,12 +51,19 @@ fn kv_read(entries []TxEntry, at int) -> TxKv {
     mut lead = 0
     ro rcs = tx_chars(rest)
     while lead < rcs.len() && tx_is_space(rcs[lead]) { lead += 1 }
-    segs.push(TxSeg { text: tx_slice(rcs, lead, rcs.len()), line: entry.line, col: entry.indent + colon + 1 + lead + 1 })
+    segs.push(TxSeg { text: tx_slice(rcs, lead, rcs.len()), line: entry.line, col: entry.indent + entry.shift + colon + 1 + lead + 1 })
     mut taken = 1
     while at + taken < entries.len() {
         ro next = entries[at + taken]
         if next.kind != EN_TEXT || next.indent == 0 { break }
-        segs.push(TxSeg { text: next.text, line: next.line, col: next.indent + 1 })
+        // a continuation line may be an item of a nested list (`  - действие;`, format 2.6): the marker is not a part of the text
+        mut item_lead = 0
+        if next.text.starts_with("- ") {
+            item_lead = 1
+            ro ncs = tx_chars(next.text)
+            while item_lead < ncs.len() && tx_is_space(ncs[item_lead]) { item_lead += 1 }
+        }
+        segs.push(TxSeg { text: tx_slice(tx_chars(next.text), item_lead, tx_chars(next.text).len()), line: next.line, col: next.indent + item_lead + 1 })
         taken += 1
     }
     TxKv { key, segs, line: entry.line, taken }
@@ -79,8 +91,8 @@ fn cell_p(cell TxCell, line int) -> Result[TxP, TranslateError] {
 
 /// The tokens of the free line of an entry.
 fn entry_p(entry TxEntry) -> Result[TxP, TranslateError] {
-    ro tokens = tx_lex(entry.text, entry.line, entry.indent + 1)?
-    Ok(p_new(tokens, entry.line, entry.indent + 1 + entry.text.chars().count()))
+    ro tokens = tx_lex(entry.text, entry.line, entry.indent + entry.shift + 1)?
+    Ok(p_new(tokens, entry.line, entry.indent + entry.shift + 1 + entry.text.chars().count()))
 }
 
 fn note(mut cx TxCx, e TranslateError) -> () {

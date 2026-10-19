@@ -21,7 +21,7 @@ fn cx_new() -> TxCx {
 // ---- the header ------------------------------------------------------------------------------------------------------------------------------
 
 /// TxHeader: the title, the Latin name, the version of the machine.
-type TxHeader { title str, machine str, version str }
+type TxHeader { title str, machine str, version str, format str }
 
 fn header_read(entries []TxEntry, mut cx TxCx) -> TxHeader {
     mut title = ""
@@ -29,6 +29,7 @@ fn header_read(entries []TxEntry, mut cx TxCx) -> TxHeader {
     mut version = ""
     mut format = ""
     mut machine_line = 1
+    mut machine_col = 10
     if entries.len() == 0 || entries[0].kind != EN_HEAD || entries[0].level != 1 || !entries[0].text.starts_with("Машина:") {
         note(cx, struct_error(1, 1, "файл машины начинается со строки `# Машина: <Имя>`"))
     } else {
@@ -43,6 +44,7 @@ fn header_read(entries []TxEntry, mut cx TxCx) -> TxHeader {
             if line.key == "machine" {
                 machine = value
                 machine_line = e.line
+                machine_col = 10 + e.shift
             } else if line.key == "machine_version" {
                 version = value
             } else if line.key == "format" {
@@ -59,13 +61,13 @@ fn header_read(entries []TxEntry, mut cx TxCx) -> TxHeader {
     if machine == "" {
         note(cx, struct_error(1, 1, "в шапке нет строки `machine: <латинское_имя>`"))
     } else if !is_identifier_latin(machine) {
-        note(cx, struct_error(machine_line, 10, "имя машины — латинский идентификатор, найдено `${machine}`"))
+        note(cx, struct_error(machine_line, machine_col, "имя машины — латинский идентификатор, найдено `${machine}`"))
     }
-    if format != "2.5" {
+    if format != "2.5" && format != "2.6" {
         ro shown = if format == "" { "не указан" } else { format }
-        note(cx, struct_error(1, 1, "формат ${shown}: переводчик читает формат 2.5 (строка `format: 2.5`)"))
+        note(cx, struct_error(1, 1, "формат ${shown}: переводчик читает формат 2.5 или 2.6 (строка `format: 2.6`)"))
     }
-    TxHeader { title, machine, version }
+    TxHeader { title, machine, version, format }
 }
 
 // ---- sorting and quoting the errors ---------------------------------------------------------------------------------------------------------
@@ -346,7 +348,7 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
     }
 
     // the JSON
-    mut root = [kv("format", js("machine/2")), kv("table_format", js("2.5")), kv("machine", js(header.machine)), kv("version", js(header.version))]
+    mut root = [kv("format", js("machine/2")), kv("table_format", js(if header.format == "2.6" { "2.6" } else { "2.5" })), kv("machine", js(header.machine)), kv("version", js(header.version))]
     if header.title != "" { root.push(kv("title", js(header.title))) }
     if types.records.len() > 0 || types.variants.len() > 0 {
         mut tp = []TxKV.new()
