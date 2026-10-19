@@ -57,7 +57,7 @@ test "sm loads" {
     match load_machine(sample_json(), standard_registry()) {
         Ok(def) => {
             assert(def.name == "agent_step")
-            assert(def.version == "portolan-2.7")
+            assert(def.version == "portolan-2.11")
             assert(def.states.len() == 14)
             assert(def.common.len() == 6)
             assert(def.parties.len() == 3)
@@ -74,15 +74,15 @@ test "sm loads" {
 
 test "sm summary" {
     ro text = render_summary(sample_json())
-    assert(text.starts_with("machine agent_step (version portolan-2.7): 14 states, 47 rows, "))
+    assert(text.starts_with("machine agent_step (version portolan-2.11): 14 states, 47 rows, "))
     assert(text.contains("  AgentTurn (appeal): 9 rows, 18 actions"))
     assert(text.contains("common events: 6 rows"))
     assert(text.contains("ends: 13 rows"))
 }
 
 test "sm header 27" {
-    assert(sample_json().starts_with("{\"format\":\"machine/2\",\"portolan_version\":\"2.7\",\"machine\":\"agent_step\",\"version\":\"portolan-2.7\""))
-    assert(sample().contains("- format: 2.7"))
+    assert(sample_json().starts_with("{\"format\":\"machine/2\",\"portolan_version\":\"2.11\",\"machine\":\"agent_step\",\"version\":\"portolan-2.11\""))
+    assert(sample().contains("- format: 2.11"))
 }
 
 test "sm expansion skipped" {
@@ -201,9 +201,9 @@ test "sm json differs by keys" {
     assert(translate_checked(agent_step_table_text(), standard_registry()).json == product)
 }
 
-test "sm both extensions" {
-    for n in ["a.table.md", "a.portolan.md", "a.table.txt", "a.portolan.txt"] { assert(is_table_name(n)) }
-    for n in ["a.md", "a.json", "a.portolan", "table.md", "a.portolan.json", "a.table.json"] { assert(!is_table_name(n)) }
+test "sm table names" {
+    for n in ["a.portolan.md", "a.portolan.txt"] { assert(is_table_name(n)) }
+    for n in ["a.md", "a.json", "a.portolan", "table.md", "a.portolan.json", "a.table.json", "foo.table.md", "foo.table.txt", "foo.machine.json"] { assert(!is_table_name(n)) }
     // the translator reads the text and not the name of the file: the notes of one text differ only by the name that the caller prints
     ro broken = translate_checked(sample().replace("число_ходов += 1", "число_ходов +="), standard_registry())
     assert(broken.errors.len() > 0)
