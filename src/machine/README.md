@@ -20,7 +20,8 @@ tests under Oracle 0.1.0 and the output of a unit must stay under 4 KB:
 | `src/machine_chat/` | `crew_harness.machine_chat` | tests only: the proof that the chat machine as data equals the chat machine on Nova |
 | `src/machine_text/` | `crew_harness.machine_text` | the translator of the tables in Russian (format 2.5) into the JSON `machine/2` ([README](../machine_text/README.md), task 108) |
 | `src/machine_text_eq/` | `crew_harness.machine_text_eq` | tests only: the chat table equals the hand-written chat machine on 39 scenarios; the pilot "Agent step", the examples of the format |
-| `src/machine_agent/` | `crew_harness.machine_agent` | tests only: the agent step of the product (task 109): the table equals its JSON, every row has a scenario, the journal codes are the methodology's, the illustration of the methodology |
+| `src/machine_agent/` | `crew_harness.machine_agent` | tests only: the agent step of the product (task 109): the table equals its JSON, every row has a scenario, the journal codes are the methodology's; task 110: the sample of the methodology (format 2.7) is translated whole and the product table is that sample with two project keys |
+| `src/machine_text_fmt/` | `crew_harness.machine_text_fmt` | tests only (task 110): format 2.7 in the translator - prose and warnings, the expansion of a fragment, sets of literals, separators and `\|`, enum words, the hash of the sample of definitions |
 
 ## Run the tests (Windows, Nova Oracle 0.1.0)
 
@@ -28,12 +29,13 @@ tests under Oracle 0.1.0 and the output of a unit must stay under 4 KB:
 . C:/work/nova/nova-oracle-0.1.0-windows-x86_64/setup-env.ps1     # the leading dot matters
 cd C:/work/crew-harness
 nova test src/machine                # the core: 170 tests
-nova test src/machine_table          # the decoder and the checks: 71 tests
-nova test src/machine_run            # the interpreter and the scenarios (the 75 of the agent step too): 79 tests
+nova test src/machine_table          # the decoder and the checks: 81 tests
+nova test src/machine_run            # the interpreter and the scenarios (the 75 of the agent step too): 105 tests
 nova test src/machine_chat           # the equality with the chat machine: 11 tests
 nova test src/machine_text           # the translator of the tables: 129 tests
 nova test src/machine_text_eq        # the proofs of the translator: 44 tests
-nova test src/machine_agent          # the proofs of the agent step: 14 tests
+nova test src/machine_agent          # the proofs of the agent step and of the sample of the methodology: 28 tests
+nova test src/machine_text_fmt       # format 2.7 in the translator: 64 tests
 nova test --strict-effects src       # the same, and an effect used without being declared in a signature is an error
 nova test src --jobs 4               # the whole tree (the PostgreSQL units need the temporary container of src/pg/testdb.ps1)
 ```
@@ -208,8 +210,8 @@ the types are written as the format writes them (`int>=0`, `?text`, `[]Finding`,
 | Key of the root | Meaning (format section) |
 |---|---|
 | `format`, `machine`, `version`, `title` | the header: `machine/2`, the Latin name (the name in the journal), the version |
-| `types` | `records`, `variants` (an enum is a variant without fields); `FailCode`, the closed list of the ten failure causes, is built in (2) |
-| `constants`, `params` | `name`, `type`, `value` / `default` (+ `project_key`); evaluated in order when the machine is built (1, 8) |
+| `types` | `records`, `variants` (an enum is a variant without fields; the key `words` of a variant is the list of the pairs `["Name", "word"]` of its values, format 2.7); `FailCode`, the closed list of the ten failure causes, is built in (2) |
+| `constants`, `params` | `name`, `type`, `value` / `default` (+ `project_key`: the key after `проект.` of the column "project override", format 2.7); evaluated in order when the machine is built (1, 8) |
 | `input` | `fields`, `invariants` - the input of a call; the event `start` carries it as an object (1) |
 | `data` | `name`, `type`, `initial` (`{"expr": E}` or `{"from_input": "field"}`), `monotonic` (`true`, or `{"bound": E}` for `<= E`), `writes` (`rows`, `mechanics`, `rows_and_mechanics`, `fragment`, `rows_and_fragment`); a name `x[*].f` is a path datum that carries only the marks (2) |
 | `parties` | `name`, `id`, `kind` (`agent`, `human`, `enhanced`, `gatekeeper`, `machine`), `words` (gates), `progress` (parts of an answer), `result` (the type of the answer, required for agent and machine), `counter` (the datum of the attempt counter, required), `profile`, `setting`, `nested` (1) |
@@ -282,7 +284,7 @@ The data view is the one both can show: `Awaiting` the message and the reply, `D
 - **Request text**: a request with one field of text is that text, with none is empty, else the JSON of a record of the fields. The identifier of a request is the engine's `<party id>-<attempt>`; the party of an answer is the id without the attempt.
 - **`order_save`** is ordered after a step that took a row (the chat machine on Nova does it at every state change; the engine saves a snapshot at every commit anyway).
 - **A step that fails**: no rollback of the writes made before the error (the format: the ERROR end sees the data as they are); only a defect leaves the state as it was.
-- **Enum words** are the code word of the case (`StoppedByHuman` - `stopped_by_human`, `text()` of the core); the explicit words per case of the format are not read. `all_data` writes composite values as the lossless JSON of the core.
+- **Enum words** (format 2.7, P-7): `text(x)` of an enum value is its word from the key `words` of the type; a value without a word is the code word of the case (`StoppedByHuman` - `stopped_by_human`, as before; `FailCode` has the words of the engine). `all_data` is written by section 5 of the format (below, task 110).
 - **`record_text`** (`text_of_record` of the format) writes the English prefix `event `.
 
 ## Not implemented (and why)
@@ -291,7 +293,7 @@ The data view is the one both can show: `Awaiting` the message and the reply, `D
 - A writing primitive that changes data of the machine (`writes` in the registry): `PrimitiveHost` gives back a value only. `profile` of a party, `edits` / `edit_check`, `form_returns` are decoded and checked, not executed (`SendOrder` has no profile; the engine has no
   return of the form and no check of the object).
 - The data of the mechanics (`open_requests`, `call_request_id`, a plain attempt counter) are kept by the interpreter since task 109 (below); the counters of the elements of a set (`lenses[*].attempt`) and the return of a cancelled party to `to_send` are still the engine's / not run. `includes` are checked for shape (name, version, 12-digit hash); the file of definitions is not read; a fragment is the expanded tree.
-- The qualified `answer: Type.Variant`, explicit enum words, the encoding of `all_data` of format 2.2 (item 1 of the pilot's edits) beyond the lossless JSON of the core.
+- The qualified `answer: Type.Variant`.
 
 ## Oracle 0.1.0: more limits met in task 107
 
@@ -317,7 +319,7 @@ Task 108 (`doc/tasks/108-table-translator/`) brought the interpreter from the fo
 
 # The agent step as data (task 109)
 
-`machines/agent_step.table.md` is the machine "Agent step" of the methodology as tables (format 2.6, the key lines are list items, the fragment "Pause" is a connection); `machines/agent_step.machine.json`
+`machines/agent_step.table.txt` (since task 110 with the extension `.txt`, as the copy of the sample: its prose has the relative links of the folder of the methodology and the guard of the links reads `.md` only) is the machine "Agent step" of the methodology as tables (format 2.6, the key lines are list items, the fragment "Pause" is a connection); `machines/agent_step.machine.json`
 is its translation by `src/machine_translate.nv` (a test compares them byte by byte). It passes the checks of the load without a note `unsupported`: 14 states (37 rows of the states, 4 of the pause,
 6 common events), 13 rows of the ends, 16 definitions, 3 parties, 21 data. The machine is run by the same interpreter as the chat; the user writes no Nova.
 
@@ -334,5 +336,26 @@ What the interpreter got for it (decisions are in `doc/tasks/109-agent-step-mach
 - **Scenarios**: the step key `host` (the answers of the primitives of the host from this step on, in the lossless JSON of the core: `reply_validation`, `close_agent_turn`), the file key `params` (the values of the parameters
   of the machine that the project gives, `table_machine_with`), the field `request` of the event `start`. `scenarios/agent-step-*` are 75 files: a scenario for every row that can be taken (`agent-step-<state>-<n>`,
   `agent-step-common-<n>`, `agent-step-end-<end>-<n>`) and the flows (`agent-step-flow-*`). Seven rows cannot be taken by any events (the rows `else` of the forks and the row 6 of the common events); the test names them.
-- Not run (still `unsupported`): the profile of a party, `Возвратов формы` above zero, `Правит`, nested machines, `вход_заново: запросы_из_к_отправке`; the coding of `все_данные` by section 5 of the format (composite
-  values are the lossless JSON of the core, enums have no words in the tree).
+- Not run (still `unsupported`): the profile of a party, `Возвратов формы` above zero, `Правит`, nested machines, `вход_заново: запросы_из_к_отправке`.
+
+# Format 2.7 (task 110)
+
+Task 110 (`doc/tasks/110-format-27/`) brought the tree, the interpreter and the translator to format 2.7 of the methodology (marks P-1...P-9 of section 0 of the format). The sample of the agent step of the methodology
+(`state-machine-agent-step-table.md`, 2.7) is translated whole and with no hand edit; the table of the product (`machines/agent_step.table.txt`) is that sample with the two keys of the project in the column "project override".
+
+- **The tree.** `table_format` may be `2.7`. A variant that is an enum has the optional key **`words`**, the list of the pairs `["Name", "word"]` in the order of the declaration (only the values that have a word; a
+  word is lower case Latin letters, digits and `_`, once in the enum, the case has no fields): `VariantDef.words` (`EnumWord { name, word }`). The schema [`machine-2.schema.json`](schema/machine-2.schema.json) and
+  a test of the unit `machine_table` say the same keys. `text(x)` takes the word (`enum_word(defs, type, case)`); the core `value_text` does not know the types and stays as it was.
+- **`все_данные`** (`журнал(все_данные)`, the event `machine_data` with the one parameter `data`, section 5 of the format): `name=value; ...` in the order of the table of data (the data of the fragments first, the paths
+  `x[*].f` are not among them). An integer is decimal, a float is `text(x)`, a text and a set of literals are as they are (an empty one is nothing after `=`), a bool is `yes`/`no`, an absent optional value is `none`, an enum value
+  is its WORD (without a word - the name of the value as the tree has it, `FailCode` - the word of the engine). A list, a dict, a record, a variant with fields and a tuple are compact JSON (`src/machine_run/encode.nv`:
+  no spaces, UTF-8, the quote, the backslash and the control signs escaped by RFC 8259 with lower case `\u00xx`): `none` is `null`, a bool is `true`/`false`, a record is an object with the fields in the order of its type,
+  a variant with fields is `{"Name":{fields}}`, an enum value and a variant without fields are a string, a dict is an object (text keys) or the array of the pairs `[[key,value],...]`, a tuple is an array.
+- **The table of the project (P-9).** `table_machine_with(def, registry, params)` takes `[]ProjectValue { key, value }`: the key is `проект.<ключ>` (`PROJECT_PREFIX`), `<ключ>` is the `project_key` of a parameter
+  (the column "project override"). A key that has no such parameter, a key twice, a key not of the form `проект.…` refuse the machine (`Err` before anything is evaluated); the value is checked against the type of the
+  parameter like a default (a full dict by the rules of section 2); a parameter that is not named keeps its default. `table_machine(def, registry)` is `table_machine_with(def, registry, [])`. A scenario (`scenario/0`)
+  carries the same table as `params` (`"params": {"проект.политика_разрешений": {...}}`); a key of another form is a mistake of the file.
+- **P-8, the data of an event of a scenario.** A word or a signal with ONE field has the value of the field as the `input` (a text: `"ivan"`, `"other-1"`), with several fields an object `{field: value}`, with none no `input`
+  (it was so since task 109; the schema `scenario/0` and tests of the unit `machine_run` say it).
+- **Names by the dictionary.** The field `идентификатор_запроса` of a signal is `id` (it was `request_id`, which is not a name of the dictionary); the datum `call_request_id` of the mechanics is the dictionary's `запрос_вызова`.
+- Tests of the task: `nova test src/machine_table` (81 tests), `src/machine_run` (105), `src/machine_agent` (28), `src/machine_text_fmt` (64).

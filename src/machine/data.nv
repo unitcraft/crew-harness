@@ -18,10 +18,10 @@ export fn machine_files() -> []NamedText => [
     NamedText { name: "variants.machine.json", text: embed_str("machines/variants.machine.json") }
 ]
 
-/// The machines written as tables in Russian (format 2.5) in `machines/`, by the name of the file (`chat.table.md`); the translator of `src/machine_text`
+/// The machines written as tables in Russian (format 2.5 to 2.7) in `machines/`, by the name of the file (`chat.table.md`); the translator of `src/machine_text`
 /// turns them into the JSON above.
 export fn table_files() -> []NamedText => [
-    NamedText { name: "agent_step.table.md", text: embed_str("machines/agent_step.table.md") },
+    NamedText { name: "agent_step.table.txt", text: embed_str("machines/agent_step.table.txt") },
     NamedText { name: "chat.table.md", text: embed_str("machines/chat.table.md") }
 ]
 
@@ -180,8 +180,8 @@ export fn chat_machine_text() -> str => text_of_file(machine_files(), "chat.mach
 /// The text of the machine of the agent step (`machines/agent_step.machine.json`), the translation of its table.
 export fn agent_step_machine_text() -> str => text_of_file(machine_files(), "agent_step.machine.json")
 
-/// The text of the agent step written as tables (`machines/agent_step.table.md`).
-export fn agent_step_table_text() -> str => text_of_file(table_files(), "agent_step.table.md")
+/// The text of the agent step written as tables (`machines/agent_step.table.txt`).
+export fn agent_step_table_text() -> str => text_of_file(table_files(), "agent_step.table.txt")
 
 /// The text of the chat machine written as tables (`machines/chat.table.md`).
 export fn chat_table_text() -> str => text_of_file(table_files(), "chat.table.md")

@@ -12,7 +12,7 @@ task 090 (`doc/tasks/090-product-env-spike/`).
 | `ws_echo/` | Polaris server on `127.0.0.1`: `GET /` (HTML), `GET /health`, WebSocket echo `/ws` | `ws_echo_check.mjs` (Node) |
 | `acp/` | `acp_initialize.mjs`: one `initialize` request to `opencode acp` over stdio, no login, no session | exit code 0 and the printed version |
 | `repro_mut_binding/` | minimal reproduction of a Polaris documentation example that Oracle 0.1.0 rejects | see "Known problems" |
-| `repro_engine/` | minimal reproductions of Oracle 0.1.0 defects found while writing the state machine engine (task 091, items 8-13), its PostgreSQL store (task 098, items 21, 23-25), its alignment to the dictionary (task 102, items 26-28), the expression evaluator of the machines (task 106, items 33-35), the interpreter of a machine that is data (task 107, items 36-39) and the translator of tables (task 108, items 40-41) and the agent step as data (task 109, item 42) | see "Known problems", items 8-42 |
+| `repro_engine/` | minimal reproductions of Oracle 0.1.0 defects found while writing the state machine engine (task 091, items 8-13), its PostgreSQL store (task 098, items 21, 23-25), its alignment to the dictionary (task 102, items 26-28), the expression evaluator of the machines (task 106, items 33-35), the interpreter of a machine that is data (task 107, items 36-39) and the translator of tables (task 108, items 40-41) the agent step as data (task 109, item 42) and format 2.7 of the tables (task 110, item 43) | see "Known problems", items 8-43 |
 | `repro_acp/` | minimal reproductions of Oracle 0.1.0 defects found while writing the ACP client (task 095) | see "Known problems", items 14-18 and 20 |
 | `repro_child_pipes/` | a program: pipes of a child process that now and then do not come back (task 095) | see "Known problems", item 19 |
 | `repro_pg_event/` | a user record `Event` next to the driver `postgres.pgnet` (task 098, item 22); needs `nova update` (the driver comes from git) | see "Known problems", item 22 |
@@ -339,3 +339,15 @@ Also met in task 109, without a reproduction: (a) `import std.fs.{...}` anywhere
 the family of item 32): keep `std.fs` out of units that join lists, or write the file from a program; (b) a unit whose tests run 75 scenarios several times each (the interpreter and a 46 KB machine built for each run) is killed by `nova test` after
 about 100 seconds (`TIMEOUT`): build the machine once per test, run the scenarios once per test; (c) `NOVA_DEBUG_RUN_DUMP=1` does not lengthen the failure text of `nova test` (cut to 600 characters) in this build either: print the tail
 of a long text with a slice.
+
+Found by task 110 (format 2.7 of the tables, `src/machine_text*`, `src/machine_run`, `src/machine_agent`); the reproduction is in `repro_engine/src/`, run the same way:
+
+43. **`user_fn_fence`**: a user function named `fence` is generated as the C function `nova_fn_fence`, which the runtime header already declares (an atomic fence with the argument `ord`); the checker does not
+    report the clash at the declaration, the C compiler stops: "conflicting types for `nova_fn_fence`", "too few arguments to function call, single argument `ord` was not specified" (CC-FAIL; the family of items 9, 14, 21, 29,
+    37-40: a name of the program against a name of the runtime). The helper of the tests that returned three backticks is `ticks` now.
+
+Also met in task 110, without a reproduction: (a) `NOVA_DEBUG_RUN_DUMP=1` DOES help (the note (c) of task 109 above is wrong in this: it prints the end of the whole output of the test binary - every `FAIL: <name> - <text>` line of the tail and the line `N/M passed` - 
+while the summary of `nova test` keeps the last four failures cut to 600 characters); only the tail comes (about 50 lines), so the red tests of the first files of a unit are seen as `N/M passed` only; (b) `nova test <dir> --filter <text>` filters UNITS by their display name 
+(`src/machine_text_fmt/expand_test`), not the tests of a unit: `--filter "ex tail"` runs nothing (`PASS: 0  FAIL: 0`); (c) a raw string in backticks cannot hold a backtick (it ends the string), so a test that needs a block of code (three backticks) builds it by a helper 
+and `${...}` inside the raw string; (d) a translation of a machine with the checks of the table costs about 0.15 s for a machine of 3 KB and about 1 s for the sample of 46 KB (the table of names is read each time), so the proofs of the translator are split by folders (`src/machine_text_fmt` beside `src/machine_text`: 64 tests, about 45 s with the build) and a test translates a text once; the output of a unit must stay under 4 KB anyway (item 20); 
+(e) in a test of the interpreter a record literal as an argument of `match f(R { ... })` is a syntax error (bind it with `ro` first), and a record literal after `=>` of its own type is a "redundant type prefix" (items of task 106 again).
