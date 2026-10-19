@@ -1,4 +1,4 @@
-// chat_test.nv - the chat machine written as tables (machines/chat.portolan.md) and its translation: the same tree as the hand-written chat.machine.json.
+// chat_test.nv - the chat machine written as tables (machines/chat.portolan.md) and its translation: the same tree as the hand-written chat.portolan.json.
 module crew_harness.machine_text
 
 import std.text

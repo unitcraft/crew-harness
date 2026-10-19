@@ -7,15 +7,15 @@ module crew_harness.machine
 /// NamedText: a file of a data directory: its name and its text.
 export type NamedText { name str, text str }
 
-/// The machines of `machines/`, by the name of the file (`chat.machine.json`).
+/// The machines of `machines/`, by the name of the file (`chat.portolan.json`).
 export fn machine_files() -> []NamedText => [
-    NamedText { name: "agent_step.machine.json", text: embed_str("machines/agent_step.machine.json") },
-    NamedText { name: "actions.machine.json", text: embed_str("machines/actions.machine.json") },
-    NamedText { name: "calc.machine.json", text: embed_str("machines/calc.machine.json") },
-    NamedText { name: "chat.machine.json", text: embed_str("machines/chat.machine.json") },
-    NamedText { name: "gate.machine.json", text: embed_str("machines/gate.machine.json") },
-    NamedText { name: "lenses.machine.json", text: embed_str("machines/lenses.machine.json") },
-    NamedText { name: "variants.machine.json", text: embed_str("machines/variants.machine.json") }
+    NamedText { name: "agent_step.portolan.json", text: embed_str("machines/agent_step.portolan.json") },
+    NamedText { name: "actions.portolan.json", text: embed_str("machines/actions.portolan.json") },
+    NamedText { name: "calc.portolan.json", text: embed_str("machines/calc.portolan.json") },
+    NamedText { name: "chat.portolan.json", text: embed_str("machines/chat.portolan.json") },
+    NamedText { name: "gate.portolan.json", text: embed_str("machines/gate.portolan.json") },
+    NamedText { name: "lenses.portolan.json", text: embed_str("machines/lenses.portolan.json") },
+    NamedText { name: "variants.portolan.json", text: embed_str("machines/variants.portolan.json") }
 ]
 
 /// The machines written as tables in Russian (format 2.5 to 2.7) in `machines/`, by the name of the file (`chat.portolan.md`); the translator of `src/machine_text`
@@ -174,11 +174,11 @@ export fn text_of_file(files []NamedText, name str) -> str {
     ""
 }
 
-/// The text of the machine of the chat session (`machines/chat.machine.json`).
-export fn chat_machine_text() -> str => text_of_file(machine_files(), "chat.machine.json")
+/// The text of the machine of the chat session (`machines/chat.portolan.json`).
+export fn chat_machine_text() -> str => text_of_file(machine_files(), "chat.portolan.json")
 
-/// The text of the machine of the agent step (`machines/agent_step.machine.json`), the translation of its table.
-export fn agent_step_machine_text() -> str => text_of_file(machine_files(), "agent_step.machine.json")
+/// The text of the machine of the agent step (`machines/agent_step.portolan.json`), the translation of its table.
+export fn agent_step_machine_text() -> str => text_of_file(machine_files(), "agent_step.portolan.json")
 
 /// The text of the agent step written as tables (`machines/agent_step.portolan.txt`).
 export fn agent_step_table_text() -> str => text_of_file(table_files(), "agent_step.portolan.txt")
@@ -189,7 +189,7 @@ export fn chat_table_text() -> str => text_of_file(table_files(), "chat.portolan
 /// The names of the files that the directories hold (read at compile time with `embed_dir`): a test compares them with the lists above, so a
 /// file that is added to a directory and not to its list is found.
 export fn data_dir_names(dir str) -> []str {
-    if dir == "machines" { return names_ending(embed_dir("machines").paths(), ".machine.json") }
+    if dir == "machines" { return machine_json_names(embed_dir("machines").paths()) }
     if dir == "tables" { return table_names(embed_dir("machines").paths()) }
     if dir == "scenarios" { return embed_dir("scenarios").paths() }
     if dir == "schema" { return embed_dir("schema").paths() }
@@ -206,19 +206,27 @@ export fn is_table_name(name str) -> bool {
     false
 }
 
-fn table_names(names []str) -> []str {
+/// Is the name the name of a compiled machine (the JSON `machine/2`)? Its name is `*.portolan.json` since task 112 (the tree of the JSON is defined by the specification of
+/// Portolan, section 6); the old `*.machine.json` is accepted for the transitional period. Our files carry the new name only.
+export fn is_machine_json_name(name str) -> bool {
+    for suffix in [".portolan.json", ".machine.json"] {
+        if name.ends_with(suffix) { return true }
+    }
+    false
+}
+
+fn machine_json_names(names []str) -> []str {
     mut out = []str.new()
     for n in names {
-        if is_table_name(n) { out.push(n) }
+        if is_machine_json_name(n) { out.push(n) }
     }
     out
 }
 
-// The names that end with the suffix.
-fn names_ending(names []str, suffix str) -> []str {
+fn table_names(names []str) -> []str {
     mut out = []str.new()
     for n in names {
-        if n.ends_with(suffix) { out.push(n) }
+        if is_table_name(n) { out.push(n) }
     }
     out
 }

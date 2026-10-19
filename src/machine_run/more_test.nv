@@ -5,7 +5,7 @@ import std.text
 import crew_harness.machine.{Null, Int, standard_registry}
 import crew_harness.engine.{Incoming, EventKind}
 
-fn gate() -> TableMachine => build("gate.machine.json")
+fn gate() -> TableMachine => build("gate.portolan.json")
 
 fn gate_started() -> Out {
     ro m = gate()
@@ -73,13 +73,13 @@ test "before the start" {
 }
 
 test "failure fallback" {
-    ro text = machine_text("gate.machine.json").replace("\"kind\": \"failure\", \"bind\": \"why\"", "\"kind\": \"failure\", \"reasons\": [ \"NoResult\" ], \"bind\": \"why\"")
+    ro text = machine_text("gate.portolan.json").replace("\"kind\": \"failure\", \"bind\": \"why\"", "\"kind\": \"failure\", \"reasons\": [ \"NoResult\" ], \"bind\": \"why\"")
     ro m = build_from(text)
     ro working = run1(m, m.initial(), start_with("")).state
     ro r = run1(m, working, refused("ModelRefused"))
     assert(r.state.name == "Halted")
     assert(summary(r.orders) == "log:work_failed(reason=no_result),finish:refusal:NoResult,save")
-    ro none = build_from(machine_text("gate.machine.json").replace("\"kind\": \"failure\", \"bind\": \"why\"", "\"kind\": \"failure\", \"reasons\": [ \"Timeout\" ], \"bind\": \"why\""))
+    ro none = build_from(machine_text("gate.portolan.json").replace("\"kind\": \"failure\", \"bind\": \"why\"", "\"kind\": \"failure\", \"reasons\": [ \"Timeout\" ], \"bind\": \"why\""))
     ro w2 = run1(none, none.initial(), start_with("")).state
     ro ignored = run1(none, w2, refused("ModelRefused"))
     assert(!ignored.moved)
@@ -87,12 +87,12 @@ test "failure fallback" {
 }
 
 test "pass and except" {
-    ro passing = machine_text("gate.machine.json").replace("{ \"do\": \"journal\", \"code\": \"work_done\" },", "{ \"do\": \"journal\", \"code\": \"work_done\" }, { \"do\": \"pass\", \"nested\": { \"op\": \"list\", \"items\": [ { \"op\": \"lit\", \"value\": \"a\" }, { \"op\": \"lit\", \"value\": \"b\" } ] }, \"signal\": \"stop\" },")
+    ro passing = machine_text("gate.portolan.json").replace("{ \"do\": \"journal\", \"code\": \"work_done\" },", "{ \"do\": \"journal\", \"code\": \"work_done\" }, { \"do\": \"pass\", \"nested\": { \"op\": \"list\", \"items\": [ { \"op\": \"lit\", \"value\": \"a\" }, { \"op\": \"lit\", \"value\": \"b\" } ] }, \"signal\": \"stop\" },")
     ro m = build_from(passing)
     ro working = run1(m, m.initial(), start_with("")).state
     ro r = run1(m, working, stamped(EventKind.Answered, "answer", Some("agent-1"), ""))
     assert(summary(r.orders) == "log:work_done,log:signal_passed(nested=a;signal=stop),log:signal_passed(nested=b;signal=stop),finish:answer:1,save")
-    ro keep = machine_text("gate.machine.json").replace("{ \"do\": \"cancel_open\" }", "{ \"do\": \"cancel_open\", \"except\": [ { \"op\": \"lit\", \"value\": \"agent\" } ] }")
+    ro keep = machine_text("gate.portolan.json").replace("{ \"do\": \"cancel_open\" }", "{ \"do\": \"cancel_open\", \"except\": [ { \"op\": \"lit\", \"value\": \"agent\" } ] }")
     ro k = build_from(keep)
     ro w = run1(k, k.initial(), start_with("")).state
     ro stopped = run1(k, w, stop_by("ann"))
@@ -100,7 +100,7 @@ test "pass and except" {
 }
 
 test "set of parties" {
-    ro m = build("lenses.machine.json")
+    ro m = build("lenses.portolan.json")
     ro r = run1(m, m.initial(), start_with("{\"order\":[\"a\",\"b\",\"c\"]}"))
     assert(r.state.name == "Ask")
     assert(summary(r.orders) == "send:a:a:0,send:b:b:0,send:c:c:0,save")
@@ -118,7 +118,7 @@ test "set of parties" {
 }
 
 test "restart request" {
-    ro m = build("variants.machine.json")
+    ro m = build("variants.portolan.json")
     ro started = run1(m, m.initial(), start_with(""))
     assert(summary(started.orders) == "send:agent:go:5000,save")
     ro retry = run1(m, started.state, stamped(EventKind.Answered, "answer", Some("agent-1"), "{\"$variant\":\"Outcome\",\"name\":\"Retry\"}"))
@@ -132,21 +132,21 @@ test "restart request" {
 }
 
 test "constants" {
-    ro text = machine_text("calc.machine.json").replace("\"value\": 3 }", "\"value\": 5 }")
+    ro text = machine_text("calc.portolan.json").replace("\"value\": 3 }", "\"value\": 5 }")
     ro m = build_from(text)
     ro r = run1(m, m.initial(), start_with("{\"start\":0,\"label\":\"x\"}"))
     assert(summary(r.orders) == "log:started(label=x),log:stepped(count=4),log:stepped(count=8),log:reached_limit(count=8),finish:answer:8,save")
-    ro wrong = machine_text("calc.machine.json").replace("\"value\": 3 }", "\"value\": -1 }")
+    ro wrong = machine_text("calc.portolan.json").replace("\"value\": 3 }", "\"value\": -1 }")
     match load_table_machine(wrong, standard_registry()) {
         Ok(x) => assert(false)
         Err(e) => assert(e.contains("the constant LIMIT"))
     }
-    ro bad_param = machine_text("calc.machine.json").replace("\"default\": { \"op\": \"lit\", \"value\": 2 }", "\"default\": { \"op\": \"lit\", \"value\": 0 }")
+    ro bad_param = machine_text("calc.portolan.json").replace("\"default\": { \"op\": \"lit\", \"value\": 2 }", "\"default\": { \"op\": \"lit\", \"value\": 0 }")
     match load_table_machine(bad_param, standard_registry()) {
         Ok(x) => assert(false)
         Err(e) => assert(e.contains("the parameter STEP"))
     }
-    ro bad_initial = machine_text("calc.machine.json").replace("{ \"name\": \"began\", \"type\": \"int\", \"initial\": { \"expr\": { \"op\": \"lit\", \"value\": 0 } } }", "{ \"name\": \"began\", \"type\": \"int\", \"initial\": { \"expr\": { \"op\": \"lit\", \"value\": \"zero\" } } }")
+    ro bad_initial = machine_text("calc.portolan.json").replace("{ \"name\": \"began\", \"type\": \"int\", \"initial\": { \"expr\": { \"op\": \"lit\", \"value\": 0 } } }", "{ \"name\": \"began\", \"type\": \"int\", \"initial\": { \"expr\": { \"op\": \"lit\", \"value\": \"zero\" } } }")
     match load_table_machine(bad_initial, standard_registry()) {
         Ok(x) => assert(false)
         Err(e) => assert(e.contains("the initial value of began"))

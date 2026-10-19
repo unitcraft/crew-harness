@@ -52,7 +52,7 @@ is refused by Oracle 0.1.0 (item 25 there), so the interpreter's units are sibli
 | `expr.nv` | `Expr`, the tree of an expression, its JSON form (`expr_from_json`, `expr_to_json`), builders, `expr_depth` |
 | `eval.nv` | `eval(expr, scope)`, `eval_with(expr, scope, host)`, `EvalError`, the protocol `PrimitiveHost` |
 | `registry.nv` | `Primitive`, `Registry`, the class of a primitive in the position of a call, `standard_registry()` and `standard_types()` |
-| `data.nv` | the data files of the directories `schema/`, `machines/`, `scenarios/` compiled in (`embed_str`), `machine_files()`, `scenario_files()`, `schema_files()`; the names: a machine in Portolan is `*.portolan.md` (or `.portolan.txt`; the old `*.table.md` and `*.table.txt` are still accepted by `is_table_name`), a scenario is `*.scenario.test.json` (task 112) |
+| `data.nv` | the data files of the directories `schema/`, `machines/`, `scenarios/` compiled in (`embed_str`), `machine_files()`, `scenario_files()`, `schema_files()`; the names: a machine in Portolan is `*.portolan.md` (or `.portolan.txt`; the old `*.table.md` and `*.table.txt` are still accepted by `is_table_name`), a compiled machine (the JSON `machine/2`) is `*.portolan.json` (it was `*.machine.json`; `is_machine_json_name` accepts both names for the transitional period, our files carry the new one), a scenario is `*.scenario.test.json` (task 112) |
 | `*_test.nv` | 170 tests, more than 750 checks (the `assert` lines; loops repeat them) |
 
 ## The value
@@ -198,7 +198,7 @@ The rules of the language that cost a compile and the three new defects (items 3
 
 `src/machine_table/` reads and checks a machine, `src/machine_run/` runs it. A machine is ONE JSON file, `format: "machine/2"`; the interpreter gives the protocol
 `Machine[TableState]` of the engine, so `start_engine[TableState, TableMachine](machine, id)` runs it with the journal, the snapshots and the link of the product,
-and a restart resumes it. The examples are `machines/*.machine.json` (chat, calc, actions, gate, lenses, variants), their scenarios `scenarios/*.scenario.test.json`.
+and a restart resumes it. The examples are `machines/*.portolan.json` (chat, calc, actions, gate, lenses, variants), their scenarios `scenarios/*.scenario.test.json`.
 
 ## The file `machine/2`
 
@@ -270,7 +270,7 @@ the traces, which is how the equality below is proved. The operations of a step:
 
 ## The chat machine as data and the proof of equality
 
-`machines/chat.machine.json` is the machine of `src/chat/chat.nv` (Idle, Awaiting, Done, Failed; the words `user_message`, `cancel`; the part `agent_chunk`; the answer, the failure, the term) written by hand. `src/machine_chat/equal_test.nv` runs the SAME scenarios on both machines -
+`machines/chat.portolan.json` is the machine of `src/chat/chat.nv` (Idle, Awaiting, Done, Failed; the words `user_message`, `cancel`; the part `agent_chunk`; the answer, the failure, the term) written by hand. `src/machine_chat/equal_test.nv` runs the SAME scenarios on both machines -
 the 39 files `scenarios/chat-*.scenario.test.json`, which reproduce every case of `chat_test.nv` and `chat_engine_test.nv` (the ten failure codes and an unknown one, the cancel in both states, the term, ignored and unknown events, tool and permission parts, Cyrillic, the discarded replies, the pump, the three restarts, the
 acknowledgement of the source key, the cancel in the window between the commit and the send) - and compares at the level of the engine, step by step: the name of the state, the data both machines hold, the events of the machine, ALL journal lines with the envelope (trace, step, cause, state, request, time), the open, sent and cancelled
 requests, the queue, the acknowledged keys, the outcome and the number of the step; and at the level of the machine (one `step`, no engine): the orders in order (journal event with parameters, send, cancel, finish with the text, save), the transition (`Go`/`Stay`) and the data. A deliberate change in the JSON machine turns the tests red (checked).
@@ -314,12 +314,12 @@ Task 108 (`doc/tasks/108-table-translator/`) brought the interpreter from the fo
 - The root key **`table_format`** (optional, `"2.5"`; absent means 2.5). The built-in record **`JournalEvent`** (`СобытиеЖурнала`, section 2) beside `FailCode`. The name of an included file of definitions is a name of the registry (any letters, not a path).
 - **Common events (the fragment "Pause", section 9)** read the data of a fragment (the marks `fragment`, `rows_and_fragment`, `mechanics`) without an Input and write the data with the marks `fragment` and `rows_and_fragment`.
 - The record `Child` of `expr.nv` is `ExprChild` (item 40 of the survey of Oracle 0.1.0: a program with `import std.os` could not be built).
-- `machines/chat.portolan.md` is the chat machine in Portolan (as tables); its translation equals `chat.machine.json` (a test compares the trees without `title` and `table_format`) and runs the 39 scenarios of the chat in the same way.
+- `machines/chat.portolan.md` is the chat machine in Portolan (as tables); its translation equals `chat.portolan.json` (a test compares the trees without `title` and `table_format`) and runs the 39 scenarios of the chat in the same way.
 - `data.nv`: `table_files()`, `chat_table_text()`; `data_dir_names("tables")`.
 
 # The agent step as data (task 109)
 
-`machines/agent_step.portolan.txt` (since task 110 with the extension `.txt`, as the copy of the sample: its prose has the relative links of the folder of the methodology and the guard of the links reads `.md` only) is the machine "Agent step" of the methodology in Portolan (as tables, format 2.6, the key lines are list items, the fragment "Pause" is a connection); `machines/agent_step.machine.json`
+`machines/agent_step.portolan.txt` (since task 110 with the extension `.txt`, as the copy of the sample: its prose has the relative links of the folder of the methodology and the guard of the links reads `.md` only) is the machine "Agent step" of the methodology in Portolan (as tables, format 2.6, the key lines are list items, the fragment "Pause" is a connection); `machines/agent_step.portolan.json`
 is its translation by `src/machine_translate.nv` (a test compares them byte by byte). It passes the checks of the load without a note `unsupported`: 14 states (37 rows of the states, 4 of the pause,
 6 common events), 13 rows of the ends, 16 definitions, 3 parties, 21 data. The machine is run by the same interpreter as the chat; the user writes no Nova.
 

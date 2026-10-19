@@ -16,12 +16,12 @@ fn build_from(text str) -> TableMachine {
 
 fn build(name str) -> TableMachine => build_from(machine_text(name))
 
-fn chat() -> TableMachine => build("chat.machine.json")
-fn calc() -> TableMachine => build("calc.machine.json")
-fn actions() -> TableMachine => build("actions.machine.json")
+fn chat() -> TableMachine => build("chat.portolan.json")
+fn calc() -> TableMachine => build("calc.portolan.json")
+fn actions() -> TableMachine => build("actions.portolan.json")
 
 // The agent step with the answers of its primitives: the reply is valid, closing the turn answers nothing.
-fn agent_step() -> TableMachine => with_replies(build("agent_step.machine.json"), [
+fn agent_step() -> TableMachine => with_replies(build("agent_step.portolan.json"), [
     ScriptedReply { name: "reply_validation", value: enum_value("ReplyCheck", "Valid") },
     ScriptedReply { name: "close_agent_turn", value: Null }
 ])

@@ -3,15 +3,15 @@ module crew_harness.machine_run
 
 import std.text
 import std.encoding.json.{Json}
-import crew_harness.machine.{scenario_files, machine_files, table_files, schema_files, data_dir_names, NamedText, text_of_file}
+import crew_harness.machine.{scenario_files, machine_files, table_files, schema_files, data_dir_names, is_machine_json_name, NamedText, text_of_file}
 
 // The machine a scenario names.
 fn machine_named(name str) -> TableMachine {
     if name == "ChatSession" { return chat() }
     if name == "Calc" { return calc() }
-    if name == "Gate" { return build("gate.machine.json") }
-    if name == "Lenses" { return build("lenses.machine.json") }
-    if name == "Variants" { return build("variants.machine.json") }
+    if name == "Gate" { return build("gate.portolan.json") }
+    if name == "Lenses" { return build("lenses.portolan.json") }
+    if name == "Variants" { return build("variants.portolan.json") }
     if name == "agent_step" { return agent_step() }
     panic("no machine ${name}")
 }
@@ -244,6 +244,13 @@ test "names by the Portolan" {
     assert(tables.len() == 2)
     for f in tables { assert(f.name.ends_with(".portolan.md") || f.name.ends_with(".portolan.txt")) }
     assert(machine_files().len() == 7)
+    for f in machine_files() { assert(f.name.ends_with(".portolan.json")) }
+}
+
+test "both names of a compiled machine" {
+    for n in ["a.portolan.json", "a.machine.json"] { assert(is_machine_json_name(n)) }
+    for n in ["a.json", "a.portolan", "a.portolan.md", "a.table.json", "machine.json", "a.scenario.test.json", "a.schema.json"] { assert(!is_machine_json_name(n)) }
+    assert(data_dir_names("machines").len() == 7)
 }
 
 test "scenario schema" {
