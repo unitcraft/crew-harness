@@ -413,3 +413,20 @@ Found by task 118 (the marks of the workarounds over the whole tree); the reprod
 56. **The stream of the upgrade hook of Polaris 0.2.4** (no reproduction: it needs a connection): the stream that `ServerResponse.upgrade` gives its hook is shared with the connection loop, so `TcpStream.into_split()` panics ("live share()-copies"); a WebSocket that is read and written by two fibers uses `share()`
     (the note of "Also met in task 099"). The front of the session server does it in `src/server/front/front.nv`; to see the panic, replace `share()` there by `into_split()`.
 57. **The cost of SCRAM on the unoptimized build** (no reproduction: it needs a PostgreSQL server; the note of "Also met in task 098"): a SCRAM login costs about a quarter of a second (4096 rounds of HMAC in Nova), so the temporary server of the tests (`src/pg/testdb.ps1`) uses md5 logins; the release mode of the build would not need it.
+
+## Marks of the workarounds
+
+Every place of the product that goes round an item above is marked with a comment (`//` in Nova and Node, `#` in scripts, `<!-- -->` in Markdown):
+
+```
+// ORACLE-WORKAROUND(N[, M]): what is gone round; how to simplify when item N is fixed
+```
+
+`N` is the number of an item of "Known problems" (the first number is the main one); the text after the colon says what the code does instead of the plain form and what the plain form is, so that the mark alone is the instruction for the cleaning. A workaround that no item names gets an item first (with a reproduction in `repro_*/` when it can be reduced).
+A text in prose ("item 29", "the driver has a Session") is not a mark: replace it by the mark.
+
+- Where to look: `git grep ORACLE-WORKAROUND`; by item and with the line: `python scripts/oracle-workarounds.py --list`; a summary: `python scripts/oracle-workarounds.py`.
+- The index: [workarounds.md](workarounds.md) (item, what, the files that go round it, the number of marks); it has no line numbers and is written by `python scripts/oracle-workarounds.py --index`. Items with no mark are listed as "no workaround in the code": a rule of the language, a limit of the tooling, or a defect the code does not meet.
+- How to clean: when Nova fixes an item, take its row of the index, open the files, simplify the code as the mark says, remove the mark, run `nova test` (and `--strict-effects`) and rerun `--index`.
+- The guard `scripts/guards/check-oracle-workarounds.py` (it runs with the others, `sh scripts/guards/run-all.sh`) fails when a mark has no `(N[, M]...)` or no text after the colon, when an `N` is not an item of this README, when a mark is not in a comment, or when the index differs from what `--index` writes.
+  It warns when an item says "worked round in the code" and has no mark. The marks are searched in the tracked files of `src/`, `scripts/` and `spikes/` (not in the plugin `opencode-plugin/`, which is JavaScript).
