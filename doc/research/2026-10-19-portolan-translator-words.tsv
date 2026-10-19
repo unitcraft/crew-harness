@@ -1,0 +1,222 @@
+kind	russian	where	note
+header	# Машина:	machine.nv:33,36	level-1 heading must start with "Машина:"; rest becomes JSON "title"
+header	# Определения:	defs.nv:269	header of a definitions file
+header	machine	machine.nv:44	Latin header key; value must be a Latin identifier; JSON "machine"
+header	machine_version	machine.nv:48	JSON "version"
+header	format	machine.nv:50; defs.nv:279	value compared as a string
+header	2.5	machine.nv:66,355; defs.nv:296	accepted format value
+header	2.6	machine.nv:66,355; defs.nv:296	accepted format value; 2.7 is rejected at the time of the audit
+header	definitions_version	defs.nv:277	must parse as int
+header	fragment	doc.nv:18	in kv_keys but never read: the fragment header is not validated
+section	Типы	doc.nv:106; machine.nv:217; defs.nv:301,342; frag.nv:107	types
+section	Константы	doc.nv:106; machine.nv:222; defs.nv:301,346	constants
+section	Параметры	doc.nv:106; machine.nv:227	parameters
+section	Вход	doc.nv:106; machine.nv:233	input
+section	Данные	doc.nv:106; machine.nv:243,253	data
+section	Стороны	doc.nv:107; machine.nv:261	parties
+section	Сигналы	doc.nv:107; machine.nv:268	signals; EXTENSION of the product, columns имя|поля
+section	Части ответа	doc.nv:107; machine.nv:275	progress parts; EXTENSION of the product, columns сторона|имя|поля
+section	Определения	doc.nv:107; machine.nv:211,280; defs.nv:301,350	definitions
+section	Подключения	doc.nv:107; machine.nv:180	includes (fragment calls and определения: lines)
+section	Общие события	doc.nv:107; machine.nv:312,322	common events
+section	Состояния	doc.nv:108; machine.nv:190,207,330	states
+section	Концы	doc.nv:108; machine.nv:349	ends
+section	Примитивы	doc.nv:108; machine.nv:285	primitives
+column	имя	decl.nv:246,273,317,464; party.nv:139,239,266,421	name
+column	тип	decl.nv:246,273,317,464	type
+column	значение	decl.nv:246	value (constants)
+column	по умолчанию	decl.nv:273	JSON "default"
+column	переопределение проектом	decl.nv:273	JSON "project_key"; cell проект.<ключ> or —
+column	примечание	decl.nv:317	note (cell not read)
+column	начальное	decl.nv:464	JSON "initial"
+column	не убывает	decl.nv:464	JSON "monotonic"
+column	пишет	decl.nv:464; party.nv:421	JSON "writes"; in primitives the cell is not read
+column	идентификатор	party.nv:139	party id
+column	вид	party.nv:139	party kind
+column	профиль	party.nv:139	non-empty cell gives an "unsupported" note
+column	слова ворот	party.nv:139	gate words
+column	счётчик	party.nv:139	counter
+column	поля	party.nv:239,266	fields
+column	сторона	party.nv:266; doc.nv:152	party; lead word of a table
+column	параметры	party.nv:421	only the column count is checked
+column	результат	party.nv:421	not read
+column	класс	party.nv:421	checked against pure/reading/writing/irreversible
+column	читает	party.nv:421; state.nv:191	in primitives not read; in the state input table read
+column	поле запроса	state.nv:132,191	lead cell compared exactly (case-sensitive)
+column	выражение	state.nv:191	expression
+column	событие	state.nv:134,144,163; doc.nv:152	accept-table detection is case-sensitive
+column	действия	state.nv:144,163	actions
+column	№	state.nv:130,144,489; doc.nv:152	row number
+column	условие	state.nv:144	condition
+column	куда	state.nv:144	destination
+column	конец	state.nv:489; doc.nv:152	ends table
+column	когда	state.nv:489	when
+column	ответ	state.nv:489	ends answer
+kind_state	обращение	state.nv:11,27	appeal
+kind_state	операция	state.nv:12,27	operation
+kind_state	развилка	state.nv:13,27	fork
+kind_state	конец	state.nv:14,27	end
+key	Начальное состояние	machine.nv:395	JSON "initial"
+key	Сторона	state.nv:335	appeal only; "party"; followed by "; набор: выр"
+key	Срок тишины	state.nv:340	appeal only; "silence"; — means none
+key	Правит	state.nv:353	appeal only; not translated, "unsupported" note
+key	Возвратов формы	state.nv:355-356	appeal only; "unsupported" unless the text equals 0
+key	Вход	state.nv:359	appeal: table поле запроса|выражение|читает; others: names list; also the section
+key	При приёме	state.nv:387	appeal only; the line is ignored, the table is found by its header
+key	При входе	state.nv:370	non-appeal only; "entry"
+key	Кроме	state.nv:379	end only; "except"
+key	Результат	state.nv:505	in the ends section; ends.result
+key	Предел запросов	party.nv:156,193	in the parties section; "request_limit"
+key	Инвариант	decl.nv:334	in the input section; input.invariants
+key	определения	defs.nv:420	include line "определения: имя версия N хеш H"
+key	набор	state.nv:232	sub-key after ";" in "Сторона:"; "set"
+key	нет	state.nv:260	"Вход: нет"; also — or empty means no reads
+key	версия	defs.nv:374	part of the include line
+key	хеш	defs.nv:378,381,383	hash must be 12 hex letters
+kind_party	agent	party.nv:92,100,106	JSON kind "agent"
+kind_party	human	party.nv:90,100	"human"; result must be ИсходВорот
+kind_party	enhanced	party.nv:100	"enhanced"
+kind_party	machine	party.nv:87	recognized, row dropped with an "unsupported" note
+kind_party	или	party.nv:90	in "human или agent по настройке имя(итог ИсходВорот)"; JSON kind "gatekeeper"
+kind_party	по	party.nv:93	same phrase
+kind_party	настройке	party.nv:94	same phrase
+kind_party	итог	party.nv:104	kind(итог Тип)
+kind_party	ИсходВорот	party.nv:110	only for human/enhanced/gatekeeper
+event	сразу	event.nv:70	JSON "now"
+event	срок	event.nv:71	JSON "timeout"; EXTENSION of the product
+event	ответ	event.nv:72,78-106	"answer"/"answer_variant"
+event	сбой	event.nv:73,122-143	"failure"
+event	слово	event.nv:74,146-166	"word"
+event	сигнал	event.nv:74,146-166	"signal"
+event	часть	event.nv:74,146-166	"progress"; EXTENSION of the product
+destination	—	event.nv:193	no "to" (used with ошибка_машины)
+destination	предыдущее	event.nv:196	"@previous"
+destination	возврат_подготовки	event.nv:199-202	"@prepare_return" plus an "unsupported" note
+destination	то же	event.nv:203-206	"@same"
+destination	запуск заново	event.nv:224-227	after a comma; "restart": true
+decl	перечисление	decl.nv:170,212	enum
+decl	тип	decl.nv:183,212	record
+decl	вариант	decl.nv:191,212	variant type
+decl	определение	party.nv:313,371,374,387	definitions
+decl	проект.	decl.nv:296-297	prefix of the project key
+type	число	parse.nv:290-298	"int"; число≥N gives "int>=N"
+type	дробное	parse.nv:299	"float"
+type	текст	parse.nv:300	"text"
+type	ид	parse.nv:301	"id"
+type	Состояние	parse.nv:302	hard-coded to "text"
+type	да/нет	parse.nv:303-307	"bool"
+type	словарь	parse.nv:308-319	словарь[K, V]
+type	полный словарь	parse.nv:308-319	"full {K: V}"
+type	СобытиеЖурнала	parse.nv:321	"JournalEvent"
+expr	в	parse.nv:166,411; action.nv:205,233	reserved word
+expr	то	parse.nv:166,397; action.nv:217; event.nv:203	if ... то
+expr	иначе	parse.nv:166,399,492; action.nv:220; event.nv:179	if-else; match fallback; row condition
+expr	и	parse.nv:166,540	and
+expr	или	parse.nv:166,530	or
+expr	не	parse.nv:166,549	not
+expr	пусть	parse.nv:166,389,407; action.nv:82,228	let
+expr	выбор	parse.nv:166,390,705	match
+expr	если	parse.nv:166,388,504,705; action.nv:81	if; guard of a match arm
+expr	для	parse.nv:166; action.nv:80	reserved in expressions, used only as an action
+expr	каждого	parse.nv:166; action.nv:201	same
+expr	истина	parse.nv:166,453,689	true
+expr	ложь	parse.nv:166,454,693	false
+expr	пусто	parse.nv:166,697	null
+expr	недостижимо	parse.nv:166,701-703	becomes require(null)
+expr	∈	parse.nv:568; event.nv:129; state.nv:281	membership
+expr	→	parse.nv:351,372,505; party.nv:354	arrow; ASCII -> also accepted
+expr	≥	parse.nv:291,559; lex.nv:94	also ASCII >=
+expr	≤	parse.nv:560; decl.nv:402; lex.nv:94	also ASCII <=
+expr	…	parse.nv:861; lex.nv:94	spread; ASCII ... also accepted
+expr	??	parse.nv:521; lex.nv:92	coalesce
+expr	_	parse.nv:205,378	unused binder
+action	журнал	action.nv:77,141-164	journal(код, имя: выр), journal(выр), journal(все_данные)
+action	ошибка_машины	action.nv:78,173-182	first argument is a quoted string
+action	вызвать	action.nv:79,185-196; parse.nv:707	primitive call; also an expression form; forbidden in definitions
+action	для каждого	action.nv:80,199-211	loop
+action	отменить_открытые	action.nv:83,241-270	bare, (сторона: имя) or (кроме: список)
+action	кроме	action.nv:262	argument key; only an empty list is supported
+action	сторона	action.nv:249	argument key
+action	передать	action.nv:84,288-299	"unsupported" for a non-empty list
+readable	вход	names_format.tsv:29; parse.nv:720; decl.nv:412	executor "input"
+readable	событие	names_format.tsv:30; parse.nv:720	"event"
+readable	сторона	names_format.tsv:31; parse.nv:720	"party"
+readable	состояние	names_format.tsv:32; parse.nv:720	"state"
+readable	запись_перехода	names_format.tsv:33; parse.nv:720	"transition_note"
+readable	все_данные	names_format.tsv:34; parse.nv:720; action.nv:147; state.nv:261	"all_data"; hard-coded in two places beside the glossary
+readable	трасса	names_format.tsv:35; parse.nv:720	"trace"
+readable	номер_шага	names_format.tsv:36; parse.nv:720	"step"
+readable	вложенные	include.nv:22,142-149; action.nv:282	fragment parameter and an empty-list name
+catalog	есть	names_format.tsv:4	has
+catalog	обязательно	names_format.tsv:5	require
+catalog	непустое	names_format.tsv:6	non_empty
+catalog	текст	names_format.tsv:7	text (also a type word)
+catalog	текст_записи	names_format.tsv:8	record_text
+catalog	дробное	names_format.tsv:9	float (also a type)
+catalog	число	names_format.tsv:10	int (also a type)
+catalog	длина	names_format.tsv:11	length
+catalog	диапазон	names_format.tsv:12	range
+catalog	наибольшее	names_format.tsv:13	max
+catalog	наименьшее	names_format.tsv:14	min
+catalog	ключи	names_format.tsv:15	keys
+catalog	значения	names_format.tsv:16	values
+catalog	без_ключа	names_format.tsv:17	without_key
+catalog	убрать	names_format.tsv:18	remove
+catalog	событие_журнала	names_format.tsv:19; parse.nv:790	journal_event; only this function takes named arguments
+catalog	конец	names_format.tsv:20	end (also a state kind and a column)
+catalog	фильтр	names_format.tsv:21	filter
+catalog	отобразить	names_format.tsv:22	map
+catalog	любой	names_format.tsv:23	any
+catalog	все	names_format.tsv:24	all
+catalog	количество	names_format.tsv:25	count
+catalog	первый_где	names_format.tsv:26	first_where
+catalog	словарь	names_format.tsv:27	dict (also a type)
+catalog	свёртка	names_format.tsv:28	fold
+enum_value	строки	decl.nv:378,387	пишет: "rows"
+enum_value	механика	decl.nv:379,388; include.nv:102	пишет: "mechanics"; also a fragment отмена_запросов value
+enum_value	строки и механика	decl.nv:389	"rows_and_mechanics"
+enum_value	фрагмент	decl.nv:380,390	"fragment"
+enum_value	строки и фрагмент	decl.nv:391	"rows_and_fragment"
+enum_value	да	decl.nv:399-402	не убывает: — / да / да, ≤ выр
+enum_value	сторона	state.nv:209,212	читает: "party"
+enum_value	исполнитель	state.nv:209,212	читает: "executor"
+enum_value	pure	party.nv:400	primitive class (Latin, compared in a Russian table)
+enum_value	reading	party.nv:400	same
+enum_value	writing	party.nv:400	same
+enum_value	irreversible	party.nv:400	same
+enum_value	без_возврата_в_к_отправке	include.nv:102	отмена_запросов value
+enum_value	прекратить_ход_транспорта	include.nv:102	отмена_запросов value
+enum_value	ничего	include.nv:104	вход_заново value
+enum_value	запросы_из_к_отправке	include.nv:104,158	вход_заново value; "unsupported" note
+other	//	lex.nv:109	comment to end of line (outside a string)
+other	> (line start)	lex.nv:247	comment line
+other	<!--	lex.nv:248	comment line
+other	```	lex.nv:246	fence line, skipped
+other	---	lex.nv:261	rule line at column 1, skipped
+other	#, ##, ###	lex.nv:249; machine.nv:33; doc.nv:116; state.nv:58	file title, section, state heading levels
+other	- (list marker)	lex.nv:264; doc.nv:61	optional marker before "Ключ: значение" and before continuation items
+other	\|	lex.nv:160,209-211	escaped bar inside a cell
+other	—	decl.nv:158,354,397; event.nv:175; state.nv:244,260; action.nv:59; party.nv:14,120,215; doc.nv:207	empty or none marker; also the heading separator in "### ИМЯ — вид (Latin)"
+other	[*]	decl.nv:438-441; party.nv:64-67	path datum имя[*].поле
+other	Ответ	state.nv:454,458	"answer"; ends cell constructor
+other	Отказ	state.nv:454,462	"refusal"; takes 2 arguments
+other	ОШИБКА	machine.nv:335	a state of kind end with this name sets error_end
+other	Пауза	include.nv:19,114	only fragment in the registry
+other	арифметика_цикла	defs.nv:204	only definitions file in the registry
+other	<параметр>	include.nv:138,141	placeholder syntax; only <слово_остановки> and <код_остановки> are substituted
+other	слово_остановки	include.nv:22,136-138	fragment parameter, a word without quotes
+other	код_остановки	include.nv:22,139-141	string in quotes
+other	отмена_запросов	include.nv:22,151-154	enum of 3 words
+other	вход_заново	include.nv:22,155-160	enum of 2 words
+other	право_записи	include.nv:22,161-162	string in quotes
+other	стоп человека	include.nv:174; names_format.tsv:44	human_stop (signal hard-coded in protocol_signals)
+other	стоп от родителя	include.nv:175; names_format.tsv:45	parent_stop
+other	отмена_запроса	include.nv:176; names_format.tsv:46	cancel_request
+other	продолжить от родителя	include.nv:177; names_format.tsv:47	parent_continue
+other	остановить от родителя	include.nv:178; names_format.tsv:48	parent_halt
+other	слово_человека	include.nv:174; names_format.tsv:49	human_word
+other	автор	include.nv:174; names_format.tsv:50	author
+other	источник	include.nv:174; names_format.tsv:51	source
+other	идентификатор_запроса	include.nv:175-178; names_format.tsv:52	request_id
+other	новый_ид	names_format.tsv:37; parse.nv:822; party.nv:406	new_id
+other	0 (literal)	state.nv:356	"Возвратов формы:" compared as the text "0"
