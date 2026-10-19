@@ -153,6 +153,21 @@ is reported as cut off; the time limit (default 120 min, up to 720) stops it wit
 is the only way: Claude Code's own background tasks (`run_in_background`, Monitor) die with the turn
 ([plan 002.1](../doc/archive/plans/002.1-watch.md)).
 
+**The console of a watch (Windows, task 100).** The OpenCode service has no console, and a process started `detached`
+has none either: every console program of its chain (`cmd`, `python`, `vcvars64.bat`, `cl`) then makes a console of its
+own. Builds run from a watch were reported dying with `0xC0000142` (3221225794) before their first command; the cause
+was not reproduced on the development machine (task 100, `doc/tasks/100-watch-console/analysis.md`), the console-less
+start is the one verified difference. A watch now starts in one hidden console that its whole chain shares: an outer
+Git Bash is started not detached and hidden (Windows gives it a hidden console), launches the inner Git Bash that runs
+the command and exits at once; the inner one is outside the service's job object, so it still outlives the turn and a
+service restart, and writes its Windows pid to `<id>.pid` (the record's `pid`, used by cancel, the limit and the "cut
+off" check). `.exit` is written atomically as before, no window blinks, `taskkill /T` by that pid stops the tree, the
+console closes with its last process. Starting takes about 0.4 s (two Git Bash starts; the pass of the plugin waits
+for the pid). Limits: no window and no keyboard, so an interactive program does not belong in a watch;
+`CREW_HARNESS_WATCH_NO_CONSOLE=1` in the service's environment starts a watch the old console-less way (the red probe
+of `test/crew-watch-console.test.mjs`, not a setting). Git Bash helpers forked by the command (`timeout`, `sleep`) can
+outlive `taskkill /T`: Windows does not list them as children of the watch process.
+
 **The machine queue.** `machine: true` marks a command that loads the machine (a gate, a build, a full test run):
 it waits for a slot in the project's machine queue — `machine_slots` at a time (1; 0 — no limit), in the order they
 were set; the time limit counts from the start. `crew_watch` says how many are ahead, `/crew` shows it as `queued`, the

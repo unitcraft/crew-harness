@@ -9,7 +9,7 @@
 // ОТКРЕПЛЁННО (переживает и перезапуск сервиса), вывод — в <id>.out, код выхода — в <id>.exit. Когда код появился —
 // письмо окну с побудкой: код, длительность, хвост вывода. Процесс пропал без кода — письмо «оборвано».
 
-import { execFileSync, spawn } from "node:child_process"
+import { execFileSync, spawn, spawnSync } from "node:child_process"
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { readJson } from "./core.ts"
@@ -100,11 +100,39 @@ function pidAlive(pid?: number): boolean {
   }
 }
 
+/** Windows: запуск с собственной скрытой консолью (задача 100). Служба OpenCode живёт без консоли, а `detached` в Node —
+ *  это DETACHED_PROCESS: bash без консоли, и каждая консольная программа его цепочки (cmd, python, vcvars64.bat, cl)
+ *  получает свою новую консоль — десятки conhost на одну сборку; при нехватке ресурсов консоли такая программа падает
+ *  с 0xC0000142 до первой команды. Здесь внешний bash запускается НЕ откреплённо и скрыто — Windows даёт ему новую
+ *  скрытую консоль; он порождает внутренний bash (в консоли внешнего, вне job-объекта Node — не умирает с службой) и
+ *  сразу выходит; внутренний пишет свой Windows-pid в `.pid` и ведёт команду. Вся цепочка команды делит одну консоль,
+ *  `taskkill /T` по pid внутреннего убивает дерево, консоль закрывается с последним процессом.
+ *  Возвращает pid внутреннего bash или undefined (файл с pid не появился). */
+function startWithConsole(w: Watch, script: string): number | undefined {
+  const pidFile = forBash(file(w.id, ".pid"))
+  const inner = `echo $(cat /proc/$$/winpid) > ${quote(pidFile + ".tmp")} && mv ${quote(pidFile + ".tmp")} ${quote(pidFile)}; ${script}`
+  const outer = `nohup bash -c "$1" </dev/null >/dev/null 2>&1 &`
+  spawnSync(gitBash(), ["-c", outer, "_", inner], { cwd: existsSync(w.cwd) ? w.cwd : undefined, env: { ...process.env, ...(w.env ?? {}) }, stdio: "ignore", windowsHide: true, timeout: 20_000 })
+  for (let i = 0; i < 100; i++) {
+    try {
+      const pid = Number(readFileSync(file(w.id, ".pid"), "utf8").trim())
+      if (pid > 0) return pid
+    } catch {}
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100)
+  }
+  return undefined
+}
+
 function start(w: Watch, now: number, log: (s: string) => void): Watch {
   const out = forBash(file(w.id, ".out"))
   const exit = forBash(file(w.id, ".exit"))
   const script = `timeout ${w.minutes * 60} bash -c ${quote(w.command)} > ${quote(out)} 2>&1; echo $? > ${quote(exit + ".tmp")} && mv ${quote(exit + ".tmp")} ${quote(exit)}`
   try {
+    if (process.platform === "win32" && !process.env.CREW_HARNESS_WATCH_NO_CONSOLE) {
+      const pid = startWithConsole(w, script)
+      if (!pid) log(`watch ${w.id}: pid внутреннего bash не появился за 10 с`)
+      return { ...w, status: "running", ...(pid ? { pid } : {}), started: now }
+    }
     const child = spawn(gitBash(), ["-c", script], { cwd: existsSync(w.cwd) ? w.cwd : undefined, env: { ...process.env, ...(w.env ?? {}) }, detached: true, stdio: "ignore", windowsHide: true })
     child.on("error", (e) => log(`watch ${w.id}: ${e}`))
     child.unref()
@@ -191,7 +219,7 @@ export function pollWatches(post: (w: Watch, text: string) => void, log: (s: str
     const w = readJson<Watch>(path.join(WATCHES, f))
     if (!w) continue
     if (w.status === "done") {
-      if (now - (w.ended ?? now) > KEEP_DONE_MS) for (const ext of [".json", ".out", ".exit"]) rmSync(file(w.id, ext), { force: true })
+      if (now - (w.ended ?? now) > KEEP_DONE_MS) for (const ext of [".json", ".out", ".exit", ".pid"]) rmSync(file(w.id, ext), { force: true })
       continue
     }
     const exitFile = file(w.id, ".exit")

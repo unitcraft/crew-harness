@@ -83,6 +83,7 @@ stops at the first failing file.
 | | `peers-plan-task` | a plan task: written, rechecked in rounds, sent for approval |
 | | `peers-plan-config` | a project's own plan form, grades, approver, manual steps |
 | `crew_watch` | `peers-watch` | a command run detached; one letter with the exit code and output tail |
+| | `crew-watch-console` | task 100 (Windows): the watch process has a hidden console of its own that its whole chain shares (AttachConsole to its pid works; the red probe `CREW_HARNESS_WATCH_NO_CONSOLE=1` starts it the old console-less way); `vcvars64.bat` + `cl` from a watch, 5 runs in a row, exit 0 (no Visual Studio Build Tools - skipped aloud, `CREW_TEST_VCVARS` points at another `vcvars64.bat`); the watch outlives the process that started it and still writes `.exit` |
 | | `peers-deny` | the project's `permissions.deny` checked on a watch command |
 | Plugin border | `crew-no-research` | static: no import from `doc/research`, every relative import inside the plugin, no bridge to other machines, every file of the `npm test` chain exists (task 046) |
 | Model profiles | `crew-profiles-data` | the data module: stages and words, value checks of `model_profiles` / `profile_sets` / `profile_set`, family of a tab model, links, windows of a set, profile choice and the state table (task 003) |

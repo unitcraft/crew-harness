@@ -3218,6 +3218,7 @@ ${lockStillYours(stillHeld.n)}` : "") }
     description:
       [
         `Wait for something long WITHOUT holding the turn: the plugin runs a command (Git Bash, in the tab's directory) in the OpenCode server, detached - it survives the end of your turn and a service restart - and when it exits wakes this tab with a letter: exit code, duration, output tail. Use it instead of Bash run_in_background / Monitor for anything that must outlive the turn (a gate's verdict, a long build): in a claude-code tab background tasks are killed when the turn ends and no notification ever comes. After calling it, end your turn - the letter wakes you.`,
+        `On Windows the command runs in a hidden console of its own that all its programs share (cmd, python, vcvars64.bat, cl work as from an ordinary window); there is no window and no keyboard - an interactive program does not belong here.`,
         `command - the bash command; it must itself wait and exit when the thing is done. A timer is a command that sleeps: "sleep 600" wakes in 10 minutes; "until [ -f /tmp/gate.done ]; do sleep 30; done; cat /tmp/gate.done" waits for a file. Without command: list this tab's watches.`,
         `note - short label for the letter, e.g. "gate verdict".`,
         `minutes - time limit from the start, default ${WATCH_DEFAULT_MIN}, at most ${WATCH_MAX_MIN}; then the command is stopped (exit 124).`,
