@@ -266,8 +266,8 @@ export fn chat_step(session ChatSession, state ChatState, event ChatEvent, mut e
 
 // ----- the machine for the engine (protocol `Machine[ChatState]`) -----
 
-/// The name of the machine for the journal.
-export fn ChatSession @name() -> str => "ChatSession"
+/// The name of the machine for the journal: the many-turn session is "DialogSession", the name of its table `dialog.portolan.md` (task 114).
+export fn ChatSession @name() -> str => if @multi { "DialogSession" } else { "ChatSession" }
 
 /// The initial state: Idle.
 export fn ChatSession @initial() -> ChatState => Idle
