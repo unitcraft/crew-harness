@@ -1,27 +1,41 @@
-// chat_test.nv - the chat session as a pure machine: `step` takes a state and an event, nothing else.
+// chat_test.nv - the chat session as a machine: `step` takes a state, an event and an environment, nothing else.
 module crew_harness.chat
 
 import std.text
-import crew_harness.engine.{Event, EventKind, StepOutput, SendOrder, LogNote, CancelOrder, Conclusion, FailCode, StepResult}
+import crew_harness.engine.{Incoming, EventKind, Order, StepEnvironment, Transition, FailCode}
 
-fn stamped(kind EventKind, name str, request Option[str], input str) -> Event => {
+fn stamped(kind EventKind, name str, request Option[str], input str) -> Incoming => {
     id: "e-1", trace: "t-1", step: 2, kind, name, request, input, at: 1000
 }
 
-fn said(text str) -> Event => stamped(EventKind.Input, "user_message", None, text)
-fn chunk(text str) -> Event => stamped(EventKind.Progress, "agent_chunk", Some("agent-1"), text)
-fn done() -> Event => stamped(EventKind.Answered, "agent_done", Some("agent-1"), "")
-fn refused(code str) -> Event => stamped(EventKind.Refused, "agent_refused", Some("agent-1"), code)
-fn expired() -> Event => stamped(EventKind.Expired, "timeout", Some("agent-1"), "")
-fn cancelled() -> Event => stamped(EventKind.Input, "cancel", None, "")
+fn said(text str) -> Incoming => stamped(EventKind.Input, "user_message", None, text)
+fn chunk(text str) -> Incoming => stamped(EventKind.Progress, "agent_chunk", Some("agent-1"), text)
+fn done() -> Incoming => stamped(EventKind.Answered, "agent_done", Some("agent-1"), "")
+fn refused(code str) -> Incoming => stamped(EventKind.Refused, "agent_refused", Some("agent-1"), code)
+fn expired() -> Incoming => stamped(EventKind.Expired, "timeout", Some("agent-1"), "")
+fn cancelled() -> Incoming => stamped(EventKind.Input, "cancel", None, "")
 
-// A compact text of the outputs, to compare and to look at.
-fn summary(outputs []StepOutput) -> str {
+// The result of one step: where the machine goes (`moved` - by Go, not Stay) and the orders it gave to the environment.
+type Run { state ChatState, moved bool, orders []Order }
+
+fn run(state ChatState, event Incoming) -> Run {
+    mut environment = StepEnvironment.new()
+    ro transition = chat_session().step(state, event, environment)
+    match transition {
+        Go(next) => Run { state: next, moved: true, orders: environment.orders }
+        Stay => Run { state, moved: false, orders: environment.orders }
+    }
+}
+
+fn same(a ChatState, b ChatState) -> bool => encode_chat_state(a) == encode_chat_state(b)
+
+// A compact text of the orders, to compare and to look at.
+fn summary(orders []Order) -> str {
     mut parts = []str.new()
-    for o in outputs {
+    for o in orders {
         match o {
             Send(order) => parts.push("Send(${order.party}:${order.input}:${order.idle_term})")
-            Log(note) => parts.push("Log")
+            Note(event) => parts.push("Log")
             Cancel(order) => parts.push("Cancel(${order.party})")
             Save => parts.push("Save")
             Finish(c) => match c.failure {
@@ -33,9 +47,19 @@ fn summary(outputs []StepOutput) -> str {
     parts.join(",")
 }
 
-fn run(state str, event Event) -> StepResult => chat_session().step(state, event)
+// The codes of the journal events among the orders.
+fn codes(orders []Order) -> str {
+    mut parts = []str.new()
+    for o in orders {
+        match o {
+            Note(event) => parts.push(event.code)
+            _ => ()
+        }
+    }
+    parts.join(",")
+}
 
-fn name_of(state str) -> str => chat_session().state_name(state)
+fn name_of(state ChatState) -> str => chat_session().state_name(state)
 
 test "chat: starts in Idle" {
     assert(name_of(chat_session().initial()) == "Idle")
@@ -44,7 +68,9 @@ test "chat: starts in Idle" {
 test "chat: a user message in Idle opens a request to the agent and waits" {
     ro r = run(chat_session().initial(), said("hello"))
     assert(name_of(r.state) == "Awaiting")
-    assert(summary(r.outputs) == "Log,Send(agent:hello:30000),Save")
+    assert(r.moved)
+    assert(summary(r.orders) == "Log,Send(agent:hello:30000),Save")
+    assert(codes(r.orders) == "user_message")
 }
 
 test "chat: chunks of the agent accumulate in the state and keep the session waiting" {
@@ -52,10 +78,10 @@ test "chat: chunks of the agent accumulate in the state and keep the session wai
     ro r2 = run(r1.state, chunk("Hel"))
     ro r3 = run(r2.state, chunk("lo"))
     assert(name_of(r3.state) == "Awaiting")
-    assert(summary(r3.outputs) == "Log,Save")
+    assert(summary(r3.orders) == "Log,Save")
     ro r4 = run(r3.state, done())
     assert(name_of(r4.state) == "Done")
-    assert(summary(r4.outputs) == "Log,Finish(answer:Hello),Save")
+    assert(summary(r4.orders) == "Log,Finish(answer:Hello),Save")
 }
 
 test "chat: a refusal ends the session with its code, every code" {
@@ -63,101 +89,107 @@ test "chat: a refusal ends the session with its code, every code" {
         ro r1 = run(chat_session().initial(), said("hi"))
         ro r2 = run(r1.state, refused(code.name()))
         assert(name_of(r2.state) == "Failed")
-        assert(summary(r2.outputs) == "Log,Finish(refusal:${code.name()}),Save")
+        assert(summary(r2.orders) == "Log,Finish(refusal:${code.name()}),Save")
     }
 }
 
 test "chat: a refusal with a code outside the closed list is NoResult" {
     ro r1 = run(chat_session().initial(), said("hi"))
     ro r2 = run(r1.state, refused("TotallyNew"))
-    assert(summary(r2.outputs) == "Log,Finish(refusal:NoResult),Save")
+    assert(summary(r2.orders) == "Log,Finish(refusal:NoResult),Save")
 }
 
 test "chat: user cancel in Awaiting stops the session as human" {
     ro r1 = run(chat_session().initial(), said("hi"))
     ro r2 = run(r1.state, cancelled())
     assert(name_of(r2.state) == "Failed")
-    assert(summary(r2.outputs) == "Log,Cancel(agent),Finish(refusal:StoppedByHuman),Save")
+    assert(summary(r2.orders) == "Log,Cancel(agent),Finish(refusal:StoppedByHuman),Save")
 }
 
 test "chat: the idle term in Awaiting ends the session with Timeout" {
     ro r1 = run(chat_session().initial(), said("hi"))
     ro r2 = run(r1.state, expired())
     assert(name_of(r2.state) == "Failed")
-    assert(summary(r2.outputs) == "Log,Finish(refusal:Timeout),Save")
+    assert(summary(r2.orders) == "Log,Finish(refusal:Timeout),Save")
 }
 
 test "chat: the cancel in Idle ends the session without a request to cancel" {
     ro r = run(chat_session().initial(), cancelled())
     assert(name_of(r.state) == "Failed")
-    assert(summary(r.outputs) == "Log,Finish(refusal:StoppedByHuman),Save")
+    assert(summary(r.orders) == "Log,Finish(refusal:StoppedByHuman),Save")
 }
 
-test "chat: an event the state does not expect changes nothing and leaves a note" {
+test "chat: an event the state does not expect changes nothing and leaves a journal event" {
     ro idle = chat_session().initial()
     ro r1 = run(idle, chunk("late"))
-    assert(r1.state == idle)
-    assert(summary(r1.outputs) == "Log")
+    assert(same(r1.state, idle))
+    assert(!r1.moved)
+    assert(summary(r1.orders) == "Log")
+    assert(codes(r1.orders) == "event_ignored")
     ro waiting = run(idle, said("hi")).state
     ro r2 = run(waiting, said("second"))
-    assert(r2.state == waiting)
-    assert(summary(r2.outputs) == "Log")
+    assert(same(r2.state, waiting))
+    assert(!r2.moved)
+    assert(summary(r2.orders) == "Log")
     ro ended = run(waiting, done()).state
     ro r3 = run(ended, said("again"))
-    assert(r3.state == ended)
-    assert(summary(r3.outputs) == "Log")
+    assert(same(r3.state, ended))
+    assert(!r3.moved)
+    assert(summary(r3.orders) == "Log")
 }
 
-test "chat: an event of a name the machine does not know is a note, not a crash" {
+test "chat: an event of a name the machine does not know is a journal event, not a crash" {
     ro idle = chat_session().initial()
     ro r = run(idle, stamped(EventKind.Input, "weather_report", None, "rain"))
-    assert(r.state == idle)
-    assert(summary(r.outputs) == "Log")
+    assert(same(r.state, idle))
+    assert(!r.moved)
+    assert(summary(r.orders) == "Log")
+    assert(codes(r.orders) == "event_unknown")
 }
 
 test "chat: step is deterministic - the same state and event give the same result every time" {
     ro start = chat_session().initial()
     ro a = run(start, said("hi"))
     ro b = run(start, said("hi"))
-    assert(a.state == b.state)
-    assert(summary(a.outputs) == summary(b.outputs))
+    assert(same(a.state, b.state))
+    assert(summary(a.orders) == summary(b.orders))
     ro a2 = run(a.state, chunk("x"))
     ro b2 = run(b.state, chunk("x"))
-    assert(a2.state == b2.state)
-    assert(summary(a2.outputs) == summary(b2.outputs))
+    assert(same(a2.state, b2.state))
+    assert(summary(a2.orders) == summary(b2.orders))
 }
 
 test "chat: the event is self-contained, the envelope is not read" {
     ro first = run(chat_session().initial(), said("hi"))
     ro r1 = run(first.state, chunk("part"))
-    ro moved = Event {
+    ro moved = Incoming {
         id: "e-99", trace: "t-other", step: 77, kind: EventKind.Progress, name: "agent_chunk",
         request: Some("agent-1"), input: "part", at: 987654
     }
     ro r2 = run(first.state, moved)
-    assert(r2.state == r1.state)
-    assert(summary(r2.outputs) == summary(r1.outputs))
+    assert(same(r2.state, r1.state))
+    assert(summary(r2.orders) == summary(r1.orders))
 }
 
 test "chat: the machine does not read the clock" {
     ro start = chat_session().initial()
     ro early = run(start, said("hi"))
-    ro late_event = Event {
+    ro late_event = Incoming {
         id: "e-1", trace: "t-1", step: 2, kind: EventKind.Input, name: "user_message",
         request: None, input: "hi", at: 99999999
     }
     ro late = run(start, late_event)
-    assert(early.state == late.state)
-    assert(summary(early.outputs) == summary(late.outputs))
+    assert(same(early.state, late.state))
+    assert(summary(early.orders) == summary(late.orders))
 }
 
 test "chat: the state is encoded and decoded without loss, for every state" {
     ro states = []ChatState.of(Idle, Awaiting { user: "вопрос", reply: "отве" }, Done { reply: "готово" }, Failed { code: FailCode.Timeout })
     for s in states {
-        ro text = encode_chat_state(s)
+        ro text = chat_session().encode_state(s)
         assert(!text.contains("\n"))
-        match decode_chat_state(text) {
-            Some(back) => assert(encode_chat_state(back) == text)
+        match chat_session().decode_state(text) {
+            Some(back) => assert(chat_session().encode_state(back) == text)
             None => assert(false)
         }
     }
@@ -165,29 +197,49 @@ test "chat: the state is encoded and decoded without loss, for every state" {
 
 test "chat: Cyrillic in a message goes into the request, the state and the answer unchanged" {
     ro r1 = run(chat_session().initial(), said("Привет, как дела? Ёжик, щётка, 日本"))
-    assert(summary(r1.outputs) == "Log,Send(agent:Привет, как дела? Ёжик, щётка, 日本:30000),Save")
-    assert(r1.state.contains("Привет, как дела? Ёжик, щётка, 日本"))
+    assert(summary(r1.orders) == "Log,Send(agent:Привет, как дела? Ёжик, щётка, 日本:30000),Save")
+    assert(encode_chat_state(r1.state).contains("Привет, как дела? Ёжик, щётка, 日本"))
     ro r2 = run(r1.state, chunk("Отлично, спасибо"))
     ro r3 = run(r2.state, done())
-    assert(summary(r3.outputs) == "Log,Finish(answer:Отлично, спасибо),Save")
+    assert(summary(r3.orders) == "Log,Finish(answer:Отлично, спасибо),Save")
 }
 
 test "chat: garbage instead of a state is not a state" {
     assert(decode_chat_state("") == None)
     assert(decode_chat_state("{\"state\":\"Mystery\"}") == None)
     assert(decode_chat_state("not json") == None)
+    assert(chat_session().decode_state("not json") == None)
 }
 
 test "chat: tool and permission events are not answer text" {
     ro r1 = run(chat_session().initial(), said("hi"))
     ro tool = stamped(EventKind.Progress, "tool_call", Some("agent-1"), "{\"id\":\"c1\",\"title\":\"t\"}")
     ro r2 = run(r1.state, tool)
-    assert(r2.state == r1.state)
-    assert(summary(r2.outputs) == "Log")
+    assert(same(r2.state, r1.state))
+    assert(summary(r2.orders) == "Log")
     ro permission = stamped(EventKind.Progress, "permission_request", Some("agent-1"), "{\"request\":\"5\"}")
     ro r3 = run(r2.state, permission)
-    assert(r3.state == r1.state)
+    assert(same(r3.state, r1.state))
     ro r4 = run(r3.state, chunk("text"))
     ro r5 = run(r4.state, done())
-    assert(summary(r5.outputs) == "Log,Finish(answer:text),Save")
+    assert(summary(r5.orders) == "Log,Finish(answer:text),Save")
+}
+
+test "chat: the journal events of a step carry codes and parameters, no ready text" {
+    ro r = run(chat_session().initial(), said("hello"))
+    match r.orders[0] {
+        Note(event) => {
+            assert(event.code == "user_message")
+            assert(event.value_of("text") == Some("hello"))
+        }
+        _ => assert(false)
+    }
+    ro refusal = run(run(chat_session().initial(), said("hi")).state, refused("ModelRefused"))
+    match refusal.orders[0] {
+        Note(event) => {
+            assert(event.code == "agent_refused")
+            assert(event.value_of("code") == Some("model_refused"))
+        }
+        _ => assert(false)
+    }
 }

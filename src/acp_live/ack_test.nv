@@ -1,9 +1,9 @@
-// ack_test.nv - an event taken from `Agent.receive` is the handler's until the engine acknowledges it after the commit.
+// ack_test.nv - an event taken from `Link.receive` is the handler's until the engine acknowledges it after the commit.
 // The handler keeps the events it handed out ("taken") and, with an inbox file, hands them out again after a restart.
 module crew_harness.acp_live
 
-import crew_harness.acp.{AcpConfig, AcpClient, open_client, acp_agent}
-import crew_harness.engine.{Agent, Event, EventKind}
+import crew_harness.acp.{AcpConfig, AcpClient, open_client, acp_link}
+import crew_harness.engine.{Link, Incoming, EventKind}
 import std.fs.{Fs, real_fs, Path, remove_dir_all, create_dir_all, write_text, read_text}
 import std.os.{Os, real_os, temp_dir, pid}
 
@@ -25,11 +25,11 @@ fn with_inbox(path str) -> AcpConfig {
 }
 
 // take exactly `n` events without acknowledging them
-fn take(n int) Agent Time -> []Event {
-    mut out = []Event.new()
+fn take(n int) Link Time -> []Incoming {
+    mut out = []Incoming.new()
     ro deadline = now_ms() + 10000
     while out.len() < n && now_ms() < deadline {
-        match Agent.receive() {
+        match Link.receive() {
             Some(e) => out.push(e)
             None => 10.to_millis().sleep()
         }
@@ -39,18 +39,18 @@ fn take(n int) Agent Time -> []Event {
 
 test "ack: taken stays unacked until ack; ack is idempotent" {
     mut client = start([])
-    with Agent = acp_agent(client) {
-        Agent.send(req("agent-1", "a b"))
+    with Link = acp_link(client) {
+        Link.send(req("agent-1", "a b"))
         ro events = collect_turn(10000)
         assert(events.len() >= 3)
         assert(client.unacked() == events.len())
-        Agent.ack(events[0].id)
+        Link.ack(events[0].id)
         assert(client.unacked() == events.len() - 1)
-        Agent.ack(events[0].id)
-        Agent.ack("acp-9999")
-        Agent.ack("")
+        Link.ack(events[0].id)
+        Link.ack("acp-9999")
+        Link.ack("")
         assert(client.unacked() == events.len() - 1)
-        for e in events { Agent.ack(e.id) }
+        for e in events { Link.ack(e.id) }
         assert(client.unacked() == 0)
     }
     client.close()
@@ -59,13 +59,13 @@ test "ack: taken stays unacked until ack; ack is idempotent" {
 test "ack: unacked events come again after a restart" {
     ro path = inbox_file("redeliver")
     mut first = start_with(with_inbox(path))
-    mut taken = []Event.new()
-    with Agent = acp_agent(first) {
-        Agent.send(req("agent-1", "one two three"))
+    mut taken = []Incoming.new()
+    with Link = acp_link(first) {
+        Link.send(req("agent-1", "one two three"))
         taken = take(3)
         assert(taken.len() == 3)
         // the third is never acknowledged, nor the second: the process dies
-        Agent.ack(taken[0].id)
+        Link.ack(taken[0].id)
     }
     first.close()
 
@@ -73,7 +73,7 @@ test "ack: unacked events come again after a restart" {
     // the events the first client had parsed (maybe more than the three taken) and nobody acknowledged
     ro n = second.unacked()
     assert(n >= 2)
-    with Agent = acp_agent(second) {
+    with Link = acp_link(second) {
         ro again = take(n)
         assert(again.len() == n)
         assert(again[0].id == taken[1].id)
@@ -86,7 +86,7 @@ test "ack: unacked events come again after a restart" {
         // nothing else is there: the new process has not been asked anything
         ro quiet = collect_quiet(200)
         assert(quiet.len() == 0)
-        for e in again { Agent.ack(e.id) }
+        for e in again { Link.ack(e.id) }
     }
     second.close()
 
@@ -98,17 +98,17 @@ test "ack: unacked events come again after a restart" {
 test "ack: new keys do not collide with recovered ones" {
     ro path = inbox_file("keys")
     mut first = start_with(with_inbox(path))
-    mut old = []Event.new()
-    with Agent = acp_agent(first) {
-        Agent.send(req("agent-1", "a"))
+    mut old = []Incoming.new()
+    with Link = acp_link(first) {
+        Link.send(req("agent-1", "a"))
         old = collect_turn(10000)
     }
     first.close()
     mut second = start_with(with_inbox(path))
-    with Agent = acp_agent(second) {
+    with Link = acp_link(second) {
         ro redelivered = take(old.len())
         assert(redelivered.len() == old.len())
-        Agent.send(req("agent-2", "b"))
+        Link.send(req("agent-2", "b"))
         ro fresh = collect_turn(10000)
         for f in fresh {
             for o in old { assert(f.id != o.id) }
@@ -120,8 +120,8 @@ test "ack: new keys do not collide with recovered ones" {
 test "ack: a torn last inbox line is ignored" {
     ro path = inbox_file("torn")
     mut first = start_with(with_inbox(path))
-    with Agent = acp_agent(first) {
-        Agent.send(req("agent-1", "a"))
+    with Link = acp_link(first) {
+        Link.send(req("agent-1", "a"))
         ro events = collect_turn(10000)
         assert(events.len() >= 2)
     }

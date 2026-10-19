@@ -2,9 +2,9 @@
 // a whole turn, and the death of the process after an event was taken and before it was committed.
 module crew_harness.acp_live
 
-import crew_harness.acp.{AcpConfig, AcpClient, open_client, acp_agent}
-import crew_harness.engine.{Engine, Event, EventKind, Journal, Store, Agent, MemoryWorld, JournalEntry, start_engine, resume_engine, memory_time, FailCode}
-import crew_harness.chat.{ChatSession, chat_session, user_says, user_cancels}
+import crew_harness.acp.{AcpConfig, AcpClient, open_client, acp_link}
+import crew_harness.engine.{Engine, Incoming, EventKind, Journal, Store, Link, MemoryWorld, JournalEntry, start_engine, resume_engine, memory_time, FailCode}
+import crew_harness.chat.{ChatSession, ChatState, chat_session, encode_chat_state, user_says, user_cancels}
 import crew_harness.storage.{open_data_dir, file_journal, file_store}
 import std.fs.{Fs, real_fs, remove_dir_all}
 import std.os.{Os, real_os, temp_dir, pid}
@@ -24,35 +24,35 @@ fn e2e_config(root str) -> AcpConfig {
     { program: base.program, args: base.args, cwd: base.cwd, inbox_path: "${root}/chat-1.inbox" }
 }
 
-fn e2e_begin(root str, mut world MemoryWorld, mut client AcpClient) -> Engine[ChatSession] {
-    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Agent = acp_agent(client), Time = memory_time(world) {
-        start_engine(chat_session(), "chat-1")
+fn e2e_begin(root str, mut world MemoryWorld, mut client AcpClient) -> Engine[ChatSession, ChatState] {
+    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Link = acp_link(client), Time = memory_time(world) {
+        start_engine[ChatState, ChatSession](chat_session(), "chat-1")
     }
 }
 
-fn e2e_resume(root str, mut world MemoryWorld, mut client AcpClient) -> Engine[ChatSession] {
-    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Agent = acp_agent(client), Time = memory_time(world) {
-        match resume_engine(chat_session(), "chat-1") {
+fn e2e_resume(root str, mut world MemoryWorld, mut client AcpClient) -> Engine[ChatSession, ChatState] {
+    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Link = acp_link(client), Time = memory_time(world) {
+        match resume_engine[ChatState, ChatSession](chat_session(), "chat-1") {
             Some(e) => e
             None => panic("no snapshot")
         }
     }
 }
 
-fn e2e_feed(root str, mut e Engine[ChatSession], mut world MemoryWorld, mut client AcpClient, event Event) -> () {
-    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Agent = acp_agent(client), Time = memory_time(world) {
+fn e2e_feed(root str, mut e Engine[ChatSession, ChatState], mut world MemoryWorld, mut client AcpClient, event Incoming) -> () {
+    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Link = acp_link(client), Time = memory_time(world) {
         e.feed(event)
     }
 }
 
-fn e2e_pump(root str, mut e Engine[ChatSession], mut world MemoryWorld, mut client AcpClient) -> int {
-    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Agent = acp_agent(client), Time = memory_time(world) {
+fn e2e_pump(root str, mut e Engine[ChatSession, ChatState], mut world MemoryWorld, mut client AcpClient) -> int {
+    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Link = acp_link(client), Time = memory_time(world) {
         e.pump()
     }
 }
 
 // pump (with the clock of the world, frozen) and sleep (with the real clock) until the session ends
-fn run_to_end(root str, mut e Engine[ChatSession], mut world MemoryWorld, mut client AcpClient, rounds int) Time -> bool {
+fn run_to_end(root str, mut e Engine[ChatSession, ChatState], mut world MemoryWorld, mut client AcpClient, rounds int) Time -> bool {
     mut i = 0
     while i < rounds {
         ro made = e2e_pump(root, e, world, client)
@@ -75,7 +75,10 @@ fn occurrences(hay str, needle str) -> int {
     n - 1
 }
 
-fn answer_text(e Engine[ChatSession]) -> str {
+// The state of the machine as text, to look into it.
+fn state_text(e Engine[ChatSession, ChatState]) -> str => encode_chat_state(e.state())
+
+fn answer_text(e Engine[ChatSession, ChatState]) -> str {
     match e.outcome() {
         Some(response) => match response {
             Answer(reply) => reply.result
@@ -98,7 +101,7 @@ test "e2e: whole turn, every event acknowledged" {
     // the journal has the key of every event that came from the agent
     mut with_key = 0
     for entry in e2e_entries(root) {
-        if entry.kind == "event" && entry.text.contains("src=acp-") { with_key += 1 }
+        if entry.event.code == "event_accepted" && (entry.event.value_of("source") ?? "").starts_with("acp-") { with_key += 1 }
     }
     assert(with_key >= 4)
     client.close()
@@ -124,8 +127,8 @@ test "e2e: death before commit: event taken again once" {
     mut e1 = e2e_begin(root, world, client1)
     e2e_feed(root, e1, world, client1, user_says("one two"))
     // take the first chunk by hand and "die" before accept: nothing of it is in the journal or the snapshot
-    mut taken = []Event.new()
-    with Agent = acp_agent(client1) {
+    mut taken = []Incoming.new()
+    with Link = acp_link(client1) {
         taken = collect_until("agent_chunk", 10000)
     }
     assert(taken.len() >= 1)
@@ -133,7 +136,7 @@ test "e2e: death before commit: event taken again once" {
     ro text = last_of(taken).input
     ro committed_step = e1.step_number()
     client1.close()
-    for entry in e2e_entries(root) { assert(!entry.text.contains("src=${key}")) }
+    for entry in e2e_entries(root) { assert(entry.event.value_of("source") != Some(key)) }
 
     // the new process: a new client over the same inbox file, the engine resumed from the files
     mut client2 = start_with(e2e_config(root))
@@ -145,11 +148,11 @@ test "e2e: death before commit: event taken again once" {
     // the event came again with the same key, was committed once and acknowledged
     mut times = 0
     for entry in e2e_entries(root) {
-        if entry.kind == "event" && entry.text.ends_with(" src=${key}") { times += 1 }
+        if entry.event.code == "event_accepted" && entry.event.value_of("source") == Some(key) { times += 1 }
     }
     assert(times == 1)
     // the answer so far holds that chunk exactly once
-    assert(occurrences(e2.machine_state(), text) == 1)
+    assert(occurrences(state_text(e2), text) == 1)
     client2.close()
 }
 
@@ -190,12 +193,12 @@ test "e2e: user cancel, late answer discarded" {
     mut e = e2e_begin(root, world, client)
     e2e_feed(root, e, world, client, user_says("slow"))
     mut i = 0
-    while i < 300 && e.machine_state().contains("started") == false {
+    while i < 300 && state_text(e).contains("started") == false {
         ro made = e2e_pump(root, e, world, client)
         10.to_millis().sleep()
         i += 1
     }
-    assert(e.machine_state().contains("started"))
+    assert(state_text(e).contains("started"))
     e2e_feed(root, e, world, client, user_cancels())
     assert(e.is_finished())
     assert(answer_text(e) == "<refusal StoppedByHuman>")
@@ -209,7 +212,7 @@ test "e2e: user cancel, late answer discarded" {
     }
     mut discarded = 0
     for entry in e2e_entries(root) {
-        if entry.kind == "discarded" { discarded += 1 }
+        if entry.event.code == "reply_discarded" { discarded += 1 }
     }
     assert(discarded >= 2)
     assert(client.unacked() == 0)

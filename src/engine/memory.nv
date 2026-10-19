@@ -12,7 +12,7 @@ import std.time.duration
 export type MemoryWorld {
     journal []str,
     snapshots HashMap[str, Snapshot],
-    inbox []Event,
+    inbox []Incoming,
     sent []Request[str],
     cancelled []str,
     acked []str,
@@ -23,7 +23,7 @@ export type MemoryWorld {
 
 /// A new empty world with the clock at `clock_ms`.
 export fn MemoryWorld.at(clock_ms int) -> MemoryWorld => {
-    journal: []str.new(), snapshots: HashMap[str, Snapshot].new(), inbox: []Event.new(),
+    journal: []str.new(), snapshots: HashMap[str, Snapshot].new(), inbox: []Incoming.new(),
     sent: []Request[str].new(), cancelled: []str.new(), acked: []str.new(), saves_at_ack: []int.new(), clock_ms, saves: 0
 }
 
@@ -32,8 +32,8 @@ export fn MemoryWorld mut @advance(ms int) -> () {
     @clock_ms = @clock_ms + ms
 }
 
-/// An event arrives from the agent.
-export fn MemoryWorld mut @deliver(event Event) -> () {
+/// An event arrives from the party.
+export fn MemoryWorld mut @deliver(event Incoming) -> () {
     @inbox.push(event)
 }
 
@@ -70,14 +70,14 @@ export fn memory_store(mut world MemoryWorld) -> Effect[Store] {
     }
 }
 
-/// The handler of `Agent`: what is sent is remembered, what is in the inbox is received in order,
+/// The handler of `Link`: what is sent is remembered, what is in the inbox is received in order,
 /// the keys that were acknowledged are remembered in `acked`.
-export fn memory_agent(mut world MemoryWorld) -> Effect[Agent] {
-    effect Agent {
+export fn memory_link(mut world MemoryWorld) -> Effect[Link] {
+    effect Link {
         send(request) -> () {
             world.sent.push(request)
         }
-        receive() -> Option[Event] {
+        receive() -> Option[Incoming] {
             if world.inbox.len() == 0 { return None }
             return Some(world.inbox.remove(0))
         }

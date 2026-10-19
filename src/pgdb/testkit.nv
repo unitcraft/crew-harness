@@ -135,8 +135,8 @@ fn put(mut o JsonObject, key str, value JsonValue) -> () {
 }
 
 /// A line of the journal in the format of the engine (`journal_line`), written here so that the module does not
-/// need the engine: the trace `t1-s`, the cause `input-<step>`, the kind and the text as given.
-export fn test_line(step int, kind str, text str) -> str {
+/// need the engine: the trace `t1-s`, the cause `input-<step>`, the event code and its parameter `text` as given.
+export fn test_line(step int, code str, text str) -> str {
     mut o = JsonObject.new()
     put(o, "trace", JsonValue.str("t1-s"))
     put(o, "step", JsonValue.int(step))
@@ -144,8 +144,12 @@ export fn test_line(step int, kind str, text str) -> str {
     put(o, "state", JsonValue.str("Idle"))
     put(o, "request", JsonValue.str(""))
     put(o, "at", JsonValue.int(1000 + step))
-    put(o, "kind", JsonValue.str(kind))
-    put(o, "text", JsonValue.str(text))
+    mut params = JsonObject.new()
+    put(params, "text", JsonValue.str(text))
+    mut event = JsonObject.new()
+    put(event, "code", JsonValue.str(code))
+    put(event, "params", JsonValue.object(params))
+    put(o, "event", JsonValue.object(event))
     JsonValue.object(o).to_str()
 }
 

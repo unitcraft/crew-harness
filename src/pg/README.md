@@ -30,7 +30,10 @@ crew.load(id text) returns table (step int, snapshot jsonb, journal jsonb)
 ```
 
 `id` is the id of the session (1 to 128 characters). One snapshot row is kept per step (the history stays; pruning is not done
-yet). `entry` is the journal line of the engine as an object (`journal_line`).
+yet). `entry` is the journal line of the engine as an object (`journal_line`): the envelope (`trace`, `step`, `cause`, `state`, `request`, `at`) and the
+event `{"code": ..., "params": {name: value}}` (version 6 of the dictionary: a code and parameters, no Russian text; `jsonb` keeps the keys of
+the parameters in its own order, the engine takes them by name). The schema does not know the fields of the line, so it did not change in task 102;
+old lines (`kind`, `text`) stay readable.
 
 **`save_step` writes the snapshot and the lines of a step in one transaction** (either both or none) and obeys the rule of the
 step. Let `current` be the last step of the session (0 for a new one):
@@ -60,8 +63,8 @@ are made from `MemoryWorld`:
 
 ```nova
 mut world = PgWorld.open(config, "chat-1")
-with Journal = pg_journal(world), Store = pg_store(world), Agent = ..., Time = ... {
-    start_engine(chat_session(), "chat-1")
+with Journal = pg_journal(world), Store = pg_store(world), Link = ..., Time = ... {
+    start_engine[ChatState, ChatSession](chat_session(), "chat-1")
 }
 ```
 
@@ -134,7 +137,7 @@ Two defects of Nova Oracle 0.1.0 decide the layout. Reproductions are in `spikes
    `crew_harness.pgconf`, which does not import the engine. The server that starts the sessions will read the settings with
    `pgconf` and give the value `PgConfig` to `PgWorld.open`; when 095's rename is in `main` the program may hold both.
 2. **`postgres.pgnet` and the engine cannot be in one program.** The driver file `pgnet/listener.nv` writes the constructor
-   `ListenerMsg.Event { ... }`, and the compiler reads it as a record literal of the engine's `Event`. So `wire.nv` does not use
+   `ListenerMsg.Event { ... }`, and the compiler read it as a record literal of the engine's `Event` (since task 102 the engine's type is `Incoming`; whether `pgnet` now fits next to the engine was not tried, the module keeps its own socket loop). So `wire.nv` does not use
    `pgnet`: it repeats its socket loop (about sixty lines: write what the `Session` owes, read a chunk, feed it, collect the
    events up to ReadyForQuery) over the pure core `postgres.Session`, which has no such clash. The rest of the driver
    (the message encoders and decoders, SCRAM, md5, the session state machine) is used as it is. This part should go away when

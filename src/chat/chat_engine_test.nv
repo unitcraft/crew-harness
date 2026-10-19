@@ -4,19 +4,20 @@
 // repeated entry, cancel, idle term, the journal, the snapshot, UTF-8.
 module crew_harness.chat
 
-import crew_harness.engine.{Engine, MemoryWorld, Event, EventKind, FailCode, Response, Reply, Rejection, JournalEntry, Journal, Store, Agent, start_engine, resume_engine, memory_journal, memory_store, memory_agent, memory_time, decode_snapshot, journal_line}
+import std.encoding.json.{JsonValue, JsonObject}
+import crew_harness.engine.{Engine, MemoryWorld, Incoming, EventKind, FailCode, Response, Reply, Rejection, JournalEntry, Journal, Store, Link, start_engine, resume_engine, memory_journal, memory_store, memory_link, memory_time, decode_snapshot, journal_line, journal_event, param}
 
 // ----- helpers: one `with` over the four handlers of a world -----
 
-fn begin(mut world MemoryWorld) -> Engine[ChatSession] {
-    with Journal = memory_journal(world), Store = memory_store(world), Agent = memory_agent(world), Time = memory_time(world) {
-        start_engine(chat_session(), "chat-1")
+fn begin(mut world MemoryWorld) -> Engine[ChatSession, ChatState] {
+    with Journal = memory_journal(world), Store = memory_store(world), Link = memory_link(world), Time = memory_time(world) {
+        start_engine[ChatState, ChatSession](chat_session(), "chat-1")
     }
 }
 
-fn resumed(mut world MemoryWorld) -> Engine[ChatSession] {
-    with Journal = memory_journal(world), Store = memory_store(world), Agent = memory_agent(world), Time = memory_time(world) {
-        match resume_engine(chat_session(), "chat-1") {
+fn resumed(mut world MemoryWorld) -> Engine[ChatSession, ChatState] {
+    with Journal = memory_journal(world), Store = memory_store(world), Link = memory_link(world), Time = memory_time(world) {
+        match resume_engine[ChatState, ChatSession](chat_session(), "chat-1") {
             Some(e) => e
             None => panic("no snapshot to resume from")
         }
@@ -24,42 +25,42 @@ fn resumed(mut world MemoryWorld) -> Engine[ChatSession] {
 }
 
 fn has_snapshot(mut world MemoryWorld) -> bool {
-    with Journal = memory_journal(world), Store = memory_store(world), Agent = memory_agent(world), Time = memory_time(world) {
-        match resume_engine(chat_session(), "chat-1") {
+    with Journal = memory_journal(world), Store = memory_store(world), Link = memory_link(world), Time = memory_time(world) {
+        match resume_engine[ChatState, ChatSession](chat_session(), "chat-1") {
             Some(e) => true
             None => false
         }
     }
 }
 
-fn feed(mut e Engine[ChatSession], mut world MemoryWorld, event Event) -> () {
-    with Journal = memory_journal(world), Store = memory_store(world), Agent = memory_agent(world), Time = memory_time(world) {
+fn feed(mut e Engine[ChatSession, ChatState], mut world MemoryWorld, event Incoming) -> () {
+    with Journal = memory_journal(world), Store = memory_store(world), Link = memory_link(world), Time = memory_time(world) {
         e.feed(event)
     }
 }
 
-fn accept_only(mut e Engine[ChatSession], mut world MemoryWorld, event Event) -> () {
-    with Journal = memory_journal(world), Store = memory_store(world), Agent = memory_agent(world), Time = memory_time(world) {
-        e.accept(event)
+fn accept_only(mut e Engine[ChatSession, ChatState], mut world MemoryWorld, event Incoming) -> () {
+    with Journal = memory_journal(world), Store = memory_store(world), Link = memory_link(world), Time = memory_time(world) {
+        e.on_arrival(event)
     }
 }
 
-fn dispatch(mut e Engine[ChatSession], mut world MemoryWorld) -> () {
-    with Journal = memory_journal(world), Store = memory_store(world), Agent = memory_agent(world), Time = memory_time(world) {
+fn dispatch(mut e Engine[ChatSession, ChatState], mut world MemoryWorld) -> () {
+    with Journal = memory_journal(world), Store = memory_store(world), Link = memory_link(world), Time = memory_time(world) {
         e.dispatch()
     }
 }
 
-fn pump(mut e Engine[ChatSession], mut world MemoryWorld) -> int {
-    with Journal = memory_journal(world), Store = memory_store(world), Agent = memory_agent(world), Time = memory_time(world) {
+fn pump(mut e Engine[ChatSession, ChatState], mut world MemoryWorld) -> int {
+    with Journal = memory_journal(world), Store = memory_store(world), Link = memory_link(world), Time = memory_time(world) {
         e.pump()
     }
 }
 
-fn state_name(e Engine[ChatSession]) -> str => chat_session().state_name(e.machine_state())
+fn state_name(e Engine[ChatSession, ChatState]) -> str => chat_session().state_name(e.state())
 
 // The reply of the final answer, None when the session has no answer.
-fn reply_of(e Engine[ChatSession]) -> Option[Reply[str]] {
+fn reply_of(e Engine[ChatSession, ChatState]) -> Option[Reply[str]] {
     match e.outcome() {
         Some(response) => match response {
             Answer(reply) => Some(reply)
@@ -70,7 +71,7 @@ fn reply_of(e Engine[ChatSession]) -> Option[Reply[str]] {
 }
 
 // The rejection of the final refusal, None when the session has no refusal.
-fn rejection_of(e Engine[ChatSession]) -> Option[Rejection] {
+fn rejection_of(e Engine[ChatSession, ChatState]) -> Option[Rejection] {
     match e.outcome() {
         Some(response) => match response {
             Answer(reply) => None
@@ -81,35 +82,38 @@ fn rejection_of(e Engine[ChatSession]) -> Option[Rejection] {
 }
 
 // The text of the answer, "" when there is none; and the refusal reason, "" when there is none.
-fn answer_of(e Engine[ChatSession]) -> str {
+fn answer_of(e Engine[ChatSession, ChatState]) -> str {
     match reply_of(e) {
         Some(reply) => reply.result
         None => ""
     }
 }
 
-fn refusal_of(e Engine[ChatSession]) -> str {
+fn refusal_of(e Engine[ChatSession, ChatState]) -> str {
     match rejection_of(e) {
         Some(rejection) => rejection.reason.name()
         None => ""
     }
 }
 
-fn of_kind(entries []JournalEntry, kind str) -> []JournalEntry {
+fn of_code(entries []JournalEntry, code str) -> []JournalEntry {
     mut out = []JournalEntry.new()
     for entry in entries {
-        if entry.kind == kind { out.push(entry) }
+        if entry.event.code == code { out.push(entry) }
     }
     out
 }
 
-fn kinds_of(entries []JournalEntry, kind str) -> int {
+fn codes_of(entries []JournalEntry, code str) -> int {
     mut n = 0
     for entry in entries {
-        if entry.kind == kind { n += 1 }
+        if entry.event.code == code { n += 1 }
     }
     n
 }
+
+// The encoded state of the machine, to compare states.
+fn encoded(e Engine[ChatSession, ChatState]) -> str => encode_chat_state(e.state())
 
 // ----- start and the first request -----
 
@@ -122,7 +126,7 @@ test "engine: start is step 1, saves the first snapshot and writes the start lin
     assert(!e.is_finished())
     ro entries = world.entries()
     assert(entries.len() == 1)
-    assert(entries[0].kind == "start")
+    assert(entries[0].event.code == "machine_started")
     assert(entries[0].step == 1)
     assert(entries[0].cause == "start-1")
     assert(entries[0].state == "Idle")
@@ -155,7 +159,7 @@ test "engine: the event is stamped: id, clock, step" {
     world.advance(250)
     feed(e, world, user_says("hello"))
     ro entries = world.entries()
-    ro on_event = of_kind(entries, "event")
+    ro on_event = of_code(entries, "event_accepted")
     assert(on_event.len() == 1)
     assert(on_event[0].cause == "input-2")
     assert(on_event[0].step == 2)
@@ -173,7 +177,7 @@ test "engine: the journal lines of a step carry the state the machine waits in a
         if entry.step == 2 { assert(entry.state == "Awaiting") }
         if entry.step == 3 { assert(entry.state == "Done") }
     }
-    assert(of_kind(entries, "sent")[0].state == "Awaiting")
+    assert(of_code(entries, "request_sent")[0].state == "Awaiting")
 }
 
 // ----- the answer, the refusal -----
@@ -232,17 +236,17 @@ test "engine: a second answer to a closed request is discarded and the journal r
     feed(e, world, agent_chunk("agent-1", "x"))
     feed(e, world, agent_done("agent-1"))
     ro before_step = e.step_number()
-    ro before_state = e.machine_state()
+    ro before_state = encoded(e)
     feed(e, world, agent_done("agent-1"))
-    assert(e.machine_state() == before_state)
+    assert(encoded(e) == before_state)
     assert(answer_of(e) == "x")
     assert(e.step_number() == before_step + 1)
     assert(world.sent.len() == 1)
     ro entries = world.entries()
-    assert(kinds_of(entries, "discarded") == 1)
-    ro discarded = of_kind(entries, "discarded")
+    assert(codes_of(entries, "reply_discarded") == 1)
+    ro discarded = of_code(entries, "reply_discarded")
     assert(discarded[0].request == "agent-1")
-    assert(discarded[0].text.contains("closed"))
+    assert(discarded[0].event.value_of("reason") == Some("closed_request"))
     assert(discarded[0].step == before_step + 1)
 }
 
@@ -254,21 +258,21 @@ test "engine: a late chunk of a closed request is discarded too, and does not re
     feed(e, world, agent_chunk("agent-1", "late"))
     assert(answer_of(e) == "")
     assert(e.open_ids().len() == 0)
-    assert(kinds_of(world.entries(), "discarded") == 1)
+    assert(codes_of(world.entries(), "reply_discarded") == 1)
 }
 
 test "engine: an answer to a request nobody opened is discarded as unknown" {
     mut world = MemoryWorld.at(1000)
     mut e = begin(world)
     feed(e, world, user_says("hi"))
-    ro before = e.machine_state()
+    ro before = encoded(e)
     feed(e, world, agent_done("agent-7"))
-    assert(e.machine_state() == before)
+    assert(encoded(e) == before)
     assert(e.open_ids().len() == 1)
-    ro discarded = of_kind(world.entries(), "discarded")
+    ro discarded = of_code(world.entries(), "reply_discarded")
     assert(discarded.len() == 1)
     assert(discarded[0].request == "agent-7")
-    assert(discarded[0].text.contains("unknown"))
+    assert(discarded[0].event.value_of("reason") == Some("unknown_request"))
 }
 
 // ----- cancel -----
@@ -285,8 +289,8 @@ test "engine: cancel by the user cancels the open request at the agent and ends 
     assert(world.cancelled.len() == 1)
     assert(world.cancelled[0] == "agent-1")
     ro entries = world.entries()
-    assert(kinds_of(entries, "cancel") == 1)
-    assert(kinds_of(entries, "cancel_sent") == 1)
+    assert(codes_of(entries, "cancel_ordered") == 1)
+    assert(codes_of(entries, "cancel_sent") == 1)
 }
 
 test "engine: an answer that comes after the cancel is discarded as a reply to a closed request" {
@@ -297,9 +301,9 @@ test "engine: an answer that comes after the cancel is discarded as a reply to a
     feed(e, world, agent_done("agent-1"))
     assert(refusal_of(e) == "StoppedByHuman")
     assert(answer_of(e) == "")
-    ro discarded = of_kind(world.entries(), "discarded")
+    ro discarded = of_code(world.entries(), "reply_discarded")
     assert(discarded.len() == 1)
-    assert(discarded[0].text.contains("closed"))
+    assert(discarded[0].event.value_of("reason") == Some("closed_request"))
 }
 
 test "engine: cancel before any request ends the session and cancels nothing" {
@@ -354,7 +358,7 @@ test "engine: an answer that comes after the timeout is discarded" {
     pump(e, world)
     assert(refusal_of(e) == "Timeout")
     assert(answer_of(e) == "")
-    assert(kinds_of(world.entries(), "discarded") == 1)
+    assert(codes_of(world.entries(), "reply_discarded") == 1)
 }
 
 test "engine: pump takes the incoming events of the agent in the order of arrival" {
@@ -399,7 +403,7 @@ test "restart after the request: no second send, same result" {
     feed(c, control, agent_chunk("agent-1", "Здравствуй"))
     feed(c, control, agent_done("agent-1"))
     assert(answer_of(c) == answer_of(e2))
-    assert(c.machine_state() == e2.machine_state())
+    assert(encoded(c) == encoded(e2))
     assert(state_name(c) == state_name(e2))
 }
 
@@ -421,9 +425,9 @@ test "restart after the answer: stays finished, nothing sent" {
     assert(answer_of(e2) == answer)
     assert(world.sent.len() == 1)
     assert(world.cancelled.len() == 0)
-    ro discarded = of_kind(world.entries(), "discarded")
+    ro discarded = of_code(world.entries(), "reply_discarded")
     assert(discarded.len() == 1)
-    assert(discarded[0].text.contains("closed"))
+    assert(discarded[0].event.value_of("reason") == Some("closed_request"))
 }
 
 test "restart after the commit but before the send: the request is sent now, exactly once" {
@@ -453,7 +457,7 @@ test "restart: a step of its own, no gaps, same trace" {
     mut e2 = resumed(world)
     assert(e2.step_number() == before + 1)
     assert(e2.trace() == e1.trace())
-    ro restart = of_kind(world.entries(), "restart")
+    ro restart = of_code(world.entries(), "engine_resumed")
     assert(restart.len() == 1)
     assert(restart[0].step == before + 1)
     assert(restart[0].cause == "restart-3")
@@ -465,7 +469,7 @@ test "restart: the attempt counter is kept, ids do not repeat" {
     feed(e1, world, user_says("hi"))
     mut e2 = resumed(world)
     match world.snapshots.get("chat-1") {
-        Some(snapshot) => match decode_snapshot(snapshot) {
+        Some(snapshot) => match decode_snapshot[ChatState, ChatSession](chat_session(), snapshot) {
             Some(state) => {
                 assert(state.counters.len() == 1)
                 assert(state.counters[0].party == "agent")
@@ -521,14 +525,14 @@ test "journal: request line and send mark carry the request id" {
     feed(e, world, user_says("hi"))
     feed(e, world, agent_done("agent-1"))
     ro entries = world.entries()
-    ro requests = of_kind(entries, "request")
-    ro sent = of_kind(entries, "sent")
+    ro requests = of_code(entries, "request_ordered")
+    ro sent = of_code(entries, "request_sent")
     assert(requests.len() == 1)
     assert(sent.len() == 1)
     assert(requests[0].request == "agent-1")
     assert(sent[0].request == "agent-1")
-    assert(kinds_of(entries, "closed") == 1)
-    assert(kinds_of(entries, "finish") == 1)
+    assert(codes_of(entries, "request_closed") == 1)
+    assert(codes_of(entries, "machine_finished") == 1)
     assert(world.saves == e.step_number())
 }
 
@@ -597,14 +601,14 @@ test "ack: sent after the commit, key in the journal line" {
     mut e = begin(world)
     feed(e, world, user_says("hi"))
     ro saves_before = world.saves
-    world.deliver(Event.from_source("acp-7", agent_chunk("agent-1", "a")))
+    world.deliver(Incoming.from_source("acp-7", agent_chunk("agent-1", "a")))
     assert(pump(e, world) == 1)
     assert(world.acked.len() == 1)
     assert(world.acked[0] == "acp-7")
     // at the moment of the ack the snapshot of the step was already saved (the commit point)
     assert(world.saves_at_ack[0] == saves_before + 1)
-    ro on_event = of_kind(world.entries(), "event")
-    assert(on_event[on_event.len() - 1].text.contains("src=acp-7"))
+    ro on_event = of_code(world.entries(), "event_accepted")
+    assert(on_event[on_event.len() - 1].event.value_of("source") == Some("acp-7"))
 }
 
 test "ack: an event without a key is not acknowledged" {
@@ -621,7 +625,7 @@ test "ack: a discarded event is acknowledged too" {
     mut e = begin(world)
     feed(e, world, user_says("hi"))
     feed(e, world, agent_done("agent-1"))
-    world.deliver(Event.from_source("acp-9", agent_chunk("agent-1", "late")))
+    world.deliver(Incoming.from_source("acp-9", agent_chunk("agent-1", "late")))
     assert(pump(e, world) == 1)
     assert(world.acked.len() == 1)
     assert(world.acked[0] == "acp-9")
@@ -631,7 +635,7 @@ test "ack: restart re-acknowledges the committed key only" {
     mut world = MemoryWorld.at(1000)
     mut e1 = begin(world)
     feed(e1, world, user_says("hi"))
-    accept_only(e1, world, Event.from_source("acp-1", agent_chunk("agent-1", "one ")))
+    accept_only(e1, world, Incoming.from_source("acp-1", agent_chunk("agent-1", "one ")))
     // the process dies here: the step of acp-1 is committed, the ack was not made
     assert(world.acked.len() == 0)
     mut e2 = resumed(world)
@@ -657,7 +661,8 @@ test "ack: an uncommitted event is not acknowledged" {
 
 // the line of an incoming event written by a step that died before its snapshot
 fn dead_event_line(trace str, step int, key str) -> JournalEntry => {
-    trace, step, cause: "progress-9", state: "Awaiting", request: "agent-1", at: 1500, kind: "event", text: "progress/agent_chunk src=${key}"
+    trace, step, cause: "progress-9", state: "Awaiting", request: "agent-1", at: 1500,
+    event: journal_event("event_accepted", [param("kind", "progress"), param("name", "agent_chunk"), param("source", key)])
 }
 
 test "ack: dead step lines are not committed after the next restart" {
@@ -676,9 +681,65 @@ test "ack: dead step lines are not committed after the next restart" {
     pump(e3, world)
     assert(world.acked.len() == 0)
     // and the event that was really committed afterwards is acknowledged by the next restart
-    accept_only(e3, world, Event.from_source("acp-1", agent_chunk("agent-1", "again")))
+    accept_only(e3, world, Incoming.from_source("acp-1", agent_chunk("agent-1", "again")))
     mut e4 = resumed(world)
     pump(e4, world)
     assert(world.acked.len() == 1)
     assert(world.acked[0] == "acp-1")
+}
+
+// ----- a journal of the old form (task 102) -----
+
+// The kind an old engine wrote for the code of a line (the codes of the machine were all notes).
+fn old_kind(code str) -> str {
+    if code == "machine_started" { return "start" }
+    if code == "event_accepted" { return "event" }
+    if code == "reply_discarded" { return "discarded" }
+    if code == "request_ordered" { return "request" }
+    if code == "request_sent" { return "sent" }
+    if code == "request_closed" { return "closed" }
+    if code == "cancel_ordered" { return "cancel" }
+    if code == "snapshot_ordered" { return "snapshot" }
+    if code == "machine_finished" { return "finish" }
+    if code == "engine_resumed" { return "restart" }
+    "note"
+}
+
+// The line of an entry in the form of the engine before task 102: `kind` and `text`, the key of the source at the end of the text of an event.
+fn old_line(entry JournalEntry) -> str {
+    mut o = JsonObject.new()
+    put(o, "trace", JsonValue.str(entry.trace))
+    put(o, "step", JsonValue.int(entry.step))
+    put(o, "cause", JsonValue.str(entry.cause))
+    put(o, "state", JsonValue.str(entry.state))
+    put(o, "request", JsonValue.str(entry.request))
+    put(o, "at", JsonValue.int(entry.at))
+    put(o, "kind", JsonValue.str(old_kind(entry.event.code)))
+    ro source = match entry.event.value_of("source") {
+        Some(key) => " src=${key}"
+        None => ""
+    }
+    put(o, "text", JsonValue.str("${entry.event.value_of("kind") ?? "x"}/${entry.event.value_of("name") ?? "y"}${source}"))
+    JsonValue.object(o).to_str()
+}
+
+test "old journal: a restart over lines of the old form reads the marks, sends nothing again and re-acknowledges the committed key" {
+    mut world = MemoryWorld.at(1000)
+    mut e1 = begin(world)
+    feed(e1, world, user_says("hi"))
+    accept_only(e1, world, Incoming.from_source("acp-1", agent_chunk("agent-1", "one ")))
+    assert(world.sent.len() == 1)
+    mut old = []str.new()
+    for entry in world.entries() { old.push(old_line(entry)) }
+    world.journal = old
+    mut e2 = resumed(world)
+    dispatch(e2, world)
+    pump(e2, world)
+    assert(world.sent.len() == 1)
+    assert(e2.open_ids().len() == 1)
+    assert(world.acked.len() == 1)
+    assert(world.acked[0] == "acp-1")
+    // the new restart line stands after the old lines
+    ro restart = of_code(world.entries(), "engine_resumed")
+    assert(restart.len() == 1)
 }

@@ -6,34 +6,34 @@
 module crew_harness.pgstore
 
 import crew_harness.pgdb.{new_test_db, drop_test_db, test_count}
-import crew_harness.engine.{Engine, MemoryWorld, Event, FailCode, JournalEntry, Journal, Store, Agent, Time, Snapshot, start_engine, resume_engine, memory_journal, memory_store, memory_agent, memory_time, decode_snapshot, encode_snapshot}
-import crew_harness.chat.{ChatSession, chat_session, user_says, user_cancels, agent_chunk, agent_done, agent_refused}
+import crew_harness.engine.{Engine, MemoryWorld, Incoming, FailCode, JournalEntry, Journal, Store, Link, Time, Snapshot, start_engine, resume_engine, memory_journal, memory_store, memory_link, memory_time, decode_snapshot, encode_snapshot, JournalEvent}
+import crew_harness.chat.{ChatSession, ChatState, chat_session, encode_chat_state, user_says, user_cancels, agent_chunk, agent_done, agent_refused}
 
 // ----- helpers: one `with` over the four handlers; use_pg picks the database or the memory -----
 
-fn begin(use_pg bool, mut mem MemoryWorld, mut pg PgWorld) -> Engine[ChatSession] {
+fn begin(use_pg bool, mut mem MemoryWorld, mut pg PgWorld) -> Engine[ChatSession, ChatState] {
     if use_pg {
-        with Journal = pg_journal(pg), Store = pg_store(pg), Agent = memory_agent(mem), Time = memory_time(mem) {
-            start_engine(chat_session(), "chat-1")
+        with Journal = pg_journal(pg), Store = pg_store(pg), Link = memory_link(mem), Time = memory_time(mem) {
+            start_engine[ChatState, ChatSession](chat_session(), "chat-1")
         }
     } else {
-        with Journal = memory_journal(mem), Store = memory_store(mem), Agent = memory_agent(mem), Time = memory_time(mem) {
-            start_engine(chat_session(), "chat-1")
+        with Journal = memory_journal(mem), Store = memory_store(mem), Link = memory_link(mem), Time = memory_time(mem) {
+            start_engine[ChatState, ChatSession](chat_session(), "chat-1")
         }
     }
 }
 
-fn resumed(use_pg bool, mut mem MemoryWorld, mut pg PgWorld) -> Engine[ChatSession] {
+fn resumed(use_pg bool, mut mem MemoryWorld, mut pg PgWorld) -> Engine[ChatSession, ChatState] {
     if use_pg {
-        with Journal = pg_journal(pg), Store = pg_store(pg), Agent = memory_agent(mem), Time = memory_time(mem) {
-            match resume_engine(chat_session(), "chat-1") {
+        with Journal = pg_journal(pg), Store = pg_store(pg), Link = memory_link(mem), Time = memory_time(mem) {
+            match resume_engine[ChatState, ChatSession](chat_session(), "chat-1") {
                 Some(e) => e
                 None => panic("no snapshot to resume from")
             }
         }
     } else {
-        with Journal = memory_journal(mem), Store = memory_store(mem), Agent = memory_agent(mem), Time = memory_time(mem) {
-            match resume_engine(chat_session(), "chat-1") {
+        with Journal = memory_journal(mem), Store = memory_store(mem), Link = memory_link(mem), Time = memory_time(mem) {
+            match resume_engine[ChatState, ChatSession](chat_session(), "chat-1") {
                 Some(e) => e
                 None => panic("no snapshot to resume from")
             }
@@ -41,49 +41,49 @@ fn resumed(use_pg bool, mut mem MemoryWorld, mut pg PgWorld) -> Engine[ChatSessi
     }
 }
 
-fn feed(use_pg bool, mut e Engine[ChatSession], mut mem MemoryWorld, mut pg PgWorld, event Event) -> () {
+fn feed(use_pg bool, mut e Engine[ChatSession, ChatState], mut mem MemoryWorld, mut pg PgWorld, event Incoming) -> () {
     if use_pg {
-        with Journal = pg_journal(pg), Store = pg_store(pg), Agent = memory_agent(mem), Time = memory_time(mem) {
+        with Journal = pg_journal(pg), Store = pg_store(pg), Link = memory_link(mem), Time = memory_time(mem) {
             e.feed(event)
         }
     } else {
-        with Journal = memory_journal(mem), Store = memory_store(mem), Agent = memory_agent(mem), Time = memory_time(mem) {
+        with Journal = memory_journal(mem), Store = memory_store(mem), Link = memory_link(mem), Time = memory_time(mem) {
             e.feed(event)
         }
     }
 }
 
-fn accept_only(use_pg bool, mut e Engine[ChatSession], mut mem MemoryWorld, mut pg PgWorld, event Event) -> () {
+fn accept_only(use_pg bool, mut e Engine[ChatSession, ChatState], mut mem MemoryWorld, mut pg PgWorld, event Incoming) -> () {
     if use_pg {
-        with Journal = pg_journal(pg), Store = pg_store(pg), Agent = memory_agent(mem), Time = memory_time(mem) {
-            e.accept(event)
+        with Journal = pg_journal(pg), Store = pg_store(pg), Link = memory_link(mem), Time = memory_time(mem) {
+            e.on_arrival(event)
         }
     } else {
-        with Journal = memory_journal(mem), Store = memory_store(mem), Agent = memory_agent(mem), Time = memory_time(mem) {
-            e.accept(event)
+        with Journal = memory_journal(mem), Store = memory_store(mem), Link = memory_link(mem), Time = memory_time(mem) {
+            e.on_arrival(event)
         }
     }
 }
 
-fn dispatch(use_pg bool, mut e Engine[ChatSession], mut mem MemoryWorld, mut pg PgWorld) -> () {
+fn dispatch(use_pg bool, mut e Engine[ChatSession, ChatState], mut mem MemoryWorld, mut pg PgWorld) -> () {
     if use_pg {
-        with Journal = pg_journal(pg), Store = pg_store(pg), Agent = memory_agent(mem), Time = memory_time(mem) {
+        with Journal = pg_journal(pg), Store = pg_store(pg), Link = memory_link(mem), Time = memory_time(mem) {
             e.dispatch()
         }
     } else {
-        with Journal = memory_journal(mem), Store = memory_store(mem), Agent = memory_agent(mem), Time = memory_time(mem) {
+        with Journal = memory_journal(mem), Store = memory_store(mem), Link = memory_link(mem), Time = memory_time(mem) {
             e.dispatch()
         }
     }
 }
 
-fn pump(use_pg bool, mut e Engine[ChatSession], mut mem MemoryWorld, mut pg PgWorld) -> int {
+fn pump(use_pg bool, mut e Engine[ChatSession, ChatState], mut mem MemoryWorld, mut pg PgWorld) -> int {
     if use_pg {
-        with Journal = pg_journal(pg), Store = pg_store(pg), Agent = memory_agent(mem), Time = memory_time(mem) {
+        with Journal = pg_journal(pg), Store = pg_store(pg), Link = memory_link(mem), Time = memory_time(mem) {
             e.pump()
         }
     } else {
-        with Journal = memory_journal(mem), Store = memory_store(mem), Agent = memory_agent(mem), Time = memory_time(mem) {
+        with Journal = memory_journal(mem), Store = memory_store(mem), Link = memory_link(mem), Time = memory_time(mem) {
             e.pump()
         }
     }
@@ -105,19 +105,28 @@ fn snapshot_of(use_pg bool, mut mem MemoryWorld, mut pg PgWorld) -> Option[Snaps
     }
 }
 
-fn state_name(e Engine[ChatSession]) -> str => chat_session().state_name(e.machine_state())
+fn state_name(e Engine[ChatSession, ChatState]) -> str => chat_session().state_name(e.state())
 
-fn of_kind(entries []JournalEntry, kind str) -> []JournalEntry {
+fn of_code(entries []JournalEntry, code str) -> []JournalEntry {
     mut out = []JournalEntry.new()
     for entry in entries {
-        if entry.kind == kind { out.push(entry) }
+        if entry.event.code == code { out.push(entry) }
     }
     out
 }
 
+// The parameters of an event are taken by name: jsonb keeps the keys of an object in its own order.
+fn same_event(x JournalEvent, y JournalEvent) -> bool {
+    if x.code != y.code || x.params.len() != y.params.len() { return false }
+    for p in x.params {
+        if y.value_of(p.name) != Some(p.value) { return false }
+    }
+    true
+}
+
 fn same_entry(x JournalEntry, y JournalEntry) -> bool =>
     x.trace == y.trace && x.step == y.step && x.cause == y.cause && x.state == y.state
-        && x.request == y.request && x.at == y.at && x.kind == y.kind && x.text == y.text
+        && x.request == y.request && x.at == y.at && same_event(x.event, y.event)
 
 fn same_entries(a []JournalEntry, b []JournalEntry) -> bool {
     if a.len() != b.len() { return false }
@@ -132,15 +141,15 @@ fn same_entries(a []JournalEntry, b []JournalEntry) -> bool {
 // The snapshot as the engine sees it: decoded and encoded again, so the spelling of the JSON text does not matter.
 fn snapshot_data(s Option[Snapshot]) -> str {
     match s {
-        Some(snapshot) => match decode_snapshot(snapshot) {
-            Some(state) => encode_snapshot(state).data
+        Some(snapshot) => match decode_snapshot[ChatState, ChatSession](chat_session(), snapshot) {
+            Some(state) => encode_snapshot[ChatState, ChatSession](chat_session(), state).data
             None => "<damaged>"
         }
         None => "<none>"
     }
 }
 
-fn answer_text(e Engine[ChatSession]) -> str {
+fn answer_text(e Engine[ChatSession, ChatState]) -> str {
     match e.outcome() {
         Some(response) => match response {
             Answer(reply) => reply.result
@@ -151,9 +160,9 @@ fn answer_text(e Engine[ChatSession]) -> str {
 }
 
 // The two runs agree on everything the world can see.
-fn assert_same(a Engine[ChatSession], b Engine[ChatSession], ja []JournalEntry, jb []JournalEntry, sa Option[Snapshot], sb Option[Snapshot]) -> () {
+fn assert_same(a Engine[ChatSession, ChatState], b Engine[ChatSession, ChatState], ja []JournalEntry, jb []JournalEntry, sa Option[Snapshot], sb Option[Snapshot]) -> () {
     assert(a.step_number() == b.step_number())
-    assert(a.machine_state() == b.machine_state())
+    assert(encode_chat_state(a.state()) == encode_chat_state(b.state()))
     assert(a.is_finished() == b.is_finished())
     assert(a.open_ids().len() == b.open_ids().len())
     assert(answer_text(a) == answer_text(b))
@@ -164,7 +173,7 @@ fn assert_same(a Engine[ChatSession], b Engine[ChatSession], ja []JournalEntry, 
 
 // ----- the stories (the same code runs in memory and on PostgreSQL) -----
 
-fn story_conversation(use_pg bool, mut mem MemoryWorld, mut pg PgWorld) -> Engine[ChatSession] {
+fn story_conversation(use_pg bool, mut mem MemoryWorld, mut pg PgWorld) -> Engine[ChatSession, ChatState] {
     mut e = begin(use_pg, mem, pg)
     feed(use_pg, e, mem, pg, user_says("Привет, как дела? Ёжик, щётка, \"кавычки\" и 😀"))
     mem.advance(40)
@@ -177,7 +186,7 @@ fn story_conversation(use_pg bool, mut mem MemoryWorld, mut pg PgWorld) -> Engin
     e
 }
 
-fn story_cancel(use_pg bool, mut mem MemoryWorld, mut pg PgWorld) -> Engine[ChatSession] {
+fn story_cancel(use_pg bool, mut mem MemoryWorld, mut pg PgWorld) -> Engine[ChatSession, ChatState] {
     mut e = begin(use_pg, mem, pg)
     feed(use_pg, e, mem, pg, user_says("hi"))
     mem.advance(5)
@@ -186,7 +195,7 @@ fn story_cancel(use_pg bool, mut mem MemoryWorld, mut pg PgWorld) -> Engine[Chat
     e
 }
 
-fn story_timeout(use_pg bool, mut mem MemoryWorld, mut pg PgWorld) -> Engine[ChatSession] {
+fn story_timeout(use_pg bool, mut mem MemoryWorld, mut pg PgWorld) -> Engine[ChatSession, ChatState] {
     mut e = begin(use_pg, mem, pg)
     feed(use_pg, e, mem, pg, user_says("hi"))
     mem.advance(29000)
@@ -199,7 +208,7 @@ fn story_timeout(use_pg bool, mut mem MemoryWorld, mut pg PgWorld) -> Engine[Cha
     e
 }
 
-fn story_refusal(use_pg bool, mut mem MemoryWorld, mut pg PgWorld) -> Engine[ChatSession] {
+fn story_refusal(use_pg bool, mut mem MemoryWorld, mut pg PgWorld) -> Engine[ChatSession, ChatState] {
     mut e = begin(use_pg, mem, pg)
     feed(use_pg, e, mem, pg, user_says("hi"))
     feed(use_pg, e, mem, pg, agent_refused("agent-1", FailCode.ModelRefused))
@@ -220,7 +229,7 @@ test "engine on PostgreSQL: a conversation gives the same journal, snapshot and 
     // what is in the table is what the engine wrote: one snapshot row per step, lines of every step
     assert(test_count(db.admin, "select count(*) from crew.machine_snapshot") == on_pg.step_number())
     assert(test_count(db.admin, "select count(distinct step) from crew.machine_journal") == on_pg.step_number())
-    assert(test_count(db.admin, "select count(*) from crew.machine_journal where entry->>'text' like '%Ёжик%'") == 1)
+    assert(test_count(db.admin, "select count(*) from crew.machine_journal where entry->'event'->'params'->>'text' like '%Ёжик%'") == 1)
     drop_test_db(db)
 }
 
@@ -235,7 +244,7 @@ test "engine on PostgreSQL: a cancel by the user gives the same result as in mem
     assert(answer_text(on_pg) == "refused:StoppedByHuman")
     assert_same(in_memory, on_pg, journal_of(false, mem_a, pg_a), journal_of(true, mem_b, pg_b), snapshot_of(false, mem_a, pg_a), snapshot_of(true, mem_b, pg_b))
     assert(mem_b.cancelled.len() == 1)
-    assert(of_kind(journal_of(true, mem_b, pg_b), "cancel_sent").len() == 1)
+    assert(of_code(journal_of(true, mem_b, pg_b), "cancel_sent").len() == 1)
     drop_test_db(db)
 }
 
@@ -298,11 +307,11 @@ test "engine on PostgreSQL: restart after the request was opened - a new process
     feed(false, c, control_mem, control_pg, agent_chunk("agent-1", "Здравствуй"))
     feed(false, c, control_mem, control_pg, agent_done("agent-1"))
     assert(answer_text(c) == answer_text(e2))
-    assert(c.machine_state() == e2.machine_state())
+    assert(encode_chat_state(c.state()) == encode_chat_state(e2.state()))
     // the restart is a line of the journal in the database, and the numbers have no gaps
     ro entries = journal_of(true, mem, pg2)
-    assert(of_kind(entries, "restart").len() == 1)
-    assert(of_kind(entries, "sent").len() == 1)
+    assert(of_code(entries, "engine_resumed").len() == 1)
+    assert(of_code(entries, "request_sent").len() == 1)
     assert(test_count(db.admin, "select count(distinct step) from crew.machine_journal") == e2.step_number())
     assert(test_count(db.admin, "select max(step) - min(step) + 1 - count(*) from crew.machine_snapshot") == 0)
     drop_test_db(db)
@@ -325,7 +334,7 @@ test "engine on PostgreSQL: restart after the answer - the session stays finishe
     feed(true, e2, mem, pg2, agent_done("agent-1"))
     assert(answer_text(e2) == "fine")
     assert(mem.sent.len() == 1)
-    assert(of_kind(journal_of(true, mem, pg2), "discarded").len() == 1)
+    assert(of_code(journal_of(true, mem, pg2), "reply_discarded").len() == 1)
     drop_test_db(db)
 }
 
@@ -358,7 +367,7 @@ test "engine on PostgreSQL: death between the journal write and the snapshot sav
     mut e1 = begin(true, mem, pg1)
     feed(true, e1, mem, pg1, user_says("hi"))
     ro committed_step = e1.step_number()
-    ro committed_state = e1.machine_state()
+    ro committed_state = encode_chat_state(e1.state())
     // the step committed_step + 1 writes its lines through the handler ... and the process dies before the snapshot
     with Journal = pg_journal(pg1) {
         Journal.write(entry_at(committed_step + 1, "event", "progress/agent_chunk"))
@@ -368,11 +377,11 @@ test "engine on PostgreSQL: death between the journal write and the snapshot sav
     mut pg2 = PgWorld.open(db.app, "chat-1")
     mut e2 = resumed(true, mem, pg2)
     // the snapshot is the commit point: the machine is where it was after the last commit
-    assert(e2.machine_state() == committed_state)
+    assert(encode_chat_state(e2.state()) == committed_state)
     assert(e2.step_number() == committed_step + 1)
-    ro restart = of_kind(journal_of(true, mem, pg2), "restart")
+    ro restart = of_code(journal_of(true, mem, pg2), "engine_resumed")
     assert(restart.len() == 1)
-    assert(restart[0].text.contains("0 journal lines of an uncommitted step ignored"))
+    assert(restart[0].event.value_of("ignored_lines") == Some("0"))
     assert(mem.sent.len() == 1)
     assert(e2.open_ids().len() == 1)
     feed(true, e2, mem, pg2, agent_chunk("agent-1", "ok"))

@@ -2,12 +2,12 @@
 // pg_engine_test.nv): lines wait for the snapshot, marks go at once, death between the journal write and the snapshot save.
 module crew_harness.pgstore
 
-import crew_harness.engine.{Journal, Store, JournalEntry, Snapshot}
+import crew_harness.engine.{Journal, Store, JournalEntry, Snapshot, journal_event, param}
 import crew_harness.pgdb.{PgFault, new_test_db, drop_test_db, test_count, test_snap}
 import std.net.{real_net}
 
 fn entry_at(step int, kind str, text str) -> JournalEntry => {
-    trace: "t1-s", step, cause: "input-${step}", state: "Idle", request: "", at: 1000 + step, kind, text
+    trace: "t1-s", step, cause: "input-${step}", state: "Idle", request: "", at: 1000 + step, event: journal_event(kind, [param("text", text)])
 }
 
 fn unit_ok(result Result[(), PgFault]) -> bool {
@@ -45,7 +45,7 @@ fn snap(step int, note str) -> Snapshot => { step, data: test_snap(step, note) }
 
 fn texts_of(entries []JournalEntry) -> []str {
     mut out = []str.new()
-    for entry in entries { out.push(entry.text) }
+    for entry in entries { out.push(entry.event.value_of("text") ?? "") }
     out
 }
 
@@ -58,7 +58,7 @@ test "handlers: lines of a step wait for the snapshot and all arrive with it, in
     save_snapshot(world, "s-1", snap(1, "x"))
     ro all = read_all(world)
     assert(all.len() == 2)
-    assert(all[0].text == "one" && all[1].text == "two")
+    assert((all[0].event.value_of("text") ?? "") == "one" && (all[1].event.value_of("text") ?? "") == "two")
     assert(all[0].step == 1)
     assert(test_count(db.admin, "select count(*) from crew.machine_snapshot") == 1)
     drop_test_db(db)
@@ -97,7 +97,7 @@ test "handlers: a new world over the same session loads the snapshot and then pu
     write_lines(second, [entry_at(1, "sent", "mark after the restart")])
     ro all = read_all(second)
     assert(all.len() == 2)
-    assert(all[1].text == "mark after the restart")
+    assert((all[1].event.value_of("text") ?? "") == "mark after the restart")
     drop_test_db(db)
 }
 
@@ -123,7 +123,7 @@ test "death between the journal write and the snapshot save: the lines of the st
     }
     ro all = read_all(after)
     assert(all.len() == 1)
-    assert(all[0].text == "committed")
+    assert((all[0].event.value_of("text") ?? "") == "committed")
     assert(test_count(db.admin, "select count(*) from crew.machine_journal where step = 2") == 0)
     // the step 2 is made again by the next process and passes
     write_lines(after, [entry_at(2, "event", "again")])

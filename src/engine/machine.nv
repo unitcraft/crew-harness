@@ -1,26 +1,81 @@
-// machine.nv - the protocol of a state machine (spec rules 8, 13: a step is a pure function).
+// machine.nv - the protocols of a state machine and of its environment (spec rules 8, 13: a step does not touch the world).
 //
-// Source: state-machine-engine-automaton.md, protocol `Automaton` (reduced to what the MVP needs).
-// The methodology generalises the engine over `State`, `Event`, `Input`, `Output`; Oracle 0.1.0 does not
-// compile that (see README.md, "Oracle 0.1.0"), so the state crosses the protocol as encoded text:
-// a machine keeps its own typed state and encodes it at the border (`step` decodes, computes, encodes).
+// Source: state-machine-engine-automaton.md, protocols `Machine` and `Environment` (reduced to what the MVP needs).
+// The methodology generalises the machine over `State` and the other types; here `Machine[S]` is generic over the state only.
+// Oracle 0.1.0 compiles that when the type arguments of a free function are written out (see README.md, "Oracle 0.1.0"),
+// so the state of the machine is typed in the engine and is encoded only at the border of the snapshot.
 
 module crew_harness.engine
 
+/// Environment: what the engine gives a machine inside a step. Everything a step does to the world goes through it: the
+/// machine only orders, the engine applies the orders after the step, in the order of giving, and commits (spec rule 13).
+/// `write_journal` is the methodology's operation; the other four are the orders of the MVP (a request, a cancel, a snapshot,
+/// the end), which the methodology derives from the description of a state and from rule 18 instead.
+export type Environment protocol {
+    // Write a journal event of the step: the engine adds the envelope.
+    mut @write_journal(event JournalEvent)
+    // Order a request to a party.
+    mut @order_send(order SendOrder)
+    // Order a cancel of the open request of a party.
+    mut @order_cancel(order CancelOrder)
+    // Order a snapshot (every commit saves one anyway; the order leaves a mark in the journal).
+    mut @order_save()
+    // The machine has ended: the engine cancels what is still open and records the outcome.
+    mut @order_finish(conclusion Conclusion)
+}
+
 /// Machine: what the engine requires of a machine. The match is structural: a type with these
-/// methods is a machine, no `impl` is needed.
+/// methods is a machine, no `impl` is needed. `S` is the state of the machine, typed.
 ///
-/// `step` is a PURE function of the old state and the event: no input-output, no clock, no random,
-/// nothing read from outside - everything it may use is in `state` and `event` (the event is
-/// self-contained). Its signature has no effects, so Oracle rejects a raw effect call inside it at compile time (`E_RAW_EFFECT_OP_UNDECLARED`);
-/// a call of a function that carries an effect is rejected with `--strict-effects`.
-export type Machine protocol {
+/// `step` takes the state, the event and the environment and returns the transition: nothing is read from outside - everything
+/// it may use is in `current` and `event` (the event is self-contained). Its signature has no effects, so Oracle rejects a raw
+/// effect call inside it at compile time (`E_RAW_EFFECT_OP_UNDECLARED`); a call of a function that carries an effect is
+/// rejected with `--strict-effects`. The environment only records the orders.
+export type Machine[S] protocol {
     // The name of the machine for the journal.
     @name() -> str
-    // The encoded initial state.
-    @initial() -> str
-    // The name of an encoded state for the journal line envelope ("Idle", "Awaiting", ...).
-    @state_name(state str) -> str
-    // One step: the new encoded state and the outputs, in the order of execution.
-    @step(state str, event Event) -> StepResult
+    // The initial state.
+    @initial() -> S
+    // The name of a state for the journal line envelope ("Idle", "Awaiting", ...).
+    @state_name(state S) -> str
+    // One step: where the machine goes; the orders go to the environment.
+    @step(current S, event Incoming, mut environment Environment) -> Transition[S]
+    // The state as text, for the snapshot (the border: the engine keeps the typed state).
+    @encode_state(state S) -> str
+    // The state from its text; text that is not a state is `None`.
+    @decode_state(text str) -> Option[S]
+}
+
+/// Order: one order of a machine as the engine records it, in the order of giving.
+export type Order enum
+    | Note(JournalEvent)
+    | Send(SendOrder)
+    | Cancel(CancelOrder)
+    | Save
+    | Finish(Conclusion)
+
+/// StepEnvironment: the environment of the engine for one step - it records the orders in the order they are given.
+export type StepEnvironment { orders []Order }
+
+/// An environment with no orders.
+export fn StepEnvironment.new() -> StepEnvironment => { orders: []Order.new() }
+
+export fn StepEnvironment mut @write_journal(event JournalEvent) -> () {
+    @orders.push(Note(event))
+}
+
+export fn StepEnvironment mut @order_send(order SendOrder) -> () {
+    @orders.push(Send(order))
+}
+
+export fn StepEnvironment mut @order_cancel(order CancelOrder) -> () {
+    @orders.push(Cancel(order))
+}
+
+export fn StepEnvironment mut @order_save() -> () {
+    @orders.push(Save)
+}
+
+export fn StepEnvironment mut @order_finish(conclusion Conclusion) -> () {
+    @orders.push(Finish(conclusion))
 }

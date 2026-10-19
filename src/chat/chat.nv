@@ -7,14 +7,16 @@
 // States: Idle (waits for a user message), Awaiting (a request to the agent is open), Done (the agent
 // answered), Failed (refused, cancelled by the user, no answer in time).
 // Events: UserMessage(text), AgentChunk(text), AgentDone, AgentRefused(code), Cancel, Timeout.
-// Outputs: send a request to the agent, write a journal line, save the snapshot, cancel the request, finish.
+// Orders to the environment: send a request to the agent, write a journal event, save the snapshot, cancel the
+// request, finish.
 //
-// `step` is a pure function of the encoded state and the event: no input-output, no clock, no random.
-// The typed core is `chat_step` (state and event as sum types); `ChatSession.step` is the border: it decodes
-// the state text, maps the engine event to a `ChatEvent`, calls the core and encodes the new state.
+// `step` takes the typed state and the event and returns the transition; nothing else is read: no input-output,
+// no clock, no random. The typed core is `chat_step` (state and event as sum types); `ChatSession.step` maps the
+// incoming event of the engine to a `ChatEvent` and calls the core. The state is encoded only at the border of
+// the snapshot (`encode_state`, `decode_state`).
 module crew_harness.chat
 
-import crew_harness.engine.{Event, EventKind, StepOutput, SendOrder, LogNote, CancelOrder, Conclusion, StepResult, FailCode}
+import crew_harness.engine.{Incoming, EventKind, Environment, Transition, SendOrder, CancelOrder, Conclusion, FailCode, JournalParam, param, journal_event, fail_code_word}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 
 /// ChatState: where the session is.
@@ -33,16 +35,13 @@ export type ChatEvent enum
     | Cancel
     | Timeout
 
-/// ChatStep: the typed result of a step.
-export type ChatStep { state ChatState, outputs []StepOutput }
-
 /// ChatSession: the machine. `party` is the id of the agent as a party of requests, `idle_term` the idle term in ms.
 export type ChatSession { party str, idle_term int }
 
 /// The session with the default agent party and the idle term of 30 seconds.
 export fn chat_session() -> ChatSession => { party: "agent", idle_term: 30000 }
 
-// ----- the text form of the state -----
+// ----- the text form of the state (the border of the snapshot) -----
 
 fn put(mut o JsonObject, key str, value JsonValue) -> () {
     ro replaced = o.insert(key, value)
@@ -111,8 +110,8 @@ export fn chat_state_name(state ChatState) -> str => match state {
 
 // ----- the events -----
 
-/// The event of the machine for an event of the engine; `None` - the machine does not know it.
-export fn chat_event_of(event Event) -> Option[ChatEvent] {
+/// The event of the machine for an incoming event of the engine; `None` - the machine does not know it.
+export fn chat_event_of(event Incoming) -> Option[ChatEvent] {
     match event.kind {
         EventKind.Input => {
             if event.name == "user_message" { return Some(UserMessage(event.input)) }
@@ -132,115 +131,122 @@ export fn chat_event_of(event Event) -> Option[ChatEvent] {
 }
 
 /// The events of the outside world as the creator of an event builds them (the envelope is stamped by the engine).
-export fn user_says(text str) -> Event => Event.word("user_message", text)
+export fn user_says(text str) -> Incoming => Incoming.word("user_message", text)
 
-export fn user_cancels() -> Event => Event.word("cancel", "")
+export fn user_cancels() -> Incoming => Incoming.word("cancel", "")
 
-export fn agent_chunk(request str, text str) -> Event => Event.incoming(EventKind.Progress, "agent_chunk", Some(request), text)
+export fn agent_chunk(request str, text str) -> Incoming => Incoming.incoming(EventKind.Progress, "agent_chunk", Some(request), text)
 
-export fn agent_done(request str) -> Event => Event.incoming(EventKind.Answered, "agent_done", Some(request), "")
+export fn agent_done(request str) -> Incoming => Incoming.incoming(EventKind.Answered, "agent_done", Some(request), "")
 
-export fn agent_refused(request str, code FailCode) -> Event => Event.incoming(EventKind.Refused, "agent_refused", Some(request), code.name())
+export fn agent_refused(request str, code FailCode) -> Incoming => Incoming.incoming(EventKind.Refused, "agent_refused", Some(request), code.name())
 
 // ----- the step -----
 
-fn note(text str) -> StepOutput => StepOutput.Log(LogNote { text })
-
-fn finish_answer(text str) -> StepOutput => StepOutput.Finish(Conclusion { failure: None, text })
-
-fn finish_refusal(code FailCode, text str) -> StepOutput => StepOutput.Finish(Conclusion { failure: Some(code), text })
-
 fn event_label(event ChatEvent) -> str => match event {
-    UserMessage(text) => "user message"
-    AgentChunk(text) => "agent chunk"
-    AgentDone => "agent done"
-    AgentRefused(code) => "agent refused"
+    UserMessage(text) => "user_message"
+    AgentChunk(text) => "agent_chunk"
+    AgentDone => "agent_done"
+    AgentRefused(code) => "agent_refused"
     Cancel => "cancel"
     Timeout => "timeout"
 }
 
-// An event the state does not expect: nothing changes, a note is left.
-fn ignored(state ChatState, event ChatEvent) -> ChatStep {
-    ChatStep { state, outputs: [note("ignored: ${event_label(event)} in ${chat_state_name(state)}")] }
+// An event the state does not expect: nothing changes, a journal event is left.
+fn ignored(state ChatState, event ChatEvent, mut environment Environment) -> Transition[ChatState] {
+    environment.write_journal(journal_event("event_ignored", [param("event", event_label(event)), param("state", chat_state_name(state))]))
+    Stay
 }
 
-/// The typed core of the machine: the new state and the outputs for a state and an event. Pure.
-export fn chat_step(session ChatSession, state ChatState, event ChatEvent) -> ChatStep {
+fn finish_answer(text str, mut environment Environment) -> () {
+    environment.order_finish(Conclusion { failure: None, text })
+}
+
+fn finish_refusal(code FailCode, text str, mut environment Environment) -> () {
+    environment.order_finish(Conclusion { failure: Some(code), text })
+}
+
+/// The typed core of the machine: the transition and the orders for a state and an event. Nothing but its arguments is read.
+export fn chat_step(session ChatSession, state ChatState, event ChatEvent, mut environment Environment) -> Transition[ChatState] {
     match state {
         Idle => match event {
-            UserMessage(text) => ChatStep {
-                state: Awaiting { user: text, reply: "" },
-                outputs: [
-                    note("user message: ${text}"),
-                    StepOutput.Send(SendOrder { party: session.party, input: text, idle_term: session.idle_term }),
-                    StepOutput.Save
-                ]
+            UserMessage(text) => {
+                environment.write_journal(journal_event("user_message", [param("text", text)]))
+                environment.order_send(SendOrder { party: session.party, input: text, idle_term: session.idle_term })
+                environment.order_save()
+                Go(Awaiting { user: text, reply: "" })
             }
-            Cancel => ChatStep {
-                state: Failed { code: FailCode.StoppedByHuman },
-                outputs: [note("cancelled by the user before the request"), finish_refusal(FailCode.StoppedByHuman, "cancelled by the user"), StepOutput.Save]
+            Cancel => {
+                environment.write_journal(journal_event("cancelled_before_request", []JournalParam.new()))
+                finish_refusal(FailCode.StoppedByHuman, "cancelled by the user", environment)
+                environment.order_save()
+                Go(Failed { code: FailCode.StoppedByHuman })
             }
-            _ => ignored(state, event)
+            _ => ignored(state, event, environment)
         }
         Awaiting { user, reply } => match event {
-            AgentChunk(text) => ChatStep {
-                state: Awaiting { user, reply: "${reply}${text}" },
-                outputs: [note("agent chunk: ${text}"), StepOutput.Save]
+            AgentChunk(text) => {
+                environment.write_journal(journal_event("agent_chunk", [param("text", text)]))
+                environment.order_save()
+                Go(Awaiting { user, reply: "${reply}${text}" })
             }
-            AgentDone => ChatStep {
-                state: Done { reply },
-                outputs: [note("agent done"), finish_answer(reply), StepOutput.Save]
+            AgentDone => {
+                environment.write_journal(journal_event("agent_done", []JournalParam.new()))
+                finish_answer(reply, environment)
+                environment.order_save()
+                Go(Done { reply })
             }
-            AgentRefused(code) => ChatStep {
-                state: Failed { code },
-                outputs: [note("agent refused: ${code.name()}"), finish_refusal(code, "the agent refused"), StepOutput.Save]
+            AgentRefused(code) => {
+                environment.write_journal(journal_event("agent_refused", [param("code", fail_code_word(code))]))
+                finish_refusal(code, "the agent refused", environment)
+                environment.order_save()
+                Go(Failed { code })
             }
-            Cancel => ChatStep {
-                state: Failed { code: FailCode.StoppedByHuman },
-                outputs: [
-                    note("cancelled by the user while waiting"),
-                    StepOutput.Cancel(CancelOrder { party: session.party }),
-                    finish_refusal(FailCode.StoppedByHuman, "cancelled by the user"),
-                    StepOutput.Save
-                ]
+            Cancel => {
+                environment.write_journal(journal_event("cancelled_while_waiting", []JournalParam.new()))
+                environment.order_cancel(CancelOrder { party: session.party })
+                finish_refusal(FailCode.StoppedByHuman, "cancelled by the user", environment)
+                environment.order_save()
+                Go(Failed { code: FailCode.StoppedByHuman })
             }
-            Timeout => ChatStep {
-                state: Failed { code: FailCode.Timeout },
-                outputs: [note("no answer in time"), finish_refusal(FailCode.Timeout, "no answer in time"), StepOutput.Save]
+            Timeout => {
+                environment.write_journal(journal_event("no_answer_in_time", []JournalParam.new()))
+                finish_refusal(FailCode.Timeout, "no answer in time", environment)
+                environment.order_save()
+                Go(Failed { code: FailCode.Timeout })
             }
-            _ => ignored(state, event)
+            _ => ignored(state, event, environment)
         }
-        Done { reply } => ignored(state, event)
-        Failed { code } => ignored(state, event)
+        Done { reply } => ignored(state, event, environment)
+        Failed { code } => ignored(state, event, environment)
     }
 }
 
-// ----- the machine for the engine (protocol `Machine`) -----
+// ----- the machine for the engine (protocol `Machine[ChatState]`) -----
 
 /// The name of the machine for the journal.
 export fn ChatSession @name() -> str => "ChatSession"
 
-/// The encoded initial state: Idle.
-export fn ChatSession @initial() -> str => encode_chat_state(Idle)
+/// The initial state: Idle.
+export fn ChatSession @initial() -> ChatState => Idle
 
-/// The name of an encoded state; text that is not a state is "Broken".
-export fn ChatSession @state_name(state str) -> str {
-    match decode_chat_state(state) {
-        Some(s) => chat_state_name(s)
-        None => "Broken"
-    }
-}
+/// The name of a state.
+export fn ChatSession @state_name(state ChatState) -> str => chat_state_name(state)
 
-/// One step on encoded values: pure, everything it uses is in `state` and `event`.
-export fn ChatSession @step(state str, event Event) -> StepResult {
-    match decode_chat_state(state) {
-        None => StepResult { state, outputs: [note("defect: the state is not a chat state, nothing changed")] }
-        Some(current) => match chat_event_of(event) {
-            None => StepResult { state, outputs: [note("ignored: unknown event ${event.name}")] }
-            Some(chat_event) => {
-                ro result = chat_step(@, current, chat_event)
-                StepResult { state: encode_chat_state(result.state), outputs: result.outputs }
-            }
+/// One step: the incoming event is mapped to a `ChatEvent` and goes to the core; an event the machine does not know is a
+/// journal event, not a crash.
+export fn ChatSession @step(current ChatState, event Incoming, mut environment Environment) -> Transition[ChatState] {
+    match chat_event_of(event) {
+        None => {
+            environment.write_journal(journal_event("event_unknown", [param("name", event.name)]))
+            Stay
         }
+        Some(chat_event) => chat_step(@, current, chat_event, environment)
     }
 }
+
+/// The state as text, for the snapshot.
+export fn ChatSession @encode_state(state ChatState) -> str => encode_chat_state(state)
+
+/// The state from its text; text that is not a state is `None`.
+export fn ChatSession @decode_state(text str) -> Option[ChatState] => decode_chat_state(text)

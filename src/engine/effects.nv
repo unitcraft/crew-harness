@@ -1,10 +1,11 @@
 // effects.nv - the outside world of the engine: four effects (spec rule 8: only the executor writes).
 //
-// Source: state-machine-engine-automaton.md, effects `Storage`, `Journal`, `Link`; here the
+// Source: state-machine-engine-automaton.md, effects `Store`, `Journal`, `Link`; here the
 // concrete types are used, because Oracle 0.1.0 has no generic effects in this shape and the
 // methodology itself fixes the concrete wire types. The clock is the standard `Time` effect.
 //
-// Handlers: tests use the in-memory ones (`memory.nv`); the real ones (file, ACP) are the next tasks.
+// Handlers: tests use the in-memory ones (`memory.nv`); the real ones are the file ones (`src/storage/`),
+// the PostgreSQL ones (`src/pgstore/`) and the ACP client (`src/acp/`).
 // A failed operation is not an error value: a real handler that cannot write stops the process
 // (the step is then not committed - spec rule 13), so the operations return plain values.
 
@@ -23,20 +24,21 @@ export type Store effect {
     fn load(id str) -> Option[Snapshot]
 }
 
-/// Agent: the link to the agent. `send` sends a request, `receive` returns the next incoming event
-/// without waiting (None - nothing arrived), `cancel` tells the agent that the request is cancelled,
-/// `ack` confirms an incoming event.
+/// Link: the link to the party (here the party is one - the agent). `send` sends a request, `receive` returns the next
+/// incoming event without waiting (None - nothing arrived), `cancel` tells the party that the request is cancelled,
+/// `ack` confirms an incoming event. The methodology's `signal` and `reply` are not here: there are no nested machines
+/// and no calling party.
 ///
 /// Acknowledgement: an event returned by `receive` is not yet the engine's. The handler keeps it as
 /// "taken, not confirmed" and hands it out again after a restart. The event carries its source key
-/// in `Event.id` (the creator of an incoming event may fill it; the engine stamps its own id and keeps
-/// the key in the journal line of the step as `src=<key>`). The engine calls `ack(key)` after the
+/// in `Incoming.id` (the creator of an incoming event may fill it; the engine stamps its own id and keeps
+/// the key in the journal event of the step as the parameter `source`). The engine calls `ack(key)` after the
 /// step of the event is committed, and after a restart for every key that the journal shows as
 /// committed (the process may have died between the commit and the `ack`). `ack` is idempotent.
 /// An event without a source key (an empty `id`) is never acknowledged.
-export type Agent effect {
+export type Link effect {
     fn send(request Request[str]) -> ()
-    fn receive() -> Option[Event]
+    fn receive() -> Option[Incoming]
     fn cancel(request_id str) -> ()
     fn ack(source str) -> ()
 }

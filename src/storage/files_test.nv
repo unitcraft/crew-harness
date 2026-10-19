@@ -2,7 +2,7 @@
 // names that cannot leave the data folder, a torn last line, a restart over the same folder.
 module crew_harness.storage
 
-import crew_harness.engine.{Journal, Store, JournalEntry, Snapshot}
+import crew_harness.engine.{Journal, Store, JournalEntry, Snapshot, journal_event, param}
 import std.fs.{Fs, real_fs, Path, read_text, write_text, remove_dir_all, try_exists}
 import std.os.{Os, real_os, temp_dir, pid}
 
@@ -18,7 +18,7 @@ fn fresh_root(name str) -> str {
 }
 
 fn entry_at(step int, text str) -> JournalEntry => {
-    trace: "t1-chat-1", step, cause: "input-${step}", state: "Idle", request: "", at: 1000 + step, kind: "note", text
+    trace: "t1-chat-1", step, cause: "input-${step}", state: "Idle", request: "", at: 1000 + step, event: journal_event("note", [param("text", text)])
 }
 
 fn present(path Path) -> bool {
@@ -128,8 +128,8 @@ test "journal: lines are appended in the order of writing and read back whole, C
         Journal.write(entry_at(3, "third"))
         ro all = Journal.read_all()
         assert(all.len() == 3)
-        assert(all[0].text == "первая")
-        assert(all[1].text == "second \"quoted\"\nwith a break")
+        assert(all[0].event.value_of("text") == Some("первая"))
+        assert(all[1].event.value_of("text") == Some("second \"quoted\"\nwith a break"))
         assert(all[2].step == 3)
     }
     ro text = text_of(path_of(root, "chat-1", "journal"))
@@ -157,7 +157,7 @@ test "journal: one file per session, a restart (a new handler over the same fold
         Journal.write(entry_at(2, "b"))
         ro all = Journal.read_all()
         assert(all.len() == 2)
-        assert(all[1].text == "b")
+        assert(all[1].event.value_of("text") == Some("b"))
     }
     with Journal = file_journal(root, "chat-2") {
         assert(Journal.read_all().len() == 1)
@@ -188,8 +188,8 @@ test "journal: a torn last line (the process died inside a write) is skipped, an
         Journal.write(entry_at(3, "after the tear"))
         ro all = Journal.read_all()
         assert(all.len() == 2)
-        assert(all[0].text == "a")
-        assert(all[1].text == "after the tear")
+        assert(all[0].event.value_of("text") == Some("a"))
+        assert(all[1].event.value_of("text") == Some("after the tear"))
     }
 }
 

@@ -4,7 +4,7 @@
 //     $env:CREW_REAL_ACP = "1"; nova test src/acp
 module crew_harness.acp_live
 
-import crew_harness.acp.{AcpConfig, AcpClient, open_client, acp_agent}
+import crew_harness.acp.{AcpConfig, AcpClient, open_client, acp_link}
 import std.fs.{Fs, real_fs, Path, create_dir_all, remove_dir_all}
 import std.os.{Os, real_os, env, temp_dir, pid}
 

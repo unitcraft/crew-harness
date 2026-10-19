@@ -2,7 +2,7 @@
 
 CrewHarness talks to a coding agent (by default `opencode acp`) through the Agent Client Protocol: JSON-RPC 2.0, one
 message per line, over the stdin and stdout of a child process. This directory is the client of that protocol on Nova
-(Oracle 0.1.0, Windows, Clang), the real handler of the effect `Agent` of the engine (`src/engine/`), the projection
+(Oracle 0.1.0, Windows, Clang), the real handler of the effect `Link` of the engine (`src/engine/`), the projection
 "ACP -> engine event -> page event", and a fake ACP agent for the tests. The file handlers of the effects `Journal` and
 `Store` are in `src/storage/`. Task 095 (`doc/tasks/095-acp-client/`); the next task is the session server (`src/server/`).
 
@@ -42,7 +42,7 @@ have a short name; to measure: start the test binary kept by `--keep-artifacts` 
 | `jsonrpc.nv` | `RpcMessage` (call, notification, result, failure, garbage), `parse_rpc`, `rpc_request_line`, `rpc_notification_line`, `rpc_result_line`, `rpc_error_line`, `LineSplitter` (bytes -> lines) |
 | `project.nv` | the projection: `project_update`, `project_permission`, `progress_event`, `stop_event`, `refused_event`, `tool_kind`, `rpc_key` (ACP -> engine) and `page_event` (engine -> page) |
 | `link.nv` | `connect`: the keeper fiber, the child process and the fibers around it (stdout reader, stderr reader, stdin writer, watcher of the process), `AgentLink` (three channels) |
-| `client.nv` | `AcpConfig`, `AcpClient` (the handshake, the queue of prompts, permissions, the inbox with acknowledgement), `open_client`, `acp_agent` (the handler of `Agent`), `decide`, `decide_event`, `close` |
+| `client.nv` | `AcpConfig`, `AcpClient` (the handshake, the queue of prompts, permissions, the inbox with acknowledgement), `open_client`, `acp_link` (the handler of `Link`), `decide`, `decide_event`, `close` |
 | `testdata/fake_agent.mjs` | the fake ACP agent (Node): the scenarios are chosen by the first word of the prompt |
 | `*_test.nv` | 45 checks: `jsonrpc_test` (18), `project_test` (27) |
 | `../acp_live/*_test.nv` | 37 checks, the unit `crew_harness.acp_live` (it imports `crew_harness.acp`): `client_test` (26, the handler over the fake agent), `ack_test` (4), `e2e_test` (6, engine + chat + files + ACP), `real_agent_test` (1, runs for real only with `CREW_REAL_ACP=1`) |
@@ -53,12 +53,12 @@ storage are imported (`crew_harness.engine`, `crew_harness.storage`); the engine
 ## How the client lives
 
 ```
-engine.pump ──> Agent.receive() ──> client.poll() ──try_recv──> [inbound channel] <── reader fiber  <── stdout of the agent
-engine.dispatch ──> Agent.send() ──> client.queue ──try_send──> [outgoing channel] ──> writer fiber ──> stdin of the agent
+engine.pump ──> Link.receive() ──> client.poll() ──try_recv──> [inbound channel] <── reader fiber  <── stdout of the agent
+engine.dispatch ──> Link.send() ──> client.queue ──try_send──> [outgoing channel] ──> writer fiber ──> stdin of the agent
                                                                 [inbound channel] <── stderr fiber, watcher fiber (exit)
 ```
 
-A read of a process pipe parks the fiber that does it, and `Agent.receive` must not wait; so fibers own the pipes and the `Child`
+A read of a process pipe parks the fiber that does it, and `Link.receive` must not wait; so fibers own the pipes and the `Child`
 and the program side calls only `try_send` and `try_recv` of channels. Reading and writing never wait for each other. All the
 fibers of one client (stdout reader, stderr reader, stdin writer, watcher of the process) live in ONE `supervised` scope of a
 detached "keeper" fiber that also starts the process (`link.nv`). The writer has a scope of its own that the watcher cancels when
@@ -99,7 +99,7 @@ closed it).
 
 ## The projection ACP -> engine event -> page event
 
-`name` is the name of the engine `Event`, `kind` its class (`Progress` renews the idle term of the request, `Answered` and
+`name` is the name of the engine `Incoming`, `kind` its class (`Progress` renews the idle term of the request, `Answered` and
 `Refused` close it). The page columns are the kinds of the page of task 093/094 (`src/web/README.md`, "The format of the
 event"); "-" means that the page has no kind for it and `page_event` gives None.
 
@@ -134,14 +134,14 @@ idle term and leave a note (changed in task 095: the machine used to take every 
 
 ## How an event is acknowledged
 
-The claim of task 091 ("an event taken by `Agent.receive` and not yet committed is lost with the process") is solved by an
+The claim of task 091 ("an event taken by `Link.receive` and not yet committed is lost with the process") is solved by an
 acknowledgement, in three parts:
 
-1. **A key and a file.** Every event the client makes gets a source key `acp-<n>` in `Event.id`; the numbers never go back. With
+1. **A key and a file.** Every event the client makes gets a source key `acp-<n>` in `Incoming.id`; the numbers never go back. With
    an inbox file (`AcpConfig.inbox_path`, `<data folder>/<session>.inbox`) the event is appended to the file BEFORE it is handed out.
 2. **`receive` hands out, `ack` forgets.** A handed-out event is "taken", not confirmed. The engine accepts the event (journal
-   lines, then the snapshot - the commit) and only then calls `Agent.ack(key)` (the new fourth operation of the effect `Agent`).
-   The key is also written to the journal line of the step (`event` line, `src=<key>` at the end of its text). The client writes
+   lines, then the snapshot - the commit) and only then calls `Link.ack(key)` (the fourth operation of the effect `Link`).
+   The key is also written to the journal event of the step (`event_accepted`, the parameter `source`). The client writes
    `ack` to the inbox file.
 3. **A restart.** `open_client` reads the inbox file and puts the events without an `ack` back first, in the order of their
    numbers, before anything new (and compacts the file; the next number is kept in its first line). If the process died
@@ -164,7 +164,7 @@ per ack until the next start compacts it.
 Reproductions of the new defects: `spikes/env/repro_acp/` (run one: `cd spikes/env/repro_acp; nova test src/<name>`; `repro_child_pipes` is a program).
 
 - a user type named `Output` breaks the C once `std.os` is imported (its `Output` is the result of `Command.output()`):
-  the engine type was renamed to `StepOutput` (`user_output_vs_std_os`);
+  the engine type was renamed to `StepOutput` (`user_output_vs_std_os`); task 102 removed that type: a machine gives its orders to the `Environment`;
 - a one-character string literal where a `char` is expected (`trim_end_matches("\r")`) passes the checker and breaks the C
   (`char_param_str_literal`); `strip_suffix` is used;
 - the result of a fluent setter of a value type cannot be assigned back (`command = command.arg(a)` -> a pointer to a value in the

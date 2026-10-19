@@ -1,14 +1,16 @@
 // types.nv - the types of the state machine engine (subset of the methodology for the MVP).
 //
-// Source: state-machine-engine-automaton.md, "Types" (Request, Response, FailCode, Event envelope)
-// and state-machine-spec.md rules 15, 16, 31, translated to English names; the dictionary
-// "term -> identifier -> where in the methodology" is GLOSSARY.md beside this file.
+// Source: state-machine-engine-automaton.md, "Types" (Request, Response, FailCode, Incoming, Transition,
+// Waiting, JournalEntry, JournalEvent) and state-machine-spec.md rules 15, 16, 31, translated to English names;
+// the journal is the event with a code and parameters of state-machine-journal.md (version 6 of the dictionary).
+// The dictionary "term -> identifier -> where in the methodology" is GLOSSARY.md beside this file; the table of the
+// differences from the methodology is `doc/tasks/102-align-glossary/mapping.md`.
 //
 // Oracle 0.1.0 limits that shaped these types (reproductions: README.md, "Oracle 0.1.0"):
 //  - a generic sum type with a `str` payload variant does not compile (`Output[I]` with `Log(str)`),
-//    so the sum types here are not generic or carry records;
-//  - a generic record holding a sum type (`Engine[M, S]` with an enum `S`) does not compile,
-//    so the machine state crosses the protocol as encoded text (`str`).
+//    so the sum types here are not generic or carry records; `Transition[S]` is generic over its payload only;
+//  - a generic protocol and a record generic over the state compile when the type arguments of a free function
+//    are written out (`start_engine[ChatState, ChatSession](...)`); inferred, they break the C.
 
 module crew_harness.engine
 
@@ -41,7 +43,7 @@ export type Response[R] enum
     | Answer(Reply[R])
     | Refusal(Rejection)
 
-/// EventKind: the class of an event, the only thing the engine itself branches on (spec rule 6).
+/// EventKind: the class of an incoming event, the only thing the engine itself branches on (spec rule 6).
 ///  - Input: comes from outside and belongs to no request (a user's word);
 ///  - Progress: partial data of an open request; it keeps the request open and renews its idle term;
 ///  - Answered: the final answer, closes the request;
@@ -54,18 +56,16 @@ export type EventKind enum
     | Refused
     | Expired
 
-/// Event: a self-contained event. It carries everything a machine may use: nothing is read from
-/// the environment. The creator fills `kind`, `name`, `request` and `input`; the engine stamps the
-/// rest on acceptance: `id` ("<kind>-<number>"), `trace`, `step` (the step the event begins),
-/// `at` (milliseconds of the clock). `request` is the id of the request the event answers.
-export type Event { id str, trace str, step int, kind EventKind, name str, request Option[str], input str, at int }
+/// Incoming: the envelope of an event that arrives (the methodology's `Incoming`; the event of a machine is its own
+/// `Event`). It is self-contained: it carries everything a machine may use, nothing is read from the environment.
+/// The creator fills `kind`, `name`, `request` and `input`; the engine stamps the rest on acceptance: `id`
+/// ("<kind>-<number>"), `trace`, `step` (the step the event begins), `at` (milliseconds of the clock).
+/// `request` is the id of the request the event answers.
+export type Incoming { id str, trace str, step int, kind EventKind, name str, request Option[str], input str, at int }
 
 /// SendOrder: an order of a machine to send a request to a party. The engine gives it the id,
 /// the attempt number, the trace and the step.
 export type SendOrder { party str, input str, idle_term int }
-
-/// LogNote: a journal line ordered by a machine; the engine adds the envelope.
-export type LogNote { text str }
 
 /// CancelOrder: close the open request of the party without an outcome (spec rule 18) and tell the party.
 export type CancelOrder { party str }
@@ -74,51 +74,50 @@ export type CancelOrder { party str }
 /// Some is a refusal with that reason.
 export type Conclusion { failure Option[FailCode], text str }
 
-/// StepOutput: a command of a machine to the engine (a step is a pure function, the engine applies the outputs).
-///  - Send: send a request;
-///  - Log: write a line to the journal;
-///  - Cancel: cancel the open request of a party;
-///  - Save: save the snapshot (in the MVP every commit saves it anyway, the order is explicit and
-///    leaves a journal mark);
-///  - Finish: the machine has ended; the engine cancels what is still open and records the outcome.
-export type StepOutput enum
-    | Send(SendOrder)
-    | Log(LogNote)
-    | Cancel(CancelOrder)
-    | Save
-    | Finish(Conclusion)
+/// Transition: where a step leads (the methodology's `Transition`; `Rerun` and `NotAwaited` are not in the MVP).
+///  - Go: to the state;
+///  - Stay: the same state.
+export type Transition[S] enum
+    | Go(S)
+    | Stay
 
-/// StepResult: what `step` returns - the new state (encoded) and the outputs in the order of execution.
-export type StepResult { state str, outputs []StepOutput }
+/// JournalParam: a parameter of a journal event - a name and a value that is always a string (the caller writes `"${x}"`).
+export type JournalParam { name str, value str }
+
+/// JournalEvent: what happened, as a structure: a Latin key in `snake_case` and its parameters. The Russian text of a line is
+/// built from the template of the code by whoever shows the journal (state-machine-journal.md); the event has no ready text.
+export type JournalEvent { code str, params []JournalParam }
 
 /// JournalEntry: one line of the journal with the trace envelope (spec rule 31).
 /// `cause` is the id of the event the step began with, `state` the name of the machine state,
-/// `request` the request id or "", `at` the clock in milliseconds, `kind` the sort of the line
-/// ("start", "event", "note", "request", "sent", "closed", "discarded", "cancel", "cancel_sent",
-/// "snapshot", "finish", "restart") and `text` the details.
-export type JournalEntry { trace str, step int, cause str, state str, request str, at int, kind str, text str }
+/// `request` the request id or "", `at` the clock in milliseconds and `event` what happened.
+export type JournalEntry { trace str, step int, cause str, state str, request str, at int, event JournalEvent }
 
 /// Snapshot: everything needed to resume; `data` is JSON text, `step` is repeated for a check.
 export type Snapshot { step int, data str }
 
+/// Waiting: how long a request has been waited for: `sent` is the clock in milliseconds when the wait began (ordered or
+/// renewed by a chunk), `term` the idle term in milliseconds (0 - no term). No answer in time: `term > 0` and `sent + term <= now`.
+export type Waiting { sent int, term int }
+
 /// OpenRequest: a request sent (or ordered) and not yet closed. `input` is kept to be able to
-/// send the same request again if it was ordered but never sent; `deadline` is the clock in
-/// milliseconds when the idle term passes (0 - no term).
-export type OpenRequest { id str, party str, attempt int, step int, input str, idle_term int, deadline int }
+/// send the same request again if it was ordered but never sent.
+export type OpenRequest { id str, party str, attempt int, step int, input str, waiting Waiting }
 
 /// PartyCounter: the attempt counter of a party (spec rule 15): grows on every order, never reset.
 export type PartyCounter { party str, attempts int }
 
 /// EngineState: the data of the engine itself (spec: "engine data"); saved whole in the snapshot.
+///  - `state` is the state of the machine, typed by the machine; it is encoded only at the border of the snapshot;
 ///  - `step` is the number of committed steps, `event_counter` the number of arrived events;
 ///  - `closed` keeps the ids of closed requests: a reply to one of them is discarded and journaled;
 ///  - `final_kind` is "" (running), "answer" or "refusal"; `final_text`, `final_code`, `final_step` describe the outcome.
-export type EngineState {
+export type EngineState[S] {
     trace str,
     step int,
     event_counter int,
-    machine_state str,
-    open []OpenRequest,
+    state S,
+    open_requests []OpenRequest,
     closed []str,
     counters []PartyCounter,
     final_kind str,
@@ -127,7 +126,7 @@ export type EngineState {
     final_step int
 }
 
-/// FailCode name: the text used in the journal, in events and in the snapshot.
+/// FailCode name: the text used in events, in the snapshot and in the outcome.
 export fn FailCode @name() -> str => match @ {
     NoResult => "NoResult"
     ModelRefused => "ModelRefused"
@@ -139,6 +138,20 @@ export fn FailCode @name() -> str => match @ {
     CeilingReached => "CeilingReached"
     MaxTokens => "MaxTokens"
     MaxTurnRequests => "MaxTurnRequests"
+}
+
+/// The word of a failure code for the parameters of a journal event (the methodology's helper).
+export fn fail_code_word(reason FailCode) -> str => match reason {
+    NoResult => "no_result"
+    ModelRefused => "model_refused"
+    ConnectionLost => "connection_lost"
+    FormNotFixed => "form_not_fixed"
+    Timeout => "timeout"
+    Cancelled => "cancelled"
+    StoppedByHuman => "stopped_by_human"
+    CeilingReached => "ceiling_reached"
+    MaxTokens => "max_tokens"
+    MaxTurnRequests => "max_turn_requests"
 }
 
 /// The whole closed list, in the order of the specification.
@@ -190,24 +203,38 @@ export fn EventKind @closes_request() -> bool => match @ {
     _ => false
 }
 
+/// A parameter of a journal event: the value is a string, the caller makes it (`"${x}"`).
+export fn param(name str, value str) -> JournalParam => { name, value }
+
+/// A journal event: a code and its parameters.
+export fn journal_event(code str, params []JournalParam) -> JournalEvent => { code, params }
+
+/// The value of a parameter of a journal event, None - there is no such parameter.
+export fn JournalEvent @value_of(name str) -> Option[str] {
+    for p in @params {
+        if p.name == name { return Some(p.value) }
+    }
+    None
+}
+
 /// An incoming event with an empty envelope: the engine stamps `id`, `trace`, `step` and `at`.
-export fn Event.incoming(kind EventKind, name str, request Option[str], input str) -> Event => {
+export fn Incoming.incoming(kind EventKind, name str, request Option[str], input str) -> Incoming => {
     id: "", trace: "", step: 0, kind, name, request, input, at: 0
 }
 
-/// The same incoming event with a source key in `id`: the key by which the handler of the agent knows the event
-/// and the engine acknowledges it after the commit (see the effect `Agent`, `ack`).
-export fn Event.from_source(key str, event Event) -> Event => {
+/// The same incoming event with a source key in `id`: the key by which the handler of the link knows the event
+/// and the engine acknowledges it after the commit (see the effect `Link`, `ack`).
+export fn Incoming.from_source(key str, event Incoming) -> Incoming => {
     id: key, trace: event.trace, step: event.step, kind: event.kind, name: event.name,
     request: event.request, input: event.input, at: event.at
 }
 
 /// A word from outside that belongs to no request.
-export fn Event.word(name str, input str) -> Event => Event.incoming(Input, name, None, input)
+export fn Incoming.word(name str, input str) -> Incoming => Incoming.incoming(Input, name, None, input)
 
-/// An empty engine state for a trace (the machine state is set by the caller).
-export fn EngineState.fresh(trace str, machine_state str) -> EngineState => {
-    trace, step: 0, event_counter: 0, machine_state,
-    open: []OpenRequest.new(), closed: []str.new(), counters: []PartyCounter.new(),
+/// An empty engine state for a trace (the state of the machine is set by the caller).
+export fn EngineState.fresh[S](trace str, state S) -> EngineState[S] => {
+    trace, step: 0, event_counter: 0, state,
+    open_requests: []OpenRequest.new(), closed: []str.new(), counters: []PartyCounter.new(),
     final_kind: "", final_text: "", final_code: "", final_step: 0
 }

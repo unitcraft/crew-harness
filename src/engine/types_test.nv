@@ -1,5 +1,8 @@
-// types_test.nv - the closed list of failures, the kinds of events and the envelope of an incoming event.
+// types_test.nv - the closed list of failures, the kinds of events, the envelope of an incoming event, the journal event
+// and the environment that records the orders of a step.
 module crew_harness.engine
+
+import std.text
 
 test "fail codes: the closed list has exactly ten codes with the names of the specification" {
     mut names = []str.new()
@@ -58,7 +61,7 @@ test "event kinds: only a final answer, a refusal and an expired term close a re
 }
 
 test "incoming event: the creator fills the content, the envelope is empty until the engine stamps it" {
-    ro e = Event.word("user_message", "hello")
+    ro e = Incoming.word("user_message", "hello")
     assert(e.id == "")
     assert(e.trace == "")
     assert(e.step == 0)
@@ -66,4 +69,60 @@ test "incoming event: the creator fills the content, the envelope is empty until
     assert(e.name == "user_message")
     assert(e.input == "hello")
     assert(e.request == None)
+}
+
+test "fail codes: every code has a distinct word for the journal, in snake_case" {
+    mut seen = []str.new()
+    for code in FailCode.all() {
+        ro word = fail_code_word(code)
+        assert(word.byte_len() > 0)
+        assert(!word.contains(" "))
+        assert(!seen.contains(word))
+        seen.push(word)
+    }
+    assert(fail_code_word(FailCode.StoppedByHuman) == "stopped_by_human")
+    assert(fail_code_word(FailCode.NoResult) == "no_result")
+}
+
+test "journal event: a code and parameters by name, a missing parameter is None" {
+    ro event = journal_event("request_ordered", [param("party", "agent"), param("attempt", "1")])
+    assert(event.code == "request_ordered")
+    assert(event.params.len() == 2)
+    assert(event.value_of("party") == Some("agent"))
+    assert(event.value_of("attempt") == Some("1"))
+    assert(event.value_of("reason") == None)
+}
+
+test "environment: the orders of a step are recorded in the order they are given" {
+    mut environment = StepEnvironment.new()
+    environment.write_journal(journal_event("user_message", [param("text", "hi")]))
+    environment.order_send(SendOrder { party: "agent", input: "hi", idle_term: 30000 })
+    environment.order_cancel(CancelOrder { party: "agent" })
+    environment.order_save()
+    environment.order_finish(Conclusion { failure: None, text: "done" })
+    assert(environment.orders.len() == 5)
+    mut names = []str.new()
+    for order in environment.orders {
+        match order {
+            Note(event) => names.push("note:${event.code}")
+            Send(send) => names.push("send:${send.party}")
+            Cancel(cancel) => names.push("cancel:${cancel.party}")
+            Save => names.push("save")
+            Finish(conclusion) => names.push("finish:${conclusion.text}")
+        }
+    }
+    assert(names.join(",") == "note:user_message,send:agent,cancel:agent,save,finish:done")
+}
+
+test "transition: Go carries the state, Stay carries nothing" {
+    ro go Transition[str] = Go("next")
+    ro stay Transition[str] = Stay
+    match go {
+        Go(state) => assert(state == "next")
+        Stay => assert(false)
+    }
+    match stay {
+        Go(state) => assert(false)
+        Stay => assert(true)
+    }
 }

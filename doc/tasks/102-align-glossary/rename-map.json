@@ -1,0 +1,268 @@
+{
+  "task": "102-align-glossary",
+  "glossary_version": 6,
+  "methodology_commit": "744e0af",
+  "note": "Map from the names of the product after task 091 (the code of origin/main before task 102) to the names of the dictionary version 6. rename.mjs applies the 'rules' to the *.nv files of a tree by word boundaries; the 'manual' list names what a script cannot rewrite (structure changes) - rename.mjs prints every remaining occurrence of those, per file. The table of decisions with the reasons is mapping.md.",
+  "rules": [
+    {
+      "id": "event-to-incoming",
+      "type": "word",
+      "old": "Event",
+      "new": "Incoming",
+      "skip_preceded_by": [
+        "ListenerMsg."
+      ],
+      "why": "the envelope of an event is Incoming in the dictionary (section 3.2, item 10); Event is the event of a machine (ChatEvent here)"
+    },
+    {
+      "id": "agent-to-link",
+      "type": "word",
+      "old": "Agent",
+      "new": "Link",
+      "skip_followed_by": [
+        " Client Protocol"
+      ],
+      "why": "the effect Agent is Link (item 13); operations send, receive, cancel are the same, ack stays"
+    },
+    {
+      "id": "acp-agent-handler",
+      "type": "word",
+      "old": "acp_agent",
+      "new": "acp_link",
+      "why": "the handler of the effect Link over the ACP client"
+    },
+    {
+      "id": "memory-agent-handler",
+      "type": "word",
+      "old": "memory_agent",
+      "new": "memory_link",
+      "why": "the in-memory handler of the effect Link"
+    },
+    {
+      "id": "accept-to-on-arrival",
+      "type": "regex",
+      "pattern": "\\b([A-Za-z_][A-Za-z0-9_]*)\\.accept\\(",
+      "replace": "$1.on_arrival(",
+      "only_if_file_matches": "crew_harness\\.engine",
+      "skip_receiver": "^(listener|socket|server|tcp|stream|conn|connection|acceptor)$",
+      "why": "Engine.accept is Engine.on_arrival (the dictionary's 'при_приходе'); applies in the files that import the engine"
+    },
+    {
+      "id": "accept-definition",
+      "type": "regex",
+      "pattern": "\\bEngine\\[M Machine\\] (mut )?@accept\\(",
+      "replace": "Engine[M Machine[S], S] $1@on_arrival(",
+      "why": "the definition of the method (only in the engine itself)"
+    },
+    {
+      "id": "machine-state-accessor",
+      "type": "regex",
+      "pattern": "\\.machine_state\\(\\)",
+      "replace": ".state()",
+      "why": "Engine.machine_state() is Engine.state() and returns the typed state"
+    },
+    {
+      "id": "engine-type-args",
+      "type": "regex",
+      "pattern": "\\bEngine\\[ChatSession\\]",
+      "replace": "Engine[ChatSession, ChatState]",
+      "why": "Engine is generic over the machine and its state"
+    },
+    {
+      "id": "start-engine-args",
+      "type": "regex",
+      "pattern": "\\b(start_engine|resume_engine)\\((chat_session\\(\\))",
+      "replace": "$1[ChatState, ChatSession]($2",
+      "why": "the type arguments of a free function over a generic protocol are written out (inferred, Oracle 0.1.0 breaks the C)"
+    },
+    {
+      "id": "snapshot-codec-args",
+      "type": "regex",
+      "pattern": "\\b(decode_snapshot|encode_snapshot)\\((?!\\s*chat_session)",
+      "replace": "$1[ChatState, ChatSession](chat_session(), ",
+      "only_if_file_matches": "crew_harness\\.engine",
+      "why": "the snapshot codec takes the machine (it encodes the typed state at the border)"
+    },
+    {
+      "id": "engine-state-open-field",
+      "type": "regex",
+      "pattern": "\\.open\\.(len|push|contains)\\(",
+      "replace": ".open_requests.$1(",
+      "only_if_file_matches": "crew_harness\\.engine",
+      "why": "EngineState.open is EngineState.open_requests"
+    }
+  ],
+  "manual": [
+    {
+      "old": "StepOutput",
+      "note": "removed: a machine gives its orders to the Environment (write_journal, order_send, order_cancel, order_save, order_finish)"
+    },
+    {
+      "old": "StepResult",
+      "note": "removed: Machine.step returns Transition[S] (Go(state) or Stay)"
+    },
+    {
+      "old": "LogNote",
+      "note": "removed: Environment.write_journal(journal_event(code, params))"
+    },
+    {
+      "old": "machine_state",
+      "note": "EngineState.machine_state (encoded text) is EngineState.state (typed); the snapshot key is state"
+    },
+    {
+      "old": "JournalEntry",
+      "note": "no kind and no text: entry.event.code and entry.event.params (entry.event.value_of(name)); codes are in mapping.md, section 5"
+    },
+    {
+      "old": "OpenRequest",
+      "note": "idle_term and deadline are replaced by waiting: Waiting { sent, term }"
+    },
+    {
+      "old": "Machine",
+      "note": "protocol Machine[S]: initial() -> S, state_name(S), step(S, Incoming, mut Environment) -> Transition[S], encode_state(S) -> str, decode_state(str) -> Option[S]"
+    },
+    {
+      "old": "ChatStep",
+      "note": "removed: chat_step(session, state, event, mut environment) -> Transition[ChatState]"
+    },
+    {
+      "old": ".accept(",
+      "note": "check every receiver: the engine's accept is on_arrival, a socket's accept is not touched"
+    }
+  ],
+  "manual_patterns": [
+    "\\bStepOutput\\b",
+    "\\bStepResult\\b",
+    "\\bLogNote\\b",
+    "\\bmachine_state\\b",
+    "\\.kind\\s*==\\s*\"(start|event|note|request|sent|closed|discarded|cancel|cancel_sent|snapshot|finish|restart)\"",
+    "\\bentry\\.text\\b",
+    "\\.deadline\\b|\\bdeadline:",
+    "\\.accept\\("
+  ],
+  "journal_codes": {
+    "start": "machine_started",
+    "event": "event_accepted",
+    "discarded": "reply_discarded",
+    "request": "request_ordered",
+    "sent": "request_sent",
+    "closed": "request_closed",
+    "cancel": "cancel_ordered",
+    "cancel_sent": "cancel_sent",
+    "snapshot": "snapshot_ordered",
+    "finish": "machine_finished",
+    "restart": "engine_resumed",
+    "note": "the codes of the machine (chat: user_message, cancelled_before_request, agent_chunk, agent_done, agent_refused, cancelled_while_waiting, no_answer_in_time, event_ignored, event_unknown) or cancel_without_request of the engine"
+  },
+  "files": {
+    "src/acp/client.nv": {
+      "rules": {
+        "event-to-incoming": 13,
+        "agent-to-link": 6,
+        "acp-agent-handler": 1
+      },
+      "sha256_after": "b6c63494a2a1cf64cf0555f659a12c54f10a5253e909b7f96f61c2654e2efd9f",
+      "same_as_task_result": true
+    },
+    "src/acp/link.nv": {
+      "rules": {
+        "agent-to-link": 1
+      },
+      "sha256_after": "4e424864c2917f65521231b2eb045cebee260b86dc4fc2496ac55ae554fbd355",
+      "same_as_task_result": true
+    },
+    "src/acp/project.nv": {
+      "rules": {
+        "event-to-incoming": 14
+      },
+      "sha256_after": "b1e6809bb0aa541fd0e42c40d39390111ea50eda3c8f4a470f68c5f802382e75",
+      "same_as_task_result": true
+    },
+    "src/acp/project_test.nv": {
+      "rules": {
+        "event-to-incoming": 5
+      },
+      "sha256_after": "ecbf042f8b3825e2eb50df9178a81b7a7955d12863b981b44a5c2f47b4fc657a",
+      "same_as_task_result": true
+    },
+    "src/acp_live/ack_test.nv": {
+      "rules": {
+        "event-to-incoming": 5,
+        "agent-to-link": 22,
+        "acp-agent-handler": 7
+      },
+      "sha256_after": "4fc082c2699e912649f1d494c252a9662afe123c2b42c49e0c69e46635fbc109",
+      "same_as_task_result": true
+    },
+    "src/acp_live/client_test.nv": {
+      "rules": {
+        "event-to-incoming": 17,
+        "agent-to-link": 74,
+        "acp-agent-handler": 26
+      },
+      "sha256_after": "3c0a49f105b51cfffa0433063649e61059e4109c477f4054e38116871a2a66c6",
+      "same_as_task_result": true
+    },
+    "src/acp_live/e2e_test.nv": {
+      "rules": {
+        "event-to-incoming": 3,
+        "agent-to-link": 6,
+        "acp-agent-handler": 6,
+        "machine-state-accessor": 3,
+        "engine-type-args": 6,
+        "start-engine-args": 2
+      },
+      "sha256_after": "8aa76ceb4fb4a78d708f6833650054bb1f1524413a507b41f15b7caaf7bd3ba7",
+      "same_as_task_result": false
+    },
+    "src/acp_live/real_agent_test.nv": {
+      "rules": {
+        "acp-agent-handler": 1
+      },
+      "sha256_after": "5a73ba9c43810e32bac3eb798a37d6e47ed7f4d2a4349df640c4a135929ce1bc",
+      "same_as_task_result": true
+    },
+    "src/pgdb/wire.nv": {
+      "rules": {
+        "event-to-incoming": 1
+      },
+      "sha256_after": "58c4c1423c95b5015fc1574dd7d5c8718e975b32fa426819060e98b030139fdb",
+      "same_as_task_result": false
+    },
+    "src/pgstore/engine_test.nv": {
+      "rules": {
+        "event-to-incoming": 3,
+        "agent-to-link": 13,
+        "memory-agent-handler": 13,
+        "accept-to-on-arrival": 2,
+        "machine-state-accessor": 7,
+        "engine-type-args": 14,
+        "start-engine-args": 4,
+        "snapshot-codec-args": 2
+      },
+      "sha256_after": "ec1520f44ec7f9df8425fd644464445eb2a5eed0bce8570fafab975fe57e351d",
+      "same_as_task_result": false
+    },
+    "src/storage/files_engine_test.nv": {
+      "rules": {
+        "event-to-incoming": 2,
+        "agent-to-link": 6,
+        "memory-agent-handler": 6,
+        "accept-to-on-arrival": 1,
+        "machine-state-accessor": 3,
+        "engine-type-args": 5,
+        "start-engine-args": 2
+      },
+      "sha256_after": "ead59e1dd38db850416711fc64f764b40d2259a09e2a7b0a3a41248b46be4586",
+      "same_as_task_result": false
+    }
+  },
+  "base": {
+    "commit": "dcd000d",
+    "note": "the tree src/ of this commit (origin/main before task 102) is the input of the script; the folders engine and chat are rewritten by hand and are skipped (--skip engine --skip chat)"
+  },
+  "manual_files": [
+    "src/acp_live/e2e_test.nv",
+    "src/pgstore/handlers_test.nv"
+  ]
+}

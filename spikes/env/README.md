@@ -12,7 +12,7 @@ task 090 (`doc/tasks/090-product-env-spike/`).
 | `ws_echo/` | Polaris server on `127.0.0.1`: `GET /` (HTML), `GET /health`, WebSocket echo `/ws` | `ws_echo_check.mjs` (Node) |
 | `acp/` | `acp_initialize.mjs`: one `initialize` request to `opencode acp` over stdio, no login, no session | exit code 0 and the printed version |
 | `repro_mut_binding/` | minimal reproduction of a Polaris documentation example that Oracle 0.1.0 rejects | see "Known problems" |
-| `repro_engine/` | minimal reproductions of Oracle 0.1.0 defects found while writing the state machine engine (task 091, items 8-13) and its PostgreSQL store (task 098, items 21, 23-25) | see "Known problems", items 8-18 |
+| `repro_engine/` | minimal reproductions of Oracle 0.1.0 defects found while writing the state machine engine (task 091, items 8-13), its PostgreSQL store (task 098, items 21, 23-25) and its alignment to the dictionary (task 102, items 26-28) | see "Known problems", items 8-28 |
 | `repro_acp/` | minimal reproductions of Oracle 0.1.0 defects found while writing the ACP client (task 095) | see "Known problems", items 14-18 and 20 |
 | `repro_child_pipes/` | a program: pipes of a child process that now and then do not come back (task 095) | see "Known problems", item 19 |
 | `repro_pg_event/` | a user record `Event` next to the driver `postgres.pgnet` (task 098, item 22); needs `nova update` (the driver comes from git) | see "Known problems", item 22 |
@@ -155,6 +155,7 @@ per defect under `src/`, each a complete test file that must PASS and does not o
     called with `S`, `B` to be inferred, generates C with an undeclared variable (`use of undeclared identifier 'r'`).
 13. **`generic_protocol_one_param`**: the same with one type parameter (`M Machine[S]`, `S` a sum type). The engine therefore
     uses a protocol without type parameters over concrete types, and the machine state crosses it as encoded text.
+    **Task 102 found the way round (item 26): written out, the type arguments compile; the engine now has a typed state.**
 
 Two more observed while writing the engine and not reduced to a reproduction: `Some(Answer(...))` returned from a method of a
 generic record as `Option[Response[str]]` once produced C with the inner enum without its type argument (`returning
@@ -215,6 +216,23 @@ Found by task 098 (the PostgreSQL store, `src/pg*`); the reproductions are in `r
 25. **`nested_module`**: a module in a folder two levels under the source root (`src/nested_module/inner/inner.nv`, no `.nv` in the
     middle folder), declared as the path from the source root with the package prefix: E_D78_MODULE_PATH_MISMATCH although the
     "expected (rev-1 legacy)" text printed by the compiler equals the declared one.
+
+Found by task 102 (the engine aligned to the dictionary of the methodology, version 6); the reproductions are in `repro_engine/src/`:
+
+26. **`typed_state_explicit`** (a working sample, PASS): the defects of items 12 and 13 are in the INFERENCE of the type arguments. With the arguments of the free
+    functions written out (`start_engine[ChatState, ChatSession](...)`, `resume_engine[ChatState, ChatSession](...)`) the protocol `Machine[S]`, the records
+    `Engine[M, S]` and `EngineState[S]` with a sum type `S` that has payloads, `Transition[S]` and a protocol parameter `mut environment Environment` all compile and
+    run; methods of a generic record need no arguments (`e.on_arrival(...)`). The engine of the product uses this form since task 102 (the state is typed, encoded
+    only at the border of the snapshot). Parsing detail met on the way: a record literal in the head of a `match` (`match f[A, B](Chat { ... }) { ... }`) is a
+    syntax error (`expected ')', got '{'`), a name bound before the `match` works.
+27. **`option_try_generic_enum`**: the operator `?` on an `Option` whose payload is a sum type, in a generic function instantiated with that type, writes the local
+    with the type name `Nova_Mode_p`, which does not exist (`unknown type name`, then pointer/value mismatches). `match value { None => ..., Some(inner) => ... }` is
+    fine; the engine's `decode_snapshot` uses it.
+
+28. **`import_missing_name`** (the test PASSES, and it must not): `import m.{Name}` of a name that `m` does not export is accepted. After a rename the old name
+    stays in the import lists and the build is green; a USE of the old name is what turns it red. A red probe of a rename puts the old name at a use.
+
+The clash of item 22 is gone from the engine's side: its type `Event` is `Incoming` since task 102 (the driver's `ListenerMsg.Event` stays).
 
 Also met in task 098, without a reproduction: `nova test` stops a unit that runs longer than 60 seconds (`--timeout`, the
 default) and prints only `TIMEOUT`, with no sign of which test is slow; a SCRAM login on the unoptimized build costs about a

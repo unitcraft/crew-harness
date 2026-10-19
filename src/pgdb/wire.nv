@@ -1,7 +1,7 @@
 // wire.nv - one connection to PostgreSQL: a socket and the pure `Session` of the driver `nova-postgres` (task 098).
 //
 // Why not `postgres.pgnet`, the adapter of the driver itself: its module also holds `listener.nv`, where the variant
-// `ListenerMsg.Event { event: ... }` is read as a record literal of the type `Event` of the ENGINE when both are in one
+// `ListenerMsg.Event { event: ... }` is read as a record literal of the event envelope of the ENGINE (called by the same name before task 102, `Incoming` now) when both are in one
 // program (E_MISSING_FIELD_IN_LITERAL, see src/pg/README.md and spikes/env/repro_engine). The handlers of the engine and the
 // driver must be in one program, so the socket loop of `pgnet/conn.nv` (about sixty lines: write what the session owes,
 // read a chunk, feed it, collect the events up to ReadyForQuery) is repeated here over the pure core, which has no such clash.

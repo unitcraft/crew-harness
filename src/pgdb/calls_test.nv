@@ -48,13 +48,25 @@ fn is_ok(result Result[int, PgFault]) -> bool {
     }
 }
 
-// The "text" field of a journal line.
+// The parameter "text" of the event of a journal line (jsonb keeps the keys in its own order; the parameters are taken by name).
 fn text_of_line(line str) -> str {
     match Json.parse(line) {
         Ok(v) => match v.object() {
-            Some(o) => match o.get("text") {
-                Some(t) => t.str() ?? "<no text>"
-                None => "<no text>"
+            Some(o) => match o.get("event") {
+                Some(e) => match e.object() {
+                    Some(eo) => match eo.get("params") {
+                        Some(p) => match p.object() {
+                            Some(po) => match po.get("text") {
+                                Some(t) => t.str() ?? "<no text>"
+                                None => "<no text>"
+                            }
+                            None => "<no params>"
+                        }
+                        None => "<no params>"
+                    }
+                    None => "<no event>"
+                }
+                None => "<no event>"
             }
             None => "<not an object>"
         }
@@ -144,7 +156,7 @@ test "UTF-8: Cyrillic, quotes, a line break and a letter of four bytes go throug
     assert(l.journal.len() == 1)
     assert(text_of_line(l.journal[0]) == text)
     // and in the table itself, not as \u escapes
-    ro raw = test_must_sql(db.admin, "select entry->>'text' from crew.machine_journal")
+    ro raw = test_must_sql(db.admin, "select entry->'event'->'params'->>'text' from crew.machine_journal")
     assert(raw[0][0] == text)
     drop_test_db(db)
 }

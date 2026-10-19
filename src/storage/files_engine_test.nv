@@ -4,8 +4,8 @@
 // that did not commit).
 module crew_harness.storage
 
-import crew_harness.engine.{Engine, Event, JournalEntry, Journal, Store, Agent, Time, MemoryWorld, start_engine, resume_engine, memory_agent, memory_time}
-import crew_harness.chat.{ChatSession, chat_session, user_says, agent_chunk, agent_done}
+import crew_harness.engine.{Engine, Incoming, JournalEntry, Journal, Store, Link, Time, MemoryWorld, start_engine, resume_engine, memory_link, memory_time, journal_event, param}
+import crew_harness.chat.{ChatSession, ChatState, chat_session, encode_chat_state, user_says, agent_chunk, agent_done}
 import std.fs.{Fs, real_fs, remove_dir_all}
 import std.os.{Os, real_os, temp_dir, pid}
 
@@ -20,29 +20,29 @@ fn engine_root(name str) -> str {
 }
 
 // the agent and the clock are in memory, the journal and the snapshots are files
-fn begin(root str, mut world MemoryWorld) -> Engine[ChatSession] {
-    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Agent = memory_agent(world), Time = memory_time(world) {
-        start_engine(chat_session(), "chat-1")
+fn begin(root str, mut world MemoryWorld) -> Engine[ChatSession, ChatState] {
+    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Link = memory_link(world), Time = memory_time(world) {
+        start_engine[ChatState, ChatSession](chat_session(), "chat-1")
     }
 }
 
-fn resumed(root str, mut world MemoryWorld) -> Engine[ChatSession] {
-    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Agent = memory_agent(world), Time = memory_time(world) {
-        match resume_engine(chat_session(), "chat-1") {
+fn resumed(root str, mut world MemoryWorld) -> Engine[ChatSession, ChatState] {
+    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Link = memory_link(world), Time = memory_time(world) {
+        match resume_engine[ChatState, ChatSession](chat_session(), "chat-1") {
             Some(e) => e
             None => panic("no snapshot to resume from")
         }
     }
 }
 
-fn feed(root str, mut e Engine[ChatSession], mut world MemoryWorld, event Event) -> () {
-    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Agent = memory_agent(world), Time = memory_time(world) {
+fn feed(root str, mut e Engine[ChatSession, ChatState], mut world MemoryWorld, event Incoming) -> () {
+    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Link = memory_link(world), Time = memory_time(world) {
         e.feed(event)
     }
 }
 
-fn pump(root str, mut e Engine[ChatSession], mut world MemoryWorld) -> int {
-    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Agent = memory_agent(world), Time = memory_time(world) {
+fn pump(root str, mut e Engine[ChatSession, ChatState], mut world MemoryWorld) -> int {
+    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Link = memory_link(world), Time = memory_time(world) {
         e.pump()
     }
 }
@@ -53,19 +53,19 @@ fn entries_of(root str) -> []JournalEntry {
     }
 }
 
-fn of_kind(entries []JournalEntry, kind str) -> []JournalEntry {
+fn of_code(entries []JournalEntry, code str) -> []JournalEntry {
     mut out = []JournalEntry.new()
     for entry in entries {
-        if entry.kind == kind { out.push(entry) }
+        if entry.event.code == code { out.push(entry) }
     }
     out
 }
 
-fn stale_entry(trace str, step int, kind str, text str) -> JournalEntry => {
-    trace, step, cause: "progress-3", state: "Awaiting", request: "agent-1", at: 1500, kind, text
+fn stale_entry(trace str, step int, code str) -> JournalEntry => {
+    trace, step, cause: "progress-3", state: "Awaiting", request: "agent-1", at: 1500, event: journal_event(code, [param("name", "agent_chunk")])
 }
 
-fn state_name(e Engine[ChatSession]) -> str => chat_session().state_name(e.machine_state())
+fn state_name(e Engine[ChatSession, ChatState]) -> str => chat_session().state_name(e.state())
 
 test "files: a whole conversation over the file handlers, then a restart of the process sees the same session" {
     ro root = engine_root("conversation")
@@ -86,9 +86,9 @@ test "files: a whole conversation over the file handlers, then a restart of the 
     assert(world.sent.len() == 1)
     // the journal in the file has the steps without gaps
     ro entries = entries_of(root)
-    assert(of_kind(entries, "start").len() == 1)
-    assert(of_kind(entries, "restart").len() == 1)
-    assert(of_kind(entries, "sent").len() == 1)
+    assert(of_code(entries, "machine_started").len() == 1)
+    assert(of_code(entries, "engine_resumed").len() == 1)
+    assert(of_code(entries, "request_sent").len() == 1)
     mut last = 0
     for entry in entries {
         assert(entry.step >= last)
@@ -103,21 +103,21 @@ test "death between the journal write and the snapshot save: the lines of the st
     mut e1 = begin(root, world)
     feed(root, e1, world, user_says("hi"))
     ro committed_step = e1.step_number()
-    ro committed_state = e1.machine_state()
+    ro committed_state = encode_chat_state(e1.state())
     // The step committed_step + 1 writes its journal lines ... and the process dies before the snapshot is saved.
     // The same lines the engine would write, written by hand through the file handler, without the Store.
     with Journal = file_journal(root, "chat-1") {
-        Journal.write(stale_entry(e1.trace(), committed_step + 1, "event", "progress/agent_chunk"))
-        Journal.write(stale_entry(e1.trace(), committed_step + 1, "note", "agent chunk: lost"))
+        Journal.write(stale_entry(e1.trace(), committed_step + 1, "event_accepted"))
+        Journal.write(stale_entry(e1.trace(), committed_step + 1, "agent_chunk"))
     }
     assert(entries_of(root).len() > 0)
     mut e2 = resumed(root, world)
     // the snapshot is the commit point: the machine is where it was after the last commit
-    assert(e2.machine_state() == committed_state)
+    assert(encode_chat_state(e2.state()) == committed_state)
     assert(e2.step_number() == committed_step + 1)       // the restart is a step of its own
-    ro restart = of_kind(entries_of(root), "restart")
+    ro restart = of_code(entries_of(root), "engine_resumed")
     assert(restart.len() == 1)
-    assert(restart[0].text.contains("2 journal lines of an uncommitted step ignored"))
+    assert(restart[0].event.value_of("ignored_lines") == Some("2"))
     // nothing was sent again, the request is still open and the conversation goes on
     assert(world.sent.len() == 1)
     assert(e2.open_ids().len() == 1)
@@ -132,8 +132,8 @@ test "death between the snapshot save and the send: the request is sent once aft
     assert(open_data_dir(root))
     mut world = MemoryWorld.at(1000)
     mut e1 = begin(root, world)
-    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Agent = memory_agent(world), Time = memory_time(world) {
-        e1.accept(user_says("hi"))
+    with Journal = file_journal(root, "chat-1"), Store = file_store(root), Link = memory_link(world), Time = memory_time(world) {
+        e1.on_arrival(user_says("hi"))
     }
     assert(world.sent.len() == 0)
     // the process dies after the commit, before the send

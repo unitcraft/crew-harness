@@ -1,6 +1,6 @@
 // link.nv - the child process of the agent and the fibers around it.
 //
-// A process pipe read BLOCKS the fiber that reads it (it parks it, the scheduler goes on), and `Agent.receive` must not
+// A process pipe read BLOCKS the fiber that reads it (it parks it, the scheduler goes on), and `Link.receive` must not
 // wait. So the process is surrounded by fibers that talk to the rest of the program only through channels:
 //   reader   reads the stdout of the process, cuts it into lines (`LineSplitter`), sends them as "line"; at the end of
 //            the stream sends the last line that had no line break and then "eof";

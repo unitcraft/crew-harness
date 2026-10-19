@@ -1,12 +1,12 @@
 // project_test.nv - the projection "ACP -> engine event -> page event": pure functions, one row of the table per test.
 module crew_harness.acp
 
-import crew_harness.engine.{Event, EventKind, FailCode}
+import crew_harness.engine.{Incoming, EventKind, FailCode}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 
 // (j, str_at and int_at are in jsonrpc_test.nv, the same module)
 
-fn request_of(e Event) -> str {
+fn request_of(e Incoming) -> str {
     match e.request {
         Some(r) => r
         None => "<none>"
@@ -14,7 +14,7 @@ fn request_of(e Event) -> str {
 }
 
 // the page event as parsed JSON, a null object when there is none
-fn page_of(e Event, turn str) -> JsonValue {
+fn page_of(e Incoming, turn str) -> JsonValue {
     match page_event(e, turn) {
         Some(text) => j(text)
         None => JsonValue.null()
@@ -31,7 +31,7 @@ fn input_of(page JsonValue) -> JsonValue {
     }
 }
 
-fn stamped(kind EventKind, name str, request str, input str) -> Event => {
+fn stamped(kind EventKind, name str, request str, input str) -> Incoming => {
     id: "${name}-4", trace: "t1000-chat-1", step: 5, kind, name, request: Some(request), input, at: 1792314001300
 }
 
@@ -225,7 +225,7 @@ test "tool kind: known ones, other for the rest" {
 // ----- engine event -> page event -----
 
 test "page: user_message with turn, text, time" {
-    ro e Event = { id: "input-2", trace: "t1000-chat-1", step: 2, kind: EventKind.Input, name: "user_message", request: None, input: "привет", at: 1792314001000 }
+    ro e Incoming = { id: "input-2", trace: "t1000-chat-1", step: 2, kind: EventKind.Input, name: "user_message", request: None, input: "привет", at: 1792314001000 }
     ro page = page_of(e, "t1")
     assert(str_at(page, "id") == "input-2")
     assert(str_at(page, "trace") == "t1000-chat-1")

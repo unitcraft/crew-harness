@@ -1,17 +1,17 @@
 // project.nv - the projection "ACP -> engine event -> page event": pure functions, the table is in README.md.
 //
 // ACP -> engine. `project_update` turns the `update` of a `session/update` into a name and an input of an engine event;
-// `progress_event` puts it into an `Event` (kind Progress, bound to the request in flight). What the table does not
+// `progress_event` puts it into an `Incoming` (kind Progress, bound to the request in flight). What the table does not
 // know is NOT dropped: it becomes the event `acp_skipped` (the engine journals every event), without an error.
 // The ends of a turn are `stop_event` (the stop reason of `session/prompt`) and `refused_event` (a failure with a code).
 //
-// Engine -> page. `page_event` turns a stamped `Event` into the JSON line of the page (task 093, "the format of the
+// Engine -> page. `page_event` turns a stamped `Incoming` into the JSON line of the page (task 093, "the format of the
 // event": `{ id, trace, step, kind, input, time }`, `input` an object): `name` becomes `kind`, `at` becomes `time`, the
 // `input` text becomes an object. An event the page has no kind for gives None. The `turn` code of the turn is given by
 // the caller: the page names a turn by the code of its `user_message`.
 module crew_harness.acp
 
-import crew_harness.engine.{Event, EventKind, FailCode}
+import crew_harness.engine.{Incoming, EventKind, FailCode}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 
 /// Projection: the name and the input of the engine event that an update of ACP becomes.
@@ -215,20 +215,20 @@ export fn project_permission(rpc_id JsonValue, params JsonValue) -> Projection {
 
 /// The engine event of a projection. Bound to the request in flight (kind Progress); with no request (`""`) there is
 /// nothing to belong to and the engine would discard it, so it is a word from outside, `acp_note`, that the engine journals.
-export fn progress_event(request str, p Projection) -> Event {
-    if request.byte_len() == 0 { return Event.word("acp_note", "${p.name}: ${p.input}") }
-    Event.incoming(EventKind.Progress, p.name, Some(request), p.input)
+export fn progress_event(request str, p Projection) -> Incoming {
+    if request.byte_len() == 0 { return Incoming.word("acp_note", "${p.name}: ${p.input}") }
+    Incoming.incoming(EventKind.Progress, p.name, Some(request), p.input)
 }
 
 /// A refusal of the request with a code of the closed list.
-export fn refused_event(request str, code FailCode) -> Event =>
-    Event.incoming(EventKind.Refused, "agent_refused", Some(request), code.name())
+export fn refused_event(request str, code FailCode) -> Incoming =>
+    Incoming.incoming(EventKind.Refused, "agent_refused", Some(request), code.name())
 
 /// The end of a turn by the stop reason of `session/prompt`: `end_turn` is the answer, the others are refusals with the
 /// codes of the table; a reason the table does not know is `NoResult`.
-export fn stop_event(request str, stop_reason str) -> Event {
+export fn stop_event(request str, stop_reason str) -> Incoming {
     if stop_reason == "end_turn" {
-        return Event.incoming(EventKind.Answered, "agent_done", Some(request), "")
+        return Incoming.incoming(EventKind.Answered, "agent_done", Some(request), "")
     }
     if stop_reason == "max_tokens" { return refused_event(request, FailCode.MaxTokens) }
     if stop_reason == "max_turn_requests" { return refused_event(request, FailCode.MaxTurnRequests) }
@@ -251,7 +251,7 @@ fn turn_object(turn str) -> JsonObject {
 }
 
 // The input text of an event as a JSON object; None - it is not one.
-fn object_input(e Event) -> Option[JsonValue] {
+fn object_input(e Incoming) -> Option[JsonValue] {
     ro value = match Json.parse(e.input) {
         Ok(v) => v
         Err(err) => return None
@@ -259,7 +259,7 @@ fn object_input(e Event) -> Option[JsonValue] {
     if value.is_object() { Some(value) } else { None }
 }
 
-fn text_input(e Event, turn str) -> Option[PageInput] {
+fn text_input(e Incoming, turn str) -> Option[PageInput] {
     mut o = turn_object(turn)
     put(o, "text", JsonValue.str(e.input))
     page_input(e.name, JsonValue.object(o))
@@ -287,7 +287,7 @@ fn refusal_input(reason str, turn str) -> Option[PageInput] {
     page_input("agent_refused", JsonValue.object(o))
 }
 
-fn page_input_of(e Event, turn str) -> Option[PageInput] {
+fn page_input_of(e Incoming, turn str) -> Option[PageInput] {
     match e.kind {
         EventKind.Input => {
             if e.name == "user_message" { return text_input(e, turn) }
@@ -328,7 +328,7 @@ fn page_input_of(e Event, turn str) -> Option[PageInput] {
 
 /// The JSON line of the page for a stamped engine event; None - the page has no kind for it (a plan, a thought, a skipped
 /// update, a note, a name nobody knows) or the input is not what the kind needs.
-export fn page_event(e Event, turn str) -> Option[str] {
+export fn page_event(e Incoming, turn str) -> Option[str] {
     ro page = page_input_of(e, turn)?
     mut o = JsonObject.new()
     put(o, "id", JsonValue.str(e.id))
