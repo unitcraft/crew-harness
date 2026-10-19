@@ -117,5 +117,5 @@ test "mk format 2.6" {
     assert(report.errors.len() == 0)
     assert(report.json.starts_with("{\"format\":\"machine/2\",\"portolan_version\":\"2.6\",\"machine\":\"Tiny\""))
     assert(report.json.replace("\"portolan_version\":\"2.6\"", "\"portolan_version\":\"2.5\"") == json_of(tiny_text()))
-    assert(note_says(tiny_text().replace("format: 2.5", "format: 2.8"), "читает формат 2.5, 2.6 или 2.7"))
+    assert(note_says(tiny_text().replace("format: 2.5", "format: 2.12"), "читает формат 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11"))
 }

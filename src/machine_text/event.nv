@@ -67,12 +67,19 @@ fn ev_parse(mut p TxP, mut cx TxCx, sc TxScope) -> Result[TxEvent, TranslateErro
     if t.kind != TK_NAME { return Err(p_fail(p, "ожидается событие")) }
     p_adv(p)
     ro w = t.text
-    if w == "сразу" { return Ok(TxEvent { json: ev_json("now", []), scope: sc }) }
-    if w == "срок" { return Ok(TxEvent { json: ev_json("timeout", []), scope: sc }) }
-    if w == "ответ" { return ev_answer(p, cx, sc) }
-    if w == "сбой" { return ev_failure(p, cx, sc) }
-    if w == "слово" || w == "сигнал" || w == "часть" { return ev_named(p, cx, sc, w) }
-    Err(tx_err(t.line, t.col, "syntax", "неизвестное событие `${w}`: ожидается ответ, сбой, слово, сигнал, сразу"))
+    ro words = cx.words
+    if t_is_kw(t, words, "event", "immediate") { return Ok(TxEvent { json: ev_json("now", []), scope: sc }) }
+    if t_is_kw(t, words, "event", "deadline") { return Ok(TxEvent { json: ev_json("timeout", []), scope: sc }) }
+    if t_is_kw(t, words, "event", "response") { return ev_answer(p, cx, sc) }
+    if t_is_kw(t, words, "event", "failure") { return ev_failure(p, cx, sc) }
+    if t_is_kw(t, words, "event", "word") { return ev_named(p, cx, sc, "word") }
+    if t_is_kw(t, words, "event", "signal") { return ev_named(p, cx, sc, "signal") }
+    if t_is_kw(t, words, "event", "part") { return ev_named(p, cx, sc, "part") }
+    match foreign_find(cx, t, ["event"]) {
+        Some(e) => return Err(e)
+        None => ()
+    }
+    Err(tx_err(t.line, t.col, "syntax", "неизвестное событие `${w}`: ожидается ${kw_all(words, "event", ["response", "failure", "word", "signal", "immediate"]).join(", ")}"))
 }
 
 fn ev_answer(mut p TxP, mut cx TxCx, sc TxScope) -> Result[TxEvent, TranslateError] {
@@ -126,7 +133,8 @@ fn ev_failure(mut p TxP, mut cx TxCx, sc TxScope) -> Result[TxEvent, TranslateEr
     p_adv(p)
     ro en = tr_binder(cx, n)
     mut reasons = []str.new()
-    if p_eat(p, "∈") {
+    if is_member_sign(p, cx.words) {
+        p_adv(p)
         p_expect(p, "{")?
         while true {
             reasons.push(ev_reason(p, cx)?)
@@ -142,7 +150,7 @@ fn ev_failure(mut p TxP, mut cx TxCx, sc TxScope) -> Result[TxEvent, TranslateEr
     Ok(TxEvent { json: ev_json("failure", rest), scope: sc_with(sc, n.text, en) })
 }
 
-// `слово(слово(поле, …))`, `сигнал(сигнал(поле, …))`, `часть(имя(поле, …))`.
+// `слово(слово(поле, …))`, `сигнал(сигнал(поле, …))`, `часть(имя(поле, …))`; `head` is the key of the event word: `word`, `signal`, `part`.
 fn ev_named(mut p TxP, mut cx TxCx, sc TxScope, head str) -> Result[TxEvent, TranslateError] {
     p_expect(p, "(")?
     ro first = p_tok(p)
@@ -150,19 +158,19 @@ fn ev_named(mut p TxP, mut cx TxCx, sc TxScope, head str) -> Result[TxEvent, Tra
     mut kinds = kinds_field()
     mut en = ""
     mut kind_word = "word"
-    if head == "слово" {
-        en = ev_word_en(cx, first, phrase, cx.env.words, "word", "слово")
-    } else if head == "сигнал" {
+    if head == "word" {
+        en = ev_word_en(cx, first, phrase, cx.env.words, "word", kw(cx.words, "event", "word"))
+    } else if head == "signal" {
         kinds = ["signal_field", "field", "data", "variable"]
         kind_word = "signal"
-        en = ev_word_en(cx, first, phrase, cx.env.signals, "signal", "сигнал")
+        en = ev_word_en(cx, first, phrase, cx.env.signals, "signal", kw(cx.words, "event", "signal"))
     } else {
         kind_word = "progress"
-        en = ev_word_en(cx, first, phrase, cx.env.parts, "part", "часть ответа")
+        en = ev_word_en(cx, first, phrase, cx.env.parts, "part", kw(cx.words, "event", "part"))
     }
     ro binds = ev_binds(p, cx, sc, kinds)?
     p_expect(p, ")")?
-    if head == "слово" { return Ok(TxEvent { json: ev_with_binds("word", "word", en, binds), scope: binds.scope }) }
+    if head == "word" { return Ok(TxEvent { json: ev_with_binds("word", "word", en, binds), scope: binds.scope }) }
     Ok(TxEvent { json: ev_with_binds(kind_word, "name", en, binds), scope: binds.scope })
 }
 
@@ -176,10 +184,7 @@ fn cond_parse(mut p TxP, mut cx TxCx, sc TxScope) -> Result[TxCond, TranslateErr
         if !p_done(p) { p_adv(p) }
         return Ok(TxCond { has_expr: false, is_else: false, expr: x_null() })
     }
-    if p_is_word(p, "иначе") {
-        p_adv(p)
-        return Ok(TxCond { has_expr: false, is_else: true, expr: x_null() })
-    }
+    if p_eat_kw(p, cx.words, "event", "else") { return Ok(TxCond { has_expr: false, is_else: true, expr: x_null() }) }
     ro e = ex_expr(p, cx, sc)?
     Ok(TxCond { has_expr: true, is_else: false, expr: e })
 }
@@ -193,16 +198,12 @@ fn where_parse(mut p TxP, mut cx TxCx) -> Result[TxWhere, TranslateError] {
     if t.kind == TK_SYM && t.text == "—" {
         p_adv(p)
     } else if t.kind == TK_NAME {
-        if t.text == "предыдущее" {
-            p_adv(p)
+        if p_eat_kw(p, cx.words, "destination", "previous") {
             to = "@previous"
-        } else if t.text == "возврат_подготовки" {
-            p_adv(p)
+        } else if p_eat_kw(p, cx.words, "destination", "preparation_return") {
             to = "@prepare_return"
-            cx_unsupported(cx, t, "переход `возврат_подготовки` (правило 24: подготовку при старте делает исполнитель)")
-        } else if t.text == "то" && t_is_word(p_ahead(p, 1), "же") {
-            p_adv(p)
-            p_adv(p)
+            cx_unsupported(cx, t, "переход `${kw(cx.words, "destination", "preparation_return")}` (правило 24: подготовку при старте делает исполнитель)")
+        } else if p_eat_kw(p, cx.words, "destination", "same") {
             to = "@same"
         } else {
             p_adv(p)
@@ -219,14 +220,10 @@ fn where_parse(mut p TxP, mut cx TxCx) -> Result[TxWhere, TranslateError] {
     }
     mut restart = false
     if p_eat(p, ",") {
-        ro a = p_tok(p)
-        ro b = p_ahead(p, 1)
-        if t_is_word(a, "запуск") && t_is_word(b, "заново") {
-            p_adv(p)
-            p_adv(p)
+        if p_eat_kw(p, cx.words, "destination", "rerun") {
             restart = true
         } else {
-            return Err(p_fail(p, "после запятой ожидается `запуск заново`"))
+            return Err(p_fail(p, "после запятой ожидается `${kw(cx.words, "destination", "rerun")}`"))
         }
     }
     Ok(TxWhere { to, restart })

@@ -86,7 +86,7 @@ test "pr bare blocks" {
 }
 
 test "pr connection lines" {
-    ro include = "определения: арифметика_цикла версия 1 хеш 446ddf8041c0"
+    ro include = "определения: арифметика_цикла версия 1 хеш fad927a77d32"
     ro good = replaced(base_text(), "## Состояния\n", "## Подключения\n\n${ticks()}\n${include}\n${ticks()}\n\n## Состояния\n")
     ro good_report = checked(good)
     if good_report.errors.len() > 0 { panic(first_error_of(good_report)) }
@@ -102,7 +102,7 @@ test "pr connection lines" {
 }
 
 fn keys() -> []str => [
-    "Сторона", "Срок тишины", "Вход", "Правит", "Возвратов формы", "При входе", "При приёме", "Результат", "Кроме", "Предел запросов", "Куда"
+    "Сторона", "Срок тишины", "Вход", "Правит", "Возвратов формы", "При входе", "При приёме", "Результат", "Кроме", "Предел запросов"
 ]
 
 test "pr warn each key" {
@@ -170,9 +170,18 @@ test "pr warn apart" {
 }
 
 test "pr warn lists" {
-    ro text = before_head(base_text(), "## Данные", "Куда ведёт строка")
+    ro text = before_head(base_text(), "## Данные", "Правит ведёт строка")
     ro list = warning_lines(text)
     assert(list.len() == 1)
     assert(list[0].contains("warning"))
-    assert(list[0].starts_with("${line_of(text, "Куда")}:1 warning "))
+    assert(list[0].starts_with("${line_of(text, "Правит")}:1 warning "))
+}
+
+// Format 2.9 (Я-14): `Куда` is a column of a table, not a key line, so a paragraph that starts with it is no warning.
+test "pr to is no key" {
+    ro text = before_head(base_text(), "## Данные", "Куда ведёт строка")
+    ro report = checked(text)
+    assert(report.errors.len() == 0)
+    assert(report.warnings.len() == 0)
+    assert(report.json == base_json())
 }

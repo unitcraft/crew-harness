@@ -12,20 +12,26 @@ module crew_harness.machine_text
 import std.text
 import std.collections.hash_map.{HashMap}
 
-/// TxName: a line of the table of names.
+/// TxName: a line of the table of names: the kind, the word as the language of the file writes it (`ru` for a Russian file, the English word for an English one) and the Latin word of the JSON.
 type TxName { kind str, ru str, en str }
 
-/// TxNames: the lines in order and the index "kind, Russian" -> English.
-type TxNames { rows []TxName, index HashMap[str, str] }
+/// TxNames: the lines in order, the index "kind, word of the file" -> the Latin word, and the reverse one "kind, Latin word" -> the word of the file (the first line of the table that has it).
+type TxNames { rows []TxName, index HashMap[str, str], rev HashMap[str, str] }
 
 fn names_text() -> str => embed_str("names.tsv")
 
 fn names_format_text() -> str => embed_str("names_format.tsv")
 
+fn names_aliases_text() -> str => embed_str("names_aliases.tsv")
+
 fn names_key(kind str, ru str) -> str => "${kind}\t${ru}"
 
-// The lines of one file of names.
-fn names_read(text str, mut rows []TxName, mut index HashMap[str, str]) -> () {
+// The kinds whose words are keywords of the language (the table of words has them): an English file does not take their Russian words as names (section 1a).
+fn names_keyword_kinds() -> []str => ["catalog", "executor"]
+
+// The lines of one file of names. A Russian file reads "Russian -> Latin"; an English file reads "Latin -> Latin" and, for the kinds that are not keywords, the Russian words too (the
+// names that the author invents may be of any language, section 1a).
+fn names_read(text str, lang str, mut rows []TxName, mut index HashMap[str, str], mut rev HashMap[str, str]) -> () {
     for raw in text.split("\n") {
         ro line = raw.strip_suffix("\r") ?? raw
         if line.byte_len() == 0 || line.starts_with("#") { continue }
@@ -33,19 +39,50 @@ fn names_read(text str, mut rows []TxName, mut index HashMap[str, str]) -> () {
         mut cells = []str.new()
         for part in parts { cells.push(part) }
         if cells.len() < 3 { continue }
-        rows.push(TxName { kind: cells[0], ru: cells[1], en: cells[2] })
+        ro mine = if lang == "en" { cells[2] } else { cells[1] }
+        rows.push(TxName { kind: cells[0], ru: mine, en: cells[2] })
+        ro old = index.insert(names_key(cells[0], mine), cells[2])
+        match rev.get(names_key(cells[0], cells[2])) {
+            Some(first) => ()
+            None => {
+                ro old_rev = rev.insert(names_key(cells[0], cells[2]), mine)
+            }
+        }
+        if lang == "en" && !names_keyword_kinds().contains(cells[0]) {
+            ro old_ru = index.insert(names_key(cells[0], cells[1]), cells[2])
+        }
+    }
+}
+
+// The synonyms of the English files: a line "kind, the English word, the Latin word of the JSON" makes the word a name of that kind (it beats the identity of the dictionary).
+fn names_read_aliases(text str, mut index HashMap[str, str]) -> () {
+    for raw in text.split("\n") {
+        ro line = raw.strip_suffix("\r") ?? raw
+        if line.byte_len() == 0 || line.starts_with("#") { continue }
+        ro parts = line.split("\t")
+        mut cells = []str.new()
+        for part in parts { cells.push(part) }
+        if cells.len() < 3 { continue }
         ro old = index.insert(names_key(cells[0], cells[1]), cells[2])
     }
 }
 
-/// The table of names of this build.
-fn names_load() -> TxNames {
+/// The table of names of this build for a language of the file.
+fn names_load_for(lang str) -> TxNames {
     mut rows = []TxName.new()
     mut index = HashMap[str, str].new()
-    names_read(names_text(), rows, index)
-    names_read(names_format_text(), rows, index)
-    TxNames { rows, index }
+    mut rev = HashMap[str, str].new()
+    names_read(names_text(), lang, rows, index, rev)
+    names_read(names_format_text(), lang, rows, index, rev)
+    if lang == "en" { names_read_aliases(names_aliases_text(), index) }
+    TxNames { rows, index, rev }
 }
+
+/// The table of names for a Russian file.
+fn names_load() -> TxNames => names_load_for("ru")
+
+/// The word of the language of the file for a Latin word under a kind (the reverse of `names_get`).
+fn names_file_word(n TxNames, kind str, en str) -> Option[str] => n.rev.get(names_key(kind, en))
 
 /// The English word of the Russian one under a kind.
 fn names_get(n TxNames, kind str, ru str) -> Option[str] => n.index.get(names_key(kind, ru))

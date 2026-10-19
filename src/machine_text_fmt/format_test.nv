@@ -5,7 +5,8 @@ module crew_harness.machine_text_fmt
 import std.text
 import crew_harness.machine_text.{definitions_hash, normalize_definitions, translate_definitions, defs_file_text}
 
-fn cycle() -> str => defs_file_text("арифметика_цикла")
+// The shipped file of definitions is of format 2.11 (the hash `fad927a77d32`); these tests are about the reading of 2.7 and earlier: the same file with the 2.7 line.
+fn cycle() -> str => defs_file_text("арифметика_цикла").replace("- format: 2.11", "- format: 2.7")
 
 // The text of 2.5: no list markers, the key lines at the first column.
 fn old_style(text str) -> str {
@@ -32,10 +33,10 @@ test "fm versions" {
 }
 
 test "fm unknown version" {
-    for v in ["2.4", "2.8", "3", "2.7.1", ""] {
+    for v in ["2.4", "2.12", "3", "2.7.1", ""] {
         ro report = checked(replaced(base_text(), "- format: 2.7", "- format: ${v}"))
         assert(report.errors.len() > 0)
-        assert(report_says(report, "читает формат 2.5, 2.6 или 2.7"))
+        assert(report_says(report, "читает формат 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11"))
     }
     ro missing = replaced(base_text(), "- format: 2.7\n", "")
     assert(errors_say(missing, "формат не указан"))
@@ -83,19 +84,19 @@ test "fm defs report" {
 }
 
 test "fm defs unknown" {
-    for v in ["2.4", "2.8", "3"] {
+    for v in ["2.4", "2.12", "3"] {
         ro report = translate_definitions(cycle().replace("format: 2.7", "format: ${v}"))
         assert(report.errors.len() == 1)
-        assert(report.errors[0].message.contains("формат файла определений должен быть 2.5, 2.6 или 2.7"))
+        assert(report.errors[0].message.contains("формат файла определений должен быть 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11"))
     }
 }
 
 test "fm include hash" {
     ro include = "определения: арифметика_цикла версия 1 хеш"
-    ro good = replaced(base_text(), "## Состояния\n", "## Подключения\n\n${include} 446ddf8041c0\n\n## Состояния\n")
+    ro good = replaced(base_text(), "## Состояния\n", "## Подключения\n\n${include} fad927a77d32\n\n## Состояния\n")
     ro good_report = checked(good)
     if good_report.errors.len() > 0 { panic(first_error_of(good_report)) }
-    assert(good_report.json.contains("\"includes\":[{\"name\":\"арифметика_цикла\",\"version\":\"1\",\"hash\":\"446ddf8041c0\"}]"))
+    assert(good_report.json.contains("\"includes\":[{\"name\":\"арифметика_цикла\",\"version\":\"1\",\"hash\":\"fad927a77d32\"}]"))
     ro old = replaced(base_text(), "## Состояния\n", "## Подключения\n\n${include} 1628bec298d9\n\n## Состояния\n")
-    assert(errors_say(old, "хеш файла арифметика_цикла — 446ddf8041c0, а в подключении 1628bec298d9"))
+    assert(errors_say(old, "хеш файла арифметика_цикла — fad927a77d32, а в подключении 1628bec298d9"))
 }

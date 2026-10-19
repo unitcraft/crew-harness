@@ -14,9 +14,12 @@ import crew_harness.machine.{NamedText}
 /// that carry a note (an error or "not supported").
 export type TranslateReport { json str, errors []TranslateError, warnings []TranslateError, rows_total int, rows_noted int, places []TxPlace }
 
-fn cx_new() -> TxCx {
-    TxCx { errors: []TranslateError.new(), names: names_load(), env: env_new(), rows_total: 0, rows_noted: 0, places: []TxPlace.new() }
+/// The context of a translation of a file in the language `lang` (`ru` or `en`).
+fn cx_new_in(lang str) -> TxCx {
+    TxCx { errors: []TranslateError.new(), names: names_load_for(lang), env: env_new(), rows_total: 0, rows_noted: 0, places: []TxPlace.new(), words: words_load(lang) }
 }
+
+fn cx_new() -> TxCx => cx_new_in("ru")
 
 // ---- the header ------------------------------------------------------------------------------------------------------------------------------
 
@@ -30,10 +33,11 @@ fn header_read(entries []TxEntry, mut cx TxCx) -> TxHeader {
     mut format = ""
     mut machine_line = 1
     mut machine_col = 10
-    if entries.len() == 0 || entries[0].kind != EN_HEAD || entries[0].level != 1 || !entries[0].text.starts_with("Машина:") {
-        note(cx, struct_error(1, 1, "файл машины начинается со строки `# Машина: <Имя>`"))
+    ro head_word = "${kw(cx.words, "header", "Machine")}:"
+    if entries.len() == 0 || entries[0].kind != EN_HEAD || entries[0].level != 1 || !entries[0].text.starts_with(head_word) {
+        note(cx, struct_error(1, 1, "файл машины начинается со строки `# ${head_word} <Имя>`"))
     } else {
-        title = entries[0].text[("Машина:").byte_len()..].trim_ascii()
+        title = entries[0].text[head_word.byte_len()..].trim_ascii()
     }
     mut i = 1
     while i < entries.len() && entries[i].kind != EN_HEAD {
@@ -49,8 +53,11 @@ fn header_read(entries []TxEntry, mut cx TxCx) -> TxHeader {
                 version = value
             } else if line.key == "format" {
                 format = value
+            } else if line.key == "language" {
+                // read by the detection of the language, before the translation
+                ()
             } else {
-                note(cx, struct_error(e.line, 1, "в шапке бывают строки machine, machine_version, format"))
+                note(cx, struct_error(e.line, 1, "в шапке бывают строки machine, machine_version, format, language"))
             }
             i += line.taken
         } else {
@@ -63,9 +70,9 @@ fn header_read(entries []TxEntry, mut cx TxCx) -> TxHeader {
     } else if !is_identifier_latin(machine) {
         note(cx, struct_error(machine_line, machine_col, "имя машины — латинский идентификатор, найдено `${machine}`"))
     }
-    if format != "2.5" && format != "2.6" && format != "2.7" {
+    if !format_versions().contains(format) {
         ro shown = if format == "" { "не указан" } else { format }
-        note(cx, struct_error(1, 1, "формат ${shown}: переводчик читает формат 2.5, 2.6 или 2.7 (строка `format: 2.7`)"))
+        note(cx, struct_error(1, 1, "формат ${shown}: переводчик читает формат ${format_versions().join(", ")} (строка `format: 2.11`)"))
     }
     TxHeader { title, machine, version, format }
 }
@@ -168,9 +175,12 @@ export fn translate_report(file_text str) -> TranslateReport => translate_report
 /// The same with the registry of the files of definitions of the caller (the name, the text).
 export fn translate_report_with(file_text str, registry []NamedText) -> TranslateReport {
     ro lines = lines_of(file_text)
-    ro classified = tx_classify_full(lines)
+    ro info = detect_language(lines)
+    ro classified = tx_classify_in(lines, words_load(info.lang), info.strict, info.strict)
     ro entries = classified.entries
-    mut cx = cx_new()
+    mut cx = cx_new_in(info.lang)
+    for e in info.errors { cx.errors.push(e) }
+    for e in classified.errors { cx.errors.push(e) }
     ro header = header_read(entries, cx)
     ro sections = sections_of(entries, cx)
 
@@ -178,17 +188,19 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
     mut runs = []TxFragRun.new()
     mut signals = []TxJ.new()
     mut included = TxIncluded { types: TxTypes { records: []TxJ.new(), variants: []TxJ.new() }, constants: []TxJ.new(), definitions: []TxJ.new(), includes: []TxJ.new() }
-    match section_of(sections, "Подключения") {
+    mut connected = []str.new()
+    match section_of(sections, "Includes") {
         Some(sec) => {
             included = defs_includes(entries, sec, registry, cx)
             for call in calls_read(entries, sec, cx) {
+                connected.push(call.name)
                 match fragment_text(call, cx) {
                     Some(text) => {
-                        ro fentries = tx_classify(lines_of(text))
+                        ro fentries = tx_classify_in(lines_of(text), cx.words, false, false).entries
                         ro before = cx.errors.len()
                         ro fsections = sections_of(fentries, cx)
                         mut fblocks = []TxBlock.new()
-                        match section_of(fsections, "Состояния") {
+                        match section_of(fsections, "States") {
                             Some(fsec) => { fblocks = states_register(fentries, fsec, cx) }
                             None => ()
                         }
@@ -205,33 +217,33 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
 
     // the names that the rows need before their declarations are read
     mut blocks = []TxBlock.new()
-    match section_of(sections, "Состояния") {
+    match section_of(sections, "States") {
         Some(sec) => { blocks = states_register(entries, sec, cx) }
-        None => note(cx, struct_error(1, 1, "нет раздела `## Состояния`"))
+        None => note(cx, struct_error(1, 1, "нет раздела `## ${kw(cx.words, "section", "States")}`"))
     }
-    match section_of(sections, "Определения") {
+    match section_of(sections, "Definitions") {
         Some(sec) => defs_register(entries, sec, cx)
         None => ()
     }
 
     mut types = TxTypes { records: []TxJ.new(), variants: []TxJ.new() }
-    match section_of(sections, "Типы") {
+    match section_of(sections, "Types") {
         Some(sec) => { types = decl_types(entries, sec, cx) }
         None => ()
     }
     mut constants = []TxJ.new()
-    match section_of(sections, "Константы") {
+    match section_of(sections, "Constants") {
         Some(sec) => { constants = decl_constants(entries, sec, cx) }
         None => ()
     }
     mut params = []TxJ.new()
-    match section_of(sections, "Параметры") {
+    match section_of(sections, "Parameters") {
         Some(sec) => { params = decl_params(entries, sec, cx) }
         None => ()
     }
     mut input = TxInput { fields: []TxJ.new(), invariants: []TxJ.new(), scope: sc_empty() }
     mut has_input = false
-    match section_of(sections, "Вход") {
+    match section_of(sections, "Input") {
         Some(sec) => {
             input = decl_input(entries, sec, cx)
             has_input = true
@@ -241,7 +253,7 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
     // the data: the data of the fragments first, then the data of the machine (the order of `все_данные`, format section 5)
     mut data = []TxJ.new()
     for run in runs {
-        match section_of(run.sections, "Данные") {
+        match section_of(run.sections, "Data") {
             Some(fsec) => {
                 ro before = cx.errors.len()
                 ro places_from = cx.places.len()
@@ -251,7 +263,7 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
             None => ()
         }
     }
-    match section_of(sections, "Данные") {
+    match section_of(sections, "Data") {
         Some(sec) => {
             for d in decl_data(entries, sec, cx) { data.push(d) }
         }
@@ -259,31 +271,31 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
     }
     mut party_rows = []TxPartyRow.new()
     mut request_limit = []TxJ.new()
-    match section_of(sections, "Стороны") {
+    match section_of(sections, "Parties") {
         Some(sec) => {
             party_rows = decl_parties(entries, sec, cx)
             request_limit = decl_request_limit(entries, sec, cx)
         }
         None => ()
     }
-    match section_of(sections, "Сигналы") {
+    match section_of(sections, "Signals") {
         Some(sec) => {
             for sj in decl_signals(entries, sec, cx) { signals.push(sj) }
         }
         None => ()
     }
     mut parts = []TxPartItem.new()
-    match section_of(sections, "Части ответа") {
+    match section_of(sections, "Response parts") {
         Some(sec) => { parts = decl_parts(entries, sec, cx) }
         None => ()
     }
     mut definitions = []TxJ.new()
-    match section_of(sections, "Определения") {
+    match section_of(sections, "Definitions") {
         Some(sec) => { definitions = decl_definitions(entries, sec, cx) }
         None => ()
     }
     mut primitives = []str.new()
-    match section_of(sections, "Примитивы") {
+    match section_of(sections, "Primitives") {
         Some(sec) => { primitives = decl_primitives(entries, sec, cx) }
         None => ()
     }
@@ -310,7 +322,7 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
     mut initial = ""
     mut common = []TxJ.new()
     for run in runs {
-        match section_of(run.sections, "Общие события") {
+        match section_of(run.sections, "Common events") {
             Some(fsec) => {
                 ro before = cx.errors.len()
                 ro places_from = cx.places.len()
@@ -320,7 +332,7 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
             None => ()
         }
     }
-    match section_of(sections, "Общие события") {
+    match section_of(sections, "Common events") {
         Some(sec) => {
             for r in common_events_at(entries, sec, cx, common.len()) { common.push(r) }
         }
@@ -328,12 +340,16 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
     }
     mut states = []TxJ.new()
     mut error_end = ""
-    match section_of(sections, "Состояния") {
+    ro error_name = match names_file_word(cx.names, "state", "Errored") {
+        Some(x) => x
+        None => "Errored"
+    }
+    match section_of(sections, "States") {
         Some(sec) => {
             initial = initial_state(entries, sec, cx)
             for blk in blocks {
                 states.push(state_translate(entries, blk, states.len(), cx))
-                if blk.ru == "ОШИБКА" && blk.kind == "end" { error_end = blk.latin }
+                if blk.ru == error_name && blk.kind == "end" { error_end = blk.latin }
             }
         }
         None => ()
@@ -347,13 +363,20 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
         }
     }
     mut ends = TxEnds { result: "", rows: []TxJ.new() }
-    match section_of(sections, "Концы") {
+    match section_of(sections, "Ends") {
         Some(sec) => { ends = decl_ends(entries, sec, cx) }
-        None => note(cx, struct_error(1, 1, "нет раздела `## Концы`"))
+        None => note(cx, struct_error(1, 1, "нет раздела `## ${kw(cx.words, "section", "Ends")}`"))
+    }
+    // the reference section of a fragment names a fragment that the machine includes (format 2.9, Я-17)
+    mut notes = []TranslateError.new()
+    for x in classified.expansions {
+        if !connected.contains(x.name) {
+            notes.push(tx_err(x.line, 4, "warning", "имя «${x.name}» в заголовке раздела не совпадает с именем подключённого фрагмента${connected_hint(connected)}"))
+        }
     }
 
     // the JSON
-    mut root = [kv("format", js("machine/2")), kv("portolan_version", js(if header.format == "2.7" { "2.7" } else if header.format == "2.6" { "2.6" } else { "2.5" })), kv("machine", js(header.machine)), kv("version", js(header.version))]
+    mut root = [kv("format", js("machine/2")), kv("portolan_version", js(if format_versions().contains(header.format) { header.format } else { "2.5" })), kv("machine", js(header.machine)), kv("version", js(header.version))]
     if header.title != "" { root.push(kv("title", js(header.title))) }
     if types.records.len() > 0 || types.variants.len() > 0 {
         mut tp = []TxKV.new()
@@ -384,7 +407,19 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
     if primitives.len() > 0 { root.push(kv("primitives", jstrs(primitives))) }
 
     ro sorted = errors_sorted(cx.errors)
-    TranslateReport { json: tx_text(jobj(root)), errors: errors_quoted(sorted, lines), warnings: errors_quoted(errors_sorted(classified.warnings), lines), rows_total: cx.rows_total, rows_noted: cx.rows_noted, places: cx.places }
+    TranslateReport { json: tx_text(jobj(root)), errors: errors_quoted(sorted, lines), warnings: errors_quoted(errors_sorted(warnings_all(classified.warnings, notes)), lines), rows_total: cx.rows_total, rows_noted: cx.rows_noted, places: cx.places }
+}
+
+fn warnings_all(first []TranslateError, second []TranslateError) -> []TranslateError {
+    mut out = []TranslateError.new()
+    for e in first { out.push(e) }
+    for e in second { out.push(e) }
+    out
+}
+
+fn connected_hint(connected []str) -> str {
+    if connected.len() == 0 { return " (фрагменты не подключены)" }
+    " (подключён: ${connected.join(", ")})"
 }
 
 /// The first line of the section `## Состояния`: `Начальное состояние: ИМЯ`.
@@ -393,7 +428,7 @@ fn initial_state(entries []TxEntry, sec TxSection, mut cx TxCx) -> str {
     while i < sec.last && entries[i].kind != EN_HEAD {
         if entries[i].kind == EN_TEXT && kv_colon(entries[i]) >= 0 {
             ro line = kv_read(entries, i)
-            if line.key == "Начальное состояние" {
+            if line.key == "Initial state" {
                 match lex_segs(line.segs) {
                     Ok(p0) => {
                         mut p = p_copy(p0)
@@ -407,7 +442,7 @@ fn initial_state(entries []TxEntry, sec TxSection, mut cx TxCx) -> str {
                                 }
                             }
                         }
-                        note(cx, p_fail(p, "после `Начальное состояние:` ожидается имя состояния"))
+                        note(cx, p_fail(p, "после `${kw(cx.words, "key", "Initial state")}:` ожидается имя состояния"))
                     }
                     Err(e) => note(cx, e)
                 }
@@ -416,7 +451,7 @@ fn initial_state(entries []TxEntry, sec TxSection, mut cx TxCx) -> str {
         }
         i += 1
     }
-    note(cx, struct_error(sec.line, 4, "в разделе `Состояния` первая строка — `Начальное состояние: ИМЯ`"))
+    note(cx, struct_error(sec.line, 4, "в разделе `${sec.title}` первая строка — `${kw(cx.words, "key", "Initial state")}: ИМЯ`"))
     ""
 }
 
@@ -428,11 +463,11 @@ fn common_events_at(entries []TxEntry, sec TxSection, mut cx TxCx, already int) 
         ro e = entries[i]
         if e.kind == EN_ROW {
             out = rows_read_from(entries, i, sec.last, "appeal", "$.common_events", already, cx, sc_empty())
-            i = tab_end(entries, i, sec.last)
+            i = tab_end(entries, i, sec.last, cx.words)
         } else if e.kind == EN_TEXT && e.text == "—" {
             i += 1
         } else {
-            note(cx, struct_error(e.line, e.indent + 1, "лишняя строка в разделе `Общие события`"))
+            note(cx, struct_error(e.line, e.indent + 1, "лишняя строка в разделе `${sec.title}`"))
             i += 1
         }
     }

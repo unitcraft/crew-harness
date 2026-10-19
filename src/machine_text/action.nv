@@ -74,15 +74,21 @@ fn ac_stmt(mut p TxP, mut cx TxCx, sc TxScope) -> Result[TxStmt, TranslateError]
     ro t = p_tok(p)
     if t.kind != TK_NAME { return Err(p_fail(p, "ожидается действие")) }
     ro w = t.text
-    if w == "журнал" && t_is(p_ahead(p, 1), "(") { return ac_journal(p, cx, sc) }
-    if w == "ошибка_машины" && t_is(p_ahead(p, 1), "(") { return ac_machine_error(p, cx, sc) }
-    if w == "вызвать" && t_is(p_ahead(p, 1), "(") { return ac_call(p, cx, sc) }
-    if w == "для" { return ac_for(p, cx, sc) }
-    if w == "если" { return ac_if(p, cx, sc) }
-    if w == "пусть" { return ac_let(p, cx, sc) }
-    if w == "отменить_открытые" { return ac_cancel(p, cx, sc) }
-    if w == "передать" && t_is(p_ahead(p, 1), "(") { return ac_pass(p, cx) }
-    if is_keyword(w) { return Err(p_fail(p, "ожидается действие")) }
+    ro words = cx.words
+    ro opens = t_is(p_ahead(p, 1), "(")
+    if t_is_kw(t, words, "action", "journal") && opens { return ac_journal(p, cx, sc) }
+    if t_is_kw(t, words, "action", "machine_error") && opens { return ac_machine_error(p, cx, sc) }
+    if t_is_kw(t, words, "action", "call") && opens { return ac_call(p, cx, sc) }
+    if t_is_kw(t, words, "action", "for") { return ac_for(p, cx, sc) }
+    if t_is_kw(t, words, "action", "if") { return ac_if(p, cx, sc) }
+    if t_is_kw(t, words, "action", "let") { return ac_let(p, cx, sc) }
+    if t_is_kw(t, words, "action", "cancel_open") { return ac_cancel(p, cx, sc) }
+    if t_is_kw(t, words, "action", "pass") && opens { return ac_pass(p, cx) }
+    if is_keyword(words, w) { return Err(p_fail(p, "ожидается действие")) }
+    match foreign_find(cx, t, ["action"]) {
+        Some(e) => return Err(e)
+        None => ()
+    }
     ac_assign(p, cx, sc)
 }
 
@@ -144,7 +150,7 @@ fn ac_journal(mut p TxP, mut cx TxCx, sc TxScope) -> Result[TxStmt, TranslateErr
     ro first = p_tok(p)
     ro after = p_ahead(p, 1)
     if first.kind == TK_NAME && (t_is(after, ",") || t_is(after, ")")) {
-        if first.text == "все_данные" {
+        if t_is_kw(first, cx.words, "readable", "all_data") {
             p_adv(p)
             p_expect(p, ")")?
             return Ok(stmt_of([a_journal_all()]))
@@ -174,7 +180,7 @@ fn ac_machine_error(mut p TxP, mut cx TxCx, sc TxScope) -> Result[TxStmt, Transl
     p_adv(p)
     p_adv(p)
     ro first = p_tok(p)
-    if first.kind != TK_STR { return Err(p_fail(p, "первый аргумент `ошибка_машины` — код в кавычках")) }
+    if first.kind != TK_STR { return Err(p_fail(p, "первый аргумент `${kw(cx.words, "action", "machine_error")}` — код в кавычках")) }
     p_adv(p)
     ro params = ac_named(p, cx, sc)?
     p_expect(p, ")")?
@@ -198,11 +204,11 @@ fn ac_call(mut p TxP, mut cx TxCx, sc TxScope) -> Result[TxStmt, TranslateError]
 // `для каждого имя в выр: действие`.
 fn ac_for(mut p TxP, mut cx TxCx, sc TxScope) -> Result[TxStmt, TranslateError] {
     p_adv(p)
-    p_expect_word(p, "каждого")?
+    p_expect_kw(p, cx.words, "action", "each")?
     ro n = p_tok(p)
-    if n.kind != TK_NAME { return Err(p_fail(p, "после `для каждого` ожидается имя")) }
+    if n.kind != TK_NAME { return Err(p_fail(p, "после `${kw(cx.words, "action", "for each")}` ожидается имя")) }
     p_adv(p)
-    p_expect_word(p, "в")?
+    p_expect_kw(p, cx.words, "action", "in")?
     ro list_expr = ex_expr(p, cx, sc)?
     p_expect(p, ":")?
     ro en = tr_binder(cx, n)
@@ -214,10 +220,10 @@ fn ac_for(mut p TxP, mut cx TxCx, sc TxScope) -> Result[TxStmt, TranslateError] 
 fn ac_if(mut p TxP, mut cx TxCx, sc TxScope) -> Result[TxStmt, TranslateError] {
     p_adv(p)
     ro cond = ex_expr(p, cx, sc)?
-    p_expect_word(p, "то")?
+    p_expect_kw(p, cx.words, "action", "then")?
     ro then_actions = ac_body(p, cx, sc)?
     mut else_actions = []TxJ.new()
-    if p_eat_word(p, "иначе") { else_actions = ac_body(p, cx, sc)? }
+    if p_eat_kw(p, cx.words, "action", "else") { else_actions = ac_body(p, cx, sc)? }
     Ok(stmt_of([a_if(cond, then_actions, else_actions)]))
 }
 
@@ -225,12 +231,15 @@ fn ac_if(mut p TxP, mut cx TxCx, sc TxScope) -> Result[TxStmt, TranslateError] {
 fn ac_let(mut p TxP, mut cx TxCx, sc TxScope) -> Result[TxStmt, TranslateError] {
     p_adv(p)
     ro n = p_tok(p)
-    if n.kind != TK_NAME { return Err(p_fail(p, "после `пусть` ожидается имя")) }
+    if n.kind != TK_NAME { return Err(p_fail(p, "после `${kw(cx.words, "action", "let")}` ожидается имя")) }
     p_adv(p)
     p_expect(p, "=")?
+    ro saved = p.in_let
+    p.in_let = 1
     ro value = ex_expr(p, cx, sc)?
+    p.in_let = saved
     ro en = tr_binder(cx, n)
-    if p_eat_word(p, "в") {
+    if p_eat_kw(p, cx.words, "action", "in") {
         ro body = ac_body(p, cx, sc_with(sc, n.text, en))?
         return Ok(stmt_of([a_let(en, value, body)]))
     }
@@ -243,10 +252,10 @@ fn ac_cancel(mut p TxP, mut cx TxCx, sc TxScope) -> Result[TxStmt, TranslateErro
     p_adv(p)
     if !p_eat(p, "(") { return Ok(stmt_of([a_cancel_open("")])) }
     ro key = p_tok(p)
-    if key.kind != TK_NAME || !t_is(p_ahead(p, 1), ":") { return Err(p_fail(p, "в скобках `отменить_открытые` ожидается `кроме: …` или `сторона: …`")) }
+    if key.kind != TK_NAME || !t_is(p_ahead(p, 1), ":") { return Err(p_fail(p, "в скобках `${kw(cx.words, "action", "cancel_open")}` ожидается `${kw(cx.words, "action", "except")}: …` или `${kw(cx.words, "action", "party")}: …`")) }
     p_adv(p)
     p_adv(p)
-    if key.text == "сторона" {
+    if t_is_kw(key, cx.words, "action", "party") {
         ro party = p_tok(p)
         if party.kind != TK_NAME { return Err(p_fail(p, "ожидается имя стороны")) }
         p_adv(p)
@@ -259,14 +268,14 @@ fn ac_cancel(mut p TxP, mut cx TxCx, sc TxScope) -> Result[TxStmt, TranslateErro
             }
         }
     }
-    if key.text == "кроме" {
+    if t_is_kw(key, cx.words, "action", "except") {
         ro empty = ac_empty_list(p, cx)?
         p_expect(p, ")")?
         if empty { return Ok(stmt_of([a_cancel_open("")])) }
         cx_unsupported(cx, head, "`отменить_открытые(кроме: …)` с непустым списком вложенных машин")
         return Ok(stmt_of([a_cancel_open("")]))
     }
-    Err(p_fail(p, "в скобках `отменить_открытые` ожидается `кроме: …` или `сторона: …`"))
+    Err(p_fail(p, "в скобках `${kw(cx.words, "action", "cancel_open")}` ожидается `${kw(cx.words, "action", "except")}: …` или `${kw(cx.words, "action", "party")}: …`"))
 }
 
 // A list of nested machines that is empty: `[]` or a parameter of a fragment that was given `[]`. Any other list is not empty (nested machines are not run).

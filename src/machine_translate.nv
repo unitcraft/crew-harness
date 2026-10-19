@@ -1,5 +1,5 @@
 // machine_translate.nv - the command of the translator of tables (task 108): a file of a machine in Russian (format 2.5, 2.6 or 2.7) -> the JSON `machine/2`.
-// The file is any text of a machine (`*.portolan.md`, `*.table.md`, `*.txt`): the extension is not looked at.
+// The file is any text of a machine (`*.portolan.md`, `*.portolan.txt`, any other): the extension is not looked at.
 //   machine-translate <file>             the JSON on the standard output, exit code 0; the errors, all of them, on the standard error, exit code 1
 //   machine-translate <file> --lenient   the JSON of what could be translated even when there are errors (they are still printed)
 //   machine-translate <file> --summary   the summary of the machine (states, rows, actions) instead of the JSON

@@ -48,6 +48,7 @@ fn party_en(mut cx TxCx, n TxTok, id str) -> str {
         Some(en) => en
         None => {
             if id != "" && is_latin_code(id) { return id }
+            if is_identifier_latin(n.text) { return n.text }
             tx_translit(n.text)
         }
     }
@@ -83,32 +84,35 @@ fn party_kind(cell TxCell, line int, mut cx TxCx) -> Result[TxKind, TranslateErr
     mut p = cell_p(cell, line)?
     ro w = p_tok(p)
     if w.kind != TK_NAME { return Err(p_fail(p, "ожидается вид стороны")) }
-    p_adv(p)
-    if w.text == "machine" { return Ok(TxKind { kind: "machine", result: "", setting: "", unsupported: true }) }
-    mut setting = ""
-    mut kind = w.text
-    if w.text == "human" && p_is_word(p, "или") {
+    ro words = cx.words
+    if p_is_kw(p, words, "kind_party", "machine") {
         p_adv(p)
-        p_expect_word(p, "agent")?
-        p_expect_word(p, "по")?
-        p_expect_word(p, "настройке")?
+        return Ok(TxKind { kind: "machine", result: "", setting: "", unsupported: true })
+    }
+    mut setting = ""
+    mut kind = ""
+    if p_eat_kw(p, words, "kind_party", "human or agent by setting") {
         ro s = p_tok(p)
         if s.kind != TK_NAME { return Err(p_fail(p, "ожидается имя настройки проекта")) }
         p_adv(p)
         setting = tr_word(cx, s, ["variable", "data", "function"], "настройка")
         kind = "gatekeeper"
-    } else if w.text != "agent" && w.text != "human" && w.text != "enhanced" {
-        return Err(tx_err(w.line, w.col, "syntax", "вид стороны: agent, human, enhanced, human или agent по настройке …, machine"))
+    } else if p_eat_kw(p, words, "kind_party", "agent") {
+        kind = "agent"
+    } else if p_eat_kw(p, words, "kind_party", "human") {
+        kind = "human"
+    } else if p_eat_kw(p, words, "kind_party", "enhanced") {
+        kind = "enhanced"
+    } else {
+        return Err(tx_err(w.line, w.col, "syntax", "вид стороны: ${kw(words, "kind_party", "agent")}, ${kw(words, "kind_party", "human")}, ${kw(words, "kind_party", "enhanced")}, ${kw(words, "kind_party", "human or agent by setting")} …, ${kw(words, "kind_party", "machine")}"))
     }
     p_expect(p, "(")?
-    p_expect_word(p, "итог")?
+    p_expect_kw(p, words, "kind_party", "result")?
     mut result = ""
     if kind == "agent" {
         result = ty_parse(p, cx)?
     } else {
-        ro g = p_tok(p)
-        if !t_is_word(g, "ИсходВорот") { return Err(p_fail(p, "у этой стороны итог — `ИсходВорот`")) }
-        p_adv(p)
+        if !p_eat_kw(p, words, "type", "GateOutcome") { return Err(p_fail(p, "у этой стороны итог — `${kw(words, "type", "GateOutcome")}`")) }
     }
     p_expect(p, ")")?
     p_end(p)?
@@ -136,7 +140,7 @@ fn party_row(r TxEntry, mut cx TxCx) -> Result[TxPartyRow, TranslateError] {
     Ok(TxPartyRow { ru: n.text, en, pairs })
 }
 
-fn party_columns() -> []str => ["имя", "идентификатор", "вид", "профиль", "слова ворот", "счётчик"]
+fn party_columns() -> []str => ["name", "id", "kind", "profile", "gate_words", "counter"]
 
 fn limit_expression(line TxKv, mut cx TxCx) -> Result[TxJ, TranslateError] {
     mut p = lex_segs(line.segs)?
@@ -153,7 +157,7 @@ fn decl_request_limit(entries []TxEntry, sec TxSection, mut cx TxCx) -> []TxJ {
         ro e = entries[i]
         if e.kind == EN_TEXT && kv_colon(e) >= 0 {
             ro line = kv_read(entries, i)
-            if line.key == "Предел запросов" {
+            if line.key == "Request limit" {
                 match limit_expression(line, cx) {
                     Ok(x) => { out.push(x) }
                     Err(err) => note(cx, err)
@@ -187,10 +191,10 @@ fn decl_parties(entries []TxEntry, sec TxSection, mut cx TxCx) -> []TxPartyRow {
                 }
                 if cx.errors.len() > before { cx.rows_noted += 1 }
             }
-            i = tab_end(entries, i, sec.last)
+            i = tab_end(entries, i, sec.last, cx.words)
         } else if e.kind == EN_TEXT && kv_colon(e) >= 0 {
             ro line = kv_read(entries, i)
-            if line.key == "Предел запросов" {
+            if line.key == "Request limit" {
                 // read by `decl_request_limit`
                 cx.rows_total += 0
             } else {
@@ -236,7 +240,7 @@ type TxPhrase { text str, first TxTok }
 /// The section `## Сигналы`: `| имя | поля |`; returns the JSON of the signals.
 fn decl_signals(entries []TxEntry, sec TxSection, mut cx TxCx) -> []TxJ {
     mut out = []TxJ.new()
-    for r in section_table(entries, sec, ["имя", "поля"], cx) {
+    for r in section_table(entries, sec, ["name", "fields"], cx) {
         cx.rows_total += 1
         ro before = cx.errors.len()
         match signal_row(r, cx) {
@@ -263,7 +267,7 @@ type TxPartItem { party_ru str, item TxJ }
 /// The section `## Части ответа`: `| сторона | имя | поля |`.
 fn decl_parts(entries []TxEntry, sec TxSection, mut cx TxCx) -> []TxPartItem {
     mut out = []TxPartItem.new()
-    for r in section_table(entries, sec, ["сторона", "имя", "поля"], cx) {
+    for r in section_table(entries, sec, ["party", "name", "fields"], cx) {
         cx.rows_total += 1
         ro before = cx.errors.len()
         match part_row(r, cx) {
@@ -310,7 +314,7 @@ fn defs_register(entries []TxEntry, sec TxSection, mut cx TxCx) -> () {
         Ok(p0) => {
             mut k = 0
             while k + 1 < p0.toks.len() {
-                if t_is_word(p0.toks[k], "определение") && p0.toks[k + 1].kind == TK_NAME {
+                if t_is_kw(p0.toks[k], cx.words, "decl", "define") && p0.toks[k + 1].kind == TK_NAME {
                     ro n = p0.toks[k + 1]
                     ro en = decl_name(cx, n, ["function", "method", "variable"], "функция")
                     if pair_has(cx.env.defs, n.text) {
@@ -329,7 +333,7 @@ fn defs_register(entries []TxEntry, sec TxSection, mut cx TxCx) -> () {
 // One definition after `определение`.
 fn def_one(mut p TxP, mut cx TxCx) -> Result[TxJ, TranslateError] {
     ro n = p_tok(p)
-    if n.kind != TK_NAME { return Err(p_fail(p, "после `определение` ожидается имя")) }
+    if n.kind != TK_NAME { return Err(p_fail(p, "после `${kw(cx.words, "decl", "define")}` ожидается имя")) }
     p_adv(p)
     ro en = match pair_get(cx.env.defs, n.text) {
         Some(x) => x
@@ -367,11 +371,11 @@ fn decl_definitions(entries []TxEntry, sec TxSection, mut cx TxCx) -> []TxJ {
         Ok(p0) => {
             mut p = p_copy(p0)
             while !p_done(p) {
-                ro kw = p_tok(p)
-                if !t_is_word(kw, "определение") {
-                    note(cx, tx_err(kw.line, kw.col, "syntax", "ожидается `определение`, найдено: ${t_shown(kw)}"))
+                ro head = p_tok(p)
+                if !t_is_kw(head, cx.words, "decl", "define") {
+                    note(cx, tx_err(head.line, head.col, "syntax", "ожидается `${kw(cx.words, "decl", "define")}`, найдено: ${t_shown(head)}"))
                     p_adv(p)
-                    while !p_done(p) && !p_is_word(p, "определение") { p_adv(p) }
+                    while !p_done(p) && !p_is_kw(p, cx.words, "decl", "define") { p_adv(p) }
                     continue
                 }
                 p_adv(p)
@@ -380,11 +384,11 @@ fn decl_definitions(entries []TxEntry, sec TxSection, mut cx TxCx) -> []TxJ {
                 match def_one(p, cx) {
                     Ok(j) => {
                         out.push(j)
-                        cx_place(cx, "$.definitions[${out.len() - 1}]", kw.line)
+                        cx_place(cx, "$.definitions[${out.len() - 1}]", head.line)
                     }
                     Err(e) => {
                         note(cx, e)
-                        while !p_done(p) && !p_is_word(p, "определение") { p_adv(p) }
+                        while !p_done(p) && !p_is_kw(p, cx.words, "decl", "define") { p_adv(p) }
                     }
                 }
                 if cx.errors.len() > before { cx.rows_noted += 1 }
@@ -418,7 +422,7 @@ fn prim_row(r TxEntry, mut cx TxCx) -> Result[str, TranslateError] {
 /// The section `## Примитивы`: the names of the primitives (the host's registry has their signatures).
 fn decl_primitives(entries []TxEntry, sec TxSection, mut cx TxCx) -> []str {
     mut out = []str.new()
-    for r in section_table(entries, sec, ["имя", "параметры", "результат", "класс", "читает", "пишет"], cx) {
+    for r in section_table(entries, sec, ["name", "parameters", "result", "class", "reads", "writes"], cx) {
         cx.rows_total += 1
         ro before = cx.errors.len()
         match prim_row(r, cx) {
