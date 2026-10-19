@@ -36,6 +36,9 @@ export type Status = {
   model?: string
   state: State
   since?: number
+  /** Порог «завис?» на момент записи, мс (long_turn_minutes, задача 111); есть только у state working и когда порог включён. since — последнее
+   *  обновление хода (последний запрос модели): прошло больше порога — панель пишет «завис? Nч», а не «работает N мин». */
+  longTurnMs?: number
   /** Одна строка по-русски: что делает или чего ждёт. */
   detail: string
   /** Вопрос владельцу (state owner): последние строки ответа. */
@@ -174,6 +177,8 @@ export type StatusInput = {
   staleSince?: number
   /** ход завис: модель молчит с этого времени, строки idle нет (core.ts hungTurn) */
   hungSince?: number
+  /** порог «завис?» панели, мс (cfg.longTurnMin, задача 111); 0 или нет — не показывать */
+  longTurnMs?: number
   /** Остановка на воротах без вопроса (index.ts: ход вкладки кончился, вопроса нет): с какого времени; wait — не запись «ворота», а ход
    *  вкладки владельца кончился фразой ожидания его решения (задача 064, п. 10), text — эта фраза */
   gate?: { at: number; wait?: true; text?: string }
@@ -261,7 +266,7 @@ function statusOfAll(x: StatusInput): Status {
     const tail = form.exhausted ? "без ответа, нужен владелец" : form.repeats ? `повтор ${form.repeats} из ${FORM_MAX_REPEATS}` : form.cancelled ? "закрыт без ответа, будет повторён" : ""
     return { ...base, state: "owner", since: form.at, question: q, formId: form.id, detail: form.exhausted ? `${tail} (с ${hm(form.at)}): ${q}` : `ждёт вас с ${hm(form.at)}${tail ? ` (${tail})` : ""}: ${q}` }
   }
-  if (x.busy) return { ...base, state: "working", since: x.busySince, detail: `работает${x.busySince ? ` (${minutes(x.busySince, now)})` : ""}` }
+  if (x.busy) return { ...base, state: "working", since: x.busySince, ...(x.longTurnMs && x.busySince ? { longTurnMs: x.longTurnMs } : {}), detail: `работает${x.busySince ? ` (${minutes(x.busySince, now)})` : ""}` }
   // сессию задачи ведёт интегратор, и её вопрос в конце хода бывает ему (сдавший воркер спросил интегратора), а бывает
   // владельцу (приёмщик просил «вливай?»): кому — по тексту не определить. Поэтому у сессии задачи — «question»: видно
   // в /crew, но без уведомления; «owner» с уведомлением — только у вкладок владельца.
@@ -703,6 +708,8 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
   const mine = project ? list.filter((s) => (s.project ?? "?") === project) : list
   // панель узкая (~32 знака): кто — до 9 знаков, что — до 20, иначе строка переносится
   const who = (s: Status) => (s.task ? `${refOf(s)} ${s.task.as === "reviewer" ? "прм" : "исп"}` : s.role === "integrator" ? "интегр." : s.role.slice(0, 9))
+  // ход без обновления дольше порога (задача 111; порог записан в статус плагином, long_turn_minutes; 0 или нет — не «завис?»); строго больше
+  const isLong = (s: Status) => s.state === "working" && !!s.since && !!s.longTurnMs && now - s.since > s.longTurnMs
   const what = (s: Status): string => {
     switch (s.state) {
       case "owner":
@@ -710,6 +717,8 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
       case "question":
         return s.wait ? "ждёт указаний" : "вопрос — ждёт ответа"
       case "working":
+        // ход давно не обновлялся (задача 111): «завис? 42ч», а не «работает 2540 мин»
+        if (isLong(s)) return `завис? ${now - s.since! >= 3_600_000 ? `${Math.floor((now - s.since!) / 3_600_000)}ч` : `${Math.floor((now - s.since!) / 60_000)}м`}`
         return s.since ? `работает ${minutes(s.since, now)}` : "работает"
       case "watch":
         return s.watches[0] && !s.watches[0].started ? `⧗ очередь: ${s.watches[0].note ?? "машина"}` : `⧗ ${s.watches[0]?.note ?? "наблюдение"}`
@@ -740,7 +749,7 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
   }
   // вкладка, которой нужно внимание (ждёт вас, задала вопрос, простаивает): тон accent; иначе строка вкладки без задачи — base
   // (idle — muted), а строка под названием задачи — muted (задача 068)
-  const needs = (s: Status) => s.state === "owner" || s.state === "question" || !!s.idleTab
+  const needs = (s: Status) => s.state === "owner" || s.state === "question" || !!s.idleTab || isLong(s)
   const toneOf = (s: Status) => (needs(s) ? "accent" : s.state === "idle" ? "muted" : "base") as SideRow["tone"]
   const subTone = (s: Status) => (needs(s) ? "accent" : "muted") as SideRow["tone"]
   const rows: SideRow[] = []
@@ -786,6 +795,13 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
     const tone = s.task ? subTone(s) : toneOf(s)
     const mark = markOf(s) ?? " "
     const shownMark = mark.trim() ? `${mark} ` : ""
+    // работающая сессия без задачи названа по своей карточке (задача 111; владелец, 2026-10-19: «почему это не написано?» про «worker 2540 мин»):
+    // название над строкой роли, тон base, перенос и «…» как у названия задачи; нет названия или оно равно роли — только роль, как раньше
+    if (!s.task && s.state === "working" && s.role !== "integrator") {
+      const name = titleText(s.title ?? "")
+      // не название: пусто, роль, номер сессии («ses_…»), заготовка OpenCode («New session - …»)
+      if (name && name !== s.role && !/^ses_?[A-Za-z0-9]*\d[A-Za-z0-9]*$/.test(name) && !/^(?:new|child) session\b/i.test(name)) wrapWords(name, width - 2).forEach((l, i) => rows.push({ mark: " ", who: "", what: i ? `· ${l}` : l, tone: "base" }))
+    }
     const role = s.task ? (s.task.as === "reviewer" ? "прм" : "исп") : ""
     // сессия методики с видом (задача 064, п. 7): «↳ С2-5 проверка спецификации» строкой (перенос — как у названия), состояние — под ней
     const kind = g && s.task!.label && s.task!.kind ? `${shownMark}${s.task!.label} ${s.task!.kind}` : undefined

@@ -213,6 +213,17 @@ the name of its kind (`↳ С2-5 проверка спецификации`, the
 "Ход работ" block; a code outside it takes the short name of the session's goal), and the finished sessions fold into one row
 `✓ сдано N сессий`, so the rows they freed go to live tabs. `/crew` is a different, minimal screen: see «The `/crew` screen» below.
 
+A working session with no live task (a worker or a reviewer whose task was cancelled or merged) is
+named by the title of its card (task 111): the title stands over its row, wrapped by words onto two rows at most and cut with `…`, and the row
+under it keeps the role and the time (`worker    работает 12 мин`). The title is left out when it is empty, equals the role, is a session id or the
+placeholder `New session - …` of OpenCode; the integrator's own tab and the rows of tasks are not changed. A working session whose turn has had
+no update (the last model request of the turn) for longer than `long_turn_minutes` (360, that is 6 h; 0 — off; a normal key of the project file
+or of the `local` option of the plugin, like the other thresholds) is shown as `завис? 42ч` in the accent tone instead of `работает 2540 мин`.
+This is a caption of the panel only: the choice of a free window for a letter (`isFree`, a flag older than 30 minutes does not hold a window) is not changed. The busy
+flag does not outlive its task either: when a task is cancelled or merged, or its session is handed over, the flag of its sessions is dropped
+(and the session is closed, as before) if the database of OpenCode shows no turn going, the tab is not busy in the window, the request was made
+more than 2 minutes ago, the session is not on another open task and no other live service holds the card; a turn that goes is never interrupted or touched.
+
 **How the panel is drawn (task 068).** The hierarchy is a sign and a colour, never an indent: no row of the panel starts with a space
 (the window keeps leading spaces, but a wrapped row restarts at the first column and two rows that start with the same two spaces
 read as one column, so an indent is no sign). The title of a task is **white** (the theme's base text colour) and starts with the

@@ -642,6 +642,22 @@ export default {
       log(`retry failed turn ${c.session} (${turn.at})`)
     }
 
+    // Снять застрявший флаг занятости сессии закрытой задачи (t) или закрытой карточки (без t). Не снимается, если: карточку держит живой другой
+    // процесс службы; запрос сделан только что (ход ещё не дошёл до базы: BUSY_RELEASE_GRACE_MS); вкладка в окне занята; по базе ход идёт
+    // (openTurn); сессия уже на другой открытой задаче. Ход не прерывается и не будится: снимается только отметка
+    const BUSY_RELEASE_GRACE_MS = 120_000
+    async function releaseBusy(sid: string, t?: Task): Promise<void> {
+      const c = readJson<Card>(cardFile(sid))
+      if (!c?.busy) return
+      if (c.pid !== process.pid && pidAlive(c.pid)) return
+      if (now() - (c.busySince ?? 0) < BUSY_RELEASE_GRACE_MS) return
+      if (tabOf(sid)?.tab.busy) return
+      if (t && [c.task, c.review].some((r) => r && (r.project !== t.project || r.n !== t.n) && isOpen(loadTask(r.project, r.n) ?? ({ status: "cancelled" } as Task)))) return
+      if (await openTurn(sid, now())) return
+      setBusy(c, false)
+      log(`busy flag of ${sid} dropped${t ? `: task ${taskNo(t)} is ${t.status}` : ": the session is closed"}, no turn runs`)
+    }
+
     // КОНЕЦ ЗАДАЧИ (план 002, Ф.3). Задача очищена или отменена — сессии задачи (исполнитель, приёмщик, прежние)
     // закрываются: строка в историю без хода, уведомление интегратору. Только когда ход сессии не идёт: строка,
     // записанная посреди хода, стала бы ещё одним шагом модели (замер 2026-10-05).
@@ -687,6 +703,14 @@ export default {
             for (const w of ws) dropWatch(w, log)
           }
         }
+      // ФЛАГ ЗАНЯТОСТИ НЕ ПЕРЕЖИВАЕТ ЗАДАЧУ (задача 111): карточка с busy, которую никто не снял (ход оборвался вместе с процессом службы, строка idle
+      // не дошла), не давала закрыть сессию закрытой задачи и висела на панели «работает 2540 мин». Флаг сессий закрытой (влита, отменена) задачи и
+      // закрытой (переданной) карточки снимается, когда хода по базе нет
+      for (const t of listTasks()) {
+        if (t.status !== "done" && t.status !== "cancelled") continue
+        for (const sid of new Set([t.executor, t.reviewer, ...t.executors, ...(t.reviewers ?? [])].filter(Boolean) as string[])) await releaseBusy(sid, t)
+      }
+      for (const c of allCards()) if (c.busy && c.spawned?.status === "closed") await releaseBusy(c.session)
       for (const t of listTasks()) {
         if (t.status !== "done" && t.status !== "cancelled") continue
         const sessions = [t.executor, t.reviewer, ...t.executors, ...(t.reviewers ?? [])].filter(Boolean) as string[]
@@ -1133,7 +1157,7 @@ export default {
           }
         }
         const gate = await gateStep(c, busy, end, formOpen.has(c.session), t)
-        const s0 = statusOf({ card: c, busy, busySince: c.busySince, end, asked: asked.get(c.session) ?? [], askedStale: askedStale.get(c.session) ?? [], now: t, watches: ws, ...(staleSince ? { staleSince } : {}), ...(hungSince ? { hungSince } : {}), ...(gate ? { gate } : {}) })
+        const s0 = statusOf({ card: c, busy, busySince: c.busySince, end, asked: asked.get(c.session) ?? [], askedStale: askedStale.get(c.session) ?? [], now: t, watches: ws, longTurnMs: loadConfig(c.directory).longTurnMin * 60_000, ...(staleSince ? { staleSince } : {}), ...(hungSince ? { hungSince } : {}), ...(gate ? { gate } : {}) })
         const idle = await idleStep(c, s0, end, !!tab, saved, t)
         const s = idle ? withIdle(s0, idle, t) : s0
         const prev = saveStatus(s)

@@ -48,6 +48,8 @@ export const STABLE_FILES = [
   "crew-answer-loop",
   // task 096: timing of the delay and the interrupt
   "crew-form-auto-flow",
+  // task 111: a service pass and the database in one file
+  "crew-panel-busy",
 ]
 
 const args = process.argv.slice(2)

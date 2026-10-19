@@ -230,6 +230,8 @@ export type CrewConfig = {
   stallMin: number
   /** простой вкладки между сессиями, минут (idle_tab_minutes, задача 063); 0 — не будить */
   idleTabMin: number
+  /** ход без обновления дольше этого (минут) панель показывает «завис?», а не «работает» (long_turn_minutes, задача 111); 0 — не показывать */
+  longTurnMin: number
   /** принятая, но не очищенная задача: через столько минут — письма приёмщику и автору (0 — нет) */
   acceptedReminderMin: number
   plansDir: string
@@ -406,6 +408,7 @@ export function loadConfig(dir: string): CrewConfig {
     machineSlots: num(j.machine_slots, 1),
     stallMin: num(j.stall_minutes, 30),
     idleTabMin: num(j.idle_tab_minutes, 20),
+    longTurnMin: num(j.long_turn_minutes, 360),
     acceptedReminderMin: num(j.accepted_reminder_min, 30),
     plansDir: typeof j.plans_dir === "string" && j.plans_dir.trim() ? j.plans_dir.trim() : "docs/plans",
     tasksDir: typeof j.tasks_dir === "string" ? j.tasks_dir.trim() : "doc/tasks",
