@@ -336,14 +336,14 @@ def main():
     flows()
     os.makedirs(OUT_DIR, exist_ok=True)
     for f, s in sorted(ALL.items()):
-        with open(os.path.join(OUT_DIR, s.fname + ".scenario.json"), "w", encoding="utf-8", newline="\n") as out:
+        with open(os.path.join(OUT_DIR, s.fname + ".scenario.test.json"), "w", encoding="utf-8", newline="\n") as out:
             out.write(s.render())
     # the list of the embedded files in src/machine/data.nv
     data_path = os.path.join("src", "machine", "data.nv")
     lines = open(data_path, encoding="utf-8").read().split("\n")
     lines = [l for l in lines if "agent-step-" not in l]
     at = [i for i, l in enumerate(lines) if l.startswith("export fn scenario_files()")][0] + 1
-    entries = ['    NamedText { name: "%s.scenario.json", text: embed_str("scenarios/%s.scenario.json") },' % ("agent-step-" + f, "agent-step-" + f) for f in sorted(ALL)]
+    entries = ['    NamedText { name: "%s.scenario.test.json", text: embed_str("scenarios/%s.scenario.test.json") },' % ("agent-step-" + f, "agent-step-" + f) for f in sorted(ALL)]
     lines[at:at] = entries
     open(data_path, "w", encoding="utf-8", newline="").write("\n".join(lines))
     print(len(ALL), "scenarios")
