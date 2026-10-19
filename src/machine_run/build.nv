@@ -1,0 +1,174 @@
+// build.nv - a machine that is data made ready to run: the constants and the parameters evaluated, the definitions with the type
+// names, the registry that checks the primitives, the initial data.
+module crew_harness.machine_run
+
+import std.text
+import crew_harness.machine.{Value, Expr, Binding, Scope, DefTable, DefFn, Registry, TextType, BoolType, check_value}
+import crew_harness.machine.{Null, Text, List, RecordField, eval_defs, make_record, error_text, NoHost, call, name_ref, bin, lambda1}
+import crew_harness.machine_table.{MachineDef, load_machine, issue_text, find_state, find_party}
+
+/// The names of the end states as a list of texts: the global `end_states` and the definition `end(s)` of the catalog (format 12) use it.
+fn end_state_names(def MachineDef) -> Value {
+    mut names = []Value.new()
+    for st in def.states {
+        if state_is_end(st.kind) { names.push(Text(st.name)) }
+    }
+    List(names)
+}
+
+fn end_definition() -> DefFn {
+    ro same = bin(Eq, name_ref("x"), name_ref("s"))
+    ro body = call("any", [name_ref("end_states"), lambda1("x", same)])
+    DefFn { name: "end", params: ["s"], specs: [TextType], result: BoolType, body }
+}
+
+fn base_table(def MachineDef, registry Registry, globals []Binding) -> DefTable {
+    mut fns = []DefFn.new()
+    for d in def.definitions { fns.push(d) }
+    fns.push(end_definition())
+    DefTable { fns, types: def.types, globals, registry, checked: true }
+}
+
+fn eval_global(e Expr, globals []Binding, table DefTable) -> Result[Value, str] {
+    mut host = NoHost { unused: 0 }
+    ro scope = Scope { bindings: globals }
+    match eval_defs(e, scope, table, host) {
+        Ok(v) => Ok(v)
+        Err(x) => Err(error_text(x))
+    }
+}
+
+fn with_binding(globals []Binding, name str, value Value) -> []Binding {
+    mut out = []Binding.new()
+    for g in globals { out.push(g) }
+    out.push(Binding { name, value })
+    out
+}
+
+/// A machine ready to run. The constants and the parameters are evaluated in order (a later one may read an earlier one); a wrong
+/// value of a type, an error of the evaluator or an initial value that does not fit its datum refuses the machine.
+export fn table_machine(def MachineDef, registry Registry) -> Result[TableMachine, str] {
+    mut globals = []Binding.new()
+    globals.push(Binding { name: "end_states", value: end_state_names(def) })
+    ro first = base_table(def, registry, globals)
+    for c in def.constants {
+        ro v = match eval_global(c.value, globals, first) {
+            Ok(x) => x
+            Err(m) => return Err("the constant ${c.name}: ${m}")
+        }
+        match check_value(c.spec, v, def.types) {
+            Ok(u) => ()
+            Err(x) => return Err("the constant ${c.name}: ${x.path} ${x.message}")
+        }
+        globals = with_binding(globals, c.name, v)
+    }
+    for p in def.params {
+        ro v = match eval_global(p.default_value, globals, first) {
+            Ok(x) => x
+            Err(m) => return Err("the parameter ${p.name}: ${m}")
+        }
+        match check_value(p.spec, v, def.types) {
+            Ok(u) => ()
+            Err(x) => return Err("the parameter ${p.name}: ${x.path} ${x.message}")
+        }
+        globals = with_binding(globals, p.name, v)
+    }
+    ro table = base_table(def, registry, globals)
+    ro data = match initial_data_of(def, table, Null) {
+        Ok(d) => d
+        Err(m) => return Err(m)
+    }
+    ro at = find_state(def, def.initial)
+    mut quiet = false
+    if at >= 0 && !def.input.present && state_is_appeal(def.states[at].kind) {
+        ro pi = find_party(def, def.states[at].party)
+        if pi >= 0 && !sends_to(def.parties[pi].kind) { quiet = true }
+    }
+    Ok(TableMachine { def, table, initial_data: data, quiet_start: quiet, replies: []ScriptedReply.new() })
+}
+
+/// The initial data. `input` is the record of the input fields (or Null): a datum `from_input` takes its field, an expression may read `input`.
+fn initial_data_of(def MachineDef, table DefTable, input Value) -> Result[Value, str] {
+    mut fields = []RecordField.new()
+    mut globals = []Binding.new()
+    for g in table.globals { globals.push(g) }
+    globals.push(Binding { name: "input", value: input })
+    match input {
+        Record { name, fields: input_fields } => {
+            for f in input_fields { globals.push(Binding { name: f.name, value: f.value }) }
+        }
+        _ => ()
+    }
+    for d in def.data {
+        if d.name.contains("[") { continue }
+        match d.initial {
+            NoInitial => fields.push(RecordField { name: d.name, value: Null })
+            InitialFromInput(f) => {
+                mut v Value = Null
+                match input {
+                    Record { name, fields: input_fields } => {
+                        for g in input_fields {
+                            if g.name == f { v = g.value }
+                        }
+                    }
+                    _ => ()
+                }
+                fields.push(RecordField { name: d.name, value: v })
+            }
+            InitialExpr(e) => {
+                ro v = match eval_global(e, globals, table) {
+                    Ok(x) => x
+                    Err(m) => return Err("the initial value of ${d.name}: ${m}")
+                }
+                match check_value(d.spec, v, def.types) {
+                    Ok(u) => ()
+                    Err(x) => return Err("the initial value of ${d.name}: ${x.path} ${x.message}")
+                }
+                fields.push(RecordField { name: d.name, value: v })
+            }
+        }
+    }
+    Ok(make_record("Data", fields))
+}
+
+/// The machine from the text of its JSON tree: decoded, checked as a table, made ready. The error is every issue in one text.
+export fn load_table_machine(text str, registry Registry) -> Result[TableMachine, str] {
+    match load_machine(text, registry) {
+        Ok(def) => table_machine(def, registry)
+        Err(issues) => {
+            mut lines = []str.new()
+            for e in issues { lines.push(issue_text(e)) }
+            Err(lines.join(" | "))
+        }
+    }
+}
+
+/// The same machine with the answers of the primitives of its default host (`ScriptedHost`).
+export fn with_replies(machine TableMachine, replies []ScriptedReply) -> TableMachine {
+    TableMachine {
+        def: machine.def, table: machine.table, initial_data: machine.initial_data, quiet_start: machine.quiet_start, replies
+    }
+}
+
+fn state_is_end(kind StateKind) -> bool {
+    match kind {
+        EndKind => true
+        _ => false
+    }
+}
+
+fn state_is_appeal(kind StateKind) -> bool {
+    match kind {
+        AppealKind => true
+        _ => false
+    }
+}
+
+// Does a party of this kind get requests (the engine sends them), or does it speak by words?
+fn sends_to(kind PartyKind) -> bool {
+    match kind {
+        AgentParty => true
+        MachineParty => true
+        _ => false
+    }
+}

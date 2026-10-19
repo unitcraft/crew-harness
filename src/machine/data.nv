@@ -1,0 +1,104 @@
+// data.nv - the data files that live beside the core and are compiled into the binary: the schemas (`schema/`), the machines written as
+// JSON (`machines/`) and the scenarios (`scenarios/`). `embed_str` reads a file at compile time, relative to this file, so the tests and the
+// product need no file system to find them. The lists of the files are written here by hand (a new file is a new line; a test of the unit
+// `machine_run` fails when a scenario file of the directory is missing from the list - see README.md, "Data").
+module crew_harness.machine
+
+/// NamedText: a file of a data directory: its name and its text.
+export type NamedText { name str, text str }
+
+/// The machines of `machines/`, by the name of the file (`chat.machine.json`).
+export fn machine_files() -> []NamedText => [
+    NamedText { name: "actions.machine.json", text: embed_str("machines/actions.machine.json") },
+    NamedText { name: "calc.machine.json", text: embed_str("machines/calc.machine.json") },
+    NamedText { name: "chat.machine.json", text: embed_str("machines/chat.machine.json") },
+    NamedText { name: "gate.machine.json", text: embed_str("machines/gate.machine.json") },
+    NamedText { name: "lenses.machine.json", text: embed_str("machines/lenses.machine.json") },
+    NamedText { name: "variants.machine.json", text: embed_str("machines/variants.machine.json") }
+]
+
+/// The scenarios of `scenarios/`, by the name of the file (`chat-basic.scenario.json`).
+export fn scenario_files() -> []NamedText => [
+    NamedText { name: "calc-before-start.scenario.json", text: embed_str("scenarios/calc-before-start.scenario.json") },
+    NamedText { name: "calc-count-up.scenario.json", text: embed_str("scenarios/calc-count-up.scenario.json") },
+    NamedText { name: "calc-missing-input.scenario.json", text: embed_str("scenarios/calc-missing-input.scenario.json") },
+    NamedText { name: "calc-over-limit.scenario.json", text: embed_str("scenarios/calc-over-limit.scenario.json") },
+    NamedText { name: "chat-ack-discarded.scenario.json", text: embed_str("scenarios/chat-ack-discarded.scenario.json") },
+    NamedText { name: "chat-ack-restart.scenario.json", text: embed_str("scenarios/chat-ack-restart.scenario.json") },
+    NamedText { name: "chat-ack.scenario.json", text: embed_str("scenarios/chat-ack.scenario.json") },
+    NamedText { name: "chat-answer-after-cancel.scenario.json", text: embed_str("scenarios/chat-answer-after-cancel.scenario.json") },
+    NamedText { name: "chat-answer-after-timeout.scenario.json", text: embed_str("scenarios/chat-answer-after-timeout.scenario.json") },
+    NamedText { name: "chat-cancel-awaiting.scenario.json", text: embed_str("scenarios/chat-cancel-awaiting.scenario.json") },
+    NamedText { name: "chat-cancel-idle.scenario.json", text: embed_str("scenarios/chat-cancel-idle.scenario.json") },
+    NamedText { name: "chat-cancel-in-window.scenario.json", text: embed_str("scenarios/chat-cancel-in-window.scenario.json") },
+    NamedText { name: "chat-chunk-renews-term.scenario.json", text: embed_str("scenarios/chat-chunk-renews-term.scenario.json") },
+    NamedText { name: "chat-chunks-and-done.scenario.json", text: embed_str("scenarios/chat-chunks-and-done.scenario.json") },
+    NamedText { name: "chat-cyrillic.scenario.json", text: embed_str("scenarios/chat-cyrillic.scenario.json") },
+    NamedText { name: "chat-ignored-after-done.scenario.json", text: embed_str("scenarios/chat-ignored-after-done.scenario.json") },
+    NamedText { name: "chat-ignored-chunk.scenario.json", text: embed_str("scenarios/chat-ignored-chunk.scenario.json") },
+    NamedText { name: "chat-ignored-second-message.scenario.json", text: embed_str("scenarios/chat-ignored-second-message.scenario.json") },
+    NamedText { name: "chat-journal-restart-answer.scenario.json", text: embed_str("scenarios/chat-journal-restart-answer.scenario.json") },
+    NamedText { name: "chat-late-chunk.scenario.json", text: embed_str("scenarios/chat-late-chunk.scenario.json") },
+    NamedText { name: "chat-message-opens-request.scenario.json", text: embed_str("scenarios/chat-message-opens-request.scenario.json") },
+    NamedText { name: "chat-pump-order.scenario.json", text: embed_str("scenarios/chat-pump-order.scenario.json") },
+    NamedText { name: "chat-refused-cancelled.scenario.json", text: embed_str("scenarios/chat-refused-cancelled.scenario.json") },
+    NamedText { name: "chat-refused-ceiling-reached.scenario.json", text: embed_str("scenarios/chat-refused-ceiling-reached.scenario.json") },
+    NamedText { name: "chat-refused-connection-lost.scenario.json", text: embed_str("scenarios/chat-refused-connection-lost.scenario.json") },
+    NamedText { name: "chat-refused-form-not-fixed.scenario.json", text: embed_str("scenarios/chat-refused-form-not-fixed.scenario.json") },
+    NamedText { name: "chat-refused-max-tokens.scenario.json", text: embed_str("scenarios/chat-refused-max-tokens.scenario.json") },
+    NamedText { name: "chat-refused-max-turn-requests.scenario.json", text: embed_str("scenarios/chat-refused-max-turn-requests.scenario.json") },
+    NamedText { name: "chat-refused-model-refused.scenario.json", text: embed_str("scenarios/chat-refused-model-refused.scenario.json") },
+    NamedText { name: "chat-refused-no-result.scenario.json", text: embed_str("scenarios/chat-refused-no-result.scenario.json") },
+    NamedText { name: "chat-refused-stopped-by-human.scenario.json", text: embed_str("scenarios/chat-refused-stopped-by-human.scenario.json") },
+    NamedText { name: "chat-refused-timeout.scenario.json", text: embed_str("scenarios/chat-refused-timeout.scenario.json") },
+    NamedText { name: "chat-refused-unknown-code.scenario.json", text: embed_str("scenarios/chat-refused-unknown-code.scenario.json") },
+    NamedText { name: "chat-restart-after-answer.scenario.json", text: embed_str("scenarios/chat-restart-after-answer.scenario.json") },
+    NamedText { name: "chat-restart-after-request.scenario.json", text: embed_str("scenarios/chat-restart-after-request.scenario.json") },
+    NamedText { name: "chat-restart-before-send.scenario.json", text: embed_str("scenarios/chat-restart-before-send.scenario.json") },
+    NamedText { name: "chat-second-answer.scenario.json", text: embed_str("scenarios/chat-second-answer.scenario.json") },
+    NamedText { name: "chat-silent-agent.scenario.json", text: embed_str("scenarios/chat-silent-agent.scenario.json") },
+    NamedText { name: "chat-start.scenario.json", text: embed_str("scenarios/chat-start.scenario.json") },
+    NamedText { name: "chat-timeout-awaiting.scenario.json", text: embed_str("scenarios/chat-timeout-awaiting.scenario.json") },
+    NamedText { name: "chat-tool-and-permission.scenario.json", text: embed_str("scenarios/chat-tool-and-permission.scenario.json") },
+    NamedText { name: "chat-unknown-name.scenario.json", text: embed_str("scenarios/chat-unknown-name.scenario.json") },
+    NamedText { name: "chat-unknown-request.scenario.json", text: embed_str("scenarios/chat-unknown-request.scenario.json") },
+    NamedText { name: "gate-done.scenario.json", text: embed_str("scenarios/gate-done.scenario.json") },
+    NamedText { name: "gate-failure.scenario.json", text: embed_str("scenarios/gate-failure.scenario.json") },
+    NamedText { name: "gate-ignored.scenario.json", text: embed_str("scenarios/gate-ignored.scenario.json") },
+    NamedText { name: "gate-pause-continue.scenario.json", text: embed_str("scenarios/gate-pause-continue.scenario.json") },
+    NamedText { name: "gate-pause-halt.scenario.json", text: embed_str("scenarios/gate-pause-halt.scenario.json") },
+    NamedText { name: "lenses-all-answer.scenario.json", text: embed_str("scenarios/lenses-all-answer.scenario.json") },
+    NamedText { name: "lenses-empty.scenario.json", text: embed_str("scenarios/lenses-empty.scenario.json") },
+    NamedText { name: "lenses-lost.scenario.json", text: embed_str("scenarios/lenses-lost.scenario.json") },
+    NamedText { name: "variants-fail-case.scenario.json", text: embed_str("scenarios/variants-fail-case.scenario.json") },
+    NamedText { name: "variants-malformed-answer.scenario.json", text: embed_str("scenarios/variants-malformed-answer.scenario.json") },
+    NamedText { name: "variants-retry-then-done.scenario.json", text: embed_str("scenarios/variants-retry-then-done.scenario.json") },
+    NamedText { name: "variants-timeout.scenario.json", text: embed_str("scenarios/variants-timeout.scenario.json") },
+    NamedText { name: "variants-transient-failure.scenario.json", text: embed_str("scenarios/variants-transient-failure.scenario.json") }
+]
+
+/// The schemas of `schema/` (`machine-2.schema.json`, `scenario-0.schema.json`).
+export fn schema_files() -> []NamedText => [
+    NamedText { name: "machine-2.schema.json", text: embed_str("schema/machine-2.schema.json") },
+    NamedText { name: "scenario-0.schema.json", text: embed_str("schema/scenario-0.schema.json") }
+]
+
+/// The text of the file with the name; the empty text when there is none.
+export fn text_of_file(files []NamedText, name str) -> str {
+    for f in files {
+        if f.name == name { return f.text }
+    }
+    ""
+}
+
+/// The text of the machine of the chat session (`machines/chat.machine.json`).
+export fn chat_machine_text() -> str => text_of_file(machine_files(), "chat.machine.json")
+
+/// The names of the files that the directories hold (read at compile time with `embed_dir`): a test compares them with the lists above, so a
+/// file that is added to a directory and not to its list is found.
+export fn data_dir_names(dir str) -> []str {
+    if dir == "machines" { return embed_dir("machines").paths() }
+    if dir == "scenarios" { return embed_dir("scenarios").paths() }
+    if dir == "schema" { return embed_dir("schema").paths() }
+    []str.new()
+}

@@ -12,7 +12,7 @@ task 090 (`doc/tasks/090-product-env-spike/`).
 | `ws_echo/` | Polaris server on `127.0.0.1`: `GET /` (HTML), `GET /health`, WebSocket echo `/ws` | `ws_echo_check.mjs` (Node) |
 | `acp/` | `acp_initialize.mjs`: one `initialize` request to `opencode acp` over stdio, no login, no session | exit code 0 and the printed version |
 | `repro_mut_binding/` | minimal reproduction of a Polaris documentation example that Oracle 0.1.0 rejects | see "Known problems" |
-| `repro_engine/` | minimal reproductions of Oracle 0.1.0 defects found while writing the state machine engine (task 091, items 8-13), its PostgreSQL store (task 098, items 21, 23-25), its alignment to the dictionary (task 102, items 26-28) and the expression evaluator of the machines (task 106, items 33-35) | see "Known problems", items 8-35 |
+| `repro_engine/` | minimal reproductions of Oracle 0.1.0 defects found while writing the state machine engine (task 091, items 8-13), its PostgreSQL store (task 098, items 21, 23-25), its alignment to the dictionary (task 102, items 26-28), the expression evaluator of the machines (task 106, items 33-35) and the interpreter of a machine that is data (task 107, items 36-39) | see "Known problems", items 8-39 |
 | `repro_acp/` | minimal reproductions of Oracle 0.1.0 defects found while writing the ACP client (task 095) | see "Known problems", items 14-18 and 20 |
 | `repro_child_pipes/` | a program: pipes of a child process that now and then do not come back (task 095) | see "Known problems", item 19 |
 | `repro_pg_event/` | a user record `Event` next to the driver `postgres.pgnet` (task 098, item 22); needs `nova update` (the driver comes from git) | see "Known problems", item 22 |
@@ -290,3 +290,24 @@ is `redundant type prefix` (write `=> { ... }`); a match arm that is an assignme
 (`E_MATCH_ARM_SEP_MISSING`: put the assignment in braces); a `consume` `StringBuilder` must end with `into_str()`; a struct-style variant in a pattern is `Name { a, b }`;
 `nova test src/<dir>` makes ONE unit per folder (the module of the folder), so a module of 160 tests prints one `  PASS: <name>` line each and the whole output must stay
 under 4 KB (item 20): the tests of `src/machine/` have names of 10-20 letters for that reason.
+
+Found by task 107 (the interpreter of a machine that is data, `src/machine_table/`, `src/machine_run/`, `src/machine_chat/`); the reproductions are in `repro_engine/src/`, run the same way:
+
+36. **`for_in_record_list_literal`**: `for s in [make(1), make(2)]`, an array literal whose items are records made by calls, does not compile: CODEGEN-FAIL "for-in: cannot resolve iterator type for expression of
+    C-type 'nova_unit'" (the family of item 29). Bind the list first (`ro all = [make(1), make(2)]`, `for s in all`).
+37. **`type_named_like_variant`** (with the helper module `type_named_like_variant_def`): a user type named like a CASE of an enum of another module (`type Reading enum | ...` here, `Class.Reading` there) makes
+    every use of that case in the other module "E7330 `Reading` is a sum type, not a value" - the error is reported in a file the user did not touch (type names and case names share one table of the program).
+38. **`user_type_next`**: a user record named `Next` breaks the compile of the STANDARD library (`E_BOUND_NOT_PROTOCOL` at `std/src/collections/vec_iter/core.nv`: its protocol `Next` is hidden by the record); the
+    clash is not reported at the declaration. The same family: a user record `Slot` clashes with the one of `std/src/collections/hash_map` (`E7310 type Slot is not generic`), `Output` (items 14, 21).
+39. **`same_type_name_two_modules`** (with the helper module `same_type_name_def`): two modules of one program that declare a record of the same name (`Pair`) are not isolated: a literal of the imported
+    module's `Pair { name, value }` is checked against the fields of the importer's `Pair` - `E_MISSING_FIELD_IN_LITERAL` in the file of the imported module. Type names are global to the program (the units of
+    task 107 keep the names of their types unique: `ReqField`, `Goto`, `EventRead`).
+
+Also met in task 107, without a reproduction: (a) `embed_dir("dir")` and `embed_str("file")` read relative to the source file (a missing directory is `E_EMBED_DIR_NOT_FOUND`) and bytes come back through
+`data.to_str_lossy()`; a directory of files cannot be listed by a name that is not embedded, so `src/machine/data.nv` lists its files; (b) once a program embeds a file, the prelude method
+`EmbeddedDir.merge` is compiled into it and its local `b` took the type of a PARAMETER named `b` of another function (`compare_fields(a, b []RecordField)`; later a local `b []Binding`): CC-FAIL "no member
+named 'path' in 'struct Nova_RecordField'". It did not reproduce in a small program; renaming every `a`, `b` of a list type fixed it; (c) a folder one level under `src/` next to another (`src/machine_run`
+beside `src/machine`) is a separate module and unit, and a module that imports another does NOT compile the tests of the imported one into its unit; a module in a folder under a module's folder is still
+refused (item 25; `module lib.sub` is accepted by `nova test` but cannot be imported); (d) `mut x = p.field` of a `ro` parameter that holds text or lists is `E_READONLY_COERCE` (restructure with `ro` and
+`match`, or recursion instead of a loop that reassigns a copy of a parameter); a record literal in the argument of `match f(R { ... })` is a syntax error; a match arm that is an assignment needs braces; a test
+that fails inside a loop prints one line, and the text of a failure is cut to 600 characters (read the full list from the test binary with `--keep-artifacts`); (e) `std.text` must be imported for `[]str.join`.

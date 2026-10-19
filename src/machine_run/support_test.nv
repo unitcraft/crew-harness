@@ -1,0 +1,118 @@
+// support_test.nv - helpers of the tests of the interpreter: the machines of the data directory, a step with its orders as text.
+module crew_harness.machine_run
+
+import std.text
+import crew_harness.machine.{Value, PrimitiveHost, EvalError, Null, standard_registry, machine_files, text_of_file, record_get, value_json}
+import crew_harness.engine.{Incoming, EventKind, Order, StepEnvironment, JournalEvent}
+
+fn machine_text(name str) -> str => text_of_file(machine_files(), name)
+
+fn build_from(text str) -> TableMachine {
+    match load_table_machine(text, standard_registry()) {
+        Ok(m) => m
+        Err(e) => panic("the machine does not load: ${e}")
+    }
+}
+
+fn build(name str) -> TableMachine => build_from(machine_text(name))
+
+fn chat() -> TableMachine => build("chat.machine.json")
+fn calc() -> TableMachine => build("calc.machine.json")
+fn actions() -> TableMachine => build("actions.machine.json")
+
+// An event as the engine hands it to a machine: the envelope is stamped.
+fn stamped(kind EventKind, name str, request Option[str], input str) -> Incoming => {
+    id: "e-1", trace: "t-1", step: 2, kind, name, request, input, at: 1000
+}
+
+fn said(text str) -> Incoming => stamped(EventKind.Input, "user_message", None, text)
+fn word_in(name str, input str) -> Incoming => stamped(EventKind.Input, name, None, input)
+fn chunk(text str) -> Incoming => stamped(EventKind.Progress, "agent_chunk", Some("agent-1"), text)
+fn done() -> Incoming => stamped(EventKind.Answered, "agent_done", Some("agent-1"), "")
+fn refused(code str) -> Incoming => stamped(EventKind.Refused, "agent_refused", Some("agent-1"), code)
+fn expired() -> Incoming => stamped(EventKind.Expired, "timeout", Some("agent-1"), "")
+fn cancelled() -> Incoming => stamped(EventKind.Input, "cancel", None, "")
+
+// The result of one step: the state, whether the machine moved (Go), the orders it gave.
+type Out { state TableState, moved bool, orders []Order }
+
+fn run1(m TableMachine, st TableState, event Incoming) -> Out {
+    mut environment = StepEnvironment.new()
+    mut host = ScriptedHost { at: 1000, replies: m.replies }
+    ro transition = table_step(m, st, event, environment, host)
+    match transition {
+        Go(next) => Out { state: next, moved: true, orders: environment.orders }
+        Stay => Out { state: st, moved: false, orders: environment.orders }
+    }
+}
+
+// The same with a host of the test (to see the calls of the primitives).
+fn run_with(m TableMachine, st TableState, event Incoming, mut host PrimitiveHost) -> Out {
+    mut environment = StepEnvironment.new()
+    ro transition = table_step(m, st, event, environment, host)
+    match transition {
+        Go(next) => Out { state: next, moved: true, orders: environment.orders }
+        Stay => Out { state: st, moved: false, orders: environment.orders }
+    }
+}
+
+// A host that remembers the names of the calls.
+type RecHost { calls []str }
+
+fn RecHost mut @call_primitive(name str, args []Value) -> Result[Value, EvalError] {
+    @calls.push("${name}/${args.len()}")
+    Ok(Null)
+}
+
+fn journal_text(event JournalEvent) -> str {
+    if event.params.len() == 0 { return "log:${event.code}" }
+    mut parts = []str.new()
+    for p in event.params { parts.push("${p.name}=${p.value}") }
+    "log:${event.code}(${parts.join(";")})"
+}
+
+// The orders as text, in the order of giving.
+fn summary(orders []Order) -> str {
+    mut parts = []str.new()
+    for o in orders {
+        match o {
+            Send(order) => parts.push("send:${order.party}:${order.input}:${order.idle_term}")
+            Note(event) => parts.push(journal_text(event))
+            Cancel(order) => parts.push("cancel:${order.party}")
+            Save => parts.push("save")
+            Finish(c) => match c.failure {
+                Some(code) => parts.push("finish:refusal:${code.name()}")
+                None => parts.push("finish:answer:${c.text}")
+            }
+        }
+    }
+    parts.join(",")
+}
+
+// A datum of the state (Null when there is none).
+fn datum(st TableState, name str) -> Value {
+    match st.data {
+        Record { name: record_name, fields } => match record_get(fields, name) {
+            Some(v) => v
+            None => Null
+        }
+        _ => Null
+    }
+}
+
+fn datum_json(st TableState, name str) -> str => value_json(datum(st, name))
+
+// The states one after another: each event is applied to the state the previous one left; the last Out comes back.
+fn run_all(m TableMachine, first TableState, events []Incoming) -> Out {
+    mut out = Out { state: first, moved: false, orders: []Order.new() }
+    for e in events { out = run1(m, out.state, e) }
+    out
+}
+
+// The input of a start event.
+fn start_with(json str) -> Incoming => word_in("start", json)
+
+fn started_calc(start int) -> Out {
+    ro m = calc()
+    run1(m, m.initial(), start_with("{\"start\":${start},\"label\":\"abc\"}"))
+}

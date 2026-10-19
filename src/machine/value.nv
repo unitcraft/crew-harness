@@ -204,19 +204,19 @@ fn sorted_entries(entries []DictEntry) -> []DictEntry {
     out
 }
 
-fn compare_lists(a []Value, b []Value) -> int {
+fn compare_lists(xs []Value, ys []Value) -> int {
     mut i = 0
-    while i < a.len() && i < b.len() {
-        ro c = value_compare(a[i], b[i])
+    while i < xs.len() && i < ys.len() {
+        ro c = value_compare(xs[i], ys[i])
         if c != 0 { return c }
         i += 1
     }
-    cmp_int(a.len(), b.len())
+    cmp_int(xs.len(), ys.len())
 }
 
-fn compare_entries(a []DictEntry, b []DictEntry) -> int {
-    ro sa = sorted_entries(a)
-    ro sb = sorted_entries(b)
+fn compare_entries(xs []DictEntry, ys []DictEntry) -> int {
+    ro sa = sorted_entries(xs)
+    ro sb = sorted_entries(ys)
     mut i = 0
     while i < sa.len() && i < sb.len() {
         ro ck = value_compare(sa[i].key, sb[i].key)
@@ -228,16 +228,16 @@ fn compare_entries(a []DictEntry, b []DictEntry) -> int {
     cmp_int(sa.len(), sb.len())
 }
 
-fn compare_fields(a []RecordField, b []RecordField) -> int {
+fn compare_fields(xs []RecordField, ys []RecordField) -> int {
     mut i = 0
-    while i < a.len() && i < b.len() {
-        ro cn = field_name_cmp(a[i].name, b[i].name)
+    while i < xs.len() && i < ys.len() {
+        ro cn = field_name_cmp(xs[i].name, ys[i].name)
         if cn != 0 { return cn }
-        ro cv = value_compare(a[i].value, b[i].value)
+        ro cv = value_compare(xs[i].value, ys[i].value)
         if cv != 0 { return cv }
         i += 1
     }
-    cmp_int(a.len(), b.len())
+    cmp_int(xs.len(), ys.len())
 }
 
 /// The total order of values: first by kind (null < bool < int < float < text < list < dict < record < variant), then by content.

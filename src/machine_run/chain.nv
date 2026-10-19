@@ -1,0 +1,484 @@
+// chain.nv - the chain of a step: where a row leads, the entry of the four kinds of states, the ends, the faults, the start, `table_step`.
+module crew_harness.machine_run
+
+import std.text
+import std.encoding.json.{Json}
+import crew_harness.engine.{Incoming, EventKind, Environment, Transition, SendOrder, FailCode, JournalParam, journal_event, param, Go, Stay}
+import crew_harness.machine.{Value, Null, Text, List, RecordField, Binding, PrimitiveHost, value_json, value_from_json, make_record, check_value, enum_value}
+import crew_harness.machine_table.{StateDef, Goto, find_state, find_party, find_data, RowsAndMechanics}
+import crew_harness.machine_table.{ToState}
+
+// ---- the request of an appeal ------------------------------------------------------------------------------------------------
+
+type ReqField { name str, value Value }
+
+// The text of a request: a request with one field of text is that text, with no field is empty, else the JSON of a record of the fields.
+fn request_text(pairs []ReqField) -> str {
+    if pairs.len() == 0 { return "" }
+    if pairs.len() == 1 {
+        match pairs[0].value {
+            Text(s) => return s
+            _ => ()
+        }
+    }
+    mut fields = []RecordField.new()
+    for p in pairs { fields.push(RecordField { name: p.name, value: p.value }) }
+    value_json(make_record("Request", fields))
+}
+
+fn silence_of(mut ctx Ctx, st StateDef, mut host PrimitiveHost) -> Result[int, Fault] {
+    if st.silence.len() == 0 { return Ok(0) }
+    ro v = run_expr(ctx, st.silence[0], host)?
+    match v {
+        Null => Ok(0)
+        Int(n) => Ok(if n < 0 { 0 } else { n })
+        _ => Err(defect_fault("type_mismatch", "the silence term must be an int or none"))
+    }
+}
+
+fn enter_appeal(mut ctx Ctx, st StateDef, mut host PrimitiveHost) -> Result[(), Fault] {
+    ro pi = find_party(ctx.def, st.party)
+    if pi < 0 { return Err(defect_fault("unknown_name", "no party ${st.party}")) }
+    ro party = ctx.def.parties[pi]
+    if !sends_to(party.kind) { return Ok(()) }
+    ro idle_term = silence_of(ctx, st, host)?
+    mut ids = []str.new()
+    if st.set.len() > 0 {
+        ro v = run_expr(ctx, st.set[0], host)?
+        match v {
+            List(xs) => {
+                for x in xs { ids.push(want_text(x, "an element of a set")?) }
+            }
+            _ => return Err(defect_fault("type_mismatch", "a set must be a list of texts"))
+        }
+    } else {
+        ids.push(party.id)
+    }
+    for id in ids {
+        ro mark = ctx.locals.len()
+        ctx.locals.push(Binding { name: "side", value: Text(id) })
+        mut pairs = []ReqField.new()
+        mut failed = false
+        mut fault = defect_fault("", "")
+        for f in st.inputs {
+            if f.to_party {
+                match run_expr(ctx, f.value, host) {
+                    Ok(v) => pairs.push(ReqField { name: f.field, value: v })
+                    Err(x) => {
+                        failed = true
+                        fault = x
+                    }
+                }
+            }
+        }
+        pop_to(ctx, mark)
+        if failed { return Err(fault) }
+        plan(ctx, PSend(SendOrder { party: id, input: request_text(pairs), idle_term }))
+    }
+    // a set that is the datum `to_send` is handed over to the requests: the mechanics empty it (rule 21)
+    for e in st.set {
+        match e {
+            Name(n) => {
+                ro at = find_data(ctx.def, n)
+                if at >= 0 && ctx.def.data[at].writes == RowsAndMechanics { ctx.data = data_put(ctx.data, n, List([]Value.new())) }
+            }
+            _ => ()
+        }
+    }
+    Ok(())
+}
+
+// ---- the end ---------------------------------------------------------------------------------------------------------------
+
+fn failure_of(v Value) -> Result[FailCode, Fault] {
+    match v {
+        Variant { type_name, name, fields } => {
+            if type_name != "FailCode" { return Err(defect_fault("type_mismatch", "the code of a refusal is a FailCode")) }
+            Ok(FailCode.of(name))
+        }
+        _ => Err(defect_fault("type_mismatch", "the code of a refusal is a FailCode"))
+    }
+}
+
+fn enter_end(mut ctx Ctx, st StateDef, mut host PrimitiveHost) -> Result[(), Fault] {
+    ro mark = ctx.locals.len()
+    run_actions(ctx, st.entry, host)?
+    for er in ctx.def.end_rows {
+        if er.state != st.name { continue }
+        ro w = want_bool(run_expr(ctx, er.when, host)?)?
+        if !w { continue }
+        match er.answer {
+            AnswerValue(e) => {
+                ro v = run_expr(ctx, e, host)?
+                mut text = ""
+                match v {
+                    Text(s) => { text = s }
+                    _ => { text = value_json(v) }
+                }
+                finish_with(ctx, None, text)
+            }
+            RefusalValue { code: code_expr, text: text_expr } => {
+                ro c = failure_of(run_expr(ctx, code_expr, host)?)?
+                ro t = want_text(run_expr(ctx, text_expr, host)?, "the text of a refusal")?
+                finish_with(ctx, Some(c), t)
+            }
+        }
+        pop_to(ctx, mark)
+        return Ok(())
+    }
+    pop_to(ctx, mark)
+    Err(defect_fault("no_end_row", "no row of the table Ends fits the end ${st.name}"))
+}
+
+// ---- the chain -----------------------------------------------------------------------------------------------------------------
+
+fn previous_state(ctx Ctx) -> Result[str, Fault] {
+    match data_get(ctx.data, "previous") {
+        Text(s) => Ok(s)
+        _ => Err(defect_fault("no_previous", "the datum previous is empty"))
+    }
+}
+
+// Go on from a "Where": enter the states one after another until an appeal waits or an end finishes (a call for every state of the chain).
+fn run_chain(mut ctx Ctx, next Goto, mut host PrimitiveHost) -> Result[(), Fault] {
+    ctx.chain += 1
+    if ctx.chain > MAX_CHAIN { return Err(defect_fault("chain_too_long", "more than ${MAX_CHAIN} transitions in one step")) }
+    mut target = ""
+    match next.target {
+        ToState(n) => { target = n }
+        ToPrevious => { target = previous_state(ctx)? }
+        ToSame => {
+            if !next.restart { return Ok(()) }
+            target = ctx.name
+        }
+        ToPrepareReturn => return Err(defect_fault("unsupported", "@prepare_return is not supported"))
+        ToNothing => return Ok(())
+    }
+    ctx.name = target
+    ro at = find_state(ctx.def, target)
+    if at < 0 { return Err(defect_fault("unknown_name", "no state ${target}")) }
+    ro st = ctx.def.states[at]
+    match st.kind {
+        EndKind => enter_end(ctx, st, host)
+        AppealKind => enter_appeal(ctx, st, host)
+        _ => {
+            ro mark = ctx.locals.len()
+            run_actions(ctx, st.entry, host)?
+            ro onward = run_work_row(ctx, st, host)?
+            pop_to(ctx, mark)
+            run_chain(ctx, onward, host)
+        }
+    }
+}
+
+// The first row of an operation or of a fork whose condition holds: its actions run, its "Where" comes back.
+fn run_work_row(mut ctx Ctx, st StateDef, mut host PrimitiveHost) -> Result[Goto, Fault] {
+    for r in st.rows {
+        mut take = true
+        if r.cond.len() > 0 { take = want_bool(run_expr(ctx, r.cond[0], host)?)? }
+        if take {
+            run_actions(ctx, r.actions, host)?
+            return Ok(r.next)
+        }
+    }
+    Err(Fault { defect: false, code: "fork_no_match", params: [param("fork", st.name)], kind: "", message: "" })
+}
+
+// ---- faults -----------------------------------------------------------------------------------------------------------------------
+
+fn handle_fault(mut ctx Ctx, f Fault, mut host PrimitiveHost) -> () {
+    if f.defect {
+        ctx.defect = true
+        ctx.planned = []Planned.new()
+        ctx.finished = false
+        note(ctx, "machine_defect", [param("kind", f.kind), param("message", f.message)])
+        finish_with(ctx, Some(FailCode.NoResult), "defect: ${f.message}")
+        return
+    }
+    ro e = journal_event(f.code, f.params)
+    plan(ctx, PNote(e))
+    ctx.record = record_of_event(e)
+    if ctx.def.error_end != "" {
+        ro at = find_state(ctx.def, ctx.def.error_end)
+        if at >= 0 {
+            ctx.name = ctx.def.error_end
+            ro r = enter_end(ctx, ctx.def.states[at], host)
+            match r {
+                Ok(u) => return
+                Err(x) => ()
+            }
+        }
+    }
+    finish_with(ctx, Some(FailCode.NoResult), "machine error: ${f.code}")
+}
+
+// ---- the bounds of the data ----------------------------------------------------------------------------------------------------
+
+fn compare_numbers(x_value Value, y_value Value) -> int {
+    match x_value {
+        Int(x) => match y_value {
+            Int(y) => if x < y { -1 } else if x > y { 1 } else { 0 }
+            _ => 0
+        }
+        Float(x) => match y_value {
+            Float(y) => if x < y { -1 } else if x > y { 1 } else { 0 }
+            _ => 0
+        }
+        _ => 0
+    }
+}
+
+fn check_bounds(mut ctx Ctx, before Value, mut host PrimitiveHost) -> Result[(), Fault] {
+    for d in ctx.def.data {
+        if d.name.contains("[") || !d.monotonic.on { continue }
+        ro old = data_get(before, d.name)
+        ro now = data_get(ctx.data, d.name)
+        if compare_numbers(now, old) < 0 { return Err(reason_fault("bound_violation")) }
+        for b in d.monotonic.bound {
+            ro limit = run_expr(ctx, b, host)?
+            if compare_numbers(now, limit) > 0 { return Err(reason_fault("bound_violation")) }
+        }
+    }
+    Ok(())
+}
+
+// ---- the start ---------------------------------------------------------------------------------------------------------------------
+
+fn reject(mut ctx Ctx, params []JournalParam, what str) -> () {
+    note(ctx, "input_rejected", params)
+    finish_with(ctx, Some(FailCode.NoResult), "input rejected: ${what}")
+}
+
+// The input of the call from the text of the start event; Ok(Err(..)) is a refusal that is already written.
+fn read_input(mut ctx Ctx, text str, mut host PrimitiveHost) -> Option[Value] {
+    ro def = ctx.def
+    mut fields = []RecordField.new()
+    if def.input.present {
+        ro parsed = match Json.parse(text) {
+            Ok(j) => j
+            Err(e) => {
+                reject(ctx, [param("reason", "json")], "not JSON")
+                return None
+            }
+        }
+        ro o = match parsed.object() {
+            Some(x) => x
+            None => {
+                reject(ctx, [param("reason", "json")], "not an object")
+                return None
+            }
+        }
+        for f in def.input.fields {
+            ro raw = match o.get(f.name) {
+                Some(x) => x
+                None => {
+                    reject(ctx, [param("reason", "missing"), param("field", f.name)], "${f.name} is missing")
+                    return None
+                }
+            }
+            ro v = match value_from_json(raw) {
+                Ok(x) => x
+                Err(m) => {
+                    reject(ctx, [param("reason", "type"), param("field", f.name)], "${f.name} is not a value")
+                    return None
+                }
+            }
+            match check_value(f.spec, v, def.types) {
+                Ok(u) => ()
+                Err(x) => {
+                    reject(ctx, [param("reason", "type"), param("field", f.name)], "${f.name}: ${x.message}")
+                    return None
+                }
+            }
+            fields.push(RecordField { name: f.name, value: v })
+        }
+    }
+    Some(make_record("Input", fields))
+}
+
+fn input_scope_ctx(ctx Ctx, input Value) -> Ctx {
+    mut locals = []Binding.new()
+    match input {
+        Record { name, fields } => {
+            for f in fields { locals.push(Binding { name: f.name, value: f.value }) }
+        }
+        _ => ()
+    }
+    Ctx {
+        def: ctx.def, table: ctx.table, name: ctx.name, started: ctx.started, input, data: ctx.data, event: ctx.event, locals,
+        record: ctx.record, planned: ctx.planned, fired: ctx.fired, finished: ctx.finished, defect: ctx.defect, chain: ctx.chain
+    }
+}
+
+fn start_machine(mut ctx Ctx, event Incoming, mut host PrimitiveHost) -> Result[(), Fault] {
+    ro read = read_input(ctx, event.input, host)
+    match read {
+        None => return Ok(())
+        Some(input) => {
+            mut with_input = input_scope_ctx(ctx, input)
+            mut index = 0
+            for inv in ctx.def.input.invariants {
+                ro ok = want_bool(run_expr(with_input, inv, host)?)?
+                if !ok {
+                    reject(ctx, [param("reason", "invariant"), param("index", "${index}")], "invariant ${index}")
+                    return Ok(())
+                }
+                index += 1
+            }
+            ro data = match initial_data_of(ctx.def, ctx.table, input) {
+                Ok(d) => d
+                Err(m) => return Err(defect_fault("initial_data", m))
+            }
+            ctx.input = input
+            ctx.data = data
+            ctx.started = true
+            ctx.fired = true
+            run_chain(ctx, Goto { target: ToState(ctx.def.initial), restart: false }, host)?
+            Ok(())
+        }
+    }
+}
+
+// ---- the step ---------------------------------------------------------------------------------------------------------------------
+
+fn new_ctx(machine TableMachine, current TableState) -> Ctx {
+    Ctx {
+        def: machine.def, table: machine.table, name: current.name, started: current.started, input: current.input, data: current.data,
+        event: EventVal { kind: EvTimeout, name: "", id: "", side: "", fields: []RecordField.new(), value: Null, reason: "" },
+        locals: []Binding.new(), record: Null, planned: []Planned.new(), fired: false, finished: false, defect: false, chain: 0
+    }
+}
+
+fn ignore_event(mut ctx Ctx, label str) -> () {
+    note(ctx, "event_ignored", [param("event", label), param("state", ctx.name)])
+}
+
+// "On accept" of an appeal: for an answer, a failure or a timeout, the first row that fits runs before the transition; its bindings stay.
+fn run_accept(mut ctx Ctx, st StateDef, mut host PrimitiveHost) -> Result[(), Fault] {
+    for a in st.accept {
+        ro h = hit_of(a.event, ctx.event)
+        if h.yes {
+            for b in h.binds { ctx.locals.push(b) }
+            run_actions(ctx, a.actions, host)?
+            return Ok(())
+        }
+    }
+    Ok(())
+}
+
+fn is_answer_kind(k EvKind) -> bool {
+    match k {
+        EvAnswer => true
+        EvFailure => true
+        EvTimeout => true
+        _ => false
+    }
+}
+
+// A failure that no row names is read as "no result" (format 4.3): the same event with the reason NoResult.
+fn as_no_result(ev EventVal) -> EventVal {
+    EventVal { kind: ev.kind, name: ev.name, id: ev.id, side: ev.side, fields: ev.fields, value: enum_value("FailCode", "NoResult"), reason: "NoResult" }
+}
+
+fn run_event(mut ctx Ctx, mut host PrimitiveHost) -> Result[(), Fault] {
+    // the common events come first, in every state
+    ro common = choose(ctx, ctx.def.common, host)?
+    if common.at >= 0 {
+        ro row = ctx.def.common[common.at]
+        ctx.fired = true
+        for b in common.binds { ctx.locals.push(b) }
+        run_actions(ctx, row.actions, host)?
+        return run_chain(ctx, row.next, host)
+    }
+    ro at = find_state(ctx.def, ctx.name)
+    if at < 0 { return Err(defect_fault("unknown_name", "no state ${ctx.name}")) }
+    ro st = ctx.def.states[at]
+    match st.kind {
+        AppealKind => {
+            if is_answer_kind(ctx.event.kind) { run_accept(ctx, st, host)? }
+            mut chosen = choose(ctx, st.rows, host)?
+            if chosen.at < 0 && ctx.event.kind == EvFailure && ctx.event.reason != "NoResult" {
+                ctx.event = as_no_result(ctx.event)
+                chosen = choose(ctx, st.rows, host)?
+            }
+            if chosen.at < 0 {
+                ignore_event(ctx, ctx.event.name)
+                return Ok(())
+            }
+            ro row = st.rows[chosen.at]
+            ctx.fired = true
+            for b in chosen.binds { ctx.locals.push(b) }
+            run_actions(ctx, row.actions, host)?
+            run_chain(ctx, row.next, host)
+        }
+        _ => {
+            ignore_event(ctx, ctx.event.name)
+            Ok(())
+        }
+    }
+}
+
+fn flush(ctx Ctx, mut environment Environment) -> () {
+    for p in ctx.planned {
+        match p {
+            PNote(e) => environment.write_journal(e)
+            PSend(s) => environment.order_send(s)
+            PCancel(c) => environment.order_cancel(c)
+            PFinish(c) => environment.order_finish(c)
+        }
+    }
+    if ctx.fired && !ctx.defect { environment.order_save() }
+}
+
+fn result_of(ctx Ctx, current TableState) -> Transition[TableState] {
+    if ctx.defect { return Stay }
+    if !ctx.fired { return Stay }
+    Go(TableState { name: ctx.name, started: ctx.started, input: ctx.input, data: ctx.data })
+}
+
+/// One step of a machine that is data (see the top of this file). Reads only its arguments; gives its orders to the environment; the
+/// primitives of the machine go to the host.
+export fn table_step(machine TableMachine, current TableState, event Incoming, mut environment Environment, mut host PrimitiveHost) -> Transition[TableState] {
+    mut ctx = new_ctx(machine, current)
+    if !current.started {
+        if event.kind == EventKind.Input && event.name == "start" {
+            ctx.event = EventVal { kind: EvInput, name: "start", id: event.id, side: "", fields: []RecordField.new(), value: Null, reason: "" }
+            match start_machine(ctx, event, host) {
+                Ok(u) => ()
+                Err(f) => handle_fault(ctx, f, host)
+            }
+        } else {
+            ignore_event(ctx, event.name)
+        }
+        flush(ctx, environment)
+        return result_of(ctx, current)
+    }
+    match read_event(ctx, event) {
+        ReadUnknown => {
+            note(ctx, "event_unknown", [param("name", event.name)])
+            flush(ctx, environment)
+            Stay
+        }
+        ReadMalformed => {
+            note(ctx, "event_malformed", [param("name", event.name)])
+            flush(ctx, environment)
+            Stay
+        }
+        ReadReady(ev) => {
+            ctx.event = ev
+            ro before = ctx.data
+            ro run = run_event(ctx, host)
+            match run {
+                Ok(u) => {
+                    match check_bounds(ctx, before, host) {
+                        Ok(v) => ()
+                        Err(f) => handle_fault(ctx, f, host)
+                    }
+                }
+                Err(f) => handle_fault(ctx, f, host)
+            }
+            flush(ctx, environment)
+            result_of(ctx, current)
+        }
+    }
+}
