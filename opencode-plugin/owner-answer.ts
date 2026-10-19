@@ -7,8 +7,9 @@
 import { existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { noteAnswered } from "./answer-loop.ts"
-import { readJson } from "./core.ts"
-import { FORMS, type PendingForm, addForm, allForms, removeForm, replacedForms, settleDuplicates } from "./form-wait.ts"
+import { type QuestionCall, readJson } from "./core.ts"
+import { DEAD_WHY, FORMS, type PendingForm, addForm, allForms, removeForm, replacedForms, settleDuplicates } from "./form-wait.ts"
+import { closeDeadMark, deadDialogOf } from "./form-restore.ts"
 import { autoLetter, autoNote } from "./form-auto.ts"
 import { BASE } from "./paths.ts"
 
@@ -49,11 +50,13 @@ const clean = (s: string) => s.replace(/\(recommended\)|\(рекомендует
 
 /** Какая форма и какой ответ. Чистая функция: её проверяет test/crew-owner-answer.test.mjs. `replaced` — записи, которые вкладка заменила
  *  новой формой того же вопроса (задача 071): ответ на такую форму отказывается с id новой. */
-export function resolveAnswer(a: OwnerAnswer, forms: { session: string; form: PendingForm }[], done: OwnerAnswer[], replaced: { session: string; form: PendingForm }[] = []): { ok: true; session: string; form: PendingForm; answer: string } | { ok: false; why: string } {
+export function resolveAnswer(a: OwnerAnswer, forms: { session: string; form: PendingForm }[], done: OwnerAnswer[], replaced: { session: string; form: PendingForm }[] = []): { ok: true; session: string; form: PendingForm; answer: string } | { ok: false; why: string; dead?: { session: string; id: string } } {
   if (!a || typeof a.quote !== "string" || !a.quote.trim()) return { ok: false, why: "no quote of the owner's word" }
   if (!a.form && !a.session) return { ok: false, why: "no form id and no session" }
   if (!a.option && !(a.text ?? "").trim()) return { ok: false, why: "no option and no text" }
-  const hits = forms.filter((x) => (a.form ? x.form.id === a.form || x.form.rid === a.form : true) && (a.session ? x.session === a.session : true))
+  let hits = forms.filter((x) => (a.form ? x.form.id === a.form || x.form.rid === a.form : true) && (a.session ? x.session === a.session : true))
+  // задача 120: вкладка назвала только сессию, а у неё живой вопрос и мёртвый диалог - ответ идёт живому
+  if (!a.form && hits.length > 1 && hits.some((x) => !x.form.dead)) hits = hits.filter((x) => !x.form.dead)
   if (!hits.length) {
     // задача 071: форму заменила новая форма того же вопроса — отказ называет форму, на которую нужно ответить (цепочка замен идёт до открытой)
     let old = a.form ? replaced.find((x) => x.form.id === a.form && (!a.session || x.session === a.session)) : undefined
@@ -69,6 +72,8 @@ export function resolveAnswer(a: OwnerAnswer, forms: { session: string; form: Pe
   }
   if (hits.length > 1) return { ok: false, why: `${hits.length} open forms, name the form id` }
   const { session, form } = hits[0]
+  // задача 120: вызов question этой формы уже оборван (перезапуск службы), ответить некому; диалог в окне закрывают руками, запись снимается
+  if (form.dead) return { ok: false, why: DEAD_WHY, dead: { session, id: form.id } }
   let answer: string
   if (a.option) {
     const opts = form.options ?? []
@@ -100,6 +105,8 @@ export type AnswerDeps = {
   letter(session: string, text: string, id: string): void
   history(session: string, note: string): void
   say(line: string): void
+  /** задача 120: последний вызов question вкладки по базе (core.ts questionCall); без него отказ «нет открытой формы» не уточняется */
+  call?(session: string): Promise<QuestionCall>
 }
 
 /** Один проход по папке входящих ответов: каждый новый файл — применён или отказан, итог в файле и в журнале. */
@@ -130,9 +137,21 @@ export async function answerTick(deps: AnswerDeps, now = Date.now(), dir = ANSWE
       const done = all.map((x) => x.a).filter((x): x is OwnerAnswer => !!x && !!x.status)
       const r = resolveAnswer(a, allForms(now, formsDir), done, replacedForms(now, formsDir))
       if (!r.ok) {
-        finish(file, a, { status: "refused", why: r.why, done: now })
+        let why = r.why
+        // задача 120: запись мёртвого диалога снимается («Ждут вас» его больше не держит); записи нет, но метка «удержана владельцу» и вызов оборван - тот же отказ
+        if (r.dead) {
+          removeForm(r.dead.session, r.dead.id, formsDir)
+          closeDeadMark(r.dead.id, DEAD_WHY, now, formsDir)
+        } else if (why === "no open question form" && deps.call) {
+          const d = await deadDialogOf(a, { call: deps.call }, now, formsDir).catch(() => undefined)
+          if (d) {
+            why = DEAD_WHY
+            closeDeadMark(d.id, DEAD_WHY, now, formsDir)
+          }
+        }
+        finish(file, a, { status: "refused", why, done: now })
         a.status = "refused"
-        deps.say(`owner answer ${a.id} not applied: ${r.why}`)
+        deps.say(`owner answer ${a.id} not applied: ${why}`)
         continue
       }
       ;({ session, form, answer } = r)

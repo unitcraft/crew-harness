@@ -681,7 +681,7 @@ function syncMark(formsDir: string, answersDir: string, m: Mark): Mark {
     return f
   }
   // the owner was first (his answer file or his reply took the form): not a failure of ours, not counted anywhere
-  if (a?.status === "refused" && /already answered|no open question form|вопрос задан заново/.test(a.why ?? "")) {
+  if (a?.status === "refused" && /already answered|no open question form|вопрос задан заново|диалог закрыт/.test(a.why ?? "")) {
     const f: Mark = { ...m, state: "owner", ...(a.why ? { why: a.why } : {}), at: a.done ?? m.at }
     saveMark(formsDir, f)
     return f
@@ -724,7 +724,7 @@ export async function autoTick(deps: AutoDeps, now = Date.now(), formsDir = FORM
 }
 
 async function one(deps: AutoDeps, session: string, f: PendingForm, now: number, formsDir: string, answersDir: string, say: (l: string) => void) {
-  if (f.replacedBy || f.cancelled || f.repeats || f.exhausted) return // the repeats of a lost question and the history are not touched (tasks 040, 071, 073)
+  if (f.replacedBy || f.cancelled || f.repeats || f.exhausted || f.dead) return // the repeats of a lost question and the history are not touched (tasks 040, 071, 073)
   const cfg = deps.config(session)
   if (!cfg) return
   const file = answerFile(answersDir, f.id)

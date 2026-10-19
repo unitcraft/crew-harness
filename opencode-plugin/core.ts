@@ -771,6 +771,54 @@ export async function pendingTool(sessionID: string, since = PROCESS_START): Pro
   }
 }
 
+/**
+ * ВЫЗОВ `question` СЕССИИ ПО БАЗЕ (задача 120). Последний вызов инструмента `question` в ответах сессии и его судьба:
+ *   open     - running / pending, и строки idle новее него нет: диалог на экране, инструмент ждёт ответа;
+ *   answered - completed: владелец ответил (событие form.replied могло потеряться);
+ *   dead     - error (оборван: перезапуск службы, обрыв хода, час работы вызова) или running, но ход после него кончился. Диалог в окне
+ *              при этом может остаться (окно перезапуск не закрывает), а ответить ему некому. dismissed - владелец закрыл диалог сам (Esc);
+ *   none     - вызова не нашли (нет базы, нет такой сессии, вызовов question в последних ответах нет).
+ * В отличие от pendingTool не смотрит на PROCESS_START: вызов, начатый до перезапуска службы, остаётся открытым, пока база не сказала иного.
+ * scan - сколько последних ответов просмотреть (1 - только «открыт ли сейчас», дёшево для панели; глубже - судьба прошлого вызова).
+ */
+export type QuestionCall = { state: "open" | "answered" | "dead" | "none"; at?: number; question?: string; options?: string[]; input?: any; dismissed?: boolean; error?: string }
+export async function questionCall(sessionID: string, scan = 40): Promise<QuestionCall> {
+  const none: QuestionCall = { state: "none" }
+  if (!sessionID || !existsSync(dbFile())) return none
+  let db: any
+  try {
+    db = await openDb()
+    const idle = Number(db.prepare("select max(time_created) as t from session_message where session_id = ? and type = 'idle'").get(sessionID)?.t ?? 0)
+    const rows = db.prepare("select data, time_created from session_message where session_id = ? and type = 'assistant' order by time_created desc, seq desc limit ?").all(sessionID, Math.max(1, scan)) as any[]
+    for (const r of rows) {
+      let parts: any
+      try {
+        parts = JSON.parse(r.data)?.content
+      } catch {
+        continue
+      }
+      const p = Array.isArray(parts) ? [...parts].reverse().find((x: any) => x?.type === "tool" && x?.name === "question") : undefined
+      if (!p) continue
+      const qs = p.state?.input?.questions
+      const first = Array.isArray(qs) ? qs[0] : undefined
+      const options = Array.isArray(first?.options) ? first.options.map((o: any) => (typeof o === "string" ? o : String(o?.label ?? ""))).filter(Boolean) : undefined
+      const info = { at: Number(p.time?.created) || Number(r.time_created) || 0, ...(typeof first?.question === "string" ? { question: first.question } : {}), ...(options?.length ? { options } : {}), ...(p.state?.input ? { input: p.state.input } : {}) }
+      const status = String(p.state?.status ?? "")
+      if (status === "completed") return { state: "answered", ...info }
+      if (status === "running" || status === "pending") return idle > Number(r.time_created) ? { state: "dead", ...info } : { state: "open", ...info }
+      const message = String(p.state?.error?.message ?? "")
+      return { state: "dead", ...info, ...(/dismissed/i.test(message) ? { dismissed: true } : {}), ...(message ? { error: message } : {}) }
+    }
+    return none
+  } catch {
+    return none
+  } finally {
+    try {
+      db?.close()
+    } catch {}
+  }
+}
+
 /** ОКНО ГОВОРИТ «ХОД ИДЁТ», А СЕРВЕР СВОБОДЕН (2026-10-06): сообщение интегратору nova ушло в миг перезапуска сервиса и
  *  потерялось, окно осталось «занятым» полтора часа, плагин копил письма до конца хода, которого нет. Хода нет, если
  *  база не видит открытого хода и последний конец хода старше staleMs; тогда — время того конца (иначе 0). */

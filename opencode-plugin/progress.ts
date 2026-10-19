@@ -417,6 +417,8 @@ export const SESSION_WORDS: Record<string, string> = {
 /** Состояние вкладки одним словом (status.ts stateText). Имя с CREW_: STATE_WORDS выше — слова таблицы «Ход работ», другое. */
 export const CREW_STATE_WORDS: Record<string, string> = {
   owner: "waiting you",
+  dialog: "dialog, no record", // задача 120: диалог вопроса на экране, записи формы нет
+  deadDialog: "dialog closed", // задача 120: вызов оборван, диалог мог остаться в окне - закрыть вручную
   gate: "gate", // остановка на воротах без вопроса владельцу
   hung: "hung · Esc", // ход завис: нажмите Esc в окне и напишите «продолжай»
   lost: "no turn · Esc", // окно считает ход идущим, а сервер свободен: Esc и повторить сообщение

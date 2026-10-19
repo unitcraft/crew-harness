@@ -16,13 +16,17 @@
 // and its reminders to the owner say "loop".
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { CARDS, readJson, safeKey } from "./core.ts"
+import { CARDS, type QuestionCall, readJson, safeKey } from "./core.ts"
 import { loopLine, loopNote, loopOf, LOOP_HINT, noteAsk } from "./answer-loop.ts"
 import { clearGate, GATE_MARK } from "./gate-stop.ts"
 import { BASE } from "./paths.ts"
 
 export const FORMS = path.join(BASE, "forms")
 export const FORM_TTL_MS = 12 * 3_600_000
+/** Task 120: how long a DEAD record (see PendingForm.dead) stays in the list after the call died: the dialog may hang in the window that long. */
+export const FORM_DEAD_TTL_MS = 24 * 3_600_000
+/** Task 120: the refusal of an answer to a dead dialog (crew-answer, owner-answer.ts) and the tail of its row in the panel. */
+export const DEAD_WHY = "диалог закрыт (вызов question завершён), вкладку закрыть вручную"
 
 /** Repeats of a lost question (the times can be shortened by CREW_HARNESS_FORM_*_MS, for self-tests), the pause between them, the reminder of the owner, the time a tab must be quiet before the
  *  question counts as gone, and the time the windows get to recover after a restart of the service. */
@@ -73,6 +77,14 @@ export type PendingForm = {
   multi?: boolean
   /** task 084: the form is exhausted and the tab worked after that (a turn is running, or one ended): nobody waits for the owner on it any more; the record stays as history */
   resumed?: number
+  /** task 120: the call `question` of this form ended in the database with an abort (restart of the service, a broken turn) and no reply came, but the dialog may still stand
+   *  in the window. Nobody can answer it any more: the record is kept and shown ("dialog closed, close the tab by hand") and leaves the list by a refused answer, a word
+   *  of the owner in the tab, a closed tab, a new form of the same question, or FORM_DEAD_TTL_MS. Not an open question for the queue gate, the repeats, the reminders. */
+  dead?: number
+  /** task 120: form.cancelled was seen at this time but the call `question` was still open in the database: the cancel is taken (cancelled) only when the call has ended */
+  cancelSeen?: number
+  /** task 120: the record was made again from forms/auto or forms/loops (form-restore.ts) at this time */
+  restored?: number
 }
 
 /**
@@ -110,6 +122,11 @@ export function addForm(session: string, f: PendingForm, dir = FORMS) {
   if (dir === FORMS) clearGate(session)
 }
 
+/** Task 120: forms this process closed itself (a reply, an answer from outside, a settled record) and when. The database lags a moment behind the reply, so the call of such a form
+ *  may still look open; form-restore.ts does not make a record again for a form closed here a moment ago. */
+const closedHere = new Map<string, number>()
+export const closedRecently = (id: string, now = Date.now(), ms = 10 * 60_000) => now - (closedHere.get(id) ?? -Infinity) < ms
+
 /** Returns the sessions whose record was removed (the record names its session; the event of a reply may not). */
 export function removeForm(session: string | undefined, id: string, dir = FORMS): string[] {
   const files = session ? [fileOf(session, dir)] : existsSync(dir) ? readdirSync(dir).filter((n) => n.endsWith(".json")).map((n) => path.join(dir, n)) : []
@@ -118,6 +135,7 @@ export function removeForm(session: string | undefined, id: string, dir = FORMS)
     const list = readJson<PendingForm[]>(file) ?? []
     const hit = list.find((x) => x.id === id)
     if (!hit) continue
+    closedHere.set(id, Date.now())
     save(file, list.filter((x) => x.id !== id))
     const s = hit.session ?? session
     if (s) out.push(s)
@@ -139,9 +157,20 @@ export function updateForm(session: string | undefined, id: string, patch: (f: P
   return undefined
 }
 
+/** Task 120: a record is current while it is young: by the time of the ask, a dead one by the time it died. */
+const current = (f: PendingForm | undefined, now: number): f is PendingForm => !!f && typeof f.at === "number" && now - (f.dead ?? f.at) < (f.dead ? FORM_DEAD_TTL_MS : FORM_TTL_MS)
+
+/** The open questions of the tab: somebody waits on them (the queue gate, the gate of the stop, the repeats). A dead dialog is not one. */
 export function pendingForms(session: string, now = Date.now(), dir = FORMS): PendingForm[] {
   const list = readJson<PendingForm[]>(fileOf(session, dir))
-  return Array.isArray(list) ? list.filter((f) => f && typeof f.at === "number" && now - f.at < FORM_TTL_MS && !f.replacedBy && !spentForm(f, list)) : []
+  return Array.isArray(list) ? list.filter((f) => current(f, now) && !f.dead && !f.replacedBy && !spentForm(f, list)) : []
+}
+
+/** Task 120: what the owner sees for the tab: the open questions first, then the dead dialogs (nobody waits on them, but they hang in the window). The panel and /ask. */
+export function shownForms(session: string, now = Date.now(), dir = FORMS): PendingForm[] {
+  const list = readJson<PendingForm[]>(fileOf(session, dir))
+  const live = Array.isArray(list) ? list.filter((f) => current(f, now) && !f.replacedBy && !spentForm(f, list)) : []
+  return [...live.filter((f) => !f.dead), ...live.filter((f) => f.dead)]
 }
 
 /** Setup: drop wait files whose forms are all stale. */
@@ -152,7 +181,7 @@ export function cleanupForms(now = Date.now(), dir = FORMS) {
       const file = path.join(dir, n)
       if (!n.endsWith(".json")) continue
       const list = readJson<PendingForm[]>(file)
-      const fresh = Array.isArray(list) ? list.filter((f) => f && typeof f.at === "number" && now - f.at < FORM_TTL_MS) : []
+      const fresh = Array.isArray(list) ? list.filter((f) => current(f, now)) : []
       if (!Array.isArray(list) || fresh.length !== list.length) save(file, fresh)
     }
   } catch {}
@@ -322,8 +351,10 @@ export function settleDuplicates(dir = FORMS, now = Date.now()): { session: stri
   return out
 }
 
-/** onReplied: the owner answered the question of this session (task 052: the mark "stuck" of the tab goes at once). */
-export function handleFormEvent(ev: any, now = Date.now(), dir = FORMS, onReplied?: (session: string) => void) {
+/** onReplied: the owner answered the question of this session (task 052: the mark "stuck" of the tab goes at once).
+ *  deferCancel (task 120, the service passes true): form.cancelled is only noted (cancelSeen); formTick takes it (cancelled) when the call `question` has ended in the
+ *  database. Without it (the old behaviour, self-tests) the record is marked cancelled at once. */
+export function handleFormEvent(ev: any, now = Date.now(), dir = FORMS, onReplied?: (session: string) => void, deferCancel = false) {
   try {
     const e = ev?.event && typeof ev.event === "object" && ev.event.type ? ev.event : ev
     const type = String(e?.type ?? "")
@@ -374,13 +405,13 @@ export function handleFormEvent(ev: any, now = Date.now(), dir = FORMS, onReplie
       const id = body.id ?? body.form?.id
       if (!id) return
       const sid = body.sessionID ?? body.form?.sessionID
-      updateForm(sid ? String(sid) : undefined, String(id), (f) => void (f.cancelled ??= now), dir)
+      updateForm(sid ? String(sid) : undefined, String(id), (f) => void (deferCancel ? (f.cancelled || (f.cancelSeen ??= now)) : (f.cancelled ??= now)), dir)
     }
   } catch {}
 }
 
 export async function startFormWait(ctx: any, log: (line: string) => void, onReplied?: (session: string) => void): Promise<void> {
-  const handler = (ev: any) => handleFormEvent(ev, Date.now(), FORMS, onReplied)
+  const handler = (ev: any) => handleFormEvent(ev, Date.now(), FORMS, onReplied, true)
   try {
     if (typeof ctx?.event?.subscribe !== "function") throw new Error("no ctx.event.subscribe")
     const r = await ctx.event.subscribe((ev: any) => handler(ev))
@@ -416,7 +447,7 @@ export function allForms(now = Date.now(), dir = FORMS, replaced = false, waitin
       if (!n.endsWith(".json")) continue
       const list = readJson<PendingForm[]>(path.join(dir, n))
       if (!Array.isArray(list)) continue
-      for (const f of list) if (f && typeof f.at === "number" && now - f.at < FORM_TTL_MS && !!f.replacedBy === replaced && !(waiting && spentForm(f, list))) out.push({ session: f.session ?? n.replace(/\.json$/, ""), form: f })
+      for (const f of list) if (current(f, now) && !!f.replacedBy === replaced && !(waiting && spentForm(f, list))) out.push({ session: f.session ?? n.replace(/\.json$/, ""), form: f })
     }
   } catch {}
   return out.sort((a, b) => a.form.at - b.form.at)
@@ -430,6 +461,26 @@ export const replacedForms = (now = Date.now(), dir = FORMS) => allForms(now, di
 
 const hm = (t?: number) => (t ? new Date(t).toTimeString().slice(0, 5) : "?")
 const lostState = (f: PendingForm) => !!(f.cancelled || f.repeats)
+
+/**
+ * Task 120: what became of the call `question` of the database for THIS form. "unknown" - the database says nothing about it (no call, another question, no reader),
+ * and the old rules apply. The call belongs to the form when the text is the same (the cut question of the record is the beginning of the text of the call),
+ * or the call began within a minute of the form (the form is made right after the call starts).
+ * open - the dialog is on the screen and the tool waits; answered - the owner answered; dead - the call was broken (the dialog may hang in the window);
+ * dismissed - the owner closed the dialog himself (Esc: form.cancelled starts the repeat of task 040).
+ */
+export type CallFate = "open" | "answered" | "dead" | "dismissed" | "unknown"
+export function fateOf(f: PendingForm, c: QuestionCall | undefined): CallFate {
+  if (!c || c.state === "none") return "unknown"
+  const a = norm(c.question).slice(0, 60)
+  const b = norm(f.question).slice(0, 60)
+  const n = Math.min(a.length, b.length)
+  const sameText = n > 0 && a.slice(0, n) === b.slice(0, n)
+  const near = typeof c.at === "number" && c.at > 0 && Math.abs(c.at - (f.born ?? f.at)) <= 60_000
+  if (!sameText && !near) return "unknown"
+  return c.state === "open" ? "open" : c.state === "answered" ? "answered" : c.dismissed ? "dismissed" : "dead"
+}
+const markDead = (session: string, id: string, now: number, dir: string) => void updateForm(session, id, (x) => void (x.dead ??= now), dir)
 
 /** The text of the wake: the question and the options, as they were, and the order to call `question` again. */
 export function repeatText(f: PendingForm, n: number): string {
@@ -456,6 +507,8 @@ export type FormDeps = {
   wake(session: string, text: string, id: string): void | Promise<void>
   /** task 080: how many messages stand in the queue of the server for the tab; a repeat is not made while any stands (the turn is about to start, the question may come back by itself) */
   queued?(session: string): Promise<number>
+  /** task 120: the last call `question` of the tab in the database (core.ts questionCall). Without it the rules are the old ones (the request or the end of a turn closes the record). */
+  call?(session: string): Promise<QuestionCall>
   say?(line: string): void
 }
 
@@ -464,7 +517,7 @@ export const resetFormTick = () => goneSince.clear()
 
 /** How soon the service must look at the records again: every `every` ms, but every FORM_HOT_LOOK_MS while a question cancelled without an answer has not yet been returned to its tab. */
 export function formLookEvery(now = Date.now(), dir = FORMS, every = 5_000): number {
-  return allForms(now, dir).some((x) => x.form.cancelled && !x.form.wokeAt && !x.form.exhausted) ? Math.min(every, FORM_HOT_LOOK_MS) : every
+  return allForms(now, dir).some((x) => (x.form.cancelled || x.form.cancelSeen) && !x.form.wokeAt && !x.form.exhausted && !x.form.dead) ? Math.min(every, FORM_HOT_LOOK_MS) : every
 }
 
 /**
@@ -477,16 +530,48 @@ export function formLookEvery(now = Date.now(), dir = FORMS, every = 5_000): num
 export async function formTick(deps: FormDeps, now = Date.now(), dir = FORMS): Promise<void> {
   const say = deps.say ?? (() => {})
   for (const x of settleDuplicates(dir, now)) say(`form ${x.id} of ${x.session}: replaced by ${x.by} (${x.reason ?? "the same question asked again"})`)
+  const calls = new Map<string, QuestionCall>() // one read of the database per tab and look
+  const callOf = async (session: string) => {
+    if (!deps.call) return undefined
+    if (!calls.has(session)) calls.set(session, await deps.call(session))
+    return calls.get(session)
+  }
   for (const { session, form: f } of allForms(now, dir)) {
     try {
       const key = `${session}/${f.id}`
       const tab = await deps.tab(session)
+      // task 120: a dead dialog is nobody's wait; it leaves the list when its tab is gone (the window needs a few minutes after a restart to report) or the owner wrote in the tab
+      if (f.dead) {
+        if (!tab.open && now - deps.processStart > FORM_RESTART_GRACE_MS) {
+          removeForm(session, f.id, dir)
+          say(`form ${f.id} of ${session}: the dead dialog is gone, the tab is closed`)
+        } else if (await deps.ownerWrote(session, f.dead)) {
+          removeForm(session, f.id, dir)
+          say(`form ${f.id} of ${session}: the dead dialog is gone, the owner wrote in the tab`)
+        }
+        continue
+      }
+      // task 120: form.cancelled came while the call `question` is still open in the database (it is not the owner closing the dialog: that ends the call too) - not taken as a cancel
+      if (f.cancelSeen && !f.cancelled) {
+        if (fateOf(f, await callOf(session)) === "open") {
+          goneSince.delete(key)
+          continue
+        }
+        f.cancelled = f.cancelSeen
+        updateForm(session, f.id, (x) => ((x.cancelled ??= x.cancelSeen), (x.cancelSeen = undefined)), dir)
+      }
       // task 084: an exhausted form is spent once the tab worked after it was exhausted - a turn runs now, or one ended since (the tab was
       // not busy when the form was exhausted, so any later turn is new). The record stays; nobody waits for the owner on it any more.
       if (f.exhausted && !f.resumed && (tab.busy || (await deps.idle(session, f.exhausted)))) {
         updateForm(session, f.id, (x) => void (x.resumed = now), dir)
         goneSince.delete(key)
         say(`form ${f.id} of ${session}: the tab worked after "no answer after the repeats" - not a wait for the owner any more`)
+        continue
+      }
+      // task 120: the call `question` of the form is open in the database: the dialog is on the screen and the tool waits, the question is not lost
+      const fate = fateOf(f, await callOf(session))
+      if (fate === "open") {
+        goneSince.delete(key)
         continue
       }
       if (tab.busy) {
@@ -506,6 +591,12 @@ export async function formTick(deps: FormDeps, now = Date.now(), dir = FORMS): P
       } else {
         const idle = await deps.idle(session, f.at)
         if (idle && idle.outcome !== "interrupted" && idle.outcome !== "failed") {
+          if (fate === "dead") {
+            // task 120: the call was broken (the restart of the service), nobody answered; the dialog may hang in the window - the record stays, as dead
+            markDead(session, f.id, now, dir)
+            say(`form ${f.id} of ${session}: the call question ended with an abort and the turn went on - the dialog may hang in the window, kept as dead`)
+            continue
+          }
           removeForm(session, f.id, dir)
           say(`form ${f.id} of ${session}: closed, the turn ended after the question (answered, the event was lost)`)
           continue
@@ -542,10 +633,21 @@ export async function formTick(deps: FormDeps, now = Date.now(), dir = FORMS): P
  * repeat (cancelled, or woken): the next step of the model after Esc or after our wake is the same turn; those are closed by
  * the owner's word, a new form of the same text (takes over) or the TTL.
  */
-export async function settleOnRequest(session: string, now: number, ownerWrote: (since: number) => Promise<boolean>, dir = FORMS): Promise<void> {
+export async function settleOnRequest(session: string, now: number, ownerWrote: (since: number) => Promise<boolean>, dir = FORMS, call?: (session: string) => Promise<QuestionCall>): Promise<void> {
+  let c: QuestionCall | undefined
   for (const { form: f } of allForms(now, dir).filter((x) => x.session === session)) {
-    if (now - f.at < FORM_SELF_MS) continue
-    if (!lostState(f) || (await ownerWrote(f.at))) removeForm(session, f.id, dir)
+    if (now - f.at < FORM_SELF_MS || f.dead) continue
+    if (lostState(f)) {
+      if (await ownerWrote(f.at)) removeForm(session, f.id, dir)
+      continue
+    }
+    // task 120: the request after the question is NOT always an answer. The call question is read from the database: open - the dialog is on the screen, the record stays;
+    // broken (the restart of the service aborted it, 2026-10-19 the dialogs of tasks 105, 107) - the dialog may hang in the window, the record stays as dead; completed or
+    // not known - the old rule (answered, the event was lost)
+    const fate = call ? fateOf(f, (c ??= await call(session))) : "unknown"
+    if (fate === "open") continue
+    if (fate === "dead") markDead(session, f.id, now, dir)
+    else removeForm(session, f.id, dir)
   }
 }
 
@@ -556,7 +658,7 @@ export async function settleOnRequest(session: string, now: number, ownerWrote: 
 export function formReminders(now: number, notify: (session: string, f: PendingForm, message: string) => boolean | void, dir = FORMS, every = FORM_REMIND_MS): number {
   let sent = 0
   for (const { session, form: f } of waitingForms(now, dir)) {
-    if (f.notifiedAt && now - f.notifiedAt < every) continue
+    if (f.dead || (f.notifiedAt && now - f.notifiedAt < every)) continue // a dead dialog is shown in the panel and in /ask, not reminded
     const q = f.question ?? f.title ?? "вопрос во встроенном вопроснике"
     const lp = loopOf(session, dir)
     const message = lp ? loopLine({ n: lp.n, question: q }) : f.exhausted ? `без ответа, нужен владелец: ${q}` : q
@@ -596,11 +698,11 @@ export function askText(now = Date.now(), dir = FORMS, ended: EndedWait[] = []):
     const who = `${card?.project ?? "?"} · ${card?.role ?? "?"}${card?.title && card.title !== session ? ` «${card.title}»` : ""}`
     const waited = Math.max(0, Math.round((now - f.at) / 60_000))
     const lp = loopOf(session, dir)
-    const how = lp ? ` — вкладка зациклилась на вопросе (${loopNote(lp.n)}); ${LOOP_HINT}` : f.exhausted ? ` — без ответа, нужен владелец (повторов было ${f.repeats ?? 0})` : f.repeats ? ` — повтор ${f.repeats} из ${FORM_MAX_REPEATS}` : f.cancelled ? " — закрыт без ответа, будет повторён" : ""
+    const how = f.dead ? ` — ${DEAD_WHY}` : lp ? ` — вкладка зациклилась на вопросе (${loopNote(lp.n)}); ${LOOP_HINT}` : f.exhausted ? ` — без ответа, нужен владелец (повторов было ${f.repeats ?? 0})` : f.repeats ? ` — повтор ${f.repeats} из ${FORM_MAX_REPEATS}` : f.cancelled ? " — закрыт без ответа, будет повторён" : ""
     out.push(`? ${who} — ждёт ${waited < 120 ? `${waited} мин` : `${Math.floor(waited / 60)} ч ${waited % 60} мин`} (с ${hm(f.at)})${how}`)
     out.push(`   ${f.question ?? f.title ?? "вопрос во встроенном вопроснике"}`)
     if (f.options?.length) out.push(`   Варианты: ${f.options.join("; ")}`)
-    out.push(`   Сессия ${session}: откройте вкладку и ответьте в диалоге; если диалога нет, вкладка получит повтор.`)
+    out.push(f.dead ? `   Сессия ${session}: вызов вопроса завершён, ответить некому; диалог в окне закройте вручную.` : `   Сессия ${session}: откройте вкладку и ответьте в диалоге; если диалога нет, вкладка получит повтор.`)
     out.push("")
   }
   return out.join("\n").trimEnd()

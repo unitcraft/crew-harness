@@ -94,7 +94,7 @@ if (!args.length) {
   for (const x of forms) {
     const age = Math.round((Date.now() - x.form.at) / 60000)
     const ageText = age >= 120 ? `${Math.round(age / 60)} ч` : `${age} мин`
-    console.log(`${x.project}  ${x.key}  сессия ${x.session}  форма ${x.form.id}  (ждёт ${ageText})${x.form.held ? `  [удержана для владельца: ${x.form.held}]` : ""}${x.form.exhausted ? "  (без ответа после повторов)" : ""}`)
+    console.log(`${x.project}  ${x.key}  сессия ${x.session}  форма ${x.form.id}  (ждёт ${ageText})${x.form.held ? `  [удержана для владельца: ${x.form.held}]` : ""}${x.form.dead ? "  [диалог закрыт: вызов question оборван, вкладку закрыть вручную; ответ будет отклонён]" : ""}${x.form.exhausted ? "  (без ответа после повторов)" : ""}`)
     console.log(`  вопрос: ${x.form.question ?? x.form.title ?? "?"}`)
     ;(x.form.options ?? []).forEach((o, i) => console.log(`  ${i + 1}. ${o}`))
   }

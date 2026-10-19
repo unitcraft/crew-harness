@@ -50,6 +50,8 @@ export const STABLE_FILES = [
   "crew-form-auto-flow",
   // task 111: a service pass and the database in one file
   "crew-panel-busy",
+  // task 120: the passes of the service over a hand-made database
+  "crew-form-record-flow",
 ]
 
 const args = process.argv.slice(2)

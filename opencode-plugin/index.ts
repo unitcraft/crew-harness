@@ -128,6 +128,7 @@ import {
   lastUserAt,
   idleFactsAfter,
   pendingTool,
+  questionCall,
   letterExistsFor,
 } from "./core.ts"
 import { answerTurn, markInterventions } from "./answer.ts"
@@ -144,7 +145,8 @@ import { countedOpen, waitingCleanup, ACCEPTED_REMINDERS_MAX, acceptedReminderId
 import { EXECUTOR_CODE, sesLabel, sessionOf, sessionRef, taskNo } from "./tasks.ts"
 import { profileProblems, profileState, stateSignature, syncProjectFiles, syncSnapshot, syncTaskFile } from "./profile-layer.ts"
 import { cellOfState, clampTier, resolveStageProfile, splitLaunchModel, stageOfLaunch, tabFitsCell } from "./profiles.ts"
-import { cleanupForms, FORM_RESTART_GRACE_MS, formLookEvery, formReminders, formTick, pendingForms, settleOnRequest, startFormWait, waitingForms } from "./form-wait.ts"
+import { cleanupForms, FORM_RESTART_GRACE_MS, formLookEvery, formReminders, formTick, pendingForms, settleOnRequest, shownForms, startFormWait, waitingForms } from "./form-wait.ts"
+import { restoreForms } from "./form-restore.ts"
 import { systemToast } from "./toast-win.ts"
 import { probeEnabled, startEventProbe } from "./event-probe.ts"
 import { catalogModels, writeCatalog } from "./model-catalog.ts"
@@ -1113,7 +1115,7 @@ export default {
           into.set(o.from_session, [...(into.get(o.from_session) ?? []), { qid: o.qid, to: keyOf(c), at: o.at }])
         }
       }
-      const formOpen = new Set(waitingForms(t).map((x) => x.session))
+      const formOpen = new Set(waitingForms(t).filter((x) => !x.form.dead).map((x) => x.session)) // мёртвый диалог (задача 120) никого не ждёт: зависание и простой вкладки он не прикрывает
       const watchesBy = openWatchesBySession() // одно чтение папки наблюдений на проход (их сотни: завершённые хранятся сутки)
       const saved = new Map(readStatuses().map((x) => [x.session, x])) // состояния прошлого прохода: кто из сессий задач ждёт автора (задача 063)
       for (const c of cards) {
@@ -1133,10 +1135,17 @@ export default {
         // «работает» — ещё и по базе: ход открыт и обновляется (ход, продолженный самим OpenCode после перезапуска,
         // плагин не доставлял — признака busy у карточки нет; сводка писала «стоит», а сессия работала, 2026-10-05)
         // вопрос владельцу на экране (инструмент question ждёт ответа дольше окна открытого хода) - не залипший ход (задача 040)
-        const staleSince = tab?.tab.busy && !(formOpen.has(c.session) && (await pendingTool(c.session))) ? await staleBusy(c.session, t) : 0
+        // ДИАЛОГ БЕЗ ЗАПИСИ (задача 120): вызов question вкладки открыт по базе, записи формы в forms/ нет (восстановление на проходе formWatch ещё не пришло или метки нет) -
+        // вкладка ждёт владельца: не «работает», не «свободна», не «окно считает ход идущим». Читается только у вкладок с идущим ходом и без записей
+        const dialog = tab?.tab.busy || c.busy ? await (async () => {
+          if (shownForms(c.session, t).length) return undefined
+          const q = await questionCall(c.session, 1)
+          return q.state === "open" ? { since: q.at || t } : undefined
+        })() : undefined
+        const staleSince = tab?.tab.busy && !(dialog || (formOpen.has(c.session) && (await pendingTool(c.session)))) ? await staleBusy(c.session, t) : 0
         await noteStale(c, tab, staleSince, t)
         // вопрос владельцу на экране (вопросник, задача 040) - не зависание (задача 048)
-        const hungAt = tab?.tab.busy && !staleSince && !formOpen.has(c.session) ? await hungTurn(c.session, t, ws.length > 0) : 0
+        const hungAt = tab?.tab.busy && !staleSince && !formOpen.has(c.session) && !dialog ? await hungTurn(c.session, t, ws.length > 0) : 0
         await noteHung(c, tab, hungAt, t)
         // зависание взял на себя плагин (задача 048): ход прерван и вкладка разбужена письмом - владельцу ничего делать не нужно
         const hungSince = hungAt && (await selfResume(c, hungAt, t)) ? 0 : hungAt
@@ -1156,8 +1165,8 @@ export default {
             ends.set(c.session, { at, end })
           }
         }
-        const gate = await gateStep(c, busy, end, formOpen.has(c.session), t)
-        const s0 = statusOf({ card: c, busy, busySince: c.busySince, end, asked: asked.get(c.session) ?? [], askedStale: askedStale.get(c.session) ?? [], now: t, watches: ws, longTurnMs: loadConfig(c.directory).longTurnMin * 60_000, ...(staleSince ? { staleSince } : {}), ...(hungSince ? { hungSince } : {}), ...(gate ? { gate } : {}) })
+        const gate = await gateStep(c, busy, end, formOpen.has(c.session) || !!dialog, t)
+        const s0 = statusOf({ card: c, busy, busySince: c.busySince, end, asked: asked.get(c.session) ?? [], askedStale: askedStale.get(c.session) ?? [], now: t, watches: ws, longTurnMs: loadConfig(c.directory).longTurnMin * 60_000, ...(staleSince ? { staleSince } : {}), ...(hungSince ? { hungSince } : {}), ...(gate ? { gate } : {}), ...(dialog ? { dialog } : {}) })
         const idle = await idleStep(c, s0, end, !!tab, saved, t)
         const s = idle ? withIdle(s0, idle, t) : s0
         const prev = saveStatus(s)
@@ -1372,10 +1381,18 @@ export default {
         if (!busy && (await pendingTool(s))) busy = true
         return { open, busy }
       }
+      // ЗАПИСЬ ФОРМЫ ЖИВЁТ, ПОКА ВЫЗОВ question ОТКРЫТ (задача 120, form-restore.ts): удержанная владельцу форма без записи, чей вызов открыт по базе, возвращается из forms/auto и forms/loops.
+      // На каждом проходе и при старте службы (первый проход после старта)
+      try {
+        await restoreForms({ call: (s) => questionCall(s, 1), say: (line) => log(line) }, now())
+      } catch (e) {
+        log(`form restore failed: ${e}`)
+      }
       await formTick(
         {
           processStart: PROCESS_START,
           tab: formTab,
+          call: (s) => questionCall(s),
           queued: async (s) => (await queuedTexts(s)).length,
           idle: (s, since) => idleFactsAfter(s, since),
           ownerWrote: async (s, since) => (await ownerWordAfter(s, since)) > 0,
@@ -1406,6 +1423,7 @@ export default {
       )
       // ОТВЕТ ВЛАДЕЛЬЦА СНАРУЖИ ОКНА (задача 059, owner-answer.ts): файл из scripts/crew-answer.mjs — прерывание хода и письмо с ответом
       await answerTick({
+        call: (s) => questionCall(s),
         interrupt: (s) => interruptTurn(ctx.session, s),
         letter: (s, text, id) => {
           if (!letterExistsFor(s, id)) postLetter(s, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: s, time: now(), text })
@@ -2113,7 +2131,7 @@ export default {
         if (!card) return
         setBusy(card, true) // запрос вкладки: она занята ходом до строки простоя
         // новый запрос модели после вопроса владельцу: ход пошёл дальше, вопрос закрыт (form-wait.ts, задача 040)
-        void settleOnRequest(card.session, now(), async (since) => (await ownerWordAfter(card.session, since)) > 0).catch(() => {})
+        void settleOnRequest(card.session, now(), async (since) => (await ownerWordAfter(card.session, since)) > 0, undefined, (sid) => questionCall(sid)).catch(() => {})
         // ПОДСКАЗКА — НЕИЗМЕННАЯ, пока не сменилась роль: системная часть стоит перед всей историей, и любое её
         // изменение заново оплачивает историю (замер 2026-10-04). Соседи — crew_list.
         // Правила проекта (project_rules) — в конец: их изменение, как и смена роли, один раз заново оплачивает историю.

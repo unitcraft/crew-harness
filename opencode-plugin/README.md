@@ -363,7 +363,7 @@ reviewer.
 
 A question of the built-in questionnaire (`question`) is kept as a record in `forms/` until it is answered. `form.replied`
 closes the record; a new model request of the tab, a succeeded end of its turn after the question, or your own word in the
-tab close it too (so a false "waiting for you" goes away at once; the 12-hour TTL stays as the last resort). `form.cancelled`
+tab close it too (so a false "waiting for you" goes away at once; the 12-hour TTL stays as the last resort) — except when the call `question` is still open in the database or ended with an abort (task 120, below). `form.cancelled`
 (you pressed Esc) and a question that vanished without any event (the window or the service was restarted) do not close it:
 if the tab has no running turn, the plugin wakes it with a service message that holds the question text and the options and asks
 to call `question` again. At most 3 repeats, at least 2 minutes apart, and not in the first 3 minutes after a start of the
@@ -409,6 +409,31 @@ wakes the tab for it. The new form must be made after the first wake. Not covere
 options - «Да» / «Нет» of two different questions stay two), a form that was cancelled but not yet woken, other options (a subset, a
 superset, another order), a form without options, another tab, and a tab that went on without asking again (that form goes by the
 12 hours term). Duplicates that piled up are closed by the same pass as in 071.
+
+### The record of a question lives while its call is open; a dialog without a record (task 120)
+
+A dialog "Questions" can hang in a window for hours while `crew-answer` says "no open question form" and the orchestrator says "no questions" (2026-10-19:
+the acceptance dialogs of two tasks, held for you by the closed list of task 096). The cause is in the database of OpenCode, which is the truth about the dialog: the
+call of the `question` tool of such a tab ended with the error "Tool execution interrupted" when the service restarted, the model went on, and the first request of
+the tab after that took the record for an answered question and removed it, while the window kept the dialog. The plugin now reads the call itself (the last `question`
+tool part of the tab: running, completed, error) and decides by it:
+
+- **Open call** (running, no end of a turn after it): the dialog is on the screen. The record is not removed by a request of the tab or by the end of a turn, and
+  `form.cancelled` is not taken as a cancel while the call is open (it is only noted; the call ends together with a dialog you close, and then the repeat of task 040
+  starts as before). There is no timer of the plugin that cancels a form: OpenCode itself aborts a call after an hour of waiting and emits `form.cancelled` at that moment.
+- **Record gone, call open** (a cleanup, the 12-hour term, an old version): on every pass, and at the start of the service, a form that the plugin left to you
+  (`forms/auto/<form>.json`, state `held`) or the last ask of the tab in `forms/loops/` is made again as a record, with the options read from the call. The panel,
+  `/ask` and `crew-answer` see it again.
+- **Dialog on the screen and no record and no trace at all**: the tab is shown as waiting for you ("Ждут вас", `/crew`: `waiting you (dialog, no record) 35m`),
+  with the age of the dialog, not as "working" or "free".
+- **Call broken, no answer** (the restart): the record stays and is marked dead (`dead`). It is shown in "Ждут вас" as "диалог закрыт" — the dialog may hang in the
+  window, but nobody can answer it any more, so it is not an open question for the reminders, the queue gate or the repeats. `crew-answer` on it (or on a held form whose
+  call is dead and whose record is already gone) is refused with «диалог закрыт (вызов question завершён), вкладку закрыть вручную» and the form leaves the list; it also
+  leaves it when the tab is closed, when you write in the tab, when the tab asks the same question again, and after a day.
+- **Completed call**: you answered (the event may have been lost): the record is removed, as before.
+
+Answer from outside the window: `node scripts/crew-answer.mjs` lists such dialogs too (a dead one is labelled), and `node scripts/crew-answer.mjs <form id | session> --option 1 --quote "your word"`
+applies to a restored form like to any other (interrupt of the turn, a letter with the answer, the record closed). No new settings key.
 
 ### Your answer to a question from outside the window (task 059)
 

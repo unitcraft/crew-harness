@@ -14,7 +14,7 @@ import { type Card, type Obligation, obligationsOf, readJson, safeKey } from "./
 import { BASE } from "./paths.ts"
 import { answerCounts, answerSideRow } from "./answer.ts"
 import { divergenceLineFor, unconfiguredLineFor } from "./config-diverge.ts"
-import { FORM_MAX_REPEATS, pendingForms } from "./form-wait.ts"
+import { DEAD_WHY, FORM_MAX_REPEATS, shownForms } from "./form-wait.ts"
 import { lockWaitLine, lockWaiters } from "./review.ts"
 import { refreshRouteStale } from "./task-folders.ts"
 import { ROUTE_RU, STALE_WARNING } from "./route.ts"
@@ -63,6 +63,9 @@ export type Status = {
   idleTab?: { since: number; what: string[] }
   /** Вопрос встроенного вопросника (form-wait.ts): уведомления по нему ведёт formWatch, не общий повтор owner_reminder_min. */
   formId?: string
+  /** Задача 120 (state owner): диалог вопроса на экране без записи формы в forms/ (norecord: вызов question открыт по базе, записи нет) или с мёртвой записью
+   *  (dead: вызов оборван, диалог мог остаться в окне - закрыть вручную). Тот же «ждёт вас», с возрастом; /crew называет это словом. */
+  dialog?: "norecord" | "dead"
   watches: { id: string; note?: string; started?: number; minutes: number }[]
   asked: { qid: string; to: string; at: number }[]
   /** Вопросы старше ASKED_STALE_MIN без ответа: в /crew отдельной строкой, состояние reply не держат. */
@@ -179,6 +182,8 @@ export type StatusInput = {
   hungSince?: number
   /** порог «завис?» панели, мс (cfg.longTurnMin, задача 111); 0 или нет — не показывать */
   longTurnMs?: number
+  /** Задача 120: вызов question вкладки открыт по базе (core.ts questionCall), а записи формы в forms/ нет: с какого времени открыт диалог */
+  dialog?: { since: number }
   /** Остановка на воротах без вопроса (index.ts: ход вкладки кончился, вопроса нет): с какого времени; wait — не запись «ворота», а ход
    *  вкладки владельца кончился фразой ожидания его решения (задача 064, п. 10), text — эта фраза */
   gate?: { at: number; wait?: true; text?: string }
@@ -254,17 +259,27 @@ function statusOfAll(x: StatusInput): Status {
     return { ...base, state: "owner", since: x.hungSince, question: q, detail: q, sys: "hung" }
   }
   // встроенный вопросник OpenCode (события form.*, form-wait.ts): адресован человеку всегда, и у вкладки владельца, и у сессии задачи
-  const form = pendingForms(card.session, now)[0]
+  // задача 120: мёртвые диалоги (вызов оборван, запись оставлена) тоже видны - после живых вопросов
+  const form = shownForms(card.session, now)[0]
   // ЦИКЛ НА ВОПРОСЕ (задача 078): владелец ответил, письма доставлены, вкладка спрашивает снова и не работает — ждёт владельца, пока он не переназначит задачу
   const lp = loopOf(card.session)
   if (lp) {
     const q = loopLine({ n: lp.n, question: form?.question ?? lp.question })
     return { ...base, state: "owner", since: lp.since, question: q, ...(form ? { formId: form.id } : {}), loop: { n: lp.n, question: form?.question ?? lp.question }, detail: `${q}; ${LOOP_HINT}` }
   }
+  if (form?.dead) {
+    const q = form.question ?? form.title ?? "вопрос во встроенном вопроснике"
+    return { ...base, state: "owner", since: form.at, question: q, formId: form.id, dialog: "dead", detail: `ждёт вас с ${hm(form.at)} (${DEAD_WHY}): ${q}` }
+  }
   if (form) {
     const q = form.question ?? form.title ?? "вопрос во встроенном вопроснике"
     const tail = form.exhausted ? "без ответа, нужен владелец" : form.repeats ? `повтор ${form.repeats} из ${FORM_MAX_REPEATS}` : form.cancelled ? "закрыт без ответа, будет повторён" : ""
     return { ...base, state: "owner", since: form.at, question: q, formId: form.id, detail: form.exhausted ? `${tail} (с ${hm(form.at)}): ${q}` : `ждёт вас с ${hm(form.at)}${tail ? ` (${tail})` : ""}: ${q}` }
+  }
+  // задача 120: диалог на экране (вызов question открыт по базе), а записи формы нет: вкладка ждёт владельца, а не «работает» и не «свободна»
+  if (x.dialog) {
+    const q = "диалог вопроса открыт, записи формы нет"
+    return { ...base, state: "owner", since: x.dialog.since, question: q, dialog: "norecord", detail: `ждёт вас с ${hm(x.dialog.since)} (диалог без записи формы)` }
   }
   if (x.busy) return { ...base, state: "working", since: x.busySince, ...(x.longTurnMs && x.busySince ? { longTurnMs: x.longTurnMs } : {}), detail: `работает${x.busySince ? ` (${minutes(x.busySince, now)})` : ""}` }
   // сессию задачи ведёт интегратор, и её вопрос в конце хода бывает ему (сдавший воркер спросил интегратора), а бывает
@@ -456,7 +471,7 @@ export function stateText(s: Status, now: number): string {
   if (s.sys) return `${CREW_STATE_WORDS[s.sys === "hung" ? "hung" : "lost"]}${age(s.since)}`
   switch (s.state) {
     case "owner":
-      return `${CREW_STATE_WORDS[s.gate ? "gate" : "owner"]}${age(s.since)}`
+      return `${CREW_STATE_WORDS[s.gate ? "gate" : "owner"]}${s.dialog ? ` (${CREW_STATE_WORDS[s.dialog === "dead" ? "deadDialog" : "dialog"]})` : ""}${age(s.since)}`
     case "question":
       return `${CREW_STATE_WORDS[s.wait ? "paused" : "question"]}${age(s.since)}`
     case "working":
@@ -713,7 +728,7 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
   const what = (s: Status): string => {
     switch (s.state) {
       case "owner":
-        return s.gate ? (s.gateWait ? "решение, вопроса нет" : "ворота, вопроса нет") : `ждёт вас ${hm(s.since)}`
+        return s.gate ? (s.gateWait ? "решение, вопроса нет" : "ворота, вопроса нет") : s.dialog === "dead" ? `диалог закрыт ${hm(s.since)}` : `ждёт вас ${hm(s.since)}`
       case "question":
         return s.wait ? "ждёт указаний" : "вопрос — ждёт ответа"
       case "working":
