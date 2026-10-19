@@ -12,7 +12,7 @@ import crew_harness.machine.{NamedText}
 /// TranslateReport: what a translation gave. `json` is the machine (complete when `errors` is empty, else what could be translated); `errors` are all the
 /// notes of the translator, by place; `rows_total` is the number of the rows of the tables (and definitions) that were read, `rows_noted` the number of those
 /// that carry a note (an error or "not supported").
-export type TranslateReport { json str, errors []TranslateError, rows_total int, rows_noted int, places []TxPlace }
+export type TranslateReport { json str, errors []TranslateError, warnings []TranslateError, rows_total int, rows_noted int, places []TxPlace }
 
 fn cx_new() -> TxCx {
     TxCx { errors: []TranslateError.new(), names: names_load(), env: env_new(), rows_total: 0, rows_noted: 0, places: []TxPlace.new() }
@@ -63,9 +63,9 @@ fn header_read(entries []TxEntry, mut cx TxCx) -> TxHeader {
     } else if !is_identifier_latin(machine) {
         note(cx, struct_error(machine_line, machine_col, "имя машины — латинский идентификатор, найдено `${machine}`"))
     }
-    if format != "2.5" && format != "2.6" {
+    if format != "2.5" && format != "2.6" && format != "2.7" {
         ro shown = if format == "" { "не указан" } else { format }
-        note(cx, struct_error(1, 1, "формат ${shown}: переводчик читает формат 2.5 или 2.6 (строка `format: 2.6`)"))
+        note(cx, struct_error(1, 1, "формат ${shown}: переводчик читает формат 2.5, 2.6 или 2.7 (строка `format: 2.7`)"))
     }
     TxHeader { title, machine, version, format }
 }
@@ -352,7 +352,7 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
     }
 
     // the JSON
-    mut root = [kv("format", js("machine/2")), kv("table_format", js(if header.format == "2.6" { "2.6" } else { "2.5" })), kv("machine", js(header.machine)), kv("version", js(header.version))]
+    mut root = [kv("format", js("machine/2")), kv("table_format", js(if header.format == "2.7" { "2.7" } else if header.format == "2.6" { "2.6" } else { "2.5" })), kv("machine", js(header.machine)), kv("version", js(header.version))]
     if header.title != "" { root.push(kv("title", js(header.title))) }
     if types.records.len() > 0 || types.variants.len() > 0 {
         mut tp = []TxKV.new()
@@ -383,7 +383,7 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
     if primitives.len() > 0 { root.push(kv("primitives", jstrs(primitives))) }
 
     ro sorted = errors_sorted(cx.errors)
-    TranslateReport { json: tx_text(jobj(root)), errors: errors_quoted(sorted, lines), rows_total: cx.rows_total, rows_noted: cx.rows_noted, places: cx.places }
+    TranslateReport { json: tx_text(jobj(root)), errors: errors_quoted(sorted, lines), warnings: []TranslateError.new(), rows_total: cx.rows_total, rows_noted: cx.rows_noted, places: cx.places }
 }
 
 /// The first line of the section `## Состояния`: `Начальное состояние: ИМЯ`.

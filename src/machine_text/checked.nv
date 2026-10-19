@@ -37,7 +37,7 @@ fn report_with_issues(report TranslateReport, issues []LoadError, lines []str) -
     for e in report.errors { errors.push(e) }
     for issue in issues { errors.push(issue_error(report.places, issue, lines)) }
     ro sorted = errors_sorted(errors)
-    TranslateReport { json: report.json, errors: errors_quoted(sorted, lines), rows_total: report.rows_total, rows_noted: report.rows_noted, places: report.places }
+    TranslateReport { json: report.json, errors: errors_quoted(sorted, lines), warnings: report.warnings, rows_total: report.rows_total, rows_noted: report.rows_noted, places: report.places }
 }
 
 /// The translation with the checks of the table against the registry of the primitives of the host. A machine whose JSON the decoder or the checks refuse has the

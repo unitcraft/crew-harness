@@ -47,11 +47,13 @@ fn with_binding(globals []Binding, name str, value Value) -> []Binding {
 
 /// A machine ready to run. The constants and the parameters are evaluated in order (a later one may read an earlier one); a wrong
 /// value of a type, an error of the evaluator or an initial value that does not fit its datum refuses the machine.
-export fn table_machine(def MachineDef, registry Registry) -> Result[TableMachine, str] => table_machine_with(def, registry, []ScriptedReply.new())
+export fn table_machine(def MachineDef, registry Registry) -> Result[TableMachine, str] => table_machine_with(def, registry, []ProjectValue.new())
 
-/// The same with the values of some parameters given by the project (format 1, the column "project override"): a value in `overrides` is used instead of the
-/// default of the parameter of that name, and it is checked against the type of the parameter like a default.
-export fn table_machine_with(def MachineDef, registry Registry, overrides []ScriptedReply) -> Result[TableMachine, str] {
+/// ProjectValue: a row of the table of the parameters of the project (format 2.7, P-9): the key `проект.<ключ>` and the value.
+export type ProjectValue { key str, value Value }
+
+/// The same with the table "key -> value" of the project (format 2.7, P-9).
+export fn table_machine_with(def MachineDef, registry Registry, overrides []ProjectValue) -> Result[TableMachine, str] {
     mut globals = []Binding.new()
     globals.push(Binding { name: "end_states", value: end_state_names(def) })
     ro first = base_table(def, registry, globals)
@@ -70,7 +72,7 @@ export fn table_machine_with(def MachineDef, registry Registry, overrides []Scri
         mut given = false
         mut given_value Value = Null
         for o in overrides {
-            if o.name == p.name {
+            if o.key == p.name {
                 given = true
                 given_value = o.value
             }

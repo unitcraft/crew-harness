@@ -521,7 +521,7 @@ fn compare_step(n int, s ScStep, t StepTrace, mut out []str) -> () {
 // The machine with the parameters the scenario gives (the same machine when it gives none).
 fn with_params(machine TableMachine, params []ScHost) -> Result[TableMachine, str] {
     if params.len() == 0 { return Ok(machine) }
-    mut values = []ScriptedReply.new()
+    mut values = []ProjectValue.new()
     for h in params {
         ro parsed = match Json.parse(h.json) {
             Ok(j) => j
@@ -531,7 +531,7 @@ fn with_params(machine TableMachine, params []ScHost) -> Result[TableMachine, st
             Ok(x) => x
             Err(m) => return Err("the parameter ${h.name}: ${m}")
         }
-        values.push(ScriptedReply { name: h.name, value: v })
+        values.push(ProjectValue { key: h.name, value: v })
     }
     ro built = table_machine_with(machine.def, machine.table.registry, values)?
     Ok(with_replies(built, machine.replies))

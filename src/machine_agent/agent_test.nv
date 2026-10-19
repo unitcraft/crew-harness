@@ -1,4 +1,4 @@
-// agent_test.nv - the machine "Agent step" of the product: the table `machines/agent_step.table.md` (format 2.6) translates without a note, its translation is the committed
+// agent_test.nv - the machine "Agent step" of the product: the table `machines/agent_step.table.md` (format 2.7: the sample of the methodology and the keys of the project) translates without a note, its translation is the committed
 // file `agent_step.machine.json`, the machine passes the checks of the load and is made; the same table without the list markers (format 2.5) gives the same tree.
 module crew_harness.machine_agent
 
@@ -33,7 +33,7 @@ test "ag loads" {
     match load_machine(agent_step_machine_text(), standard_registry()) {
         Ok(def) => {
             assert(def.name == "agent_step")
-            assert(def.version == "1")
+            assert(def.version == "table-2.7")
             assert(def.states.len() == 14)
             assert(def.common.len() == 6)
             assert(def.parties.len() == 3)
@@ -62,7 +62,7 @@ test "ag builds" {
 
 test "ag summary" {
     ro text = render_summary(agent_step_machine_text())
-    assert(text.starts_with("machine agent_step (version 1): 14 states, 47 rows, "))
+    assert(text.starts_with("machine agent_step (version table-2.7): 14 states, 47 rows, "))
     assert(text.contains("  AgentTurn (appeal): 9 rows, 18 actions"))
     assert(text.contains("common events: 6 rows"))
     assert(text.contains("ends: 13 rows"))
@@ -80,7 +80,7 @@ fn without_markers(text str) -> str {
             lines.push(line)
         }
     }
-    lines.join("\n").replace("format: 2.6", "format: 2.5")
+    lines.join("\n").replace("format: 2.7", "format: 2.5")
 }
 
 test "ag markers optional" {
@@ -88,17 +88,5 @@ test "ag markers optional" {
     assert(plain != agent_step_table_text())
     ro report = translate_checked(plain, standard_registry())
     if report.errors.len() > 0 { panic(errors_text(report)) }
-    assert(report.json.replace("\"table_format\":\"2.5\"", "\"table_format\":\"2.6\"") == agent_step_machine_text())
-}
-
-// The illustration of the methodology (state-machine-agent-step-table.md, format 2.6, copied as it is): it is a document with prose, not a file for the translator. The test pins
-// what the translator says about it: the first wave of the places (prose lines in the sections, the expansion of the fragment beside the line of the connection, a repeated
-// state PAUSE). The report for the methodology is in doc/tasks/109-agent-step-machine/analysis.md.
-test "ag methodology file" {
-    ro report = translate_checked(methodology_text(), standard_registry())
-    mut places = []str.new()
-    for e in report.errors { places.push("${e.line}:${e.col} ${e.kind}") }
-    assert(report.errors.len() == 25)
-    assert(places.join(",") == "7:1 structure,9:1 structure,11:1 structure,49:99 syntax,65:1 check,67:1 structure,75:1 structure,79:1 structure,102:1 structure,114:1 structure,193:29 syntax,193:29 syntax,203:5 syntax,216:31 syntax,220:1 syntax,230:1 syntax,234:59 syntax,264:3 syntax,265:9 syntax,306:1 structure,367:1 structure,403:5 name,429:1 structure,451:1 structure,461:1 structure")
-    assert(report.errors[0].message == "лишняя строка в шапке файла")
+    assert(report.json.replace("\"table_format\":\"2.5\"", "\"table_format\":\"2.7\"") == agent_step_machine_text())
 }

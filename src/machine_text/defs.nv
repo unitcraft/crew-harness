@@ -102,7 +102,7 @@ fn defs_header(entries []TxEntry, mut cx TxCx) -> str {
         Err(err) => ()
     }
     if !version_ok { note(cx, struct_error(1, 1, "в шапке нет строки `definitions_version: <целое>`")) }
-    if format != "2.5" && format != "2.6" { note(cx, struct_error(1, 1, "формат файла определений должен быть 2.5 или 2.6, найдено: ${format}")) }
+    if format != "2.5" && format != "2.6" && format != "2.7" { note(cx, struct_error(1, 1, "формат файла определений должен быть 2.5, 2.6 или 2.7, найдено: ${format}")) }
     version
 }
 

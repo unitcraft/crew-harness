@@ -48,7 +48,7 @@ test "in wrapper" {
     ro report = wrapped(wrapper())
     if report.errors.len() > 0 { panic("${report.errors[0].line}: ${report.errors[0].message}") }
     assert(report.errors.len() == 0)
-    assert(report.json.contains("\"includes\":[{\"name\":\"арифметика_цикла\",\"version\":\"1\",\"hash\":\"1628bec298d9\"},{\"name\":\"определения_совещания\",\"version\":\"1\",\"hash\":\"13239c31e29a\"}]"))
+    assert(report.json.contains("\"includes\":[{\"name\":\"арифметика_цикла\",\"version\":\"1\",\"hash\":\"446ddf8041c0\"},{\"name\":\"определения_совещания\",\"version\":\"1\",\"hash\":\"13239c31e29a\"}]"))
     assert(report.json.contains("{\"name\":\"ceiling_reached\",\"params\":"))
     assert(report.json.contains("{\"name\":\"yes_no_word\",\"params\""))
 }
@@ -67,17 +67,17 @@ test "in wrapper loads" {
 }
 
 test "in hash errors" {
-    assert(says_any(wrapped(wrapper().replace("1628bec298d9", "1628bec298d8")), "хеш файла арифметика_цикла — 1628bec298d9, а в подключении 1628bec298d8"))
+    assert(says_any(wrapped(wrapper().replace("446ddf8041c0", "446ddf8041c8")), "хеш файла арифметика_цикла — 446ddf8041c0, а в подключении 446ddf8041c8"))
     assert(says_any(wrapped(wrapper().replace("арифметика_цикла версия 1", "арифметика_цикла версия 2")), "версия файла арифметика_цикла — 1, а в подключении 2"))
     assert(says_any(wrapped(wrapper().replace("определения: арифметика_цикла", "определения: нет_такого_файла")), "файла определений `нет_такого_файла` нет в реестре"))
-    assert(says_any(wrapped(wrapper().replace("определения: определения_совещания версия 1 хеш 13239c31e29a", "определения: арифметика_цикла версия 1 хеш 1628bec298d9")), "подключён дважды"))
+    assert(says_any(wrapped(wrapper().replace("определения: определения_совещания версия 1 хеш 13239c31e29a", "определения: арифметика_цикла версия 1 хеш 446ddf8041c0")), "подключён дважды"))
 }
 
 test "in line errors" {
-    assert(says_any(wrapped(wrapper().replace("хеш 1628bec298d9", "хеш fb15")), "после `хеш` ожидается 12 шестнадцатеричных знаков"))
-    assert(says_any(wrapped(wrapper().replace("хеш 1628bec298d9", "хеш 1628BEC298D9")), "после `хеш` ожидается 12 шестнадцатеричных знаков"))
-    assert(says_any(wrapped(wrapper().replace("версия 1 хеш 1628bec298d9", "хеш 1628bec298d9")), "ожидается `версия`"))
-    assert(says_any(wrapped(wrapper().replace("версия 1 хеш 1628bec298d9", "версия один хеш 1628bec298d9")), "после `версия` ожидается целое число"))
+    assert(says_any(wrapped(wrapper().replace("хеш 446ddf8041c0", "хеш fb15")), "после `хеш` ожидается 12 шестнадцатеричных знаков"))
+    assert(says_any(wrapped(wrapper().replace("хеш 446ddf8041c0", "хеш 446DDF8041C0")), "после `хеш` ожидается 12 шестнадцатеричных знаков"))
+    assert(says_any(wrapped(wrapper().replace("версия 1 хеш 446ddf8041c0", "хеш 446ddf8041c0")), "ожидается `версия`"))
+    assert(says_any(wrapped(wrapper().replace("версия 1 хеш 446ddf8041c0", "версия один хеш 446ddf8041c0")), "после `версия` ожидается целое число"))
 }
 
 test "in name clash" {
@@ -99,7 +99,7 @@ fn defs_says(report DefsReport, needle str) -> bool {
 test "in defs file" {
     assert(defs_with("# Определения: арифметика_цикла", "# Что-то: арифметика_цикла").errors.len() >= 1)
     assert(defs_says(defs_with("definitions_version: 1", "definitions_version: x"), "definitions_version: <целое>"))
-    assert(defs_says(defs_with("format: 2.6", "format: 2.3"), "формат файла определений должен быть 2.5 или 2.6"))
+    assert(defs_says(defs_with("format: 2.7", "format: 2.3"), "формат файла определений должен быть 2.5, 2.6 или 2.7"))
     assert(defs_says(defs_with("## Константы\n—\n\n", ""), "три раздела по порядку"))
     assert(defs_says(defs_with("## Типы\n—", "## Типы\n—\n\n## Подключения\n—"), "три раздела по порядку"))
     assert(defs_says(defs_with("definitions_version: 1", "definitions_version: 1\nлишнее: слово"), "в шапке файла определений"))
@@ -107,9 +107,9 @@ test "in defs file" {
 
 test "in defs hash stable" {
     ro text = cycle_text()
-    assert(definitions_hash(text) == "1628bec298d9")
-    assert(definitions_hash("${text}\n\n") == "1628bec298d9")
-    assert(definitions_hash(text.replace("пред", "предел")) != "1628bec298d9")
+    assert(definitions_hash(text) == "446ddf8041c0")
+    assert(definitions_hash("${text}\n\n") == "446ddf8041c0")
+    assert(definitions_hash(text.replace("пред", "предел")) != "446ddf8041c0")
     assert(translate_definitions(text).hash == definitions_hash(text))
 }
 

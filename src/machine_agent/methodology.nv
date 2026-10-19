@@ -1,4 +1,4 @@
-// methodology.nv - the illustration of the agent step that the methodology keeps (state-machine-agent-step-table.md, format 2.6), copied as it is into `cases/` with the extension
+// methodology.nv - the illustration of the agent step that the methodology keeps (state-machine-agent-step-table.md, format 2.7), copied as it is into `cases/` with the extension
 // `.txt` (its links are the links of the methodology's folder), compiled in for the test that pins what the translator says about it.
 module crew_harness.machine_agent
 

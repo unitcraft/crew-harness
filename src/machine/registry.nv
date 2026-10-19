@@ -295,21 +295,21 @@ export fn standard_types() -> TypeDefs {
     records.push(RecordDef { name: "LensResult", fields: [fd("findings", finding_list), fd("probes", count_spec())] })
     records.push(RecordDef { name: "JournalEvent", fields: [fd("code", TextType), fd("params", ListType(TupleType([TextType, TextType])))] })
     mut variants = []VariantDef.new()
-    variants.push(VariantDef { name: "Severity", cases: [plain_case("Critical"), plain_case("Significant"), plain_case("Desirable")] })
-    variants.push(VariantDef { name: "Check", cases: [plain_case("Confirmed"), plain_case("ChannelDistortion"), plain_case("NotConfirmed")] })
-    variants.push(VariantDef { name: "ReplyCheck", cases: [plain_case("Valid"), plain_case("Violated"), plain_case("Empty")] })
-    variants.push(VariantDef { name: "WitnessAnswer", cases: [cd("Answered", [fd("claim", RecordType("Claim"))]), cd("NotMeasured", [fd("claim", TextType)])] })
-    variants.push(VariantDef { name: "EditResult", cases: [cd("Done", [fd("proposal", TextType)]), cd("Question", [fd("proposal", TextType), fd("question", TextType)])] })
+    variants.push(VariantDef { name: "Severity", cases: [plain_case("Critical"), plain_case("Significant"), plain_case("Desirable")] , words: []EnumWord.new() })
+    variants.push(VariantDef { name: "Check", cases: [plain_case("Confirmed"), plain_case("ChannelDistortion"), plain_case("NotConfirmed")] , words: []EnumWord.new() })
+    variants.push(VariantDef { name: "ReplyCheck", cases: [plain_case("Valid"), plain_case("Violated"), plain_case("Empty")] , words: []EnumWord.new() })
+    variants.push(VariantDef { name: "WitnessAnswer", cases: [cd("Answered", [fd("claim", RecordType("Claim"))]), cd("NotMeasured", [fd("claim", TextType)])] , words: []EnumWord.new() })
+    variants.push(VariantDef { name: "EditResult", cases: [cd("Done", [fd("proposal", TextType)]), cd("Question", [fd("proposal", TextType), fd("question", TextType)])] , words: []EnumWord.new() })
     variants.push(VariantDef { name: "RoleResult", cases: [
         cd("WitnessOutcome", [fd("answers", ListType(VariantType("WitnessAnswer")))]),
         cd("LensOutcome", [fd("result", RecordType("LensResult"))]),
         cd("EditOutcome", [fd("result", VariantType("EditResult"))])
-    ] })
+    ], words: []EnumWord.new() })
     variants.push(VariantDef { name: "RoleContext", cases: [
         cd("WitnessContext", [fd("author_question", optional_text), fd("findings", OptionalType(finding_list)), fd("proposal", TextType)]),
         cd("LensContext", [fd("proposal", TextType), fd("witness_answers", OptionalType(ListType(VariantType("WitnessAnswer"))))]),
         cd("FixContext", [fd("proposal", TextType), fd("gate3_findings", finding_list), fd("author_guidance", optional_text)]),
         cd("QuestionContext", [fd("author_question", TextType), fd("proposal", TextType), fd("gate3_findings", finding_list), fd("human_answer", TextType)])
-    ] })
+    ], words: []EnumWord.new() })
     TypeDefs { records, variants }
 }

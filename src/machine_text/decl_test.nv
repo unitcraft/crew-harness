@@ -57,8 +57,9 @@ test "dc enum words" {
     ro ok = types_json("перечисление ВидДействия = Чтение \"read\" | Запись \"write\" | Удаление \"delete\"")
     assert(ok.contains("\"name\":\"ActionKind\""))
     assert(ok.contains("{\"name\":\"Read\"},{\"name\":\"Write\"},{\"name\":\"Delete\"}"))
-    assert(first_type_error("перечисление ВидДействия = Чтение \"reed\" | Запись \"write\"").starts_with("unsupported:"))
-    assert(first_type_error("перечисление ВидДействия = Чтение \"reed\" | Запись \"write\"").contains("слово значения \"reed\" не равно слову кода `read`"))
+    assert(types_json("перечисление ВидДействия = Чтение \"reed\" | Запись \"write\"").contains("\"words\":[[\"Read\",\"reed\"],[\"Write\",\"write\"]]"))
+    assert(first_type_error("перечисление ВидДействия = Чтение \"reed\" | Запись \"write\"") == "ok")
+    assert(first_type_error("перечисление ВидДействия = Чтение \"read\" | Запись \"read\"").contains("повторено"))
     assert(first_type_error("перечисление ВидДействия = Чтение \"read\" | Запись \"write\"") == "ok")
 }
 
@@ -235,7 +236,7 @@ test "dc definitions calls" {
 test "dc definitions errors" {
     assert(says(defs_text("определение сумма_целых(а ?число) ?число =\n  а"), "после параметров ожидается `->`"))
     assert(says(defs_text("определение сумма_целых(а ?число) -> ?число\n  а"), "ожидается `=`"))
-    assert(says(defs_text("вот что-то лишнее"), "ожидается `определение`"))
+    assert(says("## Определения\nвот что-то лишнее\n", "ожидается `определение`"))
     assert(says(defs_text("определение сумма_целых(а ?число, а ?число) -> ?число =\n  а"), "повторён"))
 }
 

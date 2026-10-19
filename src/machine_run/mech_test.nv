@@ -74,7 +74,7 @@ test "mx cancel open" {
 test "mx host and params keys" {
     ro sc = scenario_of("agent-step-policy-1.scenario.json")
     assert(sc.params.len() == 1)
-    assert(sc.params[0].name == "PERMISSION_POLICY")
+    assert(sc.params[0].name == "проект.политика_разрешений")
     assert(sc.steps[0].host.len() == 2)
     assert(sc.steps[0].host[0].name == "reply_validation")
     assert(sc.steps[0].event.request == "call-1")

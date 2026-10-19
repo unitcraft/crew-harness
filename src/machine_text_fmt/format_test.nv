@@ -1,0 +1,101 @@
+// format_test.nv - `format: 2.7` is read in the header of a machine and of a file of definitions; the hash of the sample file of definitions is `446ddf8041c0`; files of 2.5 and 2.6
+// (no list markers, no blocks of code) are read as before.
+module crew_harness.machine_text_fmt
+
+import std.text
+import crew_harness.machine_text.{definitions_hash, normalize_definitions, translate_definitions, defs_file_text}
+
+fn cycle() -> str => defs_file_text("арифметика_цикла")
+
+// The text of 2.5: no list markers, the key lines at the first column.
+fn old_style(text str) -> str {
+    mut lines = []str.new()
+    for line in text.split("\n") {
+        if line.starts_with("- ") {
+            lines.push(line[2..])
+        } else {
+            lines.push(line)
+        }
+    }
+    lines.join("\n")
+}
+
+test "fm versions" {
+    ro v27 = base_json()
+    ro v26 = json_of(replaced(base_text(), "- format: 2.7", "- format: 2.6"))
+    ro v25 = json_of(replaced(base_text(), "- format: 2.7", "- format: 2.5"))
+    assert(v27.contains("\"table_format\":\"2.7\""))
+    assert(v26.contains("\"table_format\":\"2.6\""))
+    assert(v25.contains("\"table_format\":\"2.5\""))
+    assert(v26.replace("\"table_format\":\"2.6\"", "\"table_format\":\"2.7\"") == v27)
+    assert(v25.replace("\"table_format\":\"2.5\"", "\"table_format\":\"2.7\"") == v27)
+}
+
+test "fm unknown version" {
+    for v in ["2.4", "2.8", "3", "2.7.1", ""] {
+        ro report = checked(replaced(base_text(), "- format: 2.7", "- format: ${v}"))
+        assert(report.errors.len() > 0)
+        assert(report_says(report, "читает формат 2.5, 2.6 или 2.7"))
+    }
+    ro missing = replaced(base_text(), "- format: 2.7\n", "")
+    assert(errors_say(missing, "формат не указан"))
+}
+
+test "fm old style" {
+    ro old = replaced(old_style(base_text()), "format: 2.7", "format: 2.5")
+    assert(!old.contains("\n- "))
+    ro report = checked(old)
+    if report.errors.len() > 0 { panic(first_error_of(report)) }
+    ro plain = base_json()
+    assert(report.json.replace("\"table_format\":\"2.5\"", "\"table_format\":\"2.7\"") == plain)
+    ro mixed = replaced(base_text(), "- Сторона: вратарь", "Сторона: вратарь")
+    assert(same_json(mixed, plain))
+}
+
+test "fm sample hash" {
+    ro text = cycle()
+    assert(text.contains("- format: 2.7"))
+    assert(definitions_hash(text) == "446ddf8041c0")
+    assert(definitions_hash(text.replace("\n", "\r\n")) == "446ddf8041c0")
+    assert(definitions_hash("${text}\n\n\n") == "446ddf8041c0")
+    assert(definitions_hash(text.replace("\n\n", " \n\n")) == "446ddf8041c0")
+    assert(definitions_hash(text.replace("потолок", "потолоки")) != "446ddf8041c0")
+}
+
+test "fm older hashes" {
+    ro text = cycle()
+    assert(definitions_hash(text.replace("format: 2.7", "format: 2.6")) == "1628bec298d9")
+    assert(definitions_hash(text.replace("format: 2.7", "format: 2.5")) == "6bbdd242e7f5")
+    assert(normalize_definitions(text).ends_with("предел\n"))
+}
+
+test "fm defs report" {
+    ro report = translate_definitions(cycle())
+    assert(report.errors.len() == 0)
+    assert(report.hash == "446ddf8041c0")
+    assert(report.version == "1")
+    ro old = translate_definitions(cycle().replace("format: 2.7", "format: 2.6"))
+    assert(old.errors.len() == 0)
+    assert(old.hash == "1628bec298d9")
+    ro older = translate_definitions(cycle().replace("format: 2.7", "format: 2.5"))
+    assert(older.errors.len() == 0)
+    assert(older.json == report.json)
+}
+
+test "fm defs unknown" {
+    for v in ["2.4", "2.8", "3"] {
+        ro report = translate_definitions(cycle().replace("format: 2.7", "format: ${v}"))
+        assert(report.errors.len() == 1)
+        assert(report.errors[0].message.contains("формат файла определений должен быть 2.5, 2.6 или 2.7"))
+    }
+}
+
+test "fm include hash" {
+    ro include = "определения: арифметика_цикла версия 1 хеш"
+    ro good = replaced(base_text(), "## Состояния\n", "## Подключения\n\n${include} 446ddf8041c0\n\n## Состояния\n")
+    ro good_report = checked(good)
+    if good_report.errors.len() > 0 { panic(first_error_of(good_report)) }
+    assert(good_report.json.contains("\"includes\":[{\"name\":\"арифметика_цикла\",\"version\":\"1\",\"hash\":\"446ddf8041c0\"}]"))
+    ro old = replaced(base_text(), "## Состояния\n", "## Подключения\n\n${include} 1628bec298d9\n\n## Состояния\n")
+    assert(errors_say(old, "хеш файла арифметика_цикла — 446ddf8041c0, а в подключении 1628bec298d9"))
+}

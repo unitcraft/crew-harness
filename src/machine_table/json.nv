@@ -7,7 +7,7 @@
 module crew_harness.machine_table
 
 import std.encoding.json.{Json, JsonValue, JsonObject}
-import crew_harness.machine.{Expr, TypeSpec, TypeDefs, FieldDef, RecordDef, VariantDef, CaseDef, Bind, DefFn, expr_from_json, field_def, TextType, ListType, TupleType}
+import crew_harness.machine.{Expr, TypeSpec, TypeDefs, FieldDef, RecordDef, VariantDef, EnumWord, CaseDef, Bind, DefFn, expr_from_json, field_def, TextType, ListType, TupleType}
 
 /// The format tag of the tree.
 export const MACHINE_FORMAT = "machine/2"
@@ -16,7 +16,7 @@ export const MACHINE_FORMAT = "machine/2"
 export const TABLE_FORMAT = "2.5"
 
 /// The versions of the table format whose tree this decoder reads (2.6 changed the text of the tables, not the tree).
-export fn table_formats() -> []str => ["2.5", "2.6"]
+export fn table_formats() -> []str => ["2.5", "2.6", "2.7"]
 
 fn le(path str, message str) -> LoadError => { path, message }
 
@@ -251,7 +251,7 @@ export fn fail_code_names() -> []str => [
 fn fail_code_def() -> VariantDef {
     mut cases = []CaseDef.new()
     for n in fail_code_names() { cases.push(CaseDef { name: n, fields: []FieldDef.new() }) }
-    VariantDef { name: "FailCode", cases }
+    VariantDef { name: "FailCode", cases, words: []EnumWord.new() }
 }
 
 // The record `JournalEvent` (`СобытиеЖурнала` of the format, section 2) is built into every machine, like `FailCode`: the code and the list of the pairs (name, text).
@@ -295,7 +295,7 @@ fn dec_types(root JsonObject) -> Result[TypeDefs, LoadError] {
         ro name = j_need_str(o, "name", p)?
         if names.contains(name) || base_type_names().contains(name) { return Err(le(p, "the type name ${name} is repeated or reserved")) }
         names.push(name)
-        skeleton_variants.push(VariantDef { name, cases: []CaseDef.new() })
+        skeleton_variants.push(VariantDef { name, cases: []CaseDef.new(), words: []EnumWord.new() })
         i += 1
     }
     ro skeleton = TypeDefs { records: skeleton_records, variants: skeleton_variants }
@@ -334,7 +334,7 @@ fn dec_types(root JsonObject) -> Result[TypeDefs, LoadError] {
             cases.push(CaseDef { name: case_name, fields })
             k += 1
         }
-        variants.push(VariantDef { name, cases })
+        variants.push(VariantDef { name, cases, words: []EnumWord.new() })
         i += 1
     }
     Ok(TypeDefs { records, variants })
@@ -919,7 +919,7 @@ fn dec_machine(root JsonObject) -> Result[MachineDef, LoadError] {
     ro format = j_need_str(root, "format", "$")?
     if format != MACHINE_FORMAT { return Err(le("$.format", "the format must be ${MACHINE_FORMAT}, got ${format}")) }
     ro table_format = j_str_or(root, "table_format", TABLE_FORMAT, "$")?
-    if !table_formats().contains(table_format) { return Err(le("$.table_format", "the table_format must be 2.5 or 2.6 (the format of the methodology), got ${table_format}")) }
+    if !table_formats().contains(table_format) { return Err(le("$.table_format", "the table_format must be 2.5, 2.6 or 2.7 (the format of the methodology), got ${table_format}")) }
     ro name = j_need_str(root, "machine", "$")?
     ro version = j_str_or(root, "version", "", "$")?
     ro types = dec_types(root)?

@@ -228,7 +228,7 @@ test "cs cycle hash 26" {
     ro cycle = `# Определения: арифметика_цикла
 
 - definitions_version: 1
-- format: 2.6
+- format: 2.7
 
 ## Типы
 —
@@ -241,7 +241,7 @@ test "cs cycle hash 26" {
 определение потолок_исчерпан(номер число≥1, отсчёт число≥1, предел число≥0) -> да/нет =
   (номер - 1) - отсчёт + 1 >= предел
 `
-    assert(definitions_hash(cycle) == "1628bec298d9")
-    assert(definitions_hash(cycle.replace("\n", "\r\n")) == "1628bec298d9")
-    assert(definitions_hash(cycle.replace("- format: 2.6", "format: 2.5").replace("- definitions_version", "definitions_version")) == "fb15ba5656e3")
+    assert(definitions_hash(cycle) == "446ddf8041c0")
+    assert(definitions_hash(cycle.replace("\n", "\r\n")) == "446ddf8041c0")
+    assert(definitions_hash(cycle.replace("- format: 2.7", "format: 2.5").replace("- definitions_version", "definitions_version")) == "fb15ba5656e3")
 }
