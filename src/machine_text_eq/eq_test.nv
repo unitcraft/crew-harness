@@ -58,28 +58,28 @@ fn same_list(xs []str, ys []str) -> bool {
 }
 
 // The two traces of a step compared; "" when equal, else what differs.
-fn trace_diff(a StepTrace, b StepTrace) -> str {
-    if a.state != b.state { return "state ${a.state} / ${b.state}" }
-    if a.encoded != b.encoded { return "data ${a.encoded} / ${b.encoded}" }
-    if !same_list(a.journal, b.journal) { return "journal ${a.journal.join(";")} / ${b.journal.join(";")}" }
-    if !same_list(entry_lines(a), entry_lines(b)) { return "journal lines ${entry_lines(a).join(";")} / ${entry_lines(b).join(";")}" }
-    if !same_list(a.open, b.open) { return "open ${a.open.join(",")} / ${b.open.join(",")}" }
-    if !same_list(a.sent, b.sent) { return "sent ${a.sent.join(",")} / ${b.sent.join(",")}" }
-    if !same_list(a.cancelled, b.cancelled) { return "cancelled ${a.cancelled.join(",")} / ${b.cancelled.join(",")}" }
-    if !same_list(a.queue, b.queue) { return "queue ${a.queue.join(",")} / ${b.queue.join(",")}" }
-    if !same_list(a.acked, b.acked) { return "acked ${a.acked.join(",")} / ${b.acked.join(",")}" }
-    if a.outcome != b.outcome { return "outcome ${a.outcome} / ${b.outcome}" }
-    if a.number != b.number { return "step number ${a.number} / ${b.number}" }
+fn trace_diff(ta StepTrace, tb StepTrace) -> str {
+    if ta.state != tb.state { return "state ${ta.state} / ${tb.state}" }
+    if ta.encoded != tb.encoded { return "data ${ta.encoded} / ${tb.encoded}" }
+    if !same_list(ta.journal, tb.journal) { return "journal ${ta.journal.join(";")} / ${tb.journal.join(";")}" }
+    if !same_list(entry_lines(ta), entry_lines(tb)) { return "journal lines ${entry_lines(ta).join(";")} / ${entry_lines(tb).join(";")}" }
+    if !same_list(ta.open, tb.open) { return "open ${ta.open.join(",")} / ${tb.open.join(",")}" }
+    if !same_list(ta.sent, tb.sent) { return "sent ${ta.sent.join(",")} / ${tb.sent.join(",")}" }
+    if !same_list(ta.cancelled, tb.cancelled) { return "cancelled ${ta.cancelled.join(",")} / ${tb.cancelled.join(",")}" }
+    if !same_list(ta.queue, tb.queue) { return "queue ${ta.queue.join(",")} / ${tb.queue.join(",")}" }
+    if !same_list(ta.acked, tb.acked) { return "acked ${ta.acked.join(",")} / ${tb.acked.join(",")}" }
+    if ta.outcome != tb.outcome { return "outcome ${ta.outcome} / ${tb.outcome}" }
+    if ta.number != tb.number { return "step number ${ta.number} / ${tb.number}" }
     ""
 }
 
 fn engine_diff(sc Scenario, first PortolanMachine, second PortolanMachine) -> str {
-    ro a = drive_scenario[PortolanState, PortolanMachine](first, sc)
-    ro b = drive_scenario[PortolanState, PortolanMachine](second, sc)
-    if a.len() != b.len() { return "${sc.name}: ${a.len()} traces / ${b.len()}" }
+    ro ta = drive_scenario[PortolanState, PortolanMachine](first, sc)
+    ro tb = drive_scenario[PortolanState, PortolanMachine](second, sc)
+    if ta.len() != tb.len() { return "${sc.name}: ${ta.len()} traces / ${tb.len()}" }
     mut i = 0
-    while i < a.len() {
-        ro d = trace_diff(a[i], b[i])
+    while i < ta.len() {
+        ro d = trace_diff(ta[i], tb[i])
         if d != "" { return "${sc.name}, step ${i + 1}: ${d}" }
         i += 1
     }

@@ -205,6 +205,10 @@ fn source_files() -> []NamedText2 => [
     NamedText2 { name: "machine.nv", text: embed_str("machine.nv") },
     NamedText2 { name: "names.nv", text: embed_str("names.nv") },
     NamedText2 { name: "parse.nv", text: embed_str("parse.nv") },
+    NamedText2 { name: "render.nv", text: embed_str("render.nv") },
+    NamedText2 { name: "render_expr.nv", text: embed_str("render_expr.nv") },
+    NamedText2 { name: "render_states.nv", text: embed_str("render_states.nv") },
+    NamedText2 { name: "rj.nv", text: embed_str("rj.nv") },
     NamedText2 { name: "party.nv", text: embed_str("party.nv") },
     NamedText2 { name: "state.nv", text: embed_str("state.nv") },
     NamedText2 { name: "words.nv", text: embed_str("words.nv") }
@@ -297,7 +301,7 @@ test "wt every key listed" {
 // A line may hold a Cyrillic literal when the literal is (a piece of) the message of an error, or a letter of the alphabet.
 fn allowed_marks() -> []str => [
     "p_fail(", "tx_err(", "struct_error(", "cx_error(", "cx_unsupported(", "unsupported(", "note(", "cls_flush(", "foreign_error(", "Err(", "message:",
-    "decl_name(", "tr_word(", "tr_word_f(", "decl_name_phrase(", "ro message =", "ro why =", "ro shown =", "возможно", "конец текста", "строку", "фрагменты не подключены", "подключён:",
+    "decl_name(", "tr_word(", "tr_word_f(", "decl_name_phrase(", "decl_name_phrase_in(", "ro message =", "ro why =", "ro shown =", "возможно", "конец текста", "строку", "фрагменты не подключены", "подключён:",
     "английский", "русский", "найдено", "\"а=a\"", "\"ф=f\"", "tx_chars(\"ABC", "tx_chars(\"abc"
 ]
 

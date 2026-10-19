@@ -246,7 +246,8 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
     match section_of(sections, "Input") {
         Some(sec) => {
             input = decl_input(entries, sec, cx)
-            has_input = true
+            // a section that holds only `—` declares no input (the canonical file writes all eleven sections, an empty one as a dash)
+            has_input = input.fields.len() > 0 || input.invariants.len() > 0
         }
         None => ()
     }
@@ -349,7 +350,7 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
             initial = initial_state(entries, sec, cx)
             for blk in blocks {
                 states.push(state_translate(entries, blk, states.len(), cx))
-                if blk.ru == error_name && blk.kind == "end" { error_end = blk.latin }
+                if (blk.ru == error_name || blk.latin == "Errored") && blk.kind == "end" { error_end = blk.latin }
             }
         }
         None => ()

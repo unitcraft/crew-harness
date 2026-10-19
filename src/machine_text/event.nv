@@ -146,6 +146,8 @@ fn ev_failure(mut p TxP, mut cx TxCx, sc TxScope) -> Result[TxEvent, TranslateEr
     p_expect(p, ")")?
     mut rest = []TxKV.new()
     if reasons.len() > 0 { rest.push(kv("reasons", jstrs(reasons))) }
+    // `_` names no value: the event binds nothing (the tree of a failure with a set of reasons and no name)
+    if en == "_" { return Ok(TxEvent { json: ev_json("failure", rest), scope: sc }) }
     rest.push(kv("bind", js(en)))
     Ok(TxEvent { json: ev_json("failure", rest), scope: sc_with(sc, n.text, en) })
 }

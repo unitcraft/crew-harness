@@ -196,3 +196,16 @@ test "nw include words" {
     assert(!is_clean(bad_en))
     assert(note_says(en_with_include("afe05e9a1e4d").replace("hash afe05e9a1e4d", "hash zz"), "12 шестнадцатеричных знаков"))
 }
+
+// The canonical file writes the section `Input` always, an empty one as a dash: a section that holds only a dash declares no input.
+test "nw empty input section" {
+    ro with_dash = v211_ru().replace("## Данные", "## Вход\n—\n\n## Данные")
+    assert(is_clean(with_dash))
+    assert(json_of(with_dash) == json_of(v211_ru()))
+    assert(!json_of(with_dash).contains("\"input\""))
+    ro en = v211_en().replace("## Data", "## Input\n—\n\n## Data")
+    assert(is_clean(en))
+    assert(json_of(en) == json_of(v211_en()))
+    ro declared = v211_ru().replace("## Данные", "## Вход\n\n| имя | тип | примечание |\n|---|---|---|\n| start | число≥0 | — |\n\n## Данные")
+    assert(json_of(declared).contains("\"input\":{\"fields\":[{\"name\":\"start\""))
+}

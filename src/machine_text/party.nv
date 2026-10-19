@@ -33,11 +33,16 @@ fn party_words(cell TxCell, line int, mut cx TxCx) -> Result[[]TxJ, TranslateErr
 }
 
 // The Latin word of a phrase under a kind of the table of names, else a soft error.
-fn decl_name_phrase(mut cx TxCx, t TxTok, phrase str, kind str, what str) -> str {
-    match names_get(cx.names, kind, phrase) {
+fn decl_name_phrase(mut cx TxCx, t TxTok, phrase str, kind str, what str) -> str => decl_name_phrase_in(cx, t, phrase, [kind], what)
+
+// The same under the first of the kinds that has the phrase.
+fn decl_name_phrase_in(mut cx TxCx, t TxTok, phrase str, kinds []str, what str) -> str {
+    match names_first(cx.names, kinds, phrase) {
         Some(en) => en
         None => {
-            cx_error(cx, t, "name", "${what} `${phrase}` нет в таблице имён${names_hint(cx.names, [kind], phrase)}")
+            // a word of the author in Latin letters is the name of the JSON as it is (section 1a)
+            if is_identifier_latin(phrase) { return phrase }
+            cx_error(cx, t, "name", "${what} `${phrase}` нет в таблице имён${names_hint(cx.names, kinds, phrase)}")
             phrase
         }
     }
@@ -254,7 +259,7 @@ fn decl_signals(entries []TxEntry, sec TxSection, mut cx TxCx) -> []TxJ {
 
 fn signal_row(r TxEntry, mut cx TxCx) -> Result[TxJ, TranslateError] {
     ro ph = cell_phrase(r.cells[0], r.line)?
-    ro en = decl_name_phrase(cx, ph.first, ph.text, "word", "сигнал")
+    ro en = decl_name_phrase_in(cx, ph.first, ph.text, ["word", "signal"], "сигнал")
     ro fields = cell_fields(r.cells[1], r.line, cx)?
     pair_add(cx.env.signals, ph.text, en)
     if fields.len() == 0 { return Ok(jobj([kv("name", js(en))])) }
