@@ -344,9 +344,10 @@ fn Hub mut @ensure_client(at int) Proc Detach Time -> str {
     }
 }
 
-fn Hub @is_awaiting(at int) -> bool {
+// Does the state of the session take a message of the owner? The table answers; the hub does not know how its states are called.
+fn Hub @takes_message_at(at int) -> bool {
     ro s = @sessions[at]
-    @machine.state_name(s.engine.state()) == "Awaiting"
+    @machine.accepts_word(s.engine.state(), "user_message")
 }
 
 fn Hub mut @add_session(s Dialog) -> () {
@@ -466,7 +467,7 @@ fn Hub mut @say(trace str, text str) Proc Detach Time -> () {
         return
     }
     if text.byte_len() == 0 { return }
-    if @is_awaiting(at) {
+    if !@takes_message_at(at) {
         @say_log("a message to ${trace} while a turn is open: ignored")
         return
     }
@@ -619,7 +620,14 @@ export fn Hub @page_lines(id str) -> []str {
     @sessions[at].lines
 }
 
-/// The name of the state of the machine of a session ("Idle", "Awaiting"), "" for an unknown session.
+/// Does the session take a message of the owner now (no turn is open)? False for an unknown session. The table answers (`accepts_word`), not a name of a state.
+export fn Hub @takes_message(id str) -> bool {
+    ro at = @find(id)
+    if at < 0 { return false }
+    @takes_message_at(at)
+}
+
+/// The name of the state of the machine of a session as the table calls it (for people and for the log; the code does not compare it), "" for an unknown session.
 export fn Hub @state_of(id str) -> str {
     ro at = @find(id)
     if at < 0 { return "" }

@@ -4,7 +4,7 @@
 
 Every place of the product that goes round a defect or a limit of Oracle carries a comment `// ORACLE-WORKAROUND(N): what is gone round; how to simplify when item N is fixed`, where N is an item of [README.md](README.md) ("Known problems"). `git grep ORACLE-WORKAROUND` finds them, `python scripts/oracle-workarounds.py --list` prints them by item with the line. When Nova fixes an item, open its places below, simplify the code as the mark says and remove the mark; then rerun `python scripts/oracle-workarounds.py --index`.
 
-Marks: 183 in 113 files. Items with marks: 49. Items without marks: 11 (no workaround in the code).
+Marks: 184 in 114 files. Items with marks: 50. Items without marks: 11 (no workaround in the code).
 
 | Item | What | Places (files; marks in a file if more than one) | Marks |
 |---|---|---|---|
@@ -68,3 +68,4 @@ Marks: 183 in 113 files. Items with marks: 49. Items without marks: 11 (no worka
 | 60 | A protocol method that nothing calls is cut from the program, and the C of the program does not build (no small reproduction... | `src/engine/machine.nv` | 1 |
 | 61 | `none_arg_generic_option`: a literal `None` as the argument of a parameter of the type `Option[Wrap[str]]`, where `Wrap` is a... | `src/machine_nested_run/proto_test.nv` | 1 |
 | 62 | `with` is a reserved word: a variable, a parameter or a field named `with` (the natural name of "the machine with the answers of... | no workaround in the code | 0 |
+| 126 | `if_none_option_str`: an `if` whose one branch is `None` and the other `Some` of a text, bound by `ro` without a type (`ro... | `src/server/words_test.nv` | 1 |

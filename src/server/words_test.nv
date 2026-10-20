@@ -107,6 +107,7 @@ fn wd_event(w CodeWord) -> Incoming {
     } else {
         EventKind.Expired
     }
+    // ORACLE-WORKAROUND(126): `ro request = if ... { None } else { Some("agent-1") }` is a CC-FAIL (Option[int] against Option[str]); write the `ro` form when item 126 is fixed
     mut request Option[str] = None
     if w.kind != "input" { request = Some("agent-1") }
     Incoming { id: "e-1", trace: "t-1", step: 2, kind, name: w.name, request, input: "", at: 1000 }
@@ -265,6 +266,7 @@ test "wd the client of ACP gives only the words of the dictionary" {
     mut names = wd_names_after(project, "Incoming.word(\"")
     for n in wd_names_after(client, "Incoming.word(\"") { names.push(n) }
     for n in wd_names_after(project, "proj(\"") { names.push(n) }
+    for n in wd_names_after(project, "chunk_projection(update, \"") { names.push(n) }
     for n in wd_names_after(project, "EventKind.Answered, \"") { names.push(n) }
     for n in wd_names_after(project, "EventKind.Refused, \"") { names.push(n) }
     assert(names.len() >= 8)
