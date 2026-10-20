@@ -64,6 +64,7 @@ variable	код	code
 party	пользователь	user
 party	усиленный	enhanced
 field	подсказка	prompt
+field	содержание	content
 field	реплика	reply
 constant	ПОЛИТИКА_РАЗРЕШЕНИЙ	PERMISSION_POLICY
 variable	исполнитель_повышенного_внимания	attention_executor

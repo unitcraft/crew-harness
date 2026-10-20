@@ -114,8 +114,7 @@ def own():
         done("agent-4", state="Idle", open=[], sent=["agent-1", "agent-2", "agent-3", "agent-4"], outcome="none"),
     ])
     out["cancel-idle"] = scenario("a cancel in Idle is a note, nothing ends and nothing is cancelled", [
-        {"do": "feed", "event": {"kind": "word", "name": "cancel"}, "expect": {
-            "state": "Idle", "journal": [j("event_ignored", event="cancel", state="Idle")], "open": [], "sent": [], "cancelled": [], "outcome": "none"}},
+        cancel(state="Idle", journal=[j("event_ignored", event="cancel", state="Idle")], open=[], sent=[], cancelled=[], outcome="none"),
         msg("hi", state="Awaiting", open=["agent-1"]),
     ])
     out["cancel-then-next"] = scenario("a cancel closes the turn, the late answer and the late refusal are discarded, the next turn works", [
