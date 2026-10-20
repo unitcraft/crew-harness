@@ -45,8 +45,12 @@ export type ParamSpec { name str, spec TypeSpec }
 /// Primitive: the signature and the class of a primitive of the host.
 export type Primitive { name str, params []ParamSpec, result TypeSpec, class PrimitiveClass, reads []str, writes []str }
 
-/// Registry: the primitives, in the order of registration.
-export type Registry { primitives []Primitive }
+/// RoleRow: one row of the table "by role" of a parse primitive (format 7, 2.12, Ya-33): the result for the literal of the role and the data that the primitive reads for that role.
+export type RoleRow { primitive str, role str, result TypeSpec, reads []str }
+
+/// Registry: the primitives, in the order of registration; the codes of the journal that the host declares (the table of the methodology and the table of the product, format 5, 2.12, Ya-31;
+/// empty means that the codes are not checked against a table); the tables "by role" of the parse primitives.
+export type Registry { primitives []Primitive, journal []JournalCode, roles []RoleRow }
 
 /// RegistryError: a primitive cannot be registered.
 export type RegistryError { message str }
@@ -58,7 +62,38 @@ export type PositionError { path str, primitive str, message str }
 export fn param(name str, spec TypeSpec) -> ParamSpec => { name, spec }
 
 /// An empty registry.
-export fn new_registry() -> Registry => { primitives: []Primitive.new() }
+export fn new_registry() -> Registry => { primitives: []Primitive.new(), journal: []JournalCode.new(), roles: []RoleRow.new() }
+
+/// Put the table of the codes of the journal into the registry (the union of the tables of the methodology and of the product).
+export fn with_journal(mut registry Registry, codes []JournalCode) -> () {
+    registry.journal = codes
+}
+
+/// Register a row of the table "by role" of a parse primitive; the primitive must be registered and its second parameter a text.
+export fn add_role(mut registry Registry, primitive str, role str, result TypeSpec, reads []str) -> Result[(), RegistryError] {
+    match find_primitive(registry, primitive) {
+        Some(p) => {
+            if p.params.len() != 2 { return Err(RegistryError { message: "the primitive ${primitive} takes the answer and the role: two parameters" }) }
+        }
+        None => return Err(RegistryError { message: "the primitive ${primitive} is not registered" })
+    }
+    for r in registry.roles {
+        if r.primitive == primitive && r.role == role { return Err(RegistryError { message: "the role ${role} of ${primitive} is registered already" }) }
+    }
+    registry.roles.push(RoleRow { primitive, role, result, reads })
+    Ok(())
+}
+
+/// The row of the table "by role" for the primitive and the role literal.
+export fn find_role(registry Registry, primitive str, role str) -> Option[RoleRow] => None
+
+/// Does the primitive have a table "by role"?
+export fn has_roles(registry Registry, primitive str) -> bool {
+    for r in registry.roles {
+        if r.primitive == primitive { return true }
+    }
+    false
+}
 
 /// Register a primitive; a second one with the same name, a repeated parameter name, an empty name are errors.
 export fn register(mut registry Registry, primitive Primitive) -> Result[(), RegistryError] {

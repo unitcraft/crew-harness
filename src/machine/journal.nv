@@ -1,0 +1,21 @@
+// journal.nv - the codes of the journal that a machine may write (format 5 and 10, 2.12, Ya-31): the table of the methodology (`state-machine-journal.md`, the templates and the events of the
+// format) and the table of the product beside it, of the same form `Machine | Code | Russian template | Parameters`; the check takes the union of the two.
+module crew_harness.machine
+
+/// JournalCode: a row of a table of templates: the machines that write the code, the code, the template, the required parameters and the optional ones.
+export type JournalCode { machine str, code str, template str, params []str, optional []str }
+
+/// The table of the methodology.
+export fn methodology_journal() -> []JournalCode => []JournalCode.new()
+
+/// The table of the product.
+export fn product_journal() -> []JournalCode => []JournalCode.new()
+
+/// The union of the two tables: the codes that a machine of the product may write.
+export fn journal_union() -> []JournalCode => []JournalCode.new()
+
+/// The row of the code in a table.
+export fn journal_find(codes []JournalCode, code str) -> Option[JournalCode] => None
+
+/// The faults of the table of the product against the table of the methodology: a code that repeats a code of the methodology (even with the same template), a code that the format writes itself, a code that is not lower case latin.
+export fn journal_table_issues(methodology []JournalCode, product []JournalCode) -> []str => []str.new()
