@@ -73,7 +73,7 @@ fn header_read(entries []TxEntry, mut cx TxCx) -> TxHeader {
     }
     if !format_versions().contains(format) {
         ro shown = if format == "" { "не указан" } else { format }
-        note(cx, struct_error(1, 1, "формат ${shown}: переводчик читает формат ${format_versions().join(", ")} (строка `format: 2.11`)"))
+        note(cx, struct_error(1, 1, "формат ${shown}: версия не известна переводчику, он читает формат ${format_versions().join(", ")} (строка `format: 2.12`); переходного периода нет"))
     }
     TxHeader { title, machine, version, format }
 }
@@ -191,6 +191,7 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
     mut signals = []TxJ.new()
     mut included = TxIncluded { types: TxTypes { records: []TxJ.new(), variants: []TxJ.new() }, constants: []TxJ.new(), definitions: []TxJ.new(), includes: []TxJ.new() }
     mut connected = []str.new()
+    mut accepted_calls = []TxCall.new()
     match section_of(sections, "Includes") {
         Some(sec) => {
             included = defs_includes(entries, sec, registry, cx)
@@ -198,6 +199,7 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
                 connected.push(call.name)
                 match fragment_text(call, cx) {
                     Some(text) => {
+                        accepted_calls.push(call)
                         ro fentries = tx_classify_in(lines_of(text), cx.words, false, false).entries
                         ro before = cx.errors.len()
                         ro fsections = sections_of(fentries, cx)
@@ -381,7 +383,7 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
     }
 
     // the JSON
-    mut root = [kv("format", js("machine/2")), kv("portolan_version", js(if format_versions().contains(header.format) { header.format } else { "2.5" })), kv("machine", js(header.machine)), kv("version", js(header.version))]
+    mut root = [kv("format", js("machine/2")), kv("portolan_version", js(if format_versions().contains(header.format) { header.format } else { "2.12" })), kv("machine", js(header.machine)), kv("version", js(header.version))]
     if header.title != "" { root.push(kv("title", js(header.title))) }
     if types.records.len() > 0 || types.variants.len() > 0 {
         mut tp = []TxKV.new()
@@ -404,6 +406,15 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
     if signals.len() > 0 { root.push(kv("signals", TxArr(signals))) }
     if definitions.len() > 0 { root.push(kv("definitions", TxArr(definitions))) }
     if included.includes.len() > 0 { root.push(kv("includes", TxArr(included.includes))) }
+    // the connections of the fragments with every argument (1b (m)): the fragment is in the tree substituted, the connection lets the generator write the line back
+    mut fragments = []TxJ.new()
+    for call in accepted_calls {
+        match fragment_use_json(call, cx) {
+            Some(j) => fragments.push(j)
+            None => ()
+        }
+    }
+    if fragments.len() > 0 { root.push(kv("fragments", TxArr(fragments))) }
     root.push(kv("initial", js(initial)))
     if error_end != "" { root.push(kv("error_end", js(error_end))) }
     if common.len() > 0 { root.push(kv("common_events", TxArr(common))) }

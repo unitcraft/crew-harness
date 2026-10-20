@@ -1,4 +1,4 @@
-// defs.nv - the files of definitions (format section 8): `# Определения: <имя>`, `definitions_version: N`, `format: 2.5`, the sections `## Типы`, `## Константы`,
+// defs.nv - the files of definitions (format section 8): `# Определения: <имя>`, `definitions_version: N`, `format: 2.12`, the sections `## Типы`, `## Константы`,
 // `## Определения` (all three, an empty one is `—`), only pure definitions. A machine includes a file by the line `определения: <имя> версия <N> хеш <hex12>`; the hash is
 // the first twelve letters of the SHA-256 of the file after the normalization of the format (a BOM dropped, line feeds as LF, no spaces at the end of a line, one LF at
 // the end of the file), and the tree of the machine gets a copy of what the file brings (types, constants, definitions).

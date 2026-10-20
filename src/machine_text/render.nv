@@ -417,9 +417,16 @@ fn rn_sec_definitions(mut cx RnCx, root RJ, dropped []str) -> []str {
     out
 }
 
-fn rn_sec_includes(cx RnCx, root RJ, copy_includes bool) -> []str {
-    if copy_includes { return ["—"] }
-    mut lines = []str.new()
+fn rn_sec_includes(mut cx RnCx, root RJ, copy_includes bool) -> []str {
+    // the lines of connection of the fragments come first, one line each, with every argument (1b (m), 2.12, Ya-32)
+    mut lines = rn_fragment_lines(cx, root)
+    if copy_includes && lines.len() == 0 { return ["—"] }
+    if copy_includes {
+        mut only = ["```"]
+        rn_add(only, lines)
+        only.push("```")
+        return only
+    }
     for inc in rj_garr(root, "includes") {
         lines.push("${rn_kw(cx, "key", "definitions")}: ${rj_gstr(inc, "name")} ${rn_kw(cx, "key", "version")} ${rj_gstr(inc, "version")} ${rn_kw(cx, "key", "hash")} ${rj_gstr(inc, "hash")}")
     }

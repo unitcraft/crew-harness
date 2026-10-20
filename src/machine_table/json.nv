@@ -7,17 +7,17 @@
 module crew_harness.machine_table
 
 import std.encoding.json.{Json, JsonValue, JsonObject}
-import crew_harness.machine.{Expr, TypeSpec, TypeDefs, FieldDef, RecordDef, VariantDef, EnumWord, CaseDef, Bind, DefFn, expr_from_json, field_def, TextType, ListType, TupleType}
+import crew_harness.machine.{Expr, Lit, Text, TypeSpec, TypeDefs, FieldDef, RecordDef, VariantDef, EnumWord, CaseDef, Bind, DefFn, expr_from_json, field_def, TextType, ListType, TupleType}
 
 /// The format tag of the tree.
 export const MACHINE_FORMAT = "machine/2"
 
 /// The version of the language Portolan of the methodology that the tree follows (the optional key `portolan_version`; absent means this one). The key was named
 /// `table_format` before task 113; the old name is not accepted (it is a key the schema does not know).
-export const PORTOLAN_VERSION = "2.5"
+export const PORTOLAN_VERSION = "2.12"
 
-/// The versions of the language whose tree this decoder reads (2.6 changed the text of the tables, 2.8-2.10 the words and the writing: the tree stayed).
-export fn portolan_versions() -> []str => ["2.5", "2.6", "2.7", "2.8", "2.9", "2.10", "2.11"]
+/// The versions of the language whose tree this decoder reads: one. Task 125: there is no transition period (the word of the owner, 2026-10-20), so a tree of 2.11 or of an older version is refused.
+export fn portolan_versions() -> []str => ["2.12"]
 
 fn le(path str, message str) -> LoadError => { path, message }
 
@@ -219,8 +219,20 @@ fn j_fields_or_empty(o JsonObject, key str, defs TypeDefs, path str) -> Result[[
 /// The keys of the root object of a machine.
 export fn top_keys() -> []str => [
     "format", "portolan_version", "machine", "version", "title", "types", "constants", "params", "input", "data", "parties", "request_limit", "signals",
-    "definitions", "includes", "initial", "error_end", "common_events", "states", "ends", "primitives"
+    "definitions", "includes", "fragments", "initial", "error_end", "common_events", "states", "ends", "primitives"
 ]
+
+/// The fragments that a machine may connect (the keys of the table of words, kind `fragment`) and the keys of the arguments of the connection of each (format section 9, 1b (m), the key `fragments` of the product).
+export fn fragment_names() -> []str => ["Pause"]
+
+export fn pause_arg_names() -> []str => ["halt_word", "halt_code", "nested", "cancel_requests", "reenter", "write_right"]
+
+/// The words of the arguments `cancel_requests` and `reenter` of the fragment Pause (the behavior parameters of section 9).
+export fn pause_behavior_words(arg str) -> []str {
+    if arg == "cancel_requests" { return ["mechanics", "without_return_to_send", "stop_transport_turn"] }
+    if arg == "reenter" { return ["nothing", "requests_from_to_send"] }
+    []str.new()
+}
 
 /// The keys of a state.
 export fn state_keys() -> []str => [
@@ -527,6 +539,45 @@ fn dec_includes(root JsonObject) -> Result[[]IncludeDef, LoadError] {
         out.push(IncludeDef {
             name: j_need_str(o, "name", p)?, version: j_need_str(o, "version", p)?, hash: j_need_str(o, "hash", p)?
         })
+        i += 1
+    }
+    Ok(out)
+}
+
+// The connections of the fragments: `fragments: [{ "name", "args": { argument: expression } }]` (the key of the product, 1b (m)): the fragment is in the tree already substituted, the
+// connection says how, so that the generator can write the line of connection back. Every argument is named, the words of the behavior arguments are checked.
+fn dec_fragments(root JsonObject) -> Result[[]FragmentUse, LoadError] {
+    ro items = j_arr_or_empty(root, "fragments", "$")?
+    mut out = []FragmentUse.new()
+    mut seen = []str.new()
+    mut i = 0
+    for item in items {
+        ro p = "$.fragments[${i}]"
+        ro o = j_obj(item, p)?
+        j_only(o, ["name", "args"], p)?
+        ro name = j_need_str(o, "name", p)?
+        if !fragment_names().contains(name) { return Err(le("${p}.name", "the fragment ${name} is not one that the host connects (${fragment_names().join(", ")})")) }
+        if seen.contains(name) { return Err(le("${p}.name", "the fragment ${name} is connected twice")) }
+        seen.push(name)
+        ro ao = j_need_obj(o, "args", p)?
+        ro ap = "${p}.args"
+        j_only(ao, pause_arg_names(), ap)?
+        mut args = []FragmentArg.new()
+        for arg in pause_arg_names() {
+            if !j_has(ao, arg) { return Err(le("${ap}.${arg}", "the argument ${arg} of the fragment ${name} is missing")) }
+            ro value = j_expr(ao, arg, ap)?
+            ro words = pause_behavior_words(arg)
+            if words.len() > 0 {
+                match value {
+                    Lit(Text(w)) => {
+                        if !words.contains(w) { return Err(le("${ap}.${arg}", "the argument ${arg} is one of ${words.join(", ")}")) }
+                    }
+                    _ => return Err(le("${ap}.${arg}", "the argument ${arg} is one of ${words.join(", ")}"))
+                }
+            }
+            args.push(FragmentArg { name: arg, value })
+        }
+        out.push(FragmentUse { name, args })
         i += 1
     }
     Ok(out)
@@ -1041,7 +1092,7 @@ fn dec_machine(root JsonObject) -> Result[MachineDef, LoadError] {
     if format != MACHINE_FORMAT { return Err(le("$.format", "the format must be ${MACHINE_FORMAT}, got ${format}")) }
     ro language_version = j_str_or(root, "portolan_version", PORTOLAN_VERSION, "$")?
     if !portolan_versions().contains(language_version) {
-        return Err(le("$.portolan_version", "the portolan_version must be 2.5, 2.6, 2.7, 2.8, 2.9, 2.10 or 2.11 (the version of the language of the methodology), got ${language_version}"))
+        return Err(le("$.portolan_version", "the portolan_version must be 2.12 (the version of the language of the methodology; there is no transition period), got ${language_version}"))
     }
     ro name = j_need_str(root, "machine", "$")?
     ro version = j_str_or(root, "version", "", "$")?
@@ -1055,6 +1106,7 @@ fn dec_machine(root JsonObject) -> Result[MachineDef, LoadError] {
     ro signals = dec_words_or_empty(root, "signals", types, "$")?
     ro definitions = dec_definitions(root, types)?
     ro includes = dec_includes(root)?
+    ro fragments = dec_fragments(root)?
     ro initial = j_need_str(root, "initial", "$")?
     ro error_end = j_str_or(root, "error_end", "", "$")?
     ro common = dec_rows(root, "common_events", "$")?
@@ -1063,7 +1115,7 @@ fn dec_machine(root JsonObject) -> Result[MachineDef, LoadError] {
     ro primitives = j_strings_or_empty(root, "primitives", "$")?
     Ok(MachineDef {
         name, version, types, constants, params, input, data, parties, request_limit, signals,
-        definitions, includes, initial, error_end, common, states,
+        definitions, includes, fragments, initial, error_end, common, states,
         result_spec: [ends.spec], end_rows: ends.rows, primitives
     })
 }

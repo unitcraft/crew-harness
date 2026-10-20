@@ -286,7 +286,7 @@ fn tr_word_f(mut cx TxCx, t TxTok, kinds []str, what str, foreign []str) -> str 
             if foreign.len() > 0 && cx_foreign(cx, t, foreign) { return t.text }
             // a name that the author invents may be in Latin letters in a file of either language (section 1a): it is the name of the JSON as it is
             if is_identifier_latin(t.text) { return t.text }
-            cx_error(cx, t, "name", "${what} `${t.text}` нет в таблице имён (словарь методики, версия 9)${names_hint(cx.names, kinds, t.text)}")
+            cx_error(cx, t, "name", "${what} `${t.text}` нет в таблице имён (словарь методики, версия 10)${names_hint(cx.names, kinds, t.text)}")
             t.text
         }
     }
@@ -888,7 +888,17 @@ fn ex_call(mut p TxP, mut cx TxCx, sc TxScope, name TxTok) -> Result[TxJ, Transl
         None => {
             match pair_get(cx.env.defs, name.text) {
                 Some(en) => { fn_en = en }
-                None => { fn_en = tr_word_f(cx, name, kinds_function(), "функция", ["catalog"]) }
+                None => {
+                    // a primitive that the machine names in `## Примитивы` is called as a function too (format 4.6, 2.12, Ya-29): the same node as `вызвать(имя, арг)`; which class may stand where is the check's
+                    match pair_get(cx.env.prims, name.text) {
+                        Some(prim_en) => {
+                            if args.named.len() > 0 { return Err(tx_err(args.named_tokens[0].line, args.named_tokens[0].col, "syntax", "именованные аргументы — только у `${kw(cx.words, "catalog", "journal_event")}`")) }
+                            return Ok(x_prim(prim_en, args.positional))
+                        }
+                        None => ()
+                    }
+                    fn_en = tr_word_f(cx, name, kinds_function(), "функция", ["catalog"])
+                }
             }
         }
     }

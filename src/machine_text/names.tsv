@@ -1,4 +1,4 @@
-# Names of the dictionary of the methodology (state-machine-glossary.md, version 9), kind, Russian, English.
+# Names of the dictionary of the methodology (state-machine-glossary.md, version 10), kind, Russian, English.
 # Made by scripts/glossary-names.py; do not edit by hand (names of the format and of the product: names_format.tsv).
 state	АННУЛ	Void
 type	Автомат	Machine
@@ -658,8 +658,8 @@ data	источник_вердикта	verdict_source
 field	источник_вердикта	verdict_source
 data	источник_выбора_маршрута	route_choice_source
 field	источник_выбора_маршрута	route_choice_source
-data	источник_запуска	source
-field	источник_запуска	source
+data	источник_запуска	launch_source
+field	источник_запуска	launch_source
 data	источник_маршрута	route_source
 field	источник_маршрута	route_source
 data	источник_отложенной	next_source

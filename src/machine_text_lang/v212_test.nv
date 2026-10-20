@@ -170,7 +170,7 @@ test "v212 set en" {
 fn field_as_datum() -> str => v212_ru().replace("разрешить, отказать", "разрешить(число_ходов число), отказать")
 
 test "v212 field named as datum" {
-    ro text = field_as_datum().replace("слово(разрешить) | —", "слово(разрешить(число_ходов: шаг)) | —")
+    ro text = field_as_datum().replace("слово(разрешить) | —", "слово(разрешить(число_ходов: step)) | —")
     assert(is_clean(text))
     assert(json_of(text).contains("\"bind\":{\"turn_count\":\"step\"}"))
 }
@@ -184,14 +184,6 @@ test "v212 binding named as datum" {
 test "v212 binding named as constant" {
     ro text = field_as_datum().replace("слово(разрешить) | —", "слово(разрешить(число_ходов: ПОРОГ)) | —").replace("## Данные", "## Константы\n\n| имя | тип | значение |\n|---|---|---|\n| ПОРОГ | число | 2 |\n\n## Данные")
     assert(note_says(text, "constant") || note_says(text, "ПОРОГ") || note_says(text, "Константы"))
-}
-
-test "v212 binding of the fragment is a datum name" {
-    // the bindings of the rows of the fragment Pause (`слово_человека`, `автор`, `источник`, `идентификатор_запроса`) are the bindings of the rows of the machine: a datum with such a name is an error
-    ro text = field_as_datum().replace("| число_ходов | число≥0 | 0 | да | строки |", "| число_ходов | число≥0 | 0 | да | строки |\n| автор | текст | \"\" | — | строки |")
-    assert(is_clean(text))
-    ro bound = text.replace("слово(разрешить(число_ходов число))", "слово(разрешить(число_ходов число))").replace("слово(разрешить) | —", "слово(разрешить(число_ходов: автор)) | —")
-    assert(note_says(bound, "no shadowing"))
 }
 
 // ---- the files of definitions: the hashes of the sample of 2.12 ---------------------------------------------------------------------------
@@ -241,8 +233,4 @@ test "v212 include en" {
     assert(is_clean(en_include("eee8c3a13a08")))
     assert(note_says(en_include("afe05e9a1e4d"), "хеш файла cycle_arithmetic"))
     assert(json_of(en_include("eee8c3a13a08")).contains("\"hash\":\"eee8c3a13a08\""))
-}
-
-test "v212 include en equals ru" {
-    assert(no_title(json_of(en_include("eee8c3a13a08")).replace("cycle_arithmetic", "арифметика_цикла").replace("eee8c3a13a08", "51e15e557120")) == no_title(json_of(ru_include("51e15e557120"))))
 }

@@ -34,7 +34,7 @@ test "in meeting defs" {
     assert(d.version == "1")
     assert(d.rows_total == 15)
     assert(d.rows_noted == 0)
-    assert(d.hash == "13239c31e29a")
+    assert(d.hash == "193bf2127cd5")
     assert(d.json.contains("\"definitions\":[{\"name\":\"has_critical\""))
 }
 
@@ -48,7 +48,7 @@ test "in wrapper" {
     ro report = wrapped(wrapper())
     if report.errors.len() > 0 { panic("${report.errors[0].line}: ${report.errors[0].message}") }
     assert(report.errors.len() == 0)
-    assert(report.json.contains("\"includes\":[{\"name\":\"арифметика_цикла\",\"version\":\"1\",\"hash\":\"fad927a77d32\"},{\"name\":\"определения_совещания\",\"version\":\"1\",\"hash\":\"13239c31e29a\"}]"))
+    assert(report.json.contains("\"includes\":[{\"name\":\"арифметика_цикла\",\"version\":\"1\",\"hash\":\"51e15e557120\"},{\"name\":\"определения_совещания\",\"version\":\"1\",\"hash\":\"193bf2127cd5\"}]"))
     assert(report.json.contains("{\"name\":\"ceiling_reached\",\"params\":"))
     assert(report.json.contains("{\"name\":\"yes_no_word\",\"params\""))
 }
@@ -67,21 +67,21 @@ test "in wrapper loads" {
 }
 
 test "in hash errors" {
-    assert(says_any(wrapped(wrapper().replace("fad927a77d32", "fad927a77d33")), "хеш файла арифметика_цикла — fad927a77d32, а в подключении fad927a77d33"))
+    assert(says_any(wrapped(wrapper().replace("51e15e557120", "fad927a77d33")), "хеш файла арифметика_цикла — 51e15e557120, а в подключении fad927a77d33"))
     assert(says_any(wrapped(wrapper().replace("арифметика_цикла версия 1", "арифметика_цикла версия 2")), "версия файла арифметика_цикла — 1, а в подключении 2"))
     assert(says_any(wrapped(wrapper().replace("определения: арифметика_цикла", "определения: нет_такого_файла")), "файла определений `нет_такого_файла` нет в реестре"))
-    assert(says_any(wrapped(wrapper().replace("определения: определения_совещания версия 1 хеш 13239c31e29a", "определения: арифметика_цикла версия 1 хеш fad927a77d32")), "подключён дважды"))
+    assert(says_any(wrapped(wrapper().replace("определения: определения_совещания версия 1 хеш 193bf2127cd5", "определения: арифметика_цикла версия 1 хеш 51e15e557120")), "подключён дважды"))
 }
 
 test "in line errors" {
-    assert(says_any(wrapped(wrapper().replace("хеш fad927a77d32", "хеш fb15")), "после `хеш` ожидается 12 шестнадцатеричных знаков"))
-    assert(says_any(wrapped(wrapper().replace("хеш fad927a77d32", "хеш 446DDF8041C0")), "после `хеш` ожидается 12 шестнадцатеричных знаков"))
-    assert(says_any(wrapped(wrapper().replace("версия 1 хеш fad927a77d32", "хеш fad927a77d32")), "ожидается `версия`"))
-    assert(says_any(wrapped(wrapper().replace("версия 1 хеш fad927a77d32", "версия один хеш fad927a77d32")), "после `версия` ожидается целое число"))
+    assert(says_any(wrapped(wrapper().replace("хеш 51e15e557120", "хеш fb15")), "после `хеш` ожидается 12 шестнадцатеричных знаков"))
+    assert(says_any(wrapped(wrapper().replace("хеш 51e15e557120", "хеш 446DDF8041C0")), "после `хеш` ожидается 12 шестнадцатеричных знаков"))
+    assert(says_any(wrapped(wrapper().replace("версия 1 хеш 51e15e557120", "хеш 51e15e557120")), "ожидается `версия`"))
+    assert(says_any(wrapped(wrapper().replace("версия 1 хеш 51e15e557120", "версия один хеш 51e15e557120")), "после `версия` ожидается целое число"))
 }
 
 test "in name clash" {
-    ro text = wrapper().replace("## Состояния", "## Определения\n\nопределение потолок_исчерпан(номер число≥1, отсчёт число≥1, предел число≥0) -> да/нет =\n  истина\n\n## Состояния")
+    ro text = wrapper().replace("## Состояния", "## Определения\n\n```\nопределение потолок_исчерпан(номер число≥1, отсчёт число≥1, предел число≥0) -> да/нет =\n  истина\n```\n\n## Состояния")
     assert(says_any(wrapped(text), "определение `потолок_исчерпан` повторено"))
 }
 
@@ -99,7 +99,7 @@ fn defs_says(report DefsReport, needle str) -> bool {
 test "in defs file" {
     assert(defs_with("# Определения: арифметика_цикла", "# Что-то: арифметика_цикла").errors.len() >= 1)
     assert(defs_says(defs_with("definitions_version: 1", "definitions_version: x"), "definitions_version: <целое>"))
-    assert(defs_says(defs_with("format: 2.11", "format: 2.3"), "формат файла определений должен быть 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11"))
+    assert(defs_says(defs_with("format: 2.12", "format: 2.3"), "формат файла определений должен быть 2.12"))
     assert(defs_says(defs_with("## Константы\n—\n\n", ""), "три раздела по порядку"))
     assert(defs_says(defs_with("## Типы\n—", "## Типы\n—\n\n## Подключения\n—"), "три раздела по порядку"))
     assert(defs_says(defs_with("definitions_version: 1", "definitions_version: 1\nлишнее: слово"), "в шапке файла определений"))
@@ -107,9 +107,9 @@ test "in defs file" {
 
 test "in defs hash stable" {
     ro text = cycle_text()
-    assert(definitions_hash(text) == "fad927a77d32")
-    assert(definitions_hash("${text}\n\n") == "fad927a77d32")
-    assert(definitions_hash(text.replace("пред", "предел")) != "fad927a77d32")
+    assert(definitions_hash(text) == "51e15e557120")
+    assert(definitions_hash("${text}\n\n") == "51e15e557120")
+    assert(definitions_hash(text.replace("пред", "предел")) != "51e15e557120")
     assert(translate_definitions(text).hash == definitions_hash(text))
 }
 

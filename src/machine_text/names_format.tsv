@@ -62,6 +62,7 @@ variable	сообщение	message
 variable	кусок	piece
 variable	код	code
 party	пользователь	user
+party	усиленный	enhanced
 field	подсказка	prompt
 field	реплика	reply
 constant	ПОЛИТИКА_РАЗРЕШЕНИЙ	PERMISSION_POLICY
@@ -79,7 +80,6 @@ word	ответил	replied
 data	ид_сессии	session_id
 word	закрыть_сессию	close_session
 word	подтвердить	confirm
-data	источник_запуска	launch_source
 type	ОбъёмЗапуска	LaunchScope
 case	Помещается	Fits
 case	НеПомещается	DoesNotFit

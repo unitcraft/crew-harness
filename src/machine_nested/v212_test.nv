@@ -74,7 +74,7 @@ test "v212 fragments place" {
     ro at = json.find("\"fragments\"") ?? -1
     assert(at > 0)
     assert(at > (json.find("\"signals\"") ?? 0))
-    assert(at < (json.find("\"initial\"") ?? 0))
+    assert(at < (json.find(",\"initial\":\"") ?? 0))
 }
 
 test "v212 fragments none without a call" {
@@ -92,7 +92,7 @@ test "v212 fragments en equals ru" {
     ro ru_part = ru[(ru.find("\"fragments\"") ?? 0)..]
     ro en_part = en[(en.find("\"fragments\"") ?? 0)..]
     assert(ru_part.starts_with("\"fragments\""))
-    assert(ru_part[..(ru_part.find("\"initial\"") ?? 0)] == en_part[..(en_part.find("\"initial\"") ?? 0)])
+    assert(ru_part[..(ru_part.find(",\"initial\":\"") ?? 0)] == en_part[..(en_part.find(",\"initial\":\"") ?? 0)])
 }
 
 // ---- the file written by the generator: one line of connection --------------------------------------------------------------------------
@@ -219,7 +219,7 @@ test "v212 circle empty nested" {
 test "v212 render keeps no fragment states for an old tree" {
     // a hand-written tree with no `fragments` has the states of the fragment as its own, and the generator writes them as it did
     ro tree = tree_of(meeting212())
-    ro cut = tree[..(tree.find("\"fragments\"") ?? 0)] + tree[(tree.find("\"initial\"") ?? 0)..]
+    ro cut = tree[..(tree.find("\"fragments\"") ?? 0)] + tree[(tree.find("\"initial\":\"") ?? 0)..]
     ro text = render(cut, "ru")
     assert(line_of_pause(text) == "")
     assert(text.contains("### Pause"))

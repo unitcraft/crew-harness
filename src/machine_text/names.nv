@@ -1,4 +1,4 @@
-// names.nv - the table of names: a Russian word of a table -> the Latin word of the JSON, by the dictionary of the methodology (version 9).
+// names.nv - the table of names: a Russian word of a table -> the Latin word of the JSON, by the dictionary of the methodology (version 10).
 //
 // Two files are compiled in: `names.tsv` (made from the dictionary by `scripts/glossary-names.py`) and `names_format.tsv` (the names of the format that the
 // dictionary does not have: the functions of the catalog, the names of the executor, the words and the signals, and the names of the machines of the

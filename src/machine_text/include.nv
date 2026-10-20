@@ -205,6 +205,72 @@ fn fragment_text(call TxCall, mut cx TxCx) -> Option[str] {
     Some(text)
 }
 
+// ---- the connection of a fragment in the tree (the key `fragments`, format 1b (m), Ya-32) -----------------------------------------------------------------
+
+/// TxFragShape: what a fragment brings into the tree (the names of the JSON): its data, how many common events it puts first, its states and its signals. The generator leaves them out of the
+/// sections of the machine, because the line of connection stands for them (a repeat would be "объявлено дважды"). The shape of `Pause` is checked against the fragment file by a test.
+type TxFragShape { data []str, common int, states []str, signals []str }
+
+fn fragment_shape(key str) -> TxFragShape {
+    if key == "Pause" {
+        mut signals = []str.new()
+        for s in protocol_signals() { signals.push(s.en) }
+        return TxFragShape { data: ["previous", "call_request_id", "open_requests"], common: 6, states: ["Pause"], signals }
+    }
+    TxFragShape { data: []str.new(), common: 0, states: []str.new(), signals: []str.new() }
+}
+
+// The value of an argument of the connection as an expression of the tree: a gate word is the Latin name of the word of the machine; the strings are literals; the list of the nested machines
+// is a list of literals with the names of the registry; the behavior words are the Latin keys of the table of words.
+fn fragment_arg_json(key str, q TxParam, cx TxCx) -> TxJ {
+    if key == "halt_word" {
+        match pair_get(cx.env.words, q.text) {
+            Some(en) => return x_lit(js(en))
+            None => ()
+        }
+        match names_get(cx.names, "word", q.text) {
+            Some(en) => return x_lit(js(en))
+            None => return x_lit(js(q.text))
+        }
+    }
+    if key == "nested" {
+        mut items = []TxJ.new()
+        match pair_get(cx.env.nested_lists, q.name) {
+            Some(joined) => {
+                for one in joined.split(",") {
+                    if one != "" { items.push(x_lit(js(one))) }
+                }
+            }
+            None => ()
+        }
+        return x_list(items)
+    }
+    if key == "cancel_requests" || key == "reenter" {
+        match kw_key(cx.words, "enum_value", q.text) {
+            Some(k) => return x_lit(js(k))
+            None => return x_lit(js(q.text))
+        }
+    }
+    x_lit(js(q.text))
+}
+
+/// The node of the tree for a call of a fragment that was accepted: `{ "name": key, "args": { argument: expression } }` with every argument in the order of the table `## Параметры`.
+fn fragment_use_json(call TxCall, cx TxCx) -> Option[TxJ] {
+    mut found = ""
+    for key in fragment_keys() {
+        if call.name == kw(cx.words, "fragment", key) { found = key }
+    }
+    if found == "" { return None }
+    mut args = []TxKV.new()
+    for pk in pause_param_keys() {
+        match call_param(call, kw(cx.words, "fragment_param", pk)) {
+            Some(q) => args.push(kv(pk, fragment_arg_json(pk, q, cx)))
+            None => return None
+        }
+    }
+    Some(jobj([kv("name", js(found)), kv("args", TxObj(args))]))
+}
+
 // ---- the signals of the protocol -----------------------------------------------------------------------------------------------------------
 
 /// TxProto: a signal of the call protocol that the fragment reads: the Latin name of the JSON and the Latin names of its fields (the texts).

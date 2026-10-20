@@ -1,14 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/unitcraft/crew-harness/src/machine/schema/machine-2.schema.json",
-  "title": "machine/2 - a state machine as data (the language Portolan of the methodology, version 2.11 (2.5-2.10 too), in English keys)",
+  "title": "machine/2 - a state machine as data (the language Portolan of the methodology, version 2.12 only, in English keys)",
   "description": "The tree that the interpreter of the product (src/machine_run) runs. The source of the language is state-machines/state-machine-portolan-spec.md of unitcraft/ai-dev-methodology (read only); the keys are English. The decoder in src/machine_table/json.nv is the reference: a key that is not listed here is refused. The checks of the table (reads against the Input, writes against the data, reachability, the classes of the primitives, the exhaustiveness of the Ends) are check.nv and cannot be written in a schema.",
   "type": "object",
   "additionalProperties": false,
   "required": ["format", "machine", "initial", "states", "ends"],
   "properties": {
     "format": { "const": "machine/2" },
-    "portolan_version": { "enum": ["2.5", "2.6", "2.7", "2.8", "2.9", "2.10", "2.11"], "description": "the version of the language Portolan of the methodology that the tree follows (optional; absent means 2.5)" },
+    "portolan_version": { "enum": ["2.12"], "description": "the version of the language Portolan of the methodology that the tree follows (optional; absent means 2.12; the older versions are not read, there is no transition period)" },
     "machine": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$", "description": "the Latin name of the machine (the name in the journal, `machine_started`)" },
     "version": { "type": "string" },
     "title": { "type": "string" },
@@ -35,6 +35,7 @@
     "signals": { "type": "array", "items": { "$ref": "#/$defs/word" }, "description": "signals outside the contract: words from outside that belong to no party (stop, cancel)" },
     "definitions": { "type": "array", "items": { "$ref": "#/$defs/definition" } },
     "includes": { "type": "array", "items": { "$ref": "#/$defs/include" } },
+    "fragments": { "type": "array", "items": { "$ref": "#/$defs/fragment_use" }, "description": "the connections of the fragments (the key of the product, format 1b (m)): the fragment is in the tree substituted, the connection lets the generator write the line of connection with every argument" },
     "initial": { "type": "string" },
     "error_end": { "type": "string", "description": "the end ERROR: a state of the kind end; the machine goes there on a machine error" },
     "common_events": { "type": "array", "items": { "$ref": "#/$defs/row" }, "description": "the common events (the fragment Pause, expanded): rows of signals that are tried before the rows of the state" },
@@ -152,6 +153,23 @@
         "params": { "type": "array", "items": { "$ref": "#/$defs/field" } },
         "result": { "$ref": "#/$defs/type" },
         "body": { "$ref": "#/$defs/expr" }
+      }
+    },
+    "fragment_use": {
+      "type": "object", "additionalProperties": false, "required": ["name", "args"],
+      "properties": {
+        "name": { "enum": ["Pause"] },
+        "args": {
+          "type": "object", "additionalProperties": false, "required": ["halt_word", "halt_code", "nested", "cancel_requests", "reenter", "write_right"],
+          "properties": {
+            "halt_word": { "$ref": "#/$defs/expr", "description": "the gate word of the enhanced party that halts (a literal: the name of the word in the tree)" },
+            "halt_code": { "$ref": "#/$defs/expr", "description": "the value of the datum of the stop that the halt writes (a text literal)" },
+            "nested": { "$ref": "#/$defs/expr", "description": "the nested machines that the signals go to: a list of text literals with the names of the registry" },
+            "cancel_requests": { "$ref": "#/$defs/expr", "description": "a literal: mechanics, without_return_to_send, stop_transport_turn" },
+            "reenter": { "$ref": "#/$defs/expr", "description": "a literal: nothing, requests_from_to_send" },
+            "write_right": { "$ref": "#/$defs/expr", "description": "a note in a text literal" }
+          }
+        }
       }
     },
     "include": {

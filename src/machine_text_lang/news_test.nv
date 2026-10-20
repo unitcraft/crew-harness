@@ -5,20 +5,21 @@ module crew_harness.machine_text_lang
 import std.text
 import crew_harness.machine_text.{translate_report, translate_definitions, definitions_hash, defs_file_text, TranslateReport}
 
-fn v211_ru() -> str => ru_with("- format: 2.5\n", "- format: 2.11\n")
+fn v211_ru() -> str => ru_with("- format: 2.12\n", "- format: 2.12\n")
 
-fn v211_en() -> str => en_with("- format: 2.5\n", "- format: 2.11\n")
+fn v211_en() -> str => en_with("- format: 2.12\n", "- format: 2.12\n")
 
 test "nw versions read" {
-    for v in ["2.5", "2.6", "2.7", "2.8", "2.9", "2.10", "2.11"] {
-        ro text = ru_with("- format: 2.5\n", "- format: ${v}\n")
+    // the only version that is read is 2.12 (task 125: no transition period); the older ones are refused
+    for v in ["2.12"] {
+        ro text = ru_with("- format: 2.12\n", "- format: ${v}\n")
         assert(is_clean(text))
         assert(json_of(text).starts_with("{\"format\":\"machine/2\",\"portolan_version\":\"${v}\",\"machine\":\"Tiny\""))
-        ro en = en_with("- format: 2.5\n", "- format: ${v}\n")
+        ro en = en_with("- format: 2.12\n", "- format: ${v}\n")
         assert(is_clean(en))
         assert(no_title(json_of(en)) == no_title(json_of(text)))
     }
-    assert(note_says(ru_with("- format: 2.5\n", "- format: 2.12\n"), "читает формат 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11"))
+    assert(note_says(ru_with("- format: 2.12\n", "- format: 2.13\n"), "читает формат 2.12"))
 }
 
 test "nw state heading" {
@@ -58,10 +59,6 @@ test "nw paragraph pressed" {
     assert(report.warnings[0].line == line_of(pressed, "Пояснение"))
     assert(report.warnings[0].message.contains("вплотную к таблице"))
     assert(note_says(pressed, "лишняя строка"))
-    // before 2.9 the paragraph is a comment as it was
-    ro old = ru_with("## Данные\n\n| имя", "## Данные\n\nПояснение к таблице\n| имя")
-    assert(translate_report(old).warnings.len() == 0)
-    assert(is_clean(old))
     // a paragraph with empty lines round it is a comment in every version
     ro apart = v211_ru().replace("## Данные\n\n| имя", "## Данные\n\nПояснение к таблице\n\n| имя")
     assert(is_clean(apart))
@@ -90,12 +87,6 @@ test "nw declaration outside" {
     ro fenced = v211_ru().replace("## Данные", "## Типы\n\n```\nтип Pair { first число }\n```\n\n## Данные")
     assert(translate_report(fenced).warnings.len() == 0)
     assert(json_of(fenced).contains("\"types\":{\"records\":[{\"name\":\"Pair\""))
-}
-
-test "nw declaration before 2.9" {
-    ro old = ru_with("## Данные", "## Типы\n\nтип Pair { first число }\n\n## Данные")
-    assert(translate_report(old).warnings.len() == 0)
-    assert(json_of(old).contains("\"types\":{\"records\":[{\"name\":\"Pair\""))
 }
 
 test "nw declaration en" {
@@ -129,21 +120,6 @@ test "nw to is no key" {
 
 // ---- the files of definitions in both languages ----------------------------------------------------------------------------
 
-test "nw defs hashes" {
-    ro ru = defs_file_text("арифметика_цикла")
-    ro en = defs_file_text("cycle_arithmetic")
-    assert(ru.contains("- format: 2.11"))
-    assert(en.contains("- format: 2.11") && en.contains("- language: en"))
-    assert(definitions_hash(ru) == "fad927a77d32")
-    assert(definitions_hash(en) == "afe05e9a1e4d")
-    assert(translate_definitions(ru).hash == "fad927a77d32")
-    assert(translate_definitions(en).hash == "afe05e9a1e4d")
-    assert(translate_definitions(ru).errors.len() == 0)
-    assert(translate_definitions(en).errors.len() == 0)
-    assert(translate_definitions(en).version == "1" && translate_definitions(ru).version == "1")
-    assert(defs_file_text("нет_такого") == "")
-}
-
 test "nw defs en equals ru" {
     ro ru = translate_definitions(defs_file_text("арифметика_цикла")).json
     ro en = translate_definitions(defs_file_text("cycle_arithmetic")).json
@@ -171,30 +147,30 @@ fn ru_with_include(hash str) -> str {
 }
 
 test "nw include en" {
-    ro good = checked(en_with_include("afe05e9a1e4d"))
+    ro good = checked(en_with_include("eee8c3a13a08"))
     if good.errors.len() > 0 { panic("${good.errors[0].line}: ${good.errors[0].message}") }
     assert(good.errors.len() == 0)
-    assert(good.json.contains("\"includes\":[{\"name\":\"cycle_arithmetic\",\"version\":\"1\",\"hash\":\"afe05e9a1e4d\"}]"))
+    assert(good.json.contains("\"includes\":[{\"name\":\"cycle_arithmetic\",\"version\":\"1\",\"hash\":\"eee8c3a13a08\"}]"))
     assert(good.json.contains("\"definitions\":[{\"name\":\"ceiling_reached\""))
-    assert(note_says(en_with_include("afe05e9a1e4c"), "хеш файла cycle_arithmetic — afe05e9a1e4d, а в подключении afe05e9a1e4c"))
-    assert(note_says(en_with_include("fad927a77d32"), "хеш файла cycle_arithmetic"))
+    assert(note_says(en_with_include("afe05e9a1e4c"), "хеш файла cycle_arithmetic — eee8c3a13a08, а в подключении afe05e9a1e4c"))
+    assert(note_says(en_with_include("51e15e557120"), "хеш файла cycle_arithmetic"))
 }
 
 test "nw include ru" {
-    ro good = checked(ru_with_include("fad927a77d32"))
+    ro good = checked(ru_with_include("51e15e557120"))
     if good.errors.len() > 0 { panic("${good.errors[0].line}: ${good.errors[0].message}") }
     assert(good.errors.len() == 0)
-    assert(good.json.contains("\"includes\":[{\"name\":\"арифметика_цикла\",\"version\":\"1\",\"hash\":\"fad927a77d32\"}]"))
-    assert(note_says(ru_with_include("4de98da759eb"), "хеш файла арифметика_цикла — fad927a77d32, а в подключении 4de98da759eb"))
+    assert(good.json.contains("\"includes\":[{\"name\":\"арифметика_цикла\",\"version\":\"1\",\"hash\":\"51e15e557120\"}]"))
+    assert(note_says(ru_with_include("4de98da759eb"), "хеш файла арифметика_цикла — 51e15e557120, а в подключении 4de98da759eb"))
 }
 
 test "nw include words" {
     // the words of the include line are of the language of the file
-    ro foreign = ru_with_include("fad927a77d32").replace("версия 1 хеш", "version 1 hash")
+    ro foreign = ru_with_include("51e15e557120").replace("версия 1 хеш", "version 1 hash")
     assert(!is_clean(foreign))
-    ro bad_en = en_with_include("afe05e9a1e4d").replace("version 1", "версия 1")
+    ro bad_en = en_with_include("eee8c3a13a08").replace("version 1", "версия 1")
     assert(!is_clean(bad_en))
-    assert(note_says(en_with_include("afe05e9a1e4d").replace("hash afe05e9a1e4d", "hash zz"), "12 шестнадцатеричных знаков"))
+    assert(note_says(en_with_include("eee8c3a13a08").replace("hash eee8c3a13a08", "hash zz"), "12 шестнадцатеричных знаков"))
 }
 
 // The canonical file writes the section `Input` always, an empty one as a dash: a section that holds only a dash declares no input.

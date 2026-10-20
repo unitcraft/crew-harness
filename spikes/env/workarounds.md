@@ -4,7 +4,7 @@
 
 Every place of the product that goes round a defect or a limit of Oracle carries a comment `// ORACLE-WORKAROUND(N): what is gone round; how to simplify when item N is fixed`, where N is an item of [README.md](README.md) ("Known problems"). `git grep ORACLE-WORKAROUND` finds them, `python scripts/oracle-workarounds.py --list` prints them by item with the line. When Nova fixes an item, open its places below, simplify the code as the mark says and remove the mark; then rerun `python scripts/oracle-workarounds.py --index`.
 
-Marks: 182 in 112 files. Items with marks: 49. Items without marks: 11 (no workaround in the code).
+Marks: 183 in 113 files. Items with marks: 49. Items without marks: 11 (no workaround in the code).
 
 | Item | What | Places (files; marks in a file if more than one) | Marks |
 |---|---|---|---|
@@ -50,7 +50,7 @@ Marks: 182 in 112 files. Items with marks: 49. Items without marks: 11 (no worka
 | 40 | `user_type_child`: a user record named `Child` (the core of the machines had one, the node of a tree of an expression) next to... | `src/machine/expr.nv` | 1 |
 | 41 | `same_name_other_type`: a parameter named `list` of the type `[]Pair` in one function and a name `list` bound by a pattern... | `src/machine_text/decl.nv`, `src/machine_text/machine.nv`, `src/machine_text/parse.nv` | 3 |
 | 42 | `split_index`: indexing the result of `str.split(sep)` (`parts[0]`, the result is an iterator) passes the checker and the code... | `src/machine_text_unicode/unicode_test.nv` (2) | 2 |
-| 43 | `user_fn_fence`: a user function named `fence` is generated as the C function `nova_fn_fence`, which the runtime header already... | `src/machine_nested/support_test.nv`, `src/machine_text_fmt/support_test.nv` | 2 |
+| 43 | `user_fn_fence`: a user function named `fence` is generated as the C function `nova_fn_fence`, which the runtime header already... | `src/machine_nested/support_test.nv`, `src/machine_text/decl_test.nv`, `src/machine_text_fmt/support_test.nv` | 3 |
 | 44 | `record_after_enum_list`: a sum type with a variant that holds a list of a record, the record declared AFTER the sum type and... | `src/machine_text/rj.nv`, `src/machine_text/tj.nv` | 2 |
 | 45 | `mut_of_ro_param`: `mut out = items` with `items` a parameter without `mut` (or a `ro` binding) that holds a list or a text is... | `src/machine/eval.nv` (4), `src/machine_run/build.nv` (3), `src/machine_run/encode.nv`, `src/machine_run/machine.nv`, `src/machine_run/scenario.nv` (2), `src/machine_run/step.nv` (3), `src/machine_table/check.nv` (2), `src/machine_text/parse.nv` (2), `src/machine_text/render_expr.nv` (2) | 20 |
 | 46 | `assign_mut_param`: assigning a new list to a `mut` PARAMETER of a heap type (`items = []str.new()`) changes only the local name... | `src/machine_text/lex.nv` | 1 |

@@ -196,8 +196,9 @@ test "v25 id literal" {
 }
 
 test "v25 table format" {
-    ro text = tiny().replace("\"machine\":\"Tiny\"", "\"portolan_version\":\"2.5\",\"machine\":\"Tiny\"")
+    ro text = tiny().replace("\"machine\":\"Tiny\"", "\"portolan_version\":\"2.12\",\"machine\":\"Tiny\"")
     assert(ok_text(text))
+    assert(says(tiny().replace("\"machine\":\"Tiny\"", "\"portolan_version\":\"2.5\",\"machine\":\"Tiny\""), "must be 2.12"))
     ro old = tiny().replace("\"machine\":\"Tiny\"", "\"portolan_version\":\"2.2\",\"machine\":\"Tiny\"")
     assert(says(old, "portolan_version"))
     ro number = tiny().replace("\"machine\":\"Tiny\"", "\"portolan_version\":2.5,\"machine\":\"Tiny\"")

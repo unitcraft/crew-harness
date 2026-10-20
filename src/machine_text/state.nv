@@ -88,6 +88,15 @@ fn states_register(entries []TxEntry, sec TxSection, mut cx TxCx) -> []TxBlock {
             i += 1
         }
     }
+    // a state whose heading is its Latin JSON name (the canonical form, 1b) is also called by its word of the dictionary: the text of a fragment (`ОСТАНОВЛЕНО`, `ПАУЗА`) says so
+    for b in out {
+        match names_file_word(cx.names, "state", b.latin) {
+            Some(w) => {
+                if w != b.ru && !pair_has(cx.env.states, w) { pair_add(cx.env.states, w, b.latin) }
+            }
+            None => ()
+        }
+    }
     out
 }
 
@@ -295,6 +304,18 @@ fn line_form_returns(kvl TxKv, mut cx TxCx) -> Result[int, TranslateError] {
     Ok(n.text.to_int() ?? 0)
 }
 
+// `Вход:` of an appeal (format 4.1, 4.2, 2.12, Ya-23): `нет` (or `—`) when the appeal has no field of the request, else nothing after the colon and a table below. Returns "none" or "table"; anything else is an error.
+fn line_appeal_input(kvl TxKv, mut cx TxCx) -> Result[str, TranslateError] {
+    mut p = lex_segs(kvl.segs)?
+    if p_done(p) { return Ok("table") }
+    if p_is_kw(p, cx.words, "enum_value", "none") || p_is(p, "—") {
+        p_adv(p)
+        p_end(p)?
+        return Ok("none")
+    }
+    Err(p_fail(p, "у обращения после `${kw(cx.words, "key", "Input")}:` пишется `${kw(cx.words, "enum_value", "none")}` или ничего, а ниже — таблица полей запроса"))
+}
+
 // `Вход: имя, имя | нет | все_данные` of a state that is not an appeal: the names and the mark "all".
 type TxReads { names []str, all bool }
 
@@ -369,6 +390,7 @@ fn state_translate(entries []TxEntry, blk TxBlock, index int, mut cx TxCx) -> Tx
     mut edits_check = ""
     mut form_returns = 0
     mut input_at = -1
+    mut appeal_input = ""
     mut accept_at = -1
     mut rows_at = -1
     mut sc = sc_empty()
@@ -412,7 +434,13 @@ fn state_translate(entries []TxEntry, blk TxBlock, index int, mut cx TxCx) -> Tx
                     Err(err) => note(cx, err)
                 }
             } else if key == "Input" {
-                if blk.kind != "appeal" {
+                if blk.kind == "appeal" {
+                    has_reads_line = true
+                    match line_appeal_input(line, cx) {
+                        Ok(how) => { appeal_input = how }
+                        Err(err) => note(cx, err)
+                    }
+                } else {
                     match line_reads(line, cx) {
                         Ok(r) => {
                             reads_names = r.names
@@ -466,7 +494,12 @@ fn state_translate(entries []TxEntry, blk TxBlock, index int, mut cx TxCx) -> Tx
     // the tables
     if input_at >= 0 {
         if blk.kind != "appeal" { note(cx, struct_error(entries[input_at].line, 1, "таблица `Вход` есть только у обращения")) }
+        if blk.kind == "appeal" && appeal_input == "none" {
+            note(cx, struct_error(entries[input_at].line, 1, "у обращения `${blk.ru}` `${kw(cx.words, "key", "Input")}: ${kw(cx.words, "enum_value", "none")}` и таблица полей запроса вместе: нужно одно из двух"))
+        }
         inputs = input_read(entries, input_at, blk.last, cx, sc)
+    } else if blk.kind == "appeal" && has_reads_line && appeal_input == "table" {
+        note(cx, struct_error(blk.line, 1, "у обращения `${blk.ru}` после `${kw(cx.words, "key", "Input")}:` нет таблицы полей запроса; если полей нет, пишется `${kw(cx.words, "key", "Input")}: ${kw(cx.words, "enum_value", "none")}`"))
     }
     if accept_at >= 0 {
         accept = accept_read(entries, accept_at, blk.last, "${path}.accept", cx, sc)
@@ -480,6 +513,7 @@ fn state_translate(entries []TxEntry, blk TxBlock, index int, mut cx TxCx) -> Tx
         note(cx, struct_error(blk.line, 1, "у состояния `${blk.ru}` нет таблицы строк `№ | …`"))
     }
     if blk.kind == "appeal" {
+        if !has_reads_line { note(cx, struct_error(blk.line, 1, "у обращения `${blk.ru}` нет строки `${kw(cx.words, "key", "Input")}:` (правило 11): таблица полей запроса или `${kw(cx.words, "enum_value", "none")}`")) }
         for q in party_pairs { pairs.push(q) }
         if party_pairs.len() == 0 { note(cx, struct_error(blk.line, 1, "у обращения `${blk.ru}` нет строки `Сторона:`")) }
         if has_silence { pairs.push(kv("silence", silence)) }

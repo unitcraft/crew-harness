@@ -25,14 +25,14 @@ test "rn header ru" {
     assert(first[1] == "")
     assert(first[2] == "- machine: Calc")
     assert(first[3] == "- machine_version: 1")
-    assert(first[4] == "- format: 2.11")
+    assert(first[4] == "- format: 2.12")
     assert(first[5] == "- language: ru")
     assert(first[6] == "")
 }
 
 test "rn header en" {
     ro text = render(calc_json(), "en")
-    assert(text.starts_with("# Machine: Calc\n\n- machine: Calc\n- machine_version: 1\n- format: 2.11\n- language: en\n\n"))
+    assert(text.starts_with("# Machine: Calc\n\n- machine: Calc\n- machine_version: 1\n- format: 2.12\n- language: en\n\n"))
 }
 
 test "rn eleven sections" {
@@ -149,7 +149,7 @@ fn inc_en(hash str) -> str => `# Machine: Inc
 
 - machine: Inc
 - machine_version: 1
-- format: 2.11
+- format: 2.12
 - language: en
 
 ## Data
@@ -186,20 +186,20 @@ Initial state: S
 `
 
 test "rn includes line by default" {
-    ro first = json_of(inc_en("afe05e9a1e4d"))
+    ro first = json_of(inc_en("eee8c3a13a08"))
     assert(!first.starts_with("ERROR "))
     ro made = render_machine(first, "en")
     assert(made.notes.len() == 0)
-    assert(made.text.contains("## Includes\n\n```\ndefinitions: cycle_arithmetic version 1 hash afe05e9a1e4d\n```\n"))
+    assert(made.text.contains("## Includes\n\n```\ndefinitions: cycle_arithmetic version 1 hash eee8c3a13a08\n```\n"))
     assert(!made.text.contains("define ceiling_reached"))
     assert(same_tree(first, json_of(made.text)) == "")
     ro ru = render(first, "ru")
-    assert(ru.contains("определения: cycle_arithmetic версия 1 хеш afe05e9a1e4d"))
+    assert(ru.contains("определения: cycle_arithmetic версия 1 хеш eee8c3a13a08"))
     assert(same_tree(first, json_of(ru)) == "")
 }
 
 test "rn includes as copy" {
-    ro first = json_of(inc_en("afe05e9a1e4d"))
+    ro first = json_of(inc_en("eee8c3a13a08"))
     ro made = render_machine_with(first, "en", true)
     assert(made.text.contains("define ceiling_reached(pass_number int>=1, origin int>=1, limit int>=0) -> bool =\n  pass_number - 1 - origin + 1 >= limit"))
     assert(made.text.contains("## Includes\n—\n"))

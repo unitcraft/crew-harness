@@ -12,7 +12,7 @@ fn tiny_ru() -> str => `# Машина: Малая
 
 - machine: Tiny
 - machine_version: 1
-- format: 2.5
+- format: 2.12
 
 ## Данные
 

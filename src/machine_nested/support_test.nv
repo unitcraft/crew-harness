@@ -17,7 +17,7 @@ fn boss_text() -> str => `# Машина: Босс
 
 - machine: Boss
 - machine_version: 1
-- format: 2.11
+- format: 2.12
 
 ## Типы
 

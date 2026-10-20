@@ -84,17 +84,15 @@ test "wd not on records" {
 }
 
 test "wd table format" {
-    assert(ok_text(tiny().replace("\"format\":\"machine/2\",", "\"format\":\"machine/2\",\"portolan_version\":\"2.7\",")))
-    assert(ok_text(tiny().replace("\"format\":\"machine/2\",", "\"format\":\"machine/2\",\"portolan_version\":\"2.6\",")))
-    assert(ok_text(tiny().replace("\"format\":\"machine/2\",", "\"format\":\"machine/2\",\"portolan_version\":\"2.5\",")))
-    assert(ok_text(tiny().replace("\"format\":\"machine/2\",", "\"format\":\"machine/2\",\"portolan_version\":\"2.8\",")))
-    assert(says(tiny().replace("\"format\":\"machine/2\",", "\"format\":\"machine/2\",\"portolan_version\":\"2.12\","), "must be 2.5, 2.6, 2.7, 2.8, 2.9, 2.10 or 2.11"))
-    assert(portolan_versions().len() == 7)
+    assert(ok_text(tiny().replace("\"format\":\"machine/2\",", "\"format\":\"machine/2\",\"portolan_version\":\"2.12\",")))
+    assert(says(tiny().replace("\"format\":\"machine/2\",", "\"format\":\"machine/2\",\"portolan_version\":\"2.7\","), "must be 2.12"))
+    assert(says(tiny().replace("\"format\":\"machine/2\",", "\"format\":\"machine/2\",\"portolan_version\":\"2.11\","), "must be 2.12"))
+    assert(portolan_versions().len() == 1)
 }
 
 test "wd schema" {
     ro schema = text_of_file(schema_files(), "machine-2.schema.json")
-    assert(schema.contains("\"2.7\""))
+    assert(schema.contains("\"2.12\""))
     ro variant = def_of("variant_def")
     assert(same_names(property_names(variant), ["name", "cases", "words"]))
     assert(schema.contains("the words of the values of an enum"))

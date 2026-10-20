@@ -111,11 +111,9 @@ test "mk nested columns" {
     assert(name_note(text).ends_with(":15"))
 }
 
-test "mk format 2.6" {
-    ro text = tiny_text().replace("format: 2.5", "format: 2.6")
-    ro report = checked(text)
+test "mk format 2.12" {
+    ro report = checked(tiny_text())
     assert(report.errors.len() == 0)
-    assert(report.json.starts_with("{\"format\":\"machine/2\",\"portolan_version\":\"2.6\",\"machine\":\"Tiny\""))
-    assert(report.json.replace("\"portolan_version\":\"2.6\"", "\"portolan_version\":\"2.5\"") == json_of(tiny_text()))
-    assert(note_says(tiny_text().replace("format: 2.5", "format: 2.12"), "читает формат 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11"))
+    assert(report.json.starts_with("{\"format\":\"machine/2\",\"portolan_version\":\"2.12\",\"machine\":\"Tiny\""))
+    assert(note_says(tiny_text().replace("format: 2.12", "format: 2.11"), "читает формат 2.12"))
 }

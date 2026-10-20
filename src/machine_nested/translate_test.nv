@@ -82,7 +82,7 @@ test "nm english" {
 
 - machine: Boss
 - machine_version: 1
-- format: 2.11
+- format: 2.12
 - language: en
 
 ## Types
@@ -182,7 +182,7 @@ fn tiny_agent() -> str => `# Машина: Малая
 
 - machine: TinyAgent
 - machine_version: 1
-- format: 2.11
+- format: 2.12
 
 ## Данные
 
@@ -310,7 +310,7 @@ fn fan_text() -> str => `# Машина: Веер
 
 - machine: Fan
 - machine_version: 1
-- format: 2.11
+- format: 2.12
 
 ## Типы
 

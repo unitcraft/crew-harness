@@ -287,6 +287,21 @@ fn decl_parties(entries []TxEntry, sec TxSection, mut cx TxCx) -> []TxPartyRow {
             i += 1
         }
     }
+    // a party that the table names by its Latin name (the canonical form) is also called by its word of the dictionary: the text of a fragment (`усиленный`) says so
+    mut aliases = []TxPair.new()
+    for pr in cx.env.parties {
+        for kind in ["party", "type", "variable"] {
+            match names_file_word(cx.names, kind, pr.en) {
+                Some(w) => {
+                    if w != pr.ru && !pair_has(cx.env.parties, w) { aliases.push(TxPair { ru: w, en: pr.en }) }
+                }
+                None => ()
+            }
+        }
+    }
+    for al in aliases {
+        if !pair_has(cx.env.parties, al.ru) { pair_add(cx.env.parties, al.ru, al.en) }
+    }
     out
 }
 

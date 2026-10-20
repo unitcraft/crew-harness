@@ -11,7 +11,7 @@ fn tiny_ru() -> str => `# Машина: Малая
 
 - machine: Tiny
 - machine_version: 1
-- format: 2.5
+- format: 2.12
 
 ## Данные
 
@@ -76,7 +76,7 @@ fn tiny_en() -> str => `# Machine: Малая
 
 - machine: Tiny
 - machine_version: 1
-- format: 2.5
+- format: 2.12
 - language: en
 
 ## Data
