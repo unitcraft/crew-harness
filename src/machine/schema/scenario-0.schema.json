@@ -51,7 +51,9 @@
         "event": { "$ref": "#/$defs/event", "description": "required for feed, accept and deliver" },
         "ms": { "type": "integer", "minimum": 0, "description": "for advance" },
         "host": { "type": "object", "description": "answers of primitives of the host that hold from this step on: the name of the primitive and its value in the lossless JSON form of the core" },
-        "expect": { "$ref": "#/$defs/expect" }
+        "expect": { "$ref": "#/$defs/expect", "description": "what the engine the step acts on must leave" },
+        "on": { "type": "string", "description": "the id of the request of a nested machine (callee-1) that the step acts on; the parent when absent. The nested machines start when the parent sends their request, answer the parent when they end, get a signal for a signal of the parent and a cancel for a cancelled request (src/machine_run/nested.nv)" },
+        "also": { "type": "object", "additionalProperties": { "$ref": "#/$defs/expect" }, "description": "what other engines must leave after the step: the key is `parent` or the id of the request of a nested machine" }
       }
     }
   }

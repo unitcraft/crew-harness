@@ -68,6 +68,10 @@ export type SendOrder { party str, input str, idle_term int }
 /// CancelOrder: close the open request of the party without an outcome (spec rule 18) and tell the party.
 export type CancelOrder { party str }
 
+/// SignalOrder: an order of a machine to pass a signal (`stop`, `continue`, `halt`, `cancel`) to the nested machine that holds the request `request` (spec rule 35, item 8). The engine keeps it
+/// until the caller that runs the nested machines passes it on (`Engine.pending_signals`, `Engine.signals_passed`): a signal is not a request and is never sent by `dispatch`.
+export type SignalOrder { request str, signal str }
+
 /// Conclusion: the end of a machine. `failure` None is an answer with `text` as the result,
 /// Some is a refusal with that reason.
 export type Conclusion { failure Option[FailCode], text str }

@@ -1,0 +1,378 @@
+// nested_scenario.nv - the runner of the scenarios of a parent with its nested machines (task 119).
+//
+// A scenario is the file `scenario/0` of the parent; its steps act on the parent, or on a nested machine when they have `on` (the id of the request that started it, `callee-1`).
+// The runner is the caller of rule 35: it keeps the nested machines (each over a world of its own, as the parent has its own), and after every step it passes between them what the protocol
+// says (`nested.nv`): a request sent by the parent to a party of the kind `machine` starts the nested machine (a request sent again does not start it twice, it brings the ready answer
+// again), a request cancelled by the parent is a cancel for it, the signals the parent ordered are passed after the commit of its step, and the end of a nested machine is an event that
+// waits in the inbox of the parent for its `pump`. After each step it compares the engine the step acts on with `expect` and the others with `also`.
+module crew_harness.machine_run
+
+import std.text
+import crew_harness.engine.{Machine, Engine, MemoryWorld, Incoming, EventKind, PartyRequest, SignalOrder, resume_engine, memory_journal, memory_store, memory_link, memory_time, Journal, Store, Link, Time}
+import crew_harness.machine_table.{MachineParty}
+
+/// Kid: a nested machine of a run: the run, its world and the place in its journal where the step began.
+type Kid { run ChildRun, world MemoryWorld, from int }
+
+/// The name of the engine of the parent in its store (the same as for a scenario without nested machines).
+const PARENT_ID = "chat-1"
+
+fn start_child_in(machine PortolanMachine, nested str, request PartyRequest[str], mut world MemoryWorld) -> ChildRun {
+    with Journal = memory_journal(world), Store = memory_store(world), Link = memory_link(world), Time = memory_time(world) {
+        child_start(machine, PARENT_ID, nested, request)
+    }
+}
+
+fn kid_start(machine PortolanMachine, nested str, request PartyRequest[str], now int) -> Kid {
+    mut world = MemoryWorld.at(now)
+    ro run = start_child_in(machine, nested, request, world)
+    // the line `machine_started` of the creation of the engine is not a line of the step that started the nested machine (a machine run alone has it before its first step too)
+    Kid { run, world, from: 1 }
+}
+
+fn kid_index(kids []Kid, request str) -> int {
+    mut i = 0
+    for k in kids {
+        if k.run.request == request { return i }
+        i += 1
+    }
+    -1
+}
+
+fn kid_feed_signal(mut kid Kid, signal str) -> () {
+    with Journal = memory_journal(kid.world), Store = memory_store(kid.world), Link = memory_link(kid.world), Time = memory_time(kid.world) {
+        child_signal(kid.run, signal)
+    }
+}
+
+// The nested machine at a place of the list with a change made by `f`'s steps: a copy is changed and put back.
+fn set_replied(mut w NestedWorld, at int, replied bool) -> () {
+    mut k = w.kids[at]
+    k.run.replied = replied
+    w.kids[at] = k
+}
+
+fn signal_kid(mut w NestedWorld, at int, signal str) -> () {
+    mut k = w.kids[at]
+    kid_feed_signal(k, signal)
+    w.kids[at] = k
+}
+
+fn set_from(mut w NestedWorld, at int) -> () {
+    mut k = w.kids[at]
+    k.from = k.world.journal.len()
+    w.kids[at] = k
+}
+
+// The answers of a step of the parent hold for the nested machines that run and for the ones that start later.
+fn share_replies(mut w NestedWorld, step ScStep) -> () {
+    match replies_after(w.shared, step) {
+        Ok(next) => { w.shared = next }
+        Err(m) => { w.problem = m }
+    }
+    mut i = 0
+    while i < w.kids.len() {
+        mut k = w.kids[i]
+        match replies_after(k.run.engine.machine.replies, step) {
+            Ok(next) => { k.run.engine.machine = with_replies(k.run.engine.machine, next) }
+            Err(m) => { w.problem = m }
+        }
+        w.kids[i] = k
+        i += 1
+    }
+}
+
+fn act_on_kid(mut w NestedWorld, at int, op str, event ScEvent, ms int, step ScStep) -> () {
+    mut k = w.kids[at]
+    if step.host.len() > 0 {
+        // the answers of the primitives of the host hold for the nested machine from this step on
+        match replies_after(k.run.engine.machine.replies, step) {
+            Ok(next) => { k.run.engine.machine = with_replies(k.run.engine.machine, next) }
+            Err(m) => { w.problem = m }
+        }
+    }
+    if op == "restart" {
+        k.run.engine = kid_resumed(k.run.engine.machine, k.run.request, k.world)
+    } else {
+        ro mach = k.run.engine.machine
+        ro again = apply_op(op, event, ms, k.run.engine, k.world, mach, k.run.request)
+    }
+    w.kids[at] = k
+}
+
+fn kid_resumed(machine PortolanMachine, request str, mut world MemoryWorld) -> Engine[PortolanMachine, PortolanState] {
+    with Journal = memory_journal(world), Store = memory_store(world), Link = memory_link(world), Time = memory_time(world) {
+        match resume_engine[PortolanState, PortolanMachine](machine, "${PARENT_ID}/${request}") {
+            Some(e) => e
+            None => panic("no snapshot of the nested machine ${request}")
+        }
+    }
+}
+
+fn parent_signals_passed(mut e Engine[PortolanMachine, PortolanState], mut world MemoryWorld, done []SignalOrder) -> () {
+    with Journal = memory_journal(world), Store = memory_store(world), Link = memory_link(world), Time = memory_time(world) {
+        e.signals_passed(done)
+    }
+}
+
+fn parent_repeat(mut e Engine[PortolanMachine, PortolanState], ids []str) -> int => e.repeat_open(ids)
+
+// The state of the world of the run between the steps: the parent, its world, the nested machines, how much of the lists of the parent's world has been looked at.
+type NestedWorld {
+    registry NestedRegistry, parent_machine PortolanMachine, parent_world MemoryWorld, parent Engine[PortolanMachine, PortolanState],
+    kids []Kid, sent_seen int, cancelled_seen int, problem str,
+    shared []ScriptedReply
+}
+
+// The answers of the host that the steps of the parent give hold for the nested machines too (the answers are named by the primitive): the answers of a machine, the ones of the steps put over them.
+fn overlaid(before []ScriptedReply, over []ScriptedReply) -> []ScriptedReply {
+    mut out = []ScriptedReply.new()
+    for r in before {
+        mut replaced = false
+        for o in over {
+            if o.name == r.name { replaced = true }
+        }
+        if !replaced { out.push(r) }
+    }
+    for o in over { out.push(o) }
+    out
+}
+
+// The nested machines of the registry for a request that the parent sent.
+fn route_requests(mut w NestedWorld) -> bool {
+    mut moved = false
+    while w.sent_seen < w.parent_world.sent.len() {
+        ro request = w.parent_world.sent[w.sent_seen]
+        w.sent_seen += 1
+        ro nested = nested_of_request(w.parent_machine, request.id)
+        if nested == "" { continue }
+        moved = true
+        ro at = kid_index(w.kids, request.id)
+        if at < 0 {
+            match w.registry.find(nested) {
+                Some(m) => {
+                    w.kids.push(kid_start(with_replies(m, overlaid(m.replies, w.shared)), nested, request, w.parent_world.clock_ms))
+                }
+                None => {
+                    w.problem = "the machine ${nested} is not in the registry"
+                }
+            }
+        } else {
+            // the request is sent again (rule 22): the nested machine is not started twice, a ready answer goes again (rule 35, item 4)
+            if w.kids[at].run.engine.is_finished() { set_replied(w, at, false) }
+        }
+    }
+    moved
+}
+
+fn route_cancels(mut w NestedWorld) -> bool {
+    mut moved = false
+    while w.cancelled_seen < w.parent_world.cancelled.len() {
+        ro id = w.parent_world.cancelled[w.cancelled_seen]
+        w.cancelled_seen += 1
+        ro at = kid_index(w.kids, id)
+        if at >= 0 {
+            moved = true
+            signal_kid(w, at, "cancel")
+        }
+    }
+    moved
+}
+
+fn route_signals(mut w NestedWorld) -> bool {
+    // a signal goes to a nested machine that runs; one whose request has not been sent yet (the window between the commit and the send) waits
+    ro pending = w.parent.pending_signals()
+    mut done = []SignalOrder.new()
+    for s in pending {
+        ro at = kid_index(w.kids, s.request)
+        if at >= 0 {
+            signal_kid(w, at, s.signal)
+            done.push(s)
+        }
+    }
+    if done.len() == 0 { return false }
+    parent_signals_passed(w.parent, w.parent_world, done)
+    true
+}
+
+fn route_replies(mut w NestedWorld) -> bool {
+    mut moved = false
+    mut i = 0
+    while i < w.kids.len() {
+        if !w.kids[i].run.replied {
+            match child_reply(w.kids[i].run) {
+                Some(reply) => {
+                    w.parent_world.deliver(reply)
+                    set_replied(w, i, true)
+                    moved = true
+                }
+                None => ()
+            }
+        }
+        i += 1
+    }
+    moved
+}
+
+// Pass between the parent and the nested machines what the protocol says, until nothing moves (a nested machine's end may free the parent's next request, and so on).
+fn route(mut w NestedWorld) -> () {
+    mut rounds = 0
+    mut moved = true
+    while moved && rounds < 20 {
+        moved = false
+        if route_requests(w) { moved = true }
+        // the signals ordered by the step come before the cancels of its end: a halt that the parent passed is answered `StoppedByHuman`, not `Cancelled`
+        if route_signals(w) { moved = true }
+        if route_cancels(w) { moved = true }
+        if route_replies(w) { moved = true }
+        rounds += 1
+    }
+}
+
+fn nested_ids_open(w NestedWorld) -> []str {
+    mut out = []str.new()
+    for id in w.parent.open_ids() {
+        if nested_of_request(w.parent_machine, id) != "" { out.push(id) }
+    }
+    out
+}
+
+// One operation of a step on an engine.
+fn apply_op(op str, event ScEvent, ms int, mut e Engine[PortolanMachine, PortolanState], mut world MemoryWorld, machine PortolanMachine, id str) -> Engine[PortolanMachine, PortolanState] {
+    if op == "feed" { engine_feed[PortolanState, PortolanMachine](e, world, scenario_incoming(event)) }
+    if op == "accept" { engine_accept[PortolanState, PortolanMachine](e, world, scenario_incoming(event)) }
+    if op == "dispatch" { engine_dispatch[PortolanState, PortolanMachine](e, world) }
+    if op == "pump" { ro made = engine_pump[PortolanState, PortolanMachine](e, world) }
+    if op == "deliver" { world.deliver(scenario_incoming(event)) }
+    if op == "advance" { world.advance(ms) }
+    e
+}
+
+/// NestedStepTrace: the traces of one step: the parent and each nested machine (the request and its trace).
+export type NestedStepTrace { parent StepTrace, kids []StepTrace, requests []str }
+
+fn target_trace(t NestedStepTrace, target str) -> Option[StepTrace] {
+    if target == "parent" { return Some(t.parent) }
+    mut i = 0
+    for r in t.requests {
+        if r == target { return Some(t.kids[i]) }
+        i += 1
+    }
+    None
+}
+
+/// Run a scenario of a parent with its nested machines and give the trace of every step.
+export fn drive_nested_scenario(first_machine PortolanMachine, registry NestedRegistry, sc Scenario) -> []NestedStepTrace {
+    ro machine = match with_params(first_machine, sc.params) {
+        Ok(m) => m
+        Err(m) => panic("scenario ${sc.name}: ${m}")
+    }
+    mut parent_world = MemoryWorld.at(sc.start_at)
+    ro parent = begin_engine[PortolanState, PortolanMachine](machine, parent_world)
+    mut w = NestedWorld { registry, parent_machine: machine, parent_world, parent, kids: []Kid.new(), sent_seen: 0, cancelled_seen: 0, problem: "", shared: []ScriptedReply.new() }
+    mut replies = []ScriptedReply.new()
+    for r in machine.replies { replies.push(r) }
+    mut traces = []NestedStepTrace.new()
+    for s in sc.steps {
+        ro from = w.parent_world.journal.len()
+        mut i = 0
+        while i < w.kids.len() {
+            set_from(w, i)
+            i += 1
+        }
+        if s.host.len() > 0 {
+            match replies_after(replies, s) {
+                Ok(next) => { replies = next }
+                Err(m) => panic("scenario ${sc.name}: ${m}")
+            }
+            w.parent.machine = with_replies(machine, replies)
+            if s.on == "" { share_replies(w, s) }
+        }
+        if s.on == "" {
+            if s.op == "restart" {
+                w.parent = resumed_engine[PortolanState, PortolanMachine](w.parent.machine, w.parent_world)
+                // rule 22: the requests to the nested machines are not cancelled by a restart, they are sent again with the same identifier
+                ro repeated = parent_repeat(w.parent, nested_ids_open(w))
+            } else {
+                w.parent = apply_op(s.op, s.event, s.ms, w.parent, w.parent_world, machine, PARENT_ID)
+            }
+        } else {
+            ro at = kid_index(w.kids, s.on)
+            if at < 0 { panic("scenario ${sc.name}: the step acts on ${s.on}, which has not started") }
+            act_on_kid(w, at, s.op, s.event, s.ms, s)
+        }
+        route(w)
+        if w.problem != "" { panic("scenario ${sc.name}: ${w.problem}") }
+        mut kid_traces = []StepTrace.new()
+        mut requests = []str.new()
+        for k in w.kids {
+            kid_traces.push(trace_of[PortolanState, PortolanMachine](k.run.engine.machine, k.run.engine, k.world, s.op, k.from))
+            requests.push(k.run.request)
+        }
+        traces.push(NestedStepTrace { parent: trace_of[PortolanState, PortolanMachine](w.parent.machine, w.parent, w.parent_world, s.op, from), kids: kid_traces, requests })
+    }
+    traces
+}
+
+/// Run a scenario of a parent with its nested machines and compare every step with what the file expects: `expect` for the engine the step acts on, `also` for the others.
+export fn run_nested_scenario(machine PortolanMachine, registry NestedRegistry, sc Scenario) -> ScenarioRun {
+    ro traces = drive_nested_scenario(machine, registry, sc)
+    mut mismatches = []str.new()
+    mut parents = []StepTrace.new()
+    mut i = 0
+    for s in sc.steps {
+        ro t = traces[i]
+        parents.push(t.parent)
+        ro target = if s.on == "" { "parent" } else { s.on }
+        match target_trace(t, target) {
+            Some(own) => compare_step(i + 1, s, own, mismatches)
+            None => mismatches.push("step ${i + 1} (${s.op}): there is no nested machine ${target}")
+        }
+        for a in s.also {
+            match target_trace(t, a.target) {
+                Some(other) => {
+                    ro as_step = ScStep { op: s.op, event: s.event, ms: s.ms, expect: a.expect, host: s.host, on: "", also: []ScAlso.new() }
+                    mut inner = []str.new()
+                    compare_step(i + 1, as_step, other, inner)
+                    for m in inner { mismatches.push("${a.target}: ${m}") }
+                }
+                None => mismatches.push("step ${i + 1} (${s.op}): there is no ${a.target} to compare with")
+            }
+        }
+        i += 1
+    }
+    ScenarioRun { name: sc.name, traces: parents, mismatches }
+}
+
+/// The scenario of a machine run alone, as a scenario of a parent that calls it: the first step (the `start` of the machine) becomes the `start` of the parent with the same input (the
+/// input of the parent is the input of the machine) and the machine starts when the parent sends its request; the other steps act on the nested machine (`on` the request
+/// `child_request`) with their events, milliseconds and answers of the host. The expectations are left out: the proof of equality compares the traces. None when the scenario does not
+/// begin with the feed of a `start` (a machine that dies between the commit and the send of its own start has no nested counterpart).
+export fn scenario_through_parent(sc Scenario, parent_machine str, parent_request str, child_request str) -> Option[Scenario] {
+    if sc.steps.len() == 0 { return None }
+    ro first = sc.steps[0]
+    if first.op != "feed" || first.event.kind != "start" { return None }
+    mut steps = []ScStep.new()
+    steps.push(ScStep {
+        op: "feed", event: ScEvent { kind: "start", name: "start", request: parent_request, input: first.event.input, code: "", source: "" }, ms: 0,
+        expect: nothing_expected(), host: []ScHost.new(), on: "", also: []ScAlso.new()
+    })
+    mut i = 1
+    while i < sc.steps.len() {
+        ro s = sc.steps[i]
+        steps.push(ScStep { op: s.op, event: s.event, ms: s.ms, expect: nothing_expected(), host: s.host, on: child_request, also: []ScAlso.new() })
+        i += 1
+    }
+    Some(Scenario { name: sc.name, machine: parent_machine, start_at: sc.start_at, steps, params: []ScHost.new() })
+}
+
+/// The machine a scenario runs on, made ready to be called: the parameters of the scenario and the answers of the host that its first step gives (they hold from the start of the machine).
+export fn prepare_child(machine PortolanMachine, sc Scenario) -> Result[PortolanMachine, str] {
+    ro prepared = with_params(machine, sc.params)?
+    if sc.steps.len() == 0 { return Ok(prepared) }
+    ro replies = replies_after(prepared.replies, sc.steps[0])?
+    Ok(with_replies(prepared, replies))
+}
+
+/// The reason a scenario of a parent with nested machines cannot be run, or "" when it can (the same as `scenario_problem`, and every `on` names a request).
+export fn nested_scenario_problem(machine PortolanMachine, sc Scenario) -> str => scenario_problem(machine, sc)

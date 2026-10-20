@@ -83,18 +83,80 @@ fn party_counter(cell TxCell, line int, mut cx TxCx) -> Result[str, TranslateErr
     Ok(text)
 }
 
-// The cell `вид`: agent(итог Тип), human(итог ИсходВорот), enhanced(итог ИсходВорот), human или agent по настройке имя(итог ИсходВорот), machine …
-type TxKind { kind str, result str, setting str, unsupported bool }
+// The cell `вид`: agent(итог Тип), human(итог ИсходВорот), enhanced(итог ИсходВорот), human или agent по настройке имя(итог ИсходВорот), machine имя(вход Тип, итог Тип)[; разбор: примитив[("роль")] -> Тип].
+// A party of the kind `machine` is a nested machine (rule 35): the name of the machine of the registry of the caller, the record type of its input, the type of its result and the parse.
+type TxKind { kind str, result str, setting str, nested str, input_type str, parse_primitive str, parse_role str, parse_type str }
+
+fn kind_plain(kind str, result str, setting str) -> TxKind => { kind, result, setting, nested: "", input_type: "", parse_primitive: "", parse_role: "", parse_type: "" }
+
+// The name of the nested machine in the registry of the caller: the table of names (kind `machine`), else a Latin name as it is.
+fn nested_name(mut cx TxCx, t TxTok) -> str {
+    match names_first(cx.names, ["machine"], t.text) {
+        Some(en) => en
+        None => {
+            if is_identifier_latin(t.text) { return t.text }
+            cx_error(cx, t, "name", "машины `${t.text}` нет в таблице имён${names_hint(cx.names, ["machine"], t.text)}")
+            t.text
+        }
+    }
+}
+
+// The same for a name given as a text (a list of the machines in the parameter of a fragment) at the place of a token.
+fn nested_name_text(mut cx TxCx, at TxTok, name str) -> str {
+    match names_first(cx.names, ["machine"], name) {
+        Some(en) => en
+        None => {
+            if is_identifier_latin(name) { return name }
+            cx_error(cx, at, "name", "машины `${name}` нет в таблице имён${names_hint(cx.names, ["machine"], name)}")
+            name
+        }
+    }
+}
+
+fn party_machine(mut p TxP, mut cx TxCx) -> Result[TxKind, TranslateError] {
+    ro words = cx.words
+    ro n = p_tok(p)
+    if n.kind != TK_NAME { return Err(p_fail(p, "после `${kw(words, "kind_party", "machine")}` ожидается имя вызываемой машины")) }
+    p_adv(p)
+    ro nested = nested_name(cx, n)
+    p_expect(p, "(")?
+    p_expect_kw(p, words, "kind_party", "input")?
+    ro input_type = ty_parse(p, cx)?
+    p_expect(p, ",")?
+    p_expect_kw(p, words, "kind_party", "result")?
+    ro result = ty_parse(p, cx)?
+    p_expect(p, ")")?
+    mut prim = ""
+    mut role = ""
+    mut parse_type = ""
+    if p_eat(p, ";") {
+        p_expect_kw(p, words, "kind_party", "parse")?
+        p_expect(p, ":")?
+        ro f = p_tok(p)
+        if f.kind != TK_NAME { return Err(p_fail(p, "после `${kw(words, "kind_party", "parse")}:` ожидается имя примитива")) }
+        p_adv(p)
+        prim = tr_primitive(cx, f)
+        if p_eat(p, "(") {
+            ro r = p_tok(p)
+            if r.kind != TK_STR { return Err(p_fail(p, "роль — текст в кавычках")) }
+            p_adv(p)
+            role = r.text
+            p_expect(p, ")")?
+        }
+        if !tx_arrow(p_tok(p)) { return Err(p_fail(p, "после разбора ожидается `->` и тип его результата")) }
+        p_adv(p)
+        parse_type = ty_parse(p, cx)?
+    }
+    p_end(p)?
+    Ok(TxKind { kind: "machine", result, setting: "", nested, input_type, parse_primitive: prim, parse_role: role, parse_type })
+}
 
 fn party_kind(cell TxCell, line int, mut cx TxCx) -> Result[TxKind, TranslateError] {
     mut p = cell_p(cell, line)?
     ro w = p_tok(p)
     if w.kind != TK_NAME { return Err(p_fail(p, "ожидается вид стороны")) }
     ro words = cx.words
-    if p_is_kw(p, words, "kind_party", "machine") {
-        p_adv(p)
-        return Ok(TxKind { kind: "machine", result: "", setting: "", unsupported: true })
-    }
+    if p_eat_kw(p, words, "kind_party", "machine") { return party_machine(p, cx) }
     mut setting = ""
     mut kind = ""
     if p_eat_kw(p, words, "kind_party", "human or agent by setting") {
@@ -122,7 +184,7 @@ fn party_kind(cell TxCell, line int, mut cx TxCx) -> Result[TxKind, TranslateErr
     }
     p_expect(p, ")")?
     p_end(p)?
-    Ok(TxKind { kind, result, setting, unsupported: false })
+    Ok(kind_plain(kind, result, setting))
 }
 
 fn party_row(r TxEntry, mut cx TxCx) -> Result[TxPartyRow, TranslateError] {
@@ -132,14 +194,25 @@ fn party_row(r TxEntry, mut cx TxCx) -> Result[TxPartyRow, TranslateError] {
     ro en = party_en(cx, n, id)
     if pair_has(cx.env.parties, n.text) { return Err(tx_err(n.line, n.col, "name", "сторона `${n.text}` уже объявлена")) }
     pair_add(cx.env.parties, n.text, en)
-    if k.unsupported { return Err(unsupported(n, "сторона `${n.text}` вида `machine` — вложенная машина (строка таблицы «Стороны» не переведена)")) }
+    mut profile = TxNull
+    mut has_profile = false
     if r.cells[3].text != "—" && r.cells[3].text != "" {
-        cx_unsupported(cx, n, "профиль стороны `${n.text}` (столбец `профиль`): профиль запроса исполнитель не берёт из таблицы")
+        profile = cell_expr(r.cells[3], r.line, cx, sc_empty())?
+        has_profile = true
     }
     ro words = party_words(r.cells[4], r.line, cx)?
     ro counter = party_counter(r.cells[5], r.line, cx)?
     mut pairs = [kv("name", js(en)), kv("id", js(id)), kv("kind", js(k.kind))]
+    if k.nested != "" { pairs.push(kv("nested", js(k.nested))) }
+    if k.input_type != "" { pairs.push(kv("input_type", js(k.input_type))) }
     if k.result != "" { pairs.push(kv("result", js(k.result))) }
+    if k.parse_primitive != "" {
+        mut parse_pairs = [kv("primitive", js(k.parse_primitive))]
+        if k.parse_role != "" { parse_pairs.push(kv("role", js(k.parse_role))) }
+        parse_pairs.push(kv("type", js(k.parse_type)))
+        pairs.push(kv("parse", jobj(parse_pairs)))
+    }
+    if has_profile { pairs.push(kv("profile", profile)) }
     if k.setting != "" { pairs.push(kv("setting", js(k.setting))) }
     pairs.push(kv("counter", js(counter)))
     if words.len() > 0 { pairs.push(kv("words", TxArr(words))) }

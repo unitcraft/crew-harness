@@ -228,7 +228,10 @@ export fn state_keys() -> []str => [
 ]
 
 /// The keys of a party.
-export fn party_keys() -> []str => ["name", "id", "kind", "profile", "words", "progress", "setting", "nested", "result", "counter"]
+export fn party_keys() -> []str => ["name", "id", "kind", "profile", "words", "progress", "setting", "nested", "input_type", "result", "parse", "counter"]
+
+/// The signals that `передать` passes to a nested machine (the built-in enum `Signal`, format 2).
+export fn signal_words() -> []str => ["stop", "continue", "halt", "cancel"]
 
 /// The keys of a row.
 export fn row_keys() -> []str => ["n", "event", "cond", "else", "actions", "to", "restart"]
@@ -253,6 +256,45 @@ fn fail_code_def() -> VariantDef {
     mut cases = []CaseDef.new()
     for n in fail_code_names() { cases.push(CaseDef { name: n, fields: []FieldDef.new() }) }
     VariantDef { name: "FailCode", cases, words: []EnumWord.new() }
+}
+
+/// The built-in enum `Signal` of format section 2 (`Сигнал`): the signals that a parent passes to a nested machine.
+fn signal_def() -> VariantDef {
+    ro cases = [CaseDef { name: "Stop", fields: []FieldDef.new() }, CaseDef { name: "Continue", fields: []FieldDef.new() }, CaseDef { name: "Halt", fields: []FieldDef.new() }, CaseDef { name: "Cancel", fields: []FieldDef.new() }]
+    VariantDef { name: "Signal", cases, words: [EnumWord { name: "Stop", word: "stop" }, EnumWord { name: "Continue", word: "continue" }, EnumWord { name: "Halt", word: "halt" }, EnumWord { name: "Cancel", word: "cancel" }] }
+}
+
+// The built-in `State` (`Состояние`, format section 2): the names of the states of the machine. At run time a value is a text; the reader of the type text
+// (`spec.nv`) makes it the set of literals of these names, so a value outside them is refused like any set.
+fn state_def(root JsonObject) -> VariantDef {
+    mut cases = []CaseDef.new()
+    match root.get("states") {
+        Some(v) => {
+            match v.array() {
+                Some(items) => {
+                    for item in items {
+                        match item.object() {
+                            Some(o) => {
+                                ro n = sval_of(o, "name")
+                                if n != "" { cases.push(CaseDef { name: n, fields: []FieldDef.new() }) }
+                            }
+                            None => ()
+                        }
+                    }
+                }
+                None => ()
+            }
+        }
+        None => ()
+    }
+    VariantDef { name: "State", cases, words: []EnumWord.new() }
+}
+
+fn sval_of(o JsonObject, key str) -> str {
+    match o.get(key) {
+        Some(v) => v.str() ?? ""
+        None => ""
+    }
 }
 
 // Is the word of an enum value a Latin word of a code: lower case letters, digits, `_`, the first one a letter?
@@ -338,9 +380,11 @@ fn dec_types(root JsonObject) -> Result[TypeDefs, LoadError] {
     // pass 1: the names, so that a field may name a type declared later
     mut names = []str.new()
     mut skeleton_records = [journal_event_def()]
-    mut skeleton_variants = [fail_code_def()]
+    mut skeleton_variants = [fail_code_def(), signal_def(), state_def(root)]
     names.push("FailCode")
     names.push("JournalEvent")
+    names.push("Signal")
+    names.push("State")
     mut i = 0
     for item in rec_items {
         ro p = "$.types.records[${i}]"
@@ -364,7 +408,7 @@ fn dec_types(root JsonObject) -> Result[TypeDefs, LoadError] {
     ro skeleton = TypeDefs { records: skeleton_records, variants: skeleton_variants }
     // pass 2: the fields
     mut records = [journal_event_def()]
-    mut variants = [fail_code_def()]
+    mut variants = [fail_code_def(), signal_def(), state_def(root)]
     i = 0
     for item in rec_items {
         ro p = "$.types.records[${i}]"
@@ -598,6 +642,15 @@ fn dec_words_or_empty(o JsonObject, key str, defs TypeDefs, path str) -> Result[
     dec_words(v, defs, "${path}.${key}")
 }
 
+// The `разбор` of a party: {"primitive": "name", "role": "literal" (optional), "type": "T"}.
+fn dec_parse(o JsonObject, defs TypeDefs, path str) -> Result[ParseDef, LoadError] {
+    j_only(o, ["primitive", "role", "type"], path)?
+    ro primitive = j_need_str(o, "primitive", path)?
+    ro role = j_str_or(o, "role", "", path)?
+    ro result = j_type(o, "type", defs, path)?
+    Ok(ParseDef { primitive, role, result })
+}
+
 fn dec_parties(root JsonObject, defs TypeDefs) -> Result[[]PartyDef, LoadError] {
     ro items = j_arr_or_empty(root, "parties", "$")?
     mut out = []PartyDef.new()
@@ -614,10 +667,14 @@ fn dec_parties(root JsonObject, defs TypeDefs) -> Result[[]PartyDef, LoadError] 
         ro progress = dec_words_or_empty(o, "progress", defs, p)?
         ro setting = j_str_or(o, "setting", "", p)?
         ro nested = j_str_or(o, "nested", "", p)?
+        mut input_spec = []TypeSpec.new()
+        if j_has(o, "input_type") { input_spec.push(j_type(o, "input_type", defs, p)?) }
         mut result_spec = []TypeSpec.new()
         if j_has(o, "result") { result_spec.push(j_type(o, "result", defs, p)?) }
+        mut parse = []ParseDef.new()
+        if j_has(o, "parse") { parse.push(dec_parse(j_need_obj(o, "parse", p)?, defs, "${p}.parse")?) }
         ro counter = j_str_or(o, "counter", "", p)?
-        out.push(PartyDef { name, id, kind, profile, words, progress, setting, nested, result_spec, counter })
+        out.push(PartyDef { name, id, kind, profile, words, progress, setting, nested, input_spec, result_spec, parse, counter })
         i += 1
     }
     Ok(out)

@@ -21,6 +21,7 @@ import std.time.duration
 /// and not yet dispatched; `to_ack` are the source keys of events that the journal shows as committed
 /// before a restart and that the handler of the link is told about again (see the effect `Link`, `ack`);
 /// `fresh` are the events accepted and not yet handed out by `take_events` (task 099: the session server shows them to the page).
+/// `to_signal` are the signals to nested machines that are ordered and not yet passed on (task 119), `to_repeat` the identifiers of the requests in `to_send` that are repeats of a request already sent.
 export type Engine[M, S] {
     machine M,
     id str,
@@ -28,7 +29,9 @@ export type Engine[M, S] {
     to_send []PartyRequest[str],
     to_cancel []str,
     to_ack []str,
-    fresh []Incoming
+    fresh []Incoming,
+    to_signal []SignalOrder,
+    to_repeat []str
 }
 
 fn now_ms() Time -> int => Time.now().unix_millis()
@@ -108,11 +111,16 @@ fn EngineState[S] @open_of_party(party str) -> Option[OpenRequest] {
 
 /// Start a new session: the first step, the first snapshot.
 export fn start_engine[S, M Machine[S]](machine M, id str) Journal Store Time -> Engine[M, S] {
+    ro trace = "t${now_ms()}-${id}"
+    start_engine_in[S, M](machine, id, trace)
+}
+
+/// Start a new session under a trace the caller gives: a nested machine runs under a trace that is a child of the trace of its parent (spec rule 35, item 3).
+export fn start_engine_in[S, M Machine[S]](machine M, id str, trace str) Journal Store Time -> Engine[M, S] {
     ro now = now_ms()
-    ro trace = "t${now}-${id}"
     mut engine_state = EngineState.fresh(trace, machine.initial())
     engine_state.event_counter = 1
-    mut e Engine[M, S] = { machine, id, engine_state, to_send: []PartyRequest[str].new(), to_cancel: []str.new(), to_ack: []str.new(), fresh: []Incoming.new() }
+    mut e Engine[M, S] = { machine, id, engine_state, to_send: []PartyRequest[str].new(), to_cancel: []str.new(), to_ack: []str.new(), fresh: []Incoming.new(), to_signal: []SignalOrder.new(), to_repeat: []str.new() }
     mut entries = []JournalEntry.new()
     entries.push(entry_of(trace, 1, "start-1", "", now, journal_event("machine_started", [param("machine", machine.name())])))
     e.commit(1, entries)
@@ -160,6 +168,8 @@ fn restart[S, M Machine[S]](machine M, id str, engine_state EngineState[S]) Jour
     mut cancels = []str.new()
     mut cancels_sent = []str.new()
     mut committed_sources = []str.new()
+    mut ordered_signals = []SignalOrder.new()
+    mut passed_signals = []str.new()
     mut rolled_back = 0
     ro journal = Journal.read_all()
     ro overtaken = overtaken_lines(journal, engine_state.trace)
@@ -179,11 +189,15 @@ fn restart[S, M Machine[S]](machine M, id str, engine_state EngineState[S]) Jour
                 cancels.push(entry.request)
             } else if entry.event.code == "cancel_sent" {
                 cancels_sent.push(entry.request)
+            } else if entry.event.code == "signal_ordered" {
+                ordered_signals.push(SignalOrder { request: entry.request, signal: entry.event.value_of("signal") ?? "" })
+            } else if entry.event.code == "signal_passed" {
+                passed_signals.push("${entry.request}|${entry.event.value_of("signal") ?? ""}")
             }
         }
         at += 1
     }
-    mut e Engine[M, S] = { machine, id, engine_state, to_send: []PartyRequest[str].new(), to_cancel: []str.new(), to_ack: []str.new(), fresh: []Incoming.new() }
+    mut e Engine[M, S] = { machine, id, engine_state, to_send: []PartyRequest[str].new(), to_cancel: []str.new(), to_ack: []str.new(), fresh: []Incoming.new(), to_signal: []SignalOrder.new(), to_repeat: []str.new() }
     mut unsent = 0
     for r in engine_state.open_requests {
         if !sent.contains(r.id) {
@@ -195,6 +209,24 @@ fn restart[S, M Machine[S]](machine M, id str, engine_state EngineState[S]) Jour
         if !cancels_sent.contains(cid) { e.to_cancel.push(cid) }
     }
     e.to_ack = committed_sources
+    // the signals that were ordered and not passed on: a passed one cancels the first ordered one equal to it
+    for sig in ordered_signals {
+        ro key = "${sig.request}|${sig.signal}"
+        if passed_signals.contains(key) {
+            mut rest = []str.new()
+            mut removed = false
+            for p in passed_signals {
+                if p == key && !removed {
+                    removed = true
+                } else {
+                    rest.push(p)
+                }
+            }
+            passed_signals = rest
+        } else {
+            e.to_signal.push(sig)
+        }
+    }
     e.engine_state.event_counter += 1
     ro step = engine_state.step + 1
     ro cause = "restart-${e.engine_state.event_counter}"
@@ -331,7 +363,7 @@ export fn Engine[M Machine[S], S] mut @on_arrival(raw Incoming) Journal Store Ti
         }
     }
 
-    mut environment = StepEnvironment.new()
+    mut environment = StepEnvironment.carrying([]SignalOrder.new())
     ro transition = @machine.step(@engine_state.state, event, environment)
     match transition {
         Go(next) => { @engine_state.state = next }
@@ -339,6 +371,10 @@ export fn Engine[M Machine[S], S] mut @on_arrival(raw Incoming) Journal Store Ti
     }
     for order in environment.orders {
         @apply(order, step, event.id, now, entries)
+    }
+    for signal in environment.signals {
+        @to_signal.push(signal)
+        entries.push(entry_of(@engine_state.trace, step, event.id, signal.request, now, journal_event("signal_ordered", [param("signal", signal.signal), param("request", signal.request)])))
     }
     @commit(step, entries)
 }
@@ -356,15 +392,70 @@ export fn Engine[M Machine[S], S] mut @dispatch() Journal Link Time -> () {
     for key in acks { Link.ack(key) }
     ro requests = @to_send
     @to_send = []PartyRequest[str].new()
+    ro repeats = @to_repeat
+    @to_repeat = []str.new()
     for request in requests {
         Link.send(request)
-        Journal.write(@mark("request_sent", request.id, [param("attempt", "${request.attempt}")]))
+        ro code = if repeats.contains(request.id) { "request_repeated" } else { "request_sent" }
+        Journal.write(@mark(code, request.id, [param("attempt", "${request.attempt}")]))
     }
     ro cancels = @to_cancel
     @to_cancel = []str.new()
     for rid in cancels {
         Link.cancel(rid)
         Journal.write(@mark("cancel_sent", rid, []JournalParam.new()))
+    }
+}
+
+/// Repeat the open requests among `ids` with the same identifier (spec rule 22 and rule 35, item 4): a request to a nested machine is not cancelled by a restart, it is sent again,
+/// and the nested machine answers with the answer it has or goes on. The repeat is not a new attempt (the counter of the party stays); `dispatch` sends it and leaves the mark
+/// `request_repeated`. Returns the number of the requests that will be repeated: an id that is not open, or whose request waits for its send, is left out.
+export fn Engine[M Machine[S], S] mut @repeat_open(ids []str) -> int {
+    mut n = 0
+    for r in @engine_state.open_requests {
+        if !ids.contains(r.id) { continue }
+        mut waiting = false
+        for q in @to_send {
+            if q.id == r.id { waiting = true }
+        }
+        if waiting { continue }
+        @to_send.push(request_of(r.id, r.attempt, r.party, r.input, r.waiting.term, @engine_state.trace, r.step))
+        @to_repeat.push(r.id)
+        n += 1
+    }
+    n
+}
+
+/// The signals to nested machines that were ordered and are not passed on yet, in the order of ordering. After a restart they are found again in the journal.
+export fn Engine[M Machine[S], S] @pending_signals() -> []SignalOrder {
+    mut out = []SignalOrder.new()
+    for s in @to_signal { out.push(s) }
+    out
+}
+
+/// The caller has passed signals on to the nested machines: each of `done` that is pending leaves the journal event `signal_passed` (`signal`, `request`; the methodology writes it too) and
+/// is no longer pending. A pending signal that is not in `done` stays (its nested machine has not started yet).
+export fn Engine[M Machine[S], S] mut @signals_passed(done []SignalOrder) Journal Time -> () {
+    mut left = []SignalOrder.new()
+    mut marks = []SignalOrder.new()
+    mut taken = []int.new()
+    for s in @to_signal {
+        mut at = -1
+        mut k = 0
+        for d in done {
+            if at < 0 && !taken.contains(k) && d.request == s.request && d.signal == s.signal { at = k }
+            k += 1
+        }
+        if at >= 0 {
+            taken.push(at)
+            marks.push(s)
+        } else {
+            left.push(s)
+        }
+    }
+    @to_signal = left
+    for s in marks {
+        Journal.write(@mark("signal_passed", s.request, [param("signal", s.signal), param("request", s.request)]))
     }
 }
 

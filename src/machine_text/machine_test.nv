@@ -132,12 +132,13 @@ test "tm parties" {
     assert(note_says(tiny_with("| разрешить, отказать | попытка_вратаря |", "| разрешить, отказать | нет_счётчика |"), "нет в таблице имён"))
 }
 
-test "tm parties unsupported" {
+test "tm parties nested" {
+    // the party of the kind `machine` and the profile are translated now: no note says "not supported"
     ro nested = tiny_with("human или agent по настройке исполнитель_повышенного_внимания(итог ИсходВорот)", "machine шаг(вход Тип, итог Тип)")
-    assert(note_says(nested, "не поддержано в этой версии: сторона `вратарь` вида `machine` — вложенная машина"))
-    assert(count_kind(nested, "unsupported") >= 1)
-    ro profile = tiny_with("| gatekeeper | human или agent по настройке исполнитель_повышенного_внимания(итог ИсходВорот) | — |", "| gatekeeper | human или agent по настройке исполнитель_повышенного_внимания(итог ИсходВорот) | профиль_стороны |")
-    assert(note_says(profile, "не поддержано в этой версии: профиль стороны"))
+    assert(count_kind(nested, "unsupported") == 0)
+    assert(note_says(nested, "Тип"))
+    ro profile = tiny_with("| gatekeeper | human или agent по настройке исполнитель_повышенного_внимания(итог ИсходВорот) | — |", "| gatekeeper | human или agent по настройке исполнитель_повышенного_внимания(итог ИсходВорот) | \"p\" |")
+    assert(count_kind(profile, "unsupported") == 0)
 }
 
 test "tm request limit" {

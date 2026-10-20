@@ -22,10 +22,11 @@ module crew_harness.machine_run
 // ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import std.encoding.json.{Json}
-import crew_harness.engine.{Incoming, SendOrder, CancelOrder, Conclusion, FailCode, JournalParam, JournalEvent, journal_event, param}
+import std.encoding.json.{JsonValue, JsonObject}
+import crew_harness.engine.{Incoming, SendOrder, CancelOrder, SignalOrder, Conclusion, FailCode, JournalParam, JournalEvent, journal_event, param}
 import crew_harness.machine.{Value, Null, Int, Text, List, Dict, DictEntry, RecordField, Binding, Scope, DefTable, Expr, TypeSpec, PrimitiveHost, EvalError, Binary, Add}
-import crew_harness.machine.{eval_defs, kind_word, make_record, make_tuple, enum_value, value_text, value_json, value_compare, parse_value, value_from_json, record_get, dict_get, check_value, FieldDef, TypeDefs, check_call_args, check_call_result}
-import crew_harness.machine_table.{MachineDef, TableRow, EventPat, Action, LValue, PathStep, NamedExpr, Bind, WordDef}
+import crew_harness.machine.{eval_defs, kind_word, make_record, make_tuple, enum_value, value_text, value_json, value_to_json, value_compare, parse_value, value_from_json, record_get, dict_get, check_value, FieldDef, TypeDefs, check_call_args, check_call_result, Lit}
+import crew_harness.machine_table.{MachineDef, TableRow, EventPat, Action, LValue, PathStep, NamedExpr, Bind, WordDef, PartyDef, MachineParty}
 import crew_harness.machine_table.{find_state, find_party, find_data}
 
 /// The longest chain of transitions in one step (a loop of forks that never ends is a defect of the table).
@@ -47,11 +48,12 @@ type Planned enum
     | PSend(SendOrder)
     | PCancel(CancelOrder)
     | PFinish(Conclusion)
+    | PPass(SignalOrder)
 
 type Ctx {
     def MachineDef, table DefTable, name str, started bool, input Value, data Value,
     event EventVal, locals []Binding, record Value, planned []Planned,
-    fired bool, finished bool, defect bool, chain int, taken []str, limit int
+    fired bool, finished bool, defect bool, chain int, taken []str, limit int, trace str, step_no int, again bool
 }
 
 type Fault { defect bool, code str, params []JournalParam, kind str, message str }
@@ -127,6 +129,8 @@ fn scope_of(ctx Ctx) -> Scope {
         _ => ()
     }
     bs.push(Binding { name: "input", value: ctx.input })
+    bs.push(Binding { name: "trace", value: Text(ctx.trace) })
+    bs.push(Binding { name: "step", value: Int(ctx.step_no) })
     bs.push(Binding { name: "state", value: Text(ctx.name) })
     bs.push(Binding { name: "party", value: Text(ctx.event.party) })
     bs.push(Binding { name: "event", value: event_record(ctx.event) })
@@ -709,19 +713,35 @@ fn run_actions(mut ctx Ctx, actions []Action, mut host PrimitiveHost) -> Result[
             }
             CancelOpenAct { party, except } => {
                 if has_datum(ctx, "open_requests") {
-                    // the open requests of the machine (the datum of the contract): all of them, or those of the named party; the nested
-                    // machines of `except` are not run in this version (the translator refuses them)
+                    // the open requests of the machine (the datum of the contract): all of them, or those of the named party, except the requests to the nested machines
+                    // that `except` names (`кроме: вложенные`); the party of a set that was cancelled goes back to `to_send` before the ones not sent yet (rule 18)
                     ro wanted = party_id_of(ctx, party)
+                    mut spared = []str.new()
+                    for e in except {
+                        for n in nested_names_of_value(run_expr(ctx, e, host)?) { spared.push(n) }
+                    }
                     mut keep = []str.new()
+                    mut returned = []str.new()
                     for rid in texts_of_datum(ctx, "open_requests") {
                         ro owner = party_of_request_id(rid)
-                        if party == "" || owner == wanted {
+                        ro at = owner_party(ctx.def, rid)
+                        ro is_spared = at >= 0 && ctx.def.parties[at].kind == MachineParty && spared.contains(ctx.def.parties[at].nested)
+                        if !is_spared && (party == "" || owner == wanted) {
                             plan(ctx, PCancel(CancelOrder { party: owner }))
+                            if is_set_request(ctx.def, rid) { returned.push(owner) }
                         } else {
                             keep.push(rid)
                         }
                     }
                     put_texts(ctx, "open_requests", keep)
+                    if returned.len() > 0 && has_datum(ctx, "to_send") {
+                        mut front = []str.new()
+                        for id in returned { front.push(id) }
+                        for id in texts_of_datum(ctx, "to_send") {
+                            if !returned.contains(id) { front.push(id) }
+                        }
+                        put_texts(ctx, "to_send", front)
+                    }
                     continue
                 }
                 ro at = find_state(ctx.def, ctx.name)
@@ -751,15 +771,14 @@ fn run_actions(mut ctx Ctx, actions []Action, mut host PrimitiveHost) -> Result[
                 if !skip && id != "" { plan(ctx, PCancel(CancelOrder { party: id })) }
             }
             PassAct { nested, signal } => {
-                ro v = run_expr(ctx, nested, host)?
-                match v {
-                    List(xs) => {
-                        for x in xs {
-                            ro n = want_text(x, "a nested machine")?
-                            note(ctx, "signal_passed", [param("nested", n), param("signal", signal)])
-                        }
+                // the signal goes to every open request of the nested machines of the list, at the moment of the action (format 5, T4); the engine journals it and holds it for the
+                // caller that runs the nested machines, which passes it on after the commit of the step (rule 35, item 8)
+                ro names = nested_names_of_value(run_expr(ctx, nested, host)?)
+                for rid in texts_of_datum(ctx, "open_requests") {
+                    ro at = owner_party(ctx.def, rid)
+                    if at >= 0 && ctx.def.parties[at].kind == MachineParty && names.contains(ctx.def.parties[at].nested) {
+                        plan(ctx, PPass(SignalOrder { request: rid, signal }))
                     }
-                    _ => return Err(defect_fault("type_mismatch", "pass needs a list of nested machines"))
                 }
             }
         }
@@ -777,6 +796,24 @@ fn ctx_with(ctx Ctx, left_name str, left_value Value, right_name str, right_valu
     Ctx {
         def: ctx.def, table: ctx.table, name: ctx.name, started: ctx.started, input: ctx.input, data: ctx.data, event: ctx.event, locals,
         record: ctx.record, planned: ctx.planned, fired: ctx.fired, finished: ctx.finished, defect: ctx.defect, chain: ctx.chain,
-        taken: ctx.taken, limit: ctx.limit
+        taken: ctx.taken, limit: ctx.limit, trace: ctx.trace, step_no: ctx.step_no, again: ctx.again
     }
+}
+
+// The names of the nested machines in a value: a list of texts, or one text (a name that is not a list is a name).
+fn nested_names_of_value(v Value) -> []str {
+    mut out = []str.new()
+    match v {
+        List(xs) => {
+            for x in xs {
+                match x {
+                    Text(s) => out.push(s)
+                    _ => ()
+                }
+            }
+        }
+        Text(s) => out.push(s)
+        _ => ()
+    }
+    out
 }

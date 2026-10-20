@@ -15,7 +15,8 @@ target/portolan.exe summary machine.portolan.md                              # t
 target/portolan.exe compile machine.portolan.md --lenient                    # the JSON of what could be translated even when there are errors
 target/portolan.exe render machine.portolan.json --language en               # the reverse way: the file of Portolan for a tree
 target/portolan.exe convert machine.portolan.md --language en                # a file in the other language, through the JSON
-nova test src/machine_text                                              # the translator and its table of words: 198 tests (36 of them task 117)
+nova test src/machine_text                                              # the translator and its table of words: 199 tests (36 of them task 117)
+nova test src/machine_nested                                            # the nested machines (task 119): the party kind `machine`, `Signal`, `State`, the profile, `Правит`, the form returns, the set limit; the checks; the reverse generator (89 tests)
 nova test src/machine_text_unicode                                      # names in any alphabet through the translator and the reverse generator (27 tests, task 117)
 nova test src/machine_text_eq                                           # the proofs: the chat machine, the pilot, the examples, the definitions
 nova test src/machine_text_fmt                                          # format 2.7: prose, the expansion of a fragment, sets, tables, words, hash (65 tests)
@@ -25,7 +26,7 @@ nova test src/machine_agent                                             # the sa
 nova test src/machine_agent_en                                          # the English sample of the agent step: the translation, the equality with the Russian one, the 75 scenarios
 nova test src/portolan_cli                                         # the program `portolan` on small files: the commands, the errors, the exit codes (task 116)
 nova test src/portolan_eq                                          # the circles of the program on the machines of the product: compile -> render -> compile, convert ru -> en -> ru
-nova test src/portolan_scenarios                                   # `portolan test` on src/machine: the 131 scenarios; `portolan run` of the agent step one by one
+nova test src/portolan_scenarios                                   # `portolan test` on src/machine: the 200 scenarios (the 32 of the nested machines too); `portolan run` of the agent step one by one
 ```
 
 As a library (module `crew_harness.machine_text`):
@@ -138,12 +139,14 @@ text of the fragment, `fragments/pause.fragment.md`, is compiled in, `<пара�
 machine's own, its state `ПАУЗА` after the machine's states) and `определения: <имя> версия <N> хеш <hex12>` (the file is found in the registry by the name, the version and the hash are
 checked, a copy of its types, constants and definitions is put in the tree, `includes` gets the line). `вложенные: []` makes `передать(вложенные, …)` and `отменить_открытые(кроме: вложенные)` plain.
 
-## Not supported in this version
+## Nested machines (task 119)
 
-The format has them, the interpreter of task 107 does not run them, so the translator answers `unsupported` with the line (the rest of the file is translated, `--lenient`):
-the side of the kind `machine` (a nested machine; its row is not translated), the column `профиль` when it is not `—`, `Правит: …; проверка: …`,
-`Возвратов формы: N` with N above zero, a fragment with a non-empty list of nested machines and `вход_заново: запросы_из_к_отправке`, the "Where" `возврат_подготовки`.
-`src/machine_text_eq/cases/unsupported-examples.portolan.md` has them all; their places are the list of the next task. The line `Предел запросов` is run since task 109 (below, and the README of `src/machine`).
+Since task 119 the interpreter runs everything that the translator used to answer with `unsupported`, and the translator reads it: the side of the kind `machine` (the cell `вид`: `machine <Имя>(вход <Тип>, итог <Тип>)[; разбор: <примитив>[("роль")] -> <Тип>]`: the name of the machine of the registry of the caller, the
+record type of its input, the type of its result, the optional primitive that turns a text answer into the result), the column `профиль` (a party gets the field `profile` in the input of its nested machine), `Правит: …; проверка: …`, `Возвратов формы: N` with N above zero,
+`Предел запросов` of a set of parties, the counters of the elements of a set (`линзы[*].попытка`), a fragment with a non-empty list of nested machines, `вход_заново: запросы_из_к_отправке`, the built-in types `Сигнал` (`Signal`: stop, continue, halt, cancel) and `Состояние` (`State`:
+the names of the states of the machine), the actions `передать(сторона, сигнал)` and `отменить_открытые(кроме: …)`. The new words are in `keywords_product.tsv` (the product's layer), not in `keywords.tsv`. The reverse generator writes them back; the circles "compile -> render -> compile"
+give the same tree on the probe machines (`caller`, `callee`, `fan`, `dialog_steps`) in both languages. `unsupported` is left for the transition `возврат_подготовки` (rule 24: the preparation is the executor's) and for a word of `КодСбоя` that is not the word of the engine.
+The examples of the meeting (`src/machine_nested/cases/meeting-examples.portolan.md`, they were `unsupported-examples` before) are translated whole.
 
 ## Oracle 0.1.0: what shaped the code
 

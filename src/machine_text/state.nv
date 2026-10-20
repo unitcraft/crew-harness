@@ -265,6 +265,36 @@ fn line_silence(kvl TxKv, mut cx TxCx, sc TxScope) -> Result[Option[TxJ], Transl
     Ok(Some(e))
 }
 
+// `Правит: данное; проверка: примитив` -> the datum and the primitive of the check (Latin).
+type TxEdits { datum str, check str }
+
+fn line_edits(kvl TxKv, mut cx TxCx) -> Result[TxEdits, TranslateError] {
+    mut p = lex_segs(kvl.segs)?
+    ro d = p_tok(p)
+    if d.kind != TK_NAME { return Err(p_fail(p, "после `${kw(cx.words, "key", "Edits")}:` ожидается имя данного")) }
+    p_adv(p)
+    ro datum = tr_global(cx, d)
+    p_expect(p, ";")?
+    if !p_eat_kw(p, cx.words, "key", "check") { return Err(p_fail(p, "после данного ожидается `${kw(cx.words, "key", "check")}: примитив`")) }
+    p_expect(p, ":")?
+    ro f = p_tok(p)
+    if f.kind != TK_NAME { return Err(p_fail(p, "после `${kw(cx.words, "key", "check")}:` ожидается имя примитива")) }
+    p_adv(p)
+    ro check = tr_primitive(cx, f)
+    p_end(p)?
+    Ok(TxEdits { datum, check })
+}
+
+// `Возвратов формы: N` -> N (a whole number, zero too).
+fn line_form_returns(kvl TxKv, mut cx TxCx) -> Result[int, TranslateError] {
+    mut p = lex_segs(kvl.segs)?
+    ro n = p_tok(p)
+    if n.kind != TK_INT { return Err(p_fail(p, "после `${kw(cx.words, "key", "Form returns")}:` ожидается целое число")) }
+    p_adv(p)
+    p_end(p)?
+    Ok(n.text.to_int() ?? 0)
+}
+
 // `Вход: имя, имя | нет | все_данные` of a state that is not an appeal: the names and the mark "all".
 type TxReads { names []str, all bool }
 
@@ -335,6 +365,9 @@ fn state_translate(entries []TxEntry, blk TxBlock, index int, mut cx TxCx) -> Tx
     mut has_reads_line = false
     mut except_json = TxNull
     mut has_except = false
+    mut edits_datum = ""
+    mut edits_check = ""
+    mut form_returns = 0
     mut input_at = -1
     mut accept_at = -1
     mut rows_at = -1
@@ -366,10 +399,17 @@ fn state_translate(entries []TxEntry, blk TxBlock, index int, mut cx TxCx) -> Tx
                     Err(err) => note(cx, err)
                 }
             } else if key == "Edits" && blk.kind == "appeal" {
-                note(cx, TranslateError { line: e.line, col: 1, kind: "unsupported", message: "не поддержано в этой версии: `${kw(cx.words, "key", "Edits")}` (правило 14: у движка нет проверки отпечатка объекта)", quote: "" })
+                match line_edits(line, cx) {
+                    Ok(ed) => {
+                        edits_datum = ed.datum
+                        edits_check = ed.check
+                    }
+                    Err(err) => note(cx, err)
+                }
             } else if key == "Form returns" && blk.kind == "appeal" {
-                if line.segs[0].text != "0" {
-                    note(cx, TranslateError { line: e.line, col: 1, kind: "unsupported", message: "не поддержано в этой версии: `${kw(cx.words, "key", "Form returns")}` больше нуля (у движка нет возврата формы)", quote: "" })
+                match line_form_returns(line, cx) {
+                    Ok(count) => { form_returns = count }
+                    Err(err) => note(cx, err)
                 }
             } else if key == "Input" {
                 if blk.kind != "appeal" {
@@ -443,6 +483,11 @@ fn state_translate(entries []TxEntry, blk TxBlock, index int, mut cx TxCx) -> Tx
         for q in party_pairs { pairs.push(q) }
         if party_pairs.len() == 0 { note(cx, struct_error(blk.line, 1, "у обращения `${blk.ru}` нет строки `Сторона:`")) }
         if has_silence { pairs.push(kv("silence", silence)) }
+        if edits_datum != "" {
+            pairs.push(kv("edits", js(edits_datum)))
+            pairs.push(kv("edit_check", js(edits_check)))
+        }
+        if form_returns > 0 { pairs.push(kv("form_returns", jint(form_returns))) }
         if inputs.len() > 0 { pairs.push(kv("inputs", TxArr(inputs))) }
         if accept.len() > 0 { pairs.push(kv("accept", TxArr(accept))) }
         pairs.push(kv("rows", TxArr(rows)))

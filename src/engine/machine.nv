@@ -21,6 +21,8 @@ export type Environment protocol {
     mut @order_save()
     // The machine has ended: the engine cancels what is still open and records the outcome.
     mut @order_finish(conclusion Conclusion)
+    // Pass a signal to the nested machine that holds an open request (spec rule 35, item 8): the engine journals it and holds it for the caller.
+    mut @order_signal(order SignalOrder)
 }
 
 /// Machine: what the engine requires of a machine. The match is structural: a type with these
@@ -53,11 +55,21 @@ export type Order enum
     | Save
     | Finish(Conclusion)
 
-/// StepEnvironment: the environment of the engine for one step - it records the orders in the order they are given.
-export type StepEnvironment { orders []Order }
+/// StepEnvironment: the environment of the engine for one step - it records the orders in the order they are given. The signals to nested machines are kept apart (`signals`): they
+/// are not requests, and the enum `Order` of the machines of the product stays as it was.
+export type StepEnvironment { orders []Order, signals []SignalOrder }
 
 /// An environment with no orders.
-export fn StepEnvironment.new() -> StepEnvironment => { orders: []Order.new() }
+export fn StepEnvironment.new() -> StepEnvironment => { orders: []Order.new(), signals: []SignalOrder.new() }
+
+// ORACLE-WORKAROUND(60): a method of the protocol `Environment` that no reachable code calls is cut from the program, and the C of the program does not build ("returning 'int' from nova_unit");
+// the engine builds its environment with this function, which calls `order_signal` for the signals it carries (none at a step), so the method has a call site in every program that links the engine;
+// when item 60 is fixed the engine uses `StepEnvironment.new()` and this function goes
+export fn StepEnvironment.carrying(signals []SignalOrder) -> StepEnvironment {
+    mut environment = StepEnvironment.new()
+    for s in signals { environment.order_signal(s) }
+    environment
+}
 
 export fn StepEnvironment mut @write_journal(event JournalEvent) -> () {
     @orders.push(Note(event))
@@ -77,4 +89,8 @@ export fn StepEnvironment mut @order_save() -> () {
 
 export fn StepEnvironment mut @order_finish(conclusion Conclusion) -> () {
     @orders.push(Finish(conclusion))
+}
+
+export fn StepEnvironment mut @order_signal(order SignalOrder) -> () {
+    @signals.push(order)
 }

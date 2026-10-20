@@ -1,5 +1,5 @@
 // cases.nv - the files of the cases that the tests and the report of the task use, compiled in: the pilot "Agent step" brought to format 2.5, the examples of the format,
-// the examples that this version does not support, the definitions of the meeting and the small machine that includes them.
+// the definitions of the meeting and the small machine that includes them.
 module crew_harness.machine_text_eq
 
 import crew_harness.machine.{NamedText}
@@ -8,7 +8,6 @@ import crew_harness.machine.{NamedText}
 export fn case_files() -> []NamedText => [
     NamedText { name: "agent-step.portolan.md", text: embed_str("cases/agent-step.portolan.md") },
     NamedText { name: "format-examples.portolan.md", text: embed_str("cases/format-examples.portolan.md") },
-    NamedText { name: "unsupported-examples.portolan.md", text: embed_str("cases/unsupported-examples.portolan.md") },
     NamedText { name: "meeting-definitions.portolan.md", text: embed_str("cases/meeting-definitions.portolan.md") },
     NamedText { name: "meeting-wrapper.portolan.md", text: embed_str("cases/meeting-wrapper.portolan.md") }
 ]

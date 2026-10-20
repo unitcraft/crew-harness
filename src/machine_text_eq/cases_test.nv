@@ -1,4 +1,4 @@
-// cases_test.nv - the cases of the task: the pilot "Agent step" brought to format 2.5, the examples of the format, the examples that this version does not support, the
+// cases_test.nv - the cases of the task: the pilot "Agent step" brought to format 2.5, the examples of the format, the
 // definitions of the meeting with the file of the cycle arithmetic (the hash of the format), the fragment "Pause".
 module crew_harness.machine_text_eq
 
@@ -59,7 +59,7 @@ test "cs files" {
 }
 
 test "cs names by the Portolan" {
-    assert(case_files().len() == 5)
+    assert(case_files().len() == 4)
     for f in case_files() { assert(f.name.ends_with(".portolan.md")) }
 }
 
@@ -124,7 +124,7 @@ test "cs pilot pause" {
     ro report = translate_checked(case_text("agent-step.portolan.md"), standard_registry())
     assert(report.json.contains("\"name\":\"human_stop\",\"fields\":[{\"name\":\"human_word\",\"type\":\"text\"}"))
     assert(report.json.contains("\"to\":\"@previous\""))
-    assert(report.json.contains("{\"name\":\"previous\",\"type\":\"?text\""))
+    assert(report.json.contains("{\"name\":\"previous\",\"type\":\"?State\""))
     assert(report.json.contains("{\"do\":\"cancel_open\"}"))
     assert(report.json.contains("\"value\":\"pause_halt\""))
 }
@@ -156,34 +156,6 @@ test "cs examples new id" {
     ro broken = case_text("format-examples.portolan.md").replace("| 1 | сразу | — | ид_сессии = новая | ХОД_АГЕНТА |", "| 1 | сразу | — | журнал(opened) | ХОД_АГЕНТА |")
     ro bad = translate_checked(broken, examples_registry())
     assert(has_message(bad, "of new_id is not written to the data by a row of the state"))
-}
-
-// ---- what this version does not support ----------------------------------------------------------------------------------------
-
-test "cs unsupported" {
-    ro report = translate_checked(case_text("unsupported-examples.portolan.md"), standard_registry())
-    assert(count_of(report, "unsupported") == 6)
-    assert(has_message(report, "сторона `свидетель` вида `machine`"))
-    assert(has_message(report, "сторона `автор` вида `machine`"))
-    assert(has_message(report, "сторона `линза` вида `machine`"))
-    assert(has_message(report, "`Правит`"))
-    assert(has_message(report, "вложенные машины в подключении фрагмента"))
-    assert(has_message(report, "`вход_заново: запросы_из_к_отправке`"))
-    for e in report.errors {
-        if e.kind == "unsupported" {
-            assert(e.message.starts_with("не поддержано в этой версии: "))
-            assert(e.line >= 60)
-            assert(e.quote.byte_len() > 0)
-        }
-    }
-}
-
-test "cs unsupported only" {
-    ro report = translate_report(case_text("unsupported-examples.portolan.md"))
-    assert(count_of(report, "unsupported") == 6)
-    assert(report.errors.len() == 6)
-    assert(report.rows_total == 61)
-    assert(report.rows_noted == 3)
 }
 
 // ---- the definitions of the meeting and the hash of the format ----------------------------------------------------------------------

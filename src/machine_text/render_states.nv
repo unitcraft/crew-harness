@@ -175,6 +175,13 @@ fn rn_state(mut cx RnCx, st RJ, index int) -> []str {
             None => "—"
         }
         out.push("- ${rn_kw(cx, "key", "Idle term")}: ${silence}")
+        if rj_gstr(st, "edits") != "" {
+            out.push("- ${rn_kw(cx, "key", "Edits")}: ${rn_global(cx, rj_gstr(st, "edits"))}; ${rn_kw(cx, "key", "check")}: ${rj_gstr(st, "edit_check")}")
+        }
+        match rj_get(st, "form_returns") {
+            Some(n) => { out.push("- ${rn_kw(cx, "key", "Form returns")}: ${rj_gscalar(st, "form_returns")}") }
+            None => ()
+        }
         out.push("- ${rn_kw(cx, "key", "Input")}:")
         ro inputs = rj_garr(st, "inputs")
         if inputs.len() > 0 {

@@ -228,6 +228,13 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
         None => ()
     }
 
+    // the primitives are named before the parties, the data and the rows that call them (a profile, a parse and a check of `Правит` name them too)
+    mut primitives = []str.new()
+    match section_of(sections, "Primitives") {
+        Some(sec) => { primitives = decl_primitives(entries, sec, cx) }
+        None => ()
+    }
+
     mut types = TxTypes { records: []TxJ.new(), variants: []TxJ.new() }
     match section_of(sections, "Types") {
         Some(sec) => { types = decl_types(entries, sec, cx) }
@@ -295,11 +302,6 @@ export fn translate_report_with(file_text str, registry []NamedText) -> Translat
     mut definitions = []TxJ.new()
     match section_of(sections, "Definitions") {
         Some(sec) => { definitions = decl_definitions(entries, sec, cx) }
-        None => ()
-    }
-    mut primitives = []str.new()
-    match section_of(sections, "Primitives") {
-        Some(sec) => { primitives = decl_primitives(entries, sec, cx) }
         None => ()
     }
     // what the included files bring comes before the machine's own

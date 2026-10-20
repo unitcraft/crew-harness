@@ -130,8 +130,18 @@
         "words": { "type": "array", "items": { "$ref": "#/$defs/word" }, "description": "the words of a gate (human, enhanced, gatekeeper)" },
         "progress": { "type": "array", "items": { "$ref": "#/$defs/word" }, "description": "the parts of an answer of an agent or of a machine (the request stays open)" },
         "setting": { "type": "string", "description": "the setting of the project that makes a gatekeeper a human or an agent" },
-        "nested": { "type": "string", "description": "the name of the nested machine (kind machine)" },
+        "nested": { "type": "string", "description": "the name of the nested machine in the registry of the caller (kind machine)" },
+        "input_type": { "$ref": "#/$defs/type", "description": "the record type of the input of the call of a nested machine (kind machine): the fields of its request" },
         "result": { "$ref": "#/$defs/type", "description": "the type of the result of an agent or of a machine (the answer)" },
+        "parse": {
+          "type": "object", "additionalProperties": false, "required": ["primitive", "type"],
+          "properties": {
+            "primitive": { "type": "string", "description": "the reading primitive that turns the answer of the nested machine into the value of the answer" },
+            "role": { "type": "string", "description": "the literal of the role, the second argument of the primitive" },
+            "type": { "$ref": "#/$defs/type", "description": "the type of the result of the parse" }
+          },
+          "description": "`разбор` of a party of the kind machine (format 1)"
+        },
         "counter": { "type": "string", "description": "the datum with the attempt counter of the party (rule 15)" }
       }
     },

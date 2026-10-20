@@ -210,7 +210,7 @@ fn rn_ty_read(cx RnCx, mut t RnTy) -> str {
         }
         return rn_kw(cx, "type", "int")
     }
-    if name == "float" || name == "text" || name == "bool" || name == "id" || name == "JournalEvent" { return rn_kw(cx, "type", name) }
+    if name == "float" || name == "text" || name == "bool" || name == "id" || name == "JournalEvent" || name == "State" || name == "Signal" { return rn_kw(cx, "type", name) }
     if name == "" {
         // a sign that no type starts with: it is stepped over, the whole char
         t.pos += tx_at(t.text, t.pos).len_utf8()
@@ -551,6 +551,31 @@ fn rn_expr(mut cx RnCx, v RJ, locals []str) -> str {
 }
 
 // The arguments of a primitive call: the name of the primitive (as the registry writes it) and the arguments.
+// A list of nested machines: `[a, b]` with the names of the registry as the file writes them (the reader takes a name without quotes); a list that is computed is written as an expression.
+fn rn_nested_list(mut cx RnCx, v RJ, locals []str) -> str {
+    if rj_gstr(v, "op") == "list" {
+        mut names = []str.new()
+        mut plain = true
+        for item in rj_garr(v, "items") {
+            if rj_gstr(item, "op") == "lit" {
+                match rj_get(item, "value") {
+                    Some(x) => {
+                        match x {
+                            RStr(name) => names.push(rn_name(cx, ["machine"], name))
+                            _ => { plain = false }
+                        }
+                    }
+                    None => { plain = false }
+                }
+            } else {
+                plain = false
+            }
+        }
+        if plain { return "[${names.join(", ")}]" }
+    }
+    rn_expr(cx, v, locals)
+}
+
 fn rn_prim_args(mut cx RnCx, name str, args []RJ, locals []str) -> str {
     if args.len() == 0 { return name }
     "${name}, ${rn_args(cx, args, locals)}"
@@ -629,8 +654,18 @@ fn rn_action(mut cx RnCx, a RJ, locals []str) -> str {
     }
     if kind == "journal_all" { return "${rn_kw(cx, "action", "journal")}(${rn_kw(cx, "readable", "all_data")})" }
     if kind == "machine_error" { return "${rn_kw(cx, "action", "machine_error")}(${rn_quote(rj_gstr(a, "code"))}${rn_params(cx, a, locals)})" }
+    if kind == "pass" {
+        ro signal = rn_kw(cx, "enum_value", rj_gstr(a, "signal"))
+        ro list = match rj_get(a, "nested") {
+            Some(x) => rn_nested_list(cx, x, locals)
+            None => "[]"
+        }
+        return "${rn_kw(cx, "action", "pass")}(${list}, ${signal})"
+    }
     if kind == "cancel_open" {
         ro party = rj_gstr(a, "party")
+        ro except = rj_garr(a, "except")
+        if party == "" && except.len() > 0 { return "${rn_kw(cx, "action", "cancel_open")}(${rn_kw(cx, "action", "except")}: ${rn_nested_list(cx, except[0], locals)})" }
         if party == "" { return rn_kw(cx, "action", "cancel_open") }
         ro word = match rn_pair_ru(cx.parties, party) {
             Some(w) => w

@@ -25,6 +25,9 @@ tests under Oracle 0.1.0 and the output of a unit must stay under 4 KB:
 | `src/machine_text_render/` | `crew_harness.machine_text_render` | tests only (task 113): the reverse generator - the canonical form, the circles "tree - file - tree" in both languages on every machine |
 | `src/machine_agent_en/` | `crew_harness.machine_agent_en` | tests only (task 113): the English sample of the agent step of the methodology goes through the translator, equals the Russian one and runs the 75 scenarios |
 | `src/machine_text_fmt/` | `crew_harness.machine_text_fmt` | tests only (task 110): format 2.7 in the translator - prose and warnings, the expansion of a fragment, sets of literals, separators and `\|`, enum words, the hash of the sample of definitions |
+| `src/machine_nested/` | `crew_harness.machine_nested` | tests only (task 119): the nested machines in the translator, the checks and the reverse generator (the examples of the meeting, the party kind `machine`, `Signal`, `State`, the profile, the edits, the form returns, the set limit) |
+| `src/machine_nested_run/` | `crew_harness.machine_nested_run` | tests only (task 119): the 32 scenarios of the pairs "parent + nested machine" (`nested-*`), the events of the protocol of a call, the registry, the runner |
+| `src/machine_nested_eq/` | `crew_harness.machine_nested_eq` | tests only (task 119): the agent step called by a chat session (`dialog_steps`) leaves what it leaves run alone - 72 of the 75 scenarios of the agent step, compared step by step (two have no nested counterpart: the death between the commit and the send, the stop in the window; one begins with an input the parent cannot give) |
 
 ## Run the tests (Windows, Nova Oracle 0.1.0)
 
@@ -33,15 +36,18 @@ tests under Oracle 0.1.0 and the output of a unit must stay under 4 KB:
 cd C:/work/crew-harness
 nova test src/machine                # the core: 170 tests
 nova test src/machine_table          # the decoder and the checks: 85 tests
-nova test src/machine_run            # the interpreter and the scenarios (the 75 of the agent step too): 111 tests
+nova test src/machine_run            # the interpreter and the scenarios (the 75 of the agent step too): 145 tests
 nova test src/machine_chat           # the equality with the chat machine: 11 tests
-nova test src/machine_text           # the translator of Portolan and its table of words: 162 tests
+nova test src/machine_text           # the translator of Portolan and its table of words: 199 tests
 nova test src/machine_text_eq        # the proofs of the translator: 45 tests
 nova test src/machine_agent          # the proofs of the agent step and of the sample of the methodology: 29 tests
 nova test src/machine_text_fmt       # format 2.7 in the translator: 65 tests
 nova test src/machine_text_lang      # the two languages of Portolan, the news of 2.9 - 2.11: 53 tests
 nova test src/machine_text_render    # the reverse generator JSON -> Portolan and its circles: 49 tests
 nova test src/machine_agent_en       # the English sample of the agent step (75 scenarios too): 14 tests (slow, about a minute)
+nova test src/machine_nested         # the nested machines in the translator, the checks, the generator: 89 tests
+nova test src/machine_nested_run     # the pairs "parent + nested machine", the protocol, the registry: 27 tests
+nova test src/machine_nested_eq      # the agent step called by a session equals the agent step run alone: 6 tests
 nova test --strict-effects src       # the same, and an effect used without being declared in a signature is an error
 nova test src --jobs 4               # the whole tree (the PostgreSQL units need the temporary container of src/pg/testdb.ps1)
 ```
@@ -160,7 +166,7 @@ argument (rule 11 of the specification): they join the "Input" of the state of t
 | `role_context` | `context: RoleContext` | `text` | reading |
 | `call_trace` | - | `text` | reading |
 | `call_step` | - | `int>=0` | reading |
-| `parse_agent_reply` | `reply: AgentReply` | `RoleResult` | reading |
+| `parse_agent_reply` | `reply: AgentReply, role: "witness" \| "author" \| "lens"` | `RoleResult` | reading |
 | `proposal_read` | - | `bool` | reading |
 | `proposal_with_fingerprint` | - | `text` | reading |
 | `proposal_changed_since_attempt` | - | `bool` | reading |
@@ -297,11 +303,11 @@ The data view is the one both can show: `Awaiting` the message and the reply, `D
 
 ## Not implemented (and why)
 
-- `@prepare_return` (rule 24: the preparation is the executor's) - refused by the checks. `trace`, `step` (the envelope of a nested machine call) - allowed by the checks, not bound at run time. A nested machine as a party (`kind: machine`) is decoded and checked; the engine of the product has no nested machines, so `pass` only journals `signal_passed`.
-- A writing primitive that changes data of the machine (`writes` in the registry): `PrimitiveHost` gives back a value only. `profile` of a party, `edits` / `edit_check`, `form_returns` are decoded and checked, not executed (`SendOrder` has no profile; the engine has no
-  return of the form and no check of the object).
-- The data of the mechanics (`open_requests`, `call_request_id`, a plain attempt counter) are kept by the interpreter since task 109 (below); the counters of the elements of a set (`lenses[*].attempt`) and the return of a cancelled party to `to_send` are still the engine's / not run. `includes` are checked for shape (name, version, 12-digit hash); the file of definitions is not read; a fragment is the expanded tree.
+- `@prepare_return` (rule 24: the preparation is the executor's) - refused by the checks.
+- A writing primitive that changes data of the machine (`writes` in the registry): `PrimitiveHost` gives back a value only.
+- `includes` are checked for shape (name, version, 12-digit hash); the file of definitions is not read; a fragment is the expanded tree.
 - The qualified `answer: Type.Variant`.
+- Nested machines (task 119, section below): the answers held while the machine is on pause (rule 14) are dropped as `event_ignored`; the result table "by role" of a party is not modelled; the modes `nothing` / `no_return` of a nested call are not told apart; a machine has ONE party of a set; a hand-written Nova machine cannot be nested (only a machine that is data); the hub does not run a nested machine on the server (the memory runner `portolan test` does).
 
 ## Oracle 0.1.0: more limits met in task 107
 
@@ -345,7 +351,7 @@ What the interpreter got for it (decisions are in `doc/tasks/109-agent-step-mach
 - **Scenarios**: the step key `host` (the answers of the primitives of the host from this step on, in the lossless JSON of the core: `reply_validation`, `close_agent_turn`), the file key `params` (the values of the parameters
   of the machine that the project gives, `portolan_machine_with`), the field `request` of the event `start`. `scenarios/agent-step-*` are 75 files: a scenario for every row that can be taken (`agent-step-<state>-<n>`,
   `agent-step-common-<n>`, `agent-step-end-<end>-<n>`) and the flows (`agent-step-flow-*`). Seven rows cannot be taken by any events (the rows `else` of the forks and the row 6 of the common events); the test names them.
-- Not run (still `unsupported`): the profile of a party, `Возвратов формы` above zero, `Правит`, nested machines, `вход_заново: запросы_из_к_отправке`.
+- Not run at task 109 (still `unsupported`): the profile of a party, `Возвратов формы` above zero, `Правит`, nested machines, `вход_заново: запросы_из_к_отправке`. Task 119 runs all of them (section "Nested machines" below).
 
 # Format 2.7 (task 110)
 
@@ -376,3 +382,17 @@ Task 113 (`doc/tasks/113-portolan-bilingual/`). The names: the interpreter is `P
 transitional period for the former names of the files (Portolan 2.11, Я-22): `is_table_name` takes `*.portolan.md` and `*.portolan.txt`, `is_machine_json_name` takes `*.portolan.json`, nothing else. The translator reads a file in Russian or in English by the line
 `- language: ru|en` and writes the same tree (`src/machine_text`, [README](../machine_text/README.md)); the reverse generator writes a tree back as a file of Portolan in either language. The tests: `nova test src/machine_table` (85), `src/machine_run` (111),
 `src/machine_text` (162), `src/machine_text_lang` (53), `src/machine_text_render` (49), `src/machine_agent_en` (14).
+
+# Nested machines (task 119)
+
+Task 119 (`doc/tasks/119-nested-machines/`, the decision and the numbers are in its `analysis.md`) runs the constructs that the interpreter refused before: a party of the kind `machine` (rule 35), the profile of a party, `Предел запросов` of a set, `Возвратов формы` above zero, `Правит`, the counters of the elements of a set (`lenses[*].attempt`), `вход_заново: запросы_из_к_отправке` with the return of the cancelled parties to `to_send`, and the built-in types `Signal` and `State`.
+
+- **The call.** A nested machine is a separate engine (`Engine[PortolanMachine, PortolanState]`) in the same process: its own journal and store, its engine id `<parent id>/<request id>`, its trace `<parent trace>/<request id>`. The request of the parent to a party of the kind `machine` is a `SendOrder`; the nested machine starts with the event `start` (the field `request` is the request, the input is the record of the party's `input_type`, the column `профиль` of the parties table is its field `profile`). When it ends, its answer is the event `Answered` of the parent, its refusal (any code) is `Refused` with the code; a result that the parent reads as text goes through the optional `parse` of the party (a primitive failure is a bad form). A request sent again (rule 22, a restart) does not start the nested machine again; an answer that is ready is delivered again (rule 35.4).
+- **The signals.** The action `передать(сторона, сигнал)` (`pass`) orders a signal for the open requests of a party; the engine holds it (`Engine.pending_signals`, journal `signal_ordered`) until the runner or the hub passes it (`signals_passed`, journal `signal_passed` of the methodology) - a signal ordered in the window between the commit and the send is not lost by a death. A nested machine gets `stop`, `continue`, `halt` as the events `parent_stop`, `parent_continue`, `parent_halt` and a cancelled request as `cancel_request` (the input is the request id); the fragment "Пауза" with the list `вложенные` handles them, and `отменить_открытые(кроме: вложенные)` leaves the nested requests open on a pause.
+- **The registry.** `NestedRegistry` (`src/machine_run/nested.nv`) maps the name in the cell `вид` to a machine; `check_registry(parent, registry)` is the check of a pair (the machine is in the registry; the input type of the party is the record of the input of the machine and the result of the party is its result: `check_nested` of `src/machine_table`). The runner `run_nested_scenario` (`nested_scenario.nv`) keeps one engine and one memory world per nested machine and, after every step, passes between them the requests, the signals, the cancels and the replies. The files are `scenario/0` with two more step keys: `on` (the id of the nested request the step acts on; the parent when absent) and `also` (what the other engines must leave: `parent` or a request id; each value is an `expect`). The `host` answers of a step of the parent hold for the nested machines too.
+- **Sets.** A set party (`id` empty) sends `to_send` ∩ the set, at most `Предел запросов` − the open requests; each element has its counters (`lenses[*].attempt` is bumped for the element that is sent); the request id is `<element>-<attempt>`. A cancelled element returns to the front of `to_send` (`вход_заново: запросы_из_к_отправке`). The entry into a state again sends nothing when the request is open (rule 12); a restart cancels the open ones and sends again (rule 18).
+- **The rest.** `Правит`: when the answer is read by an expression that sets a bool primitive, the answer is rejected, a new attempt is made (journal `answer_edited`); `Возвратов формы`: the hidden datum `$form_used` counts the returns (journal `form_returned`), the next one is the failure `FormNotFixed`; no idle term on a call of a machine; the names of a step and of a trace come from the incoming event.
+- **Product-only journal codes**: `signal_ordered`, `answer_edited`, `form_returned`, `request_repeated` (the methodology has `signal_passed` only).
+- **Scenarios.** `scenarios/nested-call-*` (17: success, refusal, term, cancel, restart, death between the changes, another party in the window, an answer after a cancel, a duplicate answer, stop/continue/halt), `nested-set-*` (9: a lens set with one refusal, `Предел запросов`, a restart, a cancel), `nested-steps-*` (6: the chat session `dialog_steps` calling the agent step). The machines are `caller`, `callee`, `fan`, `dialog_steps`; they are generated by `doc/tasks/119-nested-machines/tools/gen_nested_scenarios.py` (the scenarios) and written in Portolan (the machines).
+- **Equality.** `src/machine_nested_eq`: 72 of the 75 scenarios of the agent step are run alone and as the nested machine of `dialog_steps` (the chat session of the meeting, "Шаг агента" is its turn), and after every step the state, the data, the journal and the requests of the two runs are equal.
+- **Where it is not wired.** The hub of the server does not run a nested machine; the memory runner (`portolan test <folder>`) does. A machine that is a hand-written Nova machine cannot be nested.

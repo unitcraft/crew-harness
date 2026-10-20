@@ -236,7 +236,7 @@ test "issue text" {
 
 test "example machines" {
     ro files = machine_files()
-    assert(files.len() == 8)
+    assert(files.len() == 12)
     for f in files {
         ro issues = issues_of(f.text)
         if issues.len() > 0 { panic("${f.name}: ${issues.join(" | ")}") }
@@ -247,7 +247,8 @@ test "example machines" {
 test "set rule" {
     ro lenses = text_of_file(machine_files(), "lenses.portolan.json")
     assert(ok_text(lenses))
-    assert(says(lenses.replace("\"writes\": \"rows_and_mechanics\"", "\"writes\": \"rows\""), "written by rows_and_mechanics (rule 21)"))
+    // the set is a list of the ids of the parties; the datum to_send (rows_and_mechanics) is what the mechanics hand over, a set that is another datum is allowed (task 119)
+    assert(ok_text(lenses.replace("\"writes\": \"rows_and_mechanics\"", "\"writes\": \"rows\"")))
     assert(says(lenses.replace("\"id\": \"\"", "\"id\": \"lens\""), "has the id of the element of the set"))
     assert(says(lenses.replace("\"set\": { \"op\": \"name\", \"name\": \"to_send\" },", "\"set\": { \"op\": \"name\", \"name\": \"ghost\" },"), "the name ghost is not a datum"))
 }

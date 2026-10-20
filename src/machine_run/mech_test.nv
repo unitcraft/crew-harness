@@ -31,21 +31,49 @@ test "mx limit zero" {
 }
 
 test "mx limit with a set" {
+    // a limit with a set sends at most so many at once (task 119); it was refused before
     ro lenses = machine_text("lenses.portolan.json")
     assert(load_err(lenses) == "ok")
     ro limited = lenses.replace("\"initial\": \"Prepare\",", "\"request_limit\": { \"op\": \"lit\", \"value\": 2 }, \"initial\": \"Prepare\",")
     assert(limited != lenses)
-    assert(load_err(limited).contains("not run with a set"))
+    assert(load_err(limited) == "ok")
+    assert(build_from(limited).limit == 2)
 }
 
-test "mx limit guards" {
-    // the pause does not cancel the request of the agent: the new request would be the second open one
+test "mx entry again sends nothing" {
+    // the pause does not cancel the request of the agent: the return to the saved state finds the request open and sends nothing (rule 12, task 119); it was a second request
     ro m = build_from(agent_text().replace("{\"do\":\"cancel_open\"}", "{\"do\":\"cancel_open\",\"party\":\"gatekeeper\"}"))
     ro run = run_scenario(m, scenario_of("agent-step-pause-1.scenario.test.json"))
     ro last = run.traces[run.traces.len() - 1]
     assert(last.journal.len() == 1)
-    assert(last.journal[0].starts_with("machine_defect(kind=request_limit;"))
-    assert(last.outcome == "refusal:NoResult")
+    assert(last.journal[0].starts_with("human_continue("))
+    assert(last.open.len() == 1)
+    assert(last.open[0] == "agent-1")
+    assert(last.sent.len() == 1)
+    assert(last.outcome == "none")
+}
+
+// Two agents, a limit of one: the state A waits for the agent a, the signal `jump` leads to B that asks the agent b while the request of a is open.
+fn two_agents() -> str => `{"format":"machine/2","machine":"Two","version":"1","request_limit":{"op":"lit","value":1},
+"data":[{"name":"open_requests","type":"[]text","initial":{"expr":{"op":"list","items":[]}},"writes":"mechanics"},
+{"name":"a_attempt","type":"int>=0","initial":{"expr":{"op":"lit","value":0}},"monotonic":true,"writes":"mechanics"},
+{"name":"b_attempt","type":"int>=0","initial":{"expr":{"op":"lit","value":0}},"monotonic":true,"writes":"mechanics"}],
+"parties":[{"name":"a","id":"a","kind":"agent","result":"text","counter":"a_attempt"},{"name":"b","id":"b","kind":"agent","result":"text","counter":"b_attempt"}],
+"signals":[{"name":"jump"}],"initial":"A",
+"states":[{"name":"A","kind":"appeal","party":"a","rows":[{"n":1,"event":{"kind":"signal","name":"jump"},"to":"B"},{"n":2,"event":{"kind":"answer"},"to":"End"}]},
+{"name":"B","kind":"appeal","party":"b","rows":[{"n":1,"event":{"kind":"answer"},"to":"End"}]},
+{"name":"End","kind":"end","reads":[]}],
+"ends":{"result":"text","rows":[{"state":"End","n":1,"when":{"op":"lit","value":true},"answer":{"kind":"answer","value":{"op":"lit","value":"done"}}}]}}`
+
+test "mx limit guards" {
+    // the limit of the requests that the machine holds open (rule 21): a second appeal that would pass it is a defect
+    ro m = build_from(two_agents())
+    assert(m.limit == 1)
+    ro first = run1(m, m.initial(), word_in("start", ""))
+    assert(first.state.name == "A")
+    ro jumped = run1(m, first.state, word_in("jump", ""))
+    assert(summary(jumped.orders).starts_with("log:machine_defect(kind=request_limit;"))
+    assert(summary(jumped.orders).contains("finish:refusal:NoResult"))
 }
 
 test "mx counters and open" {

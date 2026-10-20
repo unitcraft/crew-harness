@@ -14,16 +14,19 @@ type TxPair { ru str, en str }
 
 /// TxEnv: the names that the file itself introduces, collected before the sections are translated: states (the Latin name is in the heading), the data,
 /// the constants and the parameters (`globals`), the definitions, the declared types and their cases, the primitives, the parties, the words of the gates,
-/// the parts of an answer and the signals, and the nested machines that a fragment is given empty (`empty_lists`).
+/// the parts of an answer and the signals, the nested machines that a fragment is given empty (`empty_lists`) or not empty (`nested_lists`: the name of the parameter and the Latin names of the
+/// machines, joined by a comma).
 type TxEnv {
     states []TxPair, globals []TxPair, defs []TxPair, types []TxPair, cases []TxPair, prims []TxPair,
-    parties []TxPair, words []TxPair, parts []TxPair, signals []TxPair, input_fields []TxPair, empty_lists []str
+    parties []TxPair, words []TxPair, parts []TxPair, signals []TxPair, input_fields []TxPair, empty_lists []str,
+    nested_lists []TxPair
 }
 
 fn env_new() -> TxEnv {
     TxEnv {
         states: []TxPair.new(), globals: []TxPair.new(), defs: []TxPair.new(), types: []TxPair.new(), cases: []TxPair.new(), prims: []TxPair.new(),
-        parties: []TxPair.new(), words: []TxPair.new(), parts: []TxPair.new(), signals: []TxPair.new(), input_fields: []TxPair.new(), empty_lists: []str.new()
+        parties: []TxPair.new(), words: []TxPair.new(), parts: []TxPair.new(), signals: []TxPair.new(), input_fields: []TxPair.new(), empty_lists: []str.new(),
+        nested_lists: []TxPair.new()
     }
 }
 
@@ -390,7 +393,8 @@ fn ty_parse(mut p TxP, mut cx TxCx) -> Result[str, TranslateError] {
     if p_eat_kw(p, words, "type", "float") { return Ok("float") }
     if p_eat_kw(p, words, "type", "text") { return Ok("text") }
     if p_eat_kw(p, words, "type", "id") { return Ok("id") }
-    if p_eat_kw(p, words, "type", "State") { return Ok("text") }
+    if p_eat_kw(p, words, "type", "State") { return Ok("State") }
+    if p_eat_kw(p, words, "type", "Signal") { return Ok("Signal") }
     if p_eat_kw(p, words, "type", "bool") { return Ok("bool") }
     if p_is_kw(p, words, "type", "full map") || p_is_kw(p, words, "type", "map") {
         ro full = p_eat_kw(p, words, "type", "full map")

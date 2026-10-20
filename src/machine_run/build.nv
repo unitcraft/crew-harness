@@ -5,7 +5,7 @@ module crew_harness.machine_run
 // ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import crew_harness.machine.{Value, Expr, Binding, Scope, DefTable, DefFn, Registry, TextType, BoolType, check_value}
-import crew_harness.machine.{Null, Int, Text, List, RecordField, eval_defs, make_record, error_text, NoHost, call, name_ref, bin, lambda1}
+import crew_harness.machine.{Null, Int, Text, List, RecordField, eval_defs, make_record, error_text, NoHost, call, name_ref, bin, lambda1, expr_json}
 import crew_harness.machine_table.{MachineDef, ParamDef, load_machine, issue_text, find_state, find_party}
 
 /// The names of the end states as a list of texts: the global `end_states` and the definition `end(s)` of the catalog (format 12) use it.
@@ -121,7 +121,8 @@ export fn portolan_machine_with(def MachineDef, registry Registry, overrides []P
         globals = with_binding(globals, p.name, v)
     }
     ro table = base_table(def, registry, globals)
-    ro data = match initial_data_of(def, table, Null) {
+    // a machine with an input has its data made at the start; an initial value that reads the input cannot be evaluated before (it is evaluated then, and may fail then)
+    ro data = match initial_data_of(def, table, Null, def.input.present) {
         Ok(d) => d
         Err(m) => return Err(m)
     }
@@ -140,9 +141,6 @@ export fn portolan_machine_with(def MachineDef, registry Registry, overrides []P
         match lv {
             Int(n) => {
                 if n < 1 { return Err("the request limit must be 1 or more, got ${n}") }
-                for st in def.states {
-                    if st.set.len() > 0 { return Err("the request limit is not run with a set of parties (the appeal ${st.name}): the counters of the elements are the engine's") }
-                }
                 limit = n
             }
             _ => return Err("the request limit must be an int")
@@ -151,8 +149,18 @@ export fn portolan_machine_with(def MachineDef, registry Registry, overrides []P
     Ok(PortolanMachine { def, table, initial_data: data, quiet_start: quiet, replies: []ScriptedReply.new(), limit })
 }
 
+// Does the expression read the input of the call: the name `input` or one of the fields of the input?
+fn reads_input(def MachineDef, e Expr) -> bool {
+    ro text = expr_json(e)
+    if text.contains("\"op\":\"name\",\"name\":\"input\"") { return true }
+    for f in def.input.fields {
+        if text.contains("\"op\":\"name\",\"name\":\"${f.name}\"") { return true }
+    }
+    false
+}
+
 /// The initial data. `input` is the record of the input fields (or Null): a datum `from_input` takes its field, an expression may read `input`.
-fn initial_data_of(def MachineDef, table DefTable, input Value) -> Result[Value, str] {
+fn initial_data_of(def MachineDef, table DefTable, input Value, lenient bool) -> Result[Value, str] {
     mut fields = []RecordField.new()
     // ORACLE-WORKAROUND(45): a copy of a `ro` list (`table.globals`) built by hand in a loop; write `mut globals = table.globals` when item 45 is fixed
     mut globals = []Binding.new()
@@ -181,15 +189,23 @@ fn initial_data_of(def MachineDef, table DefTable, input Value) -> Result[Value,
                 fields.push(RecordField { name: d.name, value: v })
             }
             InitialExpr(e) => {
-                ro v = match eval_global(e, globals, table) {
-                    Ok(x) => x
-                    Err(m) => return Err("the initial value of ${d.name}: ${m}")
+                // before the start there is no input: an expression that reads it is evaluated at the start (it may fail then), the others now
+                ro early = lenient && reads_input(def, e)
+                match eval_global(e, globals, table) {
+                    Ok(v) => {
+                        match check_value(d.spec, v, def.types) {
+                            Ok(u) => fields.push(RecordField { name: d.name, value: v })
+                            Err(x) => {
+                                if !early { return Err("the initial value of ${d.name}: ${x.path} ${x.message}") }
+                                fields.push(RecordField { name: d.name, value: Null })
+                            }
+                        }
+                    }
+                    Err(m) => {
+                        if !early { return Err("the initial value of ${d.name}: ${m}") }
+                        fields.push(RecordField { name: d.name, value: Null })
+                    }
                 }
-                match check_value(d.spec, v, def.types) {
-                    Ok(u) => ()
-                    Err(x) => return Err("the initial value of ${d.name}: ${x.path} ${x.message}")
-                }
-                fields.push(RecordField { name: d.name, value: v })
             }
         }
     }

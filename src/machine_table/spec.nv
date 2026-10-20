@@ -106,6 +106,17 @@ fn sr_literal_set(mut r SpecReader) -> Result[TypeSpec, str] {
 }
 
 fn sr_named(name str, defs TypeDefs, r SpecReader) -> Result[TypeSpec, str] {
+    if name == "State" {
+        // the built-in `State` (format section 2): the set of the names of the states of the machine (a machine of one state: any text)
+        for v in defs.variants {
+            if v.name == "State" {
+                mut words = []str.new()
+                for c in v.cases { words.push(c.name) }
+                if words.len() >= 2 { return Ok(TextSet(words)) }
+                return Ok(TextType)
+            }
+        }
+    }
     for v in defs.variants {
         if v.name == name { return Ok(VariantType(name)) }
     }

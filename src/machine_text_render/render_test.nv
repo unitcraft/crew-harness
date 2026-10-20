@@ -454,7 +454,7 @@ test "rn actions compound" {
 }
 
 test "rn unsupported noted" {
-    ro bad = `{"format":"machine/2","machine":"M","version":"1","data":[],"parties":[{"name":"n","id":"n","kind":"machine","counter":"c"}],"initial":"S","states":[],"ends":{"result":"int","rows":[]}}`
+    ro bad = `{"format":"machine/2","machine":"M","version":"1","data":[],"parties":[{"name":"n","id":"n","kind":"robot","counter":"c"}],"initial":"S","states":[],"ends":{"result":"int","rows":[]}}`
     ro made = render_machine(bad, "en")
     assert(made.notes.len() > 0)
     assert(made.notes[0].contains("$.parties[0]"))

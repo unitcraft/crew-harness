@@ -47,7 +47,9 @@ test "ty base" {
     assert(ty("текст") == "text")
     assert(ty("да/нет") == "bool")
     assert(ty("ид") == "id")
-    assert(ty("Состояние") == "text")
+    assert(ty("Состояние") == "State")
+    assert(ty("Сигнал") == "Signal")
+    assert(ty("?Состояние") == "?State")
 }
 
 test "ty compound" {

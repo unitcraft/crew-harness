@@ -2,8 +2,8 @@
 //
 // A fragment is a file of its own (here: fragments/pause.fragment.md, compiled in) with parameters; the call names all of them, they are put in the text as
 // `<параметр>` before the text is read, and the data, the common events and the states of the fragment join the machine. A fragment is given the list of
-// the nested machines `вложенные`; the interpreter has no nested machines, so only the empty list is supported: `передать` to nobody and
-// `отменить_открытые(кроме: [])` are an ordinary cancel.
+// the nested machines `вложенные`: an empty list makes `передать` to nobody nothing and `отменить_открытые(кроме: [])` an ordinary cancel; a list of names
+// makes them `pass` actions to those machines and a cancel that leaves their requests open (task 119).
 module crew_harness.machine_text
 
 // ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
@@ -184,8 +184,9 @@ fn fragment_text(call TxCall, mut cx TxCx) -> Option[str] {
             } else if q.text == "" {
                 cx.env.empty_lists.push(q.name)
             } else {
-                cx_unsupported(cx, q.tok, "вложенные машины в подключении фрагмента (`${q.name}: [${q.text}]`)")
-                cx.env.empty_lists.push(q.name)
+                mut names = []str.new()
+                for one in q.text.split(",") { names.push(nested_name_text(cx, q.tok, one)) }
+                pair_add(cx.env.nested_lists, q.name, names.join(","))
             }
         } else if key == "cancel_requests" {
             if !behavior_words_cancel(words).contains(q.text) {
@@ -194,9 +195,9 @@ fn fragment_text(call TxCall, mut cx TxCx) -> Option[str] {
         } else if key == "reenter" {
             if !behavior_words_reenter(words).contains(q.text) {
                 note(cx, tx_err(q.tok.line, q.tok.col, "structure", "`${q.name}`: ${behavior_words_reenter(words).join(", ")}"))
-            } else if q.text == kw(words, "enum_value", "requests_from_to_send") {
-                cx_unsupported(cx, q.tok, "`${q.name}: ${q.text}` (после повторного входа в обращение набора уходят запросы из `${kw(words, "readable", "to_send")}`)")
             }
+            // `запросы_из_к_отправке`: a return to the saved state (`предыдущее`) into the appeal of a set sends the parties of `к_отправке` (rule 21); the interpreter does it for every set,
+            // so the parameter changes no text of the tree (the generator writes the fragment as the machine's own text, 1b (м), and could not carry it)
         } else if key == "write_right" {
             if q.kind != "string" { note(cx, tx_err(q.tok.line, q.tok.col, "structure", "`${q.name}` — примечание в кавычках")) }
         }

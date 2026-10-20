@@ -60,7 +60,7 @@ test "in wrapper loads" {
             assert(def.includes.len() == 2)
             assert(def.definitions.len() == 15)
             assert(def.constants.len() == 1)
-            assert(def.types.variants.len() == 3)
+            assert(def.types.variants.len() == 5)
         }
         Err(issues) => panic("${issues[0].path}: ${issues[0].message}")
     }

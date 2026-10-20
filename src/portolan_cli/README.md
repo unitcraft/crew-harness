@@ -42,8 +42,8 @@ portolan --help | portolan <command> --help | portolan help [<command>]
 | `convert` | a file of Portolan in the other language: `compile`, then `render`. The meaning is kept (the tree of the machine is the same); the comments (paragraphs of free text, lines starting with `>` or `//`) do not go through the JSON, and the program says so on the standard error (`portolan: note: ...`). |
 | `check` | the translation and the checks of the table of a file of Portolan, or the decoding and the checks of a JSON. Prints `ok` (`ok (2 warnings)`) and the code 0 when there are no errors; the errors and the warnings (P-1) go to the standard error. |
 | `summary` | the summary of a machine: the states with their kinds, the rows, the actions, the data, the parties. |
-| `run` | one scenario (`scenario/0`) on a machine: `ok`, or the report of the differences (the step, the part, what was expected and what came) and the code 1. The machine can be a JSON or a file of Portolan. The scenario names its machine; another name is an error. |
-| `test` | every `*.scenario.test.json` of the folder (and of the folders under it) on the machine that the scenario names; prints a report of each scenario that differs and `N of M scenarios passed`. The machines are the `*.portolan.json` files of the folder; a machine that has no JSON file is read from `*.portolan.md` (`*.portolan.txt`) when a scenario asks for it. `-v` also prints `ok <file>` for every scenario that passed. The code is 1 when one differs. |
+| `run` | one scenario (`scenario/0`) on a machine (a machine that calls nested machines is refused with the code 1 and the hint to use `portolan test <folder>`, because the nested machines are found in a folder): `ok`, or the report of the differences (the step, the part, what was expected and what came) and the code 1. The machine can be a JSON or a file of Portolan. The scenario names its machine; another name is an error. |
+| `test` | every `*.scenario.test.json` of the folder (and of the folders under it) on the machine that the scenario names; prints a report of each scenario that differs and `N of M scenarios passed`. The machines are the `*.portolan.json` files of the folder; a machine that has no JSON file is read from `*.portolan.md` (`*.portolan.txt`) when a scenario asks for it. `-v` also prints `ok <file>` for every scenario that passed. The code is 1 when one differs. A machine with a party of the kind `machine` (task 119) is run together with the machines it calls: they are found in the same folder by the name in the cell `вид` (a JSON file, else a file of Portolan), the pair is checked first (`the nested machines do not fit: ...`, a machine that is not in the folder is `the machine X of the party Y is not in the registry`), and the steps `on` / `also` of its scenarios act on and compare the nested machines. |
 | `version` | `portolan 0.1.0 (Portolan 2.5 - 2.11, machine/2)`. |
 
 `-o` (`--output`) writes the product into a file instead of the standard output; an existing file is not overwritten without `--force`, and nothing is written when the command has errors (except with `--lenient`). There is no
@@ -75,7 +75,7 @@ $p = "target/portolan.exe"
 & $p convert target/chat.en.portolan.md --language ru -o target/chat.ru.portolan.md       # back to Russian (through the JSON)
 & $p summary target/chat.portolan.json                                                    # the states, the rows, the actions
 & $p run src/machine/machines/chat.portolan.json src/machine/scenarios/chat-message-opens-request.scenario.test.json   # ok
-& $p test src/machine                                                                     # 168 of 168 scenarios passed
+& $p test src/machine                                                                     # 200 of 200 scenarios passed
 ```
 
 An error in a file (a transition leads to a state that is not there; the quoted line is cut here):
@@ -96,8 +96,8 @@ Each unit is a folder; `nova test` runs a unit with all its `*_test.nv` files (t
 
 ```powershell
 nova test src/portolan_cli --timeout 600            # 119 tests: help, version, compile, render, convert, check, summary, run, test on a small machine (Russian and English), the errors and the codes
-nova test src/portolan_eq --timeout 600             # 30 tests: compile -> render -> compile and convert ru -> en -> ru give an equal JSON on the 7 machines of the product, the commands are the functions of the translator
-nova test src/portolan_scenarios --timeout 600      # 16 tests: `test` passes the 168 scenarios of src/machine, `run` passes the 75 of the agent step one by one, the chat, the small machines
+nova test src/portolan_eq --timeout 600             # 45 tests: compile -> render -> compile and convert ru -> en -> ru give an equal JSON on the 7 machines of the product and on the 4 of the nested machines (task 119: `caller`, `callee`, `fan`, `dialog_steps`), the commands are the functions of the translator
+nova test src/portolan_scenarios --timeout 600      # 22 tests: `test` passes the 200 scenarios of src/machine (the 32 of the nested machines too; a parent with its callee from JSON and from a table, a callee that is missing or does not fit, `run` of a parent refused), `run` passes the 75 of the agent step one by one, the chat, the small machines
 ```
 
 `--timeout 600`: on a loaded machine `nova test` kills a unit after about 100 seconds (`spikes/env/README.md`, task 113); the units of the circles take 60-90 s. The program itself is checked on real files in the log of the task.

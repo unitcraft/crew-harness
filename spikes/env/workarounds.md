@@ -4,7 +4,7 @@
 
 Every place of the product that goes round a defect or a limit of Oracle carries a comment `// ORACLE-WORKAROUND(N): what is gone round; how to simplify when item N is fixed`, where N is an item of [README.md](README.md) ("Known problems"). `git grep ORACLE-WORKAROUND` finds them, `python scripts/oracle-workarounds.py --list` prints them by item with the line. When Nova fixes an item, open its places below, simplify the code as the mark says and remove the mark; then rerun `python scripts/oracle-workarounds.py --index`.
 
-Marks: 171 in 102 files. Items with marks: 47. Items without marks: 10 (no workaround in the code).
+Marks: 175 in 105 files. Items with marks: 49. Items without marks: 11 (no workaround in the code).
 
 | Item | What | Places (files; marks in a file if more than one) | Marks |
 |---|---|---|---|
@@ -50,7 +50,7 @@ Marks: 171 in 102 files. Items with marks: 47. Items without marks: 10 (no worka
 | 40 | `user_type_child`: a user record named `Child` (the core of the machines had one, the node of a tree of an expression) next to... | `src/machine/expr.nv` | 1 |
 | 41 | `same_name_other_type`: a parameter named `list` of the type `[]Pair` in one function and a name `list` bound by a pattern... | `src/machine_text/decl.nv`, `src/machine_text/machine.nv`, `src/machine_text/parse.nv` | 3 |
 | 42 | `split_index`: indexing the result of `str.split(sep)` (`parts[0]`, the result is an iterator) passes the checker and the code... | `src/machine_text_unicode/unicode_test.nv` (2) | 2 |
-| 43 | `user_fn_fence`: a user function named `fence` is generated as the C function `nova_fn_fence`, which the runtime header already... | `src/machine_text_fmt/support_test.nv` | 1 |
+| 43 | `user_fn_fence`: a user function named `fence` is generated as the C function `nova_fn_fence`, which the runtime header already... | `src/machine_nested/support_test.nv`, `src/machine_text_fmt/support_test.nv` | 2 |
 | 44 | `record_after_enum_list`: a sum type with a variant that holds a list of a record, the record declared AFTER the sum type and... | `src/machine_text/rj.nv`, `src/machine_text/tj.nv` | 2 |
 | 45 | `mut_of_ro_param`: `mut out = items` with `items` a parameter without `mut` (or a `ro` binding) that holds a list or a text is... | `src/machine/eval.nv` (4), `src/machine_run/build.nv` (3), `src/machine_run/encode.nv`, `src/machine_run/machine.nv`, `src/machine_run/scenario.nv` (2), `src/machine_run/step.nv` (3), `src/machine_table/check.nv` (2), `src/machine_text/parse.nv` (2), `src/machine_text/render_expr.nv` (2) | 20 |
 | 46 | `assign_mut_param`: assigning a new list to a `mut` PARAMETER of a heap type (`items = []str.new()`) changes only the local name... | `src/machine_text/lex.nv` | 1 |
@@ -59,9 +59,12 @@ Marks: 171 in 102 files. Items with marks: 47. Items without marks: 10 (no worka
 | 49 | `fn_name_two_modules`: a PRIVATE generic function `begin[T]` of one module and a function `begin(n int)` of another module of the... | `src/server/hub.nv` | 1 |
 | 50 | test helper `ev` next to the function `ev` (no small reproduction; the reproduction is the unit): the test file... | `src/machine/eval_test.nv` | 1 |
 | 51 | `match_record_literal_arg`: a record literal inside a list literal (or directly) in the argument of the call that is the... | `src/machine_dialog/table_test.nv`, `src/machine_dialog_eq/equal_test.nv`, `src/machine_dialog_eq/inject_test.nv` | 3 |
-| 52 | `for_in_list_of_lists`: `for item in [["a"], ["b", "c"]]`, an array literal whose items are arrays, does not compile... | `src/portolan_cli/help_test.nv` | 1 |
+| 52 | `for_in_list_of_lists`: `for item in [["a"], ["b", "c"]]`, an array literal whose items are arrays, does not compile... | `src/machine_nested/translate_test.nv`, `src/portolan_cli/help_test.nv` | 2 |
 | 53 | `same_fn_name_two_modules` (with the helper module `same_fn_name_def`): two modules of one program that each declare a PRIVATE... | `src/portolan_cli/cli.nv` | 1 |
 | 54 | `generic_literal_args`: a record literal of a generic record with its type arguments written, `Holder[str] { id: "a", input: "b"... | `src/engine/engine.nv` | 1 |
 | 55 | `mock_fs_create_dir_all`: `create_dir_all("/a/b/c")` on the memory file system (`mock_fs`) makes only the LAST folder... | `src/portolan_cli/support_test.nv`, `src/portolan_eq/support_test.nv`, `src/portolan_scenarios/support_test.nv` | 3 |
 | 56 | The stream of the upgrade hook of Polaris 0.2.4 (no reproduction: it needs a connection): the stream that... | `src/server/front/front.nv` | 1 |
 | 57 | The cost of SCRAM on the unoptimized build (no reproduction: it needs a PostgreSQL server; the note of "Also met in task 098"): a... | `src/pg/testdb.ps1` | 1 |
+| 60 | A protocol method that nothing calls is cut from the program, and the C of the program does not build (no small reproduction... | `src/engine/machine.nv` | 1 |
+| 61 | `none_arg_generic_option`: a literal `None` as the argument of a parameter of the type `Option[Wrap[str]]`, where `Wrap` is a... | `src/machine_nested_run/proto_test.nv` | 1 |
+| 62 | `with` is a reserved word: a variable, a parameter or a field named `with` (the natural name of "the machine with the answers of... | no workaround in the code | 0 |

@@ -86,19 +86,6 @@ test "failure fallback" {
     assert(summary(ignored.orders) == "log:event_ignored(event=agent_refused;state=Work)")
 }
 
-test "pass and except" {
-    ro passing = machine_text("gate.portolan.json").replace("{ \"do\": \"journal\", \"code\": \"work_done\" },", "{ \"do\": \"journal\", \"code\": \"work_done\" }, { \"do\": \"pass\", \"nested\": { \"op\": \"list\", \"items\": [ { \"op\": \"lit\", \"value\": \"a\" }, { \"op\": \"lit\", \"value\": \"b\" } ] }, \"signal\": \"stop\" },")
-    ro m = build_from(passing)
-    ro working = run1(m, m.initial(), start_with("")).state
-    ro r = run1(m, working, stamped(EventKind.Answered, "answer", Some("agent-1"), ""))
-    assert(summary(r.orders) == "log:work_done,log:signal_passed(nested=a;signal=stop),log:signal_passed(nested=b;signal=stop),finish:answer:1,save")
-    ro keep = machine_text("gate.portolan.json").replace("{ \"do\": \"cancel_open\" }", "{ \"do\": \"cancel_open\", \"except\": [ { \"op\": \"lit\", \"value\": \"agent\" } ] }")
-    ro k = build_from(keep)
-    ro w = run1(k, k.initial(), start_with("")).state
-    ro stopped = run1(k, w, stop_by("ann"))
-    assert(summary(stopped.orders) == "log:human_stop(author=ann;source=console;event=e-1),save")
-}
-
 test "set of parties" {
     ro m = build("lenses.portolan.json")
     ro r = run1(m, m.initial(), start_with("{\"order\":[\"a\",\"b\",\"c\"]}"))

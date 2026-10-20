@@ -7,7 +7,8 @@ import std.text
 import crew_harness.machine.{NamedText, standard_registry}
 import crew_harness.machine_table.{load_machine, parse_machine, issue_text}
 import crew_harness.machine_text.{translate_report, translate_checked, TranslateReport, error_text, render_summary, render_machine}
-import crew_harness.machine_run.{PortolanMachine, load_portolan_machine, parse_scenario, scenario_problem, run_scenario, run_ok, report_text}
+import crew_harness.machine_run.{PortolanMachine, NestedRegistry, check_registry, run_nested_scenario, load_portolan_machine, parse_scenario, scenario_problem, run_scenario, run_ok, report_text}
+import crew_harness.machine_table.{MachineParty}
 
 // ORACLE-WORKAROUND(9): the type is not named `Outcome`: a user type named like a prelude type breaks the build of the program (CC-FAIL "no member named tag in struct Nova_Outcome"); name it `Outcome` when item 9 is fixed
 /// CmdResult: the result of a command. `out` is the product (it goes to the standard output or to the file of `-o`), `err` the lines of the standard error, `code` the exit code
@@ -175,6 +176,9 @@ export fn run_command(machine_text str, machine_file str, scenario_text str, sce
                     if sc.machine != machine.def.name {
                         return done("", "${scenario_file}:1:1: scenario: the scenario is for machine ${sc.machine}, the machine of ${machine_file} is ${machine.def.name}\n", 1)
                     }
+                    if has_nested(machine) {
+                        return done("", "${scenario_file}:1:1: scenario: the machine ${machine.def.name} calls nested machines: they are found in a folder, use `portolan test <folder>`\n", 1)
+                    }
                     ro problem = scenario_problem(machine, sc)
                     if problem != "" { return done("", "${scenario_file}:1:1: scenario: ${problem}\n", 1) }
                     ro run = run_scenario(machine, sc)
@@ -199,6 +203,32 @@ export fn is_test_file(name str) -> bool => is_scenario_name(name) || is_json_ma
 
 /// A machine found in the folder: the file it came from and the machine.
 type FoundMachine { file str, machine PortolanMachine }
+
+// Does the machine call nested machines (a party of the kind `machine`)?
+fn has_nested(machine PortolanMachine) -> bool {
+    for p in machine.def.parties {
+        if p.kind == MachineParty { return true }
+    }
+    false
+}
+
+// The registry of the machines of the folder for a caller: every machine under its own name (the name of a party of the kind `machine` is the name of the machine it calls).
+fn registry_of(found []FoundMachine) -> NestedRegistry {
+    mut reg = NestedRegistry.empty()
+    for f in found { reg = reg.add(f.machine.def.name, f.machine) }
+    reg
+}
+
+// The names of nested machines that the found machines call and that are not found yet.
+fn nested_missing(found []FoundMachine) -> []str {
+    mut out = []str.new()
+    for f in found {
+        for p in f.machine.def.parties {
+            if p.kind == MachineParty && machine_named(found, p.nested).is_none() && !out.contains(p.nested) { out.push(p.nested) }
+        }
+    }
+    out
+}
 
 fn machine_named(found []FoundMachine, name str) -> Option[PortolanMachine] {
     for f in found {
@@ -240,9 +270,9 @@ export fn test_command(files []NamedText, dir str, verbose bool) -> CmdResult {
         }
     }
     // the machines written in Portolan are translated only when a scenario names a machine that no JSON file has (a translation costs a second for a big machine)
-    if missing_names(found, scenarios).len() > 0 {
+    if missing_names(found, scenarios).len() > 0 || nested_missing(found).len() > 0 {
         for f in files {
-            if is_text_machine_name(f.name) && missing_names(found, scenarios).len() > 0 {
+            if is_text_machine_name(f.name) && (missing_names(found, scenarios).len() > 0 || nested_missing(found).len() > 0) {
                 match machine_of_file(f.text, f.name) {
                     Ok(m) => {
                         if machine_named(found, m.def.name).is_none() { found.push(FoundMachine { file: f.name, machine: m }) }
@@ -262,10 +292,13 @@ export fn test_command(files []NamedText, dir str, verbose bool) -> CmdResult {
                     None => out.push("FAIL ${s.name}\n  no machine ${sc.machine} in ${dir}")
                     Some(machine) => {
                         ro problem = scenario_problem(machine, sc)
+                        ro pair_problems = if has_nested(machine) { check_registry(machine, registry_of(found)) } else { []str.new() }
                         if problem != "" {
                             out.push("FAIL ${s.name}\n  ${s.name}:1:1: scenario: ${problem}")
+                        } else if pair_problems.len() > 0 {
+                            out.push("FAIL ${s.name}\n  ${s.name}:1:1: scenario: the nested machines do not fit: ${pair_problems.join(" | ")}")
                         } else {
-                            ro run = run_scenario(machine, sc)
+                            ro run = if has_nested(machine) { run_nested_scenario(machine, registry_of(found), sc) } else { run_scenario(machine, sc) }
                             if run_ok(run) {
                                 passed += 1
                                 if verbose { out.push("ok ${s.name}") }

@@ -49,6 +49,8 @@ test "every scenario" {
     ro files = scenario_files()
     assert(files.len() >= 56)
     for f in files {
+        // the scenarios of a parent with its nested machines run in the unit `machine_nested_run`
+        if f.name.starts_with("nested-") { continue }
         ro sc = scenario_of(f.name)
         ro run = run_scenario(machine_named(sc.machine), sc)
         if !run_ok(run) { panic(report_text(run)) }
@@ -73,6 +75,9 @@ test "scenario fields" {
     assert(sc.steps[0].expect.journal[0].params[0].name == "text")
     assert(sc.steps[0].expect.data.len() == 2)
     assert(!sc.steps[0].expect.has_queue)
+    // a step of a machine without nested machines acts on the machine itself and compares it alone
+    assert(sc.steps[0].on == "")
+    assert(sc.steps[0].also.len() == 0)
 }
 
 test "scenario object input" {
@@ -240,19 +245,19 @@ test "lists of files" {
 
 test "names by the Portolan" {
     ro scenarios = scenario_files()
-    assert(scenarios.len() == 168)
+    assert(scenarios.len() == 200)
     for f in scenarios { assert(f.name.ends_with(".scenario.test.json")) }
     ro tables = table_files()
-    assert(tables.len() == 3)
+    assert(tables.len() == 7)
     for f in tables { assert(f.name.ends_with(".portolan.md") || f.name.ends_with(".portolan.txt")) }
-    assert(machine_files().len() == 8)
+    assert(machine_files().len() == 12)
     for f in machine_files() { assert(f.name.ends_with(".portolan.json")) }
 }
 
 test "name of a compiled machine" {
     assert(is_machine_json_name("a.portolan.json"))
     for n in ["a.json", "a.portolan", "a.portolan.md", "a.table.json", "machine.json", "a.scenario.test.json", "a.schema.json", "foo.machine.json", "foo.table.md", "foo.table.txt"] { assert(!is_machine_json_name(n)) }
-    assert(data_dir_names("machines").len() == 8)
+    assert(data_dir_names("machines").len() == 12)
 }
 
 test "scenario schema" {
@@ -261,7 +266,7 @@ test "scenario schema" {
             ro text = j.to_str()
             for op in step_ops() { assert(text.contains("\"${op}\"")) }
             for kind in event_kinds() { assert(text.contains("\"${kind}\"")) }
-            for key in ["state", "journal", "data", "queue", "open", "outcome", "sent", "cancelled"] { assert(text.contains("\"${key}\"")) }
+            for key in ["state", "journal", "data", "queue", "open", "outcome", "sent", "cancelled", "on", "also", "host"] { assert(text.contains("\"${key}\"")) }
         }
         Err(e) => assert(false)
     }

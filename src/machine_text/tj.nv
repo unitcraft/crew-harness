@@ -200,6 +200,10 @@ fn a_machine_error(code str, params []TxKV) -> TxJ {
     jobj(pairs)
 }
 
+fn a_cancel_open_except(nested TxJ) -> TxJ => jobj([kv("do", js("cancel_open")), kv("except", TxArr([nested]))])
+
+fn a_pass(nested TxJ, signal str) -> TxJ => jobj([kv("do", js("pass")), kv("nested", nested), kv("signal", js(signal))])
+
 fn a_cancel_open(party str) -> TxJ {
     mut pairs = [kv("do", js("cancel_open"))]
     if party != "" { pairs.push(kv("party", js(party))) }

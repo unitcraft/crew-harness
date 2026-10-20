@@ -269,41 +269,73 @@ fn ac_cancel(mut p TxP, mut cx TxCx, sc TxScope) -> Result[TxStmt, TranslateErro
         }
     }
     if t_is_kw(key, cx.words, "action", "except") {
-        ro empty = ac_empty_list(p, cx)?
+        ro names = ac_nested_list(p, cx)?
         p_expect(p, ")")?
-        if empty { return Ok(stmt_of([a_cancel_open("")])) }
-        cx_unsupported(cx, head, "`отменить_открытые(кроме: …)` с непустым списком вложенных машин")
-        return Ok(stmt_of([a_cancel_open("")]))
+        if names.len() == 0 { return Ok(stmt_of([a_cancel_open("")])) }
+        return Ok(stmt_of([a_cancel_open_except(names_list_json(names))]))
     }
     Err(p_fail(p, "в скобках `${kw(cx.words, "action", "cancel_open")}` ожидается `${kw(cx.words, "action", "except")}: …` или `${kw(cx.words, "action", "party")}: …`"))
 }
 
-// A list of nested machines that is empty: `[]` or a parameter of a fragment that was given `[]`. Any other list is not empty (nested machines are not run).
-fn ac_empty_list(mut p TxP, mut cx TxCx) -> Result[bool, TranslateError] {
-    if p_is(p, "[") && t_is(p_ahead(p, 1), "]") {
-        p_adv(p)
-        p_adv(p)
-        return Ok(true)
+// The list of the nested machines as the expression of a list of text literals (the names of the registry of the caller).
+fn names_list_json(names []str) -> TxJ {
+    mut items = []TxJ.new()
+    for n in names { items.push(x_lit(js(n))) }
+    x_list(items)
+}
+
+// A list of nested machines: `[a, b]` (the names of the registry) or the name of a parameter of a fragment (`вложенные`) that was given a list. An empty list gives no name.
+fn ac_nested_list(mut p TxP, mut cx TxCx) -> Result[[]str, TranslateError] {
+    mut out = []str.new()
+    if p_eat(p, "[") {
+        while !p_is(p, "]") {
+            ro item = p_tok(p)
+            if item.kind != TK_NAME { return Err(p_fail(p, "в списке ожидаются имена вложенных машин")) }
+            p_adv(p)
+            out.push(nested_name(cx, item))
+            if p_eat(p, ",") { continue }
+            break
+        }
+        p_expect(p, "]")?
+        return Ok(out)
     }
     ro n = p_tok(p)
     if n.kind == TK_NAME {
         p_adv(p)
-        return Ok(cx.env.empty_lists.contains(n.text))
+        if cx.env.empty_lists.contains(n.text) { return Ok(out) }
+        match pair_get(cx.env.nested_lists, n.text) {
+            Some(joined) => {
+                for one in joined.split(",") {
+                    if one != "" { out.push(one) }
+                }
+                return Ok(out)
+            }
+            None => ()
+        }
     }
-    Err(p_fail(p, "ожидается список вложенных машин"))
+    Err(p_fail(p, "ожидается список вложенных машин в скобках или параметр фрагмента"))
 }
 
-// `передать(вложенные, сигнал)`: a pass to no nested machine is nothing; to some, it is not supported.
+// `передать(вложенные, сигнал)`: the signal `stop`, `continue`, `halt` or `cancel` to the nested machines of the list; a pass to nobody is nothing.
 fn ac_pass(mut p TxP, mut cx TxCx) -> Result[TxStmt, TranslateError] {
-    ro head = p_tok(p)
     p_adv(p)
     p_adv(p)
-    ro empty = ac_empty_list(p, cx)?
+    ro names = ac_nested_list(p, cx)?
     p_expect(p, ",")?
     ro signal = p_tok(p)
-    if signal.kind != TK_NAME { return Err(p_fail(p, "ожидается имя сигнала")) }
+    if signal.kind != TK_NAME { return Err(p_fail(p, "ожидается имя сигнала: ${signal_words_ru(cx.words).join(", ")}")) }
     p_adv(p)
     p_expect(p, ")")?
-    if !empty { cx_unsupported(cx, head, "`передать` вложенным машинам") }
-    Ok(stmt_none())
+    mut key = ""
+    match kw_key(cx.words, "enum_value", signal.text) {
+        Some(k) => { key = k }
+        None => ()
+    }
+    if key != "stop" && key != "continue" && key != "halt" && key != "cancel" {
+        return Err(tx_err(signal.line, signal.col, "syntax", "сигнал: ${signal_words_ru(cx.words).join(", ")}, найдено: ${t_shown(signal)}"))
+    }
+    if names.len() == 0 { return Ok(stmt_none()) }
+    Ok(stmt_of([a_pass(names_list_json(names), key)]))
 }
+
+fn signal_words_ru(w TxWords) -> []str => kw_all(w, "enum_value", ["stop", "continue", "halt", "cancel"])
