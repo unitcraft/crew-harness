@@ -386,15 +386,6 @@ test "nr form not fixed" {
     assert(summary(r.orders) == "finish:answer:form_not_fixed,save")
 }
 
-test "nr form bad type" {
-    // a parse that gives a value of another type is the same as a parse that fails
-    ro wrong = ScriptedReply { name: "parse_out", value: Text("not a record") }
-    ro m = fixer_with([changed_reply(false), wrong])
-    ro st = run1(m, m.initial(), word_in("start", "")).state
-    ro r = run1(m, st, answered("c-1", out_json("raw")))
-    assert(summary(r.orders).starts_with("log:form_returned("))
-}
-
 test "nr form count reset" {
     // an accepted answer clears the count of the returns
     ro m = fixer_with([changed_reply(false), parsed_reply("p")])

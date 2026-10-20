@@ -4,7 +4,7 @@ module crew_harness.machine_run
 import std.text
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import crew_harness.engine.{Incoming, EventKind, Environment, Transition, SendOrder, CancelOrder, FailCode, JournalParam, journal_event, param, Go, Stay}
-import crew_harness.machine.{Value, Null, Int, Bool, Text, List, RecordField, Binding, PrimitiveHost, PrimitiveFailed, TypeSpec, TypeDefs, RecordType, OptionalType, Lit, check_call_args, value_json, value_to_json, value_from_json, make_record, check_value, enum_value}
+import crew_harness.machine.{Value, Null, Int, Bool, Text, List, RecordField, Binding, PrimitiveHost, PrimitiveFailed, TypeSpec, TypeDefs, RecordType, OptionalType, Lit, check_call_args, value_json, value_to_json, value_from_json, make_record, check_value, enum_value, spec_text}
 import crew_harness.machine_table.{StateDef, Goto, PartyDef, MachineDef, LValue, KeyStep, FieldStep, MachineParty, find_state, find_party, find_data}
 import crew_harness.machine_table.{ToState}
 
@@ -648,8 +648,8 @@ type Parsed enum
     | ParsedOk(Value)
     | ParsedBad(str)
 
-// The parse of the party (`разбор`): the reading primitive gets the answer (and the literal of the role) and gives the value of the answer. A primitive that fails, or gives a value that is not of the
-// type of the parse, says that the answer is not by the form (the host: `PrimitiveFailed`); any other failure of the host is a defect.
+// The parse of the party (`разбор`): the reading primitive gets the answer (and the literal of the role) and gives the value of the answer, or refuses: an answer that the parse does not take is
+// not by the form (the host: `PrimitiveFailed`, format 2.12, Ya-33). A value that is not of the type of the parse is a defect of the host, not an answer not by the form; so is any other failure of the host.
 fn apply_parse(ctx Ctx, party PartyDef, mut host PrimitiveHost) -> Result[Parsed, Fault] {
     ro pr = party.parse[0]
     mut args = [ctx.event.value]
@@ -662,7 +662,7 @@ fn apply_parse(ctx Ctx, party PartyDef, mut host PrimitiveHost) -> Result[Parsed
         Ok(v) => {
             match check_value(pr.result, v, ctx.def.types) {
                 Ok(u) => Ok(ParsedOk(v))
-                Err(x) => Ok(ParsedBad("the value of the parse: ${x.path} ${x.message}"))
+                Err(x) => Err(defect_fault("type_mismatch", "the value of the parse ${pr.primitive} is not of the type ${spec_text(pr.result)}: ${x.path} ${x.message}"))
             }
         }
         Err(x) => {

@@ -47,7 +47,7 @@ test "pause words" {
     ro paused = run1(m, working, stop_by("ann")).state
     ro back = run1(m, paused, word_in("continue", "{\"author\":\"ann\",\"source\":\"console\"}"))
     assert(back.state.name == "Work")
-    assert(summary(back.orders) == "log:human_continue(previous=Work;author=ann;source=console),send:agent:work:0,save")
+    assert(summary(back.orders) == "log:human_continue(previous=Work;author=ann;source=console;event=e-1),send:agent:work:0,save")
     ro halted = run1(m, paused, word_in("halt", ""))
     assert(halted.state.name == "Halted")
     assert(summary(halted.orders) == "finish:refusal:StoppedByHuman,save")

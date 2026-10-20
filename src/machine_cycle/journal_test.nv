@@ -4,6 +4,7 @@ module crew_harness.machine_cycle
 
 // ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
+import crew_harness.machine.{journal_union, journal_find}
 import crew_harness.machine_table.{MachineDef, Action, JournalAct, MachineErrorAct, IfAct, ForEachAct, LetAct, NamedExpr}
 
 // code, parameters (names, in the order of the table of the methodology)
@@ -172,4 +173,42 @@ test "jn counts" {
     assert(review_codes().len() == 11)
     assert(pause_codes().len() == 8)
     assert(all_codes().len() == 21)
+}
+
+// The codes against the union of the table of the methodology and the table of the product (format 5, 2.12, Ya-31): the machine writes only codes of the union, with the parameters of the row.
+test "jn union static" {
+    for w in written_codes(cycle_def()) {
+        ro at = w.find("|") ?? 0
+        ro code = w[..at]
+        mut names = []str.new()
+        if at + 1 < w.byte_len() {
+            for piece in w[(at + 1)..].split(",") { names.push(piece) }
+        }
+        match journal_find(journal_union(), code) {
+            Some(row) => {
+                for n in row.params { if !names.contains(n) { panic("the code ${code} lacks ${n} of the union") } }
+                for n in names { if n != "" && !row.params.contains(n) && !row.optional.contains(n) { panic("the code ${code} has ${n}, the union has not") } }
+            }
+            None => panic("the code ${code} is in neither table")
+        }
+    }
+}
+
+test "jn union dynamic" {
+    for fr in all_runs() {
+        for t in fr.run.traces {
+            for e in t.entries {
+                match journal_find(journal_union(), e.event.code) {
+                    Some(row) => {
+                        for n in row.params {
+                            mut found = false
+                            for p in e.event.params { if p.name == n { found = true } }
+                            if !found { panic("${fr.name}: the code ${e.event.code} lacks ${n}") }
+                        }
+                    }
+                    None => panic("${fr.name}: the code ${e.event.code} is in neither table")
+                }
+            }
+        }
+    }
 }
