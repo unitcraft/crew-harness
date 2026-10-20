@@ -161,6 +161,7 @@ import { factsOf, isOwnerAnswer, nudgeHold, serviceKindOf, verdicts } from "./qu
 import { writeLaunch } from "./task-folders.ts"
 import { type ResumeTry, RESUME_WINDOW_MS, canInterrupt, interruptTurn, resumeLetter, resumeNote, resumeVerdict } from "./hung-resume.ts"
 import { compactionSummaryText } from "./compaction-summary.ts"
+import { registerGluedHooks } from "./glued-guard.ts"
 
 export { parseProjects, projectOf, parseAddr, HELP, helpFor } from "./core.ts"
 
@@ -2194,6 +2195,10 @@ export default {
     } catch (e) {
       log(`model.request hook unavailable: ${e}`)
     }
+
+    // СЛИПШИЕСЯ СЛОВА (задача 127): вопросник `question` и записи текстовых файлов (`edit`, `write`, `patch`) с «потолок092», «передано16:27»
+    // отклоняются до выполнения (glued-guard.ts); письмо `crew_send` проверяет сам инструмент. Нет хуков в этой версии OpenCode — строка в журнал.
+    await registerGluedHooks(ctx, log)
 
     // САМОПРОВЕРКА: то, что умеет только процесс OpenCode.
     async function doctor(): Promise<string[]> {

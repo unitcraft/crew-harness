@@ -3,7 +3,7 @@
 // провайдера claude-code, которым инструменты плагина недоступны: одна реализация — одна семантика.
 // Отличия хозяев — в CrewHost (визитка своего окна, кандидаты, немедленная доставка в своём процессе).
 
-import { gluedText, gluedRefusal } from "./glued.ts"
+import { judge as judgeGlued } from "./glued-guard.ts"
 import { execFileSync } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync, appendFileSync } from "node:fs"
 import os from "node:os"
@@ -1997,8 +1997,8 @@ export function makeTools(host: CrewHost): CrewTool[] {
       if (!to || !text) return { content: "Нужны и адресат, и текст." }
       if (to === PLUGIN_SENDER || to.endsWith(`.${PLUGIN_SENDER}`)) return { content: "Не отправлено: crew-harness — это сам плагин, ему не пишут. Отчёт по вопросу или задаче — тому, кто спросил: crew_send {to: \"<его сессия>\", reply_to: \"<qid>\"} (qid и сессия — в письме с вопросом; открытые задачи — crew_task {action: \"list\"})." }
       if (!input.expect_reply && ACK_ONLY.test(text)) return { content: "Не отправлено: подтверждение без содержания будит получателя впустую. Пиши, только когда есть что сообщить." }
-      const glued = gluedText(text)
-      if (glued.reject) return { content: gluedRefusal(glued) }
+      const gluedMessage = judgeGlued(sessionID, { where: "letter", segments: [{ text }] }, log)
+      if (gluedMessage) return { content: gluedMessage }
       let wake = input.wake !== false
       const qid = input.expect_reply ? `q${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` : undefined
       const replyTo = input.reply_to ? String(input.reply_to) : undefined

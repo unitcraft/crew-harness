@@ -52,6 +52,9 @@ export const STABLE_FILES = [
   "crew-panel-busy",
   // task 120: the passes of the service over a hand-made database
   "crew-form-record-flow",
+  // task 127: the glued-words guard over the setup of the plugin and crew_send
+  "crew-glued",
+  "crew-glued-hooks",
 ]
 
 const args = process.argv.slice(2)
