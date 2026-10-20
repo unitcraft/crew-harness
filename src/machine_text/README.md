@@ -15,18 +15,18 @@ target/portolan.exe summary machine.portolan.md                              # t
 target/portolan.exe compile machine.portolan.md --lenient                    # the JSON of what could be translated even when there are errors
 target/portolan.exe render machine.portolan.json --language en               # the reverse way: the file of Portolan for a tree
 target/portolan.exe convert machine.portolan.md --language en                # a file in the other language, through the JSON
-nova test src/machine_text                                              # the translator and its table of words: 199 tests (36 of them task 117)
-nova test src/machine_nested                                            # the nested machines (task 119): the party kind `machine`, `Signal`, `State`, the profile, `Правит`, the form returns, the set limit; the checks; the reverse generator (89 tests)
+nova test src/machine_text                                              # the translator and its table of words: 216 tests (36 of them task 117, 17 of task 125)
+nova test src/machine_nested                                            # the nested machines (task 119): the party kind `machine`, `Signal`, `State`, the profile, `Правит`, the form returns, the set limit; the checks; the reverse generator; the fragment and the line of connection, `Вход: нет`, a primitive as a function, the table by role (task 125) (140 tests)
 nova test src/machine_text_unicode                                      # names in any alphabet through the translator and the reverse generator (27 tests, task 117)
 nova test src/machine_text_eq                                           # the proofs: the chat machine, the pilot, the examples, the definitions
-nova test src/machine_text_fmt                                          # format 2.7: prose, the expansion of a fragment, sets, tables, words, hash (65 tests)
-nova test src/machine_text_lang                                         # the two languages, the news of 2.9 - 2.11 (53 tests)
+nova test src/machine_text_fmt                                          # the reading of prose, the expansion of a fragment, sets, tables, words, hash (64 tests; the files are of 2.12 now)
+nova test src/machine_text_lang                                         # the two languages, the news of 2.9 - 2.12 (83 tests, 32 of task 125)
 nova test src/machine_text_render                                       # the reverse generator and its circles (49 tests)
 nova test src/machine_agent                                             # the sample of the methodology goes through the translator; the agent step of the product
-nova test src/machine_agent_en                                          # the English sample of the agent step: the translation, the equality with the Russian one, the 75 scenarios
+nova test src/machine_agent_en                                          # the English sample of the agent step: the translation, the equality with the Russian one, the 83 scenarios
 nova test src/portolan_cli                                         # the program `portolan` on small files: the commands, the errors, the exit codes (task 116)
 nova test src/portolan_eq                                          # the circles of the program on the machines of the product: compile -> render -> compile, convert ru -> en -> ru
-nova test src/portolan_scenarios                                   # `portolan test` on src/machine: the 200 scenarios (the 32 of the nested machines too); `portolan run` of the agent step one by one
+nova test src/portolan_scenarios                                   # `portolan test` on src/machine: the 364 scenarios (the 32 of the nested machines too); `portolan run` of the agent step one by one
 ```
 
 As a library (module `crew_harness.machine_text`):

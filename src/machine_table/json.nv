@@ -544,6 +544,17 @@ fn dec_includes(root JsonObject) -> Result[[]IncludeDef, LoadError] {
     Ok(out)
 }
 
+// The words of a list with a comma between them (a list of the words of a message; no `join`, so the file needs no `import std.text`).
+fn word_list(items []str) -> str {
+    mut out = ""
+    mut first = true
+    for w in items {
+        out = if first { w } else { "${out}, ${w}" }
+        first = false
+    }
+    out
+}
+
 // The connections of the fragments: `fragments: [{ "name", "args": { argument: expression } }]` (the key of the product, 1b (m)): the fragment is in the tree already substituted, the
 // connection says how, so that the generator can write the line of connection back. Every argument is named, the words of the behavior arguments are checked.
 fn dec_fragments(root JsonObject) -> Result[[]FragmentUse, LoadError] {
@@ -556,7 +567,7 @@ fn dec_fragments(root JsonObject) -> Result[[]FragmentUse, LoadError] {
         ro o = j_obj(item, p)?
         j_only(o, ["name", "args"], p)?
         ro name = j_need_str(o, "name", p)?
-        if !fragment_names().contains(name) { return Err(le("${p}.name", "the fragment ${name} is not one that the host connects (${fragment_names().join(", ")})")) }
+        if !fragment_names().contains(name) { return Err(le("${p}.name", "the fragment ${name} is not one that the host connects (${word_list(fragment_names())})")) }
         if seen.contains(name) { return Err(le("${p}.name", "the fragment ${name} is connected twice")) }
         seen.push(name)
         ro ao = j_need_obj(o, "args", p)?
@@ -570,9 +581,9 @@ fn dec_fragments(root JsonObject) -> Result[[]FragmentUse, LoadError] {
             if words.len() > 0 {
                 match value {
                     Lit(Text(w)) => {
-                        if !words.contains(w) { return Err(le("${ap}.${arg}", "the argument ${arg} is one of ${words.join(", ")}")) }
+                        if !words.contains(w) { return Err(le("${ap}.${arg}", "the argument ${arg} is one of ${word_list(words)}")) }
                     }
-                    _ => return Err(le("${ap}.${arg}", "the argument ${arg} is one of ${words.join(", ")}"))
+                    _ => return Err(le("${ap}.${arg}", "the argument ${arg} is one of ${word_list(words)}"))
                 }
             }
             args.push(FragmentArg { name: arg, value })

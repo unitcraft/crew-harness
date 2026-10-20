@@ -437,3 +437,24 @@ test "v212 role circle" {
     assert(circle_with(report.json, "ru", roles_registry()) == "")
     assert(circle_with(report.json, "en", roles_registry()) == "")
 }
+
+// ---- the bindings of the rows of the fragment against the data of the machine (Ya-26) ---------------------------------------------------------------------
+
+fn meeting_with_datum(name str) -> str => meeting212().replace("| попытка_вратаря | число≥0 | 0 | да | механика |", "| попытка_вратаря | число≥0 | 0 | да | механика |\n| ${name} | текст | \"\" | — | строки |")
+
+test "v212 a datum named as a binding of the fragment" {
+    // the rows of the fragment Pause bind `слово_человека`, `автор`, `источник`, `идентификатор_запроса`: after the fragment is put in they are bindings of the machine, a datum may not have such a name
+    assert(is_clean_text(meeting_with_datum("extra_note")))
+    assert(note_says(meeting_with_datum("источник"), "no shadowing"))
+    assert(note_says(meeting_with_datum("автор"), "no shadowing"))
+}
+
+test "v212 a datum named as the other binding of the fragment" {
+    assert(note_says(meeting_with_datum("идентификатор_запроса"), "no shadowing"))
+    assert(note_says(meeting_with_datum("слово_человека"), "no shadowing"))
+}
+
+test "v212 the launch source is no binding" {
+    // `источник_запуска` is `launch_source` (the dictionary, version 10): it does not shadow the binding `source`
+    assert(is_clean_text(meeting_with_datum("источник_запуска")))
+}
