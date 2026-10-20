@@ -6,3 +6,5 @@
 2026-10-20 23:31 находка: Архивный read-only letter подтверждён по id/from_session/to/qid и text SHA256; его legacy envelope — task header, цель, criteria line, WORKTREE ГОТОВ branch, handoff. Fixture — format-derived, не raw.
 2026-10-20 23:43 находка: Полный прогон выявил ограничение старого test harness: test/ перечисляется как плоский список файлов; перенёс производную fixture в корень test/, профильный тест и route-тест проходят, полный прогон повторён через очередь.
 2026-10-21 00:05 документ: npm test через очередь: код 0 после переноса fixture в корень test/; полный run-all и check-wiring: 0 FAIL.
+2026-10-21 00:30 находка: Приёмка, круг 1: saved original подтвердил условный handoff; parser теперь принимает его отсутствие, но проверяет непустой handoff и финальную submit-инструкцию. Read-only pure-probe: 9073 bytes, ожидаемый SHA256, faults []. Raw не сохранялся.
+2026-10-21 01:03 документ: Круг 1: повторный полный npm test через очередь завершился code 0; crew-progress.test изолированно также code 0 после первого transient AC-11б FAIL. Pure-probe actual archive: 9073 bytes, ожидаемый SHA256, faults [].

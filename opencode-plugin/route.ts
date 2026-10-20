@@ -284,13 +284,24 @@ export function legacyTaskLetterFaults(message: string | undefined, expected: { 
   const criteria = /^КРИТЕРИИ ПРИЁМКИ:\s*(.+)$/im.exec(text)?.[1]?.trim() ?? ""
   const goal = /^ЦЕЛЬ:\s*(\S[\s\S]*?)(?=\r?\n[A-ZА-ЯЁ][^\r\n]*:|$)/im.exec(text)?.[1]?.trim() ?? ""
   const worktree = /^WORKTREE ГОТОВ:[^\r\n]*ветка\s+([^\s.)]+)[^\r\n]*$/im.exec(text)?.[1]
-  const history = /^СДЕЛАНО ПРЕЖНИМ ИСПОЛНИТЕЛЕМ \(задача передана тебе\):\s*\r?\n[\s\S]+$/im.test(text)
+  const handoffRe = /^СДЕЛАНО ПРЕЖНИМ ИСПОЛНИТЕЛЕМ \(задача передана тебе\):[ \t]*$/gim
+  const handoffs = [...text.matchAll(handoffRe)]
+  const submitRe = /^Когда закончишь — сдай работу:\s*crew_task\s+\{action:\s*"submit",\s*n:\s*(\d+),\s*text:\s*"что сделано, как проверено, что осталось"\}\.([^\r\n]*)$/gim
+  const submits = [...text.matchAll(submitRe)]
   const faults: string[] = []
   if (!goal) faults.push("в старом письме нет непустой цели")
   if (!criteria) faults.push("в старом письме нет непустых критериев приёмки")
   if (!expected.branch || worktree !== expected.branch) faults.push("ветка в WORKTREE ГОТОВ не совпадает с веткой существующей записи")
   if (expected.source_session && head[4] !== expected.source_session) faults.push("from_session архива не совпадает с сессией автора письма")
-  if (!history) faults.push("неполная форма старого письма: нет блока передачи прежнего исполнителя")
+  if (submits.length !== 1 || Number(submits[0]?.[1]) !== expected.n || text.trimEnd().slice(submits[0]?.index ?? -1).split(/\r?\n/).filter(Boolean).length !== 1)
+    faults.push("старое письмо не заканчивается единственной корректной инструкцией сдачи этой задачи")
+  if (handoffs.length > 1) faults.push("неполная форма старого письма: повторяется блок передачи прежнего исполнителя")
+  if (handoffs.length === 1) {
+    const start = handoffs[0].index! + handoffs[0][0].length
+    const tail = text.slice(start)
+    const close = /^(?:ШАГ ПЛАНА\s|ПРИЁМЩИК ПРОВЕРИТ\s*\(|Когда закончишь — сдай работу:)/im.exec(tail)
+    if (!close || !tail.slice(0, close.index).trim()) faults.push("неполная форма старого письма: handoff пустой или не закрывается штатным концом письма")
+  }
   return faults
 }
 

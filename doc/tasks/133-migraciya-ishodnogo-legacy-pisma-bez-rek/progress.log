@@ -7,3 +7,6 @@
 исп 2/3 [2026-10-20 23:25] strict migration, provenance fields and format-derived regression tests
 исп 3/3 [2026-10-21 00:05] полный npm test и guards зелёные; подписываю сдачу
 исп 3/3 [2026-10-21 00:07] готово — commit 6de5398; npm test и guards зелёные; сдано
+исп 0/2 [2026-10-21 00:29] старт — исправить необязательный handoff и проверить фактическое legacy-письмо
+исп 1/2 [2026-10-21 00:29] handoff optional; actual archive pure-probe fault-free, tests cover empty block
+исп 2/2 [2026-10-21 01:03] npm test code 0, pure-probe faults [], signed commit pending

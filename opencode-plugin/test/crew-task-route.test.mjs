@@ -162,7 +162,13 @@ const core = await import("../core.ts")
 const { briefFaults, exactMessageHash, legacyTaskLetterFaults } = await import("../route.ts")
 const legacyFixture = JSON.parse(readFileSync(new URL("./legacy-task-letter-092.fixture.json", import.meta.url), "utf8"))
 cell("T133 format-derived Nova 092 legacy letter is recognized only against its target identity", legacyTaskLetterFaults(legacyFixture.text, legacyFixture.expected).length === 0, legacyFixture.provenance)
-cell("T133 the format-derived counterexample remains RED under modern brief validation", briefFaults(legacyFixture.text).length === 2, JSON.stringify(briefFaults(legacyFixture.text)))
+const noHandoffLetter = legacyFixture.text.replace(/\nСДЕЛАНО ПРЕЖНИМ ИСПОЛНИТЕЛЕМ \(задача передана тебе\):\n[\s\S]*?(?=\nПРИЁМЩИК ПРОВЕРИТ)/, "")
+cell("T133 the historical letter without optional handoff is accepted", legacyTaskLetterFaults(noHandoffLetter, legacyFixture.expected).length === 0, "")
+cell("T133 the format-derived counterexample remains RED under modern brief validation", briefFaults(noHandoffLetter).length === 2, JSON.stringify(briefFaults(noHandoffLetter)))
+const emptyHandoffLetter = noHandoffLetter.replace("\nПРИЁМЩИК ПРОВЕРИТ", "\nСДЕЛАНО ПРЕЖНИМ ИСПОЛНИТЕЛЕМ (задача передана тебе):\n\nПРИЁМЩИК ПРОВЕРИТ")
+cell("T133 a present but empty handoff block is rejected", legacyTaskLetterFaults(emptyHandoffLetter, legacyFixture.expected).some((x) => /handoff пустой/.test(x)), "")
+const malformedEndLetter = legacyFixture.text.replace('n: 92, text: "что сделано', 'n: 93, text: "что сделано')
+cell("T133 a handoff letter with a malformed task-submit ending is rejected", legacyTaskLetterFaults(malformedEndLetter, legacyFixture.expected).some((x) => /не заканчивается единственной корректной инструкцией/.test(x)), "")
 cell("T133 the same legacy letter rejects another number", legacyTaskLetterFaults(legacyFixture.text, { ...legacyFixture.expected, n: 93 }).length > 0, "")
 cell("T133 missing acceptance criteria are rejected", legacyTaskLetterFaults(legacyFixture.text.replace(/^КРИТЕРИИ ПРИЁМКИ:.*\n/m, ""), legacyFixture.expected).some((x) => /критериев/.test(x)), "")
 const status = await import("../status.ts")
@@ -314,7 +320,7 @@ cell("T92-17 (test 14) an old record is read without change: no route field appe
 cell("T92-17 (test 14) the file of an old record is not rewritten by reading it", !("route" in JSON.parse(readFileSync(path.join(store(), "880.json"), "utf8"))), "")
 
 // ---- explicit, in-place migration of a folderless legacy record ----
-const migrationBrief = `ЗАДАЧА #881 «Старая задача» от proj.integrator (сессия sesINTEG1), приоритет P1.\nЦЕЛЬ: Сохранить задачу\nКРИТЕРИИ ПРИЁМКИ: Проверить результат без реконструкции\nГРАНИЦЫ (не делаем): не создавать вторую запись\nWORKTREE ГОТОВ: эта сессия уже работает в <TMP>/legacy, ветка task/092-legacy (создал плагин от целевой ветки). Правь и коммить здесь; другой worktree не создавай.\nСДЕЛАНО ПРЕЖНИМ ИСПОЛНИТЕЛЕМ (задача передана тебе):\nпроверен старый формат письма.`
+const migrationBrief = `ЗАДАЧА #881 «Старая задача» от proj.integrator (сессия sesINTEG1), приоритет P1.\nЦЕЛЬ: Сохранить задачу\nКРИТЕРИИ ПРИЁМКИ: Проверить результат без реконструкции\nГРАНИЦЫ (не делаем): не создавать вторую запись\nWORKTREE ГОТОВ: эта сессия уже работает в <TMP>/legacy, ветка task/092-legacy (создал плагин от целевой ветки). Правь и коммить здесь; другой worktree не создавай.\nСДЕЛАНО ПРЕЖНИМ ИСПОЛНИТЕЛЕМ (задача передана тебе):\nпроверен старый формат письма.\nКогда закончишь — сдай работу: crew_task {action: "submit", n: 881, text: "что сделано, как проверено, что осталось"}. Упрёшься — в том же отчёте напиши, что мешает. Обычное письмо сдачей не считается. Пока работа не сдана: остановишься без сдачи — получишь напоминание.`
 const legacyMigration = {
   project: "proj", n: 881, title: "Старая задача", slug: "staraya-zadacha", goal: "Сохранить задачу", criteria: "Проверить результат",
   priority: "P1", tier: "medium", role: "worker", author: "sesINTEG1", author_role: "proj.integrator", qid: "q881",
