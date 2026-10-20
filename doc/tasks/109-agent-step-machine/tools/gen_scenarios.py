@@ -138,7 +138,7 @@ def build():
         started(s)
         s.answer("agent-1", needs("Read"), state="Permission", journal=[], open=[], sent=["agent-1"], data={"open_requests": []})
     allow = {"$dict": [[var("ActionKind", k), "allow" if k == "Read" else "ask"] for k in KINDS]}
-    s = new("policy-1", "POLICY 1: the project allows reading: the answer is allow, the turn is \"permission\"", params={"PERMISSION_POLICY": allow})
+    s = new("policy-1", "POLICY 1: the project allows reading: the answer is allow, the turn is \"permission\"", params={"проект.политика_разрешений": allow})
     started(s)
     s.answer("agent-1", needs("Read"), state="AgentTurn", journal=[("permission_auto_allowed", {"action": "read"})], sent=["agent-1", "agent-2"], open=["agent-2"],
              data={"permission_decision": "allow", "turn": "permission", "turn_count": 2})
@@ -271,7 +271,7 @@ def flows():
     s.op("restart", state="End", outcome=answer_text())
     s = new("flow-death-between", "the process dies between the commit and the send: the restart sends the request once")
     s.n += 1
-    s.steps.append({"do": "accept", "event": {"kind": "start", "request": "call-1", "input": {"agent_request": request()}}, "host": dict(HOST0),
+    s.steps.append({"do": "accept", "event": {"kind": "start", "request": "call-1", "input": request()["fields"]}, "host": dict(HOST0),
                     "expect": s._expect(state="AgentTurn", sent=[], open=["agent-1"], queue=["send agent-1"])})
     s.n += 1
     s.op("restart", state="AgentTurn", sent=[])
@@ -280,7 +280,7 @@ def flows():
     s.answer("agent-1", finished(), state="End", journal=[usage_ev()])
     s = new("flow-stop-in-window", "the stop arrives in the window between the commit and the send: the request is cancelled before it is sent, the continue sends a new one")
     s.n += 1
-    s.steps.append({"do": "accept", "event": {"kind": "start", "request": "call-1", "input": {"agent_request": request()}}, "host": dict(HOST0),
+    s.steps.append({"do": "accept", "event": {"kind": "start", "request": "call-1", "input": request()["fields"]}, "host": dict(HOST0),
                     "expect": s._expect(state="AgentTurn", sent=[], queue=["send agent-1"])})
     s.n += 1
     s.steps.append({"do": "accept", "event": {"kind": "signal", "name": "human_stop", "input": STOP},
@@ -323,7 +323,15 @@ def flows():
     s = new("flow-input-missing", "the start without the request of the agent is refused: input_rejected, a refusal NoResult")
     s.n += 1
     s.steps.append({"do": "feed", "event": {"kind": "start", "request": "call-1", "input": {}}, "host": dict(HOST0),
-                    "expect": s._expect(state="Start", journal=[("input_rejected", {"reason": "missing", "field": "agent_request"})], outcome="refusal:NoResult")})
+                    "expect": s._expect(state="Start", journal=[("input_rejected", {"reason": "missing", "field": "kind"})], outcome="refusal:NoResult")})
+    # the input of the agent step is the eight fields of the request, flat (format 2.12, Ya-30): a start without one of them is refused, and the refusal names the field
+    for field in ("kind", "profile", "session", "dialog_kind", "context", "limits", "trace", "step"):
+        s = new("flow-input-without-" + field.replace("_", "-"), "the start without the field %s of the request is refused: input_rejected names it, a refusal NoResult" % field)
+        s.n += 1
+        partial = dict(request()["fields"])
+        del partial[field]
+        s.steps.append({"do": "feed", "event": {"kind": "start", "request": "call-1", "input": partial}, "host": dict(HOST0),
+                        "expect": s._expect(state="Start", journal=[("input_rejected", {"reason": "missing", "field": field})], outcome="refusal:NoResult")})
     s = new("flow-attempts", "the counters of the attempts grow with every request: the agent after a retry and a continue")
     started(s)
     s.answer("agent-1", transient(), state="AgentTurn", data={"agent_attempt": 2, "open_requests": ["agent-2"]})

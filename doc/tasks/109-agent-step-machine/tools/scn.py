@@ -120,7 +120,7 @@ class Sc:
         return self
 
     def start(self, req=None, host=None, **expect):
-        ev = {"kind": "start", "request": self.call, "input": {"agent_request": req if req is not None else request()}}
+        ev = {"kind": "start", "request": self.call, "input": (req if req is not None else request())["fields"]}
         self.eid("start")
         st = {"do": "feed", "event": ev}
         if host:

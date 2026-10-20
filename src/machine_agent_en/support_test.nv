@@ -253,5 +253,5 @@ fn tree_text(json str) -> str {
     }
 }
 
-// The two strings of the author in the Russian sample that the English one writes in English (the text of the refusal of the end Errored).
-fn ru_strings_in_english(json str) -> str => json.replace("дефект шага агента: ", "agent step defect: ")
+// The strings of the author in the Russian sample that the English one writes in English (the text of the refusal of the end Errored, the note `write_right` of the connection of the fragment).
+fn ru_strings_in_english(json str) -> str => json.replace("дефект шага агента: ", "agent step defect: ").replace("файлы, которые правит агент; пауза их права не трогает", "files the agent edits; the pause does not touch their rights")

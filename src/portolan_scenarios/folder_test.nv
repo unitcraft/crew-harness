@@ -17,13 +17,13 @@ test "ps test folder all scenarios" {
 
 test "ps scenario families" {
     // the families of the folder (the total grows with the machines: task 114 added the 37 of the dialog)
-    assert(scenarios_with("agent-step-").len() == 75)
+    assert(scenarios_with("agent-step-").len() == 83)
     assert(scenarios_with("chat-").len() == 39)
     assert(scenarios_with("dialog-").len() == 37)
     assert(scenarios_with("nested-").len() == 32)
     assert(scenarios_with("cycle-").len() == 101)
     assert(scenarios_with("session-").len() == 55)
-    assert(scenario_files().len() == 356)
+    assert(scenario_files().len() == 364)
 }
 
 // ---- nested machines (task 119): a parent and the machines it calls are found in the folder ------------------------------------------------------------

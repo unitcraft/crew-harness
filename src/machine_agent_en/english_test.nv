@@ -34,7 +34,7 @@ test "ae clean" {
     assert(first_error(report) == "ok")
     assert(report.errors.len() == 0)
     assert(report.warnings.len() == 0)
-    assert(report.rows_total == 120)
+    assert(report.rows_total == 127)
     assert(report.rows_noted == 0)
 }
 
@@ -42,15 +42,15 @@ test "ae copied as it is" {
     ro text = en_sample()
     assert(text.starts_with("# Machine: Agent step\n"))
     assert(text.contains("- language: en"))
-    assert(text.contains("- format: 2.11"))
-    assert(text.contains("- machine_version: portolan-2.11"))
+    assert(text.contains("- format: 2.12"))
+    assert(text.contains("- machine_version: portolan-2.12"))
     assert(text.contains("## Fragment expansion \"Pause\""))
     assert(text.byte_len() > 30000)
 }
 
 test "ae header" {
     ro json = en_report().json
-    assert(json.starts_with("{\"format\":\"machine/2\",\"portolan_version\":\"2.11\",\"machine\":\"agent_step\",\"version\":\"portolan-2.11\",\"title\":\"Agent step\""))
+    assert(json.starts_with("{\"format\":\"machine/2\",\"portolan_version\":\"2.12\",\"machine\":\"agent_step\",\"version\":\"portolan-2.12\",\"title\":\"Agent step\""))
 }
 
 test "ae loads" {
@@ -172,7 +172,7 @@ test "ae fragment words" {
     assert(report_of(bad_value).errors.len() > 0)
 }
 
-// ---- the 75 scenarios of the agent step run on the English sample ----------------------------------------------------------------
+// ---- the 83 scenarios of the agent step run on the English sample ----------------------------------------------------------------
 
 fn agent_scenarios() -> []NamedText {
     mut out = []NamedText.new()
@@ -191,7 +191,7 @@ fn en_machine() -> PortolanMachine {
 
 test "ae scenarios 75" {
     ro all = agent_scenarios()
-    assert(all.len() == 75)
+    assert(all.len() == 83)
     ro m = en_machine()
     mut failed = 0
     mut first = ""

@@ -127,7 +127,8 @@ fn compare_with(file NamedText, called PortolanMachine) -> str {
 fn agent_files() -> []NamedText {
     mut out = []NamedText.new()
     for f in scenario_files() {
-        if f.name.starts_with("agent-step-") { out.push(f) }
+        // a start that the agent step refuses for a missing field is refused by the parent as well (they have the same fields): there is no nested run to compare
+        if f.name.starts_with("agent-step-") && !f.name.contains("input-without") { out.push(f) }
     }
     out
 }

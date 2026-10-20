@@ -22,7 +22,7 @@ test "ag clean" {
     if report.errors.len() > 0 { panic(errors_text(report)) }
     assert(report.errors.len() == 0)
     assert(report.rows_noted == 0)
-    assert(report.rows_total == 120)
+    assert(report.rows_total == 127)
 }
 
 test "ag file is translation" {
@@ -34,7 +34,7 @@ test "ag loads" {
     match load_machine(agent_step_machine_text(), standard_registry()) {
         Ok(def) => {
             assert(def.name == "agent_step")
-            assert(def.version == "portolan-2.11")
+            assert(def.version == "portolan-2.12")
             assert(def.states.len() == 14)
             assert(def.common.len() == 6)
             assert(def.parties.len() == 3)
@@ -63,7 +63,7 @@ test "ag builds" {
 
 test "ag summary" {
     ro text = render_summary(agent_step_machine_text())
-    assert(text.starts_with("machine agent_step (version portolan-2.11): 14 states, 47 rows, "))
+    assert(text.starts_with("machine agent_step (version portolan-2.12): 14 states, 47 rows, "))
     assert(text.contains("  AgentTurn (appeal): 9 rows, 18 actions"))
     assert(text.contains("common events: 6 rows"))
     assert(text.contains("ends: 13 rows"))
@@ -81,7 +81,7 @@ fn without_markers(text str) -> str {
             lines.push(line)
         }
     }
-    lines.join("\n").replace("format: 2.11", "format: 2.5")
+    lines.join("\n").replace("format: 2.12", "format: 2.12")
 }
 
 test "ag markers optional" {
@@ -89,5 +89,5 @@ test "ag markers optional" {
     assert(plain != agent_step_table_text())
     ro report = translate_checked(plain, standard_registry())
     if report.errors.len() > 0 { panic(errors_text(report)) }
-    assert(report.json.replace("\"portolan_version\":\"2.5\"", "\"portolan_version\":\"2.11\"") == agent_step_machine_text())
+    assert(report.json.replace("\"portolan_version\":\"2.5\"", "\"portolan_version\":\"2.12\"") == agent_step_machine_text())
 }

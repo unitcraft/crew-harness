@@ -45,7 +45,7 @@ test "sm clean" {
     if report.errors.len() > 0 { panic(error_text(report.errors[0], "sample")) }
     assert(report.errors.len() == 0)
     assert(report.rows_noted == 0)
-    assert(report.rows_total == 120)
+    assert(report.rows_total == 127)
 }
 
 test "sm warnings listed" {
@@ -58,7 +58,7 @@ test "sm loads" {
     match load_machine(sample_json(), standard_registry()) {
         Ok(def) => {
             assert(def.name == "agent_step")
-            assert(def.version == "portolan-2.11")
+            assert(def.version == "portolan-2.12")
             assert(def.states.len() == 14)
             assert(def.common.len() == 6)
             assert(def.parties.len() == 3)
@@ -75,15 +75,15 @@ test "sm loads" {
 
 test "sm summary" {
     ro text = render_summary(sample_json())
-    assert(text.starts_with("machine agent_step (version portolan-2.11): 14 states, 47 rows, "))
+    assert(text.starts_with("machine agent_step (version portolan-2.12): 14 states, 47 rows, "))
     assert(text.contains("  AgentTurn (appeal): 9 rows, 18 actions"))
     assert(text.contains("common events: 6 rows"))
     assert(text.contains("ends: 13 rows"))
 }
 
 test "sm header 27" {
-    assert(sample_json().starts_with("{\"format\":\"machine/2\",\"portolan_version\":\"2.11\",\"machine\":\"agent_step\",\"version\":\"portolan-2.11\""))
-    assert(sample().contains("- format: 2.11"))
+    assert(sample_json().starts_with("{\"format\":\"machine/2\",\"portolan_version\":\"2.12\",\"machine\":\"agent_step\",\"version\":\"portolan-2.12\""))
+    assert(sample().contains("- format: 2.12"))
 }
 
 test "sm expansion skipped" {

@@ -12,8 +12,8 @@ fn json_of_table(name str) -> str => name.replace(".portolan.md", ".portolan.jso
 test "v212 table files say 2.12" {
     for name in product_tables() {
         ro text = text_of_file(table_files(), name)
-        assert(text.contains("- format: 2.12\n"))
-        assert(!text.contains("- format: 2.11"))
+        assert(text.contains("format: 2.12\n"))
+        assert(!text.contains("format: 2.11"))
         assert(!text.contains("portolan-2.11"))
     }
 }
@@ -41,7 +41,8 @@ test "v212 check takes every table" {
 }
 
 test "v212 compile refuses 2.11" {
-    ro old = text_of_file(table_files(), "dialog.portolan.md").replace("- format: 2.12", "- format: 2.11")
+    ro old = text_of_file(table_files(), "dialog.portolan.md").replace("format: 2.12", "format: 2.11")
+    assert(old.contains("format: 2.11"))
     ro made = run_with(["compile", "/m/dialog.portolan.md"], one("/m/dialog.portolan.md", old))
     assert(made.code != 0)
     assert(made.err.contains("2.11"))
@@ -49,7 +50,8 @@ test "v212 compile refuses 2.11" {
 }
 
 test "v212 check refuses 2.11" {
-    ro old = text_of_file(table_files(), "chat.portolan.md").replace("- format: 2.12", "- format: 2.11")
+    ro old = text_of_file(table_files(), "chat.portolan.md").replace("format: 2.12", "format: 2.11")
+    assert(old.contains("format: 2.11"))
     ro made = run_with(["check", "/m/chat.portolan.md"], one("/m/chat.portolan.md", old))
     assert(made.code != 0)
 }

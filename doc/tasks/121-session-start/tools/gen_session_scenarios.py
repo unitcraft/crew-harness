@@ -378,7 +378,7 @@ put('flow-runner-done', scenario('FLOW: a session of the runner (no number of th
     s_start('s1'), s_confirm(), s_kid_done(), s_pump_end('s1', data={'result': variant('SessionResult', 'Done')})]))
 
 put('flow-review-pass', scenario('FLOW: a check session of the review of the cycle with the pass 3: the summary line and the findings are kept by the pass and go out with the answer', [
-    s_start('s2', inp=sinput('s2', launch_pass=3, phase='implementation', source='file of pass 2', source_list='README.md'),
+    s_start('s2', inp=sinput('s2', launch_pass=3, phase='implementation', launch_source='file of pass 2', source_list='README.md'),
             h=host(session='s2', result='Done', summ=summary(1, 3), findings=[finding('Essential', 'Plan', 'e1'), finding('Superficial', 'Implementation', 'e2')]),
             data={'launch_pass': 3, 'phase': 'implementation', 'launch_source': 'file of pass 2', 'source_list': 'README.md'}),
     s_confirm(), s_kid_done(),
@@ -494,7 +494,7 @@ put('flow-input-type', scenario('FLOW: the number of the pass is a text: the typ
          expect={'outcome': 'refusal:NoResult', 'open': [], 'sent': [], 'journal': [{'code': 'input_rejected', 'params': {'reason': 'type', 'field': 'launch_pass'}}]})]))
 
 put('flow-input-full', scenario('FLOW: every optional field of the input is given: the data keep them; the launch starts', [
-    s_start('s4', inp=sinput('s4', source='the answers', phase='analysis', launch_pass=2, source_list='a.md, b.md', route='quick', delivery_short=True),
+    s_start('s4', inp=sinput('s4', launch_source='the answers', phase='analysis', launch_pass=2, source_list='a.md, b.md', route='quick', delivery_short=True),
             data={'launch_source': 'the answers', 'phase': 'analysis', 'launch_pass': 2, 'source_list': 'a.md, b.md', 'route': 'quick', 'delivery_short': True, 'task_dir': '/t', 'repo_dir': '/r', 'delivery_mode': 'files'})]))
 
 put('flow-input-absent', scenario('FLOW: the optional fields of the input are absent: they are none (the source is the empty text), the launch starts', [

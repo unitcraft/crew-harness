@@ -52,9 +52,9 @@ test "dl file is translation" {
 }
 
 test "dl header" {
-    assert(dialog_table_text().contains("- format: 2.11"))
+    assert(dialog_table_text().contains("- format: 2.12"))
     assert(dialog_table_text().contains("- machine: DialogSession"))
-    assert(dialog_machine_text().contains("\"portolan_version\": \"2.11\"") || dialog_machine_text().contains("\"portolan_version\":\"2.11\""))
+    assert(dialog_machine_text().contains("\"portolan_version\": \"2.12\"") || dialog_machine_text().contains("\"portolan_version\":\"2.12\""))
 }
 
 test "dl loads" {

@@ -92,7 +92,7 @@
           "delivery_short": false,
           "launch_pass": 3,
           "phase": "implementation",
-          "source": "file of pass 2",
+          "launch_source": "file of pass 2",
           "source_list": "README.md"
         }
       },

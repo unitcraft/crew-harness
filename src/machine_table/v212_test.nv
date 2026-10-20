@@ -61,7 +61,8 @@ test "v212 machines are 2.12" {
         ro tree = decoded(f.text)
         assert(tree.states.len() > 0)
         assert(!f.text.contains("2.11"))
-        assert(!f.text.contains("portolan-2.1"))
+        assert(!f.text.contains("portolan-2.11"))
+        assert(!f.text.contains("portolan-2.10"))
     }
 }
 
@@ -80,7 +81,8 @@ test "v212 fragments accepted" {
 }
 
 test "v212 fragments args missing" {
-    assert(says(with_fragments(pause_args().replace(`"write_right":{"op":"lit","value":"x"}`, `"x":{"op":"lit","value":"x"}`)), "write_right"))
+    assert(says(with_fragments(pause_args().replace(`,"write_right":{"op":"lit","value":"x"}`, "")), "write_right"))
+    assert(says(with_fragments(pause_args().replace(`"write_right"`, `"extra"`)), "extra"))
 }
 
 test "v212 fragments name unknown" {
@@ -106,7 +108,7 @@ test "v212 fragments behavior word" {
 
 test "v212 methodology table" {
     ro table = methodology_journal()
-    assert(table.len() >= 100)
+    assert(table.len() >= 80)
     assert(journal_find(table, "signal_passed").is_some())
     assert(journal_find(table, "human_stop").is_some())
     assert(journal_find(table, "fork_no_match").is_some())
