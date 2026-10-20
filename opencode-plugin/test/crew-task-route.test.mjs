@@ -159,6 +159,12 @@ cell("T92-11 the field names of the input are reserved against the extra fields 
 const mod = await import("../index.ts")
 const tasks = await import("../tasks.ts")
 const core = await import("../core.ts")
+const { briefFaults, exactMessageHash, legacyTaskLetterFaults } = await import("../route.ts")
+const legacyFixture = JSON.parse(readFileSync(new URL("./legacy-task-letter-092.fixture.json", import.meta.url), "utf8"))
+cell("T133 format-derived Nova 092 legacy letter is recognized only against its target identity", legacyTaskLetterFaults(legacyFixture.text, legacyFixture.expected).length === 0, legacyFixture.provenance)
+cell("T133 the format-derived counterexample remains RED under modern brief validation", briefFaults(legacyFixture.text).length === 2, JSON.stringify(briefFaults(legacyFixture.text)))
+cell("T133 the same legacy letter rejects another number", legacyTaskLetterFaults(legacyFixture.text, { ...legacyFixture.expected, n: 93 }).length > 0, "")
+cell("T133 missing acceptance criteria are rejected", legacyTaskLetterFaults(legacyFixture.text.replace(/^КРИТЕРИИ ПРИЁМКИ:.*\n/m, ""), legacyFixture.expected).some((x) => /критериев/.test(x)), "")
 const status = await import("../status.ts")
 const tools = {}
 const hooks = {}
@@ -308,7 +314,7 @@ cell("T92-17 (test 14) an old record is read without change: no route field appe
 cell("T92-17 (test 14) the file of an old record is not rewritten by reading it", !("route" in JSON.parse(readFileSync(path.join(store(), "880.json"), "utf8"))), "")
 
 // ---- explicit, in-place migration of a folderless legacy record ----
-const migrationBrief = fastMessage("Старая задача")
+const migrationBrief = `ЗАДАЧА #881 «Старая задача» от proj.integrator (сессия sesINTEG1), приоритет P1.\nЦЕЛЬ: Сохранить задачу\nКРИТЕРИИ ПРИЁМКИ: Проверить результат без реконструкции\nГРАНИЦЫ (не делаем): не создавать вторую запись\nWORKTREE ГОТОВ: эта сессия уже работает в <TMP>/legacy, ветка task/092-legacy (создал плагин от целевой ветки). Правь и коммить здесь; другой worktree не создавай.\nСДЕЛАНО ПРЕЖНИМ ИСПОЛНИТЕЛЕМ (задача передана тебе):\nпроверен старый формат письма.`
 const legacyMigration = {
   project: "proj", n: 881, title: "Старая задача", slug: "staraya-zadacha", goal: "Сохранить задачу", criteria: "Проверить результат",
   priority: "P1", tier: "medium", role: "worker", author: "sesINTEG1", author_role: "proj.integrator", qid: "q881",
@@ -321,18 +327,35 @@ const legacyMigration = {
 }
 writeFileSync(path.join(store(), "881.json"), JSON.stringify(legacyMigration, null, 1))
 const migrationWord = "«заводи 881 на fast» (владелец, 2026-10-20, чат)"
-const migrate = (n, over = {}) => call("crew_task", "sesINTEG1", { action: "migrate", n, message: migrationBrief, route_word: migrationWord, route_word_date: "2026-10-20", ...over })
+const migrate = (n, over = {}) => {
+  const input = { action: "migrate", n, message: migrationBrief, source_id: "task-proj-881-3", source_session: "sesINTEG1", source_to: "sesLEGACY881", source_qid: "q881", route_word: migrationWord, route_word_date: "2026-10-20", ...over }
+  input.source_sha256 ??= exactMessageHash(input.message)
+  return call("crew_task", "sesINTEG1", input)
+}
 const beforeMigrateRecords = recs()
 const noMigrationWord = await migrate(881, { route_word: undefined, route_word_date: undefined })
 cell("T129 migration without the owner's word is refused and leaves the task untouched", /отдельное слово владельца должно прямо называть задачу 881/.test(noMigrationWord) && !tasks.loadTask("proj", 881).route && recs() === beforeMigrateRecords, noMigrationWord)
 const badMigrationBrief = await migrate(881, { message: "# неполная постановка" })
-cell("T129 migration with an invalid original brief is refused", /быстрый путь требует/.test(badMigrationBrief) && !tasks.loadTask("proj", 881).route, badMigrationBrief)
+cell("T133 an incomplete legacy letter is refused before writing", /письмо не распознано/.test(badMigrationBrief) && !tasks.loadTask("proj", 881).route, badMigrationBrief)
+const wrongProject = await migrate(881, { message: migrationBrief.replace("proj.integrator", "nova.integrator") })
+cell("T133 a legacy letter for another project is refused", /не совпадает с project\/task\/title/.test(wrongProject) && !tasks.loadTask("proj", 881).route, wrongProject)
+const wrongBranch = await migrate(881, { message: migrationBrief.replace("task/092-legacy", "task/other") })
+cell("T133 a different legacy branch is refused", /не совпадает с веткой/.test(wrongBranch) && !tasks.loadTask("proj", 881).route, wrongBranch)
+const wrongSource = await migrate(881, { source_session: "sesOTHER" })
+cell("T133 archived sender metadata must match the letter author", /from_session архива/.test(wrongSource) && !tasks.loadTask("proj", 881).route, wrongSource)
+const wrongRecipient = await migrate(881, { source_to: "sesOTHER" })
+cell("T133 archived recipient must match the existing executor", /to текущего исполнителя/.test(wrongRecipient) && !tasks.loadTask("proj", 881).route, wrongRecipient)
+const wrongQid = await migrate(881, { source_qid: "qOTHER" })
+cell("T133 archived qid must match the existing task", /qid задачи/.test(wrongQid) && !tasks.loadTask("proj", 881).route, wrongQid)
+const wrongDigest = await migrate(881, { source_sha256: "0".repeat(64) })
+cell("T133 a missing or mismatched archive digest refuses before writing", /SHA256 точного UTF-8 text/.test(wrongDigest) && !tasks.loadTask("proj", 881).route, wrongDigest)
 const wrongMigrationNumber = await migrate(881, { route_word: "«заводи 092» (владелец, 2026-10-20, чат)" })
 cell("T129 a word for a different task number is refused", /должно прямо называть задачу 881/.test(wrongMigrationNumber) && !tasks.loadTask("proj", 881).route, wrongMigrationNumber)
 const migratedReply = await migrate(881)
 const migrated = tasks.loadTask("proj", 881)
 cell("T129 migration succeeds in place without allocating a second task number", /переведена на fast/.test(migratedReply) && migrated.route === "fast" && recs() === beforeMigrateRecords, migratedReply)
-cell("T129 migration preserves sessions, rounds, branch/worktree and prior history", migrated.sessions?.[0]?.session === "sesMETHOD881" && migrated.rework === 2 && migrated.syncs === 1 && migrated.branch === legacyMigration.branch && migrated.worktree === legacyMigration.worktree && migrated.history[0].note === "legacy history", JSON.stringify(migrated))
+cell("T129 migration preserves identity, attempt, sessions, rounds, branch/worktree and prior history", migrated.qid === legacyMigration.qid && migrated.executor === legacyMigration.executor && migrated.attempt === legacyMigration.attempt && migrated.sessions?.[0]?.session === "sesMETHOD881" && migrated.rework === 2 && migrated.syncs === 1 && migrated.branch === legacyMigration.branch && migrated.worktree === legacyMigration.worktree && migrated.history[0].note === "legacy history", JSON.stringify(migrated))
+cell("T133 migration hashes the exact original legacy letter, not its validation projection", migrated.route_message_hash === exactMessageHash(migrationBrief), migrated.route_message_hash)
 cell("T129 migration preserves precheck FAIL/stale/lock and evidence rather than converting or releasing them", migrated.precheck?.result === "FAIL" && migrated.precheck?.state === "stale" && migrated.precheck?.lock_on?.tip === "sha-lock-tip" && migrated.kept?.[0]?.path === "evidence.txt" && migrated.side?.[0]?.branch === "evidence-branch", JSON.stringify({ precheck: migrated.precheck, kept: migrated.kept, side: migrated.side }))
 const repeatMigration = await migrate(881)
 cell("T129 a repeated migration safely refuses without changing history", /повторная миграция запрещена/.test(repeatMigration) && tasks.loadTask("proj", 881).history.length === migrated.history.length, repeatMigration)
@@ -436,7 +459,7 @@ const rPlan = await call("crew_spawn", "sesINTEG1", { kind: "plan", goal: "чт�
 cell("T92-22 a plan task takes no route", /не поставлена/.test(rPlan) && /план/.test(rPlan), rPlan)
 const help = await call("crew_help", "sesINTEG1")
 cell("T92-22 the help and the tool texts name the route, the word and the minimums", /route: "fast"/.test(help) && /route_word_stale/.test(help) && /route_word/.test(tools.crew_spawn.description) && /route/.test(tools.crew_task.description) && !!tools.crew_spawn.input.properties.route && !!tools.crew_task.input.properties.route && tools.crew_task.input.properties.action.enum.includes("route"), "")
-cell("T129 the tool exposes the explicit legacy migration and its required inputs", /migrate/.test(tools.crew_task.description) && tools.crew_task.input.properties.action.enum.includes("migrate") && !!tools.crew_task.input.properties.message && !!tools.crew_task.input.properties.route_word && !!tools.crew_task.input.properties.route_word_date, "")
+cell("T133 the tool exposes legacy migration and archive identity/digest inputs", /migrate/.test(tools.crew_task.description) && tools.crew_task.input.properties.action.enum.includes("migrate") && !!tools.crew_task.input.properties.message && !!tools.crew_task.input.properties.source_id && !!tools.crew_task.input.properties.source_session && !!tools.crew_task.input.properties.source_to && !!tools.crew_task.input.properties.source_qid && !!tools.crew_task.input.properties.source_sha256 && !!tools.crew_task.input.properties.route_word && !!tools.crew_task.input.properties.route_word_date, "")
 const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8")
 cell("T92-22 the README has the section «Маршрут задачи» with the table of the terms and route_defaults", /Маршрут задачи/.test(readme) && /\| слово_завода \| `route_word` \|/.test(readme) && /route_defaults/.test(readme) && /clean_series/.test(readme), "")
 cell("T129 the README gives Nova the exact migration command and warns not to invent the owner's word", /Folderless legacy → fast/.test(readme) && /action: "migrate"/.test(readme) && /infer a missing owner word/i.test(readme), "")

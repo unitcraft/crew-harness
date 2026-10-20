@@ -1,0 +1,10 @@
+{
+  "provenance": "Portable format-derived regression sample based on the historical formatTaskLetter contract; not the archived original and not byte-identical to it.",
+  "expected": {
+    "project": "nova",
+    "n": 92,
+    "title": "Carina target_os cross-emit",
+    "branch": "task/92-carina-target-os-cross-emit"
+  },
+  "text": "ЗАДАЧА #92 «Carina target_os cross-emit» от nova.integrator (сессия sesFixture92), приоритет P1.\nЦЕЛЬ: Поддержать target_os cross-emit.\nКРИТЕРИИ ПРИЁМКИ: Для Linux генерируется C, а target_os cfg/emit остаётся согласованным.\nГРАНИЦЫ (не делаем): Не менять другие компиляторы.\nWORKTREE ГОТОВ: эта сессия уже работает в <WORKTREE>, ветка task/92-carina-target-os-cross-emit (создал плагин от целевой ветки).\nСДЕЛАНО ПРЕЖНИМ ИСПОЛНИТЕЛЕМ (задача передана тебе):\nИзучен старый формат доставки."
+}

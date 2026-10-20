@@ -275,10 +275,31 @@ export function briefFaults(message: string | undefined): string[] {
   return out
 }
 
+/** Strict recognizer for the historical formatTaskLetter task letter. It is deliberately
+ * migrate-only: modern briefs continue to use briefFaults unchanged. */
+export function legacyTaskLetterFaults(message: string | undefined, expected: { project: string; n: number; title: string; branch: string; source_session?: string }): string[] {
+  const text = String(message ?? "")
+  const head = /^ЗАДАЧА\s+#(\d+)\s+«([^»]+)»\s+от\s+([a-z0-9_-]+)\.integrator\s+\(сессия\s+(ses[^\s)]+)\),\s+приоритет\s+P[0-3]\.$/i.exec(text.split(/\r?\n/, 1)[0] ?? "")
+  if (!head || Number(head[1]) !== expected.n || head[2] !== expected.title || head[3] !== expected.project) return ["заголовок старого письма не совпадает с project/task/title существующей записи"]
+  const criteria = /^КРИТЕРИИ ПРИЁМКИ:\s*(.+)$/im.exec(text)?.[1]?.trim() ?? ""
+  const goal = /^ЦЕЛЬ:\s*(\S[\s\S]*?)(?=\r?\n[A-ZА-ЯЁ][^\r\n]*:|$)/im.exec(text)?.[1]?.trim() ?? ""
+  const worktree = /^WORKTREE ГОТОВ:[^\r\n]*ветка\s+([^\s.)]+)[^\r\n]*$/im.exec(text)?.[1]
+  const history = /^СДЕЛАНО ПРЕЖНИМ ИСПОЛНИТЕЛЕМ \(задача передана тебе\):\s*\r?\n[\s\S]+$/im.test(text)
+  const faults: string[] = []
+  if (!goal) faults.push("в старом письме нет непустой цели")
+  if (!criteria) faults.push("в старом письме нет непустых критериев приёмки")
+  if (!expected.branch || worktree !== expected.branch) faults.push("ветка в WORKTREE ГОТОВ не совпадает с веткой существующей записи")
+  if (expected.source_session && head[4] !== expected.source_session) faults.push("from_session архива не совпадает с сессией автора письма")
+  if (!history) faults.push("неполная форма старого письма: нет блока передачи прежнего исполнителя")
+  return faults
+}
+
 // ---- правило решения 51 как данные ----
 
 /** Хеш постановки: переводы строк Windows и хвостовые пробелы не считаются правкой. */
 export const messageHash = (text: string): string => createHash("sha256").update(String(text).replace(/\r\n?/g, "\n").replace(/\s+$/, "")).digest("hex")
+/** Exact UTF-8 digest for the source archive; unlike messageHash, no normalization is allowed. */
+export const exactMessageHash = (text: string): string => createHash("sha256").update(String(text), "utf8").digest("hex")
 
 /** Решение 51: постановка изменена после слова завода — запись быстрого пути помечается route_word_stale (возврат на ворота В5 нужен), серия чистых
  *  заходов обнуляется; числа, слово, трасса и история остаются. `text` — нынешний текст постановки (undefined — прочесть не удалось, ничего не известно).

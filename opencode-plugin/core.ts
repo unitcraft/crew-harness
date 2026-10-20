@@ -24,7 +24,7 @@ import { type Task, type TaskPlan, type TaskSession, WORKING_STATUSES, EXECUTOR_
 import { countedOpen, waitingCleanup } from "./tasks.ts"
 import { baseRef, branchExists, commitFiles, ensureBranch, findFolder, folderName, pad3, usedNumbers } from "./task-numbers.ts"
 import { firstLogLine, folderInfo, messageRefusal, nextLaunch, readFolderFile, readTaskMessage, refreshRouteStale, routeLogLine, taskLog, templateMessage, titleOfMessage } from "./task-folders.ts"
-import { STALE_WARNING, applyRouteChange, hasRouteInput, planRoute, routeLogText, routeSettingsOf, routeView, ROUTE_RU, type RouteSettings } from "./route.ts"
+import { STALE_WARNING, applyRouteChange, exactMessageHash, hasRouteInput, legacyTaskLetterFaults, planRoute, routeLogText, routeSettingsOf, routeView, ROUTE_RU, type RouteSettings } from "./route.ts"
 import { acceptanceFromFile } from "./acceptance-file.ts"
 import { acceptWarning, acceptedTip, beginPrecheck, finishPrecheck, gateMerge, landedFresh, landingLine, markPrecheckStale, neighbourHints, precheckLines, unlockMerge } from "./precheck.ts"
 import { addSide, autoTrack, cleanupDone, removeSide, sideItems, cleanupSteps, fileAt, holdsMergeLock, isMerged, keptOnBranch, keptPaths, mergeHolder, releaseMergeLock, resolveKeep, reworkLetter, sameFs, takeMergeLock } from "./review.ts"
@@ -2535,7 +2535,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         "cancel - integrator - n, text? - cancel the task; text goes to the executor. Releases the merge lock if the task held it.",
         "priority - integrator - n, priority P0..P3 - change the priority.",
         "route - integrator - n, route full|fast, text (the reason, required for full), route_word and route_word_date (fast) - change the route of an open task BY A RECORD (task 092). To full: the reason becomes the basis, the word of the owner is emptied, the series of clean runs is zeroed, the trace stays. A new word «заводи <number>» (fast) renews the word of a task marked route_word_stale (the brief was edited after the word: the warning «постановка изменена после слова завода: нужно новое слово владельца» shows in list, show and every step until then) and re-reads the brief. A line «маршрут: …» goes to log.md of the task.",
-        "migrate - integrator - n, message (the saved original task text), route_word, route_word_date - migrate an open folderless legacy task record without changing its number to fast. Requires a record with no route and a valid fast-route brief plus the owner's explicit «заводи <number>» word; edits no files or external Nova data. The task record is updated in place, retaining sessions, rounds, branch/worktree, history and all precheck/evidence fields. A second migration is refused.",
+        "migrate - integrator - n, message (exact saved sent-letter text), source_id, source_session, source_to, source_qid, source_sha256, route_word, route_word_date - migrate an open folderless legacy record in place. Accepts only a strictly matched historical task-letter envelope; archive identity and exact UTF-8 text digest are required, never reconstruct the letter. Requires matching project/number/title/branch and the owner's explicit «заводи <number>» word. Edits no archive or external project files; preserves sessions, rounds, branch/worktree, history, precheck and evidence. A second migration is refused.",
         "submit - executor - n, text - submit the task's work with the report (what was done, how it was checked, what is left); no qid is needed. The first submission, one after rework or after a sync (the reviewer is woken), a plan task (the plan file and its form are checked). Already submitted: refused.",
         "track - executor, reviewer, integrator - n, branch?, worktree? - record a side branch or worktree of the task (no duplicates) so cleanup removes it; branches integrate/t<N> and integrate/t<N>-* are recorded by the plugin itself.",
         "plan_decide - integrator, only the plan task's author, only when the project's plan_approver is integrator - n, decision ok|ok-shortcuts|no, text (required with no) - decide a plan that passed the recheck rounds and waits for approval (status approval). ok = approved with no shortcuts; ok-shortcuts = approved, the shortcuts written in the plan stay; no = back to the executor, text lists what to change, the rounds start over. With plan_approver: owner (default) the owner decides in the window with /plans and this action is refused.",
@@ -2574,6 +2574,11 @@ export function makeTools(host: CrewHost): CrewTool[] {
         sync: { type: "boolean", description: "rework: only merge the fresh target branch, not a round" },
         all: { type: "boolean", description: "list: include finished and cancelled", default: false },
         message: str("assign in a project with task folders: the full text of task/message.md of the new folder by the template (as crew_spawn); migrate: exact saved original task text, never reconstructed"),
+        source_id: str("migrate: id copied from the read-only saved-letter archive; expected task-<project>-<number>-<attempt>"),
+        source_session: str("migrate: from_session copied from that same archived letter"),
+        source_to: str("migrate: to copied from that same archived letter; must be the existing executor"),
+        source_qid: str("migrate: qid copied from that same archived letter; must match the existing task"),
+        source_sha256: str("migrate: SHA256 of the exact UTF-8 text field from that archived letter"),
         route_word: str("route/migrate: the owner's exact «заводи <number>» authorization with date and source"),
         route_word_date: str("route/migrate: date of the owner's word in YYYY-MM-DD"),
         ...taskInput,
@@ -2684,10 +2689,21 @@ export function makeTools(host: CrewHost): CrewTool[] {
         if (t.folder || !routeView(t).legacy) return { content: `Миграция ${taskRef(t)} не выполнена: требуется открытая folderless legacy-запись без маршрута; повторная миграция запрещена.` }
         const message = typeof input.message === "string" ? input.message : undefined
         if (!message || !message.trim()) return { content: "Миграция не выполнена: передай message — дословную сохранённую исходную постановку; не восстанавливай её по памяти." }
+        const sourceId = `task-${safeKey(t.project)}-${t.n}-${t.attempt}`
+        if (input.source_id !== sourceId || input.source_to !== t.executor || input.source_qid !== t.qid || !/^ses[^\s]+$/.test(String(input.source_session ?? "")) || input.source_sha256 !== exactMessageHash(message))
+          return { content: `Миграция не выполнена: нужны совпадающие source_id «${sourceId}», from_session, to текущего исполнителя, qid задачи и SHA256 точного UTF-8 text из той же read-only записи архива.` }
+        const legacyFaults = legacyTaskLetterFaults(message, { project: t.project, n: t.n, title: t.title, branch: String(t.branch ?? ""), source_session: String(input.source_session) })
+        if (legacyFaults.length) return { content: `Миграция не выполнена: письмо не распознано как исходный legacy-формат: ${legacyFaults.join("; ")}.` }
         if (!new RegExp(`заводи\\s+0*${t.n}(?!\\d)`, "i").test(String(input.route_word ?? "")))
           return { content: `Миграция не выполнена: отдельное слово владельца должно прямо называть задачу ${taskNo(t)} («заводи ${taskNo(t)}») с датой и источником.` }
-        const res = applyRouteChange(t, { route: "fast", route_word: input.route_word, route_word_date: input.route_word_date, route_source: "human" }, message, configFor(me).routeDefaults, me.session)
+        const legacy = /^КРИТЕРИИ ПРИЁМКИ:\s*(.+)$/im.exec(message)![1].trim()
+        const branch = String(t.branch)
+        // A validation-only projection supplies the modern route engine's required shape;
+        // provenance/hash remain tied to the exact saved letter, never this projection.
+        const projected = `## Критерии приёмки\n1. ${legacy}\nВетка: ${branch}`
+        const res = applyRouteChange(t, { route: "fast", route_word: input.route_word, route_word_date: input.route_word_date, route_source: "human" }, projected, configFor(me).routeDefaults, me.session)
         if (!res.ok) return { content: `Миграция не выполнена: ${res.refusal}` }
+        t.route_message_hash = exactMessageHash(message)
         saveTask(t)
         host.posted([])
         return { content: `Legacy-запись ${taskRef(t)} переведена на fast на месте: ${res.line}. Номер, сессии, rounds, ветка/worktree, прежняя история, precheck и evidence сохранены; внешние файлы Nova не импортировались.` }
