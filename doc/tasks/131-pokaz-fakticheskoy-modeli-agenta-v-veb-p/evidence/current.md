@@ -14,9 +14,11 @@
 - GREEN: полный web-набор `node --test test/*.test.mjs` — 102/102.
 - `node --check src/acp/testdata/fake_agent.mjs` — без ошибок.
 - `git diff --check` — без ошибок.
-- Nova-наборы `nova test src/acp`, `nova test src/acp_live` и серверные тесты не запускались: `nova` и указанный в `spikes/env/README.md` setup-env отсутствуют в доступной среде.
+- `nova test src/acp` — PASS: 1, FAIL: 0.
+- `nova test src/acp_live` — PASS: 1, FAIL: 0.
+- `nova test src/server` — PASS: 2, FAIL: 0.
+- Все три Nova-прогона выполнены штатным Nova Oracle 0.1.0 из toolchain, предоставленного интегратором, через очередь машины. Первый вызов собрал libuv/runtime cache; повторных сборок toolchain не делалось.
 
 ## Осталось
 
-- Повторить полный затронутый набор Nova для ACP, ACP live и server в среде с Nova; проверить компиляцию и исполнение новых ACP/hub тестов.
 - Независимая приёмка, exact candidate/precheck и merge gates.
