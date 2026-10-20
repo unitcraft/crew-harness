@@ -21,6 +21,7 @@ export fn machine_files() -> []NamedText => [
     NamedText { name: "fan.portolan.json", text: embed_str("machines/fan.portolan.json") },
     NamedText { name: "gate.portolan.json", text: embed_str("machines/gate.portolan.json") },
     NamedText { name: "lenses.portolan.json", text: embed_str("machines/lenses.portolan.json") },
+    NamedText { name: "session_start.portolan.json", text: embed_str("machines/session_start.portolan.json") },
     NamedText { name: "variants.portolan.json", text: embed_str("machines/variants.portolan.json") }
 ]
 
@@ -34,7 +35,8 @@ export fn table_files() -> []NamedText => [
     NamedText { name: "cycle_check.portolan.md", text: embed_str("machines/cycle_check.portolan.md") },
     NamedText { name: "dialog.portolan.md", text: embed_str("machines/dialog.portolan.md") },
     NamedText { name: "dialog_steps.portolan.md", text: embed_str("machines/dialog_steps.portolan.md") },
-    NamedText { name: "fan.portolan.md", text: embed_str("machines/fan.portolan.md") }
+    NamedText { name: "fan.portolan.md", text: embed_str("machines/fan.portolan.md") },
+    NamedText { name: "session_start.portolan.md", text: embed_str("machines/session_start.portolan.md") }
 ]
 
 /// The scenarios of `scenarios/`, by the name of the file (`chat-basic.scenario.test.json`).
@@ -379,6 +381,12 @@ export fn chat_table_text() -> str => text_of_file(table_files(), "chat.portolan
 
 /// The text of the many-turn chat machine written as tables (`machines/dialog.portolan.md`).
 export fn dialog_table_text() -> str => text_of_file(table_files(), "dialog.portolan.md")
+
+/// The text of the machine "Session start" (`machines/session_start.portolan.json`), the translation of its table (task 121): the machine the runner calls for every session.
+export fn session_start_machine_text() -> str => text_of_file(machine_files(), "session_start.portolan.json")
+
+/// The text of the machine "Session start" written as tables (`machines/session_start.portolan.md`).
+export fn session_start_table_text() -> str => text_of_file(table_files(), "session_start.portolan.md")
 
 /// The names of the files that the directories hold (read at compile time with `embed_dir`): a test compares them with the lists above, so a
 /// file that is added to a directory and not to its list is found.

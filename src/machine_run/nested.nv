@@ -16,6 +16,7 @@ module crew_harness.machine_run
 
 import std.text
 import crew_harness.engine.{Engine, Incoming, EventKind, PartyRequest, PartyResponse, Journal, Store, Link, Time, start_engine_in}
+import crew_harness.machine.{standard_registry, machine_files, text_of_file}
 import crew_harness.machine_table.{MachineDef, MachineParty, check_nested}
 
 /// NestedEntry: a machine of the registry of a caller: the name the caller's table calls it by (`machine шаг_агента(…)`) and the machine.
@@ -41,6 +42,20 @@ export fn NestedRegistry @find(name str) -> Option[PortolanMachine] {
         if e.name == name { return Some(e.machine) }
     }
     None
+}
+
+/// The machines of the product that a caller may call, each under the name of its machine: "Шаг агента" (`agent_step`) and "Запуск сессии" (`session_start`, task 121), loaded from the JSON
+/// files compiled into the program (`machines/`). The runner of tasks (task 123) calls the second; the second calls the first, so a caller of the session start needs the runner of the pairs
+/// to run two levels (`check_registry` says so for such a pair).
+export fn product_registry() -> NestedRegistry {
+    mut reg = NestedRegistry.empty()
+    for name in ["agent_step", "session_start"] {
+        match load_portolan_machine(text_of_file(machine_files(), "${name}.portolan.json"), standard_registry()) {
+            Ok(m) => { reg = reg.add(m.def.name, m) }
+            Err(e) => panic("the machine ${name} of the registry of the product does not load: ${e}")
+        }
+    }
+    reg
 }
 
 fn has_machine_party(m PortolanMachine) -> bool {
