@@ -10,7 +10,7 @@ import {
 } from './state.js';
 import { t } from './strings.js';
 import { createView } from './view.js';
-import { chooseMode, createTransport } from './transport.js';
+import { chooseMode, createTransport, parseAgentRegistry } from './transport.js';
 import {
   AGENTS, MODES, MODELS, EFFORTS, createMockServer,
 } from './mock.js';
@@ -131,33 +131,37 @@ const handlers = {
   },
 };
 
-view = createView(document, {
-  app: document.getElementById('app'),
-  side: document.getElementById('side'),
-  main: document.getElementById('main'),
-  rail: document.getElementById('rail'),
-  status: document.getElementById('status'),
-  overlay: document.getElementById('overlay'),
-}, {
-  agents: AGENTS, modes: MODES, models: MODELS, efforts: EFFORTS, now: ctx.now, handlers,
-});
-
-// Раз в секунду обновляются только подписи времени («идёт 1 мин 36 с», «5 мин назад»).
-setInterval(() => view.tick(), TICK_MS);
-
 const picked = chooseMode(location.search, location.protocol, location.host);
-const transport = createTransport({
-  mode: picked.mode,
-  url: picked.url,
-  server: picked.mode === 'mock' ? createMockServer({ now: ctx.now }) : undefined,
-  WebSocketImpl: globalThis.WebSocket,
-  timers,
-  onEvent(event) {
-    const next = reduce(model, event);
-    if (next !== model) { model = next; render(); }
-  },
-  onStatus(next) { status = next; render(); },
-});
-
-transport.start();
-render();
+async function start() {
+  let agents = AGENTS;
+  let registryFailed = false;
+  if (picked.mode === 'ws') {
+    try {
+      const response = await fetch('/api/agents', { cache: 'no-store' });
+      if (!response.ok) throw new Error('agent registry unavailable');
+      agents = parseAgentRegistry(await response.json());
+    } catch {
+      agents = [];
+      registryFailed = true;
+    }
+  }
+  view = createView(document, {
+    app: document.getElementById('app'), side: document.getElementById('side'),
+    main: document.getElementById('main'), rail: document.getElementById('rail'),
+    status: document.getElementById('status'), overlay: document.getElementById('overlay'),
+  }, { agents, modes: MODES, models: MODELS, efforts: EFFORTS, now: ctx.now, handlers, registryFailed });
+  setInterval(() => view.tick(), TICK_MS);
+  const transport = createTransport({
+    mode: picked.mode, url: picked.url,
+    server: picked.mode === 'mock' ? createMockServer({ now: ctx.now }) : undefined,
+    WebSocketImpl: globalThis.WebSocket, timers,
+    onEvent(event) {
+      const next = reduce(model, event);
+      if (next !== model) { model = next; render(); }
+    },
+    onStatus(next) { status = next; render(); },
+  });
+  transport.start();
+  render();
+}
+start();

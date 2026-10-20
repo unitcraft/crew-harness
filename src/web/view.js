@@ -83,7 +83,7 @@ function icon(doc, id, extra = '') {
  */
 export function createView(doc, refs, deps) {
   const {
-    agents, modes, models, efforts, now, handlers,
+    agents, modes, models, efforts, now, handlers, registryFailed = false,
   } = deps;
   const win = doc.defaultView;
   const drafts = new Map();
@@ -94,7 +94,7 @@ export function createView(doc, refs, deps) {
 
   const agentLabel = (id) => {
     const a = agents.find((x) => x.id === id);
-    return a ? t(a.labelKey) : id;
+    return a ? (a.labelKey ? t(a.labelKey) : a.label) : id;
   };
 
   function formatTime(ms) {
@@ -128,17 +128,21 @@ export function createView(doc, refs, deps) {
   const newButton = h(doc, 'button', { type: 'button', class: 'new-btn' }, icon(doc, 'i-plus'), h(doc, 'span', { text: t('sessions.new') }));
   const agentSelect = h(doc, 'select', { id: 'new-agent' });
   for (const a of agents) {
-    agentSelect.append(h(doc, 'option', { value: a.id, disabled: a.disabled === true, text: t(a.labelKey) }));
+    agentSelect.append(h(doc, 'option', { value: a.id, disabled: a.disabled === true, text: a.labelKey ? t(a.labelKey) : a.label }));
   }
   const nameInput = h(doc, 'input', { id: 'new-name', type: 'text', autocomplete: 'off', placeholder: t('sessions.new_name_placeholder') });
   const projectInput = h(doc, 'input', { id: 'new-project', type: 'text', autocomplete: 'off', placeholder: t('sessions.new_project_placeholder') });
   const createButton = h(doc, 'button', { type: 'submit', class: 'primary', text: t('sessions.new_create') });
+  createButton.disabled = agents.length === 0;
+  const agentNotice = h(doc, 'p', { class: 'empty', text: t(registryFailed ? 'sessions.agents_unavailable' : 'sessions.agents_none'), hidden: agents.length > 0 });
+  const retryAgents = h(doc, 'button', { type: 'button', class: 'link-btn', text: t('sessions.agents_retry'), hidden: !registryFailed });
+  retryAgents.addEventListener('click', () => doc.defaultView.location.reload());
   const closeButton = h(doc, 'button', { type: 'button', text: t('sessions.new_close') });
   const newForm = h(doc, 'form', { class: 'new-form', hidden: true },
     h(doc, 'label', { for: 'new-agent' }, t('sessions.new_agent'), agentSelect),
     h(doc, 'label', { for: 'new-name' }, t('sessions.new_name'), nameInput),
     h(doc, 'label', { for: 'new-project' }, t('sessions.new_project'), projectInput),
-    h(doc, 'div', { class: 'actions' }, closeButton, createButton));
+    agentNotice, retryAgents, h(doc, 'div', { class: 'actions' }, closeButton, createButton));
   const groupsBox = h(doc, 'nav', { class: 'groups', 'aria-label': t('sessions.title') });
   const listEmpty = h(doc, 'p', { class: 'empty', text: t('sessions.empty') });
   const notFound = h(doc, 'p', { class: 'empty', text: t('sessions.not_found'), hidden: true });
@@ -247,7 +251,7 @@ export function createView(doc, refs, deps) {
 
   function selectField(id, labelKey, items) {
     const select = h(doc, 'select', { id });
-    for (const it of items) select.append(h(doc, 'option', { value: it.id, disabled: it.disabled === true, text: t(it.labelKey) }));
+    for (const it of items) select.append(h(doc, 'option', { value: it.id, disabled: it.disabled === true, text: it.labelKey ? t(it.labelKey) : it.label }));
     return { select, node: h(doc, 'label', { class: 'opt', for: id }, h(doc, 'span', { class: 'sr', text: t(labelKey) }), select) };
   }
   const modeField = selectField('opt-mode', 'composer.mode_label', modes);

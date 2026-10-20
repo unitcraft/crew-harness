@@ -23,6 +23,17 @@ export function chooseMode(search, protocol, host) {
   return { mode: 'nofile' };
 }
 
+/** Keep only public registry fields; command details never enter the page. */
+export function parseAgentRegistry(payload) {
+  if (!payload || !Array.isArray(payload.agents)) return [];
+  return payload.agents.flatMap((entry) => {
+    if (!entry || typeof entry.id !== 'string' || typeof entry.label !== 'string') return [];
+    const id = entry.id.trim();
+    const label = entry.label.trim();
+    return id && label ? [{ id, label }] : [];
+  });
+}
+
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 /**

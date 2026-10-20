@@ -1,7 +1,7 @@
 // Проверки транспорта: выбор режима, воспроизведение заглушки, WebSocket с повтором.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chooseMode, createTransport, RETRY_STEPS } from '../transport.js';
+import { chooseMode, createTransport, parseAgentRegistry, RETRY_STEPS } from '../transport.js';
 import { createMockServer } from '../mock.js';
 import { makeEvent } from '../state.js';
 
@@ -45,6 +45,17 @@ test('chooseMode: ?mock=1 — заглушка; http — сокет /ws; file б
   assert.deepEqual(chooseMode('', 'https:', 'example.test'), { mode: 'ws', url: 'wss://example.test/ws' });
   assert.deepEqual(chooseMode('', 'file:', ''), { mode: 'nofile' });
   assert.deepEqual(chooseMode('?mock=0', 'http:', 'h'), { mode: 'ws', url: 'ws://h/ws' });
+});
+
+test('реестр live-агентов: только непустые id/label, без полей запуска', () => {
+  assert.deepEqual(parseAgentRegistry({ agents: [
+    { id: 'opencode', label: 'OpenCode', program: 'hidden.exe', args: ['acp'] },
+    { id: 'kimi', label: 'Kimi Code', program: 'kimi.cmd', args: ['acp'] },
+  ] }), [
+    { id: 'opencode', label: 'OpenCode' }, { id: 'kimi', label: 'Kimi Code' },
+  ]);
+  assert.deepEqual(parseAgentRegistry({ agents: [{ id: 'bad', label: '' }, null, { id: '', label: 'No id' }] }), []);
+  assert.deepEqual(parseAgentRegistry(null), []);
 });
 
 test('заглушка: статус «mock», журнал сразу, ответ по таймеру, отмена снимает остаток', () => {

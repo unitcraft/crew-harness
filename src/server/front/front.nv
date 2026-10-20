@@ -21,6 +21,7 @@ import polaris.static.{Static, serve_path}
 import polaris.ws.{Frame, OpCode, frame_len_hint}
 import polaris.net.{ServerPolicy}
 import polaris.serve.{serve_addr}
+import std.encoding.json.{JsonValue, JsonObject}
 import std.concurrency.nvchan.{Chan, ChanTx, ChanRx}
 import std.fs.{DirFs, Path}
 import std.io.{stderr}
@@ -280,12 +281,34 @@ fn files_route(web_dir str) -> fn(ServerRequest) -> ServerResponse {
     }
 }
 
-fn build_router(web_dir str, port int, hub_tx ChanTx[str], reg_tx ChanTx[Reg]) -> Result[Router, HttpError] {
+fn agents_json(agents []AgentChoice) -> str {
+    mut rows = []JsonValue.new()
+    for agent in agents {
+        mut choice = JsonObject.new()
+        ro id_set = choice.insert("id", JsonValue.str(agent.id))
+        ro label_set = choice.insert("label", JsonValue.str(agent.label))
+        rows.push(JsonValue.object(choice))
+    }
+    mut result = JsonObject.new()
+    ro list_set = result.insert("agents", JsonValue.array(rows))
+    JsonValue.object(result).to_str()
+}
+
+fn agents_route(agents []AgentChoice) -> fn(ServerRequest) -> ServerResponse {
+    fn(req ServerRequest) -> ServerResponse {
+        mut resp = ServerResponse.text(StatusCode.OK, agents_json(agents))
+        resp.header("Content-Type", "application/json; charset=utf-8")
+        with_headers(resp)
+    }
+}
+
+fn build_router(web_dir str, port int, hub_tx ChanTx[str], reg_tx ChanTx[Reg], agents []AgentChoice) -> Result[Router, HttpError] {
     mut router = Router.new()
     ro r1 = router.get("/", files_route(web_dir))?
     ro r2 = router.get("/health", fn(req ServerRequest) -> ServerResponse => ServerResponse.text(StatusCode.OK, "ok"))?
     ro r3 = router.get("/ws", ws_route(hub_tx, reg_tx, port))?
-    ro r4 = router.get("/{*path}", files_route(web_dir))?
+    ro r4 = router.get("/api/agents", agents_route(agents))?
+    ro r5 = router.get("/{*path}", files_route(web_dir))?
     Ok(router)
 }
 
@@ -303,7 +326,7 @@ export fn run_front(settings FrontSettings, config_file str) Proc Net Time Detac
         Ok(link) => {
             ro registrations = Chan[Reg].new(256)
             detach { route_loop(link, registrations.rx) }
-            match build_router(settings.web_dir, settings.port, link.out, registrations.tx) {
+            match build_router(settings.web_dir, settings.port, link.out, registrations.tx, settings.agents) {
                 Err(e) => {
                     log_line("the routes cannot be set: ${e}")
                     exit_process(2)

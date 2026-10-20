@@ -90,7 +90,10 @@ fs.writeFileSync(configFile, JSON.stringify({
   data_dir: path.join(dir, "data"),
   store: mode === "files" ? "files" : "pg",
   ...(mode === "files" ? {} : { pg: { host: pg.host, port: pg.port, database: pg.database, user: pg.user } }), // no password in the file
-  agents: [{ id: "opencode", label: "Fake", program: "node", args: [path.join(root, "src/acp/testdata/fake_agent.mjs"), "--live"] }],
+  agents: [
+    { id: "opencode", label: "Fake", program: "node", args: [path.join(root, "src/acp/testdata/fake_agent.mjs"), "--live"] },
+    { id: "kimi", label: "Kimi Code", program: "node", args: [path.join(root, "src/acp/testdata/fake_agent.mjs"), "--live"] },
+  ],
   idle_term_seconds: 3,
   workdir: root,
   web_dir: path.join(root, "src/web"),
@@ -182,6 +185,11 @@ try {
     `status=${index.status} type=${index.headers.get("content-type")}`);
   const csp = index.headers.get("content-security-policy") ?? "";
   check("the page has the CSP of serve.mjs", csp.includes("default-src 'self'") && csp.includes("connect-src 'self'"), csp);
+  const registryResponse = await fetch(`http://127.0.0.1:${port}/api/agents`, { cache: "no-store" });
+  const registry = await registryResponse.json();
+  check("the agent registry exposes configured ids and labels only", registryResponse.status === 200
+    && JSON.stringify(registry.agents) === JSON.stringify([{ id: "opencode", label: "Fake" }, { id: "kimi", label: "Kimi Code" }])
+    && (registryResponse.headers.get("cache-control") ?? "").includes("no-store"), JSON.stringify(registry));
   const js = await fetch(`http://127.0.0.1:${port}/app.js`);
   check("GET /app.js is javascript", js.status === 200 && (js.headers.get("content-type") ?? "").includes("javascript"), `status=${js.status} type=${js.headers.get("content-type")}`);
   const css = await fetch(`http://127.0.0.1:${port}/app.css`);
@@ -214,6 +222,9 @@ try {
   await a.opened;
   a.send("session_created", "s-chat", { name: "Проба", agent: "opencode" });
   check("the session is shown", !!(await a.waitFor(isKind("session_created", "s-chat"))));
+  a.send("session_created", "s-kimi", { name: "Kimi fake ACP probe", agent: "kimi" });
+  const kimiSession = await a.waitFor(isKind("session_created", "s-kimi"));
+  check("a configured second agent id reaches the hub and starts its ACP session", !!kimiSession && kimiSession.input.agent === "kimi", JSON.stringify(kimiSession));
   a.send("user_message", "s-chat", { turn: "p1", text: "привет мир" });
   check("the first turn ends", !!(await a.waitFor(isKind("agent_done", "s-chat"))));
   const um1 = a.of("s-chat").find((e) => e.kind === "user_message");

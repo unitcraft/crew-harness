@@ -15,7 +15,8 @@ import std.fs.{Fs, read_text, Path}
 import std.os.{Os, env}
 
 /// FrontSettings: where to listen, where the page is, how to start the hub.
-export type FrontSettings { port int, web_dir str, hub_program str, hub_args []str }
+export type AgentChoice { id str, label str }
+export type FrontSettings { port int, web_dir str, hub_program str, hub_args []str, agents []AgentChoice }
 
 fn fs_env(key str) Os -> Option[str] {
     match env(key) {
@@ -58,7 +59,14 @@ fn fs_strings(v JsonValue) -> []str {
     out
 }
 
-fn fs_defaults() -> FrontSettings => { port: 8099, web_dir: "src/web", hub_program: "target/crew-hub.exe", hub_args: []str.new() }
+fn fs_default_agents() -> []AgentChoice => [AgentChoice { id: "opencode", label: "OpenCode" }]
+fn fs_agents(base []AgentChoice) Os -> []AgentChoice {
+    match fs_env("CREW_SERVER_AGENT") {
+        Some(_) => [AgentChoice { id: "opencode", label: "OpenCode" }]
+        None => base
+    }
+}
+fn fs_defaults() -> FrontSettings => { port: 8099, web_dir: "src/web", hub_program: "target/crew-hub.exe", hub_args: []str.new(), agents: fs_default_agents() }
 
 // The settings of a file (the keys that are there; a wrong value is the default - the hub says what is wrong).
 fn fs_from_file(text str) -> FrontSettings {
@@ -97,7 +105,27 @@ fn fs_from_file(text str) -> FrontSettings {
         }
         None => base.hub_args
     }
-    { port, web_dir, hub_program, hub_args }
+    ro agents = match o.get("agents") {
+        Some(v) => match v.array() {
+            Some(items) => {
+                mut choices = []AgentChoice.new()
+                for item in items {
+                    match item.object() {
+                        Some(agent) => {
+                            ro id = match agent.get("id") { Some(x) => x.str() ?? "", None => "" }
+                            ro label = match agent.get("label") { Some(x) => x.str() ?? id, None => id }
+                            if id.byte_len() > 0 { choices.push(AgentChoice { id, label }) }
+                        }
+                        None => ()
+                    }
+                }
+                if choices.len() > 0 { choices } else { base.agents }
+            }
+            None => base.agents
+        }
+        None => base.agents
+    }
+    { port, web_dir, hub_program, hub_args, agents }
 }
 
 /// The settings of the front: the file (the argument, or CREW_SERVER_CONFIG), the environment over it.
@@ -125,5 +153,5 @@ export fn front_settings(file str) Os Fs -> Result[FrontSettings, str] {
     }
     ro hub_program = if hub_words.len() > 0 { hub_words[0] } else { base.hub_program }
     ro hub_args = if hub_words.len() > 0 { fs_rest(hub_words) } else { base.hub_args }
-    Ok({ port, web_dir: fs_env("CREW_SERVER_WEB_DIR") ?? base.web_dir, hub_program, hub_args })
+    Ok({ port, web_dir: fs_env("CREW_SERVER_WEB_DIR") ?? base.web_dir, hub_program, hub_args, agents: fs_agents(base.agents) })
 }
