@@ -10,3 +10,4 @@
 исп 0/2 [2026-10-21 00:29] старт — исправить необязательный handoff и проверить фактическое legacy-письмо
 исп 1/2 [2026-10-21 00:29] handoff optional; actual archive pure-probe fault-free, tests cover empty block
 исп 2/2 [2026-10-21 01:03] npm test code 0, pure-probe faults [], signed commit pending
+исп 2/2 [2026-10-21 01:05] готово — commit 470b667; npm test, guards, pure-probe passed
