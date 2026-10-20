@@ -203,12 +203,12 @@ put('flow-pause-answer-dropped', 'KNOWN GAP (rule 14, task 123): the answer of t
 put('flow-cancel-in-pause', 'the parent cancels the call while the check is on the pause: the end HALTED, the refusal Cancelled',
     [begin(review_input('Analysis'), launched(1, 's2', 1)),
      sig('human_stop', stop_input(), e('Pause')),
-     sig('cancel_request', UP, e('Halted', outcome='refusal:Cancelled', data={'stop_reason': 'cancel_request'}))])
+     sig('cancel_request', UP, e('Halted', open=[], cancelled=['session_launch-1'], outcome='refusal:Cancelled', data={'stop_reason': 'cancel_request'}))])
 
 put('flow-halt-in-pause', 'the human stops the check on the pause: the end HALTED, the refusal StoppedByHuman',
     [begin(review_input('Analysis'), launched(1, 's2', 1)),
      sig('human_stop', stop_input(), e('Pause')),
-     word('halt', None, e('Halted', outcome='refusal:StoppedByHuman', data={'stop_reason': 'pause_halt'}))])
+     word('halt', None, e('Halted', open=[], cancelled=['session_launch-1'], outcome='refusal:StoppedByHuman', data={'stop_reason': 'pause_halt'}))])
 
 put('flow-meeting-stopped', 'the meeting stage: the human stops the nested meeting, the verdict is stopped and the answer is not a refusal',
     [begin(review_input('Meeting', proposal='p', lens_order=['l1', 'l2'], author_question='q?'), e('MeetingCall')),

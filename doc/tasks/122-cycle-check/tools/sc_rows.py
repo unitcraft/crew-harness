@@ -357,14 +357,16 @@ put('pause-1', 'Pause 1: the human continues: the state before the stop is enter
     PAUSED + [word('continue', stop_input(), e('SessionLaunch', journal=[j('human_continue', previous='SessionLaunch', author='ann', source='console', event='input-4'), j('signal_ordered', signal='continue', request='session_launch-1')],
                                                open=['session_launch-1'], sent=['session_launch-1']))])
 
-put('pause-2', 'Pause 2: the human says "halt": the end HALTED, the refusal "stopped by human"',
-    PAUSED + [word('halt', None, e('Halted', journal=[j('review_stopped', reason='pause_halt'), j('signal_ordered', signal='halt', request='session_launch-1')], outcome='refusal:StoppedByHuman', data={'stop_reason': 'pause_halt'}))])
+put('pause-2', 'Pause 2: the human says "halt": the end HALTED cancels the open request of the nested machine, the refusal "stopped by human"',
+    PAUSED + [word('halt', None, e('Halted', journal=[j('review_stopped', reason='pause_halt'), j('signal_ordered', signal='halt', request='session_launch-1')], open=[], cancelled=['session_launch-1'],
+                                   outcome='refusal:StoppedByHuman', data={'stop_reason': 'pause_halt'}))])
 
 put('pause-3', 'Pause 3: the parent says "continue": the state before the stop is entered again',
     PAUSED_BY_PARENT + [sig('parent_continue', UP, e('SessionLaunch', journal=[j('parent_continue', previous='SessionLaunch', request=UP, event='input-4'), j('signal_ordered', signal='continue', request='session_launch-1')], open=['session_launch-1']))])
 
-put('pause-4', 'Pause 4: the parent says "halt": the end HALTED, the refusal "stopped by human"',
-    PAUSED_BY_PARENT + [sig('parent_halt', UP, e('Halted', journal=[j('review_stopped', reason='pause_halt'), j('signal_ordered', signal='halt', request='session_launch-1')], outcome='refusal:StoppedByHuman', data={'stop_reason': 'pause_halt'}))])
+put('pause-4', 'Pause 4: the parent says "halt": the end HALTED cancels the open request of the nested machine, the refusal "stopped by human"',
+    PAUSED_BY_PARENT + [sig('parent_halt', UP, e('Halted', journal=[j('review_stopped', reason='pause_halt'), j('signal_ordered', signal='halt', request='session_launch-1')], open=[], cancelled=['session_launch-1'],
+                                                 outcome='refusal:StoppedByHuman', data={'stop_reason': 'pause_halt'}))])
 
 put('end-end-1', 'End 1: the end writes the line of the state: the verdict, the source, the counters of the cycle and the number of the notes of the narrowing',
     [begin(review_input('Analysis', cycle(7, 3, 2, 0), clean_needed=2), e('End', journal=[end_line('Clean', '', 7, 3, 0, 0, 0)], outcome=answer_text('Clean', '', 7, 3, 0, 0)))])
