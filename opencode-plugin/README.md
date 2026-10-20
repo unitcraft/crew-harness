@@ -111,11 +111,46 @@ A service letter of the plugin starts with `⚙ 01:17 · crew → … (служ�
 title, one line of text) and stay longer when they matter: "waiting for you" 30 s, "stuck" 15 s, others 8–10 s
 ([plan 003.1](../doc/archive/plans/003.1-clear-letters.md)).
 
-## Glued words in letters
+## Glued words
 
-Models gpt-6.1-sol and gpt-6-astra (openai) sometimes drop spaces in long mixed Russian/English string literals inside `execute` code (`crew_send({text:'...'})`); the plugin is not at fault.
-`crew_send` rejects a letter with two or more glued mixed-alphabet runs of 20+ characters (code, links, paths and hashes excluded), or one such run in a long text with under 6% spaces.
-Workaround: a short letter, details in a file and a link to it.
+Models gpt-6.1-sol and gpt-6-astra (openai) sometimes lose spaces: in long mixed Russian/English string literals inside `execute` code,
+and, more often, between a Russian word and a number or a time ("потолок092 решён15:21", "Оркестратору передано16:27", "задача081",
+"HOLD110"). The plugin is not at fault; it refuses such a text before the owner or a file gets it.
+
+**What counts as glued** (task 127; code, links, paths, hashes, fenced blocks and inline code are never checked):
+
+| Glue | Example | Rewrite as |
+|---|---|---|
+| a Russian word of 3+ letters and digits | `потолок092`, `задача081`, `Нова110`, `готовность0.3` | `потолок 092` |
+| a Russian word and a time | `решён15:21`, `передано16:27` | `решён 15:21` |
+| digits or a time and a Russian word of 4+ letters | `15:21принять`, `2000строк` | `15:21 принять` |
+| a Latin word of 3+ letters and a time | `question15:24` | `question 15:24` |
+| a "number word" (task, hold, round, step, phase, stage, wave, pin, approved, review, session, owner, spec, plan, issue, item) and digits | `HOLD110`, `round5`, `pin061` | `HOLD 110` |
+| Russian and Latin letters without a space, 20+ characters (old rule) | `reviewУЖЕвходитвcountedOpen` | two or more such runs, or one in a long text with under 6% spaces |
+
+One glued word of the first five kinds is enough, however long the text is.
+
+**Allowed** (not caught): labels of one or two letters and a number or a letter (`С6`, `Э0`, `В14`, `С7п`), units (`10мс`, `5с`, `2-я`),
+words with a dot or a hyphen (`Ш.2`, `Я-30`, `ADR-0012`), CamelCase identifiers (`ВходВ14`), a label defined in the same text in
+backticks (`` `дер002` `` and then `дер002`), Latin identifiers with digits that are not number words (`Gate14`, `win32`, `base64`), and text
+with the space (`задача 081`, `MSVC 0.3`).
+
+**Where the plugin refuses** (always on, there is no setting):
+
+- `crew_send`: "Не отправлено: в тексте слиплись слова («потолок092» → «потолок 092»)…", no letter file is written;
+- the `question` tool (question, header, option labels and descriptions): "Вопрос не показан: …", the form is not shown;
+- writes of text files: `edit` (the `newString`), `write` (the `content`), `patch` (the added lines) for `.md` (also `.portolan.md`), `.txt`, `.tsv`, `.csv`, `.rst`,
+  `.adoc`: "Файл … не записан: …". Code (`.ts`, `.mjs`, `.json`, `.nv`, `.py`…) is never checked.
+
+The refusal names the first three glued words with the way to write them; rewrite the text with a space between the word and the
+number or the time and send it again. It never loops: a **second refusal in a row** of the same kind of call in the same session
+(letter, question, file write) goes through, and the plugin journal gets a `glued words passed` line; a clean call or 15 minutes reset
+the count. Not checked: the model's ordinary reply in the window, writes made through the shell (`echo >`, `cat <<EOF`), and the text of
+`progress_line` / `log_line`.
+
+`question` and file writes are checked through OpenCode's tool hooks (`tool.execute.before`, `permission.evaluate`, `tool.execute.after`);
+with an OpenCode that has no such hook the plugin writes one line to its journal and only `crew_send` is checked.
+`node test/glued-corpus.mjs` measures the sign on the `*.md` and `*.tsv` files of the repository.
 
 ## Turn economy
 
