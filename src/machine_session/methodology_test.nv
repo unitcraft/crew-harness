@@ -152,9 +152,9 @@ test "mt the data start as the automaton says" {
     }
     assert(spec_text(def.data[find_data_index(def, "agent_reply")].spec) == "?AgentReply")
     assert(spec_text(def.data[find_data_index(def, "result")].spec) == "?SessionResult")
-    assert(spec_text(def.data[find_data_index(def, "summary")].spec) == "{int>=0: Summary}")
-    assert(spec_text(def.data[find_data_index(def, "findings")].spec) == "{int>=0: []Finding}")
-    assert(spec_text(def.data[find_data_index(def, "launch_pass")].spec) == "?int>=0")
+    assert(spec_text(def.data[find_data_index(def, "summary")].spec) == "{int: Summary}")
+    assert(spec_text(def.data[find_data_index(def, "findings")].spec) == "{int: []Finding}")
+    assert(spec_text(def.data[find_data_index(def, "launch_pass")].spec) == "?int")
 }
 
 test "mt the session codes of the automaton" {

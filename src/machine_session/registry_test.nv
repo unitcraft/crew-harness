@@ -6,6 +6,8 @@ module crew_harness.machine_session
 import std.text
 import crew_harness.machine.{standard_registry, standard_types, session_types, find_primitive, class_word, spec_text, check_call_args, check_call_result, Value, Int, Text, Bool, Null, List, make_variant, make_record, RecordField, TypeDefs, check_value, RecordType, VariantType}
 import crew_harness.machine_run.{NestedRegistry, check_registry, product_registry}
+import crew_harness.machine_table.{load_machine, check_nested}
+import crew_harness.machine.{cycle_check_machine_text}
 
 fn class_of(name str) -> str {
     match find_primitive(standard_registry(), name) {
@@ -111,7 +113,7 @@ test "rg the signatures" {
         Some(p) => {
             assert(p.params.len() == 9)
             assert(p.params[0].name == "session" && p.params[2].name == "launch_pass" && p.params[8].name == "delivery_short")
-            assert(spec_text(p.params[2].spec) == "?int>=0")
+            assert(spec_text(p.params[2].spec) == "?int")
             assert(spec_text(p.params[7].spec) == "?text")
             assert(spec_text(p.params[8].spec) == "bool")
             assert(spec_text(p.result) == "text")
@@ -189,4 +191,15 @@ test "rg the meeting types stay as they were" {
     ro meeting = standard_types()
     assert(check_value(RecordType("Summary"), make_record("Summary", [field("critical", Int(1)), field("probes", Int(2))]), meeting).is_ok())
     assert(check_value(RecordType("Summary"), summary(1, 2), meeting).is_err())
+}
+
+test "rg the cycle check calls this machine with the types it takes" {
+    // the cycle check (task 122) is the second caller of the session start: its party `запуск_сессии` has the record of the input of ten fields and the result of three
+    ro cycle = match load_machine(cycle_check_machine_text(), standard_registry()) {
+        Ok(d) => d
+        Err(issues) => panic("the cycle check does not load: ${issues[0].message}")
+    }
+    ro problems = check_nested(cycle, "session_start", session_def())
+    if problems.len() > 0 { panic("PROBLEM ${problems[0].path} ${problems[0].message}") }
+    assert(problems.len() == 0)
 }

@@ -272,7 +272,7 @@ export fn standard_registry() -> Registry {
     // the session start (task 121): what the methodology leaves to the executor of a launch. The reads are objects and service stores of the executor, not data of the machine.
     std_add(reg, std_prim("launch_scope", no_params(), VariantType("LaunchScope"), Reading, ["objects: measure of the dialog of the launch"], nothing()))
     std_add(reg, std_prim("launch_profile", [param("session", TextType)], RecordType("AgentProfile"), Reading, ["service store: profile confirmed at the gate of the profile"], nothing()))
-    std_add(reg, std_prim("session_context", [param("session", TextType), param("source", TextType), param("launch_pass", OptionalType(count_spec())), param("delivery_mode", TextType),
+    std_add(reg, std_prim("session_context", [param("session", TextType), param("source", TextType), param("launch_pass", OptionalType(IntType)), param("delivery_mode", TextType),
         param("task_dir", TextType), param("repo_dir", TextType), param("route", TextType), param("source_list", OptionalType(TextType)), param("delivery_short", BoolType)],
         TextType, Reading, ["objects: plan of the task, prompts of the sessions, dialog of the author"], nothing()))
     std_add(reg, std_prim("parse_session_artifact", [param("session", TextType), param("reply", RecordType("AgentReply"))], RecordType("SessionParsing"), Reading, ["objects: artifact file of the session"], nothing()))

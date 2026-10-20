@@ -489,8 +489,8 @@ put('flow-input-missing', scenario('FLOW: the input has no session: the call is 
     step('feed', ev('start', request='up-1', input={'task_dir': '/t', 'repo_dir': '/r', 'delivery_mode': 'files', 'route': 'full', 'delivery_short': False}), host=host(),
          expect={'outcome': 'refusal:NoResult', 'open': [], 'sent': [], 'journal': [{'code': 'input_rejected', 'params': {'reason': 'missing', 'field': 'session'}}]})]))
 
-put('flow-input-type', scenario('FLOW: the number of the pass is negative: the type of the field is violated, the call is refused with NoResult', [
-    step('feed', ev('start', request='up-1', input=sinput('s2', launch_pass=-1)), host=host(),
+put('flow-input-type', scenario('FLOW: the number of the pass is a text: the type of the field is violated, the call is refused with NoResult', [
+    step('feed', ev('start', request='up-1', input=sinput('s2', launch_pass='three')), host=host(),
          expect={'outcome': 'refusal:NoResult', 'open': [], 'sent': [], 'journal': [{'code': 'input_rejected', 'params': {'reason': 'type', 'field': 'launch_pass'}}]})]))
 
 put('flow-input-full', scenario('FLOW: every optional field of the input is given: the data keep them; the launch starts', [
