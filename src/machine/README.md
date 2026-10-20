@@ -28,6 +28,7 @@ tests under Oracle 0.1.0 and the output of a unit must stay under 4 KB:
 | `src/machine_nested/` | `crew_harness.machine_nested` | tests only (task 119): the nested machines in the translator, the checks and the reverse generator (the examples of the meeting, the party kind `machine`, `Signal`, `State`, the profile, the edits, the form returns, the set limit) |
 | `src/machine_nested_run/` | `crew_harness.machine_nested_run` | tests only (task 119): the 32 scenarios of the pairs "parent + nested machine" (`nested-*`), the events of the protocol of a call, the registry, the runner |
 | `src/machine_nested_eq/` | `crew_harness.machine_nested_eq` | tests only (task 119): the agent step called by a chat session (`dialog_steps`) leaves what it leaves run alone - 72 of the 75 scenarios of the agent step, compared step by step (two have no nested counterpart: the death between the commit and the send, the stop in the window; one begins with an input the parent cannot give) |
+| `src/machine_cycle/` | `crew_harness.machine_cycle` | tests only (task 122): the machine "Cycle check" of the methodology as a table - it translates, equals the 71 rows of the methodology row by row, writes the codes of the table of the journal, every row has a scenario (`scenarios/cycle-*`), a parent fits it by the types of the methodology |
 
 ## Run the tests (Windows, Nova Oracle 0.1.0)
 
@@ -48,6 +49,7 @@ nova test src/machine_agent_en       # the English sample of the agent step (75 
 nova test src/machine_nested         # the nested machines in the translator, the checks, the generator: 89 tests
 nova test src/machine_nested_run     # the pairs "parent + nested machine", the protocol, the registry: 27 tests
 nova test src/machine_nested_eq      # the agent step called by a session equals the agent step run alone: 6 tests
+nova test src/machine_cycle          # the cycle check: the table, the rows of the methodology, the journal, the 101 scenarios: 46 tests (about a minute and a half)
 nova test --strict-effects src       # the same, and an effect used without being declared in a signature is an error
 nova test src --jobs 4               # the whole tree (the PostgreSQL units need the temporary container of src/pg/testdb.ps1)
 ```
@@ -158,7 +160,7 @@ allowed in the place (section 7 of the format):
 `check_call_args` and `check_call_result` check the count and the types of the arguments and the type of the result of a call against the signature. `reads` and `writes` name what a primitive reads or writes without an
 argument (rule 11 of the specification): they join the "Input" of the state of the call.
 
-`standard_registry()` is filled with stubs (the name, the types and the class are the methodology's, the body is the host's) - 22 primitives; `standard_types()` declares the records and variants their signatures use.
+`standard_registry()` is filled with stubs (the name, the types and the class are the methodology's, the body is the host's) - 23 primitives; `standard_types()` declares the records and variants their signatures use.
 
 | Primitive | Parameters | Result | Class |
 |---|---|---|---|
@@ -184,9 +186,11 @@ argument (rule 11 of the specification): they join the "Input" of the state of t
 | `reply_validation` | - | `ReplyCheck` | reading |
 | `close_agent_turn` | - | nothing | irreversible |
 | `check_cache` | `dialog_kind: "main" \| "delivery"` | nothing | writing |
+| `stop_agent_group` | - | nothing | irreversible |
 
-The first 17 are the 17 functions of the meeting that its markup (`functions-markup.md`) makes primitives of the host: 8 reading, 6 writing, 3 irreversible; the last four are the agent step (`check_cache` is the
-check of the cache that the specification of the step puts after every accepted result of a turn; the pilot's code does not have it). No pure primitive: `fingerprint` stays inside `proposal_with_fingerprint`.
+The first 17 are the 17 functions of the meeting that its markup (`functions-markup.md`) makes primitives of the host: 8 reading, 6 writing, 3 irreversible; the next four are the agent step (`check_cache` is the
+check of the cache that the specification of the step puts after every accepted result of a turn; the pilot's code does not have it); the last is the one primitive of the cycle check (task 122): `stop_agent_group`, the group
+of processes of the agent is stopped as a whole when the check ends in HALTED or ERRORED. No pure primitive: `fingerprint` stays inside `proposal_with_fingerprint`.
 
 ## Decisions where the format is silent
 
@@ -396,3 +400,43 @@ Task 119 (`doc/tasks/119-nested-machines/`, the decision and the numbers are in 
 - **Scenarios.** `scenarios/nested-call-*` (17: success, refusal, term, cancel, restart, death between the changes, another party in the window, an answer after a cancel, a duplicate answer, stop/continue/halt), `nested-set-*` (9: a lens set with one refusal, `Предел запросов`, a restart, a cancel), `nested-steps-*` (6: the chat session `dialog_steps` calling the agent step). The machines are `caller`, `callee`, `fan`, `dialog_steps`; they are generated by `doc/tasks/119-nested-machines/tools/gen_nested_scenarios.py` (the scenarios) and written in Portolan (the machines).
 - **Equality.** `src/machine_nested_eq`: 72 of the 75 scenarios of the agent step are run alone and as the nested machine of `dialog_steps` (the chat session of the meeting, "Шаг агента" is its turn), and after every step the state, the data, the journal and the requests of the two runs are equal.
 - **Where it is not wired.** The hub of the server does not run a nested machine; the memory runner (`portolan test <folder>`) does. A machine that is a hand-written Nova machine cannot be nested.
+
+# The cycle check as data (task 122)
+
+Task 122 (`doc/tasks/122-cycle-check/`) wrote the machine "Cycle check" of the methodology (`task-runner-review-states.md` and the code of its automaton: 23 states, 71 rows in 19 states) as a table of Portolan 2.11:
+[`machines/cycle_check.portolan.md`](machines/cycle_check.portolan.md) (Russian) and its translation `cycle_check.portolan.json` (`portolan compile`); the English file is `portolan convert --language en`, the circles
+`compile -> render -> compile` and `ru -> en -> ru` give the same tree. The machine repeats "review -> fix" of one artifact of a task (analysis, plan, implementation, delivery) until a series of clean passes, and for the
+stage "meeting" it calls the nested meeting. The runner (task 123) calls it as a party of the kind `machine cycle_check(вход ВходПроверки, итог ИтогПроверки)`: the 14 fields of the contract are its `## Вход`, the answer
+is the verdict (`clean`, `requirements`, `plan`, `question`, `restart`, `stopped`) with the source, the counters of the cycle and the findings "out of scope", or a refusal (`NoResult`, `StoppedByHuman`, `Cancelled`).
+
+| What | Where |
+|---|---|
+| the parties | `session_launch` (nested machine `session_start`, task 121; input `ВходЗапускаСессии`, result `ИтогЗапускаСессии`), `meeting` (nested machine `meeting`, task 124; input `ВходСовещания`, result `ИтогСовещания`), `gatekeeper` (the gates 13, 3 and 9: the human, or an agent by the setting `исполнитель_повышенного_внимания`), `enhanced` (the gate 15 and the pause) |
+| the types | the types of the layer of the methodology (`Цикл`, `Находка`, `Свод`, `Счётчик`, `Вердикт`, `ИтогСессии`, ...); the findings of the meeting are `MeetingFinding` (they differ from the findings of the review); the callee must declare the same fields (pinned by `src/machine_cycle/fit_test.nv`) |
+| the data | 35 data (the variables of the table of the data of the methodology and the fields of the input kept as data) and the 3 of the fragment; `свод[номер_захода]` and `находки_проверки[номер_захода]` are dicts written by "On accept" of ЗАПУСК_СЕССИИ (rules 8 and 14); the datum of the source of the launch is `launch_source` (the dictionary name `source` is the binding of the pause) |
+| the definitions | `потолок_исчерпан` is from the included file `арифметика_цикла` (hash `fad927a77d32`); `проверяющий`, `правщик`, `обновить_счётчики`, `наибольший_счётчик`, `сбросить_достигших`, `без_достигших_потолка`, `записи_сужения`, `есть_находка_уровня`, `находки_цикла` are in the table |
+| the primitive | `stop_agent_group` (irreversible) at the entry of HALTED and ERRORED; the scenarios answer it with `"host": {"stop_agent_group": null}`; there is no real executor (`ir_proc_kill`, `ir_agent_close` of the plan 105 are a later task) |
+| the pause | the fragment "Пауза" with the nested machines `[session_start, meeting]`: stop, continue, halt and cancel go to them as signals; their request stays open on a pause |
+
+**Differences from the table of the methodology** (the details are in the analysis of the task): the verdict is an enumeration with words (the proposal of the methodology, "What the engine did not cover", item 12); the stop reasons and the mark of the
+continuation are sets of literals (the words of the code of the automaton); the numbers below the minimums are the rows 2 and 3 of ReviewEntry with the journal codes `clean_needed_below_min` and `probes_min_below_min`.
+The mode "show and continue" of the gate 3 and the answer of the gates by an agent are the mechanics of the executor of the gates and are not in the table; the simplified gates of the alpha and pre-release releases are a norm, not a mechanism.
+
+**Scenarios.** `scenarios/cycle-*.scenario.test.json` are 101 files: 73 named after a row of the table (`cycle-<state>-<n>`: `review-entry`, `pass`, `meeting`, `launch`, `failure`, `after-session`, `summary`, `no-probes`, `retry`,
+`gate3`, `outcome`, `criterion`, `gate15`, `narrowing`, `ceiling`, `gate9`, `stop-stage`, `levels`, `fix-outcome`, `pause`, `common`, `end-end`, `end-halted`, `end-errored`) and 28 flows (`cycle-flow-*`: a clean cycle, a rework, the refusals, the
+restarts, the death between the commit and the send, the pause, the cancel, the ceiling, the narrowing, the verdicts of the stages). They are generated by `doc/tasks/122-cycle-check/tools/gen_cycle_scenarios.py` (the expectations are written by hand in it).
+Thirteen rows are defensive and no sequence of events takes them: the rows "иначе" of twelve forks and the row 6 of the common events (the test names them); the row 3 of ОТКАЗ_СЕССИИ is taken by a failure with the code `Timeout`.
+
+**`"standalone": true`.** A scenario of this machine plays the nested parties itself: the answer of the session launch is a step `answer` or `failure` with the id `session_launch-N`, the answer of the meeting is the same with `meeting-N`
+(as for an agent). The key is new in `scenario/0` (`src/machine_run/scenario.nv`, the schema): a scenario with it runs on the plain runner, `portolan run` takes it and `portolan test <folder>` needs no nested machine in the folder
+(without the key a parent is run with the nested machines of the folder, as before). The reason: the nested machines of the cycle check are the work of the tasks 121 and 124, and the runner of pairs holds one level of nesting (task 119); the
+pair "runner + cycle check + session launch" is the task 123.
+
+**Equality with the methodology.** `src/machine_cycle`: the table of the 71 rows of the methodology is copied as data and compared row by row (the number of the rows of each state, where each row leads, the kind of each state, the party of
+each appeal, the words of the gates); the codes and the parameters of the journal (11 codes of the check, 8 of the pause, `machine_data`, `machine_error`) are those of the table of the journal of the methodology, statically and on the scenarios; every
+row has a scenario and the mark `taken` proves it.
+
+**Not supported (and why).** Two levels of nesting in the runner of pairs (task 123): `check_registry` still calls a nested machine that calls nested machines an error, so "runner -> cycle check -> session launch -> agent step" is not run. The
+answers that come while the machine is on the pause are dropped as `event_ignored` (rule 14 holds them): after the continue the state ЗАПУСК_СЕССИИ is entered again with no open request (the scenario `cycle-flow-pause-answer-dropped` pins it); the
+fix belongs to the runner of pairs. The hub of the server does not run a nested machine. The nested machines `session_start` and `meeting` are not in the folder yet: the types of the call are pinned by `fit_test.nv`, their tasks (121, 124) declare the same
+fields. The primitives `rd_task_document`, `pure_doc_status` and `rd_tree_diff` of the plan 105 belong to the runner (task 123): the cycle check gets the findings and the summary in the answer of the session launch and reads no file of the task.

@@ -120,7 +120,7 @@ A soft error (an unknown word) does not stop the cell: the translation goes on w
 (An English file reads the same tables with the English word as the key, see "Two languages".) `names_format.tsv` holds what the dictionary does not have: `catalog` (the functions of section 12 of the format as the evaluator names them: `есть` -> `has`), `executor`
 (`вход`, `событие`, `сторона` -> `party`, `состояние`, `запись_перехода` -> `transition_note`, `все_данные`, `трасса`, `номер_шага`: the names of `src/machine_table`, equal to the dictionary's since task 109: `party`, `transition_note`), `primitive` (`новый_ид` -> `new_id`, version 9), `word`, `signal`, `signal_field`, `part`, and the names of the machines of the product
 (the chat machine). A name that a table introduces itself (a parameter of a definition, a `пусть`, a variable of a lambda, a name of an event) is looked up under `variable` and, if
-the dictionary has not got it, written in Latin letters (`л` -> `l`, `полученный` -> `received` by the dictionary). The state names come from the heading: `### ПОЛИТИКА — развилка (Policy)`.
+the dictionary has not got it, written in Latin letters (`л` -> `l`, `полученный` -> `received` by the dictionary). The state names come from the heading: `### ПОЛИТИКА — развилка (Policy)`. Task 122 added to `names_format.tsv` the words of the gates of the cycle check: `урезать объём` (`cut_scope`), `разбить` (`split`), `спросить заказчика` (`ask_customer`), `остановиться` (`stop`), `сузить` (`narrow`).
 
 ## The file
 
