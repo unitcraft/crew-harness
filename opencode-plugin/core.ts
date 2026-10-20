@@ -2535,6 +2535,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         "cancel - integrator - n, text? - cancel the task; text goes to the executor. Releases the merge lock if the task held it.",
         "priority - integrator - n, priority P0..P3 - change the priority.",
         "route - integrator - n, route full|fast, text (the reason, required for full), route_word and route_word_date (fast) - change the route of an open task BY A RECORD (task 092). To full: the reason becomes the basis, the word of the owner is emptied, the series of clean runs is zeroed, the trace stays. A new word «заводи <number>» (fast) renews the word of a task marked route_word_stale (the brief was edited after the word: the warning «постановка изменена после слова завода: нужно новое слово владельца» shows in list, show and every step until then) and re-reads the brief. A line «маршрут: …» goes to log.md of the task.",
+        "migrate - integrator - n, message (the saved original task text), route_word, route_word_date - migrate an open folderless legacy task record without changing its number to fast. Requires a record with no route and a valid fast-route brief plus the owner's explicit «заводи <number>» word; edits no files or external Nova data. The task record is updated in place, retaining sessions, rounds, branch/worktree, history and all precheck/evidence fields. A second migration is refused.",
         "submit - executor - n, text - submit the task's work with the report (what was done, how it was checked, what is left); no qid is needed. The first submission, one after rework or after a sync (the reviewer is woken), a plan task (the plan file and its form are checked). Already submitted: refused.",
         "track - executor, reviewer, integrator - n, branch?, worktree? - record a side branch or worktree of the task (no duplicates) so cleanup removes it; branches integrate/t<N> and integrate/t<N>-* are recorded by the plugin itself.",
         "plan_decide - integrator, only the plan task's author, only when the project's plan_approver is integrator - n, decision ok|ok-shortcuts|no, text (required with no) - decide a plan that passed the recheck rounds and waits for approval (status approval). ok = approved with no shortcuts; ok-shortcuts = approved, the shortcuts written in the plan stay; no = back to the executor, text lists what to change, the rounds start over. With plan_approver: owner (default) the owner decides in the window with /plans and this action is refused.",
@@ -2552,7 +2553,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
     input: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["list", "show", "assign", "order", "push", "reassign", "cancel", "priority", "track", "plan_decide", "submit", "deliver", "review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleanup", "cleaned", "route"] },
+        action: { type: "string", enum: ["list", "show", "assign", "order", "push", "reassign", "cancel", "priority", "track", "plan_decide", "submit", "deliver", "review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleanup", "cleaned", "route", "migrate"] },
         to: str("order: the other project's integrator, \"project.integrator\"; push: \"executor\" (default) or \"reviewer\""),
         keep: { type: "array", maxItems: 8, items: { type: "string" }, description: "cleanup: up to 8 worktree paths to keep as evidence" },
         checks: { type: "object", description: "accept: report per acceptance step {step id: what proves it}", additionalProperties: { type: "string" } },
@@ -2572,7 +2573,9 @@ export function makeTools(host: CrewHost): CrewTool[] {
         grades: { type: "object", description: "round: remarks per grade id of plan_grades", additionalProperties: { type: "number" } },
         sync: { type: "boolean", description: "rework: only merge the fresh target branch, not a round" },
         all: { type: "boolean", description: "list: include finished and cancelled", default: false },
-        message: str("assign in a project with task folders: the full text of task/message.md of the new folder by the template (as crew_spawn); without it the text is built from the fields"),
+        message: str("assign in a project with task folders: the full text of task/message.md of the new folder by the template (as crew_spawn); migrate: exact saved original task text, never reconstructed"),
+        route_word: str("route/migrate: the owner's exact «заводи <number>» authorization with date and source"),
+        route_word_date: str("route/migrate: date of the owner's word in YYYY-MM-DD"),
         ...taskInput,
         ...routeInput,
       },
@@ -2674,6 +2677,20 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const why = t.folder ? taskLog(t, "документ", res.line) : "у задачи нет папки"
         host.posted([])
         return { content: `Маршрут задачи ${taskRef(t)} записан: ${res.line}.${why ? ` (В log.md задачи не записано: ${why}; запиши строку сам: log_line {kind: "документ", text: "${res.line.replace(/"/g, "'")}"}.)` : ""}` }
+      }
+      if (action === "migrate") {
+        if (!isIntegrator(me)) return notIntegrator(me)
+        if (!isOpen(t)) return { content: `Миграция ${taskRef(t)} не выполнена: задача не открыта.` }
+        if (t.folder || !routeView(t).legacy) return { content: `Миграция ${taskRef(t)} не выполнена: требуется открытая folderless legacy-запись без маршрута; повторная миграция запрещена.` }
+        const message = typeof input.message === "string" ? input.message : undefined
+        if (!message || !message.trim()) return { content: "Миграция не выполнена: передай message — дословную сохранённую исходную постановку; не восстанавливай её по памяти." }
+        if (!new RegExp(`заводи\\s+0*${t.n}(?!\\d)`, "i").test(String(input.route_word ?? "")))
+          return { content: `Миграция не выполнена: отдельное слово владельца должно прямо называть задачу ${taskNo(t)} («заводи ${taskNo(t)}») с датой и источником.` }
+        const res = applyRouteChange(t, { route: "fast", route_word: input.route_word, route_word_date: input.route_word_date, route_source: "human" }, message, configFor(me).routeDefaults, me.session)
+        if (!res.ok) return { content: `Миграция не выполнена: ${res.refusal}` }
+        saveTask(t)
+        host.posted([])
+        return { content: `Legacy-запись ${taskRef(t)} переведена на fast на месте: ${res.line}. Номер, сессии, rounds, ветка/worktree, прежняя история, precheck и evidence сохранены; внешние файлы Nova не импортировались.` }
       }
       if (action === "show") {
         const rv = routeView(t)

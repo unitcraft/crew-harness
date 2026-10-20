@@ -307,6 +307,36 @@ const loaded = tasks.loadTask("proj", 880)
 cell("T92-17 (test 14) an old record is read without change: no route field appears, show works and does not call it fast", loaded && !("route" in loaded) && /Старая запись/.test(showOld) && !/быстр/.test(showOld), showOld)
 cell("T92-17 (test 14) the file of an old record is not rewritten by reading it", !("route" in JSON.parse(readFileSync(path.join(store(), "880.json"), "utf8"))), "")
 
+// ---- explicit, in-place migration of a folderless legacy record ----
+const migrationBrief = fastMessage("Старая задача")
+const legacyMigration = {
+  project: "proj", n: 881, title: "Старая задача", slug: "staraya-zadacha", goal: "Сохранить задачу", criteria: "Проверить результат",
+  priority: "P1", tier: "medium", role: "worker", author: "sesINTEG1", author_role: "proj.integrator", qid: "q881",
+  status: "running", kind: "spawn", executor: "sesLEGACY881", executors: ["sesOLD"], attempt: 3, directory: proj,
+  branch: "task/092-legacy", worktree: path.join(tmp, "legacy-worktree"), rework: 2, syncs: 1,
+  sessions: [{ code: "С4", k: 2, launch: 4, session: "sesMETHOD881", status: "submitted", place: "task", started: 10, ended: 20 }],
+  precheck: { state: "stale", base: "sha-base", at: 1, by: "sesREVIEW", round: 3, candidate: "sha-candidate", result: "FAIL", lock_on: { tip: "sha-lock-tip", at: 1 }, stale: { reason: "old result", at: 2 } },
+  kept: [{ path: "evidence.txt", at: 4, by: "sesREVIEW" }], side: [{ branch: "evidence-branch", worktree: "evidence-tree", at: 5, by: "sesOLD" }],
+  history: [{ at: 1, by: "sesOLD", status: "running", note: "legacy history" }], created: 1, updated: 1,
+}
+writeFileSync(path.join(store(), "881.json"), JSON.stringify(legacyMigration, null, 1))
+const migrationWord = "«заводи 881 на fast» (владелец, 2026-10-20, чат)"
+const migrate = (n, over = {}) => call("crew_task", "sesINTEG1", { action: "migrate", n, message: migrationBrief, route_word: migrationWord, route_word_date: "2026-10-20", ...over })
+const beforeMigrateRecords = recs()
+const noMigrationWord = await migrate(881, { route_word: undefined, route_word_date: undefined })
+cell("T129 migration without the owner's word is refused and leaves the task untouched", /отдельное слово владельца должно прямо называть задачу 881/.test(noMigrationWord) && !tasks.loadTask("proj", 881).route && recs() === beforeMigrateRecords, noMigrationWord)
+const badMigrationBrief = await migrate(881, { message: "# неполная постановка" })
+cell("T129 migration with an invalid original brief is refused", /быстрый путь требует/.test(badMigrationBrief) && !tasks.loadTask("proj", 881).route, badMigrationBrief)
+const wrongMigrationNumber = await migrate(881, { route_word: "«заводи 092» (владелец, 2026-10-20, чат)" })
+cell("T129 a word for a different task number is refused", /должно прямо называть задачу 881/.test(wrongMigrationNumber) && !tasks.loadTask("proj", 881).route, wrongMigrationNumber)
+const migratedReply = await migrate(881)
+const migrated = tasks.loadTask("proj", 881)
+cell("T129 migration succeeds in place without allocating a second task number", /переведена на fast/.test(migratedReply) && migrated.route === "fast" && recs() === beforeMigrateRecords, migratedReply)
+cell("T129 migration preserves sessions, rounds, branch/worktree and prior history", migrated.sessions?.[0]?.session === "sesMETHOD881" && migrated.rework === 2 && migrated.syncs === 1 && migrated.branch === legacyMigration.branch && migrated.worktree === legacyMigration.worktree && migrated.history[0].note === "legacy history", JSON.stringify(migrated))
+cell("T129 migration preserves precheck FAIL/stale/lock and evidence rather than converting or releasing them", migrated.precheck?.result === "FAIL" && migrated.precheck?.state === "stale" && migrated.precheck?.lock_on?.tip === "sha-lock-tip" && migrated.kept?.[0]?.path === "evidence.txt" && migrated.side?.[0]?.branch === "evidence-branch", JSON.stringify({ precheck: migrated.precheck, kept: migrated.kept, side: migrated.side }))
+const repeatMigration = await migrate(881)
+cell("T129 a repeated migration safely refuses without changing history", /повторная миграция запрещена/.test(repeatMigration) && tasks.loadTask("proj", 881).history.length === migrated.history.length, repeatMigration)
+
 // ---- the show: the word of the route (list, show) ----
 const listed = await call("crew_task", "sesINTEG1", { action: "list" })
 const fastRow = listed.split("\n").find((l) => l.includes("Быстрая правка")) ?? ""
@@ -406,8 +436,10 @@ const rPlan = await call("crew_spawn", "sesINTEG1", { kind: "plan", goal: "чт�
 cell("T92-22 a plan task takes no route", /не поставлена/.test(rPlan) && /план/.test(rPlan), rPlan)
 const help = await call("crew_help", "sesINTEG1")
 cell("T92-22 the help and the tool texts name the route, the word and the minimums", /route: "fast"/.test(help) && /route_word_stale/.test(help) && /route_word/.test(tools.crew_spawn.description) && /route/.test(tools.crew_task.description) && !!tools.crew_spawn.input.properties.route && !!tools.crew_task.input.properties.route && tools.crew_task.input.properties.action.enum.includes("route"), "")
+cell("T129 the tool exposes the explicit legacy migration and its required inputs", /migrate/.test(tools.crew_task.description) && tools.crew_task.input.properties.action.enum.includes("migrate") && !!tools.crew_task.input.properties.message && !!tools.crew_task.input.properties.route_word && !!tools.crew_task.input.properties.route_word_date, "")
 const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8")
 cell("T92-22 the README has the section «Маршрут задачи» with the table of the terms and route_defaults", /Маршрут задачи/.test(readme) && /\| слово_завода \| `route_word` \|/.test(readme) && /route_defaults/.test(readme) && /clean_series/.test(readme), "")
+cell("T129 the README gives Nova the exact migration command and warns not to invent the owner's word", /Folderless legacy → fast/.test(readme) && /action: "migrate"/.test(readme) && /infer a missing owner word/i.test(readme), "")
 
 stop?.()
 try {

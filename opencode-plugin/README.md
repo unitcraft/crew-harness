@@ -962,6 +962,20 @@ One field cannot be both the required number and the series, so the series is th
 **Old records.** A record without `route` is read as `full`, source `rule`, basis «задача начата до введения маршрутов», with the numbers of the full route (test 14 of the
 methodology); reading never rewrites the file. Records made by `assign`, `order` and the steps of a plan have no route fields either and read the same way.
 
+**Folderless legacy → fast (task 129).** Use only after the owner has explicitly authorized migration; the task-creation word «заводи 129» does not authorize migrating another task. First inspect the exact existing record and retrieve its saved original task text read-only. Do not migrate Nova 092 automatically, import or rewrite Nova files/history, take its merge lock, or infer a missing owner word. Then the project integrator may run:
+
+```js
+crew_task({
+  action: "migrate",
+  n: 92,
+  message: "<дословная сохранённая исходная постановка задачи 092>",
+  route_word: "<дословное отдельное слово владельца «заводи 092» с датой и источником>",
+  route_word_date: "<ГГГГ-ММ-ДД>"
+})
+```
+
+This updates the existing folderless task record at the same number; it does not create a task, folder, branch, worktree, session, evidence copy or a second 092. Required input is the source task's exact text, an explicit owner word (not the executor's task-start word), and an open legacy record with no route. The text must have at least one acceptance criterion and a branch line, as for any fast route. A missing word or incomplete text refuses without writing; a repeated migration refuses. The record's sessions and IDs, status, branch/worktree, rounds, history, precheck (including old FAIL/stale), and evidence pointers remain in place; the migration adds its own history event and route fields. This does not make an old precheck green or a waiver acceptable, and it does not bypass exact-SHA CI, precheck, independent acceptance or the merge lock. If source text, owner words, title, goal or criteria are unavailable, request them; do not invent them. The card's minimum task data are title, goal and criteria; the generated folder template (when separately requested) also requires the complete ordered task sections, with unknowns explicitly called out. Nova's integrator runs the command only after independent acceptance of this CrewHarness mechanism and obtaining the owner's migration word.
+
 **`crew_spawn {route: "fast", route_word, route_word_date?, ...}`.** Without `route` the task goes the full route and the record gets the fields of the full route.
 `route` can only be `full` or `fast`. The fast path needs all of the following; otherwise nothing is made (no record, no branch) and the answer is
 «Задача не поставлена: быстрый путь требует: …» — the route stays full, a task is never made without an explicit decision:
