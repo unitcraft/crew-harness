@@ -5,3 +5,4 @@
 исп 3/5 [2026-10-20 21:43] ACP→hub/history→UI model pipeline implemented
 исп 4/5 [2026-10-20 21:46] 102 web tests GREEN; ACP/server Nova runner unavailable
 исп 5/5 [2026-10-20 21:48] evidence current and unresolved Nova/acceptance gates recorded
+исп 5/5 [2026-10-20 21:49] готово — изменения закоммичены, незапущенные Nova-проверки отмечены
