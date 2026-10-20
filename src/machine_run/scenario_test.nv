@@ -49,8 +49,8 @@ test "every scenario" {
     ro files = scenario_files()
     assert(files.len() >= 56)
     for f in files {
-        // the scenarios of a parent with its nested machines run in the unit `machine_nested_run`
-        if f.name.starts_with("nested-") { continue }
+        // the scenarios of a parent with its nested machines run in the unit `machine_nested_run`, those of the cycle check (standalone) in the unit `machine_cycle`
+        if f.name.starts_with("nested-") || f.name.starts_with("cycle-") { continue }
         ro sc = scenario_of(f.name)
         ro run = run_scenario(machine_named(sc.machine), sc)
         if !run_ok(run) { panic(report_text(run)) }
@@ -245,19 +245,19 @@ test "lists of files" {
 
 test "names by the Portolan" {
     ro scenarios = scenario_files()
-    assert(scenarios.len() == 200)
+    assert(scenarios.len() == 301)
     for f in scenarios { assert(f.name.ends_with(".scenario.test.json")) }
     ro tables = table_files()
-    assert(tables.len() == 7)
+    assert(tables.len() == 8)
     for f in tables { assert(f.name.ends_with(".portolan.md") || f.name.ends_with(".portolan.txt")) }
-    assert(machine_files().len() == 12)
+    assert(machine_files().len() == 13)
     for f in machine_files() { assert(f.name.ends_with(".portolan.json")) }
 }
 
 test "name of a compiled machine" {
     assert(is_machine_json_name("a.portolan.json"))
     for n in ["a.json", "a.portolan", "a.portolan.md", "a.table.json", "machine.json", "a.scenario.test.json", "a.schema.json", "foo.machine.json", "foo.table.md", "foo.table.txt"] { assert(!is_machine_json_name(n)) }
-    assert(data_dir_names("machines").len() == 12)
+    assert(data_dir_names("machines").len() == 13)
 }
 
 test "scenario schema" {
@@ -270,4 +270,50 @@ test "scenario schema" {
         }
         Err(e) => assert(false)
     }
+}
+
+// ---- the key `standalone` (task 122) ---------------------------------------------------------------------------------------------------------------
+
+test "standalone key default" {
+    ro sc = scenario_of("chat-message-opens-request.scenario.test.json")
+    assert(!sc.standalone)
+    match parse_scenario(`{"format":"scenario/0","machine":"M","steps":[]}`) {
+        Ok(x) => assert(!x.standalone)
+        Err(e) => assert(false)
+    }
+}
+
+test "standalone key true and false" {
+    match parse_scenario(`{"format":"scenario/0","machine":"M","standalone":true,"steps":[]}`) {
+        Ok(x) => assert(x.standalone)
+        Err(e) => assert(false)
+    }
+    match parse_scenario(`{"format":"scenario/0","machine":"M","standalone":false,"steps":[]}`) {
+        Ok(x) => assert(!x.standalone)
+        Err(e) => assert(false)
+    }
+}
+
+test "standalone key is a boolean" {
+    assert(parse_err(`{"format":"scenario/0","machine":"M","standalone":"yes","steps":[]}`) == "$.standalone: standalone is true or false")
+    assert(parse_err(`{"format":"scenario/0","machine":"M","standalone":1,"steps":[]}`) == "$.standalone: standalone is true or false")
+}
+
+test "standalone key in the schema" {
+    match Json.parse(text_of_file(schema_files(), "scenario-0.schema.json")) {
+        Ok(j) => assert(j.to_str().contains("\"standalone\""))
+        Err(e) => assert(false)
+    }
+}
+
+test "cycle scenarios are standalone" {
+    mut n = 0
+    for f in scenario_files() {
+        if !f.name.starts_with("cycle-") { continue }
+        ro sc = scenario_of(f.name)
+        assert(sc.standalone)
+        assert(sc.machine == "cycle_check")
+        n += 1
+    }
+    assert(n == 101)
 }
