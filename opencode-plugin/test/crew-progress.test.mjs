@@ -99,6 +99,53 @@ const parse = (...lines) => P.parseJournal(bytes(...lines))
     const got = l?.time === undefined ? null : `${String(Math.floor(l.time / 60)).padStart(2, "0")}:${String(l.time % 60).padStart(2, "0")}`
     cell(`dated time form ${v.sig.split("]")[0]}] is ${v.time ?? "not a time"}`, got === v.time && (v.time === null) === (l?.date === undefined), show({ sig: v.sig, got, date: l?.date }))
   }
+  const oldTimeFields = (sig) => {
+    const out = { text: sig }
+    const m = P.TIME_RE.exec(sig)
+    if (m) {
+      const close = sig.indexOf("]")
+      out.time = Number(sig.slice(close - 5, close - 3)) * 60 + Number(sig.slice(close - 2, close))
+      if (close > 6) out.date = { y: Number(sig.slice(1, 5)), mo: Number(sig.slice(6, 8)), d: Number(sig.slice(9, 11)) }
+      out.text = sig.slice(m[0].length)
+    }
+    return out
+  }
+  const timestampCases = [
+    "[00:00] start", "[23:59] end", "[24:00] invalid hour", "[12:60] invalid minute", "[1:02] short hour", "[12:3] short minute",
+    "[0000-01-01 00:00] year edge", "[9999-12-31 23:59] upper edge", "[2024-02-29 12:30] leap day", "[2026-02-30 12:30] regex-valid impossible day",
+    "[2026-00-01 12:30] invalid month", "[2026-13-01 12:30] invalid month", "[2026-01-00 12:30] invalid day", "[2026-01-32 12:30] invalid day",
+    "[2026-01-01 24:00] invalid hour", "[2026-01-01 12:60] invalid minute", "[2026-1-01 12:30] short month", "[2026-01-1 12:30] short day",
+    "[12:30]no separator", "[12:30]  suffix", "[2026-01-01 12:30]suffix", "[2026-01-01 12:30] suffix",
+  ]
+  let seed = 0x129092
+  const rand = (max) => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+    return seed % max
+  }
+  const alphabet = "[]0123456789-: x"
+  for (let i = 0; i < 1200; i++) {
+    if (i % 3 === 0) {
+      const y = String(rand(10000)).padStart(4, "0"), mo = String(rand(15)).padStart(2, "0"), d = String(rand(34)).padStart(2, "0")
+      const h = String(rand(27)).padStart(2, "0"), m = String(rand(63)).padStart(2, "0")
+      timestampCases.push(`[${y}-${mo}-${d} ${h}:${m}] random ${i}`)
+    } else {
+      const len = 1 + rand(28)
+      let s = i % 3 === 1 ? "[" : ""
+      for (let j = s.length; j < len; j++) s += alphabet[rand(alphabet.length)]
+      timestampCases.push(s)
+    }
+  }
+  let mismatch
+  for (const sig of timestampCases) {
+    const line = P.parseLine(`С5 3/4 ${sig}`)
+    const got = { text: line?.text, ...(line?.time !== undefined ? { time: line.time } : {}), ...(line?.date ? { date: line.date } : {}) }
+    const expected = oldTimeFields(sig)
+    if (JSON.stringify(got) !== JSON.stringify(expected)) {
+      mismatch = { sig, got, expected }
+      break
+    }
+  }
+  cell("AC-11 б timestamp fast path matches TIME_RE semantics for boundary, invalid and 1200 deterministic random signatures", !mismatch, mismatch ? show(mismatch) : `${timestampCases.length} signatures`)
   const good = new RegExp(P.TIME_RE.source)
   const broken = new RegExp(vectors.brokenTimePattern)
   cell("AC-26 the working time pattern matches, the broken [[]..[]] one does not (the test tells them apart)", good.test("[10:05] готово") && !broken.test("[10:05] готово"), show({ good: good.test("[10:05] готово"), broken: broken.test("[10:05] готово") }))

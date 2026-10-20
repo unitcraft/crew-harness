@@ -20,6 +20,32 @@ export const STOP_KINDS = ["вопрос", "план", "ревизия", "тре
 const BOUNDARY = " .,:;!—–-"
 const GRACE_MS = 5 * 60_000
 
+const twoDigits = (s: string, i: number) => {
+  const a = s.charCodeAt(i) - 48
+  const b = s.charCodeAt(i + 1) - 48
+  return a >= 0 && a <= 9 && b >= 0 && b <= 9 ? a * 10 + b : -1
+}
+
+/** Fast path for the optional timestamp prefix. Keep the accepted language identical to TIME_RE. */
+function timePrefix(sig: string, line: Line): number {
+  if (sig.charCodeAt(0) !== 91) return 0
+  if (sig.charCodeAt(3) === 58 && sig.charCodeAt(6) === 93 && sig.charCodeAt(7) === 32) {
+    const h = twoDigits(sig, 1), m = twoDigits(sig, 4)
+    if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
+      line.time = h * 60 + m
+      return 8
+    }
+    return 0
+  }
+  if (sig.charCodeAt(5) !== 45 || sig.charCodeAt(8) !== 45 || sig.charCodeAt(11) !== 32 || sig.charCodeAt(14) !== 58 || sig.charCodeAt(17) !== 93 || sig.charCodeAt(18) !== 32) return 0
+  const y1 = twoDigits(sig, 1), y2 = twoDigits(sig, 3)
+  const mo = twoDigits(sig, 6), d = twoDigits(sig, 9), h = twoDigits(sig, 12), m = twoDigits(sig, 15)
+  if (y1 < 0 || y2 < 0 || mo < 1 || mo > 12 || d < 1 || d > 31 || h < 0 || h > 23 || m < 0 || m > 59) return 0
+  line.time = h * 60 + m
+  line.date = { y: y1 * 100 + y2, mo, d }
+  return 19
+}
+
 export type Line = {
   code: string
   k: number
@@ -84,13 +110,8 @@ function parseAt(text: string, from: number, to: number, prev: string): Line | u
   const code = prev.length === sp - from && text.startsWith(prev, from) ? prev : text.slice(from, sp)
   const line: Line = { code, k, n, sig, text: sig }
   if (sig.charCodeAt(0) === 91) {
-    const m = TIME_RE.exec(sig)
-    if (m) {
-      const close = sig.indexOf("]")
-      line.time = Number(sig.slice(close - 5, close - 3)) * 60 + Number(sig.slice(close - 2, close))
-      if (close > 6) line.date = { y: Number(sig.slice(1, 5)), mo: Number(sig.slice(6, 8)), d: Number(sig.slice(9, 11)) }
-      line.text = sig.slice(m[0].length)
-    }
+    const end = timePrefix(sig, line)
+    if (end) line.text = sig.slice(end)
   }
   return line
 }
