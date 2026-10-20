@@ -108,23 +108,9 @@ export const S = Object.freeze({
   'diffs.hide': 'Свернуть',
 
   // ---- поле ввода
-  'composer.placeholder': 'Введите / для команд',
+  'composer.placeholder': 'Напишите сообщение…',
   'composer.hint': 'Enter — отправить, Shift+Enter — новая строка',
-  'composer.attach': 'Вложения — позже',
-  'composer.voice': 'Голосовой ввод — позже',
-  'composer.mode_label': 'Режим разрешений',
-  'composer.agent_label': 'Агент',
-  'composer.model_label': 'Модель',
-  'composer.effort_label': 'Усилие',
   'composer.ring': 'Контекст занят на {n} %',
-  'mode.ask': 'Спрашивать',
-  'mode.read': 'Авто для чтения',
-  'model.base': 'Базовая',
-  'model.fast': 'Быстрая',
-  'model.deep': 'Глубокая',
-  'effort.low': 'Низкое',
-  'effort.medium': 'Среднее',
-  'effort.high': 'Высокое',
 
   // ---- правая колонка
   'rail.toggle': 'Сведения о сессии',

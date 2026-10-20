@@ -13,22 +13,6 @@ export const AGENTS = Object.freeze([
   Object.freeze({ id: 'second', labelKey: 'agent.second', disabled: true }),
 ]);
 
-// Выбор под полем ввода — заглушка: значения показываются, действия за ними нет.
-export const MODES = Object.freeze([
-  Object.freeze({ id: 'ask', labelKey: 'mode.ask' }),
-  Object.freeze({ id: 'read', labelKey: 'mode.read' }),
-]);
-export const MODELS = Object.freeze([
-  Object.freeze({ id: 'base', labelKey: 'model.base' }),
-  Object.freeze({ id: 'fast', labelKey: 'model.fast' }),
-  Object.freeze({ id: 'deep', labelKey: 'model.deep' }),
-]);
-export const EFFORTS = Object.freeze([
-  Object.freeze({ id: 'low', labelKey: 'effort.low' }),
-  Object.freeze({ id: 'medium', labelKey: 'effort.medium' }),
-  Object.freeze({ id: 'high', labelKey: 'effort.high' }),
-]);
-
 const BASE = 1_792_314_000_000;
 const SEC = 1000;
 const MIN = 60_000;

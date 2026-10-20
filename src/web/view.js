@@ -76,14 +76,14 @@ function icon(doc, id, extra = '') {
 /**
  * @param doc       document
  * @param refs      { side, main, rail, app, status, overlay } — корневые узлы из index.html
- * @param deps      { agents, modes, models, efforts, now, handlers }
+ * @param deps      { agents, now, handlers }
  *   handlers: onSelect(trace), onBack(), onNewToggle(open, project?), onCreate({agent, name, project}),
  *             onSend(trace, text) -> bool, onCancel(trace), onDecide(trace, request, decision),
  *             onPin(trace, pinned), onTheme(), onCopy(text)
  */
 export function createView(doc, refs, deps) {
   const {
-    agents, modes, models, efforts, now, handlers, registryFailed = false,
+    agents, now, handlers, registryFailed = false,
   } = deps;
   const win = doc.defaultView;
   const drafts = new Map();
@@ -239,27 +239,10 @@ export function createView(doc, refs, deps) {
   const input = h(doc, 'textarea', {
     id: 'composer-input', rows: 1, placeholder: t('composer.placeholder'), 'aria-label': t('chat.input_label'),
   });
-  const attach = h(doc, 'button', {
-    type: 'button', class: 'icon-btn', disabled: true, 'aria-label': t('composer.attach'), title: t('composer.attach'),
-  }, icon(doc, 'i-plus'));
-  const mic = h(doc, 'button', {
-    type: 'button', class: 'icon-btn', disabled: true, 'aria-label': t('composer.voice'), title: t('composer.voice'),
-  }, icon(doc, 'i-mic'));
   const cancelButton = h(doc, 'button', { type: 'button', class: 'cancel-btn', hidden: true }, icon(doc, 'i-stop'), h(doc, 'span', { text: t('chat.cancel') }));
   const sendButton = h(doc, 'button', { type: 'button', class: 'send-btn' }, icon(doc, 'i-send'), h(doc, 'span', { text: t('chat.send') }));
   const box = h(doc, 'div', { class: 'box' }, input,
-    h(doc, 'div', { class: 'box-row' }, attach, h(doc, 'span', { class: 'grow' }), mic, cancelButton, sendButton));
-
-  function selectField(id, labelKey, items) {
-    const select = h(doc, 'select', { id });
-    for (const it of items) select.append(h(doc, 'option', { value: it.id, disabled: it.disabled === true, text: it.labelKey ? t(it.labelKey) : it.label }));
-    return { select, node: h(doc, 'label', { class: 'opt', for: id }, h(doc, 'span', { class: 'sr', text: t(labelKey) }), select) };
-  }
-  const modeField = selectField('opt-mode', 'composer.mode_label', modes);
-  const agentField = selectField('opt-agent', 'composer.agent_label', agents);
-  const modelField = selectField('opt-model', 'composer.model_label', models);
-  const effortField = selectField('opt-effort', 'composer.effort_label', efforts);
-  effortField.select.value = 'high';
+    h(doc, 'div', { class: 'box-row' }, h(doc, 'span', { class: 'grow' }), cancelButton, sendButton));
 
   const ringFill = svgNode(doc, 'circle', { class: 'ring-fill', cx: 12, cy: 12, r: 9, pathLength: 100 });
   const ring = svgNode(doc, 'svg', { class: 'ring', viewBox: '0 0 24 24', role: 'img' });
@@ -269,8 +252,7 @@ export function createView(doc, refs, deps) {
 
   const composer = h(doc, 'div', { class: 'composer' },
     box,
-    h(doc, 'p', { class: 'hint', text: t('composer.hint') }),
-    h(doc, 'div', { class: 'options' }, modeField.node, h(doc, 'span', { class: 'grow' }), agentField.node, modelField.node, effortField.node, ringBox));
+    h(doc, 'div', { class: 'composer-meta' }, h(doc, 'p', { class: 'hint', text: t('composer.hint') }), h(doc, 'span', { class: 'grow' }), ringBox));
 
   const chat = h(doc, 'section', { class: 'chat', hidden: true }, log, composer);
   refs.main.replaceChildren(topbar, pick, chat);
@@ -483,7 +465,6 @@ export function createView(doc, refs, deps) {
     }
     agentText.textContent = agentLabel(session.agent);
     modelText.textContent = session.model || t('session.model_unknown');
-    agentField.select.value = session.agent;
     stateBadge.textContent = t(STATE_KEYS[session.state]);
     stateBadge.dataset.state = session.state;
     const busy = session.state === 'answering' || session.state === 'permission';

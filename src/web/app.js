@@ -12,7 +12,7 @@ import { t } from './strings.js';
 import { createView } from './view.js';
 import { chooseMode, createTransport, parseAgentRegistry } from './transport.js';
 import {
-  AGENTS, MODES, MODELS, EFFORTS, createMockServer,
+  AGENTS, createMockServer,
 } from './mock.js';
 
 const FLASH_MS = 4000;
@@ -150,7 +150,7 @@ async function start() {
     app: document.getElementById('app'), side: document.getElementById('side'),
     main: document.getElementById('main'), rail: document.getElementById('rail'),
     status: document.getElementById('status'), overlay: document.getElementById('overlay'),
-  }, { agents, modes: MODES, models: MODELS, efforts: EFFORTS, now: ctx.now, handlers, registryFailed });
+  }, { agents, now: ctx.now, handlers, registryFailed });
   setInterval(() => view.tick(), TICK_MS);
   transport = createTransport({
     mode: picked.mode, url: picked.url,
