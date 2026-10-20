@@ -89,13 +89,14 @@ fn now_millis() Time -> int => Time.now().unix_millis()
 fn acp_config_of(program str, args []str, cwd str, inbox_path str) -> AcpConfig => { program, args, cwd, inbox_path }
 
 fn joined(parts []str, sep str) -> str {
-    mut out = ""
+    consume sb = StringBuilder.new()
     mut first = true
     for part in parts {
-        out = if first { part } else { "${out}${sep}${part}" }
+        if !first { sb.append(sep) }
+        sb.append(part)
         first = false
     }
-    out
+    sb.into_str()
 }
 
 fn array_text(lines []str) -> str => "[${joined(lines, ",")}]"
