@@ -56,6 +56,7 @@ applyTheme(ui.theme);
 const ctx = { newId, now: () => Date.now() };
 let view = null;
 let queued = false;
+let transport = null;
 
 function draw() {
   if (!queued) return;
@@ -151,7 +152,7 @@ async function start() {
     status: document.getElementById('status'), overlay: document.getElementById('overlay'),
   }, { agents, modes: MODES, models: MODELS, efforts: EFFORTS, now: ctx.now, handlers, registryFailed });
   setInterval(() => view.tick(), TICK_MS);
-  const transport = createTransport({
+  transport = createTransport({
     mode: picked.mode, url: picked.url,
     server: picked.mode === 'mock' ? createMockServer({ now: ctx.now }) : undefined,
     WebSocketImpl: globalThis.WebSocket, timers,
