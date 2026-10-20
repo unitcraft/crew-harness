@@ -1,0 +1,11 @@
+// words.nv - the words between the code and the table of the sessions (task 126). STUB of the red probe: the lists are empty.
+module crew_harness.server
+
+/// CodeWord: a word that goes between the code and the machine of the sessions.
+export type CodeWord { name str, kind str, source str, fields str, known bool }
+
+/// The words that the hub gives to the machine.
+export fn words_given_by_code() -> []CodeWord => []CodeWord.new()
+
+/// The words that come from the agent (the client of ACP and the engine).
+export fn words_from_agent() -> []CodeWord => []CodeWord.new()

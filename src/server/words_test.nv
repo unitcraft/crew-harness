@@ -1,0 +1,296 @@
+// words_test.nv - task 126: the dictionary of the words between the table of the dialog and the code (`words.nv`, the section "The border of the table and the code" of README.md):
+// every word that the code gives is declared in the table or named in the list "the table does not know"; the sources say the same as the dictionary; the hub does not name a state.
+module crew_harness.server
+
+import std.text
+import std.fs.{Fs, real_fs, Path, read_text}
+import crew_harness.engine.{Incoming, EventKind, StepEnvironment, Order}
+import crew_harness.machine_run.{PortolanMachine, PortolanState}
+import crew_harness.machine_table.{MachineDef, TableRow, WordEv, SignalEv, ProgressEv, AnswerEv, FailureEv, TimeoutEv, StateDef}
+
+fn wd_machine() -> PortolanMachine {
+    match hub_machine(900000) {
+        Ok(m) => m
+        Err(e) => panic("the hub machine is not made: ${e}")
+    }
+}
+
+fn wd_all() -> []CodeWord {
+    mut out = []CodeWord.new()
+    for w in words_given_by_code() { out.push(w) }
+    for w in words_from_agent() { out.push(w) }
+    out
+}
+
+fn wd_source(relative str) -> str {
+    mut p = kit_repo_root()
+    for part in relative.split("/") { p = p.join(part) }
+    with Fs = real_fs() {
+        match read_text(p) {
+            Ok(t) => t
+            Err(e) => panic("cannot read ${relative}")
+        }
+    }
+}
+
+// The names that stand after a marker in the text, up to the closing quote: `Incoming.word("acp_note"` with the marker `Incoming.word("`.
+fn wd_names_after(text str, marker str) -> []str {
+    mut out = []str.new()
+    mut first = true
+    for part in text.split(marker) {
+        if first {
+            first = false
+        } else {
+            ro close = part.find("\"") ?? -1
+            if close > 0 { out.push(part[..close]) }
+        }
+    }
+    out
+}
+
+fn wd_in_dictionary(name str) -> bool {
+    for w in wd_all() {
+        if w.name == name { return true }
+    }
+    false
+}
+
+// Does a row of the list take this kind of event (by the name for a word, a signal and a part; by the kind for an answer, a failure and a timeout)?
+fn wd_rows_take(rows []TableRow, w CodeWord) -> bool {
+    for r in rows {
+        match r.event {
+            WordEv { word, binds } => { if w.kind == "input" && word == w.name { return true } }
+            SignalEv { name, binds } => { if w.kind == "input" && name == w.name { return true } }
+            ProgressEv { name, binds } => { if w.kind == "progress" && name == w.name { return true } }
+            AnswerEv { bind } => { if w.kind == "answered" { return true } }
+            FailureEv { reasons, bind } => { if w.kind == "refused" { return true } }
+            TimeoutEv => { if w.kind == "expired" { return true } }
+            _ => ()
+        }
+    }
+    false
+}
+
+// The word is taken by a row of a state.
+fn wd_in_table(def MachineDef, w CodeWord) -> bool {
+    for s in def.states {
+        if wd_rows_take(s.rows, w) { return true }
+    }
+    false
+}
+
+// The word is declared in the table: a word of a party, a signal, a part; an answer, a failure and a timeout have no name in the table.
+fn wd_declared(def MachineDef, w CodeWord) -> bool {
+    for p in def.parties {
+        for x in p.words {
+            if w.kind == "input" && x.name == w.name { return true }
+        }
+        for x in p.progress {
+            if w.kind == "progress" && x.name == w.name { return true }
+        }
+    }
+    for x in def.signals {
+        if w.kind == "input" && x.name == w.name { return true }
+    }
+    w.kind == "answered" || w.kind == "refused" || w.kind == "expired"
+}
+
+fn wd_event(w CodeWord) -> Incoming {
+    ro kind = if w.kind == "input" {
+        EventKind.Input
+    } else if w.kind == "progress" {
+        EventKind.Progress
+    } else if w.kind == "answered" {
+        EventKind.Answered
+    } else if w.kind == "refused" {
+        EventKind.Refused
+    } else {
+        EventKind.Expired
+    }
+    mut request Option[str] = None
+    if w.kind != "input" { request = Some("agent-1") }
+    Incoming { id: "e-1", trace: "t-1", step: 2, kind, name: w.name, request, input: "", at: 1000 }
+}
+
+fn wd_codes(m PortolanMachine, s PortolanState, w CodeWord) -> []str {
+    mut environment = StepEnvironment.new()
+    ro moved = m.step(s, wd_event(w), environment)
+    mut out = []str.new()
+    for o in environment.orders {
+        match o {
+            Note(event) => out.push(event.code)
+            _ => ()
+        }
+    }
+    out
+}
+
+fn wd_unknown() -> []CodeWord {
+    mut out = []CodeWord.new()
+    for w in wd_all() {
+        if !w.known { out.push(w) }
+    }
+    out
+}
+
+fn wd_known() -> []CodeWord {
+    mut out = []CodeWord.new()
+    for w in wd_all() {
+        if w.known { out.push(w) }
+    }
+    out
+}
+
+// ----- the dictionary and the table -----
+
+test "wd the dictionary lists four words of the code and the words of the agent" {
+    assert(words_given_by_code().len() == 4)
+    assert(words_from_agent().len() >= 8)
+}
+
+test "wd the words of the code are the four of the page" {
+    mut names = []str.new()
+    for w in words_given_by_code() { names.push(w.name) }
+    assert(names.contains("user_message"))
+    assert(names.contains("cancel"))
+    assert(names.contains("permission_decision"))
+    assert(names.contains("session_created"))
+}
+
+test "wd a name is listed once" {
+    mut seen = []str.new()
+    for w in wd_all() {
+        assert(!seen.contains(w.name))
+        seen.push(w.name)
+    }
+    assert(seen.len() > 0)
+}
+
+test "wd every word of the dictionary has a source and a kind" {
+    assert(wd_all().len() > 0)
+    for w in wd_all() {
+        assert(w.source.byte_len() > 0)
+        assert(w.kind == "input" || w.kind == "progress" || w.kind == "answered" || w.kind == "refused" || w.kind == "expired")
+    }
+}
+
+test "wd a word that the table knows is declared in the table of the dialog" {
+    ro def = wd_machine().def
+    assert(wd_known().len() >= 5)
+    for w in wd_known() { assert(wd_declared(def, w)) }
+}
+
+test "wd a word that the table knows is taken by a row of a state" {
+    ro def = wd_machine().def
+    assert(wd_known().len() >= 5)
+    for w in wd_known() { assert(wd_in_table(def, w)) }
+}
+
+test "wd a word that the table does not know is not declared in it" {
+    ro def = wd_machine().def
+    assert(wd_unknown().len() >= 5)
+    for w in wd_unknown() { assert(!wd_declared(def, w)) }
+}
+
+test "wd the table writes event_unknown for a word it does not know" {
+    ro m = wd_machine()
+    assert(wd_unknown().len() >= 5)
+    for w in wd_unknown() { assert(wd_codes(m, m.initial(), w) == ["event_unknown"]) }
+}
+
+test "wd the table writes event_unknown for them also while a turn is open" {
+    ro m = wd_machine()
+    mut environment = StepEnvironment.new()
+    ro opened = Incoming { id: "e-0", trace: "t-1", step: 1, kind: EventKind.Input, name: "user_message", request: None, input: "hi", at: 900 }
+    ro open = match m.step(m.initial(), opened, environment) {
+        Go(next) => next
+        Stay => m.initial()
+    }
+    assert(m.state_name(open) != m.state_name(m.initial()))
+    assert(wd_unknown().len() >= 5)
+    for w in wd_unknown() { assert(wd_codes(m, open, w) == ["event_unknown"]) }
+}
+
+test "wd session_created is a word that the table does not know, on purpose" {
+    mut found = false
+    for w in wd_unknown() {
+        if w.name == "session_created" { found = true }
+    }
+    assert(found)
+}
+
+test "wd the word cancel is a signal of the table and is not a word of the user" {
+    ro def = wd_machine().def
+    mut as_word = false
+    for p in def.parties {
+        for x in p.words {
+            if x.name == "cancel" { as_word = true }
+        }
+    }
+    mut as_signal = false
+    for x in def.signals {
+        if x.name == "cancel" { as_signal = true }
+    }
+    assert(!as_word)
+    assert(as_signal)
+}
+
+test "wd the field of the message and of the chunk is content" {
+    ro def = wd_machine().def
+    mut message = ""
+    mut chunk = ""
+    for p in def.parties {
+        for x in p.words {
+            if x.name == "user_message" && x.fields.len() == 1 { message = x.fields[0].name }
+        }
+        for x in p.progress {
+            if x.name == "agent_chunk" && x.fields.len() == 1 { chunk = x.fields[0].name }
+        }
+    }
+    assert(message == "content")
+    assert(chunk == "content")
+}
+
+// ----- the dictionary and the sources -----
+
+test "wd the hub gives only the words of the dictionary" {
+    ro names = wd_names_after(wd_source("src/server/hub.nv"), "Incoming.word(\"")
+    assert(names.len() >= 3)
+    for n in names { assert(wd_in_dictionary(n)) }
+}
+
+test "wd the client of ACP gives only the words of the dictionary" {
+    ro project = wd_source("src/acp/project.nv")
+    ro client = wd_source("src/acp/client.nv")
+    mut names = wd_names_after(project, "Incoming.word(\"")
+    for n in wd_names_after(client, "Incoming.word(\"") { names.push(n) }
+    for n in wd_names_after(project, "proj(\"") { names.push(n) }
+    for n in wd_names_after(project, "EventKind.Answered, \"") { names.push(n) }
+    for n in wd_names_after(project, "EventKind.Refused, \"") { names.push(n) }
+    assert(names.len() >= 8)
+    for n in names { assert(wd_in_dictionary(n)) }
+}
+
+test "wd every word of the dictionary is in a source" {
+    ro sources = "${wd_source("src/server/hub.nv")}${wd_source("src/acp/project.nv")}${wd_source("src/acp/client.nv")}${wd_source("src/engine/engine.nv")}"
+    assert(wd_all().len() > 0)
+    for w in wd_all() { assert(sources.contains("\"${w.name}\"")) }
+}
+
+// ----- the hub does not name a state -----
+
+test "wd the code of the hub names no state of the table" {
+    ro hub = wd_source("src/server/hub.nv")
+    assert(hub.byte_len() > 1000)
+    assert(!hub.contains("\"Awaiting\""))
+    assert(!hub.contains("\"Idle\""))
+    assert(!hub.contains("\"Closed\""))
+}
+
+test "wd the scenarios of the hub name no state of the table" {
+    ro kit = wd_source("src/server/testkit.nv")
+    assert(kit.byte_len() > 1000)
+    assert(!kit.contains("\"Awaiting\""))
+    assert(!kit.contains("\"Idle\""))
+    assert(!kit.contains("\"Closed\""))
+}

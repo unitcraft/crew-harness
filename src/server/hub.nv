@@ -18,6 +18,7 @@
 module crew_harness.server
 
 import crew_harness.engine.{Engine, Incoming, EventKind, Journal, Store, Link, start_engine, resume_engine, decode_snapshot}
+import crew_harness.machine.{dialog_machine_text}
 import crew_harness.machine_run.{PortolanMachine, PortolanState}
 import crew_harness.acp.{AcpConfig, AcpClient, open_client, acp_link, page_event}
 import crew_harness.storage.{open_data_dir, file_journal, file_store, list_sessions, valid_session_name, session_path}
@@ -354,7 +355,10 @@ fn Hub mut @add_session(s Dialog) -> () {
 
 /// Start the hub: the settings are checked, the data folder is opened, every session of the store is resumed (the engine from
 /// its snapshot and journal, the lines of the page from the journal); an agent is started for a session only if a request of it is open.
-export fn start_hub(settings ServerSettings) Proc Detach Time Net Fs Os -> Result[Hub, str] {
+export fn start_hub(settings ServerSettings) Proc Detach Time Net Fs Os -> Result[Hub, str] => start_hub_from(settings, dialog_machine_text())
+
+/// The same over the text of the JSON of the machine of the sessions (the tests run a changed copy of the table: a state with another name).
+export fn start_hub_from(settings ServerSettings, table_text str) Proc Detach Time Net Fs Os -> Result[Hub, str] {
     settings.check()?
     if !open_data_dir(settings.data_dir) { return Err("the data folder ${settings.data_dir} cannot be opened") }
     ro workdir = if settings.workdir.byte_len() > 0 {
@@ -365,7 +369,7 @@ export fn start_hub(settings ServerSettings) Proc Detach Time Net Fs Os -> Resul
             Err(e) => return Err("the working folder is unknown")
         }
     }
-    ro machine = hub_machine(settings.idle_term_ms)?
+    ro machine = hub_machine_from(table_text, settings.idle_term_ms)?
     mut hub = Hub {
         settings, machine, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0
     }

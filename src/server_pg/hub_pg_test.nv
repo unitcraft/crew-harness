@@ -3,7 +3,7 @@
 // red test with a message, not a skip.
 module crew_harness.server_pg
 
-import crew_harness.server.{kit_pg, scenario_chat, scenario_stream_burst, scenario_permission, scenario_cancel, scenario_restart_idle, scenario_restart_open, scenario_crash, scenario_two_pages, scenario_rejects, scenario_many, scenario_broken_agent}
+import crew_harness.server.{kit_pg, scenario_chat, scenario_stream_burst, scenario_permission, scenario_cancel, scenario_restart_idle, scenario_restart_open, scenario_crash, scenario_two_pages, scenario_rejects, scenario_many, scenario_broken_agent, scenario_renamed_table}
 import crew_harness.pgdb.{new_test_db, drop_test_db, test_count, test_must_sql}
 
 fn clean(report str) -> () {
@@ -105,6 +105,15 @@ test "pg: several sessions" {
 test "pg: an agent that refuses to start" {
     ro db = new_test_db("hub_broken")
     ro report = scenario_broken_agent(kit_pg("pgbroken", 30000, db.app))
+    ro stored = test_count(db.admin, "select count(distinct id) from crew.machine_snapshot")
+    drop_test_db(db)
+    clean(report)
+    assert(stored == 1)
+}
+
+test "pg: the table with other names of the states" {
+    ro db = new_test_db("hub_renamed")
+    ro report = scenario_renamed_table(kit_pg("pgrenamed", 30000, db.app))
     ro stored = test_count(db.admin, "select count(distinct id) from crew.machine_snapshot")
     drop_test_db(db)
     clean(report)

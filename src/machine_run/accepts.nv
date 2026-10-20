@@ -1,0 +1,5 @@
+// accepts.nv - the question of a caller that is not the machine: does the state take this word? (task 126)
+module crew_harness.machine_run
+
+/// STUB of the red probe of task 126: the answer is always no.
+export fn PortolanMachine @accepts_word(state PortolanState, name str) -> bool => false

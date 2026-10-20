@@ -7,6 +7,7 @@
 // repository upward from the working directory (the nearest folder with `nova.toml`).
 module crew_harness.server
 
+import crew_harness.machine.{dialog_machine_text}
 import crew_harness.pgdb.{PgConfig}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import std.fs.{Fs, real_fs, Path, try_exists, remove_dir_all}
@@ -205,6 +206,19 @@ export fn rig_open(settings ServerSettings) Proc Detach Time Net Fs Os -> Rig {
         Ok(hub) => Rig { hub, heard: []Heard.new(), mark: 0 }
         Err(e) => panic("the hub cannot start: ${e}")
     }
+}
+
+/// Start a hub over a changed text of the table of the dialog.
+export fn rig_open_with(settings ServerSettings, table_text str) Proc Detach Time Net Fs Os -> Rig {
+    match start_hub_from(settings, table_text) {
+        Ok(hub) => Rig { hub, heard: []Heard.new(), mark: 0 }
+        Err(e) => panic("the hub cannot start: ${e}")
+    }
+}
+
+/// The table of the dialog as it is committed, with the two states named otherwise (`Waiting` for the open turn, `Resting` for the first state): nothing else changes.
+export fn renamed_table_text() -> str {
+    dialog_machine_text().replace("\"Awaiting\"", "\"Waiting\"").replace("\"Idle\"", "\"Resting\"")
 }
 
 fn Rig mut @collect() -> () {
@@ -488,6 +502,31 @@ export fn scenario_permission(settings ServerSettings) Proc Detach Time Net Fs O
     rig.page(1, "permission_decision", "s-perm", "{\"request\":\"999\",\"decision\":\"allow\"}")
     rig.run(150)
     c.expect(rig.lines_for(1).len() == before, "a decision nobody asked for is not shown")
+    rig.shut()
+    c.report()
+}
+
+/// The table of the dialog with other names of the states: the hub does the same (a message while a turn is open is not taken, a cancel ends the turn, the next turn works).
+export fn scenario_renamed_table(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open_with(settings, renamed_table_text())
+    rig.attach(1)
+    rig.page(1, "session_created", "s-ren", "{\"name\":\"Другие имена\",\"agent\":\"opencode\"}")
+    rig.page(1, "user_message", "s-ren", "{\"turn\":\"t1\",\"text\":\"slow go\"}")
+    c.expect(rig.until("\"text\":\"started\"", 15000), "the turn has begun")
+    c.expect(rig.hub.state_of("s-ren") == "Waiting", "the names of the states are those of the changed table")
+    ro log_before = rig.hub.take_log()
+    rig.page(1, "user_message", "s-ren", "{\"turn\":\"t2\",\"text\":\"second\"}")
+    rig.run(200)
+    c.expect(kit_with(rig.lines_for(1), "\"kind\":\"user_message\"") == 1, "a message while a turn is open is not taken")
+    c.expect(kit_with(rig.hub.take_log(), "while a turn is open: ignored") == 1, "the hub says it ignored the message")
+    rig.page(1, "cancel", "s-ren", "{}")
+    c.expect(rig.until("\"kind\":\"cancel\"", 5000), "the cancel is shown")
+    c.expect(rig.hub.state_of("s-ren") == "Resting", "the session is open after the cancel")
+    rig.run(600)
+    rig.page(1, "user_message", "s-ren", "{\"turn\":\"t3\",\"text\":\"after cancel\"}")
+    c.expect(rig.until(KIT_DONE, 15000), "the next turn ends")
+    c.expect(answer_of(rig.lines_for(1), line_input(first_of(rig.lines_for(1), "user_message", 4), "turn")) == "Echo: after cancel", "the next turn is answered")
     rig.shut()
     c.report()
 }
