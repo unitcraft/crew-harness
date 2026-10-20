@@ -4,7 +4,7 @@ module crew_harness.machine_run
 import std.text
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import crew_harness.engine.{Incoming, EventKind, Environment, Transition, SendOrder, CancelOrder, FailCode, JournalParam, journal_event, param, Go, Stay}
-import crew_harness.machine.{Value, Null, Int, Bool, Text, List, RecordField, Binding, PrimitiveHost, PrimitiveFailed, TypeSpec, TypeDefs, RecordType, Lit, check_call_args, value_json, value_to_json, value_from_json, make_record, check_value, enum_value}
+import crew_harness.machine.{Value, Null, Int, Bool, Text, List, RecordField, Binding, PrimitiveHost, PrimitiveFailed, TypeSpec, TypeDefs, RecordType, OptionalType, Lit, check_call_args, value_json, value_to_json, value_from_json, make_record, check_value, enum_value}
 import crew_harness.machine_table.{StateDef, Goto, PartyDef, MachineDef, LValue, KeyStep, FieldStep, MachineParty, find_state, find_party, find_data}
 import crew_harness.machine_table.{ToState}
 
@@ -463,6 +463,13 @@ fn reject(mut ctx Ctx, params []JournalParam, what str) -> () {
     finish_with(ctx, Some(FailCode.NoResult), "input rejected: ${what}")
 }
 
+fn spec_is_optional(spec TypeSpec) -> bool {
+    match spec {
+        OptionalType(inner) => true
+        _ => false
+    }
+}
+
 // The input of the call from the text of the start event; Ok(Err(..)) is a refusal that is already written.
 fn read_input(mut ctx Ctx, text str, mut host PrimitiveHost) -> Option[Value] {
     ro def = ctx.def
@@ -483,6 +490,11 @@ fn read_input(mut ctx Ctx, text str, mut host PrimitiveHost) -> Option[Value] {
             }
         }
         for f in def.input.fields {
+            // a field of an optional type (`?T`) that the input does not have is `none` (format section 1: `missing` is a missing REQUIRED field)
+            if !o.contains(f.name) && spec_is_optional(f.spec) {
+                fields.push(RecordField { name: f.name, value: Null })
+                continue
+            }
             ro raw = match o.get(f.name) {
                 Some(x) => x
                 None => {

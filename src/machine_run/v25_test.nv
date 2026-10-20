@@ -117,6 +117,44 @@ test "v25 input id bad" {
     assert(summary(number.orders).starts_with("log:input_rejected(reason=type;field=session)"))
 }
 
+// ---- an optional field of the input (task 121) ------------------------------------------------------------------------------------
+
+fn input_optional() -> PortolanMachine {
+    ro data = `{"name":"session","type":"text","initial":{"from_input":"session"}},{"name":"note","type":"?text","initial":{"from_input":"note"}},{"name":"level","type":"?int>=0","initial":{"from_input":"level"}},{"name":"u_attempt","type":"int>=0","initial":{"expr":{"op":"lit","value":0}},"monotonic":true,"writes":"mechanics"}`
+    ro party = `{"name":"user","id":"user","kind":"human","counter":"u_attempt","words":[{"name":"go"}]}`
+    ro wait = `{"name":"Wait","kind":"appeal","party":"user","rows":[{"n":1,"event":{"kind":"word","word":"go"},"to":"Done"}]}`
+    ro done = `{"name":"Done","kind":"end","reads":["session"]}`
+    ro ends = `{"result":"text","rows":[{"state":"Done","n":1,"when":{"op":"lit","value":true},"answer":{"kind":"answer","value":{"op":"name","name":"session"}}}]}`
+    build_from(`{"format":"machine/2","machine":"Opt","version":"1","input":{"fields":[{"name":"session","type":"text"},{"name":"note","type":"?text"},{"name":"level","type":"?int>=0"}]},"data":[${data}],"parties":[${party}],"initial":"Wait","states":[${wait},${done}],"ends":${ends}}`)
+}
+
+test "v25 input optional absent" {
+    // a field of an optional type that the input does not have is none; a required one is still missing
+    ro m = input_optional()
+    ro bare = run1(m, m.initial(), start_with("{\"session\":\"a\"}"))
+    assert(bare.state.name == "Wait")
+    assert(bare.state.started)
+    assert(datum_json(bare.state, "note") == "null")
+    assert(datum_json(bare.state, "level") == "null")
+    assert(datum_json(bare.state, "session") == "\"a\"")
+    ro none = run1(m, m.initial(), start_with("{\"note\":\"x\"}"))
+    assert(summary(none.orders).starts_with("log:input_rejected(reason=missing;field=session),finish:refusal:NoResult"))
+}
+
+test "v25 input optional given" {
+    ro m = input_optional()
+    ro full = run1(m, m.initial(), start_with("{\"session\":\"a\",\"note\":\"n\",\"level\":2}"))
+    assert(full.state.name == "Wait")
+    assert(datum_json(full.state, "note") == "\"n\"")
+    assert(datum_json(full.state, "level") == "2")
+    ro explicit = run1(m, m.initial(), start_with("{\"session\":\"a\",\"note\":null}"))
+    assert(explicit.state.name == "Wait")
+    assert(datum_json(explicit.state, "note") == "null")
+    // the type of a field that is given is still checked: a negative level is refused
+    ro bad = run1(m, m.initial(), start_with("{\"session\":\"a\",\"level\":-1}"))
+    assert(summary(bad.orders).starts_with("log:input_rejected(reason=type;field=level),finish:refusal:NoResult"))
+}
+
 // ---- a set of literals in a word and in the data -------------------------------------------------------------------------------
 
 fn set_machine() -> PortolanMachine {

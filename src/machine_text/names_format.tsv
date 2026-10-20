@@ -78,8 +78,13 @@ word	сузить	narrow
 word	ответил	replied
 data	ид_сессии	session_id
 word	закрыть_сессию	close_session
+word	подтвердить	confirm
+data	источник_запуска	launch_source
+type	ОбъёмЗапуска	LaunchScope
+case	Помещается	Fits
+case	НеПомещается	DoesNotFit
 machine	шаг_агента	agent_step
 machine	совещание	meeting
 machine	проверка_цикла	review
-machine	запуск_сессии	session_launch
+machine	запуск_сессии	session_start
 machine	раннер	runner

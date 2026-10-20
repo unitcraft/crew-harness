@@ -269,7 +269,14 @@ export fn standard_registry() -> Registry {
         ["reply_text", "reply_artifact", "agent_request", "objects: session files"], ["service record: form remarks (read by the turn fix)"]))
     std_add(reg, std_prim("close_agent_turn", no_params(), NothingType, Irreversible, nothing(), nothing()))
     std_add(reg, std_prim("check_cache", [param("dialog_kind", TextSet(["main", "delivery"]))], NothingType, Writing, nothing(), ["service record: request start mark"]))
-    // the cycle check: the last, repeatable stage of the commit of its ends HALTED and ERRORED (rule 13); the group of the agent processes stops as a whole and it is checked that none is left
+    // the session start (task 121): what the methodology leaves to the executor of a launch. The reads are objects and service stores of the executor, not data of the machine.
+    std_add(reg, std_prim("launch_scope", no_params(), VariantType("LaunchScope"), Reading, ["objects: measure of the dialog of the launch"], nothing()))
+    std_add(reg, std_prim("launch_profile", [param("session", TextType)], RecordType("AgentProfile"), Reading, ["service store: profile confirmed at the gate of the profile"], nothing()))
+    std_add(reg, std_prim("session_context", [param("session", TextType), param("source", TextType), param("launch_pass", OptionalType(count_spec())), param("delivery_mode", TextType),
+        param("task_dir", TextType), param("repo_dir", TextType), param("route", TextType), param("source_list", OptionalType(TextType)), param("delivery_short", BoolType)],
+        TextType, Reading, ["objects: plan of the task, prompts of the sessions, dialog of the author"], nothing()))
+    std_add(reg, std_prim("parse_session_artifact", [param("session", TextType), param("reply", RecordType("AgentReply"))], RecordType("SessionParsing"), Reading, ["objects: artifact file of the session"], nothing()))
+    // the primitive of the cycle check (task 122) and of the session start (task 121), below: the last, repeatable stage of the commit of their ends HALTED and ERRORED (rule 13); the group of the agent processes stops as a whole and it is checked that none is left
     std_add(reg, std_prim("stop_agent_group", no_params(), NothingType, Irreversible, nothing(), nothing()))
     reg
 }
@@ -315,5 +322,28 @@ export fn standard_types() -> TypeDefs {
         cd("FixContext", [fd("proposal", TextType), fd("gate3_findings", finding_list), fd("author_guidance", optional_text)]),
         cd("QuestionContext", [fd("author_question", TextType), fd("proposal", TextType), fd("gate3_findings", finding_list), fd("human_answer", TextType)])
     ], words: []EnumWord.new() })
+    TypeDefs { records, variants }
+}
+
+/// The records and the variants the signatures of the session start use (task 121): the types of the machine "Session start" (English names of the dictionary of the methodology). They are
+/// another set than `standard_types()` for the names `Finding` (severity essential or superficial, a level, the evidence), `Severity` and `Summary` (essential, probes): the meeting has
+/// types of the same names with other fields (`standard_types()`), and each machine declares its own, so the registry has a set of types for each of them. The rest is the common part.
+export fn session_types() -> TypeDefs {
+    ro base = standard_types()
+    mut records = []RecordDef.new()
+    for r in base.records {
+        if r.name != "Finding" && r.name != "Summary" { records.push(r) }
+    }
+    records.push(RecordDef { name: "Finding", fields: [fd("severity", VariantType("Severity")), fd("level", VariantType("Level")), fd("evidence", TextType)] })
+    records.push(RecordDef { name: "Summary", fields: [fd("essential", count_spec()), fd("probes", count_spec())] })
+    records.push(RecordDef { name: "SessionParsing", fields: [fd("result", VariantType("SessionResult")), fd("summary", OptionalType(RecordType("Summary"))), fd("findings", OptionalType(ListType(RecordType("Finding"))))] })
+    mut variants = []VariantDef.new()
+    for v in base.variants {
+        if v.name != "Severity" { variants.push(v) }
+    }
+    variants.push(VariantDef { name: "Severity", cases: [plain_case("Essential"), plain_case("Superficial")], words: []EnumWord.new() })
+    variants.push(VariantDef { name: "Level", cases: [plain_case("Implementation"), plain_case("Plan"), plain_case("Requirements"), plain_case("OutOfScope"), plain_case("Delivery")], words: []EnumWord.new() })
+    variants.push(VariantDef { name: "SessionResult", cases: [plain_case("Done"), plain_case("Revision"), plain_case("Plan"), plain_case("Requirements"), plain_case("Question")], words: []EnumWord.new() })
+    variants.push(VariantDef { name: "LaunchScope", cases: [plain_case("Fits"), plain_case("DoesNotFit")], words: []EnumWord.new() })
     TypeDefs { records, variants }
 }

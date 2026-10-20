@@ -19,6 +19,26 @@ fn rclass(name str) -> str {
     }
 }
 
+fn rfield_names(defs TypeDefs, record str) -> []str {
+    mut out = []str.new()
+    for r in defs.records {
+        if r.name == record {
+            for f in r.fields { out.push(f.name) }
+        }
+    }
+    out
+}
+
+fn rcase_names(defs TypeDefs, variant str) -> []str {
+    mut out = []str.new()
+    for v in defs.variants {
+        if v.name == variant {
+            for c in v.cases { out.push(c.name) }
+        }
+    }
+    out
+}
+
 fn rcount(class PrimitiveClass) -> int {
     mut n = 0
     for p in standard_registry().primitives {
@@ -214,8 +234,8 @@ test "ps names" {
 }
 
 test "sd count" {
-    assert(standard_registry().primitives.len() == 23)
-    assert(rcount(Reading) == 11)
+    assert(standard_registry().primitives.len() == 27)
+    assert(rcount(Reading) == 15)
     assert(rcount(Writing) == 7)
     assert(rcount(Irreversible) == 5)
     assert(rcount(Pure) == 0)
@@ -299,11 +319,40 @@ test "sd reads writes" {
 }
 
 test "sd types" {
+    // the five primitives of the session start (task 121) use the types of the session (session_types), the others those of the pilots (standard_types)
     ro defs = standard_types()
+    ro session = session_types()
+    ro mine = ["launch_scope", "launch_profile", "session_context", "parse_session_artifact", "stop_agent_group"]
     for p in standard_registry().primitives {
-        assert(rknown(p.result, defs))
-        for q in p.params { assert(rknown(q.spec, defs)) }
+        ro use = if mine.contains(p.name) { session } else { defs }
+        assert(rknown(p.result, use))
+        for q in p.params { assert(rknown(q.spec, use)) }
     }
+}
+
+test "sd session start" {
+    for name in ["launch_scope", "launch_profile", "session_context", "parse_session_artifact"] { assert(rclass(name) == "reading") }
+    assert(rclass("stop_agent_group") == "irreversible")
+    match find_primitive(standard_registry(), "session_context") {
+        Some(p) => assert(p.params.len() == 9 && spec_text(p.result) == "text")
+        None => assert(false)
+    }
+}
+
+test "sd session types" {
+    ro session = session_types()
+    ro meeting = standard_types()
+    // the same names, other fields: the meeting's Summary has `critical`, the session's has `essential`
+    assert(rfield_names(meeting, "Summary") == ["critical", "probes"])
+    assert(rfield_names(session, "Summary") == ["essential", "probes"])
+    assert(rfield_names(meeting, "Finding") == ["severity", "evidence", "repeat", "question"])
+    assert(rfield_names(session, "Finding") == ["severity", "level", "evidence"])
+    assert(rcase_names(meeting, "Severity") == ["Critical", "Significant", "Desirable"])
+    assert(rcase_names(session, "Severity") == ["Essential", "Superficial"])
+    assert(rcase_names(session, "SessionResult") == ["Done", "Revision", "Plan", "Requirements", "Question"])
+    assert(rcase_names(session, "LaunchScope") == ["Fits", "DoesNotFit"])
+    // what they share
+    assert(rfield_names(session, "AgentReply") == rfield_names(meeting, "AgentReply"))
 }
 
 test "sd names" {
