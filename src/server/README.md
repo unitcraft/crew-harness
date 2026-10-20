@@ -102,7 +102,7 @@ Since task 114 the hub runs every session on the machine of the many-turn chat w
 - **The idle term.** It is the parameter `IDLE_TERM` of the table with the key of the project `проект.срок_бездействия` (format 2.7, P-9, default 900000 ms). The hub gives it
   `idle_term_seconds * 1000` of the settings through the table of the parameters of the project (`portolan_machine_with`); nothing else of the settings reaches the machine.
 - **What the page sees.** Nothing changed: `page_event` takes the events of the engine (the journal codes and the names of the events), the states for the page (`Idle`, `Awaiting`)
-  are the names of the states of the table, `/ws` and `src/web/` are as they were.
+  are the names of the states of the table (for people: the code does not compare them, see the next section), `/ws` and `src/web/` are as they were.
 - **Snapshots.** The state of a session in the store is now the state of the Portolan machine: `{"state":"Awaiting","started":true,"input":null,"data":{...}}`. A snapshot of the old form
   (`{"state":"Awaiting","user":...,"reply":...}`) is **not migrated**: there are no such sessions in a product base; the hub does not resume it and writes `the session <id> cannot be resumed: no usable snapshot` to its log.
   A session of the new form is found by the store after a restart and goes on through `resume_engine`.
@@ -114,6 +114,48 @@ Since task 114 the hub runs every session on the machine of the many-turn chat w
   (`inject_test.nv`). [`src/machine_dialog`](../machine_dialog/table_test.nv) takes every row of the table by a scenario (the mark `taken`, 8 rows of 8) and checks the parameter of the idle term.
   One change of the JSON (a journal code) turns both units red. The ten scenarios of the hub (`testkit.nv`) run over files and over PostgreSQL on the Portolan machine.
 - **No switch.** The hub runs on Portolan only; there is no setting "nova/portolan". Removing `dialog_session` from `src/chat` is for the owner to say.
+
+## The border of the table and the code (Граница таблицы и кода)
+
+Task 126. Where the behaviour of a session is written in the table [`dialog.portolan.md`](../machine/machines/dialog.portolan.md), and where it is written in code. The hub does not know the name of any
+state of the table: it asks the table.
+
+**The table decides** (change it in the table, the code stays): the states and what leads from one to the other; which word or signal a state takes (`слово(...)`, `сигнал(...)`, `часть(...)`, `ответ`, `сбой`, `срок`);
+the codes of the journal and their parameters; the data of the turn (the two texts) and when they are cleared; the numbers of the requests of the agent (`agent-1`, `agent-2`...: the counter of the party, the mechanics);
+what the request to the agent holds (`подсказка`, `реплика`); the cancel of the open requests (`отменить_открытые`); the idle term (the parameter `IDLE_TERM`, the key of the project `проект.срок_бездействия`);
+the end `ЗАКРЫТО` (the word `закрыть_сессию`, which the hub never gives).
+
+**The code decides** (change it in the code, the table stays): which event of the page becomes which word (the table below); whether a word may be given now (`Hub.takes_message`, one question to the machine, see below);
+the process of the agent (start, stop, the pump of its events); how an update of ACP becomes a word (`project_update`) and how a stop reason becomes an outcome (`stop_event`); the term as a timer of the engine (the event
+`срок`); the store (files or PostgreSQL), the journal, the snapshot; the lines of the page (`page_event`), the `turn` of the page, the synthetic `error` events of the page (they are not kept).
+
+### The words the code gives to the table
+
+The list as data is `words.nv` (`words_given_by_code`, `words_from_agent`); `words_test.nv` keeps it equal to the table and to the sources.
+
+| word | who gives it | fields | the table |
+|---|---|---|---|
+| `user_message` | the hub, `Hub.say`, from the page | `content` (text) | declared: a word of the party `пользователь`; the row of `ПОКОЙ` |
+| `cancel` | the hub, `Hub.cancel`, from the page | none | declared once, as a signal `отмена`; the row `сигнал(отмена)` of `ОЖИДАНИЕ` (in `ПОКОЙ` it is a note `event_ignored`) |
+| `permission_decision` | the hub, `Hub.decide`, from the page | `request`, `decision` (JSON text) | **not known** on purpose: it goes to the client of the agent, and the engine journals it; the machine writes `event_unknown` |
+| `session_created` | the hub, `Hub.create`, from the page | `name`, `agent`, `folder`, `project` (JSON text) | **not known** on purpose (below) |
+| `agent_chunk` | the client of ACP, `project_update` | `content` (text) | declared: a part of the answer of the party `агент`; the row of `ОЖИДАНИЕ` |
+| `agent_done` | the client of ACP, `stop_event` (`end_turn`) | none | the answer: the row `ответ` of `ОЖИДАНИЕ` |
+| `agent_refused` | the client of ACP, `refused_event` | the code of `FailCode` | the failure: the row `сбой(код)` of `ОЖИДАНИЕ` |
+| `timeout` | the engine, when the term of a request ends | none | the term: the row `срок` of `ОЖИДАНИЕ` |
+| `agent_thought`, `tool_call`, `tool_call_update`, `usage_update`, `plan`, `permission_request`, `acp_skipped`, `acp_note` | the client of ACP | JSON text or text | **not known** on purpose: the page sees them (`page_event`), the machine writes `event_unknown` and nothing changes |
+
+- **`session_created` is a word the table does not know, on purpose.** The first event of a session is made by the server and kept in the journal like any other (`Engine.history` tells the whole story after a restart),
+  so it is given to the machine; the machine has no row for it and writes `event_unknown` (the state does not change, nothing is saved). The page needs the event and the machine does not.
+- **The stop reason of the agent** is turned into an outcome by `stop_event` of the client of ACP (`src/acp/project.nv`): `end_turn` is the answer (`agent_done`); `max_tokens`, `max_turn_requests`, `refusal`, `cancelled`
+  and any other reason are the refusal `agent_refused` with a code of `FailCode`: `MaxTokens`, `MaxTurnRequests`, `ModelRefused`, `StoppedByHuman`, and for the rest `NoResult`. The table sees only the outcome, never the reason.
+- **The question to the table.** `Hub.takes_message` asks `PortolanMachine.accepts_word(state, "user_message")` (`src/machine_run/accepts.nv`): the word is declared and the common events or the rows of the state have a row for it.
+  The condition of a row is evaluated with the data of the state and without the bindings of the word; a condition that cannot be evaluated that way counts as taking the word. When the state does not take it, the hub
+  writes `a message to <session> while a turn is open: ignored` to its log and does not give the word. Rename a state in the table, and nothing in the code changes: the scenario `scenario_renamed_table`
+  (`testkit.nv`, `src/server_live`, `src/server_pg`) runs the hub on the table with `Idle` and `Awaiting` named `Resting` and `Waiting`.
+- **How it is kept.** `words_test.nv`: every word the code gives is declared in the table or named "the table does not know"; the sources (`hub.nv`, `src/acp/project.nv`, `client.nv`) give only the words of the list and every word
+  of the list is in a source; the hub and the scenarios name no state of the table. `accepts_test.nv` (`src/machine_run`): the question on the dialog, the chat and a common event. `src/machine_dialog/border_test.nv`: the field
+  `содержание` and the cancel declared once.
 
 ## The protocol of `/ws`
 
