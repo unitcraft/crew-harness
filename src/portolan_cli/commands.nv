@@ -176,7 +176,7 @@ export fn run_command(machine_text str, machine_file str, scenario_text str, sce
                     if sc.machine != machine.def.name {
                         return done("", "${scenario_file}:1:1: scenario: the scenario is for machine ${sc.machine}, the machine of ${machine_file} is ${machine.def.name}\n", 1)
                     }
-                    if has_nested(machine) {
+                    if has_nested(machine) && !sc.standalone {
                         return done("", "${scenario_file}:1:1: scenario: the machine ${machine.def.name} calls nested machines: they are found in a folder, use `portolan test <folder>`\n", 1)
                     }
                     ro problem = scenario_problem(machine, sc)
@@ -219,10 +219,25 @@ fn registry_of(found []FoundMachine) -> NestedRegistry {
     reg
 }
 
-// The names of nested machines that the found machines call and that are not found yet.
-fn nested_missing(found []FoundMachine) -> []str {
+// The names of the machines that scenarios run together with their nested machines: a standalone scenario (task 122) plays the nested parties itself and needs none.
+fn nested_run_names(scenarios []NamedText) -> []str {
+    mut out = []str.new()
+    for s in scenarios {
+        match parse_scenario(s.text) {
+            Ok(sc) => {
+                if !sc.standalone && !out.contains(sc.machine) { out.push(sc.machine) }
+            }
+            Err(e) => ()
+        }
+    }
+    out
+}
+
+// The names of nested machines that the found machines named in `wanted` call and that are not found yet.
+fn nested_missing(found []FoundMachine, wanted []str) -> []str {
     mut out = []str.new()
     for f in found {
+        if !wanted.contains(f.machine.def.name) { continue }
         for p in f.machine.def.parties {
             if p.kind == MachineParty && machine_named(found, p.nested).is_none() && !out.contains(p.nested) { out.push(p.nested) }
         }
@@ -270,9 +285,10 @@ export fn test_command(files []NamedText, dir str, verbose bool) -> CmdResult {
         }
     }
     // the machines written in Portolan are translated only when a scenario names a machine that no JSON file has (a translation costs a second for a big machine)
-    if missing_names(found, scenarios).len() > 0 || nested_missing(found).len() > 0 {
+    ro wanted = nested_run_names(scenarios)
+    if missing_names(found, scenarios).len() > 0 || nested_missing(found, wanted).len() > 0 {
         for f in files {
-            if is_text_machine_name(f.name) && (missing_names(found, scenarios).len() > 0 || nested_missing(found).len() > 0) {
+            if is_text_machine_name(f.name) && (missing_names(found, scenarios).len() > 0 || nested_missing(found, wanted).len() > 0) {
                 match machine_of_file(f.text, f.name) {
                     Ok(m) => {
                         if machine_named(found, m.def.name).is_none() { found.push(FoundMachine { file: f.name, machine: m }) }
@@ -292,13 +308,15 @@ export fn test_command(files []NamedText, dir str, verbose bool) -> CmdResult {
                     None => out.push("FAIL ${s.name}\n  no machine ${sc.machine} in ${dir}")
                     Some(machine) => {
                         ro problem = scenario_problem(machine, sc)
-                        ro pair_problems = if has_nested(machine) { check_registry(machine, registry_of(found)) } else { []str.new() }
+                        // a standalone scenario plays the nested parties itself (task 122): no pair to check
+                        ro nested_run = has_nested(machine) && !sc.standalone
+                        ro pair_problems = if nested_run { check_registry(machine, registry_of(found)) } else { []str.new() }
                         if problem != "" {
                             out.push("FAIL ${s.name}\n  ${s.name}:1:1: scenario: ${problem}")
                         } else if pair_problems.len() > 0 {
                             out.push("FAIL ${s.name}\n  ${s.name}:1:1: scenario: the nested machines do not fit: ${pair_problems.join(" | ")}")
                         } else {
-                            ro run = if has_nested(machine) { run_nested_scenario(machine, registry_of(found), sc) } else { run_scenario(machine, sc) }
+                            ro run = if nested_run { run_nested_scenario(machine, registry_of(found), sc) } else { run_scenario(machine, sc) }
                             if run_ok(run) {
                                 passed += 1
                                 if verbose { out.push("ok ${s.name}") }

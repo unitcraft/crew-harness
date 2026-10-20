@@ -236,7 +236,8 @@ fn count_spec() -> TypeSpec => IntMin(0)
 /// The registry of the pilots: the 17 functions of the meeting that the methodology marks as primitives of the host
 /// (8 reading, 6 writing, 3 irreversible; markup of the 80 functions, `functions-markup.md` of the pilot) and the primitives
 /// of the agent step (`time_now`, `new_id` of format 2.5, `reply_validation`, `close_agent_turn`, and `check_cache`, which the specification of the step
-/// puts after every accepted result of a turn). Stubs: the names, the types and the classes are the methodology's, the bodies are the host's.
+/// puts after every accepted result of a turn) and the one primitive of the cycle check (`stop_agent_group`, task 122: the group of processes of the agent is stopped
+/// as a whole when the check ends in HALTED or ERRORED). Stubs: the names, the types and the classes are the methodology's, the bodies are the host's.
 export fn standard_registry() -> Registry {
     mut reg = new_registry()
     // the meeting: reading
@@ -268,6 +269,8 @@ export fn standard_registry() -> Registry {
         ["reply_text", "reply_artifact", "agent_request", "objects: session files"], ["service record: form remarks (read by the turn fix)"]))
     std_add(reg, std_prim("close_agent_turn", no_params(), NothingType, Irreversible, nothing(), nothing()))
     std_add(reg, std_prim("check_cache", [param("dialog_kind", TextSet(["main", "delivery"]))], NothingType, Writing, nothing(), ["service record: request start mark"]))
+    // the cycle check: the last, repeatable stage of the commit of its ends HALTED and ERRORED (rule 13); the group of the agent processes stops as a whole and it is checked that none is left
+    std_add(reg, std_prim("stop_agent_group", no_params(), NothingType, Irreversible, nothing(), nothing()))
     reg
 }
 

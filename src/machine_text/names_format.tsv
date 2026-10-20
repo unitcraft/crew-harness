@@ -70,6 +70,11 @@ function	слово_да_нет	yes_no_word
 word	засчитан	counted
 word	не засчитан	not_counted
 word	ещё заход	another_pass
+word	урезать объём	cut_scope
+word	разбить	split
+word	спросить заказчика	ask_customer
+word	остановиться	stop
+word	сузить	narrow
 word	ответил	replied
 data	ид_сессии	session_id
 word	закрыть_сессию	close_session

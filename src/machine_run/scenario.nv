@@ -54,7 +54,9 @@ export type ScAlso { target str, expect ScExpect }
 export type ScStep { op str, event ScEvent, ms int, expect ScExpect, host []ScHost, on str, also []ScAlso }
 
 /// Scenario: the file `scenario/0`. `params` are the values of parameters of the machine that the project gives, the table of format 2.7 (`"params": {"проект.<ключ>": value}`, P-9).
-export type Scenario { name str, machine str, start_at int, steps []ScStep, params []ScHost }
+/// `standalone` (task 122) is the key `"standalone": true`: the machine runs alone and the parties of the kind `machine` are played by the steps of the scenario (an `answer` or a `failure`
+/// event with the id of the request, as for an agent); no nested machine is started and none is looked for in the folder.
+export type Scenario { name str, machine str, start_at int, steps []ScStep, params []ScHost, standalone bool }
 
 /// StepTrace: what one step left in the world. `journal` are the lines the machine wrote (`code(name=value;...)`), `entries` all the lines of
 /// the step with the envelope, `queue` what waits for the dispatch (`send <id>`, `cancel <id>`) and for `pump` (`in <name>`), `outcome` is
@@ -282,7 +284,7 @@ export fn parse_scenario(text str) -> Result[Scenario, LoadError] {
         Err(e) => return Err(sle("$", "not valid JSON"))
     }
     ro o = sj_obj(parsed, "$")?
-    sj_only(o, ["format", "machine", "name", "start_at", "steps", "params"], "$")?
+    sj_only(o, ["format", "machine", "name", "start_at", "steps", "params", "standalone"], "$")?
     ro format = sj_need_str(o, "format", "$")?
     if format != "scenario/0" { return Err(sle("$.format", "the format must be scenario/0, got ${format}")) }
     ro machine = sj_need_str(o, "machine", "$")?
@@ -318,7 +320,14 @@ export fn parse_scenario(text str) -> Result[Scenario, LoadError] {
             }
         }
     }
-    Ok(Scenario { name, machine, start_at, steps, params })
+    mut standalone = false
+    if sj_present(o, "standalone") {
+        standalone = match (o.get("standalone") ?? JsonValue.null()).bool() {
+            Some(b) => b
+            None => return Err(sle("$.standalone", "standalone is true or false"))
+        }
+    }
+    Ok(Scenario { name, machine, start_at, steps, params, standalone })
 }
 
 // ---- the events ---------------------------------------------------------------------------------------------------------------------

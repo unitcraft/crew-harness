@@ -363,7 +363,7 @@ export fn scenario_through_parent(sc Scenario, parent_machine str, parent_reques
         steps.push(ScStep { op: s.op, event: s.event, ms: s.ms, expect: nothing_expected(), host: s.host, on: child_request, also: []ScAlso.new() })
         i += 1
     }
-    Some(Scenario { name: sc.name, machine: parent_machine, start_at: sc.start_at, steps, params: []ScHost.new() })
+    Some(Scenario { name: sc.name, machine: parent_machine, start_at: sc.start_at, steps, params: []ScHost.new(), standalone: false })
 }
 
 /// The machine a scenario runs on, made ready to be called: the parameters of the scenario and the answers of the host that its first step gives (they hold from the start of the machine).

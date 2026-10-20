@@ -11,6 +11,7 @@
     "machine": { "type": "string", "description": "the Latin name of the machine the scenario runs on" },
     "name": { "type": "string" },
     "start_at": { "type": "integer", "default": 1000, "description": "the clock of the in-memory world in milliseconds" },
+    "standalone": { "type": "boolean", "default": false, "description": "the machine runs alone (task 122): its parties of the kind `machine` are played by the steps of the scenario (an `answer` or a `failure` event with the id of the request, as for an agent); no nested machine is started and none is looked for in the folder" },
     "params": { "type": "object", "description": "the table of the parameters of the project (format 2.7, P-9): the key `проект.<ключ>` of the column \"project override\" of a parameter and its value in the lossless JSON form of the core; a key the machine does not have refuses the run, a parameter that is not named keeps its default",
     "propertyNames": { "pattern": "^проект\\." } },
     "steps": { "type": "array", "items": { "$ref": "#/$defs/step" } }

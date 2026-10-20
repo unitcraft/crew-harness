@@ -214,10 +214,10 @@ test "ps names" {
 }
 
 test "sd count" {
-    assert(standard_registry().primitives.len() == 22)
+    assert(standard_registry().primitives.len() == 23)
     assert(rcount(Reading) == 11)
     assert(rcount(Writing) == 7)
-    assert(rcount(Irreversible) == 4)
+    assert(rcount(Irreversible) == 5)
     assert(rcount(Pure) == 0)
 }
 
@@ -239,6 +239,17 @@ test "sd agent step" {
     assert(rclass("close_agent_turn") == "irreversible")
     assert(rclass("check_cache") == "writing")
     assert(rclass("not_there") == "")
+}
+
+test "sd cycle check" {
+    assert(rclass("stop_agent_group") == "irreversible")
+    match find_primitive(standard_registry(), "stop_agent_group") {
+        Some(p) => {
+            assert(p.params.len() == 0)
+            assert(spec_text(p.result) == "nothing")
+        }
+        None => assert(false)
+    }
 }
 
 test "sd signatures" {
