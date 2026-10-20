@@ -42,6 +42,7 @@ export const S = Object.freeze({
 
   'agent.opencode': 'OpenCode',
   'agent.second': 'Второй агент — позже',
+  'session.model_unknown': 'Модель не сообщена',
 
   'state.idle': 'Ожидает',
   'state.answering': 'Отвечает',

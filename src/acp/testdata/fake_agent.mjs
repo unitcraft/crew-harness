@@ -39,8 +39,8 @@ const pendingAgentCalls = new Map(); // id -> resolve
 function write(obj) {
   process.stdout.write(JSON.stringify(obj) + "\n");
 }
-function update(update) {
-  write({ jsonrpc: "2.0", method: "session/update", params: { sessionId: SESSION, update } });
+function update(update, sessionId = SESSION) {
+  write({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update } });
 }
 function chunk(text) {
   update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text } });
@@ -64,6 +64,16 @@ async function prompt(id, params) {
   const text = first && first.type === "text" ? first.text : "";
   const word = text.split(" ")[0];
   switch (word) {
+    case "model-change": {
+      update({ sessionUpdate: "config_option_update", configOptions: [{ id: "model", category: "model", type: "select", currentValue: "fake-model-2", options: [{ value: "fake-model-2", name: "Second Model" }] }] });
+      chunk("model changed");
+      return respond(id, { stopReason: "end_turn" });
+    }
+    case "foreign-model": {
+      update({ sessionUpdate: "config_option_update", configOptions: [{ id: "model", category: "model", type: "select", currentValue: "intruder", options: [{ value: "intruder", name: "Foreign Model" }] }] }, "foreign-session");
+      chunk("foreign event ignored");
+      return respond(id, { stopReason: "end_turn" });
+    }
     case "tools": {
       update({ sessionUpdate: "available_commands_update", availableCommands: [] });
       update({ sessionUpdate: "tool_call", toolCallId: "call_001", title: "Чтение src/main.nv", kind: "read", status: "pending" });
@@ -197,7 +207,7 @@ function handle(line) {
       });
     case "session/new":
       if (noSession) return;
-      return respond(msg.id, { sessionId: SESSION });
+      return respond(msg.id, { sessionId: SESSION, configOptions: [{ id: "model", category: "model", type: "select", currentValue: "fake-model", options: [{ value: "fake-model", name: "Fake Model" }] }] });
     case "session/prompt":
       if (!msg.params || msg.params.sessionId !== SESSION) {
         return write({ jsonrpc: "2.0", id: msg.id, error: { code: -32602, message: "unknown session" } });

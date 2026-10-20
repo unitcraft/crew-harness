@@ -171,6 +171,7 @@ test "agent: ordinary turn, chunks, end" {
     assert(client.phase() == "ready")
     assert(client.session_id() == "sess_fake_1")
     assert(client.agent_name() == "fake-agent")
+    assert(client.model_name() == "Fake Model")
     client.close()
 }
 
@@ -187,6 +188,35 @@ test "agent: events carry different source keys" {
         }
         assert(keys.len() == events.len())
     }
+    client.close()
+}
+
+test "agent: config_option_update replaces the reported model" {
+    mut client = start([])
+    with Link = acp_link(client) {
+        Link.send(req("agent-1", "model-change"))
+        ro events = collect_turn(10000)
+        mut found = false
+        for event in events {
+            if event.name == "agent_model" {
+                found = true
+                assert(event.input.contains("Second Model"))
+            }
+        }
+        assert(found)
+    }
+    assert(client.model_name() == "Second Model")
+    client.close()
+}
+
+test "agent: config_option_update from another session is ignored" {
+    mut client = start([])
+    with Link = acp_link(client) {
+        Link.send(req("agent-1", "foreign-model"))
+        ro events = collect_turn(10000)
+        for event in events { assert(event.input != "Foreign Model") }
+    }
+    assert(client.model_name() == "Fake Model")
     client.close()
 }
 

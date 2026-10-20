@@ -136,6 +136,7 @@ The page says what the owner did. It does not apply its own words: they appear o
 | `kind` | `input` | When |
 |---|---|---|
 | `session_created` | `{ name, agent, folder, project? }` | a session exists |
+| `session_model` | `{ model }` | current model explicitly reported by ACP; empty means the agent did not report one |
 | `user_message` | `{ turn, text }` | the owner's word was accepted |
 | `agent_chunk` | `{ turn, text }` | a piece of the answer; the page glues pieces in the order of `step` |
 | `agent_done` | `{ turn }` | the turn ended well |

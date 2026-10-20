@@ -1,0 +1,7 @@
+исп 0/0 [2026-10-20 21:28] запуск №1
+исп 0/5 [2026-10-20 21:32] старт — ACP-источник, проверки, реализация и сдача
+исп 1/5 [2026-10-20 21:34] ACP contract: configOptions category=model; model slot agreed
+исп 2/5 [2026-10-20 21:35] state negative-control probe RED before fix
+исп 3/5 [2026-10-20 21:43] ACP→hub/history→UI model pipeline implemented
+исп 4/5 [2026-10-20 21:46] 102 web tests GREEN; ACP/server Nova runner unavailable
+исп 5/5 [2026-10-20 21:48] evidence current and unresolved Nova/acceptance gates recorded

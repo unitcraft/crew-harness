@@ -143,6 +143,26 @@ test "update: unknown ones are acp_skipped, named" {
     assert(user_echo.name == "acp_skipped")
 }
 
+test "model: selected name from flat and grouped ACP options" {
+    ro flat = j("[{\"id\":\"model\",\"category\":\"model\",\"type\":\"select\",\"currentValue\":\"x1\",\"options\":[{\"value\":\"x1\",\"name\":\"Model X\"}]}]")
+    assert(model_name_of(flat) == "Model X")
+    ro grouped = j("[{\"id\":\"model\",\"category\":\"model\",\"type\":\"select\",\"currentValue\":\"y1\",\"options\":[{\"group\":\"g\",\"name\":\"Group\",\"options\":[{\"value\":\"y1\",\"name\":\"Model Y\"}]}]}]")
+    assert(model_name_of(grouped) == "Model Y")
+    ro update = project_update(j("{\"sessionUpdate\":\"config_option_update\",\"configOptions\":[{\"category\":\"model\",\"type\":\"select\",\"currentValue\":\"x1\",\"options\":[{\"value\":\"x1\",\"name\":\"Model X\"}]}]}"))
+    assert(update.name == "agent_model")
+    ro page = page_of(progress_event("", update), "")
+    assert(str_at(page, "kind") == "session_model")
+    assert(str_at(input_of(page), "model") == "Model X")
+}
+
+test "model: unknown or removed selector is empty, update is full replacement" {
+    assert(model_name_of(j("[]")) == "")
+    assert(model_name_of(j("[{\"id\":\"m\",\"type\":\"select\",\"currentValue\":\"secret\"}]")) == "")
+    ro update = project_update(j("{\"sessionUpdate\":\"config_option_update\",\"configOptions\":[]}"))
+    assert(update.name == "agent_model")
+    assert(update.input == "{\"model\":\"\"}")
+}
+
 test "update: no open request makes the note acp_note" {
     ro p = project_update(j("{\"sessionUpdate\":\"available_commands_update\",\"availableCommands\":[]}"))
     ro e = progress_event("", p)

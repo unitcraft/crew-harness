@@ -50,6 +50,7 @@ export type AcpClient {
     prompt_rpc int,
     session str,
     agent str,
+    model_name str,
     queue []AcpQueued,
     active str,
     permissions []AcpPending,
@@ -259,7 +260,7 @@ export fn open_client(config AcpConfig) Proc Detach Time -> Result[AcpClient, st
             }
             mut client = AcpClient {
                 config, link, phase: "initializing", next_rpc: 0, init_rpc: -1, new_rpc: -1, prompt_rpc: -1,
-                session: "", agent: "", queue: []AcpQueued.new(), active: "", permissions: []AcpPending.new(),
+                session: "", agent: "", model_name: "", queue: []AcpQueued.new(), active: "", permissions: []AcpPending.new(),
                 ready, taken: []AcpInboxItem.new(), next_seq: next, stderr: "", exit_code: -2, last_error: ""
             }
             client.init_rpc = client.next_id()
@@ -345,6 +346,10 @@ fn AcpClient mut @on_result(id JsonValue, result JsonValue) -> () {
         return
     }
     if key == "${@new_rpc}" && @phase == "opening" {
+        @model_name = match field(result, "configOptions") {
+            Some(options) => model_name_of(options)
+            None => ""
+        }
         match field_text(result, "sessionId") {
             Some(session) => {
                 @session = session
@@ -397,7 +402,14 @@ fn AcpClient mut @on_update(params JsonValue) -> () {
         Some(u) => u
         None => JsonValue.null()
     }
-    @push(progress_event(@active, project_update(update)))
+    ro projected = project_update(update)
+    if projected.name == "agent_model" {
+        @model_name = match Json.parse(projected.input) {
+            Ok(value) => field_text(value, "model") ?? ""
+            Err(e) => ""
+        }
+    }
+    @push(progress_event(@active, projected))
 }
 
 fn AcpClient mut @on_permission(id JsonValue, params JsonValue) -> () {
@@ -662,6 +674,9 @@ export fn AcpClient @session_id() -> str => @session
 
 /// The name of the agent from its answer to `initialize`.
 export fn AcpClient @agent_name() -> str => @agent
+
+/// The explicitly reported current model name from ACP configOptions; empty means not reported.
+export fn AcpClient @model_name() -> str => @model_name
 
 /// The last part of what the agent wrote to its stderr.
 export fn AcpClient @stderr_tail() -> str => @stderr

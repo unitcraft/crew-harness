@@ -22,6 +22,7 @@ export const KINDS = Object.freeze([
   // задача 094: рабочие события хода (соответствуют ACP session/update)
   'usage_update', 'tool_call', 'tool_call_update', 'output_file', 'file_diff',
   'background_task', 'background_task_update',
+  'session_model',
 ]);
 
 export const TOOL_KINDS = Object.freeze(['read', 'edit', 'delete', 'move', 'search', 'execute', 'think', 'fetch', 'other']);
@@ -123,6 +124,10 @@ function apply(session, event) {
   const turn = str(input.turn) || lastTurn(session);
 
   switch (event.kind) {
+    case 'session_model': {
+      if (event.step <= session.modelStep) return session;
+      return { ...session, model: str(input.model), modelStep: event.step };
+    }
     case 'user_message': {
       const userTurn = str(input.turn, event.id);
       const user = { key: userKey(userTurn), role: 'user', turn: userTurn, text: str(input.text) };
@@ -321,6 +326,8 @@ export function reduce(model, event) {
       id: event.trace,
       name: str(event.input.name, event.trace),
       agent: str(event.input.agent),
+      model: '',
+      modelStep: event.step,
       state: 'idle',
       createdAt: event.time,
       updatedAt: event.time,

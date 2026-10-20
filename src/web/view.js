@@ -224,8 +224,9 @@ export function createView(doc, refs, deps) {
   const backButton = h(doc, 'button', { type: 'button', class: 'icon-btn chat-back', 'aria-label': t('chat.back'), title: t('chat.back') }, icon(doc, 'i-back'));
   const title = h(doc, 'h2');
   const agentText = h(doc, 'span', { class: 'agent-name' });
+  const modelText = h(doc, 'span', { class: 'session-model-slot', 'data-session-model': '' });
   const stateBadge = h(doc, 'span', { class: 'badge' });
-  const titleBlock = h(doc, 'div', { class: 'title-block', hidden: true }, title, h(doc, 'div', { class: 'sub' }, agentText, stateBadge));
+  const titleBlock = h(doc, 'div', { class: 'title-block', hidden: true }, title, h(doc, 'div', { class: 'sub' }, agentText, modelText, stateBadge));
   const railButton = h(doc, 'button', { type: 'button', class: 'icon-btn', 'aria-label': t('rail.toggle'), title: t('rail.toggle'), 'aria-pressed': 'true' }, icon(doc, 'i-panel'));
   const topbar = h(doc, 'header', { class: 'topbar' }, backButton, titleBlock, railButton);
 
@@ -481,6 +482,7 @@ export function createView(doc, refs, deps) {
       title.textContent = session.name;
     }
     agentText.textContent = agentLabel(session.agent);
+    modelText.textContent = session.model || t('session.model_unknown');
     agentField.select.value = session.agent;
     stateBadge.textContent = t(STATE_KEYS[session.state]);
     stateBadge.dataset.state = session.state;

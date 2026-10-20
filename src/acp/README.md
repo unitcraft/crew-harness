@@ -44,8 +44,8 @@ have a short name; to measure: start the test binary kept by `--keep-artifacts` 
 | `link.nv` | `connect`: the keeper fiber, the child process and the fibers around it (stdout reader, stderr reader, stdin writer, watcher of the process), `AgentLink` (three channels) |
 | `client.nv` | `AcpConfig`, `AcpClient` (the handshake, the queue of prompts, permissions, the inbox with acknowledgement), `open_client`, `acp_link` (the handler of `Link`), `decide`, `decide_event`, `close` |
 | `testdata/fake_agent.mjs` | the fake ACP agent (Node): the scenarios are chosen by the first word of the prompt |
-| `*_test.nv` | 45 checks: `jsonrpc_test` (18), `project_test` (27) |
-| `../acp_live/*_test.nv` | 37 checks, the unit `crew_harness.acp_live` (it imports `crew_harness.acp`): `client_test` (26, the handler over the fake agent), `ack_test` (4), `e2e_test` (6, engine + chat + files + ACP), `real_agent_test` (1, runs for real only with `CREW_REAL_ACP=1`) |
+| `*_test.nv` | 47 checks: `jsonrpc_test` (18), `project_test` (29) |
+| `../acp_live/*_test.nv` | 39 checks, the unit `crew_harness.acp_live` (it imports `crew_harness.acp`): `client_test` (28, the handler over the fake agent), `ack_test` (4), `e2e_test` (6, engine + chat + files + ACP), `real_agent_test` (1, runs for real only with `CREW_REAL_ACP=1`) |
 
 The `.nv` files of this folder are one module `crew_harness.acp` (a folder is a module, the tests are its peers). The engine and the
 storage are imported (`crew_harness.engine`, `crew_harness.storage`); the engine does not know this module.
@@ -113,6 +113,7 @@ event"); "-" means that the page has no kind for it and `page_event` gives None.
 | `tool_call_update` | Progress / `tool_call_update` / `{id, status?, detail?}` (only the fields that came) | `tool_call_update` the same object |
 | `plan` | Progress / `plan` / `{entries}` | - |
 | `usage_update` | Progress / `usage_update` / `{used, size, cost?}` (`cost` as it came) | `usage_update` the same object |
+| `config_option_update` with `configOptions` | `agent_model` / `{model}`; Progress during a turn, otherwise Input; first `category:"model"` select, current value resolved through its advertised flat/grouped options | `session_model` `{model}`; empty when model selector/value is absent |
 | any other `sessionUpdate` (`user_message_chunk`, `available_commands_update`, `current_mode_update`, `config_option_update`, `session_info_update`, ...) and a missing one | Progress / `acp_skipped` / the name of the update | - |
 | `session/request_permission` (a call of the agent) | Progress / `permission_request` / `{request, tool_call, action, detail, options:[{id,name,kind}]}`; `request` is the key of the JSON-RPC id | `permission_request` `{turn, request, action, detail}` |
 | any of the above when no turn is open | Input / `acp_note` / `<name>: <input>` (a progress event of no request would be discarded) | - |

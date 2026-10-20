@@ -56,6 +56,21 @@ test('session_created заводит сессию, список: свежие с
   assert.equal(m.sessions.a.agent, 'opencode');
 });
 
+test('модель сессии: сообщённая обновляется, неизвестная и запоздалое событие не подменяют её', () => {
+  const m = run([
+    ev('session_created', { name: 'A', agent: 'opencode' }, { trace: 'a', step: 0 }),
+    ev('session_created', { name: 'B', agent: 'opencode' }, { trace: 'b', step: 0 }),
+    ev('session_model', { model: 'Model Alpha' }, { trace: 'a', step: 3, id: 'a-model' }),
+    ev('session_model', { model: 'Model Beta' }, { trace: 'a', step: 4, id: 'a-model-change' }),
+    ev('session_model', { model: '' }, { trace: 'b', step: 1, id: 'b-unknown' }),
+    ev('session_model', { model: 'Stale Model' }, { trace: 'a', step: 3, id: 'a-stale' }),
+    ev('session_model', { model: 'Foreign Model' }, { trace: 'missing', step: 9, id: 'foreign' }),
+  ]);
+  assert.equal(m.sessions.a.model, 'Model Beta');
+  assert.equal(m.sessions.b.model, '');
+  assert.equal(m.sessions.missing, undefined);
+});
+
 test('потоковые куски склеиваются в порядке номеров шагов, а не прибытия', () => {
   const m = run([
     created(),

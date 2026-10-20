@@ -28,7 +28,7 @@ const base = () => [
 test('виды событий: девять прежних и шесть новых', () => {
   assert.deepEqual([...st.KINDS].sort(), [
     'agent_chunk', 'agent_done', 'agent_refused', 'background_task', 'background_task_update', 'cancel', 'error',
-    'file_diff', 'output_file', 'permission_decision', 'permission_request', 'session_created', 'tool_call',
+    'file_diff', 'output_file', 'permission_decision', 'permission_request', 'session_created', 'session_model', 'tool_call',
     'tool_call_update', 'usage_update', 'user_message',
   ]);
 });

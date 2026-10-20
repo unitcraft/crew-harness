@@ -41,6 +41,7 @@ type Dialog {
     turn str,
     lines []str,
     announced bool,
+    model_announced bool,
     started_at int,
     slow_told bool
 }
@@ -226,6 +227,12 @@ fn error_input(turn str, message str) -> JsonObject {
     input
 }
 
+fn model_input(model str) -> str {
+    mut o = JsonObject.new()
+    jput(o, "model", JsonValue.str(model))
+    JsonValue.object(o).to_str()
+}
+
 fn created_input(name str, agent str, folder str) -> JsonObject {
     mut input = JsonObject.new()
     jput(input, "name", JsonValue.str(name))
@@ -326,6 +333,7 @@ fn Hub mut @ensure_client(at int) Proc Detach Time -> str {
             Ok(client) => {
                 s.clients.push(client)
                 s.announced = false
+                s.model_announced = false
                 s.slow_told = false
                 s.started_at = now_millis()
                 ""
@@ -384,7 +392,7 @@ fn Hub mut @resume_session(id str) Proc Detach Time -> () {
     match resume_stored(pg, root, world, @machine, id) {
         None => @say_log("the session ${id} cannot be resumed: no usable snapshot")
         Some(engine) => {
-            mut s = Dialog { id, name: id, agent: "", engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, started_at: 0, slow_told: false }
+            mut s = Dialog { id, name: id, agent: "", engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false }
             mut saw_created = false
             for e in history_in(pg, root, s) {
                 if e.name == "session_created" && e.kind == EventKind.Input && !saw_created {
@@ -433,7 +441,7 @@ fn Hub mut @create(conn int, trace str, input JsonObject) Proc Detach Time -> ()
             ro root = @settings.data_dir
             mut world = PgWorld.open(@settings.pg, trace)
             ro engine = begin_session_engine(pg, root, world, @machine, trace)
-            mut s = Dialog { id: trace, name, agent, engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, started_at: 0, slow_told: false }
+            mut s = Dialog { id: trace, name, agent, engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false }
             accept_in(pg, root, s, Incoming.word("session_created", meta_text(name, agent, @workdir, project)))
             @add_session(s)
             ro at = @sessions.len() - 1
@@ -528,6 +536,7 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
 fn Hub mut @watch_agent(at int) Time -> () {
     mut s = @sessions[at]
     if s.announced { return }
+    mut model_arrived = false
     ro phase = s.clients[0].phase()
     if !s.slow_told && phase != "ready" && phase != "failed" && now_millis() - s.started_at > 10000 {
         s.slow_told = true
@@ -536,12 +545,19 @@ fn Hub mut @watch_agent(at int) Time -> () {
     if phase == "ready" {
         s.announced = true
         @say_log("the agent of ${s.id} is ready: ${s.clients[0].agent_name()}")
+        if !s.model_announced {
+            s.model_announced = true
+            accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.word("agent_model", model_input(s.clients[0].model_name())))
+            model_arrived = true
+        }
     } else if phase == "failed" {
         s.announced = true
         ro why = s.clients[0].last_error()
         @say_log("the agent of ${s.id} refused to start: ${why}")
         @tell_error(0, s.id, s.engine.step_number(), "", "the agent refused to start: ${why}")
     }
+    @sessions[at] = s
+    if model_arrived { @drain(at) }
 }
 
 /// The work of a moment: the agents are asked for what they have, the engines take it. Returns the number of steps made.
