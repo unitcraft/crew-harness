@@ -15,6 +15,7 @@ export fn machine_files() -> []NamedText => [
     NamedText { name: "callee.portolan.json", text: embed_str("machines/callee.portolan.json") },
     NamedText { name: "caller.portolan.json", text: embed_str("machines/caller.portolan.json") },
     NamedText { name: "chat.portolan.json", text: embed_str("machines/chat.portolan.json") },
+    NamedText { name: "cycle_check.portolan.json", text: embed_str("machines/cycle_check.portolan.json") },
     NamedText { name: "dialog.portolan.json", text: embed_str("machines/dialog.portolan.json") },
     NamedText { name: "dialog_steps.portolan.json", text: embed_str("machines/dialog_steps.portolan.json") },
     NamedText { name: "fan.portolan.json", text: embed_str("machines/fan.portolan.json") },
@@ -30,6 +31,7 @@ export fn table_files() -> []NamedText => [
     NamedText { name: "callee.portolan.md", text: embed_str("machines/callee.portolan.md") },
     NamedText { name: "caller.portolan.md", text: embed_str("machines/caller.portolan.md") },
     NamedText { name: "chat.portolan.md", text: embed_str("machines/chat.portolan.md") },
+    NamedText { name: "cycle_check.portolan.md", text: embed_str("machines/cycle_check.portolan.md") },
     NamedText { name: "dialog.portolan.md", text: embed_str("machines/dialog.portolan.md") },
     NamedText { name: "dialog_steps.portolan.md", text: embed_str("machines/dialog_steps.portolan.md") },
     NamedText { name: "fan.portolan.md", text: embed_str("machines/fan.portolan.md") }
@@ -264,6 +266,12 @@ export fn agent_step_machine_text() -> str => text_of_file(machine_files(), "age
 
 /// The text of the agent step written as tables (`machines/agent_step.portolan.txt`).
 export fn agent_step_table_text() -> str => text_of_file(table_files(), "agent_step.portolan.txt")
+
+/// The text of the machine of the cycle check (`machines/cycle_check.portolan.json`), the translation of `cycle_check.portolan.md` (task 122).
+export fn cycle_check_machine_text() -> str => text_of_file(machine_files(), "cycle_check.portolan.json")
+
+/// The text of the cycle check written as tables (`machines/cycle_check.portolan.md`).
+export fn cycle_check_table_text() -> str => text_of_file(table_files(), "cycle_check.portolan.md")
 
 /// The text of the chat machine written as tables (`machines/chat.portolan.md`).
 export fn chat_table_text() -> str => text_of_file(table_files(), "chat.portolan.md")
