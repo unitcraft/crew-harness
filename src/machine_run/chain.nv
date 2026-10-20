@@ -4,7 +4,7 @@ module crew_harness.machine_run
 import std.text
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import crew_harness.engine.{Incoming, EventKind, Environment, Transition, SendOrder, CancelOrder, FailCode, JournalParam, journal_event, param, Go, Stay}
-import crew_harness.machine.{Value, Null, Int, Bool, Text, List, RecordField, Binding, PrimitiveHost, PrimitiveFailed, TypeSpec, TypeDefs, RecordType, OptionalType, Lit, check_call_args, value_json, value_to_json, value_from_json, make_record, check_value, enum_value, spec_text}
+import crew_harness.machine.{Value, Null, Int, Bool, Text, List, Record, record_get, RecordField, Binding, PrimitiveHost, PrimitiveFailed, TypeSpec, TypeDefs, RecordType, OptionalType, Lit, check_call_args, value_json, value_to_json, value_from_json, make_record, check_value, enum_value, spec_text}
 import crew_harness.machine_table.{StateDef, Goto, PartyDef, MachineDef, LValue, KeyStep, FieldStep, MachineParty, find_state, find_party, find_data}
 import crew_harness.machine_table.{ToState}
 
@@ -351,6 +351,24 @@ fn previous_state(ctx Ctx) -> Result[str, Fault] {
     }
 }
 
+// The "Where" of a row that jumps by `возврат_подготовки` (rule 24, task 123): the state that the preparation of the executor saved in the datum `preparation_return` before it showed
+// the gates of the preparation (the executor is the only writer of the datum). The target is read BEFORE the actions of the row run (the row may rewrite the data), and the jump
+// empties the datum, so the next preparation starts clean. An empty datum is a defect of the executor, not of the table.
+fn take_goto(mut ctx Ctx, next Goto) -> Result[Goto, Fault] {
+    match next.target {
+        ToPrepareReturn => {
+            match data_get(ctx.data, "preparation_return") {
+                Text(s) => {
+                    ctx.data = data_put(ctx.data, "preparation_return", Null)
+                    Ok(Goto { target: ToState(s), restart: next.restart })
+                }
+                _ => Err(defect_fault("no_preparation_return", "the datum preparation_return is empty: the preparation of the executor writes it before the gates"))
+            }
+        }
+        _ => Ok(next)
+    }
+}
+
 // Go on from a "Where": enter the states one after another until an appeal waits or an end finishes (a call for every state of the chain).
 fn run_chain(mut ctx Ctx, next Goto, mut host PrimitiveHost) -> Result[(), Fault] {
     ctx.chain += 1
@@ -391,8 +409,9 @@ fn run_work_row(mut ctx Ctx, st StateDef, mut host PrimitiveHost) -> Result[Goto
         if r.cond.len() > 0 { take = want_bool(run_expr(ctx, r.cond[0], host)?)? }
         if take {
             ctx.taken.push("${st.name}#${r.n}")
+            ro go = take_goto(ctx, r.next)?
             run_actions(ctx, r.actions, host)?
-            return Ok(r.next)
+            return Ok(go)
         }
     }
     Err(Fault { defect: false, code: "fork_no_match", params: [param("fork", st.name)], kind: "", message: "" })
@@ -733,8 +752,9 @@ fn run_event(mut ctx Ctx, mut host PrimitiveHost) -> Result[(), Fault] {
         ctx.taken.push("common#${row.n}")
         ctx.fired = true
         for b in common.binds { ctx.locals.push(b) }
+        ro common_go = take_goto(ctx, row.next)?
         run_actions(ctx, row.actions, host)?
-        return run_chain(ctx, row.next, host)
+        return run_chain(ctx, common_go, host)
     }
     ro at = find_state(ctx.def, ctx.name)
     if at < 0 { return Err(defect_fault("unknown_name", "no state ${ctx.name}")) }
@@ -773,14 +793,112 @@ fn run_event(mut ctx Ctx, mut host PrimitiveHost) -> Result[(), Fault] {
             ctx.taken.push("${st.name}#${row.n}")
             ctx.fired = true
             for b in chosen.binds { ctx.locals.push(b) }
+            ro row_go = take_goto(ctx, row.next)?
             run_actions(ctx, row.actions, host)?
-            run_chain(ctx, row.next, host)
+            run_chain(ctx, row_go, host)
         }
         _ => {
             ignore_event(ctx, ctx.event.name)
             Ok(())
         }
     }
+}
+
+// ---- the answers that come while the state does not wait for them (rule 14, task 123) ---------------------------------------------------
+
+// Is the request one that the machine keeps among its open ones (the datum `open_requests`; a machine that does not hold the datum keeps none)?
+fn request_is_open(ctx Ctx, rid str) -> bool => has_datum(ctx, "open_requests") && texts_of_datum(ctx, "open_requests").contains(rid)
+
+// Does the current state wait for the answer of a request? An appeal waits for the requests of its own party; every other state - the pause, the gate of another party - does not.
+fn state_awaits(ctx Ctx, rid str) -> bool {
+    ro at = find_state(ctx.def, ctx.name)
+    if at < 0 { return true }
+    ro st = ctx.def.states[at]
+    match st.kind {
+        AppealKind => {
+            ro pi = find_party(ctx.def, st.party)
+            pi >= 0 && owner_party(ctx.def, rid) == pi
+        }
+        _ => false
+    }
+}
+
+fn held_items(ctx Ctx) -> []Value {
+    match data_get(ctx.data, "$held") {
+        List(items) => items
+        _ => []Value.new()
+    }
+}
+
+fn held_text(item Value, name str) -> str {
+    match item {
+        Record { name: record_name, fields } => match record_get(fields, name) {
+            Some(Text(s)) => s
+            _ => ""
+        }
+        _ => ""
+    }
+}
+
+fn event_kind_of(name str) -> EventKind {
+    if name == "Refused" { return EventKind.Refused }
+    EventKind.Answered
+}
+
+// An answer or a refusal of a request that is open, while the state is the pause (or another that does not wait for it): the outcome is not lost (rule 14), it is kept in the hidden datum `$held`
+// and the request stays among the open ones, so that the return into the appeal (rule 12) sends nothing and takes the outcome.
+fn hold_answer(mut ctx Ctx, event Incoming) -> () {
+    ro rid = request_text_of(event.request)
+    mut items = held_items(ctx)
+    items.push(make_record("Held", [
+        RecordField { name: "id", value: Text(event.id) }, RecordField { name: "kind", value: Text(event.kind.name()) }, RecordField { name: "name", value: Text(event.name) },
+        RecordField { name: "request", value: Text(rid) }, RecordField { name: "input", value: Text(event.input) }
+    ]))
+    ctx.data = data_put(ctx.data, "$held", List(items))
+    ctx.fired = true
+    note(ctx, "answer_held", [param("request", rid), param("state", ctx.name)])
+}
+
+// The kept outcomes that the state now waits for are taken one after another, as if they had just come: the request leaves the open ones, the event runs (a chain may lead to another state that waits for another kept outcome).
+fn replay_held(mut ctx Ctx, mut host PrimitiveHost) -> Result[(), Fault] {
+    mut rounds = 0
+    while rounds < 20 && !ctx.finished && !ctx.defect {
+        ro items = held_items(ctx)
+        mut at = -1
+        mut i = 0
+        for item in items {
+            if at < 0 && state_awaits(ctx, held_text(item, "request")) { at = i }
+            i += 1
+        }
+        if at < 0 { return Ok(()) }
+        ro item = items[at]
+        mut rest = []Value.new()
+        mut j = 0
+        for other in items {
+            if j != at { rest.push(other) }
+            j += 1
+        }
+        ctx.data = data_put(ctx.data, "$held", List(rest))
+        ro rid = held_text(item, "request")
+        ro again = Incoming {
+            id: held_text(item, "id"), trace: ctx.trace, step: ctx.step_no, kind: event_kind_of(held_text(item, "kind")), name: held_text(item, "name"), request: Some(rid),
+            input: held_text(item, "input"), at: 0
+        }
+        match read_event(ctx, again) {
+            ReadReady(ev) => {
+                note(ctx, "answer_replayed", [param("request", rid)])
+                ctx.event = ev
+                ctx.locals = []Binding.new()
+                open_remove(ctx, rid)
+                run_event(ctx, host)?
+            }
+            _ => {
+                note(ctx, "event_malformed", [param("name", held_text(item, "name"))])
+            }
+        }
+        rounds += 1
+    }
+    Ok(())
 }
 
 fn flush(ctx Ctx, mut environment Environment) -> () {
@@ -819,6 +937,12 @@ export fn portolan_step(machine PortolanMachine, current PortolanState, event In
         flush(ctx, environment)
         return result_of(ctx, current)
     }
+    // rule 14 (task 123): the outcome of an open request that comes while the state does not wait for it (the pause) is kept, not dropped
+    if (event.kind == EventKind.Answered || event.kind == EventKind.Refused) && request_text_of(event.request) != "" && request_is_open(ctx, request_text_of(event.request)) && !state_awaits(ctx, request_text_of(event.request)) {
+        hold_answer(ctx, event)
+        flush(ctx, environment)
+        return result_of(ctx, current)
+    }
     match read_event(ctx, event) {
         ReadUnknown => {
             note(ctx, "event_unknown", [param("name", event.name)])
@@ -838,6 +962,10 @@ export fn portolan_step(machine PortolanMachine, current PortolanState, event In
             ro run = run_event(ctx, host)
             match run {
                 Ok(u) => {
+                    match replay_held(ctx, host) {
+                        Ok(v) => ()
+                        Err(f) => handle_fault(ctx, f, host)
+                    }
                     match check_bounds(ctx, before, host) {
                         Ok(v) => ()
                         Err(f) => handle_fault(ctx, f, host)

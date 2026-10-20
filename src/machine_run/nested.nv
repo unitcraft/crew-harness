@@ -44,12 +44,12 @@ export fn NestedRegistry @find(name str) -> Option[PortolanMachine] {
     None
 }
 
-/// The machines of the product that a caller may call, each under the name of its machine: "Шаг агента" (`agent_step`) and "Запуск сессии" (`session_start`, task 121), loaded from the JSON
-/// files compiled into the program (`machines/`). The runner of tasks (task 123) calls the second; the second calls the first, so a caller of the session start needs the runner of the pairs
-/// to run two levels (`check_registry` says so for such a pair).
+/// The machines of the product that a caller may call, each under the name of its machine: "Шаг агента" (`agent_step`), "Запуск сессии" (`session_start`, task 121) and "Проверка цикла"
+/// (`cycle_check`, task 122), loaded from the JSON files compiled into the program (`machines/`). The runner of tasks (`task_runner`, task 123) calls the last two; the second calls the first and
+/// the third the second, so the runner of the pairs runs several levels (task 123: the runner is recursive).
 export fn product_registry() -> NestedRegistry {
     mut reg = NestedRegistry.empty()
-    for name in ["agent_step", "session_start"] {
+    for name in ["agent_step", "session_start", "cycle_check"] {
         match load_portolan_machine(text_of_file(machine_files(), "${name}.portolan.json"), standard_registry()) {
             Ok(m) => { reg = reg.add(m.def.name, m) }
             Err(e) => panic("the machine ${name} of the registry of the product does not load: ${e}")
@@ -65,20 +65,53 @@ fn has_machine_party(m PortolanMachine) -> bool {
     false
 }
 
-/// The machines of the parties of the kind `machine` of a parent that the registry does not have, and the places where the parent and the machine it calls do not fit
-/// (`check_nested`): the input type of the party is the record of the input of the machine, the result is its result. Empty - the pair is right.
+/// The places where a parent and the machines it calls do not fit (`check_nested`): the input type of the party is the record of the input of the machine, the result is its result; a machine of a
+/// party of the parent that the registry does not have. A machine that calls machines itself is checked the same way, level by level (task 123: the runner of the pairs is recursive); a machine
+/// that would call itself again (a cycle of calls) is an issue. A machine that a machine BELOW the parent calls and the registry lacks is not an issue here (it is named by `registry_gaps`;
+/// when a request goes to it the runner stops): the stage of the cycle check that calls the meeting is one the runner never takes. Empty - the pairs are right.
 export fn check_registry(parent PortolanMachine, registry NestedRegistry) -> []str {
+    mut out = []str.new()
+    for q in walk_registry(parent, registry, [parent.def.name]) {
+        if !q.starts_with("gap: ") { out.push(q) }
+    }
+    out
+}
+
+/// The machines that the machines below the parent call and the registry does not have (`check_registry` does not call them an issue): the names with the machine that calls them. Empty - the whole tree of calls is in the registry.
+export fn registry_gaps(parent PortolanMachine, registry NestedRegistry) -> []str {
+    mut out = []str.new()
+    for q in walk_registry(parent, registry, [parent.def.name]) {
+        if q.starts_with("gap: ") { out.push(q[5..]) }
+    }
+    out
+}
+
+fn walk_registry(parent PortolanMachine, registry NestedRegistry, above []str) -> []str {
     mut out = []str.new()
     mut done = []str.new()
     for p in parent.def.parties {
         if p.kind != MachineParty || done.contains(p.nested) { continue }
         done.push(p.nested)
         match registry.find(p.nested) {
-            None => out.push("the machine ${p.nested} of the party ${p.name} is not in the registry")
+            None => {
+                if above.len() == 1 {
+                    out.push("the machine ${p.nested} of the party ${p.name} is not in the registry")
+                } else {
+                    out.push("gap: ${p.nested} (called by ${above[above.len() - 1]})")
+                }
+            }
             Some(m) => {
                 for q in check_nested(parent.def, p.nested, m.def) { out.push("${p.nested}: ${q.path}: ${q.message}") }
-                // the runner passes between a parent and its nested machines, one level (task 119); a nested machine that calls machines itself is not routed
-                if has_machine_party(m) { out.push("${p.nested}: calls nested machines itself: the runner runs one level of nesting") }
+                if has_machine_party(m) {
+                    if above.contains(p.nested) {
+                        out.push("${p.nested}: calls itself again: the calls make a cycle")
+                    } else {
+                        mut chain = []str.new()
+                        for a in above { chain.push(a) }
+                        chain.push(p.nested)
+                        for q in walk_registry(m, registry, chain) { out.push(q) }
+                    }
+                }
             }
         }
     }

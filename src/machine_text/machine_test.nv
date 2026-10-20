@@ -174,7 +174,7 @@ test "tm where" {
     assert(note_says(tiny_with("| 2 | иначе | — | ЖДАТЬ |", "| 2 | иначе | — | то же |"), "@same is for the rows of an appeal"))
     assert(is_clean(tiny_with("| 2 | иначе | — | ЖДАТЬ |", "| 2 | иначе | — | ЖДАТЬ, запуск заново |")))
     assert(note_says(tiny_with("| 2 | иначе | — | ЖДАТЬ |", "| 2 | иначе | — | ЖДАТЬ, ещё |"), "после запятой ожидается `запуск заново`"))
-    assert(note_says(tiny_with("| 2 | иначе | — | ЖДАТЬ |", "| 2 | иначе | — | возврат_подготовки |"), "не поддержано в этой версии: переход `возврат_подготовки`"))
+    assert(note_says(tiny_with("| 2 | иначе | — | ЖДАТЬ |", "| 2 | иначе | — | возврат_подготовки |"), "needs the datum preparation_return"))
     ro stay = tiny_with("| 1 | слово(разрешить) | — | число_ходов += 1 | РЕШИТЬ |", "| 1 | слово(разрешить) | — | число_ходов += 1 | то же |")
     assert(note_says(stay, "the state Decide cannot be reached"))
     assert(note_says(stay, "@same is for") == false)

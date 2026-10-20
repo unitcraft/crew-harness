@@ -950,7 +950,10 @@ fn check_targets_of_row(mut cx Checker, r TableRow, path str, may_stay bool) -> 
             ro at = find_data(def, "previous")
             if at < 0 { cx_issue(cx, "${path}.to", "@previous needs the datum previous (the fragment Pause brings it)") }
         }
-        ToPrepareReturn => cx_issue(cx, "${path}.to", "@prepare_return is not supported by the interpreter (rule 24, the preparation is the executor's)")
+        ToPrepareReturn => {
+            ro at = find_data(def, "preparation_return")
+            if at < 0 { cx_issue(cx, "${path}.to", "@prepare_return needs the datum preparation_return (the preparation of the executor writes it, rule 24)") }
+        }
         ToSame => {
             if !may_stay { cx_issue(cx, "${path}.to", "@same is for the rows of an appeal and the common events") }
         }

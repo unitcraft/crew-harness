@@ -249,16 +249,16 @@ test "names by the Portolan" {
     assert(scenarios.len() == 364)
     for f in scenarios { assert(f.name.ends_with(".scenario.test.json")) }
     ro tables = table_files()
-    assert(tables.len() == 9)
+    assert(tables.len() == 10)
     for f in tables { assert(f.name.ends_with(".portolan.md") || f.name.ends_with(".portolan.txt")) }
-    assert(machine_files().len() == 14)
+    assert(machine_files().len() == 15)
     for f in machine_files() { assert(f.name.ends_with(".portolan.json")) }
 }
 
 test "name of a compiled machine" {
     assert(is_machine_json_name("a.portolan.json"))
     for n in ["a.json", "a.portolan", "a.portolan.md", "a.table.json", "machine.json", "a.scenario.test.json", "a.schema.json", "foo.machine.json", "foo.table.md", "foo.table.txt"] { assert(!is_machine_json_name(n)) }
-    assert(data_dir_names("machines").len() == 14)
+    assert(data_dir_names("machines").len() == 15)
 }
 
 test "scenario schema" {

@@ -205,7 +205,6 @@ fn where_parse(mut p TxP, mut cx TxCx) -> Result[TxWhere, TranslateError] {
             to = "@previous"
         } else if p_eat_kw(p, cx.words, "destination", "preparation_return") {
             to = "@prepare_return"
-            cx_unsupported(cx, t, "переход `${kw(cx.words, "destination", "preparation_return")}` (правило 24: подготовку при старте делает исполнитель)")
         } else if p_eat_kw(p, cx.words, "destination", "same") {
             to = "@same"
         } else {

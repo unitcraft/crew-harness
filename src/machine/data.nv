@@ -22,6 +22,7 @@ export fn machine_files() -> []NamedText => [
     NamedText { name: "gate.portolan.json", text: embed_str("machines/gate.portolan.json") },
     NamedText { name: "lenses.portolan.json", text: embed_str("machines/lenses.portolan.json") },
     NamedText { name: "session_start.portolan.json", text: embed_str("machines/session_start.portolan.json") },
+    NamedText { name: "task_runner.portolan.json", text: embed_str("machines/task_runner.portolan.json") },
     NamedText { name: "variants.portolan.json", text: embed_str("machines/variants.portolan.json") }
 ]
 
@@ -36,7 +37,8 @@ export fn table_files() -> []NamedText => [
     NamedText { name: "dialog.portolan.md", text: embed_str("machines/dialog.portolan.md") },
     NamedText { name: "dialog_steps.portolan.md", text: embed_str("machines/dialog_steps.portolan.md") },
     NamedText { name: "fan.portolan.md", text: embed_str("machines/fan.portolan.md") },
-    NamedText { name: "session_start.portolan.md", text: embed_str("machines/session_start.portolan.md") }
+    NamedText { name: "session_start.portolan.md", text: embed_str("machines/session_start.portolan.md") },
+    NamedText { name: "task_runner.portolan.md", text: embed_str("machines/task_runner.portolan.md") }
 ]
 
 /// The scenarios of `scenarios/`, by the name of the file (`chat-basic.scenario.test.json`).
@@ -211,7 +213,7 @@ export fn scenario_files() -> []NamedText => [
     NamedText { name: "cycle-flow-narrowing-clean.scenario.test.json", text: embed_str("scenarios/cycle-flow-narrowing-clean.scenario.test.json") },
     NamedText { name: "cycle-flow-no-probes-repeat.scenario.test.json", text: embed_str("scenarios/cycle-flow-no-probes-repeat.scenario.test.json") },
     NamedText { name: "cycle-flow-not-counted.scenario.test.json", text: embed_str("scenarios/cycle-flow-not-counted.scenario.test.json") },
-    NamedText { name: "cycle-flow-pause-answer-dropped.scenario.test.json", text: embed_str("scenarios/cycle-flow-pause-answer-dropped.scenario.test.json") },
+    NamedText { name: "cycle-flow-pause-answer-held.scenario.test.json", text: embed_str("scenarios/cycle-flow-pause-answer-held.scenario.test.json") },
     NamedText { name: "cycle-flow-pause-at-gate.scenario.test.json", text: embed_str("scenarios/cycle-flow-pause-at-gate.scenario.test.json") },
     NamedText { name: "cycle-flow-plan-verdict.scenario.test.json", text: embed_str("scenarios/cycle-flow-plan-verdict.scenario.test.json") },
     NamedText { name: "cycle-flow-refusal-no-result.scenario.test.json", text: embed_str("scenarios/cycle-flow-refusal-no-result.scenario.test.json") },
@@ -435,6 +437,12 @@ export fn agent_step_table_text() -> str => text_of_file(table_files(), "agent_s
 
 /// The text of the machine of the cycle check (`machines/cycle_check.portolan.json`), the translation of `cycle_check.portolan.md` (task 122).
 export fn cycle_check_machine_text() -> str => text_of_file(machine_files(), "cycle_check.portolan.json")
+
+/// The text of the machine "Task runner" (`machines/task_runner.portolan.json`), the translation of its table (task 123).
+export fn task_runner_machine_text() -> str => text_of_file(machine_files(), "task_runner.portolan.json")
+
+/// The text of the task runner written as tables (`machines/task_runner.portolan.md`).
+export fn task_runner_table_text() -> str => text_of_file(table_files(), "task_runner.portolan.md")
 
 /// The text of the cycle check written as tables (`machines/cycle_check.portolan.md`).
 export fn cycle_check_table_text() -> str => text_of_file(table_files(), "cycle_check.portolan.md")

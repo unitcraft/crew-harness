@@ -192,13 +192,14 @@ put('flow-pause-at-gate', 'the human stops the check at the gate 3 and continues
      word('continue', stop_input(), e('Gate3', journal=[j('human_continue', previous='Gate3', author='ann', source='console', event='input-5')], open=[])),
      counted([], None, launched(2, 's2', 2, extra={'number': 2, 'streak': 1}))])
 
-put('flow-pause-answer-dropped', 'KNOWN GAP (rule 14, task 123): the answer of the nested machine comes on the pause and is dropped as event_ignored, not held; the continue enters the state again with no request open',
+put('flow-pause-answer-held', 'rule 14 (task 123): the answer of the nested machine comes on the pause and is held; the continue enters the state again, takes the answer and the check goes on to the gate 3',
     [begin(review_input('Analysis'), launched(1, 's2', 1)),
      sig('human_stop', stop_input(), e('Pause')),
      step('feed', ev('answer', request='session_launch-1', input=launch_result('Done', summary(0, 3), [])),
-          expect=e('Pause', journal=[j('event_ignored', event='answer', state='Pause')], open=[], data={'summary': {'$dict': []}})),
-     word('continue', stop_input(), e('SessionLaunch', open=[], sent=['session_launch-1'],
-                                      journal=[j('human_continue', previous='SessionLaunch', author='ann', source='console', event='input-5'), j('signal_ordered', signal='continue', request='session_launch-1')]))])
+          expect=e('Pause', journal=[j('answer_held', request='session_launch-1', state='Pause')], open=[], data={'summary': {'$dict': []}, 'open_requests': ['session_launch-1']})),
+     word('continue', stop_input(), e('Gate3', open=[], sent=['session_launch-1'],
+                                      journal=[j('human_continue', previous='SessionLaunch', author='ann', source='console', event='input-5'), j('answer_replayed', request='session_launch-1'), j('signal_ordered', signal='continue', request='session_launch-1')],
+                                      data={'open_requests': []}))])
 
 put('flow-cancel-in-pause', 'the parent cancels the call while the check is on the pause: the end HALTED, the refusal Cancelled',
     [begin(review_input('Analysis'), launched(1, 's2', 1)),

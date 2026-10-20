@@ -89,3 +89,54 @@ machine	совещание	meeting
 machine	проверка_цикла	review
 machine	запуск_сессии	session_start
 machine	раннер	runner
+# Task 123 (the task runner): names of the product for the machine task_runner.portolan.md.
+type	Фаза	Phase
+case	ОбратнаяСвязь	Feedback
+case	Завершено	Completed
+type	Документ	TaskDocument
+case	Спецификация	Specification
+case	ОтчётРеализации	ImplementationReport
+type	СтатусДокумента	DocumentStatus
+type	ДокументЗадачи	TaskDocumentState
+field	есть	exists
+type	ИсходПодготовки	PreparationStatus
+case	Готова	Ready
+case	ЗанятаЖивымПроцессом	BusyByLiveProcess
+case	ДеревоЗанято	TreeBusyByOtherTask
+case	ГруппаНеОстановлена	GroupNotStopped
+function	новый_цикл	new_cycle
+function	через_запятую	join_with_comma
+data	последняя_проверка_реализации	last_review
+field	параметры_проекта	project_settings
+field	признаки_маршрута	route_features
+word	быстрый	fast
+word	полный	full
+word	принято	accepted
+word	ваше	yours
+word	не ваше	not_yours
+word	подтвердил	confirmed
+word	полный путь	full_path
+word	закрыть руками	close_manually
+word	остальные решения	other_decisions
+word	подтверждено	verified
+word	решения записаны	decisions_recorded
+word	разрешить коммит	allow_commit
+word	разрешить пуш	allow_push
+word	отправлено	sent
+word	ответов нет	no_answers
+word	ответы	answers
+word	ответы меняют цель	answers_change_goal
+word	реализация	implementation
+word	план	plan
+word	требования	requirements
+word	решения не меняют план	decisions_keep_plan
+word	решения меняют план	decisions_change_plan
+word	завершить	finish
+word	обратная связь	feedback
+state	ИТОГ_ПРОВЕРКИ	ReviewVerdict
+data	стадия_проверки	review_stage
+data	вердикт_проверки	review_verdict
+data	источник_проверки	review_source
+data	вне_задачи_проверки	review_out_of_scope
+field	последняя_проверка_реализации	last_review
+function	документ_по_имени	document_by_name

@@ -108,7 +108,7 @@ test "events vs words" {
 
 test "targets" {
     assert(says(tiny().replace("\"to\":\"Finished\"", "\"to\":\"Nowhere\""), "Nowhere is not a state"))
-    assert(says(tiny().replace("\"to\":\"Finished\"", "\"to\":\"@prepare_return\""), "not supported by the interpreter"))
+    assert(says(tiny().replace("\"to\":\"Finished\"", "\"to\":\"@prepare_return\""), "needs the datum preparation_return"))
     assert(says(tiny().replace("\"to\":\"Finished\"", "\"to\":\"@previous\""), "needs the datum previous"))
     assert(says(tiny().replace("\"to\":\"Finished\"", "\"to\":\"@same\""), "@same is for the rows of an appeal"))
     assert(says(tiny().replace("\"to\":\"Stopped\"", "\"to\":null"), "ends in machine_error"))
