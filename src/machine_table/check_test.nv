@@ -100,10 +100,10 @@ test "events vs words" {
     ro fail = tiny_rows("{\"n\":1,\"event\":{\"kind\":\"failure\"},\"to\":\"Decide\"},{\"n\":2,\"event\":{\"kind\":\"word\",\"word\":\"halt\"},\"actions\":[${jassign("stop", jl(jstr("a")))}],\"to\":\"Stopped\"}")
     assert(says(fail, "come from a party that gets requests"))
     assert(says(chat_with("\"kind\": \"failure\", \"bind\": \"code\"", "\"kind\": \"failure\", \"reasons\": [\"Lost\"], \"bind\": \"code\""), "Lost is not a failure code"))
-    assert(says(chat_with("\"bind\": { \"text\": \"piece\" }", "\"bind\": { \"nope\": \"piece\" }"), "has no field nope"))
+    assert(says(chat_with("\"bind\": { \"content\": \"piece\" }", "\"bind\": { \"nope\": \"piece\" }"), "has no field nope"))
     assert(says(chat_with("\"name\": \"agent_chunk\", \"bind\"", "\"name\": \"agent_zzz\", \"bind\""), "not a progress event"))
-    assert(says(chat_with("\"bind\": { \"text\": \"message\" }", "\"bind\": { \"text\": \"user\" }"), "has the name of a datum"))
-    assert(says(chat_with("\"bind\": { \"text\": \"message\" }", "\"bind\": { \"text\": \"IDLE_TERM\" }"), "has the name of a constant"))
+    assert(says(chat_with("\"bind\": { \"content\": \"message\" }", "\"bind\": { \"content\": \"user\" }"), "has the name of a datum"))
+    assert(says(chat_with("\"bind\": { \"content\": \"message\" }", "\"bind\": { \"content\": \"IDLE_TERM\" }"), "has the name of a constant"))
 }
 
 test "targets" {
