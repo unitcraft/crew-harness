@@ -160,16 +160,16 @@ class S:
     def start(self, st, **ex):
         return self.step({'kind': 'start', 'request': 'up-1', 'input': {'task_dir': 't', 'repo_dir': 'w', 'delivery_mode': 'files'}}, e(st, **ex))
 
-    def word(self, name, fields=None, st=None, **ex):
+    def word(self, name, fields=None, st=None, also=None, on=None, **ex):
         ev = {'kind': 'word', 'name': name}
         if isinstance(fields, dict) and len(fields) == 1:
             fields = list(fields.values())[0]      # a word with one field takes its text as the input
         if fields is not None:
             ev['input'] = fields
-        return self.step(ev, e(st, **ex))
+        return self.step(ev, e(st, **ex), also=also, on=on)
 
-    def sess(self, n, result='Done', st=None, **ex):
-        return self.step({'kind': 'answer', 'request': 'session_launch-%d' % n, 'input': session_result(result)}, e(st, **ex))
+    def sess(self, n, result='Done', st=None, also=None, on=None, **ex):
+        return self.step({'kind': 'answer', 'request': 'session_launch-%d' % n, 'input': session_result(result)}, e(st, **ex), also=also, on=on)
 
     def review(self, n, verdict='Clean', source='', cycle=None, out=None, st=None, **ex):
         return self.step({'kind': 'answer', 'request': 'loop_review-%d' % n, 'input': review_result(verdict, source, cycle, out)}, e(st, **ex))
@@ -177,14 +177,14 @@ class S:
     def fail(self, party, n, code, st=None, **ex):
         return self.step({'kind': 'failure', 'request': '%s-%d' % (party, n), 'code': code}, e(st, **ex))
 
-    def sig(self, name, inp, st=None, **ex):
-        return self.step({'kind': 'signal', 'name': name, 'input': inp}, e(st, **ex))
+    def sig(self, name, inp, st=None, also=None, on=None, **ex):
+        return self.step({'kind': 'signal', 'name': name, 'input': inp}, e(st, **ex), also=also, on=on)
 
     def restart(self, st=None, **ex):
         return self.step(None, e(st, **ex), do='restart')
 
-    def pump(self, st=None, on=None, **ex):
-        return self.step(None, e(st, **ex), do='pump', on=on)
+    def pump(self, st=None, on=None, also=None, **ex):
+        return self.step(None, e(st, **ex), do='pump', on=on, also=also)
 
 
 def e(state=None, journal=None, data=None, open=None, sent=None, outcome=None, queue=None, cancelled=None):
@@ -203,8 +203,10 @@ UP = 'up-1'
 PROPOSED = None  # set below
 
 
-def put(file, name, s):
-    sc = {'format': 'scenario/0', 'machine': 'task_runner', 'name': name, 'start_at': 1000, 'standalone': True, 'steps': s.steps}
+def put(file, name, s, nested=False):
+    sc = {'format': 'scenario/0', 'machine': 'task_runner', 'name': name, 'start_at': 1000, 'steps': s.steps}
+    if not nested:
+        sc['standalone'] = True
     assert file not in FILES, file
     FILES['runner-%s.scenario.test.json' % file] = sc
 
@@ -216,3 +218,9 @@ def ends_answer(rounds):
 
 
 PROPOSED = j('route_proposed', proposal='полный', source='правило', basis='признаки не записаны')
+
+
+def acc(s):
+    """The last step is only accepted (committed, not dispatched): the process dies after the commit."""
+    s.steps[-1]['do'] = 'accept'
+    return s

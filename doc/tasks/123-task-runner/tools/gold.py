@@ -148,3 +148,7 @@ def fir1(**host):
 
 def fg8(**host):
     return fir1(**host).review(1, 'Clean', st='Gate8', open=[])
+
+
+def FL(name, text, s, nested=False):
+    put('flow-%s' % name, 'FLOW: %s' % text, s, nested)

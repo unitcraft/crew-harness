@@ -841,7 +841,7 @@ fn held_text(item Value, name str) -> str {
 }
 
 fn event_kind_of(name str) -> EventKind {
-    if name == "Refused" { return EventKind.Refused }
+    if name == "refused" { return EventKind.Refused }
     EventKind.Answered
 }
 
