@@ -778,6 +778,21 @@ at least `answer_delay_sec` seconds old. A doubt (a parse failure, an unknown ty
   the specification and the plan, the result and the handover, push to `main` or a server, merge, deletion and cleanup, restart or switch of the service, a live check,
   tag / release / publish / asset / pin, force, password / token / key, money, the owner's word ("продолжить без слова владельца"), the keys `answer_*`, the files of the settings,
   lifting a prohibition or a border of the task, giving up a requirement, the ceiling of rounds ("сверх лимита"), widening of the rights, shared environments; plus `Тип: gate`.
+  **Task 142 (owner, 2026-10-21)** added the rows that keep for the owner what is his decision and the closed list did not recognise: `norms` - the **approval of rules, norms, specifications,
+  plans, the Canon, ADR** ("утверждаешь", "утверждаете правило", "ВОРОТА утверждения правил", "подтверждаешь правило", "нормативно закрепить", an architectural border that is fixed); `rounds` - the
+  **permission beyond the ceiling of rounds** ("разрешаете круг 5", "round7", "rework_max", "четвёртая доработка при лимите три", "ещё один круг"; "круг" and "round…" count in the sentence of the verb "разрешаете", while
+  "доработка", "при лимите" and "потолок" may stand in another sentence of the question); `route-word` - the **word of the owner in the format of the plugin** ("заводи 129", "дословное слово", "владельческое слово",
+  "route word", a word in quotes "слово «…»", "ваше GO"); `task-grant` - the permission to **start a task** or to order a work ("завести задачу", "разрешить отдельную задачу", "заказать исправление");
+  `scope` - widening of a task; `late-word` - the word of the owner that came after the agent's answer (its priority); `profile` - a switch of the models or of the set. Each row has its examples
+  in the table and a cell for every example. Two measures of 2026-10-21 on the data of the plugin (task 142, `analysis.md`): the 55 forms that the plugin had answered contained 22 decisions of the owner
+  (0 were held by the old list, 22 by the new one) and 13 technical choices (none held by the new rows).
+- **The automatic answer never chooses the word of the owner and never answers a question that asks for it** (task 142). If a form asks for the owner's word, or the recommended option IS a word of the
+  plugin's format ("заводи 129"), the plugin does not put an answer: it checks in `judgeForm`, again in the tick right before the record of the answer, and once more in the delivery
+  (`owner-answer.ts`: an answer file with the source `plugin` for such a form is refused with `удержана для владельца: …`, the form stays open, the turn is not interrupted, no letter is sent). The
+  marker of the form becomes `held`, not `failed`. An answer that you give yourself (the file of `scripts/crew-answer.mjs` with your quote) is delivered as always.
+- **Where you see why a form was kept for you.** `node scripts/crew-answer.mjs` prints `[удержана для владельца: <rule> («<the word that hit>»)]` after every such form (also for the forms whose record is in `forms/`),
+  the marker `forms/auto/<form id>.json` keeps `rule` and `why`, `/crew` says `form to you K (closed N (norms 1, rounds 2), no rec M, …)`, and `crew_doctor` adds the same rules to its note. The rows have no
+  key of the settings: they always act.
   A negated action ("без push", "не удалять") is not a proposal. The vocabulary is open and errs toward the owner (a doubt - to the owner). Questions of the acceptance sessions
   are NOT closed by a rule of their own (owner, 2026-10-19), neither in forms nor in text blocks; only this list and the words of the gates stay.
 - Delivery is the answer of task 059 (`owner-answer.ts`) with the source `plugin`: the file `answers/auto-<form id>.json` (one per form - the name is the "once" mark), the interrupt
