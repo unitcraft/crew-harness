@@ -24,6 +24,7 @@ const port = Number(argv.find((a) => /^\d+$/.test(a)) ?? 18099);
 const exe = (name) => path.join(root, "target", `${name}.exe`);
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "crew-e2e-"));
 const configFile = path.join(dir, "server.json");
+const streamMarker = path.join(dir, "stream-active");
 
 // ----- the database (modes pg and pg-docker) -----
 
@@ -63,6 +64,11 @@ function provision() {
       { input: fs.readFileSync(path.join(root, "src/pg/schema.sql")), encoding: "utf8" });
     if (schema.status !== 0) stopWith(`the schema was not applied: ${mask(schema.stderr)}`);
     try { psql("postgres", `create role ${pg.user} login password '${pg.password}' in role crew_app`); } catch (e) { stopWith(String(e.message ?? e)); }
+    // Isolated test-only latency: delay only snapshot commits for the burst session. This makes
+    // persistence backpressure controlled without touching a product database or weakening commit.
+    try {
+      psql(E2E_DB, "create function crew.test_slow_stream_save() returns trigger language plpgsql as $fn$ begin if new.id = 's-stream' then perform pg_sleep(0.015); end if; return new; end; $fn$; create trigger test_slow_stream_save before insert on crew.machine_snapshot for each row execute function crew.test_slow_stream_save()");
+    } catch (e) { stopWith(String(e.message ?? e)); }
   } else {
     // the permanent container of src/pg/db.ps1 and its settings file outside the repository
     dbScript("dropdb", "-Database", E2E_DB); // a leftover of an earlier run
@@ -91,8 +97,8 @@ fs.writeFileSync(configFile, JSON.stringify({
   store: mode === "files" ? "files" : "pg",
   ...(mode === "files" ? {} : { pg: { host: pg.host, port: pg.port, database: pg.database, user: pg.user } }), // no password in the file
   agents: [
-    { id: "opencode", label: "Fake", program: "node", args: [path.join(root, "src/acp/testdata/fake_agent.mjs"), "--live"] },
-    { id: "kimi", label: "Kimi Code", program: "node", args: [path.join(root, "src/acp/testdata/fake_agent.mjs"), "--live"] },
+    { id: "opencode", label: "Fake", program: "node", args: [path.join(root, "src/acp/testdata/fake_agent.mjs"), "--live", `--stream-marker=${streamMarker}`] },
+    { id: "kimi", label: "Kimi Code", program: "node", args: [path.join(root, "src/acp/testdata/fake_agent.mjs"), "--live", `--stream-marker=${streamMarker}`] },
   ],
   idle_term_seconds: 3,
   workdir: root,
@@ -139,13 +145,25 @@ async function stopFront() {
 // ----- a page -----
 
 let serial = 0;
+const wsReceivedAt = new WeakMap();
+const producerAtWebSocket = new WeakMap();
+const chunkBeforeDoneAtWebSocket = new WeakMap();
 function page() {
   const events = [];
   const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
   const opened = new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = () => reject(new Error("websocket error")); });
   ws.onmessage = (m) => {
     const data = JSON.parse(m.data);
-    for (const e of Array.isArray(data) ? data : [data]) events.push(e);
+    for (const e of Array.isArray(data) ? data : [data]) {
+      wsReceivedAt.set(e, Date.now());
+      if (e.trace === "s-stream" && e.kind === "agent_chunk" && fs.existsSync(streamMarker)) {
+        producerAtWebSocket.set(e, JSON.parse(fs.readFileSync(streamMarker, "utf8")));
+      }
+      if (e.trace === "s-stream" && e.kind === "agent_chunk") {
+        chunkBeforeDoneAtWebSocket.set(e, !events.some((seen) => seen.trace === "s-stream" && seen.kind === "agent_done"));
+      }
+      events.push(e);
+    }
   };
   const state = { closed: false, code: 0 };
   ws.onclose = (e) => { state.closed = true; state.code = e.code; };
@@ -239,6 +257,41 @@ try {
   const ums = a.of("s-chat").filter((e) => e.kind === "user_message");
   check("the second turn is answered", ums.length === 2 && a.text("s-chat", ums[1].input.turn) === "Echo: второй", a.text("s-chat", ums[1]?.input.turn));
 
+  // ----- streamed burst reaches a real WebSocket before the whole answer is accepted -----
+  a.send("session_created", "s-stream", { name: "Stream probe", agent: "opencode" });
+  check("the streaming session is shown", !!(await a.waitFor(isKind("session_created", "s-stream"))));
+  const streamStartedAt = Date.now();
+  a.send("user_message", "s-stream", { turn: "stream-turn", text: "burst" });
+  const streamInput = await a.waitFor((e) => e.trace === "s-stream" && e.kind === "user_message");
+  const firstStreamChunk = await a.waitFor((e) => e.trace === "s-stream" && e.kind === "agent_chunk");
+  const producerStateAtFirstChunk = firstStreamChunk ? producerAtWebSocket.get(firstStreamChunk) : undefined;
+  check("the first burst chunk reaches WebSocket before agent_done",
+    !!firstStreamChunk && chunkBeforeDoneAtWebSocket.get(firstStreamChunk) === true && !!producerStateAtFirstChunk);
+  const readOnlyDuringStream = page();
+  await readOnlyDuringStream.opened;
+  const historyChunkDuringStream = await readOnlyDuringStream.waitFor((e) => e.trace === "s-stream" && e.kind === "agent_chunk");
+  check("a new WebSocket receives in-flight history before the producer finishes",
+    !!historyChunkDuringStream && fs.existsSync(streamMarker)
+      && !readOnlyDuringStream.of("s-stream").some((e) => e.kind === "agent_done"));
+  readOnlyDuringStream.close();
+  const streamDone = await a.waitFor(isKind("agent_done", "s-stream"));
+  check("the streaming turn completes", !!streamDone);
+  const streamEvents = a.of("s-stream");
+  const streamStory = JSON.stringify(streamEvents);
+  const streamTurn = streamEvents.find((e) => e.kind === "user_message")?.input.turn;
+  check("all burst text reaches WebSocket once and in order",
+    a.text("s-stream", streamTurn) === Array.from({ length: 256 }, (_, i) => `b${i};`).join("")
+      && streamEvents.filter((e) => e.kind === "agent_chunk").length === 256);
+  if (streamInput && firstStreamChunk && streamDone) {
+    console.log("STREAM_METRICS " + JSON.stringify({ store: mode,
+      firstInputMs: wsReceivedAt.get(streamInput) - streamStartedAt,
+      firstChunkMs: wsReceivedAt.get(firstStreamChunk) - streamStartedAt,
+      producerToEngineAcceptMs: firstStreamChunk.time - producerStateAtFirstChunk.producerStartedAt,
+      engineAcceptToWsFlushMs: wsReceivedAt.get(firstStreamChunk) - firstStreamChunk.time,
+      testStoreDelayPerSaveMs: mode === "pg" ? 15 : 0,
+      doneMs: wsReceivedAt.get(streamDone) - streamStartedAt }));
+  }
+
   // ----- permission -----
   a.send("session_created", "s-perm", { name: "Разрешение", agent: "opencode" });
   a.send("user_message", "s-perm", { turn: "p", text: "permission go" });
@@ -298,10 +351,11 @@ try {
   const c = page();
   await c.opened;
   // the hub resumes the sessions first (an agent is started for the open request); the page is told when it is done
-  for (let i = 0; i < 300 && !["s-chat", "s-perm", "s-cancel", "s-crash", "s-rest"].every((t) => c.of(t).length > 0); i += 1) await sleep(50);
+  for (let i = 0; i < 300 && !["s-chat", "s-perm", "s-cancel", "s-crash", "s-rest", "s-stream"].every((t) => c.of(t).length > 0); i += 1) await sleep(50);
   await sleep(200);
-  check("the sessions are all there after the restart", ["s-chat", "s-perm", "s-cancel", "s-crash", "s-rest"].every((t) => c.of(t).length > 0));
+  check("the sessions are all there after the restart", ["s-chat", "s-perm", "s-cancel", "s-crash", "s-rest", "s-stream"].every((t) => c.of(t).length > 0));
   check("a session has the same lines as before", c.of("s-chat").length === seen + 5 || c.of("s-chat").length >= seen);
+  check("the burst history is identical after restart", JSON.stringify(c.of("s-stream")) === streamStory);
   check("the open request ends with Timeout", !!(await c.waitFor((e) => e.trace === "s-rest" && e.kind === "agent_refused" && e.input.reason === "Timeout", 20000)));
   c.send("user_message", "s-rest", { turn: "p2", text: "still here" });
   check("the session goes on after the restart", !!(await c.waitFor((e) => e.trace === "s-rest" && e.kind === "agent_done")));
@@ -314,7 +368,7 @@ try {
 
   // ----- the store pg: the sessions are in the database, and the password is nowhere it should not be -----
   if (mode !== "files") {
-    const traces = ["s-chat", "s-perm", "s-cancel", "s-crash", "s-rest"];
+    const traces = ["s-chat", "s-perm", "s-cancel", "s-crash", "s-rest", "s-stream"];
     const ids = psql(E2E_DB, "select string_agg(id, ',' order by id) from crew.list_sessions()").split(",");
     check("the sessions are in the database", traces.every((t) => ids.includes(t)), ids.join(","));
     const lines = Number(psql(E2E_DB, "select count(*) from crew.machine_journal"));
@@ -325,7 +379,7 @@ try {
 
   // ----- the permanent database: down, up, and the data of the volume are there -----
   if (mode === "pg-docker") {
-    const traces = ["s-chat", "s-perm", "s-cancel", "s-crash", "s-rest"];
+    const traces = ["s-chat", "s-perm", "s-cancel", "s-crash", "s-rest", "s-stream"];
     // as the page does: an event is kept once by its id (an event of the moment of the connection may come twice), in the order of the steps
     const story = (page_, t) => [...new Map(page_.of(t).map((e) => [e.id, e])).values()].sort((x, y) => x.step - y.step);
     const before = Object.fromEntries(traces.map((t) => [t, JSON.stringify(story(c, t))]));

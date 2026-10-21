@@ -3,8 +3,8 @@
 // red test with a message, not a skip.
 module crew_harness.server_pg
 
-import crew_harness.server.{kit_pg, scenario_chat, scenario_permission, scenario_cancel, scenario_restart_idle, scenario_restart_open, scenario_crash, scenario_two_pages, scenario_rejects, scenario_many, scenario_broken_agent}
-import crew_harness.pgdb.{new_test_db, drop_test_db, test_count}
+import crew_harness.server.{kit_pg, scenario_chat, scenario_stream_burst, scenario_permission, scenario_cancel, scenario_restart_idle, scenario_restart_open, scenario_crash, scenario_two_pages, scenario_rejects, scenario_many, scenario_broken_agent}
+import crew_harness.pgdb.{new_test_db, drop_test_db, test_count, test_must_sql}
 
 fn clean(report str) -> () {
     if report.byte_len() > 0 { println("NOT AS IT MUST BE: ${report}") }
@@ -18,6 +18,16 @@ test "pg: two turns of a chat" {
     drop_test_db(db)
     clean(report)
     assert(stored == 1)
+}
+
+test "pg: burst chunks flush before the end event" {
+    ro db = new_test_db("hub_burst")
+    test_must_sql(db.admin, "create function crew.test_slow_stream_save() returns trigger language plpgsql as $fn$ begin if new.id = 's-burst' then perform pg_sleep(0.015); end if; return new; end; $fn$; create trigger test_slow_stream_save before insert on crew.machine_snapshot for each row execute function crew.test_slow_stream_save()")
+    ro report = scenario_stream_burst(kit_pg("pgburst", 30000, db.app))
+    ro stored = test_count(db.admin, "select count(distinct id) from crew.machine_snapshot")
+    drop_test_db(db)
+    if report.byte_len() > 0 { panic("stream burst: ${report}") }
+    assert(stored == 2)
 }
 
 test "pg: permission asked, allowed, denied" {

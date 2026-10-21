@@ -93,7 +93,9 @@ parameters) and no text.
    the state after the step, the request id and the time.
 6. **Dispatch.** Only after the commit the queued requests and cancels are sent through `Link`, and each send is marked in
    the journal (`request_sent`, `cancel_sent`). `feed` is `on_arrival` + `dispatch`; `pump` sends the pending orders, takes the incoming
-   events of the link in the order of arrival, then makes an `Expired` event for each open request whose idle term passed.
+    events of the link in the order of arrival (at most 16 per call; fewer when `receive` returns `None`), then makes an
+    `Expired` event for each open request whose idle term passed. The finite scheduling quantum lets the server drain visible
+    events, service page commands and move to another session even while one link has a backlog; it does not limit a response.
 
 A line of the journal (one JSON object per line, UTF-8 as it is); what happened is an `event`: a code and parameters (a name -> a
 string), never a ready text. The Russian text of a line is built from the template of the code by whoever shows the journal

@@ -86,6 +86,30 @@ test "events: take_events hands the accepted events out once, stamped, in order"
     assert(e.take_events().len() == 0)
 }
 
+test "pump: a ready backlog yields at the event budget and resumes in order" {
+    mut world = MemoryWorld.at(5000)
+    mut e = echo_begin(world)
+    mut i = 0
+    while i < 20 {
+        world.deliver(Incoming.word("hello", "event-${i}"))
+        i += 1
+    }
+    ro first = with Journal = memory_journal(world), Store = memory_store(world), Link = memory_link(world), Time = memory_time(world) {
+        e.pump()
+    }
+    assert(first == 16)
+    assert(e.take_events().len() == 16)
+    assert(world.inbox.len() == 4)
+    ro second = with Journal = memory_journal(world), Store = memory_store(world), Link = memory_link(world), Time = memory_time(world) {
+        e.pump()
+    }
+    assert(second == 4)
+    ro rest = e.take_events()
+    assert(rest.len() == 4)
+    assert(rest[0].input == "event-16")
+    assert(rest[3].input == "event-19")
+}
+
 test "events: a discarded event is not handed out" {
     mut world = MemoryWorld.at(5000)
     mut e = echo_begin(world)

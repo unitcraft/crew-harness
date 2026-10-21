@@ -1,0 +1,8 @@
+исп 0/0 [2026-10-21 01:45] запуск №1
+исп 0/5 [2026-10-21 18:30] старт — Причинная RED, bounded pump, проверки, evidence и сдача
+исп 1/5 [2026-10-21 18:30] Исходный unbounded pump RED на paced fake ACP и PG delay
+исп 2/5 [2026-10-21 18:30] budget 16 и burst tests; order, fairness, attach, marker, restart
+исп 3/5 [2026-10-21 18:30] Node WebSocket E2E files/PG и метрики выполнены
+исп 4/5 [2026-10-21 18:30] Затронутые Nova tests, builds и guards зелёные
+исп 5/5 [2026-10-21 18:37] Trace, timings and exact code SHA recorded; preparing signed evidence commit
+исп 5/5 [2026-10-21 18:38] готово — Код 3246618 и evidence 486ae0c подписаны; тесты и guards зелёные; сдано

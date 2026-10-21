@@ -40,9 +40,14 @@ fn kit_repo_root() -> Path {
     panic("nova.toml was not found above the working directory")
 }
 
-fn kit_agent(id str, extra str) -> AgentSpec {
+fn kit_agent(id str, extra str, marker str) -> AgentSpec {
     ro script = kit_repo_root().join("src").join("acp").join("testdata").join("fake_agent.mjs").display()
-    AgentSpec { id, label: "Fake", program: "node", args: [script, "--live", extra] }
+    mut args = []str.new()
+    args.push(script)
+    args.push("--live")
+    args.push(extra)
+    if marker.byte_len() > 0 { args.push("--stream-marker=${marker}") }
+    AgentSpec { id, label: "Fake", program: "node", args }
 }
 
 fn kit_data_dir(name str) -> str {
@@ -56,11 +61,12 @@ fn kit_data_dir(name str) -> str {
 }
 
 fn kit_settings(store str, name str, idle_ms int, pg PgConfig) -> ServerSettings {
+    ro data_dir = kit_data_dir(name)
     mut agents = []AgentSpec.new()
-    agents.push(kit_agent("opencode", "--ok"))
-    agents.push(kit_agent("broken", "--auth-error"))
+    agents.push(kit_agent("opencode", "--ok", "${data_dir}/stream-active"))
+    agents.push(kit_agent("broken", "--auth-error", ""))
     ServerSettings {
-        port: 8099, data_dir: kit_data_dir(name), store, pg, agents, idle_term_ms: idle_ms,
+        port: 8099, data_dir, store, pg, agents, idle_term_ms: idle_ms,
         workdir: kit_repo_root().display(), web_dir: "src/web", hub_program: "", hub_args: []str.new()
     }
 }
@@ -297,6 +303,15 @@ fn kit_diff(a []str, b []str) -> str {
 
 fn kit_check() -> Check => { failures: []str.new() }
 
+fn kit_file_exists(path str) -> bool {
+    with Fs = real_fs() {
+        match try_exists(Path.from_bytes(path.bytes())) {
+            Ok(value) => value
+            Err(error) => false
+        }
+    }
+}
+
 fn kit_unique(lines []str) -> bool {
     mut seen = []str.new()
     for line in lines {
@@ -360,6 +375,75 @@ export fn scenario_chat(settings ServerSettings) Proc Detach Time Net Fs Os -> s
     c.expect(rig.hub.machine_name() == "DialogSession", "the sessions run on the Portolan machine DialogSession")
     c.expect(rig.hub.state_text_of("s-chat").contains("\"started\":true"), "the snapshot is the state of a Portolan machine")
     rig.shut()
+    c.report()
+}
+
+/// A real ACP child produces faster than a slow store can persist. The page must receive a chunk
+/// at a pump boundary while the producer marker is still present and before agent_done.
+export fn scenario_stream_burst(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-burst", "{\"name\":\"Поток\",\"agent\":\"opencode\"}")
+    rig.page(1, "session_created", "s-fair", "{\"name\":\"Вторая сессия\",\"agent\":\"opencode\"}")
+    c.expect(rig.until("\"kind\":\"session_created\"", 3000), "the session is shown")
+    c.expect(rig.until("\"trace\":\"s-fair\"", 3000), "the second session is shown")
+    rig.page(1, "user_message", "s-burst", "{\"turn\":\"t-burst\",\"text\":\"burst\"}")
+    rig.page(1, "user_message", "s-fair", "{\"turn\":\"t-fair\",\"text\":\"short\"}")
+    mut saw_chunk_before_done = false
+    mut burst_done = false
+    mut fair_done = false
+    mut fair_done_before_burst = false
+    mut attached_during_stream = false
+    mut producer_active_at_flush = false
+    ro deadline = Time.now().unix_millis() + 15000
+    while (!burst_done || !fair_done) && Time.now().unix_millis() < deadline {
+        ro made = rig.hub.pump()
+        rig.collect()
+        ro burst_lines = rig.hub.page_lines("s-burst")
+        ro fair_lines = rig.hub.page_lines("s-fair")
+        mut first_chunk = false
+        for line in burst_lines {
+            if line_field(line, "kind") == "agent_chunk" { first_chunk = true }
+            if line_field(line, "kind") == "agent_done" { burst_done = true }
+        }
+        for line in fair_lines {
+            if line_field(line, "kind") == "agent_done" { fair_done = true }
+        }
+        if first_chunk && !saw_chunk_before_done && !burst_done {
+            saw_chunk_before_done = true
+            producer_active_at_flush = kit_file_exists("${settings.data_dir}/stream-active")
+        }
+        if fair_done && !burst_done { fair_done_before_burst = true }
+        if first_chunk && !burst_done && !attached_during_stream {
+            rig.attach(2)
+            attached_during_stream = true
+        }
+        if !burst_done || !fair_done { 5.to_millis().sleep() }
+    }
+    c.expect(saw_chunk_before_done, "a page-visible chunk precedes agent_done at a pump boundary")
+    c.expect(producer_active_at_flush, "the fake ACP producer is still running when the chunk is drained")
+    c.expect(burst_done && fair_done, "both turns end")
+    c.expect(fair_done_before_burst, "the second session finishes while the burst session is still pumping")
+    c.expect(attached_during_stream, "a new page can attach during the burst")
+    c.expect(kit_with(rig.lines_for(2), "\"kind\":\"agent_chunk\"") > 0, "the attaching page receives in-flight history")
+    ro lines = rig.hub.page_lines("s-burst")
+    ro turn = line_input(first_of(lines, "user_message", 0), "turn")
+    ro text = answer_of(lines, turn)
+    mut expected = ""
+    mut i = 0
+    while i < 256 {
+        expected = "${expected}b${i};"
+        i += 1
+    }
+    c.expect(text == expected, "the burst text is complete and ordered")
+    c.expect(kit_with(lines, "\"kind\":\"agent_chunk\"") == 256, "each burst chunk is shown once")
+    c.expect(kit_unique(lines) && kit_increasing(lines), "event ids and steps stay unique and increasing")
+    rig.shut()
+    mut again = rig_open(settings)
+    ro restored = again.hub.page_lines("s-burst")
+    c.expect(kit_text(restored) == kit_text(lines), "the committed burst history is identical after restart")
+    again.shut()
     c.report()
 }
 

@@ -465,14 +465,19 @@ export fn Engine[M Machine[S], S] mut @feed(raw Incoming) Journal Store Link Tim
     @dispatch()
 }
 
+// Sixteen input events is a scheduling quantum, not a response-size limit: Hub.pump gets back
+// to drain this session and then advances to the next one; stdio can service page commands and
+// flush output between calls. The bound applies even when receive() never goes empty. Each event
+// still commits (journal then snapshot) and is acknowledged independently.
+const PUMP_EVENT_BUDGET = 16
+
 /// Take what is due: send the pending orders, accept the incoming events of the link in the order of
 /// arrival (each is acknowledged to the handler after its step is committed), then make an `Expired` event for every open request whose idle term passed.
 /// Returns the number of steps made.
 export fn Engine[M Machine[S], S] mut @pump() Journal Store Link Time -> int {
     mut made = 0
     @dispatch()
-    mut more = true
-    while more {
+    while made < PUMP_EVENT_BUDGET {
         match Link.receive() {
             Some(event) => {
                 // the step is committed by `on_arrival`; only then the handler is told that the event is the engine's
@@ -481,7 +486,7 @@ export fn Engine[M Machine[S], S] mut @pump() Journal Store Link Time -> int {
                 @dispatch()
                 made += 1
             }
-            None => { more = false }
+            None => { break }
         }
     }
     ro now = now_ms()

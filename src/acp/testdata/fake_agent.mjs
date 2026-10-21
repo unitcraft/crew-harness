@@ -15,8 +15,10 @@
 //   noeol            a chunk, then the final answer WITHOUT a line break, then the process exits
 //   caps             a chunk with the clientCapabilities that came with initialize
 //   cancelcount      a chunk with the number of session/cancel notifications received so far
+//   burst            256 chunks over a marked 512ms stream, then end_turn (server pump fairness probe)
 // The process writes `fake-agent: ready` to stderr when it starts.
 import { createInterface } from "node:readline";
+import fs from "node:fs";
 
 // A guard for the tests: a test that fails before it closes its client would leave this process alive, and the test
 // binary (which waits for the pipes of the process) with it; the process ends by itself after 25 seconds (a test takes
@@ -28,6 +30,8 @@ if (!args.includes("--live")) setTimeout(() => process.exit(0), 25000);
 const noInitialize = args.includes("--no-initialize");
 const noSession = args.includes("--no-session");
 const authError = args.includes("--auth-error");
+const streamMarkerArg = args.find((arg) => arg.startsWith("--stream-marker="));
+const streamMarker = streamMarkerArg ? streamMarkerArg.slice("--stream-marker=".length) : "";
 
 const SESSION = "sess_fake_1";
 let clientCaps = null;
@@ -162,6 +166,21 @@ async function prompt(id, params) {
     case "cancelcount":
       chunk("cancels: " + cancels);
       return respond(id, { stopReason: "end_turn" });
+    case "burst": {
+      const producerStartedAt = Date.now();
+      if (streamMarker) fs.writeFileSync(streamMarker, JSON.stringify({ producerStartedAt }));
+      try {
+        // Produce faster than the isolated PG store commits each incoming event, keeping a real
+        // backlog while making the producer's unfinished state externally observable to tests.
+        for (let i = 0; i < 256; i++) {
+          chunk(`b${i};`);
+          await sleep(2);
+        }
+        return respond(id, { stopReason: "end_turn" });
+      } finally {
+        if (streamMarker) fs.rmSync(streamMarker, { force: true });
+      }
+    }
     default: {
       const words = ("Echo: " + text).split(" ");
       for (let i = 0; i < words.length; i++) {

@@ -2,7 +2,7 @@
 // The same scenarios run over PostgreSQL in src/server_pg: the results must be the same.
 module crew_harness.server_live
 
-import crew_harness.server.{kit_files, scenario_chat, scenario_permission, scenario_cancel, scenario_restart_idle, scenario_restart_open, scenario_crash, scenario_two_pages, scenario_rejects, scenario_many, scenario_broken_agent}
+import crew_harness.server.{kit_files, scenario_chat, scenario_stream_burst, scenario_permission, scenario_cancel, scenario_restart_idle, scenario_restart_open, scenario_crash, scenario_two_pages, scenario_rejects, scenario_many, scenario_broken_agent}
 
 fn clean(report str) -> () {
     if report.byte_len() > 0 { println("NOT AS IT MUST BE: ${report}") }
@@ -11,6 +11,11 @@ fn clean(report str) -> () {
 
 test "files: two turns of a chat" {
     clean(scenario_chat(kit_files("chat", 30000)))
+}
+
+test "files: burst chunks flush before the end event" {
+    ro report = scenario_stream_burst(kit_files("burst", 30000))
+    if report.byte_len() > 0 { panic("stream burst: ${report}") }
 }
 
 test "files: permission asked, allowed, denied" {
