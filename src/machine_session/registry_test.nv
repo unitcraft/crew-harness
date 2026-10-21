@@ -36,7 +36,7 @@ fn parsing(result str, with_summary bool) -> Value {
 
 test "rg the registry has the two machines" {
     ro reg = registry()
-    assert(reg.entries.len() == 2)
+    assert(reg.entries.len() == 3)
     assert(reg.find("agent_step").is_some())
     assert(reg.find("session_start").is_some())
     assert(reg.find("meeting").is_none())
@@ -91,7 +91,7 @@ test "rg the five primitives are registered" {
     assert(class_of("session_context") == "reading")
     assert(class_of("parse_session_artifact") == "reading")
     assert(class_of("stop_agent_group") == "irreversible")
-    assert(standard_registry().primitives.len() == 27)
+    assert(standard_registry().primitives.len() == 56)
 }
 
 test "rg the signatures" {

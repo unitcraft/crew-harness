@@ -38,7 +38,7 @@ fn all_codes() -> []JCode {
 }
 
 // What the interpreter itself writes (the executor discards and journals, rule 17; a defect) and what the product adds to the table of the methodology (task 119): not codes of a machine.
-fn executor_notes() -> []str => ["event_ignored", "event_unknown", "event_malformed", "machine_defect", "input_rejected", "signal_passed", "signal_ordered", "request_repeated", "answer_edited", "form_returned"]
+fn executor_notes() -> []str => ["event_ignored", "event_unknown", "event_malformed", "machine_defect", "input_rejected", "signal_passed", "signal_ordered", "request_repeated", "answer_held", "answer_replayed", "answer_edited", "form_returned"]
 
 fn engine_codes() -> []str => [
     "machine_started", "event_accepted", "reply_discarded", "request_ordered", "request_sent", "request_closed", "cancel_ordered", "cancel_sent",

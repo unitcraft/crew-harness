@@ -131,12 +131,12 @@ test "np check wrong machine" {
     assert(problems[0].starts_with("callee: $.parties["))
 }
 
-test "np check one level" {
-    // the nested machine itself calls a machine: the runner passes one level only
+test "np check a cycle of calls" {
+    // the nested machine itself calls a machine: task 123 checks the levels below, and a machine that would call itself again is a cycle
     ro reg = NestedRegistry.empty().add("callee", machine_of("caller"))
     ro problems = check_registry(machine_of("caller"), reg)
     assert(problems.len() >= 1)
-    assert(problems[problems.len() - 1].contains("one level of nesting"))
+    assert(problems[problems.len() - 1].contains("calls itself again"))
 }
 
 test "np check fits" {
