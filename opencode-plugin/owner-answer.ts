@@ -10,7 +10,7 @@ import { noteAnswered } from "./answer-loop.ts"
 import { type QuestionCall, readJson } from "./core.ts"
 import { DEAD_WHY, FORMS, type PendingForm, addForm, allForms, removeForm, replacedForms, settleDuplicates } from "./form-wait.ts"
 import { closeDeadMark, deadDialogOf } from "./form-restore.ts"
-import { autoLetter, autoNote } from "./form-auto.ts"
+import { HELD_WHY, autoLetter, autoNote, guardAnswer } from "./form-auto.ts"
 import { BASE } from "./paths.ts"
 
 export const ANSWERS = path.join(BASE, "answers")
@@ -34,6 +34,8 @@ export type OwnerAnswer = {
   done?: number
   /** что передано вкладке */
   answer?: string
+  /** задача 142: правило закрытого списка, по которому доставка отказала автоответ («удержана для владельца»); метка формы берёт его оттуда */
+  rule?: string
   /** задача 096: ответ положил плагин по настройке answer_mode (автоответ на форму); без этого поля — слово владельца через оркестратора */
   source?: "plugin"
   mode?: string
@@ -155,6 +157,18 @@ export async function answerTick(deps: AnswerDeps, now = Date.now(), dir = ANSWE
         continue
       }
       ;({ session, form, answer } = r)
+      // задача 142: последний заслон автоответа. Форма — решение владельца или просит его слово (утверждение правил, круг сверх потолка, «заводи N»), а файл
+      // лёг раньше (другая версия списка, ручной файл с источником plugin): запись формы остаётся, ход не прерывается, письма нет.
+      if (a.source === "plugin") {
+        const g = guardAnswer(form, answer)
+        if (g) {
+          const why = `${HELD_WHY}${g.why} («${g.word}»)`
+          finish(file, a, { status: "refused", why, rule: g.id, done: now })
+          a.status = "refused"
+          deps.say(`owner answer ${a.id} not applied: ${why}`)
+          continue
+        }
+      }
       // запись о взятии — до снятия записи формы и до прерывания (задача 096): умер процесс между шагами — файл помнит форму и ответ
       finish(file, a, { status: "applying", form: form.id, session, answer, snap: form })
       Object.assign(a, { status: "applying", form: form.id, session, answer, snap: form })

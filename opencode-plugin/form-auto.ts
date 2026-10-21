@@ -26,6 +26,8 @@ import { FORMS, type PendingForm, waitingForms } from "./form-wait.ts"
 import { BASE } from "./paths.ts"
 
 const ANSWERS_DIR = path.join(BASE, "answers")
+/** The start of the reason of a refusal of the delivery when the form turned out to be the owner's (task 142); the marker and crew-answer show the rest. */
+export const HELD_WHY = "удержана для владельца: "
 const DAY_MS = 24 * 3_600_000
 const MARK_KEEP_MS = 3 * DAY_MS
 
@@ -46,10 +48,13 @@ const MARK_KEEP_MS = 3 * DAY_MS
 //   n  nominal actions ("push", "слияние", "релиз"): close after a word of proposal `p` (PROPOSE: "разрешить", "нужен", "сделать", "git" ...)
 //      within 4 words, or alone in a heading / label of up to 4 words or in a short question of up to 6.
 //   An occurrence right after "не" / "без" ("не пушить", "без push") is skipped (`neg: false` keeps it). `after: true`: the object stands after the verb. `pv`: past forms that count only after "чтобы" / "если" / before "ли". `lone: true`: the verb alone in a label of up to 3 words closes (the object is not named).
+//   Task 142: `any: true` - the object may stand ANYWHERE in the question, not only in the sentence of the verb ("...четвёртой доработке при лимите три. Разрешаете продолжить?");
+//   `own: true` - for an option the object must stand in the option itself (the question gives none: "Разрешить" + a word of the question is not "разрешить задачу");
+//   `raw`: regular expressions (flags "iu") over the text of a sentence as it was written, for a word of the owner in the format of the plugin ("заводи 129", «слово "…"»), where the quotes and digits matter.
 // Notation of a term: "word" - the whole word (lower case, "ё" as "е"); "stem*" - a word that starts with the stem; "stem(a|b|)" - the stem
 // with one of the endings, the whole word (an empty ending is allowed); words separated by a space are neighbouring words.
 // The vocabulary is open and errs toward the owner: a false hit costs one question to the owner, a miss is a defect of safety.
-export type ClosedAct = { v?: string[]; n?: string[]; o?: string[]; p?: string[]; w?: number; short?: false; neg?: false; after?: true; lone?: true; pv?: string[] }
+export type ClosedAct = { v?: string[]; n?: string[]; o?: string[]; p?: string[]; w?: number; short?: false; neg?: false; after?: true; lone?: true; pv?: string[]; any?: true; raw?: string[]; own?: true }
 export type ClosedRule = { id: string; why: string; act: ClosedAct[]; yes: string[]; no: string[] }
 
 /** Words of proposal before / after a nominal action ("Разрешить push", "Нужен релиз", "Сделать уборку", "git push"). */
@@ -57,6 +62,12 @@ const PROPOSE = [
   "разреш(ить|ите|аем|аю|аете|им|ай|айте)", "можно", "нужн(о|а|ы|ый|ое|ой)", "нужен", "надо", "давай", "давайте", "рекомендую", "рекомендуем", "рекомендуется", "предлагаю", "предлагаем",
   "подтверд(ить|ите|им|ждаете|ждаем)", "выполн(ить|им|яем|яйте|и)", "сдела(ть|ем|й|йте)", "делать", "делаем", "провести", "проведем", "проводить", "проводим", "готовить", "готовим", "подготовить", "подготовим",
   "начать", "начнем", "приступить", "приступим", "запустить", "запустим", "запускаем", "запускать", "хотите", "требуется", "необходим(о|а|ы|ый)", "git", "to", "need", "needs", "should", "must", "let", "run", "do", "make", "allow", "approve",
+]
+
+/** The objects of an approval of the owner (task 142): rules, norms, specifications, plans, the Canon, ADR. */
+const NORM_OBJECTS = [
+  "правил(о|а|у|ом|ам|ами|ах|е)", "норм(а|ы|у|е|ой|ам|ами|ах)", "норматив*", "спецификац*", "канон*", "adr", "регламент*", "политик*", "стандарт*", "протокол*", "требован*", "контракт*", "план(|а|у|ом|е|ы|ов|ам)", "spec", "specification",
+  "rule", "rules", "policy",
 ]
 
 export const CLOSED_LIST: ClosedRule[] = [
@@ -388,14 +399,101 @@ export const CLOSED_LIST: ClosedRule[] = [
     yes: ["Менять общую среду разработки?", "Установить пакет в общую среду?", "Изменить shared environment?"],
     no: ["Среда запуска тестов — локальная, правок не требуется.", "Общая среда ждёт обновления модели."],
   },
+  // ---- task 142: the automatic answer does not decide for the owner. Owner, 2026-10-21 (the check of the orchestrator): the forms below were closed by the
+  // recommendation although they are his decisions: the approval of a rule of the methodology, the round beyond the ceiling, the start of a task by his word,
+  // and even the word of the owner that the plugin demands ("заводи 129") was offered as an option. The vocabulary errs toward the owner.
+  {
+    id: "norms",
+    why: "утверждение правил, норм, спецификаций, плана, Канона",
+    act: [
+      { v: ["утвержда(ешь|ете)", "одобря(ешь|ете)", "ратифиц*", "санкционир*"] },
+      { v: ["подтвержда(ешь|ете)", "согласуе(шь|те)", "принима(ешь|ете)", "фиксиру(ешь|ете)", "закрепля(ешь|ете)"], o: NORM_OBJECTS, w: 5 },
+      { v: ["ворот* утверждени(я|е|ю|ем|и)", "норматив* закреп*", "норматив* зафиксир*", "норматив* утверд*", "норматив* ввест*", "норматив* ввод*"] },
+      { n: ["утверждени(е|я|ю|ем|и)", "одобрени(е|я|ю|ем)", "согласовани(е|я|ю|ем|и)"], o: NORM_OBJECTS, w: 3 },
+      { v: ["закреп(ить|им|ляем|лять)", "зафиксир(овать|уем)", "определ(ить|им)", "разреш(ить|им)", "утверд(ить|им)"], o: ["архитектурн*"], w: 3 },
+    ],
+    yes: ["Утверждаешь правило: позднее возражение записывается как «не применено»?", "Утверждаете норму ответа плагина?", "ВОРОТА утверждения правил 12: что делать с пришедшим позже словом?", "Подтверждаешь правило очередности машины?", "Требуется утверждение спецификации задачи 12.", "Как нормативно закрепить границу сборки?", "Как закрепить архитектурную границу для продолжения задачи?", "Одобряешь план задачи?"],
+    no: ["Правило утверждено вчера, план одобрен.", "Не могу нормативно добавить блок без номера: интегратор не ответил.", "Подтверждаете оставить приёмку ждать CI?", "Принимаешь решение сам или спросить?", "Правила очереди описаны в документе, норма не менялась."],
+  },
+  {
+    id: "rounds",
+    why: "разрешение сверх потолка: круг, round, rework_max",
+    act: [
+      // the verb of permission and a word of the rounds in ONE sentence: «Разрешаете круг 5», «Разрешить bounded round7», «Да, GO круг 6»
+      { v: ["разреш(ить|ите|аем|аю|аете|аешь|им|ай)", "одобр(ить|им|яете|яешь)", "допуст(ить|им)", "допуска(ем|ете)", "согласен", "согласны", "дадите", "даете", "даешь", "go"], o: ["круг(|а|у|ом|е|и|ов)", "раунд*", "round*", "доработк*", "rework*", "заход(|а|у|ом|е|ы|ов|ам)", "потолок", "потолк(а|у|ом|е)", "ceiling", "сверх лимита", "при лимите"], w: 8 },
+      // the cue of the ceiling may stand in ANOTHER sentence of the question («...четвёртой доработке при лимите три. Разрешаете продолжить?»); the plain word «круг» is not a cue there
+      { v: ["разреш(ить|ите|аем|аю|аете|аешь|им|ай)", "одобр(ить|им|яете|яешь)", "допуст(ить|им)", "допуска(ем|ете)", "согласен", "согласны", "дадите", "даете", "даешь", "go"], o: ["доработк*", "rework*", "потолок", "потолк(а|у|ом|е)", "ceiling", "сверх лимита", "при лимите"], w: 8, any: true },
+      { v: ["продолж(ить|им|ите|аем|аете|ать)", "провест(и|ем)"], o: ["круг(|а|у|ом|е|и|ов)", "раунд*", "round*"], w: 4 },
+      { v: ["rework max*", "(четвертой|пятой|шестой|седьмой|восьмой|девятой|десятой) доработк(и|е)", "(четвертом|пятом|шестом|седьмом|восьмом|девятом|десятом) круге"] },
+    ],
+    yes: ["Разрешаете круг 5 доработки?", "Разрешить bounded round7?", "Разрешить ли ещё один ограниченный круг для задачи 12?", "У задачи 12 уже четыре доработки при лимите три. Разрешаете ещё одну проверку?", "Задача достигла предела rework_max=3. Как распорядиться?", "Задача 12 уже в пятом круге. Что дальше?", "Продолжить круг 6 тем же исполнителем?", "Что делаем с кругом? => Да, GO круг 6 (Recommended)"],
+    no: ["Задача прошла три круга. Разрешить закрыть отчёт?", "Добавить в отчёт раздел про круг пользователей?", "Заход в функцию parse слишком глубокий. Разрешить рефакторинг?", "Круг пользователей нашего сервиса вырос.", "Заход 3 из 6 завершён, отчёта нет.", "Разрешить запись в журнал?", "Пятичасовая квота исчерпана, лимит токенов на сегодня выбран.", "Задача 12 прошла три круга и принята."],
+  },
+  {
+    id: "route-word",
+    why: "слово владельца в формате плагина («заводи N», дословное слово)",
+    act: [
+      {
+        raw: [
+          "(?<![\\p{L}\\p{N}])заводи\\s*[№#]?\\s*\\d+",
+          "(?<![\\p{L}\\p{N}])(?:route|owner)[\\s_-]?word",
+          "дословн\\p{L}*\\s+(?:слов|go(?![\\p{L}\\p{N}]))",
+          "владельческ\\p{L}*\\s+слов",
+          "слов(?:о|а|у|ом|е)\\s*[«“„\"]",
+          "ваш\\p{L}*\\s+go(?![\\p{L}\\p{N}])",
+        ],
+      },
+      { v: ["заводи", "дословн* слов*", "дословн* go", "владельческ* слов*", "route word", "owner word"] },
+    ],
+    yes: ["Плагину требуется дословное слово «заводи 129». Подтверждаете?", "Подтвердите владельческим словом: можно ли добавить пакет?", "Подтверждаете? => заводи 129 (Recommended)", "Нужно слово «обновляй». Как продолжить?", "Плагин требует route word для этой задачи.", "Автоматическая рекомендация не считается вашим GO.", "Что делаем? => Продолжить || Ответить словом «заводи 12»"],
+    no: ["Слово владельца записано в разборе задачи.", "Решение принято по слову владельца, запись в журнале.", "Заводить ли запись в журнале?", "Какой номер у задачи 12 в журнале?", "Слово короче имени, назвать функцию parse или read?"],
+  },
+  {
+    id: "task-grant",
+    why: "разрешение завести задачу или заказать работу",
+    act: [
+      { v: ["завест(и|ем)", "заводить", "заводим", "созда(ть|дим|ем|ете|ешь|й)", "создава(ть|ем)", "оформ(ить|им)", "поставить", "поставим", "откр(ыть|оем)", "заказать", "закажем"], o: ["задачу", "тикет*", "issue"], w: 4, own: true },
+      { v: ["разреш(ить|ите|аем|аю|аете|аешь|им)"], o: ["задачу"], w: 5, own: true },
+      { v: ["заказать", "закажем"], o: ["исправлени*", "доработк*", "работ(у|ы)"], w: 4 },
+    ],
+    yes: ["Завести отдельную задачу на ложный статус?", "Разрешить отдельную узкую задачу расследовать сбой?", "Разрешаете заказать узкое исправление проверки?", "Создать задачу на разбор расхождения?", "Создавать задачу без вашего решения не буду. Как поступить?"],
+    no: ["Задача 12 создана вчера, исправление принято.", "Как устранить противоречие в указании рабочего дерева в задаче 12?", "Разрешить запись в кэш?", "Открыть вкладку после ответа?"],
+  },
+  {
+    id: "scope",
+    why: "расширение объёма задачи",
+    act: [{ v: ["расшир(ить|им|ите|яем|ять)"], o: ["задач(у|и|е|ей)", "постановк*", "объем*", "скоуп*", "scope"], w: 5 }],
+    yes: ["Расширить задачу 12?", "Разрешить расширить задачу 12 на исправление соседней части?", "Что делаем с задачей 12? => Расширить на соседнюю часть (Recommended)"],
+    no: ["Задача 12 расширена вчера, приёмка идёт.", "Расширить таблицу тестов на два столбца?"],
+  },
+  {
+    id: "late-word",
+    why: "слово человека позже ответа агента (приоритет слова владельца)",
+    act: [
+      {
+        n: ["слов(о|а|у|ом|е) человека", "слов(о|а|у|ом|е) владельца", "возражени(е|я|ю|ем) человека", "возражени(е|я|ю|ем) владельца"],
+        o: ["поздн*", "позже", "противоположн*", "приоритет*", "старше", "отбра*", "отброс*", "перебь*", "перебив*"],
+        w: 4,
+      },
+    ],
+    yes: ["Что делать с пришедшим позже противоположным словом владельца?", "Новое правило отбрасывает позднее слово человека. Как быть?", "Слово человека старше ответа агента?"],
+    no: ["Решение принято по слову владельца, запись в журнале.", "Слово владельца записано в разборе задачи.", "Слово человека в чате отсутствует."],
+  },
+  {
+    id: "profile",
+    why: "смена набора моделей и профиля",
+    act: [{ v: ["переключ(ить|им|ите|ать|аем)", "перевест(и|ем)", "смен(ить|им)", "поменя(ть|ем)"], o: ["модел(ь|и|ей|ям|ях)", "профил*", "набор(|а|у|ом)", "kimi", "codex", "opus", "sonnet", "gpt*"], w: 4 }],
+    yes: ["Переключить на другую модель только один проект или все?", "Переключить на Kimi текущие сессии?", "Сменить профиль проекта?"],
+    no: ["Модель вернула пустой ответ, повторим запрос.", "Переключить вкладку в режим просмотра?"],
+  },
 ]
 
 // ----- the engine: sentences, words, terms. Pure, no files. -----
 type Sub = (word: string) => boolean
 type Term = Sub[]
 type Span = { s: number; e: number; word: string }
-type Seg = { toks: string[]; q: boolean; head: boolean; label: boolean }
-type CAct = { v?: Term[]; n?: Term[]; o?: Term[]; p?: Term[]; w: number; short: boolean; neg: boolean; after: boolean; lone: boolean; pv?: Term[] }
+type Seg = { toks: string[]; q: boolean; head: boolean; label: boolean; raw: string }
+type CAct = { v?: Term[]; n?: Term[]; o?: Term[]; p?: Term[]; w: number; short: boolean; neg: boolean; after: boolean; lone: boolean; pv?: Term[]; any: boolean; raw?: RegExp[]; own: boolean }
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 const fold = (s: string) => s.toLowerCase().replace(/ё/g, "е")
@@ -417,7 +515,7 @@ const termsOf = (l?: string[]): Term[] => (l ?? []).map(termOf)
 const PROPOSE_T = termsOf(PROPOSE)
 const compiled = CLOSED_LIST.map((rule) => ({
   rule,
-  acts: rule.act.map((a): CAct => ({ v: a.v && termsOf(a.v), n: a.n && termsOf(a.n), o: a.o && termsOf(a.o), p: a.p && termsOf(a.p), w: a.w ?? 6, short: a.short !== false, neg: a.neg !== false, after: a.after === true, lone: a.lone === true, pv: a.pv && termsOf(a.pv) })),
+  acts: rule.act.map((a): CAct => ({ v: a.v && termsOf(a.v), n: a.n && termsOf(a.n), o: a.o && termsOf(a.o), p: a.p && termsOf(a.p), w: a.w ?? 6, short: a.short !== false, neg: a.neg !== false, after: a.after === true, lone: a.lone === true, pv: a.pv && termsOf(a.pv), any: a.any === true, raw: a.raw?.map((r) => new RegExp(r, "iu")), own: a.own === true })),
 }))
 
 const NEG = new Set(["не", "без", "нет", "нельзя", "never", "not", "no", "without", "dont", "don", "t"])
@@ -440,7 +538,7 @@ function segments(text: string, label = false): Seg[] {
       const raw = part.trim()
       if (!raw) continue
       const toks = normalizeGateText(raw).trim().split(" ").filter(Boolean)
-      if (toks.length) out.push({ toks, q: /\?[)»"'*_`\s]*$/.test(raw), head: !/[.;…]\s*$/.test(raw) && toks.length <= 4, label })
+      if (toks.length) out.push({ toks, q: /\?[)»"'*_`\s]*$/.test(raw), head: !/[.;…]\s*$/.test(raw) && toks.length <= 4, label, raw })
     }
   }
   return out
@@ -449,6 +547,12 @@ function segments(text: string, label = false): Seg[] {
 /** The word of the first pattern of the rule that the sentence satisfies (`ctx`: the words of the question, objects for an option). */
 function actWord(a: CAct, seg: Seg, ctx?: string[]): string | undefined {
   const toks = seg.toks
+  if (a.raw) {
+    for (const re of a.raw) {
+      const m = re.exec(seg.raw)
+      if (m) return m[0].trim().slice(0, 40)
+    }
+  }
   const alive = (s: Span) => a.neg === false || !(s.s > 0 && NEG.has(toks[s.s - 1]))
   const os = a.o ? spansOf(toks, a.o) : []
   const ctxO = ctx && a.o ? spansOf(ctx, a.o)[0] : undefined
@@ -499,7 +603,7 @@ export function closedHits(text: string, label = "", desc = ""): ClosedHit[] {
   for (const c of compiled) {
     let word: string | undefined
     for (const a of c.acts) {
-      word = qs.map((s) => actWord(a, s)).find(Boolean) ?? opt.map((s) => actWord(a, s, ctx)).find(Boolean)
+      word = qs.map((s) => actWord(a, s, a.any ? ctx : undefined)).find(Boolean) ?? opt.map((s) => actWord(a, s, a.own ? undefined : ctx)).find(Boolean)
       if (word) break
     }
     if (word) out.push({ id: c.rule.id, why: c.rule.why, word })
@@ -513,6 +617,30 @@ export function exampleHits(example: string): ClosedHit[] {
   const [q, opt = ""] = example.split(" => ")
   const [label, desc = ""] = opt.split(" || ")
   return closedHits(q, label, desc)
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// THE WORD OF THE OWNER (task 142). The plugin demands from the owner words in a fixed format ("заводи 129" for a fast task, the word of the
+// update, ...). An automatic answer must never BE such a word and must never answer a question that ASKS for one: the word is the owner's,
+// a recommendation cannot utter it. The check is the rule "route-word" of the list plus the format "заводи N" written here apart from the table,
+// so that a change of the table cannot open the hole. Used by judgeForm, by the tick before the answer file and by the delivery (owner-answer.ts).
+const ROUTE_WORD_RE = /(?<![\p{L}\p{N}])заводи\s*[№#]?\s*\d+/iu
+export function ownerWordHit(question: string, label = "", desc = ""): ClosedHit | undefined {
+  const own = closedHits(question, label, desc).find((h) => h.id === "route-word")
+  if (own) return own
+  const m = ROUTE_WORD_RE.exec(String(label ?? "")) ?? ROUTE_WORD_RE.exec(String(desc ?? "")) ?? ROUTE_WORD_RE.exec(String(question ?? ""))
+  return m ? { id: "route-word", why: "слово владельца в формате плагина", word: m[0].trim() } : undefined
+}
+type FormText = { title?: string; full?: string; question?: string; options?: string[]; optDesc?: string[] }
+const textOf = (f: FormText) => [f.title, f.full, f.question].filter(Boolean).join("\n")
+/**
+ * The last defence before an automatic answer is put or delivered: the form (its whole text) and the chosen option (`answer`, as it stands in
+ * `options`). The word of the owner first, then the whole closed list; a hit means "left to the owner".
+ */
+export function guardAnswer(f: FormText, answer: string): ClosedHit | undefined {
+  const i = (f.options ?? []).findIndex((o) => o === answer)
+  const desc = i >= 0 ? (f.optDesc?.[i] ?? "") : ""
+  return ownerWordHit(textOf(f), answer, desc) ?? closedBy(textOf(f), answer, desc)
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -541,6 +669,8 @@ export function judgeForm(f: PendingForm, cfg: { mode: AnswerMap }): Judge {
     const marks = opts.map((o, i) => (MARK.test(o) ? i : -1)).filter((i) => i >= 0)
     const rec = marks.length === 1 ? marks[0] : -1
     // (c) the closed list: what the question PROPOSES, and what the RECOMMENDED option (label and description) proposes (task 097)
+    const ow = ownerWordHit(text, rec >= 0 ? opts[rec] : "", rec >= 0 ? (f.optDesc?.[rec] ?? "") : "") // task 142: the word of the owner is never chosen and never answered
+    if (ow) return hold(type, "closed", `${ow.why} («${ow.word}»): автоответ не выбирает и не просит слово владельца`, ow.id)
     const hit = closedBy(text, rec >= 0 ? opts[rec] : "", rec >= 0 ? (f.optDesc?.[rec] ?? "") : "")
     if (hit) return hold(type, "closed", `${hit.why} («${hit.word}»)`, hit.id)
     // the shape: exactly one question, not a multiple choice (the answer is one option)
@@ -615,7 +745,7 @@ function createOnce(file: string, v: unknown): boolean {
 const readMark = (formsDir: string, id: string) => readJson<Mark>(markFile(formsDir, id))
 const saveMark = (formsDir: string, m: Mark) => writeJson(markFile(formsDir, m.id), m)
 
-type AnswerFile = { id: string; at: number; session?: string; form?: string; source?: string; status?: string; done?: number; why?: string }
+type AnswerFile = { id: string; at: number; session?: string; form?: string; source?: string; status?: string; done?: number; why?: string; rule?: string }
 const readAnswers = (answersDir: string): AnswerFile[] => {
   const out: AnswerFile[] = []
   try {
@@ -686,6 +816,12 @@ function syncMark(formsDir: string, answersDir: string, m: Mark): Mark {
     saveMark(formsDir, f)
     return f
   }
+  // task 142: the delivery refused the answer because the form is the owner's (owner-answer.ts guard): the form is held for the owner, not a failure
+  if (a?.status === "refused" && a.why?.startsWith(HELD_WHY)) {
+    const f: Mark = { ...m, state: "held", reason: "closed", ...(a.rule ? { rule: a.rule } : {}), why: a.why.slice(HELD_WHY.length), at: a.done ?? m.at }
+    saveMark(formsDir, f)
+    return f
+  }
   if (a?.status === "refused") {
     const f: Mark = { ...m, state: "failed", reason: "fail", ...(a.why ? { why: a.why } : {}), at: a.done ?? m.at }
     saveMark(formsDir, f)
@@ -731,7 +867,7 @@ async function one(deps: AutoDeps, session: string, f: PendingForm, now: number,
   const mark = readMark(formsDir, f.id)
   if (existsSync(file)) {
     // decided before (maybe by a process that died before it wrote the marker): the file is the fact, the marker follows it
-    if (!mark || mark.state === "held") {
+    if ((!mark || mark.state === "held") && readJson<AnswerFile>(file)?.status !== "refused") {
       const m: Mark = { id: f.id, session, ...(cfg.project ? { project: cfg.project } : {}), ...(cfg.task ? { task: cfg.task } : {}), type: "default", first: now, at: now, state: "sent" }
       saveMark(formsDir, m)
       markers.add(safeKey(f.id))
@@ -748,6 +884,8 @@ async function one(deps: AutoDeps, session: string, f: PendingForm, now: number,
   }
   if (!j.ok) return holdFor(j.reason, j.why, j.rule)
   if (now - (f.born ?? f.at) < Math.max(0, cfg.delaySec) * 1000) return // the owner may answer first
+  const guard = guardAnswer(f, j.label) // task 142: the chosen option is looked at again before the record of the answer is made
+  if (guard) return holdFor("closed", `${guard.why} («${guard.word}»)`, guard.id)
   const key = `${session}/${f.id}`
   const r0 = recheck.get(key)
   if (r0 && r0.until > now && r0.max === cfg.max) return // looked a moment ago (a query each): not every tick
@@ -797,7 +935,7 @@ function purge(autoDir: string, now: number) {
 
 // ---------------------------------------------------------------------------------------------------------------------
 // THE LETTER AND THE NOTE (owner-answer.ts uses them for the source plugin)
-const GATES_TEXT = "Ворота — утверждение spec.md и plan.md, согласование плана, пуш, слияние, удаление, перезапуск или переключение службы, публикация, деньги и подписки, общие среды, отказ от требования, потолок заходов и раунды, решения по результату и сдаче — только слово владельца."
+const GATES_TEXT = "Ворота — утверждение spec.md и plan.md, согласование плана, пуш, слияние, удаление, перезапуск или переключение службы, публикация, деньги и подписки, общие среды, отказ от требования, потолок заходов и раунды (круг N, roundN, rework_max), утверждение правил и норм, заведение задачи его словом («заводи N»), решения по результату и сдаче — только слово владельца."
 export const autoLetter = (question: string, answer: string, type: string) =>
   `Ответ по настройке проекта (answer_mode: recommendations, тип ${type}), не слово владельца. Ваш вопрос «${question}» закрыт плагином: выбран рекомендованный вариант «${answer}». ` +
   `Вопросник закрыт прерыванием хода; не задавайте этот вопрос снова, продолжайте с этим ответом. ` +
@@ -807,14 +945,14 @@ export const autoNote = (question: string, answer: string, type: string, id: str
 
 // ---------------------------------------------------------------------------------------------------------------------
 // THE SHOW: the counters of /crew and of the side panel, the note of the doctor
-export type AutoStats = { answered: number; last?: number; held: Record<HoldReason, number>; heldTotal: number }
+export type AutoStats = { answered: number; last?: number; held: Record<HoldReason, number>; heldTotal: number; /** held by the closed list, by rule (task 142) */ rules: Record<string, number> }
 const REASON_WORDS: Record<HoldReason, string> = { closed: "закрытый список", norec: "нет рекомендации", limit: "предел", doubt: "сомнение", fail: "сбой доставки" }
 const REASON_SHORT: Record<HoldReason, string> = { closed: "closed", norec: "no rec", limit: "limit", doubt: "doubt", fail: "failed" }
 
 /** The forms of the last 24 hours: answered by the plugin, and left to the owner by reason. `project` undefined - all projects. */
 export function autoStats(project: string | undefined, now = Date.now(), formsDir = FORMS, answersDir = ANSWERS_DIR): AutoStats {
   void answersDir
-  const out: AutoStats = { answered: 0, held: { closed: 0, norec: 0, limit: 0, doubt: 0, fail: 0 }, heldTotal: 0 }
+  const out: AutoStats = { answered: 0, held: { closed: 0, norec: 0, limit: 0, doubt: 0, fail: 0 }, heldTotal: 0, rules: {} }
   const dir = autoDirOf(formsDir)
   let names: string[] = []
   try {
@@ -831,19 +969,25 @@ export function autoStats(project: string | undefined, now = Date.now(), formsDi
       const r: HoldReason = m.state === "failed" ? "fail" : (m.reason ?? "doubt")
       out.held[r]++
       out.heldTotal++
+      if (r === "closed" && m.rule) out.rules[m.rule] = (out.rules[m.rule] ?? 0) + 1
     }
   }
   return out
 }
 
 /** "closed 1, no rec 2": the reasons with a count, for the counter of /crew. */
-export const heldShort = (s: AutoStats) => (Object.keys(REASON_SHORT) as HoldReason[]).filter((r) => s.held[r]).map((r) => `${REASON_SHORT[r]} ${s.held[r]}`).join(", ")
+export const heldShort = (s: AutoStats) => (Object.keys(REASON_SHORT) as HoldReason[]).filter((r) => s.held[r]).map((r) => `${REASON_SHORT[r]} ${s.held[r]}${r === "closed" ? rulesShort(s) : ""}`).join(", ")
+/** " (norms 1, rounds 2)": which rules of the closed list held the forms (task 142: the panel names the reason, not only the count). */
+const rulesShort = (s: AutoStats) => {
+  const l = Object.entries(s.rules ?? {}).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  return l.length ? ` (${l.map(([k, n]) => `${k} ${n}`).join(", ")})` : ""
+}
 
 /** Lines of the doctor ("К сведению"): the day's count, the last closing, the forms left to the owner and why. Nothing happened - no line. */
 export function autoNotes(now = Date.now(), formsDir = FORMS, answersDir = ANSWERS_DIR): string[] {
   const s = autoStats(undefined, now, formsDir, answersDir)
   if (!s.answered && !s.heldTotal) return []
   const hm = (t: number) => new Date(t).toTimeString().slice(0, 5)
-  const why = (Object.keys(REASON_WORDS) as HoldReason[]).filter((r) => s.held[r]).map((r) => `${REASON_WORDS[r]} ${s.held[r]}`).join(", ")
+  const why = (Object.keys(REASON_WORDS) as HoldReason[]).filter((r) => s.held[r]).map((r) => `${REASON_WORDS[r]} ${s.held[r]}${r === "closed" ? rulesShort(s) : ""}`).join(", ")
   return [`автоответы на формы встроенного вопросника за сутки: ${s.answered}${s.last ? ` (последнее в ${hm(s.last)})` : ""}; ушло владельцу: ${s.heldTotal}${why ? ` (${why})` : ""}`]
 }

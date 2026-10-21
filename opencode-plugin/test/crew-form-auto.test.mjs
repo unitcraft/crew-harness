@@ -86,6 +86,14 @@ const CLOSED = [
   ["ceiling", "Разрешить одну проверку сверх прежнего лимита?"],
   ["rights", "Расширить права исполнителя на соседний проект?"],
   ["environments", "Менять общую среду разработки?"],
+  // task 142: the approval of rules, the round beyond the ceiling, the word of the owner, the start of a task, the widening of a task, the late word, the models
+  ["norms", "Утверждаешь правило: позднее возражение записывается как «не применено»?"],
+  ["rounds", "Разрешаете круг 5 доработки?"],
+  ["route-word", "Плагину требуется дословное слово «заводи 129». Подтверждаете?"],
+  ["task-grant", "Завести отдельную задачу на разбор сбоя?"],
+  ["scope", "Расширить задачу 12 на соседнюю часть?"],
+  ["late-word", "Что делать с пришедшим позже противоположным словом владельца?"],
+  ["profile", "Переключить на другую модель все проекты?"],
 ]
 for (const [id, text] of CLOSED) {
   const hits = fa.closedHits(text).map((h) => h.id)

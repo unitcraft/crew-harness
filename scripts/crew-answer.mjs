@@ -48,6 +48,7 @@ function openForms(replaced = false) {
     }
   }
   if (!replaced) {
+    markHeld(out)
     addHeld(out)
     // вкладка, задавшая новый вопрос, старый оставила (ответ пришёл или ход идёт дальше): по вкладке живёт самый новый
     const newest = new Map()
@@ -55,6 +56,15 @@ function openForms(replaced = false) {
     for (let i = out.length - 1; i >= 0; i--) if (out[i].form.at < newest.get(out[i].session)) out.splice(i, 1)
   }
   return out.sort((a, b) => a.form.at - b.form.at)
+}
+
+// Задача 142: причина удержания видна и у формы, чья запись лежит в forms/ (раньше — только у формы без записи, addHeld ниже): метка
+// forms/auto/<форма>.json в состоянии «held» называет правило закрытого списка и слово, что его сработало («утверждение правил («утверждаешь»)»).
+function markHeld(out) {
+  for (const x of out) {
+    const m = read(path.join(FORMS, "auto", `${safeKey(x.form.id)}.json`))
+    if (m && m.state === "held" && !x.form.held) x.form.held = m.why ?? m.reason ?? true
+  }
 }
 
 // 2026-10-20: форма, которую плагин УДЕРЖАЛ для владельца по закрытому списку (forms/auto/<форма>.json, state «held»), могла выпасть
