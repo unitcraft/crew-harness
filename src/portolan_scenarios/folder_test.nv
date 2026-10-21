@@ -23,7 +23,7 @@ test "ps scenario families" {
     assert(scenarios_with("nested-").len() == 32)
     assert(scenarios_with("cycle-").len() == 101)
     assert(scenarios_with("session-").len() == 55)
-    assert(scenario_files().len() == 364)
+    assert(scenario_files().len() == 621)
 }
 
 // ---- nested machines (task 119): a parent and the machines it calls are found in the folder ------------------------------------------------------------

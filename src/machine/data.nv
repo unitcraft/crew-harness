@@ -555,6 +555,7 @@ export fn scenario_files() -> []NamedText => [
     NamedText { name: "runner-review-parsing-6.scenario.test.json", text: embed_str("scenarios/runner-review-parsing-6.scenario.test.json") },
     NamedText { name: "runner-review-parsing-7.scenario.test.json", text: embed_str("scenarios/runner-review-parsing-7.scenario.test.json") },
     NamedText { name: "runner-review-parsing-8.scenario.test.json", text: embed_str("scenarios/runner-review-parsing-8.scenario.test.json") },
+    NamedText { name: "runner-review-parsing-9.scenario.test.json", text: embed_str("scenarios/runner-review-parsing-9.scenario.test.json") },
     NamedText { name: "runner-review-verdict-1.scenario.test.json", text: embed_str("scenarios/runner-review-verdict-1.scenario.test.json") },
     NamedText { name: "runner-review-verdict-10.scenario.test.json", text: embed_str("scenarios/runner-review-verdict-10.scenario.test.json") },
     NamedText { name: "runner-review-verdict-11.scenario.test.json", text: embed_str("scenarios/runner-review-verdict-11.scenario.test.json") },

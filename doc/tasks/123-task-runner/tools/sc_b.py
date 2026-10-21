@@ -109,6 +109,9 @@ R('ReviewParsing', 7, 'the full route, no specification: the first session of th
 R('ReviewParsing', 8, 'the full route, the specification exists: the review of the analysis',
   ar1().review(1, 'Requirements', source='f1', st='SessionLaunch', open=['session_launch-2']).h(specification=doc(True, 'Draft')).sess(2, st='AnalysisReview', open=['loop_review-2']))
 
+R('ReviewParsing', 9, 'the fast route, the copy was approved but the approval was taken off by the snapshot and the scripted host still answers "approved": no row of the fork fits, the machine error, the end ERRORED',
+  fg8().h(specification=doc(True, 'Approved', h='HX')).word('other_decisions', {'owner_decisions': 'ok'}, 'Errored'))
+
 R('AnalysisReview', 1, 'the nested check answers: the cycle of the stage and the verdict are kept, the verdict fork follows',
   ar1().review(1, 'Clean', cycle=cyc(2, 1, 1, 0), st='Gate4', data={'cycle': cycles(Analysis=cyc(2, 1, 1, 0)), 'review_stage': var('Stage', 'Analysis'), 'review_verdict': var('Verdict', 'Clean'), 'review_source': ''}))
 R('AnalysisReview', 2, 'the nested check fails (no result): the journal says so, HALTED, the refusal NoResult',
