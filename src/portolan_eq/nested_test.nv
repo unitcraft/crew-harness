@@ -54,6 +54,6 @@ test "pn check the probe machines" {
 test "pn the machines are the files of the product" {
     ro names = probe_names()
     assert(names.len() == 4)
-    assert(machine_files().len() == 14)
+    assert(machine_files().len() == 15)
     for name in names { assert(machine_json(name).byte_len() > 100) }
 }
