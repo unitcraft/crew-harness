@@ -37,5 +37,6 @@ export fn words_from_agent() -> []CodeWord => [
     cw("plan", "progress", "src/acp/project.nv: project_update", "JSON text", false),
     cw("permission_request", "progress", "src/acp/project.nv: project_permission", "JSON text", false),
     cw("acp_skipped", "progress", "src/acp/project.nv: project_update", "text", false),
+    cw("agent_model", "progress", "src/acp/project.nv: project_update (configOptions); with no open request it is a word of the same name (progress_event), the hub also gives it when the agent is ready (Hub.watch_agent)", "model (JSON text)", false),
     cw("acp_note", "input", "src/acp/client.nv: AcpClient.note", "text", false)
 ]
