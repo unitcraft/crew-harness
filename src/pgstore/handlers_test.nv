@@ -2,7 +2,7 @@
 // pg_engine_test.nv): lines wait for the snapshot, marks go at once, death between the journal write and the snapshot save.
 module crew_harness.pgstore
 
-import crew_harness.engine.{Journal, Store, JournalEntry, Snapshot, journal_event, param}
+import alula.engine.{Journal, Store, JournalEntry, Snapshot, journal_event, param}
 import crew_harness.pgdb.{PgFault, new_test_db, drop_test_db, test_count, test_snap}
 import std.net.{real_net}
 

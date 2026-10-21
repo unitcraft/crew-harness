@@ -4,7 +4,7 @@
 // that did not commit).
 module crew_harness.storage
 
-import crew_harness.engine.{Engine, Incoming, JournalEntry, Journal, Store, Link, Time, MemoryWorld, start_engine, resume_engine, memory_link, memory_time, journal_event, param}
+import alula.engine.{Engine, Incoming, JournalEntry, Journal, Store, Link, Time, MemoryWorld, start_engine, resume_engine, memory_link, memory_time, journal_event, param}
 import crew_harness.chat.{ChatSession, ChatState, chat_session, encode_chat_state, user_says, agent_chunk, agent_done}
 import std.fs.{Fs, real_fs, remove_dir_all}
 import std.os.{Os, real_os, temp_dir, pid}

@@ -15,7 +15,7 @@
 // are made from `MemoryWorld`: `with Journal = pg_journal(world), Store = pg_store(world) { ... }`.
 module crew_harness.pgstore
 
-import crew_harness.engine.{Journal, Store, JournalEntry, Snapshot, journal_line, parse_journal_line}
+import alula.engine.{Journal, Store, JournalEntry, Snapshot, journal_line, parse_journal_line}
 import crew_harness.pgdb.{PgConfig, PgFault, pg_save_step, pg_load}
 import std.net.{real_net}
 

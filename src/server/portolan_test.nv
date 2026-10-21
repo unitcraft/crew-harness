@@ -3,9 +3,9 @@
 module crew_harness.server
 
 import std.text
-import crew_harness.engine.{Engine, MemoryWorld, Incoming, EventKind, Journal, Store, Link, StepEnvironment, start_engine, resume_engine, memory_journal, memory_store, memory_link, memory_time, decode_snapshot}
+import alula.engine.{Engine, MemoryWorld, Incoming, EventKind, Journal, Store, Link, StepEnvironment, start_engine, resume_engine, memory_journal, memory_store, memory_link, memory_time, decode_snapshot}
 import crew_harness.chat.{user_says, user_cancels, agent_chunk, agent_done, ChatSession, ChatState, dialog_session, encode_chat_state}
-import crew_harness.machine_run.{PortolanMachine, PortolanState}
+import alula.machine_run.{PortolanMachine, PortolanState}
 
 fn hm_made(ms int) -> PortolanMachine {
     match hub_machine(ms) {

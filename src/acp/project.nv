@@ -11,7 +11,7 @@
 // the caller: the page names a turn by the code of its `user_message`.
 module crew_harness.acp
 
-import crew_harness.engine.{Incoming, EventKind, FailCode}
+import alula.engine.{Incoming, EventKind, FailCode}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 
 /// Projection: the name and the input of the engine event that an update of ACP becomes.

@@ -2,7 +2,7 @@
 // names that cannot leave the data folder, a torn last line, a restart over the same folder.
 module crew_harness.storage
 
-import crew_harness.engine.{Journal, Store, JournalEntry, Snapshot, journal_event, param}
+import alula.engine.{Journal, Store, JournalEntry, Snapshot, journal_event, param}
 import std.fs.{Fs, real_fs, Path, read_text, write_text, remove_dir_all, try_exists}
 import std.os.{Os, real_os, temp_dir, pid}
 

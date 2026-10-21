@@ -4,9 +4,9 @@ module crew_harness.server
 
 import std.text
 import std.fs.{Fs, real_fs, Path, read_text}
-import crew_harness.engine.{Incoming, EventKind, StepEnvironment, Order}
-import crew_harness.machine_run.{PortolanMachine, PortolanState}
-import crew_harness.machine_table.{MachineDef, TableRow, WordEv, SignalEv, ProgressEv, AnswerEv, FailureEv, TimeoutEv, StateDef}
+import alula.engine.{Incoming, EventKind, StepEnvironment, Order}
+import alula.machine_run.{PortolanMachine, PortolanState}
+import alula.machine_table.{MachineDef, TableRow, WordEv, SignalEv, ProgressEv, AnswerEv, FailureEv, TimeoutEv, StateDef}
 
 fn wd_machine() -> PortolanMachine {
     match hub_machine(900000) {
@@ -274,9 +274,13 @@ test "wd the client of ACP gives only the words of the dictionary" {
 }
 
 test "wd every word of the dictionary is in a source" {
-    ro sources = "${wd_source("src/server/hub.nv")}${wd_source("src/acp/project.nv")}${wd_source("src/acp/client.nv")}${wd_source("src/engine/engine.nv")}"
+    // The words that the engine gives (`src/engine/engine.nv`, now the package `alula`) are not in a source of this repository: the check
+    // is for the words that the hub, the projection and the client of this repository give.
+    ro sources = "${wd_source("src/server/hub.nv")}${wd_source("src/acp/project.nv")}${wd_source("src/acp/client.nv")}"
     assert(wd_all().len() > 0)
-    for w in wd_all() { assert(sources.contains("\"${w.name}\"")) }
+    for w in wd_all() {
+        if !w.source.contains("src/engine/") { assert(sources.contains("\"${w.name}\"")) }
+    }
 }
 
 // ----- the hub does not name a state -----

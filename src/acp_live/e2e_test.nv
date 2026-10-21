@@ -3,7 +3,7 @@
 module crew_harness.acp_live
 
 import crew_harness.acp.{AcpConfig, AcpClient, open_client, acp_link}
-import crew_harness.engine.{Engine, Incoming, EventKind, Journal, Store, Link, MemoryWorld, JournalEntry, start_engine, resume_engine, memory_time, FailCode}
+import alula.engine.{Engine, Incoming, EventKind, Journal, Store, Link, MemoryWorld, JournalEntry, start_engine, resume_engine, memory_time, FailCode}
 import crew_harness.chat.{ChatSession, ChatState, chat_session, encode_chat_state, user_says, user_cancels}
 import crew_harness.storage.{open_data_dir, file_journal, file_store}
 import std.fs.{Fs, real_fs, remove_dir_all}

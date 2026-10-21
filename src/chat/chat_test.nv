@@ -3,7 +3,7 @@ module crew_harness.chat
 
 // ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
-import crew_harness.engine.{Incoming, EventKind, Order, StepEnvironment, Transition, FailCode}
+import alula.engine.{Incoming, EventKind, Order, StepEnvironment, Transition, FailCode}
 
 fn stamped(kind EventKind, name str, request Option[str], input str) -> Incoming => {
     id: "e-1", trace: "t-1", step: 2, kind, name, request, input, at: 1000

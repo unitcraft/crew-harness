@@ -1,7 +1,7 @@
 // project_test.nv - the projection "ACP -> engine event -> page event": pure functions, one row of the table per test.
 module crew_harness.acp
 
-import crew_harness.engine.{Incoming, EventKind, FailCode}
+import alula.engine.{Incoming, EventKind, FailCode}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 
 // (j, str_at and int_at are in jsonrpc_test.nv, the same module)

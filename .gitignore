@@ -9,3 +9,6 @@ target/
 
 # Codegen leaves a <name>.c beside every <name>.nv it compiles.
 *.c
+
+# Local replacement of a dependency by a folder (until the repository of `alula` is published, task 144); it is never committed.
+nova.override.toml

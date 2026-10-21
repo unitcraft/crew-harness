@@ -1,7 +1,7 @@
 # pg: the store and the journal of the engine in PostgreSQL
 
 The handlers of the effects `Store` (`save`, `load`) and `Journal` (`write`, `read_all`) of the engine
-([`src/engine`](../engine/README.md)) on PostgreSQL, written straight on the driver
+(`alula.engine` of the package `alula`) on PostgreSQL, written straight on the driver
 [nova-postgres](https://github.com/nv-lang/nova-postgres) (a foreign package, read only). There is **no layer over databases**
 here and none is waited for: the SQL is PostgreSQL's, the calls are three functions (`list_sessions` came in task 099). Task 098
 (`doc/tasks/098-pg-storage/`); the session server (`src/server/`, task 099) gives a `PgWorld` to the engine of every session when its `store` is `pg`.

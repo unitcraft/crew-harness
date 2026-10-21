@@ -6,7 +6,7 @@
 module crew_harness.pgstore
 
 import crew_harness.pgdb.{new_test_db, drop_test_db, test_count}
-import crew_harness.engine.{Engine, MemoryWorld, Incoming, FailCode, JournalEntry, Journal, Store, Link, Time, Snapshot, start_engine, resume_engine, memory_journal, memory_store, memory_link, memory_time, decode_snapshot, encode_snapshot, JournalEvent}
+import alula.engine.{Engine, MemoryWorld, Incoming, FailCode, JournalEntry, Journal, Store, Link, Time, Snapshot, start_engine, resume_engine, memory_journal, memory_store, memory_link, memory_time, decode_snapshot, encode_snapshot, JournalEvent}
 import crew_harness.chat.{ChatSession, ChatState, chat_session, encode_chat_state, user_says, user_cancels, agent_chunk, agent_done, agent_refused}
 
 // ----- helpers: one `with` over the four handlers; use_pg picks the database or the memory -----

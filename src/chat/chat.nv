@@ -16,7 +16,7 @@
 // the snapshot (`encode_state`, `decode_state`).
 module crew_harness.chat
 
-import crew_harness.engine.{Incoming, EventKind, Environment, Transition, SendOrder, CancelOrder, Conclusion, FailCode, JournalParam, param, journal_event, fail_code_word}
+import alula.engine.{Incoming, EventKind, Environment, Transition, SendOrder, CancelOrder, Conclusion, FailCode, JournalParam, param, journal_event, fail_code_word}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 
 /// ChatState: where the session is.

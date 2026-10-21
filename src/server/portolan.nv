@@ -3,8 +3,8 @@
 // `проект.срок_бездействия` (format 2.7, P-9): the settings give it in milliseconds (`idle_term_seconds` * 1000).
 module crew_harness.server
 
-import crew_harness.machine.{standard_registry, dialog_machine_text, Int}
-import crew_harness.machine_run.{PortolanMachine, ProjectValue, load_portolan_machine_with}
+import alula.machine.{standard_registry, dialog_machine_text, Int}
+import alula.machine_run.{PortolanMachine, ProjectValue, load_portolan_machine_with}
 
 /// The key of the parameter of the idle term in the table of the project.
 export const IDLE_TERM_KEY = "проект.срок_бездействия"

@@ -3,7 +3,7 @@
 module crew_harness.acp_live
 
 import crew_harness.acp.{AcpConfig, AcpClient, open_client, acp_link}
-import crew_harness.engine.{Link, Incoming, EventKind}
+import alula.engine.{Link, Incoming, EventKind}
 import std.fs.{Fs, real_fs, Path, remove_dir_all, create_dir_all, write_text, read_text}
 import std.os.{Os, real_os, temp_dir, pid}
 

@@ -4,7 +4,7 @@
 module crew_harness.acp_live
 
 import crew_harness.acp.{AcpConfig, AcpClient, open_client, acp_link}
-import crew_harness.engine.{Link, Incoming, EventKind, PartyRequest, FailCode}
+import alula.engine.{Link, Incoming, EventKind, PartyRequest, FailCode}
 import std.fs.{Fs, real_fs, Path, try_exists}
 import std.os.{Os, real_os, cwd}
 

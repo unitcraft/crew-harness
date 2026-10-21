@@ -5,7 +5,7 @@
 module crew_harness.chat
 
 import std.encoding.json.{JsonValue, JsonObject}
-import crew_harness.engine.{Engine, MemoryWorld, Incoming, EventKind, FailCode, PartyResponse, Reply, Rejection, JournalEntry, Journal, Store, Link, start_engine, resume_engine, memory_journal, memory_store, memory_link, memory_time, decode_snapshot, journal_line, journal_event, param}
+import alula.engine.{Engine, MemoryWorld, Incoming, EventKind, FailCode, PartyResponse, Reply, Rejection, JournalEntry, Journal, Store, Link, start_engine, resume_engine, memory_journal, memory_store, memory_link, memory_time, decode_snapshot, journal_line, journal_event, param}
 
 // ----- helpers: one `with` over the four handlers of a world -----
 

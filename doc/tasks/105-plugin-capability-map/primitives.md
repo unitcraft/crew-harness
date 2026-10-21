@@ -197,7 +197,7 @@
 
 ## 5. Что уже есть в `src/` и чего нет
 
-- Есть: эффекты `Journal`, `Store`, `Agent` (отправка, приём, отмена, подтверждение) и `Time` движка ([src/engine/effects.nv](../../../src/engine/effects.nv)); файловые обработчики журнала и снимков ([src/storage/files.nv](../../../src/storage/files.nv)); обработчики PostgreSQL ([src/pgstore/handlers.nv](../../../src/pgstore/handlers.nv)); ACP-клиент с открытием сессии, отправкой, отменой и подтверждением входящих ([src/acp/client.nv](../../../src/acp/client.nv)); проекция событий страницы `page_event` ([src/acp/project.nv](../../../src/acp/project.nv)).
+- Есть: эффекты `Journal`, `Store`, `Agent` (отправка, приём, отмена, подтверждение) и `Time` движка (`src/engine/effects.nv`, с задачи 144 — в пакете `alula`); файловые обработчики журнала и снимков ([src/storage/files.nv](../../../src/storage/files.nv)); обработчики PostgreSQL ([src/pgstore/handlers.nv](../../../src/pgstore/handlers.nv)); ACP-клиент с открытием сессии, отправкой, отменой и подтверждением входящих ([src/acp/client.nv](../../../src/acp/client.nv)); проекция событий страницы `page_event` ([src/acp/project.nv](../../../src/acp/project.nv)).
 - Нет: всё остальное. Чтение и запись файлов проекта, git, процессы, настройки проекта, разборы текста, хранилище проекта с атомарным «сравнить и записать».
 - Нет в движке (не примитив, а возможность движка): таймеры (`wr_timer`), вызов машины из машины, общие события «стоп человека» и «продолжить», ворота человека, множество сторон ([plan.md](plan.md), «Зазоры движка и формата»).
 

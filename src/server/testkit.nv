@@ -7,7 +7,7 @@
 // repository upward from the working directory (the nearest folder with `nova.toml`).
 module crew_harness.server
 
-import crew_harness.machine.{dialog_machine_text}
+import alula.machine.{dialog_machine_text}
 import crew_harness.pgdb.{PgConfig}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import std.fs.{Fs, real_fs, Path, try_exists, remove_dir_all}

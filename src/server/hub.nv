@@ -17,9 +17,9 @@
 // told to the page as a synthetic `error` event, with an id of its own ("srv-<n>"); it is not kept.
 module crew_harness.server
 
-import crew_harness.engine.{Engine, Incoming, EventKind, Journal, Store, Link, start_engine, resume_engine, decode_snapshot}
-import crew_harness.machine.{dialog_machine_text}
-import crew_harness.machine_run.{PortolanMachine, PortolanState}
+import alula.engine.{Engine, Incoming, EventKind, Journal, Store, Link, start_engine, resume_engine, decode_snapshot}
+import alula.machine.{dialog_machine_text}
+import alula.machine_run.{PortolanMachine, PortolanState}
 import crew_harness.acp.{AcpConfig, AcpClient, open_client, acp_link, page_event}
 import crew_harness.storage.{open_data_dir, file_journal, file_store, list_sessions, valid_session_name, session_path}
 import crew_harness.pgstore.{PgWorld, pg_journal, pg_store}

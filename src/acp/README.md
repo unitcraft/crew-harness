@@ -2,7 +2,7 @@
 
 CrewHarness talks to a coding agent (by default `opencode acp`) through the Agent Client Protocol: JSON-RPC 2.0, one
 message per line, over the stdin and stdout of a child process. This directory is the client of that protocol on Nova
-(Oracle 0.1.0, Windows, Clang), the real handler of the effect `Link` of the engine (`src/engine/`), the projection
+(Oracle 0.1.0, Windows, Clang), the real handler of the effect `Link` of the engine (the module `alula.engine` of the package `alula`, task 144), the projection
 "ACP -> engine event -> page event", and a fake ACP agent for the tests. The file handlers of the effects `Journal` and
 `Store` are in `src/storage/`. Task 095 (`doc/tasks/095-acp-client/`); the session server (`src/server/`, task 099) is its user: one client per session, the decisions of the owner through `decide_event`.
 

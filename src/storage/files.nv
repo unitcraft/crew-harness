@@ -15,7 +15,7 @@
 // files bring `std.fs` into the program and the engine must stay free of it.
 module crew_harness.storage
 
-import crew_harness.engine.{Journal, Store, JournalEntry, Snapshot, journal_line, parse_journal_line}
+import alula.engine.{Journal, Store, JournalEntry, Snapshot, journal_line, parse_journal_line}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import std.fs.{Fs, real_fs, File, Path, read, read_dir, create_dir_all, rename, metadata, remove_file}
 import std.io.{write_all}
