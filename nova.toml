@@ -28,7 +28,7 @@ tls = { git = "https://github.com/nv-lang/nova-tls", version = "0.2" }
 # organization are theirs to choose (the owner leans to nv-lang); until it is published the package is taken from a local folder through `[replace]` in
 # the file `nova.override.toml` (not committed, see .gitignore): `[replace]` / `alula = { path = "../alula-core" }`. After the publication the address is
 # corrected here, `nova update` rebuilds `nova.lock.toml` and the override is not needed.
-alula = { git = "https://github.com/nv-lang/alula", version = "0.1" }
+alula = { git = "https://github.com/nv-lang/nova-alula", version = "0.1" }
 
 [package]
 name = "crew_harness"
