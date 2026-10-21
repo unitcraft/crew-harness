@@ -27,7 +27,8 @@ R('PlanPhase', 2, 'the fast route and a correction of the plan is queued (the im
   fir1().review(1, 'Question', st='Gate7Implementation').word('plan', {'human_answer': 'a'}, 'SessionLaunch', data={'route': FULL, 'session': 's1', 'continuation': 'analysis_queue'}))
 R('PlanPhase', 3, 'the full route and a correction of the plan is queued: the session of the queue starts', plq())
 R('PlanPhase', 4, 'the full route and no plan: the first session of the plan', sl3())
-R('PlanPhase', 5, 'the full route and the plan exists: the stop word is looked at', pr2())
+R('PlanPhase', 5, 'the full route and the plan exists: the stop word is looked at, the plan review follows',
+  g5a().h(specification=doc(True, 'Approved', h='H1'), task_plan=doc(True, 'Draft')).word('confirmed', None, 'PlanReview', open=['loop_review-2'], data={'phase': phase('Plan')}))
 
 R('PlanStopWord', 1, 'the session of the plan stopped with "requirements": the work goes back to the requirements',
   sl3().h(task_plan=doc(True, 'Draft', 'Requirements')).sess(2, st='SessionLaunch', open=['session_launch-3'], data={'route_source': 'последний абзац плана', 'session': 's1_fix', 'continuation': 'analysis_queue'}))
