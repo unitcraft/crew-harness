@@ -432,3 +432,31 @@ export fn session_types() -> TypeDefs {
     variants.push(VariantDef { name: "LaunchScope", cases: [plain_case("Fits"), plain_case("DoesNotFit")], words: []EnumWord.new() })
     TypeDefs { records, variants }
 }
+
+/// The records and the variants the signatures of the task runner use (task 123): the types of the documents of the task, of the approval, of the route and of the preparation (English names of the
+/// dictionary of the methodology and of the product). The rest is the common part.
+export fn runner_types() -> TypeDefs {
+    ro base = standard_types()
+    mut records = []RecordDef.new()
+    for r in base.records { records.push(r) }
+    ro optional_count = OptionalType(IntType)
+    records.push(RecordDef { name: "Cycle", fields: [fd("number", IntMin(1)), fd("origin", IntMin(1)), fd("streak", count_spec()), fd("no_probes", count_spec())] })
+    records.push(RecordDef { name: "Approval", fields: [fd("date", TextType), fd("who", TextType), fd("hash", TextType)] })
+    records.push(RecordDef { name: "TaskDocumentState", fields: [fd("exists", BoolType), fd("status", VariantType("DocumentStatus")), fd("stop_word", VariantType("StopWord")), fd("hash", TextType)] })
+    records.push(RecordDef { name: "RouteFeatures", fields: [fd("goal", TextType), fd("sources", optional_count), fd("parts", optional_count), fd("risk", VariantType("Risk")), fd("irreversible", VariantType("Rating")),
+        fd("cause_known", VariantType("Rating")), fd("touches_norm", VariantType("Rating")), fd("helper_proposal", TextType)] })
+    records.push(RecordDef { name: "RouteThresholds", fields: [fd("max_sources", count_spec()), fd("max_parts", count_spec()), fd("allowed_risk", VariantType("Risk"))] })
+    records.push(RecordDef { name: "RouteSettings", fields: [fd("ceiling", count_spec()), fd("clean_needed", count_spec()), fd("probes_min", count_spec()), fd("delivery_short", BoolType), fd("relaxations", ListType(TextType))] })
+    records.push(RecordDef { name: "ProjectSettings", fields: [fd("thresholds", RecordType("RouteThresholds")), fd("full", RecordType("RouteSettings")), fd("fast", RecordType("RouteSettings"))] })
+    records.push(RecordDef { name: "PreparationResult", fields: [fd("outcome", VariantType("PreparationStatus")), fd("cycle", FullDictType { key: VariantType("Stage"), value: RecordType("Cycle") })] })
+    mut variants = []VariantDef.new()
+    for v in base.variants { variants.push(v) }
+    variants.push(VariantDef { name: "Stage", cases: [plain_case("Analysis"), plain_case("Plan"), plain_case("Implementation"), plain_case("Delivery"), plain_case("Meeting")], words: []EnumWord.new() })
+    variants.push(VariantDef { name: "TaskDocument", cases: [plain_case("Specification"), plain_case("Plan"), plain_case("ImplementationReport")], words: []EnumWord.new() })
+    variants.push(VariantDef { name: "DocumentStatus", cases: [plain_case("Draft"), plain_case("Approved"), plain_case("InProgress"), plain_case("Done"), plain_case("Unparsed")], words: []EnumWord.new() })
+    variants.push(VariantDef { name: "StopWord", cases: [plain_case("NoWord"), plain_case("Revision"), plain_case("Plan"), plain_case("Requirements"), plain_case("Question")], words: []EnumWord.new() })
+    variants.push(VariantDef { name: "Risk", cases: [plain_case("Low"), plain_case("Medium"), plain_case("High"), plain_case("Unrated")], words: []EnumWord.new() })
+    variants.push(VariantDef { name: "Rating", cases: [plain_case("Confirmed"), plain_case("No"), plain_case("Unrated")], words: []EnumWord.new() })
+    variants.push(VariantDef { name: "PreparationStatus", cases: [plain_case("Ready"), plain_case("BusyByLiveProcess"), plain_case("TreeBusyByOtherTask"), plain_case("GroupNotStopped")], words: []EnumWord.new() })
+    TypeDefs { records, variants }
+}

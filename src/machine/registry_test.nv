@@ -234,10 +234,10 @@ test "ps names" {
 }
 
 test "sd count" {
-    assert(standard_registry().primitives.len() == 27)
-    assert(rcount(Reading) == 15)
-    assert(rcount(Writing) == 7)
-    assert(rcount(Irreversible) == 5)
+    assert(standard_registry().primitives.len() == 56)
+    assert(rcount(Reading) == 34)
+    assert(rcount(Writing) == 12)
+    assert(rcount(Irreversible) == 10)
     assert(rcount(Pure) == 0)
 }
 
@@ -323,8 +323,13 @@ test "sd types" {
     ro defs = standard_types()
     ro session = session_types()
     ro mine = ["launch_scope", "launch_profile", "session_context", "parse_session_artifact", "stop_agent_group"]
+    // the 29 primitives of the task runner (task 123) use the types of the runner (runner_types)
+    ro runner = runner_types()
+    ro theirs = ["run_preparation", "specification", "task_plan", "implementation_report", "route_features", "project_settings", "source_list", "brief_complete", "copy_approval", "approval_by_document",
+                 "source_with_specification_marks", "last_implementation_review", "has_unresolved_line", "customer_letter", "round_letters", "secrets_report", "tree_diff", "commit_message", "commit_text",
+                 "feedback_route", "write_answers", "write_decisions", "write_owner_marks", "save_round_notes", "write_draft_status", "create_approved_copy", "rename_letter", "release_lock", "show_human"]
     for p in standard_registry().primitives {
-        ro use = if mine.contains(p.name) { session } else { defs }
+        ro use = if mine.contains(p.name) { session } else { if theirs.contains(p.name) { runner } else { defs } }
         assert(rknown(p.result, use))
         for q in p.params { assert(rknown(q.spec, use)) }
     }

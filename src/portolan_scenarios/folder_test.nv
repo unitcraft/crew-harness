@@ -23,6 +23,7 @@ test "ps scenario families" {
     assert(scenarios_with("nested-").len() == 32)
     assert(scenarios_with("cycle-").len() == 101)
     assert(scenarios_with("session-").len() == 55)
+    assert(scenarios_with("runner-").len() == 257)
     assert(scenario_files().len() == 621)
 }
 
