@@ -21,7 +21,7 @@ export const TASKS = path.join(BASE, "tasks")
 // reviewing — на приёмке; rework — на доработке; accepted — принята (влита), ждёт очистки; done — принята и убрана, всё
 // закрыто (в старых файлах это слово «cleaned»: читается как done, см. normTask); cancelled — отменена.
 // idle (задача 058) — задача с сессиями методики между сессиями: прежняя сессия сдана интегратору, следующей ещё нет; приёмки нет.
-export type TaskStatus = "starting" | "running" | "submitted" | "reviewing" | "rework" | "approval" | "accepted" | "done" | "cancelled" | "idle"
+export type TaskStatus = "starting" | "running" | "submitted" | "reviewing" | "rework" | "approval" | "accepted" | "done" | "cancelled" | "idle" | "backlog"
 export const OPEN_STATUSES: TaskStatus[] = ["starting", "running", "submitted", "reviewing", "rework", "approval", "accepted", "idle"]
 /** статусы, в которых исполнитель работает (может сдавать отчёт) */
 export const WORKING_STATUSES: TaskStatus[] = ["starting", "running", "rework"]
@@ -129,6 +129,8 @@ export type Task = RouteFields & {
   /** qid отчёта: исполнитель отвечает crew_send {reply_to: qid} */
   qid: string
   status: TaskStatus
+  /** Explicit pause. Snapshot is audit/context only; resume must not replay a session or acceptance side effect. */
+  backlog?: { status: Exclude<TaskStatus, "backlog">; at: number; by: string }
   /** spawn — сессия создана плагином; assign — задачу взяла вкладка владельца; order — заказ в другой проект (своей
    *  сессии нет: делает интегратор проекта-исполнителя своими задачами, у них parent — этот заказ); external — номер взял агент
    *  вне OpenCode (scripts/task-number.mjs, задача 058): запись только занимает номер */
@@ -414,5 +416,5 @@ export function letterExists(key: string, id: string): boolean {
 const PRIORITY_RANK: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3 }
 export const byPriority = (a: Task, b: Task) => (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9) || a.created - b.created
 
-const STATUS_RU: Record<TaskStatus, string> = { starting: "запускается", running: "в работе", submitted: "сдана", reviewing: "на приёмке", rework: "на доработке", approval: "на согласовании у владельца", accepted: "принята", done: "готова", cancelled: "отменена", idle: "ждёт следующей сессии" }
+const STATUS_RU: Record<TaskStatus, string> = { starting: "запускается", running: "в работе", submitted: "сдана", reviewing: "на приёмке", rework: "на доработке", approval: "на согласовании у владельца", accepted: "принята", done: "готова", cancelled: "отменена", idle: "ждёт следующей сессии", backlog: "в бэклоге" }
 export const statusRu = (s: TaskStatus) => STATUS_RU[s] ?? s

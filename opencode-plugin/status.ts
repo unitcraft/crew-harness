@@ -163,7 +163,7 @@ export function waitLabel(phrase = ""): string {
 
 const hm = (t?: number) => (t ? new Date(t).toTimeString().slice(0, 5) : "?")
 const minutes = (from: number | undefined, now: number) => (from ? `${Math.max(0, Math.round((now - from) / 60_000))} мин` : "")
-const STATUS_RU: Record<string, string> = { starting: "запускается", running: "в работе", submitted: "сдана", reviewing: "на приёмке", rework: "на доработке", accepted: "принята", done: "влита", cancelled: "отменена", idle: "ждёт следующей сессии" }
+const STATUS_RU: Record<string, string> = { starting: "запускается", running: "в работе", submitted: "сдана", reviewing: "на приёмке", rework: "на доработке", accepted: "принята", done: "влита", cancelled: "отменена", idle: "ждёт следующей сессии", backlog: "в бэклоге" }
 
 export type StatusInput = {
   card: Card

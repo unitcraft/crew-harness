@@ -1117,7 +1117,13 @@ export function watchEnv(c: Card, project: string): Record<string, string> {
   if (isOpen(t) && t!.executor === c.session) env.CREW_TASK_N = String(t!.n)
   return env
 }
-export const mayWakeCard =(c: Card, windows = liveWindows()) => !!tabOf(c.session, windows) || c.spawned?.status === "running" || c.spawned?.status === "done" || holdsOpenTask(c)
+export const mayWakeCard = (c: Card, windows = liveWindows()) => {
+  const tab = tabOf(c.session, windows)
+  if (tab) return true
+  const linked = c.task ? loadTask(c.task.project, c.task.n) : c.review ? loadTask(c.review.project, c.review.n) : undefined
+  if (linked?.status === "backlog") return false
+  return c.spawned?.status === "running" || c.spawned?.status === "done" || holdsOpenTask(c)
+}
 
 /** Уведомление окну pid (покажет плагин окна): письмо пришло в его фоновую вкладку и т.п. */
 /** Строка не длиннее n знаков (с «…»): уведомления окна короткие, чтобы их успевали прочитать (план 003.1). */
@@ -1484,8 +1490,8 @@ export const HELP = `crew-harness — письма между вкладками
        kind: "plan"          — задача-план (раздел ПЛАНИРОВАНИЕ ниже).
        route: "fast"         — быстрый путь (задача 092): нужны route_word («заводи N» владельца дословно, с датой) и полная постановка
                                 (критерии приёмки пунктами, строка с веткой); иначе отказ «быстрый путь требует: …». Подробнее — раздел ЗАДАЧИ.
-  crew_task {action, n?}      — задачи по номеру: list, show; интегратору ещё assign, push, reassign, cancel,
-                                priority, route (маршрут задачи записью), order, plan_decide, deliver (задачу с сессиями — на приёмку); приёмщику — review, check, round (план), precheck, merge, unlock, rework
+   crew_task {action, n?}      — задачи по номеру: list, show; интегратору ещё assign, push, reassign, cancel, backlog, resume,
+                                 priority, route (маршрут задачи записью), order, plan_decide, deliver (задачу с сессиями — на приёмку); приёмщику — review, check, round (план), precheck, merge, unlock, rework
                                 (sync: true — только влить свежую целевую ветку, не круг доработки), accept, cleanup (cleaned — старое имя). assign — открытой вкладке владельца;
                                 сессия задачи ведёт одну задачу и закрывается после cleanup: продолжение работы того же
                                 исполнителя — новой задачей (crew_spawn), assign на сессию задачи отказывает.
@@ -1574,7 +1580,9 @@ acceptor — роль приёмщика (разделяемая) при нас�
   crew_task {action: "push", n, text?, to?} — подтолкнуть остановившуюся вкладку сейчас: to "executor" (по умолчанию) — исполнителя, "reviewer" — приёмщика (счётчик напоминаний — с нуля).
   crew_task {action: "reassign", n, text?} — передать задачу новой сессии под тем же номером со сводкой сделанного; text —
     уточнение цели: идёт в первое письмо новой сессии перед прежней целью (уточнять тем же вызовом, не вторым письмом).
-  crew_task {action: "cancel", n, text?} / {action: "priority", n, priority} / {action: "show", n} / {action: "list"}.
+   crew_task {action: "backlog", n, text} — убрать открытую задачу из панели и активных лимитов; обязательная причина идёт в историю. Номер и запись остаются занятыми, ветки и деревья сохраняются; done/cancelled и повторный backlog отвергаются.
+   crew_task {action: "resume", n, text?} — вернуть задачу из backlog; только подтверждённая живая сессия исполнителя может продолжить прежний статус, иначе задача становится idle без запуска или повторной приёмки. История и gate/evidence не меняются; новую сессию назначают явно.
+   crew_task {action: "cancel", n, text?} / {action: "priority", n, priority} / {action: "show", n} / {action: "list"}.
   crew_task {action: "order", to: "<проект>.integrator", goal, criteria, ...} — заказ в другой проект: его интегратор
     делает работу своими задачами (crew_spawn {parent: "<проект>#N"}); заказ идёт за ними: принята у него — заказ
     выполнен (сводка без пробуждения), отменена — тебе вызов.
@@ -1943,6 +1951,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
   // Отказ — строкой (задача не меняется); иначе задача сдана (или доработка сдана), обязательство исполнителя снято,
   // приёмщик после доработки разбужен. Письмо с отчётом автору кладёт вызывающий.
   const submitTask = (t: Task, sessionID: string, fromRole: string, text: string, now: number): string | undefined => {
+    if (t.status === "backlog") return `Не отправлено: задача ${taskRef(t)} в бэклоге; поздний отчёт не возобновляет её. Интегратор должен выполнить crew_task {action: "resume", n: ${t.n}}.`
     const ms = methodSession(t)
     if (ms && ms.session === sessionID) return submitSession(t, ms, sessionID, fromRole, text, now)
     if (!WORKING_STATUSES.includes(t.status)) return `Не отправлено: отчёт по задаче ${taskRef(t)} уже отправлен (задача ${statusRu(t.status)}). Остановись — дальше приёмка.`
@@ -2260,6 +2269,8 @@ export function makeTools(host: CrewHost): CrewTool[] {
     let fresh = false
     if (taskNum !== undefined) {
       const old = loadTask(project, taskNum)
+      if (old?.status === "backlog")
+        return { content: `Не запущено: номер ${taskNum} занят задачей ${taskRef(old)} в бэклоге. Не создавай новую задачу и не переноси запись в legacy; интегратор должен явно выполнить crew_task {action: "resume", n: ${taskNum}}.` }
       if (old && isOpen(old) && !old.folder)
         return { content: `Не запущено: номер ${taskNum} занят открытой записью «${old.title}» (${statusRu(old.status)}) — это другая работа, заведённая до задачи 058. Её закрывают или отменяют (crew_task {action: "cancel", n: ${taskNum}}) — решает владелец.` }
       if (old && isOpen(old)) {
@@ -2553,7 +2564,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
     input: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["list", "show", "assign", "order", "push", "reassign", "cancel", "priority", "track", "plan_decide", "submit", "deliver", "review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleanup", "cleaned", "route", "migrate"] },
+        action: { type: "string", enum: ["list", "show", "assign", "order", "push", "reassign", "cancel", "backlog", "resume", "priority", "track", "plan_decide", "submit", "deliver", "review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleanup", "cleaned", "route", "migrate"] },
         to: str("order: the other project's integrator, \"project.integrator\"; push: \"executor\" (default) or \"reviewer\""),
         keep: { type: "array", maxItems: 8, items: { type: "string" }, description: "cleanup: up to 8 worktree paths to keep as evidence" },
         checks: { type: "object", description: "accept: report per acceptance step {step id: what proves it}", additionalProperties: { type: "string" } },
@@ -2565,7 +2576,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         candidate: str("precheck: the checked candidate (branch or hash); with result it finishes the precheck"),
         n: { type: "number", description: "Task number" },
         session: str("assign: the tab (session id) that takes the task"),
-        text: str("submit: the report (what was done, how it was checked, what is left); push / cancel: text for the executor; reassign: the refined goal for the new session's first letter; deliver: the report for the reviewer"),
+        text: str("submit: report; backlog: required reason; resume: optional note; push / cancel: text for the executor; reassign: refined goal; deliver: report for reviewer"),
         blocking: { type: "number", description: "round (plan recheck): number of blocking remarks" },
         significant: { type: "number", description: "round: number of significant remarks" },
         cosmetic: { type: "number", description: "round: number of cosmetic remarks" },
@@ -2594,11 +2605,13 @@ export function makeTools(host: CrewHost): CrewTool[] {
       if (String(input.action ?? "") === "view") return { content: VIEW_GONE }
       const action = ((a) => (a === "cleaned" ? "cleanup" : a))(String(input.action ?? ""))
       if (action === "list") {
-        const ts = listTasks(project).filter((t) => input.all || isOpen(t)).sort(byPriority)
+        const ts = listTasks(project).filter((t) => t.status !== "backlog" && (input.all || isOpen(t))).sort(byPriority)
+        const backlog = listTasks(project).filter((t) => t.status === "backlog").sort(byPriority)
         // старые записи с номерами папок, перенесённые в legacy/ (задача 058), — в полном списке
         const old = input.all ? listLegacy(project) : []
         const legacy = old.length ? `\nСтарые записи (перенесены в legacy/, номер отдан папке задачи):\n${old.map((t) => `${taskNo(t)} ${statusRu(t.status)} «${t.title}»`).join("\n")}` : ""
-        return { content: ts.length ? `Задачи проекта ${project}:\n${ts.map(taskRow).join("\n")}${legacy}` : `Открытых задач в проекте ${project} нет.${legacy}` }
+        const backlogText = backlog.length ? `\nБэклог:\n${backlog.map(taskRow).join("\n")}` : ""
+        return { content: ts.length ? `Задачи проекта ${project}:\n${ts.map(taskRow).join("\n")}${backlogText}${legacy}` : `${input.all ? `Задач в проекте ${project} нет.` : `Открытых задач в проекте ${project} нет.`}${backlogText}${legacy}` }
       }
       if (action === "assign") {
         if (!isIntegrator(me)) return notIntegrator(me)
@@ -2673,6 +2686,49 @@ export function makeTools(host: CrewHost): CrewTool[] {
       }
       const t = findTask(me, input.n)
       if (!t) return { content: `Задачи ${taskNo({ project, n: input.n })} в проекте ${project} нет.` }
+      if (action === "backlog") {
+        if (!isIntegrator(me)) return notIntegrator(me)
+        if (!String(input.text ?? "").trim()) return { content: `Нужна причина в text: crew_task {action: "backlog", n: ${t.n}, text: "почему пауза"}.` }
+        if (t.status === "backlog") return { content: `Задача ${taskRef(t)} уже в бэклоге.` }
+        if (t.status === "done" || t.status === "cancelled") return { content: `Задача ${taskRef(t)} уже ${statusRu(t.status)}: в бэклог переводят только открытую задачу.` }
+        if (mergeHolder(project)?.n === t.n) return { content: `Задача ${taskRef(t)} не переведена в бэклог: у неё ещё есть замок вливания. Сначала явно отпусти его: crew_task {action: "unlock", n: ${t.n}}.` }
+        t.backlog = { status: t.status, at: Date.now(), by: me.session }
+        taskEvent(t, me.session, "backlog", String(input.text).trim())
+        for (const session of new Set([t.author, t.executor, t.reviewer].filter((s): s is string => !!s))) {
+          if (t.qid) settleObligation(session, t.qid)
+          if (t.review_qid) settleObligation(session, t.review_qid)
+        }
+        host.posted([])
+        return { content: `Задача ${taskRef(t)} переведена в бэклог; запись, история, ветки и деревья сохранены. Возврат — crew_task {action: "resume", n: ${t.n}}.` }
+      }
+      if (action === "resume") {
+        if (!isIntegrator(me)) return notIntegrator(me)
+        if (t.status !== "backlog" || !t.backlog) return { content: `Задача ${taskRef(t)} не в бэклоге.` }
+        if (mergeHolder(project)?.n === t.n) return { content: `Задача ${taskRef(t)} не возвращена из бэклога: обнаружен замок вливания. Сначала проверь и явно отпусти его: crew_task {action: "unlock", n: ${t.n}}.` }
+        const previous = t.backlog.status
+        // Only resume a live worker session when its tab is still present. Everything else returns to idle;
+        // resume never replays starts, reviewer assignment, letters, precheck, or merge.
+        const liveExecutor = (previous === "running" || previous === "rework") && !!t.executor && !!readJson<Card>(cardFile(t.executor)) && !!tabOf(t.executor)
+        const nextStatus = liveExecutor ? previous : "idle"
+        if (!liveExecutor) {
+          if (t.executor && !t.executors.includes(t.executor)) t.executors.push(t.executor)
+          if (t.reviewer && !(t.reviewers ?? []).includes(t.reviewer)) (t.reviewers ??= []).push(t.reviewer)
+          for (const session of [t.executor, t.reviewer]) {
+            if (!session || tabOf(session)) continue
+            const card = readJson<Card>(cardFile(session))
+            if (card?.spawned && card.spawned.status !== "closed") {
+              card.spawned.status = "closed"
+              saveCard(card)
+            }
+          }
+          delete t.executor
+          delete t.reviewer
+        }
+        delete t.backlog
+        taskEvent(t, me.session, nextStatus, `возвращена из бэклога (до паузы: ${statusRu(previous)}; восстановлен статус: ${statusRu(nextStatus)})${String(input.text ?? "").trim() ? `; ${String(input.text).trim()}` : ""}`)
+        host.posted([])
+        return { content: `Задача ${taskRef(t)} возвращена из бэклога в состояние «${statusRu(t.status)}» без автозапуска и повторного назначения. До паузы: ${statusRu(previous)}; при необходимости явно назначь следующую сессию.` }
+      }
       if (action === "route") {
         if (!isIntegrator(me)) return notIntegrator(me)
         if (!isOpen(t)) return { content: `Задача ${taskRef(t)} ${statusRu(t.status)}: маршрут закрытой задачи не меняют.` }

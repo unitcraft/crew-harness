@@ -915,7 +915,8 @@ task by its number; a session's title is `045 исп title`. The journal is
   open one refuses with its title. An order (`crew_task order`) takes its number from the same count and makes no folder.
 - **The show.** The "Crew" panel puts the task line `045 <title>` over its sessions `↳ прм`, `↳ С4-3 проверка плана`, finished
   sessions folded into `✓ сдано N сессий` (task 064); `/crew` lists the live ones under `045 <title>` and counts the finished (`· N done`); its first line "Waiting for you" names `045 rev`, the panel's "Ждут вас" `045 прм`; notices, letters and answers name the task `045` and the
-  session `045 С4-3`.
+  session `045 С4-3`. Backlogged tasks are excluded from the Crew panel and open-task counts; `crew_task list` prints them
+  in a separate `Бэклог:` group. `idle` remains an open task between methodology sessions, not a backlog state.
 
 - `crew_spawn {title?, goal, criteria, owner_words?, result?, links?, boundaries?, open_questions?, message?, extra?, tier?, priority?, role?, parent?}` (the
   integrator only) starts task `NNN` in a new session, with or without a window. No task without a
@@ -933,8 +934,11 @@ task by its number; a session's title is `045 исп title`. The journal is
   {n, text?}` (wake a stalled executor now), `reassign {n, text?}` (a new session, the same number, a
   summary of what was done; `text` refines the goal: it goes into the new session's first letter as a
   block «УТОЧНЕНИЕ ПРИ ПЕРЕДАЧЕ» before the old goal, wins where they differ and stays in the task
-  history and `show`; refine with this call, not with a second letter), `cancel {n}`, `priority {n, priority}`, `deliver {n,
-  text}` (a task with method sessions goes to the plugin's review once).
+  history and `show`; refine with this call, not with a second letter), `cancel {n}`, `backlog {n, text}` (integrator only,
+  required reason; preserves the task record, history, branch and worktree), `resume {n, text?}` (integrator only; returns
+  without replaying execution or review side effects; initially resumes as `idle` so the next session/assignment is explicit),
+  `priority {n, priority}`, `deliver {n, text}` (a task with method sessions goes to the plugin's review once). Backlog is
+  not `done` or `cancelled`, does not release its number, and cannot be replaced by `crew_spawn` using that number.
 - The executor submits with `crew_task {action: "submit", n, text}` (`submit - executor - n, text`):
   no qid needed; `text` is the report (what was done, how it was checked, what is left). It covers
   the first submission, the one after rework or after a sync, and a plan task with the form check. The task is
