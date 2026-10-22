@@ -936,7 +936,7 @@ task by its number; a session's title is `045 исп title`. The journal is
   block «УТОЧНЕНИЕ ПРИ ПЕРЕДАЧЕ» before the old goal, wins where they differ and stays in the task
   history and `show`; refine with this call, not with a second letter), `cancel {n}`, `backlog {n, text}` (integrator only,
   required reason; preserves the task record, history, branch and worktree), `resume {n, text?}` (integrator only; returns
-  without replaying execution or review side effects; initially resumes as `idle` so the next session/assignment is explicit),
+  without replaying execution or review side effects; `accepted` stays accepted in the cleanup queue, a confirmed live executor may restore `running`/`rework`, otherwise resume is `idle` so the next session/assignment is explicit),
   `priority {n, priority}`, `deliver {n, text}` (a task with method sessions goes to the plugin's review once). Backlog is
   not `done` or `cancelled`, does not release its number, and cannot be replaced by `crew_spawn` using that number.
 - The executor submits with `crew_task {action: "submit", n, text}` (`submit - executor - n, text`):

@@ -1581,7 +1581,7 @@ acceptor — роль приёмщика (разделяемая) при нас�
   crew_task {action: "reassign", n, text?} — передать задачу новой сессии под тем же номером со сводкой сделанного; text —
     уточнение цели: идёт в первое письмо новой сессии перед прежней целью (уточнять тем же вызовом, не вторым письмом).
    crew_task {action: "backlog", n, text} — убрать открытую задачу из панели и активных лимитов; обязательная причина идёт в историю. Номер и запись остаются занятыми, ветки и деревья сохраняются; done/cancelled и повторный backlog отвергаются.
-   crew_task {action: "resume", n, text?} — вернуть задачу из backlog; только подтверждённая живая сессия исполнителя может продолжить прежний статус, иначе задача становится idle без запуска или повторной приёмки. История и gate/evidence не меняются; новую сессию назначают явно.
+   crew_task {action: "resume", n, text?} — вернуть задачу из backlog; accepted остаётся accepted в очереди уборки, живая сессия исполнителя может вернуть running/rework, прочее возвращается как idle без запуска или повторной приёмки. История и gate/evidence не меняются; новую сессию назначают явно.
    crew_task {action: "cancel", n, text?} / {action: "priority", n, priority} / {action: "show", n} / {action: "list"}.
   crew_task {action: "order", to: "<проект>.integrator", goal, criteria, ...} — заказ в другой проект: его интегратор
     делает работу своими задачами (crew_spawn {parent: "<проект>#N"}); заказ идёт за ними: принята у него — заказ
@@ -2706,11 +2706,12 @@ export function makeTools(host: CrewHost): CrewTool[] {
         if (t.status !== "backlog" || !t.backlog) return { content: `Задача ${taskRef(t)} не в бэклоге.` }
         if (mergeHolder(project)?.n === t.n) return { content: `Задача ${taskRef(t)} не возвращена из бэклога: обнаружен замок вливания. Сначала проверь и явно отпусти его: crew_task {action: "unlock", n: ${t.n}}.` }
         const previous = t.backlog.status
-        // Only resume a live worker session when its tab is still present. Everything else returns to idle;
-        // resume never replays starts, reviewer assignment, letters, precheck, or merge.
+        // Accepted is a cleanup queue state, not a session state: preserve it verbatim, including its assigned
+        // reviewer and evidence, without replaying review. Other active work resumes only with a live executor tab.
         const liveExecutor = (previous === "running" || previous === "rework") && !!t.executor && !!readJson<Card>(cardFile(t.executor)) && !!tabOf(t.executor)
-        const nextStatus = liveExecutor ? previous : "idle"
-        if (!liveExecutor) {
+        const preserveCleanup = previous === "accepted"
+        const nextStatus = preserveCleanup ? "accepted" : liveExecutor ? previous : "idle"
+        if (!liveExecutor && !preserveCleanup) {
           if (t.executor && !t.executors.includes(t.executor)) t.executors.push(t.executor)
           if (t.reviewer && !(t.reviewers ?? []).includes(t.reviewer)) (t.reviewers ??= []).push(t.reviewer)
           for (const session of [t.executor, t.reviewer]) {
@@ -2725,7 +2726,8 @@ export function makeTools(host: CrewHost): CrewTool[] {
           delete t.reviewer
         }
         delete t.backlog
-        taskEvent(t, me.session, nextStatus, `возвращена из бэклога (до паузы: ${statusRu(previous)}; восстановлен статус: ${statusRu(nextStatus)})${String(input.text ?? "").trim() ? `; ${String(input.text).trim()}` : ""}`)
+        if (preserveCleanup) t.status = "accepted"
+        taskEvent(t, me.session, preserveCleanup ? undefined : nextStatus, `возвращена из бэклога (до паузы: ${statusRu(previous)}; восстановлен статус: ${statusRu(nextStatus)})${String(input.text ?? "").trim() ? `; ${String(input.text).trim()}` : ""}`)
         host.posted([])
         return { content: `Задача ${taskRef(t)} возвращена из бэклога в состояние «${statusRu(t.status)}» без автозапуска и повторного назначения. До паузы: ${statusRu(previous)}; при необходимости явно назначь следующую сессию.` }
       }

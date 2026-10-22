@@ -262,6 +262,40 @@ const lockedBacklogHistory = lockedBacklog.history.length
 cell("resume: unknown merge lock blocks resume without state mutation", /замок вливания/.test(await call("crew_task", "sesINTEG1", { action: "resume", n: lockedBacklog.n })) && tasks.loadTask("proj", lockedBacklog.n).status === "backlog" && tasks.loadTask("proj", lockedBacklog.n).history.length === lockedBacklogHistory, JSON.stringify(tasks.loadTask("proj", lockedBacklog.n)))
 rmSync(mergeLock, { force: true })
 
+// 10. accepted -> backlog -> resume preserves cleanup state and evidence, without replay.
+const acceptedFolder = `doc/tasks/accepted-resume-${Date.now()}`
+const acceptedTask = tasks.createTask({
+  project: "proj", title: "принятая на уборке", goal: "сохранить принятое", priority: "P2", tier: "light", role: "worker",
+  author: "sesINTEG1", author_role: "proj.integrator", qid: "qaccepted", status: "accepted", kind: "spawn", directory: proj,
+  folder: acceptedFolder, executor: "ses_GHOST_EXECUTOR", reviewer: "ses_GHOST_REVIEWER", review_kind: "spawn", review_qid: "rqaccepted",
+  branch: "accepted-branch", worktree: path.join(proj, "accepted-worktree"), commit: "c".repeat(40),
+  precheck: { state: "stale", base: "b".repeat(40), at: Date.now(), by: "ses_GHOST_REVIEWER", round: 1, stale: { reason: "prior evidence", at: Date.now() } },
+  checks: { required: "verified" }, steps: [{ id: "required", text: "acceptance" }], side: [{ branch: "accepted-side", at: Date.now(), by: "sesINTEG1" }],
+}, undefined, { fill: () => ({ sessions: [] }) })
+const acceptedAtBefore = tasks.acceptedAt(acceptedTask)
+const acceptedHistoryBefore = acceptedTask.history.length
+const acceptedSessionsBefore = sessions.size
+const acceptedLettersBefore = delivered.length
+const acceptedBacklog = await call("crew_task", "sesINTEG1", { action: "backlog", n: acceptedTask.n, text: "пауза после приёмки" })
+cell("accepted backlog: pause is allowed and explicit", /переведена в бэклог/.test(acceptedBacklog) && tasks.loadTask("proj", acceptedTask.n).status === "backlog", acceptedBacklog)
+const acceptedResume = await call("crew_task", "sesINTEG1", { action: "resume", n: acceptedTask.n })
+const resumedAccepted = tasks.loadTask("proj", acceptedTask.n)
+cell("accepted resume: status remains accepted, not idle", /состояние «принята»/.test(acceptedResume) && resumedAccepted.status === "accepted", JSON.stringify({ acceptedResume, status: resumedAccepted.status }))
+cell("accepted resume: cleanup queue and accepted time restored", tasks.waitingCleanup(tasks.listTasks("proj")).some((x) => x.n === acceptedTask.n) && tasks.acceptedAt(resumedAccepted) === acceptedAtBefore, JSON.stringify({ acceptedAtBefore, acceptedAt: tasks.acceptedAt(resumedAccepted) }))
+cell("accepted resume: history is append-only without resetting accepted-at", resumedAccepted.history.length === acceptedHistoryBefore + 2 && resumedAccepted.history.at(-2)?.status === "backlog" && !resumedAccepted.history.at(-1)?.status && /восстановлен статус: принята/.test(resumedAccepted.history.at(-1)?.note ?? ""), JSON.stringify(resumedAccepted.history))
+cell("accepted resume: evidence and resources survive unchanged", resumedAccepted.checks.required === "verified" && resumedAccepted.precheck.stale.reason === "prior evidence" && resumedAccepted.commit === acceptedTask.commit && resumedAccepted.branch === acceptedTask.branch && resumedAccepted.worktree === acceptedTask.worktree && JSON.stringify(resumedAccepted.steps) === JSON.stringify(acceptedTask.steps) && JSON.stringify(resumedAccepted.side) === JSON.stringify(acceptedTask.side), JSON.stringify(resumedAccepted))
+cell("accepted resume: no new executor, reviewer or wakeup", sessions.size === acceptedSessionsBefore && delivered.length === acceptedLettersBefore && resumedAccepted.executor === acceptedTask.executor && resumedAccepted.reviewer === acceptedTask.reviewer, `${sessions.size}/${acceptedSessionsBefore}, ${delivered.length}/${acceptedLettersBefore}`)
+const acceptedPath = path.join(proj, "doc", "tasks", `${String(acceptedTask.n).padStart(3, "0")}-accepted-resume`)
+mkdirSync(path.join(acceptedPath, "task"), { recursive: true })
+writeFileSync(path.join(acceptedPath, "task", "message.md"), "# Принятая задача\n")
+writeFileSync(path.join(acceptedPath, "log.md"), "старт\n")
+g("add", "doc/tasks")
+g("commit", "-q", "-m", "Add accepted same-number folder")
+const acceptedBeforeSpawn = JSON.stringify(tasks.loadTask("proj", acceptedTask.n))
+const acceptedSpawn = await call("crew_spawn", "sesINTEG1", { task: acceptedTask.n, goal: "новая сессия не должна подменить задачу" })
+cell("accepted resume: same-number spawn cannot replace the accepted record", /сессия не запущена.*принята/i.test(acceptedSpawn) && JSON.stringify(tasks.loadTask("proj", acceptedTask.n)) === acceptedBeforeSpawn && !tasks.listLegacy("proj").some((x) => x.n === acceptedTask.n), acceptedSpawn)
+cell("accepted resume: accepted cleanup slot is in waitingCleanup", tasks.waitingCleanup(tasks.listTasks("proj")).filter((x) => x.n === acceptedTask.n).length === 1, JSON.stringify(tasks.waitingCleanup(tasks.listTasks("proj")).map((x) => x.n)))
+
 clearInterval(heart)
 stop?.()
 rmSync(tmp, { recursive: true, force: true })

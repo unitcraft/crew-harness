@@ -38,6 +38,7 @@
 Решение владельца, 2026-10-22, чат оркестратора: «проверь сессии opencode, ответь на вопросы по твоей рекомендации». Принят fail-closed вариант:
 
 - сохранять исходный статус как аудируемый snapshot; resume не повторяет побочные эффекты старого перехода и не создаёт новый executor/reviewer;
+- если сохранённый статус был `accepted`, восстановить ровно `accepted` и прежнюю очередь уборки, включая прежний `acceptedAt`; reviewer/session, check/evidence, precheck, commit и git resources сохраняются без запуска или повторной приёмки;
 - не считать записанный session id доказательством живой сессии; отсутствующий live tab executor не возобновлять, его id сохраняется в `executors`, активная ссылка очищается, задача возвращается в `idle` без автозапуска;
 - при исчезнувшем reviewer или неизвестном состоянии merge lock сохранить безопасное ожидание и требовать явного назначения/разблокировки интегратором, не запускать приёмку;
 - не сбрасывать и не обновлять `precheck`, checks, evidence, history и relation; устарелость существующего доказательства определяется его текущими правилами;
@@ -57,9 +58,9 @@
 
 ## Проверки
 
-- До кода добавлено 26+ сценариев backlog/resume, включая три различающих сценария, retention, same-number spawn, late submit, spawned-card wake и merge-lock; причинный RED: 13 отказов до реализации.
-- `node test/crew-tasks.test.mjs`, `node test/crew-retention.test.mjs`, `node test/crew-help.test.mjs`, `node test/crew-task-label.test.mjs`, `node test/crew-answer-golden.test.mjs` — зелёные.
-- `npm test` из `opencode-plugin/` — код выхода 0; `sh scripts/guards/run-all.sh` — 9/9 зелёные.
+- Добавлено 37 целевых проверок backlog/resume, включая три различающих сценария, retention, same-number spawn, late submit, spawned-card wake, merge-lock и accepted cleanup; причинный RED до первой реализации — 13 отказов из 22 проверок, а regression RED accepted resume — 6 отказов.
+- На rework-tip после accepted-resume исправления: `node test/crew-tasks.test.mjs` — зелёный. Полный набор и guards, пройденные на исходном submitted-tip `871bc3c`, не являются доказательством для нового exact candidate.
+- Полный `npm test` и `sh scripts/guards/run-all.sh` должны быть выполнены на свежем exact candidate после реализации требований rework и интеграционных изменений по установленному маршруту.
 
 ## Применение после отдельной активации
 
