@@ -9,11 +9,11 @@ import std.encoding.json.{Json, JsonObject}
 import alula.machine.{scenario_files, standard_registry, chat_machine_text}
 import alula.engine.{Incoming, Order, StepEnvironment, FailCode, journal_line, fail_code_word}
 import crew_harness.chat.{ChatState, ChatSession, chat_session, encode_chat_state}
-import alula.machine_run.{PortolanState, PortolanMachine, Scenario, StepTrace, ScEvent, load_portolan_machine, portolan_step, ScriptedHost, drive_scenario, parse_scenario, scenario_incoming, state_data_fields}
+import alula.machine_run.{AlulaState, AlulaMachine, Scenario, StepTrace, ScEvent, load_alula_machine, alula_step, ScriptedHost, drive_scenario, parse_scenario, scenario_incoming, state_data_fields}
 import alula.machine_table.{fail_code_names}
 
-fn table_chat() -> PortolanMachine {
-    match load_portolan_machine(chat_machine_text(), standard_registry()) {
+fn table_chat() -> AlulaMachine {
+    match load_alula_machine(chat_machine_text(), standard_registry()) {
         Ok(m) => m
         Err(e) => panic("the chat machine does not load: ${e}")
     }
@@ -155,21 +155,21 @@ fn order_text(orders []Order) -> str {
     parts.join(",")
 }
 
-type Pair { nova_state ChatState, table_state PortolanState, nova_text str, table_text str, nova_moved bool, table_moved bool }
+type Pair { nova_state ChatState, table_state AlulaState, nova_text str, table_text str, nova_moved bool, table_moved bool }
 
-fn first_pair(table PortolanMachine) -> Pair {
+fn first_pair(table AlulaMachine) -> Pair {
     Pair {
         nova_state: chat_session().initial(), table_state: table.initial(), nova_text: "", table_text: "",
         nova_moved: false, table_moved: false
     }
 }
 
-fn step_pair(table PortolanMachine, p Pair, event Incoming) -> Pair {
+fn step_pair(table AlulaMachine, p Pair, event Incoming) -> Pair {
     mut ne = StepEnvironment.new()
     ro nt = chat_session().step(p.nova_state, event, ne)
     mut te = StepEnvironment.new()
     mut host = ScriptedHost { at: event.at, replies: table.replies, ids: 0 }
-    ro tt = portolan_step(table, p.table_state, event, te, host)
+    ro tt = alula_step(table, p.table_state, event, te, host)
     ro next_nova = match nt {
         Go(s) => s
         Stay => p.nova_state
@@ -192,7 +192,7 @@ fn step_pair(table PortolanMachine, p Pair, event Incoming) -> Pair {
     }
 }
 
-fn pair_diff(table PortolanMachine, p Pair) -> str {
+fn pair_diff(table AlulaMachine, p Pair) -> str {
     if p.nova_text != p.table_text { return "orders ${p.nova_text} / ${p.table_text}" }
     if p.nova_moved != p.table_moved { return "moved ${p.nova_moved} / ${p.table_moved}" }
     ro nova_text_view = nova_view(encode_chat_state(p.nova_state))
@@ -214,7 +214,7 @@ fn events_of(sc Scenario) -> []Incoming {
 fn first_run_diff(sc Scenario) -> str {
     ro table = table_chat()
     ro nova = drive_scenario[ChatState, ChatSession](chat_session(), sc)
-    ro tab = drive_scenario[PortolanState, PortolanMachine](table, sc)
+    ro tab = drive_scenario[AlulaState, AlulaMachine](table, sc)
     if nova.len() != tab.len() { return "${sc.name}: ${nova.len()} traces / ${tab.len()}" }
     mut i = 0
     while i < nova.len() {
@@ -304,8 +304,8 @@ test "closed list" {
 test "same twice" {
     ro table = table_chat()
     for sc in chat_scenarios() {
-        ro first = drive_scenario[PortolanState, PortolanMachine](table, sc)
-        ro second = drive_scenario[PortolanState, PortolanMachine](table, sc)
+        ro first = drive_scenario[AlulaState, AlulaMachine](table, sc)
+        ro second = drive_scenario[AlulaState, AlulaMachine](table, sc)
         assert(first.len() == second.len())
         mut i = 0
         while i < first.len() {
@@ -327,7 +327,7 @@ test "death between" {
     ro table = table_chat()
     ro sc = scenario_named("restart after the commit but before the send")
     ro nova = drive_scenario[ChatState, ChatSession](chat_session(), sc)
-    ro tab = drive_scenario[PortolanState, PortolanMachine](table, sc)
+    ro tab = drive_scenario[AlulaState, AlulaMachine](table, sc)
     assert(tab[0].sent.len() == 0)
     assert(tab[0].queue.len() == 1)
     assert(tab[1].sent.len() == 0)
@@ -345,7 +345,7 @@ test "other side" {
     ro table = table_chat()
     ro sc = scenario_named("the cancel arrives in the window")
     ro nova = drive_scenario[ChatState, ChatSession](chat_session(), sc)
-    ro tab = drive_scenario[PortolanState, PortolanMachine](table, sc)
+    ro tab = drive_scenario[AlulaState, AlulaMachine](table, sc)
     assert(tab[0].queue.len() == 1)
     assert(tab[1].state == "Failed")
     assert(tab[1].queue.len() == 2)
@@ -372,7 +372,7 @@ test "ack agrees" {
     for part in ["is acknowledged after the commit", "discarded event with a key"] {
         ro sc = scenario_named(part)
         ro nova = drive_scenario[ChatState, ChatSession](chat_session(), sc)
-        ro tab = drive_scenario[PortolanState, PortolanMachine](table, sc)
+        ro tab = drive_scenario[AlulaState, AlulaMachine](table, sc)
         assert(tab[tab.len() - 1].acked.len() == 1)
         assert(same_list(nova[nova.len() - 1].acked, tab[tab.len() - 1].acked))
     }

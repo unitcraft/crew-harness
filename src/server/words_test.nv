@@ -5,10 +5,10 @@ module crew_harness.server
 import std.text
 import std.fs.{Fs, real_fs, Path, read_text}
 import alula.engine.{Incoming, EventKind, StepEnvironment, Order}
-import alula.machine_run.{PortolanMachine, PortolanState}
+import alula.machine_run.{AlulaMachine, AlulaState}
 import alula.machine_table.{MachineDef, TableRow, WordEv, SignalEv, ProgressEv, AnswerEv, FailureEv, TimeoutEv, StateDef}
 
-fn wd_machine() -> PortolanMachine {
+fn wd_machine() -> AlulaMachine {
     match hub_machine(900000) {
         Ok(m) => m
         Err(e) => panic("the hub machine is not made: ${e}")
@@ -113,7 +113,7 @@ fn wd_event(w CodeWord) -> Incoming {
     Incoming { id: "e-1", trace: "t-1", step: 2, kind, name: w.name, request, input: "", at: 1000 }
 }
 
-fn wd_codes(m PortolanMachine, s PortolanState, w CodeWord) -> []str {
+fn wd_codes(m AlulaMachine, s AlulaState, w CodeWord) -> []str {
     mut environment = StepEnvironment.new()
     ro moved = m.step(s, wd_event(w), environment)
     mut out = []str.new()

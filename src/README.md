@@ -18,14 +18,14 @@ package **`alula`** (task 144 moved them out of this folder, with the tests; the
 | In the package `alula` (a dependency) | What it is |
 |---|---|
 | `alula.engine` | the engine: `Machine[S]`, `Engine`, the effects `Journal`, `Store`, `Link`, in-memory handlers |
-| `alula.machine`, `alula.machine_table`, `alula.machine_text`, `alula.machine_run` | the tree of a machine, the checks, the translator of Portolan tables, the interpreter `PortolanMachine`, the runner of scenarios |
-| `alula.portolan_cli` and the program `portolan` | the commands `compile`, `render`, `convert`, `check`, `summary`, `run`, `test` |
+| `alula.machine`, `alula.machine_table`, `alula.machine_text`, `alula.machine_run` | the tree of a machine, the checks, the translator of Alula tables, the interpreter `AlulaMachine`, the runner of scenarios |
+| `alula.alula_cli` and the program `alula` | the commands `compile`, `render`, `convert`, `check`, `summary`, `run`, `test` |
 | the data of `alula.machine` | the registry of the primitives (`standard_registry`), the journal codes, the machines `chat`, `dialog`, `dialog_steps`, `agent_step`, `session_start`, `task_runner`, `cycle_check` and the 621 scenarios, compiled in |
-| all the `machine_*` and `portolan_*` unit tests | 1657 tests; the product has 311 |
+| all the `machine_*` and `alula_*` unit tests | 1657 tests; the product has 311 |
 
 The border is the import: a file of this folder imports `alula.<module>`; a file of `alula` imports no module of the product (the guard `check-no-product-imports.py`
-of that repository). The dictionary of the engine, the format of the machines and the program `portolan` are described in the READMEs of `alula`
-(`src/engine/README.md`, `src/machine/README.md`, `src/machine_text/README.md`, `src/portolan_cli/README.md` there).
+of that repository). The dictionary of the engine, the format of the machines and the program `alula` are described in the READMEs of `alula`
+(`src/engine/README.md`, `src/machine/README.md`, `src/machine_text/README.md`, `src/alula_cli/README.md` there).
 
 ## How the dependency is connected
 

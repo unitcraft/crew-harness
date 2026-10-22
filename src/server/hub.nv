@@ -6,7 +6,7 @@
 // timer and takes the events of the agents. The caller of the hub is a loop: in the product it reads and writes the pipes of the
 // hub program (stdio.nv), in the tests it is the test.
 //
-// A session = the engine of the dialog machine (the table `dialog.portolan.md`, run by `PortolanMachine`, task 114) over the handlers of the store (files or PostgreSQL, by the
+// A session = the engine of the dialog machine (the table `dialog.alula.md`, run by `AlulaMachine`, task 114) over the handlers of the store (files or PostgreSQL, by the
 // settings) and of the agent (the ACP client over a process). The page sees only what the engine accepted: every accepted
 // event is turned into a page event by `page_event` (task 095), stamped with the id, the step and the time of the engine.
 //   - The id of the page event is "<session>/<engine id>": the page keeps the ids of ALL sessions in one set.
@@ -19,7 +19,7 @@ module crew_harness.server
 
 import alula.engine.{Engine, Incoming, EventKind, Journal, Store, Link, start_engine, resume_engine, decode_snapshot}
 import alula.machine.{dialog_machine_text}
-import alula.machine_run.{PortolanMachine, PortolanState}
+import alula.machine_run.{AlulaMachine, AlulaState}
 import crew_harness.acp.{AcpConfig, AcpClient, open_client, acp_link, page_event}
 import crew_harness.storage.{open_data_dir, file_journal, file_store, list_sessions, valid_session_name, session_path}
 import crew_harness.pgstore.{PgWorld, pg_journal, pg_store}
@@ -36,7 +36,7 @@ type Dialog {
     id str,
     name str,
     agent str,
-    engine Engine[PortolanMachine, PortolanState],
+    engine Engine[AlulaMachine, AlulaState],
     world PgWorld,
     clients []AcpClient,
     turn str,
@@ -50,7 +50,7 @@ type Dialog {
 /// Hub: the sessions, the pages, the output not yet taken, the log.
 export type Hub {
     settings ServerSettings,
-    machine PortolanMachine,
+    machine AlulaMachine,
     workdir str,
     sessions []Dialog,
     conns []int,
@@ -106,28 +106,28 @@ fn array_text(lines []str) -> str => "[${joined(lines, ",")}]"
 // ----- the store, by the settings: the same engine over files or over PostgreSQL -----
 
 // ORACLE-WORKAROUND(49, 12, 13, 26): `begin_engine` of the interpreter (private, generic) captured the name, so this is `begin_session_engine`; the type arguments of `start_engine` are written out (the same in `resume_stored` and `decode_snapshot` below); rename it to `begin_engine` when item 49 is fixed and drop the arguments when items 12 and 13 are fixed
-fn begin_session_engine(pg bool, root str, mut world PgWorld, machine PortolanMachine, id str) Time -> Engine[PortolanMachine, PortolanState] {
+fn begin_session_engine(pg bool, root str, mut world PgWorld, machine AlulaMachine, id str) Time -> Engine[AlulaMachine, AlulaState] {
     if pg {
         with Journal = pg_journal(world), Store = pg_store(world) {
-            start_engine[PortolanState, PortolanMachine](machine, id)
+            start_engine[AlulaState, AlulaMachine](machine, id)
         }
     } else {
         with Journal = file_journal(root, id), Store = file_store(root) {
-            start_engine[PortolanState, PortolanMachine](machine, id)
+            start_engine[AlulaState, AlulaMachine](machine, id)
         }
     }
 }
 
 // ORACLE-WORKAROUND(26): the type arguments of `decode_snapshot` and `resume_engine` are written out; infer them when items 12 and 13 are fixed
-fn resume_stored(pg bool, root str, mut world PgWorld, machine PortolanMachine, id str) Time -> Option[Engine[PortolanMachine, PortolanState]] {
+fn resume_stored(pg bool, root str, mut world PgWorld, machine AlulaMachine, id str) Time -> Option[Engine[AlulaMachine, AlulaState]] {
     if pg {
         with Journal = pg_journal(world), Store = pg_store(world) {
             // a damaged snapshot would stop the process (`resume_engine`): look at it first
             match Store.load(id) {
                 None => None
-                Some(snapshot) => match decode_snapshot[PortolanState, PortolanMachine](machine, snapshot) {
+                Some(snapshot) => match decode_snapshot[AlulaState, AlulaMachine](machine, snapshot) {
                     None => None
-                    Some(state) => resume_engine[PortolanState, PortolanMachine](machine, id)
+                    Some(state) => resume_engine[AlulaState, AlulaMachine](machine, id)
                 }
             }
         }
@@ -135,9 +135,9 @@ fn resume_stored(pg bool, root str, mut world PgWorld, machine PortolanMachine, 
         with Journal = file_journal(root, id), Store = file_store(root) {
             match Store.load(id) {
                 None => None
-                Some(snapshot) => match decode_snapshot[PortolanState, PortolanMachine](machine, snapshot) {
+                Some(snapshot) => match decode_snapshot[AlulaState, AlulaMachine](machine, snapshot) {
                     None => None
-                    Some(state) => resume_engine[PortolanState, PortolanMachine](machine, id)
+                    Some(state) => resume_engine[AlulaState, AlulaMachine](machine, id)
                 }
             }
         }

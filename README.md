@@ -12,7 +12,7 @@ one merge at a time, letters between agents, a queue for heavy runs on the machi
 | Folder | What it is | State |
 |---|---|---|
 | [`opencode-plugin/`](opencode-plugin/README.md) | the crew as an OpenCode V2 plugin: Claude Code tabs of OpenCode are the agents | in use |
-| `src/` | the product on Nova: the chat session machine, the ACP client, the file and PostgreSQL handlers of the engine, the session server and hub; it depends on the package `alula` (the state machine engine and the core of the machines written as data: the tree, the translator of the tables, the interpreter, the program `portolan`), which was extracted from this folder by [task 144](doc/tasks/144-alula-core-extraction/) and has a repository of its own | in use |
+| `src/` | the product on Nova: the chat session machine, the ACP client, the file and PostgreSQL handlers of the engine, the session server and hub; it depends on the package `alula` (the state machine engine and the core of the machines written as data: the tree, the translator of the tables, the interpreter, the program `alula`), which was extracted from this folder by [task 144](doc/tasks/144-alula-core-extraction/) and has a repository of its own | in use |
 | `service/` | the coordination service: tasks, letters, reviews, the merge lock, the machine queue, plans — outside any one agent program; agents reach it over MCP | planned ([task 001](doc/tasks/001-crew-service/)) |
 | `web/` | the owner's console in the browser: the board, live agent terminals, chat with pictures | planned (task 001) |
 | `scripts/` | the repository's guards: git hooks, checks run by the hooks and CI, the agent shell-command hook, their self-tests, the installer and the GitHub setup script ([rules](AGENTS.md)) | in use |

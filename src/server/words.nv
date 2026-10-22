@@ -1,6 +1,6 @@
 // words.nv - the words between the code and the table of the sessions (task 126): the dictionary of the border, as data.
 //
-// Everything that crosses the border between `src/machine/machines/dialog.portolan.md` (the table: the states, the rows, the journal) and the code
+// Everything that crosses the border between `src/machine/machines/dialog.alula.md` (the table: the states, the rows, the journal) and the code
 // (the hub, the client of ACP, the engine) is a word of this list; `README.md` ("The border of the table and the code") says the same in words.
 // `words_test.nv` keeps the two honest: a word the code gives must be here, a word marked `known` must be declared in the table, a word marked
 // not known must not be (the machine writes `event_unknown` for it and does nothing else).

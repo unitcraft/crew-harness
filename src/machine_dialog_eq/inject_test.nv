@@ -1,5 +1,5 @@
 // inject_test.nv - the deaths and the old journals that a scenario file cannot write (task 114): the tests of `dialog_test.nv` and `chat_engine_test.nv` that put lines into the journal by hand or
-// ask for the history run on both machines of the many-turn chat (`dialog_session` on Nova and `PortolanMachine` over `dialog.portolan.json`) and give the same observations.
+// ask for the history run on both machines of the many-turn chat (`dialog_session` on Nova and `AlulaMachine` over `dialog.alula.json`) and give the same observations.
 module crew_harness.machine_dialog_eq
 
 // ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
@@ -8,13 +8,13 @@ import std.encoding.json.{JsonValue, JsonObject}
 import alula.machine.{standard_registry, dialog_machine_text, Int}
 import alula.engine.{Machine, Engine, MemoryWorld, Incoming, JournalEntry, Journal, Store, Link, start_engine, resume_engine, memory_journal, memory_store, memory_link, memory_time, journal_line, journal_event, param}
 import crew_harness.chat.{ChatState, ChatSession, dialog_session, user_says, user_cancels, agent_chunk, agent_done}
-import alula.machine_run.{PortolanState, PortolanMachine, ProjectValue, load_portolan_machine_with}
+import alula.machine_run.{AlulaState, AlulaMachine, ProjectValue, load_alula_machine_with}
 
 // ORACLE-WORKAROUND(51): the table of the project is built by a function, not by a literal inside the `match` that loads the machine; write it in place when item 51 is fixed
 fn ij_values() -> []ProjectValue => [ProjectValue { key: "проект.срок_бездействия", value: Int(30000) }]
 
-fn ij_table() -> PortolanMachine {
-    match load_portolan_machine_with(dialog_machine_text(), standard_registry(), ij_values()) {
+fn ij_table() -> AlulaMachine {
+    match load_alula_machine_with(dialog_machine_text(), standard_registry(), ij_values()) {
         Ok(m) => m
         Err(e) => panic("the dialog machine does not load: ${e}")
     }
@@ -120,7 +120,7 @@ fn dead_answer_run[S, M Machine[S]](machine M) -> []str {
 
 test "ij death between the line and the snapshot of the answer" {
     ro nova = dead_answer_run[ChatState, ChatSession](ij_nova())
-    ro table = dead_answer_run[PortolanState, PortolanMachine](ij_table())
+    ro table = dead_answer_run[AlulaState, AlulaMachine](ij_table())
     assert(ij_same(nova, table))
     assert(table[0] == "Awaiting")
     assert(table[1] == "pumped=1")
@@ -157,7 +157,7 @@ fn dead_lines_run[S, M Machine[S]](machine M) -> []str {
 
 test "ij dead step lines are not committed" {
     ro nova = dead_lines_run[ChatState, ChatSession](ij_nova())
-    ro table = dead_lines_run[PortolanState, PortolanMachine](ij_table())
+    ro table = dead_lines_run[AlulaState, AlulaMachine](ij_table())
     assert(ij_same(nova, table))
     assert(table[0] == "acked=0")
     assert(table[1] == "acked=0")
@@ -223,7 +223,7 @@ fn old_journal_run[S, M Machine[S]](machine M) -> []str {
 
 test "ij an old journal is read" {
     ro nova = old_journal_run[ChatState, ChatSession](ij_nova())
-    ro table = old_journal_run[PortolanState, PortolanMachine](ij_table())
+    ro table = old_journal_run[AlulaState, AlulaMachine](ij_table())
     assert(ij_same(nova, table))
     assert(table[0] == "sent=1")
     assert(table[1] == "open=1")
@@ -258,7 +258,7 @@ fn history_run[S, M Machine[S]](machine M) -> []str {
 
 test "ij the history of two turns" {
     ro nova = history_run[ChatState, ChatSession](ij_nova())
-    ro table = history_run[PortolanState, PortolanMachine](ij_table())
+    ro table = history_run[AlulaState, AlulaMachine](ij_table())
     assert(ij_same(nova, table))
     assert(table[0] == "live=5 again=5")
     assert(table.len() == 11)
@@ -285,8 +285,8 @@ fn determinism_run[S, M Machine[S]](machine M) -> str {
 }
 
 test "ij determinism" {
-    ro a = determinism_run[PortolanState, PortolanMachine](ij_table())
-    ro b = determinism_run[PortolanState, PortolanMachine](ij_table())
+    ro a = determinism_run[AlulaState, AlulaMachine](ij_table())
+    ro b = determinism_run[AlulaState, AlulaMachine](ij_table())
     ro c = determinism_run[ChatState, ChatSession](ij_nova())
     assert(a == b)
     assert(a == c)
@@ -299,17 +299,17 @@ test "ij determinism" {
 test "ij the session stays open after the cancel" {
     mut world = MemoryWorld.at(1000)
     ro machine = ij_table()
-    mut e = ij_begin[PortolanState, PortolanMachine](machine, world)
-    ij_feed[PortolanState, PortolanMachine](e, world, user_says("one"))
-    ij_feed[PortolanState, PortolanMachine](e, world, user_cancels())
+    mut e = ij_begin[AlulaState, AlulaMachine](machine, world)
+    ij_feed[AlulaState, AlulaMachine](e, world, user_says("one"))
+    ij_feed[AlulaState, AlulaMachine](e, world, user_cancels())
     assert(!e.is_finished())
     match e.outcome() {
         Some(r) => assert(false)
         None => ()
     }
-    assert(ij_name[PortolanState, PortolanMachine](machine, e) == "Idle")
-    ij_feed[PortolanState, PortolanMachine](e, world, user_says("two"))
-    assert(ij_name[PortolanState, PortolanMachine](machine, e) == "Awaiting")
+    assert(ij_name[AlulaState, AlulaMachine](machine, e) == "Idle")
+    ij_feed[AlulaState, AlulaMachine](e, world, user_says("two"))
+    assert(ij_name[AlulaState, AlulaMachine](machine, e) == "Awaiting")
     assert(world.sent.len() == 2)
     assert(world.sent[1].id == "agent-2")
 }

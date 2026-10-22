@@ -1,20 +1,20 @@
-// portolan_test.nv - the hub runs on Portolan (task 114): the machine of the sessions is the embedded `dialog.portolan.json` run by `PortolanMachine`, the idle term of the
+// alula_test.nv - the hub runs on Alula (task 114): the machine of the sessions is the embedded `dialog.alula.json` run by `AlulaMachine`, the idle term of the
 // settings is its parameter of the project, a session in memory goes through two turns and a restart on it, the snapshot is the state of that machine.
 module crew_harness.server
 
 import std.text
 import alula.engine.{Engine, MemoryWorld, Incoming, EventKind, Journal, Store, Link, StepEnvironment, start_engine, resume_engine, memory_journal, memory_store, memory_link, memory_time, decode_snapshot}
 import crew_harness.chat.{user_says, user_cancels, agent_chunk, agent_done, ChatSession, ChatState, dialog_session, encode_chat_state}
-import alula.machine_run.{PortolanMachine, PortolanState}
+import alula.machine_run.{AlulaMachine, AlulaState}
 
-fn hm_made(ms int) -> PortolanMachine {
+fn hm_made(ms int) -> AlulaMachine {
     match hub_machine(ms) {
         Ok(m) => m
         Err(e) => panic("the hub machine is not made: ${e}")
     }
 }
 
-fn hm_send_term(m PortolanMachine) -> int {
+fn hm_send_term(m AlulaMachine) -> int {
     mut environment = StepEnvironment.new()
     ro event = Incoming { id: "e-1", trace: "t-1", step: 2, kind: EventKind.Input, name: "user_message", request: None, input: "hi", at: 1000 }
     ro moved = m.step(m.initial(), event, environment)
@@ -67,19 +67,19 @@ test "hm a term below zero is refused naming the parameter" {
 // ----- an engine over the hub machine in memory -----
 
 // ORACLE-WORKAROUND(12, 13, 26): the type arguments of `start_engine`, `resume_engine` and `decode_snapshot` are written out here and below; infer them when items 12 and 13 are fixed
-fn hm_begin(m PortolanMachine, mut world MemoryWorld) -> Engine[PortolanMachine, PortolanState] {
+fn hm_begin(m AlulaMachine, mut world MemoryWorld) -> Engine[AlulaMachine, AlulaState] {
     with Journal = memory_journal(world), Store = memory_store(world), Link = memory_link(world), Time = memory_time(world) {
-        start_engine[PortolanState, PortolanMachine](m, "hub-1")
+        start_engine[AlulaState, AlulaMachine](m, "hub-1")
     }
 }
 
-fn hm_resumed(m PortolanMachine, mut world MemoryWorld) -> Option[Engine[PortolanMachine, PortolanState]] {
+fn hm_resumed(m AlulaMachine, mut world MemoryWorld) -> Option[Engine[AlulaMachine, AlulaState]] {
     with Journal = memory_journal(world), Store = memory_store(world), Link = memory_link(world), Time = memory_time(world) {
-        resume_engine[PortolanState, PortolanMachine](m, "hub-1")
+        resume_engine[AlulaState, AlulaMachine](m, "hub-1")
     }
 }
 
-fn hm_feed(mut e Engine[PortolanMachine, PortolanState], mut world MemoryWorld, event Incoming) -> () {
+fn hm_feed(mut e Engine[AlulaMachine, AlulaState], mut world MemoryWorld, event Incoming) -> () {
     with Journal = memory_journal(world), Store = memory_store(world), Link = memory_link(world), Time = memory_time(world) {
         e.feed(event)
     }
@@ -110,7 +110,7 @@ test "hm two turns and a restart in memory" {
     }
 }
 
-test "hm the snapshot is the state of the Portolan machine" {
+test "hm the snapshot is the state of the Alula machine" {
     ro m = hm_made(30000)
     mut world = MemoryWorld.at(1000)
     mut e = hm_begin(m, world)
@@ -121,7 +121,7 @@ test "hm the snapshot is the state of the Portolan machine" {
             assert(snapshot.data.contains("\"started\":true"))
             assert(snapshot.data.contains("\"data\":"))
             assert(snapshot.data.contains("привет"))
-            match decode_snapshot[PortolanState, PortolanMachine](m, snapshot) {
+            match decode_snapshot[AlulaState, AlulaMachine](m, snapshot) {
                 Some(es) => assert(es.state.name == "Awaiting")
                 None => assert(false)
             }

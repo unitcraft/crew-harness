@@ -9,7 +9,7 @@
 #
 # `src/chat/` is the machine of a chat session with an agent; tests are peer files `*_test.nv` beside the sources. Build: Nova Oracle 0.1.0,
 # Clang, see `spikes/env/README.md`. The state machine engine and the core of the machines as data (the tree, the translator of tables, the interpreter, the
-# program `portolan`) live in the package `alula` (task 144), a dependency below; its modules are `alula.engine`, `alula.machine`, `alula.machine_run` and so on.
+# program `alula`) live in the package `alula` (task 144), a dependency below; its modules are `alula.engine`, `alula.machine`, `alula.machine_run` and so on.
 #
 # Dependencies (foreign packages, read only): the PostgreSQL driver `postgres` (nova-postgres) for the PostgreSQL handlers of
 # `Journal` and `Store` in `src/pg*` (task 098), and Polaris (`polaris`, with its `http` and `tls`) for the front of the session
@@ -24,11 +24,10 @@ postgres = { git = "https://github.com/nv-lang/nova-postgres", version = "0.1" }
 polaris = { git = "https://github.com/nv-lang/nova-polaris", version = "0.2" }
 http = { git = "https://github.com/nv-lang/nova-http", version = "0.2" }
 tls = { git = "https://github.com/nv-lang/nova-tls", version = "0.2" }
-# The core of the machines as data (task 144). The address is the PROPOSED one: the owner or the integrator of Nova creates the repository, its name and
-# organization are theirs to choose (the owner leans to nv-lang); until it is published the package is taken from a local folder through `[replace]` in
-# the file `nova.override.toml` (not committed, see .gitignore): `[replace]` / `alula = { path = "../alula-core" }`. After the publication the address is
-# corrected here, `nova update` rebuilds `nova.lock.toml` and the override is not needed.
-alula = { git = "https://github.com/nv-lang/nova-alula", version = "0.1" }
+# The core of the machines as data (task 144, published as nv-lang/nova-alula): the package `alula`. Version 0.2 (task 148) is the language under the name Alula, the format 2.14,
+# the modules `alula.alula_cli`, `alula.alula_scenarios`, `alula.alula_eq` and the program `alula`; before the version 0.2 is published, the package is taken from a local
+# folder through `[replace]` in the file `nova.override.toml` (not committed, see .gitignore).
+alula = { git = "https://github.com/nv-lang/nova-alula", version = "0.2" }
 
 [package]
 name = "crew_harness"

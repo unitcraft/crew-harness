@@ -1,4 +1,4 @@
-// equal_test.nv - the proof of equality of the many-turn chat (task 114): the machine written as data (`dialog.portolan.json`, run by `PortolanMachine`) and the machine on Nova
+// equal_test.nv - the proof of equality of the many-turn chat (task 114): the machine written as data (`dialog.alula.json`, run by `AlulaMachine`) and the machine on Nova
 // (`dialog_session`, `src/chat`) give the same sequence on the same scenarios - the state, the events of the journal, the data, the queue - at the level of the machine (one step) and
 // of the engine (journal lines with the envelope, sent and cancelled requests, the outcome, the acknowledgements). The scenarios are the files `dialog-*` of `src/machine/scenarios`:
 // the single-turn scenarios of `chat_engine_test.nv` moved to the many-turn machine and the scenarios of `dialog_test.nv`.
@@ -10,7 +10,7 @@ import std.encoding.json.{Json, JsonObject}
 import alula.machine.{scenario_files, standard_registry, dialog_machine_text, Int}
 import alula.engine.{Incoming, EventKind, Order, StepEnvironment, FailCode, journal_line, fail_code_word}
 import crew_harness.chat.{ChatState, ChatSession, dialog_session, encode_chat_state}
-import alula.machine_run.{PortolanState, PortolanMachine, ProjectValue, Scenario, StepTrace, ScEvent, load_portolan_machine_with, portolan_step, ScriptedHost, drive_scenario, parse_scenario, scenario_incoming, state_data_fields}
+import alula.machine_run.{AlulaState, AlulaMachine, ProjectValue, Scenario, StepTrace, ScEvent, load_alula_machine_with, alula_step, ScriptedHost, drive_scenario, parse_scenario, scenario_incoming, state_data_fields}
 import alula.machine_table.{fail_code_names}
 
 const TERM = 30000
@@ -18,8 +18,8 @@ const TERM = 30000
 // ORACLE-WORKAROUND(51): the table of the project is built by a function, not by a literal inside the `match` that loads the machine; write it in place when item 51 is fixed
 fn term_values() -> []ProjectValue => [ProjectValue { key: "проект.срок_бездействия", value: Int(TERM) }]
 
-fn table_dialog() -> PortolanMachine {
-    match load_portolan_machine_with(dialog_machine_text(), standard_registry(), term_values()) {
+fn table_dialog() -> AlulaMachine {
+    match load_alula_machine_with(dialog_machine_text(), standard_registry(), term_values()) {
         Ok(m) => m
         Err(e) => panic("the dialog machine does not load: ${e}")
     }
@@ -139,21 +139,21 @@ fn order_text(orders []Order) -> str {
     parts.join(",")
 }
 
-type Pair { nova_state ChatState, table_state PortolanState, nova_text str, table_text str, nova_moved bool, table_moved bool }
+type Pair { nova_state ChatState, table_state AlulaState, nova_text str, table_text str, nova_moved bool, table_moved bool }
 
-fn first_pair(table PortolanMachine) -> Pair {
+fn first_pair(table AlulaMachine) -> Pair {
     Pair {
         nova_state: nova_dialog().initial(), table_state: table.initial(), nova_text: "", table_text: "",
         nova_moved: false, table_moved: false
     }
 }
 
-fn step_pair(table PortolanMachine, p Pair, event Incoming) -> Pair {
+fn step_pair(table AlulaMachine, p Pair, event Incoming) -> Pair {
     mut ne = StepEnvironment.new()
     ro nt = nova_dialog().step(p.nova_state, event, ne)
     mut te = StepEnvironment.new()
     mut host = ScriptedHost { at: event.at, replies: table.replies, ids: 0 }
-    ro tt = portolan_step(table, p.table_state, event, te, host)
+    ro tt = alula_step(table, p.table_state, event, te, host)
     ro next_nova = match nt {
         Go(s) => s
         Stay => p.nova_state
@@ -176,7 +176,7 @@ fn step_pair(table PortolanMachine, p Pair, event Incoming) -> Pair {
     }
 }
 
-fn pair_diff(table PortolanMachine, p Pair) -> str {
+fn pair_diff(table AlulaMachine, p Pair) -> str {
     if p.nova_text != p.table_text { return "orders ${p.nova_text} / ${p.table_text}" }
     if p.nova_moved != p.table_moved { return "moved ${p.nova_moved} / ${p.table_moved}" }
     ro nova_text_view = nova_view(encode_chat_state(p.nova_state))
@@ -194,10 +194,10 @@ fn events_of(sc Scenario) -> []Incoming {
     out
 }
 
-// ORACLE-WORKAROUND(12, 13, 26): `drive_scenario[ChatState, ChatSession](...)` and `drive_scenario[PortolanState, PortolanMachine](...)` write the type arguments out here and in the tests below; infer them when items 12 and 13 are fixed
-fn first_run_diff(table PortolanMachine, sc Scenario) -> str {
+// ORACLE-WORKAROUND(12, 13, 26): `drive_scenario[ChatState, ChatSession](...)` and `drive_scenario[AlulaState, AlulaMachine](...)` write the type arguments out here and in the tests below; infer them when items 12 and 13 are fixed
+fn first_run_diff(table AlulaMachine, sc Scenario) -> str {
     ro nova = drive_scenario[ChatState, ChatSession](nova_dialog(), sc)
-    ro tab = drive_scenario[PortolanState, PortolanMachine](table, sc)
+    ro tab = drive_scenario[AlulaState, AlulaMachine](table, sc)
     if nova.len() != tab.len() { return "${sc.name}: ${nova.len()} traces / ${tab.len()}" }
     mut i = 0
     while i < nova.len() {
@@ -208,7 +208,7 @@ fn first_run_diff(table PortolanMachine, sc Scenario) -> str {
     ""
 }
 
-fn machine_run_diff(table PortolanMachine, sc Scenario) -> str {
+fn machine_run_diff(table AlulaMachine, sc Scenario) -> str {
     mut p = first_pair(table)
     mut i = 0
     for e in events_of(sc) {
@@ -260,7 +260,7 @@ fn all_events() -> []Incoming => [
 ]
 
 // The three places of the machine: the start, a turn that is open, a turn that has ended.
-fn places(table PortolanMachine) -> []Pair {
+fn places(table AlulaMachine) -> []Pair {
     ro start = first_pair(table)
     ro open = step_pair(table, start, word_event("user_message", "first"))
     ro mid = step_pair(table, open, chunk_event("agent-1", "some "))
@@ -353,8 +353,8 @@ test "de closed list" {
 test "de same twice" {
     ro table = table_dialog()
     for sc in dialog_scenarios() {
-        ro first = drive_scenario[PortolanState, PortolanMachine](table, sc)
-        ro second = drive_scenario[PortolanState, PortolanMachine](table, sc)
+        ro first = drive_scenario[AlulaState, AlulaMachine](table, sc)
+        ro second = drive_scenario[AlulaState, AlulaMachine](table, sc)
         assert(first.len() == second.len())
         mut i = 0
         while i < first.len() {
@@ -376,7 +376,7 @@ test "de death between" {
     ro table = table_dialog()
     ro sc = scenario_named("death after the commit of the second turn")
     ro nova = drive_scenario[ChatState, ChatSession](nova_dialog(), sc)
-    ro tab = drive_scenario[PortolanState, PortolanMachine](table, sc)
+    ro tab = drive_scenario[AlulaState, AlulaMachine](table, sc)
     assert(tab[2].sent.len() == 1)
     assert(tab[2].queue.len() == 1)
     assert(tab[3].sent.len() == 1)
@@ -395,7 +395,7 @@ test "de other side" {
     ro table = table_dialog()
     ro sc = scenario_named("the cancel arrives in the window")
     ro nova = drive_scenario[ChatState, ChatSession](nova_dialog(), sc)
-    ro tab = drive_scenario[PortolanState, PortolanMachine](table, sc)
+    ro tab = drive_scenario[AlulaState, AlulaMachine](table, sc)
     assert(tab[0].queue.len() == 1)
     assert(tab[1].state == "Idle")
     assert(tab[1].queue.len() == 2)
@@ -422,7 +422,7 @@ test "de ack agrees" {
     for part in ["is acknowledged after the commit", "discarded event with a key", "the agent answers while the process is dead"] {
         ro sc = scenario_named(part)
         ro nova = drive_scenario[ChatState, ChatSession](nova_dialog(), sc)
-        ro tab = drive_scenario[PortolanState, PortolanMachine](table, sc)
+        ro tab = drive_scenario[AlulaState, AlulaMachine](table, sc)
         assert(tab[tab.len() - 1].acked.len() >= 1)
         assert(same_list(nova[nova.len() - 1].acked, tab[tab.len() - 1].acked))
     }
