@@ -244,13 +244,13 @@ test "de machine level" {
     assert(events >= 100)
 }
 
-fn word_event(name str, input str) -> Incoming => scenario_incoming(ScEvent { kind: "word", name, request: "", input, code: "", source: "" })
-fn signal_event(name str) -> Incoming => scenario_incoming(ScEvent { kind: "signal", name, request: "", input: "", code: "", source: "" })
-fn chunk_event(request str, text str) -> Incoming => scenario_incoming(ScEvent { kind: "progress", name: "agent_chunk", request, input: text, code: "", source: "" })
-fn named_progress(name str, input str) -> Incoming => scenario_incoming(ScEvent { kind: "progress", name, request: "agent-1", input, code: "", source: "" })
-fn done_event(request str) -> Incoming => scenario_incoming(ScEvent { kind: "answer", name: "agent_done", request, input: "", code: "", source: "" })
-fn refused_event(request str, code str) -> Incoming => scenario_incoming(ScEvent { kind: "failure", name: "agent_refused", request, input: "", code, source: "" })
-fn timeout_event(request str) -> Incoming => scenario_incoming(ScEvent { kind: "timeout", name: "timeout", request, input: "", code: "", source: "" })
+fn word_event(name str, input str) -> Incoming => scenario_incoming(ScEvent { kind: "signal", name, request: "", input, code: "", source: "", party: "" })
+fn signal_event(name str) -> Incoming => scenario_incoming(ScEvent { kind: "signal", name, request: "", input: "", code: "", source: "", party: "" })
+fn chunk_event(request str, text str) -> Incoming => scenario_incoming(ScEvent { kind: "progress", name: "agent_chunk", request, input: text, code: "", source: "", party: "" })
+fn named_progress(name str, input str) -> Incoming => scenario_incoming(ScEvent { kind: "progress", name, request: "agent-1", input, code: "", source: "", party: "" })
+fn done_event(request str) -> Incoming => scenario_incoming(ScEvent { kind: "answer", name: "agent_done", request, input: "", code: "", source: "", party: "" })
+fn refused_event(request str, code str) -> Incoming => scenario_incoming(ScEvent { kind: "failure", name: "agent_refused", request, input: "", code, source: "", party: "" })
+fn timeout_event(request str) -> Incoming => scenario_incoming(ScEvent { kind: "timeout", name: "timeout", request, input: "", code: "", source: "", party: "" })
 
 // Every kind of event the machine knows and some it does not, for the machine alone (the engine would discard some of them before they reach it).
 fn all_events() -> []Incoming => [

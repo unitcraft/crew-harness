@@ -59,7 +59,7 @@ test "hm a term below zero is refused naming the parameter" {
         Ok(m) => assert(false)
         Err(e) => {
             assert(e.starts_with("the dialog machine cannot be made: "))
-            assert(e.contains("IDLE_TERM"))
+            assert(e.contains("СРОК_БЕЗДЕЙСТВИЯ"))
         }
     }
 }

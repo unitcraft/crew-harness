@@ -99,7 +99,7 @@ Since task 114 the hub runs every session on the machine of the many-turn chat w
   goes back to `Idle` and forgets the turn (the data of the turn are cleared, as the state `Idle` of the machine in Nova holds nothing). The journal codes and their parameters, the numbers of requests
   (`agent-1`, `agent-2`...) and the notes of an event the state does not expect (`event_ignored`) are the same as before. The end `Closed` is reached by the word `close_session`, which only the table has: the
   hub never sends it (a table needs one reachable end), the machine in Nova takes it for an event of an unknown name.
-- **The idle term.** It is the parameter `IDLE_TERM` of the table with the key of the project `проект.срок_бездействия` (format 2.7, P-9, default 900000 ms). The hub gives it
+- **The idle term.** It is the parameter `СРОК_БЕЗДЕЙСТВИЯ` (the name as written in the table, AL-46) of the table with the key of the project `проект.срок_бездействия` (format 2.7, P-9, default 900000 ms). The hub gives it
   `idle_term_seconds * 1000` of the settings through the table of the parameters of the project (`alula_machine_with`); nothing else of the settings reaches the machine.
 - **What the page sees.** Nothing changed: `page_event` takes the events of the engine (the journal codes and the names of the events), the states for the page (`Idle`, `Awaiting`)
   are the names of the states of the table (for people: the code does not compare them, see the next section), `/ws` and `src/web/` are as they were.
@@ -120,9 +120,9 @@ Since task 114 the hub runs every session on the machine of the many-turn chat w
 Task 126. Where the behaviour of a session is written in the table `dialog.alula.md` (`src/machine/machines/` of the package `alula`), and where it is written in code. The hub does not know the name of any
 state of the table: it asks the table.
 
-**The table decides** (change it in the table, the code stays): the states and what leads from one to the other; which word or signal a state takes (`слово(...)`, `сигнал(...)`, `часть(...)`, `ответ`, `сбой`, `срок`);
+**The table decides** (change it in the table, the code stays): the states and what leads from one to the other; which signal a state takes (`сигнал(...)` for a signal of a party and for a signal of the machine, `часть(...)`, `ответ`, `сбой`, `срок`; since the language 2.14 the word of a party is its signal, AL-38);
 the codes of the journal and their parameters; the data of the turn (the two texts) and when they are cleared; the numbers of the requests of the agent (`agent-1`, `agent-2`...: the counter of the party, the mechanics);
-what the request to the agent holds (`подсказка`, `реплика`); the cancel of the open requests (`отменить_открытые`); the idle term (the parameter `IDLE_TERM`, the key of the project `проект.срок_бездействия`);
+what the request to the agent holds (`подсказка`, `реплика`); the cancel of the open requests (`отменить_открытые`); the idle term (the parameter `СРОК_БЕЗДЕЙСТВИЯ` as it is written in the table, the key of the project `проект.срок_бездействия`);
 the end `ЗАКРЫТО` (the word `закрыть_сессию`, which the hub never gives).
 
 **The code decides** (change it in the code, the table stays): which event of the page becomes which word (the table below); whether a word may be given now (`Hub.takes_message`, one question to the machine, see below);

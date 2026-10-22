@@ -6,7 +6,7 @@ import std.text
 import std.fs.{Fs, real_fs, Path, read_text}
 import alula.engine.{Incoming, EventKind, StepEnvironment, Order}
 import alula.machine_run.{AlulaMachine, AlulaState}
-import alula.machine_table.{MachineDef, TableRow, WordEv, SignalEv, ProgressEv, AnswerEv, FailureEv, TimeoutEv, StateDef}
+import alula.machine_table.{MachineDef, TableRow, SignalEv, ProgressEv, AnswerEv, FailureEv, TimeoutEv, StateDef}
 
 fn wd_machine() -> AlulaMachine {
     match hub_machine(900000) {
@@ -59,7 +59,6 @@ fn wd_in_dictionary(name str) -> bool {
 fn wd_rows_take(rows []TableRow, w CodeWord) -> bool {
     for r in rows {
         match r.event {
-            WordEv { word, binds } => { if w.kind == "input" && word == w.name { return true } }
             SignalEv { name, binds } => { if w.kind == "input" && name == w.name { return true } }
             ProgressEv { name, binds } => { if w.kind == "progress" && name == w.name { return true } }
             AnswerEv { bind } => { if w.kind == "answered" { return true } }
@@ -82,7 +81,7 @@ fn wd_in_table(def MachineDef, w CodeWord) -> bool {
 // The word is declared in the table: a word of a party, a signal, a part; an answer, a failure and a timeout have no name in the table.
 fn wd_declared(def MachineDef, w CodeWord) -> bool {
     for p in def.parties {
-        for x in p.words {
+        for x in p.signals {
             if w.kind == "input" && x.name == w.name { return true }
         }
         for x in p.progress {
@@ -224,7 +223,7 @@ test "wd the word cancel is a signal of the table and is not a word of the user"
     ro def = wd_machine().def
     mut as_word = false
     for p in def.parties {
-        for x in p.words {
+        for x in p.signals {
             if x.name == "cancel" { as_word = true }
         }
     }
@@ -241,7 +240,7 @@ test "wd the field of the message and of the chunk is content" {
     mut message = ""
     mut chunk = ""
     for p in def.parties {
-        for x in p.words {
+        for x in p.signals {
             if x.name == "user_message" && x.fields.len() == 1 { message = x.fields[0].name }
         }
         for x in p.progress {
