@@ -5,6 +5,14 @@
 version = 1
 
 [[package]]
+name = "alula"
+source = "git"
+git = "https://github.com/nv-lang/nova-alula"
+pin = "version:>=0.1.0, <0.2.0"
+version = "0.1.0"
+commit = "4456440ab7855db077571b58f1f5107bb7061017"
+
+[[package]]
 name = "compress"
 source = "git"
 git = "https://github.com/nv-lang/nova-compress"
