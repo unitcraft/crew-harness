@@ -142,7 +142,7 @@ def kids(upto):
 
 def word(name, input=None):
     """A word of the keeper (a gate is not a request of the engine: the word comes by its name)."""
-    return ev('word', name, input=input)
+    return ev('signal', name, input=input)
 
 
 def s_start(session='s3', inp=None, h=None, data=None):
@@ -238,7 +238,7 @@ def stop_signal(by=STOP_BY):
 
 
 def continue_word(by=GO_BY):
-    return ev('word', 'continue', input=by)
+    return ev('signal', 'continue', input=by)
 
 
 put('session-1', scenario('SESSION 1: the nested machine answers (the answer of its agent, validated) -> RESULT PARSING reads the artifact and the launch ends with the result', [

@@ -157,7 +157,7 @@ def build():
         s = new(f, t)
         started(s)
         s.answer("agent-1", needs("Read"), state="Permission")
-        s.feed("word", w, state="AgentTurn", journal=[(code, {"action": "read"})], sent=["agent-1", "agent-2"], open=["agent-2"],
+        s.feed("signal", w, state="AgentTurn", journal=[(code, {"action": "read"})], sent=["agent-1", "agent-2"], open=["agent-2"],
                data={"permission_decision": decision, "turn": "permission", "turn_count": 2, "agent_attempt": 2, "gatekeeper_attempt": 0})
 
     s = new("budget-1", "BUDGET 1: the budget of tokens is used up: the step stops")
@@ -219,11 +219,11 @@ def build():
         s.steps[-1]["expect"] = s._expect(state="Pause", cancelled=["agent-1"])
         return s
     s = paused("pause-1", "PAUSE 1: the human continues: the state before the stop is entered again, with a new request")
-    s.feed("word", "continue", input=STOP, state="AgentTurn", journal=[("human_continue", {"previous": "AgentTurn", "author": "ann", "source": "console", "event": "input-4"})],
+    s.feed("signal", "continue", input=STOP, state="AgentTurn", journal=[("human_continue", {"previous": "AgentTurn", "author": "ann", "source": "console", "event": "input-4"})],
            sent=["agent-1", "agent-2"], open=["agent-2"], data={"agent_attempt": 2, "open_requests": ["agent-2"], "turn": "first"})
     for f, t in (("pause-2", "PAUSE 2: the human halts: the step stops"), ("end-halted-10", "HALTED 10: pause_halt is a refusal StoppedByHuman")):
         s = paused(f, t)
-        s.feed("word", "halt", state="Halted", journal=[usage_ev(result="pause_halt", inp=None, out=None), ("agent_step_stopped", {"reason": "pause_halt"})],
+        s.feed("signal", "halt", state="Halted", journal=[usage_ev(result="pause_halt", inp=None, out=None), ("agent_step_stopped", {"reason": "pause_halt"})],
                outcome="refusal:StoppedByHuman", data={"stop_reason": "pause_halt"})
     s = paused("pause-3", "PAUSE 3: the parent continues (the request of the call)", "parent_stop", {"request_id": "call-1"})
     s.signal("parent_continue", request_id="call-1")
@@ -260,7 +260,7 @@ def flows():
     started(s)
     s.signal("human_stop", **STOP)
     s.steps[-1]["expect"] = s._expect(state="Pause", cancelled=["agent-1"])
-    s.feed("word", "continue", input=STOP, state="AgentTurn", sent=["agent-1", "agent-2"])
+    s.feed("signal", "continue", input=STOP, state="AgentTurn", sent=["agent-1", "agent-2"])
     s.answer("agent-2", finished(), state="End", journal=[usage_ev()], outcome=answer_text(), data={"agent_attempt": 2, "open_requests": []})
     s = new("flow-restart-midturn", "a restart in the middle of a turn resumes from the journal: nothing is sent again, the answer is accepted")
     started(s)
@@ -286,26 +286,26 @@ def flows():
     s.steps.append({"do": "accept", "event": {"kind": "signal", "name": "human_stop", "input": STOP},
                     "expect": s._expect(state="Pause", open=[], queue=["send agent-1", "cancel agent-1"], journal=[("human_stop", {"author": "ann", "source": "console", "event": "input-3"})])})
     s.op("dispatch", sent=["agent-1"], cancelled=["agent-1"], queue=[])
-    s.feed("word", "continue", input=STOP, state="AgentTurn", sent=["agent-1", "agent-2"], open=["agent-2"])
+    s.feed("signal", "continue", input=STOP, state="AgentTurn", sent=["agent-1", "agent-2"], open=["agent-2"])
     s.answer("agent-2", finished(), state="End", journal=[usage_ev()])
     s = new("flow-other-party", "in the pause the late answer of the agent and the word of the gate are dropped; the pause waits for its own words")
     started(s)
     s.signal("human_stop", **STOP)
     s.steps[-1]["expect"] = s._expect(state="Pause")
     s.answer("agent-1", finished(), state="Pause", journal=[], open=[])
-    s.feed("word", "allow", state="Pause", journal=[("event_ignored", {"event": "allow", "state": "Pause"})])
-    s.feed("word", "continue", input=STOP, state="AgentTurn", sent=["agent-1", "agent-2"])
+    s.feed("signal", "allow", state="Pause", journal=[("event_ignored", {"event": "allow", "state": "Pause"})])
+    s.feed("signal", "continue", input=STOP, state="AgentTurn", sent=["agent-1", "agent-2"])
     s = new("flow-permission-human", "the agent asks to delete: a human is asked, allows, the turn goes on and ends")
     started(s)
     s.answer("agent-1", needs("Delete"), state="Permission", open=[])
-    s.feed("word", "allow", state="AgentTurn", journal=[("permission_human_allowed", {"action": "delete"})], sent=["agent-1", "agent-2"])
+    s.feed("signal", "allow", state="AgentTurn", journal=[("permission_human_allowed", {"action": "delete"})], sent=["agent-1", "agent-2"])
     s.answer("agent-2", finished(), state="End", journal=[usage_ev()])
     s = new("flow-stop-in-permission", "the stop in the gate PERMISSION: the continue enters the gate again, no request is sent")
     started(s)
     s.answer("agent-1", needs("Read"), state="Permission")
     s.signal("human_stop", **STOP)
     s.steps[-1]["expect"] = s._expect(state="Pause", journal=[("human_stop", {"author": "ann", "source": "console", "event": "input-4"})], data={"previous": "Permission"}, cancelled=[])
-    s.feed("word", "continue", input=STOP, state="Permission", sent=["agent-1"], open=[],
+    s.feed("signal", "continue", input=STOP, state="Permission", sent=["agent-1"], open=[],
            journal=[("human_continue", {"previous": "Permission", "author": "ann", "source": "console", "event": "input-5"})])
     s = new("flow-stop-in-pause", "a stop in the pause is dropped")
     started(s)
@@ -315,7 +315,7 @@ def flows():
     s.steps[-1]["expect"] = s._expect(state="Pause", journal=[("event_ignored", {"event": "human_stop", "state": "Pause"})])
     s = new("flow-continue-outside", "the word continue outside the pause is dropped")
     started(s)
-    s.feed("word", "continue", input=STOP, state="AgentTurn", journal=[("event_ignored", {"event": "continue", "state": "AgentTurn"})])
+    s.feed("signal", "continue", input=STOP, state="AgentTurn", journal=[("event_ignored", {"event": "continue", "state": "AgentTurn"})])
     s = new("flow-parent-wrong-id", "the stop of a parent with another request id is dropped")
     started(s)
     s.signal("parent_stop", request_id="other-1")

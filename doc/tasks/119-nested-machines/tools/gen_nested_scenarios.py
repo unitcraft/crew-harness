@@ -154,7 +154,7 @@ put('call-window-stop', scenario('caller', 'a call: a human stops the parent in 
     step('feed', ev('signal', 'human_stop', input={'human_word': 'stop', 'author': 'ann', 'source': 'console'}),
          expect={'state': 'Pause', 'sent': ['callee-1'], 'open': ['callee-1'], 'data': {'previous': 'Call'}},
          also={KID: {'state': 'Pause', 'data': {'previous': 'Ask'}, 'cancelled': ['agent-1']}}),
-    step('feed', ev('word', 'continue', input={'human_word': 'go', 'author': 'ann', 'source': 'console'}),
+    step('feed', ev('signal', 'continue', input={'human_word': 'go', 'author': 'ann', 'source': 'console'}),
          expect={'state': 'Call', 'open': ['callee-1']},
          also={KID: {'state': 'Ask', 'sent': ['agent-1', 'agent-2'], 'open': ['agent-2']}}),
     step('feed', ev('answer', request='agent-2', input='late'), on=KID, expect={'state': 'Done', 'outcome': 'answer:' + out_json('late', 3)}),
@@ -165,7 +165,7 @@ put('call-pause-continue', scenario('caller', 'a call: the stop of a human is pa
     step('feed', ev('signal', 'human_stop', input={'human_word': 'stop', 'author': 'ann', 'source': 'console'}),
          expect={'state': 'Pause', 'open': ['callee-1'], 'cancelled': [], 'data': {'previous': 'Call', 'open_requests': ['callee-1']}},
          also={KID: {'state': 'Pause', 'cancelled': ['agent-1'], 'open': [], 'data': {'previous': 'Ask'}}}),
-    step('feed', ev('word', 'continue', input={'human_word': 'go', 'author': 'ann', 'source': 'console'}),
+    step('feed', ev('signal', 'continue', input={'human_word': 'go', 'author': 'ann', 'source': 'console'}),
          expect={'state': 'Call', 'open': ['callee-1'], 'sent': ['callee-1'], 'data': {'child_attempt': 1}},
          also={KID: {'state': 'Ask', 'sent': ['agent-1', 'agent-2'], 'open': ['agent-2'], 'data': {'agent_attempt': 2}}}),
     step('feed', ev('answer', request='agent-2', input='again'), on=KID, expect={'state': 'Done'}),
@@ -175,7 +175,7 @@ put('call-halt', scenario('caller', 'a call: the stop and then the halt of a hum
     c_start(),
     step('feed', ev('signal', 'human_stop', input={'human_word': 'stop', 'author': 'ann', 'source': 'console'}),
          expect={'state': 'Pause'}, also={KID: {'state': 'Pause'}}),
-    step('feed', ev('word', 'halt'),
+    step('feed', ev('signal', 'halt'),
          expect={'state': 'Halted', 'outcome': 'refusal:StoppedByHuman', 'open': [], 'queue': ['in failure']},
          also={KID: {'state': 'Halted', 'outcome': 'refusal:StoppedByHuman'}}),
     step('pump', expect={'state': 'Halted', 'outcome': 'refusal:StoppedByHuman', 'queue': []})]))
@@ -282,7 +282,7 @@ put('set-pause-continue', scenario('fan', 'a set: the stop of a human goes to th
     step('feed', ev('signal', 'human_stop', input={'human_word': 'stop', 'author': 'ann', 'source': 'console'}),
          expect={'state': 'Pause', 'open': ['a-1', 'b-1'], 'cancelled': [], 'data': {'to_send': ['c'], 'previous': 'Lenses'}},
          also={'a-1': {'state': 'Pause'}, 'b-1': {'state': 'Pause'}}),
-    step('feed', ev('word', 'continue', input={'human_word': 'go', 'author': 'ann', 'source': 'console'}),
+    step('feed', ev('signal', 'continue', input={'human_word': 'go', 'author': 'ann', 'source': 'console'}),
          expect={'state': 'Lenses', 'open': ['a-1', 'b-1'], 'sent': ['a-1', 'b-1'], 'data': {'to_send': ['c']}},
          also={'a-1': {'state': 'Ask', 'sent': ['agent-1', 'agent-2']}, 'b-1': {'state': 'Ask'}}),
     step('feed', ev('answer', request='agent-2', input='ra'), on='a-1'),
@@ -336,12 +336,12 @@ put('steps-turn', scenario('dialog_steps', 'a chat turn: the agent step is the n
 put('steps-two-turns', scenario('dialog_steps', 'a chat of two turns: each message is a new request call-N and a new nested machine; the closing word ends the session', [
     s_start(), s_kid_done(),
     step('pump', expect={'state': 'Wait'}),
-    step('feed', ev('word', 'user_message', input='second question'),
+    step('feed', ev('signal', 'user_message', input='second question'),
          expect={'state': 'Turn', 'open': ['call-2'], 'sent': ['call-1', 'call-2'], 'journal': [{'code': 'user_message', 'params': {'text': 'second question'}}], 'data': {'step_attempt': 2}},
          also={'call-2': {'state': 'AgentTurn', 'open': ['agent-1'], 'data': {'call_request_id': 'call-2'}}, 'call-1': {'state': 'End'}}),
     s_kid_done('call-2'),
     step('pump', expect={'state': 'Wait', 'data': {'turn_count': 2}}),
-    step('feed', ev('word', 'close_session'), expect={'state': 'Closed', 'outcome': 'answer:closed', 'journal': [{'code': 'session_closed'}]})]))
+    step('feed', ev('signal', 'close_session'), expect={'state': 'Closed', 'outcome': 'answer:closed', 'journal': [{'code': 'session_closed'}]})]))
 
 put('steps-refused', scenario('dialog_steps', 'a chat turn: the agent gives no result; the nested machine ends with the refusal, the session records it and waits for the next word', [
     s_start(),
@@ -354,14 +354,14 @@ put('steps-stop', scenario('dialog_steps', 'a chat turn: a human stops the sessi
     step('feed', ev('signal', 'human_stop', input=STOP_BY),
          expect={'state': 'Pause', 'open': ['call-1']},
          also={'call-1': {'state': 'Pause', 'cancelled': ['agent-1']}}),
-    step('feed', ev('word', 'halt'),
+    step('feed', ev('signal', 'halt'),
          expect={'state': 'Halted', 'outcome': 'refusal:StoppedByHuman', 'open': []},
          also={'call-1': {'state': 'Halted', 'outcome': 'refusal:StoppedByHuman'}})]))
 
 put('steps-continue', scenario('dialog_steps', 'a chat turn: stop and continue of a human go down to the agent step; after continue it asks the agent again and the turn ends', [
     s_start(),
     step('feed', ev('signal', 'human_stop', input=STOP_BY), expect={'state': 'Pause'}, also={'call-1': {'state': 'Pause'}}),
-    step('feed', ev('word', 'continue', input={'human_word': 'go', 'author': 'ann', 'source': 'console'}),
+    step('feed', ev('signal', 'continue', input={'human_word': 'go', 'author': 'ann', 'source': 'console'}),
          expect={'state': 'Turn', 'open': ['call-1'], 'sent': ['call-1']},
          also={'call-1': {'state': 'AgentTurn', 'sent': ['agent-1', 'agent-2'], 'open': ['agent-2']}}),
     step('feed', dict(DONE_EVENT, request='agent-2'), on='call-1', expect={'state': 'End'}),

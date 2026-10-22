@@ -161,7 +161,7 @@ class S:
         return self.step({'kind': 'start', 'request': 'up-1', 'input': {'task_dir': 't', 'repo_dir': 'w', 'delivery_mode': 'files'}}, e(st, **ex))
 
     def word(self, name, fields=None, st=None, also=None, on=None, **ex):
-        ev = {'kind': 'word', 'name': name}
+        ev = {'kind': 'signal', 'name': name}
         if isinstance(fields, dict) and len(fields) == 1:
             fields = list(fields.values())[0]      # a word with one field takes its text as the input
         if fields is not None:

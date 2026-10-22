@@ -89,7 +89,7 @@ def answer_text(text="hello", artifact=None, result="reply", inp=10, out=5, cost
     return "answer:" + canon(rec("AgentReply", text=text, artifact=artifact, usage=usage, request_started=request_started))
 
 
-KIND = {"word": "input", "signal": "input", "start": "input", "answer": "answered", "failure": "refused", "timeout": "expired", "progress": "progress"}
+KIND = {"signal": "input", "start": "input", "answer": "answered", "failure": "refused", "timeout": "expired", "progress": "progress"}
 
 
 class Sc:

@@ -62,7 +62,7 @@ def derive(slug):
 
 
 def msg(text, **expect):
-    return {"do": "feed", "event": {"kind": "word", "name": "user_message", "input": text}, "expect": expect}
+    return {"do": "feed", "event": {"kind": "signal", "name": "user_message", "input": text}, "expect": expect}
 
 
 def chunk(req, text, **expect):
@@ -136,7 +136,7 @@ def own():
     out["restart-before-send-second"] = scenario("death after the commit of the second turn, before the send: sent once as agent-2", [
         msg("one", state="Awaiting"),
         done("agent-1", state="Idle"),
-        {"do": "accept", "event": {"kind": "word", "name": "user_message", "input": "two"},
+        {"do": "accept", "event": {"kind": "signal", "name": "user_message", "input": "two"},
          "expect": {"state": "Awaiting", "sent": ["agent-1"], "queue": ["send agent-2"]}},
         {"do": "restart", "expect": {"state": "Awaiting", "sent": ["agent-1"]}},
         {"do": "dispatch", "expect": {"sent": ["agent-1", "agent-2"], "queue": []}},
@@ -163,7 +163,7 @@ def own():
     out["closed-table-only"] = scenario("(table only) the word close_session in Idle ends the session: the end Closed answers closed", [
         msg("hi", state="Awaiting"),
         done("agent-1", state="Idle"),
-        {"do": "feed", "event": {"kind": "word", "name": "close_session"}, "expect": {
+        {"do": "feed", "event": {"kind": "signal", "name": "close_session"}, "expect": {
             "state": "Closed", "journal": [j("session_closed")], "open": [], "outcome": "answer:closed"}},
         msg("late", state="Closed", journal=[j("event_ignored", event="user_message", state="Closed")], outcome="answer:closed"),
     ])

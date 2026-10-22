@@ -86,14 +86,14 @@ def nest_s1():
 
 def nest_session():
     s = nest_s1()
-    return s.step({'kind': 'word', 'name': 'confirm'}, e('Session', open=['agent_step-1']), on='session_launch-1', also={'agent_step-1': {'state': 'AgentTurn'}})
+    return s.step({'kind': 'signal', 'name': 'confirm'}, e('Session', open=['agent_step-1']), on='session_launch-1', also={'agent_step-1': {'state': 'AgentTurn'}})
 
 
 FL('nested-launch', 'the runner calls the launch of a session, which calls the agent step (two levels below the runner): the agent answers, the launch ends with the result, the runner takes it and goes to the review of the analysis',
    nest_session().step(AGENT_ANSWER, e('End'), on='session_launch-1/agent_step-1').pump(on='session_launch-1', st='End').pump('AnalysisReview', open=['loop_review-1'], also={'loop_review-1': {'state': 'SessionLaunch'}}), nested=True)
 FL('nested-review', 'the runner calls the cycle check, which calls the launch of the session of the reviewer (the third level) and its agent step (the fourth): the states of the four machines are those of the tables',
    nest_session().step(AGENT_ANSWER, e('End'), on='session_launch-1/agent_step-1').pump(on='session_launch-1', st='End').pump('AnalysisReview', open=['loop_review-1'])
-   .step({'kind': 'word', 'name': 'confirm'}, e('Session'), on='loop_review-1/session_launch-1', also={'loop_review-1/session_launch-1/agent_step-1': {'state': 'AgentTurn'}}), nested=True)
+   .step({'kind': 'signal', 'name': 'confirm'}, e('Session'), on='loop_review-1/session_launch-1', also={'loop_review-1/session_launch-1/agent_step-1': {'state': 'AgentTurn'}}), nested=True)
 FL('nested-pause', 'the human stops the runner while the launch and the agent step run: the stop goes down the two levels as signals, the nested machines wait on their pauses, "continue" goes down and they work on',
    nest_session().sig('human_stop', stop_input(), 'Pause', also={'session_launch-1': {'state': 'Pause'}, 'session_launch-1/agent_step-1': {'state': 'Pause'}})
    .word('continue', stop_input(), 'SessionLaunch', also={'session_launch-1': {'state': 'Session'}}), nested=True)

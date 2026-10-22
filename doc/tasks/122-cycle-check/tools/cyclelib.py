@@ -159,7 +159,7 @@ def meeting_refuse(n, code, expect=None):
 
 
 def word(name, inp=None, expect=None):
-    return step('feed', ev('word', name, input=inp), expect=expect)
+    return step('feed', ev('signal', name, input=inp), expect=expect)
 
 
 def sig(name, inp, expect=None):
