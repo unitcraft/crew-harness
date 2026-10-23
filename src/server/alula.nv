@@ -3,7 +3,8 @@
 // `проект.срок_бездействия` (format 2.7, P-9): the settings give it in milliseconds (`idle_term_seconds` * 1000).
 module crew_harness.server
 
-import alula.machine.{standard_registry, dialog_machine_text, Int}
+import alula.machine.{Int}
+import crew_harness.product_machines.{product_registry, dialog_machine_text}
 import alula.machine_run.{AlulaMachine, ProjectValue, load_alula_machine_with}
 
 /// The key of the parameter of the idle term in the table of the project.
@@ -13,7 +14,7 @@ fn idle_term_values(idle_term_ms int) -> []ProjectValue => [ProjectValue { key: 
 
 /// The machine of the sessions from the text of its JSON and the idle term in milliseconds; the error says what is wrong with the machine.
 export fn hub_machine_from(text str, idle_term_ms int) -> Result[AlulaMachine, str] {
-    match load_alula_machine_with(text, standard_registry(), idle_term_values(idle_term_ms)) {
+    match load_alula_machine_with(text, product_registry(), idle_term_values(idle_term_ms)) {
         Ok(machine) => Ok(machine)
         Err(e) => Err("the dialog machine cannot be made: ${e}")
     }

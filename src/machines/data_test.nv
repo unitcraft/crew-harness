@@ -1,0 +1,117 @@
+// data_test.nv - the data of the machines of the product and of the methodology (task 158): the lists of the files in `data.nv` hold every file of the folders `machines/product/` and `machines/methodology/`,
+// the names follow the Alula rule, the registries of the owners load, and every machine loads with the registry of its owner.
+module crew_harness.machines
+
+import alula.machine.{NamedText, text_of_file, find_primitive, journal_find, is_machine_json_name, is_table_name, class_word}
+import alula.machine_run.{load_alula_machine}
+
+fn dt_names(files []NamedText) -> []str {
+    mut out = []str.new()
+    for f in files { out.push(f.name) }
+    out
+}
+
+fn dt_same(left []str, right []str) -> bool {
+    if left.len() != right.len() { return false }
+    for l in left { if !right.contains(l) { return false } }
+    for r in right { if !left.contains(r) { return false } }
+    true
+}
+
+fn dt_with_prefix(files []NamedText, prefix str) -> []NamedText {
+    mut out = []NamedText.new()
+    for f in files {
+        if f.name.starts_with(prefix) { out.push(f) }
+    }
+    out
+}
+
+test "dt the lists of the files hold every file of the folders" {
+    ro machines = dt_names(machine_files())
+    mut in_folders = data_dir_names("product_machines")
+    for n in data_dir_names("methodology_machines") { in_folders.push(n) }
+    assert(dt_same(machines, in_folders))
+    ro tables = dt_names(table_files())
+    mut tables_in_folders = data_dir_names("product_tables")
+    for n in data_dir_names("methodology_tables") {
+        // the copy of the sample of the specification is a text for the tests, not a table of a machine
+        tables_in_folders.push(n)
+    }
+    assert(dt_same(tables, tables_in_folders))
+    ro scenarios = dt_names(scenario_files())
+    mut scenarios_in_folders = data_dir_names("product_scenarios")
+    for n in data_dir_names("methodology_scenarios") { scenarios_in_folders.push(n) }
+    assert(dt_same(scenarios, scenarios_in_folders))
+    assert(data_dir_names("elsewhere").len() == 0)
+}
+
+test "dt the numbers of the files" {
+    assert(machine_files().len() == 7)
+    assert(table_files().len() == 7)
+    assert(scenario_files().len() == 583)
+    assert(dt_with_prefix(scenario_files(), "chat-").len() + dt_with_prefix(scenario_files(), "dialog-").len() + dt_with_prefix(scenario_files(), "free-input-").len() == 81)
+    assert(dt_with_prefix(scenario_files(), "agent-step-").len() == 83)
+    assert(dt_with_prefix(scenario_files(), "cycle-").len() == 101)
+    assert(dt_with_prefix(scenario_files(), "session-").len() == 55)
+    assert(dt_with_prefix(scenario_files(), "runner-").len() == 257)
+    assert(dt_with_prefix(scenario_files(), "nested-steps-").len() == 6)
+}
+
+test "dt the names are the names of Alula" {
+    for f in machine_files() { assert(is_machine_json_name(f.name)) }
+    for f in table_files() { assert(is_table_name(f.name)) }
+    for f in scenario_files() { assert(f.name.ends_with(".scenario.test.json")) }
+}
+
+test "dt the machines of the product load with the registry of the product" {
+    for name in ["chat.alula.json", "dialog.alula.json"] {
+        match load_alula_machine(text_of_file(machine_files(), name), product_registry()) {
+            Ok(m) => assert(m.def.states.len() >= 3)
+            Err(e) => panic("${name}: ${e}")
+        }
+    }
+}
+
+test "dt the machines of the methodology load with the registry of the methodology" {
+    for name in ["agent_step.alula.json", "cycle_check.alula.json", "session_start.alula.json", "task_runner.alula.json", "dialog_steps.alula.json"] {
+        match load_alula_machine(text_of_file(machine_files(), name), methodology_registry()) {
+            Ok(m) => assert(m.def.states.len() >= 3)
+            Err(e) => panic("${name}: ${e}")
+        }
+    }
+}
+
+test "dt a machine of the methodology does not load with the registry of the product" {
+    // the data of an owner are the owner's: the registry of the product has neither the primitives nor the codes of the methodology
+    match load_alula_machine(text_of_file(machine_files(), "agent_step.alula.json"), product_registry()) {
+        Ok(m) => assert(false)
+        Err(e) => assert(e.contains("not registered") || e.contains("journal tables"))
+    }
+}
+
+test "dt the registry of the methodology has 54 primitives and the language has two" {
+    ro reg = methodology_registry()
+    assert(reg.primitives.len() == 56)
+    mut reading = 0
+    mut writing = 0
+    mut irreversible = 0
+    for p in reg.primitives {
+        if class_word(p.class) == "reading" { reading += 1 }
+        if class_word(p.class) == "writing" { writing += 1 }
+        if class_word(p.class) == "irreversible" { irreversible += 1 }
+    }
+    assert(reading == 34 && writing == 12 && irreversible == 10)
+    assert(find_primitive(reg, "time_now").is_some())
+    assert(find_primitive(reg, "stop_agent_group").is_some())
+    assert(product_registry().primitives.len() == 2)
+    assert(all_registry().primitives.len() == 56)
+    assert(journal_find(all_registry().journal, "user_message").is_some())
+    assert(journal_find(all_registry().journal, "turn_failed").is_some())
+}
+
+test "dt the sample of the specification is the sample" {
+    assert(agent_step_sample_text().contains("Шаг агента"))
+    assert(agent_step_sample_text().contains("format: 2.22"))
+    assert(all_journal_text().contains("agent_chunk"))
+    assert(all_journal_text().contains("turn_failed"))
+}

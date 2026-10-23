@@ -1,0 +1,109 @@
+// data.nv - the machines of the product as data that the programs embed: the chat (`machines/product/chat.alula.json`) and the many-turn chat `dialog` that the hub runs, with the table of the journal codes
+// of the product (`machines/product/journal.md`). The package `alula` knows the language only (two primitives, 35 codes, spec 7a); the registry of the product is the language and these codes: the
+// machines of the product call no primitive of their own. The tests read the same files and the machines of the methodology from `crew_harness.machines` (tests only).
+module crew_harness.product_machines
+
+import alula.machine.{NamedText, Registry, load_host}
+
+/// The scenarios of the machines of the product (`machines/product/scenarios/`), by the name of the file.
+export fn scenario_files() -> []NamedText => [
+    NamedText { name: "chat-ack-discarded.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-ack-discarded.scenario.test.json") },
+    NamedText { name: "chat-ack-restart.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-ack-restart.scenario.test.json") },
+    NamedText { name: "chat-ack.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-ack.scenario.test.json") },
+    NamedText { name: "chat-answer-after-cancel.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-answer-after-cancel.scenario.test.json") },
+    NamedText { name: "chat-answer-after-timeout.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-answer-after-timeout.scenario.test.json") },
+    NamedText { name: "chat-cancel-awaiting.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-cancel-awaiting.scenario.test.json") },
+    NamedText { name: "chat-cancel-idle.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-cancel-idle.scenario.test.json") },
+    NamedText { name: "chat-cancel-in-window.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-cancel-in-window.scenario.test.json") },
+    NamedText { name: "chat-chunk-renews-term.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-chunk-renews-term.scenario.test.json") },
+    NamedText { name: "chat-chunks-and-done.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-chunks-and-done.scenario.test.json") },
+    NamedText { name: "chat-cyrillic.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-cyrillic.scenario.test.json") },
+    NamedText { name: "chat-ignored-after-done.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-ignored-after-done.scenario.test.json") },
+    NamedText { name: "chat-ignored-chunk.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-ignored-chunk.scenario.test.json") },
+    NamedText { name: "chat-ignored-second-message.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-ignored-second-message.scenario.test.json") },
+    NamedText { name: "chat-journal-restart-answer.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-journal-restart-answer.scenario.test.json") },
+    NamedText { name: "chat-late-chunk.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-late-chunk.scenario.test.json") },
+    NamedText { name: "chat-message-opens-request.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-message-opens-request.scenario.test.json") },
+    NamedText { name: "chat-pump-order.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-pump-order.scenario.test.json") },
+    NamedText { name: "chat-refused-cancelled.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-cancelled.scenario.test.json") },
+    NamedText { name: "chat-refused-ceiling-reached.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-ceiling-reached.scenario.test.json") },
+    NamedText { name: "chat-refused-connection-lost.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-connection-lost.scenario.test.json") },
+    NamedText { name: "chat-refused-form-not-fixed.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-form-not-fixed.scenario.test.json") },
+    NamedText { name: "chat-refused-max-tokens.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-max-tokens.scenario.test.json") },
+    NamedText { name: "chat-refused-max-turn-requests.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-max-turn-requests.scenario.test.json") },
+    NamedText { name: "chat-refused-model-refused.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-model-refused.scenario.test.json") },
+    NamedText { name: "chat-refused-no-result.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-no-result.scenario.test.json") },
+    NamedText { name: "chat-refused-stopped-by-human.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-stopped-by-human.scenario.test.json") },
+    NamedText { name: "chat-refused-timeout.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-timeout.scenario.test.json") },
+    NamedText { name: "chat-refused-unknown-code.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-unknown-code.scenario.test.json") },
+    NamedText { name: "chat-restart-after-answer.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-restart-after-answer.scenario.test.json") },
+    NamedText { name: "chat-restart-after-request.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-restart-after-request.scenario.test.json") },
+    NamedText { name: "chat-restart-before-send.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-restart-before-send.scenario.test.json") },
+    NamedText { name: "chat-second-answer.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-second-answer.scenario.test.json") },
+    NamedText { name: "chat-silent-agent.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-silent-agent.scenario.test.json") },
+    NamedText { name: "chat-start.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-start.scenario.test.json") },
+    NamedText { name: "chat-timeout-awaiting.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-timeout-awaiting.scenario.test.json") },
+    NamedText { name: "chat-tool-and-permission.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-tool-and-permission.scenario.test.json") },
+    NamedText { name: "chat-unknown-name.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-unknown-name.scenario.test.json") },
+    NamedText { name: "chat-unknown-request.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-unknown-request.scenario.test.json") },
+    NamedText { name: "dialog-answer-while-dead.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-answer-while-dead.scenario.test.json") },
+    NamedText { name: "dialog-cancel-before-send.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-cancel-before-send.scenario.test.json") },
+    NamedText { name: "dialog-cancel-idle.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-cancel-idle.scenario.test.json") },
+    NamedText { name: "dialog-cancel-then-next.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-cancel-then-next.scenario.test.json") },
+    NamedText { name: "dialog-closed-table-only.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-closed-table-only.scenario.test.json") },
+    NamedText { name: "dialog-flow-ack-discarded.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-ack-discarded.scenario.test.json") },
+    NamedText { name: "dialog-flow-ack-restart.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-ack-restart.scenario.test.json") },
+    NamedText { name: "dialog-flow-ack.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-ack.scenario.test.json") },
+    NamedText { name: "dialog-flow-answer-after-cancel.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-answer-after-cancel.scenario.test.json") },
+    NamedText { name: "dialog-flow-answer-after-timeout.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-answer-after-timeout.scenario.test.json") },
+    NamedText { name: "dialog-flow-cancel-awaiting.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-cancel-awaiting.scenario.test.json") },
+    NamedText { name: "dialog-flow-cancel-in-window.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-cancel-in-window.scenario.test.json") },
+    NamedText { name: "dialog-flow-chunk-renews-term.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-chunk-renews-term.scenario.test.json") },
+    NamedText { name: "dialog-flow-chunks-and-done.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-chunks-and-done.scenario.test.json") },
+    NamedText { name: "dialog-flow-cyrillic.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-cyrillic.scenario.test.json") },
+    NamedText { name: "dialog-flow-ignored-chunk.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-ignored-chunk.scenario.test.json") },
+    NamedText { name: "dialog-flow-ignored-second-message.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-ignored-second-message.scenario.test.json") },
+    NamedText { name: "dialog-flow-journal-restart-answer.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-journal-restart-answer.scenario.test.json") },
+    NamedText { name: "dialog-flow-late-chunk.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-late-chunk.scenario.test.json") },
+    NamedText { name: "dialog-flow-message-opens-request.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-message-opens-request.scenario.test.json") },
+    NamedText { name: "dialog-flow-pump-order.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-pump-order.scenario.test.json") },
+    NamedText { name: "dialog-flow-refused-model-refused.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-refused-model-refused.scenario.test.json") },
+    NamedText { name: "dialog-flow-refused-unknown-code.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-refused-unknown-code.scenario.test.json") },
+    NamedText { name: "dialog-flow-restart-after-answer.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-restart-after-answer.scenario.test.json") },
+    NamedText { name: "dialog-flow-restart-after-request.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-restart-after-request.scenario.test.json") },
+    NamedText { name: "dialog-flow-restart-before-send.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-restart-before-send.scenario.test.json") },
+    NamedText { name: "dialog-flow-second-answer.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-second-answer.scenario.test.json") },
+    NamedText { name: "dialog-flow-silent-agent.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-silent-agent.scenario.test.json") },
+    NamedText { name: "dialog-flow-start.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-start.scenario.test.json") },
+    NamedText { name: "dialog-flow-timeout-awaiting.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-timeout-awaiting.scenario.test.json") },
+    NamedText { name: "dialog-flow-tool-and-permission.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-tool-and-permission.scenario.test.json") },
+    NamedText { name: "dialog-flow-unknown-name.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-unknown-name.scenario.test.json") },
+    NamedText { name: "dialog-flow-unknown-request.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-unknown-request.scenario.test.json") },
+    NamedText { name: "dialog-restart-before-send-second.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-restart-before-send-second.scenario.test.json") },
+    NamedText { name: "dialog-second-turn.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-second-turn.scenario.test.json") },
+    NamedText { name: "dialog-timeout-then-next.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-timeout-then-next.scenario.test.json") },
+    NamedText { name: "dialog-turn-ends.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-turn-ends.scenario.test.json") },
+    NamedText { name: "free-input-chat-message.scenario.test.json", text: embed_str("../../machines/product/scenarios/free-input-chat-message.scenario.test.json") },
+    NamedText { name: "free-input-counter-stays.scenario.test.json", text: embed_str("../../machines/product/scenarios/free-input-counter-stays.scenario.test.json") },
+    NamedText { name: "free-input-dialog-close.scenario.test.json", text: embed_str("../../machines/product/scenarios/free-input-dialog-close.scenario.test.json") },
+    NamedText { name: "free-input-no-gate-record.scenario.test.json", text: embed_str("../../machines/product/scenarios/free-input-no-gate-record.scenario.test.json") },
+    NamedText { name: "free-input-word-without-row.scenario.test.json", text: embed_str("../../machines/product/scenarios/free-input-word-without-row.scenario.test.json") }
+]
+
+/// The text of the machine of the chat session (`machines/product/chat.alula.json`).
+export fn chat_machine_text() -> str => embed_str("../../machines/product/chat.alula.json")
+
+/// The text of the machine of the many-turn chat session (`machines/product/dialog.alula.json`), the translation of `dialog.alula.md`: the machine that the session server runs.
+export fn dialog_machine_text() -> str => embed_str("../../machines/product/dialog.alula.json")
+
+/// The table of the journal codes of the product (`machines/product/journal.md`): `user_message`, `agent_chunk`, `agent_done`, `agent_refused`, `cancelled_while_waiting`, `no_answer_in_time`,
+/// `cancelled_before_request`, `session_closed`, `turn_answered`, `turn_refused`.
+export fn product_journal_text() -> str => embed_str("../../machines/product/journal.md")
+
+/// The registry of the host "product": the language and the codes of the journal of the product.
+export fn product_registry() -> Registry {
+    match load_host("", product_journal_text()) {
+        Ok(reg) => reg
+        Err(errors) => panic("the registry of the product is wrong: ${errors.join(" | ")}")
+    }
+}

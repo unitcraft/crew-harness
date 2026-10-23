@@ -1,0 +1,752 @@
+// data.nv - the machines of the product and the machines of the methodology (kept here until task 159) as data, compiled into the program and the tests with `embed_str` (a path is read relative to this file):
+// the JSON `machine/2`, the tables, the scenarios, the registry of the primitives and the table of the journal codes of each owner (`machines/product/`, `machines/methodology/`). The package `alula` knows
+// only the language (two primitives, 35 codes, spec 7a); the rest is registered here: `product_registry()` and `methodology_registry()` are the language and the data of the owner.
+module crew_harness.machines
+
+import alula.machine.{NamedText, Registry, text_of_file, HostRegistryData, parse_registry_table, load_host, host_registry, parse_journal, journal_find}
+import alula.machine_run.{NestedRegistry, load_alula_machine}
+
+/// The machines as JSON, by the name of the file (`chat.alula.json`): the product and the methodology.
+export fn machine_files() -> []NamedText => [
+    NamedText { name: "agent_step.alula.json", text: embed_str("../../machines/methodology/agent_step.alula.json") },
+    NamedText { name: "chat.alula.json", text: embed_str("../../machines/product/chat.alula.json") },
+    NamedText { name: "cycle_check.alula.json", text: embed_str("../../machines/methodology/cycle_check.alula.json") },
+    NamedText { name: "dialog.alula.json", text: embed_str("../../machines/product/dialog.alula.json") },
+    NamedText { name: "dialog_steps.alula.json", text: embed_str("../../machines/methodology/dialog_steps.alula.json") },
+    NamedText { name: "session_start.alula.json", text: embed_str("../../machines/methodology/session_start.alula.json") },
+    NamedText { name: "task_runner.alula.json", text: embed_str("../../machines/methodology/task_runner.alula.json") }
+]
+
+/// The machines written as tables, by the name of the file (`chat.alula.md`).
+export fn table_files() -> []NamedText => [
+    NamedText { name: "agent_step.alula.txt", text: embed_str("../../machines/methodology/agent_step.alula.txt") },
+    NamedText { name: "chat.alula.md", text: embed_str("../../machines/product/chat.alula.md") },
+    NamedText { name: "cycle_check.alula.md", text: embed_str("../../machines/methodology/cycle_check.alula.md") },
+    NamedText { name: "dialog.alula.md", text: embed_str("../../machines/product/dialog.alula.md") },
+    NamedText { name: "dialog_steps.alula.md", text: embed_str("../../machines/methodology/dialog_steps.alula.md") },
+    NamedText { name: "session_start.alula.md", text: embed_str("../../machines/methodology/session_start.alula.md") },
+    NamedText { name: "task_runner.alula.md", text: embed_str("../../machines/methodology/task_runner.alula.md") }
+]
+
+/// The scenarios, by the name of the file (`chat-ack.scenario.test.json`): the product and the methodology.
+export fn scenario_files() -> []NamedText => [
+    NamedText { name: "agent-step-accounting-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-accounting-1.scenario.test.json") },
+    NamedText { name: "agent-step-agent-turn-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-agent-turn-1.scenario.test.json") },
+    NamedText { name: "agent-step-agent-turn-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-agent-turn-2.scenario.test.json") },
+    NamedText { name: "agent-step-agent-turn-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-agent-turn-3.scenario.test.json") },
+    NamedText { name: "agent-step-agent-turn-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-agent-turn-4.scenario.test.json") },
+    NamedText { name: "agent-step-agent-turn-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-agent-turn-5.scenario.test.json") },
+    NamedText { name: "agent-step-agent-turn-6.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-agent-turn-6.scenario.test.json") },
+    NamedText { name: "agent-step-agent-turn-7.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-agent-turn-7.scenario.test.json") },
+    NamedText { name: "agent-step-agent-turn-8.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-agent-turn-8.scenario.test.json") },
+    NamedText { name: "agent-step-agent-turn-9.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-agent-turn-9.scenario.test.json") },
+    NamedText { name: "agent-step-budget-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-budget-1.scenario.test.json") },
+    NamedText { name: "agent-step-budget-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-budget-2.scenario.test.json") },
+    NamedText { name: "agent-step-budget-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-budget-3.scenario.test.json") },
+    NamedText { name: "agent-step-budget-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-budget-4.scenario.test.json") },
+    NamedText { name: "agent-step-common-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-common-1.scenario.test.json") },
+    NamedText { name: "agent-step-common-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-common-2.scenario.test.json") },
+    NamedText { name: "agent-step-common-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-common-3.scenario.test.json") },
+    NamedText { name: "agent-step-common-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-common-4.scenario.test.json") },
+    NamedText { name: "agent-step-common-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-common-5.scenario.test.json") },
+    NamedText { name: "agent-step-continuation-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-continuation-1.scenario.test.json") },
+    NamedText { name: "agent-step-continuation-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-continuation-2.scenario.test.json") },
+    NamedText { name: "agent-step-end-end-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-end-end-1.scenario.test.json") },
+    NamedText { name: "agent-step-end-errored-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-end-errored-1.scenario.test.json") },
+    NamedText { name: "agent-step-end-halted-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-end-halted-1.scenario.test.json") },
+    NamedText { name: "agent-step-end-halted-10.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-end-halted-10.scenario.test.json") },
+    NamedText { name: "agent-step-end-halted-11.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-end-halted-11.scenario.test.json") },
+    NamedText { name: "agent-step-end-halted-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-end-halted-2.scenario.test.json") },
+    NamedText { name: "agent-step-end-halted-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-end-halted-3.scenario.test.json") },
+    NamedText { name: "agent-step-end-halted-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-end-halted-4.scenario.test.json") },
+    NamedText { name: "agent-step-end-halted-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-end-halted-5.scenario.test.json") },
+    NamedText { name: "agent-step-end-halted-6.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-end-halted-6.scenario.test.json") },
+    NamedText { name: "agent-step-end-halted-7.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-end-halted-7.scenario.test.json") },
+    NamedText { name: "agent-step-end-halted-8.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-end-halted-8.scenario.test.json") },
+    NamedText { name: "agent-step-end-halted-9.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-end-halted-9.scenario.test.json") },
+    NamedText { name: "agent-step-flow-attempts.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-attempts.scenario.test.json") },
+    NamedText { name: "agent-step-flow-cancel-open.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-cancel-open.scenario.test.json") },
+    NamedText { name: "agent-step-flow-continue-outside.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-continue-outside.scenario.test.json") },
+    NamedText { name: "agent-step-flow-death-between.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-death-between.scenario.test.json") },
+    NamedText { name: "agent-step-flow-failure-no-result.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-failure-no-result.scenario.test.json") },
+    NamedText { name: "agent-step-flow-failure-unknown-code.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-failure-unknown-code.scenario.test.json") },
+    NamedText { name: "agent-step-flow-form-fix.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-form-fix.scenario.test.json") },
+    NamedText { name: "agent-step-flow-happy.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-happy.scenario.test.json") },
+    NamedText { name: "agent-step-flow-input-missing.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-input-missing.scenario.test.json") },
+    NamedText { name: "agent-step-flow-input-without-context.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-input-without-context.scenario.test.json") },
+    NamedText { name: "agent-step-flow-input-without-dialog-kind.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-input-without-dialog-kind.scenario.test.json") },
+    NamedText { name: "agent-step-flow-input-without-kind.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-input-without-kind.scenario.test.json") },
+    NamedText { name: "agent-step-flow-input-without-limits.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-input-without-limits.scenario.test.json") },
+    NamedText { name: "agent-step-flow-input-without-profile.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-input-without-profile.scenario.test.json") },
+    NamedText { name: "agent-step-flow-input-without-session.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-input-without-session.scenario.test.json") },
+    NamedText { name: "agent-step-flow-input-without-step.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-input-without-step.scenario.test.json") },
+    NamedText { name: "agent-step-flow-input-without-trace.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-input-without-trace.scenario.test.json") },
+    NamedText { name: "agent-step-flow-other-party.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-other-party.scenario.test.json") },
+    NamedText { name: "agent-step-flow-parent-wrong-id.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-parent-wrong-id.scenario.test.json") },
+    NamedText { name: "agent-step-flow-pause-continue.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-pause-continue.scenario.test.json") },
+    NamedText { name: "agent-step-flow-permission-human.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-permission-human.scenario.test.json") },
+    NamedText { name: "agent-step-flow-policy-elevated-lens.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-policy-elevated-lens.scenario.test.json") },
+    NamedText { name: "agent-step-flow-policy-elevated.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-policy-elevated.scenario.test.json") },
+    NamedText { name: "agent-step-flow-restart-midturn.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-restart-midturn.scenario.test.json") },
+    NamedText { name: "agent-step-flow-retries-exhausted.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-retries-exhausted.scenario.test.json") },
+    NamedText { name: "agent-step-flow-stop-in-pause.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-stop-in-pause.scenario.test.json") },
+    NamedText { name: "agent-step-flow-stop-in-permission.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-stop-in-permission.scenario.test.json") },
+    NamedText { name: "agent-step-flow-stop-in-window.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-stop-in-window.scenario.test.json") },
+    NamedText { name: "agent-step-flow-timeout.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-timeout.scenario.test.json") },
+    NamedText { name: "agent-step-flow-transient-then-answer.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-flow-transient-then-answer.scenario.test.json") },
+    NamedText { name: "agent-step-pause-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-pause-1.scenario.test.json") },
+    NamedText { name: "agent-step-pause-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-pause-2.scenario.test.json") },
+    NamedText { name: "agent-step-pause-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-pause-3.scenario.test.json") },
+    NamedText { name: "agent-step-pause-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-pause-4.scenario.test.json") },
+    NamedText { name: "agent-step-permission-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-permission-1.scenario.test.json") },
+    NamedText { name: "agent-step-permission-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-permission-2.scenario.test.json") },
+    NamedText { name: "agent-step-policy-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-policy-1.scenario.test.json") },
+    NamedText { name: "agent-step-policy-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-policy-2.scenario.test.json") },
+    NamedText { name: "agent-step-policy-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-policy-3.scenario.test.json") },
+    NamedText { name: "agent-step-reply-validation-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-reply-validation-1.scenario.test.json") },
+    NamedText { name: "agent-step-reply-validation-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-reply-validation-2.scenario.test.json") },
+    NamedText { name: "agent-step-reply-validation-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-reply-validation-3.scenario.test.json") },
+    NamedText { name: "agent-step-reply-validation-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-reply-validation-4.scenario.test.json") },
+    NamedText { name: "agent-step-retry-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-retry-1.scenario.test.json") },
+    NamedText { name: "agent-step-retry-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-retry-2.scenario.test.json") },
+    NamedText { name: "agent-step-retry-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-retry-3.scenario.test.json") },
+    NamedText { name: "agent-step-start-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-start-1.scenario.test.json") },
+    NamedText { name: "agent-step-step-outcome-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-step-outcome-1.scenario.test.json") },
+    NamedText { name: "agent-step-step-outcome-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/agent-step-step-outcome-2.scenario.test.json") },
+    NamedText { name: "chat-ack-discarded.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-ack-discarded.scenario.test.json") },
+    NamedText { name: "chat-ack-restart.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-ack-restart.scenario.test.json") },
+    NamedText { name: "chat-ack.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-ack.scenario.test.json") },
+    NamedText { name: "chat-answer-after-cancel.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-answer-after-cancel.scenario.test.json") },
+    NamedText { name: "chat-answer-after-timeout.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-answer-after-timeout.scenario.test.json") },
+    NamedText { name: "chat-cancel-awaiting.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-cancel-awaiting.scenario.test.json") },
+    NamedText { name: "chat-cancel-idle.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-cancel-idle.scenario.test.json") },
+    NamedText { name: "chat-cancel-in-window.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-cancel-in-window.scenario.test.json") },
+    NamedText { name: "chat-chunk-renews-term.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-chunk-renews-term.scenario.test.json") },
+    NamedText { name: "chat-chunks-and-done.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-chunks-and-done.scenario.test.json") },
+    NamedText { name: "chat-cyrillic.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-cyrillic.scenario.test.json") },
+    NamedText { name: "chat-ignored-after-done.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-ignored-after-done.scenario.test.json") },
+    NamedText { name: "chat-ignored-chunk.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-ignored-chunk.scenario.test.json") },
+    NamedText { name: "chat-ignored-second-message.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-ignored-second-message.scenario.test.json") },
+    NamedText { name: "chat-journal-restart-answer.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-journal-restart-answer.scenario.test.json") },
+    NamedText { name: "chat-late-chunk.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-late-chunk.scenario.test.json") },
+    NamedText { name: "chat-message-opens-request.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-message-opens-request.scenario.test.json") },
+    NamedText { name: "chat-pump-order.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-pump-order.scenario.test.json") },
+    NamedText { name: "chat-refused-cancelled.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-cancelled.scenario.test.json") },
+    NamedText { name: "chat-refused-ceiling-reached.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-ceiling-reached.scenario.test.json") },
+    NamedText { name: "chat-refused-connection-lost.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-connection-lost.scenario.test.json") },
+    NamedText { name: "chat-refused-form-not-fixed.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-form-not-fixed.scenario.test.json") },
+    NamedText { name: "chat-refused-max-tokens.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-max-tokens.scenario.test.json") },
+    NamedText { name: "chat-refused-max-turn-requests.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-max-turn-requests.scenario.test.json") },
+    NamedText { name: "chat-refused-model-refused.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-model-refused.scenario.test.json") },
+    NamedText { name: "chat-refused-no-result.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-no-result.scenario.test.json") },
+    NamedText { name: "chat-refused-stopped-by-human.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-stopped-by-human.scenario.test.json") },
+    NamedText { name: "chat-refused-timeout.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-timeout.scenario.test.json") },
+    NamedText { name: "chat-refused-unknown-code.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-refused-unknown-code.scenario.test.json") },
+    NamedText { name: "chat-restart-after-answer.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-restart-after-answer.scenario.test.json") },
+    NamedText { name: "chat-restart-after-request.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-restart-after-request.scenario.test.json") },
+    NamedText { name: "chat-restart-before-send.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-restart-before-send.scenario.test.json") },
+    NamedText { name: "chat-second-answer.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-second-answer.scenario.test.json") },
+    NamedText { name: "chat-silent-agent.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-silent-agent.scenario.test.json") },
+    NamedText { name: "chat-start.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-start.scenario.test.json") },
+    NamedText { name: "chat-timeout-awaiting.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-timeout-awaiting.scenario.test.json") },
+    NamedText { name: "chat-tool-and-permission.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-tool-and-permission.scenario.test.json") },
+    NamedText { name: "chat-unknown-name.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-unknown-name.scenario.test.json") },
+    NamedText { name: "chat-unknown-request.scenario.test.json", text: embed_str("../../machines/product/scenarios/chat-unknown-request.scenario.test.json") },
+    NamedText { name: "cycle-after-session-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-after-session-1.scenario.test.json") },
+    NamedText { name: "cycle-after-session-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-after-session-2.scenario.test.json") },
+    NamedText { name: "cycle-after-session-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-after-session-3.scenario.test.json") },
+    NamedText { name: "cycle-after-session-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-after-session-4.scenario.test.json") },
+    NamedText { name: "cycle-ceiling-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-ceiling-1.scenario.test.json") },
+    NamedText { name: "cycle-ceiling-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-ceiling-2.scenario.test.json") },
+    NamedText { name: "cycle-common-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-common-1.scenario.test.json") },
+    NamedText { name: "cycle-common-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-common-2.scenario.test.json") },
+    NamedText { name: "cycle-common-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-common-3.scenario.test.json") },
+    NamedText { name: "cycle-common-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-common-4.scenario.test.json") },
+    NamedText { name: "cycle-common-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-common-5.scenario.test.json") },
+    NamedText { name: "cycle-criterion-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-criterion-1.scenario.test.json") },
+    NamedText { name: "cycle-criterion-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-criterion-2.scenario.test.json") },
+    NamedText { name: "cycle-end-end-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-end-end-1.scenario.test.json") },
+    NamedText { name: "cycle-end-errored-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-end-errored-1.scenario.test.json") },
+    NamedText { name: "cycle-end-halted-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-end-halted-1.scenario.test.json") },
+    NamedText { name: "cycle-end-halted-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-end-halted-2.scenario.test.json") },
+    NamedText { name: "cycle-end-halted-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-end-halted-3.scenario.test.json") },
+    NamedText { name: "cycle-failure-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-failure-1.scenario.test.json") },
+    NamedText { name: "cycle-failure-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-failure-2.scenario.test.json") },
+    NamedText { name: "cycle-failure-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-failure-3.scenario.test.json") },
+    NamedText { name: "cycle-fix-outcome-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-fix-outcome-1.scenario.test.json") },
+    NamedText { name: "cycle-fix-outcome-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-fix-outcome-2.scenario.test.json") },
+    NamedText { name: "cycle-fix-outcome-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-fix-outcome-3.scenario.test.json") },
+    NamedText { name: "cycle-fix-outcome-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-fix-outcome-4.scenario.test.json") },
+    NamedText { name: "cycle-fix-outcome-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-fix-outcome-5.scenario.test.json") },
+    NamedText { name: "cycle-flow-cancel-in-pause.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-cancel-in-pause.scenario.test.json") },
+    NamedText { name: "cycle-flow-ceiling-another-pass.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-ceiling-another-pass.scenario.test.json") },
+    NamedText { name: "cycle-flow-ceiling-cut-scope.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-ceiling-cut-scope.scenario.test.json") },
+    NamedText { name: "cycle-flow-clean.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-clean.scenario.test.json") },
+    NamedText { name: "cycle-flow-codes-delivery.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-codes-delivery.scenario.test.json") },
+    NamedText { name: "cycle-flow-codes-implementation.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-codes-implementation.scenario.test.json") },
+    NamedText { name: "cycle-flow-codes-plan.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-codes-plan.scenario.test.json") },
+    NamedText { name: "cycle-flow-criterion-resets.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-criterion-resets.scenario.test.json") },
+    NamedText { name: "cycle-flow-death-between.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-death-between.scenario.test.json") },
+    NamedText { name: "cycle-flow-death-start.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-death-start.scenario.test.json") },
+    NamedText { name: "cycle-flow-halt-in-pause.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-halt-in-pause.scenario.test.json") },
+    NamedText { name: "cycle-flow-implementation-stop.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-implementation-stop.scenario.test.json") },
+    NamedText { name: "cycle-flow-input-below-minimum.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-input-below-minimum.scenario.test.json") },
+    NamedText { name: "cycle-flow-meeting-restart.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-meeting-restart.scenario.test.json") },
+    NamedText { name: "cycle-flow-meeting-stopped.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-meeting-stopped.scenario.test.json") },
+    NamedText { name: "cycle-flow-narrowing-clean.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-narrowing-clean.scenario.test.json") },
+    NamedText { name: "cycle-flow-no-probes-repeat.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-no-probes-repeat.scenario.test.json") },
+    NamedText { name: "cycle-flow-not-counted.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-not-counted.scenario.test.json") },
+    NamedText { name: "cycle-flow-pause-answer-held.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-pause-answer-held.scenario.test.json") },
+    NamedText { name: "cycle-flow-pause-at-gate.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-pause-at-gate.scenario.test.json") },
+    NamedText { name: "cycle-flow-plan-verdict.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-plan-verdict.scenario.test.json") },
+    NamedText { name: "cycle-flow-refusal-no-result.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-refusal-no-result.scenario.test.json") },
+    NamedText { name: "cycle-flow-refusal-stopped.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-refusal-stopped.scenario.test.json") },
+    NamedText { name: "cycle-flow-requirements-verdict.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-requirements-verdict.scenario.test.json") },
+    NamedText { name: "cycle-flow-restart-end.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-restart-end.scenario.test.json") },
+    NamedText { name: "cycle-flow-restart-gate.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-restart-gate.scenario.test.json") },
+    NamedText { name: "cycle-flow-restart-launch.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-restart-launch.scenario.test.json") },
+    NamedText { name: "cycle-flow-rework.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-flow-rework.scenario.test.json") },
+    NamedText { name: "cycle-gate15-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-gate15-1.scenario.test.json") },
+    NamedText { name: "cycle-gate15-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-gate15-2.scenario.test.json") },
+    NamedText { name: "cycle-gate15-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-gate15-3.scenario.test.json") },
+    NamedText { name: "cycle-gate3-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-gate3-1.scenario.test.json") },
+    NamedText { name: "cycle-gate3-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-gate3-2.scenario.test.json") },
+    NamedText { name: "cycle-gate9-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-gate9-1.scenario.test.json") },
+    NamedText { name: "cycle-gate9-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-gate9-2.scenario.test.json") },
+    NamedText { name: "cycle-gate9-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-gate9-3.scenario.test.json") },
+    NamedText { name: "cycle-gate9-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-gate9-4.scenario.test.json") },
+    NamedText { name: "cycle-gate9-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-gate9-5.scenario.test.json") },
+    NamedText { name: "cycle-launch-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-launch-1.scenario.test.json") },
+    NamedText { name: "cycle-launch-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-launch-2.scenario.test.json") },
+    NamedText { name: "cycle-levels-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-levels-1.scenario.test.json") },
+    NamedText { name: "cycle-levels-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-levels-2.scenario.test.json") },
+    NamedText { name: "cycle-levels-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-levels-3.scenario.test.json") },
+    NamedText { name: "cycle-levels-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-levels-4.scenario.test.json") },
+    NamedText { name: "cycle-levels-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-levels-5.scenario.test.json") },
+    NamedText { name: "cycle-levels-6.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-levels-6.scenario.test.json") },
+    NamedText { name: "cycle-meeting-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-meeting-1.scenario.test.json") },
+    NamedText { name: "cycle-meeting-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-meeting-2.scenario.test.json") },
+    NamedText { name: "cycle-narrowing-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-narrowing-1.scenario.test.json") },
+    NamedText { name: "cycle-narrowing-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-narrowing-2.scenario.test.json") },
+    NamedText { name: "cycle-no-probes-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-no-probes-1.scenario.test.json") },
+    NamedText { name: "cycle-no-probes-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-no-probes-2.scenario.test.json") },
+    NamedText { name: "cycle-outcome-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-outcome-1.scenario.test.json") },
+    NamedText { name: "cycle-outcome-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-outcome-2.scenario.test.json") },
+    NamedText { name: "cycle-pass-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-pass-1.scenario.test.json") },
+    NamedText { name: "cycle-pass-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-pass-2.scenario.test.json") },
+    NamedText { name: "cycle-pass-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-pass-3.scenario.test.json") },
+    NamedText { name: "cycle-pause-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-pause-1.scenario.test.json") },
+    NamedText { name: "cycle-pause-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-pause-2.scenario.test.json") },
+    NamedText { name: "cycle-pause-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-pause-3.scenario.test.json") },
+    NamedText { name: "cycle-pause-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-pause-4.scenario.test.json") },
+    NamedText { name: "cycle-retry-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-retry-1.scenario.test.json") },
+    NamedText { name: "cycle-retry-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-retry-2.scenario.test.json") },
+    NamedText { name: "cycle-review-entry-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-review-entry-1.scenario.test.json") },
+    NamedText { name: "cycle-review-entry-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-review-entry-2.scenario.test.json") },
+    NamedText { name: "cycle-review-entry-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-review-entry-3.scenario.test.json") },
+    NamedText { name: "cycle-review-entry-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-review-entry-4.scenario.test.json") },
+    NamedText { name: "cycle-stop-stage-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-stop-stage-1.scenario.test.json") },
+    NamedText { name: "cycle-stop-stage-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-stop-stage-2.scenario.test.json") },
+    NamedText { name: "cycle-stop-stage-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-stop-stage-3.scenario.test.json") },
+    NamedText { name: "cycle-stop-stage-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-stop-stage-4.scenario.test.json") },
+    NamedText { name: "cycle-summary-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-summary-1.scenario.test.json") },
+    NamedText { name: "cycle-summary-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-summary-2.scenario.test.json") },
+    NamedText { name: "cycle-summary-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-summary-3.scenario.test.json") },
+    NamedText { name: "cycle-summary-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/cycle-summary-4.scenario.test.json") },
+    NamedText { name: "dialog-answer-while-dead.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-answer-while-dead.scenario.test.json") },
+    NamedText { name: "dialog-cancel-before-send.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-cancel-before-send.scenario.test.json") },
+    NamedText { name: "dialog-cancel-idle.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-cancel-idle.scenario.test.json") },
+    NamedText { name: "dialog-cancel-then-next.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-cancel-then-next.scenario.test.json") },
+    NamedText { name: "dialog-closed-table-only.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-closed-table-only.scenario.test.json") },
+    NamedText { name: "dialog-flow-ack-discarded.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-ack-discarded.scenario.test.json") },
+    NamedText { name: "dialog-flow-ack-restart.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-ack-restart.scenario.test.json") },
+    NamedText { name: "dialog-flow-ack.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-ack.scenario.test.json") },
+    NamedText { name: "dialog-flow-answer-after-cancel.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-answer-after-cancel.scenario.test.json") },
+    NamedText { name: "dialog-flow-answer-after-timeout.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-answer-after-timeout.scenario.test.json") },
+    NamedText { name: "dialog-flow-cancel-awaiting.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-cancel-awaiting.scenario.test.json") },
+    NamedText { name: "dialog-flow-cancel-in-window.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-cancel-in-window.scenario.test.json") },
+    NamedText { name: "dialog-flow-chunk-renews-term.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-chunk-renews-term.scenario.test.json") },
+    NamedText { name: "dialog-flow-chunks-and-done.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-chunks-and-done.scenario.test.json") },
+    NamedText { name: "dialog-flow-cyrillic.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-cyrillic.scenario.test.json") },
+    NamedText { name: "dialog-flow-ignored-chunk.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-ignored-chunk.scenario.test.json") },
+    NamedText { name: "dialog-flow-ignored-second-message.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-ignored-second-message.scenario.test.json") },
+    NamedText { name: "dialog-flow-journal-restart-answer.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-journal-restart-answer.scenario.test.json") },
+    NamedText { name: "dialog-flow-late-chunk.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-late-chunk.scenario.test.json") },
+    NamedText { name: "dialog-flow-message-opens-request.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-message-opens-request.scenario.test.json") },
+    NamedText { name: "dialog-flow-pump-order.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-pump-order.scenario.test.json") },
+    NamedText { name: "dialog-flow-refused-model-refused.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-refused-model-refused.scenario.test.json") },
+    NamedText { name: "dialog-flow-refused-unknown-code.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-refused-unknown-code.scenario.test.json") },
+    NamedText { name: "dialog-flow-restart-after-answer.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-restart-after-answer.scenario.test.json") },
+    NamedText { name: "dialog-flow-restart-after-request.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-restart-after-request.scenario.test.json") },
+    NamedText { name: "dialog-flow-restart-before-send.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-restart-before-send.scenario.test.json") },
+    NamedText { name: "dialog-flow-second-answer.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-second-answer.scenario.test.json") },
+    NamedText { name: "dialog-flow-silent-agent.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-silent-agent.scenario.test.json") },
+    NamedText { name: "dialog-flow-start.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-start.scenario.test.json") },
+    NamedText { name: "dialog-flow-timeout-awaiting.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-timeout-awaiting.scenario.test.json") },
+    NamedText { name: "dialog-flow-tool-and-permission.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-tool-and-permission.scenario.test.json") },
+    NamedText { name: "dialog-flow-unknown-name.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-unknown-name.scenario.test.json") },
+    NamedText { name: "dialog-flow-unknown-request.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-flow-unknown-request.scenario.test.json") },
+    NamedText { name: "dialog-restart-before-send-second.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-restart-before-send-second.scenario.test.json") },
+    NamedText { name: "dialog-second-turn.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-second-turn.scenario.test.json") },
+    NamedText { name: "dialog-timeout-then-next.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-timeout-then-next.scenario.test.json") },
+    NamedText { name: "dialog-turn-ends.scenario.test.json", text: embed_str("../../machines/product/scenarios/dialog-turn-ends.scenario.test.json") },
+    NamedText { name: "free-input-chat-message.scenario.test.json", text: embed_str("../../machines/product/scenarios/free-input-chat-message.scenario.test.json") },
+    NamedText { name: "free-input-counter-stays.scenario.test.json", text: embed_str("../../machines/product/scenarios/free-input-counter-stays.scenario.test.json") },
+    NamedText { name: "free-input-dialog-close.scenario.test.json", text: embed_str("../../machines/product/scenarios/free-input-dialog-close.scenario.test.json") },
+    NamedText { name: "free-input-no-gate-record.scenario.test.json", text: embed_str("../../machines/product/scenarios/free-input-no-gate-record.scenario.test.json") },
+    NamedText { name: "free-input-word-without-row.scenario.test.json", text: embed_str("../../machines/product/scenarios/free-input-word-without-row.scenario.test.json") },
+    NamedText { name: "nested-steps-cancel.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/nested-steps-cancel.scenario.test.json") },
+    NamedText { name: "nested-steps-continue.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/nested-steps-continue.scenario.test.json") },
+    NamedText { name: "nested-steps-refused.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/nested-steps-refused.scenario.test.json") },
+    NamedText { name: "nested-steps-stop.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/nested-steps-stop.scenario.test.json") },
+    NamedText { name: "nested-steps-turn.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/nested-steps-turn.scenario.test.json") },
+    NamedText { name: "nested-steps-two-turns.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/nested-steps-two-turns.scenario.test.json") },
+    NamedText { name: "runner-after-approval-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-after-approval-1.scenario.test.json") },
+    NamedText { name: "runner-after-approval-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-after-approval-2.scenario.test.json") },
+    NamedText { name: "runner-after-session-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-after-session-1.scenario.test.json") },
+    NamedText { name: "runner-after-session-10.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-after-session-10.scenario.test.json") },
+    NamedText { name: "runner-after-session-11.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-after-session-11.scenario.test.json") },
+    NamedText { name: "runner-after-session-12.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-after-session-12.scenario.test.json") },
+    NamedText { name: "runner-after-session-13.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-after-session-13.scenario.test.json") },
+    NamedText { name: "runner-after-session-14.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-after-session-14.scenario.test.json") },
+    NamedText { name: "runner-after-session-15.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-after-session-15.scenario.test.json") },
+    NamedText { name: "runner-after-session-16.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-after-session-16.scenario.test.json") },
+    NamedText { name: "runner-after-session-17.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-after-session-17.scenario.test.json") },
+    NamedText { name: "runner-after-session-18.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-after-session-18.scenario.test.json") },
+    NamedText { name: "runner-after-session-19.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-after-session-19.scenario.test.json") },
+    NamedText { name: "runner-after-session-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-after-session-2.scenario.test.json") },
+    NamedText { name: "runner-after-session-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-after-session-3.scenario.test.json") },
+    NamedText { name: "runner-after-session-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-after-session-4.scenario.test.json") },
+    NamedText { name: "runner-after-session-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-after-session-5.scenario.test.json") },
+    NamedText { name: "runner-after-session-6.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-after-session-6.scenario.test.json") },
+    NamedText { name: "runner-after-session-7.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-after-session-7.scenario.test.json") },
+    NamedText { name: "runner-after-session-8.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-after-session-8.scenario.test.json") },
+    NamedText { name: "runner-after-session-9.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-after-session-9.scenario.test.json") },
+    NamedText { name: "runner-analysis-review-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-analysis-review-1.scenario.test.json") },
+    NamedText { name: "runner-analysis-review-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-analysis-review-2.scenario.test.json") },
+    NamedText { name: "runner-answers-recording-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-answers-recording-1.scenario.test.json") },
+    NamedText { name: "runner-approval-check-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-approval-check-1.scenario.test.json") },
+    NamedText { name: "runner-approval-check-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-approval-check-2.scenario.test.json") },
+    NamedText { name: "runner-approval-recording-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-approval-recording-1.scenario.test.json") },
+    NamedText { name: "runner-brief-check-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-brief-check-1.scenario.test.json") },
+    NamedText { name: "runner-brief-check-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-brief-check-2.scenario.test.json") },
+    NamedText { name: "runner-brief-copy-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-brief-copy-1.scenario.test.json") },
+    NamedText { name: "runner-common-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-common-1.scenario.test.json") },
+    NamedText { name: "runner-common-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-common-2.scenario.test.json") },
+    NamedText { name: "runner-common-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-common-3.scenario.test.json") },
+    NamedText { name: "runner-common-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-common-4.scenario.test.json") },
+    NamedText { name: "runner-common-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-common-5.scenario.test.json") },
+    NamedText { name: "runner-copy-snapshot-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-copy-snapshot-1.scenario.test.json") },
+    NamedText { name: "runner-decisions-outcome-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-decisions-outcome-1.scenario.test.json") },
+    NamedText { name: "runner-decisions-outcome-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-decisions-outcome-2.scenario.test.json") },
+    NamedText { name: "runner-decisions-recording-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-decisions-recording-1.scenario.test.json") },
+    NamedText { name: "runner-delivery-diff-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-delivery-diff-1.scenario.test.json") },
+    NamedText { name: "runner-delivery-diff-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-delivery-diff-2.scenario.test.json") },
+    NamedText { name: "runner-delivery-letter-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-delivery-letter-1.scenario.test.json") },
+    NamedText { name: "runner-delivery-letter-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-delivery-letter-2.scenario.test.json") },
+    NamedText { name: "runner-delivery-letter-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-delivery-letter-3.scenario.test.json") },
+    NamedText { name: "runner-delivery-letter-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-delivery-letter-4.scenario.test.json") },
+    NamedText { name: "runner-delivery-message-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-delivery-message-1.scenario.test.json") },
+    NamedText { name: "runner-delivery-message-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-delivery-message-2.scenario.test.json") },
+    NamedText { name: "runner-delivery-phase-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-delivery-phase-1.scenario.test.json") },
+    NamedText { name: "runner-delivery-phase-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-delivery-phase-2.scenario.test.json") },
+    NamedText { name: "runner-delivery-review-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-delivery-review-1.scenario.test.json") },
+    NamedText { name: "runner-delivery-review-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-delivery-review-2.scenario.test.json") },
+    NamedText { name: "runner-delivery-secrets-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-delivery-secrets-1.scenario.test.json") },
+    NamedText { name: "runner-delivery-secrets-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-delivery-secrets-2.scenario.test.json") },
+    NamedText { name: "runner-end-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-end-1.scenario.test.json") },
+    NamedText { name: "runner-errored-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-errored-1.scenario.test.json") },
+    NamedText { name: "runner-factory-word-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-factory-word-1.scenario.test.json") },
+    NamedText { name: "runner-factory-word-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-factory-word-2.scenario.test.json") },
+    NamedText { name: "runner-factory-word-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-factory-word-3.scenario.test.json") },
+    NamedText { name: "runner-feedback-route-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-feedback-route-1.scenario.test.json") },
+    NamedText { name: "runner-feedback-route-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-feedback-route-2.scenario.test.json") },
+    NamedText { name: "runner-feedback-route-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-feedback-route-3.scenario.test.json") },
+    NamedText { name: "runner-feedback-route-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-feedback-route-4.scenario.test.json") },
+    NamedText { name: "runner-feedback-route-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-feedback-route-5.scenario.test.json") },
+    NamedText { name: "runner-feedback-saving-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-feedback-saving-1.scenario.test.json") },
+    NamedText { name: "runner-flow-cancel-in-gate.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-cancel-in-gate.scenario.test.json") },
+    NamedText { name: "runner-flow-death-between.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-death-between.scenario.test.json") },
+    NamedText { name: "runner-flow-death-start.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-death-start.scenario.test.json") },
+    NamedText { name: "runner-flow-fast-ceiling.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-fast-ceiling.scenario.test.json") },
+    NamedText { name: "runner-flow-fast-clean.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-fast-clean.scenario.test.json") },
+    NamedText { name: "runner-flow-fast-gate14.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-fast-gate14.scenario.test.json") },
+    NamedText { name: "runner-flow-fast-refused.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-fast-refused.scenario.test.json") },
+    NamedText { name: "runner-flow-fast-rework.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-fast-rework.scenario.test.json") },
+    NamedText { name: "runner-flow-full-clean.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-full-clean.scenario.test.json") },
+    NamedText { name: "runner-flow-full-commit-edited.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-full-commit-edited.scenario.test.json") },
+    NamedText { name: "runner-flow-full-edit-after-approval.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-full-edit-after-approval.scenario.test.json") },
+    NamedText { name: "runner-flow-full-feedback-round.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-full-feedback-round.scenario.test.json") },
+    NamedText { name: "runner-flow-full-no-code.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-full-no-code.scenario.test.json") },
+    NamedText { name: "runner-flow-full-plan-question.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-full-plan-question.scenario.test.json") },
+    NamedText { name: "runner-flow-full-secrets-gate.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-full-secrets-gate.scenario.test.json") },
+    NamedText { name: "runner-flow-nested-cancel.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-nested-cancel.scenario.test.json") },
+    NamedText { name: "runner-flow-nested-held.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-nested-held.scenario.test.json") },
+    NamedText { name: "runner-flow-nested-launch.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-nested-launch.scenario.test.json") },
+    NamedText { name: "runner-flow-nested-pause.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-nested-pause.scenario.test.json") },
+    NamedText { name: "runner-flow-nested-review.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-nested-review.scenario.test.json") },
+    NamedText { name: "runner-flow-pause-answer-held.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-pause-answer-held.scenario.test.json") },
+    NamedText { name: "runner-flow-pause-failure-held.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-pause-failure-held.scenario.test.json") },
+    NamedText { name: "runner-flow-restart-end.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-restart-end.scenario.test.json") },
+    NamedText { name: "runner-flow-restart-gate.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-restart-gate.scenario.test.json") },
+    NamedText { name: "runner-flow-restart-gate14.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-restart-gate14.scenario.test.json") },
+    NamedText { name: "runner-flow-restart-launch.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-restart-launch.scenario.test.json") },
+    NamedText { name: "runner-flow-stop-at-gate.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-stop-at-gate.scenario.test.json") },
+    NamedText { name: "runner-flow-stranger-in-window.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-flow-stranger-in-window.scenario.test.json") },
+    NamedText { name: "runner-foreign-approval-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-foreign-approval-1.scenario.test.json") },
+    NamedText { name: "runner-foreign-approval-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-foreign-approval-2.scenario.test.json") },
+    NamedText { name: "runner-foreign-snapshot-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-foreign-snapshot-1.scenario.test.json") },
+    NamedText { name: "runner-full-path-return-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-full-path-return-1.scenario.test.json") },
+    NamedText { name: "runner-gate10a-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate10a-1.scenario.test.json") },
+    NamedText { name: "runner-gate10a-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate10a-2.scenario.test.json") },
+    NamedText { name: "runner-gate10b-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate10b-1.scenario.test.json") },
+    NamedText { name: "runner-gate10c-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate10c-1.scenario.test.json") },
+    NamedText { name: "runner-gate10d-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate10d-1.scenario.test.json") },
+    NamedText { name: "runner-gate11-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate11-1.scenario.test.json") },
+    NamedText { name: "runner-gate11-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate11-2.scenario.test.json") },
+    NamedText { name: "runner-gate12-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate12-1.scenario.test.json") },
+    NamedText { name: "runner-gate13-preparation-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate13-preparation-1.scenario.test.json") },
+    NamedText { name: "runner-gate13-preparation-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate13-preparation-2.scenario.test.json") },
+    NamedText { name: "runner-gate13-status-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate13-status-1.scenario.test.json") },
+    NamedText { name: "runner-gate13-status-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate13-status-2.scenario.test.json") },
+    NamedText { name: "runner-gate14-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate14-1.scenario.test.json") },
+    NamedText { name: "runner-gate14-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate14-2.scenario.test.json") },
+    NamedText { name: "runner-gate14-refusal-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate14-refusal-1.scenario.test.json") },
+    NamedText { name: "runner-gate4-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate4-1.scenario.test.json") },
+    NamedText { name: "runner-gate4-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate4-2.scenario.test.json") },
+    NamedText { name: "runner-gate4-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate4-3.scenario.test.json") },
+    NamedText { name: "runner-gate4-question-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate4-question-1.scenario.test.json") },
+    NamedText { name: "runner-gate4-question-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate4-question-2.scenario.test.json") },
+    NamedText { name: "runner-gate4-question-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate4-question-3.scenario.test.json") },
+    NamedText { name: "runner-gate5-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate5-1.scenario.test.json") },
+    NamedText { name: "runner-gate5-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate5-2.scenario.test.json") },
+    NamedText { name: "runner-gate6-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate6-1.scenario.test.json") },
+    NamedText { name: "runner-gate6-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate6-2.scenario.test.json") },
+    NamedText { name: "runner-gate7-delivery-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate7-delivery-1.scenario.test.json") },
+    NamedText { name: "runner-gate7-delivery-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate7-delivery-2.scenario.test.json") },
+    NamedText { name: "runner-gate7-delivery-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate7-delivery-3.scenario.test.json") },
+    NamedText { name: "runner-gate7-implementation-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate7-implementation-1.scenario.test.json") },
+    NamedText { name: "runner-gate7-implementation-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate7-implementation-2.scenario.test.json") },
+    NamedText { name: "runner-gate7-implementation-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate7-implementation-3.scenario.test.json") },
+    NamedText { name: "runner-gate7-implementation-step-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate7-implementation-step-1.scenario.test.json") },
+    NamedText { name: "runner-gate7-implementation-step-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate7-implementation-step-2.scenario.test.json") },
+    NamedText { name: "runner-gate7-implementation-step-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate7-implementation-step-3.scenario.test.json") },
+    NamedText { name: "runner-gate7-plan-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate7-plan-1.scenario.test.json") },
+    NamedText { name: "runner-gate7-plan-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate7-plan-2.scenario.test.json") },
+    NamedText { name: "runner-gate7-plan-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate7-plan-3.scenario.test.json") },
+    NamedText { name: "runner-gate7-plan-queue-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate7-plan-queue-1.scenario.test.json") },
+    NamedText { name: "runner-gate7-plan-queue-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate7-plan-queue-2.scenario.test.json") },
+    NamedText { name: "runner-gate7-plan-queue-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate7-plan-queue-3.scenario.test.json") },
+    NamedText { name: "runner-gate8-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate8-1.scenario.test.json") },
+    NamedText { name: "runner-gate8-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate8-2.scenario.test.json") },
+    NamedText { name: "runner-gate8-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate8-3.scenario.test.json") },
+    NamedText { name: "runner-gate8-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate8-4.scenario.test.json") },
+    NamedText { name: "runner-gate8-confirmation-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate8-confirmation-1.scenario.test.json") },
+    NamedText { name: "runner-gate8-delivery-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate8-delivery-1.scenario.test.json") },
+    NamedText { name: "runner-gate8-outcome-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate8-outcome-1.scenario.test.json") },
+    NamedText { name: "runner-gate8-outcome-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate8-outcome-2.scenario.test.json") },
+    NamedText { name: "runner-gate8-outcome-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-gate8-outcome-3.scenario.test.json") },
+    NamedText { name: "runner-halted-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-halted-1.scenario.test.json") },
+    NamedText { name: "runner-halted-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-halted-2.scenario.test.json") },
+    NamedText { name: "runner-halted-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-halted-3.scenario.test.json") },
+    NamedText { name: "runner-halted-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-halted-4.scenario.test.json") },
+    NamedText { name: "runner-halted-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-halted-5.scenario.test.json") },
+    NamedText { name: "runner-halted-6.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-halted-6.scenario.test.json") },
+    NamedText { name: "runner-implementation-outcome-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-implementation-outcome-1.scenario.test.json") },
+    NamedText { name: "runner-implementation-outcome-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-implementation-outcome-2.scenario.test.json") },
+    NamedText { name: "runner-implementation-outcome-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-implementation-outcome-3.scenario.test.json") },
+    NamedText { name: "runner-implementation-outcome-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-implementation-outcome-4.scenario.test.json") },
+    NamedText { name: "runner-implementation-outcome-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-implementation-outcome-5.scenario.test.json") },
+    NamedText { name: "runner-implementation-phase-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-implementation-phase-1.scenario.test.json") },
+    NamedText { name: "runner-implementation-phase-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-implementation-phase-2.scenario.test.json") },
+    NamedText { name: "runner-implementation-phase-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-implementation-phase-3.scenario.test.json") },
+    NamedText { name: "runner-implementation-phase-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-implementation-phase-4.scenario.test.json") },
+    NamedText { name: "runner-implementation-phase-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-implementation-phase-5.scenario.test.json") },
+    NamedText { name: "runner-implementation-phase-6.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-implementation-phase-6.scenario.test.json") },
+    NamedText { name: "runner-implementation-review-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-implementation-review-1.scenario.test.json") },
+    NamedText { name: "runner-implementation-review-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-implementation-review-2.scenario.test.json") },
+    NamedText { name: "runner-letter-renaming-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-letter-renaming-1.scenario.test.json") },
+    NamedText { name: "runner-owner-decisions-recording-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-owner-decisions-recording-1.scenario.test.json") },
+    NamedText { name: "runner-pause-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-pause-1.scenario.test.json") },
+    NamedText { name: "runner-pause-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-pause-2.scenario.test.json") },
+    NamedText { name: "runner-pause-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-pause-3.scenario.test.json") },
+    NamedText { name: "runner-pause-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-pause-4.scenario.test.json") },
+    NamedText { name: "runner-phase-switch-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-phase-switch-1.scenario.test.json") },
+    NamedText { name: "runner-phase-switch-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-phase-switch-2.scenario.test.json") },
+    NamedText { name: "runner-phase-switch-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-phase-switch-3.scenario.test.json") },
+    NamedText { name: "runner-phase-switch-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-phase-switch-4.scenario.test.json") },
+    NamedText { name: "runner-phase-switch-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-phase-switch-5.scenario.test.json") },
+    NamedText { name: "runner-plan-phase-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-plan-phase-1.scenario.test.json") },
+    NamedText { name: "runner-plan-phase-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-plan-phase-2.scenario.test.json") },
+    NamedText { name: "runner-plan-phase-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-plan-phase-3.scenario.test.json") },
+    NamedText { name: "runner-plan-phase-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-plan-phase-4.scenario.test.json") },
+    NamedText { name: "runner-plan-phase-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-plan-phase-5.scenario.test.json") },
+    NamedText { name: "runner-plan-reconciliation-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-plan-reconciliation-1.scenario.test.json") },
+    NamedText { name: "runner-plan-reconciliation-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-plan-reconciliation-2.scenario.test.json") },
+    NamedText { name: "runner-plan-reconciliation-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-plan-reconciliation-3.scenario.test.json") },
+    NamedText { name: "runner-plan-reconciliation-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-plan-reconciliation-4.scenario.test.json") },
+    NamedText { name: "runner-plan-reconciliation-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-plan-reconciliation-5.scenario.test.json") },
+    NamedText { name: "runner-plan-reconciliation-6.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-plan-reconciliation-6.scenario.test.json") },
+    NamedText { name: "runner-plan-review-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-plan-review-1.scenario.test.json") },
+    NamedText { name: "runner-plan-review-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-plan-review-2.scenario.test.json") },
+    NamedText { name: "runner-plan-snapshot-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-plan-snapshot-1.scenario.test.json") },
+    NamedText { name: "runner-plan-stop-word-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-plan-stop-word-1.scenario.test.json") },
+    NamedText { name: "runner-plan-stop-word-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-plan-stop-word-2.scenario.test.json") },
+    NamedText { name: "runner-plan-stop-word-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-plan-stop-word-3.scenario.test.json") },
+    NamedText { name: "runner-preparation-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-preparation-1.scenario.test.json") },
+    NamedText { name: "runner-preparation-outcome-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-preparation-outcome-1.scenario.test.json") },
+    NamedText { name: "runner-preparation-outcome-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-preparation-outcome-3.scenario.test.json") },
+    NamedText { name: "runner-preparation-outcome-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-preparation-outcome-4.scenario.test.json") },
+    NamedText { name: "runner-preparation-outcome-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-preparation-outcome-5.scenario.test.json") },
+    NamedText { name: "runner-review-failure-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-failure-1.scenario.test.json") },
+    NamedText { name: "runner-review-failure-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-failure-2.scenario.test.json") },
+    NamedText { name: "runner-review-failure-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-failure-3.scenario.test.json") },
+    NamedText { name: "runner-review-parsing-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-parsing-1.scenario.test.json") },
+    NamedText { name: "runner-review-parsing-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-parsing-2.scenario.test.json") },
+    NamedText { name: "runner-review-parsing-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-parsing-3.scenario.test.json") },
+    NamedText { name: "runner-review-parsing-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-parsing-4.scenario.test.json") },
+    NamedText { name: "runner-review-parsing-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-parsing-5.scenario.test.json") },
+    NamedText { name: "runner-review-parsing-6.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-parsing-6.scenario.test.json") },
+    NamedText { name: "runner-review-parsing-7.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-parsing-7.scenario.test.json") },
+    NamedText { name: "runner-review-parsing-8.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-parsing-8.scenario.test.json") },
+    NamedText { name: "runner-review-parsing-9.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-parsing-9.scenario.test.json") },
+    NamedText { name: "runner-review-verdict-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-verdict-1.scenario.test.json") },
+    NamedText { name: "runner-review-verdict-10.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-verdict-10.scenario.test.json") },
+    NamedText { name: "runner-review-verdict-11.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-verdict-11.scenario.test.json") },
+    NamedText { name: "runner-review-verdict-12.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-verdict-12.scenario.test.json") },
+    NamedText { name: "runner-review-verdict-13.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-verdict-13.scenario.test.json") },
+    NamedText { name: "runner-review-verdict-14.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-verdict-14.scenario.test.json") },
+    NamedText { name: "runner-review-verdict-15.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-verdict-15.scenario.test.json") },
+    NamedText { name: "runner-review-verdict-16.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-verdict-16.scenario.test.json") },
+    NamedText { name: "runner-review-verdict-17.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-verdict-17.scenario.test.json") },
+    NamedText { name: "runner-review-verdict-18.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-verdict-18.scenario.test.json") },
+    NamedText { name: "runner-review-verdict-19.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-verdict-19.scenario.test.json") },
+    NamedText { name: "runner-review-verdict-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-verdict-2.scenario.test.json") },
+    NamedText { name: "runner-review-verdict-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-verdict-3.scenario.test.json") },
+    NamedText { name: "runner-review-verdict-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-verdict-4.scenario.test.json") },
+    NamedText { name: "runner-review-verdict-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-verdict-5.scenario.test.json") },
+    NamedText { name: "runner-review-verdict-6.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-verdict-6.scenario.test.json") },
+    NamedText { name: "runner-review-verdict-7.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-verdict-7.scenario.test.json") },
+    NamedText { name: "runner-review-verdict-8.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-verdict-8.scenario.test.json") },
+    NamedText { name: "runner-review-verdict-9.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-review-verdict-9.scenario.test.json") },
+    NamedText { name: "runner-route-check-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-route-check-1.scenario.test.json") },
+    NamedText { name: "runner-route-check-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-route-check-2.scenario.test.json") },
+    NamedText { name: "runner-route-check-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-route-check-3.scenario.test.json") },
+    NamedText { name: "runner-route-check-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-route-check-4.scenario.test.json") },
+    NamedText { name: "runner-route-classification-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-route-classification-1.scenario.test.json") },
+    NamedText { name: "runner-route-classification-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-route-classification-2.scenario.test.json") },
+    NamedText { name: "runner-route-classification-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-route-classification-3.scenario.test.json") },
+    NamedText { name: "runner-route-classification-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-route-classification-4.scenario.test.json") },
+    NamedText { name: "runner-route-classification-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-route-classification-5.scenario.test.json") },
+    NamedText { name: "runner-route-recording-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-route-recording-1.scenario.test.json") },
+    NamedText { name: "runner-route-recording-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-route-recording-2.scenario.test.json") },
+    NamedText { name: "runner-session-failure-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-session-failure-1.scenario.test.json") },
+    NamedText { name: "runner-session-failure-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-session-failure-2.scenario.test.json") },
+    NamedText { name: "runner-session-failure-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-session-failure-3.scenario.test.json") },
+    NamedText { name: "runner-session-launch-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-session-launch-1.scenario.test.json") },
+    NamedText { name: "runner-session-launch-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-session-launch-2.scenario.test.json") },
+    NamedText { name: "runner-specification-reconciliation-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-specification-reconciliation-1.scenario.test.json") },
+    NamedText { name: "runner-specification-reconciliation-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-specification-reconciliation-2.scenario.test.json") },
+    NamedText { name: "runner-specification-reconciliation-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-specification-reconciliation-3.scenario.test.json") },
+    NamedText { name: "runner-specification-reconciliation-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-specification-reconciliation-4.scenario.test.json") },
+    NamedText { name: "runner-specification-reconciliation-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-specification-reconciliation-5.scenario.test.json") },
+    NamedText { name: "runner-specification-reconciliation-6.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-specification-reconciliation-6.scenario.test.json") },
+    NamedText { name: "runner-specification-reconciliation-7.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-specification-reconciliation-7.scenario.test.json") },
+    NamedText { name: "runner-specification-reconciliation-8.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-specification-reconciliation-8.scenario.test.json") },
+    NamedText { name: "runner-specification-snapshot-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-specification-snapshot-1.scenario.test.json") },
+    NamedText { name: "runner-to-plan-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-to-plan-1.scenario.test.json") },
+    NamedText { name: "runner-to-requirements-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-to-requirements-1.scenario.test.json") },
+    NamedText { name: "runner-tree-busy-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-tree-busy-1.scenario.test.json") },
+    NamedText { name: "runner-tree-busy-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/runner-tree-busy-2.scenario.test.json") },
+    NamedText { name: "session-common-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-common-1.scenario.test.json") },
+    NamedText { name: "session-common-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-common-2.scenario.test.json") },
+    NamedText { name: "session-common-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-common-3.scenario.test.json") },
+    NamedText { name: "session-common-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-common-4.scenario.test.json") },
+    NamedText { name: "session-common-5.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-common-5.scenario.test.json") },
+    NamedText { name: "session-end-end-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-end-end-1.scenario.test.json") },
+    NamedText { name: "session-end-halted-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-end-halted-1.scenario.test.json") },
+    NamedText { name: "session-end-halted-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-end-halted-2.scenario.test.json") },
+    NamedText { name: "session-end-halted-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-end-halted-3.scenario.test.json") },
+    NamedText { name: "session-flow-cancel-answered.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-cancel-answered.scenario.test.json") },
+    NamedText { name: "session-flow-cancel-in-gate.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-cancel-in-gate.scenario.test.json") },
+    NamedText { name: "session-flow-cancel-midcall.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-cancel-midcall.scenario.test.json") },
+    NamedText { name: "session-flow-death-between.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-death-between.scenario.test.json") },
+    NamedText { name: "session-flow-delivery-kind.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-delivery-kind.scenario.test.json") },
+    NamedText { name: "session-flow-fail-connection.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-fail-connection.scenario.test.json") },
+    NamedText { name: "session-flow-fail-model-refused.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-fail-model-refused.scenario.test.json") },
+    NamedText { name: "session-flow-fail-no-result.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-fail-no-result.scenario.test.json") },
+    NamedText { name: "session-flow-input-absent.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-input-absent.scenario.test.json") },
+    NamedText { name: "session-flow-input-full.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-input-full.scenario.test.json") },
+    NamedText { name: "session-flow-input-missing.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-input-missing.scenario.test.json") },
+    NamedText { name: "session-flow-input-type.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-input-type.scenario.test.json") },
+    NamedText { name: "session-flow-late-answer.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-late-answer.scenario.test.json") },
+    NamedText { name: "session-flow-parent-stop.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-parent-stop.scenario.test.json") },
+    NamedText { name: "session-flow-pause-halt.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-pause-halt.scenario.test.json") },
+    NamedText { name: "session-flow-request-fields.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-request-fields.scenario.test.json") },
+    NamedText { name: "session-flow-restart-after-answer.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-restart-after-answer.scenario.test.json") },
+    NamedText { name: "session-flow-restart-gate2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-restart-gate2.scenario.test.json") },
+    NamedText { name: "session-flow-restart-kid.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-restart-kid.scenario.test.json") },
+    NamedText { name: "session-flow-restart-midcall.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-restart-midcall.scenario.test.json") },
+    NamedText { name: "session-flow-result-plan.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-result-plan.scenario.test.json") },
+    NamedText { name: "session-flow-result-question.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-result-question.scenario.test.json") },
+    NamedText { name: "session-flow-result-requirements.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-result-requirements.scenario.test.json") },
+    NamedText { name: "session-flow-result-revision.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-result-revision.scenario.test.json") },
+    NamedText { name: "session-flow-retry-twice.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-retry-twice.scenario.test.json") },
+    NamedText { name: "session-flow-review-pass.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-review-pass.scenario.test.json") },
+    NamedText { name: "session-flow-runner-done.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-runner-done.scenario.test.json") },
+    NamedText { name: "session-flow-scope-retry.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-scope-retry.scenario.test.json") },
+    NamedText { name: "session-flow-session-retry.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-session-retry.scenario.test.json") },
+    NamedText { name: "session-flow-stop-in-gate13.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-stop-in-gate13.scenario.test.json") },
+    NamedText { name: "session-flow-stop-in-gate2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-stop-in-gate2.scenario.test.json") },
+    NamedText { name: "session-flow-unknown-word.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-flow-unknown-word.scenario.test.json") },
+    NamedText { name: "session-gate1-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-gate1-1.scenario.test.json") },
+    NamedText { name: "session-gate1-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-gate1-2.scenario.test.json") },
+    NamedText { name: "session-gate13-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-gate13-1.scenario.test.json") },
+    NamedText { name: "session-gate13-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-gate13-2.scenario.test.json") },
+    NamedText { name: "session-gate2-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-gate2-1.scenario.test.json") },
+    NamedText { name: "session-pause-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-pause-1.scenario.test.json") },
+    NamedText { name: "session-pause-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-pause-2.scenario.test.json") },
+    NamedText { name: "session-pause-3.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-pause-3.scenario.test.json") },
+    NamedText { name: "session-pause-4.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-pause-4.scenario.test.json") },
+    NamedText { name: "session-result-parsing-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-result-parsing-1.scenario.test.json") },
+    NamedText { name: "session-scope-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-scope-1.scenario.test.json") },
+    NamedText { name: "session-scope-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-scope-2.scenario.test.json") },
+    NamedText { name: "session-session-1.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-session-1.scenario.test.json") },
+    NamedText { name: "session-session-2.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/session-session-2.scenario.test.json") }
+]
+
+/// The names of the files that the folders hold (read at compile time with `embed_dir`): `product_machines`, `methodology_machines`, `product_tables`, `methodology_tables`, `product_scenarios`,
+/// `methodology_scenarios`; a test compares them with the lists above, so a file that is added to a folder and not to its list is found.
+export fn data_dir_names(dir str) -> []str {
+    if dir == "product_machines" { return only_ending(embed_dir("../../machines/product").paths(), [".alula.json"]) }
+    if dir == "methodology_machines" { return only_ending(embed_dir("../../machines/methodology").paths(), [".alula.json"]) }
+    if dir == "product_tables" { return only_ending(embed_dir("../../machines/product").paths(), [".alula.md", ".alula.txt"]) }
+    if dir == "methodology_tables" { return only_ending(embed_dir("../../machines/methodology").paths(), [".alula.md", ".alula.txt"]) }
+    if dir == "product_scenarios" { return embed_dir("../../machines/product/scenarios").paths() }
+    if dir == "methodology_scenarios" { return embed_dir("../../machines/methodology/scenarios").paths() }
+    []str.new()
+}
+
+fn only_ending(names []str, suffixes []str) -> []str {
+    mut out = []str.new()
+    for n in names {
+        for suffix in suffixes {
+            if n.ends_with(suffix) { out.push(n) }
+        }
+    }
+    out
+}
+
+/// The text of the machine of the chat session (`machines/product/chat.alula.json`).
+export fn chat_machine_text() -> str => text_of_file(machine_files(), "chat.alula.json")
+
+/// The text of the machine of the many-turn chat session (`machines/product/dialog.alula.json`), the translation of `dialog.alula.md`: the machine that the session server runs.
+export fn dialog_machine_text() -> str => text_of_file(machine_files(), "dialog.alula.json")
+
+/// The text of the machine of the agent step (`machines/methodology/agent_step.alula.json`), the translation of its table.
+export fn agent_step_machine_text() -> str => text_of_file(machine_files(), "agent_step.alula.json")
+
+/// The text of the agent step written as tables (`machines/methodology/agent_step.alula.txt`).
+export fn agent_step_table_text() -> str => text_of_file(table_files(), "agent_step.alula.txt")
+
+/// The text of the machine of the cycle check (`machines/methodology/cycle_check.alula.json`), the translation of `cycle_check.alula.md` (task 122).
+export fn cycle_check_machine_text() -> str => text_of_file(machine_files(), "cycle_check.alula.json")
+
+/// The text of the machine "Task runner" (`machines/methodology/task_runner.alula.json`), the translation of its table (task 123).
+export fn task_runner_machine_text() -> str => text_of_file(machine_files(), "task_runner.alula.json")
+
+/// The text of the task runner written as tables (`machines/methodology/task_runner.alula.md`).
+export fn task_runner_table_text() -> str => text_of_file(table_files(), "task_runner.alula.md")
+
+/// The text of the cycle check written as tables (`machines/methodology/cycle_check.alula.md`).
+export fn cycle_check_table_text() -> str => text_of_file(table_files(), "cycle_check.alula.md")
+
+/// The text of the chat machine written as tables (`machines/product/chat.alula.md`).
+export fn chat_table_text() -> str => text_of_file(table_files(), "chat.alula.md")
+
+/// The text of the many-turn chat machine written as tables (`machines/product/dialog.alula.md`).
+export fn dialog_table_text() -> str => text_of_file(table_files(), "dialog.alula.md")
+
+/// The text of the machine "Session start" (`machines/methodology/session_start.alula.json`), the translation of its table (task 121): the machine the runner calls for every session.
+export fn session_start_machine_text() -> str => text_of_file(machine_files(), "session_start.alula.json")
+
+/// The text of the machine "Session start" written as tables (`machines/methodology/session_start.alula.md`).
+export fn session_start_table_text() -> str => text_of_file(table_files(), "session_start.alula.md")
+
+/// The copy of the sample of the agent step of the specification (`machines/methodology/agent-step-sample.txt`, the same text as `spec/samples/agent-step.alula.md` of the package, links aside).
+export fn agent_step_sample_text() -> str => embed_str("../../machines/methodology/agent-step-sample.txt")
+
+/// The registry of the methodology as text (`machines/methodology/registry.md`): the 54 primitives, the roles of the parse, the sets of the types of the signatures.
+export fn methodology_registry_text() -> str => embed_str("../../machines/methodology/registry.md")
+
+/// The table of the journal codes of the methodology (`machines/methodology/journal.md`).
+export fn methodology_journal_text() -> str => embed_str("../../machines/methodology/journal.md")
+
+/// The table of the journal codes of the product (`machines/product/journal.md`).
+export fn product_journal_text() -> str => embed_str("../../machines/product/journal.md")
+
+/// The registry of the methodology as data: the primitives, the roles and the sets of the types (`host_types(data, "session")`, `host_types(data, "runner")`).
+export fn methodology_registry_data() -> HostRegistryData {
+    match parse_registry_table(methodology_registry_text()) {
+        Ok(data) => data
+        Err(errors) => panic("the registry of the methodology is wrong: ${errors.join(" | ")}")
+    }
+}
+
+/// The registry of the host "methodology": the language, the 54 primitives of the methodology and the codes of its journal.
+export fn methodology_registry() -> Registry {
+    match load_host(methodology_registry_text(), methodology_journal_text()) {
+        Ok(reg) => reg
+        Err(errors) => panic("the registry of the methodology is wrong: ${errors.join(" | ")}")
+    }
+}
+
+/// The registry of the host "product": the language (the machines of the product call no primitive of their own) and the codes of the journal of the product.
+export fn product_registry() -> Registry {
+    match load_host("", product_journal_text()) {
+        Ok(reg) => reg
+        Err(errors) => panic("the registry of the product is wrong: ${errors.join(" | ")}")
+    }
+}
+
+/// The table of the journal codes of both owners as one file (`journal.md` beside machines of both): the table of the methodology and the rows of the table of the product that it does not hold.
+export fn all_journal_text() -> str {
+    ro have = parse_journal(methodology_journal_text())
+    mut text = methodology_journal_text().trim_ascii()
+    for line in product_journal_text().split("\n") {
+        ro cells = line.split("|")
+        mut codes = []str.new()
+        for c in cells { codes.push(c.trim_ascii()) }
+        if codes.len() < 3 { continue }
+        ro code = codes[2].replace("`", "")
+        if line.starts_with("| ") && code != "Код события" && !code.starts_with("---") && journal_find(have, code).is_none() { text = "${text}\n${line}" }
+    }
+    "${text}\n"
+}
+
+/// The registry of the methodology and of the product together: the primitives of the methodology and the codes of both journals (a code that both tables hold - the four codes of the pair `dialog_steps` - once).
+/// For the tests that run machines of both owners with one registry.
+export fn all_registry() -> Registry {
+    mut rows = parse_journal(methodology_journal_text())
+    for row in parse_journal(product_journal_text()) {
+        if journal_find(rows, row.code).is_none() { rows.push(row) }
+    }
+    match host_registry(methodology_registry_data(), rows) {
+        Ok(reg) => reg
+        Err(errors) => panic("the registry of both owners is wrong: ${errors.join(" | ")}")
+    }
+}
+
+/// The machines of the methodology that a caller may call, each under the name of its machine: "Шаг агента" (`agent_step`), "Запуск сессии" (`session_start`, task 121) and "Проверка цикла"
+/// (`cycle_check`, task 122), loaded from the JSON files compiled into the program. The runner of tasks (`task_runner`, task 123) calls the last two; the second calls the first and the third the
+/// second, so the runner of the pairs runs several levels (task 123: the runner is recursive).
+export fn methodology_nested() -> NestedRegistry {
+    mut reg = NestedRegistry.empty()
+    for name in ["agent_step", "session_start", "cycle_check"] {
+        match load_alula_machine(text_of_file(machine_files(), "${name}.alula.json"), methodology_registry()) {
+            Ok(m) => { reg = reg.add(m.def.name, m) }
+            Err(e) => panic("the machine ${name} of the registry of the methodology does not load: ${e}")
+        }
+    }
+    reg
+}

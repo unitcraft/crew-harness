@@ -28,7 +28,10 @@ tls = { git = "https://github.com/nv-lang/nova-tls", version = "0.2" }
 # `alula.alula_cli`, `alula.alula_scenarios`, `alula.alula_eq` and the program `alula`; version 0.3 (tasks 149, 151 and 152, published once) is Alula 2.22: the rules of 2.13, the semantics of the formats
 # 2.15 - 2.17 (the JSON names built by themselves and the section `## Имена`, a party of a free input, the `иначе` of a fork only where the type does not prove the exhaustion) and the syntax of the
 # formats 2.18 - 2.22 (blocks, `=>`, `функция`, ranges, methods of the macros, insertions, `тип Имя перечисление`, the comments, the new lexer).
-alula = { git = "https://github.com/nv-lang/nova-alula", version = "0.3" }
+# Version 0.4 (task 158) is the split of the package and the product: the package holds the language (two primitives, 35 journal codes, spec 7a) and its examples, the registry and the journal
+# of a host are data (`registry.md`, `journal.md`); the machines of the product and of the methodology (`machines/`) and the tests that run them live here. Until the tag v0.4.0 is published the package is
+# connected by the local `nova.override.toml` (not committed); `nova.lock.toml` is rebuilt (`nova update alula`) after the publication.
+alula = { git = "https://github.com/nv-lang/nova-alula", version = "0.4" }
 
 [package]
 name = "crew_harness"

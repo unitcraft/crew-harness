@@ -7,7 +7,8 @@ module crew_harness.machine_dialog_eq
 // ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import std.encoding.json.{Json, JsonObject}
-import alula.machine.{scenario_files, standard_registry, dialog_machine_text, Int}
+import alula.machine.{Int}
+import crew_harness.product_machines.{scenario_files, product_registry, dialog_machine_text}
 import alula.engine.{Incoming, EventKind, Order, StepEnvironment, FailCode, journal_line, fail_code_word}
 import crew_harness.chat.{ChatState, ChatSession, dialog_session, encode_chat_state}
 import alula.machine_run.{AlulaState, AlulaMachine, ProjectValue, Scenario, StepTrace, ScEvent, load_alula_machine_with, alula_step, ScriptedHost, drive_scenario, parse_scenario, scenario_incoming, state_data_fields}
@@ -19,7 +20,7 @@ const TERM = 30000
 fn term_values() -> []ProjectValue => [ProjectValue { key: "проект.срок_бездействия", value: Int(TERM) }]
 
 fn table_dialog() -> AlulaMachine {
-    match load_alula_machine_with(dialog_machine_text(), standard_registry(), term_values()) {
+    match load_alula_machine_with(dialog_machine_text(), product_registry(), term_values()) {
         Ok(m) => m
         Err(e) => panic("the dialog machine does not load: ${e}")
     }
