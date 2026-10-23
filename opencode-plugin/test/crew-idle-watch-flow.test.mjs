@@ -86,7 +86,9 @@ const lettersOf = (s) => {
 const rec = (n) => iw?.readRecord?.(P, n)
 
 // the window of the author works on other tasks (busy); an executor works on its own task (busy)
-for (const s of ["sesAUTH", "sesEXEC"]) core.saveCard({ ...core.readJson(core.cardFile(s)), busy: true, busySince: Date.now() })
+core.saveCard({ ...core.readJson(core.cardFile("sesAUTH")), busy: true, busySince: Date.now() })
+// the executor of 93 works a turn ON ITS OWN task (its card says so): that is the exception; a busy window on another task would not be
+core.saveCard({ ...core.readJson(core.cardFile("sesEXEC")), task: { project: P, n: 93 }, busy: true, busySince: Date.now() })
 // 92: goes, no executor (the author holds the step), the step did not change for two hours, `updated` is fresh (the noise of the plugin)
 putTask(mkTask(92, "running", { title: "Carina target_os cross-emit", history: [{ at: T0, by: "sesAUTH", status: "running", note: "поставлена" }, { at: Date.now() - 60_000, by: core.PLUGIN_SENDER, note: "приёмка застряла: 3 хода подряд остановилась без работы и без ответа" }] }))
 // 93: an executor at work on it (a turn goes); 94: an open watch with a ceiling; 95: HOLD (set below); 96: an open question to the owner
