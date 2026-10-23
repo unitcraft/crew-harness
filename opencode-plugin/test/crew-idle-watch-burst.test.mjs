@@ -104,6 +104,7 @@ const note = (list, input, who, d, at) => iw?.noteStep?.(input, { session: who, 
   const ps = [mk("a", 1, 150), mk("a", 2, 150), mk("a", 3, 150), mk("b", 1, 150), mk("b", 2, 150), mk("b", 3, 150)]
   tick(ps, { ...two.d, cfg: () => ({ ...base, passMax: 100 }) }, NOW - 20 * MIN)
   tick(ps, two.d, NOW)
+  tick(ps, two.d, NOW + 30_000)
   cell("B-3d the limit is per project: two projects, two open questions each", openQ(two.d, "a") === 2 && openQ(two.d, "b") === 2, J([openQ(two.d, "a"), openQ(two.d, "b")]))
 }
 

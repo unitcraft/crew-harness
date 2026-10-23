@@ -465,6 +465,25 @@ longer than the term of the step, **whether or not the window is busy**. The fil
 - **Where it lives.** `idle-watch/<project>/<n>.json` in the box of the plugin: the episode (the key of the step, the term, the letters, the
   answers, the question) and the mark. Nothing is kept in memory: after a restart of the service the term is the same and no letter is repeated
   (the id of a letter comes from the record). The letters are service letters of the kind «idle» for the gate of the queue.
+- **A volley on old tasks is held back** (a condition of the deployment: on the real box ten open tasks stood for 1590–7943 minutes). (a) At most
+  `step_letters_per_pass` (3) new letters in one pass of the service (every 30 s); the rest wait for the next pass and are not lost. At most
+  `step_questions_max` (2) open questions to the owner per project; the others wait their turn (their ladder does not move on) until the owner decides
+  an open one. (b) A task that stands longer than `step_old_minutes` (300, ten terms; 0 — no summary) gets no letter of its own: it goes into ONE
+  summary question per project «Шаг стоит давно, срок вышел: …» — the list «number «title» — minutes, holder», the options close (`crew_task cancel`) /
+  HOLD / wait / change the executor, a recommendation. (c) A holder with no live window (no card, or the card does not wake) gets no letter: its task goes
+  into the same summary question at once, however young. The summary question is made once; it shrinks silently as tasks are decided (the author writes
+  `crew_step_note {n, decide | hold, who}` per task; `decide` works on a task of the summary question too) and goes away with the last one; a task
+  whose wait is over comes back into a new summary question. It shows in `/crew`, the side panel, `/crew-progress` («Срок шага вышел») and `crew_doctor`.
+- **A deliberate wait needs HOLD.** The option «wait more» gives only a new term (`minutes`, default `step_extend_minutes`); when it is over the ladder begins
+  again (about `step_extend_minutes + step_answer_minutes` later). To wait on purpose, the author records HOLD with the owner's word; the text of the question and
+  the answer to `decide: "wait"` say so.
+- **One letter per step to the author.** When the author holds the step (a task between sessions, a task without an executor, an order whose addressee has
+  no window) the letter of the watch asks for an answer; the old «Ты простаиваешь» (the rule of the tab, tasks 063, 070) does not name such a task any more
+  while `step_term_minutes` is on (the mark ◷ stays). The old letter stays for what the watch does not cover: an executor with no live session, a silent
+  executor, a session that waits for the author, a cleanup.
+- **A busy window is an excuse only on its own task.** «A turn goes» excuses a task only when the card of the window names THAT task (`task` of an executor,
+  `review` of a reviewer). A reviewer that works a turn on task 31 gives no excuse for task 30 it also holds: the letter about 30 goes to it. (A reviewer tab that
+  holds several tasks has one `review` on its card — the last one assigned; the others are watched.)
 - **Borders.** The step «answer to a question» (`expect_reply`) is not watched here (it has no task record; `askedStale` and the counters of
   `/crew` keep it). The owner answers through the author; there is no dialog of the window as `/plans` has. The question is a record and a
   letter, not a form of the built-in questionnaire: only a call of the `question` tool in a model turn makes such a form.

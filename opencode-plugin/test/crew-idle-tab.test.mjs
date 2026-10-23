@@ -33,8 +33,9 @@ process.env.CREW_HARNESS_DB = dbPath
 delete process.env.CREW_HARNESS_PRESENCE
 const proj = path.join(tmp, "proj")
 mkdirSync(path.join(proj, ".opencode"), { recursive: true })
+// task 161: the watch of the term of a step is off here (step_term_minutes 0): this file tests the old rule of the tab alone; the one-letter-per-step rule is in crew-idle-watch-burst-flow
 // threshold 3 s: the fixtures stand 2 minutes, the checks of "the mark is gone" run well inside 3 s
-writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ idle_tab_minutes: 0.05 }))
+writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ idle_tab_minutes: 0.05, step_term_minutes: 0 }))
 
 let fail = 0
 const cell = (name, ok, detail = "") => {

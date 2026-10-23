@@ -89,7 +89,7 @@ const dropNew = (key, text) => {
   const keep = []
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i]
-    if (/^\s*(- )?(answer_|route_defaults|step_term_minutes|step_term_by_step|step_extend_minutes|step_answer_minutes)/.test(l)) continue
+    if (/^\s*(- )?(answer_|route_defaults|step_term_minutes|step_term_by_step|step_extend_minutes|step_answer_minutes|step_questions_max|step_letters_per_pass|step_old_minutes)/.test(l)) continue
     if (/ОТВЕТЫ НА ВОПРОСЫ/.test(l)) {
       if (keep.length && keep[keep.length - 1] === "") keep.pop()
       continue

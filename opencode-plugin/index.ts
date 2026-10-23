@@ -133,7 +133,7 @@ import {
   branchDeps,
 } from "./core.ts"
 import { branchNotes, checkWindow, pruneStates, registerBranchHooks, turnWarning } from "./branch-guard.ts"
-import { holderOf, stepNotes, watchTick } from "./idle-watch.ts"
+import { holderOf, stepNotes, watchCovers, watchTick } from "./idle-watch.ts"
 import { answerTurn, markInterventions } from "./answer.ts"
 import { answerModesOn } from "./answer-parse.ts"
 import { DECISION_RU, readApprovals, removeApproval } from "./approvals.ts"
@@ -1364,7 +1364,11 @@ export default {
       const what = idleWhat(b.items)
       if (!idleOf(c.session, undefined, t)) {
         const id = `idle-${safeKey(c.session)}-${since}`
-        if (!letterExistsFor(c.session, id)) postLetter(c.session, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: c.session, time: t, text: idleLetter((t - since) / 60_000, b.items) })
+        // шаг, о котором автору и так пишет сторож срока шага (idle-watch.ts, задача 161), старым письмом не повторяется: одно письмо на шаг
+        const sc = loadConfig(c.directory)
+        const wc = { termMin: sc.stepTermMin, byStep: sc.stepTermByStep, extendMin: sc.stepExtendMin, answerMin: sc.stepAnswerMin }
+        const letterItems = b.items.filter((i) => !watchCovers(i, wc))
+        if (letterItems.length && !letterExistsFor(c.session, id)) postLetter(c.session, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: c.session, time: t, text: idleLetter((t - since) / 60_000, letterItems) })
         holdIdle(c.session, since, t)
         log(`idle tab: ${keyOf(c)} (${c.session}) stands since ${hm(since)}: ${what.join("; ")}; reminded`)
       }
@@ -1390,10 +1394,20 @@ export default {
         {
           cfg: (x) => {
             const c = loadConfig(x.directory)
-            return { termMin: c.stepTermMin, byStep: c.stepTermByStep, extendMin: c.stepExtendMin, answerMin: c.stepAnswerMin }
+            return { termMin: c.stepTermMin, byStep: c.stepTermByStep, extendMin: c.stepExtendMin, answerMin: c.stepAnswerMin, questionsMax: c.stepQuestionsMax, passMax: c.stepLettersPerPass, oldMin: c.stepOldMin }
           },
           addressee: (project) => [...saved.values()].find((x) => x.project === project && x.role === "integrator")?.session,
-          turnGoing: (x, session) => !!session && (session === x.executor || session === x.reviewer) && saved.get(session)?.state === "working",
+          // ход окна по ЭТОЙ задаче: сводка working и карточка окна ссылается на эту задачу (task у исполнителя, review у приёмщика); окно, занятое другой задачей, не оправдание
+          turnGoing: (x, session) => {
+            if (!session || !(session === x.executor || session === x.reviewer) || saved.get(session)?.state !== "working") return false
+            const card = readJson<Card>(cardFile(session))
+            return [card?.task, card?.review].some((r) => !!r && r.project === x.project && r.n === x.n)
+          },
+          // держатель в окне: у него есть карточка, и она будится (иначе письмо уйдёт в мёртвое окно, задача идёт в сводный вопрос)
+          holderAlive: (session) => {
+            const card = readJson<Card>(cardFile(session))
+            return !!card && mayWakeCard(card)
+          },
           formOpen: (x) => [holderOf(x).session, x.executor, x.reviewer].some((sid) => !!sid && pendingForms(sid, t0).length > 0),
           ownerHolds: (x) => (x.status === "approval" && loadConfig(x.directory).planApprover === "owner") || [holderOf(x).session, x.executor, x.reviewer].some((sid) => !!sid && saved.get(sid)?.state === "owner"),
           externalRun: (x, at) => [holderOf(x).session, x.executor, x.reviewer].some((sid) => !!sid && watchesOf(sid).some((w) => !w.cancelled && !w.dropped && (w.started ?? w.created) + w.minutes * 60_000 > at)),

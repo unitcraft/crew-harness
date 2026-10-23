@@ -237,6 +237,10 @@ export type CrewConfig = {
   stepTermByStep: Record<string, number>
   stepExtendMin: number
   stepAnswerMin: number
+  /** защита от залпа (задача 161): открытых вопросов владельцу на проект, новых писем за проход, минут до сводного вопроса «стоят давно» */
+  stepQuestionsMax: number
+  stepLettersPerPass: number
+  stepOldMin: number
   /** ход без обновления дольше этого (минут) панель показывает «завис?», а не «работает» (long_turn_minutes, задача 111); 0 — не показывать */
   longTurnMin: number
   /** принятая, но не очищенная задача: через столько минут — письма приёмщику и автору (0 — нет) */
@@ -421,6 +425,9 @@ export function loadConfig(dir: string): CrewConfig {
     stepTermByStep,
     stepExtendMin: num(j.step_extend_minutes, 30),
     stepAnswerMin: num(j.step_answer_minutes, 15),
+    stepQuestionsMax: num(j.step_questions_max, 2),
+    stepLettersPerPass: num(j.step_letters_per_pass, 3),
+    stepOldMin: num(j.step_old_minutes, 300),
     longTurnMin: num(j.long_turn_minutes, 360),
     acceptedReminderMin: num(j.accepted_reminder_min, 30),
     plansDir: typeof j.plans_dir === "string" && j.plans_dir.trim() ? j.plans_dir.trim() : "docs/plans",
@@ -3446,7 +3453,7 @@ ${lockStillYours(stillHeld.n)}` : "") }
         {
           cfg: (t) => {
             const c = loadConfig(t.directory)
-            return { termMin: c.stepTermMin, byStep: c.stepTermByStep, extendMin: c.stepExtendMin, answerMin: c.stepAnswerMin }
+            return { termMin: c.stepTermMin, byStep: c.stepTermByStep, extendMin: c.stepExtendMin, answerMin: c.stepAnswerMin, questionsMax: c.stepQuestionsMax, passMax: c.stepLettersPerPass, oldMin: c.stepOldMin }
           },
           task: (project, n) => loadTask(project, n),
           tasks: () => listTasks().filter((t) => isOpen(t)),
