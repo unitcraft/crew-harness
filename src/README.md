@@ -26,6 +26,8 @@ package **`alula`** (task 144 moved them out of this folder, with the tests; the
 The border is the import: a file of this folder imports `alula.<module>`; a file of `alula` imports no module of the product (the guard `check-no-product-imports.py`
 of that repository). The dictionary of the engine, the format of the machines and the program `alula` are described in the READMEs of `alula`
 (`src/engine/README.md`, `src/machine/README.md`, `src/machine_text/README.md`, `src/alula_cli/README.md` there).
+The language itself (the specification, the samples, the table of words, the checks, the overview) is kept in the same repository: [`spec/`](https://github.com/nv-lang/nova-alula/tree/main/spec),
+[`tools/`](https://github.com/nv-lang/nova-alula/tree/main/tools) and [`docs/`](https://github.com/nv-lang/nova-alula/tree/main/docs) of `nv-lang/nova-alula` (since version 0.3.2; before that the methodology kept them).
 
 ## How the dependency is connected
 

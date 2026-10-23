@@ -14,7 +14,7 @@
 
 | Часть Канона | Где |
 |---|---|
-| Методика — основа | [unitcraft/ai-dev-methodology](https://github.com/unitcraft/ai-dev-methodology/tree/744e0af34dc9c7f9d4db2a91e312ee170c6642fd), по ссылке, без копии; стейт-машины методики (спецификация, движок, протокол вызова, машины раннера) — [индекс](https://github.com/unitcraft/ai-dev-methodology/blob/744e0af34dc9c7f9d4db2a91e312ee170c6642fd/state-machines/README.md), файлы в Канон не копируются |
+| Методика — основа | [unitcraft/ai-dev-methodology](https://github.com/unitcraft/ai-dev-methodology/tree/744e0af34dc9c7f9d4db2a91e312ee170c6642fd), по ссылке, без копии; стейт-машины методики (спецификация, движок, протокол вызова, машины раннера) — [индекс](https://github.com/unitcraft/ai-dev-methodology/blob/744e0af34dc9c7f9d4db2a91e312ee170c6642fd/state-machines/README.md), файлы в Канон не копируются; язык Алула (спецификация, образцы, таблица слов, проверки) с версии 0.3.2 пакета `alula` — не в методике, а в [nv-lang/nova-alula](https://github.com/nv-lang/nova-alula/tree/main/spec), папки `spec/`, `tools/`, `docs/` |
 | Отличия и дополнения к методике | [process.md](process.md) |
 | Правила репозитория и машины | [AGENTS.md](../../AGENTS.md) — в корне, потому что агенты читают его оттуда при старте |
 | Решения (ADR) | [decisions/](decisions/README.md) |
