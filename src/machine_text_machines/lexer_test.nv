@@ -1,0 +1,65 @@
+// lexer_test.nv - the lossless lexer (AL-90 ... AL-92): `lx_reserialize(lx_lex(src)) == src` on every file of the package and on mutations of them, the numbers (D44), the order of the
+// signs, the text literals (the escapes, the insertions), the comments, the broken places.
+module crew_harness.machine_text_machines
+
+import std.text
+import alula.machine.{NamedText}
+import alula.machine_text.{lex_round_trips}
+import crew_harness.machines.{table_files}
+
+fn round_trips(src str) -> bool => lex_round_trips(src)
+
+// ---- the lead invariant ----------------------------------------------------------------------------------------------------------
+
+// A deterministic generator of numbers for the mutations.
+fn lx_next(seed int) -> int => (seed * 1103515245 + 12345) % 2147483648
+
+fn lx_pieces() -> []str => ["\"", "\${", "}", "\\", "//", "\\u{", "..", "..=", "...", "1_", "e", "0x", "—", "≥", "\n", "\r", "#", "'", "`", "\\|"]
+
+// A text with one mutation at the char `at`: a char deleted, a piece put in, or a char replaced by a piece.
+fn lx_mutate(chars []char, at int, how int, piece str) -> str {
+    mut out = []str.new()
+    mut k = 0
+    for c in chars {
+        if k == at {
+            if how == 1 {
+                out.push(piece)
+                out.push("${c}")
+            } else if how == 2 {
+                out.push(piece)
+            }
+        } else {
+            out.push("${c}")
+        }
+        k += 1
+    }
+    out.join("")
+}
+
+fn lx_mutations_hold(src str, count int, seed0 int) -> bool {
+    ro chars []char = src.chars().collect()
+    if chars.len() == 0 { return true }
+    mut seed = seed0
+    mut k = 0
+    while k < count {
+        seed = lx_next(seed)
+        ro at = seed % chars.len()
+        seed = lx_next(seed)
+        ro how = seed % 3
+        seed = lx_next(seed)
+        ro piece = lx_pieces()[seed % lx_pieces().len()]
+        ro mutated = lx_mutate(chars, at, how, piece)
+        if !round_trips(mutated) { return false }
+        k += 1
+    }
+    true
+}
+
+test "lx mutations machines" {
+    mut seed = 3
+    for f in table_files() {
+        seed += 1
+        if f.name == "task_runner.alula.md" || f.name == "cycle_check.alula.md" || f.name == "agent_step.alula.txt" { continue }
+        assert(lx_mutations_hold(f.text, 40, seed))
+    }
+}

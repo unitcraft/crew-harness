@@ -1,0 +1,70 @@
+// v213_test.nv - task 149: Alula 2.13 in the interpreter and the scenario runner: the signal of a party is an event `signal` (the step `word` of a scenario is gone, the step `signal` may name the party
+// that declared the signal), the question `accepts_word` of the hub is answered from the signals of the table, an optional field of the input that the input does not have is none (AL-48).
+module crew_harness.machine_run_machines
+
+import std.text
+import alula.machine.{text_of_file}
+import crew_harness.machines.{machine_files, scenario_files}
+import alula.machine_run.{report_text, run_ok}
+
+fn signal_step(name str, party str, input str) -> str {
+    ro who = if party == "" { "" } else { ",\"party\":\"${party}\"" }
+    ro data = if input == "" { "" } else { ",\"input\":\"${input}\"" }
+    `{"do":"feed","event":{"kind":"signal","name":"${name}"${who}${data}}}`
+}
+
+// ---- the step signal of a scenario ------------------------------------------------------------------------------------------------------------
+
+test "v213 word step refused" {
+    ro text = one_step(`{"do":"feed","event":{"kind":"word","name":"user_message","input":"hi"}}`)
+    ro got = parse_err(text)
+    assert(got != "ok")
+    assert(got.contains("signal"))
+}
+
+test "v213 signal step parses" {
+    assert(parse_err(one_step(signal_step("user_message", "", "hi"))) == "ok")
+}
+
+test "v213 signal step with its party parses" {
+    assert(parse_err(one_step(signal_step("user_message", "user", "hi"))) == "ok")
+}
+
+test "v213 signal step runs on the chat machine" {
+    ro run = run_text(chat(), one_step(signal_step("user_message", "", "hi").replace("}}", "},\"expect\":{\"state\":\"Awaiting\"}}")))
+    assert(run_ok(run))
+}
+
+test "v213 signal step names the party that declared the signal" {
+    ro run = run_text(chat(), one_step(signal_step("user_message", "user", "hi").replace("}}", "},\"expect\":{\"state\":\"Awaiting\"}}")))
+    assert(run_ok(run))
+}
+
+test "v213 signal of another party is a mistake of the scenario" {
+    ro run = run_text(chat(), one_step(signal_step("user_message", "agent", "hi")))
+    assert(!run_ok(run))
+    assert(report_text(run).contains("agent"))
+}
+
+test "v213 party that does not exist" {
+    ro run = run_text(chat(), one_step(signal_step("user_message", "nobody", "hi")))
+    assert(!run_ok(run))
+}
+
+test "v213 accepts a signal of the table" {
+    ro m = chat()
+    assert(m.accepts_word(m.initial(), "user_message"))
+}
+
+test "v213 does not accept what the table does not declare" {
+    ro m = chat()
+    assert(!m.accepts_word(m.initial(), "no_such_signal"))
+}
+
+test "v213 the chat machine declares its signals at the party" {
+    ro text = machine_text("chat.alula.json")
+    assert(text.contains("\"signals\""))
+    assert(!text.contains("\"words\""))
+}
+
+// ---- AL-48: an optional field of the input -------------------------------------------------------------------------------------------------------------

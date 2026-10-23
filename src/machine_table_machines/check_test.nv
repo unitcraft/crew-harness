@@ -1,0 +1,76 @@
+// check_test.nv - the checks of a table: every check is red on a broken table and green on the good one.
+module crew_harness.machine_table_machines
+
+import alula.machine.{text_of_file}
+import std.text
+import crew_harness.machines.{product_registry, chat_machine_text, machine_files}
+import alula.machine_table.{check_machine}
+
+fn wait_rows_with(go_value str) -> str {
+    ro inc = jassign("n", go_value)
+    ro a = jassign("stop", jl(jstr("a")))
+    ro go = `{"n":1,"event":{"kind":"signal","name":"go"},"actions":[${inc}],"to":"Decide"}`
+    ro halt = `{"n":2,"event":{"kind":"signal","name":"halt"},"actions":[${a}],"to":"Stopped"}`
+    "${go},${halt}"
+}
+
+fn tiny_rows(wait_rows str) -> str => tiny_with("", "", wait_rows, tiny_ends_rows())
+
+test "good tables" {
+    assert(ok_text(tiny()))
+    assert(ok_text(chat_machine_text()))
+    assert(check_machine(decoded(tiny()), product_registry()).len() == 0)
+}
+
+test "red read outside" {
+    ro text = tiny_rows(wait_rows_with(jb("+", jn("n"), jcall("length", jn("stop")))))
+    assert(says(text, "the datum stop is read but is not in the Input of the state (rule 11)"))
+    assert(first_issue(text).starts_with("$.states[0].rows[0].actions[0].value"))
+    assert(says(tiny().replace("\"reads\":[\"n\"],\"rows\"", "\"reads\":[],\"rows\""), "the datum n is read but is not in the Input"))
+    assert(says(chat_with("\"reads\": [ \"reply\" ]", "\"reads\": []"), "the datum reply is read"))
+    assert(says(chat_with("\"silence\": { \"op\": \"name\", \"name\": \"IDLE_TERM\" }", "\"silence\": { \"op\": \"name\", \"name\": \"stop_text\" }"), "stop_text is read"))
+}
+
+test "red write outside" {
+    ro ghost = tiny_rows("{\"n\":1,\"event\":{\"kind\":\"signal\",\"name\":\"go\"},\"actions\":[${jassign("ghost", jl("1"))}],\"to\":\"Decide\"},{\"n\":2,\"event\":{\"kind\":\"signal\",\"name\":\"halt\"},\"actions\":[${jassign("stop", jl(jstr("a")))}],\"to\":\"Stopped\"}")
+    assert(says(ghost, "ghost is not a datum of the machine"))
+    ro mech = tiny_rows("{\"n\":1,\"event\":{\"kind\":\"signal\",\"name\":\"go\"},\"actions\":[${jassign("u_attempt", jl("1"))}],\"to\":\"Decide\"},{\"n\":2,\"event\":{\"kind\":\"signal\",\"name\":\"halt\"},\"actions\":[${jassign("stop", jl(jstr("a")))}],\"to\":\"Stopped\"}")
+    assert(says(mech, "written by mechanics, not by rows"))
+    assert(says(chat_with("\"target\": \"user\"", "\"target\": \"nobody\""), "nobody is not a datum"))
+    assert(says(chat_with("\"target\": \"user\"", "\"target\": \"agent_attempt\""), "written by mechanics"))
+}
+
+test "events vs words" {
+    assert(says(tiny().replace("{\"kind\":\"signal\",\"name\":\"go\"}", "{\"kind\":\"signal\",\"name\":\"fly\"}"), "not a signal of the party user"))
+    ro extra = tiny().replace("{\"name\":\"halt\"}", "{\"name\":\"halt\"},{\"name\":\"zap\"}")
+    assert(says(extra, "the signal zap of the party user is used by no row"))
+    ro sig = tiny_rows("{\"n\":1,\"event\":{\"kind\":\"signal\",\"name\":\"stopit\"},\"to\":\"Decide\"},{\"n\":2,\"event\":{\"kind\":\"signal\",\"name\":\"halt\"},\"actions\":[${jassign("stop", jl(jstr("a")))}],\"to\":\"Stopped\"}")
+    assert(says(sig, "the signal stopit is not"))
+    ro fail = tiny_rows("{\"n\":1,\"event\":{\"kind\":\"failure\"},\"to\":\"Decide\"},{\"n\":2,\"event\":{\"kind\":\"signal\",\"name\":\"halt\"},\"actions\":[${jassign("stop", jl(jstr("a")))}],\"to\":\"Stopped\"}")
+    assert(says(fail, "come from a party that gets requests"))
+    assert(says(chat_with("\"kind\": \"failure\", \"bind\": \"code\"", "\"kind\": \"failure\", \"reasons\": [\"Lost\"], \"bind\": \"code\""), "Lost is not a failure code"))
+    assert(says(chat_with("\"bind\": { \"content\": \"piece\" }", "\"bind\": { \"nope\": \"piece\" }"), "has no field nope"))
+    assert(says(chat_with("\"name\": \"agent_chunk\", \"bind\"", "\"name\": \"agent_zzz\", \"bind\""), "not a progress event"))
+    assert(says(chat_with("\"bind\": { \"content\": \"message\" }", "\"bind\": { \"content\": \"user\" }"), "has the name of a datum"))
+    assert(says(chat_with("\"bind\": { \"content\": \"message\" }", "\"bind\": { \"content\": \"IDLE_TERM\" }"), "has the name of a constant"))
+}
+
+test "accept block" {
+    ro accept = `"accept":[{"event":{"kind":"answer"},"actions":[{"do":"journal","code":"x"}]}]`
+    assert(says(chat_with("\"silence\":", "${accept}, \"silence\":").replace("\"IDLE_TERM\" }", "\"IDLE_TERM\" }"), "On accept has no journal"))
+    ro word_accept = `"accept":[{"event":{"kind":"signal","name":"cancel"},"actions":[]}]`
+    assert(says(chat_with("\"silence\":", "${word_accept}, \"silence\":"), "On accept takes an answer"))
+    ro good = `"accept":[{"event":{"kind":"answer"},"actions":[{"do":"assign","target":"reply","value":{"op":"lit","value":"x"}}]}]`
+    assert(ok_text(chat_with("\"silence\":", "${good}, \"silence\":")))
+}
+
+test "parties" {
+    assert(says(tiny().replace("\"counter\":\"u_attempt\",", "").replace("\"kind\":\"human\"", "\"kind\":\"enhanced\""), "names the datum of its attempt counter"))
+    assert(says(tiny().replace("\"counter\":\"u_attempt\"", "\"counter\":\"nothing\""), "the datum nothing is not declared"))
+    assert(says(tiny().replace("\"monotonic\":true,\"writes\":\"mechanics\"", "\"writes\":\"mechanics\""), "does not decrease"))
+    assert(says(tiny().replace("\"monotonic\":true,\"writes\":\"mechanics\"", "\"monotonic\":true,\"writes\":\"rows\""), "written by mechanics"))
+    assert(says(chat_with("\"result\": \"text\", ", ""), "declares the type of its result"))
+    assert(says(chat_with("\"kind\": \"human\"", "\"kind\": \"gatekeeper\""), "names the setting"))
+    assert(says(chat_with("\"kind\": \"human\"", "\"kind\": \"machine\""), "names the machine"))
+    assert(says(tiny().replace("\"kind\":\"human\"", "\"kind\":\"agent\""), "signals of a party are for the gates"))
+}

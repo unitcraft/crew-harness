@@ -1,0 +1,19 @@
+// more_test.nv - the common events, the pause and the previous state, the set, the restart, the fallback of a failure, the constants and the parameters.
+module crew_harness.machine_run_machines
+
+import std.text
+import alula.machine.{Null, Int}
+import alula.engine.{Incoming, EventKind}
+import alula.machine_run.{AlulaMachine}
+
+fn gate() -> AlulaMachine => build("gate.alula.json")
+
+test "event at an end" {
+    ro m = chat()
+    ro r1 = run1(m, m.initial(), said("hi"))
+    ro ended = run1(m, r1.state, done()).state
+    assert(summary(run1(m, ended, done()).orders) == "log:event_ignored(event=agent_done;state=Done)")
+    assert(summary(run1(m, ended, expired()).orders) == "log:event_ignored(event=timeout;state=Done)")
+    assert(summary(run1(m, ended, cancelled()).orders) == "log:event_ignored(event=cancel;state=Done)")
+    assert(!run1(m, ended, said("x")).moved)
+}

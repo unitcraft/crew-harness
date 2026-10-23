@@ -1,0 +1,116 @@
+// render_test.nv - task 113: the reverse generator `render_machine(json, language)`: the canonical form of section 1b (the header, the eleven sections, the keys of a state in their order, the
+// tables with one space round the bar, the operators of the language), the circles "tree -> file -> tree" in both languages on every machine of the product, and "Russian -> English -> Russian".
+module crew_harness.machine_text_render_machines
+
+import std.text
+import alula.machine.{text_of_file}
+import alula.machine_agent.{methodology_text, methodology_en_text}
+import alula.machine_text_eq.{case_text}
+import alula.machine_text.{render_machine, render_machine_with, render, translate_report, render_type_in, render_expression_in, render_actions_in}
+import crew_harness.machines.{agent_step_table_text, chat_table_text, table_files}
+
+fn chat_json() -> str => machine_json("chat.alula.json")
+
+fn calc_json() -> str => machine_json("calc.alula.json")
+
+// ---- the canonical form ----------------------------------------------------------------------------------------------------------
+
+test "rn empty section dash" {
+    ro en = render(chat_json(), "en")
+    ro at = index_of_line(en, "## Types")
+    assert(at > 0)
+    assert(lines_from(en, at, 3) == "## Types\n—\n")
+    assert(lines_from(en, index_of_line(en, "## Input"), 2) == "## Input\n—")
+    assert(lines_from(en, index_of_line(en, "## Includes"), 2) == "## Includes\n—")
+    // a table has an empty line under the heading
+    assert(lines_from(en, index_of_line(en, "## Data"), 3).starts_with("## Data\n\n| name |"))
+}
+
+test "rn language word" {
+    ro ru = render(chat_json(), "ru")
+    ro en = render(chat_json(), "en")
+    assert(text_has_line(ru, "## Состояния") && text_has_line(ru, "## Концы"))
+    assert(text_has_line(en, "## States") && text_has_line(en, "## Ends"))
+    assert(!en.contains("Состояния"))
+    assert(ru.contains("Начальное состояние: ") && en.contains("Initial state: "))
+}
+
+test "rn operators en ascii" {
+    ro en = render(calc_json(), "en")
+    for sign in ["≥", "≤", "≠", "→", "…", "∈"] { assert(!en.contains(sign)) }
+    ro agent = render(machine_json("agent_step.alula.json"), "en")
+    for sign in ["≥", "≤", "≠", "→", "…", "∈"] { assert(!agent.contains(sign)) }
+    assert(agent.contains("int>=0"))
+    assert(agent.contains("-> "))
+}
+
+test "rn operators ru canon" {
+    ro agent = render(machine_json("agent_step.alula.json"), "ru")
+    assert(agent.contains("число>=0"))
+    assert(agent.contains("->"))
+    assert(agent.contains(" in {") || agent.contains("Кроме: "))
+    assert(agent.contains(" >= "))
+    assert(!agent.contains(" ≥ "))
+}
+
+test "rn declarations in blocks" {
+    ro agent = render(machine_json("agent_step.alula.json"), "en")
+    ro at = index_of_line(agent, "## Types")
+    assert(lines_from(agent, at + 1, 2) == "\n```")
+    assert(agent.contains("\ntype CallerKind enum Lens | CycleSession | ChatTurn | Gatekeeper\n"))
+    assert(agent.contains("\ntype TurnResult enum\n  | Finished { text ?str, artifact ?str, usage TransportUsage }\n"))
+    assert(agent.contains("\nfn сумма_целых(а ?int, б ?int) -> ?int =>\n  "))
+}
+
+test "rn words of an enum" {
+    ro agent = render(machine_json("agent_step.alula.json"), "en")
+    assert(agent.contains("| Read = \"read\""))
+    assert(agent.contains("| SwitchMode = \"switch_mode\""))
+}
+
+test "rn circle en chat" {
+    assert(circle(chat_json(), "en") == "")
+}
+
+test "rn circle ru chat" {
+    assert(circle(chat_json(), "ru") == "")
+}
+
+test "rn circle chat table" {
+    // md -> JSON -> md -> JSON on the chat machine written by hand in Russian
+    ro first = translate_report(chat_table_text()).json
+    assert(circle(first, "ru") == "")
+    assert(circle(first, "en") == "")
+}
+
+test "rn ru to en to ru chat" {
+    ro first = translate_report(chat_table_text()).json
+    ro english = render(first, "en")
+    ro second = json_of(english)
+    assert(same_tree(first, second) == "")
+    ro russian = render(second, "ru")
+    ro third = json_of(russian)
+    assert(same_tree(first, third) == "")
+    assert(render(third, "en") == english)
+}
+
+fn lit(v str) -> str => `{"op":"lit","value":${v}}`
+
+test "rn circle product table" {
+    ro first = json_of(agent_step_table_text())
+    assert(!first.starts_with("ERROR "))
+    assert(circle(first, "ru") == "")
+    assert(circle(first, "en") == "")
+}
+
+test "rn circle pilot and examples" {
+    ro pilot = json_of(case_text("agent-step.alula.md"))
+    assert(!pilot.starts_with("ERROR "))
+    assert(circle(pilot, "ru") == "")
+    assert(circle(pilot, "en") == "")
+    // the examples of the format are pieces of a machine, not a machine: they are translated without the checks of the table
+    ro examples = translate_report(case_text("format-examples.alula.md")).json
+    assert(examples.byte_len() > 1000)
+    assert(circle_loose(examples, "ru") == "")
+    assert(circle_loose(examples, "en") == "")
+}

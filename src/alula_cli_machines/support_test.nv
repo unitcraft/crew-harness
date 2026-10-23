@@ -1,0 +1,113 @@
+// support_test.nv - helpers of the tests of the program `alula` (task 116): the program is run over the memory file system with the arguments, the standard output and
+// the standard error captured; the small machine "Tiny" in Russian and in English; a scenario for it.
+module crew_harness.alula_cli_machines
+
+import std.fs.{Path, MemFs, mock_fs, write_text, read_text, create_dir_all, try_exists}
+import std.text
+import std.io.{IoCapture, mock_io}
+import std.os.{MockOs, mock_os}
+import alula.machine.{NamedText}
+import alula.alula_cli.{execute}
+import crew_harness.machines.{methodology_registry_text, all_journal_text}
+import alula.machine_text.{translate_checked, translate_report, render_machine, render_summary}
+
+/// Ran: what a run of the program left: the exit code, the standard output, the standard error, the text of the file `back` (empty when it is not there).
+type Ran { code int, out str, err str, back str, present bool }
+
+// Runs `alula <argv>` over a memory file system that holds `files` (a name is a path from the root, `/work/a.alula.md`); then reads the file `back_path`.
+fn run_cli(argv []str, files []NamedText, back_path str) -> Ran => run_full(argv, files, back_path, false)
+
+// The same; with `fail_writes` the memory file system refuses every write after the files are put (a disk that is full, a folder that is not there).
+fn run_full(argv []str, files []NamedText, back_path str, fail_writes bool) -> Ran {
+    mut os = MockOs.new()
+    os.push_arg("alula")
+    for a in argv { os.push_arg(a) }
+    mut fs = MemFs.new()
+    mut cap = IoCapture.new([]u8.new())
+    mut code = -1
+    mut back = ""
+    mut present = false
+    with Os = mock_os(os), Fs = mock_fs(fs), Io = mock_io(cap) {
+        for f in files {
+            make_parents(f.name)
+            ro written = write_text(Path.posix(f.name), f.text)
+        }
+        // the host of the machines beside the files of every folder that has none (the program reads `registry.md` and `journal.md` from the folder of the file)
+        for dir in host_dirs(files) {
+            ro registry = write_text(Path.posix("${dir}/registry.md"), methodology_registry_text())
+            ro journal = write_text(Path.posix("${dir}/journal.md"), all_journal_text())
+        }
+        if fail_writes { fs.fail_writes() }
+        code = execute()
+        if back_path != "" {
+            match try_exists(Path.posix(back_path)) {
+                Ok(there) => { present = there }
+                Err(e) => ()
+            }
+            match read_text(Path.posix(back_path)) {
+                Ok(text) => { back = text }
+                Err(e) => ()
+            }
+        }
+    }
+    Ran { code, out: cap.out_bytes().to_str_lossy(), err: cap.err_bytes().to_str_lossy(), back, present }
+}
+
+// The folders of the files; a folder that holds a file named `registry.md` has its host already.
+fn host_dirs(files []NamedText) -> []str {
+    mut out = []str.new()
+    mut has_host = []str.new()
+    for f in files {
+        if f.name.ends_with("/registry.md") { has_host.push(dir_of(f.name)) }
+    }
+    for f in files {
+        ro dir = dir_of(f.name)
+        if dir != "" && !has_host.contains(dir) && !out.contains(dir) { out.push(dir) }
+    }
+    out
+}
+
+fn dir_of(name str) -> str {
+    mut parts = []str.new()
+    for p in name.split("/") { parts.push(p) }
+    mut kept = []str.new()
+    mut i = 0
+    while i + 1 < parts.len() {
+        kept.push(parts[i])
+        i += 1
+    }
+    kept.join("/")
+}
+
+// Does a file of the folder belong to a machine of the methodology (the agent step, the cycle check, the session start, the task runner)?
+fn for_methodology(files []NamedText, dir str) -> bool {
+    for f in files {
+        if dir_of(f.name) != dir { continue }
+        for word in ["agent_step", "cycle_check", "session_start", "task_runner"] {
+            if f.name.contains(word) { return true }
+        }
+    }
+    false
+}
+
+// Every folder above the file is there.
+// ORACLE-WORKAROUND(55): the memory file system makes only the LAST folder of `create_dir_all`, so every folder above the file is made one by one; make the path in one call when item 55 is fixed
+fn make_parents(path str) Fs -> () {
+    mut names = []str.new()
+    for part in path.split("/") { names.push(part) }
+    mut acc = ""
+    mut i = 0
+    while i + 1 < names.len() {
+        if names[i] != "" {
+            acc = "${acc}/${names[i]}"
+            ro made = create_dir_all(Path.posix(acc))
+        }
+        i += 1
+    }
+}
+
+fn run_with(argv []str, files []NamedText) -> Ran => run_cli(argv, files, "")
+
+fn file(name str, text str) -> NamedText => { name, text }
+
+fn one(name str, text str) -> []NamedText => [NamedText { name, text }]

@@ -1,0 +1,24 @@
+// v217_test.nv - task 151: the reverse generator writes Alula 2.17: the header `format: 2.17`, `—` for the expression of a field of the request that is the name of the field (AL-56), `—` for the counter
+// of a party of a free input (AL-52), no brackets after the names and no section `## Имена` for the names that lie in the tree (1b (ж), AL-60), the circles "tree -> file -> tree" and "ru -> en -> ru"
+// equal for the new constructions in both languages.
+module crew_harness.machine_text_render_machines
+
+import std.text
+import alula.machine_text.{render, render_machine, translate_report}
+
+test "v217 the circle of the chat machine" {
+    ro json = machine_json("chat.alula.json")
+    assert(circle(json, "ru") == "")
+    assert(circle(json, "en") == "")
+}
+
+test "v217 the chat machine writes its user as a free input" {
+    ro ru = render(machine_json("chat.alula.json"), "ru")
+    assert(ru.contains("| user | user | human(итог ИсходВорот) | — | user_message { content строка }, cancel | — |"))
+}
+
+test "v217 the tree of the chat has no counter for the user" {
+    ro json = machine_json("chat.alula.json")
+    assert(json.contains("\"name\":\"user\"") || json.contains("\"name\": \"user\""))
+    assert(!json.contains("\"counter\": \"user_attempt\"") && !json.contains("\"counter\":\"user_attempt\""))
+}

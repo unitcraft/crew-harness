@@ -1,0 +1,120 @@
+// circle_test.nv - task 116: the circles of the program `alula` on the machines of the product (the chat, the agent step, the five small ones): `compile` -> `render` -> `compile` gives an
+// equal JSON in Russian and in English, and `convert` ru -> en -> ru gives an equal JSON; the commands give what the functions of the translator give.
+module crew_harness.alula_eq_machines
+
+import std.fs.{Path}
+import std.text
+import alula.machine.{NamedText}
+import alula.machine_text.{translate_checked, render, render_summary}
+import crew_harness.machines.{agent_step_table_text, chat_table_text, all_registry}
+
+// A circle through the program: the JSON of the machine -> `render` in the language -> `compile` of the file it wrote. "" when the second tree equals the first, else why not.
+fn circle(name str, language str) -> str {
+    ro json = machine_json(name)
+    ro rendered = run_with(["render", "/m/a.alula.json", "--language", language], one("/m/a.alula.json", json))
+    if rendered.code != 0 { return "render ${name}: ${rendered.err}" }
+    ro back = run_with(["compile", "/m/b.alula.md"], one("/m/b.alula.md", rendered.out))
+    if back.code != 0 { return "compile ${name}: ${back.err}" }
+    same_tree(json, back.out)
+}
+
+// ru -> en -> ru through `convert`, then `compile`: the tree of the machine again. The first file is the machine rendered in Russian.
+fn convert_circle(name str) -> str {
+    ro json = machine_json(name)
+    ro russian = run_with(["render", "/m/a.alula.json"], one("/m/a.alula.json", json))
+    if russian.code != 0 { return "render ${name}: ${russian.err}" }
+    ro english = run_with(["convert", "/m/b.alula.md", "--language", "en"], one("/m/b.alula.md", russian.out))
+    if english.code != 0 { return "convert en ${name}: ${english.err}" }
+    if !english.out.contains("- language: en\n") { return "the English file of ${name} has no language line" }
+    ro again = run_with(["convert", "/m/c.alula.md", "--language", "ru"], one("/m/c.alula.md", english.out))
+    if again.code != 0 { return "convert ru ${name}: ${again.err}" }
+    ro back = run_with(["compile", "/m/d.alula.md"], one("/m/d.alula.md", again.out))
+    if back.code != 0 { return "compile ${name}: ${back.err}" }
+    same_tree(json, back.out)
+}
+
+// The same from a file of Alula that the product keeps (the tables of the chat and of the agent step): convert to the other language and back; the tree is the one of the file.
+fn file_convert_circle(name str, text str) -> str {
+    ro first = run_with(["compile", "/m/${name}"], one("/m/${name}", text))
+    if first.code != 0 { return "compile ${name}: ${first.err}" }
+    ro english = run_with(["convert", "/m/${name}", "--language", "en"], one("/m/${name}", text))
+    if english.code != 0 { return "convert en ${name}: ${english.err}" }
+    ro again = run_with(["convert", "/m/e.alula.md", "--language", "ru"], one("/m/e.alula.md", english.out))
+    if again.code != 0 { return "convert ru ${name}: ${again.err}" }
+    ro back = run_with(["compile", "/m/f.alula.md"], one("/m/f.alula.md", again.out))
+    if back.code != 0 { return "compile ${name}: ${back.err}" }
+    same_tree(first.out, back.out)
+}
+
+// ---- compile -> render -> compile ---------------------------------------------------------------------------------------------
+
+test "pe circle chat ru" { assert(circle("chat.alula.json", "ru") == "") }
+
+test "pe circle chat en" { assert(circle("chat.alula.json", "en") == "") }
+
+test "pe circle agent step ru" { assert(circle("agent_step.alula.json", "ru") == "") }
+
+test "pe circle agent step en" { assert(circle("agent_step.alula.json", "en") == "") }
+
+test "pe the machines are the files of the product" {
+    ro names = json_names()
+    assert(names.len() == 2)
+    for name in names { assert(machine_json(name).byte_len() > 100) }
+}
+
+// ---- convert ru -> en -> ru ------------------------------------------------------------------------------------------------------
+
+test "pe convert chat" { assert(convert_circle("chat.alula.json") == "") }
+
+test "pe convert agent step" { assert(convert_circle("agent_step.alula.json") == "") }
+
+test "pe convert chat table" { assert(file_convert_circle("chat.alula.md", chat_table_text()) == "") }
+
+test "pe convert agent step table" { assert(file_convert_circle("agent_step.alula.md", agent_step_table_text()) == "") }
+
+// ---- the commands are the functions of the translator --------------------------------------------------------------------------
+
+test "pe compile is translate checked" {
+    ro text = chat_table_text()
+    ro ran = run_with(["compile", "/m/chat.alula.md"], one("/m/chat.alula.md", text))
+    ro report = translate_checked(text, all_registry())
+    assert(report.errors.len() == 0)
+    assert(ran.code == 0)
+    assert(ran.out == "${report.json}\n")
+}
+
+test "pe summary is the function" {
+    ro json = machine_json("chat.alula.json")
+    ro ran = run_with(["summary", "/m/chat.alula.json"], one("/m/chat.alula.json", json))
+    assert(ran.code == 0)
+    assert(ran.out == "${render_summary(json)}\n")
+    ro from_table = run_with(["summary", "/m/chat.alula.md"], one("/m/chat.alula.md", chat_table_text()))
+    assert(from_table.out == "${render_summary(translate_checked(chat_table_text(), all_registry()).json)}\n")
+}
+
+test "pe check every machine of the product" {
+    for name in json_names() {
+        ro ran = run_with(["check", "/m/${name}"], one("/m/${name}", machine_json(name)))
+        assert(ran.err == "")
+        assert(ran.code == 0)
+        assert(ran.out == "ok\n")
+    }
+}
+
+test "pe check the tables of the product" {
+    ro chat = run_with(["check", "/m/chat.alula.md"], one("/m/chat.alula.md", chat_table_text()))
+    assert(chat.code == 0)
+    assert(chat.out == "ok\n")
+    ro step = run_with(["check", "/m/agent_step.alula.md"], one("/m/agent_step.alula.md", agent_step_table_text()))
+    assert(step.code == 0)
+    assert(step.out == "ok\n")
+}
+
+test "pe the tree of a table is the tree of the compile" {
+    // `compile` of the table of the chat and the written JSON of the chat run the same scenarios (task 108); here: the same machine name and the same states
+    ro ran = run_with(["compile", "/m/chat.alula.md"], one("/m/chat.alula.md", chat_table_text()))
+    assert(ran.out.contains("\"machine\":\"ChatSession\""))
+    ro summary_json = run_with(["summary", "/m/chat.alula.json"], one("/m/chat.alula.json", machine_json("chat.alula.json")))
+    ro summary_table = run_with(["summary", "/m/chat.alula.md"], one("/m/chat.alula.md", chat_table_text()))
+    assert(summary_json.out == summary_table.out)
+}

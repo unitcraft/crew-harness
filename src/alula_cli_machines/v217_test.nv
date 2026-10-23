@@ -1,0 +1,15 @@
+// v217_test.nv - task 151: the program `alula` and Alula 2.17: the brackets after the names of 2.14 are refused with the message that names `## Имена`, a file that says `format: 2.14` is not read, `check` shows
+// the warnings (an explicit `x | x` in `Запрос`, an `иначе` that cannot be reached), a party of a free input is compiled, rendered and converted, the machines of the folder are read, `version` names 2.17.
+module crew_harness.alula_cli_machines
+
+import std.text
+import alula.machine.{NamedText, text_of_file}
+import crew_harness.machines.{table_files}
+
+test "v217 the machines of the folder are read" {
+    for name in ["chat.alula.md", "dialog.alula.md"] {
+        ro ran = run_with(["check", "/m/${name}"], one("/m/${name}", text_of_file(table_files(), name)))
+        if ran.code != 0 { panic("check ${name}: ${ran.err}") }
+        assert(ran.code == 0)
+    }
+}

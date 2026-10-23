@@ -1,0 +1,103 @@
+// support_test.nv - helpers of the tests of the interpreter: the machines of the data directory, a step with its orders as text.
+module crew_harness.machine_run_machines
+
+import std.text
+import alula.machine.{Value, PrimitiveHost, EvalError, Null, enum_value, text_of_file, record_get, value_json}
+import alula.engine.{Incoming, EventKind, Order, StepEnvironment, JournalEvent, SignalOrder}
+import crew_harness.machines.{machine_files, all_registry}
+import alula.machine_run.{AlulaMachine, AlulaState, ScriptedHost, ScriptedReply, alula_step, load_alula_machine, with_replies}
+
+fn machine_text(name str) -> str => text_of_file(machine_files(), name)
+
+fn build_from(text str) -> AlulaMachine {
+    match load_alula_machine(text, all_registry()) {
+        Ok(m) => m
+        Err(e) => panic("the machine does not load: ${e}")
+    }
+}
+
+fn build(name str) -> AlulaMachine => build_from(machine_text(name))
+
+fn chat() -> AlulaMachine => build("chat.alula.json")
+
+fn calc() -> AlulaMachine => build("calc.alula.json")
+
+fn dialog() -> AlulaMachine => build("dialog.alula.json")
+
+fn actions() -> AlulaMachine => build("actions.alula.json")
+
+// The agent step with the answers of its primitives: the reply is valid, closing the turn answers nothing.
+fn agent_step() -> AlulaMachine => with_replies(build("agent_step.alula.json"), [
+    ScriptedReply { name: "reply_validation", value: enum_value("ReplyCheck", "Valid") },
+    ScriptedReply { name: "close_agent_turn", value: Null }
+])
+
+// An event as the engine hands it to a machine: the envelope is stamped.
+fn stamped(kind EventKind, name str, request Option[str], input str) -> Incoming => {
+    id: "e-1", trace: "t-1", step: 2, kind, name, request, input, at: 1000
+}
+
+fn said(text str) -> Incoming => stamped(EventKind.Input, "user_message", None, text)
+
+fn word_in(name str, input str) -> Incoming => stamped(EventKind.Input, name, None, input)
+
+fn chunk(text str) -> Incoming => stamped(EventKind.Progress, "agent_chunk", Some("agent-1"), text)
+
+fn done() -> Incoming => stamped(EventKind.Answered, "agent_done", Some("agent-1"), "")
+
+fn refused(code str) -> Incoming => stamped(EventKind.Refused, "agent_refused", Some("agent-1"), code)
+
+fn expired() -> Incoming => stamped(EventKind.Expired, "timeout", Some("agent-1"), "")
+
+fn cancelled() -> Incoming => stamped(EventKind.Input, "cancel", None, "")
+
+// The result of one step: the state, whether the machine moved (Go), the orders it gave.
+type Out { state AlulaState, moved bool, orders []Order, signals []SignalOrder }
+
+fn run1(m AlulaMachine, st AlulaState, event Incoming) -> Out {
+    mut environment = StepEnvironment.new()
+    mut host = ScriptedHost { at: 1000, replies: m.replies, ids: 0 }
+    ro transition = alula_step(m, st, event, environment, host)
+    match transition {
+        Go(next) => Out { state: next, moved: true, orders: environment.orders, signals: environment.signals }
+        Stay => Out { state: st, moved: false, orders: environment.orders, signals: environment.signals }
+    }
+}
+
+fn journal_text(event JournalEvent) -> str {
+    if event.params.len() == 0 { return "log:${event.code}" }
+    mut parts = []str.new()
+    for p in event.params { parts.push("${p.name}=${p.value}") }
+    "log:${event.code}(${parts.join(";")})"
+}
+
+// The orders as text, in the order of giving.
+fn summary(orders []Order) -> str {
+    mut parts = []str.new()
+    for o in orders {
+        match o {
+            Send(order) => parts.push("send:${order.party}:${order.input}:${order.idle_term}")
+            Note(event) => parts.push(journal_text(event))
+            Cancel(order) => parts.push("cancel:${order.party}")
+            Save => parts.push("save")
+            Finish(c) => match c.failure {
+                Some(code) => parts.push("finish:refusal:${code.name()}")
+                None => parts.push("finish:answer:${c.text}")
+            }
+        }
+    }
+    parts.join(",")
+}
+
+// A datum of the state (Null when there is none).
+fn datum(st AlulaState, name str) -> Value {
+    match st.data {
+        Record { name: record_name, fields } => match record_get(fields, name) {
+            Some(v) => v
+            None => Null
+        }
+        _ => Null
+    }
+}
+
+fn datum_json(st AlulaState, name str) -> str => value_json(datum(st, name))

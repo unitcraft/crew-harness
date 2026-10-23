@@ -1,0 +1,267 @@
+// registry_test.nv - the registry of the methodology as data (`machines/methodology/registry.md`, task 158; it was `standard_registry()` of the package until 0.3.2): the 54 primitives of the methodology and the two of
+// the language, their classes, signatures, reads and writes, the sets of the types the signatures use, and the check of the arguments and of the results against it.
+module crew_harness.machine_registry
+
+import alula.machine.{Registry, PrimitiveClass, TypeSpec, TypeDefs, Value, RecordField, Int, Text, Bool, Null, List, IntType, OptionalType, ListType, DictType, FullDictType, TupleType, RecordType, VariantType, Reading, Writing, Irreversible, Pure}
+import alula.machine.{find_primitive, class_word, spec_text, check_call_args, check_call_result, make_record, make_variant, enum_value, code_word, host_types}
+import crew_harness.machines.{methodology_registry, methodology_registry_data}
+
+fn rcount(class PrimitiveClass) -> int {
+    mut n = 0
+    for p in methodology_registry().primitives {
+        if class_word(p.class) == class_word(class) { n += 1 }
+    }
+    n
+}
+
+fn rclass(name str) -> str {
+    match find_primitive(methodology_registry(), name) {
+        Some(p) => class_word(p.class)
+        None => ""
+    }
+}
+
+fn rfield_names(defs TypeDefs, record str) -> []str {
+    mut out = []str.new()
+    for r in defs.records {
+        if r.name == record {
+            for f in r.fields { out.push(f.name) }
+        }
+    }
+    out
+}
+
+fn rcase_names(defs TypeDefs, variant str) -> []str {
+    mut out = []str.new()
+    for v in defs.variants {
+        if v.name == variant {
+            for c in v.cases { out.push(c.name) }
+        }
+    }
+    out
+}
+
+fn rtext(s str) -> Value => Text(s)
+
+fn rfinding(severity str) -> Value {
+    make_record("Finding", [
+        RecordField { name: "severity", value: enum_value("Severity", severity) },
+        RecordField { name: "evidence", value: Text("e") },
+        RecordField { name: "repeat", value: Bool(false) },
+        RecordField { name: "question", value: Bool(false) }
+    ])
+}
+
+fn rtypes() -> TypeDefs => host_types(methodology_registry_data(), "")
+
+fn rargs(name str, args []Value) -> str {
+    match check_call_args(methodology_registry(), rtypes(), name, args) {
+        Ok(u) => "ok"
+        Err(x) => "${x.path}: ${x.message}"
+    }
+}
+
+fn rresult(name str, v Value) -> bool {
+    match check_call_result(methodology_registry(), rtypes(), name, v) {
+        Ok(u) => true
+        Err(x) => false
+    }
+}
+
+fn rknown(spec TypeSpec, defs TypeDefs) -> bool {
+    match spec {
+        OptionalType(inner) => rknown(inner, defs)
+        ListType(inner) => rknown(inner, defs)
+        DictType { key, value } => rknown(key, defs) && rknown(value, defs)
+        FullDictType { key, value } => rknown(key, defs) && rknown(value, defs)
+        TupleType(items) => {
+            mut ok = true
+            for item in items { if !rknown(item, defs) { ok = false } }
+            ok
+        }
+        RecordType(name) => {
+            mut found = false
+            for r in defs.records { if r.name == name { found = true } }
+            found
+        }
+        VariantType(name) => {
+            mut found = false
+            for v in defs.variants { if v.name == name { found = true } }
+            found
+        }
+        _ => true
+    }
+}
+
+test "md count" {
+    assert(methodology_registry().primitives.len() == 56)
+    assert(rcount(Reading) == 34)
+    assert(rcount(Writing) == 12)
+    assert(rcount(Irreversible) == 10)
+    assert(rcount(Pure) == 0)
+}
+
+test "md meeting" {
+    for name in ["party_profile", "role_context", "call_trace", "call_step", "parse_agent_reply", "proposal_read", "proposal_with_fingerprint", "proposal_changed_since_attempt"] {
+        assert(rclass(name) == "reading")
+    }
+    for name in ["count_in_model_tally", "journal_findings", "journal_machine_data", "journal_decision", "remove_unsound", "build_summary"] {
+        assert(rclass(name) == "writing")
+    }
+    for name in ["close_for_writing", "open_for_writing", "move_to_archive"] {
+        assert(rclass(name) == "irreversible")
+    }
+}
+
+test "md agent step" {
+    assert(rclass("time_now") == "reading")
+    assert(rclass("reply_validation") == "reading")
+    assert(rclass("close_agent_turn") == "irreversible")
+    assert(rclass("check_cache") == "writing")
+    assert(rclass("not_there") == "")
+}
+
+test "md cycle check" {
+    assert(rclass("stop_agent_group") == "irreversible")
+    match find_primitive(methodology_registry(), "stop_agent_group") {
+        Some(p) => {
+            assert(p.params.len() == 0)
+            assert(spec_text(p.result) == "nothing")
+        }
+        None => assert(false)
+    }
+}
+
+test "md signatures" {
+    match find_primitive(methodology_registry(), "party_profile") {
+        Some(p) => {
+            assert(p.params.len() == 1 && p.params[0].name == "party")
+            assert(spec_text(p.params[0].spec) == "text")
+            assert(spec_text(p.result) == "AgentProfile")
+        }
+        None => assert(false)
+    }
+    match find_primitive(methodology_registry(), "journal_decision") {
+        Some(p) => {
+            assert(p.params.len() == 4)
+            assert(p.params[3].name == "open" && spec_text(p.params[3].spec) == "[]Finding")
+            assert(spec_text(p.params[2].spec) == "int>=0")
+            assert(spec_text(p.result) == "nothing")
+        }
+        None => assert(false)
+    }
+    match find_primitive(methodology_registry(), "move_to_archive") {
+        Some(p) => assert(p.params.len() == 2 && p.params[0].name == "number" && p.params[1].name == "suffix")
+        None => assert(false)
+    }
+    match find_primitive(methodology_registry(), "build_summary") {
+        Some(p) => assert(spec_text(p.result) == "?Summary")
+        None => assert(false)
+    }
+    match find_primitive(methodology_registry(), "time_now") {
+        Some(p) => assert(p.params.len() == 0 && spec_text(p.result) == "int")
+        None => assert(false)
+    }
+}
+
+test "md reads writes" {
+    match find_primitive(methodology_registry(), "remove_unsound") {
+        Some(p) => assert(p.reads == ["lens_findings"] && p.writes == ["lens_findings"])
+        None => assert(false)
+    }
+    match find_primitive(methodology_registry(), "reply_validation") {
+        Some(p) => {
+            assert(p.reads.contains("reply_text") && p.reads.contains("reply_artifact") && p.reads.contains("agent_request"))
+            assert(p.writes.len() == 1)
+        }
+        None => assert(false)
+    }
+}
+
+test "md types" {
+    // the five primitives of the session start (task 121) use the types of the session (session_types), the others those of the pilots (standard_types)
+    ro defs = host_types(methodology_registry_data(), "")
+    ro session = host_types(methodology_registry_data(), "session")
+    ro mine = ["launch_scope", "launch_profile", "session_context", "parse_session_artifact", "stop_agent_group"]
+    // the 29 primitives of the task runner (task 123) use the types of the runner (runner_types)
+    ro runner = host_types(methodology_registry_data(), "runner")
+    ro theirs = ["run_preparation", "specification", "task_plan", "implementation_report", "route_features", "project_settings", "source_list", "brief_complete", "copy_approval", "approval_by_document",
+                 "source_with_specification_marks", "last_implementation_review", "has_unresolved_line", "customer_letter", "round_letters", "secrets_report", "tree_diff", "commit_message", "commit_text",
+                 "feedback_route", "write_answers", "write_decisions", "write_owner_marks", "save_round_notes", "write_draft_status", "create_approved_copy", "rename_letter", "release_lock", "show_human"]
+    for p in methodology_registry().primitives {
+        ro use = if mine.contains(p.name) { session } else { if theirs.contains(p.name) { runner } else { defs } }
+        assert(rknown(p.result, use))
+        for q in p.params { assert(rknown(q.spec, use)) }
+    }
+}
+
+test "md session start" {
+    for name in ["launch_scope", "launch_profile", "session_context", "parse_session_artifact"] { assert(rclass(name) == "reading") }
+    assert(rclass("stop_agent_group") == "irreversible")
+    match find_primitive(methodology_registry(), "session_context") {
+        Some(p) => assert(p.params.len() == 9 && spec_text(p.result) == "text")
+        None => assert(false)
+    }
+}
+
+test "md session types" {
+    ro session = host_types(methodology_registry_data(), "session")
+    ro meeting = host_types(methodology_registry_data(), "")
+    // the same names, other fields: the meeting's Summary has `critical`, the session's has `essential`
+    assert(rfield_names(meeting, "Summary") == ["critical", "probes"])
+    assert(rfield_names(session, "Summary") == ["essential", "probes"])
+    assert(rfield_names(meeting, "Finding") == ["severity", "evidence", "repeat", "question"])
+    assert(rfield_names(session, "Finding") == ["severity", "level", "evidence"])
+    assert(rcase_names(meeting, "Severity") == ["Critical", "Significant", "Desirable"])
+    assert(rcase_names(session, "Severity") == ["Essential", "Superficial"])
+    assert(rcase_names(session, "SessionResult") == ["Done", "Revision", "Plan", "Requirements", "Question"])
+    assert(rcase_names(session, "LaunchScope") == ["Fits", "DoesNotFit"])
+    // what they share
+    assert(rfield_names(session, "AgentReply") == rfield_names(meeting, "AgentReply"))
+}
+
+test "md names" {
+    for p in methodology_registry().primitives {
+        assert(p.name.byte_len() > 0)
+        assert(code_word(p.name) == p.name)
+    }
+}
+
+test "mag count types" {
+    assert(rargs("party_profile", [rtext("witness")]) == "ok")
+    assert(rargs("party_profile", []Value.new()) == "$: wrong argument count for party_profile: expected 1, got 0")
+    assert(rargs("party_profile", [rtext("a"), rtext("b")]) == "$: wrong argument count for party_profile: expected 1, got 2")
+    assert(rargs("party_profile", [Int(1)]) == "$.party: expected text, got int")
+    assert(rargs("time_now", []Value.new()) == "ok")
+    assert(rargs("no_such", []Value.new()) == "$: the primitive no_such is not registered")
+}
+
+test "mag records" {
+    assert(rargs("journal_findings", [List([rfinding("Critical"), rfinding("Desirable")])]) == "ok")
+    assert(rargs("journal_findings", [List([rfinding("Nope")])]) == "$.findings[0].severity: Severity has no case Nope")
+    assert(rargs("move_to_archive", [Int(2), Int(1)]) == "ok")
+    assert(rargs("move_to_archive", [Int(-1), Int(1)]) == "$.number: -1 is less than the bound 0")
+    assert(rargs("close_for_writing", [rtext("proposal")]) == "ok")
+}
+
+test "mag variant" {
+    ro ctx = make_variant("RoleContext", "WitnessContext", [
+        RecordField { name: "author_question", value: Null },
+        RecordField { name: "findings", value: Null },
+        RecordField { name: "proposal", value: Text("p") }
+    ])
+    assert(rargs("role_context", [ctx]) == "ok")
+    assert(rargs("role_context", [Text("p")]) == "$.context: expected RoleContext, got text")
+}
+
+test "mrs checked" {
+    assert(rresult("time_now", Int(1000)))
+    assert(!rresult("time_now", Text("1000")))
+    assert(rresult("close_agent_turn", Null))
+    assert(!rresult("close_agent_turn", Int(1)))
+    assert(rresult("reply_validation", enum_value("ReplyCheck", "Valid")))
+    assert(!rresult("reply_validation", enum_value("ReplyCheck", "Maybe")))
+    assert(rresult("build_summary", Null))
+    assert(rresult("build_summary", make_record("Summary", [RecordField { name: "critical", value: Int(0) }, RecordField { name: "probes", value: Int(2) }])))
+    assert(!rresult("build_summary", Int(1)))
+}

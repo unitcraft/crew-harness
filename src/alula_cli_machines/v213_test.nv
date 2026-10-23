@@ -1,0 +1,15 @@
+// v213_test.nv - task 149: the program `alula` and the syntax of 2.12 that the format 2.14 does not read any more: a file that says `format: 2.17` and still writes `Вход:`, `слово(…)`, the column
+// `слова ворот` or a sign `>=` is refused with a message that names the new writing (there is no transition period); the machines of the folder are read.
+module crew_harness.alula_cli_machines
+
+import std.text
+import alula.machine.{NamedText, text_of_file}
+import crew_harness.machines.{table_files}
+
+test "v213 the machines of the folder are read" {
+    for name in ["chat.alula.md", "dialog.alula.md"] {
+        ro ran = run_with(["check", "/m/${name}"], one("/m/${name}", text_of_file(table_files(), name)))
+        if ran.code != 0 { panic("check ${name}: ${ran.err}") }
+        assert(ran.code == 0)
+    }
+}

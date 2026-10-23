@@ -1,0 +1,50 @@
+// proto_test.nv - the runner of the scenarios through a parent (task 119): the scenarios of the agent step run again as the nested machine of the session `dialog_steps` (`scenario_through_parent`) and the
+// nested machine is made ready for the steps (`prepare_child`). The protocol of the call itself is proved on the examples of the language in the package (task 158).
+module crew_harness.machine_nested_run
+
+import alula.machine_run.{parse_scenario, scenario_through_parent, prepare_child}
+import crew_harness.machines.{scenario_files}
+
+fn text_of_scenario(name str) -> str {
+    for f in scenario_files() {
+        if f.name == name { return f.text }
+    }
+    panic("no scenario ${name}")
+}
+
+test "np through parent" {
+    ro text = text_of_scenario("agent-step-flow-happy.scenario.test.json")
+    match parse_scenario(text) {
+        Ok(sc) => {
+            match scenario_through_parent(sc, "dialog_steps", "up-1", "call-1") {
+                Some(n) => {
+                    assert(n.machine == "dialog_steps")
+                    assert(n.steps.len() == sc.steps.len())
+                    assert(n.steps[0].event.request == "up-1")
+                    assert(n.steps[0].expect.has_state == false)
+                    assert(n.steps[1].on == "call-1")
+                    assert(n.steps[1].op == sc.steps[1].op)
+                }
+                None => assert(false)
+            }
+            match prepare_child(machine_of("agent_step"), sc) {
+                Ok(m) => assert(m.replies.len() == 2)
+                Err(e) => assert(false)
+            }
+        }
+        Err(e) => assert(false)
+    }
+}
+
+test "np through parent none" {
+    ro text = text_of_scenario("agent-step-flow-death-between.scenario.test.json")
+    match parse_scenario(text) {
+        Ok(sc) => {
+            match scenario_through_parent(sc, "dialog_steps", "up-1", "call-1") {
+                Some(n) => assert(false)
+                None => assert(true)
+            }
+        }
+        Err(e) => assert(false)
+    }
+}

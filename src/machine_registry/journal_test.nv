@@ -1,0 +1,75 @@
+// journal_test.nv - the tables of the journal codes of the methodology and of the product as data (`machines/methodology/journal.md`, `machines/product/journal.md`, task 158; they were `journal_methodology.md` and
+// `journal_product.md` of the package until 0.3.2, AL-31): the codes, the parameters, the faults against the table of the language, the union that the registry of a host holds.
+module crew_harness.machine_registry
+
+import alula.machine.{JournalCode, parse_journal, language_journal, journal_find, journal_table_issues}
+import crew_harness.machines.{methodology_registry, product_registry, methodology_journal_text, product_journal_text}
+
+fn methodology_rows() -> []JournalCode => parse_journal(methodology_journal_text())
+
+fn product_rows() -> []JournalCode => parse_journal(product_journal_text())
+
+test "jt methodology table" {
+    ro table = methodology_rows()
+    // 73 codes of the methodology and 4 codes of the pair `dialog_steps` (the session that calls the agent step)
+    assert(table.len() == 77)
+    for code in ["turn_failed", "agent_usage", "route_proposed", "session_result", "review_state", "meeting_decision", "turn_answered"] {
+        assert(journal_find(table, code).is_some())
+    }
+}
+
+test "jt methodology parameters" {
+    match journal_find(methodology_rows(), "turn_failed") {
+        Some(row) => {
+            assert(row.params == ["reason"])
+            assert(row.optional.len() == 0)
+        }
+        None => assert(false)
+    }
+    match journal_find(methodology_rows(), "task_completed") {
+        Some(row) => assert(row.params == ["feedback_rounds"])
+        None => assert(false)
+    }
+}
+
+test "jt product table" {
+    ro table = product_rows()
+    assert(table.len() == 10)
+    for code in ["user_message", "agent_chunk", "agent_done", "agent_refused", "cancelled_while_waiting", "no_answer_in_time", "cancelled_before_request", "session_closed", "turn_answered", "turn_refused"] {
+        assert(journal_find(table, code).is_some())
+    }
+}
+
+test "jt the tables are their own" {
+    // no code of the methodology or of the product is a code of the language (35: the format, the fragment Pause, the engine and the executor)
+    assert(journal_table_issues(language_journal(), methodology_rows()).len() == 0)
+    assert(journal_table_issues(language_journal(), product_rows()).len() == 0)
+    for row in methodology_rows() { assert(journal_find(language_journal(), row.code).is_none()) }
+    for row in product_rows() { assert(journal_find(language_journal(), row.code).is_none()) }
+}
+
+test "jt a table of a host cannot repeat a code of the language" {
+    ro dup = [JournalCode { machine: "x", code: "human_stop", template: "стоп", params: []str.new(), optional: []str.new() }]
+    ro issues = journal_table_issues(language_journal(), dup)
+    assert(issues.len() == 1)
+    assert(issues[0].contains("human_stop"))
+    for code in ["signal_passed", "input_rejected", "machine_error", "machine_data", "fork_no_match", "answer_edited"] {
+        ro one = [JournalCode { machine: "x", code, template: "t", params: []str.new(), optional: []str.new() }]
+        assert(journal_table_issues(language_journal(), one).len() == 1)
+    }
+}
+
+test "jt the codes are snake case" {
+    ro bad = [JournalCode { machine: "x", code: "BadCode", template: "t", params: []str.new(), optional: []str.new() }]
+    assert(journal_table_issues(language_journal(), bad).len() == 1)
+}
+
+test "jt the registry of a host names the union" {
+    assert(methodology_registry().journal.len() == 35 + methodology_rows().len())
+    assert(product_registry().journal.len() == 35 + product_rows().len())
+    assert(journal_find(methodology_registry().journal, "signal_passed").is_some())
+    assert(journal_find(methodology_registry().journal, "turn_failed").is_some())
+    assert(journal_find(methodology_registry().journal, "agent_chunk").is_none())
+    assert(journal_find(product_registry().journal, "user_message").is_some())
+    assert(journal_find(product_registry().journal, "turn_failed").is_none())
+}

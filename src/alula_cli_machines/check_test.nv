@@ -1,0 +1,14 @@
+// check_test.nv - task 116: `alula check` (a file of Alula or the JSON: the translation, the checks of the table, the warnings P-1) and `alula summary`.
+module crew_harness.alula_cli_machines
+
+import std.fs.{Path}
+import std.text
+import alula.machine.{NamedText}
+import alula.machine_text.{translate_checked, render_summary}
+import crew_harness.machines.{chat_machine_text}
+
+test "ck json machine from the product" {
+    ro ran = run_with(["check", "/work/chat.alula.json"], one("/work/chat.alula.json", chat_machine_text()))
+    assert(ran.code == 0)
+    assert(ran.out == "ok\n")
+}

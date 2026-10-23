@@ -1,0 +1,15 @@
+// v222_test.nv - task 152: the program `alula` and Alula 2.22: the version of the program and of the language, a file with the new forms is checked, compiled, rendered and converted; a file with a former form is refused with
+// the code 1 and the message of the table of the former forms; the whole folder of the machines is read.
+module crew_harness.alula_cli_machines
+
+import std.text
+import alula.machine.{NamedText, text_of_file}
+import crew_harness.machines.{table_files}
+
+test "c222 the machines of the folder are read" {
+    for name in ["chat.alula.md", "dialog.alula.md", "cycle_check.alula.md"] {
+        ro ran = run_with(["check", "/m/${name}"], one("/m/${name}", text_of_file(table_files(), name)))
+        if ran.code != 0 { panic("check ${name}: ${ran.err}") }
+        assert(ran.code == 0)
+    }
+}
