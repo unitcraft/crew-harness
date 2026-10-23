@@ -6,6 +6,7 @@
 // 2026-10-17: «"ждёт указаний" — сливается, показывай др. цветом»).
 // Тон accent: предупреждение → акцент → основной цвет; берётся первый, что отличается и от обычного текста, и от серого (сравнение по
 // значению: цвета окна — объекты, один цвет в разных объектах). Не нашлось — обычный цвет, но жирным (знак виден без цвета).
+// Тоны error и warn (задача 157, расхождение ветки окна и смена с причиной) — тот же выбор, но первым берётся цвет ошибки и предупреждения темы.
 
 /** Бит жирного начертания в `attributes` текста окна (TextAttributes.BOLD в рисовальщике OpenCode). */
 export const BOLD = 1
@@ -36,8 +37,10 @@ export function toneStyle(theme: any, tone?: string): ToneStyle {
   try {
     const t = obj(theme?.text) ?? {}
     if (tone === "muted") return { fg: t.muted }
-    if (tone !== "accent") return { fg: t.base }
-    const candidates = [obj(obj(t.feedback)?.warning)?.base, t.accent, t.primary, obj(obj(obj(theme)?.hue)?.accent)?.[200]]
+    if (tone !== "accent" && tone !== "error" && tone !== "warn") return { fg: t.base }
+    // error (красная пометка расхождения ветки окна, задача 157) — цвет ошибки темы, warn (смена с причиной) — цвет предупреждения; нет — как accent
+    const first = tone === "error" ? obj(obj(t.feedback)?.error)?.base : obj(obj(t.feedback)?.warning)?.base
+    const candidates = [first, obj(obj(t.feedback)?.warning)?.base, t.accent, t.primary, obj(obj(obj(theme)?.hue)?.accent)?.[200]]
     const pick = candidates.find((c) => has(c) && !sameColor(c, t.base) && !sameColor(c, t.muted))
     return pick !== undefined ? { fg: pick } : { fg: t.base, attributes: BOLD }
   } catch {

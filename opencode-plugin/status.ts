@@ -14,6 +14,7 @@ import { type Card, type Obligation, obligationsOf, readJson, safeKey } from "./
 import { BASE } from "./paths.ts"
 import { answerCounts, answerSideRow } from "./answer.ts"
 import { divergenceLineFor, unconfiguredLineFor } from "./config-diverge.ts"
+import { branchRows, branchSideRows } from "./branch-guard.ts"
 import { DEAD_WHY, FORM_MAX_REPEATS, shownForms } from "./form-wait.ts"
 import { lockWaitLine, lockWaiters } from "./review.ts"
 import { refreshRouteStale } from "./task-folders.ts"
@@ -576,6 +577,9 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
     const plans = plansOf(p)
     for (const t of plans.approval) lines.push(`  ◇ plan ${t.plan!.n} ${t.title.replace(/^план \S+: /, "")} — ${TASK_WORDS.approval}${t.plan!.stuck ? " (rounds out)" : ""} · /plans`)
     // проект, где ничего не идёт (только свободные вкладки, счётчиков нет), — в одну последнюю строку «idle: …»
+    // ветка и каталог окон (задача 157): красная строка расхождения, жёлтая — смена с причиной за сутки; окна на своих местах — одной серой строкой
+    const branch = branchRows(BASE, p, now)
+    if (branch.some((r) => r.tone !== "muted")) lines.push(...branch.map((r) => `  ${r.text}`))
     const counters = countersOf(p, items, plans.other, now)
     if (!lines.length && !counters && !quiet.some((s) => s.state === "tasks")) {
       sleeping.push(p)
@@ -656,7 +660,7 @@ export function reportsOf(project: string, now = Date.now()): string[] {
  *  владелец, 2026-10-17: «сейчас показывается каша», «название задачи белым цветом, под элементы серым»): название задачи — тон
  *  base, продолжение названия — «· », всё под задачей — тон muted и начинается со знака «↳», тон accent — у вкладки, что ждёт
  *  владельца, и у строк «⚠». Ни одна строка не начинается пробелом. */
-export type SideRow = { mark: string; who: string; what: string; tone: "accent" | "base" | "muted"; lead?: string }
+export type SideRow = { mark: string; who: string; what: string; tone: "accent" | "base" | "muted" | "error" | "warn"; lead?: string }
 /** Строка панели как она печатается (ширина панели ~32 знака: длиннее — перенос, и список выглядит разрезанным; OpenCode
  *  2.0.23 даёт панели 42 колонки, под текст после отступов — около 37).
  *
@@ -859,6 +863,8 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
   if (dv) rows.push({ mark: " ", who: "", what: dv.replace("⚠ настройки не на ветке:", "⚠ не на ветке:"), tone: "accent" })
   const uc = project ? unconfiguredLineFor(project) : undefined
   if (uc) rows.push({ mark: " ", who: "", what: uc, tone: "accent" })
+  // окна не на своей ветке (красные) и недавние смены с причиной (жёлтые), задача 157
+  for (const r of branchSideRows(BASE, project, now)) rows.push({ mark: " ", who: "", what: r.text, tone: r.tone === "muted" ? "muted" : r.tone })
   // «ход» — модель думает сейчас; «ждут» — наблюдения (гейты, коммит в main), из них в очереди машины — ещё не запущены
   const working = mine.filter((s) => s.state === "working").length
   const watching = mine.filter((s) => s.state === "watch").length
