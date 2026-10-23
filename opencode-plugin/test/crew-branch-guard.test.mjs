@@ -220,6 +220,67 @@ cell("integrator: writing into the tree of someone else's task is refused", type
 cell("integrator in the drifted window: writing into that folder is refused, into the helper tree passes", typeof w(integrator, T145, "edit", { filePath: path.join(T145, "x.ts") }) === "string" && w(integrator, T145, "edit", { filePath: path.join(HELPER, "x.ts") }) === undefined, "")
 cell("the orchestrator may write anywhere", w(orchestrator, MAIN, "write", { filePath: path.join(T145, "a.ts") }) === undefined, "")
 
+
+// ---- (acceptance 4.1) a stopped rebase in the tree of an executor is not a drift, and its way out is never refused
+const gitdirOf = (dir) => path.dirname(heads.get(dir))
+const sha40 = "89abcdef0123456789abcdef0123456789abcdef"
+writeFileSync(heads.get(T157), `${sha40}\n`)
+cell("without the rebase marker a bare hash in the own tree is a drift", at(exec157, T157)?.status === "drift", J(at(exec157, T157)))
+mkdirSync(path.join(gitdirOf(T157), "rebase-merge"), { recursive: true })
+writeFileSync(path.join(gitdirOf(T157), "rebase-merge", "head-name"), "refs/heads/task/157-branch-guard\n")
+const rb = at(exec157, T157)
+cell("a stopped rebase on the own branch (rebase-merge/head-name): ok, no warning", rb?.status === "ok" && turnWarning(rb) === undefined, J(rb))
+cell("rebase --continue, --skip, --abort and the commit of the resolved conflict pass", ["git rebase --continue", "git rebase --skip", "git rebase --abort", "git add -A && git commit -m resolved"].every((c) => allowed(bash(exec157, T157, c))), J(bash(exec157, T157, "git rebase --continue")))
+cell("but a stopped rebase of another branch is still a drift", (writeFileSync(path.join(gitdirOf(T157), "rebase-merge", "head-name"), "refs/heads/other\n"), at(exec157, T157)?.status === "drift"), "")
+rmSync(path.join(gitdirOf(T157), "rebase-merge"), { recursive: true, force: true })
+mkdirSync(path.join(gitdirOf(T157), "rebase-apply"), { recursive: true })
+writeFileSync(path.join(gitdirOf(T157), "rebase-apply", "head-name"), "refs/heads/task/157-branch-guard\n")
+cell("a stopped rebase (rebase-apply/head-name): ok, and --continue passes even when the window is off its branch", at(exec157, T157)?.status === "ok" && allowed(bash(exec157, T157, "git rebase --continue")), "")
+rmSync(path.join(gitdirOf(T157), "rebase-apply"), { recursive: true, force: true })
+setBranch(T157, "main")
+cell("off its branch, --continue/--skip/--abort pass without a reason (they never block)", ["git rebase --continue", "git rebase --skip", "git rebase --abort", "git merge --abort", "git cherry-pick --continue"].every((c) => allowed(bash(exec157, T157, c))), J(bash(exec157, T157, "git rebase --continue")))
+setBranch(T157, "task/157-branch-guard")
+at(exec157, T157)
+
+// ---- (acceptance 4.2) git checkout <file> without "--" is a restore of a file
+mkdirSync(path.join(MAIN, "src"), { recursive: true })
+writeFileSync(path.join(MAIN, "src", "foo.ts"), "x")
+mkdirSync(path.join(MAIN, ".git", "refs", "heads"), { recursive: true })
+writeFileSync(path.join(MAIN, ".git", "refs", "heads", "main"), "0123456789abcdef0123456789abcdef01234567\n")
+cell("integrator: git checkout src/foo.ts (a file, not a branch) is not refused", allowed(bash(integrator, MAIN, "git checkout src/foo.ts")), J(bash(integrator, MAIN, "git checkout src/foo.ts")))
+cell("integrator: git checkout of a branch in the main copy is still refused", denied(bash(integrator, MAIN, "git checkout feature/x")), "")
+
+// ---- (acceptance 4.3) Windows paths with a backslash and no quotes are read (the tools powershell and pwsh)
+if (process.platform === "win32") {
+  cell("git -C D:\\tree commit without quotes in the tree of someone else's task is refused", denied(bash(integrator, MAIN, `git -C ${T145} commit -m x`)), J(bash(integrator, MAIN, `git -C ${T145} commit -m x`)))
+  cell("cd D:\\tree && git merge without quotes is refused too", denied(bash(integrator, MAIN, `cd ${T145} && git merge x`)), "")
+}
+cell("PowerShell Set-Location <tree>; git commit is read like cd", denied(bash(integrator, MAIN, `Set-Location ${fw(T145)}; git commit -m x`)) && allowed(bash(integrator, MAIN, `Set-Location ${fw(HELPER)}; git commit -m x`)), "")
+
+// ---- (acceptance 4.6) the permission is kept per folder: a second note does not wipe the first
+clock.t += 40 * 60_000
+const nA = noteBranch(integrator, MAIN, { what: "git merge --ff-only update/main in the main copy", why: "the update of the main copy by the word of the owner", who: "owner, 2026-10-23", directory: MAIN }, deps)
+const nB = noteBranch(integrator, MAIN, { what: "git commit in the tree of 145", why: "a fix of the report asked by the owner", who: "owner, 2026-10-23", directory: T145 }, deps)
+cell("two notes for two folders: both permissions hold", nA?.ok === true && nB?.ok === true && allowed(bash(integrator, MAIN, "git merge --ff-only update/main")) && allowed(bash(integrator, MAIN, `git -C ${fw(T145)} commit -m x`)), J([nA, nB]))
+cell("a folder without a note is still refused", denied(bash(integrator, MAIN, `git -C ${fw(T157)} commit -m x`)), "")
+clock.t += 31 * 60_000
+cell("each permission ends 30 minutes after its own note", denied(bash(integrator, MAIN, "git merge --ff-only update/main")) && denied(bash(integrator, MAIN, `git -C ${fw(T145)} commit -m x`)), "")
+const nC = noteBranch(integrator, MAIN, { what: "git merge in the main copy again", why: "the second update of the day", who: "owner, 2026-10-23", directory: MAIN }, deps)
+clock.t += 20 * 60_000
+const nD = noteBranch(integrator, MAIN, { what: "git merge in the main copy once more", why: "and one more time, renewed", who: "owner, 2026-10-23", directory: MAIN }, deps)
+clock.t += 20 * 60_000
+cell("a repeated note for the same folder renews its term", nC?.ok === true && nD?.ok === true && allowed(bash(integrator, MAIN, "git merge x")), J(readState(base, "ses_int")))
+cell("the state keeps no more than one permission per folder", (readState(base, "ses_int")?.passes ?? []).length === 1, J(readState(base, "ses_int")?.passes))
+
+// ---- (acceptance 5) a reviewer writes the files of its task in the main copy; nothing else
+const folder158 = "doc/tasks/158-review-x"
+tasks.get("crew-harness#158").folder = folder158
+cell("reviewer without the lock: a write into doc/tasks/<its task>/ of the main copy passes (the log, the evidence)", w(rev157, MAIN, "write", { filePath: path.join(MAIN, folder158, "log.md") }) === undefined && w(rev157, MAIN, "edit", { filePath: path.join(MAIN, folder158, "task", "evidence.md") }) === undefined, J(w(rev157, MAIN, "write", { filePath: path.join(MAIN, folder158, "log.md") })))
+cell("reviewer: a patch that writes only into its folder passes", w(rev157, MAIN, "patch", { patchText: `*** Begin Patch\n*** Update File: ${folder158}/progress.log\n+x\n*** End Patch` }) === undefined, "")
+cell("reviewer: a write outside its task folder in the main copy is still refused (code, another task)", typeof w(rev157, MAIN, "write", { filePath: path.join(MAIN, "src", "a.ts") }) === "string" && typeof w(rev157, MAIN, "write", { filePath: path.join(MAIN, "doc/tasks/999-other/log.md") }) === "string", "")
+cell("reviewer: a path that climbs out of its folder (..) is not its folder", typeof w(rev157, MAIN, "write", { filePath: path.join(MAIN, folder158, "..", "..", "..", "src", "a.ts") }) === "string", "")
+cell("a task folder named only by the number (no folder in the record) is read from the number", (delete tasks.get("crew-harness#158").folder, w(rev157, MAIN, "write", { filePath: path.join(MAIN, "doc/tasks/158-anything/log.md") }) === undefined), "")
+cell("an executor still may not write into the main copy, even into doc/tasks", typeof w(exec157, T157, "write", { filePath: path.join(MAIN, "doc/tasks/157-branch-guard/log.md") }) === "string", "")
 rmSync(tmp, { recursive: true, force: true })
 console.log(fail ? `crew-branch-guard.test: FAIL ${fail} of ${n}${bg.missing ? " (module: " + bg.missing + ")" : ""}` : `crew-branch-guard.test ok (${n} checks)`)
 process.exit(fail ? 1 : 0)

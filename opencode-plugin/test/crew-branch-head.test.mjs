@@ -123,6 +123,47 @@ cell("write/edit: filePath, path or file_path", J(wtT("write", { filePath: "/x/a
 cell("patch: the files of the headers", J(wtT("patch", { patchText: "*** Begin Patch\n*** Update File: src/a.ts\n+x\n*** Add File: doc/b.md\n+y\n*** Delete File: old.txt\n*** End Patch" })) === J(["src/a.ts", "doc/b.md", "old.txt"]), J(wtT("patch", { patchText: "*** Update File: src/a.ts\n*** Add File: doc/b.md" })))
 cell("other tools and no input: no files", wtT("read", { path: "/x" }).length === 0 && wtT("write", null).length === 0, "")
 
+
+// ---- (acceptance 4.1) a stopped rebase: HEAD holds a bare hash, the branch is in rebase-merge/head-name or rebase-apply/head-name
+const mkRebase = (name, kind) => {
+  const dir = path.join(tmp, "trees", name)
+  const g = path.join(main, ".git", "worktrees", name)
+  mkdirSync(path.join(g, kind), { recursive: true })
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(path.join(g, "HEAD"), "89abcdef0123456789abcdef0123456789abcdef\n")
+  writeFileSync(path.join(g, "commondir"), "../..\n")
+  writeFileSync(path.join(g, kind, "head-name"), "refs/heads/task/157-branch-guard\n")
+  writeFileSync(path.join(dir, ".git"), `gitdir: ${fw(g)}\n`)
+  return dir
+}
+const rbm = readHead(mkRebase("rbm", "rebase-merge"))
+cell("a stopped rebase (rebase-merge/head-name): the branch is the one being rebased, rebasing=true", rbm?.branch === "task/157-branch-guard" && rbm?.rebasing === true, J(rbm))
+const rba = readHead(mkRebase("rba", "rebase-apply"))
+cell("a stopped rebase (rebase-apply/head-name): the same", rba?.branch === "task/157-branch-guard" && rba?.rebasing === true, J(rba))
+cell("a detached HEAD without a rebase is still detached, not rebasing", h3?.branch === undefined && h3?.rebasing !== true && h3?.detached !== undefined, J(h3))
+cell("rebase --continue, --skip, --abort, --quit are never a change", ["--continue", "--skip", "--abort", "--quit"].every((a) => m("rebase", a) === undefined) && m("cherry-pick", "--continue") === undefined && m("merge", "--continue") === undefined, J(m("rebase", "--continue")))
+
+// ---- (acceptance 4.2) git checkout <file> without "--" restores a file, it does not change the branch
+mkdirSync(path.join(main, "src"), { recursive: true })
+writeFileSync(path.join(main, "src", "foo.ts"), "x")
+mkdirSync(path.join(main, ".git", "refs", "heads"), { recursive: true })
+writeFileSync(path.join(main, ".git", "refs", "heads", "main"), "0123456789abcdef0123456789abcdef01234567\n")
+mkdirSync(path.join(main, "docs"), { recursive: true })
+writeFileSync(path.join(main, ".git", "packed-refs"), "# pack-refs\n0123456789abcdef0123456789abcdef01234567 refs/heads/docs\n")
+cell("checkout of an existing file that is not a branch is a restore of the file", mutationOf("checkout", ["src/foo.ts"], main) === undefined && mutationOf("checkout", ["src/foo.ts", "src/other.ts"], main) === undefined, J(mutationOf("checkout", ["src/foo.ts"], main)))
+cell("checkout of a branch is still a change of the branch", mutationOf("checkout", ["main"], main)?.kind === "branch", J(mutationOf("checkout", ["main"], main)))
+cell("a name that is a branch wins over a folder of the same name (packed-refs)", mutationOf("checkout", ["docs"], main)?.kind === "branch", J(mutationOf("checkout", ["docs"], main)))
+cell("a name that is neither a file nor a branch is treated as a branch (git may fetch it)", mutationOf("checkout", ["feature/new"], main)?.kind === "branch", J(mutationOf("checkout", ["feature/new"], main)))
+cell("without the folder of the call the old rule holds (a name is a branch)", mutationOf("checkout", ["src/foo.ts"])?.kind === "branch", J(mutationOf("checkout", ["src/foo.ts"])))
+
+// ---- (acceptance 4.3) a backslash in a Windows path is not an escape
+if (process.platform === "win32") {
+  cell("git -C D:\\x commit without quotes", J(dirs(`git -C ${wt} commit -m x`, main)) === J([`commit@${at(wt)}`]), J(dirs(`git -C ${wt} commit -m x`, main)))
+  cell("cd D:\\x && git merge without quotes", J(dirs(`cd ${wt} && git merge x`, main)) === J([`merge@${at(wt)}`]), J(dirs(`cd ${wt} && git merge x`, main)))
+  cell("a backslash path with a following argument keeps the argument", gitCalls(`git -C ${wt} commit -m "a b"`, main)[0]?.args.join("|") === "-m|a b", J(gitCalls(`git -C ${wt} commit -m "a b"`, main)))
+}
+cell("PowerShell: Set-Location <dir>; git ... acts in that folder", J(dirs(`Set-Location "${fw(wt)}"; git commit -m x`, main)) === J([`commit@${at(wt)}`]) && J(dirs(`sl ${fw(wt)}; git commit`, main)) === J([`commit@${at(wt)}`]), J(dirs(`Set-Location "${fw(wt)}"; git commit -m x`, main)))
+cell("an escaped space outside a drive path is still an escape", gitCalls("git commit -m a\\ b", main)[0]?.args.join("|") === "-m|a b", J(gitCalls("git commit -m a\\ b", main)))
 rmSync(tmp, { recursive: true, force: true })
 console.log(fail ? `crew-branch-head.test: FAIL ${fail} of ${n}${bh.missing ? " (module: " + bh.missing + ")" : ""}` : `crew-branch-head.test ok (${n} checks)`)
 process.exit(fail ? 1 : 0)
