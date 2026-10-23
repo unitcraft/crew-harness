@@ -13,7 +13,7 @@
 | методика | 54 | шаг агента 3 (`reply_validation`, `close_agent_turn`, `check_cache`), совещание 17 (`party_profile`, `role_context`, `call_trace`, `call_step`, `parse_agent_reply`, `proposal_*` 3, `count_in_model_tally`, `journal_findings`, `journal_machine_data`, `journal_decision`, `remove_unsound`, `build_summary`, `close_for_writing`, `open_for_writing`, `move_to_archive`), запуск сессии 4 (`launch_scope`, `launch_profile`, `session_context`, `parse_session_artifact`), `stop_agent_group` 1, раннер 29 |
 | продукт | 0 | машины `chat`, `dialog` примитивов не зовут |
 
-Таблицы ролей разбора (3 строки `parse_agent_reply`: `witness`, `author`, `lens`) и три набора типов (`standard_types`: 11 записей, 6 вариантов; `session_types`; `runner_types`) — методики.
+Таблицы ролей разбора (3 строки `parse_agent_reply`: `witness`, `author`, `lens`) и три набора типов (`standard_types`: 10 записей, 7 вариантов; `session_types`; `runner_types`) — методики.
 
 Расхождения с постановкой:
 1. `close_agent_turn` — примитив методики, но его зовёт пример языка `actions` (`actions.alula.json`): в `examples/registry.md` он записан как пример хозяина; это не реестр методики.
@@ -31,7 +31,7 @@
 | продукт | 10 | `user_message`, `agent_chunk`, `agent_done`, `agent_refused`, `cancelled_while_waiting`, `no_answer_in_time`, `cancelled_before_request`, `session_closed`, `turn_answered`, `turn_refused` |
 | примеры языка | 24 | `child_answered`, `child_failed` (caller), `callee_answered`, `callee_failed`, `callee_silent` (callee), `lens_answered`, `lens_lost` (fan, lenses), `big`, `small`, `boom`, `doubled`, `seen` (actions), `started`, `stepped`, `reached_limit` (calc), `stop_discarded`, `work_done`, `work_failed` (gate), `failed`, `got`, `other_failure`, `retrying`, `silent`, `transient` (variants) |
 
-Расхождение: пример `dialog_steps` (вложенная пара) пишет `user_message`, `session_closed`, `turn_answered`, `turn_refused` — четыре кода из 10 продукта. Решение по месту: таблицы — самостоятельные данные своего хозяина, поэтому `examples/journal.md` содержит 28 строк (24 + эти 4 с теми же шаблонами), `machines/product/journal.md` — 10. Одинаковый код в таблицах двух разных хозяев не конфликтует: проверка `journal_table_issues` сверяет хозяина только с кодами ЯЗЫКА. Суммы сошлись: 35 + 73 + 10 + 24 = 142 = 86 + 56.
+Расхождение: пример `dialog_steps` (вложенная пара) пишет `user_message`, `session_closed`, `turn_answered`, `turn_refused` — четыре кода из 10 продукта. Решение по месту: таблицы — самостоятельные данные своего хозяина, поэтому (после решения ниже — `dialog_steps` едет в методику) `examples/journal.md` содержит 24 строки, а эти 4 кода — в журнале методики, `machines/product/journal.md` — 10. Одинаковый код в таблицах двух разных хозяев не конфликтует: проверка `journal_table_issues` сверяет хозяина только с кодами ЯЗЫКА. Суммы сошлись: 35 + 73 + 10 + 24 = 142 = 86 + 56.
 
 ### 3. Данные, которые едут
 
