@@ -20,8 +20,8 @@ package **`alula`** (task 144 moved them out of this folder, with the tests; the
 | `alula.engine` | the engine: `Machine[S]`, `Engine`, the effects `Journal`, `Store`, `Link`, in-memory handlers |
 | `alula.machine`, `alula.machine_table`, `alula.machine_text`, `alula.machine_run` | the tree of a machine, the checks, the translator of Alula tables, the interpreter `AlulaMachine`, the runner of scenarios |
 | `alula.alula_cli` and the program `alula` | the commands `compile`, `render`, `convert`, `check`, `summary`, `run`, `test` |
-| the data of `alula.machine` | the registry of the primitives (`standard_registry`), the journal codes, the machines `chat`, `dialog`, `dialog_steps`, `agent_step`, `session_start`, `task_runner`, `cycle_check` and the 626 scenarios, compiled in; the language is Alula 2.17 (package 0.4, task 151): the JSON names are built by themselves, `—` in a request, a party of a free input |
-| all the `machine_*` and `alula_*` unit tests | 2163 tests; the product has 311 |
+| the data of `alula.machine` | the registry of the primitives (`standard_registry`), the journal codes, the machines `chat`, `dialog`, `dialog_steps`, `agent_step`, `session_start`, `task_runner`, `cycle_check` and the 626 scenarios, compiled in; the language is Alula 2.22 (package 0.5, task 152): blocks `{ … }`, `=>`, `функция`, ranges, methods of the macros, insertions, `тип Имя перечисление`, comments, a new lossless lexer; the trees are the same as in 2.17 |
+| all the `machine_*` and `alula_*` unit tests | 2510 tests; the product has 311 |
 
 The border is the import: a file of this folder imports `alula.<module>`; a file of `alula` imports no module of the product (the guard `check-no-product-imports.py`
 of that repository). The dictionary of the engine, the format of the machines and the program `alula` are described in the READMEs of `alula`

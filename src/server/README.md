@@ -88,7 +88,7 @@ is a member of `crew_app`). A server that restarts finds its sessions with `crew
 
 ## The chat runs on Alula
 
-Since task 114 the hub runs every session on the machine of the many-turn chat written as a table of Alula 2.11,
+Since task 114 the hub runs every session on the machine of the many-turn chat written as a table of Alula (2.11 at the start, 2.22 since task 152: blocks, `=>`, `тип Имя перечисление`, a free input of the user),
 `src/machine/machines/dialog.alula.md` of the package `alula`, and not on the machine written in Nova.
 
 - **Where the machine comes from.** `dialog.alula.json` is the translation of the table by the translator `alula.machine_text` of the package `alula`

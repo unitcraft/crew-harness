@@ -27,9 +27,10 @@ tls = { git = "https://github.com/nv-lang/nova-tls", version = "0.2" }
 # The core of the machines as data (task 144, published as nv-lang/nova-alula): the package `alula`. Version 0.2 (task 148) is the language under the name Alula, the format 2.14, the modules
 # `alula.alula_cli`, `alula.alula_scenarios`, `alula.alula_eq` and the program `alula`; version 0.3 (task 149) reads the language by the rules of the format 2.13 (the signal of a party, Request and Reads, the
 # values of an enum, ASCII signs, the names as written); version 0.4 (task 151) reads the formats 2.15 - 2.17 (the JSON names built by themselves and the section `## Имена`, a party of a free input, `—` in the
-# request, the `иначе` of a fork only where the type does not prove the exhaustion). Before the version 0.4 is published, the package is taken from a local folder through `[replace]` in the file
+# request, the `иначе` of a fork only where the type does not prove the exhaustion); version 0.5 (task 152) reads and writes the syntax of the formats 2.18 - 2.22 (blocks, `=>`, `функция`, ranges, methods of
+# the macros, insertions, `тип Имя перечисление`, the comments, the new lexer). Before the version 0.5 is published, the package is taken from a local folder through `[replace]` in the file
 # `nova.override.toml` (not committed, see .gitignore).
-alula = { git = "https://github.com/nv-lang/nova-alula", version = "0.4" }
+alula = { git = "https://github.com/nv-lang/nova-alula", version = "0.5" }
 
 [package]
 name = "crew_harness"

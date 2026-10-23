@@ -8,9 +8,9 @@ version = 1
 name = "alula"
 source = "git"
 git = "https://github.com/nv-lang/nova-alula"
-pin = "version:>=0.4.0, <0.5.0"
-version = "0.4.0"
-commit = "69f8de200de42cdb04b8b7d007ad63d46ce7e0e9"
+pin = "version:>=0.5.0, <0.6.0"
+version = "0.5.0"
+commit = "634257b3dfb0eb75e23865b02474fd590eee4f5b"
 
 [[package]]
 name = "compress"
