@@ -17,7 +17,7 @@
 // названная пара становится ожиданием окна, пока не сменились роль или задача (override).
 // Нет автоматического checkout, reset и переноса: плагин только показывает и отклоняет. Окно переносит штатный session_move.
 // ЧЕСТНАЯ ГРАНИЦА: произвольный shell (переменные, подстановки, внешний терминал) проверки не разбирают и не предотвращают гонку.
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { type Head, type Mutation, fsKey, gitCalls, mutationOf, readHead, sameTree, writeTargets } from "./branch-head.ts"
 
@@ -28,6 +28,8 @@ export type TaskLike = {
   executor?: string
   reviewer?: string
   directory: string
+  /** папка задачи от корня репозитория (doc/tasks/NNN-…): приёмщик пишет в неё журнал и доказательства */
+  folder?: string
   worktree?: string
   branch?: string
   sessions?: { session?: string; place?: string; worktree?: string; branch?: string }[]
@@ -61,6 +63,8 @@ export type Expect = {
   common?: string
   /** основная копия репозитория */
   main?: string
+  /** папка задачи (doc/tasks/NNN-…) */
+  folder?: string
   /** допустимые корни окна (у приёмщика пусто: любое дерево репозитория) */
   dirs: string[]
   /** ожидаемая ветка (у приёмщика нет) */
@@ -95,7 +99,7 @@ export function expectedFor(card: CardLike, deps: Deps): Expect | undefined {
         const dir = own ? ses!.worktree : t.worktree
         const branch = own ? ses!.branch : t.branch
         if (!dir || !branch) return undefined
-        return { role: "executor", project: card.project ?? t.project, task: { project: t.project, n: t.n }, bind: `executor:${t.project}#${t.n}`, common: (readHead(t.directory) ?? readHead(dir))?.common, dirs: [dir], branch, target: deps.targetBranch(t.directory), helpers: treesOf(t), detachedOk: false }
+        return { role: "executor", project: card.project ?? t.project, task: { project: t.project, n: t.n }, bind: `executor:${t.project}#${t.n}`, common: (readHead(t.directory) ?? readHead(dir))?.common, dirs: [dir], branch, target: deps.targetBranch(t.directory), helpers: treesOf(t), folder: t.folder, detachedOk: false }
       }
     }
     if (card.review) {
@@ -103,7 +107,7 @@ export function expectedFor(card: CardLike, deps: Deps): Expect | undefined {
       if (t && t.reviewer === card.session && ["submitted", "reviewing", "accepted"].includes(t.status)) {
         const h = readHead(t.directory)
         if (!h) return undefined
-        return { role: "reviewer", project: card.project ?? t.project, task: { project: t.project, n: t.n }, bind: `reviewer:${t.project}#${t.n}`, common: h.common, main: h.main ? h.top : undefined, dirs: [], target: deps.targetBranch(t.directory), helpers: treesOf(t), detachedOk: true }
+        return { role: "reviewer", project: card.project ?? t.project, task: { project: t.project, n: t.n }, bind: `reviewer:${t.project}#${t.n}`, common: h.common, main: h.main ? h.top : undefined, dirs: [], target: deps.targetBranch(t.directory), helpers: treesOf(t), folder: t.folder, detachedOk: true }
       }
     }
     if (card.role === "integrator" && card.project) {
@@ -149,7 +153,8 @@ export type State = {
   expected: { label: string; dir?: string; branch?: string }
   actual: Pair
   override?: Override
-  pass?: Pass
+  /** разрешения мутаций по каталогам (запись причины на каталог, 30 минут); повторная запись для каталога продлевает его срок */
+  passes?: Pass[]
   lastNote?: LastNote
 }
 export type JournalLine = { at: number; kind: "note" | "change" | "drift" | "restored" | "blocked"; session: string; role: string; project?: string; task?: string; from?: string; to?: string; reason?: string; what?: string; why?: string; who?: string; command?: string }
@@ -265,7 +270,7 @@ export function checkWindow(card: CardLike, dir: string | undefined, deps: Deps,
       expected: expectedLabel(exp, ov),
       actual: head ? { dir: head.top, branch: head.branch, detached: head.detached, main: head.main, label: pairLabel(head.top, head, head.main) } : { label: "не определено" },
       ...(ov ? { override: ov } : {}),
-      ...(prev?.pass ? { pass: prev.pass } : {}),
+      ...(prev?.passes?.length ? { passes: prev.passes.filter((x) => x.until > now) } : {}),
       ...(prev?.lastNote ? { lastNote: prev.lastNote } : {}),
     }
     if (!head) st.reason = dir ? "каталог окна не читается как git-репозиторий" : "каталог окна неизвестен (session.get не вернул location)"
@@ -325,6 +330,20 @@ function refusal(what: string, why: string, dir: string, extra = ""): string {
   return `Отклонено: ${what} — ${why}.${extra} Запиши причину: crew_branch_note {what: "<что меняешь>", why: "<зачем>", who: "<кто разрешил: слово владельца с датой или решение оркестратора>", directory: "${dir.replace(/\\/g, "/")}"} и повтори команду (разрешение на этот каталог — ${PASS_MS / 60_000} минут). Чтение (git status, log, diff), git -C <своё helper-дерево> и возврат на свою ветку не блокируются.`
 }
 
+/** Есть ли у окна действующее разрешение (запись причины) на каталог top. */
+const passed = (st: State | undefined, top: string, now: number): boolean => !!st?.passes?.some((x) => x.until > now && sameTree(x.dir, top))
+
+/** Файл abs лежит в папке задачи приёмщика (doc/tasks/NNN-…) основной копии top: журнал и доказательства, которые он обязан писать. */
+function inTaskFolder(exp: Expect, top: string, abs: string): boolean {
+  if (exp.role !== "reviewer" || !exp.task) return false
+  const rel = path.relative(top, abs).replace(/\\/g, "/")
+  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return false
+  const folder = exp.folder?.replace(/\\/g, "/").replace(/\/+$/, "")
+  const low = process.platform === "win32" ? (x: string) => x.toLowerCase() : (x: string) => x
+  if (folder) return low(rel).startsWith(`${low(folder)}/`)
+  return low(rel).startsWith(`doc/tasks/${String(exp.task.n).padStart(3, "0")}-`)
+}
+
 /** Причина отказа для вызова git в каталоге dir или undefined. */
 function judgeTarget(exp: Expect, card: CardLike, dir: string, mu: Mutation, call: { sub: string; text: string }, deps: Deps): string | undefined {
   const head = readHead(dir)
@@ -332,7 +351,7 @@ function judgeTarget(exp: Expect, card: CardLike, dir: string, mu: Mutation, cal
   if (exp.common && !sameTree(head.common, exp.common)) return undefined // другой репозиторий — не наш
   const st = readState(deps.base, card.session)
   const now = nowOf(deps)
-  if (st?.pass && st.pass.until > now && sameTree(st.pass.dir, head.top)) return undefined
+  if (passed(st, head.top, now)) return undefined
   if (mu.kind === "branch" && mu.to && exp.branch && mu.to === exp.branch && exp.dirs.some((d) => sameTree(d, head.top))) return undefined // путь назад
   const ov = st?.override && st.override.bind === exp.bind ? st.override : undefined
   const what = `git ${call.sub} (${mu.kind === "branch" ? "меняет ветку" : "меняет историю"})`
@@ -361,7 +380,7 @@ export function judgeBash(card: CardLike, windowDir: string | undefined, input: 
     const calls = gitCalls(input?.command, cwd)
     out.calls = calls.length
     for (const c of calls) {
-      const mu = mutationOf(c.sub, c.args)
+      const mu = mutationOf(c.sub, c.args, c.dir)
       if (!mu) continue
       if (c.dir === undefined) {
         out.unresolved++
@@ -393,12 +412,14 @@ export function judgeWrite(card: CardLike, windowDir: string | undefined, tool: 
     const ov = st?.override && st.override.bind === exp.bind ? st.override : undefined
     const winOk = winHead ? judgeHead(exp, winHead, ov) : ({ ok: true } as Verdict)
     for (const f of files) {
-      let p = path.resolve(windowDir || ".", f)
+      const abs = path.resolve(windowDir || ".", f)
+      let p = abs
       while (!existsSync(p) && path.dirname(p) !== p) p = path.dirname(p)
       const head = readHead(p)
       if (!head) continue
       if (exp.common && !sameTree(head.common, exp.common)) continue
-      if (st?.pass && st.pass.until > now && sameTree(st.pass.dir, head.top)) continue
+      if (passed(st, head.top, now)) continue
+      if (head.main && inTaskFolder(exp, head.top, path.join(realpathSync.native(p), path.relative(p, abs)))) continue
       const what = `запись файла ${path.basename(f)}`
       if (head.main) {
         if (exp.role === "executor" || (exp.role === "reviewer" && !(exp.task && deps.holdsLock(exp.task.project, card.session, exp.task.n)))) return refusal(what, "в основной копии проекта (живая система подгружает её файлы)", head.top)
@@ -449,7 +470,7 @@ export function noteBranch(card: CardLike, windowDir: string | undefined, input:
     // состояние: разрешение на мутации в каталоге, запись для ожидания (если названа ветка или окно стоит не на своём месте и причину дают этому месту)
     const cur = checkWindow(card, windowDir, deps) ?? readState(deps.base, card.session)
     if (cur) {
-      cur.pass = { dir: passDir, until: now + PASS_MS, at: now }
+      cur.passes = [...(cur.passes ?? []).filter((x) => x.until > now && !sameTree(x.dir, passDir)), { dir: passDir, until: now + PASS_MS, at: now }]
       cur.lastNote = { at: now, what, why, who, from, to }
       const here = !!winHead && sameTree(passDir, winHead.top)
       if (branch || (cur.status === "drift" && here)) cur.override = { dir: passDir, branch: branch ?? (here ? winHead?.branch : undefined), at: now, why, who, bind: exp.bind }

@@ -24,6 +24,8 @@ export type Head = {
   detached?: string
   /** `ref:` на что-то кроме refs/heads */
   ref?: string
+  /** остановленный rebase: HEAD — голый хеш, а ветка, которую перебазируют, записана в rebase-merge/head-name или rebase-apply/head-name */
+  rebasing?: boolean
 }
 
 const real = (p: string): string => {
@@ -90,7 +92,18 @@ function fromGit(top: string, dotGit: string, isDir: boolean): Head | undefined 
     const r = ref[1].trim()
     if (r.startsWith("refs/heads/")) head.branch = r.slice("refs/heads/".length)
     else head.ref = r
-  } else if (/^[0-9a-f]{40}([0-9a-f]{24})?$/i.test(h)) head.detached = h
+  } else if (/^[0-9a-f]{40}([0-9a-f]{24})?$/i.test(h)) {
+    head.detached = h
+    // остановленный rebase (конфликт): git держит HEAD голым хешем, а ветку записывает в head-name; для окна фактическая ветка — она
+    for (const d of ["rebase-merge", "rebase-apply"]) {
+      const hn = /^refs\/heads\/(.+)$/.exec(text(path.join(gitdir, d, "head-name")) ?? "")
+      if (hn) {
+        head.branch = hn[1].trim()
+        head.rebasing = true
+        break
+      }
+    }
+  }
   return head
 }
 
@@ -138,6 +151,11 @@ function tokenize(cmd: string): (Tok[] | typeof OPEN | typeof CLOSE)[] {
     if (c === "'" || c === '"') {
       q = c
       has = true
+      continue
+    }
+    if (c === "\\" && /^[A-Za-z]:/.test(word)) {
+      // обратная коса в пути с буквой диска (путь Windows без кавычек, PowerShell) — часть пути, а не экранирование
+      word += c
       continue
     }
     if (c === "\\" && i + 1 < cmd.length) {
@@ -222,9 +240,10 @@ function walk(cmd: string, cwd0: string | undefined, out: GitCall[], depth: numb
     const head = toks[i]?.text
     if (!head) continue
     const name = path.basename(head).replace(/\.exe$/i, "")
-    if (name === "cd" || name === "pushd") {
-      const a = toks[i + 1]
-      cwd = a && a.text !== "-" ? resolveDir(a, cwd) : undefined
+    if (["cd", "pushd", "chdir", "set-location", "sl"].includes(name.toLowerCase())) {
+      const args = toks.slice(i + 1).filter((t) => !/^-(path|literalpath)$/i.test(t.text))
+      const dirTok = args[0]
+      cwd = dirTok && dirTok.text !== "-" ? resolveDir(dirTok, cwd) : undefined
       continue
     }
     if (SHELLS.has(name) && depth < 3) {
@@ -270,17 +289,37 @@ export type Mutation = { kind: "branch" | "history"; /** switch/checkout: на �
 
 const HISTORY = new Set(["merge", "cherry-pick", "rebase", "reset", "commit", "pull", "revert", "am"])
 
+/** Есть ли локальная ветка с таким именем: файл refs/heads/<имя> общего каталога или строка в packed-refs. */
+function isLocalBranch(common: string, name: string): boolean {
+  try {
+    if (existsSync(path.join(common, "refs", "heads", name))) return true
+    return readFileSync(path.join(common, "packed-refs"), "utf8").split(/\r?\n/).some((l) => l.endsWith(` refs/heads/${name}`))
+  } catch {
+    return false
+  }
+}
+/** `checkout <имена>` без `--`: первое имя — не ветка, а путь, который есть в дереве; или `<дерево-ish> <пути>`, где пути есть в дереве. */
+function restoresPaths(dir: string, pos: string[]): boolean {
+  const h = readHead(dir)
+  if (!h) return false
+  const isPath = (p: string) => existsSync(path.resolve(dir, p))
+  if (!isLocalBranch(h.common, pos[0]) && isPath(pos[0])) return true
+  return pos.length > 1 && pos.slice(1).every(isPath)
+}
+
 /** Меняет ли вызов git ветку или историю. Чтение, пути (`checkout -- файл`, `reset -- файл`), `--abort` — нет. */
-export function mutationOf(sub: string, args: string[]): Mutation | undefined {
+export function mutationOf(sub: string, args: string[], dir?: string): Mutation | undefined {
   if (sub === "checkout" || sub === "switch") {
     if (sub === "checkout" && (args.includes("--") || args.includes("-p") || args.includes("--patch"))) return undefined
     const creates = args.some((a) => /^(-b|-B|-c|-C|--orphan|--detach|-d|--create|--force-create)$/.test(a))
     const pos = args.filter((a) => !a.startsWith("-"))
     if (sub === "checkout" && !creates && (pos[0] === "." || !pos.length)) return undefined
+    // `git checkout src/foo.ts` без `--`: имя не ветка, а путь, который есть в дереве, — восстановление файла, не смена ветки
+    if (sub === "checkout" && !creates && dir && pos.length && restoresPaths(dir, pos)) return undefined
     return { kind: "branch", ...(creates || !pos[0] ? {} : { to: pos[0] }) }
   }
   if (!HISTORY.has(sub)) return undefined
-  if (args.includes("--abort") || args.includes("--quit")) return undefined
+  if (args.includes("--abort") || args.includes("--quit") || args.includes("--continue") || args.includes("--skip")) return undefined // выход из операции никогда не блокируется
   if (sub === "reset" && (args.includes("--") || args.includes("-p") || args.includes("--patch"))) return undefined
   if (sub === "commit" && args.includes("--dry-run")) return undefined
   return { kind: "history" }
