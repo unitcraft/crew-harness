@@ -129,6 +129,7 @@ const c3 = await call("bash", { command: `git -C ${fw(HELPER)} commit --allow-em
 cell("git -C <its helper tree> passes", c3.effect === "allow", J(c3))
 const c4 = await call("bash", { command: "git reset --hard" }, "ses_orch")
 cell("a window that is not controlled passes everything", c4.effect === "allow", J(c4))
+clock.t += 31 * 60_000 // the permission of the note above (30 minutes, for the tree of 145) is over
 const c5 = await call("write", { filePath: path.join(T145, "x.md"), content: "x" }, "ses_int")
 cell("a write into the tree of someone else's task is denied", c5.effect === "deny", J(c5))
 const c6 = await call("bash", { command: "git checkout update/main" }, "ses_unknown")

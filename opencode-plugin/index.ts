@@ -130,7 +130,9 @@ import {
   pendingTool,
   questionCall,
   letterExistsFor,
+  branchDeps,
 } from "./core.ts"
+import { branchNotes, checkWindow, pruneStates, registerBranchHooks, turnWarning } from "./branch-guard.ts"
 import { answerTurn, markInterventions } from "./answer.ts"
 import { answerModesOn } from "./answer-parse.ts"
 import { DECISION_RU, readApprovals, removeApproval } from "./approvals.ts"
@@ -187,6 +189,15 @@ export default {
       } catch {
         return undefined
       }
+    }
+    // КОНТРОЛЬ КАТАЛОГА И ВЕТКИ ОКОН (branch-guard.ts, задача 157). Каталог сессии — session.get(...).location, каждый раз заново (не карточка и
+    // не ctx.location: те относятся к экземпляру плагина, а не к каждой сессии); нет ответа — undefined (окно «не определено», без предупреждения).
+    const bdeps = branchDeps(projects)
+    const cardNow = (sessionID: string) => readJson<Card>(cardFile(sessionID)) ?? mine.get(sessionID)
+    const dirOfSession = async (sessionID: string): Promise<string | undefined> => {
+      const info = await sessionInfo(sessionID)
+      const dir = info?.location?.directory ?? info?.directory
+      return dir ? String(dir) : undefined
     }
 
     // Визитка сессии: создаётся при первом обращении, отметка жизни — при каждом.
@@ -2094,6 +2105,7 @@ export default {
         await step("formWatch", formWatch)
         await step("flowWatch", flowWatch)
         await step("leftWatch", leftWatch)
+        await step("branchWatch", branchWatch)
         await step("housekeep", housekeep)
         await step("processQueue", processQueue)
         // наблюдения crew_watch (watch.ts): запустить новые, по концу — письмо окну с побудкой
@@ -2109,6 +2121,26 @@ export default {
       } finally {
         if (id === passId) passBusy = false // зависший прежний проход, вернувшись, не снимает флаг идущего
       }
+    }
+    // КАТАЛОГ И ВЕТКА ОКОН РАЗ В 10 с (задача 157): ветка могла смениться между ходами или под командой не из оболочки окна; снимок для /crew, панели
+    // и crew_doctor свежий и у окон, которые сейчас не ходят. Только окна этого процесса, только контролируемые роли; чтение файлов `.git`, не git.
+    const BRANCH_EVERY_MS = Number(process.env.CREW_HARNESS_BRANCH_MS) || 10_000
+    let branchAt = 0
+    async function branchWatch() {
+      if (now() - branchAt < BRANCH_EVERY_MS) return
+      branchAt = now()
+      const cards = allCards().filter((c) => c.pid === process.pid && !children.has(c.session) && c.spawned?.status !== "closed" && (c.role === "integrator" || c.task || c.review))
+      const t0 = now()
+      for (const c of cards) {
+        // предел времени шага без пауз между окнами: пауза setTimeout(0) на Windows — до 15 мс, а доставка писем идёт в том же проходе
+        if (now() - t0 > 2_000) {
+          log(`step branchWatch yielded after ${now() - t0} ms`)
+          break
+        }
+        const dir = await dirOfSession(c.session)
+        if (dir) checkWindow(c, dir, bdeps)
+      }
+      if (cards.length) pruneStates(bdeps.base, now())
     }
     // Таймеры цикла создаёт start() в конце setup, снимает stop(): цикл можно перенести на другой экземпляр (см. «ОДИН ЦИКЛ»).
     let timer: any
@@ -2154,6 +2186,13 @@ export default {
             `Help on the tools: crew_help.` +
             (rules ? ` Project rules: ${rules}` : ""),
         })
+        // окно не на своей ветке или не в своём каталоге: одна строка в системную часть, пока расхождение есть (branch-guard.ts)
+        try {
+          const warn = turnWarning(checkWindow(card, await dirOfSession(card.session), bdeps))
+          if (warn) ev.system.push({ type: "text", text: warn })
+        } catch (e) {
+          log(`branch check failed: ${e}`)
+        }
       } catch (e) {
         log(`context failed: ${e}`)
       }
@@ -2200,6 +2239,10 @@ export default {
     // отклоняются до выполнения (glued-guard.ts); письмо `crew_send` проверяет сам инструмент. Нет хуков в этой версии OpenCode — строка в журнал.
     await registerGluedHooks(ctx, log)
 
+    // КАТАЛОГ И ВЕТКА ОКОН (задача 157): команды оболочки, меняющие ветку или историю в основной копии, в дереве чужой задачи или не на своей ветке,
+    // и записи файлов там отклоняются, пока не записана причина (crew_branch_note); после оболочки окно сверяется заново. Нет хуков — строка в журнал.
+    await registerBranchHooks(ctx, log, { cardOf: cardNow, dirOf: dirOfSession, deps: bdeps })
+
     // САМОПРОВЕРКА: то, что умеет только процесс OpenCode.
     async function doctor(): Promise<string[]> {
       const out: string[] = []
@@ -2232,6 +2275,7 @@ export default {
       startTask,
       doctor,
       doctorNotes: () => autoNotes(now()),
+      dirOf: dirOfSession,
     })
     const toEditor = (t: (typeof tools)[number]) => ({ name: t.name, description: t.description, input: t.input, execute: (input: any, context: any) => t.execute(input, context?.sessionID) })
     await ctx.tool.transform((editor: any) => {
@@ -2263,7 +2307,7 @@ export default {
     const runDoctor = async () => {
       const problems = [...(await doctor()), ...commonDoctor(), ...settingsProblems(projects, settingsContext().local), ...profileProblems()]
       try {
-        writeFileSync(DOCTOR_FILE, JSON.stringify({ at: Date.now(), problems, notes: [...settingsNotes(), ...autoNotes(now())] }))
+        writeFileSync(DOCTOR_FILE, JSON.stringify({ at: Date.now(), problems, notes: [...settingsNotes(), ...autoNotes(now()), ...branchNotes(BASE)] }))
       } catch {}
       const said = problems.join(" | ")
       if (said === doctorSaid) return

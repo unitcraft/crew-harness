@@ -4,7 +4,7 @@
 // the windows of the owner are not controlled. A check at every turn compares the folder from session.get and the HEAD of the folder
 // with that pair; a command that changes the branch or the history in the main copy or in the tree of someone else's task is refused
 // until the reason is recorded (crew_branch_note); a reason lets it pass and moves the expectation.
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync, existsSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
@@ -70,7 +70,8 @@ mkMain(OTHER)
 const tasks = new Map()
 const put = (t) => (tasks.set(`${t.project}#${t.n}`, t), t)
 put({ project: "crew-harness", n: 145, status: "running", executor: "ses_145", directory: MAIN, worktree: T145, branch: "task/145-orders", sessions: [], side: [] })
-put({ project: "crew-harness", n: 157, status: "running", executor: "ses_157", reviewer: "ses_rev157", directory: MAIN, worktree: T157, branch: "task/157-branch-guard", sessions: [], side: [{ worktree: CAND }] })
+put({ project: "crew-harness", n: 157, status: "running", executor: "ses_157", reviewer: "ses_rev157", directory: MAIN, worktree: T157, branch: "task/157-branch-guard", sessions: [], side: [] })
+put({ project: "crew-harness", n: 158, status: "reviewing", executor: "ses_158", reviewer: "ses_rev157", directory: MAIN, worktree: T157B, branch: "task/158", sessions: [], side: [{ worktree: CAND }] })
 put({ project: "crew-harness", n: 160, status: "running", executor: "ses_160", directory: MAIN, sessions: [], side: [] }) // no tree: not controlled
 put({ project: "crew-harness", n: 161, status: "done", executor: "ses_161", directory: MAIN, worktree: T145, branch: "task/161-x", sessions: [], side: [] })
 const t157b = put({ project: "crew-harness", n: 170, status: "running", executor: "ses_170", directory: MAIN, worktree: T157, branch: "task/170", sessions: [{ session: "ses_170", place: "own", worktree: T157B, branch: "task/157-s2-1" }], side: [] })
@@ -92,11 +93,12 @@ const deps = {
 const integrator = { session: "ses_int", role: "integrator", project: "crew-harness" }
 const exec145 = { session: "ses_145", role: "worker", project: "crew-harness", task: { project: "crew-harness", n: 145 } }
 const exec157 = { session: "ses_157", role: "worker", project: "crew-harness", task: { project: "crew-harness", n: 157 } }
-const rev157 = { session: "ses_rev157", role: "worker", project: "crew-harness", review: { project: "crew-harness", n: 157 } }
+const rev157 = { session: "ses_rev157", role: "worker", project: "crew-harness", review: { project: "crew-harness", n: 158 } }
 const orchestrator = { session: "ses_orch", role: "orchestrator", project: "crew-harness" }
 const ownerTab = { session: "ses_owner", role: "worker", project: "crew-harness" }
 const exp = (card) => expectedFor(card, deps)
-const same = (a, b) => path.resolve(String(a)).toLowerCase() === path.resolve(String(b)).toLowerCase()
+const real = (p) => { try { return realpathSync.native(String(p)).toLowerCase() } catch { return path.resolve(String(p)).toLowerCase() } }
+const same = (a, b) => real(a) === real(b)
 
 // ---- the expected pair by the role
 const ei = exp(integrator)
@@ -127,7 +129,7 @@ const j1 = readJournal(base)
 cell("the drift is written to the journal once, with the pair it went to", j1.filter((l) => l.kind === "drift" && l.session === "ses_int").length === 1 && J(j1).includes("task/145-orders"), J(j1))
 at(integrator, T145)
 cell("a repeated check of the same drift does not repeat the line", readJournal(base).filter((l) => l.kind === "drift" && l.session === "ses_int").length === 1, J(readJournal(base)))
-cell("and the log of the plugin has one line, not one per turn", logs.filter((l) => l.includes("ses_int") && /drift/i.test(l)).length === 1, J(logs))
+cell("and the log of the plugin has one line, not one per turn", logs.filter((l) => l.includes("ses_int") && /not where it should be/.test(l)).length === 1, J(logs))
 const back = at(integrator, MAIN)
 cell("back to the main copy: ok, and the journal says restored", back?.status === "ok" && readJournal(base).some((l) => l.kind === "restored" && l.session === "ses_int"), J([back, readJournal(base)]))
 
@@ -179,8 +181,11 @@ cell("executor on a wrong branch: a commit is refused with the branch it should 
 cell("and the switch back to its branch always passes (a way out must not need a reason)", allowed(bash(exec157, T157, "git switch task/157-branch-guard")) && allowed(bash(exec157, T157, "git checkout task/157-branch-guard")), "")
 cell("but a switch to a third branch is refused", denied(bash(exec157, T157, "git switch other")), "")
 setBranch(T157, "task/157-branch-guard")
+cell("executor on its branch: leaving it in its own tree (switch, checkout -b, --detach) needs a reason too", ["git switch other", "git checkout -b side", "git switch -c side2", "git checkout --detach HEAD"].every((c) => denied(bash(exec157, T157, c))) && allowed(bash(exec157, T157, "git checkout task/157-branch-guard")) && allowed(bash(exec157, T157, "git rebase main")), J(bash(exec157, T157, "git switch other")))
+cell("a command in a subshell and a pipeline is read like any other", denied(bash(exec157, T157, `(cd ${fw(MAIN)} && git commit -m x) | cat`)) && allowed(bash(exec157, T157, `(cd ${fw(MAIN)} && git status) && git commit -m x`)), J(bash(exec157, T157, `(cd ${fw(MAIN)} && git status) && git commit -m x`)))
+cell("git commit --dry-run and git merge --abort are not changes", allowed(bash(integrator, MAIN, "git commit --dry-run")) && allowed(bash(integrator, MAIN, "git merge --abort")), "")
 cell("reviewer: a merge in the main copy without the lock is refused", denied(bash(rev157, MAIN, "git merge --ff-only integrate/t157")), "")
-locks.add("crew-harness#157#ses_rev157")
+locks.add("crew-harness#158#ses_rev157")
 cell("reviewer holding the merge lock of its task: the same merge passes", allowed(bash(rev157, MAIN, "git merge --ff-only integrate/t157")), "")
 locks.clear()
 cell("reviewer: commands in a candidate tree pass", allowed(bash(rev157, MAIN, `git -C ${fw(CAND)} checkout --detach HEAD`)), "")

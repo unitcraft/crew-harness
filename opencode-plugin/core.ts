@@ -4,6 +4,7 @@
 // Отличия хозяев — в CrewHost (визитка своего окна, кандидаты, немедленная доставка в своём процессе).
 
 import { judge as judgeGlued } from "./glued-guard.ts"
+import { type Deps as BranchDeps, branchNotes, branchProblems, noteBranch } from "./branch-guard.ts"
 import { execFileSync } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync, appendFileSync } from "node:fs"
 import os from "node:os"
@@ -1500,6 +1501,7 @@ export const HELP = `crew-harness — письма между вкладками
                                 дописывает стандартный шаблон моделей: claude/codex/kimi, набор codex, потолок light; ключи проекта не трогает).
                                 Проект без моделей (нет profile_set, spawn_models, allow_default_models) отказывает crew_spawn без явного model.
   crew_doctor                 — самопроверка: что сломано и что делать.
+  crew_branch_note {what, why, who, directory?, branch?} — причина смены каталога или ветки окна (задача 157): без неё команды, меняющие ветку или историю в основной копии, в дереве чужой задачи или не на своей ветке, отклоняются. Штатные места: интегратор — основная копия на целевой ветке; исполнитель — дерево и ветка своей задачи; приёмщик — основная копия на целевой ветке или любое дерево репозитория.
   /crew (команда окна)       — владельцу: кто чего ждёт, без хода модели; кто ждёт его — уведомление в окне.
   /ask (команда окна)        — владельцу: вопросы, которые ждут его ответа (проект, вкладка, сколько ждёт, текст и варианты).
   /crew-sets, /crew-profiles (команды окна) — владельцу: наборы профилей моделей и справочник «семья, ступень → модель и контекст»;
@@ -1811,6 +1813,28 @@ export type CrewHost = {
   doctor(): Promise<string[]>
   /** справка низкой важности для crew_doctor (не проблема): сводка автоответов на формы за сутки (задача 096) */
   doctorNotes?(): string[]
+  /** каталог сессии по session.get(...).location (задача 157): источник истины, карточка и ctx.location его не знают; нет — каталог карточки */
+  dirOf?(sessionID: string): Promise<string | undefined>
+}
+
+/** Зависимости контроля каталога и ветки окон (branch-guard.ts, задача 157): задачи, настройки и замок вливания плагина. */
+export function branchDeps(projects: Projects): BranchDeps {
+  return {
+    base: BASE,
+    log,
+    projectRoot: (name) => {
+      const p = projects.find((x) => x.name === name)
+      return p ? (p.rootPath ?? p.root) : undefined
+    },
+    targetBranch: (dir) => loadConfig(dir).targetBranch,
+    task: (project, n) => loadTask(project, n),
+    openTasks: () => listTasks().filter((t) => isOpen(t)),
+    holdsLock: (project, session, n) => holdsMergeLock(project, session, n),
+    taskNote: (project, n, text) => {
+      const t = loadTask(project, n)
+      if (t) taskEvent(t, PLUGIN_SENDER, undefined, text)
+    },
+  }
 }
 
 export type CrewTool = { name: string; description: string; input: any; execute(input: any, sessionID: string): Promise<{ content: string }> }
@@ -3348,9 +3372,35 @@ ${lockStillYours(stillHeld.n)}` : "") }
     input: { type: "object", properties: {}, additionalProperties: false },
     execute: async (_input: any, sessionID: string) => {
       const problems = [...(await host.doctor()), ...commonDoctor(sessionID), ...settingsProblems(projects, currentLocal), ...profileProblems()]
-      const notes = [...settingsNotes(), ...(host.doctorNotes?.() ?? [])] // справка низкой важности: не проблема, зелёный вердикт не отменяет
+      const notes = [...settingsNotes(), ...(host.doctorNotes?.() ?? []), ...branchNotes(BASE)] // справка низкой важности: не проблема, зелёный вердикт не отменяет
       const tail = notes.length ? `\nК сведению:\n${notes.map((p) => `- ${p}`).join("\n")}` : ""
       return { content: (problems.length ? `crew_doctor — есть проблемы:\n${problems.map((p) => `- ${p}`).join("\n")}` : "crew_doctor: всё в порядке (окна отмечаются, ящик пишется, нужные возможности OpenCode на месте).") + tail }
+    },
+  }
+
+  // ПРИЧИНА СМЕНЫ КАТАЛОГА ИЛИ ВЕТКИ (branch-guard.ts, задача 157): без записи команды, меняющие ветку или историю в основной копии,
+  // в дереве чужой задачи или в своём дереве не на своей ветке, отклоняются; с записью проходят, а названная пара становится ожиданием окна.
+  const crewBranchNote: CrewTool = {
+    name: "crew_branch_note",
+    description:
+      "Record WHY the folder or the branch of this window changes (or why a command that changes a branch or the history -- git checkout/switch/merge/cherry-pick/rebase/reset/commit/pull -- must run in the main copy, in a tree of another task, or off the window's own branch). The plugin refuses such commands until a reason is recorded: what, why, who allowed it (the owner's word with the date, or the orchestrator's decision). With the reason the commands pass in that folder for 30 minutes; with branch (or when the window stands off its place and the folder is its own) the named pair becomes what the window is expected to be until the role or the task changes. The record goes to the journal (visible in /crew, the side panel and crew_doctor) and to the history of the task. Reading (git status/log/diff), git -C <your own helper tree> and the way back to the window's own branch are never refused. To move the window itself to another folder use session_move.",
+    input: {
+      type: "object",
+      properties: {
+        what: str("What changes: the command or the move, e.g. 'git merge --ff-only update/main in the main copy'"),
+        why: str("Why: one sentence"),
+        who: str("Who allowed it: the owner's word with the date and the source (e.g. 'owner, 2026-10-23, chat'), or the decision of the orchestrator"),
+        directory: str("The folder the reason is for (the working tree or the main copy); default: the folder of the window"),
+        branch: str("The branch the window is to stand on after this (it becomes the expectation); omit if the reason is only for a command"),
+      },
+      required: ["what", "why", "who"],
+      additionalProperties: false,
+    },
+    execute: async (input: any, sessionID: string) => {
+      const me = await host.touch(sessionID)
+      if (!me) return { content: "Причину записывает только вкладка, не субагент." }
+      const dir = (await host.dirOf?.(sessionID)) ?? me.directory
+      return { content: noteBranch(me, dir, input ?? {}, branchDeps(projects)).text }
     },
   }
 
@@ -3459,7 +3509,7 @@ ${lockStillYours(stillHeld.n)}` : "") }
     }
   }
 
-  return [crewList, crewRole, crewSend, crewWait, crewWatch, crewTimer, crewSpawn, crewTask, crewConfig, crewInbox, crewDoctor, crewHelp]
+  return [crewList, crewRole, crewSend, crewWait, crewWatch, crewTimer, crewSpawn, crewTask, crewConfig, crewInbox, crewDoctor, crewBranchNote, crewHelp]
 }
 
 /** Шаги приёмки задачи: у задачи-плана — перепроверка плана (план 004), у остальных — приёмка проекта. */
@@ -3674,5 +3724,6 @@ export function commonDoctor(sessionID?: string): string[] {
   const windows = liveWindows()
   if (!windows.length) out.push("ни одно окно OpenCode не отмечается: плагин окна не подключён или окна закрыты. Подключение: в ~/.config/opencode/cli.json, раздел plugins — путь к папке crew-harness; окна открыть заново")
   else if (sessionID && !process.env.CREW_HARNESS_PRESENCE && !tabOf(sessionID, windows) && !readJson<Card>(cardFile(sessionID))?.spawned) out.push("эта вкладка не видна ни одному окну: она открыта в окне, запущенном до подключения плагина окна? Открой окно заново")
+  out.push(...branchProblems(BASE)) // окна не на своей ветке или не в своём каталоге (задача 157)
   return out
 }
