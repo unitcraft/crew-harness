@@ -14,6 +14,7 @@ process.env.XDG_DATA_HOME = tmp
 process.env.CREW_HARNESS_POLL_MS = "100"
 process.env.CREW_HARNESS_STATUS_MS = "100"
 process.env.CREW_HARNESS_FORM_MS = "100"
+process.env.CREW_HARNESS_STEP_MS = "100"
 process.env.CREW_HARNESS_DB = path.join(tmp, "absent.db")
 process.env.CREW_HARNESS_PRESENCE = "all"
 process.env.CREW_HARNESS_SETTINGS_TTL_MS = "1"
@@ -48,7 +49,6 @@ const hooks = {}
 const tools = {}
 const ctx = {
   location: { directory: proj },
-  options: { projects: [proj] },
   session: {
     get: async ({ sessionID }) => ({ id: sessionID, title: sessionID, location: { directory: proj }, time: {} }),
     prompt: async () => {},
@@ -62,7 +62,7 @@ const ctx = {
   events: { on: async () => {} },
 }
 let stop = await mod.default.setup(ctx)
-const SES = { sesAUTH: "integrator", sesEXEC: "worker", sesEXEC2: "worker", sesEXEC3: "worker", sesEXEC4: "worker" }
+const SES = { sesAUTH: "integrator", sesEXEC: "worker", sesEXEC2: "worker", sesEXEC3: "worker", sesEXEC4: "worker", sesEXEC5: "worker" }
 for (const [s, role] of Object.entries(SES)) await tools.crew_role.execute({ role }, { sessionID: s })
 const P = core.readJson(core.cardFile("sesAUTH"))?.project ?? "proj"
 const mkTask = (n, st, extra = {}) => ({
@@ -94,6 +94,8 @@ putTask(mkTask(93, "running", { executor: "sesEXEC" }))
 putTask(mkTask(94, "running", { executor: "sesEXEC2" }))
 putTask(mkTask(95, "running", { executor: "sesEXEC3" }))
 putTask(mkTask(96, "running", { executor: "sesEXEC4" }))
+// 98: the control - an executor that is not at work (its card is not busy): the letter goes to the EXECUTOR
+putTask(mkTask(98, "running", { executor: "sesEXEC5" }))
 mkdirSync(watch.WATCHES, { recursive: true })
 writeFileSync(path.join(watch.WATCHES, "w161.json"), JSON.stringify({ id: "w161", session: "sesEXEC2", command: "x", cwd: proj, note: "CI", minutes: 120, created: Date.now(), status: "running", pid: process.pid, started: Date.now() }))
 fw.handleFormEvent({ type: "form.created", data: { form: { id: "frm_161", sessionID: "sesEXEC4", title: "Questions", metadata: { kind: "question" }, fields: [{ key: "q0", description: "Как быть?", options: [{ label: "Да (Recommended)" }, { label: "Нет" }] }] } } })
@@ -122,6 +124,9 @@ cell("F-1g crew_doctor names the task, «срок вышел, вопрос от�
 // ---- F-2 the exceptions in the plugin
 cell("F-2a HOLD is recorded by the tool with the word of the owner", /HOLD/.test(hold?.content ?? "") && rec(95)?.hold?.kind === "HOLD", J([hold, rec(95)]))
 cell("F-2b an executor at work on its task (busy), an open watch with a ceiling, an open question to the owner, a HOLD: no letter and no question for 93..96", [93, 94, 95, 96].every((n) => !rec(n)?.ep && !lettersOf("sesEXEC").concat(lettersOf("sesEXEC2"), lettersOf("sesEXEC3"), lettersOf("sesEXEC4"), lettersOf("sesAUTH").filter((l) => new RegExp(`09${n - 90}`).test(l.text))).length), J([[93, 94, 95, 96].map((n) => rec(n)?.ep), ["sesEXEC", "sesEXEC2", "sesEXEC3", "sesEXEC4"].map((s) => lettersOf(s).length)]))
+
+await until(() => lettersOf("sesEXEC5").length >= 1)
+cell("F-2c control: the same task with an executor that is NOT at work gets its letter to the executor (the exceptions above are not a silence of the watch)", lettersOf("sesEXEC5").length >= 1 && /crew_step_note/.test(lettersOf("sesEXEC5")[0].text) && /098/.test(lettersOf("sesEXEC5")[0].text), J(lettersOf("sesEXEC5").map((l) => l.text.slice(0, 80))))
 
 // ---- F-3 an answer by the tool extends the term once and is recorded
 putTask(mkTask(97, "running", { title: "Шаг без исполнителя" }))

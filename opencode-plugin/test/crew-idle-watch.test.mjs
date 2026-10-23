@@ -100,6 +100,7 @@ const mkDeps = (o = {}) => {
     turnGoing: o.turnGoing ?? (() => false),
     formOpen: o.formOpen ?? (() => false),
     externalRun: o.externalRun ?? (() => false),
+    ownerHolds: o.ownerHolds,
     letter: (to, id, text, kind) => out.letters.push({ to, id, text, kind }),
     notice: (title, message) => out.notices.push({ title, message }),
     taskNote: (t, text) => out.notes.push(text),
@@ -226,6 +227,12 @@ const note = (input, me, d, task, at) => iw?.noteStep?.(input, me, { dir: d.dir,
   cell("W-6k a closed task is not watched", done.out.letters.length === 0, J(done.out))
   const fresh = run(mkTask(13, "running", { executor: "sesX", history: [{ at: NOW - 10 * MIN, by: "sesAUTHOR", status: "running" }] }), {})
   cell("W-6l a step younger than the term is not an alarm", fresh.out.letters.length === 0, J(fresh.out))
+  const plan = run(mkTask(16, "approval"), { ownerHolds: (task) => task.status === "approval" })
+  cell("W-6m a plan on approval with plan_approver owner (the owner decides in /plans): no letter, no question", plan.out.letters.length === 0 && plan.out.notices.length === 0, J(plan.out))
+  const text = run(t, { ownerHolds: (task) => task.executor === "sesX" })
+  cell("W-6n a question to the owner in the text of a turn (state owner) at the holder: no letter, no question", text.out.letters.length === 0 && text.out.notices.length === 0, J(text.out))
+  const plan2 = run(mkTask(17, "approval"), {})
+  cell("W-6o control: a plan on approval where the owner is not the approver is watched (the letter goes to the author)", plan2.out.letters.length === 1 && plan2.out.letters[0].to === "sesAUTHOR", J(plan2.out))
 }
 
 // ---- W-7 the store: the term and the letters live in files

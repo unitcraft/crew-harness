@@ -22,7 +22,7 @@ import { pendingForms } from "./form-wait.ts"
 export type ServiceKind = "nudge" | "form-repeat" | "idle" | "hung-resume" | "gate" | "stall" | "resume"
 
 // The kind of a letter by its id (the plugin makes the ids): the reminder "Не завершено" is `<time>-nudge-<qid>`, the repeat of a lost question
-// `form-repeat-<form>-<n>`, the reminders about idle time `idle-…`, a hung turn `hung-resume-…`, a stop at a gate `gate-…` / `wait-…`, a stall
+// `form-repeat-<form>-<n>`, the reminders about idle time `idle-…` (and the letters of the watch of the term of a step, task 161, `idle-step-…`), a hung turn `hung-resume-…`, a stop at a gate `gate-…` / `wait-…`, a stall
 // or a leftover `stall-…`, a task accepted but not cleaned up `stale-accepted-…`, "continue" after a restart or a failed turn `resume-…` / `retry-…`.
 const BY_ID: [ServiceKind, RegExp][] = [
   ["nudge", /^\d+-nudge-/],
@@ -51,7 +51,7 @@ const BY_TEXT: [ServiceKind, RegExp][] = [
   ["form-repeat", /^Ваш вопрос владельцу не получил ответа/],
   ["hung-resume", /^Ход завис и прерван плагином/],
   ["resume", /^(Работа прервана перезапуском OpenCode|Прошлый ход \()/],
-  ["idle", /^Ты простаиваешь \d+ мин:/],
+  ["idle", /^(Ты простаиваешь \d+ мин:|Шаг стоит \d+ мин, срок вышел:)/],
   ["gate", /^(Ты остановился на воротах без вопроса|Ты ждёшь решения владельца, но вопроса нет)/],
 ]
 export function kindsOfTexts(texts: string[]): ServiceKind[] {

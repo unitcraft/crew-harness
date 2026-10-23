@@ -15,6 +15,7 @@ import { BASE } from "./paths.ts"
 import { answerCounts, answerSideRow } from "./answer.ts"
 import { divergenceLineFor, unconfiguredLineFor } from "./config-diverge.ts"
 import { branchRows, branchSideRows } from "./branch-guard.ts"
+import { stepRows, stepSideRows } from "./idle-watch.ts"
 import { DEAD_WHY, FORM_MAX_REPEATS, shownForms } from "./form-wait.ts"
 import { lockWaitLine, lockWaiters } from "./review.ts"
 import { refreshRouteStale } from "./task-folders.ts"
@@ -580,6 +581,8 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
     // ветка и каталог окон (задача 157): красная строка расхождения, жёлтая — смена с причиной за сутки; окна на своих местах — одной серой строкой
     const branch = branchRows(BASE, p, now)
     if (branch.some((r) => r.tone !== "muted")) lines.push(...branch.map((r) => `  ${r.text}`))
+    // срок шага задачи вышел (задача 161, idle-watch.ts): «шаг стоит N мин, срок вышел» и «срок вышел, вопрос открыт»
+    lines.push(...stepRows(now, { project: p }).map((r) => `  ${r.text}`))
     const counters = countersOf(p, items, plans.other, now)
     if (!lines.length && !counters && !quiet.some((s) => s.state === "tasks")) {
       sleeping.push(p)
@@ -865,6 +868,8 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
   if (uc) rows.push({ mark: " ", who: "", what: uc, tone: "accent" })
   // окна не на своей ветке (красные) и недавние смены с причиной (жёлтые), задача 157
   for (const r of branchSideRows(BASE, project, now)) rows.push({ mark: " ", who: "", what: r.text, tone: r.tone === "muted" ? "muted" : r.tone })
+  // срок шага вышел (задача 161): короткая строка на задачу
+  for (const r of stepSideRows(now, { project })) rows.push({ mark: " ", who: "", what: r.text, tone: r.tone === "muted" ? "muted" : r.tone })
   // «ход» — модель думает сейчас; «ждут» — наблюдения (гейты, коммит в main), из них в очереди машины — ещё не запущены
   const working = mine.filter((s) => s.state === "working").length
   const watching = mine.filter((s) => s.state === "watch").length

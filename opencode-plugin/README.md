@@ -427,6 +427,48 @@ letter «задача NNN … принята в ЧЧ:ММ, все 5 напоми
 (the time of the acceptance). The episode ends as the others do: a working turn of the tab, your word, a cleaned task, a turn of the
 reviewer.
 
+### A task step stands past its term: the term of a step, the ladder and the question to the owner (task 161)
+
+The rule of an idle tab (above) looks at the TAB of the author, and it stays silent while the window is busy. Nova task 092 stood for about two
+hours past the named term: the task read as going, the integrator's window worked on other things, and the only letter ("Ты простаиваешь")
+asked for no answer and went nowhere higher (owner, 2026-10-24: «У каждого шага свой срок — да, 30 минут на выполнение», «092 не делается,
+в чем дело? как этого избежать в будущем?»). The watch of the term of a step looks at the TASK: it **stands** when its step did not change for
+longer than the term of the step, **whether or not the window is busy**. The file is `idle-watch.ts`; it runs in the pass of the service
+(every 30 s, `CREW_HARNESS_STEP_MS`) over the open tasks of all projects.
+
+- **The step** is by the status: `starting` — the launch of the executor, `running`/`rework` — the work of the executor,
+  `submitted`/`reviewing` — the acceptance, `approval` — the presentation of the plan, `accepted` — the cleanup, `idle` — between sessions, an
+  order nobody took — the answer to the order. The **holder** is the executor, the reviewer or the author (for an order, the integrator of
+  the addressee when it has a window); when nobody holds the step, the author does.
+- **The start of the step** is the latest of: a change of the status, a word of the holder in the record (a note of a session; not a note of the
+  plugin, except «ответ владельца …», and not «подталкивание …»), a check of an acceptance step, the start or end of a session, the
+  pre-check. The field `updated` of the task is not used: every record of the plugin («приёмка застряла», a reminder) moves it.
+- **The term** is `step_term_minutes` (default 30; 0 — the watch is off), per step `step_term_by_step` (`{"review": 90}`, keys `start, work,
+  review, plan, order, cleanup, between`). `step_extend_minutes` (30) is how long an answer extends the term, `step_answer_minutes` (15)
+  how long the letter waits for the answer.
+- **The ladder.** (1) The term is out: ONE letter «Шаг стоит N мин, срок вышел: …» to the window of the holder that **asks for an answer by a
+  tool**: `crew_step_note {n, reason, minutes}` (what is done, what you wait for; the term is extended once, by at most
+  `step_extend_minutes`) or `crew_step_note {n, done: true}`. A word in the turn is not an answer. (2) After the extension the second letter
+  (the last one: no more than two letters per step). (3) **The question to the owner** opens when the letter got no answer for
+  `step_answer_minutes`, when the same reason is named a second time (the extension is then not given), or when the term is out again
+  after two letters. It is a record with four options — wait more, narrow the task, change the executor, give up — a recommendation and an
+  argument made of the records (who holds the step, what it waited for, how long it stands): the author gets a letter with the text for the
+  `question` tool, the windows a notice, and the task is marked **«срок вышел, вопрос открыт»** in `/crew`, the side panel, `/crew-progress`
+  and `crew_doctor` (a problem line). (4) The owner decides in words; the AUTHOR writes it down: `crew_step_note {n, decide: "wait"|"narrow"|
+  "reassign"|"cancel", who: "<the owner's word with the date and the source>"}`. The question closes, the new term runs (for «wait» —
+  `minutes`; for the others `step_extend_minutes` to do the action), and no new letter or question comes inside it.
+- **No alarm** while: a turn of the window on THIS task goes (the executor or the reviewer of the task is working; a busy window of the author
+  with other things is not an exception); a question to the owner is open at the holder, the executor or the reviewer; the task is on
+  **HOLD/STOP by the owner's word** (the author records it: `crew_step_note {n, hold: "HOLD"|"STOP", who}`; `release` with `who` removes it;
+  the mark is in the record of the task and shows in `/crew` and `crew_doctor`); an open `crew_watch` of the holder whose ceiling (`minutes`) is
+  not out; a plan on `approval` when `plan_approver` is `owner` (you decide in `/plans`), and a question to you in the text of a turn (state `owner`) at the holder, the executor or the reviewer. A change of the step (a new status, a word of the holder) closes the episode and its open question.
+- **Where it lives.** `idle-watch/<project>/<n>.json` in the box of the plugin: the episode (the key of the step, the term, the letters, the
+  answers, the question) and the mark. Nothing is kept in memory: after a restart of the service the term is the same and no letter is repeated
+  (the id of a letter comes from the record). The letters are service letters of the kind «idle» for the gate of the queue.
+- **Borders.** The step «answer to a question» (`expect_reply`) is not watched here (it has no task record; `askedStale` and the counters of
+  `/crew` keep it). The owner answers through the author; there is no dialog of the window as `/plans` has. The question is a record and a
+  letter, not a form of the built-in questionnaire: only a call of the `question` tool in a model turn makes such a form.
+
 ### A question to the owner is not lost (task 040)
 
 A question of the built-in questionnaire (`question`) is kept as a record in `forms/` until it is answered. `form.replied`

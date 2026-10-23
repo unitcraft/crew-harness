@@ -133,6 +133,7 @@ import {
   branchDeps,
 } from "./core.ts"
 import { branchNotes, checkWindow, pruneStates, registerBranchHooks, turnWarning } from "./branch-guard.ts"
+import { holderOf, stepNotes, watchTick } from "./idle-watch.ts"
 import { answerTurn, markInterventions } from "./answer.ts"
 import { answerModesOn } from "./answer-parse.ts"
 import { DECISION_RU, readApprovals, removeApproval } from "./approvals.ts"
@@ -1370,6 +1371,48 @@ export default {
       return { since, what }
     }
 
+    // СРОК ШАГА ЗАДАЧИ (idle-watch.ts, задача 161; владелец, 2026-10-24: «У каждого шага свой срок — да, 30 минут»). Раз в STEP_EVERY_MS по открытым
+    // задачам всех проектов: шаг не менялся дольше срока — письмо держателю, которое требует ответа инструментом crew_step_note, без ответа или с той же
+    // причиной — вопрос владельцу (письмо автору с текстом для question и уведомление окнам). Законное ожидание не тревожит: ход окна по этой задаче (исполнитель
+    // или приёмщик в состоянии working), открытый вопрос владельцу у держателя, исполнителя или приёмщика, HOLD/STOP, наблюдение crew_watch с потолком.
+    // Запись о сроке и письмах — файл idle-watch/<проект>/<номер>.json: после перезапуска службы ничего не повторяется (id письма выводится из записи).
+    const STEP_EVERY_MS = Number(process.env.CREW_HARNESS_STEP_MS) || 30_000
+    let stepAt0 = 0
+    async function stepWatch() {
+      if (now() - stepAt0 < STEP_EVERY_MS) return
+      stepAt0 = now()
+      const open = listTasks().filter((x) => isOpen(x))
+      if (!open.length) return
+      const saved = new Map(readStatuses().map((x) => [x.session, x]))
+      const t0 = now()
+      watchTick(
+        open,
+        {
+          cfg: (x) => {
+            const c = loadConfig(x.directory)
+            return { termMin: c.stepTermMin, byStep: c.stepTermByStep, extendMin: c.stepExtendMin, answerMin: c.stepAnswerMin }
+          },
+          addressee: (project) => [...saved.values()].find((x) => x.project === project && x.role === "integrator")?.session,
+          turnGoing: (x, session) => !!session && (session === x.executor || session === x.reviewer) && saved.get(session)?.state === "working",
+          formOpen: (x) => [holderOf(x).session, x.executor, x.reviewer].some((sid) => !!sid && pendingForms(sid, t0).length > 0),
+          ownerHolds: (x) => (x.status === "approval" && loadConfig(x.directory).planApprover === "owner") || [holderOf(x).session, x.executor, x.reviewer].some((sid) => !!sid && saved.get(sid)?.state === "owner"),
+          externalRun: (x, at) => [holderOf(x).session, x.executor, x.reviewer].some((sid) => !!sid && watchesOf(sid).some((w) => !w.cancelled && !w.dropped && (w.started ?? w.created) + w.minutes * 60_000 > at)),
+          letter: (to, id, text) => {
+            if (!letterExistsFor(to, id)) postLetter(to, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to, time: now(), text })
+          },
+          notice: (title, message) => {
+            for (const w of liveWindows()) postNotice(w.pid, { title, message: short(message, 100), attention: true, duration: 30_000 })
+          },
+          taskNote: (x, text) => {
+            const fresh = loadTask(x.project, x.n)
+            if (fresh) taskEvent(fresh, PLUGIN_SENDER, undefined, text)
+          },
+          say: (line) => log(line),
+        },
+        t0,
+      )
+    }
+
     // ВОПРОС ВЛАДЕЛЬЦУ НЕ ПРОПАДАЕТ МОЛЧА (задача 040, form-wait.ts). Раз в FORM_EVERY_MS: (1) запись о вопросе встроенного вопросника открыта,
     // а хода во вкладке нет (перезапуск окна или службы, вопрос закрыли без ответа, событие не дошло) - вкладку будит служебное письмо с
     // текстом и вариантами: задать вопрос заново (до 3 раз, не чаще раза в 2 минуты; потом «без ответа, нужен владелец»); (2) уведомление
@@ -2106,6 +2149,7 @@ export default {
         await step("flowWatch", flowWatch)
         await step("leftWatch", leftWatch)
         await step("branchWatch", branchWatch)
+        await step("stepWatch", stepWatch)
         await step("housekeep", housekeep)
         await step("processQueue", processQueue)
         // наблюдения crew_watch (watch.ts): запустить новые, по концу — письмо окну с побудкой
@@ -2307,7 +2351,7 @@ export default {
     const runDoctor = async () => {
       const problems = [...(await doctor()), ...commonDoctor(), ...settingsProblems(projects, settingsContext().local), ...profileProblems()]
       try {
-        writeFileSync(DOCTOR_FILE, JSON.stringify({ at: Date.now(), problems, notes: [...settingsNotes(), ...autoNotes(now()), ...branchNotes(BASE)] }))
+        writeFileSync(DOCTOR_FILE, JSON.stringify({ at: Date.now(), problems, notes: [...settingsNotes(), ...autoNotes(now()), ...branchNotes(BASE), ...stepNotes(now())] }))
       } catch {}
       const said = problems.join(" | ")
       if (said === doctorSaid) return

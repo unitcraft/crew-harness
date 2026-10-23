@@ -5,6 +5,7 @@
 
 import { judge as judgeGlued } from "./glued-guard.ts"
 import { type Deps as BranchDeps, branchNotes, branchProblems, noteBranch } from "./branch-guard.ts"
+import { noteStep, stepNotes, stepProblems } from "./idle-watch.ts"
 import { execFileSync } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync, appendFileSync } from "node:fs"
 import os from "node:os"
@@ -231,6 +232,11 @@ export type CrewConfig = {
   stallMin: number
   /** простой вкладки между сессиями, минут (idle_tab_minutes, задача 063); 0 — не будить */
   idleTabMin: number
+  /** срок шага задачи, минут (step_term_minutes, задача 161); 0 — сторож срока шага выключен; значение по шагу — step_term_by_step; продление ответом и ожидание ответа */
+  stepTermMin: number
+  stepTermByStep: Record<string, number>
+  stepExtendMin: number
+  stepAnswerMin: number
   /** ход без обновления дольше этого (минут) панель показывает «завис?», а не «работает» (long_turn_minutes, задача 111); 0 — не показывать */
   longTurnMin: number
   /** принятая, но не очищенная задача: через столько минут — письма приёмщику и автору (0 — нет) */
@@ -364,6 +370,8 @@ export function loadConfig(dir: string): CrewConfig {
   for (const t of TIER_ORDER) if (Array.isArray(j.tiers?.[t])) tiers[t] = j.tiers[t].map((x: any) => String(x).toLowerCase())
   const spawnLimits: Record<string, number> = {}
   for (const [r, n] of Object.entries(j.spawn_limits ?? {})) if (Number.isFinite(Number(n))) spawnLimits[String(r)] = Number(n)
+  const stepTermByStep: Record<string, number> = {}
+  for (const [r, n] of Object.entries(j.step_term_by_step ?? {})) if (Number.isFinite(Number(n))) stepTermByStep[String(r)] = Number(n)
   const spawnModels: Partial<Record<Tier, string>> = {}
   for (const t of TIER_ORDER) if (typeof j.spawn_models?.[t] === "string") spawnModels[t] = j.spawn_models[t]
   const project = projectFor(dir, currentProjects)
@@ -409,6 +417,10 @@ export function loadConfig(dir: string): CrewConfig {
     machineSlots: num(j.machine_slots, 1),
     stallMin: num(j.stall_minutes, 30),
     idleTabMin: num(j.idle_tab_minutes, 20),
+    stepTermMin: num(j.step_term_minutes, 30),
+    stepTermByStep,
+    stepExtendMin: num(j.step_extend_minutes, 30),
+    stepAnswerMin: num(j.step_answer_minutes, 15),
     longTurnMin: num(j.long_turn_minutes, 360),
     acceptedReminderMin: num(j.accepted_reminder_min, 30),
     plansDir: typeof j.plans_dir === "string" && j.plans_dir.trim() ? j.plans_dir.trim() : "docs/plans",
@@ -1501,6 +1513,7 @@ export const HELP = `crew-harness — письма между вкладками
                                 дописывает стандартный шаблон моделей: claude/codex/kimi, набор codex, потолок light; ключи проекта не трогает).
                                 Проект без моделей (нет profile_set, spawn_models, allow_default_models) отказывает crew_spawn без явного model.
   crew_doctor                 — самопроверка: что сломано и что делать.
+  crew_step_note {n?, reason?, minutes?, done?, decide?, who?, hold?, release?} — срок шага задачи (задача 161): письмо «Шаг стоит N мин, срок вышел» требует ответа этим инструментом: reason (что сделано, чего ждёшь) и minutes (продление до step_extend_minutes, один раз на письмо) или done: true; без ответа за step_answer_minutes или с той же причиной второй раз плагин поднимает вопрос владельцу. Автор после слова владельца пишет решение: decide wait|narrow|reassign|cancel и who; hold HOLD|STOP и who снимают тревогу по слову владельца, release снимает метку.
   crew_branch_note {what, why, who, directory?, branch?} — причина смены каталога или ветки окна (задача 157): без неё команды, меняющие ветку или историю в основной копии, в дереве чужой задачи или не на своей ветке, отклоняются. Штатные места: интегратор — основная копия на целевой ветке; исполнитель — дерево и ветка своей задачи; приёмщик — основная копия на целевой ветке или любое дерево репозитория.
   /crew (команда окна)       — владельцу: кто чего ждёт, без хода модели; кто ждёт его — уведомление в окне.
   /ask (команда окна)        — владельцу: вопросы, которые ждут его ответа (проект, вкладка, сколько ждёт, текст и варианты).
@@ -3372,7 +3385,7 @@ ${lockStillYours(stillHeld.n)}` : "") }
     input: { type: "object", properties: {}, additionalProperties: false },
     execute: async (_input: any, sessionID: string) => {
       const problems = [...(await host.doctor()), ...commonDoctor(sessionID), ...settingsProblems(projects, currentLocal), ...profileProblems()]
-      const notes = [...settingsNotes(), ...(host.doctorNotes?.() ?? []), ...branchNotes(BASE)] // справка низкой важности: не проблема, зелёный вердикт не отменяет
+      const notes = [...settingsNotes(), ...(host.doctorNotes?.() ?? []), ...branchNotes(BASE), ...stepNotes(Date.now())] // справка низкой важности: не проблема, зелёный вердикт не отменяет
       const tail = notes.length ? `\nК сведению:\n${notes.map((p) => `- ${p}`).join("\n")}` : ""
       return { content: (problems.length ? `crew_doctor — есть проблемы:\n${problems.map((p) => `- ${p}`).join("\n")}` : "crew_doctor: всё в порядке (окна отмечаются, ящик пишется, нужные возможности OpenCode на месте).") + tail }
     },
@@ -3401,6 +3414,50 @@ ${lockStillYours(stillHeld.n)}` : "") }
       if (!me) return { content: "Причину записывает только вкладка, не субагент." }
       const dir = (await host.dirOf?.(sessionID)) ?? me.directory
       return { content: noteBranch(me, dir, input ?? {}, branchDeps(projects)).text }
+    },
+  }
+
+  // СРОК ШАГА ЗАДАЧИ (idle-watch.ts, задача 161): ответ держателя на письмо «Шаг стоит N мин, срок вышел», решение владельца и метка HOLD/STOP.
+  const crewStepNote: CrewTool = {
+    name: "crew_step_note",
+    description:
+      "Answer the plugin's letter about the term of a task step (\"Шаг стоит N мин, срок вышел\"), or write down the owner's decision. The holder of the step answers with reason (what is done, what you wait for, why the step stands) and minutes (how long to extend, at most step_extend_minutes, default 30) - the term is extended once per letter - or with done: true when the step is done. The same reason twice, or no answer for step_answer_minutes (default 15), makes the plugin raise a question to the owner with options (wait more, narrow the task, change the executor, give up). After the owner's word the AUTHOR of the task writes the decision: decide wait|narrow|reassign|cancel with who (the owner's word with the date and the source) and minutes (the new term for wait). The author also records a stop by the owner's word: hold HOLD|STOP with who (the plugin stops watching the term of this task) and release with who. Without n the call answers the step that waits for this window.",
+    input: {
+      type: "object",
+      properties: {
+        n: { type: "number", description: "The task number (as shown, without leading zeros); omit to answer the one step that waits for this window" },
+        project: str("The project of the task if it is not the project of this window"),
+        reason: str("Why the step stands and what is done (the same reason a second time raises the question to the owner)"),
+        minutes: { type: "number", description: "How long to extend the term; at most step_extend_minutes. For decide wait: the new term in minutes" },
+        done: { type: "boolean", description: "The step is done (then hand it over by the regular action)" },
+        decide: { type: "string", enum: ["wait", "narrow", "reassign", "cancel"], description: "The owner's decision on the open question (author only, needs who)" },
+        who: str("The owner's word with the date and the source, e.g. 'owner, 2026-10-24, chat, ...' (needed for decide, hold and release)"),
+        hold: { type: "string", enum: ["HOLD", "STOP"], description: "Mark the task as held or stopped by the owner's word (author only, needs who)" },
+        release: { type: "boolean", description: "Remove the HOLD/STOP mark (author only, needs who)" },
+      },
+      additionalProperties: false,
+    },
+    execute: async (input: any, sessionID: string) => {
+      const me = await host.touch(sessionID)
+      if (!me) return { content: "Срок шага записывает только вкладка, не субагент." }
+      const r = noteStep(
+        input ?? {},
+        { session: me.session, project: me.project },
+        {
+          cfg: (t) => {
+            const c = loadConfig(t.directory)
+            return { termMin: c.stepTermMin, byStep: c.stepTermByStep, extendMin: c.stepExtendMin, answerMin: c.stepAnswerMin }
+          },
+          task: (project, n) => loadTask(project, n),
+          tasks: () => listTasks().filter((t) => isOpen(t)),
+          taskNote: (t, text) => {
+            const fresh = loadTask(t.project, t.n)
+            if (fresh) taskEvent(fresh, PLUGIN_SENDER, undefined, text)
+          },
+        },
+        Date.now(),
+      )
+      return { content: r.text }
     },
   }
 
@@ -3509,7 +3566,7 @@ ${lockStillYours(stillHeld.n)}` : "") }
     }
   }
 
-  return [crewList, crewRole, crewSend, crewWait, crewWatch, crewTimer, crewSpawn, crewTask, crewConfig, crewInbox, crewDoctor, crewBranchNote, crewHelp]
+  return [crewList, crewRole, crewSend, crewWait, crewWatch, crewTimer, crewSpawn, crewTask, crewConfig, crewInbox, crewDoctor, crewBranchNote, crewStepNote, crewHelp]
 }
 
 /** Шаги приёмки задачи: у задачи-плана — перепроверка плана (план 004), у остальных — приёмка проекта. */
@@ -3725,5 +3782,6 @@ export function commonDoctor(sessionID?: string): string[] {
   if (!windows.length) out.push("ни одно окно OpenCode не отмечается: плагин окна не подключён или окна закрыты. Подключение: в ~/.config/opencode/cli.json, раздел plugins — путь к папке crew-harness; окна открыть заново")
   else if (sessionID && !process.env.CREW_HARNESS_PRESENCE && !tabOf(sessionID, windows) && !readJson<Card>(cardFile(sessionID))?.spawned) out.push("эта вкладка не видна ни одному окну: она открыта в окне, запущенном до подключения плагина окна? Открой окно заново")
   out.push(...branchProblems(BASE)) // окна не на своей ветке или не в своём каталоге (задача 157)
+  out.push(...stepProblems(Date.now())) // срок шага вышел, вопрос владельцу открыт (задача 161)
   return out
 }

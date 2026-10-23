@@ -262,6 +262,12 @@ export default {
       } catch (e) {
         text = `Не прочитать ход работ: ${e}`
       }
+      // задачи, у которых срок шага вышел (задача 161, idle-watch.ts): отдельным блоком под ходом работ
+      try {
+        const w = await import("./idle-watch.ts")
+        const lines = w.stepProgressLines(Date.now(), { project: card?.project })
+        if (lines.length) text += `\n\nСрок шага вышел:\n${lines.join("\n")}`
+      } catch {}
       showText({ title: "crew-harness — что сейчас идёт", message: text })
     }
     // КОМАНДЫ БЕЗ ХОДА МОДЕЛИ, ОТВЕТ СРАЗУ (владелец, 2026-10-08: «выполнение команды должно делаться сразу»). Прежняя серверная
