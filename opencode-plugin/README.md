@@ -168,15 +168,20 @@ owner's windows are not watched, nor is a window whose place is not known for ce
   `crew_branch_note {what, why, who, directory?, branch?}` -- what changes, why, who allowed it (the owner's word with the date, or the orchestrator's
   decision). With the reason the commands pass in that folder for 30 minutes; with `branch`, or when the window stands off its place and the folder is its
   own, the named pair becomes the expectation until the role or the task changes. Never refused: reading (`status`, `log`, `diff`), `git -C <a helper tree
-  that is not the main copy and not another task's>`, `cd <tree> && git ...`, `checkout -- file`, `--abort`, and the way back to the window's own branch.
+  that is not the main copy and not another task's>`, `cd <tree> && git ...`, `checkout -- file` (and `checkout file` when the name is a file and not a branch),
+  `--continue`/`--skip`/`--abort`/`--quit` of a rebase, merge or cherry-pick, and the way back to the window's own branch. A rebase stopped by a conflict leaves a bare
+  hash in `HEAD`; the plugin then reads the branch from `rebase-merge/head-name` or `rebase-apply/head-name`, so the window is not marked as off its branch.
   A reviewer holding the merge lock of its task may merge in the main copy. `workdir`, `cd`, `git -C` and `--git-dir/--work-tree` of the command are read;
   a path with an unexpanded variable is passed with a line in the plugin journal. The plugin never switches, resets or moves anything itself.
 - **Where it shows.** `/crew` and the side panel: a red `⚠` row "ожидалось → фактически" for a window off its place, a yellow `✎` row for a change with a
   reason in the last 24 hours, one grey line for the windows in place (`/crew` only); `crew_doctor`: the drift as a problem, the watched windows and the
   recent reasons as notes. The journal is `branch-journal.jsonl` in the mailbox (lines `drift`, `restored`, `change`, `note`, `blocked`), the snapshots are
   in `branch/`; a reason of a window bound to a task is also a line in the history of the task.
-- **Limits.** An arbitrary shell (variables, substitutions, `eval` of built strings) is not parsed, a terminal outside OpenCode is not seen, and the checks
-  before and after a command do not prevent a race with it. The hooks are the same as those of the glued-words guard (`tool.execute.before`,
+- **Limits (honest boundaries).** An arbitrary shell (variables, substitutions, `eval` of built strings) is not parsed, a terminal outside OpenCode is not seen, and the checks
+  before and after a command do not prevent a race with it. Not controlled: `git branch -f/-D`, `update-ref`, `worktree`, `stash`, `tag` and `push`. The `who` of a reason is not
+  verified (it is a record, not an authorization). Writes of files (`edit`, `write`, `patch`) are refused in the main copy and in another task's tree beyond what the task
+  statement asked for; a reviewer may write into `doc/tasks/<its task>/` of the main copy (its log and evidence) without the merge lock. A permission from a reason is kept
+  per folder (30 minutes each; a second note for the same folder renews it, a note for another folder does not wipe the first). The hooks are the same as those of the glued-words guard (`tool.execute.before`,
   `permission.evaluate`, `tool.execute.after`); with an OpenCode that has no such hook the plugin writes one line to its journal, and only the turn line,
   the panel and `crew_doctor` work.
 
