@@ -20,7 +20,7 @@ A *window* is the OpenCode program in a terminal; a *tab* is a session inside it
 background); a task session may run with no window at all. Formerly `opencode-peers` (renamed 2026-10-07, plan 005).
 
 - tools `crew_list`, `crew_send`, `crew_wait`, `crew_watch`, `crew_role`, `crew_inbox`, `crew_spawn`,
-  `crew_task`, `crew_config`, `crew_doctor`, `crew_help` (also `/crew-help`);
+  `crew_task`, `crew_config`, `crew_doctor`, `crew_branch_note`, `crew_help` (also `/crew-help`);
 - **projects**: every tab belongs to a project and its address is `project.role`
   (`nova.integrator`). A plain role means the sender's own project; `project.role` reaches another
   project; `all` is every open tab of the own project, `project.all` of another one; a session id
@@ -151,6 +151,34 @@ the count. Not checked: the model's ordinary reply in the window, writes made th
 `question` and file writes are checked through OpenCode's tool hooks (`tool.execute.before`, `permission.evaluate`, `tool.execute.after`);
 with an OpenCode that has no such hook the plugin writes one line to its journal and only `crew_send` is checked.
 `node test/glued-corpus.mjs` measures the sign on the `*.md` and `*.tsv` files of the repository.
+
+## The folder and the branch of a window are watched (task 157)
+
+The integrator stands in the **main copy** of the project on its target branch (`main`); an executor in the **tree and on the branch of its task**; a
+reviewer in the main copy on the target branch or in any tree of the repository (a candidate on a detached HEAD is allowed). The orchestrator and the
+owner's windows are not watched, nor is a window whose place is not known for certain (an executor of a task with no recorded tree).
+
+- **How it reads.** The folder of the window is `session.get(...).location` (not the card and not `ctx.location`: those belong to the plugin instance),
+  the branch is read from `.git/HEAD` (also in a working tree, `gitdir:` and `commondir`): no git process, on every turn and before every command.
+- **At a turn.** A window off its place gets one line in the system part: "окно не на своей ветке: ожидалось X, фактически Y" (with the way back:
+  `session_move` for the folder, `git switch` for the branch). The service looks at the watched windows every 10 s (`CREW_HARNESS_BRANCH_MS`) and after
+  every shell call, so a branch changed between turns is written as "was → became" in the journal.
+- **Commands.** `git checkout`/`switch`/`merge`/`cherry-pick`/`rebase`/`reset`/`commit`/`pull` (and writes of files) in the main copy, in the tree of
+  another task, or in the window's own tree off its branch (or leaving it) are refused through the permission hook until a reason is recorded:
+  `crew_branch_note {what, why, who, directory?, branch?}` -- what changes, why, who allowed it (the owner's word with the date, or the orchestrator's
+  decision). With the reason the commands pass in that folder for 30 minutes; with `branch`, or when the window stands off its place and the folder is its
+  own, the named pair becomes the expectation until the role or the task changes. Never refused: reading (`status`, `log`, `diff`), `git -C <a helper tree
+  that is not the main copy and not another task's>`, `cd <tree> && git ...`, `checkout -- file`, `--abort`, and the way back to the window's own branch.
+  A reviewer holding the merge lock of its task may merge in the main copy. `workdir`, `cd`, `git -C` and `--git-dir/--work-tree` of the command are read;
+  a path with an unexpanded variable is passed with a line in the plugin journal. The plugin never switches, resets or moves anything itself.
+- **Where it shows.** `/crew` and the side panel: a red `⚠` row "ожидалось → фактически" for a window off its place, a yellow `✎` row for a change with a
+  reason in the last 24 hours, one grey line for the windows in place (`/crew` only); `crew_doctor`: the drift as a problem, the watched windows and the
+  recent reasons as notes. The journal is `branch-journal.jsonl` in the mailbox (lines `drift`, `restored`, `change`, `note`, `blocked`), the snapshots are
+  in `branch/`; a reason of a window bound to a task is also a line in the history of the task.
+- **Limits.** An arbitrary shell (variables, substitutions, `eval` of built strings) is not parsed, a terminal outside OpenCode is not seen, and the checks
+  before and after a command do not prevent a race with it. The hooks are the same as those of the glued-words guard (`tool.execute.before`,
+  `permission.evaluate`, `tool.execute.after`); with an OpenCode that has no such hook the plugin writes one line to its journal, and only the turn line,
+  the panel and `crew_doctor` work.
 
 ## Turn economy
 
