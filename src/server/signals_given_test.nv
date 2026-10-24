@@ -1,0 +1,8 @@
+// signals_given_test.nv - task 166: the lists of the signals that the code gives to the table are `signals_given_by_code` and `signals_from_agent` (they were `words_*` before).
+module crew_harness.server
+
+test "sg the lists of the signals are not empty and the first one is the message of the user" {
+    assert(signals_given_by_code().len() > 0)
+    assert(signals_given_by_code()[0].name == "user_message")
+    assert(signals_from_agent().len() > 0)
+}

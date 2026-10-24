@@ -1,0 +1,16 @@
+// accepts_signal_test.nv - task 166: the question "does the state take this signal?" is `AlulaMachine.accepts_signal` (it was `accepts_word` before 0.4.0 of `alula`).
+module crew_harness.machine_run_machines
+
+import alula.machine.{text_of_file}
+import crew_harness.machines.{machine_files, all_registry}
+import alula.machine_run.{AlulaMachine, load_alula_machine}
+
+test "as the dialog in Idle takes the signal of a message and not an unknown one" {
+    match load_alula_machine(text_of_file(machine_files(), "dialog.alula.json"), all_registry()) {
+        Ok(m) => {
+            assert(m.accepts_signal(m.initial(), "user_message"))
+            assert(!m.accepts_signal(m.initial(), "no_such_signal"))
+        }
+        Err(e) => panic("dialog.alula.json does not load: ${e}")
+    }
+}
