@@ -7,9 +7,9 @@ import std.text
 import alula.machine.{text_of_file}
 import crew_harness.machines.{machine_files, table_files}
 
-fn all_tables() -> []str => ["chat.alula.md", "cycle_check.alula.md", "dialog.alula.md", "dialog_steps.alula.md", "session_start.alula.md", "task_runner.alula.md", "agent_step.alula.txt"]
+fn all_tables() -> []str => ["chat.alula.md", "cycle_check.alula.md", "dialog.alula.md", "dialog_steps.alula.md", "session_start.alula.md", "task_runner.alula.md", "agent_step.alula.md"]
 
-fn tree_name(name str) -> str => name.replace(".alula.md", ".alula.json").replace(".alula.txt", ".alula.json")
+fn tree_name(name str) -> str => name.replace(".alula.md", ".alula.json")
 
 fn has_line_starting(text str, prefix str) -> bool {
     for line in text.split("\n") {
@@ -93,7 +93,7 @@ test "v213 check takes every table" {
 }
 
 test "v213 the fragment line has the signal parameter" {
-    for name in ["dialog_steps.alula.md", "session_start.alula.md", "cycle_check.alula.md", "agent_step.alula.txt"] {
+    for name in ["dialog_steps.alula.md", "session_start.alula.md", "cycle_check.alula.md", "agent_step.alula.md"] {
         ro text = text_of_file(table_files(), name)
         assert(text.contains("Пауза(сигнал_остановки:"))
         assert(!text.contains("слово_остановки"))

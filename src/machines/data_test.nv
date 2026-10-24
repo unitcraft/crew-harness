@@ -45,6 +45,29 @@ test "dt the lists of the files hold every file of the folders" {
     assert(data_dir_names("elsewhere").len() == 0)
 }
 
+fn dt_count_ending(names []str, suffix str) -> int {
+    mut n = 0
+    for name in names { if name.ends_with(suffix) { n += 1 } }
+    n
+}
+
+test "dt the one extension of a table is alula md" {
+    // task 169: the old extension `.alula.txt` (the work-around of the guard of the links) is gone from the folders of the machines and from the lists of the tables
+    assert(dt_count_ending(data_dir_names("product_files"), ".alula.txt") == 0)
+    assert(dt_count_ending(data_dir_names("methodology_files"), ".alula.txt") == 0)
+    ro tables = dt_names(table_files())
+    assert(dt_count_ending(tables, ".alula.txt") == 0)
+    assert(dt_count_ending(tables, ".alula.md") == tables.len())
+    assert(dt_count_ending(data_dir_names("product_tables"), ".alula.md") == data_dir_names("product_tables").len())
+    assert(dt_count_ending(data_dir_names("methodology_tables"), ".alula.md") == data_dir_names("methodology_tables").len())
+    assert(data_dir_names("methodology_tables").contains("agent_step.alula.md"))
+    assert(tables.contains("agent_step.alula.md"))
+    assert(agent_step_table_text().byte_len() > 0)
+    // the copy of the sample of the specification is a text for the tests, not a table of a machine: it is in the folder, not in the lists of the tables
+    assert(data_dir_names("methodology_files").contains("agent-step-sample.txt"))
+    assert(!tables.contains("agent-step-sample.txt"))
+}
+
 test "dt the numbers of the files" {
     assert(machine_files().len() == 7)
     assert(table_files().len() == 7)

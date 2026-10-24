@@ -19,7 +19,7 @@ export fn machine_files() -> []NamedText => [
 
 /// The machines written as tables, by the name of the file (`chat.alula.md`).
 export fn table_files() -> []NamedText => [
-    NamedText { name: "agent_step.alula.txt", text: embed_str("../../machines/methodology/agent_step.alula.txt") },
+    NamedText { name: "agent_step.alula.md", text: embed_str("../../machines/methodology/agent_step.alula.md") },
     NamedText { name: "chat.alula.md", text: embed_str("../../machines/product/chat.alula.md") },
     NamedText { name: "cycle_check.alula.md", text: embed_str("../../machines/methodology/cycle_check.alula.md") },
     NamedText { name: "dialog.alula.md", text: embed_str("../../machines/product/dialog.alula.md") },
@@ -628,12 +628,15 @@ export fn scenario_files() -> []NamedText => [
 ]
 
 /// The names of the files that the folders hold (read at compile time with `embed_dir`): `product_machines`, `methodology_machines`, `product_tables`, `methodology_tables`, `product_scenarios`,
-/// `methodology_scenarios`; a test compares them with the lists above, so a file that is added to a folder and not to its list is found.
+/// `methodology_scenarios`; a test compares them with the lists above, so a file that is added to a folder and not to its list is found. `product_files` and `methodology_files` are every file of the folder
+/// (a test proves there is no `*.alula.txt` among them: the one extension of a table is `.alula.md`, task 169).
 export fn data_dir_names(dir str) -> []str {
     if dir == "product_machines" { return only_ending(embed_dir("../../machines/product").paths(), [".alula.json"]) }
     if dir == "methodology_machines" { return only_ending(embed_dir("../../machines/methodology").paths(), [".alula.json"]) }
-    if dir == "product_tables" { return only_ending(embed_dir("../../machines/product").paths(), [".alula.md", ".alula.txt"]) }
-    if dir == "methodology_tables" { return only_ending(embed_dir("../../machines/methodology").paths(), [".alula.md", ".alula.txt"]) }
+    if dir == "product_tables" { return only_ending(embed_dir("../../machines/product").paths(), [".alula.md"]) }
+    if dir == "methodology_tables" { return only_ending(embed_dir("../../machines/methodology").paths(), [".alula.md"]) }
+    if dir == "product_files" { return embed_dir("../../machines/product").paths() }
+    if dir == "methodology_files" { return embed_dir("../../machines/methodology").paths() }
     if dir == "product_scenarios" { return embed_dir("../../machines/product/scenarios").paths() }
     if dir == "methodology_scenarios" { return embed_dir("../../machines/methodology/scenarios").paths() }
     []str.new()
@@ -658,8 +661,8 @@ export fn dialog_machine_text() -> str => text_of_file(machine_files(), "dialog.
 /// The text of the machine of the agent step (`machines/methodology/agent_step.alula.json`), the translation of its table.
 export fn agent_step_machine_text() -> str => text_of_file(machine_files(), "agent_step.alula.json")
 
-/// The text of the agent step written as tables (`machines/methodology/agent_step.alula.txt`).
-export fn agent_step_table_text() -> str => text_of_file(table_files(), "agent_step.alula.txt")
+/// The text of the agent step written as tables (`machines/methodology/agent_step.alula.md`).
+export fn agent_step_table_text() -> str => text_of_file(table_files(), "agent_step.alula.md")
 
 /// The text of the machine of the cycle check (`machines/methodology/cycle_check.alula.json`), the translation of `cycle_check.alula.md` (task 122).
 export fn cycle_check_machine_text() -> str => text_of_file(machine_files(), "cycle_check.alula.json")

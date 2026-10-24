@@ -59,7 +59,7 @@ test "lx mutations machines" {
     mut seed = 3
     for f in table_files() {
         seed += 1
-        if f.name == "task_runner.alula.md" || f.name == "cycle_check.alula.md" || f.name == "agent_step.alula.txt" { continue }
+        if f.name == "task_runner.alula.md" || f.name == "cycle_check.alula.md" || f.name == "agent_step.alula.md" { continue }
         assert(lx_mutations_hold(f.text, 40, seed))
     }
 }

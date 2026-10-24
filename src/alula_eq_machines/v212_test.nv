@@ -6,9 +6,9 @@ import std.text
 import alula.machine.{NamedText, text_of_file}
 import crew_harness.machines.{machine_files, table_files}
 
-fn product_tables() -> []str => ["chat.alula.md", "cycle_check.alula.md", "dialog.alula.md", "dialog_steps.alula.md", "session_start.alula.md", "agent_step.alula.txt"]
+fn product_tables() -> []str => ["chat.alula.md", "cycle_check.alula.md", "dialog.alula.md", "dialog_steps.alula.md", "session_start.alula.md", "agent_step.alula.md"]
 
-fn json_of_table(name str) -> str => name.replace(".alula.md", ".alula.json").replace(".alula.txt", ".alula.json")
+fn json_of_table(name str) -> str => name.replace(".alula.md", ".alula.json")
 
 test "v212 table files say 2.22" {
     for name in product_tables() {

@@ -1,8 +1,10 @@
 # machines: machines written as data
 
-The machines of the product CrewHarness and the algorithms of the methodology as tables of the language Alula (`*.alula.md`, `*.alula.txt`), their compiled trees (`*.alula.json`, `machine/2`) and their scenarios
+The machines of the product CrewHarness and the algorithms of the methodology as tables of the language Alula (`*.alula.md`; the one extension, task 169), their compiled trees (`*.alula.json`, `machine/2`) and their scenarios
 (`scenarios/*.scenario.test.json`, `scenario/0`). They were samples inside the package `alula` until its version 0.3.2; since task 158 they belong to their owners and the package holds only the language and its own examples
 (`examples/` of [nv-lang/nova-alula](https://github.com/nv-lang/nova-alula)).
+
+The relative links inside a table (`*.alula.md`) are the links of the table of a machine, not the navigation of the product (the table `agent_step` of the methodology links to the files of the methodology that are not here): the guard of the links `scripts/guards/check-md-links.py` does not judge them; the other `.md` of this folder (`registry.md`, `journal.md`, this file) are judged as everywhere.
 
 | Folder | Whose | What is in it |
 |---|---|---|

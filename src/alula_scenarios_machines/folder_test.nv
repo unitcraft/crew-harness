@@ -33,7 +33,7 @@ test "ps test folder from a table only" {
 
 test "ps test folder agent step table" {
     // the table of the agent step (format 2.5, the copy `.txt`) runs the scenarios like its JSON
-    mut files = [NamedText { name: "/a/agent_step.alula.txt", text: agent_step_table_text() }]
+    mut files = [NamedText { name: "/a/agent_step.alula.md", text: agent_step_table_text() }]
     mut n = 0
     for s in scenarios_with("agent-step-flow") {
         files.push(NamedText { name: "/a/${s.name}", text: s.text })

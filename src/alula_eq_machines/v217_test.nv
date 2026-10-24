@@ -7,7 +7,7 @@ import std.text
 import alula.machine.{text_of_file}
 import crew_harness.machines.{machine_files, table_files}
 
-fn tables217() -> []str => ["chat.alula.md", "cycle_check.alula.md", "dialog.alula.md", "dialog_steps.alula.md", "session_start.alula.md", "task_runner.alula.md", "agent_step.alula.txt"]
+fn tables217() -> []str => ["chat.alula.md", "cycle_check.alula.md", "dialog.alula.md", "dialog_steps.alula.md", "session_start.alula.md", "task_runner.alula.md", "agent_step.alula.md"]
 
 // ` (latin)` right after a name in a row of a table or in a heading of a state
 fn has_bracket_after_name217(line str) -> bool {
