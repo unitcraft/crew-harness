@@ -14,7 +14,7 @@ package **`alula`** (task 144 moved them out of this folder, with the tests; the
 | `alula_cli_machines/`, `alula_eq_machines/`, `alula_scenarios_machines/`, `machine_run_machines/`, `machine_table_machines/`, `machine_text_machines/`, `machine_text_eq_machines/`, `machine_text_render_machines/` | tests only (task 158): the program, the translator, the checks and the interpreter of the pinned package on the machines of the product and of the methodology |
 | `acp/`, `acp_live/` | the ACP client and the handler of `Link` ([README](acp/README.md)) |
 | `storage/`, `pgconf/`, `pgdb/`, `pgstore/`, `pg/` | the file and PostgreSQL handlers of `Journal` and `Store` ([README](pg/README.md)) |
-| `server/`, `server_live/`, `server_pg/` | the session server and the hub ([README](server/README.md)); the hub runs the dialog machine of `alula` |
+| `server/`, `server_live/`, `server_pg/` | the session server and the hub ([README](server/README.md)); the hub runs the dialog machine of the product (`crew_harness.product_machines`, `machines/product/dialog.alula.json`) on the package `alula` |
 | `web/` | the console in the browser |
 | `crew_harness.nv`, `crew_hub.nv` | the entry points: the front and the hub |
 
