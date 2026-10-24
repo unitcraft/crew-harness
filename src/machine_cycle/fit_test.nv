@@ -1,4 +1,4 @@
-// fit_test.nv - the cycle check as a machine that is called and as a machine that calls: the input of the machine is the 14 fields of the contract of the methodology, a parent that calls it by the
+// fit_test.nv - the cycle check as a machine that is called and as a machine that calls: the input of the machine is the 15 fields of the contract of the methodology, a parent that calls it by the
 // types of the methodology fits (`check_nested`), a parent with a wrong type does not, the types of the two nested machines it calls (the session launch, the meeting) are pinned for the tasks 121
 // and 124, and the runner of pairs of task 119 does not yet route two levels (task 123).
 module crew_harness.machine_cycle
@@ -27,10 +27,10 @@ fn types_block() -> str {
     text[from..to]
 }
 
-// The record of the input of the call: the 14 fields of the contract of the machine (a caller declares it; the machine takes the fields from its `## Вход`).
+// The record of the input of the call: the 15 fields of the contract of the machine (a caller declares it; the machine takes the fields from its `## Вход`).
 fn review_input() -> str {
     ro ticks = "```"
-    ro record = `тип ВходПроверки { стадия Стадия, цикл Цикл, вне_задачи []Находка, папка_задачи строка, рабочее_дерево строка, режим_сдачи строка, маршрут строка, чистых_подряд число>=0, потолок_заходов число>=0, проб_в_чистом число>=0, сдача_сжата булево, предложение ?строка, порядок_линз []строка, вопрос_автора ?строка }`
+    ro record = `тип ВходПроверки { стадия Стадия, цикл Цикл, вне_задачи []Находка, папка_задачи строка, рабочее_дерево строка, режим_сдачи строка, маршрут строка, чистых_подряд число>=0, потолок_заходов число>=0, проб_в_чистом число>=0, сдача_сжата булево, предложение ?строка, порядок_линз []строка, вопрос_автора ?строка, сужено ?[]строка }`
     "${ticks}\n${record}\n${ticks}\n"
 }
 
@@ -39,7 +39,7 @@ fn probe_parent() -> str {
     ro head = "# Машина: Раннер пробный\n\n- machine: runner_probe\n- machine_version: 1\n- format: 2.22\n\n"
     ro data = "\n## Данные\n\n| имя | тип | начальное | не убывает | пишет |\n|---|---|---|---|---|\n| итог | ?ИтогПроверки | пусто | — | строки |\n| попытка_проверки | число>=0 | 0 | да | механика |\n\n"
     ro parties = "## Стороны\n\n| имя | идентификатор | вид | профиль | сигналы | счётчик |\n|---|---|---|---|---|---|\n| проверка | review | machine cycle_check(вход ВходПроверки, итог ИтогПроверки) | — | — | попытка_проверки |\n\n"
-    ro states = "## Состояния\n\nНачальное состояние: ВЫЗОВ\n\n### ВЫЗОВ — обращение\n- Сторона: проверка\n- Запрос:\n\n| поле запроса | выражение | читает |\n|---|---|---|\n| стадия | Стадия.Разбор | сторона |\n| цикл | Цикл { номер_захода: 1, заход_отсчёта: 1, серия_чистых: 0, без_проб_подряд: 0 } | сторона |\n| вне_задачи | [] | сторона |\n| папка_задачи | \"t\" | сторона |\n| рабочее_дерево | \"w\" | сторона |\n| режим_сдачи | \"files\" | сторона |\n| маршрут | \"full\" | сторона |\n| чистых_подряд | 2 | сторона |\n| потолок_заходов | 4 | сторона |\n| проб_в_чистом | 3 | сторона |\n| сдача_сжата | ложь | сторона |\n| предложение | пусто | сторона |\n| порядок_линз | [] | сторона |\n| вопрос_автора | пусто | сторона |\n\n| № | Событие | Условие | Действия | Куда |\n|---|---|---|---|---|\n| 1 | ответ(результат) | — | итог = результат | КОНЕЦ |\n| 2 | сбой | — | — | КОНЕЦ |\n\n### КОНЕЦ — конец\n- Читает: итог\n\n"
+    ro states = "## Состояния\n\nНачальное состояние: ВЫЗОВ\n\n### ВЫЗОВ — обращение\n- Сторона: проверка\n- Запрос:\n\n| поле запроса | выражение | читает |\n|---|---|---|\n| стадия | Стадия.Разбор | сторона |\n| цикл | Цикл { номер_захода: 1, заход_отсчёта: 1, серия_чистых: 0, без_проб_подряд: 0 } | сторона |\n| вне_задачи | [] | сторона |\n| папка_задачи | \"t\" | сторона |\n| рабочее_дерево | \"w\" | сторона |\n| режим_сдачи | \"files\" | сторона |\n| маршрут | \"full\" | сторона |\n| чистых_подряд | 2 | сторона |\n| потолок_заходов | 4 | сторона |\n| проб_в_чистом | 3 | сторона |\n| сдача_сжата | ложь | сторона |\n| предложение | пусто | сторона |\n| порядок_линз | [] | сторона |\n| вопрос_автора | пусто | сторона |\n| сужено | пусто | сторона |\n\n| № | Событие | Условие | Действия | Куда |\n|---|---|---|---|---|\n| 1 | ответ(результат) | — | итог = результат | КОНЕЦ |\n| 2 | сбой | — | — | КОНЕЦ |\n\n### КОНЕЦ — конец\n- Читает: итог\n\n"
     ro ends = "## Концы\n\n- Результат: ?ИтогПроверки\n\n| конец | № | когда | ответ |\n|---|---|---|---|\n| КОНЕЦ | 1 | истина | Ответ(итог) |\n"
     "${head}${types_block()}${review_input()}${data}${parties}${states}${ends}"
 }
@@ -65,7 +65,7 @@ fn problems_text(list []NestedProblem) -> str {
 
 test "ft input is the contract" {
     ro lines = input_lines(cycle_def())
-    assert(lines.len() == 14)
+    assert(lines.len() == 15)
     assert(lines[0] == "stage:Stage")
     assert(lines[1] == "cycle:Cycle")
     assert(lines[2] == "out_of_scope:[]Finding")
@@ -80,6 +80,7 @@ test "ft input is the contract" {
     assert(lines[11] == "proposal:?text")
     assert(lines[12] == "lens_order:[]text")
     assert(lines[13] == "author_question:?text")
+    assert(lines[14] == "narrowed:?[]text")
 }
 
 test "ft result is the result of the methodology" {

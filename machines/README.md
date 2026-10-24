@@ -7,7 +7,7 @@ The machines of the product CrewHarness and the algorithms of the methodology as
 | Folder | Whose | What is in it |
 |---|---|---|
 | `product/` | the product | `chat`, `dialog` (tables and trees), their 81 scenarios, `journal.md` (10 journal codes of the product). The product calls no primitive of its own: no `registry.md`, the registry is the language (`time_now`, `new_id`) |
-| `methodology/` | the methodology, kept here until task 159 | `agent_step` (with `agent-step-sample.txt`, the copy of the sample of the specification), `cycle_check`, `session_start`, `task_runner`, `dialog_steps` (the session that calls the agent step), their 502 scenarios, `registry.md` (54 primitives, the roles of the parse, three sets of the types of the signatures), `journal.md` (73 codes of the methodology and the 4 codes of the pair `dialog_steps`) |
+| `methodology/` | the methodology, kept here until task 159 | `agent_step` (with `agent-step-sample.txt`, the copy of the sample of the specification), `cycle_check`, `session_start`, `task_runner`, `dialog_steps` (the session that calls the agent step), their 514 scenarios, `registry.md` (56 primitives, the roles of the parse, three sets of the types of the signatures), `journal.md` (73 codes of the methodology and the 4 codes of the pair `dialog_steps`) |
 
 The registry of the primitives and the table of the journal codes of an owner are data beside its machines (`registry.md`, `journal.md`; the form is in `src/machine/README.md` of the package, spec 7a, AL-113). The language owns 35 codes
 (the format, the fragment "Pause", the engine, the executor); the files here hold the codes of the owner only.
@@ -20,7 +20,7 @@ The scenarios run by the program `alula` of the package, on the version the prod
 . C:/work/nova/nova-oracle-0.1.0-windows-x86_64/setup-env.ps1
 nova build <alula>/src/alula.nv -o target/alula.exe       # <alula> is the working tree of the package at the pinned version
 target/alula.exe test machines/product                    # 81 of 81 scenarios passed
-target/alula.exe test machines/methodology                # 502 of 502 scenarios passed
+target/alula.exe test machines/methodology                # 514 of 514 scenarios passed
 ```
 
 The same scenarios and the tests of the machines (the tables equal the JSON, every row has a scenario, the journal codes are the table of the owner, the equality with the machine on Nova) run in the units of `src/`

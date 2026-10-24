@@ -188,5 +188,5 @@ test "cycle scenarios are standalone" {
         assert(sc.machine == "cycle_check")
         n += 1
     }
-    assert(n == 101)
+    assert(n == 102)
 }

@@ -100,5 +100,5 @@ test "ft the input is the contract" {
     ro launch = callee_def("session_start")
     assert(launch.input.fields.len() == 10)
     ro review = callee_def("cycle_check")
-    assert(review.input.fields.len() == 14)
+    assert(review.input.fields.len() == 15)
 }
