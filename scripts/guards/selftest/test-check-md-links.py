@@ -7,9 +7,12 @@
 Проверяет: существующие файлы, папки и якоря (повторы с суффиксом, кириллица, setext, HTML-якоря)
     зелёные; несуществующий файл, ссылка за корень, пустая цель, несуществующий якорь красные;
     ссылка внутри блока кода и встроенного кода не ссылка; пометка с причиной снимает ссылку и
-    печатает причину, без причины красная; цель судится по источнику (файл вне индекса — нет файла).
+    печатает причину, без причины красная; цель судится по источнику (файл вне индекса — нет файла);
+    исключение по маске (задача 169): битая ссылка внутри таблицы машины `machines/**/*.alula.md` зелёная
+    (в том числе в режимах индекса и коммита), а в обычном .md — рядом с таблицей, в той же папке и вне
+    `machines/` — красная, как и в файле `.alula.md` вне `machines/`.
 Не проверяет: внешние адреса, ссылки-определения, якоря не-.md.
-Правило: ADR-0001 (Канон ссылками), AC-06 задачи.
+Правило: ADR-0001 (Канон ссылками), AC-06 задачи; задача 169 (исключение таблиц машин).
 """
 import sys
 
@@ -149,6 +152,29 @@ def main():
         files = {"a.md": "[x](<%s>) [y](%s)\n" % (name, name.replace(" ", "%20")), name: "# Тест\n"}
         stlib.expect(check(fresh(files)), 0, "ок: осмотрено 2 ссылок")
 
+    table_broken = "[z](nope.md) [w](../../doc/nope.md#a) [v](../../../out.md)\n"
+
+    def table_mask_green():
+        files = {"a.md": "[x](b.md)\n", "b.md": "x\n", "machines/x/y.alula.md": table_broken,
+                 "machines/z.alula.md": table_broken, "machines/p/q/r.alula.md": table_broken}
+        stlib.expect(check(fresh(files)), 0, "ок: осмотрено 1 ссылок")
+
+    def table_mask_all_modes():
+        repo = fresh({"a.md": "[x](b.md)\n", "b.md": "x\n", "machines/x/y.alula.md": table_broken})
+        stlib.write_files(repo, {"machines/x/y.alula.md": table_broken + "[u](more.md)\n"})
+        stlib.expect(check(repo), 0, "ок: осмотрено 1 ссылок")
+        stlib.git(repo, env, "add", "--", "machines/x/y.alula.md")
+        stlib.expect(check(repo, "--index"), 0, "ок: осмотрено 1 ссылок")
+        sha = stlib.commit_file(repo, env, "machines/x/w.alula.md", table_broken, "w")
+        stlib.expect(check(repo, "--commit", sha), 0, "судить нечего")
+
+    def table_mask_only_tables():
+        files = {"machines/x/y.alula.md": table_broken, "machines/x/note.md": "[a](gone.md)\n", "machines/x/notalula.md": "[a](gone2.md)\n"}
+        proc = check(fresh(files))
+        stlib.expect(proc, 1, "FAIL: check-md-links: 2 нарушений")
+        assert stlib.has_line(proc, "FAIL machines/x/note.md:1: md-link:"), proc.out
+        assert stlib.has_line(proc, "FAIL machines/x/notalula.md:1: md-link:"), proc.out
+
     def no_md_target_lost():
         stlib.expect(check(fresh({"a.txt": "[x](nope.md)\n"})), 1, "FAIL: мишень потеряна")
 
@@ -180,6 +206,11 @@ def main():
     pr.probe("красная", "папка, которой нет", red({"a.md": "[y](nodir/)\n", "b/c.md": "x\n"}, "md-link", "a.md:1"))
     pr.probe("красная", "пометка без причины", allow_without_reason)
     pr.probe("красная", "режим коммита судит дерево коммита", commit_mode_sees_commit_tree)
+    pr.probe("законное", "таблица машины machines/**/*.alula.md: битая ссылка не судится", table_mask_green)
+    pr.probe("законное", "таблица машины: то же в режимах индекса и коммита", table_mask_all_modes)
+    pr.probe("красная", "обычный .md в machines/ рядом с таблицей судится", table_mask_only_tables)
+    pr.probe("красная", ".alula.md вне machines/ судится", red({"docs/y.alula.md": "[y](gone.md)\n", "a.md": "x\n"}, "md-link", "docs/y.alula.md:1"))
+    pr.probe("красная", "обычный .md вне machines/ при исключённой таблице", red({"machines/x/y.alula.md": "[z](nope.md)\n", "d/a.md": "[y](gone.md)\n"}, "md-link", "d/a.md:1"))
     pr.probe("иной-синтаксис", "пометка якоря не снимает ссылку на файл", allow_anchor_rule_separate)
     pr.probe("иной-синтаксис", "файл существует в рабочей копии, но не отслеживается", untracked_target_is_missing)
     pr.probe("иной-синтаксис", "непарный знак кода не прячет ссылку", legit_unpaired_tick_does_not_hide)

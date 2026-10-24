@@ -15,7 +15,12 @@
 
 Исключение — только пометка с причиной на строке ссылки: «guard-allow(md-link): <причина>» для
 файла или папки, «guard-allow(md-anchor): <причина>» для якоря; причина печатается. Исключить файл или
-папку целиком нельзя. Пометка без причины — красный.
+папку целиком нельзя, кроме одной маски (TABLE_MASK, задача 169, слово владельца 2026-10-25: «формат должен
+быть *.alula.md, необходимо скорректировать стража»): таблицы машин `machines/**/*.alula.md` на относительные
+ссылки не проверяются. Причина: ссылки внутри таблицы машины — часть таблицы (таблица «Шаг агента» методики
+ссылается на файлы методики, которых в продукте нет), а не навигация продукта; прежде таблица лежала как
+`.alula.txt`, чтобы страж её не видел. Маска узкая: только `.alula.md` и только под `machines/`; обычные
+`.md` там же (реестр, журнал, README) и любые `.alula.md` вне `machines/` проверяются как всегда. Пометка без причины — красный.
 """
 import sys
 
@@ -30,6 +35,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib
 
 import guardlib  # noqa: E402
 
+# Таблицы машин Алулы (`machines/**/*.alula.md`): относительные ссылки внутри них не судятся, см. «Исключение» в начале файла.
+TABLE_MASK = re.compile(r"^machines/(?:.+/)?[^/]+\.alula\.md$")
 SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`)(.*?)(?<!`)\1(?!`)", re.S)
 ATX = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$")
@@ -205,7 +212,8 @@ class Checker(object):
 
 
 def judge(source, args, rep):
-    docs = [e for e in source.changed() if e.path.lower().endswith(".md") and e.mode != "160000"]
+    docs = [e for e in source.changed()
+            if e.path.lower().endswith(".md") and e.mode != "160000" and not TABLE_MASK.match(e.path)]
     if not docs:
         return guardlib.Outcome(count=0)
     checker = Checker(source)
