@@ -1,4 +1,4 @@
-// registry_test.nv - the registry of the methodology as data (`machines/methodology/registry.md`, task 158; it was `standard_registry()` of the package until 0.3.2): the 54 primitives of the methodology and the two of
+// registry_test.nv - the registry of the methodology as data (`machines/methodology/registry.md`, task 158; it was `standard_registry()` of the package until 0.3.2): the 56 primitives of the methodology and the two of
 // the language, their classes, signatures, reads and writes, the sets of the types the signatures use, and the check of the arguments and of the results against it.
 module crew_harness.machine_registry
 
@@ -94,9 +94,9 @@ fn rknown(spec TypeSpec, defs TypeDefs) -> bool {
 }
 
 test "md count" {
-    assert(methodology_registry().primitives.len() == 56)
+    assert(methodology_registry().primitives.len() == 58)
     assert(rcount(Reading) == 34)
-    assert(rcount(Writing) == 12)
+    assert(rcount(Writing) == 14)
     assert(rcount(Irreversible) == 10)
     assert(rcount(Pure) == 0)
 }

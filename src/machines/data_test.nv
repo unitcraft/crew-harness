@@ -89,9 +89,9 @@ test "dt a machine of the methodology does not load with the registry of the pro
     }
 }
 
-test "dt the registry of the methodology has 54 primitives and the language has two" {
+test "dt the registry of the methodology has 56 primitives and the language has two" {
     ro reg = methodology_registry()
-    assert(reg.primitives.len() == 56)
+    assert(reg.primitives.len() == 58)
     mut reading = 0
     mut writing = 0
     mut irreversible = 0
@@ -100,11 +100,11 @@ test "dt the registry of the methodology has 54 primitives and the language has 
         if class_word(p.class) == "writing" { writing += 1 }
         if class_word(p.class) == "irreversible" { irreversible += 1 }
     }
-    assert(reading == 34 && writing == 12 && irreversible == 10)
+    assert(reading == 34 && writing == 14 && irreversible == 10)
     assert(find_primitive(reg, "time_now").is_some())
     assert(find_primitive(reg, "stop_agent_group").is_some())
     assert(product_registry().primitives.len() == 2)
-    assert(all_registry().primitives.len() == 56)
+    assert(all_registry().primitives.len() == 58)
     assert(journal_find(all_registry().journal, "user_message").is_some())
     assert(journal_find(all_registry().journal, "turn_failed").is_some())
 }

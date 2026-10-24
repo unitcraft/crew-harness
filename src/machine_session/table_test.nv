@@ -140,18 +140,62 @@ test "st the gates write the stop" {
 test "st the session row writes" {
     ro def = session_def()
     ro answered = row_of(def, "Session", 1)
-    assert(answered.actions.len() == 1)
+    // the end of the launch is written first (task 162, C-5), then the answer is kept
+    assert(answered.actions.len() == 2)
     match answered.actions[0] {
+        CallAct { name, args } => {
+            assert(name == "finish_launch")
+            assert(args.len() == 4)
+        }
+        _ => assert(false)
+    }
+    match answered.actions[1] {
         AssignAct { target, value } => assert(target.root == "agent_reply")
         _ => assert(false)
     }
     ro failed = row_of(def, "Session", 2)
-    assert(failed.actions.len() == 1)
+    assert(failed.actions.len() == 2)
     match failed.actions[0] {
+        CallAct { name, args } => {
+            assert(name == "finish_launch")
+            assert(args.len() == 4)
+        }
+        _ => assert(false)
+    }
+    match failed.actions[1] {
         JournalAct { code, params } => {
             assert(code == "session_not_finished")
             assert(params.len() == 2 && params[0].name == "session" && params[1].name == "reason")
         }
+        _ => assert(false)
+    }
+}
+
+test "st the preparation of the launch is written on the rows (task 162, C-4, C-5)" {
+    ro def = session_def()
+    // SCOPE#1 prepares the launch; SCOPE#2 (B1) does not
+    ro fits = row_of(def, "Scope", 1)
+    assert(fits.actions.len() == 1)
+    match fits.actions[0] {
+        CallAct { name, args } => {
+            assert(name == "prepare_launch")
+            assert(args.len() == 4)
+        }
+        _ => assert(false)
+    }
+    assert(row_of(def, "Scope", 2).actions.len() == 0)
+    // the repeat at B13 stops the group of the processes of the agent and then prepares the launch again
+    ro again = row_of(def, "Gate13Session", 1)
+    assert(again.actions.len() == 2)
+    match again.actions[0] {
+        CallAct { name, args } => {
+            assert(name == "stop_agent_group")
+            assert(args.len() == 0)
+        }
+        _ => assert(false)
+    }
+    match again.actions[1] {
+        CallAct { name, args } => assert(name == "prepare_launch")
         _ => assert(false)
     }
 }
@@ -280,8 +324,8 @@ test "st the entry of the ends calls the group" {
 
 test "st the primitives of the table" {
     ro def = session_def()
-    assert(def.primitives.len() == 5)
-    for n in ["launch_scope", "launch_profile", "session_context", "parse_session_artifact", "stop_agent_group"] { assert(def.primitives.contains(n)) }
+    assert(def.primitives.len() == 7)
+    for n in ["launch_scope", "launch_profile", "session_context", "parse_session_artifact", "prepare_launch", "finish_launch", "stop_agent_group"] { assert(def.primitives.contains(n)) }
 }
 
 test "st the definition" {
@@ -380,7 +424,8 @@ test "st the gates ask what the methodology says" {
     assert(gate1 == ["session"])
     mut gate13 = []str.new()
     for f in state_named(def, "Gate13Session").inputs { gate13.push(f.field) }
-    assert(gate13 == ["session", "refusal_text"])
+    // the three data that the executor reads for the preparation of the repeated launch (task 162, C-5) stand after the two fields of the keeper
+    assert(gate13 == ["session", "refusal_text", "launch_pass", "task_dir", "repo_dir"])
 }
 
 test "st the table text is a table of 2.22" {

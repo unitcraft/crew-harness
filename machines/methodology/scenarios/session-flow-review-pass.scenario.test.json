@@ -78,7 +78,9 @@
             ]
           }
         },
-        "stop_agent_group": null
+        "stop_agent_group": null,
+        "prepare_launch": null,
+        "finish_launch": null
       },
       "event": {
         "kind": "start",

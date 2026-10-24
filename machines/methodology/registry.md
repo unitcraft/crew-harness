@@ -1,6 +1,6 @@
 # Реестр методики: примитивы шага агента, совещания, запуска сессии и раннера задачи
 
-Данные методики (54 примитива, роли разбора и типы их подписей), которые она регистрирует у языка. Переходно лежит в продукте (задача 158; к методике уйдёт задачей 159). Примитивы `time_now` и `new_id` — язык (раздел 7а, AL-113), здесь их нет. Наборы типов: основной (`standard`), `session` (типы запуска сессии: свои `Finding`, `Severity`, `Summary`) и `runner` (типы раннера).
+Данные методики (56 примитивов, роли разбора и типы их подписей), которые она регистрирует у языка. Переходно лежит в продукте (задача 158; к методике уйдёт задачей 159). Примитивы `time_now` и `new_id` — язык (раздел 7а, AL-113), здесь их нет. Наборы типов: основной (`standard`), `session` (типы запуска сессии: свои `Finding`, `Severity`, `Summary`) и `runner` (типы раннера).
 
 Форма — раздел 7 спецификации Алулы: имена — JSON-имена реестра хозяина; типы — как пишет дерево `machine/2` (`int>=0`, `?text`, `[]Finding`, `"a" \| "b"`); `\|` внутри ячейки — знак `|`; списки «читает» и «пишет» разделены `;`; `—` — пусто. Файл читает `parse_registry_table` пакета `alula` (`alula.machine_table`), программа `alula` берёт его рядом с машинами (`registry.md`) или флагом `--registry`.
 
@@ -32,6 +32,8 @@
 | launch_profile | session: text | AgentProfile | reading | service store: profile confirmed at the gate of the profile | — |
 | session_context | session: text; source: text; launch_pass: ?int; delivery_mode: text; task_dir: text; repo_dir: text; route: text; source_list: ?text; delivery_short: bool | text | reading | objects: plan of the task, prompts of the sessions, dialog of the author | — |
 | parse_session_artifact | session: text; reply: AgentReply | SessionParsing | reading | objects: artifact file of the session | — |
+| prepare_launch | session: text; launch_pass: ?int; task_dir: text; repo_dir: text | — | writing | — | objects: group of the processes of the agent, record of the launch, marks progress.log and profile.log |
+| finish_launch | session: text; launch_pass: ?int; task_dir: text; answered: bool | — | writing | objects: profile.log, progress.log, dialog of the agent | objects: hint from profile.log, check of progress.log, transcript of the dialog |
 | stop_agent_group | — | — | irreversible | — | — |
 | run_preparation | task_dir: text; repo_dir: text | PreparationResult | writing | objects: state of the runner, files of the cycles on the disk, lock, mark of the tree | objects: lock of the runner, state, file of a torn pass |
 | specification | — | TaskDocumentState | reading | objects: spec.md | — |

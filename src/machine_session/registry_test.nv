@@ -85,13 +85,15 @@ test "rg the session start calls one level only" {
     assert(calls == 1)
 }
 
-test "rg the five primitives are registered" {
+test "rg the seven primitives are registered" {
     assert(class_of("launch_scope") == "reading")
     assert(class_of("launch_profile") == "reading")
     assert(class_of("session_context") == "reading")
     assert(class_of("parse_session_artifact") == "reading")
     assert(class_of("stop_agent_group") == "irreversible")
-    assert(methodology_registry().primitives.len() == 56)
+    assert(class_of("prepare_launch") == "writing")
+    assert(class_of("finish_launch") == "writing")
+    assert(methodology_registry().primitives.len() == 58)
 }
 
 test "rg the signatures" {
