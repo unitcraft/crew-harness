@@ -18,7 +18,7 @@ fn last_state(run ScenarioRun) -> str => run.traces[run.traces.len() - 1].state
 
 test "fl the scenarios all together" {
     ro runs = all_runs()
-    assert(runs.len() == 257)
+    assert(runs.len() == 260)
     for fr in runs {
         if !run_ok(fr.run) { panic(fr.name) }
     }

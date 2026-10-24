@@ -30,7 +30,7 @@ fn any_contains(items []str, needle str) -> bool {
 
 test "fl the scenarios all together" {
     ro runs = all_runs()
-    assert(runs.len() == 101)
+    assert(runs.len() == 102)
     // every scenario agrees with its file
     for fr in runs {
         if !run_ok(fr.run) { panic(fr.name) }

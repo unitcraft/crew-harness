@@ -48,12 +48,12 @@ test "dt the lists of the files hold every file of the folders" {
 test "dt the numbers of the files" {
     assert(machine_files().len() == 7)
     assert(table_files().len() == 7)
-    assert(scenario_files().len() == 583)
+    assert(scenario_files().len() == 595)
     assert(dt_with_prefix(scenario_files(), "chat-").len() + dt_with_prefix(scenario_files(), "dialog-").len() + dt_with_prefix(scenario_files(), "free-input-").len() == 81)
     assert(dt_with_prefix(scenario_files(), "agent-step-").len() == 83)
-    assert(dt_with_prefix(scenario_files(), "cycle-").len() == 101)
-    assert(dt_with_prefix(scenario_files(), "session-").len() == 55)
-    assert(dt_with_prefix(scenario_files(), "runner-").len() == 257)
+    assert(dt_with_prefix(scenario_files(), "cycle-").len() == 102)
+    assert(dt_with_prefix(scenario_files(), "session-").len() == 63)
+    assert(dt_with_prefix(scenario_files(), "runner-").len() == 260)
     assert(dt_with_prefix(scenario_files(), "nested-steps-").len() == 6)
 }
 

@@ -13,10 +13,10 @@ test "ps scenario families" {
     assert(scenarios_with("chat-").len() == 39)
     assert(scenarios_with("dialog-").len() == 37)
     assert(scenarios_with("nested-steps-").len() == 6)
-    assert(scenarios_with("cycle-").len() == 101)
-    assert(scenarios_with("session-").len() == 55)
-    assert(scenarios_with("runner-").len() == 257)
-    assert(scenario_files().len() == 583)
+    assert(scenarios_with("cycle-").len() == 102)
+    assert(scenarios_with("session-").len() == 63)
+    assert(scenarios_with("runner-").len() == 260)
+    assert(scenario_files().len() == 595)
 }
 
 // ---- nested machines (task 119): a parent and the machines it calls are found in the folder ------------------------------------------------------------
