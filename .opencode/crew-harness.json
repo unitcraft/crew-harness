@@ -60,7 +60,7 @@
   "accepted_slot": "free",
   "cleanup_limit": 10,
   "answer_mode": { "implementation": "recommendations" },
-  "profile_set": "codex",
+  "profile_set": "codex-kimi",
   "tier_max": "light",
   "branch_name": "task/{n}-{slug}",
   "worktrees": "../worktrees",
