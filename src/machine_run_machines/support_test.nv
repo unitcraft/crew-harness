@@ -39,7 +39,7 @@ fn stamped(kind EventKind, name str, request Option[str], input str) -> Incoming
 
 fn said(text str) -> Incoming => stamped(EventKind.Input, "user_message", None, text)
 
-fn word_in(name str, input str) -> Incoming => stamped(EventKind.Input, name, None, input)
+fn signal_in(name str, input str) -> Incoming => stamped(EventKind.Input, name, None, input)
 
 fn chunk(text str) -> Incoming => stamped(EventKind.Progress, "agent_chunk", Some("agent-1"), text)
 

@@ -1,5 +1,5 @@
 // rows_test.nv - the machine "Cycle check" equals the table of the methodology (task-runner-review-states.md): the 71 rows of the 19 states, row by row: the number of the rows of each state,
-// where each row leads, the kind of each state, the party of each appeal, the words of the parties. The table of the methodology is copied here as data (the state, the number of the row, the state
+// where each row leads, the kind of each state, the party of each appeal, the signals of the parties. The table of the methodology is copied here as data (the state, the number of the row, the state
 // it leads to; "!" is a row that ends in a machine error: the methodology leads it to the end ERROR). The pause (4 rows) and the common events (6 rows) are the fragment, checked by the scenarios.
 module crew_harness.machine_cycle
 
@@ -208,7 +208,7 @@ test "rw parties of the appeals" {
     assert(party_id_of(def, state_of(def, "Pause")) == "enhanced")
 }
 
-fn words_of(def MachineDef, id str) -> []str {
+fn signals_of(def MachineDef, id str) -> []str {
     mut out = []str.new()
     for p in def.parties {
         if p.id != id { continue }
@@ -217,21 +217,21 @@ fn words_of(def MachineDef, id str) -> []str {
     out
 }
 
-test "rw words of the gates" {
+test "rw signals of the gates" {
     ro def = cycle_def()
-    ro gate = words_of(def, "gatekeeper")
+    ro gate = signals_of(def, "gatekeeper")
     for w in ["repeat", "halt", "not_counted", "counted", "cut_scope", "split", "ask_customer", "stop", "another_pass"] {
-        if !gate.contains(w) { panic("the gatekeeper has no word ${w}: ${gate.join(",")}") }
+        if !gate.contains(w) { panic("the gatekeeper has no signal ${w}: ${gate.join(",")}") }
     }
     assert(gate.len() == 9)
-    ro enh = words_of(def, "enhanced")
+    ro enh = signals_of(def, "enhanced")
     for w in ["continue", "halt", "narrow", "another_pass", "stop"] {
-        if !enh.contains(w) { panic("the enhanced party has no word ${w}: ${enh.join(",")}") }
+        if !enh.contains(w) { panic("the enhanced party has no signal ${w}: ${enh.join(",")}") }
     }
     assert(enh.len() == 5)
 }
 
-test "rw words carry the data of the methodology" {
+test "rw signals carry the data of the methodology" {
     ro def = cycle_def()
     for p in def.parties {
         for w in p.signals {

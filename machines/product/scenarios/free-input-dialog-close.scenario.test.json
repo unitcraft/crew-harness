@@ -1,7 +1,7 @@
 {
   "format": "scenario/0",
   "machine": "DialogSession",
-  "name": "free input: the word close_session in Idle is taken by its name and ends the dialog, no gate is closed",
+  "name": "free input: the signal close_session in Idle is taken by its name and ends the dialog, no gate is closed",
   "start_at": 1000,
   "params": {"проект.срок_бездействия": 30000},
   "steps": [

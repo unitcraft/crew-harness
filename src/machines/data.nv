@@ -294,7 +294,7 @@ export fn scenario_files() -> []NamedText => [
     NamedText { name: "free-input-counter-stays.scenario.test.json", text: embed_str("../../machines/product/scenarios/free-input-counter-stays.scenario.test.json") },
     NamedText { name: "free-input-dialog-close.scenario.test.json", text: embed_str("../../machines/product/scenarios/free-input-dialog-close.scenario.test.json") },
     NamedText { name: "free-input-no-gate-record.scenario.test.json", text: embed_str("../../machines/product/scenarios/free-input-no-gate-record.scenario.test.json") },
-    NamedText { name: "free-input-word-without-row.scenario.test.json", text: embed_str("../../machines/product/scenarios/free-input-word-without-row.scenario.test.json") },
+    NamedText { name: "free-input-signal-without-row.scenario.test.json", text: embed_str("../../machines/product/scenarios/free-input-signal-without-row.scenario.test.json") },
     NamedText { name: "nested-steps-cancel.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/nested-steps-cancel.scenario.test.json") },
     NamedText { name: "nested-steps-continue.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/nested-steps-continue.scenario.test.json") },
     NamedText { name: "nested-steps-refused.scenario.test.json", text: embed_str("../../machines/methodology/scenarios/nested-steps-refused.scenario.test.json") },

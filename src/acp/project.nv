@@ -264,11 +264,11 @@ export fn project_permission(rpc_id JsonValue, params JsonValue) -> Projection {
 }
 
 /// The engine event of a projection. Bound to the request in flight (kind Progress); with no request (`""`) there is
-/// nothing to belong to and the engine would discard it, so it is a word from outside, `acp_note`, that the engine journals.
+/// nothing to belong to and the engine would discard it, so it is a signal from outside, `acp_note`, that the engine journals.
 export fn progress_event(request str, p Projection) -> Incoming {
     if request.byte_len() == 0 {
-        if p.name == "agent_model" { return Incoming.word("agent_model", p.input) }
-        return Incoming.word("acp_note", "${p.name}: ${p.input}")
+        if p.name == "agent_model" { return Incoming.signal("agent_model", p.input) }
+        return Incoming.signal("acp_note", "${p.name}: ${p.input}")
     }
     Incoming.incoming(EventKind.Progress, p.name, Some(request), p.input)
 }
@@ -353,7 +353,7 @@ fn page_input_of(e Incoming, turn str) -> Option[PageInput] {
                 ro value = object_input(e)?
                 return page_input("permission_decision", value)
             }
-            // the first word of a session of the server (task 099): its name, the agent, the folder - the input is the page's own
+            // the first signal of a session of the server (task 099): its name, the agent, the folder - the input is the page's own
             if e.name == "session_created" {
                 ro value = object_input(e)?
                 return page_input("session_created", value)

@@ -1,5 +1,5 @@
 // rows_test.nv - the machine "Task runner" equals the table of the methodology (task-runner-states.md): the 228 rows of the 71 states, row by row: the number of the rows of each state, where each
-// row leads, the kind of each state, the party (the side) of each appeal, the words of the parties. The table of the methodology is data (`methodology_rows.tsv`, made by `extract_rows.py` from the
+// row leads, the kind of each state, the party (the side) of each appeal, the signals of the parties. The table of the methodology is data (`methodology_rows.tsv`, made by `extract_rows.py` from the
 // file of the methodology: the state, the number of the row, the state it leads to; "!" is a row that ends in a machine error, which the methodology leads to the end ERROR). The pause (4 rows) and
 // the common events (6 rows) are the fragment, checked by the scenarios. The 18 rows of the verdicts of the four reviews are rows of the fork ReviewVerdict of the product.
 module crew_harness.machine_runner
@@ -48,7 +48,7 @@ fn party_id_of(def MachineDef, st StateDef) -> str {
     def.parties[at].id
 }
 
-fn words_of(def MachineDef, id str) -> []str {
+fn signals_of(def MachineDef, id str) -> []str {
     mut out = []str.new()
     for p in def.parties {
         if p.id != id { continue }
@@ -181,21 +181,21 @@ test "rw sides of the gates" {
     }
 }
 
-test "rw words of the gates" {
+test "rw signals of the gates" {
     ro def = runner_def()
-    ro gate = words_of(def, "gatekeeper")
+    ro gate = signals_of(def, "gatekeeper")
     for w in ["repeat", "halt", "no_answers", "answers", "answers_change_goal", "implementation", "plan", "requirements", "decisions_keep_plan", "decisions_change_plan", "finish", "feedback"] {
-        if !gate.contains(w) { panic("the gatekeeper has no word ${w}: ${gate.join(",")}") }
+        if !gate.contains(w) { panic("the gatekeeper has no signal ${w}: ${gate.join(",")}") }
     }
     assert(gate.len() == 12)
-    ro enh = words_of(def, "enhanced")
+    ro enh = signals_of(def, "enhanced")
     for w in ["fast", "full", "accepted", "yours", "not_yours", "confirmed", "full_path", "close_manually", "cut_scope", "other_decisions", "verified", "decisions_recorded", "allow_commit", "allow_push", "sent", "continue", "halt"] {
-        if !enh.contains(w) { panic("the enhanced party has no word ${w}: ${enh.join(",")}") }
+        if !enh.contains(w) { panic("the enhanced party has no signal ${w}: ${enh.join(",")}") }
     }
     assert(enh.len() == 17)
 }
 
-test "rw words carry the data of the methodology" {
+test "rw signals carry the data of the methodology" {
     ro def = runner_def()
     for p in def.parties {
         for w in p.signals {

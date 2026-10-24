@@ -347,7 +347,7 @@ fn Hub mut @ensure_client(at int) Proc Detach Time -> str {
 // Does the state of the session take a message of the owner? The table answers; the hub does not know how its states are called.
 fn Hub @takes_message_at(at int) -> bool {
     ro s = @sessions[at]
-    @machine.accepts_word(s.engine.state(), "user_message")
+    @machine.accepts_signal(s.engine.state(), "user_message")
 }
 
 fn Hub mut @add_session(s Dialog) -> () {
@@ -447,7 +447,7 @@ fn Hub mut @create(conn int, trace str, input JsonObject) Proc Detach Time -> ()
             mut world = PgWorld.open(@settings.pg, trace)
             ro engine = begin_session_engine(pg, root, world, @machine, trace)
             mut s = Dialog { id: trace, name, agent, engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false }
-            accept_in(pg, root, s, Incoming.word("session_created", meta_text(name, agent, @workdir, project)))
+            accept_in(pg, root, s, Incoming.signal("session_created", meta_text(name, agent, @workdir, project)))
             @add_session(s)
             ro at = @sessions.len() - 1
             @drain(at)
@@ -477,7 +477,7 @@ fn Hub mut @say(trace str, text str) Proc Detach Time -> () {
         return
     }
     mut s = @sessions[at]
-    feed_in(@settings.store == "pg", @settings.data_dir, s, Incoming.word("user_message", text))
+    feed_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("user_message", text))
     @drain(at)
 }
 
@@ -486,7 +486,7 @@ fn Hub mut @cancel(trace str) Proc Detach Time -> () {
     if at < 0 { return }
     mut s = @sessions[at]
     if s.clients.len() == 0 { return }
-    feed_in(@settings.store == "pg", @settings.data_dir, s, Incoming.word("cancel", ""))
+    feed_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("cancel", ""))
     @drain(at)
 }
 
@@ -495,7 +495,7 @@ fn Hub mut @decide(trace str, request str, decision str) Proc Detach Time -> () 
     if at < 0 { return }
     mut s = @sessions[at]
     if s.clients.len() == 0 { return }
-    ro event = Incoming.word("permission_decision", decision_text(request, decision))
+    ro event = Incoming.signal("permission_decision", decision_text(request, decision))
     if s.clients[0].decide_event(event) {
         feed_in(@settings.store == "pg", @settings.data_dir, s, event)
         @drain(at)
@@ -552,7 +552,7 @@ fn Hub mut @watch_agent(at int) Time -> () {
         @say_log("the agent of ${s.id} is ready: ${s.clients[0].agent_name()}")
         if !s.model_announced {
             s.model_announced = true
-            accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.word("agent_model", model_input(s.clients[0].model_name())))
+            accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("agent_model", model_input(s.clients[0].model_name())))
             model_arrived = true
         }
     } else if phase == "failed" {
@@ -620,7 +620,7 @@ export fn Hub @page_lines(id str) -> []str {
     @sessions[at].lines
 }
 
-/// Does the session take a message of the owner now (no turn is open)? False for an unknown session. The table answers (`accepts_word`), not a name of a state.
+/// Does the session take a message of the owner now (no turn is open)? False for an unknown session. The table answers (`accepts_signal`), not a name of a state.
 export fn Hub @takes_message(id str) -> bool {
     ro at = @find(id)
     if at < 0 { return false }

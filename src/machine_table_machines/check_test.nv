@@ -40,7 +40,7 @@ test "red write outside" {
     assert(says(chat_with("\"target\": \"user\"", "\"target\": \"agent_attempt\""), "written by mechanics"))
 }
 
-test "events vs words" {
+test "events vs signals" {
     assert(says(tiny().replace("{\"kind\":\"signal\",\"name\":\"go\"}", "{\"kind\":\"signal\",\"name\":\"fly\"}"), "not a signal of the party user"))
     ro extra = tiny().replace("{\"name\":\"halt\"}", "{\"name\":\"halt\"},{\"name\":\"zap\"}")
     assert(says(extra, "the signal zap of the party user is used by no row"))

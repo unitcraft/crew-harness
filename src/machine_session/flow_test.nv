@@ -130,7 +130,7 @@ test "fl the volume that does not fit asks the keeper again" {
     ro ts = flow("session-flow-scope-retry")
     ro end = last_parent(ts)
     assert(end.sent == ["agent_step-1"])
-    // a gate is not a request of the engine: the keeper answers by a word, the counter of the keeper stays 0
+    // a gate is not a request of the engine: the keeper answers by a signal, the counter of the keeper stays 0
     assert(field_of(end.encoded, "gatekeeper_attempt") == "0")
     assert(end.state == "End")
 }
@@ -272,7 +272,7 @@ test "fl the input is checked" {
     assert(typed.sent.len() == 0)
 }
 
-test "fl a word that the gate does not wait for is ignored" {
+test "fl a signal that the gate does not wait for is ignored" {
     ro end = last_parent(flow("session-flow-unknown-word"))
     assert(end.state == "Gate2")
     assert(end.outcome == "none")

@@ -1,7 +1,7 @@
 {
   "format": "scenario/0",
   "machine": "DialogSession",
-  "name": "(table only) the word close_session in Idle ends the session: the end Closed answers closed",
+  "name": "(table only) the signal close_session in Idle ends the session: the end Closed answers closed",
   "start_at": 1000,
   "params": {"проект.срок_бездействия": 30000},
   "steps": [

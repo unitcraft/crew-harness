@@ -137,9 +137,9 @@ export fn chat_event_of(event Incoming) -> Option[ChatEvent] {
 }
 
 /// The events of the outside world as the creator of an event builds them (the envelope is stamped by the engine).
-export fn user_says(text str) -> Incoming => Incoming.word("user_message", text)
+export fn user_says(text str) -> Incoming => Incoming.signal("user_message", text)
 
-export fn user_cancels() -> Incoming => Incoming.word("cancel", "")
+export fn user_cancels() -> Incoming => Incoming.signal("cancel", "")
 
 export fn agent_chunk(request str, text str) -> Incoming => Incoming.incoming(EventKind.Progress, "agent_chunk", Some(request), text)
 

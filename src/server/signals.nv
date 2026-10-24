@@ -1,0 +1,42 @@
+// signals.nv - the signals between the code and the table of the sessions (task 126): the dictionary of the border, as data.
+//
+// Everything that crosses the border between `src/machine/machines/dialog.alula.md` (the table: the states, the rows, the journal) and the code
+// (the hub, the client of ACP, the engine) is a signal of this list; `README.md` ("The border of the table and the code") says the same in prose.
+// `signals_test.nv` keeps the two honest: a signal the code gives must be here, a signal marked `known` must be declared in the table, a signal marked
+// not known must not be (the machine writes `event_unknown` for it and does nothing else).
+module crew_harness.server
+
+/// CodeSignal: a signal that goes between the code and the machine of the sessions.
+///   - `name`: the name of the engine event (the Latin key of the table for a signal of a party, a signal of the machine and a part);
+///   - `kind`: the kind of the engine event: `input` (a signal of a party or of the machine), `progress` (a part of an answer), `answered`, `refused`, `expired`;
+///   - `source`: where the code makes the signal;
+///   - `fields`: the fields of the input (`-` - none);
+///   - `known`: the table declares the signal (or has a row for the answer, the failure, the term); false - the table does not know it, on purpose.
+export type CodeSignal { name str, kind str, source str, fields str, known bool }
+
+fn cs(name str, kind str, source str, fields str, known bool) -> CodeSignal => { name, kind, source, fields, known }
+
+/// The signals that the hub gives to the machine (from the page).
+export fn signals_given_by_code() -> []CodeSignal => [
+    cs("user_message", "input", "src/server/hub.nv: Hub.say", "content (text)", true),
+    cs("cancel", "input", "src/server/hub.nv: Hub.cancel", "-", true),
+    cs("permission_decision", "input", "src/server/hub.nv: Hub.decide", "request, decision (JSON text)", false),
+    cs("session_created", "input", "src/server/hub.nv: Hub.create", "name, agent, folder, project (JSON text)", false)
+]
+
+/// The signals that come from the agent (the client of ACP) and from the engine (the term).
+export fn signals_from_agent() -> []CodeSignal => [
+    cs("agent_chunk", "progress", "src/acp/project.nv: project_update", "content (text)", true),
+    cs("agent_done", "answered", "src/acp/project.nv: stop_event (end_turn)", "-", true),
+    cs("agent_refused", "refused", "src/acp/project.nv: refused_event, stop_event", "the code of FailCode", true),
+    cs("timeout", "expired", "src/engine/engine.nv: the term of a request", "-", true),
+    cs("agent_thought", "progress", "src/acp/project.nv: project_update", "text", false),
+    cs("tool_call", "progress", "src/acp/project.nv: project_update", "JSON text", false),
+    cs("tool_call_update", "progress", "src/acp/project.nv: project_update", "JSON text", false),
+    cs("usage_update", "progress", "src/acp/project.nv: project_update", "JSON text", false),
+    cs("plan", "progress", "src/acp/project.nv: project_update", "JSON text", false),
+    cs("permission_request", "progress", "src/acp/project.nv: project_permission", "JSON text", false),
+    cs("acp_skipped", "progress", "src/acp/project.nv: project_update", "text", false),
+    cs("agent_model", "progress", "src/acp/project.nv: project_update (configOptions); with no open request it is a signal of the same name (progress_event), the hub also gives it when the agent is ready (Hub.watch_agent)", "model (JSON text)", false),
+    cs("acp_note", "input", "src/acp/client.nv: AcpClient.note", "text", false)
+]

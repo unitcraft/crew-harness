@@ -1,0 +1,301 @@
+// signals_test.nv - task 126: the dictionary of the signals between the table of the dialog and the code (`signals.nv`, the section "The border of the table and the code" of README.md):
+// every signal that the code gives is declared in the table or named in the list "the table does not know"; the sources say the same as the dictionary; the hub does not name a state.
+module crew_harness.server
+
+import std.text
+import std.fs.{Fs, real_fs, Path, read_text}
+import alula.engine.{Incoming, EventKind, StepEnvironment, Order}
+import alula.machine_run.{AlulaMachine, AlulaState}
+import alula.machine_table.{MachineDef, TableRow, SignalEv, ProgressEv, AnswerEv, FailureEv, TimeoutEv, StateDef}
+
+fn sg_machine() -> AlulaMachine {
+    match hub_machine(900000) {
+        Ok(m) => m
+        Err(e) => panic("the hub machine is not made: ${e}")
+    }
+}
+
+fn sg_all() -> []CodeSignal {
+    mut out = []CodeSignal.new()
+    for w in signals_given_by_code() { out.push(w) }
+    for w in signals_from_agent() { out.push(w) }
+    out
+}
+
+fn sg_source(relative str) -> str {
+    mut p = kit_repo_root()
+    for part in relative.split("/") { p = p.join(part) }
+    with Fs = real_fs() {
+        match read_text(p) {
+            Ok(t) => t
+            Err(e) => panic("cannot read ${relative}")
+        }
+    }
+}
+
+// The names that stand after a marker in the text, up to the closing quote: `Incoming.signal("acp_note"` with the marker `Incoming.signal("`.
+fn sg_names_after(text str, marker str) -> []str {
+    mut out = []str.new()
+    mut first = true
+    for part in text.split(marker) {
+        if first {
+            first = false
+        } else {
+            ro close = part.find("\"") ?? -1
+            if close > 0 { out.push(part[..close]) }
+        }
+    }
+    out
+}
+
+fn sg_in_dictionary(name str) -> bool {
+    for w in sg_all() {
+        if w.name == name { return true }
+    }
+    false
+}
+
+// Does a row of the list take this kind of event (by the name for a signal and a part; by the kind for an answer, a failure and a timeout)?
+fn sg_rows_take(rows []TableRow, w CodeSignal) -> bool {
+    for r in rows {
+        match r.event {
+            SignalEv { name, binds } => { if w.kind == "input" && name == w.name { return true } }
+            ProgressEv { name, binds } => { if w.kind == "progress" && name == w.name { return true } }
+            AnswerEv { bind } => { if w.kind == "answered" { return true } }
+            FailureEv { reasons, bind } => { if w.kind == "refused" { return true } }
+            TimeoutEv => { if w.kind == "expired" { return true } }
+            _ => ()
+        }
+    }
+    false
+}
+
+// The signal is taken by a row of a state.
+fn sg_in_table(def MachineDef, w CodeSignal) -> bool {
+    for s in def.states {
+        if sg_rows_take(s.rows, w) { return true }
+    }
+    false
+}
+
+// The signal is declared in the table: a signal of a party or of the machine, a part; an answer, a failure and a timeout have no name in the table.
+fn sg_declared(def MachineDef, w CodeSignal) -> bool {
+    for p in def.parties {
+        for x in p.signals {
+            if w.kind == "input" && x.name == w.name { return true }
+        }
+        for x in p.progress {
+            if w.kind == "progress" && x.name == w.name { return true }
+        }
+    }
+    for x in def.signals {
+        if w.kind == "input" && x.name == w.name { return true }
+    }
+    w.kind == "answered" || w.kind == "refused" || w.kind == "expired"
+}
+
+fn sg_event(w CodeSignal) -> Incoming {
+    ro kind = if w.kind == "input" {
+        EventKind.Input
+    } else if w.kind == "progress" {
+        EventKind.Progress
+    } else if w.kind == "answered" {
+        EventKind.Answered
+    } else if w.kind == "refused" {
+        EventKind.Refused
+    } else {
+        EventKind.Expired
+    }
+    // ORACLE-WORKAROUND(126): `ro request = if ... { None } else { Some("agent-1") }` is a CC-FAIL (Option[int] against Option[str]); write the `ro` form when item 126 is fixed
+    mut request Option[str] = None
+    if w.kind != "input" { request = Some("agent-1") }
+    Incoming { id: "e-1", trace: "t-1", step: 2, kind, name: w.name, request, input: "", at: 1000 }
+}
+
+fn sg_codes(m AlulaMachine, s AlulaState, w CodeSignal) -> []str {
+    mut environment = StepEnvironment.new()
+    ro moved = m.step(s, sg_event(w), environment)
+    mut out = []str.new()
+    for o in environment.orders {
+        match o {
+            Note(event) => out.push(event.code)
+            _ => ()
+        }
+    }
+    out
+}
+
+fn sg_unknown() -> []CodeSignal {
+    mut out = []CodeSignal.new()
+    for w in sg_all() {
+        if !w.known { out.push(w) }
+    }
+    out
+}
+
+fn sg_known() -> []CodeSignal {
+    mut out = []CodeSignal.new()
+    for w in sg_all() {
+        if w.known { out.push(w) }
+    }
+    out
+}
+
+// ----- the dictionary and the table -----
+
+test "sg the dictionary lists four signals of the code and the signals of the agent" {
+    assert(signals_given_by_code().len() == 4)
+    assert(signals_from_agent().len() >= 8)
+}
+
+test "sg the signals of the code are the four of the page" {
+    mut names = []str.new()
+    for w in signals_given_by_code() { names.push(w.name) }
+    assert(names.contains("user_message"))
+    assert(names.contains("cancel"))
+    assert(names.contains("permission_decision"))
+    assert(names.contains("session_created"))
+}
+
+test "sg a name is listed once" {
+    mut seen = []str.new()
+    for w in sg_all() {
+        assert(!seen.contains(w.name))
+        seen.push(w.name)
+    }
+    assert(seen.len() > 0)
+}
+
+test "sg every signal of the dictionary has a source and a kind" {
+    assert(sg_all().len() > 0)
+    for w in sg_all() {
+        assert(w.source.byte_len() > 0)
+        assert(w.kind == "input" || w.kind == "progress" || w.kind == "answered" || w.kind == "refused" || w.kind == "expired")
+    }
+}
+
+test "sg a signal that the table knows is declared in the table of the dialog" {
+    ro def = sg_machine().def
+    assert(sg_known().len() >= 5)
+    for w in sg_known() { assert(sg_declared(def, w)) }
+}
+
+test "sg a signal that the table knows is taken by a row of a state" {
+    ro def = sg_machine().def
+    assert(sg_known().len() >= 5)
+    for w in sg_known() { assert(sg_in_table(def, w)) }
+}
+
+test "sg a signal that the table does not know is not declared in it" {
+    ro def = sg_machine().def
+    assert(sg_unknown().len() >= 5)
+    for w in sg_unknown() { assert(!sg_declared(def, w)) }
+}
+
+test "sg the table writes event_unknown for a signal it does not know" {
+    ro m = sg_machine()
+    assert(sg_unknown().len() >= 5)
+    for w in sg_unknown() { assert(sg_codes(m, m.initial(), w) == ["event_unknown"]) }
+}
+
+test "sg the table writes event_unknown for them also while a turn is open" {
+    ro m = sg_machine()
+    mut environment = StepEnvironment.new()
+    ro opened = Incoming { id: "e-0", trace: "t-1", step: 1, kind: EventKind.Input, name: "user_message", request: None, input: "hi", at: 900 }
+    ro open = match m.step(m.initial(), opened, environment) {
+        Go(next) => next
+        Stay => m.initial()
+    }
+    assert(m.state_name(open) != m.state_name(m.initial()))
+    assert(sg_unknown().len() >= 5)
+    for w in sg_unknown() { assert(sg_codes(m, open, w) == ["event_unknown"]) }
+}
+
+test "sg session_created is a signal that the table does not know, on purpose" {
+    mut found = false
+    for w in sg_unknown() {
+        if w.name == "session_created" { found = true }
+    }
+    assert(found)
+}
+
+test "sg the signal cancel is a signal of the machine and is not a signal of the party user" {
+    ro def = sg_machine().def
+    mut as_party_signal = false
+    for p in def.parties {
+        for x in p.signals {
+            if x.name == "cancel" { as_party_signal = true }
+        }
+    }
+    mut as_machine_signal = false
+    for x in def.signals {
+        if x.name == "cancel" { as_machine_signal = true }
+    }
+    assert(!as_party_signal)
+    assert(as_machine_signal)
+}
+
+test "sg the field of the message and of the chunk is content" {
+    ro def = sg_machine().def
+    mut message = ""
+    mut chunk = ""
+    for p in def.parties {
+        for x in p.signals {
+            if x.name == "user_message" && x.fields.len() == 1 { message = x.fields[0].name }
+        }
+        for x in p.progress {
+            if x.name == "agent_chunk" && x.fields.len() == 1 { chunk = x.fields[0].name }
+        }
+    }
+    assert(message == "content")
+    assert(chunk == "content")
+}
+
+// ----- the dictionary and the sources -----
+
+test "sg the hub gives only the signals of the dictionary" {
+    ro names = sg_names_after(sg_source("src/server/hub.nv"), "Incoming.signal(\"")
+    assert(names.len() >= 3)
+    for n in names { assert(sg_in_dictionary(n)) }
+}
+
+test "sg the client of ACP gives only the signals of the dictionary" {
+    ro project = sg_source("src/acp/project.nv")
+    ro client = sg_source("src/acp/client.nv")
+    mut names = sg_names_after(project, "Incoming.signal(\"")
+    for n in sg_names_after(client, "Incoming.signal(\"") { names.push(n) }
+    for n in sg_names_after(project, "proj(\"") { names.push(n) }
+    for n in sg_names_after(project, "chunk_projection(update, \"") { names.push(n) }
+    for n in sg_names_after(project, "EventKind.Answered, \"") { names.push(n) }
+    for n in sg_names_after(project, "EventKind.Refused, \"") { names.push(n) }
+    assert(names.len() >= 8)
+    for n in names { assert(sg_in_dictionary(n)) }
+}
+
+test "sg every signal of the dictionary is in a source" {
+    // The signals that the engine gives (`src/engine/engine.nv`, now the package `alula`) are not in a source of this repository: the check
+    // is for the signals that the hub, the projection and the client of this repository give.
+    ro sources = "${sg_source("src/server/hub.nv")}${sg_source("src/acp/project.nv")}${sg_source("src/acp/client.nv")}"
+    assert(sg_all().len() > 0)
+    for w in sg_all() {
+        if !w.source.contains("src/engine/") { assert(sources.contains("\"${w.name}\"")) }
+    }
+}
+
+// ----- the hub does not name a state -----
+
+test "sg the code of the hub names no state of the table" {
+    ro hub = sg_source("src/server/hub.nv")
+    assert(hub.byte_len() > 1000)
+    assert(!hub.contains("\"Awaiting\""))
+    assert(!hub.contains("\"Idle\""))
+    assert(!hub.contains("\"Closed\""))
+}
+
+test "sg the scenarios of the hub name no state of the table" {
+    ro kit = sg_source("src/server/testkit.nv")
+    assert(kit.byte_len() > 1000)
+    assert(!kit.contains("\"Awaiting\""))
+    assert(!kit.contains("\"Idle\""))
+    assert(!kit.contains("\"Closed\""))
+}

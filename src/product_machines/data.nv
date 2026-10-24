@@ -87,7 +87,7 @@ export fn scenario_files() -> []NamedText => [
     NamedText { name: "free-input-counter-stays.scenario.test.json", text: embed_str("../../machines/product/scenarios/free-input-counter-stays.scenario.test.json") },
     NamedText { name: "free-input-dialog-close.scenario.test.json", text: embed_str("../../machines/product/scenarios/free-input-dialog-close.scenario.test.json") },
     NamedText { name: "free-input-no-gate-record.scenario.test.json", text: embed_str("../../machines/product/scenarios/free-input-no-gate-record.scenario.test.json") },
-    NamedText { name: "free-input-word-without-row.scenario.test.json", text: embed_str("../../machines/product/scenarios/free-input-word-without-row.scenario.test.json") }
+    NamedText { name: "free-input-signal-without-row.scenario.test.json", text: embed_str("../../machines/product/scenarios/free-input-signal-without-row.scenario.test.json") }
 ]
 
 /// The text of the machine of the chat session (`machines/product/chat.alula.json`).

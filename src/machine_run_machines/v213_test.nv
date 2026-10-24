@@ -1,5 +1,5 @@
 // v213_test.nv - task 149: Alula 2.13 in the interpreter and the scenario runner: the signal of a party is an event `signal` (the step `word` of a scenario is gone, the step `signal` may name the party
-// that declared the signal), the question `accepts_word` of the hub is answered from the signals of the table, an optional field of the input that the input does not have is none (AL-48).
+// that declared the signal), the question `accepts_signal` of the hub is answered from the signals of the table, an optional field of the input that the input does not have is none (AL-48).
 module crew_harness.machine_run_machines
 
 import std.text
@@ -53,12 +53,12 @@ test "v213 party that does not exist" {
 
 test "v213 accepts a signal of the table" {
     ro m = chat()
-    assert(m.accepts_word(m.initial(), "user_message"))
+    assert(m.accepts_signal(m.initial(), "user_message"))
 }
 
 test "v213 does not accept what the table does not declare" {
     ro m = chat()
-    assert(!m.accepts_word(m.initial(), "no_such_signal"))
+    assert(!m.accepts_signal(m.initial(), "no_such_signal"))
 }
 
 test "v213 the chat machine declares its signals at the party" {

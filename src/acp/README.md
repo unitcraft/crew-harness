@@ -123,10 +123,10 @@ event"); "-" means that the page has no kind for it and `page_event` gives None.
 | the process ended, the connection is lost | Refused / `agent_refused` / `ConnectionLost` | `agent_refused` |
 | (the engine) the idle term passed | Expired / `timeout` | `agent_refused` `{turn, reason: "Timeout"}` |
 | a notification, a response nobody waits for, a line that is not JSON-RPC | Input / `acp_note` | - |
-| (the user) the word | Input / `user_message` | `user_message` `{turn, text}` |
+| (the user) the message | Input / `user_message` | `user_message` `{turn, text}` |
 | (the user) cancel | Input / `cancel` | `cancel` `{turn}` |
 | (the owner) the decision | Input / `permission_decision` / `{request, decision}` | `permission_decision` the same object |
-| (the server) the first word of a session | Input / `session_created` / `{name, agent, folder, project?}` | `session_created` the same object (task 099) |
+| (the server) the first signal of a session | Input / `session_created` / `{name, agent, folder, project?}` | `session_created` the same object (task 099) |
 
 What is not in the table is never dropped without a trace: it becomes the event `acp_skipped` (or the note `acp_note`), the
 engine journals every event, and the page gets nothing. The page line is `{id, trace, step, kind, input, time}`: `name` -> `kind`,

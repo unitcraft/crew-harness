@@ -1,5 +1,5 @@
-// border_test.nv - task 126: the tables of the dialog and of the chat after the border with the code was drawn: the field of the words is `содержание` (not `текст текст`),
-// the cancel of the dialog is declared once (a signal, not a word of the user), the translation says `content`.
+// border_test.nv - task 126: the tables of the dialog and of the chat after the border with the code was drawn: the field of the signals is `содержание` (not `текст текст`),
+// the cancel of the dialog is declared once (a signal of the machine, not a signal of the party user), the translation says `content`.
 module crew_harness.machine_dialog
 
 import std.text
@@ -25,7 +25,7 @@ test "bd dialog: the field текст текст is gone" {
     assert(!t.contains("текст: кусок"))
 }
 
-test "bd dialog: the cancel is not a word of the user" {
+test "bd dialog: the cancel is not a signal of the party user" {
     ro t = dialog_table_text()
     assert(!t.contains("сообщение_пользователя { содержание строка }, отмена"))
     assert(!t.contains("сигнал(отмена)") || t.contains("## Сигналы"))
@@ -49,7 +49,7 @@ test "bd dialog: the translation is the committed file" {
     assert(report.json == dialog_machine_text())
 }
 
-test "bd dialog: the tree has content, not text, in the words" {
+test "bd dialog: the tree has content, not text, in the signals" {
     ro j = dialog_machine_text()
     assert(j.contains("\"name\":\"user_message\",\"fields\":[{\"name\":\"content\",\"type\":\"text\"}]"))
     assert(j.contains("\"name\":\"agent_chunk\",\"fields\":[{\"name\":\"content\",\"type\":\"text\"}]"))

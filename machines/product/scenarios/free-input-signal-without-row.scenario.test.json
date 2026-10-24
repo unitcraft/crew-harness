@@ -1,7 +1,7 @@
 {
   "format": "scenario/0",
   "machine": "ChatSession",
-  "name": "free input: a word that the current state has no row for is thrown away and the state stays",
+  "name": "free input: a signal that the current state has no row for is thrown away and the state stays",
   "start_at": 1000,
   "steps": [
     {"do": "feed", "event": {"kind": "signal", "name": "user_message", "input": "hi"}, "expect": {"state": "Awaiting"}},

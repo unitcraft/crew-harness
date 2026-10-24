@@ -97,7 +97,7 @@ Since task 114 the hub runs every session on the machine of the many-turn chat w
   (`start_hub`); a machine that cannot be made stops the start with the message `the dialog machine cannot be made: ...`.
 - **The states.** `Idle` (waits for a message), `Awaiting` (a request to the agent is open) and the end `Closed`. After an answer, a refusal, an idle term and a cancel the session
   goes back to `Idle` and forgets the turn (the data of the turn are cleared, as the state `Idle` of the machine in Nova holds nothing). The journal codes and their parameters, the numbers of requests
-  (`agent-1`, `agent-2`...) and the notes of an event the state does not expect (`event_ignored`) are the same as before. The end `Closed` is reached by the word `close_session`, which only the table has: the
+  (`agent-1`, `agent-2`...) and the notes of an event the state does not expect (`event_ignored`) are the same as before. The end `Closed` is reached by the signal `close_session`, which only the table has: the
   hub never sends it (a table needs one reachable end), the machine in Nova takes it for an event of an unknown name.
 - **The idle term.** It is the parameter `СРОК_БЕЗДЕЙСТВИЯ` (the name as written in the table, AL-46) of the table with the key of the project `проект.срок_бездействия` (format 2.7, P-9, default 900000 ms). The hub gives it
   `idle_term_seconds * 1000` of the settings through the table of the parameters of the project (`alula_machine_with`); nothing else of the settings reaches the machine.
@@ -120,22 +120,22 @@ Since task 114 the hub runs every session on the machine of the many-turn chat w
 Task 126. Where the behaviour of a session is written in the table `dialog.alula.md` (`src/machine/machines/` of the package `alula`), and where it is written in code. The hub does not know the name of any
 state of the table: it asks the table.
 
-**The table decides** (change it in the table, the code stays): the states and what leads from one to the other; which signal a state takes (`сигнал(...)` for a signal of a party and for a signal of the machine, `часть(...)`, `ответ`, `сбой`, `срок`; since the language 2.14 the word of a party is its signal, AL-38);
+**The table decides** (change it in the table, the code stays): the states and what leads from one to the other; which signal a state takes (`сигнал(...)` for a signal of a party and for a signal of the machine, `часть(...)`, `ответ`, `сбой`, `срок`; since the language 2.14 the signals of a party stand in the column `сигналы` of its row, AL-38);
 the codes of the journal and their parameters; the data of the turn (the two texts) and when they are cleared; the numbers of the requests of the agent (`agent-1`, `agent-2`...: the counter of the party, the mechanics);
 what the request to the agent holds (`подсказка`, `реплика`); the cancel of the open requests (`отменить_открытые`); the idle term (the parameter `СРОК_БЕЗДЕЙСТВИЯ` as it is written in the table, the key of the project `проект.срок_бездействия`);
-the end `ЗАКРЫТО` (the word `закрыть_сессию`, which the hub never gives).
+the end `ЗАКРЫТО` (the signal `закрыть_сессию`, which the hub never gives).
 
-**The code decides** (change it in the code, the table stays): which event of the page becomes which word (the table below); whether a word may be given now (`Hub.takes_message`, one question to the machine, see below);
-the process of the agent (start, stop, the pump of its events); how an update of ACP becomes a word (`project_update`) and how a stop reason becomes an outcome (`stop_event`); the term as a timer of the engine (the event
+**The code decides** (change it in the code, the table stays): which event of the page becomes which signal (the table below); whether a signal may be given now (`Hub.takes_message`, one question to the machine, see below);
+the process of the agent (start, stop, the pump of its events); how an update of ACP becomes a signal (`project_update`) and how a stop reason becomes an outcome (`stop_event`); the term as a timer of the engine (the event
 `срок`); the store (files or PostgreSQL), the journal, the snapshot; the lines of the page (`page_event`), the `turn` of the page, the synthetic `error` events of the page (they are not kept).
 
-### The words the code gives to the table
+### The signals the code gives to the table
 
-The list as data is `words.nv` (`words_given_by_code`, `words_from_agent`); `words_test.nv` keeps it equal to the table and to the sources.
+The list as data is `signals.nv` (`signals_given_by_code`, `signals_from_agent`); `signals_test.nv` keeps it equal to the table and to the sources.
 
-| word | who gives it | fields | the table |
+| signal | who gives it | fields | the table |
 |---|---|---|---|
-| `user_message` | the hub, `Hub.say`, from the page | `content` (text) | declared: a word of the party `пользователь`; the row of `ПОКОЙ` |
+| `user_message` | the hub, `Hub.say`, from the page | `content` (text) | declared: a signal of the party `пользователь`; the row of `ПОКОЙ` |
 | `cancel` | the hub, `Hub.cancel`, from the page | none | declared once, as a signal `отмена`; the row `сигнал(отмена)` of `ОЖИДАНИЕ` (in `ПОКОЙ` it is a note `event_ignored`) |
 | `permission_decision` | the hub, `Hub.decide`, from the page | `request`, `decision` (JSON text) | **not known** on purpose: it goes to the client of the agent, and the engine journals it; the machine writes `event_unknown` |
 | `session_created` | the hub, `Hub.create`, from the page | `name`, `agent`, `folder`, `project` (JSON text) | **not known** on purpose (below) |
@@ -145,15 +145,15 @@ The list as data is `words.nv` (`words_given_by_code`, `words_from_agent`); `wor
 | `timeout` | the engine, when the term of a request ends | none | the term: the row `срок` of `ОЖИДАНИЕ` |
 | `agent_thought`, `tool_call`, `tool_call_update`, `usage_update`, `plan`, `permission_request`, `acp_skipped`, `acp_note`, `agent_model` | the client of ACP | JSON text or text | **not known** on purpose: the page sees them (`page_event`), the machine writes `event_unknown` and nothing changes |
 
-- **`session_created` is a word the table does not know, on purpose.** The first event of a session is made by the server and kept in the journal like any other (`Engine.history` tells the whole story after a restart),
+- **`session_created` is a signal the table does not know, on purpose.** The first event of a session is made by the server and kept in the journal like any other (`Engine.history` tells the whole story after a restart),
   so it is given to the machine; the machine has no row for it and writes `event_unknown` (the state does not change, nothing is saved). The page needs the event and the machine does not.
 - **The stop reason of the agent** is turned into an outcome by `stop_event` of the client of ACP (`src/acp/project.nv`): `end_turn` is the answer (`agent_done`); `max_tokens`, `max_turn_requests`, `refusal`, `cancelled`
   and any other reason are the refusal `agent_refused` with a code of `FailCode`: `MaxTokens`, `MaxTurnRequests`, `ModelRefused`, `StoppedByHuman`, and for the rest `NoResult`. The table sees only the outcome, never the reason.
-- **The question to the table.** `Hub.takes_message` asks `AlulaMachine.accepts_word(state, "user_message")` (`src/machine_run/accepts.nv` of `alula`): the word is declared and the common events or the rows of the state have a row for it.
-  The condition of a row is evaluated with the data of the state and without the bindings of the word; a condition that cannot be evaluated that way counts as taking the word. When the state does not take it, the hub
-  writes `a message to <session> while a turn is open: ignored` to its log and does not give the word. Rename a state in the table, and nothing in the code changes: the scenario `scenario_renamed_table`
+- **The question to the table.** `Hub.takes_message` asks `AlulaMachine.accepts_signal(state, "user_message")` (`src/machine_run/accepts.nv` of `alula`): the signal is declared and the common events or the rows of the state have a row for it.
+  The condition of a row is evaluated with the data of the state and without the bindings of the signal; a condition that cannot be evaluated that way counts as taking the signal. When the state does not take it, the hub
+  writes `a message to <session> while a turn is open: ignored` to its log and does not give the signal. Rename a state in the table, and nothing in the code changes: the scenario `scenario_renamed_table`
   (`testkit.nv`, `src/server_live`, `src/server_pg`) runs the hub on the table with `Idle` and `Awaiting` named `Resting` and `Waiting`.
-- **How it is kept.** `words_test.nv`: every word the code gives is declared in the table or named "the table does not know"; the sources (`hub.nv`, `src/acp/project.nv`, `client.nv`) give only the words of the list and every word
+- **How it is kept.** `signals_test.nv`: every signal the code gives is declared in the table or named "the table does not know"; the sources (`hub.nv`, `src/acp/project.nv`, `client.nv`) give only the signals of the list and every signal
   of the list is in a source; the hub and the scenarios name no state of the table. `accepts_test.nv` (`src/machine_run` of `alula`): the question on the dialog, the chat and a common event. `src/machine_dialog/border_test.nv`: the field
   `содержание` and the cancel declared once.
 
@@ -179,7 +179,7 @@ The page says what the owner did. It does not apply its own words: they appear o
 |---|---|---|
 | `session_created` | `{ name, agent, folder, project? }` | a session exists |
 | `session_model` | `{ model }` | current model explicitly reported by ACP; empty means the agent did not report one |
-| `user_message` | `{ turn, text }` | the owner's word was accepted |
+| `user_message` | `{ turn, text }` | the owner's message was accepted |
 | `agent_chunk` | `{ turn, text }` | a piece of the answer; the page glues pieces in the order of `step` |
 | `agent_done` | `{ turn }` | the turn ended well |
 | `agent_refused` | `{ turn, reason }` | the turn ended badly: `reason` is a code of the closed list (`Timeout`, `ConnectionLost`, `ModelRefused`, `MaxTokens`...) |
@@ -217,7 +217,7 @@ The page's connection number is the peer port of its socket.
 
 ## How a session lives
 
-1. **Create.** The hub starts an engine (`start_engine`), feeds it the word `session_created` (name, agent, folder; the machine ignores it, the journal keeps
+1. **Create.** The hub starts an engine (`start_engine`), feeds it the signal `session_created` (name, agent, folder; the machine ignores it, the journal keeps
    it with its input), starts the agent process. The session is on disk (or in the database) before the page sees it.
 2. **Talk.** `user_message` is `feed`ed: the machine opens a request, the engine sends it to the ACP client, which queues it (one turn at a time). A timer
    (every few milliseconds) pumps every session: the events of the agent are accepted (journal, snapshot, then the acknowledgement to the client) and shown.

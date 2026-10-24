@@ -201,9 +201,9 @@ test "st the three parties" {
     assert(keeper.kind == GatekeeperParty)
     assert(keeper.id == "gatekeeper")
     assert(keeper.counter == "gatekeeper_attempt")
-    mut words = []str.new()
-    for w in keeper.signals { words.push(w.name) }
-    assert(words == ["confirm", "repeat", "halt"])
+    mut signals = []str.new()
+    for w in keeper.signals { signals.push(w.name) }
+    assert(signals == ["confirm", "repeat", "halt"])
     ro enhanced = def.parties[find_party(def, "усиленный")]
     assert(enhanced.kind == EnhancedParty)
     assert(enhanced.counter == "enhanced_attempt")

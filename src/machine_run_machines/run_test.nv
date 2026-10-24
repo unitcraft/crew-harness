@@ -83,7 +83,7 @@ test "chat ignored" {
     ro ended = run1(m, waiting, done()).state
     assert(summary(run1(m, ended, said("again")).orders) == "log:event_ignored(event=user_message;state=Done)")
     assert(summary(run1(m, idle, done()).orders) == "log:event_ignored(event=agent_done;state=Idle)")
-    assert(summary(run1(m, idle, word_in("weather_report", "rain")).orders) == "log:event_unknown(name=weather_report)")
+    assert(summary(run1(m, idle, signal_in("weather_report", "rain")).orders) == "log:event_unknown(name=weather_report)")
     ro tool = stamped(EventKind.Progress, "tool_call", Some("agent-1"), "{}")
     assert(summary(run1(m, waiting, tool).orders) == "log:event_unknown(name=tool_call)")
 }

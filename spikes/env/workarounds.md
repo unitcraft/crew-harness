@@ -68,4 +68,4 @@ Marks: 64 in 38 files. Items with marks: 29. Items without marks: 32 (no workaro
 | 60 | A protocol method that nothing calls is cut from the program, and the C of the program does not build (no small reproduction... | no workaround in the code | 0 |
 | 61 | `none_arg_generic_option`: a literal `None` as the argument of a parameter of the type `Option[Wrap[str]]`, where `Wrap` is a... | no workaround in the code | 0 |
 | 62 | `with` is a reserved word: a variable, a parameter or a field named `with` (the natural name of "the machine with the answers of... | no workaround in the code | 0 |
-| 126 | `if_none_option_str`: an `if` whose one branch is `None` and the other `Some` of a text, bound by `ro` without a type (`ro... | `src/server/words_test.nv` | 1 |
+| 126 | `if_none_option_str`: an `if` whose one branch is `None` and the other `Some` of a text, bound by `ro` without a type (`ro... | `src/server/signals_test.nv` | 1 |

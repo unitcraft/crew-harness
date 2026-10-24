@@ -1,4 +1,4 @@
-// v217_test.nv - task 151: the party of a free input in the interpreter and the runner of the scenarios (AL-51, AL-52): the machine has no counter of the party and no record of a gate, the word is taken
+// v217_test.nv - task 151: the party of a free input in the interpreter and the runner of the scenarios (AL-51, AL-52): the machine has no counter of the party and no record of a gate, the signal is taken
 // by the name of the signal in the current state, the counter of the party does not grow, the machine may have a party with gates and a party of a free input together. The chat machine of the data
 // directory is the machine of a free input (the user writes when he wants to).
 module crew_harness.machine_run_machines
@@ -30,14 +30,14 @@ test "v217 the chat machine still loads and starts" {
     assert(m.initial().name == "Idle")
 }
 
-test "v217 a word of the free input is taken by its name" {
+test "v217 a signal of the free input is taken by its name" {
     ro r = run1(chat_free(), chat_free().initial(), said("hello"))
     assert(r.moved)
     assert(r.state.name == "Awaiting")
     assert(summary(r.orders) == "log:user_message(text=hello),send:agent:hello:30000,save")
 }
 
-test "v217 the word of a free input has no gate record" {
+test "v217 the signal of a free input has no gate record" {
     ro r = run1(chat_free(), chat_free().initial(), said("hello"))
     for o in r.orders {
         match o {
@@ -61,7 +61,7 @@ test "v217 the counter of the agent grows as before" {
     assert(datum_json(r1.state, "agent_attempt") == "1")
 }
 
-test "v217 a word with no row in the state is thrown away" {
+test "v217 a signal with no row in the state is thrown away" {
     ro m = chat_free()
     ro r1 = run1(m, m.initial(), said("hi"))
     ro r2 = run1(m, r1.state, said("second"))
@@ -69,19 +69,19 @@ test "v217 a word with no row in the state is thrown away" {
     assert(r2.state.name == "Awaiting")
 }
 
-test "v217 the hub asks the table about a word of a free input" {
+test "v217 the hub asks the table about a signal of a free input" {
     ro m = chat_free()
-    assert(m.accepts_word(m.initial(), "user_message"))
-    assert(m.accepts_word(m.initial(), "cancel"))
+    assert(m.accepts_signal(m.initial(), "user_message"))
+    assert(m.accepts_signal(m.initial(), "cancel"))
 }
 
-test "v217 the hub is told that a waiting state takes no word" {
+test "v217 the hub is told that a waiting state takes no signal" {
     ro m = chat_free()
     ro r1 = run1(m, m.initial(), said("hi"))
-    assert(!m.accepts_word(r1.state, "user_message"))
+    assert(!m.accepts_signal(r1.state, "user_message"))
 }
 
-test "v217 the stop word of a free input is a common signal" {
+test "v217 the stop signal of a free input is a common signal" {
     ro m = chat_free()
     ro r = run1(m, m.initial(), cancelled())
     assert(r.state.name == "Failed")
@@ -107,9 +107,9 @@ test "v217 the dialog machine has a free input too" {
     }
 }
 
-test "v217 the dialog machine closes by a word of the free input" {
+test "v217 the dialog machine closes by a signal of the free input" {
     ro m = dialog()
-    ro r = run1(m, m.initial(), word_in("close_session", ""))
+    ro r = run1(m, m.initial(), signal_in("close_session", ""))
     assert(r.state.name == "Closed")
 }
 
@@ -135,14 +135,14 @@ test "v217 the scenario of the counters that stay" {
     assert(run_ok(run_text(dialog(), text)))
 }
 
-test "v217 the scenario of the close word of the dialog" {
+test "v217 the scenario of the close signal of the dialog" {
     ro text = scenario_named("free-input-dialog-close.scenario.test.json")
     assert(text != "")
     assert(run_ok(run_text(dialog(), text)))
 }
 
-test "v217 the scenario of a word without a row" {
-    ro text = scenario_named("free-input-word-without-row.scenario.test.json")
+test "v217 the scenario of a signal without a row" {
+    ro text = scenario_named("free-input-signal-without-row.scenario.test.json")
     assert(text != "")
     assert(run_ok(run_text(chat(), text)))
 }

@@ -297,7 +297,7 @@ fn AcpClient mut @push(event Incoming) -> () {
 }
 
 fn AcpClient mut @note(text str) -> () {
-    @push(Incoming.word("acp_note", text))
+    @push(Incoming.signal("acp_note", text))
 }
 
 fn AcpClient mut @refuse(request str, code FailCode) -> () {
