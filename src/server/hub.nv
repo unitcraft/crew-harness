@@ -17,7 +17,7 @@
 // told to the page as a synthetic `error` event, with an id of its own ("srv-<n>"); it is not kept.
 module crew_harness.server
 
-import alula.engine.{Engine, Incoming, EventKind, Journal, Store, Link, start_engine, resume_engine, decode_snapshot}
+import alula.engine.{Engine, Incoming, EventKind, Journal, Store, Link, PartyRequest, start_engine, resume_engine, decode_snapshot}
 import crew_harness.product_machines.{dialog_machine_text}
 import alula.machine_run.{AlulaMachine, AlulaState}
 import crew_harness.acp.{AcpConfig, AcpClient, open_client, acp_link, page_event}
@@ -300,10 +300,12 @@ export fn Hub mut @release(conn int) -> () {
     @conns = rest
 }
 
-fn Hub @open_config(s Dialog) -> Option[AcpConfig] {
-    match @settings.agent(s.agent) {
+fn Hub @open_config(s Dialog) -> Option[AcpConfig] => @open_config_for(s.agent, s.id)
+
+fn Hub @open_config_for(agent str, id str) -> Option[AcpConfig] {
+    match @settings.agent(agent) {
         Some(spec) => {
-            ro inbox = match session_path(@settings.data_dir, s.id, "inbox") {
+            ro inbox = match session_path(@settings.data_dir, id, "inbox") {
                 Some(p) => p.display()
                 None => ""
             }
@@ -404,6 +406,13 @@ fn Hub mut @resume_session(id str) Proc Detach Time -> () {
                         None => ()
                     }
                 }
+                // the family changed in the window (task 192): the agent of the session is the last one it was handed to
+                if e.name == "agent_switched" && e.kind == EventKind.Input {
+                    match jobject(e.input) {
+                        Some(change) => { if jtext(change, "to").byte_len() > 0 { s.agent = jtext(change, "to") } }
+                        None => ()
+                    }
+                }
                 match line_of(s, e) {
                     Some(line) => s.lines.push(line)
                     None => ()
@@ -498,6 +507,81 @@ fn Hub mut @decide(trace str, request str, decision str) Proc Detach Time -> () 
     }
 }
 
+fn switched_text(from str, to str, shown int, total int, cut bool) -> str {
+    mut o = JsonObject.new()
+    jput(o, "from", JsonValue.str(from))
+    jput(o, "to", JsonValue.str(to))
+    jput(o, "shown", JsonValue.int(shown))
+    jput(o, "total", JsonValue.int(total))
+    jput(o, "cut", JsonValue.int(if cut { 1 } else { 0 }))
+    JsonValue.object(o).to_str()
+}
+
+fn transfer_request(id str, trace str, step int, text str) -> PartyRequest[str] => {
+    id, attempt: 1, party: "agent", input: text, idle_term: 0, trace, step
+}
+
+fn send_transfer(mut s Dialog, request PartyRequest[str]) -> () {
+    with Link = acp_link(s.clients[0]) {
+        Link.send(request)
+    }
+}
+
+// The owner changed the family in the window (task 192): the same session, the same journal, another agent. The new agent is started
+// first (a failure leaves the old one), then the old one is closed and the new one gets the whole protocol of the conversation as
+// a turn of its own: it is not a turn of the engine, so the feed does not show it, and what the agent answers to it is discarded.
+fn Hub mut @switch_agent(trace str, agent str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    mut s = @sessions[at]
+    if agent == s.agent { return }
+    match @settings.agent(agent) {
+        None => {
+            @tell_error(0, trace, s.engine.step_number(), "", "unknown agent: ${agent}")
+            return
+        }
+        Some(spec) => ()
+    }
+    if s.clients.len() > 0 && !@takes_message_at(at) { @cancel(trace) }
+    if !@takes_message_at(at) {
+        @tell_error(0, trace, s.engine.step_number(), "", "the turn is still open: the agent is not changed, try again in a moment")
+        return
+    }
+    ro config = match @open_config_for(agent, s.id) {
+        Some(c) => c
+        None => {
+            @tell_error(0, trace, s.engine.step_number(), "", "the agent ${agent} is not configured")
+            return
+        }
+    }
+    match open_client(config) {
+        Err(reason) => {
+            @say_log("the agent of ${trace} cannot be changed to ${agent}: ${reason}")
+            @tell_error(0, trace, s.engine.step_number(), "", "the agent ${agent} cannot be started: ${reason}; the session stays with ${s.agent}")
+        }
+        Ok(client) => {
+            ro from = s.agent
+            ro transfer = build_transfer(s.lines, from, TRANSFER_LIMIT)
+            if s.clients.len() > 0 { s.clients[0].close() }
+            s.clients = []AcpClient.new()
+            s.clients.push(client)
+            s.agent = agent
+            s.announced = false
+            s.model_announced = false
+            s.slow_told = false
+            s.started_at = now_millis()
+            accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("agent_switched", switched_text(from, agent, transfer.shown, transfer.total, transfer.cut)))
+            @sessions[at] = s
+            @drain(at)
+            if transfer.total > 0 {
+                @serial += 1
+                send_transfer(s, transfer_request("transfer-${@serial}", trace, s.engine.step_number(), transfer.text))
+            }
+            @say_log("the session ${trace} goes on with ${agent} (was ${from}): ${transfer.shown} of ${transfer.total} messages whole")
+        }
+    }
+}
+
 // The owner chose a model, an effort or a mode (task 192): the agent is asked; the answer comes back as `agent_model`.
 fn Hub mut @choose(trace str, setting str, value str) Proc Detach Time -> () {
     ro at = @find(trace)
@@ -537,6 +621,8 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
         @cancel(trace)
     } else if kind == "permission_decision" {
         @decide(trace, jtext(input, "request"), jtext(input, "decision"))
+    } else if kind == "session_agent" {
+        @switch_agent(trace, jtext(input, "agent"))
     } else if kind == "session_setting" {
         @choose(trace, jtext(input, "setting"), jtext(input, "value"))
     } else {

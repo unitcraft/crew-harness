@@ -127,6 +127,9 @@ const handlers = {
     const open = session ? session.messages.filter((m) => m.role === 'agent' && m.status === 'streaming').at(-1) : undefined;
     send('cancel', trace, nextStep(model, trace), open ? { turn: open.turn } : {});
   },
+  onSwitchAgent(trace, agent) {
+    send('session_agent', trace, nextStep(model, trace), { agent });
+  },
   onChoose(trace, setting, value) {
     send('session_setting', trace, nextStep(model, trace), { setting, value });
   },

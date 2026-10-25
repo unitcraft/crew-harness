@@ -110,12 +110,18 @@ export const S = Object.freeze({
   // ---- поле ввода
   'composer.placeholder': 'Напишите сообщение…',
   'composer.hint': 'Enter — отправить, Shift+Enter — новая строка',
+  'menu.agent': 'Агент',
   'menu.mode': 'Режим',
   'menu.effort': 'Усилие',
   'menu.more_models': 'Другие модели',
   'menu.back': 'Назад',
   'menu.search': 'Найти модель…',
   'menu.none': 'Ничего не найдено',
+  'chat.switched': 'Разговор продолжает {agent}: протокол передан целиком.',
+  'chat.switched_cut': 'Разговор длиннее лимита: передано последних {shown} сообщений целиком из {total}; ранее — только заголовки.',
+  'voice.label': 'Голосовой ввод',
+  'voice.hold': 'Нажмите и удерживайте для записи',
+  'voice.unavailable': 'Голосовой ввод недоступен в этом браузере: {reason}',
   'composer.working': 'Агент работает',
   'composer.ring': 'Контекст занят на {n} %',
 

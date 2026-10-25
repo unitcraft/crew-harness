@@ -572,6 +572,7 @@ pre code { font: inherit; }
 .menu-list { max-height: min(60vh, 420px); overflow-y: auto; }
 .menu-search { display: block; width: 100%; margin: 0 0 6px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: inherit; font: inherit; }
 .menu-search[hidden] { display: none; }
+.item-switch { font-size: 14px; color: var(--fg-muted); }
 .menu-head { padding: 6px 10px 4px; color: var(--fg-muted); font-size: 12px; }
 .menu-sep { height: 1px; margin: 5px 4px; background: var(--border); }
 .menu-item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; padding: 5px 10px; border: 0; border-radius: 8px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
@@ -788,6 +789,13 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
 .send-btn, .cancel-btn { justify-content: center; width: 32px; min-height: 32px; height: 32px; padding: 0; border-radius: 50%; }
 .send-btn:disabled { background: var(--surface-2); border-color: var(--surface-2); color: var(--fg-muted); filter: none; opacity: 1; }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.mic-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; min-height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--fg-muted); touch-action: none; }
+.mic-btn .icon { width: 18px; height: 18px; }
+.mic-btn[data-state="recording"] { background: var(--danger-soft); color: var(--danger); animation: pulse 1.1s ease-in-out infinite; }
+.mic-btn[data-state="unavailable"] { opacity: .45; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--danger) 18%, transparent); } }
+.voice-hint { margin: 6px 14px 0; font-size: 12.5px; color: var(--fg-muted); }
+.voice-hint[hidden] { display: none; }
 .composer-status .ring-box { width: 22px; height: 22px; }
 .ring-box[hidden] { display: none; }
 .composer-status .ring { width: 18px; height: 18px; }

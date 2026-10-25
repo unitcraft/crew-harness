@@ -171,6 +171,7 @@ export function createMockServer({ journal, now = Date.now } = {}) {
   const lastStep = {};
   const pending = {};
   const picks = {};
+  const family = {};
   const used = {};
   let serial = 0;
 
@@ -257,6 +258,10 @@ export function createMockServer({ journal, now = Date.now } = {}) {
           });
         }
       }
+    } else if (event.kind === 'session_agent') {
+      const from = family[trace] || 'opencode';
+      family[trace] = String(input.agent);
+      mint(entries, trace, CHUNK_FIRST_MS, 'agent_switched', { from, to: String(input.agent), shown: 4, total: 4, cut: 0 });
     } else if (event.kind === 'session_setting') {
       const key = { mode: 'mode', model: 'model_id', effort: 'effort' }[input.setting];
       if (key) {

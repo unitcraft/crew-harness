@@ -1,0 +1,59 @@
+// transfer_test.nv - task 192: the protocol of a conversation that is handed to another agent (`transfer.nv`): whole messages, in order,
+// the tools as one line, a limit that cuts between messages and never inside one.
+module crew_harness.server
+
+fn tl(kind str, input str) -> str => "{\"id\":\"x\",\"trace\":\"s\",\"step\":1,\"kind\":\"${kind}\",\"input\":${input},\"time\":0}"
+
+fn sample() -> []str => [
+    tl("session_created", "{\"name\":\"N\",\"agent\":\"opencode\"}"),
+    tl("user_message", "{\"turn\":\"t1\",\"text\":\"first question\\nwith a second line\"}"),
+    tl("agent_chunk", "{\"turn\":\"t1\",\"text\":\"The answer \"}"),
+    tl("tool_call", "{\"turn\":\"t1\",\"id\":\"c1\",\"title\":\"read a.txt\",\"kind\":\"read\",\"status\":\"in_progress\"}"),
+    tl("tool_call_update", "{\"id\":\"c1\",\"status\":\"completed\",\"detail\":\"12 lines\"}"),
+    tl("agent_chunk", "{\"turn\":\"t1\",\"text\":\"goes on.\"}"),
+    tl("agent_done", "{\"turn\":\"t1\"}"),
+    tl("user_message", "{\"turn\":\"t2\",\"text\":\"second question\"}")
+]
+
+test "transfer: the first line says whose conversation it is, the messages come whole and in order" {
+    ro r = build_transfer(sample(), "opencode", 400000)
+    assert(r.text.starts_with("Это продолжение разговора, ранее вёл opencode; ниже протокол; продолжай с последнего сообщения пользователя, ничего не отвечай на протокол"))
+    assert(r.text.contains("first question\nwith a second line"))
+    assert(r.text.contains("The answer"))
+    assert(r.text.contains("goes on."))
+    assert(r.text.contains("read a.txt"))
+    assert(r.text.contains("completed"))
+    assert(r.text.contains("second question"))
+    assert(r.shown == 4)
+    assert(r.total == 4)
+    assert(!r.cut)
+    ro first = r.text.find("first question") ?? -1
+    ro answer = r.text.find("The answer") ?? -1
+    ro second = r.text.find("second question") ?? -1
+    assert(first >= 0 && first < answer && answer < second)
+}
+
+test "transfer: over the limit it goes from the end by whole messages, the earlier ones are headers only" {
+    mut lines = []str.new()
+    mut n = 0
+    while n < 20 {
+        lines.push(tl("user_message", "{\"turn\":\"t${n}\",\"text\":\"question number ${n} ........................................................................................................................\"}"))
+        lines.push(tl("agent_chunk", "{\"turn\":\"t${n}\",\"text\":\"answer number ${n} ........................................................................................................................\"}"))
+        n += 1
+    }
+    ro r = build_transfer(lines, "kimi", 1500)
+    assert(r.cut)
+    assert(r.total == 40)
+    assert(r.shown > 0 && r.shown < 40)
+    // the last message is whole, the first one is only a header (a short preview), never a half of a message
+    assert(r.text.contains("answer number 19 ........................................................................................................................"))
+    assert(r.text.contains("question number 0"))
+    assert(!r.text.contains("question number 0 ........................................................................................................................"))
+}
+
+test "transfer: one message over the limit is still given whole" {
+    ro big = "{\"turn\":\"t1\",\"text\":\"${"x".repeat(2000)}\"}"
+    ro r = build_transfer([tl("user_message", big)], "kimi", 100)
+    assert(r.text.contains("x".repeat(2000)))
+    assert(r.shown == 1)
+}

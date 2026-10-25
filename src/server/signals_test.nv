@@ -143,8 +143,8 @@ fn sg_known() -> []CodeSignal {
 
 // ----- the dictionary and the table -----
 
-test "sg the dictionary lists four signals of the code and the signals of the agent" {
-    assert(signals_given_by_code().len() == 4)
+test "sg the dictionary lists five signals of the code and the signals of the agent" {
+    assert(signals_given_by_code().len() == 5)
     assert(signals_from_agent().len() >= 8)
 }
 

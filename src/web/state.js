@@ -22,7 +22,7 @@ export const KINDS = Object.freeze([
   // задача 094: рабочие события хода (соответствуют ACP session/update)
   'usage_update', 'tool_call', 'tool_call_update', 'output_file', 'file_diff',
   'background_task', 'background_task_update',
-  'session_model',
+  'session_model', 'agent_switched',
 ]);
 
 export const TOOL_KINDS = Object.freeze(['read', 'edit', 'delete', 'move', 'search', 'execute', 'think', 'fetch', 'other']);
@@ -146,6 +146,18 @@ function apply(session, event) {
     case 'session_model': {
       if (event.step <= session.modelStep) return session;
       return { ...session, model: str(input.model), options: optionsOf(input), modelStep: event.step };
+    }
+    case 'agent_switched': {
+      // смена семьи в окне (задача 192): тот же разговор, другой агент; строка в ленте говорит, что и как передано
+      const key = `sw:${event.id}`;
+      if (session.messages.some((m) => m.key === key)) return session;
+      const total = Number.isInteger(input.total) ? input.total : 0;
+      const shown = Number.isInteger(input.shown) ? input.shown : total;
+      return {
+        ...session,
+        agent: str(input.to, session.agent),
+        messages: [...session.messages, { role: 'switch', key, from: str(input.from), to: str(input.to), shown, total, cut: input.cut === 1 }],
+      };
     }
     case 'user_message': {
       const userTurn = str(input.turn, event.id);

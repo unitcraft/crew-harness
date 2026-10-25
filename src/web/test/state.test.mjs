@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  KINDS, initialModel, reduce, isEvent, sessionList, nextStep, makeEvent, splitBlocks,
+  KINDS, initialModel, reduce, isEvent, sessionList, nextStep, makeEvent, splitBlocks, timeline,
 } from '../state.js';
 import { INITIAL_JOURNAL } from '../mock.js';
 
@@ -90,6 +90,17 @@ test('выбор модели, усилия и режима: берётся из
     ev('session_model', { model: 'Plain' }, { trace: 'a', step: 1, id: 'a-plain' }),
   ]).sessions.a.options;
   assert.deepEqual([plain.models, plain.efforts, plain.modes], [[], [], []]);
+});
+
+test('смена семьи: агент сессии меняется, в ленте одна строка о переносе, повтор того же события ничего не добавляет', () => {
+  const sw = ev('agent_switched', { from: 'opencode', to: 'claude', shown: 3, total: 9, cut: 1 }, { trace: 'a', step: 5, id: 'a-sw' });
+  const m = run([ev('session_created', { name: 'A', agent: 'opencode' }, { trace: 'a', step: 0 }), sw, sw]);
+  const s = m.sessions.a;
+  assert.equal(s.agent, 'claude');
+  const rows = s.messages.filter((x) => x.role === 'switch');
+  assert.equal(rows.length, 1);
+  assert.deepEqual([rows[0].from, rows[0].to, rows[0].shown, rows[0].total, rows[0].cut], ['opencode', 'claude', 3, 9, true]);
+  assert.equal(timeline(s).at(-1).type, 'switch');
 });
 
 test('потоковые куски склеиваются в порядке номеров шагов, а не прибытия', () => {

@@ -10,6 +10,7 @@
 //     ставится свойством --fill / --ring через CSSOM, а не атрибутом style (его запрещает CSP).
 
 import { t } from './strings.js';
+import { createDictation, speechCtor } from './voice.js';
 import {
   STATE_KEYS, sessionList, splitBlocks, filterSessions, groupSessions, effectivePins, timeline, paragraphs, inlineSpans,
   workSummary, filterModels, groupModels, usagePercent, usageLevel, tokenParts, durationLabel, agoParts, fileParts, taskSummary,
@@ -79,6 +80,7 @@ function icon(doc, id, extra = '') {
  *   handlers: onSelect(trace), onBack(), onNewToggle(open, project?), onCreate({agent, name, project}),
  *             onSend(trace, text) -> bool, onCancel(trace), onDecide(trace, request, decision),
  *             onPin(trace, pinned), onTheme(), onCopy(text),
+ *             onSwitchAgent(trace, agent) — продолжить этот разговор на другом агенте,
  *             onChoose(trace, setting, value) — выбор режима, модели или усилия (setting: 'mode' | 'model' | 'effort')
  */
 export function createView(doc, refs, deps) {
@@ -240,10 +242,12 @@ export function createView(doc, refs, deps) {
     id: 'composer-input', rows: 1, placeholder: t('composer.placeholder'), 'aria-label': t('chat.input_label'),
   });
   // Кнопки круглые, без видимого текста: имя — для чтения с экрана, подсказка о клавишах — в title (задача 192).
+  const micButton = h(doc, 'button', { type: 'button', class: 'mic-btn', title: t('voice.hold'), 'aria-label': t('voice.label'), 'data-state': 'idle' }, icon(doc, 'i-mic'));
+  const voiceHint = h(doc, 'p', { class: 'voice-hint', role: 'status', hidden: true });
   const cancelButton = h(doc, 'button', { type: 'button', class: 'cancel-btn', hidden: true, title: t('chat.cancel') }, icon(doc, 'i-stop'), h(doc, 'span', { class: 'sr-only', text: t('chat.cancel') }));
   const sendButton = h(doc, 'button', { type: 'button', class: 'send-btn', title: t('composer.hint'), disabled: true }, icon(doc, 'i-send'), h(doc, 'span', { class: 'sr-only', text: t('chat.send') }));
   const box = h(doc, 'div', { class: 'box' }, input,
-    h(doc, 'div', { class: 'box-row' }, cancelButton, sendButton));
+    h(doc, 'div', { class: 'box-row' }, micButton, cancelButton, sendButton));
 
   const ringFill = svgNode(doc, 'circle', { class: 'ring-fill', cx: 12, cy: 12, r: 9, pathLength: 100 });
   const ring = svgNode(doc, 'svg', { class: 'ring', viewBox: '0 0 24 24', role: 'img' });
@@ -252,17 +256,53 @@ export function createView(doc, refs, deps) {
   ringBox.append(ring);
 
   // строка статуса под полем: слева режим (когда агент его сообщает), справа модель и спиннер хода
+  // Голосовой ввод (задача 192): нажать и держать — пишет, отпустить — стоп; короткое нажатие и Пробел/Enter — переключатель.
+  const HOLD_MS = 400;
+  let pressedAt = 0;
+  let pressing = false;
+  let ignoreUp = false;
+  const dictation = createDictation({
+    Ctor: speechCtor(win),
+    field: input,
+    lang: 'ru-RU',
+    onChange() { fitInput(); if (currentTrace) drafts.set(currentTrace, input.value); },
+    onStatus(s) {
+      micButton.dataset.state = s.state;
+      voiceHint.hidden = s.state !== 'unavailable';
+      voiceHint.textContent = s.state === 'unavailable' ? t('voice.unavailable', { reason: s.reason }) : '';
+    },
+  });
+  if (!speechCtor(win)) micButton.dataset.state = 'unavailable';
+  micButton.addEventListener('pointerdown', (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    e.preventDefault();
+    pressedAt = now();
+    pressing = true;
+    if (dictation.active()) { dictation.stop(); ignoreUp = true; } else { ignoreUp = false; dictation.start(); }
+  });
+  const releaseMic = () => {
+    if (!pressing) return;
+    pressing = false;
+    if (!ignoreUp && dictation.active() && now() - pressedAt >= HOLD_MS) dictation.stop();
+  };
+  micButton.addEventListener('pointerup', releaseMic);
+  micButton.addEventListener('pointercancel', releaseMic);
+  micButton.addEventListener('pointerleave', releaseMic);
+  micButton.addEventListener('click', (e) => { if (e.detail === 0) dictation.toggle(); });
+
   const statusModel = h(doc, 'span', { class: 'status-model' });
+  const familyButton = h(doc, 'button', { type: 'button', class: 'status-btn', hidden: true, 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
   const modeButton = h(doc, 'button', { type: 'button', class: 'status-btn', hidden: true, 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
   const modelButton = h(doc, 'button', { type: 'button', class: 'status-btn', hidden: true, 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
   const spinner = h(doc, 'span', { class: 'spinner', role: 'img', 'aria-label': t('composer.working'), hidden: true });
   const menu = h(doc, 'div', { class: 'menu', role: 'menu', hidden: true });
-  const status = h(doc, 'div', { class: 'composer-status', hidden: true }, modeButton, h(doc, 'span', { class: 'grow' }), statusModel, modelButton, ringBox, spinner, menu);
+  const status = h(doc, 'div', { class: 'composer-status', hidden: true }, familyButton, modeButton, h(doc, 'span', { class: 'grow' }), statusModel, modelButton, ringBox, spinner, menu);
 
   // Меню выбора режима, модели и усилия (задача 192): показывает только то, что агент отдал по ACP.
   const MENU_MODELS = 4;
   let menuKind = null; // null | 'mode' | 'model' | 'more' | 'effort'
   let options = null;
+  let currentAgent = '';
   let menuQuery = '';
   let menuSig = '';
   const menuSearch = h(doc, 'input', { type: 'search', class: 'menu-search', placeholder: t('menu.search'), 'aria-label': t('menu.search'), autocomplete: 'off', hidden: true });
@@ -275,6 +315,7 @@ export function createView(doc, refs, deps) {
     menu.hidden = true;
     modeButton.setAttribute('aria-expanded', 'false');
     modelButton.setAttribute('aria-expanded', 'false');
+    familyButton.setAttribute('aria-expanded', 'false');
   }
 
   function choose(setting, value) {
@@ -293,6 +334,16 @@ export function createView(doc, refs, deps) {
 
   function renderMenu() {
     menuList.replaceChildren();
+    if (menuKind === 'agent') {
+      menuSearch.hidden = true;
+      menu.dataset.side = 'left';
+      menuList.append(h(doc, 'div', { class: 'menu-head', text: t('menu.agent') }), ...agents.map((a, i) => menuRow({
+        name: agentLabel(a.id), checked: a.id === currentAgent, number: i < 9 ? i + 1 : 0,
+        onPick: () => { if (currentTrace && a.id !== currentAgent) handlers.onSwitchAgent(currentTrace, a.id); closeMenu(); },
+      })));
+      menu.hidden = false;
+      return;
+    }
     if (!options || !menuKind) { menu.hidden = true; return; }
     const rows = [];
     const searchable = menuKind === 'model' || menuKind === 'more';
@@ -344,8 +395,9 @@ export function createView(doc, refs, deps) {
     menuQuery = '';
     menuSearch.value = '';
     menuSig = JSON.stringify(options);
+    familyButton.setAttribute('aria-expanded', kind === 'agent' ? 'true' : 'false');
     modeButton.setAttribute('aria-expanded', kind === 'mode' ? 'true' : 'false');
-    modelButton.setAttribute('aria-expanded', kind === 'mode' ? 'false' : 'true');
+    modelButton.setAttribute('aria-expanded', kind === 'mode' || kind === 'agent' ? 'false' : 'true');
     renderMenu();
     if (kind === 'model' || kind === 'more') menuSearch.focus();
     else menu.querySelector('.menu-item')?.focus();
@@ -369,6 +421,7 @@ export function createView(doc, refs, deps) {
   });
 
   const toggleMenu = (kind) => { if (menuKind) closeMenu(); else openMenu(kind); };
+  familyButton.addEventListener('click', () => toggleMenu('agent'));
   modeButton.addEventListener('click', () => toggleMenu('mode'));
   modelButton.addEventListener('click', () => toggleMenu('model'));
   // номера строк — горячие клавиши; у строк без номера (Назад, подменю) их нет
@@ -385,6 +438,7 @@ export function createView(doc, refs, deps) {
 
   const composer = h(doc, 'div', { class: 'composer' },
     box,
+    voiceHint,
     status);
 
   const chat = h(doc, 'section', { class: 'chat', hidden: true }, log, composer);
@@ -559,6 +613,11 @@ export function createView(doc, refs, deps) {
       case 'diffs':
         fillDiffs(entry, item);
         break;
+      case 'switch': {
+        const text = t('chat.switched', { agent: agentLabel(item.to) });
+        node.replaceChildren(h(doc, 'span', { text: item.cut ? `${text} ${t('chat.switched_cut', { shown: item.shown, total: item.total })}` : text }));
+        break;
+      }
       case 'note': {
         let text = t('chat.cancelled');
         if (item.tone === 'refused') text = item.reason ? t('chat.refused', { reason: item.reason }) : t('chat.refused_plain');
@@ -611,6 +670,9 @@ export function createView(doc, refs, deps) {
     cancelButton.hidden = !busy;
     sendButton.disabled = busy || input.value.trim().length === 0;
     options = session.options || null;
+    currentAgent = session.agent;
+    familyButton.hidden = agents.length < 2;
+    familyButton.replaceChildren(h(doc, 'span', { text: agentLabel(session.agent) }), icon(doc, 'i-chevron-down'));
     const hasModes = Boolean(options && options.modes.length > 0);
     const hasModels = Boolean(options && (options.models.length > 0 || options.efforts.length > 0));
     modeButton.hidden = !hasModes;
@@ -622,8 +684,9 @@ export function createView(doc, refs, deps) {
     statusModel.hidden = hasModels;
     statusModel.textContent = session.model || '';
     spinner.hidden = !busy;
-    status.hidden = !session.model && !busy && !hasModes && !hasModels && !session.usage;
-    if (menuKind && ((menuKind === 'mode' && !hasModes) || (menuKind !== 'mode' && !hasModels))) closeMenu();
+    status.hidden = familyButton.hidden && !session.model && !busy && !hasModes && !hasModels && !session.usage;
+    if (menuKind === 'agent') renderMenu();
+    else if (menuKind && ((menuKind === 'mode' && !hasModes) || (menuKind !== 'mode' && !hasModels))) closeMenu();
     else if (menuKind) {
       const sig = JSON.stringify(options);
       if (sig !== menuSig) renderMenu();

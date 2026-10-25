@@ -66,6 +66,7 @@ fn kit_settings(store str, name str, idle_ms int, pg PgConfig) -> ServerSettings
     mut agents = []AgentSpec.new()
     agents.push(kit_agent("opencode", "--ok", "${data_dir}/stream-active"))
     agents.push(kit_agent("broken", "--auth-error", ""))
+    agents.push(kit_agent("second", "--ok", ""))
     ServerSettings {
         port: 8099, data_dir, store, pg, agents, idle_term_ms: idle_ms,
         workdir: kit_repo_root().display(), web_dir: "src/web", hub_program: "", hub_args: []str.new()
@@ -554,6 +555,35 @@ export fn scenario_cancel(settings ServerSettings) Proc Detach Time Net Fs Os ->
     c.expect(answer_of(rig.lines_for(1), line_input(first_of(rig.lines_for(1), "user_message", 4), "turn")) == "Echo: after cancel", "the next turn is answered")
     c.expect(rig.hub.takes_message("s-cancel"), "the session is open")
     rig.shut()
+    c.report()
+}
+
+/// The family changes in the window (task 192): the same session, another agent; the protocol goes to it as a turn that the feed does not show.
+export fn scenario_switch_agent(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-sw", "{\"name\":\"Смена\",\"agent\":\"opencode\"}")
+    rig.page(1, "user_message", "s-sw", "{\"turn\":\"t1\",\"text\":\"before the change\"}")
+    c.expect(rig.until(KIT_DONE, 15000), "the first turn ends")
+    rig.page(1, "session_agent", "s-sw", "{\"agent\":\"nobody\"}")
+    c.expect(rig.until("unknown agent: nobody", 5000), "an agent nobody configured is refused")
+    rig.page(1, "session_agent", "s-sw", "{\"agent\":\"second\"}")
+    c.expect(rig.until("\"kind\":\"agent_switched\"", 15000), "the change is told to the page")
+    ro told = first_of(rig.lines_for(1), "agent_switched", 0)
+    c.expect(line_input(told, "to") == "second" && line_input(told, "from") == "opencode", "the change names both agents")
+    c.expect(rig.hub.session_ids().len() == 1, "no new session")
+    rig.page(1, "user_message", "s-sw", "{\"turn\":\"t2\",\"text\":\"after the change\"}")
+    c.expect(rig.until(KIT_DONE, 20000), "the next turn is answered by the new agent")
+    ro lines = rig.lines_for(1)
+    c.expect(answer_of(lines, line_input(first_of(lines, "user_message", 3), "turn")) == "Echo: after the change", "the next message goes to the new agent")
+    c.expect(kit_with(lines, "Это продолжение разговора") == 0, "the turn of the protocol is not shown")
+    ro before = rig.hub.page_lines("s-sw")
+    rig.shut()
+
+    mut again = rig_open(settings)
+    c.expect(kit_text(again.hub.page_lines("s-sw")) == kit_text(before), "the lines are the same after the restart")
+    again.shut()
     c.report()
 }
 

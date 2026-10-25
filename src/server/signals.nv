@@ -21,7 +21,8 @@ export fn signals_given_by_code() -> []CodeSignal => [
     cs("user_message", "input", "src/server/hub.nv: Hub.say", "content (text)", true),
     cs("cancel", "input", "src/server/hub.nv: Hub.cancel", "-", true),
     cs("permission_decision", "input", "src/server/hub.nv: Hub.decide", "request, decision (JSON text)", false),
-    cs("session_created", "input", "src/server/hub.nv: Hub.create", "name, agent, folder, project (JSON text)", false)
+    cs("session_created", "input", "src/server/hub.nv: Hub.create", "name, agent, folder, project (JSON text)", false),
+    cs("agent_switched", "input", "src/server/hub.nv: Hub.switch_agent", "from, to, shown, total, cut (JSON text)", false)
 ]
 
 /// The signals that come from the agent (the client of ACP) and from the engine (the term).

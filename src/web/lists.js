@@ -128,6 +128,8 @@ export function timeline(session) {
   for (const m of session.messages) {
     if (m.role === 'user') {
       items.push({ type: 'user', key: m.key, text: m.text, turn: m.turn });
+    } else if (m.role === 'switch') {
+      items.push({ type: 'switch', key: m.key, from: m.from, to: m.to, shown: m.shown, total: m.total, cut: m.cut });
     } else if (m.role === 'agent') {
       const own = rows.filter((r) => r.turn === m.turn);
       own.forEach((r) => emitted.add(r.key));
