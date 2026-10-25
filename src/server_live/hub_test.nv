@@ -2,7 +2,7 @@
 // The same scenarios run over PostgreSQL in src/server_pg: the results must be the same.
 module crew_harness.server_live
 
-import crew_harness.server.{kit_files, scenario_chat, scenario_stream_burst, scenario_permission, scenario_cancel, scenario_switch_agent, scenario_restart_idle, scenario_migrate_flat, scenario_restart_open, scenario_crash, scenario_two_pages, scenario_rejects, scenario_many, scenario_broken_agent, scenario_renamed_table, scenario_images}
+import crew_harness.server.{kit_files, scenario_chat, scenario_stream_burst, scenario_permission, scenario_question, scenario_question_off, scenario_cancel, scenario_switch_agent, scenario_restart_idle, scenario_restart_open, scenario_crash, scenario_two_pages, scenario_rejects, scenario_many, scenario_broken_agent, scenario_renamed_table, scenario_migrate_flat, scenario_images}
 
 fn clean(report str) -> () {
     if report.byte_len() > 0 { println("NOT AS IT MUST BE: ${report}") }
@@ -20,6 +20,16 @@ test "files: burst chunks flush before the end event" {
 
 test "files: permission asked, allowed, denied" {
     clean(scenario_permission(kit_files("perm", 30000)))
+}
+
+test "files: a question with a choice is asked, answered, skipped, withdrawn" {
+    clean(scenario_question(kit_files("ask", 30000)))
+}
+
+test "files: with ask_form off the agent is not told about forms" {
+    mut settings = kit_files("askoff", 30000)
+    settings.ask_form = false
+    clean(scenario_question_off(settings))
 }
 
 test "files: a cancel keeps the session open" {

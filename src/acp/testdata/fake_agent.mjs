@@ -1,5 +1,6 @@
 // A fake ACP agent for the tests of src/acp (task 095): JSON-RPC 2.0 over stdio, one message per line.
-//   node fake_agent.mjs [--no-initialize] [--no-session] [--auth-error] [--live]
+//   node fake_agent.mjs [--no-initialize] [--no-session] [--auth-error] [--live] [--ask]
+// `--ask`: the agent says in its capabilities that it takes an HTTP MCP server (mcpCapabilities.http) and keeps the servers of session/new.
 // Answers `initialize` and `session/new`; what a `session/prompt` does depends on the first word of the prompt text:
 //   (anything else)  an echo in three chunks, then end_turn
 //   tools            unknown update, tool_call, tool_call_update, plan, usage_update, thought, a chunk, end_turn
@@ -16,6 +17,10 @@
 //   (pictures)       a prompt with `image` blocks is echoed with a tail "[blocks:text,image; image/png:<length of data>:<first 8 characters>]"
 //   caps             a chunk with the clientCapabilities that came with initialize
 //   cancelcount      a chunk with the number of session/cancel notifications received so far
+//   ask              asks the client a question by `elicitation/create` (a form, as claude-agent-acp writes it) when the client said at initialize
+//                    that it shows forms; the chunk tells the answer ("ask: no-form" when it did not). Two questions with `ask2`.
+//   askmcp           (with `--ask`) calls the tool ask_user_question of the MCP server that came in session/new: initialize, tools/list, tools/call;
+//                    the chunk tells the result ("askmcp: no-server" when the client gave no server)
 //   burst            256 chunks over a marked 512ms stream, then end_turn (server pump fairness probe)
 // The process writes `fake-agent: ready` to stderr when it starts.
 import { createInterface } from "node:readline";
@@ -33,6 +38,8 @@ const noInitialize = args.includes("--no-initialize");
 const takesImages = args.includes("--images");
 const noSession = args.includes("--no-session");
 const authError = args.includes("--auth-error");
+const askFlag = args.includes("--ask");
+let mcpServers = [];
 const streamMarkerArg = args.find((arg) => arg.startsWith("--stream-marker="));
 const streamMarker = streamMarkerArg ? streamMarkerArg.slice("--stream-marker=".length) : "";
 
@@ -106,6 +113,61 @@ async function prompt(id, params) {
       const told = outcome ? (outcome.outcome === "selected" ? "selected:" + outcome.optionId : outcome.outcome) : "no-answer";
       chunk("permission: " + told);
       return respond(id, { stopReason: told === "cancelled" ? "cancelled" : "end_turn" });
+    }
+    case "ask":
+    case "ask2": {
+      if (!(clientCaps && clientCaps.elicitation && clientCaps.elicitation.form)) {
+        chunk("ask: no-form");
+        return respond(id, { stopReason: "end_turn" });
+      }
+      const properties = {
+        question_0: { type: "string", title: "Формат", oneOf: [{ const: "JSON", title: "JSON", description: "машинный" }, { const: "YAML", title: "YAML" }] },
+        question_0_custom: { type: "string", title: "Other" },
+      };
+      let message = "Какой формат?";
+      if (word === "ask2") {
+        message = "Please answer the following questions.";
+        properties.question_0.description = "Какой формат?";
+        properties.question_1 = { type: "array", title: "Части", description: "Что делать?", items: { anyOf: [{ const: "A", title: "A" }, { const: "B", title: "B" }] } };
+        properties.question_1_custom = { type: "string", title: "Other" };
+      }
+      const answer = await callClient("elicitation/create", {
+        mode: "form",
+        sessionId: SESSION,
+        toolCallId: "call_q1",
+        message,
+        requestedSchema: { type: "object", properties },
+      });
+      const told = answer && answer.result ? JSON.stringify(answer.result) : "no-answer";
+      chunk("ask: " + told);
+      return respond(id, { stopReason: answer && answer.result && answer.result.action === "cancel" ? "cancelled" : "end_turn" });
+    }
+    case "askmcp": {
+      if (mcpServers.length === 0) {
+        chunk("askmcp: no-server");
+        return respond(id, { stopReason: "end_turn" });
+      }
+      const server = mcpServers[0];
+      const headers = { "content-type": "application/json", accept: "application/json, text/event-stream" };
+      for (const h of server.headers || []) headers[h.name] = h.value;
+      const post = async (body) => {
+        const res = await fetch(server.url, { method: "POST", headers, body: JSON.stringify(body) });
+        const text = await res.text();
+        return { status: res.status, body: text ? JSON.parse(text) : null };
+      };
+      try {
+      const init = await post({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "fake-agent", version: "0" } } });
+      await post({ jsonrpc: "2.0", method: "notifications/initialized" });
+      const tools = await post({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+      const names = ((tools.body && tools.body.result && tools.body.result.tools) || []).map((t) => t.name).join(",");
+      const called = await post({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "ask_user_question", arguments: { questions: [{ question: "Какой формат?", header: "Формат", multiSelect: false, options: [{ label: "JSON", description: "машинный" }, { label: "YAML", description: "" }] }] } } });
+      const content = called.body && called.body.result && called.body.result.content;
+      const textOut = content && content[0] ? content[0].text : JSON.stringify(called.body);
+      chunk("askmcp: " + init.status + " " + names + " | " + textOut);
+      } catch (e) {
+        chunk("askmcp: error " + (e && e.message));
+      }
+      return respond(id, { stopReason: "end_turn" });
     }
     case "fs": {
       const a = await callClient("fs/read_text_file", { sessionId: SESSION, path: "C:/work/x.txt" });
@@ -228,12 +290,13 @@ function handle(line) {
       if (authError) return write({ jsonrpc: "2.0", id: msg.id, error: { code: -32000, message: "Authentication required" } });
       return respond(msg.id, {
         protocolVersion: 1,
-        agentCapabilities: { loadSession: false, promptCapabilities: { image: takesImages, audio: false, embeddedContext: false } },
+        agentCapabilities: { loadSession: false, promptCapabilities: { image: takesImages, audio: false, embeddedContext: false }, ...(askFlag ? { mcpCapabilities: { http: true, sse: false } } : {}) },
         agentInfo: { name: "fake-agent", title: "Fake ACP agent", version: "0.0.1" },
         authMethods: [],
       });
     case "session/new":
       if (noSession) return;
+      mcpServers = (msg.params && msg.params.mcpServers) || [];
       return respond(msg.id, { sessionId: SESSION, modes: { currentModeId: "default", availableModes: [{ id: "default", name: "Default", description: "Asks before changes" }, { id: "plan", name: "Plan", description: "Plans first" }] }, configOptions: [{ id: "model", category: "model", type: "select", currentValue: "fake-model", options: [{ value: "fake-model", name: "Fake Model" }] }] });
     case "session/set_mode":
       return respond(msg.id, {});

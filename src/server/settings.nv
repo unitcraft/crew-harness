@@ -3,11 +3,12 @@
 // The file is a JSON object; every key is optional (see `src/server/server.example.json`):
 //   port, data_dir, store ("files" or "pg"), pg {host, port, database, user, password}, agents [{id, label, program, args}],
 //   idle_term_seconds, workdir, web_dir, machines_dir (the folder of the machines of the product, task 248), hub {program, args}, acp_trace (true by default: the raw exchange with the agent is written to
-//   <data_dir>/<session>/acp.jsonl), stt {url, language} (the local whisper server the front sends the voice to: `/api/stt`),
+//   <data_dir>/<session>/acp.jsonl), ask_form (true by default: the agents may ask the owner a question with a choice; see src/acp/README.md,
+//   "Questions of the agent"), ask_timeout_seconds (1800: how long the tool `ask_user_question` waits for the owner), agents[].ask (native, mcp, off), stt {url, language} (the local whisper server the front sends the voice to: `/api/stt`),
 //   max_image_bytes (the largest picture of a message, 10 MB by default; env CREW_SERVER_MAX_IMAGE_BYTES)
 // The environment is over the file, key by key:
 //   CREW_SERVER_PORT, CREW_SERVER_STORE, CREW_SERVER_DATA_DIR, CREW_SERVER_AGENT (the command of the one agent "opencode",
-//   words separated by spaces), CREW_SERVER_WORKDIR, CREW_SERVER_WEB_DIR, CREW_SERVER_MACHINES_DIR, CREW_SERVER_ACP_TRACE (true/false), CREW_SERVER_STT_URL, CREW_SERVER_STT_LANGUAGE, CREW_SERVER_IDLE_SECONDS, CREW_SERVER_HUB (the command
+//   words separated by spaces), CREW_SERVER_WORKDIR, CREW_SERVER_WEB_DIR, CREW_SERVER_ACP_TRACE (true/false), CREW_SERVER_ASK_FORM (true/false), CREW_SERVER_ASK_TIMEOUT_SECONDS, CREW_SERVER_STT_URL, CREW_SERVER_STT_LANGUAGE, CREW_SERVER_IDLE_SECONDS, CREW_SERVER_HUB (the command
 //   that starts the hub, words separated by spaces) and the CREW_PG_* variables of `crew_harness.pgconf`.
 // The file is named by the argument or, when that is empty, by CREW_SERVER_CONFIG. The password lives in the environment or in a
 // file outside the repository; it is in no error and no description.
@@ -21,8 +22,9 @@ import std.encoding.json.{Json, JsonValue, JsonObject}
 import std.fs.{Fs, read_text, Path}
 import std.os.{Os, env}
 
-/// AgentSpec: an agent the page can choose: the id the page names it by, the label, the command.
-export type AgentSpec { id str, label str, program str, args []str }
+/// AgentSpec: an agent the page can choose: the id the page names it by, the label, the command, and how it asks the owner (task 192i): `native` (its own
+/// tool of questions, over `elicitation/create`; the default), `mcp` (the hub gives it the MCP tool `ask_user_question` and a hint), `off` (nothing).
+export type AgentSpec { id str, label str, program str, args []str, ask str }
 
 /// ServerSettings: everything the server is told. `store` is "files" or "pg"; `data_dir` holds the files of the file store
 /// and, in both modes, the inbox files of the ACP client; `idle_term_ms` is the idle term of a turn; `workdir` is the folder
@@ -41,6 +43,8 @@ export type ServerSettings {
     hub_program str,
     hub_args []str,
     acp_trace bool,
+    ask_form bool,
+    ask_timeout_ms int,
     stt_url str,
     stt_language str,
     max_image_bytes int
@@ -124,7 +128,9 @@ fn st_agent(v JsonValue) -> Result[AgentSpec, str] {
         Some(a) => st_words(a, "the args of the agent ${id}")?
         None => []str.new()
     }
-    Ok(AgentSpec { id, label, program, args })
+    ro ask = st_text(o, "ask", "native")?
+    if ask != "native" && ask != "mcp" && ask != "off" { return Err("the ask of the agent ${id} must be native, mcp or off") }
+    Ok(AgentSpec { id, label, program, args, ask })
 }
 
 // On Windows OpenCode is an npm shim, a .cmd file, and a process cannot be started from the bare name.
@@ -139,7 +145,7 @@ export fn default_opencode_program() -> str => st_opencode_program()
 
 fn st_default_agents() -> []AgentSpec {
     mut out = []AgentSpec.new()
-    out.push(AgentSpec { id: "opencode", label: "OpenCode", program: st_opencode_program(), args: ["acp"] })
+    out.push(AgentSpec { id: "opencode", label: "OpenCode", program: st_opencode_program(), args: ["acp"], ask: "native" })
     out
 }
 
@@ -193,6 +199,9 @@ export fn parse_server_settings(text str) -> Result[ServerSettings, str] {
     ro acp_trace = st_flag(o, "acp_trace", true)?
     ro max_image_bytes = st_number(o, "max_image_bytes", DEFAULT_MAX_IMAGE_BYTES)?
     st_image_limit_check(max_image_bytes)?
+    ro ask_form = st_flag(o, "ask_form", true)?
+    ro ask_seconds = st_number(o, "ask_timeout_seconds", 1800)?
+    if ask_seconds < 1 { return Err("ask_timeout_seconds must be 1 or more") }
     mut stt_url = STT_DEFAULT_URL
     mut stt_language = "auto"
     match o.get("stt") {
@@ -217,7 +226,7 @@ export fn parse_server_settings(text str) -> Result[ServerSettings, str] {
         }
         None => ()
     }
-    Ok(ServerSettings { port, data_dir, store, pg, agents, idle_term_ms: idle_seconds * 1000, workdir, web_dir, machines_dir, hub_program, hub_args, acp_trace, stt_url, stt_language, max_image_bytes })
+    Ok(ServerSettings { port, data_dir, store, pg, agents, idle_term_ms: idle_seconds * 1000, workdir, web_dir, machines_dir, hub_program, hub_args, acp_trace, ask_form, ask_timeout_ms: ask_seconds * 1000, stt_url, stt_language, max_image_bytes })
 }
 
 fn st_env(key str) Os -> Option[str] {
@@ -272,7 +281,7 @@ fn st_rest(words []str) -> []str {
 // The one agent "opencode" of the command in the variable.
 fn st_one_agent(words []str) -> []AgentSpec {
     mut one = []AgentSpec.new()
-    one.push(AgentSpec { id: "opencode", label: "OpenCode", program: words[0], args: st_rest(words) })
+    one.push(AgentSpec { id: "opencode", label: "OpenCode", program: words[0], args: st_rest(words), ask: "native" })
     one
 }
 
@@ -311,6 +320,12 @@ export fn server_settings(file str) Os Fs -> Result[ServerSettings, str] {
         None => base.idle_term_ms
     }
     ro acp_trace = st_env_flag("CREW_SERVER_ACP_TRACE", base.acp_trace)?
+    ro ask_form = st_env_flag("CREW_SERVER_ASK_FORM", base.ask_form)?
+    ro ask_seconds = st_env_number("CREW_SERVER_ASK_TIMEOUT_SECONDS")?
+    ro ask_timeout_ms = match ask_seconds {
+        Some(n) => n * 1000
+        None => base.ask_timeout_ms
+    }
     ro stt_url = st_env("CREW_SERVER_STT_URL") ?? base.stt_url
     ro stt_language = st_env("CREW_SERVER_STT_LANGUAGE") ?? base.stt_language
     st_stt_check(stt_url, stt_language)?
@@ -330,6 +345,8 @@ export fn server_settings(file str) Os Fs -> Result[ServerSettings, str] {
         hub_program,
         hub_args,
         acp_trace,
+        ask_form,
+        ask_timeout_ms,
         stt_url,
         stt_language,
         max_image_bytes
@@ -337,6 +354,7 @@ export fn server_settings(file str) Os Fs -> Result[ServerSettings, str] {
     if merged.store != "files" && merged.store != "pg" { return Err("the store must be files or pg") }
     if merged.port < 1 || merged.port > 65535 { return Err("the port must be 1 to 65535") }
     if merged.idle_term_ms < 1000 { return Err("the idle term must be 1 second or more") }
+    if merged.ask_timeout_ms < 1000 { return Err("the term of a question must be 1 second or more") }
     Ok(merged)
 }
 

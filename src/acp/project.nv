@@ -566,6 +566,22 @@ fn permission_input(value JsonValue, turn str) -> Option[PageInput] {
     page_input("permission_request", JsonValue.object(o))
 }
 
+// The questions of the agent for the page (task 192i): the turn and what `project_question` made.
+fn question_input(value JsonValue, turn str) -> Option[PageInput] {
+    mut o = turn_object(turn)
+    put(o, "request", JsonValue.str(text_field(value, "request") ?? ""))
+    put(o, "tool_call", JsonValue.str(text_field(value, "tool_call") ?? ""))
+    put(o, "questions", get_of(value, "questions") ?? JsonValue.array([]JsonValue.new()))
+    page_input("question_request", JsonValue.object(o))
+}
+
+// The question is over (answered, skipped, withdrawn): the page takes the form away.
+fn resolved_input(value JsonValue) -> Option[PageInput] {
+    mut o = JsonObject.new()
+    put(o, "request", JsonValue.str(text_field(value, "request") ?? ""))
+    page_input("question_resolved", JsonValue.object(o))
+}
+
 fn refusal_input(reason str, turn str) -> Option[PageInput] {
     mut o = turn_object(turn)
     put(o, "reason", JsonValue.str(reason))
@@ -599,6 +615,11 @@ fn page_input_of(e Incoming, turn str) -> Option[PageInput] {
                 ro value = object_input(e)?
                 return page_input("permission_decision", value)
             }
+            // the answer of the owner to a question of the agent (task 192i): the page only needs to know that it is settled
+            if e.name == "question_answer" {
+                ro value = object_input(e)?
+                return resolved_input(value)
+            }
             // the first signal of a session of the server (task 099): its name, the agent, the folder - the input is the page's own
             if e.name == "session_created" {
                 ro value = object_input(e)?
@@ -623,6 +644,14 @@ fn page_input_of(e Incoming, turn str) -> Option[PageInput] {
             if e.name == "permission_request" {
                 ro value = object_input(e)?
                 return permission_input(value, turn)
+            }
+            if e.name == "question_request" {
+                ro value = object_input(e)?
+                return question_input(value, turn)
+            }
+            if e.name == "question_resolved" {
+                ro value = object_input(e)?
+                return resolved_input(value)
             }
             None
         }

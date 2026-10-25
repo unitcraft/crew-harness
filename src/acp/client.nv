@@ -40,6 +40,19 @@ type AcpOption { id str, kind str }
 
 type AcpPending { key str, id JsonValue, options []AcpOption }
 
+// A question of the agent that waits for the owner (task 192i): the key of the request, its JSON-RPC id and the parameters of the call
+// (the answer is made from them again, `question_response`).
+type AcpAsk { key str, id JsonValue, params JsonValue }
+
+/// AskSetup: what the client offers the agent for its questions (task 192i). `form`: say at `initialize` that the client shows a form
+/// (`clientCapabilities.elicitation.form`), so the agents use their own tool of questions and `elicitation/create` comes; `mcp_url` and
+/// `mcp_token`: the MCP server of the hub with the tool `ask_user_question`, handed to the agent in `session/new` when it can use an HTTP
+/// server (`agentCapabilities.mcpCapabilities.http`); "" - none.
+export type AskSetup { form bool, mcp_url str, mcp_token str }
+
+/// Nothing offered: the agent is asked nothing and gets no tool.
+export fn no_ask() -> AskSetup => { form: false, mcp_url: "", mcp_token: "" }
+
 type AcpSet { rpc int, setting str, value str }
 
 type AcpInboxItem { seq int, event Incoming }
@@ -65,6 +78,9 @@ export type AcpClient {
     queue []AcpQueued,
     active str,
     permissions []AcpPending,
+    ask AskSetup,
+    asks []AcpAsk,
+    mcp_http bool,
     ready []AcpInboxItem,
     taken []AcpInboxItem,
     next_seq int,
@@ -85,13 +101,30 @@ fn parse_value(text str) -> JsonValue {
     }
 }
 
-fn initialize_params() -> JsonValue =>
+fn initialize_params(form bool) -> JsonValue {
+    if form {
+        return parse_value("{\"protocolVersion\":1,\"clientCapabilities\":{\"fs\":{\"readTextFile\":false,\"writeTextFile\":false},\"terminal\":false,\"elicitation\":{\"form\":{}}},\"clientInfo\":{\"name\":\"crew-harness\",\"title\":\"CrewHarness\",\"version\":\"0.1.0\"}}")
+    }
     parse_value("{\"protocolVersion\":1,\"clientCapabilities\":{\"fs\":{\"readTextFile\":false,\"writeTextFile\":false},\"terminal\":false},\"clientInfo\":{\"name\":\"crew-harness\",\"title\":\"CrewHarness\",\"version\":\"0.1.0\"}}")
+}
 
-fn new_session_params(cwd str) -> JsonValue {
+// The MCP server of the hub as `session/new` wants it: an HTTP server with the token in the header `Authorization`.
+fn mcp_servers_params(url str, token str) -> JsonValue {
+    mut header = JsonObject.new()
+    put(header, "name", JsonValue.str("Authorization"))
+    put(header, "value", JsonValue.str("Bearer ${token}"))
+    mut server = JsonObject.new()
+    put(server, "type", JsonValue.str("http"))
+    put(server, "name", JsonValue.str("crew"))
+    put(server, "url", JsonValue.str(url))
+    put(server, "headers", JsonValue.array([JsonValue.object(header)]))
+    JsonValue.array([JsonValue.object(server)])
+}
+
+fn new_session_params(cwd str, servers JsonValue) -> JsonValue {
     mut o = JsonObject.new()
     put(o, "cwd", JsonValue.str(cwd))
-    put(o, "mcpServers", JsonValue.array([]JsonValue.new()))
+    put(o, "mcpServers", servers)
     JsonValue.object(o)
 }
 
@@ -273,7 +306,11 @@ export fn open_client(config AcpConfig) Proc Detach Time -> Result[AcpClient, st
 
 /// `open_client` that also writes every line of the exchange with the agent, both ways, to the file `trace_path` (see trace.nv; ""
 /// - no record); the file is rotated at `trace_limit` bytes. The record begins with the `initialize` that goes out at the start.
-export fn open_client_traced(config AcpConfig, trace_path str, trace_limit int) Proc Detach Time -> Result[AcpClient, str] {
+export fn open_client_traced(config AcpConfig, trace_path str, trace_limit int) Proc Detach Time -> Result[AcpClient, str] =>
+    open_client_asking(config, trace_path, trace_limit, no_ask())
+
+/// `open_client_traced` that also offers the agent the means to ask the owner (see `AskSetup`).
+export fn open_client_asking(config AcpConfig, trace_path str, trace_limit int, ask AskSetup) Proc Detach Time -> Result[AcpClient, str] {
     match connect(config.program, config.args, config.cwd) {
         Err(reason) => Err(reason)
         Ok(link) => {
@@ -289,12 +326,12 @@ export fn open_client_traced(config AcpConfig, trace_path str, trace_limit int) 
             }
             mut client = AcpClient {
                 config, link, phase: "initializing", next_rpc: 0, init_rpc: -1, new_rpc: -1, prompt_rpc: -1,
-                session: "", agent: "", model_name: "", modes: JsonValue.null(), models: JsonValue.null(), choices_cfg: JsonValue.null(), mode_now: "", model_now: "", sets: []AcpSet.new(), queue: []AcpQueued.new(), active: "", permissions: []AcpPending.new(),
+                session: "", agent: "", model_name: "", modes: JsonValue.null(), models: JsonValue.null(), choices_cfg: JsonValue.null(), mode_now: "", model_now: "", sets: []AcpSet.new(), queue: []AcpQueued.new(), active: "", permissions: []AcpPending.new(), ask, asks: []AcpAsk.new(), mcp_http: false,
                 ready, taken: []AcpInboxItem.new(), next_seq: next, stderr: "", exit_code: -2, last_error: "", trace: trace_open(trace_path, trace_limit),
                 images_ok: false, attached: []AcpImage.new()
             }
             client.init_rpc = client.next_id()
-            client.say(rpc_request_line(client.init_rpc, "initialize", initialize_params()))
+            client.say(rpc_request_line(client.init_rpc, "initialize", initialize_params(ask.form)))
             Ok(client)
         }
     }
@@ -338,6 +375,8 @@ fn AcpClient mut @refuse(request str, code FailCode) -> () {
 // ----- the end of the process, the failure of the handshake -----
 
 fn AcpClient mut @refuse_everything(code FailCode) -> () {
+    // the questions that wait for the owner end with the turn: the page is told, the process is not (it is gone or going)
+    @resolve_asks(false)
     if @active.byte_len() > 0 {
         @refuse(@active, code)
         @active = ""
@@ -382,9 +421,24 @@ fn AcpClient mut @on_result(id JsonValue, result JsonValue) -> () {
             Some(info) => field_text(info, "name") ?? ""
             None => ""
         }
+        @mcp_http = match field(result, "agentCapabilities") {
+            Some(caps) => match field(caps, "mcpCapabilities") {
+                Some(mcp) => (field(mcp, "http") ?? JsonValue.null()).bool() ?? false
+                None => false
+            }
+            None => false
+        }
+        mut servers = JsonValue.array([]JsonValue.new())
+        if @ask.mcp_url.byte_len() > 0 {
+            if @mcp_http {
+                servers = mcp_servers_params(@ask.mcp_url, @ask.mcp_token)
+            } else {
+                @note("the tool ask_user_question is not offered: the agent ${@agent} does not take an HTTP MCP server (mcpCapabilities.http)")
+            }
+        }
         @phase = "opening"
         @new_rpc = @next_id()
-        @say(rpc_request_line(@new_rpc, "session/new", new_session_params(@config.cwd)))
+        @say(rpc_request_line(@new_rpc, "session/new", new_session_params(@config.cwd, servers)))
         return
     }
     if key == "${@new_rpc}" && @phase == "opening" {
@@ -571,13 +625,80 @@ fn AcpClient mut @on_permission(id JsonValue, params JsonValue) -> () {
     @push(progress_event(@active, projection))
 }
 
+// A question of the agent (task 192i): `elicitation/create` in the mode `form`, when we said at `initialize` that we show one. It becomes the
+// event `question_request`; the agent waits for the owner. What is not a set of questions (a url, a form of another kind) is declined.
+fn AcpClient mut @on_elicitation(id JsonValue, params JsonValue) -> () {
+    if !@ask.form {
+        @say(rpc_error_line(id, -32601, "method not supported: elicitation/create"))
+        @note("a request that is not supported: elicitation/create")
+        return
+    }
+    if @active.byte_len() == 0 {
+        @say(rpc_result_line(id, question_cancel_response()))
+        @note("a question of the agent while no turn is open: answered cancelled")
+        return
+    }
+    match project_question(id, params) {
+        None => {
+            @say(rpc_result_line(id, question_decline_response()))
+            @note("an elicitation that is not a set of questions: declined")
+        }
+        Some(projection) => {
+            @asks.push(AcpAsk { key: rpc_key(id), id, params })
+            @push(progress_event(@active, projection))
+        }
+    }
+}
+
+// The questions that wait for the owner are over (the turn is cancelled, the agent withdrew them, the process is gone): the page is told
+// `question_resolved` for each; `reply` - the agent is answered "cancel" (it is alive and waits).
+fn AcpClient mut @resolve_asks(reply bool) -> () {
+    ro open = @asks
+    @asks = []AcpAsk.new()
+    for a in open {
+        if reply { @say(rpc_result_line(a.id, question_cancel_response())) }
+        mut o = JsonObject.new()
+        put(o, "request", JsonValue.str(a.key))
+        @push(progress_event(@active, Projection { name: "question_resolved", input: JsonValue.object(o).to_str() }))
+    }
+}
+
 fn AcpClient mut @on_call(id JsonValue, method str, params JsonValue) -> () {
     if method == "session/request_permission" {
         @on_permission(id, params)
         return
     }
+    if method == "elicitation/create" {
+        @on_elicitation(id, params)
+        return
+    }
     @say(rpc_error_line(id, -32601, "method not supported: ${method}"))
     @note("a request that is not supported: ${method}")
+}
+
+// The agent withdrew a request of its own (`$/cancel_request`); of those we know, only a question can be open.
+fn AcpClient mut @on_withdrawn(params JsonValue) -> () {
+    ro key = match field(params, "requestId") {
+        Some(v) => rpc_key(v)
+        None => ""
+    }
+    mut found = -1
+    mut index = 0
+    for a in @asks {
+        if a.key == key { found = index }
+        index += 1
+    }
+    if found < 0 { return }
+    ro gone = @asks[found]
+    mut rest = []AcpAsk.new()
+    for a in @asks {
+        if a.key != key { rest.push(a) }
+    }
+    @asks = rest
+    @say(rpc_result_line(gone.id, question_cancel_response()))
+    mut o = JsonObject.new()
+    put(o, "request", JsonValue.str(gone.key))
+    @push(progress_event(@active, Projection { name: "question_resolved", input: JsonValue.object(o).to_str() }))
 }
 
 fn AcpClient mut @on_line(text str) -> () {
@@ -587,6 +708,8 @@ fn AcpClient mut @on_line(text str) -> () {
         RpcNote { method, params } => {
             if method == "session/update" {
                 @on_update(params)
+            } else if method == "$/cancel_request" {
+                @on_withdrawn(params)
             } else {
                 @note("a notification that is not used: ${method}")
             }
@@ -703,6 +826,7 @@ fn AcpClient mut @cancel_request(request_id str) -> () {
     ro open = @permissions
     @permissions = []AcpPending.new()
     for p in open { @say(rpc_result_line(p.id, outcome_result("cancelled", ""))) }
+    @resolve_asks(true)
 }
 
 fn AcpClient mut @next_event() -> Option[Incoming] {
@@ -810,6 +934,64 @@ export fn AcpClient mut @decide_event(event Incoming) -> bool {
     if key.byte_len() == 0 || decision.byte_len() == 0 { return false }
     @decide(key, decision)
 }
+
+// ----- the owner's answer to a question -----
+
+/// The answer of the owner to a question of the agent, by the key of the request (`request` of the event `question_request`):
+/// `answer` is `{request, skipped, answers:[{index, selected:[label], other}]}`. True - the agent was answered (a skip is `decline`); a key
+/// nobody asked, a request already answered: false, nothing is sent.
+export fn AcpClient mut @answer(key str, answer JsonValue) -> bool {
+    mut found = -1
+    mut index = 0
+    for a in @asks {
+        if a.key == key { found = index }
+        index += 1
+    }
+    if found < 0 { return false }
+    ro pending = @asks[found]
+    mut rest = []AcpAsk.new()
+    for a in @asks {
+        if a.key != key { rest.push(a) }
+    }
+    @asks = rest
+    @say(rpc_result_line(pending.id, question_response(pending.params, answer)))
+    true
+}
+
+/// The same from an engine event named `question_answer` whose input is the answer of the page; any other event is not one (false).
+export fn AcpClient mut @answer_event(event Incoming) -> bool {
+    if event.name != "question_answer" { return false }
+    ro value = match Json.parse(event.input) {
+        Ok(v) => v
+        Err(e) => return false
+    }
+    ro key = field_text(value, "request") ?? ""
+    if key.byte_len() == 0 { return false }
+    @answer(key, value)
+}
+
+/// The owner cancelled the turn: the questions that wait for him are withdrawn - the agent is answered "cancel" - and their keys are given back, so
+/// that the caller can tell the page (the engine does not show an event of a request it has already closed).
+export fn AcpClient mut @withdraw_questions() -> []str {
+    ro open = @asks
+    @asks = []AcpAsk.new()
+    mut keys = []str.new()
+    for a in open {
+        @say(rpc_result_line(a.id, question_cancel_response()))
+        keys.push(a.key)
+    }
+    keys
+}
+
+/// The keys of the questions that wait for the owner.
+export fn AcpClient @pending_questions() -> []str {
+    mut keys = []str.new()
+    for a in @asks { keys.push(a.key) }
+    keys
+}
+
+/// Does the agent take an HTTP MCP server (from its answer to `initialize`)?
+export fn AcpClient @takes_mcp_http() -> bool => @mcp_http
 
 // ----- closing and looking -----
 

@@ -286,3 +286,39 @@ test "settings: max_image_bytes is 10 MB, the file sets it, the environment is o
         Err(e) => assert(false)
     }
 }
+
+test "settings: ask_form is on by default, the file turns it off, the environment is over the file; the wait for an answer has a term" {
+    assert(must_settings("{}").ask_form)
+    assert(!must_settings("{\"ask_form\":false}").ask_form)
+    assert(is_error(parse_server_settings("{\"ask_form\":\"no\"}")))
+    assert(must_settings("{}").ask_timeout_ms == 1800000)
+    assert(must_settings("{\"ask_timeout_seconds\":60}").ask_timeout_ms == 60000)
+    assert(is_error(parse_server_settings("{\"ask_timeout_seconds\":0}")))
+    ro path = settings_file("ask.json", "{\"ask_form\":false}")
+    mut state = MockOs.new()
+    state.put_env("CREW_SERVER_ASK_FORM", "true")
+    match with Os = mock_os(state), Fs = real_fs() { server_settings(path.display()) } {
+        Ok(s) => assert(s.ask_form)
+        Err(e) => assert(false)
+    }
+    mut off = MockOs.new()
+    off.put_env("CREW_SERVER_ASK_FORM", "false")
+    match with Os = mock_os(off), Fs = real_fs() { server_settings("") } {
+        Ok(s) => assert(!s.ask_form)
+        Err(e) => assert(false)
+    }
+    mut timed = MockOs.new()
+    timed.put_env("CREW_SERVER_ASK_TIMEOUT_SECONDS", "90")
+    match with Os = mock_os(timed), Fs = real_fs() { server_settings("") } {
+        Ok(s) => assert(s.ask_timeout_ms == 90000)
+        Err(e) => assert(false)
+    }
+}
+
+test "settings: an agent asks the owner by its own tool (native) unless the file says mcp or off" {
+    ro s = must_settings("{\"agents\":[{\"id\":\"a\",\"program\":\"x\"},{\"id\":\"b\",\"program\":\"x\",\"ask\":\"mcp\"},{\"id\":\"c\",\"program\":\"x\",\"ask\":\"off\"}]}")
+    assert(s.agents[0].ask == "native")
+    assert(s.agents[1].ask == "mcp")
+    assert(s.agents[2].ask == "off")
+    assert(is_error(parse_server_settings("{\"agents\":[{\"id\":\"a\",\"program\":\"x\",\"ask\":\"always\"}]}")))
+}

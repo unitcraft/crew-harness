@@ -3,7 +3,7 @@
 // silence, a repeated final answer, a line torn in the middle of a letter, a line without a line break at the end.
 module crew_harness.acp_live
 
-import crew_harness.acp.{AcpConfig, AcpClient, AcpImage, open_client, acp_link}
+import crew_harness.acp.{AcpConfig, AcpClient, AcpImage, AskSetup, open_client, open_client_asking, acp_link}
 import alula.engine.{Link, Incoming, EventKind, PartyRequest, FailCode}
 import std.fs.{Fs, real_fs, Path, try_exists, write, create_dir_all}
 import std.os.{Os, real_os, cwd, temp_dir, pid}
@@ -444,6 +444,147 @@ test "agent: cancel answers open permissions cancelled" {
         assert(client.pending_permissions().len() == 0)
     }
     client.close()
+}
+
+// ----- the questions of the agent (task 192i) -----
+
+fn start_asking(extra []str, form bool) Proc Detach Time -> AcpClient {
+    ro setup AskSetup = { form, mcp_url: "", mcp_token: "" }
+    match open_client_asking(fake_config(extra), "", 0, setup) {
+        Ok(c) => c
+        Err(e) => panic("cannot start the fake agent: ${e}")
+    }
+}
+
+fn answer_event(request str, body str) -> Incoming => {
+    id: "input-11", trace: "t1", step: 11, kind: EventKind.Input, name: "question_answer", request: None, input: "{\"request\":\"${request}\",${body}}", at: 0
+}
+
+test "agent: the client says at initialize that it shows forms, only when it was set up so" {
+    mut asking = start_asking([], true)
+    with Link = acp_link(asking) {
+        Link.send(req("agent-1", "caps"))
+        ro events = collect_turn(10000)
+        assert(text_of(events).contains("\"elicitation\":{\"form\":{}}"))
+    }
+    asking.close()
+    mut plain = start([])
+    with Link = acp_link(plain) {
+        Link.send(req("agent-1", "caps"))
+        ro events = collect_turn(10000)
+        assert(!text_of(events).contains("elicitation"))
+    }
+    plain.close()
+}
+
+test "agent: a client that did not say it shows forms is not asked" {
+    mut client = start([])
+    with Link = acp_link(client) {
+        Link.send(req("agent-1", "ask"))
+        ro events = collect_turn(10000)
+        assert(text_of(events) == "ask: no-form")
+        assert(with_name(events, "question_request").len() == 0)
+    }
+    client.close()
+}
+
+test "agent: a question waits for the owner, the answer reaches the agent as the content of the form" {
+    mut client = start_asking([], true)
+    with Link = acp_link(client) {
+        Link.send(req("agent-1", "ask"))
+        ro before = collect_until("question_request", 10000)
+        ro asked = last_of(before)
+        assert(asked.name == "question_request")
+        assert(asked.kind == EventKind.Progress)
+        assert(request_of(asked) == "agent-1")
+        assert(asked.input.contains("\"request\":\"100\""))
+        assert(asked.input.contains("Какой формат?"))
+        assert(asked.input.contains("YAML"))
+        assert(client.pending_questions().len() == 1)
+        // nobody answered: the agent waits, the client does not answer for the owner
+        ro quiet = collect_quiet(300)
+        assert(quiet.len() == 0)
+        assert(client.pending_questions().len() == 1)
+        assert(client.answer_event(answer_event("100", "\"skipped\":false,\"answers\":[{\"index\":0,\"selected\":[\"YAML\"],\"other\":\"\"}]")))
+        ro after = collect_turn(10000)
+        assert(text_of(after) == "ask: {\"action\":\"accept\",\"content\":{\"question_0\":\"YAML\"}}")
+        assert(last_of(after).kind == EventKind.Answered)
+        assert(client.pending_questions().len() == 0)
+        assert(!client.answer_event(answer_event("100", "\"skipped\":true")))
+    }
+    client.close()
+}
+
+test "agent: skipped questions are declined" {
+    mut client = start_asking([], true)
+    with Link = acp_link(client) {
+        Link.send(req("agent-1", "ask"))
+        ro before = collect_until("question_request", 10000)
+        assert(client.answer_event(answer_event("100", "\"skipped\":true")))
+        ro after = collect_turn(10000)
+        assert(text_of(after) == "ask: {\"action\":\"decline\"}")
+    }
+    client.close()
+}
+
+test "agent: two questions and an own answer" {
+    mut client = start_asking([], true)
+    with Link = acp_link(client) {
+        Link.send(req("agent-1", "ask2"))
+        ro before = collect_until("question_request", 10000)
+        assert(last_of(before).input.contains("Что делать?"))
+        assert(client.answer_event(answer_event("100", "\"skipped\":false,\"answers\":[{\"index\":0,\"selected\":[],\"other\":\"TOML\"},{\"index\":1,\"selected\":[\"A\",\"B\"],\"other\":\"\"}]")))
+        ro after = collect_turn(10000)
+        assert(text_of(after) == "ask: {\"action\":\"accept\",\"content\":{\"question_0_custom\":\"TOML\",\"question_1\":[\"A\",\"B\"]}}")
+    }
+    client.close()
+}
+
+test "agent: a cancel of the turn cancels the open question and tells the page" {
+    mut client = start_asking([], true)
+    with Link = acp_link(client) {
+        Link.send(req("agent-1", "ask"))
+        ro before = collect_until("question_request", 10000)
+        Link.cancel("agent-1")
+        ro after = collect_turn(10000)
+        assert(text_of(after) == "ask: {\"action\":\"cancel\"}")
+        ro resolved = with_name(after, "question_resolved")
+        assert(resolved.len() == 1)
+        assert(resolved[0].input.contains("\"request\":\"100\""))
+        assert(last_of(after).kind == EventKind.Refused)
+        assert(client.pending_questions().len() == 0)
+    }
+    client.close()
+}
+
+test "agent: the server of questions goes to session/new only to an agent that takes an HTTP MCP server" {
+    ro setup AskSetup = { form: true, mcp_url: "http://127.0.0.1:1/mcp/t1", mcp_token: "tok" }
+    mut with_http = match open_client_asking(fake_config(["--ask"]), "", 0, setup) {
+        Ok(c) => c
+        Err(e) => panic("cannot start the fake agent: ${e}")
+    }
+    with Link = acp_link(with_http) {
+        Link.send(req("agent-1", "askmcp"))
+        ro events = collect_turn(15000)
+        // the fake agent reaches the address (nobody listens there): it got the server in session/new, the call itself fails
+        assert(!text_of(events).contains("no-server"))
+        assert(with_http.takes_mcp_http())
+    }
+    with_http.close()
+    mut without = match open_client_asking(fake_config([]), "", 0, setup) {
+        Ok(c) => c
+        Err(e) => panic("cannot start the fake agent: ${e}")
+    }
+    with Link = acp_link(without) {
+        Link.send(req("agent-1", "askmcp"))
+        ro events = collect_turn(10000)
+        assert(text_of(events) == "askmcp: no-server")
+        assert(!without.takes_mcp_http())
+        ro notes = with_name(events, "acp_note")
+        assert(notes.len() == 1)
+        assert(notes[0].input.contains("does not take an HTTP MCP server"))
+    }
+    without.close()
 }
 
 // ----- the cancel of a turn -----

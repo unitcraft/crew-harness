@@ -49,7 +49,7 @@ fn kit_agent(id str, extra str, marker str) -> AgentSpec {
     args.push("--live")
     args.push(extra)
     if marker.byte_len() > 0 { args.push("--stream-marker=${marker}") }
-    AgentSpec { id, label: "Fake", program: "node", args }
+    AgentSpec { id, label: "Fake", program: "node", args, ask: "native" }
 }
 
 fn kit_data_dir(name str) -> str {
@@ -71,7 +71,7 @@ fn kit_settings(store str, name str, idle_ms int, pg PgConfig) -> ServerSettings
     agents.push(kit_agent("pictures", "--images", ""))
     ServerSettings {
         port: 8099, data_dir, store, pg, agents, idle_term_ms: idle_ms,
-        workdir: kit_repo_root().display(), web_dir: "src/web", machines_dir: tree_machines_dir(), hub_program: "", hub_args: []str.new(), acp_trace: false,
+        workdir: kit_repo_root().display(), web_dir: "src/web", machines_dir: tree_machines_dir(), hub_program: "", hub_args: []str.new(), acp_trace: false, ask_form: true, ask_timeout_ms: 1800000,
         stt_url: "http://127.0.0.1:8178/inference", stt_language: "auto", max_image_bytes: 10485760
     }
 }
@@ -506,6 +506,72 @@ export fn scenario_permission(settings ServerSettings) Proc Detach Time Net Fs O
     rig.page(1, "permission_decision", "s-perm", "{\"request\":\"999\",\"decision\":\"allow\"}")
     rig.run(150)
     c.expect(rig.lines_for(1).len() == before, "a decision nobody asked for is not shown")
+    rig.shut()
+    c.report()
+}
+
+/// The agent asks the owner a question with a choice (task 192i): the page gets `question_request`, the answer reaches the agent as the content of the
+/// form and the page is told `question_resolved`; a skip is declined; a cancelled turn takes the form away.
+export fn scenario_question(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-ask", "{\"name\":\"Вопросы\",\"agent\":\"opencode\"}")
+    rig.page(1, "user_message", "s-ask", "{\"turn\":\"t1\",\"text\":\"ask go\"}")
+    c.expect(rig.until("\"kind\":\"question_request\"", 15000), "the question is shown")
+    ro asked = first_of(rig.lines_for(1), "question_request", 0)
+    ro request = line_input(asked, "request")
+    c.expect(request.byte_len() > 0, "the question has a key")
+    c.expect(asked.contains("Какой формат?") && asked.contains("YAML") && asked.contains("\"multiSelect\":false"), "the question has its text and its options")
+    c.expect(!rig.hub.takes_message("s-ask"), "the turn waits for the owner")
+    rig.page(1, "question_answer", "s-ask", "{\"request\":\"${request}\",\"skipped\":false,\"answers\":[{\"index\":0,\"selected\":[\"YAML\"],\"other\":\"\"}]}")
+    c.expect(rig.until(KIT_DONE, 15000), "the turn ends after the answer")
+    ro lines = rig.lines_for(1)
+    c.expect(kit_with(lines, "accept") == 1 && kit_with(lines, "question_0") == 1, "the agent got the choice")
+    c.expect(kit_with(lines, "\"kind\":\"question_resolved\"") == 1, "the page is told the question is settled")
+    // the second question is skipped
+    rig.page(1, "user_message", "s-ask", "{\"turn\":\"t2\",\"text\":\"ask again\"}")
+    c.expect(rig.until("\"kind\":\"question_request\"", 15000), "the second question is shown")
+    mut second = ""
+    mut seen = 0
+    for line in rig.lines_for(1) {
+        if line_field(line, "kind") == "question_request" {
+            seen += 1
+            if seen == 2 { second = line_input(line, "request") }
+        }
+    }
+    c.expect(second.byte_len() > 0 && second != request, "the second question has a key of its own")
+    rig.page(1, "question_answer", "s-ask", "{\"request\":\"${second}\",\"skipped\":true}")
+    c.expect(rig.until(KIT_DONE, 15000), "the second turn ends")
+    c.expect(kit_with(rig.lines_for(1), "decline") == 1, "the agent was told: declined")
+    // an answer nobody asked for changes nothing
+    ro before = rig.lines_for(1).len()
+    rig.page(1, "question_answer", "s-ask", "{\"request\":\"999\",\"skipped\":true}")
+    rig.run(150)
+    c.expect(rig.lines_for(1).len() == before, "an answer nobody asked for is not shown")
+    // a cancel takes the form away
+    rig.page(1, "user_message", "s-ask", "{\"turn\":\"t3\",\"text\":\"ask third\"}")
+    c.expect(rig.until("\"kind\":\"question_request\"", 15000), "the third question is shown")
+    rig.page(1, "cancel", "s-ask", "{}")
+    c.expect(rig.until("\"kind\":\"question_resolved\"", 5000), "a cancelled turn settles the question")
+    c.expect(rig.until("\"kind\":\"cancel\"", 5000), "the cancel is shown")
+    c.expect(rig.hub.takes_message("s-ask"), "the session is open after the cancel")
+    rig.run(300)
+    c.expect(kit_with(rig.lines_for(1), "\"kind\":\"question_resolved\"") == 3, "each question is settled once")
+    rig.shut()
+    c.report()
+}
+
+/// With the setting `ask_form` off the agent is not told that the client shows forms, so it does not ask (the fake agent says so).
+export fn scenario_question_off(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-askoff", "{\"name\":\"Без вопросов\",\"agent\":\"opencode\"}")
+    rig.page(1, "user_message", "s-askoff", "{\"turn\":\"t1\",\"text\":\"ask go\"}")
+    c.expect(rig.until(KIT_DONE, 15000), "the turn ends")
+    c.expect(kit_with(rig.lines_for(1), "ask: no-form") == 1, "the agent was not told about forms")
+    c.expect(kit_with(rig.lines_for(1), "question_request") == 0, "no question is shown")
     rig.shut()
     c.report()
 }

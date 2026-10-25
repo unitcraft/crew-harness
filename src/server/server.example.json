@@ -11,6 +11,8 @@
   "web_dir": "src/web",
   "acp_trace": true,
   "max_image_bytes": 10485760,
+  "ask_form": true,
+  "ask_timeout_seconds": 1800,
   "stt": { "url": "http://127.0.0.1:8178/inference", "language": "auto" },
   "hub": { "program": "target/crew-hub.exe", "args": [] }
 }

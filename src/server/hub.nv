@@ -20,7 +20,7 @@ module crew_harness.server
 import alula.engine.{Engine, Incoming, EventKind, Journal, Store, Link, PartyRequest, start_engine, resume_engine, decode_snapshot}
 import crew_harness.product_machines.{find_machines_dir, load_product_machines}
 import alula.machine_run.{AlulaMachine, AlulaState}
-import crew_harness.acp.{AcpConfig, AcpClient, AcpImage, open_client_traced, acp_link, page_event, TRACE_LIMIT}
+import crew_harness.acp.{AcpConfig, AcpClient, AcpImage, AskSetup, no_ask, open_client_asking, acp_link, page_event, TRACE_LIMIT}
 import crew_harness.storage.{open_data_dir, file_journal, file_store, list_sessions, valid_session_name, session_file_made, migrate_flat_sessions, image_ext, decode_image, save_image, find_image}
 import crew_harness.pgstore.{PgWorld, pg_journal, pg_store}
 import crew_harness.pgdb.{pg_list}
@@ -326,6 +326,24 @@ fn Hub @trace_path_of(s Dialog) -> str {
 
 fn Hub @open_config(s Dialog) -> Option[AcpConfig] => @open_config_for(s.agent, s.id)
 
+// What the agent of this session is offered for its questions (task 192i): nothing when the setting `ask_form` is off or the agent is `off`; the form
+// (its own tool of questions) when it is `native`; the MCP tool of the hub, and no form, when it is `mcp`.
+fn Hub @ask_for(agent str, id str) -> AskSetup {
+    if !@settings.ask_form { return no_ask() }
+    match @settings.agent(agent) {
+        Some(spec) => {
+            if spec.ask == "off" { return no_ask() }
+            if spec.ask == "mcp" { return AskSetup { form: false, mcp_url: @mcp_url_for(id), mcp_token: @mcp_token_value() } }
+            AskSetup { form: true, mcp_url: "", mcp_token: "" }
+        }
+        None => no_ask()
+    }
+}
+
+fn Hub @mcp_url_for(id str) -> str => ""
+
+fn Hub @mcp_token_value() -> str => ""
+
 fn Hub @open_config_for(agent str, id str) -> Option[AcpConfig] {
     match @settings.agent(agent) {
         Some(spec) => {
@@ -350,7 +368,7 @@ fn Hub mut @ensure_client(at int) Proc Detach Time -> str {
     }
     match @open_config(s) {
         None => "the agent ${s.agent} is not configured"
-        Some(config) => match open_client_traced(config, @trace_path_of(s), TRACE_LIMIT) {
+        Some(config) => match open_client_asking(config, @trace_path_of(s), TRACE_LIMIT, @ask_for(s.agent, s.id)) {
             Ok(client) => {
                 s.clients.push(client)
                 s.announced = false
@@ -627,6 +645,14 @@ fn Hub mut @cancel(trace str) Proc Detach Time -> () {
     if at < 0 { return }
     mut s = @sessions[at]
     if s.clients.len() == 0 { return }
+    // a question that waits for the owner goes first: the page takes the form away, and the agent is answered "cancel" (task 192i)
+    for key in s.clients[0].withdraw_questions() {
+        mut withdrawn = JsonObject.new()
+        jput(withdrawn, "request", JsonValue.str(key))
+        jput(withdrawn, "skipped", JsonValue.bool(true))
+        jput(withdrawn, "cancelled", JsonValue.bool(true))
+        feed_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("question_answer", JsonValue.object(withdrawn).to_str()))
+    }
     feed_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("cancel_request", ""))
     @drain(at)
 }
@@ -642,6 +668,21 @@ fn Hub mut @decide(trace str, request str, decision str) Proc Detach Time -> () 
         @drain(at)
     } else {
         @say_log("a decision for ${trace} that nobody asked: request ${request}")
+    }
+}
+
+// The owner answered a question of the agent (task 192i): the agent gets the content of the form, the engine journals the answer.
+fn Hub mut @answer(trace str, input JsonObject) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    mut s = @sessions[at]
+    if s.clients.len() == 0 { return }
+    ro event = Incoming.signal("question_answer", JsonValue.object(input).to_str())
+    if s.clients[0].answer_event(event) {
+        feed_in(@settings.store == "pg", @settings.data_dir, s, event)
+        @drain(at)
+    } else {
+        @say_log("an answer for ${trace} to a question that nobody asked: request ${jtext(input, "request")}")
     }
 }
 
@@ -692,7 +733,7 @@ fn Hub mut @switch_agent(trace str, agent str) Proc Detach Time -> () {
             return
         }
     }
-    match open_client_traced(config, @trace_path_of(s), TRACE_LIMIT) {
+    match open_client_asking(config, @trace_path_of(s), TRACE_LIMIT, @ask_for(agent, s.id)) {
         Err(reason) => {
             @say_log("the agent of ${trace} cannot be changed to ${agent}: ${reason}")
             @tell_error(0, trace, s.engine.step_number(), "", "the agent ${agent} cannot be started: ${reason}; the session stays with ${s.agent}")
@@ -731,7 +772,7 @@ fn Hub mut @choose(trace str, setting str, value str) Proc Detach Time -> () {
     }
 }
 
-/// A page said something: an event in the format of the page (`session_created`, `user_message`, `cancel`, `permission_decision`).
+/// A page said something: an event in the format of the page (`session_created`, `user_message`, `cancel`, `permission_decision`, `question_answer`).
 /// Anything else is ignored and logged.
 export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
     ro o = match jobject(text) {
@@ -759,6 +800,8 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
         @cancel(trace)
     } else if kind == "permission_decision" {
         @decide(trace, jtext(input, "request"), jtext(input, "decision"))
+    } else if kind == "question_answer" {
+        @answer(trace, input)
     } else if kind == "session_agent" {
         @switch_agent(trace, jtext(input, "agent"))
     } else if kind == "session_setting" {

@@ -1,0 +1,222 @@
+// ask_test.nv - the questions of the agent to the owner (task 192i): the form of `elicitation/create` -> the questions of the page,
+// the answer of the page -> the answer to the agent. The four shapes below are the ones the four agents send (see README.md, "Questions of the agent").
+module crew_harness.acp
+
+import alula.engine.{Incoming, EventKind}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+// (j, str_at and int_at are in jsonrpc_test.nv, the same module)
+
+fn at_key(v JsonValue, key str) -> JsonValue {
+    match v.object() {
+        Some(o) => match o.get(key) {
+            Some(x) => x
+            None => JsonValue.null()
+        }
+        None => JsonValue.null()
+    }
+}
+
+fn at_index(v JsonValue, index int) -> JsonValue {
+    match v.array() {
+        Some(items) => {
+            if index < items.len() { items[index] } else { JsonValue.null() }
+        }
+        None => JsonValue.null()
+    }
+}
+
+fn count_of(v JsonValue) -> int {
+    match v.array() {
+        Some(items) => items.len()
+        None => -1
+    }
+}
+
+fn flag_at(v JsonValue, key str) -> bool {
+    match v.object() {
+        Some(o) => match o.get(key) {
+            Some(x) => x.bool() ?? false
+            None => false
+        }
+        None => false
+    }
+}
+
+// claude-agent-acp: question_<n> (a titled oneOf, or an array with anyOf) and question_<n>_custom
+fn claude_single() -> JsonValue => j("{\"mode\":\"form\",\"sessionId\":\"s1\",\"toolCallId\":\"tc1\",\"message\":\"Какой формат?\",\"requestedSchema\":{\"type\":\"object\",\"properties\":{\"question_0\":{\"type\":\"string\",\"title\":\"Формат\",\"oneOf\":[{\"const\":\"JSON\",\"title\":\"JSON\",\"description\":\"машинный\"},{\"const\":\"YAML\",\"title\":\"YAML\"}]},\"question_0_custom\":{\"type\":\"string\",\"title\":\"Other\"}}}}")
+
+fn claude_two() -> JsonValue => j("{\"mode\":\"form\",\"sessionId\":\"s1\",\"message\":\"Please answer the following questions.\",\"requestedSchema\":{\"type\":\"object\",\"properties\":{\"question_0\":{\"type\":\"string\",\"title\":\"Язык\",\"description\":\"Какой язык?\",\"oneOf\":[{\"const\":\"Nova\",\"title\":\"Nova\"},{\"const\":\"Go\",\"title\":\"Go\"}]},\"question_0_custom\":{\"type\":\"string\",\"title\":\"Other\"},\"question_1\":{\"type\":\"array\",\"title\":\"Части\",\"description\":\"Что делать?\",\"items\":{\"anyOf\":[{\"const\":\"A\",\"title\":\"A\"},{\"const\":\"B\",\"title\":\"B\"},{\"const\":\"C\",\"title\":\"C\"}]}},\"question_1_custom\":{\"type\":\"string\",\"title\":\"Other\"}}}}")
+
+// opencode: key and key_custom, const is the value and title is the label
+fn opencode_form() -> JsonValue => j("{\"mode\":\"form\",\"sessionId\":\"s1\",\"message\":\"Нужен выбор\",\"requestedSchema\":{\"type\":\"object\",\"properties\":{\"mode\":{\"type\":\"string\",\"title\":\"Режим\",\"description\":\"Как запускать?\",\"oneOf\":[{\"const\":\"fast\",\"title\":\"Быстро\"},{\"const\":\"safe\",\"title\":\"Надёжно\",\"description\":\"медленнее\"}]},\"mode_custom\":{\"type\":\"string\",\"title\":\"Режим (other)\"}},\"required\":[\"mode\"]}}")
+
+// kimi: q<n>, the message is the questions joined by a line break, no field for an own answer
+fn kimi_form() -> JsonValue => j("{\"mode\":\"form\",\"sessionId\":\"s1\",\"toolCallId\":\"tc9\",\"message\":\"Первый вопрос?\\nВторой вопрос?\",\"requestedSchema\":{\"type\":\"object\",\"properties\":{\"q0\":{\"type\":\"string\",\"title\":\"Первый\",\"oneOf\":[{\"const\":\"да\",\"title\":\"да\"},{\"const\":\"нет\",\"title\":\"нет\"}]},\"q1\":{\"type\":\"array\",\"title\":\"Второй\",\"minItems\":1,\"items\":{\"anyOf\":[{\"const\":\"x\",\"title\":\"x\"},{\"const\":\"y\",\"title\":\"y\"}]}}},\"required\":[\"q0\",\"q1\"]}}")
+
+// codex: the id of the question is the key, the title is the question, the description is the header, the note field names the question in its _meta
+fn codex_form() -> JsonValue => j("{\"mode\":\"form\",\"sessionId\":\"th1\",\"toolCallId\":\"item1\",\"message\":\"Codex needs your input to continue.\",\"requestedSchema\":{\"type\":\"object\",\"properties\":{\"scope\":{\"title\":\"Что трогаем?\",\"description\":\"Область\",\"_meta\":{\"codex\":{\"isOther\":true,\"isSecret\":false}},\"type\":\"string\",\"oneOf\":[{\"const\":\"src\",\"title\":\"src\",\"description\":\"исходники\"},{\"const\":\"doc\",\"title\":\"doc\"}]},\"scope_note\":{\"type\":\"string\",\"title\":\"Additional answer or note\",\"_meta\":{\"codex\":{\"questionId\":\"scope\",\"role\":\"user_note\",\"isSecret\":false}}}},\"required\":[\"scope\"]}}")
+
+fn answer_of_one(selected str, other str) -> JsonValue =>
+    j("{\"request\":\"5\",\"skipped\":false,\"answers\":[{\"index\":0,\"selected\":${selected},\"other\":\"${other}\"}]}")
+
+fn questions_of(params JsonValue) -> JsonValue {
+    match project_question(j("5"), params) {
+        Some(p) => {
+            assert(p.name == "question_request")
+            ro input = j(p.input)
+            assert(str_at(input, "request") == "5")
+            at_key(input, "questions")
+        }
+        None => JsonValue.null()
+    }
+}
+
+// ----- form -> questions -----
+
+test "ask: claude, one question: the message is the question, the title is the header, the custom field is not a question" {
+    ro qs = questions_of(claude_single())
+    assert(count_of(qs) == 1)
+    ro q = at_index(qs, 0)
+    assert(str_at(q, "question") == "Какой формат?")
+    assert(str_at(q, "header") == "Формат")
+    assert(!flag_at(q, "multiSelect"))
+    ro options = at_key(q, "options")
+    assert(count_of(options) == 2)
+    assert(str_at(at_index(options, 0), "label") == "JSON")
+    assert(str_at(at_index(options, 0), "description") == "машинный")
+    assert(str_at(at_index(options, 1), "label") == "YAML")
+}
+
+test "ask: claude, two questions: the description is the question, an array is a multi-select" {
+    ro qs = questions_of(claude_two())
+    assert(count_of(qs) == 2)
+    assert(str_at(at_index(qs, 0), "question") == "Какой язык?")
+    assert(str_at(at_index(qs, 0), "header") == "Язык")
+    assert(!flag_at(at_index(qs, 0), "multiSelect"))
+    assert(str_at(at_index(qs, 1), "question") == "Что делать?")
+    assert(flag_at(at_index(qs, 1), "multiSelect"))
+    assert(count_of(at_key(at_index(qs, 1), "options")) == 3)
+}
+
+test "ask: opencode, the title of an option is its label" {
+    ro qs = questions_of(opencode_form())
+    assert(count_of(qs) == 1)
+    ro q = at_index(qs, 0)
+    assert(str_at(q, "question") == "Нужен выбор")
+    ro options = at_key(q, "options")
+    assert(str_at(at_index(options, 0), "label") == "Быстро")
+    assert(str_at(at_index(options, 1), "label") == "Надёжно")
+    assert(str_at(at_index(options, 1), "description") == "медленнее")
+}
+
+test "ask: kimi, the lines of the message are the questions" {
+    ro qs = questions_of(kimi_form())
+    assert(count_of(qs) == 2)
+    assert(str_at(at_index(qs, 0), "question") == "Первый вопрос?")
+    assert(str_at(at_index(qs, 1), "question") == "Второй вопрос?")
+    assert(str_at(at_index(qs, 0), "header") == "Первый")
+    assert(flag_at(at_index(qs, 1), "multiSelect"))
+}
+
+test "ask: codex, the title is the question and the description is the header" {
+    ro qs = questions_of(codex_form())
+    assert(count_of(qs) == 1)
+    ro q = at_index(qs, 0)
+    assert(str_at(q, "question") == "Что трогаем?")
+    assert(str_at(q, "header") == "Область")
+    assert(count_of(at_key(q, "options")) == 2)
+}
+
+test "ask: a url form and a form with no field are not questions" {
+    assert(project_question(j("5"), j("{\"mode\":\"url\",\"sessionId\":\"s\",\"message\":\"open\",\"url\":\"https://example.com\",\"elicitationId\":\"e1\"}")).is_none())
+    assert(project_question(j("5"), j("{\"mode\":\"form\",\"sessionId\":\"s\",\"message\":\"ok?\",\"requestedSchema\":{\"type\":\"object\",\"properties\":{}}}")).is_none())
+}
+
+test "ask: the key of the request is the JSON-RPC id, a tool call is kept" {
+    ro p = match project_question(j("\"abc\""), claude_single()) {
+        Some(x) => x
+        None => panic("a question was expected")
+    }
+    ro input = j(p.input)
+    assert(str_at(input, "request") == "abc")
+    assert(str_at(input, "tool_call") == "tc1")
+}
+
+// ----- answer -> response -----
+
+test "ask: a chosen option is the value of the field" {
+    ro r = question_response(claude_single(), answer_of_one("[\"YAML\"]", ""))
+    assert(str_at(r, "action") == "accept")
+    assert(str_at(at_key(r, "content"), "question_0") == "YAML")
+}
+
+test "ask: an own answer goes to the custom field, with no option chosen too" {
+    ro r = question_response(claude_single(), answer_of_one("[]", "свой вариант"))
+    assert(str_at(r, "action") == "accept")
+    ro content = at_key(r, "content")
+    assert(str_at(content, "question_0_custom") == "свой вариант")
+    assert(str_at(content, "question_0") == "<missing>")
+}
+
+test "ask: a multi-select is an array of values, a label goes back to its value" {
+    ro answer = j("{\"request\":\"5\",\"skipped\":false,\"answers\":[{\"index\":0,\"selected\":[\"Go\"],\"other\":\"\"},{\"index\":1,\"selected\":[\"A\",\"C\"],\"other\":\"\"}]}")
+    ro r = question_response(claude_two(), answer)
+    ro content = at_key(r, "content")
+    assert(str_at(content, "question_0") == "Go")
+    ro picked = at_key(content, "question_1")
+    assert(count_of(picked) == 2)
+    assert(str_at(j("{\"x\":${at_index(picked, 1).to_str()}}"), "x") == "C")
+}
+
+test "ask: the label of the page is turned into the value of the form (opencode)" {
+    ro r = question_response(opencode_form(), answer_of_one("[\"Надёжно\"]", ""))
+    assert(str_at(at_key(r, "content"), "mode") == "safe")
+}
+
+test "ask: kimi has no custom field, an own answer with no option is nothing" {
+    ro answer = j("{\"request\":\"5\",\"skipped\":false,\"answers\":[{\"index\":0,\"selected\":[\"нет\"],\"other\":\"\"},{\"index\":1,\"selected\":[],\"other\":\"что-то\"}]}")
+    ro r = question_response(kimi_form(), answer)
+    ro content = at_key(r, "content")
+    assert(str_at(content, "q0") == "нет")
+    assert(str_at(content, "q1") == "<missing>")
+}
+
+test "ask: codex, the note of the question goes to its note field" {
+    ro r = question_response(codex_form(), answer_of_one("[\"src\"]", "только тесты"))
+    ro content = at_key(r, "content")
+    assert(str_at(content, "scope") == "src")
+    assert(str_at(content, "scope_note") == "только тесты")
+}
+
+test "ask: skipped is decline, cancelled is cancel" {
+    ro r = question_response(claude_single(), j("{\"request\":\"5\",\"skipped\":true}"))
+    assert(str_at(r, "action") == "decline")
+    assert(str_at(question_cancel_response(), "action") == "cancel")
+    assert(str_at(question_decline_response(), "action") == "decline")
+}
+
+// ----- engine event -> page event -----
+
+test "ask: the page gets question_request with the turn and the questions" {
+    ro p = match project_question(j("7"), claude_single()) {
+        Some(x) => x
+        None => panic("a question was expected")
+    }
+    ro page = page_of(stamped(EventKind.Progress, "question_request", "agent-1", p.input), "turn-3")
+    assert(str_at(page, "kind") == "question_request")
+    ro input = input_of(page)
+    assert(str_at(input, "turn") == "turn-3")
+    assert(str_at(input, "request") == "7")
+    assert(count_of(at_key(input, "questions")) == 1)
+    assert(str_at(at_index(at_key(input, "questions"), 0), "question") == "Какой формат?")
+}
+
+test "ask: the answer of the owner and the withdrawal both become question_resolved" {
+    ro answered = page_of(stamped(EventKind.Input, "question_answer", "x", "{\"request\":\"7\",\"skipped\":false,\"answers\":[]}"), "turn-3")
+    assert(str_at(answered, "kind") == "question_resolved")
+    assert(str_at(input_of(answered), "request") == "7")
+    ro withdrawn = page_of(stamped(EventKind.Progress, "question_resolved", "agent-1", "{\"request\":\"7\"}"), "turn-3")
+    assert(str_at(withdrawn, "kind") == "question_resolved")
+    assert(str_at(input_of(withdrawn), "request") == "7")
+}
