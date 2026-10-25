@@ -21,6 +21,7 @@ export fn signals_given_by_code() -> []CodeSignal => [
     cs("user_message", "input", "src/server/hub.nv: Hub.say", "content (text)", true),
     cs("cancel", "input", "src/server/hub.nv: Hub.cancel", "-", true),
     cs("permission_decision", "input", "src/server/hub.nv: Hub.decide", "request, decision (JSON text)", false),
+    cs("question_answer", "input", "src/server/hub.nv: Hub.answer", "request, skipped, answers (JSON text)", false),
     cs("session_created", "input", "src/server/hub.nv: Hub.create", "name, agent, folder, project (JSON text)", false),
     cs("agent_switched", "input", "src/server/hub.nv: Hub.switch_agent", "from, to, shown, total, cut (JSON text)", false),
     cs("message_images", "input", "src/server/hub.nv: Hub.say (the pictures of the message that follows: n, name, mime, bytes)", "images (JSON text)", false)
@@ -38,6 +39,8 @@ export fn signals_from_agent() -> []CodeSignal => [
     cs("usage_update", "progress", "src/acp/project.nv: project_update", "JSON text", false),
     cs("plan", "progress", "src/acp/project.nv: project_update", "JSON text", false),
     cs("permission_request", "progress", "src/acp/project.nv: project_permission", "JSON text", false),
+    cs("question_request", "progress", "src/acp/ask.nv: project_question", "JSON text", false),
+    cs("question_resolved", "progress", "src/acp/client.nv: AcpClient.resolve_asks", "JSON text", false),
     cs("acp_skipped", "progress", "src/acp/project.nv: project_update", "text", false),
     cs("agent_model", "progress", "src/acp/project.nv: project_update (configOptions); with no open request it is a signal of the same name (progress_event), the hub also gives it when the agent is ready (Hub.watch_agent)", "model (JSON text)", false),
     cs("acp_note", "input", "src/acp/client.nv: AcpClient.note", "text", false),

@@ -1,0 +1,312 @@
+// ask.nv - the questions of the agent to the owner (task 192i): pure functions, no process.
+//
+// The four agents of the product ask by the same call of ACP, `elicitation/create` in the mode `form`, when the client says at `initialize` that it
+// can show one (`clientCapabilities.elicitation.form`); see README.md, "Questions of the agent". A form is a JSON schema of fields; every agent
+// writes its questions into it in its own way:
+//   - claude-agent-acp: `question_<n>` (a string with `oneOf`, or an array with `items.anyOf`) and the field `question_<n>_custom` for an own answer;
+//   - OpenCode: `<key>` and `<key>_custom`, `const` is the value and `title` is the label of an option;
+//   - Kimi Code: `q<n>`, the message is the questions joined by a line break, no field for an own answer;
+//   - Codex: the key is the id of the question, `title` is the question, `description` is the header, the field for a note names its question in
+//     `_meta.codex.questionId`.
+// `project_question` turns a form into the questions of the page (`{request, tool_call, questions:[{question, header, multiSelect,
+// options:[{label, description}]}]}`), `question_response` turns the answer of the page back into the answer to the agent. Both read the form again, so
+// the client keeps only the parameters of the call.
+module crew_harness.acp
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+// An option of a field: the value the form wants back, the label the page shows.
+type AskOption { value str, label str, description str }
+
+// A question of the form: the key of its field, the key of the field for an own answer ("" - none), what the page shows.
+type AskField { key str, custom str, header str, question str, multi bool, text bool, options []AskOption }
+
+// The key and the schema of one property of the form.
+type AskProp { key str, prop JsonValue }
+
+type AskShape { multi bool, options []AskOption }
+
+fn first_present(v JsonValue, keys []str) -> Option[JsonValue] {
+    for key in keys {
+        match get_of(v, key) {
+            Some(found) => return Some(found)
+            None => ()
+        }
+    }
+    None
+}
+
+fn option_of(entry JsonValue) -> Option[AskOption] {
+    match entry.str() {
+        Some(s) => return Some(AskOption { value: s, label: s, description: "" })
+        None => ()
+    }
+    ro value = text_field(entry, "const")?
+    ro title = text_field(entry, "title") ?? ""
+    ro label = if title.byte_len() > 0 { title } else { value }
+    Some(AskOption { value, label, description: text_field(entry, "description") ?? "" })
+}
+
+fn options_of(list JsonValue) -> []AskOption {
+    mut out = []AskOption.new()
+    match list.array() {
+        Some(items) => {
+            for item in items {
+                match option_of(item) {
+                    Some(option) => out.push(option)
+                    None => ()
+                }
+            }
+        }
+        None => ()
+    }
+    out
+}
+
+// The shape of a field that offers options: a string with `oneOf` or `enum`, an array with `items.anyOf`, `oneOf` or `enum`; None - it is not one.
+fn shape_of(prop JsonValue) -> Option[AskShape] {
+    ro kind = text_field(prop, "type") ?? ""
+    if kind == "array" {
+        ro items = get_of(prop, "items")?
+        ro list = first_present(items, ["anyOf", "oneOf", "enum"])?
+        ro options = options_of(list)
+        if options.len() == 0 { return None }
+        return Some(AskShape { multi: true, options })
+    }
+    ro list = first_present(prop, ["oneOf", "anyOf", "enum"])?
+    ro options = options_of(list)
+    if options.len() == 0 { return None }
+    Some(AskShape { multi: false, options })
+}
+
+// The key of the select field a text field is the place for an own answer of ("" - it is none): `<key>_custom`, or named in `_meta.codex.questionId`.
+fn companion_of(key str, prop JsonValue, selects []str) -> str {
+    if (text_field(prop, "type") ?? "") != "string" { return "" }
+    for s in selects {
+        if key == "${s}_custom" { return s }
+    }
+    match get_of(prop, "_meta") {
+        Some(meta) => match get_of(meta, "codex") {
+            Some(codex) => {
+                ro named = text_field(codex, "questionId") ?? ""
+                if named.byte_len() > 0 && selects.contains(named) && (text_field(codex, "role") ?? "") == "user_note" { return named }
+            }
+            None => ()
+        }
+        None => ()
+    }
+    ""
+}
+
+fn has_codex_meta(prop JsonValue) -> bool {
+    match get_of(prop, "_meta") {
+        Some(meta) => get_of(meta, "codex").is_some()
+        None => false
+    }
+}
+
+// The text of a question: the message of the form for a single one, the line of the message when there are as many lines as questions, else the
+// description of the field (Codex: its title) or the title.
+fn question_of(message str, prop JsonValue, key str, count int, index int) -> str {
+    ro title = text_field(prop, "title") ?? ""
+    ro description = text_field(prop, "description") ?? ""
+    if has_codex_meta(prop) {
+        if title.byte_len() > 0 { return title }
+        return key
+    }
+    if count == 1 && message.byte_len() > 0 { return message }
+    if count > 1 {
+        ro lines = message.lines()
+        if lines.len() == count && lines[index].byte_len() > 0 { return lines[index] }
+    }
+    if description.byte_len() > 0 { return description }
+    if title.byte_len() > 0 { return title }
+    key
+}
+
+fn header_of(prop JsonValue, question str) -> str {
+    ro title = text_field(prop, "title") ?? ""
+    ro description = text_field(prop, "description") ?? ""
+    ro header = if has_codex_meta(prop) { description } else { title }
+    if header == question { "" } else { header }
+}
+
+// The questions of a form; None - the form is not one the page can show (not the mode `form`, no field, a field of another kind).
+fn fields_of(params JsonValue) -> Option[[]AskField] {
+    if (text_field(params, "mode") ?? "form") != "form" { return None }
+    ro schema = get_of(params, "requestedSchema")?
+    ro props = get_of(schema, "properties")?
+    ro object = props.object()?
+    ro message = text_field(params, "message") ?? ""
+    mut entries = []AskProp.new()
+    for (key, prop) in object.iter() {
+        entries.push(AskProp { key, prop })
+    }
+    mut selects = []str.new()
+    for e in entries {
+        if shape_of(e.prop).is_some() { selects.push(e.key) }
+    }
+    mut wanted = 0
+    for e in entries {
+        if shape_of(e.prop).is_some() || (companion_of(e.key, e.prop, selects).byte_len() == 0 && (text_field(e.prop, "type") ?? "") == "string") { wanted += 1 }
+    }
+    if wanted == 0 { return None }
+    mut out = []AskField.new()
+    for e in entries {
+        match shape_of(e.prop) {
+            Some(shape) => {
+                mut custom = ""
+                for other in entries {
+                    if other.key != e.key && companion_of(other.key, other.prop, selects) == e.key { custom = other.key }
+                }
+                ro question = question_of(message, e.prop, e.key, wanted, out.len())
+                out.push(AskField { key: e.key, custom, header: header_of(e.prop, question), question, multi: shape.multi, text: false, options: shape.options })
+            }
+            None => {
+                if companion_of(e.key, e.prop, selects).byte_len() == 0 {
+                    if (text_field(e.prop, "type") ?? "") != "string" { return None }
+                    ro question = question_of(message, e.prop, e.key, wanted, out.len())
+                    out.push(AskField { key: e.key, custom: "", header: header_of(e.prop, question), question, multi: false, text: true, options: []AskOption.new() })
+                }
+            }
+        }
+    }
+    Some(out)
+}
+
+fn option_json(o AskOption) -> JsonValue {
+    mut json = JsonObject.new()
+    put(json, "label", JsonValue.str(o.label))
+    put(json, "description", JsonValue.str(o.description))
+    JsonValue.object(json)
+}
+
+fn field_json(f AskField) -> JsonValue {
+    mut json = JsonObject.new()
+    put(json, "question", JsonValue.str(f.question))
+    put(json, "header", JsonValue.str(f.header))
+    put(json, "multiSelect", JsonValue.bool(f.multi))
+    mut options = []JsonValue.new()
+    for o in f.options { options.push(option_json(o)) }
+    put(json, "options", JsonValue.array(options))
+    JsonValue.object(json)
+}
+
+/// The questions of an `elicitation/create` of the agent as a projection `question_request`; None - the form is not a set of questions (the call is
+/// declined). `request` is the key of the JSON-RPC id: the answer of the owner names it.
+export fn project_question(rpc_id JsonValue, params JsonValue) -> Option[Projection] {
+    ro fields = fields_of(params)?
+    mut questions = []JsonValue.new()
+    for f in fields { questions.push(field_json(f)) }
+    mut o = JsonObject.new()
+    put(o, "request", JsonValue.str(rpc_key(rpc_id)))
+    put(o, "tool_call", JsonValue.str(text_field(params, "toolCallId") ?? ""))
+    put(o, "questions", JsonValue.array(questions))
+    Some(proj("question_request", JsonValue.object(o).to_str()))
+}
+
+fn answer_for(answer JsonValue, index int) -> JsonValue {
+    match get_of(answer, "answers") {
+        Some(list) => match list.array() {
+            Some(items) => {
+                mut at = 0
+                for item in items {
+                    ro named = match get_of(item, "index") {
+                        Some(n) => n.int() ?? at
+                        None => at
+                    }
+                    if named == index { return item }
+                    at += 1
+                }
+                JsonValue.null()
+            }
+            None => JsonValue.null()
+        }
+        None => JsonValue.null()
+    }
+}
+
+fn selected_labels(entry JsonValue) -> []str {
+    mut out = []str.new()
+    match get_of(entry, "selected") {
+        Some(list) => match list.array() {
+            Some(items) => {
+                for item in items {
+                    match item.str() {
+                        Some(s) => out.push(s)
+                        None => ()
+                    }
+                }
+            }
+            None => ()
+        }
+        None => ()
+    }
+    out
+}
+
+// The values of the form for the labels the page sent; a label no option has is dropped.
+fn values_of(f AskField, labels []str) -> []str {
+    mut out = []str.new()
+    for label in labels {
+        for o in f.options {
+            if o.label == label && !out.contains(o.value) { out.push(o.value) }
+        }
+    }
+    out
+}
+
+fn action_only(action str) -> JsonValue {
+    mut o = JsonObject.new()
+    put(o, "action", JsonValue.str(action))
+    JsonValue.object(o)
+}
+
+/// The answer to the agent when the owner skipped the questions.
+export fn question_decline_response() -> JsonValue => action_only("decline")
+
+/// The answer to the agent when the question is withdrawn (the turn is cancelled, the agent gave it up).
+export fn question_cancel_response() -> JsonValue => action_only("cancel")
+
+/// The answer to the agent for the answer of the page (`{request, skipped, answers:[{index, selected:[label], other}]}`) to the form `params`.
+export fn question_response(params JsonValue, answer JsonValue) -> JsonValue {
+    match get_of(answer, "skipped") {
+        Some(flag) => { if flag.bool() ?? false { return question_decline_response() } }
+        None => ()
+    }
+    ro fields = match fields_of(params) {
+        Some(list) => list
+        None => return question_decline_response()
+    }
+    mut content = JsonObject.new()
+    mut index = 0
+    for f in fields {
+        ro entry = answer_for(answer, index)
+        ro other = (text_field(entry, "other") ?? "").trim_ascii()
+        if f.text {
+            ro labels = selected_labels(entry)
+            if other.byte_len() > 0 {
+                put(content, f.key, JsonValue.str(other))
+            } else if labels.len() > 0 {
+                put(content, f.key, JsonValue.str(labels[0]))
+            }
+        } else {
+            ro values = values_of(f, selected_labels(entry))
+            if f.multi {
+                if values.len() > 0 {
+                    mut items = []JsonValue.new()
+                    for v in values { items.push(JsonValue.str(v)) }
+                    put(content, f.key, JsonValue.array(items))
+                }
+            } else if values.len() > 0 {
+                put(content, f.key, JsonValue.str(values[0]))
+            }
+            if other.byte_len() > 0 && f.custom.byte_len() > 0 { put(content, f.custom, JsonValue.str(other)) }
+        }
+        index += 1
+    }
+    mut o = JsonObject.new()
+    put(o, "action", JsonValue.str("accept"))
+    put(o, "content", JsonValue.object(content))
+    JsonValue.object(o)
+}
