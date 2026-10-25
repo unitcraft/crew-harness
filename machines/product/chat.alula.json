@@ -1,6 +1,6 @@
 {
   "format": "machine/2",
-  "alula_version": "2.24",
+  "alula_version": "2.25",
   "machine": "ChatSession",
   "version": "1",
   "title": "A chat session with an agent: the machine of src/chat written as data",

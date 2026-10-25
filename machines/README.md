@@ -8,7 +8,7 @@ The relative links inside a table (`*.alula.md`) are the links of the table of a
 
 | Folder | Whose | What is in it |
 |---|---|---|
-| `product/` | the product | `chat`, `dialog` (tables and trees), their 81 scenarios, `journal.md` (10 journal codes of the product). The product calls no primitive of its own: no `registry.md`, the registry is the language (`time_now`, `new_id`) |
+| `product/` | the product | `chat`, `dialog` (tables and trees), their 81 scenarios, `journal.md` (10 journal codes of the product). The product calls no primitive of its own: no `registry.md`, the registry is the language (`new_id`; the time is the stamp of the event, `event.at`) |
 | `methodology/` | the methodology, kept here until task 159 | `agent_step` (with `agent-step-sample.txt`, the copy of the sample of the specification), `cycle_check`, `session_start`, `task_runner`, `dialog_steps` (the session that calls the agent step), their 514 scenarios, `registry.md` (58 primitives, among them the three functions of the parse by role, three sets of the types of the signatures), `journal.md` (73 codes of the methodology and the 4 codes of the pair `dialog_steps`) |
 
 The registry of the primitives and the table of the journal codes of an owner are data beside its machines (`registry.md`, `journal.md`; the form is in `src/machine/README.md` of the package, spec 7a, AL-113). The language owns 35 codes
@@ -36,4 +36,4 @@ the module `crew_harness.machines` (`src/machines/`) embeds these files for the 
 
 ## The included file of definitions
 
-`cycle_check.alula.md` and the meeting include the file of definitions `арифметика_цикла` (spec 8, the hash `818a4aaeef4f`); the translator of the package holds it (`src/machine_text/defs/`) with the specification. It goes to the methodology with task 159.
+`cycle_check.alula.md` and the meeting include the file of definitions `арифметика_цикла` (spec 8, the hash `f757b8aa7b08`); the translator of the package holds it (`src/machine_text/defs/`) with the specification. It goes to the methodology with task 159.
