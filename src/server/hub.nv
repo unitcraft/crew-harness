@@ -228,12 +228,6 @@ fn error_input(turn str, message str) -> JsonObject {
     input
 }
 
-fn model_input(model str) -> str {
-    mut o = JsonObject.new()
-    jput(o, "model", JsonValue.str(model))
-    JsonValue.object(o).to_str()
-}
-
 fn created_input(name str, agent str, folder str) -> JsonObject {
     mut input = JsonObject.new()
     jput(input, "name", JsonValue.str(name))
@@ -504,6 +498,17 @@ fn Hub mut @decide(trace str, request str, decision str) Proc Detach Time -> () 
     }
 }
 
+// The owner chose a model, an effort or a mode (task 192): the agent is asked; the answer comes back as `agent_model`.
+fn Hub mut @choose(trace str, setting str, value str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    mut s = @sessions[at]
+    if s.clients.len() == 0 { return }
+    if !s.clients[0].select_option(setting, value) {
+        @say_log("a choice for ${trace} that the agent did not offer: ${setting} = ${value}")
+    }
+}
+
 /// A page said something: an event in the format of the page (`session_created`, `user_message`, `cancel`, `permission_decision`).
 /// Anything else is ignored and logged.
 export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
@@ -532,6 +537,8 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
         @cancel(trace)
     } else if kind == "permission_decision" {
         @decide(trace, jtext(input, "request"), jtext(input, "decision"))
+    } else if kind == "session_setting" {
+        @choose(trace, jtext(input, "setting"), jtext(input, "value"))
     } else {
         @say_log("a message of the kind ${kind} from page ${conn}: ignored")
     }
@@ -552,7 +559,7 @@ fn Hub mut @watch_agent(at int) Time -> () {
         @say_log("the agent of ${s.id} is ready: ${s.clients[0].agent_name()}")
         if !s.model_announced {
             s.model_announced = true
-            accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("agent_model", model_input(s.clients[0].model_name())))
+            accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("agent_model", s.clients[0].options()))
             model_arrived = true
         }
     } else if phase == "failed" {

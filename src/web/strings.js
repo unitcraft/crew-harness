@@ -110,6 +110,10 @@ export const S = Object.freeze({
   // ---- поле ввода
   'composer.placeholder': 'Напишите сообщение…',
   'composer.hint': 'Enter — отправить, Shift+Enter — новая строка',
+  'menu.mode': 'Режим',
+  'menu.effort': 'Усилие',
+  'menu.more_models': 'Другие модели',
+  'menu.back': 'Назад',
   'composer.working': 'Агент работает',
   'composer.ring': 'Контекст занят на {n} %',
 

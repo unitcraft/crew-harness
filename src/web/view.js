@@ -78,7 +78,8 @@ function icon(doc, id, extra = '') {
  * @param deps      { agents, now, handlers }
  *   handlers: onSelect(trace), onBack(), onNewToggle(open, project?), onCreate({agent, name, project}),
  *             onSend(trace, text) -> bool, onCancel(trace), onDecide(trace, request, decision),
- *             onPin(trace, pinned), onTheme(), onCopy(text)
+ *             onPin(trace, pinned), onTheme(), onCopy(text),
+ *             onChoose(trace, setting, value) — выбор режима, модели или усилия (setting: 'mode' | 'model' | 'effort')
  */
 export function createView(doc, refs, deps) {
   const {
@@ -251,8 +252,94 @@ export function createView(doc, refs, deps) {
 
   // строка статуса под полем: слева режим (когда агент его сообщает), справа модель и спиннер хода
   const statusModel = h(doc, 'span', { class: 'status-model' });
+  const modeButton = h(doc, 'button', { type: 'button', class: 'status-btn', hidden: true, 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
+  const modelButton = h(doc, 'button', { type: 'button', class: 'status-btn', hidden: true, 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
   const spinner = h(doc, 'span', { class: 'spinner', role: 'img', 'aria-label': t('composer.working'), hidden: true });
-  const status = h(doc, 'div', { class: 'composer-status', hidden: true }, h(doc, 'span', { class: 'grow' }), statusModel, spinner);
+  const menu = h(doc, 'div', { class: 'menu', role: 'menu', hidden: true });
+  const status = h(doc, 'div', { class: 'composer-status', hidden: true }, modeButton, h(doc, 'span', { class: 'grow' }), statusModel, modelButton, spinner, menu);
+
+  // Меню выбора режима, модели и усилия (задача 192): показывает только то, что агент отдал по ACP.
+  const MENU_MODELS = 4;
+  let menuKind = null; // null | 'mode' | 'model' | 'more' | 'effort'
+  let options = null;
+  const nameOf = (list, id) => (list.find((c) => c.id === id) || { name: '' }).name;
+
+  function closeMenu() {
+    menuKind = null;
+    menu.hidden = true;
+    modeButton.setAttribute('aria-expanded', 'false');
+    modelButton.setAttribute('aria-expanded', 'false');
+  }
+
+  function choose(setting, value) {
+    if (currentTrace) handlers.onChoose(currentTrace, setting, value);
+    closeMenu();
+  }
+
+  function menuRow({ name, description, checked, number, arrow, onPick }) {
+    const row = h(doc, 'button', { type: 'button', class: 'menu-item', role: 'menuitem', 'aria-checked': checked ? 'true' : 'false' },
+      h(doc, 'span', { class: 'menu-check' }, checked ? icon(doc, 'i-check') : false),
+      h(doc, 'span', { class: 'menu-label' }, h(doc, 'span', { text: name }), description ? h(doc, 'small', { text: description }) : false),
+      arrow ? h(doc, 'span', { class: 'menu-end' }, icon(doc, 'i-chevron-right')) : h(doc, 'span', { class: 'menu-end menu-num', text: number ? String(number) : '' }));
+    row.addEventListener('click', onPick);
+    return row;
+  }
+
+  function renderMenu() {
+    menu.replaceChildren();
+    if (!options || !menuKind) { menu.hidden = true; return; }
+    const rows = [];
+    const numbered = (list, setting, current) => list.map((c, i) => menuRow({
+      name: c.name, description: c.description, checked: c.id === current, number: i < 9 ? i + 1 : 0, onPick: () => choose(setting, c.id),
+    }));
+    if (menuKind === 'mode') {
+      menu.dataset.side = 'left';
+      rows.push(h(doc, 'div', { class: 'menu-head', text: t('menu.mode') }), ...numbered(options.modes, 'mode', options.mode));
+    } else {
+      menu.dataset.side = 'right';
+      if (menuKind === 'model') {
+        rows.push(...numbered(options.models.slice(0, MENU_MODELS), 'model', options.modelId));
+        if (options.efforts.length > 0 || options.models.length > MENU_MODELS) rows.push(h(doc, 'div', { class: 'menu-sep', role: 'separator' }));
+        if (options.efforts.length > 0) {
+          rows.push(menuRow({
+            name: `${options.effortName || t('menu.effort')}  ${nameOf(options.efforts, options.effort)}`, arrow: true, onPick: () => openMenu('effort'),
+          }));
+        }
+        if (options.models.length > MENU_MODELS) rows.push(menuRow({ name: t('menu.more_models'), arrow: true, onPick: () => openMenu('more') }));
+      } else if (menuKind === 'more') {
+        rows.push(menuRow({ name: t('menu.back'), onPick: () => openMenu('model') }), ...numbered(options.models, 'model', options.modelId));
+      } else {
+        rows.push(menuRow({ name: t('menu.back'), onPick: () => openMenu('model') }),
+          h(doc, 'div', { class: 'menu-head', text: options.effortName || t('menu.effort') }),
+          ...numbered(options.efforts, 'effort', options.effort));
+      }
+    }
+    menu.append(...rows);
+    menu.hidden = false;
+  }
+
+  function openMenu(kind) {
+    menuKind = kind;
+    modeButton.setAttribute('aria-expanded', kind === 'mode' ? 'true' : 'false');
+    modelButton.setAttribute('aria-expanded', kind === 'mode' ? 'false' : 'true');
+    renderMenu();
+    menu.querySelector('.menu-item')?.focus();
+  }
+
+  const toggleMenu = (kind) => { if (menuKind) closeMenu(); else openMenu(kind); };
+  modeButton.addEventListener('click', () => toggleMenu('mode'));
+  modelButton.addEventListener('click', () => toggleMenu('model'));
+  // номера строк — горячие клавиши; у строк без номера (Назад, подменю) их нет
+  doc.addEventListener('keydown', (e) => {
+    if (!menuKind) return;
+    if (e.key === 'Escape') { closeMenu(); return; }
+    if (/^[1-9]$/.test(e.key)) {
+      const rows = [...menu.querySelectorAll('.menu-num')];
+      const at = rows.findIndex((n) => n.textContent === e.key);
+      if (at >= 0) { e.preventDefault(); rows[at].closest('.menu-item').click(); }
+    }
+  });
+  doc.addEventListener('click', (e) => { if (menuKind && !e.composedPath().includes(status)) closeMenu(); });
 
   const composer = h(doc, 'div', { class: 'composer' },
     box,
@@ -472,6 +559,7 @@ export function createView(doc, refs, deps) {
       input.value = drafts.get(session.id) ?? '';
       fitInput();
       title.textContent = session.name;
+      closeMenu();
     }
     agentText.textContent = agentLabel(session.agent);
     modelText.textContent = session.model || t('session.model_unknown');
@@ -480,9 +568,21 @@ export function createView(doc, refs, deps) {
     const busy = session.state === 'answering' || session.state === 'permission';
     cancelButton.hidden = !busy;
     sendButton.disabled = busy;
+    options = session.options || null;
+    const hasModes = Boolean(options && options.modes.length > 0);
+    const hasModels = Boolean(options && (options.models.length > 0 || options.efforts.length > 0));
+    modeButton.hidden = !hasModes;
+    modeButton.replaceChildren(h(doc, 'span', { text: hasModes ? (nameOf(options.modes, options.mode) || t('menu.mode')) : '' }), hasModes ? icon(doc, 'i-chevron-down') : false);
+    modelButton.hidden = !hasModels;
+    modelButton.replaceChildren(h(doc, 'span', {
+      text: hasModels ? [session.model || nameOf(options.models, options.modelId) || t('session.model_unknown'), nameOf(options.efforts, options.effort)].filter(Boolean).join('  ') : '',
+    }), hasModels ? icon(doc, 'i-chevron-down') : false);
+    statusModel.hidden = hasModels;
     statusModel.textContent = session.model || '';
     spinner.hidden = !busy;
-    status.hidden = !session.model && !busy;
+    status.hidden = !session.model && !busy && !hasModes && !hasModels;
+    if (menuKind && ((menuKind === 'mode' && !hasModes) || (menuKind !== 'mode' && !hasModels))) closeMenu();
+    else if (menuKind) renderMenu();
 
     const pct = usagePercent(session.usage);
     ring.style.setProperty('--ring', String(pct));

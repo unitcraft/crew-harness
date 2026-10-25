@@ -16,6 +16,23 @@ export const AGENTS = Object.freeze([
 const BASE = 1_792_314_000_000;
 const SEC = 1000;
 const MIN = 60_000;
+
+// Что «агент» предлагает выбрать (задача 192): как configOptions настоящего агента.
+const MOCK_OPTIONS = {
+  model: 'Sonnet 5.5',
+  model_id: 'sonnet',
+  models: [{ id: 'opus', name: 'Opus 5.5' }, { id: 'fable', name: 'Fable 5.1' }, { id: 'sonnet', name: 'Sonnet 5.5' }, { id: 'haiku', name: 'Haiku 5.5' }, { id: 'old', name: 'Sonnet 4' }],
+  effort: 'high',
+  effort_name: 'Усилие',
+  efforts: [{ id: 'low', name: 'Low' }, { id: 'medium', name: 'Medium' }, { id: 'high', name: 'High' }],
+  mode: 'default',
+  modes: [
+    { id: 'default', name: 'Auto', description: 'Агент сам решает про разрешения' },
+    { id: 'manual', name: 'Manual', description: 'Всегда спрашивать перед правками' },
+    { id: 'acceptEdits', name: 'Accept edits', description: 'Принимать правки файлов автоматически' },
+    { id: 'plan', name: 'Plan', description: 'Составить план до правок' },
+  ],
+};
 const HOUR = 60 * MIN;
 const END = BASE + 3 * HOUR;
 const CTX = 200_000;
@@ -35,6 +52,7 @@ function buildJournal() {
   add(s1, 'session_created', {
     name: 'Разбор падающих тестов', agent: 'opencode', project: 'crew-harness', folder: 'C:/work/crew-harness', branch: 'task/flaky-tests',
   }, BASE);
+  add(s1, 'session_model', MOCK_OPTIONS, BASE + 1);
   add(s1, 'user_message', { turn: 't1', text: 'Почему тест на дубликаты событий иногда красный?' }, BASE + MIN);
   add(s1, 'tool_call', { id: 'c1', title: 'src/web/test/state.test.mjs', kind: 'read', status: 'in_progress' }, BASE + MIN + 300);
   add(s1, 'tool_call_update', { id: 'c1', status: 'completed' }, BASE + MIN + 600);
@@ -152,6 +170,7 @@ export function createMockServer({ journal, now = Date.now } = {}) {
   const shown = journal ?? rebaseJournal(INITIAL_JOURNAL, now());
   const lastStep = {};
   const pending = {};
+  const picks = {};
   const used = {};
   let serial = 0;
 
@@ -237,6 +256,14 @@ export function createMockServer({ journal, now = Date.now } = {}) {
             turn: open.turn, reason: 'вы отклонили действие, файлы не тронуты',
           });
         }
+      }
+    } else if (event.kind === 'session_setting') {
+      const key = { mode: 'mode', model: 'model_id', effort: 'effort' }[input.setting];
+      if (key) {
+        picks[trace] = { ...(picks[trace] || {}), [key]: input.value };
+        const merged = { ...MOCK_OPTIONS, ...picks[trace] };
+        const named = merged.models.find((m) => m.id === merged.model_id);
+        mint(entries, trace, CHUNK_FIRST_MS, 'session_model', { ...merged, model: named ? named.name : merged.model });
       }
     } else if (event.kind === 'cancel') {
       delete pending[trace];

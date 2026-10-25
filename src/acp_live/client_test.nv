@@ -209,6 +209,29 @@ test "agent: config_option_update replaces the reported model" {
     client.close()
 }
 
+test "agent: a mode chosen by the owner goes to the agent and comes back as agent_model" {
+    mut client = start([])
+    with Link = acp_link(client) {
+        ro deadline = now_ms() + 10000
+        while client.phase() != "ready" && now_ms() < deadline {
+            match Link.receive() {
+                Some(e) => ()
+                None => 10.to_millis().sleep()
+            }
+        }
+        assert(client.phase() == "ready")
+        assert(client.options().contains("\"modes\""))
+        assert(client.options().contains("\"mode\":\"default\""))
+        assert(!client.select_option("mode", "nobody-offered-this"))
+        assert(client.select_option("mode", "plan"))
+        ro events = collect_until("agent_model", 10000)
+        ro last = last_of(events)
+        assert(last.name == "agent_model")
+        assert(last.input.contains("\"mode\":\"plan\""))
+    }
+    client.close()
+}
+
 test "agent: config_option_update from another session is ignored" {
     mut client = start([])
     with Link = acp_link(client) {

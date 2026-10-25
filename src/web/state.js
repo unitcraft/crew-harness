@@ -81,6 +81,25 @@ export function sessionList(model) {
 
 const str = (v, fallback = '') => (typeof v === 'string' ? v : fallback);
 
+// Выбор, который агент отдаёт по ACP (задача 192): модели, усилие, режимы. Чего агент не отдал — пустой список, кнопки нет.
+const choiceList = (v) => (Array.isArray(v)
+  ? v.filter((c) => isObject(c) && typeof c.id === 'string' && c.id).map((c) => ({ id: c.id, name: str(c.name, c.id), description: str(c.description) }))
+  : []);
+
+export function optionsOf(input) {
+  return {
+    models: choiceList(input.models),
+    modelId: str(input.model_id),
+    efforts: choiceList(input.efforts),
+    effort: str(input.effort),
+    effortName: str(input.effort_name),
+    modes: choiceList(input.modes),
+    mode: str(input.mode),
+  };
+}
+
+export const NO_OPTIONS = Object.freeze(optionsOf({}));
+
 const userKey = (turn) => `u:${turn}`;
 const agentKey = (turn) => `a:${turn}`;
 const permKey = (request) => `p:${request}`;
@@ -126,7 +145,7 @@ function apply(session, event) {
   switch (event.kind) {
     case 'session_model': {
       if (event.step <= session.modelStep) return session;
-      return { ...session, model: str(input.model), modelStep: event.step };
+      return { ...session, model: str(input.model), options: optionsOf(input), modelStep: event.step };
     }
     case 'user_message': {
       const userTurn = str(input.turn, event.id);
@@ -327,6 +346,7 @@ export function reduce(model, event) {
       name: str(event.input.name, event.trace),
       agent: str(event.input.agent),
       model: '',
+      options: NO_OPTIONS,
       modelStep: event.step,
       state: 'idle',
       createdAt: event.time,

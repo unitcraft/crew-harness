@@ -226,7 +226,9 @@ function handle(line) {
       });
     case "session/new":
       if (noSession) return;
-      return respond(msg.id, { sessionId: SESSION, configOptions: [{ id: "model", category: "model", type: "select", currentValue: "fake-model", options: [{ value: "fake-model", name: "Fake Model" }] }] });
+      return respond(msg.id, { sessionId: SESSION, modes: { currentModeId: "default", availableModes: [{ id: "default", name: "Default", description: "Asks before changes" }, { id: "plan", name: "Plan", description: "Plans first" }] }, configOptions: [{ id: "model", category: "model", type: "select", currentValue: "fake-model", options: [{ value: "fake-model", name: "Fake Model" }] }] });
+    case "session/set_mode":
+      return respond(msg.id, {});
     case "session/prompt":
       if (!msg.params || msg.params.sessionId !== SESSION) {
         return write({ jsonrpc: "2.0", id: msg.id, error: { code: -32602, message: "unknown session" } });

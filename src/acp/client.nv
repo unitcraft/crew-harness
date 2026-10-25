@@ -37,6 +37,8 @@ type AcpOption { id str, kind str }
 
 type AcpPending { key str, id JsonValue, options []AcpOption }
 
+type AcpSet { rpc int, setting str, value str }
+
 type AcpInboxItem { seq int, event Incoming }
 
 /// AcpClient: one agent process, one session. Mutable: `poll`, `decide` and the operations of the handler change it.
@@ -51,6 +53,12 @@ export type AcpClient {
     session str,
     agent str,
     model_name str,
+    modes JsonValue,
+    models JsonValue,
+    choices_cfg JsonValue,
+    mode_now str,
+    model_now str,
+    sets []AcpSet,
     queue []AcpQueued,
     active str,
     permissions []AcpPending,
@@ -260,7 +268,7 @@ export fn open_client(config AcpConfig) Proc Detach Time -> Result[AcpClient, st
             }
             mut client = AcpClient {
                 config, link, phase: "initializing", next_rpc: 0, init_rpc: -1, new_rpc: -1, prompt_rpc: -1,
-                session: "", agent: "", model_name: "", queue: []AcpQueued.new(), active: "", permissions: []AcpPending.new(),
+                session: "", agent: "", model_name: "", modes: JsonValue.null(), models: JsonValue.null(), choices_cfg: JsonValue.null(), mode_now: "", model_now: "", sets: []AcpSet.new(), queue: []AcpQueued.new(), active: "", permissions: []AcpPending.new(),
                 ready, taken: []AcpInboxItem.new(), next_seq: next, stderr: "", exit_code: -2, last_error: ""
             }
             client.init_rpc = client.next_id()
@@ -350,6 +358,10 @@ fn AcpClient mut @on_result(id JsonValue, result JsonValue) -> () {
             Some(options) => model_name_of(options)
             None => ""
         }
+        @modes = field(result, "modes") ?? JsonValue.null()
+        @models = field(result, "models") ?? JsonValue.null()
+        @choices_cfg = field(result, "configOptions") ?? JsonValue.null()
+        @model_name = @options_model()
         match field_text(result, "sessionId") {
             Some(session) => {
                 @session = session
@@ -367,6 +379,7 @@ fn AcpClient mut @on_result(id JsonValue, result JsonValue) -> () {
         @push(stop_event(request, reason))
         return
     }
+    if @settle_set(key, result) { return }
     @note("a response nobody waits for: id ${key}")
 }
 
@@ -389,6 +402,7 @@ fn AcpClient mut @on_failure(id JsonValue, code int, message str) -> () {
         @refuse(request, FailCode.NoResult)
         return
     }
+    if @fail_set(key, why) { return }
     @note("an error response nobody waits for: id ${key}: ${why}")
 }
 
@@ -403,14 +417,101 @@ fn AcpClient mut @on_update(params JsonValue) -> () {
         None => JsonValue.null()
     }
     ro projected = project_update(update)
+    if field_text(update, "sessionUpdate") == Some("current_mode_update") {
+        @mode_now = field_text(update, "currentModeId") ?? ""
+        @push_options()
+        return
+    }
     if projected.name == "agent_model" {
-        @model_name = match Json.parse(projected.input) {
-            Ok(value) => field_text(value, "model") ?? ""
-            Err(e) => ""
-        }
+        // a full replacement of the options (an empty list is "the selector is gone")
+        @choices_cfg = field(update, "configOptions") ?? JsonValue.null()
+        @push_options()
+        return
     }
     @push(progress_event(@active, projected))
 }
+
+// The summary of the choices now (task 192): model, effort, mode.
+fn AcpClient @options_json() -> str => options_summary(@modes, @models, @choices_cfg, @mode_now, @model_now)
+
+fn AcpClient @options_model() -> str {
+    match Json.parse(@options_json()) {
+        Ok(value) => field_text(value, "model") ?? ""
+        Err(e) => ""
+    }
+}
+
+fn AcpClient mut @push_options() -> () {
+    @model_name = @options_model()
+    @push(progress_event(@active, model_projection(@options_json())))
+}
+
+// The answer of the agent to a choice of the owner: `session/set_config_option` brings the whole set of options, the older
+// `session/set_mode` and `session/set_model` bring nothing and the choice is kept here. True - the answer was of that kind.
+fn AcpClient mut @settle_set(key str, result JsonValue) -> bool {
+    mut found = -1
+    mut index = 0
+    for s in @sets {
+        if "${s.rpc}" == key { found = index }
+        index += 1
+    }
+    if found < 0 { return false }
+    ro done = @sets[found]
+    mut rest = []AcpSet.new()
+    for s in @sets {
+        if s.rpc != done.rpc { rest.push(s) }
+    }
+    @sets = rest
+    match field(result, "configOptions") {
+        Some(options) => { @choices_cfg = options }
+        None => {
+            if done.setting == "mode" { @mode_now = done.value }
+            if done.setting == "model" { @model_now = done.value }
+        }
+    }
+    @push_options()
+    true
+}
+
+fn AcpClient mut @fail_set(key str, why str) -> bool {
+    mut found = false
+    mut rest = []AcpSet.new()
+    for s in @sets {
+        if "${s.rpc}" == key { found = true } else { rest.push(s) }
+    }
+    if !found { return false }
+    @sets = rest
+    @note("the agent refused a choice: ${why}")
+    true
+}
+
+/// The owner chose `value` for `setting` (`mode`, `model` or `effort`): the agent is asked, by the method it supports. False - the
+/// agent has not offered that value (or the session is not ready): nothing is sent. The new choice arrives as an event `agent_model`.
+export fn AcpClient mut @select_option(setting str, value str) -> bool {
+    if @phase != "ready" { return false }
+    match setting_call(setting, value, @modes, @models, @choices_cfg) {
+        None => false
+        Some(call) => {
+            ro id = @next_id()
+            @sets.push(AcpSet { rpc: id, setting, value })
+            mut o = JsonObject.new()
+            put(o, "sessionId", JsonValue.str(@session))
+            if call.method == "session/set_config_option" {
+                put(o, "configId", JsonValue.str(call.config_id))
+                put(o, "value", JsonValue.str(value))
+            } else if call.method == "session/set_mode" {
+                put(o, "modeId", JsonValue.str(value))
+            } else {
+                put(o, "modelId", JsonValue.str(value))
+            }
+            @say(rpc_request_line(id, call.method, JsonValue.object(o)))
+            true
+        }
+    }
+}
+
+/// The choices now as the JSON object of the page event `session_model` (see `options_summary`).
+export fn AcpClient @options() -> str => @options_json()
 
 fn AcpClient mut @on_permission(id JsonValue, params JsonValue) -> () {
     if @active.byte_len() == 0 {

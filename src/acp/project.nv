@@ -229,6 +229,166 @@ export fn model_name_of(config_options JsonValue) -> str {
     ""
 }
 
+// ----- the choices of the session: model, effort, mode (task 192) -----
+//
+// What the agent offers, as it says it: `configOptions` of `session/new` (selects with the categories `mode`, `model`,
+// `thought_level`), or, when there are none, the older `modes` and `models` of the same answer. Nothing is made up: a
+// part the agent does not offer is not in the summary, and the page shows no button for it.
+
+/// SettingCall: the request that makes the agent take a choice of the owner: the method, the id of the option (for
+/// `session/set_config_option`) and the chosen value.
+export type SettingCall { method str, config_id str, value str }
+
+fn choice_of(item JsonValue, id_key str) -> Option[JsonValue] {
+    ro id = text_field(item, id_key)?
+    mut o = JsonObject.new()
+    put(o, "id", JsonValue.str(id))
+    put(o, "name", JsonValue.str(text_field(item, "name") ?? id))
+    ro description = text_field(item, "description") ?? ""
+    if description.byte_len() > 0 { put(o, "description", JsonValue.str(description)) }
+    Some(JsonValue.object(o))
+}
+
+// The choices of a list: the items with the key `id_key`; a group of a select (`options` inside) is flattened.
+fn choices_of(list JsonValue, id_key str) -> []JsonValue {
+    mut out = []JsonValue.new()
+    ro items = match list.array() {
+        Some(x) => x
+        None => return out
+    }
+    for item in items {
+        match get_of(item, "options") {
+            Some(nested) => match nested.array() {
+                Some(group) => {
+                    for inner in group {
+                        match choice_of(inner, id_key) {
+                            Some(c) => out.push(c)
+                            None => ()
+                        }
+                    }
+                }
+                None => ()
+            }
+            None => match choice_of(item, id_key) {
+                Some(c) => out.push(c)
+                None => ()
+            }
+        }
+    }
+    out
+}
+
+// The select of configOptions with the category (the effort: `thought_level`, or the id `effort`).
+fn select_of(config JsonValue, category str) -> Option[JsonValue] {
+    ro items = config.array()?
+    for option in items {
+        if text_field(option, "type") != Some("select") { continue }
+        if text_field(option, "category") == Some(category) { return Some(option) }
+        if category == "thought_level" && text_field(option, "id") == Some("effort") { return Some(option) }
+    }
+    None
+}
+
+fn field_or_null(v JsonValue, key str) -> JsonValue {
+    match get_of(v, key) {
+        Some(x) => x
+        None => JsonValue.null()
+    }
+}
+
+fn name_in(choices []JsonValue, id str) -> str {
+    if id.byte_len() == 0 { return "" }
+    for c in choices {
+        if text_field(c, "id") == Some(id) { return text_field(c, "name") ?? id }
+    }
+    id
+}
+
+fn has_choice(choices []JsonValue, id str) -> bool {
+    for c in choices {
+        if text_field(c, "id") == Some(id) { return true }
+    }
+    false
+}
+
+// One setting of the summary. `legacy_list` and `legacy_current` are the older `modes` / `models` answer of `session/new`.
+type Setting { id str, name str, choices []JsonValue }
+
+fn setting_of(config JsonValue, category str, legacy_list JsonValue, legacy_key str, legacy_current str, now str) -> Setting {
+    match select_of(config, category) {
+        Some(option) => {
+            ro choices = match get_of(option, "options") {
+                Some(list) => choices_of(list, "value")
+                None => []JsonValue.new()
+            }
+            Setting { id: text_field(option, "currentValue") ?? "", name: text_field(option, "name") ?? "", choices }
+        }
+        None => {
+            ro choices = choices_of(legacy_list, legacy_key)
+            mut current = legacy_current
+            if now.byte_len() > 0 { current = now }
+            Setting { id: current, name: "", choices }
+        }
+    }
+}
+
+fn put_setting(mut o JsonObject, setting Setting, id_key str, list_key str, name_key str) -> () {
+    put(o, id_key, JsonValue.str(setting.id))
+    if setting.choices.len() > 0 { put(o, list_key, JsonValue.array(setting.choices)) }
+    if setting.name.byte_len() > 0 && name_key.byte_len() > 0 { put(o, name_key, JsonValue.str(setting.name)) }
+}
+
+/// The summary of what the agent offers and what is chosen now, as the JSON object of the page event `session_model`:
+/// `model` (the name, "" when not reported), `model_id`, `models` (`[{id, name}]`), `effort` (the id), `effort_name`, `efforts`,
+/// `mode` (the id), `modes` (`[{id, name, description}]`). A list the agent does not offer is absent. `mode_now` and `model_now`
+/// are the choices made later than `session/new` told (empty - none); they count only for the older `modes` / `models`.
+export fn options_summary(modes JsonValue, models JsonValue, config JsonValue, mode_now str, model_now str) -> str {
+    ro model = setting_of(config, "model", field_or_null(models, "availableModels"), "modelId", text_field(models, "currentModelId") ?? "", model_now)
+    ro effort = setting_of(config, "thought_level", JsonValue.null(), "id", "", "")
+    ro mode = setting_of(config, "mode", field_or_null(modes, "availableModes"), "id", text_field(modes, "currentModeId") ?? "", mode_now)
+    mut o = JsonObject.new()
+    put(o, "model", JsonValue.str(name_in(model.choices, model.id)))
+    if model.id.byte_len() > 0 { put(o, "model_id", JsonValue.str(model.id)) }
+    if model.choices.len() > 0 { put(o, "models", JsonValue.array(model.choices)) }
+    if effort.choices.len() > 0 { put_setting(o, effort, "effort", "efforts", "effort_name") }
+    if mode.choices.len() > 0 { put_setting(o, mode, "mode", "modes", "") }
+    JsonValue.object(o).to_str()
+}
+
+/// The call that makes the agent take `value` for `setting` (`mode`, `model` or `effort`); None - the agent did not offer
+/// that value (or that setting at all): nothing is sent.
+export fn setting_call(setting str, value str, modes JsonValue, models JsonValue, config JsonValue) -> Option[SettingCall] {
+    if setting != "mode" && setting != "model" && setting != "effort" { return None }
+    mut category = "thought_level"
+    if setting == "mode" { category = "mode" }
+    if setting == "model" { category = "model" }
+    match select_of(config, category) {
+        Some(option) => {
+            ro choices = match get_of(option, "options") {
+                Some(list) => choices_of(list, "value")
+                None => []JsonValue.new()
+            }
+            if !has_choice(choices, value) { return None }
+            return Some(SettingCall { method: "session/set_config_option", config_id: text_field(option, "id") ?? "", value })
+        }
+        None => ()
+    }
+    if setting == "mode" {
+        ro list = field_or_null(modes, "availableModes")
+        if !has_choice(choices_of(list, "id"), value) { return None }
+        return Some(SettingCall { method: "session/set_mode", config_id: "", value })
+    }
+    if setting == "model" {
+        ro list = field_or_null(models, "availableModels")
+        if !has_choice(choices_of(list, "modelId"), value) { return None }
+        return Some(SettingCall { method: "session/set_model", config_id: "", value })
+    }
+    None
+}
+
+/// The projection that carries the summary to the engine: the same event `agent_model` (the page event `session_model`).
+export fn model_projection(summary str) -> Projection => proj("agent_model", summary)
+
 const PERMISSION_DETAIL_CHARS = 300
 
 // The action the dialog names (task 189): a command is "Выполнить команду" (the kind `execute`; claude-agent-acp sends

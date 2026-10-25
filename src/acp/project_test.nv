@@ -163,6 +163,78 @@ test "model: unknown or removed selector is empty, update is full replacement" {
     assert(update.input == "{\"model\":\"\"}")
 }
 
+// ----- the choices of the session: model, effort, mode (task 192) -----
+
+fn arr_len(v JsonValue, key str) -> int {
+    match v.object() {
+        Some(o) => match o.get(key) {
+            Some(x) => match x.array() {
+                Some(items) => items.len()
+                None => -1
+            }
+            None => -1
+        }
+        None => -1
+    }
+}
+
+fn no_call(call Option[SettingCall]) -> bool {
+    match call {
+        Some(c) => false
+        None => true
+    }
+}
+
+test "options: model, effort and mode come from configOptions with their categories" {
+    ro config = j("[{\"id\":\"mode\",\"name\":\"Mode\",\"category\":\"mode\",\"type\":\"select\",\"currentValue\":\"plan\",\"options\":[{\"value\":\"default\",\"name\":\"Auto\",\"description\":\"Claude decides\"},{\"value\":\"plan\",\"name\":\"Plan\"}]},{\"id\":\"model\",\"category\":\"model\",\"type\":\"select\",\"currentValue\":\"s\",\"options\":[{\"value\":\"o\",\"name\":\"Opus\"},{\"value\":\"s\",\"name\":\"Sonnet\"}]},{\"id\":\"effort\",\"name\":\"Effort\",\"category\":\"thought_level\",\"type\":\"select\",\"currentValue\":\"high\",\"options\":[{\"value\":\"low\",\"name\":\"Low\"},{\"value\":\"high\",\"name\":\"High\"}]}]")
+    ro v = j(options_summary(JsonValue.null(), JsonValue.null(), config, "", ""))
+    assert(str_at(v, "model") == "Sonnet")
+    assert(str_at(v, "model_id") == "s")
+    assert(arr_len(v, "models") == 2)
+    assert(str_at(v, "mode") == "plan")
+    assert(arr_len(v, "modes") == 2)
+    assert(str_at(v, "effort_name") == "Effort")
+    assert(str_at(v, "effort") == "high")
+    assert(arr_len(v, "efforts") == 2)
+}
+
+test "options: the old modes and models of session/new are the fallback, current_mode_update overrides" {
+    ro modes = j("{\"currentModeId\":\"default\",\"availableModes\":[{\"id\":\"default\",\"name\":\"Default\"},{\"id\":\"plan\",\"name\":\"Plan\"}]}")
+    ro models = j("{\"currentModelId\":\"m1\",\"availableModels\":[{\"modelId\":\"m1\",\"name\":\"Model One\"}]}")
+    ro v = j(options_summary(modes, models, JsonValue.null(), "plan", ""))
+    assert(str_at(v, "mode") == "plan")
+    assert(arr_len(v, "modes") == 2)
+    assert(str_at(v, "model") == "Model One")
+    assert(arr_len(v, "efforts") == -1)
+    ro none = j(options_summary(JsonValue.null(), JsonValue.null(), JsonValue.null(), "", ""))
+    assert(str_at(none, "model") == "")
+    assert(arr_len(none, "modes") == -1)
+}
+
+test "options: a choice is turned into the call of the agent only when the agent offered it" {
+    ro config = j("[{\"id\":\"mode\",\"category\":\"mode\",\"type\":\"select\",\"currentValue\":\"default\",\"options\":[{\"value\":\"default\",\"name\":\"Auto\"},{\"value\":\"plan\",\"name\":\"Plan\"}]}]")
+    match setting_call("mode", "plan", JsonValue.null(), JsonValue.null(), config) {
+        Some(call) => {
+            assert(call.method == "session/set_config_option")
+            assert(call.config_id == "mode")
+            assert(call.value == "plan")
+        }
+        None => assert(false)
+    }
+    assert(no_call(setting_call("mode", "bypass", JsonValue.null(), JsonValue.null(), config)))
+    assert(no_call(setting_call("effort", "high", JsonValue.null(), JsonValue.null(), config)))
+    ro modes = j("{\"currentModeId\":\"default\",\"availableModes\":[{\"id\":\"default\",\"name\":\"Default\"}]}")
+    match setting_call("mode", "default", modes, JsonValue.null(), JsonValue.null()) {
+        Some(call) => assert(call.method == "session/set_mode")
+        None => assert(false)
+    }
+    ro models = j("{\"currentModelId\":\"m1\",\"availableModels\":[{\"modelId\":\"m1\",\"name\":\"One\"},{\"modelId\":\"m2\",\"name\":\"Two\"}]}")
+    match setting_call("model", "m2", JsonValue.null(), models, JsonValue.null()) {
+        Some(call) => assert(call.method == "session/set_model")
+        None => assert(false)
+    }
+}
+
 test "update: no open request makes the note acp_note" {
     ro p = project_update(j("{\"sessionUpdate\":\"available_commands_update\",\"availableCommands\":[]}"))
     ro e = progress_event("", p)

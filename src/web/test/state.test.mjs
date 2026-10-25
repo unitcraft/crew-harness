@@ -71,6 +71,27 @@ test('модель сессии: сообщённая обновляется, н
   assert.equal(m.sessions.missing, undefined);
 });
 
+test('выбор модели, усилия и режима: берётся из session_model то, что агент отдал, остальное пусто', () => {
+  const m = run([
+    ev('session_created', { name: 'A', agent: 'claude' }, { trace: 'a', step: 0 }),
+    ev('session_model', {
+      model: 'Sonnet', model_id: 's', models: [{ id: 'o', name: 'Opus' }, { id: 's', name: 'Sonnet' }, { name: 'без id' }],
+      effort: 'high', effort_name: 'Effort', efforts: [{ id: 'high', name: 'High' }], mode: 'plan', modes: [{ id: 'plan', name: 'Plan', description: 'Сначала план' }],
+    }, { trace: 'a', step: 1, id: 'a-opts' }),
+    ev('session_model', { model: 'Plain' }, { trace: 'a', step: 2, id: 'a-plain' }),
+  ].slice(0, 2));
+  const o = m.sessions.a.options;
+  assert.deepEqual(o.models.map((c) => c.id), ['o', 's']);
+  assert.equal(o.modelId, 's');
+  assert.equal(o.effort, 'high');
+  assert.equal(o.modes[0].description, 'Сначала план');
+  const plain = run([
+    ev('session_created', { name: 'A', agent: 'opencode' }, { trace: 'a', step: 0 }),
+    ev('session_model', { model: 'Plain' }, { trace: 'a', step: 1, id: 'a-plain' }),
+  ]).sessions.a.options;
+  assert.deepEqual([plain.models, plain.efforts, plain.modes], [[], [], []]);
+});
+
 test('потоковые куски склеиваются в порядке номеров шагов, а не прибытия', () => {
   const m = run([
     created(),

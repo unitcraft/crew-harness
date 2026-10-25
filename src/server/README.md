@@ -171,6 +171,7 @@ The page says what the owner did. It does not apply its own words: they appear o
 | `session_created` | `{ name, agent, project? }`; `trace` is the id the page chose | makes the session (the id must be a safe file name: letters, digits, dot, dash, underscore), starts the agent. An unknown agent or a bad id is answered by `session_created` and `error` for that page only, nothing is kept |
 | `user_message` | `{ turn, text }` | gives the text to the agent as the next turn. `turn` is not used (see below). Ignored while a turn is open (the page does not offer sending then) |
 | `cancel` | `{ turn? }` | cancels the open turn (`session/cancel`); **the session stays open** |
+| `session_setting` (task 192) | `{ setting, value }`; `setting` is `mode`, `model` or `effort` | the owner chose; the hub asks the agent (`Hub.choose`, `AcpClient.select_option`), the engine does not see it; the answer is a new `session_model` |
 | `permission_decision` | `{ request, decision }`; `decision` is `allow` or `deny` | answers the request for permission of the agent; a decision nobody asked for changes nothing |
 
 ### Server to page
@@ -178,7 +179,7 @@ The page says what the owner did. It does not apply its own words: they appear o
 | `kind` | `input` | When |
 |---|---|---|
 | `session_created` | `{ name, agent, folder, project? }` | a session exists |
-| `session_model` | `{ model }` | current model explicitly reported by ACP; empty means the agent did not report one |
+| `session_model` | `{ model, model_id?, models?, effort?, effort_name?, efforts?, mode?, modes? }` | current model explicitly reported by ACP (empty `model` - not reported) and, task 192, what the agent offers to choose: models, effort, modes (see `src/acp/README.md`) |
 | `user_message` | `{ turn, text }` | the owner's message was accepted |
 | `agent_chunk` | `{ turn, text }` | a piece of the answer; the page glues pieces in the order of `step` |
 | `agent_done` | `{ turn }` | the turn ended well |
