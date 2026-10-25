@@ -248,9 +248,9 @@ export function createView(doc, refs, deps) {
     id: 'composer-input', rows: 1, placeholder: t('composer.placeholder'), 'aria-label': t('chat.input_label'),
   });
   // Кнопки круглые, без видимого текста: имя — для чтения с экрана, подсказка о клавишах — в title (задача 192).
-  const micButton = h(doc, 'button', { type: 'button', class: 'mic-btn', title: t('voice.start'), 'aria-label': `${t('voice.label')}: ${t('voice.start')}`, 'data-state': 'idle' }, icon(doc, 'i-mic'));
+  const micButton = h(doc, 'button', { type: 'button', class: 'mic-btn', 'data-tip': `${t('voice.start')} · ${t('voice.right_click')}`, 'aria-label': `${t('voice.label')}: ${t('voice.start')}`, 'data-state': 'idle' }, icon(doc, 'i-mic'));
   const wave = h(doc, 'div', { class: 'wave', 'aria-hidden': 'true', hidden: true }, ...Array.from({ length: BARS }, () => h(doc, 'i')));
-  const enterButton = h(doc, 'button', { type: 'button', class: 'enter-btn', hidden: true, title: t('voice.stop_insert'), 'aria-label': t('voice.stop_insert') }, icon(doc, 'i-return'));
+  const enterButton = h(doc, 'button', { type: 'button', class: 'enter-btn', hidden: true, 'data-tip': t('voice.stop_insert'), 'aria-label': t('voice.stop_insert') }, icon(doc, 'i-return'));
   const micTimer = h(doc, 'span', { class: 'mic-timer', 'aria-hidden': 'true', hidden: true });
   // стрелка рядом с микрофоном открывает меню: провайдер распознавания, язык, микрофон
   const micMore = h(doc, 'button', { type: 'button', class: 'mic-more', title: t('voice.menu'), 'aria-label': t('voice.menu'), 'aria-haspopup': 'menu', 'aria-expanded': 'false' }, icon(doc, 'i-chevron-down'));
@@ -268,8 +268,8 @@ export function createView(doc, refs, deps) {
     timers: { setTimeout: (f, ms) => globalThis.setTimeout(f, ms), clearTimeout: (id) => globalThis.clearTimeout(id) },
   });
   voiceHint.addEventListener('click', () => voiceToast.hide());
-  const cancelButton = h(doc, 'button', { type: 'button', class: 'cancel-btn', hidden: true, title: t('chat.cancel'), 'aria-label': t('chat.cancel') }, icon(doc, 'i-stop'), h(doc, 'span', { class: 'sr-only', text: t('chat.cancel') }));
-  const sendButton = h(doc, 'button', { type: 'button', class: 'send-btn', title: t('composer.hint'), disabled: true }, icon(doc, 'i-return'), h(doc, 'span', { class: 'sr-only', text: t('chat.send') }));
+  const cancelButton = h(doc, 'button', { type: 'button', class: 'cancel-btn', hidden: true, 'data-tip': t('chat.cancel'), 'aria-label': t('chat.cancel') }, icon(doc, 'i-stop'), h(doc, 'span', { class: 'sr-only', text: t('chat.cancel') }));
+  const sendButton = h(doc, 'button', { type: 'button', class: 'send-btn', 'data-tip': t('composer.hint'), disabled: true }, icon(doc, 'i-return'), h(doc, 'span', { class: 'sr-only', text: t('chat.send') }));
   // счётчик очереди — над полем, position absolute: его появление не меняет высоту
   const queueButton = h(doc, 'button', { type: 'button', class: 'queue-count', hidden: true, title: t('composer.queued_hint') });
   const box = h(doc, 'div', { class: 'box' }, input,
@@ -335,7 +335,7 @@ export function createView(doc, refs, deps) {
   const voiceStatus = (s) => {
     micButton.dataset.state = s.state;
     const hint = t(micTitleKey(s.state));
-    micButton.title = hint;
+    micButton.dataset.tip = s.state === 'recording' || s.state === 'processing' ? hint : `${hint} · ${t('voice.right_click')}`;
     micButton.setAttribute('aria-label', `${t('voice.label')}: ${hint}`);
     setMicTimer(s.state === 'recording');
     paintRecording(s.state);
@@ -432,12 +432,15 @@ export function createView(doc, refs, deps) {
     voiceMenu.hidden = true;
     micMore.setAttribute('aria-expanded', 'false');
   }
-  micMore.addEventListener('click', () => {
+  const toggleVoiceMenu = () => {
     if (!voiceMenu.hidden) { closeVoiceMenu(); return; }
     renderVoiceMenu();
     // статус сервера и список микрофонов узнаём при открытии: сервер могли запустить или остановить
     Promise.all([voiceSettings.refreshStatus(), voiceSettings.refreshMics()]).then(() => { if (!voiceMenu.hidden) renderVoiceMenu(); syncMicIdle(); });
-  });
+  };
+  micMore.addEventListener('click', toggleVoiceMenu);
+  // правый клик на микрофоне — то же меню (провайдер, язык, микрофон), как и по стрелке рядом
+  micButton.addEventListener('contextmenu', (e) => { e.preventDefault(); if (voiceMenu.hidden) toggleVoiceMenu(); });
   doc.addEventListener('click', (e) => { if (!voiceMenu.hidden && !e.composedPath().includes(micWrap)) closeVoiceMenu(); });
   doc.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !voiceMenu.hidden) closeVoiceMenu(); });
   const micPress = createMicPress({ dictation, now, onStart: () => { voiceSettings.refreshStatus().then(syncMicIdle); } });

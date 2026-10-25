@@ -124,6 +124,7 @@ export const S = Object.freeze({
   'chat.switched': 'Разговор продолжает {agent}: протокол передан целиком.',
   'chat.switched_cut': 'Разговор длиннее лимита: передано последних {shown} сообщений целиком из {total}; ранее — только заголовки.',
   'voice.label': 'Голосовой ввод',
+  'voice.right_click': 'Правый клик — настройки',
   'voice.start': 'Нажмите, чтобы начать запись',
   'voice.listening': 'Слушаю…',
   'voice.stop_insert': 'Остановить и вставить текст',
