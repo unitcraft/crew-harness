@@ -11,6 +11,8 @@
 
 import { t } from './strings.js';
 import { createDictation, speechCtor } from './voice.js';
+import { createLocalDictation } from './recorder.js';
+import { LANGS, createVoiceSettings, langFor, pageLang } from './stt.js';
 import { isBusy, keyAction } from './queue.js';
 import { labelOf } from './labels-ru.js';
 import {
@@ -245,11 +247,17 @@ export function createView(doc, refs, deps) {
   });
   // Кнопки круглые, без видимого текста: имя — для чтения с экрана, подсказка о клавишах — в title (задача 192).
   const micButton = h(doc, 'button', { type: 'button', class: 'mic-btn', title: t('voice.hold'), 'aria-label': t('voice.label'), 'data-state': 'idle' }, icon(doc, 'i-mic'));
+  // стрелка рядом с микрофоном открывает меню: провайдер распознавания, язык, микрофон
+  const micMore = h(doc, 'button', { type: 'button', class: 'mic-more', title: t('voice.menu'), 'aria-label': t('voice.menu'), 'aria-haspopup': 'menu', 'aria-expanded': 'false' }, icon(doc, 'i-chevron-down'));
+  const voiceMenu = h(doc, 'div', { class: 'menu voice-menu', role: 'menu', 'data-side': 'right', hidden: true });
+  const voiceList = h(doc, 'div', { class: 'menu-list' });
+  voiceMenu.append(voiceList);
+  const micWrap = h(doc, 'div', { class: 'mic-wrap' }, micButton, micMore, voiceMenu);
   const voiceHint = h(doc, 'p', { class: 'voice-hint', role: 'status', hidden: true });
   const cancelButton = h(doc, 'button', { type: 'button', class: 'cancel-btn', hidden: true, title: t('chat.cancel'), 'aria-label': t('chat.cancel') }, icon(doc, 'i-stop'), h(doc, 'span', { class: 'sr-only', text: t('chat.cancel') }));
   const sendButton = h(doc, 'button', { type: 'button', class: 'send-btn', title: t('composer.hint'), disabled: true }, icon(doc, 'i-send'), h(doc, 'span', { class: 'sr-only', text: t('chat.send') }));
   const box = h(doc, 'div', { class: 'box' }, input,
-    h(doc, 'div', { class: 'box-row' }, micButton, cancelButton, sendButton));
+    h(doc, 'div', { class: 'box-row' }, micWrap, cancelButton, sendButton));
   // счётчик очереди «на потом» (Ctrl+Enter при работающем агенте); клик убирает последнее сообщение
   const queueButton = h(doc, 'button', { type: 'button', class: 'queue-count', hidden: true, title: t('composer.queued_hint') });
 
@@ -265,24 +273,127 @@ export function createView(doc, refs, deps) {
   let pressedAt = 0;
   let pressing = false;
   let ignoreUp = false;
-  const dictation = createDictation({
+  let storage = null;
+  try { storage = win && win.localStorage ? win.localStorage : null; } catch { storage = null; }
+  const page = pageLang(doc);
+  const voiceSettings = createVoiceSettings({
+    storage,
+    fetchFn: (...args) => win.fetch(...args),
+    mediaDevices: win && win.navigator ? win.navigator.mediaDevices : undefined,
+    page,
+  });
+  const voiceChange = () => { fitInput(); if (currentTrace) drafts.set(currentTrace, input.value); };
+  // Состояние кнопки и подсказка под полем: «недоступно» (серая: браузер без распознавания) и «ошибка» (можно повторить)
+  const voiceStatus = (s) => {
+    micButton.dataset.state = s.state;
+    micButton.title = s.state === 'processing' ? t('voice.processing') : t('voice.hold');
+    voiceHint.hidden = !['unavailable', 'error', 'processing'].includes(s.state);
+    if (s.state === 'unavailable') voiceHint.textContent = t('voice.unavailable', { reason: s.reason });
+    else if (s.state === 'error') voiceHint.textContent = t('voice.failed', { reason: s.reason });
+    else if (s.state === 'processing') voiceHint.textContent = s.reason ? t('voice.processing_note', { note: s.reason }) : t('voice.processing');
+    else voiceHint.textContent = '';
+  };
+  const browserDictation = createDictation({
     Ctor: speechCtor(win),
     field: input,
-    lang: 'ru-RU',
-    onChange() { fitInput(); if (currentTrace) drafts.set(currentTrace, input.value); },
-    onStatus(s) {
-      micButton.dataset.state = s.state;
-      voiceHint.hidden = s.state !== 'unavailable';
-      voiceHint.textContent = s.state === 'unavailable' ? t('voice.unavailable', { reason: s.reason }) : '';
-    },
+    lang: () => langFor('browser', voiceSettings.state.lang, page),
+    onChange: voiceChange,
+    onStatus: voiceStatus,
   });
-  if (!speechCtor(win)) micButton.dataset.state = 'unavailable';
+  const localDictation = createLocalDictation({
+    field: input,
+    mediaDevices: win && win.navigator ? win.navigator.mediaDevices : undefined,
+    AudioCtx: win ? (win.AudioContext || win.webkitAudioContext) : undefined,
+    fetchFn: (...args) => win.fetch(...args),
+    getLang: () => langFor('local', voiceSettings.state.lang),
+    getMic: () => voiceSettings.state.mic,
+    workletUrl: new URL('./rec-worklet.js', import.meta.url).href,
+    onChange: voiceChange,
+    onStatus: voiceStatus,
+  });
+  // Одна ручка на два распознавателя: какой работает, решает выбор в меню на момент нажатия.
+  let currentDictation = browserDictation;
+  const dictation = {
+    start() { currentDictation = voiceSettings.provider() === 'local' ? localDictation : browserDictation; return currentDictation.start(); },
+    stop() { currentDictation.stop(); },
+    toggle() { if (currentDictation.active()) currentDictation.stop(); else this.start(); },
+    active() { return browserDictation.active() || localDictation.active(); },
+  };
+  // серая кнопка — только если работать будет браузерный распознаватель, а его в этом браузере нет
+  const syncMicIdle = () => {
+    if (micButton.dataset.state !== 'idle' && micButton.dataset.state !== 'unavailable') return;
+    micButton.dataset.state = voiceSettings.provider() === 'browser' && !speechCtor(win) ? 'unavailable' : 'idle';
+  };
+  syncMicIdle();
+  voiceSettings.refreshStatus().then(syncMicIdle);
+
+  // ---- меню голосового ввода
+  const voiceRow = ({ name, description, checked, disabled, onPick }) => {
+    const row = menuRow({ name, description, checked, onPick: disabled ? () => {} : onPick });
+    if (disabled) row.setAttribute('aria-disabled', 'true');
+    return row;
+  };
+  function renderVoiceMenu() {
+    const st = voiceSettings.state;
+    const provider = voiceSettings.provider();
+    const offline = st.available === false;
+    const rows = [
+      h(doc, 'div', { class: 'menu-head', text: t('voice.provider_head') }),
+      voiceRow({ name: t('voice.p_browser'), checked: provider === 'browser', onPick: () => { voiceSettings.setProvider('browser'); syncMicIdle(); renderVoiceMenu(); } }),
+      voiceRow({
+        name: t('voice.p_local'), description: offline ? t('voice.not_running') : false, checked: provider === 'local', disabled: offline,
+        onPick: () => { voiceSettings.setProvider('local'); syncMicIdle(); renderVoiceMenu(); },
+      }),
+      h(doc, 'div', { class: 'menu-sep', role: 'separator' }),
+      h(doc, 'div', { class: 'menu-head', text: t('voice.lang_head') }),
+      ...LANGS.map((l) => voiceRow({
+        name: l.id === 'auto' ? t('voice.lang_auto') : l.name, checked: st.lang === l.id,
+        onPick: () => { voiceSettings.setLang(l.id); renderVoiceMenu(); },
+      })),
+      h(doc, 'div', { class: 'menu-sep', role: 'separator' }),
+      h(doc, 'div', { class: 'menu-head', text: provider === 'local' ? t('voice.mic_head') : t('voice.mic_head_browser') }),
+      voiceRow({ name: t('voice.mic_default'), checked: st.mic === '' || !st.mics.devices.some((d) => d.id === st.mic), onPick: () => { voiceSettings.setMic(''); renderVoiceMenu(); } }),
+      ...st.mics.devices.filter((d) => d.id !== 'default').map((d, i) => voiceRow({
+        name: d.label || t('voice.mic_n', { n: i + 1 }), checked: st.mic === d.id, onPick: () => { voiceSettings.setMic(d.id); renderVoiceMenu(); },
+      })),
+    ];
+    if (!st.mics.labelled) {
+      rows.push(voiceRow({
+        name: t('voice.mic_allow'),
+        onPick: async () => {
+          try {
+            const stream = await win.navigator.mediaDevices.getUserMedia({ audio: true });
+            for (const track of stream.getTracks()) track.stop();
+          } catch (e) {
+            voiceStatus({ state: 'error', reason: e && e.name === 'NotAllowedError' ? t('voice.err_denied') : t('voice.err_no_mic') });
+          }
+          await voiceSettings.refreshMics();
+          renderVoiceMenu();
+        },
+      }));
+    }
+    voiceList.replaceChildren(...rows);
+    voiceMenu.hidden = false;
+    micMore.setAttribute('aria-expanded', 'true');
+  }
+  function closeVoiceMenu() {
+    voiceMenu.hidden = true;
+    micMore.setAttribute('aria-expanded', 'false');
+  }
+  micMore.addEventListener('click', () => {
+    if (!voiceMenu.hidden) { closeVoiceMenu(); return; }
+    renderVoiceMenu();
+    // статус сервера и список микрофонов узнаём при открытии: сервер могли запустить или остановить
+    Promise.all([voiceSettings.refreshStatus(), voiceSettings.refreshMics()]).then(() => { if (!voiceMenu.hidden) renderVoiceMenu(); syncMicIdle(); });
+  });
+  doc.addEventListener('click', (e) => { if (!voiceMenu.hidden && !e.composedPath().includes(micWrap)) closeVoiceMenu(); });
+  doc.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !voiceMenu.hidden) closeVoiceMenu(); });
   micButton.addEventListener('pointerdown', (e) => {
     if (e.button !== undefined && e.button !== 0) return;
     e.preventDefault();
     pressedAt = now();
     pressing = true;
-    if (dictation.active()) { dictation.stop(); ignoreUp = true; } else { ignoreUp = false; dictation.start(); }
+    if (dictation.active()) { dictation.stop(); ignoreUp = true; } else { ignoreUp = false; dictation.start(); voiceSettings.refreshStatus().then(syncMicIdle); }
   });
   const releaseMic = () => {
     if (!pressing) return;

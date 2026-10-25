@@ -825,3 +825,14 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
   .sub { min-width: 0; gap: 5px; }
   .session-model-slot { min-width: 0; max-width: 34vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
+
+.mic-wrap { position: relative; display: inline-flex; align-items: center; }
+.mic-more { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 32px; min-height: 32px; padding: 0; border: 0; background: transparent; color: var(--fg-muted); cursor: pointer; }
+.mic-more .icon { width: 12px; height: 12px; }
+.mic-more[aria-expanded="true"] { color: var(--fg); }
+.voice-menu { bottom: calc(100% + 10px); min-width: 270px; }
+.voice-menu .menu-list { max-height: min(70vh, 460px); }
+.voice-menu .menu-item[aria-disabled="true"] { opacity: .5; cursor: default; }
+.mic-btn[data-state="processing"] .icon { display: none; }
+.mic-btn[data-state="processing"]::after { content: ""; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+.mic-btn[data-state="error"] { color: var(--danger); }

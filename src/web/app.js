@@ -174,6 +174,7 @@ async function start() {
     agents = mock.AGENTS;
   }
   let registryFailed = false;
+  if (picked.mode === 'mock') globalThis.fetch = mock.mockFetch(globalThis.fetch.bind(globalThis));
   if (picked.mode === 'ws') {
     try {
       const response = await fetch('/api/agents', { cache: 'no-store' });

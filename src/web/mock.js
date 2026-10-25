@@ -278,3 +278,17 @@ export function createMockServer({ journal, now = Date.now } = {}) {
 
   return { handle, journal: () => shown };
 }
+
+// ---- заглушка распознавания речи (задача 192): в режиме ?mock=1 сервера нет, но выбор провайдера и запись можно проверить
+export const MOCK_STT_TEXT = 'пример распознанного текста';
+
+/** fetch, который сам отвечает на /api/stt и /api/stt/status, а всё остальное отдаёт настоящему fetch. */
+export function mockFetch(real) {
+  const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  return async (url, init) => {
+    const path = String(url).split('?')[0];
+    if (path === '/api/stt/status') return json({ available: true, provider: 'local', model: 'small' });
+    if (path === '/api/stt') return json({ text: MOCK_STT_TEXT });
+    return real(url, init);
+  };
+}

@@ -29,7 +29,7 @@ export const NO_API_REASON = 'в браузере нет распознаван�
 /**
  * @param deps.Ctor      конструктор распознавателя или null
  * @param deps.field     поле: { value, selectionStart, selectionEnd, setSelectionRange? }
- * @param deps.lang      язык распознавания, например 'ru-RU'
+ * @param deps.lang      язык распознавания, например 'ru-RU', или функция, отдающая его на момент начала записи
  * @param deps.onChange  вызывается после каждого изменения поля (подогнать высоту, сохранить черновик)
  * @param deps.onStatus  вызывается с { state: 'idle' | 'recording' | 'unavailable', reason? }
  * @returns { start(), stop(), toggle(), active() }
@@ -68,7 +68,7 @@ export function createDictation({ Ctor, field, lang = 'ru-RU', onChange = () => 
       onStatus({ state: 'unavailable', reason: reasonOf(e && e.name) });
       return false;
     }
-    r.lang = lang;
+    r.lang = typeof lang === 'function' ? lang() : lang;
     r.interimResults = true;
     r.continuous = true;
     r.onresult = (event) => {

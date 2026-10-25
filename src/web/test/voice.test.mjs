@@ -87,3 +87,14 @@ test('toggle: первый вызов начинает запись, второ�
   d.toggle();
   assert.equal(d.active(), false);
 });
+
+test('язык может быть функцией: берётся в момент начала записи', () => {
+  let current = 'ru-RU';
+  const d = createDictation({ Ctor: FakeRec, field: field(''), lang: () => current });
+  d.start();
+  assert.equal(FakeRec.last.lang, 'ru-RU');
+  d.stop();
+  current = 'de-DE';
+  d.start();
+  assert.equal(FakeRec.last.lang, 'de-DE');
+});

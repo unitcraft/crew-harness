@@ -178,3 +178,13 @@ test('запрос разрешения: в detail — сама команда, 
   assert.ok(pending.detail.includes('node scripts/clean.js'), 'в detail видна команда');
   assert.ok(pending.detail.includes('\n'), 'многострочная команда приходит целиком');
 });
+
+test('mockFetch: статус и распознавание отвечает сам, остальное отдаёт настоящему fetch', async () => {
+  const { mockFetch, MOCK_STT_TEXT } = await import('../mock.js');
+  const seen = [];
+  const f = mockFetch(async (url) => { seen.push(url); return 'real'; });
+  assert.deepEqual(await (await f('/api/stt/status', {})).json(), { available: true, provider: 'local', model: 'small' });
+  assert.deepEqual(await (await f('/api/stt?lang=ru', { method: 'POST' })).json(), { text: MOCK_STT_TEXT });
+  assert.equal(await f('/api/agents'), 'real');
+  assert.deepEqual(seen, ['/api/agents']);
+});
