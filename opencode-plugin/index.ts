@@ -1934,6 +1934,8 @@ export default {
             if (cfg.worktrees && !insideDir(t.worktree, cfg.worktrees)) return refuse(`worktree ${t.worktree} вне папки деревьев проекта ${cfg.worktrees}`)
             const w = await ensureWorktree(t.directory, t.worktree, t.branch, cfg.targetBranch, { foreign: foreignTree(t) })
             if (!w.ok) return refuse(`worktree ${t.worktree} не создан: ${w.error}`)
+            // правило владельца (2026-10-26): деревья создаются только в папке деревьев проекта — стоящее вне её не усыновляется
+            if (w.adopted && w.path && cfg.worktrees && !insideDir(w.path, cfg.worktrees)) return refuse(`на ветке ${t.branch} уже стоит дерево ${w.path} вне папки деревьев проекта ${cfg.worktrees} (деревья создаются только там — владелец, 2026-10-26): перенеси его туда (git worktree move) или удали, затем повтори запуск`)
             // на ветке уже стоит дерево (подготовлено вручную, записано track): запись задачи выравнивается по нему (задача 079)
             if (w.adopted && w.path && !sameFs(w.path, t.worktree)) {
               taskEvent(t, PLUGIN_SENDER, undefined, `дерево задачи — ${w.path}: на ветке ${t.branch} оно уже стоит (по настройкам было бы ${t.worktree}); второе не создаётся`)
@@ -1959,6 +1961,8 @@ export default {
                 if (cfg.worktrees && !insideDir(ses.worktree, cfg.worktrees)) return refuse(`дерево сессии ${ses.worktree} вне папки деревьев проекта ${cfg.worktrees}`)
                 const ws = await ensureWorktree(t.directory, ses.worktree, ses.branch, t.branch, { foreign: foreignTree(t) })
                 if (!ws.ok) return refuse(`дерево сессии ${ses.worktree} не создано: ${ws.error}`)
+                // правило владельца (2026-10-26): деревья создаются только в папке деревьев проекта — стоящее вне её не усыновляется
+                if (ws.adopted && ws.path && cfg.worktrees && !insideDir(ws.path, cfg.worktrees)) return refuse(`дерево сессии ${sesLabel(ses)} на ветке ${ses.branch} уже стоит в ${ws.path} вне папки деревьев проекта ${cfg.worktrees} (деревья создаются только там — владелец, 2026-10-26): перенеси или удали его, затем повтори запуск`)
                 // дерево ветки сессии уже стоит (сделано вручную): запись сессии называет его путь, уборка видит его (задача 079)
                 if (ws.adopted && ws.path && !sameFs(ws.path, ses.worktree)) {
                   taskEvent(t, PLUGIN_SENDER, undefined, `дерево сессии ${sesLabel(ses)} — ${ws.path}: на ветке ${ses.branch} оно уже стоит (по настройкам было бы ${ses.worktree}); второе не создаётся`)

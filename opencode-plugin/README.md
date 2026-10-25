@@ -1019,6 +1019,10 @@ task by its number; a session's title is `045 исп title`. The journal is
   role (`spawn_limits`, 3); priority `P0` (emergency) … `P3`, default `P2`. With `worktrees` set the
   plugin creates the task's worktree and branch (from the target branch) and starts the session in it, so the
   project's hooks see the task's branch, not the main copy ([plan 002.3](../doc/archive/plans/002.3-task-worktree.md)).
+  The place has to lie inside the `worktrees` folder (the rule of the trees folder): a place that escapes it through
+  the `worktree_name` template is refused before the task record is made (`crew_spawn`, `crew_task {action: "assign"}`),
+  and a tree made by hand outside the folder on the task's branch is not adopted — the start is refused with how to
+  fix (`git worktree move` into the folder, or remove the tree).
 - The start is repeatable: the session id is chosen and written to the journal **before**
   `session.create` (OpenCode accepts an own id starting with `ses` and returns the existing session
   on a repeat), the task letter's id comes from the number — a start cut off at any step is

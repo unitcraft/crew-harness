@@ -972,6 +972,21 @@ export function insideDir(p: string, dir: string): boolean {
   const rel = path.relative(path.resolve(dir).toLowerCase(), path.resolve(p).toLowerCase())
   return !!rel && !rel.startsWith("..") && !path.isAbsolute(rel)
 }
+/** Каталог дерева обязан лежать в папке деревьев проекта (владелец, 2026-10-26: деревья создаются только там). Текст отказа
+ *  или undefined; корень — из настройки worktrees проекта, путей машины в репозитории нет (AGENTS.md, п. 15). */
+export function placeFault(worktree: string | undefined, cfg: CrewConfig): string | undefined {
+  if (!cfg.worktrees || !worktree) return undefined
+  if (insideDir(worktree, cfg.worktrees)) return undefined
+  return `каталог дерева ${worktree} вне папки деревьев проекта ${cfg.worktrees} (деревья создаются только там — владелец, 2026-10-26); проверь настройки проекта worktrees и worktree_name`
+}
+/** Место задачи по настройкам с проверкой правила о папке деревьев: место вне её — бросок с меткой placeRefusal;
+ *  обработчики постановки ловят его и отвечают отказом до записи задачи. */
+export function checkedPlace(dir: string, cfg: CrewConfig, n: number | string, slug: string, project: string): { worktree?: string; branch: string } {
+  const p = taskPlace(dir, cfg, n, slug, project)
+  const f = placeFault(p.worktree, cfg)
+  if (f) throw Object.assign(new Error(f), { placeRefusal: true })
+  return p
+}
 
 /** Старт процесса сервера (не загрузки плагина: OpenCode грузит его заново в том же процессе на каждую папку). */
 export const PROCESS_START = Number(process.env.CREW_HARNESS_PROCESS_START) || Date.now() - process.uptime() * 1000
@@ -2317,7 +2332,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
     const goal = String(input.goal ?? "").trim()
     const prio = isPriority(input.priority) ? input.priority : cfg.defaultPriority
     const common = { project, goal, boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(), ...messageFieldsOf(input), ...(extra ? { extra } : {}), priority: prio, tier: recTier, role, model, author: me.session, author_role: keyOf(me), qid: newQid(), status: "idle" as const, kind: "spawn" as const, directory: me.directory }
-    const placeOf = (n: number, slug: string) => taskPlace(me.directory, cfg, pad3(n), slug, project)
+    const placeOf = (n: number, slug: string) => checkedPlace(me.directory, cfg, pad3(n), slug, project)
     let t: Task
     let made = ""
     let fresh = false
@@ -2349,6 +2364,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         try {
           t = createTask({ ...common, ...rp.fields, title: ftitle, slug: hit.name.replace(/^\d+-/, ""), criteria: input.criteria?.trim() || `по заданию ${fm.rel}/${hit.name}/task/message.md` }, placeOf, { n: taskNum, fill: () => ({ folder: `${fm.rel}/${hit.name}`, sessions: [] }) })
         } catch (e: any) {
+          if (e?.placeRefusal) return { content: `Задача не поставлена: ${e.message}` }
           return { content: `Задача не поставлена: запись ${taskNum} в этот миг завёл другой процесс (${e?.code ?? e}). Повтори.` }
         }
         // папки нет в целевой ветке — ветка задачи идёт от ветки, где папка лежит (основную копию не трогаем)
@@ -2390,7 +2406,12 @@ export function makeTools(host: CrewHost): CrewTool[] {
       const rp = planRoute(input, text, cfg.routeDefaults)
       if (!rp.ok) return { content: rp.refusal }
       const used = usedNumbers(fm.top, fm.rel)
-      t = createTask({ ...common, ...rp.fields, title: a.title, criteria: input.criteria?.trim() || (small ? "приёмка — слово владельца на тестовом контуре" : undefined), ...(partOf !== undefined ? { part_of: partOf } : {}) }, placeOf, { used, fill: (n, slug) => ({ folder: `${fm.rel}/${folderName(n, slug)}`, sessions: [] }) })
+      try {
+        t = createTask({ ...common, ...rp.fields, title: a.title, criteria: input.criteria?.trim() || (small ? "приёмка — слово владельца на тестовом контуре" : undefined), ...(partOf !== undefined ? { part_of: partOf } : {}) }, placeOf, { used, fill: (n, slug) => ({ folder: `${fm.rel}/${folderName(n, slug)}`, sessions: [] }) })
+      } catch (e: any) {
+        if (e?.placeRefusal) return { content: `Задача не поставлена: ${e.message}` }
+        throw e
+      }
       const base = baseRef(fm.top, cfg.targetBranch)
       let sha = ""
       try {
@@ -2566,14 +2587,20 @@ export function makeTools(host: CrewHost): CrewTool[] {
       if (plan && hasRouteInput(input)) return { content: "Задача не поставлена: route и его поля — для задачи с папкой, не для задачи-плана." }
       const rp = plan ? undefined : planRoute(input, undefined, cfg.routeDefaults)
       if (rp && !rp.ok) return { content: rp.refusal }
-      const t = createTask({
-        ...(rp?.ok ? rp.fields : {}),
-        project, title: plan ? `план ${plan.n}: ${title}` : title, goal: String(input.goal).trim(), criteria: plan ? "критерии приёмки плана (план 004): А — против исходной задачи, Б — правильность составления" : input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(),
-        ...(extra.value ? { extra: extra.value } : {}),
-        priority: isPriority(input.priority) ? input.priority : cfg.defaultPriority, tier: recTier, role, model,
-        author: me.session, author_role: keyOf(me), qid: newQid(), status: "starting", kind: "spawn", executor: plannedSessionId(), directory: me.directory,
-        ...(plan ? { plan } : {}),
-      }, (n, slug) => taskPlace(me.directory, cfg, n, slug, project), ((fo) => (fo ? { used: usedNumbers(fo.top, fo.rel) } : {}))(plan ? folderInfo(me.directory, cfg) : undefined)) // задача-план в проекте с папками — номер не повторяет номер папки
+      let t: Task
+      try {
+        t = createTask({
+          ...(rp?.ok ? rp.fields : {}),
+          project, title: plan ? `план ${plan.n}: ${title}` : title, goal: String(input.goal).trim(), criteria: plan ? "критерии приёмки плана (план 004): А — против исходной задачи, Б — правильность составления" : input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(),
+          ...(extra.value ? { extra: extra.value } : {}),
+          priority: isPriority(input.priority) ? input.priority : cfg.defaultPriority, tier: recTier, role, model,
+          author: me.session, author_role: keyOf(me), qid: newQid(), status: "starting", kind: "spawn", executor: plannedSessionId(), directory: me.directory,
+          ...(plan ? { plan } : {}),
+        }, (n, slug) => checkedPlace(me.directory, cfg, n, slug, project), ((fo) => (fo ? { used: usedNumbers(fo.top, fo.rel) } : {}))(plan ? folderInfo(me.directory, cfg) : undefined)) // задача-план в проекте с папками — номер не повторяет номер папки
+      } catch (e: any) {
+        if (e?.placeRefusal) return { content: `Задача не поставлена: ${e.message}` }
+        throw e
+      }
       if (chosen && !("refuse" in chosen)) stampProfile(t, "executor", t.executor!, chosen, !!t.worktree)
       else if (!chosen) stampClamp(t, "executor", t.executor!, stageOfLaunch({ plan: input.kind === "plan" }, "executor"), model, tier, tierCut.from)
       const par = parseParent(input.parent)
@@ -2695,12 +2722,18 @@ export function makeTools(host: CrewHost): CrewTool[] {
         // задание по образцу Канона (задача 065) — те же поля и отказы, что у crew_spawn
         const refusal = fm ? messageRefusal(input) : undefined
         if (refusal) return { content: refusal }
-        const t = createTask({
-          project, title, goal: String(input.goal).trim(), criteria: input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(), ...messageFieldsOf(input),
-          ...(extra.value ? { extra: extra.value } : {}),
-          priority: isPriority(input.priority) ? input.priority : cfg.defaultPriority, tier: "medium", role: target.role, model: target.model,
-          author: me.session, author_role: keyOf(me), qid: newQid(), status: "running", kind: "assign", executor: target.session, directory: target.directory,
-        }, (n, slug) => taskPlace(target.directory, cfg, fm ? pad3(n) : n, slug, project), fm ? { used: usedNumbers(fm.top, fm.rel), fill: (n, slug) => ({ folder: `${fm.rel}/${folderName(n, slug)}`, sessions: [{ code: EXECUTOR_CODE, k: 1, launch: 1, session: target.session, status: "running", goal: String(input.goal).trim(), place: "task", started: Date.now() }] }) } : {})
+        let t: Task
+        try {
+          t = createTask({
+            project, title, goal: String(input.goal).trim(), criteria: input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(), ...messageFieldsOf(input),
+            ...(extra.value ? { extra: extra.value } : {}),
+            priority: isPriority(input.priority) ? input.priority : cfg.defaultPriority, tier: "medium", role: target.role, model: target.model,
+            author: me.session, author_role: keyOf(me), qid: newQid(), status: "running", kind: "assign", executor: target.session, directory: target.directory,
+          }, (n, slug) => checkedPlace(target.directory, cfg, fm ? pad3(n) : n, slug, project), fm ? { used: usedNumbers(fm.top, fm.rel), fill: (n, slug) => ({ folder: `${fm.rel}/${folderName(n, slug)}`, sessions: [{ code: EXECUTOR_CODE, k: 1, launch: 1, session: target.session, status: "running", goal: String(input.goal).trim(), place: "task", started: Date.now() }] }) } : {})
+        } catch (e: any) {
+          if (e?.placeRefusal) return { content: `Задача не поставлена: ${e.message}` }
+          throw e
+        }
         if (fm && t.folder && t.branch) {
           const own = String(input.message ?? "")
           const base = baseRef(fm.top, cfg.targetBranch)

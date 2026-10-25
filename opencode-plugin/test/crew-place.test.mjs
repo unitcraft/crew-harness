@@ -2,7 +2,9 @@
 // The worktree and branch are written with the task itself (not by a second save a server pass could miss), the
 // path in the crew_spawn answer is the path created, and a task session is never opened in the main copy: a task
 // whose record lost its place gets it from the settings; a worktree outside the project's worktrees folder or one
-// that cannot be created is not started, the author is told.
+// that cannot be created is not started, the author is told. The rule of the trees folder (the owner, 2026-10-26):
+// a place escaping it through the settings template is refused before the record is made (crew_spawn), and a tree
+// made by hand outside the folder on the task branch is not adopted.
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -100,6 +102,30 @@ await until(() => lettersTo("sesINTEG1").some((l) => /003 .*не запущен�
 const t3 = task(3)
 cell("a worktree outside the project's folder is not started", t3.status === "starting" && !sessions.has(t3.executor) && !existsSync(outside), JSON.stringify({ st: t3.status, s: sessions.has(t3.executor) }))
 cell("the author is told why, once", lettersTo("sesINTEG1").filter((l) => /003 .*не запущена: worktree .* вне папки деревьев/.test(l.text)).length === 1, JSON.stringify(lettersTo("sesINTEG1").map((l) => l.text.slice(0, 160))))
+
+// 4. the rule of the trees folder (the owner, 2026-10-26: trees are made only there)
+// 4a. a settings template whose name escapes the folder: crew_spawn refuses before the record is made
+// (the plugin reads the settings folder COMMITTED, with a background refresh — commit the flip and wait for it)
+writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ root: "..", worktrees: "worktrees", worktree_name: "../escape-{n}-{slug}", branch_name: "t{n}-{slug}", cleanup: "local", allow_default_models: true, spawn_limits: { worker: 5, reviewer: 0 } }))
+git(proj, "add", ".opencode/crew-harness.json")
+git(proj, "commit", "-q", "-m", "escape template")
+await until(() => core.loadConfig(proj).worktreeName === "../escape-{n}-{slug}")
+const bad = await call("crew_spawn", "sesINTEG1", { title: "Побег из папки", goal: "g", criteria: "c" })
+cell("crew_spawn refuses a place outside the trees folder and names the rule", /Задача не поставлена: каталог дерева .* вне папки деревьев проекта .*владелец, 2026-10-26/.test(bad), bad)
+cell("no record is made", !task(4), JSON.stringify(task(4)))
+writeFileSync(path.join(proj, ".opencode", "crew-harness.json"), JSON.stringify({ root: "..", worktrees: "worktrees", worktree_name: "{repo}-{n}-{slug}", branch_name: "t{n}-{slug}", cleanup: "local", allow_default_models: true, spawn_limits: { worker: 5, reviewer: 0 } }))
+git(proj, "add", ".opencode/crew-harness.json")
+git(proj, "commit", "-q", "-m", "restore template")
+await until(() => core.loadConfig(proj).worktreeName === "{repo}-{n}-{slug}")
+
+// 4b. a tree made by hand outside the folder on the task branch: not adopted, not started, the author is told how to fix
+const adopted = path.join(tmp, "elsewhere", "proj-4-outside")
+git(proj, "worktree", "add", adopted, "-b", "t4-outside")
+tasks.createTask({ project: "proj", title: "усыновление снаружи", goal: "g", criteria: "c", priority: "P2", tier: "light", role: "worker", model: "claude-code/haiku", author: "sesINTEG1", author_role: "proj.integrator", qid: "q4", status: "starting", kind: "spawn", executor: tasks.plannedSessionId(), directory: proj }, () => ({ worktree: path.join(wtRoot, "proj-4-outside"), branch: "t4-outside" }))
+await until(() => lettersTo("sesINTEG1").some((l) => /004 .*не запущена: на ветке t4-outside/.test(l.text)))
+const t4 = task(4)
+cell("a hand-made tree outside the folder is not adopted, the record keeps its own place", t4.status === "starting" && t4.worktree === path.join(wtRoot, "proj-4-outside") && !sessions.has(t4.executor), JSON.stringify({ st: t4.status, wt: t4.worktree, s: sessions.has(t4.executor) }))
+cell("the letter says why and how to fix, once", lettersTo("sesINTEG1").filter((l) => /004 .*не запущена: на ветке t4-outside уже стоит дерево .* вне папки деревьев проекта .*git worktree move/.test(l.text)).length === 1, JSON.stringify(lettersTo("sesINTEG1").map((l) => l.text.slice(0, 200))))
 
 stop?.()
 process.chdir(cwd0)
