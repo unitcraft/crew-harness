@@ -108,9 +108,11 @@ export const S = Object.freeze({
   'diffs.hide': 'Свернуть',
 
   // ---- поле ввода
-  'composer.placeholder': 'Напишите сообщение…',
-  'composer.hint': 'Enter — отправить, Shift+Enter — новая строка',
+  'composer.placeholder': 'Enter — отправить, Ctrl+Enter — в очередь на потом',
+  'composer.hint': 'Enter — отправить, Ctrl+Enter — в очередь на потом',
   'menu.agent': 'Агент',
+  'composer.queued': 'В очереди: {n}',
+  'composer.queued_hint': 'Убрать последнее сообщение из очереди',
   'menu.mode': 'Режим',
   'menu.effort': 'Усилие',
   'menu.more_models': 'Другие модели',

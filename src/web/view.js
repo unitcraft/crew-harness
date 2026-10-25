@@ -11,6 +11,7 @@
 
 import { t } from './strings.js';
 import { createDictation, speechCtor } from './voice.js';
+import { isBusy, keyAction } from './queue.js';
 import {
   STATE_KEYS, sessionList, splitBlocks, filterSessions, groupSessions, effectivePins, timeline, paragraphs, inlineSpans,
   workSummary, effortChoices, filterModels, groupModels, usagePercent, usageLevel, tokenParts, durationLabel, agoParts, fileParts, taskSummary,
@@ -244,10 +245,12 @@ export function createView(doc, refs, deps) {
   // Кнопки круглые, без видимого текста: имя — для чтения с экрана, подсказка о клавишах — в title (задача 192).
   const micButton = h(doc, 'button', { type: 'button', class: 'mic-btn', title: t('voice.hold'), 'aria-label': t('voice.label'), 'data-state': 'idle' }, icon(doc, 'i-mic'));
   const voiceHint = h(doc, 'p', { class: 'voice-hint', role: 'status', hidden: true });
-  const cancelButton = h(doc, 'button', { type: 'button', class: 'cancel-btn', hidden: true, title: t('chat.cancel') }, icon(doc, 'i-stop'), h(doc, 'span', { class: 'sr-only', text: t('chat.cancel') }));
+  const cancelButton = h(doc, 'button', { type: 'button', class: 'cancel-btn', hidden: true, title: t('chat.cancel'), 'aria-label': t('chat.cancel') }, icon(doc, 'i-stop'), h(doc, 'span', { class: 'sr-only', text: t('chat.cancel') }));
   const sendButton = h(doc, 'button', { type: 'button', class: 'send-btn', title: t('composer.hint'), disabled: true }, icon(doc, 'i-send'), h(doc, 'span', { class: 'sr-only', text: t('chat.send') }));
   const box = h(doc, 'div', { class: 'box' }, input,
     h(doc, 'div', { class: 'box-row' }, micButton, cancelButton, sendButton));
+  // счётчик очереди «на потом» (Ctrl+Enter при работающем агенте); клик убирает последнее сообщение
+  const queueButton = h(doc, 'button', { type: 'button', class: 'queue-count', hidden: true, title: t('composer.queued_hint') });
 
   const ringFill = svgNode(doc, 'circle', { class: 'ring-fill', cx: 12, cy: 12, r: 9, pathLength: 100 });
   const ring = svgNode(doc, 'svg', { class: 'ring', viewBox: '0 0 24 24', role: 'img' });
@@ -439,6 +442,7 @@ export function createView(doc, refs, deps) {
   const composer = h(doc, 'div', { class: 'composer' },
     box,
     voiceHint,
+    queueButton,
     status);
 
   const chat = h(doc, 'section', { class: 'chat', hidden: true }, log, composer);
@@ -455,10 +459,11 @@ export function createView(doc, refs, deps) {
   let currentTrace = null;
   const nodes = new Map(); // key элемента ленты -> { node, sig, item }
 
-  function submit() {
+  function submit(queue = false) {
     const text = input.value.trim();
     if (!currentTrace || text.length === 0) return;
-    if (handlers.onSend(currentTrace, text)) {
+    const done = queue ? handlers.onQueue(currentTrace, text) : handlers.onSend(currentTrace, text);
+    if (done) {
       input.value = '';
       fitInput();
       drafts.delete(currentTrace);
@@ -470,10 +475,13 @@ export function createView(doc, refs, deps) {
     input.style.height = 'auto';
     if (input.scrollHeight > 0) input.style.height = `${input.scrollHeight}px`; // 0 — чат скрыт: оставить auto
   }
-  sendButton.addEventListener('click', submit);
+  sendButton.addEventListener('click', () => submit());
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); }
+    const session = current.session;
+    const action = keyAction(e, Boolean(session) && isBusy(session.state));
+    if (action) { e.preventDefault(); submit(action === 'queue'); }
   });
+  queueButton.addEventListener('click', () => { if (currentTrace) handlers.onUnqueue(currentTrace); });
   input.addEventListener('input', () => {
     fitInput();
     if (currentTrace) drafts.set(currentTrace, input.value);
@@ -666,7 +674,10 @@ export function createView(doc, refs, deps) {
     modelText.textContent = session.model || t('session.model_unknown');
     stateBadge.textContent = t(STATE_KEYS[session.state]);
     stateBadge.dataset.state = session.state;
-    const busy = session.state === 'answering' || session.state === 'permission';
+    const busy = isBusy(session.state);
+    const queued = handlers.queued(session.id);
+    queueButton.hidden = queued === 0;
+    if (queued > 0) queueButton.textContent = t('composer.queued', { n: queued });
     cancelButton.hidden = !busy;
     sendButton.disabled = busy || input.value.trim().length === 0;
     options = session.options || null;

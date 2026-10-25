@@ -10,6 +10,7 @@ import {
 } from './state.js';
 import { t } from './strings.js';
 import { createView } from './view.js';
+import { createQueue } from './queue.js';
 import { chooseMode, createTransport, parseAgentRegistry } from './transport.js';
 import {
   AGENTS, createMockServer,
@@ -92,7 +93,28 @@ function send(kind, trace, step, input) {
   return ok;
 }
 
+// Очередь «на потом» (Ctrl+Enter при работающем агенте): живёт только в странице, по сессиям, FIFO.
+const queue = createQueue();
+
+/** Ход закончился — следующее сообщение очереди уходит как обычная отправка; сессии нет в модели — очередь сброшена. */
+function drain() {
+  queue.prune(model.sessions);
+  for (const trace of queue.traces()) {
+    const text = queue.take(trace, model.sessions[trace]);
+    if (text === undefined) continue;
+    if (!send('user_message', trace, nextStep(model, trace), { turn: newId(), text })) queue.restore(trace, text);
+  }
+}
+
 const handlers = {
+  queued(trace) { return queue.count(trace); },
+  onQueue(trace, text) {
+    queue.push(trace, text);
+    render();
+    drain();
+    return true;
+  },
+  onUnqueue(trace) { queue.popLast(trace); render(); },
   onSelect(trace) { ui.selected = trace; ui.pane = 'chat'; render(); },
   onBack() { ui.pane = 'list'; render(); },
   onNewToggle(open, project) { ui.newOpen = open; ui.newProject = open ? (project ?? '') : ''; render(); },
@@ -164,7 +186,7 @@ async function start() {
     WebSocketImpl: globalThis.WebSocket, timers,
     onEvent(event) {
       const next = reduce(model, event);
-      if (next !== model) { model = next; render(); }
+      if (next !== model) { model = next; drain(); render(); }
     },
     onStatus(next) { status = next; render(); },
   });

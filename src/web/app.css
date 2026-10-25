@@ -787,6 +787,13 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
 .box textarea { min-height: 32px; padding: 6px 0; }
 .box-row { flex: none; gap: 6px; }
 .send-btn, .cancel-btn { justify-content: center; width: 32px; min-height: 32px; height: 32px; padding: 0; border-radius: 50%; }
+.cancel-btn { background: var(--surface-2); border-color: var(--border); color: var(--fg); }
+.cancel-btn:hover { filter: brightness(.96); }
+.cancel-btn .icon { width: 16px; height: 16px; }
+.cancel-btn[hidden] { display: none; }
+.queue-count { display: block; margin: 4px 0 0 20px; padding: 0 4px; min-height: 20px; border: 0; border-radius: 6px; background: transparent; color: var(--fg-muted); font: inherit; font-size: 12px; cursor: pointer; }
+.queue-count:hover { text-decoration: underline; }
+.queue-count[hidden] { display: none; }
 .send-btn:disabled { background: var(--surface-2); border-color: var(--surface-2); color: var(--fg-muted); filter: none; opacity: 1; }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .mic-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; min-height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--fg-muted); touch-action: none; }
