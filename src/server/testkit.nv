@@ -69,7 +69,7 @@ fn kit_settings(store str, name str, idle_ms int, pg PgConfig) -> ServerSettings
     agents.push(kit_agent("second", "--ok", ""))
     ServerSettings {
         port: 8099, data_dir, store, pg, agents, idle_term_ms: idle_ms,
-        workdir: kit_repo_root().display(), web_dir: "src/web", hub_program: "", hub_args: []str.new()
+        workdir: kit_repo_root().display(), web_dir: "src/web", hub_program: "", hub_args: []str.new(), acp_trace: false
     }
 }
 

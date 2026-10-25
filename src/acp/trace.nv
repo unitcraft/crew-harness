@@ -1,0 +1,107 @@
+// trace.nv - the raw record of the exchange with the agent (task 192c).
+//
+// Every line of the JSON-RPC exchange goes to a file `<data_dir>/<session>.acp.jsonl`, one record per line:
+//   {"t": <unix milliseconds>, "dir": "out"|"in", "line": "<the line of the exchange as it is, a string>"}
+// `out` is what the client writes to the stdin of the agent, `in` is what it reads from the stdout of the agent. Nothing is cut
+// out: the file holds the whole talk and the output of the tools (the README of the server says so). The file is only appended
+// to; at more than the limit (50 MB) the file becomes `<session>.acp.1.jsonl` (an older one is replaced) and a new file is begun.
+// A failed write never stops the session: one line to the log of the hub (the stderr) and the trace of this session is off.
+module crew_harness.acp
+
+import std.encoding.json.{JsonValue, JsonObject}
+import std.fs.{Fs, real_fs, File, Path, rename, metadata, remove_file}
+import std.io.{write_all, stderr}
+
+/// The limit of one trace file: 50 MB.
+export const TRACE_LIMIT = 52428800
+
+/// AcpTrace: the state of the record of one session. `on` false - nothing is written.
+export type AcpTrace { path str, size int, limit int, on bool }
+
+/// No trace.
+export fn trace_off() -> AcpTrace => { path: "", size: 0, limit: 0, on: false }
+
+fn trace_size(path Path) Fs -> int {
+    match metadata(path) {
+        Ok(meta) => meta.len()
+        Err(e) => 0
+    }
+}
+
+/// The record into `path`, rotating at `limit` bytes; the size of a file that is already there is taken into account.
+export fn trace_open(path str, limit int) -> AcpTrace {
+    if path.byte_len() == 0 { return trace_off() }
+    ro size = with Fs = real_fs() { trace_size(Path.from_bytes(path.bytes())) }
+    { path, size, limit, on: true }
+}
+
+/// The name of the rotated file: `x.acp.jsonl` -> `x.acp.1.jsonl`.
+export fn trace_rotated_name(path str) -> str {
+    ro suffix = ".jsonl"
+    if path.byte_len() > suffix.byte_len() && path[(path.byte_len() - suffix.byte_len())..] == suffix {
+        "${path[..(path.byte_len() - suffix.byte_len())]}.1${suffix}"
+    } else {
+        "${path}.1"
+    }
+}
+
+fn trace_record(at int, dir str, line str) -> str {
+    mut o = JsonObject.new()
+    ro a = o.insert("t", JsonValue.int(at))
+    ro b = o.insert("dir", JsonValue.str(dir))
+    ro c = o.insert("line", JsonValue.str(line))
+    JsonValue.object(o).to_str()
+}
+
+fn trace_warn(text str) -> () {
+    mut err = stderr()
+    ro written = err.write("crew-hub: ${text}\n".bytes())
+}
+
+fn trace_rotate(path str) Fs -> () {
+    ro now = Path.from_bytes(path.bytes())
+    ro old = Path.from_bytes(trace_rotated_name(path).bytes())
+    ro removed = remove_file(old)
+    match rename(now, old) {
+        Ok(done) => ()
+        Err(e) => ()
+    }
+}
+
+fn trace_append(path str, text str) Fs -> bool {
+    match File.append(Path.from_bytes(path.bytes())) {
+        Err(e) => false
+        Ok(consume f) => {
+            mut ok = false
+            match write_all(f, text.bytes()) {
+                Ok(done) => { ok = true }
+                Err(e) => ()
+            }
+            match f.close() {
+                Ok(done) => ()
+                Err(e) => { ok = false }
+            }
+            ok
+        }
+    }
+}
+
+/// Write one record. `dir` is "out" or "in". A failure switches the trace of this session off (one line to the log).
+export fn AcpTrace mut @record(dir str, line str) Time -> () {
+    if !@on { return }
+    ro at = Time.now().unix_millis()
+    ro text = "${trace_record(at, dir, line)}\n"
+    ro n = text.byte_len()
+    with Fs = real_fs() {
+        if @size > 0 && @size + n > @limit {
+            trace_rotate(@path)
+            @size = 0
+        }
+        if trace_append(@path, text) {
+            @size = @size + n
+        } else {
+            @on = false
+            trace_warn("the ACP trace cannot be written (${@path}), it is off for this session")
+        }
+    }
+}

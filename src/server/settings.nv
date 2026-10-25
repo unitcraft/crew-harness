@@ -2,10 +2,11 @@
 //
 // The file is a JSON object; every key is optional (see `src/server/server.example.json`):
 //   port, data_dir, store ("files" or "pg"), pg {host, port, database, user, password}, agents [{id, label, program, args}],
-//   idle_term_seconds, workdir, web_dir, hub {program, args}
+//   idle_term_seconds, workdir, web_dir, hub {program, args}, acp_trace (true by default: the raw exchange with the agent is written to
+//   <data_dir>/<session>.acp.jsonl)
 // The environment is over the file, key by key:
 //   CREW_SERVER_PORT, CREW_SERVER_STORE, CREW_SERVER_DATA_DIR, CREW_SERVER_AGENT (the command of the one agent "opencode",
-//   words separated by spaces), CREW_SERVER_WORKDIR, CREW_SERVER_WEB_DIR, CREW_SERVER_IDLE_SECONDS, CREW_SERVER_HUB (the command
+//   words separated by spaces), CREW_SERVER_WORKDIR, CREW_SERVER_WEB_DIR, CREW_SERVER_ACP_TRACE (true/false), CREW_SERVER_IDLE_SECONDS, CREW_SERVER_HUB (the command
 //   that starts the hub, words separated by spaces) and the CREW_PG_* variables of `crew_harness.pgconf`.
 // The file is named by the argument or, when that is empty, by CREW_SERVER_CONFIG. The password lives in the environment or in a
 // file outside the repository; it is in no error and no description.
@@ -35,7 +36,8 @@ export type ServerSettings {
     workdir str,
     web_dir str,
     hub_program str,
-    hub_args []str
+    hub_args []str,
+    acp_trace bool
 }
 
 fn st_text(o JsonObject, key str, fallback str) -> Result[str, str] {
@@ -54,6 +56,16 @@ fn st_number(o JsonObject, key str, fallback int) -> Result[int, str] {
         Some(v) => match v.int() {
             Some(n) => Ok(n)
             None => Err("the setting ${key} must be a whole number")
+        }
+    }
+}
+
+fn st_flag(o JsonObject, key str, fallback bool) -> Result[bool, str] {
+    match o.get(key) {
+        None => Ok(fallback)
+        Some(v) => match v.bool() {
+            Some(b) => Ok(b)
+            None => Err("the setting ${key} must be true or false")
         }
     }
 }
@@ -152,6 +164,7 @@ export fn parse_server_settings(text str) -> Result[ServerSettings, str] {
     if idle_seconds < 1 { return Err("idle_term_seconds must be 1 or more") }
     ro workdir = st_text(o, "workdir", "")?
     ro web_dir = st_text(o, "web_dir", "src/web")?
+    ro acp_trace = st_flag(o, "acp_trace", true)?
     mut hub_program = "target/crew-hub.exe"
     mut hub_args = []str.new()
     match o.get("hub") {
@@ -165,13 +178,26 @@ export fn parse_server_settings(text str) -> Result[ServerSettings, str] {
         }
         None => ()
     }
-    Ok(ServerSettings { port, data_dir, store, pg, agents, idle_term_ms: idle_seconds * 1000, workdir, web_dir, hub_program, hub_args })
+    Ok(ServerSettings { port, data_dir, store, pg, agents, idle_term_ms: idle_seconds * 1000, workdir, web_dir, hub_program, hub_args, acp_trace })
 }
 
 fn st_env(key str) Os -> Option[str] {
     match env(key) {
         Some(v) => if v.byte_len() > 0 { Some(v) } else { None }
         None => None
+    }
+}
+
+fn st_env_flag(key str, fallback bool) Os -> Result[bool, str] {
+    match st_env(key) {
+        None => Ok(fallback)
+        Some(text) => if text == "true" || text == "1" {
+            Ok(true)
+        } else if text == "false" || text == "0" {
+            Ok(false)
+        } else {
+            Err("${key} must be true or false")
+        }
     }
 }
 
@@ -245,6 +271,7 @@ export fn server_settings(file str) Os Fs -> Result[ServerSettings, str] {
         Some(n) => n * 1000
         None => base.idle_term_ms
     }
+    ro acp_trace = st_env_flag("CREW_SERVER_ACP_TRACE", base.acp_trace)?
     ro merged = ServerSettings {
         port: port ?? base.port,
         data_dir: st_env("CREW_SERVER_DATA_DIR") ?? base.data_dir,
@@ -255,7 +282,8 @@ export fn server_settings(file str) Os Fs -> Result[ServerSettings, str] {
         workdir: st_env("CREW_SERVER_WORKDIR") ?? base.workdir,
         web_dir: st_env("CREW_SERVER_WEB_DIR") ?? base.web_dir,
         hub_program,
-        hub_args
+        hub_args,
+        acp_trace
     }
     if merged.store != "files" && merged.store != "pg" { return Err("the store must be files or pg") }
     if merged.port < 1 || merged.port > 65535 { return Err("the port must be 1 to 65535") }

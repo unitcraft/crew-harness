@@ -1,0 +1,146 @@
+// trace_test.nv - the raw record of the exchange over the FAKE agent: every line, both ways, in the order of the exchange.
+module crew_harness.acp_live
+
+import crew_harness.acp.{AcpConfig, AcpClient, open_client, open_client_traced, TRACE_LIMIT, acp_link}
+import alula.engine.{Link, Incoming, EventKind}
+import std.encoding.json.{Json, JsonObject}
+import std.fs.{Fs, real_fs, Path, remove_dir_all, create_dir_all, read_text, try_exists}
+import std.os.{Os, real_os, temp_dir, pid}
+
+fn trace_folder(name str) -> Path {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-acp-live-trace-${id}-${name}")
+    with Fs = real_fs() {
+        ro removed = remove_dir_all(dir)
+        ro made = create_dir_all(dir)
+    }
+    dir
+}
+
+fn file_lines(path str) -> []str {
+    mut out = []str.new()
+    ro text = with Fs = real_fs() {
+        match read_text(Path.from_bytes(path.bytes())) {
+            Ok(t) => t
+            Err(e) => ""
+        }
+    }
+    for part in text.split("\n") {
+        if part.byte_len() > 0 { out.push(part) }
+    }
+    out
+}
+
+fn file_there(path str) -> bool {
+    with Fs = real_fs() {
+        match try_exists(Path.from_bytes(path.bytes())) {
+            Ok(b) => b
+            Err(e) => false
+        }
+    }
+}
+
+fn obj_of(text str) -> JsonObject {
+    match Json.parse(text) {
+        Ok(v) => match v.object() {
+            Some(o) => o
+            None => panic("not an object: ${text}")
+        }
+        Err(e) => panic("not JSON: ${text}")
+    }
+}
+
+fn str_of(o JsonObject, key str) -> str {
+    match o.get(key) {
+        Some(v) => match v.str() {
+            Some(s) => s
+            None => panic("${key} is not a string")
+        }
+        None => panic("${key} is missing")
+    }
+}
+
+fn int_of(o JsonObject, key str) -> int {
+    match o.get(key) {
+        Some(v) => match v.int() {
+            Some(n) => n
+            None => panic("${key} is not a number")
+        }
+        None => panic("${key} is missing")
+    }
+}
+
+fn start_traced(path str) Proc Detach Time -> AcpClient {
+    match open_client_traced(fake_config([]), path, TRACE_LIMIT) {
+        Ok(c) => c
+        Err(e) => panic("cannot start the fake agent: ${e}")
+    }
+}
+
+test "trace: both ways, in order, every line, none lost" {
+    ro path = trace_folder("exchange").join("chat-1.acp.jsonl").display()
+    mut client = start_traced(path)
+    mut events = []Incoming.new()
+    with Link = acp_link(client) {
+        Link.send(req("agent-1", "hello trace"))
+        events = collect_turn(10000)
+    }
+    assert(events.len() > 0)
+    client.close()
+    ro lines = file_lines(path)
+    mut outs = 0
+    mut ins = 0
+    mut results = 0
+    mut last_t = 0
+    mut saw_prompt = false
+    mut saw_echo = false
+    mut first_is_initialize = false
+    for i in 0..lines.len() {
+        ro o = obj_of(lines[i])
+        ro t = int_of(o, "t")
+        ro dir = str_of(o, "dir")
+        ro line = str_of(o, "line")
+        assert(t >= last_t)
+        last_t = t
+        // the line is a JSON-RPC message as it was
+        ro rpc = obj_of(line)
+        assert(str_of(rpc, "jsonrpc") == "2.0")
+        if dir == "out" {
+            outs += 1
+            if i == 0 && line.contains("\"initialize\"") { first_is_initialize = true }
+            if line.contains("session/prompt") && line.contains("hello trace") { saw_prompt = true }
+        } else {
+            assert(dir == "in")
+            ins += 1
+            if line.contains("Echo:") { saw_echo = true }
+            if rpc.get("result").is_some() { results += 1 }
+        }
+    }
+    assert(first_is_initialize)
+    assert(saw_prompt)
+    assert(saw_echo)
+    // out: initialize, session/new, session/prompt; in: three results and the updates of the turn
+    assert(outs == 3)
+    assert(results == 3)
+    assert(ins >= 4)
+    assert(lines.len() == outs + ins)
+}
+
+test "trace: no path - no file" {
+    ro path = trace_folder("off").join("chat-1.acp.jsonl").display()
+    mut client = start([])
+    with Link = acp_link(client) {
+        Link.send(req("agent-1", "hello"))
+        ro events = collect_turn(10000)
+        assert(events.len() > 0)
+    }
+    client.close()
+    assert(!file_there(path))
+    mut traced_off = match open_client_traced(fake_config([]), "", TRACE_LIMIT) {
+        Ok(c) => c
+        Err(e) => panic("cannot start the fake agent: ${e}")
+    }
+    traced_off.close()
+    assert(!file_there(path))
+}

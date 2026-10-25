@@ -1,0 +1,135 @@
+// trace_test.nv - the record of the raw exchange: the form of a record, the rotation at the limit, a failed write.
+module crew_harness.acp
+
+import std.encoding.json.{Json, JsonValue}
+import std.fs.{Fs, real_fs, Path, remove_dir_all, create_dir_all, read_text, try_exists}
+import std.os.{Os, real_os, temp_dir, pid}
+
+fn trace_dir(name str) -> Path {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-acp-trace-${id}-${name}")
+    with Fs = real_fs() {
+        ro removed = remove_dir_all(dir)
+        ro made = create_dir_all(dir)
+    }
+    dir
+}
+
+fn trace_lines(path str) -> []str {
+    mut out = []str.new()
+    ro text = with Fs = real_fs() {
+        match read_text(Path.from_bytes(path.bytes())) {
+            Ok(t) => t
+            Err(e) => ""
+        }
+    }
+    for part in text.split("\n") {
+        if part.byte_len() > 0 { out.push(part) }
+    }
+    out
+}
+
+fn trace_exists(path str) -> bool {
+    with Fs = real_fs() {
+        match try_exists(Path.from_bytes(path.bytes())) {
+            Ok(b) => b
+            Err(e) => false
+        }
+    }
+}
+
+fn trace_object(text str) -> JsonObject {
+    match Json.parse(text) {
+        Ok(v) => match v.object() {
+            Some(o) => o
+            None => panic("a record is not an object: ${text}")
+        }
+        Err(e) => panic("a record is not JSON: ${text}")
+    }
+}
+
+fn trace_field_str(o JsonObject, key str) -> str {
+    match o.get(key) {
+        Some(v) => match v.str() {
+            Some(s) => s
+            None => panic("${key} is not a string")
+        }
+        None => panic("${key} is missing")
+    }
+}
+
+fn trace_field_int(o JsonObject, key str) -> int {
+    match o.get(key) {
+        Some(v) => match v.int() {
+            Some(n) => n
+            None => panic("${key} is not a number")
+        }
+        None => panic("${key} is missing")
+    }
+}
+
+test "trace: a record has t, dir and the line as a string, as it is" {
+    ro path = trace_dir("form").join("s1.acp.jsonl").display()
+    ro raw = "{\"jsonrpc\":\"2.0\",\"id\":0,\"method\":\"initialize\"} \"кириллица\""
+    mut t = trace_open(path, TRACE_LIMIT)
+    t.record("out", raw)
+    t.record("in", "not json at all")
+    ro lines = trace_lines(path)
+    assert(lines.len() == 2)
+    ro first = trace_object(lines[0])
+    assert(trace_field_str(first, "dir") == "out")
+    assert(trace_field_int(first, "t") > 1700000000000)
+    assert(trace_field_str(first, "line") == raw)
+    ro second = trace_object(lines[1])
+    assert(trace_field_str(second, "dir") == "in")
+    assert(trace_field_str(second, "line") == "not json at all")
+    assert(trace_field_int(second, "t") >= trace_field_int(first, "t"))
+}
+
+test "trace: the file is only appended to, also by a second open" {
+    ro path = trace_dir("append").join("s1.acp.jsonl").display()
+    mut a = trace_open(path, TRACE_LIMIT)
+    a.record("out", "one")
+    mut b = trace_open(path, TRACE_LIMIT)
+    b.record("in", "two")
+    assert(trace_lines(path).len() == 2)
+}
+
+test "trace: over the limit the file becomes .1 and a new one begins; an older .1 is replaced" {
+    ro dir = trace_dir("rotate")
+    ro path = dir.join("s1.acp.jsonl").display()
+    ro old = dir.join("s1.acp.1.jsonl").display()
+    assert(trace_rotated_name(path) == old)
+    mut t = trace_open(path, 140)
+    t.record("out", "aaaaaaaaaaaaaaaaaaaa")
+    t.record("out", "bbbbbbbbbbbbbbbbbbbb")
+    assert(!trace_exists(old))
+    t.record("out", "cccccccccccccccccccc")
+    assert(trace_lines(old).len() == 2)
+    assert(trace_lines(path).len() == 1)
+    t.record("out", "dddddddddddddddddddd")
+    t.record("out", "eeeeeeeeeeeeeeeeeeee")
+    ro rotated = trace_lines(old)
+    assert(rotated.len() == 2)
+    assert(rotated[0].contains("cccc") && rotated[1].contains("dddd"))
+    ro current = trace_lines(path)
+    assert(current.len() == 1)
+    assert(current[0].contains("eeee"))
+}
+
+test "trace: a failed write switches the trace off and does not panic" {
+    ro path = trace_dir("fail").join("no-such-folder").join("s1.acp.jsonl").display()
+    mut t = trace_open(path, TRACE_LIMIT)
+    assert(t.on)
+    t.record("out", "x")
+    assert(!t.on)
+    t.record("out", "y")
+    assert(!trace_exists(path))
+}
+
+test "trace: an empty path is no trace" {
+    mut t = trace_open("", TRACE_LIMIT)
+    assert(!t.on)
+    t.record("out", "x")
+}

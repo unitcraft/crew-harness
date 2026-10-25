@@ -20,7 +20,7 @@ module crew_harness.server
 import alula.engine.{Engine, Incoming, EventKind, Journal, Store, Link, PartyRequest, start_engine, resume_engine, decode_snapshot}
 import crew_harness.product_machines.{dialog_machine_text}
 import alula.machine_run.{AlulaMachine, AlulaState}
-import crew_harness.acp.{AcpConfig, AcpClient, open_client, acp_link, page_event}
+import crew_harness.acp.{AcpConfig, AcpClient, open_client_traced, acp_link, page_event, TRACE_LIMIT}
 import crew_harness.storage.{open_data_dir, file_journal, file_store, list_sessions, valid_session_name, session_path}
 import crew_harness.pgstore.{PgWorld, pg_journal, pg_store}
 import crew_harness.pgdb.{pg_list}
@@ -300,6 +300,15 @@ export fn Hub mut @release(conn int) -> () {
     @conns = rest
 }
 
+// The file of the raw exchange with the agent (`<id>.acp.jsonl`); "" - the trace is off (`acp_trace` false) or the id is not a safe name.
+fn Hub @trace_path_of(s Dialog) -> str {
+    if !@settings.acp_trace { return "" }
+    match session_path(@settings.data_dir, s.id, "acp.jsonl") {
+        Some(p) => p.display()
+        None => ""
+    }
+}
+
 fn Hub @open_config(s Dialog) -> Option[AcpConfig] => @open_config_for(s.agent, s.id)
 
 fn Hub @open_config_for(agent str, id str) -> Option[AcpConfig] {
@@ -326,7 +335,7 @@ fn Hub mut @ensure_client(at int) Proc Detach Time -> str {
     }
     match @open_config(s) {
         None => "the agent ${s.agent} is not configured"
-        Some(config) => match open_client(config) {
+        Some(config) => match open_client_traced(config, @trace_path_of(s), TRACE_LIMIT) {
             Ok(client) => {
                 s.clients.push(client)
                 s.announced = false
@@ -554,7 +563,7 @@ fn Hub mut @switch_agent(trace str, agent str) Proc Detach Time -> () {
             return
         }
     }
-    match open_client(config) {
+    match open_client_traced(config, @trace_path_of(s), TRACE_LIMIT) {
         Err(reason) => {
             @say_log("the agent of ${trace} cannot be changed to ${agent}: ${reason}")
             @tell_error(0, trace, s.engine.step_number(), "", "the agent ${agent} cannot be started: ${reason}; the session stays with ${s.agent}")

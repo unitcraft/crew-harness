@@ -78,6 +78,7 @@ and no error (`describe()` leaves it out).
 | `idle_term_seconds` | `CREW_SERVER_IDLE_SECONDS` | 900 | the idle term of a turn: an agent silent that long ends the turn with `Timeout`. A request for permission waits for a human, so keep it long |
 | `workdir` | `CREW_SERVER_WORKDIR` | the folder of the server | the folder the agents work in (`session/new` needs it) |
 | `web_dir` | `CREW_SERVER_WEB_DIR` | `src/web` | the folder of the page |
+| `acp_trace` | `CREW_SERVER_ACP_TRACE` (`true`/`false`) | `true` | write the raw JSON-RPC exchange with the agent, both ways, to `<data_dir>/<session>.acp.jsonl` (`{"t": unix ms, "dir": "out"|"in", "line": "<the line as it is>"}`); over 50 MB the file becomes `<session>.acp.1.jsonl`. **The file holds the full text of the talk and the output of the tools, nothing is cut out.** |
 | `hub` {`program`,`args`} | `CREW_SERVER_HUB` (words separated by spaces) | `target/crew-hub.exe` | how the front starts the hub |
 | - | `CREW_SERVER_CONFIG` | - | the settings file, when no argument names it |
 

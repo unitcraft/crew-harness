@@ -67,7 +67,8 @@ export type AcpClient {
     next_seq int,
     stderr str,
     exit_code int,
-    last_error str
+    last_error str,
+    trace AcpTrace
 }
 
 const STDERR_KEEP = 4000
@@ -252,7 +253,11 @@ fn tail_of(text str) -> str {
 
 /// Start the agent process and the handshake (`initialize` goes out at once; `session/new` follows when the agent answers,
 /// on the next `poll`). With an inbox file, the events that were not acknowledged before come back first.
-export fn open_client(config AcpConfig) Proc Detach Time -> Result[AcpClient, str] {
+export fn open_client(config AcpConfig) Proc Detach Time -> Result[AcpClient, str] => open_client_traced(config, "", 0)
+
+/// `open_client` that also writes every line of the exchange with the agent, both ways, to the file `trace_path` (see trace.nv; ""
+/// - no record); the file is rotated at `trace_limit` bytes. The record begins with the `initialize` that goes out at the start.
+export fn open_client_traced(config AcpConfig, trace_path str, trace_limit int) Proc Detach Time -> Result[AcpClient, str] {
     match connect(config.program, config.args, config.cwd) {
         Err(reason) => Err(reason)
         Ok(link) => {
@@ -269,7 +274,7 @@ export fn open_client(config AcpConfig) Proc Detach Time -> Result[AcpClient, st
             mut client = AcpClient {
                 config, link, phase: "initializing", next_rpc: 0, init_rpc: -1, new_rpc: -1, prompt_rpc: -1,
                 session: "", agent: "", model_name: "", modes: JsonValue.null(), models: JsonValue.null(), choices_cfg: JsonValue.null(), mode_now: "", model_now: "", sets: []AcpSet.new(), queue: []AcpQueued.new(), active: "", permissions: []AcpPending.new(),
-                ready, taken: []AcpInboxItem.new(), next_seq: next, stderr: "", exit_code: -2, last_error: ""
+                ready, taken: []AcpInboxItem.new(), next_seq: next, stderr: "", exit_code: -2, last_error: "", trace: trace_open(trace_path, trace_limit)
             }
             client.init_rpc = client.next_id()
             client.say(rpc_request_line(client.init_rpc, "initialize", initialize_params()))
@@ -285,7 +290,8 @@ fn AcpClient mut @next_id() -> int {
 }
 
 // A line to the process; false - the process does not take it (closed).
-fn AcpClient @say(line str) -> () {
+fn AcpClient mut @say(line str) -> () {
+    @trace.record("out", line)
     ro queued = @link.out.try_send(line)
 }
 
@@ -564,6 +570,7 @@ fn AcpClient mut @on_line(text str) -> () {
 
 fn AcpClient mut @take(item Inbound) -> () {
     if item.kind == "line" {
+        @trace.record("in", item.text)
         @on_line(item.text)
     } else if item.kind == "stderr" {
         @stderr = tail_of("${@stderr}${item.text}\n")

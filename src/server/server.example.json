@@ -9,5 +9,6 @@
   "idle_term_seconds": 900,
   "workdir": "",
   "web_dir": "src/web",
+  "acp_trace": true,
   "hub": { "program": "target/crew-hub.exe", "args": [] }
 }

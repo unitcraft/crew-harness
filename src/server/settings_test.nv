@@ -205,3 +205,22 @@ test "settings: the example of the store pg has no password and is refused until
         Err(e) => assert(e.contains("pg"))
     }
 }
+
+test "settings: acp_trace is on by default, the file turns it off, the environment is over the file" {
+    assert(must_settings("{}").acp_trace)
+    assert(!must_settings("{\"acp_trace\":false}").acp_trace)
+    assert(is_error(parse_server_settings("{\"acp_trace\":\"no\"}")))
+    ro path = settings_file("trace.json", "{\"acp_trace\":false}")
+    mut state = MockOs.new()
+    state.put_env("CREW_SERVER_ACP_TRACE", "true")
+    match with Os = mock_os(state), Fs = real_fs() { server_settings(path.display()) } {
+        Ok(s) => assert(s.acp_trace)
+        Err(e) => assert(false)
+    }
+    mut off = MockOs.new()
+    off.put_env("CREW_SERVER_ACP_TRACE", "false")
+    match with Os = mock_os(off), Fs = real_fs() { server_settings("") } {
+        Ok(s) => assert(!s.acp_trace)
+        Err(e) => assert(false)
+    }
+}
