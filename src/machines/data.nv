@@ -1,6 +1,6 @@
 // data.nv - the machines of the product and the machines of the methodology (kept here until task 159) as data, compiled into the program and the tests with `embed_str` (a path is read relative to this file):
 // the JSON `machine/2`, the tables, the scenarios, the registry of the primitives and the table of the journal codes of each owner (`machines/product/`, `machines/methodology/`). The package `alula` knows
-// only the language (two primitives, 35 codes, spec 7a); the rest is registered here: `product_registry()` and `methodology_registry()` are the language and the data of the owner.
+// only the language (one primitive, 35 codes, spec 7a); the rest is registered here: `product_registry()` and `methodology_registry()` are the language and the data of the owner.
 module crew_harness.machines
 
 import alula.machine.{NamedText, Registry, text_of_file, HostRegistryData, parse_registry_table, load_host, host_registry, parse_journal, journal_find}

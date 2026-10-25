@@ -44,7 +44,7 @@ test "cc loads" {
     assert(def.request_limit.len() == 1)
     assert(def.includes.len() == 1)
     assert(def.includes[0].version == "1")
-    assert(def.includes[0].hash == "818a4aaeef4f")
+    assert(def.includes[0].hash == "f757b8aa7b08")
     assert(def.constants.len() == 3)
 }
 
@@ -109,8 +109,8 @@ test "cc summary" {
 }
 
 test "cc header" {
-    assert(cycle_check_machine_text().starts_with("{\"format\":\"machine/2\",\"alula_version\":\"2.24\",\"machine\":\"cycle_check\",\"version\":\"alula-2.24\""))
-    assert(cycle_check_table_text().contains("- format: 2.24"))
+    assert(cycle_check_machine_text().starts_with("{\"format\":\"machine/2\",\"alula_version\":\"2.25\",\"machine\":\"cycle_check\",\"version\":\"alula-2.24\""))
+    assert(cycle_check_table_text().contains("- format: 2.25"))
 }
 
 test "cc circle ru" {

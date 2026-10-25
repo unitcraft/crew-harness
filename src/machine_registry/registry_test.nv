@@ -94,8 +94,8 @@ fn rknown(spec TypeSpec, defs TypeDefs) -> bool {
 }
 
 test "md count" {
-    assert(methodology_registry().primitives.len() == 60)
-    assert(rcount(Volatile) == 37)
+    assert(methodology_registry().primitives.len() == 59)
+    assert(rcount(Volatile) == 36)
     assert(rcount(Acting) == 23)
     assert(rcount(Pure) == 0)
 }
@@ -113,7 +113,8 @@ test "md meeting" {
 }
 
 test "md agent step" {
-    assert(rclass("time_now") == "volatile")
+    assert(rclass("new_id") == "volatile")
+    assert(rclass("time_now") == "")
     assert(rclass("reply_validation") == "volatile")
     assert(rclass("close_agent_turn") == "acting")
     assert(rclass("check_cache") == "acting")
@@ -157,10 +158,11 @@ test "md signatures" {
         Some(p) => assert(spec_text(p.result) == "?Summary")
         None => assert(false)
     }
-    match find_primitive(methodology_registry(), "time_now") {
-        Some(p) => assert(p.params.len() == 0 && spec_text(p.result) == "int")
+    match find_primitive(methodology_registry(), "new_id") {
+        Some(p) => assert(p.params.len() == 0 && spec_text(p.result) == "id")
         None => assert(false)
     }
+    assert(find_primitive(methodology_registry(), "time_now").is_none())
 }
 
 test "md reads writes" {
@@ -231,7 +233,7 @@ test "mag count types" {
     assert(rargs("party_profile", []Value.new()) == "$: wrong argument count for party_profile: expected 1, got 0")
     assert(rargs("party_profile", [rtext("a"), rtext("b")]) == "$: wrong argument count for party_profile: expected 1, got 2")
     assert(rargs("party_profile", [Int(1)]) == "$.party: expected text, got int")
-    assert(rargs("time_now", []Value.new()) == "ok")
+    assert(rargs("new_id", []Value.new()) == "ok")
     assert(rargs("no_such", []Value.new()) == "$: the primitive no_such is not registered")
 }
 
@@ -254,8 +256,9 @@ test "mag variant" {
 }
 
 test "mrs checked" {
-    assert(rresult("time_now", Int(1000)))
-    assert(!rresult("time_now", Text("1000")))
+    assert(rresult("new_id", Text("0b6f3c1e-7d2a-4f5b-8c9d-1e2f3a4b5c6d")))
+    assert(!rresult("new_id", Text("1000")))
+    assert(!rresult("new_id", Int(1000)))
     assert(rresult("close_agent_turn", Null))
     assert(!rresult("close_agent_turn", Int(1)))
     assert(rresult("reply_validation", enum_value("ReplyCheck", "Valid")))

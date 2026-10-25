@@ -80,7 +80,7 @@ fn without_markers(text str) -> str {
             lines.push(line)
         }
     }
-    lines.join("\n").replace("format: 2.24", "format: 2.24")
+    lines.join("\n").replace("format: 2.25", "format: 2.25")
 }
 
 test "ag markers optional" {

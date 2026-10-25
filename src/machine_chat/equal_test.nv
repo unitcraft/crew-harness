@@ -264,9 +264,9 @@ test "every code" {
     ro table = table_chat()
     for code in FailCode.all() {
         mut p = first_pair(table)
-        p = step_pair(table, p, scenario_incoming(ScEvent { kind: "signal", name: "user_message", request: "", input: "hi", code: "", source: "", party: "" }))
+        p = step_pair(table, p, scenario_incoming(ScEvent { kind: "signal", name: "user_message", request: "", input: "hi", code: "", source: "", party: "", has_at: false, at: 0 }))
         assert(pair_diff(table, p) == "")
-        p = step_pair(table, p, scenario_incoming(ScEvent { kind: "failure", name: "agent_refused", request: "agent-1", input: "", code: code.name(), source: "", party: "" }))
+        p = step_pair(table, p, scenario_incoming(ScEvent { kind: "failure", name: "agent_refused", request: "agent-1", input: "", code: code.name(), source: "", party: "", has_at: false, at: 0 }))
         assert(pair_diff(table, p) == "")
         assert(p.nova_text.contains("finish:refusal:${code.name()}"))
         assert(p.table_text.contains("agent_refused(code=${fail_code_word(code)})"))
