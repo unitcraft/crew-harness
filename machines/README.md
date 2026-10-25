@@ -36,4 +36,4 @@ the module `crew_harness.machines` (`src/machines/`) embeds these files for the 
 
 ## The included file of definitions
 
-`cycle_check.alula.md` and the meeting include the file of definitions `арифметика_цикла` (spec 8, the hash `642e1f78f0f7`); the translator of the package holds it (`src/machine_text/defs/`) with the specification. It goes to the methodology with task 159.
+`cycle_check.alula.md` and the meeting include the file of definitions `арифметика_цикла` (spec 8, the hash `ebb7658048b2`); the translator of the package holds it (`src/machine_text/defs/`) with the specification. It goes to the methodology with task 159.
