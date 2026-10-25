@@ -197,6 +197,23 @@ export const S = Object.freeze({
   'tokens.k': '{n} тыс.',
   'tokens.m': '{n} млн',
 
+  // ---- форма вопросов агента (задача 192)
+  'ask.need': 'Нужен ваш ответ',
+  'ask.tabs': 'Вопросы агента',
+  'ask.tab_n': 'Вопрос {n}',
+  'ask.other': 'Другое',
+  'ask.other_placeholder': 'Введите свой вариант',
+  'ask.other_label': 'Свой вариант ответа',
+  'ask.multi': 'Можно выбрать несколько',
+  'ask.skip': 'Пропустить',
+  'ask.send': 'Отправить',
+  'ask.send_hint': 'Ctrl+Enter',
+  'ask.send_title': 'Отправить ответ (Ctrl+Enter)',
+  'ask.skip_title': 'Пропустить вопрос (Esc)',
+  'ask.blocked': 'Сначала ответьте на вопрос или пропустите',
+  'ask.answer': 'Ответ: {question} → {choice}',
+  'ask.skipped': 'Вопрос пропущен: {question}',
+
   // ---- диалог разрешения
   'perm.title': 'Агент просит разрешения',
   'perm.action': 'Действие',

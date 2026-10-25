@@ -128,6 +128,9 @@ PNG, JPEG, WebP, GIF, до 10 МБ каждая, до 6 на сообщение 
 | `agent_refused` | `{ turn, reason }` | отказ агента, «Отказ» |
 | `permission_request` | `{ turn, request, action, detail }` | открывает диалог, «Ждёт разрешения» |
 | `permission_decision` | `{ request, decision }` | `decision` — `allow` или `deny`; закрывает диалог |
+| `question_request` | `{ turn, request, questions: [{ question, header, multiSelect, options: [{ label, description }] }] }` | форма вопросов над полем ввода (задача 192): 1–4 вопроса, вкладки по `header`, последний пункт «Другое» со свободным текстом; в списке сессий метка «Нужен ваш ответ»; пока вопрос ждёт, обычное сообщение не уходит |
+| `question_answer` | `{ request, skipped, answers?: [{ index, selected: [label], other }] }` | ответ владельца (`index` — номер вопроса с нуля) или пропуск (`skipped: true`); страница отправляет его событием, сервер возвращает его в потоке — тогда форма закрывается и в ленте остаётся строка «Ответ: вопрос → выбор» |
+| `question_resolved` | `{ request }` | снимает форму без строки в ленте (ответ пришёл из другого места, ход отменён) |
 | `cancel` | `{ turn }` | «Ход отменён»; закрывает диалог |
 | `error` | `{ turn, message }` | ошибка, «Ошибка» |
 | `usage_update` | `{ used, size, cost? }` | занятость окна контекста; `cost` — число или `{ amount, currency }`; негодное (`size` не больше 0, `used` меньше 0) и более старое по `step` пропускается |

@@ -20,6 +20,10 @@ import { canSend } from './attachments.js';
 import { createAttachUi, createLightbox } from './attach-ui.js';
 import { labelOf } from './labels-ru.js';
 import {
+  createForm, selectOption, setOtherText, setCursor, moveCursor, setActive, isAnswered, nextUnanswered, canSubmit,
+  markSent, buildAnswer, buildSkip, digitOption, otherIndex,
+} from './question.js';
+import {
   STATE_KEYS, sessionList, splitBlocks, filterSessions, groupSessions, effectivePins, timeline, paragraphs, inlineSpans,
   workSummary, effortChoices, filterModels, groupModels, usagePercent, usageLevel, tokenParts, durationLabel, agoParts, fileParts, taskSummary,
 } from './state.js';
@@ -88,6 +92,7 @@ function icon(doc, id, extra = '') {
  *   handlers: onSelect(trace), onBack(), onNewToggle(open, project?), onCreate({agent, name, project}),
  *             onSend(trace, text, images?) -> bool | Promise<bool> (images — вложения: сначала уходят на сервер, потом сообщение), onCancel(trace), onDecide(trace, request, decision),
  *             onPin(trace, pinned), onTheme(), onCopy(text),
+ *             onAnswer(trace, answer) -> bool — ответ на вопросы агента (question_answer) или пропуск,
  *             onSwitchAgent(trace, agent) — продолжить этот разговор на другом агенте,
  *             onChoose(trace, setting, value) — выбор режима, модели или усилия (setting: 'mode' | 'model' | 'effort')
  */
@@ -176,6 +181,11 @@ export function createView(doc, refs, deps) {
   });
   search.addEventListener('input', () => { query = search.value; if (current.ui) renderList(current.model, current.ui); });
 
+  /** Метка «Нужен ваш ответ»: оранжевая точка и плашка; в списке сессий и в карточке вопросов. */
+  function askBadge() {
+    return h(doc, 'span', { class: 'ask-badge' }, h(doc, 'span', { class: 'ask-dot', 'aria-hidden': 'true' }), h(doc, 'span', { class: 'ask-badge-text', text: t('ask.need') }));
+  }
+
   let listSig = '';
   function sessionRow({ session: s, depth }, ui, pins) {
     const active = s.id === ui.selected;
@@ -190,6 +200,7 @@ export function createView(doc, refs, deps) {
     depth > 0 ? h(doc, 'span', { class: 'corner', 'aria-hidden': 'true' }) : false,
     depth > 0 ? h(doc, 'span', { class: 'sr', text: t('sessions.child') }) : false,
     h(doc, 'span', { class: 'session-name', text: s.name }),
+    s.pendingQuestion ? h(doc, 'span', { class: 'ask-line' }, askBadge()) : false,
     h(doc, 'span', { class: 'dot', 'data-state': s.state, 'aria-hidden': 'true' }),
     h(doc, 'span', { class: 'sr', text: stateLabel }));
     item.addEventListener('click', () => handlers.onSelect(s.id));
@@ -217,7 +228,7 @@ export function createView(doc, refs, deps) {
     const all = sessionList(model);
     const pins = effectivePins(all, ui.pins);
     const groups = groupSessions(filterSessions(all, query), { pinned: pins });
-    const rowSig = (r) => [r.depth, r.session.id, r.session.name, r.session.state, r.session.updatedAt];
+    const rowSig = (r) => [r.depth, r.session.id, r.session.name, r.session.state, r.session.updatedAt, Boolean(r.session.pendingQuestion)];
     const sig = JSON.stringify([ui.selected, query, groups.pinned.map(rowSig), groups.projects.map((p) => [p.project, p.rows.map(rowSig)])]);
     const shown = groups.pinned.length + groups.projects.length;
     listEmpty.hidden = all.length > 0;
@@ -620,7 +631,10 @@ export function createView(doc, refs, deps) {
   });
   doc.addEventListener('click', (e) => { if (menuKind && !e.composedPath().includes(status)) closeMenu(); });
 
+  // форма вопросов агента (задача 192): position absolute над полем ввода, место в потоке не занимает
+  const askCard = h(doc, 'div', { class: 'ask', role: 'dialog', hidden: true });
   const composer = h(doc, 'div', { class: 'composer' },
+    askCard,
     box,
     voiceHint,
     queueButton,
@@ -645,6 +659,8 @@ export function createView(doc, refs, deps) {
     const text = input.value.trim();
     const images = attach.items();
     if (!currentTrace || uploading || (text.length === 0 && images.length === 0)) return;
+    // пока вопрос агента ждёт ответа, обычное сообщение не уходит: форма просит ответить или пропустить
+    if (current.session && current.session.pendingQuestion) { nudgeAsk(); return; }
     if (queue && images.length > 0) { voiceToast.show(t('images.err_queue')); return; }
     const trace = currentTrace;
     if (images.length === 0) {
@@ -848,6 +864,13 @@ export function createView(doc, refs, deps) {
       case 'switch': {
         const text = t('chat.switched', { agent: agentLabel(item.to) });
         node.replaceChildren(h(doc, 'span', { text: item.cut ? `${text} ${t('chat.switched_cut', { shown: item.shown, total: item.total })}` : text }));
+        break;
+      }
+      case 'answer': {
+        const lines = item.skipped
+          ? [t('ask.skipped', { question: item.lines.length > 0 ? item.lines[0].question : '' })]
+          : item.lines.map((l) => t('ask.answer', { question: l.question, choice: l.choice }));
+        node.replaceChildren(...lines.map((text) => h(doc, 'div', { text })));
         break;
       }
       case 'note': {
@@ -1112,6 +1135,189 @@ export function createView(doc, refs, deps) {
     deny.focus(); // безопасное умолчание: Enter не разрешает действие
   }
 
+  // ---------------------------------------------------------------- форма вопросов агента (задача 192)
+
+  const askForms = new Map(); // `${сессия}:${запрос}` -> форма (question.js); переживает переключение сессий
+  let askShown = null;
+  let askUi = null; // { key, sync, focusFirst, nudge } построенной сейчас карточки
+
+  askCard.addEventListener('keydown', (e) => { if (askUi) askUi.onKey(e); });
+  function nudgeAsk() { if (askUi) askUi.nudge(); }
+
+  function buildAsk(trace, pq, key) {
+    const { questions } = pq;
+    const get = () => askForms.get(key);
+    const multi = questions.length > 1;
+    let panels = [];
+    let tabs = [];
+    let badge = null;
+    let badgeText = null;
+    let skip = null;
+    let send = null;
+
+    function sync() {
+      const f = get();
+      panels.forEach((p, qi) => {
+        const q = questions[qi];
+        const a = f.answers[qi];
+        p.node.hidden = qi !== f.active;
+        p.inputs.forEach((inp, oi) => {
+          const on = oi === otherIndex(q) ? a.other : a.picked.includes(oi);
+          inp.checked = on;
+          p.rows[oi].dataset.on = String(on);
+        });
+        p.text.hidden = !a.other;
+        if (tabs[qi]) {
+          tabs[qi].setAttribute('aria-selected', String(qi === f.active));
+          tabs[qi].tabIndex = qi === f.active ? 0 : -1;
+          tabs[qi].dataset.done = String(isAnswered(f, questions, qi));
+        }
+      });
+      askCard.setAttribute('aria-labelledby', `ask-q-${f.active}`);
+      send.disabled = !canSubmit(f, questions);
+      skip.disabled = f.sent;
+      badge.dataset.alert = 'false';
+      badgeText.textContent = t('ask.need');
+    }
+    const put = (form) => { askForms.set(key, form); sync(); };
+
+    const optionRow = (qi, oi, name, description, isOther) => {
+      const q = questions[qi];
+      const input = h(doc, 'input', {
+        type: q.multiSelect ? 'checkbox' : 'radio', class: 'ask-input', name: `ask-${qi}`, 'data-oi': oi,
+      });
+      const text = h(doc, 'span', { class: 'ask-text' },
+        h(doc, 'span', { class: 'ask-name', text: name }),
+        description ? h(doc, 'span', { class: 'ask-desc', text: description }) : false);
+      const row = h(doc, 'label', { class: isOther ? 'ask-opt ask-opt-other' : 'ask-opt' }, input, text, h(doc, 'span', { class: 'ask-key', 'aria-hidden': 'true', text: String(oi + 1) }));
+      input.addEventListener('change', () => {
+        put(selectOption(get(), questions, qi, oi));
+        if (isOther && get().answers[qi].other) panels[qi].text.focus();
+      });
+      return { row, input };
+    };
+
+    panels = questions.map((q, qi) => {
+      const rows = q.options.map((o, oi) => optionRow(qi, oi, o.label, o.description, false));
+      const other = optionRow(qi, otherIndex(q), t('ask.other'), '', true);
+      const text = h(doc, 'textarea', { class: 'ask-text-input', rows: 2, placeholder: t('ask.other_placeholder'), 'aria-label': t('ask.other_label'), hidden: true });
+      text.value = get().answers[qi].text;
+      text.addEventListener('input', () => put(setOtherText(get(), qi, text.value)));
+      const heading = h(doc, 'h3', { class: 'ask-q', id: `ask-q-${qi}`, text: q.question }, q.multiSelect ? h(doc, 'span', { class: 'ask-multi', text: t('ask.multi') }) : false);
+      const list = h(doc, 'div', { class: 'ask-options', role: q.multiSelect ? 'group' : 'radiogroup', 'aria-labelledby': `ask-q-${qi}` }, ...rows.map((r) => r.row), other.row, text);
+      const node = h(doc, 'div', { class: 'ask-panel', id: `ask-panel-${qi}`, role: multi ? 'tabpanel' : false, hidden: true }, heading, list);
+      return { node, inputs: [...rows, other].map((r) => r.input), rows: [...rows, other].map((r) => r.row), text };
+    });
+
+    tabs = multi ? questions.map((q, qi) => {
+      const tab = h(doc, 'button', {
+        type: 'button', class: 'ask-tab', role: 'tab', id: `ask-tab-${qi}`, 'aria-controls': `ask-panel-${qi}`,
+      }, h(doc, 'span', { text: q.header || t('ask.tab_n', { n: qi + 1 }) }), icon(doc, 'i-check'));
+      tab.addEventListener('click', () => { put(setActive(get(), questions, qi)); panels[qi].inputs[get().cursor[qi]].focus(); });
+      return tab;
+    }) : [];
+    const tabRow = multi ? h(doc, 'div', { class: 'ask-tabs', role: 'tablist', 'aria-label': t('ask.tabs') }, ...tabs) : false;
+
+    badgeText = h(doc, 'span', { class: 'ask-badge-text', text: t('ask.need') });
+    badge = h(doc, 'span', { class: 'ask-badge' }, h(doc, 'span', { class: 'ask-dot', 'aria-hidden': 'true' }), badgeText);
+    skip = h(doc, 'button', { type: 'button', class: 'ask-skip', title: t('ask.skip_title'), text: t('ask.skip') });
+    send = h(doc, 'button', { type: 'button', class: 'ask-send', title: t('ask.send_title') }, h(doc, 'span', { text: t('ask.send') }), h(doc, 'kbd', { text: t('ask.send_hint') }));
+    const foot = h(doc, 'div', { class: 'ask-foot' }, badge, h(doc, 'span', { class: 'grow' }), skip, send);
+    askCard.replaceChildren(...[tabRow, ...panels.map((p) => p.node), foot].filter(Boolean));
+
+    const focusRow = (qi, oi, intoText) => {
+      const p = panels[qi];
+      if (intoText && get().answers[qi].other) p.text.focus();
+      else p.inputs[oi].focus();
+    };
+    const deliver = (answer) => {
+      put(markSent(get()));
+      if (!handlers.onAnswer(trace, answer)) put(markSent(get(), false));
+    };
+    const doSkip = () => { if (!get().sent) deliver(buildSkip(pq.request)); };
+    const doSend = () => {
+      const f = get();
+      const answer = buildAnswer(pq.request, f, questions);
+      if (answer) { deliver(answer); return; }
+      // не всё отвечено: Enter ведёт к первому вопросу без ответа
+      const next = nextUnanswered(f, questions, f.active);
+      if (next >= 0 && next !== f.active) { put(setActive(f, questions, next)); focusRow(next, get().cursor[next], false); }
+    };
+    skip.addEventListener('click', doSkip);
+    send.addEventListener('click', doSend);
+
+    const onKey = (e) => {
+      if (e.isComposing) return;
+      const f = get();
+      const qi = f.active;
+      const q = questions[qi];
+      const target = e.target;
+      const onText = target.tagName === 'TEXTAREA';
+      const onButton = target.tagName === 'BUTTON';
+      if (e.key === 'Escape') { e.preventDefault(); doSkip(); return; }
+      if (e.key === 'Enter') {
+        if (onText && e.shiftKey) return; // перенос строки в «Другом»
+        if (onButton && !e.ctrlKey && !e.metaKey) return; // Enter на кнопке нажимает её
+        e.preventDefault();
+        doSend();
+        return;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const digit = digitOption(e.key);
+      if (digit >= 0 && !onText) {
+        if (digit > otherIndex(q)) return;
+        e.preventDefault();
+        put(selectOption(f, questions, qi, digit));
+        focusRow(qi, digit, digit === otherIndex(q));
+        return;
+      }
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      if (onButton) return;
+      if (onText && !(e.key === 'ArrowUp' && target.selectionStart === 0 && target.selectionEnd === 0)) return;
+      e.preventDefault();
+      const from = onText ? otherIndex(q) : Number(target.dataset.oi);
+      const moved = moveCursor(setCursor(f, questions, qi, from), questions, qi, e.key === 'ArrowDown' ? 1 : -1);
+      const oi = moved.cursor[qi];
+      put(q.multiSelect ? moved : selectOption(moved, questions, qi, oi));
+      focusRow(qi, oi, !q.multiSelect && oi === otherIndex(q));
+    };
+
+    askUi = {
+      key,
+      onKey,
+      focusFirst() { const f = get(); focusRow(f.active, f.cursor[f.active], false); },
+      nudge() {
+        badge.dataset.alert = 'true';
+        badgeText.textContent = t('ask.blocked');
+        askUi.focusFirst();
+      },
+    };
+    sync();
+  }
+
+  function renderAsk(model, ui) {
+    const session = ui.selected ? model.sessions[ui.selected] : undefined;
+    const pq = session ? session.pendingQuestion : null;
+    const key = pq ? `${session.id}:${pq.request}` : null;
+    const open = new Set(Object.values(model.sessions).filter((s) => s.pendingQuestion).map((s) => `${s.id}:${s.pendingQuestion.request}`));
+    for (const k of [...askForms.keys()]) if (!open.has(k)) askForms.delete(k);
+    if (key === askShown) return; // состояние формы ведёт сама карточка; перерисовка не нужна
+    const hadFocus = askCard.contains(doc.activeElement);
+    askShown = key;
+    if (!pq) {
+      askUi = null;
+      askCard.hidden = true;
+      askCard.replaceChildren();
+      askCard.removeAttribute('aria-labelledby');
+      if (hadFocus && !chat.hidden) input.focus();
+      return;
+    }
+    if (!askForms.has(key)) askForms.set(key, createForm(pq.questions));
+    buildAsk(session.id, pq, key);
+    askCard.hidden = false;
+    askUi.focusFirst();
+  }
+
   // ---------------------------------------------------------------- строка статуса
 
   function statusText(status) {
@@ -1183,6 +1389,7 @@ export function createView(doc, refs, deps) {
       renderChat(model, ui);
       renderRail(session);
       renderDialog(model, ui);
+      renderAsk(model, ui);
       renderStatus(status, ui.flash, ui.flashTone);
       tick();
     },

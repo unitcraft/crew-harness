@@ -175,6 +175,9 @@ const handlers = {
   onChoose(trace, setting, value) {
     send('session_setting', trace, nextStep(model, trace), { setting, value });
   },
+  onAnswer(trace, answer) {
+    return send('question_answer', trace, nextStep(model, trace), answer);
+  },
   onDecide(trace, request, decision) {
     send('permission_decision', trace, nextStep(model, trace), { request, decision });
   },
