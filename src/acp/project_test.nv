@@ -197,6 +197,59 @@ test "rpc key: number and string id" {
     assert(rpc_key(j("\"abc\"")) == "abc")
 }
 
+// ----- the permission shows what will run (task 189) -----
+
+test "permission: a bash request shows the command" {
+    // the shape claude-agent-acp sends for Bash (the capture behind task 189): no kind, the title is
+    // the tool name, the command sits in rawInput
+    ro p = project_permission(j("7"), j("{\"sessionId\":\"sess_1\",\"toolCall\":{\"toolCallId\":\"call_bash_1\",\"title\":\"Bash\",\"status\":\"pending\",\"content\":[],\"locations\":[],\"rawInput\":{\"command\":\"git status --short\",\"description\":\"Show working tree status\"}},\"options\":[{\"optionId\":\"allow-once\",\"name\":\"Allow once\",\"kind\":\"allow_once\"},{\"optionId\":\"reject-once\",\"name\":\"Reject once\",\"kind\":\"reject_once\"}]}"))
+    assert(p.name == "permission_request")
+    ro input = j(p.input)
+    assert(str_at(input, "action") == "Выполнить команду")
+    assert(str_at(input, "detail") == "git status --short")
+}
+
+test "permission: execute, a multiline command whole" {
+    ro p = project_permission(j("8"), j("{\"sessionId\":\"s\",\"toolCall\":{\"toolCallId\":\"c2\",\"title\":\"npm test\",\"kind\":\"execute\",\"rawInput\":{\"command\":\"npm test\\nnpm run build\"}},\"options\":[]}"))
+    ro input = j(p.input)
+    assert(str_at(input, "action") == "Выполнить команду")
+    ro detail = str_at(input, "detail")
+    assert(detail.contains("npm test"))
+    assert(detail.contains("npm run build"))
+}
+
+test "permission: content line, locations, title" {
+    // no rawInput: the first line of the content
+    ro a = j(project_permission(j("9"), j("{\"toolCall\":{\"toolCallId\":\"c3\",\"title\":\"Bash\",\"content\":[{\"type\":\"content\",\"content\":{\"type\":\"text\",\"text\":\"первая строка\\nвторая\"}}]},\"options\":[]}")).input)
+    assert(str_at(a, "detail") == "первая строка")
+    // a right over files: the paths of the locations
+    ro b = j(project_permission(j("10"), j("{\"toolCall\":{\"toolCallId\":\"c4\",\"title\":\"Edit\",\"kind\":\"edit\",\"locations\":[{\"path\":\"C:/work/a.txt\"},{\"path\":\"C:/work/b.txt\"}]},\"options\":[]}")).input)
+    assert(str_at(b, "detail") == "C:/work/a.txt, C:/work/b.txt")
+    assert(str_at(b, "action") == "edit")
+    // nothing else: the title, as before
+    ro c = j(project_permission(j("11"), j("{\"toolCall\":{\"toolCallId\":\"c5\",\"title\":\"Что-то\"},\"options\":[]}")).input)
+    assert(str_at(c, "detail") == "Что-то")
+}
+
+test "permission: a long line is cut with a mark" {
+    mut long = ""
+    mut i = 0
+    while i < 40 { long = "${long}abcdefghij"; i += 1 }
+    ro params = "{\"toolCall\":{\"toolCallId\":\"c6\",\"title\":\"Bash\",\"rawInput\":{\"command\":\"${long}\"}},\"options\":[]}"
+    ro detail = str_at(j(project_permission(j("12"), j(params)).input), "detail")
+    assert(detail.contains("400"))
+    assert(detail.contains("…"))
+    assert(detail.byte_len() < long.byte_len())
+    assert(!detail.contains("jabcdefghij")) // the tail is not shown
+}
+
+test "permission: an unknown kind named honestly" {
+    ro input = j(project_permission(j("13"), j("{\"toolCall\":{\"toolCallId\":\"c7\",\"title\":\"Teleport\",\"kind\":\"teleport\"},\"options\":[]}")).input)
+    assert(str_at(input, "action") == "неизвестное действие: Teleport")
+    ro bare = j(project_permission(j("14"), j("{\"toolCall\":{\"toolCallId\":\"c8\"},\"options\":[]}")).input)
+    assert(str_at(bare, "action") == "неизвестное действие")
+}
+
 // ----- the end of the turn -----
 
 test "stop: end_turn is agent_done" {
