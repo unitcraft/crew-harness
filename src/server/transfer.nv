@@ -27,16 +27,39 @@ fn t_input(o JsonObject) -> JsonObject {
 fn t_entry(role str, turn str, id str, text str) -> TEntry => { role, turn, id, text, status: "", detail: "" }
 
 // The entries of the protocol from the lines of the page, in the order of the lines.
+// The names of the pictures of a `message_images` line, each as a line "[изображение: имя]": the new agent is told that a picture was there, the bytes do not go.
+fn t_picture_notes(input JsonObject) -> str {
+    mut notes = []str.new()
+    match input.get("images") {
+        Some(list) => {
+            for item in list.array() ?? []JsonValue.new() {
+                match item.object() {
+                    Some(o) => notes.push("[изображение: ${jtext(o, "name")}]")
+                    None => ()
+                }
+            }
+        }
+        None => ()
+    }
+    notes.join("\n")
+}
+
 fn t_entries(lines []str) -> []TEntry {
     mut out = []TEntry.new()
+    mut pictures = ""
     for line in lines {
         match jobject(line) {
             None => ()
             Some(o) => {
                 ro kind = t_text(o, "kind")
                 ro input = t_input(o)
-                if kind == "user_message" {
-                    out.push(t_entry("user", t_text(input, "turn"), "", t_text(input, "text")))
+                if kind == "message_images" {
+                    pictures = t_picture_notes(input)
+                } else if kind == "user_message" {
+                    ro said = t_text(input, "text")
+                    ro full = if pictures.byte_len() == 0 { said } else if said.byte_len() == 0 { pictures } else { "${said}\n${pictures}" }
+                    pictures = ""
+                    out.push(t_entry("user", t_text(input, "turn"), "", full))
                 } else if kind == "agent_chunk" {
                     ro last = out.len() - 1
                     if last >= 0 && out[last].role == "agent" && out[last].turn == t_text(input, "turn") {

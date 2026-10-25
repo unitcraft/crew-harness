@@ -272,3 +272,17 @@ test "settings: the folder of the machines is machines_dir of the file, CREW_SER
         Err(e) => panic(e)
     }
 }
+
+test "settings: max_image_bytes is 10 MB, the file sets it, the environment is over" {
+    assert(must_settings("{}").max_image_bytes == 10485760)
+    assert(must_settings("{\"max_image_bytes\":2048}").max_image_bytes == 2048)
+    assert(is_error(parse_server_settings("{\"max_image_bytes\":\"big\"}")))
+    assert(is_error(parse_server_settings("{\"max_image_bytes\":10}")))
+    ro path = settings_file("img.json", "{\"max_image_bytes\":4096}")
+    mut state = MockOs.new()
+    state.put_env("CREW_SERVER_MAX_IMAGE_BYTES", "8192")
+    match with Os = mock_os(state), Fs = real_fs() { server_settings(path.display()) } {
+        Ok(s) => assert(s.max_image_bytes == 8192)
+        Err(e) => assert(false)
+    }
+}

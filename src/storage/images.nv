@@ -1,0 +1,174 @@
+// images.nv - the pictures attached to the messages of a session (task 192, worker H).
+//
+// A picture is a file `<images folder of the session>/<n>.<ext>`: `n` is a number that grows through the whole session (1, 2, ...), `ext` is
+// `png`, `jpg`, `webp` or `gif` (the type of the picture is the extension, so the file needs no other record). The journal never holds the
+// bytes: it holds `{n, name, mime, bytes}` (the hub), and the page and the agent get the bytes from the file.
+//
+// The folder is `session_images_dir`: ONE function names it, so a change of the layout of the data folder (a folder per session) is one line.
+// Both programs use this file: the front writes an upload (`POST /api/session-image/<id>`) and serves a picture (`GET /api/session-image/<id>/<n>`),
+// the hub numbers and reads a picture for the agent. Nothing here leaves the images folder: the session id and the number are checked by a mask.
+module crew_harness.storage
+
+import std.encoding.base64.{Base64}
+import std.fs.{Fs, real_fs, File, Path, read, read_dir, create_dir_all, metadata}
+import std.io.{write_all}
+
+/// The kinds of picture that are taken, as `(mime, ext)`; nothing else is kept.
+fn image_kinds() -> []str => ["image/png", "png", "image/jpeg", "jpg", "image/webp", "webp", "image/gif", "gif"]
+
+/// The extension of the file for a type of picture, "" - the type is not taken.
+export fn image_ext(mime str) -> str {
+    ro kinds = image_kinds()
+    mut at = 0
+    while at + 1 < kinds.len() {
+        if kinds[at] == mime { return kinds[at + 1] }
+        at += 2
+    }
+    ""
+}
+
+/// The type of a picture by the extension of its file, "" - not one of ours.
+export fn image_mime(ext str) -> str {
+    ro kinds = image_kinds()
+    mut at = 0
+    while at + 1 < kinds.len() {
+        if kinds[at + 1] == ext { return kinds[at] }
+        at += 2
+    }
+    ""
+}
+
+/// The folder of the pictures of a session; None when the session id is not a safe name. The ONE place that knows where it is:
+/// `<data folder>/<id>/images` (the owner, 2026-10-26: a folder per session).
+export fn session_images_dir(root str, session str) -> Option[Path] {
+    if !valid_session_name(session) { return None }
+    Some(Path.from_bytes(root.bytes()).join(session).join("images"))
+}
+
+/// The number of a picture from the text of an address: digits only, 1 to 9 of them, no leading zero (so 0 is not one). None - not a number of ours.
+export fn image_number(text str) -> Option[int] {
+    ro bytes = text.bytes()
+    if bytes.len() == 0 || bytes.len() > 9 { return None }
+    if bytes[0] == (48 as u8) { return None }
+    for b in bytes {
+        if b < (48 as u8) || b > (57 as u8) { return None }
+    }
+    match text.to_int() {
+        Ok(n) => if n >= 1 { Some(n) } else { None }
+        Err(e) => None
+    }
+}
+
+/// The number in the name of a file of the images folder (`12.png` -> 12), None - the file is not a picture of ours.
+fn image_file_number(name str) -> Option[int] {
+    ro dot = name.find(".")?
+    ro ext = name[dot + 1..]
+    if image_mime(ext).byte_len() == 0 { return None }
+    image_number(name[..dot])
+}
+
+/// The number the next picture of the session gets: one more than the largest in the folder (1 when there is none).
+export fn next_image_number(dir Path) Fs -> int {
+    mut top = 0
+    match read_dir(dir) {
+        Err(e) => ()
+        Ok(entries) => {
+            for entry in entries {
+                match entry.name_str() {
+                    Some(name) => match image_file_number(name) {
+                        Some(n) => if n > top { top = n }
+                        None => ()
+                    }
+                    None => ()
+                }
+            }
+        }
+    }
+    top + 1
+}
+
+/// Where a picture was put: its number, or the reason it could not be.
+export type ImageSaved { n int, reason str }
+
+fn saved_n(n int) -> ImageSaved => { n, reason: "" }
+
+fn saved_not(reason str) -> ImageSaved => { n: 0, reason }
+
+fn write_new(path Path, bytes []u8) Fs -> bool {
+    match File.create_new(path) {
+        Err(e) => false
+        Ok(consume f) => {
+            mut ok = false
+            match write_all(f, bytes) {
+                Ok(done) => { ok = true }
+                Err(e) => ()
+            }
+            match f.close() {
+                Ok(done) => ()
+                Err(e) => { ok = false }
+            }
+            ok
+        }
+    }
+}
+
+/// Keep the bytes of a picture of the type `mime` as the next number of the session. A number taken meanwhile (the file exists) is skipped:
+/// the file is created with "must not exist", so two uploads never share a number.
+export fn save_image(root str, session str, mime str, bytes []u8) Fs -> ImageSaved {
+    ro ext = image_ext(mime)
+    if ext.byte_len() == 0 { return saved_not("the type ${mime} is not taken (png, jpeg, webp, gif)") }
+    match session_images_dir(root, session) {
+        None => saved_not("the session id is not a safe name")
+        Some(dir) => {
+            match create_dir_all(dir) {
+                Err(e) => return saved_not("the folder of the pictures cannot be made")
+                Ok(done) => ()
+            }
+            mut n = next_image_number(dir)
+            mut tries = 0
+            while tries < 50 {
+                if write_new(dir.join("${n}.${ext}"), bytes) { return saved_n(n) }
+                n = next_image_number(dir)
+                tries += 1
+            }
+            saved_not("the picture cannot be written")
+        }
+    }
+}
+
+/// A picture on the disk: the path and the type. None - there is none with this number (or the id is not safe).
+export type ImageFile { path Path, mime str, bytes int }
+
+/// Find the file of picture `n` of the session. The extension is looked up among the four we write.
+export fn find_image(root str, session str, n int) Fs -> Option[ImageFile] {
+    if n < 1 { return None }
+    ro dir = session_images_dir(root, session)?
+    ro exts = ["png", "jpg", "webp", "gif"]
+    for ext in exts {
+        ro path = dir.join("${n}.${ext}")
+        match metadata(path) {
+            Ok(meta) => if meta.is_file() { return Some(ImageFile { path, mime: image_mime(ext), bytes: meta.len() }) }
+            Err(e) => ()
+        }
+    }
+    None
+}
+
+/// The bytes of a file of a picture, None when it cannot be read.
+export fn read_image(file ImageFile) Fs -> Option[[]u8] {
+    match read(file.path) {
+        Ok(bytes) => Some(bytes)
+        Err(e) => None
+    }
+}
+
+/// Decode the base64 of a picture into bytes, None when the text is not base64.
+export fn decode_image(data str) -> Option[[]u8] {
+    match Base64.decode(data) {
+        Ok(bytes) => Some(bytes)
+        Err(e) => None
+    }
+}
+
+/// The base64 text of bytes (for the block of the prompt).
+export fn encode_image(bytes []u8) -> str => Base64.encode(bytes)

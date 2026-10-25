@@ -81,6 +81,7 @@ and no error (`describe()` leaves it out).
 | `machines_dir` | `CREW_SERVER_MACHINES_DIR` | `machines/product` beside the hub, else beside its folder | the folder of the machines of the product that the hub reads at its start (task 248, "Where the machine comes from" below) |
 | `acp_trace` | `CREW_SERVER_ACP_TRACE` (`true`/`false`) | `true` | write the raw JSON-RPC exchange with the agent, both ways, to `<data_dir>/<session>/acp.jsonl` (`{"t": unix ms, "dir": "out"|"in", "line": "<the line as it is>"}`); over 50 MB the file becomes `acp.1.jsonl` in the same folder. **The file holds the full text of the talk and the output of the tools, nothing is cut out.** |
 | `stt` {`url`,`language`,`managed`,`dir`,`model`} | `CREW_SERVER_STT_URL`, `CREW_SERVER_STT_LANGUAGE`, `CREW_SERVER_STT_MANAGED`, `CREW_SERVER_STT_DIR`, `CREW_SERVER_STT_MODEL` | `http://127.0.0.1:8178/inference`, `auto`, `true`, `CREW_STT_DIR` or `%LOCALAPPDATA%/crew-harness/stt`, `small` | the local speech recognizer (whisper.cpp `whisper-server`) that the front sends the voice to and, with `managed`, starts and ends itself (below); the address must be a plain `http://127.0.0.1:<port>/...` or `http://localhost:<port>/...` (the audio never leaves the machine); `language` is the default of `POST /api/stt`; `dir` holds `bin/whisper-server.exe` and `models/ggml-<model>.bin` |
+| `max_image_bytes` | `CREW_SERVER_MAX_IMAGE_BYTES` | 10485760 (10 MB) | the largest picture of a message (1024 to 104857600); the front and the hub both refuse a larger one |
 | `hub` {`program`,`args`} | `CREW_SERVER_HUB` (words separated by spaces) | `target/crew-hub.exe` | how the front starts the hub |
 | - | `CREW_SERVER_CONFIG` | - | the settings file, when no argument names it |
 
@@ -107,6 +108,21 @@ Whisper is a part of the control panel: the front starts it and ends it with its
 - **Check:** `curl http://127.0.0.1:<port>/api/stt/status` gives `"available":true`; `curl -X POST --data-binary @voice.wav -H "Content-Type: audio/wav" "http://127.0.0.1:<port>/api/stt?lang=en"` gives `{"text":"..."}`.
 - **By hand (emergency):** `scripts/start-stt.ps1` and `scripts/stop-stt.ps1` start and stop a recognizer on `127.0.0.1:8178` outside the front (the front then uses it as a foreign one).
 - Tests: `powershell -File scripts/tests/test-install-stt.ps1` (the installer), `nova test src/server/front/sttproc_test.nv` (the plan, the pid file, the orphan, the status).
+
+### The pictures of a message: `/api/session-image` (task 192)
+
+The owner pastes a screenshot from the clipboard (or drops an image file) into the card of the control panel and sends it with the message.
+
+- `POST /api/session-image/<session>`: the body is the raw bytes of a picture (`Content-Type`: `image/png`, `image/jpeg`, `image/webp` or `image/gif`; up to `max_image_bytes`; the first bytes must say the same as the type). The front keeps it as
+  `<data_dir>/<session>/images/<n>.<ext>` (`n` grows through the whole session: 1, 2, ...) and answers `200 {"n": 3, "bytes": 1234}`; `400` the bytes are not that type or the id is not a safe name, `413` too big, `415` another type.
+- `GET /api/session-image/<session>/<n>`: the file with its `Content-Type` (`404` none). The session id and the number are checked by a mask (a safe name, digits without a leading zero): no address leaves the images folder.
+  Only `127.0.0.1` listens, and an upload from a page of another origin is refused (as the WebSocket).
+- The message names the pictures by number: `{"kind":"user_message", "input":{"turn":..., "text":..., "images":[{"name":"image.png","n":3}]}}` (the hub also takes `{"name","mime","data"}` with base64 and keeps the file itself; at most 6 pictures, each up to `max_image_bytes`).
+  **Why not base64 in the message:** the hub reads its stdin one byte at a time (about 40 microseconds a byte, workaround 31), so a screenshot of a megabyte in a line would stop the hub for 40 seconds.
+- The journal keeps a record before the message: the signal `message_images` `{"images":[{"n","name","mime","bytes"}]}` (never the bytes); the page gets the same line and puts the thumbnails into the bubble of the message that follows; after a reload the page loads them from `GET /api/session-image/...`.
+- To the agent: `session/prompt` gets `[{"type":"text","text":...},{"type":"image","mimeType":...,"data":<base64>}]` ONLY if the agent said `agentCapabilities.promptCapabilities.image = true` at `initialize`. Otherwise no picture is sent: the text goes with the note
+  `[приложено изображений: N, агент их не принимает]` and the feed shows the line "the agent does not take pictures; only the text was sent" (the signal `images_skipped`). When the family changes in the window, a picture in the protocol is the line `[изображение: имя]`.
+- The raw trace (`<session>.acp.jsonl`) holds `"data":"<image N bytes>"` instead of the base64.
 
 ## The chat runs on Alula
 
@@ -296,7 +312,7 @@ The events a live session shows come from the engine itself (`Engine.take_events
 | `../storage/paths.nv`, `../storage/migrate.nv` | the paths of the folder of a session (one place), the move of the flat files of the older form into the folders |
 | `hub.nv` | `Hub`: `start_hub`, `attach`, `release`, `handle`, `pump`, `take_output`, `take_log`, `close`; the sessions, the store by the settings, the lines of the page |
 | `stdio.nv` | `run_hub_stdio`: the hub over stdin and stdout |
-| `front/front.nv`, `front/front_settings.nv`, `front/stt.nv`, `front/sttproc.nv` | the front: HTTP, `/ws` (frames over two owners of the socket), the router fiber, the hub as a child process; the voice to text (`/api/stt`); the recognizer as a child of the front |
+| `front/front.nv`, `front/front_settings.nv`, `front/stt.nv`, `front/sttproc.nv`, `front/images.nv` | the front: HTTP, `/ws` (frames over two owners of the socket), the router fiber, the hub as a child process; the voice to text (`/api/stt`); the recognizer as a child of the front; the pictures of the messages (`/api/session-image`) |
 | `testkit.nv` | the settings of a test hub with the fake agent, the rig that drives a hub as a page does, the scenarios (shared by the units below) |
 | `alula_test.nv` | the machine of the hub: made from the embedded table, the idle term, a broken text, an engine in memory, the snapshot |
 | `dialog_test.nv`, `settings_test.nv`, `front/front_settings_test.nv`, `front/stt_test.nv`, `front/sttproc_test.nv` | tests of the unit `src/server` and `src/server/front` |

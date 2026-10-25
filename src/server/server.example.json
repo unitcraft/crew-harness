@@ -10,6 +10,7 @@
   "workdir": "",
   "web_dir": "src/web",
   "acp_trace": true,
+  "max_image_bytes": 10485760,
   "stt": { "url": "http://127.0.0.1:8178/inference", "language": "auto" },
   "hub": { "program": "target/crew-hub.exe", "args": [] }
 }

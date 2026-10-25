@@ -237,7 +237,7 @@ fn route_loop(link AgentLink, reg_rx ChanRx[Reg]) Io Time Os -> () {
 
 // ----- HTTP -----
 
-const CSP = "default-src 'self'; connect-src 'self' ws://localhost:* ws://127.0.0.1:*"
+const CSP = "default-src 'self'; img-src 'self' blob:; connect-src 'self' ws://localhost:* ws://127.0.0.1:*"
 
 fn with_headers(mut resp ServerResponse) -> ServerResponse {
     resp.header("Content-Security-Policy", CSP)
@@ -441,7 +441,32 @@ fn stt_status_route(mgr_asks ChanTx[SttMgrAsk], asks ChanTx[SttAsk], model str) 
     }
 }
 
-fn build_router(web_dir str, port int, hub_tx ChanTx[str], reg_tx ChanTx[Reg], agents []AgentChoice, stt_url str, stt_language str, stt_model str, stt_asks ChanTx[SttAsk], stt_mgr ChanTx[SttMgrAsk]) -> Result[Router, HttpError] {
+// ----- the pictures of the messages: POST /api/session-image/<session> and GET /api/session-image/<session>/<n> (task 192) -----
+
+fn image_reply(r ImageReply) -> ServerResponse {
+    mut resp = ServerResponse.bytes(r.status, r.mime, r.body)
+    resp.header("X-Content-Type-Options", "nosniff")
+    with_headers(resp)
+}
+
+fn image_put_route(data_dir str, limit int, port int) -> fn(ServerRequest) -> ServerResponse {
+    fn(req ServerRequest) -> ServerResponse {
+        if !origin_allowed(req, port) { return json_reply(403, "{\"error\":\"origin not allowed\"}") }
+        ro session = req.param("id") ?? ""
+        ro content_type = req.header("Content-Type") ?? ""
+        image_reply(img_put(data_dir, session, content_type, req.body_bytes(), limit))
+    }
+}
+
+fn image_get_route(data_dir str) -> fn(ServerRequest) -> ServerResponse {
+    fn(req ServerRequest) -> ServerResponse {
+        ro session = req.param("id") ?? ""
+        ro number = req.param("n") ?? ""
+        image_reply(img_get(data_dir, session, number))
+    }
+}
+
+fn build_router(web_dir str, port int, hub_tx ChanTx[str], reg_tx ChanTx[Reg], agents []AgentChoice, stt_url str, stt_language str, stt_model str, stt_asks ChanTx[SttAsk], stt_mgr ChanTx[SttMgrAsk], data_dir str, image_limit int) -> Result[Router, HttpError] {
     mut router = Router.new()
     ro r1 = router.get("/", files_route(web_dir))?
     ro r2 = router.get("/health", fn(req ServerRequest) -> ServerResponse => ServerResponse.text(StatusCode.OK, "ok"))?
@@ -449,6 +474,8 @@ fn build_router(web_dir str, port int, hub_tx ChanTx[str], reg_tx ChanTx[Reg], a
     ro r4 = router.get("/api/agents", agents_route(agents))?
     ro r4a = router.post("/api/stt", stt_route(stt_url, stt_language, port))?
     ro r4b = router.get("/api/stt/status", stt_status_route(stt_mgr, stt_asks, stt_model))?
+    ro r4c = router.post("/api/session-image/{id}", image_put_route(data_dir, image_limit, port))?
+    ro r4d = router.get("/api/session-image/{id}/{n}", image_get_route(data_dir))?
     ro r5 = router.get("/{*path}", files_route(web_dir))?
     Ok(router)
 }
@@ -473,7 +500,7 @@ export fn run_front(settings FrontSettings, config_file str) Proc Net Time Detac
             ro stt_mgr = Chan[SttMgrAsk].new(16)
             ro stt_cfg = SttConfig { managed: settings.stt_managed, dir: settings.stt_dir, model: settings.stt_model, language: settings.stt_language, url: settings.stt_url, pid_file: "${settings.data_dir}/stt.pid" }
             detach { with Net = real_net(), Fs = real_fs() { stt_manage(stt_cfg, stt_mgr.rx) } }
-            match build_router(settings.web_dir, settings.port, link.out, registrations.tx, settings.agents, settings.stt_url, settings.stt_language, settings.stt_model, stt_asks.tx, stt_mgr.tx) {
+            match build_router(settings.web_dir, settings.port, link.out, registrations.tx, settings.agents, settings.stt_url, settings.stt_language, settings.stt_model, stt_asks.tx, stt_mgr.tx, settings.data_dir, settings.max_image_bytes) {
                 Err(e) => {
                     log_line("the routes cannot be set: ${e}")
                     exit_process(2)
@@ -481,8 +508,9 @@ export fn run_front(settings FrontSettings, config_file str) Proc Net Time Detac
                 Ok(router) => {
                     log_line("listening on http://127.0.0.1:${settings.port}/ - Ctrl+C to stop (hub: ${settings.hub_program}, page: ${settings.web_dir})")
                     // the voice is a WAV in the body of a request: up to 25 MiB, read for up to 30 s (the default is 1 MiB and 5 s)
+                    // a picture is a body too: the larger of the two limits
                     mut policy = ServerPolicy.new()
-                    policy.max_body_bytes(STT_MAX_AUDIO)
+                    policy.max_body_bytes(if settings.max_image_bytes > STT_MAX_AUDIO { settings.max_image_bytes } else { STT_MAX_AUDIO })
                     policy.read_deadline(30.to_seconds())
                     match serve_addr("127.0.0.1:${settings.port}", router, policy) {
                         Ok(done) => ()

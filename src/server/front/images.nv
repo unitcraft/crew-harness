@@ -1,0 +1,99 @@
+// images.nv - the pictures of the messages in the control panel (task 192): `POST /api/session-image/<session>` keeps an upload,
+// `GET /api/session-image/<session>/<n>` gives it back.
+//
+// Why the front and not the hub takes the bytes: the hub reads its stdin ONE byte at a time (item 31 of the workarounds), about 40 microseconds a byte,
+// so a screenshot of a megabyte in a line would stop the hub for 40 seconds. The page puts the file by HTTP (raw bytes, no base64, no line), then the
+// message names the picture by its number (`images: [{n, name}]`) and the hub, which shares the data folder, finds the file.
+// This file holds what needs no routes: the check of an upload, the answer, the read of a file. The files and the numbers are `crew_harness.storage` (images.nv there).
+// ORACLE-WORKAROUND(25): the module is declared `module server.front` (without the package prefix) and imported as `crew_harness.server.front`: a module two folders under the source root cannot be declared with the full path; declare it with the prefix when item 25 is fixed
+module server.front
+
+import crew_harness.storage.{image_ext, image_number, save_image, find_image, read_image, valid_session_name}
+import std.encoding.json.{JsonValue, JsonObject}
+import std.fs.{Fs, real_fs}
+
+/// ImageReply: the answer of the front about a picture: the status, the type of the body, the body (bytes, or the JSON of a failure).
+export type ImageReply { status int, mime str, body []u8 }
+
+fn img_byte(bytes []u8, at int) -> int => bytes[at] as int
+
+fn img_starts(bytes []u8, at int, text str) -> bool {
+    ro want = text.bytes()
+    if bytes.len() < at + want.len() { return false }
+    mut i = 0
+    while i < want.len() {
+        if bytes[at + i] != want[i] { return false }
+        i += 1
+    }
+    true
+}
+
+/// Do the first bytes say what `mime` says? A file that only calls itself a picture is not kept.
+export fn img_magic_ok(mime str, bytes []u8) -> bool {
+    if mime == "image/png" { return bytes.len() >= 8 && img_byte(bytes, 0) == 137 && img_starts(bytes, 1, "PNG\r\n") }
+    if mime == "image/jpeg" { return bytes.len() >= 3 && img_byte(bytes, 0) == 255 && img_byte(bytes, 1) == 216 && img_byte(bytes, 2) == 255 }
+    if mime == "image/gif" { return img_starts(bytes, 0, "GIF87a") || img_starts(bytes, 0, "GIF89a") }
+    if mime == "image/webp" { return bytes.len() >= 12 && img_starts(bytes, 0, "RIFF") && img_starts(bytes, 8, "WEBP") }
+    false
+}
+
+/// The type of an upload from its `Content-Type` (parameters such as `; charset` are dropped, the case is not looked at).
+export fn img_mime_of(content_type str) -> str {
+    ro semi = content_type.find(";") ?? content_type.byte_len()
+    content_type[..semi].trim_ascii().to_ascii_lower()
+}
+
+fn img_json(o JsonObject) -> []u8 => JsonValue.object(o).to_str().bytes()
+
+fn img_failure(status int, reason str) -> ImageReply {
+    mut o = JsonObject.new()
+    ro set = o.insert("error", JsonValue.str(reason))
+    ImageReply { status, mime: "application/json; charset=utf-8", body: img_json(o) }
+}
+
+/// Is an upload fit to keep? A reply with a status of 415 / 400 / 413 and the reason when it is not; a reply with the status 0 when it is.
+export fn img_refusal(mime str, bytes []u8, limit int) -> ImageReply {
+    if image_ext(mime).byte_len() == 0 { return img_failure(415, "the type ${mime} is not taken: png, jpeg, webp or gif") }
+    if bytes.len() == 0 { return img_failure(400, "the body is empty: send the picture") }
+    if bytes.len() > limit { return img_failure(413, "the picture is over ${limit} bytes") }
+    if !img_magic_ok(mime, bytes) { return img_failure(400, "the bytes are not ${mime}") }
+    ImageReply { status: 0, mime: "", body: []u8.new() }
+}
+
+fn img_put_in(root str, session str, mime str, bytes []u8) Fs -> ImageReply {
+    ro saved = save_image(root, session, mime, bytes)
+    if saved.reason.byte_len() > 0 { return img_failure(500, saved.reason) }
+    mut o = JsonObject.new()
+    ro n_set = o.insert("n", JsonValue.int(saved.n))
+    ro bytes_set = o.insert("bytes", JsonValue.int(bytes.len()))
+    ImageReply { status: 200, mime: "application/json; charset=utf-8", body: img_json(o) }
+}
+
+/// An upload: check it (`img_refusal`), keep it as the next number of the session. The answer is `{"n": 3, "bytes": 1234}` or `{"error": "..."}`.
+export fn img_put(root str, session str, content_type str, bytes []u8, limit int) -> ImageReply {
+    if !valid_session_name(session) { return img_failure(400, "the session id is not a safe name") }
+    ro mime = img_mime_of(content_type)
+    ro refused = img_refusal(mime, bytes, limit)
+    if refused.status != 0 { return refused }
+    with Fs = real_fs() { img_put_in(root, session, mime, bytes) }
+}
+
+fn img_get_in(root str, session str, n int) Fs -> ImageReply {
+    match find_image(root, session, n) {
+        None => img_failure(404, "no such picture")
+        Some(file) => match read_image(file) {
+            None => img_failure(404, "no such picture")
+            Some(bytes) => ImageReply { status: 200, mime: file.mime, body: bytes }
+        }
+    }
+}
+
+/// A picture for the page. `number` is the text of the address: digits only, or it is not ours (400); an unknown picture is 404.
+/// Nothing is joined from the text of the address except a checked session name and a checked number, so no address leaves the images folder.
+export fn img_get(root str, session str, number str) -> ImageReply {
+    if !valid_session_name(session) { return img_failure(400, "the session id is not a safe name") }
+    match image_number(number) {
+        None => img_failure(400, "the number of a picture is digits")
+        Some(n) => with Fs = real_fs() { img_get_in(root, session, n) }
+    }
+}

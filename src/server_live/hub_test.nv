@@ -2,7 +2,7 @@
 // The same scenarios run over PostgreSQL in src/server_pg: the results must be the same.
 module crew_harness.server_live
 
-import crew_harness.server.{kit_files, scenario_chat, scenario_stream_burst, scenario_permission, scenario_cancel, scenario_switch_agent, scenario_restart_idle, scenario_migrate_flat, scenario_restart_open, scenario_crash, scenario_two_pages, scenario_rejects, scenario_many, scenario_broken_agent, scenario_renamed_table}
+import crew_harness.server.{kit_files, scenario_chat, scenario_stream_burst, scenario_permission, scenario_cancel, scenario_switch_agent, scenario_restart_idle, scenario_migrate_flat, scenario_restart_open, scenario_crash, scenario_two_pages, scenario_rejects, scenario_many, scenario_broken_agent, scenario_renamed_table, scenario_images}
 
 fn clean(report str) -> () {
     if report.byte_len() > 0 { println("NOT AS IT MUST BE: ${report}") }
@@ -64,4 +64,8 @@ test "files: an agent that refuses to start" {
 
 test "files: the table with other names of the states" {
     clean(scenario_renamed_table(kit_files("renamed", 30000)))
+}
+
+test "files: pictures in a message" {
+    clean(scenario_images(kit_files("images", 30000)))
 }

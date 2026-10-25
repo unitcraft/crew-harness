@@ -20,11 +20,12 @@ module crew_harness.server
 import alula.engine.{Engine, Incoming, EventKind, Journal, Store, Link, PartyRequest, start_engine, resume_engine, decode_snapshot}
 import crew_harness.product_machines.{find_machines_dir, load_product_machines}
 import alula.machine_run.{AlulaMachine, AlulaState}
-import crew_harness.acp.{AcpConfig, AcpClient, open_client_traced, acp_link, page_event, TRACE_LIMIT}
-import crew_harness.storage.{open_data_dir, file_journal, file_store, list_sessions, valid_session_name, session_file_made, migrate_flat_sessions}
+import crew_harness.acp.{AcpConfig, AcpClient, AcpImage, open_client_traced, acp_link, page_event, TRACE_LIMIT}
+import crew_harness.storage.{open_data_dir, file_journal, file_store, list_sessions, valid_session_name, session_file_made, migrate_flat_sessions, image_ext, decode_image, save_image, find_image}
 import crew_harness.pgstore.{PgWorld, pg_journal, pg_store}
 import crew_harness.pgdb.{pg_list}
 import std.encoding.json.{Json, JsonValue, JsonObject}
+import std.fs.{Fs, real_fs}
 import std.net.{real_net}
 import std.os.{Os, real_os, cwd, args}
 
@@ -102,6 +103,20 @@ fn joined(parts []str, sep str) -> str {
 }
 
 fn array_text(lines []str) -> str => "[${joined(lines, ",")}]"
+
+fn jlist(o JsonObject, key str) -> []JsonValue {
+    match o.get(key) {
+        Some(v) => v.array() ?? []JsonValue.new()
+        None => []JsonValue.new()
+    }
+}
+
+fn jnumber(o JsonObject, key str) -> int {
+    match o.get(key) {
+        Some(v) => v.int() ?? 0
+        None => 0
+    }
+}
 
 // ----- the store, by the settings: the same engine over files or over PostgreSQL -----
 
@@ -452,6 +467,8 @@ fn Hub mut @resume_session(id str) Proc Detach Time -> () {
     }
 }
 
+fn prepare_none() -> Prepared => prepared_not("")
+
 // ----- what the page says -----
 
 fn Hub mut @create(conn int, trace str, input JsonObject) Proc Detach Time -> () {
@@ -488,13 +505,97 @@ fn Hub mut @create(conn int, trace str, input JsonObject) Proc Detach Time -> ()
     }
 }
 
-fn Hub mut @say(trace str, text str) Proc Detach Time -> () {
+/// The most pictures one message carries.
+export const MAX_IMAGES = 6
+
+/// ImageMeta: what the journal keeps of a picture: its number in the session, the name the owner saw, the type and the size. Never the bytes.
+type ImageMeta { n int, name str, mime str, bytes int }
+
+/// Prepared: the pictures of a message after they were checked and kept: their records, the files for the prompt, and the reason (""
+/// - all well) the message is refused for.
+type Prepared { metas []ImageMeta, files []AcpImage, reason str }
+
+fn prepared_not(reason str) -> Prepared => { metas: []ImageMeta.new(), files: []AcpImage.new(), reason }
+
+// A name to show: at most 80 characters, no line breaks; "image.png" when there is none.
+fn short_name(name str) -> str {
+    ro flat = name.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+    if flat.trim_ascii().byte_len() == 0 { return "image.png" }
+    mut parts = []str.new()
+    mut count = 0
+    for c in flat.chars() {
+        count += 1
+        if count <= 80 { parts.push("${c}") }
+    }
+    parts.join("")
+}
+
+fn images_text(metas []ImageMeta) -> str {
+    mut rows = []JsonValue.new()
+    for m in metas {
+        mut o = JsonObject.new()
+        jput(o, "n", JsonValue.int(m.n))
+        jput(o, "name", JsonValue.str(m.name))
+        jput(o, "mime", JsonValue.str(m.mime))
+        jput(o, "bytes", JsonValue.int(m.bytes))
+        rows.push(JsonValue.object(o))
+    }
+    mut o = JsonObject.new()
+    jput(o, "images", JsonValue.array(rows))
+    JsonValue.object(o).to_str()
+}
+
+// The pictures of a message of the page: each one is `{name, mime, data}` (base64, the hub keeps the file) or `{name, n}` (the page has put
+// the file already by `POST /api/session-image/<session>`, the hub looks at it). The limit of the number and of the size is checked here, whatever the page did.
+fn Hub @prepare_images_in(trace str, items []JsonValue) Fs -> Prepared {
+    if items.len() > MAX_IMAGES { return prepared_not("at most ${MAX_IMAGES} pictures in a message") }
+    mut metas = []ImageMeta.new()
+    mut files = []AcpImage.new()
+    for item in items {
+        ro o = match item.object() {
+            Some(x) => x
+            None => return prepared_not("a picture must be an object")
+        }
+        ro name = short_name(jtext(o, "name"))
+        ro data = jtext(o, "data")
+        mut n = jnumber(o, "n")
+        if data.byte_len() > 0 {
+            ro mime = jtext(o, "mime")
+            if image_ext(mime).byte_len() == 0 { return prepared_not("the type of the picture ${name} is not taken (png, jpeg, webp, gif)") }
+            ro bytes = match decode_image(data) {
+                Some(b) => b
+                None => return prepared_not("the picture ${name} is not base64")
+            }
+            if bytes.len() > @settings.max_image_bytes { return prepared_not("the picture ${name} is over ${@settings.max_image_bytes} bytes") }
+            ro saved = save_image(@settings.data_dir, trace, mime, bytes)
+            if saved.reason.byte_len() > 0 { return prepared_not(saved.reason) }
+            n = saved.n
+        }
+        match find_image(@settings.data_dir, trace, n) {
+            None => return prepared_not("the picture ${name} is not there")
+            Some(file) => {
+                if file.bytes > @settings.max_image_bytes { return prepared_not("the picture ${name} is over ${@settings.max_image_bytes} bytes") }
+                metas.push(ImageMeta { n, name, mime: file.mime, bytes: file.bytes })
+                files.push(AcpImage { path: file.path.display(), mime: file.mime, name })
+            }
+        }
+    }
+    Prepared { metas, files, reason: "" }
+}
+
+fn Hub @prepare_images(trace str, items []JsonValue) -> Prepared {
+    with Fs = real_fs() {
+        @prepare_images_in(trace, items)
+    }
+}
+
+fn Hub mut @say(trace str, text str, items []JsonValue) Proc Detach Time -> () {
     ro at = @find(trace)
     if at < 0 {
         @say_log("a message to an unknown session: ${trace}")
         return
     }
-    if text.byte_len() == 0 { return }
+    if text.byte_len() == 0 && items.len() == 0 { return }
     if !@takes_message_at(at) {
         @say_log("a message to ${trace} while a turn is open: ignored")
         return
@@ -505,7 +606,19 @@ fn Hub mut @say(trace str, text str) Proc Detach Time -> () {
         return
     }
     mut s = @sessions[at]
+    mut prepared = prepare_none()
+    if items.len() > 0 {
+        prepared = @prepare_images(trace, items)
+        if prepared.reason.byte_len() > 0 {
+            @tell_error(0, trace, s.engine.step_number(), "", "the pictures are not sent: ${prepared.reason}")
+            return
+        }
+        // the journal keeps the records of the pictures, right before the message they belong to; the files go to the client for the prompt
+        accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("message_images", images_text(prepared.metas)))
+        s.clients[0].attach_images(prepared.files)
+    }
     feed_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("user_message", text))
+    s.clients[0].attach_images([]AcpImage.new())
     @drain(at)
 }
 
@@ -641,7 +754,7 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
     if kind == "session_created" {
         @create(conn, trace, input)
     } else if kind == "user_message" {
-        @say(trace, jtext(input, "text"))
+        @say(trace, jtext(input, "text"), jlist(input, "images"))
     } else if kind == "cancel" {
         @cancel(trace)
     } else if kind == "permission_decision" {

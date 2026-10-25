@@ -1,0 +1,88 @@
+// images_test.nv - the pictures at the front: the check of an upload, the answer, the read, the names that cannot leave the folder.
+// ORACLE-WORKAROUND(25): the module is declared `module server.front` (without the package prefix): a module two folders under the source root cannot be declared with the full path; declare it with the prefix when item 25 is fixed
+module server.front
+
+import std.os.{Os, real_os, temp_dir, pid}
+import std.fs.{Fs, real_fs, remove_dir_all, create_dir_all, write_text, Path}
+
+fn pic_root(name str) -> str {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-front-images-${id}-${name}")
+    with Fs = real_fs() {
+        ro removed = remove_dir_all(dir)
+    }
+    dir.display()
+}
+
+fn png_bytes(extra int) -> []u8 {
+    mut out = [137 as u8, 80 as u8, 78 as u8, 71 as u8, 13 as u8, 10 as u8, 26 as u8, 10 as u8]
+    mut i = 0
+    while i < extra {
+        out.push(7 as u8)
+        i += 1
+    }
+    out
+}
+
+fn body_text(r ImageReply) -> str {
+    match r.body.to_str() {
+        Ok(t) => t
+        Err(e) => "<bytes>"
+    }
+}
+
+test "images front: the type of an upload, the check by the first bytes" {
+    assert(img_mime_of("image/PNG; charset=x") == "image/png")
+    assert(img_mime_of("  image/webp ") == "image/webp")
+    assert(img_magic_ok("image/png", png_bytes(4)))
+    assert(!img_magic_ok("image/png", "GIF89a".bytes()))
+    assert(img_magic_ok("image/gif", "GIF89a....".bytes()))
+    assert(img_magic_ok("image/jpeg", [255 as u8, 216 as u8, 255 as u8, 224 as u8]))
+    assert(img_magic_ok("image/webp", "RIFF....WEBPVP8 ".bytes()))
+    assert(!img_magic_ok("image/webp", "RIFF....WAVEfmt ".bytes()))
+    assert(!img_magic_ok("image/svg+xml", "<svg/>".bytes()))
+}
+
+test "images front: an upload is kept and numbered, the answer is JSON" {
+    ro root = pic_root("put")
+    ro a = img_put(root, "s-1", "image/png", png_bytes(10), 1000)
+    assert(a.status == 200 && body_text(a).contains("\"n\":1") && body_text(a).contains("\"bytes\":18"))
+    ro b = img_put(root, "s-1", "image/png", png_bytes(20), 1000)
+    assert(b.status == 200 && body_text(b).contains("\"n\":2"))
+    ro got = img_get(root, "s-1", "2")
+    assert(got.status == 200 && got.mime == "image/png" && got.body == png_bytes(20))
+}
+
+test "images front: refusals have their statuses" {
+    ro root = pic_root("refuse")
+    assert(img_put(root, "s-1", "text/html", png_bytes(10), 1000).status == 415)
+    assert(img_put(root, "s-1", "image/png", []u8.new(), 1000).status == 400)
+    assert(img_put(root, "s-1", "image/png", png_bytes(2000), 1000).status == 413)
+    assert(img_put(root, "s-1", "image/png", "GIF89a......".bytes(), 1000).status == 400)
+    assert(img_put(root, "../s", "image/png", png_bytes(10), 1000).status == 400)
+    assert(img_put(root, "s-1", "image/svg+xml", "<svg/>".bytes(), 1000).status == 415)
+}
+
+test "images front: an address cannot leave the folder of the pictures" {
+    ro root = pic_root("path")
+    ro saved = img_put(root, "s-1", "image/png", png_bytes(10), 1000)
+    assert(saved.status == 200)
+    // a secret next to the data folder
+    with Fs = real_fs() {
+        ro made = create_dir_all(Path.from_bytes(root.bytes()))
+        ro written = write_text(Path.from_bytes(root.bytes()).join("secret.txt"), "secret")
+    }
+    assert(img_get(root, "s-1", "1").status == 200)
+    assert(img_get(root, "s-1", "2").status == 404)
+    assert(img_get(root, "s-1", "../1").status == 400)
+    assert(img_get(root, "s-1", "1/../../secret.txt").status == 400)
+    assert(img_get(root, "s-1", "..%2f1").status == 400)
+    assert(img_get(root, "s-1", "01").status == 400)
+    assert(img_get(root, "s-1", "1.png").status == 400)
+    assert(img_get(root, "..", "1").status == 400)
+    assert(img_get(root, "../s-1", "1").status == 400)
+    assert(img_get(root, "s-1/..", "1").status == 400)
+    assert(img_get(root, "", "1").status == 400)
+    assert(img_get(root, "s-other", "1").status == 404)
+}

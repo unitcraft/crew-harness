@@ -133,3 +133,28 @@ test "trace: an empty path is no trace" {
     assert(!t.on)
     t.record("out", "x")
 }
+
+test "trace: the bytes of a picture are cut out of a line, the rest stays" {
+    ro big = "QUJD".repeat(5000)
+    ro raw = "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"session/prompt\",\"params\":{\"prompt\":[{\"type\":\"text\",\"text\":\"look\"},{\"type\":\"image\",\"mimeType\":\"image/png\",\"data\":\"${big}\"},{\"type\":\"image\",\"mimeType\":\"image/gif\",\"data\":\"QQ==\"}]}}"
+    ro cut = trace_redact_images(raw)
+    assert(!cut.contains("QUJD"))
+    assert(cut.contains("\"data\":\"<image 15000 bytes>\""))
+    assert(cut.contains("\"data\":\"<image 1 bytes>\""))
+    assert(cut.contains("\"text\":\"look\""))
+    assert(cut.contains("\"mimeType\":\"image/gif\""))
+    // a line without a picture is not touched, also one with a field `data` of something else
+    ro plain = "{\"data\":\"QUJD\",\"type\":\"text\"}"
+    assert(trace_redact_images(plain) == plain)
+}
+
+test "trace: a record of a prompt with a picture holds the size, not the bytes" {
+    ro path = trace_dir("image").join("s1.acp.jsonl").display()
+    mut t = trace_open(path, TRACE_LIMIT)
+    t.record("out", "{\"prompt\":[{\"type\":\"image\",\"mimeType\":\"image/png\",\"data\":\"QUJDRA==\"}]}")
+    ro lines = trace_lines(path)
+    assert(lines.len() == 1)
+    ro line = trace_field_str(trace_object(lines[0]), "line")
+    assert(line.contains("<image 4 bytes>"))
+    assert(!line.contains("QUJDRA"))
+}

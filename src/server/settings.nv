@@ -3,7 +3,8 @@
 // The file is a JSON object; every key is optional (see `src/server/server.example.json`):
 //   port, data_dir, store ("files" or "pg"), pg {host, port, database, user, password}, agents [{id, label, program, args}],
 //   idle_term_seconds, workdir, web_dir, machines_dir (the folder of the machines of the product, task 248), hub {program, args}, acp_trace (true by default: the raw exchange with the agent is written to
-//   <data_dir>/<session>/acp.jsonl), stt {url, language} (the local whisper server the front sends the voice to: `/api/stt`)
+//   <data_dir>/<session>/acp.jsonl), stt {url, language} (the local whisper server the front sends the voice to: `/api/stt`),
+//   max_image_bytes (the largest picture of a message, 10 MB by default; env CREW_SERVER_MAX_IMAGE_BYTES)
 // The environment is over the file, key by key:
 //   CREW_SERVER_PORT, CREW_SERVER_STORE, CREW_SERVER_DATA_DIR, CREW_SERVER_AGENT (the command of the one agent "opencode",
 //   words separated by spaces), CREW_SERVER_WORKDIR, CREW_SERVER_WEB_DIR, CREW_SERVER_MACHINES_DIR, CREW_SERVER_ACP_TRACE (true/false), CREW_SERVER_STT_URL, CREW_SERVER_STT_LANGUAGE, CREW_SERVER_IDLE_SECONDS, CREW_SERVER_HUB (the command
@@ -41,7 +42,8 @@ export type ServerSettings {
     hub_args []str,
     acp_trace bool,
     stt_url str,
-    stt_language str
+    stt_language str,
+    max_image_bytes int
 }
 
 fn st_text(o JsonObject, key str, fallback str) -> Result[str, str] {
@@ -72,6 +74,14 @@ fn st_flag(o JsonObject, key str, fallback bool) -> Result[bool, str] {
             None => Err("the setting ${key} must be true or false")
         }
     }
+}
+
+/// The largest picture the server takes: 10 MB.
+export const DEFAULT_MAX_IMAGE_BYTES = 10485760
+
+fn st_image_limit_check(n int) -> Result[(), str] {
+    if n < 1024 || n > 104857600 { return Err("max_image_bytes must be 1024 to 104857600 (100 MB)") }
+    Ok(())
 }
 
 const STT_DEFAULT_URL = "http://127.0.0.1:8178/inference"
@@ -181,6 +191,8 @@ export fn parse_server_settings(text str) -> Result[ServerSettings, str] {
     ro web_dir = st_text(o, "web_dir", "src/web")?
     ro machines_dir = st_text(o, "machines_dir", "")?
     ro acp_trace = st_flag(o, "acp_trace", true)?
+    ro max_image_bytes = st_number(o, "max_image_bytes", DEFAULT_MAX_IMAGE_BYTES)?
+    st_image_limit_check(max_image_bytes)?
     mut stt_url = STT_DEFAULT_URL
     mut stt_language = "auto"
     match o.get("stt") {
@@ -205,7 +217,7 @@ export fn parse_server_settings(text str) -> Result[ServerSettings, str] {
         }
         None => ()
     }
-    Ok(ServerSettings { port, data_dir, store, pg, agents, idle_term_ms: idle_seconds * 1000, workdir, web_dir, machines_dir, hub_program, hub_args, acp_trace, stt_url, stt_language })
+    Ok(ServerSettings { port, data_dir, store, pg, agents, idle_term_ms: idle_seconds * 1000, workdir, web_dir, machines_dir, hub_program, hub_args, acp_trace, stt_url, stt_language, max_image_bytes })
 }
 
 fn st_env(key str) Os -> Option[str] {
@@ -302,6 +314,9 @@ export fn server_settings(file str) Os Fs -> Result[ServerSettings, str] {
     ro stt_url = st_env("CREW_SERVER_STT_URL") ?? base.stt_url
     ro stt_language = st_env("CREW_SERVER_STT_LANGUAGE") ?? base.stt_language
     st_stt_check(stt_url, stt_language)?
+    ro image_limit = st_env_number("CREW_SERVER_MAX_IMAGE_BYTES")?
+    ro max_image_bytes = image_limit ?? base.max_image_bytes
+    st_image_limit_check(max_image_bytes)?
     ro merged = ServerSettings {
         port: port ?? base.port,
         data_dir: st_env("CREW_SERVER_DATA_DIR") ?? base.data_dir,
@@ -316,7 +331,8 @@ export fn server_settings(file str) Os Fs -> Result[ServerSettings, str] {
         hub_args,
         acp_trace,
         stt_url,
-        stt_language
+        stt_language,
+        max_image_bytes
     }
     if merged.store != "files" && merged.store != "pg" { return Err("the store must be files or pg") }
     if merged.port < 1 || merged.port > 65535 { return Err("the port must be 1 to 65535") }

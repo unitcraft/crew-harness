@@ -10,8 +10,8 @@ module crew_harness.server
 import crew_harness.product_machines.{dialog_machine_text, tree_machines_dir}
 import crew_harness.pgdb.{PgConfig}
 import std.encoding.json.{Json, JsonValue, JsonObject}
-import crew_harness.storage.{session_dir, session_file}
-import std.fs.{Fs, real_fs, Path, try_exists, remove_dir_all, read_dir, rename}
+import crew_harness.storage.{session_dir, session_file, session_images_dir, save_image}
+import std.fs.{Fs, real_fs, Path, try_exists, remove_dir_all, read_dir, rename, read_text}
 import std.os.{Os, real_os, cwd, temp_dir, pid}
 
 // ----- the settings of a test -----
@@ -68,10 +68,11 @@ fn kit_settings(store str, name str, idle_ms int, pg PgConfig) -> ServerSettings
     agents.push(kit_agent("opencode", "--ok", "${data_dir}/stream-active"))
     agents.push(kit_agent("broken", "--auth-error", ""))
     agents.push(kit_agent("second", "--ok", ""))
+    agents.push(kit_agent("pictures", "--images", ""))
     ServerSettings {
         port: 8099, data_dir, store, pg, agents, idle_term_ms: idle_ms,
         workdir: kit_repo_root().display(), web_dir: "src/web", machines_dir: tree_machines_dir(), hub_program: "", hub_args: []str.new(), acp_trace: false,
-        stt_url: "http://127.0.0.1:8178/inference", stt_language: "auto"
+        stt_url: "http://127.0.0.1:8178/inference", stt_language: "auto", max_image_bytes: 10485760
     }
 }
 
@@ -585,6 +586,109 @@ export fn scenario_switch_agent(settings ServerSettings) Proc Detach Time Net Fs
 
     mut again = rig_open(settings)
     c.expect(kit_text(again.hub.page_lines("s-sw")) == kit_text(before), "the lines are the same after the restart")
+    again.shut()
+    c.report()
+}
+
+fn kit_png_bytes() -> []u8 => [137 as u8, 80 as u8, 78 as u8, 71 as u8, 13 as u8, 10 as u8, 26 as u8, 10 as u8]
+
+// The base64 of kit_png_bytes: 12 characters.
+const KIT_PNG_B64 = "iVBORw0KGgo="
+
+fn kit_file_text(path str) -> str {
+    with Fs = real_fs() {
+        match read_text(Path.from_bytes(path.bytes())) {
+            Ok(t) => t
+            Err(e) => ""
+        }
+    }
+}
+
+fn kit_session_file(settings ServerSettings, session str, name str) -> str {
+    match session_file(settings.data_dir, session, name) {
+        Some(path) => path.display()
+        None => ""
+    }
+}
+
+fn kit_image_path(settings ServerSettings, session str, file str) -> str {
+    match session_images_dir(settings.data_dir, session) {
+        Some(dir) => dir.join(file).display()
+        None => ""
+    }
+}
+
+// The lines of one session.
+fn kit_of_trace(lines []str, trace str) -> []str {
+    mut out = []str.new()
+    for line in lines {
+        if line_field(line, "trace") == trace { out.push(line) }
+    }
+    out
+}
+
+// The answer to the first message of a session.
+fn kit_first_answer(lines []str, trace str) -> str {
+    ro mine = kit_of_trace(lines, trace)
+    answer_of(mine, line_input(first_of(mine, "user_message", 0), "turn"))
+}
+
+fn kit_picture_input(turn str, text str, images str) -> str => "{\"turn\":\"${turn}\",\"text\":\"${text}\",\"images\":${images}}"
+
+/// Pictures in a message (task 192): kept as files, the journal and the lines of the page hold the records and never the bytes; an agent that
+/// says it takes pictures gets image blocks; one that does not gets the text with a note and the page an information line; a picture the page has put
+/// by number is found; a message with too many pictures, a wrong type or a missing file is refused as a whole.
+export fn scenario_images(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-pic", "{\"name\":\"Картинки\",\"agent\":\"pictures\"}")
+    rig.page(1, "user_message", "s-pic", kit_picture_input("t1", "look", "[{\"name\":\"shot.png\",\"mime\":\"image/png\",\"data\":\"${KIT_PNG_B64}\"}]"))
+    c.expect(rig.until(KIT_DONE, 15000), "the turn with a picture ends")
+    ro lines = rig.lines_for(1)
+    ro records = first_of(lines, "message_images", 0)
+    c.expect(records.contains("\"n\":1") && records.contains("\"bytes\":8") && records.contains("\"name\":\"shot.png\"") && records.contains("image/png"), "the page is told the record of the picture: ${records}")
+    c.expect(kit_with(lines, KIT_PNG_B64) == 0, "the bytes are in no line of the page")
+    c.expect(kit_first_answer(lines, "s-pic") == "Echo: look [blocks:text,image; image/png:12:iVBORw0K]", "the agent got a text block and an image block: ${kit_first_answer(lines, "s-pic")}")
+    c.expect(kit_file_exists(kit_image_path(settings, "s-pic", "1.png")), "the picture is kept as a file")
+    ro journal = kit_file_text(kit_session_file(settings, "s-pic", "journal"))
+    c.expect(journal.contains("message_images") && !journal.contains(KIT_PNG_B64), "the journal holds the record, not the bytes")
+
+    rig.page(1, "session_created", "s-nopic", "{\"name\":\"Без картинок\",\"agent\":\"opencode\"}")
+    rig.page(1, "user_message", "s-nopic", kit_picture_input("t1", "look", "[{\"name\":\"shot.png\",\"mime\":\"image/png\",\"data\":\"${KIT_PNG_B64}\"}]"))
+    c.expect(rig.until("images_skipped", 15000), "an agent that does not take pictures: the page is told")
+    c.expect(rig.until(KIT_DONE, 15000), "the turn without the picture ends")
+    ro plain = rig.lines_for(1)
+    ro skipped = first_of(plain, "images_skipped", 0)
+    c.expect(skipped.contains("\"count\":1") && skipped.contains("\"trace\":\"s-nopic\""), "the information line counts the pictures: ${skipped}")
+    ro said = kit_first_answer(plain, "s-nopic")
+    c.expect(said == "Echo: look\n[приложено изображений: 1, агент их не принимает]", "the text carries the note and no image block went: ${said}")
+    c.expect(kit_file_exists(kit_image_path(settings, "s-nopic", "1.png")), "the picture is kept all the same")
+
+    // a picture the page has put by number (the front keeps it: POST /api/session-image), sent alone
+    ro put = save_image(settings.data_dir, "s-ref", "image/png", kit_png_bytes())
+    c.expect(put.n == 1 && put.reason == "", "the upload gets the number 1")
+    rig.page(1, "session_created", "s-ref", "{\"name\":\"По номеру\",\"agent\":\"pictures\"}")
+    rig.page(1, "user_message", "s-ref", kit_picture_input("t1", "", "[{\"name\":\"a.png\",\"n\":1}]"))
+    c.expect(rig.until("[blocks:image; image/png:12:iVBORw0K]", 15000), "a picture alone goes as an image block without a text block")
+    c.expect(rig.until(KIT_DONE, 15000), "the turn of a picture alone ends")
+
+    // refused as a whole: nothing of the message is kept in the journal
+    rig.forget()
+    rig.page(1, "user_message", "s-ref", kit_picture_input("t2", "x", "[{\"name\":\"a\",\"n\":1},{\"name\":\"a\",\"n\":1},{\"name\":\"a\",\"n\":1},{\"name\":\"a\",\"n\":1},{\"name\":\"a\",\"n\":1},{\"name\":\"a\",\"n\":1},{\"name\":\"a\",\"n\":1}]"))
+    c.expect(rig.until("at most 6 pictures", 3000), "seven pictures are refused")
+    rig.page(1, "user_message", "s-ref", kit_picture_input("t3", "x", "[{\"name\":\"a.txt\",\"mime\":\"text/plain\",\"data\":\"QUJD\"}]"))
+    c.expect(rig.until("is not taken", 3000), "a type that is not a picture is refused")
+    rig.page(1, "user_message", "s-ref", kit_picture_input("t4", "x", "[{\"name\":\"gone.png\",\"n\":99}]"))
+    c.expect(rig.until("gone.png is not there", 3000), "a picture that is not there is refused")
+    c.expect(kit_with(rig.lines_for(1), "\"kind\":\"user_message\"") == 3, "no refused message is shown or kept")
+    c.expect(rig.hub.takes_message("s-ref"), "the session still takes a message")
+
+    ro before = rig.hub.page_lines("s-pic")
+    rig.shut()
+    mut again = rig_open(settings)
+    c.expect(kit_text(again.hub.page_lines("s-pic")) == kit_text(before), "the lines with the record of the picture are the same after the restart")
+    c.expect(kit_with(again.hub.page_lines("s-pic"), "message_images") == 1, "the record comes back from the journal")
     again.shut()
     c.report()
 }

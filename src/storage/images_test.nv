@@ -1,0 +1,90 @@
+// images_test.nv - the pictures of a session: the types, the folder, the numbers, the names that cannot leave the folder.
+module crew_harness.storage
+
+import std.fs.{Fs, real_fs, Path, remove_dir_all, read}
+import std.os.{Os, real_os, temp_dir, pid}
+
+fn img_root(name str) -> str {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-images-test-${id}-${name}")
+    with Fs = real_fs() {
+        ro removed = remove_dir_all(dir)
+    }
+    dir.display()
+}
+
+fn img_bytes(n int) -> []u8 {
+    mut out = []u8.new()
+    mut i = 0
+    while i < n {
+        out.push((i % 251) as u8)
+        i += 1
+    }
+    out
+}
+
+test "images: four types, the extension is the type" {
+    assert(image_ext("image/png") == "png" && image_ext("image/jpeg") == "jpg")
+    assert(image_ext("image/webp") == "webp" && image_ext("image/gif") == "gif")
+    assert(image_ext("image/svg+xml") == "" && image_ext("text/html") == "" && image_ext("") == "")
+    assert(image_mime("jpg") == "image/jpeg" && image_mime("png") == "image/png" && image_mime("exe") == "")
+}
+
+test "images: the folder is the session's, a bad id has none" {
+    ro dir = session_images_dir("D:/data", "s-1")
+    assert(dir.is_some())
+    match dir {
+        Some(p) => assert(p.display().replace("\\", "/").ends_with("/s-1/images"))
+        None => assert(false)
+    }
+    assert(session_images_dir("D:/data", "..").is_none())
+    assert(session_images_dir("D:/data", "a/b").is_none())
+    assert(session_images_dir("D:/data", "").is_none())
+}
+
+test "images: a number is digits, no leading zero" {
+    assert(image_number("1") == Some(1) && image_number("120") == Some(120))
+    assert(image_number("0").is_none() && image_number("01").is_none() && image_number("").is_none())
+    assert(image_number("../1").is_none() && image_number("1/2").is_none() && image_number("1.png").is_none())
+    assert(image_number("-1").is_none() && image_number("1234567890").is_none())
+}
+
+test "images: saved with growing numbers, found, read back" {
+    ro root = img_root("save")
+    ro first = save_image(root, "s-1", "image/png", img_bytes(300))
+    assert(first.reason == "" && first.n == 1)
+    ro second = save_image(root, "s-1", "image/jpeg", img_bytes(10))
+    assert(second.n == 2)
+    ro other = save_image(root, "s-2", "image/gif", img_bytes(5))
+    assert(other.n == 1)
+    with Fs = real_fs() {
+        match find_image(root, "s-1", 1) {
+            Some(f) => {
+                assert(f.mime == "image/png" && f.bytes == 300)
+                assert(read_image(f) == Some(img_bytes(300)))
+            }
+            None => assert(false)
+        }
+        match find_image(root, "s-1", 2) {
+            Some(f) => assert(f.mime == "image/jpeg")
+            None => assert(false)
+        }
+        assert(find_image(root, "s-1", 3).is_none())
+        assert(find_image(root, "s-1", 0).is_none())
+        assert(find_image(root, "s-9", 1).is_none())
+        assert(find_image(root, "..", 1).is_none())
+    }
+}
+
+test "images: a type that is not taken and a bad id are refused" {
+    ro root = img_root("refuse")
+    assert(save_image(root, "s-1", "image/svg+xml", img_bytes(3)).reason.contains("not taken"))
+    assert(save_image(root, "../x", "image/png", img_bytes(3)).reason.contains("safe"))
+}
+
+test "images: base64 in and out" {
+    assert(decode_image("iVBORw0KGgo=") == Some([137 as u8, 80 as u8, 78 as u8, 71 as u8, 13 as u8, 10 as u8, 26 as u8, 10 as u8]))
+    assert(decode_image("@@@").is_none())
+    assert(encode_image(img_bytes(7)).byte_len() == 12)
+}
