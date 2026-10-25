@@ -12,6 +12,7 @@
 import { t } from './strings.js';
 import { createDictation, speechCtor } from './voice.js';
 import { isBusy, keyAction } from './queue.js';
+import { labelOf } from './labels-ru.js';
 import {
   STATE_KEYS, sessionList, splitBlocks, filterSessions, groupSessions, effectivePins, timeline, paragraphs, inlineSpans,
   workSummary, effortChoices, filterModels, groupModels, usagePercent, usageLevel, tokenParts, durationLabel, agoParts, fileParts, taskSummary,
@@ -312,6 +313,8 @@ export function createView(doc, refs, deps) {
   const menuList = h(doc, 'div', { class: 'menu-list' });
   menu.append(menuSearch, menuList);
   const nameOf = (list, id) => (list.find((c) => c.id === id) || { name: '' }).name;
+  // Режимы и усилие — по-русски там, где перевод известен; оригинал агента остаётся в title (labels-ru.js).
+  const labelFor = (kind, list, id) => labelOf(kind, list.find((c) => c.id === id) || { name: '' });
 
   function closeMenu() {
     menuKind = null;
@@ -326,8 +329,8 @@ export function createView(doc, refs, deps) {
     closeMenu();
   }
 
-  function menuRow({ name, description, checked, number, arrow, onPick }) {
-    const row = h(doc, 'button', { type: 'button', class: 'menu-item', role: 'menuitem', 'aria-checked': checked ? 'true' : 'false' },
+  function menuRow({ name, description, checked, number, arrow, tip, onPick }) {
+    const row = h(doc, 'button', { type: 'button', class: 'menu-item', role: 'menuitem', 'aria-checked': checked ? 'true' : 'false', title: tip || false },
       h(doc, 'span', { class: 'menu-check' }, checked ? icon(doc, 'i-check') : false),
       h(doc, 'span', { class: 'menu-label' }, h(doc, 'span', { text: name }), description ? h(doc, 'small', { text: description }) : false),
       arrow ? h(doc, 'span', { class: 'menu-end' }, icon(doc, 'i-chevron-right')) : h(doc, 'span', { class: 'menu-end menu-num', text: number ? String(number) : '' }));
@@ -352,9 +355,12 @@ export function createView(doc, refs, deps) {
     const searchable = menuKind === 'model' || menuKind === 'more';
     menuSearch.hidden = !searchable;
     const searching = searchable && menuQuery.trim().length > 0;
-    const numbered = (list, setting, current) => list.map((c, i) => menuRow({
-      name: c.name, description: c.description, checked: c.id === current, number: i < 9 ? i + 1 : 0, onPick: () => choose(setting, c.id),
-    }));
+    const numbered = (list, setting, current) => list.map((c, i) => {
+      const l = setting === 'model' ? { name: c.name, description: c.description, title: '' } : labelOf(setting, c);
+      return menuRow({
+        name: l.name, description: l.description, tip: l.title, checked: c.id === current, number: i < 9 ? i + 1 : 0, onPick: () => choose(setting, c.id),
+      });
+    });
     if (menuKind === 'mode') {
       menu.dataset.side = 'left';
       rows.push(h(doc, 'div', { class: 'menu-head', text: t('menu.mode') }), ...numbered(options.modes, 'mode', options.mode));
@@ -369,7 +375,7 @@ export function createView(doc, refs, deps) {
         if (options.efforts.length > 0 || options.models.length > MENU_MODELS) rows.push(h(doc, 'div', { class: 'menu-sep', role: 'separator' }));
         if (options.efforts.length > 0) {
           rows.push(menuRow({
-            name: `${t('menu.effort')}  ${nameOf(effortChoices(options.efforts), options.effort)}`, arrow: true, onPick: () => openMenu('effort'),
+            name: `${t('menu.effort')}  ${labelFor('effort', effortChoices(options.efforts), options.effort).name}`, arrow: true, onPick: () => openMenu('effort'),
           }));
         }
         if (options.models.length > MENU_MODELS) rows.push(menuRow({ name: t('menu.more_models'), arrow: true, onPick: () => openMenu('more') }));
@@ -687,10 +693,14 @@ export function createView(doc, refs, deps) {
     const hasModes = Boolean(options && options.modes.length > 0);
     const hasModels = Boolean(options && (options.models.length > 0 || options.efforts.length > 0));
     modeButton.hidden = !hasModes;
-    modeButton.replaceChildren(h(doc, 'span', { text: hasModes ? (nameOf(options.modes, options.mode) || t('menu.mode')) : '' }), hasModes ? icon(doc, 'i-chevron-down') : false);
+    const modeLabel = hasModes ? labelFor('mode', options.modes, options.mode) : { name: '', title: '' };
+    modeButton.title = modeLabel.title;
+    modeButton.replaceChildren(h(doc, 'span', { text: hasModes ? (modeLabel.name || t('menu.mode')) : '' }), hasModes ? icon(doc, 'i-chevron-down') : false);
     modelButton.hidden = !hasModels;
+    const effortLabel = hasModels ? labelFor('effort', effortChoices(options.efforts), options.effort) : { name: '', title: '' };
+    modelButton.title = effortLabel.title;
     modelButton.replaceChildren(h(doc, 'span', {
-      text: hasModels ? [session.model || nameOf(options.models, options.modelId) || t('session.model_unknown'), nameOf(effortChoices(options.efforts), options.effort)].filter(Boolean).join(' · ') : '',
+      text: hasModels ? [session.model || nameOf(options.models, options.modelId) || t('session.model_unknown'), effortLabel.name].filter(Boolean).join(' · ') : '',
     }), hasModels ? icon(doc, 'i-chevron-down') : false);
     statusModel.hidden = hasModels;
     statusModel.textContent = session.model || '';
