@@ -249,8 +249,14 @@ export function createView(doc, refs, deps) {
   const ringBox = h(doc, 'span', { class: 'ring-box' });
   ringBox.append(ring);
 
+  // строка статуса под полем: слева режим (когда агент его сообщает), справа модель и спиннер хода
+  const statusModel = h(doc, 'span', { class: 'status-model' });
+  const spinner = h(doc, 'span', { class: 'spinner', role: 'img', 'aria-label': t('composer.working'), hidden: true });
+  const status = h(doc, 'div', { class: 'composer-status', hidden: true }, h(doc, 'span', { class: 'grow' }), statusModel, spinner);
+
   const composer = h(doc, 'div', { class: 'composer' },
     box,
+    status,
     h(doc, 'div', { class: 'composer-meta' }, h(doc, 'p', { class: 'hint', text: t('composer.hint') }), h(doc, 'span', { class: 'grow' }), ringBox));
 
   const chat = h(doc, 'section', { class: 'chat', hidden: true }, log, composer);
@@ -474,6 +480,9 @@ export function createView(doc, refs, deps) {
     const busy = session.state === 'answering' || session.state === 'permission';
     cancelButton.hidden = !busy;
     sendButton.disabled = busy;
+    statusModel.textContent = session.model || '';
+    spinner.hidden = !busy;
+    status.hidden = !session.model && !busy;
 
     const pct = usagePercent(session.usage);
     ring.style.setProperty('--ring', String(pct));
