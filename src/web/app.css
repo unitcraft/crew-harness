@@ -1,6 +1,6 @@
 /* app.css — токены темы и раскладка пульта: три колонки (сессии, разговор, сведения).
  *
- * Тема. Светлая (тёплая нейтральная) — по умолчанию. Тёмная включается двумя путями с ОДНИМИ значениями:
+ * Тема. Светлая (нейтральная, без бежевого; палитра владельца, задача 192) — по умолчанию. Тёмная включается двумя путями с ОДНИМИ значениями:
  * по системе (prefers-color-scheme, если владелец не выбрал светлую вручную) и вручную
  * (:root[data-theme="dark"]). Выбор владельца ставит атрибут data-theme на <html> (theme.js и app.js).
  * Блоки тёмной темы дублируют друг друга намеренно (CSS не умеет «или» для разных условий); их равенство
@@ -9,31 +9,31 @@
  */
 
 :root {
-  --bg: #faf9f5;
-  --side: #f1efe8;
+  --bg: #ffffff;
+  --side: #fafafa;
   /* Подложка центральной области (верхняя полоса, лента, правая колонка): в светлой теме — белая (задача 190). */
   --center: #ffffff;
   --surface: #ffffff;
-  --surface-2: #efede4;
-  --hover: #e8e5db;
-  --active: #dedacd;
-  --border: #d9d5c8;
-  --fg: #1f1e1b;
-  --fg-muted: #5f5b50;
+  --surface-2: #f3f3f3;
+  --hover: #efefef;
+  --active: #e1e1e1;
+  --border: #e5e5e5;
+  --fg: #191919;
+  --fg-muted: #666666;
   --accent: #2f54c9;
   --accent-fg: #ffffff;
   --ok: #17692e;
   --warn: #8f5600;
   --warn-soft: #fbf0d9;
-  --danger: #b3261e;
+  --danger: #a42528;
   --danger-soft: #fbe4e1;
-  --code-bg: #efede4;
-  --code-fg: #2b2a26;
-  --user-bg: #e9e6dc;
-  --user-fg: #1f1e1b;
-  --shadow: 0 10px 30px rgba(40, 36, 20, .22);
-  --shadow-soft: 0 1px 3px rgba(40, 36, 20, .10);
-  --scrim: rgba(30, 28, 20, .45);
+  --code-bg: #f3f3f3;
+  --code-fg: #191919;
+  --user-bg: #f3f3f3;
+  --user-fg: #191919;
+  --shadow: 0 10px 30px rgba(0, 0, 0, .18);
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, .08);
+  --scrim: rgba(0, 0, 0, .40);
 
   --font-ui: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "Cascadia Mono", Consolas, "SFMono-Regular", monospace;

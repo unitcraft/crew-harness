@@ -33,6 +33,19 @@ test('в светлой теме центральная подложка бел�
   assert.equal(light['--center'], '#ffffff');
 });
 
+test('палитра светлой темы со скрина владельца (192): боковая панель #fafafa, выбранный пункт #e1e1e1', () => {
+  assert.equal(light['--side'], '#fafafa');
+  assert.equal(light['--active'], '#e1e1e1');
+  assert.equal(light['--bg'], '#ffffff');
+  assert.equal(light['--surface-2'], '#f3f3f3');
+  assert.equal(light['--user-bg'], '#f3f3f3');
+  assert.equal(light['--hover'], '#efefef');
+  assert.equal(light['--border'], '#e5e5e5');
+  assert.equal(light['--fg'], '#191919');
+  assert.equal(light['--fg-muted'], '#666666');
+  assert.equal(light['--danger'], '#a42528');
+});
+
 test('в тёмной теме --center равен прежнему --bg (тёмная тема не меняется)', () => {
   for (const [name, dark] of [['по системе', darkBySystem], ['по выбору', darkByHand]]) {
     assert.equal(dark['--center'], dark['--bg'], `тёмная ${name}: --center должен повторять --bg`);
