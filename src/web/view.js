@@ -257,7 +257,7 @@ export function createView(doc, refs, deps) {
   const voiceMenu = h(doc, 'div', { class: 'menu voice-menu', role: 'menu', 'data-side': 'right', hidden: true });
   const voiceList = h(doc, 'div', { class: 'menu-list' });
   voiceMenu.append(voiceList);
-  const micWrap = h(doc, 'div', { class: 'mic-wrap' }, micButton, micTimer, micMore, voiceMenu);
+  const micWrap = h(doc, 'div', { class: 'mic-wrap' }, micButton, micMore, voiceMenu);
   // Ошибки голоса — красная плашка над полем: position absolute, место в потоке не занимает, макет не прыгает
   const voiceToastText = h(doc, 'span', { class: 'voice-toast-text' });
   const voiceToastClose = h(doc, 'button', { type: 'button', class: 'voice-toast-close', title: t('voice.dismiss'), 'aria-label': t('voice.dismiss') }, icon(doc, 'i-x'));
@@ -273,7 +273,7 @@ export function createView(doc, refs, deps) {
   // счётчик очереди — над полем, position absolute: его появление не меняет высоту
   const queueButton = h(doc, 'button', { type: 'button', class: 'queue-count', hidden: true, title: t('composer.queued_hint') });
   const box = h(doc, 'div', { class: 'box' }, input,
-    wave, h(doc, 'div', { class: 'box-row' }, cancelButton, sendButton, enterButton, micWrap));
+    micTimer, wave, h(doc, 'div', { class: 'box-row' }, cancelButton, sendButton, enterButton, micWrap));
   // счётчик очереди «на потом» (Ctrl+Enter при работающем агенте); клик убирает последнее сообщение
 
   const ringFill = svgNode(doc, 'circle', { class: 'ring-fill', cx: 12, cy: 12, r: 9, pathLength: 100 });

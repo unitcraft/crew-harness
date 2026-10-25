@@ -811,7 +811,9 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
 .enter-btn .icon { width: 18px; height: 18px; }
 .enter-btn[hidden], .send-btn[hidden] { display: none; }
 .box.recording textarea::placeholder { font-style: italic; }
-.mic-timer { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--danger); margin: 0 2px 0 -2px; align-self: center; }
+.mic-timer { flex: none; width: 34px; font-variant-numeric: tabular-nums; font-size: 12px; text-align: right; color: var(--fg-muted); align-self: center; }
+.box.recording .mic-more { display: none; }
+.mic-wrap { gap: 6px; }
 .mic-timer[hidden] { display: none; }
 @keyframes pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--danger) 18%, transparent); } }
 .voice-toast { position: absolute; left: 20px; right: 20px; bottom: calc(100% - 2px); z-index: 25; display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 8px 8px 8px 12px; border: 1px solid var(--danger); border-radius: 10px; background: var(--danger-soft); color: var(--danger); font-size: 13px; line-height: 1.35; box-shadow: 0 4px 16px color-mix(in srgb, var(--fg) 12%, transparent); cursor: pointer; }

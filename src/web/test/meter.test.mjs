@@ -83,3 +83,24 @@ test('Esc: запись браузерным распознавателем от
   assert.equal(field.value, 'до после');
   assert.equal(d.active(), false);
 });
+
+// ---- правая группа карточки: порядок и зазоры без наложений (задача 192) ----
+import fs from 'node:fs';
+const viewSrc = fs.readFileSync(new URL('../view.js', import.meta.url), 'utf8');
+const cssSrc = fs.readFileSync(new URL('../app.css', import.meta.url), 'utf8');
+
+test('правая группа карточки: таймер, дорожка, строка кнопок (отмена, отправка, «↵», микрофон) в этом порядке; таймер не внутри микрофона', () => {
+  const box = viewSrc.match(/const box = h\(doc, 'div', \{ class: 'box' \}, input,\s*([^;]*)\);/);
+  assert.ok(box, 'карточка найдена');
+  assert.match(box[1], /^micTimer, wave, h\(doc, 'div', \{ class: 'box-row' \}, cancelButton, sendButton, enterButton, micWrap\)/);
+  assert.match(viewSrc, /const micWrap = h\(doc, 'div', \{ class: 'mic-wrap' \}, micButton, micMore, voiceMenu\);/);
+});
+
+test('таймер мелкий серый фиксированной ширины, стрелка провайдера в записи скрыта, зазоры 6–8 px', () => {
+  assert.match(cssSrc, /\.mic-timer \{[^}]*width: 34px[^}]*color: var\(--fg-muted\)/);
+  assert.ok(!/\.mic-timer \{[^}]*--danger/.test(cssSrc));
+  assert.match(cssSrc, /\.box\.recording \.mic-more \{ display: none; \}/);
+  assert.match(cssSrc, /\.box \{ display: flex; align-items: flex-end; gap: 8px;/);
+  assert.match(cssSrc, /\.box-row \{ flex: none; gap: 6px; \}/);
+  assert.match(cssSrc, /\.mic-wrap \{ gap: 6px; \}/);
+});
