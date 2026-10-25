@@ -1,6 +1,6 @@
 # Реестр методики: примитивы шага агента, совещания, запуска сессии и раннера задачи
 
-Данные методики (56 примитивов, роли разбора и типы их подписей), которые она регистрирует у языка. Переходно лежит в продукте (задача 158; к методике уйдёт задачей 159). Примитивы `time_now` и `new_id` — язык (раздел 7а, AL-113), здесь их нет. Наборы типов: основной (`standard`), `session` (типы запуска сессии: свои `Finding`, `Severity`, `Summary`) и `runner` (типы раннера).
+Данные методики (58 примитивов, три функции разбора по роли и типы их подписей), которые она регистрирует у языка. Переходно лежит в продукте (задача 158; к методике уйдёт задачей 159). Примитивы `time_now` и `new_id` — язык (раздел 7а, AL-113), здесь их нет. Наборы типов: основной (`standard`), `session` (типы запуска сессии: свои `Finding`, `Severity`, `Summary`) и `runner` (типы раннера).
 
 Форма — раздел 7 спецификации Алулы: имена — JSON-имена реестра хозяина; типы — как пишет дерево `machine/2` (`int>=0`, `?text`, `[]Finding`, `"a" \| "b"`); `\|` внутри ячейки — знак `|`; списки «читает» и «пишет» разделены `;`; `—` — пусто. Файл читает `parse_registry_table` пакета `alula` (`alula.machine_table`), программа `alula` берёт его рядом с машинами (`registry.md`) или флагом `--registry`.
 
@@ -12,7 +12,9 @@
 | role_context | context: RoleContext | text | volatile | project objects | — |
 | call_trace | — | text | volatile | envelope of the call | — |
 | call_step | — | int>=0 | volatile | envelope of the call | — |
-| parse_agent_reply | reply: AgentReply; role: "witness" \| "author" \| "lens" | RoleResult | volatile | object: artifact file of the reply | — |
+| parse_witness_reply | reply: AgentReply | []WitnessAnswer | volatile | object: artifact file of the reply; object: proposal | — |
+| parse_author_reply | reply: AgentReply | EditResult | volatile | object: artifact file of the reply | — |
+| parse_lens_reply | reply: AgentReply | LensResult | volatile | object: artifact file of the reply | — |
 | proposal_read | — | bool | volatile | object: proposal | — |
 | proposal_with_fingerprint | — | text | volatile | object: proposal | — |
 | proposal_changed_since_attempt | — | bool | volatile | object: proposal | — |
@@ -20,8 +22,8 @@
 | journal_findings | findings: []Finding | — | acting | — | — |
 | journal_machine_data | — | — | acting | all_data | — |
 | journal_decision | decision: text; source: text; passes: int>=0; open: []Finding | — | acting | — | — |
-| remove_unsound | number: int>=0 | — | acting | lens_findings | lens_findings |
-| build_summary | number: int>=0 | ?Summary | acting | lens_findings; lenses | object: summary file |
+| remove_unsound | number: int>=1 | — | acting | lens_findings | lens_findings |
+| build_summary | number: int>=1 | ?Summary | volatile | lens_findings; lenses | object: summary file |
 | close_for_writing | object: text | — | acting | — | — |
 | open_for_writing | object: text | — | acting | — | — |
 | move_to_archive | number: int>=0; suffix: int>=0 | — | acting | — | — |
@@ -65,14 +67,6 @@
 | release_lock | — | — | acting | — | — |
 | show_human | text: text | — | acting | — | — |
 
-## Roles
-
-| primitive | role | result | reads |
-|---|---|---|---|
-| parse_agent_reply | witness | []WitnessAnswer | object: proposal |
-| parse_agent_reply | author | EditResult | — |
-| parse_agent_reply | lens | LensResult | — |
-
 ## Types
 
 | type | kind | members |
@@ -92,7 +86,6 @@
 | ReplyCheck | variant | Valid; Violated; Empty |
 | WitnessAnswer | variant | Answered(claim: Claim); NotMeasured(claim: text) |
 | EditResult | variant | Done(proposal: text); Question(proposal: text, question: text) |
-| RoleResult | variant | WitnessOutcome(answers: []WitnessAnswer); LensOutcome(result: LensResult); EditOutcome(result: EditResult) |
 | RoleContext | variant | WitnessContext(author_question: ?text, findings: ?[]Finding, proposal: text); LensContext(proposal: text, witness_answers: ?[]WitnessAnswer); FixContext(proposal: text, gate3_findings: []Finding, author_guidance: ?text); QuestionContext(author_question: text, proposal: text, gate3_findings: []Finding, human_answer: text) |
 
 ## Types: session
@@ -114,7 +107,6 @@
 | ReplyCheck | variant | Valid; Violated; Empty |
 | WitnessAnswer | variant | Answered(claim: Claim); NotMeasured(claim: text) |
 | EditResult | variant | Done(proposal: text); Question(proposal: text, question: text) |
-| RoleResult | variant | WitnessOutcome(answers: []WitnessAnswer); LensOutcome(result: LensResult); EditOutcome(result: EditResult) |
 | RoleContext | variant | WitnessContext(author_question: ?text, findings: ?[]Finding, proposal: text); LensContext(proposal: text, witness_answers: ?[]WitnessAnswer); FixContext(proposal: text, gate3_findings: []Finding, author_guidance: ?text); QuestionContext(author_question: text, proposal: text, gate3_findings: []Finding, human_answer: text) |
 | Severity | variant | Essential; Superficial |
 | Level | variant | Implementation; Plan; Requirements; OutOfScope; Delivery |
@@ -148,7 +140,6 @@
 | ReplyCheck | variant | Valid; Violated; Empty |
 | WitnessAnswer | variant | Answered(claim: Claim); NotMeasured(claim: text) |
 | EditResult | variant | Done(proposal: text); Question(proposal: text, question: text) |
-| RoleResult | variant | WitnessOutcome(answers: []WitnessAnswer); LensOutcome(result: LensResult); EditOutcome(result: EditResult) |
 | RoleContext | variant | WitnessContext(author_question: ?text, findings: ?[]Finding, proposal: text); LensContext(proposal: text, witness_answers: ?[]WitnessAnswer); FixContext(proposal: text, gate3_findings: []Finding, author_guidance: ?text); QuestionContext(author_question: text, proposal: text, gate3_findings: []Finding, human_answer: text) |
 | Stage | variant | Analysis; Plan; Implementation; Delivery; Meeting |
 | TaskDocument | variant | Specification; Plan; ImplementationReport |
