@@ -33,7 +33,10 @@ tls = { git = "https://github.com/nv-lang/nova-tls", version = "0.2" }
 # pins it (`nova update alula`); a local `nova.override.toml` (not committed) is only for work on the package itself.
 # Version 0.5 (task 172, the tag v0.5.0, commit 9fd413a) is Alula 2.23: the code of a journal entry is a string, three classes of the host functions (`pure`, `volatile`, `acting`), the column `writes` says `actions`;
 # the package reads only the format 2.23 (no transition period), the tables of `machines/` are moved to it.
-alula = { git = "https://github.com/nv-lang/nova-alula", version = "0.5" }
+# Version 0.6 (task 184, the tag v0.6.0, commit 8be13fb) is Alula 2.24: the external functions are declared in the file of a machine (the section `## External functions`, the call `name(args)` without `call`),
+# a parse of a reply is three functions by role, the host binds the functions by class, the names `require_non_empty`, the priorities of the operators as in Nova; the package reads only the format 2.24,
+# the tables of `machines/` are moved to it.
+alula = { git = "https://github.com/nv-lang/nova-alula", version = "0.6" }
 
 [package]
 name = "crew_harness"
