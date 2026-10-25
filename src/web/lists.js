@@ -275,7 +275,7 @@ export function agoParts(ms, now) {
 
 /** Путь файла -> имя и путь-пояснение. */
 export function fileParts(path) {
-  const p = String(path).replaceAll('\\', '/');
+  const p = String(path).split('\\').join('/');
   const i = p.lastIndexOf('/');
   return i < 0 ? { dir: '', name: p } : { dir: p.slice(0, i), name: p.slice(i + 1) };
 }

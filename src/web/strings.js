@@ -179,10 +179,10 @@ export const S = Object.freeze({
 
 /** Подставить {имя} из vars; нет значения — остаётся как есть, чтобы пропуск был виден. */
 export function fmt(template, vars = {}) {
-  return template.replace(/\{([^{}]+)\}/g, (whole, name) => (Object.hasOwn(vars, name) ? String(vars[name]) : whole));
+  return template.replace(/\{([^{}]+)\}/g, (whole, name) => (Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : whole));
 }
 
 /** Текст интерфейса по ключу. Неизвестный ключ виден на экране, а не молча пуст. */
 export function t(key, vars) {
-  return Object.hasOwn(S, key) ? fmt(S[key], vars) : `⟦${key}⟧`;
+  return Object.prototype.hasOwnProperty.call(S, key) ? fmt(S[key], vars) : `⟦${key}⟧`;
 }

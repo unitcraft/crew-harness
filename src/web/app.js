@@ -146,7 +146,7 @@ const handlers = {
   },
   onCancel(trace) {
     const session = model.sessions[trace];
-    const open = session ? session.messages.filter((m) => m.role === 'agent' && m.status === 'streaming').at(-1) : undefined;
+    const open = session ? session.messages.filter((m) => m.role === 'agent' && m.status === 'streaming').pop() : undefined;
     send('cancel', trace, nextStep(model, trace), open ? { turn: open.turn } : {});
   },
   onSwitchAgent(trace, agent) {
@@ -159,6 +159,13 @@ const handlers = {
     send('permission_decision', trace, nextStep(model, trace), { request, decision });
   },
 };
+
+// Любая ошибка запуска или обработки события — на экран блоком стража (boot-guard.js), а не молча в консоль.
+function reportError(e) {
+  const report = globalThis.__crewBootError;
+  if (typeof report === 'function') report(e && e.message ? e.message : String(e));
+  if (globalThis.console) globalThis.console.error(e);
+}
 
 const picked = chooseMode(location.search, location.protocol, location.host);
 async function start() {
@@ -185,12 +192,19 @@ async function start() {
     server: picked.mode === 'mock' ? createMockServer({ now: ctx.now }) : undefined,
     WebSocketImpl: globalThis.WebSocket, timers,
     onEvent(event) {
-      const next = reduce(model, event);
-      if (next !== model) { model = next; drain(); render(); }
+      try {
+        const next = reduce(model, event);
+        if (next !== model) { model = next; drain(); render(); }
+      } catch (e) {
+        reportError(e);
+      }
     },
     onStatus(next) { status = next; render(); },
   });
   transport.start();
   render();
 }
-start();
+start().then(() => {
+  // страж запуска (boot-guard.js) ждёт этот признак: нет его — показывает «Ошибка запуска», а не пустой экран
+  document.documentElement.setAttribute('data-booted', '1');
+}, reportError);
