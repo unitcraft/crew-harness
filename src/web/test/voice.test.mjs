@@ -106,7 +106,7 @@ import { t } from '../strings.js';
 test('подсказка кнопки по состояниям: покой — «нажмите, чтобы начать», запись — «нажмите, чтобы остановить», распознавание', () => {
   assert.equal(t(micTitleKey('idle')), 'Нажмите, чтобы начать запись');
   assert.equal(t(micTitleKey('unavailable')), 'Нажмите, чтобы начать запись');
-  assert.equal(t(micTitleKey('recording')), 'Идёт запись… нажмите, чтобы остановить');
+  assert.equal(t(micTitleKey('recording')), 'Нажмите, чтобы остановить');
   assert.equal(t(micTitleKey('processing')), 'Распознаю…');
 });
 

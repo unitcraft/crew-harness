@@ -250,7 +250,6 @@ export function createView(doc, refs, deps) {
   // Кнопки круглые, без видимого текста: имя — для чтения с экрана, подсказка о клавишах — в title (задача 192).
   const micButton = h(doc, 'button', { type: 'button', class: 'mic-btn', 'data-tip': `${t('voice.start')} · ${t('voice.right_click')}`, 'aria-label': `${t('voice.label')}: ${t('voice.start')}`, 'data-state': 'idle' }, icon(doc, 'i-mic'));
   const wave = h(doc, 'div', { class: 'wave', 'aria-hidden': 'true', hidden: true }, ...Array.from({ length: BARS }, () => h(doc, 'i')));
-  const enterButton = h(doc, 'button', { type: 'button', class: 'enter-btn', hidden: true, 'data-tip': t('voice.stop_insert'), 'aria-label': t('voice.stop_insert') }, icon(doc, 'i-return'));
   const micTimer = h(doc, 'span', { class: 'mic-timer', 'aria-hidden': 'true', hidden: true });
   // стрелка рядом с микрофоном открывает меню: провайдер распознавания, язык, микрофон
   const micMore = h(doc, 'button', { type: 'button', class: 'mic-more', title: t('voice.menu'), 'aria-label': t('voice.menu'), 'aria-haspopup': 'menu', 'aria-expanded': 'false' }, icon(doc, 'i-chevron-down'));
@@ -273,7 +272,7 @@ export function createView(doc, refs, deps) {
   // счётчик очереди — над полем, position absolute: его появление не меняет высоту
   const queueButton = h(doc, 'button', { type: 'button', class: 'queue-count', hidden: true, title: t('composer.queued_hint') });
   const box = h(doc, 'div', { class: 'box' }, input,
-    micTimer, wave, h(doc, 'div', { class: 'box-row' }, cancelButton, sendButton, enterButton, micWrap));
+    micTimer, wave, h(doc, 'div', { class: 'box-row' }, cancelButton, sendButton, micWrap));
   // счётчик очереди «на потом» (Ctrl+Enter при работающем агенте); клик убирает последнее сообщение
 
   const ringFill = svgNode(doc, 'circle', { class: 'ring-fill', cx: 12, cy: 12, r: 9, pathLength: 100 });
@@ -310,7 +309,6 @@ export function createView(doc, refs, deps) {
     const micUse = micButton.querySelector('use');
     if (micUse) micUse.setAttribute('href', v.showWave ? '#i-mic-fill' : '#i-mic');
     wave.hidden = !v.showWave;
-    enterButton.hidden = !v.showEnter;
     sendButton.hidden = v.hideSend;
     if (v.showWave) meter.start(); else meter.stop();
   }
@@ -449,7 +447,6 @@ export function createView(doc, refs, deps) {
     e.preventDefault();
     micPress.down();
   });
-  enterButton.addEventListener('click', () => dictation.stop());
   doc.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dictation.active()) { e.preventDefault(); dictation.cancel(); } });
   micButton.addEventListener('pointerup', () => micPress.up());
   micButton.addEventListener('pointercancel', () => micPress.up());
@@ -647,6 +644,8 @@ export function createView(doc, refs, deps) {
   }
   sendButton.addEventListener('click', () => submit());
   input.addEventListener('keydown', (e) => {
+    // в записи Enter останавливает её и вставляет текст, а не отправляет сообщение
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && dictation.active()) { e.preventDefault(); dictation.stop(); return; }
     const session = current.session;
     const action = keyAction(e, Boolean(session) && isBusy(session.state));
     if (action) { e.preventDefault(); submit(action === 'queue'); }

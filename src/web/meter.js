@@ -33,10 +33,10 @@ export function barHeights(window, minPx = 3, maxPx = 24) {
   return window.map((l) => (l < SILENT ? minPx : Math.round(minPx + l * (maxPx - minPx))));
 }
 
-/** Что показывает карточка: в записи — «Слушаю…» вместо подсказки, без кнопки отправки, с «↵» и дорожкой. */
+/** Что показывает карточка: в записи — «Слушаю…» вместо подсказки, без кнопки отправки и без «↵», с дорожкой; остановка — клик по микрофону или Enter. */
 export function recordingView(state) {
   const on = state === 'recording';
-  return { placeholderKey: on ? 'voice.listening' : 'composer.placeholder', hideSend: on, showEnter: on, showWave: on };
+  return { placeholderKey: on ? 'voice.listening' : 'composer.placeholder', hideSend: on, showWave: on };
 }
 
 /**

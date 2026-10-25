@@ -540,7 +540,7 @@ pre code { font: inherit; }
   background: var(--surface);
   box-shadow: var(--shadow-soft);
 }
-.box:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.box:focus-within { outline: none; }
 .box textarea {
   display: block;
   flex: 1;
@@ -568,13 +568,15 @@ pre code { font: inherit; }
 .cancel-btn { color: var(--danger); border-color: var(--danger); }
 .hint { margin: 6px 6px 0; font-size: 12.5px; color: var(--fg-muted); }
 
-.composer-status { position: relative; display: flex; align-items: center; gap: 8px; min-height: 24px; margin-top: 4px; padding: 0 6px; color: var(--fg-muted); font-size: 12px; }
+.composer-status { position: relative; display: flex; align-items: center; gap: 8px; min-height: 24px; margin-top: 8px; padding: 0 6px; color: var(--fg-muted); font-size: 13px; }
 .composer-status[hidden] { display: none; }
-.status-group { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; min-width: 0; }
+.status-group { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; min-width: 0; }
+.status-group > :not([hidden]) ~ :not([hidden])::before { content: "\00b7"; margin-right: 6px; color: var(--fg-muted); }
 @media (max-width: 560px) { .composer-status { flex-wrap: wrap; } .status-group { margin-left: 0; flex-wrap: wrap; } }
 .composer-status[data-empty="true"] { visibility: hidden; } /* место остаётся: поле не прыгает, когда строка статуса появляется */
 .status-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 24px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
-.status-btn .icon { width: 12px; height: 12px; }
+.status-btn .icon { display: none; width: 12px; height: 12px; }
+.status-btn:hover .icon, .status-btn:focus-visible .icon, .status-btn[aria-expanded="true"] .icon { display: inline; }
 .status-btn[hidden], .status-model[hidden] { display: none; }
 .menu { position: absolute; bottom: calc(100% + 6px); z-index: 30; min-width: 250px; max-width: min(380px, 92vw); padding: 6px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: 0 8px 28px color-mix(in srgb, var(--fg) 14%, transparent); color: var(--fg); font-size: 14px; }
 .menu[hidden] { display: none; }
@@ -793,17 +795,17 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
 .prose { line-height: 1.65; }
 .composer { padding: 8px 24px 16px; }
 /* Композер задачи 192: карточка в одну строку, круглая кнопка со стрелкой прижата к правому нижнему краю. */
-.box { display: flex; align-items: flex-end; gap: 8px; padding: 8px 10px 8px 14px; border-radius: 22px; box-shadow: 0 2px 12px color-mix(in srgb, var(--fg) 6%, transparent); }
-.box:focus-within { outline: 1px solid color-mix(in srgb, var(--accent) 72%, transparent); outline-offset: 0; }
-.box textarea { min-height: 36px; padding: 6px 0; font-size: 15px; }
+.box { display: flex; align-items: flex-end; gap: 8px; padding: 6px 10px 6px 12px; border-radius: 14px; box-shadow: 0 2px 12px color-mix(in srgb, var(--fg) 6%, transparent); }
+.box:focus-within { outline: none; border-color: color-mix(in srgb, var(--fg) 30%, var(--border)); }
+.box textarea { min-height: 32px; padding: 5px 0; font-size: 15px; line-height: 1.45; max-height: calc(1.45em * 5 + 10px); }
 .box textarea::placeholder { color: var(--fg-muted); opacity: 1; }
 .box-row { flex: none; gap: 6px; }
 /* Кнопки карточки (задача 192): плоские, без заливки; область 38 px, значок 22 px; цветное состояние одно - запись у микрофона. */
-.send-btn, .cancel-btn, .enter-btn, .mic-btn { display: inline-flex; align-items: center; justify-content: center; position: relative; width: 36px; height: 36px; min-height: 36px; padding: 0; border: 0; border-radius: 10px; background: transparent; }
-.send-btn, .enter-btn, .cancel-btn { color: var(--fg); }
-.send-btn:hover:not(:disabled), .enter-btn:hover, .cancel-btn:hover, .mic-btn:hover { background: var(--hover); filter: none; }
-.send-btn:focus-visible, .enter-btn:focus-visible, .cancel-btn:focus-visible, .mic-btn:focus-visible, .mic-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
-.send-btn .icon, .enter-btn .icon, .cancel-btn .icon, .mic-btn .icon { width: 22px; height: 22px; }
+.send-btn, .cancel-btn, .mic-btn { display: inline-flex; align-items: center; justify-content: center; position: relative; width: 32px; height: 32px; min-height: 32px; padding: 0; border: 0; border-radius: 8px; background: transparent; }
+.send-btn, .cancel-btn { color: var(--fg); }
+.send-btn:hover:not(:disabled), .cancel-btn:hover, .mic-btn:hover { background: var(--hover); filter: none; }
+.send-btn:focus-visible, .cancel-btn:focus-visible, .mic-btn:focus-visible, .mic-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+.send-btn .icon, .cancel-btn .icon, .mic-btn .icon { width: 20px; height: 20px; }
 .cancel-btn[hidden] { display: none; }
 .queue-count { position: absolute; right: 24px; bottom: calc(100% - 2px); z-index: 20; margin: 0; padding: 0 8px; min-height: 22px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); color: var(--fg-muted); font: inherit; font-size: 12px; cursor: pointer; }
 .queue-count:hover { text-decoration: underline; }
@@ -811,7 +813,7 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
 .send-btn:disabled { background: transparent; border-color: transparent; color: var(--fg-muted); opacity: .45; filter: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .mic-btn { color: var(--fg-muted); touch-action: none; }
-.mic-btn[data-state="recording"] { border-radius: 12px; background: var(--accent-soft); color: var(--accent); }
+.mic-btn[data-state="recording"] { border-radius: 8px; background: var(--accent-soft); color: var(--accent); }
 .mic-btn[data-state="recording"] .icon { animation: breathe 1.6s ease-in-out infinite; }
 @keyframes breathe { 50% { opacity: .75; } }
 @media (prefers-reduced-motion: reduce) { .mic-btn[data-state="recording"] .icon { animation: none; } }
@@ -819,7 +821,7 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
 .wave { display: flex; align-items: center; justify-content: flex-end; gap: 2px; height: 32px; padding: 0 4px; color: var(--fg-muted); }
 .wave[hidden] { display: none; }
 .wave i { display: block; width: 2px; min-height: 3px; height: 3px; border-radius: 2px; background: currentColor; }
-.enter-btn[hidden], .send-btn[hidden] { display: none; }
+.send-btn[hidden] { display: none; }
 .box.recording textarea::placeholder { font-style: italic; }
 .mic-timer { flex: none; width: 34px; font-variant-numeric: tabular-nums; font-size: 12px; text-align: right; color: var(--fg-muted); align-self: center; }
 .box.recording .mic-more { display: none; }
@@ -853,7 +855,7 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
 }
 
 .mic-wrap { position: relative; display: inline-flex; align-items: center; }
-.mic-more { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 36px; min-height: 36px; margin-left: -2px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--fg-muted); cursor: pointer; }
+.mic-more { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 32px; min-height: 32px; margin-left: -2px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--fg-muted); cursor: pointer; }
 .mic-more .icon { width: 12px; height: 12px; }
 .mic-more[aria-expanded="true"] { color: var(--fg); }
 .voice-menu { bottom: calc(100% + 10px); min-width: 270px; }
