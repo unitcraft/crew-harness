@@ -37,6 +37,33 @@ const HOUR = 60 * MIN;
 const END = BASE + 3 * HOUR;
 const CTX = 200_000;
 
+// Вопросы агента с выбором (задача 192): данные потока, как и тексты разговоров.
+function mockQuestions() {
+  return [
+    {
+      question: 'Как чинить ложное падение теста на дубликаты событий?',
+      header: 'Способ',
+      multiSelect: false,
+      options: [
+        { label: 'Сортировать по step', description: 'Куски склеиваются по номеру шага, порядок прибытия не важен.' },
+        { label: 'Ждать все куски', description: 'Склейка только после agent_done; проще, но ответ не растёт на глазах.' },
+        { label: 'Повторять тест', description: 'Перезапуск при красном; прячет причину, а не лечит.' },
+      ],
+    },
+    {
+      question: 'Что ещё проверить после правки?',
+      header: 'Проверки',
+      multiSelect: true,
+      options: [
+        { label: 'Тесты страницы', description: 'node --test для src/web.' },
+        { label: 'Стражи', description: 'sh scripts/guards/run-all.sh по индексу.' },
+        { label: 'Вид в браузере', description: 'Светлая и тёмная темы, узкий экран.' },
+        { label: 'Журнал задачи', description: 'Запись в doc/tasks.' },
+      ],
+    },
+  ];
+}
+
 // ---- заготовленный журнал ---------------------------------------------------------------------
 
 function buildJournal() {
@@ -89,6 +116,7 @@ function buildJournal() {
   add(s1, 'user_message', { turn: 't2', text: 'Вот два скриншота красного прогона. Что на них?' }, BASE + 2 * MIN + 100);
   add(s1, 'agent_chunk', { turn: 't2', text: 'На обоих одно и то же падение: тест ждёт порядок прибытия кусков.' }, BASE + 2 * MIN + 600);
   add(s1, 'agent_done', { turn: 't2' }, BASE + 2 * MIN + 900);
+  add(s1, 'question_request', { turn: 't1', request: 'ask-demo-1', questions: mockQuestions() }, BASE + MIN + 5100);
 
   // 2. отказ агента после запроса разрешения
   const s2 = 'ses-demo-2';
@@ -168,6 +196,9 @@ const WORK_RESULT = [
   'Правки небольшие, их видно в карточке ниже.',
 ];
 
+const WANTS_QUESTION = /спроси|вопрос|выбор/i;
+const QUESTION_LEAD = ['Есть развилка, ', 'уточню у вас. '];
+const QUESTION_ANSWERED = ['Принято, ', 'продолжаю по вашему выбору.'];
 const WANTS_PERMISSION = /файл|удал|команд|запуст|разреш/i;
 const WANTS_WORK = /тест|прогон|собер|сбор|проверь|отч[её]т|инструмент/i;
 
@@ -180,6 +211,7 @@ export function createMockServer({ journal, now = Date.now } = {}) {
   const shown = journal ?? rebaseJournal(INITIAL_JOURNAL, now());
   const lastStep = {};
   const pending = {};
+  const asks = {};
   const picks = {};
   const family = {};
   const used = {};
@@ -247,7 +279,12 @@ export function createMockServer({ journal, now = Date.now } = {}) {
     if (event.kind === 'user_message') {
       const turn = typeof input.turn === 'string' ? input.turn : event.id;
       const text = String(input.text);
-      if (WANTS_PERMISSION.test(text)) {
+      if (WANTS_QUESTION.test(text)) {
+        const end = speak(entries, trace, turn, QUESTION_LEAD, CHUNK_FIRST_MS);
+        const request = `ask-${serial + 1}`;
+        mint(entries, trace, end, 'question_request', { turn, request, questions: mockQuestions() });
+        asks[trace] = { request, turn };
+      } else if (WANTS_PERMISSION.test(text)) {
         const end = speak(entries, trace, turn, PERMISSION_LEAD, CHUNK_FIRST_MS);
         const request = `perm-${serial + 1}`;
         mint(entries, trace, end, 'permission_request', {
@@ -274,6 +311,14 @@ export function createMockServer({ journal, now = Date.now } = {}) {
           });
         }
       }
+    } else if (event.kind === 'question_answer') {
+      // ответ владельца: эхо уже в entries (оно закрывает форму и пишет строку в ленту); ход, ждавший ответа, продолжается
+      const open = asks[trace];
+      if (open && open.request === input.request) {
+        delete asks[trace];
+        const end = speak(entries, trace, open.turn, QUESTION_ANSWERED, CHUNK_FIRST_MS);
+        mint(entries, trace, end, 'agent_done', { turn: open.turn });
+      }
     } else if (event.kind === 'session_agent') {
       const from = family[trace] || 'opencode';
       family[trace] = String(input.agent);
@@ -288,6 +333,7 @@ export function createMockServer({ journal, now = Date.now } = {}) {
       }
     } else if (event.kind === 'cancel') {
       delete pending[trace];
+      delete asks[trace];
     }
     return entries;
   }

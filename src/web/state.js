@@ -16,6 +16,7 @@
 // Чистые функции списка, ленты и подписей живут в lists.js; снаружи всё берётся отсюда.
 export * from './lists.js';
 import { imageUrl } from './attachments.js';
+import { normalizeQuestions, summarize } from './question.js';
 
 export const KINDS = Object.freeze([
   'session_created', 'user_message', 'agent_chunk', 'agent_done', 'agent_refused',
@@ -26,6 +27,8 @@ export const KINDS = Object.freeze([
   'session_model', 'agent_switched',
   // задача 192: картинки сообщения и «агент не принимает изображения»
   'message_images', 'images_skipped',
+  // форма вопросов агента (задача 192): вопрос, ответ владельца (эхо сервера), снятие вопроса
+  'question_request', 'question_answer', 'question_resolved',
 ]);
 
 export const TOOL_KINDS = Object.freeze(['read', 'edit', 'delete', 'move', 'search', 'execute', 'think', 'fetch', 'other']);
@@ -215,6 +218,7 @@ function apply(session, event) {
         ...session,
         state: 'idle',
         pending: null,
+        pendingQuestion: null,
         messages: putMessage(session.messages, index, { ...message, status: 'done', doneAt: event.time }),
       };
     }
@@ -226,8 +230,38 @@ function apply(session, event) {
         ...session,
         state: 'refused',
         pending: null,
+        pendingQuestion: null,
         messages: putMessage(session.messages, index, { ...message, status: 'refused', reason: str(input.reason) }),
       };
+    }
+
+    case 'question_request': {
+      const request = str(input.request, event.id);
+      if (session.questionClosed.includes(request)) return session;
+      if (session.pendingQuestion && session.pendingQuestion.request === request) return session;
+      const questions = normalizeQuestions(input.questions);
+      if (questions.length === 0) return session;
+      return { ...session, pendingQuestion: { request, turn, questions, step: event.step } };
+    }
+
+    case 'question_answer': {
+      const open = session.pendingQuestion;
+      if (!open || open.request !== str(input.request)) return session;
+      const skipped = input.skipped === true;
+      const key = `qa:${open.request}`;
+      const lines = skipped ? [{ question: open.questions[0].question, choice: '' }] : summarize(open.questions, input);
+      return {
+        ...session,
+        pendingQuestion: null,
+        questionClosed: [...session.questionClosed, open.request],
+        messages: [...session.messages, { role: 'answer', key, turn: open.turn, request: open.request, skipped, lines }],
+      };
+    }
+
+    case 'question_resolved': {
+      const open = session.pendingQuestion;
+      if (!open || open.request !== str(input.request)) return session;
+      return { ...session, pendingQuestion: null, questionClosed: [...session.questionClosed, open.request] };
     }
 
     case 'permission_request': {
@@ -260,7 +294,7 @@ function apply(session, event) {
     }
 
     case 'cancel': {
-      if (!live(session)) return session;
+      if (!live(session)) return session.pendingQuestion ? { ...session, pendingQuestion: null } : session;
       const messages = session.messages.map((m) => {
         if (m.role === 'agent' && m.status === 'streaming') return { ...m, status: 'cancelled' };
         if (m.role === 'permission' && m.decision === null) return { ...m, decision: 'cancelled' };
@@ -268,7 +302,7 @@ function apply(session, event) {
       });
       const tools = session.tools.map((x) => (x.status === 'pending' || x.status === 'in_progress' ? { ...x, status: 'cancelled' } : x));
       const tasks = session.tasks.map((x) => (x.status === 'running' ? { ...x, status: 'stopped', finishedAt: event.time } : x));
-      return { ...session, state: 'cancelled', pending: null, messages, tools, tasks };
+      return { ...session, state: 'cancelled', pending: null, pendingQuestion: null, messages, tools, tasks };
     }
 
     case 'usage_update': {
@@ -357,7 +391,7 @@ function apply(session, event) {
       const messages = turn && message.status === 'streaming'
         ? putMessage(session.messages, index, { ...message, status: 'error', reason: str(input.message) })
         : session.messages;
-      return { ...session, state: 'error', pending: null, messages };
+      return { ...session, state: 'error', pending: null, pendingQuestion: null, messages };
     }
 
     default:
@@ -391,6 +425,8 @@ export function reduce(model, event) {
       messages: [],
       pending: null,
       pendingImages: [],
+      pendingQuestion: null,
+      questionClosed: [],
       project: str(event.input.project),
       folder: str(event.input.folder),
       branch: str(event.input.branch),
