@@ -111,6 +111,8 @@ export const S = Object.freeze({
   'composer.placeholder': 'Enter — отправить, Ctrl+Enter — в очередь на потом',
   'composer.hint': 'Enter — отправить, Ctrl+Enter — в очередь на потом',
   'menu.agent': 'Агент',
+  'status.agent': 'Агент (семья)',
+  'status.model': 'Модель и усилие',
   'composer.queued': 'В очереди: {n}',
   'composer.queued_hint': 'Убрать последнее сообщение из очереди',
   'menu.mode': 'Режим',
