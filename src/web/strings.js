@@ -126,6 +126,7 @@ export const S = Object.freeze({
   'voice.label': 'Голосовой ввод',
   'voice.hold': 'Нажмите и удерживайте для записи',
   'voice.unavailable': 'Голосовой ввод недоступен в этом браузере: {reason}',
+  'voice.dismiss': 'Закрыть',
   'voice.failed': 'Голосовой ввод: {reason}',
   'voice.processing': 'Распознаю…',
   'voice.processing_note': 'Распознаю… {note}',

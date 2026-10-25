@@ -12,7 +12,7 @@ test('группа status-group: семья, режим, модель·усил�
   const names = group[1].split(',').map((x) => x.trim());
   assert.deepEqual(names.filter((n) => n.endsWith('Button')), ['familyButton', 'modeButton', 'modelButton']);
   assert.ok(names.indexOf('familyButton') < names.indexOf('modeButton') && names.indexOf('modeButton') < names.indexOf('modelButton'));
-  const row = view.match(/const status = h\(doc, 'div', \{ class: 'composer-status', hidden: true \}, ([^;]*)\);/);
+  const row = view.match(/const status = h\(doc, 'div', \{ class: 'composer-status', [^}]*\}, ([^;]*)\);/);
   assert.match(row[1], /statusGroup, ringBox, spinner/);
 });
 

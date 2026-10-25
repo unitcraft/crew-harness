@@ -12,6 +12,7 @@
 import { t } from './strings.js';
 import { createDictation, speechCtor } from './voice.js';
 import { createLocalDictation } from './recorder.js';
+import { createToast } from './toast.js';
 import { LANGS, createVoiceSettings, langFor, pageLang } from './stt.js';
 import { isBusy, keyAction } from './queue.js';
 import { labelOf } from './labels-ru.js';
@@ -253,13 +254,23 @@ export function createView(doc, refs, deps) {
   const voiceList = h(doc, 'div', { class: 'menu-list' });
   voiceMenu.append(voiceList);
   const micWrap = h(doc, 'div', { class: 'mic-wrap' }, micButton, micMore, voiceMenu);
-  const voiceHint = h(doc, 'p', { class: 'voice-hint', role: 'status', hidden: true });
+  // Ошибки голоса — красная плашка над полем: position absolute, место в потоке не занимает, макет не прыгает
+  const voiceToastText = h(doc, 'span', { class: 'voice-toast-text' });
+  const voiceToastClose = h(doc, 'button', { type: 'button', class: 'voice-toast-close', title: t('voice.dismiss'), 'aria-label': t('voice.dismiss') }, icon(doc, 'i-x'));
+  const voiceHint = h(doc, 'div', { class: 'voice-toast', role: 'alert', hidden: true }, voiceToastText, voiceToastClose);
+  const voiceToast = createToast({
+    show(text) { voiceToastText.textContent = text; voiceHint.hidden = false; },
+    hide() { voiceHint.hidden = true; voiceToastText.textContent = ''; },
+    timers: { setTimeout: (f, ms) => globalThis.setTimeout(f, ms), clearTimeout: (id) => globalThis.clearTimeout(id) },
+  });
+  voiceHint.addEventListener('click', () => voiceToast.hide());
   const cancelButton = h(doc, 'button', { type: 'button', class: 'cancel-btn', hidden: true, title: t('chat.cancel'), 'aria-label': t('chat.cancel') }, icon(doc, 'i-stop'), h(doc, 'span', { class: 'sr-only', text: t('chat.cancel') }));
   const sendButton = h(doc, 'button', { type: 'button', class: 'send-btn', title: t('composer.hint'), disabled: true }, icon(doc, 'i-send'), h(doc, 'span', { class: 'sr-only', text: t('chat.send') }));
+  // счётчик очереди — над полем, position absolute: его появление не меняет высоту
+  const queueButton = h(doc, 'button', { type: 'button', class: 'queue-count', hidden: true, title: t('composer.queued_hint') });
   const box = h(doc, 'div', { class: 'box' }, input,
     h(doc, 'div', { class: 'box-row' }, micWrap, cancelButton, sendButton));
   // счётчик очереди «на потом» (Ctrl+Enter при работающем агенте); клик убирает последнее сообщение
-  const queueButton = h(doc, 'button', { type: 'button', class: 'queue-count', hidden: true, title: t('composer.queued_hint') });
 
   const ringFill = svgNode(doc, 'circle', { class: 'ring-fill', cx: 12, cy: 12, r: 9, pathLength: 100 });
   const ring = svgNode(doc, 'svg', { class: 'ring', viewBox: '0 0 24 24', role: 'img' });
@@ -287,11 +298,10 @@ export function createView(doc, refs, deps) {
   const voiceStatus = (s) => {
     micButton.dataset.state = s.state;
     micButton.title = s.state === 'processing' ? t('voice.processing') : t('voice.hold');
-    voiceHint.hidden = !['unavailable', 'error', 'processing'].includes(s.state);
-    if (s.state === 'unavailable') voiceHint.textContent = t('voice.unavailable', { reason: s.reason });
-    else if (s.state === 'error') voiceHint.textContent = t('voice.failed', { reason: s.reason });
-    else if (s.state === 'processing') voiceHint.textContent = s.reason ? t('voice.processing_note', { note: s.reason }) : t('voice.processing');
-    else voiceHint.textContent = '';
+    if (s.state === 'unavailable') voiceToast.show(t('voice.unavailable', { reason: s.reason }));
+    else if (s.state === 'error') voiceToast.show(t('voice.failed', { reason: s.reason }));
+    else if (s.state === 'processing' && s.reason) voiceToast.show(t('voice.processing_note', { note: s.reason }));
+    else if (s.state !== 'processing') voiceToast.hide();
   };
   const browserDictation = createDictation({
     Ctor: speechCtor(win),
@@ -413,7 +423,7 @@ export function createView(doc, refs, deps) {
   const menu = h(doc, 'div', { class: 'menu', role: 'menu', hidden: true });
   // Одна группа чипов у правого края: семья, режим, модель и усилие; за ней кольцо контекста и спиннер (задача 192).
   const statusGroup = h(doc, 'div', { class: 'status-group' }, familyButton, modeButton, statusModel, modelButton);
-  const status = h(doc, 'div', { class: 'composer-status', hidden: true }, h(doc, 'span', { class: 'grow' }), statusGroup, ringBox, spinner, menu);
+  const status = h(doc, 'div', { class: 'composer-status', 'data-empty': 'true' }, h(doc, 'span', { class: 'grow' }), statusGroup, ringBox, spinner, menu);
 
   // Меню выбора режима, модели и усилия (задача 192): показывает только то, что агент отдал по ACP.
   const MENU_MODELS = 4;
@@ -818,7 +828,7 @@ export function createView(doc, refs, deps) {
     statusModel.hidden = hasModels;
     statusModel.textContent = session.model || '';
     spinner.hidden = !busy;
-    status.hidden = familyButton.hidden && !session.model && !busy && !hasModes && !hasModels && !session.usage;
+    status.dataset.empty = String(familyButton.hidden && !session.model && !busy && !hasModes && !hasModels && !session.usage);
     if (menuKind === 'agent') renderMenu();
     else if (menuKind && ((menuKind === 'mode' && !hasModes) || (menuKind !== 'mode' && !hasModels))) closeMenu();
     else if (menuKind) {
