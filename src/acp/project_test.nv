@@ -188,7 +188,7 @@ test "permission: string id, no title or kind" {
     ro p = project_permission(j("\"abc\""), j("{\"toolCall\":{\"toolCallId\":\"call_9\"},\"options\":[]}"))
     ro input = j(p.input)
     assert(str_at(input, "request") == "abc")
-    assert(str_at(input, "action") == "other")
+    assert(str_at(input, "action") == "неизвестное действие")
     assert(str_at(input, "detail") == "call_9")
 }
 
@@ -234,13 +234,14 @@ test "permission: content line, locations, title" {
 test "permission: a long line is cut with a mark" {
     mut long = ""
     mut i = 0
-    while i < 40 { long = "${long}abcdefghij"; i += 1 }
+    while i < 39 { long = "${long}abcdefghij"; i += 1 }
+    long = "${long}0123456789ХВОСТ"
     ro params = "{\"toolCall\":{\"toolCallId\":\"c6\",\"title\":\"Bash\",\"rawInput\":{\"command\":\"${long}\"}},\"options\":[]}"
     ro detail = str_at(j(project_permission(j("12"), j(params)).input), "detail")
-    assert(detail.contains("400"))
+    assert(detail.contains("405"))
     assert(detail.contains("…"))
     assert(detail.byte_len() < long.byte_len())
-    assert(!detail.contains("jabcdefghij")) // the tail is not shown
+    assert(!detail.contains("ХВОСТ")) // the tail is not shown
 }
 
 test "permission: an unknown kind named honestly" {

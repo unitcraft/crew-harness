@@ -161,3 +161,20 @@ test('сценарий разрешения не ломается: «Запус�
   const entries = send('user_message', trace, { turn: 'pp', text: 'Запусти команду сборки' });
   assert.equal(entries.at(-1).event.kind, 'permission_request');
 });
+
+// задача 189: диалог разрешения показывает саму команду (detail), а не только вид действия
+test('запрос разрешения: в detail — сама команда, у заготовки и у живого сценария', () => {
+  const m = INITIAL_JOURNAL.reduce(reduce, initialModel());
+  const perms = Object.values(m.sessions).flatMap((s) => s.messages.filter((x) => x.role === 'permission'));
+  assert.ok(perms.length >= 1, 'в заготовке нужен запрос разрешения');
+  for (const p of perms) {
+    assert.ok(typeof p.detail === 'string' && p.detail.length > 0, 'detail не пуст');
+    assert.notEqual(p.detail, p.action, 'detail — это не подпись действия');
+  }
+  const { send, get } = setup();
+  const trace = Object.keys(get().sessions)[0];
+  send('user_message', trace, { turn: 'tp', text: 'Запусти команду' });
+  const pending = get().sessions[trace].pending;
+  assert.ok(pending.detail.includes('node scripts/clean.js'), 'в detail видна команда');
+  assert.ok(pending.detail.includes('\n'), 'многострочная команда приходит целиком');
+});

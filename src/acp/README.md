@@ -44,7 +44,7 @@ have a short name; to measure: start the test binary kept by `--keep-artifacts` 
 | `link.nv` | `connect`: the keeper fiber, the child process and the fibers around it (stdout reader, stderr reader, stdin writer, watcher of the process), `AgentLink` (three channels) |
 | `client.nv` | `AcpConfig`, `AcpClient` (the handshake, the queue of prompts, permissions, the inbox with acknowledgement), `open_client`, `acp_link` (the handler of `Link`), `decide`, `decide_event`, `close` |
 | `testdata/fake_agent.mjs` | the fake ACP agent (Node): the scenarios are chosen by the first word of the prompt |
-| `*_test.nv` | 47 checks: `jsonrpc_test` (18), `project_test` (29) |
+| `*_test.nv` | 53 checks: `jsonrpc_test` (18), `project_test` (35) |
 | `../acp_live/*_test.nv` | 39 checks, the unit `crew_harness.acp_live` (it imports `crew_harness.acp`): `client_test` (28, the handler over the fake agent), `ack_test` (4), `e2e_test` (6, engine + chat + files + ACP), `real_agent_test` (1, runs for real only with `CREW_REAL_ACP=1`) |
 
 The `.nv` files of this folder are one module `crew_harness.acp` (a folder is a module, the tests are its peers). The engine and the
@@ -115,7 +115,7 @@ event"); "-" means that the page has no kind for it and `page_event` gives None.
 | `usage_update` | Progress / `usage_update` / `{used, size, cost?}` (`cost` as it came) | `usage_update` the same object |
 | `config_option_update` with `configOptions` | `agent_model` / `{model}`; Progress during a turn, otherwise Input; first `category:"model"` select, current value resolved through its advertised flat/grouped options | `session_model` `{model}`; empty when model selector/value is absent |
 | any other `sessionUpdate` (`user_message_chunk`, `available_commands_update`, `current_mode_update`, `config_option_update`, `session_info_update`, ...) and a missing one | Progress / `acp_skipped` / the name of the update | - |
-| `session/request_permission` (a call of the agent) | Progress / `permission_request` / `{request, tool_call, action, detail, options:[{id,name,kind}]}`; `request` is the key of the JSON-RPC id | `permission_request` `{turn, request, action, detail}` |
+| `session/request_permission` (a call of the agent) | Progress / `permission_request` / `{request, tool_call, action, detail, options:[{id,name,kind}]}`; `request` is the key of the JSON-RPC id. `action`: «Выполнить команду» for kind `execute` or a `Bash` title, the kind itself for a known kind, otherwise «неизвестное действие» + the title. `detail`: `rawInput.command`, else the first line of `content`, else the paths from `locations`, else the title; a single long line is cut after 300 chars with a mark | `permission_request` `{turn, request, action, detail}` |
 | any of the above when no turn is open | Input / `acp_note` / `<name>: <input>` (a progress event of no request would be discarded) | - |
 | the answer to `session/prompt`, `stopReason` `end_turn` | Answered / `agent_done` | `agent_done` `{turn}` |
 | `max_tokens`, `max_turn_requests`, `refusal`, `cancelled` | Refused / `agent_refused` / `MaxTokens`, `MaxTurnRequests`, `ModelRefused`, `StoppedByHuman` | `agent_refused` `{turn, reason}` |

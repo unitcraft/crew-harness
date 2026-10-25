@@ -229,8 +229,80 @@ export fn model_name_of(config_options JsonValue) -> str {
     ""
 }
 
+const PERMISSION_DETAIL_CHARS = 300
+
+// The action the dialog names (task 189): a command is "Выполнить команду" (the kind `execute`; claude-agent-acp sends
+// no kind and the title is "Bash"), a known kind keeps its token, the rest is an honest "неизвестное действие".
+fn permission_action(kind str, title str) -> str {
+    if kind == "execute" || title == "Bash" { return "Выполнить команду" }
+    if tool_kind(kind) != "other" { return tool_kind(kind) }
+    if title.byte_len() > 0 { return "неизвестное действие: ${title}" }
+    "неизвестное действие"
+}
+
+// A single line longer than the limit is cut with a mark; a multiline text is kept whole (the page scrolls it).
+fn shorten_detail(text str) -> str {
+    if text.contains("\n") { return text }
+    mut total = 0
+    mut parts = []str.new()
+    for c in text.chars() {
+        total += 1
+        if total <= PERMISSION_DETAIL_CHARS { parts.push("${c}") }
+    }
+    if total <= PERMISSION_DETAIL_CHARS { return text }
+    ro joined = parts.join("")
+    "${joined}… (показаны первые ${PERMISSION_DETAIL_CHARS} знаков из ${total})"
+}
+
+// The detail of the dialog: the command of `rawInput.command`, else the first line of the content, else the paths of
+// `locations`, else the title or the call id.
+fn permission_detail(call JsonValue, title str, call_id str) -> str {
+    match get_of(call, "rawInput") {
+        Some(raw) => match text_field(raw, "command") {
+            Some(command) => if command.byte_len() > 0 { return shorten_detail(command) }
+            None => ()
+        }
+        None => ()
+    }
+    match get_of(call, "content") {
+        Some(content) => {
+            ro text = detail_of(content)
+            if text.byte_len() > 0 {
+                ro cut = text.find("\n") ?? text.byte_len()
+                ro first = text[..cut]
+                if first.byte_len() > 0 { return shorten_detail(first) }
+            }
+        }
+        None => ()
+    }
+    match get_of(call, "locations") {
+        Some(locations) => match locations.array() {
+            Some(items) => {
+                mut paths = []str.new()
+                for item in items {
+                    match text_field(item, "path") {
+                        Some(path) => paths.push(path)
+                        None => ()
+                    }
+                }
+                if paths.len() > 0 { return shorten_detail(paths.join(", ")) }
+            }
+            None => ()
+        }
+        None => ()
+    }
+    if title.byte_len() > 0 { title } else { call_id }
+}
+
 /// A `session/request_permission` of the agent as the name and the input of an engine event. The `request` of the input is
 /// the key of the JSON-RPC id: the decision of the owner names it.
+///
+/// The dialog of the page shows `action` and `detail` as they are (task 189): `action` is the phrase "Выполнить команду"
+/// for a command (the kind `execute`; claude-agent-acp sends no kind and the title is "Bash"), the token of a known kind
+/// otherwise, and an honest "неизвестное действие" (with the title, when there is one) for the rest - never a bare
+/// "other". `detail` is the thing itself: the command of `rawInput.command`, else the first line of the content, else the
+/// paths of `locations` (the files a right would touch), else the title or the call id. A single line longer than
+/// PERMISSION_DETAIL_CHARS is cut with a mark; a multiline text is kept whole - the page shows it in a scrollable block.
 export fn project_permission(rpc_id JsonValue, params JsonValue) -> Projection {
     ro call = match get_of(params, "toolCall") {
         Some(c) => c
@@ -257,8 +329,8 @@ export fn project_permission(rpc_id JsonValue, params JsonValue) -> Projection {
     mut o = JsonObject.new()
     put(o, "request", JsonValue.str(rpc_key(rpc_id)))
     put(o, "tool_call", JsonValue.str(call_id))
-    put(o, "action", JsonValue.str(tool_kind(text_field(call, "kind") ?? "other")))
-    put(o, "detail", JsonValue.str(if title.byte_len() > 0 { title } else { call_id }))
+    put(o, "action", JsonValue.str(permission_action(text_field(call, "kind") ?? "", title)))
+    put(o, "detail", JsonValue.str(permission_detail(call, title, call_id)))
     put(o, "options", JsonValue.array(options))
     proj("permission_request", JsonValue.object(o).to_str())
 }

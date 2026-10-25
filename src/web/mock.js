@@ -69,7 +69,7 @@ function buildJournal() {
   }, BASE + 5 * MIN);
   add(s2, 'user_message', { turn: 't1', text: 'Удали все временные файлы в проекте.' }, BASE + 6 * MIN);
   add(s2, 'agent_chunk', { turn: 't1', text: 'Для этого мне нужно удалить файлы в папке tmp. ' }, BASE + 6 * MIN + 400);
-  add(s2, 'permission_request', { turn: 't1', request: 'j2-perm', action: 'Удалить файлы в папке tmp/', detail: 'tmp/cache.bin, tmp/build.log' }, BASE + 6 * MIN + 800);
+  add(s2, 'permission_request', { turn: 't1', request: 'j2-perm', action: 'Выполнить команду', detail: 'rm -rf tmp/cache.bin tmp/build.log' }, BASE + 6 * MIN + 800);
   add(s2, 'permission_decision', { request: 'j2-perm', decision: 'deny' }, BASE + 7 * MIN);
   add(s2, 'agent_refused', { turn: 't1', reason: 'вы отклонили удаление, файлы не тронуты' }, BASE + 7 * MIN + 300);
   add(s2, 'usage_update', { used: 12_000, size: CTX }, BASE + 7 * MIN + 400);
@@ -215,7 +215,7 @@ export function createMockServer({ journal, now = Date.now } = {}) {
         const end = speak(entries, trace, turn, PERMISSION_LEAD, CHUNK_FIRST_MS);
         const request = `perm-${serial + 1}`;
         mint(entries, trace, end, 'permission_request', {
-          turn, request, action: 'Изменить файлы в рабочей папке', detail: 'src/example.txt (запись), tmp/old.log (удаление)',
+          turn, request, action: 'Выполнить команду', detail: 'node scripts/clean.js tmp/\nrm -f tmp/old.log',
         });
         pending[trace] = { request, turn };
       } else if (WANTS_WORK.test(text)) {
