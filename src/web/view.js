@@ -20,7 +20,6 @@ const NEAR_BOTTOM_PX = 48;
 const FOLD_DIFFS = 3;
 const FOLD_OUTPUTS = 4;
 const FOLD_TASKS = 3;
-const MAX_ROWS = 8;
 const WIDE_QUERY = '(min-width: 1101px)';
 
 // Таблицы значков и подписей — литералами, чтобы проверка страницы и проверка строк видели каждый ключ.
@@ -273,16 +272,21 @@ export function createView(doc, refs, deps) {
     if (!currentTrace || text.length === 0) return;
     if (handlers.onSend(currentTrace, text)) {
       input.value = '';
-      input.rows = 1;
+      fitInput();
       drafts.delete(currentTrace);
     }
+  }
+  // Авторазмер: высота по содержимому, не выше 5 строк (дальше — внутренняя прокрутка, см. max-height в app.css).
+  function fitInput() {
+    input.style.height = 'auto';
+    if (input.scrollHeight > 0) input.style.height = `${input.scrollHeight}px`; // 0 — чат скрыт: оставить auto
   }
   sendButton.addEventListener('click', submit);
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); }
   });
   input.addEventListener('input', () => {
-    input.rows = Math.min(MAX_ROWS, input.value.split('\n').length);
+    fitInput();
     if (currentTrace) drafts.set(currentTrace, input.value);
   });
   cancelButton.addEventListener('click', () => { if (currentTrace) handlers.onCancel(currentTrace); });
@@ -460,7 +464,7 @@ export function createView(doc, refs, deps) {
       nodes.clear();
       thread.replaceChildren();
       input.value = drafts.get(session.id) ?? '';
-      input.rows = Math.min(MAX_ROWS, Math.max(1, input.value.split('\n').length));
+      fitInput();
       title.textContent = session.name;
     }
     agentText.textContent = agentLabel(session.agent);

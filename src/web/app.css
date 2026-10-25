@@ -540,6 +540,10 @@ pre code { font: inherit; }
   background: transparent;
   resize: none;
   outline: none;
+  /* 5 строк: line-height * 5 + вертикальные отступы; дальше — внутренняя прокрутка (задача 192). */
+  line-height: 1.5;
+  max-height: calc(1.5em * 5 + 10px);
+  overflow-y: auto;
 }
 .box-row { display: flex; align-items: center; gap: 6px; }
 .send-btn, .cancel-btn {
