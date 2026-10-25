@@ -36,7 +36,9 @@ tls = { git = "https://github.com/nv-lang/nova-tls", version = "0.2" }
 # Version 0.6 (task 184, the tag v0.6.0, commit 8be13fb) is Alula 2.24: the external functions are declared in the file of a machine (the section `## External functions`, the call `name(args)` without `call`),
 # a parse of a reply is three functions by role, the host binds the functions by class, the names `require_non_empty`, the priorities of the operators as in Nova; the package reads only the format 2.24,
 # the tables of `machines/` are moved to it.
-alula = { git = "https://github.com/nv-lang/nova-alula", version = "0.6" }
+# Version 0.7 (task 225, the tag v0.7.0, commit d816e37) is Alula 2.25: the time is the stamp of the event (`event.at`, the Russian name `событие.момент`), the former function of the time is an error and the only standard
+# external function is `new_id`; the functions `time_to_text` and `text_to_time`; the package reads only the format 2.25, the tables of `machines/` are moved to it.
+alula = { git = "https://github.com/nv-lang/nova-alula", version = "0.7" }
 
 [package]
 name = "crew_harness"
