@@ -10,7 +10,8 @@ module crew_harness.server
 import crew_harness.product_machines.{dialog_machine_text}
 import crew_harness.pgdb.{PgConfig}
 import std.encoding.json.{Json, JsonValue, JsonObject}
-import std.fs.{Fs, real_fs, Path, try_exists, remove_dir_all}
+import crew_harness.storage.{session_dir, session_file}
+import std.fs.{Fs, real_fs, Path, try_exists, remove_dir_all, read_dir, rename}
 import std.os.{Os, real_os, cwd, temp_dir, pid}
 
 // ----- the settings of a test -----
@@ -615,6 +616,88 @@ export fn scenario_restart_idle(settings ServerSettings) Proc Detach Time Net Fs
     c.expect(answer_of(lines, turn) == "Echo: after restart", "the turn after the restart is answered: ${answer_of(lines, turn)} (turn ${turn}, ${lines.len()} lines)")
     c.expect(kit_unique(lines) && kit_increasing(lines), "the ids are unique and the steps grow across the restart")
     again.shut()
+    c.report()
+}
+
+// The folder of a session back to the flat files of the older form (`<root>/<id>/journal` -> `<root>/<id>.journal`); the folder is removed.
+fn kit_flatten(root str, id str) Fs -> int {
+    mut moved = 0
+    match session_dir(root, id) {
+        None => ()
+        Some(dir) => {
+            match read_dir(dir) {
+                Err(e) => ()
+                Ok(entries) => {
+                    for entry in entries {
+                        match entry.name_str() {
+                            Some(name) => {
+                                match rename(dir.join(name), Path.from_bytes(root.bytes()).join("${id}.${name}")) {
+                                    Ok(done) => { moved += 1 }
+                                    Err(e) => ()
+                                }
+                            }
+                            None => ()
+                        }
+                    }
+                }
+            }
+            ro removed = remove_dir_all(dir)
+        }
+    }
+    moved
+}
+
+fn kit_there(root str, id str, name str) -> bool {
+    match session_file(root, id, name) {
+        None => false
+        Some(p) => with Fs = real_fs() {
+            match try_exists(p) {
+                Ok(b) => b
+                Err(e) => false
+            }
+        }
+    }
+}
+
+/// The files of a session lie in the folder of the session (task 192k); a data folder of the older form (flat files) is moved into the
+/// folders at the start of the hub, the session is resumed from its folder, the next start moves nothing.
+export fn scenario_migrate_flat(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    ro root = settings.data_dir
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-flat", "{\"name\":\"Flat\",\"agent\":\"opencode\"}")
+    rig.page(1, "user_message", "s-flat", "{\"turn\":\"t1\",\"text\":\"before the move\"}")
+    c.expect(rig.until(KIT_DONE, 15000), "the first turn ends")
+    ro before = rig.hub.page_lines("s-flat")
+    rig.shut()
+    c.expect(kit_there(root, "s-flat", "snapshot") && kit_there(root, "s-flat", "journal"), "a new session writes into its folder: snapshot and journal")
+    c.expect(kit_there(root, "s-flat", "inbox"), "the inbox of the agent is in the folder too")
+
+    // the data folder as the older versions left it
+    ro flat = with Fs = real_fs() { kit_flatten(root, "s-flat") }
+    c.expect(flat >= 3, "the folder is turned into flat files (${flat})")
+    c.expect(!kit_there(root, "s-flat", "snapshot"), "the folder of the session is gone")
+
+    mut again = rig_open(settings)
+    c.expect(kit_with(again.hub.take_log(), "migrated 1 sessions to per-session folders") == 1, "the hub says it migrated one session")
+    c.expect(again.hub.session_ids().len() == 1 && again.hub.session_ids()[0] == "s-flat", "the session is found in its folder")
+    c.expect(kit_text(again.hub.page_lines("s-flat")) == kit_text(before), "the lines of the page are the same after the migration")
+    c.expect(kit_there(root, "s-flat", "snapshot") && kit_there(root, "s-flat", "journal") && kit_there(root, "s-flat", "inbox"), "the files are in the folder")
+    c.expect(again.hub.takes_message("s-flat"), "the session is idle")
+    again.attach(7)
+    again.forget()
+    again.page(7, "user_message", "s-flat", "{\"turn\":\"t2\",\"text\":\"after the move\"}")
+    c.expect(again.until(KIT_DONE, 15000), "the turn after the migration ends")
+    ro lines = again.lines_for(7)
+    ro turn = line_input(first_of(lines, "user_message", before.len()), "turn")
+    c.expect(answer_of(lines, turn) == "Echo: after the move", "the turn after the migration is answered: ${answer_of(lines, turn)}")
+    again.shut()
+
+    mut third = rig_open(settings)
+    c.expect(kit_with(third.hub.take_log(), "migrated") == 0, "the next start moves nothing")
+    c.expect(third.hub.session_ids().len() == 1, "the session is still there")
+    third.shut()
     c.report()
 }
 

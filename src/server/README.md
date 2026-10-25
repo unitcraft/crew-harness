@@ -71,14 +71,14 @@ and no error (`describe()` leaves it out).
 | Key | Environment | Default | Meaning |
 |---|---|---|---|
 | `port` | `CREW_SERVER_PORT` | 8099 | the port on `127.0.0.1` (the server never listens on another address: no TLS yet) |
-| `data_dir` | `CREW_SERVER_DATA_DIR` | `crew-data` | the files of the file store, **and in both modes** the inbox files of the ACP client (`<session>.inbox`) |
+| `data_dir` | `CREW_SERVER_DATA_DIR` | `crew-data` | the files of the file store, **and in both modes** the inbox files of the ACP client: a folder per session, see "Where the files of a session lie" |
 | `store` | `CREW_SERVER_STORE` | `files` | `files` (task 095) or `pg` (task 098) |
 | `pg` {`host`,`port`,`database`,`user`,`password`} | `CREW_PG_HOST`, `_PORT`, `_DATABASE`, `_USER`, `_PASSWORD` | `127.0.0.1`, 5432, `crew`, `crew_app`, - | the PostgreSQL connection (local host only); the same keys as `src/pgconf` |
 | `agents` [{`id`,`label`,`program`,`args`}] | `CREW_SERVER_AGENT` (one agent `opencode`, words separated by spaces) | `opencode.cmd acp` on Windows, `opencode acp` elsewhere | the agents the page can ask for by `id`; only `id` and `label` are exposed by the front at `/api/agents` |
 | `idle_term_seconds` | `CREW_SERVER_IDLE_SECONDS` | 900 | the idle term of a turn: an agent silent that long ends the turn with `Timeout`. A request for permission waits for a human, so keep it long |
 | `workdir` | `CREW_SERVER_WORKDIR` | the folder of the server | the folder the agents work in (`session/new` needs it) |
 | `web_dir` | `CREW_SERVER_WEB_DIR` | `src/web` | the folder of the page |
-| `acp_trace` | `CREW_SERVER_ACP_TRACE` (`true`/`false`) | `true` | write the raw JSON-RPC exchange with the agent, both ways, to `<data_dir>/<session>.acp.jsonl` (`{"t": unix ms, "dir": "out"|"in", "line": "<the line as it is>"}`); over 50 MB the file becomes `<session>.acp.1.jsonl`. **The file holds the full text of the talk and the output of the tools, nothing is cut out.** |
+| `acp_trace` | `CREW_SERVER_ACP_TRACE` (`true`/`false`) | `true` | write the raw JSON-RPC exchange with the agent, both ways, to `<data_dir>/<session>/acp.jsonl` (`{"t": unix ms, "dir": "out"|"in", "line": "<the line as it is>"}`); over 50 MB the file becomes `acp.1.jsonl` in the same folder. **The file holds the full text of the talk and the output of the tools, nothing is cut out.** |
 | `stt` {`url`,`language`} | `CREW_SERVER_STT_URL`, `CREW_SERVER_STT_LANGUAGE` | `http://127.0.0.1:8178/inference`, `auto` | the local speech recognizer (whisper.cpp `whisper-server`, started by `scripts/start-stt.ps1`) that the front sends the voice to; the address must be a plain `http://127.0.0.1:<port>/...` or `http://localhost:<port>/...` (the audio never leaves the machine); `language` is the default of `POST /api/stt` |
 | `hub` {`program`,`args`} | `CREW_SERVER_HUB` (words separated by spaces) | `target/crew-hub.exe` | how the front starts the hub |
 | - | `CREW_SERVER_CONFIG` | - | the settings file, when no argument names it |
@@ -227,6 +227,31 @@ Lines, fields separated by a tab (a JSON text has no raw line break or tab): to 
 from the hub `ready`, then `<conn> <message for the page>` (`conn` 0: every page). The log of the hub is its stderr, which the front prints with the prefix `hub:`.
 The page's connection number is the peer port of its socket.
 
+## Where the files of a session lie (Где лежат файлы сессии)
+
+Every session has a folder of its own in the data folder (task 192k, owner 2026-10-26: "каждую сессию храни в отдельной папке"). The name of the folder is the session id
+(letters, digits, dot, dash, underscore; not starting or ending with a dot; at most 128 characters), the names of the files do not carry the id:
+
+```text
+<data_dir>/
+  041ef79a-4010-4b90-9fa3-8f08085cd9d4/
+    journal        the journal of the engine, one JSON line per entry, appended   (store: files)
+    snapshot       the snapshot of the engine, replaced as a whole                  (store: files; the folder is a session if it holds this file)
+    inbox          the events of the ACP client not acknowledged yet                (both stores)
+    acp.jsonl      the raw exchange with the agent (acp_trace); acp.1.jsonl - the rotated one
+    images/        the images of the session (the page reads them through the server, `/api/session-image/<id>/<n>`, never by a path)
+  2a8be5e7-e8c8-45b9-8261-7caad7a93826/
+    ...
+```
+
+All the paths are built in one place, `src/storage/paths.nv` (`session_dir`, `session_file`, `session_file_made`, `ensure_session_dir`, `remove_session_dir`); an id or a name that is not
+safe has no path, so nothing leaves the folder. The folder is made at the first write. The page and the front know no paths. Deleting a session is deleting its folder (`remove_session_dir`).
+
+**Migration.** The older versions kept the files side by side (`<id>.inbox`, `<id>.journal`, `<id>.snapshot`, `<id>.acp.jsonl`, `<id>.acp.1.jsonl`, the folder `<id>.images`).
+At its start, before the sessions are listed, the hub moves them into the folders (`src/storage/migrate.nv`): the folder first, then the files, by RENAME (nothing is copied), the snapshot last.
+A file that has a namesake in the folder is not overwritten: it stays and the log says so (`<file> stays in place: ...`). The log line `migrated N sessions to per-session folders`
+is written only when something was moved; a second start moves nothing.
+
 ## How a session lives
 
 1. **Create.** The hub starts an engine (`start_engine`), feeds it the signal `session_created` (name, agent, folder; the machine ignores it, the journal keeps
@@ -251,6 +276,7 @@ The events a live session shows come from the engine itself (`Engine.take_events
 |---|---|
 | `settings.nv` | `ServerSettings`, `parse_server_settings`, `server_settings` (file + environment), `check`, `describe` |
 | `alula.nv` | `hub_machine`, `hub_machine_from`: the embedded `dialog.alula.json` as `AlulaMachine` with the idle term of the settings |
+| `../storage/paths.nv`, `../storage/migrate.nv` | the paths of the folder of a session (one place), the move of the flat files of the older form into the folders |
 | `hub.nv` | `Hub`: `start_hub`, `attach`, `release`, `handle`, `pump`, `take_output`, `take_log`, `close`; the sessions, the store by the settings, the lines of the page |
 | `stdio.nv` | `run_hub_stdio`: the hub over stdin and stdout |
 | `front/front.nv`, `front/front_settings.nv`, `front/stt.nv` | the front: HTTP, `/ws` (frames over two owners of the socket), the router fiber, the hub as a child process; the voice to text (`/api/stt`) |

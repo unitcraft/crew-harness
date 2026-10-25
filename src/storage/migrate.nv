@@ -1,0 +1,133 @@
+// migrate.nv - the flat files of the older form into the folders of the sessions (task 192k).
+//
+// Before task 192k the data folder held the files of a session side by side, named by the id: `<id>.journal`, `<id>.snapshot`,
+// `<id>.inbox`, `<id>.acp.jsonl`, `<id>.acp.1.jsonl` and the folder `<id>.images`. Now a session has a folder `<id>/` with the files
+// `journal`, `snapshot`, `inbox`, `acp.jsonl`, `acp.1.jsonl` and the folder `images` (paths.nv).
+// The hub calls `migrate_flat_sessions` once at its start, before it lists the sessions. The order is the safe one: the folder of the
+// session is made first, then the files are RENAMED into it (not copied), the snapshot last - so a session whose move was cut
+// short is not listed (no snapshot in its folder) and the next start finishes the move. A file that has a namesake in the folder is
+// left where it is and is told in `kept`: nothing is overwritten. A second run finds nothing to move and changes nothing.
+module crew_harness.storage
+
+import std.fs.{Fs, real_fs, Path, read_dir, rename, try_exists}
+
+/// Migration: the result of one run. `sessions` - how many sessions had at least one thing moved, `moved` - how many things in all,
+/// `kept` - one line for every flat file that was left in place.
+export type Migration { sessions int, moved int, kept []str }
+
+// The flat names of the older form, in the order they are moved (the snapshot is the last); the name inside the folder of the session.
+// `dir` - the thing must be a folder.
+type FlatKind { suffix str, name str, dir bool }
+
+fn flat_kinds() -> []FlatKind {
+    mut out = []FlatKind.new()
+    out.push(FlatKind { suffix: ".journal", name: "journal", dir: false })
+    out.push(FlatKind { suffix: ".inbox", name: "inbox", dir: false })
+    out.push(FlatKind { suffix: ".acp.1.jsonl", name: "acp.1.jsonl", dir: false })
+    out.push(FlatKind { suffix: ".acp.jsonl", name: "acp.jsonl", dir: false })
+    out.push(FlatKind { suffix: ".images", name: "images", dir: true })
+    out.push(FlatKind { suffix: ".snapshot", name: "snapshot", dir: false })
+    out
+}
+
+// One thing to move: the id, the flat name in the data folder, the name inside the folder of the session, the order of the kind.
+type FlatItem { id str, flat str, name str, rank int }
+
+fn flat_items(root str) Fs -> []FlatItem {
+    mut items = []FlatItem.new()
+    match read_dir(Path.from_bytes(root.bytes())) {
+        Err(e) => ()
+        Ok(entries) => {
+            ro kinds = flat_kinds()
+            for entry in entries {
+                match entry.name_str() {
+                    None => ()
+                    Some(file) => {
+                        mut rank = 0
+                        for kind in kinds {
+                            match file.strip_suffix(kind.suffix) {
+                                Some(id) => {
+                                    if entry.is_dir() == kind.dir && valid_session_name(id) {
+                                        items.push(FlatItem { id, flat: file, name: kind.name, rank })
+                                    }
+                                }
+                                None => ()
+                            }
+                            rank += 1
+                        }
+                    }
+                }
+            }
+        }
+    }
+    items
+}
+
+fn is_there(path Path) Fs -> bool {
+    match try_exists(path) {
+        Ok(b) => b
+        Err(e) => false
+    }
+}
+
+// The ids of the items, each once, in the order of the names.
+fn item_ids(items []FlatItem) -> []str {
+    mut sorted = []str.new()
+    for item in items {
+        mut seen = false
+        for id in sorted {
+            if id == item.id { seen = true }
+        }
+        if !seen {
+            mut at = sorted.len()
+            while at > 0 && item.id < sorted[at - 1] { at -= 1 }
+            sorted.insert(at, item.id)
+        }
+    }
+    sorted
+}
+
+/// Move the flat files of the older form into the folders of their sessions. A data folder that does not exist has nothing to move.
+/// Only names of the exact old form are touched (`<safe id>` + one of the suffixes, a folder only for `.images`); every other file stays.
+export fn migrate_flat_sessions(root str) -> Migration {
+    mut sessions = 0
+    mut moved = 0
+    mut kept = []str.new()
+    with Fs = real_fs() {
+        ro items = flat_items(root)
+        ro kind_count = flat_kinds().len()
+        for id in item_ids(items) {
+            if !ensure_session_dir(root, id) {
+                kept.push("the folder of the session ${id} cannot be made: its flat files stay where they are")
+            } else {
+                mut rank = 0
+                mut session_moved = 0
+                // in the order of the kinds: the snapshot is the last
+                while rank < kind_count {
+                    for item in items {
+                        if item.id == id && item.rank == rank {
+                            ro from = Path.from_bytes(root.bytes()).join(item.flat)
+                            match session_file(root, id, item.name) {
+                                None => ()
+                                Some(to) => {
+                                    if is_there(to) {
+                                        kept.push("${item.flat} stays in place: ${id}/${item.name} is there already")
+                                    } else {
+                                        match rename(from, to) {
+                                            Ok(done) => { session_moved += 1 }
+                                            Err(e) => { kept.push("${item.flat} stays in place: it cannot be moved to ${id}/${item.name}") }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    rank += 1
+                }
+                if session_moved > 0 { sessions += 1 }
+                moved += session_moved
+            }
+        }
+    }
+    Migration { sessions, moved, kept }
+}

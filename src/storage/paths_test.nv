@@ -1,0 +1,127 @@
+// paths_test.nv - the paths of a session (task 192k): one folder per session, names that cannot leave the data folder.
+module crew_harness.storage
+
+import std.fs.{Fs, real_fs, Path, write_text, remove_dir_all, try_exists, create_dir_all}
+import std.os.{Os, real_os, temp_dir, pid}
+
+fn paths_root(name str) -> str {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-paths-test-${id}-${name}")
+    with Fs = real_fs() {
+        ro removed = remove_dir_all(dir)
+    }
+    dir.display()
+}
+
+fn paths_present(path Path) -> bool {
+    with Fs = real_fs() {
+        match try_exists(path) {
+            Ok(b) => b
+            Err(e) => false
+        }
+    }
+}
+
+fn paths_shown(p Option[Path]) -> str {
+    match p {
+        Some(path) => path.display().replace("\\", "/")
+        None => "<none>"
+    }
+}
+
+test "session_dir: <root>/<id>" {
+    assert(paths_shown(session_dir("C:/work/data", "041ef79a-4010-4b90-9fa3-8f08085cd9d4")) == "C:/work/data/041ef79a-4010-4b90-9fa3-8f08085cd9d4")
+    assert(paths_shown(session_dir("C:/work/data", "probe-1792314000000")) == "C:/work/data/probe-1792314000000")
+}
+
+test "session_file: <root>/<id>/<name>, with the dotted names of the files" {
+    ro id = "2a8be5e7-e8c8-45b9-8261-7caad7a93826"
+    assert(paths_shown(session_file("C:/work/d", id, "inbox")) == "C:/work/d/${id}/inbox")
+    assert(paths_shown(session_file("C:/work/d", id, "journal")) == "C:/work/d/${id}/journal")
+    assert(paths_shown(session_file("C:/work/d", id, "snapshot")) == "C:/work/d/${id}/snapshot")
+    assert(paths_shown(session_file("C:/work/d", id, "acp.jsonl")) == "C:/work/d/${id}/acp.jsonl")
+    assert(paths_shown(session_file("C:/work/d", id, "acp.1.jsonl")) == "C:/work/d/${id}/acp.1.jsonl")
+    assert(paths_shown(session_file("C:/work/d", id, "images")) == "C:/work/d/${id}/images")
+}
+
+test "session paths: an empty id, a dot, a separator, a drive letter or a leading and trailing dot has no path" {
+    assert(paths_shown(session_dir("C:/work/d", "")) == "<none>")
+    assert(paths_shown(session_dir("C:/work/d", ".")) == "<none>")
+    assert(paths_shown(session_dir("C:/work/d", "..")) == "<none>")
+    assert(paths_shown(session_dir("C:/work/d", "../x")) == "<none>")
+    assert(paths_shown(session_dir("C:/work/d", "..\\x")) == "<none>")
+    assert(paths_shown(session_dir("C:/work/d", "a/b")) == "<none>")
+    assert(paths_shown(session_dir("C:/work/d", "a\\b")) == "<none>")
+    assert(paths_shown(session_dir("C:/work/d", "c:x")) == "<none>")
+    assert(paths_shown(session_dir("C:/work/d", ".hidden")) == "<none>")
+    assert(paths_shown(session_dir("C:/work/d", "ends.")) == "<none>")
+    assert(paths_shown(session_dir("C:/work/d", "a..b")) == "<none>")
+    assert(paths_shown(session_dir("C:/work/d", "a b")) == "<none>")
+}
+
+test "session_file: a bad id or a bad name has no path, nothing leaves the folder of the session" {
+    assert(paths_shown(session_file("C:/work/d", "", "inbox")) == "<none>")
+    assert(paths_shown(session_file("C:/work/d", "../x", "inbox")) == "<none>")
+    assert(paths_shown(session_file("C:/work/d", "s1", "")) == "<none>")
+    assert(paths_shown(session_file("C:/work/d", "s1", "..")) == "<none>")
+    assert(paths_shown(session_file("C:/work/d", "s1", "../x")) == "<none>")
+    assert(paths_shown(session_file("C:/work/d", "s1", "a/b")) == "<none>")
+    assert(paths_shown(session_file("C:/work/d", "s1", "..\\inbox")) == "<none>")
+    assert(paths_shown(session_file("C:/work/d", "s1", "c:inbox")) == "<none>")
+    assert(paths_shown(session_file("C:/work/d", "s1", ".hidden")) == "<none>")
+}
+
+test "ensure_session_dir: made at the first call with its parents, the second call changes nothing, a bad id is a failure" {
+    ro root = paths_root("ensure")
+    ro deep = "${root}/a/b"
+    with Fs = real_fs() {
+        assert(ensure_session_dir(deep, "s1"))
+        assert(paths_present(Path.from_bytes("${deep}/s1".bytes())))
+        ro w = write_text(Path.from_bytes("${deep}/s1/journal".bytes()), "keep me")
+        assert(ensure_session_dir(deep, "s1"))
+        assert(paths_present(Path.from_bytes("${deep}/s1/journal".bytes())))
+        assert(!ensure_session_dir(deep, "../s2"))
+        assert(!ensure_session_dir(deep, ""))
+    }
+}
+
+test "ensure_session_dir: a file in the way is a failure" {
+    ro root = paths_root("ensure-file")
+    with Fs = real_fs() {
+        ro made = create_dir_all(Path.from_bytes(root.bytes()))
+        ro w = write_text(Path.from_bytes("${root}/s1".bytes()), "x")
+        assert(!ensure_session_dir(root, "s1"))
+    }
+}
+
+test "session_file_made: the folder is there, the path is in it" {
+    ro root = paths_root("made")
+    match session_file_made(root, "s1", "inbox") {
+        Some(p) => {
+            assert(p.display().replace("\\", "/") == "${root.replace("\\", "/")}/s1/inbox")
+            assert(paths_present(Path.from_bytes("${root}/s1".bytes())))
+        }
+        None => assert(false)
+    }
+    assert(paths_shown(session_file_made(root, "..", "inbox")) == "<none>")
+    assert(paths_shown(session_file_made(root, "s1", "../inbox")) == "<none>")
+}
+
+test "remove_session_dir: the folder goes with everything in it, a missing one is fine, a bad id is not" {
+    ro root = paths_root("remove")
+    ro images = match session_file_made(root, "s1", "images") {
+        Some(p) => p
+        None => panic("no path")
+    }
+    with Fs = real_fs() {
+        ro made = create_dir_all(images)
+        ro w = write_text(images.join("1.png"), "x")
+        ro other = write_text(Path.from_bytes("${root}/s2.keep".bytes()), "x")
+        assert(remove_session_dir(root, "s1"))
+        assert(!paths_present(Path.from_bytes("${root}/s1".bytes())))
+        assert(paths_present(Path.from_bytes("${root}/s2.keep".bytes())))
+        assert(remove_session_dir(root, "s1"))
+        assert(!remove_session_dir(root, ".."))
+    }
+}

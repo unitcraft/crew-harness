@@ -1,0 +1,85 @@
+// paths.nv - the ONE place where the paths of a session are built (task 192k).
+//
+// Every session has a folder of its own in the data folder: `<data_dir>/<id>/`. What lies in it:
+//   journal        the journal of the engine (files.nv)
+//   snapshot       the snapshot of the engine (files.nv)
+//   inbox          the incoming events of the ACP client that are not acknowledged yet (src/acp)
+//   acp.jsonl      the raw record of the exchange with the agent (src/acp/trace.nv); acp.1.jsonl is the rotated one
+//   images/        the images of the session (the page reads them through the server, not by a path)
+// A session id is checked (`valid_session_name`): letters, digits, dot, dash and underscore, not starting with a dot, not
+// ending with a dot, no two dots in a row, at most 128 characters - so an id cannot hold a separator, a drive letter or `..`
+// and a path never leaves the data folder. The name of a file in the folder is checked by the same rule.
+module crew_harness.storage
+
+import std.fs.{Fs, real_fs, Path, create_dir_all, remove_dir_all, metadata}
+
+const MAX_NAME = 128
+
+/// Is this text a name that is safe inside the data folder?
+export fn valid_session_name(name str) -> bool {
+    ro bytes = name.bytes()
+    if bytes.len() == 0 || bytes.len() > MAX_NAME { return false }
+    if bytes[0] == (46 as u8) { return false }
+    if bytes[bytes.len() - 1] == (46 as u8) { return false }
+    mut previous_dot = false
+    for b in bytes {
+        ro letter = (b >= (97 as u8) && b <= (122 as u8)) || (b >= (65 as u8) && b <= (90 as u8))
+        ro digit = b >= (48 as u8) && b <= (57 as u8)
+        ro dot = b == (46 as u8)
+        ro mark = b == (45 as u8) || b == (95 as u8)
+        if !(letter || digit || dot || mark) { return false }
+        if dot && previous_dot { return false }
+        previous_dot = dot
+    }
+    true
+}
+
+/// The folder of a session: `<root>/<id>`; None when the id is not a safe name. Nothing is made on the disk.
+export fn session_dir(root str, session str) -> Option[Path] {
+    if !valid_session_name(session) { return None }
+    Some(Path.from_bytes(root.bytes()).join(session))
+}
+
+/// A file (or a folder, like `images`) in the folder of a session: `<root>/<id>/<name>`; None when the id or the name is not a safe name.
+/// Nothing is made on the disk (`ensure_session_dir` makes the folder).
+export fn session_file(root str, session str, name str) -> Option[Path] {
+    if !valid_session_name(name) { return None }
+    Some(session_dir(root, session)?.join(name))
+}
+
+/// The folder of a session, made with its parents when it is not there (the rights are those of the parent). False when it cannot be
+/// made (a file is in the way, no rights) or the id is not a safe name.
+export fn ensure_session_dir(root str, session str) Fs -> bool {
+    match session_dir(root, session) {
+        None => false
+        Some(dir) => match create_dir_all(dir) {
+            Err(e) => false
+            Ok(done) => match metadata(dir) {
+                Ok(meta) => meta.is_dir()
+                Err(e) => false
+            }
+        }
+    }
+}
+
+/// `session_file` after `ensure_session_dir`: the path of a file whose folder is surely there. None when the id or the name is not
+/// safe or the folder cannot be made.
+export fn session_file_made(root str, session str, name str) -> Option[Path] {
+    ro path = session_file(root, session, name)?
+    ro made = with Fs = real_fs() { ensure_session_dir(root, session) }
+    if made { Some(path) } else { None }
+}
+
+/// Delete a session with everything in its folder; true when the folder is gone (it was not there is also true).
+export fn remove_session_dir(root str, session str) Fs -> bool {
+    match session_dir(root, session) {
+        None => false
+        Some(dir) => match remove_dir_all(dir) {
+            Ok(done) => true
+            Err(e) => match metadata(dir) {
+                Ok(meta) => false
+                Err(gone) => true
+            }
+        }
+    }
+}

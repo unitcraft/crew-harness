@@ -2,7 +2,7 @@
 // The same scenarios run over PostgreSQL in src/server_pg: the results must be the same.
 module crew_harness.server_live
 
-import crew_harness.server.{kit_files, scenario_chat, scenario_stream_burst, scenario_permission, scenario_cancel, scenario_switch_agent, scenario_restart_idle, scenario_restart_open, scenario_crash, scenario_two_pages, scenario_rejects, scenario_many, scenario_broken_agent, scenario_renamed_table}
+import crew_harness.server.{kit_files, scenario_chat, scenario_stream_burst, scenario_permission, scenario_cancel, scenario_switch_agent, scenario_restart_idle, scenario_migrate_flat, scenario_restart_open, scenario_crash, scenario_two_pages, scenario_rejects, scenario_many, scenario_broken_agent, scenario_renamed_table}
 
 fn clean(report str) -> () {
     if report.byte_len() > 0 { println("NOT AS IT MUST BE: ${report}") }
@@ -32,6 +32,10 @@ test "files: the family changes in the window" {
 
 test "files: restart between turns" {
     clean(scenario_restart_idle(kit_files("restart", 30000)))
+}
+
+test "files: an older data folder with flat files is moved into the folders of the sessions" {
+    clean(scenario_migrate_flat(kit_files("flat", 30000)))
 }
 
 test "files: restart in the middle of a turn" {

@@ -1,12 +1,11 @@
 // files.nv - the file handlers of the effects `Journal` and `Store` of the engine (task 095).
 //
-// The data folder holds, per session, three files named by the session id:
-//   <id>.journal   the journal: one line of JSON per entry (the format of `journal_line`), appended;
-//   <id>.snapshot  the snapshot: one JSON object, replaced as a whole (a temporary file, then a rename);
-//   <id>.inbox     the incoming events of the ACP client that are not acknowledged yet (src/acp).
-// A session id is checked (`valid_session_name`): letters, digits, dot, dash and underscore, not starting with a dot,
-// no two dots in a row, at most 128 characters - so a name cannot hold a separator, a drive letter or `..`
-// and a path never leaves the data folder.
+// The data folder holds a folder per session, named by the session id (task 192k; the paths are built in paths.nv only):
+//   <id>/journal   the journal: one line of JSON per entry (the format of `journal_line`), appended;
+//   <id>/snapshot  the snapshot: one JSON object, replaced as a whole (a temporary file, then a rename);
+//   <id>/inbox     the incoming events of the ACP client that are not acknowledged yet (src/acp).
+// The flat files of the older form (`<id>.journal` ...) are moved into the folders at the start of the hub (migrate.nv).
+// A session id is checked (`valid_session_name`, paths.nv), so a path never leaves the data folder.
 //
 // A failed write is not an error value: the effects return plain values, a handler that cannot write stops the
 // process (`panic`), the step is then not committed (rule 13 of the specification).
@@ -17,28 +16,8 @@ module crew_harness.storage
 
 import alula.engine.{Journal, Store, JournalEntry, Snapshot, journal_line, parse_journal_line}
 import std.encoding.json.{Json, JsonValue, JsonObject}
-import std.fs.{Fs, real_fs, File, Path, read, read_dir, create_dir_all, rename, metadata, remove_file}
+import std.fs.{Fs, real_fs, File, Path, read, read_dir, create_dir_all, rename, metadata, remove_file, try_exists}
 import std.io.{write_all}
-
-const MAX_NAME = 128
-
-/// Is this text a name that is safe inside the data folder?
-export fn valid_session_name(name str) -> bool {
-    ro bytes = name.bytes()
-    if bytes.len() == 0 || bytes.len() > MAX_NAME { return false }
-    if bytes[0] == (46 as u8) { return false }
-    mut previous_dot = false
-    for b in bytes {
-        ro letter = (b >= (97 as u8) && b <= (122 as u8)) || (b >= (65 as u8) && b <= (90 as u8))
-        ro digit = b >= (48 as u8) && b <= (57 as u8)
-        ro dot = b == (46 as u8)
-        ro mark = b == (45 as u8) || b == (95 as u8)
-        if !(letter || digit || dot || mark) { return false }
-        if dot && previous_dot { return false }
-        previous_dot = dot
-    }
-    true
-}
 
 /// The data folder: created with its parents; false when it cannot be (a file is in the way, no rights).
 export fn open_data_dir(root str) -> bool {
@@ -52,12 +31,6 @@ export fn open_data_dir(root str) -> bool {
             }
         }
     }
-}
-
-/// The path of a file of a session inside the data folder; None when the session id or the extension is not a safe name.
-export fn session_path(root str, session str, ext str) -> Option[Path] {
-    if !valid_session_name(session) || !valid_session_name(ext) { return None }
-    Some(Path.from_bytes(root.bytes()).join("${session}.${ext}"))
 }
 
 // Does the file end with a line break (or does not exist, or is empty)? A journal that does not was torn in a write.
@@ -191,21 +164,28 @@ fn parse_snapshot(text str) -> Option[Snapshot] {
     Some(snapshot_of(step, data))
 }
 
-fn path_or_stop(root str, session str, ext str) -> Path {
-    match session_path(root, session, ext) {
+fn path_or_stop(root str, session str, name str) -> Path {
+    match session_file(root, session, name) {
         Some(p) => p
         None => panic("the session name is not a safe file name: ${session}")
     }
 }
 
-/// The handler of `Journal` for one session: `<root>/<session>.journal`. Lines that are not entries (a torn last line) are
+// Append a line to a file of the session; the folder of the session is made when the first try fails (it is not there yet).
+fn append_in_session(root str, session str, path Path, line str) Fs -> bool {
+    if append_line(path, line) { return true }
+    if !ensure_session_dir(root, session) { return false }
+    append_line(path, line)
+}
+
+/// The handler of `Journal` for one session: `<root>/<session>/journal`. Lines that are not entries (a torn last line) are
 /// skipped by `read_all`. A session name that is not safe stops the program at once.
 export fn file_journal(root str, session str) -> Effect[Journal] {
     ro path = path_or_stop(root, session, "journal")
     effect Journal {
         write(entry) -> () {
             with Fs = real_fs() {
-                if !append_line(path, journal_line(entry)) {
+                if !append_in_session(root, session, path, journal_line(entry)) {
                     panic("the journal cannot be written: ${path.display()}")
                 }
             }
@@ -225,7 +205,7 @@ export fn file_journal(root str, session str) -> Effect[Journal] {
     }
 }
 
-/// The handler of `Store`: `<root>/<id>.snapshot` per session. `save` replaces the file as a whole; `load` of a missing
+/// The handler of `Store`: `<root>/<id>/snapshot` per session. `save` replaces the file as a whole; `load` of a missing
 /// file or of a name that is not safe is None; a file that exists and is not a snapshot comes back as a snapshot the engine
 /// rejects (step -1), so a damaged snapshot is never taken for "no session" and the session is never started over it.
 /// A `save` under a name that is not safe stops the program.
@@ -234,13 +214,13 @@ export fn file_store(root str) -> Effect[Store] {
         save(id, snapshot) -> () {
             ro path = path_or_stop(root, id, "snapshot")
             with Fs = real_fs() {
-                if !replace_file(path, snapshot_text(snapshot)) {
+                if !ensure_session_dir(root, id) || !replace_file(path, snapshot_text(snapshot)) {
                     panic("the snapshot cannot be saved: ${path.display()}")
                 }
             }
         }
         load(id) -> Option[Snapshot] {
-            match session_path(root, id, "snapshot") {
+            match session_file(root, id, "snapshot") {
                 None => None
                 Some(path) => {
                     with Fs = real_fs() {
@@ -258,8 +238,8 @@ export fn file_store(root str) -> Effect[Store] {
     }
 }
 
-/// The ids of the sessions in the data folder: the names that have a `<id>.snapshot` file, in the order of the names. A folder
-/// that does not exist has none. A file whose name is not a safe session name is not a session.
+/// The ids of the sessions in the data folder: the folders that hold a `snapshot` file, in the order of the names. A folder
+/// that does not exist has none. A name that is not a safe session name is not a session.
 export fn list_sessions(root str) -> []str {
     mut names = []str.new()
     with Fs = real_fs() {
@@ -268,9 +248,14 @@ export fn list_sessions(root str) -> []str {
             Ok(entries) => {
                 for entry in entries {
                     match entry.name_str() {
-                        Some(file) => match file.strip_suffix(".snapshot") {
-                            Some(id) => if entry.is_file() && valid_session_name(id) { names.push(id) }
-                            None => ()
+                        Some(id) => if entry.is_dir() && valid_session_name(id) {
+                            match session_file(root, id, "snapshot") {
+                                Some(snapshot) => match try_exists(snapshot) {
+                                    Ok(there) => { if there { names.push(id) } }
+                                    Err(e) => ()
+                                }
+                                None => ()
+                            }
                         }
                         None => ()
                     }

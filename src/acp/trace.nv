@@ -1,10 +1,10 @@
 // trace.nv - the raw record of the exchange with the agent (task 192c).
 //
-// Every line of the JSON-RPC exchange goes to a file `<data_dir>/<session>.acp.jsonl`, one record per line:
+// Every line of the JSON-RPC exchange goes to a file `<data_dir>/<session>/acp.jsonl`, one record per line:
 //   {"t": <unix milliseconds>, "dir": "out"|"in", "line": "<the line of the exchange as it is, a string>"}
 // `out` is what the client writes to the stdin of the agent, `in` is what it reads from the stdout of the agent. Nothing is cut
 // out: the file holds the whole talk and the output of the tools (the README of the server says so). The file is only appended
-// to; at more than the limit (50 MB) the file becomes `<session>.acp.1.jsonl` (an older one is replaced) and a new file is begun.
+// to; at more than the limit (50 MB) the file becomes `acp.1.jsonl` beside it (an older one is replaced) and a new file is begun.
 // A failed write never stops the session: one line to the log of the hub (the stderr) and the trace of this session is off.
 module crew_harness.acp
 
@@ -35,7 +35,7 @@ export fn trace_open(path str, limit int) -> AcpTrace {
     { path, size, limit, on: true }
 }
 
-/// The name of the rotated file: `x.acp.jsonl` -> `x.acp.1.jsonl`.
+/// The name of the rotated file: `<session>/acp.jsonl` -> `<session>/acp.1.jsonl`.
 export fn trace_rotated_name(path str) -> str {
     ro suffix = ".jsonl"
     if path.byte_len() > suffix.byte_len() && path[(path.byte_len() - suffix.byte_len())..] == suffix {

@@ -3,7 +3,7 @@
 module crew_harness.storage
 
 import alula.engine.{Journal, Store, JournalEntry, Snapshot, journal_event, param}
-import std.fs.{Fs, real_fs, Path, read_text, write_text, remove_dir_all, try_exists}
+import std.fs.{Fs, real_fs, Path, read_text, write_text, remove_dir_all, try_exists, create_dir_all}
 import std.os.{Os, real_os, temp_dir, pid}
 
 // A clean data folder of one test, outside the repository: <temp>/crew-storage-test-<pid>-<name>.
@@ -39,8 +39,8 @@ fn text_of(path Path) -> str {
     }
 }
 
-fn path_of(root str, session str, ext str) -> Path {
-    match session_path(root, session, ext) {
+fn path_of(root str, session str, name str) -> Path {
+    match session_file(root, session, name) {
         Some(p) => p
         None => panic("no path for ${session}")
     }
@@ -77,30 +77,9 @@ test "session name: empty, dots, separators, drive letters, spaces, a leading do
     assert(!valid_session_name(".hidden"))
     assert(!valid_session_name("сессия"))
     assert(!valid_session_name("a..b"))
+    assert(!valid_session_name("a."))
     assert(!valid_session_name(xs(129)))
     assert(valid_session_name(xs(128)))
-}
-
-test "session path: inside the data folder, with the extension; a bad name or extension has no path" {
-    ro root = fresh_root("paths")
-    match session_path(root, "chat-1", "journal") {
-        Some(p) => {
-            assert(p.display().ends_with("chat-1.journal"))
-            match p.parent() {
-                Some(par) => assert(par.display() == Path.from_bytes(root.bytes()).display())
-                None => assert(false)
-            }
-        }
-        None => assert(false)
-    }
-    match session_path(root, "../outside", "journal") {
-        Some(p) => assert(false)
-        None => assert(true)
-    }
-    match session_path(root, "chat-1", "../x") {
-        Some(p) => assert(false)
-        None => assert(true)
-    }
 }
 
 // ----- the data folder -----
@@ -215,8 +194,9 @@ test "store: the last saved snapshot is loaded, a save replaces the whole file" 
             None => assert(false)
         }
     }
-    // one file per session; no temporary file stays
+    // one file per session, in the folder of the session; no temporary file stays
     assert(present(path_of(root, "chat-1", "snapshot")))
+    assert(present(Path.from_bytes("${root}/chat-1".bytes())))
     assert(!present(path_of(root, "chat-1", "snapshot.tmp")))
 }
 
@@ -257,6 +237,22 @@ test "store: a name with a separator or dots loads nothing and touches nothing o
 
 // ----- the list of sessions (task 099) -----
 
+test "journal and store: write into the folder of the session, made at the first write; no flat file appears" {
+    ro root = fresh_root("in-folder")
+    assert(open_data_dir(root))
+    assert(!present(Path.from_bytes("${root}/chat-1".bytes())))
+    with Journal = file_journal(root, "chat-1"), Store = file_store(root) {
+        Journal.write(entry_at(1, "a"))
+        Store.save("chat-1", Snapshot { step: 1, data: "{}" })
+        assert(Journal.read_all().len() == 1)
+        assert(Store.load("chat-1") != None)
+    }
+    assert(present(Path.from_bytes("${root}/chat-1/journal".bytes())))
+    assert(present(Path.from_bytes("${root}/chat-1/snapshot".bytes())))
+    assert(!present(Path.from_bytes("${root}/chat-1.journal".bytes())))
+    assert(!present(Path.from_bytes("${root}/chat-1.snapshot".bytes())))
+}
+
 test "list: the sessions of a folder are the names that have a snapshot, in order" {
     ro root = fresh_root("list")
     assert(open_data_dir(root))
@@ -265,6 +261,11 @@ test "list: the sessions of a folder are the names that have a snapshot, in orde
         Store.save("b-2", snapshot_of(1, "{}"))
         Store.save("a-1", snapshot_of(1, "{}"))
         Journal.write(entry_at(1, "only a journal"))
+    }
+    // a flat file of the older form and a folder without a snapshot are not sessions
+    with Fs = real_fs() {
+        ro w = write_text(Path.from_bytes("${root}/stray.snapshot".bytes()), "{}")
+        ro made = create_dir_all(Path.from_bytes("${root}/d-4".bytes()))
     }
     ro found = list_sessions(root)
     assert(found.len() == 2)

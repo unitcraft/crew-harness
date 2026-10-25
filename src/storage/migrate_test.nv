@@ -1,0 +1,169 @@
+// migrate_test.nv - the flat files of the older form into the folders of the sessions (task 192k).
+module crew_harness.storage
+
+import std.fs.{Fs, real_fs, Path, write_text, read_text, remove_dir_all, try_exists, create_dir_all}
+import std.os.{Os, real_os, temp_dir, pid}
+
+fn mig_root(name str) -> str {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-migrate-test-${id}-${name}")
+    with Fs = real_fs() {
+        ro removed = remove_dir_all(dir)
+        ro made = create_dir_all(dir)
+    }
+    dir.display()
+}
+
+fn mig_at(root str, rest str) -> Path => Path.from_bytes("${root}/${rest}".bytes())
+
+fn mig_present(path Path) -> bool {
+    with Fs = real_fs() {
+        match try_exists(path) {
+            Ok(b) => b
+            Err(e) => false
+        }
+    }
+}
+
+fn mig_put(root str, rest str, text str) -> () {
+    with Fs = real_fs() {
+        ro w = write_text(mig_at(root, rest), text)
+    }
+}
+
+fn mig_text(root str, rest str) -> str {
+    with Fs = real_fs() {
+        match read_text(mig_at(root, rest)) {
+            Ok(t) => t
+            Err(e) => "<unreadable>"
+        }
+    }
+}
+
+// A session of the older form: all the flat files and the folder of images.
+fn mig_old_session(root str, id str) -> () {
+    mig_put(root, "${id}.snapshot", "snap-${id}")
+    mig_put(root, "${id}.journal", "journal-${id}")
+    mig_put(root, "${id}.inbox", "inbox-${id}")
+    mig_put(root, "${id}.acp.jsonl", "trace-${id}")
+    mig_put(root, "${id}.acp.1.jsonl", "trace1-${id}")
+    with Fs = real_fs() {
+        ro made = create_dir_all(mig_at(root, "${id}.images"))
+    }
+    mig_put(root, "${id}.images/1.png", "png-${id}")
+}
+
+test "migrate: the flat files of a session go into its folder, by rename, with their text" {
+    ro root = mig_root("one")
+    mig_old_session(root, "041ef79a-4010-4b90-9fa3-8f08085cd9d4")
+    ro id = "041ef79a-4010-4b90-9fa3-8f08085cd9d4"
+    ro done = migrate_flat_sessions(root)
+    assert(done.sessions == 1)
+    assert(done.moved == 6)
+    assert(done.kept.len() == 0)
+    assert(mig_text(root, "${id}/snapshot") == "snap-${id}")
+    assert(mig_text(root, "${id}/journal") == "journal-${id}")
+    assert(mig_text(root, "${id}/inbox") == "inbox-${id}")
+    assert(mig_text(root, "${id}/acp.jsonl") == "trace-${id}")
+    assert(mig_text(root, "${id}/acp.1.jsonl") == "trace1-${id}")
+    assert(mig_text(root, "${id}/images/1.png") == "png-${id}")
+    assert(!mig_present(mig_at(root, "${id}.snapshot")))
+    assert(!mig_present(mig_at(root, "${id}.journal")))
+    assert(!mig_present(mig_at(root, "${id}.inbox")))
+    assert(!mig_present(mig_at(root, "${id}.acp.jsonl")))
+    assert(!mig_present(mig_at(root, "${id}.acp.1.jsonl")))
+    assert(!mig_present(mig_at(root, "${id}.images")))
+}
+
+test "migrate: several sessions, a session found by its snapshot in the folder afterwards" {
+    ro root = mig_root("three")
+    mig_old_session(root, "a-1")
+    mig_old_session(root, "b-2")
+    mig_put(root, "c-3.inbox", "only an inbox")
+    ro done = migrate_flat_sessions(root)
+    assert(done.sessions == 3)
+    ro found = list_sessions(root)
+    assert(found.len() == 2)
+    assert(found[0] == "a-1")
+    assert(found[1] == "b-2")
+    assert(mig_text(root, "c-3/inbox") == "only an inbox")
+}
+
+test "migrate: a second run changes nothing" {
+    ro root = mig_root("again")
+    mig_old_session(root, "s1")
+    ro first = migrate_flat_sessions(root)
+    assert(first.sessions == 1)
+    ro second = migrate_flat_sessions(root)
+    assert(second.sessions == 0)
+    assert(second.moved == 0)
+    assert(second.kept.len() == 0)
+    assert(mig_text(root, "s1/snapshot") == "snap-s1")
+    assert(mig_text(root, "s1/journal") == "journal-s1")
+}
+
+test "migrate: a file that has a namesake in the folder is not overwritten, it stays and is told" {
+    ro root = mig_root("clash")
+    mig_old_session(root, "s1")
+    with Fs = real_fs() {
+        ro made = create_dir_all(mig_at(root, "s1"))
+    }
+    mig_put(root, "s1/journal", "the newer journal")
+    ro done = migrate_flat_sessions(root)
+    assert(mig_text(root, "s1/journal") == "the newer journal")
+    assert(mig_text(root, "s1.journal") == "journal-s1")
+    assert(done.kept.len() == 1)
+    assert(done.kept[0].contains("s1.journal"))
+    assert(done.sessions == 1)
+    assert(mig_text(root, "s1/snapshot") == "snap-s1")
+    // the clash is told again at the next start, and still nothing is overwritten
+    ro again = migrate_flat_sessions(root)
+    assert(again.sessions == 0)
+    assert(again.kept.len() == 1)
+    assert(mig_text(root, "s1/journal") == "the newer journal")
+    assert(mig_text(root, "s1.journal") == "journal-s1")
+}
+
+test "migrate: other files and names of the data folder are not touched" {
+    ro root = mig_root("others")
+    mig_put(root, "stream-active", "x")
+    mig_put(root, "notes.txt", "x")
+    mig_put(root, ".hidden.snapshot", "x")
+    mig_put(root, "s1.snapshot.tmp", "half")
+    mig_put(root, "s1.images", "a file, not a folder")
+    mig_put(root, "readme.journal.bak", "x")
+    ro done = migrate_flat_sessions(root)
+    assert(done.sessions == 0)
+    assert(mig_present(mig_at(root, "stream-active")))
+    assert(mig_present(mig_at(root, "notes.txt")))
+    assert(mig_present(mig_at(root, ".hidden.snapshot")))
+    assert(mig_present(mig_at(root, "s1.snapshot.tmp")))
+    assert(mig_present(mig_at(root, "s1.images")))
+    assert(mig_present(mig_at(root, "readme.journal.bak")))
+    assert(!mig_present(mig_at(root, "s1")))
+}
+
+test "migrate: a data folder that does not exist has nothing to move" {
+    ro root = mig_root("none")
+    with Fs = real_fs() {
+        ro removed = remove_dir_all(Path.from_bytes(root.bytes()))
+    }
+    ro done = migrate_flat_sessions(root)
+    assert(done.sessions == 0)
+    assert(done.moved == 0)
+}
+
+test "migrate: the session of the folder form next to the flat one is left alone" {
+    ro root = mig_root("mixed")
+    mig_old_session(root, "old-1")
+    with Fs = real_fs() {
+        ro made = create_dir_all(mig_at(root, "new-2"))
+    }
+    mig_put(root, "new-2/snapshot", "snap-new")
+    ro done = migrate_flat_sessions(root)
+    assert(done.sessions == 1)
+    assert(mig_text(root, "new-2/snapshot") == "snap-new")
+    ro found = list_sessions(root)
+    assert(found.len() == 2)
+}

@@ -43,7 +43,7 @@ have a short name; to measure: start the test binary kept by `--keep-artifacts` 
 | `project.nv` | the projection: `project_update`, `project_permission`, `progress_event`, `stop_event`, `refused_event`, `tool_kind`, `rpc_key` (ACP -> engine) and `page_event` (engine -> page) |
 | `link.nv` | `connect`: the keeper fiber, the child process and the fibers around it (stdout reader, stderr reader, stdin writer, watcher of the process), `AgentLink` (three channels) |
 | `client.nv` | `AcpConfig`, `AcpClient` (the handshake, the queue of prompts, permissions, the inbox with acknowledgement), `open_client`, `acp_link` (the handler of `Link`), `decide`, `decide_event`, `close` |
-| `trace.nv` | the raw record of the exchange (task 192c): `AcpTrace`, `trace_open`, `record`; `open_client_traced(config, path, limit)` writes every JSON-RPC line, both ways, to `<session>.acp.jsonl` (`{"t", "dir": "out"/"in", "line"}`); nothing is cut out, so the file holds the full talk and the output of the tools |
+| `trace.nv` | the raw record of the exchange (task 192c): `AcpTrace`, `trace_open`, `record`; `open_client_traced(config, path, limit)` writes every JSON-RPC line, both ways, to `<session>/acp.jsonl` (`{"t", "dir": "out"/"in", "line"}`); nothing is cut out, so the file holds the full talk and the output of the tools |
 | `testdata/fake_agent.mjs` | the fake ACP agent (Node): the scenarios are chosen by the first word of the prompt |
 | `*_test.nv` | 53 checks: `jsonrpc_test` (18), `project_test` (35) |
 | `../acp_live/*_test.nv` | 39 checks, the unit `crew_harness.acp_live` (it imports `crew_harness.acp`): `client_test` (28, the handler over the fake agent), `ack_test` (4), `e2e_test` (6, engine + chat + files + ACP), `real_agent_test` (1, runs for real only with `CREW_REAL_ACP=1`) |
@@ -143,7 +143,7 @@ The claim of task 091 ("an event taken by `Link.receive` and not yet committed i
 acknowledgement, in three parts:
 
 1. **A key and a file.** Every event the client makes gets a source key `acp-<n>` in `Incoming.id`; the numbers never go back. With
-   an inbox file (`AcpConfig.inbox_path`, `<data folder>/<session>.inbox`) the event is appended to the file BEFORE it is handed out.
+   an inbox file (`AcpConfig.inbox_path`, `<data folder>/<session>/inbox`) the event is appended to the file BEFORE it is handed out.
 2. **`receive` hands out, `ack` forgets.** A handed-out event is "taken", not confirmed. The engine accepts the event (journal
    lines, then the snapshot - the commit) and only then calls `Link.ack(key)` (the fourth operation of the effect `Link`).
    The key is also written to the journal event of the step (`event_accepted`, the parameter `source`). The client writes

@@ -3,7 +3,7 @@
 // The file is a JSON object; every key is optional (see `src/server/server.example.json`):
 //   port, data_dir, store ("files" or "pg"), pg {host, port, database, user, password}, agents [{id, label, program, args}],
 //   idle_term_seconds, workdir, web_dir, hub {program, args}, acp_trace (true by default: the raw exchange with the agent is written to
-//   <data_dir>/<session>.acp.jsonl), stt {url, language} (the local whisper server the front sends the voice to: `/api/stt`)
+//   <data_dir>/<session>/acp.jsonl), stt {url, language} (the local whisper server the front sends the voice to: `/api/stt`)
 // The environment is over the file, key by key:
 //   CREW_SERVER_PORT, CREW_SERVER_STORE, CREW_SERVER_DATA_DIR, CREW_SERVER_AGENT (the command of the one agent "opencode",
 //   words separated by spaces), CREW_SERVER_WORKDIR, CREW_SERVER_WEB_DIR, CREW_SERVER_ACP_TRACE (true/false), CREW_SERVER_STT_URL, CREW_SERVER_STT_LANGUAGE, CREW_SERVER_IDLE_SECONDS, CREW_SERVER_HUB (the command
