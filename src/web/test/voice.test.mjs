@@ -98,3 +98,56 @@ test('язык может быть функцией: берётся в моме�
   d.start();
   assert.equal(FakeRec.last.lang, 'de-DE');
 });
+
+// ---- кнопка-микрофон: подсказки по состояниям, таймер, клик и удержание (задача 192) ----
+import { micTitleKey, clockText, createMicPress, HOLD_MS } from '../voice.js';
+import { t } from '../strings.js';
+
+test('подсказка кнопки по состояниям: покой — «нажмите, чтобы начать», запись — «нажмите, чтобы остановить», распознавание', () => {
+  assert.equal(t(micTitleKey('idle')), 'Нажмите, чтобы начать запись');
+  assert.equal(t(micTitleKey('unavailable')), 'Нажмите, чтобы начать запись');
+  assert.equal(t(micTitleKey('recording')), 'Идёт запись… нажмите, чтобы остановить');
+  assert.equal(t(micTitleKey('processing')), 'Распознаю…');
+});
+
+test('таймер записи: секунды как м:сс', () => {
+  assert.equal(clockText(0), '0:00');
+  assert.equal(clockText(7.9), '0:07');
+  assert.equal(clockText(65), '1:05');
+  assert.equal(clockText(-3), '0:00');
+});
+
+function fakeDictation() {
+  const d = { on: false, starts: 0, stops: 0, active: () => d.on, start() { d.on = true; d.starts += 1; }, stop() { d.on = false; d.stops += 1; }, toggle() { if (d.on) d.stop(); else d.start(); } };
+  return d;
+}
+
+test('клик — переключатель: короткое нажатие стартует и при отпускании НЕ останавливает, следующий клик останавливает', () => {
+  const d = fakeDictation();
+  let clock = 0;
+  const press = createMicPress({ dictation: d, now: () => clock });
+  press.down(); clock += 120; press.up();
+  assert.deepEqual([d.on, d.starts, d.stops], [true, 1, 0]);
+  clock += 3000; press.down(); clock += 80; press.up();
+  assert.deepEqual([d.on, d.starts, d.stops], [false, 1, 1]);
+});
+
+test('удержание дольше порога — «рация»: отпустил — стоп; после остановки по клику отпускание ничего не меняет', () => {
+  const d = fakeDictation();
+  let clock = 0;
+  const press = createMicPress({ dictation: d, now: () => clock });
+  press.down(); clock += HOLD_MS + 50; press.up();
+  assert.deepEqual([d.on, d.stops], [false, 1]);
+  // второй нажим останавливает активную запись; отпускание после долгого нажатия повторно не стопит
+  d.start(); press.down(); clock += 2000; press.up();
+  assert.deepEqual([d.on, d.stops], [false, 2]);
+});
+
+test('Пробел и Enter на кнопке (click без указателя) — тот же переключатель', () => {
+  const d = fakeDictation();
+  const press = createMicPress({ dictation: d, now: () => 0 });
+  press.key();
+  assert.equal(d.on, true);
+  press.key();
+  assert.equal(d.on, false);
+});

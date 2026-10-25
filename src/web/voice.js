@@ -40,6 +40,7 @@ export function createDictation({ Ctor, field, lang = 'ru-RU', onChange = () => 
   let after = '';
   let finalText = '';
   let failed = false;
+  let cancelled = false;
 
   const compose = (interim) => {
     const spoken = `${finalText}${interim}`;
@@ -61,6 +62,7 @@ export function createDictation({ Ctor, field, lang = 'ru-RU', onChange = () => 
     after = value.slice(to);
     finalText = '';
     failed = false;
+    cancelled = false;
     let r;
     try {
       r = new Ctor();
@@ -72,6 +74,7 @@ export function createDictation({ Ctor, field, lang = 'ru-RU', onChange = () => 
     r.interimResults = true;
     r.continuous = true;
     r.onresult = (event) => {
+      if (cancelled) return;
       // results накапливает весь сеанс записи: итог и черновик пересобираются целиком, а не дописываются
       let interim = '';
       finalText = '';
@@ -107,10 +110,60 @@ export function createDictation({ Ctor, field, lang = 'ru-RU', onChange = () => 
     if (rec) rec.stop();
   }
 
+  // Esc: запись прекращается, сказанное в поле не остаётся
+  function cancel() {
+    if (!rec) return;
+    cancelled = true;
+    field.value = `${before}${after}`;
+    if (typeof field.setSelectionRange === 'function') field.setSelectionRange(before.length, before.length);
+    onChange();
+    if (typeof rec.abort === 'function') rec.abort(); else rec.stop();
+  }
+
   return {
     start,
     stop,
+    cancel,
     toggle() { if (rec) stop(); else start(); },
     active() { return rec !== null; },
+  };
+}
+
+// ---- кнопка-микрофон: одно правило (задача 192) ----
+// КЛИК — переключатель: первый начинает запись, следующий останавливает. Удержание дольше HOLD_MS — «рация»: отпустил — стоп.
+// Короткое нажатие при отпускании запись НЕ останавливает. Пробел/Enter на кнопке (click без указателя) — тот же переключатель.
+export const HOLD_MS = 400;
+
+/** Ключ строки подсказки кнопки по состоянию: покой, запись или распознавание. */
+export function micTitleKey(state) {
+  if (state === 'recording') return 'voice.recording';
+  if (state === 'processing') return 'voice.processing';
+  return 'voice.start';
+}
+
+/** Секунды записи как «0:07». */
+export function clockText(seconds) {
+  const s = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/** Нажатия на кнопку: dictation — { active(), start(), stop(), toggle() }, now() — часы в мс. */
+export function createMicPress({ dictation, now, holdMs = HOLD_MS, onStart = () => {} }) {
+  let pressedAt = 0;
+  let pressing = false;
+  let ignoreUp = false;
+  return {
+    down() {
+      pressedAt = now();
+      pressing = true;
+      if (dictation.active()) { dictation.stop(); ignoreUp = true; } else { ignoreUp = false; dictation.start(); onStart(); }
+    },
+    up() {
+      if (!pressing) return;
+      pressing = false;
+      if (!ignoreUp && dictation.active() && now() - pressedAt >= holdMs) dictation.stop();
+    },
+    // click без указателя (Пробел, Enter): detail === 0
+    key() { dictation.toggle(); },
   };
 }

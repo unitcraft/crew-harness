@@ -36,6 +36,7 @@ export function createLocalDictation({
   let from = 0;
   let to = 0;
   let limitHit = false;
+  let cancelAsked = false;
 
   async function openCapture() {
     if (!mediaDevices || typeof mediaDevices.getUserMedia !== 'function' || !AudioCtx) {
@@ -123,6 +124,7 @@ export function createLocalDictation({
       onStatus({ state: 'error', reason: micReason(e) });
       return;
     }
+    if (cancelAsked) { session.close(); session = null; phase = 'idle'; onStatus({ state: 'idle' }); return; }
     if (stopAsked) { await finish(); return; }
     phase = 'recording';
     timer = timers.setTimeout(() => { limitHit = true; stop(); }, MAX_RECORD_SECONDS * 1000);
@@ -132,6 +134,7 @@ export function createLocalDictation({
     if (phase !== 'idle') return false;
     phase = 'starting';
     stopAsked = false;
+    cancelAsked = false;
     limitHit = false;
     startValue = String(field.value ?? '');
     from = Number.isInteger(field.selectionStart) ? field.selectionStart : startValue.length;
@@ -146,9 +149,21 @@ export function createLocalDictation({
     else if (phase === 'recording') finish();
   }
 
+  // Esc: запись выбрасывается, на распознавание не уходит, в поле ничего не попадает
+  function cancel() {
+    if (phase === 'starting') { cancelAsked = true; return; }
+    if (phase !== 'recording') return;
+    if (timer !== null) { timers.clearTimeout(timer); timer = null; }
+    session.close();
+    session = null;
+    phase = 'idle';
+    onStatus({ state: 'idle' });
+  }
+
   return {
     start,
     stop,
+    cancel,
     toggle() { if (phase === 'starting' || phase === 'recording') stop(); else if (phase === 'idle') start(); },
     active() { return phase === 'starting' || phase === 'recording'; },
     busy() { return phase !== 'idle'; },

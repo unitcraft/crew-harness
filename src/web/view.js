@@ -10,7 +10,8 @@
 //     ставится свойством --fill / --ring через CSSOM, а не атрибутом style (его запрещает CSP).
 
 import { t } from './strings.js';
-import { createDictation, speechCtor } from './voice.js';
+import { BARS, barHeights, createMeter, recordingView } from './meter.js';
+import { createDictation, speechCtor, createMicPress, micTitleKey, clockText } from './voice.js';
 import { createLocalDictation } from './recorder.js';
 import { createToast } from './toast.js';
 import { LANGS, createVoiceSettings, langFor, pageLang } from './stt.js';
@@ -247,13 +248,16 @@ export function createView(doc, refs, deps) {
     id: 'composer-input', rows: 1, placeholder: t('composer.placeholder'), 'aria-label': t('chat.input_label'),
   });
   // Кнопки круглые, без видимого текста: имя — для чтения с экрана, подсказка о клавишах — в title (задача 192).
-  const micButton = h(doc, 'button', { type: 'button', class: 'mic-btn', title: t('voice.hold'), 'aria-label': t('voice.label'), 'data-state': 'idle' }, icon(doc, 'i-mic'));
+  const micButton = h(doc, 'button', { type: 'button', class: 'mic-btn', title: t('voice.start'), 'aria-label': `${t('voice.label')}: ${t('voice.start')}`, 'data-state': 'idle' }, icon(doc, 'i-mic'));
+  const wave = h(doc, 'div', { class: 'wave', 'aria-hidden': 'true', hidden: true }, ...Array.from({ length: BARS }, () => h(doc, 'i')));
+  const enterButton = h(doc, 'button', { type: 'button', class: 'enter-btn', hidden: true, title: t('voice.stop_insert'), 'aria-label': t('voice.stop_insert') }, icon(doc, 'i-return'));
+  const micTimer = h(doc, 'span', { class: 'mic-timer', 'aria-hidden': 'true', hidden: true });
   // стрелка рядом с микрофоном открывает меню: провайдер распознавания, язык, микрофон
   const micMore = h(doc, 'button', { type: 'button', class: 'mic-more', title: t('voice.menu'), 'aria-label': t('voice.menu'), 'aria-haspopup': 'menu', 'aria-expanded': 'false' }, icon(doc, 'i-chevron-down'));
   const voiceMenu = h(doc, 'div', { class: 'menu voice-menu', role: 'menu', 'data-side': 'right', hidden: true });
   const voiceList = h(doc, 'div', { class: 'menu-list' });
   voiceMenu.append(voiceList);
-  const micWrap = h(doc, 'div', { class: 'mic-wrap' }, micButton, micMore, voiceMenu);
+  const micWrap = h(doc, 'div', { class: 'mic-wrap' }, micButton, micTimer, micMore, voiceMenu);
   // Ошибки голоса — красная плашка над полем: position absolute, место в потоке не занимает, макет не прыгает
   const voiceToastText = h(doc, 'span', { class: 'voice-toast-text' });
   const voiceToastClose = h(doc, 'button', { type: 'button', class: 'voice-toast-close', title: t('voice.dismiss'), 'aria-label': t('voice.dismiss') }, icon(doc, 'i-x'));
@@ -265,11 +269,11 @@ export function createView(doc, refs, deps) {
   });
   voiceHint.addEventListener('click', () => voiceToast.hide());
   const cancelButton = h(doc, 'button', { type: 'button', class: 'cancel-btn', hidden: true, title: t('chat.cancel'), 'aria-label': t('chat.cancel') }, icon(doc, 'i-stop'), h(doc, 'span', { class: 'sr-only', text: t('chat.cancel') }));
-  const sendButton = h(doc, 'button', { type: 'button', class: 'send-btn', title: t('composer.hint'), disabled: true }, icon(doc, 'i-send'), h(doc, 'span', { class: 'sr-only', text: t('chat.send') }));
+  const sendButton = h(doc, 'button', { type: 'button', class: 'send-btn', title: t('composer.hint'), disabled: true }, icon(doc, 'i-return'), h(doc, 'span', { class: 'sr-only', text: t('chat.send') }));
   // счётчик очереди — над полем, position absolute: его появление не меняет высоту
   const queueButton = h(doc, 'button', { type: 'button', class: 'queue-count', hidden: true, title: t('composer.queued_hint') });
   const box = h(doc, 'div', { class: 'box' }, input,
-    h(doc, 'div', { class: 'box-row' }, micWrap, cancelButton, sendButton));
+    wave, h(doc, 'div', { class: 'box-row' }, cancelButton, sendButton, enterButton, micWrap));
   // счётчик очереди «на потом» (Ctrl+Enter при работающем агенте); клик убирает последнее сообщение
 
   const ringFill = svgNode(doc, 'circle', { class: 'ring-fill', cx: 12, cy: 12, r: 9, pathLength: 100 });
@@ -280,10 +284,6 @@ export function createView(doc, refs, deps) {
 
   // строка статуса под полем: слева режим (когда агент его сообщает), справа модель и спиннер хода
   // Голосовой ввод (задача 192): нажать и держать — пишет, отпустить — стоп; короткое нажатие и Пробел/Enter — переключатель.
-  const HOLD_MS = 400;
-  let pressedAt = 0;
-  let pressing = false;
-  let ignoreUp = false;
   let storage = null;
   try { storage = win && win.localStorage ? win.localStorage : null; } catch { storage = null; }
   const page = pageLang(doc);
@@ -294,10 +294,49 @@ export function createView(doc, refs, deps) {
     page,
   });
   const voiceChange = () => { fitInput(); if (currentTrace) drafts.set(currentTrace, input.value); };
+  // Запись: «Слушаю…» вместо подсказки, дорожка уровня, «↵» вместо отправки (задача 192)
+  const waveBars = [...wave.children];
+  const paintWave = (levels) => { const px = barHeights(levels, 3, 22); waveBars.forEach((bar, i) => { bar.style.height = `${px[i]}px`; }); };
+  const meter = createMeter({
+    mediaDevices: win && win.navigator ? win.navigator.mediaDevices : undefined,
+    AudioCtx: win ? (win.AudioContext || win.webkitAudioContext) : undefined,
+    getMic: () => voiceSettings.state.mic,
+    onLevels: paintWave,
+  });
+  function paintRecording(state) {
+    const v = recordingView(state);
+    input.placeholder = t(v.placeholderKey);
+    box.classList.toggle('recording', v.showWave);
+    wave.hidden = !v.showWave;
+    enterButton.hidden = !v.showEnter;
+    sendButton.hidden = v.hideSend;
+    if (v.showWave) meter.start(); else meter.stop();
+  }
+  // Таймер записи «0:07» рядом с кнопкой, пока идёт запись
+  let micClock = null;
+  let micStartedAt = 0;
+  const paintMicTimer = () => { micTimer.textContent = clockText((now() - micStartedAt) / 1000); };
+  function setMicTimer(on) {
+    if (on && micClock === null) {
+      micStartedAt = now();
+      paintMicTimer();
+      micTimer.hidden = false;
+      micClock = setInterval(paintMicTimer, 500);
+    } else if (!on && micClock !== null) {
+      clearInterval(micClock);
+      micClock = null;
+      micTimer.hidden = true;
+      micTimer.textContent = '';
+    }
+  }
   // Состояние кнопки и подсказка под полем: «недоступно» (серая: браузер без распознавания) и «ошибка» (можно повторить)
   const voiceStatus = (s) => {
     micButton.dataset.state = s.state;
-    micButton.title = s.state === 'processing' ? t('voice.processing') : t('voice.hold');
+    const hint = t(micTitleKey(s.state));
+    micButton.title = hint;
+    micButton.setAttribute('aria-label', `${t('voice.label')}: ${hint}`);
+    setMicTimer(s.state === 'recording');
+    paintRecording(s.state);
     if (s.state === 'unavailable') voiceToast.show(t('voice.unavailable', { reason: s.reason }));
     else if (s.state === 'error') voiceToast.show(t('voice.failed', { reason: s.reason }));
     else if (s.state === 'processing' && s.reason) voiceToast.show(t('voice.processing_note', { note: s.reason }));
@@ -326,6 +365,7 @@ export function createView(doc, refs, deps) {
   const dictation = {
     start() { currentDictation = voiceSettings.provider() === 'local' ? localDictation : browserDictation; return currentDictation.start(); },
     stop() { currentDictation.stop(); },
+    cancel() { if (currentDictation.cancel) currentDictation.cancel(); },
     toggle() { if (currentDictation.active()) currentDictation.stop(); else this.start(); },
     active() { return browserDictation.active() || localDictation.active(); },
   };
@@ -398,22 +438,18 @@ export function createView(doc, refs, deps) {
   });
   doc.addEventListener('click', (e) => { if (!voiceMenu.hidden && !e.composedPath().includes(micWrap)) closeVoiceMenu(); });
   doc.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !voiceMenu.hidden) closeVoiceMenu(); });
+  const micPress = createMicPress({ dictation, now, onStart: () => { voiceSettings.refreshStatus().then(syncMicIdle); } });
   micButton.addEventListener('pointerdown', (e) => {
     if (e.button !== undefined && e.button !== 0) return;
     e.preventDefault();
-    pressedAt = now();
-    pressing = true;
-    if (dictation.active()) { dictation.stop(); ignoreUp = true; } else { ignoreUp = false; dictation.start(); voiceSettings.refreshStatus().then(syncMicIdle); }
+    micPress.down();
   });
-  const releaseMic = () => {
-    if (!pressing) return;
-    pressing = false;
-    if (!ignoreUp && dictation.active() && now() - pressedAt >= HOLD_MS) dictation.stop();
-  };
-  micButton.addEventListener('pointerup', releaseMic);
-  micButton.addEventListener('pointercancel', releaseMic);
-  micButton.addEventListener('pointerleave', releaseMic);
-  micButton.addEventListener('click', (e) => { if (e.detail === 0) dictation.toggle(); });
+  enterButton.addEventListener('click', () => dictation.stop());
+  doc.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dictation.active()) { e.preventDefault(); dictation.cancel(); } });
+  micButton.addEventListener('pointerup', () => micPress.up());
+  micButton.addEventListener('pointercancel', () => micPress.up());
+  micButton.addEventListener('pointerleave', () => micPress.up());
+  micButton.addEventListener('click', (e) => { if (e.detail === 0) micPress.key(); });
 
   const statusModel = h(doc, 'span', { class: 'status-model' });
   const familyButton = h(doc, 'button', { type: 'button', class: 'status-btn', hidden: true, title: t('status.agent'), 'aria-label': t('status.agent'), 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
