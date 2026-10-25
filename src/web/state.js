@@ -15,6 +15,7 @@
 
 // Чистые функции списка, ленты и подписей живут в lists.js; снаружи всё берётся отсюда.
 export * from './lists.js';
+import { imageUrl } from './attachments.js';
 
 export const KINDS = Object.freeze([
   'session_created', 'user_message', 'agent_chunk', 'agent_done', 'agent_refused',
@@ -23,6 +24,8 @@ export const KINDS = Object.freeze([
   'usage_update', 'tool_call', 'tool_call_update', 'output_file', 'file_diff',
   'background_task', 'background_task_update',
   'session_model', 'agent_switched',
+  // задача 192: картинки сообщения и «агент не принимает изображения»
+  'message_images', 'images_skipped',
 ]);
 
 export const TOOL_KINDS = Object.freeze(['read', 'edit', 'delete', 'move', 'search', 'execute', 'think', 'fetch', 'other']);
@@ -100,6 +103,17 @@ export function optionsOf(input) {
 
 export const NO_OPTIONS = Object.freeze(optionsOf({}));
 
+/**
+ * Картинки сообщения из события message_images: [{ n, name, mime, bytes, src }]. src — адрес на сервере; байтов в событии нет.
+ * Чужое (не объект, нет номера) отбрасывается.
+ */
+export function imageList(trace, v) {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((i) => isObject(i) && Number.isInteger(i.n) && i.n >= 1)
+    .map((i) => ({ n: i.n, name: str(i.name, 'image'), mime: str(i.mime), bytes: count(i.bytes), src: imageUrl(trace, i.n) }));
+}
+
 const userKey = (turn) => `u:${turn}`;
 const agentKey = (turn) => `a:${turn}`;
 const permKey = (request) => `p:${request}`;
@@ -159,12 +173,22 @@ function apply(session, event) {
         messages: [...session.messages, { role: 'switch', key, from: str(input.from), to: str(input.to), shown, total, cut: input.cut === 1 }],
       };
     }
+    case 'message_images': {
+      // журнал кладёт запись о картинках прямо перед сообщением, к которому они относятся
+      return { ...session, pendingImages: imageList(session.id, input.images) };
+    }
+    case 'images_skipped': {
+      const key = `sk:${event.id}`;
+      if (session.messages.some((m) => m.key === key)) return session;
+      return { ...session, messages: [...session.messages, { role: 'skipped', key, agent: session.agent, count: count(input.count) }] };
+    }
     case 'user_message': {
       const userTurn = str(input.turn, event.id);
-      const user = { key: userKey(userTurn), role: 'user', turn: userTurn, text: str(input.text) };
+      const user = { key: userKey(userTurn), role: 'user', turn: userTurn, text: str(input.text), images: session.pendingImages ?? [] };
       if (session.messages.some((m) => m.key === user.key)) return session;
       return {
         ...session,
+        pendingImages: [],
         state: 'answering',
         pending: null,
         turnStartedAt: event.time,
@@ -366,6 +390,7 @@ export function reduce(model, event) {
       lastStep: event.step,
       messages: [],
       pending: null,
+      pendingImages: [],
       project: str(event.input.project),
       folder: str(event.input.folder),
       branch: str(event.input.branch),

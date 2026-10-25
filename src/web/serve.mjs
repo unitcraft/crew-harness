@@ -15,6 +15,7 @@ const TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.svg': 'image/svg+xml',
+  '.png': 'image/png',
 };
 
 const server = http.createServer((req, res) => {
@@ -31,7 +32,7 @@ const server = http.createServer((req, res) => {
   // Тот же запрет встроенного кода, что и у сервиса: страница, пустая здесь, пуста и там.
   res.writeHead(200, {
     'content-type': type,
-    'content-security-policy': "default-src 'self'; connect-src 'self' ws://localhost:* ws://127.0.0.1:*",
+    'content-security-policy': "default-src 'self'; img-src 'self' blob:; connect-src 'self' ws://localhost:* ws://127.0.0.1:*",
     'cache-control': 'no-store',
   });
   fs.createReadStream(file).pipe(res);

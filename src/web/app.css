@@ -870,3 +870,29 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
 
 /* Подсказки кнопок карточки: тёмные, с белым текстом (data-tip), над кнопкой и у правого края (задача 192) */
 .box-row [data-tip]:hover::after, .box-row [data-tip]:focus-visible::after { content: attr(data-tip); position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 40; width: max-content; max-width: 280px; padding: 6px 10px; border-radius: 8px; background: var(--tip-bg); color: var(--tip-fg); font-size: 12px; font-weight: 400; line-height: 1.35; white-space: normal; text-align: left; pointer-events: none; }
+
+/* ---- картинки в сообщении (задача 192) ---- */
+/* Полоска превью — первой строкой карточки: карточка переносит строки, полоска занимает всю первую. */
+.box { flex-wrap: wrap; }
+.plus-btn { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 32px; height: 32px; min-height: 32px; margin-left: -4px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--fg-muted); }
+.plus-btn:hover { background: var(--hover); color: var(--fg); }
+.plus-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+.plus-btn .icon { width: 20px; height: 20px; }
+.attach-row { display: flex; flex: 0 0 100%; flex-wrap: wrap; gap: 8px; margin: 0; padding: 4px 12px 6px 0; }
+.attach-row[hidden] { display: none; }
+.attach { position: relative; flex: none; width: 64px; height: 64px; }
+.attach-img { display: block; width: 64px; height: 64px; object-fit: cover; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+.attach-x { position: absolute; top: -6px; right: -6px; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; min-height: 20px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--surface); color: var(--fg); box-shadow: var(--shadow-soft); cursor: pointer; }
+.attach-x:hover:not(:disabled) { background: var(--hover); }
+.attach-x .icon { width: 12px; height: 12px; }
+.box[data-drop="on"] { outline: 2px dashed var(--accent); outline-offset: 1px; background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
+.thumbs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+.bubble .thumbs:last-child { margin-bottom: 0; }
+.thumb { flex: none; width: 88px; height: 88px; min-height: 88px; padding: 0; border: 0; border-radius: 10px; background: transparent; cursor: zoom-in; overflow: hidden; }
+.thumb-img { display: block; width: 88px; height: 88px; object-fit: cover; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.lightbox { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: var(--scrim); cursor: zoom-out; }
+.lightbox[hidden] { display: none; }
+.lightbox-img { max-width: min(92vw, 1400px); max-height: 90vh; border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow); }
+.lightbox-close { position: absolute; top: 16px; right: 16px; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; min-height: 36px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--surface); color: var(--fg); box-shadow: var(--shadow-soft); cursor: pointer; }
+.lightbox-close .icon { width: 18px; height: 18px; }
+.item-skipped { font-size: 14px; color: var(--fg-muted); }

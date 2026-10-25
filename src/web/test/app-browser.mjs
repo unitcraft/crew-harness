@@ -27,7 +27,7 @@ const server = http.createServer((req, res) => {
   if (!file.startsWith(web + path.sep) || !fs.existsSync(file)) { res.writeHead(404).end(); return; }
   res.writeHead(200, {
     'content-type': name.endsWith('.js') ? 'text/javascript; charset=utf-8' : name.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/html; charset=utf-8',
-    'content-security-policy': "default-src 'self'; connect-src 'self' ws://127.0.0.1:*",
+    'content-security-policy': "default-src 'self'; img-src 'self' blob:; connect-src 'self' ws://127.0.0.1:*",
   });
   res.end(name === 'app.js' && red ? fs.readFileSync(baselinePath) : fs.readFileSync(file));
 });

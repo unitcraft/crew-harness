@@ -11,6 +11,7 @@ import {
 import { t } from './strings.js';
 import { createView } from './view.js';
 import { createQueue } from './queue.js';
+import { uploadImages, messageInput } from './attachments.js';
 import { chooseMode, createTransport, parseAgentRegistry } from './transport.js';
 
 const FLASH_MS = 4000;
@@ -103,6 +104,20 @@ function drain() {
   }
 }
 
+// Картинка сообщения уходит на сервер сырыми байтами (не через WebSocket: тот несёт строки, а мегабайт текстом хаб читал бы десятки секунд).
+async function postImage(trace, item) {
+  const response = await fetch(`/api/session-image/${encodeURIComponent(trace)}`, {
+    method: 'POST', headers: { 'Content-Type': item.type }, body: item.blob, cache: 'no-store',
+  });
+  if (!response.ok) {
+    let reason = `${response.status}`;
+    try { reason = (await response.json()).error || reason; } catch { /* тело не JSON: остаётся код */ }
+    throw new Error(reason);
+  }
+  const data = await response.json();
+  return { n: data.n };
+}
+
 const handlers = {
   queued(trace) { return queue.count(trace); },
   onQueue(trace, text) {
@@ -138,8 +153,16 @@ const handlers = {
       render();
     }
   },
-  onSend(trace, text) {
-    return send('user_message', trace, nextStep(model, trace), { turn: newId(), text });
+  // Без картинок — как раньше, сразу. С картинками — сначала они на сервер по очереди, потом сообщение с их номерами.
+  onSend(trace, text, images = []) {
+    if (images.length === 0) return send('user_message', trace, nextStep(model, trace), { turn: newId(), text });
+    return uploadImages(trace, images, postImage).then((up) => {
+      if (!up.ok) {
+        flash(t('images.upload_failed', { name: up.name, reason: up.error }));
+        return false;
+      }
+      return send('user_message', trace, nextStep(model, trace), messageInput(newId(), text, up.images));
+    });
   },
   onCancel(trace) {
     const session = model.sessions[trace];
@@ -191,7 +214,7 @@ async function start() {
     app: document.getElementById('app'), side: document.getElementById('side'),
     main: document.getElementById('main'), rail: document.getElementById('rail'),
     status: document.getElementById('status'), overlay: document.getElementById('overlay'),
-  }, { agents, now: ctx.now, handlers, registryFailed });
+  }, { agents, now: ctx.now, handlers, registryFailed, imageSrc: mock ? mock.mockImageSrc : undefined });
   setInterval(() => view.tick(), TICK_MS);
   transport = createTransport({
     mode: picked.mode, url: picked.url,

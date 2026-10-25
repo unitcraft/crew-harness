@@ -79,6 +79,16 @@ function buildJournal() {
   }
   add(s1, 'usage_update', { used: 76_000, size: CTX }, BASE + MIN + 4800);
   add(s1, 'agent_done', { turn: 't1' }, BASE + MIN + 5000);
+  // второе сообщение с приложенными картинками: запись о них стоит прямо перед сообщением (так её кладёт сервер)
+  add(s1, 'message_images', {
+    images: [
+      { n: 1, name: 'image.png', mime: 'image/png', bytes: 2048 },
+      { n: 2, name: 'image-2.png', mime: 'image/png', bytes: 2048 },
+    ],
+  }, BASE + 2 * MIN);
+  add(s1, 'user_message', { turn: 't2', text: 'Вот два скриншота красного прогона. Что на них?' }, BASE + 2 * MIN + 100);
+  add(s1, 'agent_chunk', { turn: 't2', text: 'На обоих одно и то же падение: тест ждёт порядок прибытия кусков.' }, BASE + 2 * MIN + 600);
+  add(s1, 'agent_done', { turn: 't2' }, BASE + 2 * MIN + 900);
 
   // 2. отказ агента после запроса разрешения
   const s2 = 'ses-demo-2';
@@ -225,8 +235,14 @@ export function createMockServer({ journal, now = Date.now } = {}) {
 
   function handle(event) {
     note(event);
-    const entries = [{ delay: 0, event }];
+    const entries = [];
     const { trace, input } = event;
+    // сообщение с картинками: сервер сначала кладёт в журнал запись о них, потом само сообщение
+    if (event.kind === 'user_message' && Array.isArray(input.images) && input.images.length > 0) {
+      const images = input.images.map((i) => ({ n: i.n, name: String(i.name), mime: 'image/png', bytes: 2048 }));
+      mint(entries, trace, 0, 'message_images', { images });
+    }
+    entries.push({ delay: 0, event });
 
     if (event.kind === 'user_message') {
       const turn = typeof input.turn === 'string' ? input.turn : event.id;
@@ -285,10 +301,20 @@ export const MOCK_STT_TEXT = 'пример распознанного текст
 /** fetch, который сам отвечает на /api/stt и /api/stt/status, а всё остальное отдаёт настоящему fetch. */
 export function mockFetch(real) {
   const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  const numbers = {};
   return async (url, init) => {
     const path = String(url).split('?')[0];
+    // загрузка картинки сообщения (задача 192): сервера нет, номер выдаёт заглушка
+    const upload = /^\/api\/session-image\/([^/]+)$/.exec(path);
+    if (upload && init && init.method === 'POST') {
+      numbers[upload[1]] = (numbers[upload[1]] ?? 0) + 1;
+      return json({ n: numbers[upload[1]], bytes: init.body && init.body.size ? init.body.size : 0 });
+    }
     if (path === '/api/stt/status') return json({ available: true, provider: 'local', model: 'small' });
     if (path === '/api/stt') return json({ text: MOCK_STT_TEXT });
     return real(url, init);
   };
 }
+
+/** Адрес картинки в режиме ?mock=1: сервера нет, у всех одна заготовленная картинка рядом со страницей. */
+export const mockImageSrc = () => 'mock-image.png';
