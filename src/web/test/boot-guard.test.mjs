@@ -89,3 +89,39 @@ test('сохранённая тема неверной формы читаетс
   for (const bad of [null, undefined, '', '{"a":1}', 42, 'purple', {}, []]) assert.equal(normalizeTheme(bad), 'system');
   assert.equal(normalizeTheme('dark'), 'dark');
 });
+
+function memoryStorage() {
+  const data = {};
+  return {
+    data,
+    get length() { return Object.keys(data).length; },
+    key: (i) => Object.keys(data)[i],
+    getItem: (k) => (k in data ? data[k] : null),
+    setItem: (k, v) => { data[k] = String(v); },
+    removeItem: (k) => { delete data[k]; },
+  };
+}
+
+test('не загрузился скрипт страницы (503): один автоповтор через секунду, второй раз — блок, без цикла', () => {
+  const storage = memoryStorage();
+  const first = boot({ storage });
+  first.handlers.error({ target: { tagName: 'SCRIPT', src: 'http://127.0.0.1:8100/app.js' } });
+  assert.equal(first.body.children.length, 0);
+  const reload = first.timers.find((x) => x.ms === 1000);
+  assert.ok(reload, 'повтор поставлен на секунду');
+  reload.fn();
+  assert.equal(first.reloads.length, 1);
+  assert.equal(storage.data['crew-boot-retry'], '1');
+  const second = boot({ storage });
+  second.handlers.error({ target: { tagName: 'SCRIPT', src: 'http://127.0.0.1:8100/app.js' } });
+  assert.match(textOf(second.body.children[0]), /не загрузился http:\/\/127.0.0.1:8100\/app.js/);
+  assert.equal(second.reloads.length, 0);
+});
+
+test('не загрузилась картинка или стили — не ошибка запуска; обычное исключение — блок', () => {
+  const a = boot({ storage: memoryStorage() });
+  a.handlers.error({ target: { tagName: 'IMG', src: 'x.png' } });
+  assert.equal(a.body.children.length, 0);
+  a.handlers.error({ target: a.win, message: 'boom' });
+  assert.match(textOf(a.body.children[0]), /boom/);
+});

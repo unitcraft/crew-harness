@@ -6,6 +6,8 @@
 (function crewBootGuard(global) {
   var BOOT_WAIT_MS = 5000;
   var OUR_KEY = /^crew-/;
+  var RETRY_KEY = 'crew-boot-retry';
+  var RETRY_MS = 1000;
   var shown = false;
 
   function clearOurStorage() {
@@ -55,9 +57,24 @@
 
   global.__crewBootError = show;
   global.__crewClearOurStorage = clearOurStorage;
+  // Не загрузился скрипт страницы (сеть, 503): один раз перезагрузить через секунду; счётчик в sessionStorage, чтобы не зациклиться.
+  function retryOrShow(src) {
+    var store;
+    try { store = global.sessionStorage; } catch (e) { store = null; }
+    var tried = false;
+    try { tried = !!(store && store.getItem(RETRY_KEY)); } catch (e) { tried = false; }
+    if (tried || !store) { show('не загрузился ' + (src || 'скрипт страницы')); return; }
+    try { store.setItem(RETRY_KEY, '1'); } catch (e) { show('не загрузился ' + (src || 'скрипт страницы')); return; }
+    global.setTimeout(function () { global.location.reload(); }, RETRY_MS);
+  }
+
+  // третий аргумент true: ошибки загрузки <script> не всплывают, их видно только на перехвате
   global.addEventListener('error', function (event) {
+    var target = event && event.target;
+    if (target && target !== global && target.tagName === 'SCRIPT') { retryOrShow(target.src); return; }
+    if (target && target !== global && target.tagName) return; // не загрузилась картинка или таблица стилей: не ошибка запуска
     show(event && event.message ? event.message : messageOf(event && event.error));
-  });
+  }, true);
   global.addEventListener('unhandledrejection', function (event) {
     show(messageOf(event && event.reason));
   });

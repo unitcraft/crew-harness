@@ -12,9 +12,6 @@ import { t } from './strings.js';
 import { createView } from './view.js';
 import { createQueue } from './queue.js';
 import { chooseMode, createTransport, parseAgentRegistry } from './transport.js';
-import {
-  AGENTS, createMockServer,
-} from './mock.js';
 
 const FLASH_MS = 4000;
 const TICK_MS = 1000;
@@ -169,7 +166,13 @@ function reportError(e) {
 
 const picked = chooseMode(location.search, location.protocol, location.host);
 async function start() {
-  let agents = AGENTS;
+  // mock.js (заготовленный журнал) грузится ТОЛЬКО в режиме ?mock=1: реальной странице он не нужен, и сбой его загрузки её не роняет.
+  let mock = null;
+  let agents = [];
+  if (picked.mode === 'mock') {
+    mock = await import('./mock.js');
+    agents = mock.AGENTS;
+  }
   let registryFailed = false;
   if (picked.mode === 'ws') {
     try {
@@ -189,7 +192,7 @@ async function start() {
   setInterval(() => view.tick(), TICK_MS);
   transport = createTransport({
     mode: picked.mode, url: picked.url,
-    server: picked.mode === 'mock' ? createMockServer({ now: ctx.now }) : undefined,
+    server: mock ? mock.createMockServer({ now: ctx.now }) : undefined,
     WebSocketImpl: globalThis.WebSocket, timers,
     onEvent(event) {
       try {
@@ -207,4 +210,5 @@ async function start() {
 start().then(() => {
   // страж запуска (boot-guard.js) ждёт этот признак: нет его — показывает «Ошибка запуска», а не пустой экран
   document.documentElement.setAttribute('data-booted', '1');
+  try { globalThis.sessionStorage.removeItem('crew-boot-retry'); } catch { /* хранилища нет: счётчик повтора не нужен */ }
 }, reportError);
