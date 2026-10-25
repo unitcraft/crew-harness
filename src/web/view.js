@@ -6,7 +6,7 @@
 //   * каркас строится один раз; при каждой перерисовке меняется только то, что изменилось,
 //     поэтому ответ агента растёт без мерцания, а черновик в поле ввода не пропадает;
 //   * прокрутка вниз только если владелец уже был у конца: читающего историю не дёргаем;
-//   * значки — один спрайт icons.svg (<use>), цвет берут из темы; ширина полоски и кольца контекста
+//   * значки — один спрайт, встроенный в index.html (<use href="#i-имя">), цвет берут из темы; ширина полоски и кольца контекста
 //     ставится свойством --fill / --ring через CSSOM, а не атрибутом style (его запрещает CSP).
 
 import { t } from './strings.js';
@@ -71,10 +71,10 @@ function svgNode(doc, tag, attrs = {}) {
   return node;
 }
 
-/** Значок из спрайта icons.svg: id — литерал вида 'i-имя'. */
+/** Значок из встроенного в index.html спрайта (источник icons.svg): id — литерал вида 'i-имя'. */
 function icon(doc, id, extra = '') {
   const svg = svgNode(doc, 'svg', { class: extra ? `icon ${extra}` : 'icon', 'aria-hidden': 'true', focusable: 'false' });
-  svg.append(svgNode(doc, 'use', { href: `icons.svg#${id}` }));
+  svg.append(svgNode(doc, 'use', { href: `#${id}` }));
   return svg;
 }
 

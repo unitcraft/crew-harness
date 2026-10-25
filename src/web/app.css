@@ -168,6 +168,7 @@ input, select, textarea {
 .grow { flex: 1; }
 .muted { color: var(--fg-muted); }
 
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 .icon {
   width: 18px;
   height: 18px;

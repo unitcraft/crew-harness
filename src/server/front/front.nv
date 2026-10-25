@@ -277,6 +277,8 @@ fn files_route(web_dir str) -> fn(ServerRequest) -> ServerResponse {
     fn(req ServerRequest) -> ServerResponse {
         ro wanted = req.param("path") ?? ""
         mut resp = serve_path(files, Static.new(), wanted, req)
+        // a status of 500 or more is told to stderr, so that a 503 of the page is traced to its source (task 192)
+        if resp.status_code() >= 500 { log_line("front: ${resp.status_code()} GET ${req.path()}") }
         with_headers(resp)
     }
 }
