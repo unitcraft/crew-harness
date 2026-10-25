@@ -32,7 +32,7 @@ test "cc in the lists" {
 test "cc loads" {
     ro def = cycle_def()
     assert(def.name == "cycle_check")
-    assert(def.version == "alula-2.23")
+    assert(def.version == "alula-2.24")
     assert(def.initial == "ReviewEntry")
     assert(def.error_end == "Errored")
     assert(def.states.len() == 23)
@@ -40,11 +40,11 @@ test "cc loads" {
     assert(def.parties.len() == 4)
     assert(def.end_rows.len() == 5)
     assert(def.primitives.len() == 1)
-    assert(def.primitives[0] == "stop_agent_group")
+    assert(def.primitives[0].name == "stop_agent_group")
     assert(def.request_limit.len() == 1)
     assert(def.includes.len() == 1)
     assert(def.includes[0].version == "1")
-    assert(def.includes[0].hash == "ebb7658048b2")
+    assert(def.includes[0].hash == "818a4aaeef4f")
     assert(def.constants.len() == 3)
 }
 
@@ -100,7 +100,7 @@ test "cc parties" {
 
 test "cc summary" {
     ro text = render_summary(cycle_check_machine_text())
-    assert(text.starts_with("machine cycle_check (version alula-2.23): 23 states, "))
+    assert(text.starts_with("machine cycle_check (version alula-2.24): 23 states, "))
     assert(text.contains("  SessionLaunch (appeal): 3 rows"))
     assert(text.contains("  Levels (fork): 7 rows"))
     assert(text.contains("  Pause (appeal): 4 rows"))
@@ -109,8 +109,8 @@ test "cc summary" {
 }
 
 test "cc header" {
-    assert(cycle_check_machine_text().starts_with("{\"format\":\"machine/2\",\"alula_version\":\"2.23\",\"machine\":\"cycle_check\",\"version\":\"alula-2.23\""))
-    assert(cycle_check_table_text().contains("- format: 2.23"))
+    assert(cycle_check_machine_text().starts_with("{\"format\":\"machine/2\",\"alula_version\":\"2.24\",\"machine\":\"cycle_check\",\"version\":\"alula-2.24\""))
+    assert(cycle_check_table_text().contains("- format: 2.24"))
 }
 
 test "cc circle ru" {

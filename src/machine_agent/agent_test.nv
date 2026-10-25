@@ -21,7 +21,7 @@ test "ag clean" {
     if report.errors.len() > 0 { panic(errors_text(report)) }
     assert(report.errors.len() == 0)
     assert(report.rows_noted == 0)
-    assert(report.rows_total == 127)
+    assert(report.rows_total == 126)
 }
 
 test "ag file is translation" {
@@ -33,14 +33,14 @@ test "ag loads" {
     match load_machine(agent_step_machine_text(), methodology_registry()) {
         Ok(def) => {
             assert(def.name == "agent_step")
-            assert(def.version == "alula-2.23")
+            assert(def.version == "alula-2.24")
             assert(def.states.len() == 14)
             assert(def.common.len() == 6)
             assert(def.parties.len() == 3)
             assert(def.data.len() == 21)
             assert(def.definitions.len() == 16)
             assert(def.end_rows.len() == 13)
-            assert(def.primitives.len() == 3)
+            assert(def.primitives.len() == 2)
             assert(def.request_limit.len() == 1)
             assert(def.initial == "Start")
             assert(def.error_end == "Errored")
@@ -62,7 +62,7 @@ test "ag builds" {
 
 test "ag summary" {
     ro text = render_summary(agent_step_machine_text())
-    assert(text.starts_with("machine agent_step (version alula-2.23): 14 states, 47 rows, "))
+    assert(text.starts_with("machine agent_step (version alula-2.24): 14 states, 47 rows, "))
     assert(text.contains("  AgentTurn (appeal): 9 rows, 18 actions"))
     assert(text.contains("common events: 6 rows"))
     assert(text.contains("ends: 13 rows"))
@@ -80,7 +80,7 @@ fn without_markers(text str) -> str {
             lines.push(line)
         }
     }
-    lines.join("\n").replace("format: 2.23", "format: 2.23")
+    lines.join("\n").replace("format: 2.24", "format: 2.24")
 }
 
 test "ag markers optional" {

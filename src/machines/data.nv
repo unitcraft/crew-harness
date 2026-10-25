@@ -691,7 +691,7 @@ export fn session_start_table_text() -> str => text_of_file(table_files(), "sess
 /// The copy of the sample of the agent step of the specification (`machines/methodology/agent-step-sample.txt`, the same text as `spec/samples/agent-step.alula.md` of the package, links aside).
 export fn agent_step_sample_text() -> str => embed_str("../../machines/methodology/agent-step-sample.txt")
 
-/// The registry of the methodology as text (`machines/methodology/registry.md`): the 56 primitives, the roles of the parse, the sets of the types of the signatures.
+/// The registry of the methodology as text (`machines/methodology/registry.md`): the 58 primitives (the parse of a reply is three functions, one per role), the sets of the types of the signatures.
 export fn methodology_registry_text() -> str => embed_str("../../machines/methodology/registry.md")
 
 /// The table of the journal codes of the methodology (`machines/methodology/journal.md`).
@@ -700,7 +700,7 @@ export fn methodology_journal_text() -> str => embed_str("../../machines/methodo
 /// The table of the journal codes of the product (`machines/product/journal.md`).
 export fn product_journal_text() -> str => embed_str("../../machines/product/journal.md")
 
-/// The registry of the methodology as data: the primitives, the roles and the sets of the types (`host_types(data, "session")`, `host_types(data, "runner")`).
+/// The registry of the methodology as data: the primitives and the sets of the types (`host_types(data, "session")`, `host_types(data, "runner")`).
 export fn methodology_registry_data() -> HostRegistryData {
     match parse_registry_table(methodology_registry_text()) {
         Ok(data) => data
@@ -708,7 +708,7 @@ export fn methodology_registry_data() -> HostRegistryData {
     }
 }
 
-/// The registry of the host "methodology": the language, the 56 primitives of the methodology and the codes of its journal.
+/// The registry of the host "methodology": the language, the 58 primitives of the methodology and the codes of its journal.
 export fn methodology_registry() -> Registry {
     match load_host(methodology_registry_text(), methodology_journal_text()) {
         Ok(reg) => reg

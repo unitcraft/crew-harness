@@ -325,7 +325,13 @@ test "st the entry of the ends calls the group" {
 test "st the primitives of the table" {
     ro def = session_def()
     assert(def.primitives.len() == 7)
-    for n in ["launch_scope", "launch_profile", "session_context", "parse_session_artifact", "prepare_launch", "finish_launch", "stop_agent_group"] { assert(def.primitives.contains(n)) }
+    for n in ["launch_scope", "launch_profile", "session_context", "parse_session_artifact", "prepare_launch", "finish_launch", "stop_agent_group"] {
+        mut found = false
+        for p in def.primitives {
+            if p.name == n { found = true }
+        }
+        assert(found)
+    }
 }
 
 test "st the definition" {
@@ -428,11 +434,11 @@ test "st the gates ask what the methodology says" {
     assert(gate13 == ["session", "refusal_text", "launch_pass", "task_dir", "repo_dir"])
 }
 
-test "st the table text is a table of 2.23" {
+test "st the table text is a table of 2.24" {
     ro text = session_start_table_text()
     assert(text.starts_with("# Машина: Запуск сессии\n"))
     assert(text.contains("- machine: session_start\n"))
-    assert(text.contains("- format: 2.23\n"))
+    assert(text.contains("- format: 2.24\n"))
     assert(text.contains("Начальное состояние: В2"))
     assert(text.contains("Пауза(сигнал_остановки: остановить"))
     assert(session_start_machine_text().contains("\"format\": \"machine/2\"") || session_start_machine_text().contains("\"format\":\"machine/2\""))

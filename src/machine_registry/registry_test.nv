@@ -1,4 +1,4 @@
-// registry_test.nv - the registry of the methodology as data (`machines/methodology/registry.md`, task 158; it was `standard_registry()` of the package until 0.3.2): the 56 primitives of the methodology and the two of
+// registry_test.nv - the registry of the methodology as data (`machines/methodology/registry.md`, task 158; it was `standard_registry()` of the package until 0.3.2): the 58 primitives of the methodology and the two of
 // the language, their classes, signatures, reads and writes, the sets of the types the signatures use, and the check of the arguments and of the results against it.
 module crew_harness.machine_registry
 
@@ -94,17 +94,17 @@ fn rknown(spec TypeSpec, defs TypeDefs) -> bool {
 }
 
 test "md count" {
-    assert(methodology_registry().primitives.len() == 58)
-    assert(rcount(Volatile) == 34)
-    assert(rcount(Acting) == 24)
+    assert(methodology_registry().primitives.len() == 60)
+    assert(rcount(Volatile) == 37)
+    assert(rcount(Acting) == 23)
     assert(rcount(Pure) == 0)
 }
 
 test "md meeting" {
-    for name in ["party_profile", "role_context", "call_trace", "call_step", "parse_agent_reply", "proposal_read", "proposal_with_fingerprint", "proposal_changed_since_attempt"] {
+    for name in ["party_profile", "role_context", "call_trace", "call_step", "parse_witness_reply", "parse_author_reply", "parse_lens_reply", "proposal_read", "proposal_with_fingerprint", "proposal_changed_since_attempt", "build_summary"] {
         assert(rclass(name) == "volatile")
     }
-    for name in ["count_in_model_tally", "journal_findings", "journal_machine_data", "journal_decision", "remove_unsound", "build_summary"] {
+    for name in ["count_in_model_tally", "journal_findings", "journal_machine_data", "journal_decision", "remove_unsound"] {
         assert(rclass(name) == "acting")
     }
     for name in ["close_for_writing", "open_for_writing", "move_to_archive"] {

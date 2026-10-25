@@ -11,7 +11,7 @@ import crew_harness.machines.{methodology_registry, session_start_table_text}
 
 fn broken_text() -> str {
     session_start_table_text()
-        .replace("| 1 | объём == ОбъёмЗапуска.Помещается | вызвать(prepare_launch, сессия, заход_запуска, папка_задачи, рабочее_дерево) | СЕССИЯ |", "| 1 | ложь | — | СЕССИЯ |")
+        .replace("| 1 | объём == ОбъёмЗапуска.Помещается | prepare_launch(сессия, заход_запуска, папка_задачи, рабочее_дерево) | СЕССИЯ |", "| 1 | ложь | — | СЕССИЯ |")
         .replace("| 2 | объём == ОбъёмЗапуска.НеПомещается | — | В1 |", "| 2 | ложь | — | В1 |\n| 3 | иначе | ошибка_машины(\"fork_no_match\", fork: \"Scope\") | — |")
 }
 

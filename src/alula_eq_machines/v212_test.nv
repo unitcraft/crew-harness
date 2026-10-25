@@ -10,10 +10,10 @@ fn product_tables() -> []str => ["chat.alula.md", "cycle_check.alula.md", "dialo
 
 fn json_of_table(name str) -> str => name.replace(".alula.md", ".alula.json")
 
-test "v212 table files say 2.23" {
+test "v212 table files say 2.24" {
     for name in product_tables() {
         ro text = text_of_file(table_files(), name)
-        assert(text.contains("format: 2.23\n"))
+        assert(text.contains("format: 2.24\n"))
         assert(!text.contains("format: 2.11"))
         assert(!text.contains("alula-2.11"))
     }
@@ -38,31 +38,31 @@ test "v212 check takes every table" {
 }
 
 test "v212 compile refuses 2.11" {
-    ro old = text_of_file(table_files(), "dialog.alula.md").replace("format: 2.23", "format: 2.11")
+    ro old = text_of_file(table_files(), "dialog.alula.md").replace("format: 2.24", "format: 2.11")
     assert(old.contains("format: 2.11"))
     ro made = run_with(["compile", "/m/dialog.alula.md"], one("/m/dialog.alula.md", old))
     assert(made.code != 0)
     assert(made.err.contains("2.11"))
-    assert(made.err.contains("format: 2.23"))
+    assert(made.err.contains("format: 2.24"))
 }
 
 test "v212 check refuses 2.11" {
-    ro old = text_of_file(table_files(), "chat.alula.md").replace("format: 2.23", "format: 2.11")
+    ro old = text_of_file(table_files(), "chat.alula.md").replace("format: 2.24", "format: 2.11")
     assert(old.contains("format: 2.11"))
     ro made = run_with(["check", "/m/chat.alula.md"], one("/m/chat.alula.md", old))
     assert(made.code != 0)
 }
 
-test "v212 render writes 2.23" {
+test "v212 render writes 2.24" {
     ro made = run_with(["render", "/m/dialog.alula.json"], one("/m/dialog.alula.json", text_of_file(machine_files(), "dialog.alula.json")))
     assert(made.code == 0)
-    assert(made.out.contains("- format: 2.23\n"))
+    assert(made.out.contains("- format: 2.24\n"))
     ro en = run_with(["render", "/m/dialog.alula.json", "--language", "en"], one("/m/dialog.alula.json", text_of_file(machine_files(), "dialog.alula.json")))
-    assert(en.out.contains("- format: 2.23\n"))
+    assert(en.out.contains("- format: 2.24\n"))
 }
 
 test "v212 json of 2.11 is refused" {
-    ro old = text_of_file(machine_files(), "dialog.alula.json").replace("\"alula_version\":\"2.23\"", "\"alula_version\":\"2.11\"")
+    ro old = text_of_file(machine_files(), "dialog.alula.json").replace("\"alula_version\":\"2.24\"", "\"alula_version\":\"2.11\"")
     ro made = run_with(["render", "/m/dialog.alula.json"], one("/m/dialog.alula.json", old))
     assert(made.code != 0)
 }

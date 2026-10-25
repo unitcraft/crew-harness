@@ -22,7 +22,7 @@ test "cs pilot loads" {
             assert(def.definitions.len() == 16)
             assert(def.error_end == "Errored")
             assert(def.end_rows.len() == 13)
-            assert(def.primitives.len() == 3)
+            assert(def.primitives.len() == 2)
         }
         Err(issues) => panic("the pilot does not load: ${issues[0].path}: ${issues[0].message}")
     }

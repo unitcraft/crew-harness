@@ -16,7 +16,7 @@ fn first_error(report TranslateReport) -> str {
 
 test "ae header" {
     ro json = en_report().json
-    assert(json.starts_with("{\"format\":\"machine/2\",\"alula_version\":\"2.23\",\"machine\":\"agent_step\",\"version\":\"alula-2.23\",\"title\":\"Agent step\""))
+    assert(json.starts_with("{\"format\":\"machine/2\",\"alula_version\":\"2.24\",\"machine\":\"agent_step\",\"version\":\"alula-2.24\",\"title\":\"Agent step\""))
 }
 
 test "ae loads" {
@@ -29,7 +29,7 @@ test "ae loads" {
             assert(def.data.len() == 21)
             assert(def.definitions.len() == 16)
             assert(def.end_rows.len() == 13)
-            assert(def.primitives.len() == 3)
+            assert(def.primitives.len() == 2)
             assert(def.request_limit.len() == 1)
             assert(def.params.len() == 2)
         }

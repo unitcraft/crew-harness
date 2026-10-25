@@ -93,7 +93,7 @@ test "rg the seven primitives are registered" {
     assert(class_of("stop_agent_group") == "acting")
     assert(class_of("prepare_launch") == "acting")
     assert(class_of("finish_launch") == "acting")
-    assert(methodology_registry().primitives.len() == 58)
+    assert(methodology_registry().primitives.len() == 60)
 }
 
 test "rg the signatures" {
