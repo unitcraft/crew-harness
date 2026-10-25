@@ -1,0 +1,157 @@
+// stt_test.nv - the voice to the text (task 192f): the address, the request to the recognizer, its answer, the JSON of the front.
+// ORACLE-WORKAROUND(25): the module is declared `module server.front` (without the package prefix): a module two folders under the source root cannot be declared with the full path; declare it with the prefix when item 25 is fixed
+module server.front
+
+import std.text
+import std.encoding.json.{Json}
+
+fn wav_bytes(extra int) -> []u8 {
+    mut out = []u8.new()
+    out.append("RIFF".bytes())
+    out.append([36 as u8, 0 as u8, 0 as u8, 0 as u8])
+    out.append("WAVEfmt ".bytes())
+    mut i = 0
+    while i < 32 + extra {
+        out.push(7 as u8)
+        i += 1
+    }
+    out
+}
+
+fn must_target(url str) -> SttTarget {
+    match stt_target(url) {
+        Ok(t) => t
+        Err(e) => panic("stt target: ${e}")
+    }
+}
+
+test "stt: the address splits into the socket address and the path" {
+    ro t = must_target("http://127.0.0.1:8178/inference")
+    assert(t.addr == "127.0.0.1:8178")
+    assert(t.host == "127.0.0.1:8178")
+    assert(t.path == "/inference")
+    ro bare = must_target("http://localhost:9000")
+    assert(bare.addr == "localhost:9000")
+    assert(bare.path == "/")
+    assert(match stt_target("https://127.0.0.1:8178/x") { Ok(t) => false, Err(e) => true })
+    assert(match stt_target("http://127.0.0.1/x") { Ok(t) => false, Err(e) => true })
+    assert(match stt_target("http:///x") { Ok(t) => false, Err(e) => true })
+}
+
+test "stt: a language is 2 to 8 letters, nothing that could break the form" {
+    assert(stt_language_ok("ru"))
+    assert(stt_language_ok("auto"))
+    assert(stt_language_ok("zh-cn"))
+    assert(!stt_language_ok(""))
+    assert(!stt_language_ok("r"))
+    assert(!stt_language_ok("russian123"))
+    assert(!stt_language_ok("ru\r\nX: y"))
+    assert(!stt_language_ok("r u"))
+}
+
+test "stt: only a WAV passes" {
+    assert(stt_is_wav(wav_bytes(0)))
+    // the size field of a real file is not text: 0xE6 0xB0 0x02 0x00 is not valid UTF-8 (a regression: this once crashed the route)
+    mut real = []u8.new()
+    real.append("RIFF".bytes())
+    real.append([230 as u8, 176 as u8, 2 as u8, 0 as u8])
+    real.append("WAVEfmt ".bytes())
+    mut i = 0
+    while i < 40 {
+        real.push(9 as u8)
+        i += 1
+    }
+    assert(stt_is_wav(real))
+    assert(!stt_is_wav("RIFF".bytes()))
+    assert(!stt_is_wav([]u8.new()))
+    assert(!stt_is_wav("not a wav file, not a wav file, not a wav file".bytes()))
+}
+
+test "stt: the form holds the file, the language and json, closed by the boundary" {
+    ro audio = wav_bytes(0)
+    ro form = stt_multipart("BND", audio, "ru").to_str_lossy()
+    assert(form.starts_with("--BND\r\nContent-Disposition: form-data; name=\"file\"; filename=\"voice.wav\"\r\nContent-Type: audio/wav\r\n\r\nRIFF"))
+    assert(form.contains("\r\n--BND\r\nContent-Disposition: form-data; name=\"language\"\r\n\r\nru\r\n"))
+    assert(form.contains("\r\n--BND\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\njson\r\n"))
+    assert(form.ends_with("\r\n--BND--\r\n"))
+}
+
+test "stt: the request has the right length and the form as the body" {
+    ro t = must_target("http://127.0.0.1:8178/inference")
+    ro audio = wav_bytes(100)
+    ro raw = stt_request(t, "BND", audio, "en")
+    ro text = raw.to_str_lossy()
+    assert(text.starts_with("POST /inference HTTP/1.1\r\nHost: 127.0.0.1:8178\r\nContent-Type: multipart/form-data; boundary=BND\r\n"))
+    ro body = stt_multipart("BND", audio, "en")
+    assert(text.contains("Content-Length: ${body.len()}\r\n"))
+    assert(text.contains("Connection: close\r\n\r\n--BND\r\n"))
+    assert(raw.len() > body.len())
+    ro probe = stt_probe_request(t).to_str_lossy()
+    assert(probe.starts_with("GET / HTTP/1.1\r\nHost: 127.0.0.1:8178\r\n"))
+}
+
+test "stt: an answer with a length, without a length and chunked" {
+    ro whole = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 15\r\n\r\n{\"text\":\" hi \"}".bytes()
+    match stt_parse_reply(whole) {
+        Ok(r) => {
+            assert(r.status == 200)
+            assert(r.body.to_str_lossy() == "{\"text\":\" hi \"}")
+        }
+        Err(e) => assert(false)
+    }
+    ro cut = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nabcdef".bytes()
+    match stt_parse_reply(cut) {
+        Ok(r) => assert(r.body.to_str_lossy() == "abc")
+        Err(e) => assert(false)
+    }
+    ro open = "HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\nbusy".bytes()
+    match stt_parse_reply(open) {
+        Ok(r) => {
+            assert(r.status == 503)
+            assert(r.body.to_str_lossy() == "busy")
+        }
+        Err(e) => assert(false)
+    }
+    ro chunked = "HTTP/1.1 200 OK\r\nTransfer-Encoding: Chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n".bytes()
+    match stt_parse_reply(chunked) {
+        Ok(r) => assert(r.body.to_str_lossy() == "hello world")
+        Err(e) => assert(false)
+    }
+}
+
+test "stt: a broken answer is an error" {
+    assert(match stt_parse_reply([]u8.new()) { Ok(r) => false, Err(e) => true })
+    assert(match stt_parse_reply("HTTP/1.1 200 OK\r\nContent-Length: 3\r\n".bytes()) { Ok(r) => false, Err(e) => true })
+    assert(match stt_parse_reply("garbage\r\n\r\nx".bytes()) { Ok(r) => false, Err(e) => true })
+    assert(match stt_parse_reply("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nzz\r\nx".bytes()) { Ok(r) => false, Err(e) => true })
+}
+
+test "stt: the text of the answer is trimmed; no text is an error" {
+    match stt_text_of("{\"text\":\" And so, my fellow Americans.\n\"}".bytes()) {
+        Ok(t) => assert(t == "And so, my fellow Americans.")
+        Err(e) => assert(false)
+    }
+    match stt_text_of("{\"text\":\"привет\"}".bytes()) {
+        Ok(t) => assert(t == "привет")
+        Err(e) => assert(false)
+    }
+    assert(match stt_text_of("{\"error\":\"x\"}".bytes()) { Ok(t) => false, Err(e) => true })
+    assert(match stt_text_of("{\"text\":5}".bytes()) { Ok(t) => false, Err(e) => true })
+    assert(match stt_text_of("not json".bytes()) { Ok(t) => false, Err(e) => true })
+}
+
+test "stt: the JSON of the front" {
+    assert(stt_text_json("привет \"мир\"") == "{\"text\":\"привет \\\"мир\\\"\"}")
+    assert(stt_error_json("busy") == "{\"error\":\"busy\"}")
+    assert(stt_status_json(true) == "{\"available\":true,\"provider\":\"local\",\"model\":\"small\"}")
+    assert(stt_status_json(false) == "{\"available\":false,\"provider\":\"local\",\"model\":\"small\"}")
+}
+
+test "stt: the probe looks at the status line only" {
+    assert(stt_status_is_200("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".bytes()))
+    assert(stt_status_is_200("HTTP/1.0 200 OK\r\n\r\n".bytes()))
+    assert(!stt_status_is_200("HTTP/1.1 404 Not Found\r\n\r\n".bytes()))
+    assert(!stt_status_is_200("HTTP/1.1 500 Internal\r\n\r\n".bytes()))
+    assert(!stt_status_is_200("HTTP/1.1 20".bytes()))
+    assert(!stt_status_is_200([]u8.new()))
+}

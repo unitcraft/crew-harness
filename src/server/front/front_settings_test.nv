@@ -82,3 +82,45 @@ test "front settings: a missing file, a bad port" {
         Err(e) => assert(e.contains("port"))
     }
 }
+
+test "front settings: the recognizer of the voice, local only; the file, the environment over it" {
+    mut empty = MockOs.new()
+    match with Os = mock_os(empty), Fs = real_fs() { front_settings("") } {
+        Ok(s) => {
+            assert(s.stt_url == "http://127.0.0.1:8178/inference")
+            assert(s.stt_language == "auto")
+        }
+        Err(e) => assert(false)
+    }
+    ro path = front_file("stt.json", "{\"stt\":{\"url\":\"http://localhost:9000/inference\",\"language\":\"ru\"}}")
+    mut none = MockOs.new()
+    match with Os = mock_os(none), Fs = real_fs() { front_settings(path.display()) } {
+        Ok(s) => {
+            assert(s.stt_url == "http://localhost:9000/inference")
+            assert(s.stt_language == "ru")
+        }
+        Err(e) => assert(false)
+    }
+    mut state = MockOs.new()
+    state.put_env("CREW_SERVER_STT_URL", "http://127.0.0.1:9100/inference")
+    state.put_env("CREW_SERVER_STT_LANGUAGE", "en")
+    match with Os = mock_os(state), Fs = real_fs() { front_settings(path.display()) } {
+        Ok(s) => {
+            assert(s.stt_url == "http://127.0.0.1:9100/inference")
+            assert(s.stt_language == "en")
+        }
+        Err(e) => assert(false)
+    }
+    // an address that is not local is the default: the voice does not leave the machine
+    ro far = front_file("stt-far.json", "{\"stt\":{\"url\":\"http://example.com:9000/inference\"}}")
+    match with Os = mock_os(empty), Fs = real_fs() { front_settings(far.display()) } {
+        Ok(s) => assert(s.stt_url == "http://127.0.0.1:8178/inference")
+        Err(e) => assert(false)
+    }
+    mut far_env = MockOs.new()
+    far_env.put_env("CREW_SERVER_STT_URL", "http://example.com:1/x")
+    match with Os = mock_os(far_env), Fs = real_fs() { front_settings("") } {
+        Ok(s) => assert(s.stt_url == "http://127.0.0.1:8178/inference")
+        Err(e) => assert(false)
+    }
+}

@@ -10,5 +10,6 @@
   "workdir": "",
   "web_dir": "src/web",
   "acp_trace": true,
+  "stt": { "url": "http://127.0.0.1:8178/inference", "language": "auto" },
   "hub": { "program": "target/crew-hub.exe", "args": [] }
 }

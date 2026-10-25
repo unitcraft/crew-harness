@@ -1,0 +1,252 @@
+// stt.nv - the voice of the control panel to the text (task 192f): the page sends a WAV to `POST /api/stt`, the front passes it on to a
+// local recognizer (whisper.cpp `whisper-server`, `/inference`) as `multipart/form-data` and gives back `{"text": "..."}`.
+//
+// The audio goes to the address in the settings (`stt.url`, always a local http one: see src/server/settings.nv) and nowhere else.
+// This file holds the parts that need no routes: the address, the request, the answer, the one exchange over a socket.
+// ORACLE-WORKAROUND(25): the module is declared `module server.front` (without the package prefix) and imported as `crew_harness.server.front`: a module two folders under the source root cannot be declared with the full path; declare it with the prefix when item 25 is fixed
+module server.front
+
+import std.text
+import std.encoding.json.{Json, JsonValue, JsonObject}
+import std.net.{TcpStream}
+
+/// The most the recognizer may answer (its answer is a line of text): more is cut off.
+const STT_MAX_REPLY = 1048576
+
+/// The most audio the front takes (25 MiB: about 13 minutes of 16 kHz mono 16 bit).
+export const STT_MAX_AUDIO = 26214400
+
+/// SttTarget: where the recognizer listens: `host:port` for the socket, the path for the request line.
+export type SttTarget { addr str, host str, path str }
+
+/// SttReply: what the recognizer answered: the status code and the body.
+export type SttReply { status int, body []u8 }
+
+/// The target of an address `http://<host>:<port>/<path>` (the port is required, the path is "/" when there is none).
+export fn stt_target(url str) -> Result[SttTarget, str] {
+    if !url.starts_with("http://") { return Err("the stt url must start with http://") }
+    ro rest = url[7..]
+    ro slash = rest.find("/") ?? rest.byte_len()
+    ro addr = rest[..slash]
+    ro path = if slash < rest.byte_len() { rest[slash..] } else { "/" }
+    if addr.byte_len() == 0 || !addr.contains(":") { return Err("the stt url needs a host and a port") }
+    Ok(SttTarget { addr, host: addr, path })
+}
+
+/// Is `lang` fit to go into the form: 2 to 8 letters (and "-"), as `ru`, `en`, `auto`, `zh-cn`?
+export fn stt_language_ok(lang str) -> bool {
+    if lang.byte_len() < 2 || lang.byte_len() > 8 { return false }
+    for b in lang.bytes() {
+        ro c = b as int
+        ro letter = (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || c == 45
+        if !letter { return false }
+    }
+    true
+}
+
+/// Is `audio` a WAV file (RIFF....WAVE)? The recognizer wants nothing else.
+export fn stt_is_wav(audio []u8) -> bool {
+    if audio.len() < 44 { return false }
+    // bytes, not text: the size field between the two words is any four bytes (not valid UTF-8, mostly)
+    ro riff = (audio[0] as int) == 82 && (audio[1] as int) == 73 && (audio[2] as int) == 70 && (audio[3] as int) == 70
+    ro wave = (audio[8] as int) == 87 && (audio[9] as int) == 65 && (audio[10] as int) == 86 && (audio[11] as int) == 69
+    riff && wave
+}
+
+fn stt_field(boundary str, name str, value str) -> []u8 {
+    "--${boundary}\r\nContent-Disposition: form-data; name=\"${name}\"\r\n\r\n${value}\r\n".bytes()
+}
+
+/// The body of `multipart/form-data`: the audio as `file`, then `language` and `response_format=json`.
+export fn stt_multipart(boundary str, audio []u8, language str) -> []u8 {
+    mut out = []u8.new()
+    out.append("--${boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"voice.wav\"\r\nContent-Type: audio/wav\r\n\r\n".bytes())
+    out.append(audio)
+    out.append("\r\n".bytes())
+    out.append(stt_field(boundary, "language", language))
+    out.append(stt_field(boundary, "response_format", "json"))
+    out.append("--${boundary}--\r\n".bytes())
+    out
+}
+
+/// The whole HTTP/1.1 request that sends `audio` to the recognizer; the connection is closed after the answer.
+export fn stt_request(target SttTarget, boundary str, audio []u8, language str) -> []u8 {
+    ro body = stt_multipart(boundary, audio, language)
+    mut out = []u8.new()
+    out.append("POST ${target.path} HTTP/1.1\r\nHost: ${target.host}\r\nContent-Type: multipart/form-data; boundary=${boundary}\r\nContent-Length: ${body.len()}\r\nConnection: close\r\n\r\n".bytes())
+    out.append(body)
+    out
+}
+
+/// The request that asks whether the recognizer is there (its start page).
+export fn stt_probe_request(target SttTarget) -> []u8 => "GET / HTTP/1.1\r\nHost: ${target.host}\r\nConnection: close\r\n\r\n".bytes()
+
+// The offset of the first "\r\n\r\n" in the bytes at or after `from`; -1 - there is none.
+fn stt_blank_line(raw []u8, from int) -> int {
+    mut i = from
+    while i + 3 < raw.len() {
+        if (raw[i] as int) == 13 && (raw[i + 1] as int) == 10 && (raw[i + 2] as int) == 13 && (raw[i + 3] as int) == 10 { return i }
+        i += 1
+    }
+    -1
+}
+
+// The offset of the first "\r\n" at or after `from`; -1 - there is none.
+fn stt_line_end(raw []u8, from int) -> int {
+    mut i = from
+    while i + 1 < raw.len() {
+        if (raw[i] as int) == 13 && (raw[i + 1] as int) == 10 { return i }
+        i += 1
+    }
+    -1
+}
+
+// The body of a chunked answer: "<hex size>\r\n<data>\r\n" ... "0\r\n".
+fn stt_unchunk(raw []u8) -> Result[[]u8, str] {
+    mut out = []u8.new()
+    mut at = 0
+    mut running = true
+    while running {
+        ro eol = stt_line_end(raw, at)
+        if eol < 0 { return Err("the recognizer sent a broken chunked answer") }
+        ro size_text = raw[at..eol].to_str_lossy()
+        ro semi = size_text.find(";") ?? size_text.byte_len()
+        ro size = match size_text[..semi].trim_ascii().to_int(radix: 16) {
+            Ok(n) => n
+            Err(e) => return Err("the recognizer sent a broken chunked answer")
+        }
+        if size == 0 {
+            running = false
+        } else {
+            ro start = eol + 2
+            if start + size > raw.len() { return Err("the recognizer sent a broken chunked answer") }
+            out.append(raw[start..start + size])
+            at = start + size + 2
+        }
+    }
+    Ok(out)
+}
+
+/// Does the answer begin with `HTTP/1.x 200`? Only bytes are compared (it is called from a fiber of its own, where the text functions are not allowed).
+export fn stt_status_is_200(raw []u8) -> bool {
+    raw.len() >= 12 && (raw[0] as int) == 72 && (raw[4] as int) == 47 && (raw[8] as int) == 32
+        && (raw[9] as int) == 50 && (raw[10] as int) == 48 && (raw[11] as int) == 48
+}
+
+/// The status and the body of a raw HTTP/1.1 answer (`Content-Length`, chunked, or until the close).
+export fn stt_parse_reply(raw []u8) -> Result[SttReply, str] {
+    ro end = stt_blank_line(raw, 0)
+    if end < 0 { return Err("the recognizer sent no answer") }
+    ro head = raw[..end].to_str_lossy()
+    ro lines = head.lines()
+    if lines.len() == 0 { return Err("the recognizer sent no answer") }
+    ro words = lines[0].split(" ")
+    mut parts = []str.new()
+    for w in words {
+        if w.byte_len() > 0 { parts.push(w) }
+    }
+    if parts.len() < 2 { return Err("the recognizer sent a broken status line") }
+    ro status = match parts[1].to_int() {
+        Ok(n) => n
+        Err(e) => return Err("the recognizer sent a broken status line")
+    }
+    mut chunked = false
+    mut length = -1
+    mut i = 1
+    while i < lines.len() {
+        ro line = lines[i]
+        ro colon = line.find(":") ?? -1
+        if colon > 0 {
+            ro name = line[..colon].trim_ascii()
+            ro value = line[colon + 1..].trim_ascii()
+            ro lower_name = name.to_ascii_lower()
+            if lower_name == "transfer-encoding" && value.to_ascii_lower() == "chunked" { chunked = true }
+            if lower_name == "content-length" {
+                match value.to_int() {
+                    Ok(n) => { length = n }
+                    Err(e) => ()
+                }
+            }
+        }
+        i += 1
+    }
+    ro rest = raw[end + 4..raw.len()]
+    if chunked {
+        ro body = stt_unchunk(rest)?
+        return Ok(SttReply { status, body })
+    }
+    if length >= 0 && length < rest.len() {
+        return Ok(SttReply { status, body: rest[..length] })
+    }
+    Ok(SttReply { status, body: rest })
+}
+
+/// The text of the answer `{"text": "..."}` of the recognizer, without the spaces and line breaks at the ends.
+export fn stt_text_of(body []u8) -> Result[str, str] {
+    ro value = match Json.parse(body.to_str_lossy()) {
+        Ok(v) => v
+        Err(e) => return Err("the recognizer did not answer with JSON")
+    }
+    ro o = match value.object() {
+        Some(x) => x
+        None => return Err("the recognizer did not answer with JSON")
+    }
+    match o.get("text") {
+        Some(t) => match t.str() {
+            Some(s) => Ok(s.trim_ascii())
+            None => Err("the recognizer answered without a text")
+        }
+        None => Err("the recognizer answered without a text")
+    }
+}
+
+/// `{"text":"..."}` - the answer of the front.
+export fn stt_text_json(text str) -> str {
+    mut o = JsonObject.new()
+    ro set = o.insert("text", JsonValue.str(text))
+    JsonValue.object(o).to_str()
+}
+
+/// `{"error":"..."}` - the refusal of the front.
+export fn stt_error_json(reason str) -> str {
+    mut o = JsonObject.new()
+    ro set = o.insert("error", JsonValue.str(reason))
+    JsonValue.object(o).to_str()
+}
+
+/// `{"available":true,"provider":"local","model":"small"}` - the state of the recognizer.
+export fn stt_status_json(available bool) -> str {
+    mut o = JsonObject.new()
+    ro a = o.insert("available", JsonValue.bool(available))
+    ro p = o.insert("provider", JsonValue.str("local"))
+    ro m = o.insert("model", JsonValue.str("small"))
+    JsonValue.object(o).to_str()
+}
+
+/// One exchange: connect, send `request`, read the answer to the close. The error says why the recognizer could not be reached.
+export fn stt_exchange(target SttTarget, request []u8) Net -> Result[[]u8, str] {
+    consume stream = match TcpStream.connect(target.addr) {
+        Ok(consume s) => s
+        Err(e) => return Err("the recognizer cannot be reached")
+    }
+    match stream.write_all(request) {
+        Ok(done) => ()
+        Err(e) => return Err("the recognizer does not take the audio")
+    }
+    mut reply = []u8.new()
+    mut chunk []u8 = []u8.new()
+    chunk.resize(65536, 0 as u8)
+    mut reading = true
+    while reading {
+        match stream.read(chunk) {
+            Ok(0) => { reading = false }
+            Ok(n) => {
+                reply.append(chunk[..n])
+                if reply.len() > STT_MAX_REPLY { reading = false }
+            }
+            Err(e) => { reading = false }
+        }
+    }
+    stream.close()
+    Ok(reply)
+}

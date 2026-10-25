@@ -79,6 +79,7 @@ and no error (`describe()` leaves it out).
 | `workdir` | `CREW_SERVER_WORKDIR` | the folder of the server | the folder the agents work in (`session/new` needs it) |
 | `web_dir` | `CREW_SERVER_WEB_DIR` | `src/web` | the folder of the page |
 | `acp_trace` | `CREW_SERVER_ACP_TRACE` (`true`/`false`) | `true` | write the raw JSON-RPC exchange with the agent, both ways, to `<data_dir>/<session>.acp.jsonl` (`{"t": unix ms, "dir": "out"|"in", "line": "<the line as it is>"}`); over 50 MB the file becomes `<session>.acp.1.jsonl`. **The file holds the full text of the talk and the output of the tools, nothing is cut out.** |
+| `stt` {`url`,`language`} | `CREW_SERVER_STT_URL`, `CREW_SERVER_STT_LANGUAGE` | `http://127.0.0.1:8178/inference`, `auto` | the local speech recognizer (whisper.cpp `whisper-server`, started by `scripts/start-stt.ps1`) that the front sends the voice to; the address must be a plain `http://127.0.0.1:<port>/...` or `http://localhost:<port>/...` (the audio never leaves the machine); `language` is the default of `POST /api/stt` |
 | `hub` {`program`,`args`} | `CREW_SERVER_HUB` (words separated by spaces) | `target/crew-hub.exe` | how the front starts the hub |
 | - | `CREW_SERVER_CONFIG` | - | the settings file, when no argument names it |
 
@@ -86,6 +87,14 @@ The file store needs no database. For `store: pg` the easy way is the permanent 
 "The permanent database in Docker"); by hand: start a database and migrate it (`psql -f src/pg/schema.sql` as the owner, a login that
 is a member of `crew_app`). A server that restarts finds its sessions with `crew.list_sessions()`. An example with `store: pg` and no password:
 `src/server/server-pg.example.json` (the password comes from `CREW_PG_PASSWORD`).
+
+### The voice: `/api/stt`
+
+The front turns a recording into text with a local recognizer (task 192f); nothing is sent to a cloud service.
+
+- `POST /api/stt?lang=<ru|en|auto|...>`: the body is a WAV (`Content-Type: audio/wav`, 16 kHz, mono, 16 bit; up to 25 MiB). The front passes it to `stt.url` as `multipart/form-data` (`file`, `language`, `response_format=json`) and answers `200 {"text":"..."}`. Without `lang` the `language` of the settings is used. Errors are `{"error":"<reason>"}`: 400 (not a WAV, empty, a bad language), 403 (a foreign `Origin`), 502 (the recognizer answered something else), 503 (it cannot be reached). A body over 25 MiB is refused by the server itself with 413 and a plain-text body.
+- `GET /api/stt/status`: `{"available":true|false,"provider":"local","model":"small"}`; `available` is true when the recognizer answers `GET /` with 200 within one second.
+- The recognizer: `$env:CREW_STT_DIR = '<folder with bin/whisper-server.exe and models/ggml-small.bin>'; powershell -File scripts/start-stt.ps1` (hidden, `127.0.0.1:8178`, GPU when the build has CUDA); `scripts/stop-stt.ps1` stops it.
 
 ## The chat runs on Alula
 
@@ -244,10 +253,10 @@ The events a live session shows come from the engine itself (`Engine.take_events
 | `alula.nv` | `hub_machine`, `hub_machine_from`: the embedded `dialog.alula.json` as `AlulaMachine` with the idle term of the settings |
 | `hub.nv` | `Hub`: `start_hub`, `attach`, `release`, `handle`, `pump`, `take_output`, `take_log`, `close`; the sessions, the store by the settings, the lines of the page |
 | `stdio.nv` | `run_hub_stdio`: the hub over stdin and stdout |
-| `front/front.nv`, `front/front_settings.nv` | the front: HTTP, `/ws` (frames over two owners of the socket), the router fiber, the hub as a child process |
+| `front/front.nv`, `front/front_settings.nv`, `front/stt.nv` | the front: HTTP, `/ws` (frames over two owners of the socket), the router fiber, the hub as a child process; the voice to text (`/api/stt`) |
 | `testkit.nv` | the settings of a test hub with the fake agent, the rig that drives a hub as a page does, the scenarios (shared by the units below) |
 | `alula_test.nv` | the machine of the hub: made from the embedded table, the idle term, a broken text, an engine in memory, the snapshot |
-| `dialog_test.nv`, `settings_test.nv`, `front/front_settings_test.nv` | tests of the unit `src/server` and `src/server/front` |
+| `dialog_test.nv`, `settings_test.nv`, `front/front_settings_test.nv`, `front/stt_test.nv` | tests of the unit `src/server` and `src/server/front` |
 | `../server_live/hub_test.nv`, `../server_pg/hub_pg_test.nv` | the same ten scenarios over files and over PostgreSQL |
 | `test/e2e.mjs`, `test/real-agent.mjs` | Node: the whole server through its door (files, `--pg` on the temporary database, `--pg-docker` on the permanent one); the real `opencode acp` (handshake only) |
 | `server.example.json`, `server-pg.example.json` | the examples of the settings: the file store, and the store pg on the database of `db.ps1` (no password) |

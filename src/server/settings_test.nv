@@ -224,3 +224,38 @@ test "settings: acp_trace is on by default, the file turns it off, the environme
         Err(e) => assert(false)
     }
 }
+
+test "settings: stt has the local whisper server by default, the file sets it, the environment is over the file" {
+    ro d = must_settings("{}")
+    assert(d.stt_url == "http://127.0.0.1:8178/inference")
+    assert(d.stt_language == "auto")
+    ro s = must_settings("{\"stt\":{\"url\":\"http://localhost:9000/inference\",\"language\":\"ru\"}}")
+    assert(s.stt_url == "http://localhost:9000/inference")
+    assert(s.stt_language == "ru")
+    ro half = must_settings("{\"stt\":{\"language\":\"en\"}}")
+    assert(half.stt_url == "http://127.0.0.1:8178/inference")
+    assert(half.stt_language == "en")
+    assert(is_error(parse_server_settings("{\"stt\":\"x\"}")))
+    assert(is_error(parse_server_settings("{\"stt\":{\"url\":5}}")))
+    assert(is_error(parse_server_settings("{\"stt\":{\"language\":\"\"}}")))
+    // the audio never leaves this machine: the address must be a local http one
+    assert(is_error(parse_server_settings("{\"stt\":{\"url\":\"http://example.com:8178/inference\"}}")))
+    assert(is_error(parse_server_settings("{\"stt\":{\"url\":\"https://127.0.0.1:8178/inference\"}}")))
+    ro path = settings_file("stt.json", "{\"stt\":{\"url\":\"http://127.0.0.1:9001/inference\",\"language\":\"ru\"}}")
+    mut state = MockOs.new()
+    state.put_env("CREW_SERVER_STT_URL", "http://127.0.0.1:9002/inference")
+    state.put_env("CREW_SERVER_STT_LANGUAGE", "en")
+    match with Os = mock_os(state), Fs = real_fs() { server_settings(path.display()) } {
+        Ok(s) => {
+            assert(s.stt_url == "http://127.0.0.1:9002/inference")
+            assert(s.stt_language == "en")
+        }
+        Err(e) => assert(false)
+    }
+    mut bad = MockOs.new()
+    bad.put_env("CREW_SERVER_STT_URL", "http://example.com/inference")
+    match with Os = mock_os(bad), Fs = real_fs() { server_settings("") } {
+        Ok(s) => assert(false)
+        Err(e) => assert(e.contains("stt"))
+    }
+}

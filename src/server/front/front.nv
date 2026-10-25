@@ -302,12 +302,119 @@ fn agents_route(agents []AgentChoice) -> fn(ServerRequest) -> ServerResponse {
     }
 }
 
-fn build_router(web_dir str, port int, hub_tx ChanTx[str], reg_tx ChanTx[Reg], agents []AgentChoice) -> Result[Router, HttpError] {
+// ----- the voice: POST /api/stt and GET /api/stt/status (task 192f) -----
+
+// A line that cannot be in a WAV file by chance, so the audio never closes the form early.
+const STT_BOUNDARY = "----crew-harness-stt-6b1f0d9a47c2e853"
+
+fn json_reply(status int, text str) -> ServerResponse {
+    mut resp = ServerResponse.text(status, text)
+    resp.header("Content-Type", "application/json; charset=utf-8")
+    with_headers(resp)
+}
+
+fn stt_failure(status int, reason str) -> ServerResponse => json_reply(status, stt_error_json(reason))
+
+// The audio of the body to the recognizer, the text of the answer to the page. 400 - not an audio we take, 413 - too big, 503 - the recognizer is not there,
+// 502 - it is there and did not give a text.
+fn stt_recognize(target SttTarget, audio []u8, language str) -> ServerResponse {
+    if audio.len() == 0 { return stt_failure(400, "the body is empty: send a WAV file") }
+    if audio.len() > STT_MAX_AUDIO { return stt_failure(413, "the audio is too long") }
+    if !stt_is_wav(audio) { return stt_failure(400, "the body must be a WAV file (16 kHz, mono, 16 bit)") }
+    if !stt_language_ok(language) { return stt_failure(400, "the language must be 2 to 8 letters, as ru, en or auto") }
+    ro exchanged = with Net = real_net() { stt_exchange(target, stt_request(target, STT_BOUNDARY, audio, language)) }
+    match exchanged {
+        Err(reason) => stt_failure(503, reason)
+        Ok(raw) => match stt_parse_reply(raw) {
+            Err(reason) => stt_failure(502, reason)
+            Ok(reply) => {
+                if reply.status != 200 { return stt_failure(502, "the recognizer answered with the status ${reply.status}") }
+                match stt_text_of(reply.body) {
+                    Err(reason) => stt_failure(502, reason)
+                    Ok(text) => json_reply(200, stt_text_json(text))
+                }
+            }
+        }
+    }
+}
+
+fn stt_route(url str, default_language str, port int) -> fn(ServerRequest) -> ServerResponse {
+    fn(req ServerRequest) -> ServerResponse {
+        if !origin_allowed(req, port) { return stt_failure(403, "origin not allowed") }
+        match stt_target(url) {
+            Err(reason) => stt_failure(503, reason)
+            Ok(target) => {
+                ro asked = req.query_param("lang") ?? ""
+                ro language = if asked.byte_len() > 0 { asked } else { default_language }
+                stt_recognize(target, req.body_bytes(), language)
+            }
+        }
+    }
+}
+
+// Does the recognizer answer `GET /` with 200? (Only the bytes of the status line are looked at: this runs in the prober fiber.)
+fn stt_alive(url str) Net -> bool {
+    match stt_target(url) {
+        Err(reason) => false
+        Ok(target) => match stt_exchange(target, stt_probe_request(target)) {
+            Err(reason) => false
+            Ok(raw) => stt_status_is_200(raw)
+        }
+    }
+}
+
+// A question to the prober: where to put the answer (Oracle 0.1.0 does not compile a channel of channel ends, so the end is in a record).
+type SttAsk { reply ChanTx[bool] }
+
+// The prober is a fiber of its own (`run_front` starts it): it takes the channel of an answer, probes the recognizer and tells the answer.
+// A refused connection takes about two seconds on Windows, so the route waits for the answer up to one second and says "not available" after it.
+fn stt_prober(url str, asks ChanRx[SttAsk]) Net -> () {
+    mut running = true
+    while running {
+        match asks.recv() {
+            Some(ask) => {
+                ro alive = stt_alive(url)
+                ro sent = ask.reply.send(alive)
+            }
+            None => { running = false }
+        }
+    }
+}
+
+fn stt_status_route(asks ChanTx[SttAsk]) -> fn(ServerRequest) -> ServerResponse {
+    fn(req ServerRequest) -> ServerResponse {
+        ro answer = Chan[bool].new(1)
+        mut alive = false
+        mut waiting = asks.try_send(SttAsk { reply: answer.tx })
+        mut waited = 0
+        while waiting {
+            match answer.rx.try_recv() {
+                Some(a) => {
+                    alive = a
+                    waiting = false
+                }
+                None => {
+                    if waited >= 1000 {
+                        waiting = false
+                    } else {
+                        5.to_millis().sleep()
+                        waited += 5
+                    }
+                }
+            }
+        }
+        json_reply(200, stt_status_json(alive))
+    }
+}
+
+fn build_router(web_dir str, port int, hub_tx ChanTx[str], reg_tx ChanTx[Reg], agents []AgentChoice, stt_url str, stt_language str, stt_asks ChanTx[SttAsk]) -> Result[Router, HttpError] {
     mut router = Router.new()
     ro r1 = router.get("/", files_route(web_dir))?
     ro r2 = router.get("/health", fn(req ServerRequest) -> ServerResponse => ServerResponse.text(StatusCode.OK, "ok"))?
     ro r3 = router.get("/ws", ws_route(hub_tx, reg_tx, port))?
     ro r4 = router.get("/api/agents", agents_route(agents))?
+    ro r4a = router.post("/api/stt", stt_route(stt_url, stt_language, port))?
+    ro r4b = router.get("/api/stt/status", stt_status_route(stt_asks))?
     ro r5 = router.get("/{*path}", files_route(web_dir))?
     Ok(router)
 }
@@ -326,14 +433,20 @@ export fn run_front(settings FrontSettings, config_file str) Proc Net Time Detac
         Ok(link) => {
             ro registrations = Chan[Reg].new(256)
             detach { route_loop(link, registrations.rx) }
-            match build_router(settings.web_dir, settings.port, link.out, registrations.tx, settings.agents) {
+            ro stt_asks = Chan[SttAsk].new(16)
+            detach { with Net = real_net() { stt_prober(settings.stt_url, stt_asks.rx) } }
+            match build_router(settings.web_dir, settings.port, link.out, registrations.tx, settings.agents, settings.stt_url, settings.stt_language, stt_asks.tx) {
                 Err(e) => {
                     log_line("the routes cannot be set: ${e}")
                     exit_process(2)
                 }
                 Ok(router) => {
                     log_line("listening on http://127.0.0.1:${settings.port}/ - Ctrl+C to stop (hub: ${settings.hub_program}, page: ${settings.web_dir})")
-                    match serve_addr("127.0.0.1:${settings.port}", router, ServerPolicy.new()) {
+                    // the voice is a WAV in the body of a request: up to 25 MiB, read for up to 30 s (the default is 1 MiB and 5 s)
+                    mut policy = ServerPolicy.new()
+                    policy.max_body_bytes(STT_MAX_AUDIO)
+                    policy.read_deadline(30.to_seconds())
+                    match serve_addr("127.0.0.1:${settings.port}", router, policy) {
                         Ok(done) => ()
                         Err(e) => {
                             log_line("the server cannot listen on port ${settings.port}: ${e}")

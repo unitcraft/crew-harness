@@ -4,7 +4,7 @@
 // stderr when they are wrong. The front cannot use `crew_harness.server.ServerSettings`: that module holds the hub, which holds the
 // PostgreSQL driver (see the mark 30 below).
 // The keys and the variables are those of src/server/settings.nv: port / CREW_SERVER_PORT, web_dir / CREW_SERVER_WEB_DIR,
-// hub {program, args} / CREW_SERVER_HUB, the file by the argument or CREW_SERVER_CONFIG.
+// hub {program, args} / CREW_SERVER_HUB, stt {url, language} / CREW_SERVER_STT_URL, CREW_SERVER_STT_LANGUAGE, the file by the argument or CREW_SERVER_CONFIG.
 // ORACLE-WORKAROUND(30): the front reads its own part of the settings, because the module of the settings holds the hub, which holds the PostgreSQL driver, and the driver and Polaris cannot be in one program; use `ServerSettings` when item 30 is fixed
 // ORACLE-WORKAROUND(25): the module is declared `module server.front` (without the package prefix) and imported as `crew_harness.server.front`: a module two folders under the source root cannot be declared with the full path; declare it with the prefix when item 25 is fixed
 module server.front
@@ -14,9 +14,9 @@ import std.encoding.json.{Json, JsonValue, JsonObject}
 import std.fs.{Fs, read_text, Path}
 import std.os.{Os, env}
 
-/// FrontSettings: where to listen, where the page is, how to start the hub.
+/// FrontSettings: where to listen, where the page is, how to start the hub, where the recognizer of the voice listens (`stt_url`, a local http address) and its default language.
 export type AgentChoice { id str, label str }
-export type FrontSettings { port int, web_dir str, hub_program str, hub_args []str, agents []AgentChoice }
+export type FrontSettings { port int, web_dir str, hub_program str, hub_args []str, agents []AgentChoice, stt_url str, stt_language str }
 
 fn fs_env(key str) Os -> Option[str] {
     match env(key) {
@@ -66,7 +66,12 @@ fn fs_agents(base []AgentChoice) Os -> []AgentChoice {
         None => base
     }
 }
-fn fs_defaults() -> FrontSettings => { port: 8099, web_dir: "src/web", hub_program: "target/crew-hub.exe", hub_args: []str.new(), agents: fs_default_agents() }
+fn fs_defaults() -> FrontSettings => { port: 8099, web_dir: "src/web", hub_program: "target/crew-hub.exe", hub_args: []str.new(), agents: fs_default_agents(), stt_url: "http://127.0.0.1:8178/inference", stt_language: "auto" }
+
+// The voice never leaves this machine: a recognizer address that is not a local http one is the default (the hub says what is wrong).
+fn fs_stt_url(url str, fallback str) -> str {
+    if url.starts_with("http://127.0.0.1:") || url.starts_with("http://localhost:") { url } else { fallback }
+}
 
 // The settings of a file (the keys that are there; a wrong value is the default - the hub says what is wrong).
 fn fs_from_file(text str) -> FrontSettings {
@@ -125,7 +130,28 @@ fn fs_from_file(text str) -> FrontSettings {
         }
         None => base.agents
     }
-    { port, web_dir, hub_program, hub_args, agents }
+    ro stt = match o.get("stt") {
+        Some(t) => t.object()
+        None => None
+    }
+    ro stt_url = match stt {
+        Some(to) => match to.get("url") {
+            Some(u) => fs_stt_url(u.str() ?? base.stt_url, base.stt_url)
+            None => base.stt_url
+        }
+        None => base.stt_url
+    }
+    ro stt_language = match stt {
+        Some(to) => match to.get("language") {
+            Some(l) => match l.str() {
+                Some(text) => if text.byte_len() > 0 { text } else { base.stt_language }
+                None => base.stt_language
+            }
+            None => base.stt_language
+        }
+        None => base.stt_language
+    }
+    { port, web_dir, hub_program, hub_args, agents, stt_url, stt_language }
 }
 
 /// The settings of the front: the file (the argument, or CREW_SERVER_CONFIG), the environment over it.
@@ -153,5 +179,7 @@ export fn front_settings(file str) Os Fs -> Result[FrontSettings, str] {
     }
     ro hub_program = if hub_words.len() > 0 { hub_words[0] } else { base.hub_program }
     ro hub_args = if hub_words.len() > 0 { fs_rest(hub_words) } else { base.hub_args }
-    Ok({ port, web_dir: fs_env("CREW_SERVER_WEB_DIR") ?? base.web_dir, hub_program, hub_args, agents: fs_agents(base.agents) })
+    ro stt_url = fs_stt_url(fs_env("CREW_SERVER_STT_URL") ?? base.stt_url, base.stt_url)
+    ro stt_language = fs_env("CREW_SERVER_STT_LANGUAGE") ?? base.stt_language
+    Ok({ port, web_dir: fs_env("CREW_SERVER_WEB_DIR") ?? base.web_dir, hub_program, hub_args, agents: fs_agents(base.agents), stt_url, stt_language })
 }
