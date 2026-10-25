@@ -1,0 +1,18 @@
+2026-10-26 01:10 документ: исполнение начато по заданию оркестратора (чат, 2026-10-26; папки `task/` нет — постановка пришла текстом): машины продукта и методики из `machines/` и встроенные тексты в `src/` переводятся на формат 2.25 (пакет `alula` 0.7.0); образец — задача 184. Ветка `task-2-25-machines` от `origin/main` (98085ec), рабочее дерево — отдельное, вне основной копии. Пакет `alula` 0.7.0 опубликован (коммит d816e3797ef68ec9427851421df7db47cb844a5b, метка v0.7.0), программа `alula 0.7.0 (Alula 2.25, machine/2)` собрана из этого коммита и лежит вне репозитория; Nova Oracle 0.1.0. Ничего не публикуется и не пушится
+
+2026-10-26 01:17 документ: **красная проба AC-1 (первая запись работы):** раздел спецификации пакета — «формат 2.25» (журнал изменений 2.25, правила AL-133 — функции `время_в_текст` и `текст_во_время`, AL-134 — штамп события `событие.момент` вместо `время_сейчас()`); команда `accept-225` (текст в конце задачи) на прежнем коде красная, потому что программа 0.7.0 отклоняет деревья `alula_version` 2.24, таблицы `format: 2.24` и вызов `время_сейчас()` в `agent_step` (строка 249). Красный вывод (папки `src/` в красной пробе пропущены переменной `ACCEPT_225_SRC=skip`; остальное сокращено до 200 знаков в строке):
+
+```
+КРАСНОЕ: alula test machines/methodology: 0 из 514 (ожидалось 514 из 514); machines/methodology/agent_step.alula.json:1:1: check: $.alula_version: the alula_version must be 2.25 (the version of the language of the methodology; there is no transition period), got 2.24
+КРАСНОЕ: alula test machines/product: 0 из 81 (ожидалось 81 из 81); machines/product/chat.alula.json:1:1: check: $.alula_version: the alula_version must be 2.25 (the version of the language of the methodology; there is no transition period), got 2.24
+КРАСНОЕ: старых форм в machines: 33
+tree machines\methodology\agent_step.alula.md: compile failed: ... structure: формат 2.24: версия не известна переводчику, он читает формат 2.25 (строка `format: 2.25`); переходного периода нет
+machines\methodology\agent_step.alula.md:249:29: syntax: `время_сейчас()` в формате 2.24 не бывает (AL-134 ...
+tree machines\methodology\cycle_check.alula.md: compile failed: ... формат 2.24: версия не известна переводчику ...
+  (и так для dialog_steps, session_start, task_runner, product/chat, product/dialog)
+trees: 7 tables, differ 7
+КРАСНОЕ: деревья не равны сборке
+НЕ ПРИНЯТО 225 (5 красных): methodology 0 из 514; product 0 из 81; старых форм 33; деревья не равны; src: пропущено (ACCEPT_225_SRC=skip)
+```
+
+2026-10-26 01:20 документ: инвентаризация старых форм до правки (числа, `grep` по строкам): в `machines/` — `format: 2.24` 8 строк (7 таблиц и образец `agent-step-sample.txt`), `alula-2.24` 5 (3 в таблицах и образце — `machine_version`, 2 в деревьях — `version` у `agent_step` и `cycle_check`), `"alula_version":"2.24"` 6 строк (деревья; 7-е, `chat.alula.json`, рукописное с красивой печатью — другая запись), хеш образца файла функций `818a4aaeef4f` 3 (`cycle_check.alula.md`, его дерево, `machines/README.md`; английского `431e7018e2bb` нет), `время_сейчас` 8 строк (по 4 вызова в `agent_step.alula.md` и в образце `agent-step-sample.txt` — СТАРТ `начато`, УЧЁТ, ОСТАНОВЛЕНО, ОШИБКА `сейчас` — плюс по строке «Соответствие коду» в каждом; в деревьях `agent_step.alula.json` — запись внешнего вызова), `time_now` 7 строк (проза «`time_now` — миллисекунды эпохи» в таблице и образце, шапка и таблица `registry.md`, `machines/README.md`, дерево); в `src/` — `2.24` в 13 файлах тестов (кроме `src/web/app.css`, другая вещь), `time_now` в 2 файлах (`machines/data_test.nv`, `machine_registry/registry_test.nv`), хеш `818a4aaeef4f` в `machine_cycle/table_test.nv`; `opencode-plugin/`: деревьев, `alula_version` и формата нет (плагин не правится)
