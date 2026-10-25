@@ -102,5 +102,34 @@ test('таймер мелкий серый фиксированной ширин
   assert.match(cssSrc, /\.box\.recording \.mic-more \{ display: none; \}/);
   assert.match(cssSrc, /\.box \{ display: flex; align-items: flex-end; gap: 8px;/);
   assert.match(cssSrc, /\.box-row \{ flex: none; gap: 6px; \}/);
-  assert.match(cssSrc, /\.mic-wrap \{ gap: 6px; \}/);
+  assert.match(cssSrc, /\.mic-wrap \{ gap: 0; \}/);
+});
+
+// ---- плоские кнопки карточки (задача 192): без заливки, область 38 px, значок 22 px ----
+const rule = (selector) => [...cssSrc.matchAll(new RegExp(`(^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\{([^}]*)\\}`, 'g'))].map((m) => m[2]).join(' ');
+
+test('кнопка отправки плоская: нигде нет синего фона, цвет --fg, пустая — серая с прозрачностью', () => {
+  assert.ok(!/\.send-btn \{[^}]*(background: var\(--accent\)|--accent-fg)/.test(cssSrc), 'старая синяя заливка убрана');
+  assert.ok(!/\.send-btn:hover:not\(:disabled\) \{[^}]*--accent/.test(cssSrc));
+  assert.match(cssSrc, /\.send-btn, \.enter-btn, \.cancel-btn \{ color: var\(--fg\); \}/);
+  assert.match(rule('.send-btn:disabled'), /background: transparent/);
+  assert.match(rule('.send-btn:disabled'), /color: var\(--fg-muted\)/);
+  assert.match(rule('.send-btn:disabled'), /opacity: \.45/);
+});
+
+test('кнопки карточки (↵, отмена, микрофон) — область 38×38, значок 22 px, фон прозрачный, при наведении --hover, при фокусе контур --accent', () => {
+  const shared = cssSrc.match(/\.send-btn, \.cancel-btn, \.enter-btn, \.mic-btn \{([^}]*)\}/);
+  assert.ok(shared);
+  assert.match(shared[1], /width: 38px; height: 38px; min-height: 38px/);
+  assert.match(shared[1], /background: transparent/);
+  assert.match(cssSrc, /\.send-btn \.icon, \.enter-btn \.icon, \.cancel-btn \.icon, \.mic-btn \.icon \{ width: 22px; height: 22px; \}/);
+  assert.match(cssSrc, /\.mic-btn:hover \{ background: var\(--hover\)/);
+  assert.match(cssSrc, /:focus-visible[^{]*\{ outline: 2px solid var\(--accent\)/);
+});
+
+test('микрофон серый; единственное цветное состояние — запись; стрелка провайдера 14 px прижата к нему', () => {
+  assert.match(cssSrc, /\.mic-btn \{ color: var\(--fg-muted\); touch-action: none; \}/);
+  assert.match(cssSrc, /\.mic-btn\[data-state="recording"\] \{ background: color-mix\(in srgb, var\(--accent\) 16%, transparent\)/);
+  assert.match(rule('.mic-more'), /width: 14px/);
+  assert.match(rule('.mic-more'), /margin-left: -2px/);
 });

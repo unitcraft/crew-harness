@@ -556,8 +556,6 @@ pre code { font: inherit; }
   padding: 0 15px;
   font-weight: 600;
 }
-.send-btn { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
-.send-btn:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
 .cancel-btn { color: var(--danger); border-color: var(--danger); }
 .hint { margin: 6px 6px 0; font-size: 12.5px; color: var(--fg-muted); }
 
@@ -790,30 +788,29 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
 .box:focus-within { outline: 1px solid color-mix(in srgb, var(--accent) 72%, transparent); outline-offset: 0; }
 .box textarea { min-height: 32px; padding: 6px 0; }
 .box-row { flex: none; gap: 6px; }
-.send-btn, .cancel-btn { justify-content: center; width: 32px; min-height: 32px; height: 32px; padding: 0; border-radius: 50%; }
-.cancel-btn { background: var(--surface-2); border-color: var(--border); color: var(--fg); }
-.cancel-btn:hover { filter: brightness(.96); }
-.cancel-btn .icon { width: 16px; height: 16px; }
+/* Кнопки карточки (задача 192): плоские, без заливки; область 38 px, значок 22 px; цветное состояние одно - запись у микрофона. */
+.send-btn, .cancel-btn, .enter-btn, .mic-btn { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; min-height: 38px; padding: 0; border: 0; border-radius: 50%; background: transparent; }
+.send-btn, .enter-btn, .cancel-btn { color: var(--fg); }
+.send-btn:hover:not(:disabled), .enter-btn:hover, .cancel-btn:hover, .mic-btn:hover { background: var(--hover); filter: none; }
+.send-btn:focus-visible, .enter-btn:focus-visible, .cancel-btn:focus-visible, .mic-btn:focus-visible, .mic-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+.send-btn .icon, .enter-btn .icon, .cancel-btn .icon, .mic-btn .icon { width: 22px; height: 22px; }
 .cancel-btn[hidden] { display: none; }
 .queue-count { position: absolute; right: 24px; bottom: calc(100% - 2px); z-index: 20; margin: 0; padding: 0 8px; min-height: 22px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); color: var(--fg-muted); font: inherit; font-size: 12px; cursor: pointer; }
 .queue-count:hover { text-decoration: underline; }
 .queue-count[hidden] { display: none; }
-.send-btn:disabled { background: var(--surface-2); border-color: var(--surface-2); color: var(--fg-muted); filter: none; opacity: 1; }
+.send-btn:disabled { background: transparent; border-color: transparent; color: var(--fg-muted); opacity: .45; filter: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-.mic-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; min-height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--fg-muted); touch-action: none; }
-.mic-btn .icon { width: 18px; height: 18px; }
+.mic-btn { color: var(--fg-muted); touch-action: none; }
 .mic-btn[data-state="recording"] { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
 .mic-btn[data-state="unavailable"] { opacity: .45; }
 .wave { display: flex; align-items: center; justify-content: flex-end; gap: 2px; height: 32px; padding: 0 4px; color: var(--fg-muted); }
 .wave[hidden] { display: none; }
 .wave i { display: block; width: 2px; min-height: 3px; height: 3px; border-radius: 2px; background: currentColor; }
-.enter-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; min-height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--fg-muted); }
-.enter-btn .icon { width: 18px; height: 18px; }
 .enter-btn[hidden], .send-btn[hidden] { display: none; }
 .box.recording textarea::placeholder { font-style: italic; }
 .mic-timer { flex: none; width: 34px; font-variant-numeric: tabular-nums; font-size: 12px; text-align: right; color: var(--fg-muted); align-self: center; }
 .box.recording .mic-more { display: none; }
-.mic-wrap { gap: 6px; }
+.mic-wrap { gap: 0; }
 .mic-timer[hidden] { display: none; }
 @keyframes pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--danger) 18%, transparent); } }
 .voice-toast { position: absolute; left: 20px; right: 20px; bottom: calc(100% - 2px); z-index: 25; display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 8px 8px 8px 12px; border: 1px solid var(--danger); border-radius: 10px; background: var(--danger-soft); color: var(--danger); font-size: 13px; line-height: 1.35; box-shadow: 0 4px 16px color-mix(in srgb, var(--fg) 12%, transparent); cursor: pointer; }
@@ -843,7 +840,7 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
 }
 
 .mic-wrap { position: relative; display: inline-flex; align-items: center; }
-.mic-more { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 32px; min-height: 32px; padding: 0; border: 0; background: transparent; color: var(--fg-muted); cursor: pointer; }
+.mic-more { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 38px; min-height: 38px; margin-left: -2px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--fg-muted); cursor: pointer; }
 .mic-more .icon { width: 12px; height: 12px; }
 .mic-more[aria-expanded="true"] { color: var(--fg); }
 .voice-menu { bottom: calc(100% + 10px); min-width: 270px; }
