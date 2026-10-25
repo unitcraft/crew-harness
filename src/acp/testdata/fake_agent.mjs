@@ -13,6 +13,7 @@
 //   error            a JSON-RPC error instead of the answer
 //   fragment         Cyrillic and an emoji; one line is written in two pieces cut inside a letter, two lines in one write
 //   noeol            a chunk, then the final answer WITHOUT a line break, then the process exits
+//   (pictures)       a prompt with `image` blocks is echoed with a tail "[blocks:text,image; image/png:<length of data>:<first 8 characters>]"
 //   caps             a chunk with the clientCapabilities that came with initialize
 //   cancelcount      a chunk with the number of session/cancel notifications received so far
 //   burst            256 chunks over a marked 512ms stream, then end_turn (server pump fairness probe)
@@ -28,6 +29,8 @@ const args = process.argv.slice(2);
 if (!args.includes("--live")) setTimeout(() => process.exit(0), 25000);
 
 const noInitialize = args.includes("--no-initialize");
+// `--images`: the agent says at `initialize` that it takes pictures in a prompt (promptCapabilities.image)
+const takesImages = args.includes("--images");
 const noSession = args.includes("--no-session");
 const authError = args.includes("--auth-error");
 const streamMarkerArg = args.find((arg) => arg.startsWith("--stream-marker="));
@@ -187,6 +190,11 @@ async function prompt(id, params) {
         chunk((i === 0 ? "" : " ") + words[i]);
         await sleep(5);
       }
+      const blocks = params.prompt || [];
+      const pictures = blocks.filter((b) => b.type === "image");
+      if (pictures.length > 0) {
+        chunk(" [blocks:" + blocks.map((b) => b.type).join(",") + "; " + pictures.map((b) => b.mimeType + ":" + String(b.data).length + ":" + String(b.data).slice(0, 8)).join(" ") + "]");
+      }
       return respond(id, { stopReason: "end_turn" });
     }
   }
@@ -220,7 +228,7 @@ function handle(line) {
       if (authError) return write({ jsonrpc: "2.0", id: msg.id, error: { code: -32000, message: "Authentication required" } });
       return respond(msg.id, {
         protocolVersion: 1,
-        agentCapabilities: { loadSession: false, promptCapabilities: { image: false, audio: false, embeddedContext: false } },
+        agentCapabilities: { loadSession: false, promptCapabilities: { image: takesImages, audio: false, embeddedContext: false } },
         agentInfo: { name: "fake-agent", title: "Fake ACP agent", version: "0.0.1" },
         authMethods: [],
       });

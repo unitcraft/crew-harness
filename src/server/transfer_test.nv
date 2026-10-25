@@ -57,3 +57,20 @@ test "transfer: one message over the limit is still given whole" {
     assert(r.text.contains("x".repeat(2000)))
     assert(r.shown == 1)
 }
+
+test "transfer: the pictures of a message go as lines with the names, never the bytes" {
+    ro lines = [
+        tl("session_created", "{\"name\":\"N\",\"agent\":\"opencode\"}"),
+        tl("message_images", "{\"images\":[{\"n\":1,\"name\":\"shot.png\",\"mime\":\"image/png\",\"bytes\":5},{\"n\":2,\"name\":\"image-2.png\",\"mime\":\"image/png\",\"bytes\":7}]}"),
+        tl("user_message", "{\"turn\":\"t1\",\"text\":\"look at this\"}"),
+        tl("agent_done", "{\"turn\":\"t1\"}"),
+        tl("message_images", "{\"images\":[{\"n\":3,\"name\":\"alone.png\",\"mime\":\"image/png\",\"bytes\":1}]}"),
+        tl("user_message", "{\"turn\":\"t2\",\"text\":\"\"}"),
+        tl("user_message", "{\"turn\":\"t3\",\"text\":\"plain\"}")
+    ]
+    ro r = build_transfer(lines, "opencode", 400000)
+    assert(r.text.contains("look at this\n[изображение: shot.png]\n[изображение: image-2.png]"))
+    assert(r.text.contains("[пользователь]\n[изображение: alone.png]"))
+    assert(r.text.contains("[пользователь]\nplain"))
+    assert(r.total == 3)
+}

@@ -584,6 +584,16 @@ fn page_input_of(e Incoming, turn str) -> Option[PageInput] {
                 ro value = object_input(e)?
                 return page_input("agent_switched", value)
             }
+            // the pictures of the message that comes next (task 192): the list {n, name, mime, bytes}, never the bytes
+            if e.name == "message_images" {
+                ro value = object_input(e)?
+                return page_input("message_images", value)
+            }
+            // the pictures were not sent: the agent does not take them (task 192)
+            if e.name == "images_skipped" {
+                ro value = object_input(e)?
+                return with_turn("images_skipped", value, turn)
+            }
             if e.name == "cancel" { return turn_only("cancel", turn) }
             if e.name == "permission_decision" {
                 ro value = object_input(e)?

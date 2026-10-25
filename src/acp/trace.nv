@@ -3,7 +3,9 @@
 // Every line of the JSON-RPC exchange goes to a file `<data_dir>/<session>/acp.jsonl`, one record per line:
 //   {"t": <unix milliseconds>, "dir": "out"|"in", "line": "<the line of the exchange as it is, a string>"}
 // `out` is what the client writes to the stdin of the agent, `in` is what it reads from the stdout of the agent. Nothing is cut
-// out: the file holds the whole talk and the output of the tools (the README of the server says so). The file is only appended
+// out: the file holds the whole talk and the output of the tools (the README of the server says so), except the bytes of a picture: a block
+// `{"type":"image",...,"data":"<base64>"}` is written with `"data":"<image N bytes>"` (task 192, the pictures are kept as files, see
+// storage/images.nv; a trace that held them would grow by megabytes per message). The file is only appended
 // to; at more than the limit (50 MB) the file becomes `acp.1.jsonl` beside it (an older one is replaced) and a new file is begun.
 // A failed write never stops the session: one line to the log of the hub (the stderr) and the trace of this session is off.
 module crew_harness.acp
@@ -43,6 +45,48 @@ export fn trace_rotated_name(path str) -> str {
     } else {
         "${path}.1"
     }
+}
+
+/// The number of bytes a base64 text stands for (the padding `=` at the end is not counted).
+export fn trace_image_bytes(data str) -> int {
+    ro n = data.byte_len()
+    mut pad = 0
+    if n > 0 && data[n - 1..] == "=" { pad += 1 }
+    if n > 1 && data[n - 2..n - 1] == "=" { pad += 1 }
+    n / 4 * 3 - pad
+}
+
+/// A line of the exchange with the bytes of every picture replaced: `"data":"<base64>"` -> `"data":"<image N bytes>"`. A line without a picture block
+/// (the usual one) is returned as it is, without being looked into.
+export fn trace_redact_images(line str) -> str {
+    if !line.contains("\"type\":\"image\"") { return line }
+    ro key = "\"data\":\""
+    consume sb = StringBuilder.new()
+    mut rest = line
+    mut more = true
+    while more {
+        match rest.find(key) {
+            None => {
+                sb.append(rest)
+                more = false
+            }
+            Some(at) => {
+                sb.append(rest[..at + key.byte_len()])
+                ro after = rest[at + key.byte_len()..]
+                match after.find("\"") {
+                    None => {
+                        sb.append(after)
+                        more = false
+                    }
+                    Some(end) => {
+                        sb.append("<image ${trace_image_bytes(after[..end])} bytes>")
+                        rest = after[end..]
+                    }
+                }
+            }
+        }
+    }
+    sb.into_str()
 }
 
 fn trace_record(at int, dir str, line str) -> str {
@@ -90,7 +134,7 @@ fn trace_append(path str, text str) Fs -> bool {
 export fn AcpTrace mut @record(dir str, line str) Time -> () {
     if !@on { return }
     ro at = Time.now().unix_millis()
-    ro text = "${trace_record(at, dir, line)}\n"
+    ro text = "${trace_record(at, dir, trace_redact_images(line))}\n"
     ro n = text.byte_len()
     with Fs = real_fs() {
         if @size > 0 && @size + n > @limit {

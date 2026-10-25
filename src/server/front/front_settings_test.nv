@@ -190,3 +190,30 @@ test "front settings: the recognizer is managed by default; the folder, the mode
         Err(e) => assert(false)
     }
 }
+
+test "front settings: the folder of the data and the limit of a picture" {
+    ro path = front_file("front-img.json", "{\"data_dir\":\"D:/data\",\"max_image_bytes\":4096}")
+    mut none = MockOs.new()
+    match with Os = mock_os(none), Fs = real_fs() { front_settings(path.display()) } {
+        Ok(s) => {
+            assert(s.data_dir == "D:/data")
+            assert(s.max_image_bytes == 4096)
+        }
+        Err(e) => assert(false)
+    }
+    mut state = MockOs.new()
+    state.put_env("CREW_SERVER_DATA_DIR", "E:/elsewhere")
+    state.put_env("CREW_SERVER_MAX_IMAGE_BYTES", "8192")
+    match with Os = mock_os(state), Fs = real_fs() { front_settings(path.display()) } {
+        Ok(s) => {
+            assert(s.data_dir == "E:/elsewhere")
+            assert(s.max_image_bytes == 8192)
+        }
+        Err(e) => assert(false)
+    }
+    mut empty = MockOs.new()
+    match with Os = mock_os(empty), Fs = real_fs() { front_settings("") } {
+        Ok(s) => assert(s.data_dir == "crew-data" && s.max_image_bytes == 10485760)
+        Err(e) => assert(false)
+    }
+}

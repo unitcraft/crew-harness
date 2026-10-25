@@ -19,9 +19,9 @@
 module crew_harness.acp
 
 import alula.engine.{Link, Incoming, EventKind, PartyRequest, FailCode}
-import crew_harness.storage.{append_line, read_lines, replace_file}
+import crew_harness.storage.{append_line, read_lines, replace_file, encode_image}
 import std.encoding.json.{Json, JsonValue, JsonObject}
-import std.fs.{Fs, real_fs, Path}
+import std.fs.{Fs, real_fs, Path, read}
 
 /// AcpConfig: how to start the agent. `program` and `args` - the command (by default `opencode acp`); `cwd` - the absolute
 /// folder of the session (`session/new` needs it, and the process is started there); `inbox_path` - the file of the
@@ -31,7 +31,10 @@ export type AcpConfig { program str, args []str, cwd str, inbox_path str }
 /// The default config: `opencode acp` in the folder `cwd`, no inbox file.
 export fn default_config(cwd str) -> AcpConfig => { program: "opencode", args: ["acp"], cwd, inbox_path: "" }
 
-type AcpQueued { request str, text str }
+/// AcpImage: a picture that goes with the next prompt: the file it was kept in (storage/images.nv), its type and the name the owner saw.
+export type AcpImage { path str, mime str, name str }
+
+type AcpQueued { request str, text str, images []AcpImage }
 
 type AcpOption { id str, kind str }
 
@@ -68,7 +71,9 @@ export type AcpClient {
     stderr str,
     exit_code int,
     last_error str,
-    trace AcpTrace
+    trace AcpTrace,
+    images_ok bool,
+    attached []AcpImage
 }
 
 const STDERR_KEEP = 4000
@@ -90,12 +95,23 @@ fn new_session_params(cwd str) -> JsonValue {
     JsonValue.object(o)
 }
 
-fn prompt_params(session str, text str) -> JsonValue {
+/// The block of a picture of the prompt (ACP content block `image`): the type, the MIME type, the base64 of the bytes.
+export fn image_block(mime str, data str) -> JsonValue {
+    mut block = JsonObject.new()
+    put(block, "type", JsonValue.str("image"))
+    put(block, "mimeType", JsonValue.str(mime))
+    put(block, "data", JsonValue.str(data))
+    JsonValue.object(block)
+}
+
+fn prompt_params(session str, text str, pictures []JsonValue) -> JsonValue {
     mut block = JsonObject.new()
     put(block, "type", JsonValue.str("text"))
     put(block, "text", JsonValue.str(text))
     mut blocks = []JsonValue.new()
-    blocks.push(JsonValue.object(block))
+    // a message of pictures alone has no text block: an empty one is refused by some agents
+    if text.byte_len() > 0 || pictures.len() == 0 { blocks.push(JsonValue.object(block)) }
+    for picture in pictures { blocks.push(picture) }
     mut o = JsonObject.new()
     put(o, "sessionId", JsonValue.str(session))
     put(o, "prompt", JsonValue.array(blocks))
@@ -274,7 +290,8 @@ export fn open_client_traced(config AcpConfig, trace_path str, trace_limit int) 
             mut client = AcpClient {
                 config, link, phase: "initializing", next_rpc: 0, init_rpc: -1, new_rpc: -1, prompt_rpc: -1,
                 session: "", agent: "", model_name: "", modes: JsonValue.null(), models: JsonValue.null(), choices_cfg: JsonValue.null(), mode_now: "", model_now: "", sets: []AcpSet.new(), queue: []AcpQueued.new(), active: "", permissions: []AcpPending.new(),
-                ready, taken: []AcpInboxItem.new(), next_seq: next, stderr: "", exit_code: -2, last_error: "", trace: trace_open(trace_path, trace_limit)
+                ready, taken: []AcpInboxItem.new(), next_seq: next, stderr: "", exit_code: -2, last_error: "", trace: trace_open(trace_path, trace_limit),
+                images_ok: false, attached: []AcpImage.new()
             }
             client.init_rpc = client.next_id()
             client.say(rpc_request_line(client.init_rpc, "initialize", initialize_params()))
@@ -350,6 +367,17 @@ fn AcpClient mut @fail_handshake(why str) -> () {
 fn AcpClient mut @on_result(id JsonValue, result JsonValue) -> () {
     ro key = rpc_key(id)
     if key == "${@init_rpc}" && @phase == "initializing" {
+        // the agent takes pictures in a prompt only if it says so at `initialize` (promptCapabilities.image); otherwise they are not sent
+        @images_ok = match field(result, "agentCapabilities") {
+            Some(caps) => match field(caps, "promptCapabilities") {
+                Some(prompt_caps) => match field(prompt_caps, "image") {
+                    Some(flag) => flag.bool() ?? false
+                    None => false
+                }
+                None => false
+            }
+            None => false
+        }
         @agent = match field(result, "agentInfo") {
             Some(info) => field_text(info, "name") ?? ""
             None => ""
@@ -587,8 +615,49 @@ fn AcpClient mut @drive() -> () {
     ro next = @queue.remove(0)
     @active = next.request
     @prompt_rpc = @next_id()
-    @say(rpc_request_line(@prompt_rpc, "session/prompt", prompt_params(@session, next.text)))
+    mut text = next.text
+    mut pictures = []JsonValue.new()
+    if next.images.len() > 0 {
+        if @images_ok {
+            mut unreadable = 0
+            for image in next.images {
+                match with Fs = real_fs() { read_picture(image.path) } {
+                    Some(data) => pictures.push(image_block(image.mime, data))
+                    None => { unreadable += 1 }
+                }
+            }
+            if unreadable > 0 { text = "${text}\n[изображений не удалось прочитать: ${unreadable}]" }
+        } else {
+            // not sent: the text goes with a note, the owner is told in the feed (the event `images_skipped`)
+            text = "${text}\n[приложено изображений: ${next.images.len()}, агент их не принимает]"
+            @push(Incoming.signal("images_skipped", skipped_text(@agent, next.images.len())))
+        }
+    }
+    @say(rpc_request_line(@prompt_rpc, "session/prompt", prompt_params(@session, text, pictures)))
 }
+
+// The base64 of a picture file, None when it cannot be read.
+fn read_picture(path str) Fs -> Option[str] {
+    match read(Path.from_bytes(path.bytes())) {
+        Ok(bytes) => Some(encode_image(bytes))
+        Err(e) => None
+    }
+}
+
+fn skipped_text(agent str, count int) -> str {
+    mut o = JsonObject.new()
+    put(o, "agent", JsonValue.str(agent))
+    put(o, "count", JsonValue.int(count))
+    JsonValue.object(o).to_str()
+}
+
+/// The pictures of the NEXT message: the prompt that is queued next takes them. Called by the hub right before it feeds the message.
+export fn AcpClient mut @attach_images(images []AcpImage) -> () {
+    @attached = images
+}
+
+/// Does the agent take pictures in a prompt (its `initialize` said `promptCapabilities.image`)? False before the handshake is over.
+export fn AcpClient @accepts_images() -> bool => @images_ok
 
 /// Take what the fibers around the process have brought: the handshake moves on, lines become events, the next
 /// waiting prompt goes out. Never waits.
@@ -615,7 +684,8 @@ fn AcpClient mut @enqueue(request PartyRequest[str]) -> () {
         @refuse(request.id, FailCode.NoResult)
         return
     }
-    @queue.push(AcpQueued { request: request.id, text: request.input })
+    @queue.push(AcpQueued { request: request.id, text: request.input, images: @attached })
+    @attached = []AcpImage.new()
     @poll()
 }
 
