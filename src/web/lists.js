@@ -317,3 +317,18 @@ export function groupModels(models) {
   }
   return groups;
 }
+
+/** Общее первое слово имён значений («Thinking Low / Thinking High» → «Thinking»), если оно у ВСЕХ и после него есть ещё слово; иначе ''. */
+export function commonWordPrefix(names) {
+  if (names.length < 2) return '';
+  const word = (n) => { const at = String(n).indexOf(' '); return at > 0 ? String(n).slice(0, at) : ''; };
+  const first = word(names[0]);
+  if (!first) return '';
+  return names.every((n) => word(n) === first) ? first : '';
+}
+
+/** Значения усилия для показа: имя агента без общего первого слова; данные агента не меняются (id те же). */
+export function effortChoices(efforts) {
+  const prefix = commonWordPrefix(efforts.map((e) => e.name));
+  return efforts.map((e) => (prefix ? { ...e, name: e.name.slice(prefix.length + 1) } : e));
+}

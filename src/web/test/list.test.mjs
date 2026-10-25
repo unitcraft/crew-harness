@@ -269,3 +269,16 @@ test('groupModels: по провайдеру (до «/») в порядке по
   assert.equal(st.providerOf('/x'), '');
   assert.deepEqual(st.groupModels([]), []);
 });
+
+test('усилие: общее первое слово имён (Kimi «Thinking …») отрезается в показе, у Claude приставки нет', () => {
+  const kimi = [{ id: 'low', name: 'Thinking Low' }, { id: 'high', name: 'Thinking High' }, { id: 'max', name: 'Thinking Max' }];
+  assert.equal(st.commonWordPrefix(kimi.map((e) => e.name)), 'Thinking');
+  assert.deepEqual(st.effortChoices(kimi).map((e) => [e.id, e.name]), [['low', 'Low'], ['high', 'High'], ['max', 'Max']]);
+  const claude = ['Default', 'Low', 'Medium', 'High', 'Xhigh', 'Max'].map((name) => ({ id: name.toLowerCase(), name }));
+  assert.equal(st.commonWordPrefix(claude.map((e) => e.name)), '');
+  assert.deepEqual(st.effortChoices(claude), claude);
+  // одно значение, разные первые слова и однословные имена не режутся
+  assert.equal(st.commonWordPrefix(['Thinking High']), '');
+  assert.equal(st.commonWordPrefix(['Fast mode', 'Slow mode']), '');
+  assert.equal(st.commonWordPrefix(['Low', 'High']), '');
+});

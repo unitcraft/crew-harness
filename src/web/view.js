@@ -13,7 +13,7 @@ import { t } from './strings.js';
 import { createDictation, speechCtor } from './voice.js';
 import {
   STATE_KEYS, sessionList, splitBlocks, filterSessions, groupSessions, effectivePins, timeline, paragraphs, inlineSpans,
-  workSummary, filterModels, groupModels, usagePercent, usageLevel, tokenParts, durationLabel, agoParts, fileParts, taskSummary,
+  workSummary, effortChoices, filterModels, groupModels, usagePercent, usageLevel, tokenParts, durationLabel, agoParts, fileParts, taskSummary,
 } from './state.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -366,7 +366,7 @@ export function createView(doc, refs, deps) {
         if (options.efforts.length > 0 || options.models.length > MENU_MODELS) rows.push(h(doc, 'div', { class: 'menu-sep', role: 'separator' }));
         if (options.efforts.length > 0) {
           rows.push(menuRow({
-            name: `${options.effortName || t('menu.effort')}  ${nameOf(options.efforts, options.effort)}`, arrow: true, onPick: () => openMenu('effort'),
+            name: `${t('menu.effort')}  ${nameOf(effortChoices(options.efforts), options.effort)}`, arrow: true, onPick: () => openMenu('effort'),
           }));
         }
         if (options.models.length > MENU_MODELS) rows.push(menuRow({ name: t('menu.more_models'), arrow: true, onPick: () => openMenu('more') }));
@@ -381,8 +381,8 @@ export function createView(doc, refs, deps) {
         }
       } else {
         rows.push(menuRow({ name: t('menu.back'), onPick: () => openMenu('model') }),
-          h(doc, 'div', { class: 'menu-head', text: options.effortName || t('menu.effort') }),
-          ...numbered(options.efforts, 'effort', options.effort));
+          h(doc, 'div', { class: 'menu-head', text: t('menu.effort') }),
+          ...numbered(effortChoices(options.efforts), 'effort', options.effort));
       }
     }
     menuList.append(...rows);
@@ -679,7 +679,7 @@ export function createView(doc, refs, deps) {
     modeButton.replaceChildren(h(doc, 'span', { text: hasModes ? (nameOf(options.modes, options.mode) || t('menu.mode')) : '' }), hasModes ? icon(doc, 'i-chevron-down') : false);
     modelButton.hidden = !hasModels;
     modelButton.replaceChildren(h(doc, 'span', {
-      text: hasModels ? [session.model || nameOf(options.models, options.modelId) || t('session.model_unknown'), nameOf(options.efforts, options.effort)].filter(Boolean).join('  ') : '',
+      text: hasModels ? [session.model || nameOf(options.models, options.modelId) || t('session.model_unknown'), nameOf(effortChoices(options.efforts), options.effort)].filter(Boolean).join(' · ') : '',
     }), hasModels ? icon(doc, 'i-chevron-down') : false);
     statusModel.hidden = hasModels;
     statusModel.textContent = session.model || '';
