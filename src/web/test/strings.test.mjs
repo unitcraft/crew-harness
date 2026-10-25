@@ -25,7 +25,7 @@ test('каждый t(\'ключ\') в коде ссылается на суще�
 });
 
 test('значения непусты и по-русски (кроме названия агента и значений без букв)', () => {
-  const latinOnly = new Set(['agent.opencode', 'ask.send_hint']);
+  const latinOnly = new Set(['agent.opencode', 'ask.send_hint', 'project.worktree']);
   for (const [key, value] of Object.entries(S)) {
     assert.equal(typeof value, 'string', key);
     assert.ok(value.length > 0, key);

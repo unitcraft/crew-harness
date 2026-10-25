@@ -14,6 +14,9 @@ import { BARS, barHeights, createMeter, recordingView } from './meter.js';
 import { createDictation, speechCtor, createMicPress, micTitleKey, clockText } from './voice.js';
 import { createLocalDictation } from './recorder.js';
 import { createToast } from './toast.js';
+import { h, svgNode, icon } from './dom.js';
+import { createProjectsUi } from './projects-ui.js';
+import { pickFolder as pickFolderFor, sessionPlace } from './projects.js';
 import { LANGS, createVoiceSettings, langFor, pageLang } from './stt.js';
 import { isBusy, keyAction } from './queue.js';
 import { canSend } from './attachments.js';
@@ -28,7 +31,6 @@ import {
   workSummary, effortChoices, filterModels, groupModels, usagePercent, usageLevel, tokenParts, durationLabel, agoParts, fileParts, taskSummary,
 } from './state.js';
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
 const NEAR_BOTTOM_PX = 48;
 const FOLD_DIFFS = 3;
 const FOLD_OUTPUTS = 4;
@@ -60,36 +62,13 @@ const DECISION_KEY = { allow: 'chat.perm_allowed', deny: 'chat.perm_denied', can
 const UNIT_KEY = { d: 'unit.d', h: 'unit.h', m: 'unit.m', s: 'unit.s' };
 const AGO_KEY = { now: 'ago.now', min: 'ago.min', hour: 'ago.hour', day: 'ago.day' };
 
-function h(doc, tag, props = {}, ...children) {
-  const node = doc.createElement(tag);
-  for (const [key, value] of Object.entries(props)) {
-    if (value === undefined || value === null || value === false) continue;
-    if (key === 'class') node.className = value;
-    else if (key === 'text') node.textContent = value;
-    else node.setAttribute(key, value === true ? '' : String(value));
-  }
-  for (const child of children) if (child !== false && child !== null && child !== undefined) node.append(child);
-  return node;
-}
-
-function svgNode(doc, tag, attrs = {}) {
-  const node = doc.createElementNS(SVG_NS, tag);
-  for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, String(value));
-  return node;
-}
-
-/** Значок из встроенного в index.html спрайта (источник icons.svg): id — литерал вида 'i-имя'. */
-function icon(doc, id, extra = '') {
-  const svg = svgNode(doc, 'svg', { class: extra ? `icon ${extra}` : 'icon', 'aria-hidden': 'true', focusable: 'false' });
-  svg.append(svgNode(doc, 'use', { href: `#${id}` }));
-  return svg;
-}
-
 /**
  * @param doc       document
  * @param refs      { side, main, rail, app, status, overlay } — корневые узлы из index.html
  * @param deps      { agents, now, handlers }
- *   handlers: onSelect(trace), onBack(), onNewToggle(open, project?), onCreate({agent, name, project}),
+ *   deps.projectsApi — клиент проектов (projects-api.js); handlers.onProjectsChanged() — список проектов изменился, перечитать;
+ *   handlers.onNotice(text, tone) — короткая заметка в строке статуса.
+ *   handlers: onSelect(trace), onBack(), onNewToggle(open, projectId?), onCreate({agent, name, project: {id, name}|null, folder}),
  *             onSend(trace, text, images?) -> bool | Promise<bool> (images — вложения: сначала уходят на сервер, потом сообщение), onCancel(trace), onDecide(trace, request, decision),
  *             onPin(trace, pinned), onTheme(), onCopy(text),
  *             onAnswer(trace, answer) -> bool — ответ на вопросы агента (question_answer) или пропуск,
@@ -98,7 +77,7 @@ function icon(doc, id, extra = '') {
  */
 export function createView(doc, refs, deps) {
   const {
-    agents, now, handlers, registryFailed = false, imageSrc = (image) => image.src,
+    agents, now, handlers, registryFailed = false, imageSrc = (image) => image.src, projectsApi,
   } = deps;
   const win = doc.defaultView;
   const drafts = new Map();
@@ -147,7 +126,10 @@ export function createView(doc, refs, deps) {
     agentSelect.append(h(doc, 'option', { value: a.id, disabled: a.disabled === true, text: a.labelKey ? t(a.labelKey) : a.label }));
   }
   const nameInput = h(doc, 'input', { id: 'new-name', type: 'text', autocomplete: 'off', placeholder: t('sessions.new_name_placeholder') });
-  const projectInput = h(doc, 'input', { id: 'new-project', type: 'text', autocomplete: 'off', placeholder: t('sessions.new_project_placeholder') });
+  const projectSelect = h(doc, 'select', { id: 'new-project' });
+  const folderSelect = h(doc, 'select', { id: 'new-folder' });
+  const folderLabel = h(doc, 'label', { for: 'new-folder', hidden: true }, t('sessions.new_folder'), folderSelect);
+  const folderSingle = h(doc, 'p', { class: 'muted new-folder-single', hidden: true });
   const createButton = h(doc, 'button', { type: 'submit', class: 'primary', text: t('sessions.new_create') });
   createButton.disabled = agents.length === 0;
   const agentNotice = h(doc, 'p', { class: 'empty', text: t(registryFailed ? 'sessions.agents_unavailable' : 'sessions.agents_none'), hidden: agents.length > 0 });
@@ -157,7 +139,8 @@ export function createView(doc, refs, deps) {
   const newForm = h(doc, 'form', { class: 'new-form', hidden: true },
     h(doc, 'label', { for: 'new-agent' }, t('sessions.new_agent'), agentSelect),
     h(doc, 'label', { for: 'new-name' }, t('sessions.new_name'), nameInput),
-    h(doc, 'label', { for: 'new-project' }, t('sessions.new_project'), projectInput),
+    h(doc, 'label', { for: 'new-project' }, t('sessions.new_project'), projectSelect),
+    folderLabel, folderSingle,
     agentNotice, retryAgents, h(doc, 'div', { class: 'actions' }, closeButton, createButton));
   const groupsBox = h(doc, 'nav', { class: 'groups', 'aria-label': t('sessions.title') });
   const listEmpty = h(doc, 'p', { class: 'empty', text: t('sessions.empty') });
@@ -174,16 +157,70 @@ export function createView(doc, refs, deps) {
   themeButton.addEventListener('click', () => handlers.onTheme());
   newButton.addEventListener('click', () => handlers.onNewToggle(newForm.hidden));
   closeButton.addEventListener('click', () => handlers.onNewToggle(false));
-  newForm.addEventListener('submit', (e) => {
+  newForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    handlers.onCreate({ agent: agentSelect.value, name: nameInput.value.trim(), project: projectInput.value.trim() });
+    const project = projectById(projectSelect.value);
+    const folder = project ? pickFolderFor(project, folderSelect.value) : null;
+    const name = nameInput.value.trim();
+    const agent = agentSelect.value;
+    // у папки без закреплённой ветки берём текущую из git: она попадёт в заголовок сессии
+    let branch = folder && folder.branch ? folder.branch : '';
+    if (folder && !branch) {
+      createButton.disabled = true;
+      const git = await projectsApi.fsGit(folder.path);
+      createButton.disabled = agents.length === 0;
+      branch = git.ok && git.isRepo ? git.branch : '';
+    }
+    handlers.onCreate({
+      agent, name, project: project ? { id: project.id, name: project.name } : null, folder: folder ? folder.path : '', branch,
+    });
     nameInput.value = '';
   });
+  projectSelect.addEventListener('change', () => syncFolderField());
   search.addEventListener('input', () => { query = search.value; if (current.ui) renderList(current.model, current.ui); });
 
   /** Метка «Нужен ваш ответ»: оранжевая точка и плашка; в списке сессий и в карточке вопросов. */
   function askBadge() {
     return h(doc, 'span', { class: 'ask-badge' }, h(doc, 'span', { class: 'ask-dot', 'aria-hidden': 'true' }), h(doc, 'span', { class: 'ask-badge-text', text: t('ask.need') }));
+  }
+
+  // ---- проекты: список приходит из страницы (ui.projects), окна живут в projects-ui.js
+  let projectsList = null; // null — список ещё не загружен
+  let selectSig = '';
+  let groupMenu = ''; // id проекта, чьё меню «⋯» открыто
+  const projectById = (id) => (projectsList ? projectsList.find((p) => p.id === id) : undefined);
+  const projectsUi = createProjectsUi(doc, {
+    api: projectsApi,
+    onChanged: () => handlers.onProjectsChanged(),
+    onNotice: (text, tone) => handlers.onNotice(text, tone),
+  });
+
+  /** Папка проекта для новой сессии: единственная — сама, из нескольких — выбранная в списке. */
+  function syncFolderField() {
+    const project = projectById(projectSelect.value);
+    const many = Boolean(project) && project.folders.length > 1;
+    folderLabel.hidden = !many;
+    folderSingle.hidden = !(project && project.folders.length === 1);
+    if (project && project.folders.length === 1) folderSingle.textContent = t('sessions.new_folder_single', { folder: project.folders[0].path });
+    const sig = many ? JSON.stringify(project.folders.map((f) => f.path)) : '';
+    if (folderSelect.dataset.sig !== sig) {
+      folderSelect.dataset.sig = sig;
+      folderSelect.replaceChildren(...(many ? project.folders.map((f) => h(doc, 'option', { value: f.path, text: f.path })) : []));
+    }
+  }
+
+  /** Выпадающий список проектов формы: «Без проекта» и проекты; выбор владельца сохраняется. */
+  function syncProjectSelect(ui) {
+    const list = projectsList ?? [];
+    const sig = JSON.stringify([list.map((p) => [p.id, p.name, p.folders.map((f) => f.path)]), ui.newOpen ? ui.newProjectId ?? '' : null]);
+    if (sig === selectSig) return;
+    selectSig = sig;
+    const keep = ui.newOpen && ui.newProjectId ? ui.newProjectId : projectSelect.value;
+    projectSelect.replaceChildren(h(doc, 'option', { value: '', text: t('sessions.no_project') }),
+      ...list.map((p) => h(doc, 'option', { value: p.id, text: p.name })));
+    projectSelect.value = list.some((p) => p.id === keep) ? keep : '';
+    folderSelect.dataset.sig = '';
+    syncFolderField();
   }
 
   let listSig = '';
@@ -213,33 +250,93 @@ export function createView(doc, refs, deps) {
     return h(doc, 'li', { class: cls, 'data-depth': Math.min(depth, 2) }, item, pin);
   }
 
-  function groupNode(title, rows, ui, pins, project) {
-    const head = h(doc, 'div', { class: 'group-head' }, h(doc, 'h3', { text: title }));
-    if (project !== undefined) {
-      const label = t('sessions.group_add', { project: title });
-      const add = h(doc, 'button', { type: 'button', class: 'icon-btn small', 'aria-label': label, title: label }, icon(doc, 'i-plus'));
-      add.addEventListener('click', () => handlers.onNewToggle(true, project));
-      head.append(add);
-    }
-    return h(doc, 'section', { class: 'group' }, head, h(doc, 'ul', { class: 'group-list' }, ...rows.map((r) => sessionRow(r, ui, pins))));
+  function closeGroupMenu() {
+    groupMenu = '';
+    if (current.ui) renderList(current.model, current.ui);
   }
 
+  function menuAction(label, iconId, onPick, danger = false) {
+    const row = h(doc, 'button', { type: 'button', class: danger ? 'menu-item is-danger' : 'menu-item', role: 'menuitem' },
+      h(doc, 'span', { class: 'menu-check' }, icon(doc, iconId)),
+      h(doc, 'span', { class: 'menu-label' }, h(doc, 'span', { text: label })));
+    row.addEventListener('click', onPick);
+    return row;
+  }
+
+  /** Группа сессий. group.id пуст — «Без проекта» или проект только по имени (меню «⋯» только у настоящих проектов). */
+  function groupNode(title, rows, ui, pins, group = null) {
+    const head = h(doc, 'div', { class: 'group-head' },
+      h(doc, 'div', { class: 'group-title' }, h(doc, 'h3', { text: title }),
+        group && group.id !== '' ? h(doc, 'span', { class: 'group-count', title: t('projects.count_title', { n: rows.length }), text: String(rows.length) }) : false));
+    if (group) {
+      const actions = h(doc, 'div', { class: 'group-actions' });
+      const label = t('sessions.group_add', { project: title });
+      const add = h(doc, 'button', { type: 'button', class: 'icon-btn small', 'aria-label': label, title: label }, icon(doc, 'i-plus'));
+      add.addEventListener('click', () => handlers.onNewToggle(true, group.id));
+      actions.append(add);
+      if (group.id !== '') {
+        const menuLabel = t('projects.menu', { project: title });
+        const more = h(doc, 'button', {
+          type: 'button', class: 'icon-btn small', 'aria-label': menuLabel, title: menuLabel, 'aria-haspopup': 'menu', 'aria-expanded': String(groupMenu === group.id),
+        }, icon(doc, 'i-more'));
+        more.addEventListener('click', (e) => {
+          e.stopPropagation();
+          groupMenu = groupMenu === group.id ? '' : group.id;
+          if (current.ui) renderList(current.model, current.ui);
+        });
+        actions.append(more);
+        if (groupMenu === group.id) {
+          const project = projectById(group.id);
+          head.append(h(doc, 'div', { class: 'menu group-menu', role: 'menu', 'data-side': 'right' },
+            menuAction(t('projects.edit'), 'i-pencil', () => { closeGroupMenu(); projectsUi.openEditor(group.id); }),
+            menuAction(t('projects.delete'), 'i-trash', () => { closeGroupMenu(); if (project) projectsUi.removeProject(project); }, true)));
+        }
+      }
+      head.append(actions);
+    }
+    const body = rows.length === 0
+      ? h(doc, 'p', { class: 'group-empty', text: t('projects.group_empty') })
+      : h(doc, 'ul', { class: 'group-list' }, ...rows.map((r) => sessionRow(r, ui, pins)));
+    return h(doc, 'section', { class: 'group' }, head, body);
+  }
+
+  const projectsHeadNew = h(doc, 'button', { type: 'button', class: 'projects-new', title: t('projects.new') }, icon(doc, 'i-plus'), h(doc, 'span', { text: t('projects.new') }));
+  projectsHeadNew.addEventListener('click', () => projectsUi.openEditor());
+  const projectsHead = h(doc, 'div', { class: 'projects-head' }, h(doc, 'h3', { text: t('projects.title') }), projectsHeadNew);
+
   function renderList(model, ui) {
+    projectsList = ui.projects ?? null;
+    syncProjectSelect(ui);
     const all = sessionList(model);
     const pins = effectivePins(all, ui.pins);
-    const groups = groupSessions(filterSessions(all, query), { pinned: pins });
+    const filtered = filterSessions(all, query);
+    const groups = groupSessions(filtered, { pinned: pins, projects: projectsList, includeEmpty: query.trim() === '' });
     const rowSig = (r) => [r.depth, r.session.id, r.session.name, r.session.state, r.session.updatedAt, Boolean(r.session.pendingQuestion)];
-    const sig = JSON.stringify([ui.selected, query, groups.pinned.map(rowSig), groups.projects.map((p) => [p.project, p.rows.map(rowSig)])]);
+    const sig = JSON.stringify([ui.selected, query, groupMenu, groups.pinned.map(rowSig), groups.projects.map((p) => [p.project, p.id, p.rows.map(rowSig)])]);
     const shown = groups.pinned.length + groups.projects.length;
-    listEmpty.hidden = all.length > 0;
+    listEmpty.hidden = all.length > 0 || (projectsList !== null && projectsList.length > 0);
     notFound.hidden = !(all.length > 0 && shown === 0);
     if (sig === listSig) return;
     listSig = sig;
     const nodes = [];
     if (groups.pinned.length > 0) nodes.push(groupNode(t('sessions.pinned'), groups.pinned, ui, pins));
-    for (const p of groups.projects) nodes.push(groupNode(p.project || t('sessions.no_project'), p.rows, ui, pins, p.project));
+    const named = groups.projects.filter((p) => p.project !== '');
+    const free = groups.projects.filter((p) => p.project === '');
+    nodes.push(projectsHead);
+    for (const p of named) nodes.push(groupNode(p.project, p.rows, ui, pins, { id: p.id }));
+    for (const p of free) nodes.push(groupNode(t('sessions.no_project'), p.rows, ui, pins, { id: '' }));
     groupsBox.replaceChildren(...nodes);
   }
+
+  // меню «⋯» закрывается кликом в стороне и Esc
+  doc.addEventListener('click', (e) => {
+    if (groupMenu === '' || e.composedPath().some((n) => n && n.classList && n.classList.contains('group-menu'))) return;
+    closeGroupMenu();
+  });
+  doc.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || groupMenu === '' || projectsUi.openCount() > 0) return;
+    closeGroupMenu();
+  });
 
   // ---------------------------------------------------------------- центр: заголовок и разговор
 
@@ -248,7 +345,8 @@ export function createView(doc, refs, deps) {
   const agentText = h(doc, 'span', { class: 'agent-name' });
   const modelText = h(doc, 'span', { class: 'session-model-slot', 'data-session-model': '' });
   const stateBadge = h(doc, 'span', { class: 'badge' });
-  const titleBlock = h(doc, 'div', { class: 'title-block', hidden: true }, title, h(doc, 'div', { class: 'sub' }, agentText, modelText, stateBadge));
+  const placeText = h(doc, 'span', { class: 'place muted', title: t('session.place'), hidden: true });
+  const titleBlock = h(doc, 'div', { class: 'title-block', hidden: true }, title, h(doc, 'div', { class: 'sub' }, agentText, modelText, stateBadge, placeText));
   const railButton = h(doc, 'button', { type: 'button', class: 'icon-btn', 'aria-label': t('rail.toggle'), title: t('rail.toggle'), 'aria-pressed': 'true' }, icon(doc, 'i-panel'));
   const topbar = h(doc, 'header', { class: 'topbar' }, backButton, titleBlock, railButton);
 
@@ -922,6 +1020,11 @@ export function createView(doc, refs, deps) {
       closeMenu();
     }
     agentText.textContent = agentLabel(session.agent);
+    const known = session.projectId ? projectById(session.projectId) : undefined;
+    const removed = Boolean(session.projectId) && projectsList !== null && !known; // проект удалён: сессия теперь «Без проекта»
+    const place = removed ? '' : sessionPlace({ project: known ? known.name : session.project, folder: session.folder, branch: session.branch });
+    placeText.hidden = place === '';
+    placeText.textContent = place;
     modelText.textContent = session.model || t('session.model_unknown');
     stateBadge.textContent = t(STATE_KEYS[session.state]);
     stateBadge.dataset.state = session.state;
@@ -1367,10 +1470,9 @@ export function createView(doc, refs, deps) {
     }
   }
 
-  let formSig = '';
   return {
     tick,
-    /** ui: { selected, newOpen, newProject, pane, flash, theme, pins }; status: { state, seconds? } */
+    /** ui: { selected, newOpen, newProjectId, projects, pane, flash, theme, pins }; status: { state, seconds? } */
     render(model, ui, status) {
       const session = ui.selected ? model.sessions[ui.selected] : undefined;
       current = { model, ui, session };
@@ -1379,11 +1481,6 @@ export function createView(doc, refs, deps) {
       const wide = Boolean(win && win.matchMedia && win.matchMedia(WIDE_QUERY).matches);
       railButton.setAttribute('aria-pressed', String(railOpen === null ? wide : railOpen));
       newForm.hidden = !ui.newOpen;
-      const form = `${ui.newOpen}:${ui.newProject ?? ''}`;
-      if (form !== formSig) {
-        formSig = form;
-        if (ui.newOpen) projectInput.value = ui.newProject ?? '';
-      }
       renderTheme(ui.theme);
       renderList(model, ui);
       renderChat(model, ui);

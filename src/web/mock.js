@@ -8,6 +8,8 @@
 // Сервер чистый: ни таймеров, ни DOM. handle(событие) возвращает список { delay, event };
 // расписание и отмену ведёт transport.js.
 
+import { parseEnv, normalizePath, parentPath, samePath } from './projects.js';
+
 export const AGENTS = Object.freeze([
   Object.freeze({ id: 'opencode', labelKey: 'agent.opencode' }),
   Object.freeze({ id: 'second', labelKey: 'agent.second', disabled: true }),
@@ -77,7 +79,7 @@ function buildJournal() {
   // 1. закреплённая, закончена: инструменты, фоновые задачи, правки, результаты
   const s1 = 'ses-demo-1';
   add(s1, 'session_created', {
-    name: 'Разбор падающих тестов', agent: 'opencode', project: 'crew-harness', folder: 'C:/work/crew-harness', branch: 'task/flaky-tests',
+    name: 'Разбор падающих тестов', agent: 'opencode', project: 'crew-harness', project_id: 'proj-crew', folder: 'C:/work/crew-harness', branch: 'task/flaky-tests',
   }, BASE);
   add(s1, 'session_model', MOCK_OPTIONS, BASE + 1);
   add(s1, 'user_message', { turn: 't1', text: 'Почему тест на дубликаты событий иногда красный?' }, BASE + MIN);
@@ -121,7 +123,7 @@ function buildJournal() {
   // 2. отказ агента после запроса разрешения
   const s2 = 'ses-demo-2';
   add(s2, 'session_created', {
-    name: 'Уборка временных файлов', agent: 'opencode', project: 'crew-harness', folder: 'C:/work/crew-harness', branch: 'main',
+    name: 'Уборка временных файлов', agent: 'opencode', project: 'crew-harness', project_id: 'proj-crew', folder: 'C:/work/crew-harness', branch: 'main',
   }, BASE + 5 * MIN);
   add(s2, 'user_message', { turn: 't1', text: 'Удали все временные файлы в проекте.' }, BASE + 6 * MIN);
   add(s2, 'agent_chunk', { turn: 't1', text: 'Для этого мне нужно удалить файлы в папке tmp. ' }, BASE + 6 * MIN + 400);
@@ -133,7 +135,7 @@ function buildJournal() {
   // 3. ошибка в другом проекте
   const s4 = 'ses-demo-4';
   add(s4, 'session_created', {
-    name: 'Заметки к релизу', agent: 'opencode', project: 'docs-site', folder: 'C:/work/docs-site', branch: 'main', pinned: true,
+    name: 'Заметки к релизу', agent: 'opencode', project: 'docs-site', project_id: 'proj-docs', folder: 'C:/work/docs-site', branch: 'main', pinned: true,
   }, BASE + HOUR);
   add(s4, 'user_message', { turn: 't1', text: 'Собери заметки к релизу из журнала изменений.' }, BASE + HOUR + MIN);
   add(s4, 'agent_chunk', { turn: 't1', text: 'Читаю журнал изменений… ' }, BASE + HOUR + MIN + 400);
@@ -143,7 +145,7 @@ function buildJournal() {
   // 4. дочерняя сессия закреплённой, работа идёт: красная полоска контекста и бегущая строка
   const s3 = 'ses-demo-3';
   add(s3, 'session_created', {
-    name: 'Проверка стражей', agent: 'opencode', project: 'crew-harness', folder: 'C:/work/crew-harness', branch: 'task/flaky-tests', parent: s1,
+    name: 'Проверка стражей', agent: 'opencode', project: 'crew-harness', project_id: 'proj-crew', folder: 'C:/work/crew-harness', branch: 'task/flaky-tests', parent: s1,
   }, END - 4 * MIN);
   add(s3, 'user_message', { turn: 't1', text: 'Прогони все стражи по индексу и скажи, что красное.' }, END - 96 * SEC);
   add(s3, 'agent_chunk', { turn: 't1', text: 'Запускаю стражи; пока они идут, смотрю список изменённых файлов.' }, END - 94 * SEC);
@@ -344,12 +346,108 @@ export function createMockServer({ journal, now = Date.now } = {}) {
 // ---- заглушка распознавания речи (задача 192): в режиме ?mock=1 сервера нет, но выбор провайдера и запись можно проверить
 export const MOCK_STT_TEXT = 'пример распознанного текста';
 
-/** fetch, который сам отвечает на /api/stt и /api/stt/status, а всё остальное отдаёт настоящему fetch. */
+// ---- заглушка проектов и обзора папок (задача 192n): всё в памяти, как договорённость с сервером
+
+/** Дерево папок заглушки: путь -> вложенные каталоги. Диски: C:/ и D:/. */
+const MOCK_TREE = Object.freeze({
+  'C:/': ['Users', 'work'],
+  'C:/Users': ['demo'],
+  'C:/work': ['api-server', 'crew-harness', 'docs-site', 'notes'],
+  'C:/work/api-server': ['src', 'tests'],
+  'C:/work/crew-harness': ['doc', 'scripts', 'src'],
+  'C:/work/crew-harness/src': ['web', 'machine'],
+  'C:/work/docs-site': ['content', 'theme'],
+  'C:/work/notes': [],
+  'D:/': ['data', 'tmp'],
+  'D:/data': ['archive'],
+});
+const MOCK_GIT = Object.freeze({
+  'C:/work/crew-harness': 'main',
+  'C:/work/docs-site': 'docs',
+  'C:/work/api-server': 'develop',
+});
+const MOCK_RECENT = Object.freeze(['C:/work/crew-harness', 'C:/work/docs-site', 'C:/work/api-server']);
+
+function mockProjects() {
+  const projects = [
+    {
+      id: 'proj-crew', name: 'crew-harness', env: 'NODE_ENV=production\nGIT_AUTHOR_NAME=Your Name',
+      folders: [{ path: 'C:/work/crew-harness', branch: 'main', worktree: true }],
+    },
+    {
+      id: 'proj-docs', name: 'docs-site', env: '',
+      folders: [{ path: 'C:/work/docs-site', worktree: false }, { path: 'C:/work/notes', worktree: false }],
+    },
+  ];
+  let serial = 2;
+  const find = (id) => projects.find((p) => p.id === id);
+  const checked = (body) => {
+    if (!body || typeof body.name !== 'string' || body.name.trim() === '') return 'название проекта не задано';
+    const env = parseEnv(body.env);
+    if (env.errors.length > 0) return env.errors[0].message;
+    return '';
+  };
+  const clean = (body) => ({
+    name: body.name.trim(),
+    env: typeof body.env === 'string' ? body.env : '',
+    folders: (Array.isArray(body.folders) ? body.folders : []).map((f) => {
+      const out = { path: normalizePath(f.path), worktree: f.worktree === true };
+      if (typeof f.branch === 'string' && f.branch) out.branch = f.branch;
+      return out;
+    }),
+  });
+  return {
+    summary: () => ({ projects: projects.map((p) => ({ id: p.id, name: p.name, folders: p.folders, env_keys: parseEnv(p.env).vars.map((v) => v.key) })) }),
+    get: find,
+    create(body) {
+      const error = checked(body);
+      if (error) return { status: 400, body: { error } };
+      serial += 1;
+      const project = { id: `proj-${serial}`, ...clean(body) };
+      projects.push(project);
+      return { status: 201, body: { id: project.id } };
+    },
+    update(id, body) {
+      const at = projects.findIndex((p) => p.id === id);
+      if (at < 0) return { status: 404, body: { error: 'проект не найден' } };
+      const error = checked(body);
+      if (error) return { status: 400, body: { error } };
+      projects[at] = { id, ...clean(body) };
+      return { status: 200, body: { id } };
+    },
+    remove(id) {
+      const at = projects.findIndex((p) => p.id === id);
+      if (at < 0) return { status: 404, body: { error: 'проект не найден' } };
+      projects.splice(at, 1);
+      return { status: 200, body: {} };
+    },
+  };
+}
+
+function mockFsList(rawPath) {
+  const path = normalizePath(rawPath);
+  if (path === '') {
+    return { status: 200, body: { path: '', parent: null, entries: ['C:/', 'D:/'].map((name) => ({ name, dir: true })), recent: [...MOCK_RECENT] } };
+  }
+  const key = Object.keys(MOCK_TREE).find((k) => samePath(k, path));
+  if (key === undefined) return { status: 404, body: { error: `папка не найдена: ${path}` } };
+  return { status: 200, body: { path: key, parent: parentPath(key), entries: MOCK_TREE[key].map((name) => ({ name, dir: true })) } };
+}
+
+function mockFsGit(rawPath) {
+  const key = Object.keys(MOCK_GIT).find((k) => samePath(k, rawPath));
+  return { status: 200, body: key === undefined ? { is_repo: false, branch: '' } : { is_repo: true, branch: MOCK_GIT[key] } };
+}
+
+/** fetch, который сам отвечает на /api/stt, /api/projects и /api/fs/*, а всё остальное отдаёт настоящему fetch. */
 export function mockFetch(real) {
-  const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  const reply = ({ status, body }) => json(body, status);
+  const projects = mockProjects();
   const numbers = {};
   return async (url, init) => {
-    const path = String(url).split('?')[0];
+    const [path, query = ''] = String(url).split('?');
+    const method = String((init && init.method) || 'GET').toUpperCase();
     // загрузка картинки сообщения (задача 192): сервера нет, номер выдаёт заглушка
     const upload = /^\/api\/session-image\/([^/]+)$/.exec(path);
     if (upload && init && init.method === 'POST') {
@@ -358,6 +456,19 @@ export function mockFetch(real) {
     }
     if (path === '/api/stt/status') return json({ available: true, provider: 'local', model: 'small' });
     if (path === '/api/stt') return json({ text: MOCK_STT_TEXT });
+    if (path === '/api/fs/list') return reply(mockFsList(new URLSearchParams(query).get('path') ?? ''));
+    if (path === '/api/fs/git') return reply(mockFsGit(new URLSearchParams(query).get('path') ?? ''));
+    if (path === '/api/projects') {
+      if (method === 'GET') return json(projects.summary());
+      if (method === 'POST') return reply(projects.create(JSON.parse(init.body)));
+    }
+    const one = /^\/api\/projects\/([^/]+)$/.exec(path);
+    if (one) {
+      const id = decodeURIComponent(one[1]);
+      if (method === 'GET') { const p = projects.get(id); return p ? json(p) : json({ error: 'проект не найден' }, 404); }
+      if (method === 'PUT') return reply(projects.update(id, JSON.parse(init.body)));
+      if (method === 'DELETE') return reply(projects.remove(id));
+    }
     return real(url, init);
   };
 }

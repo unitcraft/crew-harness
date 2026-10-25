@@ -50,25 +50,39 @@ function buildTree(list) {
 }
 
 /**
- * Группы для левой колонки: { pinned: [{session, depth:0}], projects: [{project, rows}] }.
+ * Группы для левой колонки: { pinned: [{session, depth:0}], projects: [{project, id, rows}] }.
  * Закреплённые вынесены, остальные собраны по проекту (свежие проекты выше).
+ * Сессия с projectId — в группе этого проекта; если список проектов известен (projects — массив {id, name}), а такого
+ * проекта в нём нет (удалён), сессия уходит в «Без проекта». Сессия только с именем project — в группе по имени (id пуст).
+ * includeEmpty добавляет известные проекты без сессий (в конец, по имени): у них тоже есть кнопка «+».
  */
-export function groupSessions(sessions, { pinned = new Set() } = {}) {
+export function groupSessions(sessions, { pinned = new Set(), projects = null, includeEmpty = false } = {}) {
   const pinnedList = [];
-  const byProject = new Map();
+  const known = projects ? new Map(projects.map((p) => [p.id, p])) : null;
+  const byKey = new Map();
+  const slot = (key, project, id) => {
+    if (!byKey.has(key)) byKey.set(key, { project, id, list: [] });
+    return byKey.get(key);
+  };
   for (const s of sessions) {
     if (pinned.has(s.id)) { pinnedList.push(s); continue; }
-    const key = s.project || '';
-    if (!byProject.has(key)) byProject.set(key, []);
-    byProject.get(key).push(s);
+    if (s.projectId && (!known || known.has(s.projectId))) {
+      const real = known ? known.get(s.projectId) : undefined;
+      slot(`id:${s.projectId}`, real ? real.name : (s.project || s.projectId), s.projectId).list.push(s);
+    } else if (s.project && !s.projectId) {
+      slot(`name:${s.project}`, s.project, '').list.push(s);
+    } else {
+      slot('', '', '').list.push(s);
+    }
   }
-  const projects = [...byProject.entries()]
-    .map(([project, list]) => ({ project, list, latest: Math.max(...list.map((s) => s.updatedAt)) }))
-    .sort((a, b) => (b.latest - a.latest) || (a.project < b.project ? -1 : 1))
-    .map(({ project, list }) => ({ project, rows: buildTree(list) }));
+  if (includeEmpty && known) for (const p of known.values()) slot(`id:${p.id}`, p.name, p.id);
+  const groups = [...byKey.values()]
+    .map((g) => ({ ...g, latest: g.list.length > 0 ? Math.max(...g.list.map((s) => s.updatedAt)) : -1 }))
+    .sort((x, y) => (y.latest - x.latest) || (x.project < y.project ? -1 : (x.project > y.project ? 1 : 0)))
+    .map(({ project, id, list }) => ({ project, id, rows: buildTree(list) }));
   return {
     pinned: pinnedList.sort(byRecency).map((session) => ({ session, depth: 0 })),
-    projects,
+    projects: groups,
   };
 }
 

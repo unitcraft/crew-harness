@@ -25,7 +25,7 @@ test('каждый значок i-… из кода есть во встроен
 
 test('встроенный спрайт совпадает с icons.svg, а ссылки на значки — внутри документа', () => {
   assert.deepEqual(symbolsOf(html), symbolsOf(read('icons.svg')));
-  assert.match(read('view.js'), /href: `#\$\{id\}`/);
-  assert.ok(!/icons\.svg#/.test(read('view.js')));
+  assert.match(read('dom.js'), /href: `#\$\{id\}`/);
+  assert.ok(!/icons\.svg#/.test(read('dom.js')) && !/icons\.svg#/.test(read('view.js')));
   assert.match(html, /<svg class="sprite" width="0" height="0" aria-hidden="true"/);
 });
