@@ -11,6 +11,8 @@
 :root {
   --bg: #faf9f5;
   --side: #f1efe8;
+  /* Подложка центральной области (верхняя полоса, лента, правая колонка): в светлой теме — белая (задача 190). */
+  --center: #ffffff;
   --surface: #ffffff;
   --surface-2: #efede4;
   --hover: #e8e5db;
@@ -48,6 +50,8 @@
   :root:not([data-theme="light"]) {
     --bg: #262624;
     --side: #1f1e1d;
+    /* В тёмной теме центр — прежний --bg: тёмная тема не меняется (задача 190). */
+    --center: #262624;
     --surface: #30302e;
     --surface-2: #3a3935;
     --hover: #353430;
@@ -75,6 +79,8 @@
 :root[data-theme="dark"] {
   --bg: #262624;
   --side: #1f1e1d;
+  /* В тёмной теме центр — прежний --bg: тёмная тема не меняется (задача 190). */
+  --center: #262624;
   --surface: #30302e;
   --surface-2: #3a3935;
   --hover: #353430;
@@ -217,7 +223,7 @@ input, select, textarea {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  background: var(--bg);
+  background: var(--center);
 }
 
 .rail {
@@ -228,7 +234,7 @@ input, select, textarea {
   padding: 16px;
   overflow-y: auto;
   border-left: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--center);
 }
 
 /* ---- левая колонка ---- */
@@ -365,7 +371,7 @@ input, select, textarea {
   min-height: 56px;
   padding: 8px 12px 8px 20px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--center);
 }
 .chat-back { display: none; margin-left: -8px; }
 .title-block { flex: 1; min-width: 0; margin-right: auto; }

@@ -35,13 +35,13 @@ export function contrast(a, b) {
 
 // текст -> фоны, на которых он встречается
 const PAIRS = {
-  '--fg': ['--bg', '--side', '--surface', '--surface-2', '--active', '--hover'],
-  '--fg-muted': ['--bg', '--side', '--surface', '--surface-2', '--active', '--hover'],
-  '--accent': ['--bg', '--side', '--surface', '--surface-2'],
+  '--fg': ['--bg', '--side', '--center', '--surface', '--surface-2', '--active', '--hover'],
+  '--fg-muted': ['--bg', '--side', '--center', '--surface', '--surface-2', '--active', '--hover'],
+  '--accent': ['--bg', '--side', '--center', '--surface', '--surface-2'],
   '--accent-fg': ['--accent'],
-  '--danger': ['--bg', '--side', '--surface', '--surface-2', '--active', '--danger-soft'],
-  '--ok': ['--bg', '--side', '--surface'],
-  '--warn': ['--bg', '--side', '--surface', '--surface-2', '--warn-soft'],
+  '--danger': ['--bg', '--side', '--center', '--surface', '--surface-2', '--active', '--danger-soft'],
+  '--ok': ['--bg', '--side', '--center', '--surface'],
+  '--warn': ['--bg', '--side', '--center', '--surface', '--surface-2', '--warn-soft'],
   '--code-fg': ['--code-bg'],
   '--user-fg': ['--user-bg'],
 };
