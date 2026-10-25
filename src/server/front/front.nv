@@ -23,7 +23,7 @@ import polaris.net.{ServerPolicy}
 import polaris.serve.{serve_addr}
 import std.encoding.json.{JsonValue, JsonObject}
 import std.concurrency.nvchan.{Chan, ChanTx, ChanRx}
-import std.fs.{DirFs, Path}
+import std.fs.{DirFs, Path, Fs, real_fs}
 import std.io.{stderr}
 import std.net.{TcpStream, real_net}
 import std.os.{exit_process}
@@ -383,47 +383,79 @@ fn stt_prober(url str, asks ChanRx[SttAsk]) Net -> () {
     }
 }
 
-fn stt_status_route(asks ChanTx[SttAsk]) -> fn(ServerRequest) -> ServerResponse {
-    fn(req ServerRequest) -> ServerResponse {
-        ro answer = Chan[bool].new(1)
-        mut alive = false
-        mut waiting = asks.try_send(SttAsk { reply: answer.tx })
-        mut waited = 0
-        while waiting {
-            match answer.rx.try_recv() {
-                Some(a) => {
-                    alive = a
+// The state word of the manager (see sttproc.nv); the manager that is busy and does not answer within a second is "starting".
+fn stt_manager_state(mgr_asks ChanTx[SttMgrAsk]) -> str {
+    ro answer = Chan[str].new(1)
+    mut state = "starting"
+    mut waiting = mgr_asks.try_send(SttMgrAsk { reply: answer.tx })
+    mut waited = 0
+    while waiting {
+        match answer.rx.try_recv() {
+            Some(a) => {
+                state = a
+                waiting = false
+            }
+            None => {
+                if waited >= 1000 {
                     waiting = false
-                }
-                None => {
-                    if waited >= 1000 {
-                        waiting = false
-                    } else {
-                        5.to_millis().sleep()
-                        waited += 5
-                    }
+                } else {
+                    5.to_millis().sleep()
+                    waited += 5
                 }
             }
         }
-        json_reply(200, stt_status_json(alive))
+    }
+    state
+}
+
+fn stt_probed(asks ChanTx[SttAsk]) -> bool {
+    ro answer = Chan[bool].new(1)
+    mut alive = false
+    mut waiting = asks.try_send(SttAsk { reply: answer.tx })
+    mut waited = 0
+    while waiting {
+        match answer.rx.try_recv() {
+            Some(a) => {
+                alive = a
+                waiting = false
+            }
+            None => {
+                if waited >= 1000 {
+                    waiting = false
+                } else {
+                    5.to_millis().sleep()
+                    waited += 5
+                }
+            }
+        }
+    }
+    alive
+}
+
+// `GET /api/stt/status`: our own recognizer says its state; a foreign one (or an unmanaged one) is probed at its address.
+fn stt_status_route(mgr_asks ChanTx[SttMgrAsk], asks ChanTx[SttAsk], model str) -> fn(ServerRequest) -> ServerResponse {
+    fn(req ServerRequest) -> ServerResponse {
+        ro state = stt_manager_state(mgr_asks)
+        ro shown = if state == "probe" { if stt_probed(asks) { "ready" } else { "not_running" } } else { state }
+        json_reply(200, stt_state_json(shown, model))
     }
 }
 
-fn build_router(web_dir str, port int, hub_tx ChanTx[str], reg_tx ChanTx[Reg], agents []AgentChoice, stt_url str, stt_language str, stt_asks ChanTx[SttAsk]) -> Result[Router, HttpError] {
+fn build_router(web_dir str, port int, hub_tx ChanTx[str], reg_tx ChanTx[Reg], agents []AgentChoice, stt_url str, stt_language str, stt_model str, stt_asks ChanTx[SttAsk], stt_mgr ChanTx[SttMgrAsk]) -> Result[Router, HttpError] {
     mut router = Router.new()
     ro r1 = router.get("/", files_route(web_dir))?
     ro r2 = router.get("/health", fn(req ServerRequest) -> ServerResponse => ServerResponse.text(StatusCode.OK, "ok"))?
     ro r3 = router.get("/ws", ws_route(hub_tx, reg_tx, port))?
     ro r4 = router.get("/api/agents", agents_route(agents))?
     ro r4a = router.post("/api/stt", stt_route(stt_url, stt_language, port))?
-    ro r4b = router.get("/api/stt/status", stt_status_route(stt_asks))?
+    ro r4b = router.get("/api/stt/status", stt_status_route(stt_mgr, stt_asks, stt_model))?
     ro r5 = router.get("/{*path}", files_route(web_dir))?
     Ok(router)
 }
 
 /// Start the hub, then serve the page and `/ws` on 127.0.0.1 at the port of the settings; returns only if the server ends.
 /// `config_file` is passed to the hub as its settings file ("" - it reads the environment alone).
-export fn run_front(settings FrontSettings, config_file str) Proc Net Time Detach Io Os -> () {
+export fn run_front(settings FrontSettings, config_file str) Proc Net Time Detach Io Os Fs -> () {
     mut hub_args = []str.new()
     for a in settings.hub_args { hub_args.push(a) }
     if config_file.byte_len() > 0 { hub_args.push(config_file) }
@@ -437,7 +469,11 @@ export fn run_front(settings FrontSettings, config_file str) Proc Net Time Detac
             detach { route_loop(link, registrations.rx) }
             ro stt_asks = Chan[SttAsk].new(16)
             detach { with Net = real_net() { stt_prober(settings.stt_url, stt_asks.rx) } }
-            match build_router(settings.web_dir, settings.port, link.out, registrations.tx, settings.agents, settings.stt_url, settings.stt_language, stt_asks.tx) {
+            // the recognizer is a part of the panel (task 192l): started here, ended with the front (sttproc.nv)
+            ro stt_mgr = Chan[SttMgrAsk].new(16)
+            ro stt_cfg = SttConfig { managed: settings.stt_managed, dir: settings.stt_dir, model: settings.stt_model, language: settings.stt_language, url: settings.stt_url, pid_file: "${settings.data_dir}/stt.pid" }
+            detach { with Net = real_net(), Fs = real_fs() { stt_manage(stt_cfg, stt_mgr.rx) } }
+            match build_router(settings.web_dir, settings.port, link.out, registrations.tx, settings.agents, settings.stt_url, settings.stt_language, settings.stt_model, stt_asks.tx, stt_mgr.tx) {
                 Err(e) => {
                     log_line("the routes cannot be set: ${e}")
                     exit_process(2)

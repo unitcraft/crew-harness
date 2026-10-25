@@ -4,7 +4,8 @@
 // stderr when they are wrong. The front cannot use `crew_harness.server.ServerSettings`: that module holds the hub, which holds the
 // PostgreSQL driver (see the mark 30 below).
 // The keys and the variables are those of src/server/settings.nv: port / CREW_SERVER_PORT, web_dir / CREW_SERVER_WEB_DIR,
-// hub {program, args} / CREW_SERVER_HUB, stt {url, language} / CREW_SERVER_STT_URL, CREW_SERVER_STT_LANGUAGE, the file by the argument or CREW_SERVER_CONFIG.
+// hub {program, args} / CREW_SERVER_HUB, stt {url, language} / CREW_SERVER_STT_URL, CREW_SERVER_STT_LANGUAGE, the file by the argument or CREW_SERVER_CONFIG;
+// the recognizer as a part of the panel (task 192l): stt {managed, dir, model} / CREW_SERVER_STT_MANAGED, CREW_SERVER_STT_DIR, CREW_SERVER_STT_MODEL, data_dir / CREW_SERVER_DATA_DIR (the pid file).
 // ORACLE-WORKAROUND(30): the front reads its own part of the settings, because the module of the settings holds the hub, which holds the PostgreSQL driver, and the driver and Polaris cannot be in one program; use `ServerSettings` when item 30 is fixed
 // ORACLE-WORKAROUND(25): the module is declared `module server.front` (without the package prefix) and imported as `crew_harness.server.front`: a module two folders under the source root cannot be declared with the full path; declare it with the prefix when item 25 is fixed
 module server.front
@@ -16,7 +17,9 @@ import std.os.{Os, env}
 
 /// FrontSettings: where to listen, where the page is, how to start the hub, where the recognizer of the voice listens (`stt_url`, a local http address) and its default language.
 export type AgentChoice { id str, label str }
-export type FrontSettings { port int, web_dir str, hub_program str, hub_args []str, agents []AgentChoice, stt_url str, stt_language str }
+/// The recognizer is a part of the control panel (task 192l): `stt_managed` - the front starts and ends it itself, `stt_dir` - the folder of the tool (bin/, models/),
+/// `stt_model` - the model (models/ggml-<model>.bin), `data_dir` - where the pid file `stt.pid` is written.
+export type FrontSettings { port int, web_dir str, hub_program str, hub_args []str, agents []AgentChoice, stt_url str, stt_language str, stt_managed bool, stt_dir str, stt_model str, data_dir str }
 
 fn fs_env(key str) Os -> Option[str] {
     match env(key) {
@@ -66,7 +69,18 @@ fn fs_agents(base []AgentChoice) Os -> []AgentChoice {
         None => base
     }
 }
-fn fs_defaults() -> FrontSettings => { port: 8099, web_dir: "src/web", hub_program: "target/crew-hub.exe", hub_args: []str.new(), agents: fs_default_agents(), stt_url: "http://127.0.0.1:8178/inference", stt_language: "auto" }
+fn fs_defaults() -> FrontSettings => { port: 8099, web_dir: "src/web", hub_program: "target/crew-hub.exe", hub_args: []str.new(), agents: fs_default_agents(), stt_url: "http://127.0.0.1:8178/inference", stt_language: "auto", stt_managed: true, stt_dir: "", stt_model: "small", data_dir: "crew-data" }
+
+// The folder of the tool when nothing names it: the one the installer (scripts/install-stt.ps1) uses - CREW_STT_DIR, else %LOCALAPPDATA%/crew-harness/stt.
+fn fs_default_stt_dir() Os -> str {
+    match fs_env("CREW_STT_DIR") {
+        Some(dir) => dir
+        None => match fs_env("LOCALAPPDATA") {
+            Some(local) => "${local}/crew-harness/stt"
+            None => ""
+        }
+    }
+}
 
 // The voice never leaves this machine: a recognizer address that is not a local http one is the default (the hub says what is wrong).
 fn fs_stt_url(url str, fallback str) -> str {
@@ -151,7 +165,38 @@ fn fs_from_file(text str) -> FrontSettings {
         }
         None => base.stt_language
     }
-    { port, web_dir, hub_program, hub_args, agents, stt_url, stt_language }
+    ro stt_managed = match stt {
+        Some(to) => match to.get("managed") {
+            Some(m) => m.bool() ?? base.stt_managed
+            None => base.stt_managed
+        }
+        None => base.stt_managed
+    }
+    ro stt_dir = match stt {
+        Some(to) => match to.get("dir") {
+            Some(d) => d.str() ?? base.stt_dir
+            None => base.stt_dir
+        }
+        None => base.stt_dir
+    }
+    ro stt_model = match stt {
+        Some(to) => match to.get("model") {
+            Some(m) => match m.str() {
+                Some(text) => if stt_model_ok(text) { text } else { base.stt_model }
+                None => base.stt_model
+            }
+            None => base.stt_model
+        }
+        None => base.stt_model
+    }
+    ro data_dir = match o.get("data_dir") {
+        Some(v) => match v.str() {
+            Some(text) => if text.byte_len() > 0 { text } else { base.data_dir }
+            None => base.data_dir
+        }
+        None => base.data_dir
+    }
+    { port, web_dir, hub_program, hub_args, agents, stt_url, stt_language, stt_managed, stt_dir, stt_model, data_dir }
 }
 
 /// The settings of the front: the file (the argument, or CREW_SERVER_CONFIG), the environment over it.
@@ -181,5 +226,15 @@ export fn front_settings(file str) Os Fs -> Result[FrontSettings, str] {
     ro hub_args = if hub_words.len() > 0 { fs_rest(hub_words) } else { base.hub_args }
     ro stt_url = fs_stt_url(fs_env("CREW_SERVER_STT_URL") ?? base.stt_url, base.stt_url)
     ro stt_language = fs_env("CREW_SERVER_STT_LANGUAGE") ?? base.stt_language
-    Ok({ port, web_dir: fs_env("CREW_SERVER_WEB_DIR") ?? base.web_dir, hub_program, hub_args, agents: fs_agents(base.agents), stt_url, stt_language })
+    ro stt_managed = match fs_env("CREW_SERVER_STT_MANAGED") {
+        Some(text) => if text == "true" { true } else if text == "false" { false } else { base.stt_managed }
+        None => base.stt_managed
+    }
+    ro stt_dir = fs_env("CREW_SERVER_STT_DIR") ?? (if base.stt_dir.byte_len() > 0 { base.stt_dir } else { fs_default_stt_dir() })
+    ro stt_model = match fs_env("CREW_SERVER_STT_MODEL") {
+        Some(text) => if stt_model_ok(text) { text } else { base.stt_model }
+        None => base.stt_model
+    }
+    ro data_dir = fs_env("CREW_SERVER_DATA_DIR") ?? base.data_dir
+    Ok({ port, web_dir: fs_env("CREW_SERVER_WEB_DIR") ?? base.web_dir, hub_program, hub_args, agents: fs_agents(base.agents), stt_url, stt_language, stt_managed, stt_dir, stt_model, data_dir })
 }

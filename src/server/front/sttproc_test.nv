@@ -1,0 +1,180 @@
+// sttproc_test.nv - the recognizer as a child of the control panel (task 192l): the plan (use a foreign one, start our own, not installed), the pid file,
+// the orphan left by a front that died, the arguments of the server, the JSON of the status.
+// ORACLE-WORKAROUND(25): the module is declared `module server.front` (without the package prefix): a module two folders under the source root cannot be declared with the full path; declare it with the prefix when item 25 is fixed
+module server.front
+
+import std.os.{Os, real_os, temp_dir, pid}
+import std.os.{Proc, real_proc}
+import std.fs.{Fs, real_fs, write_text, create_dir_all, try_exists, Path}
+
+fn proc_dir(name str) -> Path {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-sttproc-${id}-${name}")
+    with Fs = real_fs() {
+        ro made = create_dir_all(dir)
+    }
+    dir
+}
+
+// ----- the plan: a pure choice -----
+
+test "sttproc plan: unmanaged means off, whatever else is true" {
+    assert(stt_plan(false, true, false, false) == "off")
+    assert(stt_plan(false, false, true, true) == "off")
+}
+
+test "sttproc plan: an orphan of ours is killed first, whatever answers" {
+    assert(stt_plan(true, true, true, true) == "kill_orphan")
+    assert(stt_plan(true, false, false, true) == "kill_orphan")
+}
+
+test "sttproc plan: a foreign recognizer that answers is used, not touched" {
+    assert(stt_plan(true, true, true, false) == "foreign")
+    assert(stt_plan(true, false, true, false) == "foreign")
+}
+
+test "sttproc plan: nothing answers - ours is started if the files are there, else it is not installed" {
+    assert(stt_plan(true, true, false, false) == "start")
+    assert(stt_plan(true, false, false, false) == "not_installed")
+}
+
+// ----- the paths, the arguments, the port -----
+
+test "sttproc: the paths of the exe and of the model" {
+    assert(stt_exe_path("C:/work/stt") == "C:/work/stt/bin/whisper-server.exe")
+    assert(stt_exe_path("C:/work/stt/") == "C:/work/stt/bin/whisper-server.exe")
+    assert(stt_model_path("C:/work/stt", "small") == "C:/work/stt/models/ggml-small.bin")
+    assert(stt_model_path("C:/work/stt/", "medium") == "C:/work/stt/models/ggml-medium.bin")
+}
+
+test "sttproc: the arguments of the server bind to 127.0.0.1 at the port of the address" {
+    ro args = stt_server_args("C:/work/m/ggml-small.bin", 8179, "ru")
+    assert(args.len() == 8)
+    assert(args[0] == "-m" && args[1] == "C:/work/m/ggml-small.bin")
+    assert(args[2] == "--host" && args[3] == "127.0.0.1")
+    assert(args[4] == "--port" && args[5] == "8179")
+    assert(args[6] == "-l" && args[7] == "ru")
+}
+
+test "sttproc: the port of the address" {
+    assert(match stt_port("http://127.0.0.1:8179/inference") { Ok(p) => p == 8179, Err(e) => false })
+    assert(match stt_port("http://localhost:9000") { Ok(p) => p == 9000, Err(e) => false })
+    assert(match stt_port("http://127.0.0.1:abc/x") { Ok(p) => false, Err(e) => true })
+    assert(match stt_port("http://127.0.0.1:0/x") { Ok(p) => false, Err(e) => true })
+    assert(match stt_port("http://127.0.0.1:70000/x") { Ok(p) => false, Err(e) => true })
+    assert(match stt_port("https://127.0.0.1:80/x") { Ok(p) => false, Err(e) => true })
+}
+
+test "sttproc: a model name is a plain word, nothing that leaves the folder" {
+    assert(stt_model_ok("small"))
+    assert(stt_model_ok("large-v3"))
+    assert(stt_model_ok("medium.en"))
+    assert(!stt_model_ok(""))
+    assert(!stt_model_ok("../x"))
+    assert(!stt_model_ok("a/b"))
+    assert(!stt_model_ok("a b"))
+    assert(!stt_model_ok(".."))
+}
+
+// ----- the pid file -----
+
+test "sttproc pid: the text of the file and its reading" {
+    assert(stt_pid_text(4242) == "4242\n")
+    assert(match stt_parse_pid("4242\n") { Some(p) => p == 4242, None => false })
+    assert(match stt_parse_pid("  17 \r\n") { Some(p) => p == 17, None => false })
+    assert(match stt_parse_pid("") { Some(p) => false, None => true })
+    assert(match stt_parse_pid("abc") { Some(p) => false, None => true })
+    assert(match stt_parse_pid("0") { Some(p) => false, None => true })
+    assert(match stt_parse_pid("-5") { Some(p) => false, None => true })
+}
+
+test "sttproc pid: written, read back, cleared" {
+    ro path = proc_dir("pidfile").join("stt.pid").display()
+    with Fs = real_fs() {
+        assert(match stt_pid_read(path) { Some(p) => false, None => true })
+        stt_pid_write(path, 31337)
+        assert(match stt_pid_read(path) { Some(p) => p == 31337, None => false })
+        stt_pid_clear(path)
+        assert(match stt_pid_read(path) { Some(p) => false, None => true })
+        // clearing what is not there is no error
+        stt_pid_clear(path)
+    }
+}
+
+// ----- the process behind a pid -----
+
+test "sttproc: a line of tasklist names the process" {
+    ro hit = "\"whisper-server.exe\",\"4242\",\"Console\",\"1\",\"812,340 K\"\r\n"
+    assert(stt_tasklist_is_whisper(hit, 4242))
+    assert(!stt_tasklist_is_whisper(hit, 4243))
+    assert(!stt_tasklist_is_whisper("\"node.exe\",\"4242\",\"Console\",\"1\",\"40 K\"\r\n", 4242))
+    assert(!stt_tasklist_is_whisper("INFO: No tasks are running which match the specified criteria.\r\n", 4242))
+    assert(!stt_tasklist_is_whisper("", 4242))
+    // a name that only contains ours is not ours
+    assert(!stt_tasklist_is_whisper("\"not-whisper-server.exe.bak\",\"4242\",\"Console\",\"1\",\"1 K\"\r\n", 4242))
+}
+
+test "sttproc: this very process is not a whisper-server, and a pid that is not there is not either" {
+    ro me = with Os = real_os() { pid() }
+    assert(!with Proc = real_proc() { stt_process_is_whisper(me) })
+    assert(!with Proc = real_proc() { stt_process_is_whisper(2147483000) })
+}
+
+test "sttproc orphan: a pid file of a dead process is removed, nothing is killed" {
+    ro path = proc_dir("orphan-dead").join("stt.pid").display()
+    with Fs = real_fs() {
+        stt_pid_write(path, 2147483000)
+        ro killed = with Proc = real_proc() { stt_cleanup_orphan(path) }
+        assert(!killed)
+        assert(match stt_pid_read(path) { Some(p) => false, None => true })
+    }
+}
+
+test "sttproc orphan: a pid file that names another program is removed and that program is left alone" {
+    ro path = proc_dir("orphan-other").join("stt.pid").display()
+    ro me = with Os = real_os() { pid() }
+    with Fs = real_fs() {
+        stt_pid_write(path, me)
+        ro killed = with Proc = real_proc() { stt_cleanup_orphan(path) }
+        assert(!killed)
+        assert(match stt_pid_read(path) { Some(p) => false, None => true })
+    }
+}
+
+test "sttproc orphan: no pid file is nothing to do" {
+    ro path = proc_dir("orphan-none").join("stt.pid").display()
+    with Fs = real_fs() {
+        ro killed = with Proc = real_proc() { stt_cleanup_orphan(path) }
+        assert(!killed)
+    }
+}
+
+// ----- the files of the tool -----
+
+test "sttproc: installed means the exe and the model are both there" {
+    ro dir = proc_dir("tool")
+    ro root = dir.display()
+    with Fs = real_fs() {
+        assert(!stt_installed(root, "small"))
+        ro bin = dir.join("bin")
+        ro models = dir.join("models")
+        ro m1 = create_dir_all(bin)
+        ro m2 = create_dir_all(models)
+        ro w1 = write_text(bin.join("whisper-server.exe"), "x")
+        assert(!stt_installed(root, "small"))
+        ro w2 = write_text(models.join("ggml-small.bin"), "x")
+        assert(stt_installed(root, "small"))
+        assert(!stt_installed(root, "medium"))
+    }
+}
+
+// ----- the status -----
+
+test "sttproc status: ready and foreign mean available, the rest says why not" {
+    assert(stt_state_json("ready", "small") == "{\"available\":true,\"provider\":\"local\",\"model\":\"small\"}")
+    assert(stt_state_json("starting", "small") == "{\"available\":false,\"provider\":\"local\",\"model\":\"small\",\"reason\":\"starting\"}")
+    assert(stt_state_json("not_installed", "small") == "{\"available\":false,\"provider\":\"local\",\"model\":\"small\",\"reason\":\"not_installed\",\"hint\":\"scripts/install-stt.ps1\"}")
+    assert(stt_state_json("failed", "medium") == "{\"available\":false,\"provider\":\"local\",\"model\":\"medium\",\"reason\":\"failed\"}")
+    assert(stt_state_json("not_running", "small") == "{\"available\":false,\"provider\":\"local\",\"model\":\"small\",\"reason\":\"not_running\"}")
+}

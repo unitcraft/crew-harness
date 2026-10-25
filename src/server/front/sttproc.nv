@@ -1,0 +1,339 @@
+// sttproc.nv - the recognizer as a part of the control panel (task 192l): the front starts `whisper-server` itself and ends it with itself.
+//
+// At the start the manager looks, in this order: (1) an orphan of ours (the pid file `<data_dir>/stt.pid` names a live `whisper-server`: the
+// front that started it died) is ended; (2) if a recognizer already answers at `stt.url`, it is a foreign one: it is used and never touched;
+// (3) else, if the tool folder holds `bin/whisper-server.exe` and `models/ggml-<model>.bin`, ours is started, hidden, on the port of `stt.url`
+// (127.0.0.1) and awaited for up to 30 s; (4) else the state is `not_installed` (the page says so, the log names scripts/install-stt.ps1).
+//
+// The child is started with `Tree.Group`: on Windows that is a Job Object with KILL_ON_JOB_CLOSE, so the recognizer ends with the front
+// whatever the end of the front is (Ctrl+C, a kill, a crash); the pid file is the second line of defence (a front that is gone and a
+// recognizer that was somehow left): the next start ends it. The manager answers the status route; the state words are
+// `ready` `starting` `failed` `not_installed` `probe` (a foreign recognizer or an unmanaged one: the route probes the address itself).
+// ORACLE-WORKAROUND(25): the module is declared `module server.front` (without the package prefix) and imported as `crew_harness.server.front`: a module two folders under the source root cannot be declared with the full path; declare it with the prefix when item 25 is fixed
+module server.front
+
+import std.text
+import std.concurrency.nvchan.{Chan, ChanTx, ChanRx}
+import std.encoding.json.{JsonValue, JsonObject}
+import std.fs.{Fs, read_text, write_text, remove_file, create_dir_all, try_exists, Path}
+import std.io.{stderr}
+import std.os.{Command, Child, Stdio, Signal, Tree, kill_pid}
+import std.net.{real_net}
+
+/// How long the recognizer may take to come up (the model is loaded before it listens).
+const STT_START_MS = 30000
+
+/// SttConfig: what the manager needs. `pid_file` is `<data_dir>/stt.pid`.
+export type SttConfig { managed bool, dir str, model str, language str, url str, pid_file str }
+
+/// A question of the status route to the manager: where to put the state word.
+export type SttMgrAsk { reply ChanTx[str] }
+
+/// The choice at the start, from four facts: "off" (not managed), "kill_orphan" (a recognizer of ours is left from a front that died: end it first),
+/// "foreign" (something already answers: use it), "start" (start ours), "not_installed" (nothing answers and there are no files).
+export fn stt_plan(managed bool, installed bool, answers bool, orphan bool) -> str {
+    if !managed { return "off" }
+    if orphan { return "kill_orphan" }
+    if answers { return "foreign" }
+    if installed { "start" } else { "not_installed" }
+}
+
+fn stt_trim_slash(dir str) -> str => if dir.ends_with("/") || dir.ends_with("\\") { dir[..dir.byte_len() - 1] } else { dir }
+
+/// `<dir>/bin/whisper-server.exe`
+export fn stt_exe_path(dir str) -> str => "${stt_trim_slash(dir)}/bin/whisper-server.exe"
+
+/// `<dir>/models/ggml-<model>.bin`
+export fn stt_model_path(dir str, model str) -> str => "${stt_trim_slash(dir)}/models/ggml-${model}.bin"
+
+/// The arguments of `whisper-server`: the model, 127.0.0.1 (never another address), the port, the language.
+export fn stt_server_args(model_path str, port int, language str) -> []str {
+    ["-m", model_path, "--host", "127.0.0.1", "--port", "${port}", "-l", language]
+}
+
+/// The port of `http://<host>:<port>/...`; 1 to 65535.
+export fn stt_port(url str) -> Result[int, str] {
+    ro target = stt_target(url)?
+    ro colon = target.addr.find(":") ?? -1
+    if colon < 0 { return Err("the stt url needs a port") }
+    ro port = match target.addr[colon + 1..].to_int() {
+        Ok(n) => n
+        Err(e) => return Err("the port of the stt url must be a number")
+    }
+    if port < 1 || port > 65535 { return Err("the port of the stt url must be 1 to 65535") }
+    Ok(port)
+}
+
+/// Is `model` fit to be a part of a file name: letters, digits, "-", "_" and "." (not at the start)?
+export fn stt_model_ok(model str) -> bool {
+    if model.byte_len() == 0 || model.starts_with(".") { return false }
+    for b in model.bytes() {
+        ro c = b as int
+        ro fit = (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 48 && c <= 57) || c == 45 || c == 95 || c == 46
+        if !fit { return false }
+    }
+    true
+}
+
+// ----- the pid file -----
+
+/// The text of the pid file.
+export fn stt_pid_text(pid int) -> str => "${pid}\n"
+
+/// The pid in the text of a pid file; `None` for anything that is not a positive whole number.
+export fn stt_parse_pid(text str) -> Option[int] {
+    ro t = text.trim_ascii()
+    if t.byte_len() == 0 { return None }
+    match t.to_int() {
+        Ok(n) => if n > 0 { Some(n) } else { None }
+        Err(e) => None
+    }
+}
+
+fn stt_path(text str) -> Path => Path.from_bytes(text.bytes())
+
+/// Write the pid file (its folder is made when it is not there).
+export fn stt_pid_write(path str, pid int) Fs -> () {
+    ro p = stt_path(path)
+    match p.parent() {
+        Some(dir) => {
+            ro made = create_dir_all(dir)
+        }
+        None => ()
+    }
+    ro written = write_text(p, stt_pid_text(pid))
+}
+
+/// The pid in the file; `None` - there is no file or it holds no pid.
+export fn stt_pid_read(path str) Fs -> Option[int] {
+    match read_text(stt_path(path)) {
+        Ok(text) => stt_parse_pid(text)
+        Err(e) => None
+    }
+}
+
+/// Remove the pid file (no file is no error).
+export fn stt_pid_clear(path str) Fs -> () {
+    ro removed = remove_file(stt_path(path))
+}
+
+// ----- the process behind a pid -----
+
+/// Does a line of `tasklist /FO CSV /NH` name `whisper-server.exe` with this pid?
+export fn stt_tasklist_is_whisper(output str, pid int) -> bool => output.contains("\"whisper-server.exe\",\"${pid}\"")
+
+/// Is the process `pid` alive and a `whisper-server`? (Asks `tasklist`: a pid that a pid file names may be reused by anything.)
+export fn stt_process_is_whisper(pid int) Proc -> bool {
+    mut command = Command.new("tasklist")
+    command.arg("/FI")
+    command.arg("PID eq ${pid}")
+    command.arg("/FO")
+    command.arg("CSV")
+    command.arg("/NH")
+    match command.output() {
+        Ok(out) => stt_tasklist_is_whisper(out.stdout.to_str_lossy(), pid)
+        Err(e) => false
+    }
+}
+
+/// The pid of a live `whisper-server` that the pid file names; 0 - none (a file that names something else or nothing is removed).
+export fn stt_orphan_pid(path str) Proc Fs -> int {
+    match stt_pid_read(path) {
+        None => {
+            stt_pid_clear(path)
+            0
+        }
+        Some(pid) => {
+            if stt_process_is_whisper(pid) { return pid }
+            stt_pid_clear(path)
+            0
+        }
+    }
+}
+
+fn stt_kill(pid int) Proc -> () {
+    ro killed = kill_pid(pid, Signal.Kill, true)
+}
+
+/// End the orphan the pid file names, if it is a live `whisper-server`; the file goes either way. True - something was ended.
+export fn stt_cleanup_orphan(path str) Proc Fs -> bool {
+    ro pid = stt_orphan_pid(path)
+    if pid > 0 {
+        stt_kill(pid)
+        stt_pid_clear(path)
+        return true
+    }
+    false
+}
+
+fn stt_file_there(path str) Fs -> bool {
+    match try_exists(stt_path(path)) {
+        Ok(yes) => yes
+        Err(e) => false
+    }
+}
+
+/// Are the exe and the model of the tool folder both there?
+export fn stt_installed(dir str, model str) Fs -> bool => stt_file_there(stt_exe_path(dir)) && stt_file_there(stt_model_path(dir, model))
+
+// ----- the status -----
+
+/// The answer of `GET /api/stt/status` for a state word: `ready` is available; the others say why not (`not_installed` also gives the hint).
+export fn stt_state_json(state str, model str) -> str {
+    mut o = JsonObject.new()
+    ro a = o.insert("available", JsonValue.bool(state == "ready"))
+    ro p = o.insert("provider", JsonValue.str("local"))
+    ro m = o.insert("model", JsonValue.str(model))
+    if state != "ready" {
+        ro r = o.insert("reason", JsonValue.str(state))
+        if state == "not_installed" {
+            ro h = o.insert("hint", JsonValue.str("scripts/install-stt.ps1"))
+        }
+    }
+    JsonValue.object(o).to_str()
+}
+
+// ----- the manager (a fiber of the front) -----
+
+fn stt_log(text str) Io -> () {
+    mut err = stderr()
+    ro written = err.write("stt: ${text}\n".bytes())
+}
+
+fn stt_now_ms() Time -> int => Time.now().unix_millis()
+
+// Answer the questions of the status route with `state`, for as long as the front lives.
+fn stt_serve_state(asks ChanRx[SttMgrAsk], state str) -> () {
+    mut running = true
+    while running {
+        match asks.recv() {
+            Some(ask) => { ro told = ask.reply.send(state) }
+            None => { running = false }
+        }
+    }
+}
+
+// Poll the address until it answers (the model is loaded before the server listens): one `true` into `ready`, or nothing after the time is up.
+fn stt_poll_ready(url str, ready ChanTx[bool]) Net Time -> () {
+    ro began = stt_now_ms()
+    mut polling = true
+    while polling {
+        if stt_alive(url) {
+            ro told = ready.send(true)
+            polling = false
+        } else if stt_now_ms() - began > STT_START_MS + 5000 {
+            polling = false
+        } else {
+            250.to_millis().sleep()
+        }
+    }
+}
+
+// Keep the child, answer the questions, watch the end. The child is a member of a job: it ends with the front.
+fn stt_keep(cfg SttConfig, consume child Child, asks ChanRx[SttMgrAsk]) Proc Net Fs Time Io Detach -> () {
+    ro ready = Chan[bool].new(1)
+    detach { with Net = real_net() { stt_poll_ready(cfg.url, ready.tx) } }
+    ro began = stt_now_ms()
+    mut state = "starting"
+    mut watching = true
+    while watching {
+        mut more = true
+        while more {
+            match asks.try_recv() {
+                Some(ask) => { ro told = ask.reply.send(state) }
+                None => { more = false }
+            }
+        }
+        match ready.rx.try_recv() {
+            Some(yes) => {
+                if state == "starting" {
+                    state = "ready"
+                    stt_log("the recognizer is up (model ${cfg.model}, ${stt_now_ms() - began} ms)")
+                }
+            }
+            None => ()
+        }
+        if state == "starting" && stt_now_ms() - began > STT_START_MS {
+            stt_log("the recognizer did not come up in 30 s: it is ended")
+            state = "failed"
+            ro killed = child.kill(Signal.Kill)
+        }
+        match child.wait_timeout(50.to_millis()) {
+            Ok(Some(status)) => {
+                if state != "failed" { stt_log("the recognizer ended (code ${status.code()})") }
+                state = "failed"
+                stt_pid_clear(cfg.pid_file)
+                watching = false
+            }
+            Ok(None) => ()
+            Err(e) => {
+                state = "failed"
+                watching = false
+            }
+        }
+    }
+    child.release()
+    stt_serve_state(asks, state)
+}
+
+// Start the recognizer; the state word and, with "starting", the child.
+fn stt_start(cfg SttConfig, port int, asks ChanRx[SttMgrAsk]) Proc Net Fs Time Io Detach -> () {
+    mut command = Command.new(stt_exe_path(cfg.dir))
+    for a in stt_server_args(stt_model_path(cfg.dir, cfg.model), port, cfg.language) { command.arg(a) }
+    command.stdin(Stdio.Null)
+    command.stdout(Stdio.Null)
+    command.stderr(Stdio.Null)
+    command.tree(Tree.Group)
+    command.dir(stt_path("${stt_trim_slash(cfg.dir)}/bin"))
+    match command.start() {
+        Err(e) => {
+            stt_log("the recognizer cannot be started: ${e}")
+            stt_serve_state(asks, "failed")
+        }
+        Ok(consume spawned) => {
+            consume child = spawned
+            stt_pid_write(cfg.pid_file, child.pid())
+            stt_log("the recognizer is started (process ${child.pid()}, port ${port}, model ${cfg.model}): up to 30 s to load the model")
+            stt_keep(cfg, child, asks)
+        }
+    }
+}
+
+/// The manager: runs for as long as the front, answers `asks` with the state word. Not managed: the word is `probe`.
+export fn stt_manage(cfg SttConfig, asks ChanRx[SttMgrAsk]) Proc Net Fs Time Io Detach -> () {
+    if !cfg.managed {
+        stt_serve_state(asks, "probe")
+        return
+    }
+    ro port = match stt_port(cfg.url) {
+        Ok(p) => p
+        Err(reason) => {
+            stt_log("${reason}: the recognizer is not managed")
+            stt_serve_state(asks, "probe")
+            return
+        }
+    }
+    mut orphan = stt_orphan_pid(cfg.pid_file)
+    mut plan = stt_plan(true, stt_installed(cfg.dir, cfg.model), stt_alive(cfg.url), orphan > 0)
+    if plan == "kill_orphan" {
+        stt_log("a recognizer is left from a front that died (process ${orphan}): it is ended")
+        stt_kill(orphan)
+        stt_pid_clear(cfg.pid_file)
+        // let the port go: the address must stop answering before ours takes it
+        mut waited = 0
+        while waited < 5000 && stt_alive(cfg.url) {
+            100.to_millis().sleep()
+            waited += 100
+        }
+        plan = stt_plan(true, stt_installed(cfg.dir, cfg.model), stt_alive(cfg.url), false)
+    }
+    if plan == "foreign" {
+        stt_log("a recognizer already answers at ${cfg.url}: it is used and left alone")
+        stt_serve_state(asks, "probe")
+    } else if plan == "not_installed" {
+        stt_log("the recognizer is not installed in ${cfg.dir}: run scripts/install-stt.ps1 (the voice stays off)")
+        stt_serve_state(asks, "not_installed")
+    } else {
+        stt_start(cfg, port, asks)
+    }
+}

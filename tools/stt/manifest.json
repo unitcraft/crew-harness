@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "description": "The local speech recognizer of the control panel (task 192l): whisper.cpp for Windows with CUDA and a model. The files are NOT in the repository (they are 685 MB and 488 MB); scripts/install-stt.ps1 downloads them from these addresses, checks the size and SHA256, and puts them into the tool folder (CREW_STT_DIR, by default %LOCALAPPDATA%/crew-harness/stt).",
+  "binary": {
+    "name": "whisper.cpp",
+    "version": "b5454",
+    "url": "https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-bin-win-cuda-12.4.0-x64.zip",
+    "file": "whisper-bin-win-cuda-12.4.0-x64.zip",
+    "size": 684913404,
+    "sha256": "afef0b881c500958921c3f5523b50e59ee2ec9b6f5cbd25b324c51ed308a957a",
+    "kind": "zip",
+    "strip": "Release/",
+    "dest": "bin",
+    "check": "bin/whisper-server.exe",
+    "source": "size from the release page of the author; no digest is published for this release"
+  },
+  "default_model": "small",
+  "models": {
+    "small": {
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
+      "file": "ggml-small.bin",
+      "size": 487601967,
+      "sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+      "dest": "models/ggml-small.bin",
+      "source": "sha256 and size equal the LFS pointer of the author on huggingface.co"
+    },
+    "medium": {
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
+      "file": "ggml-medium.bin",
+      "size": 1533763059,
+      "sha256": "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208",
+      "dest": "models/ggml-medium.bin",
+      "source": "sha256 and size equal the LFS pointer of the author on huggingface.co"
+    }
+  }
+}

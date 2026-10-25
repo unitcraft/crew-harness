@@ -124,3 +124,69 @@ test "front settings: the recognizer of the voice, local only; the file, the env
         Err(e) => assert(false)
     }
 }
+
+test "front settings: the recognizer is managed by default; the folder, the model, the data folder" {
+    mut empty = MockOs.new()
+    match with Os = mock_os(empty), Fs = real_fs() { front_settings("") } {
+        Ok(s) => {
+            assert(s.stt_managed)
+            assert(s.stt_model == "small")
+            assert(s.data_dir == "crew-data")
+            assert(s.stt_dir == "")
+        }
+        Err(e) => assert(false)
+    }
+    // the default folder: CREW_STT_DIR (the installer's), else LOCALAPPDATA/crew-harness/stt
+    mut local = MockOs.new()
+    local.put_env("LOCALAPPDATA", "C:/work/local")
+    match with Os = mock_os(local), Fs = real_fs() { front_settings("") } {
+        Ok(s) => assert(s.stt_dir == "C:/work/local/crew-harness/stt")
+        Err(e) => assert(false)
+    }
+    mut installer = MockOs.new()
+    installer.put_env("LOCALAPPDATA", "C:/work/local")
+    installer.put_env("CREW_STT_DIR", "C:/work/stt")
+    match with Os = mock_os(installer), Fs = real_fs() { front_settings("") } {
+        Ok(s) => assert(s.stt_dir == "C:/work/stt")
+        Err(e) => assert(false)
+    }
+    ro path = front_file("stt-managed.json", "{\"data_dir\":\"C:/work/data\",\"stt\":{\"managed\":false,\"dir\":\"C:/work/from-file\",\"model\":\"medium\"}}")
+    match with Os = mock_os(installer), Fs = real_fs() { front_settings(path.display()) } {
+        Ok(s) => {
+            assert(!s.stt_managed)
+            assert(s.stt_dir == "C:/work/from-file")
+            assert(s.stt_model == "medium")
+            assert(s.data_dir == "C:/work/data")
+        }
+        Err(e) => assert(false)
+    }
+    mut env = MockOs.new()
+    env.put_env("CREW_SERVER_STT_MANAGED", "true")
+    env.put_env("CREW_SERVER_STT_DIR", "C:/work/from-env")
+    env.put_env("CREW_SERVER_STT_MODEL", "small")
+    env.put_env("CREW_SERVER_DATA_DIR", "C:/work/data-env")
+    match with Os = mock_os(env), Fs = real_fs() { front_settings(path.display()) } {
+        Ok(s) => {
+            assert(s.stt_managed)
+            assert(s.stt_dir == "C:/work/from-env")
+            assert(s.stt_model == "small")
+            assert(s.data_dir == "C:/work/data-env")
+        }
+        Err(e) => assert(false)
+    }
+    mut off = MockOs.new()
+    off.put_env("CREW_SERVER_STT_MANAGED", "false")
+    match with Os = mock_os(off), Fs = real_fs() { front_settings("") } {
+        Ok(s) => assert(!s.stt_managed)
+        Err(e) => assert(false)
+    }
+    // a model that could leave the folder is the default
+    ro odd = front_file("stt-odd.json", "{\"stt\":{\"model\":\"../x\",\"managed\":\"yes\"}}")
+    match with Os = mock_os(empty), Fs = real_fs() { front_settings(odd.display()) } {
+        Ok(s) => {
+            assert(s.stt_model == "small")
+            assert(s.stt_managed)
+        }
+        Err(e) => assert(false)
+    }
+}

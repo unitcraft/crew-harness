@@ -79,7 +79,7 @@ and no error (`describe()` leaves it out).
 | `workdir` | `CREW_SERVER_WORKDIR` | the folder of the server | the folder the agents work in (`session/new` needs it) |
 | `web_dir` | `CREW_SERVER_WEB_DIR` | `src/web` | the folder of the page |
 | `acp_trace` | `CREW_SERVER_ACP_TRACE` (`true`/`false`) | `true` | write the raw JSON-RPC exchange with the agent, both ways, to `<data_dir>/<session>/acp.jsonl` (`{"t": unix ms, "dir": "out"|"in", "line": "<the line as it is>"}`); over 50 MB the file becomes `acp.1.jsonl` in the same folder. **The file holds the full text of the talk and the output of the tools, nothing is cut out.** |
-| `stt` {`url`,`language`} | `CREW_SERVER_STT_URL`, `CREW_SERVER_STT_LANGUAGE` | `http://127.0.0.1:8178/inference`, `auto` | the local speech recognizer (whisper.cpp `whisper-server`, started by `scripts/start-stt.ps1`) that the front sends the voice to; the address must be a plain `http://127.0.0.1:<port>/...` or `http://localhost:<port>/...` (the audio never leaves the machine); `language` is the default of `POST /api/stt` |
+| `stt` {`url`,`language`,`managed`,`dir`,`model`} | `CREW_SERVER_STT_URL`, `CREW_SERVER_STT_LANGUAGE`, `CREW_SERVER_STT_MANAGED`, `CREW_SERVER_STT_DIR`, `CREW_SERVER_STT_MODEL` | `http://127.0.0.1:8178/inference`, `auto`, `true`, `CREW_STT_DIR` or `%LOCALAPPDATA%/crew-harness/stt`, `small` | the local speech recognizer (whisper.cpp `whisper-server`) that the front sends the voice to and, with `managed`, starts and ends itself (below); the address must be a plain `http://127.0.0.1:<port>/...` or `http://localhost:<port>/...` (the audio never leaves the machine); `language` is the default of `POST /api/stt`; `dir` holds `bin/whisper-server.exe` and `models/ggml-<model>.bin` |
 | `hub` {`program`,`args`} | `CREW_SERVER_HUB` (words separated by spaces) | `target/crew-hub.exe` | how the front starts the hub |
 | - | `CREW_SERVER_CONFIG` | - | the settings file, when no argument names it |
 
@@ -93,8 +93,19 @@ is a member of `crew_app`). A server that restarts finds its sessions with `crew
 The front turns a recording into text with a local recognizer (task 192f); nothing is sent to a cloud service.
 
 - `POST /api/stt?lang=<ru|en|auto|...>`: the body is a WAV (`Content-Type: audio/wav`, 16 kHz, mono, 16 bit; up to 25 MiB). The front passes it to `stt.url` as `multipart/form-data` (`file`, `language`, `response_format=json`) and answers `200 {"text":"..."}`. Without `lang` the `language` of the settings is used. Errors are `{"error":"<reason>"}`: 400 (not a WAV, empty, a bad language), 403 (a foreign `Origin`), 502 (the recognizer answered something else), 503 (it cannot be reached). A body over 25 MiB is refused by the server itself with 413 and a plain-text body.
-- `GET /api/stt/status`: `{"available":true|false,"provider":"local","model":"small"}`; `available` is true when the recognizer answers `GET /` with 200 within one second.
-- The recognizer: `$env:CREW_STT_DIR = '<folder with bin/whisper-server.exe and models/ggml-small.bin>'; powershell -File scripts/start-stt.ps1` (hidden, `127.0.0.1:8178`, GPU when the build has CUDA); `scripts/stop-stt.ps1` stops it.
+- `GET /api/stt/status`: `{"available":true|false,"provider":"local","model":"small"}`; when `available` is false the answer also has `reason`: `starting` (the model is loading, up to 30 s), `not_installed` (also `"hint":"scripts/install-stt.ps1"`), `failed` (it did not start or ended), `not_running` (a foreign or an unmanaged recognizer does not answer).
+
+### Speech recognition (Whisper)
+
+Whisper is a part of the control panel: the front starts it and ends it with itself. The files (whisper.cpp with CUDA, 685 MB, and the model `small`, 488 MB) are not in the repository (the public repository takes no file over 100 MB); `tools/stt/manifest.json` lists the addresses, sizes and SHA256.
+
+- **Install, one command:** `powershell -File scripts/install-stt.ps1` downloads the files of the manifest, checks the size and SHA256 (a mismatch stops it and the file is deleted), and unpacks them into the tool folder: `CREW_STT_DIR`, else `%LOCALAPPDATA%/crew-harness/stt`. A second run downloads nothing when everything is in place. `-Model medium` installs the larger model (then set `stt.model` to `medium`); `-Check` only says whether everything is there.
+- **Autostart:** with `stt.managed` (the default `true`) the front, at its start, (1) ends an orphan of ours left by a front that died (`<data_dir>/stt.pid` names a live `whisper-server`); (2) if something already answers at `stt.url`, uses it and never touches or ends it; (3) else, if `stt.dir` holds `bin/whisper-server.exe` and `models/ggml-<model>.bin`, starts `whisper-server` hidden on `127.0.0.1` at the port of `stt.url` and waits up to 30 s for `GET /` to answer 200 (the status is `starting` meanwhile); (4) else the status says `not_installed` and the log names `scripts/install-stt.ps1`. The front never fails because of the recognizer.
+- **Autostop:** the recognizer is a child of the front in a Job Object (`Tree.Group`), so it ends with the front however the front ends (Ctrl+C, a kill, a crash). The pid file is the second line of defence: if a recognizer of ours is somehow left, the next start ends it and starts a new one.
+- **Variables:** `CREW_STT_DIR` (the folder of the installer and the default of `stt.dir`), `CREW_SERVER_STT_DIR`, `CREW_SERVER_STT_MODEL`, `CREW_SERVER_STT_URL`, `CREW_SERVER_STT_MANAGED=false` (the recognizer is yours: nothing is started or ended), `CREW_SERVER_STT_LANGUAGE`.
+- **Check:** `curl http://127.0.0.1:<port>/api/stt/status` gives `"available":true`; `curl -X POST --data-binary @voice.wav -H "Content-Type: audio/wav" "http://127.0.0.1:<port>/api/stt?lang=en"` gives `{"text":"..."}`.
+- **By hand (emergency):** `scripts/start-stt.ps1` and `scripts/stop-stt.ps1` start and stop a recognizer on `127.0.0.1:8178` outside the front (the front then uses it as a foreign one).
+- Tests: `powershell -File scripts/tests/test-install-stt.ps1` (the installer), `nova test src/server/front/sttproc_test.nv` (the plan, the pid file, the orphan, the status).
 
 ## The chat runs on Alula
 
@@ -279,10 +290,10 @@ The events a live session shows come from the engine itself (`Engine.take_events
 | `../storage/paths.nv`, `../storage/migrate.nv` | the paths of the folder of a session (one place), the move of the flat files of the older form into the folders |
 | `hub.nv` | `Hub`: `start_hub`, `attach`, `release`, `handle`, `pump`, `take_output`, `take_log`, `close`; the sessions, the store by the settings, the lines of the page |
 | `stdio.nv` | `run_hub_stdio`: the hub over stdin and stdout |
-| `front/front.nv`, `front/front_settings.nv`, `front/stt.nv` | the front: HTTP, `/ws` (frames over two owners of the socket), the router fiber, the hub as a child process; the voice to text (`/api/stt`) |
+| `front/front.nv`, `front/front_settings.nv`, `front/stt.nv`, `front/sttproc.nv` | the front: HTTP, `/ws` (frames over two owners of the socket), the router fiber, the hub as a child process; the voice to text (`/api/stt`); the recognizer as a child of the front |
 | `testkit.nv` | the settings of a test hub with the fake agent, the rig that drives a hub as a page does, the scenarios (shared by the units below) |
 | `alula_test.nv` | the machine of the hub: made from the embedded table, the idle term, a broken text, an engine in memory, the snapshot |
-| `dialog_test.nv`, `settings_test.nv`, `front/front_settings_test.nv`, `front/stt_test.nv` | tests of the unit `src/server` and `src/server/front` |
+| `dialog_test.nv`, `settings_test.nv`, `front/front_settings_test.nv`, `front/stt_test.nv`, `front/sttproc_test.nv` | tests of the unit `src/server` and `src/server/front` |
 | `../server_live/hub_test.nv`, `../server_pg/hub_pg_test.nv` | the same ten scenarios over files and over PostgreSQL |
 | `test/e2e.mjs`, `test/real-agent.mjs` | Node: the whole server through its door (files, `--pg` on the temporary database, `--pg-docker` on the permanent one); the real `opencode acp` (handshake only) |
 | `server.example.json`, `server-pg.example.json` | the examples of the settings: the file store, and the store pg on the database of `db.ps1` (no password) |
