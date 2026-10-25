@@ -115,15 +115,15 @@ test "dt a machine of the methodology does not load with the registry of the pro
 test "dt the registry of the methodology has 56 primitives and the language has two" {
     ro reg = methodology_registry()
     assert(reg.primitives.len() == 58)
-    mut reading = 0
-    mut writing = 0
-    mut irreversible = 0
+    mut volatile = 0
+    mut acting = 0
+    mut pure = 0
     for p in reg.primitives {
-        if class_word(p.class) == "reading" { reading += 1 }
-        if class_word(p.class) == "writing" { writing += 1 }
-        if class_word(p.class) == "irreversible" { irreversible += 1 }
+        if class_word(p.class) == "volatile" { volatile += 1 }
+        if class_word(p.class) == "acting" { acting += 1 }
+        if class_word(p.class) == "pure" { pure += 1 }
     }
-    assert(reading == 34 && writing == 14 && irreversible == 10)
+    assert(volatile == 34 && acting == 24 && pure == 0)
     assert(find_primitive(reg, "time_now").is_some())
     assert(find_primitive(reg, "stop_agent_group").is_some())
     assert(product_registry().primitives.len() == 2)
@@ -134,7 +134,7 @@ test "dt the registry of the methodology has 56 primitives and the language has 
 
 test "dt the sample of the specification is the sample" {
     assert(agent_step_sample_text().contains("Шаг агента"))
-    assert(agent_step_sample_text().contains("format: 2.22"))
+    assert(agent_step_sample_text().contains("format: 2.23"))
     assert(all_journal_text().contains("agent_chunk"))
     assert(all_journal_text().contains("turn_failed"))
 }

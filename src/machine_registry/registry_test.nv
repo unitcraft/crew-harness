@@ -2,7 +2,7 @@
 // the language, their classes, signatures, reads and writes, the sets of the types the signatures use, and the check of the arguments and of the results against it.
 module crew_harness.machine_registry
 
-import alula.machine.{Registry, PrimitiveClass, TypeSpec, TypeDefs, Value, RecordField, Int, Text, Bool, Null, List, IntType, OptionalType, ListType, DictType, FullDictType, TupleType, RecordType, VariantType, Reading, Writing, Irreversible, Pure}
+import alula.machine.{Registry, PrimitiveClass, TypeSpec, TypeDefs, Value, RecordField, Int, Text, Bool, Null, List, IntType, OptionalType, ListType, DictType, FullDictType, TupleType, RecordType, VariantType, Volatile, Acting, Pure}
 import alula.machine.{find_primitive, class_word, spec_text, check_call_args, check_call_result, make_record, make_variant, enum_value, code_word, host_types}
 import crew_harness.machines.{methodology_registry, methodology_registry_data}
 
@@ -95,34 +95,33 @@ fn rknown(spec TypeSpec, defs TypeDefs) -> bool {
 
 test "md count" {
     assert(methodology_registry().primitives.len() == 58)
-    assert(rcount(Reading) == 34)
-    assert(rcount(Writing) == 14)
-    assert(rcount(Irreversible) == 10)
+    assert(rcount(Volatile) == 34)
+    assert(rcount(Acting) == 24)
     assert(rcount(Pure) == 0)
 }
 
 test "md meeting" {
     for name in ["party_profile", "role_context", "call_trace", "call_step", "parse_agent_reply", "proposal_read", "proposal_with_fingerprint", "proposal_changed_since_attempt"] {
-        assert(rclass(name) == "reading")
+        assert(rclass(name) == "volatile")
     }
     for name in ["count_in_model_tally", "journal_findings", "journal_machine_data", "journal_decision", "remove_unsound", "build_summary"] {
-        assert(rclass(name) == "writing")
+        assert(rclass(name) == "acting")
     }
     for name in ["close_for_writing", "open_for_writing", "move_to_archive"] {
-        assert(rclass(name) == "irreversible")
+        assert(rclass(name) == "acting")
     }
 }
 
 test "md agent step" {
-    assert(rclass("time_now") == "reading")
-    assert(rclass("reply_validation") == "reading")
-    assert(rclass("close_agent_turn") == "irreversible")
-    assert(rclass("check_cache") == "writing")
+    assert(rclass("time_now") == "volatile")
+    assert(rclass("reply_validation") == "volatile")
+    assert(rclass("close_agent_turn") == "acting")
+    assert(rclass("check_cache") == "acting")
     assert(rclass("not_there") == "")
 }
 
 test "md cycle check" {
-    assert(rclass("stop_agent_group") == "irreversible")
+    assert(rclass("stop_agent_group") == "acting")
     match find_primitive(methodology_registry(), "stop_agent_group") {
         Some(p) => {
             assert(p.params.len() == 0)
@@ -196,8 +195,8 @@ test "md types" {
 }
 
 test "md session start" {
-    for name in ["launch_scope", "launch_profile", "session_context", "parse_session_artifact"] { assert(rclass(name) == "reading") }
-    assert(rclass("stop_agent_group") == "irreversible")
+    for name in ["launch_scope", "launch_profile", "session_context", "parse_session_artifact"] { assert(rclass(name) == "volatile") }
+    assert(rclass("stop_agent_group") == "acting")
     match find_primitive(methodology_registry(), "session_context") {
         Some(p) => assert(p.params.len() == 9 && spec_text(p.result) == "text")
         None => assert(false)

@@ -3,7 +3,7 @@
 module crew_harness.machine_text_eq_machines
 
 import std.text
-import alula.machine.{Registry, Primitive, ParamSpec, TextType, ListType, Reading, register, NamedText, find_primitive}
+import alula.machine.{Registry, Primitive, ParamSpec, TextType, ListType, Volatile, register, NamedText, find_primitive}
 import alula.machine_table.{parse_machine, load_machine}
 import alula.machine_run.{load_alula_machine}
 import alula.machine_text.{translate_report, translate_checked, translate_checked_with, TranslateReport, TranslateError, translate_definitions, DefsReport, definitions_hash, normalize_definitions, render_summary, error_text}

@@ -31,7 +31,9 @@ tls = { git = "https://github.com/nv-lang/nova-tls", version = "0.2" }
 # Version 0.4 (task 158) is the split of the package and the product: the package holds the language (two primitives, 35 journal codes, spec 7a) and its examples, the registry and the journal
 # of a host are data (`registry.md`, `journal.md`); the machines of the product and of the methodology (`machines/`) and the tests that run them live here. The tag v0.4.0 is published (commit 62cb32a), `nova.lock.toml`
 # pins it (`nova update alula`); a local `nova.override.toml` (not committed) is only for work on the package itself.
-alula = { git = "https://github.com/nv-lang/nova-alula", version = "0.4" }
+# Version 0.5 (task 172, the tag v0.5.0, commit 9fd413a) is Alula 2.23: the code of a journal entry is a string, three classes of the host functions (`pure`, `volatile`, `acting`), the column `writes` says `actions`;
+# the package reads only the format 2.23 (no transition period), the tables of `machines/` are moved to it.
+alula = { git = "https://github.com/nv-lang/nova-alula", version = "0.5" }
 
 [package]
 name = "crew_harness"

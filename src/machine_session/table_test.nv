@@ -428,11 +428,11 @@ test "st the gates ask what the methodology says" {
     assert(gate13 == ["session", "refusal_text", "launch_pass", "task_dir", "repo_dir"])
 }
 
-test "st the table text is a table of 2.22" {
+test "st the table text is a table of 2.23" {
     ro text = session_start_table_text()
     assert(text.starts_with("# Машина: Запуск сессии\n"))
     assert(text.contains("- machine: session_start\n"))
-    assert(text.contains("- format: 2.22\n"))
+    assert(text.contains("- format: 2.23\n"))
     assert(text.contains("Начальное состояние: В2"))
     assert(text.contains("Пауза(сигнал_остановки: остановить"))
     assert(session_start_machine_text().contains("\"format\": \"machine/2\"") || session_start_machine_text().contains("\"format\":\"machine/2\""))

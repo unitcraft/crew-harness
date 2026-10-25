@@ -86,13 +86,13 @@ test "rg the session start calls one level only" {
 }
 
 test "rg the seven primitives are registered" {
-    assert(class_of("launch_scope") == "reading")
-    assert(class_of("launch_profile") == "reading")
-    assert(class_of("session_context") == "reading")
-    assert(class_of("parse_session_artifact") == "reading")
-    assert(class_of("stop_agent_group") == "irreversible")
-    assert(class_of("prepare_launch") == "writing")
-    assert(class_of("finish_launch") == "writing")
+    assert(class_of("launch_scope") == "volatile")
+    assert(class_of("launch_profile") == "volatile")
+    assert(class_of("session_context") == "volatile")
+    assert(class_of("parse_session_artifact") == "volatile")
+    assert(class_of("stop_agent_group") == "acting")
+    assert(class_of("prepare_launch") == "acting")
+    assert(class_of("finish_launch") == "acting")
     assert(methodology_registry().primitives.len() == 58)
 }
 
