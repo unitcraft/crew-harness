@@ -4,6 +4,9 @@
 // part that needs no runner: the data in the task record, the check of the brief of the fast path, the rule of decision 51 as data (an edit of the
 // brief after the word of the owner marks the record), the display and the line of the journal. The gate В14, the copy of the brief and the return to
 // the full path are the engine of the product, not the plugin.
+// Task 191 (the cells T191): the small route — the entry phrases («сделай X мгновенно», «сделай X, супер быстро») are recognized by the orchestrator
+// (the plugin does not parse them); the plugin keeps the field of the record, the three-line folder, the contour mark with the norm of 10 minutes and
+// the acceptance by the integrator with the owner's word (no reviewer, no lock).
 // Tests of the methodology that this file covers (the data side only): 3 (first part), 4, 9, 10, 14, 15, 19, 21 and 23 (the data part), 22.
 import { execFileSync } from "node:child_process"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
@@ -469,6 +472,67 @@ cell("T133 the tool exposes legacy migration and archive identity/digest inputs"
 const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8")
 cell("T92-22 the README has the section «Маршрут задачи» with the table of the terms and route_defaults", /Маршрут задачи/.test(readme) && /\| слово_завода \| `route_word` \|/.test(readme) && /route_defaults/.test(readme) && /clean_series/.test(readme), "")
 cell("T129 the README gives Nova the exact migration command and warns not to invent the owner's word", /Folderless legacy → fast/.test(readme) && /action: "migrate"/.test(readme) && /infer a missing owner word/i.test(readme), "")
+
+// ---- the small route (task 191; the owner, 2026-10-25, the chat of the methodology): the entry phrases («сделай X
+// мгновенно», «сделай X, супер быстро») are recognized by the ORCHESTRATOR; the plugin does not parse the phrase ----
+const prS = (input, now) => safe(() => need("planRoute")(input, undefined, need("routeSettingsOf")({}), now), { ok: "THROW" })
+const sf = (w, d) => safe(() => need("smallWordFaults")(w, d), ["THROW"])
+const SWORD = "«сделай X мгновенно» (владелец, 2026-10-25, чат Методики)"
+cell("T191-1 the entry phrases with the date pass", sf(SWORD, "2026-10-25").length === 0 && sf("«сделай X, супер быстро» (владелец, 2026-10-25, чат)", "2026-10-25").length === 0, JSON.stringify(sf(SWORD, "2026-10-25")))
+cell("T191-1 the plugin does not parse the wording of the phrase: any word with the date passes; empty word and no date are faults", sf("«сделай X, проверю потом» (владелец, 2026-10-25)", "2026-10-25").length === 0 && sf("", "2026-10-25").length === 1 && sf(SWORD, "").some((f) => /дата/.test(f)), JSON.stringify([sf("«сделай X, проверю потом»", "2026-10-25"), sf("", "2026-10-25")]))
+cell("T191-1 the date is read from the phrase itself", prS({ route: "small", route_word: SWORD }).ok === true && prS({ route: "small", route_word: SWORD }).fields.route_word_date === "2026-10-25", JSON.stringify(prS({ route: "small", route_word: SWORD })))
+cell("T191-2 the contour mark: without the word ts the relation is not counted; 5 min — «в норме 10 мин»; 12 min — «превышение нормы 10 мин»",
+  /не считается/.test(need("contourMarkText")(undefined, "http://x")) && /5 мин \(в норме 10 мин\)/.test(need("contourMarkText")(1_000_000, "http://x", 1_000_000 + 5 * 60_000)) && /12 мин \(превышение нормы 10 мин\)/.test(need("contourMarkText")(1_000_000, "http://x", 1_000_000 + 12 * 60_000)), need("contourMarkText")(1_000_000, "http://x", 1_000_000 + 5 * 60_000))
+const pSmall = prS({ route: "small", route_word: SWORD, route_word_date: "2026-10-25" }, 1_700_000_000_000)
+cell("T191-3 planRoute small: route small, source human, the ts of the word is recorded, the numbers of the small route", pSmall.ok === true && pSmall.fields.route === "small" && pSmall.fields.route_source === "human" && pSmall.fields.route_word_ts === 1_700_000_000_000 && pSmall.fields.ceiling === 1 && pSmall.fields.clean_runs === 1, JSON.stringify(pSmall))
+cell("T191-3 small without the phrase: «малый маршрут требует» naming the phrase; from a rule: refused (the phrase of the owner chooses it)",
+  prS({ route: "small" }).ok === false && /малый маршрут требует/.test(prS({ route: "small" }).refusal ?? "") && /фраза владельца/.test(prS({ route: "small" }).refusal ?? "") && prS({ route: "small", route_word: SWORD, route_source: "rule" }).ok === false, JSON.stringify(prS({ route: "small" })))
+const arcT = { project: "proj", n: 990, route: "full", route_basis: "b", route_source: "rule", history: [] }
+const arcR = safe(() => need("applyRouteChange")(arcT, { route: "small", route_word: SWORD, route_word_date: "2026-10-25" }, undefined, need("routeSettingsOf")({}), "sesX", 1_700_000_000_000), { ok: "THROW" })
+cell("T191-4 the change full → small by the phrase: route small, the ts of the word is set, a note in the history", arcR.ok === true && arcT.route === "small" && arcT.route_word_ts === 1_700_000_000_000 && /малый/.test(arcT.history.at(-1).note ?? ""), JSON.stringify(arcT))
+const arcBack = safe(() => need("applyRouteChange")(arcT, { route: "full", text: "разрослась" }, undefined, need("routeSettingsOf")({}), "sesX", 1_700_000_100_000), { ok: "THROW" })
+cell("T191-4 the change small → full: the mark of the word is gone", arcBack.ok === true && arcT.route === "full" && !("route_word_ts" in arcT), JSON.stringify(arcT))
+
+// ---- the flow: spawn, the folder of three lines, no reviewer, the contour mark, the accept by the integrator ----
+const nS0 = recs(), bS0 = branches()
+const rNoEst = await spawn("Малая без T", { route: "small", route_word: SWORD, route_word_date: "2026-10-25" })
+cell("T191-5 small without estimate: refused naming estimate, no record and no branch", /estimate/.test(rNoEst) && recs() === nS0 && branches() === bS0, rNoEst)
+const rNoPhrase = await spawn("Малая без фразы", { route: "small", estimate: "5 мин" })
+cell("T191-5 small without the phrase of the owner: «малый маршрут требует», no record", /малый маршрут требует/.test(rNoPhrase) && recs() === nS0, rNoPhrase)
+const rSm = await spawn("Малая правка", { route: "small", route_word: SWORD, route_word_date: "2026-10-25", estimate: "5–10 мин", criteria: undefined })
+const tsm = tasks.listTasks("proj").find((t) => t.title === "Малая правка")
+cell("T191-5 the small task is made: route small, the default criteria name the owner's word on the contour, no reviewer", !!tsm && tsm.route === "small" && /слово владельца/.test(tsm.criteria ?? "") && !tsm.reviewer, JSON.stringify(tsm && { r: tsm.route, c: tsm.criteria, a: rSm.slice(0, 150) }))
+const smMsg = tsm ? show(tsm)("task/message.md") : ""
+cell("T191-5 the folder is three lines: «# Задание», «T:», the phrase of the owner", smMsg.split("\n").filter((l) => l.trim()).length === 3 && smMsg.startsWith("# Задание: Малая правка") && /\nT: 5–10 мин\n/.test(smMsg) && smMsg.includes("«сделай X мгновенно»"), smMsg)
+cell("T191-5 the journal of the small task has the route line with the word of the owner", /маршрут: малый/.test(logNow(tsm)) && /слово владельца/.test(logNow(tsm)), logNow(tsm))
+const listed2 = await call("crew_task", "sesINTEG1", { action: "list" })
+cell("T191-6 crew_task list: the small task has the word «малый»", (listed2.split("\n").find((l) => l.includes("Малая правка")) ?? "").includes("малый"), listed2)
+const showS = await call("crew_task", "sesINTEG1", { action: "show", n: tsm.n })
+cell("T191-6 crew_task show: the small route line names the norm of 10 minutes and the contour mark", /маршрут: малый/.test(showS) && /10 мин/.test(showS) && /contour/.test(showS), showS)
+const rC0 = await call("crew_task", t0.executor, { action: "contour", n: t0.n, link: "http://127.0.0.1:8100/" })
+cell("T191-7 contour of a full task (its executor): refused naming the small route", /малого маршрута/.test(rC0), rC0)
+const rC1 = await call("crew_task", "sesINTEG1", { action: "contour", n: tsm.n, link: "http://127.0.0.1:8100/" })
+cell("T191-7 contour by a non-executor: refused", /исполнител/.test(rC1), rC1)
+const rSub = await call("crew_task", tsm.executor, { action: "submit", n: tsm.n, text: "сделано" })
+cell("T191-8 the submit of a small task names the contour mark and that there is no reviewer", /contour/.test(rSub) && /приёмщика нет/.test(rSub), rSub)
+await wait(400) // the loop of the plugin had its passes: no reviewer is assigned to a small task
+const tsmS = tasks.loadTask("proj", tsm.n)
+cell("T191-8 a submitted small task gets no reviewer (the acceptance is the owner's word)", tsmS.status === "submitted" && !tsmS.reviewer, JSON.stringify({ st: tsmS.status, r: tsmS.reviewer }))
+const rC2 = await call("crew_task", tsm.executor, { action: "contour", n: tsm.n, link: "http://127.0.0.1:8100/" })
+cell("T191-9 the contour mark goes to the journal with the relation to the norm of 10 minutes", /ссылка на контур выдана: http:\/\/127\.0\.0\.1:8100\//.test(rC2) && /в норме 10 мин/.test(rC2) && /ссылка на контур выдана/.test(logNow(tasks.loadTask("proj", tsm.n))), rC2 + " || " + logNow(tasks.loadTask("proj", tsm.n)))
+const rAnW = await call("crew_task", "sesTAB2", { action: "accept", n: tsm.n, text: "«принимаю» (владелец, 2026-10-25, чат)" })
+cell("T191-10 the accept of a small task by a non-integrator is refused", /интегратор/.test(rAnW), rAnW)
+const rMerge = await call("crew_task", "sesINTEG1", { action: "merge", n: tsm.n })
+cell("T191-10 merge of a small task: refused — there is no lock, the way (accept) is named", /малый маршрут/.test(rMerge) && /accept/.test(rMerge), rMerge)
+const rAnD = await call("crew_task", "sesINTEG1", { action: "accept", n: tsm.n, text: "«принимаю» (владелец)" })
+cell("T191-10 the word without the date is refused", /дат/.test(rAnD), rAnD)
+const rA0 = await call("crew_task", "sesINTEG1", { action: "accept", n: tsm.n, text: "«проверил на контуре, принимаю» (владелец, 2026-10-25, чат)" })
+cell("T191-10 accept without the landing is refused naming it", /Не принято/.test(rA0) && /не влита/.test(rA0), rA0)
+git(proj, "merge", "--ff", tsm.branch)
+const rA1 = await call("crew_task", "sesINTEG1", { action: "accept", n: tsm.n, text: "«проверил на контуре, принимаю» (владелец, 2026-10-25, чат)" })
+const tsmA = tasks.loadTask("proj", tsm.n)
+cell("T191-10 the integrator accepts the small task by the word of the owner: accepted; the word is in the history and in the journal", /принята словом владельца/.test(rA1) && tsmA.status === "accepted" && /принята словом владельца/.test(tsmA.history.at(-1)?.note ?? "") && /решение владельца: задача .* принята/.test(logNow(tsmA)), rA1 + " || " + logNow(tsmA))
+cell("T191-11 the README names the small route, the three lines and the contour mark", /малый|small/.test(readme) && /test-contour/.test(readme) && /contour/.test(readme), "")
 
 stop?.()
 try {

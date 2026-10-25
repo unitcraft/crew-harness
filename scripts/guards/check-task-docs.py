@@ -45,7 +45,8 @@
     «# Задание: <название>» (message-title), разделы второго уровня «Чего хочет владелец», «Что нужно», «Критерии приёмки»,
     «Результат и куда он попадает», «Связи», «Границы» есть все и в этом порядке (пояснение в скобках после названия допустимо),
     ни один не пуст и «нет:» в них — с причиной (message-section), в разделе слов владельца есть дата ГГГГ-ММ-ДД в заголовке или
-    теле, если раздел не «нет: …» (message-owner).
+    теле, если раздел не «нет: …» (message-owner). Малая форма (малый маршрут, задача 191; признак — вторая строка «T: …»):
+    три непустые строки — заголовок, «T: <оценка>» непустая, слова владельца с датой ГГГГ-ММ-ДД (message-small, message-owner).
 Не проверяет: содержание документов, остальные файлы задач (result.md, profile.log, материалы
     task/), записи log.md без даты в начале строки, с датой раньше 2026-10-10 и вне индекса (в
     режимах дерева, коммита и CI добавленных строк нет), usage.log, вложенные папки задач, вторую строку plan.md (база ревизии); честность строки
@@ -523,9 +524,34 @@ def check_result_section(path, text, folder, paths, rep):
         rep.add(path, start + 1, "result-current", "результат назван, result.md уже есть, а current.md в папке задачи нет")
 
 
+SMALL_RULE = "малый маршрут (задача 191; владелец, 2026-10-25): папка из трёх строк — «# Задание: <название>», «T: <оценка>», слова владельца дословно с датой и источником"
+
+
+def check_message_small(path, lines, rep):
+    """Малая форма задания (задача 191): признак — вторая непустая строка начинается с «T:». True — форма малая, проверена здесь."""
+    plain = [line for line in lines if line.strip()]
+    if len(plain) < 2 or not plain[1].startswith("T:"):
+        return False
+    if not MESSAGE_TITLE.match(plain[0]):
+        rep.add(path, None, "message-title", "нет заголовка «# Задание: <название>» (%s)" % SMALL_RULE)
+    if not plain[1][2:].strip():
+        rep.add(path, None, "message-small", "строка «T:» пуста — оценка времени T одной строкой (%s)" % SMALL_RULE)
+    if len(plain) < 3:
+        rep.add(path, None, "message-small", "нет строки слов владельца: малая форма — три строки (что; T; слова владельца) (%s)" % SMALL_RULE)
+    elif not MESSAGE_DATE.search(plain[2]):
+        rep.add(path, None, "message-owner", "в строке слов владельца нет даты ГГГГ-ММ-ДД: слова владельца — дословно, с датой и источником "
+                "(AGENTS.md, п. 2; %s)" % SMALL_RULE)
+    if len(plain) > 3:
+        rep.add(path, None, "message-small", "больше трёх непустых строк: малая форма — «# Задание: …», «T: …», слова владельца (%s)" % SMALL_RULE)
+    return True
+
+
 def check_message(path, text, rep):
-    """task/message.md задачи, заведённой не раньше MESSAGE_FROM: заголовок, разделы образца по порядку, не пустые, дата у слов владельца."""
+    """task/message.md задачи, заведённой не раньше MESSAGE_FROM: заголовок, разделы образца по порядку, не пустые, дата у слов владельца.
+    Малая форма (задача 191, вторая строка «T: …») судится check_message_small."""
     lines = text_lines(guardlib.strip_fenced(text.lstrip("﻿")))
+    if check_message_small(path, lines, rep):
+        return
     heads = []
     for number, line in enumerate(lines, 1):
         m = MESSAGE_HEAD.match(line)

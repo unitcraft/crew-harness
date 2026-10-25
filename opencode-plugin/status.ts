@@ -75,7 +75,7 @@ export type Status = {
   /** Своя задача (исполнитель или приёмщик). ref — номер задачи в показе («045», задачи 058, 086); label — сессия
    *  методики («С4-3»); group — задача с папкой: панель и /crew группируют её сессии под строкой задачи; status у сессии методики —
    *  её собственный (сдана — submitted, передана — handed), ended — когда сдана. */
-  task?: { n: number; status: string; as: "executor" | "reviewer"; title: string; steps?: StepView[]; checking?: string; ref?: string; label?: string; group?: true; ended?: number; kind?: string; route?: "fast"; routeStale?: true }
+  task?: { n: number; status: string; as: "executor" | "reviewer"; title: string; steps?: StepView[]; checking?: string; ref?: string; label?: string; group?: true; ended?: number; kind?: string; route?: "fast" | "small"; routeStale?: true }
   /** Открытые задачи, поставленные этой сессией. */
   tasks: { n: number; status: string; priority: string; title: string }[]
   /** Вкладка застряла (задача 043, L3): с какого времени и по чему; держится, пока признак не снят (push, ответ, сдача, рабочий ход,
@@ -247,7 +247,7 @@ function statusOfAll(x: StatusInput): Status {
     watches: watches.map((w) => ({ id: w.id, note: w.note, started: w.started, minutes: w.minutes })),
     asked: x.asked,
     ...(x.askedStale?.length ? { askedStale: x.askedStale } : {}),
-    ...(shown ? { task: { n: shown.n, status: ses && ses.status !== "running" ? (ses.status === "submitted" ? "submitted" : ses.status === "handed" ? "handed" : "cancelled") : shown.status, as: card.task ? ("executor" as const) : ("reviewer" as const), title: shown.title, ...(stepsOf(shown) ? { steps: stepsOf(shown) } : {}), ...(shown.checking ? { checking: shown.checking.step } : {}), ref: taskNo(shown), ...(shown.folder ? { group: true as const } : {}), ...(ses && ses.code !== "исп" ? { label: sesLabel(ses), ...(sessionKind(ses.code, ses.goal) ? { kind: sessionKind(ses.code, ses.goal) } : {}) } : {}), ...(ses?.ended && ses.status !== "running" ? { ended: ses.ended } : {}), ...(shown.route === "fast" ? { route: "fast" as const } : {}), ...(shown.route === "fast" && shown.route_word_stale ? { routeStale: true as const } : {}) } } : {}),
+    ...(shown ? { task: { n: shown.n, status: ses && ses.status !== "running" ? (ses.status === "submitted" ? "submitted" : ses.status === "handed" ? "handed" : "cancelled") : shown.status, as: card.task ? ("executor" as const) : ("reviewer" as const), title: shown.title, ...(stepsOf(shown) ? { steps: stepsOf(shown) } : {}), ...(shown.checking ? { checking: shown.checking.step } : {}), ref: taskNo(shown), ...(shown.folder ? { group: true as const } : {}), ...(ses && ses.code !== "исп" ? { label: sesLabel(ses), ...(sessionKind(ses.code, ses.goal) ? { kind: sessionKind(ses.code, ses.goal) } : {}) } : {}), ...(ses?.ended && ses.status !== "running" ? { ended: ses.ended } : {}), ...(shown.route === "fast" || shown.route === "small" ? { route: shown.route } : {}), ...(shown.route === "fast" && shown.route_word_stale ? { routeStale: true as const } : {}) } } : {}),
     tasks: authored.map((t) => ({ n: t.n, status: t.status, priority: t.priority, title: t.title })),
     ...(stuck.length ? { stuck } : {}),
     updated: now,
@@ -557,8 +557,9 @@ export function formatStatuses(list: Status[], now = Date.now(), first?: string)
       // шаги приёмки — один раз на задачу (задача 087): у приёмщика, а без него — на строке названия («шаги 3/13»)
       const { holder, orphan } = stepsPlace(group.filter((y) => !finishedSession(y)))
       const onTitle = orphan ? ` · шаги ${orphan.match(/\d+\/\d+/)?.[0] ?? ""}`.trimEnd() : ""
-      // маршрут (задача 092): у быстрой задачи — слово «быстрый» на строке названия, под ней предупреждение решения 51
-      const title = `${refOf(s)} ${titleText(s.task!.title)}${group.some((x) => x.task?.route) ? ` · ${ROUTE_RU.fast}` : ""}`
+      // маршрут (задача 092): у задачи быстрого или малого (задача 191) маршрута — его слово на строке названия, под ней предупреждение решения 51
+      const groupRoute = group.find((x) => x.task?.route)?.task?.route
+      const title = `${refOf(s)} ${titleText(s.task!.title)}${groupRoute ? ` · ${ROUTE_RU[groupRoute]}` : ""}`
       const staleLine = group.some((x) => x.task?.routeStale) ? `    ⚠ ${STALE_WARNING}` : undefined
       if (s.task!.group) {
         const done = group.filter(finishedSession).length
@@ -783,7 +784,7 @@ export function sidebarLines(list: Status[], now = Date.now(), project?: string,
   // тон base (accent — если эта вкладка ждёт вас), продолжение названия начинается с «· » вместо пробелов (задача 068)
   const heading = (first: Status) => {
     const g = first.task!.group
-    wrapWords(`${refOf(first)} ${titleText(first.task!.title)}${first.task!.route ? ` · ${ROUTE_RU.fast}` : ""}`, width - 2).forEach((l, k) => {
+    wrapWords(`${refOf(first)} ${titleText(first.task!.title)}${first.task!.route ? ` · ${ROUTE_RU[first.task!.route]}` : ""}`, width - 2).forEach((l, k) => {
       const m = k || g ? " " : (markOf(first) ?? " ")
       rows.push({ mark: m, who: "", what: k ? `· ${l}` : m.trim() ? `${m} ${l}` : l, tone: g || !needs(first) ? "base" : "accent" })
     })

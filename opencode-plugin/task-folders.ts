@@ -140,6 +140,12 @@ export function messageFaults(message: string): string[] {
   return out
 }
 
+/** Задание малого маршрута (задача 191; владелец, 2026-10-25, чат Методики): три строки — что; T (оценка времени) одной строкой;
+ *  слова владельца дословно («сделай X мгновенно» / «сделай X, супер быстро» с датой и источником). Большой образец задания малой задаче не нужен. */
+export function smallMessage(title: string, estimate: string, word: string): string {
+  return [`# Задание: ${title.replace(/[\r\n]/g, " ").trim()}`, `T: ${estimate.replace(/[\r\n]/g, " ").trim()}`, word.replace(/[\r\n]+/g, " ").trim(), ""].join("\n")
+}
+
 /** Отказ постановки задачи с папкой: текст message не по образцу или нет полей для задания из полей; undefined — можно ставить. */
 export function messageRefusal(input: { message?: unknown; owner_words?: unknown; result?: unknown }): string | undefined {
   const own = String(input.message ?? "")

@@ -1055,11 +1055,11 @@ the journal**. The gate В14, the copy of the brief (`spec.md`), the return to t
 
 | Methodology term | Field | Values |
 |---|---|---|
-| маршрут | `route` | `full` (default) or `fast` |
+| маршрут | `route` | `full` (default), `fast` or `small` |
 | основание_маршрута | `route_basis` | text |
 | источник_выбора_маршрута («правило», «помощник», «человек») | `route_source` | `rule`, `helper` or `human` |
 | предложение_маршрута | `route_proposal` | `full` or `fast` (the rule applied to the section «Признаки маршрута» of the brief, or what the integrator passed) |
-| слово_завода | `route_word` | the owner's «заводи N» word for word with the date and the source |
+| слово_завода | `route_word` | the owner's «заводи N» word for word with the date and the source; for `small` — the owner's entry phrase word for word with the date and the source (the plugin does not parse its wording) |
 | дата_слова_завода | `route_word_date` | `ГГГГ-ММ-ДД` (absent in the input: the date inside the word) |
 | чистых_подряд | `clean_runs` | integer, default 2 full / 1 fast, **not below 1** |
 | потолок_заходов | `ceiling` | integer ≥ 1, default 4 full / 2 fast |
@@ -1121,6 +1121,16 @@ the gate В5, the phase «РАЗБОР» and the re-run of the implementation be
 **`crew_task {action: "route", n, route, ...}`** (integrator; an open task). `route: "full"` needs `text` — the reason, which becomes the basis in the journal; the word is emptied,
 `clean_series` is zeroed, the trace is kept. `route: "fast"` with a new `route_word` (+ `route_word_date`) renews the word of a marked task: the same conditions as at the start,
 the brief is read again, the new hash is kept, the mark is removed, the series start over. The line `документ: маршрут: …` goes to `log.md` of the task.
+
+**The small route («малый», task 191; the owner, 2026-10-25, the chat of the methodology).** The owner's entry phrases «сделай X мгновенно» and «сделай X, супер быстро» choose the
+route and name the owner the checker, with no questions; recognizing them is the orchestrator's logic — **the plugin does not parse the phrase** (a field of the record and the folder
+template only): `crew_spawn {route: "small", route_word: "<the phrase word for word with the date and the source>", estimate: "<T in one line>"}`.
+The folder is three lines — `task/message.md` is `# Задание: <title>`, `T: <estimate>`, the phrase of the owner; criteria are not required (the default criterion is «приёмка — слово
+владельца на тестовом контуре»). The record gets `route_word_ts` — the mark «слово владельца» (the time the phrase was recorded). There is **no reviewer, no review cycle and no merge
+lock**: the executor submits (`crew_task submit`), raises the test contour (`scripts/test-contour` of the task's tree), gives the owner the link and records the mark
+`crew_task {action: "contour", n, link}` — the line «ссылка на контур выдана» goes to `log.md` of the task with the relation to the norm of 10 minutes from the owner's word. The
+integrator accepts with `crew_task {action: "accept", n, text: "<the owner's word word for word with the date>"}`; the landing of the branch (or the commit) in the target branch is
+still required. `crew_task route` moves a task to and from `small` by the same conditions.
 
 **Display.** `crew_task list` and `show` and `/crew` mark a fast task with the word «быстрый» on the line of its title, the panel — on the heading («045 Название · быстрый»); a marked
 task has the warning line under it (in the panel two rows: «⚠ правка после слова завода», «↳ нужно новое слово владельца»). `show` prints the route line with the source, the basis, the word and the numbers.

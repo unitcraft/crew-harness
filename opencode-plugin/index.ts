@@ -885,13 +885,13 @@ export default {
     }
     async function assignReviewers() {
       const windows = liveWindows()
-      const queue = listTasks().filter((t) => t.status === "submitted" && !t.reviewer).sort(byPriority)
+      const queue = listTasks().filter((t) => t.status === "submitted" && !t.reviewer && t.route !== "small").sort(byPriority) // малый маршрут (задача 191): приёмщика нет — приёмка словом владельца на контуре
       const bud = stepBudget("assignReviewers", log)
       let qi = 0
       for (const t0 of queue) {
         if (await bud.stop(qi++, queue.length)) break
         const t = loadTask(t0.project, t0.n)
-        if (!t || t.status !== "submitted" || t.reviewer) continue
+        if (!t || t.status !== "submitted" || t.reviewer || t.route === "small") continue
         const author = readJson<Card>(cardFile(t.author))
         if (author && author.pid !== process.pid && pidAlive(author.pid)) continue // назначает процесс автора
         const cfg = loadConfig(t.directory)
@@ -1772,7 +1772,7 @@ export default {
               postLetter(x.author, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: x.author, time: t, text: toAuthor + nth })
             log(`stall: ${taskNo(x)} of ${project} accepted ${at}, not cleaned up (reminder ${k} of ${ACCEPTED_REMINDERS_MAX})`)
           }
-        for (const x of list.filter((y) => y.status === "submitted" && !y.reviewer)) {
+        for (const x of list.filter((y) => y.status === "submitted" && !y.reviewer && y.route !== "small")) { // у малого маршрута (задача 191) приёмщика нет: простоя «ждёт приёмщика» не бывает
           const since = [...(x.history ?? [])].reverse().find((h) => h.status === "submitted")?.at ?? 0
           if (!since || t - since <= stall) continue
           const id = `stall-review-${safeKey(project)}-${x.n}-${since}`

@@ -3,17 +3,21 @@
 // заходов, чистых заходов подряд, проб в чистом заходе), основание и источник выбора, слово владельца «заводи <номер>». Плагин делает то, что
 // не требует раннера: данные в записи задачи, проверку постановки быстрого пути, правило решения 51 как данные (правка постановки после слова
 // завода помечает запись) и показ. Ворота В14, копия постановки и возврат на полный путь — движок продукта, здесь их нет.
+// МАЛЫЙ МАРШРУТ (задача 191; владелец, 2026-10-25, чат Методики): вход — фразы владельца «сделай X мгновенно» и «сделай X,
+// супер быстро»; распознаёт их оркестратор (плагин фразу не разбирает: поле записи и шаблон папки), проверяющий — владелец,
+// без вопросов; папка — три строки (что; T; слова владельца дословно), приёмщика нет, приёмка — слово
+// владельца на тестовом контуре; метки «слово владельца» → «ссылка на контур выдана» с отношением к норме 10 минут — в журнале задачи.
 //
 // Модуль без ввода-вывода и без зависимостей от ядра (core.ts и tasks.ts импортируют его, обратный импорт образовал бы цикл): чистые функции,
 // которые проверяет самотест. Имена полей — английские; таблица соответствия терминам методики — в README плагина, «Маршрут задачи».
 import { createHash } from "node:crypto"
 
-export type Route = "full" | "fast"
+export type Route = "full" | "fast" | "small"
 export type RouteSource = "rule" | "helper" | "human"
 export type Risk = "low" | "medium" | "high"
-export const ROUTES: Route[] = ["full", "fast"]
+export const ROUTES: Route[] = ["full", "fast", "small"]
 export const ROUTE_SOURCES: RouteSource[] = ["rule", "helper", "human"]
-export const ROUTE_RU: Record<Route, string> = { full: "полный", fast: "быстрый" }
+export const ROUTE_RU: Record<Route, string> = { full: "полный", fast: "быстрый", small: "малый" }
 export const SOURCE_RU: Record<RouteSource, string> = { rule: "правило", helper: "помощник", human: "человек" }
 
 /** Минимумы методики (task-sessions.md: «у малой задачи без риска достаточно одного чистого захода с тремя пробами»): проект может поднять, не опустить. */
@@ -29,11 +33,15 @@ export type RouteSide = RouteNumbers & { weakenings: string[] }
 export type Thresholds = { max_sources: number; max_parts: number; max_risk: Risk }
 export type RouteSettings = { full: RouteSide; fast: RouteSide; thresholds: Thresholds }
 
-/** Значения методики (task-runner.md, «Параметры маршрута»). */
+/** Значения методики (task-runner.md, «Параметры маршрута»). Малый маршрут (задача 191) — вне цикла раннера (приёмка — слово
+ *  владельца на тестовом контуре); его числа — формальная запись: один заход, сдача сжата. */
 export const METHOD_NUMBERS: Record<Route, RouteNumbers> = {
   full: { ceiling: 4, clean_runs: 2, probes: 3, delivery_compressed: false },
   fast: { ceiling: 2, clean_runs: 1, probes: 3, delivery_compressed: false },
+  small: { ceiling: 1, clean_runs: 1, probes: 3, delivery_compressed: true },
 }
+/** Норма малого маршрута (задача 191; владелец, 2026-10-25, чат Методики): от слова владельца до ссылки на тестовый контур — 10 минут. */
+export const SMALL_NORM_MIN = 10
 export const DEFAULT_THRESHOLDS: Thresholds = { max_sources: 3, max_parts: 2, max_risk: "low" }
 const RISK_RANK: Record<Risk, number> = { low: 0, medium: 1, high: 2 }
 
@@ -62,9 +70,9 @@ export function routeSettingsOf(raw: any): RouteSettings {
   }
 }
 
-/** Числа маршрута: настройки проекта (если даны) или значения методики. */
+/** Числа маршрута: настройки проекта (если даны) или значения методики. У малого маршрута настроек проекта нет (route_defaults — full и fast). */
 export function numbersFor(route: Route, settings?: RouteSettings): RouteNumbers {
-  const s = settings?.[route] ?? METHOD_NUMBERS[route]
+  const s = (route === "small" ? undefined : settings?.[route]) ?? METHOD_NUMBERS[route]
   return { ceiling: s.ceiling, clean_runs: s.clean_runs, probes: s.probes, delivery_compressed: s.delivery_compressed }
 }
 
@@ -98,9 +106,11 @@ export type RouteFields = {
   route_source?: RouteSource
   /** что предложили правило или помощник (человек у ворот подтверждает или меняет) */
   route_proposal?: Route
-  /** слово владельца «заводи N» дословно с датой и источником; дата слова отдельно */
+  /** слово владельца дословно с датой и источником («заводи N» — fast, «сделай X мгновенно» / «сделай X, супер быстро» — small); дата слова отдельно */
   route_word?: string
   route_word_date?: string
+  /** метка «слово владельца» малого маршрута (мс): время записи фразы; по ней — отношение к норме 10 минут в метке «ссылка на контур выдана» */
+  route_word_ts?: number
   /** числа цикла: потолок заходов, чистых заходов подряд (требуется), проб в чистом заходе, сжатие сдачи */
   ceiling?: number
   clean_runs?: number
@@ -121,7 +131,7 @@ export type RouteView = { route: Route; basis: string; source: RouteSource; lega
 /** Маршрут записи как данные: запись без поля route — полный путь, источник «правило», основание «задача начата до введения маршрутов» (проверка 14);
  *  числа — из записи, а без них — значения полного пути. Запись при чтении не меняется. */
 export function routeView(t: RouteFields): RouteView {
-  const legacy = t.route !== "full" && t.route !== "fast"
+  const legacy = !ROUTES.includes(t.route as Route)
   const route: Route = legacy ? "full" : (t.route as Route)
   const m = METHOD_NUMBERS[route]
   return {
@@ -261,6 +271,24 @@ export function wordFaults(word: string | undefined, date: string | undefined): 
   return out
 }
 
+/** Слово малого маршрута (задача 191; владелец, 2026-10-25, чат Методики): входные фразы «сделай X мгновенно» и «сделай X,
+ *  супер быстро» распознаёт оркестратор — плагин фразу не разбирает; от записи — непустая дословная цитата и дата ГГГГ-ММ-ДД. */
+export function smallWordFaults(word: string | undefined, date: string | undefined): string[] {
+  const out: string[] = []
+  const w = String(word ?? "").trim()
+  if (!w) out.push("фраза владельца не названа (route_word: дословная цитата с датой и источником — «сделай X мгновенно» или «сделай X, супер быстро»)")
+  if (!ISO_RE.test(String(date ?? "").trim())) out.push("дата фразы не названа или не в форме ГГГГ-ММ-ДД (route_word_date)")
+  return out
+}
+
+/** Строка метки «ссылка на контур выдана» (задача 191): ссылка и отношение к норме малого маршрута (SMALL_NORM_MIN минут от слова владельца). */
+export function contourMarkText(wordTs: number | undefined, link: string, now: number = Date.now()): string {
+  if (!wordTs) return `ссылка на контур выдана: ${link} (метки «слово владельца» нет — отношение к норме ${SMALL_NORM_MIN} мин не считается)`
+  const mins = Math.max(0, Math.round((now - wordTs) / 60_000))
+  const rel = mins <= SMALL_NORM_MIN ? `в норме ${SMALL_NORM_MIN} мин` : `превышение нормы ${SMALL_NORM_MIN} мин`
+  return `ссылка на контур выдана: ${link}; от слова владельца ${mins} мин (${rel})`
+}
+
 const POINT_RE = /^[ \t]*(?:[0-9]+[.)]|[-*•])[ \t]+\S|\bAC-[0-9]+/
 /** Постановка быстрого пути полна: файл есть, в разделе «Критерии приёмки» хотя бы один пункт (нумерованный, маркированный или AC-N), есть строка с веткой.
  *  Формат постановки проекта — «Репозиторий: …, ветка …» — принимается так же, как строка «Ветка: <имя>» методики. */
@@ -325,10 +353,12 @@ export function markStale(t: RouteFields & { history?: { at: number; by: string;
   return true
 }
 
-/** Строка журнала задачи о маршруте: «маршрут: быстрый, основание: …, источник: человек, слово завода: «…» (2026-10-18)». */
+/** Строка журнала задачи о маршруте: «маршрут: быстрый, основание: …, источник: человек, слово завода: «…» (2026-10-18)»; у малого —
+ *  «маршрут: малый, …, слово владельца: «…» (2026-10-25)» — эта строка и есть метка «слово владельца» (задача 191). */
 export function routeLogText(t: RouteFields): string {
   const v = routeView(t)
-  const word = v.route === "fast" && v.word ? `, слово завода: ${v.word.replace(/\s+/g, " ").trim()}${v.word_date ? ` (${v.word_date})` : ""}` : ""
+  const label = v.route === "fast" ? "слово завода" : "слово владельца"
+  const word = (v.route === "fast" || v.route === "small") && v.word ? `, ${label}: ${v.word.replace(/\s+/g, " ").trim()}${v.word_date ? ` (${v.word_date})` : ""}` : ""
   return `маршрут: ${ROUTE_RU[v.route]}, основание: ${v.basis.replace(/\s+/g, " ").trim() || "не записано"}, источник: ${SOURCE_RU[v.source]}${word}`
 }
 
@@ -346,18 +376,32 @@ export type RouteInput = {
   probes?: unknown
   delivery_compressed?: unknown
   sources_list?: unknown
+  estimate?: unknown
 }
-export const ROUTE_INPUT_KEYS = ["route", "route_basis", "route_source", "route_proposal", "route_word", "route_word_date", "clean_runs", "ceiling", "probes", "delivery_compressed", "sources_list"] as const
+export const ROUTE_INPUT_KEYS = ["route", "route_basis", "route_source", "route_proposal", "route_word", "route_word_date", "clean_runs", "ceiling", "probes", "delivery_compressed", "sources_list", "estimate"] as const
 export const hasRouteInput = (input: RouteInput): boolean => ROUTE_INPUT_KEYS.some((k) => (input as any)?.[k] !== undefined && (input as any)?.[k] !== null && (input as any)?.[k] !== "")
 
 /** Выбрать маршрут новой задачи и собрать поля записи. `brief` — текст постановки (task/message.md), как будет записан; undefined — постановки нет.
  *  Быстрый путь без условий — отказ «быстрый путь требует: …» (маршрут остаётся полным, задача без явного решения не создаётся). Числа ниже минимума
  *  методики отвергаются на любом маршруте; настройки проекта route_defaults — так же (быстрого — отказ быстрого пути, полного — отказ задачи:
  *  запасного маршрута безопаснее полного нет). */
-export function planRoute(input: RouteInput, brief: string | undefined, settings: RouteSettings): { ok: true; fields: Required<Pick<RouteFields, "route" | "route_basis" | "route_source" | "ceiling" | "clean_runs" | "probes" | "delivery_compressed" | "clean_series">> & RouteFields } | { ok: false; refusal: string } {
+export function planRoute(input: RouteInput, brief: string | undefined, settings: RouteSettings, now: number = Date.now()): { ok: true; fields: Required<Pick<RouteFields, "route" | "route_basis" | "route_source" | "ceiling" | "clean_runs" | "probes" | "delivery_compressed" | "clean_series">> & RouteFields } | { ok: false; refusal: string } {
   const raw = input?.route
-  if (raw !== undefined && raw !== null && raw !== "" && !ROUTES.includes(raw as Route)) return { ok: false, refusal: `Задача не поставлена: route — full или fast (получено «${String(raw)}»). Без route задача идёт полным путём.` }
-  const route: Route = raw === "fast" ? "fast" : "full"
+  if (raw !== undefined && raw !== null && raw !== "" && !ROUTES.includes(raw as Route)) return { ok: false, refusal: `Задача не поставлена: route — full, fast или small (получено «${String(raw)}»). Без route задача идёт полным путём.` }
+  const route: Route = raw === "fast" ? "fast" : raw === "small" ? "small" : "full"
+  if (route === "small") {
+    // МАЛЫЙ МАРШРУТ (задача 191; владелец, 2026-10-25, чат Методики): входные фразы распознаёт оркестратор, плагин их не
+    // разбирает; постановка — папка из трёх строк (собирает core.ts), цикла и приёмщика нет
+    const source: RouteSource = input.route_source === undefined || input.route_source === null || input.route_source === "" ? "human" : (input.route_source as RouteSource)
+    if (!ROUTE_SOURCES.includes(source)) return { ok: false, refusal: `Задача не поставлена: route_source — rule, helper или human (получено «${String(input.route_source)}»).` }
+    const word = String(input.route_word ?? "").trim()
+    const date = wordDateOf(word, input.route_word_date as string | undefined)
+    const faults = [...smallWordFaults(word, date)]
+    if (source !== "human") faults.push("малый маршрут выбирает фраза владельца: route_source — human")
+    if (faults.length) return { ok: false, refusal: `Задача не поставлена: малый маршрут требует: ${faults.join("; ")}. Или поставь задачу без route (полный путь).` }
+    const basis = String(input.route_basis ?? "").trim() || `фраза владельца ${date} («сделай X мгновенно» / «сделай X, супер быстро») — проверяющий владелец`
+    return { ok: true, fields: { route, route_basis: basis, route_source: source, route_word: word, route_word_date: date, route_word_ts: now, ...METHOD_NUMBERS.small, clean_series: 0 } }
+  }
   const own = settings[route]
   const sFaults = numberFaults(own)
   if (sFaults.length) {
@@ -395,17 +439,26 @@ export function planRoute(input: RouteInput, brief: string | undefined, settings
 /** Смена маршрута записью (crew_task route): быстрый → полный — только записью route и пустого route_word с причиной; серия чистых заходов обнуляется,
  *  трасса и номера заходов остаются. Полный → быстрый и новое слово завода — те же условия, что при постановке. Меняет запись на месте. */
 export function applyRouteChange(t: RouteFields & { history?: { at: number; by: string; note?: string }[] }, input: RouteInput & { text?: unknown }, brief: string | undefined, settings: RouteSettings, by: string, now: number = Date.now()): { ok: true; line: string } | { ok: false; refusal: string } {
-  const to: Route | undefined = input.route === "full" || input.route === "fast" ? input.route : undefined
-  if (!to) return { ok: false, refusal: "route — full или fast." }
+  const to: Route | undefined = input.route === "full" || input.route === "fast" || input.route === "small" ? input.route : undefined
+  if (!to) return { ok: false, refusal: "route — full, fast или small." }
   const reason = String(input.text ?? input.route_basis ?? "").trim()
   if (to === "full") {
     if (!reason) return { ok: false, refusal: "Смена маршрута на полный записывается с причиной: text — почему (она станет основанием маршрута в журнале)." }
     const p = planRoute({ route: "full", route_basis: reason, route_source: "human" }, brief, settings)
     if (!p.ok) return p
     const was = routeView(t)
-    for (const k of ["route_word", "route_word_date", "route_message_hash", "route_word_stale", "route_stale_at"] as const) delete t[k]
+    for (const k of ["route_word", "route_word_date", "route_word_ts", "route_message_hash", "route_word_stale", "route_stale_at"] as const) delete t[k]
     Object.assign(t, p.fields, { route_word: "", clean_series: 0 })
     ;(t.history ??= []).push({ at: now, by, note: `маршрут: ${ROUTE_RU[was.route]} → полный; основание: ${reason}; слово завода снято, серия чистых заходов обнулена` })
+    return { ok: true, line: routeLogText(t) }
+  }
+  if (to === "small") {
+    const p = planRoute({ ...input, route: "small", route_source: input.route_source ?? "human" }, brief, settings, now)
+    if (!p.ok) return p
+    const was = routeView(t)
+    for (const k of ["route_message_hash", "route_word_stale", "route_stale_at"] as const) delete t[k]
+    Object.assign(t, p.fields, { clean_series: 0 })
+    ;(t.history ??= []).push({ at: now, by, note: `маршрут: ${ROUTE_RU[was.route]} → малый по фразе владельца ${p.fields.route_word_date}; серия чистых заходов обнулена` })
     return { ok: true, line: routeLogText(t) }
   }
   const p = planRoute({ ...input, route: "fast", route_source: input.route_source ?? "human" }, brief, settings)
