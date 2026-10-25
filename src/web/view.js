@@ -16,6 +16,8 @@ import { createLocalDictation } from './recorder.js';
 import { createToast } from './toast.js';
 import { LANGS, createVoiceSettings, langFor, pageLang } from './stt.js';
 import { isBusy, keyAction } from './queue.js';
+import { canSend } from './attachments.js';
+import { createAttachUi, createLightbox } from './attach-ui.js';
 import { labelOf } from './labels-ru.js';
 import {
   STATE_KEYS, sessionList, splitBlocks, filterSessions, groupSessions, effectivePins, timeline, paragraphs, inlineSpans,
@@ -84,17 +86,18 @@ function icon(doc, id, extra = '') {
  * @param refs      { side, main, rail, app, status, overlay } — корневые узлы из index.html
  * @param deps      { agents, now, handlers }
  *   handlers: onSelect(trace), onBack(), onNewToggle(open, project?), onCreate({agent, name, project}),
- *             onSend(trace, text) -> bool, onCancel(trace), onDecide(trace, request, decision),
+ *             onSend(trace, text, images?) -> bool | Promise<bool> (images — вложения: сначала уходят на сервер, потом сообщение), onCancel(trace), onDecide(trace, request, decision),
  *             onPin(trace, pinned), onTheme(), onCopy(text),
  *             onSwitchAgent(trace, agent) — продолжить этот разговор на другом агенте,
  *             onChoose(trace, setting, value) — выбор режима, модели или усилия (setting: 'mode' | 'model' | 'effort')
  */
 export function createView(doc, refs, deps) {
   const {
-    agents, now, handlers, registryFailed = false,
+    agents, now, handlers, registryFailed = false, imageSrc = (image) => image.src,
   } = deps;
   const win = doc.defaultView;
   const drafts = new Map();
+  const attachDrafts = new Map(); // вложения по сессиям: как черновик, живут до отправки
   const open = new Set(); // раскрытые строки и карточки по ключу: переживают перерисовку
   let query = '';
   let railOpen = null; // null — «как задано шириной», true/false — выбор владельца
@@ -271,8 +274,15 @@ export function createView(doc, refs, deps) {
   const sendButton = h(doc, 'button', { type: 'button', class: 'send-btn', 'data-tip': t('composer.hint'), disabled: true }, icon(doc, 'i-return'), h(doc, 'span', { class: 'sr-only', text: t('chat.send') }));
   // счётчик очереди — над полем, position absolute: его появление не меняет высоту
   const queueButton = h(doc, 'button', { type: 'button', class: 'queue-count', hidden: true, title: t('composer.queued_hint') });
-  const box = h(doc, 'div', { class: 'box' }, input,
+  // картинки сообщения: полоска превью — первой строкой карточки (задача 192)
+  const attach = createAttachUi(doc, { h, icon, showError: (text) => voiceToast.show(text), onChange: () => fitInput() });
+  const lightbox = createLightbox(doc, { h, icon });
+  const plusButton = h(doc, 'button', { type: 'button', class: 'plus-btn', title: t('images.add'), 'aria-label': t('images.add') }, icon(doc, 'i-plus'));
+  const box = h(doc, 'div', { class: 'box' }, attach.row, plusButton, input,
     micTimer, wave, h(doc, 'div', { class: 'box-row' }, cancelButton, sendButton, micWrap));
+  attach.bindPicker(plusButton);
+  attach.bindPaste(input);
+  attach.bindDrop(box);
   // счётчик очереди «на потом» (Ctrl+Enter при работающем агенте); клик убирает последнее сообщение
 
   const ringFill = svgNode(doc, 'circle', { class: 'ring-fill', cx: 12, cy: 12, r: 9, pathLength: 100 });
@@ -626,19 +636,38 @@ export function createView(doc, refs, deps) {
   let currentTrace = null;
   const nodes = new Map(); // key элемента ленты -> { node, sig, item }
 
+  let uploading = false; // картинки уходят на сервер: второй отправки пока нет
   function submit(queue = false) {
     const text = input.value.trim();
-    if (!currentTrace || text.length === 0) return;
-    const done = queue ? handlers.onQueue(currentTrace, text) : handlers.onSend(currentTrace, text);
-    if (done) {
-      input.value = '';
-      fitInput();
-      drafts.delete(currentTrace);
+    const images = attach.items();
+    if (!currentTrace || uploading || (text.length === 0 && images.length === 0)) return;
+    if (queue && images.length > 0) { voiceToast.show(t('images.err_queue')); return; }
+    const trace = currentTrace;
+    if (images.length === 0) {
+      const done = queue ? handlers.onQueue(trace, text) : handlers.onSend(trace, text);
+      if (done) {
+        input.value = '';
+        fitInput();
+        drafts.delete(trace);
+      }
+      return;
     }
+    uploading = true;
+    fitInput();
+    const finish = (ok) => {
+      uploading = false;
+      if (ok) {
+        drafts.delete(trace);
+        attachDrafts.delete(trace);
+        if (currentTrace === trace) { input.value = ''; attach.clear(); }
+      }
+      fitInput();
+    };
+    Promise.resolve(handlers.onSend(trace, text, images)).then(finish, () => finish(false));
   }
   // Авторазмер: высота по содержимому, не выше 5 строк (дальше — внутренняя прокрутка, см. max-height в app.css).
   function fitInput() {
-    sendButton.disabled = cancelButton.hidden === false || input.value.trim().length === 0;
+    sendButton.disabled = cancelButton.hidden === false || !canSend(input.value, attach.items(), uploading);
     input.style.height = 'auto';
     if (input.scrollHeight > 0) input.style.height = `${input.scrollHeight}px`; // 0 — чат скрыт: оставить auto
   }
@@ -777,8 +806,24 @@ export function createView(doc, refs, deps) {
   function fillItem(entry, item) {
     const { node } = entry;
     switch (item.type) {
-      case 'user':
-        node.replaceChildren(h(doc, 'span', { class: 'sr', text: t('chat.you') }), h(doc, 'div', { class: 'bubble' }, ...proseNodes(item.text)));
+      case 'user': {
+        // картинки сообщения — миниатюры над текстом; клик увеличивает поверх страницы
+        const thumbs = item.images.length > 0
+          ? h(doc, 'div', { class: 'thumbs' }, ...item.images.map((image) => {
+            const src = imageSrc(image);
+            const label = t('images.open', { name: image.name });
+            const button = h(doc, 'button', { type: 'button', class: 'thumb', title: label, 'aria-label': label },
+              h(doc, 'img', { class: 'thumb-img', src, alt: t('images.alt', { name: image.name }), loading: 'lazy' }));
+            button.addEventListener('click', () => lightbox.open(src, image.name, button));
+            return button;
+          }))
+          : false;
+        node.replaceChildren(h(doc, 'span', { class: 'sr', text: t('chat.you') }),
+          h(doc, 'div', { class: 'bubble' }, thumbs, ...(item.text.trim().length > 0 ? proseNodes(item.text) : [])));
+        break;
+      }
+      case 'skipped':
+        node.replaceChildren(h(doc, 'span', { text: t('chat.images_skipped', { agent: agentLabel(item.agent) }) }));
         break;
       case 'text':
         node.dataset.streaming = String(item.streaming);
@@ -830,11 +875,15 @@ export function createView(doc, refs, deps) {
     if (!session) { currentTrace = null; return; }
 
     if (currentTrace !== session.id) {
-      if (currentTrace) drafts.set(currentTrace, input.value);
+      if (currentTrace) {
+        drafts.set(currentTrace, input.value);
+        attachDrafts.set(currentTrace, attach.take());
+      }
       currentTrace = session.id;
       nodes.clear();
       thread.replaceChildren();
       input.value = drafts.get(session.id) ?? '';
+      attach.restore(attachDrafts.get(session.id));
       fitInput();
       title.textContent = session.name;
       closeMenu();
@@ -848,7 +897,7 @@ export function createView(doc, refs, deps) {
     queueButton.hidden = queued === 0;
     if (queued > 0) queueButton.textContent = t('composer.queued', { n: queued });
     cancelButton.hidden = !busy;
-    sendButton.disabled = busy || input.value.trim().length === 0;
+    sendButton.disabled = busy || !canSend(input.value, attach.items(), uploading);
     options = session.options || null;
     currentAgent = session.agent;
     familyButton.hidden = agents.length < 2;

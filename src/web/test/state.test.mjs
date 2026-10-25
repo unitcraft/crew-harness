@@ -292,3 +292,50 @@ test('splitBlocks: текст и блоки кода, незакрытый бл�
   // HTML остаётся обычными символами: его никто не разбирает
   assert.deepEqual(splitBlocks('<img src=x onerror=alert(1)>'), [{ type: 'text', text: '<img src=x onerror=alert(1)>' }]);
 });
+
+// ---- картинки сообщения (задача 192)
+
+test('message_images перед user_message: картинки приходят в сообщение с адресами на сервере, записи о них одноразовы', () => {
+  const m = run([
+    created(),
+    ev('message_images', { images: [{ n: 1, name: 'image.png', mime: 'image/png', bytes: 2048 }, { n: 2, name: 'image-2.png', mime: 'image/png', bytes: 10 }] }, { step: 1 }),
+    ev('user_message', { turn: 't1', text: 'вот' }, { step: 2 }),
+    ev('agent_done', { turn: 't1' }, { step: 3 }),
+    ev('user_message', { turn: 't2', text: 'без картинок' }, { step: 4 }),
+  ]);
+  const users = m.sessions.s1.messages.filter((x) => x.role === 'user');
+  assert.deepEqual(users[0].images, [
+    { n: 1, name: 'image.png', mime: 'image/png', bytes: 2048, src: '/api/session-image/s1/1' },
+    { n: 2, name: 'image-2.png', mime: 'image/png', bytes: 10, src: '/api/session-image/s1/2' },
+  ]);
+  assert.deepEqual(users[1].images, []);
+  const items = timeline(m.sessions.s1).filter((x) => x.type === 'user');
+  assert.equal(items[0].images.length, 2);
+  assert.equal(items[1].images.length, 0);
+});
+
+test('message_images: чужое отбрасывается; повтор события безвреден; картинка без текста — сообщение есть', () => {
+  const dup = ev('message_images', { images: [{ n: 1, name: 'a.png', mime: 'image/png', bytes: 1 }, { name: 'без номера' }, 'мусор', { n: 0 }, { n: 1.5 }] }, { step: 1, id: 'same' });
+  const m = run([created(), dup, dup, ev('user_message', { turn: 't1', text: '' }, { step: 2 })]);
+  const user = m.sessions.s1.messages.find((x) => x.role === 'user');
+  assert.deepEqual(user.images.map((i) => i.n), [1]);
+  assert.equal(user.text, '');
+  assert.equal(reduce(m, dup), m);
+  assert.deepEqual(run([created(), ev('message_images', { images: 'нет' }, { step: 1 }), ev('user_message', { turn: 'x' }, { step: 2 })]).sessions.s1.messages[0].images, []);
+});
+
+test('images_skipped: строка в ленте «агент не принимает изображения», один раз на событие', () => {
+  const skipped = ev('images_skipped', { turn: 't1', agent: 'fake-agent', count: 2 }, { step: 3, id: 'sk1' });
+  const m = run([created(), ev('user_message', { turn: 't1', text: 'вот' }, { step: 1 }), skipped, skipped]);
+  const rows = timeline(m.sessions.s1).filter((x) => x.type === 'skipped');
+  assert.equal(rows.length, 1);
+  assert.deepEqual({ agent: rows[0].agent, count: rows[0].count }, { agent: 'opencode', count: 2 });
+});
+
+test('в заглушке есть сообщение с двумя картинками, и после перезагрузки (тот же журнал) оно то же', () => {
+  const a = run(INITIAL_JOURNAL.map((e) => ({ ...e })));
+  const withImages = Object.values(a.sessions).flatMap((s) => s.messages).filter((x) => x.role === 'user' && x.images.length > 0);
+  assert.equal(withImages.length, 1);
+  assert.equal(withImages[0].images.length, 2);
+  assert.deepEqual(run(INITIAL_JOURNAL.map((e) => ({ ...e }))), a);
+});

@@ -89,7 +89,7 @@ const viewSrc = fs.readFileSync(new URL('../view.js', import.meta.url), 'utf8');
 const cssSrc = fs.readFileSync(new URL('../app.css', import.meta.url), 'utf8');
 
 test('правая группа карточки: таймер, дорожка, строка кнопок (отмена, отправка, микрофон) в этом порядке; «↵» нет совсем', () => {
-  const box = viewSrc.match(/const box = h\(doc, 'div', \{ class: 'box' \}, input,\s*([^;]*)\);/);
+  const box = viewSrc.match(/const box = h\(doc, 'div', \{ class: 'box' \}, attach\.row, plusButton, input,\s*([^;]*)\);/);
   assert.ok(box, 'карточка найдена');
   assert.match(box[1], /^micTimer, wave, h\(doc, 'div', \{ class: 'box-row' \}, cancelButton, sendButton, micWrap\)/);
   assert.match(viewSrc, /const micWrap = h\(doc, 'div', \{ class: 'mic-wrap' \}, micButton, micMore, voiceMenu\);/);
@@ -180,4 +180,16 @@ test('подсказки кнопок карточки — тёмные (data-ti
   }
   assert.match(viewSrc, /micButton\.addEventListener\('contextmenu', \(e\) => \{ e\.preventDefault\(\); if \(voiceMenu\.hidden\) toggleVoiceMenu\(\); \}\);/);
   assert.equal(t('voice.right_click'), 'Правый клик \u2014 настройки');
+});
+
+test('кнопка «+» слева в карточке открывает выбор изображений: скрытый input type=file accept=image/* multiple', async () => {
+  const attachUi = fs.readFileSync(new URL('../attach-ui.js', import.meta.url), 'utf8');
+  assert.match(viewSrc, /const box = h\(doc, 'div', \{ class: 'box' \}, attach\.row, plusButton, input,/);
+  assert.match(viewSrc, /attach\.bindPicker\(plusButton\)/);
+  assert.match(attachUi, /chooser\.type = 'file';\s*chooser\.accept = pickerAccept\(\);\s*chooser\.multiple = true;/);
+  assert.match(attachUi, /button\.addEventListener\('click', \(\) => chooser\.click\(\)\)/);
+  const { pickerAccept } = await import('../attachments.js');
+  assert.equal(pickerAccept(), 'image/png,image/jpeg,image/webp,image/gif');
+  assert.equal(t('images.add'), 'Прикрепить изображение');
+  assert.match(cssSrc, /\.plus-btn \{[^}]*width: 32px; height: 32px;[^}]*border-radius: 8px/);
 });
