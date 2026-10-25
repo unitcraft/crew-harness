@@ -307,6 +307,8 @@ export function createView(doc, refs, deps) {
     const v = recordingView(state);
     input.placeholder = t(v.placeholderKey);
     box.classList.toggle('recording', v.showWave);
+    const micUse = micButton.querySelector('use');
+    if (micUse) micUse.setAttribute('href', v.showWave ? '#i-mic-fill' : '#i-mic');
     wave.hidden = !v.showWave;
     enterButton.hidden = !v.showEnter;
     sendButton.hidden = v.hideSend;

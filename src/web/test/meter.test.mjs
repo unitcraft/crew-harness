@@ -129,7 +129,22 @@ test('кнопки карточки (↵, отмена, микрофон) — о
 
 test('микрофон серый; единственное цветное состояние — запись; стрелка провайдера 14 px прижата к нему', () => {
   assert.match(cssSrc, /\.mic-btn \{ color: var\(--fg-muted\); touch-action: none; \}/);
-  assert.match(cssSrc, /\.mic-btn\[data-state="recording"\] \{ background: color-mix\(in srgb, var\(--accent\) 16%, transparent\)/);
+  assert.match(cssSrc, /\.mic-btn\[data-state="recording"\] \{ border-radius: 12px; background: var\(--accent-soft\)/);
   assert.match(rule('.mic-more'), /width: 14px/);
   assert.match(rule('.mic-more'), /margin-left: -2px/);
+});
+
+test('запись: микрофон — скруглённый квадрат 12 px с --accent-soft, значок --accent и заливной; без пульсации тени, «дыхание» значка отключается при reduced-motion', () => {
+  const rec = cssSrc.match(/\.mic-btn\[data-state="recording"\] \{([^}]*)\}/);
+  assert.ok(rec);
+  assert.match(rec[1], /border-radius: 12px/);
+  assert.match(rec[1], /background: var\(--accent-soft\)/);
+  assert.match(rec[1], /color: var\(--accent\)/);
+  assert.ok(!/animation|box-shadow/.test(rec[1]), 'у кнопки нет пульсации тени');
+  assert.match(cssSrc, /\.mic-btn\[data-state="recording"\] \.icon \{ animation: breathe 1\.6s/);
+  assert.match(cssSrc, /@keyframes breathe \{ 50% \{ opacity: \.75; \} \}/);
+  assert.match(cssSrc, /prefers-reduced-motion: reduce\) \{ \.mic-btn\[data-state="recording"\] \.icon \{ animation: none; \} \}/);
+  assert.match(viewSrc, /'#i-mic-fill' : '#i-mic'/);
+  assert.match(fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8'), /<symbol id="i-mic-fill"[^>]*><rect[^>]*fill="currentColor"/);
+  assert.match(cssSrc, /--accent-soft: #e6eefc;/);
 });

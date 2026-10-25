@@ -22,6 +22,7 @@
   --fg-muted: #666666;
   --accent: #2f54c9;
   --accent-fg: #ffffff;
+  --accent-soft: #e6eefc;
   --ok: #17692e;
   --warn: #8f5600;
   --warn-soft: #fbf0d9;
@@ -61,6 +62,7 @@
     --fg-muted: #b4b0a5;
     --accent: #9db2ff;
     --accent-fg: #10142a;
+    --accent-soft: #26304f;
     --ok: #6fcf8c;
     --warn: #f0b050;
     --warn-soft: #3b2f17;
@@ -90,6 +92,7 @@
   --fg-muted: #b4b0a5;
   --accent: #9db2ff;
   --accent-fg: #10142a;
+  --accent-soft: #26304f;
   --ok: #6fcf8c;
   --warn: #f0b050;
   --warn-soft: #3b2f17;
@@ -801,7 +804,10 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
 .send-btn:disabled { background: transparent; border-color: transparent; color: var(--fg-muted); opacity: .45; filter: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .mic-btn { color: var(--fg-muted); touch-action: none; }
-.mic-btn[data-state="recording"] { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.mic-btn[data-state="recording"] { border-radius: 12px; background: var(--accent-soft); color: var(--accent); }
+.mic-btn[data-state="recording"] .icon { animation: breathe 1.6s ease-in-out infinite; }
+@keyframes breathe { 50% { opacity: .75; } }
+@media (prefers-reduced-motion: reduce) { .mic-btn[data-state="recording"] .icon { animation: none; } }
 .mic-btn[data-state="unavailable"] { opacity: .45; }
 .wave { display: flex; align-items: center; justify-content: flex-end; gap: 2px; height: 32px; padding: 0 4px; color: var(--fg-muted); }
 .wave[hidden] { display: none; }
