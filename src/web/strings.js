@@ -114,6 +114,8 @@ export const S = Object.freeze({
   'menu.effort': 'Усилие',
   'menu.more_models': 'Другие модели',
   'menu.back': 'Назад',
+  'menu.search': 'Найти модель…',
+  'menu.none': 'Ничего не найдено',
   'composer.working': 'Агент работает',
   'composer.ring': 'Контекст занят на {n} %',
 

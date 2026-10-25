@@ -12,7 +12,7 @@
 import { t } from './strings.js';
 import {
   STATE_KEYS, sessionList, splitBlocks, filterSessions, groupSessions, effectivePins, timeline, paragraphs, inlineSpans,
-  workSummary, usagePercent, usageLevel, tokenParts, durationLabel, agoParts, fileParts, taskSummary,
+  workSummary, filterModels, groupModels, usagePercent, usageLevel, tokenParts, durationLabel, agoParts, fileParts, taskSummary,
 } from './state.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -239,10 +239,11 @@ export function createView(doc, refs, deps) {
   const input = h(doc, 'textarea', {
     id: 'composer-input', rows: 1, placeholder: t('composer.placeholder'), 'aria-label': t('chat.input_label'),
   });
-  const cancelButton = h(doc, 'button', { type: 'button', class: 'cancel-btn', hidden: true }, icon(doc, 'i-stop'), h(doc, 'span', { text: t('chat.cancel') }));
-  const sendButton = h(doc, 'button', { type: 'button', class: 'send-btn' }, icon(doc, 'i-send'), h(doc, 'span', { text: t('chat.send') }));
+  // Кнопки круглые, без видимого текста: имя — для чтения с экрана, подсказка о клавишах — в title (задача 192).
+  const cancelButton = h(doc, 'button', { type: 'button', class: 'cancel-btn', hidden: true, title: t('chat.cancel') }, icon(doc, 'i-stop'), h(doc, 'span', { class: 'sr-only', text: t('chat.cancel') }));
+  const sendButton = h(doc, 'button', { type: 'button', class: 'send-btn', title: t('composer.hint'), disabled: true }, icon(doc, 'i-send'), h(doc, 'span', { class: 'sr-only', text: t('chat.send') }));
   const box = h(doc, 'div', { class: 'box' }, input,
-    h(doc, 'div', { class: 'box-row' }, h(doc, 'span', { class: 'grow' }), cancelButton, sendButton));
+    h(doc, 'div', { class: 'box-row' }, cancelButton, sendButton));
 
   const ringFill = svgNode(doc, 'circle', { class: 'ring-fill', cx: 12, cy: 12, r: 9, pathLength: 100 });
   const ring = svgNode(doc, 'svg', { class: 'ring', viewBox: '0 0 24 24', role: 'img' });
@@ -256,12 +257,17 @@ export function createView(doc, refs, deps) {
   const modelButton = h(doc, 'button', { type: 'button', class: 'status-btn', hidden: true, 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
   const spinner = h(doc, 'span', { class: 'spinner', role: 'img', 'aria-label': t('composer.working'), hidden: true });
   const menu = h(doc, 'div', { class: 'menu', role: 'menu', hidden: true });
-  const status = h(doc, 'div', { class: 'composer-status', hidden: true }, modeButton, h(doc, 'span', { class: 'grow' }), statusModel, modelButton, spinner, menu);
+  const status = h(doc, 'div', { class: 'composer-status', hidden: true }, modeButton, h(doc, 'span', { class: 'grow' }), statusModel, modelButton, ringBox, spinner, menu);
 
   // Меню выбора режима, модели и усилия (задача 192): показывает только то, что агент отдал по ACP.
   const MENU_MODELS = 4;
   let menuKind = null; // null | 'mode' | 'model' | 'more' | 'effort'
   let options = null;
+  let menuQuery = '';
+  let menuSig = '';
+  const menuSearch = h(doc, 'input', { type: 'search', class: 'menu-search', placeholder: t('menu.search'), 'aria-label': t('menu.search'), autocomplete: 'off', hidden: true });
+  const menuList = h(doc, 'div', { class: 'menu-list' });
+  menu.append(menuSearch, menuList);
   const nameOf = (list, id) => (list.find((c) => c.id === id) || { name: '' }).name;
 
   function closeMenu() {
@@ -286,9 +292,12 @@ export function createView(doc, refs, deps) {
   }
 
   function renderMenu() {
-    menu.replaceChildren();
+    menuList.replaceChildren();
     if (!options || !menuKind) { menu.hidden = true; return; }
     const rows = [];
+    const searchable = menuKind === 'model' || menuKind === 'more';
+    menuSearch.hidden = !searchable;
+    const searching = searchable && menuQuery.trim().length > 0;
     const numbered = (list, setting, current) => list.map((c, i) => menuRow({
       name: c.name, description: c.description, checked: c.id === current, number: i < 9 ? i + 1 : 0, onPick: () => choose(setting, c.id),
     }));
@@ -297,7 +306,11 @@ export function createView(doc, refs, deps) {
       rows.push(h(doc, 'div', { class: 'menu-head', text: t('menu.mode') }), ...numbered(options.modes, 'mode', options.mode));
     } else {
       menu.dataset.side = 'right';
-      if (menuKind === 'model') {
+      if (searching) {
+        const found = filterModels(options.models, menuQuery);
+        if (found.length === 0) rows.push(h(doc, 'div', { class: 'menu-head', text: t('menu.none') }));
+        rows.push(...found.map((c) => menuRow({ name: c.name, description: c.description, checked: c.id === options.modelId, onPick: () => choose('model', c.id) })));
+      } else if (menuKind === 'model') {
         rows.push(...numbered(options.models.slice(0, MENU_MODELS), 'model', options.modelId));
         if (options.efforts.length > 0 || options.models.length > MENU_MODELS) rows.push(h(doc, 'div', { class: 'menu-sep', role: 'separator' }));
         if (options.efforts.length > 0) {
@@ -307,24 +320,53 @@ export function createView(doc, refs, deps) {
         }
         if (options.models.length > MENU_MODELS) rows.push(menuRow({ name: t('menu.more_models'), arrow: true, onPick: () => openMenu('more') }));
       } else if (menuKind === 'more') {
-        rows.push(menuRow({ name: t('menu.back'), onPick: () => openMenu('model') }), ...numbered(options.models, 'model', options.modelId));
+        rows.push(menuRow({ name: t('menu.back'), onPick: () => openMenu('model') }));
+        const groups = groupModels(options.models);
+        for (const g of groups) {
+          if (g.provider) rows.push(h(doc, 'div', { class: 'menu-head', text: g.provider }));
+          rows.push(...g.models.map((c) => menuRow({
+            name: g.provider ? c.name.replace(`${g.provider}/`, '') : c.name, description: c.description, checked: c.id === options.modelId, onPick: () => choose('model', c.id),
+          })));
+        }
       } else {
         rows.push(menuRow({ name: t('menu.back'), onPick: () => openMenu('model') }),
           h(doc, 'div', { class: 'menu-head', text: options.effortName || t('menu.effort') }),
           ...numbered(options.efforts, 'effort', options.effort));
       }
     }
-    menu.append(...rows);
+    menuList.append(...rows);
     menu.hidden = false;
+    menuList.querySelector('[aria-checked="true"]')?.scrollIntoView?.({ block: 'nearest' });
   }
 
   function openMenu(kind) {
     menuKind = kind;
+    menuQuery = '';
+    menuSearch.value = '';
+    menuSig = JSON.stringify(options);
     modeButton.setAttribute('aria-expanded', kind === 'mode' ? 'true' : 'false');
     modelButton.setAttribute('aria-expanded', kind === 'mode' ? 'false' : 'true');
     renderMenu();
-    menu.querySelector('.menu-item')?.focus();
+    if (kind === 'model' || kind === 'more') menuSearch.focus();
+    else menu.querySelector('.menu-item')?.focus();
   }
+
+  menuSearch.addEventListener('input', () => { menuQuery = menuSearch.value; renderMenu(); });
+  // стрелки ходят по строкам, Enter в поиске берёт первую найденную
+  menu.addEventListener('keydown', (e) => {
+    const items = [...menuList.querySelectorAll('.menu-item')];
+    const at = items.indexOf(doc.activeElement);
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      (items[at + 1] || items[0])?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (at <= 0 && !menuSearch.hidden) menuSearch.focus(); else (items[at - 1] || items[items.length - 1])?.focus();
+    } else if (e.key === 'Enter' && doc.activeElement === menuSearch && items.length > 0) {
+      e.preventDefault();
+      items[0].click();
+    }
+  });
 
   const toggleMenu = (kind) => { if (menuKind) closeMenu(); else openMenu(kind); };
   modeButton.addEventListener('click', () => toggleMenu('mode'));
@@ -334,7 +376,7 @@ export function createView(doc, refs, deps) {
     if (!menuKind) return;
     if (e.key === 'Escape') { closeMenu(); return; }
     if (/^[1-9]$/.test(e.key)) {
-      const rows = [...menu.querySelectorAll('.menu-num')];
+      const rows = [...menuList.querySelectorAll('.menu-num')];
       const at = rows.findIndex((n) => n.textContent === e.key);
       if (at >= 0) { e.preventDefault(); rows[at].closest('.menu-item').click(); }
     }
@@ -343,8 +385,7 @@ export function createView(doc, refs, deps) {
 
   const composer = h(doc, 'div', { class: 'composer' },
     box,
-    status,
-    h(doc, 'div', { class: 'composer-meta' }, h(doc, 'p', { class: 'hint', text: t('composer.hint') }), h(doc, 'span', { class: 'grow' }), ringBox));
+    status);
 
   const chat = h(doc, 'section', { class: 'chat', hidden: true }, log, composer);
   refs.main.replaceChildren(topbar, pick, chat);
@@ -371,6 +412,7 @@ export function createView(doc, refs, deps) {
   }
   // Авторазмер: высота по содержимому, не выше 5 строк (дальше — внутренняя прокрутка, см. max-height в app.css).
   function fitInput() {
+    sendButton.disabled = cancelButton.hidden === false || input.value.trim().length === 0;
     input.style.height = 'auto';
     if (input.scrollHeight > 0) input.style.height = `${input.scrollHeight}px`; // 0 — чат скрыт: оставить auto
   }
@@ -567,7 +609,7 @@ export function createView(doc, refs, deps) {
     stateBadge.dataset.state = session.state;
     const busy = session.state === 'answering' || session.state === 'permission';
     cancelButton.hidden = !busy;
-    sendButton.disabled = busy;
+    sendButton.disabled = busy || input.value.trim().length === 0;
     options = session.options || null;
     const hasModes = Boolean(options && options.modes.length > 0);
     const hasModels = Boolean(options && (options.models.length > 0 || options.efforts.length > 0));
@@ -580,9 +622,13 @@ export function createView(doc, refs, deps) {
     statusModel.hidden = hasModels;
     statusModel.textContent = session.model || '';
     spinner.hidden = !busy;
-    status.hidden = !session.model && !busy && !hasModes && !hasModels;
+    status.hidden = !session.model && !busy && !hasModes && !hasModels && !session.usage;
     if (menuKind && ((menuKind === 'mode' && !hasModes) || (menuKind !== 'mode' && !hasModels))) closeMenu();
-    else if (menuKind) renderMenu();
+    else if (menuKind) {
+      const sig = JSON.stringify(options);
+      if (sig !== menuSig) renderMenu();
+      menuSig = sig;
+    }
 
     const pct = usagePercent(session.usage);
     ring.style.setProperty('--ring', String(pct));

@@ -243,3 +243,29 @@ test('тема: нормализация и цикл система -> свет�
   assert.equal(st.nextTheme('мусор'), 'light');
   assert.equal(typeof st.THEME_KEY, 'string');
 });
+
+// ---- выбор модели: поиск и группы (задача 192) ---------------------------------------------
+
+const M = (id, name = id) => ({ id, name });
+const MODELS = [M('openai/gpt-5', 'GPT-5'), M('opencode/big-pickle', 'Big Pickle'), M('302ai/claude-sonnet-5', '302ai/Claude Sonnet 5'), M('openai/o3', 'o3'), M('plain', 'Plain Model')];
+
+test('filterModels: подстрока id или названия без учёта регистра, провайдер ищется; пусто — все', () => {
+  assert.equal(st.filterModels(MODELS, '').length, 5);
+  assert.equal(st.filterModels(MODELS, '   ').length, 5);
+  assert.deepEqual(st.filterModels(MODELS, 'OPENAI').map((m) => m.id), ['openai/gpt-5', 'openai/o3']);
+  assert.deepEqual(st.filterModels(MODELS, ' pickle ').map((m) => m.id), ['opencode/big-pickle']);
+  assert.deepEqual(st.filterModels(MODELS, 'sonnet 5').map((m) => m.id), ['302ai/claude-sonnet-5']);
+  assert.deepEqual(st.filterModels(MODELS, 'нет такой'), []);
+});
+
+test('groupModels: по провайдеру (до «/») в порядке появления; id без «/» — группа без провайдера', () => {
+  const g = st.groupModels(MODELS);
+  assert.deepEqual(g.map((x) => [x.provider, x.models.map((m) => m.id)]), [
+    ['openai', ['openai/gpt-5', 'openai/o3']],
+    ['opencode', ['opencode/big-pickle']],
+    ['302ai', ['302ai/claude-sonnet-5']],
+    ['', ['plain']],
+  ]);
+  assert.equal(st.providerOf('/x'), '');
+  assert.deepEqual(st.groupModels([]), []);
+});

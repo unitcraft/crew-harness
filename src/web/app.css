@@ -533,7 +533,9 @@ pre code { font: inherit; }
 .box:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
 .box textarea {
   display: block;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
+  width: auto;
   min-height: 28px;
   padding: 5px 0;
   border: 0;
@@ -542,7 +544,7 @@ pre code { font: inherit; }
   outline: none;
   /* 5 строк: line-height * 5 + вертикальные отступы; дальше — внутренняя прокрутка (задача 192). */
   line-height: 1.5;
-  max-height: calc(1.5em * 5 + 10px);
+  max-height: calc(1.5em * 5 + 12px);
   overflow-y: auto;
 }
 .box-row { display: flex; align-items: center; gap: 6px; }
@@ -567,6 +569,9 @@ pre code { font: inherit; }
 .menu[hidden] { display: none; }
 .menu[data-side="left"] { left: 0; }
 .menu[data-side="right"] { right: 0; }
+.menu-list { max-height: min(60vh, 420px); overflow-y: auto; }
+.menu-search { display: block; width: 100%; margin: 0 0 6px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: inherit; font: inherit; }
+.menu-search[hidden] { display: none; }
 .menu-head { padding: 6px 10px 4px; color: var(--fg-muted); font-size: 12px; }
 .menu-sep { height: 1px; margin: 5px 4px; background: var(--border); }
 .menu-item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; padding: 5px 10px; border: 0; border-radius: 8px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
@@ -775,11 +780,17 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
 .bubble { padding: 11px 15px; }
 .prose { line-height: 1.65; }
 .composer { padding: 8px 24px 16px; }
-.box { padding: 10px 11px 8px 15px; border-radius: var(--radius-box); box-shadow: 0 4px 18px color-mix(in srgb, var(--fg) 6%, transparent); }
+/* Композер задачи 192: карточка в одну строку, круглая кнопка со стрелкой прижата к правому нижнему краю. */
+.box { display: flex; align-items: flex-end; gap: 8px; padding: 8px 8px 8px 20px; border-radius: 26px; box-shadow: 0 4px 18px color-mix(in srgb, var(--fg) 6%, transparent); }
 .box:focus-within { outline: 1px solid color-mix(in srgb, var(--accent) 72%, transparent); outline-offset: 0; }
-.box textarea { min-height: 34px; }
-.send-btn { min-height: var(--hit); padding-inline: 13px; border-radius: 9px; }
-.hint { margin-top: 5px; }
+.box textarea { min-height: 32px; padding: 6px 0; }
+.box-row { flex: none; gap: 6px; }
+.send-btn, .cancel-btn { justify-content: center; width: 32px; min-height: 32px; height: 32px; padding: 0; border-radius: 50%; }
+.send-btn:disabled { background: var(--surface-2); border-color: var(--surface-2); color: var(--fg-muted); filter: none; opacity: 1; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.composer-status .ring-box { width: 22px; height: 22px; }
+.ring-box[hidden] { display: none; }
+.composer-status .ring { width: 18px; height: 18px; }
 .rail { gap: 17px; padding: 20px 18px; border-left-color: color-mix(in srgb, var(--border) 60%, transparent); }
 .rail .card { padding: 10px 0; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; }
 .rail .card-title { font-size: 13px; }

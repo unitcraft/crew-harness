@@ -288,3 +288,30 @@ export function nextTheme(current) {
   if (c === 'system') return 'light';
   return c === 'light' ? 'dark' : 'system';
 }
+
+// ---- выбор модели: поиск и группы по провайдеру (задача 192) -------------------------------
+
+/** Провайдер модели — часть id до первой «/» ('' — у id без неё). */
+export function providerOf(id) {
+  const at = String(id).indexOf('/');
+  return at > 0 ? String(id).slice(0, at) : '';
+}
+
+/** Модели, чьи id или название содержат запрос (без учёта регистра, пробелы по краям не считаются); пустой запрос — все. */
+export function filterModels(models, query) {
+  const q = typeof query === 'string' ? query.trim().toLowerCase() : '';
+  if (!q) return [...models];
+  return models.filter((m) => `${m.id}\n${m.name}`.toLowerCase().includes(q));
+}
+
+/** Модели по провайдерам в порядке первого появления: [{ provider, models }]. */
+export function groupModels(models) {
+  const groups = [];
+  for (const m of models) {
+    const provider = providerOf(m.id);
+    let g = groups.find((x) => x.provider === provider);
+    if (!g) { g = { provider, models: [] }; groups.push(g); }
+    g.models.push(m);
+  }
+  return groups;
+}
