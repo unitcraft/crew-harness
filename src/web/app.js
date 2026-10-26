@@ -50,8 +50,20 @@ document.title = t('app.title');
 
 let model = initialModel();
 let status = { state: 'connecting' };
+const UNREAD_KEY = 'crew-console-unread';
+function readUnread() {
+  try {
+    const v = JSON.parse(globalThis.localStorage.getItem(UNREAD_KEY) || '{}');
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  } catch { return {}; }
+}
+function saveUnread(value) {
+  try { globalThis.localStorage.setItem(UNREAD_KEY, JSON.stringify(value)); } catch { /* закрытое хранилище: пометки живут до перезагрузки */ }
+}
+// ссылка на сессию (#s=<id>): после загрузки журнала страница её открывает
+const linked = /^#s=(.+)$/.exec(globalThis.location ? globalThis.location.hash : '');
 const ui = {
-  selected: null, projects: null, pane: 'list', flash: '', flashTone: 'error', awaiting: null, theme: readTheme(), pins: {},
+  selected: null, projects: null, pane: 'list', flash: '', flashTone: 'error', awaiting: linked ? decodeURIComponent(linked[1]) : null, theme: readTheme(), pins: {}, unread: readUnread(),
 };
 applyTheme(ui.theme);
 
@@ -73,6 +85,8 @@ async function loadProjects() {
 function draw() {
   if (!queued) return;
   queued = false;
+  // сессию удалили (здесь или в другом окне): открытый чат закрывается
+  if (ui.selected && ui.selected !== ui.awaiting && !model.sessions[ui.selected]) { ui.selected = null; ui.pane = 'list'; }
   if (ui.awaiting && model.sessions[ui.awaiting]) {
     ui.selected = ui.awaiting;
     ui.pane = 'chat';
@@ -161,7 +175,25 @@ const handlers = {
     handlers.onCancel(trace);
     render();
   },
-  onSelect(trace) { ui.selected = trace; ui.pane = 'chat'; render(); },
+  onSelect(trace) {
+    ui.selected = trace;
+    ui.pane = 'chat';
+    if (ui.unread[trace]) { ui.unread = { ...ui.unread, [trace]: false }; saveUnread(ui.unread); }
+    render();
+  },
+  onUnread(trace, on) { ui.unread = { ...ui.unread, [trace]: on }; saveUnread(ui.unread); render(); },
+  onMoveSession(trace, projectId) { send('session_move', trace, nextStep(model, trace), { project_id: projectId }); },
+  onDeleteSession(trace) { send('session_delete', trace, nextStep(model, trace), {}); },
+  onReorderSessions(ids) { if (ids.length > 0) send('session_reorder', ids[0], nextStep(model, ids[0]), { ids }); },
+  // порядок проектов: страница показывает его сразу, сервер запоминает для всех страниц
+  async onReorderProjects(ids) {
+    const byId = new Map((ui.projects || []).map((p) => [p.id, p]));
+    ui.projects = [...ids.map((id) => byId.get(id)).filter(Boolean), ...(ui.projects || []).filter((p) => !ids.includes(p.id))];
+    render();
+    const r = await projectsApi.order(ids);
+    if (!r.ok) flash(t('projects.order_failed', { reason: r.error }));
+    loadProjects();
+  },
   onBack() { ui.pane = 'list'; render(); },
   // «+» у проекта: пустой чат новой сессии; на сервер она уходит с первым сообщением (задача 192)
   onNewToggle(open, projectId = '') {

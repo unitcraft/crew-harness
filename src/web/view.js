@@ -16,6 +16,7 @@ import { createLocalDictation } from './recorder.js';
 import { createToast } from './toast.js';
 import { h, svgNode, icon } from './dom.js';
 import { createProjectsUi } from './projects-ui.js';
+import { createSideKit } from './session-row.js';
 import { sessionPlace } from './projects.js';
 import { LANGS, createVoiceSettings, langFor, pageLang } from './stt.js';
 import { isBusy, keyAction } from './queue.js';
@@ -160,14 +161,25 @@ export function createView(doc, refs, deps) {
     onNotice: (text, tone) => handlers.onNotice(text, tone),
   });
 
+  const sideKit = createSideKit(doc, {
+    handlers,
+    projects: () => projectsList,
+    confirm: (text) => projectsUi.confirm({ title: t('session.delete_title'), text, ok: t('session.delete_ok'), cancel: t('session.delete_cancel') }),
+    linkFor: (id) => {
+      const loc = win && win.location;
+      return `${loc ? loc.origin + loc.pathname : ''}#s=${encodeURIComponent(id)}`;
+    },
+    render: () => { listSig = ''; if (current.ui) renderList(current.model, current.ui); },
+  });
   let listSig = '';
   let activeProject = null; // проект выбранной сессии или черновика ('' - без проекта), null - ничего не выбрано
-  function sessionRow({ session: s, depth }, ui, pins) {
+  function sessionRow({ session: s, depth }, ui, pins, gctx) {
     const active = s.id === ui.selected;
     const pinned = pins.has(s.id);
+    const unread = Boolean(ui.unread && ui.unread[s.id] === true);
     const stateLabel = t(STATE_KEYS[s.state]);
     const merge = mergeLabel(s.routeState && s.routeState.task);
-    const item = h(doc, 'button', {
+    const item = sideKit.isRenaming(s.id) ? sideKit.renameField(s) : h(doc, 'button', {
       type: 'button',
       class: 'session-item',
       'data-merge': merge ? merge.kind : false,
@@ -176,19 +188,17 @@ export function createView(doc, refs, deps) {
     },
     depth > 0 ? h(doc, 'span', { class: 'corner', 'aria-hidden': 'true' }) : false,
     depth > 0 ? h(doc, 'span', { class: 'sr', text: t('sessions.child') }) : false,
+    unread ? h(doc, 'span', { class: 'unread', role: 'img', 'aria-label': t('session.unread'), title: t('session.unread') }) : false,
     h(doc, 'span', { class: 'session-name', text: s.name }),
     s.pendingQuestion ? h(doc, 'span', { class: 'ask-line' }, askBadge()) : false,
     h(doc, 'span', { class: 'dot', 'data-state': s.state, 'aria-hidden': 'true' }),
     h(doc, 'span', { class: 'sr', text: stateLabel }),
     merge ? h(doc, 'span', { class: 'session-merge', 'data-kind': merge.kind, text: merge.text }) : false);
-    item.addEventListener('click', () => handlers.onSelect(s.id));
-    const pinLabel = `${pinned ? t('sessions.unpin') : t('sessions.pin')}: ${s.name}`;
-    const pin = h(doc, 'button', {
-      type: 'button', class: 'pin-btn', 'aria-pressed': pinned ? 'true' : 'false', 'aria-label': pinLabel, title: pinLabel,
-    }, icon(doc, 'i-pin'));
-    pin.addEventListener('click', () => handlers.onPin(s.id, !pinned));
-    const cls = ['session', active ? 'is-active' : '', pinned ? 'is-pinned' : ''].filter(Boolean).join(' ');
-    return h(doc, 'li', { class: cls, 'data-depth': Math.min(depth, 2) }, item, pin);
+    if (!sideKit.isRenaming(s.id)) item.addEventListener('click', () => handlers.onSelect(s.id));
+    const cls = ['session', active ? 'is-active' : '', pinned ? 'is-pinned' : '', unread ? 'is-unread' : ''].filter(Boolean).join(' ');
+    const li = h(doc, 'li', { class: cls, 'data-depth': Math.min(depth, 2) }, item, sideKit.moreButton(s), sideKit.menuFor(s, { pinned, unread }) || false);
+    sideKit.rowDnd(li, { id: s.id, group: gctx.key, ids: gctx.ids, projectId: s.projectId || '', enabled: gctx.draggable });
+    return li;
   }
 
   function closeGroupMenu() {
@@ -207,6 +217,8 @@ export function createView(doc, refs, deps) {
   /** Группа сессий. group.id пуст — «Без проекта» или проект только по имени (меню «⋯» только у настоящих проектов). */
   function groupNode(title, rows, ui, pins, group = null) {
     const isProject = Boolean(group) && group.id !== '';
+    // перетаскивание сессий: внутри группы проекта; в «Закреплённых» порядок по активности
+    const gctx = { key: group ? `${group.id}|${title}` : '', ids: rows.map((r) => r.session.id), draggable: Boolean(group) };
     const head = h(doc, 'div', { class: 'group-head' },
       h(doc, 'div', { class: 'group-title' }, isProject ? icon(doc, 'i-folder', 'group-icon') : false, h(doc, 'h3', { text: title }),
         group && group.id !== '' ? h(doc, 'span', { class: 'group-count', title: t('projects.count_title', { n: rows.length }), text: String(rows.length) }) : false));
@@ -238,9 +250,11 @@ export function createView(doc, refs, deps) {
     }
     const body = rows.length === 0
       ? h(doc, 'p', { class: 'group-empty', text: t('projects.group_empty') })
-      : h(doc, 'ul', { class: 'group-list' }, ...rows.map((r) => sessionRow(r, ui, pins)));
+      : h(doc, 'ul', { class: 'group-list' }, ...rows.map((r) => sessionRow(r, ui, pins, gctx)));
     const active = Boolean(group) && activeProject !== null && group.id === activeProject;
-    return h(doc, 'section', { class: 'group', 'data-active': active ? 'true' : false, 'data-project': isProject ? 'true' : false }, head, body);
+    const section = h(doc, 'section', { class: 'group', 'data-active': active ? 'true' : false, 'data-project': isProject ? 'true' : false }, head, body);
+    if (group) sideKit.projectDnd({ section, head, projectId: group.id, free: Boolean(group.free) });
+    return section;
   }
 
   const projectsHeadNew = h(doc, 'button', { type: 'button', class: 'projects-new', title: t('projects.new') }, icon(doc, 'i-plus'), h(doc, 'span', { text: t('projects.new') }));
@@ -255,12 +269,13 @@ export function createView(doc, refs, deps) {
     const pins = effectivePins(all, ui.pins);
     const filtered = filterSessions(all, query);
     const groups = groupSessions(filtered, { pinned: pins, projects: projectsList, includeEmpty: query.trim() === '' });
-    const rowSig = (r) => [r.depth, r.session.id, r.session.name, r.session.state, r.session.updatedAt, Boolean(r.session.pendingQuestion), (mergeLabel(r.session.routeState && r.session.routeState.task) || {}).text];
-    const sig = JSON.stringify([ui.selected, activeProject, query, groupMenu, groups.pinned.map(rowSig), groups.projects.map((p) => [p.project, p.id, p.rows.map(rowSig)])]);
+    const rowSig = (r) => [r.depth, r.session.id, r.session.name, r.session.state, r.session.updatedAt, r.session.rank, r.session.projectId, ui.unread ? ui.unread[r.session.id] : undefined, Boolean(r.session.pendingQuestion), (mergeLabel(r.session.routeState && r.session.routeState.task) || {}).text];
+    const sig = JSON.stringify([ui.selected, activeProject, query, groupMenu, sideKit.sig(), groups.pinned.map(rowSig), groups.projects.map((p) => [p.project, p.id, p.rows.map(rowSig)])]);
     const shown = groups.pinned.length + groups.projects.length;
     listEmpty.hidden = all.length > 0 || (projectsList !== null && projectsList.length > 0);
     notFound.hidden = !(all.length > 0 && shown === 0);
     if (sig === listSig) return;
+    if (sideKit.isDragging()) { sideKit.deferRender(); return; } // пока тащат, список не пересобирается
     listSig = sig;
     const nodes = [];
     if (groups.pinned.length > 0) nodes.push(groupNode(t('sessions.pinned'), groups.pinned, ui, pins));
@@ -268,8 +283,9 @@ export function createView(doc, refs, deps) {
     const free = groups.projects.filter((p) => p.project === '');
     nodes.push(projectsHead);
     for (const p of named) nodes.push(groupNode(p.project, p.rows, ui, pins, { id: p.id }));
-    for (const p of free) nodes.push(groupNode(t('sessions.no_project'), p.rows, ui, pins, { id: '' }));
-    groupsBox.replaceChildren(...nodes);
+    for (const p of free) nodes.push(groupNode(t('sessions.no_project'), p.rows, ui, pins, { id: '', free: true }));
+    sideKit.rebuild(() => groupsBox.replaceChildren(...nodes));
+    sideKit.afterRender(groupsBox);
   }
 
   // меню «⋯» закрывается кликом в стороне и Esc

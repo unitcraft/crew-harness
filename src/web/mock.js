@@ -534,6 +534,12 @@ export function createMockServer({ journal, now = Date.now } = {}) {
         const end = speak(entries, trace, open.turn, QUESTION_ANSWERED, CHUNK_FIRST_MS);
         mint(entries, trace, end, 'agent_done', { turn: open.turn });
       }
+    } else if (event.kind === 'session_reorder') {
+      (Array.isArray(input.ids) ? input.ids : []).forEach((id, rank) => mint(entries, String(id), CHUNK_FIRST_MS, 'session_placed', { rank }));
+    } else if (event.kind === 'session_move') {
+      mint(entries, trace, CHUNK_FIRST_MS, 'session_placed', { rank: -1, project_id: String(input.project_id), project: String(input.project_id) });
+    } else if (event.kind === 'session_delete') {
+      mint(entries, trace, CHUNK_FIRST_MS, 'session_deleted', {});
     } else if (event.kind === 'session_rename') {
       mint(entries, trace, CHUNK_FIRST_MS, 'session_renamed', { name: String(input.name) });
     } else if (event.kind === 'session_agent') {
@@ -645,6 +651,12 @@ function mockProjects() {
     }),
   });
   return {
+    order(ids) {
+      const named = ids.map((id) => find(id)).filter(Boolean);
+      const rest = projects.filter((p) => !named.includes(p));
+      projects.splice(0, projects.length, ...new Set([...named, ...rest]));
+      return { status: 200, body: { ok: true } };
+    },
     summary: () => ({ projects: projects.map((p) => ({ id: p.id, name: p.name, folders: p.folders, env_keys: parseEnv(p.env).vars.map((v) => v.key) })) }),
     get: find,
     create(body) {
@@ -710,6 +722,7 @@ export function mockFetch(real) {
       if (method === 'GET') return json(projects.summary());
       if (method === 'POST') return reply(projects.create(JSON.parse(init.body)));
     }
+    if (path === '/api/project-order' && method === 'POST') return reply(projects.order(JSON.parse(init.body).ids ?? []));
     const one = /^\/api\/projects\/([^/]+)$/.exec(path);
     if (one) {
       const id = decodeURIComponent(one[1]);

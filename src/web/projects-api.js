@@ -35,6 +35,8 @@ export function createProjectsApi(fetchFn, failText = 'Нет связи с се
       const r = await call('POST', '/api/projects', payload);
       return r.ok ? { ok: true, id: r.body && r.body.id } : r;
     },
+    /** Порядок проектов сверху вниз (перетаскивание): ids — все id проектов. */
+    order(ids) { return call('POST', '/api/project-order', { ids }); },
     update(id, payload) { return call('PUT', `/api/projects/${encodeURIComponent(id)}`, payload); },
     remove(id) { return call('DELETE', `/api/projects/${encodeURIComponent(id)}`); },
     /** Каталоги по пути; пустой путь — корни дисков и недавние. */
