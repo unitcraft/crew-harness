@@ -1130,8 +1130,6 @@ input[aria-invalid="true"] { border-color: var(--danger); }
 .rsub-merging { padding: 0 6px; border-radius: 6px; background: var(--warn-soft); color: var(--warn); font-size: 12px; white-space: nowrap; }
 .rsub-own { margin-right: 6px; padding: 0 6px; border-radius: 6px; background: var(--surface-2); color: var(--fg); }
 .rsub-owner { margin: 2px 0 4px 18px; padding: 4px 8px; border-radius: 8px; background: var(--danger-soft); color: var(--danger); font-size: 13px; overflow-wrap: anywhere; }
-.rsub-par { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 2px 18px; color: var(--fg-muted); font-size: 12px; cursor: pointer; }
-.rsub-check { width: 14px; height: 14px; min-height: 0; margin: 0; padding: 0; accent-color: var(--accent); }
 .route-over { position: absolute; left: 24px; right: 24px; bottom: calc(100% - 4px); z-index: 6; display: flex; flex-direction: column; gap: 6px; }
 .route-strip, .route-banner { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-soft); color: var(--fg); font-size: 13px; }
 .route-strip[hidden], .route-banner[hidden] { display: none; }
@@ -1195,12 +1193,21 @@ input[aria-invalid="true"] { border-color: var(--danger); }
 .usage-table th:first-child, .usage-table td:first-child { text-align: left; }
 .usage-table td { padding: 0 14px 0 0; text-align: right; white-space: nowrap; }
 
+/* ---- кнопка «вниз» над полем ввода ---- */
+.jump-wrap { position: relative; height: 0; z-index: 5; }
+.jump-btn { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--bg); color: var(--fg); box-shadow: var(--shadow-card); cursor: pointer; }
+.jump-btn[hidden] { display: none; }
+.jump-btn .icon { width: 18px; height: 18px; }
+.jump-btn:hover { background: var(--hover); }
+.jump-dot { position: absolute; top: 4px; right: 4px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+.jump-dot[hidden] { display: none; }
+
 /* ---- сообщения: ряд мелких иконок под пузырём (задача 192) ----
    Место ряда занято всегда (высота 24 px, visibility), поэтому лента не дёргается; владельцу ряд виден при наведении, фокусе и касании,
    сообщению в очереди - всегда. Ряд под ответом агента (copy + время) - при наведении на ответ (data-hot ставит страница). */
 .item-user, .item-queued { position: relative; }
-.msg-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-height: 24px; margin-top: 2px; color: var(--fg-muted); font-size: 12px; visibility: hidden; }
-.item-user:hover .msg-actions, .item-user:focus-within .msg-actions, .item-user[data-tap="on"] .msg-actions, .msg-actions[data-queued="true"] { visibility: visible; }
+.msg-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-height: 24px; margin-top: 0; padding-top: 4px; color: var(--fg-muted); font-size: 12px; visibility: hidden; }
+.item-user:hover .msg-actions, .item-user:has(:focus-visible) .msg-actions, .item-user[data-tap="on"] .msg-actions, .msg-actions[data-queued="true"] { visibility: visible; }
 .msg-check { display: inline-flex; }
 .msg-check .icon, .msg-btn .icon { width: 16px; height: 16px; }
 .msg-btn { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; min-height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--fg-muted); cursor: pointer; }
@@ -1214,7 +1221,7 @@ input[aria-invalid="true"] { border-color: var(--danger); }
 .item-queued .bubble { opacity: .7; }
 .queued-images { margin: 0 0 6px; color: var(--fg-muted); font-size: 12px; }
 .item-actions[data-row="hover"] { visibility: hidden; }
-.item-actions[data-row="hover"][data-hot="on"], .item-actions[data-row="hover"]:focus-within { visibility: visible; }
+.item-actions[data-row="hover"][data-hot="on"], .item-actions[data-row="hover"]:has(:focus-visible) { visibility: visible; }
 
 /* ---- задача 192: название сессии переименовывается на месте, черновик новой сессии, выделение проекта ---- */
 .title { position: relative; display: block; max-width: 100%; min-width: 8ch; margin: 0 0 0 -6px; padding: 0 6px; overflow: visible; }

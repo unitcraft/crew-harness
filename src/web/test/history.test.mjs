@@ -27,20 +27,34 @@ test('↑ из пустого поля показывает последнее �
   assert.deepEqual([r.value, r.state.index], ['первое', 0]);
 });
 
-test('↓ идёт к новым, за последним возвращает черновик; правка текста выводит из истории', () => {
-  let r = up(NO_HISTORY);
+test('↓ идёт к новым, за последним возвращает черновик', () => {
+  let r = up(NO_HISTORY, 'мой черновик');
+  assert.deepEqual([r.handled, r.value, r.state.index, r.state.draft], [true, 'третье', 2, 'мой черновик']);
   r = up(r.state, r.value);
   const back = down(r.state, r.value);
   assert.deepEqual([back.handled, back.value, back.state.index], [true, 'третье', 2]);
   const end = down(back.state, back.value);
-  assert.deepEqual([end.handled, end.value, end.state.index], [true, '', -1]);
-  // правили показанное: стрелки снова нужны полю
-  assert.equal(up(back.state, 'третье!').handled, false);
-  assert.equal(down(back.state, 'третье!').handled, false);
+  assert.deepEqual([end.handled, end.value, end.state.index], [true, 'мой черновик', -1]);
 });
 
-test('история не включается из непустого поля, из многострочного текста не в первой строке и без отправленных сообщений', () => {
-  assert.equal(up(NO_HISTORY, 'набираю').handled, false);
+test('правка показанного сообщения историю не выключает: ↑ и ↓ идут дальше, черновик возвращается всегда', () => {
+  let r = up(NO_HISTORY, 'черновик');
+  r = up(r.state, 'третье!!!'); // правили показанное
+  assert.deepEqual([r.handled, r.value, r.state.index, r.state.draft], [true, texts[1], 1, 'черновик']);
+  r = down(r.state, `${texts[1]} (правка)`);
+  assert.deepEqual([r.handled, r.value, r.state.index], [true, 'третье', 2]);
+  r = down(r.state, 'третье?');
+  assert.deepEqual([r.handled, r.value, r.state.index], [true, 'черновик', -1]);
+});
+
+test('после отправки история с пустого поля: новое сообщение в конце, ↑ показывает его первым', () => {
+  const after = [...texts, 'только что отправленное'];
+  const r = historyStep({ texts: after, state: NO_HISTORY, value: '', caret: 0, key: 'ArrowUp' });
+  assert.deepEqual([r.handled, r.value, r.state.index], [true, 'только что отправленное', 3]);
+});
+
+test('история включается и из непустого поля (первая строка), но не из середины многострочного текста и без отправленных', () => {
+  assert.equal(up(NO_HISTORY, 'набираю').handled, true);
   assert.equal(up(NO_HISTORY, 'а\nб', 3).handled, false);
   assert.equal(historyStep({ texts: [], state: NO_HISTORY, value: '', caret: 0, key: 'ArrowUp' }).handled, false);
   assert.equal(down(NO_HISTORY, '').handled, false);
@@ -52,7 +66,8 @@ test('поле ввода: стрелки не перехватываются п
   assert.match(view, /e\.key === 'ArrowUp' \|\| e\.key === 'ArrowDown'\) && !e\.isComposing && !e\.shiftKey && !e\.ctrlKey && !e\.altKey && !e\.metaKey/);
   assert.match(view, /m\.role === 'user' && m\.text\.trim\(\)\.length > 0/);
   assert.match(view, /historyState = NO_HISTORY;\s*nodes\.clear\(\);/);
-  assert.match(view, /input\.addEventListener\('input', \(\) => \{\s*historyState = NO_HISTORY;/);
+  assert.doesNotMatch(view, /input\.addEventListener\('input', \(\) => \{\s*historyState = NO_HISTORY;/, 'правка историю не сбрасывает');
+  assert.match(view, /historyState = NO_HISTORY; \/\/ после отправки/);
 });
 
 test('время сообщения: только что, сегодня ЧЧ:ММ, вчера, раньше — дата', () => {
@@ -91,7 +106,7 @@ test('сообщение владельца: ряд иконок (доставл
   const view = read('view.js');
   const css = read('app.css');
   assert.match(css, /\.msg-actions \{[^}]*min-height: 24px[^}]*visibility: hidden;/);
-  assert.match(css, /\.item-user:hover \.msg-actions, \.item-user:focus-within \.msg-actions, \.item-user\[data-tap="on"\] \.msg-actions, \.msg-actions\[data-queued="true"\] \{ visibility: visible; \}/);
+  assert.match(css, /\.item-user:hover \.msg-actions, \.item-user:has\(:focus-visible\) \.msg-actions, \.item-user\[data-tap="on"\] \.msg-actions, \.msg-actions\[data-queued="true"\] \{ visibility: visible; \}/);
   assert.match(view, /iconButton\(doc, 'i-copy', t\('msg\.copy'\), \(\) => handlers\.onCopy\(item\.text\)\)/);
   assert.match(view, /iconButton\(doc, 'i-undo', t\('msg\.restore'\), \(\) => putInField\(item\.text\)\)/);
   assert.match(view, /if \(queued\) \{\s*row\.append\(iconButton\(doc, 'i-x', t\('msg\.unqueue'\)/);
@@ -114,4 +129,29 @@ test('сообщения в очереди — приглушённые пузы
   assert.match(read('app.css'), /\.item-queued \.bubble \{ opacity: \.7; \}/);
   assert.match(app, /onSendNow\(trace, index\) \{\s*queue\.moveToFront\(trace, index\);\s*handlers\.onCancel\(trace\);/);
   assert.match(app, /onUnqueueAt\(trace, index\) \{\s*const item = queue\.removeAt\(trace, index\);/);
+});
+
+test('ряд иконок: вплотную под пузырём, внутри той же зоны наведения; не залипает после клика мышью и ухода мыши', () => {
+  const view = read('view.js');
+  const css = read('app.css');
+  assert.match(css, /\.msg-actions \{[^}]*margin-top: 0; padding-top: 4px;/);
+  assert.doesNotMatch(css, /\.item-user:focus-within/, 'после клика по кнопке фокус остаётся — залипание');
+  assert.match(css, /\.item-actions\[data-row="hover"\]:has\(:focus-visible\)/);
+  // касание раскрывает ряд только пальцем, клик мышью и по кнопкам ряда — нет; уход мыши и клик мимо гасят
+  assert.match(view, /const touch = e\.pointerType === 'touch';/);
+  assert.match(view, /if \(!touch \|\| \(e\.target\.closest && e\.target\.closest\('button'\)\)\) return;/);
+  assert.match(view, /thread\.addEventListener\('mouseleave', \(\) => clearTaps\(null\)\)/);
+});
+
+test('кнопка «вниз»: порог 40 px, плавная прокрутка по клику, точка «есть новое», автопрокрутка только у самого низа', () => {
+  const view = read('view.js');
+  const css = read('app.css');
+  assert.match(view, /const NEAR_BOTTOM_PX = 40;/);
+  assert.match(view, /const away = distanceFromBottom\(\) > NEAR_BOTTOM_PX;/);
+  assert.match(view, /if \(!away\) unseen = false;/);
+  assert.match(view, /log\.scrollTo\(\{ top: log\.scrollHeight, behavior: 'smooth' \}\)/);
+  assert.match(view, /if \(nearBottom \|\| created === items\.length\) log\.scrollTop = log\.scrollHeight;\s*else if \(changed \|\| created > 0\) unseen = true;\s*syncJump\(\);/);
+  assert.match(view, /log\.addEventListener\('scroll', syncJump\)/);
+  assert.match(css, /\.jump-btn \{[^}]*left: 50%[^}]*border-radius: 50%/);
+  assert.equal(S['chat.to_bottom'], 'Вниз');
 });

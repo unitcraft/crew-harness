@@ -201,12 +201,6 @@ export function stripActions(state) {
 /** В режиме без шагов подзадач нет: сообщения владельца — журнал сообщений задачи, а не подзадачи с чек-листом. */
 export const showSubtasks = (state) => Boolean(state) && state.stepless !== true;
 
-/** «Параллельно» — у подзадачи с чек-листом и только когда есть другая работающая подзадача (иначе бессмысленно). */
-export function parallelShown(task, sub) {
-  if (sub.merged || sub.total === 0) return false;
-  return task.subtasks.some((x) => x.n !== sub.n && x.state === 'running' && !x.merged);
-}
-
 /** Доля подзадачи в процентах (0–100). */
 export function subtaskPercent(sub) {
   return sub.total > 0 ? Math.round((Math.min(sub.done, sub.total) / sub.total) * 100) : 0;

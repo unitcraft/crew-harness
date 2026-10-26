@@ -1,7 +1,8 @@
 // history.js — история отправленных сообщений сессии в поле ввода (задача 192): ↑ и ↓, как в терминале.
 // Чистая функция: страница передаёт тексты отправленных сообщений (из ленты, она переживает перезагрузку), текст поля и позицию курсора.
-// История включается, только когда стрелка не нужна самому полю: ↑ — курсор в первой строке, ↓ — в последней. Идти назад можно из пустого
-// поля, дальше — пока текст не правили после перехода; правка выводит из истории, стрелки снова ходят по строкам.
+// ↑ в первой строке и ↓ в последней ВСЕГДА ходят по истории, даже если текст изменён. Набранное до первого ↑ запоминается как черновик
+// и возвращается при ↓ за последним сообщением. Правка показанного сообщения индекс не сбрасывает; уйдя с него стрелкой, правку теряем
+// (черновик — свой текст владельца — не теряется никогда).
 
 export const NO_HISTORY = Object.freeze({ index: -1, draft: '' });
 
@@ -18,15 +19,13 @@ export function historyStep({ texts, state, value, caret, key }) {
   if (key === 'ArrowUp') {
     if (!first || texts.length === 0) return none;
     if (state.index === -1) {
-      if (value.trim() !== '') return none;
       const index = texts.length - 1;
       return { handled: true, value: texts[index], state: { index, draft: value } };
     }
-    if (value !== texts[state.index]) return none;
-    const index = Math.max(0, state.index - 1);
+    const index = Math.max(0, Math.min(state.index, texts.length - 1) - 1);
     return { handled: true, value: texts[index], state: { index, draft: state.draft } };
   }
-  if (!last || state.index === -1 || value !== texts[state.index]) return none;
+  if (!last || state.index === -1) return none;
   if (state.index < texts.length - 1) {
     const index = state.index + 1;
     return { handled: true, value: texts[index], state: { index, draft: state.draft } };

@@ -36,11 +36,11 @@ import {
 } from './state.js';
 import {
   ROUTES, STEP_ICON, STEP_STATE_KEY, SUBTASK_STATE_KEY, routeName, routeDescription, counterText, stepToSkip, showStrip, stripActions,
-  subtaskPercent, subtaskProgressText, showSubtasks, parallelShown, INTERACTIVE_STATE, NOTE_KEY, taskHeading, subtaskActions, hasSubtaskActions, bannerCount, subtaskCountText,
+  subtaskPercent, subtaskProgressText, showSubtasks, INTERACTIVE_STATE, NOTE_KEY, taskHeading, subtaskActions, hasSubtaskActions, bannerCount, subtaskCountText,
   mergeLabel, diffTotals, finishPrompt, readyPrompt, overlapPrompt, commitsText, filesText, branchTestsText, mainTestsText, testsRunnable, stalePrompt,
 } from './routes.js';
 
-const NEAR_BOTTOM_PX = 48;
+const NEAR_BOTTOM_PX = 40;
 const FOLD_DIFFS = 3;
 const FOLD_OUTPUTS = 4;
 const FOLD_TASKS = 3;
@@ -978,7 +978,27 @@ export function createView(doc, refs, deps) {
     queueButton,
     status);
 
-  const chat = h(doc, 'section', { class: 'chat', hidden: true }, log, composer);
+  // Кнопка «вниз»: круглая, по центру над полем; есть, только когда лента не в самом низу; точка — пришло новое, пока читали выше.
+  const jumpButton = h(doc, 'button', { type: 'button', class: 'jump-btn', hidden: true, title: t('chat.to_bottom'), 'aria-label': t('chat.to_bottom') },
+    icon(doc, 'i-arrow-down'), h(doc, 'span', { class: 'jump-dot', hidden: true, 'aria-hidden': 'true' }));
+  const jumpDot = jumpButton.querySelector('.jump-dot');
+  const jumpWrap = h(doc, 'div', { class: 'jump-wrap' }, jumpButton);
+  let unseen = false; // пока лента не в самом низу, что-то появилось или дописалось
+  const distanceFromBottom = () => log.scrollHeight - log.scrollTop - log.clientHeight;
+  function syncJump() {
+    const away = distanceFromBottom() > NEAR_BOTTOM_PX;
+    if (!away) unseen = false;
+    jumpButton.hidden = !away;
+    jumpDot.hidden = !(away && unseen);
+    jumpButton.setAttribute('aria-label', unseen ? t('chat.to_bottom_new') : t('chat.to_bottom'));
+    jumpButton.title = unseen ? t('chat.to_bottom_new') : t('chat.to_bottom');
+  }
+  log.addEventListener('scroll', syncJump);
+  jumpButton.addEventListener('click', () => {
+    if (typeof log.scrollTo === 'function') log.scrollTo({ top: log.scrollHeight, behavior: 'smooth' });
+    else log.scrollTop = log.scrollHeight;
+  });
+  const chat = h(doc, 'section', { class: 'chat', hidden: true }, log, jumpWrap, composer);
   refs.main.replaceChildren(topbar, pick, chat);
 
   backButton.addEventListener('click', () => handlers.onBack());
@@ -1001,6 +1021,7 @@ export function createView(doc, refs, deps) {
     // пока вопрос агента ждёт ответа, обычное сообщение не уходит: форма просит ответить или пропустить
     if (current.session && current.session.pendingQuestion) { nudgeAsk(); return; }
     const trace = currentTrace;
+    historyState = NO_HISTORY; // после отправки история с пустого поля: новое сообщение в её конце, ↑ показывает его первым
     // агент занят ходом: сообщение (и его картинки) встаёт в очередь страницы и уходит, когда ход закончится
     if (current.session && isBusy(current.session.state)) {
       if (handlers.onQueue(trace, text, images)) {
@@ -1068,7 +1089,7 @@ export function createView(doc, refs, deps) {
   });
   queueButton.addEventListener('click', () => { if (currentTrace) handlers.onUnqueue(currentTrace); });
   input.addEventListener('input', () => {
-    historyState = NO_HISTORY;
+    // правка текста историю не сбрасывает: ↑ и ↓ ходят по ней и с изменённым текстом (history.js)
     fitInput();
     if (currentTrace) drafts.set(currentTrace, input.value);
   });
@@ -1322,13 +1343,21 @@ export function createView(doc, refs, deps) {
   }
   thread.addEventListener('mouseover', (e) => { const item = e.target.closest ? e.target.closest('[data-turn]') : null; setHot(item ? item.dataset.turn : ''); });
   thread.addEventListener('mouseleave', () => setHot(''));
+  // Ряд иконок под сообщением владельца раскрывается по касанию пузыря только пальцем: клик мышью (и по самим кнопкам ряда) его не «залипает».
+  function clearTaps(except) {
+    for (const n of thread.querySelectorAll('[data-tap="on"]')) if (n !== except) delete n.dataset.tap;
+  }
   thread.addEventListener('click', (e) => {
     const item = e.target.closest ? e.target.closest('.item-user, .item-text') : null;
-    if (!item) return;
-    // на сенсорном экране ряд раскрывается по касанию пузыря
-    if (item.classList.contains('item-user')) item.dataset.tap = item.dataset.tap === 'on' ? '' : 'on';
-    else setHot(hotTurn === item.dataset.turn ? '' : item.dataset.turn);
+    if (!item) { clearTaps(null); return; }
+    const touch = e.pointerType === 'touch';
+    if (item.classList.contains('item-user')) {
+      if (!touch || (e.target.closest && e.target.closest('button'))) return;
+      clearTaps(item);
+      item.dataset.tap = item.dataset.tap === 'on' ? '' : 'on';
+    } else setHot(hotTurn === item.dataset.turn ? '' : item.dataset.turn);
   });
+  thread.addEventListener('mouseleave', () => clearTaps(null));
 
   // ---- сообщения владельца: ряд мелких иконок под пузырём (при наведении; в очереди — всегда)
   function timeText(at) {
@@ -1516,6 +1545,7 @@ export function createView(doc, refs, deps) {
       if (projectPicker.parentNode) projectPicker.remove();
     }
     let created = 0;
+    let changed = false;
     const alive = new Set();
     items.forEach((item, i) => {
       let entry = nodes.get(item.key);
@@ -1523,11 +1553,13 @@ export function createView(doc, refs, deps) {
       alive.add(item.key);
       entry.item = item;
       const sig = JSON.stringify(item);
-      if (sig !== entry.sig) { entry.sig = sig; fillItem(entry, item); }
+      if (sig !== entry.sig) { entry.sig = sig; fillItem(entry, item); changed = true; }
       if (thread.children[i] !== entry.node) thread.insertBefore(entry.node, thread.children[i] ?? null);
     });
     for (const [key, entry] of nodes) if (!alive.has(key)) { entry.node.remove(); nodes.delete(key); }
     if (nearBottom || created === items.length) log.scrollTop = log.scrollHeight;
+    else if (changed || created > 0) unseen = true;
+    syncJump();
   }
 
   // ---------------------------------------------------------------- правая колонка
@@ -1647,13 +1679,6 @@ export function createView(doc, refs, deps) {
       acts.worktree ? row(t('route.sub_act_worktree'), () => handlers.onRouteSubtaskWorktree(sessionId, sub.n)) : false,
       acts.done ? row(t('route.sub_act_done'), () => handlers.onRouteSubtaskDone(sessionId, sub.n)) : false);
   }
-  function parallelBox(s, task, sub) {
-    if (!parallelShown(task, sub)) return false;
-    const box = h(doc, 'input', { type: 'checkbox', class: 'rsub-check' });
-    box.checked = sub.parallel;
-    box.addEventListener('change', () => handlers.onRouteSubtaskParallel(s.id, sub.n, box.checked));
-    return h(doc, 'label', { class: 'rsub-par' }, box, h(doc, 'span', { text: t('route.sub_parallel') }));
-  }
   function subtaskRow(s, task, sub) {
     const key = subKey(task, sub);
     const isOpen = open.has(key);
@@ -1690,7 +1715,6 @@ export function createView(doc, refs, deps) {
       h(doc, 'div', { class: 'rsub-row' }, toggle, more),
       where || sub.worktree ? h(doc, 'div', { class: 'rsub-where' }, sub.worktree ? h(doc, 'span', { class: 'rsub-own', text: t('route.sub_own_tree') }) : false, where) : false,
       sub.needsOwner ? h(doc, 'div', { class: 'rsub-owner', role: 'alert', text: sub.ownerText || t('route.sub_owner') }) : false,
-      parallelBox(s, task, sub),
       meter, body,
       more && subMenu === key ? subtaskMenu(s.id, sub) : false);
   }
@@ -1718,7 +1742,6 @@ export function createView(doc, refs, deps) {
       task.worktree && testsRunnable(task) ? panelTestsButton(s) : false,
       task.worktree && task.testsRunning ? h(doc, 'p', { class: 'rsub-tests muted', text: t('route.tests_running') }) : false,
       task.stale ? h(doc, 'p', { class: 'rsub-label', 'data-kind': 'unmerged', text: t('route.stale_title', { days: task.idleDays }) }) : false,
-      withSubs ? false : h(doc, 'p', { class: 'rsub-task', text: t('route.messages', { count: task.messages }) }),
       withSubs && task.subtasks.length === 0 ? h(doc, 'p', { class: 'muted', text: t('route.sub_none') }) : false,
       withSubs && task.subtasks.length > 0 ? list : false,
       newTask);
