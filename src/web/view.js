@@ -407,7 +407,7 @@ export function createView(doc, refs, deps) {
   attach.bindPicker(plusButton);
   attach.bindPaste(input);
   attach.bindDrop(box);
-  // счётчик очереди «на потом» (Ctrl+Enter при работающем агенте); клик убирает последнее сообщение
+  // счётчик очереди (Enter при работающем агенте); клик убирает последнее сообщение
 
   const ringFill = svgNode(doc, 'circle', { class: 'ring-fill', cx: 12, cy: 12, r: 9, pathLength: 100 });
   const ring = svgNode(doc, 'svg', { class: 'ring', viewBox: '0 0 24 24', role: 'img' });
@@ -922,16 +922,26 @@ export function createView(doc, refs, deps) {
   const nodes = new Map(); // key элемента ленты -> { node, sig, item }
 
   let uploading = false; // картинки уходят на сервер: второй отправки пока нет
-  function submit(queue = false) {
+  function submit() {
     const text = input.value.trim();
     const images = attach.items();
     if (!currentTrace || uploading || (text.length === 0 && images.length === 0)) return;
     // пока вопрос агента ждёт ответа, обычное сообщение не уходит: форма просит ответить или пропустить
     if (current.session && current.session.pendingQuestion) { nudgeAsk(); return; }
-    if (queue && images.length > 0) { voiceToast.show(t('images.err_queue')); return; }
     const trace = currentTrace;
+    // агент занят ходом: сообщение (и его картинки) встаёт в очередь страницы и уходит, когда ход закончится
+    if (current.session && isBusy(current.session.state)) {
+      if (handlers.onQueue(trace, text, images)) {
+        input.value = '';
+        attach.clear();
+        drafts.delete(trace);
+        attachDrafts.delete(trace);
+        fitInput();
+      }
+      return;
+    }
     if (images.length === 0) {
-      const done = queue ? handlers.onQueue(trace, text) : handlers.onSend(trace, text);
+      const done = handlers.onSend(trace, text);
       if (done) {
         input.value = '';
         fitInput();
@@ -958,7 +968,7 @@ export function createView(doc, refs, deps) {
     // в записи место кнопки остаётся (visibility), чтобы поле не меняло ширину и текст не перетекал в нижнюю строку
     sendButton.hidden = !can && !recordingNow;
     sendButton.style.visibility = recordingNow ? 'hidden' : '';
-    sendButton.disabled = busy || !can || recordingNow;
+    sendButton.disabled = !can || recordingNow;
   }
   // Авторазмер: высота по содержимому, не выше 5 строк (дальше — внутренняя прокрутка, см. max-height в app.css).
   function fitInput() {
@@ -970,9 +980,7 @@ export function createView(doc, refs, deps) {
   input.addEventListener('keydown', (e) => {
     // в записи Enter останавливает её и вставляет текст, а не отправляет сообщение
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && dictation.active()) { e.preventDefault(); dictation.stop(); return; }
-    const session = current.session;
-    const action = keyAction(e, Boolean(session) && isBusy(session.state));
-    if (action) { e.preventDefault(); submit(action === 'queue'); }
+    if (keyAction(e)) { e.preventDefault(); submit(); }
   });
   queueButton.addEventListener('click', () => { if (currentTrace) handlers.onUnqueue(currentTrace); });
   input.addEventListener('input', () => {

@@ -102,16 +102,23 @@ function send(kind, trace, step, input) {
   return ok;
 }
 
-// Очередь «на потом» (Ctrl+Enter при работающем агенте): живёт только в странице, по сессиям, FIFO.
+// Очередь сообщений (Enter при работающем агенте): живёт только в странице, по сессиям, FIFO.
 const queue = createQueue();
 
 /** Ход закончился — следующее сообщение очереди уходит как обычная отправка; сессии нет в модели — очередь сброшена. */
 function drain() {
   queue.prune(model.sessions);
   for (const trace of queue.traces()) {
-    const text = queue.take(trace, model.sessions[trace]);
-    if (text === undefined) continue;
-    if (!send('user_message', trace, nextStep(model, trace), { turn: newId(), text })) queue.restore(trace, text);
+    const item = queue.take(trace, model.sessions[trace]);
+    if (item === undefined) continue;
+    // в очереди лежит { text, images }: картинки уходят на сервер при выдаче, а не при постановке
+    const images = item.images ?? [];
+    const delivered = handlers.onSend(trace, item.text, images);
+    if (images.length === 0) {
+      if (!delivered) queue.restore(trace, item);
+    } else {
+      Promise.resolve(delivered).then((ok) => { if (!ok) { queue.restore(trace, item); render(); } }, () => { queue.restore(trace, item); render(); });
+    }
   }
 }
 
@@ -132,8 +139,8 @@ const signal = (trace, { kind, input }) => [kind, trace, nextStep(model, trace),
 
 const handlers = {
   queued(trace) { return queue.count(trace); },
-  onQueue(trace, text) {
-    queue.push(trace, text);
+  onQueue(trace, text, images = []) {
+    queue.push(trace, { text, images });
     render();
     drain();
     return true;

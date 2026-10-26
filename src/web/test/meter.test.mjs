@@ -48,7 +48,7 @@ test('вид карточки: в записи — «Слушаю…», без �
   assert.deepEqual([rec.hideSend, rec.showWave, 'showEnter' in rec], [true, true, false]);
   for (const s of ['idle', 'processing', 'error', 'unavailable']) {
     const v = recordingView(s);
-    assert.equal(t(v.placeholderKey), 'Enter — отправить, Shift+Enter — новая строка, Ctrl+Enter — в очередь на потом');
+    assert.equal(t(v.placeholderKey), 'Enter — отправить, Shift+Enter — новая строка');
     assert.deepEqual([v.hideSend, v.showWave], [false, false]);
   }
 });
