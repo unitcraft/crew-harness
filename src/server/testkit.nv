@@ -767,6 +767,123 @@ export fn scenario_switch_agent(settings ServerSettings) Proc Detach Time Net Fs
     c.report()
 }
 
+// ----- the choices of the owner stay with the session (task 192t) -----
+
+// The settings with the agent `opencode` that has no "yolo" in its list of modes any more (`--no-yolo` of the fake agent).
+fn kit_without_yolo(settings ServerSettings) -> ServerSettings {
+    mut changed = settings
+    mut agents = []AgentSpec.new()
+    for a in settings.agents {
+        if a.id == "opencode" {
+            mut args = []str.new()
+            for word in a.args { args.push(word) }
+            args.push("--no-yolo")
+            agents.push(AgentSpec { id: a.id, label: a.label, program: a.program, args, ask: a.ask })
+        } else {
+            agents.push(a)
+        }
+    }
+    changed.agents = agents
+    changed
+}
+
+// A message `text` to the session, then the answer of the turn once it ends ("" when it did not end).
+fn kit_ask(mut rig Rig, trace str, text str) Proc Detach Time Net Fs Os -> str {
+    ro from = rig.lines_for(1).len()
+    rig.page(1, "user_message", trace, "{\"turn\":\"t${from}\",\"text\":\"${text}\"}")
+    if !rig.until(KIT_DONE, 20000) { return "" }
+    ro lines = rig.lines_for(1)
+    answer_of(lines, line_input(first_of(lines, "user_message", from), "turn"))
+}
+
+// The owner chooses; true when the summary of the page shows `needle` (the setting as the summary names it).
+fn kit_choose(mut rig Rig, trace str, setting str, value str, needle str) Proc Detach Time Net Fs Os -> bool {
+    rig.page(1, "session_setting", trace, "{\"setting\":\"${setting}\",\"value\":\"${value}\"}")
+    rig.until(needle, 8000)
+}
+
+fn kit_last_of(lines []str, kind str) -> str {
+    mut last = ""
+    for line in lines {
+        if line_field(line, "kind") == kind { last = line }
+    }
+    last
+}
+
+const KIT_DEFAULTS = "mode: default model: fake-model effort: medium"
+const KIT_CHOSEN = "mode: yolo model: fake-model-b effort: high"
+
+/// The owner chose a mode, a model and an effort: they are in the journal, and every agent that is started again (the hub restarts, the
+/// agent dies) gets them again; a value the agent does not offer any more is dropped with a line in the feed.
+export fn scenario_settings_persist(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-set", "{\"name\":\"Выбор\",\"agent\":\"opencode\"}")
+    c.expect(kit_ask(rig, "s-set", "mode") == "mode: default model: fake-model effort: medium", "a new agent has its defaults")
+    c.expect(kit_choose(rig, "s-set", "mode", "yolo", "\"mode\":\"yolo\""), "the mode is chosen")
+    c.expect(kit_choose(rig, "s-set", "model", "fake-model-b", "\"model_id\":\"fake-model-b\""), "the model is chosen")
+    c.expect(kit_choose(rig, "s-set", "effort", "high", "\"effort\":\"high\""), "the effort is chosen")
+    c.expect(kit_ask(rig, "s-set", "mode") == KIT_CHOSEN, "the agent holds the choices")
+    rig.run(200)
+    ro journal = kit_file_text(kit_session_file(settings, "s-set", "journal"))
+    c.expect(journal.contains("setting_chosen") && journal.contains("yolo") && journal.contains("fake-model-b"), "the journal keeps the choices")
+    rig.shut()
+
+    mut again = rig_open(settings)
+    again.attach(1)
+    ro shown = kit_last_of(again.hub.page_lines("s-set"), "session_model")
+    c.expect(shown.contains("\"mode\":\"yolo\"") && shown.contains("\"effort\":\"high\""), "the page shows the choices before the agent is started")
+    c.expect(kit_ask(again, "s-set", "mode") == KIT_CHOSEN, "the agent of the restarted hub gets the choices again")
+    ro summary = kit_last_of(again.lines_for(1), "session_model")
+    c.expect(summary.contains("\"mode\":\"yolo\"") && summary.contains("\"model_id\":\"fake-model-b\""), "the summary after the start has the choices: ${summary}")
+    again.page(1, "user_message", "s-set", "{\"turn\":\"tc\",\"text\":\"crash go\"}")
+    c.expect(again.until("\"reason\":\"ConnectionLost\"", 15000), "the agent dies")
+    c.expect(kit_ask(again, "s-set", "mode") == KIT_CHOSEN, "the agent that replaces the dead one gets the choices")
+    again.shut()
+
+    mut changed = rig_open(kit_without_yolo(settings))
+    changed.attach(1)
+    c.expect(kit_ask(changed, "s-set", "mode") == "mode: default model: fake-model-b effort: high", "a mode the agent does not offer is not asked for")
+    c.expect(kit_with(changed.lines_for(1), "\"kind\":\"setting_dropped\"") == 1, "the owner is told in the feed")
+    ro dropped = first_of(changed.lines_for(1), "setting_dropped", 0)
+    c.expect(line_input(dropped, "setting") == "mode" && line_input(dropped, "value") == "yolo" && line_input(dropped, "used") == "default", "the line names the mode, the lost value and the one used")
+    changed.shut()
+
+    mut last = rig_open(settings)
+    last.attach(1)
+    c.expect(kit_ask(last, "s-set", "mode") == "mode: default model: fake-model-b effort: high", "the dropped choice is gone from the journal")
+    last.shut()
+    c.report()
+}
+
+/// The choices are kept per family: a family that comes later has its own, and the way back brings the first ones back.
+export fn scenario_settings_family(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-fam", "{\"name\":\"Семьи\",\"agent\":\"opencode\"}")
+    c.expect(kit_ask(rig, "s-fam", "mode") == KIT_DEFAULTS, "the first family starts with its defaults")
+    c.expect(kit_choose(rig, "s-fam", "mode", "yolo", "\"mode\":\"yolo\""), "the first family: yolo")
+    rig.page(1, "session_agent", "s-fam", "{\"agent\":\"second\"}")
+    c.expect(rig.until("\"kind\":\"agent_switched\"", 15000), "to the second family")
+    c.expect(kit_ask(rig, "s-fam", "mode") == KIT_DEFAULTS, "the choices of the first family do not go to the second")
+    c.expect(kit_choose(rig, "s-fam", "mode", "plan", "\"mode\":\"plan\""), "the second family: plan")
+    rig.page(1, "session_agent", "s-fam", "{\"agent\":\"opencode\"}")
+    c.expect(rig.until("\"kind\":\"agent_switched\"", 15000), "back to the first family")
+    c.expect(kit_ask(rig, "s-fam", "mode") == "mode: yolo model: fake-model effort: medium", "the way back brings the first choices back")
+    rig.page(1, "session_agent", "s-fam", "{\"agent\":\"second\"}")
+    c.expect(rig.until("\"kind\":\"agent_switched\"", 15000), "to the second family again")
+    c.expect(kit_ask(rig, "s-fam", "mode") == "mode: plan model: fake-model effort: medium", "the second family has its own choice")
+    rig.shut()
+
+    mut again = rig_open(settings)
+    again.attach(1)
+    c.expect(kit_ask(again, "s-fam", "mode") == "mode: plan model: fake-model effort: medium", "after the restart the family of the session has its choice")
+    again.shut()
+    c.report()
+}
+
 fn kit_png_bytes() -> []u8 => [137 as u8, 80 as u8, 78 as u8, 71 as u8, 13 as u8, 10 as u8, 26 as u8, 10 as u8]
 
 // The base64 of kit_png_bytes: 12 characters.
