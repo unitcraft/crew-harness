@@ -30,3 +30,21 @@ test('mock.js подгружается только динамически и т
   assert.match(app, /if \(picked\.mode === 'mock'\) \{\s*mock = await import\('\.\/mock\.js'\);/);
   assert.ok(!/from '\.\/mock\.js'/.test(app));
 });
+
+test('index.html заранее просит все модули страницы (modulepreload), и список совпадает с графом импортов app.js: водопад не растягивает загрузку', () => {
+  const html = read('index.html');
+  const preload = [...html.matchAll(/<link rel="modulepreload" href="([\w.-]+\.js)">/g)].map((m) => m[1]).sort();
+  const graph = [...closure('app.js')].sort();
+  assert.deepEqual(preload, graph);
+  assert.ok(!preload.includes('mock.js'), 'mock.js только по ?mock=1');
+  assert.ok(preload.length >= 20);
+});
+
+test('front: предел соединений поднят (по умолчанию Polaris их 16, и несколько вкладок исчерпывали его), Keep-Alive короче простоя сервера, живые страницы пингуются', () => {
+  const front = fs.readFileSync(new URL('../../server/front/front.nv', import.meta.url), 'utf8');
+  assert.match(front, /policy\.max_inflight\(1024\)/);
+  assert.match(front, /resp\.header\("Keep-Alive", "timeout=50"\)/);
+  assert.match(front, /const PING_EVERY_MS = 25000/);
+  assert.match(front, /ws_out\(4, ""\)/);
+  assert.match(front, /frame_bytes\(OpCode\.Ping, \[\]u8\.new\(\)\)/);
+});

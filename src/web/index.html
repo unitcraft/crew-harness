@@ -13,6 +13,33 @@
      Видимого текста в этом файле нет: все надписи рисует view.js из strings.js. -->
 <link rel="stylesheet" href="app.css">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<!-- Модули страницы грузятся параллельно, а не водопадом из десятков запросов друг за другом: список совпадает с графом импортов app.js,
+     его сверяет test/graph.test.mjs. mock.js и rec-worklet.js сюда не входят: первый грузится только в ?mock=1, второй — при записи звука. -->
+<link rel="modulepreload" href="app.js">
+<link rel="modulepreload" href="state.js">
+<link rel="modulepreload" href="lists.js">
+<link rel="modulepreload" href="attachments.js">
+<link rel="modulepreload" href="question.js">
+<link rel="modulepreload" href="routes.js">
+<link rel="modulepreload" href="strings.js">
+<link rel="modulepreload" href="view.js">
+<link rel="modulepreload" href="meter.js">
+<link rel="modulepreload" href="voice.js">
+<link rel="modulepreload" href="recorder.js">
+<link rel="modulepreload" href="wav.js">
+<link rel="modulepreload" href="stt.js">
+<link rel="modulepreload" href="toast.js">
+<link rel="modulepreload" href="dom.js">
+<link rel="modulepreload" href="projects-ui.js">
+<link rel="modulepreload" href="projects.js">
+<link rel="modulepreload" href="queue.js">
+<link rel="modulepreload" href="history.js">
+<link rel="modulepreload" href="attach-ui.js">
+<link rel="modulepreload" href="viewer-ui.js">
+<link rel="modulepreload" href="viewer.js">
+<link rel="modulepreload" href="labels-ru.js">
+<link rel="modulepreload" href="transport.js">
+<link rel="modulepreload" href="projects-api.js">
 <script src="boot-guard.js"></script>
 <script src="theme.js"></script>
 </head>
