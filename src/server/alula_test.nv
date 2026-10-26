@@ -4,7 +4,7 @@ module crew_harness.server
 
 import std.text
 import alula.engine.{Engine, MemoryWorld, Incoming, EventKind, Journal, Store, Link, StepEnvironment, start_engine, resume_engine, memory_journal, memory_store, memory_link, memory_time, decode_snapshot}
-import crew_harness.chat.{user_says, user_cancels, agent_chunk, agent_done, ChatSession, ChatState, dialog_session, encode_chat_state}
+import crew_harness.chat.{user_says, agent_chunk, agent_done}
 import alula.machine_run.{AlulaMachine, AlulaState}
 
 fn hm_made(ms int) -> AlulaMachine {
@@ -130,23 +130,9 @@ test "hm the snapshot is the state of the Alula machine" {
     }
 }
 
-test "hm a snapshot of the machine on Nova is not a state of the hub machine" {
-    // sessions of the old form are not migrated (there are none in a product base): the hub says it cannot resume them
+test "hm a snapshot of the old form is not a state of the hub machine" {
+    // sessions of the old form (the machine on Nova, removed) are not migrated (there are none in a product base): the hub says it cannot resume them
     ro m = hm_made(30000)
-    // ORACLE-WORKAROUND(36): two states are encoded one by one, not in `for state in [a(), b()]` (an array literal of calls in a `for` does not compile); loop when item 36 is fixed
-    ro idle_text = encode_chat_state(dialog_session(30000).initial())
-    assert(m.decode_state(idle_text) == None)
-    ro waiting_text = encode_chat_state(user_says_state())
-    assert(m.decode_state(waiting_text) == None)
     assert(m.decode_state("{\"state\":\"Idle\"}") == None)
     assert(m.decode_state("{\"state\":\"Awaiting\",\"user\":\"a\",\"reply\":\"b\"}") == None)
-}
-
-fn user_says_state() -> ChatState {
-    mut environment = StepEnvironment.new()
-    ro event = Incoming { id: "e-1", trace: "t-1", step: 2, kind: EventKind.Input, name: "user_message", request: None, input: "hi", at: 1000 }
-    match dialog_session(30000).step(dialog_session(30000).initial(), event, environment) {
-        Go(s) => s
-        Stay => panic("the machine did not move")
-    }
 }

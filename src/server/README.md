@@ -270,12 +270,9 @@ Since task 114 the hub runs every session on the machine of the many-turn chat w
   A session of the new form is found by the store after a restart and goes on through `resume_engine`.
 - **Primitives.** The chat has none (`## Примитивы` is empty); the step reads the world through its event only (the clock is the stamp of the event). The default host of the engine is enough,
   so the server has no host of its own with a real clock: a step stays a function of the state and the event.
-- **How it was checked.** The machine in Nova (`dialog_session`, `src/chat`) stays as the reference. [`src/machine_dialog_eq`](../machine_dialog_eq/equal_test.nv) runs 36 scenarios
-  (`src/machine/scenarios/dialog-*` of `alula`: the scenarios of `chat_engine_test.nv` moved to the many-turn machine and those of `dialog_test.nv`) on both machines and compares the state, the data, every line of the journal with its envelope,
-  the requests sent and cancelled, the queue, the acknowledgements and the outcome; the same twelve events in four places of the machine alone; every failure code; six deaths and old journals
-  (`inject_test.nv`). `src/machine_dialog` of `alula` takes every row of the table by a scenario (the mark `taken`, 8 rows of 8) and checks the parameter of the idle term.
-  One change of the JSON (a journal code) turns both units red. The ten scenarios of the hub (`testkit.nv`) run over files and over PostgreSQL on the Alula machine.
-- **No switch.** The hub runs on Alula only; there is no setting "nova/alula". Removing `dialog_session` from `src/chat` is for the owner to say.
+- **How it was checked.** `src/machine_dialog` of `alula` takes every row of the table by a scenario (the mark `taken`, 8 rows of 8) and checks the parameter of the idle term. The ten scenarios of the hub
+  (`testkit.nv`) run over files and over PostgreSQL on the Alula machine. The machine in Nova (`dialog_session`) and its comparison with the table (`src/machine_dialog_eq`) were removed on the word of the owner (2026-10-26).
+- **No switch.** The hub runs on Alula only; there is no setting "nova/alula".
 
 ## The border of the table and the code (Граница таблицы и кода)
 
@@ -448,7 +445,7 @@ The events a live session shows come from the engine itself (`Engine.take_events
 | `front/front.nv`, `front/front_settings.nv`, `front/stt.nv`, `front/sttproc.nv`, `front/images.nv` | the front: HTTP, `/ws` (frames over two owners of the socket), the router fiber, the hub as a child process; the voice to text (`/api/stt`); the recognizer as a child of the front; the pictures of the messages (`/api/session-image`) |
 | `testkit.nv` | the settings of a test hub with the fake agent, the rig that drives a hub as a page does, the scenarios (shared by the units below) |
 | `alula_test.nv` | the machine of the hub: made from the embedded table, the idle term, a broken text, an engine in memory, the snapshot |
-| `dialog_test.nv`, `settings_test.nv`, `front/front_settings_test.nv`, `front/stt_test.nv`, `front/sttproc_test.nv` | tests of the unit `src/server` and `src/server/front` |
+| `settings_test.nv`, `front/front_settings_test.nv`, `front/stt_test.nv`, `front/sttproc_test.nv` | tests of the unit `src/server` and `src/server/front` |
 | `../server_live/hub_test.nv`, `../server_pg/hub_pg_test.nv` | the same ten scenarios over files and over PostgreSQL |
 | `test/e2e.mjs`, `test/real-agent.mjs` | Node: the whole server through its door (files, `--pg` on the temporary database, `--pg-docker` on the permanent one); the real `opencode acp` (handshake only) |
 | `server.example.json`, `server-pg.example.json` | the examples of the settings: the file store, and the store pg on the database of `db.ps1` (no password) |
@@ -488,9 +485,7 @@ node src/server/test/real-agent.mjs                    # the real opencode: init
 The scenarios (`testkit.nv`), each on a fresh store: two turns of a chat (chunks, turns, ids, steps), permission asked/allowed/denied, a cancel keeps the
 session open and the late words are not shown, restart between turns (the same lines, a page that comes later is told everything), restart in the middle of a
 turn (`Timeout`, the session goes on), the agent dies (`ConnectionLost`, a new agent), two pages on one session, what cannot be done is an error, several
-sessions, an agent that refuses to start. The machine and the engine are tested in memory with the deaths of rules 13 and 34(e) (`dialog_test.nv`): between
-the commit and the send, between the journal line and the snapshot, the agent answering while the process is dead, a cancel committed and not sent
-(`dialog_test.nv` runs them on the machine in Nova; `src/machine_dialog_eq` runs the same on both machines).
+sessions, an agent that refuses to start.
 
 ## What is not here
 
