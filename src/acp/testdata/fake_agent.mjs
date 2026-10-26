@@ -28,6 +28,7 @@
 // The process writes `fake-agent: ready` to stderr when it starts.
 import { createInterface } from "node:readline";
 import fs from "node:fs";
+import { execFileSync } from "node:child_process";
 
 // A guard for the tests: a test that fails before it closes its client would leave this process alive, and the test
 // binary (which waits for the pipes of the process) with it; the process ends by itself after 25 seconds (a test takes
@@ -86,6 +87,20 @@ async function prompt(id, params) {
     text = text.slice(text.indexOf("\n\n") + 2);
   }
   const word = text.split(" ")[0];
+  // the modes of work (task 192q): the hub asks to resolve conflicts (the files are resolved here, in the folder of the process) and to run the tests
+  if (text.includes("Разреши конфликты")) {
+    const files = execFileSync("git", ["diff", "--name-only", "--diff-filter=U"], { encoding: "utf8" }).split("\n").filter(Boolean);
+    for (const f of files) {
+      fs.writeFileSync(f, "resolved\n");
+      execFileSync("git", ["add", "--", f]);
+    }
+    chunk("Конфликты разрешены: " + files.join(", ") + "\nТЕСТЫ: ЗЕЛЁНЫЕ");
+    return respond(id, { stopReason: "end_turn" });
+  }
+  if (text.includes("Последней строкой ответа напиши ровно")) {
+    chunk(text.includes("fake-red-tests") ? "ТЕСТЫ: КРАСНЫЕ" : "ТЕСТЫ: ЗЕЛЁНЫЕ");
+    return respond(id, { stopReason: "end_turn" });
+  }
   switch (word) {
     case "usage": {
       chunk("counted");

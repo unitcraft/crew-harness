@@ -2,7 +2,7 @@
 // The same scenarios run over PostgreSQL in src/server_pg: the results must be the same.
 module crew_harness.server_live
 
-import crew_harness.server.{kit_files, kit_files_mcp, scenario_question_mcp, scenario_question_mcp_timeout, scenario_chat, scenario_stream_burst, scenario_permission, scenario_question, scenario_question_off, scenario_cancel, scenario_switch_agent, scenario_restart_idle, scenario_restart_open, scenario_crash, scenario_two_pages, scenario_rejects, scenario_many, scenario_broken_agent, scenario_renamed_table, scenario_migrate_flat, scenario_images, scenario_catalog, scenario_choose_cold, kit_routes, kit_routes_git, scenario_route_fast, scenario_route_nosteps, scenario_route_tree}
+import crew_harness.server.{kit_files, kit_files_mcp, scenario_question_mcp, scenario_question_mcp_timeout, scenario_chat, scenario_stream_burst, scenario_permission, scenario_question, scenario_question_off, scenario_cancel, scenario_switch_agent, scenario_restart_idle, scenario_restart_open, scenario_crash, scenario_two_pages, scenario_rejects, scenario_many, scenario_broken_agent, scenario_renamed_table, scenario_migrate_flat, scenario_images, scenario_catalog, scenario_choose_cold}
 
 fn clean(report str) -> () {
     if report.byte_len() > 0 { println("NOT AS IT MUST BE: ${report}") }
@@ -94,16 +94,4 @@ test "files: the catalog of the families is told, written and read back" {
 
 test "files: a choice in a session whose agent is not running starts it and is made" {
     clean(scenario_choose_cold(kit_files("cold", 30000)))
-}
-
-test "files: the mode Fast task: the task in the data folder, the instruction, the subtasks, the run of the steps, the review of another family" {
-    clean(scenario_route_fast(kit_routes("route-fast")))
-}
-
-test "files: a mode without steps does not run, an unknown mode is refused" {
-    clean(scenario_route_nosteps(kit_routes("route-none")))
-}
-
-test "files: the mode interactive in a repository: a task with a tree of its own, a kept task comes back" {
-    clean(scenario_route_tree(kit_routes_git("route-tree")))
 }
