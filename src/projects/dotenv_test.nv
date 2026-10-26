@@ -1,0 +1,116 @@
+// dotenv_test.nv - the `.env` text of a project: quotes, lines that span, comments, `export`, the mistakes with the number of the line.
+module crew_harness.projects
+
+import std.text
+
+fn must_parse(text str) -> []EnvEntry {
+    match parse_dotenv(text) {
+        Ok(entries) => entries
+        Err(reason) => panic("dotenv: ${reason}")
+    }
+}
+
+fn error_of(text str) -> str {
+    match parse_dotenv(text) {
+        Ok(entries) => "<no error>"
+        Err(reason) => reason
+    }
+}
+
+test "dotenv: plain lines, blanks around the equal sign, an empty value" {
+    ro e = must_parse("FOO=bar baz\nA = 1\nEMPTY=\n  SPACED  =  x y  \n")
+    assert(e.len() == 4)
+    assert(e[0].key == "FOO" && e[0].value == "bar baz")
+    assert(e[1].key == "A" && e[1].value == "1")
+    assert(e[2].key == "EMPTY" && e[2].value == "")
+    assert(e[3].key == "SPACED" && e[3].value == "x y")
+}
+
+test "dotenv: empty lines, comments, CRLF" {
+    ro e = must_parse("# a comment\r\n\r\nFOO=1 # inline\r\n   # indented\r\nBAR=a#b\r\nBAZ=# nothing\r\n")
+    assert(e.len() == 3)
+    assert(e[0].value == "1")
+    assert(e[1].value == "a#b")
+    assert(e[2].key == "BAZ" && e[2].value == "")
+}
+
+test "dotenv: export is allowed, a name that only begins with it is a name" {
+    ro e = must_parse("export FOO=1\nexport   BAR='x'\nexported=2\nexport=3\n")
+    assert(e.len() == 4)
+    assert(e[0].key == "FOO")
+    assert(e[1].key == "BAR" && e[1].value == "x")
+    assert(e[2].key == "exported" && e[2].value == "2")
+    assert(e[3].key == "export" && e[3].value == "3")
+}
+
+test "dotenv: double quotes keep blanks and # and have escapes" {
+    ro e = must_parse("A=\"  spaced # not a comment  \"\nB=\"line1\\nline2\\t\\\"q\\\" \\\\ \\x\"\nC=\"x\" # comment\n")
+    assert(e[0].value == "  spaced # not a comment  ")
+    assert(e[1].value == "line1\nline2\t\"q\" \\ \\x")
+    assert(e[2].value == "x")
+}
+
+test "dotenv: a double-quoted value may span lines" {
+    ro e = must_parse("A=\"first\nsecond\r\nthird\"\nB=2\n")
+    assert(e.len() == 2)
+    assert(e[0].value == "first\nsecond\nthird")
+    assert(e[1].key == "B" && e[1].value == "2")
+    assert(error_of("A=\"x\ny\"\n9bad=1") == "строка 3: имя переменной начинается с буквы или «_»")
+}
+
+test "dotenv: single quotes are taken as they are" {
+    ro e = must_parse("A='a \\n $B \"c\" # x'\nB='one\ntwo'\n")
+    assert(e[0].value == "a \\n $B \"c\" # x")
+    assert(e[1].value == "one\ntwo")
+}
+
+test "dotenv: a name that comes twice keeps the last value in the first place" {
+    ro e = must_parse("A=1\nB=2\nA=3\n")
+    assert(e.len() == 2)
+    assert(e[0].key == "A" && e[0].value == "3")
+    assert(e[1].key == "B")
+}
+
+test "dotenv: mistakes tell the line" {
+    assert(error_of("A=1\nNOEQUALS\n") == "строка 2: после имени «NOEQUALS» ожидается «=»")
+    assert(error_of("\n\n=x\n") == "строка 3: имя переменной начинается с буквы или «_»")
+    assert(error_of("A=1\n1A=2\n") == "строка 2: имя переменной начинается с буквы или «_»")
+    assert(error_of("A=1\nB=\"open\nstill open\n") == "строка 2: не закрыта кавычка у значения «B»")
+    assert(error_of("A='open") == "строка 1: не закрыта кавычка у значения «A»")
+    assert(error_of("A=\"x\" tail\n") == "строка 1: после закрывающей кавычки значения «A» лишний текст")
+    assert(error_of("A=\"x\ny\" tail\n") == "строка 2: после закрывающей кавычки значения «A» лишний текст")
+}
+
+test "dotenv: an error never holds a value" {
+    ro reason = error_of("SECRET=\"top-secret-value\" oops\n")
+    assert(!reason.contains("top-secret-value"))
+}
+
+test "dotenv: the limits" {
+    mut big = ""
+    mut i = 0
+    while i < 300 {
+        big = "${big}K${i}=1\n"
+        i += 1
+    }
+    assert(error_of(big).starts_with("строка 257: переменных больше"))
+    mut huge = "A="
+    mut j = 0
+    while j < 7000 {
+        huge = "${huge}0123456789"
+        j += 1
+    }
+    assert(error_of(huge) == "текст переменных длиннее 64 КиБ")
+}
+
+test "dotenv: the keys without the values" {
+    ro keys = dotenv_keys("A=1\n# c\nexport B='2'\n")
+    assert(keys.len() == 2 && keys[0] == "A" && keys[1] == "B")
+    assert(dotenv_keys("not valid").len() == 0)
+    assert(dotenv_keys("").len() == 0)
+}
+
+test "dotenv: Cyrillic values pass through" {
+    ro e = must_parse("NAME=1\nTXT=\"привет\\nмир\"\n")
+    assert(e[1].value == "привет\nмир")
+}

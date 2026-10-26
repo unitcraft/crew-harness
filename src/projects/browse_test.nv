@@ -1,0 +1,145 @@
+// browse_test.nv - the choice of a folder: only folders, sorted, hidden at the end, the parent, the roots, the cut at 500, the branch of git.
+module crew_harness.projects
+
+import std.fs.{Fs, real_fs, Path, write_text, remove_dir_all, create_dir_all}
+import std.os.{Os, real_os, temp_dir, pid}
+import std.text
+
+fn browse_fresh(name str) -> str {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-browse-test-${id}-${name}")
+    with Fs = real_fs() {
+        ro removed = remove_dir_all(dir)
+        ro made = create_dir_all(dir)
+    }
+    dir.display()
+}
+
+fn dir_in(root str, name str) -> () {
+    with Fs = real_fs() {
+        ro made = create_dir_all(Path.from_bytes(root.bytes()).join(name))
+    }
+}
+
+fn file_in(root str, name str, text str) -> () {
+    with Fs = real_fs() {
+        ro written = write_text(Path.from_bytes(root.bytes()).join(name), text)
+    }
+}
+
+fn must_list(path str) -> Listing {
+    match list_folders(path) {
+        Ok(l) => l
+        Err(reason) => panic("list ${path}: ${reason}")
+    }
+}
+
+fn slash(path str) -> str {
+    mut raw = []u8.new()
+    for b in path.bytes() { raw.push(if (b as int) == 92 { 47 as u8 } else { b }) }
+    raw.to_str_lossy()
+}
+
+test "browse: only folders, sorted by name without the case, the hidden at the end" {
+    ro root = slash(browse_fresh("sort"))
+    dir_in(root, "beta")
+    dir_in(root, "Alpha")
+    dir_in(root, "gamma")
+    dir_in(root, ".git")
+    dir_in(root, "$Recycle")
+    dir_in(root, ".config")
+    file_in(root, "readme.txt", "x")
+    file_in(root, "zzz", "x")
+    ro l = must_list(root)
+    assert(l.path == root)
+    assert(l.names.len() == 6)
+    assert(l.names[0] == "Alpha" && l.names[1] == "beta" && l.names[2] == "gamma")
+    assert(l.names[3] == "$Recycle" && l.names[4] == ".config" && l.names[5] == ".git")
+    assert(!l.cut)
+    assert(l.has_parent)
+}
+
+test "browse: a backslash path is the same path, a trailing slash is cut" {
+    ro root = slash(browse_fresh("slashes"))
+    dir_in(root, "inner")
+    ro back = list_folders("${root}/inner/")
+    assert(match back { Ok(l) => l.path == "${root}/inner" && l.parent == root, Err(e) => false })
+}
+
+test "browse: the parent of a path, a root has none" {
+    assert(parent_of("C:/work/x") == Some("C:/work"))
+    assert(parent_of("C:/work") == Some("C:/"))
+    assert(parent_of("C:/") == None)
+    assert(parent_of("/") == None)
+    assert(parent_of("/srv") == Some("/"))
+    assert(parent_of("/srv/app") == Some("/srv"))
+}
+
+test "browse: a missing path, a file and a relative path are refused with a reason" {
+    ro root = slash(browse_fresh("refuse"))
+    file_in(root, "a.txt", "x")
+    assert(match list_folders("${root}/nothing") { Ok(l) => false, Err(r) => r.byte_len() > 0 })
+    assert(match list_folders("${root}/a.txt") { Ok(l) => false, Err(r) => r == "это не папка" })
+    assert(match list_folders("relative/dir") { Ok(l) => false, Err(r) => r == "путь папки должен быть абсолютным" })
+    assert(match list_folders("${root}/../x") { Ok(l) => false, Err(r) => r.byte_len() > 0 })
+}
+
+test "browse: the answer is cut at 500 names" {
+    ro root = slash(browse_fresh("many"))
+    mut i = 0
+    while i < 520 {
+        dir_in(root, "d${i}")
+        i += 1
+    }
+    ro l = must_list(root)
+    assert(l.names.len() == 500)
+    assert(l.cut)
+}
+
+test "browse: the roots hold the drive of the temporary folder" {
+    ro roots = list_roots()
+    assert(roots.len() >= 1)
+    ro root = slash(browse_fresh("roots"))
+    ro first = root[..3]
+    mut found = false
+    for r in roots {
+        if r.to_ascii_lower() == first.to_ascii_lower() { found = true }
+    }
+    // on a system without drives the only root is "/"
+    assert(found || roots[0] == "/")
+}
+
+test "browse: the branch is read from .git/HEAD, also from a folder inside the repository" {
+    ro root = slash(browse_fresh("git"))
+    dir_in(root, ".git")
+    file_in(root, ".git/HEAD", "ref: refs/heads/feature/x\n")
+    dir_in(root, "src/deep")
+    ro here = git_state(root)
+    assert(here.is_repo && here.branch == "feature/x")
+    ro deep = git_state("${root}/src/deep")
+    assert(deep.is_repo && deep.branch == "feature/x")
+}
+
+test "browse: a detached head says HEAD, a work tree is a .git file with gitdir" {
+    ro root = slash(browse_fresh("tree"))
+    dir_in(root, "main-repo/.git/worktrees/w1")
+    file_in(root, "main-repo/.git/worktrees/w1/HEAD", "ref: refs/heads/task/192\n")
+    dir_in(root, "w1")
+    file_in(root, "w1/.git", "gitdir: ${root}/main-repo/.git/worktrees/w1\n")
+    ro tree = git_state("${root}/w1")
+    assert(tree.is_repo && tree.branch == "task/192")
+    dir_in(root, "det/.git")
+    file_in(root, "det/.git/HEAD", "0123456789abcdef0123456789abcdef01234567\n")
+    ro det = git_state("${root}/det")
+    assert(det.is_repo && det.branch == "HEAD")
+}
+
+test "browse: a folder outside any repository is not a repo" {
+    ro root = slash(browse_fresh("norepo"))
+    dir_in(root, "plain")
+    ro s = git_state("${root}/plain")
+    // the temporary folder is not inside a repository; if a machine keeps one there the test cannot say
+    assert(!s.is_repo || s.branch.byte_len() > 0)
+    assert(!git_state("relative").is_repo)
+}

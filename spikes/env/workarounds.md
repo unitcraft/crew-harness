@@ -4,7 +4,7 @@
 
 Every place of the product that goes round a defect or a limit of Oracle carries a comment `// ORACLE-WORKAROUND(N): what is gone round; how to simplify when item N is fixed`, where N is an item of [README.md](README.md) ("Known problems"). `git grep ORACLE-WORKAROUND` finds them, `python scripts/oracle-workarounds.py --list` prints them by item with the line. When Nova fixes an item, open its places below, simplify the code as the mark says and remove the mark; then rerun `python scripts/oracle-workarounds.py --index`.
 
-Marks: 70 in 44 files. Items with marks: 29. Items without marks: 32 (no workaround in the code).
+Marks: 72 in 46 files. Items with marks: 29. Items without marks: 32 (no workaround in the code).
 
 | Item | What | Places (files; marks in a file if more than one) | Marks |
 |---|---|---|---|
@@ -32,7 +32,7 @@ Marks: 70 in 44 files. Items with marks: 29. Items without marks: 32 (no workaro
 | 22 | `repro_pg_event`: a user record named `Event` (the engine has one) in the same program as `postgres.pgnet` of the driver | `src/pg/README.md`, `src/pgdb/wire.nv` | 2 |
 | 23 | `handler_op_panic`: the body of an operation of an effect handler that is only `panic(...)`, for an operation that returns | no workaround in the code | 0 |
 | 24 | `handler_op_vec_new`: `return []int.new()` as a statement in the body of a handler operation: the generated C writes | no workaround in the code | 0 |
-| 25 | `nested_module`: a module in a folder two levels under the source root (`src/nested_module/inner/inner.nv`, no `.nv` in the | `src/acp/README.md`, `src/pg/README.md`, `src/server/front/front.nv`, `src/server/front/front_settings.nv`, `src/server/front/front_settings_test.nv`, `src/server/front/images.nv`, `src/server/front/images_test.nv`, `src/server/front/stt.nv`, `src/server/front/stt_test.nv`, `src/server/front/sttproc.nv`, `src/server/front/sttproc_test.nv` | 11 |
+| 25 | `nested_module`: a module in a folder two levels under the source root (`src/nested_module/inner/inner.nv`, no `.nv` in the | `src/acp/README.md`, `src/pg/README.md`, `src/server/front/front.nv`, `src/server/front/front_settings.nv`, `src/server/front/front_settings_test.nv`, `src/server/front/images.nv`, `src/server/front/images_test.nv`, `src/server/front/projects_api.nv`, `src/server/front/projects_api_test.nv`, `src/server/front/stt.nv`, `src/server/front/stt_test.nv`, `src/server/front/sttproc.nv`, `src/server/front/sttproc_test.nv` | 13 |
 | 26 | `typed_state_explicit` (a working sample, PASS): the defects of items 12 and 13 are in the INFERENCE of the type arguments. With... | `src/acp_live/e2e_test.nv`, `src/chat/chat_engine_test.nv`, `src/machine_chat/equal_test.nv`, `src/machine_dialog_eq/equal_test.nv`, `src/machine_dialog_eq/inject_test.nv`, `src/machine_run_machines/scenario_test.nv`, `src/machine_text_eq_machines/eq_test.nv`, `src/pgstore/engine_test.nv`, `src/server/alula_test.nv`, `src/server/dialog_test.nv`, `src/server/hub.nv` (2), `src/storage/files_engine_test.nv` | 13 |
 | 27 | `option_try_generic_enum`: the operator `?` on an `Option` whose payload is a sum type, in a generic function instantiated with... | no workaround in the code | 0 |
 | 28 | `import_missing_name` (the test PASSES, and it must not): `import m.{Name}` of a name that `m` does not export is accepted. After... | no workaround in the code | 0 |

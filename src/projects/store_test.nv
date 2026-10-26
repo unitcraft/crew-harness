@@ -1,0 +1,245 @@
+// store_test.nv - the projects of the control panel: the paths, the id, create / read / replace / delete, the list without the values,
+// a file that is replaced as a whole, a broken file.
+module crew_harness.projects
+
+import std.encoding.json.{Json, JsonObject}
+import std.fs.{Fs, real_fs, Path, read_text, write_text, remove_dir_all, try_exists, create_dir_all, read_dir}
+import std.os.{Os, real_os, temp_dir, pid}
+import std.text
+
+// A clean data folder of one test, outside the repository: <temp>/crew-projects-test-<pid>-<name>.
+fn fresh_root(name str) -> str {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-projects-test-${id}-${name}")
+    with Fs = real_fs() {
+        ro removed = remove_dir_all(dir)
+    }
+    dir.display()
+}
+
+fn body_of(text str) -> JsonObject {
+    match Json.parse(text) {
+        Ok(v) => match v.object() {
+            Some(o) => o
+            None => panic("not an object: ${text}")
+        }
+        Err(e) => panic("not JSON: ${text}")
+    }
+}
+
+fn sample_body() -> JsonObject {
+    body_of("{\"name\":\"Alpha\",\"folders\":[{\"path\":\"C:\\\\work\\\\alpha\\\\\",\"branch\":\"main\",\"worktree\":true},{\"path\":\"/srv/x\"}],\"env\":\"FOO=bar baz\\nexport TOKEN=\\\"s3cret value\\\"\\n\"}")
+}
+
+fn made(root str, body JsonObject) -> str {
+    match projects_create(root, body) {
+        Ok(id) => id
+        Err(f) => panic("create: ${f.status} ${f.message}")
+    }
+}
+
+fn status_of(r Result[(), StoreFail]) -> int {
+    match r {
+        Ok(done) => 0
+        Err(f) => f.status
+    }
+}
+
+fn file_text(root str) -> str {
+    with Fs = real_fs() {
+        match read_text(Path.from_bytes(root.bytes()).join("projects.json")) {
+            Ok(t) => t
+            Err(e) => "<unreadable>"
+        }
+    }
+}
+
+// ----- the paths and the id -----
+
+test "projects: a path of a folder is absolute, with slashes, without the trailing one and without .." {
+    assert(normalize_folder_path("C:\\work\\x\\") == Ok("C:/work/x"))
+    assert(normalize_folder_path("  C:/work//x/ ") == Ok("C:/work//x"))
+    assert(normalize_folder_path("C:\\") == Ok("C:/"))
+    assert(normalize_folder_path("/") == Ok("/"))
+    assert(normalize_folder_path("/srv/app/") == Ok("/srv/app"))
+    assert(normalize_folder_path("//host/share/x") == Ok("//host/share/x"))
+    assert(match normalize_folder_path("work/x") { Ok(p) => false, Err(e) => true })
+    assert(match normalize_folder_path("C:work") { Ok(p) => false, Err(e) => true })
+    assert(match normalize_folder_path("C:/work/a/../b") { Ok(p) => false, Err(e) => true })
+    assert(match normalize_folder_path("") { Ok(p) => false, Err(e) => true })
+    assert(match normalize_folder_path("C:/work/a\nb") { Ok(p) => false, Err(e) => true })
+}
+
+test "projects: the id is a short random lowercase word, checked by a mask" {
+    ro a = new_project_id()
+    ro b = new_project_id()
+    assert(a.byte_len() == 12)
+    assert(a != b)
+    assert(valid_project_id(a))
+    assert(valid_project_id("abc123"))
+    assert(!valid_project_id("abc"))
+    assert(!valid_project_id("ABC123"))
+    assert(!valid_project_id("abc/../x"))
+    assert(!valid_project_id("abc.123"))
+    assert(!valid_project_id(""))
+}
+
+// ----- create, read, replace, delete -----
+
+test "projects: an empty folder has no projects, no file is made by a read" {
+    ro root = fresh_root("empty")
+    match projects_load(root) {
+        Ok(list) => assert(list.len() == 0)
+        Err(f) => panic(f.message)
+    }
+    with Fs = real_fs() {
+        assert(match try_exists(Path.from_bytes(root.bytes()).join("projects.json")) { Ok(b) => !b, Err(e) => true })
+    }
+}
+
+test "projects: create and read back, the folders are normalized" {
+    ro root = fresh_root("create")
+    ro id = made(root, sample_body())
+    assert(valid_project_id(id))
+    match projects_get(root, id) {
+        Ok(p) => {
+            assert(p.id == id)
+            assert(p.name == "Alpha")
+            assert(p.folders.len() == 2)
+            assert(p.folders[0].path == "C:/work/alpha")
+            assert(p.folders[0].branch == "main")
+            assert(p.folders[0].worktree)
+            assert(p.folders[1].path == "/srv/x")
+            assert(p.folders[1].branch == "")
+            assert(!p.folders[1].worktree)
+            assert(p.env == "FOO=bar baz\nexport TOKEN=\"s3cret value\"\n")
+        }
+        Err(f) => panic("get: ${f.message}")
+    }
+}
+
+test "projects: the list holds the names of the variables and never the values" {
+    ro root = fresh_root("list")
+    ro id = made(root, sample_body())
+    ro second = made(root, body_of("{\"name\":\"Beta\",\"folders\":[],\"env\":\"\"}"))
+    match projects_load(root) {
+        Ok(list) => {
+            assert(list.len() == 2)
+            ro text = projects_list_json(list)
+            assert(text.contains("\"env_keys\":[\"FOO\",\"TOKEN\"]"))
+            assert(text.contains("\"env_keys\":[]"))
+            assert(!text.contains("bar baz"))
+            assert(!text.contains("s3cret"))
+            assert(!text.contains("\"env\":"))
+            assert(text.contains(id) && text.contains(second))
+            // the full project, on the other hand, has the text
+            assert(project_json(list[0]).to_str().contains("s3cret value"))
+        }
+        Err(f) => panic(f.message)
+    }
+}
+
+test "projects: replace changes every field, the id stays" {
+    ro root = fresh_root("replace")
+    ro id = made(root, sample_body())
+    ro other = made(root, body_of("{\"name\":\"Other\"}"))
+    assert(status_of(projects_replace(root, id, body_of("{\"name\":\"Alpha 2\",\"folders\":[{\"path\":\"/a\"}],\"env\":\"X=1\"}"))) == 0)
+    match projects_get(root, id) {
+        Ok(p) => {
+            assert(p.name == "Alpha 2")
+            assert(p.folders.len() == 1 && p.folders[0].path == "/a")
+            assert(p.env == "X=1")
+        }
+        Err(f) => panic(f.message)
+    }
+    match projects_get(root, other) {
+        Ok(p) => assert(p.name == "Other")
+        Err(f) => panic(f.message)
+    }
+    // a field that is not in the body is cleared (a full replacement)
+    assert(status_of(projects_replace(root, id, body_of("{\"name\":\"Alpha 3\"}"))) == 0)
+    match projects_get(root, id) {
+        Ok(p) => assert(p.folders.len() == 0 && p.env == "")
+        Err(f) => panic(f.message)
+    }
+    assert(status_of(projects_replace(root, "nosuchid1", body_of("{\"name\":\"x\"}"))) == 404)
+}
+
+test "projects: delete removes one project only" {
+    ro root = fresh_root("delete")
+    ro a = made(root, body_of("{\"name\":\"A\"}"))
+    ro b = made(root, body_of("{\"name\":\"B\"}"))
+    assert(status_of(projects_delete(root, a)) == 0)
+    assert(status_of(projects_delete(root, a)) == 404)
+    assert(status_of(projects_delete(root, "../etc")) == 404)
+    match projects_load(root) {
+        Ok(list) => assert(list.len() == 1 && list[0].id == b)
+        Err(f) => panic(f.message)
+    }
+}
+
+test "projects: a wrong body is 400 with a reason, and nothing is written" {
+    ro root = fresh_root("wrong")
+    assert(match projects_create(root, body_of("{}")) { Ok(id) => false, Err(f) => f.status == 400 })
+    assert(match projects_create(root, body_of("{\"name\":\"  \"}")) { Ok(id) => false, Err(f) => f.status == 400 })
+    assert(match projects_create(root, body_of("{\"name\":\"x\",\"folders\":{}}")) { Ok(id) => false, Err(f) => f.status == 400 })
+    assert(match projects_create(root, body_of("{\"name\":\"x\",\"folders\":[{\"path\":\"rel/path\"}]}")) { Ok(id) => false, Err(f) => f.status == 400 })
+    assert(match projects_create(root, body_of("{\"name\":\"x\",\"env\":5}")) { Ok(id) => false, Err(f) => f.status == 400 })
+    ro bad = projects_create(root, body_of("{\"name\":\"x\",\"env\":\"A=1\\nB\\n\"}"))
+    assert(match bad { Ok(id) => false, Err(f) => f.status == 400 && f.message == "строка 2: после имени «B» ожидается «=»" })
+    with Fs = real_fs() {
+        assert(match try_exists(Path.from_bytes(root.bytes()).join("projects.json")) { Ok(b) => !b, Err(e) => true })
+    }
+}
+
+// ----- the file -----
+
+test "projects: the file is replaced as a whole, no temporary file stays, the values are in it" {
+    ro root = fresh_root("file")
+    ro id = made(root, sample_body())
+    ro again = made(root, body_of("{\"name\":\"B\"}"))
+    ro text = file_text(root)
+    assert(text.starts_with("{\"version\":1,\"projects\":["))
+    assert(text.contains(id) && text.contains(again))
+    assert(text.contains("s3cret value"))
+    // one file in the folder: the temporary files of the replacements are gone
+    with Fs = real_fs() {
+        match read_dir(Path.from_bytes(root.bytes())) {
+            Ok(entries) => assert(entries.len() == 1)
+            Err(e) => panic("read_dir")
+        }
+    }
+    // a restart: a new load reads the same
+    match projects_load(root) {
+        Ok(list) => assert(list.len() == 2 && list[0].id == id && list[1].id == again)
+        Err(f) => panic(f.message)
+    }
+}
+
+test "projects: a broken file is an error, not an empty list" {
+    ro root = fresh_root("broken")
+    with Fs = real_fs() {
+        ro made_dir = create_dir_all(Path.from_bytes(root.bytes()))
+        ro written = write_text(Path.from_bytes(root.bytes()).join("projects.json"), "{\"projects\": [ {oops")
+    }
+    assert(match projects_load(root) { Ok(list) => false, Err(f) => f.status == 500 })
+    assert(match projects_create(root, body_of("{\"name\":\"x\"}")) { Ok(id) => false, Err(f) => f.status == 500 })
+}
+
+test "projects: the recent folders, the newest project first, without repeats" {
+    ro root = fresh_root("recent")
+    ro a = made(root, body_of("{\"name\":\"A\",\"folders\":[{\"path\":\"/one\"},{\"path\":\"/two\"}]}"))
+    ro b = made(root, body_of("{\"name\":\"B\",\"folders\":[{\"path\":\"/two\"},{\"path\":\"/three\"}]}"))
+    match projects_load(root) {
+        Ok(list) => {
+            ro recent = recent_folders(list, 10)
+            assert(recent.len() == 3)
+            assert(recent[0] == "/two" && recent[1] == "/three" && recent[2] == "/one")
+            assert(recent_folders(list, 2).len() == 2)
+            assert(project_has_folder(list[0], "/one"))
+            assert(!project_has_folder(list[0], "/three"))
+        }
+        Err(f) => panic(f.message)
+    }
+}

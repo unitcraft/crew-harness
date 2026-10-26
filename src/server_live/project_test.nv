@@ -1,0 +1,10 @@
+// project_test.nv - a session of a project of the control panel over FILES with the fake ACP agent (task 192m): the folder, the variables, the journal.
+module crew_harness.server_live
+
+import crew_harness.server.{kit_files, scenario_project}
+
+test "files: a session of a project works in its folder, its agent gets the variables, the journal holds the id only" {
+    ro report = scenario_project(kit_files("project", 30000))
+    if report.byte_len() > 0 { panic("project: ${report}") }
+    assert(report == "")
+}

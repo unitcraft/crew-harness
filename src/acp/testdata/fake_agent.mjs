@@ -16,6 +16,8 @@
 //   noeol            a chunk, then the final answer WITHOUT a line break, then the process exits
 //   (pictures)       a prompt with `image` blocks is echoed with a tail "[blocks:text,image; image/png:<length of data>:<first 8 characters>]"
 //   caps             a chunk with the clientCapabilities that came with initialize
+//   env NAME...      a chunk with the values of the named environment variables of the agent process (`env FOO=[bar baz]; X=<unset>`, `<unset>` when none)
+//   cwd              a chunk with the working folder of the agent process
 //   cancelcount      a chunk with the number of session/cancel notifications received so far
 //   ask              asks the client a question by `elicitation/create` (a form, as claude-agent-acp writes it) when the client said at initialize
 //                    that it shows forms; the chunk tells the answer ("ask: no-form" when it did not). Two questions with `ask2`.
@@ -234,6 +236,15 @@ async function prompt(id, params) {
       process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, result: { stopReason: "end_turn" } }), () => process.exit(0));
       return;
     }
+    case "env": {
+      // the values of the named environment variables of this process (task 192m: the variables of the project of a session)
+      const names = text.split(" ").slice(1).filter((n) => n.length > 0);
+      chunk("env " + names.map((n) => n + "=" + (process.env[n] === undefined ? "<unset>" : "[" + process.env[n] + "]")).join("; "));
+      return respond(id, { stopReason: "end_turn" });
+    }
+    case "cwd":
+      chunk("cwd: " + process.cwd().split(String.fromCharCode(92)).join("/"));
+      return respond(id, { stopReason: "end_turn" });
     case "caps":
       chunk("caps: " + JSON.stringify(clientCaps));
       return respond(id, { stopReason: "end_turn" });

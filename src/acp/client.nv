@@ -20,6 +20,7 @@ module crew_harness.acp
 
 import alula.engine.{Link, Incoming, EventKind, PartyRequest, FailCode}
 import crew_harness.storage.{append_line, read_lines, replace_file, encode_image}
+import crew_harness.projects.{EnvEntry}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import std.fs.{Fs, real_fs, Path, read}
 
@@ -312,8 +313,18 @@ export fn open_client_traced(config AcpConfig, trace_path str, trace_limit int) 
     open_client_asking(config, trace_path, trace_limit, no_ask())
 
 /// `open_client_traced` that also offers the agent the means to ask the owner (see `AskSetup`).
-export fn open_client_asking(config AcpConfig, trace_path str, trace_limit int, ask AskSetup) Proc Detach Time -> Result[AcpClient, str] {
-    match connect(config.program, config.args, config.cwd) {
+export fn open_client_asking(config AcpConfig, trace_path str, trace_limit int, ask AskSetup) Proc Detach Time -> Result[AcpClient, str] =>
+    open_client_full(config, trace_path, trace_limit, ask, []EnvEntry.new())
+
+/// `open_client_traced` that also gives the agent process the environment variables `env` (task 192m: the variables of the project of the
+/// session, over the environment of this process). The values go to the environment block of the process and nowhere else: not to the trace,
+/// the inbox, the journal or a log.
+export fn open_client_env(config AcpConfig, trace_path str, trace_limit int, env []EnvEntry) Proc Detach Time -> Result[AcpClient, str] =>
+    open_client_full(config, trace_path, trace_limit, no_ask(), env)
+
+/// The whole of it: the trace, the means to ask the owner and the environment of the process.
+export fn open_client_full(config AcpConfig, trace_path str, trace_limit int, ask AskSetup, env []EnvEntry) Proc Detach Time -> Result[AcpClient, str] {
+    match connect_env(config.program, config.args, config.cwd, env) {
         Err(reason) => Err(reason)
         Ok(link) => {
             mut ready = []AcpInboxItem.new()

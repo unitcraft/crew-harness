@@ -1,0 +1,200 @@
+// browse.nv - the choice of a folder for a project (task 192m): the folders of a path, the roots, the branch of a git folder.
+//
+// The panel of the owner asks `/api/fs/list`; the answer holds the FOLDERS only (never a file name), sorted by name, the hidden ones
+// (a name that begins with `.` or `$`) at the end, at most BROWSE_MAX of them. Paths go both ways with `/` between the names (`C:/work/x`).
+// The branch is read from the files of git (`.git/HEAD`, also for a work tree whose `.git` is a file `gitdir: ...`), so no process is started.
+module crew_harness.projects
+
+import std.fs.{Fs, real_fs, Path, read_dir, read_text, metadata, try_exists}
+import std.text
+
+/// The most names one answer holds.
+export const BROWSE_MAX = 500
+
+/// Listing: the folder (`path`), its parent (`has_parent` false - none, the roots are the next level), the names of the folders, whether more were cut.
+export type Listing { path str, parent str, has_parent bool, names []str, cut bool }
+
+fn is_hidden(name str) -> bool => name.starts_with(".") || name.starts_with("$")
+
+// Is a < b, ignoring the case of ASCII letters (then the case itself, so that the order is the same every time)?
+fn name_before(a str, b str) -> bool {
+    ro la = a.to_ascii_lower()
+    ro lb = b.to_ascii_lower()
+    if la != lb { return la < lb }
+    a < b
+}
+
+fn insert_sorted(mut list []str, name str) -> () {
+    mut at = list.len()
+    while at > 0 && name_before(name, list[at - 1]) { at -= 1 }
+    list.insert(at, name)
+}
+
+// The names in the order of the panel: the visible ones by name, then the hidden ones by name.
+fn sorted_names(names []str) -> []str {
+    mut visible = []str.new()
+    mut hidden = []str.new()
+    for name in names {
+        if is_hidden(name) { insert_sorted(hidden, name) } else { insert_sorted(visible, name) }
+    }
+    mut out = []str.new()
+    for name in visible { out.push(name) }
+    for name in hidden { out.push(name) }
+    out
+}
+
+/// The parent of a normalized path: None for a root (`C:/`, `/`).
+export fn parent_of(path str) -> Option[str] {
+    ro raw = path.bytes()
+    ro drive = raw.len() >= 3 && (raw[1] as int) == 58
+    ro floor = if drive { 3 } else { 1 }
+    if raw.len() <= floor { return None }
+    mut end = raw.len() - 1
+    while end >= floor && (raw[end] as int) != 47 { end -= 1 }
+    if end < floor { return Some(raw[..floor].to_str_lossy()) }
+    Some(raw[..end].to_str_lossy())
+}
+
+/// The folders of `path` (absolute, `/` or `\` between the names): `Err` says why it cannot be shown.
+export fn list_folders(path str) -> Result[Listing, str] {
+    ro normal = normalize_folder_path(path)?
+    mut names = []str.new()
+    mut cut = false
+    with Fs = real_fs() {
+        ro dir = Path.from_bytes(normal.bytes())
+        match metadata(dir) {
+            Ok(meta) => { if !meta.is_dir() { return Err("это не папка") } }
+            Err(e) => return Err("папки нет или нет доступа")
+        }
+        match read_dir(dir) {
+            Err(e) => return Err("папка не читается")
+            Ok(entries) => {
+                for entry in entries {
+                    match entry.name_str() {
+                        Some(name) => {
+                            // a link to a folder is a folder; a file, or a link to a file, is not shown
+                            ro folder = if entry.is_dir() {
+                                true
+                            } else if entry.is_symlink() {
+                                match metadata(dir.join(name)) {
+                                    Ok(meta) => meta.is_dir()
+                                    Err(e) => false
+                                }
+                            } else {
+                                false
+                            }
+                            if folder { names.push(name) }
+                        }
+                        None => ()
+                    }
+                }
+            }
+        }
+    }
+    mut sorted = sorted_names(names)
+    if sorted.len() > BROWSE_MAX {
+        cut = true
+        mut head = []str.new()
+        mut k = 0
+        while k < BROWSE_MAX {
+            head.push(sorted[k])
+            k += 1
+        }
+        sorted = head
+    }
+    ro up = parent_of(normal)
+    Ok(Listing { path: normal, parent: up ?? "", has_parent: up.is_some(), names: sorted, cut })
+}
+
+/// The roots: the drives that exist (`C:/`, `C:/` ...); on a system without drives, `/`.
+export fn list_roots() -> []str {
+    mut roots = []str.new()
+    with Fs = real_fs() {
+        ro letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        mut letter = 0
+        while letter < 26 {
+            ro root = "${letters[letter..letter + 1]}:/"
+            match try_exists(Path.from_bytes(root.bytes())) {
+                Ok(there) => { if there { roots.push(root) } }
+                Err(e) => ()
+            }
+            letter += 1
+        }
+    }
+    if roots.len() == 0 { roots.push("/") }
+    roots
+}
+
+/// GitState: whether the folder is inside a git repository, and the branch (`HEAD` for a detached head, as `git rev-parse --abbrev-ref HEAD` says).
+export type GitState { is_repo bool, branch str }
+
+// A path with `/` between the names.
+fn slashes(path str) -> str {
+    mut raw = []u8.new()
+    for b in path.bytes() { raw.push(if (b as int) == 92 { 47 as u8 } else { b }) }
+    raw.to_str_lossy()
+}
+
+// The first line of a file ("" when it cannot be read).
+fn first_line(path Path) Fs -> str {
+    match read_text(path) {
+        Ok(text) => {
+            ro lines = text.lines()
+            if lines.len() > 0 { lines[0].trim_ascii() } else { "" }
+        }
+        Err(e) => ""
+    }
+}
+
+// The file `HEAD` of the repository whose `.git` is at `dot_git`: a folder holds it, a file `gitdir: <folder>` points to it.
+fn head_file(dir Path, dot_git Path) Fs -> Option[Path] {
+    match metadata(dot_git) {
+        Err(e) => None
+        Ok(meta) => {
+            if meta.is_dir() { return Some(dot_git.join("HEAD")) }
+            ro pointer = first_line(dot_git)
+            match pointer.strip_prefix("gitdir:") {
+                Some(rest) => {
+                    ro target = slashes(rest.trim_ascii())
+                    ro folder = Path.from_bytes(target.bytes())
+                    Some((if folder.is_absolute() { folder } else { dir.join_path(folder) }).join("HEAD"))
+                }
+                None => None
+            }
+        }
+    }
+}
+
+/// Is `path` in a git repository, and on which branch? The folders above it are looked at too, as git does.
+export fn git_state(path str) -> GitState {
+    ro normal = match normalize_folder_path(path) {
+        Ok(p) => p
+        Err(e) => return GitState { is_repo: false, branch: "" }
+    }
+    mut at = normal
+    mut state = GitState { is_repo: false, branch: "" }
+    mut looking = true
+    with Fs = real_fs() {
+        while looking {
+            ro dir = Path.from_bytes(at.bytes())
+            match head_file(dir, dir.join(".git")) {
+                Some(head) => {
+                    ro line = first_line(head)
+                    ro branch = match line.strip_prefix("ref: refs/heads/") {
+                        Some(name) => name
+                        None => "HEAD"
+                    }
+                    state = GitState { is_repo: true, branch }
+                    looking = false
+                }
+                None => {
+                    match parent_of(at) {
+                        Some(up) => { at = up }
+                        None => { looking = false }
+                    }
+                }
+            }
+        }
+    }
+    state
+}

@@ -1,0 +1,30 @@
+// projects_api_test.nv - the JSON of the folder routes of the control panel (task 192m): the shape the page reads.
+// ORACLE-WORKAROUND(25): the module is declared `module server.front` (without the package prefix): a module two folders under the source root cannot be declared with the full path; declare it with the prefix when item 25 is fixed
+module server.front
+
+import crew_harness.projects.{Listing}
+import std.encoding.json.{Json}
+import std.text
+
+test "projects api: a listing is {path, parent, entries[{name, dir}], truncated, recent}" {
+    ro listing = Listing { path: "C:/work", parent: "C:/", has_parent: true, names: ["alpha", ".git"], cut: false }
+    ro text = fs_list_json(listing, ["C:/a", "C:/b"])
+    assert(text == "{\"path\":\"C:/work\",\"parent\":\"C:/\",\"entries\":[{\"name\":\"alpha\",\"dir\":true},{\"name\":\".git\",\"dir\":true}],\"truncated\":false,\"recent\":[\"C:/a\",\"C:/b\"]}")
+    assert(match Json.parse(text) { Ok(v) => v.is_object(), Err(e) => false })
+}
+
+test "projects api: a root has a null parent, a cut listing says so" {
+    ro listing = Listing { path: "C:/", parent: "", has_parent: false, names: [], cut: true }
+    ro text = fs_list_json(listing, [])
+    assert(text.contains("\"parent\":null"))
+    assert(text.contains("\"truncated\":true"))
+    assert(text.contains("\"entries\":[]"))
+    assert(text.contains("\"recent\":[]"))
+}
+
+test "projects api: without a path the entries are the roots and the parent is null" {
+    ro text = fs_roots_json(["C:/one"])
+    assert(text.starts_with("{\"path\":\"\",\"parent\":null,\"entries\":["))
+    assert(text.contains("\"dir\":true"))
+    assert(text.contains("\"recent\":[\"C:/one\"]"))
+}
