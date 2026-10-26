@@ -24,6 +24,7 @@ import { historyStep, NO_HISTORY } from './history.js';
 import { canSend } from './attachments.js';
 import { createAttachUi } from './attach-ui.js';
 import { createViewer } from './viewer-ui.js';
+import { createMachinesPanel } from './machines-ui.js';
 import { labelOf } from './labels-ru.js';
 import {
   createForm, selectOption, setOtherText, setCursor, moveCursor, setActive, isAnswered, nextUnanswered, canSubmit,
@@ -1720,6 +1721,31 @@ export function createView(doc, refs, deps) {
       newTask);
   }
 
+  // Вкладки правой колонки (задача 192.1): «Сведения» и «Машины» в той же колонке; выбор помнится в localStorage (без него — «Сведения»).
+  const RAIL_TAB_KEY = 'crew-rail-tab';
+  let railTab = 'info';
+  try { if (win && win.localStorage && win.localStorage.getItem(RAIL_TAB_KEY) === 'machines') railTab = 'machines'; } catch (e) { railTab = 'info'; }
+  const machinesPanel = createMachinesPanel(doc, {
+    now,
+    durationText,
+    onCopy: (text) => handlers.onCopy(text),
+    onGet: (id) => { if (handlers.onMachineGet) handlers.onMachineGet(id); },
+    rerender: () => { railSig = ''; renderRail(current.session); },
+  });
+  const railTabInfo = h(doc, 'button', { type: 'button', class: 'rail-tab', role: 'tab', 'data-tab': 'info', text: t('rail.tab_info') });
+  const railTabMachines = h(doc, 'button', { type: 'button', class: 'rail-tab', role: 'tab', 'data-tab': 'machines', text: t('rail.tab_machines') });
+  const railTabs = h(doc, 'div', { class: 'rail-tabs', role: 'tablist', 'aria-label': t('rail.tabs') }, railTabInfo, railTabMachines);
+  function pickRailTab(tab) {
+    if (railTab === tab) return;
+    railTab = tab;
+    try { if (win && win.localStorage) win.localStorage.setItem(RAIL_TAB_KEY, tab); } catch (e) { /* выбор вкладки не сохранится */ }
+    if (tab === 'machines' && current.session && handlers.onMachineGet) handlers.onMachineGet(current.session.id);
+    railSig = '';
+    renderRail(current.session);
+  }
+  railTabInfo.addEventListener('click', () => pickRailTab('info'));
+  railTabMachines.addEventListener('click', () => pickRailTab('machines'));
+
   let railSig = '';
   function renderRail(raw) {
     // при смене семьи правая панель называет уже новую (задача 192o)
@@ -1728,12 +1754,21 @@ export function createView(doc, refs, deps) {
       if (railSig !== 'none') { railSig = 'none'; refs.rail.replaceChildren(h(doc, 'p', { class: 'rail-pick', text: t('rail.pick') })); }
       return;
     }
-    const sig = JSON.stringify([session.id, session.project, session.folder, session.branch, session.agent, session.usage, session.outputs,
+    const queued = handlers.queuedItems ? handlers.queuedItems(session.id) : [];
+    const sig = JSON.stringify([railTab, railTab === 'machines' ? machinesPanel.signature(session, queued) : '', session.id, session.project, session.folder, session.branch, session.agent, session.usage, session.outputs,
       session.tasks.map((x) => [x.id, x.title, x.status, x.started, x.finishedAt]), session.routeState && session.routeState.task,
       [...open].filter((k) => k.startsWith('more:') || k.startsWith('sub:') || k === 'ctx-closed'), subMenu]);
     if (sig === railSig) return;
     railSig = sig;
-    refs.rail.replaceChildren(...[envCard(session), subtasksCard(session), contextCard(session), outputsCard(session), tasksCard(session)].filter(Boolean));
+    for (const b of [railTabInfo, railTabMachines]) {
+      const on = b.dataset.tab === railTab;
+      b.setAttribute('aria-selected', String(on));
+      b.classList.toggle('on', on);
+    }
+    const cards = railTab === 'machines'
+      ? machinesPanel.render(session, queued)
+      : [envCard(session), subtasksCard(session), contextCard(session), outputsCard(session), tasksCard(session)].filter(Boolean);
+    refs.rail.replaceChildren(railTabs, ...cards);
   }
 
   // ---------------------------------------------------------------- диалог разрешения

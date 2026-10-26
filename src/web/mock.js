@@ -376,8 +376,42 @@ const CHUNK_EVERY_MS = 320;
 const CONTEXT_STEP_PLAIN = 4000;
 const CONTEXT_STEP_WORK = 16_000;
 
-export function createMockServer({ journal, now = Date.now } = {}) {
-  const shown = journal ?? rebaseJournal(INITIAL_JOURNAL, now());
+// ---- машина диалога заглушки (задача 192.1): состояние для вкладки «Машины», считается по ходу событий потока
+const MACHINE_NAME = 'DialogSession';
+const MACHINE_CODE = Object.freeze({ user_message: 'user_message', agent_chunk: 'agent_chunk', agent_done: 'agent_done', agent_refused: 'agent_refused', error: 'agent_refused', cancel: 'cancelled_while_waiting' });
+
+/** Новое состояние машины после события потока; события, что машину не двигают, возвращают её как есть. */
+export function foldMachine(m, kind, input, time) {
+  const code = MACHINE_CODE[kind];
+  if (!code) return m;
+  const next = { ...m, journal: [...m.journal, { code, at: time, note: kind === 'user_message' || kind === 'agent_chunk' ? String(input.text ?? '').slice(0, 80) : '' }].slice(-20) };
+  if (kind === 'user_message') return { ...next, state: 'Awaiting', since: time, user: String(input.text ?? ''), reply: '', lastInput: { signal: 'user_message', content: String(input.text ?? '') }, userAttempt: m.userAttempt + 1 };
+  if (kind === 'agent_chunk') return { ...next, reply: m.reply + String(input.text ?? ''), lastInput: { signal: 'agent_chunk', content: String(input.text ?? '') } };
+  return { ...next, state: 'Idle', since: time, user: '', reply: '', lastInput: { signal: kind === 'agent_done' ? 'answer' : (kind === 'cancel' ? 'cancel' : 'failure'), content: null }, agentAttempt: m.agentAttempt + 1 };
+}
+
+const newMachine = (time) => ({ state: 'Idle', since: time, user: '', reply: '', lastInput: null, userAttempt: 0, agentAttempt: 0, journal: [] });
+
+/** Вход события machine_state из состояния заглушки. */
+export function machineInput(m) {
+  return {
+    machine: MACHINE_NAME, table: 'dialog', state: m.state, since: m.since, started: true, last_input: m.lastInput,
+    data: { user: m.user, reply: m.reply, user_attempt: m.userAttempt, agent_attempt: m.agentAttempt }, journal: m.journal,
+  };
+}
+
+/** machines: true — сервер заглушки присылает ещё и machine_state (страница включает; проверки потока прежних видов его не ждут). */
+export function createMockServer({ journal, now = Date.now, machines: withMachines = false } = {}) {
+  const base = journal ?? rebaseJournal(INITIAL_JOURNAL, now());
+  const machines = {}; // trace -> состояние машины заглушки
+  let machineSerial = 0;
+  const machineOf = (trace) => machines[trace] ?? (machines[trace] = newMachine(now()));
+  const machineEvent = (trace, delay = 0) => {
+    machineSerial += 1;
+    return { id: `mach-${machineSerial}`, trace, step: 0, kind: 'machine_state', input: machineInput(machineOf(trace)), time: now() + delay };
+  };
+  for (const e of base) if (e.kind !== 'session_deleted') machines[e.trace] = foldMachine(machineOf(e.trace), e.kind, e.input, e.time);
+  const shown = withMachines ? [...base, ...Object.keys(machines).map((trace) => machineEvent(trace))] : base;
   const lastStep = {};
   const pending = {};
   const asks = {};
@@ -494,8 +528,11 @@ export function createMockServer({ journal, now = Date.now } = {}) {
       mint(entries, trace, 0, 'message_images', { images });
     }
     entries.push({ delay: 0, event });
+    const sent = entries.length;
 
-    if (event.kind === 'user_message') {
+    if (event.kind === 'machine_state_get') {
+      if (withMachines) entries.push({ delay: 0, event: machineEvent(trace) });
+    } else if (event.kind === 'user_message') {
       const turn = typeof input.turn === 'string' ? input.turn : event.id;
       const text = String(input.text);
       if (WANTS_QUESTION.test(text)) {
@@ -594,6 +631,13 @@ export function createMockServer({ journal, now = Date.now } = {}) {
     } else if (event.kind === 'cancel') {
       delete pending[trace];
       delete asks[trace];
+    }
+    // машина идёт за событиями потока: после каждого, что её двигает, страница получает её состояние
+    for (const entry of withMachines ? entries.slice(sent - 1) : []) {
+      const e = entry.event;
+      if (!MACHINE_CODE[e.kind]) continue;
+      machines[trace] = foldMachine(machineOf(trace), e.kind, e.input, e.time);
+      if (e.kind !== 'agent_chunk') entries.push({ delay: entry.delay + 5, event: machineEvent(trace, entry.delay + 5) });
     }
     return entries;
   }

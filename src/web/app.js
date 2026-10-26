@@ -314,6 +314,8 @@ const handlers = {
   onRouteNewTask(trace) { send(...signal(trace, routeSignal.newTask())); },
   // «Слить в main» — слово владельца на push в origin/main (хаб сам коммитит оставленное агентом одним коммитом, тесты не гоняет)
   onRouteMerge(trace) { send(...signal(trace, routeSignal.merge())); },
+  // Отладочное состояние машины (задача 192.1): явный запрос; ответ вернётся событием machine_state, в журнал оно не пишется.
+  onMachineGet(trace) { if (model.sessions[trace] && !model.sessions[trace].draft) send('machine_state_get', trace, nextStep(model, trace), {}); },
   onRouteTestsRun(trace) { send(...signal(trace, routeSignal.testsRun())); },
   onRouteTreeDrop(trace, force) { send(...signal(trace, routeSignal.treeDrop(force))); },
   onRouteSubtaskParallel(trace, n, on) { send(...signal(trace, routeSignal.subtaskParallel(n, on))); },
@@ -368,7 +370,7 @@ async function start() {
   setInterval(() => view.tick(), TICK_MS);
   transport = createTransport({
     mode: picked.mode, url: picked.url,
-    server: mock ? mock.createMockServer({ now: ctx.now }) : undefined,
+    server: mock ? mock.createMockServer({ now: ctx.now, machines: true }) : undefined,
     WebSocketImpl: globalThis.WebSocket, timers,
     onEvent(event) {
       try {

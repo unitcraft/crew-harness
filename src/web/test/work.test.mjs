@@ -38,6 +38,7 @@ test('виды событий: девять прежних, шесть рабо�
     'error',
     'file_diff',
     'images_skipped',
+    'machine_state',
     'message_images',
     'output_file',
     'permission_decision',

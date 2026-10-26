@@ -1252,3 +1252,36 @@ input[aria-invalid="true"] { border-color: var(--danger); }
 .group[data-project="true"] .group-head h3 { color: var(--fg); font-weight: 700; }
 .group-icon { width: 15px; height: 15px; margin-right: 6px; align-self: center; color: var(--fg-muted); }
 .group[data-active="true"] .group-head { background: color-mix(in srgb, var(--fg) 7%, transparent); }
+
+/* ---- правая колонка: вкладки и «Машины» (задача 192.1) ---- */
+.rail-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); }
+.rail-tab {
+  flex: 1; padding: 6px 8px; border: 0; border-bottom: 2px solid transparent; background: transparent;
+  color: var(--fg-muted); font: inherit; font-size: 13px; cursor: pointer;
+}
+.rail-tab.on { color: var(--fg); border-bottom-color: var(--accent); }
+.mach-list, .mach-journal { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.mach-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 8px; align-items: start; }
+.mach-dot { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--fg-muted); }
+.mach-row[data-state="running"] .mach-dot { background: var(--accent); animation: mach-pulse 1.2s ease-in-out infinite; }
+.mach-row[data-state="error"] .mach-dot { background: var(--danger); }
+.mach-row[data-state="done"] .mach-dot { background: var(--ok); }
+.mach-title { overflow-wrap: anywhere; }
+.mach-detail, .mach-time, .mach-jtime, .mach-note { font-size: 12px; }
+.mach-side { display: flex; flex-direction: column; align-items: flex-end; font-size: 12px; }
+.mach-body { display: flex; flex-direction: column; gap: 10px; }
+.mach-sub { margin: 0 0 4px; font-size: 12px; color: var(--fg-muted); font-weight: 600; }
+.mach-branch { display: flex; gap: 6px; align-items: center; padding: 1px 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.mach-branch .chev { transition: transform .15s; }
+.mach-branch[aria-expanded="false"] .chev { transform: rotate(-90deg); }
+.mach-kids { margin-left: 12px; padding-left: 8px; border-left: 1px solid var(--border); }
+.mach-leaf { display: flex; flex-wrap: wrap; gap: 6px; font-family: var(--font-mono); font-size: 12px; }
+.mach-key { color: var(--fg-muted); }
+.mach-val { overflow-wrap: anywhere; white-space: pre-wrap; }
+.mach-jrow { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.mach-code { font-family: var(--font-mono); font-size: 12px; }
+@keyframes mach-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .mach-row[data-state="running"] .mach-dot { animation: none; } }
+.mach-body, .mach-kids, .mach-node, .mach-journal, .mach-jrow { min-width: 0; }
+.mach-note { flex-basis: 100%; overflow-wrap: anywhere; word-break: break-word; }
+.mach-leaf .mach-val { min-width: 0; word-break: break-word; }

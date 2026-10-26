@@ -18,6 +18,7 @@ export * from './lists.js';
 import { imageUrl } from './attachments.js';
 import { normalizeQuestions, summarize } from './question.js';
 import { INTERACTIVE_STATE, parseRouteState, subtaskNotes } from './routes.js';
+import { parseMachineState } from './machines.js';
 
 export const KINDS = Object.freeze([
   'session_created', 'user_message', 'agent_chunk', 'agent_done', 'agent_refused',
@@ -40,6 +41,8 @@ export const KINDS = Object.freeze([
   'turn_usage',
   // задача 192p: режим работы по методике и его шаги (сервер -> страница)
   'route_state',
+  // задача 192.1: отладочное состояние машины диалога (сервер -> страница); в журнал сессии не пишется и порядок списка не меняет
+  'machine_state',
 ]);
 
 export const TOOL_KINDS = Object.freeze(['read', 'edit', 'delete', 'move', 'search', 'execute', 'think', 'fetch', 'other']);
@@ -531,6 +534,8 @@ export function reduce(model, event) {
       route: INTERACTIVE_STATE.route,
       routeState: INTERACTIVE_STATE,
       routeStep: -1,
+      machine: null,
+      machineAt: 0,
       state: 'idle',
       createdAt: event.time,
       updatedAt: event.time,
@@ -565,6 +570,12 @@ export function reduce(model, event) {
 
   const session = model.sessions[event.trace];
   if (!session) return model; // чужая цепочка без session_created: нечего рисовать, и id не запоминаем
+
+  if (event.kind === 'machine_state') {
+    // состояние для просмотра, не история: id не запоминается (событий много), запоздавший (старее принятого по времени) отбрасывается; порядок сессий и шаг цепочки не трогает
+    if (event.time < session.machineAt) return model;
+    return { ...model, sessions: { ...model.sessions, [event.trace]: { ...session, machine: parseMachineState(event.input), machineAt: event.time } } };
+  }
 
   const changed = apply(session, event);
   // перестановка владельцем не «событие в сессии»: порядок по активности от неё не меняется
