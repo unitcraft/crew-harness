@@ -14,6 +14,7 @@ import { createQueue } from './queue.js';
 import { uploadImages, messageInput } from './attachments.js';
 import { chooseMode, createTransport, parseAgentRegistry } from './transport.js';
 import { createProjectsApi } from './projects-api.js';
+import { routeSignal } from './routes.js';
 
 const FLASH_MS = 4000;
 const TICK_MS = 1000;
@@ -127,6 +128,7 @@ async function postImage(trace, item) {
   const data = await response.json();
   return { n: data.n };
 }
+const signal = (trace, { kind, input }) => [kind, trace, nextStep(model, trace), input];
 
 const handlers = {
   queued(trace) { return queue.count(trace); },
@@ -203,6 +205,26 @@ const handlers = {
   onAnswer(trace, answer) {
     return send('question_answer', trace, nextStep(model, trace), answer);
   },
+  // Режимы работы по методике (задача 192p): сигналы серверу; состояние вернётся событием route_state.
+  onRoute(trace, route) { send(...signal(trace, routeSignal.set(route))); },
+  onRouteRun(trace) { send(...signal(trace, routeSignal.run())); },
+  onRouteSkip(trace, step) { send(...signal(trace, routeSignal.skip(step))); },
+  onRouteStop(trace) { send(...signal(trace, routeSignal.stop())); },
+  onRouteSubtaskNew(trace) { send(...signal(trace, routeSignal.subtaskNew())); },
+  onRouteSubtaskSame(trace) { send(...signal(trace, routeSignal.subtaskSame())); },
+  onRouteSubtaskWorktree(trace, n) { send(...signal(trace, routeSignal.subtaskWorktree(n))); },
+  onRouteSubtaskDone(trace, n) { send(...signal(trace, routeSignal.subtaskDone(n))); },
+  onRouteNewTask(trace) { send(...signal(trace, routeSignal.newTask())); },
+  onRoutePublish(trace) { send(...signal(trace, routeSignal.publish())); },
+  onRouteKeep(trace) { send(...signal(trace, routeSignal.keep())); },
+  onRouteSubtaskParallel(trace, n, on) { send(...signal(trace, routeSignal.subtaskParallel(n, on))); },
+  onRouteSubtaskChoose(trace, n, tree) { send(...signal(trace, routeSignal.subtaskChoose(n, tree))); },
+  // «Закончить задачу»: переключить режим и сразу прогнать шаги окончания — два сигнала подряд, шаг события у каждого свой
+  onRouteFinish(trace, route) {
+    if (!send(...signal(trace, routeSignal.set(route)))) return;
+    send('route_run', trace, nextStep(model, trace) + 1, {});
+  },
+  onNotice(text) { flash(text, 'info'); },
   onDecide(trace, request, decision) {
     send('permission_decision', trace, nextStep(model, trace), { request, decision });
   },

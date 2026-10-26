@@ -31,6 +31,11 @@ import {
   STATE_KEYS, sessionList, splitBlocks, filterSessions, groupSessions, effectivePins, timeline, paragraphs, inlineSpans,
   workSummary, effortChoices, shownOf, familyOf, filterModels, groupModels, usagePercent, usageLevel, tokenParts, durationLabel, agoParts, fileParts, taskSummary,
 } from './state.js';
+import {
+  ROUTES, STEP_ICON, STEP_STATE_KEY, SUBTASK_STATE_KEY, routeName, routeDescription, counterText, stepToSkip, showStrip, stripActions,
+  subtaskPercent, subtaskProgressText, INTERACTIVE_STATE, NOTE_KEY, taskHeading, subtaskActions, hasSubtaskActions, bannerCount, subtaskCountText,
+  mergeLabel, diffTotals, finishPrompt, readyPrompt, overlapPrompt, commitsText, filesText,
+} from './routes.js';
 
 const NEAR_BOTTOM_PX = 48;
 const FOLD_DIFFS = 3;
@@ -229,9 +234,11 @@ export function createView(doc, refs, deps) {
     const active = s.id === ui.selected;
     const pinned = pins.has(s.id);
     const stateLabel = t(STATE_KEYS[s.state]);
+    const merge = mergeLabel(s.routeState && s.routeState.task);
     const item = h(doc, 'button', {
       type: 'button',
       class: 'session-item',
+      'data-merge': merge ? merge.kind : false,
       'aria-current': active ? 'true' : 'false',
       title: t('sessions.time_title', { state: stateLabel, time: formatTime(s.updatedAt) }),
     },
@@ -240,7 +247,8 @@ export function createView(doc, refs, deps) {
     h(doc, 'span', { class: 'session-name', text: s.name }),
     s.pendingQuestion ? h(doc, 'span', { class: 'ask-line' }, askBadge()) : false,
     h(doc, 'span', { class: 'dot', 'data-state': s.state, 'aria-hidden': 'true' }),
-    h(doc, 'span', { class: 'sr', text: stateLabel }));
+    h(doc, 'span', { class: 'sr', text: stateLabel }),
+    merge ? h(doc, 'span', { class: 'session-merge', 'data-kind': merge.kind, text: merge.text }) : false);
     item.addEventListener('click', () => handlers.onSelect(s.id));
     const pinLabel = `${pinned ? t('sessions.unpin') : t('sessions.pin')}: ${s.name}`;
     const pin = h(doc, 'button', {
@@ -312,7 +320,7 @@ export function createView(doc, refs, deps) {
     const pins = effectivePins(all, ui.pins);
     const filtered = filterSessions(all, query);
     const groups = groupSessions(filtered, { pinned: pins, projects: projectsList, includeEmpty: query.trim() === '' });
-    const rowSig = (r) => [r.depth, r.session.id, r.session.name, r.session.state, r.session.updatedAt, Boolean(r.session.pendingQuestion)];
+    const rowSig = (r) => [r.depth, r.session.id, r.session.name, r.session.state, r.session.updatedAt, Boolean(r.session.pendingQuestion), (mergeLabel(r.session.routeState && r.session.routeState.task) || {}).text];
     const sig = JSON.stringify([ui.selected, query, groupMenu, groups.pinned.map(rowSig), groups.projects.map((p) => [p.project, p.id, p.rows.map(rowSig)])]);
     const shown = groups.pinned.length + groups.projects.length;
     listEmpty.hidden = all.length > 0 || (projectsList !== null && projectsList.length > 0);
@@ -585,17 +593,20 @@ export function createView(doc, refs, deps) {
   const familyButton = h(doc, 'button', { type: 'button', class: 'status-btn', hidden: true, title: t('status.agent'), 'aria-label': t('status.agent'), 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
   const modeButton = h(doc, 'button', { type: 'button', class: 'status-btn', hidden: true, title: t('menu.mode'), 'aria-label': t('menu.mode'), 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
   const modelButton = h(doc, 'button', { type: 'button', class: 'status-btn', hidden: true, title: t('status.model'), 'aria-label': t('status.model'), 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
+  // Режим работы по методике (задача 192p): слева в строке статуса, плоский текст без шеврона.
+  const routeButton = h(doc, 'button', { type: 'button', class: 'status-btn route-chip', hidden: true, title: t('route.label'), 'aria-label': t('route.label'), 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
   const spinner = h(doc, 'span', { class: 'spinner', role: 'img', 'aria-label': t('composer.working'), hidden: true });
   const menu = h(doc, 'div', { class: 'menu', role: 'menu', hidden: true });
   // Одна группа чипов у правого края: семья, режим, модель и усилие; за ней кольцо контекста и спиннер (задача 192).
   const statusGroup = h(doc, 'div', { class: 'status-group' }, familyButton, modeButton, statusModel, modelButton);
-  const status = h(doc, 'div', { class: 'composer-status', 'data-empty': 'true' }, h(doc, 'span', { class: 'grow' }), statusGroup, ringBox, spinner, menu);
+  const status = h(doc, 'div', { class: 'composer-status', 'data-empty': 'true' }, routeButton, h(doc, 'span', { class: 'grow' }), statusGroup, ringBox, spinner, menu);
 
   // Меню выбора режима, модели и усилия (задача 192): показывает только то, что агент отдал по ACP.
   const MENU_MODELS = 4;
   let menuKind = null; // null | 'mode' | 'model' | 'more' | 'effort'
   let options = null;
   let currentAgent = '';
+  let currentRoute = INTERACTIVE_STATE.route;
   let menuQuery = '';
   let menuSig = '';
   const menuSearch = h(doc, 'input', { type: 'search', class: 'menu-search', placeholder: t('menu.search'), 'aria-label': t('menu.search'), autocomplete: 'off', hidden: true });
@@ -611,6 +622,7 @@ export function createView(doc, refs, deps) {
     modeButton.setAttribute('aria-expanded', 'false');
     modelButton.setAttribute('aria-expanded', 'false');
     familyButton.setAttribute('aria-expanded', 'false');
+    routeButton.setAttribute('aria-expanded', 'false');
   }
 
   function choose(setting, value) {
@@ -635,6 +647,16 @@ export function createView(doc, refs, deps) {
       menuList.append(h(doc, 'div', { class: 'menu-head', text: t('menu.agent') }), ...agents.map((a, i) => menuRow({
         name: agentLabel(a.id), checked: a.id === currentAgent, number: i < 9 ? i + 1 : 0,
         onPick: () => { if (currentTrace && a.id !== currentAgent) handlers.onSwitchAgent(currentTrace, a.id); closeMenu(); },
+      })));
+      menu.hidden = false;
+      return;
+    }
+    if (menuKind === 'route') {
+      menuSearch.hidden = true;
+      menu.dataset.side = 'left';
+      menuList.append(h(doc, 'div', { class: 'menu-head', text: t('route.label') }), ...ROUTES.map((r, i) => menuRow({
+        name: routeName(r.id), description: routeDescription(r.id), checked: r.id === currentRoute, number: i + 1,
+        onPick: () => { if (currentTrace && r.id !== currentRoute) handlers.onRoute(currentTrace, r.id); closeMenu(); },
       })));
       menu.hidden = false;
       return;
@@ -692,10 +714,11 @@ export function createView(doc, refs, deps) {
     menuKind = kind;
     menuQuery = '';
     menuSearch.value = '';
-    menuSig = JSON.stringify(options);
+    menuSig = kind === 'route' ? currentRoute : JSON.stringify(options);
     familyButton.setAttribute('aria-expanded', kind === 'agent' ? 'true' : 'false');
+    routeButton.setAttribute('aria-expanded', kind === 'route' ? 'true' : 'false');
     modeButton.setAttribute('aria-expanded', kind === 'mode' ? 'true' : 'false');
-    modelButton.setAttribute('aria-expanded', kind === 'mode' || kind === 'agent' ? 'false' : 'true');
+    modelButton.setAttribute('aria-expanded', kind === 'mode' || kind === 'agent' || kind === 'route' ? 'false' : 'true');
     renderMenu();
     if (kind === 'model' || kind === 'more') menuSearch.focus();
     else menu.querySelector('.menu-item')?.focus();
@@ -720,6 +743,7 @@ export function createView(doc, refs, deps) {
 
   const toggleMenu = (kind) => { if (menuKind) closeMenu(); else openMenu(kind); };
   familyButton.addEventListener('click', () => toggleMenu('agent'));
+  routeButton.addEventListener('click', () => toggleMenu('route'));
   modeButton.addEventListener('click', () => toggleMenu('mode'));
   modelButton.addEventListener('click', () => toggleMenu('model'));
   // номера строк — горячие клавиши; у строк без номера (Назад, подменю) их нет
@@ -734,10 +758,148 @@ export function createView(doc, refs, deps) {
   });
   doc.addEventListener('click', (e) => { if (menuKind && !e.composedPath().includes(status)) closeMenu(); });
 
+  // Полоса шагов режима (задача 192p): абсолютно над полем ввода, макет не сдвигает.
+  const routeStrip = h(doc, 'section', { class: 'route-strip', hidden: true, 'aria-label': t('route.label') });
+  let stripSig = '';
+  function renderRouteStrip(session) {
+    const rs = session.routeState;
+    if (!showStrip(rs)) {
+      if (stripSig !== '') { stripSig = ''; routeStrip.hidden = true; routeStrip.replaceChildren(); }
+      return;
+    }
+    const folded = open.has('route-folded');
+    const sig = JSON.stringify([session.id, rs, folded]);
+    if (sig === stripSig) return;
+    stripSig = sig;
+    const acts = stripActions(rs);
+    const skipStep = stepToSkip(rs.steps);
+    const fold = h(doc, 'button', { type: 'button', class: 'route-fold', 'aria-expanded': String(!folded), title: t('route.fold') },
+      icon(doc, 'i-chevron-down', 'chev'),
+      h(doc, 'span', { class: 'route-title', text: t('route.steps_title', { name: routeName(rs.route) }) }),
+      h(doc, 'span', { class: 'route-count', text: counterText(rs.steps) }));
+    fold.addEventListener('click', () => {
+      if (open.has('route-folded')) open.delete('route-folded'); else open.add('route-folded');
+      stripSig = '';
+      renderRouteStrip(current.session);
+    });
+    const run = h(doc, 'button', { type: 'button', class: 'route-btn primary', text: t('route.run'), disabled: !acts.run });
+    const skip = h(doc, 'button', { type: 'button', class: 'route-btn', text: t('route.skip'), disabled: !acts.skip });
+    const stop = h(doc, 'button', { type: 'button', class: 'route-btn danger', text: t('route.stop'), disabled: !acts.stop });
+    run.addEventListener('click', () => handlers.onRouteRun(session.id));
+    skip.addEventListener('click', () => handlers.onRouteSkip(session.id, skipStep));
+    stop.addEventListener('click', () => handlers.onRouteStop(session.id));
+    const steps = h(doc, 'ol', { class: 'route-steps', hidden: folded }, ...rs.steps.map((x) => h(doc, 'li', {
+      class: 'route-step', 'data-state': x.state, title: t(STEP_STATE_KEY[x.state]), 'aria-label': `${x.title}: ${t(STEP_STATE_KEY[x.state])}`,
+    }, icon(doc, STEP_ICON[x.state]), h(doc, 'span', { text: x.title }))));
+    routeStrip.replaceChildren(h(doc, 'div', { class: 'route-head' }, fold, h(doc, 'div', { class: 'route-actions' }, run, skip, stop)), steps);
+    routeStrip.dataset.running = String(rs.running);
+    routeStrip.hidden = false;
+  }
+
+  // Баннер «Задача разрослась»: над полем, рядом с полосой шагов; «Продолжить» запоминается до следующей подзадачи.
+  const routeBanner = h(doc, 'section', { class: 'route-banner', hidden: true, role: 'status' });
+  const bannerDismissed = new Map(); // «сессия:задача» -> число подзадач на момент «Продолжить»
+  let bannerSig = '';
+  function renderRouteBanner(session) {
+    const rs = session.routeState;
+    const task = rs && rs.task;
+    const count = bannerCount(rs, task ? bannerDismissed.get(`${session.id}:${task.id}`) : undefined);
+    const sig = JSON.stringify([session.id, count, task && task.id]);
+    if (sig === bannerSig) return;
+    bannerSig = sig;
+    if (count === 0) { routeBanner.hidden = true; routeBanner.replaceChildren(); return; }
+    const close = h(doc, 'button', { type: 'button', class: 'route-btn primary', text: t('route.banner_close') });
+    const keep = h(doc, 'button', { type: 'button', class: 'route-btn', text: t('route.banner_keep') });
+    close.addEventListener('click', () => handlers.onRouteNewTask(session.id));
+    keep.addEventListener('click', () => {
+      bannerDismissed.set(`${session.id}:${task.id}`, count);
+      bannerSig = '';
+      renderRouteBanner(session);
+    });
+    routeBanner.replaceChildren(
+      h(doc, 'span', { class: 'route-banner-text', text: t('route.banner', { count: subtaskCountText(count) }) }),
+      h(doc, 'div', { class: 'route-actions' }, close, keep));
+    routeBanner.hidden = false;
+  }
+
+  // Карточки задачи над полем (задача 192p): «Закончить задачу», «Задача готова», пересечение подзадач.
+  const routeCards = h(doc, 'div', { class: 'route-cards', hidden: true });
+  const overlapSeen = new Map(); // «сессия:задача:N:M» -> когда выберется «Отдельное дерево» (мс страницы)
+  let cardsSig = '';
+  const numberOf = (task) => task.number || task.id;
+  function renderTaskCards(session) {
+    const task = session.routeState && session.routeState.task;
+    const finish = finishPrompt(task);
+    const ready = readyPrompt(task);
+    const overlap = overlapPrompt(task);
+    const diffKey = `route-diff:${session.id}`;
+    const showDiff = open.has(diffKey);
+    let deadline = 0;
+    if (overlap) {
+      const key = `${session.id}:${task.id}:${overlap.n}:${overlap.with}`;
+      if (!overlapSeen.has(key)) overlapSeen.set(key, now() + overlap.seconds * 1000);
+      deadline = overlapSeen.get(key);
+    }
+    const sig = JSON.stringify([session.id, task && [task.id, task.number, task.branch, task.state, task.unmergedCommits, task.diff], finish, ready, overlap, showDiff, deadline]);
+    if (sig === cardsSig) return;
+    cardsSig = sig;
+    const cards = [];
+    const button = (text, cls, run) => {
+      const b = h(doc, 'button', { type: 'button', class: `route-btn ${cls}`.trim(), text });
+      b.addEventListener('click', run);
+      return b;
+    };
+    if (finish) {
+      cards.push(h(doc, 'section', { class: 'route-card', 'data-card': 'finish' },
+        h(doc, 'strong', { class: 'route-card-title', text: t('route.finish_title', { number: numberOf(task) }) }),
+        h(doc, 'div', { class: 'route-actions' },
+          button(t('route.finish_fast'), 'primary', () => handlers.onRouteFinish(session.id, 'fast')),
+          button(t('route.finish_full'), '', () => handlers.onRouteFinish(session.id, 'full')),
+          button(t('route.finish_keep'), '', () => handlers.onRouteKeep(session.id)))));
+    }
+    if (ready) {
+      const totals = diffTotals(task.diff);
+      const summary = t('route.ready_summary', {
+        branch: task.branch || '—', commits: commitsText(task.unmergedCommits), files: filesText(totals.files), added: totals.added, removed: totals.removed,
+      });
+      const files = task.diff.files.length === 0
+        ? [h(doc, 'li', { class: 'muted', text: t('route.diff_none') })]
+        : task.diff.files.map((f) => h(doc, 'li', { class: 'route-diff-row', title: f.path },
+          h(doc, 'span', { class: 'route-diff-path', text: f.path }),
+          h(doc, 'span', { class: 'counts' }, h(doc, 'span', { class: 'plus', text: `+${f.added}` }), h(doc, 'span', { class: 'minus', text: `−${f.removed}` }))));
+      cards.push(h(doc, 'section', { class: 'route-card', 'data-card': 'ready' },
+        h(doc, 'strong', { class: 'route-card-title', text: t('route.ready_title', { number: numberOf(task) }) }),
+        h(doc, 'span', { class: 'route-card-text', text: summary }),
+        showDiff ? h(doc, 'ul', { class: 'route-diff' }, ...files) : false,
+        h(doc, 'div', { class: 'route-actions' },
+          button(t('route.ready_publish'), 'dark', () => handlers.onRoutePublish(session.id)),
+          button(t('route.finish_keep'), '', () => handlers.onRouteKeep(session.id)),
+          button(showDiff ? t('route.ready_hide') : t('route.ready_show'), '', () => {
+            if (open.has(diffKey)) open.delete(diffKey); else open.add(diffKey);
+            cardsSig = '';
+            renderTaskCards(current.session);
+          }))));
+    }
+    if (overlap) {
+      const timer = h(doc, 'span', { class: 'route-card-timer', 'data-until': deadline, text: t('route.overlap_timer', { seconds: Math.max(0, Math.ceil((deadline - now()) / 1000)) }) });
+      cards.push(h(doc, 'section', { class: 'route-card', 'data-card': 'overlap' },
+        h(doc, 'span', { class: 'route-card-text', text: t('route.overlap', { n: overlap.n, with: overlap.with, files: overlap.files.join(', ') }) }),
+        timer,
+        h(doc, 'div', { class: 'route-actions' },
+          button(t('route.overlap_own'), 'primary', () => handlers.onRouteSubtaskChoose(session.id, overlap.n, 'own')),
+          button(t('route.overlap_shared'), '', () => handlers.onRouteSubtaskChoose(session.id, overlap.n, 'shared')))));
+    }
+    routeCards.replaceChildren(...cards);
+    routeCards.hidden = cards.length === 0;
+  }
+
+  const routeOver = h(doc, 'div', { class: 'route-over' }, routeCards, routeBanner, routeStrip);
+
   // форма вопросов агента (задача 192): position absolute над полем ввода, место в потоке не занимает
   const askCard = h(doc, 'div', { class: 'ask', role: 'dialog', hidden: true });
   const composer = h(doc, 'div', { class: 'composer' },
     askCard,
+    routeOver,
     box,
     voiceHint,
     queueButton,
@@ -976,6 +1138,9 @@ export function createView(doc, refs, deps) {
         node.replaceChildren(...lines.map((text) => h(doc, 'div', { text })));
         break;
       }
+      case 'routenote':
+        node.replaceChildren(h(doc, 'span', { text: t(NOTE_KEY[item.action], { n: item.n }) }));
+        break;
       case 'note': {
         let text = t('chat.cancelled');
         if (item.tone === 'refused') text = item.reason ? t('chat.refused', { reason: item.reason }) : t('chat.refused_plain');
@@ -1003,6 +1168,16 @@ export function createView(doc, refs, deps) {
     return { node: h(doc, 'div', { class: cls, 'data-key': item.key }), sig: null, item };
   }
 
+  // Напоминание при открытии сессии: в задаче есть не влитые коммиты (один раз за сессию страницы).
+  const reminded = new Set();
+  function remindUnmerged(session) {
+    const task = session.routeState && session.routeState.task;
+    const label = mergeLabel(task);
+    if (!label || label.kind !== 'unmerged' || reminded.has(session.id)) return;
+    reminded.add(session.id);
+    if (handlers.onNotice) handlers.onNotice(t('route.remind_unmerged', { number: numberOf(task), commits: commitsText(task.unmergedCommits) }));
+  }
+
   function renderChat(model, ui) {
     const session = ui.selected ? model.sessions[ui.selected] : undefined;
     pick.hidden = Boolean(session);
@@ -1023,6 +1198,7 @@ export function createView(doc, refs, deps) {
       fitInput();
       title.textContent = session.name;
       closeMenu();
+      remindUnmerged(session);
     }
     // Что показать про семью, модель, режим и усилие: данные показанной семьи (собственная сводка сессии, иначе каталог семьи)
     const shown = shownOf(model, session);
@@ -1043,6 +1219,10 @@ export function createView(doc, refs, deps) {
     syncSend(busy);
     options = shown.options;
     currentAgent = shown.agent;
+    currentRoute = session.route || INTERACTIVE_STATE.route;
+    routeButton.hidden = false;
+    routeButton.replaceChildren(h(doc, 'span', { text: routeName(currentRoute) }));
+    routeButton.title = `${t('route.label')}: ${routeDescription(currentRoute)}`;
     familyButton.hidden = agents.length < 2;
     familyButton.replaceChildren(h(doc, 'span', { text: agentLabel(shown.agent) }));
     const hasModes = Boolean(options && options.modes.length > 0);
@@ -1060,9 +1240,12 @@ export function createView(doc, refs, deps) {
     statusModel.hidden = hasModels;
     statusModel.textContent = shown.model || (shown.loading ? t('session.loading') : '');
     spinner.hidden = !busy;
-    status.dataset.empty = String(familyButton.hidden && !statusModel.textContent && !busy && !hasModes && !hasModels && !session.usage);
+    status.dataset.empty = String(routeButton.hidden && familyButton.hidden && !statusModel.textContent && !busy && !hasModes && !hasModels && !session.usage);
     if (menuKind === 'agent') renderMenu();
-    else if (menuKind && ((menuKind === 'mode' && !hasModes) || (menuKind !== 'mode' && !hasModels))) closeMenu();
+    else if (menuKind === 'route') {
+      if (menuSig !== currentRoute) renderMenu();
+      menuSig = currentRoute;
+    } else if (menuKind && ((menuKind === 'mode' && !hasModes) || (menuKind !== 'mode' && !hasModels))) closeMenu();
     else if (menuKind) {
       const sig = JSON.stringify(options);
       if (sig !== menuSig) renderMenu();
@@ -1074,6 +1257,9 @@ export function createView(doc, refs, deps) {
     ring.dataset.level = usageLevel(pct);
     ring.setAttribute('aria-label', t('composer.ring', { n: pct }));
     ringBox.hidden = !session.usage;
+    renderRouteStrip(session);
+    renderRouteBanner(session);
+    renderTaskCards(session);
 
     const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight <= NEAR_BOTTOM_PX;
     const items = timeline(session);
@@ -1197,6 +1383,86 @@ export function createView(doc, refs, deps) {
       sum.finished > 0 ? h(doc, 'p', { class: 'finished', text: t('rail.tasks_finished', { n: sum.finished }) }) : false);
   }
 
+  // Задача режима (задача 192p): заголовок с номером и веткой, подзадачи с прогрессом done/total; клик раскрывает чекбоксы (только чтение),
+  // меню «⋯» отдаёт серверу сигналы по подзадаче.
+  let subMenu = null; // ключ подзадачи с открытым меню «⋯»
+  const subKey = (task, sub) => `sub:${task.id}:${sub.n}`;
+  function subtaskMenu(sessionId, sub) {
+    const acts = subtaskActions(sub);
+    const row = (text, run) => {
+      const b = h(doc, 'button', { type: 'button', class: 'menu-item', role: 'menuitem' }, h(doc, 'span', { class: 'menu-label', text }));
+      b.addEventListener('click', () => { subMenu = null; run(); railSig = ''; renderRail(current.session); });
+      return b;
+    };
+    return h(doc, 'div', { class: 'rsub-menu', role: 'menu' },
+      acts.same ? row(t('route.sub_act_same'), () => handlers.onRouteSubtaskSame(sessionId)) : false,
+      acts.fresh ? row(t('route.sub_act_new'), () => handlers.onRouteSubtaskNew(sessionId)) : false,
+      acts.worktree ? row(t('route.sub_act_worktree'), () => handlers.onRouteSubtaskWorktree(sessionId, sub.n)) : false,
+      acts.done ? row(t('route.sub_act_done'), () => handlers.onRouteSubtaskDone(sessionId, sub.n)) : false);
+  }
+  function parallelBox(s, sub) {
+    if (sub.merged) return false;
+    const box = h(doc, 'input', { type: 'checkbox', class: 'rsub-check' });
+    box.checked = sub.parallel;
+    box.addEventListener('change', () => handlers.onRouteSubtaskParallel(s.id, sub.n, box.checked));
+    return h(doc, 'label', { class: 'rsub-par' }, box, h(doc, 'span', { text: t('route.sub_parallel') }));
+  }
+  function subtaskRow(s, task, sub) {
+    const key = subKey(task, sub);
+    const isOpen = open.has(key);
+    const pct = subtaskPercent(sub);
+    const meter = h(doc, 'span', { class: 'meter route-meter', 'data-level': sub.state === 'done' ? 'done' : 'part', 'aria-hidden': 'true' }, h(doc, 'span', { class: 'meter-fill' }));
+    meter.style.setProperty('--fill', `${pct}%`);
+    const toggle = h(doc, 'button', { type: 'button', class: 'rsub-head', 'aria-expanded': String(isOpen), title: t(SUBTASK_STATE_KEY[sub.state]) },
+      icon(doc, 'i-chevron-right', 'chev'),
+      h(doc, 'span', { class: 'rsub-title', text: t('route.sub_title', { n: sub.n, title: sub.title }) }),
+      sub.merged ? h(doc, 'span', { class: 'rsub-merged', text: t('route.sub_merged') }) : false,
+      sub.merging ? h(doc, 'span', { class: 'rsub-merging', text: t('route.sub_merging') }) : false,
+      h(doc, 'span', { class: 'rsub-count', text: subtaskProgressText(sub) }));
+    const items = sub.items.length === 0
+      ? [h(doc, 'li', { class: 'rsub-item muted', text: t('route.sub_items_empty') })]
+      : sub.items.map((x) => h(doc, 'li', { class: 'rsub-item', 'data-done': String(x.done) },
+        h(doc, 'span', { class: 'rsub-box', 'aria-hidden': 'true' }, x.done ? icon(doc, 'i-check') : false),
+        h(doc, 'span', { text: x.text })));
+    const body = h(doc, 'ul', { class: 'rsub-items', hidden: !isOpen }, ...items);
+    toggle.addEventListener('click', () => {
+      const next = !open.has(key);
+      if (next) open.add(key); else open.delete(key);
+      toggle.setAttribute('aria-expanded', String(next));
+      body.hidden = !next;
+      railSig = '';
+    });
+    const more = hasSubtaskActions(sub)
+      ? h(doc, 'button', { type: 'button', class: 'rsub-more', text: '⋯', title: t('route.sub_more'), 'aria-label': t('route.sub_more'), 'aria-haspopup': 'menu', 'aria-expanded': String(subMenu === key) })
+      : false;
+    if (more) {
+      more.addEventListener('click', () => { subMenu = subMenu === key ? null : key; railSig = ''; renderRail(current.session); });
+    }
+    const where = [sub.branch ? t('route.sub_branch', { branch: sub.branch }) : '', sub.worktree ? t('route.sub_tree', { worktree: sub.worktree }) : ''].filter(Boolean).join(' · ');
+    return h(doc, 'li', { class: 'rsub', 'data-state': sub.state, 'data-merged': String(sub.merged) },
+      h(doc, 'div', { class: 'rsub-row' }, toggle, more),
+      where || sub.worktree ? h(doc, 'div', { class: 'rsub-where' }, sub.worktree ? h(doc, 'span', { class: 'rsub-own', text: t('route.sub_own_tree') }) : false, where) : false,
+      sub.needsOwner ? h(doc, 'div', { class: 'rsub-owner', role: 'alert', text: sub.ownerText || t('route.sub_owner') }) : false,
+      parallelBox(s, sub),
+      meter, body,
+      more && subMenu === key ? subtaskMenu(s.id, sub) : false);
+  }
+
+  function subtasksCard(s) {
+    const task = s.routeState && s.routeState.task;
+    if (!task) return false;
+    const list = h(doc, 'ul', { class: 'rsub-list' }, ...task.subtasks.map((sub) => subtaskRow(s, task, sub)));
+    const newTask = h(doc, 'button', { type: 'button', class: 'link-btn', text: t('route.new_task') });
+    newTask.addEventListener('click', () => handlers.onRouteNewTask(s.id));
+    const label = mergeLabel(task);
+    return card(taskHeading(task),
+      label ? h(doc, 'p', { class: 'rsub-label', 'data-kind': label.kind, text: label.text }) : false,
+      task.branch ? h(doc, 'p', { class: 'rsub-task', text: t('route.task_branch', { branch: task.branch }) }) : false,
+      task.worktree ? h(doc, 'p', { class: 'rsub-task', text: t('route.task_tree', { worktree: task.worktree }) }) : false,
+      task.subtasks.length === 0 ? h(doc, 'p', { class: 'muted', text: t('route.sub_none') }) : list,
+      newTask);
+  }
+
   let railSig = '';
   function renderRail(raw) {
     // при смене семьи правая панель называет уже новую (задача 192o)
@@ -1206,10 +1472,11 @@ export function createView(doc, refs, deps) {
       return;
     }
     const sig = JSON.stringify([session.id, session.project, session.folder, session.branch, session.agent, session.usage, session.outputs,
-      session.tasks.map((x) => [x.id, x.title, x.status, x.started, x.finishedAt]), [...open].filter((k) => k.startsWith('more:') || k === 'ctx-closed')]);
+      session.tasks.map((x) => [x.id, x.title, x.status, x.started, x.finishedAt]), session.routeState && session.routeState.task,
+      [...open].filter((k) => k.startsWith('more:') || k.startsWith('sub:') || k === 'ctx-closed'), subMenu]);
     if (sig === railSig) return;
     railSig = sig;
-    refs.rail.replaceChildren(envCard(session), contextCard(session), outputsCard(session), tasksCard(session));
+    refs.rail.replaceChildren(...[envCard(session), subtasksCard(session), contextCard(session), outputsCard(session), tasksCard(session)].filter(Boolean));
   }
 
   // ---------------------------------------------------------------- диалог разрешения
@@ -1473,12 +1740,32 @@ export function createView(doc, refs, deps) {
       const text = durationText(now() - Number(node.dataset.since));
       if (node.textContent !== text) node.textContent = text;
     }
+    for (const node of doc.querySelectorAll('[data-until]')) {
+      const text = t('route.overlap_timer', { seconds: Math.max(0, Math.ceil((Number(node.dataset.until) - now()) / 1000)) });
+      if (node.textContent !== text) node.textContent = text;
+    }
     for (const node of doc.querySelectorAll('[data-ago]')) {
       const text = agoText(Number(node.dataset.ago));
       if (node.textContent !== text) node.textContent = text;
     }
   }
 
+  doc.addEventListener('click', (e) => {
+    if (subMenu === null) return;
+    const path = e.composedPath();
+    if (path.some((n) => n.classList && (n.classList.contains('rsub-menu') || n.classList.contains('rsub-more')))) return;
+    subMenu = null;
+    railSig = '';
+    renderRail(current.session);
+  });
+  doc.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || subMenu === null) return;
+    subMenu = null;
+    railSig = '';
+    renderRail(current.session);
+  });
+
+  let formSig = '';
   return {
     tick,
     /** ui: { selected, newOpen, newProjectId, projects, pane, flash, theme, pins }; status: { state, seconds? } */

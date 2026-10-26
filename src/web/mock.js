@@ -35,6 +35,155 @@ const MOCK_OPTIONS = {
     { id: 'plan', name: 'Plan', description: 'Составить план до правок' },
   ],
 };
+
+// Режимы работы по методике (задача 192p): что «сервер» присылает в route_state. Названия шагов и подзадач — данные потока.
+const FULL_STEPS = ['Постановка', 'План', 'Реализация', 'Тесты', 'Независимая проверка', 'Отчёт', 'Запись в журнал'];
+const FAST_STEPS = ['Постановка', 'Реализация', 'Независимая проверка', 'Запись в журнал'];
+const ROUTE_STEP_MS = 1200;
+const subItems = (texts, done) => texts.map((text, i) => ({ text, done: i < done }));
+const DEMO_TASK = Object.freeze({
+  id: '192p',
+  number: '192',
+  title: 'Режимы работы по методике',
+  branch: 'task/192p-routes-page',
+  worktree: 'C:/work/wt/192p-routes-page',
+  suggest_new_task: false,
+  state: 'active',
+  unmerged_commits: 3,
+  overlap: Object.freeze({ n: 2, with: 1, files: Object.freeze(['src/web/view.js', 'src/web/state.js']), seconds: 30 }),
+  subtasks: Object.freeze([
+    {
+      n: 1, title: 'Модуль режимов и тесты', state: 'running', done: 3, total: 5,
+      items: subItems(['модель состояния', 'сборка сигналов', 'тесты модуля', 'события в состоянии страницы', 'строки интерфейса'], 3),
+    },
+    {
+      n: 2, title: 'Полоса шагов и меню', state: 'planned', done: 0, total: 4, parallel: true,
+      items: subItems(['чип режима в строке статуса', 'полоса шагов над полем', 'панель подзадач', 'проверка на моке'], 0),
+    },
+  ]),
+});
+
+// Интерактивная задача 007: ветка, подзадача 1 в отдельном дереве и уже влита, подзадача 2 идёт в дереве задачи.
+const TASK_007 = Object.freeze({
+  id: '007',
+  number: '007',
+  title: 'Уборка временных файлов',
+  branch: 'task/007-cleanup',
+  worktree: 'C:/work/wt/007-cleanup',
+  suggest_new_task: false,
+  state: 'ready',
+  unmerged_commits: 2,
+  diff: Object.freeze({
+    files: Object.freeze([
+      { path: 'scripts/clean.js', added: 18, removed: 2 }, { path: 'tmp/README.md', added: 4, removed: 0 }, { path: 'doc/tasks/007-cleanup/report.md', added: 31, removed: 0 },
+    ]),
+  }),
+  subtasks: Object.freeze([
+    {
+      n: 1, title: 'Найти временные файлы', state: 'done', done: 4, total: 4, branch: 'task/007-cleanup-1', worktree: 'C:/work/wt/007-cleanup-1', merged: true,
+      items: subItems(['каталог tmp', 'кэш сборки', 'журналы', 'список для удаления'], 4),
+    },
+    {
+      n: 2, title: 'Удалить кэш сборки', state: 'running', done: 1, total: 3,
+      items: subItems(['спросить разрешение', 'удалить файлы', 'проверить сборку'], 1),
+    },
+  ]),
+});
+
+// Задача 011 разрослась: сервер просит закрыть её и начать новую (suggest_new_task), страница показывает баннер.
+const TASK_011 = Object.freeze({
+  id: '011',
+  number: '011',
+  title: 'Заметки к релизу',
+  branch: 'task/011-release-notes',
+  worktree: 'C:/work/wt/011-release-notes',
+  suggest_new_task: true,
+  subtasks: Object.freeze(['Собрать журнал изменений', 'Разбить по разделам', 'Выписать несовместимости', 'Описать миграцию', 'Проверить ссылки', 'Свести в один файл'].map((title, i) => ({
+    n: i + 1,
+    title,
+    state: i < 5 ? 'done' : 'running',
+    done: i < 5 ? 2 : 1,
+    total: 2,
+    merged: i < 4,
+    merging: i === 4,
+    needs_owner: i === 5 ? 'Конфликт в docs/release.md: выберите, какую версию абзаца оставить' : false,
+    items: subItems(['черновик', 'проверка'], i < 5 ? 2 : 1),
+  }))),
+});
+
+// Задача 020 в сессии проверки стражей: коммиты не влиты, сервер просит закончить (finish).
+const TASK_020 = Object.freeze({
+  id: '020',
+  number: '020',
+  title: 'Проверка стражей',
+  branch: 'task/020-guards',
+  worktree: 'C:/work/wt/020-guards',
+  suggest_new_task: false,
+  state: 'active',
+  unmerged_commits: 3,
+  finish: true,
+  subtasks: Object.freeze([{ n: 1, title: 'Прогнать стражи по индексу', state: 'done', done: 2, total: 2, items: subItems(['стражи', 'отчёт'], 2) }]),
+});
+
+const DEFAULT_DIFF = Object.freeze({ files: Object.freeze([{ path: 'src/web/view.js', added: 42, removed: 7 }, { path: 'src/web/test/routes.test.mjs', added: 60, removed: 0 }]) });
+
+/** Окончание задачи: пока идут шаги — finishing, когда прошли — ready (слово владельца), флаг finish снимается. */
+export function finishPhase(task, working) {
+  const diff = task.diff && task.diff.files.length > 0 ? task.diff : DEFAULT_DIFF;
+  return { ...task, finish: false, state: working ? 'finishing' : 'ready', diff };
+}
+
+/** Состояние режима для route_state: steps — названия, finished — сколько шагов уже готово (следующий выполняется, если active). */
+export function routeStateInput(route, { finished = 0, running = false, active = false, task } = {}) {
+  if (route === 'interactive') return { route, steps: [], running: false, task: task ?? null };
+  const titles = route === 'fast' ? FAST_STEPS : FULL_STEPS;
+  const steps = titles.map((title, i) => ({
+    n: i + 1, title, state: i < finished ? 'done' : (i === finished && active ? 'running' : 'pending'),
+  }));
+  return { route, steps, running, task: task ?? DEMO_TASK };
+}
+
+const TASK_SIGNALS = [
+  'route_subtask_new', 'route_subtask_same', 'route_subtask_worktree', 'route_subtask_done', 'route_new_task',
+  'route_publish', 'route_keep', 'route_subtask_parallel', 'route_subtask_choose',
+];
+
+/** Что «сервер» делает с задачей по сигналу подзадачи (сигналы route_subtask_* и route_new_task). Исходная задача не меняется. */
+export function editTask(task, kind, input = {}) {
+  if (!task) return task;
+  const subs = task.subtasks.map((x) => ({ ...x }));
+  const active = subs.find((x) => x.state === 'running');
+  if (kind === 'route_subtask_new') {
+    if (active) Object.assign(active, { state: 'done', done: active.total });
+    const n = subs.reduce((m, x) => Math.max(m, x.n), 0) + 1;
+    subs.push({ n, title: 'Новая подзадача', state: 'running', done: 0, total: 0, items: [] });
+  } else if (kind === 'route_subtask_same') {
+    if (active) active.merged_into = String(active.n > 1 ? active.n - 1 : active.n);
+  } else if (kind === 'route_subtask_worktree') {
+    const sub = subs.find((x) => x.n === input.n);
+    if (sub && !sub.worktree) Object.assign(sub, { worktree: `C:/work/wt/${task.number}-${sub.n}`, branch: `${task.branch}-${sub.n}` });
+  } else if (kind === 'route_subtask_done') {
+    const sub = subs.find((x) => x.n === input.n);
+    if (sub) Object.assign(sub, { state: 'done', done: sub.total, merged: true });
+  } else if (kind === 'route_publish') {
+    return { ...task, state: 'done', unmerged_commits: 0, finish: false, subtasks: subs.map((x) => ({ ...x, merged: true })) };
+  } else if (kind === 'route_keep') {
+    return { ...task, state: 'kept', finish: false };
+  } else if (kind === 'route_subtask_parallel') {
+    const sub = subs.find((x) => x.n === input.n);
+    if (sub) sub.parallel = input.on === true;
+  } else if (kind === 'route_subtask_choose') {
+    const sub = subs.find((x) => x.n === input.n);
+    if (sub && input.tree === 'own' && !sub.worktree) Object.assign(sub, { worktree: `C:/work/wt/${task.number}-${sub.n}`, branch: `${task.branch}-${sub.n}` });
+    return { ...task, overlap: null, subtasks: subs };
+  } else if (kind === 'route_new_task') {
+    const number = String(Number(task.number) + 1).padStart(3, '0');
+    return {
+      id: number, number, title: 'Новая задача', branch: `task/${number}-new`, worktree: `C:/work/wt/${number}-new`, suggest_new_task: false, subtasks: [],
+    };
+  }
+  return { ...task, suggest_new_task: task.suggest_new_task && subs.length >= 6, subtasks: subs };
+}
 const HOUR = 60 * MIN;
 const END = BASE + 3 * HOUR;
 const CTX = 200_000;
@@ -85,6 +234,7 @@ function buildJournal() {
     name: 'Разбор падающих тестов', agent: 'opencode', project: 'crew-harness', project_id: 'proj-crew', folder: 'C:/work/crew-harness', branch: 'task/flaky-tests',
   }, BASE);
   add(s1, 'session_model', MOCK_OPTIONS, BASE + 1);
+  add(s1, 'route_state', routeStateInput('full', { finished: 3, active: true }), BASE + 2);
   add(s1, 'user_message', { turn: 't1', text: 'Почему тест на дубликаты событий иногда красный?' }, BASE + MIN);
   add(s1, 'tool_call', { id: 'c1', title: 'src/web/test/state.test.mjs', kind: 'read', status: 'in_progress' }, BASE + MIN + 300);
   add(s1, 'tool_call_update', { id: 'c1', status: 'completed' }, BASE + MIN + 600);
@@ -134,6 +284,7 @@ function buildJournal() {
   add(s2, 'permission_decision', { request: 'j2-perm', decision: 'deny' }, BASE + 7 * MIN);
   add(s2, 'agent_refused', { turn: 't1', reason: 'вы отклонили удаление, файлы не тронуты' }, BASE + 7 * MIN + 300);
   add(s2, 'usage_update', { used: 12_000, size: CTX }, BASE + 7 * MIN + 400);
+  add(s2, 'route_state', routeStateInput('interactive', { task: TASK_007 }), BASE + 7 * MIN + 500);
 
   // 3. ошибка в другом проекте
   const s4 = 'ses-demo-4';
@@ -144,12 +295,14 @@ function buildJournal() {
   add(s4, 'agent_chunk', { turn: 't1', text: 'Читаю журнал изменений… ' }, BASE + HOUR + MIN + 400);
   add(s4, 'error', { turn: 't1', message: 'обрыв связи с агентом' }, BASE + HOUR + MIN + 900);
   add(s4, 'usage_update', { used: 31_000, size: CTX }, BASE + HOUR + MIN + 1000);
+  add(s4, 'route_state', routeStateInput('interactive', { task: TASK_011 }), BASE + HOUR + MIN + 1100);
 
   // 4. дочерняя сессия закреплённой, работа идёт: красная полоска контекста и бегущая строка
   const s3 = 'ses-demo-3';
   add(s3, 'session_created', {
     name: 'Проверка стражей', agent: 'opencode', project: 'crew-harness', project_id: 'proj-crew', folder: 'C:/work/crew-harness', branch: 'task/flaky-tests', parent: s1,
   }, END - 4 * MIN);
+  add(s3, 'route_state', routeStateInput('interactive', { task: TASK_020 }), END - 4 * MIN + 1);
   add(s3, 'user_message', { turn: 't1', text: 'Прогони все стражи по индексу и скажи, что красное.' }, END - 96 * SEC);
   add(s3, 'agent_chunk', { turn: 't1', text: 'Запускаю стражи; пока они идут, смотрю список изменённых файлов.' }, END - 94 * SEC);
   add(s3, 'tool_call', { id: 'g1', title: 'git status --short', kind: 'execute', status: 'completed' }, END - 92 * SEC);
@@ -220,11 +373,14 @@ export function createMockServer({ journal, now = Date.now } = {}) {
   const picks = {};
   const family = {};
   const used = {};
+  const routeNow = {}; // trace -> последнее установившееся состояние режима
+  const runs = {}; // trace -> { t0, plan: [{ delay, state }] } идущий прогон шагов
   let serial = 0;
 
   const note = (e) => {
     lastStep[e.trace] = Math.max(lastStep[e.trace] ?? -1, e.step);
     if (e.kind === 'usage_update' && Number.isFinite(e.input.used)) used[e.trace] = e.input.used;
+    if (e.kind === 'route_state') routeNow[e.trace] = e.input;
   };
   shown.forEach(note);
 
@@ -235,6 +391,53 @@ export function createMockServer({ journal, now = Date.now } = {}) {
       delay,
       event: { id: `srv-${serial}`, trace, step: lastStep[trace], kind, input, time: now() + delay },
     });
+  }
+
+  // Состояние режима на сейчас: прогон идёт по плану с задержками, поэтому «сейчас» считается по часам.
+  function routeStateAt(trace) {
+    const base = routeNow[trace] ?? routeStateInput('interactive');
+    const run = runs[trace];
+    if (!run) return base;
+    const dt = now() - run.t0;
+    let cur = base;
+    for (const p of run.plan) if (p.delay <= dt) cur = p.state;
+    if (dt >= run.plan[run.plan.length - 1].delay) { routeNow[trace] = cur; delete runs[trace]; }
+    return cur;
+  }
+
+  function mintRoute(entries, trace, delay, state) {
+    mint(entries, trace, delay, 'route_state', state);
+    entries[entries.length - 1].tag = `${trace}#route`;
+  }
+
+  /** Прогнать оставшиеся шаги: каждый выполняется ROUTE_STEP_MS, затем следующий; в конце running=false. */
+  function planRun(entries, trace, base) {
+    const steps = base.steps.map((s) => ({ ...s }));
+    const plan = [];
+    const emit = (delay, running) => {
+      const finishing = base.task && (base.task.finish || base.task.state === 'finishing');
+      const task = finishing ? finishPhase(base.task, running) : base.task;
+      const state = { ...base, steps: steps.map((s) => ({ ...s })), running, task };
+      plan.push({ delay, state });
+      mintRoute(entries, trace, delay, state);
+    };
+    const startNext = () => {
+      const i = steps.findIndex((s) => s.state === 'pending');
+      if (i >= 0) steps[i].state = 'running';
+      return i >= 0;
+    };
+    if (!steps.some((s) => s.state === 'running') && !startNext()) return;
+    let delay = 80;
+    emit(delay, true);
+    for (;;) {
+      delay += ROUTE_STEP_MS;
+      const cur = steps.find((s) => s.state === 'running');
+      if (cur) cur.state = 'done';
+      const more = startNext();
+      emit(delay, more);
+      if (!more) break;
+    }
+    runs[trace] = { t0: now(), plan };
   }
 
   function speak(entries, trace, turn, texts, from) {
@@ -336,6 +539,39 @@ export function createMockServer({ journal, now = Date.now } = {}) {
         const named = merged.models.find((m) => m.id === merged.model_id);
         mint(entries, trace, CHUNK_FIRST_MS, 'session_model', { ...merged, model: named ? named.name : merged.model });
       }
+    } else if (event.kind === 'session_route') {
+      delete runs[trace];
+      // задача (сессия в git) переживает смену режима; в режимах с шагами её нет только у сессии без задачи
+      const task = (routeNow[trace] ?? {}).task;
+      routeNow[trace] = routeStateInput(String(input.route), { task: task ?? undefined });
+      mintRoute(entries, trace, 80, routeNow[trace]);
+    } else if (event.kind === 'route_run') {
+      const cur = routeStateAt(trace);
+      delete runs[trace];
+      routeNow[trace] = cur;
+      planRun(entries, trace, cur);
+    } else if (event.kind === 'route_skip') {
+      const cur = routeStateAt(trace);
+      const wasRunning = cur.running;
+      delete runs[trace];
+      const next = { ...cur, running: false, steps: cur.steps.map((s) => (s.n === input.step && (s.state === 'pending' || s.state === 'running') ? { ...s, state: 'skipped' } : s)) };
+      // пропущенный выполняемый шаг: следующий ожидающий становится выполняемым, если прогон шёл
+      routeNow[trace] = next;
+      mintRoute(entries, trace, 80, next);
+      if (wasRunning) planRun(entries, trace, next);
+    } else if (TASK_SIGNALS.includes(event.kind)) {
+      const cur = routeStateAt(trace);
+      const wasRunning = cur.running;
+      delete runs[trace];
+      const next = { ...cur, running: false, task: editTask(cur.task, event.kind, input) };
+      routeNow[trace] = next;
+      mintRoute(entries, trace, 80, next);
+      if (wasRunning) planRun(entries, trace, next);
+    } else if (event.kind === 'route_stop') {
+      const cur = routeStateAt(trace);
+      delete runs[trace];
+      routeNow[trace] = { ...cur, running: false };
+      mintRoute(entries, trace, 80, routeNow[trace]);
     } else if (event.kind === 'cancel') {
       delete pending[trace];
       delete asks[trace];
