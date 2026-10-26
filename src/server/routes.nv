@@ -250,12 +250,14 @@ export fn progress_mark(text str, title str, skipped bool) -> str {
 
 /// Does a message go into the last subtask (true) or does it open a new one (false)? `forced` is the word of the owner for the next message
 /// ("new", "same", "" - none); otherwise it is extended while the boxes of the checklist are not all marked and the owner has not marked the subtask done.
+/// A subtask without boxes (a mode without steps) is never "closed": there is nothing to finish, so the message extends it and the file is a journal of messages.
 export fn subtask_extends(forced str, has_subtask bool, total int, done int, marked_done bool) -> bool {
     if !has_subtask { return false }
     if forced == "new" { return false }
     if forced == "same" { return true }
     if marked_done { return false }
-    total > 0 && done < total
+    if total == 0 { return true }
+    done < total
 }
 
 /// Is the task too big (many subtasks or many messages)? A limit of 0 is off.
@@ -696,6 +698,7 @@ export fn route_view_text(rt RouteSession, titles []str, progress []Progress, su
         jput(t, "branch", JsonValue.str(rt.branch))
         jput(t, "worktree", JsonValue.str(rt.worktree))
         jput(t, "closed", JsonValue.bool(rt.task_closed))
+        jput(t, "messages", JsonValue.int(rt.messages))
         jput(t, "state", JsonValue.str(rt.tstate))
         jput(t, "unmerged_commits", JsonValue.int(rt.unmerged))
         jput(t, "needs_owner", JsonValue.bool(rt.tnote.byte_len() > 0))

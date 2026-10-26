@@ -36,7 +36,7 @@ import {
 } from './state.js';
 import {
   ROUTES, STEP_ICON, STEP_STATE_KEY, SUBTASK_STATE_KEY, routeName, routeDescription, counterText, stepToSkip, showStrip, stripActions,
-  subtaskPercent, subtaskProgressText, INTERACTIVE_STATE, NOTE_KEY, taskHeading, subtaskActions, hasSubtaskActions, bannerCount, subtaskCountText,
+  subtaskPercent, subtaskProgressText, showSubtasks, parallelShown, INTERACTIVE_STATE, NOTE_KEY, taskHeading, subtaskActions, hasSubtaskActions, bannerCount, subtaskCountText,
   mergeLabel, diffTotals, finishPrompt, readyPrompt, overlapPrompt, commitsText, filesText, branchTestsText, mainTestsText, testsRunnable, stalePrompt,
 } from './routes.js';
 
@@ -1647,8 +1647,8 @@ export function createView(doc, refs, deps) {
       acts.worktree ? row(t('route.sub_act_worktree'), () => handlers.onRouteSubtaskWorktree(sessionId, sub.n)) : false,
       acts.done ? row(t('route.sub_act_done'), () => handlers.onRouteSubtaskDone(sessionId, sub.n)) : false);
   }
-  function parallelBox(s, sub) {
-    if (sub.merged) return false;
+  function parallelBox(s, task, sub) {
+    if (!parallelShown(task, sub)) return false;
     const box = h(doc, 'input', { type: 'checkbox', class: 'rsub-check' });
     box.checked = sub.parallel;
     box.addEventListener('change', () => handlers.onRouteSubtaskParallel(s.id, sub.n, box.checked));
@@ -1690,7 +1690,7 @@ export function createView(doc, refs, deps) {
       h(doc, 'div', { class: 'rsub-row' }, toggle, more),
       where || sub.worktree ? h(doc, 'div', { class: 'rsub-where' }, sub.worktree ? h(doc, 'span', { class: 'rsub-own', text: t('route.sub_own_tree') }) : false, where) : false,
       sub.needsOwner ? h(doc, 'div', { class: 'rsub-owner', role: 'alert', text: sub.ownerText || t('route.sub_owner') }) : false,
-      parallelBox(s, sub),
+      parallelBox(s, task, sub),
       meter, body,
       more && subMenu === key ? subtaskMenu(s.id, sub) : false);
   }
@@ -1704,6 +1704,7 @@ export function createView(doc, refs, deps) {
   function subtasksCard(s) {
     const task = s.routeState && s.routeState.task;
     if (!task) return false;
+    const withSubs = showSubtasks(s.routeState);
     const list = h(doc, 'ul', { class: 'rsub-list' }, ...task.subtasks.map((sub) => subtaskRow(s, task, sub)));
     const newTask = h(doc, 'button', { type: 'button', class: 'link-btn', text: t('route.new_task') });
     newTask.addEventListener('click', () => handlers.onRouteNewTask(s.id));
@@ -1717,7 +1718,9 @@ export function createView(doc, refs, deps) {
       task.worktree && testsRunnable(task) ? panelTestsButton(s) : false,
       task.worktree && task.testsRunning ? h(doc, 'p', { class: 'rsub-tests muted', text: t('route.tests_running') }) : false,
       task.stale ? h(doc, 'p', { class: 'rsub-label', 'data-kind': 'unmerged', text: t('route.stale_title', { days: task.idleDays }) }) : false,
-      task.subtasks.length === 0 ? h(doc, 'p', { class: 'muted', text: t('route.sub_none') }) : list,
+      withSubs ? false : h(doc, 'p', { class: 'rsub-task', text: t('route.messages', { count: task.messages }) }),
+      withSubs && task.subtasks.length === 0 ? h(doc, 'p', { class: 'muted', text: t('route.sub_none') }) : false,
+      withSubs && task.subtasks.length > 0 ? list : false,
       newTask);
   }
 

@@ -227,7 +227,7 @@ function apply(session, event) {
       if (event.step <= session.routeStep) return session;
       const routeState = parseRouteState(input);
       // строки ленты «подзадача N: новая / дополнена» — по смене состояния задачи (routes.js, subtaskNotes)
-      const notes = subtaskNotes(session.routeState.task, routeState.task)
+      const notes = subtaskNotes(session.routeState.task, routeState.task, routeState.stepless)
         .map((x) => ({ role: 'route_note', key: `rn:${event.id}:${x.n}`, n: x.n, action: x.action }));
       return { ...session, route: routeState.route, routeState, routeStep: event.step, messages: notes.length ? [...session.messages, ...notes] : session.messages };
     }

@@ -388,6 +388,7 @@ export const S = Object.freeze({
   'route.worktree_off': 'Worktree выключен: работаем в папке проекта на текущей ветке, без дерева',
   'route.worktree_locked': 'У задачи уже есть дерево',
   'route.sub_none': 'Подзадач пока нет',
+  'route.messages': 'Сообщений: {count}',
   'route.sub_title': '{n}. {title}',
   'route.sub_progress': '{done}/{total}',
   'route.sub_planned': 'в плане',

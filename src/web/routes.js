@@ -135,6 +135,8 @@ function parseTask(raw) {
     worktree: str(raw.worktree),
     suggestNewTask: raw.suggest_new_task === true,
     subtasks,
+    // сообщений владельца в задаче; старые журналы числа не присылали — тогда по одному на подзадачу
+    messages: num(raw.messages) || subtasks.length,
     state: TASK_STATES.includes(raw.state) ? raw.state : 'active',
     unmergedCommits: num(raw.unmerged_commits),
     finish: Boolean(raw.finish),
@@ -152,13 +154,13 @@ export function parseRouteState(input) {
   const src = isObject(input) ? input : {};
   const route = normalizeRoute(src.route);
   const useTree = src.use_tree !== false;
-  if (!routeInfo(route).hasSteps) return { route, steps: [], running: false, useTree, task: parseTask(src.task) };
+  if (!routeInfo(route).hasSteps) return { route, stepless: true, steps: [], running: false, useTree, task: parseTask(src.task) };
   const steps = (Array.isArray(src.steps) ? src.steps : []).filter(isObject).map((s, i) => ({
     n: Number.isInteger(s.n) ? s.n : i + 1,
     title: str(s.title),
     state: STEP_STATES.includes(s.state) ? s.state : 'pending',
   }));
-  return { route, steps, running: src.running === true, useTree, task: parseTask(src.task) };
+  return { route, stepless: false, steps, running: src.running === true, useTree, task: parseTask(src.task) };
 }
 
 export const INTERACTIVE_STATE = Object.freeze(parseRouteState({ route: DEFAULT_ROUTE }));
@@ -194,6 +196,15 @@ export function stripActions(state) {
     skip: stepToSkip(steps) !== null,
     stop: running,
   };
+}
+
+/** В режиме без шагов подзадач нет: сообщения владельца — журнал сообщений задачи, а не подзадачи с чек-листом. */
+export const showSubtasks = (state) => Boolean(state) && state.stepless !== true;
+
+/** «Параллельно» — у подзадачи с чек-листом и только когда есть другая работающая подзадача (иначе бессмысленно). */
+export function parallelShown(task, sub) {
+  if (sub.merged || sub.total === 0) return false;
+  return task.subtasks.some((x) => x.n !== sub.n && x.state === 'running' && !x.merged);
 }
 
 /** Доля подзадачи в процентах (0–100). */
@@ -244,8 +255,8 @@ export function bannerCount(state, dismissedAt) {
  * новая подзадача — это номер, которого раньше не было; дополнена — у подзадачи появилось merged_into.
  * Без прежней задачи (первое состояние, смена задачи) строк нет: история не восстанавливается.
  */
-export function subtaskNotes(prevTask, nextTask) {
-  if (!prevTask || !nextTask || prevTask.id !== nextTask.id) return [];
+export function subtaskNotes(prevTask, nextTask, stepless = false) {
+  if (stepless || !prevTask || !nextTask || prevTask.id !== nextTask.id) return [];
   const notes = [];
   for (const sub of nextTask.subtasks) {
     const before = prevTask.subtasks.find((x) => x.n === sub.n);

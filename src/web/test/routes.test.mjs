@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import {
   ROUTES, DEFAULT_ROUTE, INTERACTIVE_STATE, STEP_ICON, STEP_STATE_KEY, normalizeRoute, routeName, routeDescription, parseRouteState,
   stepCounter, counterText, stepToSkip, showStrip, stripActions, subtaskPercent, subtaskProgressText, routeSignal,
-  subtaskCountText, taskHeading, subtaskActions, hasSubtaskActions, bannerCount, subtaskNotes,
+  subtaskCountText, showSubtasks, parallelShown, taskHeading, subtaskActions, hasSubtaskActions, bannerCount, subtaskNotes,
   commitsText, filesText, mergeLabel, diffTotals, finishPrompt, readyPrompt, overlapPrompt,
 } from '../routes.js';
 import { S } from '../strings.js';
@@ -219,7 +219,7 @@ test('редьюсер: route_state кладёт режим и состояни�
 });
 
 test('редьюсер: новая подзадача и «дописана» дают строки ленты «подзадача N: …»; повтор события строк не множит', () => {
-  const raw = (subs) => routeStateInput('interactive', { task: taskRaw({ subtasks: subs }) });
+  const raw = (subs) => routeStateInput('fast', { task: taskRaw({ subtasks: subs }) });
   let m = reduce(initialModel(), created);
   m = reduce(m, ev('r1', 's', 1, 'route_state', raw([{ n: 1, title: 'a', state: 'running', done: 0, total: 1 }])));
   assert.equal(m.sessions.s.messages.length, 0, 'первое состояние строк не даёт');
@@ -529,4 +529,33 @@ test('номер задачи сессии показывается без ре�
   assert.match(strings, /'route\.task_no_title': 'Задача \{number\}: \{title\}'/);
   assert.doesNotMatch(strings, /'[^']*#\{number\}/);
   assert.doesNotMatch(view, /text: `#|text: '#'/);
+});
+
+test('режим без шагов: подзадач в интерфейсе нет — только число сообщений; строк ленты «подзадача N» нет', () => {
+  const subs = [{ n: 1, title: 'привет', state: 'planned', done: 0, total: 0 }, { n: 2, title: 'задай мне вопрос?', state: 'planned', done: 0, total: 0 }];
+  const inter = parseRouteState({ route: 'interactive', task: taskRaw({ subtasks: subs }) });
+  assert.equal(showSubtasks(inter), false);
+  assert.equal(inter.task.messages, 2, 'старый журнал без messages: по одному на подзадачу');
+  assert.equal(parseRouteState({ route: 'interactive', task: taskRaw({ subtasks: subs.slice(0, 1), messages: 5 }) }).task.messages, 5);
+  for (const route of ['fast', 'full', 'planning']) assert.equal(showSubtasks(parseRouteState({ route, task: taskRaw({ subtasks: subs }) })), true, route);
+  assert.equal(showSubtasks(INTERACTIVE_STATE), false);
+  assert.deepEqual(subtaskNotes(inter.task, parseRouteState({ route: 'interactive', task: taskRaw({ subtasks: [...subs, { n: 3 }] }) }).task, true), []);
+  const card = view.slice(view.indexOf('function subtasksCard'), view.indexOf('// Вкладки правой колонки'));
+  assert.match(card, /withSubs \? false : h\(doc, 'p', \{ class: 'rsub-task', text: t\('route\.messages'/);
+  assert.match(card, /withSubs && task\.subtasks\.length > 0 \? list : false/);
+});
+
+test('«параллельно»: у подзадачи с чек-листом и только когда есть другая работающая', () => {
+  const task = (subs) => parseRouteState({ route: 'fast', task: taskRaw({ subtasks: subs }) }).task;
+  const a = { n: 1, state: 'running', done: 1, total: 3 };
+  const b = { n: 2, state: 'planned', done: 0, total: 3 };
+  const two = task([a, b]);
+  assert.equal(parallelShown(two, two.subtasks[1]), true);
+  assert.equal(parallelShown(two, two.subtasks[0]), false, 'другой работающей нет');
+  const one = task([b]);
+  assert.equal(parallelShown(one, one.subtasks[0]), false);
+  const bare = task([a, { n: 2, state: 'planned', total: 0 }]);
+  assert.equal(parallelShown(bare, bare.subtasks[1]), false, 'без чек-листа');
+  const merged = task([a, { ...b, merged: true }]);
+  assert.equal(parallelShown(merged, merged.subtasks[1]), false);
 });

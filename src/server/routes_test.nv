@@ -147,7 +147,8 @@ test "routes: a message extends the subtask while its checklist is not complete,
     assert(subtask_extends("", false, 0, 0, false) == false)
     assert(subtask_extends("", true, 3, 1, false) == true)
     assert(subtask_extends("", true, 3, 3, false) == false)
-    assert(subtask_extends("", true, 0, 0, false) == false)
+    assert(subtask_extends("", true, 0, 0, false) == true) // no boxes: a journal of messages, no new subtask
+    assert(subtask_extends("new", true, 0, 0, false) == false)
     assert(subtask_extends("", true, 3, 1, true) == false)
     assert(subtask_extends("new", true, 3, 1, false) == false)
     assert(subtask_extends("same", true, 3, 3, false) == true)
@@ -278,6 +279,11 @@ test "routes: a subtask that was extended shows merged_into; a subtask of its ow
     ro sub2 = ((jchild(again, "task") ?? JsonObject.new()).get("subtasks") ?? JsonValue.null()).array() ?? []JsonValue.new()
     ro last = sub2[1].object() ?? JsonObject.new()
     assert(jtext(last, "merged_into") == "2")
+    ro counted = (jchild(again, "task") ?? JsonObject.new())
+    match counted.get("messages") {
+        Some(v) => assert((v.int() ?? 0) == 4)
+        None => panic("no messages")
+    }
     ro first = sub2[0].object() ?? JsonObject.new()
     match first.get("merged_into") {
         Some(v) => assert(v.is_null())
