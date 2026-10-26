@@ -17,6 +17,7 @@
 export * from './lists.js';
 import { imageUrl } from './attachments.js';
 import { normalizeQuestions, summarize } from './question.js';
+import { INTERACTIVE_STATE, parseRouteState, subtaskNotes } from './routes.js';
 
 export const KINDS = Object.freeze([
   'session_created', 'user_message', 'agent_chunk', 'agent_done', 'agent_refused',
@@ -31,6 +32,8 @@ export const KINDS = Object.freeze([
   'question_request', 'question_answer', 'question_resolved',
   // задача 192o: каталог семьи — последние списки и значения агента, их шлёт хаб всем страницам
   'agent_catalog',
+  // задача 192p: режим работы по методике и его шаги (сервер -> страница)
+  'route_state',
 ]);
 
 export const TOOL_KINDS = Object.freeze(['read', 'edit', 'delete', 'move', 'search', 'execute', 'think', 'fetch', 'other']);
@@ -210,6 +213,14 @@ function apply(session, event) {
     case 'session_model': {
       if (event.step <= session.modelStep) return session;
       return { ...session, model: str(input.model), options: optionsOf(input), optionsAgent: session.agent, optionsPending: false, modelStep: event.step };
+    }
+    case 'route_state': {
+      if (event.step <= session.routeStep) return session;
+      const routeState = parseRouteState(input);
+      // строки ленты «подзадача N: новая / дополнена» — по смене состояния задачи (routes.js, subtaskNotes)
+      const notes = subtaskNotes(session.routeState.task, routeState.task)
+        .map((x) => ({ role: 'route_note', key: `rn:${event.id}:${x.n}`, n: x.n, action: x.action }));
+      return { ...session, route: routeState.route, routeState, routeStep: event.step, messages: notes.length ? [...session.messages, ...notes] : session.messages };
     }
     case 'agent_switched': {
       // смена семьи в окне (задача 192): тот же разговор, другой агент; строка в ленте говорит, что и как передано
@@ -482,6 +493,9 @@ export function reduce(model, event) {
       switchingTo: '',
       optionsPending: false,
       modelStep: event.step,
+      route: INTERACTIVE_STATE.route,
+      routeState: INTERACTIVE_STATE,
+      routeStep: -1,
       state: 'idle',
       createdAt: event.time,
       updatedAt: event.time,
