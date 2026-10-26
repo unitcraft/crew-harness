@@ -20,7 +20,8 @@ import { pickFolder as pickFolderFor, sessionPlace } from './projects.js';
 import { LANGS, createVoiceSettings, langFor, pageLang } from './stt.js';
 import { isBusy, keyAction } from './queue.js';
 import { canSend } from './attachments.js';
-import { createAttachUi, createLightbox } from './attach-ui.js';
+import { createAttachUi } from './attach-ui.js';
+import { createViewer } from './viewer-ui.js';
 import { labelOf } from './labels-ru.js';
 import {
   createForm, selectOption, setOtherText, setCursor, moveCursor, setActive, isAnswered, nextUnanswered, canSubmit,
@@ -384,8 +385,11 @@ export function createView(doc, refs, deps) {
   // счётчик очереди — над полем, position absolute: его появление не меняет высоту
   const queueButton = h(doc, 'button', { type: 'button', class: 'queue-count', hidden: true, title: t('composer.queued_hint') });
   // картинки сообщения: полоска превью — первой строкой карточки (задача 192)
-  const attach = createAttachUi(doc, { h, icon, showError: (text) => voiceToast.show(text), onChange: () => fitInput() });
-  const lightbox = createLightbox(doc, { h, icon });
+  const viewer = createViewer(doc, { h, icon });
+  const attach = createAttachUi(doc, {
+    h, icon, showError: (text) => voiceToast.show(text), onChange: () => fitInput(),
+    onView: (images, at, from) => viewer.open(images, at, from),
+  });
   // панель записи (таймер и дорожка) лежит поверх карточки справа от места микрофона: ширина поля не меняется
   const recPanel = h(doc, 'div', { class: 'rec-panel' }, micTimer, wave);
   const plusButton = h(doc, 'button', { type: 'button', class: 'plus-btn', title: t('images.add'), 'aria-label': t('images.add') }, icon(doc, 'i-plus'));
@@ -932,14 +936,14 @@ export function createView(doc, refs, deps) {
     const { node } = entry;
     switch (item.type) {
       case 'user': {
-        // картинки сообщения — миниатюры над текстом; клик увеличивает поверх страницы
-        const thumbs = item.images.length > 0
-          ? h(doc, 'div', { class: 'thumbs' }, ...item.images.map((image) => {
-            const src = imageSrc(image);
+        // картинки сообщения — миниатюры над текстом; клик открывает просмотрщик (стрелки листают картинки этого сообщения)
+        const shown = item.images.map((image) => ({ src: imageSrc(image), name: image.name }));
+        const thumbs = shown.length > 0
+          ? h(doc, 'div', { class: 'thumbs' }, ...shown.map((image, at) => {
             const label = t('images.open', { name: image.name });
             const button = h(doc, 'button', { type: 'button', class: 'thumb', title: label, 'aria-label': label },
-              h(doc, 'img', { class: 'thumb-img', src, alt: t('images.alt', { name: image.name }), loading: 'lazy' }));
-            button.addEventListener('click', () => lightbox.open(src, image.name, button));
+              h(doc, 'img', { class: 'thumb-img', src: image.src, alt: t('images.alt', { name: image.name }), loading: 'lazy' }));
+            button.addEventListener('click', () => viewer.open(shown, at, button));
             return button;
           }))
           : false;

@@ -39,6 +39,11 @@
   --shadow-card: 0 1px 2px rgba(0, 0, 0, .06), 0 6px 20px rgba(0, 0, 0, .08);
   --shadow-card-focus: 0 1px 2px rgba(0, 0, 0, .09), 0 8px 26px rgba(0, 0, 0, .13);
   --scrim: rgba(0, 0, 0, .40);
+  /* просмотрщик изображений: подложка и кнопки одни и те же в обеих темах (тёмная подложка, светлые кнопки) */
+  --viewer-scrim: rgba(0, 0, 0, .85);
+  --viewer-fg: #ffffff;
+  --viewer-ctl: rgba(40, 40, 40, .78);
+  --viewer-ctl-hover: rgba(255, 255, 255, .18);
 
   --font-ui: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "Cascadia Mono", Consolas, "SFMono-Regular", monospace;
@@ -894,6 +899,8 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
 .attach-row { display: flex; flex: 0 0 100%; flex-wrap: wrap; gap: 8px; margin: 0; padding: 4px 12px 6px 0; }
 .attach-row[hidden] { display: none; }
 .attach { position: relative; flex: none; width: 64px; height: 64px; }
+.attach-open { display: block; width: 64px; height: 64px; min-height: 64px; padding: 0; border: 0; border-radius: 12px; background: transparent; cursor: zoom-in; }
+.attach-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .attach-img { display: block; width: 64px; height: 64px; object-fit: cover; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
 .attach-x { position: absolute; top: -6px; right: -6px; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; min-height: 20px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--surface); color: var(--fg); box-shadow: var(--shadow-soft); cursor: pointer; }
 .attach-x:hover:not(:disabled) { background: var(--hover); }
@@ -903,11 +910,38 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
 .bubble .thumbs:last-child { margin-bottom: 0; }
 .thumb { flex: none; width: 88px; height: 88px; min-height: 88px; padding: 0; border: 0; border-radius: 10px; background: transparent; cursor: zoom-in; overflow: hidden; }
 .thumb-img { display: block; width: 88px; height: 88px; object-fit: cover; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
-.lightbox { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: var(--scrim); cursor: zoom-out; }
-.lightbox[hidden] { display: none; }
-.lightbox-img { max-width: min(92vw, 1400px); max-height: 90vh; border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow); }
-.lightbox-close { position: absolute; top: 16px; right: 16px; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; min-height: 36px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--surface); color: var(--fg); box-shadow: var(--shadow-soft); cursor: pointer; }
-.lightbox-close .icon { width: 18px; height: 18px; }
+/* ---- просмотрщик изображений (задача 192s) ----
+   Подложка тёмная в обеих темах; кнопки — светлые на тёмном. Картинка двигается одним transform на самом <img>. */
+.viewer { position: fixed; inset: 0; z-index: 100; overflow: hidden; background: var(--viewer-scrim); color: var(--viewer-fg); outline: none; }
+.viewer[hidden] { display: none; }
+.viewer-stage { position: absolute; inset: 0; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; cursor: default; }
+.viewer-stage[data-pan="grab"] { cursor: grab; }
+.viewer-stage[data-pan="grabbing"] { cursor: grabbing; }
+.viewer-img { position: absolute; left: 50%; top: 50%; max-width: none; max-height: none; transform-origin: 50% 50%; will-change: transform; user-select: none; -webkit-user-drag: none; background: var(--viewer-ctl); box-shadow: var(--shadow); }
+.viewer-img[data-anim="1"] { transition: transform .12s ease-out; }
+.viewer-img[data-crisp="1"] { image-rendering: pixelated; }
+.viewer-bar { position: absolute; top: 14px; right: 14px; z-index: 2; display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 12px; background: var(--viewer-ctl); backdrop-filter: blur(8px); }
+.viewer-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; min-height: 36px; padding: 0; border: 0; border-radius: 9px; background: transparent; color: var(--viewer-fg); cursor: pointer; }
+.viewer-btn:hover:not(:disabled) { background: var(--viewer-ctl-hover); }
+.viewer-btn:focus-visible { outline: 2px solid var(--viewer-fg); outline-offset: -2px; }
+.viewer-btn:disabled { opacity: .35; cursor: default; }
+.viewer-btn .icon { width: 20px; height: 20px; }
+.viewer-btn[hidden] { display: none; }
+.viewer-pct { min-width: 52px; padding: 0 4px; font-size: 13px; font-variant-numeric: tabular-nums; text-align: center; }
+.viewer-nav { position: absolute; top: 50%; z-index: 2; width: 44px; height: 44px; margin-top: -22px; border-radius: 50%; background: var(--viewer-ctl); }
+.viewer-nav .icon { width: 24px; height: 24px; }
+.viewer-prev { left: 14px; }
+.viewer-next { right: 14px; }
+.viewer-caption { position: absolute; left: 50%; bottom: 14px; z-index: 2; display: flex; align-items: baseline; gap: 12px; max-width: min(90vw, 720px); padding: 6px 14px; border-radius: 12px; background: var(--viewer-ctl); font-size: 13px; transform: translateX(-50%); pointer-events: none; }
+.viewer-cap-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.viewer-cap-dims, .viewer-cap-count { flex: none; opacity: .75; font-variant-numeric: tabular-nums; }
+.viewer-cap-dims[hidden], .viewer-cap-count[hidden] { display: none; }
+@media (max-width: 599px) {
+  .viewer-bar { top: auto; right: auto; bottom: 14px; left: 50%; transform: translateX(-50%); }
+  .viewer-caption { bottom: auto; top: 14px; }
+  .viewer-nav { top: auto; bottom: 74px; margin-top: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .viewer-img[data-anim="1"] { transition: none; } }
 .item-skipped { font-size: 14px; color: var(--fg-muted); }
 
 /* ---- форма вопросов агента (задача 192) ----

@@ -1,5 +1,5 @@
 // attach-ui.js — рисование вложений-картинок (задача 192): полоска превью над строкой ввода, вставка из буфера,
-// перетаскивание файлов в карточку и увеличение картинки поверх страницы. Решения («что можно приложить») — в attachments.js;
+// перетаскивание файлов в карточку; клик по превью открывает просмотрщик (viewer-ui.js). Решения («что можно приложить») — в attachments.js;
 // здесь только узлы DOM и события. Текст из данных попадает в DOM через textContent/атрибуты, как везде в view.js.
 
 import { t } from './strings.js';
@@ -21,8 +21,9 @@ export function errorText(error) {
  * @param deps.h, deps.icon   конструкторы узлов из view.js
  * @param deps.showError      (text) — красная плашка тем же механизмом toast.js
  * @param deps.onChange       () — список изменился (кнопка отправки, высота поля)
+ * @param deps.onView         (items, index, back) — открыть просмотрщик (back — функция: узел для возврата фокуса): items — [{ src, name }] всех приложенных картинок
  */
-export function createAttachUi(doc, { h, icon, showError, onChange }) {
+export function createAttachUi(doc, { h, icon, showError, onChange, onView = () => {} }) {
   const win = doc.defaultView;
   const URLApi = win && win.URL && typeof win.URL.createObjectURL === 'function' ? win.URL : globalThis.URL;
   let list = [];
@@ -46,10 +47,17 @@ export function createAttachUi(doc, { h, icon, showError, onChange }) {
     row.hidden = list.length === 0;
     row.replaceChildren(...list.map((item) => {
       const img = h(doc, 'img', { class: 'attach-img', src: urlOf(item), alt: t('images.alt', { name: item.name }) });
+      const openLabel = t('images.open', { name: item.name });
+      const open = h(doc, 'button', { type: 'button', class: 'attach-open', title: openLabel, 'aria-label': openLabel }, img);
+      open.addEventListener('click', () => {
+        // полоска перерисовывается при каждом добавлении: фокус возвращаем на превью по id, а не на узел, которого уже может не быть
+        const back = () => [...row.children].find((n) => n.getAttribute('data-id') === item.id)?.children[0] ?? null;
+        onView(list.map((x) => ({ src: urlOf(x), name: x.name })), list.findIndex((x) => x.id === item.id), back);
+      });
       const label = t('images.remove', { name: item.name });
       const remove = h(doc, 'button', { type: 'button', class: 'attach-x', title: label, 'aria-label': label }, icon(doc, 'i-x'));
       remove.addEventListener('click', (e) => { e.stopPropagation(); drop(item.id); });
-      return h(doc, 'div', { class: 'attach', role: 'listitem', 'data-id': item.id }, img, remove);
+      return h(doc, 'div', { class: 'attach', role: 'listitem', 'data-id': item.id }, open, remove);
     }));
   }
 
@@ -155,42 +163,5 @@ export function createAttachUi(doc, { h, icon, showError, onChange }) {
     },
     bindPaste,
     bindDrop,
-  };
-}
-
-/** Увеличенная картинка поверх страницы: клик по ней или по фону и Esc закрывают. */
-export function createLightbox(doc, { h, icon }) {
-  const img = h(doc, 'img', { class: 'lightbox-img', alt: '' });
-  const closeLabel = t('images.close');
-  const close = h(doc, 'button', { type: 'button', class: 'lightbox-close', title: closeLabel, 'aria-label': closeLabel }, icon(doc, 'i-x'));
-  const box = h(doc, 'div', { class: 'lightbox', role: 'dialog', 'aria-modal': 'true', hidden: true }, img, close);
-  doc.body.append(box);
-  let opener = null;
-
-  function hide() {
-    if (box.hidden) return;
-    box.hidden = true;
-    img.removeAttribute('src');
-    if (opener && typeof opener.focus === 'function') opener.focus();
-    opener = null;
-  }
-
-  box.addEventListener('click', hide);
-  // Esc закрывает только увеличенную картинку и не идёт дальше (меню и поле ввода его не получают)
-  doc.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !box.hidden) { e.preventDefault(); e.stopPropagation(); hide(); }
-  }, true);
-
-  return {
-    open(src, name, from = null) {
-      opener = from;
-      img.setAttribute('src', src);
-      img.setAttribute('alt', t('images.alt', { name }));
-      box.setAttribute('aria-label', t('images.alt', { name }));
-      box.hidden = false;
-      close.focus();
-    },
-    close: hide,
-    isOpen: () => !box.hidden,
   };
 }
