@@ -1,4 +1,4 @@
-// queue.js — очередь сообщений «на потом» (задача 192b): Ctrl+Enter при работающем агенте.
+// queue.js — очередь сообщений (задача 192b, переделана): Enter при работающем агенте ставит сообщение в очередь страницы.
 //
 // Очередь живёт только в странице (в потоке событий её нет): по сессии, FIFO. Модуль чистый — ни
 // DOM, ни транспорта: app.js вызывает take() на каждое изменение модели, view.js — keyAction().
@@ -9,14 +9,13 @@ export function isBusy(state) {
 }
 
 /**
- * Что делает нажатие клавиши в поле ввода: 'send' | 'queue' | null (не наше).
- * Enter — отправка как раньше; Ctrl+Enter / Cmd+Enter — в очередь, если агент занят, иначе обычная отправка.
- * Shift+Enter остаётся переносом строки.
+ * Что делает нажатие клавиши в поле ввода: 'send' | null (не наше). Enter — отправить: агент свободен — сообщение уходит сразу,
+ * занят — встаёт в очередь страницы и уходит, когда ход закончится (решает view.js по состоянию сессии, не клавиша).
+ * Shift+Enter — перенос строки (его вставляет сам браузер). Ctrl+Enter и Cmd+Enter — особого действия нет.
  */
-export function keyAction(e, busy) {
+export function keyAction(e) {
   if (e.key !== 'Enter' || e.isComposing) return null;
-  if (e.ctrlKey || e.metaKey) return busy ? 'queue' : 'send';
-  if (e.shiftKey) return null;
+  if (e.ctrlKey || e.metaKey || e.shiftKey) return null;
   return 'send';
 }
 

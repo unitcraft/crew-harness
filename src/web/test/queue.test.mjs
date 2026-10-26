@@ -11,19 +11,16 @@ const web = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const key = (extra = {}) => ({ key: 'Enter', ctrlKey: false, metaKey: false, shiftKey: false, isComposing: false, ...extra });
 const session = (state, n = 2) => ({ state, messages: new Array(n).fill({}) });
 
-test('Ctrl+Enter при работе агента — в очередь, при ожидании — обычная отправка', () => {
-  assert.equal(keyAction(key({ ctrlKey: true }), true), 'queue');
-  assert.equal(keyAction(key({ metaKey: true }), true), 'queue');
-  assert.equal(keyAction(key({ ctrlKey: true }), false), 'send');
-  assert.equal(keyAction(key({ metaKey: true }), false), 'send');
+test('Enter — отправка (свободен или занят агент решает страница); Ctrl+Enter и Cmd+Enter — особого действия нет', () => {
+  assert.equal(keyAction(key()), 'send');
+  assert.equal(keyAction(key({ ctrlKey: true })), null);
+  assert.equal(keyAction(key({ metaKey: true })), null);
 });
 
-test('Enter ведёт себя как раньше (отправка, в том числе при работе), Shift+Enter — перенос строки', () => {
-  assert.equal(keyAction(key(), true), 'send');
-  assert.equal(keyAction(key(), false), 'send');
-  assert.equal(keyAction(key({ shiftKey: true }), false), null);
-  assert.equal(keyAction(key({ key: 'a', ctrlKey: true }), true), null);
-  assert.equal(keyAction(key({ isComposing: true, ctrlKey: true }), true), null);
+test('Shift+Enter — перенос строки (не перехватывается), чужие клавиши и набор через IME — не наши', () => {
+  assert.equal(keyAction(key({ shiftKey: true })), null);
+  assert.equal(keyAction(key({ key: 'a' })), null);
+  assert.equal(keyAction(key({ isComposing: true })), null);
 });
 
 test('занят — это «отвечает» и «ждёт разрешения»', () => {
@@ -85,22 +82,40 @@ test('при удалении сессии её очередь сбрасыва�
   assert.deepEqual(q.traces(), ['b']);
 });
 
-test('подсказка в поле ввода берётся из strings.js и называет Shift+Enter', () => {
-  assert.equal(S['composer.placeholder'], 'Enter — отправить, Shift+Enter — новая строка, Ctrl+Enter — в очередь на потом');
-  assert.match(S['composer.placeholder'], /Shift\+Enter — новая строка/);
+test('подсказка в поле ввода: «Enter — отправить, Shift+Enter — новая строка», без Ctrl+Enter; в одну строку с многоточием', () => {
+  assert.equal(S['composer.placeholder'], 'Enter — отправить, Shift+Enter — новая строка');
+  assert.equal(S['composer.hint'], S['composer.placeholder']);
+  assert.ok(!/Ctrl/.test(S['composer.placeholder']));
   assert.equal(t('composer.queued', { n: 3 }), 'В очереди: 3');
   const view = fs.readFileSync(path.join(web, 'view.js'), 'utf8');
+  const css = fs.readFileSync(path.join(web, 'app.css'), 'utf8');
   assert.match(view, /placeholder: t\('composer\.placeholder'\)/);
   assert.match(view, /'aria-label': t\('chat\.cancel'\)/);
+  assert.match(css, /\.box textarea:placeholder-shown \{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; \}/);
 });
 
-test('подсказка пустого поля называет Enter, Shift+Enter и Ctrl+Enter; в одну строку с многоточием; Shift+Enter не перехватывается (браузер вставляет перенос)', async () => {
-  const fs = await import('node:fs');
-  const css = fs.readFileSync(new URL('../app.css', import.meta.url), 'utf8');
-  assert.equal(S['composer.placeholder'], 'Enter — отправить, Shift+Enter — новая строка, Ctrl+Enter — в очередь на потом');
-  assert.equal(S['composer.hint'], S['composer.placeholder']);
-  assert.match(css, /\.box textarea:placeholder-shown \{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; \}/);
-  // Shift+Enter — не наше действие: keyAction отдаёт null, preventDefault не вызывается, перенос строки вставляет сам браузер
-  assert.equal(keyAction(key({ shiftKey: true }), false), null);
-  assert.equal(keyAction(key({ shiftKey: true }), true), null);
+test('Enter при занятом агенте ставит сообщение в очередь страницы вместе с картинками; кнопка «↵» при занятом агенте включена; ошибки «нельзя в очередь» нет', () => {
+  const view = fs.readFileSync(path.join(web, 'view.js'), 'utf8');
+  const app = fs.readFileSync(path.join(web, 'app.js'), 'utf8');
+  assert.match(view, /if \(current\.session && isBusy\(current\.session\.state\)\) \{\s*if \(handlers\.onQueue\(trace, text, images\)\)/);
+  assert.match(view, /sendButton\.disabled = !can \|\| recordingNow;/);
+  assert.ok(!/err_queue/.test(view + S['composer.hint'] + JSON.stringify(Object.keys(S))));
+  assert.match(app, /queue\.push\(trace, \{ text, images \}\);/);
+  assert.match(app, /const delivered = handlers\.onSend\(trace, item\.text, images\);/);
+  assert.ok(!/keyAction\(e, /.test(view));
+});
+
+test('очередь с вложениями выдаётся по одному элементу целиком, FIFO; пустая очередь ничего не выдаёт; провал доставки возвращает элемент', () => {
+  const q = createQueue();
+  const a = { text: 'a', images: [{ name: 'x.png' }] };
+  const b = { text: 'b', images: [] };
+  q.push('s', a);
+  q.push('s', b);
+  assert.equal(q.take('s', session('answering')), undefined);
+  const first = q.take('s', session('idle', 2));
+  assert.deepEqual(first, a);
+  q.restore('s', first);
+  assert.deepEqual(q.take('s', session('idle', 2)), a);
+  assert.deepEqual(q.take('s', session('idle', 4)), b);
+  assert.equal(q.take('s', session('idle', 6)), undefined);
 });

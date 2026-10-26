@@ -108,8 +108,8 @@ export const S = Object.freeze({
   'diffs.hide': 'Свернуть',
 
   // ---- поле ввода
-  'composer.placeholder': 'Enter — отправить, Shift+Enter — новая строка, Ctrl+Enter — в очередь на потом',
-  'composer.hint': 'Enter — отправить, Shift+Enter — новая строка, Ctrl+Enter — в очередь на потом',
+  'composer.placeholder': 'Enter — отправить, Shift+Enter — новая строка',
+  'composer.hint': 'Enter — отправить, Shift+Enter — новая строка',
   'menu.agent': 'Агент',
   'status.agent': 'Агент (семья)',
   'status.model': 'Модель и усилие',
@@ -183,7 +183,6 @@ export const S = Object.freeze({
   'images.err_empty': 'Изображение {name} пустое',
   'images.err_size': 'Изображение {name} больше 10 МБ',
   'images.err_count': 'К сообщению можно приложить не больше 6 изображений',
-  'images.err_queue': 'Сообщение с изображениями нельзя поставить в очередь: отправьте его обычной отправкой',
   'images.upload_failed': 'Изображение {name} не отправлено: {reason}',
   'chat.images_skipped': 'Агент {agent} не принимает изображения; отправлен только текст',
   'composer.working': 'Агент работает',
