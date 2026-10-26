@@ -901,7 +901,7 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
 .attach { position: relative; flex: none; width: 64px; height: 64px; }
 .attach-open { display: block; width: 64px; height: 64px; min-height: 64px; padding: 0; border: 0; border-radius: 12px; background: transparent; cursor: zoom-in; }
 .attach-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.attach-img { display: block; width: 64px; height: 64px; object-fit: cover; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+.attach-img { display: block; width: 64px; height: 64px; object-fit: contain; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
 .attach-x { position: absolute; top: -6px; right: -6px; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; min-height: 20px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--surface); color: var(--fg); box-shadow: var(--shadow-soft); cursor: pointer; }
 .attach-x:hover:not(:disabled) { background: var(--hover); }
 .attach-x .icon { width: 12px; height: 12px; }
@@ -909,7 +909,7 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
 .thumbs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
 .bubble .thumbs:last-child { margin-bottom: 0; }
 .thumb { flex: none; width: 88px; height: 88px; min-height: 88px; padding: 0; border: 0; border-radius: 10px; background: transparent; cursor: zoom-in; overflow: hidden; }
-.thumb-img { display: block; width: 88px; height: 88px; object-fit: cover; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.thumb-img { display: block; width: 88px; height: 88px; object-fit: contain; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
 /* ---- просмотрщик изображений (задача 192s) ----
    Подложка тёмная в обеих темах; кнопки — светлые на тёмном. Картинка двигается одним transform на самом <img>. */
 .viewer { position: fixed; inset: 0; z-index: 100; overflow: hidden; background: var(--viewer-scrim); color: var(--viewer-fg); outline: none; }
