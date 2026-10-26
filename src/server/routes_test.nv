@@ -477,3 +477,12 @@ test "routes: the prelude of the planning holds its instruction first" {
     assert(text.starts_with("[crew] Режим «Планирование»"))
     assert(text.contains("Подзадача 1"))
 }
+
+test "routes: a changed file that is not committed is work: the card to finish is offered; a tree with the files of the task alone is not" {
+    mut rt = rt_sample()
+    ro none = jchild(rt_obj(route_view_text(rt, ["Постановка"], [parse_progress("- [ ] Постановка\n")], false, 0, task_extra_none())), "task") ?? JsonObject.new()
+    assert(!((none.get("finish") ?? JsonValue.null()).bool() ?? true))
+    rt.dirty = true
+    ro work = jchild(rt_obj(route_view_text(rt, ["Постановка"], [parse_progress("- [ ] Постановка\n")], false, 0, task_extra_none())), "task") ?? JsonObject.new()
+    assert((work.get("finish") ?? JsonValue.null()).bool() ?? false)
+}

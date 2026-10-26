@@ -616,6 +616,18 @@ export fn diff_stat(task_tree_path str) Proc Os Fs -> []DiffStat {
     out
 }
 
+/// Only temporary files (see `is_temp_file`) may be left in the tree: they do not hold up a publish. False also when git cannot tell.
+fn tw_clean_enough(path str) Proc Os Fs -> bool {
+    ro r = tw_git(tw_norm(path), ["status", "--porcelain", "--untracked-files=all"])
+    if r.code != 0 { return false }
+    for raw in r.out.lines() {
+        ro line = raw.trim_ascii()
+        if line.byte_len() > 3 && !(line.starts_with("?? ") && is_temp_file(line[3..].trim_ascii())) { return false }
+        if line.byte_len() <= 3 && line.byte_len() > 0 { return false }
+    }
+    true
+}
+
 /// No change and no new file in the tree (`git status --porcelain` is empty). False also when git cannot tell.
 export fn is_clean(path str) Proc Os Fs -> bool {
     ro r = tw_git(tw_norm(path), ["status", "--porcelain"])
@@ -655,6 +667,13 @@ fn tw_update_main_copy(main_copy str) Proc Os Fs -> str {
 /// Take the tree and the branch of a published task away (from the main copy: a tree cannot remove itself). "" - done, else why not.
 fn tw_remove_task_tree(main_copy str, tree str, branch str) Proc Os Fs -> str {
     mut problems = []str.new()
+    // the temporary files that were left (they did not hold up the publish) go first: `worktree remove` refuses a tree with an untracked file
+    ro left = tw_git(tree, ["ls-files", "-o", "--exclude-standard"])
+    if left.code == 0 {
+        for f in tw_lines(left.out) {
+            if is_temp_file(f) { ro gone = remove_file(Path.from_bytes("${tw_norm(tree)}/${f}".bytes())) }
+        }
+    }
     ro w = tw_git(main_copy, ["worktree", "remove", tree])
     if w.code != 0 { problems.push("tree not removed: ${tw_why(w)}") }
     ro in_main = tw_git(main_copy, ["merge-base", "--is-ancestor", branch, "origin/main"])
@@ -696,7 +715,7 @@ export fn publish(task_tree_path str, main_copy_path str, run_tests fn() Proc Os
     if tw_key(tree) == tw_key(main_copy) { return tw_blocked("precheck", "the tree of the task is the main copy") }
     if tw_merging(tree) || tw_rebasing(tree) { return tw_blocked("precheck", "a merge or a rebase is in progress in the tree: finish it first") }
     if tw_current_branch(tree).byte_len() == 0 { return tw_blocked("precheck", "the tree has a detached head") }
-    if !is_clean(tree) { return tw_blocked("precheck", "the tree has uncommitted changes") }
+    if !tw_clean_enough(tree) { return tw_blocked("precheck", "the tree has uncommitted changes") }
     ro fetched = tw_git_net(tree, ["fetch", "origin"])
     if fetched.code != 0 { return tw_blocked("fetch", tw_why(fetched)) }
     ro rebased = tw_git(tree, ["rebase", "--rebase-merges", "origin/main"])
@@ -728,7 +747,7 @@ export fn publish_continue(task_tree_path str, main_copy_path str, run_tests fn(
         }
     }
     if tw_merging(tree) { return tw_blocked("precheck", "a merge is in progress in the tree: finish it first") }
-    if !is_clean(tree) { return tw_blocked("precheck", "the tree has uncommitted changes") }
+    if !tw_clean_enough(tree) { return tw_blocked("precheck", "the tree has uncommitted changes") }
     tw_publish_tail(tree, main_copy, run_tests)
 }
 

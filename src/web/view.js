@@ -371,7 +371,7 @@ export function createView(doc, refs, deps) {
     projectPicker.replaceChildren(
       projectRow({ id: '', name: t('chat.project_none'), checked: !project }),
       ...list.map((p) => projectRow({ id: p.id, name: p.name, checked: Boolean(project) && p.id === project.id })),
-      many ? h(doc, 'div', { class: 'project-folder' }, draftFolder) : false);
+      ...(many ? [h(doc, 'div', { class: 'project-folder' }, draftFolder)] : []));
   }
   const agentText = h(doc, 'span', { class: 'agent-name' });
   const modelText = h(doc, 'span', { class: 'session-model-slot', 'data-session-model': '' });

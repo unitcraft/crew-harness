@@ -829,6 +829,8 @@ fn Hub mut @route_observe(at int) Proc Detach Time -> () {
     if s.rt.worktree.byte_len() > 0 && now_millis() - s.rt.unmerged_at > UNMERGED_MS {
         s.rt.unmerged = tk_unmerged(s.rt.worktree)
         s.rt.diff = tk_diff(s.rt.worktree)
+        // what the agent changed and did not commit is work too: the card to finish is offered for it
+        s.rt.dirty = @route_dirty(s)
         s.rt.unmerged_at = now_millis()
         // the last run of CI of main, asked of GitHub now and then (no `gh`, no network: no data)
         if now_millis() - s.rt.ci_at > 120000 {

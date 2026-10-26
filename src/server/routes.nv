@@ -355,6 +355,7 @@ export type RouteSession {
     active_at int,
     extra TaskExtra,
     testing bool,
+    dirty bool,
     ci_at int,
     diff []DiffRec,
     ov_n int,
@@ -369,7 +370,7 @@ export fn route_session_new() -> RouteSession => {
     route: "interactive", told: false, states: []str.new(), running: false, current: -1, awaiting: false, reviewing: false,
     task_open: false, task_closed: false, task_id: "", number: "", task_dir: "", task_shown: "", branch: "", worktree: "", title: "",
     messages: 0, subs: []SubRec.new(), merged_into: 0, force: "", last_state: "", last_check: 0, cwd_now: "", base: "", tstate: "active", tnote: "", unmerged: 0, unmerged_at: 0,
-    job: "", attempt: 0, use_tree: true, active_at: 0, extra: task_extra_none(), testing: false, ci_at: 0, diff: []DiffRec.new(), ov_n: 0, ov_with: 0, ov_files: []str.new(), ov_until: 0, asked: []int.new(), conflict_files: []str.new()
+    job: "", attempt: 0, use_tree: true, active_at: 0, extra: task_extra_none(), testing: false, dirty: false, ci_at: 0, diff: []DiffRec.new(), ov_n: 0, ov_with: 0, ov_files: []str.new(), ov_until: 0, asked: []int.new(), conflict_files: []str.new()
 }
 
 fn rj_object(text str) -> JsonObject {
@@ -742,7 +743,7 @@ export fn route_view_text(rt RouteSession, titles []str, progress []Progress, su
 // Is there work in the tree of the task: commits not merged, or a changed file other than the files of the task itself (`doc/tasks/<task>/`, the hub writes them)?
 // A tree with none is not worth the card "finish the task" (task 192): a greeting makes a task and a tree, and the owner is not asked about them.
 fn tree_has_work(rt RouteSession) -> bool {
-    if rt.unmerged > 0 { return true }
+    if rt.unmerged > 0 || rt.dirty { return true }
     for d in rt.diff {
         if !d.path.contains("doc/tasks/${rt.task_id}/") { return true }
     }

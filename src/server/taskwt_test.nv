@@ -729,3 +729,25 @@ test "taskwt autocommit: what the agent left (a changed file, a new file, a dele
     assert(again.status == "none")
     tt_rm(w.root)
 }
+
+test "taskwt publish: a temporary file left in the tree does not hold up the publish, a real untracked file does" {
+    ro w = tt_world("pubtemp")
+    ro tree = tt_task(w, "192", "demo")
+    tt_commit(tree.path, "t.txt", "task\n", "task work")
+    tt_write("${tree.path}/junk.tmp", "temporary\n")
+    tt_write("${tree.path}/real.txt", "work\n")
+    match publish(tree.path, w.main, tt_green) {
+        Published { sha, main_copy, cleanup } => panic("a real untracked file must stop the publish")
+        Blocked { reason, step, conflict_files } => assert(step == "precheck")
+    }
+    ro gone = remove_file(tt_path("${tree.path}/real.txt"))
+    match publish(tree.path, w.main, tt_green) {
+        Published { sha, main_copy, cleanup } => {
+            assert(cleanup == "")
+            assert(tg(w.origin, ["rev-parse", "main"]) == sha)
+        }
+        Blocked { reason, step, conflict_files } => panic("blocked at ${step}: ${reason}")
+    }
+    assert(!tw_exists(tree.path))
+    tt_rm(w.root)
+}
