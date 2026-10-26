@@ -243,3 +243,44 @@ test "projects: the recent folders, the newest project first, without repeats" {
         Err(f) => panic(f.message)
     }
 }
+
+test "projects: the order of the owner is kept in the file and comes back for every reader" {
+    ro root = fresh_root("order")
+    ro a = made(root, body_of("{\"name\":\"A\",\"folders\":[]}"))
+    ro b = made(root, body_of("{\"name\":\"B\",\"folders\":[]}"))
+    ro c = made(root, body_of("{\"name\":\"C\",\"folders\":[]}"))
+    match projects_reorder(root, [c, a, "nothere", c, b]) {
+        Ok(done) => ()
+        Err(f) => panic("reorder: ${f.message}")
+    }
+    match projects_load(root) {
+        Ok(list) => {
+            assert(list.len() == 3)
+            assert(list[0].id == c && list[1].id == a && list[2].id == b)
+        }
+        Err(f) => panic("load: ${f.message}")
+    }
+    // a project made later goes last; a name of the order that is gone is skipped
+    ro d = made(root, body_of("{\"name\":\"D\",\"folders\":[]}"))
+    match projects_load(root) {
+        Ok(list) => assert(list.len() == 4 && list[3].id == d && list[0].id == c)
+        Err(f) => panic("load: ${f.message}")
+    }
+    match projects_reorder(root, [d]) {
+        Ok(done) => ()
+        Err(f) => panic("reorder: ${f.message}")
+    }
+    match projects_load(root) {
+        Ok(list) => assert(list[0].id == d && list[1].id == c && list[2].id == a && list[3].id == b)
+        Err(f) => panic("load: ${f.message}")
+    }
+}
+
+test "projects: the pure order puts the named first, the rest keep their order" {
+    ro p1 = Project { id: "aaaaaa", name: "1", folders: []Folder.new(), env: "" }
+    ro p2 = Project { id: "bbbbbb", name: "2", folders: []Folder.new(), env: "" }
+    ro p3 = Project { id: "cccccc", name: "3", folders: []Folder.new(), env: "" }
+    ro out = projects_ordered([p1, p2, p3], ["cccccc", "zzzzzz", "cccccc"])
+    assert(out.len() == 3 && out[0].id == "cccccc" && out[1].id == "aaaaaa" && out[2].id == "bbbbbb")
+    assert(projects_ordered([p1, p2], []).len() == 2)
+}

@@ -10,6 +10,7 @@ module crew_harness.server
 import crew_harness.product_machines.{dialog_machine_text, tree_machines_dir}
 import crew_harness.pgdb.{PgConfig}
 import std.encoding.json.{Json, JsonValue, JsonObject}
+import crew_harness.projects.{projects_create}
 import crew_harness.storage.{session_dir, session_file, session_images_dir, save_image, replace_file}
 import std.fs.{Fs, real_fs, Path, try_exists, remove_dir_all, read_dir, rename, read_text}
 import std.os.{Os, real_os, cwd, temp_dir, pid}
@@ -711,6 +712,65 @@ export fn scenario_renamed_table(settings ServerSettings) Proc Detach Time Net F
     c.expect(rig.until(KIT_DONE, 15000), "the next turn ends")
     c.expect(answer_of(rig.lines_for(1), line_input(first_of(rig.lines_for(1), "user_message", 4), "turn")) == "Echo: after cancel", "the next turn is answered")
     rig.shut()
+    c.report()
+}
+
+/// The owner puts the sessions in an order, moves one to another project, and deletes one (task 192): every page is told, the places and the project
+/// come back after a restart, a deleted session is gone from the hub and from the disk, even with a turn open.
+export fn scenario_order_move_delete(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    for name in ["s-oa", "s-ob", "s-oc"] {
+        rig.page(1, "session_created", name, "{\"name\":\"${name}\",\"agent\":\"opencode\"}")
+    }
+    // the order: top to bottom, the place is the number; the same order again writes nothing
+    rig.page(1, "session_reorder", "s-oc", "{\"ids\":[\"s-oc\",\"s-oa\",\"gone\",\"s-ob\"]}")
+    c.expect(kit_with(rig.lines_for(1), "\"kind\":\"session_placed\"") == 3, "three places are told")
+    ro placed = first_of(rig.lines_for(1), "session_placed", 0)
+    c.expect(placed.contains("\"rank\":0") && placed.contains("\"trace\":\"s-oc\""), "the first is at the place 0: ${placed}")
+    rig.page(1, "session_reorder", "s-oc", "{\"ids\":[\"s-oc\",\"s-oa\",\"s-ob\"]}")
+    rig.run(200)
+    c.expect(kit_with(rig.lines_for(1), "\"kind\":\"session_placed\"") == 3, "the same order is not written again")
+    rig.page(1, "session_reorder", "s-oc", "{\"ids\":[\"s-ob\",\"s-oc\",\"s-oa\"]}")
+    c.expect(kit_with(rig.lines_for(1), "\"kind\":\"session_placed\"") == 6, "a new order tells every session that moved")
+    // to another project: the session goes to the top of it
+    ro made = projects_create(settings.data_dir, match Json.parse("{\"name\":\"Other\",\"folders\":[]}") { Ok(v) => v.object() ?? JsonObject.new()
+        Err(e) => JsonObject.new() })
+    ro project_id = match made { Ok(id) => id
+        Err(f) => "" }
+    c.expect(project_id.byte_len() > 0, "the project is made")
+    rig.page(1, "session_move", "s-oa", "{\"project_id\":\"${project_id}\"}")
+    c.expect(rig.until("\"project\":\"Other\"", 5000), "the move is told with the name of the project")
+    rig.page(1, "session_move", "s-ob", "{\"project_id\":\"nonexistent\"}")
+    rig.run(200)
+    c.expect(kit_with(rig.lines_for(1), "the project is not there") == 1, "a project that is not there is refused")
+    rig.page(1, "session_move", "s-ob", "{\"project_id\":\"\"}")
+    rig.run(200)
+    c.expect(kit_with(rig.lines_for(1), "\"project_id\":\"\"") == 0, "a move to the same place says nothing")
+    // a restart keeps the places and the project
+    ro before = rig.hub.page_lines("s-oa")
+    rig.shut()
+    mut again = rig_open(settings)
+    c.expect(kit_text(again.hub.page_lines("s-oa")) == kit_text(before), "the lines of the moved session are the same after the restart")
+    again.attach(2)
+    // delete a session with an open turn
+    again.page(2, "user_message", "s-oc", "{\"turn\":\"t1\",\"text\":\"slow go\"}")
+    c.expect(again.until("\"text\":\"started\"", 15000), "the turn has begun")
+    ro folder = match session_dir(settings.data_dir, "s-oc") { Some(p) => p.display()
+        None => "" }
+    c.expect(kit_file_exists(folder), "the folder of the session is there")
+    again.page(2, "session_delete", "s-oc", "{}")
+    c.expect(again.until("\"kind\":\"session_deleted\"", 5000), "the deletion is told")
+    c.expect(!kit_file_exists(folder), "the folder of the session is gone")
+    c.expect(!again.hub.session_ids().contains("s-oc") && again.hub.session_ids().len() == 2, "the hub has two sessions left")
+    c.expect(!again.hub.has_agent("s-oc"), "the agent is stopped")
+    again.page(2, "user_message", "s-oc", "{\"turn\":\"t2\",\"text\":\"hello\"}")
+    again.run(200)
+    again.shut()
+    mut third = rig_open(settings)
+    c.expect(third.hub.session_ids().len() == 2 && !third.hub.session_ids().contains("s-oc"), "a deleted session does not come back after a restart")
+    third.shut()
     c.report()
 }
 
