@@ -350,14 +350,15 @@ export type RouteSession {
     ov_with int,
     ov_files []str,
     ov_until int,
-    asked []int
+    asked []int,
+    conflict_files []str
 }
 
 export fn route_session_new() -> RouteSession => {
     route: "interactive", told: false, states: []str.new(), running: false, current: -1, awaiting: false, reviewing: false,
     task_open: false, task_closed: false, task_id: "", number: "", task_dir: "", task_shown: "", branch: "", worktree: "", title: "",
     messages: 0, subs: []SubRec.new(), merged_into: 0, force: "", last_state: "", last_check: 0, cwd_now: "", base: "", tstate: "active", tnote: "", unmerged: 0, unmerged_at: 0,
-    job: "", attempt: 0, parked: []ParkRec.new(), diff: []DiffRec.new(), ov_n: 0, ov_with: 0, ov_files: []str.new(), ov_until: 0, asked: []int.new()
+    job: "", attempt: 0, parked: []ParkRec.new(), diff: []DiffRec.new(), ov_n: 0, ov_with: 0, ov_files: []str.new(), ov_until: 0, asked: []int.new(), conflict_files: []str.new()
 }
 
 fn rj_object(text str) -> JsonObject {

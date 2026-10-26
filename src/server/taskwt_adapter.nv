@@ -1,0 +1,181 @@
+// taskwt_adapter.nv - task 192q: the hub's view of the git operations of the tasks (`taskwt.nv`, task 192r). The hub does not know the types and the effects of that module:
+// here they are turned into plain records and the effects `Os` and `Fs` are given (`with`). The names begin with `tk_`.
+module crew_harness.server
+
+import std.os.{Os, real_os}
+import std.fs.{Fs, real_fs}
+
+/// TkTree: a tree made for a task or a subtask.
+export type TkTree { ok bool, branch str, worktree str, base str, text str }
+
+/// TkMerge: the result of a merge: `status` is "merged", "conflict" (the files are unmerged, the merge is left in progress), "still" (files still hold markers) or "error".
+export type TkMerge { status str, files []str, text str }
+
+/// TkPublish: the result of a step of publishing: `status` "done" (`main_note` says what became of the main copy, `cleanup` of the tree) or "blocked" (`step`: precheck, fetch, rebase, tests, push).
+export type TkPublish { status str, step str, reason str, files []str, main_note str, cleanup str }
+
+/// Is the folder the root of a git repository (a `.git` folder or file)?
+export fn tk_is_repo(dir str) -> bool => path_there("${dir}/.git")
+
+/// The names of the task branches (`task/007-x` as `007-x`, also those of `origin`), for the number of the next task.
+export fn tk_branch_names(main_copy str) Proc -> []str {
+    mut out = []str.new()
+    ro r = git_run(main_copy, ["for-each-ref", "--format=%(refname:short)", "refs/heads/task", "refs/remotes/origin/task"])
+    if r.ok {
+        for line in r.text.lines() {
+            ro name = line.trim_ascii()
+            if name.starts_with("origin/task/") {
+                out.push(name["origin/task/".byte_len()..])
+            } else if name.starts_with("task/") {
+                out.push(name["task/".byte_len()..])
+            }
+        }
+    }
+    out
+}
+
+/// The lines of `git status --porcelain` of the tree (what is changed and not committed).
+export fn tk_tree_changes(tree str) Proc -> []str {
+    mut out = []str.new()
+    ro r = git_run(tree, ["status", "--porcelain"])
+    if r.ok {
+        for line in r.text.lines() {
+            if line.trim_ascii().byte_len() > 0 { out.push(line) }
+        }
+    }
+    out
+}
+
+/// Remove the tree and the branch of a task that has nothing to lose (no commits that are not merged, no changes but the files of the task itself).
+export fn tk_tree_remove(main_copy str, tree str, branch str) Proc -> ShellOut {
+    ro r = git_run(main_copy, ["worktree", "remove", "--force", tree])
+    if !r.ok { return r }
+    git_run(main_copy, ["branch", "-d", branch])
+}
+
+fn tk_failed(text str) -> TkTree => { ok: false, branch: "", worktree: "", base: "", text }
+
+/// A tree for the task `number` `slug`: branch `task/<number>-<slug>`, the folder next to the repository (in `worktrees`).
+export fn tk_task_tree(main_copy str, number str, slug str) Proc -> TkTree {
+    ro made = with Os = real_os(), Fs = real_fs() { task_tree_create(main_copy, number, slug) }
+    match made {
+        Ok(t) => { ok: true, branch: t.branch, worktree: t.path, base: t.base, text: t.note }
+        Err(e) => tk_failed(e)
+    }
+}
+
+/// A tree for the subtask `n`: branch `<task branch>-s<n>` from the head of the task, the folder `<tree of the task>-s<n>`.
+export fn tk_subtask_tree(task_tree str, number str, slug str, n int) Proc -> TkTree {
+    ro made = with Os = real_os(), Fs = real_fs() { subtask_tree_create(task_tree, number, slug, n) }
+    match made {
+        Ok(t) => { ok: true, branch: t.branch, worktree: t.path, base: t.base, text: "" }
+        Err(e) => tk_failed(e)
+    }
+}
+
+fn tk_merge_of(r MergeResult) -> TkMerge {
+    match r {
+        Merged { sha } => { status: "merged", files: []str.new(), text: sha }
+        Conflict { files } => { status: "conflict", files, text: "" }
+        StillConflicted { files } => { status: "still", files, text: "" }
+        Failed { msg } => { status: "error", files: []str.new(), text: msg }
+    }
+}
+
+/// Merge the branch of a subtask into the tree of the task (`--no-ff`); a conflict is left in progress for the agent.
+export fn tk_merge(task_tree str, sub_branch str, message str) Proc -> TkMerge {
+    tk_merge_of(with Os = real_os(), Fs = real_fs() { subtask_merge(task_tree, sub_branch, message) })
+}
+
+/// Finish a merge whose conflicts were resolved.
+export fn tk_merge_finish(task_tree str) Proc -> TkMerge {
+    tk_merge_of(with Os = real_os(), Fs = real_fs() { subtask_merge_finish(task_tree) })
+}
+
+/// Abandon a merge in the tree of the task.
+export fn tk_merge_abort(task_tree str) Proc -> ShellOut {
+    match with Os = real_os(), Fs = real_fs() { subtask_merge_abort(task_tree) } {
+        Ok(done) => { ok: true, text: "" }
+        Err(e) => { ok: false, text: e }
+    }
+}
+
+/// Remove the tree and the branch of a merged subtask.
+export fn tk_subtree_remove(task_tree str, sub_tree str, sub_branch str) Proc -> ShellOut {
+    match with Os = real_os(), Fs = real_fs() { subtask_tree_remove(task_tree, sub_tree, sub_branch) } {
+        Ok(done) => { ok: true, text: "" }
+        Err(e) => { ok: false, text: e }
+    }
+}
+
+/// The number of the commits of the tree that are not in `origin/main`; 0 when git cannot tell.
+export fn tk_unmerged(tree str) Proc -> int {
+    ro n = with Os = real_os(), Fs = real_fs() { unmerged_count(tree) }
+    if n < 0 { 0 } else { n }
+}
+
+/// The changed files of the tree with the lines added and removed.
+export fn tk_diff(tree str) Proc -> []DiffRec {
+    ro stats = with Os = real_os(), Fs = real_fs() { diff_stat(tree) }
+    mut out = []DiffRec.new()
+    for d in stats { out.push(DiffRec { path: d.path, added: d.added, removed: d.removed }) }
+    out
+}
+
+/// The same as text, one file to a line.
+export fn tk_diff_text(tree str) Proc -> str {
+    mut lines = []str.new()
+    for d in tk_diff(tree) { lines.push("${d.path}  +${d.added} -${d.removed}") }
+    if lines.len() == 0 { "(изменений нет)" } else { joined(lines, "\n") }
+}
+
+/// No change and no new file in the tree.
+export fn tk_clean(tree str) Proc -> bool => with Os = real_os(), Fs = real_fs() { is_clean(tree) }
+
+/// The files a subtask says it touches (the section `Затрагивает:` of its progress file).
+export fn tk_touches(progress_md str) -> []str => parse_touches(progress_md)
+
+/// The files and folders that two lists share.
+export fn tk_overlap(a []str, b []str) -> []str => overlap(a, b)
+
+/// The words for the agent that must resolve conflicts in `files`; the tests are asked for in a form the hub reads.
+export fn tk_resolve_text(files []str) -> str =>
+    "${resolve_prompt(files)} Последней строкой ответа напиши ровно «ТЕСТЫ: ЗЕЛЁНЫЕ» или «ТЕСТЫ: КРАСНЫЕ»."
+
+// The tests are the turn of the agent and cannot be waited for inside `publish`: the first calls answer "need-tests", the last answers green.
+fn tk_tests_pending() Proc Os Fs -> str => "need-tests"
+
+fn tk_tests_green() Proc Os Fs -> str => ""
+
+fn tk_published_of(r PublishResult) -> TkPublish {
+    match r {
+        Published { sha, main_copy, cleanup } => { status: "done", step: "", reason: sha, files: []str.new(), main_note: main_copy, cleanup }
+        Blocked { reason, step, conflict_files } => { status: "blocked", step, reason, files: conflict_files, main_note: "", cleanup: "" }
+    }
+}
+
+/// A step of publishing a task, the only way to the remote. `mode`: "start" (fetch, rebase, then it stops at "tests" with the reason "need-tests"), "continue" (go on after the conflicts
+/// were resolved, stops at "tests" again), "final" (the tests are green: the push, the main copy, the clean-up).
+export fn tk_publish(task_tree str, main_copy str, mode str) Proc -> TkPublish {
+    if mode == "start" {
+        return tk_published_of(with Os = real_os(), Fs = real_fs() { publish(task_tree, main_copy, tk_tests_pending) })
+    }
+    if mode == "continue" {
+        return tk_published_of(with Os = real_os(), Fs = real_fs() { publish_continue(task_tree, main_copy, tk_tests_pending) })
+    }
+    tk_published_of(with Os = real_os(), Fs = real_fs() { publish_continue(task_tree, main_copy, tk_tests_green) })
+}
+
+/// The files of the task itself (`doc/tasks/<id>/`) are committed to the branch of the task before it is published (they are a part of the work); `rel` is the folder from the root of the tree.
+/// "" - done (or nothing to commit), else why not.
+export fn tk_commit_task_files(tree str, rel str, number str) Proc -> str {
+    ro added = git_run(tree, ["add", "--", rel])
+    if !added.ok { return added.text }
+    ro staged = git_run(tree, ["diff", "--cached", "--quiet", "--", rel])
+    if staged.ok { return "" }
+    ro done = git_run(tree, ["commit", "-s", "-m", "${number} files of the task", "--", rel])
+    if done.ok { "" } else { done.text }
+}
+
+/// Abandon a rebase that was left in progress.
+export fn tk_rebase_abort(task_tree str) Proc -> ShellOut => git_run(task_tree, ["rebase", "--abort"])

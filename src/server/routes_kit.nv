@@ -346,3 +346,101 @@ export fn scenario_route_tree(settings ServerSettings) Proc Detach Time Net Fs O
     again.shut()
     c.report()
 }
+
+// A repository with a remote: `<root>/origin.git` (bare) and `<root>/repo` on `main`, pushed, with the identity set for the commits of the hub.
+fn rk_repo_remote(root str) Proc -> str {
+    ro repo = rk_repo(root)
+    ro origin = "${root}/origin.git"
+    ro made = write_file("${origin}/.keep", "")
+    ro bare = rk_git(origin, ["init", "--bare", "-b", "main"])
+    ro name = rk_git(repo, ["config", "user.name", "Test"])
+    ro mail = rk_git(repo, ["config", "user.email", "test@example.com"])
+    ro sign = rk_git(repo, ["config", "commit.gpgsign", "false"])
+    ro remote = rk_git(repo, ["remote", "add", "origin", origin])
+    ro pushed = rk_git(repo, ["push", "origin", "main"])
+    repo
+}
+
+/// The settings for a session in a repository that has a remote.
+export fn kit_routes_remote(name str) Proc -> ServerSettings {
+    ro root = rk_root(name)
+    ro repo = rk_repo_remote(root)
+    rk_settings(name, repo)
+}
+
+fn rk_head(dir str, branch str) Proc -> str => git_run(dir, ["rev-parse", branch]).text
+
+// Pump until the subtask `at` (from 0) of the task is merged, at most `limit_ms`.
+fn Rig mut @wait_merged(at int, limit_ms int) Proc Detach Time -> bool {
+    ro deadline = Time.now().unix_millis() + limit_ms
+    while Time.now().unix_millis() < deadline {
+        @run(150)
+        if ((rk_sub(rk_last(@all_lines_for(1), "route_state"), at).get("merged") ?? JsonValue.null()).bool() ?? false) { return true }
+    }
+    false
+}
+
+/// A subtask in a tree of its own is merged into the tree of the task (a conflict is resolved by the agent), and the task is published ONLY by the word of the owner: before it the remote is
+/// untouched; then the rebase, the tests (a turn of the agent), the push, the main copy brought up by a fast-forward, the tree removed.
+export fn scenario_route_publish(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    ro repo = settings.workdir
+    ro origin = "${repo}/../origin.git"
+    ro initial = rk_head(origin, "main")
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-r4", "{\"name\":\"Публикация\",\"agent\":\"opencode\"}")
+    c.expect(rig.until("\"kind\":\"session_created\"", 5000), "the session is shown")
+    rig.page(1, "user_message", "s-r4", "{\"turn\":\"t1\",\"text\":\"общая работа\"}")
+    c.expect(rig.until(KIT_DONE, 20000), "the first message is answered")
+    rig.page(1, "route_subtask_new", "s-r4", "{}")
+    rig.page(1, "user_message", "s-r4", "{\"turn\":\"t2\",\"text\":\"вторая часть\"}")
+    c.expect(rig.until(KIT_DONE, 20000), "the second message is answered")
+    rig.page(1, "route_subtask_worktree", "s-r4", "{\"n\":2}")
+    rig.run(1500)
+    ro st = rk_last(rig.all_lines_for(1), "route_state")
+    ro task = rk_task(st)
+    ro tree = jtext(task, "worktree")
+    ro sub = rk_sub(st, 1)
+    ro subtree = jtext(sub, "worktree")
+    c.expect(rk_array(task, "subtasks").len() == 2, "two subtasks")
+    c.expect(subtree.byte_len() > 0 && dir_there(subtree) && subtree != tree, "the subtask has a tree of its own: ${subtree}")
+    c.expect(jtext(sub, "branch") == "${jtext(task, "branch")}-s2", "its branch: ${jtext(sub, "branch")}")
+
+    // both sides add a.txt: a conflict of the merge
+    ro w1 = write_file("${tree}/a.txt", "task side\n")
+    c.expect(rk_git(tree, ["add", "a.txt"]) && rk_git(tree, ["commit", "-m", "${jtext(task, "number")} task side"]), "a commit in the tree of the task")
+    ro w2 = write_file("${subtree}/a.txt", "subtask side\n")
+    ro w3 = write_file("${subtree}/b.txt", "b\n")
+    c.expect(rk_git(subtree, ["add", "a.txt", "b.txt"]) && rk_git(subtree, ["commit", "-m", "${jtext(task, "number")} subtask side"]), "a commit in the tree of the subtask")
+    rig.page(1, "route_subtask_done", "s-r4", "{\"n\":2}")
+    c.expect(rig.wait_merged(1, 60000), "the conflict is resolved by the agent and the subtask is merged")
+    rig.run(500)
+    ro st2 = rk_last(rig.all_lines_for(1), "route_state")
+    c.expect(rk_text("${tree}/a.txt") == "resolved\n", "the file holds what the agent resolved: ${rk_text("${tree}/a.txt")}")
+    c.expect(path_there("${tree}/b.txt"), "the other file of the subtask came with the merge")
+    c.expect(!dir_there(subtree), "the tree of a merged subtask is removed")
+    c.expect(jtext(rk_sub(st2, 1), "worktree") == "" && jtext(rk_sub(st2, 1), "state") == "done", "the subtask is done and has no tree")
+    c.expect(kit_with(rig.lines_for(1), "Служебный ход: разрешение конфликта") >= 1, "the service turn is shown in the feed")
+    c.expect(rk_head(origin, "main") == initial, "nothing was pushed before the word of the owner")
+
+    // the word of the owner
+    rig.page(1, "route_publish", "s-r4", "{}")
+    ro deadline = Time.now().unix_millis() + 90000
+    mut state = ""
+    while Time.now().unix_millis() < deadline && state != "done" && state != "ready" {
+        rig.run(200)
+        state = jtext(rk_task(rk_last(rig.all_lines_for(1), "route_state")), "state")
+        if state == "active" || state == "finishing" { state = "" }
+    }
+    rig.run(500)
+    ro st3 = rk_last(rig.all_lines_for(1), "route_state")
+    c.expect(state == "done", "the task is published: state ${state}, ${jtext(rk_task(st3), "note")}")
+    c.expect(rk_head(origin, "main") != initial, "the remote has the work now")
+    c.expect(rk_text("${repo}/a.txt").trim_ascii() == "resolved", "the main copy was brought up by a fast-forward")
+    c.expect(!dir_there(tree), "the tree of the task is removed")
+    c.expect(kit_with(rig.lines_for(1), "влита в main") >= 1 && kit_with(rig.lines_for(1), "Основная копия: updated") >= 1, "the owner is told what became of the main copy")
+    c.expect(git_run(repo, ["status", "--porcelain"]).text.byte_len() == 0, "the main copy is clean")
+    rig.shut()
+    c.report()
+}

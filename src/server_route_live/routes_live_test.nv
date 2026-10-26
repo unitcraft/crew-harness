@@ -1,0 +1,25 @@
+// routes_live_test.nv - the modes of work over a hub with the fake ACP agent (task 192q): the scenarios `scenario_route_*` of crew_harness.server/routes_kit.nv.
+module crew_harness.server_route_live
+
+import crew_harness.server.{kit_routes, kit_routes_git, kit_routes_remote, scenario_route_fast, scenario_route_nosteps, scenario_route_tree, scenario_route_publish}
+
+fn route_clean(report str) -> () {
+    if report.byte_len() > 0 { println("NOT AS IT MUST BE: ${report}") }
+    assert(report == "")
+}
+
+test "files: the mode Fast task: the task in the data folder, the instruction, the subtasks, the run of the steps, the review of another family" {
+    route_clean(scenario_route_fast(kit_routes("route-fast")))
+}
+
+test "files: a mode without steps does not run, an unknown mode is refused" {
+    route_clean(scenario_route_nosteps(kit_routes("route-none")))
+}
+
+test "files: the mode interactive in a repository: a task with a tree of its own, a kept task comes back" {
+    route_clean(scenario_route_tree(kit_routes_git("route-tree")))
+}
+
+test "files: a subtask in a tree of its own is merged (the agent resolves the conflict), the task is published only by the word of the owner" {
+    route_clean(scenario_route_publish(kit_routes_remote("route-publish")))
+}

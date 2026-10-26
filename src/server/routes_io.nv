@@ -81,11 +81,11 @@ export fn dir_names(p str) -> []str {
     out
 }
 
-/// GitOut: did the command end with 0, and what it printed (the output; the error text when it failed).
-export type GitOut { ok bool, text str }
+/// ShellOut: did the command end with 0, and what it printed (the output; the error text when it failed).
+export type ShellOut { ok bool, text str }
 
 /// `git -C dir args...` without a terminal prompt or an editor.
-export fn git_run(dir str, args []str) Proc -> GitOut {
+export fn git_run(dir str, args []str) Proc -> ShellOut {
     mut command = Command.new("git")
     command.arg("-C")
     command.arg(dir)
