@@ -452,3 +452,50 @@ test "page: session_created is passed on with its input" {
     assert(str_at(input_of(page), "folder") == "C:/work/x")
     assert(page_event(stamped(EventKind.Input, "session_created", "x", "not json"), "t1") == None)
 }
+
+test "turn usage: the tokens come from the usage of the answer, a number the agent did not give is absent, no usage - nothing" {
+    ro some = turn_usage_projection(j("{\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":662,\"outputTokens\":120,\"cachedReadTokens\":173312,\"totalTokens\":174094}}"), "end_turn")
+    match some {
+        Some(p) => {
+            assert(p.name == "turn_usage")
+            ro v = j(p.input)
+            assert(int_at(v, "new") == 662)
+            assert(int_at(v, "cached") == 173312)
+            assert(int_at(v, "output") == 120)
+            assert(int_at(v, "total") == 174094)
+            assert(str_at(v, "reason") == "end_turn")
+        }
+        None => assert(false)
+    }
+    match turn_usage_projection(j("{\"usage\":{\"input_tokens\":5}}"), "stop") {
+        Some(p) => {
+            ro v = j(p.input)
+            assert(int_at(v, "new") == 5)
+            assert(str_at(v, "cached") == "<missing>")
+        }
+        None => assert(false)
+    }
+    assert(no_projection(turn_usage_projection(j("{\"stopReason\":\"end_turn\"}"), "end_turn")))
+    assert(no_projection(turn_usage_projection(j("{\"usage\":{}}"), "end_turn")))
+    assert(no_projection(turn_usage_projection(j("{\"usage\":\"lots\"}"), "end_turn")))
+}
+
+fn no_projection(p Option[Projection]) -> bool {
+    match p {
+        Some(x) => false
+        None => true
+    }
+}
+
+test "turn usage: the page line carries the turn and the numbers" {
+    ro some = turn_usage_projection(j("{\"usage\":{\"inputTokens\":1,\"cachedReadTokens\":2}}"), "end_turn")
+    match some {
+        Some(p) => {
+            ro page = page_of(progress_event("agent-1", p), "t9")
+            assert(str_at(page, "kind") == "turn_usage")
+            assert(str_at(input_of(page), "turn") == "t9")
+            assert(int_at(input_of(page), "cached") == 2)
+        }
+        None => assert(false)
+    }
+}

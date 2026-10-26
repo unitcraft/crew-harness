@@ -155,6 +155,36 @@ fn usage_projection(update JsonValue) -> Projection {
     proj("usage_update", JsonValue.object(o).to_str())
 }
 
+fn first_int(v JsonValue, keys []str) -> int {
+    for key in keys {
+        match int_field(v, key) {
+            Some(n) => { if n >= 0 { return n } }
+            None => ()
+        }
+    }
+    -1
+}
+
+/// The tokens a turn used (task 192), from the `usage` of the answer of `session/prompt`: the event `turn_usage` with `{new, cached, output, total, reason}`
+/// (`new` - the input that was not read from the cache, `cached` - read from the cache, `output`, `total` as the agent counts it; a number the agent
+/// did not give is absent, and `reason` is the stop reason). No `usage`, or none of the four numbers in it: None - nothing is shown, nothing made up.
+export fn turn_usage_projection(result JsonValue, reason str) -> Option[Projection] {
+    ro usage = get_of(result, "usage")?
+    if !usage.is_object() { return None }
+    ro fresh = first_int(usage, ["inputTokens", "input_tokens"])
+    ro cached = first_int(usage, ["cachedReadTokens", "cached_read_tokens", "cachedInputTokens"])
+    ro output = first_int(usage, ["outputTokens", "output_tokens"])
+    ro total = first_int(usage, ["totalTokens", "total_tokens"])
+    if fresh < 0 && cached < 0 && output < 0 && total < 0 { return None }
+    mut o = JsonObject.new()
+    if fresh >= 0 { put(o, "new", JsonValue.int(fresh)) }
+    if cached >= 0 { put(o, "cached", JsonValue.int(cached)) }
+    if output >= 0 { put(o, "output", JsonValue.int(output)) }
+    if total >= 0 { put(o, "total", JsonValue.int(total)) }
+    put(o, "reason", JsonValue.str(reason))
+    Some(proj("turn_usage", JsonValue.object(o).to_str()))
+}
+
 /// The `update` of a `session/update` as the name and the input of an engine event. What is not in the table is
 /// `acp_skipped` with the name of the update as input.
 export fn project_update(update JsonValue) -> Projection {
@@ -641,6 +671,10 @@ fn page_input_of(e Incoming, turn str) -> Option[PageInput] {
             if e.name == "tool_call" {
                 ro value = object_input(e)?
                 return with_turn("tool_call", value, turn)
+            }
+            if e.name == "turn_usage" {
+                ro value = object_input(e)?
+                return with_turn("turn_usage", value, turn)
             }
             if e.name == "tool_call_update" || e.name == "usage_update" {
                 ro value = object_input(e)?

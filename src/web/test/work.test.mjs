@@ -50,6 +50,7 @@ test('виды событий: девять прежних, шесть рабо�
     'session_model',
     'tool_call',
     'tool_call_update',
+    'turn_usage',
     'usage_update',
     'user_message',
   ]);

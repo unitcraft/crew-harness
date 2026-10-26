@@ -478,6 +478,11 @@ fn AcpClient mut @on_result(id JsonValue, result JsonValue) -> () {
         ro request = @active
         @active = ""
         @prompt_rpc = -1
+        // the tokens of the turn go before its end (when the agent says them), so that they belong to the turn on the page
+        match turn_usage_projection(result, reason) {
+            Some(used) => @push(progress_event(request, used))
+            None => ()
+        }
         @push(stop_event(request, reason))
         return
     }

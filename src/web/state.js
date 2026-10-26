@@ -32,6 +32,8 @@ export const KINDS = Object.freeze([
   'question_request', 'question_answer', 'question_resolved',
   // задача 192o: каталог семьи — последние списки и значения агента, их шлёт хаб всем страницам
   'agent_catalog',
+  // задача 192: расход токенов хода (из usage ответа session/prompt)
+  'turn_usage',
   // задача 192p: режим работы по методике и его шаги (сервер -> страница)
   'route_state',
 ]);
@@ -365,6 +367,17 @@ function apply(session, event) {
       const tools = session.tools.map((x) => (x.status === 'pending' || x.status === 'in_progress' ? { ...x, status: 'cancelled' } : x));
       const tasks = session.tasks.map((x) => (x.status === 'running' ? { ...x, status: 'stopped', finishedAt: event.time } : x));
       return { ...session, state: 'cancelled', pending: null, pendingQuestion: null, messages, tools, tasks };
+    }
+
+    case 'turn_usage': {
+      const { index, message } = agentMessageFor(session.messages, turn);
+      if (index < 0) return session; // хода нет: цеплять не к чему
+      const num = (v) => (Number.isFinite(v) && v >= 0 ? v : undefined);
+      const usage = {
+        new: num(input.new), cached: num(input.cached), output: num(input.output), total: num(input.total), reason: str(input.reason),
+        steps: Array.isArray(input.steps) ? input.steps : undefined,
+      };
+      return { ...session, messages: putMessage(session.messages, index, { ...message, usage }) };
     }
 
     case 'usage_update': {

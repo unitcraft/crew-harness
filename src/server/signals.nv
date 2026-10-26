@@ -33,6 +33,7 @@ export fn signals_from_agent() -> []CodeSignal => [
     cs("agent_done", "answered", "src/acp/project.nv: stop_event (end_turn)", "-", true),
     cs("agent_refused", "refused", "src/acp/project.nv: refused_event, stop_event", "the code of FailCode", true),
     cs("timeout", "expired", "src/engine/engine.nv: the term of a request", "-", true),
+    cs("turn_usage", "progress", "src/acp/client.nv: on_result (the usage of session/prompt), src/acp/project.nv: turn_usage_projection", "new, cached, output, total, reason (JSON text)", false),
     cs("agent_thought", "progress", "src/acp/project.nv: project_update", "text", false),
     cs("tool_call", "progress", "src/acp/project.nv: project_update", "JSON text", false),
     cs("tool_call_update", "progress", "src/acp/project.nv: project_update", "JSON text", false),

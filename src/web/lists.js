@@ -137,6 +137,7 @@ export function timeline(session) {
   const items = [];
   const rows = workRows(session);
   const agentTurns = new Set(session.messages.filter((m) => m.role === 'agent').map((m) => m.turn));
+  const lastAgentTurn = [...session.messages].reverse().find((m) => m.role === 'agent')?.turn;
   const emitted = new Set();
 
   for (const m of session.messages) {
@@ -179,6 +180,10 @@ export function timeline(session) {
       const last = content[content.length - 1];
       if (last && last.type === 'text' && m.status === 'streaming') last.streaming = true;
       items.push(...content);
+
+      // расход токенов хода (задача 192): строка под ответом агента, только если агент его сообщил
+      const used = usageSummary(m.usage);
+      if (used && m.status !== 'streaming') items.push({ type: 'usage', key: `tok:${m.turn}`, ...used, context: m.turn === lastAgentTurn && session.usage ? { used: session.usage.used, size: session.usage.size } : null });
 
       const diffs = session.diffs.filter((d) => d.turn === m.turn);
       if (diffs.length > 0) items.push({ type: 'diffs', key: `d:${m.turn}`, rows: diffs, totals: diffTotals(diffs) });
@@ -351,4 +356,48 @@ export function commonWordPrefix(names) {
 export function effortChoices(efforts) {
   const prefix = commonWordPrefix(efforts.map((e) => e.name));
   return efforts.map((e) => (prefix ? { ...e, name: e.name.slice(prefix.length + 1) } : e));
+}
+
+// ---- расход токенов хода (задача 192) -----------------------------------------------------------
+
+/** Число с узкими неразрывными пробелами между тысячами: 173312 -> «173 312». */
+export function groupThousands(n) {
+  const v = Math.trunc(Number(n));
+  if (!Number.isFinite(v)) return '';
+  return String(v).replace(/\B(?=(\d{3})+(?!\d))/g, '\u202f');
+}
+
+/** Форма слова по числу: 'one' (1, 21), 'few' (2-4, 22-24), 'many' (остальное). */
+export function ruForm(n) {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return 'one';
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'few';
+  return 'many';
+}
+
+const STOP_LABEL = { end_turn: 'stop', tool_use: 'tool-call' };
+
+/**
+ * Расход токенов хода из события turn_usage: { steps, rows, latest, expandable }. rows - строки шагов (из input.steps, если агент
+ * присылает расход по шагам; иначе одна строка итога); latest - последняя строка. Нет чисел - null (строки в ленте не будет).
+ * «Всего» - то, что вошло в запрос: новые плюс из кэша (так считает и строка-образец); нет обоих - как дал агент.
+ */
+export function usageSummary(usage) {
+  if (!usage || typeof usage !== 'object') return null;
+  const num = (v) => (Number.isFinite(v) && v >= 0 ? v : undefined);
+  const row = (label, r) => {
+    const fresh = num(r.new);
+    const cached = num(r.cached);
+    const given = num(r.total);
+    const total = fresh !== undefined || cached !== undefined ? (fresh ?? 0) + (cached ?? 0) : given;
+    return { label, new: fresh, cached, total };
+  };
+  const listed = Array.isArray(usage.steps) ? usage.steps.filter((x) => x && typeof x === 'object') : [];
+  const rows = listed.length > 0
+    ? listed.map((x, i) => row(typeof x.label === 'string' && x.label ? x.label : String(i + 1), x))
+    : [row(STOP_LABEL[usage.reason] ?? (typeof usage.reason === 'string' && usage.reason ? usage.reason : 'stop'), usage)];
+  const latest = rows[rows.length - 1];
+  if (latest.new === undefined && latest.cached === undefined && latest.total === undefined) return null;
+  return { steps: rows.length, rows, latest, expandable: rows.length > 1 };
 }

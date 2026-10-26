@@ -232,6 +232,30 @@ test "agent: a mode chosen by the owner goes to the agent and comes back as agen
     client.close()
 }
 
+test "agent: the usage of the answer becomes the event turn_usage before the end of the turn" {
+    mut client = start([])
+    with Link = acp_link(client) {
+        Link.send(req("agent-1", "usage"))
+        ro events = collect_turn(10000)
+        mut at = -1
+        mut index = 0
+        for event in events {
+            if event.name == "turn_usage" {
+                at = index
+                assert(event.kind == EventKind.Progress)
+                assert(event.input.contains("\"new\":662"))
+                assert(event.input.contains("\"cached\":173312"))
+                assert(event.input.contains("\"reason\":\"end_turn\""))
+            }
+            index += 1
+        }
+        assert(at >= 0)
+        assert(at == events.len() - 2)
+        assert(last_of(events).name == "agent_done")
+    }
+    client.close()
+}
+
 test "agent: config_option_update from another session is ignored" {
     mut client = start([])
     with Link = acp_link(client) {
