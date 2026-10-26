@@ -23,7 +23,7 @@ import polaris.net.{ServerPolicy}
 import polaris.serve.{serve_addr}
 import std.encoding.json.{JsonValue, JsonObject}
 import std.concurrency.nvchan.{Chan, ChanTx, ChanRx}
-import std.fs.{DirFs, Path, Fs, real_fs}
+import std.fs.{DirFs, Path, Fs, real_fs, read_text}
 import std.io.{stderr}
 import std.net.{TcpStream, real_net}
 import std.os.{exit_process}
@@ -304,6 +304,22 @@ fn agents_route(agents []AgentChoice) -> fn(ServerRequest) -> ServerResponse {
     }
 }
 
+// ----- the catalog of the families: GET /api/agent-catalog (task 192o) -----
+
+// The file the hub keeps (`<data_dir>/agents.json`, written whole by a rename), as it is; the front reads it each time, so it never holds a stale copy.
+fn catalog_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
+    fn(req ServerRequest) -> ServerResponse {
+        if !origin_allowed(req, port) { return json_reply(403, "{\"error\":\"origin not allowed\"}") }
+        ro file = with Fs = real_fs() {
+            match read_text(Path.from_bytes("${data_dir}/agents.json".bytes())) {
+                Ok(text) => Some(text)
+                Err(e) => None
+            }
+        }
+        json_reply(200, agent_catalog_reply(file))
+    }
+}
+
 // ----- the voice: POST /api/stt and GET /api/stt/status (task 192f) -----
 
 // A line that cannot be in a WAV file by chance, so the audio never closes the form early.
@@ -488,6 +504,7 @@ fn build_router(web_dir str, port int, hub_tx ChanTx[str], reg_tx ChanTx[Reg], a
     ro r4n = router.route("/api/projects/{id}", one_project)?
     ro r4h = router.get("/api/fs/list", fs_list_route(data_dir, port))?
     ro r4i = router.get("/api/fs/git", fs_git_route(port))?
+    ro r4o = router.get("/api/agent-catalog", catalog_route(data_dir, port))?
     ro r5 = router.get("/{*path}", files_route(web_dir))?
     Ok(router)
 }

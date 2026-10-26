@@ -10,7 +10,7 @@ module crew_harness.server
 import crew_harness.product_machines.{dialog_machine_text, tree_machines_dir}
 import crew_harness.pgdb.{PgConfig}
 import std.encoding.json.{Json, JsonValue, JsonObject}
-import crew_harness.storage.{session_dir, session_file, session_images_dir, save_image}
+import crew_harness.storage.{session_dir, session_file, session_images_dir, save_image, replace_file}
 import std.fs.{Fs, real_fs, Path, try_exists, remove_dir_all, read_dir, rename, read_text}
 import std.os.{Os, real_os, cwd, temp_dir, pid}
 
@@ -296,16 +296,28 @@ export fn Rig mut @until(needle str, limit_ms int) Proc Detach Time -> bool {
     false
 }
 
-/// The lines of the page one page has been told, in order (a message with an array is taken apart).
-export fn Rig @lines_for(conn int) -> []str {
+// The lines one page has been told: mode 0 - the lines of the sessions, 1 - the lines of the catalog of the families (task 192o), 2 - all of them.
+fn Rig @lines_in_mode(conn int, mode int) -> []str {
     mut out = []str.new()
     for h in @heard {
         if h.to.contains(conn) {
-            for line in kit_flatten(h.text) { out.push(line) }
+            for line in kit_flatten(h.text) {
+                ro catalog = line_field(line, "kind") == "agent_catalog"
+                if mode == 2 || (mode == 1 && catalog) || (mode == 0 && !catalog) { out.push(line) }
+            }
         }
     }
     out
 }
+
+/// The lines of the sessions one page has been told, in order (a message with an array is taken apart; the lines of the catalog are not among them).
+export fn Rig @lines_for(conn int) -> []str => @lines_in_mode(conn, 0)
+
+/// The lines of the catalog of the families one page has been told, in order.
+export fn Rig @catalog_for(conn int) -> []str => @lines_in_mode(conn, 1)
+
+/// Everything one page has been told, in order.
+export fn Rig @everything_for(conn int) -> []str => @lines_in_mode(conn, 2)
 
 /// Close the hub: the processes of the agents are killed.
 export fn Rig mut @shut() Time -> () {
@@ -842,6 +854,60 @@ export fn scenario_images(settings ServerSettings) Proc Detach Time Net Fs Os ->
     c.expect(kit_text(again.hub.page_lines("s-pic")) == kit_text(before), "the lines with the record of the picture are the same after the restart")
     c.expect(kit_with(again.hub.page_lines("s-pic"), "message_images") == 1, "the record comes back from the journal")
     again.shut()
+    c.report()
+}
+
+fn kit_write_file(path str, text str) -> bool {
+    with Fs = real_fs() { replace_file(Path.from_bytes(path.bytes()), text) }
+}
+
+fn kit_after_gap() Time -> int => Time.now().unix_millis()
+
+/// The catalog of the families (task 192o): what an agent gave is told to the pages at once and written to `<data_dir>/agents.json` (not oftener than every 2 s);
+/// a page that comes later is told the catalog before the sessions; a damaged file is ignored with a line in the log.
+export fn scenario_catalog(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    ro file = "${settings.data_dir}/agents.json"
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    c.expect(!kit_file_exists(file), "no catalog file before an agent gave something")
+    rig.page(1, "session_created", "s-cat", "{\"name\":\"Каталог\",\"agent\":\"opencode\"}")
+    c.expect(rig.until("\"kind\":\"agent_catalog\"", 15000), "the catalog of the family is told to the page when the agent gave its choices")
+    ro first_at = kit_after_gap()
+    ro told = first_of(rig.catalog_for(1), "agent_catalog", 0)
+    c.expect(line_input(told, "agent") == "opencode" && line_input(told, "model_id") == "fake-model" && line_input(told, "mode") == "default", "the line names the agent and carries its values: ${told}")
+    c.expect(kit_file_text(file).contains("\"opencode\"") && kit_file_text(file).contains("Fake Model") && kit_file_text(file).contains("Asks before changes"), "the first record is written at once: ${kit_file_text(file)}")
+    rig.page(1, "user_message", "s-cat", "{\"turn\":\"t1\",\"text\":\"model-change please\"}")
+    c.expect(rig.until("\"kind\":\"agent_catalog\"", 15000), "a change of the choices is told to the page again")
+    ro changed_at = kit_after_gap()
+    c.expect(kit_with(rig.catalog_for(1), "Second Model") >= 1, "the new list is in the line")
+    if changed_at - first_at < 1500 {
+        c.expect(!kit_file_text(file).contains("Second Model"), "the second write waits for the gap of 2 s")
+    }
+    c.expect(rig.until(KIT_DONE, 15000), "the turn ends")
+    rig.run(2400)
+    c.expect(kit_file_text(file).contains("Second Model") && !kit_file_text(file).contains("Fake Model"), "after the gap the change is written: ${kit_file_text(file)}")
+    rig.page(1, "session_agent", "s-cat", "{\"agent\":\"second\"}")
+    c.expect(rig.until("\"kind\":\"agent_switched\"", 15000), "the family changes")
+    c.expect(rig.until("catalog/second/", 15000), "the other family gives its choices and gets a record of its own")
+    rig.run(2400)
+    c.expect(kit_file_text(file).contains("\"second\":{") && kit_file_text(file).contains("\"opencode\":{"), "both records are in the file: ${kit_file_text(file)}")
+    rig.shut()
+
+    mut again = rig_open(settings)
+    again.attach(9)
+    ro lines = again.everything_for(9)
+    c.expect(again.catalog_for(9).len() == 2, "a page that comes after the restart is told both records: ${again.catalog_for(9).len()}")
+    c.expect(kinds_of(lines).len() > 0 && kinds_of(lines)[0] == "agent_catalog", "the catalog comes before the sessions")
+    again.shut()
+
+    c.expect(kit_write_file(file, "{\"agents\":{\"opencode\":{\"mod"), "a damaged file is made")
+    mut third = rig_open(settings)
+    ro said = kit_text(third.hub.take_log())
+    c.expect(said.contains("agents.json"), "the damaged file is named in the log: ${said}")
+    third.attach(9)
+    c.expect(third.catalog_for(9).len() == 0, "a damaged file gives no records")
+    third.shut()
     c.report()
 }
 
