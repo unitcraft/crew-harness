@@ -786,7 +786,8 @@ fn kit_without_yolo(settings ServerSettings) -> ServerSettings {
         port: settings.port, data_dir: settings.data_dir, store: settings.store, pg: settings.pg, agents, idle_term_ms: settings.idle_term_ms,
         workdir: settings.workdir, web_dir: settings.web_dir, hub_program: settings.hub_program, hub_args: settings.hub_args, acp_trace: settings.acp_trace,
         ask_form: settings.ask_form, ask_timeout_ms: settings.ask_timeout_ms, stt_url: settings.stt_url, stt_language: settings.stt_language,
-        max_image_bytes: settings.max_image_bytes
+        max_image_bytes: settings.max_image_bytes, routes_dir: settings.routes_dir, route_reviewer_order: settings.route_reviewer_order, route_task_limit: settings.route_task_limit,
+        route_task_messages: settings.route_task_messages, route_fix_attempts: settings.route_fix_attempts, route_worktree_ask: settings.route_worktree_ask, route_overlap_seconds: settings.route_overlap_seconds
     }
 }
 

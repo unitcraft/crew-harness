@@ -99,7 +99,8 @@ async function prompt(id, params) {
   let text = first && first.type === "text" ? first.text : "";
   // a note of the hub about the tool of questions comes before the first prompt: "[crew] ...", a blank line, the text of the owner
   let hinted = false;
-  if (text.startsWith("[crew] Если нужно") && text.includes("\n\n")) {
+  // (the notes of the modes of work and the service prompts also begin with "[crew]" or carry its words; only the note that names the tool is cut off)
+  if (text.startsWith("[crew]") && text.slice(0, text.indexOf("\n\n")).includes("ask_user_question") && text.includes("\n\n")) {
     hinted = true;
     text = text.slice(text.indexOf("\n\n") + 2);
   }
