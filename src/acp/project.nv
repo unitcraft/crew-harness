@@ -630,6 +630,11 @@ fn page_input_of(e Incoming, turn str) -> Option[PageInput] {
                 ro value = object_input(e)?
                 return page_input("agent_switched", value)
             }
+            // a choice of the owner that the agent does not offer any more (task 192t): a line in the feed
+            if e.name == "setting_dropped" {
+                ro value = object_input(e)?
+                return page_input("setting_dropped", value)
+            }
             // the pictures of the message that comes next (task 192): the list {n, name, mime, bytes}, never the bytes
             if e.name == "message_images" {
                 ro value = object_input(e)?

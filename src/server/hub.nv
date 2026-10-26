@@ -20,7 +20,7 @@ module crew_harness.server
 import alula.engine.{Engine, Incoming, EventKind, Journal, Store, Link, PartyRequest, start_engine, resume_engine, decode_snapshot}
 import crew_harness.product_machines.{dialog_machine_text}
 import alula.machine_run.{AlulaMachine, AlulaState}
-import crew_harness.acp.{AcpConfig, AcpClient, AcpImage, AskSetup, no_ask, open_client_full, acp_link, page_event, TRACE_LIMIT}
+import crew_harness.acp.{AcpConfig, AcpClient, AcpImage, AcpPreset, AskSetup, no_ask, open_client_full, acp_link, page_event, TRACE_LIMIT}
 import crew_harness.projects.{EnvEntry, projects_get, parse_dotenv, normalize_folder_path, project_has_folder, valid_project_id}
 import crew_harness.storage.{open_data_dir, file_journal, file_store, list_sessions, valid_session_name, session_file_made, migrate_flat_sessions, image_ext, decode_image, save_image, find_image, replace_file}
 import crew_harness.pgstore.{PgWorld, pg_journal, pg_store}
@@ -53,7 +53,52 @@ type Dialog {
     slow_told bool,
     folder str,
     project_id str,
-    rt RouteSession
+    rt RouteSession,
+    chosen []SavedChoice
+}
+
+// A choice of the owner (task 192t), kept per family: the agent, the setting (`mode`, `model`, `effort`) and the id chosen.
+type SavedChoice { agent str, setting str, value str }
+
+fn chosen_without(list []SavedChoice, agent str, setting str) -> []SavedChoice {
+    mut out = []SavedChoice.new()
+    for c in list {
+        if !(c.agent == agent && c.setting == setting) { out.push(c) }
+    }
+    out
+}
+
+fn chosen_put(list []SavedChoice, agent str, setting str, value str) -> []SavedChoice {
+    mut out = chosen_without(list, agent, setting)
+    out.push(SavedChoice { agent, setting, value })
+    out
+}
+
+// What a new agent of this family is asked for.
+fn presets_for(list []SavedChoice, agent str) -> []AcpPreset {
+    mut out = []AcpPreset.new()
+    for c in list {
+        if c.agent == agent { out.push(AcpPreset { setting: c.setting, value: c.value }) }
+    }
+    out
+}
+
+fn chosen_text(agent str, setting str, value str, at int) -> str {
+    mut o = JsonObject.new()
+    jput(o, "agent", JsonValue.str(agent))
+    jput(o, "setting", JsonValue.str(setting))
+    jput(o, "value", JsonValue.str(value))
+    jput(o, "at", JsonValue.int(at))
+    JsonValue.object(o).to_str()
+}
+
+fn dropped_text(agent str, setting str, value str, used str) -> str {
+    mut o = JsonObject.new()
+    jput(o, "agent", JsonValue.str(agent))
+    jput(o, "setting", JsonValue.str(setting))
+    jput(o, "value", JsonValue.str(value))
+    jput(o, "used", JsonValue.str(used))
+    JsonValue.object(o).to_str()
 }
 
 // A call of the tool `ask_user_question` (task 192i) that waits for the owner: the key the page answers by, the call of the MCP server, the session, the
@@ -566,6 +611,8 @@ fn Hub mut @ensure_client(at int) Proc Detach Time -> str {
         Some(config) => match open_client_full(config, @trace_path_of(s), TRACE_LIMIT, @ask_for(s.agent, s.id), @env_of(s)) {
             Ok(client) => {
                 s.clients.push(client)
+                // the choices of the owner for this family go to every agent started for the session (task 192t)
+                s.clients[0].set_presets(presets_for(s.chosen, s.agent))
                 s.announced = false
                 s.model_announced = false
                 s.slow_told = false
@@ -638,7 +685,7 @@ fn Hub mut @resume_session(id str) Proc Detach Time -> () {
     match resume_stored(pg, root, world, @machine, id) {
         None => @say_log("the session ${id} cannot be resumed: no usable snapshot")
         Some(engine) => {
-            mut s = Dialog { id, name: id, agent: "", engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false, folder: "", project_id: "", rt: route_session_new() }
+            mut s = Dialog { id, name: id, agent: "", engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false, folder: "", project_id: "", rt: route_session_new(), chosen: []SavedChoice.new() }
             mut saw_created = false
             for e in history_in(pg, root, s) {
                 if e.name == "session_created" && e.kind == EventKind.Input && !saw_created {
@@ -665,6 +712,19 @@ fn Hub mut @resume_session(id str) Proc Detach Time -> () {
                 }
                 // the mode of work and its task come back from the journal (task 192q)
                 if e.kind == EventKind.Input && route_signals().contains(e.name) { s.rt.apply(e.name, e.input) }
+                // the choices of the owner, per family: the last word of the journal (task 192t)
+                if e.kind == EventKind.Input && (e.name == "setting_chosen" || e.name == "setting_dropped") {
+                    match jobject(e.input) {
+                        Some(change) => {
+                            if e.name == "setting_chosen" {
+                                s.chosen = chosen_put(s.chosen, jtext(change, "agent"), jtext(change, "setting"), jtext(change, "value"))
+                            } else {
+                                s.chosen = chosen_without(s.chosen, jtext(change, "agent"), jtext(change, "setting"))
+                            }
+                        }
+                        None => ()
+                    }
+                }
                 match line_of(s, e) {
                     Some(line) => s.lines.push(line)
                     None => ()
@@ -714,7 +774,7 @@ fn Hub mut @create(conn int, trace str, input JsonObject) Proc Detach Time -> ()
             ro root = @settings.data_dir
             mut world = PgWorld.open(@settings.pg, trace)
             ro engine = begin_session_engine(pg, root, world, @machine, trace)
-            mut s = Dialog { id: trace, name, agent, engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false, folder: launch.folder, project_id, rt: route_session_new() }
+            mut s = Dialog { id: trace, name, agent, engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false, folder: launch.folder, project_id, rt: route_session_new(), chosen: []SavedChoice.new() }
             accept_in(pg, root, s, Incoming.signal("session_created", meta_text(name, agent, @cwd_of(launch.folder), project, project_id)))
             @add_session(s)
             ro at = @sessions.len() - 1
@@ -1078,6 +1138,8 @@ fn Hub mut @switch_agent(trace str, agent str) Proc Detach Time -> () {
             if s.clients.len() > 0 { s.clients[0].close() }
             s.clients = []AcpClient.new()
             s.clients.push(client)
+            // this family has choices of its own (kept in the journal); those of the family left are not carried over
+            s.clients[0].set_presets(presets_for(s.chosen, agent))
             s.agent = agent
             s.announced = false
             s.model_announced = false
@@ -1202,14 +1264,31 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
 // The first time an agent is ready, or has refused to start, is told: to the log, and a refusal to the page.
 fn Hub mut @watch_agent(at int) Time -> () {
     mut s = @sessions[at]
-    if s.announced { return }
-    mut model_arrived = false
+    mut told = false
+    // the choices of the owner the agent took go to the journal; the ones it does not offer any more are dropped there, and the owner is told (task 192t)
+    for p in s.clients[0].take_settled() {
+        s.chosen = chosen_put(s.chosen, s.agent, p.setting, p.value)
+        accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("setting_chosen", chosen_text(s.agent, p.setting, p.value, now_millis())))
+        told = true
+    }
+    for d in s.clients[0].take_dropped() {
+        s.chosen = chosen_without(s.chosen, s.agent, d.setting)
+        accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("setting_dropped", dropped_text(s.agent, d.setting, d.value, d.used)))
+        told = true
+    }
+    if s.announced {
+        @sessions[at] = s
+        if told { @drain(at) }
+        return
+    }
+    mut model_arrived = told
     ro phase = s.clients[0].phase()
     if !s.slow_told && phase != "ready" && phase != "failed" && now_millis() - s.started_at > 10000 {
         s.slow_told = true
         @say_log("the agent of ${s.id} is still starting (phase ${phase}): ${s.clients[0].stderr_tail()}")
     }
-    if phase == "ready" {
+    // the first summary waits until the choices asked for after the start are settled (a few seconds at most), so that it shows them
+    if phase == "ready" && (s.clients[0].sets_pending() == 0 || now_millis() - s.started_at > 5000) {
         s.announced = true
         @say_log("the agent of ${s.id} is ready: ${s.clients[0].agent_name()}")
         @apply_choices(s)
