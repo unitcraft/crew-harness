@@ -308,4 +308,21 @@ test "settings: an agent asks the owner by its own tool (native) unless the file
     assert(s.agents[1].ask == "mcp")
     assert(s.agents[2].ask == "off")
     assert(is_error(parse_server_settings("{\"agents\":[{\"id\":\"a\",\"program\":\"x\",\"ask\":\"always\"}]}")))
+
+test "settings: the modes of work have defaults and can be set" {
+    ro plain = must_settings("{}")
+    assert(plain.routes_dir == "doc/routes")
+    assert(plain.route_reviewer_order == ["codex", "claude", "kimi", "opencode"])
+    assert(plain.route_task_limit == 12)
+    assert(plain.route_task_messages == 40)
+    assert(plain.route_fix_attempts == 2)
+    assert(plain.route_worktree_ask)
+    assert(plain.route_overlap_seconds == 30)
+    ro set = must_settings("{\"routes_dir\":\"my/routes\",\"route_reviewer_order\":[\"kimi\"],\"route_task_limit\":5,\"route_task_messages\":9,\"route_fix_attempts\":3,\"route_worktree_ask\":false,\"route_overlap_seconds\":10}")
+    assert(set.routes_dir == "my/routes")
+    assert(set.route_reviewer_order == ["kimi"])
+    assert(set.route_task_limit == 5 && set.route_task_messages == 9 && set.route_fix_attempts == 3)
+    assert(!set.route_worktree_ask)
+    assert(set.route_overlap_seconds == 10)
+    assert(is_error(parse_server_settings("{\"route_reviewer_order\":\"kimi\"}")))
 }
