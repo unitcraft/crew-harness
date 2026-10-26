@@ -181,6 +181,12 @@ For an agent with no tool of its own (`ask: mcp` in its settings). The hub start
   выбрать между вариантами - вызывай инструмент ask_user_question (сервер crew), не пиши вопрос текстом"; the note is not in the journal and not in the feed.
 - The call blocks until the page answers (`question_answer` with the key `mcp-<n>`), a cancel of the turn answers it "skipped".
 
+The trace `<session>.acp.jsonl` holds the line of `session/new` with this token and the address; the token lives as long as the hub run and works on the loopback only.
+
+Checked live (2026-10-26, a hub of its own on port 8105, the real agents): Claude Code asked by `AskUserQuestion` and got the choice, Kimi Code the same; Claude Code with `ask: mcp` was handed the server, called
+`mcp__crew__ask_user_question` after the note and got the choice; Codex did not ask in 140 s (its tool `request_user_input` is for the plan mode of Codex, so it may never ask in a plain chat); OpenCode could not be
+checked: its model answered "Free usage limit reached" (the quota of the account, not the hub).
+
 Tests: `src/acp/ask_test.nv` (the forms and the answers, pure), `src/acp_live/client_test.nv` (the fake agent asks, is answered, is skipped, is cancelled; the server goes to `session/new` only to an agent that takes HTTP),
 `src/server/ask_mcp_test.nv` (the messages), `src/server_live/mcp_test.nv` (the sockets: the token, the origin, a call that waits, a term), `src/server_live/hub_test.nv` (the scenarios `scenario_question`,
 `scenario_question_off`, `scenario_question_mcp`, `scenario_question_mcp_timeout`; the fake agent `src/acp/testdata/fake_agent.mjs` asks with `ask`, `ask2`, calls the tool with `askmcp`).
