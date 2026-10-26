@@ -1,0 +1,168 @@
+// catalog.nv - the catalog of the families (task 192o): the last lists of models, efforts and modes that each agent (a family) gave,
+// and its current values; they are kept in `<data_dir>/agents.json` and told to the pages, so that a session whose agent is not running
+// (or a session that has just changed its family) shows what its family offers at once, and not the choices of another family.
+//
+//   {"agents":{"<agent id>":{"updated":<ms>,"model":"…","model_id":"…","models":[{id,name}],"effort":"…","effort_name":"…","efforts":[{id,name}],
+//                            "mode":"…","modes":[{id,name,description}]}}}
+//
+// Only the hub writes the file (a temporary file, then a rename: `replace_file`); the front only reads it (`GET /api/agent-catalog`). The record
+// of an agent is the summary of its last event `agent_model` merged into the old record: a list or a value that the summary lacks stays as it was
+// (the last list that the agent gave), a list that it gives replaces the old one. The values are ids and names the agent offers; no secrets.
+// The pure functions are here (checked by catalog_test.nv); the hub does the rest (hub.nv).
+module crew_harness.server
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+/// The least time between two writes of the file (the hub coalesces the updates).
+export const CATALOG_SAVE_GAP_MS = 2000
+
+/// The name of the file in the data folder.
+export const CATALOG_FILE = "agents.json"
+
+fn cat_put(mut o JsonObject, key str, value JsonValue) -> () {
+    ro replaced = o.insert(key, value)
+}
+
+fn cat_text_of(o JsonObject, key str) -> str {
+    match o.get(key) {
+        Some(v) => v.str() ?? ""
+        None => ""
+    }
+}
+
+fn cat_number_of(o JsonObject, key str) -> int {
+    match o.get(key) {
+        Some(v) => v.int() ?? 0
+        None => 0
+    }
+}
+
+// The list of the summary if it has one (not empty), else the old one, else none.
+fn cat_list(summary JsonObject, old JsonObject, key str) -> Option[JsonValue] {
+    match summary.get(key) {
+        Some(v) => match v.array() {
+            Some(items) => if items.len() > 0 { return Some(v) }
+            None => ()
+        }
+        None => ()
+    }
+    match old.get(key) {
+        Some(v) => match v.array() {
+            Some(items) => if items.len() > 0 { Some(v) } else { None }
+            None => None
+        }
+        None => None
+    }
+}
+
+// The text of the summary if it is not empty, else the old one, else none.
+fn cat_value(summary JsonObject, old JsonObject, key str) -> str {
+    ro fresh = cat_text_of(summary, key)
+    if fresh.byte_len() > 0 { return fresh }
+    cat_text_of(old, key)
+}
+
+fn cat_body(summary JsonObject, old JsonObject, updated int) -> JsonObject {
+    mut o = JsonObject.new()
+    cat_put(o, "updated", JsonValue.int(updated))
+    for key in ["model", "model_id"] {
+        ro v = cat_value(summary, old, key)
+        if v.byte_len() > 0 { cat_put(o, key, JsonValue.str(v)) }
+    }
+    match cat_list(summary, old, "models") {
+        Some(v) => cat_put(o, "models", v)
+        None => ()
+    }
+    for key in ["effort", "effort_name"] {
+        ro v = cat_value(summary, old, key)
+        if v.byte_len() > 0 { cat_put(o, key, JsonValue.str(v)) }
+    }
+    match cat_list(summary, old, "efforts") {
+        Some(v) => cat_put(o, "efforts", v)
+        None => ()
+    }
+    ro mode = cat_value(summary, old, "mode")
+    if mode.byte_len() > 0 { cat_put(o, "mode", JsonValue.str(mode)) }
+    match cat_list(summary, old, "modes") {
+        Some(v) => cat_put(o, "modes", v)
+        None => ()
+    }
+    o
+}
+
+/// The record of an agent after its summary (the input of an event `agent_model`) is merged into the old record. None - nothing changed, so there is
+/// nothing to tell and to write. The `updated` of a changed record is `now`, and always later than the old one.
+export fn catalog_update(old JsonObject, summary JsonObject, now int) -> Option[JsonObject] {
+    ro before = cat_number_of(old, "updated")
+    ro merged = cat_body(summary, old, before)
+    if cat_str(merged) == cat_str(cat_body(old, JsonObject.new(), before)) { return None }
+    ro stamp = if now > before { now } else { before + 1 }
+    Some(cat_body(summary, old, stamp))
+}
+
+fn cat_str(o JsonObject) -> str => JsonValue.object(o).to_str()
+
+/// The text of the file: the records of all the agents.
+export fn catalog_file_text(agents JsonObject) -> str {
+    mut o = JsonObject.new()
+    cat_put(o, "agents", JsonValue.object(agents))
+    JsonValue.object(o).to_str()
+}
+
+/// The agents of the text of the file; Err - the text is not what the hub wrote (the hub ignores such a file and says so).
+export fn catalog_parse(text str) -> Result[JsonObject, str] {
+    ro parsed = match Json.parse(text) {
+        Ok(v) => v
+        Err(e) => return Err("not JSON")
+    }
+    ro top = match parsed.object() {
+        Some(o) => o
+        None => return Err("not an object")
+    }
+    ro agents = match top.get("agents") {
+        Some(v) => match v.object() {
+            Some(o) => o
+            None => return Err("agents is not an object")
+        }
+        None => return Err("no agents")
+    }
+    mut kept = JsonObject.new()
+    for id in agents.keys() {
+        match agents.get(id) {
+            Some(record) => match record.object() {
+                Some(o) => cat_put(kept, id, record)
+                None => return Err("the record of ${id} is not an object")
+            }
+            None => ()
+        }
+    }
+    Ok(kept)
+}
+
+/// The line of the page for a record: the event `agent_catalog`, whose input is the record and the id of the agent; the id of the event holds
+/// the time of the record, so that a page ignores a record it has seen and takes a new one.
+export fn catalog_line(agent str, record JsonObject) -> str {
+    ro updated = cat_number_of(record, "updated")
+    mut input = JsonObject.new()
+    cat_put(input, "agent", JsonValue.str(agent))
+    for key in record.keys() {
+        match record.get(key) {
+            Some(v) => cat_put(input, key, v)
+            None => ()
+        }
+    }
+    mut o = JsonObject.new()
+    cat_put(o, "id", JsonValue.str("catalog/${agent}/${updated}"))
+    cat_put(o, "trace", JsonValue.str("agents"))
+    cat_put(o, "step", JsonValue.int(0))
+    cat_put(o, "kind", JsonValue.str("agent_catalog"))
+    cat_put(o, "input", JsonValue.object(input))
+    cat_put(o, "time", JsonValue.int(updated))
+    JsonValue.object(o).to_str()
+}
+
+/// Is it time to write the file? Something changed and the last write was at least `CATALOG_SAVE_GAP_MS` ago (or `force`).
+export fn catalog_save_due(dirty bool, now int, saved_at int, force bool) -> bool {
+    if !dirty { return false }
+    force || now - saved_at >= CATALOG_SAVE_GAP_MS
+}

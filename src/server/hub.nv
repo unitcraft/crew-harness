@@ -22,7 +22,7 @@ import crew_harness.product_machines.{dialog_machine_text}
 import alula.machine_run.{AlulaMachine, AlulaState}
 import crew_harness.acp.{AcpConfig, AcpClient, AcpImage, AskSetup, no_ask, open_client_full, acp_link, page_event, TRACE_LIMIT}
 import crew_harness.projects.{EnvEntry, projects_get, parse_dotenv, normalize_folder_path, project_has_folder, valid_project_id}
-import crew_harness.storage.{open_data_dir, file_journal, file_store, list_sessions, valid_session_name, session_file_made, migrate_flat_sessions, image_ext, decode_image, save_image, find_image}
+import crew_harness.storage.{open_data_dir, file_journal, file_store, list_sessions, valid_session_name, session_file_made, migrate_flat_sessions, image_ext, decode_image, save_image, find_image, replace_file}
 import crew_harness.pgstore.{PgWorld, pg_journal, pg_store}
 import crew_harness.pgdb.{pg_list}
 import std.concurrency.nvchan.{ChanTx}
@@ -32,6 +32,7 @@ import std.fs.{Fs, real_fs}
 import std.net.{real_net}
 import std.prelude.effects.{real_random}
 import std.os.{Os, real_os, cwd}
+import std.fs.{Fs, real_fs, Path, read_text, try_exists}
 
 /// Outgoing: a text for the page `conn`; conn 0 - for every page that is attached.
 export type Outgoing { conn int, text str }
@@ -70,7 +71,10 @@ export type Hub {
     serial int,
     mcps []McpServer,
     mcp_pending []McpPending,
-    mcp_serial int
+    mcp_serial int,
+    catalog JsonObject,
+    catalog_dirty bool,
+    catalog_saved_at int
 }
 
 // ----- small helpers -----
@@ -297,6 +301,7 @@ fn Hub mut @send(conn int, text str) -> () {
 fn Hub mut @drain(at int) Time -> () {
     mut s = @sessions[at]
     for e in s.engine.take_events() {
+        if e.name == "agent_model" { @catalog_note(s.agent, e.input) }
         match line_of(s, e) {
             Some(line) => {
                 s.lines.push(line)
@@ -313,9 +318,85 @@ fn Hub mut @tell_error(conn int, trace str, step int, turn str, message str) Tim
     @send(conn, event_line("srv-${@serial}", trace, step, "error", error_input(turn, message), now_millis()))
 }
 
-/// A page is attached: it gets everything that happened in every session, one message per session.
+// The catalog of the families (task 192o): an `agent_model` of a session is merged into the record of the agent of that session; a changed record is told to
+// every page at once and written to the file (`catalog_save_due` coalesces the writes).
+fn Hub mut @catalog_note(agent str, summary_text str) Time -> () {
+    if agent.byte_len() == 0 { return }
+    ro summary = match jobject(summary_text) {
+        Some(x) => x
+        None => return
+    }
+    ro old = match jchild(@catalog, agent) {
+        Some(r) => r
+        None => JsonObject.new()
+    }
+    match catalog_update(old, summary, now_millis()) {
+        None => ()
+        Some(record) => {
+            jput(@catalog, agent, JsonValue.object(record))
+            @catalog_dirty = true
+            @send(0, catalog_line(agent, record))
+        }
+    }
+}
+
+fn Hub @catalog_path() -> Path => Path.from_bytes("${@settings.data_dir}/${CATALOG_FILE}".bytes())
+
+// Write the file if a record changed and the gap since the last write has passed (`force`: now). A write that fails is tried again after the gap.
+fn Hub mut @catalog_save(force bool) Time -> () {
+    ro now = now_millis()
+    if !catalog_save_due(@catalog_dirty, now, @catalog_saved_at, force) { return }
+    @catalog_saved_at = now
+    ro path = @catalog_path()
+    ro written = with Fs = real_fs() { replace_file(path, catalog_file_text(@catalog)) }
+    if written {
+        @catalog_dirty = false
+    } else {
+        @say_log("the catalog of the families cannot be written to ${CATALOG_FILE}: it is tried again")
+    }
+}
+
+// The file of the catalog is read at the start; a missing file is an empty catalog, a damaged one is ignored (and said so in the log).
+fn Hub mut @catalog_load() -> () {
+    ro path = @catalog_path()
+    ro there = with Fs = real_fs() {
+        match try_exists(path) {
+            Ok(b) => b
+            Err(e) => false
+        }
+    }
+    if !there { return }
+    ro text = with Fs = real_fs() {
+        match read_text(path) {
+            Ok(t) => t
+            Err(e) => ""
+        }
+    }
+    match catalog_parse(text) {
+        Ok(agents) => { @catalog = agents }
+        Err(why) => @say_log("${CATALOG_FILE} is ignored: ${why}")
+    }
+}
+
+fn Hub @catalog_lines() -> []str {
+    mut lines = []str.new()
+    for agent in @catalog.keys() {
+        match jchild(@catalog, agent) {
+            Some(record) => lines.push(catalog_line(agent, record))
+            None => ()
+        }
+    }
+    lines
+}
+
+/// The ids of the agents that have a record in the catalog, in the order they were first given.
+export fn Hub @catalog_agents() -> []str => @catalog.keys()
+
+/// A page is attached: it gets the catalog of the families, then everything that happened in every session, one message per session.
 export fn Hub mut @attach(conn int) -> () {
     if !@conns.contains(conn) { @conns.push(conn) }
+    ro known = @catalog_lines()
+    if known.len() > 0 { @send(conn, array_text(known)) }
     for s in @sessions {
         if s.lines.len() > 0 { @send(conn, array_text(s.lines)) }
     }
@@ -513,7 +594,7 @@ export fn start_hub_from(settings ServerSettings, table_text str) Proc Detach Ti
     }
     ro machine = hub_machine_from(table_text, settings.idle_term_ms)?
     mut hub = Hub {
-        settings, machine, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0, mcps: []McpServer.new(), mcp_pending: []McpPending.new(), mcp_serial: 0
+        settings, machine, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0, mcps: []McpServer.new(), mcp_pending: []McpPending.new(), mcp_serial: 0, catalog: JsonObject.new(), catalog_dirty: false, catalog_saved_at: 0
     }
     if hub.wants_mcp() { ro started = hub.start_mcp() }
     ro pg = settings.store == "pg"
@@ -521,6 +602,7 @@ export fn start_hub_from(settings ServerSettings, table_text str) Proc Detach Ti
     ro migration = migrate_flat_sessions(settings.data_dir)
     if migration.sessions > 0 { hub.say_log("migrated ${migration.sessions} sessions to per-session folders") }
     for line in migration.kept { hub.say_log(line) }
+    hub.catalog_load()
     ro ids = if pg {
         match with Net = real_net() { pg_list(settings.pg) } {
             Ok(list) => list
@@ -1079,6 +1161,7 @@ export fn Hub mut @pump() Proc Detach Time -> int {
         }
         at += 1
     }
+    @catalog_save(false)
     made
 }
 
@@ -1099,6 +1182,7 @@ export fn Hub mut @take_log() -> []str {
 /// Close the agents of all sessions (their processes are killed). The store has nothing to close.
 export fn Hub mut @close() Time -> () {
     for server in @mcps { server.stop() }
+    @catalog_save(true)
     for s in @sessions {
         mut mine = s
         if mine.clients.len() > 0 {

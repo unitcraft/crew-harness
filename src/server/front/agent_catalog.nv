@@ -1,0 +1,41 @@
+// agent_catalog.nv - `GET /api/agent-catalog` (task 192o): the catalog of the families that the hub keeps in `<data_dir>/agents.json` (see src/server/catalog.nv),
+// as it is on disk. The front only reads it; a missing or damaged file is an empty catalog, so the page never gets a broken answer.
+// ORACLE-WORKAROUND(25): the module is declared `module server.front` (without the package prefix) and imported as `crew_harness.server.front`: a module two folders under the source root cannot be declared with the full path; declare it with the prefix when item 25 is fixed
+module server.front
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+/// The answer for an empty catalog.
+export const AGENT_CATALOG_EMPTY = "{\"agents\":{}}"
+
+/// The text of the answer for the text of the file (None - there is no file): the file itself if it is `{"agents":{...}}` with an object of objects, else an empty catalog.
+export fn agent_catalog_reply(file Option[str]) -> str {
+    ro text = match file {
+        Some(t) => t
+        None => return AGENT_CATALOG_EMPTY
+    }
+    ro parsed = match Json.parse(text) {
+        Ok(v) => v
+        Err(e) => return AGENT_CATALOG_EMPTY
+    }
+    ro top = match parsed.object() {
+        Some(o) => o
+        None => return AGENT_CATALOG_EMPTY
+    }
+    ro agents = match top.get("agents") {
+        Some(v) => match v.object() {
+            Some(o) => o
+            None => return AGENT_CATALOG_EMPTY
+        }
+        None => return AGENT_CATALOG_EMPTY
+    }
+    for id in agents.keys() {
+        match agents.get(id) {
+            Some(record) => if !record.is_object() { return AGENT_CATALOG_EMPTY }
+            None => ()
+        }
+    }
+    mut kept = JsonObject.new()
+    ro replaced = kept.insert("agents", JsonValue.object(agents))
+    JsonValue.object(kept).to_str()
+}

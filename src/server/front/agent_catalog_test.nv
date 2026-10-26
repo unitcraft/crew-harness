@@ -1,0 +1,24 @@
+// agent_catalog_test.nv - `GET /api/agent-catalog` (task 192o): the answer for the file of the catalog.
+// ORACLE-WORKAROUND(25): the module is declared `module server.front` (without the package prefix): a module two folders under the source root cannot be declared with the full path; declare it with the prefix when item 25 is fixed
+module server.front
+
+fn file_text() -> str => "{\"agents\":{\"claude\":{\"updated\":5000,\"model_id\":\"sonnet\",\"models\":[{\"id\":\"sonnet\",\"name\":\"Sonnet\"}]},\"kimi\":{\"updated\":6000}}}"
+
+test "agent catalog: a good file is given as it is" {
+    assert(agent_catalog_reply(Some(file_text())) == file_text())
+}
+
+test "agent catalog: no file, a damaged file and a file of another shape are an empty catalog" {
+    assert(agent_catalog_reply(None) == AGENT_CATALOG_EMPTY)
+    assert(agent_catalog_reply(Some("")) == AGENT_CATALOG_EMPTY)
+    assert(agent_catalog_reply(Some("{\"agents\":{\"claude\":{\"mod")) == AGENT_CATALOG_EMPTY)
+    assert(agent_catalog_reply(Some("[]")) == AGENT_CATALOG_EMPTY)
+    assert(agent_catalog_reply(Some("{}")) == AGENT_CATALOG_EMPTY)
+    assert(agent_catalog_reply(Some("{\"agents\":[]}")) == AGENT_CATALOG_EMPTY)
+    assert(agent_catalog_reply(Some("{\"agents\":{\"claude\":5}}")) == AGENT_CATALOG_EMPTY)
+}
+
+test "agent catalog: the empty answer is a catalog with no agents" {
+    assert(AGENT_CATALOG_EMPTY == "{\"agents\":{}}")
+    assert(agent_catalog_reply(Some("{\"agents\":{}}")) == AGENT_CATALOG_EMPTY)
+}

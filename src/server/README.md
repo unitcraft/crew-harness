@@ -92,6 +92,16 @@ The file store needs no database. For `store: pg` the easy way is the permanent 
 is a member of `crew_app`). A server that restarts finds its sessions with `crew.list_sessions()`. An example with `store: pg` and no password:
 `src/server/server-pg.example.json` (the password comes from `CREW_PG_PASSWORD`).
 
+### The catalog of the families: `agents.json`, `/api/agent-catalog` (task 192o)
+
+The hub keeps, for every agent (family), the last lists of models, efforts and modes that the agent gave and its current values, in `<data_dir>/agents.json`
+(`{"agents":{"<id>":{"updated":<ms>,"model","model_id","models":[{id,name}],"effort","effort_name","efforts":[{id,name}],"mode","modes":[{id,name,description}]}}}`).
+Every `agent_model` of a session (the answer to `session/new`, `config_option_update`, `current_mode_update`) is merged into the record of the agent of that session
+(`catalog.nv`: a list the summary lacks stays the last one given; nothing changed - nothing is told or written). A changed record is told to every page at once as the event
+`agent_catalog` `{ agent, ...record }` (id `catalog/<agent>/<updated>`, trace `agents`), and every page that attaches gets all the records before the sessions. The file is written
+whole (a temporary file, then a rename), not oftener than every 2 s; at the start the hub reads it, a damaged one is ignored with a line in the log. `GET /api/agent-catalog` gives the file
+as it is (`{"agents":{}}` when there is none; a foreign `Origin` is 403). The values are ids and names the agent offers, no secrets.
+
 ### The voice: `/api/stt`
 
 The front turns a recording into text with a local recognizer (task 192f); nothing is sent to a cloud service.
