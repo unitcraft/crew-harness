@@ -911,6 +911,26 @@ export fn scenario_catalog(settings ServerSettings) Proc Detach Time Net Fs Os -
     c.report()
 }
 
+/// A choice of the owner (mode) in a session whose agent is not running (after a restart): the hub starts the agent and makes the choice when it is ready (task 192).
+export fn scenario_choose_cold(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-cold", "{\"name\":\"Холодная\",\"agent\":\"opencode\"}")
+    rig.page(1, "user_message", "s-cold", "{\"turn\":\"t1\",\"text\":\"before\"}")
+    c.expect(rig.until(KIT_DONE, 15000), "the first turn ends")
+    rig.shut()
+
+    mut again = rig_open(settings)
+    again.attach(2)
+    c.expect(!again.hub.has_agent("s-cold"), "no agent is running after the restart")
+    again.page(2, "session_setting", "s-cold", "{\"setting\":\"mode\",\"value\":\"plan\"}")
+    c.expect(again.until("\"mode\":\"plan\"", 20000), "the agent is started for the choice and the page is told the new mode")
+    c.expect(again.hub.has_agent("s-cold"), "the agent is running now")
+    again.shut()
+    c.report()
+}
+
 /// The service restarts between two turns: the session, its lines and its next turn.
 export fn scenario_restart_idle(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
     mut c = kit_check()
