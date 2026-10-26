@@ -196,6 +196,9 @@ export fn scenario_route_fast(settings ServerSettings) Proc Detach Time Net Fs O
     ro st9 = rk_last(again.all_lines_for(1), "route_state")
     c.expect(jtext(rk_task(st9), "number") == "002", "a message after a finished run opens task 002: ${jtext(rk_task(st9), "number")}")
     c.expect(rk_array(rk_task(st9), "subtasks").len() == 1, "its first subtask")
+    // there is no publishing of a task that has no tree
+    again.page(1, "route_publish", "s-r1", "{}")
+    c.expect(again.until("публиковать нечего", 5000), "no tree: nothing to publish")
     again.shut()
     c.report()
 }
@@ -331,6 +334,13 @@ export fn scenario_route_tree(settings ServerSettings) Proc Detach Time Net Fs O
     c.expect(jtext(rk_task(st6), "id") == id2, "the kept task is taken up again")
     c.expect(rk_array(st6, "parked").len() == 0, "and is not kept any more")
     c.expect(rk_array(rk_task(st6), "subtasks").len() == 1, "its subtask is found from the files")
+    // the git module of the tasks is not in this build: publishing stops with a note, nothing is pushed (there is not even a remote)
+    again.page(1, "route_publish", "s-r3", "{}")
+    c.expect(again.until("публикация задачи", 15000), "publishing stops with a note")
+    again.run(300)
+    ro st7 = rk_last(again.all_lines_for(1), "route_state")
+    c.expect(jtext(rk_task(st7), "state") != "done" && ((rk_task(st7).get("needs_owner") ?? JsonValue.null()).bool() ?? false), "the task is not done and asks the owner")
+    c.expect(!git_run(settings.workdir, ["rev-parse", "--verify", "--quiet", "origin/main"]).ok, "no remote was made or pushed to")
     again.page(1, "route_diff", "s-r3", "{}")
     c.expect(again.until("work.txt", 8000), "the changes of the task are shown")
     again.shut()
