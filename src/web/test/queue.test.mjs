@@ -85,11 +85,22 @@ test('при удалении сессии её очередь сбрасыва�
   assert.deepEqual(q.traces(), ['b']);
 });
 
-test('подсказка в поле ввода берётся из strings.js и не упоминает Shift', () => {
-  assert.equal(S['composer.placeholder'], 'Enter — отправить, Ctrl+Enter — в очередь на потом');
-  assert.doesNotMatch(S['composer.placeholder'], /Shift/);
+test('подсказка в поле ввода берётся из strings.js и называет Shift+Enter', () => {
+  assert.equal(S['composer.placeholder'], 'Enter — отправить, Shift+Enter — новая строка, Ctrl+Enter — в очередь на потом');
+  assert.match(S['composer.placeholder'], /Shift\+Enter — новая строка/);
   assert.equal(t('composer.queued', { n: 3 }), 'В очереди: 3');
   const view = fs.readFileSync(path.join(web, 'view.js'), 'utf8');
   assert.match(view, /placeholder: t\('composer\.placeholder'\)/);
   assert.match(view, /'aria-label': t\('chat\.cancel'\)/);
+});
+
+test('подсказка пустого поля называет Enter, Shift+Enter и Ctrl+Enter; в одну строку с многоточием; Shift+Enter не перехватывается (браузер вставляет перенос)', async () => {
+  const fs = await import('node:fs');
+  const css = fs.readFileSync(new URL('../app.css', import.meta.url), 'utf8');
+  assert.equal(S['composer.placeholder'], 'Enter — отправить, Shift+Enter — новая строка, Ctrl+Enter — в очередь на потом');
+  assert.equal(S['composer.hint'], S['composer.placeholder']);
+  assert.match(css, /\.box textarea:placeholder-shown \{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; \}/);
+  // Shift+Enter — не наше действие: keyAction отдаёт null, preventDefault не вызывается, перенос строки вставляет сам браузер
+  assert.equal(keyAction(key({ shiftKey: true }), false), null);
+  assert.equal(keyAction(key({ shiftKey: true }), true), null);
 });
