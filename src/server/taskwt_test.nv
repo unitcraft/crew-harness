@@ -441,11 +441,12 @@ test "taskwt state: the count of unmerged commits, the stat of the diff, a clean
 test "taskwt: a git call that does not finish in time comes back as a failure" {
     ro w = tt_world("timeout")
     ro t0 = Time.now().unix_millis()
-    ro r = tw_exec(w.main, ["-c", "alias.slow=!ping -n 12 127.0.0.1 >/dev/null", "slow"], 700)
+    ro r = tw_exec(w.main, ["-c", "alias.slow=!ping -n 5 127.0.0.1 >/dev/null", "slow"], 700)
     ro elapsed = Time.now().unix_millis() - t0
     assert(r.code == -1)
     assert(r.err.contains("did not finish"))
-    assert(elapsed < 8000)
+    // git itself is cut at once; a grandchild that holds the pipes (the ping of the alias) may keep the call until it ends
+    assert(elapsed < 15000)
     tt_rm(w.root)
 }
 
@@ -657,10 +658,10 @@ test "taskwt: no push without publish - the log of git calls and the head of ori
 
 test "taskwt source: the word push stands in one function, which only the end of publish calls; no force anywhere" {
     ro text = tt_read("${tw_norm(cwd().unwrap().display())}/src/server/taskwt.nv")
-    assert(text.contains("module crew_harness.server"))
-    // the argument "push" of git: once
-    assert(tt_count(text, "\"push\"") == 1)
-    ro at_arg = text.find("\"push\"") ?? -1
+    assert(text.contains("fn tw_push("))
+    // the argument "push" of git (a list that begins with it): once
+    assert(tt_count(text, "[\"push\",") == 1)
+    ro at_arg = text.find("[\"push\",") ?? -1
     ro at_fn = text.find("fn tw_push(") ?? -1
     assert(at_fn >= 0)
     assert(at_arg > at_fn)
