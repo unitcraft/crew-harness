@@ -391,7 +391,7 @@ input, select, textarea {
 .more-btn:hover:not(:disabled), .more-btn[aria-expanded="true"] { background: var(--active); }
 @media (hover: none) { .more-btn { opacity: 1; } }
 .session { position: relative; border-radius: 8px; }
-.session-menu { top: calc(100% - 2px); bottom: auto; right: 4px; min-width: 240px; }
+.menu.session-menu { top: calc(100% - 2px); bottom: auto; right: 4px; min-width: 240px; }
 .session-menu .is-danger { color: var(--danger); }
 .session-menu .menu-end { margin-left: auto; color: var(--fg-muted); }
 .unread { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
