@@ -268,3 +268,14 @@ test('панель записи — непрозрачный блок на вс�
   assert.match(veil, /top: 0; bottom: 0/);
   assert.match(viewSrc, /sendButton\.style\.visibility = recordingNow \? 'hidden' : '';/);
 });
+
+test('миниатюры картинок вписываются в квадрат целиком: object-fit: contain на нейтральной подложке, углы скруглены, без обрезки', () => {
+  for (const cls of ['attach-img', 'thumb-img']) {
+    const rule = cssSrc.match(new RegExp(`\.${cls} \{([^}]*)\}`))[1];
+    assert.match(rule, /object-fit: contain/, cls);
+    assert.ok(!/object-fit: cover/.test(rule), `${cls}: без обрезки`);
+    assert.match(rule, /background: var\(--surface-2\)/, cls);
+    assert.match(rule, /border-radius: \d+px/, cls);
+    assert.match(rule, /border: 1px solid var\(--border\)/, cls);
+  }
+});
