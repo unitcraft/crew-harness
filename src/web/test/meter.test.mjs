@@ -179,7 +179,7 @@ test('токены объёмной тени заданы во всех тема
 
 test('панель записи лежит поверх карточки (position: absolute; right) с завесой-градиентом слева; ширина поля от записи не зависит', () => {
   const panel = cssSrc.match(/\.rec-panel \{([^}]*)\}/)[1];
-  assert.match(panel, /position: absolute; right: \d+px/);
+  assert.match(panel, /position: absolute; top: 0; bottom: 0; right: \d+px/);
   assert.match(cssSrc, /\.box\.recording \.rec-panel \{ display: flex; \}/);
   const veil = cssSrc.match(/\.rec-panel::before \{([^}]*)\}/)[1];
   assert.match(veil, /width: 140px/);
@@ -208,7 +208,7 @@ test('строка статуса — плоский серый текст 13 px
 });
 
 test('«↵» отправки: есть только когда есть что отправлять и не идёт запись; поле сжимается, а не двигается правая группа', () => {
-  assert.match(viewSrc, /function syncSend\(busy\) \{\s*const can = canSend\(input\.value, attach\.items\(\), uploading\);\s*sendButton\.hidden = recordingNow \|\| !can;\s*sendButton\.disabled = busy \|\| !can;/);
+  assert.match(viewSrc, /function syncSend\(busy\) \{\s*const can = canSend\(input\.value, attach\.items\(\), uploading\);[\s\S]*?sendButton\.hidden = !can && !recordingNow;[\s\S]*?sendButton\.style\.visibility = recordingNow \? 'hidden' : '';/);
   assert.ok(!/sendButton\.hidden = v\.hideSend/.test(viewSrc));
   assert.match(cssSrc, /\.send-btn\[hidden\] \{ display: none; \}/);
   assert.match(cssSrc, /\.box-row \{ flex: none; gap: 2px; margin-bottom: 4px; \}/);
@@ -257,4 +257,14 @@ test('верх первой строки не режется: max-height пол�
   assert.equal(Number(m[1]), 18, 'отступы сверху и снизу 9 + 9');
   // ширина поля от записи не зависит: нет правил textarea с классом recording
   assert.ok(!/\.box\.recording textarea\s*\{/.test(cssSrc), 'у поля в записи нет своих размеров');
+});
+
+test('панель записи — непрозрачный блок на всю высоту карточки (top: 0; bottom: 0), левее микрофона; кнопка отправки в записи держит место, поле не меняет ширину', () => {
+  const panel = cssSrc.match(/\.rec-panel \{([^}]*)\}/)[1];
+  assert.match(panel, /position: absolute; top: 0; bottom: 0; right: 52px/);
+  assert.match(panel, /background: var\(--surface\)/);
+  assert.match(panel, /align-items: flex-end; padding: 0 0 8px 4px/);
+  const veil = cssSrc.match(/\.rec-panel::before \{([^}]*)\}/)[1];
+  assert.match(veil, /top: 0; bottom: 0/);
+  assert.match(viewSrc, /sendButton\.style\.visibility = recordingNow \? 'hidden' : '';/);
 });
