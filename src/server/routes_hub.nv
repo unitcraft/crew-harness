@@ -158,14 +158,22 @@ type TaskMade { ok bool, id str, number str, dir str, shown str, branch str, wor
 fn no_task() -> TaskMade => { ok: false, id: "", number: "", dir: "", shown: "", branch: "", worktree: "", base: "" }
 
 // The numbers taken: the folders of `doc/tasks` of the repository and the task branches; outside a repository - the folders of the session in the data folder.
+// The repository the tasks of a session live in: the folder of its project (the working folder of the agent without a task), else the working folder of the hub.
+fn Hub @route_repo_dir(session str) -> str {
+    ro at = @find(session)
+    if at < 0 { return @workdir }
+    @cwd_of(@sessions[at].folder)
+}
+
 fn Hub @route_make_task(session str, route str, text str) Proc -> TaskMade {
-    ro repo = tk_is_repo(@workdir)
+    ro base = @route_repo_dir(session)
+    ro repo = tk_is_repo(base)
     if !repo && route == "interactive" { return no_task() }
-    ro tasks_here = repo && dir_there("${@workdir}/doc/tasks")
+    ro tasks_here = repo && dir_there("${base}/doc/tasks")
     mut names = []str.new()
     if repo {
-        for n in dir_names("${@workdir}/doc/tasks") { names.push(n) }
-        for n in tk_branch_names(@workdir) { names.push(n) }
+        for n in dir_names("${base}/doc/tasks") { names.push(n) }
+        for n in tk_branch_names(base) { names.push(n) }
     } else {
         for n in dir_names("${@settings.data_dir}/${session}/tasks") { names.push(n) }
     }
@@ -174,7 +182,7 @@ fn Hub @route_make_task(session str, route str, text str) Proc -> TaskMade {
     ro folder = "${number}-${slug}"
     mut tree = TkTree { ok: false, branch: "", worktree: "", base: "", text: "" }
     if repo {
-        tree = tk_task_tree(@workdir, number, slug)
+        tree = tk_task_tree(base, number, slug)
         if !tree.ok { @say_log("the tree of the task ${folder} cannot be made: ${tree.text}") }
     }
     if tree.ok && tasks_here {
@@ -239,7 +247,7 @@ fn Hub mut @route_on_message(at int, text str) Proc Detach Time -> str {
 // The folder of the agent follows the mode: a tree of the task or of the subtask; an agent that works in another folder is closed (it is started again in the right one).
 fn Hub mut @route_sync_cwd(at int) Time -> () {
     mut s = @sessions[at]
-    ro want = s.rt.agent_dir(@workdir)
+    ro want = s.rt.agent_dir(@cwd_of(s.folder))
     if s.clients.len() > 0 && s.rt.cwd_now != want {
         s.clients[0].close()
         s.clients = []AcpClient.new()
@@ -567,7 +575,7 @@ fn Hub mut @route_start_review(at int, index int, step RouteStep) Proc Detach Ti
         @route_stop(at)
         return
     }
-    ro cwd = s.rt.agent_dir(@workdir)
+    ro cwd = s.rt.agent_dir(@cwd_of(s.folder))
     ro config = match @settings.agent(family) {
         Some(spec) => acp_config_of(spec.program, spec.args, cwd, "")
         None => {
@@ -964,7 +972,7 @@ fn Hub mut @route_new_task(trace str) Proc Detach Time -> () {
             return
         }
         @route_close_agent_in(at, s.rt.worktree)
-        ro gone = tk_tree_remove(@workdir, s.rt.worktree, s.rt.branch)
+        ro gone = tk_tree_remove(@cwd_of(s.folder), s.rt.worktree, s.rt.branch)
         if !gone.ok { @say_log("the tree of the task ${s.rt.task_id} is not removed: ${gone.text}") }
     }
     mut o = JsonObject.new()
@@ -1095,7 +1103,7 @@ fn Hub mut @route_publish_fail(at int, why str) Proc Detach Time -> () {
 fn Hub mut @route_publish_step(at int, mode str) Proc Detach Time -> () {
     ro s = @sessions[at]
     if mode == "final" { @route_close_agent_in(at, s.rt.worktree) }
-    ro r = tk_publish(s.rt.worktree, @workdir, mode)
+    ro r = tk_publish(s.rt.worktree, @cwd_of(s.folder), mode)
     if r.status == "done" {
         mut me = @sessions[at]
         me.rt.job = ""

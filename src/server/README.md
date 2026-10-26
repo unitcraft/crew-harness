@@ -425,6 +425,14 @@ The events a live session shows come from the engine itself (`Engine.take_events
 | `../storage/paths.nv`, `../storage/migrate.nv` | the paths of the folder of a session (one place), the move of the flat files of the older form into the folders |
 | `hub.nv` | `Hub`: `start_hub`, `attach`, `release`, `handle`, `pump`, `take_output`, `take_log`, `close`; the sessions, the store by the settings, the lines of the page |
 | `stdio.nv` | `run_hub_stdio`: the hub over stdin and stdout |
+| `routes.nv`, `routes_io.nv`, `routes_hub.nv` | the modes of work (task 192q): the pure logic of the modes and their files, the reading of the files from the disk, the part of the hub (tasks, subtasks, the run of the steps, the review by another family) |
+| `taskwt.nv`, `taskwt_adapter.nv` | task and subtask trees (git worktrees), the merge of a subtask with a conflict left in progress, the state of a tree; the adapter that gives the hub these operations (publishing only by `route_publish`) |
+| `catalog.nv`, `front/agent_catalog.nv` | the catalog of the families (task 192o): the last lists and values of every agent kept in `agents.json`, told to the page; the route `/api/agents` of the front |
+| `ask_mcp.nv`, `ask_mcp_server.nv` | the MCP tool `ask_user_question` for agents with no tool of their own (task 192i) |
+| `transfer.nv` | the protocol of a conversation handed to another agent (task 192) |
+| `front/projects_api.nv`, `front/images.nv` | `/api/projects`, `/api/fs/*` (task 192m) and `/api/session-image` (task 192) |
+| `routes_kit.nv`, `testkit_project.nv` | settings and repositories of the tests of the modes and of the projects |
+| `routes_test.nv`, `taskwt_test.nv`, `../server_route_live/routes_live_test.nv`, `ask_mcp_test.nv`, `catalog_test.nv`, `transfer_test.nv`, `signals_given_test.nv` | tests of the above |
 | `front/front.nv`, `front/front_settings.nv`, `front/stt.nv`, `front/sttproc.nv`, `front/images.nv` | the front: HTTP, `/ws` (frames over two owners of the socket), the router fiber, the hub as a child process; the voice to text (`/api/stt`); the recognizer as a child of the front; the pictures of the messages (`/api/session-image`) |
 | `testkit.nv` | the settings of a test hub with the fake agent, the rig that drives a hub as a page does, the scenarios (shared by the units below) |
 | `alula_test.nv` | the machine of the hub: made from the embedded table, the idle term, a broken text, an engine in memory, the snapshot |
