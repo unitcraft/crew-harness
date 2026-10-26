@@ -1161,3 +1161,24 @@ input[aria-invalid="true"] { border-color: var(--danger); }
 .usage-table th { padding: 0 14px 0 0; font-style: italic; font-weight: 400; text-align: right; }
 .usage-table th:first-child, .usage-table td:first-child { text-align: left; }
 .usage-table td { padding: 0 14px 0 0; text-align: right; white-space: nowrap; }
+
+/* ---- сообщения: ряд мелких иконок под пузырём (задача 192) ----
+   Место ряда занято всегда (высота 24 px, visibility), поэтому лента не дёргается; владельцу ряд виден при наведении, фокусе и касании,
+   сообщению в очереди - всегда. Ряд под ответом агента (copy + время) - при наведении на ответ (data-hot ставит страница). */
+.item-user, .item-queued { position: relative; }
+.msg-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-height: 24px; margin-top: 2px; color: var(--fg-muted); font-size: 12px; visibility: hidden; }
+.item-user:hover .msg-actions, .item-user:focus-within .msg-actions, .item-user[data-tap="on"] .msg-actions, .msg-actions[data-queued="true"] { visibility: visible; }
+.msg-check { display: inline-flex; }
+.msg-check .icon, .msg-btn .icon { width: 16px; height: 16px; }
+.msg-btn { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; min-height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--fg-muted); cursor: pointer; }
+.msg-btn:hover { background: var(--hover); color: var(--fg); }
+.msg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+.msg-time { white-space: nowrap; }
+.msg-state { padding: 0 6px; border-radius: 6px; background: var(--hover); }
+.msg-now { min-height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--fg); font-size: 12px; text-decoration: underline; cursor: pointer; }
+.msg-now:hover { background: var(--hover); }
+.item-queued { align-self: flex-end; max-width: min(78%, 620px); }
+.item-queued .bubble { opacity: .7; }
+.queued-images { margin: 0 0 6px; color: var(--fg-muted); font-size: 12px; }
+.item-actions[data-row="hover"] { visibility: hidden; }
+.item-actions[data-row="hover"][data-hot="on"], .item-actions[data-row="hover"]:focus-within { visibility: visible; }

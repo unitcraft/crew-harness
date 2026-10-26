@@ -31,6 +31,23 @@ export function createQueue() {
       return list.length;
     },
     count(trace) { return (lists.get(trace) ?? []).length; },
+    /** Сообщения очереди сессии, первое поставленное первым (для ленты). */
+    items(trace) { return [...(lists.get(trace) ?? [])]; },
+    /** Убрать сообщение по номеру («вернуть на редактирование»): возвращает его или undefined. */
+    removeAt(trace, index) {
+      const list = lists.get(trace);
+      if (!list || index < 0 || index >= list.length) return undefined;
+      const [item] = list.splice(index, 1);
+      if (list.length === 0) lists.delete(trace);
+      return item;
+    },
+    /** «Отправить сейчас»: сообщение встаёт первым, остальные идут за ним. */
+    moveToFront(trace, index) {
+      const list = lists.get(trace);
+      if (!list || index <= 0 || index >= list.length) return;
+      const [item] = list.splice(index, 1);
+      list.unshift(item);
+    },
     traces() { return [...lists.keys()]; },
     /** Убрать последнее поставленное сообщение (клик по счётчику). Возвращает его текст или undefined. */
     popLast(trace) {
@@ -40,12 +57,12 @@ export function createQueue() {
       return text;
     },
     /**
-     * Выдать следующее сообщение, если ход закончился (состояние «ждёт»). Пока отправленное не дошло
+     * Выдать следующее сообщение, если ход закончился (агент не отвечает и не ждёт разрешения: «ждёт», «отменён», «ошибка»). Пока отправленное не дошло
      * до модели (число сообщений не выросло), второе не выдаётся.
      */
     take(trace, session) {
       const list = lists.get(trace);
-      if (!list || list.length === 0 || !session || session.state !== 'idle') return undefined;
+      if (!list || list.length === 0 || !session || isBusy(session.state)) return undefined;
       if (sentAt.get(trace) === session.messages.length) return undefined;
       const text = list.shift();
       if (list.length === 0) lists.delete(trace);

@@ -146,6 +146,19 @@ const handlers = {
     return true;
   },
   onUnqueue(trace) { queue.popLast(trace); render(); },
+  queuedItems(trace) { return queue.items(trace); },
+  /** «Вернуть на редактирование»: сообщение уходит из очереди, страница кладёт его в поле. */
+  onUnqueueAt(trace, index) {
+    const item = queue.removeAt(trace, index);
+    render();
+    return item;
+  },
+  /** «Отправить сейчас»: сообщение первым в очереди, текущий ход отменяется, как кнопкой «Отмена хода»; дальше выдача сама. */
+  onSendNow(trace, index) {
+    queue.moveToFront(trace, index);
+    handlers.onCancel(trace);
+    render();
+  },
   onSelect(trace) { ui.selected = trace; ui.pane = 'chat'; render(); },
   onBack() { ui.pane = 'list'; render(); },
   onNewToggle(open, projectId) { ui.newOpen = open; ui.newProjectId = open ? (projectId ?? '') : ''; render(); },
