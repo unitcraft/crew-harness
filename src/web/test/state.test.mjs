@@ -332,6 +332,14 @@ test('images_skipped: строка в ленте «агент не приним�
   assert.deepEqual({ agent: rows[0].agent, count: rows[0].count }, { agent: 'opencode', count: 2 });
 });
 
+test('setting_dropped: строка «значение больше не доступно», один раз на событие', () => {
+  const dropped = ev('setting_dropped', { setting: 'mode', value: 'yolo', used: 'default' }, { step: 3, id: 'sd1' });
+  const m = run([created(), dropped, dropped]);
+  const rows = timeline(m.sessions.s1).filter((x) => x.type === 'dropped');
+  assert.equal(rows.length, 1);
+  assert.deepEqual({ setting: rows[0].setting, value: rows[0].value, used: rows[0].used }, { setting: 'mode', value: 'yolo', used: 'default' });
+});
+
 test('в заглушке есть сообщение с двумя картинками, и после перезагрузки (тот же журнал) оно то же', () => {
   const a = run(INITIAL_JOURNAL.map((e) => ({ ...e })));
   const withImages = Object.values(a.sessions).flatMap((s) => s.messages).filter((x) => x.role === 'user' && x.images.length > 0);

@@ -600,6 +600,7 @@ pre code { font: inherit; }
 .menu-search { display: block; width: 100%; margin: 0 0 6px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: inherit; font: inherit; }
 .menu-search[hidden] { display: none; }
 .item-switch { font-size: 14px; color: var(--fg-muted); }
+.item-dropped { font-size: 14px; color: var(--fg-muted); }
 .menu-head { padding: 6px 10px 4px; color: var(--fg-muted); font-size: 12px; }
 .menu-sep { height: 1px; margin: 5px 4px; background: var(--border); }
 .menu-item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; padding: 5px 10px; border: 0; border-radius: 8px; background: transparent; color: inherit; text-align: left; cursor: pointer; }

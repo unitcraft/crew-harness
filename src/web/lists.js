@@ -145,6 +145,8 @@ export function timeline(session) {
       items.push({ type: 'user', key: m.key, text: m.text, turn: m.turn, images: m.images ?? [] });
     } else if (m.role === 'skipped') {
       items.push({ type: 'skipped', key: m.key, agent: m.agent, count: m.count });
+    } else if (m.role === 'dropped') {
+      items.push({ type: 'dropped', key: m.key, setting: m.setting, value: m.value, used: m.used });
     } else if (m.role === 'switch') {
       items.push({ type: 'switch', key: m.key, from: m.from, to: m.to, shown: m.shown, total: m.total, cut: m.cut });
     } else if (m.role === 'answer') {
