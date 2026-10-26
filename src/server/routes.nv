@@ -630,7 +630,7 @@ export fn route_view_text(rt RouteSession, titles []str, progress []Progress, su
         jput(t, "unmerged_commits", JsonValue.int(rt.unmerged))
         jput(t, "needs_owner", JsonValue.bool(rt.tnote.byte_len() > 0))
         jput(t, "note", JsonValue.str(rt.tnote))
-        jput(t, "finish", JsonValue.bool(rt.worktree.byte_len() > 0 && rt.tstate != "done"))
+        jput(t, "finish", JsonValue.bool(rt.worktree.byte_len() > 0 && rt.tstate != "done" && tree_has_work(rt)))
         jput(t, "finish_options", if rt.tstate == "finishing" { finish_options() } else { JsonValue.null() })
         mut files = []JsonValue.new()
         for d in rt.diff {
@@ -674,6 +674,16 @@ export fn route_view_text(rt RouteSession, titles []str, progress []Progress, su
     }
     jput(o, "parked", JsonValue.array(parked))
     JsonValue.object(o).to_str()
+}
+
+// Is there work in the tree of the task: commits not merged, or a changed file other than the files of the task itself (`doc/tasks/<task>/`, the hub writes them)?
+// A tree with none is not worth the card "finish the task" (task 192): a greeting makes a task and a tree, and the owner is not asked about them.
+fn tree_has_work(rt RouteSession) -> bool {
+    if rt.unmerged > 0 { return true }
+    for d in rt.diff {
+        if !d.path.contains("doc/tasks/${rt.task_id}/") { return true }
+    }
+    false
 }
 
 fn finish_options() -> JsonValue {

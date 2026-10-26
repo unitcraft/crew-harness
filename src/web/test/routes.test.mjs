@@ -511,3 +511,15 @@ test('полоса шагов и баннер лежат в абсолютном
   const block = css.slice(css.indexOf('режимы работы по методике (задача 192p)'));
   assert.doesNotMatch(block, /#[0-9a-fA-F]{3,8}\b|rgba?\(/, 'в стилях режимов нет прямых цветов');
 });
+
+test('номер задачи сессии показывается без решётки: в заголовке чата и в строке списка, с подсказкой «Задача N: название»', async () => {
+  const fs = await import('node:fs');
+  const view = fs.readFileSync(new URL('../view.js', import.meta.url), 'utf8');
+  const strings = fs.readFileSync(new URL('../strings.js', import.meta.url), 'utf8');
+  assert.match(view, /const taskNo = h\(doc, 'span', \{ class: 'task-no', hidden: true \}\)/);
+  assert.match(view, /h\(doc, 'h2', \{ class: 'title' \}, titleText, taskNo, titleInput\)/);
+  assert.match(view, /class: 'task-no', text: taskInfo\.number/);
+  assert.match(strings, /'route\.task_no_title': 'Задача \{number\}: \{title\}'/);
+  assert.doesNotMatch(strings, /'[^']*#\{number\}/);
+  assert.doesNotMatch(view, /text: `#|text: '#'/);
+});

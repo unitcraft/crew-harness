@@ -394,6 +394,9 @@ input, select, textarea {
 .menu.session-menu { top: calc(100% - 2px); bottom: auto; right: 4px; min-width: 240px; }
 .session-menu .is-danger { color: var(--danger); }
 .session-menu .menu-end { margin-left: auto; color: var(--fg-muted); }
+.task-no { flex: none; color: var(--fg-muted); font-size: 12px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.title .task-no { margin-left: 8px; font-size: 13px; }
+.task-no[hidden] { display: none; }
 .unread { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .session-item.is-renaming { padding: 0 4px 0 6px; }
 .session-rename { width: 100%; min-height: 28px; padding: 0 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: inherit; font: inherit; font-weight: 500; outline: none; }

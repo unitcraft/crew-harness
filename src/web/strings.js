@@ -279,6 +279,7 @@ export const S = Object.freeze({
   'route.task': 'Задача',
   'route.task_head': 'Задача {number} · {title}',
   'route.task_head_bare': 'Задача {number}',
+  'route.task_no_title': 'Задача {number}: {title}',
   'route.task_branch': 'Ветка: {branch}',
   'route.task_tree': 'Дерево: {worktree}',
   'route.count_one': '{n} подзадача',

@@ -173,10 +173,17 @@ export function createView(doc, refs, deps) {
   });
   let listSig = '';
   let activeProject = null; // проект выбранной сессии или черновика ('' - без проекта), null - ничего не выбрано
+  /** Номер и название задачи сессии, если у неё есть задача с номером; иначе null. */
+  function sessionTask(s) {
+    const task = s.routeState && s.routeState.task;
+    return task && task.number ? { number: task.number, title: task.title || '' } : null;
+  }
+
   function sessionRow({ session: s, depth }, ui, pins, gctx) {
     const active = s.id === ui.selected;
     const pinned = pins.has(s.id);
     const unread = Boolean(ui.unread && ui.unread[s.id] === true);
+    const taskInfo = sessionTask(s);
     const stateLabel = t(STATE_KEYS[s.state]);
     const merge = mergeLabel(s.routeState && s.routeState.task);
     const item = sideKit.isRenaming(s.id) ? sideKit.renameField(s) : h(doc, 'button', {
@@ -189,6 +196,7 @@ export function createView(doc, refs, deps) {
     depth > 0 ? h(doc, 'span', { class: 'corner', 'aria-hidden': 'true' }) : false,
     depth > 0 ? h(doc, 'span', { class: 'sr', text: t('sessions.child') }) : false,
     unread ? h(doc, 'span', { class: 'unread', role: 'img', 'aria-label': t('session.unread'), title: t('session.unread') }) : false,
+    taskInfo ? h(doc, 'span', { class: 'task-no', text: taskInfo.number, title: taskInfo.title ? t('route.task_no_title', { number: taskInfo.number, title: taskInfo.title }) : t('route.task_head_bare', { number: taskInfo.number }) }) : false,
     h(doc, 'span', { class: 'session-name', text: s.name }),
     s.pendingQuestion ? h(doc, 'span', { class: 'ask-line' }, askBadge()) : false,
     h(doc, 'span', { class: 'dot', 'data-state': s.state, 'aria-hidden': 'true' }),
@@ -269,7 +277,7 @@ export function createView(doc, refs, deps) {
     const pins = effectivePins(all, ui.pins);
     const filtered = filterSessions(all, query);
     const groups = groupSessions(filtered, { pinned: pins, projects: projectsList, includeEmpty: query.trim() === '' });
-    const rowSig = (r) => [r.depth, r.session.id, r.session.name, r.session.state, r.session.updatedAt, r.session.rank, r.session.projectId, ui.unread ? ui.unread[r.session.id] : undefined, Boolean(r.session.pendingQuestion), (mergeLabel(r.session.routeState && r.session.routeState.task) || {}).text];
+    const rowSig = (r) => [r.depth, r.session.id, r.session.name, r.session.state, r.session.updatedAt, r.session.rank, r.session.projectId, (sessionTask(r.session) || {}).number, ui.unread ? ui.unread[r.session.id] : undefined, Boolean(r.session.pendingQuestion), (mergeLabel(r.session.routeState && r.session.routeState.task) || {}).text];
     const sig = JSON.stringify([ui.selected, activeProject, query, groupMenu, sideKit.sig(), groups.pinned.map(rowSig), groups.projects.map((p) => [p.project, p.id, p.rows.map(rowSig)])]);
     const shown = groups.pinned.length + groups.projects.length;
     listEmpty.hidden = all.length > 0 || (projectsList !== null && projectsList.length > 0);
@@ -304,7 +312,9 @@ export function createView(doc, refs, deps) {
   // Заголовок переименовывается на месте (задача 192): поле лежит поверх текста тех же размеров, ничего не прыгает
   const titleText = h(doc, 'span', { class: 'title-text', title: t('chat.rename'), tabindex: '0', role: 'button' });
   const titleInput = h(doc, 'input', { class: 'title-input', type: 'text', maxlength: '200', autocomplete: 'off', 'aria-label': t('chat.rename'), hidden: true });
-  const title = h(doc, 'h2', { class: 'title' }, titleText, titleInput);
+  // номер задачи сессии (если есть): приглушённо рядом с названием, без решётки
+  const taskNo = h(doc, 'span', { class: 'task-no', hidden: true });
+  const title = h(doc, 'h2', { class: 'title' }, titleText, taskNo, titleInput);
   let renaming = false;
   function finishRename(save) {
     if (!renaming) return;
@@ -1351,6 +1361,10 @@ export function createView(doc, refs, deps) {
     draftBar.hidden = !session.draft;
     if (session.draft) syncDraftBar(session);
     if (!renaming) titleText.textContent = session.name;
+    const taskInfo = sessionTask(session);
+    taskNo.hidden = !taskInfo;
+    taskNo.textContent = taskInfo ? taskInfo.number : '';
+    taskNo.title = taskInfo ? (taskInfo.title ? t('route.task_no_title', { number: taskInfo.number, title: taskInfo.title }) : t('route.task_head_bare', { number: taskInfo.number })) : '';
     // Что показать про семью, модель, режим и усилие: данные показанной семьи (собственная сводка сессии, иначе каталог семьи)
     const shown = shownOf(model, session);
     agentText.textContent = agentLabel(shown.agent);
