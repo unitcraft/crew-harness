@@ -29,7 +29,7 @@ import {
 } from './question.js';
 import {
   STATE_KEYS, sessionList, splitBlocks, filterSessions, groupSessions, effectivePins, timeline, paragraphs, inlineSpans,
-  workSummary, effortChoices, shownOf, familyOf, filterModels, groupModels, usagePercent, usageLevel, tokenParts, durationLabel, agoParts, fileParts, taskSummary,
+  workSummary, groupThousands, ruForm, effortChoices, shownOf, familyOf, filterModels, groupModels, usagePercent, usageLevel, tokenParts, durationLabel, agoParts, fileParts, taskSummary,
 } from './state.js';
 import {
   ROUTES, STEP_ICON, STEP_STATE_KEY, SUBTASK_STATE_KEY, routeName, routeDescription, counterText, stepToSkip, showStrip, stripActions,
@@ -59,6 +59,7 @@ const TOOL_STATUS = {
 const TASK_STATUS = {
   running: 'task.running', completed: 'task.completed', failed: 'task.failed', stopped: 'task.stopped',
 };
+const USAGE_STEP_KEY = { one: 'usage.step_one', few: 'usage.step_few', many: 'usage.step_many' };
 const TASK_ICON = { running: 'i-clock', completed: 'i-check', failed: 'i-x', stopped: 'i-stop' };
 const PERM_ICON = { allow: 'i-check', deny: 'i-x', cancelled: 'i-stop', wait: 'i-clock' };
 const FILE_ICON = { create: 'i-file-plus', edit: 'i-file-edit', delete: 'i-file-x' };
@@ -1128,6 +1129,40 @@ export function createView(doc, refs, deps) {
       case 'diffs':
         fillDiffs(entry, item);
         break;
+      case 'usage': {
+        const n = item.steps;
+        const parts = [
+          item.latest.new !== undefined ? t('usage.new', { n: groupThousands(item.latest.new) }) : '',
+          item.latest.cached !== undefined ? t('usage.cached', { n: groupThousands(item.latest.cached) }) : '',
+          item.latest.total !== undefined ? t('usage.total', { n: groupThousands(item.latest.total) }) : '',
+        ].filter(Boolean);
+        if (item.context) parts.push(t('usage.context', { used: groupThousands(item.context.used), size: groupThousands(item.context.size) }));
+        const text = t('usage.line', { steps: t(USAGE_STEP_KEY[ruForm(n)], { n }), parts: parts.join(' · ') });
+        if (!item.expandable) {
+          node.replaceChildren(h(doc, 'span', { class: 'usage-line', text }));
+          break;
+        }
+        const key = `usage:${item.key}`;
+        const isOpen = open.has(key);
+        const toggle = h(doc, 'button', { type: 'button', class: 'usage-toggle', 'aria-expanded': String(isOpen), title: t('usage.toggle') },
+          h(doc, 'span', { class: 'usage-sign', 'aria-hidden': 'true', text: isOpen ? '\u2212' : '+' }), h(doc, 'span', { text: ` ${text}` }));
+        toggle.addEventListener('click', () => {
+          if (open.has(key)) open.delete(key); else open.add(key);
+          entry.sig = null;
+          fillItem(entry, item);
+        });
+        const table = isOpen
+          ? h(doc, 'table', { class: 'usage-table' },
+            h(doc, 'thead', {}, h(doc, 'tr', {}, ...['usage.col_step', 'usage.col_new', 'usage.col_cached', 'usage.col_total'].map((key) => h(doc, 'th', { text: t(key) })))),
+            h(doc, 'tbody', {}, ...item.rows.map((r) => h(doc, 'tr', {},
+              h(doc, 'td', { text: r.label }),
+              h(doc, 'td', { text: r.new === undefined ? '' : groupThousands(r.new) }),
+              h(doc, 'td', { text: r.cached === undefined ? '' : groupThousands(r.cached) }),
+              h(doc, 'td', { text: r.total === undefined ? '' : groupThousands(r.total) })))))
+          : false;
+        node.replaceChildren(...(table ? [toggle, table] : [toggle]));
+        break;
+      }
       case 'switch': {
         const text = t('chat.switched', { agent: agentLabel(item.to) });
         node.replaceChildren(h(doc, 'span', { text: item.cut ? `${text} ${t('chat.switched_cut', { shown: item.shown, total: item.total })}` : text }));

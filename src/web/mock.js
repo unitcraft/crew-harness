@@ -260,6 +260,11 @@ function buildJournal() {
     add(s1, 'background_task_update', { id: `bg${i}`, status: i === 4 ? 'failed' : 'completed' }, BASE + MIN + 4700 + i * 100);
   }
   add(s1, 'usage_update', { used: 76_000, size: CTX }, BASE + MIN + 4800);
+  // расход токенов хода (задача 192): агент прислал шаги — строка раскрывается в таблицу
+  add(s1, 'turn_usage', {
+    turn: 't1', new: 662, cached: 173312, output: 120, reason: 'end_turn',
+    steps: [{ label: 'tool-call', new: 800, cached: 173056 }, { label: 'stop', new: 662, cached: 173312 }],
+  }, BASE + MIN + 4950);
   add(s1, 'agent_done', { turn: 't1' }, BASE + MIN + 5000);
   // второе сообщение с приложенными картинками: запись о них стоит прямо перед сообщением (так её кладёт сервер)
   add(s1, 'message_images', {
@@ -270,6 +275,8 @@ function buildJournal() {
   }, BASE + 2 * MIN);
   add(s1, 'user_message', { turn: 't2', text: 'Вот два скриншота красного прогона. Что на них?' }, BASE + 2 * MIN + 100);
   add(s1, 'agent_chunk', { turn: 't2', text: 'На обоих одно и то же падение: тест ждёт порядок прибытия кусков.' }, BASE + 2 * MIN + 600);
+  // агент, который прислал только итог хода: одна строка без таблицы
+  add(s1, 'turn_usage', { turn: 't2', new: 410, cached: 12800, output: 95, reason: 'end_turn' }, BASE + 2 * MIN + 850);
   add(s1, 'agent_done', { turn: 't2' }, BASE + 2 * MIN + 900);
   add(s1, 'question_request', { turn: 't1', request: 'ask-demo-1', questions: mockQuestions() }, BASE + MIN + 5100);
 

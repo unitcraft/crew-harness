@@ -86,6 +86,10 @@ async function prompt(id, params) {
   }
   const word = text.split(" ")[0];
   switch (word) {
+    case "usage": {
+      chunk("counted");
+      return respond(id, { stopReason: "end_turn", usage: { inputTokens: 662, outputTokens: 120, cachedReadTokens: 173312, totalTokens: 174094 } });
+    }
     case "model-change": {
       update({ sessionUpdate: "config_option_update", configOptions: [{ id: "model", category: "model", type: "select", currentValue: "fake-model-2", options: [{ value: "fake-model-2", name: "Second Model" }] }] });
       chunk("model changed");
