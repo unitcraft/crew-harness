@@ -739,6 +739,27 @@ export fn scenario_cancel(settings ServerSettings) Proc Detach Time Net Fs Os ->
 }
 
 /// The family changes in the window (task 192): the same session, another agent; the protocol goes to it as a turn that the feed does not show.
+/// The owner renames a session in the header (task 192): every page is told, a restart keeps the name, an empty name changes nothing.
+export fn scenario_rename(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-ren", "{\"name\":\"Старое\",\"agent\":\"opencode\"}")
+    rig.page(1, "session_rename", "s-ren", "{\"name\":\"  Новое имя  \"}")
+    c.expect(rig.until("\"kind\":\"session_renamed\"", 5000), "the new name is told to the page")
+    ro told = first_of(rig.lines_for(1), "session_renamed", 0)
+    c.expect(line_input(told, "name") == "Новое имя", "the name is trimmed: ${told}")
+    rig.page(1, "session_rename", "s-ren", "{\"name\":\"   \"}")
+    rig.run(300)
+    c.expect(kit_with(rig.lines_for(1), "\"kind\":\"session_renamed\"") == 1, "an empty name changes nothing")
+    ro before = rig.hub.page_lines("s-ren")
+    rig.shut()
+    mut again = rig_open(settings)
+    c.expect(kit_text(again.hub.page_lines("s-ren")) == kit_text(before), "the lines are the same after the restart")
+    again.shut()
+    c.report()
+}
+
 export fn scenario_switch_agent(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
     mut c = kit_check()
     mut rig = rig_open(settings)

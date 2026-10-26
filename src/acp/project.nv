@@ -626,6 +626,10 @@ fn page_input_of(e Incoming, turn str) -> Option[PageInput] {
                 return page_input("session_model", value)
             }
             if e.name == "user_message" { return text_input(e, turn) }
+            if e.name == "session_renamed" {
+                ro value = object_input(e)?
+                return page_input("session_renamed", value)
+            }
             if e.name == "agent_switched" {
                 ro value = object_input(e)?
                 return page_input("agent_switched", value)

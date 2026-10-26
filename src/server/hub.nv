@@ -703,6 +703,13 @@ fn Hub mut @resume_session(id str) Proc Detach Time -> () {
                         None => ()
                     }
                 }
+                // the owner renamed the session (task 192): the last name is the name
+                if e.name == "session_renamed" && e.kind == EventKind.Input {
+                    match jobject(e.input) {
+                        Some(change) => { if jtext(change, "name").byte_len() > 0 { s.name = jtext(change, "name") } }
+                        None => ()
+                    }
+                }
                 // the family changed in the window (task 192): the agent of the session is the last one it was handed to
                 if e.name == "agent_switched" && e.kind == EventKind.Input {
                     match jobject(e.input) {
@@ -1100,6 +1107,25 @@ fn send_transfer(mut s Dialog, request PartyRequest[str]) -> () {
     }
 }
 
+fn renamed_text(name str) -> str {
+    mut o = JsonObject.new()
+    jput(o, "name", JsonValue.str(name))
+    JsonValue.object(o).to_str()
+}
+
+// The owner renamed the session in the header (task 192): the same session and journal, a new name; every page is told by the event `session_renamed`.
+fn Hub mut @rename(trace str, name str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    ro clean = name.trim()
+    if clean.byte_len() == 0 || clean.byte_len() > 400 { return }
+    mut s = @sessions[at]
+    s.name = clean
+    accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("session_renamed", renamed_text(clean)))
+    @sessions[at] = s
+    @drain(at)
+}
+
 // The owner changed the family in the window (task 192): the same session, the same journal, another agent. The new agent is started
 // first (a failure leaves the old one), then the old one is closed and the new one gets the whole protocol of the conversation as
 // a turn of its own: it is not a turn of the engine, so the feed does not show it, and what the agent answers to it is discarded.
@@ -1224,6 +1250,8 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
         @answer(trace, input)
     } else if kind == "session_agent" {
         @switch_agent(trace, jtext(input, "agent"))
+    } else if kind == "session_rename" {
+        @rename(trace, jtext(input, "name"))
     } else if kind == "session_setting" {
         @choose(trace, jtext(input, "setting"), jtext(input, "value"))
     } else if kind == "session_route" {
