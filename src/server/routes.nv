@@ -1,0 +1,701 @@
+// routes.nv - task 192q: the modes of work by the methodology in the control panel ("Interactive", "Fast task", "Full path").
+//
+// The pure part: the files of the modes (`doc/routes/*.md`, parsed by a short parser), the numbers and names of the tasks, the files of the
+// subtasks (`message.N.md`, `progress.N.md`), the rule "extend the subtask or open a new one", the state `route_state` for the page and the choice
+// of the independent reviewer. The state of a session (`RouteSession`) is rebuilt from the journal: every change is a signal of the journal
+// (`route_set`, `route_task`, `route_step`, `route_review`) and `RouteSession.apply` is the one place that reads it, live and on resume.
+// What touches the disk and git is in `routes_io.nv`, the use in `hub.nv`.
+module crew_harness.server
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+// ----- the files of the modes -----
+
+/// RouteStep: a step of a mode. `kind` is `self` (the same agent does it) or `independent` (a reviewer of another family); `required` - it cannot be skipped.
+export type RouteStep { id str, kind str, title str, required bool, prompt str }
+
+/// RouteDoc: a mode as the file says it: the instruction for the agent and the steps.
+export type RouteDoc { route str, instruction str, steps []RouteStep }
+
+/// The three modes.
+export fn route_valid(route str) -> bool => route == "interactive" || route == "fast" || route == "full"
+
+const STEP_MARK = "## шаг "
+const INSTRUCTION_MARK = "## инструкция"
+const DOT = " · "
+
+fn rt_trim_lines(lines []str) -> str {
+    mut parts = []str.new()
+    for l in lines { parts.push(l) }
+    joined(parts, "\n").trim_ascii()
+}
+
+// A step from its header (the text after `## шаг `) and its body; None - the header is not one.
+fn rt_step_of(header str, body []str) -> Option[RouteStep] {
+    mut parts = []str.new()
+    for p in header.split(DOT) { parts.push(p.trim_ascii()) }
+    if parts.len() < 3 { return None }
+    if parts[0].byte_len() == 0 || parts[2].byte_len() == 0 { return None }
+    if parts[1] != "self" && parts[1] != "independent" { return None }
+    ro required = parts.len() >= 4 && parts[3] == "обязательный"
+    Some(RouteStep { id: parts[0], kind: parts[1], title: parts[2], required, prompt: rt_trim_lines(body) })
+}
+
+fn rt_close_step(mut steps []RouteStep, header str, body []str) -> () {
+    if header.byte_len() == 0 { return }
+    match rt_step_of(header, body) {
+        Some(step) => steps.push(step)
+        None => ()
+    }
+}
+
+/// The mode `route` from the text of its file: the lines after `## инструкция` up to the first `## шаг` are the instruction; each `## шаг <id> · <kind> · <title>`
+/// (and, optionally, `· обязательный`) opens a step whose body up to the next `## шаг` is its prompt. Everything else is skipped.
+export fn parse_route_doc(route str, text str) -> RouteDoc {
+    mut instruction = []str.new()
+    mut steps = []RouteStep.new()
+    mut in_instruction = false
+    mut header = ""
+    mut body = []str.new()
+    for line in text.lines() {
+        if line.starts_with(STEP_MARK) {
+            in_instruction = false
+            rt_close_step(steps, header, body)
+            header = line[STEP_MARK.byte_len()..]
+            body = []str.new()
+        } else if header.byte_len() > 0 {
+            body.push(line)
+        } else if line.trim_ascii() == INSTRUCTION_MARK {
+            in_instruction = true
+        } else if in_instruction {
+            instruction.push(line)
+        }
+    }
+    rt_close_step(steps, header, body)
+    RouteDoc { route, instruction: rt_trim_lines(instruction), steps }
+}
+
+/// The prompt of a step with `{N}` (the number of the subtask) and `{task}` (the folder of the files of the task) put in.
+export fn route_fill(text str, n int, task str) -> str => text.replace("{N}", "${n}").replace("{task}", task)
+
+// ----- the numbers and names of the tasks -----
+
+fn rt_digits(name str) -> str {
+    mut out = []str.new()
+    for c in name.chars() {
+        ro s = "${c}"
+        if "0123456789".contains(s) { out.push(s) } else { break }
+    }
+    joined(out, "")
+}
+
+/// The number of the next task: the greatest number at the start of a name (`007-name`, `192q-...` counts 192) plus one; 1 when there is none.
+export fn next_task_number(names []str) -> int {
+    mut top = 0
+    for name in names {
+        ro digits = rt_digits(name)
+        if digits.byte_len() > 0 {
+            match digits.to_int() {
+                Ok(n) => { if n > top { top = n } }
+                Err(e) => ()
+            }
+        }
+    }
+    top + 1
+}
+
+/// The number as three digits ("007"); a larger one as it is.
+export fn task_number_text(n int) -> str {
+    if n < 10 { return "00${n}" }
+    if n < 100 { return "0${n}" }
+    "${n}"
+}
+
+const TRANSLIT = "а:a б:b в:v г:g д:d е:e ё:e ж:zh з:z и:i й:y к:k л:l м:m н:n о:o п:p р:r с:s т:t у:u ф:f х:h ц:c ч:ch ш:sh щ:sch ъ: ы:y ь: э:e ю:yu я:ya А:a Б:b В:v Г:g Д:d Е:e Ё:e Ж:zh З:z И:i Й:y К:k Л:l М:m Н:n О:o П:p Р:r С:s Т:t У:u Ф:f Х:h Ц:c Ч:ch Ш:sh Щ:sch Ъ: Ы:y Ь: Э:e Ю:yu Я:ya"
+
+fn rt_translit(c str) -> str {
+    for pair in TRANSLIT.split(" ") {
+        if pair.until(":") == c { return pair.after(":") }
+    }
+    c
+}
+
+/// A name for a folder from the first words of a message: Latin letters (the Cyrillic is transliterated), digits and single dashes, at most 40 characters;
+/// "task" when nothing is left.
+export fn task_slug(text str) -> str {
+    ro all_lines = text.trim_ascii().lines()
+    ro first_line = if all_lines.len() > 0 { all_lines[0] } else { "" }
+    mut words = []str.new()
+    for w in first_line.split_ascii_whitespace() {
+        if words.len() < 6 { words.push(w) }
+    }
+    mut out = []str.new()
+    mut dash = true
+    for c in joined(words, " ").chars() {
+        ro latin = rt_translit("${c}").to_ascii_lower()
+        for d in latin.chars() {
+            ro s = "${d}"
+            if "abcdefghijklmnopqrstuvwxyz0123456789".contains(s) {
+                out.push(s)
+                dash = false
+            } else if !dash {
+                out.push("-")
+                dash = true
+            }
+        }
+    }
+    mut slug = joined(out, "")
+    if slug.byte_len() > 40 { slug = slug[..40] }
+    while slug.ends_with("-") { slug = slug[..slug.byte_len() - 1] }
+    if slug.byte_len() == 0 { return "task" }
+    slug
+}
+
+/// The first line of a message, at most 60 characters: the title of a subtask and of a task.
+export fn subtask_title(text str) -> str {
+    mut line = ""
+    for l in text.lines() {
+        if line.byte_len() == 0 && l.trim_ascii().byte_len() > 0 { line = l.trim_ascii() }
+    }
+    mut out = []str.new()
+    mut count = 0
+    for c in line.chars() {
+        count += 1
+        if count <= 60 { out.push("${c}") }
+    }
+    if count > 60 { return "${joined(out, "")}…" }
+    line
+}
+
+// ----- the date -----
+
+fn rt_pad2(n int) -> str => if n < 10 { "0${n}" } else { "${n}" }
+
+/// `2026-10-26 07:33` (UTC) from the milliseconds since 1970.
+export fn civil_stamp(ms int) -> str {
+    ro days = ms / 86400000
+    ro rest = (ms % 86400000) / 1000
+    ro z = days + 719468
+    ro era = z / 146097
+    ro doe = z - era * 146097
+    ro yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    ro doy = doe - (365 * yoe + yoe / 4 - yoe / 100)
+    ro mp = (5 * doy + 2) / 153
+    ro d = doy - (153 * mp + 2) / 5 + 1
+    ro m = if mp < 10 { mp + 3 } else { mp - 9 }
+    ro y0 = yoe + era * 400
+    ro y = if m <= 2 { y0 + 1 } else { y0 }
+    "${y}-${rt_pad2(m)}-${rt_pad2(d)} ${rt_pad2(rest / 3600)}:${rt_pad2((rest % 3600) / 60)}"
+}
+
+// ----- the files of a subtask -----
+
+/// `message.N.md`: the message of the owner and its date.
+export fn message_file_text(n int, text str, ms int) -> str => "# Сообщение ${n}\n\nДата: ${civil_stamp(ms)}\n\n${text}\n"
+
+/// What is appended to `message.N.md` when a later message extends the subtask.
+export fn message_addition_text(text str, ms int) -> str => "\n## Дополнение ${civil_stamp(ms)}\n\n${text}\n"
+
+/// ProgressItem, Progress: the boxes of a progress file.
+export type ProgressItem { text str, done bool }
+export type Progress { done int, total int, items []ProgressItem }
+
+/// The boxes `- [ ]` and `- [x]` of a progress file (also nested ones); other lines are skipped.
+export fn parse_progress(text str) -> Progress {
+    mut items = []ProgressItem.new()
+    mut done = 0
+    for line in text.lines() {
+        ro t = line.trim_ascii_start()
+        if t.starts_with("- [ ]") {
+            ro label = t[5..].trim_ascii()
+            if label.byte_len() > 0 { items.push(ProgressItem { text: label, done: false }) }
+        } else if t.starts_with("- [x]") || t.starts_with("- [X]") {
+            ro label = t[5..].trim_ascii()
+            if label.byte_len() > 0 {
+                items.push(ProgressItem { text: label, done: true })
+                done += 1
+            }
+        }
+    }
+    Progress { done, total: items.len(), items }
+}
+
+/// An empty `progress.N.md`: a box for each step of the mode.
+export fn progress_template(n int, steps []RouteStep) -> str {
+    mut lines = []str.new()
+    lines.push("# Прогресс подзадачи ${n}")
+    lines.push("")
+    if steps.len() == 0 {
+        lines.push("(шагов у режима нет)")
+    } else {
+        for s in steps { lines.push("- [ ] ${s.title}") }
+    }
+    "${joined(lines, "\n")}\n"
+}
+
+/// The box of the step `title` marked `[x]` (`skipped`: with the note "(пропущен)"); other lines stay.
+export fn progress_mark(text str, title str, skipped bool) -> str {
+    mut out = []str.new()
+    for line in text.lines() {
+        if line.trim_ascii_start().starts_with("- [ ]") && line.trim_ascii_start()[5..].trim_ascii() == title {
+            out.push(if skipped { "- [x] ${title} (пропущен)" } else { "- [x] ${title}" })
+        } else {
+            out.push(line)
+        }
+    }
+    "${joined(out, "\n")}\n"
+}
+
+// ----- the rules of the subtasks -----
+
+/// Does a message go into the last subtask (true) or does it open a new one (false)? `forced` is the word of the owner for the next message
+/// ("new", "same", "" - none); otherwise it is extended while the boxes of the checklist are not all marked and the owner has not marked the subtask done.
+export fn subtask_extends(forced str, has_subtask bool, total int, done int, marked_done bool) -> bool {
+    if !has_subtask { return false }
+    if forced == "new" { return false }
+    if forced == "same" { return true }
+    if marked_done { return false }
+    total > 0 && done < total
+}
+
+/// Is the task too big (many subtasks or many messages)? A limit of 0 is off.
+export fn task_too_big(subtasks int, messages int, limit_subtasks int, limit_messages int) -> bool {
+    if limit_subtasks > 0 && subtasks >= limit_subtasks { return true }
+    limit_messages > 0 && messages >= limit_messages
+}
+
+// ----- the independent reviewer -----
+
+/// The family of the reviewer: the first of `order` that is available and is not `current`; else any available agent that is not `current`; "" - none.
+export fn pick_reviewer(order []str, available []str, current str) -> str {
+    for family in order {
+        if family != current && available.contains(family) { return family }
+    }
+    for family in available {
+        if family != current { return family }
+    }
+    ""
+}
+
+/// A text cut to `max` bytes (not inside a letter) with the note of the cut.
+export fn cut_text(text str, max int) -> str {
+    if text.byte_len() <= max { return text }
+    mut k = max
+    while k > 0 && !text.is_char_boundary(k) { k -= 1 }
+    "${text[..k]}\n… (обрезано, всего ${text.byte_len()} байт)"
+}
+
+/// The task for the reviewer: the prompt of the step and the protocol of the task (the message, the state of the repository, the last answer).
+export fn review_prompt(prompt str, message str, status str, diff str, answer str) -> str =>
+    "${prompt}\n\n=== Сообщение пользователя (постановка) ===\n${message}\n\n=== git status ===\n${status}\n\n=== git diff ===\n${diff}\n\n=== Последний ответ исполнителя ===\n${answer}\n"
+
+/// The hidden note put before a prompt of the agent (not in the feed, not in the journal): the instruction of the mode (`with_instruction`: once per mode and per start of the agent),
+/// the files of the subtask, the prompt of a step. "" when there is nothing to say.
+export fn route_prelude(doc RouteDoc, with_instruction bool, task_shown str, n int, step_prompt str) -> str {
+    mut parts = []str.new()
+    if with_instruction && doc.instruction.byte_len() > 0 { parts.push("[crew] ${doc.instruction}") }
+    if task_shown.byte_len() > 0 {
+        parts.push("[crew] Задача: ${task_shown}. Подзадача ${n}: сообщение — message.${n}.md, ведите progress.${n}.md, отмечая [x] выполненное.")
+    }
+    if step_prompt.byte_len() > 0 { parts.push("[crew] Задание шага режима:\n${step_prompt}") }
+    joined(parts, "\n\n")
+}
+
+// ----- the state of a session -----
+
+/// SubRec: a subtask of the task. `worktree` is its own tree ("" - none or removed after the merge); `conflict` - why it is not merged.
+export type SubRec { n int, title str, branch str, worktree str, merged bool, done bool, conflict str, side bool }
+
+/// DiffRec: a changed file of the tree of the task against its base.
+export type DiffRec { path str, added int, removed int }
+
+/// ParkRec: a task left in its tree ("kept") while the session goes on with another one; the work in the tree is not lost.
+export type ParkRec { id str, number str, title str, branch str, worktree str, base str, state str, unmerged int }
+
+/// RouteSession: the mode of a session and its task. Rebuilt from the journal (`apply`); `running`, `current`, `awaiting`, `reviewing` live only in the process.
+export type RouteSession {
+    route str,
+    told bool,
+    states []str,
+    running bool,
+    current int,
+    awaiting bool,
+    reviewing bool,
+    task_open bool,
+    task_closed bool,
+    task_id str,
+    number str,
+    task_dir str,
+    task_shown str,
+    branch str,
+    worktree str,
+    title str,
+    messages int,
+    subs []SubRec,
+    merged_into int,
+    force str,
+    last_state str,
+    last_check int,
+    cwd_now str,
+    base str,
+    tstate str,
+    tnote str,
+    unmerged int,
+    unmerged_at int,
+    job str,
+    attempt int,
+    parked []ParkRec,
+    diff []DiffRec,
+    ov_n int,
+    ov_with int,
+    ov_files []str,
+    ov_until int,
+    asked []int
+}
+
+export fn route_session_new() -> RouteSession => {
+    route: "interactive", told: false, states: []str.new(), running: false, current: -1, awaiting: false, reviewing: false,
+    task_open: false, task_closed: false, task_id: "", number: "", task_dir: "", task_shown: "", branch: "", worktree: "", title: "",
+    messages: 0, subs: []SubRec.new(), merged_into: 0, force: "", last_state: "", last_check: 0, cwd_now: "", base: "", tstate: "active", tnote: "", unmerged: 0, unmerged_at: 0,
+    job: "", attempt: 0, parked: []ParkRec.new(), diff: []DiffRec.new(), ov_n: 0, ov_with: 0, ov_files: []str.new(), ov_until: 0, asked: []int.new()
+}
+
+fn rj_object(text str) -> JsonObject {
+    match Json.parse(text) {
+        Ok(v) => match v.object() {
+            Some(o) => o
+            None => JsonObject.new()
+        }
+        Err(e) => JsonObject.new()
+    }
+}
+
+fn rj_int(o JsonObject, key str) -> int {
+    match o.get(key) {
+        Some(v) => v.int() ?? 0
+        None => 0
+    }
+}
+
+fn RouteSession @sub_at(n int) -> int {
+    mut at = 0
+    for s in @subs {
+        if s.n == n { return at }
+        at += 1
+    }
+    -1
+}
+
+/// The state of step `n` (from 1): pending until the journal says otherwise.
+export fn RouteSession @step_state(n int) -> str {
+    if n < 1 || n > @states.len() { return "pending" }
+    @states[n - 1]
+}
+
+/// The last subtask (0 - none).
+export fn RouteSession @last_sub() -> int => if @subs.len() == 0 { 0 } else { @subs[@subs.len() - 1].n }
+
+/// The folder the agent works in: the tree of the last subtask if it has one, else the tree of the task, else the folder of the session.
+export fn RouteSession @agent_dir(session_dir str) -> str {
+    // a conflict is resolved, a task is published in the tree of the task, whatever the subtasks have
+    if (@job.starts_with("resolve") || @job.starts_with("pub")) && @worktree.byte_len() > 0 { return @worktree }
+    if @subs.len() > 0 {
+        ro last = @subs[@subs.len() - 1]
+        if last.worktree.byte_len() > 0 && !last.merged { return last.worktree }
+    }
+    if @task_open && @worktree.byte_len() > 0 { return @worktree }
+    session_dir
+}
+
+/// After the journal is replayed (a restart): nothing is running any more, the agent is not started in any folder.
+export fn RouteSession mut @normalize() -> () {
+    mut at = 0
+    while at < @states.len() {
+        if @states[at] == "running" { @states[at] = "pending" }
+        at += 1
+    }
+    @running = false
+    @current = -1
+    @awaiting = false
+    @reviewing = false
+    @job = ""
+    @cwd_now = ""
+    @told = false
+}
+
+fn RouteSession mut @reset_task() -> () {
+    @task_open = false
+    @task_closed = false
+    @task_id = ""
+    @number = ""
+    @task_dir = ""
+    @task_shown = ""
+    @branch = ""
+    @worktree = ""
+    @title = ""
+    @messages = 0
+    @subs = []SubRec.new()
+    @merged_into = 0
+    @force = ""
+    @states = []str.new()
+    @running = false
+    @current = -1
+    @awaiting = false
+    @base = ""
+    @tstate = "active"
+    @tnote = ""
+    @unmerged = 0
+    @job = ""
+    @attempt = 0
+    @diff = []DiffRec.new()
+    @ov_n = 0
+    @ov_with = 0
+    @ov_files = []str.new()
+    @ov_until = 0
+}
+
+fn RouteSession mut @change_sub(n int, f str, value str, flag bool) -> () {
+    ro at = @sub_at(n)
+    if at < 0 { return }
+    mut s = @subs[at]
+    if f == "worktree" { s.worktree = value }
+    if f == "branch" { s.branch = value }
+    if f == "conflict" { s.conflict = value }
+    if f == "merged" {
+        s.merged = true
+        s.done = true
+        s.worktree = ""
+        s.conflict = ""
+    }
+    if f == "done" { s.done = true }
+    if f == "parallel" { s.side = flag }
+    @subs[at] = s
+}
+
+/// Apply a signal of the journal (`route_set`, `route_task`, `route_step`); any other name changes nothing.
+export fn RouteSession mut @apply(name str, text str) -> () {
+    ro o = rj_object(text)
+    if name == "route_set" {
+        ro route = jtext(o, "route")
+        if route_valid(route) {
+            @route = route
+            @told = false
+            @states = []str.new()
+            @running = false
+            @current = -1
+            @awaiting = false
+        }
+        return
+    }
+    if name == "route_step" {
+        ro n = rj_int(o, "n")
+        if n < 1 { return }
+        while @states.len() < n { @states.push("pending") }
+        @states[n - 1] = jtext(o, "state")
+        return
+    }
+    if name != "route_task" { return }
+    ro op = jtext(o, "op")
+    if op == "open" {
+        @reset_task()
+        @task_open = true
+        @task_id = jtext(o, "id")
+        @number = jtext(o, "number")
+        @task_dir = jtext(o, "dir")
+        @task_shown = jtext(o, "shown")
+        @branch = jtext(o, "branch")
+        @worktree = jtext(o, "worktree")
+        @base = jtext(o, "base")
+        @title = jtext(o, "title")
+        @messages = 1
+        @subs.push(SubRec { n: 1, title: if jtext(o, "sub_title").byte_len() > 0 { jtext(o, "sub_title") } else { @title }, branch: "", worktree: "", merged: false, done: false, conflict: "", side: false })
+    } else if op == "subtask" {
+        ro n = rj_int(o, "n")
+        @subs.push(SubRec { n, title: jtext(o, "title"), branch: "", worktree: "", merged: false, done: false, conflict: "", side: false })
+        @messages += 1
+        @merged_into = 0
+        @force = ""
+        @states = []str.new()
+    } else if op == "extend" {
+        @messages += 1
+        @merged_into = rj_int(o, "n")
+        @force = ""
+    } else if op == "new" {
+        @reset_task()
+    } else if op == "close" {
+        @task_closed = true
+        @running = false
+    } else if op == "state" {
+        @tstate = jtext(o, "state")
+        @tnote = jtext(o, "note")
+        if @tstate == "done" {
+            @task_closed = true
+            @running = false
+        }
+    } else if op == "park" {
+        @parked.push(ParkRec { id: @task_id, @number, @title, @branch, @worktree, @base, state: jtext(o, "state"), unmerged: rj_int(o, "unmerged") })
+        @reset_task()
+    } else if op == "unpark" {
+        mut rest = []ParkRec.new()
+        for p in @parked {
+            if p.id != jtext(o, "id") { rest.push(p) }
+        }
+        @parked = rest
+    } else if op == "sub_parallel" {
+        @change_sub(rj_int(o, "n"), "parallel", "", rj_int(o, "on") == 1)
+    } else if op == "force" {
+        @force = jtext(o, "mode")
+    } else if op == "sub_worktree" {
+        @change_sub(rj_int(o, "n"), "branch", jtext(o, "branch"), false)
+        @change_sub(rj_int(o, "n"), "worktree", jtext(o, "worktree"), false)
+    } else if op == "sub_conflict" {
+        @change_sub(rj_int(o, "n"), "conflict", jtext(o, "text"), false)
+    } else if op == "sub_merged" {
+        @change_sub(rj_int(o, "n"), "merged", "", true)
+    } else if op == "sub_done" {
+        @change_sub(rj_int(o, "n"), "done", "", true)
+    }
+}
+
+// ----- route_state for the page -----
+
+fn rv_item(i ProgressItem) -> JsonValue {
+    mut o = JsonObject.new()
+    jput(o, "text", JsonValue.str(i.text))
+    jput(o, "done", JsonValue.bool(i.done))
+    JsonValue.object(o)
+}
+
+fn rv_sub(s SubRec, p Progress, last bool, merged_into int, merging bool) -> JsonValue {
+    ro complete = p.total > 0 && p.done == p.total
+    ro state = if s.merged || s.done || complete { "done" } else if merging { "merging" } else if last { "running" } else { "planned" }
+    mut items = []JsonValue.new()
+    for i in p.items { items.push(rv_item(i)) }
+    mut o = JsonObject.new()
+    jput(o, "n", JsonValue.int(s.n))
+    jput(o, "title", JsonValue.str(s.title))
+    jput(o, "state", JsonValue.str(state))
+    jput(o, "done", JsonValue.int(p.done))
+    jput(o, "total", JsonValue.int(p.total))
+    jput(o, "items", JsonValue.array(items))
+    jput(o, "ready", JsonValue.bool(complete))
+    jput(o, "branch", JsonValue.str(s.branch))
+    jput(o, "worktree", JsonValue.str(s.worktree))
+    jput(o, "merged", JsonValue.bool(s.merged))
+    jput(o, "conflict", JsonValue.str(s.conflict))
+    jput(o, "needs_owner", JsonValue.bool(s.conflict.byte_len() > 0))
+    jput(o, "needs_owner_text", JsonValue.str(s.conflict))
+    jput(o, "merging", JsonValue.bool(merging))
+    jput(o, "parallel", JsonValue.bool(s.side))
+    jput(o, "merged_into", if last && merged_into == s.n { JsonValue.str("${s.n}") } else { JsonValue.null() })
+    JsonValue.object(o)
+}
+
+/// The input of the page event `route_state`: `{route, steps:[{n,title,state}], running, task:{...}|null, suggest_new_task, next_subtask}`.
+/// `titles` are the titles of the steps of the mode now (from its file), `progress` the boxes of each subtask in the order of `rt.subs`.
+export fn route_view_text(rt RouteSession, titles []str, progress []Progress, suggest bool, now int) -> str {
+    mut steps = []JsonValue.new()
+    mut i = 0
+    while i < titles.len() {
+        mut s = JsonObject.new()
+        jput(s, "n", JsonValue.int(i + 1))
+        jput(s, "title", JsonValue.str(titles[i]))
+        jput(s, "state", JsonValue.str(rt.step_state(i + 1)))
+        steps.push(JsonValue.object(s))
+        i += 1
+    }
+    mut o = JsonObject.new()
+    jput(o, "route", JsonValue.str(rt.route))
+    jput(o, "steps", JsonValue.array(steps))
+    jput(o, "running", JsonValue.bool(rt.running))
+    jput(o, "suggest_new_task", JsonValue.bool(suggest))
+    jput(o, "next_subtask", JsonValue.str(if rt.force.byte_len() > 0 { rt.force } else { "auto" }))
+    if rt.task_open {
+        mut subs = []JsonValue.new()
+        mut at = 0
+        while at < rt.subs.len() {
+            ro p = if at < progress.len() { progress[at] } else { Progress { done: 0, total: 0, items: []ProgressItem.new() } }
+            subs.push(rv_sub(rt.subs[at], p, at == rt.subs.len() - 1, rt.merged_into, rt.job == "resolve:${rt.subs[at].n}"))
+            at += 1
+        }
+        mut t = JsonObject.new()
+        jput(t, "id", JsonValue.str(rt.task_id))
+        jput(t, "number", JsonValue.str(rt.number))
+        jput(t, "title", JsonValue.str(rt.title))
+        jput(t, "branch", JsonValue.str(rt.branch))
+        jput(t, "worktree", JsonValue.str(rt.worktree))
+        jput(t, "closed", JsonValue.bool(rt.task_closed))
+        jput(t, "state", JsonValue.str(rt.tstate))
+        jput(t, "unmerged_commits", JsonValue.int(rt.unmerged))
+        jput(t, "needs_owner", JsonValue.bool(rt.tnote.byte_len() > 0))
+        jput(t, "note", JsonValue.str(rt.tnote))
+        jput(t, "finish", rt.worktree.byte_len() > 0 && rt.tstate != "done")
+        jput(t, "finish_options", if rt.tstate == "finishing" { finish_options() } else { JsonValue.null() })
+        mut files = []JsonValue.new()
+        for d in rt.diff {
+            mut fo = JsonObject.new()
+            jput(fo, "path", JsonValue.str(d.path))
+            jput(fo, "added", JsonValue.int(d.added))
+            jput(fo, "removed", JsonValue.int(d.removed))
+            files.push(JsonValue.object(fo))
+        }
+        mut diff = JsonObject.new()
+        jput(diff, "files", JsonValue.array(files))
+        jput(t, "diff", JsonValue.object(diff))
+        if rt.ov_n > 0 {
+            mut ov = JsonObject.new()
+            jput(ov, "n", JsonValue.int(rt.ov_n))
+            jput(ov, "with", JsonValue.int(rt.ov_with))
+            mut of = []JsonValue.new()
+            for f in rt.ov_files { of.push(JsonValue.str(f)) }
+            jput(ov, "files", JsonValue.array(of))
+            jput(ov, "seconds", JsonValue.int(if rt.ov_until > now { (rt.ov_until - now + 999) / 1000 } else { 0 }))
+            jput(t, "overlap", JsonValue.object(ov))
+        } else {
+            jput(t, "overlap", JsonValue.null())
+        }
+        jput(t, "subtasks", JsonValue.array(subs))
+        jput(o, "task", JsonValue.object(t))
+    } else {
+        jput(o, "task", JsonValue.null())
+    }
+    mut parked = []JsonValue.new()
+    for p in rt.parked {
+        mut po = JsonObject.new()
+        jput(po, "id", JsonValue.str(p.id))
+        jput(po, "number", JsonValue.str(p.number))
+        jput(po, "title", JsonValue.str(p.title))
+        jput(po, "branch", JsonValue.str(p.branch))
+        jput(po, "worktree", JsonValue.str(p.worktree))
+        jput(po, "state", JsonValue.str(p.state))
+        jput(po, "unmerged_commits", JsonValue.int(p.unmerged))
+        parked.push(JsonValue.object(po))
+    }
+    jput(o, "parked", JsonValue.array(parked))
+    JsonValue.object(o).to_str()
+}
+
+fn finish_options() -> JsonValue {
+    mut options = []JsonValue.new()
+    for pair in ["fast:Быстрая задача:переключить режим и прогнать шаги окончания", "full:Полный путь:переключить режим и прогнать шаги окончания", "keep:Оставить в дереве:работа не теряется, метка «не влито» остаётся"] {
+        ro parts = pair.split(":")
+        mut items = []str.new()
+        for x in parts { items.push(x) }
+        mut o = JsonObject.new()
+        jput(o, "id", JsonValue.str(items[0]))
+        jput(o, "title", JsonValue.str(items[1]))
+        jput(o, "hint", JsonValue.str(items[2]))
+        options.push(JsonValue.object(o))
+    }
+    JsonValue.array(options)
+}
+
+// ----- the verdict of the tests -----
+
+/// What the agent said about the tests: "green" (the later of the two marks wins), "red", or "" when it said neither.
+export fn tests_verdict(answer str) -> str {
+    ro green = answer.rfind("ТЕСТЫ: ЗЕЛЁНЫЕ") ?? -1
+    ro red = answer.rfind("ТЕСТЫ: КРАСНЫЕ") ?? -1
+    if green < 0 && red < 0 { return "" }
+    if green > red { "green" } else { "red" }
+}

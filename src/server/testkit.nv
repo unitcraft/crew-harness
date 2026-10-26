@@ -72,7 +72,8 @@ fn kit_settings(store str, name str, idle_ms int, pg PgConfig) -> ServerSettings
     ServerSettings {
         port: 8099, data_dir, store, pg, agents, idle_term_ms: idle_ms,
         workdir: kit_repo_root().display(), web_dir: "src/web", machines_dir: tree_machines_dir(), hub_program: "", hub_args: []str.new(), acp_trace: false, ask_form: true, ask_timeout_ms: 1800000,
-        stt_url: "http://127.0.0.1:8178/inference", stt_language: "auto", max_image_bytes: 10485760
+        stt_url: "http://127.0.0.1:8178/inference", stt_language: "auto", max_image_bytes: 10485760,
+        routes_dir: "doc/routes", route_reviewer_order: ["second"], route_task_limit: 12, route_task_messages: 40, route_fix_attempts: 2, route_worktree_ask: true, route_overlap_seconds: 30
     }
 }
 

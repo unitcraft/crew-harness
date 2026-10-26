@@ -24,7 +24,12 @@ export fn signals_given_by_code() -> []CodeSignal => [
     cs("question_answer", "input", "src/server/hub.nv: Hub.answer", "request, skipped, answers (JSON text)", false),
     cs("session_created", "input", "src/server/hub.nv: Hub.create", "name, agent, folder, project, project_id (JSON text)", false),
     cs("agent_switched", "input", "src/server/hub.nv: Hub.switch_agent", "from, to, shown, total, cut (JSON text)", false),
-    cs("message_images", "input", "src/server/hub.nv: Hub.say (the pictures of the message that follows: n, name, mime, bytes)", "images (JSON text)", false)
+    cs("message_images", "input", "src/server/hub.nv: Hub.say (the pictures of the message that follows: n, name, mime, bytes)", "images (JSON text)", false),
+    cs("route_set", "input", "src/server/routes_hub.nv: Hub.rt_journal (the mode of work of the session)", "route (JSON text)", false),
+    cs("route_task", "input", "src/server/routes_hub.nv: Hub.rt_task_op (the task and its subtasks, trees, state)", "op and its fields (JSON text)", false),
+    cs("route_step", "input", "src/server/routes_hub.nv: Hub.rt_step (the state of a step of the mode)", "n, state (JSON text)", false),
+    cs("route_note", "input", "src/server/routes_hub.nv: Hub.rt_note (a line of the hub in the feed)", "text (JSON text)", false),
+    cs("route_review", "input", "src/server/routes_hub.nv: Hub.route_review_finish (the block of the independent review in the feed)", "family, step, text (JSON text)", false)
 ]
 
 /// The signals that come from the agent (the client of ACP) and from the engine (the term).

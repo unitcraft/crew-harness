@@ -35,7 +35,7 @@ export fn default_config(cwd str) -> AcpConfig => { program: "opencode", args: [
 /// AcpImage: a picture that goes with the next prompt: the file it was kept in (storage/images.nv), its type and the name the owner saw.
 export type AcpImage { path str, mime str, name str }
 
-type AcpQueued { request str, text str, images []AcpImage }
+type AcpQueued { request str, text str, images []AcpImage, pre str }
 
 type AcpOption { id str, kind str }
 
@@ -92,7 +92,8 @@ export type AcpClient {
     last_error str,
     trace AcpTrace,
     images_ok bool,
-    attached []AcpImage
+    attached []AcpImage,
+    prelude str
 }
 
 const STDERR_KEEP = 4000
@@ -341,7 +342,7 @@ export fn open_client_full(config AcpConfig, trace_path str, trace_limit int, as
                 config, link, phase: "initializing", next_rpc: 0, init_rpc: -1, new_rpc: -1, prompt_rpc: -1,
                 session: "", agent: "", model_name: "", modes: JsonValue.null(), models: JsonValue.null(), choices_cfg: JsonValue.null(), mode_now: "", model_now: "", sets: []AcpSet.new(), queue: []AcpQueued.new(), active: "", permissions: []AcpPending.new(), ask, asks: []AcpAsk.new(), mcp_http: false, hint_due: false,
                 ready, taken: []AcpInboxItem.new(), next_seq: next, stderr: "", exit_code: -2, last_error: "", trace: trace_open(trace_path, trace_limit),
-                images_ok: false, attached: []AcpImage.new()
+                images_ok: false, attached: []AcpImage.new(), prelude: ""
             }
             client.init_rpc = client.next_id()
             client.say(rpc_request_line(client.init_rpc, "initialize", initialize_params(ask.form)))
@@ -758,8 +759,10 @@ fn AcpClient mut @drive() -> () {
     @active = next.request
     @prompt_rpc = @next_id()
     // the note about the tool of questions goes before the first prompt only
+    // the hidden note of the hub (the mode of work, task 192q) goes first; it is in neither the feed nor the journal
     mut text = if @hint_due { "${@ask.hint}\n\n${next.text}" } else { next.text }
     @hint_due = false
+    if next.pre.byte_len() > 0 { text = "${next.pre}\n\n${text}" }
     mut pictures = []JsonValue.new()
     if next.images.len() > 0 {
         if @images_ok {
@@ -778,6 +781,11 @@ fn AcpClient mut @drive() -> () {
         }
     }
     @say(rpc_request_line(@prompt_rpc, "session/prompt", prompt_params(@session, text, pictures)))
+}
+
+/// A hidden note for the NEXT request that is sent to the agent (task 192q): it is put before its text in the prompt and is forgotten after.
+export fn AcpClient mut @set_prelude(text str) -> () {
+    @prelude = text
 }
 
 // The base64 of a picture file, None when it cannot be read.
@@ -828,8 +836,9 @@ fn AcpClient mut @enqueue(request PartyRequest[str]) -> () {
         @refuse(request.id, FailCode.NoResult)
         return
     }
-    @queue.push(AcpQueued { request: request.id, text: request.input, images: @attached })
+    @queue.push(AcpQueued { request: request.id, text: request.input, images: @attached, pre: @prelude })
     @attached = []AcpImage.new()
+    @prelude = ""
     @poll()
 }
 

@@ -52,12 +52,16 @@ type Dialog {
     started_at int,
     slow_told bool,
     folder str,
-    project_id str
+    project_id str,
+    rt RouteSession
 }
 
 // A call of the tool `ask_user_question` (task 192i) that waits for the owner: the key the page answers by, the call of the MCP server, the session, the
 // questions as the page got them, and where the text for the agent goes.
 type McpPending { key str, call int, session str, questions JsonValue, reply ChanTx[str] }
+
+// The signals of the journal that carry the mode of work (task 192q, `routes_hub.nv`).
+fn route_signals() -> []str => ["route_set", "route_task", "route_step", "route_note", "route_review"]
 
 /// Hub: the sessions, the pages, the output not yet taken, the log.
 /// A choice of the owner (model, effort, mode) made while the agent of the session was not running: it waits until the agent is ready.
@@ -78,7 +82,9 @@ export type Hub {
     catalog JsonObject,
     catalog_dirty bool,
     catalog_saved_at int,
-    choices []PendingChoice
+    choices []PendingChoice,
+    reviews []Review,
+    route_obs int
 }
 
 // ----- small helpers -----
@@ -404,6 +410,7 @@ export fn Hub mut @attach(conn int) -> () {
     for s in @sessions {
         if s.lines.len() > 0 { @send(conn, array_text(s.lines)) }
     }
+    @route_attach(conn)
 }
 
 /// A page is gone (it is not told anything more).
@@ -424,7 +431,7 @@ fn Hub @trace_path_of(s Dialog) -> str {
     }
 }
 
-fn Hub @open_config(s Dialog) -> Option[AcpConfig] => @open_config_for(s.agent, s.id, s.folder)
+fn Hub @open_config(s Dialog) -> Option[AcpConfig] => @open_config_for(s.agent, s.id, s.rt.agent_dir(@cwd_of(s.folder)))
 
 // What the agent of this session is offered for its questions (task 192i): nothing when the setting `ask_form` is off or the agent is `off`; the form
 // (its own tool of questions) when it is `native`; the MCP tool of the hub, and no form, when it is `mcp`.
@@ -488,14 +495,14 @@ export fn Hub @mcp_token() -> str => @mcp_token_value()
 // The folder an agent works in: the folder of the project chosen for the session, else the working folder of the server.
 fn Hub @cwd_of(folder str) -> str => if folder.byte_len() > 0 { folder } else { @workdir }
 
-fn Hub @open_config_for(agent str, id str, folder str) -> Option[AcpConfig] {
+fn Hub @open_config_for(agent str, id str, cwd str) -> Option[AcpConfig] {
     match @settings.agent(agent) {
         Some(spec) => {
             ro inbox = match session_file_made(@settings.data_dir, id, "inbox") {
                 Some(p) => p.display()
                 None => ""
             }
-            Some(acp_config_of(spec.program, spec.args, @cwd_of(folder), inbox))
+            Some(acp_config_of(spec.program, spec.args, cwd, inbox))
         }
         None => None
     }
@@ -563,6 +570,8 @@ fn Hub mut @ensure_client(at int) Proc Detach Time -> str {
                 s.model_announced = false
                 s.slow_told = false
                 s.started_at = now_millis()
+                s.rt.cwd_now = s.rt.agent_dir(@workdir)
+                s.rt.told = false
                 ""
             }
             Err(reason) => reason
@@ -609,7 +618,7 @@ export fn start_hub_from(settings ServerSettings, table_text str) Proc Detach Ti
     }
     ro machine = hub_machine_with(machine_text, registry, settings.idle_term_ms)?
     mut hub = Hub {
-        settings, machine, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0, mcps: []McpServer.new(), mcp_pending: []McpPending.new(), mcp_serial: 0, catalog: JsonObject.new(), catalog_dirty: false, catalog_saved_at: 0, choices: []PendingChoice.new()
+        settings, machine, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0, mcps: []McpServer.new(), mcp_pending: []McpPending.new(), mcp_serial: 0, catalog: JsonObject.new(), catalog_dirty: false, catalog_saved_at: 0, choices: []PendingChoice.new(), reviews: []Review.new(), route_obs: 0
     }
     if hub.wants_mcp() { ro started = hub.start_mcp() }
     ro pg = settings.store == "pg"
@@ -641,7 +650,7 @@ fn Hub mut @resume_session(id str) Proc Detach Time -> () {
     match resume_stored(pg, root, world, @machine, id) {
         None => @say_log("the session ${id} cannot be resumed: no usable snapshot")
         Some(engine) => {
-            mut s = Dialog { id, name: id, agent: "", engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false, folder: "", project_id: "" }
+            mut s = Dialog { id, name: id, agent: "", engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false, folder: "", project_id: "", rt: route_session_new() }
             mut saw_created = false
             for e in history_in(pg, root, s) {
                 if e.name == "session_created" && e.kind == EventKind.Input && !saw_created {
@@ -666,11 +675,14 @@ fn Hub mut @resume_session(id str) Proc Detach Time -> () {
                         None => ()
                     }
                 }
+                // the mode of work and its task come back from the journal (task 192q)
+                if e.kind == EventKind.Input && route_signals().contains(e.name) { s.rt.apply(e.name, e.input) }
                 match line_of(s, e) {
                     Some(line) => s.lines.push(line)
                     None => ()
                 }
             }
+            s.rt.normalize()
             @add_session(s)
             if engine.open_ids().len() > 0 {
                 ro reason = @ensure_client(@sessions.len() - 1)
@@ -714,7 +726,7 @@ fn Hub mut @create(conn int, trace str, input JsonObject) Proc Detach Time -> ()
             ro root = @settings.data_dir
             mut world = PgWorld.open(@settings.pg, trace)
             ro engine = begin_session_engine(pg, root, world, @machine, trace)
-            mut s = Dialog { id: trace, name, agent, engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false, folder: launch.folder, project_id }
+            mut s = Dialog { id: trace, name, agent, engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false, folder: launch.folder, project_id, rt: route_session_new() }
             accept_in(pg, root, s, Incoming.signal("session_created", meta_text(name, agent, @cwd_of(launch.folder), project, project_id)))
             @add_session(s)
             ro at = @sessions.len() - 1
@@ -823,6 +835,13 @@ fn Hub mut @say(trace str, text str, items []JsonValue) Proc Detach Time -> () {
         @say_log("a message to ${trace} while a turn is open: ignored")
         return
     }
+    if @sessions[at].rt.running || @sessions[at].rt.job.byte_len() > 0 {
+        @tell_error(0, trace, @sessions[at].engine.step_number(), "", "идёт прогон шагов: остановите его, чтобы написать")
+        return
+    }
+    // the mode of work (task 192q): the task, its tree and its files first, then the agent in the right folder
+    ro line = @route_on_message(at, text)
+    @route_sync_cwd(at)
     ro reason = @ensure_client(at)
     if reason.byte_len() > 0 {
         @tell_error(0, trace, @sessions[at].engine.step_number(), "", "the agent cannot be started: ${reason}")
@@ -840,9 +859,12 @@ fn Hub mut @say(trace str, text str, items []JsonValue) Proc Detach Time -> () {
         accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("message_images", images_text(prepared.metas)))
         s.clients[0].attach_images(prepared.files)
     }
+    ro prelude = @route_message_prelude(at)
+    if prelude.byte_len() > 0 { s.clients[0].set_prelude(prelude) }
     feed_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("user_message", text))
     s.clients[0].attach_images([]AcpImage.new())
     @drain(at)
+    @route_broadcast(at, false)
 }
 
 fn Hub mut @cancel(trace str) Proc Detach Time -> () {
@@ -1050,7 +1072,7 @@ fn Hub mut @switch_agent(trace str, agent str) Proc Detach Time -> () {
         @tell_error(0, trace, s.engine.step_number(), "", "the turn is still open: the agent is not changed, try again in a moment")
         return
     }
-    ro config = match @open_config_for(agent, s.id, s.folder) {
+    ro config = match @open_config_for(agent, s.id, s.rt.agent_dir(@cwd_of(s.folder))) {
         Some(c) => c
         None => {
             @tell_error(0, trace, s.engine.step_number(), "", "the agent ${agent} is not configured")
@@ -1073,6 +1095,8 @@ fn Hub mut @switch_agent(trace str, agent str) Proc Detach Time -> () {
             s.model_announced = false
             s.slow_told = false
             s.started_at = now_millis()
+            s.rt.cwd_now = s.rt.agent_dir(@workdir)
+            s.rt.told = false
             accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("agent_switched", switched_text(from, agent, transfer.shown, transfer.total, transfer.cut)))
             @sessions[at] = s
             @drain(at)
@@ -1152,6 +1176,36 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
         @switch_agent(trace, jtext(input, "agent"))
     } else if kind == "session_setting" {
         @choose(trace, jtext(input, "setting"), jtext(input, "value"))
+    } else if kind == "session_route" {
+        @route_set(trace, jtext(input, "route"))
+    } else if kind == "route_run" {
+        @route_run(trace)
+    } else if kind == "route_skip" {
+        @route_skip(trace, jint(input, "step"))
+    } else if kind == "route_stop" {
+        @route_stop_signal(trace)
+    } else if kind == "route_new_task" {
+        @route_new_task(trace)
+    } else if kind == "route_subtask_new" {
+        @route_force(trace, "new")
+    } else if kind == "route_subtask_same" {
+        @route_force(trace, "same")
+    } else if kind == "route_subtask_worktree" {
+        @route_subtree_signal(trace, jint(input, "n"))
+    } else if kind == "route_subtask_done" {
+        @route_subtask_done(trace, jint(input, "n"))
+    } else if kind == "route_subtask_parallel" {
+        @route_parallel(trace, jint(input, "n"), jflag(input, "on"))
+    } else if kind == "route_subtask_choose" {
+        @route_choose_signal(trace, jint(input, "n"), jtext(input, "tree"))
+    } else if kind == "route_keep" {
+        @route_keep(trace)
+    } else if kind == "route_publish" {
+        @route_publish(trace)
+    } else if kind == "route_diff" {
+        @route_diff(trace)
+    } else if kind == "route_task_resume" {
+        @route_resume(trace, jtext(input, "id"))
     } else {
         @say_log("a message of the kind ${kind} from page ${conn}: ignored")
     }
@@ -1201,6 +1255,7 @@ export fn Hub mut @pump() Proc Detach Time -> int {
         at += 1
     }
     @catalog_save(false)
+    @route_pump()
     made
 }
 
@@ -1229,6 +1284,7 @@ export fn Hub mut @close() Time -> () {
             mine.clients = []AcpClient.new()
         }
     }
+    @route_close_reviews()
 }
 
 /// The ids of the sessions, in the order they were found or made.

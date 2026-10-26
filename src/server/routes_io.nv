@@ -1,0 +1,106 @@
+// routes_io.nv - task 192q: the disk and the processes under the modes of work: the files of the tasks (`message.N.md`, `progress.N.md`), the files of the modes, `git`.
+// The git operations of the tasks (trees, merges, publishing) are the module of task 192r (`taskwt.nv`); here is only what the hub needs of the plain disk.
+module crew_harness.server
+
+import std.fs.{Fs, real_fs, Path, read_text, write_text, create_dir_all, try_exists, read_dir, metadata}
+import std.os.{Command}
+
+fn rio_path(p str) -> Path => Path.from_bytes(p.bytes())
+
+/// Does the file or folder exist?
+export fn path_there(p str) -> bool {
+    with Fs = real_fs() {
+        match try_exists(rio_path(p)) {
+            Ok(b) => b
+            Err(e) => false
+        }
+    }
+}
+
+/// Is it a folder?
+export fn dir_there(p str) -> bool {
+    with Fs = real_fs() {
+        match metadata(rio_path(p)) {
+            Ok(m) => m.is_dir()
+            Err(e) => false
+        }
+    }
+}
+
+/// The text of a file, None - it cannot be read.
+export fn read_file(p str) -> Option[str] {
+    with Fs = real_fs() {
+        match read_text(rio_path(p)) {
+            Ok(t) => Some(t)
+            Err(e) => None
+        }
+    }
+}
+
+/// Write a file (the folders above it are made); false - it could not be written.
+export fn write_file(p str, text str) -> bool {
+    with Fs = real_fs() {
+        match rio_path(p).parent() {
+            Some(parent) => {
+                match create_dir_all(parent) {
+                    Ok(done) => ()
+                    Err(e) => return false
+                }
+            }
+            None => ()
+        }
+        match write_text(rio_path(p), text) {
+            Ok(done) => true
+            Err(e) => false
+        }
+    }
+}
+
+/// Add a text to the end of a file (it is made when there is none).
+export fn append_file(p str, text str) -> bool {
+    ro old = read_file(p) ?? ""
+    write_file(p, "${old}${text}")
+}
+
+/// The names in a folder (files and folders), [] when it cannot be read.
+export fn dir_names(p str) -> []str {
+    mut out = []str.new()
+    with Fs = real_fs() {
+        match read_dir(rio_path(p)) {
+            Ok(entries) => {
+                for entry in entries {
+                    match entry.name_str() {
+                        Some(name) => out.push(name)
+                        None => ()
+                    }
+                }
+            }
+            Err(e) => ()
+        }
+    }
+    out
+}
+
+/// GitOut: did the command end with 0, and what it printed (the output; the error text when it failed).
+export type GitOut { ok bool, text str }
+
+/// `git -C dir args...` without a terminal prompt or an editor.
+export fn git_run(dir str, args []str) Proc -> GitOut {
+    mut command = Command.new("git")
+    command.arg("-C")
+    command.arg(dir)
+    for a in args { command.arg(a) }
+    command.env("GIT_TERMINAL_PROMPT", "0")
+    command.env("GIT_EDITOR", "true")
+    match command.output() {
+        Ok(out) => {
+            ro printed = out.stdout.to_str_lossy().trim_ascii()
+            if out.status.success() {
+                { ok: true, text: printed }
+            } else {
+                { ok: false, text: "${printed}\n${out.stderr.to_str_lossy().trim_ascii()}".trim_ascii() }
+            }
+        }
+        Err(e) => { ok: false, text: "git cannot be started" }
+    }
+}
