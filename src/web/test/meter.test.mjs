@@ -88,10 +88,11 @@ import fs from 'node:fs';
 const viewSrc = fs.readFileSync(new URL('../view.js', import.meta.url), 'utf8');
 const cssSrc = fs.readFileSync(new URL('../app.css', import.meta.url), 'utf8');
 
-test('правая группа карточки: таймер, дорожка, строка кнопок (отмена, отправка, микрофон) в этом порядке; «↵» нет совсем', () => {
+test('карточка: «+», поле, затем панель записи (таймер и дорожка) и строка кнопок (отмена, отправка, микрофон); «↵» в записи нет', () => {
   const box = viewSrc.match(/const box = h\(doc, 'div', \{ class: 'box' \}, attach\.row, plusButton, input,\s*([^;]*)\);/);
   assert.ok(box, 'карточка найдена');
-  assert.match(box[1], /^micTimer, wave, h\(doc, 'div', \{ class: 'box-row' \}, cancelButton, sendButton, micWrap\)/);
+  assert.match(box[1], /^recPanel, h\(doc, 'div', \{ class: 'box-row' \}, cancelButton, sendButton, micWrap\)/);
+  assert.match(viewSrc, /const recPanel = h\(doc, 'div', \{ class: 'rec-panel' \}, micTimer, wave\);/);
   assert.match(viewSrc, /const micWrap = h\(doc, 'div', \{ class: 'mic-wrap' \}, micButton, micMore, voiceMenu\);/);
   assert.ok(!/enterButton|enter-btn/.test(viewSrc + cssSrc), 'кнопки «↵» в записи нет');
 });
@@ -104,7 +105,7 @@ test('в записи Enter останавливает её и вставляе�
 test('таймер мелкий серый фиксированной ширины, стрелка провайдера в записи скрыта, зазоры 6–8 px', () => {
   assert.match(cssSrc, /\.mic-timer \{[^}]*width: 34px[^}]*color: var\(--fg-muted\)/);
   assert.ok(!/\.mic-timer \{[^}]*--danger/.test(cssSrc));
-  assert.match(cssSrc, /\.box\.recording \.mic-more \{ display: none; \}/);
+  assert.match(cssSrc, /\.box\.recording \.mic-more \{ visibility: hidden; \}/);
   assert.match(cssSrc, /\.box \{ display: flex; align-items: flex-end; gap: 8px;/);
   assert.match(cssSrc, /\.box-row \{ flex: none; gap: 6px; \}/);
   assert.match(cssSrc, /\.mic-wrap \{ gap: 0; \}/);
@@ -121,16 +122,20 @@ test('кнопка отправки плоская: нигде нет синег
   assert.match(rule('.send-btn:disabled'), /opacity: \.45/);
 });
 
-test('кнопки карточки (отправка, отмена, микрофон) — область 32×32, значок 20 px, радиус 8, фон прозрачный, hover --hover, фокус с клавиатуры — контур', () => {
+test('кнопки карточки (отправка, отмена, микрофон) — область 40×40, значки 24 px с тонкой линией, радиус 8, фон прозрачный, hover --hover, фокус — контур; «стоп» — тёмный квадрат 18 px', () => {
   const shared = cssSrc.match(/\.send-btn, \.cancel-btn, \.mic-btn \{([^}]*)\}/);
   assert.ok(shared);
-  assert.match(shared[1], /width: 32px; height: 32px; min-height: 32px/);
+  assert.match(shared[1], /width: 40px; height: 40px; min-height: 40px/);
   assert.match(shared[1], /border-radius: 8px/);
   assert.ok(!/border-radius: 50%/.test(shared[1]), 'не круг');
   assert.match(shared[1], /background: transparent/);
-  assert.match(cssSrc, /\.send-btn \.icon, \.cancel-btn \.icon, \.mic-btn \.icon \{ width: 20px; height: 20px; \}/);
+  assert.match(cssSrc, /\.send-btn \.icon, \.mic-btn \.icon \{ width: 24px; height: 24px; stroke-width: 1\.75; \}/);
+  assert.match(cssSrc, /\.plus-btn \.icon \{ width: 24px; height: 24px; stroke-width: 1\.75; \}/);
+  assert.match(cssSrc, /\.cancel-btn \.icon \{ display: none; \}/);
+  assert.match(cssSrc, /\.cancel-btn::before \{ content: ""; width: 18px; height: 18px; border-radius: 4px; background: var\(--fg\); \}/);
   assert.match(cssSrc, /\.mic-btn:hover \{ background: var\(--hover\)/);
   assert.match(cssSrc, /:focus-visible[^{]*\{ outline: 2px solid var\(--accent\)/);
+  assert.match(rule('.mic-more'), /width: 14px/);
 });
 
 test('микрофон серый; единственное цветное состояние — запись; стрелка провайдера 14 px прижата к нему', () => {
@@ -154,14 +159,35 @@ test('запись: микрофон — скруглённый квадрат 8
   assert.match(cssSrc, /--accent-soft: #e6eefc;/);
 });
 
-test('карточка: радиус 14, отступы 6/10/6/12, мягкая тень, текст 15 px; рамка при фокусе не акцентная; высота одной строки 46 px', () => {
-  assert.match(cssSrc, /\.box \{ display: flex; align-items: flex-end; gap: 8px; padding: 6px 10px 6px 12px; border-radius: 14px; box-shadow: 0 2px 12px color-mix\(in srgb, var\(--fg\) 6%, transparent\); \}/);
-  assert.match(cssSrc, /\.box textarea \{ min-height: 32px; padding: 5px 0; font-size: 15px; line-height: 1\.45; max-height: calc\(1\.45em \* 5 \+ 10px\); \}/);
+test('карточка: радиус 14, отступы 4/10/4/12, объёмная двухслойная тень из токена, текст 15 px; рамка при фокусе не акцентная; высота одной строки 50 px', () => {
+  assert.match(cssSrc, /\.box \{ display: flex; align-items: flex-end; gap: 8px; position: relative; padding: 4px 10px 4px 12px; border-radius: 14px; box-shadow: var\(--shadow-card\); \}/);
+  assert.match(cssSrc, /\.box textarea \{ min-height: 40px; padding: 9px 12px 9px 0; font-size: 15px; line-height: 1\.45;/);
   assert.match(cssSrc, /\.box textarea::placeholder \{ color: var\(--fg-muted\)/);
   const focusRules = [...cssSrc.matchAll(/\.box:focus-within \{([^}]*)\}/g)].map((m) => m[1]).join(' ');
   assert.ok(focusRules.length > 0 && !/accent/.test(focusRules), 'при фокусе рамка серая, не --accent');
-  // 32 (кнопка) + 2*6 (отступы) + 2 (рамка) = 46
-  assert.equal(32 + 12 + 2, 46);
+  assert.match(focusRules, /box-shadow: var\(--shadow-card-focus\)/);
+  // 40 (кнопка) + 2*4 (отступы) + 2 (рамка) = 50
+  assert.equal(40 + 8 + 2, 50);
+});
+
+test('токены объёмной тени заданы во всех темах: светлой и обоих блоках тёмной, в тёмной есть светлая внутренняя кромка', () => {
+  assert.equal([...cssSrc.matchAll(/--shadow-card: /g)].length, 3);
+  assert.equal([...cssSrc.matchAll(/--shadow-card-focus: /g)].length, 3);
+  assert.equal([...cssSrc.matchAll(/--shadow-card: [^;]*inset 0 1px 0 rgba\(255, 255, 255, \.04\)/g)].length, 2);
+  assert.match(cssSrc, /--shadow-card: 0 1px 2px rgba\(0, 0, 0, \.06\), 0 6px 20px rgba\(0, 0, 0, \.08\);/);
+});
+
+test('панель записи лежит поверх карточки (position: absolute; right) с завесой-градиентом слева; ширина поля от записи не зависит', () => {
+  const panel = cssSrc.match(/\.rec-panel \{([^}]*)\}/)[1];
+  assert.match(panel, /position: absolute; right: \d+px/);
+  assert.match(cssSrc, /\.box\.recording \.rec-panel \{ display: flex; \}/);
+  const veil = cssSrc.match(/\.rec-panel::before \{([^}]*)\}/)[1];
+  assert.match(veil, /width: 140px/);
+  assert.match(veil, /linear-gradient\(to right, transparent, var\(--surface\) 70%\)/);
+  assert.match(veil, /pointer-events: none/);
+  const recRules = [...cssSrc.matchAll(/\.box\.recording[^{]*\{([^}]*)\}/g)].map((m) => m[0]).join('\n');
+  assert.ok(!/\.box\.recording textarea[^{]*\{[^}]*(width|padding)/.test(recRules), 'у поля в записи нет своей ширины и отступов');
+  assert.match(cssSrc, /\.box textarea \{[^}]*padding: 9px 12px 9px 0;/);
 });
 
 test('строка статуса — плоский серый текст 13 px без чипов и без шевронов: при наведении меняется только фон, ширина та же', () => {
@@ -186,7 +212,7 @@ test('«↵» отправки: есть только когда есть что
   assert.ok(!/sendButton\.hidden = v\.hideSend/.test(viewSrc));
   assert.match(cssSrc, /\.send-btn\[hidden\] \{ display: none; \}/);
   assert.match(cssSrc, /\.box-row \{ flex: none; gap: 6px; \}/);
-  assert.match(cssSrc, /\.box textarea \{ min-height: 32px;/);
+  assert.match(cssSrc, /\.box textarea \{ min-height: 40px;/);
 });
 
 test('подсказки кнопок карточки — тёмные (data-tip), правый клик на микрофоне открывает меню настроек', () => {
@@ -209,5 +235,6 @@ test('кнопка «+» слева в карточке открывает вы�
   const { pickerAccept } = await import('../attachments.js');
   assert.equal(pickerAccept(), 'image/png,image/jpeg,image/webp,image/gif');
   assert.equal(t('images.add'), 'Прикрепить изображение');
-  assert.match(cssSrc, /\.plus-btn \{[^}]*width: 32px; height: 32px;[^}]*border-radius: 8px/);
+  assert.match(cssSrc, /\.plus-btn \{[^}]*width: 40px; height: 40px;[^}]*border-radius: 8px/);
 });
+

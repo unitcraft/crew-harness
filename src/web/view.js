@@ -277,9 +277,11 @@ export function createView(doc, refs, deps) {
   // картинки сообщения: полоска превью — первой строкой карточки (задача 192)
   const attach = createAttachUi(doc, { h, icon, showError: (text) => voiceToast.show(text), onChange: () => fitInput() });
   const lightbox = createLightbox(doc, { h, icon });
+  // панель записи (таймер и дорожка) лежит поверх карточки справа от места микрофона: ширина поля не меняется
+  const recPanel = h(doc, 'div', { class: 'rec-panel' }, micTimer, wave);
   const plusButton = h(doc, 'button', { type: 'button', class: 'plus-btn', title: t('images.add'), 'aria-label': t('images.add') }, icon(doc, 'i-plus'));
   const box = h(doc, 'div', { class: 'box' }, attach.row, plusButton, input,
-    micTimer, wave, h(doc, 'div', { class: 'box-row' }, cancelButton, sendButton, micWrap));
+    recPanel, h(doc, 'div', { class: 'box-row' }, cancelButton, sendButton, micWrap));
   attach.bindPicker(plusButton);
   attach.bindPaste(input);
   attach.bindDrop(box);
