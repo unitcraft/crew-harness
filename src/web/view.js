@@ -582,12 +582,13 @@ export function createView(doc, refs, deps) {
   const familyButton = h(doc, 'button', { type: 'button', class: 'status-btn', hidden: true, title: t('status.agent'), 'aria-label': t('status.agent'), 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
   const modeButton = h(doc, 'button', { type: 'button', class: 'status-btn', hidden: true, title: t('menu.mode'), 'aria-label': t('menu.mode'), 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
   const modelButton = h(doc, 'button', { type: 'button', class: 'status-btn', hidden: true, title: t('status.model'), 'aria-label': t('status.model'), 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
+  const effortButton = h(doc, 'button', { type: 'button', class: 'status-btn', hidden: true, title: t('menu.effort'), 'aria-label': t('menu.effort'), 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
   // Режим работы по методике (задача 192p): слева в строке статуса, плоский текст без шеврона.
   const routeButton = h(doc, 'button', { type: 'button', class: 'status-btn route-chip', hidden: true, title: t('route.label'), 'aria-label': t('route.label'), 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
   const spinner = h(doc, 'span', { class: 'spinner', role: 'img', 'aria-label': t('composer.working'), hidden: true });
   const menu = h(doc, 'div', { class: 'menu', role: 'menu', hidden: true });
   // Одна группа чипов у правого края: семья, режим, модель и усилие; за ней кольцо контекста и спиннер (задача 192).
-  const statusGroup = h(doc, 'div', { class: 'status-group' }, familyButton, modeButton, statusModel, modelButton);
+  const statusGroup = h(doc, 'div', { class: 'status-group' }, familyButton, modeButton, statusModel, modelButton, effortButton);
   const status = h(doc, 'div', { class: 'composer-status', 'data-empty': 'true' }, routeButton, h(doc, 'span', { class: 'grow' }), statusGroup, ringBox, spinner, menu);
 
   // Меню выбора режима, модели и усилия (задача 192): показывает только то, что агент отдал по ACP.
@@ -610,6 +611,7 @@ export function createView(doc, refs, deps) {
     menu.hidden = true;
     modeButton.setAttribute('aria-expanded', 'false');
     modelButton.setAttribute('aria-expanded', 'false');
+    effortButton.setAttribute('aria-expanded', 'false');
     familyButton.setAttribute('aria-expanded', 'false');
     routeButton.setAttribute('aria-expanded', 'false');
   }
@@ -672,12 +674,7 @@ export function createView(doc, refs, deps) {
         rows.push(...found.map((c) => menuRow({ name: c.name, description: c.description, checked: c.id === options.modelId, onPick: () => choose('model', c.id) })));
       } else if (menuKind === 'model') {
         rows.push(...numbered(options.models.slice(0, MENU_MODELS), 'model', options.modelId));
-        if (options.efforts.length > 0 || options.models.length > MENU_MODELS) rows.push(h(doc, 'div', { class: 'menu-sep', role: 'separator' }));
-        if (options.efforts.length > 0) {
-          rows.push(menuRow({
-            name: `${t('menu.effort')}  ${labelFor('effort', effortChoices(options.efforts), options.effort).name}`, arrow: true, onPick: () => openMenu('effort'),
-          }));
-        }
+        if (options.models.length > MENU_MODELS) rows.push(h(doc, 'div', { class: 'menu-sep', role: 'separator' }));
         if (options.models.length > MENU_MODELS) rows.push(menuRow({ name: t('menu.more_models'), arrow: true, onPick: () => openMenu('more') }));
       } else if (menuKind === 'more') {
         rows.push(menuRow({ name: t('menu.back'), onPick: () => openMenu('model') }));
@@ -689,8 +686,7 @@ export function createView(doc, refs, deps) {
           })));
         }
       } else {
-        rows.push(menuRow({ name: t('menu.back'), onPick: () => openMenu('model') }),
-          h(doc, 'div', { class: 'menu-head', text: t('menu.effort') }),
+        rows.push(h(doc, 'div', { class: 'menu-head', text: t('menu.effort') }),
           ...numbered(effortChoices(options.efforts), 'effort', options.effort));
       }
     }
@@ -707,7 +703,8 @@ export function createView(doc, refs, deps) {
     familyButton.setAttribute('aria-expanded', kind === 'agent' ? 'true' : 'false');
     routeButton.setAttribute('aria-expanded', kind === 'route' ? 'true' : 'false');
     modeButton.setAttribute('aria-expanded', kind === 'mode' ? 'true' : 'false');
-    modelButton.setAttribute('aria-expanded', kind === 'mode' || kind === 'agent' || kind === 'route' ? 'false' : 'true');
+    modelButton.setAttribute('aria-expanded', kind === 'model' || kind === 'more' ? 'true' : 'false');
+    effortButton.setAttribute('aria-expanded', kind === 'effort' ? 'true' : 'false');
     renderMenu();
     if (kind === 'model' || kind === 'more') menuSearch.focus();
     else menu.querySelector('.menu-item')?.focus();
@@ -735,6 +732,7 @@ export function createView(doc, refs, deps) {
   routeButton.addEventListener('click', () => toggleMenu('route'));
   modeButton.addEventListener('click', () => toggleMenu('mode'));
   modelButton.addEventListener('click', () => toggleMenu('model'));
+  effortButton.addEventListener('click', () => toggleMenu('effort'));
   // номера строк — горячие клавиши; у строк без номера (Назад, подменю) их нет
   doc.addEventListener('keydown', (e) => {
     if (!menuKind) return;
@@ -1363,26 +1361,27 @@ export function createView(doc, refs, deps) {
     familyButton.hidden = agents.length < 2;
     familyButton.replaceChildren(h(doc, 'span', { text: agentLabel(shown.agent) }));
     const hasModes = Boolean(options && options.modes.length > 0);
-    const hasModels = Boolean(options && (options.models.length > 0 || options.efforts.length > 0));
+    const hasModels = Boolean(options && options.models.length > 0);
+    const hasEfforts = Boolean(options && options.efforts.length > 0);
     modeButton.hidden = !hasModes;
     const modeLabel = hasModes ? labelFor('mode', options.modes, options.mode) : { name: '', title: '' };
     modeButton.title = modeLabel.title ? `${t('menu.mode')}: ${modeLabel.title}` : t('menu.mode');
     modeButton.replaceChildren(h(doc, 'span', { text: hasModes ? (modeLabel.name || t('menu.mode')) : '' }));
     modelButton.hidden = !hasModels;
-    const effortLabel = hasModels ? labelFor('effort', effortChoices(options.efforts), options.effort) : { name: '', title: '' };
-    modelButton.title = effortLabel.title ? `${t('status.model')}: ${effortLabel.title}` : t('status.model');
-    modelButton.replaceChildren(h(doc, 'span', {
-      text: hasModels ? [shown.model || nameOf(options.models, options.modelId) || t('session.model_unknown'), effortLabel.name].filter(Boolean).join(' · ') : '',
-    }));
+    modelButton.replaceChildren(h(doc, 'span', { text: hasModels ? (shown.model || nameOf(options.models, options.modelId) || t('session.model_unknown')) : '' }));
+    effortButton.hidden = !hasEfforts;
+    const effortLabel = hasEfforts ? labelFor('effort', effortChoices(options.efforts), options.effort) : { name: '', title: '' };
+    effortButton.title = effortLabel.title ? `${t('menu.effort')}: ${effortLabel.title}` : t('menu.effort');
+    effortButton.replaceChildren(h(doc, 'span', { text: effortLabel.name }));
     statusModel.hidden = hasModels;
     statusModel.textContent = shown.model || (shown.loading ? t('session.loading') : '');
     spinner.hidden = !busy;
-    status.dataset.empty = String(routeButton.hidden && familyButton.hidden && !statusModel.textContent && !busy && !hasModes && !hasModels && !session.usage);
+    status.dataset.empty = String(routeButton.hidden && familyButton.hidden && !statusModel.textContent && !busy && !hasModes && !hasModels && !hasEfforts && !session.usage);
     if (menuKind === 'agent') renderMenu();
     else if (menuKind === 'route') {
       if (menuSig !== currentRoute) renderMenu();
       menuSig = currentRoute;
-    } else if (menuKind && ((menuKind === 'mode' && !hasModes) || (menuKind !== 'mode' && !hasModels))) closeMenu();
+    } else if (menuKind && ((menuKind === 'mode' && !hasModes) || (menuKind === 'effort' && !hasEfforts) || ((menuKind === 'model' || menuKind === 'more') && !hasModels))) closeMenu();
     else if (menuKind) {
       const sig = JSON.stringify(options);
       if (sig !== menuSig) renderMenu();

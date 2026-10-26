@@ -10,17 +10,23 @@ test('группа status-group: семья, режим, модель·усил�
   const group = view.match(/const statusGroup = h\(doc, 'div', \{ class: 'status-group' \}, ([^)]*)\);/);
   assert.ok(group, 'группа есть');
   const names = group[1].split(',').map((x) => x.trim());
-  assert.deepEqual(names.filter((n) => n.endsWith('Button')), ['familyButton', 'modeButton', 'modelButton']);
+  assert.deepEqual(names.filter((n) => n.endsWith('Button')), ['familyButton', 'modeButton', 'modelButton', 'effortButton']);
   assert.ok(names.indexOf('familyButton') < names.indexOf('modeButton') && names.indexOf('modeButton') < names.indexOf('modelButton'));
   const row = view.match(/const status = h\(doc, 'div', \{ class: 'composer-status', [^}]*\}, ([^;]*)\);/);
   assert.match(row[1], /statusGroup, ringBox, spinner/);
 });
 
 test('у каждого чипа title и aria-label; группа прижата вправо, на узком экране переносится влево', () => {
-  for (const name of ['familyButton', 'modeButton', 'modelButton']) {
+  for (const name of ['familyButton', 'modeButton', 'modelButton', 'effortButton']) {
     const line = view.split('\n').find((l) => l.includes(`const ${name} = h(doc, 'button'`));
-    assert.match(line, /title: t\('(status\.agent|menu\.mode|status\.model)'\), 'aria-label': t\('(status\.agent|menu\.mode|status\.model)'\)/, name);
+    assert.match(line, /title: t\('(status\.agent|menu\.mode|status\.model|menu\.effort)'\), 'aria-label': t\('(status\.agent|menu\.mode|status\.model|menu\.effort)'\)/, name);
   }
   assert.match(css, /\.status-group \{[^}]*margin-left: auto/);
   assert.match(css, /@media \(max-width: 560px\)[^\r\n]*\.status-group \{ margin-left: 0/);
+});
+
+test('модель и усилие — два независимых чипа; разделитель «·» лежит вне подложки чипа', () => {
+  assert.match(view, /effortButton\.addEventListener\('click', \(\) => toggleMenu\('effort'\)\)/);
+  assert.match(view, /modelButton\.addEventListener\('click', \(\) => toggleMenu\('model'\)\)/);
+  assert.match(css, /\.status-group > :not\(\[hidden\]\) ~ :not\(\[hidden\]\)::before \{[^}]*position: absolute; left: -/);
 });
