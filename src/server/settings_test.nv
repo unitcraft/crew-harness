@@ -308,6 +308,7 @@ test "settings: an agent asks the owner by its own tool (native) unless the file
     assert(s.agents[1].ask == "mcp")
     assert(s.agents[2].ask == "off")
     assert(is_error(parse_server_settings("{\"agents\":[{\"id\":\"a\",\"program\":\"x\",\"ask\":\"always\"}]}")))
+}
 
 test "settings: the modes of work have defaults and can be set" {
     ro plain = must_settings("{}")

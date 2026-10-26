@@ -82,7 +82,7 @@ async function prompt(id, params) {
   let text = first && first.type === "text" ? first.text : "";
   // a note of the hub about the tool of questions comes before the first prompt: "[crew] ...", a blank line, the text of the owner
   let hinted = false;
-  if (text.startsWith("[crew]") && text.includes("\n\n")) {
+  if (text.startsWith("[crew] Если нужно") && text.includes("\n\n")) {
     hinted = true;
     text = text.slice(text.indexOf("\n\n") + 2);
   }
