@@ -26,6 +26,8 @@ export const KINDS = Object.freeze([
   'usage_update', 'tool_call', 'tool_call_update', 'output_file', 'file_diff',
   'background_task', 'background_task_update',
   'session_model', 'agent_switched', 'session_renamed',
+  // задача 192: место сессии в списке проекта (и проект, если её перенесли) и удаление сессии (его шлёт сервер, в журнале его нет)
+  'session_placed', 'session_deleted',
   // задача 192t: выбранное владельцем значение больше недоступно у агента — строка в ленте
   'setting_dropped',
   // задача 192: картинки сообщения и «агент не принимает изображения»
@@ -230,6 +232,12 @@ function apply(session, event) {
       // владелец переименовал сессию в заголовке (задача 192): последнее имя журнала и есть имя
       const name = str(input.name).trim();
       return name ? { ...session, name } : session;
+    }
+    case 'session_placed': {
+      // владелец перетащил сессию (задача 192): место в списке; project_id и project — если её перенесли в другой проект ('' — без проекта)
+      const out = Number.isFinite(input.rank) ? { ...session, rank: input.rank } : { ...session };
+      if (typeof input.project_id === 'string') { out.projectId = input.project_id; out.project = str(input.project); }
+      return out;
     }
     case 'agent_switched': {
       // смена семьи в окне (задача 192): тот же разговор, другой агент; строка в ленте говорит, что и как передано
@@ -548,13 +556,22 @@ export function reduce(model, event) {
     return { ...model, seen, sessions: { ...model.sessions, [event.trace]: session } };
   }
 
+  if (event.kind === 'session_deleted') {
+    // сессию удалили на сервере: её нет ни в списках, ни в разговоре (id события помнится, чтобы повтор был безвреден)
+    if (!model.sessions[event.trace]) return { ...model, seen };
+    const { [event.trace]: gone, ...rest } = model.sessions;
+    return { ...model, seen, sessions: rest };
+  }
+
   const session = model.sessions[event.trace];
   if (!session) return model; // чужая цепочка без session_created: нечего рисовать, и id не запоминаем
 
   const changed = apply(session, event);
+  // перестановка владельцем не «событие в сессии»: порядок по активности от неё не меняется
+  const quiet = event.kind === 'session_placed';
   const next = {
     ...changed,
-    updatedAt: Math.max(session.updatedAt, event.time),
+    updatedAt: quiet ? session.updatedAt : Math.max(session.updatedAt, event.time),
     lastStep: Math.max(session.lastStep, event.step),
   };
   return { ...model, seen, sessions: { ...model.sessions, [event.trace]: next } };

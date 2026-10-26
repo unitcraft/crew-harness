@@ -75,6 +75,16 @@ export class FakeElement {
 
   get children() { return this.childNodes.filter((n) => n instanceof FakeElement); }
 
+  get classList() {
+    const el = this;
+    const list = () => el.className.split(/\s+/).filter(Boolean);
+    return {
+      add: (c) => { if (!list().includes(c)) el.className = [...list(), c].join(' '); },
+      remove: (c) => { el.className = list().filter((x) => x !== c).join(' '); },
+      contains: (c) => list().includes(c),
+    };
+  }
+
   get className() { return this.attrs.get('class') ?? ''; }
 
   set className(v) { this.attrs.set('class', String(v)); }

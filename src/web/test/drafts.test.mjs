@@ -87,8 +87,9 @@ test('поиск по сессиям: как поле ввода сообщен�
   assert.match(cssSrc, /\.dialog\.modal \{ width: min\(640px, 100%\);/);
 });
 
-test('строка проекта выделена: значок папки, жирное имя, фон шапки, полоска у активного', () => {
+test('строка проекта выделена: значок папки, жирное имя, фон шапки, у активного фон темнее и без акцентной полоски', () => {
   assert.match(viewSrc, /icon\(doc, 'i-folder', 'group-icon'\)/);
   assert.match(cssSrc, /\.group\[data-project="true"\] \.group-head h3 \{[^}]*font-weight: 700/);
-  assert.match(cssSrc, /\.group\[data-active="true"\] \.group-head \{ box-shadow: inset 2px 0 var\(--accent\); \}/);
+  assert.match(cssSrc, /\.group\[data-active="true"\] \.group-head \{ background: color-mix\(in srgb, var\(--fg\) 7%, transparent\); \}/);
+  assert.doesNotMatch(cssSrc, /inset 2px 0 var\(--accent\)/);
 });

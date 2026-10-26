@@ -121,8 +121,8 @@ test('groupSessions: по projectId, удалённый проект — в «Б
   ];
   const g = groupSessions(list, { projects });
   assert.deepEqual(g.projects.map((x) => [x.project, x.id, x.rows.map((r) => r.session.id)]), [
-    ['', '', ['b', 'd']],
     ['Один', 'p1', ['a']],
+    ['', '', ['b', 'd']],
     ['legacy', '', ['c']],
   ]);
 });

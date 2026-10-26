@@ -377,6 +377,21 @@ export function createProjectsUi(doc, deps) {
     return r.id || true;
   }
 
+  /** Окно подтверждения: { title, text, ok, cancel } -> Promise<boolean>; Esc и «Отмена» — false, фокус сначала на «Отмена». */
+  function confirm({ title, text, ok, cancel }) {
+    const cancelButton = h(doc, 'button', { type: 'button', class: 'confirm-cancel', text: cancel });
+    const okButton = h(doc, 'button', { type: 'button', class: 'confirm-ok danger', text: ok });
+    const dialog = dialogShell('confirm-title', 'confirm-dialog',
+      h(doc, 'h3', { id: 'confirm-title', text: title }),
+      h(doc, 'p', { class: 'confirm-text', text }),
+      h(doc, 'div', { class: 'actions' }, cancelButton, okButton));
+    const layer = pushLayer(dialog, { cancelValue: false, scrimClose: true });
+    cancelButton.addEventListener('click', () => layer.close(false));
+    okButton.addEventListener('click', () => layer.close(true));
+    cancelButton.focus();
+    return layer.promise;
+  }
+
   async function removeProject(project) {
     const r = await api.remove(project.id);
     if (!r.ok) { onNotice(t('projects.delete_failed', { reason: r.error }), 'error'); return false; }
@@ -385,5 +400,5 @@ export function createProjectsUi(doc, deps) {
     return true;
   }
 
-  return { openEditor, createByFolder, removeProject, pickFolder, editEnv, openCount: () => layers.length };
+  return { openEditor, createByFolder, confirm, removeProject, pickFolder, editEnv, openCount: () => layers.length };
 }

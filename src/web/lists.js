@@ -6,6 +6,31 @@
 
 const byRecency = (a, b) => (b.updatedAt - a.updatedAt) || (a.id < b.id ? -1 : 1);
 
+const hasRank = (s) => Number.isFinite(s.rank);
+
+/**
+ * Порядок сессий внутри проекта (задача 192): место, которое владелец задал перетаскиванием (rank, меньше — выше), сильнее
+ * сортировки по активности; сессии без места (новые) стоят над всеми, свежие выше.
+ */
+export const byOrder = (a, b) => {
+  if (hasRank(a) && hasRank(b)) return (a.rank - b.rank) || byRecency(a, b);
+  if (hasRank(a) !== hasRank(b)) return hasRank(a) ? 1 : -1;
+  return byRecency(a, b);
+};
+
+/**
+ * Список id после перетаскивания: id переезжает перед targetId (after=false) или после него (after=true).
+ * Неизвестный id или цель, совпадающая с переносимым, — список не меняется (копия).
+ */
+export function moveInOrder(ids, id, targetId, after) {
+  const list = [...ids];
+  if (id === targetId || !list.includes(id) || !list.includes(targetId)) return list;
+  const rest = list.filter((x) => x !== id);
+  const at = rest.indexOf(targetId);
+  rest.splice(after ? at + 1 : at, 0, id);
+  return rest;
+}
+
 /** Сессии, чьё название содержит запрос (без учёта регистра); пустой запрос — все. */
 export function filterSessions(sessions, query) {
   const q = typeof query === 'string' ? query.trim().toLowerCase() : '';
@@ -28,7 +53,7 @@ function buildTree(list) {
   const present = new Set(list.map((s) => s.id));
   const kids = new Map();
   const roots = [];
-  for (const s of [...list].sort(byRecency)) {
+  for (const s of [...list].sort(byOrder)) {
     if (s.parent && s.parent !== s.id && present.has(s.parent)) {
       if (!kids.has(s.parent)) kids.set(s.parent, []);
       kids.get(s.parent).push(s);
@@ -45,7 +70,7 @@ function buildTree(list) {
     for (const k of kids.get(s.id) ?? []) walk(k, depth + 1);
   };
   for (const r of roots) walk(r, 0);
-  for (const s of [...list].sort(byRecency)) walk(s, 0); // цикл родителей: ничего не теряем
+  for (const s of [...list].sort(byOrder)) walk(s, 0); // цикл родителей: ничего не теряем
   return rows;
 }
 
@@ -76,9 +101,15 @@ export function groupSessions(sessions, { pinned = new Set(), projects = null, i
     }
   }
   if (includeEmpty && known) for (const p of known.values()) slot(`id:${p.id}`, p.name, p.id);
+  // порядок проектов — тот, что владелец задал перетаскиванием и сервер хранит (порядок списка projects); остальные группы после них, свежие выше
+  const place = new Map((projects ?? []).map((p, i) => [p.id, i]));
+  const placed = (g) => (g.id !== '' && place.has(g.id) ? place.get(g.id) : Infinity);
   const groups = [...byKey.values()]
     .map((g) => ({ ...g, latest: g.list.length > 0 ? Math.max(...g.list.map((s) => s.updatedAt)) : -1 }))
-    .sort((x, y) => (y.latest - x.latest) || (x.project < y.project ? -1 : (x.project > y.project ? 1 : 0)))
+    .sort((x, y) => {
+      if (placed(x) !== placed(y)) return placed(x) < placed(y) ? -1 : 1;
+      return (y.latest - x.latest) || (x.project < y.project ? -1 : (x.project > y.project ? 1 : 0));
+    })
     .map(({ project, id, list }) => ({ project, id, rows: buildTree(list) }));
   return {
     pinned: pinnedList.sort(byRecency).map((session) => ({ session, depth: 0 })),
