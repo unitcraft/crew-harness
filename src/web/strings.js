@@ -108,6 +108,16 @@ export const S = Object.freeze({
   'diffs.hide': 'Свернуть',
 
   // ---- поле ввода
+  'msg.copy': 'Скопировать',
+  'msg.restore': 'Вернуть в поле ввода',
+  'msg.delivered': 'Доставлено',
+  'msg.queued': 'в очереди',
+  'msg.unqueue': 'Вернуть на редактирование',
+  'msg.send_now': 'Отправить сейчас',
+  'msg.time_now': 'только что',
+  'msg.time_yesterday': 'вчера {clock}',
+  'msg.time_older': '{date} {clock}',
+  'msg.images_n': 'Изображений: {n}',
   'composer.placeholder': 'Enter — отправить, Shift+Enter — новая строка',
   'composer.hint': 'Enter — отправить, Shift+Enter — новая строка',
   'menu.agent': 'Агент',

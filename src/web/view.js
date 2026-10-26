@@ -19,6 +19,7 @@ import { createProjectsUi } from './projects-ui.js';
 import { pickFolder as pickFolderFor, sessionPlace } from './projects.js';
 import { LANGS, createVoiceSettings, langFor, pageLang } from './stt.js';
 import { isBusy, keyAction } from './queue.js';
+import { historyStep, NO_HISTORY } from './history.js';
 import { canSend } from './attachments.js';
 import { createAttachUi } from './attach-ui.js';
 import { createViewer } from './viewer-ui.js';
@@ -29,7 +30,7 @@ import {
 } from './question.js';
 import {
   STATE_KEYS, sessionList, splitBlocks, filterSessions, groupSessions, effectivePins, timeline, paragraphs, inlineSpans,
-  workSummary, groupThousands, ruForm, effortChoices, shownOf, familyOf, filterModels, groupModels, usagePercent, usageLevel, tokenParts, durationLabel, agoParts, fileParts, taskSummary,
+  workSummary, messageTime, groupThousands, ruForm, effortChoices, shownOf, familyOf, filterModels, groupModels, usagePercent, usageLevel, tokenParts, durationLabel, agoParts, fileParts, taskSummary,
 } from './state.js';
 import {
   ROUTES, STEP_ICON, STEP_STATE_KEY, SUBTASK_STATE_KEY, routeName, routeDescription, counterText, stepToSkip, showStrip, stripActions,
@@ -921,6 +922,7 @@ export function createView(doc, refs, deps) {
   let currentTrace = null;
   const nodes = new Map(); // key элемента ленты -> { node, sig, item }
 
+  let historyState = NO_HISTORY; // где мы в истории отправленных сообщений (↑ и ↓ в поле)
   let uploading = false; // картинки уходят на сервер: второй отправки пока нет
   function submit() {
     const text = input.value.trim();
@@ -980,10 +982,23 @@ export function createView(doc, refs, deps) {
   input.addEventListener('keydown', (e) => {
     // в записи Enter останавливает её и вставляет текст, а не отправляет сообщение
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && dictation.active()) { e.preventDefault(); dictation.stop(); return; }
-    if (keyAction(e)) { e.preventDefault(); submit(); }
+    if (keyAction(e)) { e.preventDefault(); submit(); return; }
+    if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.isComposing && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && current.session) {
+      const texts = current.session.messages.filter((m) => m.role === 'user' && m.text.trim().length > 0).map((m) => m.text);
+      const step = historyStep({ texts, state: historyState, value: input.value, caret: input.selectionStart, key: e.key });
+      if (step.handled) {
+        e.preventDefault();
+        historyState = step.state;
+        input.value = step.value;
+        input.setSelectionRange(step.value.length, step.value.length);
+        fitInput();
+        if (currentTrace) drafts.set(currentTrace, input.value);
+      }
+    }
   });
   queueButton.addEventListener('click', () => { if (currentTrace) handlers.onUnqueue(currentTrace); });
   input.addEventListener('input', () => {
+    historyState = NO_HISTORY;
     fitInput();
     if (currentTrace) drafts.set(currentTrace, input.value);
   });
@@ -1122,7 +1137,18 @@ export function createView(doc, refs, deps) {
           }))
           : false;
         node.replaceChildren(h(doc, 'span', { class: 'sr', text: t('chat.you') }),
-          h(doc, 'div', { class: 'bubble' }, thumbs, ...(item.text.trim().length > 0 ? proseNodes(item.text) : [])));
+          h(doc, 'div', { class: 'bubble' }, thumbs, ...(item.text.trim().length > 0 ? proseNodes(item.text) : [])),
+          messageActions(item));
+        break;
+      }
+      case 'queued': {
+        // сообщение в очереди: приглушённый пузырь под текущим ходом, ряд иконок виден всегда
+        node.dataset.queued = 'true';
+        node.replaceChildren(h(doc, 'span', { class: 'sr', text: t('chat.you') }),
+          h(doc, 'div', { class: 'bubble' },
+            item.images.length > 0 ? h(doc, 'p', { class: 'queued-images', text: t('msg.images_n', { n: item.images.length }) }) : false,
+            ...(item.text.trim().length > 0 ? proseNodes(item.text) : [])),
+          messageActions(item));
         break;
       }
       case 'skipped':
@@ -1203,6 +1229,7 @@ export function createView(doc, refs, deps) {
       case 'actions': {
         const copy = h(doc, 'button', { type: 'button', class: 'icon-btn small', 'aria-label': t('chat.copy'), title: t('chat.copy') }, icon(doc, 'i-copy'));
         copy.addEventListener('click', () => handlers.onCopy(item.text));
+        node.dataset.row = 'hover';
         node.replaceChildren(copy, h(doc, 'span', { class: 'ago', 'data-ago': item.at, text: agoText(item.at) }));
         break;
       }
@@ -1214,9 +1241,75 @@ export function createView(doc, refs, deps) {
     }
   }
 
+  // Ряд под ответом агента показывается при наведении на любую часть этого ответа (и по касанию): items одного хода несут data-turn
+  let hotTurn = '';
+  function setHot(turn) {
+    if (turn === hotTurn) return;
+    hotTurn = turn;
+    for (const row of thread.querySelectorAll('[data-row="hover"]')) {
+      if (turn && row.dataset.turn === turn) row.dataset.hot = 'on'; else delete row.dataset.hot;
+    }
+  }
+  thread.addEventListener('mouseover', (e) => { const item = e.target.closest ? e.target.closest('[data-turn]') : null; setHot(item ? item.dataset.turn : ''); });
+  thread.addEventListener('mouseleave', () => setHot(''));
+  thread.addEventListener('click', (e) => {
+    const item = e.target.closest ? e.target.closest('.item-user, .item-text') : null;
+    if (!item) return;
+    // на сенсорном экране ряд раскрывается по касанию пузыря
+    if (item.classList.contains('item-user')) item.dataset.tap = item.dataset.tap === 'on' ? '' : 'on';
+    else setHot(hotTurn === item.dataset.turn ? '' : item.dataset.turn);
+  });
+
+  // ---- сообщения владельца: ряд мелких иконок под пузырём (при наведении; в очереди — всегда)
+  function timeText(at) {
+    if (!at) return '';
+    const m = messageTime(at, now());
+    if (m.kind === 'now') return t('msg.time_now');
+    if (m.kind === 'today') return m.clock;
+    if (m.kind === 'yesterday') return t('msg.time_yesterday', { clock: m.clock });
+    return t('msg.time_older', { date: m.date, clock: m.clock });
+  }
+  function iconButton(doc2, id, label, onClick) {
+    const b = h(doc2, 'button', { type: 'button', class: 'msg-btn', title: label, 'aria-label': label }, icon(doc2, id));
+    b.addEventListener('click', onClick);
+    return b;
+  }
+  /** Текст сообщения в поле ввода: перед тем, что уже набрано (через пустую строку); фокус в поле, курсор после вставленного, ничего не уходит. */
+  function putInField(text, images = []) {
+    const keep = input.value;
+    input.value = keep.trim() === '' ? text : `${text}\n\n${keep}`;
+    if (images.length > 0) attach.restore([...attach.items(), ...images]);
+    fitInput();
+    if (currentTrace) drafts.set(currentTrace, input.value);
+    input.focus();
+    input.setSelectionRange(text.length, text.length);
+  }
+  function messageActions(item) {
+    const queued = item.type === 'queued';
+    const row = h(doc, 'div', { class: 'msg-actions', 'data-queued': queued ? 'true' : undefined });
+    if (queued) {
+      row.append(h(doc, 'span', { class: 'msg-state', text: t('msg.queued') }));
+    } else {
+      row.append(h(doc, 'span', { class: 'msg-check', title: t('msg.delivered'), 'aria-label': t('msg.delivered') }, icon(doc, 'i-check2')),
+        h(doc, 'span', { class: 'msg-time', 'data-at': item.at || undefined, text: timeText(item.at) }));
+    }
+    row.append(iconButton(doc, 'i-copy', t('msg.copy'), () => handlers.onCopy(item.text)),
+      iconButton(doc, 'i-undo', t('msg.restore'), () => putInField(item.text)));
+    if (queued) {
+      row.append(iconButton(doc, 'i-x', t('msg.unqueue'), () => {
+        const back = handlers.onUnqueueAt(currentTrace, item.index);
+        if (back) putInField(back.text, back.images ?? []);
+      }));
+      const now2 = h(doc, 'button', { type: 'button', class: 'msg-now', text: t('msg.send_now') });
+      now2.addEventListener('click', () => handlers.onSendNow(currentTrace, item.index));
+      row.append(now2);
+    }
+    return row;
+  }
+
   function makeEntry(item) {
     const cls = { diffs: 'item card diffs', work: 'item item-work' }[item.type] ?? `item item-${item.type}`;
-    return { node: h(doc, 'div', { class: cls, 'data-key': item.key }), sig: null, item };
+    return { node: h(doc, 'div', { class: cls, 'data-key': item.key, 'data-turn': item.turn || undefined }), sig: null, item };
   }
 
   // Напоминание при открытии сессии: в задаче есть не влитые коммиты (один раз за сессию страницы).
@@ -1242,6 +1335,7 @@ export function createView(doc, refs, deps) {
         attachDrafts.set(currentTrace, attach.take());
       }
       currentTrace = session.id;
+      historyState = NO_HISTORY;
       nodes.clear();
       thread.replaceChildren();
       input.value = drafts.get(session.id) ?? '';
@@ -1314,6 +1408,10 @@ export function createView(doc, refs, deps) {
 
     const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight <= NEAR_BOTTOM_PX;
     const items = timeline(session);
+    // сообщения в очереди — под текущим ходом, в порядке постановки
+    handlers.queuedItems(session.id).forEach((q, index) => {
+      items.push({ type: 'queued', key: `queued:${index}:${q.text.length}:${q.text.slice(0, 24)}`, text: q.text, images: q.images ?? [], index });
+    });
     if (items.length === 0) {
       if (!emptyChat.parentNode) thread.replaceChildren(emptyChat);
     } else if (emptyChat.parentNode) {
@@ -1798,6 +1896,10 @@ export function createView(doc, refs, deps) {
     }
     for (const node of doc.querySelectorAll('[data-until]')) {
       const text = t('route.overlap_timer', { seconds: Math.max(0, Math.ceil((Number(node.dataset.until) - now()) / 1000)) });
+      if (node.textContent !== text) node.textContent = text;
+    }
+    for (const node of doc.querySelectorAll('.msg-time[data-at]')) {
+      const text = timeText(Number(node.dataset.at));
       if (node.textContent !== text) node.textContent = text;
     }
     for (const node of doc.querySelectorAll('[data-ago]')) {

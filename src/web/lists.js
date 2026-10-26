@@ -142,7 +142,7 @@ export function timeline(session) {
 
   for (const m of session.messages) {
     if (m.role === 'user') {
-      items.push({ type: 'user', key: m.key, text: m.text, turn: m.turn, images: m.images ?? [] });
+      items.push({ type: 'user', key: m.key, text: m.text, turn: m.turn, images: m.images ?? [], at: m.at ?? 0 });
     } else if (m.role === 'skipped') {
       items.push({ type: 'skipped', key: m.key, agent: m.agent, count: m.count });
     } else if (m.role === 'dropped') {
@@ -166,7 +166,7 @@ export function timeline(session) {
       let group = [];
       let segment = 0;
       const flushText = () => {
-        if (text.trim().length > 0) content.push({ type: 'text', key: `${m.key}:s${segment}`, text, streaming: false });
+        if (text.trim().length > 0) content.push({ type: 'text', key: `${m.key}:s${segment}`, text, streaming: false, turn: m.turn });
         if (text.length > 0) segment += 1;
         text = '';
       };
@@ -193,7 +193,7 @@ export function timeline(session) {
       if (m.status === 'refused' || m.status === 'error' || m.status === 'cancelled') {
         items.push({ type: 'note', key: `n:${m.turn}`, tone: m.status, reason: m.reason });
       } else if (m.status === 'done' && m.text.trim().length > 0) {
-        items.push({ type: 'actions', key: `x:${m.turn}`, text: m.text, at: m.doneAt });
+        items.push({ type: 'actions', key: `x:${m.turn}`, text: m.text, at: m.doneAt, turn: m.turn });
       }
     }
   }
@@ -402,4 +402,18 @@ export function usageSummary(usage) {
   const latest = rows[rows.length - 1];
   if (latest.new === undefined && latest.cached === undefined && latest.total === undefined) return null;
   return { steps: rows.length, rows, latest, expandable: rows.length > 1 };
+}
+
+/** Время сообщения под пузырём: { kind: 'now' | 'today' | 'yesterday' | 'older', clock: 'ЧЧ:ММ', date: 'дд.мм' } (местное время). */
+export function messageTime(at, now) {
+  const pad = (n) => String(n).padStart(2, '0');
+  const d = new Date(at);
+  const clock = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const date = `${pad(d.getDate())}.${pad(d.getMonth() + 1)}`;
+  if (now - at < 60_000) return { kind: 'now', clock, date };
+  const midnight = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((midnight(new Date(now)) - midnight(d)) / 86_400_000);
+  if (days <= 0) return { kind: 'today', clock, date };
+  if (days === 1) return { kind: 'yesterday', clock, date };
+  return { kind: 'older', clock, date };
 }

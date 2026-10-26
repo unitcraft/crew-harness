@@ -260,7 +260,7 @@ function apply(session, event) {
     }
     case 'user_message': {
       const userTurn = str(input.turn, event.id);
-      const user = { key: userKey(userTurn), role: 'user', turn: userTurn, text: str(input.text), images: session.pendingImages ?? [] };
+      const user = { key: userKey(userTurn), role: 'user', turn: userTurn, text: str(input.text), images: session.pendingImages ?? [], at: event.time };
       if (session.messages.some((m) => m.key === user.key)) return session;
       return {
         ...session,
