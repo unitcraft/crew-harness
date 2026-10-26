@@ -29,7 +29,7 @@ import {
 } from './question.js';
 import {
   STATE_KEYS, sessionList, splitBlocks, filterSessions, groupSessions, effectivePins, timeline, paragraphs, inlineSpans,
-  workSummary, effortChoices, filterModels, groupModels, usagePercent, usageLevel, tokenParts, durationLabel, agoParts, fileParts, taskSummary,
+  workSummary, effortChoices, shownOf, familyOf, filterModels, groupModels, usagePercent, usageLevel, tokenParts, durationLabel, agoParts, fileParts, taskSummary,
 } from './state.js';
 
 const NEAR_BOTTOM_PX = 48;
@@ -1024,13 +1024,15 @@ export function createView(doc, refs, deps) {
       title.textContent = session.name;
       closeMenu();
     }
-    agentText.textContent = agentLabel(session.agent);
+    // Что показать про семью, модель, режим и усилие: данные показанной семьи (собственная сводка сессии, иначе каталог семьи)
+    const shown = shownOf(model, session);
+    agentText.textContent = agentLabel(shown.agent);
     const known = session.projectId ? projectById(session.projectId) : undefined;
     const removed = Boolean(session.projectId) && projectsList !== null && !known; // проект удалён: сессия теперь «Без проекта»
     const place = removed ? '' : sessionPlace({ project: known ? known.name : session.project, folder: session.folder, branch: session.branch });
     placeText.hidden = place === '';
     placeText.textContent = place;
-    modelText.textContent = session.model || t('session.model_unknown');
+    modelText.textContent = shown.model || t('session.model_unknown');
     stateBadge.textContent = t(STATE_KEYS[session.state]);
     stateBadge.dataset.state = session.state;
     const busy = isBusy(session.state);
@@ -1039,10 +1041,10 @@ export function createView(doc, refs, deps) {
     if (queued > 0) queueButton.textContent = t('composer.queued', { n: queued });
     cancelButton.hidden = !busy;
     syncSend(busy);
-    options = session.options || null;
-    currentAgent = session.agent;
+    options = shown.options;
+    currentAgent = shown.agent;
     familyButton.hidden = agents.length < 2;
-    familyButton.replaceChildren(h(doc, 'span', { text: agentLabel(session.agent) }));
+    familyButton.replaceChildren(h(doc, 'span', { text: agentLabel(shown.agent) }));
     const hasModes = Boolean(options && options.modes.length > 0);
     const hasModels = Boolean(options && (options.models.length > 0 || options.efforts.length > 0));
     modeButton.hidden = !hasModes;
@@ -1053,12 +1055,12 @@ export function createView(doc, refs, deps) {
     const effortLabel = hasModels ? labelFor('effort', effortChoices(options.efforts), options.effort) : { name: '', title: '' };
     modelButton.title = effortLabel.title ? `${t('status.model')}: ${effortLabel.title}` : t('status.model');
     modelButton.replaceChildren(h(doc, 'span', {
-      text: hasModels ? [session.model || nameOf(options.models, options.modelId) || t('session.model_unknown'), effortLabel.name].filter(Boolean).join(' · ') : '',
+      text: hasModels ? [shown.model || nameOf(options.models, options.modelId) || t('session.model_unknown'), effortLabel.name].filter(Boolean).join(' · ') : '',
     }));
     statusModel.hidden = hasModels;
-    statusModel.textContent = session.model || '';
+    statusModel.textContent = shown.model || (shown.loading ? t('session.loading') : '');
     spinner.hidden = !busy;
-    status.dataset.empty = String(familyButton.hidden && !session.model && !busy && !hasModes && !hasModels && !session.usage);
+    status.dataset.empty = String(familyButton.hidden && !statusModel.textContent && !busy && !hasModes && !hasModels && !session.usage);
     if (menuKind === 'agent') renderMenu();
     else if (menuKind && ((menuKind === 'mode' && !hasModes) || (menuKind !== 'mode' && !hasModels))) closeMenu();
     else if (menuKind) {
@@ -1196,7 +1198,9 @@ export function createView(doc, refs, deps) {
   }
 
   let railSig = '';
-  function renderRail(session) {
+  function renderRail(raw) {
+    // при смене семьи правая панель называет уже новую (задача 192o)
+    const session = raw ? { ...raw, agent: familyOf(raw) } : raw;
     if (!session) {
       if (railSig !== 'none') { railSig = 'none'; refs.rail.replaceChildren(h(doc, 'p', { class: 'rail-pick', text: t('rail.pick') })); }
       return;

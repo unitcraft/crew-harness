@@ -76,6 +76,9 @@ function buildJournal() {
     out.push({ id: `${trace}-${steps[trace]}`, trace, step: steps[trace], kind, input, time });
   };
 
+  // каталог семьи (задача 192o): сессии без собственной сводки показывают списки своей семьи
+  add('agents', 'agent_catalog', { agent: 'opencode', updated: BASE, ...MOCK_OPTIONS }, BASE);
+
   // 1. закреплённая, закончена: инструменты, фоновые задачи, правки, результаты
   const s1 = 'ses-demo-1';
   add(s1, 'session_created', {

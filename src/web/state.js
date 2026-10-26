@@ -29,6 +29,8 @@ export const KINDS = Object.freeze([
   'message_images', 'images_skipped',
   // форма вопросов агента (задача 192): вопрос, ответ владельца (эхо сервера), снятие вопроса
   'question_request', 'question_answer', 'question_resolved',
+  // задача 192o: каталог семьи — последние списки и значения агента, их шлёт хаб всем страницам
+  'agent_catalog',
 ]);
 
 export const TOOL_KINDS = Object.freeze(['read', 'edit', 'delete', 'move', 'search', 'execute', 'think', 'fetch', 'other']);
@@ -64,7 +66,7 @@ export function isEvent(e) {
 }
 
 export function initialModel() {
-  return { sessions: {}, seen: {} };
+  return { sessions: {}, seen: {}, catalog: {} };
 }
 
 /** Собрать исходящее событие владельца. Часы и генератор id приходят снаружи. */
@@ -117,6 +119,51 @@ export function imageList(trace, v) {
     .map((i) => ({ n: i.n, name: str(i.name, 'image'), mime: str(i.mime), bytes: count(i.bytes), src: imageUrl(trace, i.n) }));
 }
 
+const hasOptions = (o) => o.models.length > 0 || o.efforts.length > 0 || o.modes.length > 0 || o.modelId !== '';
+
+/** Семья, которую страница показывает у сессии: выбранная владельцем при смене (пока сервер не ответил) или текущая. */
+export const familyOf = (session) => session.switchingTo || session.agent;
+
+/**
+ * Что показать у сессии про модель, режим и усилие (задача 192o). Сперва собственная сводка сессии, но только от той семьи, которая показана
+ * (сводка прежнего агента после смены семьи не годится ни на миг); иначе каталог этой семьи; нет и его — пусто, а при смене семьи ещё и loading.
+ * Значения каталога — «по умолчанию» семьи, а не выбор другой сессии: поэтому собственная сводка всегда главнее.
+ */
+export function shownOf(model, session) {
+  const agent = familyOf(session);
+  if (session.optionsAgent === agent && hasOptions(session.options)) {
+    return { agent, model: session.model, options: session.options, loading: false };
+  }
+  const entry = model.catalog ? model.catalog[agent] : undefined;
+  if (entry) return { agent, model: entry.model, options: entry.options, loading: false };
+  return { agent, model: '', options: NO_OPTIONS, loading: session.optionsPending === true };
+}
+
+function withSession(model, trace, change) {
+  const session = model.sessions[trace];
+  if (!session) return model;
+  const next = change(session);
+  if (next === session) return model;
+  return { ...model, sessions: { ...model.sessions, [trace]: next } };
+}
+
+/**
+ * Владелец выбрал другую семью: страница НЕМЕДЛЕННО, не дожидаясь сервера, показывает значения новой семьи (shownOf). Выбор прежней семьи
+ * во время смены отменяет её. Событие agent_switched (или ошибка сервера) завершает смену.
+ */
+export function beginSwitch(model, trace, agent) {
+  return withSession(model, trace, (s) => {
+    if (typeof agent !== 'string' || agent === '') return s;
+    if (agent === s.agent) return s.switchingTo ? { ...s, switchingTo: '', optionsPending: false } : s;
+    return s.switchingTo === agent ? s : { ...s, switchingTo: agent, optionsPending: true };
+  });
+}
+
+/** Отправка смены не удалась: вернуться к показу прежней семьи. */
+export function undoSwitch(model, trace) {
+  return withSession(model, trace, (s) => (s.switchingTo ? { ...s, switchingTo: '', optionsPending: false } : s));
+}
+
 const userKey = (turn) => `u:${turn}`;
 const agentKey = (turn) => `a:${turn}`;
 const permKey = (request) => `p:${request}`;
@@ -162,7 +209,7 @@ function apply(session, event) {
   switch (event.kind) {
     case 'session_model': {
       if (event.step <= session.modelStep) return session;
-      return { ...session, model: str(input.model), options: optionsOf(input), modelStep: event.step };
+      return { ...session, model: str(input.model), options: optionsOf(input), optionsAgent: session.agent, optionsPending: false, modelStep: event.step };
     }
     case 'agent_switched': {
       // смена семьи в окне (задача 192): тот же разговор, другой агент; строка в ленте говорит, что и как передано
@@ -173,6 +220,10 @@ function apply(session, event) {
       return {
         ...session,
         agent: str(input.to, session.agent),
+        switchingTo: '',
+        optionsPending: session.switchingTo !== '', // это окно выбрало семью: сводка нового агента ещё в пути
+        // сводки прежнего агента, что придут позже этого события, не годятся: шаг смены — новая нижняя граница
+        modelStep: Math.max(session.modelStep, event.step),
         messages: [...session.messages, { role: 'switch', key, from: str(input.from), to: str(input.to), shown, total, cut: input.cut === 1 }],
       };
     }
@@ -391,7 +442,7 @@ function apply(session, event) {
       const messages = turn && message.status === 'streaming'
         ? putMessage(session.messages, index, { ...message, status: 'error', reason: str(input.message) })
         : session.messages;
-      return { ...session, state: 'error', pending: null, pendingQuestion: null, messages };
+      return { ...session, state: 'error', pending: null, pendingQuestion: null, messages, switchingTo: '', optionsPending: false };
     }
 
     default:
@@ -409,6 +460,16 @@ export function reduce(model, event) {
 
   const seen = { ...model.seen, [event.id]: true };
 
+  if (event.kind === 'agent_catalog') {
+    const agent = str(event.input.agent);
+    if (!agent) return { ...model, seen };
+    const updated = Number.isFinite(event.input.updated) ? event.input.updated : event.time;
+    const old = model.catalog[agent];
+    if (old && old.updated > updated) return { ...model, seen };
+    const entry = { agent, updated, model: str(event.input.model), options: optionsOf(event.input) };
+    return { ...model, seen, catalog: { ...model.catalog, [agent]: entry } };
+  }
+
   if (event.kind === 'session_created') {
     if (model.sessions[event.trace]) return { ...model, seen };
     const session = {
@@ -417,6 +478,9 @@ export function reduce(model, event) {
       agent: str(event.input.agent),
       model: '',
       options: NO_OPTIONS,
+      optionsAgent: '',
+      switchingTo: '',
+      optionsPending: false,
       modelStep: event.step,
       state: 'idle',
       createdAt: event.time,
