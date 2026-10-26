@@ -211,3 +211,14 @@ export function joinPath(base, name) {
   if (b === '') return normalizePath(name);
   return normalizePath(b.endsWith('/') ? `${b}${name}` : `${b}/${name}`);
 }
+
+/** Имя нового проекта по имени папки; такое уже есть (без учёта регистра) — «имя (2)», «имя (3)» и так далее. */
+export function uniqueProjectName(base, names) {
+  const taken = new Set(names.map((n) => String(n).trim().toLowerCase()));
+  const first = String(base).trim() || 'Проект';
+  if (!taken.has(first.toLowerCase())) return first;
+  for (let n = 2; ; n += 1) {
+    const candidate = `${first} (${n})`;
+    if (!taken.has(candidate.toLowerCase())) return candidate;
+  }
+}

@@ -22,17 +22,14 @@ export const S = Object.freeze({
   'sessions.pin': 'Закрепить',
   'sessions.unpin': 'Открепить',
   'sessions.child': 'дочерняя',
-  'sessions.new': 'Новая сессия',
-  'sessions.new_agent': 'Агент',
   'sessions.agents_none': 'В настройках сервера нет доступных агентов.',
   'sessions.agents_unavailable': 'Не удалось загрузить список агентов сервера.',
   'sessions.agents_retry': 'Повторить',
-  'sessions.new_name': 'Название',
   'sessions.new_name_placeholder': 'Без названия',
-  'sessions.new_project': 'Проект',
-  'sessions.new_create': 'Создать',
-  'sessions.new_close': 'Закрыть',
-  'sessions.untitled': 'Сессия {n}',
+  'projects.create_failed': 'Проект не создан: {reason}',
+  'chat.rename': 'Переименовать',
+  'chat.draft_project': 'Проект новой сессии',
+  'chat.draft_folder': 'Папка',
   'sessions.time_title': '{state}. Последнее событие: {time}',
 
   'theme.system': 'Тема: как в системе. Нажмите, чтобы выбрать светлую',
@@ -403,8 +400,6 @@ export const S = Object.freeze({
   'picker.failed': 'Не удалось открыть папку: {reason}',
   'picker.hint': 'Клик по папке открывает её, двойной клик выбирает текущую.',
 
-  'sessions.new_folder': 'Папка',
-  'sessions.new_folder_single': 'Папка: {folder}',
   'session.place': 'Проект, папка и ветка сессии',
 });
 

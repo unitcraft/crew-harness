@@ -7,6 +7,7 @@
 
 import {
   initialModel, reduce, makeEvent, nextStep, normalizeTheme, nextTheme, THEME_KEY, beginSwitch, undoSwitch,
+  addDraft, dropDrafts, patchDraft, nameFromText,
 } from './state.js';
 import { t } from './strings.js';
 import { createView } from './view.js';
@@ -50,7 +51,7 @@ document.title = t('app.title');
 let model = initialModel();
 let status = { state: 'connecting' };
 const ui = {
-  selected: null, newOpen: false, newProjectId: '', projects: null, pane: 'list', flash: '', flashTone: 'error', awaiting: null, theme: readTheme(), pins: {},
+  selected: null, projects: null, pane: 'list', flash: '', flashTone: 'error', awaiting: null, theme: readTheme(), pins: {},
 };
 applyTheme(ui.theme);
 
@@ -58,6 +59,7 @@ const ctx = { newId, now: () => Date.now() };
 let view = null;
 let queued = false;
 let transport = null;
+let agentList = []; // семьи агентов: нужны, чтобы выбрать первую для черновика новой сессии
 // fetch берётся при каждом вызове: в режиме ?mock=1 страница подменяет globalThis.fetch уже после старта
 const projectsApi = createProjectsApi(() => globalThis.fetch.bind(globalThis), t('projects.offline'));
 
@@ -161,7 +163,43 @@ const handlers = {
   },
   onSelect(trace) { ui.selected = trace; ui.pane = 'chat'; render(); },
   onBack() { ui.pane = 'list'; render(); },
-  onNewToggle(open, projectId) { ui.newOpen = open; ui.newProjectId = open ? (projectId ?? '') : ''; render(); },
+  // «+» у проекта: пустой чат новой сессии; на сервер она уходит с первым сообщением (задача 192)
+  onNewToggle(open, projectId = '') {
+    if (!open) {
+      model = dropDrafts(model);
+      if (ui.selected && !model.sessions[ui.selected]) ui.selected = null;
+      render();
+      return;
+    }
+    const project = (ui.projects || []).find((p) => p.id === projectId);
+    const folder = project && project.folders[0] ? project.folders[0] : null;
+    const agent = (agentList.find((a) => !a.disabled) || { id: '' }).id;
+    const id = newId();
+    model = addDraft(dropDrafts(model), {
+      id, agent, projectId: project ? project.id : '', project: project ? project.name : '', folder: folder ? folder.path : '', branch: folder && folder.branch ? folder.branch : '', now: Date.now(),
+    });
+    ui.selected = id;
+    ui.pane = 'chat';
+    render();
+  },
+  onDraftProject(trace, projectId) {
+    const project = (ui.projects || []).find((p) => p.id === projectId);
+    const folder = project && project.folders[0] ? project.folders[0] : null;
+    model = patchDraft(model, trace, {
+      projectId: project ? project.id : '', project: project ? project.name : '', folder: folder ? folder.path : '', branch: folder && folder.branch ? folder.branch : '',
+    });
+    render();
+  },
+  onDraftFolder(trace, path) {
+    const d = model.sessions[trace];
+    const project = d && (ui.projects || []).find((p) => p.id === d.projectId);
+    const folder = project && project.folders.find((f) => f.path === path);
+    if (folder) { model = patchDraft(model, trace, { folder: folder.path, branch: folder.branch || '' }); render(); }
+  },
+  onRename(trace, name) {
+    const clean = String(name).trim();
+    if (clean) send('session_rename', trace, nextStep(model, trace), { name: clean });
+  },
   onProjectsChanged() { loadProjects(); },
   onNotice(text, tone) { flash(text, tone); },
   onPin(trace, pinned) { ui.pins = { ...ui.pins, [trace]: pinned }; render(); },
@@ -176,26 +214,26 @@ const handlers = {
     if (!clip || typeof clip.writeText !== 'function') { flash(t('chat.copy_failed')); return; }
     clip.writeText(text).then(() => flash(t('chat.copied'), 'info'), () => flash(t('chat.copy_failed')));
   },
-  onCreate({ agent, name, project, folder, branch }) {
-    const trace = newId();
-    const count = Object.keys(model.sessions).length;
-    const title = name || t('sessions.untitled', { n: count + 1 });
-    const input = { name: title, agent };
-    // сессия внутри проекта: идентификатор проекта и папка — как в договорённости с сервером; имя проекта — для старого вида группы
-    if (project) {
-      input.project = project.name;
-      input.project_id = project.id;
-      if (folder) input.folder = folder;
-      if (branch) input.branch = branch;
-    }
-    if (send('session_created', trace, 0, input)) {
-      ui.awaiting = trace;
-      ui.newOpen = false;
-      render();
-    }
-  },
   // Без картинок — как раньше, сразу. С картинками — сначала они на сервер по очереди, потом сообщение с их номерами.
   onSend(trace, text, images = []) {
+    const draft = model.sessions[trace];
+    if (draft && draft.draft) {
+      // первое сообщение черновика: сначала создаётся сессия (проект, папка, агент), потом уходит сообщение
+      const input = { name: nameFromText(text) || t('sessions.new_name_placeholder'), agent: draft.agent };
+      if (draft.projectId) {
+        input.project = draft.project;
+        input.project_id = draft.projectId;
+        if (draft.folder) input.folder = draft.folder;
+        if (draft.branch) input.branch = draft.branch;
+      }
+      model = dropDrafts(model);
+      if (!send('session_created', trace, 0, input)) {
+        model = { ...model, sessions: { ...model.sessions, [trace]: draft } };
+        render();
+        return false;
+      }
+      ui.awaiting = trace;
+    }
     if (images.length === 0) return send('user_message', trace, nextStep(model, trace), { turn: newId(), text });
     return uploadImages(trace, images, postImage).then((up) => {
       if (!up.ok) {
@@ -211,6 +249,7 @@ const handlers = {
     send('cancel', trace, nextStep(model, trace), open ? { turn: open.turn } : {});
   },
   onSwitchAgent(trace, agent) {
+    if (model.sessions[trace] && model.sessions[trace].draft) { model = patchDraft(model, trace, { agent }); render(); return; }
     // Страница не ждёт сервера: сразу показывает значения новой семьи (каталог), а не остатки прежней (задача 192o).
     model = beginSwitch(model, trace, agent);
     render();
@@ -280,6 +319,7 @@ async function start() {
       registryFailed = true;
     }
   }
+  agentList = agents;
   view = createView(document, {
     app: document.getElementById('app'), side: document.getElementById('side'),
     main: document.getElementById('main'), rail: document.getElementById('rail'),
