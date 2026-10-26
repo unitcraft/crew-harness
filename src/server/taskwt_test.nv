@@ -1,0 +1,685 @@
+// taskwt_test.nv - task 192r: the git operations of the tasks (`taskwt.nv`). Everything runs in temporary repositories: a main copy, a bare
+// "origin" beside it (a folder, never a network address) and, where needed, a second clone that plays another worker. Nothing here touches a
+// real repository.
+module crew_harness.server
+
+import std.fs.{Fs, read_text, write_text, create_dir_all, remove_dir_all, try_exists, Path}
+import std.os.{Os, temp_dir, pid, cwd, env, remove_env, Command}
+import std.time.{Time}
+
+// ----- the world of a test -----
+
+type TwWorld { root str, main str, origin str }
+
+fn tt_path(text str) -> Path => Path.from_bytes(text.bytes())
+
+fn tt_rm(dir str) -> () {
+    if tw_exists(dir) {
+        ro gone = remove_dir_all(tt_path(dir))
+        if tw_exists(dir) {
+            // read-only files of .git: the shell knows how
+            mut c = Command.new("cmd")
+            c.arg("/c")
+            c.arg("rmdir")
+            c.arg("/s")
+            c.arg("/q")
+            c.arg(dir.replace("/", "\\"))
+            ro done = c.output()
+        }
+    }
+}
+
+fn tt_root(name str) -> str {
+    ro dir = tw_norm(temp_dir().join("crew-taskwt-${pid()}-${name}").display())
+    tt_rm(dir)
+    ro made = create_dir_all(tt_path(dir))
+    dir
+}
+
+fn tt_write(path str, text str) -> () {
+    ro p = tt_path(path)
+    match p.parent() {
+        Some(d) => { ro made = create_dir_all(d) }
+        None => ()
+    }
+    ro w = write_text(p, text)
+}
+
+fn tt_read(path str) -> str {
+    match read_text(tt_path(path)) {
+        Ok(t) => t
+        Err(e) => "<<missing>>"
+    }
+}
+
+/// A git call that must succeed; the text of its output.
+fn tg(dir str, args []str) Proc Os Fs -> str {
+    ro r = tw_git(dir, args)
+    if r.code != 0 { panic("git ${args.join(" ")} failed in ${dir}: ${r.err}") }
+    r.out.trim_ascii()
+}
+
+fn tt_identity(dir str) Proc Os Fs -> () {
+    tg(dir, ["config", "user.name", "Test Worker"])
+    tg(dir, ["config", "user.email", "worker@example.test"])
+    tg(dir, ["config", "commit.gpgsign", "false"])
+    tg(dir, ["config", "core.autocrlf", "false"])
+}
+
+fn tt_commit(dir str, file str, text str, msg str) Proc Os Fs -> () {
+    tt_write("${dir}/${file}", text)
+    tg(dir, ["add", "--", file])
+    tg(dir, ["commit", "-m", msg])
+}
+
+/// A main copy `<root>/crew-harness` with one commit (`README.md`, `a.txt`), pushed to the bare `<root>/origin.git`.
+fn tt_world(name str) Proc Os Fs -> TwWorld {
+    ro root = tt_root(name)
+    ro origin = "${root}/origin.git"
+    ro main = "${root}/crew-harness"
+    tg(root, ["init", "--bare", "-b", "main", "origin.git"])
+    tg(root, ["init", "-b", "main", "crew-harness"])
+    tt_identity(main)
+    tt_write("${main}/README.md", "readme\n")
+    tt_write("${main}/a.txt", "alpha\nbeta\ngamma\n")
+    tg(main, ["add", "--", "README.md", "a.txt"])
+    tg(main, ["commit", "-m", "init"])
+    tg(main, ["remote", "add", "origin", origin])
+    tg(main, ["push", "-u", "origin", "main"])
+    TwWorld { root, main, origin }
+}
+
+/// A second clone of the origin: another worker.
+fn tt_other(w TwWorld) Proc Os Fs -> str {
+    ro other = "${w.root}/other"
+    tg(w.root, ["clone", w.origin, "other"])
+    tt_identity(other)
+    other
+}
+
+fn tt_task(w TwWorld, nnn str, slug str) Proc Os Fs -> TaskTree {
+    match task_tree_create(w.main, nnn, slug) {
+        Ok(t) => t
+        Err(e) => panic("task_tree_create: ${e}")
+    }
+}
+
+fn tt_sub(tree TaskTree, nnn str, slug str, n int) Proc Os Fs -> SubtaskTree {
+    match subtask_tree_create(tree.path, nnn, slug, n) {
+        Ok(t) => t
+        Err(e) => panic("subtask_tree_create: ${e}")
+    }
+}
+
+fn tt_branch_exists(dir str, branch str) Proc Os Fs -> bool => tw_ref_exists(dir, "refs/heads/${branch}")
+
+fn tt_green() Proc Os Fs -> str => ""
+
+fn tt_red() Proc Os Fs -> str => "3 tests are red"
+
+fn tt_count(text str, needle str) -> int {
+    mut n = 0
+    for part in text.split(needle) { n += 1 }
+    n - 1
+}
+
+// ----- the pure parts -----
+
+test "taskwt: the folder of the trees lies beside the main copy, not in it" {
+    assert(worktrees_dir("C:/work/crew-harness") == "C:/work/worktrees")
+    assert(worktrees_dir("C:\\work\\crew-harness\\") == "C:/work/worktrees")
+    assert(worktrees_dir("C:/work/repo/") == "C:/work/worktrees")
+    assert(worktrees_dir("C:/repo") == "C:/worktrees")
+}
+
+test "taskwt overlap: the same file, a folder and a file inside it, the slashes and the case" {
+    assert(overlap(["src/a.nv", "src/b.nv"], ["src/b.nv", "doc/x.md"]) == ["src/b.nv"])
+    assert(overlap(["src/server/"], ["src/server/hub.nv", "src/acp/link.nv"]) == ["src/server/hub.nv"])
+    assert(overlap(["src/server/hub.nv"], ["src/server/"]) == ["src/server/hub.nv"])
+    assert(overlap(["src\\Server\\Hub.nv"], ["SRC/server/hub.nv"]).len() == 1)
+    assert(overlap(["src/server"], ["src/server/hub.nv"]) == ["src/server/hub.nv"])
+    // a name that only begins like the folder is not inside it
+    assert(overlap(["src/server/"], ["src/server2/x.nv"]).len() == 0)
+    assert(overlap(["src/a.nv"], ["doc/a.nv"]).len() == 0)
+    assert(overlap([], ["a"]).len() == 0)
+    // two folders: the deeper one
+    assert(overlap(["src/"], ["src/server/"]) == ["src/server/"])
+    // the same pair once
+    assert(overlap(["src/", "src/server/"], ["src/server/hub.nv"]) == ["src/server/hub.nv"])
+}
+
+test "taskwt parse_touches: the list under the header, the end of the section" {
+    ro md = "# Progress\n\nDone: 1\n\n**Затрагивает:**\n\n- src/server/taskwt.nv\n- `src/server/taskwt_test.nv` — the tests\n- doc/canon/\n\n## Next\n- not/this.nv\n"
+    assert(parse_touches(md) == ["src/server/taskwt.nv", "src/server/taskwt_test.nv", "doc/canon/"])
+    assert(parse_touches("nothing here\n- a.nv\n").len() == 0)
+    assert(parse_touches("Затрагивает: a.nv, dir/b.nv\nnext line\n- c.nv\n") == ["a.nv", "dir/b.nv"])
+    assert(parse_touches("Затрагивает:\n- a.nv\n  \n- b.nv\n").len() == 1)
+    assert(parse_touches("Затрагивает:\n").len() == 0)
+}
+
+test "taskwt: a secret in a URL is cut off the text that comes back from git" {
+    ro at = "@"
+    ro a = "fatal: unable to access 'https://u1:p1${at}host.example/x.git/': nope"
+    assert(tw_redact(a) == "fatal: unable to access 'https://host.example/x.git/': nope")
+    assert(tw_redact("no url here") == "no url here")
+    ro b = tw_redact("ssh://g${at}host/x and https://tok:en${at}h/p")
+    assert(!b.contains("tok"))
+    assert(b.contains("https://h/p"))
+}
+
+test "taskwt: markers of a conflict are seen at the start of a line" {
+    assert(tw_has_markers("a\n<<<<<<< HEAD\nb\n=======\nc\n>>>>>>> branch\n"))
+    assert(tw_has_markers("a\n>>>>>>> x\n"))
+    assert(!tw_has_markers("a\n    <<<<<<< not at the start\nb\n"))
+    assert(!tw_has_markers("Title\n=======\ntext\n"))
+}
+
+test "taskwt: the service turn names the files and says that the panel commits" {
+    ro p = resolve_prompt(["a.txt", "src/b.nv"])
+    assert(p.contains("a.txt, src/b.nv"))
+    assert(p.contains("Разреши конфликты слияния"))
+    assert(p.contains("<<<<<<< ======= >>>>>>>"))
+    assert(p.contains("ничего не коммить"))
+}
+
+// ----- the tree of a task -----
+
+test "taskwt tree: made beside the main copy, the main copy is not touched" {
+    ro w = tt_world("tree")
+    ro head0 = tg(w.main, ["rev-parse", "HEAD"])
+    ro branch0 = tw_current_branch(w.main)
+    ro status0 = tg(w.main, ["status", "--porcelain"])
+    ro tree = tt_task(w, "192", "demo")
+    assert(tree.branch == "task/192-demo")
+    assert(tree.path == "${w.root}/worktrees/crew-harness-192-demo")
+    assert(tree.base == "origin/main")
+    assert(tree.created)
+    assert(tw_exists("${tree.path}/a.txt"))
+    assert(tw_current_branch(tree.path) == "task/192-demo")
+    assert(tg(w.main, ["rev-parse", "HEAD"]) == head0)
+    assert(tw_current_branch(w.main) == branch0)
+    assert(tg(w.main, ["status", "--porcelain"]) == status0)
+    // not tracking origin/main: a bare `git push` of the tree would not go to main
+    assert(tw_git(tree.path, ["config", "branch.task/192-demo.remote"]).code != 0)
+    tt_rm(w.root)
+}
+
+test "taskwt tree: the call is idempotent, also when only the branch is left" {
+    ro w = tt_world("idem")
+    ro first = tt_task(w, "192", "demo")
+    ro second = tt_task(w, "192", "demo")
+    assert(first.created)
+    assert(!second.created)
+    assert(second.path == first.path)
+    // the folder is gone, the branch is left: the tree is made again on the same branch
+    tt_commit(first.path, "t.txt", "t\n", "tree commit")
+    tg(w.main, ["worktree", "remove", "--force", first.path])
+    assert(tt_branch_exists(w.main, "task/192-demo"))
+    ro third = tt_task(w, "192", "demo")
+    assert(third.created)
+    assert(tw_exists("${third.path}/t.txt"))
+    tt_rm(w.root)
+}
+
+test "taskwt tree: not a git repository, a foreign folder, a bad name" {
+    ro w = tt_world("refuse")
+    ro plain = "${w.root}/plain"
+    ro made = create_dir_all(tt_path(plain))
+    match task_tree_create(plain, "192", "demo") {
+        Ok(t) => panic("a plain folder is not a repository")
+        Err(e) => assert(e == "not a git repository")
+    }
+    match task_tree_create("${w.root}/nowhere", "192", "demo") {
+        Ok(t) => panic("a missing folder is not a repository")
+        Err(e) => assert(e == "not a git repository")
+    }
+    match task_tree_create(w.main, "19x", "demo") {
+        Ok(t) => panic("a bad number")
+        Err(e) => assert(e.contains("digits"))
+    }
+    match task_tree_create(w.main, "192", "bad slug") {
+        Ok(t) => panic("a bad slug")
+        Err(e) => assert(e.contains("slug"))
+    }
+    // a folder that is there and is no tree of this repository
+    ro foreign = "${w.root}/worktrees/crew-harness-192-demo"
+    tt_write("${foreign}/x.txt", "x")
+    match task_tree_create(w.main, "192", "demo") {
+        Ok(t) => panic("a foreign folder is not reused")
+        Err(e) => assert(e.contains("not a tree of this repository"))
+    }
+    assert(!tt_branch_exists(w.main, "task/192-demo"))
+    tt_rm(w.root)
+}
+
+test "taskwt tree: a repository without origin is cut from main" {
+    ro root = tt_root("noorigin")
+    ro main = "${root}/crew-harness"
+    tg(root, ["init", "-b", "main", "crew-harness"])
+    tt_identity(main)
+    tt_commit(main, "a.txt", "a\n", "init")
+    match task_tree_create(main, "7", "solo") {
+        Ok(t) => {
+            assert(t.base == "main")
+            assert(t.path == "${root}/worktrees/crew-harness-7-solo")
+            assert(t.note == "")
+            assert(tw_exists("${t.path}/a.txt"))
+        }
+        Err(e) => panic("no origin: ${e}")
+    }
+    tt_rm(root)
+}
+
+// ----- subtasks -----
+
+test "taskwt subtask: made from the head of the task, merged without a conflict, taken away" {
+    ro w = tt_world("sub")
+    ro tree = tt_task(w, "192", "demo")
+    ro s1 = tt_sub(tree, "192", "demo", 1)
+    assert(s1.branch == "task/192-demo-s1")
+    assert(s1.path == "${tree.path}-s1")
+    assert(s1.created)
+    assert(!tt_sub(tree, "192", "demo", 1).created)
+    tt_commit(s1.path, "one.txt", "one\n", "subtask work")
+    assert(!tw_exists("${tree.path}/one.txt"))
+    match subtask_merge(tree.path, s1.branch, "192-s1: first part") {
+        Merged { sha } => {
+            assert(sha == tg(tree.path, ["rev-parse", "HEAD"]))
+            assert(tg(tree.path, ["log", "-1", "--format=%s"]) == "192-s1: first part")
+            assert(tw_split(tg(tree.path, ["rev-list", "--parents", "-n", "1", "HEAD"]), " ").len() == 3)
+        }
+        other => panic("expected Merged")
+    }
+    assert(tw_exists("${tree.path}/one.txt"))
+    match subtask_tree_remove(tree.path, s1.path, s1.branch) {
+        Ok(u) => ()
+        Err(e) => panic("remove: ${e}")
+    }
+    assert(!tw_exists(s1.path))
+    assert(!tt_branch_exists(tree.path, s1.branch))
+    // the main copy and its branches know nothing of it
+    assert(tg(w.main, ["status", "--porcelain"]) == "")
+    tt_rm(w.root)
+}
+
+test "taskwt subtask: a tree whose branch is not merged is not removed" {
+    ro w = tt_world("subkeep")
+    ro tree = tt_task(w, "192", "demo")
+    ro s1 = tt_sub(tree, "192", "demo", 1)
+    tt_commit(s1.path, "one.txt", "one\n", "subtask work")
+    match subtask_tree_remove(tree.path, s1.path, s1.branch) {
+        Ok(u) => panic("not merged must not be removed")
+        Err(e) => assert(e == "not merged")
+    }
+    assert(tw_exists(s1.path))
+    assert(tt_branch_exists(tree.path, s1.branch))
+    tt_rm(w.root)
+}
+
+test "taskwt subtask: a conflict is left in progress, the agent resolves it, the finish commits" {
+    ro w = tt_world("conflict")
+    ro tree = tt_task(w, "192", "demo")
+    ro s1 = tt_sub(tree, "192", "demo", 1)
+    ro s2 = tt_sub(tree, "192", "demo", 2)
+    tt_commit(s1.path, "a.txt", "alpha\nbeta-one\ngamma\n", "s1 edit")
+    tt_commit(s2.path, "a.txt", "alpha\nbeta-two\ngamma\n", "s2 edit")
+    match subtask_merge(tree.path, s1.branch, "192-s1: first") {
+        Merged { sha } => ()
+        other => panic("the first merge is clean")
+    }
+    match subtask_merge(tree.path, s2.branch, "192-s2: second") {
+        Conflict { files } => assert(files == ["a.txt"])
+        other => panic("expected Conflict")
+    }
+    // the merge is left in progress, the markers are in the file
+    assert(tw_merging(tree.path))
+    assert(tw_has_markers(tt_read("${tree.path}/a.txt")))
+    // finishing before the agent has worked: the file still holds the markers
+    match subtask_merge_finish(tree.path) {
+        StillConflicted { files } => assert(files == ["a.txt"])
+        other => panic("expected StillConflicted")
+    }
+    assert(tw_merging(tree.path))
+    // the agent's resolution: a plain write of the file
+    tt_write("${tree.path}/a.txt", "alpha\nbeta-one-and-two\ngamma\n")
+    match subtask_merge_finish(tree.path) {
+        Merged { sha } => assert(sha == tg(tree.path, ["rev-parse", "HEAD"]))
+        other => panic("expected Merged after the resolution")
+    }
+    assert(!tw_merging(tree.path))
+    assert(tt_read("${tree.path}/a.txt") == "alpha\nbeta-one-and-two\ngamma\n")
+    assert(tw_split(tg(tree.path, ["rev-list", "--parents", "-n", "1", "HEAD"]), " ").len() == 3)
+    assert(is_clean(tree.path))
+    // both subtasks are in the head now
+    match subtask_tree_remove(tree.path, s2.path, s2.branch) {
+        Ok(u) => ()
+        Err(e) => panic("remove after the resolved merge: ${e}")
+    }
+    tt_rm(w.root)
+}
+
+test "taskwt subtask: a merge can be given up, the finish without a merge is a failure" {
+    ro w = tt_world("abort")
+    ro tree = tt_task(w, "192", "demo")
+    ro s1 = tt_sub(tree, "192", "demo", 1)
+    ro s2 = tt_sub(tree, "192", "demo", 2)
+    tt_commit(s1.path, "a.txt", "alpha\nbeta-one\ngamma\n", "s1 edit")
+    tt_commit(s2.path, "a.txt", "alpha\nbeta-two\ngamma\n", "s2 edit")
+    match subtask_merge_finish(tree.path) {
+        Failed { msg } => assert(msg.contains("no merge"))
+        other => panic("no merge: a failure")
+    }
+    match subtask_merge(tree.path, s1.branch, "") {
+        Merged { sha } => assert(tg(tree.path, ["log", "-1", "--format=%s"]) == "Merge task/192-demo-s1")
+        other => panic("clean")
+    }
+    match subtask_merge(tree.path, s2.branch, "x") {
+        Conflict { files } => ()
+        other => panic("expected Conflict")
+    }
+    // a second merge while one is in progress is refused
+    match subtask_merge(tree.path, s2.branch, "x") {
+        Failed { msg } => assert(msg.contains("in progress"))
+        other => panic("expected Failed")
+    }
+    match subtask_merge_abort(tree.path) {
+        Ok(u) => ()
+        Err(e) => panic("abort: ${e}")
+    }
+    assert(!tw_merging(tree.path))
+    assert(is_clean(tree.path))
+    assert(tt_read("${tree.path}/a.txt") == "alpha\nbeta-one\ngamma\n")
+    tt_rm(w.root)
+}
+
+test "taskwt subtask: a branch that does not exist is a failure, not a conflict" {
+    ro w = tt_world("nobranch")
+    ro tree = tt_task(w, "192", "demo")
+    match subtask_merge(tree.path, "task/192-demo-s9", "x") {
+        Failed { msg } => assert(msg.byte_len() > 0)
+        other => panic("expected Failed")
+    }
+    tt_rm(w.root)
+}
+
+// ----- the state of a tree -----
+
+test "taskwt state: the count of unmerged commits, the stat of the diff, a clean tree" {
+    ro w = tt_world("state")
+    ro tree = tt_task(w, "192", "demo")
+    assert(unmerged_count(tree.path) == 0)
+    assert(diff_stat(tree.path).len() == 0)
+    assert(is_clean(tree.path))
+    tt_commit(tree.path, "a.txt", "alpha\nbeta\ngamma\ndelta\nepsilon\n", "two lines more")
+    tt_commit(tree.path, "Заметка.md", "один\nдва\n", "a note")
+    assert(unmerged_count(tree.path) == 2)
+    ro stat = diff_stat(tree.path)
+    assert(stat.len() == 2)
+    mut seen_a = false
+    mut seen_note = false
+    for s in stat {
+        if s.path == "a.txt" {
+            seen_a = true
+            assert(s.added == 2)
+            assert(s.removed == 0)
+        }
+        if s.path == "Заметка.md" {
+            seen_note = true
+            assert(s.added == 2)
+        }
+    }
+    assert(seen_a)
+    assert(seen_note)
+    assert(is_clean(tree.path))
+    tt_write("${tree.path}/loose.txt", "x")
+    assert(!is_clean(tree.path))
+    assert(!is_clean("${w.root}/nowhere"))
+    assert(unmerged_count("${w.root}/nowhere") == -1)
+    tt_rm(w.root)
+}
+
+test "taskwt: a git call that does not finish in time comes back as a failure" {
+    ro w = tt_world("timeout")
+    ro t0 = Time.now().unix_millis()
+    ro r = tw_exec(w.main, ["-c", "alias.slow=!ping -n 12 127.0.0.1 >/dev/null", "slow"], 700)
+    ro elapsed = Time.now().unix_millis() - t0
+    assert(r.code == -1)
+    assert(r.err.contains("did not finish"))
+    assert(elapsed < 8000)
+    tt_rm(w.root)
+}
+
+// ----- publish -----
+
+test "taskwt publish: rebased onto the news of origin, tested, pushed, the main copy goes forward, the tree is taken away" {
+    ro w = tt_world("pub")
+    ro tree = tt_task(w, "192", "demo")
+    ro other = tt_other(w)
+    tt_commit(tree.path, "t.txt", "task\n", "task work")
+    tt_commit(other, "o.txt", "other\n", "other work")
+    tg(other, ["push", "origin", "main"])
+    ro before = tg(w.origin, ["rev-parse", "main"])
+    match publish(tree.path, w.main, tt_green) {
+        Published { sha, main_copy, cleanup } => {
+            assert(tg(w.origin, ["rev-parse", "main"]) == sha)
+            assert(sha != before)
+            // both works are in origin/main, the task on top of the news
+            ro files = tg(w.origin, ["ls-tree", "-r", "--name-only", "main"])
+            assert(files.contains("t.txt"))
+            assert(files.contains("o.txt"))
+            assert(tg(w.origin, ["rev-parse", "main~1"]) == before)
+            assert(main_copy == "updated")
+            assert(cleanup == "")
+            assert(tg(w.main, ["rev-parse", "HEAD"]) == sha)
+            assert(tw_exists("${w.main}/t.txt"))
+            assert(tw_exists("${w.main}/o.txt"))
+        }
+        Blocked { reason, step, conflict_files } => panic("blocked at ${step}: ${reason}")
+    }
+    assert(!tw_exists(tree.path))
+    assert(!tt_branch_exists(w.main, tree.branch))
+    tt_rm(w.root)
+}
+
+test "taskwt publish: the merges of the subtasks stay in the history" {
+    ro w = tt_world("pubmerge")
+    ro tree = tt_task(w, "192", "demo")
+    ro s1 = tt_sub(tree, "192", "demo", 1)
+    tt_commit(s1.path, "one.txt", "one\n", "subtask work")
+    match subtask_merge(tree.path, s1.branch, "192-s1: part") {
+        Merged { sha } => ()
+        other => panic("clean merge")
+    }
+    ro other = tt_other(w)
+    tt_commit(other, "o.txt", "other\n", "other work")
+    tg(other, ["push", "origin", "main"])
+    match publish(tree.path, w.main, tt_green) {
+        Published { sha, main_copy, cleanup } => {
+            assert(tg(w.origin, ["rev-parse", "main"]) == sha)
+            assert(tg(w.origin, ["rev-list", "--merges", "--count", "main"]) == "1")
+            assert(tg(w.origin, ["ls-tree", "-r", "--name-only", "main"]).contains("one.txt"))
+        }
+        Blocked { reason, step, conflict_files } => panic("blocked at ${step}: ${reason}")
+    }
+    tt_rm(w.root)
+}
+
+test "taskwt publish: a dirty main copy is not touched, the push still goes" {
+    ro w = tt_world("pubdirty")
+    ro tree = tt_task(w, "192", "demo")
+    tt_commit(tree.path, "t.txt", "task\n", "task work")
+    tt_write("${w.main}/README.md", "readme, edited by the owner\n")
+    ro main_head = tg(w.main, ["rev-parse", "HEAD"])
+    match publish(tree.path, w.main, tt_green) {
+        Published { sha, main_copy, cleanup } => {
+            assert(main_copy.starts_with("not updated"))
+            assert(tg(w.origin, ["rev-parse", "main"]) == sha)
+        }
+        Blocked { reason, step, conflict_files } => panic("blocked at ${step}: ${reason}")
+    }
+    assert(tg(w.main, ["rev-parse", "HEAD"]) == main_head)
+    assert(tt_read("${w.main}/README.md") == "readme, edited by the owner\n")
+    assert(!tw_exists("${w.main}/t.txt"))
+    tt_rm(w.root)
+}
+
+test "taskwt publish: a main copy on another branch is not touched" {
+    ro w = tt_world("pubbranch")
+    ro tree = tt_task(w, "192", "demo")
+    tt_commit(tree.path, "t.txt", "task\n", "task work")
+    tg(w.main, ["switch", "-c", "side"])
+    match publish(tree.path, w.main, tt_green) {
+        Published { sha, main_copy, cleanup } => assert(main_copy.contains("not on main"))
+        Blocked { reason, step, conflict_files } => panic("blocked at ${step}: ${reason}")
+    }
+    assert(tw_current_branch(w.main) == "side")
+    tt_rm(w.root)
+}
+
+test "taskwt publish: red tests block it before the push, nothing changes" {
+    ro w = tt_world("pubred")
+    ro tree = tt_task(w, "192", "demo")
+    tt_commit(tree.path, "t.txt", "task\n", "task work")
+    ro before = tg(w.origin, ["rev-parse", "main"])
+    match publish(tree.path, w.main, tt_red) {
+        Published { sha, main_copy, cleanup } => panic("red tests must block")
+        Blocked { reason, step, conflict_files } => {
+            assert(step == "tests")
+            assert(reason == "3 tests are red")
+        }
+    }
+    assert(tg(w.origin, ["rev-parse", "main"]) == before)
+    assert(tw_exists(tree.path))
+    assert(tt_branch_exists(w.main, tree.branch))
+    tt_rm(w.root)
+}
+
+test "taskwt publish: a conflict of the rebase is left in progress; after the resolution publish_continue finishes" {
+    ro w = tt_world("pubrebase")
+    ro tree = tt_task(w, "192", "demo")
+    ro other = tt_other(w)
+    tt_commit(tree.path, "a.txt", "alpha\nbeta-tree\ngamma\n", "task edit")
+    tt_commit(other, "a.txt", "alpha\nbeta-origin\ngamma\n", "other edit")
+    tg(other, ["push", "origin", "main"])
+    ro before = tg(w.origin, ["rev-parse", "main"])
+    match publish(tree.path, w.main, tt_green) {
+        Published { sha, main_copy, cleanup } => panic("the rebase conflicts")
+        Blocked { reason, step, conflict_files } => {
+            assert(step == "rebase")
+            assert(conflict_files == ["a.txt"])
+        }
+    }
+    assert(tw_rebasing(tree.path))
+    assert(tg(w.origin, ["rev-parse", "main"]) == before)
+    // continue before the resolution: the markers stop it
+    match publish_continue(tree.path, w.main, tt_green) {
+        Published { sha, main_copy, cleanup } => panic("markers are still in the file")
+        Blocked { reason, step, conflict_files } => {
+            assert(step == "rebase")
+            assert(conflict_files == ["a.txt"])
+        }
+    }
+    assert(tg(w.origin, ["rev-parse", "main"]) == before)
+    tt_write("${tree.path}/a.txt", "alpha\nbeta-both\ngamma\n")
+    match publish_continue(tree.path, w.main, tt_green) {
+        Published { sha, main_copy, cleanup } => {
+            assert(tg(w.origin, ["rev-parse", "main"]) == sha)
+            assert(tg(w.origin, ["show", "main:a.txt"]) == "alpha\nbeta-both\ngamma")
+            assert(main_copy == "updated")
+        }
+        Blocked { reason, step, conflict_files } => panic("blocked at ${step}: ${reason}")
+    }
+    assert(!tw_exists(tree.path))
+    tt_rm(w.root)
+}
+
+test "taskwt publish: a tree with uncommitted files, a merge in progress, the main copy itself are refused" {
+    ro w = tt_world("pubprecheck")
+    ro tree = tt_task(w, "192", "demo")
+    tt_write("${tree.path}/loose.txt", "x")
+    match publish(tree.path, w.main, tt_green) {
+        Published { sha, main_copy, cleanup } => panic("dirty tree")
+        Blocked { reason, step, conflict_files } => assert(step == "precheck")
+    }
+    match publish(w.main, w.main, tt_green) {
+        Published { sha, main_copy, cleanup } => panic("the main copy is not a task")
+        Blocked { reason, step, conflict_files } => assert(step == "precheck")
+    }
+    match publish("${w.root}/nowhere", w.main, tt_green) {
+        Published { sha, main_copy, cleanup } => panic("not a repository")
+        Blocked { reason, step, conflict_files } => assert(step == "precheck")
+    }
+    assert(tg(w.origin, ["rev-list", "--count", "main"]) == "1")
+    tt_rm(w.root)
+}
+
+// ----- nothing pushes by itself -----
+
+test "taskwt: no push without publish - the log of git calls and the head of origin" {
+    ro w = tt_world("nopush")
+    ro logfile = "${w.root}/gitcalls.log"
+    ro set = env("CREW_GIT_LOG", logfile)
+    ro head = tg(w.origin, ["rev-parse", "main"])
+    ro tree = tt_task(w, "192", "demo")
+    ro s1 = tt_sub(tree, "192", "demo", 1)
+    ro s2 = tt_sub(tree, "192", "demo", 2)
+    tt_commit(s1.path, "one.txt", "one\n", "s1")
+    tt_commit(s2.path, "a.txt", "alpha\nbeta-two\ngamma\n", "s2")
+    tt_commit(tree.path, "a.txt", "alpha\nbeta-tree\ngamma\n", "tree")
+    ro m1 = subtask_merge(tree.path, s1.branch, "192-s1: x")
+    ro m2 = subtask_merge(tree.path, s2.branch, "192-s2: y")
+    ro ab = subtask_merge_abort(tree.path)
+    ro removed = subtask_tree_remove(tree.path, s1.path, s1.branch)
+    ro n = unmerged_count(tree.path)
+    ro st = diff_stat(tree.path)
+    ro c = is_clean(tree.path)
+    ro blocked = publish(tree.path, w.main, tt_red)
+    ro log1 = tt_read(logfile)
+    assert(log1.contains("worktree add"))
+    assert(log1.contains("merge --no-ff"))
+    assert(log1.contains("fetch origin"))
+    assert(tt_count(log1, "| push ") == 0)
+    assert(tg(w.origin, ["rev-parse", "main"]) == head)
+    // a green publish is the one call that pushes - once, without force
+    ro s3 = subtask_merge_abort(tree.path)
+    ro done = publish(tree.path, w.main, tt_green)
+    ro log2 = tt_read(logfile)
+    match done {
+        Published { sha, main_copy, cleanup } => assert(tg(w.origin, ["rev-parse", "main"]) == sha)
+        Blocked { reason, step, conflict_files } => panic("blocked at ${step}: ${reason}")
+    }
+    assert(tt_count(log2, "| push ") == 1)
+    assert(tt_count(log2, "| push origin HEAD:main") == 1)
+    assert(!log2.contains("force"))
+    ro unset = remove_env("CREW_GIT_LOG")
+    tt_rm(w.root)
+}
+
+test "taskwt source: the word push stands in one function, which only the end of publish calls; no force anywhere" {
+    ro text = tt_read("${tw_norm(cwd().unwrap().display())}/src/server/taskwt.nv")
+    assert(text.contains("module crew_harness.server"))
+    // the argument "push" of git: once
+    assert(tt_count(text, "\"push\"") == 1)
+    ro at_arg = text.find("\"push\"") ?? -1
+    ro at_fn = text.find("fn tw_push(") ?? -1
+    assert(at_fn >= 0)
+    assert(at_arg > at_fn)
+    ro fn_end = (text[at_fn..].find("\n}\n") ?? -1) + at_fn
+    assert(at_arg < fn_end)
+    // tw_push is called once, inside tw_publish_tail
+    assert(tt_count(text, "tw_push(") == 2)
+    ro tail_at = text.find("fn tw_publish_tail(") ?? -1
+    ro call_at = text.rfind("tw_push(") ?? -1
+    assert(tail_at >= 0)
+    assert(call_at > tail_at)
+    ro tail_end = (text[tail_at..].find("\n}\n") ?? -1) + tail_at
+    assert(call_at < tail_end)
+    // the tail is reached from publish and publish_continue only
+    assert(tt_count(text, "tw_publish_tail(") == 3)
+    // no way to a forced push, and no generic runner is exported
+    assert(!text.contains("--force"))
+    assert(!text.contains("\"-f\""))
+    assert(!text.contains("export fn tw_git"))
+    assert(!text.contains("export fn tw_exec"))
+    assert(!text.contains("export fn tw_push"))
+}

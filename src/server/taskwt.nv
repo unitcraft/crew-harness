@@ -1,0 +1,728 @@
+// taskwt.nv - task 192r: the git operations of the tasks of the control panel.
+//
+// A task lives in a tree of its own (`<worktrees>/<repo>-NNN-slug`, branch `task/NNN-slug`), a subtask of an agent in a tree beside it
+// (`...-sN`, branch `task/NNN-slug-sN`). The functions below start `git` as a child process (every call has a time limit, no prompt, no
+// editor), return values instead of printing, and never write a secret to a log: a text that comes back from git passes `tw_redact`
+// (the user and the password of a URL are cut off). The module never touches the files or the branch of the main copy, except for the
+// one fast-forward after a published task (see `publish`).
+//
+// THE ONLY WAY TO `git push` is `tw_push`, called from `tw_publish_tail` alone, which is the end of `publish` and `publish_continue`; a push
+// is never forced and is made only from a head that is a descendant of `origin/main`. `taskwt_test.nv` greps this file for it.
+//
+// Debug: when the environment variable `CREW_GIT_LOG` names a file, every call of git adds one line there (`<dir> | <arguments>`, redacted).
+module crew_harness.server
+
+import std.text
+import std.fs.{Fs, read_text, write_text, try_exists, remove_dir, canonicalize, Path}
+import std.os.{Os, env, Command, Stdio, Tree}
+
+/// Time limits, in milliseconds: a local call, a call over the network.
+const TW_LOCAL_MS = 60000
+const TW_NET_MS = 180000
+
+// ----- types -----
+
+/// A tree of a task: `branch` `task/NNN-slug`, `path` the folder, `base` the branch or the ref it was cut from, `created` false when the tree
+/// was there already (the call is idempotent), `note` anything the caller may want to show ("fetch failed: ..." when the network was away).
+export type TaskTree { branch str, path str, base str, created bool, note str }
+
+/// A tree of a subtask: the branch, the folder and the commit it was cut from.
+export type SubtaskTree { branch str, path str, base str, created bool }
+
+/// The answer of a merge: `Merged` (the commit is `sha`), `Conflict` (the merge is left in progress, the files are the unmerged ones),
+/// `StillConflicted` (finish: these files still hold markers or are unmerged), `Failed` (git refused, `msg` is its reason).
+export type MergeResult enum
+    | Merged { sha str }
+    | Conflict { files []str }
+    | StillConflicted { files []str }
+    | Failed { msg str }
+
+/// The answer of `publish`: `Published` (the commit `sha` is on origin/main; `main_copy` is "updated" or "not updated: <reason>"; `cleanup` is ""
+/// or why the tree or the branch were not removed) or `Blocked` (`step` is one of "precheck" "fetch" "rebase" "tests" "push"; for "rebase" the
+/// rebase is left in progress and `conflict_files` are the unmerged files).
+export type PublishResult enum
+    | Published { sha str, main_copy str, cleanup str }
+    | Blocked { reason str, step str, conflict_files []str }
+
+/// One line of `git diff --numstat`.
+export type DiffStat { path str, added int, removed int }
+
+type GitOut { code int, out str, err str }
+
+type TwTree { path str, branch str }
+
+// ----- text and path helpers (pure) -----
+
+fn tw_slash(p str) -> str {
+    mut s = p.replace("\\", "/").trim_ascii()
+    while s.starts_with("./") { s = s[2..] }
+    s
+}
+
+/// The path with `/` and without a closing `/` (a root such as `C:/` or `/` keeps it).
+fn tw_norm(p str) -> str {
+    mut s = tw_slash(p)
+    while s.byte_len() > 1 && s.ends_with("/") && !s.ends_with(":/") { s = s[..s.byte_len() - 1] }
+    s
+}
+
+fn tw_key(p str) -> str => tw_norm(p).to_ascii_lower()
+
+fn tw_base_name(p str) -> str {
+    ro s = tw_norm(p)
+    match s.rfind("/") {
+        Some(i) => s[i + 1..]
+        None => s
+    }
+}
+
+fn tw_parent(p str) -> str {
+    ro s = tw_norm(p)
+    match s.rfind("/") {
+        Some(i) => if i == 0 { "/" } else { s[..i] }
+        None => "."
+    }
+}
+
+fn tw_split(s str, sep str) -> []str {
+    mut out = []str.new()
+    for part in s.split(sep) { out.push(part) }
+    out
+}
+
+/// The non-empty trimmed lines of a text.
+fn tw_lines(s str) -> []str {
+    mut out = []str.new()
+    for raw in s.lines() {
+        ro line = raw.trim_ascii()
+        if line.byte_len() > 0 { out.push(line) }
+    }
+    out
+}
+
+fn tw_authority_end(s str) -> int {
+    mut i = 0
+    for b in s.bytes() {
+        ro c = b as int
+        if c == 47 || c == 32 || c == 10 || c == 13 || c == 9 || c == 34 || c == 39 { return i }
+        i += 1
+    }
+    i
+}
+
+/// The text without the user and the password of every URL in it (the part before the `@` of the address is dropped).
+export fn tw_redact(text str) -> str {
+    if !text.contains("://") { return text }
+    mut out = ""
+    mut first = true
+    for part in text.split("://") {
+        if first {
+            out = part
+            first = false
+        } else {
+            ro end = tw_authority_end(part)
+            ro auth = part[..end]
+            ro rest = part[end..]
+            ro at = auth.rfind("@") ?? -1
+            ro clean = if at >= 0 { auth[at + 1..] } else { auth }
+            out = "${out}://${clean}${rest}"
+        }
+    }
+    out
+}
+
+fn tw_name_ok(s str) -> bool {
+    if s.byte_len() == 0 || s.starts_with("-") { return false }
+    for b in s.bytes() {
+        ro c = b as int
+        ro fit = (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 48 && c <= 57) || c == 45 || c == 95
+        if !fit { return false }
+    }
+    true
+}
+
+fn tw_digits_ok(s str) -> bool {
+    if s.byte_len() == 0 { return false }
+    for b in s.bytes() {
+        ro c = b as int
+        if c < 48 || c > 57 { return false }
+    }
+    true
+}
+
+/// Does the text hold a marker of a merge conflict at the start of a line (`<<<<<<<` or `>>>>>>>`)? (`=======` alone is not looked at: it is a
+/// heading underline in a markdown file.)
+export fn tw_has_markers(text str) -> bool {
+    for raw in text.lines() {
+        ro line = raw.trim_ascii_end()
+        if line == "<<<<<<<" || line.starts_with("<<<<<<< ") { return true }
+        if line == ">>>>>>>" || line.starts_with(">>>>>>> ") { return true }
+    }
+    false
+}
+
+// ----- the directory of the trees -----
+
+/// The folder of the trees: `<the parent of the main copy>/worktrees` (the trees lie beside the main copy, never inside it).
+export fn worktrees_dir(repo_main_path str) -> str {
+    ro parent = tw_parent(repo_main_path)
+    if parent.ends_with("/") { "${parent}worktrees" } else { "${parent}/worktrees" }
+}
+
+// ----- running git -----
+
+fn tw_log_call(dir str, args []str) Os Fs -> () {
+    match env("CREW_GIT_LOG") {
+        Some(file) => {
+            if file.byte_len() > 0 {
+                ro p = Path.from_bytes(file.bytes())
+                ro before = match read_text(p) {
+                    Ok(t) => t
+                    Err(e) => ""
+                }
+                ro line = tw_redact("${tw_norm(dir)} | ${args.join(" ")}")
+                ro written = write_text(p, "${before}${line}\n")
+            }
+        }
+        None => ()
+    }
+}
+
+fn tw_exec(dir str, args []str, timeout_ms int) Proc Os Fs -> GitOut {
+    tw_log_call(dir, args)
+    mut command = Command.new("git")
+    // the setters change the command in place and return it; the result is dropped, as in src/acp/link.nv
+    command.arg("-c")
+    command.arg("core.quotepath=off")
+    if dir.byte_len() > 0 {
+        command.arg("-C")
+        command.arg(dir)
+    }
+    for a in args { command.arg(a) }
+    command.env("GIT_TERMINAL_PROMPT", "0")
+    command.env("GIT_EDITOR", "true")
+    command.env("GIT_MERGE_AUTOEDIT", "no")
+    command.tree(Tree.Group)
+    mut res = GitOut { code: -1, out: "", err: "cannot run git" }
+    ro finished = with Fail[TimeoutError] = |_e| { false } {
+        supervised(timeout: timeout_ms.to_millis()) {
+            match command.output() {
+                Ok(o) => {
+                    res = GitOut { code: o.status.code(), out: o.stdout.to_str_lossy(), err: o.stderr.to_str_lossy() }
+                }
+                Err(e) => {
+                    res = GitOut { code: -1, out: "", err: "cannot run git: ${e}" }
+                }
+            }
+        }
+        true
+    }
+    if !finished {
+        ro what = if args.len() > 0 { args[0] } else { "" }
+        return GitOut { code: -1, out: "", err: "git ${what} did not finish in ${timeout_ms} ms" }
+    }
+    res
+}
+
+fn tw_git(dir str, args []str) Proc Os Fs -> GitOut => tw_exec(dir, args, TW_LOCAL_MS)
+
+fn tw_git_net(dir str, args []str) Proc Os Fs -> GitOut => tw_exec(dir, args, TW_NET_MS)
+
+/// The reason of a failed call, without secrets.
+fn tw_why(r GitOut) -> str {
+    ro e = r.err.trim_ascii()
+    if e.byte_len() > 0 { tw_redact(e) } else { tw_redact(r.out.trim_ascii()) }
+}
+
+fn tw_exists(path str) Fs -> bool {
+    match try_exists(Path.from_bytes(path.bytes())) {
+        Ok(b) => b
+        Err(e) => false
+    }
+}
+
+/// The path as git prints it: a folder that is there is resolved (short 8.3 names, links); one that is not is its nearest existing parent
+/// resolved plus the rest. Only for comparing paths, never shown.
+fn tw_canon(path str) Fs -> str {
+    ro p = tw_norm(path)
+    if tw_exists(p) {
+        match canonicalize(Path.from_bytes(p.bytes())) {
+            Ok(c) => {
+                ro t = tw_norm(c.display())
+                return if t.starts_with("//?/") { t[4..] } else { t }
+            }
+            Err(e) => return p
+        }
+    }
+    ro up = tw_parent(p)
+    if up == p || up == "." { return p }
+    "${tw_canon(up)}/${tw_base_name(p)}"
+}
+
+fn tw_is_repo(dir str) Proc Os Fs -> bool {
+    if !tw_exists(dir) { return false }
+    ro r = tw_git(dir, ["rev-parse", "--show-toplevel"])
+    r.code == 0
+}
+
+fn tw_has_origin(dir str) Proc Os Fs -> bool {
+    ro r = tw_git(dir, ["remote"])
+    if r.code != 0 { return false }
+    for l in tw_lines(r.out) { if l == "origin" { return true } }
+    false
+}
+
+fn tw_ref_exists(dir str, refname str) Proc Os Fs -> bool {
+    ro r = tw_git(dir, ["rev-parse", "--verify", "--quiet", refname])
+    r.code == 0
+}
+
+/// The branch the tree stands on; "" for a detached head.
+fn tw_current_branch(dir str) Proc Os Fs -> str {
+    ro r = tw_git(dir, ["symbolic-ref", "--short", "-q", "HEAD"])
+    if r.code != 0 { "" } else { r.out.trim_ascii() }
+}
+
+/// The ref a task is measured against: `origin/main`, else the local `main`, else the branch of the tree, else `HEAD`.
+fn tw_base_ref(dir str) Proc Os Fs -> str {
+    if tw_ref_exists(dir, "refs/remotes/origin/main") { return "origin/main" }
+    if tw_ref_exists(dir, "refs/heads/main") { return "main" }
+    ro b = tw_current_branch(dir)
+    if b.byte_len() > 0 { b } else { "HEAD" }
+}
+
+fn tw_head_sha(dir str) Proc Os Fs -> str {
+    ro r = tw_git(dir, ["rev-parse", "HEAD"])
+    if r.code == 0 { r.out.trim_ascii() } else { "" }
+}
+
+fn tw_trees(dir str) Proc Os Fs -> []TwTree {
+    mut out = []TwTree.new()
+    ro r = tw_git(dir, ["worktree", "list", "--porcelain"])
+    if r.code != 0 { return out }
+    mut path = ""
+    mut branch = ""
+    mut open = false
+    for raw in r.out.lines() {
+        ro line = raw.trim_ascii()
+        if line.starts_with("worktree ") {
+            if open { out.push(TwTree { path, branch }) }
+            path = line[9..]
+            branch = ""
+            open = true
+        } else if line.starts_with("branch refs/heads/") {
+            branch = line[18..]
+        }
+    }
+    if open { out.push(TwTree { path, branch }) }
+    out
+}
+
+/// Make (or find) the tree `path` on `branch`, cut from `base` when the branch is new. Ok(true) - made now, Ok(false) - it was there.
+fn tw_tree_ensure(dir str, path str, branch str, base str) Proc Os Fs -> Result[bool, str] {
+    ro pruned = tw_git(dir, ["worktree", "prune"])
+    ro want = tw_key(tw_canon(path))
+    for t in tw_trees(dir) {
+        if tw_key(t.path) == want || tw_key(tw_canon(t.path)) == want {
+            if t.branch == branch { return Ok(false) }
+            return Err("the folder ${path} is the tree of another branch (${t.branch})")
+        }
+        if t.branch == branch { return Err("the branch ${branch} stands in another tree (${t.path})") }
+    }
+    if tw_exists(path) { return Err("the folder ${path} exists and is not a tree of this repository") }
+    ro r = if tw_ref_exists(dir, "refs/heads/${branch}") {
+        tw_git(dir, ["worktree", "add", path, branch])
+    } else {
+        tw_git(dir, ["worktree", "add", "--no-track", "-b", branch, path, base])
+    }
+    if r.code != 0 { return Err("git worktree add failed: ${tw_why(r)}") }
+    Ok(true)
+}
+
+// ----- the tree of a task and of a subtask -----
+
+/// Make the tree of the task `nnn` `slug` of the repository `repo` (the main copy): `git fetch origin` (skipped when there is no origin),
+/// then `git worktree add --no-track -b task/NNN-slug <worktrees>/<repo>-NNN-slug <base>`; `base` is `origin/main` (else the local `main`, else
+/// the branch of the main copy). The files and the branch of the main copy are not touched. A tree that is there already (the branch stands in
+/// that folder) is reused. `Err("not a git repository")` when `repo` is not one.
+export fn task_tree_create(repo str, nnn str, slug str) Proc Os Fs -> Result[TaskTree, str] {
+    ro dir = tw_norm(repo)
+    if !tw_is_repo(dir) { return Err("not a git repository") }
+    if !tw_digits_ok(nnn) { return Err("the number of the task must be digits: ${nnn}") }
+    if !tw_name_ok(slug) { return Err("the slug of the task may hold letters, digits, - and _: ${slug}") }
+    mut note = ""
+    if tw_has_origin(dir) {
+        ro f = tw_git_net(dir, ["fetch", "origin"])
+        if f.code != 0 { note = "fetch failed: ${tw_why(f)}" }
+    }
+    ro base = tw_base_ref(dir)
+    ro branch = "task/${nnn}-${slug}"
+    ro path = "${worktrees_dir(dir)}/${tw_base_name(dir)}-${nnn}-${slug}"
+    ro created = match tw_tree_ensure(dir, path, branch, base) {
+        Ok(c) => c
+        Err(e) => return Err(e)
+    }
+    Ok(TaskTree { branch, path, base, created, note })
+}
+
+/// Make the tree of the subtask number `n` beside the tree of the task: branch `task/NNN-slug-sN`, folder `<tree of the task>-sN`, cut from the
+/// current head of the task. A tree that is there already is reused.
+export fn subtask_tree_create(task_tree_path str, nnn str, slug str, n int) Proc Os Fs -> Result[SubtaskTree, str] {
+    ro dir = tw_norm(task_tree_path)
+    if !tw_is_repo(dir) { return Err("not a git repository") }
+    if !tw_digits_ok(nnn) { return Err("the number of the task must be digits: ${nnn}") }
+    if !tw_name_ok(slug) { return Err("the slug of the task may hold letters, digits, - and _: ${slug}") }
+    if n < 1 { return Err("the number of the subtask must be 1 or more") }
+    ro base = tw_head_sha(dir)
+    if base.byte_len() == 0 { return Err("the tree of the task has no head") }
+    ro branch = "task/${nnn}-${slug}-s${n}"
+    ro path = "${dir}-s${n}"
+    ro created = match tw_tree_ensure(dir, path, branch, base) {
+        Ok(c) => c
+        Err(e) => return Err(e)
+    }
+    Ok(SubtaskTree { branch, path, base, created })
+}
+
+// ----- merge of a subtask -----
+
+fn tw_unmerged(dir str) Proc Os Fs -> []str {
+    ro r = tw_git(dir, ["diff", "--name-only", "--diff-filter=U"])
+    if r.code != 0 { return []str.new() }
+    tw_lines(r.out)
+}
+
+fn tw_merging(dir str) Proc Os Fs -> bool {
+    ro r = tw_git(dir, ["rev-parse", "-q", "--verify", "MERGE_HEAD"])
+    r.code == 0
+}
+
+fn tw_rebasing(dir str) Proc Os Fs -> bool {
+    for name in ["rebase-merge", "rebase-apply"] {
+        ro r = tw_git(dir, ["rev-parse", "--path-format=absolute", "--git-path", name])
+        if r.code == 0 && tw_exists(r.out.trim_ascii()) { return true }
+    }
+    false
+}
+
+/// Merge the branch of a subtask into the tree of the task: `git merge --no-ff -m <message> <branch>` (the message is "Merge <branch>" when empty;
+/// the commit is signed off). A conflict is NOT rolled back: `Conflict` names the unmerged files and the merge stays in progress for the agent to
+/// resolve; then `subtask_merge_finish`, or `subtask_merge_abort`.
+export fn subtask_merge(task_tree_path str, branch str, message str) Proc Os Fs -> MergeResult {
+    ro dir = tw_norm(task_tree_path)
+    if tw_merging(dir) { return Failed { msg: "a merge is in progress in the tree already" } }
+    ro text = if message.trim_ascii().byte_len() > 0 { message.trim_ascii() } else { "Merge ${branch}" }
+    ro r = tw_git(dir, ["merge", "--no-ff", "--signoff", "-m", text, branch])
+    if r.code == 0 { return Merged { sha: tw_head_sha(dir) } }
+    ro files = tw_unmerged(dir)
+    if files.len() > 0 { return Conflict { files } }
+    Failed { msg: tw_why(r) }
+}
+
+/// The files that hold markers, of those named (a file that is not text is taken for clean).
+fn tw_marker_files(dir str, files []str) Fs -> []str {
+    mut bad = []str.new()
+    for f in files {
+        match read_text(Path.from_bytes("${dir}/${f}".bytes())) {
+            Ok(text) => { if tw_has_markers(text) { bad.push(f) } }
+            Err(e) => ()
+        }
+    }
+    bad
+}
+
+fn tw_union(a []str, b []str) -> []str {
+    mut out = []str.new()
+    for x in a { out.push(x) }
+    for y in b {
+        mut seen = false
+        for x in a { if x == y { seen = true } }
+        if !seen { out.push(y) }
+    }
+    out
+}
+
+/// After the agent has edited the files: look at the unmerged ones and at the ones already staged for markers; if there are none, stage the
+/// unmerged ones. The answer: the files that still need the agent (empty - all is staged).
+fn tw_stage_resolved(dir str) Proc Os Fs -> []str {
+    ro unmerged = tw_unmerged(dir)
+    ro cached = tw_git(dir, ["diff", "--cached", "--name-only"])
+    ro staged = if cached.code == 0 { tw_lines(cached.out) } else { []str.new() }
+    ro bad = tw_marker_files(dir, tw_union(unmerged, staged))
+    if bad.len() > 0 { return bad }
+    mut rest = []str.new()
+    for f in unmerged {
+        ro a = tw_git(dir, ["add", "-A", "--", f])
+        if a.code != 0 { rest.push(f) }
+    }
+    if rest.len() > 0 { return rest }
+    tw_unmerged(dir)
+}
+
+/// The agent says the conflicts are resolved: if no file holds a marker, stage the files and commit (`git commit --no-edit`, signed off).
+/// `StillConflicted` names the files that still hold markers or are unmerged.
+export fn subtask_merge_finish(task_tree_path str) Proc Os Fs -> MergeResult {
+    ro dir = tw_norm(task_tree_path)
+    if !tw_merging(dir) { return Failed { msg: "no merge is in progress in the tree" } }
+    ro left = tw_stage_resolved(dir)
+    if left.len() > 0 { return StillConflicted { files: left } }
+    ro c = tw_git(dir, ["commit", "-s", "--no-edit"])
+    if c.code != 0 { return Failed { msg: tw_why(c) } }
+    Merged { sha: tw_head_sha(dir) }
+}
+
+/// Give the merge up: `git merge --abort`.
+export fn subtask_merge_abort(task_tree_path str) Proc Os Fs -> Result[(), str] {
+    ro dir = tw_norm(task_tree_path)
+    ro r = tw_git(dir, ["merge", "--abort"])
+    if r.code != 0 { return Err(tw_why(r)) }
+    Ok(())
+}
+
+/// Take a merged subtask away: the tree of the subtask and its branch (`git worktree remove`, `git branch -d`). `Err("not merged")` when the
+/// branch is not in the head of the task tree; nothing is removed then. A tree with uncommitted files is not removed either (no force).
+export fn subtask_tree_remove(task_tree_path str, subtask_path str, branch str) Proc Os Fs -> Result[(), str] {
+    ro dir = tw_norm(task_tree_path)
+    ro is_in = tw_git(dir, ["merge-base", "--is-ancestor", branch, "HEAD"])
+    if is_in.code == 1 { return Err("not merged") }
+    if is_in.code != 0 { return Err("cannot tell whether ${branch} is merged: ${tw_why(is_in)}") }
+    ro w = tw_git(dir, ["worktree", "remove", tw_norm(subtask_path)])
+    if w.code != 0 { return Err("git worktree remove failed: ${tw_why(w)}") }
+    ro b = tw_git(dir, ["branch", "-d", branch])
+    if b.code != 0 { return Err("git branch -d failed: ${tw_why(b)}") }
+    if tw_exists(subtask_path) { ro gone = remove_dir(Path.from_bytes(tw_norm(subtask_path).bytes())) }
+    Ok(())
+}
+
+// ----- the files a task touches -----
+
+fn tw_pkey(p str) -> str => tw_slash(p).to_ascii_lower()
+
+fn tw_dir_prefix(k str) -> str => if k.ends_with("/") { k } else { "${k}/" }
+
+/// Does the entry `a` cover the entry `b`: the same path, or `a` is a folder and `b` stands inside it?
+fn tw_covers(a str, b str) -> bool => a == b || b.starts_with(tw_dir_prefix(a))
+
+/// The overlap of two lists of paths, by files and by folders: the same path, or a folder (`dir/`) and anything inside it. The slashes and the
+/// case are not told apart. The answer holds the narrower entry of every pair (the file inside the folder), once, with `/` as separator.
+export fn overlap(files_a []str, files_b []str) -> []str {
+    mut out = []str.new()
+    mut keys = []str.new()
+    for a in files_a {
+        ro ka = tw_pkey(a)
+        if ka.byte_len() == 0 { continue }
+        for b in files_b {
+            ro kb = tw_pkey(b)
+            if kb.byte_len() == 0 { continue }
+            mut pick = ""
+            mut pick_key = ""
+            if tw_covers(ka, kb) {
+                pick = tw_slash(b)
+                pick_key = kb
+            } else if tw_covers(kb, ka) {
+                pick = tw_slash(a)
+                pick_key = ka
+            }
+            if pick.byte_len() > 0 {
+                mut seen = false
+                for k in keys { if k == pick_key { seen = true } }
+                if !seen {
+                    keys.push(pick_key)
+                    out.push(pick)
+                }
+            }
+        }
+    }
+    out
+}
+
+fn tw_item(text str) -> str {
+    mut s = text.replace("`", "").replace("**", "").trim_ascii()
+    for sep in [" — ", " – ", " - "] {
+        match s.find(sep) {
+            Some(i) => { s = s[..i].trim_ascii() }
+            None => ()
+        }
+    }
+    while s.ends_with(",") || s.ends_with(";") { s = s[..s.byte_len() - 1].trim_ascii() }
+    s
+}
+
+/// The paths of the section "Затрагивает:" of a `progress.md`: the items of the list under the header (`- path`), and the items written after the
+/// colon in the same line, separated by commas. The section ends at the first line that is neither an item nor empty.
+export fn parse_touches(progress_md str) -> []str {
+    mut out = []str.new()
+    mut state = 0
+    for raw in progress_md.lines() {
+        ro line = raw.trim_ascii()
+        if state == 0 {
+            ro at = line.find("Затрагивает") ?? -1
+            if at >= 0 {
+                state = 1
+                ro rest = line[at + "Затрагивает".byte_len()..].replace("*", "").trim_ascii()
+                ro tail = if rest.starts_with(":") { rest[1..].trim_ascii() } else { rest }
+                if tail.byte_len() > 0 {
+                    for piece in tail.split(",") {
+                        ro it = tw_item(piece)
+                        if it.byte_len() > 0 { out.push(it) }
+                    }
+                }
+            }
+        } else if line.starts_with("- ") || line.starts_with("* ") {
+            ro it = tw_item(line[2..])
+            if it.byte_len() > 0 { out.push(it) }
+            state = 2
+        } else if line.byte_len() == 0 {
+            if state == 2 { return out }
+        } else {
+            return out
+        }
+    }
+    out
+}
+
+// ----- the state of a task tree -----
+
+/// How many commits the tree has that `origin/main` has not (the base branch when there is no `origin/main`); -1 when git cannot tell.
+export fn unmerged_count(task_tree_path str) Proc Os Fs -> int {
+    ro dir = tw_norm(task_tree_path)
+    ro r = tw_git(dir, ["rev-list", "--count", "${tw_base_ref(dir)}..HEAD"])
+    if r.code != 0 { return -1 }
+    match r.out.trim_ascii().to_int() {
+        Ok(n) => n
+        Err(e) => -1
+    }
+}
+
+/// The files the task changed against `origin/main` (`git diff --numstat <base>...HEAD`); a binary file has 0 and 0.
+export fn diff_stat(task_tree_path str) Proc Os Fs -> []DiffStat {
+    mut out = []DiffStat.new()
+    ro dir = tw_norm(task_tree_path)
+    ro r = tw_git(dir, ["diff", "--numstat", "--no-renames", "${tw_base_ref(dir)}...HEAD"])
+    if r.code != 0 { return out }
+    for line in tw_lines(r.out) {
+        ro parts = tw_split(line, "\t")
+        if parts.len() >= 3 {
+            ro added = parts[0].to_int() ?? 0
+            ro removed = parts[1].to_int() ?? 0
+            out.push(DiffStat { path: parts[2], added, removed })
+        }
+    }
+    out
+}
+
+/// No change and no new file in the tree (`git status --porcelain` is empty). False also when git cannot tell.
+export fn is_clean(path str) Proc Os Fs -> bool {
+    ro r = tw_git(tw_norm(path), ["status", "--porcelain"])
+    r.code == 0 && r.out.trim_ascii().byte_len() == 0
+}
+
+// ----- the text of the service turn -----
+
+/// The text of the service turn for the agent that has to resolve conflicts in `files`.
+export fn resolve_prompt(files []str) -> str {
+    "Разреши конфликты слияния в файлах: ${files.join(", ")}; сохрани смысл обеих сторон; убери маркеры <<<<<<< ======= >>>>>>>; прогони тесты; ничего не коммить — коммит сделает пульт."
+}
+
+// ----- publish -----
+
+/// The ONLY place that pushes. Never forced; a head that is not a descendant of `origin/main` is not pushed.
+fn tw_push(tree str) Proc Os Fs -> GitOut {
+    tw_git_net(tree, ["push", "origin", "HEAD:main"])
+}
+
+fn tw_blocked(step str, reason str) -> PublishResult => Blocked { reason, step, conflict_files: []str.new() }
+
+/// The main copy is brought up to origin/main by a fast-forward, only when it is clean, stands on `main`, and its head is an ancestor of
+/// origin/main. The answer: "updated" or "not updated: <reason>".
+fn tw_update_main_copy(main_copy str) Proc Os Fs -> str {
+    if !tw_is_repo(main_copy) { return "not updated: the main copy is not a git repository" }
+    if !is_clean(main_copy) { return "not updated: the main copy has changes or new files" }
+    ro on = tw_current_branch(main_copy)
+    if on != "main" { return "not updated: the main copy stands on '${on}', not on main" }
+    ro anc = tw_git(main_copy, ["merge-base", "--is-ancestor", "HEAD", "origin/main"])
+    if anc.code != 0 { return "not updated: the head of the main copy is not an ancestor of origin/main" }
+    ro m = tw_git(main_copy, ["merge", "--ff-only", "origin/main"])
+    if m.code != 0 { return "not updated: ${tw_why(m)}" }
+    "updated"
+}
+
+/// Take the tree and the branch of a published task away (from the main copy: a tree cannot remove itself). "" - done, else why not.
+fn tw_remove_task_tree(main_copy str, tree str, branch str) Proc Os Fs -> str {
+    mut problems = []str.new()
+    ro w = tw_git(main_copy, ["worktree", "remove", tree])
+    if w.code != 0 { problems.push("tree not removed: ${tw_why(w)}") }
+    ro in_main = tw_git(main_copy, ["merge-base", "--is-ancestor", branch, "origin/main"])
+    if in_main.code == 0 {
+        ro b = tw_git(main_copy, ["branch", "-D", branch])
+        if b.code != 0 { problems.push("branch not removed: ${tw_why(b)}") }
+    } else {
+        problems.push("branch not removed: it is not in origin/main")
+    }
+    if tw_exists(tree) && problems.len() == 0 { ro gone = remove_dir(Path.from_bytes(tw_norm(tree).bytes())) }
+    problems.join("; ")
+}
+
+/// The end of `publish` and of `publish_continue`: the tests, the check of descent, the push, the main copy, the cleaning.
+fn tw_publish_tail(tree str, main_copy str, run_tests fn() Proc Os Fs -> str) Proc Os Fs -> PublishResult {
+    ro red = run_tests()
+    if red.byte_len() > 0 { return tw_blocked("tests", red) }
+    ro desc = tw_git(tree, ["merge-base", "--is-ancestor", "origin/main", "HEAD"])
+    if desc.code != 0 { return tw_blocked("push", "the head is not a descendant of origin/main: fetch and rebase again") }
+    ro branch = tw_current_branch(tree)
+    ro pushed = tw_push(tree)
+    if pushed.code != 0 { return tw_blocked("push", tw_why(pushed)) }
+    ro sha = tw_head_sha(tree)
+    ro copy = tw_update_main_copy(main_copy)
+    ro cleanup = if branch.byte_len() > 0 { tw_remove_task_tree(main_copy, tree, branch) } else { "tree not removed: detached head" }
+    Published { sha, main_copy: copy, cleanup }
+}
+
+/// Publish a task, step by step: (1) `git fetch origin`; (2) `git rebase --rebase-merges origin/main` (the merges of the subtasks are kept; a conflict
+/// leaves the rebase in progress and answers `Blocked{step: "rebase", conflict_files}`, to go on with `publish_continue`); (3) `run_tests()` -
+/// "" is green, anything else is the reason (`Blocked{step: "tests"}`); (4) `git push origin HEAD:main`, never forced, only from a descendant of
+/// origin/main; (5) in the main copy `git merge --ff-only origin/main`, only if it is clean, stands on main and is an ancestor of origin/main
+/// (else `main_copy` says "not updated: <reason>"); (6) the tree and the branch of the task are removed. Call it only on the signal
+/// `route_publish`: the push is not made by anything else.
+export fn publish(task_tree_path str, main_copy_path str, run_tests fn() Proc Os Fs -> str) Proc Os Fs -> PublishResult {
+    ro tree = tw_norm(task_tree_path)
+    ro main_copy = tw_norm(main_copy_path)
+    if !tw_is_repo(tree) { return tw_blocked("precheck", "not a git repository") }
+    if tw_key(tree) == tw_key(main_copy) { return tw_blocked("precheck", "the tree of the task is the main copy") }
+    if tw_merging(tree) || tw_rebasing(tree) { return tw_blocked("precheck", "a merge or a rebase is in progress in the tree: finish it first") }
+    if tw_current_branch(tree).byte_len() == 0 { return tw_blocked("precheck", "the tree has a detached head") }
+    if !is_clean(tree) { return tw_blocked("precheck", "the tree has uncommitted changes") }
+    ro fetched = tw_git_net(tree, ["fetch", "origin"])
+    if fetched.code != 0 { return tw_blocked("fetch", tw_why(fetched)) }
+    ro rebased = tw_git(tree, ["rebase", "--rebase-merges", "origin/main"])
+    if rebased.code != 0 {
+        ro files = tw_unmerged(tree)
+        if files.len() > 0 { return Blocked { reason: "conflicts in the rebase", step: "rebase", conflict_files: files } }
+        ro aborted = tw_git(tree, ["rebase", "--abort"])
+        return tw_blocked("rebase", tw_why(rebased))
+    }
+    tw_publish_tail(tree, main_copy, run_tests)
+}
+
+/// Go on with `publish` after the agent has resolved the conflicts of the rebase: the resolved files are staged (a file with a marker stops it:
+/// `Blocked{step: "rebase"}`), `git rebase --continue` (the next commit may conflict again), then the tests and the rest of `publish`. When no
+/// rebase is in progress it goes straight to the tests.
+export fn publish_continue(task_tree_path str, main_copy_path str, run_tests fn() Proc Os Fs -> str) Proc Os Fs -> PublishResult {
+    ro tree = tw_norm(task_tree_path)
+    ro main_copy = tw_norm(main_copy_path)
+    if !tw_is_repo(tree) { return tw_blocked("precheck", "not a git repository") }
+    if tw_key(tree) == tw_key(main_copy) { return tw_blocked("precheck", "the tree of the task is the main copy") }
+    if tw_rebasing(tree) {
+        ro left = tw_stage_resolved(tree)
+        if left.len() > 0 { return Blocked { reason: "conflicts are not resolved", step: "rebase", conflict_files: left } }
+        ro cont = tw_git(tree, ["rebase", "--continue"])
+        if cont.code != 0 {
+            ro files = tw_unmerged(tree)
+            if files.len() > 0 { return Blocked { reason: "conflicts in the rebase", step: "rebase", conflict_files: files } }
+            return tw_blocked("rebase", tw_why(cont))
+        }
+    }
+    if tw_merging(tree) { return tw_blocked("precheck", "a merge is in progress in the tree: finish it first") }
+    if !is_clean(tree) { return tw_blocked("precheck", "the tree has uncommitted changes") }
+    tw_publish_tail(tree, main_copy, run_tests)
+}
