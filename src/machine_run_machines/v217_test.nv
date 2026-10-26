@@ -5,7 +5,7 @@ module crew_harness.machine_run_machines
 
 import std.text
 import alula.machine.{text_of_file}
-import crew_harness.machines.{machine_files, scenario_files}
+import crew_harness.machines.{machine_files, test_files}
 import alula.machine_run.{AlulaMachine, run_ok}
 
 // The chat machine as the file has it; and the same machine with the counter of the user put back (a party with gates).
@@ -115,39 +115,39 @@ test "v217 the dialog machine closes by a signal of the free input" {
 
 // ---- the scenarios of the free input -------------------------------------------------------------------------------------------------------
 
-fn scenario_named(name str) -> str => text_of_file(scenario_files(), name)
+fn scenario_named(name str) -> str => text_of_file(test_files(), name)
 
 test "v217 the scenario of a free input runs" {
-    ro text = scenario_named("free-input-chat-message.scenario.test.json")
+    ro text = scenario_named("free-input-chat-message.alula.test.json")
     assert(text != "")
     assert(run_ok(run_text(chat(), text)))
 }
 
 test "v217 the scenario of a free input without a gate record" {
-    ro text = scenario_named("free-input-no-gate-record.scenario.test.json")
+    ro text = scenario_named("free-input-no-gate-record.alula.test.json")
     assert(text != "")
     assert(run_ok(run_text(chat(), text)))
 }
 
 test "v217 the scenario of the counters that stay" {
-    ro text = scenario_named("free-input-counter-stays.scenario.test.json")
+    ro text = scenario_named("free-input-counter-stays.alula.test.json")
     assert(text != "")
     assert(run_ok(run_text(dialog(), text)))
 }
 
 test "v217 the scenario of the close signal of the dialog" {
-    ro text = scenario_named("free-input-dialog-close.scenario.test.json")
+    ro text = scenario_named("free-input-dialog-close.alula.test.json")
     assert(text != "")
     assert(run_ok(run_text(dialog(), text)))
 }
 
 test "v217 the scenario of a signal without a row" {
-    ro text = scenario_named("free-input-signal-without-row.scenario.test.json")
+    ro text = scenario_named("free-input-signal-without-row.alula.test.json")
     assert(text != "")
     assert(run_ok(run_text(chat(), text)))
 }
 
 test "v217 the step of a scenario names the party of a free input" {
-    ro run = run_text(chat(), scenario_named("free-input-chat-message.scenario.test.json").replace("\"party\": \"user\"", "\"party\": \"agent\""))
+    ro run = run_text(chat(), scenario_named("free-input-chat-message.alula.test.json").replace("\"party\": \"user\"", "\"party\": \"agent\""))
     assert(!run_ok(run))
 }

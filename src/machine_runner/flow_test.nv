@@ -3,18 +3,18 @@
 module crew_harness.machine_runner
 
 import std.text
-import alula.machine_run.{ScenarioRun, StepTrace, run_ok}
+import alula.machine_run.{TestRun, StepTrace, run_ok}
 
-fn named(runs []FileRun, name str) -> ScenarioRun {
+fn named(runs []FileRun, name str) -> TestRun {
     for fr in runs {
-        if fr.name == "${name}.scenario.test.json" { return fr.run }
+        if fr.name == "${name}.alula.test.json" { return fr.run }
     }
     panic("no scenario ${name}")
 }
 
-fn last_outcome(run ScenarioRun) -> str => run.traces[run.traces.len() - 1].outcome
+fn last_outcome(run TestRun) -> str => run.traces[run.traces.len() - 1].outcome
 
-fn last_state(run ScenarioRun) -> str => run.traces[run.traces.len() - 1].state
+fn last_state(run TestRun) -> str => run.traces[run.traces.len() - 1].state
 
 test "fl the scenarios all together" {
     ro runs = all_runs()

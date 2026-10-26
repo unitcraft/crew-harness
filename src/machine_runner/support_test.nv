@@ -1,14 +1,14 @@
 // support_test.nv - helpers of the proofs of the machine "Task runner" (task 123): the table `machines/task_runner.alula.md`, its translation, the decoded machine, the machine that is made,
-// and the scenarios `scenarios/runner-*` run once on it.
+// and the scenarios `tests/runner-*` run once on it.
 module crew_harness.machine_runner
 
 import std.text
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import alula.machine.{NamedText}
 import alula.machine_table.{MachineDef, StateDef, TableRow, Target, ToState, ToNothing, ToPrevious, ToSame, ToPrepareReturn, load_machine}
-import alula.machine_run.{AlulaMachine, ScenarioRun, load_alula_machine, parse_scenario, run_scenario, run_nested_scenario, run_ok, report_text}
+import alula.machine_run.{AlulaMachine, TestRun, load_alula_machine, parse_test, run_test, run_nested_test, run_ok, report_text}
 import alula.machine_text.{translate_checked, TranslateReport, TranslateError, error_text, render_machine}
-import crew_harness.machines.{methodology_nested, methodology_registry, scenario_files, task_runner_machine_text, task_runner_table_text}
+import crew_harness.machines.{methodology_nested, methodology_registry, test_files, task_runner_machine_text, task_runner_table_text}
 
 fn table_report() -> TranslateReport => translate_checked(task_runner_table_text(), methodology_registry())
 
@@ -75,7 +75,7 @@ fn row_target(st StateDef, n int) -> str {
 
 fn runner_scenarios() -> []NamedText {
     mut out = []NamedText.new()
-    for f in scenario_files() {
+    for f in test_files() {
         if f.name.starts_with("runner-") { out.push(f) }
     }
     out
@@ -83,19 +83,19 @@ fn runner_scenarios() -> []NamedText {
 
 fn scenario_files_all() -> []str {
     mut out = []str.new()
-    for f in scenario_files() { out.push(f.name) }
+    for f in test_files() { out.push(f.name) }
     out
 }
 
-fn run_with(m AlulaMachine, file NamedText) -> ScenarioRun {
-    match parse_scenario(file.text) {
-        Ok(sc) => if sc.standalone { run_scenario(m, sc) } else { run_nested_scenario(m, methodology_nested(), sc) }
+fn run_with(m AlulaMachine, file NamedText) -> TestRun {
+    match parse_test(file.text) {
+        Ok(sc) => if sc.standalone { run_test(m, sc) } else { run_nested_test(m, methodology_nested(), sc) }
         Err(e) => panic("${file.name}: ${e.path}: ${e.message}")
     }
 }
 
 /// FileRun: a scenario file and its run.
-type FileRun { name str, run ScenarioRun }
+type FileRun { name str, run TestRun }
 
 // Every scenario of the task runner run once (the machine is made once: building it checks the whole table).
 fn all_runs() -> []FileRun {

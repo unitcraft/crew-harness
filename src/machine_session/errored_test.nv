@@ -6,7 +6,7 @@ module crew_harness.machine_session
 
 import std.text
 import alula.machine_text.{translate_checked}
-import alula.machine_run.{AlulaMachine, load_alula_machine, parse_scenario, run_scenario, run_ok, report_text, drive_scenario, StepTrace}
+import alula.machine_run.{AlulaMachine, load_alula_machine, parse_test, run_test, run_ok, report_text, drive_test, StepTrace}
 import crew_harness.machines.{methodology_registry, session_start_table_text}
 
 fn broken_text() -> str {
@@ -27,7 +27,7 @@ fn broken_machine() -> AlulaMachine {
 fn start_input() -> str => `{"session":"s1","task_dir":"/t","repo_dir":"/r","delivery_mode":"files","route":"full","delivery_short":false}`
 
 fn broken_scenario() -> str => `{
-  "format": "scenario/0", "machine": "session_start", "name": "the fork finds no row", "start_at": 1000,
+  "format": "test/0", "machine": "session_start", "name": "the fork finds no row", "start_at": 1000,
   "steps": [
     { "do": "feed", "event": { "kind": "start", "request": "up-1", "input": ${start_input()} } },
     { "do": "feed", "host": { "launch_scope": { "$variant": "LaunchScope", "name": "Fits", "fields": {} }, "stop_agent_group": null },
@@ -45,22 +45,22 @@ test "er the changed table is a table" {
 }
 
 test "er the fork with no row ends in the error" {
-    ro sc = match parse_scenario(broken_scenario()) {
+    ro sc = match parse_test(broken_scenario()) {
         Ok(s) => s
         Err(e) => panic("${e.path}: ${e.message}")
     }
-    ro run = run_scenario(broken_machine(), sc)
+    ro run = run_test(broken_machine(), sc)
     if !run_ok(run) { panic(report_text(run)) }
     assert(run.traces.len() == 2)
     assert(run.traces[1].state == "Errored")
 }
 
 test "er the end writes the transition and the data" {
-    ro sc = match parse_scenario(broken_scenario()) {
+    ro sc = match parse_test(broken_scenario()) {
         Ok(s) => s
         Err(e) => panic("${e.path}: ${e.message}")
     }
-    ro run = run_scenario(broken_machine(), sc)
+    ro run = run_test(broken_machine(), sc)
     mut codes = []str.new()
     for e in run.traces[1].entries { codes.push(e.event.code) }
     // the fork writes its code, the end writes the transition (the same line again) and all the data

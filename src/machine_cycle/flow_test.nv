@@ -3,23 +3,23 @@
 module crew_harness.machine_cycle
 
 import std.text
-import alula.machine_run.{ScenarioRun, StepTrace, run_ok}
+import alula.machine_run.{TestRun, StepTrace, run_ok}
 
 fn state_names() -> []str => [
     "ReviewEntry", "Pass", "MeetingCall", "SessionLaunch", "SessionFailure", "AfterSession", "SummaryParsing", "NoProbes", "Retry", "Gate3", "PassOutcome", "CriterionNotConverging",
     "Gate15", "AfterNarrowing", "Ceiling", "Gate9", "StopStage", "Levels", "FixOutcome", "Pause", "End", "Halted", "Errored"
 ]
 
-fn named(runs []FileRun, name str) -> ScenarioRun {
+fn named(runs []FileRun, name str) -> TestRun {
     for fr in runs {
-        if fr.name == "${name}.scenario.test.json" { return fr.run }
+        if fr.name == "${name}.alula.test.json" { return fr.run }
     }
     panic("no scenario ${name}")
 }
 
-fn last_outcome(run ScenarioRun) -> str => run.traces[run.traces.len() - 1].outcome
+fn last_outcome(run TestRun) -> str => run.traces[run.traces.len() - 1].outcome
 
-fn last_state(run ScenarioRun) -> str => run.traces[run.traces.len() - 1].state
+fn last_state(run TestRun) -> str => run.traces[run.traces.len() - 1].state
 
 fn any_contains(items []str, needle str) -> bool {
     for x in items {
@@ -116,7 +116,7 @@ test "fl the five flows" {
 test "fl a run is deterministic" {
     ro m = cycle_machine()
     for f in cycle_scenarios() {
-        if f.name != "cycle-flow-rework.scenario.test.json" && f.name != "cycle-flow-narrowing-clean.scenario.test.json" && f.name != "cycle-gate9-1.scenario.test.json" { continue }
+        if f.name != "cycle-flow-rework.alula.test.json" && f.name != "cycle-flow-narrowing-clean.alula.test.json" && f.name != "cycle-gate9-1.alula.test.json" { continue }
         ro first = run_with(m, f)
         ro second = run_with(m, f)
         assert(first.traces.len() == second.traces.len())

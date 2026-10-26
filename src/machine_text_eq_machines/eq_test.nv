@@ -6,9 +6,9 @@ module crew_harness.machine_text_eq_machines
 
 import std.text
 import alula.engine.{Incoming, Order, StepEnvironment, journal_line}
-import alula.machine_run.{AlulaState, AlulaMachine, Scenario, StepTrace, load_alula_machine, alula_step, ScriptedHost, drive_scenario, parse_scenario, scenario_incoming, run_scenario, run_ok, report_text}
+import alula.machine_run.{AlulaState, AlulaMachine, Test, StepTrace, load_alula_machine, alula_step, ScriptedHost, drive_test, parse_test, test_incoming, run_test, run_ok, report_text}
 import alula.machine_text.{translate, error_text}
-import crew_harness.machines.{product_registry, chat_machine_text, chat_table_text, scenario_files}
+import crew_harness.machines.{product_registry, chat_machine_text, chat_table_text, test_files}
 
 fn translated_json() -> str {
     match translate(chat_table_text()) {
@@ -28,10 +28,10 @@ fn translated_machine() -> AlulaMachine => machine_from(translated_json())
 
 fn written_machine() -> AlulaMachine => machine_from(chat_machine_text())
 
-fn chat_scenarios() -> []Scenario {
-    mut out = []Scenario.new()
-    for f in scenario_files() {
-        match parse_scenario(f.text) {
+fn chat_scenarios() -> []Test {
+    mut out = []Test.new()
+    for f in test_files() {
+        match parse_test(f.text) {
             Ok(sc) => {
                 if sc.machine == "ChatSession" { out.push(sc) }
             }
@@ -74,10 +74,10 @@ fn trace_diff(ta StepTrace, tb StepTrace) -> str {
     ""
 }
 
-// ORACLE-WORKAROUND(12, 13, 26): the type arguments of `drive_scenario` are written out here and in the tests below; infer them when items 12 and 13 are fixed
-fn engine_diff(sc Scenario, first AlulaMachine, second AlulaMachine) -> str {
-    ro ta = drive_scenario[AlulaState, AlulaMachine](first, sc)
-    ro tb = drive_scenario[AlulaState, AlulaMachine](second, sc)
+// ORACLE-WORKAROUND(12, 13, 26): the type arguments of `drive_test` are written out here and in the tests below; infer them when items 12 and 13 are fixed
+fn engine_diff(sc Test, first AlulaMachine, second AlulaMachine) -> str {
+    ro ta = drive_test[AlulaState, AlulaMachine](first, sc)
+    ro tb = drive_test[AlulaState, AlulaMachine](second, sc)
     if ta.len() != tb.len() { return "${sc.name}: ${ta.len()} traces / ${tb.len()}" }
     mut i = 0
     while i < ta.len() {
@@ -105,7 +105,7 @@ test "eq 39 engine" {
 test "eq 39 own" {
     ro first = translated_machine()
     for sc in chat_scenarios() {
-        ro run = run_scenario(first, sc)
+        ro run = run_test(first, sc)
         if !run_ok(run) { panic(report_text(run)) }
     }
 }
@@ -161,15 +161,15 @@ fn step_pair(first AlulaMachine, second AlulaMachine, p StepPair, event Incoming
     StepPair { a_state: next_a, b_state: next_b, a_text: order_text(ae.orders), b_text: order_text(be.orders), a_moved, b_moved }
 }
 
-fn events_of(sc Scenario) -> []Incoming {
+fn events_of(sc Test) -> []Incoming {
     mut out = []Incoming.new()
     for s in sc.steps {
-        if s.event.kind != "" { out.push(scenario_incoming(s.event)) }
+        if s.event.kind != "" { out.push(test_incoming(s.event)) }
     }
     out
 }
 
-fn machine_diff(sc Scenario, first AlulaMachine, second AlulaMachine) -> str {
+fn machine_diff(sc Test, first AlulaMachine, second AlulaMachine) -> str {
     mut p = StepPair { a_state: first.initial(), b_state: second.initial(), a_text: "", b_text: "", a_moved: false, b_moved: false }
     mut i = 0
     for e in events_of(sc) {

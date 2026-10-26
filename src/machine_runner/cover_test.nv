@@ -1,11 +1,11 @@
-// cover_test.nv - every row of the table "Task runner" has a scenario: the rows that the scenarios of `scenarios/runner-*` took (the mark `taken` of the state after every step) are compared with the
+// cover_test.nv - every row of the table "Task runner" has a scenario: the rows that the scenarios of `tests/runner-*` took (the mark `taken` of the state after every step) are compared with the
 // rows of the machine; a row that no scenario takes is red. The rows that cannot be taken by any sequence of events are named here with the reason.
 module crew_harness.machine_runner
 
 import std.text
 import std.encoding.json.{Json}
 import alula.machine_table.{MachineErrorAct}
-import alula.machine_run.{ScenarioRun, run_ok, report_text}
+import alula.machine_run.{TestRun, run_ok, report_text}
 
 /// The rows of the machine as marks: `State#n`, `common#n`, `end:State#n`.
 fn all_rows() -> []str {
@@ -55,7 +55,7 @@ fn taken_of(encoded str) -> []str {
     out
 }
 
-fn taken_by(run ScenarioRun) -> []str {
+fn taken_by(run TestRun) -> []str {
     mut out = []str.new()
     for t in run.traces {
         for r in taken_of(t.encoded) {
@@ -81,7 +81,7 @@ fn kebab(name str) -> str {
 fn file_of_row(row str) -> str {
     ro body = row.replace("end:", "")
     match body.find("#") {
-        Some(at) => "runner-${kebab(body[..at])}-${body[(at + 1)..]}.scenario.test.json"
+        Some(at) => "runner-${kebab(body[..at])}-${body[(at + 1)..]}.alula.test.json"
         None => panic("a row without a number: ${row}")
     }
 }

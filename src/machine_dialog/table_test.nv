@@ -6,10 +6,10 @@ import std.text
 import std.encoding.json.{Json}
 import alula.machine.{NamedText, Int, Text}
 import alula.machine_table.{MachineDef, load_machine}
-import alula.machine_run.{AlulaMachine, AlulaState, ProjectValue, Scenario, ScenarioRun, load_alula_machine, load_alula_machine_with, parse_scenario, run_scenario, run_ok, report_text}
+import alula.machine_run.{AlulaMachine, AlulaState, ProjectValue, Test, TestRun, load_alula_machine, load_alula_machine_with, parse_test, run_test, run_ok, report_text}
 import alula.machine_text.{translate_checked, translate_report, TranslateReport, error_text, render_summary}
 import alula.engine.{Incoming, EventKind, StepEnvironment, Order}
-import crew_harness.machines.{product_registry, dialog_machine_text, dialog_table_text, scenario_files}
+import crew_harness.machines.{product_registry, dialog_machine_text, dialog_table_text, test_files}
 
 fn dialog_report() -> TranslateReport => translate_checked(dialog_table_text(), product_registry())
 
@@ -196,7 +196,7 @@ fn all_rows() -> []str {
 
 fn dialog_scenarios() -> []NamedText {
     mut out = []NamedText.new()
-    for f in scenario_files() {
+    for f in test_files() {
         if f.name.starts_with("dialog-") { out.push(f) }
     }
     out
@@ -228,7 +228,7 @@ fn taken_of(encoded str) -> []str {
     out
 }
 
-fn taken_by(run ScenarioRun) -> []str {
+fn taken_by(run TestRun) -> []str {
     mut out = []str.new()
     for t in run.traces {
         for r in taken_of(t.encoded) {
@@ -251,9 +251,9 @@ test "dl scenarios take every row" {
     mut covered = []str.new()
     mut steps = 0
     for f in files {
-        match parse_scenario(f.text) {
+        match parse_test(f.text) {
             Ok(sc) => {
-                ro run = run_scenario(m, sc)
+                ro run = run_test(m, sc)
                 if !run_ok(run) { panic(report_text(run)) }
                 steps += sc.steps.len()
                 for r in taken_by(run) {

@@ -5,8 +5,8 @@ module crew_harness.machine_session
 import std.text
 import alula.machine.{NamedText}
 import alula.machine_table.{MachineDef, load_machine, StateDef, TableRow}
-import alula.machine_run.{AlulaMachine, NestedRegistry, load_alula_machine, parse_scenario, run_nested_scenario, drive_nested_scenario, Scenario, ScenarioRun, NestedStepTrace}
-import crew_harness.machines.{methodology_nested, methodology_registry, scenario_files, session_start_machine_text}
+import alula.machine_run.{AlulaMachine, NestedRegistry, load_alula_machine, parse_test, run_nested_test, drive_nested_test, Test, TestRun, NestedStepTrace}
+import crew_harness.machines.{methodology_nested, methodology_registry, test_files, session_start_machine_text}
 
 /// The tree of the machine as the checks read it.
 fn session_def() -> MachineDef {
@@ -38,14 +38,14 @@ fn state_named(def MachineDef, name str) -> StateDef {
 /// The scenarios of the machine: the files `session-*`.
 fn session_scenarios() -> []NamedText {
     mut out = []NamedText.new()
-    for f in scenario_files() {
+    for f in test_files() {
         if f.name.starts_with("session-") { out.push(f) }
     }
     out
 }
 
-fn scenario_of(file NamedText) -> Scenario {
-    match parse_scenario(file.text) {
+fn scenario_of(file NamedText) -> Test {
+    match parse_test(file.text) {
         Ok(sc) => sc
         Err(e) => panic("the scenario ${file.name} does not parse: ${e.path}: ${e.message}")
     }
@@ -57,13 +57,13 @@ type SessCtx { m AlulaMachine, reg NestedRegistry }
 fn sctx() -> SessCtx => { m: session_machine(), reg: registry() }
 
 /// A scenario run together with the nested machine it calls.
-fn run_file(c SessCtx, file NamedText) -> ScenarioRun {
-    run_nested_scenario(c.m, c.reg, scenario_of(file))
+fn run_file(c SessCtx, file NamedText) -> TestRun {
+    run_nested_test(c.m, c.reg, scenario_of(file))
 }
 
 /// The traces of every step of a scenario file (the parent and the nested machines).
 fn traces_of(c SessCtx, file NamedText) -> []NestedStepTrace {
-    drive_nested_scenario(c.m, c.reg, scenario_of(file))
+    drive_nested_test(c.m, c.reg, scenario_of(file))
 }
 
 /// The number of the scenario files whose name starts with the prefix (they are all run by the test "cv scenarios agree and take every row").

@@ -1,4 +1,4 @@
-// cover_test.nv - every row of the table "Cycle check" has a scenario: the rows that the scenarios of `scenarios/cycle-*` took (the mark `taken` of the state after every step) are compared with
+// cover_test.nv - every row of the table "Cycle check" has a scenario: the rows that the scenarios of `tests/cycle-*` took (the mark `taken` of the state after every step) are compared with
 // the rows of the machine; a row that no scenario takes is red. The rows that cannot be taken by any sequence of events are named here with the reason.
 module crew_harness.machine_cycle
 
@@ -6,8 +6,8 @@ import std.text
 import std.encoding.json.{Json}
 import alula.machine.{NamedText}
 import alula.machine_table.{MachineErrorAct}
-import alula.machine_run.{ScenarioRun, run_ok, report_text}
-import crew_harness.machines.{scenario_files}
+import alula.machine_run.{TestRun, run_ok, report_text}
+import crew_harness.machines.{test_files}
 
 // The rows of the machine as marks: `State#n`, `common#n`, `end:State#n`.
 fn all_rows() -> []str {
@@ -55,7 +55,7 @@ fn taken_of(encoded str) -> []str {
     out
 }
 
-fn taken_by(run ScenarioRun) -> []str {
+fn taken_by(run TestRun) -> []str {
     mut out = []str.new()
     for t in run.traces {
         for r in taken_of(t.encoded) {
@@ -97,7 +97,7 @@ fn state_word(name str) -> str {
 fn file_of_row(row str) -> str {
     ro body = row.replace("end:", "")
     match body.find("#") {
-        Some(at) => "cycle-${state_word(body[..at])}-${body[(at + 1)..]}.scenario.test.json"
+        Some(at) => "cycle-${state_word(body[..at])}-${body[(at + 1)..]}.alula.test.json"
         None => panic("a row without a number: ${row}")
     }
 }

@@ -1,14 +1,14 @@
 // support_test.nv - helpers of the proofs of the machine "Cycle check" (task 122): the table `machines/cycle_check.alula.md`, its translation, the decoded machine, the machine that is made,
-// and the scenarios `scenarios/cycle-*` run once on it.
+// and the scenarios `tests/cycle-*` run once on it.
 module crew_harness.machine_cycle
 
 import std.text
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import alula.machine.{NamedText}
 import alula.machine_table.{MachineDef, StateDef, TableRow, Target, ToState, ToNothing, ToPrevious, ToSame, ToPrepareReturn, load_machine}
-import alula.machine_run.{AlulaMachine, ScenarioRun, load_alula_machine, parse_scenario, run_scenario, run_ok, report_text}
+import alula.machine_run.{AlulaMachine, TestRun, load_alula_machine, parse_test, run_test, run_ok, report_text}
 import alula.machine_text.{translate_checked, TranslateReport, TranslateError, error_text, render_machine}
-import crew_harness.machines.{methodology_registry, cycle_check_machine_text, cycle_check_table_text, scenario_files}
+import crew_harness.machines.{methodology_registry, cycle_check_machine_text, cycle_check_table_text, test_files}
 
 fn table_report() -> TranslateReport => translate_checked(cycle_check_table_text(), methodology_registry())
 
@@ -68,21 +68,21 @@ fn row_target(st StateDef, n int) -> str {
 
 fn cycle_scenarios() -> []NamedText {
     mut out = []NamedText.new()
-    for f in scenario_files() {
+    for f in test_files() {
         if f.name.starts_with("cycle-") { out.push(f) }
     }
     out
 }
 
-fn run_with(m AlulaMachine, file NamedText) -> ScenarioRun {
-    match parse_scenario(file.text) {
-        Ok(sc) => run_scenario(m, sc)
+fn run_with(m AlulaMachine, file NamedText) -> TestRun {
+    match parse_test(file.text) {
+        Ok(sc) => run_test(m, sc)
         Err(e) => panic("${file.name}: ${e.path}: ${e.message}")
     }
 }
 
 /// FileRun: a scenario file and its run.
-type FileRun { name str, run ScenarioRun }
+type FileRun { name str, run TestRun }
 
 // Every scenario of the cycle check run once (the machine is made once: building it checks the whole table).
 fn all_runs() -> []FileRun {

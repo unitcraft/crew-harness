@@ -38,7 +38,7 @@ test "dt the lists of the files hold every file of the folders" {
         tables_in_folders.push(n)
     }
     assert(dt_same(tables, tables_in_folders))
-    ro scenarios = dt_names(scenario_files())
+    ro scenarios = dt_names(test_files())
     mut scenarios_in_folders = data_dir_names("product_scenarios")
     for n in data_dir_names("methodology_scenarios") { scenarios_in_folders.push(n) }
     assert(dt_same(scenarios, scenarios_in_folders))
@@ -71,19 +71,19 @@ test "dt the one extension of a table is alula md" {
 test "dt the numbers of the files" {
     assert(machine_files().len() == 7)
     assert(table_files().len() == 7)
-    assert(scenario_files().len() == 595)
-    assert(dt_with_prefix(scenario_files(), "chat-").len() + dt_with_prefix(scenario_files(), "dialog-").len() + dt_with_prefix(scenario_files(), "free-input-").len() == 81)
-    assert(dt_with_prefix(scenario_files(), "agent-step-").len() == 83)
-    assert(dt_with_prefix(scenario_files(), "cycle-").len() == 102)
-    assert(dt_with_prefix(scenario_files(), "session-").len() == 63)
-    assert(dt_with_prefix(scenario_files(), "runner-").len() == 260)
-    assert(dt_with_prefix(scenario_files(), "nested-steps-").len() == 6)
+    assert(test_files().len() == 595)
+    assert(dt_with_prefix(test_files(), "chat-").len() + dt_with_prefix(test_files(), "dialog-").len() + dt_with_prefix(test_files(), "free-input-").len() == 81)
+    assert(dt_with_prefix(test_files(), "agent-step-").len() == 83)
+    assert(dt_with_prefix(test_files(), "cycle-").len() == 102)
+    assert(dt_with_prefix(test_files(), "session-").len() == 63)
+    assert(dt_with_prefix(test_files(), "runner-").len() == 260)
+    assert(dt_with_prefix(test_files(), "nested-steps-").len() == 6)
 }
 
 test "dt the names are the names of Alula" {
     for f in machine_files() { assert(is_machine_json_name(f.name)) }
     for f in table_files() { assert(is_table_name(f.name)) }
-    for f in scenario_files() { assert(f.name.ends_with(".scenario.test.json")) }
+    for f in test_files() { assert(f.name.ends_with(".alula.test.json")) }
 }
 
 test "dt the machines of the product load with the registry of the product" {

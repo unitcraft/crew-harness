@@ -1,5 +1,5 @@
 // checks_test.nv - the 42 "Checks of the implementation" of the table of the methodology (task-runner-states.md, section "Проверки реализации"): for each, what the scenarios and the tests of the
-// product cover and what they do not. A line is `number|kind|files|note`; the kind is `scenario` (the files are scenarios of `scenarios/`), `unit` (a test of this unit), `other` (covered
+// product cover and what they do not. A line is `number|kind|files|note`; the kind is `scenario` (the files are scenarios of `tests/`), `unit` (a test of this unit), `other` (covered
 // by the scenarios or the tests of another machine) or `none` (not covered, with the reason). The test checks that all 42 numbers are there and that every named scenario exists.
 module crew_harness.machine_runner
 
@@ -74,7 +74,7 @@ test "ck every named scenario exists" {
     for line in items() {
         if field(line, 1) != "scenario" { continue }
         for file in field(line, 2).split(",") {
-            if !have.contains("${file}.scenario.test.json") { panic("check ${field(line, 0)}: no scenario ${file}") }
+            if !have.contains("${file}.alula.test.json") { panic("check ${field(line, 0)}: no scenario ${file}") }
             named += 1
         }
     }
@@ -87,7 +87,7 @@ test "ck other machines scenarios exist" {
     for line in items() {
         if field(line, 1) != "other" { continue }
         for file in field(line, 2).split(",") {
-            if !have.contains("${file}.scenario.test.json") { panic("check ${field(line, 0)}: no scenario ${file}") }
+            if !have.contains("${file}.alula.test.json") { panic("check ${field(line, 0)}: no scenario ${file}") }
         }
     }
 }

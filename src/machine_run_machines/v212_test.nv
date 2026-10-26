@@ -4,7 +4,7 @@ module crew_harness.machine_run_machines
 
 import std.text
 import alula.machine.{Text, text_of_file}
-import crew_harness.machines.{machine_files, scenario_files}
+import crew_harness.machines.{machine_files, test_files}
 
 fn agent_fields() -> []str => ["kind", "profile", "session", "dialog_kind", "context", "limits", "trace", "step"]
 
@@ -42,7 +42,7 @@ test "v212 callers give the profile by the column" {
 
 test "v212 scenarios of the agent step start with the flat input" {
     mut seen = 0
-    for f in scenario_files() {
+    for f in test_files() {
         if !f.name.starts_with("agent-step-") { continue }
         assert(!f.text.contains("\"input\": {\"agent_request\""))
         assert(!f.text.contains("\"input\":{\"agent_request\""))
@@ -52,14 +52,14 @@ test "v212 scenarios of the agent step start with the flat input" {
 }
 
 test "v212 scenarios of the agent step name the fields" {
-    ro text = text_of_scenario("agent-step-flow-happy.scenario.test.json")
+    ro text = text_of_scenario("agent-step-flow-happy.alula.test.json")
     assert(text.contains("\"input\": {\"kind\": {\"$variant\": \"CallerKind\""))
     assert(text.contains("\"dialog_kind\": \"main\""))
 }
 
-fn text_of_scenario(name str) -> str => text_of_file(scenario_files(), name)
+fn text_of_scenario(name str) -> str => text_of_file(test_files(), name)
 
 test "v212 the missing field of the input is named" {
-    ro text = text_of_scenario("agent-step-flow-input-missing.scenario.test.json")
+    ro text = text_of_scenario("agent-step-flow-input-missing.alula.test.json")
     assert(!text.contains("\"field\": \"agent_request\""))
 }

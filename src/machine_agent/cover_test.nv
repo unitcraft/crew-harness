@@ -1,4 +1,4 @@
-// cover_test.nv - every row of the table "Agent step" has a scenario: the rows that the scenarios of `scenarios/agent-step-*` took (the mark `taken` of the state after every step) are
+// cover_test.nv - every row of the table "Agent step" has a scenario: the rows that the scenarios of `tests/agent-step-*` took (the mark `taken` of the state after every step) are
 // compared with the rows of the machine; a row that no scenario takes is red. The rows that cannot be taken by any sequence of events are named here with the reason.
 module crew_harness.machine_agent
 
@@ -6,8 +6,8 @@ import std.text
 import std.encoding.json.{Json}
 import alula.machine.{NamedText}
 import alula.machine_table.{MachineDef, load_machine, MachineErrorAct, ToNothing}
-import alula.machine_run.{AlulaMachine, Scenario, ScenarioRun, load_alula_machine, parse_scenario, run_scenario, run_ok, report_text}
-import crew_harness.machines.{methodology_registry, agent_step_machine_text, scenario_files}
+import alula.machine_run.{AlulaMachine, Test, TestRun, load_alula_machine, parse_test, run_test, run_ok, report_text}
+import crew_harness.machines.{methodology_registry, agent_step_machine_text, test_files}
 
 fn agent_def() -> MachineDef {
     match load_machine(agent_step_machine_text(), methodology_registry()) {
@@ -41,7 +41,7 @@ fn dead_rows() -> []str => ["Retry#4", "Continuation#3", "ReplyValidation#5", "P
 
 fn agent_scenarios() -> []NamedText {
     mut out = []NamedText.new()
-    for f in scenario_files() {
+    for f in test_files() {
         if f.name.starts_with("agent-step-") { out.push(f) }
     }
     out
@@ -73,15 +73,15 @@ fn taken_of(encoded str) -> []str {
     out
 }
 
-fn run_with(m AlulaMachine, file NamedText) -> ScenarioRun {
-    match parse_scenario(file.text) {
-        Ok(sc) => run_scenario(m, sc)
+fn run_with(m AlulaMachine, file NamedText) -> TestRun {
+    match parse_test(file.text) {
+        Ok(sc) => run_test(m, sc)
         Err(e) => panic("${file.name}: ${e.path}: ${e.message}")
     }
 }
 
 /// FileRun: a scenario file and its run.
-type FileRun { name str, run ScenarioRun }
+type FileRun { name str, run TestRun }
 
 // Every scenario of the agent step run once (the machine is made once: building it checks the whole table).
 fn all_runs() -> []FileRun {
@@ -91,7 +91,7 @@ fn all_runs() -> []FileRun {
     out
 }
 
-fn taken_by(run ScenarioRun) -> []str {
+fn taken_by(run TestRun) -> []str {
     mut out = []str.new()
     for t in run.traces {
         for r in taken_of(t.encoded) {
@@ -124,7 +124,7 @@ fn state_word(name str) -> str {
 fn file_of_row(row str) -> str {
     ro body = row.replace("end:", "")
     match body.find("#") {
-        Some(at) => "agent-step-${state_word(body[..at])}-${body[(at + 1)..]}.scenario.test.json"
+        Some(at) => "agent-step-${state_word(body[..at])}-${body[(at + 1)..]}.alula.test.json"
         None => panic("a row without a number: ${row}")
     }
 }

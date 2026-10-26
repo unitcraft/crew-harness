@@ -4,7 +4,7 @@ module crew_harness.machine_runner
 
 import std.text
 import alula.machine_text.{translate_checked}
-import alula.machine_run.{AlulaMachine, load_alula_machine, parse_scenario, run_scenario, run_ok, report_text}
+import alula.machine_run.{AlulaMachine, load_alula_machine, parse_test, run_test, run_ok, report_text}
 import crew_harness.machines.{methodology_registry}
 
 fn probe_text() -> str {
@@ -25,10 +25,10 @@ fn probe() -> AlulaMachine {
 }
 
 fn run_probe(input str, expect str) -> bool {
-    ro text = "{\"format\":\"scenario/0\",\"machine\":\"back_probe\",\"name\":\"probe\",\"start_at\":1000,\"steps\":[{\"do\":\"feed\",\"event\":{\"kind\":\"start\",\"request\":\"up-1\",\"input\":${input}},\"expect\":${expect}}]}"
-    match parse_scenario(text) {
+    ro text = "{\"format\":\"test/0\",\"machine\":\"back_probe\",\"name\":\"probe\",\"start_at\":1000,\"steps\":[{\"do\":\"feed\",\"event\":{\"kind\":\"start\",\"request\":\"up-1\",\"input\":${input}},\"expect\":${expect}}]}"
+    match parse_test(text) {
         Ok(sc) => {
-            ro run = run_scenario(probe(), sc)
+            ro run = run_test(probe(), sc)
             if !run_ok(run) { panic(report_text(run)) }
             true
         }

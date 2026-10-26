@@ -1,7 +1,7 @@
 # machines: machines written as data
 
 The machines of the product CrewHarness and the algorithms of the methodology as tables of the language Alula (`*.alula.md`; the one extension, task 169), their compiled trees (`*.alula.json`, `machine/2`) and their scenarios
-(`scenarios/*.scenario.test.json`, `scenario/0`). They were samples inside the package `alula` until its version 0.3.2; since task 158 they belong to their owners and the package holds only the language and its own examples
+(`tests/*.alula.test.json`, `test/0`). They were samples inside the package `alula` until its version 0.3.2; since task 158 they belong to their owners and the package holds only the language and its own examples
 (`examples/` of [nv-lang/nova-alula](https://github.com/nv-lang/nova-alula)).
 
 The relative links inside a table (`*.alula.md`) are the links of the table of a machine, not the navigation of the product (the table `agent_step` of the methodology links to the files of the methodology that are not here): the guard of the links `scripts/guards/check-md-links.py` does not judge them; the other `.md` of this folder (`registry.md`, `journal.md`, this file) are judged as everywhere.
@@ -21,8 +21,8 @@ The scenarios run by the program `alula` of the package, on the version the prod
 ```powershell
 . C:/work/nova/nova-oracle-0.1.0-windows-x86_64/setup-env.ps1
 nova build <alula>/src/alula.nv -o target/alula.exe       # <alula> is the working tree of the package at the pinned version
-target/alula.exe test machines/product                    # 81 of 81 scenarios passed
-target/alula.exe test machines/methodology                # 514 of 514 scenarios passed
+target/alula.exe test machines/product                    # 81 of 81 tests passed
+target/alula.exe test machines/methodology                # 514 of 514 tests passed
 ```
 
 The same scenarios and the tests of the machines (the tables equal the JSON, every row has a scenario, the journal codes are the table of the owner, the equality with the machine on Nova) run in the units of `src/`

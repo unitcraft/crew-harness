@@ -6,10 +6,10 @@ module crew_harness.machine_chat
 // ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import std.encoding.json.{Json, JsonObject}
-import crew_harness.product_machines.{scenario_files, product_registry, chat_machine_text}
+import crew_harness.product_machines.{test_files, product_registry, chat_machine_text}
 import alula.engine.{Incoming, Order, StepEnvironment, FailCode, journal_line, fail_code_word}
 import crew_harness.chat.{ChatState, ChatSession, chat_session, encode_chat_state}
-import alula.machine_run.{AlulaState, AlulaMachine, Scenario, StepTrace, ScEvent, load_alula_machine, alula_step, ScriptedHost, drive_scenario, parse_scenario, scenario_incoming, state_data_fields}
+import alula.machine_run.{AlulaState, AlulaMachine, Test, StepTrace, ScEvent, load_alula_machine, alula_step, ScriptedHost, drive_test, parse_test, test_incoming, state_data_fields}
 import alula.machine_table.{fail_code_names}
 
 fn table_chat() -> AlulaMachine {
@@ -20,10 +20,10 @@ fn table_chat() -> AlulaMachine {
 }
 
 // The scenarios of the chat, in the order of the files.
-fn chat_scenarios() -> []Scenario {
-    mut out = []Scenario.new()
-    for f in scenario_files() {
-        match parse_scenario(f.text) {
+fn chat_scenarios() -> []Test {
+    mut out = []Test.new()
+    for f in test_files() {
+        match parse_test(f.text) {
             Ok(sc) => {
                 if sc.machine == "ChatSession" { out.push(sc) }
             }
@@ -202,19 +202,19 @@ fn pair_diff(table AlulaMachine, p Pair) -> str {
     ""
 }
 
-fn events_of(sc Scenario) -> []Incoming {
+fn events_of(sc Test) -> []Incoming {
     mut out = []Incoming.new()
     for s in sc.steps {
-        if s.event.kind != "" { out.push(scenario_incoming(s.event)) }
+        if s.event.kind != "" { out.push(test_incoming(s.event)) }
     }
     out
 }
 
-// ORACLE-WORKAROUND(12, 13, 26): the type arguments of `drive_scenario` are written out here and in the tests below; infer them when items 12 and 13 are fixed
-fn first_run_diff(sc Scenario) -> str {
+// ORACLE-WORKAROUND(12, 13, 26): the type arguments of `drive_test` are written out here and in the tests below; infer them when items 12 and 13 are fixed
+fn first_run_diff(sc Test) -> str {
     ro table = table_chat()
-    ro nova = drive_scenario[ChatState, ChatSession](chat_session(), sc)
-    ro tab = drive_scenario[AlulaState, AlulaMachine](table, sc)
+    ro nova = drive_test[ChatState, ChatSession](chat_session(), sc)
+    ro tab = drive_test[AlulaState, AlulaMachine](table, sc)
     if nova.len() != tab.len() { return "${sc.name}: ${nova.len()} traces / ${tab.len()}" }
     mut i = 0
     while i < nova.len() {
@@ -225,7 +225,7 @@ fn first_run_diff(sc Scenario) -> str {
     ""
 }
 
-fn machine_run_diff(sc Scenario) -> str {
+fn machine_run_diff(sc Test) -> str {
     ro table = table_chat()
     mut p = first_pair(table)
     mut i = 0
@@ -264,9 +264,9 @@ test "every code" {
     ro table = table_chat()
     for code in FailCode.all() {
         mut p = first_pair(table)
-        p = step_pair(table, p, scenario_incoming(ScEvent { kind: "signal", name: "user_message", request: "", input: "hi", code: "", source: "", party: "", has_at: false, at: 0 }))
+        p = step_pair(table, p, test_incoming(ScEvent { kind: "signal", name: "user_message", request: "", input: "hi", code: "", source: "", party: "", has_at: false, at: 0 }))
         assert(pair_diff(table, p) == "")
-        p = step_pair(table, p, scenario_incoming(ScEvent { kind: "failure", name: "agent_refused", request: "agent-1", input: "", code: code.name(), source: "", party: "", has_at: false, at: 0 }))
+        p = step_pair(table, p, test_incoming(ScEvent { kind: "failure", name: "agent_refused", request: "agent-1", input: "", code: code.name(), source: "", party: "", has_at: false, at: 0 }))
         assert(pair_diff(table, p) == "")
         assert(p.nova_text.contains("finish:refusal:${code.name()}"))
         assert(p.table_text.contains("agent_refused(code=${fail_code_word(code)})"))
@@ -304,8 +304,8 @@ test "closed list" {
 test "same twice" {
     ro table = table_chat()
     for sc in chat_scenarios() {
-        ro first = drive_scenario[AlulaState, AlulaMachine](table, sc)
-        ro second = drive_scenario[AlulaState, AlulaMachine](table, sc)
+        ro first = drive_test[AlulaState, AlulaMachine](table, sc)
+        ro second = drive_test[AlulaState, AlulaMachine](table, sc)
         assert(first.len() == second.len())
         mut i = 0
         while i < first.len() {
@@ -316,7 +316,7 @@ test "same twice" {
     }
 }
 
-fn scenario_named(name str) -> Scenario {
+fn scenario_named(name str) -> Test {
     for sc in chat_scenarios() {
         if sc.name.contains(name) { return sc }
     }
@@ -326,8 +326,8 @@ fn scenario_named(name str) -> Scenario {
 test "death between" {
     ro table = table_chat()
     ro sc = scenario_named("restart after the commit but before the send")
-    ro nova = drive_scenario[ChatState, ChatSession](chat_session(), sc)
-    ro tab = drive_scenario[AlulaState, AlulaMachine](table, sc)
+    ro nova = drive_test[ChatState, ChatSession](chat_session(), sc)
+    ro tab = drive_test[AlulaState, AlulaMachine](table, sc)
     assert(tab[0].sent.len() == 0)
     assert(tab[0].queue.len() == 1)
     assert(tab[1].sent.len() == 0)
@@ -344,8 +344,8 @@ test "death between" {
 test "other side" {
     ro table = table_chat()
     ro sc = scenario_named("the cancel arrives in the window")
-    ro nova = drive_scenario[ChatState, ChatSession](chat_session(), sc)
-    ro tab = drive_scenario[AlulaState, AlulaMachine](table, sc)
+    ro nova = drive_test[ChatState, ChatSession](chat_session(), sc)
+    ro tab = drive_test[AlulaState, AlulaMachine](table, sc)
     assert(tab[0].queue.len() == 1)
     assert(tab[1].state == "Failed")
     assert(tab[1].queue.len() == 2)
@@ -371,8 +371,8 @@ test "ack agrees" {
     ro table = table_chat()
     for part in ["is acknowledged after the commit", "discarded event with a key"] {
         ro sc = scenario_named(part)
-        ro nova = drive_scenario[ChatState, ChatSession](chat_session(), sc)
-        ro tab = drive_scenario[AlulaState, AlulaMachine](table, sc)
+        ro nova = drive_test[ChatState, ChatSession](chat_session(), sc)
+        ro tab = drive_test[AlulaState, AlulaMachine](table, sc)
         assert(tab[tab.len() - 1].acked.len() == 1)
         assert(same_list(nova[nova.len() - 1].acked, tab[tab.len() - 1].acked))
     }

@@ -4,11 +4,11 @@ module crew_harness.alula_eq_machines
 
 import std.text
 import alula.machine.{NamedText, text_of_file}
-import crew_harness.machines.{machine_files, scenario_files, session_start_table_text, table_files}
+import crew_harness.machines.{machine_files, test_files, session_start_table_text, table_files}
 
 fn session_scenario_files() -> []NamedText {
     mut out = []NamedText.new()
-    for f in scenario_files() {
+    for f in test_files() {
         if f.name.starts_with("session-") { out.push(NamedText { name: "/m/${f.name}", text: f.text }) }
     }
     out
@@ -56,8 +56,8 @@ test "ps the summary names the states" {
 }
 
 test "ps a machine with a nested machine is not run alone" {
-    ro ran = run_with(["run", "/m/session_start.alula.json", "/m/s.scenario.test.json"],
-        [NamedText { name: "/m/session_start.alula.json", text: machine_json("session_start.alula.json") }, NamedText { name: "/m/s.scenario.test.json", text: text_of_file(scenario_files(), "session-gate2-1.scenario.test.json") }])
+    ro ran = run_with(["run", "/m/session_start.alula.json", "/m/s.alula.test.json"],
+        [NamedText { name: "/m/session_start.alula.json", text: machine_json("session_start.alula.json") }, NamedText { name: "/m/s.alula.test.json", text: text_of_file(test_files(), "session-gate2-1.alula.test.json") }])
     assert(ran.code == 1)
     assert(ran.err.contains("alula test"))
 }
@@ -69,7 +69,7 @@ test "ps the program runs the scenarios of the folder with the agent step" {
     ro ran = run_with(["test", "/m"], files)
     assert(ran.err == "")
     assert(ran.code == 0)
-    assert(ran.out.contains("${session_scenario_files().len()} of ${session_scenario_files().len()} scenarios passed"))
+    assert(ran.out.contains("${session_scenario_files().len()} of ${session_scenario_files().len()} tests passed"))
 }
 
 test "ps the program takes the machine from its table when there is no json" {

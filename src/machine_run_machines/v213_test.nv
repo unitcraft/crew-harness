@@ -4,7 +4,7 @@ module crew_harness.machine_run_machines
 
 import std.text
 import alula.machine.{text_of_file}
-import crew_harness.machines.{machine_files, scenario_files}
+import crew_harness.machines.{machine_files, test_files}
 import alula.machine_run.{report_text, run_ok}
 
 fn signal_step(name str, party str, input str) -> str {

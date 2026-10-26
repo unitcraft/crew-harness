@@ -1,6 +1,6 @@
 // equal_test.nv - the proof of equality of the many-turn chat (task 114): the machine written as data (`dialog.alula.json`, run by `AlulaMachine`) and the machine on Nova
 // (`dialog_session`, `src/chat`) give the same sequence on the same scenarios - the state, the events of the journal, the data, the queue - at the level of the machine (one step) and
-// of the engine (journal lines with the envelope, sent and cancelled requests, the outcome, the acknowledgements). The scenarios are the files `dialog-*` of `src/machine/scenarios`:
+// of the engine (journal lines with the envelope, sent and cancelled requests, the outcome, the acknowledgements). The scenarios are the files `dialog-*` of `machines/product/tests`:
 // the single-turn scenarios of `chat_engine_test.nv` moved to the many-turn machine and the scenarios of `dialog_test.nv`.
 module crew_harness.machine_dialog_eq
 
@@ -8,10 +8,10 @@ module crew_harness.machine_dialog_eq
 import std.text
 import std.encoding.json.{Json, JsonObject}
 import alula.machine.{Int}
-import crew_harness.product_machines.{scenario_files, product_registry, dialog_machine_text}
+import crew_harness.product_machines.{test_files, product_registry, dialog_machine_text}
 import alula.engine.{Incoming, EventKind, Order, StepEnvironment, FailCode, journal_line, fail_code_word}
 import crew_harness.chat.{ChatState, ChatSession, dialog_session, encode_chat_state}
-import alula.machine_run.{AlulaState, AlulaMachine, ProjectValue, Scenario, StepTrace, ScEvent, load_alula_machine_with, alula_step, ScriptedHost, drive_scenario, parse_scenario, scenario_incoming, state_data_fields}
+import alula.machine_run.{AlulaState, AlulaMachine, ProjectValue, Test, StepTrace, ScEvent, load_alula_machine_with, alula_step, ScriptedHost, drive_test, parse_test, test_incoming, state_data_fields}
 import alula.machine_table.{fail_code_names}
 
 const TERM = 30000
@@ -29,11 +29,11 @@ fn table_dialog() -> AlulaMachine {
 fn nova_dialog() -> ChatSession => dialog_session(TERM)
 
 // The scenarios of the many-turn machine that both machines can run: the files `dialog-*` but the ones that name a way only the table has.
-fn dialog_scenarios() -> []Scenario {
-    mut out = []Scenario.new()
-    for f in scenario_files() {
+fn dialog_scenarios() -> []Test {
+    mut out = []Test.new()
+    for f in test_files() {
         if !f.name.starts_with("dialog-") { continue }
-        match parse_scenario(f.text) {
+        match parse_test(f.text) {
             Ok(sc) => {
                 if sc.machine == "DialogSession" && !sc.name.starts_with("(table only)") { out.push(sc) }
             }
@@ -187,18 +187,18 @@ fn pair_diff(table AlulaMachine, p Pair) -> str {
     ""
 }
 
-fn events_of(sc Scenario) -> []Incoming {
+fn events_of(sc Test) -> []Incoming {
     mut out = []Incoming.new()
     for s in sc.steps {
-        if s.event.kind != "" { out.push(scenario_incoming(s.event)) }
+        if s.event.kind != "" { out.push(test_incoming(s.event)) }
     }
     out
 }
 
-// ORACLE-WORKAROUND(12, 13, 26): `drive_scenario[ChatState, ChatSession](...)` and `drive_scenario[AlulaState, AlulaMachine](...)` write the type arguments out here and in the tests below; infer them when items 12 and 13 are fixed
-fn first_run_diff(table AlulaMachine, sc Scenario) -> str {
-    ro nova = drive_scenario[ChatState, ChatSession](nova_dialog(), sc)
-    ro tab = drive_scenario[AlulaState, AlulaMachine](table, sc)
+// ORACLE-WORKAROUND(12, 13, 26): `drive_test[ChatState, ChatSession](...)` and `drive_test[AlulaState, AlulaMachine](...)` write the type arguments out here and in the tests below; infer them when items 12 and 13 are fixed
+fn first_run_diff(table AlulaMachine, sc Test) -> str {
+    ro nova = drive_test[ChatState, ChatSession](nova_dialog(), sc)
+    ro tab = drive_test[AlulaState, AlulaMachine](table, sc)
     if nova.len() != tab.len() { return "${sc.name}: ${nova.len()} traces / ${tab.len()}" }
     mut i = 0
     while i < nova.len() {
@@ -209,7 +209,7 @@ fn first_run_diff(table AlulaMachine, sc Scenario) -> str {
     ""
 }
 
-fn machine_run_diff(table AlulaMachine, sc Scenario) -> str {
+fn machine_run_diff(table AlulaMachine, sc Test) -> str {
     mut p = first_pair(table)
     mut i = 0
     for e in events_of(sc) {
@@ -245,13 +245,13 @@ test "de machine level" {
     assert(events >= 100)
 }
 
-fn signal_with_input(name str, input str) -> Incoming => scenario_incoming(ScEvent { kind: "signal", name, request: "", input, code: "", source: "", party: "", has_at: false, at: 0 })
-fn signal_event(name str) -> Incoming => scenario_incoming(ScEvent { kind: "signal", name, request: "", input: "", code: "", source: "", party: "", has_at: false, at: 0 })
-fn chunk_event(request str, text str) -> Incoming => scenario_incoming(ScEvent { kind: "progress", name: "agent_chunk", request, input: text, code: "", source: "", party: "", has_at: false, at: 0 })
-fn named_progress(name str, input str) -> Incoming => scenario_incoming(ScEvent { kind: "progress", name, request: "agent-1", input, code: "", source: "", party: "", has_at: false, at: 0 })
-fn done_event(request str) -> Incoming => scenario_incoming(ScEvent { kind: "answer", name: "agent_done", request, input: "", code: "", source: "", party: "", has_at: false, at: 0 })
-fn refused_event(request str, code str) -> Incoming => scenario_incoming(ScEvent { kind: "failure", name: "agent_refused", request, input: "", code, source: "", party: "", has_at: false, at: 0 })
-fn timeout_event(request str) -> Incoming => scenario_incoming(ScEvent { kind: "timeout", name: "timeout", request, input: "", code: "", source: "", party: "", has_at: false, at: 0 })
+fn signal_with_input(name str, input str) -> Incoming => test_incoming(ScEvent { kind: "signal", name, request: "", input, code: "", source: "", party: "", has_at: false, at: 0 })
+fn signal_event(name str) -> Incoming => test_incoming(ScEvent { kind: "signal", name, request: "", input: "", code: "", source: "", party: "", has_at: false, at: 0 })
+fn chunk_event(request str, text str) -> Incoming => test_incoming(ScEvent { kind: "progress", name: "agent_chunk", request, input: text, code: "", source: "", party: "", has_at: false, at: 0 })
+fn named_progress(name str, input str) -> Incoming => test_incoming(ScEvent { kind: "progress", name, request: "agent-1", input, code: "", source: "", party: "", has_at: false, at: 0 })
+fn done_event(request str) -> Incoming => test_incoming(ScEvent { kind: "answer", name: "agent_done", request, input: "", code: "", source: "", party: "", has_at: false, at: 0 })
+fn refused_event(request str, code str) -> Incoming => test_incoming(ScEvent { kind: "failure", name: "agent_refused", request, input: "", code, source: "", party: "", has_at: false, at: 0 })
+fn timeout_event(request str) -> Incoming => test_incoming(ScEvent { kind: "timeout", name: "timeout", request, input: "", code: "", source: "", party: "", has_at: false, at: 0 })
 
 // Every kind of event the machine knows and some it does not, for the machine alone (the engine would discard some of them before they reach it).
 fn all_events() -> []Incoming => [
@@ -354,8 +354,8 @@ test "de closed list" {
 test "de same twice" {
     ro table = table_dialog()
     for sc in dialog_scenarios() {
-        ro first = drive_scenario[AlulaState, AlulaMachine](table, sc)
-        ro second = drive_scenario[AlulaState, AlulaMachine](table, sc)
+        ro first = drive_test[AlulaState, AlulaMachine](table, sc)
+        ro second = drive_test[AlulaState, AlulaMachine](table, sc)
         assert(first.len() == second.len())
         mut i = 0
         while i < first.len() {
@@ -366,7 +366,7 @@ test "de same twice" {
     }
 }
 
-fn scenario_named(name str) -> Scenario {
+fn scenario_named(name str) -> Test {
     for sc in dialog_scenarios() {
         if sc.name.contains(name) { return sc }
     }
@@ -376,8 +376,8 @@ fn scenario_named(name str) -> Scenario {
 test "de death between" {
     ro table = table_dialog()
     ro sc = scenario_named("death after the commit of the second turn")
-    ro nova = drive_scenario[ChatState, ChatSession](nova_dialog(), sc)
-    ro tab = drive_scenario[AlulaState, AlulaMachine](table, sc)
+    ro nova = drive_test[ChatState, ChatSession](nova_dialog(), sc)
+    ro tab = drive_test[AlulaState, AlulaMachine](table, sc)
     assert(tab[2].sent.len() == 1)
     assert(tab[2].queue.len() == 1)
     assert(tab[3].sent.len() == 1)
@@ -395,8 +395,8 @@ test "de death between" {
 test "de other side" {
     ro table = table_dialog()
     ro sc = scenario_named("the cancel arrives in the window")
-    ro nova = drive_scenario[ChatState, ChatSession](nova_dialog(), sc)
-    ro tab = drive_scenario[AlulaState, AlulaMachine](table, sc)
+    ro nova = drive_test[ChatState, ChatSession](nova_dialog(), sc)
+    ro tab = drive_test[AlulaState, AlulaMachine](table, sc)
     assert(tab[0].queue.len() == 1)
     assert(tab[1].state == "Idle")
     assert(tab[1].queue.len() == 2)
@@ -422,8 +422,8 @@ test "de ack agrees" {
     ro table = table_dialog()
     for part in ["is acknowledged after the commit", "discarded event with a key", "the agent answers while the process is dead"] {
         ro sc = scenario_named(part)
-        ro nova = drive_scenario[ChatState, ChatSession](nova_dialog(), sc)
-        ro tab = drive_scenario[AlulaState, AlulaMachine](table, sc)
+        ro nova = drive_test[ChatState, ChatSession](nova_dialog(), sc)
+        ro tab = drive_test[AlulaState, AlulaMachine](table, sc)
         assert(tab[tab.len() - 1].acked.len() >= 1)
         assert(same_list(nova[nova.len() - 1].acked, tab[tab.len() - 1].acked))
     }
@@ -440,8 +440,8 @@ test "de the way only the table has" {
     assert(nova_dialog().state_name(p.nova_state) == "Idle")
     // the scenario of the way is not in the shared list
     mut named = 0
-    for f in scenario_files() {
-        if f.name == "dialog-closed-table-only.scenario.test.json" { named += 1 }
+    for f in test_files() {
+        if f.name == "dialog-closed-table-only.alula.test.json" { named += 1 }
     }
     assert(named == 1)
     for sc in dialog_scenarios() { assert(!sc.name.starts_with("(table only)")) }

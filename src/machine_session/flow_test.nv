@@ -1,6 +1,6 @@
 // flow_test.nv - AC-2: the scenarios `session-*` of the machine "Session start" run together with its nested machine, the agent step: one for every row of the table (`session-<state>-<n>`) and the
 // flows (`session-flow-*`): the start, the volume, a session with the agent, the parse of the result, the pause, the stop, the failure, the restart in the middle of a call, the answer of the nested
-// machine after the cancel. The files are data (`src/machine/scenarios/`); the numbers here say how many there are, and the tests below read what the runs left.
+// machine after the cancel. The files are data (`src/machine/tests/`); the numbers here say how many there are, and the tests below read what the runs left.
 module crew_harness.machine_session
 
 import std.text
@@ -19,7 +19,7 @@ fn flow_names() -> []str => [
 
 fn file_named(name str) -> NamedText {
     for f in session_scenarios() {
-        if f.name == "${name}.scenario.test.json" { return f }
+        if f.name == "${name}.alula.test.json" { return f }
     }
     panic("no scenario file ${name}")
 }
@@ -72,7 +72,7 @@ test "fl the files of the ends" {
 test "fl the flows are the ones named" {
     mut have = []str.new()
     for f in session_scenarios() {
-        if f.name.starts_with("session-flow-") { have.push(f.name.replace(".scenario.test.json", "")) }
+        if f.name.starts_with("session-flow-") { have.push(f.name.replace(".alula.test.json", "")) }
     }
     assert(have.len() == flow_names().len())
     for n in flow_names() {

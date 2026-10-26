@@ -5,9 +5,9 @@ module crew_harness.machine_agent_en
 import std.text
 import alula.machine.{NamedText}
 import alula.machine_table.{load_machine}
-import alula.machine_run.{AlulaMachine, load_alula_machine, parse_scenario, run_scenario, run_ok, report_text}
+import alula.machine_run.{AlulaMachine, load_alula_machine, parse_test, run_test, run_ok, report_text}
 import alula.machine_text.{translate_report, error_text, render_summary, TranslateReport}
-import crew_harness.machines.{methodology_registry, agent_step_machine_text, scenario_files}
+import crew_harness.machines.{methodology_registry, agent_step_machine_text, test_files}
 
 fn first_error(report TranslateReport) -> str {
     if report.errors.len() == 0 { return "ok" }
@@ -48,7 +48,7 @@ test "ae the keyed sample is the product table" {
 
 fn agent_scenarios() -> []NamedText {
     mut out = []NamedText.new()
-    for f in scenario_files() {
+    for f in test_files() {
         if f.name.starts_with("agent-step-") { out.push(f) }
     }
     out
@@ -68,9 +68,9 @@ test "ae scenarios 75" {
     mut failed = 0
     mut first = ""
     for f in all {
-        match parse_scenario(f.text) {
+        match parse_test(f.text) {
             Ok(sc) => {
-                ro run = run_scenario(m, sc)
+                ro run = run_test(m, sc)
                 if !run_ok(run) {
                     failed += 1
                     if first == "" { first = "${f.name}: ${report_text(run)}" }
