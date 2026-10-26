@@ -24,6 +24,7 @@ export fn signals_given_by_code() -> []CodeSignal => [
     cs("question_answer", "input", "src/server/hub.nv: Hub.answer", "request, skipped, answers (JSON text)", false),
     cs("session_created", "input", "src/server/hub.nv: Hub.create", "name, agent, folder, project, project_id (JSON text)", false),
     cs("session_renamed", "input", "src/server/hub.nv: Hub.rename", "name (JSON text)", false),
+    cs("session_placed", "input", "src/server/hub.nv: Hub.reorder, Hub.move", "rank, and project_id, project when the session goes to another project (JSON text)", false),
     cs("agent_switched", "input", "src/server/hub.nv: Hub.switch_agent", "from, to, shown, total, cut (JSON text)", false),
     cs("message_images", "input", "src/server/hub.nv: Hub.say (the pictures of the message that follows: n, name, mime, bytes)", "images (JSON text)", false),
     cs("route_set", "input", "src/server/routes_hub.nv: Hub.rt_journal (the mode of work of the session)", "route (JSON text)", false),

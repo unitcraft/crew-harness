@@ -515,6 +515,7 @@ fn build_router(web_dir str, port int, hub_tx ChanTx[str], reg_tx ChanTx[Reg], a
     one_project.put(projects_put_route(data_dir, port))
     one_project.delete(projects_delete_route(data_dir, port))
     ro r4n = router.route("/api/projects/{id}", one_project)?
+    ro r4p = router.post("/api/project-order", projects_order_route(data_dir, port))?
     ro r4h = router.get("/api/fs/list", fs_list_route(data_dir, port))?
     ro r4i = router.get("/api/fs/git", fs_git_route(port))?
     ro r4o = router.get("/api/agent-catalog", catalog_route(data_dir, port))?

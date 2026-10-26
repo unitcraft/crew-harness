@@ -226,6 +226,10 @@ export fn projects_load(root str) -> Result[[]Project, StoreFail] {
             Some(v) => v.array() ?? []JsonValue.new()
             None => []JsonValue.new()
         }
+        // the manual order of the owner (task 192): the field `order` is the ids top to bottom; the projects it does not name stay after them
+        mut ids = []str.new()
+        for v in (match top.get("order") { Some(v) => v.array() ?? []JsonValue.new()
+            None => []JsonValue.new() }) { ids.push(v.str() ?? "") }
         for item in items {
             ro o = match item.object() {
                 Some(x) => x
@@ -238,8 +242,30 @@ export fn projects_load(root str) -> Result[[]Project, StoreFail] {
                 Err(reason) => return Err(fail(500, "projects.json: проект ${id}: ${reason}"))
             }
         }
+        return Ok(projects_ordered(list, ids))
     }
-    Ok(list)
+}
+
+/// The projects in the manual order: first those named in `ids` (in that order; a name that is not a project, or is repeated, is skipped), then
+/// the others in the order they had.
+export fn projects_ordered(list []Project, ids []str) -> []Project {
+    mut out = []Project.new()
+    mut taken = []str.new()
+    for id in ids {
+        if taken.contains(id) { continue }
+        mut at = 0
+        while at < list.len() {
+            if list[at].id == id {
+                out.push(list[at])
+                taken.push(id)
+            }
+            at += 1
+        }
+    }
+    for p in list {
+        if !taken.contains(p.id) { out.push(p) }
+    }
+    out
 }
 
 /// Replace the file with these projects, as a whole.
@@ -249,6 +275,9 @@ export fn projects_save(root str, list []Project) -> Result[(), StoreFail] {
     mut o = JsonObject.new()
     jput(o, "version", JsonValue.int(1))
     jput(o, "projects", JsonValue.array(rows))
+    mut order = []JsonValue.new()
+    for p in list { order.push(JsonValue.str(p.id)) }
+    jput(o, "order", JsonValue.array(order))
     ro text = JsonValue.object(o).to_str()
     with Fs = real_fs() {
         match create_dir_all(Path.from_bytes(root.bytes())) {
@@ -306,6 +335,12 @@ export fn projects_replace(root str, id str, body JsonObject) -> Result[(), Stor
     }
     list[at] = project
     projects_save(root, list)
+}
+
+/// Put the projects in the order of `ids` (the owner dragged them): the list comes back in this order from now on, on every page.
+export fn projects_reorder(root str, ids []str) -> Result[(), StoreFail] {
+    ro list = projects_load(root)?
+    projects_save(root, projects_ordered(list, ids))
 }
 
 /// Remove a project (the sessions that were made in it stay).

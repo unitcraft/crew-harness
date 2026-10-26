@@ -22,7 +22,7 @@ import crew_harness.product_machines.{dialog_machine_text}
 import alula.machine_run.{AlulaMachine, AlulaState}
 import crew_harness.acp.{AcpConfig, AcpClient, AcpImage, AcpPreset, AskSetup, no_ask, open_client_full, acp_link, page_event, TRACE_LIMIT}
 import crew_harness.projects.{EnvEntry, projects_get, parse_dotenv, normalize_folder_path, project_has_folder, valid_project_id}
-import crew_harness.storage.{open_data_dir, file_journal, file_store, list_sessions, valid_session_name, session_file_made, migrate_flat_sessions, image_ext, decode_image, save_image, find_image, replace_file}
+import crew_harness.storage.{remove_session_dir, open_data_dir, file_journal, file_store, list_sessions, valid_session_name, session_file_made, migrate_flat_sessions, image_ext, decode_image, save_image, find_image, replace_file}
 import crew_harness.pgstore.{PgWorld, pg_journal, pg_store}
 import crew_harness.pgdb.{pg_list}
 import std.concurrency.nvchan.{ChanTx}
@@ -53,6 +53,8 @@ type Dialog {
     slow_told bool,
     folder str,
     project_id str,
+    has_rank bool,
+    rank int,
     rt RouteSession,
     chosen []SavedChoice
 }
@@ -685,7 +687,7 @@ fn Hub mut @resume_session(id str) Proc Detach Time -> () {
     match resume_stored(pg, root, world, @machine, id) {
         None => @say_log("the session ${id} cannot be resumed: no usable snapshot")
         Some(engine) => {
-            mut s = Dialog { id, name: id, agent: "", engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false, folder: "", project_id: "", rt: route_session_new(), chosen: []SavedChoice.new() }
+            mut s = Dialog { id, name: id, agent: "", engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false, folder: "", project_id: "", has_rank: false, rank: 0, rt: route_session_new(), chosen: []SavedChoice.new() }
             mut saw_created = false
             for e in history_in(pg, root, s) {
                 if e.name == "session_created" && e.kind == EventKind.Input && !saw_created {
@@ -707,6 +709,25 @@ fn Hub mut @resume_session(id str) Proc Detach Time -> () {
                 if e.name == "session_renamed" && e.kind == EventKind.Input {
                     match jobject(e.input) {
                         Some(change) => { if jtext(change, "name").byte_len() > 0 { s.name = jtext(change, "name") } }
+                        None => ()
+                    }
+                }
+                // the owner placed the session (task 192): the place in the list of its project, and maybe another project; the last word is the place
+                if e.name == "session_placed" && e.kind == EventKind.Input {
+                    match jobject(e.input) {
+                        Some(change) => {
+                            match change.get("rank") {
+                                Some(v) => {
+                                    s.has_rank = true
+                                    s.rank = jnumber(change, "rank")
+                                }
+                                None => ()
+                            }
+                            match change.get("project_id") {
+                                Some(v) => { s.project_id = jtext(change, "project_id") }
+                                None => ()
+                            }
+                        }
                         None => ()
                     }
                 }
@@ -781,7 +802,7 @@ fn Hub mut @create(conn int, trace str, input JsonObject) Proc Detach Time -> ()
             ro root = @settings.data_dir
             mut world = PgWorld.open(@settings.pg, trace)
             ro engine = begin_session_engine(pg, root, world, @machine, trace)
-            mut s = Dialog { id: trace, name, agent, engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false, folder: launch.folder, project_id, rt: route_session_new(), chosen: []SavedChoice.new() }
+            mut s = Dialog { id: trace, name, agent, engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false, folder: launch.folder, project_id, has_rank: false, rank: 0, rt: route_session_new(), chosen: []SavedChoice.new() }
             accept_in(pg, root, s, Incoming.signal("session_created", meta_text(name, agent, @cwd_of(launch.folder), project, project_id)))
             @add_session(s)
             ro at = @sessions.len() - 1
@@ -1126,6 +1147,103 @@ fn Hub mut @rename(trace str, name str) Proc Detach Time -> () {
     @drain(at)
 }
 
+fn placed_text(rank int, move bool, project_id str, project str) -> str {
+    mut o = JsonObject.new()
+    jput(o, "rank", JsonValue.int(rank))
+    if move {
+        jput(o, "project_id", JsonValue.str(project_id))
+        jput(o, "project", JsonValue.str(project))
+    }
+    JsonValue.object(o).to_str()
+}
+
+// The owner dragged the sessions of a project into a new order (task 192): `ids` is the whole list top to bottom; the place of a session is its number.
+// Only the sessions whose place changed are written to their journals; a name that is not a session is skipped.
+fn Hub mut @reorder(ids []JsonValue) Proc Detach Time -> () {
+    mut place = 0
+    for v in ids {
+        ro id = v.str() ?? ""
+        ro at = @find(id)
+        if at < 0 { continue }
+        mut s = @sessions[at]
+        if !s.has_rank || s.rank != place {
+            s.has_rank = true
+            s.rank = place
+            accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("session_placed", placed_text(place, false, "", "")))
+            @sessions[at] = s
+            @drain(at)
+        }
+        place += 1
+    }
+}
+
+// The owner dropped a session on the head of another project (task 192): the session goes to the top of that project; its folder stays as it was.
+fn Hub mut @move(trace str, project_id str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    mut name = ""
+    if project_id.byte_len() > 0 {
+        match projects_get(@settings.data_dir, project_id) {
+            Ok(p) => { name = p.name }
+            Err(f) => {
+                @tell_error(0, trace, @sessions[at].engine.step_number(), "", "the project is not there: ${f.message}")
+                return
+            }
+        }
+    }
+    mut front = 0
+    for other in @sessions {
+        if other.id != trace && other.project_id == project_id && other.has_rank && other.rank - 1 < front { front = other.rank - 1 }
+    }
+    mut s = @sessions[at]
+    if s.project_id == project_id { return }
+    s.project_id = project_id
+    s.has_rank = true
+    s.rank = front
+    accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("session_placed", placed_text(front, true, project_id, name)))
+    @sessions[at] = s
+    @drain(at)
+}
+
+fn delete_files(root str, id str) Fs -> bool => remove_session_dir(root, id)
+
+// The owner deleted a session (task 192): the turn is cancelled, the agent is stopped, the folder of the session (the journal, the snapshot, the inbox, the
+// trace of the agent, the pictures) is removed, and every page is told by the event `session_deleted` (it is not kept: the session is gone). Over PostgreSQL
+// the application role cannot delete, so the owner is told and nothing changes.
+fn Hub mut @delete(conn int, trace str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    if @settings.store == "pg" {
+        @tell_error(conn, trace, @sessions[at].engine.step_number(), "", "a session cannot be deleted over PostgreSQL")
+        return
+    }
+    @mcp_withdraw(trace)
+    @cancel(trace)
+    mut s = @sessions[at]
+    if s.clients.len() > 0 {
+        s.clients[0].close()
+        s.clients = []AcpClient.new()
+    }
+    ro removed = with Fs = real_fs() { delete_files(@settings.data_dir, trace) }
+    if !removed {
+        @tell_error(conn, trace, s.engine.step_number(), "", "the folder of the session cannot be removed")
+        return
+    }
+    mut rest = []Dialog.new()
+    for other in @sessions {
+        if other.id != trace { rest.push(other) }
+    }
+    @sessions = rest
+    mut kept = []PendingChoice.new()
+    for c in @choices {
+        if c.trace != trace { kept.push(c) }
+    }
+    @choices = kept
+    @serial += 1
+    @send(0, event_line("srv-${@serial}", trace, 0, "session_deleted", JsonObject.new(), now_millis()))
+    @say_log("the session ${trace} is deleted")
+}
+
 // The owner changed the family in the window (task 192): the same session, the same journal, another agent. The new agent is started
 // first (a failure leaves the old one), then the old one is closed and the new one gets the whole protocol of the conversation as
 // a turn of its own: it is not a turn of the engine, so the feed does not show it, and what the agent answers to it is discarded.
@@ -1250,6 +1368,12 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
         @answer(trace, input)
     } else if kind == "session_agent" {
         @switch_agent(trace, jtext(input, "agent"))
+    } else if kind == "session_delete" {
+        @delete(conn, trace)
+    } else if kind == "session_reorder" {
+        @reorder(jlist(input, "ids"))
+    } else if kind == "session_move" {
+        @move(trace, jtext(input, "project_id"))
     } else if kind == "session_rename" {
         @rename(trace, jtext(input, "name"))
     } else if kind == "session_setting" {

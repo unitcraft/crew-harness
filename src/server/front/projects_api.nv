@@ -4,6 +4,7 @@
 //   POST   /api/projects          {name, folders, env} -> 201 {"id"}
 //   PUT    /api/projects/<id>     the same body replaces all the fields -> 200
 //   DELETE /api/projects/<id>     -> 200 (the sessions made in the project stay)
+//   POST   /api/project-order     {ids} the projects top to bottom -> 200; the list comes in this order for every page
 //   GET    /api/fs/list?path=     the folders of a path (only folders); no path: the roots and the recent folders
 //   GET    /api/fs/git?path=      {"is_repo", "branch"}
 // Every route answers a foreign `Origin` with 403, as `/api/stt` does. The projects are in `<data_dir>/projects.json` (src/projects/store.nv);
@@ -11,7 +12,7 @@
 // ORACLE-WORKAROUND(25): the module is declared `module server.front` (without the package prefix) and imported as `crew_harness.server.front`: a module two folders under the source root cannot be declared with the full path; declare it with the prefix when item 25 is fixed
 module server.front
 
-import crew_harness.projects.{Project, StoreFail, Listing, GitState, projects_load, projects_get, projects_create, projects_replace, projects_delete, projects_list_json, project_json, recent_folders, normalize_folder_path, list_folders, list_roots, git_state}
+import crew_harness.projects.{Project, StoreFail, Listing, GitState, projects_load, projects_get, projects_create, projects_replace, projects_reorder, projects_delete, projects_list_json, project_json, recent_folders, normalize_folder_path, list_folders, list_roots, git_state}
 import polaris.{ServerRequest, ServerResponse}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import std.text
@@ -85,6 +86,28 @@ fn projects_put_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResp
             Ok(body) => match projects_replace(data_dir, req.param("id") ?? "", body) {
                 Ok(done) => json_reply(200, "{\"ok\":true}")
                 Err(f) => api_fail(f)
+            }
+        }
+    }
+}
+
+fn projects_order_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
+    fn(req ServerRequest) -> ServerResponse {
+        if !origin_allowed(req, port) { return api_error(403, "origin not allowed") }
+        match api_body(req) {
+            Err(reason) => api_error(400, reason)
+            Ok(body) => {
+                mut ids = []str.new()
+                match body.get("ids") {
+                    Some(list) => {
+                        for v in list.array() ?? []JsonValue.new() { ids.push(v.str() ?? "") }
+                    }
+                    None => ()
+                }
+                match projects_reorder(data_dir, ids) {
+                    Ok(done) => json_reply(200, "{\"ok\":true}")
+                    Err(f) => api_fail(f)
+                }
             }
         }
     }
