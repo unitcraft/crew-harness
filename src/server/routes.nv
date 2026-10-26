@@ -17,8 +17,8 @@ export type RouteStep { id str, kind str, title str, required bool, prompt str }
 /// RouteDoc: a mode as the file says it: the instruction for the agent and the steps.
 export type RouteDoc { route str, instruction str, steps []RouteStep }
 
-/// The three modes.
-export fn route_valid(route str) -> bool => route == "interactive" || route == "fast" || route == "full"
+/// The four modes: "interactive", "fast", "full" and "planning" (the agent writes the task, `spec.md` and `plan.md`, and does not change the code).
+export fn route_valid(route str) -> bool => route == "interactive" || route == "fast" || route == "full" || route == "planning"
 
 const STEP_MARK = "## шаг "
 const INSTRUCTION_MARK = "## инструкция"
@@ -301,6 +301,16 @@ export fn route_prelude(doc RouteDoc, with_instruction bool, task_shown str, n i
     joined(parts, "\n\n")
 }
 
+/// The hidden note about the task given before the owner's words when the task was planned (a section «Задание» in the message file) or has pictures.
+export fn route_files_hint(task_shown str, n int, has_assignment bool, has_images bool) -> str {
+    if task_shown.byte_len() == 0 { return "" }
+    mut parts = []str.new()
+    if has_assignment { parts.push("в конце ${task_shown}/message.${n}.md есть раздел «Задание» (задачу планировали): это и есть постановка") }
+    if has_images { parts.push("картинки владельца лежат в ${task_shown}/images/, на них ссылки в сообщении") }
+    if parts.len() == 0 { return "" }
+    "[crew] ${joined(parts, "; ")}."
+}
+
 // ----- the state of a session -----
 
 /// SubRec: a subtask of the task. `worktree` is its own tree ("" - none or removed after the merge); `conflict` - why it is not merged.
@@ -308,9 +318,6 @@ export type SubRec { n int, title str, branch str, worktree str, merged bool, do
 
 /// DiffRec: a changed file of the tree of the task against its base.
 export type DiffRec { path str, added int, removed int }
-
-/// ParkRec: a task left in its tree ("kept") while the session goes on with another one; the work in the tree is not lost.
-export type ParkRec { id str, number str, title str, branch str, worktree str, base str, state str, unmerged int }
 
 /// RouteSession: the mode of a session and its task. Rebuilt from the journal (`apply`); `running`, `current`, `awaiting`, `reviewing` live only in the process.
 export type RouteSession {
@@ -344,7 +351,11 @@ export type RouteSession {
     unmerged_at int,
     job str,
     attempt int,
-    parked []ParkRec,
+    use_tree bool,
+    active_at int,
+    extra TaskExtra,
+    testing bool,
+    ci_at int,
     diff []DiffRec,
     ov_n int,
     ov_with int,
@@ -358,7 +369,7 @@ export fn route_session_new() -> RouteSession => {
     route: "interactive", told: false, states: []str.new(), running: false, current: -1, awaiting: false, reviewing: false,
     task_open: false, task_closed: false, task_id: "", number: "", task_dir: "", task_shown: "", branch: "", worktree: "", title: "",
     messages: 0, subs: []SubRec.new(), merged_into: 0, force: "", last_state: "", last_check: 0, cwd_now: "", base: "", tstate: "active", tnote: "", unmerged: 0, unmerged_at: 0,
-    job: "", attempt: 0, parked: []ParkRec.new(), diff: []DiffRec.new(), ov_n: 0, ov_with: 0, ov_files: []str.new(), ov_until: 0, asked: []int.new(), conflict_files: []str.new()
+    job: "", attempt: 0, use_tree: true, active_at: 0, extra: task_extra_none(), testing: false, ci_at: 0, diff: []DiffRec.new(), ov_n: 0, ov_with: 0, ov_files: []str.new(), ov_until: 0, asked: []int.new(), conflict_files: []str.new()
 }
 
 fn rj_object(text str) -> JsonObject {
@@ -446,6 +457,8 @@ fn RouteSession mut @reset_task() -> () {
     @tstate = "active"
     @tnote = ""
     @unmerged = 0
+    @testing = false
+    @extra = task_extra_none()
     @job = ""
     @attempt = 0
     @diff = []DiffRec.new()
@@ -477,6 +490,11 @@ fn RouteSession mut @change_sub(n int, f str, value str, flag bool) -> () {
 export fn RouteSession mut @apply(name str, text str) -> () {
     ro o = rj_object(text)
     if name == "route_set" {
+        // the place of work of the session (the new session: a tree of the task or the folder of the project itself); the key may stand alone
+        match o.get("worktree") {
+            Some(v) => { @use_tree = v.bool() ?? (jtext(o, "worktree") != "false") }
+            None => ()
+        }
         ro route = jtext(o, "route")
         if route_valid(route) {
             @route = route
@@ -534,14 +552,15 @@ export fn RouteSession mut @apply(name str, text str) -> () {
             @running = false
         }
     } else if op == "park" {
-        @parked.push(ParkRec { id: @task_id, @number, @title, @branch, @worktree, @base, state: jtext(o, "state"), unmerged: rj_int(o, "unmerged") })
+        // an old journal: a task that was left in its tree is no more a list of its own, it is forgotten here (its tree is as it was)
         @reset_task()
-    } else if op == "unpark" {
-        mut rest = []ParkRec.new()
-        for p in @parked {
-            if p.id != jtext(o, "id") { rest.push(p) }
-        }
-        @parked = rest
+    } else if op == "attach_tree" {
+        // a task that was made without a tree (the planning, a project without a tree) gets one: its files are now in the tree
+        @branch = jtext(o, "branch")
+        @worktree = jtext(o, "worktree")
+        @base = jtext(o, "base")
+        @task_dir = jtext(o, "dir")
+        @task_shown = jtext(o, "shown")
     } else if op == "sub_parallel" {
         @change_sub(rj_int(o, "n"), "parallel", "", rj_int(o, "on") == 1)
     } else if op == "force" {
@@ -592,9 +611,58 @@ fn rv_sub(s SubRec, p Progress, last bool, merged_into int, merging bool) -> Jso
     JsonValue.object(o)
 }
 
+// ----- the tests of a branch and of main -----
+
+/// TestsRec: the last run of the tests that the hub knows: `has` false - none; `commit` the commit they ran on, `at` when (ms), `result` "green" or "red", `command` what ran.
+export type TestsRec { has bool, commit str, at int, result str, command str }
+
+export fn tests_rec_none() -> TestsRec => { has: false, commit: "", at: 0, result: "", command: "" }
+
+/// The record `tests-run.json` of the folder of a task: `{commit, at, result, command}`.
+export fn tests_rec_text(commit str, at int, result str, command str) -> str {
+    mut o = JsonObject.new()
+    jput(o, "commit", JsonValue.str(commit))
+    jput(o, "at", JsonValue.int(at))
+    jput(o, "result", JsonValue.str(result))
+    jput(o, "command", JsonValue.str(command))
+    JsonValue.object(o).to_str()
+}
+
+/// The record from its text; a text that is not a record (or has no result) is "no run".
+export fn tests_rec_parse(text str) -> TestsRec {
+    ro o = rj_object(text)
+    ro result = jtext(o, "result")
+    if result != "green" && result != "red" { return tests_rec_none() }
+    TestsRec { has: true, commit: jtext(o, "commit"), at: rj_int(o, "at"), result, command: jtext(o, "command") }
+}
+
+/// What the page shows of a run against the head of the branch now: "never" (no run), "outdated" (the run was on another commit), "green" or "red".
+export fn tests_state(rec TestsRec, head str) -> str {
+    if !rec.has { return "never" }
+    if head.byte_len() > 0 && rec.commit != head { return "outdated" }
+    rec.result
+}
+
+/// What the hub adds to the state of a task from the disk and git: the tests of the branch (its record and its head), the tests of main (the last run of CI, source "ci"), the idle time.
+export type TaskExtra { branch_tests TestsRec, head str, main_tests TestsRec, main_source str, idle_days int, stale bool }
+
+export fn task_extra_none() -> TaskExtra => { branch_tests: tests_rec_none(), head: "", main_tests: tests_rec_none(), main_source: "", idle_days: 0, stale: false }
+
+fn rv_tests(rec TestsRec, head str, source str) -> JsonValue {
+    mut o = JsonObject.new()
+    jput(o, "state", JsonValue.str(tests_state(rec, head)))
+    jput(o, "result", JsonValue.str(rec.result))
+    jput(o, "commit", JsonValue.str(rec.commit))
+    jput(o, "head", JsonValue.str(head))
+    jput(o, "at", JsonValue.int(rec.at))
+    jput(o, "command", JsonValue.str(rec.command))
+    jput(o, "source", JsonValue.str(source))
+    JsonValue.object(o)
+}
+
 /// The input of the page event `route_state`: `{route, steps:[{n,title,state}], running, task:{...}|null, suggest_new_task, next_subtask}`.
-/// `titles` are the titles of the steps of the mode now (from its file), `progress` the boxes of each subtask in the order of `rt.subs`.
-export fn route_view_text(rt RouteSession, titles []str, progress []Progress, suggest bool, now int) -> str {
+/// `titles` are the titles of the steps of the mode now (from its file), `progress` the boxes of each subtask in the order of `rt.subs`, `extra` what the disk and git say.
+export fn route_view_text(rt RouteSession, titles []str, progress []Progress, suggest bool, now int, extra TaskExtra) -> str {
     mut steps = []JsonValue.new()
     mut i = 0
     while i < titles.len() {
@@ -610,6 +678,7 @@ export fn route_view_text(rt RouteSession, titles []str, progress []Progress, su
     jput(o, "steps", JsonValue.array(steps))
     jput(o, "running", JsonValue.bool(rt.running))
     jput(o, "suggest_new_task", JsonValue.bool(suggest))
+    jput(o, "use_tree", JsonValue.bool(rt.use_tree))
     jput(o, "next_subtask", JsonValue.str(if rt.force.byte_len() > 0 { rt.force } else { "auto" }))
     if rt.task_open {
         mut subs = []JsonValue.new()
@@ -643,6 +712,13 @@ export fn route_view_text(rt RouteSession, titles []str, progress []Progress, su
         mut diff = JsonObject.new()
         jput(diff, "files", JsonValue.array(files))
         jput(t, "diff", JsonValue.object(diff))
+        jput(t, "tests_running", JsonValue.bool(rt.testing))
+        jput(t, "stale", JsonValue.bool(extra.stale))
+        jput(t, "idle_days", JsonValue.int(extra.idle_days))
+        mut tests = JsonObject.new()
+        jput(tests, "branch", rv_tests(extra.branch_tests, extra.head, "run"))
+        jput(tests, "main", rv_tests(extra.main_tests, "", extra.main_source))
+        jput(t, "tests", JsonValue.object(tests))
         if rt.ov_n > 0 {
             mut ov = JsonObject.new()
             jput(ov, "n", JsonValue.int(rt.ov_n))
@@ -660,19 +736,6 @@ export fn route_view_text(rt RouteSession, titles []str, progress []Progress, su
     } else {
         jput(o, "task", JsonValue.null())
     }
-    mut parked = []JsonValue.new()
-    for p in rt.parked {
-        mut po = JsonObject.new()
-        jput(po, "id", JsonValue.str(p.id))
-        jput(po, "number", JsonValue.str(p.number))
-        jput(po, "title", JsonValue.str(p.title))
-        jput(po, "branch", JsonValue.str(p.branch))
-        jput(po, "worktree", JsonValue.str(p.worktree))
-        jput(po, "state", JsonValue.str(p.state))
-        jput(po, "unmerged_commits", JsonValue.int(p.unmerged))
-        parked.push(JsonValue.object(po))
-    }
-    jput(o, "parked", JsonValue.array(parked))
     JsonValue.object(o).to_str()
 }
 
@@ -688,7 +751,7 @@ fn tree_has_work(rt RouteSession) -> bool {
 
 fn finish_options() -> JsonValue {
     mut options = []JsonValue.new()
-    for pair in ["fast:Быстрая задача:переключить режим и прогнать шаги окончания", "full:Полный путь:переключить режим и прогнать шаги окончания", "keep:Оставить в дереве:работа не теряется, метка «не влито» остаётся"] {
+    for pair in ["merge:Слить в main:push в origin/main без прогона тестов", "fast:Шаги окончания как быстрая задача:переключить режим и прогнать шаги окончания", "full:Шаги окончания как полный путь:переключить режим и прогнать шаги окончания"] {
         ro parts = pair.split(":")
         mut items = []str.new()
         for x in parts { items.push(x) }

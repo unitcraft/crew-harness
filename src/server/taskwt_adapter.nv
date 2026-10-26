@@ -53,6 +53,13 @@ export fn tk_tree_remove(main_copy str, tree str, branch str) Proc -> ShellOut {
     git_run(main_copy, ["branch", "-d", branch])
 }
 
+/// Drop the tree and the branch of a task, with the work in them (the owner said so): `worktree remove --force`, `branch -D`.
+export fn tk_tree_drop(main_copy str, tree str, branch str) Proc -> ShellOut {
+    ro r = git_run(main_copy, ["worktree", "remove", "--force", tree])
+    if !r.ok { return r }
+    git_run(main_copy, ["branch", "-D", branch])
+}
+
 fn tk_failed(text str) -> TkTree => { ok: false, branch: "", worktree: "", base: "", text }
 
 /// A tree for the task `number` `slug`: branch `task/<number>-<slug>`, the folder next to the repository (in `worktrees`).
@@ -154,9 +161,12 @@ fn tk_published_of(r PublishResult) -> TkPublish {
     }
 }
 
-/// A step of publishing a task, the only way to the remote. `mode`: "start" (fetch, rebase, then it stops at "tests" with the reason "need-tests"), "continue" (go on after the conflicts
+/// A step of publishing a task, the only way to the remote. `mode`: "merge" (the button "Слить в main": fetch, rebase, then at once the push, the main copy and the clean-up: NO tests are run, they do not block the merge), "start" (fetch, rebase, then it stops at "tests" with the reason "need-tests"), "continue" (go on after the conflicts
 /// were resolved, stops at "tests" again), "final" (the tests are green: the push, the main copy, the clean-up).
 export fn tk_publish(task_tree str, main_copy str, mode str) Proc -> TkPublish {
+    if mode == "merge" {
+        return tk_published_of(with Os = real_os(), Fs = real_fs() { publish(task_tree, main_copy, tk_tests_green) })
+    }
     if mode == "start" {
         return tk_published_of(with Os = real_os(), Fs = real_fs() { publish(task_tree, main_copy, tk_tests_pending) })
     }
@@ -169,13 +179,49 @@ export fn tk_publish(task_tree str, main_copy str, mode str) Proc -> TkPublish {
 /// The files of the task itself (`doc/tasks/<id>/`) are committed to the branch of the task before it is published (they are a part of the work); `rel` is the folder from the root of the tree.
 /// "" - done (or nothing to commit), else why not.
 export fn tk_commit_task_files(tree str, rel str, number str) Proc -> str {
-    ro added = git_run(tree, ["add", "--", rel])
+    // the record of the tests of the hub (`tests-run.json`) is not a file of the work: it stays out of the commit
+    ro skip = ":(exclude,glob)**/tests-run.json"
+    ro added = git_run(tree, ["add", "--", rel, skip])
     if !added.ok { return added.text }
-    ro staged = git_run(tree, ["diff", "--cached", "--quiet", "--", rel])
+    ro staged = git_run(tree, ["diff", "--cached", "--quiet", "--", rel, skip])
     if staged.ok { return "" }
-    ro done = git_run(tree, ["commit", "-s", "-m", "${number} files of the task", "--", rel])
+    ro done = git_run(tree, ["commit", "-s", "-m", "${number} files of the task", "--", rel, skip])
     if done.ok { "" } else { done.text }
 }
 
 /// Abandon a rebase that was left in progress.
 export fn tk_rebase_abort(task_tree str) Proc -> ShellOut => git_run(task_tree, ["rebase", "--abort"])
+
+/// TkAuto: the result of the commit of what the agent left: `status` "none", "done" (`files` of them, `text` the commit) or "error" (`text` why).
+export type TkAuto { status str, files int, text str }
+
+/// Commit all the agent changed and did not commit, in one commit (`git commit -s`, the files named in a list, never `add -A`); `number` and `slug` make the subject in English.
+export fn tk_autocommit(tree str, number str, slug str) Proc -> TkAuto {
+    ro r = with Os = real_os(), Fs = real_fs() { autocommit(tree, commit_subject(number, slug)) }
+    { status: r.status, files: r.files, text: r.text }
+}
+
+/// The head commit of the tree ("" when git cannot tell).
+export fn tk_head(tree str) Proc -> str {
+    ro r = git_run(tree, ["rev-parse", "HEAD"])
+    if r.ok { r.text.trim_ascii() } else { "" }
+}
+
+/// The time of the last commit of the tree, in ms (0 when git cannot tell): the sign of a task that nobody touches.
+export fn tk_head_time(tree str) Proc -> int {
+    ro r = git_run(tree, ["log", "-1", "--format=%ct"])
+    if !r.ok { return 0 }
+    match r.text.trim_ascii().to_int() {
+        Ok(n) => n * 1000
+        Err(e) => 0
+    }
+}
+
+/// The last run of CI of main as a record of the tests (`has` false - no data).
+export fn tk_main_ci(main_copy str) Proc -> TestsRec {
+    ro run = with Os = real_os(), Fs = real_fs() { ci_latest(main_copy) }
+    if !run.found { return tests_rec_none() }
+    if run.conclusion == "success" { return TestsRec { has: true, commit: run.sha, at: run.at, result: "green", command: "CI" } }
+    if run.conclusion.byte_len() > 0 { return TestsRec { has: true, commit: run.sha, at: run.at, result: "red", command: "CI" } }
+    tests_rec_none()
+}

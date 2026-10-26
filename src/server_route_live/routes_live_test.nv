@@ -1,10 +1,10 @@
 // routes_live_test.nv - the modes of work over a hub with the fake ACP agent (task 192q): the scenarios `scenario_route_*` of crew_harness.server/routes_kit.nv.
 module crew_harness.server_route_live
 
-import crew_harness.server.{kit_routes, kit_routes_git, kit_routes_remote, scenario_route_fast, scenario_route_nosteps, scenario_route_tree, scenario_route_publish}
+import crew_harness.server.{kit_routes, kit_routes_git, kit_routes_remote, scenario_route_fast, scenario_route_nosteps, scenario_route_tree, scenario_route_publish, scenario_route_planning, scenario_route_notree}
 
 fn route_clean(report str) -> () {
-    if report.byte_len() > 0 { println("NOT AS IT MUST BE: ${report}") }
+    if report.byte_len() > 0 { panic("NOT AS IT MUST BE: ${report}") }
     assert(report == "")
 }
 
@@ -16,10 +16,18 @@ test "files: a mode without steps does not run, an unknown mode is refused" {
     route_clean(scenario_route_nosteps(kit_routes("route-none")))
 }
 
-test "files: the mode interactive in a repository: a task with a tree of its own, a kept task comes back" {
+test "files: the mode interactive in a repository: a task with a tree of its own, closing a task with work does not drop it, the button merge commits what the agent left" {
     route_clean(scenario_route_tree(kit_routes_git("route-tree")))
 }
 
 test "files: a subtask in a tree of its own is merged (the agent resolves the conflict), the task is published only by the word of the owner" {
     route_clean(scenario_route_publish(kit_routes_remote("route-publish")))
+}
+
+test "files: the mode Planning: a numbered task without a tree, the steps, the folder of the task goes into a tree when another mode is chosen" {
+    route_clean(scenario_route_planning(kit_routes_git("route-planning")))
+}
+
+test "files: a session without Worktree works in the folder of the project, the switch gives the next task a tree" {
+    route_clean(scenario_route_notree(kit_routes_git("route-notree")))
 }

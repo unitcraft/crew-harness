@@ -13,7 +13,7 @@ fn rk_settings(name str, workdir str) -> ServerSettings {
         port: base.port, data_dir: base.data_dir, store: base.store, pg: base.pg, agents: base.agents, idle_term_ms: 30000, workdir,
         web_dir: base.web_dir, hub_program: "", hub_args: []str.new(), acp_trace: false, ask_form: base.ask_form, ask_timeout_ms: base.ask_timeout_ms, max_image_bytes: base.max_image_bytes, stt_url: base.stt_url, stt_language: base.stt_language,
         routes_dir: "${kit_repo_root().display()}/doc/routes", route_reviewer_order: ["second"], route_task_limit: 12, route_task_messages: 40,
-        route_fix_attempts: 2, route_worktree_ask: true, route_overlap_seconds: 30
+        route_fix_attempts: 2, route_worktree_ask: true, route_overlap_seconds: 30, route_keep_days: 30
     }
 }
 
@@ -198,7 +198,7 @@ export fn scenario_route_fast(settings ServerSettings) Proc Detach Time Net Fs O
     c.expect(rk_array(rk_task(st9), "subtasks").len() == 1, "its first subtask")
     // there is no publishing of a task that has no tree
     again.page(1, "route_publish", "s-r1", "{}")
-    c.expect(again.until("публиковать нечего", 5000), "no tree: nothing to publish")
+    c.expect(again.until("сливать нечего", 5000), "no tree: nothing to merge")
     again.shut()
     c.report()
 }
@@ -298,7 +298,7 @@ export fn scenario_route_tree(settings ServerSettings) Proc Detach Time Net Fs O
     c.expect(rk_task_is_null(st2), "the task is closed")
     c.expect(!dir_there(tree), "its empty tree is removed")
 
-    // a new task with work in its tree: closing it asks, keeping it parks it
+    // a new task with work in its tree: it is not dropped and not parked, the owner is told to finish it
     rig.page(1, "user_message", "s-r3", "{\"turn\":\"t2\",\"text\":\"вторая работа\"}")
     c.expect(rig.until(KIT_DONE, 20000), "the second task is answered")
     rig.run(300)
@@ -309,44 +309,68 @@ export fn scenario_route_tree(settings ServerSettings) Proc Detach Time Net Fs O
     ro wrote = write_file("${tree2}/work.txt", "result\n")
     c.expect(rk_git(tree2, ["add", "work.txt"]) && rk_git(tree2, ["commit", "-m", "${jtext(rk_task(st3), "number")} work"]), "a commit in the tree")
     rig.page(1, "route_new_task", "s-r3", "{}")
-    rig.run(1500)
+    c.expect(rig.until("в дереве задачи есть работа", 8000), "work in the tree: a new task is not started, the owner is told to finish")
+    rig.run(500)
     ro st4 = rk_last(rig.all_lines_for(1), "route_state")
-    c.expect(jtext(rk_task(st4), "state") == "finishing", "work in the tree: the task is finishing, not closed: ${jtext(rk_task(st4), "state")}")
+    c.expect(jtext(rk_task(st4), "state") == "active" && jtext(rk_task(st4), "id") == id2, "the task stays as it was: ${jtext(rk_task(st4), "state")}")
     c.expect(((rk_task(st4).get("unmerged_commits") ?? JsonValue.null()).int() ?? 0) == 1, "one commit is not merged")
-    c.expect(rk_array(rk_task(st4), "finish_options").len() == 3, "three ways to finish")
     c.expect((rk_task(st4).get("finish") ?? JsonValue.null()).bool() ?? false, "a tree with a commit is offered to finish")
+    c.expect((st4.get("parked") ?? JsonValue.null()).is_null(), "there is no list of parked tasks any more")
     c.expect(dir_there(tree2), "the tree stays")
-    rig.page(1, "route_keep", "s-r3", "{}")
-    rig.run(1500)
-    ro st5 = rk_last(rig.all_lines_for(1), "route_state")
-    c.expect(rk_task_is_null(st5), "a kept task leaves the session free")
-    ro parked = rk_array(st5, "parked")
-    c.expect(parked.len() == 1 && jtext(parked[0].object() ?? JsonObject.new(), "state") == "kept", "the kept task is listed")
-    c.expect(dir_there(tree2), "the tree of a kept task stays")
+    c.expect(rk_tests_state(st4, "branch") == "never" && rk_tests_state(st4, "main") == "never", "no run of the tests is known: ${rk_tests_state(st4, "branch")}")
+    // a tests record on the head: green; a new commit makes it outdated
+    ro head = rk_head(tree2, "HEAD")
+    ro rec = write_file("${jtext(rk_task(st4), "worktree")}/doc/tasks/${id2}/task/tests-run.json", tests_rec_text(head, 1000, "green", "test"))
+    rig.run(12500)
+    ro st4b = rk_last(rig.all_lines_for(1), "route_state")
+    c.expect(rk_tests_state(st4b, "branch") == "green", "the record of the run on the head: green: ${rk_tests_state(st4b, "branch")}")
+    ro wrote2 = write_file("${tree2}/more.txt", "more\n")
+    c.expect(rk_git(tree2, ["add", "more.txt"]) && rk_git(tree2, ["commit", "-m", "${jtext(rk_task(st3), "number")} more"]), "a second commit")
+    rig.run(12500)
+    ro st4c = rk_last(rig.all_lines_for(1), "route_state")
+    c.expect(rk_tests_state(st4c, "branch") == "outdated", "a newer head: the run was not on this commit: ${rk_tests_state(st4c, "branch")}")
+    // what the agent left uncommitted: the button "merge" commits it in one commit before the push; there is no remote here, so the publishing stops with a note after that
+    ro dirty = write_file("${tree2}/left.txt", "left by the agent\n")
+    ro junk = write_file("${tree2}/junk.tmp", "temporary\n")
     rig.shut()
 
-    // after a restart the kept task is still there and can be taken up again
+    // after a restart the task is still in its session
     mut again = rig_open(settings)
     again.attach(1)
     ro back = rk_last(again.all_lines_for(1), "route_state")
-    c.expect(rk_array(back, "parked").len() == 1, "after the restart: the kept task is listed")
-    again.page(1, "route_task_resume", "s-r3", "{\"id\":\"${id2}\"}")
-    again.run(500)
-    ro st6 = rk_last(again.all_lines_for(1), "route_state")
-    c.expect(jtext(rk_task(st6), "id") == id2, "the kept task is taken up again")
-    c.expect(rk_array(st6, "parked").len() == 0, "and is not kept any more")
-    c.expect(rk_array(rk_task(st6), "subtasks").len() == 1, "its subtask is found from the files")
-    // the git module of the tasks is not in this build: publishing stops with a note, nothing is pushed (there is not even a remote)
-    again.page(1, "route_publish", "s-r3", "{}")
-    c.expect(again.until("публикация задачи", 15000), "publishing stops with a note")
+    c.expect(jtext(rk_task(back), "id") == id2, "after the restart: the task is open in its session")
+    again.page(1, "route_merge", "s-r3", "{}")
+    c.expect(again.until("публикация задачи", 20000), "publishing stops with a note (no remote)")
     again.run(300)
     ro st7 = rk_last(again.all_lines_for(1), "route_state")
     c.expect(jtext(rk_task(st7), "state") != "done" && ((rk_task(st7).get("needs_owner") ?? JsonValue.null()).bool() ?? false), "the task is not done and asks the owner")
     c.expect(!git_run(settings.workdir, ["rev-parse", "--verify", "--quiet", "origin/main"]).ok, "no remote was made or pushed to")
+    c.expect(kit_with(again.lines_for(1), "закоммичено одним коммитом") >= 1, "the owner is told about the one commit")
+    c.expect(git_run(tree2, ["status", "--porcelain"]).text.contains("junk.tmp") && !git_run(tree2, ["status", "--porcelain"]).text.contains("left.txt"), "the left file is committed, the temporary one is not")
+    c.expect(git_run(tree2, ["log", "-1", "--format=%B"]).text.contains("Signed-off-by"), "the commit is signed off")
+    c.expect(git_run(tree2, ["log", "-1", "--format=%s"]).text.starts_with(jtext(rk_task(st3), "number")), "the subject begins with the number of the task")
     again.page(1, "route_diff", "s-r3", "{}")
     c.expect(again.until("work.txt", 8000), "the changes of the task are shown")
+    // deleting the session: the work is not lost, the tree and the branch stay
+    again.page(1, "session_delete", "s-r3", "{}")
+    again.run(1500)
+    c.expect(dir_there(tree2), "a deleted session with work leaves the tree")
     again.shut()
     c.report()
+}
+
+// The turn of the last message of the owner in the feed.
+fn rk_last_turn(lines []str) -> str {
+    mut turn = ""
+    for line in lines {
+        if line_field(line, "kind") == "user_message" { turn = line_input(line, "turn") }
+    }
+    turn
+}
+
+fn rk_tests_state(st JsonObject, which str) -> str {
+    ro tests = jchild(rk_task(st), "tests") ?? JsonObject.new()
+    jtext(jchild(tests, which) ?? JsonObject.new(), "state")
 }
 
 // A repository with a remote: `<root>/origin.git` (bare) and `<root>/repo` on `main`, pushed, with the identity set for the commits of the hub.
@@ -407,7 +431,7 @@ export fn scenario_route_publish(settings ServerSettings) Proc Detach Time Net F
     ro subtree = jtext(sub, "worktree")
     c.expect(rk_array(task, "subtasks").len() == 2, "two subtasks")
     c.expect(subtree.byte_len() > 0 && dir_there(subtree) && subtree != tree, "the subtask has a tree of its own: ${subtree}")
-    c.expect(jtext(sub, "branch") == "${jtext(task, "branch")}-s2", "its branch: ${jtext(sub, "branch")}")
+    c.expect(jtext(sub, "branch") == "task/${jtext(task, "number")}.2-${task_slug_of(jtext(task, "id"))}", "its branch: ${jtext(sub, "branch")}")
 
     // both sides add a.txt: a conflict of the merge
     ro w1 = write_file("${tree}/a.txt", "task side\n")
@@ -427,7 +451,8 @@ export fn scenario_route_publish(settings ServerSettings) Proc Detach Time Net F
     c.expect(rk_head(origin, "main") == initial, "nothing was pushed before the word of the owner")
 
     // the word of the owner
-    rig.page(1, "route_publish", "s-r4", "{}")
+    ro left = write_file("${tree}/left.txt", "left by the agent\n")
+    rig.page(1, "route_merge", "s-r4", "{}")
     ro deadline = Time.now().unix_millis() + 90000
     mut state = ""
     while Time.now().unix_millis() < deadline && state != "done" && state != "ready" {
@@ -439,10 +464,113 @@ export fn scenario_route_publish(settings ServerSettings) Proc Detach Time Net F
     ro st3 = rk_last(rig.all_lines_for(1), "route_state")
     c.expect(state == "done", "the task is published: state ${state}, ${jtext(rk_task(st3), "note")}")
     c.expect(rk_head(origin, "main") != initial, "the remote has the work now")
+    c.expect(git_run(origin, ["show", "main:left.txt"]).text.trim_ascii() == "left by the agent", "what the agent left uncommitted went in one commit and was pushed")
+    c.expect(!kit_with(rig.lines_for(1), "Служебный ход: тесты перед публикацией") >= 1, "no tests were run before the push")
     c.expect(rk_text("${repo}/a.txt").trim_ascii() == "resolved", "the main copy was brought up by a fast-forward")
     c.expect(!dir_there(tree), "the tree of the task is removed")
     c.expect(kit_with(rig.lines_for(1), "влита в main") >= 1 && kit_with(rig.lines_for(1), "Основная копия: updated") >= 1, "the owner is told what became of the main copy")
     c.expect(git_run(repo, ["status", "--porcelain"]).text.byte_len() == 0, "the main copy is clean")
+    rig.shut()
+    c.report()
+}
+
+/// The mode "Planning" in a repository: the task is numbered at once but has no tree (its folder is in the data folder), the steps run and leave the task open, and when the owner
+/// chooses another mode the whole folder of the task (the assignment in `message.1.md`, `images/`) goes into a tree of its own and the mode goes on with it.
+export fn scenario_route_planning(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    ro repo = settings.workdir
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-r5", "{\"name\":\"План\",\"agent\":\"opencode\",\"route\":\"planning\",\"worktree\":true}")
+    c.expect(rig.until("\"kind\":\"session_created\"", 5000), "the session is shown")
+    rig.run(300)
+    ro st0 = rk_last(rig.all_lines_for(1), "route_state")
+    c.expect(jtext(st0, "route") == "planning", "the session was made in the mode planning: ${jtext(st0, "route")}")
+    c.expect(rk_array(st0, "steps").len() == 4, "planning has four steps: ${rk_array(st0, "steps").len()}")
+    rig.page(1, "user_message", "s-r5", "{\"turn\":\"t1\",\"text\":\"подготовь задание\"}")
+    c.expect(rig.until(KIT_DONE, 20000), "the first message is answered")
+    rig.run(300)
+    ro lines1 = rig.lines_for(1)
+    ro echo = answer_of(lines1, line_input(first_of(lines1, "user_message", 0), "turn"))
+    c.expect(echo.contains("Режим «Планирование»"), "the instruction of the planning is put before the message: ${echo}")
+    ro st1 = rk_last(rig.all_lines_for(1), "route_state")
+    ro task = rk_task(st1)
+    ro id = jtext(task, "id")
+    ro dir = "${settings.data_dir}/s-r5/tasks/${id}/task"
+    c.expect(id.starts_with("001-"), "the task is numbered: ${id}")
+    c.expect(jtext(task, "worktree") == "" && jtext(task, "branch") == "", "the planning makes no tree")
+    c.expect(!dir_there("${repo}/../worktrees"), "no folder of trees is made")
+    c.expect(rk_text("${dir}/message.1.md").contains("подготовь задание"), "message.1.md is in the data folder")
+    c.expect(rk_boxes_done("${dir}/progress.1.md") == 0 && parse_progress(rk_text("${dir}/progress.1.md")).total == 4, "progress.1.md holds four boxes")
+
+    rig.page(1, "route_run", "s-r5", "{}")
+    c.expect(rig.wait_steps("done", 4, 90000), "the four steps pass, with the review of another family")
+    rig.run(500)
+    ro st2 = rk_last(rig.all_lines_for(1), "route_state")
+    c.expect(!rk_task_is_null(st2) && !((rk_task(st2).get("closed") ?? JsonValue.null()).bool() ?? false), "the planning leaves the task open")
+    c.expect(kit_with(rig.lines_for(1), "Независимая проверка (second)") >= 1, "the review of the assignment is in the feed")
+
+    // the assignment and a picture are in the folder of the task; the owner chooses a mode that does the task
+    ro more = append_file("${dir}/message.1.md", "\n## Задание\n\nцель\n\n![картинка](images/image-1.png)\n")
+    ro pic = write_file("${dir}/images/image-1.png", "not really a picture")
+    rig.page(1, "session_route", "s-r5", "{\"route\":\"fast\"}")
+    rig.run(3000)
+    ro st3 = rk_last(rig.all_lines_for(1), "route_state")
+    ro tree = jtext(rk_task(st3), "worktree")
+    c.expect(jtext(rk_task(st3), "id") == id, "the task stays the same: ${jtext(rk_task(st3), "id")}")
+    c.expect(tree.byte_len() > 0 && dir_there(tree), "the tree is made when the planning is left: ${tree}")
+    ro moved = "${tree}/doc/tasks/${id}/task"
+    c.expect(rk_text("${moved}/message.1.md").contains("## Задание"), "the assignment went into the tree")
+    c.expect(path_there("${moved}/images/image-1.png"), "the pictures went with it")
+    c.expect(parse_progress(rk_text("${moved}/progress.1.md")).total == 6 && rk_boxes_done("${moved}/progress.1.md") == 0, "the checklist is made again for the six steps")
+    c.expect(rk_steps_in(st3, "pending") == 6, "the steps of the new mode are pending")
+    rig.page(1, "user_message", "s-r5", "{\"turn\":\"t2\",\"text\":\"продолжай\"}")
+    c.expect(rig.until(KIT_DONE, 20000), "the next message is answered")
+    // the answer is the echo of what the agent got: wait for the end of it (the message of the owner comes last)
+    mut echo2 = ""
+    mut waited = 0
+    while waited < 20000 && !echo2.ends_with("продолжай") {
+        rig.run(300)
+        waited += 300
+        ro lines2 = rig.lines_for(1)
+        echo2 = answer_of(lines2, rk_last_turn(lines2))
+    }
+    c.expect(echo2.contains("[crew] в конце") && echo2.contains("раздел «Задание»"), "the agent is told the assignment is the statement: ${echo2.byte_len()}")
+    c.expect(echo2.contains("images/"), "and where the pictures are")
+    rig.shut()
+    c.report()
+}
+
+/// A session without "Worktree": the agent works in the folder of the project itself, no task and no tree in the mode interactive; the switch turns the tree on for the next task.
+export fn scenario_route_notree(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    ro repo = settings.workdir
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-r6", "{\"name\":\"Без дерева\",\"agent\":\"opencode\",\"worktree\":false}")
+    c.expect(rig.until("\"kind\":\"session_created\"", 5000), "the session is shown")
+    rig.run(300)
+    c.expect(!((rk_last(rig.all_lines_for(1), "route_state").get("use_tree") ?? JsonValue.null()).bool() ?? true), "the page is told: no tree")
+    rig.page(1, "user_message", "s-r6", "{\"turn\":\"t1\",\"text\":\"pwd\"}")
+    c.expect(rig.until(KIT_DONE, 20000), "the message is answered")
+    rig.run(300)
+    ro lines = rig.lines_for(1)
+    ro answer = answer_of(lines, line_input(first_of(lines, "user_message", 0), "turn")).replace("\\", "/")
+    c.expect(answer.contains(repo.replace("\\", "/")) && !answer.contains("/worktrees/"), "the agent works in the folder of the project: ${answer}")
+    c.expect(rk_task_is_null(rk_last(rig.all_lines_for(1), "route_state")), "no task in the mode interactive without a tree")
+    c.expect(!dir_there("${repo}/../worktrees"), "no tree is made")
+    // the switch is on: the next task gets a tree
+    rig.page(1, "session_worktree", "s-r6", "{\"on\":true}")
+    rig.run(300)
+    c.expect((rk_last(rig.all_lines_for(1), "route_state").get("use_tree") ?? JsonValue.null()).bool() ?? false, "the switch is on")
+    rig.page(1, "user_message", "s-r6", "{\"turn\":\"t2\",\"text\":\"pwd\"}")
+    c.expect(rig.until(KIT_DONE, 20000), "the second message is answered")
+    rig.run(300)
+    ro st = rk_last(rig.all_lines_for(1), "route_state")
+    c.expect(jtext(rk_task(st), "worktree").byte_len() > 0, "the task has a tree now")
+    // with a tree the switch cannot be turned off
+    rig.page(1, "session_worktree", "s-r6", "{\"on\":false}")
+    c.expect(rig.until("выключить Worktree нельзя", 5000), "a tree that is there is not switched off")
     rig.shut()
     c.report()
 }

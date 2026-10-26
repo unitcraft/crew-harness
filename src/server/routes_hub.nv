@@ -1,7 +1,7 @@
 // routes_hub.nv - task 192q: the modes of work in the hub (the pure part is `routes.nv`, the disk is `routes_io.nv`, the git operations of the tasks are `taskwt`).
 //
 // What the page says: `session_route`, `route_run`, `route_skip`, `route_stop`, `route_new_task`, `route_subtask_new`, `route_subtask_same`, `route_subtask_worktree`,
-// `route_subtask_done`, `route_subtask_parallel`, `route_keep`, `route_publish`, `route_diff`, `route_task_resume`. What the hub says: the page event `route_state`
+// `route_subtask_done`, `route_subtask_parallel`, `route_merge` (`route_publish` is the same), `route_tests_run`, `route_tree_drop`, `route_diff`, `session_worktree`. What the hub says: the page event `route_state`
 // (on every change and when a page attaches), and in the feed the lines "subtask N: new / extended" and the block of the independent review.
 // Every change that must survive a restart is a signal of the journal (`route_set`, `route_task`, `route_step`, `route_note`, `route_review`); `RouteSession.apply` reads them again.
 module crew_harness.server
@@ -15,7 +15,8 @@ const OBSERVE_MS = 2000
 const UNMERGED_MS = 10000
 
 // An independent review in flight: a hidden agent of another family, its answer is collected here.
-type Review { session str, step int, family str, title str, clients []AcpClient, sent bool, text str, failed str, started_at int, prompt str }
+// `purpose` is "review" (a step of the mode) or "tests" (the button "Прогнать тесты": the hidden agent runs the tests in the tree and says the verdict).
+type Review { session str, step int, family str, title str, clients []AcpClient, sent bool, text str, failed str, started_at int, prompt str, purpose str }
 
 fn jint(o JsonObject, key str) -> int {
     match o.get(key) {
@@ -88,7 +89,7 @@ fn Hub @route_state_text(at int) -> str {
         progress.push(parse_progress(read_file("${s.rt.task_dir}/progress.${sub.n}.md") ?? ""))
     }
     ro suggest = task_too_big(s.rt.subs.len(), s.rt.messages, @settings.route_task_limit, @settings.route_task_messages)
-    route_view_text(s.rt, @route_titles(doc), progress, suggest, now_millis())
+    route_view_text(s.rt, @route_titles(doc), progress, suggest, now_millis(), s.rt.extra)
 }
 
 fn Hub mut @route_line(conn int, id str, input str) Time -> () {
@@ -165,11 +166,13 @@ fn Hub @route_repo_dir(session str) -> str {
     @cwd_of(@sessions[at].folder)
 }
 
-fn Hub @route_make_task(session str, route str, text str) Proc -> TaskMade {
+fn Hub @route_make_task(session str, route str, text str, use_tree bool) Proc -> TaskMade {
     ro base = @route_repo_dir(session)
     ro repo = tk_is_repo(base)
-    if !repo && route == "interactive" { return no_task() }
-    ro tasks_here = repo && dir_there("${base}/doc/tasks")
+    // a tree is made when the session wants one (the switch "Worktree") and the mode is not the planning (it writes the task and touches no code: the tree comes later)
+    ro want_tree = repo && use_tree && route != "planning"
+    if route == "interactive" && !want_tree { return no_task() }
+    ro tasks_here = want_tree && dir_there("${base}/doc/tasks")
     mut names = []str.new()
     if repo {
         for n in dir_names("${base}/doc/tasks") { names.push(n) }
@@ -181,7 +184,7 @@ fn Hub @route_make_task(session str, route str, text str) Proc -> TaskMade {
     ro slug = task_slug(text)
     ro folder = "${number}-${slug}"
     mut tree = TkTree { ok: false, branch: "", worktree: "", base: "", text: "" }
-    if repo {
+    if want_tree {
         tree = tk_task_tree(base, number, slug)
         if !tree.ok { @say_log("the tree of the task ${folder} cannot be made: ${tree.text}") }
     }
@@ -205,7 +208,7 @@ fn Hub mut @route_write_sub(at int, n int, text str) Proc Detach Time -> () {
 fn Hub mut @route_on_message(at int, text str) Proc Detach Time -> str {
     ro s0 = @sessions[at]
     if !s0.rt.task_open || s0.rt.task_closed {
-        ro made = @route_make_task(s0.id, s0.rt.route, text)
+        ro made = @route_make_task(s0.id, s0.rt.route, text, s0.rt.use_tree)
         if !made.ok { return "" }
         mut o = JsonObject.new()
         js(o, "id", made.id)
@@ -258,12 +261,43 @@ fn Hub mut @route_sync_cwd(at int) Time -> () {
 // The hidden note before the message of the owner: "" in the mode "interactive".
 fn Hub mut @route_message_prelude(at int) Proc -> str {
     mut s = @sessions[at]
-    if s.rt.route == "interactive" { return "" }
+    ro hint = @route_files_hint_of(s)
+    if s.rt.route == "interactive" { return hint }
     ro doc = @route_doc(s.rt.route)
     ro text = route_prelude(doc, !s.rt.told, s.rt.task_shown, s.rt.last_sub(), "")
     s.rt.told = true
     @sessions[at] = s
-    text
+    if hint.byte_len() == 0 { text } else if text.byte_len() == 0 { hint } else { "${text}\n\n${hint}" }
+}
+
+// The note about a planned task and its pictures ("" when there is nothing to say).
+fn Hub @route_files_hint_of(s Dialog) -> str {
+    if !s.rt.task_open || s.rt.last_sub() == 0 { return "" }
+    ro msg = read_file("${s.rt.task_dir}/message.${s.rt.last_sub()}.md") ?? ""
+    route_files_hint(s.rt.task_shown, s.rt.last_sub(), msg.contains("## Задание"), dir_there("${s.rt.task_dir}/images"))
+}
+
+// The pictures of a message of the owner go beside the task: `images/` of its folder, and a line `![name](images/file)` for each is added to the message file of the subtask.
+fn Hub mut @route_save_images(at int, files []AcpImage) Proc -> () {
+    ro s = @sessions[at]
+    if !s.rt.task_open || s.rt.last_sub() == 0 || files.len() == 0 { return }
+    mut lines = []str.new()
+    for f in files {
+        ro from = f.path
+        ro dot = from.rfind(".") ?? -1
+        ro ext = if dot >= 0 && from.byte_len() - dot <= 6 { from[dot..] } else { ".png" }
+        mut k = 1
+        while dir_there("${s.rt.task_dir}/images") && path_there("${s.rt.task_dir}/images/image-${k}${ext}") { k += 1 }
+        ro file = "image-${k}${ext}"
+        if io_copy_file(from, "${s.rt.task_dir}/images/${file}") {
+            lines.push("![${f.name}](images/${file})")
+        } else {
+            @say_log("a picture of ${s.id} cannot be copied to ${s.rt.task_dir}/images")
+        }
+    }
+    if lines.len() > 0 {
+        ro done = append_file("${s.rt.task_dir}/message.${s.rt.last_sub()}.md", "\n${joined(lines, "\n")}\n")
+    }
 }
 
 // ----- what the page says -----
@@ -276,10 +310,12 @@ fn Hub mut @route_set(trace str, route str) Proc Detach Time -> () {
         return
     }
     if @sessions[at].rt.route != route {
+        ro was = @sessions[at].rt.route
         @route_stop(at)
         mut o = JsonObject.new()
         js(o, "route", route)
         @rt_journal(at, "route_set", JsonValue.object(o).to_str())
+        if was == "planning" { @route_leave_planning(at) }
         // the checklist of the last subtask is made again when the new mode has steps and the file has no boxes yet
         ro s = @sessions[at]
         if s.rt.task_open && s.rt.last_sub() > 0 {
@@ -290,6 +326,69 @@ fn Hub mut @route_set(trace str, route str) Proc Detach Time -> () {
             }
         }
     }
+    @route_broadcast(at, true)
+}
+
+// The planning is left for a mode that does the task: the task (its number, `message.N.md` with the assignment, `images/`) goes into a tree of its own when the session has the switch
+// "Worktree" on, and the checklist of the subtask is made again for the steps of the new mode.
+fn Hub mut @route_leave_planning(at int) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    if !s.rt.task_open || s.rt.last_sub() == 0 { return }
+    if s.rt.use_tree && s.rt.worktree.byte_len() == 0 { ro made = @route_attach_tree(at) }
+    ro me = @sessions[at]
+    ro n = me.rt.last_sub()
+    ro wrote = write_file("${me.rt.task_dir}/progress.${n}.md", progress_template(n, @route_doc(me.rt.route).steps))
+}
+
+// A task that was made without a tree gets one: the branch `task/NNN-slug`, the folder of the task goes into it whole (with `images/`) and from now on lives there, the agent works in the tree.
+fn Hub mut @route_attach_tree(at int) Proc Detach Time -> bool {
+    ro s = @sessions[at]
+    if !s.rt.task_open || s.rt.worktree.byte_len() > 0 { return false }
+    ro base = @route_repo_dir(s.id)
+    if !tk_is_repo(base) {
+        @tell_error(0, s.id, s.engine.step_number(), "", "папка проекта не репозиторий git: дерево сделать нельзя")
+        return false
+    }
+    ro tree = tk_task_tree(base, s.rt.number, task_slug_of(s.rt.task_id))
+    if !tree.ok {
+        @tell_error(0, s.id, s.engine.step_number(), "", "дерево задачи не создано: ${tree.text}")
+        return false
+    }
+    mut dir = s.rt.task_dir
+    mut shown = s.rt.task_shown
+    if dir_there("${tree.worktree}/doc/tasks") {
+        ro into = "${tree.worktree}/doc/tasks/${s.rt.task_id}/task"
+        if io_copy_dir(s.rt.task_dir, into) < 0 {
+            @tell_error(0, s.id, s.engine.step_number(), "", "папка задачи не перенесена в дерево ${tree.worktree}")
+            return false
+        }
+        dir = into
+        shown = "doc/tasks/${s.rt.task_id}/task"
+    }
+    mut o = JsonObject.new()
+    js(o, "branch", tree.branch)
+    js(o, "worktree", tree.worktree)
+    js(o, "base", tree.base)
+    js(o, "dir", dir)
+    js(o, "shown", shown)
+    @rt_task_op(at, "attach_tree", o)
+    @route_broadcast(at, true)
+    true
+}
+
+// The switch "Worktree" of a session: on - the next task (or the task that is open without a tree) gets a tree; off - only while no tree has been made.
+fn Hub mut @route_worktree(trace str, on bool) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    ro s = @sessions[at]
+    if !on && s.rt.worktree.byte_len() > 0 {
+        @tell_error(0, trace, s.engine.step_number(), "", "у задачи уже есть дерево: выключить Worktree нельзя")
+        return
+    }
+    mut o = JsonObject.new()
+    jput(o, "worktree", JsonValue.bool(on))
+    @rt_journal(at, "route_set", JsonValue.object(o).to_str())
+    if on && @sessions[at].rt.task_open && @sessions[at].rt.worktree.byte_len() == 0 { ro made = @route_attach_tree(at) }
     @route_broadcast(at, true)
 }
 
@@ -476,6 +575,10 @@ fn Hub mut @route_next_step(at int) Proc Detach Time -> () {
 fn Hub mut @route_step_finished(at int, index int) Proc Detach Time -> () {
     ro s = @sessions[at]
     ro doc = @route_doc(s.rt.route)
+    if index >= 0 && index < doc.steps.len() && doc.steps[index].kind == "self" && doc.steps[index].prompt.contains("ТЕСТЫ: ЗЕЛЁНЫЕ") {
+        // the step of the tests: what the agent said about them is the record of the last run
+        @route_tests_record(at, tests_verdict(answer_of(s.lines, s.turn)), "шаг «${doc.steps[index].title}»")
+    }
     if index >= 0 && index < doc.steps.len() {
         @rt_step(at, index + 1, "done")
         @route_mark_progress(at, doc.steps[index].title, false)
@@ -493,6 +596,11 @@ fn Hub mut @route_run_finished(at int) Proc Detach Time -> () {
     s.rt.running = false
     s.rt.current = -1
     @sessions[at] = s
+    if s.rt.route == "planning" {
+        // the planning does not finish the task: it stays open for the mode the owner chooses next
+        @route_broadcast(at, false)
+        return
+    }
     if s.rt.worktree.byte_len() > 0 {
         mut me = @sessions[at]
         me.rt.unmerged = tk_unmerged(me.rt.worktree)
@@ -515,8 +623,6 @@ fn Hub mut @route_turn_done(at int) Proc Detach Time -> () {
         @route_after_resolve(at)
     } else if job == "pub_resolve" {
         @route_after_publish_resolve(at)
-    } else if job == "pub_tests" {
-        @route_after_publish_tests(at)
     } else {
         mut me = @sessions[at]
         me.rt.job = ""
@@ -597,7 +703,7 @@ fn Hub mut @route_start_review(at int, index int, step RouteStep) Proc Detach Ti
             ro prompt = review_prompt(route_fill(step.prompt, n, s.rt.task_shown), message, cut_text(if status.ok { status.text } else { "(папка не репозиторий git)" }, 4000), cut_text(if diff.ok { diff.text } else { "" }, 60000), cut_text(answer, 20000))
             mut clients = []AcpClient.new()
             clients.push(client)
-            @reviews.push(Review { session: s.id, step: index, family, title: step.title, clients, sent: false, text: "", failed: "", started_at: now_millis(), prompt })
+            @reviews.push(Review { session: s.id, step: index, family, title: step.title, clients, sent: false, text: "", failed: "", started_at: now_millis(), prompt, purpose: "review" })
             @rt_step(at, index + 1, "running")
             mut me = @sessions[at]
             me.rt.reviewing = true
@@ -628,7 +734,7 @@ fn Hub mut @route_review_poll(i int) Proc Detach Time -> bool {
         }
     }
     for key in r.clients[0].pending_permissions() {
-        ro refused = r.clients[0].decide(key, "deny")
+        ro refused = r.clients[0].decide(key, if r.purpose == "tests" { "allow" } else { "deny" })
     }
     mut over = false
     mut more = true
@@ -671,6 +777,20 @@ fn Hub mut @route_review_finish(i int) Proc Detach Time -> () {
     r.clients[0].close()
     ro at = @find(r.session)
     if at < 0 { return }
+    if r.purpose == "tests" {
+        mut me = @sessions[at]
+        me.rt.testing = false
+        @sessions[at] = me
+        ro verdict = tests_verdict(r.text)
+        if verdict == "" {
+            @rt_note(at, "▸ прогон тестов не дал итога: ${if r.failed.byte_len() > 0 { r.failed } else { "агент не назвал результат" }}")
+        } else {
+            @route_tests_record(at, verdict, "прогон по кнопке (${r.family})")
+            @rt_note(at, "▸ тесты ветки: ${if verdict == "green" { "зелёные" } else { "красные" }}")
+        }
+        @route_broadcast(at, false)
+        return
+    }
     if r.failed.byte_len() > 0 && r.text.byte_len() == 0 {
         @tell_error(0, r.session, @sessions[at].engine.step_number(), "", r.failed)
         @route_stop(at)
@@ -710,6 +830,12 @@ fn Hub mut @route_observe(at int) Proc Detach Time -> () {
         s.rt.unmerged = tk_unmerged(s.rt.worktree)
         s.rt.diff = tk_diff(s.rt.worktree)
         s.rt.unmerged_at = now_millis()
+        // the last run of CI of main, asked of GitHub now and then (no `gh`, no network: no data)
+        if now_millis() - s.rt.ci_at > 120000 {
+            s.rt.ci_at = now_millis()
+            s.rt.extra = TaskExtra { branch_tests: s.rt.extra.branch_tests, head: s.rt.extra.head, main_tests: tk_main_ci(@cwd_of(s.folder)), main_source: "ci", idle_days: s.rt.extra.idle_days, stale: s.rt.extra.stale }
+        }
+        s.rt.extra = @route_extra(s)
         @sessions[at] = s
     }
     // subtasks that are marked parallel and touch the same files as another one that goes on: the owner is asked (the page counts the seconds down), then the subtask gets a tree of its own
@@ -869,7 +995,7 @@ fn Hub mut @route_subtask_done(trace str, n int) Proc Detach Time -> () {
         return
     }
     @route_close_agent_in(at, tree)
-    ro r = tk_merge(s.rt.worktree, branch, "${s.rt.number} merge subtask ${n} into the task branch")
+    ro r = tk_merge(s.rt.worktree, branch, "${s.rt.number}.${n}: ${subtask_title_of(s, n)}")
     if r.status == "merged" {
         @route_subtask_merged(at, n)
     } else if r.status == "conflict" {
@@ -959,15 +1085,11 @@ fn Hub mut @route_new_task(trace str) Proc Detach Time -> () {
     if s.rt.worktree.byte_len() > 0 && s.rt.tstate != "done" {
         ro count = tk_unmerged(s.rt.worktree)
         if count > 0 || @route_dirty(s) {
-            // work in the tree is not dropped quietly: the owner chooses (the steps of the finishing, "keep")
+            // work in the tree is not dropped quietly and is not parked: the owner finishes the task (the card: merge, or the steps of the finishing)
             mut me = @sessions[at]
             me.rt.unmerged = count
             @sessions[at] = me
-            if s.rt.tstate == "finishing" {
-                @route_keep_task(at)
-            } else {
-                @rt_state(at, "finishing", "")
-            }
+            @tell_error(0, trace, s.engine.step_number(), "", "в дереве задачи есть работа: слейте её в main или закончите шагами (карточка «Закончить задачу»), потом начинайте новую")
             @route_broadcast(at, false)
             return
         }
@@ -980,71 +1102,54 @@ fn Hub mut @route_new_task(trace str) Proc Detach Time -> () {
     @route_broadcast(at, false)
 }
 
-fn Hub mut @route_keep_task(at int) Proc Detach Time -> () {
+// The tree and the branch of a task are dropped: only by the word of the owner (the card of a stale session, the delete of a session); work that is not merged only with `force`.
+// The folder of the task is taken out of the tree first (into the data folder), the task goes on without a tree.
+fn Hub mut @route_tree_drop(trace str, force bool) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
     ro s = @sessions[at]
     if !s.rt.task_open || s.rt.worktree.byte_len() == 0 { return }
-    mut o = JsonObject.new()
-    js(o, "state", "kept")
-    ji(o, "unmerged", tk_unmerged(s.rt.worktree))
-    @rt_task_op(at, "park", o)
-}
-
-fn Hub mut @route_keep(trace str) Proc Detach Time -> () {
-    ro at = @find(trace)
-    if at < 0 { return }
-    if @sessions[at].rt.running || @sessions[at].rt.job.byte_len() > 0 { return }
-    @route_keep_task(at)
-    @route_broadcast(at, false)
-}
-
-fn Hub mut @route_resume(trace str, id str) Proc Detach Time -> () {
-    ro at = @find(trace)
-    if at < 0 { return }
-    ro s = @sessions[at]
-    if s.rt.task_open {
-        @tell_error(0, trace, s.engine.step_number(), "", "сначала закройте или оставьте текущую задачу")
+    if s.rt.running || s.rt.job.byte_len() > 0 {
+        @tell_error(0, trace, s.engine.step_number(), "", "идёт другая работа: дождитесь её конца")
         return
     }
-    for p in s.rt.parked {
-        if p.id == id {
-            ro in_tree = "${p.worktree}/doc/tasks/${p.id}/task"
-            ro dir = if dir_there(in_tree) { in_tree } else { "${@settings.data_dir}/${s.id}/tasks/${p.id}/task" }
-            ro shown = if dir_there(in_tree) { "doc/tasks/${p.id}/task" } else { dir }
-            mut un = JsonObject.new()
-            js(un, "id", p.id)
-            @rt_task_op(at, "unpark", un)
-            mut o = JsonObject.new()
-            js(o, "id", p.id)
-            js(o, "number", p.number)
-            js(o, "dir", dir)
-            js(o, "shown", shown)
-            js(o, "branch", p.branch)
-            js(o, "worktree", p.worktree)
-            js(o, "base", p.base)
-            js(o, "title", p.title)
-            @rt_task_op(at, "open", o)
-            // the subtasks are what the files say
-            mut numbers = []int.new()
-            for name in dir_names(dir) {
-                if name.starts_with("message.") && name.ends_with(".md") {
-                    match name["message.".byte_len()..name.byte_len() - 3].to_int() {
-                        Ok(k) => { if k > 1 { numbers.push(k) } }
-                        Err(e) => ()
-                    }
-                }
-            }
-            mut k = 2
-            while k < 1000 && numbers.contains(k) {
-                mut so = JsonObject.new()
-                ji(so, "n", k)
-                js(so, "title", "подзадача ${k}")
-                @rt_task_op(at, "subtask", so)
-                k += 1
-            }
-            @route_broadcast(at, true)
-            return
-        }
+    ro count = tk_unmerged(s.rt.worktree)
+    if !force && (count > 0 || @route_dirty(s)) {
+        @tell_error(0, trace, s.engine.step_number(), "", "в дереве есть не влитая работа (${count} коммитов): удалить её можно только явной кнопкой «Удалить вместе с работой»")
+        return
     }
+    ro out = "${@settings.data_dir}/${s.id}/tasks/${s.rt.task_id}/task"
+    ro copied = io_copy_dir(s.rt.task_dir, out)
+    @route_close_agent_in(at, s.rt.worktree)
+    ro gone = tk_tree_drop(@cwd_of(s.folder), s.rt.worktree, s.rt.branch)
+    if !gone.ok {
+        @tell_error(0, trace, s.engine.step_number(), "", "дерево не удалено: ${gone.text}")
+        return
+    }
+    mut o = JsonObject.new()
+    js(o, "branch", "")
+    js(o, "worktree", "")
+    js(o, "base", "")
+    js(o, "dir", out)
+    js(o, "shown", out)
+    @rt_task_op(at, "attach_tree", o)
+    @rt_note(at, "▸ дерево и ветка задачи ${s.rt.number} удалены")
+    mut me = @sessions[at]
+    me.rt.unmerged = 0
+    me.rt.extra = task_extra_none()
+    @sessions[at] = me
+    @route_broadcast(at, true)
+}
+
+// What the disk and git say of the task of a session (the tests of the branch, the head, how long nobody touched it).
+fn Hub @route_extra(s Dialog) Proc -> TaskExtra {
+    ro head = tk_head(s.rt.worktree)
+    ro rec = tests_rec_parse(read_file("${s.rt.task_dir}/tests-run.json") ?? "")
+    ro committed = tk_head_time(s.rt.worktree)
+    ro last = if s.rt.active_at > committed { s.rt.active_at } else { committed }
+    ro days = if last > 0 { (now_millis() - last) / 86400000 } else { 0 }
+    ro keep = @settings.route_keep_days
+    TaskExtra { branch_tests: rec, head, main_tests: s.rt.extra.main_tests, main_source: "ci", idle_days: if days < 0 { 0 } else { days }, stale: keep > 0 && days >= keep }
 }
 
 fn Hub mut @route_diff(trace str) Proc Detach Time -> () {
@@ -1055,14 +1160,15 @@ fn Hub mut @route_diff(trace str) Proc Detach Time -> () {
     @rt_note(at, "Изменения задачи ${s.rt.number} относительно ${s.rt.base}:\n\n${tk_diff_text(s.rt.worktree)}")
 }
 
-// The word of the owner to publish. The only way to the remote is `tk_publish` (taskwt.nv `publish`): fetch, rebase on `origin/main` (the agent resolves conflicts), the tests of
-// the mode (the agent runs them: a turn), then the push, the main copy and the clean-up.
-fn Hub mut @route_publish(trace str) Proc Detach Time -> () {
+// The word of the owner to merge: the button "Слить в main" is the word to push (the card says "push в origin/main"). The only way to the remote is `tk_publish` (taskwt.nv `publish`): the hub first
+// commits what the agent left (one commit, the files named in a list), then fetch, `rebase --rebase-merges origin/main` (the agent resolves conflicts, then the owner), NO tests (they may run for hours and do
+// not block the merge: the page shows what the last run said), `git push origin HEAD:main` (never forced), the main copy by `merge --ff-only`, the tree and the branch removed.
+fn Hub mut @route_merge(trace str) Proc Detach Time -> () {
     ro at = @find(trace)
     if at < 0 { return }
     ro s = @sessions[at]
     if !s.rt.task_open || s.rt.worktree.byte_len() == 0 {
-        @tell_error(0, trace, s.engine.step_number(), "", "у задачи нет дерева: публиковать нечего")
+        @tell_error(0, trace, s.engine.step_number(), "", "у задачи нет дерева: сливать нечего")
         return
     }
     if s.rt.running || s.rt.job.byte_len() > 0 {
@@ -1070,10 +1176,17 @@ fn Hub mut @route_publish(trace str) Proc Detach Time -> () {
         return
     }
     if s.clients.len() > 0 && !@takes_message_at(at) {
-        @tell_error(0, trace, s.engine.step_number(), "", "ход ещё идёт: публиковать можно между ходами")
+        @tell_error(0, trace, s.engine.step_number(), "", "ход ещё идёт: сливать можно между ходами")
         return
     }
-    // the word of the owner: the files of the task are committed with the work
+    // what the agent changed and did not commit goes into one commit (nothing changed - nothing to commit)
+    ro auto = tk_autocommit(s.rt.worktree, s.rt.number, task_slug_of(s.rt.task_id))
+    if auto.status == "error" {
+        @route_publish_fail(at, "изменения не закоммичены: ${auto.text}")
+        return
+    }
+    if auto.status == "done" { @rt_note(at, "▸ закоммичено одним коммитом: ${auto.files} файлов, перед слиянием") }
+    // the files of the task are committed with the work
     ro rel = "doc/tasks/${s.rt.task_id}"
     if path_there("${s.rt.worktree}/${rel}") {
         ro why = tk_commit_task_files(s.rt.worktree, rel, s.rt.number)
@@ -1086,7 +1199,7 @@ fn Hub mut @route_publish(trace str) Proc Detach Time -> () {
     me.rt.job = "pub"
     me.rt.attempt = 0
     @sessions[at] = me
-    @route_publish_step(at, "start")
+    @route_publish_step(at, "merge")
 }
 
 fn Hub mut @route_publish_fail(at int, why str) Proc Detach Time -> () {
@@ -1102,7 +1215,7 @@ fn Hub mut @route_publish_fail(at int, why str) Proc Detach Time -> () {
 // One step of publishing and what to do with its answer.
 fn Hub mut @route_publish_step(at int, mode str) Proc Detach Time -> () {
     ro s = @sessions[at]
-    if mode == "final" { @route_close_agent_in(at, s.rt.worktree) }
+    if mode == "final" || mode == "merge" { @route_close_agent_in(at, s.rt.worktree) }
     ro r = tk_publish(s.rt.worktree, @cwd_of(s.folder), mode)
     if r.status == "done" {
         mut me = @sessions[at]
@@ -1122,10 +1235,6 @@ fn Hub mut @route_publish_step(at int, mode str) Proc Detach Time -> () {
         } else {
             @route_publish_resolve(at, r.files)
         }
-        return
-    }
-    if r.step == "tests" && r.reason == "need-tests" {
-        @route_publish_tests(at)
         return
     }
     @route_publish_fail(at, "${r.step}: ${r.reason}")
@@ -1148,37 +1257,67 @@ fn Hub mut @route_after_publish_resolve(at int) Proc Detach Time -> () {
     mut s = @sessions[at]
     s.rt.job = "pub"
     @sessions[at] = s
-    @route_publish_step(at, "continue")
+    @route_publish_step(at, "final")
 }
 
-// The step "tests" of the mode of the session (the first step whose title says so), else the plain words.
+// The words for the hidden agent that runs the tests (the button "Прогнать тесты"): the step "tests" of the mode when it has one, else the plain words.
 fn Hub @route_tests_prompt(s Dialog) -> str {
     ro doc = @route_doc(s.rt.route)
     mut prompt = "Прогони тесты затронутой части проекта и проверки репозитория (команды — в AGENTS.md или README проекта)."
     for st in doc.steps {
-        if st.kind == "self" && (st.title.contains("Тест") || st.title.contains("тест")) { prompt = route_fill(st.prompt, s.rt.last_sub(), s.rt.task_shown) }
+        if st.kind == "self" && st.prompt.contains("ТЕСТЫ: ЗЕЛЁНЫЕ") { prompt = route_fill(st.prompt, s.rt.last_sub(), s.rt.task_shown) }
     }
-    "${prompt}\nПоследней строкой ответа напиши ровно «ТЕСТЫ: ЗЕЛЁНЫЕ» или «ТЕСТЫ: КРАСНЫЕ»."
+    "${prompt}\nФайлы проекта не меняй. Последней строкой ответа напиши ровно «ТЕСТЫ: ЗЕЛЁНЫЕ» или «ТЕСТЫ: КРАСНЫЕ»."
 }
 
-fn Hub mut @route_publish_tests(at int) Proc Detach Time -> () {
-    mut s = @sessions[at]
-    s.rt.job = "pub_tests"
-    @sessions[at] = s
-    ro reason = @route_agent_turn(at, "Служебный ход: тесты перед публикацией", "[crew] ${@route_tests_prompt(s)}")
-    if reason.byte_len() > 0 { @route_publish_fail(at, "агент не смог начать ход: ${reason}") }
+// The record of the last run of the tests of the branch (`tests-run.json` in the folder of the task): the commit it ran on, the time, the result, what ran.
+fn Hub mut @route_tests_record(at int, verdict str, command str) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    if verdict != "green" && verdict != "red" { return }
+    if !s.rt.task_open || s.rt.task_dir.byte_len() == 0 { return }
+    ro wrote = write_file("${s.rt.task_dir}/tests-run.json", tests_rec_text(if s.rt.worktree.byte_len() > 0 { tk_head(s.rt.worktree) } else { "" }, now_millis(), verdict, command))
+    mut me = @sessions[at]
+    me.rt.unmerged_at = 0
+    @sessions[at] = me
 }
 
-fn Hub mut @route_after_publish_tests(at int) Proc Detach Time -> () {
-    mut s = @sessions[at]
-    ro verdict = tests_verdict(answer_of(s.lines, s.turn))
-    if verdict != "green" {
-        @route_publish_fail(at, if verdict == "red" { "тесты красные" } else { "агент не подтвердил зелёные тесты" })
+// The button "Прогнать тесты": a hidden agent of the family of the session runs the tests of the affected part in the tree, in the background (the chat is not blocked), and the record of the run is written.
+// It is the owner's own button, so the requests of this agent for permission to run the commands are allowed (a review is never allowed anything).
+fn Hub mut @route_tests_run(trace str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    ro s = @sessions[at]
+    if !s.rt.task_open || s.rt.worktree.byte_len() == 0 {
+        @tell_error(0, trace, s.engine.step_number(), "", "у задачи нет дерева: тесты гонять негде")
         return
     }
-    s.rt.job = "pub"
-    @sessions[at] = s
-    @route_publish_step(at, "final")
+    if s.rt.testing { return }
+    match @settings.agent(s.agent) {
+        None => @tell_error(0, trace, s.engine.step_number(), "", "агент сессии не найден: ${s.agent}")
+        Some(spec) => {
+            match open_client_traced(acp_config_of(spec.program, spec.args, s.rt.worktree, ""), "", 0) {
+                Err(reason) => @tell_error(0, trace, s.engine.step_number(), "", "прогон тестов не начат: ${reason}")
+                Ok(client) => {
+                    mut clients = []AcpClient.new()
+                    clients.push(client)
+                    @reviews.push(Review { session: s.id, step: -1, family: s.agent, title: "tests", clients, sent: false, text: "", failed: "", started_at: now_millis(), prompt: @route_tests_prompt(s), purpose: "tests" })
+                    mut me = @sessions[at]
+                    me.rt.testing = true
+                    @sessions[at] = me
+                    @say_log("the run of the tests of ${s.id} by ${s.agent}")
+                    @route_broadcast(at, false)
+                }
+            }
+        }
+    }
+}
+
+// The title of subtask `n` for the message of its merge ("" -> "subtask N").
+fn subtask_title_of(s Dialog, n int) -> str {
+    for sub in s.rt.subs {
+        if sub.n == n && sub.title.byte_len() > 0 { return sub.title }
+    }
+    "subtask ${n}"
 }
 
 // The slug of a task id "007-name": what follows the number.

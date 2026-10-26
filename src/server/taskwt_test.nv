@@ -3,7 +3,7 @@
 // real repository.
 module crew_harness.server
 
-import std.fs.{Fs, read_text, write_text, create_dir_all, remove_dir_all, try_exists, Path}
+import std.fs.{Fs, read_text, write_text, create_dir_all, remove_dir_all, remove_file, try_exists, Path}
 import std.os.{Os, temp_dir, pid, cwd, env, remove_env, Command}
 import std.time.{Time}
 
@@ -276,16 +276,16 @@ test "taskwt subtask: made from the head of the task, merged without a conflict,
     ro w = tt_world("sub")
     ro tree = tt_task(w, "192", "demo")
     ro s1 = tt_sub(tree, "192", "demo", 1)
-    assert(s1.branch == "task/192-demo-s1")
-    assert(s1.path == "${tree.path}-s1")
+    assert(s1.branch == "task/192.1-demo")
+    assert(s1.path == "${tw_parent(tree.path)}/crew-harness-192.1-demo")
     assert(s1.created)
     assert(!tt_sub(tree, "192", "demo", 1).created)
     tt_commit(s1.path, "one.txt", "one\n", "subtask work")
     assert(!tw_exists("${tree.path}/one.txt"))
-    match subtask_merge(tree.path, s1.branch, "192-s1: first part") {
+    match subtask_merge(tree.path, s1.branch, "192.1: first part") {
         Merged { sha } => {
             assert(sha == tg(tree.path, ["rev-parse", "HEAD"]))
-            assert(tg(tree.path, ["log", "-1", "--format=%s"]) == "192-s1: first part")
+            assert(tg(tree.path, ["log", "-1", "--format=%s"]) == "192.1: first part")
             assert(tw_split(tg(tree.path, ["rev-list", "--parents", "-n", "1", "HEAD"]), " ").len() == 3)
         }
         other => panic("expected Merged")
@@ -323,11 +323,11 @@ test "taskwt subtask: a conflict is left in progress, the agent resolves it, the
     ro s2 = tt_sub(tree, "192", "demo", 2)
     tt_commit(s1.path, "a.txt", "alpha\nbeta-one\ngamma\n", "s1 edit")
     tt_commit(s2.path, "a.txt", "alpha\nbeta-two\ngamma\n", "s2 edit")
-    match subtask_merge(tree.path, s1.branch, "192-s1: first") {
+    match subtask_merge(tree.path, s1.branch, "192.1: first") {
         Merged { sha } => ()
         other => panic("the first merge is clean")
     }
-    match subtask_merge(tree.path, s2.branch, "192-s2: second") {
+    match subtask_merge(tree.path, s2.branch, "192.2: second") {
         Conflict { files } => assert(files == ["a.txt"])
         other => panic("expected Conflict")
     }
@@ -370,7 +370,7 @@ test "taskwt subtask: a merge can be given up, the finish without a merge is a f
         other => panic("no merge: a failure")
     }
     match subtask_merge(tree.path, s1.branch, "") {
-        Merged { sha } => assert(tg(tree.path, ["log", "-1", "--format=%s"]) == "Merge task/192-demo-s1")
+        Merged { sha } => assert(tg(tree.path, ["log", "-1", "--format=%s"]) == "Merge task/192.1-demo")
         other => panic("clean")
     }
     match subtask_merge(tree.path, s2.branch, "x") {
@@ -487,7 +487,7 @@ test "taskwt publish: the merges of the subtasks stay in the history" {
     ro tree = tt_task(w, "192", "demo")
     ro s1 = tt_sub(tree, "192", "demo", 1)
     tt_commit(s1.path, "one.txt", "one\n", "subtask work")
-    match subtask_merge(tree.path, s1.branch, "192-s1: part") {
+    match subtask_merge(tree.path, s1.branch, "192.1: part") {
         Merged { sha } => ()
         other => panic("clean merge")
     }
@@ -627,8 +627,8 @@ test "taskwt: no push without publish - the log of git calls and the head of ori
     tt_commit(s1.path, "one.txt", "one\n", "s1")
     tt_commit(s2.path, "a.txt", "alpha\nbeta-two\ngamma\n", "s2")
     tt_commit(tree.path, "a.txt", "alpha\nbeta-tree\ngamma\n", "tree")
-    ro m1 = subtask_merge(tree.path, s1.branch, "192-s1: x")
-    ro m2 = subtask_merge(tree.path, s2.branch, "192-s2: y")
+    ro m1 = subtask_merge(tree.path, s1.branch, "192.1: x")
+    ro m2 = subtask_merge(tree.path, s2.branch, "192.2: y")
     ro ab = subtask_merge_abort(tree.path)
     ro removed = subtask_tree_remove(tree.path, s1.path, s1.branch)
     ro n = unmerged_count(tree.path)
@@ -683,4 +683,49 @@ test "taskwt source: the word push stands in one function, which only the end of
     assert(!text.contains("export fn tw_git"))
     assert(!text.contains("export fn tw_exec"))
     assert(!text.contains("export fn tw_push"))
+}
+
+test "taskwt: a temporary file is not work, the subject of a commit is English words of the slug with the number, the list is literal paths" {
+    assert(is_temp_file("a/b/notes.tmp") && is_temp_file("run.log") && is_temp_file("x/Thumbs.db") && is_temp_file("doc/tasks/007-x/task/tests-run.json") && is_temp_file("file.txt~") && is_temp_file(".#lock"))
+    assert(!is_temp_file("src/main.nv") && !is_temp_file("doc/tasks/007-x/task/message.1.md") && !is_temp_file("images/image-1.png"))
+    assert(commit_subject("232", "fix-the-list") == "232 Fix the list")
+    assert(commit_subject("232", "privet") == "232 Privet")
+    assert(commit_subject("232", "") == "232 Work of the task")
+    assert(pathspec_lines(["a b.txt", "d/*.md"]) == ":(literal)a b.txt\n:(literal)d/*.md\n")
+}
+
+test "taskwt: the date of a run of CI is read, the answer of gh is parsed, no runs and no JSON are no data" {
+    assert(iso_to_ms("1970-01-02T00:00:00Z") == 86400000)
+    assert(iso_to_ms("2026-10-26T10:11:12Z") == 1793009472000)
+    assert(iso_to_ms("garbage") == 0)
+    ro run = parse_ci_run("[{\"conclusion\":\"success\",\"status\":\"completed\",\"headSha\":\"abc\",\"updatedAt\":\"1970-01-02T00:00:00Z\"}]")
+    assert(run.found && run.conclusion == "success" && run.sha == "abc" && run.at == 86400000)
+    assert(!parse_ci_run("[]").found)
+    assert(!parse_ci_run("nope").found)
+    ro going = parse_ci_run("[{\"conclusion\":\"\",\"status\":\"in_progress\",\"headSha\":\"abc\",\"updatedAt\":\"1970-01-02T00:00:00Z\"}]")
+    assert(going.found && going.conclusion == "")
+}
+
+test "taskwt autocommit: what the agent left (a changed file, a new file, a deleted file) goes in ONE signed commit, a temporary file stays out, a second call has nothing to commit" {
+    ro w = tt_world("auto")
+    ro tree = tt_task(w, "232", "fix-the-list")
+    tt_write("${tree.path}/a.txt", "alpha\nchanged\ngamma\n")
+    tt_write("${tree.path}/new file.txt", "new\n")
+    tt_write("${tree.path}/junk.tmp", "temporary\n")
+    tg(tree.path, ["rm", "-q", "--", "README.md"])
+    ro before = tg(tree.path, ["rev-list", "--count", "HEAD"]).to_int() ?? 0
+    ro r = autocommit(tree.path, commit_subject("232", "fix-the-list"))
+    assert(r.status == "done")
+    assert(r.files == 3)
+    assert((tg(tree.path, ["rev-list", "--count", "HEAD"]).to_int() ?? 0) == before + 1)
+    assert(tg(tree.path, ["log", "-1", "--format=%s"]) == "232 Fix the list")
+    assert(tg(tree.path, ["log", "-1", "--format=%B"]).contains("Signed-off-by: Test Worker"))
+    ro changed = tg(tree.path, ["show", "--name-status", "--format=", "HEAD"])
+    assert(changed.contains("a.txt") && changed.contains("new file.txt") && changed.contains("README.md"))
+    assert(!changed.contains("junk.tmp"))
+    assert(tg(tree.path, ["status", "--porcelain"]).contains("junk.tmp"))
+    assert(!tw_exists("${tree.path}/crew-autocommit.lst"))
+    ro again = autocommit(tree.path, commit_subject("232", "fix-the-list"))
+    assert(again.status == "none")
+    tt_rm(w.root)
 }

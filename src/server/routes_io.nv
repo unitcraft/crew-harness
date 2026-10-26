@@ -2,7 +2,7 @@
 // The git operations of the tasks (trees, merges, publishing) are the module of task 192r (`taskwt.nv`); here is only what the hub needs of the plain disk.
 module crew_harness.server
 
-import std.fs.{Fs, real_fs, Path, read_text, write_text, create_dir_all, try_exists, read_dir, metadata}
+import std.fs.{Fs, real_fs, Path, read_text, write_text, create_dir_all, try_exists, read_dir, metadata, copy_file, remove_file}
 import std.os.{Command}
 
 fn rio_path(p str) -> Path => Path.from_bytes(p.bytes())
@@ -79,6 +79,51 @@ export fn dir_names(p str) -> []str {
         }
     }
     out
+}
+
+/// Copy a file as it is (bytes), the folders above the new one are made; false - it could not be copied.
+export fn io_copy_file(src str, dst str) -> bool {
+    with Fs = real_fs() {
+        match rio_path(dst).parent() {
+            Some(parent) => {
+                match create_dir_all(parent) {
+                    Ok(done) => ()
+                    Err(e) => return false
+                }
+            }
+            None => ()
+        }
+        match copy_file(rio_path(src), rio_path(dst)) {
+            Ok(n) => true
+            Err(e) => false
+        }
+    }
+}
+
+/// Copy a folder with everything in it (the folders inside too) into `dst`; the number of the files copied (-1 - one could not be).
+export fn io_copy_dir(src str, dst str) -> int {
+    mut count = 0
+    for name in dir_names(src) {
+        if dir_there("${src}/${name}") {
+            ro inner = io_copy_dir("${src}/${name}", "${dst}/${name}")
+            if inner < 0 { return -1 }
+            count += inner
+        } else {
+            if !io_copy_file("${src}/${name}", "${dst}/${name}") { return -1 }
+            count += 1
+        }
+    }
+    count
+}
+
+/// Remove a file; false - it could not be.
+export fn io_remove_file(p str) -> bool {
+    with Fs = real_fs() {
+        match remove_file(rio_path(p)) {
+            Ok(done) => true
+            Err(e) => false
+        }
+    }
 }
 
 /// ShellOut: did the command end with 0, and what it printed (the output; the error text when it failed).

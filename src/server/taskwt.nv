@@ -1,7 +1,7 @@
 // taskwt.nv - task 192r: the git operations of the tasks of the control panel.
 //
 // A task lives in a tree of its own (`<worktrees>/<repo>-NNN-slug`, branch `task/NNN-slug`), a subtask of an agent in a tree beside it
-// (`...-sN`, branch `task/NNN-slug-sN`). The functions below start `git` as a child process (every call has a time limit, no prompt, no
+// (`<project>-NNN.N-slug`, branch `task/NNN.N-slug`). The functions below start `git` as a child process (every call has a time limit, no prompt, no
 // editor), return values instead of printing, and never write a secret to a log: a text that comes back from git passes `tw_redact`
 // (the user and the password of a URL are cut off). The module never touches the files or the branch of the main copy, except for the
 // one fast-forward after a published task (see `publish`).
@@ -13,8 +13,9 @@
 module crew_harness.server
 
 import std.text
-import std.fs.{Fs, read_text, write_text, try_exists, remove_dir, canonicalize, Path}
+import std.fs.{Fs, read_text, write_text, try_exists, remove_dir, remove_file, canonicalize, Path}
 import std.os.{Os, env, Command, Stdio, Tree}
+import std.encoding.json.{Json, JsonValue, JsonObject}
 
 /// Time limits, in milliseconds: a local call, a call over the network.
 const TW_LOCAL_MS = 60000
@@ -365,7 +366,7 @@ export fn task_tree_create(repo str, nnn str, slug str) Proc Os Fs -> Result[Tas
     Ok(TaskTree { branch, path, base, created, note })
 }
 
-/// Make the tree of the subtask number `n` beside the tree of the task: branch `task/NNN-slug-sN`, folder `<tree of the task>-sN`, cut from the
+/// Make the tree of the subtask number `n` beside the tree of the task: branch `task/NNN.N-slug`, folder `<project>-NNN.N-slug` beside the tree of the task, cut from the
 /// current head of the task. A tree that is there already is reused.
 export fn subtask_tree_create(task_tree_path str, nnn str, slug str, n int) Proc Os Fs -> Result[SubtaskTree, str] {
     ro dir = tw_norm(task_tree_path)
@@ -375,8 +376,12 @@ export fn subtask_tree_create(task_tree_path str, nnn str, slug str, n int) Proc
     if n < 1 { return Err("the number of the subtask must be 1 or more") }
     ro base = tw_head_sha(dir)
     if base.byte_len() == 0 { return Err("the tree of the task has no head") }
-    ro branch = "task/${nnn}-${slug}-s${n}"
-    ro path = "${dir}-s${n}"
+    ro branch = "task/${nnn}.${n}-${slug}"
+    // the folder is beside the tree of the task: `<project>-NNN.N-slug` (the tree of the task is `<project>-NNN-slug`)
+    ro own = tw_base_name(dir)
+    ro tail = "-${nnn}-${slug}"
+    ro project = if own.ends_with(tail) { own[..own.byte_len() - tail.byte_len()] } else { own }
+    ro path = "${tw_parent(dir)}/${project}-${nnn}.${n}-${slug}"
     ro created = match tw_tree_ensure(dir, path, branch, base) {
         Ok(c) => c
         Err(e) => return Err(e)
@@ -725,4 +730,162 @@ export fn publish_continue(task_tree_path str, main_copy_path str, run_tests fn(
     if tw_merging(tree) { return tw_blocked("precheck", "a merge is in progress in the tree: finish it first") }
     if !is_clean(tree) { return tw_blocked("precheck", "the tree has uncommitted changes") }
     tw_publish_tail(tree, main_copy, run_tests)
+}
+
+// ----- the commit of what the agent left (the button "Слить в main") -----
+
+/// A file that is not the work: a temporary or editor file, a log, the record of the tests of the hub.
+export fn is_temp_file(path str) -> bool {
+    ro p = tw_slash(path).to_ascii_lower()
+    ro name = tw_base_name(p)
+    if name == "thumbs.db" || name == ".ds_store" || name == "nul" || name == "tests-run.json" { return true }
+    if name.starts_with("~$") || name.starts_with(".#") || name.ends_with("~") { return true }
+    for ext in [".tmp", ".temp", ".log", ".swp", ".swo", ".bak", ".orig", ".rej", ".pyc"] {
+        if name.ends_with(ext) { return true }
+    }
+    false
+}
+
+/// The subject of the commit made for a task: `<number> <the words of the slug>`, the first word in capitals ("232 Fix the list").
+export fn commit_subject(number str, slug str) -> str {
+    ro words = tw_split(slug.replace("_", "-"), "-")
+    mut parts = []str.new()
+    for w in words {
+        if w.byte_len() > 0 { parts.push(w) }
+    }
+    if parts.len() == 0 { return "${number} Work of the task" }
+    ro first = parts[0]
+    ro head = "${first[..1].to_ascii_upper()}${first[1..]}"
+    mut rest = []str.new()
+    mut i = 1
+    while i < parts.len() {
+        rest.push(parts[i])
+        i += 1
+    }
+    if rest.len() == 0 { return "${number} ${head}" }
+    "${number} ${head} ${rest.join(" ")}"
+}
+
+/// The list of paths for `--pathspec-from-file`: one literal path to a line.
+export fn pathspec_lines(paths []str) -> str {
+    mut lines = []str.new()
+    for p in paths { lines.push(":(literal)${p}") }
+    "${lines.join("\n")}\n"
+}
+
+/// AutoResult: `status` "none" (nothing to commit), "done" (`files` files in one commit) or "error" (`text` says why).
+export type AutoResult { status str, files int, text str }
+
+fn tw_add_unique(mut out []str, items []str) -> () {
+    for it in items {
+        if !is_temp_file(it) && !out.contains(it) { out.push(it) }
+    }
+}
+
+/// Commit everything the agent changed and did not commit, in ONE commit (`git commit -s`): the changed and deleted tracked files and the new files that
+/// are not ignored, except the temporary ones; the files are named in a list (`--pathspec-from-file`), never `git add -A`.
+export fn autocommit(tree str, message str) Proc Os Fs -> AutoResult {
+    ro dir = tw_norm(tree)
+    ro changed = tw_git(dir, ["ls-files", "-m", "-d"])
+    ro fresh = tw_git(dir, ["ls-files", "-o", "--exclude-standard"])
+    if changed.code != 0 { return AutoResult { status: "error", files: 0, text: tw_why(changed) } }
+    if fresh.code != 0 { return AutoResult { status: "error", files: 0, text: tw_why(fresh) } }
+    ro staged = tw_git(dir, ["diff", "--cached", "--name-only"])
+    if staged.code != 0 { return AutoResult { status: "error", files: 0, text: tw_why(staged) } }
+    // the files to stage: the changed, the deleted and the new ones that are not temporary; what the agent staged itself is committed with them
+    mut paths = []str.new()
+    tw_add_unique(paths, tw_lines(changed.out))
+    tw_add_unique(paths, tw_lines(fresh.out))
+    mut all = []str.new()
+    tw_add_unique(all, paths)
+    tw_add_unique(all, tw_lines(staged.out))
+    if all.len() == 0 { return AutoResult { status: "none", files: 0, text: "" } }
+    if paths.len() > 0 {
+        ro gd = tw_git(dir, ["rev-parse", "--absolute-git-dir"])
+        if gd.code != 0 { return AutoResult { status: "error", files: 0, text: tw_why(gd) } }
+        ro list = "${tw_norm(gd.out.trim_ascii())}/crew-autocommit.lst"
+        ro lp = Path.from_bytes(list.bytes())
+        match write_text(lp, pathspec_lines(paths)) {
+            Ok(done) => ()
+            Err(e) => return AutoResult { status: "error", files: 0, text: "cannot write the list of files: ${e}" }
+        }
+        // the files are named in a list (never the whole tree at once)
+        ro added = tw_git(dir, ["add", "--pathspec-from-file=${list}"])
+        ro gone = remove_file(lp)
+        if added.code != 0 { return AutoResult { status: "error", files: 0, text: tw_why(added) } }
+    }
+    ro made = tw_git(dir, ["commit", "-s", "-m", message])
+    if made.code != 0 { return AutoResult { status: "error", files: 0, text: tw_why(made) } }
+    AutoResult { status: "done", files: all.len(), text: tw_head_sha(dir) }
+}
+
+// ----- the last run of CI of main (GitHub, by `gh` when it is there) -----
+
+/// CiRun: the last run of the workflows on main; `found` false - no data (no `gh`, no network, no runs); `conclusion` "success", "failure", ... or "" while it runs; `at` when it was updated (ms).
+export type CiRun { found bool, conclusion str, sha str, at int }
+
+fn ci_none() -> CiRun => { found: false, conclusion: "", sha: "", at: 0 }
+
+/// `2026-10-26T10:11:12Z` as milliseconds since 1970 (0 when it is not a date).
+export fn iso_to_ms(text str) -> int {
+    if text.byte_len() < 19 { return 0 }
+    ro y = text[0..4].to_int() ?? -1
+    ro mo = text[5..7].to_int() ?? -1
+    ro d = text[8..10].to_int() ?? -1
+    ro h = text[11..13].to_int() ?? -1
+    ro mi = text[14..16].to_int() ?? -1
+    ro se = text[17..19].to_int() ?? -1
+    if y < 1970 || mo < 1 || mo > 12 || d < 1 || d > 31 || h < 0 || mi < 0 || se < 0 { return 0 }
+    ro y2 = if mo <= 2 { y - 1 } else { y }
+    ro era = y2 / 400
+    ro yoe = y2 - era * 400
+    ro mp = if mo > 2 { mo - 3 } else { mo + 9 }
+    ro doy = (153 * mp + 2) / 5 + d - 1
+    ro doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+    ro days = era * 146097 + doe - 719468
+    ((days * 24 + h) * 60 + mi) * 60000 + se * 1000
+}
+
+/// The run from the answer of `gh run list --json conclusion,status,headSha,updatedAt` (an array of one).
+export fn parse_ci_run(text str) -> CiRun {
+    match Json.parse(text) {
+        Ok(v) => {
+            ro list = v.array() ?? []JsonValue.new()
+            if list.len() == 0 { return ci_none() }
+            ro o = list[0].object() ?? JsonObject.new()
+            ro conclusion = match o.get("conclusion") { Some(c) => c.str() ?? "", None => "" }
+            ro sha = match o.get("headSha") { Some(c) => c.str() ?? "", None => "" }
+            ro upd = match o.get("updatedAt") { Some(c) => c.str() ?? "", None => "" }
+            CiRun { found: true, conclusion, sha, at: iso_to_ms(upd) }
+        }
+        Err(e) => ci_none()
+    }
+}
+
+/// The last run of CI on main, asked of `gh` in the main copy (15 s at most); no data when `gh` is not there or says no.
+export fn ci_latest(main_copy str) Proc Os Fs -> CiRun {
+    mut command = Command.new("gh")
+    command.arg("run")
+    command.arg("list")
+    command.arg("--branch")
+    command.arg("main")
+    command.arg("--limit")
+    command.arg("1")
+    command.arg("--json")
+    command.arg("conclusion,status,headSha,updatedAt")
+    command.env("GH_PROMPT_DISABLED", "1")
+    command.dir(Path.from_bytes(tw_norm(main_copy).bytes()))
+    command.tree(Tree.Group)
+    mut out = ""
+    ro finished = with Fail[TimeoutError] = |_e| { false } {
+        supervised(timeout: 15000.to_millis()) {
+            match command.output() {
+                Ok(o) => { if o.status.code() == 0 { out = o.stdout.to_str_lossy() } }
+                Err(e) => ()
+            }
+        }
+        true
+    }
+    if !finished || out.byte_len() == 0 { return ci_none() }
+    parse_ci_run(out)
 }

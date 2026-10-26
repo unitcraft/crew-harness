@@ -200,7 +200,7 @@ test "routes: the state of a mode for the page: route, steps, the task with its 
     rt.apply("route_step", "{\"n\":2,\"state\":\"running\"}")
     ro one = parse_progress("- [x] Постановка\n- [x] Проверка\n- [x] Итог\n")
     ro two = parse_progress("- [x] Постановка\n- [ ] Проверка\n- [ ] Итог\n")
-    ro text = route_view_text(rt, rt_titles(), [one, two], true, 0)
+    ro text = route_view_text(rt, rt_titles(), [one, two], true, 0, task_extra_none())
     ro o = rt_obj(text)
     assert(jtext(o, "route") == "fast")
     match o.get("running") {
@@ -241,7 +241,7 @@ test "routes: the state of a mode for the page: route, steps, the task with its 
 
 test "routes: interactive has no steps and no task until a message; the task is null then" {
     mut rt = route_session_new()
-    ro text = route_view_text(rt, []str.new(), []Progress.new(), false, 0)
+    ro text = route_view_text(rt, []str.new(), []Progress.new(), false, 0, task_extra_none())
     ro o = rt_obj(text)
     assert(jtext(o, "route") == "interactive")
     ro steps = (o.get("steps") ?? JsonValue.null()).array() ?? []JsonValue.new()
@@ -258,23 +258,23 @@ test "routes: a subtask that was extended shows merged_into; a subtask of its ow
     assert(rt.merged_into == 1)
     rt.apply("route_task", "{\"op\":\"subtask\",\"n\":2,\"title\":\"Вторая\"}")
     assert(rt.merged_into == 0)
-    rt.apply("route_task", "{\"op\":\"sub_worktree\",\"n\":2,\"branch\":\"task/007-sdelay-s2\",\"worktree\":\"/w/r-007-sdelay-s2\"}")
+    rt.apply("route_task", "{\"op\":\"sub_worktree\",\"n\":2,\"branch\":\"task/007.2-sdelay\",\"worktree\":\"/w/r-007.2-sdelay\"}")
     ro p = parse_progress("- [ ] Постановка\n")
-    ro text = route_view_text(rt, ["Постановка"], [p, p], false, 0)
+    ro text = route_view_text(rt, ["Постановка"], [p, p], false, 0, task_extra_none())
     ro task = jchild(rt_obj(text), "task") ?? JsonObject.new()
     ro subs = (task.get("subtasks") ?? JsonValue.null()).array() ?? []JsonValue.new()
     ro a = subs[0].object() ?? JsonObject.new()
     ro b = subs[1].object() ?? JsonObject.new()
     assert(jtext(a, "state") == "planned")
     assert(jtext(b, "state") == "running")
-    assert(jtext(b, "branch") == "task/007-sdelay-s2")
-    assert(jtext(b, "worktree") == "/w/r-007-sdelay-s2")
+    assert(jtext(b, "branch") == "task/007.2-sdelay")
+    assert(jtext(b, "worktree") == "/w/r-007.2-sdelay")
     match b.get("merged") {
         Some(v) => assert((v.bool() ?? true) == false)
         None => panic("no merged")
     }
     rt.apply("route_task", "{\"op\":\"extend\",\"n\":2}")
-    ro again = rt_obj(route_view_text(rt, ["Постановка"], [p, p], false, 0))
+    ro again = rt_obj(route_view_text(rt, ["Постановка"], [p, p], false, 0, task_extra_none()))
     ro sub2 = ((jchild(again, "task") ?? JsonObject.new()).get("subtasks") ?? JsonValue.null()).array() ?? []JsonValue.new()
     ro last = sub2[1].object() ?? JsonObject.new()
     assert(jtext(last, "merged_into") == "2")
@@ -287,15 +287,15 @@ test "routes: a subtask that was extended shows merged_into; a subtask of its ow
 
 test "routes: a merged subtask is done and its tree is gone; a conflict keeps it unmerged with the text" {
     mut rt = rt_sample()
-    rt.apply("route_task", "{\"op\":\"sub_worktree\",\"n\":1,\"branch\":\"task/007-sdelay-s1\",\"worktree\":\"/w/r-007-sdelay-s1\"}")
+    rt.apply("route_task", "{\"op\":\"sub_worktree\",\"n\":1,\"branch\":\"task/007.1-sdelay\",\"worktree\":\"/w/r-007.1-sdelay\"}")
     rt.apply("route_task", "{\"op\":\"sub_conflict\",\"n\":1,\"text\":\"CONFLICT in a.txt\"}")
     ro p = parse_progress("- [ ] Постановка\n")
-    ro after = jchild(rt_obj(route_view_text(rt, ["Постановка"], [p], false, 0)), "task") ?? JsonObject.new()
+    ro after = jchild(rt_obj(route_view_text(rt, ["Постановка"], [p], false, 0, task_extra_none())), "task") ?? JsonObject.new()
     ro s1 = ((after.get("subtasks") ?? JsonValue.null()).array() ?? []JsonValue.new())[0].object() ?? JsonObject.new()
     assert(jtext(s1, "conflict") == "CONFLICT in a.txt")
     assert(jtext(s1, "state") != "done")
     rt.apply("route_task", "{\"op\":\"sub_merged\",\"n\":1}")
-    ro done = jchild(rt_obj(route_view_text(rt, ["Постановка"], [p], false, 0)), "task") ?? JsonObject.new()
+    ro done = jchild(rt_obj(route_view_text(rt, ["Постановка"], [p], false, 0, task_extra_none())), "task") ?? JsonObject.new()
     ro d1 = ((done.get("subtasks") ?? JsonValue.null()).array() ?? []JsonValue.new())[0].object() ?? JsonObject.new()
     assert(jtext(d1, "state") == "done")
     assert(jtext(d1, "worktree") == "")
@@ -330,8 +330,8 @@ test "routes: the working folder of the agent is the tree of the subtask, else t
     rt = rt_sample()
     assert(rt.agent_dir("/repo") == "/w/r-007-sdelay")
     rt.apply("route_task", "{\"op\":\"subtask\",\"n\":2,\"title\":\"B\"}")
-    rt.apply("route_task", "{\"op\":\"sub_worktree\",\"n\":2,\"branch\":\"b\",\"worktree\":\"/w/r-007-sdelay-s2\"}")
-    assert(rt.agent_dir("/repo") == "/w/r-007-sdelay-s2")
+    rt.apply("route_task", "{\"op\":\"sub_worktree\",\"n\":2,\"branch\":\"b\",\"worktree\":\"/w/r-007.2-sdelay\"}")
+    assert(rt.agent_dir("/repo") == "/w/r-007.2-sdelay")
     rt.apply("route_task", "{\"op\":\"sub_merged\",\"n\":2}")
     assert(rt.agent_dir("/repo") == "/w/r-007-sdelay")
 }
@@ -363,4 +363,117 @@ test "routes: the protocol for the reviewer holds the prompt, the message, the d
     assert(cut.byte_len() < 100)
     assert(cut.contains("обрезано"))
     assert(cut_text("short", 10) == "short")
+}
+
+test "routes: planning is a mode, its file has four steps and the review of the assignment is the one independent step, required; no spec.md and plan.md" {
+    assert(route_valid("planning"))
+    assert(!route_valid("nonsense"))
+    ro planning = parse_route_doc("planning", rt_repo_file("planning.md"))
+    assert(planning.steps.len() == 4)
+    assert(rt_independent(planning.steps) == 1)
+    for step in planning.steps { if step.kind == "independent" { assert(step.required) } }
+    assert(planning.instruction.contains("Задание"))
+    assert(planning.instruction.contains("images/"))
+    for step in planning.steps { assert(step.prompt.byte_len() > 50) }
+    for name in ["interactive.md", "fast.md", "full.md"] {
+        assert(parse_route_doc("x", rt_repo_file(name)).instruction.contains("раздел «Задание»"))
+    }
+}
+
+test "routes: the steps of the tests say the mark of the verdict, so the hub can write the record" {
+    for name in ["fast.md", "full.md"] {
+        ro doc = parse_route_doc("x", rt_repo_file(name))
+        mut marked = 0
+        for step in doc.steps { if step.prompt.contains("ТЕСТЫ: ЗЕЛЁНЫЕ") { marked += 1 } }
+        assert(marked == 1)
+    }
+}
+
+test "routes: the place of work: a tree by default, the key of route_set turns it off and on, a tree can be attached later, the old journal that parked a task forgets it" {
+    mut rt = route_session_new()
+    assert(rt.use_tree)
+    rt.apply("route_set", "{\"route\":\"planning\",\"worktree\":false}")
+    assert(rt.route == "planning")
+    assert(!rt.use_tree)
+    rt.apply("route_set", "{\"worktree\":true}")
+    assert(rt.use_tree)
+    assert(rt.route == "planning")
+    rt.apply("route_task", "{\"op\":\"open\",\"id\":\"007-x\",\"number\":\"007\",\"dir\":\"/d/s/tasks/007-x/task\",\"shown\":\"/d/s/tasks/007-x/task\",\"branch\":\"\",\"worktree\":\"\",\"title\":\"X\"}")
+    assert(rt.task_open && rt.worktree == "")
+    assert(rt.agent_dir("/repo") == "/repo")
+    rt.apply("route_task", "{\"op\":\"attach_tree\",\"branch\":\"task/007-x\",\"worktree\":\"/w/r-007-x\",\"base\":\"origin/main\",\"dir\":\"/w/r-007-x/doc/tasks/007-x/task\",\"shown\":\"doc/tasks/007-x/task\"}")
+    assert(rt.task_open && rt.worktree == "/w/r-007-x" && rt.branch == "task/007-x")
+    assert(rt.task_dir == "/w/r-007-x/doc/tasks/007-x/task")
+    assert(rt.agent_dir("/repo") == "/w/r-007-x")
+    rt.apply("route_task", "{\"op\":\"park\",\"state\":\"kept\",\"unmerged\":1}")
+    assert(!rt.task_open)
+}
+
+test "routes: the state tells the place of work, the tests of the branch and of main, the idle time and the stale mark" {
+    mut rt = rt_sample()
+    ro none = rt_obj(route_view_text(rt, ["Постановка"], [parse_progress("- [ ] Постановка\n")], false, 0, task_extra_none()))
+    assert((none.get("use_tree") ?? JsonValue.null()).bool() ?? false)
+    ro task0 = jchild(none, "task") ?? JsonObject.new()
+    ro tests0 = jchild(task0, "tests") ?? JsonObject.new()
+    assert(jtext(jchild(tests0, "branch") ?? JsonObject.new(), "state") == "never")
+    assert(jtext(jchild(tests0, "main") ?? JsonObject.new(), "state") == "never")
+    assert(!((task0.get("stale") ?? JsonValue.null()).bool() ?? true))
+    ro rec = tests_rec_parse(tests_rec_text("abc123", 5000, "green", "npm test"))
+    assert(rec.has && rec.commit == "abc123" && rec.at == 5000 && rec.result == "green" && rec.command == "npm test")
+    ro ci = TestsRec { has: true, commit: "def456", at: 9000, result: "red", command: "CI" }
+    ro extra = TaskExtra { branch_tests: rec, head: "abc123", main_tests: ci, main_source: "ci", idle_days: 31, stale: true }
+    ro full = rt_obj(route_view_text(rt, ["Постановка"], [parse_progress("- [ ] Постановка\n")], false, 0, extra))
+    ro task = jchild(full, "task") ?? JsonObject.new()
+    ro tests = jchild(task, "tests") ?? JsonObject.new()
+    ro branch = jchild(tests, "branch") ?? JsonObject.new()
+    ro main = jchild(tests, "main") ?? JsonObject.new()
+    assert(jtext(branch, "state") == "green")
+    assert(jtext(branch, "commit") == "abc123" && jtext(branch, "head") == "abc123")
+    assert(jtext(branch, "command") == "npm test")
+    assert(jtext(main, "state") == "red" && jtext(main, "source") == "ci")
+    assert((task.get("stale") ?? JsonValue.null()).bool() ?? false)
+    assert(((task.get("idle_days") ?? JsonValue.null()).int() ?? 0) == 31)
+    // a newer head: the run was not on this commit
+    ro older = TaskExtra { branch_tests: rec, head: "zzz999", main_tests: ci, main_source: "ci", idle_days: 0, stale: false }
+    ro again = rt_obj(route_view_text(rt, ["Постановка"], [parse_progress("- [ ] Постановка\n")], false, 0, older))
+    ro b2 = jchild(jchild(jchild(again, "task") ?? JsonObject.new(), "tests") ?? JsonObject.new(), "branch") ?? JsonObject.new()
+    assert(jtext(b2, "state") == "outdated")
+    assert(jtext(b2, "result") == "green")
+    rt.testing = true
+    ro running = jchild(rt_obj(route_view_text(rt, ["Постановка"], [parse_progress("- [ ] Постановка\n")], false, 0, task_extra_none())), "task") ?? JsonObject.new()
+    assert((running.get("tests_running") ?? JsonValue.null()).bool() ?? false)
+    assert(tests_state(tests_rec_none(), "x") == "never")
+    assert(!tests_rec_parse("not json").has)
+    assert(!tests_rec_parse("{\"result\":\"maybe\"}").has)
+}
+
+test "routes: the card to finish offers three ways: merge into main first, then the steps of the finishing; no keep" {
+    mut rt = rt_sample()
+    rt.apply("route_task", "{\"op\":\"state\",\"state\":\"finishing\",\"note\":\"\"}")
+    ro task = jchild(rt_obj(route_view_text(rt, ["Постановка"], [parse_progress("- [ ] Постановка\n")], false, 0, task_extra_none())), "task") ?? JsonObject.new()
+    ro options = (task.get("finish_options") ?? JsonValue.null()).array() ?? []JsonValue.new()
+    assert(options.len() == 3)
+    assert(jtext(options[0].object() ?? JsonObject.new(), "id") == "merge")
+    assert(jtext(options[1].object() ?? JsonObject.new(), "id") == "fast")
+    assert(jtext(options[2].object() ?? JsonObject.new(), "id") == "full")
+    for o in options { assert(jtext(o.object() ?? JsonObject.new(), "id") != "keep") }
+}
+
+test "routes: the note about a planned task and its pictures is said only when there is something to say" {
+    assert(route_files_hint("", 1, true, true) == "")
+    assert(route_files_hint("doc/tasks/007-x/task", 1, false, false) == "")
+    ro a = route_files_hint("doc/tasks/007-x/task", 2, true, false)
+    assert(a.contains("message.2.md") && a.contains("«Задание»") && !a.contains("images/"))
+    ro b = route_files_hint("doc/tasks/007-x/task", 1, false, true)
+    assert(b.contains("doc/tasks/007-x/task/images/") && !b.contains("«Задание»"))
+    ro both = route_files_hint("doc/tasks/007-x/task", 1, true, true)
+    assert(both.contains("«Задание»") && both.contains("images/") && both.starts_with("[crew]"))
+}
+
+test "routes: the prelude of the planning holds its instruction first" {
+    ro doc = parse_route_doc("planning", rt_repo_file("planning.md"))
+    ro text = route_prelude(doc, true, "doc/tasks/007-x/task", 1, "")
+    assert(doc.instruction.byte_len() > 500)
+    assert(text.starts_with("[crew] Режим «Планирование»"))
+    assert(text.contains("Подзадача 1"))
 }

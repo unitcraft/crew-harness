@@ -750,6 +750,7 @@ fn Hub mut @resume_session(id str) Proc Detach Time -> () {
                         None => ()
                     }
                 }
+                if e.at > s.rt.active_at { s.rt.active_at = e.at }
                 // the mode of work and its task come back from the journal (task 192q)
                 if e.kind == EventKind.Input && route_signals().contains(e.name) { s.rt.apply(e.name, e.input) }
                 // the choices of the owner, per family: the last word of the journal (task 192t)
@@ -819,6 +820,12 @@ fn Hub mut @create(conn int, trace str, input JsonObject) Proc Detach Time -> ()
             @add_session(s)
             ro at = @sessions.len() - 1
             @drain(at)
+            // the mode and the place of work chosen on the page before the first message (the default: interactive, with a tree)
+            mut place = JsonObject.new()
+            js(place, "route", if route_valid(jtext(input, "route")) { jtext(input, "route") } else { "interactive" })
+            jput(place, "worktree", JsonValue.bool(match input.get("worktree") { Some(v) => jflag(input, "worktree"), None => true }))
+            @rt_journal(at, "route_set", JsonValue.object(place).to_str())
+            @route_broadcast(at, true)
             ro reason = @ensure_client(at)
             if reason.byte_len() > 0 {
                 @say_log("the agent of ${trace} cannot be started: ${reason}")
@@ -946,6 +953,7 @@ fn Hub mut @say(trace str, text str, items []JsonValue) Proc Detach Time -> () {
         // the journal keeps the records of the pictures, right before the message they belong to; the files go to the client for the prompt
         accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("message_images", images_text(prepared.metas)))
         s.clients[0].attach_images(prepared.files)
+        @route_save_images(at, prepared.files)
     }
     ro prelude = @route_message_prelude(at)
     if prelude.byte_len() > 0 { s.clients[0].set_prelude(prelude) }
@@ -1222,7 +1230,7 @@ fn delete_files(root str, id str) Fs -> bool => remove_session_dir(root, id)
 // The owner deleted a session (task 192): the turn is cancelled, the agent is stopped, the folder of the session (the journal, the snapshot, the inbox, the
 // trace of the agent, the pictures) is removed, and every page is told by the event `session_deleted` (it is not kept: the session is gone). Over PostgreSQL
 // the application role cannot delete, so the owner is told and nothing changes.
-fn Hub mut @delete(conn int, trace str) Proc Detach Time -> () {
+fn Hub mut @delete(conn int, trace str, branch str) Proc Detach Time -> () {
     ro at = @find(trace)
     if at < 0 { return }
     if @settings.store == "pg" {
@@ -1235,6 +1243,19 @@ fn Hub mut @delete(conn int, trace str) Proc Detach Time -> () {
     if s.clients.len() > 0 {
         s.clients[0].close()
         s.clients = []AcpClient.new()
+    }
+    // the tree and the branch of the task live as long as the session is in the list; a deleted session takes them with it only when there is nothing to lose
+    // (no commits that are not merged, no changed files), else they stay, unless the owner said "drop" (`branch`: "drop" - with the work, "keep" - leave them)
+    if s.rt.task_open && s.rt.worktree.byte_len() > 0 {
+        @route_close_agent_in(at, s.rt.worktree)
+        ro count = tk_unmerged(s.rt.worktree)
+        ro work = count > 0 || @route_dirty(s)
+        if branch == "drop" || (!work && branch != "keep") {
+            ro dropped = tk_tree_drop(@cwd_of(s.folder), s.rt.worktree, s.rt.branch)
+            if !dropped.ok { @say_log("the tree of the task ${s.rt.task_id} is not removed: ${dropped.text}") }
+        } else {
+            @say_log("the session ${trace} is deleted, the tree ${s.rt.worktree} and the branch ${s.rt.branch} stay (${count} commits not merged)")
+        }
     }
     ro removed = with Fs = real_fs() { delete_files(@settings.data_dir, trace) }
     if !removed {
@@ -1368,6 +1389,12 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
         @say_log("a message without a trace from page ${conn}")
         return
     }
+    ro active_at = @find(trace)
+    if active_at >= 0 {
+        mut touched = @sessions[active_at]
+        touched.rt.active_at = now_millis()
+        @sessions[active_at] = touched
+    }
     if kind == "session_created" {
         @create(conn, trace, input)
     } else if kind == "user_message" {
@@ -1381,7 +1408,7 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
     } else if kind == "session_agent" {
         @switch_agent(trace, jtext(input, "agent"))
     } else if kind == "session_delete" {
-        @delete(conn, trace)
+        @delete(conn, trace, jtext(input, "branch"))
     } else if kind == "session_reorder" {
         @reorder(jlist(input, "ids"))
     } else if kind == "session_move" {
@@ -1412,14 +1439,16 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
         @route_parallel(trace, jint(input, "n"), jflag(input, "on"))
     } else if kind == "route_subtask_choose" {
         @route_choose_signal(trace, jint(input, "n"), jtext(input, "tree"))
-    } else if kind == "route_keep" {
-        @route_keep(trace)
-    } else if kind == "route_publish" {
-        @route_publish(trace)
+    } else if kind == "route_merge" || kind == "route_publish" {
+        @route_merge(trace)
+    } else if kind == "route_tests_run" {
+        @route_tests_run(trace)
+    } else if kind == "route_tree_drop" {
+        @route_tree_drop(trace, jflag(input, "force"))
+    } else if kind == "session_worktree" {
+        @route_worktree(trace, jflag(input, "on"))
     } else if kind == "route_diff" {
         @route_diff(trace)
-    } else if kind == "route_task_resume" {
-        @route_resume(trace, jtext(input, "id"))
     } else {
         @say_log("a message of the kind ${kind} from page ${conn}: ignored")
     }
