@@ -2,10 +2,11 @@
 // страницы не загрузились или упали при старте. Любая ошибка запуска (исключение, необработанный отказ промиса, модуль,
 // который не разобрался или не нашёлся) показывается видимым красным блоком
 // «Ошибка запуска: …» с кнопкой «Сбросить локальные данные и перезагрузить», а не пустым экраном.
-// Долгий старт (страница не заявила «запущена» за BOOT_WAIT_MS, 20 с) — не ошибка: нейтральная строка с кнопкой «Подождать».
+// Старт, что завис (страница не заявила «запущена» за BOOT_WAIT_MS, 15 с: запрос модуля ждёт, а не падает): один раз сама перезагружается
+// с новым адресом (?_r=…, сокет и ответ берутся заново), второй раз — нейтральная строка с кнопками «Подождать» и «Перезагрузить».
 // Только то, что умеют старые Chromium: без ?., ??, let над var не обязательно, стили — через CSSOM (CSP запрещает style="").
 (function crewBootGuard(global) {
-  var BOOT_WAIT_MS = 20000;
+  var BOOT_WAIT_MS = 15000;
   var OUR_KEY = /^crew-/;
   var RETRY_KEY = 'crew-boot-retry';
   var RETRY_MS = 1000;
@@ -52,6 +53,29 @@
     doc.body.appendChild(box);
   }
 
+  // Перезагрузка с новым адресом: ?_r=<время> заставляет браузер взять соединение и ответ заново (а не ждать «мёртвый» keep-alive сокет)
+  function freshReload() {
+    var loc = global.location;
+    try {
+      var search = String(loc.search || '').replace(/([?&])_r=\d+&?/, '$1').replace(/[?&]$/, '');
+      var url = String(loc.pathname || '/') + search + (search.indexOf('?') >= 0 ? '&' : '?') + '_r=' + Date.now() + String(loc.hash || '');
+      loc.replace(url);
+    } catch (e) {
+      loc.reload();
+    }
+  }
+
+  // Завис старт: один автоповтор (счётчик в sessionStorage общий с повтором после ошибки загрузки скрипта), потом — строка с кнопками
+  function stalledStart() {
+    var store;
+    try { store = global.sessionStorage; } catch (e) { store = null; }
+    var tried = false;
+    try { tried = !!(store && store.getItem(RETRY_KEY)); } catch (e) { tried = false; }
+    if (tried || !store) { showSlow(); return; }
+    try { store.setItem(RETRY_KEY, '1'); } catch (e) { showSlow(); return; }
+    freshReload();
+  }
+
   // Долгий старт — не ошибка: нейтральная строка с кнопкой «Подождать», без красного блока и без role=alert
   function showSlow() {
     var doc = global.document;
@@ -70,8 +94,14 @@
     button.addEventListener('click', function () {
       if (box.parentNode) box.parentNode.removeChild(box);
     });
+    var again = doc.createElement('button');
+    again.type = 'button';
+    again.textContent = '\u041f\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c';
+    again.style.marginLeft = '8px';
+    again.addEventListener('click', function () { freshReload(); });
     box.appendChild(text);
     box.appendChild(button);
+    box.appendChild(again);
     doc.body.appendChild(box);
     slow = box;
   }
@@ -107,6 +137,6 @@
   // страница объявляет себя запущенной атрибутом data-booted (app.js): нет его за срок — значит, модуль не стартовал
   global.setTimeout(function () {
     var root = global.document && global.document.documentElement;
-    if (root && root.getAttribute('data-booted') !== '1') showSlow();
+    if (root && root.getAttribute('data-booted') !== '1') stalledStart();
   }, BOOT_WAIT_MS);
 }(typeof window !== 'undefined' ? window : globalThis));

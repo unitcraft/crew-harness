@@ -31,6 +31,9 @@ import std.os.{exit_process}
 // What the router tells a writer: 1 - a text, 2 - a pong, 3 - close.
 type WsOut { kind int, text str }
 
+// How often a page is pinged (ms): about twice a minute, so that a dead page is found in about a minute.
+const PING_EVERY_MS = 25000
+
 // A page that comes to the router (or goes: `gone`): its number and the channel to its writer.
 type Reg { id int, out ChanTx[WsOut], gone bool }
 
@@ -64,6 +67,8 @@ fn write_pump(consume wr TcpStream, source ChanRx[WsOut]) Net -> () {
                     if !write_whole(wr, frame_bytes(OpCode.Text, item.text.bytes())) { writing = false }
                 } else if item.kind == 2 {
                     if !write_whole(wr, frame_bytes(OpCode.Pong, []u8.new())) { writing = false }
+                } else if item.kind == 4 {
+                    if !write_whole(wr, frame_bytes(OpCode.Ping, []u8.new())) { writing = false }
                 } else {
                     ro sent = write_whole(wr, frame_bytes(OpCode.Close, []u8.new()))
                     writing = false
@@ -195,6 +200,7 @@ fn route_line(peers []Peer, line str) Io -> () {
 fn route_loop(link AgentLink, reg_rx ChanRx[Reg]) Io Time Os -> () {
     mut peers = []Peer.new()
     mut running = true
+    mut next_ping = Time.now().unix_millis() + PING_EVERY_MS
     while running {
         mut busy = false
         mut more = true
@@ -231,6 +237,12 @@ fn route_loop(link AgentLink, reg_rx ChanRx[Reg]) Io Time Os -> () {
                 None => { more = false }
             }
         }
+        ro now = Time.now().unix_millis()
+        if now >= next_ping {
+            // a ping to every page: the socket of a page that is gone without a word fails at the write and gives its permit back
+            for p in peers { ro sent = p.out.try_send(ws_out(4, "")) }
+            next_ping = now + PING_EVERY_MS
+        }
         if !busy { 3.to_millis().sleep() }
     }
 }
@@ -242,6 +254,7 @@ const CSP = "default-src 'self'; img-src 'self' blob:; connect-src 'self' ws://l
 fn with_headers(mut resp ServerResponse) -> ServerResponse {
     resp.header("Content-Security-Policy", CSP)
     resp.header("Cache-Control", "no-store")
+    resp.header("Keep-Alive", "timeout=50")
     resp
 }
 
@@ -541,6 +554,9 @@ export fn run_front(settings FrontSettings, config_file str) Proc Net Time Detac
                     mut policy = ServerPolicy.new()
                     policy.max_body_bytes(if settings.max_image_bytes > STT_MAX_AUDIO { settings.max_image_bytes } else { STT_MAX_AUDIO })
                     policy.read_deadline(30.to_seconds())
+                    // Every open connection (an idle keep-alive one for 60 s, a WebSocket for good) holds one admission permit; the default 16 was gone with a few
+                    // tabs and the 17th request got a 503 or a reset (the blank page, task 192). Fibers are cheap: a thousand.
+                    policy.max_inflight(1024)
                     match serve_addr("127.0.0.1:${settings.port}", router, policy) {
                         Ok(done) => ()
                         Err(e) => {

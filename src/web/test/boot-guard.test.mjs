@@ -21,16 +21,17 @@ function boot({ booted = false, storage } = {}) {
   const handlers = {};
   const timers = [];
   const reloads = [];
+  const replaced = [];
   const root = { getAttribute: (k) => (k === 'data-booted' && booted ? '1' : null) };
   const win = {
     document: { body, documentElement: root, createElement: el },
     addEventListener: (type, fn) => { handlers[type] = fn; },
     setTimeout: (fn, ms) => timers.push({ fn, ms }),
-    location: { reload: () => reloads.push(1) },
+    location: { reload: () => reloads.push(1), replace: (url) => replaced.push(url), pathname: '/', search: '?mock=1', hash: '' },
     ...(storage ? { localStorage: storage, sessionStorage: storage } : {}),
   };
   vm.runInNewContext(source, { window: win, globalThis: win });
-  return { win, body, handlers, timers, reloads };
+  return { win, body, handlers, timers, reloads, replaced };
 }
 
 const textOf = (node) => [node.textContent, ...node.children.map(textOf)].join('|');
@@ -55,23 +56,54 @@ test('window error и unhandledrejection попадают в тот же бло�
   assert.match(textOf(b.body.children[0]), /отказ промиса/);
 });
 
-test('страница не объявила «запущена» за 20 с: нейтральная строка «запускается дольше обычного» с кнопкой «Подождать», не красный блок; объявила — тишина', () => {
-  const quiet = boot({ booted: true });
+test('страница не объявила «запущена» за 15 с: объявила — тишина; не объявила — один автоповтор с новым адресом, второй раз — строка с «Подождать» и «Перезагрузить», не красный блок', () => {
+  const quiet = boot({ booted: true, storage: memoryStorage() });
   quiet.timers[0].fn();
   assert.equal(quiet.body.children.length, 0);
-  const loud = boot({ booted: false });
-  assert.equal(loud.timers[0].ms, 20000);
-  loud.timers[0].fn();
-  const block = loud.body.children[0];
+  assert.equal(quiet.replaced.length, 0);
+
+  const storage = memoryStorage();
+  const first = boot({ booted: false, storage });
+  assert.equal(first.timers[0].ms, 15000);
+  first.timers[0].fn();
+  assert.equal(first.body.children.length, 0, 'первый раз — тихий повтор, без блока');
+  assert.equal(first.replaced.length, 1);
+  assert.match(first.replaced[0], /^\/\?mock=1&_r=\d+$/, 'адрес с новой меткой, прежние параметры сохранены');
+  assert.equal(storage.data['crew-boot-retry'], '1');
+
+  const second = boot({ booted: false, storage });
+  second.timers[0].fn();
+  assert.equal(second.replaced.length, 0, 'повтор один: больше не перезагружается');
+  const block = second.body.children[0];
   assert.equal(block.id, 'boot-slow');
   assert.match(textOf(block), /Страница запускается дольше обычного/);
   assert.notEqual(block.attrs.role, 'alert');
   assert.ok(!/Ошибка запуска/.test(textOf(block)));
   assert.match(textOf(block), /Подождать/);
+  assert.match(textOf(block), /Перезагрузить/);
+  block.children[2].listeners.click();
+  assert.equal(second.replaced.length, 1, 'кнопка «Перезагрузить» открывает адрес заново, с новой меткой');
   // красный блок настоящей ошибки по-прежнему появляется поверх
-  loud.win.__crewBootError('настоящая ошибка');
-  assert.equal(loud.body.children.length, 2);
-  assert.match(textOf(loud.body.children[1]), /Ошибка запуска: настоящая ошибка/);
+  second.win.__crewBootError('настоящая ошибка');
+  assert.equal(second.body.children.length, 2);
+  assert.match(textOf(second.body.children[1]), /Ошибка запуска: настоящая ошибка/);
+});
+
+test('автоповтор метит адрес один раз: старая метка _r заменяется, а не копится', () => {
+  const body = el('body');
+  const timers = [];
+  const replaced = [];
+  const win = {
+    document: { body, documentElement: { getAttribute: () => null }, createElement: el },
+    addEventListener: () => {},
+    setTimeout: (fn, ms) => timers.push({ fn, ms }),
+    location: { reload: () => {}, replace: (url) => replaced.push(url), pathname: '/', search: '?mock=1&_r=111', hash: '#x' },
+    sessionStorage: memoryStorage(),
+  };
+  vm.runInNewContext(source, { window: win, globalThis: win });
+  timers[0].fn();
+  assert.match(replaced[0], /^\/\?mock=1&_r=\d+#x$/);
+  assert.equal((replaced[0].match(/_r=/g) || []).length, 1);
 });
 
 test('кнопка сброса чистит только наши ключи (crew-…) и перезагружает страницу', () => {
