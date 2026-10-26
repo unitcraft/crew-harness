@@ -125,3 +125,13 @@ test('комментарий о запретном не считается на�
   });
   assert.deepEqual(problems, []);
 });
+
+test('страница не скроллится: html и body без прокрутки, корень по высоте окна, строка сетки не растёт от содержимого', () => {
+  const css = fs.readFileSync(path.join(web, 'app.css'), 'utf8');
+  assert.match(css, /html, body \{ height: 100%; margin: 0; overflow: hidden; \}/);
+  const app = css.match(/\n\.app \{([^}]*)\}/)[1];
+  assert.match(app, /height: 100vh;\s*height: 100dvh;/);
+  assert.match(app, /grid-template-rows: minmax\(0, 1fr\)/);
+  assert.ok(!/min-height: 100(vh|dvh)/.test(css), 'нигде нет min-height: 100vh');
+  assert.match(css, /\.log \{ flex: 1; min-height: 0; overflow-y: auto; \}/);
+});
