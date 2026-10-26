@@ -312,6 +312,7 @@ export function createView(doc, refs, deps) {
     getMic: () => voiceSettings.state.mic,
     onLevels: paintWave,
   });
+  let recordingNow = false;
   function paintRecording(state) {
     const v = recordingView(state);
     input.placeholder = t(v.placeholderKey);
@@ -319,7 +320,8 @@ export function createView(doc, refs, deps) {
     const micUse = micButton.querySelector('use');
     if (micUse) micUse.setAttribute('href', v.showWave ? '#i-mic-fill' : '#i-mic');
     wave.hidden = !v.showWave;
-    sendButton.hidden = v.hideSend;
+    recordingNow = v.hideSend;
+    syncSend(!cancelButton.hidden);
     if (v.showWave) meter.start(); else meter.stop();
   }
   // Таймер записи «0:07» рядом с кнопкой, пока идёт запись
@@ -665,9 +667,15 @@ export function createView(doc, refs, deps) {
     };
     Promise.resolve(handlers.onSend(trace, text, images)).then(finish, () => finish(false));
   }
+  // «↵» нет совсем, пока нечего отправлять (пустое поле, нет картинок) и во время записи: правая группа не двигается, поле сжимается
+  function syncSend(busy) {
+    const can = canSend(input.value, attach.items(), uploading);
+    sendButton.hidden = recordingNow || !can;
+    sendButton.disabled = busy || !can;
+  }
   // Авторазмер: высота по содержимому, не выше 5 строк (дальше — внутренняя прокрутка, см. max-height в app.css).
   function fitInput() {
-    sendButton.disabled = cancelButton.hidden === false || !canSend(input.value, attach.items(), uploading);
+    syncSend(!cancelButton.hidden);
     input.style.height = 'auto';
     if (input.scrollHeight > 0) input.style.height = `${input.scrollHeight}px`; // 0 — чат скрыт: оставить auto
   }
@@ -897,23 +905,23 @@ export function createView(doc, refs, deps) {
     queueButton.hidden = queued === 0;
     if (queued > 0) queueButton.textContent = t('composer.queued', { n: queued });
     cancelButton.hidden = !busy;
-    sendButton.disabled = busy || !canSend(input.value, attach.items(), uploading);
+    syncSend(busy);
     options = session.options || null;
     currentAgent = session.agent;
     familyButton.hidden = agents.length < 2;
-    familyButton.replaceChildren(h(doc, 'span', { text: agentLabel(session.agent) }), icon(doc, 'i-chevron-down'));
+    familyButton.replaceChildren(h(doc, 'span', { text: agentLabel(session.agent) }));
     const hasModes = Boolean(options && options.modes.length > 0);
     const hasModels = Boolean(options && (options.models.length > 0 || options.efforts.length > 0));
     modeButton.hidden = !hasModes;
     const modeLabel = hasModes ? labelFor('mode', options.modes, options.mode) : { name: '', title: '' };
     modeButton.title = modeLabel.title ? `${t('menu.mode')}: ${modeLabel.title}` : t('menu.mode');
-    modeButton.replaceChildren(h(doc, 'span', { text: hasModes ? (modeLabel.name || t('menu.mode')) : '' }), hasModes ? icon(doc, 'i-chevron-down') : false);
+    modeButton.replaceChildren(h(doc, 'span', { text: hasModes ? (modeLabel.name || t('menu.mode')) : '' }));
     modelButton.hidden = !hasModels;
     const effortLabel = hasModels ? labelFor('effort', effortChoices(options.efforts), options.effort) : { name: '', title: '' };
     modelButton.title = effortLabel.title ? `${t('status.model')}: ${effortLabel.title}` : t('status.model');
     modelButton.replaceChildren(h(doc, 'span', {
       text: hasModels ? [session.model || nameOf(options.models, options.modelId) || t('session.model_unknown'), effortLabel.name].filter(Boolean).join(' · ') : '',
-    }), hasModels ? icon(doc, 'i-chevron-down') : false);
+    }));
     statusModel.hidden = hasModels;
     statusModel.textContent = session.model || '';
     spinner.hidden = !busy;

@@ -164,11 +164,29 @@ test('карточка: радиус 14, отступы 6/10/6/12, мягкая 
   assert.equal(32 + 12 + 2, 46);
 });
 
-test('строка статуса — плоский серый текст 13 px без чипов, шевроны только при наведении и фокусе, отступ от карточки 8 px', () => {
+test('строка статуса — плоский серый текст 13 px без чипов и без шевронов: при наведении меняется только фон, ширина та же', () => {
   assert.match(cssSrc, /\.composer-status \{[^}]*margin-top: 8px[^}]*font-size: 13px/);
-  assert.match(cssSrc, /\.status-btn \.icon \{ display: none;/);
-  assert.match(cssSrc, /\.status-btn:hover \.icon, \.status-btn:focus-visible \.icon, \.status-btn\[aria-expanded="true"\] \.icon \{ display: inline; \}/);
+  const btn = cssSrc.match(/\n\.status-btn \{([^}]*)\}/)[1];
+  assert.match(btn, /padding: 0 6px/);
+  assert.match(btn, /border-radius: 8px/);
+  assert.match(cssSrc, /\.status-btn:hover, \.status-btn\[aria-expanded="true"\] \{ background: var\(--hover\); \}/);
+  assert.match(cssSrc, /\.status-btn:focus-visible \{ background: var\(--hover\); outline: 1px solid var\(--border\)/);
+  assert.ok(!/\.status-btn[^{]*\.icon/.test(cssSrc), 'нет правил про значки в чипах строки статуса');
+  for (const name of ['familyButton', 'modeButton', 'modelButton']) {
+    const line = viewSrc.split('\n').find((l) => l.includes(`${name}.replaceChildren`) || (name === 'modelButton' && l.includes('}));') && false));
+    if (line) assert.ok(!/chevron/.test(line), `${name}: нет шеврона`);
+  }
+  const statusCode = viewSrc.slice(viewSrc.indexOf('familyButton.replaceChildren'), viewSrc.indexOf('statusModel.hidden = hasModels'));
+  assert.ok(!/chevron/.test(statusCode), 'в сборке строки статуса нет шевронов');
   assert.match(cssSrc, /\.status-group > :not\(\[hidden\]\) ~ :not\(\[hidden\]\)::before \{ content: "\\00b7"/);
+});
+
+test('«↵» отправки: есть только когда есть что отправлять и не идёт запись; поле сжимается, а не двигается правая группа', () => {
+  assert.match(viewSrc, /function syncSend\(busy\) \{\s*const can = canSend\(input\.value, attach\.items\(\), uploading\);\s*sendButton\.hidden = recordingNow \|\| !can;\s*sendButton\.disabled = busy \|\| !can;/);
+  assert.ok(!/sendButton\.hidden = v\.hideSend/.test(viewSrc));
+  assert.match(cssSrc, /\.send-btn\[hidden\] \{ display: none; \}/);
+  assert.match(cssSrc, /\.box-row \{ flex: none; gap: 6px; \}/);
+  assert.match(cssSrc, /\.box textarea \{ min-height: 32px;/);
 });
 
 test('подсказки кнопок карточки — тёмные (data-tip), правый клик на микрофоне открывает меню настроек', () => {
