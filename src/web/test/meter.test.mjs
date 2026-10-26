@@ -107,7 +107,7 @@ test('таймер мелкий серый фиксированной ширин
   assert.ok(!/\.mic-timer \{[^}]*--danger/.test(cssSrc));
   assert.match(cssSrc, /\.box\.recording \.mic-more \{ visibility: hidden; \}/);
   assert.match(cssSrc, /\.box \{ display: flex; align-items: flex-end; gap: 8px;/);
-  assert.match(cssSrc, /\.box-row \{ flex: none; gap: 6px; \}/);
+  assert.match(cssSrc, /\.box-row \{ flex: none; gap: 0; \}/);
   assert.match(cssSrc, /\.mic-wrap \{ gap: 0; \}/);
 });
 
@@ -141,7 +141,7 @@ test('кнопки карточки (отправка, отмена, микро�
 test('микрофон серый; единственное цветное состояние — запись; стрелка провайдера 14 px прижата к нему', () => {
   assert.match(cssSrc, /\.mic-btn \{ color: var\(--fg-muted\); touch-action: none; \}/);
   assert.match(rule('.mic-more'), /width: 14px/);
-  assert.match(rule('.mic-more'), /margin-left: -2px/);
+  assert.match(rule('.mic-more'), /margin-left: 0/);
 });
 
 test('запись: микрофон — скруглённый квадрат 8 px с --accent-soft, значок --accent и заливной; без пульсации тени, «дыхание» значка отключается при reduced-motion', () => {
@@ -159,8 +159,8 @@ test('запись: микрофон — скруглённый квадрат 8
   assert.match(cssSrc, /--accent-soft: #e6eefc;/);
 });
 
-test('карточка: радиус 14, отступы 4/10/4/12, объёмная двухслойная тень из токена, текст 15 px; рамка при фокусе не акцентная; высота одной строки 50 px', () => {
-  assert.match(cssSrc, /\.box \{ display: flex; align-items: flex-end; gap: 8px; position: relative; padding: 4px 10px 4px 12px; border-radius: 14px; box-shadow: var\(--shadow-card\); \}/);
+test('карточка: радиус 14, отступы 4/8/4/12, объёмная двухслойная тень из токена, текст 15 px; рамка при фокусе не акцентная; высота одной строки 50 px', () => {
+  assert.match(cssSrc, /\.box \{ display: flex; align-items: flex-end; gap: 8px; position: relative; padding: 4px 8px 4px 12px; border-radius: 14px; box-shadow: var\(--shadow-card\); \}/);
   assert.match(cssSrc, /\.box textarea \{ min-height: 40px; padding: 9px 12px 9px 0; font-size: 15px; line-height: 1\.45;/);
   assert.match(cssSrc, /\.box textarea::placeholder \{ color: var\(--fg-muted\)/);
   const focusRules = [...cssSrc.matchAll(/\.box:focus-within \{([^}]*)\}/g)].map((m) => m[1]).join(' ');
@@ -211,7 +211,7 @@ test('«↵» отправки: есть только когда есть что
   assert.match(viewSrc, /function syncSend\(busy\) \{\s*const can = canSend\(input\.value, attach\.items\(\), uploading\);\s*sendButton\.hidden = recordingNow \|\| !can;\s*sendButton\.disabled = busy \|\| !can;/);
   assert.ok(!/sendButton\.hidden = v\.hideSend/.test(viewSrc));
   assert.match(cssSrc, /\.send-btn\[hidden\] \{ display: none; \}/);
-  assert.match(cssSrc, /\.box-row \{ flex: none; gap: 6px; \}/);
+  assert.match(cssSrc, /\.box-row \{ flex: none; gap: 0; \}/);
   assert.match(cssSrc, /\.box textarea \{ min-height: 40px;/);
 });
 
@@ -238,3 +238,23 @@ test('кнопка «+» слева в карточке открывает вы�
   assert.match(cssSrc, /\.plus-btn \{[^}]*width: 40px; height: 40px;[^}]*border-radius: 8px/);
 });
 
+
+test('геометрия правой группы: «↵» и микрофон вплотную, стрелка ⌄ вплотную к микрофону, группа с отступом 8 px от края; панель записи опаковая, поле в записи без правки орфографии', () => {
+  assert.match(cssSrc, /\.box \{[^}]*padding: 4px 8px 4px 12px/);
+  assert.match(cssSrc, /\.box-row \{ flex: none; gap: 0; \}/);
+  assert.match(cssSrc, /\.mic-wrap \{ gap: 0; \}/);
+  assert.match(rule('.mic-more'), /margin-left: 0/);
+  const panel = cssSrc.match(/\.rec-panel \{([^}]*)\}/)[1];
+  assert.match(panel, /right: 62px/); // 8 (отступ) + 40 (микрофон) + 14 (стрелка)
+  assert.match(panel, /background: var\(--surface\)/);
+  assert.match(panel, /z-index: 2/);
+  assert.match(viewSrc, /input\.spellcheck = !v\.showWave;/);
+});
+
+test('верх первой строки не режется: max-height поля = пять строк плюс ВСЕ вертикальные отступы (2 × 9 px)', () => {
+  const m = cssSrc.match(/\.box textarea \{ min-height: 40px; padding: 9px 12px 9px 0;[^}]*max-height: calc\(1\.45em \* 5 \+ (\d+)px\);/);
+  assert.ok(m, 'правило поля найдено');
+  assert.equal(Number(m[1]), 18, 'отступы сверху и снизу 9 + 9');
+  // ширина поля от записи не зависит: нет правил textarea с классом recording
+  assert.ok(!/\.box\.recording textarea\s*\{/.test(cssSrc), 'у поля в записи нет своих размеров');
+});

@@ -432,6 +432,7 @@ export function createView(doc, refs, deps) {
     if (micUse) micUse.setAttribute('href', v.showWave ? '#i-mic-fill' : '#i-mic');
     wave.hidden = !v.showWave;
     recordingNow = v.hideSend;
+    input.spellcheck = !v.showWave; // красные волны орфографии при записи не нужны
     syncSend(!cancelButton.hidden);
     if (v.showWave) meter.start(); else meter.stop();
   }
