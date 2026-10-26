@@ -284,16 +284,20 @@ input, select, textarea {
   background: var(--surface);
   color: var(--fg-muted);
 }
-.search:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.search { border-radius: 14px; box-shadow: var(--shadow-card); }
+.search:focus-within { outline: none; border-color: color-mix(in srgb, var(--fg) 30%, var(--border)); box-shadow: var(--shadow-card-focus); }
 .search-input {
   flex: 1;
   min-width: 0;
   padding: 0;
   border: 0;
+  border-radius: 0;
   background: transparent;
+  box-shadow: none;
   color: var(--fg);
   outline: none;
 }
+.search-input:focus, .search-input:focus-visible { outline: none; box-shadow: none; }
 
 .new-btn {
   display: flex;
@@ -1020,7 +1024,7 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
 .place { min-width: 0; max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .layer { z-index: 40; }
-.dialog.modal { width: min(560px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; border-color: var(--border); }
+.dialog.modal { width: min(640px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; border-color: var(--border); }
 .dialog.picker { width: min(520px, 100%); }
 .dialog.env { width: min(600px, 100%); }
 .dialog.modal p { margin: 0 0 8px; }
@@ -1182,3 +1186,18 @@ input[aria-invalid="true"] { border-color: var(--danger); }
 .queued-images { margin: 0 0 6px; color: var(--fg-muted); font-size: 12px; }
 .item-actions[data-row="hover"] { visibility: hidden; }
 .item-actions[data-row="hover"][data-hot="on"], .item-actions[data-row="hover"]:focus-within { visibility: visible; }
+
+/* ---- задача 192: название сессии переименовывается на месте, черновик новой сессии, выделение проекта ---- */
+.title { position: relative; display: block; max-width: 100%; min-width: 8ch; margin: 0 0 0 -6px; padding: 0 6px; overflow: visible; }
+.title-text { display: block; overflow: hidden; border-radius: 6px; text-overflow: ellipsis; white-space: nowrap; cursor: text; }
+.title-text:hover, .title-text:focus-visible { background: var(--hover); outline: none; }
+.title.is-editing .title-text { visibility: hidden; }
+.title-input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; padding: 0 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2); box-shadow: none; color: inherit; font: inherit; letter-spacing: inherit; outline: none; }
+.title-input[hidden] { display: none; }
+.title[hidden], .draft-bar[hidden], .sub[hidden] { display: none; }
+.draft-bar { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.draft-project, .draft-folder { width: auto; max-width: 100%; min-height: 32px; padding: 4px 10px; border-radius: 8px; font-size: 15px; font-weight: 600; }
+.group[data-project="true"] .group-head { background: color-mix(in srgb, var(--fg) 4%, transparent); border-radius: 8px; }
+.group[data-project="true"] .group-head h3 { color: var(--fg); font-weight: 700; }
+.group-icon { width: 15px; height: 15px; margin-right: 6px; align-self: center; color: var(--fg-muted); }
+.group[data-active="true"] .group-head { box-shadow: inset 2px 0 var(--accent); }

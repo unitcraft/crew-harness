@@ -534,6 +534,8 @@ export function createMockServer({ journal, now = Date.now } = {}) {
         const end = speak(entries, trace, open.turn, QUESTION_ANSWERED, CHUNK_FIRST_MS);
         mint(entries, trace, end, 'agent_done', { turn: open.turn });
       }
+    } else if (event.kind === 'session_rename') {
+      mint(entries, trace, CHUNK_FIRST_MS, 'session_renamed', { name: String(input.name) });
     } else if (event.kind === 'session_agent') {
       const from = family[trace] || 'opencode';
       family[trace] = String(input.agent);

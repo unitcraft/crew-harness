@@ -25,7 +25,7 @@ export const KINDS = Object.freeze([
   // задача 094: рабочие события хода (соответствуют ACP session/update)
   'usage_update', 'tool_call', 'tool_call_update', 'output_file', 'file_diff',
   'background_task', 'background_task_update',
-  'session_model', 'agent_switched',
+  'session_model', 'agent_switched', 'session_renamed',
   // задача 192t: выбранное владельцем значение больше недоступно у агента — строка в ленте
   'setting_dropped',
   // задача 192: картинки сообщения и «агент не принимает изображения»
@@ -225,6 +225,11 @@ function apply(session, event) {
       const notes = subtaskNotes(session.routeState.task, routeState.task)
         .map((x) => ({ role: 'route_note', key: `rn:${event.id}:${x.n}`, n: x.n, action: x.action }));
       return { ...session, route: routeState.route, routeState, routeStep: event.step, messages: notes.length ? [...session.messages, ...notes] : session.messages };
+    }
+    case 'session_renamed': {
+      // владелец переименовал сессию в заголовке (задача 192): последнее имя журнала и есть имя
+      const name = str(input.name).trim();
+      return name ? { ...session, name } : session;
     }
     case 'agent_switched': {
       // смена семьи в окне (задача 192): тот же разговор, другой агент; строка в ленте говорит, что и как передано
@@ -584,4 +589,40 @@ export function splitBlocks(text) {
   }
   flush();
   return blocks;
+}
+
+// ---- черновик новой сессии (задача 192): живёт только на странице, на сервер уходит с первым сообщением ----
+
+/** Добавить в модель черновик: обычная сессия без событий, помеченная draft; id станет настоящим id сессии при отправке. */
+export function addDraft(model, { id, agent, projectId = '', project = '', folder = '', branch = '', now }) {
+  const next = reduce(model, {
+    id: `draft-${id}`, trace: id, step: 0, kind: 'session_created', time: now,
+    input: { name: '', agent, project, project_id: projectId, folder, branch },
+  });
+  const session = next.sessions[id];
+  if (!session) return model;
+  return { ...next, sessions: { ...next.sessions, [id]: { ...session, draft: true } } };
+}
+
+/** Убрать все черновики (кроме `keep`). */
+export function dropDrafts(model, keep = '') {
+  const kept = {};
+  let changed = false;
+  for (const [id, s] of Object.entries(model.sessions)) {
+    if (s.draft && id !== keep) changed = true; else kept[id] = s;
+  }
+  return changed ? { ...model, sessions: kept } : model;
+}
+
+/** Поменять поля черновика (агент, проект, папка). */
+export function patchDraft(model, id, patch) {
+  const s = model.sessions[id];
+  if (!s || !s.draft) return model;
+  return { ...model, sessions: { ...model.sessions, [id]: { ...s, ...patch } } };
+}
+
+/** Название по умолчанию: первые слова первого сообщения; пусто — «Без названия» подставляет вызывающий. */
+export function nameFromText(text, maxWords = 6, maxChars = 60) {
+  const words = String(text).trim().split(/\s+/).filter(Boolean).slice(0, maxWords).join(' ');
+  return words.length > maxChars ? words.slice(0, maxChars).trim() : words;
 }

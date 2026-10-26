@@ -7,7 +7,7 @@
 import { t } from './strings.js';
 import { h, icon } from './dom.js';
 import {
-  countEnv, folderName, joinPath, makeFolder, normalizePath, parseEnv, pluralRu, projectPayload, samePath, validateProject,
+  countEnv, folderName, joinPath, makeFolder, normalizePath, parseEnv, pluralRu, projectPayload, samePath, uniqueProjectName, validateProject,
 } from './projects.js';
 
 const FOCUSABLE = 'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])';
@@ -366,6 +366,17 @@ export function createProjectsUi(doc, deps) {
     return layer.promise;
   }
 
+  /** «Новый проект»: только выбор одной папки; название — имя папки (при совпадении «имя (2)»), его можно поправить в настройках проекта. */
+  async function createByFolder(names) {
+    const path = await pickFolder('');
+    if (path === null) return null;
+    const name = uniqueProjectName(folderName(path) || path, names);
+    const r = await api.create(projectPayload({ name, folders: [makeFolder({ path, worktree: false })], env: '' }));
+    if (!r.ok) { onNotice(t('projects.create_failed', { reason: r.error }), 'error'); return null; }
+    onChanged();
+    return r.id || true;
+  }
+
   async function removeProject(project) {
     const r = await api.remove(project.id);
     if (!r.ok) { onNotice(t('projects.delete_failed', { reason: r.error }), 'error'); return false; }
@@ -374,5 +385,5 @@ export function createProjectsUi(doc, deps) {
     return true;
   }
 
-  return { openEditor, removeProject, pickFolder, editEnv, openCount: () => layers.length };
+  return { openEditor, createByFolder, removeProject, pickFolder, editEnv, openCount: () => layers.length };
 }
