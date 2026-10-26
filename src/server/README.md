@@ -27,6 +27,10 @@ browser <--HTTP, WebSocket /ws--> crew-harness (the front, Polaris)  <--lines ov
 The front must not import the module `crew_harness.server` (it holds the hub, hence the driver): it reads its own few settings
 (`src/server/front/front_settings.nv`).
 
+## Connections of the front (task 192)
+
+Polaris counts every open connection against `max_inflight` (16 by default): an idle keep-alive socket of a browser for 60 s, a WebSocket of a page for good. A few tabs used it up, and the 17th request got a `503` or a reset, so a module of the page did not load and the page stayed blank (`node repro-conns.mjs`: 16 idle sockets and `GET /` was reset). The front sets `max_inflight` to 1024, answers with `Keep-Alive: timeout=50` (shorter than the idle deadline of the server, 60 s: the browser does not reuse a socket the server is about to close), and pings every page twice a minute (about every 25 s): a page that is gone without a word (a sleeping computer) fails at the write and gives its permit back. `index.html` asks for all modules at once (`modulepreload`, the list is checked against the import graph by `src/web/test/graph.test.mjs`), and `boot-guard.js` reloads a start that hung (no `data-booted` in 15 s) once with a new address.
+
 ## Run
 
 From a normal console window (**not** through `crew_watch`: child processes of a window-less launch fail on Windows, task 100):
