@@ -1,0 +1,160 @@
+// mcp_test.nv - the MCP server of the questions over a real socket (task 192i): the token, the methods, a call that waits for the hub and gets its answer, a call
+// that is not answered in time. The test plays the hub: it takes the messages of the inbox and answers them.
+module crew_harness.server_live
+
+import crew_harness.server.{start_mcp_server, McpServer, McpMsg}
+import std.concurrency.nvchan.{Chan, ChanTx, ChanRx}
+import std.net.{Net, real_net, TcpStream, SocketAddr}
+
+// Write the request, read the whole answer (the server closes the connection).
+fn exchange(consume conn TcpStream, request str) Net -> str {
+    ro sent = conn.write_all(request.bytes())
+    mut got []u8 = []u8.new()
+    mut buf []u8 = []u8.new()
+    buf.resize(4096, 0 as u8)
+    mut reading = true
+    while reading {
+        match conn.read(buf) {
+            Ok(0) => { reading = false }
+            Ok(n) => {
+                for b in buf[..n] { got.push(b) }
+            }
+            Err(e) => { reading = false }
+        }
+    }
+    conn.close()
+    got[..got.len()].to_str_lossy()
+}
+
+fn roundtrip(port int, request str) Net -> str {
+    match TcpStream.connect(SocketAddr.loopback(port)) {
+        Ok(consume conn) => exchange(conn, request)
+        Err(e) => panic("the test cannot connect to the MCP server")
+    }
+}
+
+fn http_post(port int, path str, auth str, body str) Net -> str =>
+    roundtrip(port, "POST ${path} HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\n${auth}Content-Length: ${body.byte_len()}\r\nConnection: close\r\n\r\n${body}")
+
+fn http_get(port int, path str, auth str) Net -> str =>
+    roundtrip(port, "GET ${path} HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\n${auth}Connection: close\r\n\r\n")
+
+fn bearer(token str) -> str => "Authorization: Bearer ${token}\r\n"
+
+fn started(token str, timeout_ms int) Net Detach Time -> McpServer {
+    match start_mcp_server(token, timeout_ms) {
+        Ok(server) => server
+        Err(e) => panic("the MCP server did not start: ${e}")
+    }
+}
+
+const INIT = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{},\"clientInfo\":{\"name\":\"t\",\"version\":\"1\"}}}"
+
+const CALL = "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"ask_user_question\",\"arguments\":{\"questions\":[{\"question\":\"Какой формат?\",\"header\":\"Формат\",\"multiSelect\":false,\"options\":[{\"label\":\"JSON\"},{\"label\":\"YAML\"}]}]}}}"
+
+test "mcp server: no token, a wrong token, a page's origin are refused" {
+    with Net = real_net() {
+        ro server = started("secret-token", 5000)
+        assert(http_post(server.port, "/mcp/s1", "", INIT).starts_with("HTTP/1.1 401"))
+        assert(http_post(server.port, "/mcp/s1", bearer("wrong"), INIT).starts_with("HTTP/1.1 401"))
+        assert(http_post(server.port, "/mcp/s1", "Origin: http://evil.example\r\n${bearer("secret-token")}", INIT).starts_with("HTTP/1.1 403"))
+        server.stop()
+    }
+}
+
+test "mcp server: initialize and tools/list over HTTP, a GET is not allowed, a notification is accepted" {
+    with Net = real_net() {
+        ro server = started("secret-token", 5000)
+        ro init = http_post(server.port, "/mcp/s1", bearer("secret-token"), INIT)
+        assert(init.starts_with("HTTP/1.1 200"))
+        assert(init.contains("Content-Type: application/json"))
+        assert(init.contains("\"serverInfo\""))
+        ro listed = http_post(server.port, "/mcp/s1", bearer("secret-token"), "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}")
+        assert(listed.contains("ask_user_question"))
+        assert(http_get(server.port, "/mcp/s1", bearer("secret-token")).starts_with("HTTP/1.1 405"))
+        ro note = http_post(server.port, "/mcp/s1", bearer("secret-token"), "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}")
+        assert(note.starts_with("HTTP/1.1 202"))
+        server.stop()
+    }
+}
+
+test "mcp server: a call waits for the hub and gets its answer" {
+    with Net = real_net() {
+        ro server = started("secret-token", 20000)
+        ro answers = Chan[str].new(1)
+        supervised {
+            spawn {
+                answers.tx.send(http_post(server.port, "/mcp/s1", bearer("secret-token"), CALL))
+            }
+            // the hub: the call arrives with the session of the path and the questions, and waits
+            match server.inbox.recv() {
+                Some(msg) => {
+                    assert(msg.kind == "ask")
+                    assert(msg.session == "s1")
+                    assert(msg.text.contains("Какой формат?"))
+                    assert(msg.reply.send("ok:Вопрос: Какой формат?\nОтвет: YAML"))
+                }
+                None => assert(false)
+            }
+        }
+        ro text = match answers.rx.recv() {
+            Some(t) => t
+            None => ""
+        }
+        assert(text.starts_with("HTTP/1.1 200"))
+        assert(text.contains("Ответ: YAML"))
+        assert(text.contains("\"id\":7"))
+        assert(text.contains("\"isError\":false"))
+        server.stop()
+    }
+}
+
+test "mcp server: an answer of the hub that is an error is an error of the tool" {
+    with Net = real_net() {
+        ro server = started("secret-token", 20000)
+        ro answers = Chan[str].new(1)
+        supervised {
+            spawn {
+                answers.tx.send(http_post(server.port, "/mcp/s1", bearer("secret-token"), CALL))
+            }
+            match server.inbox.recv() {
+                Some(msg) => assert(msg.reply.send("err:no turn is open"))
+                None => assert(false)
+            }
+        }
+        ro text = match answers.rx.recv() {
+            Some(t) => t
+            None => ""
+        }
+        assert(text.contains("no turn is open"))
+        assert(text.contains("\"isError\":true"))
+        server.stop()
+    }
+}
+
+test "mcp server: a call that is not answered in time ends with the timeout and the hub is told" {
+    with Net = real_net() {
+        ro server = started("secret-token", 400)
+        ro answers = Chan[str].new(1)
+        supervised {
+            spawn {
+                answers.tx.send(http_post(server.port, "/mcp/s1", bearer("secret-token"), CALL))
+            }
+            match server.inbox.recv() {
+                Some(msg) => assert(msg.kind == "ask")
+                None => assert(false)
+            }
+            match server.inbox.recv() {
+                Some(msg) => assert(msg.kind == "gone")
+                None => assert(false)
+            }
+        }
+        ro text = match answers.rx.recv() {
+            Some(t) => t
+            None => ""
+        }
+        assert(text.contains("таймаут ожидания ответа"))
+        assert(text.contains("\"isError\":true"))
+        server.stop()
+    }
+}

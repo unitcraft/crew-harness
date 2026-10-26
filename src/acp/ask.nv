@@ -1,7 +1,7 @@
 // ask.nv - the questions of the agent to the owner (task 192i): pure functions, no process.
 //
 // The four agents of the product ask by the same call of ACP, `elicitation/create` in the mode `form`, when the client says at `initialize` that it
-// can show one (`clientCapabilities.elicitation.form`); see README.md, "Questions of the agent". A form is a JSON schema of fields; every agent
+// can show one (`clientCapabilities.elicitation.form`); see src/server/README.md, "Questions of the agent". A form is a JSON schema of fields; every agent
 // writes its questions into it in its own way:
 //   - claude-agent-acp: `question_<n>` (a string with `oneOf`, or an array with `items.anyOf`) and the field `question_<n>_custom` for an own answer;
 //   - OpenCode: `<key>` and `<key>_custom`, `const` is the value and `title` is the label of an option;

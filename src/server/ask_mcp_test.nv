@@ -1,0 +1,146 @@
+// ask_mcp_test.nv - the MCP server of the questions (task 192i): the part that is pure functions - what the server answers to a JSON-RPC message of an agent and
+// what text the agent gets back for the answer of the owner.
+module crew_harness.server
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+fn mj(text str) -> JsonValue {
+    match Json.parse(text) {
+        Ok(v) => v
+        Err(e) => panic("bad json in a test: ${text}")
+    }
+}
+
+fn mkey(v JsonValue, key str) -> JsonValue {
+    match v.object() {
+        Some(o) => match o.get(key) {
+            Some(x) => x
+            None => JsonValue.null()
+        }
+        None => JsonValue.null()
+    }
+}
+
+fn mtext(v JsonValue, key str) -> str {
+    match mkey(v, key).str() {
+        Some(s) => s
+        None => "<none>"
+    }
+}
+
+fn mfirst(v JsonValue) -> JsonValue {
+    match v.array() {
+        Some(items) => {
+            if items.len() > 0 { items[0] } else { JsonValue.null() }
+        }
+        None => JsonValue.null()
+    }
+}
+
+fn question_args() -> str => "{\"questions\":[{\"question\":\"Какой формат?\",\"header\":\"Формат\",\"multiSelect\":false,\"options\":[{\"label\":\"JSON\",\"description\":\"машинный\"},{\"label\":\"YAML\",\"description\":\"\"}]}]}"
+
+fn call_text(arguments str) -> str => "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"ask_user_question\",\"arguments\":${arguments}}}"
+
+test "mcp: initialize answers with the protocol, the tools capability and the name of the server" {
+    ro out = mcp_handle("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{},\"clientInfo\":{\"name\":\"x\",\"version\":\"1\"}}}")
+    assert(out.kind == "reply")
+    ro reply = mj(out.text)
+    assert(mtext(reply, "jsonrpc") == "2.0")
+    assert(mkey(reply, "id").int() == Some(1))
+    ro result = mkey(reply, "result")
+    assert(mtext(result, "protocolVersion") == "2025-03-26")
+    assert(mkey(mkey(result, "capabilities"), "tools").is_object())
+    assert(mtext(mkey(result, "serverInfo"), "name") == "crew")
+}
+
+test "mcp: an initialize with a protocol we do not know is answered with ours" {
+    ro out = mcp_handle("{\"jsonrpc\":\"2.0\",\"id\":\"a\",\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"1999-01-01\"}}")
+    ro reply = mj(out.text)
+    assert(mtext(reply, "id") == "a")
+    assert(mtext(mkey(reply, "result"), "protocolVersion") == "2025-03-26")
+}
+
+test "mcp: tools/list names the tool and describes its arguments" {
+    ro out = mcp_handle("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}")
+    assert(out.kind == "reply")
+    ro tools = mkey(mkey(mj(out.text), "result"), "tools")
+    ro tool = mfirst(tools)
+    assert(mtext(tool, "name") == "ask_user_question")
+    assert(mtext(tool, "description").contains("ask"))
+    ro schema = mkey(tool, "inputSchema")
+    assert(mtext(schema, "type") == "object")
+    assert(mkey(mkey(schema, "properties"), "questions").is_object())
+}
+
+test "mcp: a call with good arguments waits for the owner" {
+    ro out = mcp_handle(call_text(question_args()))
+    assert(out.kind == "ask")
+    assert(mj(out.id).int() == Some(7))
+    ro questions = mj(out.questions)
+    assert(mtext(mfirst(questions), "question") == "Какой формат?")
+    assert(mtext(mfirst(questions), "header") == "Формат")
+}
+
+test "mcp: a call with no questions or an option with no label is an error the agent can read" {
+    ro none = mcp_handle(call_text("{}"))
+    assert(none.kind == "reply")
+    ro result = mkey(mj(none.text), "result")
+    assert(mkey(result, "isError").bool() == Some(true))
+    assert(mtext(mfirst(mkey(result, "content")), "text").contains("questions"))
+    ro bad = mcp_handle(call_text("{\"questions\":[{\"question\":\"q\",\"options\":[{\"description\":\"d\"}]}]}"))
+    assert(bad.kind == "reply")
+    assert(mkey(mkey(mj(bad.text), "result"), "isError").bool() == Some(true))
+}
+
+test "mcp: a question may be asked with the options given as plain strings" {
+    ro out = mcp_handle(call_text("{\"questions\":[{\"question\":\"q?\",\"options\":[\"a\",\"b\"]}]}"))
+    assert(out.kind == "ask")
+    ro options = mkey(mfirst(mj(out.questions)), "options")
+    assert(mtext(mfirst(options), "label") == "a")
+}
+
+test "mcp: an unknown tool and an unknown method are errors of the protocol" {
+    ro tool = mcp_handle("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"nothing\",\"arguments\":{}}}")
+    assert(tool.kind == "reply")
+    assert(mkey(mkey(mj(tool.text), "result"), "isError").bool() == Some(true))
+    ro method = mcp_handle("{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"resources/list\"}")
+    assert(method.kind == "reply")
+    assert(mkey(mkey(mj(method.text), "error"), "code").int() == Some(-32601))
+}
+
+test "mcp: a notification has no answer, ping is answered, garbage is a parse error" {
+    assert(mcp_handle("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}").kind == "none")
+    ro ping = mcp_handle("{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"ping\"}")
+    assert(ping.kind == "reply")
+    assert(mkey(mj(ping.text), "result").is_object())
+    ro garbage = mcp_handle("not json")
+    assert(garbage.kind == "reply")
+    assert(mkey(mkey(mj(garbage.text), "error"), "code").int() == Some(-32700))
+}
+
+test "mcp: the text for the agent has the question and the answer, the own answer too" {
+    ro questions = mj("[{\"question\":\"Какой формат?\",\"header\":\"Формат\",\"multiSelect\":false,\"options\":[{\"label\":\"JSON\"},{\"label\":\"YAML\"}]},{\"question\":\"Что делать?\",\"multiSelect\":true,\"options\":[{\"label\":\"A\"},{\"label\":\"B\"}]}]")
+    ro answer = mj("{\"request\":\"mcp-1\",\"skipped\":false,\"answers\":[{\"index\":0,\"selected\":[\"YAML\"],\"other\":\"\"},{\"index\":1,\"selected\":[\"A\",\"B\"],\"other\":\"и ещё C\"}]}")
+    ro text = ask_result_text(questions, answer)
+    assert(text.contains("Вопрос: Какой формат?"))
+    assert(text.contains("Ответ: YAML"))
+    assert(text.contains("Вопрос: Что делать?"))
+    assert(text.contains("Ответ: A, B"))
+    assert(text.contains("и ещё C"))
+}
+
+test "mcp: a skipped question and a question with nothing chosen are told as they are" {
+    ro questions = mj("[{\"question\":\"q?\",\"options\":[{\"label\":\"a\"}]}]")
+    assert(ask_result_text(questions, mj("{\"request\":\"mcp-1\",\"skipped\":true}")).contains("пропустил"))
+    assert(ask_result_text(questions, mj("{\"request\":\"mcp-1\",\"skipped\":false,\"answers\":[]}")).contains("пропустил"))
+}
+
+test "mcp: the reply of a tool call carries the text, an error carries the flag" {
+    ro ok = mj(mcp_text_reply(mj("7"), "готово", false))
+    assert(mkey(ok, "id").int() == Some(7))
+    ro result = mkey(ok, "result")
+    assert(mtext(mfirst(mkey(result, "content")), "type") == "text")
+    assert(mtext(mfirst(mkey(result, "content")), "text") == "готово")
+    assert(mkey(result, "isError").bool() == Some(false))
+    assert(mkey(mkey(mj(mcp_text_reply(mj("7"), "плохо", true)), "result"), "isError").bool() == Some(true))
+}

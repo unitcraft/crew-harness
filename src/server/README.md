@@ -79,6 +79,9 @@ and no error (`describe()` leaves it out).
 | `workdir` | `CREW_SERVER_WORKDIR` | the folder of the server | the folder the agents work in (`session/new` needs it) |
 | `web_dir` | `CREW_SERVER_WEB_DIR` | `src/web` | the folder of the page |
 | `acp_trace` | `CREW_SERVER_ACP_TRACE` (`true`/`false`) | `true` | write the raw JSON-RPC exchange with the agent, both ways, to `<data_dir>/<session>/acp.jsonl` (`{"t": unix ms, "dir": "out"|"in", "line": "<the line as it is>"}`); over 50 MB the file becomes `acp.1.jsonl` in the same folder. **The file holds the full text of the talk and the output of the tools, nothing is cut out.** |
+| `ask_form` | `CREW_SERVER_ASK_FORM` (`true`/`false`) | `true` | the agents may ask the owner a question with a choice (task 192i): the hub says at `initialize` that it shows forms and gives the agents that need it the MCP tool `ask_user_question`; `false` - nothing of it (an agent then cannot ask by a tool; Claude Code has no `AskUserQuestion` at all). See "Questions of the agent" |
+| `ask_timeout_seconds` | `CREW_SERVER_ASK_TIMEOUT_SECONDS` | 1800 | how long a call of the MCP tool `ask_user_question` waits for the owner; then the agent gets "таймаут ожидания ответа" |
+| `agents[].ask` | - | `native` | how the agent asks: `native` (its own tool, over `elicitation/create`), `mcp` (the hub gives it the MCP tool and a note), `off` (nothing) |
 | `stt` {`url`,`language`,`managed`,`dir`,`model`} | `CREW_SERVER_STT_URL`, `CREW_SERVER_STT_LANGUAGE`, `CREW_SERVER_STT_MANAGED`, `CREW_SERVER_STT_DIR`, `CREW_SERVER_STT_MODEL` | `http://127.0.0.1:8178/inference`, `auto`, `true`, `CREW_STT_DIR` or `%LOCALAPPDATA%/crew-harness/stt`, `small` | the local speech recognizer (whisper.cpp `whisper-server`) that the front sends the voice to and, with `managed`, starts and ends itself (below); the address must be a plain `http://127.0.0.1:<port>/...` or `http://localhost:<port>/...` (the audio never leaves the machine); `language` is the default of `POST /api/stt`; `dir` holds `bin/whisper-server.exe` and `models/ggml-<model>.bin` |
 | `max_image_bytes` | `CREW_SERVER_MAX_IMAGE_BYTES` | 10485760 (10 MB) | the largest picture of a message (1024 to 104857600); the front and the hub both refuse a larger one |
 | `hub` {`program`,`args`} | `CREW_SERVER_HUB` (words separated by spaces) | `target/crew-hub.exe` | how the front starts the hub |
@@ -122,6 +125,65 @@ The owner pastes a screenshot from the clipboard (or drops an image file) into t
 - To the agent: `session/prompt` gets `[{"type":"text","text":...},{"type":"image","mimeType":...,"data":<base64>}]` ONLY if the agent said `agentCapabilities.promptCapabilities.image = true` at `initialize`. Otherwise no picture is sent: the text goes with the note
   `[приложено изображений: N, агент их не принимает]` and the feed shows the line "the agent does not take pictures; only the text was sent" (the signal `images_skipped`). When the family changes in the window, a picture in the protocol is the line `[изображение: имя]`.
 - The raw trace (`<session>.acp.jsonl`) holds `"data":"<image N bytes>"` instead of the base64.
+
+## Questions of the agent (Вопросы агента)
+
+Task 192i. The owner asked for the form of questions with a choice that the assistant itself has (`AskUserQuestion`), and for the agents to use it. The page shows a form;
+the hub gives the agent the answer in the shape that agent wants.
+
+### How each agent asks (read from the sources of the adapters installed on this machine, and from the raw exchange `<session>.acp.jsonl`)
+
+All four ask with the same call of ACP: **`elicitation/create` in the mode `form`** (a call of the agent to the client: `{mode:"form", sessionId, toolCallId?, message, requestedSchema}`), and only if the client
+said so at `initialize` with `clientCapabilities.elicitation.form`. **Not by `session/request_permission` with `rawInput.questions`**: no adapter of the four does that for the questions (Kimi uses
+`session/request_permission` as a fallback, see below). There is no method `session/elicit`; `elicitation/create` and the notification `elicitation/complete` (the mode `url`) are in the SDKs of all four.
+The hub did not declare the capability before this task; it does now (`ask_form`), and **Claude Code has no tool `AskUserQuestion` at all without it** (the adapter lists the tool as disallowed).
+
+| Agent (version) | Its tool | Without `elicitation.form` | The form it sends | How to answer (`result` of `elicitation/create`) |
+|---|---|---|---|---|
+| **Claude Code** (`claude-agent-acp` 0.94.0) | `AskUserQuestion` | the tool is switched off | `message` = the question (one) or "Please answer the following questions."; a field `question_<n>`: a string with `oneOf` (`const` = `title` = the label, `description`), or, for `multiSelect`, an array with `items.anyOf`; the `title` of the field is the header, with many questions its `description` is the question; a field `question_<n>_custom` (string) for an own answer | `{action:"accept", content:{"question_0":"<label>", "question_0_custom":"<own text>"}}` (an array of labels for a multi-select; the own text joins the choice of a multi-select, is the answer of a single when nothing is chosen, or a note to it). `{action:"decline"}`: the model is told the user skipped. `{action:"cancel"}`: the tool use is aborted |
+| **Codex** (`codex-acp` 2.2.2) | `request_user_input` | answers come empty | `message` = "Codex needs your input to continue."; a field named by the id of the question: `title` = the question, `description` = the header, a string with `oneOf` (label, description) and an option "None of the above" when `isOther`; a field for a note that names its question in `_meta.codex.questionId`; all `required` | `accept` with `content:{"<id>":"<label>", "<id>_note":"<text>"}`; `decline` and `cancel`: empty answers |
+| **Kimi Code** (2.1.1) | `AskUserQuestion` | `session/request_permission`: a tool call titled `AskUserQuestion` with the text of the FIRST question, options `q0_opt_<i>` (`allow_once`, the label) and `q0_skip` (`reject_once`); multi-select is asked as single. Answer `{outcome:{outcome:"selected", optionId:"q0_opt_1"}}`, `cancelled` or the skip is "dismissed" | fields `q<n>`: a string with `oneOf` or an array with `anyOf` (`minItems` 1), `title` = the header, `message` = the questions joined by a line break, all `required`; no field for an own answer | `accept` with `content:{"q0":"<label>", "q1":["<a>","<b>"]}`; `decline`/`cancel`: dismissed |
+| **OpenCode** (2.0.26) | `question` | the tool fails; the model reads "The question couldn't be shown to the user in this client. Continue without an answer" | fields `<key>` (string with `oneOf`, `const` = the value, `title` = the label; or an array with `anyOf`) and `<key>_custom` for an own answer; a form with a field that looks like a secret (password, token, key...) is not sent | `accept` with `content:{"<key>":"<value>", "<key>_custom":"<text>"}`; `decline`/`cancel`: the form is cancelled |
+
+`initialize` of the four (checked live): `mcpCapabilities.http` is true for all four (`sse` too for Claude Code and Kimi Code; Codex adds `acp:false`); `promptCapabilities`: `image` and `embeddedContext` for all, `audio:false` for Kimi.
+An agent says nothing about elicitation: it is a capability of the client. A request of an agent is withdrawn with `$/cancel_request` (Claude Code does it when the tool use is aborted): the hub answers `cancel` and takes the form away.
+
+So **every one of the four has its own tool of questions, and the native way (this section's table) is the one the hub uses**: `ask: native` is the default of an agent; no MCP server is started for them.
+For an agent without its own tool the hub has the universal way below (`ask: mcp` in the settings of that agent).
+
+### What the hub does (native questions)
+
+`Hub` -> `AcpClient.on_elicitation` (`src/acp/client.nv`) -> `project_question` (`src/acp/ask.nv`). A form is read by its fields, not by the name of the agent: a field with options is a question, a text field named
+`<key>_custom` or marked as the note of a question (`_meta.codex.questionId`) is the place for an own answer of that question, a plain text field is a question with no options. The text of the question, the header and the label of an option
+are taken as the agents write them (the four shapes above are the tests of `ask_test.nv`). A call that is not a set of questions (the mode `url`, a number field...) is declined.
+
+The page protocol (the contract with the page of the control panel):
+
+| Direction | `kind` | `input` |
+|---|---|---|
+| server to page | `question_request` | `{ turn, request, tool_call, questions:[{ question, header, multiSelect, options:[{ label, description }] }] }`; `request` is the key of the call (the JSON-RPC id, or `mcp-<n>` for the MCP tool) |
+| page to server | `question_answer` | `{ request, skipped:false, answers:[{ index, selected:[label...], other }] }` or `{ request, skipped:true }`; `other` is the own text of the owner or an empty string |
+| server to page | `question_resolved` | `{ request }`: the question is settled (answered, skipped, withdrawn by the agent, its term passed, the turn was cancelled); the page takes the form away |
+
+A skip is `decline` (the agent goes on, told that the user skipped); a cancel of the turn answers `cancel` to the agent and tells the page `question_resolved` before the `cancel`; the request is in the journal (`question_request`
+as a progress of the turn, `question_answer` as the owner's event), so a reloaded page sees the form again if the question is still open and a settled one as settled. An answer nobody asked for changes nothing.
+
+### The universal way: the MCP tool `ask_user_question`
+
+For an agent with no tool of its own (`ask: mcp` in its settings). The hub starts a small MCP server (`ask_mcp.nv`, `ask_mcp_server.nv`) when some agent needs it:
+
+- `127.0.0.1` and a port the system chooses (one for the hub; the log says which); `POST /mcp/<session>` with the header `Authorization: Bearer <token>` (a random token for the hub); a request with an `Origin` header is refused, a `GET` is `405`.
+  Streamable HTTP of MCP as far as needed: `initialize`, `ping`, `tools/list`, `tools/call`, a notification is `202`. One JSON-RPC message per `POST`, one JSON answer, the connection closed.
+- The tool `ask_user_question`: `questions:[{ question, header, multiSelect, options:[{ label, description }] }]` (options may also be plain strings); the result is a text, `Вопрос: ... Ответ: ...` for each question, or
+  "Пользователь пропустил вопрос."; a call that is not answered in `ask_timeout_seconds` (30 minutes) gives "таймаут ожидания ответа" and the form is taken away.
+- It is handed to the agent in `session/new` (`mcpServers`: an `http` server `crew` with the address of the session and the token in `headers`) **only when the agent said `mcpCapabilities.http`**; otherwise nothing is given
+  and the log of the session gets a note (`acp_note`). The first prompt of the session (and of an agent after a change of the family) gets a short note before the text of the owner: "Если нужно что-то уточнить у пользователя или
+  выбрать между вариантами - вызывай инструмент ask_user_question (сервер crew), не пиши вопрос текстом"; the note is not in the journal and not in the feed.
+- The call blocks until the page answers (`question_answer` with the key `mcp-<n>`), a cancel of the turn answers it "skipped".
+
+Tests: `src/acp/ask_test.nv` (the forms and the answers, pure), `src/acp_live/client_test.nv` (the fake agent asks, is answered, is skipped, is cancelled; the server goes to `session/new` only to an agent that takes HTTP),
+`src/server/ask_mcp_test.nv` (the messages), `src/server_live/mcp_test.nv` (the sockets: the token, the origin, a call that waits, a term), `src/server_live/hub_test.nv` (the scenarios `scenario_question`,
+`scenario_question_off`, `scenario_question_mcp`, `scenario_question_mcp_timeout`; the fake agent `src/acp/testdata/fake_agent.mjs` asks with `ask`, `ask2`, calls the tool with `askmcp`).
 
 ## The chat runs on Alula
 
@@ -175,12 +237,13 @@ The list as data is `signals.nv` (`signals_given_by_code`, `signals_from_agent`)
 | `user_message` | the hub, `Hub.say`, from the page | `content` (text) | declared: a signal of the party `пользователь`; the row of `ПОКОЙ` |
 | `cancel` | the hub, `Hub.cancel`, from the page | none | declared once, as a signal `отмена`; the row `сигнал(отмена)` of `ОЖИДАНИЕ` (in `ПОКОЙ` it is a note `event_ignored`) |
 | `permission_decision` | the hub, `Hub.decide`, from the page | `request`, `decision` (JSON text) | **not known** on purpose: it goes to the client of the agent, and the engine journals it; the machine writes `event_unknown` |
+| `question_answer` | the hub, `Hub.answer`, from the page (and `Hub.cancel` for the questions it withdraws) | `request`, `skipped`, `answers` (JSON text) | **not known** on purpose, like `permission_decision`: the client of the agent or the MCP tool gets the answer, the engine journals it |
 | `session_created` | the hub, `Hub.create`, from the page | `name`, `agent`, `folder`, `project` (JSON text) | **not known** on purpose (below) |
 | `agent_chunk` | the client of ACP, `project_update` | `content` (text) | declared: a part of the answer of the party `агент`; the row of `ОЖИДАНИЕ` |
 | `agent_done` | the client of ACP, `stop_event` (`end_turn`) | none | the answer: the row `ответ` of `ОЖИДАНИЕ` |
 | `agent_refused` | the client of ACP, `refused_event` | the code of `FailCode` | the failure: the row `сбой(код)` of `ОЖИДАНИЕ` |
 | `timeout` | the engine, when the term of a request ends | none | the term: the row `срок` of `ОЖИДАНИЕ` |
-| `agent_thought`, `tool_call`, `tool_call_update`, `usage_update`, `plan`, `permission_request`, `acp_skipped`, `acp_note`, `agent_model` | the client of ACP | JSON text or text | **not known** on purpose: the page sees them (`page_event`), the machine writes `event_unknown` and nothing changes |
+| `agent_thought`, `tool_call`, `tool_call_update`, `usage_update`, `plan`, `permission_request`, `question_request`, `question_resolved`, `acp_skipped`, `acp_note`, `agent_model` | the client of ACP (`question_request` is also the hub's own event for the MCP tool) | JSON text or text | **not known** on purpose: the page sees them (`page_event`), the machine writes `event_unknown` and nothing changes |
 
 - **`session_created` is a signal the table does not know, on purpose.** The first event of a session is made by the server and kept in the journal like any other (`Engine.history` tells the whole story after a restart),
   so it is given to the machine; the machine has no row for it and writes `event_unknown` (the state does not change, nothing is saved). The page needs the event and the machine does not.
@@ -211,6 +274,7 @@ The page says what the owner did. It does not apply its own words: they appear o
 | `session_agent` (task 192) | `{ agent }` | the owner changed the family in the window: `Hub.switch_agent` starts the new agent (a failure keeps the old one), closes the old one, writes `agent_switched` `{ from, to, shown, total, cut }` into the journal of the SAME session (a restart reads it back) and hands the new agent the whole protocol of the conversation (`transfer.nv`: messages word for word, tools as one line; over 400000 bytes whole messages from the end, the earlier ones as headers) as a turn that is not a turn of the engine, so the feed does not show it and the answer to it is discarded |
 | `session_setting` (task 192) | `{ setting, value }`; `setting` is `mode`, `model` or `effort` | the owner chose; the hub asks the agent (`Hub.choose`, `AcpClient.select_option`), the engine does not see it; the answer is a new `session_model` |
 | `permission_decision` | `{ request, decision }`; `decision` is `allow` or `deny` | answers the request for permission of the agent; a decision nobody asked for changes nothing |
+| `question_answer` (task 192i) | `{ request, skipped, answers:[{ index, selected:[label], other }] }` | answers a question of the agent (see "Questions of the agent"); an answer nobody asked for changes nothing |
 
 ### Server to page
 
@@ -224,6 +288,8 @@ The page says what the owner did. It does not apply its own words: they appear o
 | `agent_refused` | `{ turn, reason }` | the turn ended badly: `reason` is a code of the closed list (`Timeout`, `ConnectionLost`, `ModelRefused`, `MaxTokens`...) |
 | `permission_request` | `{ turn, request, action, detail }` | the agent asks; the answer is `permission_decision` |
 | `permission_decision`, `cancel` | as above | the page's decision, accepted |
+| `question_request` (task 192i) | `{ turn, request, tool_call, questions }` | the agent asks the owner a question with a choice; the answer is `question_answer` |
+| `question_resolved` (task 192i) | `{ request }` | the question is settled; the page takes the form away |
 | `tool_call`, `tool_call_update`, `usage_update` | as in the page README | work of the agent |
 | `error` | `{ turn, message }` | **synthetic**: the agent could not be started or refused to start, a rejected `session_created`. Its id is `srv-<n>` and it is not kept: it is not in the journal and not in the history |
 

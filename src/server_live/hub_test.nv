@@ -2,7 +2,7 @@
 // The same scenarios run over PostgreSQL in src/server_pg: the results must be the same.
 module crew_harness.server_live
 
-import crew_harness.server.{kit_files, scenario_chat, scenario_stream_burst, scenario_permission, scenario_question, scenario_question_off, scenario_cancel, scenario_switch_agent, scenario_restart_idle, scenario_restart_open, scenario_crash, scenario_two_pages, scenario_rejects, scenario_many, scenario_broken_agent, scenario_renamed_table, scenario_migrate_flat, scenario_images}
+import crew_harness.server.{kit_files, kit_files_mcp, scenario_question_mcp, scenario_question_mcp_timeout, scenario_chat, scenario_stream_burst, scenario_permission, scenario_question, scenario_question_off, scenario_cancel, scenario_switch_agent, scenario_restart_idle, scenario_restart_open, scenario_crash, scenario_two_pages, scenario_rejects, scenario_many, scenario_broken_agent, scenario_renamed_table, scenario_migrate_flat, scenario_images}
 
 fn clean(report str) -> () {
     if report.byte_len() > 0 { println("NOT AS IT MUST BE: ${report}") }
@@ -24,6 +24,14 @@ test "files: permission asked, allowed, denied" {
 
 test "files: a question with a choice is asked, answered, skipped, withdrawn" {
     clean(scenario_question(kit_files("ask", 30000)))
+}
+
+test "files: the tool ask_user_question of the hub: asked, answered, skipped, withdrawn" {
+    clean(scenario_question_mcp(kit_files_mcp("askmcp", 30000, 1800000)))
+}
+
+test "files: the tool ask_user_question of the hub: nobody answers in time" {
+    clean(scenario_question_mcp_timeout(kit_files_mcp("askmcpt", 30000, 700)))
 }
 
 test "files: with ask_form off the agent is not told about forms" {

@@ -1,5 +1,5 @@
 // ask_test.nv - the questions of the agent to the owner (task 192i): the form of `elicitation/create` -> the questions of the page,
-// the answer of the page -> the answer to the agent. The four shapes below are the ones the four agents send (see README.md, "Questions of the agent").
+// the answer of the page -> the answer to the agent. The four shapes below are the ones the four agents send (see src/server/README.md, "Questions of the agent").
 module crew_harness.acp
 
 import alula.engine.{Incoming, EventKind}

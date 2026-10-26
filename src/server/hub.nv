@@ -24,9 +24,12 @@ import crew_harness.acp.{AcpConfig, AcpClient, AcpImage, AskSetup, no_ask, open_
 import crew_harness.storage.{open_data_dir, file_journal, file_store, list_sessions, valid_session_name, session_file_made, migrate_flat_sessions, image_ext, decode_image, save_image, find_image}
 import crew_harness.pgstore.{PgWorld, pg_journal, pg_store}
 import crew_harness.pgdb.{pg_list}
+import std.concurrency.nvchan.{ChanTx}
+import std.encoding.hex.{Hex}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import std.fs.{Fs, real_fs}
 import std.net.{real_net}
+import std.prelude.effects.{real_random}
 import std.os.{Os, real_os, cwd}
 
 /// Outgoing: a text for the page `conn`; conn 0 - for every page that is attached.
@@ -48,6 +51,10 @@ type Dialog {
     slow_told bool
 }
 
+// A call of the tool `ask_user_question` (task 192i) that waits for the owner: the key the page answers by, the call of the MCP server, the session, the
+// questions as the page got them, and where the text for the agent goes.
+type McpPending { key str, call int, session str, questions JsonValue, reply ChanTx[str] }
+
 /// Hub: the sessions, the pages, the output not yet taken, the log.
 export type Hub {
     settings ServerSettings,
@@ -57,7 +64,10 @@ export type Hub {
     conns []int,
     out []Outgoing,
     log []str,
-    serial int
+    serial int,
+    mcps []McpServer,
+    mcp_pending []McpPending,
+    mcp_serial int
 }
 
 // ----- small helpers -----
@@ -333,16 +343,57 @@ fn Hub @ask_for(agent str, id str) -> AskSetup {
     match @settings.agent(agent) {
         Some(spec) => {
             if spec.ask == "off" { return no_ask() }
-            if spec.ask == "mcp" { return AskSetup { form: false, mcp_url: @mcp_url_for(id), mcp_token: @mcp_token_value() } }
-            AskSetup { form: true, mcp_url: "", mcp_token: "" }
+            if spec.ask == "mcp" { return AskSetup { form: false, mcp_url: @mcp_url_for(id), mcp_token: @mcp_token_value(), hint: ASK_HINT } }
+            AskSetup { form: true, mcp_url: "", mcp_token: "", hint: "" }
         }
         None => no_ask()
     }
 }
 
-fn Hub @mcp_url_for(id str) -> str => ""
+// The note put before the first prompt of an agent that was given the MCP tool: it is not in the journal and not in the feed (the client puts it before the prompt).
+const ASK_HINT = "[crew] Если нужно что-то уточнить у пользователя или выбрать между вариантами — вызывай инструмент ask_user_question (сервер crew), не пиши вопрос текстом."
 
-fn Hub @mcp_token_value() -> str => ""
+fn Hub @mcp_url_for(id str) -> str {
+    if @mcps.len() == 0 { return "" }
+    ro port = @mcps[0].port
+    "http://127.0.0.1:${port}/mcp/${id}"
+}
+
+fn Hub @mcp_token_value() -> str {
+    if @mcps.len() == 0 { return "" }
+    @mcps[0].token
+}
+
+fn Hub @wants_mcp() -> bool {
+    if !@settings.ask_form { return false }
+    for a in @settings.agents {
+        if a.ask == "mcp" { return true }
+    }
+    false
+}
+
+/// Start the MCP server of the questions (only when an agent of the settings asks by `mcp`; the tests call it too). The port is the system's choice, the token is random.
+export fn Hub mut @start_mcp() Proc Detach Time Net -> bool {
+    if @mcps.len() > 0 { return true }
+    ro token = with Random = real_random() { Hex.encode(Random.bytes(24)) }
+    match start_mcp_server(token, @settings.ask_timeout_ms) {
+        Ok(server) => {
+            @mcps.push(server)
+            @say_log("the MCP server of the questions listens on 127.0.0.1:${server.port}")
+            true
+        }
+        Err(reason) => {
+            @say_log("the MCP server of the questions did not start: ${reason}")
+            false
+        }
+    }
+}
+
+/// The address of the MCP server of the questions for a session ("" - it is not running).
+export fn Hub @mcp_address(id str) -> str => @mcp_url_for(id)
+
+/// The token of the MCP server of the questions ("" - it is not running).
+export fn Hub @mcp_token() -> str => @mcp_token_value()
 
 fn Hub @open_config_for(agent str, id str) -> Option[AcpConfig] {
     match @settings.agent(agent) {
@@ -410,8 +461,9 @@ export fn start_hub_from(settings ServerSettings, table_text str) Proc Detach Ti
     }
     ro machine = hub_machine_from(table_text, settings.idle_term_ms)?
     mut hub = Hub {
-        settings, machine, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0
+        settings, machine, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0, mcps: []McpServer.new(), mcp_pending: []McpPending.new(), mcp_serial: 0
     }
+    if hub.wants_mcp() { ro started = hub.start_mcp() }
     ro pg = settings.store == "pg"
     // the flat files of the older form (`<id>.inbox` ...) go into the folders of their sessions before the sessions are listed (task 192k)
     ro migration = migrate_flat_sessions(settings.data_dir)
@@ -633,6 +685,7 @@ fn Hub mut @cancel(trace str) Proc Detach Time -> () {
     if at < 0 { return }
     mut s = @sessions[at]
     if s.clients.len() == 0 { return }
+    @mcp_withdraw(trace)
     // a question that waits for the owner goes first: the page takes the form away, and the agent is answered "cancel" (task 192i)
     for key in s.clients[0].withdraw_questions() {
         mut withdrawn = JsonObject.new()
@@ -663,6 +716,14 @@ fn Hub mut @decide(trace str, request str, decision str) Proc Detach Time -> () 
 fn Hub mut @answer(trace str, input JsonObject) Proc Detach Time -> () {
     ro at = @find(trace)
     if at < 0 { return }
+    match @mcp_take(jtext(input, "request")) {
+        Some(pending) => {
+            ro told = pending.reply.send("ok:${ask_result_text(pending.questions, JsonValue.object(input))}")
+            @mcp_settled(at, input)
+            return
+        }
+        None => ()
+    }
     mut s = @sessions[at]
     if s.clients.len() == 0 { return }
     ro event = Incoming.signal("question_answer", JsonValue.object(input).to_str())
@@ -671,6 +732,116 @@ fn Hub mut @answer(trace str, input JsonObject) Proc Detach Time -> () {
         @drain(at)
     } else {
         @say_log("an answer for ${trace} to a question that nobody asked: request ${jtext(input, "request")}")
+    }
+}
+
+// The pending call of the tool with this key, taken out of the list; None - there is none.
+fn Hub mut @mcp_take(key str) -> Option[McpPending] {
+    mut found = -1
+    mut index = 0
+    for p in @mcp_pending {
+        if p.key == key { found = index }
+        index += 1
+    }
+    if found < 0 { return None }
+    ro pending = @mcp_pending[found]
+    mut rest = []McpPending.new()
+    for p in @mcp_pending {
+        if p.key != key { rest.push(p) }
+    }
+    @mcp_pending = rest
+    Some(pending)
+}
+
+fn Hub mut @mcp_take_call(call int) -> Option[McpPending] {
+    mut key = ""
+    for p in @mcp_pending {
+        if p.call == call { key = p.key }
+    }
+    if key.byte_len() == 0 { return None }
+    @mcp_take(key)
+}
+
+// The page is told a question of the tool is settled (an answer, a skip, a term, a cancel): an event of the session, kept in its journal like the answer of the owner.
+fn Hub mut @mcp_settled(at int, answer JsonObject) Proc Detach Time -> () {
+    mut s = @sessions[at]
+    accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("question_answer", JsonValue.object(answer).to_str()))
+    @drain(at)
+}
+
+fn withdrawn_answer(key str, why str) -> JsonObject {
+    mut o = JsonObject.new()
+    jput(o, "request", JsonValue.str(key))
+    jput(o, "skipped", JsonValue.bool(true))
+    jput(o, "cancelled", JsonValue.bool(true))
+    jput(o, why, JsonValue.bool(true))
+    o
+}
+
+// The calls of the tool of a session are over because its turn is cancelled: the agent is told the owner skipped, the page takes the forms away.
+fn Hub mut @mcp_withdraw(trace str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    mut keys = []str.new()
+    for p in @mcp_pending {
+        if p.session == trace { keys.push(p.key) }
+    }
+    for key in keys {
+        match @mcp_take(key) {
+            Some(pending) => {
+                ro told = pending.reply.send("ok:${ask_result_text(pending.questions, JsonValue.object(withdrawn_answer(key, "turn")))}")
+                @mcp_settled(at, withdrawn_answer(key, "turn"))
+            }
+            None => ()
+        }
+    }
+}
+
+// A message of the MCP server: a call of the tool opens a question on the page of its session; a call whose term passed takes it away.
+fn Hub mut @mcp_message(msg McpMsg) Proc Detach Time -> () {
+    if msg.kind == "gone" {
+        match @mcp_take_call(msg.call) {
+            Some(pending) => {
+                ro at = @find(pending.session)
+                if at >= 0 { @mcp_settled(at, withdrawn_answer(pending.key, "timeout")) }
+            }
+            None => ()
+        }
+        return
+    }
+    ro at = @find(msg.session)
+    if at < 0 {
+        ro told = msg.reply.send("err:the session ${msg.session} is not known to the hub")
+        return
+    }
+    if @takes_message_at(at) {
+        ro told = msg.reply.send("err:no turn is open in the session, so nobody can answer now")
+        return
+    }
+    ro questions = match Json.parse(msg.text) {
+        Ok(v) => v
+        Err(e) => JsonValue.array([]JsonValue.new())
+    }
+    @mcp_serial += 1
+    ro key = "mcp-${@mcp_serial}"
+    @mcp_pending.push(McpPending { key, call: msg.call, session: msg.session, questions, reply: msg.reply })
+    mut o = JsonObject.new()
+    jput(o, "request", JsonValue.str(key))
+    jput(o, "tool_call", JsonValue.str(""))
+    jput(o, "questions", questions)
+    mut s = @sessions[at]
+    accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("question_request", JsonValue.object(o).to_str()))
+    @drain(at)
+}
+
+fn Hub mut @mcp_poll() Proc Detach Time -> () {
+    if @mcps.len() == 0 { return }
+    mut more = true
+    while more {
+        match @mcps[0].inbox.try_recv() {
+            Some(msg) => @mcp_message(msg)
+            None => { more = false }
+        }
     }
 }
 
@@ -829,6 +1000,7 @@ fn Hub mut @watch_agent(at int) Time -> () {
 
 /// The work of a moment: the agents are asked for what they have, the engines take it. Returns the number of steps made.
 export fn Hub mut @pump() Proc Detach Time -> int {
+    @mcp_poll()
     mut made = 0
     mut at = 0
     while at < @sessions.len() {
@@ -859,6 +1031,7 @@ export fn Hub mut @take_log() -> []str {
 
 /// Close the agents of all sessions (their processes are killed). The store has nothing to close.
 export fn Hub mut @close() Time -> () {
+    for server in @mcps { server.stop() }
     for s in @sessions {
         mut mine = s
         if mine.clients.len() > 0 {

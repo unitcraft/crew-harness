@@ -1,0 +1,252 @@
+// ask_mcp_server.nv - the sockets of the MCP server of the questions (task 192i); the messages themselves are in `ask_mcp.nv`.
+//
+// A small HTTP/1.1 server on 127.0.0.1 and a port of the system's choosing (one for the hub). One `POST /mcp/<session>` is one JSON-RPC message; the
+// answer is one JSON body and the connection is closed (`Connection: close`). The token of the hub is in the header `Authorization: Bearer <token>`; a
+// request with another token is `401`, a request with an `Origin` header (a page of a browser) is `403`, a `GET` is `405` (no stream is offered).
+//
+// The server does not know the sessions or the owner. A call of the tool is a message to the hub (`McpMsg`, kind `ask`: the session of the path, the questions)
+// and the server waits for the text the hub sends back through `reply` ("ok:<text>" or "err:<text>"); if nothing comes in `timeout_ms` it answers
+// "таймаут ожидания ответа" and tells the hub (`McpMsg`, kind `gone`) so that the question is taken away from the page.
+//
+// The fibers: a detached keeper that owns the listener and a `supervised` scope that can be cancelled (`McpServer.stop`), one detached fiber for each connection.
+// The listener is made by the keeper itself (the standard library's tests do the same: a socket belongs to the loop of the fiber that made it). The code a fiber
+// runs avoids `str.lines` and the like: the checker of the scheduler takes them for unsafe in a fiber, so the head of the request is cut by hand.
+module crew_harness.server
+
+import std.concurrency.nvchan.{Chan, ChanTx, ChanRx}
+import std.encoding.json.{Json, JsonValue}
+import std.net.{Net, TcpListener, TcpStream, SocketAddr}
+
+/// McpMsg: what the server tells the hub. `kind`: `ask` (a call of the tool: `session` of the path, `text` the JSON of the questions, `reply` where the hub sends
+/// the answer), `gone` (the call `call` is no longer waited for: the term passed). `call` numbers the calls of the server.
+export type McpMsg { kind str, call int, session str, text str, reply ChanTx[str] }
+
+/// McpServer: the port, the token, the messages for the hub, and the way to stop it.
+export type McpServer { port int, token str, inbox ChanRx[McpMsg], stop_token CancelToken }
+
+/// Stop the server: the listener is closed, no new connection is taken.
+export fn McpServer @stop() -> () {
+    @stop_token.cancel()
+}
+
+const MAX_REQUEST = 1048576
+
+// A request as far as the server cares: the line, three headers and the body.
+type HttpRequest { method str, path str, auth str, origin str, length int, body str }
+
+fn mcp_now_ms() Time -> int => Time.now().unix_millis()
+
+// The place of the end of the head (a blank line) in the text, -1 when it has not come yet.
+fn head_end(text str) -> int {
+    match text.find("\r\n\r\n") {
+        Some(at) => at
+        None => -1
+    }
+}
+
+// The value of a header of the head (the name in lower case), "" when there is none.
+fn header_of(head str, name str) -> str {
+    mut rest = head
+    match rest.find("\r\n") {
+        Some(at) => { rest = rest[at + 2..] }
+        None => return ""
+    }
+    mut more = true
+    while more {
+        ro cut = rest.find("\r\n") ?? rest.byte_len()
+        ro line = rest[..cut]
+        match line.find(":") {
+            Some(colon) => {
+                if line[..colon].trim_ascii().to_ascii_lower() == name { return line[colon + 1..].trim_ascii() }
+            }
+            None => ()
+        }
+        if cut >= rest.byte_len() { more = false } else { rest = rest[cut + 2..] }
+    }
+    ""
+}
+
+// The request of the head (the body is added later): None - the head is not an HTTP request.
+fn parse_head(head str) -> Option[HttpRequest] {
+    ro request_line = head[..(head.find("\r\n") ?? head.byte_len())]
+    ro first_space = request_line.find(" ")?
+    ro method = request_line[..first_space]
+    ro rest = request_line[first_space + 1..]
+    ro second_space = rest.find(" ") ?? rest.byte_len()
+    ro path = rest[..second_space]
+    ro length = match header_of(head, "content-length").to_int() {
+        Ok(n) => n
+        Err(e) => 0
+    }
+    Some(HttpRequest { method, path, auth: header_of(head, "authorization"), origin: header_of(head, "origin"), length, body: "" })
+}
+
+fn status_text(code int) -> str {
+    if code == 200 { return "OK" }
+    if code == 202 { return "Accepted" }
+    if code == 400 { return "Bad Request" }
+    if code == 401 { return "Unauthorized" }
+    if code == 403 { return "Forbidden" }
+    if code == 404 { return "Not Found" }
+    if code == 405 { return "Method Not Allowed" }
+    if code == 413 { return "Payload Too Large" }
+    "Error"
+}
+
+fn http_answer(code int, body str) -> str {
+    ro allow = if code == 405 { "Allow: POST\r\n" } else { "" }
+    "HTTP/1.1 ${code} ${status_text(code)}\r\nContent-Type: application/json\r\n${allow}Content-Length: ${body.byte_len()}\r\nConnection: close\r\n\r\n${body}"
+}
+
+// Read one request from the connection: the head, then as much body as `Content-Length` says. None - it did not come (closed, too big, not HTTP).
+fn read_request(mut conn TcpStream) Net -> Option[HttpRequest] {
+    mut raw []u8 = []u8.new()
+    mut buf []u8 = []u8.new()
+    buf.resize(8192, 0 as u8)
+    mut end = -1
+    mut text = ""
+    while end < 0 {
+        match conn.read(buf) {
+            Ok(0) => return None
+            Ok(n) => {
+                for b in buf[..n] { raw.push(b) }
+            }
+            Err(e) => return None
+        }
+        if raw.len() > MAX_REQUEST { return None }
+        text = raw[..raw.len()].to_str_lossy()
+        end = head_end(text)
+    }
+    ro parsed = parse_head(text[..end])?
+    if parsed.length > MAX_REQUEST { return None }
+    // the body is taken from the bytes, after the head in bytes
+    ro head_bytes = text[..end].byte_len() + 4
+    while raw.len() < head_bytes + parsed.length {
+        match conn.read(buf) {
+            Ok(0) => return None
+            Ok(n) => {
+                for b in buf[..n] { raw.push(b) }
+            }
+            Err(e) => return None
+        }
+    }
+    ro body = raw[head_bytes..head_bytes + parsed.length].to_str_lossy()
+    Some(HttpRequest { method: parsed.method, path: parsed.path, auth: parsed.auth, origin: parsed.origin, length: parsed.length, body })
+}
+
+// The session of a path `/mcp/<session>` ("" - none); None - the path is not ours.
+fn session_of(path str) -> Option[str] {
+    if path == "/mcp" || path == "/mcp/" { return Some("") }
+    if path.starts_with("/mcp/") { return Some(path[5..]) }
+    None
+}
+
+// The answer of the hub to a call: "ok:<text>" is the text of the tool, "err:<text>" is a failure of the tool.
+fn reply_text(answer str) -> str {
+    if answer.starts_with("ok:") { return answer[3..] }
+    if answer.starts_with("err:") { return answer[4..] }
+    answer
+}
+
+fn is_failure(answer str) -> bool => answer.starts_with("err:")
+
+// Wait for the answer of the hub; None - `timeout_ms` passed.
+fn await_answer(rx ChanRx[str], timeout_ms int) Time -> Option[str] {
+    ro deadline = mcp_now_ms() + timeout_ms
+    while mcp_now_ms() < deadline {
+        match rx.try_recv() {
+            Some(answer) => return Some(answer)
+            None => 15.to_millis().sleep()
+        }
+    }
+    None
+}
+
+fn id_of(text str) -> JsonValue {
+    match Json.parse(text) {
+        Ok(v) => v
+        Err(e) => JsonValue.null()
+    }
+}
+
+// What to write back for one request.
+fn answer_request(request HttpRequest, token str, timeout_ms int, call int, inbox ChanTx[McpMsg]) Time -> str {
+    if request.origin.byte_len() > 0 { return http_answer(403, "{\"error\":\"a request from a page is not accepted\"}") }
+    if request.auth != "Bearer ${token}" { return http_answer(401, "{\"error\":\"the token is wrong\"}") }
+    ro session = match session_of(request.path) {
+        Some(s) => s
+        None => return http_answer(404, "{\"error\":\"not found\"}")
+    }
+    if request.method != "POST" { return http_answer(405, "{\"error\":\"POST only\"}") }
+    ro out = mcp_handle(request.body)
+    if out.kind == "none" { return "HTTP/1.1 202 Accepted\r\nContent-Length: 0\r\nConnection: close\r\n\r\n" }
+    if out.kind == "reply" { return http_answer(200, out.text) }
+    // a call of the tool: the hub is told and the owner is waited for
+    ro answers = Chan[str].new(1)
+    ro told = inbox.send(McpMsg { kind: "ask", call, session, text: out.questions, reply: answers.tx })
+    ro id = id_of(out.id)
+    match await_answer(answers.rx, timeout_ms) {
+        Some(answer) => http_answer(200, mcp_text_reply(id, reply_text(answer), is_failure(answer)))
+        None => {
+            ro gone = inbox.send(McpMsg { kind: "gone", call, session, text: "", reply: answers.tx })
+            http_answer(200, mcp_text_reply(id, "таймаут ожидания ответа", true))
+        }
+    }
+}
+
+fn serve_connection(consume conn TcpStream, token str, timeout_ms int, call int, inbox ChanTx[McpMsg]) Net Time -> () {
+    match read_request(conn) {
+        Some(request) => {
+            ro written = conn.write_all(answer_request(request, token, timeout_ms, call, inbox).bytes())
+        }
+        None => ()
+    }
+    conn.close()
+}
+
+// The loop of the listener: connections until it is cancelled.
+fn listen_loop(consume listener TcpListener, token str, timeout_ms int, inbox ChanTx[McpMsg], stop CancelToken) Net Time Detach -> () {
+    mut calls = 0
+    supervised(cancel: stop) {
+        mut serving = true
+        while serving {
+            match listener.accept() {
+                Ok(consume conn) => {
+                    calls += 1
+                    ro call = calls
+                    detach consume conn { serve_connection(conn, token, timeout_ms, call, inbox) }
+                }
+                Err(e) => { serving = false }
+            }
+        }
+    }
+    listener.close()
+}
+
+// The keeper: makes the listener, tells the starter its port (-1 - it could not be made), then takes connections.
+fn keep_mcp(token str, timeout_ms int, inbox ChanTx[McpMsg], ready ChanTx[int], stop CancelToken) Net Time Detach -> () {
+    match TcpListener.bind(SocketAddr.loopback(0)) {
+        Err(e) => {
+            ro told = ready.send(-1)
+        }
+        Ok(consume bound) => {
+            ro told = ready.send(bound.local_port())
+            listen_loop(bound, token, timeout_ms, inbox, stop)
+        }
+    }
+}
+
+/// Start the MCP server of the questions on 127.0.0.1 and a free port. `timeout_ms` is how long a call waits for the owner.
+export fn start_mcp_server(token str, timeout_ms int) Net Detach Time -> Result[McpServer, str] {
+    ro inbox = Chan[McpMsg].new(256)
+    ro ready = Chan[int].new(1)
+    ro stop = CancelToken.new()
+    detach { keep_mcp(token, timeout_ms, inbox.tx, ready.tx, stop) }
+    match ready.rx.recv() {
+        Some(port) => {
+            if port < 0 { return Err("the MCP server cannot listen on 127.0.0.1") }
+            Ok(McpServer { port, token, inbox: inbox.rx, stop_token: stop })
+        }
+        None => Err("the MCP server ended before it listened")
+    }
+}
