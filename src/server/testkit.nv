@@ -319,7 +319,17 @@ fn Rig @lines_in_mode(conn int, mode int) -> []str {
 export fn Rig @lines_for(conn int) -> []str {
     mut out = []str.new()
     for line in @lines_in_mode(conn, 0) {
-        if line_field(line, "kind") != "route_state" { out.push(line) }
+        ro kind = line_field(line, "kind")
+        if kind != "route_state" && kind != "machine_state" { out.push(line) }
+    }
+    out
+}
+
+/// The lines `machine_state` one page has been told (the debug state of the machine of a session, task 192.1): not a part of the story of the session either.
+export fn Rig @machine_lines_for(conn int) -> []str {
+    mut out = []str.new()
+    for line in @lines_in_mode(conn, 0) {
+        if line_field(line, "kind") == "machine_state" { out.push(line) }
     }
     out
 }
@@ -1398,6 +1408,49 @@ export fn scenario_broken_agent(settings ServerSettings) Proc Detach Time Net Fs
     rig.page(1, "user_message", "s-broken", "{\"turn\":\"t\",\"text\":\"hello\"}")
     c.expect(rig.until("\"kind\":\"agent_refused\"", 10000), "a message gets a refusal")
     c.expect(rig.hub.takes_message("s-broken"), "the session stays open")
+    rig.shut()
+    c.report()
+}
+
+/// The debug state of the machine (task 192.1): `machine_state` comes when the state changes and when a page attaches, on request, cut when too big, and is not in the journal.
+export fn scenario_machine_state(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-mach", "{\"name\":\"Машина\",\"agent\":\"opencode\"}")
+    c.expect(rig.until("\"kind\":\"machine_state\"", 5000), "the state of the machine is told after the session is made")
+    ro first = rig.machine_lines_for(1)[0]
+    c.expect(first.contains("\"table\":\"dialog\"") && first.contains("\"machine\":\"DialogSession\""), "the table and the machine are named: ${first}")
+    c.expect(first.contains("\"state\":\"Idle\"") && first.contains("\"started\":true"), "the first state: ${first}")
+    rig.page(1, "user_message", "s-mach", "{\"turn\":\"t1\",\"text\":\"slow go\"}")
+    c.expect(rig.until("\"state\":\"Awaiting\"", 15000), "the open turn is told as a change of the state")
+    rig.page(1, "cancel", "s-mach", "{}")
+    c.expect(rig.until("\"kind\":\"cancel\"", 5000), "the cancel is shown")
+    rig.run(600)
+    ro told = rig.machine_lines_for(1)
+    c.expect(told[told.len() - 1].contains("\"state\":\"Idle\""), "the machine is back in the first state: ${told[told.len() - 1]}")
+    c.expect(kit_with(told, "\"code\":\"user_message\"") > 0, "the journal of the machine is in the event")
+    c.expect(kit_with(told, "\"data\":{\"agent_attempt\"") > 0, "the data are the fields of the record, with no wrapper: ${told[0]}")
+    c.expect(told[told.len() - 1].contains("\"code\":\"cancel\""), "the cancel is in the journal of the machine: ${told[told.len() - 1]}")
+    c.expect(kit_with(rig.hub.page_lines("s-mach"), "machine_state") == 0, "the debug state is not a line of the session")
+    rig.forget()
+    rig.page(1, "machine_state_get", "s-mach", "{}")
+    c.expect(rig.until("\"kind\":\"machine_state\"", 3000), "a request is answered")
+    rig.attach(2)
+    c.expect(rig.machine_lines_for(2).len() == 1, "a page that attaches is told the state of the machine of the session")
+    c.expect(kit_with(rig.lines_for(2), "machine_state") == 0, "it is not among the lines of the session")
+    mut parts = []str.new()
+    mut i = 0
+    while i < 7000 {
+        parts.push("xxxxxxxxxx")
+        i += 1
+    }
+    ro big = parts.join("")
+    rig.forget()
+    rig.page(1, "user_message", "s-mach", "{\"turn\":\"t2\",\"text\":\"${big}\"}")
+    ro cut_seen = rig.until("\"truncated\":true", 15000)
+    ro seen_lines = rig.machine_lines_for(1)
+    c.expect(cut_seen, "data above 64 KiB are cut with a note: ${seen_lines.len()} lines, the last: ${cut_text(seen_lines[seen_lines.len() - 1], 700)}; the log: ${cut_text(kit_text(rig.hub.take_log()), 500)}")
     rig.shut()
     c.report()
 }

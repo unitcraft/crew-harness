@@ -1,0 +1,148 @@
+// machine_hub.nv - the debug state of the machine of a session for the pages (task 192.1): the page event `machine_state`.
+//
+// What the page gets: the name of the machine, the state (as the table calls it), the time the machine came into it, the snapshot without the state
+// (`started`, `input`, `data`) and the last lines of the journal of the machine. It is the state for looking at, not the history: the event is not written
+// to the journal of the session and not kept in `lines`, a page gets it when the state changes, when it attaches, and when it asks (`machine_state_get`).
+// The data of the table of the dialog are the texts of the turn (`user`, `reply`) and counters: no secrets; the size of the event is limited anyway.
+module crew_harness.server
+
+import alula.engine.{Incoming}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+const MACHINE_DATA_LIMIT = 65536
+const MACHINE_JOURNAL_LINES = 20
+const MACHINE_NOTE_LIMIT = 160
+const MACHINE_DATA_PAUSE_MS = 400
+
+/// What was told to the pages about a session: its snapshot, the state, since when, and when the last event went.
+type MachMark { id str, key str, state str, since int, sent_at int }
+
+fn mark_at(marks []MachMark, id str) -> int {
+    mut i = 0
+    while i < marks.len() {
+        if marks[i].id == id { return i }
+        i += 1
+    }
+    -1
+}
+
+fn machine_journal(lines []Incoming) -> JsonValue {
+    mut out = []JsonValue.new()
+    mut from = 0
+    if lines.len() > MACHINE_JOURNAL_LINES { from = lines.len() - MACHINE_JOURNAL_LINES }
+    mut i = from
+    while i < lines.len() {
+        mut o = JsonObject.new()
+        jput(o, "code", JsonValue.str(lines[i].name))
+        jput(o, "at", JsonValue.int(lines[i].at))
+        jput(o, "note", JsonValue.str(cut_text(lines[i].input, MACHINE_NOTE_LIMIT)))
+        out.push(JsonValue.object(o))
+        i += 1
+    }
+    JsonValue.array(out)
+}
+
+// The part of the snapshot the page shows; a value above the limit is replaced by the note and its beginning.
+fn machine_part(snapshot JsonObject, key str) -> JsonValue {
+    match snapshot.get(key) {
+        Some(shown) => {
+            // the data of the machine come as a record `{"$record":"Data","fields":{...}}`: the page gets the fields
+            ro v = match shown.object() {
+                Some(o) => match o.get("fields") {
+                    Some(f) => if o.get("$record").is_some() { f } else { shown }
+                    None => shown
+                }
+                None => shown
+            }
+            ro text = v.to_str()
+            if text.byte_len() > MACHINE_DATA_LIMIT {
+                mut o = JsonObject.new()
+                jput(o, "truncated", JsonValue.bool(true))
+                jput(o, "size", JsonValue.int(text.byte_len()))
+                jput(o, "head", JsonValue.str(cut_text(text, 4096)))
+                JsonValue.object(o)
+            } else {
+                v
+            }
+        }
+        None => JsonValue.null()
+    }
+}
+
+// The text of the event `machine_state` of the session at `at`, `since` is the time the machine came into the state.
+fn Hub @machine_event_text(at int, since int) -> str {
+    mut s = @sessions[at]
+    ro snapshot = jobject(@machine.encode_state(s.engine.state())) ?? JsonObject.new()
+    mut input = JsonObject.new()
+    jput(input, "machine", JsonValue.str(@machine.name()))
+    jput(input, "table", JsonValue.str("dialog"))
+    jput(input, "state", JsonValue.str(@machine.state_name(s.engine.state())))
+    jput(input, "since", JsonValue.int(since))
+    jput(input, "started", machine_part(snapshot, "started"))
+    jput(input, "last_input", machine_part(snapshot, "input"))
+    jput(input, "data", machine_part(snapshot, "data"))
+    jput(input, "journal", machine_journal(history_in(@settings.store == "pg", @settings.data_dir, s)))
+    event_line("srv-${@serial}", s.id, @serial, "machine_state", input, now_millis())
+}
+
+fn Hub mut @machine_line(conn int, at int, since int) Time -> () {
+    @serial += 1
+    @send(conn, @machine_event_text(at, since))
+}
+
+/// `machine_state` to every page when the state changed (the data alone - not oftener than a pause); `force`: always.
+fn Hub mut @machine_broadcast(at int, force bool) Time -> () {
+    ro s = @sessions[at]
+    ro key = @machine.encode_state(s.engine.state())
+    ro state = @machine.state_name(s.engine.state())
+    ro now = now_millis()
+    ro m = mark_at(@marks, s.id)
+    if m < 0 {
+        @marks.push(MachMark { id: s.id, key, state, since: now, sent_at: now })
+        @machine_line(0, at, now)
+        return
+    }
+    mut mark = @marks[m]
+    if key == mark.key && !force { return }
+    if state != mark.state {
+        mark.since = now
+    } else if !force && now - mark.sent_at < MACHINE_DATA_PAUSE_MS {
+        return
+    }
+    mark.key = key
+    mark.state = state
+    mark.sent_at = now
+    @marks[m] = mark
+    @machine_line(0, at, mark.since)
+}
+
+fn Hub @machine_since(id str) -> int {
+    ro m = mark_at(@marks, id)
+    if m < 0 { now_millis() } else { @marks[m].since }
+}
+
+/// `machine_state` of every session to a page that attached.
+fn Hub mut @machine_attach(conn int) Time -> () {
+    mut at = 0
+    while at < @sessions.len() {
+        @machine_line(conn, at, @machine_since(@sessions[at].id))
+        at += 1
+    }
+}
+
+/// The page asked for the state of one session (`machine_state_get`): the answer goes to every page (it is the same state).
+fn Hub mut @machine_get(trace str) Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    @machine_broadcast(at, true)
+}
+
+/// The state of the machines is looked at after each pump: every session whose machine moved is told to the pages.
+fn Hub mut @machine_pump() Time -> () {
+    if @conns.len() == 0 { return }
+    mut at = 0
+    while at < @sessions.len() {
+        @machine_broadcast(at, false)
+        at += 1
+    }
+}

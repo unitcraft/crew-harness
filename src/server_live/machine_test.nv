@@ -1,0 +1,9 @@
+// machine_test.nv - the debug state of the machine of a session over FILES with the fake ACP agent (task 192.1): the scenario of crew_harness.server/testkit.nv.
+module crew_harness.server_live
+
+import crew_harness.server.{kit_files, scenario_machine_state}
+
+test "files: the debug state of the machine is told on a change, on attach and on request, cut when big" {
+    ro report = scenario_machine_state(kit_files("machstate", 30000))
+    if report.byte_len() > 0 { panic("NOT AS IT MUST BE: ${report}") }
+}

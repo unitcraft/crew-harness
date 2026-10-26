@@ -131,7 +131,8 @@ export type Hub {
     catalog_saved_at int,
     choices []PendingChoice,
     reviews []Review,
-    route_obs int
+    route_obs int,
+    marks []MachMark
 }
 
 // ----- small helpers -----
@@ -458,6 +459,7 @@ export fn Hub mut @attach(conn int) -> () {
         if s.lines.len() > 0 { @send(conn, array_text(s.lines)) }
     }
     @route_attach(conn)
+    @machine_attach(conn)
 }
 
 /// A page is gone (it is not told anything more).
@@ -667,7 +669,7 @@ export fn start_hub_from(settings ServerSettings, table_text str) Proc Detach Ti
     }
     ro machine = hub_machine_with(machine_text, registry, settings.idle_term_ms)?
     mut hub = Hub {
-        settings, machine, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0, mcps: []McpServer.new(), mcp_pending: []McpPending.new(), mcp_serial: 0, catalog: JsonObject.new(), catalog_dirty: false, catalog_saved_at: 0, choices: []PendingChoice.new(), reviews: []Review.new(), route_obs: 0
+        settings, machine, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0, mcps: []McpServer.new(), mcp_pending: []McpPending.new(), mcp_serial: 0, catalog: JsonObject.new(), catalog_dirty: false, catalog_saved_at: 0, choices: []PendingChoice.new(), reviews: []Review.new(), route_obs: 0, marks: []MachMark.new()
     }
     if hub.wants_mcp() { ro started = hub.start_mcp() }
     ro pg = settings.store == "pg"
@@ -1417,6 +1419,8 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
         @rename(trace, jtext(input, "name"))
     } else if kind == "session_setting" {
         @choose(trace, jtext(input, "setting"), jtext(input, "value"))
+    } else if kind == "machine_state_get" {
+        @machine_get(trace)
     } else if kind == "session_route" {
         @route_set(trace, jtext(input, "route"))
     } else if kind == "route_run" {
@@ -1452,6 +1456,8 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
     } else {
         @say_log("a message of the kind ${kind} from page ${conn}: ignored")
     }
+    // a state the machine passed through while the message was taken (the open turn) is told now, not at the next pump
+    @machine_pump()
 }
 
 // The first time an agent is ready, or has refused to start, is told: to the log, and a refusal to the page.
@@ -1516,6 +1522,7 @@ export fn Hub mut @pump() Proc Detach Time -> int {
     }
     @catalog_save(false)
     @route_pump()
+    @machine_pump()
     made
 }
 
