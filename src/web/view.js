@@ -953,8 +953,10 @@ export function createView(doc, refs, deps) {
   // «↵» нет совсем, пока нечего отправлять (пустое поле, нет картинок) и во время записи: правая группа не двигается, поле сжимается
   function syncSend(busy) {
     const can = canSend(input.value, attach.items(), uploading);
-    sendButton.hidden = recordingNow || !can;
-    sendButton.disabled = busy || !can;
+    // в записи место кнопки остаётся (visibility), чтобы поле не меняло ширину и текст не перетекал в нижнюю строку
+    sendButton.hidden = !can && !recordingNow;
+    sendButton.style.visibility = recordingNow ? 'hidden' : '';
+    sendButton.disabled = busy || !can || recordingNow;
   }
   // Авторазмер: высота по содержимому, не выше 5 строк (дальше — внутренняя прокрутка, см. max-height в app.css).
   function fitInput() {

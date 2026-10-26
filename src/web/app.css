@@ -835,8 +835,8 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
 @keyframes breathe { 50% { opacity: .75; } }
 @media (prefers-reduced-motion: reduce) { .mic-btn[data-state="recording"] .icon { animation: none; } }
 .mic-btn[data-state="unavailable"] { opacity: .45; }
-/* Панель записи: поверх карточки справа от микрофона (позиция absolute), поле под ней не сжимается; слева - «завеса» от прозрачного к фону карточки */
-.rec-panel { position: absolute; right: 52px; bottom: 8px; z-index: 2; display: none; align-items: center; height: 32px; padding-left: 4px; background: var(--surface); }
+/* Панель записи: непрозрачный блок поверх карточки по всей её высоте, правее поля и левее микрофона (позиция absolute); текст под ним скрыт, слева - «завеса» от прозрачного к фону карточки; таймер и дорожка стоят в нижней строке, на линии микрофона */
+.rec-panel { position: absolute; top: 0; bottom: 0; right: 52px; z-index: 2; display: none; align-items: flex-end; padding: 0 0 8px 4px; background: var(--surface); }
 .box.recording .rec-panel { display: flex; }
 .rec-panel::before { content: ""; position: absolute; top: 0; bottom: 0; right: 100%; width: 140px; background: linear-gradient(to right, transparent, var(--surface) 70%); pointer-events: none; }
 .wave { display: flex; align-items: center; justify-content: flex-end; gap: 2px; height: 32px; padding: 0 4px; color: var(--fg-muted); }
@@ -844,7 +844,7 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
 .wave i { display: block; width: 2px; min-height: 3px; height: 3px; border-radius: 2px; background: currentColor; }
 .send-btn[hidden] { display: none; }
 .box.recording textarea::placeholder { font-style: italic; }
-.mic-timer { flex: none; width: 34px; font-variant-numeric: tabular-nums; font-size: 12px; text-align: right; color: var(--fg-muted); align-self: center; }
+.mic-timer { flex: none; width: 34px; font-variant-numeric: tabular-nums; font-size: 12px; text-align: right; color: var(--fg-muted); align-self: flex-end; line-height: 32px; }
 .box.recording .mic-more { visibility: hidden; }
 .mic-wrap { gap: 0; }
 .mic-timer[hidden] { display: none; }
