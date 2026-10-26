@@ -232,7 +232,7 @@ export const S = Object.freeze({
   'ask.multi': 'Можно выбрать несколько',
   'ask.skip': 'Пропустить',
   'ask.send': 'Отправить',
-  'ask.send_hint': 'Ctrl+Enter',
+  'ask.send_hint': 'Ctrl ⏎',
   'ask.send_title': 'Отправить ответ (Ctrl+Enter)',
   'ask.skip_title': 'Пропустить вопрос (Esc)',
   'ask.blocked': 'Сначала ответьте на вопрос или пропустите',

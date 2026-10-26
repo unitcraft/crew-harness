@@ -32,13 +32,14 @@ export function normalizeQuestions(raw) {
   return out;
 }
 
-/** Пустая форма: ничего не выбрано, открыт первый вопрос, указатель на первом пункте каждого. */
+/** Новая форма: в вопросах с одним ответом выбран первый вариант, открыт первый вопрос, указатель на первом пункте каждого. */
 export function createForm(questions) {
   return {
     active: 0,
     sent: false,
     cursor: questions.map(() => 0),
-    answers: questions.map(() => ({ picked: [], other: false, text: '' })),
+    // как на эталоне: в вопросе с одним ответом выбран первый вариант; во множественном ничего
+    answers: questions.map((q) => ({ picked: !q.multiSelect && q.options.length > 0 ? [0] : [], other: false, text: '' })),
   };
 }
 

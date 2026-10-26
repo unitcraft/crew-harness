@@ -896,10 +896,11 @@ export function createView(doc, refs, deps) {
 
   const routeOver = h(doc, 'div', { class: 'route-over' }, routeCards, routeBanner, routeStrip);
 
-  // форма вопросов агента (задача 192): position absolute над полем ввода, место в потоке не занимает
+  // форма вопросов агента (задача 192): элемент ленты сообщений, под сообщением владельца; прокручивается вместе с лентой
   const askCard = h(doc, 'div', { class: 'ask', role: 'dialog', hidden: true });
+  const askWrap = h(doc, 'div', { class: 'ask-wrap', hidden: true }, askCard);
+  log.append(askWrap);
   const composer = h(doc, 'div', { class: 'composer' },
-    askCard,
     routeOver,
     box,
     voiceHint,
@@ -1643,8 +1644,9 @@ export function createView(doc, refs, deps) {
     badge = h(doc, 'span', { class: 'ask-badge' }, h(doc, 'span', { class: 'ask-dot', 'aria-hidden': 'true' }), badgeText);
     skip = h(doc, 'button', { type: 'button', class: 'ask-skip', title: t('ask.skip_title'), text: t('ask.skip') });
     send = h(doc, 'button', { type: 'button', class: 'ask-send', title: t('ask.send_title') }, h(doc, 'span', { text: t('ask.send') }), h(doc, 'kbd', { text: t('ask.send_hint') }));
-    const foot = h(doc, 'div', { class: 'ask-foot' }, badge, h(doc, 'span', { class: 'grow' }), skip, send);
+    const foot = h(doc, 'div', { class: 'ask-foot' }, h(doc, 'span', { class: 'grow' }), skip, send);
     askCard.replaceChildren(...[tabRow, ...panels.map((p) => p.node), foot].filter(Boolean));
+    askWrap.replaceChildren(askCard, h(doc, 'div', { class: 'ask-status' }, badge));
 
     const focusRow = (qi, oi, intoText) => {
       const p = panels[qi];
@@ -1727,6 +1729,8 @@ export function createView(doc, refs, deps) {
     askShown = key;
     if (!pq) {
       askUi = null;
+      askWrap.hidden = true;
+      askWrap.replaceChildren(askCard);
       askCard.hidden = true;
       askCard.replaceChildren();
       askCard.removeAttribute('aria-labelledby');
@@ -1736,6 +1740,8 @@ export function createView(doc, refs, deps) {
     if (!askForms.has(key)) askForms.set(key, createForm(pq.questions));
     buildAsk(session.id, pq, key);
     askCard.hidden = false;
+    askWrap.hidden = false;
+    log.scrollTop = log.scrollHeight; // лента сама прокручивается к карточке вопроса
     askUi.focusFirst();
   }
 
