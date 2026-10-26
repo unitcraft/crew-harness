@@ -7,7 +7,7 @@ import { judge as judgeGlued } from "./glued-guard.ts"
 import { type Deps as BranchDeps, branchNotes, branchProblems, noteBranch } from "./branch-guard.ts"
 import { noteStep, stepNotes, stepProblems } from "./idle-watch.ts"
 import { execFileSync } from "node:child_process"
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync, appendFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync, appendFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { BASE as CREW_BASE, dataDir } from "./paths.ts"
@@ -967,9 +967,28 @@ export function taskPlace(dir: string, cfg: CrewConfig, n: number | string, slug
   const v = { repo: repoNameOf(dir), n, slug, project }
   return { worktree: cfg.worktrees ? path.join(cfg.worktrees, fillName(cfg.worktreeName, v)) : undefined, branch: fillName(cfg.branchName, v) }
 }
-/** Путь внутри папки (без «..» наружу; регистр букв на Windows не важен). */
+/** Настоящее имя пути: realpathSync ближайшего существующего предка, несуществующий хвост достраивается как есть
+ *  (так сходятся короткая форма 8.3 и длинная: TEMP процесса службы бывает коротким — найдено полным прогоном,
+ *  приёмка 191). */
+const realish = (x: string): string => {
+  let cur = path.resolve(x)
+  const tail: string[] = []
+  for (let i = 0; i < 64; i++) {
+    try {
+      const real = realpathSync.native(cur)
+      return tail.length ? path.join(real, ...tail) : real
+    } catch {
+      const up = path.dirname(cur)
+      if (up === cur) return path.resolve(x)
+      tail.unshift(path.basename(cur))
+      cur = up
+    }
+  }
+  return path.resolve(x)
+}
+/** Путь внутри папки (без «..» наружу; регистр букв и короткие имена 8.3 на Windows не важны). */
 export function insideDir(p: string, dir: string): boolean {
-  const rel = path.relative(path.resolve(dir).toLowerCase(), path.resolve(p).toLowerCase())
+  const rel = path.relative(realish(dir).toLowerCase(), realish(p).toLowerCase())
   return !!rel && !rel.startsWith("..") && !path.isAbsolute(rel)
 }
 /** Каталог дерева обязан лежать в папке деревьев проекта (владелец, 2026-10-26: деревья создаются только там). Текст отказа
@@ -1605,7 +1624,8 @@ acceptor — роль приёмщика (разделяемая) при нас�
     дословно с датой>", estimate: "<T одной строкой>"} — папка из трёх строк (что; T; слова владельца), приёмщика и цикла нет; исполнитель сдаёт (submit),
     поднимает тестовый контур (scripts/test-contour), даёт владельцу ссылку и пишет метку crew_task {action: "contour", n, link} — в log.md задачи идёт
     строка с отношением к норме 10 минут от слова владельца; принимает интегратор по слову владельца: crew_task {action: "accept", n, text: "<слово
-    владельца с датой>"} — влитие в целевую ветку обязательно, замка и шагов приёмки нет.
+    владельца с датой>"} — влитие в целевую ветку обязательно, замка и шагов приёмки нет. Время фразы: route_word_at (ISO-дата или
+    миллисекунды) — время сообщения владельца; без него отсчёт идёт от записи постановки, и в журнале пометка «время записи, не сообщения».
   Подзадача — отдельная задача со своим номером и папкой: crew_spawn {part_of: N, ...}; первая строка её task/message.md —
     «Часть задачи NNN «…».», в log.md родителя — строка о заведении. Правило: своя приёмка или отдельное попадание в main —
     подзадача; следующий шаг той же работы (проверка, правка по находкам, продолжение, передача) — сессия.
@@ -2238,6 +2258,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
     route: { type: "string", enum: ["full", "fast", "small"], description: "Route of the task (the methodology: data of the task): full (default), fast or small (task 191). fast needs: task/message.md with the numbered points of «Критерии приёмки» and a branch line («Репозиторий: …, ветка …» or «Ветка: …»), route_word with «заводи» and its date; otherwise the answer says «быстрый путь требует: …» and no task is made. The invariants of the route are not switched off by it. small is chosen by the owner's entry phrases («сделай X мгновенно» / «сделай X, супер быстро»), recognized by the orchestrator — the plugin does not parse the phrase: route_word = the phrase word for word with the date, estimate = the time T in one line; the folder is three lines, there is no reviewer, the acceptance is the owner's word on the test contour (crew_task contour records the link mark)" },
     route_word: str("fast: the owner's word «заводи <number>» word for word with the date and the source, e.g. «заводи 093» (владелец, 2026-10-18, чат оркестратора); required, must contain «заводи». small: the owner's entry phrase word for word with the date and the source; the plugin does not parse its wording"),
     route_word_date: str("fast/small: the date of the word, ГГГГ-ММ-ДД; absent - taken from route_word"),
+    route_word_at: str("small: the time of the owner's message (an ISO date or milliseconds); absent - the time the spawn is recorded, and the task's log carries the honest note «время слова — время записи, не сообщения»"),
     route_basis: str("The basis of the route choice (default: the owner's word and the proposal of the rule for fast)"),
     route_source: { type: "string", enum: ["rule", "helper", "human"], description: "Who chose the route (fast and small are chosen by the word of a human: human, the default for them; rule - the default for full)" },
     route_proposal: { type: "string", enum: ["full", "fast"], description: "What the rule or the helper proposed (default: the rule applied to the section «Признаки маршрута» of the brief)" },
@@ -2680,6 +2701,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         source_sha256: str("migrate: SHA256 of the exact UTF-8 text field from that archived letter"),
         route_word: str("route/migrate: the owner's exact «заводи <number>» authorization with date and source; route to small: the owner's entry phrase word for word with date and source"),
         route_word_date: str("route/migrate: date of the owner's word in YYYY-MM-DD"),
+        route_word_at: str("route to small: the time of the owner's message (an ISO date or milliseconds); absent - the time the change is recorded, with the honest note «время слова — время записи, не сообщения» in the log"),
         link: str("contour: the test contour URL given to the owner (route small); the mark «ссылка на контур выдана» with the relation to the 10 minute norm goes to log.md of the task"),
         ...taskInput,
         ...routeInput,
@@ -2934,7 +2956,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const link = String(input.link ?? "").trim()
         if (!link) return { content: `Нужен link: адрес тестового контура, который ты дал владельцу (http://127.0.0.1:8100/). crew_task {action: "contour", n: ${t.n}, link: "..."}.` }
         const now = Date.now()
-        const line = contourMarkText(t.route_word_ts, link, now)
+        const line = contourMarkText(t.route_word_ts, link, now, t.route_word_ts_kind)
         taskEvent(t, me.session, undefined, line)
         const why = taskLog(t, "документ", line, new Date(now))
         host.posted([])

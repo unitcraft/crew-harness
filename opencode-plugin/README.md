@@ -1130,7 +1130,8 @@ the brief is read again, the new hash is kept, the mark is removed, the series s
 route and name the owner the checker, with no questions; recognizing them is the orchestrator's logic — **the plugin does not parse the phrase** (a field of the record and the folder
 template only): `crew_spawn {route: "small", route_word: "<the phrase word for word with the date and the source>", estimate: "<T in one line>"}`.
 The folder is three lines — `task/message.md` is `# Задание: <title>`, `T: <estimate>`, the phrase of the owner; criteria are not required (the default criterion is «приёмка — слово
-владельца на тестовом контуре»). The record gets `route_word_ts` — the mark «слово владельца» (the time the phrase was recorded). There is **no reviewer, no review cycle and no merge
+владельца на тестовом контуре»). The record gets `route_word_ts` — the mark «слово владельца»: with `route_word_at` (an ISO date or milliseconds) it is the time of the owner's
+message, without it the time the spawn is recorded, and the task's log carries the honest note «время слова — время записи, не сообщения» (`route_word_ts_kind`). There is **no reviewer, no review cycle and no merge
 lock**: the executor submits (`crew_task submit`), raises the test contour (`scripts/test-contour` of the task's tree), gives the owner the link and records the mark
 `crew_task {action: "contour", n, link}` — the line «ссылка на контур выдана» goes to `log.md` of the task with the relation to the norm of 10 minutes from the owner's word. The
 integrator accepts with `crew_task {action: "accept", n, text: "<the owner's word word for word with the date>"}`; the landing of the branch (or the commit) in the target branch is

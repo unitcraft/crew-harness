@@ -110,7 +110,9 @@ $config = Join-Path $dir 'server.json'
 # без BOM: разбор JSON сервера его не принимает
 [System.IO.File]::WriteAllText($config, ($settings | ConvertTo-Json -Depth 5), (New-Object System.Text.UTF8Encoding($false)))
 
-$proc = Start-Process -FilePath $front -ArgumentList 'serve', "`"$config`"" -WorkingDirectory $tree -PassThru `
+# the front is started DETACHED (a hidden window, output to files): started through an agent's pipe, an attached front
+# inherits the pipe's handles and the caller is blocked until the contour stops (the acceptance of 191)
+$proc = Start-Process -FilePath $front -ArgumentList 'serve', "`"$config`"" -WorkingDirectory $tree -PassThru -WindowStyle Hidden `
     -RedirectStandardOutput (Join-Path $dir 'front.out.log') -RedirectStandardError (Join-Path $dir 'front.err.log')
 Start-Sleep -Milliseconds 800
 if ($proc.HasExited) {

@@ -109,8 +109,10 @@ export type RouteFields = {
   /** слово владельца дословно с датой и источником («заводи N» — fast, «сделай X мгновенно» / «сделай X, супер быстро» — small); дата слова отдельно */
   route_word?: string
   route_word_date?: string
-  /** метка «слово владельца» малого маршрута (мс): время записи фразы; по ней — отношение к норме 10 минут в метке «ссылка на контур выдана» */
+  /** метка «слово владельца» малого маршрута (мс): время фразы владельца; по ней — отношение к норме 10 минут в метке «ссылка на контур выдана» */
   route_word_ts?: number
+  /** откуда route_word_ts: «word» — задано время сообщения владельца (route_word_at при постановке), «write» — время записи постановки (в журнале — честная пометка «время записи, не сообщения») */
+  route_word_ts_kind?: "word" | "write"
   /** числа цикла: потолок заходов, чистых заходов подряд (требуется), проб в чистом заходе, сжатие сдачи */
   ceiling?: number
   clean_runs?: number
@@ -126,7 +128,7 @@ export type RouteFields = {
   route_stale_at?: number
 }
 
-export type RouteView = { route: Route; basis: string; source: RouteSource; legacy: boolean; proposal?: Route; word?: string; word_date?: string; stale: boolean } & RouteNumbers & { clean_series: number }
+export type RouteView = { route: Route; basis: string; source: RouteSource; legacy: boolean; proposal?: Route; word?: string; word_date?: string; word_ts_kind?: "word" | "write"; stale: boolean } & RouteNumbers & { clean_series: number }
 
 /** Маршрут записи как данные: запись без поля route — полный путь, источник «правило», основание «задача начата до введения маршрутов» (проверка 14);
  *  числа — из записи, а без них — значения полного пути. Запись при чтении не меняется. */
@@ -142,6 +144,7 @@ export function routeView(t: RouteFields): RouteView {
     proposal: t.route_proposal,
     word: t.route_word,
     word_date: t.route_word_date,
+    word_ts_kind: t.route_word_ts_kind,
     stale: t.route_word_stale === true,
     ceiling: t.ceiling ?? m.ceiling,
     clean_runs: t.clean_runs ?? m.clean_runs,
@@ -261,6 +264,14 @@ const ISO_RE = /^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])$/
 /** Дата слова: поле, а нет его — дата ГГГГ-ММ-ДД из самой цитаты (слово записано человеком вместе с датой). */
 export const wordDateOf = (word: string | undefined, date: string | undefined): string => (String(date ?? "").trim() || DATE_RE.exec(String(word ?? ""))?.[0] || "")
 
+/** Время сообщения владельца из входа (route_word_at): миллисекунды или ISO-дата; {} — не задано, {bad: true} — задано криво. */
+export const wordTsOf = (v: unknown): { ts?: number; bad?: true } => {
+  if (v === undefined || v === null || String(v).trim() === "") return {}
+  const s = String(v).trim()
+  const ts = typeof v === "number" ? v : /^\d{10,}$/.test(s) ? Number(s) : Date.parse(s)
+  return Number.isFinite(ts) && ts > 0 ? { ts } : { bad: true }
+}
+
 /** Слово владельца «заводи <номер>»: не пустое, содержит «заводи», дата ГГГГ-ММ-ДД. Форму цитаты машина проверить не может (решение 50). */
 export function wordFaults(word: string | undefined, date: string | undefined): string[] {
   const out: string[] = []
@@ -281,12 +292,13 @@ export function smallWordFaults(word: string | undefined, date: string | undefin
   return out
 }
 
-/** Строка метки «ссылка на контур выдана» (задача 191): ссылка и отношение к норме малого маршрута (SMALL_NORM_MIN минут от слова владельца). */
-export function contourMarkText(wordTs: number | undefined, link: string, now: number = Date.now()): string {
+/** Строка метки «ссылка на контур выдана» (задача 191): ссылка и отношение к норме малого маршрута (SMALL_NORM_MIN минут от слова владельца).
+ *  tsKind «write» — время фразы не задавали (route_word_at), отсчёт идёт от записи постановки: строка несёт честную пометку. */
+export function contourMarkText(wordTs: number | undefined, link: string, now: number = Date.now(), tsKind?: "word" | "write"): string {
   if (!wordTs) return `ссылка на контур выдана: ${link} (метки «слово владельца» нет — отношение к норме ${SMALL_NORM_MIN} мин не считается)`
   const mins = Math.max(0, Math.round((now - wordTs) / 60_000))
   const rel = mins <= SMALL_NORM_MIN ? `в норме ${SMALL_NORM_MIN} мин` : `превышение нормы ${SMALL_NORM_MIN} мин`
-  return `ссылка на контур выдана: ${link}; от слова владельца ${mins} мин (${rel})`
+  return `ссылка на контур выдана: ${link}; от слова владельца ${mins} мин (${rel})${tsKind === "write" ? "; время слова — время записи, не сообщения" : ""}`
 }
 
 const POINT_RE = /^[ \t]*(?:[0-9]+[.)]|[-*•])[ \t]+\S|\bAC-[0-9]+/
@@ -354,12 +366,14 @@ export function markStale(t: RouteFields & { history?: { at: number; by: string;
 }
 
 /** Строка журнала задачи о маршруте: «маршрут: быстрый, основание: …, источник: человек, слово завода: «…» (2026-10-18)»; у малого —
- *  «маршрут: малый, …, слово владельца: «…» (2026-10-25)» — эта строка и есть метка «слово владельца» (задача 191). */
+ *  «маршрут: малый, …, слово владельца: «…» (2026-10-25)» — эта строка и есть метка «слово владельца» (задача 191); время фразы,
+ *  записанное без route_word_at, — с честной пометкой «время записи, не сообщения». */
 export function routeLogText(t: RouteFields): string {
   const v = routeView(t)
   const label = v.route === "fast" ? "слово завода" : "слово владельца"
   const word = (v.route === "fast" || v.route === "small") && v.word ? `, ${label}: ${v.word.replace(/\s+/g, " ").trim()}${v.word_date ? ` (${v.word_date})` : ""}` : ""
-  return `маршрут: ${ROUTE_RU[v.route]}, основание: ${v.basis.replace(/\s+/g, " ").trim() || "не записано"}, источник: ${SOURCE_RU[v.source]}${word}`
+  const tsNote = v.route === "small" && v.word && v.word_ts_kind === "write" ? "; время слова — время записи, не сообщения" : ""
+  return `маршрут: ${ROUTE_RU[v.route]}, основание: ${v.basis.replace(/\s+/g, " ").trim() || "не записано"}, источник: ${SOURCE_RU[v.source]}${word}${tsNote}`
 }
 
 // ---- выбор маршрута при постановке задачи (crew_spawn) ----
@@ -371,6 +385,7 @@ export type RouteInput = {
   route_proposal?: unknown
   route_word?: unknown
   route_word_date?: unknown
+  route_word_at?: unknown
   clean_runs?: unknown
   ceiling?: unknown
   probes?: unknown
@@ -378,7 +393,7 @@ export type RouteInput = {
   sources_list?: unknown
   estimate?: unknown
 }
-export const ROUTE_INPUT_KEYS = ["route", "route_basis", "route_source", "route_proposal", "route_word", "route_word_date", "clean_runs", "ceiling", "probes", "delivery_compressed", "sources_list", "estimate"] as const
+export const ROUTE_INPUT_KEYS = ["route", "route_basis", "route_source", "route_proposal", "route_word", "route_word_date", "route_word_at", "clean_runs", "ceiling", "probes", "delivery_compressed", "sources_list", "estimate"] as const
 export const hasRouteInput = (input: RouteInput): boolean => ROUTE_INPUT_KEYS.some((k) => (input as any)?.[k] !== undefined && (input as any)?.[k] !== null && (input as any)?.[k] !== "")
 
 /** Выбрать маршрут новой задачи и собрать поля записи. `brief` — текст постановки (task/message.md), как будет записан; undefined — постановки нет.
@@ -398,9 +413,11 @@ export function planRoute(input: RouteInput, brief: string | undefined, settings
     const date = wordDateOf(word, input.route_word_date as string | undefined)
     const faults = [...smallWordFaults(word, date)]
     if (source !== "human") faults.push("малый маршрут выбирает фраза владельца: route_source — human")
+    const at = wordTsOf(input.route_word_at)
+    if (at.bad) faults.push(`route_word_at — время сообщения владельца: миллисекунды или ISO-дата (получено «${String(input.route_word_at)}»)`)
     if (faults.length) return { ok: false, refusal: `Задача не поставлена: малый маршрут требует: ${faults.join("; ")}. Или поставь задачу без route (полный путь).` }
     const basis = String(input.route_basis ?? "").trim() || `фраза владельца ${date} («сделай X мгновенно» / «сделай X, супер быстро») — проверяющий владелец`
-    return { ok: true, fields: { route, route_basis: basis, route_source: source, route_word: word, route_word_date: date, route_word_ts: now, ...METHOD_NUMBERS.small, clean_series: 0 } }
+    return { ok: true, fields: { route, route_basis: basis, route_source: source, route_word: word, route_word_date: date, route_word_ts: at.ts ?? now, route_word_ts_kind: at.ts === undefined ? "write" : "word", ...METHOD_NUMBERS.small, clean_series: 0 } }
   }
   const own = settings[route]
   const sFaults = numberFaults(own)
@@ -447,7 +464,7 @@ export function applyRouteChange(t: RouteFields & { history?: { at: number; by: 
     const p = planRoute({ route: "full", route_basis: reason, route_source: "human" }, brief, settings)
     if (!p.ok) return p
     const was = routeView(t)
-    for (const k of ["route_word", "route_word_date", "route_word_ts", "route_message_hash", "route_word_stale", "route_stale_at"] as const) delete t[k]
+    for (const k of ["route_word", "route_word_date", "route_word_ts", "route_word_ts_kind", "route_message_hash", "route_word_stale", "route_stale_at"] as const) delete t[k]
     Object.assign(t, p.fields, { route_word: "", clean_series: 0 })
     ;(t.history ??= []).push({ at: now, by, note: `маршрут: ${ROUTE_RU[was.route]} → полный; основание: ${reason}; слово завода снято, серия чистых заходов обнулена` })
     return { ok: true, line: routeLogText(t) }

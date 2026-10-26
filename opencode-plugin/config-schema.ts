@@ -31,7 +31,7 @@ export type Setting = { key: string; kind: Kind; default: any; question: string;
 const TIERS = ["heavy", "medium", "light"]
 /** Встроенные поля задачи и входа crew_spawn / crew_task: id полей проекта (task_extra_fields) с ними не совпадает. Список живёт
  *  здесь, а не в core.ts: core.ts импортирует эту схему, обратный импорт образовал бы цикл; тест сверяет его с полями входа. */
-export const RESERVED_FIELD_IDS = ["title", "goal", "criteria", "boundaries", "open_questions", "owner_words", "result", "links", "route", "route_basis", "route_source", "route_proposal", "route_word", "route_word_date", "clean_runs", "ceiling", "probes", "delivery_compressed", "sources_list", "estimate", "link", "priority", "tier", "role", "model", "kind", "parent", "plan_parent", "task", "session", "part_of", "place", "message", "n", "action", "extra", "__proto__", "constructor", "prototype"]
+export const RESERVED_FIELD_IDS = ["title", "goal", "criteria", "boundaries", "open_questions", "owner_words", "result", "links", "route", "route_basis", "route_source", "route_proposal", "route_word", "route_word_date", "route_word_at", "clean_runs", "ceiling", "probes", "delivery_compressed", "sources_list", "estimate", "link", "priority", "tier", "role", "model", "kind", "parent", "plan_parent", "task", "session", "part_of", "place", "message", "n", "action", "extra", "__proto__", "constructor", "prototype"]
 export const EXTRA_FIELDS_MAX = 8
 export const EXTRA_ID_RE = /^[a-z0-9_]{1,31}$/
 /** Язык владельца (задача 054): английское имя языка — оно встаёт в английский системный блок вкладки; не предложение,

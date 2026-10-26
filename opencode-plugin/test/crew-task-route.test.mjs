@@ -156,7 +156,7 @@ const k = schema.SCHEMA.find((s) => s.key === "route_defaults")
 cell("T92-11 route_defaults is in the schema with a question and a reason", !!k && !!k.question && !!k.why, JSON.stringify(k))
 cell("T92-11 the schema accepts the shape and refuses a wrong one", schema.invalid("route_defaults", { full: { ceiling: 5 }, fast: { clean_runs: 1, delivery_compressed: true, weakenings: [] }, thresholds: { max_sources: 4, max_parts: 2, max_risk: "medium" } }) === undefined && !!schema.invalid("route_defaults", { fast: { clean_runs: "x" } }) && !!schema.invalid("route_defaults", { speedy: {} }) && !!schema.invalid("route_defaults", { thresholds: { max_risk: "huge" } }) && !!schema.invalid("route_defaults", []), JSON.stringify(schema.invalid("route_defaults", { fast: { clean_runs: "x" } })))
 cell("T92-11 the schema lets a value under the minimum be written (it is refused at the choice of the route, test 3)", schema.invalid("route_defaults", { fast: { clean_runs: 0, probes: 2 } }) === undefined, String(schema.invalid("route_defaults", { fast: { clean_runs: 0, probes: 2 } })))
-cell("T92-11 the field names of the input are reserved against the extra fields of a project", ["route", "route_basis", "route_source", "route_proposal", "route_word", "route_word_date", "clean_runs", "ceiling", "probes", "delivery_compressed", "sources_list"].every((f) => schema.RESERVED_FIELD_IDS.includes(f)), JSON.stringify(schema.RESERVED_FIELD_IDS))
+cell("T92-11 the field names of the input are reserved against the extra fields of a project", ["route", "route_basis", "route_source", "route_proposal", "route_word", "route_word_date", "route_word_at", "clean_runs", "ceiling", "probes", "delivery_compressed", "sources_list"].every((f) => schema.RESERVED_FIELD_IDS.includes(f)), JSON.stringify(schema.RESERVED_FIELD_IDS))
 
 // ---- the tools ----
 const mod = await import("../index.ts")
@@ -492,6 +492,18 @@ const arcR = safe(() => need("applyRouteChange")(arcT, { route: "small", route_w
 cell("T191-4 the change full → small by the phrase: route small, the ts of the word is set, a note in the history", arcR.ok === true && arcT.route === "small" && arcT.route_word_ts === 1_700_000_000_000 && /малый/.test(arcT.history.at(-1).note ?? ""), JSON.stringify(arcT))
 const arcBack = safe(() => need("applyRouteChange")(arcT, { route: "full", text: "разрослась" }, undefined, need("routeSettingsOf")({}), "sesX", 1_700_000_100_000), { ok: "THROW" })
 cell("T191-4 the change small → full: the mark of the word is gone", arcBack.ok === true && arcT.route === "full" && !("route_word_ts" in arcT), JSON.stringify(arcT))
+cell("T191-4 the change small → full: the kind of the ts is gone with the mark", !("route_word_ts_kind" in arcT), JSON.stringify(arcT))
+
+// T191-12 (the acceptance follow-up): route_word_at is the time of the owner's MESSAGE, not of the spawn call;
+// absent - the write time with the honest note «время записи, не сообщения» in the journal
+const pAt = prS({ route: "small", route_word: SWORD, route_word_at: "2026-10-25T21:30:00Z" }, 1_700_000_000_000)
+cell("T191-12 route_word_at ISO: the ts of the word is the message time, kind «word», no write-time note in the log line", pAt.ok === true && pAt.fields.route_word_ts === Date.parse("2026-10-25T21:30:00Z") && pAt.fields.route_word_ts_kind === "word" && !/время записи/.test(need("routeLogText")(pAt.fields)), JSON.stringify(pAt))
+const pAtMs = prS({ route: "small", route_word: SWORD, route_word_at: 1_700_000_500_000 }, 1_700_000_000_000)
+cell("T191-12 route_word_at in milliseconds (a number and a string of digits)", pAtMs.ok === true && pAtMs.fields.route_word_ts === 1_700_000_500_000 && prS({ route: "small", route_word: SWORD, route_word_at: "1700000500000" }).fields?.route_word_ts === 1_700_000_500_000, JSON.stringify(pAtMs))
+const pAtBad = prS({ route: "small", route_word: SWORD, route_word_at: "вчера" })
+cell("T191-12 bad route_word_at: refused naming the form", pAtBad.ok === false && /route_word_at/.test(pAtBad.refusal ?? "") && /ISO/.test(pAtBad.refusal ?? ""), JSON.stringify(pAtBad))
+cell("T191-12 without route_word_at: the ts is the write time (kind «write»), the honest note is in the log line and in the contour mark",
+  pSmall.fields.route_word_ts_kind === "write" && /время слова — время записи, не сообщения/.test(need("routeLogText")(pSmall.fields)) && /время записи, не сообщения/.test(need("contourMarkText")(1_000_000, "http://x", 1_000_000 + 5 * 60_000, "write")) && !/время записи/.test(need("contourMarkText")(1_000_000, "http://x", 1_000_000 + 5 * 60_000, "word")), need("routeLogText")(pSmall.fields))
 
 // ---- the flow: spawn, the folder of three lines, no reviewer, the contour mark, the accept by the integrator ----
 const nS0 = recs(), bS0 = branches()
@@ -520,6 +532,10 @@ const tsmS = tasks.loadTask("proj", tsm.n)
 cell("T191-8 a submitted small task gets no reviewer (the acceptance is the owner's word)", tsmS.status === "submitted" && !tsmS.reviewer, JSON.stringify({ st: tsmS.status, r: tsmS.reviewer }))
 const rC2 = await call("crew_task", tsm.executor, { action: "contour", n: tsm.n, link: "http://127.0.0.1:8100/" })
 cell("T191-9 the contour mark goes to the journal with the relation to the norm of 10 minutes", /ссылка на контур выдана: http:\/\/127\.0\.0\.1:8100\//.test(rC2) && /в норме 10 мин/.test(rC2) && /ссылка на контур выдана/.test(logNow(tasks.loadTask("proj", tsm.n))), rC2 + " || " + logNow(tasks.loadTask("proj", tsm.n)))
+cell("T191-9a the contour mark of a task spawned without route_word_at carries the honest note «время записи, не сообщения»", /время записи, не сообщения/.test(rC2) && /время записи, не сообщения/.test(logNow(tasks.loadTask("proj", tsm.n))), rC2)
+const rSmAt = await spawn("Малая со временем", { route: "small", route_word: SWORD, route_word_date: "2026-10-25", route_word_at: "2026-10-25T21:30:00Z", estimate: "5 мин", criteria: undefined })
+const tsmAt = tasks.listTasks("proj").find((t) => t.title === "Малая со временем")
+cell("T191-12 crew_spawn with route_word_at: the record holds the message time, kind «word», no write-time note in the journal", !!tsmAt && tsmAt.route_word_ts === Date.parse("2026-10-25T21:30:00Z") && tsmAt.route_word_ts_kind === "word" && !/время записи/.test(logNow(tsmAt)), JSON.stringify(tsmAt && { ts: tsmAt.route_word_ts, k: tsmAt.route_word_ts_kind }) + " || " + rSmAt.slice(0, 150))
 const rAnW = await call("crew_task", "sesTAB2", { action: "accept", n: tsm.n, text: "«принимаю» (владелец, 2026-10-25, чат)" })
 cell("T191-10 the accept of a small task by a non-integrator is refused", /интегратор/.test(rAnW), rAnW)
 const rMerge = await call("crew_task", "sesINTEG1", { action: "merge", n: tsm.n })

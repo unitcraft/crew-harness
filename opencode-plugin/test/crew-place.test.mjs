@@ -4,7 +4,8 @@
 // whose record lost its place gets it from the settings; a worktree outside the project's worktrees folder or one
 // that cannot be created is not started, the author is told. The rule of the trees folder (the owner, 2026-10-26):
 // a place escaping it through the settings template is refused before the record is made (crew_spawn), and a tree
-// made by hand outside the folder on the task branch is not adopted.
+// made by hand outside the folder on the task branch is not adopted. The short (8.3) and the long form of one folder
+// compare equal (insideDir): the TEMP of the service process may come short — the full run of 2026-10-26 caught it.
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -126,6 +127,12 @@ await until(() => lettersTo("sesINTEG1").some((l) => /004 .*не запущен�
 const t4 = task(4)
 cell("a hand-made tree outside the folder is not adopted, the record keeps its own place", t4.status === "starting" && t4.worktree === path.join(wtRoot, "proj-4-outside") && !sessions.has(t4.executor), JSON.stringify({ st: t4.status, wt: t4.worktree, s: sessions.has(t4.executor) }))
 cell("the letter says why and how to fix, once", lettersTo("sesINTEG1").filter((l) => /004 .*не запущена: на ветке t4-outside уже стоит дерево .* вне папки деревьев проекта .*git worktree move/.test(l.text)).length === 1, JSON.stringify(lettersTo("sesINTEG1").map((l) => l.text.slice(0, 200))))
+
+// ---- the short (8.3) form and the long form of one folder compare equal (the TEMP of the service process may come
+// in the short form; the full run of 2026-10-26 caught a false refusal «вне папки деревьев» on this machine) ----
+const shortOf = (p) => { try { return execFileSync("powershell", ["-NoProfile", "-Command", `(New-Object -ComObject Scripting.FileSystemObject).GetFolder('${p.replace(/'/g, "''")}').ShortPath`], { encoding: "utf8" }).trim() } catch { return p } }
+const tmpShort = shortOf(tmp)
+cell("insideDir: the short 8.3 form and the long form of one folder match", core.insideDir(path.join(tmpShort, "worktrees", "proj-9-x"), path.join(tmp, "worktrees")) && core.insideDir(path.join(tmp, "worktrees", "proj-9-x"), path.join(tmpShort, "worktrees")), `${tmpShort} <-> ${tmp}`)
 
 stop?.()
 process.chdir(cwd0)

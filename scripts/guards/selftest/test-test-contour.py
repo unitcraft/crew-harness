@@ -6,8 +6,10 @@
 Проверяет: синтаксис sh принимает test-contour.sh (sh -n); оба скрипта держат опорные свойства контура —
     корень из расположения скрипта, свой data_dir во временной папке по хешу пути дерева, свободный порт
     с 8100, печать ссылки http://127.0.0.1 и подсказки метки crew_task contour, режим остановки, бинарники
-    основной копии без флага сборки, страницы из src/web дерева; испорченная копия (без каталога данных
-    или без ссылки) не проходит проверку свойств.
+    основной копии без флага сборки, страницы из src/web дерева; ps1 стартует front отсоединённо
+    (Start-Process -WindowStyle Hidden — через трубу агента присоединённый front блокирует вызов до остановки
+    контура, замечание приёмки 191); испорченная копия (без каталога данных, без ссылки или с присоединённым
+    front) не проходит проверку свойств.
 Не проверяет: живой подъём контура (нужны собранные бинарники основной копии; в задаче 191 проверен вживую,
     дальше — руками при изменении скриптов) и код самого пульта (его тесты — opencode-plugin).
 Правило: AGENTS.md п.11 (рабочую копию main не трогаем) и п.14; задача 191.
@@ -25,7 +27,8 @@ ROOT = os.path.normpath(os.path.join(stlib.HERE, "..", "..", ".."))
 SH_TOKENS = ("crew-contour-", "8100", "http://127.0.0.1:", "--stop", "--build", "src/web",
              "contour.pid", 'crew_task {action: "contour"', "git rev-parse --git-common-dir")
 PS_TOKENS = ("crew-contour-", "8100", "http://127.0.0.1:", "-Stop", "-Build", "src/web",
-             "contour.pid", 'crew_task {action: `"contour`"', "git rev-parse --git-common-dir")
+             "contour.pid", 'crew_task {action: `"contour`"', "git rev-parse --git-common-dir",
+             "-WindowStyle Hidden")
 
 
 def faults(text, tokens):
@@ -55,11 +58,16 @@ def main():
         bad = ps_text.replace("http://127.0.0.1:", "http://")
         assert faults(bad, PS_TOKENS), "копия ps1 без печати ссылки прошла проверку"
 
+    def red_attached_front():
+        bad = ps_text.replace("-WindowStyle Hidden", "")
+        assert faults(bad, PS_TOKENS), "копия ps1 с присоединённым front прошла проверку"
+
     pr.probe("законное", "sh -n принимает test-contour.sh", sh_syntax)
     pr.probe("законное", "оба скрипта держат опорные свойства контура (data_dir по хешу дерева, порт 8100+, "
              "ссылка, стоп, бинарники основной копии, src/web дерева, метка contour)", props)
     pr.probe("красная", "копия sh без своего каталога данных — проверка свойств красная", red_no_data_dir)
     pr.probe("красная", "копия ps1 без печати ссылки — проверка свойств красная", red_no_link)
+    pr.probe("красная", "копия ps1 с присоединённым front (без -WindowStyle Hidden) — проверка красная", red_attached_front)
     sys.exit(pr.done())
 
 
