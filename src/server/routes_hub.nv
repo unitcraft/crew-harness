@@ -1,0 +1,1202 @@
+// routes_hub.nv - task 192q: the modes of work in the hub (the pure part is `routes.nv`, the disk is `routes_io.nv`, the git operations of the tasks are `taskwt`).
+//
+// What the page says: `session_route`, `route_run`, `route_skip`, `route_stop`, `route_new_task`, `route_subtask_new`, `route_subtask_same`, `route_subtask_worktree`,
+// `route_subtask_done`, `route_subtask_parallel`, `route_keep`, `route_publish`, `route_diff`, `route_task_resume`. What the hub says: the page event `route_state`
+// (on every change and when a page attaches), and in the feed the lines "subtask N: new / extended" and the block of the independent review.
+// Every change that must survive a restart is a signal of the journal (`route_set`, `route_task`, `route_step`, `route_note`, `route_review`); `RouteSession.apply` reads them again.
+module crew_harness.server
+
+import alula.engine.{Incoming, EventKind, Link}
+import crew_harness.acp.{AcpClient, AcpConfig, open_client_traced, acp_link}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+const REVIEW_LIMIT_MS = 1200000
+const OBSERVE_MS = 2000
+const UNMERGED_MS = 10000
+
+// An independent review in flight: a hidden agent of another family, its answer is collected here.
+type Review { session str, step int, family str, title str, clients []AcpClient, sent bool, text str, failed str, started_at int, prompt str }
+
+fn jint(o JsonObject, key str) -> int {
+    match o.get(key) {
+        Some(v) => match v.int() {
+            Some(n) => n
+            None => match v.str() {
+                Some(t) => match t.to_int() {
+                    Ok(n) => n
+                    Err(e) => 0
+                }
+                None => 0
+            }
+        }
+        None => 0
+    }
+}
+
+// A flag the page sends as true, 1 or "true".
+fn jflag(o JsonObject, key str) -> bool {
+    match o.get(key) {
+        Some(v) => match v.bool() {
+            Some(b) => b
+            None => jint(o, key) == 1 || jtext(o, key) == "true"
+        }
+        None => false
+    }
+}
+
+fn js(mut o JsonObject, key str, value str) -> () {
+    jput(o, key, JsonValue.str(value))
+}
+
+fn ji(mut o JsonObject, key str, value int) -> () {
+    jput(o, key, JsonValue.int(value))
+}
+
+fn note_text(text str) -> str {
+    mut o = JsonObject.new()
+    js(o, "text", text)
+    JsonValue.object(o).to_str()
+}
+
+// ----- the files of the modes, the page -----
+
+fn Hub @routes_path() -> str {
+    ro d = @settings.routes_dir
+    if d.starts_with("/") || d.starts_with("\\") || d.contains(":") { d } else { "${@workdir}/${d}" }
+}
+
+// The mode from its file at the moment (read each time: a changed text acts at once); a missing file is a mode without steps.
+fn Hub @route_doc(route str) -> RouteDoc {
+    match read_file("${@routes_path()}/${route}.md") {
+        Some(t) => parse_route_doc(route, t)
+        None => { route, instruction: "", steps: []RouteStep.new() }
+    }
+}
+
+fn Hub @route_titles(doc RouteDoc) -> []str {
+    mut titles = []str.new()
+    for st in doc.steps { titles.push(st.title) }
+    titles
+}
+
+// The input of `route_state` of a session now.
+fn Hub @route_state_text(at int) -> str {
+    ro s = @sessions[at]
+    ro doc = @route_doc(s.rt.route)
+    mut progress = []Progress.new()
+    for sub in s.rt.subs {
+        progress.push(parse_progress(read_file("${s.rt.task_dir}/progress.${sub.n}.md") ?? ""))
+    }
+    ro suggest = task_too_big(s.rt.subs.len(), s.rt.messages, @settings.route_task_limit, @settings.route_task_messages)
+    route_view_text(s.rt, @route_titles(doc), progress, suggest, now_millis())
+}
+
+fn Hub mut @route_line(conn int, id str, input str) Time -> () {
+    @serial += 1
+    @send(conn, "{\"id\":\"srv-${@serial}\",\"trace\":\"${id}\",\"step\":${@serial},\"kind\":\"route_state\",\"input\":${input},\"time\":${now_millis()}}")
+}
+
+// `route_state` to every page when it changed (`force`: always).
+fn Hub mut @route_broadcast(at int, force bool) Time -> () {
+    mut s = @sessions[at]
+    ro text = @route_state_text(at)
+    if force || text != s.rt.last_state {
+        s.rt.last_state = text
+        @sessions[at] = s
+        @route_line(0, s.id, text)
+    }
+}
+
+/// `route_state` of every session to a page that attached.
+fn Hub mut @route_attach(conn int) Time -> () {
+    mut at = 0
+    while at < @sessions.len() {
+        ro s = @sessions[at]
+        @route_line(conn, s.id, @route_state_text(at))
+        at += 1
+    }
+}
+
+// ----- the journal -----
+
+fn Hub mut @rt_journal(at int, name str, text str) Proc Detach Time -> () {
+    if !route_signals().contains(name) { return }
+    mut s = @sessions[at]
+    accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal(name, text))
+    s.rt.apply(name, text)
+    @sessions[at] = s
+    @drain(at)
+}
+
+fn Hub mut @rt_task_op(at int, op str, mut fields JsonObject) Proc Detach Time -> () {
+    js(fields, "op", op)
+    @rt_journal(at, "route_task", JsonValue.object(fields).to_str())
+}
+
+fn Hub mut @rt_note(at int, text str) Proc Detach Time -> () {
+    @rt_journal(at, "route_note", note_text(text))
+}
+
+fn Hub mut @rt_step(at int, n int, state str) Proc Detach Time -> () {
+    mut o = JsonObject.new()
+    ji(o, "n", n)
+    js(o, "state", state)
+    @rt_journal(at, "route_step", JsonValue.object(o).to_str())
+}
+
+fn Hub mut @rt_state(at int, state str, note str) Proc Detach Time -> () {
+    mut o = JsonObject.new()
+    js(o, "state", state)
+    js(o, "note", note)
+    @rt_task_op(at, "state", o)
+}
+
+// ----- the task: folder, tree, files of the subtasks -----
+
+type TaskMade { ok bool, id str, number str, dir str, shown str, branch str, worktree str, base str }
+
+fn no_task() -> TaskMade => { ok: false, id: "", number: "", dir: "", shown: "", branch: "", worktree: "", base: "" }
+
+// The numbers taken: the folders of `doc/tasks` of the repository and the task branches; outside a repository - the folders of the session in the data folder.
+fn Hub @route_make_task(session str, route str, text str) Proc -> TaskMade {
+    ro repo = tw_is_repo(@workdir)
+    if !repo && route == "interactive" { return no_task() }
+    ro tasks_here = repo && dir_there("${@workdir}/doc/tasks")
+    mut names = []str.new()
+    if repo {
+        for n in dir_names("${@workdir}/doc/tasks") { names.push(n) }
+        for n in task_branch_names(@workdir) { names.push(n) }
+    } else {
+        for n in dir_names("${@settings.data_dir}/${session}/tasks") { names.push(n) }
+    }
+    ro number = task_number_text(next_task_number(names))
+    ro folder = "${number}-${task_slug(text)}"
+    mut tree = TwTree { ok: false, branch: "", worktree: "", base: "", text: "" }
+    if repo {
+        tree = task_tree_create(@workdir, folder)
+        if !tree.ok { @say_log("the tree of the task ${folder} cannot be made: ${tree.text}") }
+    }
+    if tree.ok && tasks_here {
+        return { ok: true, id: folder, number, dir: "${tree.worktree}/doc/tasks/${folder}/task", shown: "doc/tasks/${folder}/task", branch: tree.branch, worktree: tree.worktree, base: tree.base }
+    }
+    ro dir = "${@settings.data_dir}/${session}/tasks/${folder}/task"
+    { ok: true, id: folder, number, dir, shown: dir, branch: tree.branch, worktree: tree.worktree, base: tree.base }
+}
+
+fn Hub mut @route_write_sub(at int, n int, text str) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    ro doc = @route_doc(s.rt.route)
+    ro wrote = write_file("${s.rt.task_dir}/message.${n}.md", message_file_text(n, text, now_millis()))
+    ro made = write_file("${s.rt.task_dir}/progress.${n}.md", progress_template(n, doc.steps))
+    if !wrote || !made { @say_log("the files of the subtask ${n} of ${s.id} cannot be written in ${s.rt.task_dir}") }
+}
+
+// The message of the owner arrives in a mode with tasks: the task is opened (the folder, the tree), the message becomes a new subtask or extends the last one.
+// Returns the line for the feed ("subtask 2: new"), "" when the mode keeps no task.
+fn Hub mut @route_on_message(at int, text str) Proc Detach Time -> str {
+    ro s0 = @sessions[at]
+    if !s0.rt.task_open || s0.rt.task_closed {
+        ro made = @route_make_task(s0.id, s0.rt.route, text)
+        if !made.ok { return "" }
+        mut o = JsonObject.new()
+        js(o, "id", made.id)
+        js(o, "number", made.number)
+        js(o, "dir", made.dir)
+        js(o, "shown", made.shown)
+        js(o, "branch", made.branch)
+        js(o, "worktree", made.worktree)
+        js(o, "base", made.base)
+        js(o, "title", subtask_title(text))
+        @rt_task_op(at, "open", o)
+        @route_write_sub(at, 1, text)
+        return "подзадача 1: новая (задача ${made.id})"
+    }
+    if s0.rt.tstate != "active" { @rt_state(at, "active", "") }
+    ro s = @sessions[at]
+    ro last = s.rt.last_sub()
+    ro prog = parse_progress(read_file("${s.rt.task_dir}/progress.${last}.md") ?? "")
+    mut marked = false
+    for sub in s.rt.subs {
+        if sub.n == last && (sub.done || sub.merged) { marked = true }
+    }
+    if subtask_extends(s.rt.force, last > 0, prog.total, prog.done, marked) {
+        ro appended = append_file("${s.rt.task_dir}/message.${last}.md", message_addition_text(text, now_millis()))
+        mut o = JsonObject.new()
+        ji(o, "n", last)
+        @rt_task_op(at, "extend", o)
+        return "подзадача ${last}: дополнена"
+    }
+    ro n = last + 1
+    mut o = JsonObject.new()
+    ji(o, "n", n)
+    js(o, "title", subtask_title(text))
+    @rt_task_op(at, "subtask", o)
+    @route_write_sub(at, n, text)
+    "подзадача ${n}: новая"
+}
+
+// The folder of the agent follows the mode: a tree of the task or of the subtask; an agent that works in another folder is closed (it is started again in the right one).
+fn Hub mut @route_sync_cwd(at int) Time -> () {
+    mut s = @sessions[at]
+    ro want = s.rt.agent_dir(@workdir)
+    if s.clients.len() > 0 && s.rt.cwd_now != want {
+        s.clients[0].close()
+        s.clients = []AcpClient.new()
+        @sessions[at] = s
+    }
+}
+
+// The hidden note before the message of the owner: "" in the mode "interactive".
+fn Hub mut @route_message_prelude(at int) Proc -> str {
+    mut s = @sessions[at]
+    if s.rt.route == "interactive" { return "" }
+    ro doc = @route_doc(s.rt.route)
+    ro text = route_prelude(doc, !s.rt.told, s.rt.task_shown, s.rt.last_sub(), "")
+    s.rt.told = true
+    @sessions[at] = s
+    text
+}
+
+// ----- what the page says -----
+
+fn Hub mut @route_set(trace str, route str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    if !route_valid(route) {
+        @say_log("a mode of work that does not exist: ${route}")
+        return
+    }
+    if @sessions[at].rt.route != route {
+        @route_stop(at)
+        mut o = JsonObject.new()
+        js(o, "route", route)
+        @rt_journal(at, "route_set", JsonValue.object(o).to_str())
+        // the checklist of the last subtask is made again when the new mode has steps and the file has no boxes yet
+        ro s = @sessions[at]
+        if s.rt.task_open && s.rt.last_sub() > 0 {
+            ro n = s.rt.last_sub()
+            ro path = "${s.rt.task_dir}/progress.${n}.md"
+            if parse_progress(read_file(path) ?? "").total == 0 {
+                ro wrote = write_file(path, progress_template(n, @route_doc(route).steps))
+            }
+        }
+    }
+    @route_broadcast(at, true)
+}
+
+fn Hub mut @route_run(trace str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    ro s = @sessions[at]
+    ro doc = @route_doc(s.rt.route)
+    if s.rt.route == "interactive" || doc.steps.len() == 0 {
+        @tell_error(0, trace, s.engine.step_number(), "", "в этом режиме нет шагов: выберите «Быстрая задача» или «Полный путь»")
+        return
+    }
+    if s.rt.running || s.rt.job.byte_len() > 0 { return }
+    if !s.rt.task_open {
+        @tell_error(0, trace, s.engine.step_number(), "", "сначала поставьте задачу сообщением")
+        return
+    }
+    // all steps done before: a new pass
+    mut all_done = true
+    mut i = 0
+    while i < doc.steps.len() {
+        ro st = s.rt.step_state(i + 1)
+        if st == "pending" || st == "running" { all_done = false }
+        i += 1
+    }
+    if all_done {
+        mut j = 0
+        while j < doc.steps.len() {
+            @rt_step(at, j + 1, "pending")
+            j += 1
+        }
+    }
+    mut me = @sessions[at]
+    me.rt.running = true
+    me.rt.current = -1
+    @sessions[at] = me
+    @route_broadcast(at, false)
+}
+
+// The end of the run (the owner stopped it, or a step could not be made): nothing is in flight any more, a step that was running is pending again.
+fn Hub mut @route_stop(at int) Proc Detach Time -> () {
+    mut s = @sessions[at]
+    if !s.rt.running && !s.rt.awaiting && !s.rt.reviewing && s.rt.job.byte_len() == 0 { return }
+    if s.rt.reviewing { @route_drop_review(s.id) }
+    if s.rt.awaiting && s.clients.len() > 0 && !@takes_message_at(at) { @cancel(s.id) }
+    mut i = 0
+    while i < s.rt.states.len() {
+        if s.rt.states[i] == "running" { @rt_step(at, i + 1, "pending") }
+        i += 1
+    }
+    s = @sessions[at]
+    s.rt.running = false
+    s.rt.awaiting = false
+    s.rt.reviewing = false
+    s.rt.job = ""
+    s.rt.current = -1
+    @sessions[at] = s
+    @route_broadcast(at, false)
+}
+
+fn Hub mut @route_stop_signal(trace str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at >= 0 { @route_stop(at) }
+}
+
+fn Hub mut @route_subtree_signal(trace str, n int) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at >= 0 { @route_subtree(at, n) }
+}
+
+fn Hub mut @route_skip(trace str, n int) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    ro s = @sessions[at]
+    ro doc = @route_doc(s.rt.route)
+    if n < 1 || n > doc.steps.len() { return }
+    ro step = doc.steps[n - 1]
+    ro st = s.rt.step_state(n)
+    if st == "done" || st == "skipped" { return }
+    if step.required {
+        @tell_error(0, trace, s.engine.step_number(), "", "шаг «${step.title}» обязательный: пропустить его нельзя")
+        return
+    }
+    if s.rt.current == n - 1 && (s.rt.awaiting || s.rt.reviewing) {
+        if s.rt.reviewing { @route_drop_review(s.id) }
+        if s.rt.awaiting && s.clients.len() > 0 && !@takes_message_at(at) { @cancel(s.id) }
+        mut me = @sessions[at]
+        me.rt.awaiting = false
+        me.rt.reviewing = false
+        me.rt.job = ""
+        me.rt.current = -1
+        @sessions[at] = me
+    }
+    @rt_step(at, n, "skipped")
+    @route_mark_progress(at, step.title, true)
+    @route_broadcast(at, false)
+}
+
+fn Hub mut @route_force(trace str, mode str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    if !@sessions[at].rt.task_open { return }
+    mut o = JsonObject.new()
+    js(o, "mode", mode)
+    @rt_task_op(at, "force", o)
+    @route_broadcast(at, false)
+}
+
+fn Hub mut @route_parallel(trace str, n int, on bool) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 || n < 1 { return }
+    mut o = JsonObject.new()
+    ji(o, "n", n)
+    ji(o, "on", if on { 1 } else { 0 })
+    @rt_task_op(at, "sub_parallel", o)
+    @route_broadcast(at, false)
+}
+
+// Mark the box of the step in the progress file of the last subtask.
+fn Hub mut @route_mark_progress(at int, title str, skipped bool) -> () {
+    ro s = @sessions[at]
+    if !s.rt.task_open || s.rt.last_sub() == 0 { return }
+    ro path = "${s.rt.task_dir}/progress.${s.rt.last_sub()}.md"
+    match read_file(path) {
+        Some(old) => { ro wrote = write_file(path, progress_mark(old, title, skipped)) }
+        None => ()
+    }
+}
+
+// ----- the run of the steps -----
+
+// A turn of the agent with a hidden note: the visible line is `label`, the note goes before it in the prompt. "" - sent, else why not.
+fn Hub mut @route_agent_turn(at int, label str, prelude str) Proc Detach Time -> str {
+    @route_sync_cwd(at)
+    ro reason = @ensure_client(at)
+    if reason.byte_len() > 0 { return reason }
+    mut s = @sessions[at]
+    if !@takes_message_at(at) { return "ход ещё идёт" }
+    s.clients[0].set_prelude(prelude)
+    feed_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("user_message", label))
+    s.rt.awaiting = true
+    @sessions[at] = s
+    @drain(at)
+    ""
+}
+
+fn Hub mut @route_next_step(at int) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    ro doc = @route_doc(s.rt.route)
+    mut next = -1
+    mut i = 0
+    while i < doc.steps.len() {
+        if next < 0 && s.rt.step_state(i + 1) == "pending" { next = i }
+        i += 1
+    }
+    if next < 0 {
+        @route_run_finished(at)
+        return
+    }
+    ro step = doc.steps[next]
+    if step.kind == "independent" {
+        @route_start_review(at, next, step)
+        return
+    }
+    if !@takes_message_at(at) { return }
+    ro n = s.rt.last_sub()
+    ro prompt = route_fill(step.prompt, n, s.rt.task_shown)
+    ro prelude = route_prelude(doc, !s.rt.told, s.rt.task_shown, n, prompt)
+    @rt_step(at, next + 1, "running")
+    ro reason = @route_agent_turn(at, "Шаг режима: ${step.title}", prelude)
+    if reason.byte_len() > 0 {
+        @tell_error(0, s.id, s.engine.step_number(), "", "шаг «${step.title}» не начат: ${reason}")
+        @route_stop(at)
+        return
+    }
+    mut me = @sessions[at]
+    me.rt.told = true
+    me.rt.current = next
+    me.rt.job = "step"
+    @sessions[at] = me
+    @route_broadcast(at, false)
+}
+
+fn Hub mut @route_step_finished(at int, index int) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    ro doc = @route_doc(s.rt.route)
+    if index >= 0 && index < doc.steps.len() {
+        @rt_step(at, index + 1, "done")
+        @route_mark_progress(at, doc.steps[index].title, false)
+    }
+    mut me = @sessions[at]
+    me.rt.current = -1
+    me.rt.job = ""
+    @sessions[at] = me
+    @route_broadcast(at, false)
+}
+
+// All steps passed: a task with a tree is ready to be published (the card of the page), a task without one is closed.
+fn Hub mut @route_run_finished(at int) Proc Detach Time -> () {
+    mut s = @sessions[at]
+    s.rt.running = false
+    s.rt.current = -1
+    @sessions[at] = s
+    if s.rt.worktree.byte_len() > 0 {
+        mut me = @sessions[at]
+        me.rt.unmerged = unmerged_count(me.rt.worktree, me.rt.base)
+        @sessions[at] = me
+        @rt_state(at, "ready", "")
+    } else {
+        mut o = JsonObject.new()
+        @rt_task_op(at, "close", o)
+    }
+    @route_broadcast(at, false)
+}
+
+// A turn of the agent that the hub started has ended (the engine is open for a message again).
+fn Hub mut @route_turn_done(at int) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    ro job = s.rt.job
+    if job == "step" {
+        @route_step_finished(at, s.rt.current)
+    } else if job.starts_with("resolve") {
+        @route_after_resolve(at)
+    } else if job == "pub_resolve" {
+        @route_after_publish_resolve(at)
+    } else if job == "pub_tests" {
+        @route_after_publish_tests(at)
+    } else {
+        mut me = @sessions[at]
+        me.rt.job = ""
+        @sessions[at] = me
+    }
+}
+
+// The work of a moment of a session: the turn of a step ended, the next step starts.
+fn Hub mut @route_tick(at int) Proc Detach Time -> () {
+    mut s = @sessions[at]
+    if s.rt.awaiting {
+        if !@takes_message_at(at) { return }
+        s.rt.awaiting = false
+        @sessions[at] = s
+        @route_turn_done(at)
+        return
+    }
+    if s.rt.reviewing || !s.rt.running { return }
+    @route_next_step(at)
+}
+
+// ----- the independent review -----
+
+fn Hub @agent_ids() -> []str {
+    mut ids = []str.new()
+    for a in @settings.agents { ids.push(a.id) }
+    ids
+}
+
+fn Hub mut @route_close_reviews() Time -> () {
+    for r in @reviews {
+        mut mine = r
+        if mine.clients.len() > 0 { mine.clients[0].close() }
+    }
+    @reviews = []Review.new()
+}
+
+fn Hub mut @route_drop_review(session str) Time -> () {
+    mut rest = []Review.new()
+    for r in @reviews {
+        if r.session == session {
+            mut mine = r
+            if mine.clients.len() > 0 { mine.clients[0].close() }
+        } else {
+            rest.push(r)
+        }
+    }
+    @reviews = rest
+}
+
+fn Hub mut @route_start_review(at int, index int, step RouteStep) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    ro family = pick_reviewer(@settings.route_reviewer_order, @agent_ids(), s.agent)
+    if family.byte_len() == 0 {
+        @tell_error(0, s.id, s.engine.step_number(), "", "нет независимого проверяющего другой семьи: настройте agents и route_reviewer_order")
+        @route_stop(at)
+        return
+    }
+    ro cwd = s.rt.agent_dir(@workdir)
+    ro config = match @settings.agent(family) {
+        Some(spec) => acp_config_of(spec.program, spec.args, cwd, "")
+        None => {
+            @route_stop(at)
+            return
+        }
+    }
+    match open_client_traced(config, "", 0) {
+        Err(reason) => {
+            @tell_error(0, s.id, s.engine.step_number(), "", "проверяющий ${family} не запущен: ${reason}")
+            @route_stop(at)
+        }
+        Ok(client) => {
+            ro n = s.rt.last_sub()
+            ro message = read_file("${s.rt.task_dir}/message.${n}.md") ?? "(файл постановки не найден)"
+            ro status = git_run(cwd, ["status", "--short"])
+            ro diff = git_run(cwd, ["diff", "HEAD"])
+            ro answer = answer_of(s.lines, s.turn)
+            ro prompt = review_prompt(route_fill(step.prompt, n, s.rt.task_shown), message, cut_text(if status.ok { status.text } else { "(папка не репозиторий git)" }, 4000), cut_text(if diff.ok { diff.text } else { "" }, 60000), cut_text(answer, 20000))
+            mut clients = []AcpClient.new()
+            clients.push(client)
+            @reviews.push(Review { session: s.id, step: index, family, title: step.title, clients, sent: false, text: "", failed: "", started_at: now_millis(), prompt })
+            @rt_step(at, index + 1, "running")
+            mut me = @sessions[at]
+            me.rt.reviewing = true
+            me.rt.current = index
+            @sessions[at] = me
+            @say_log("the independent review of ${s.id}, step ${index + 1}, by ${family}")
+            @route_broadcast(at, false)
+        }
+    }
+}
+
+fn review_ack(mut client AcpClient, id str) -> () {
+    with Link = acp_link(client) {
+        Link.ack(id)
+    }
+}
+
+// One look at a review: false - it goes on; true - it is over (`text` or `failed` tell how).
+fn Hub mut @route_review_poll(i int) Proc Detach Time -> bool {
+    mut r = @reviews[i]
+    r.clients[0].poll()
+    ro phase = r.clients[0].phase()
+    if phase == "ready" && !r.sent {
+        r.sent = true
+        @serial += 1
+        with Link = acp_link(r.clients[0]) {
+            Link.send(transfer_request("review-${@serial}", r.session, 0, r.prompt))
+        }
+    }
+    for key in r.clients[0].pending_permissions() {
+        ro refused = r.clients[0].decide(key, "deny")
+    }
+    mut over = false
+    mut more = true
+    while more {
+        ro event = with Link = acp_link(r.clients[0]) { Link.receive() }
+        match event {
+            None => { more = false }
+            Some(e) => {
+                if e.name == "agent_chunk" { r.text = "${r.text}${e.input}" }
+                if e.name == "agent_done" { over = true }
+                if e.kind == EventKind.Refused || e.kind == EventKind.Expired {
+                    over = true
+                    r.failed = "проверяющий не ответил (${e.name} ${e.input})"
+                }
+                review_ack(r.clients[0], e.id)
+            }
+        }
+    }
+    if phase == "failed" || phase == "dead" || phase == "closed" {
+        over = true
+        if r.text.byte_len() == 0 { r.failed = "проверяющий не запустился или завершился: ${r.clients[0].last_error()}" }
+    }
+    if !over && now_millis() - r.started_at > REVIEW_LIMIT_MS {
+        over = true
+        r.failed = "проверяющий не ответил за 20 минут"
+    }
+    @reviews[i] = r
+    over
+}
+
+fn Hub mut @route_review_finish(i int) Proc Detach Time -> () {
+    mut r = @reviews[i]
+    mut rest = []Review.new()
+    mut k = 0
+    while k < @reviews.len() {
+        if k != i { rest.push(@reviews[k]) }
+        k += 1
+    }
+    @reviews = rest
+    r.clients[0].close()
+    ro at = @find(r.session)
+    if at < 0 { return }
+    if r.failed.byte_len() > 0 && r.text.byte_len() == 0 {
+        @tell_error(0, r.session, @sessions[at].engine.step_number(), "", r.failed)
+        @route_stop(at)
+        return
+    }
+    mut o = JsonObject.new()
+    js(o, "family", r.family)
+    ji(o, "step", r.step + 1)
+    js(o, "text", "**Независимая проверка (${r.family})** — шаг «${r.title}»\n\n${r.text.trim_ascii()}")
+    @rt_journal(at, "route_review", JsonValue.object(o).to_str())
+    mut me = @sessions[at]
+    me.rt.reviewing = false
+    @sessions[at] = me
+    @route_step_finished(at, r.step)
+}
+
+fn Hub mut @route_pump_reviews() Proc Detach Time -> () {
+    mut i = 0
+    while i < @reviews.len() {
+        if @route_review_poll(i) {
+            @route_review_finish(i)
+        } else {
+            i += 1
+        }
+    }
+}
+
+// ----- the observer: the progress files, the trees -----
+
+// The place of the subtask in the list of the tasks that go on: the files it says it touches, from its progress file.
+fn Hub @route_touches(s Dialog, n int) -> []str => parse_touches(read_file("${s.rt.task_dir}/progress.${n}.md") ?? "")
+
+fn Hub mut @route_observe(at int) Proc Detach Time -> () {
+    mut s = @sessions[at]
+    if !s.rt.task_open { return }
+    if s.rt.worktree.byte_len() > 0 && now_millis() - s.rt.unmerged_at > UNMERGED_MS {
+        s.rt.unmerged = unmerged_count(s.rt.worktree, s.rt.base)
+        s.rt.diff = diff_numstat(s.rt.worktree, s.rt.base)
+        s.rt.unmerged_at = now_millis()
+        @sessions[at] = s
+    }
+    // subtasks that are marked parallel and touch the same files as another one that goes on: the owner is asked (the page counts the seconds down), then the subtask gets a tree of its own
+    if s.rt.worktree.byte_len() > 0 && s.rt.job.byte_len() == 0 {
+        if s.rt.ov_n > 0 {
+            if now_millis() >= s.rt.ov_until {
+                @route_choose(at, s.rt.ov_n, "own")
+                return
+            }
+        } else {
+            for sub in s.rt.subs {
+                if sub.side && sub.worktree.byte_len() == 0 && !sub.done && !sub.merged && !s.rt.asked.contains(sub.n) {
+                    ro mine = @route_touches(s, sub.n)
+                    for other in s.rt.subs {
+                        if s.rt.ov_n == 0 && other.n != sub.n && !other.done && !other.merged {
+                            ro theirs = @route_touches(s, other.n)
+                            if overlap(mine, theirs) {
+                                if @settings.route_worktree_ask {
+                                    mut me = @sessions[at]
+                                    me.rt.ov_n = sub.n
+                                    me.rt.ov_with = other.n
+                                    me.rt.ov_files = shared_paths(mine, theirs)
+                                    me.rt.ov_until = now_millis() + @settings.route_overlap_seconds * 1000
+                                    @sessions[at] = me
+                                } else {
+                                    @route_choose(at, sub.n, "own")
+                                    return
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    @route_broadcast(at, false)
+}
+
+// ----- the trees of the subtasks, merges -----
+
+fn shared_paths(a []str, b []str) -> []str {
+    mut out = []str.new()
+    for x in a {
+        for y in b {
+            if x == y || x.starts_with("${y}/") || y.starts_with("${x}/") {
+                if !out.contains(x) { out.push(x) }
+            }
+        }
+    }
+    out
+}
+
+// The choice for a subtask whose files overlap: "own" - a tree of its own, "shared" - the tree of the task.
+fn Hub mut @route_choose(at int, n int, tree str) Proc Detach Time -> () {
+    mut s = @sessions[at]
+    s.rt.ov_n = 0
+    s.rt.ov_with = 0
+    s.rt.ov_files = []str.new()
+    s.rt.ov_until = 0
+    s.rt.asked.push(n)
+    @sessions[at] = s
+    if tree == "own" { @route_subtree(at, n) }
+    @route_broadcast(at, false)
+}
+
+fn Hub mut @route_choose_signal(trace str, n int, tree str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    if @sessions[at].rt.ov_n == n { @route_choose(at, n, tree) }
+}
+
+fn Hub mut @route_subtree(at int, n int) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    if s.rt.worktree.byte_len() == 0 {
+        @tell_error(0, s.id, s.engine.step_number(), "", "у задачи нет дерева: подзадаче нельзя сделать своё")
+        return
+    }
+    for sub in s.rt.subs {
+        if sub.n == n && sub.worktree.byte_len() > 0 { return }
+    }
+    ro tree = subtask_tree_create(s.rt.worktree, @workdir, s.rt.task_id, n)
+    if !tree.ok {
+        @tell_error(0, s.id, s.engine.step_number(), "", "дерево подзадачи ${n} не создано: ${tree.text}")
+        return
+    }
+    mut o = JsonObject.new()
+    ji(o, "n", n)
+    js(o, "branch", tree.branch)
+    js(o, "worktree", tree.worktree)
+    @rt_task_op(at, "sub_worktree", o)
+    @route_broadcast(at, false)
+}
+
+fn Hub mut @route_close_agent_in(at int, dir str) Time -> () {
+    mut s = @sessions[at]
+    if s.clients.len() > 0 && s.rt.cwd_now == dir {
+        s.clients[0].close()
+        s.clients = []AcpClient.new()
+        @sessions[at] = s
+    }
+}
+
+fn Hub mut @route_subtask_merged(at int, n int) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    mut tree = ""
+    mut branch = ""
+    for sub in s.rt.subs {
+        if sub.n == n {
+            tree = sub.worktree
+            branch = sub.branch
+        }
+    }
+    @route_close_agent_in(at, tree)
+    ro removed = subtask_tree_remove(s.rt.worktree, tree, branch)
+    if !removed.ok { @say_log("the tree of the subtask ${n} of ${s.id} is not removed: ${removed.text}") }
+    mut o = JsonObject.new()
+    ji(o, "n", n)
+    @rt_task_op(at, "sub_merged", o)
+    mut me = @sessions[at]
+    me.rt.job = ""
+    me.rt.attempt = 0
+    @sessions[at] = me
+    @rt_note(at, "▸ подзадача ${n} влита в ветку задачи")
+    @route_broadcast(at, false)
+}
+
+fn Hub mut @route_conflict_failed(at int, n int, why str) Proc Detach Time -> () {
+    mut o = JsonObject.new()
+    ji(o, "n", n)
+    js(o, "text", why)
+    @rt_task_op(at, "sub_conflict", o)
+    mut me = @sessions[at]
+    me.rt.job = ""
+    me.rt.attempt = 0
+    @sessions[at] = me
+    @rt_note(at, "▸ подзадача ${n} готова, но не влита: ${why}")
+    @route_broadcast(at, false)
+}
+
+fn Hub mut @route_subtask_done(trace str, n int) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    ro s = @sessions[at]
+    mut found = false
+    mut tree = ""
+    mut branch = ""
+    for sub in s.rt.subs {
+        if sub.n == n {
+            found = true
+            tree = sub.worktree
+            branch = sub.branch
+        }
+    }
+    if !found || s.rt.job.byte_len() > 0 || s.rt.running { return }
+    if tree.byte_len() == 0 {
+        mut o = JsonObject.new()
+        ji(o, "n", n)
+        @rt_task_op(at, "sub_done", o)
+        @route_broadcast(at, false)
+        return
+    }
+    if !is_clean(tree) {
+        @tell_error(0, trace, s.engine.step_number(), "", "в дереве подзадачи ${n} есть незакоммиченные изменения: закоммитьте их, потом влейте")
+        return
+    }
+    if s.clients.len() > 0 && !@takes_message_at(at) {
+        @tell_error(0, trace, s.engine.step_number(), "", "ход ещё идёт: влить подзадачу можно между ходами")
+        return
+    }
+    @route_close_agent_in(at, tree)
+    ro r = subtask_merge(s.rt.worktree, branch, "${s.rt.number} merge subtask ${n} into the task branch")
+    if r.status == "merged" {
+        @route_subtask_merged(at, n)
+    } else if r.status == "conflict" {
+        @route_resolve_start(at, n, r.files)
+    } else {
+        @route_conflict_failed(at, n, r.text)
+    }
+}
+
+fn Hub mut @route_resolve_start(at int, n int, files []str) Proc Detach Time -> () {
+    mut s = @sessions[at]
+    s.rt.job = "resolve:${n}"
+    s.rt.attempt = 1
+    @sessions[at] = s
+    @route_resolve_turn(at, n, files)
+}
+
+fn Hub mut @route_resolve_turn(at int, n int, files []str) Proc Detach Time -> () {
+    ro reason = @route_agent_turn(at, "Служебный ход: разрешение конфликта слияния подзадачи ${n}", "[crew] ${resolve_prompt(files, "merge")}")
+    if reason.byte_len() > 0 {
+        ro dropped = subtask_merge_abort(@sessions[at].rt.worktree)
+        @route_conflict_failed(at, n, "агент не смог начать ход: ${reason}")
+    }
+}
+
+fn Hub @job_n(job str) -> int {
+    match job.after(":").to_int() {
+        Ok(n) => n
+        Err(e) => 0
+    }
+}
+
+fn Hub mut @route_after_resolve(at int) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    ro n = @job_n(s.rt.job)
+    ro verdict = tests_verdict(answer_of(s.lines, s.turn))
+    if verdict == "green" {
+        ro r = subtask_merge_finish(s.rt.worktree, "${s.rt.number} merge subtask ${n} into the task branch")
+        if r.status == "merged" {
+            @route_subtask_merged(at, n)
+            return
+        }
+        if s.rt.attempt < @settings.route_fix_attempts && r.status == "conflict" {
+            @route_resolve_again(at, n, r.files)
+            return
+        }
+        ro dropped = subtask_merge_abort(s.rt.worktree)
+        @route_conflict_failed(at, n, if r.text.byte_len() > 0 { r.text } else { "конфликт не разрешён" })
+        return
+    }
+    if s.rt.attempt < @settings.route_fix_attempts {
+        @route_resolve_again(at, n, [])
+        return
+    }
+    ro dropped = subtask_merge_abort(s.rt.worktree)
+    @route_conflict_failed(at, n, "агент не подтвердил зелёные тесты за ${s.rt.attempt} попыток")
+}
+
+fn Hub mut @route_resolve_again(at int, n int, files []str) Proc Detach Time -> () {
+    mut s = @sessions[at]
+    s.rt.attempt += 1
+    @sessions[at] = s
+    @route_resolve_turn(at, n, files)
+}
+
+// ----- finishing and publishing -----
+
+fn Hub mut @route_new_task(trace str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    ro s = @sessions[at]
+    if !s.rt.task_open { return }
+    if s.rt.running || s.rt.job.byte_len() > 0 {
+        @tell_error(0, trace, s.engine.step_number(), "", "идёт прогон: остановите его, потом закройте задачу")
+        return
+    }
+    if s.rt.worktree.byte_len() > 0 && s.rt.tstate != "done" {
+        ro count = unmerged_count(s.rt.worktree, s.rt.base)
+        ro clean = is_clean(s.rt.worktree)
+        if count > 0 || !clean {
+            // work in the tree is not dropped quietly: the owner chooses (the steps of the finishing, "keep")
+            mut me = @sessions[at]
+            me.rt.unmerged = count
+            @sessions[at] = me
+            if s.rt.tstate == "finishing" {
+                @route_keep_task(at)
+            } else {
+                @rt_state(at, "finishing", "")
+            }
+            @route_broadcast(at, false)
+            return
+        }
+        @route_close_agent_in(at, s.rt.worktree)
+        ro gone = task_tree_remove(@workdir, s.rt.worktree, s.rt.branch)
+        if !gone.ok { @say_log("the tree of the task ${s.rt.task_id} is not removed: ${gone.text}") }
+    }
+    mut o = JsonObject.new()
+    @rt_task_op(at, "new", o)
+    @route_broadcast(at, false)
+}
+
+fn Hub mut @route_keep_task(at int) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    if !s.rt.task_open || s.rt.worktree.byte_len() == 0 { return }
+    mut o = JsonObject.new()
+    js(o, "state", "kept")
+    ji(o, "unmerged", unmerged_count(s.rt.worktree, s.rt.base))
+    @rt_task_op(at, "park", o)
+}
+
+fn Hub mut @route_keep(trace str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    if @sessions[at].rt.running || @sessions[at].rt.job.byte_len() > 0 { return }
+    @route_keep_task(at)
+    @route_broadcast(at, false)
+}
+
+fn Hub mut @route_resume(trace str, id str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    ro s = @sessions[at]
+    if s.rt.task_open {
+        @tell_error(0, trace, s.engine.step_number(), "", "сначала закройте или оставьте текущую задачу")
+        return
+    }
+    for p in s.rt.parked {
+        if p.id == id {
+            ro in_tree = "${p.worktree}/doc/tasks/${p.id}/task"
+            ro dir = if dir_there(in_tree) { in_tree } else { "${@settings.data_dir}/${s.id}/tasks/${p.id}/task" }
+            ro shown = if dir_there(in_tree) { "doc/tasks/${p.id}/task" } else { dir }
+            mut un = JsonObject.new()
+            js(un, "id", p.id)
+            @rt_task_op(at, "unpark", un)
+            mut o = JsonObject.new()
+            js(o, "id", p.id)
+            js(o, "number", p.number)
+            js(o, "dir", dir)
+            js(o, "shown", shown)
+            js(o, "branch", p.branch)
+            js(o, "worktree", p.worktree)
+            js(o, "base", p.base)
+            js(o, "title", p.title)
+            @rt_task_op(at, "open", o)
+            // the subtasks are what the files say
+            mut numbers = []int.new()
+            for name in dir_names(dir) {
+                if name.starts_with("message.") && name.ends_with(".md") {
+                    match name["message.".byte_len()..name.byte_len() - 3].to_int() {
+                        Ok(k) => { if k > 1 { numbers.push(k) } }
+                        Err(e) => ()
+                    }
+                }
+            }
+            mut k = 2
+            while k < 1000 && numbers.contains(k) {
+                mut so = JsonObject.new()
+                ji(so, "n", k)
+                js(so, "title", "подзадача ${k}")
+                @rt_task_op(at, "subtask", so)
+                k += 1
+            }
+            @route_broadcast(at, true)
+            return
+        }
+    }
+}
+
+fn Hub mut @route_diff(trace str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    ro s = @sessions[at]
+    if !s.rt.task_open || s.rt.worktree.byte_len() == 0 { return }
+    @rt_note(at, "Изменения задачи ${s.rt.number} относительно ${s.rt.base}:\n\n${diff_stat(s.rt.worktree, s.rt.base)}")
+}
+
+// The word of the owner to publish. The only way to the remote (`publish_push`): the tree is rebased on `origin/main` (the agent resolves conflicts),
+// the tests of the mode pass (the agent runs them), then the push, the main copy, the clean-up.
+fn Hub mut @route_publish(trace str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    ro s = @sessions[at]
+    if !s.rt.task_open || s.rt.worktree.byte_len() == 0 {
+        @tell_error(0, trace, s.engine.step_number(), "", "у задачи нет дерева: публиковать нечего")
+        return
+    }
+    if s.rt.running || s.rt.job.byte_len() > 0 {
+        @tell_error(0, trace, s.engine.step_number(), "", "идёт другая работа: дождитесь её конца")
+        return
+    }
+    if s.clients.len() > 0 && !@takes_message_at(at) {
+        @tell_error(0, trace, s.engine.step_number(), "", "ход ещё идёт: публиковать можно между ходами")
+        return
+    }
+    if !is_clean(s.rt.worktree) {
+        @route_publish_fail(at, "в дереве есть незакоммиченные изменения: закоммитьте их")
+        return
+    }
+    mut me = @sessions[at]
+    me.rt.job = "pub"
+    me.rt.attempt = 0
+    @sessions[at] = me
+    @route_publish_rebase(at)
+}
+
+fn Hub mut @route_publish_fail(at int, why str) Proc Detach Time -> () {
+    mut me = @sessions[at]
+    me.rt.job = ""
+    me.rt.attempt = 0
+    @sessions[at] = me
+    @rt_state(at, "ready", why)
+    @rt_note(at, "▸ публикация задачи ${me.rt.number} остановлена: ${why}")
+    @route_broadcast(at, false)
+}
+
+fn Hub mut @route_publish_rebase(at int) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    @route_close_agent_in(at, s.rt.worktree)
+    ro r = publish_rebase(s.rt.worktree)
+    if r.status == "merged" {
+        @route_publish_tests(at)
+    } else if r.status == "conflict" {
+        @route_publish_resolve(at, r.files)
+    } else {
+        @route_publish_fail(at, r.text)
+    }
+}
+
+fn Hub mut @route_publish_resolve(at int, files []str) Proc Detach Time -> () {
+    mut s = @sessions[at]
+    s.rt.job = "pub_resolve"
+    s.rt.attempt += 1
+    @sessions[at] = s
+    ro reason = @route_agent_turn(at, "Служебный ход: разрешение конфликтов при публикации", "[crew] ${resolve_prompt(files, "rebase")}")
+    if reason.byte_len() > 0 {
+        ro dropped = publish_abort(s.rt.worktree)
+        @route_publish_fail(at, "агент не смог начать ход: ${reason}")
+    }
+}
+
+fn Hub mut @route_after_publish_resolve(at int) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    ro verdict = tests_verdict(answer_of(s.lines, s.turn))
+    if verdict == "green" {
+        ro r = publish_continue(s.rt.worktree)
+        if r.status == "merged" {
+            @route_publish_tests(at)
+            return
+        }
+        if s.rt.attempt < @settings.route_fix_attempts && r.status == "conflict" {
+            @route_publish_resolve(at, r.files)
+            return
+        }
+        ro dropped = publish_abort(s.rt.worktree)
+        @route_publish_fail(at, if r.text.byte_len() > 0 { r.text } else { "конфликт не разрешён" })
+        return
+    }
+    if s.rt.attempt < @settings.route_fix_attempts {
+        @route_publish_resolve(at, [])
+        return
+    }
+    ro dropped = publish_abort(s.rt.worktree)
+    @route_publish_fail(at, "агент не подтвердил зелёные тесты за ${s.rt.attempt} попыток")
+}
+
+// The step "tests" of the mode of the session (the first step whose title says so), else the plain words.
+fn Hub @route_tests_prompt(s Dialog) -> str {
+    ro doc = @route_doc(s.rt.route)
+    mut prompt = "Прогони тесты затронутой части проекта и проверки репозитория (команды — в AGENTS.md или README проекта)."
+    for st in doc.steps {
+        if st.kind == "self" && (st.title.contains("Тест") || st.title.contains("тест")) { prompt = route_fill(st.prompt, s.rt.last_sub(), s.rt.task_shown) }
+    }
+    "${prompt}\nПоследней строкой ответа напиши ровно «ТЕСТЫ: ЗЕЛЁНЫЕ» или «ТЕСТЫ: КРАСНЫЕ»."
+}
+
+fn Hub mut @route_publish_tests(at int) Proc Detach Time -> () {
+    mut s = @sessions[at]
+    s.rt.job = "pub_tests"
+    @sessions[at] = s
+    ro reason = @route_agent_turn(at, "Служебный ход: тесты перед публикацией", "[crew] ${@route_tests_prompt(s)}")
+    if reason.byte_len() > 0 { @route_publish_fail(at, "агент не смог начать ход: ${reason}") }
+}
+
+fn Hub mut @route_after_publish_tests(at int) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    ro verdict = tests_verdict(answer_of(s.lines, s.turn))
+    if verdict != "green" {
+        @route_publish_fail(at, if verdict == "red" { "тесты красные" } else { "агент не подтвердил зелёные тесты" })
+        return
+    }
+    // the tree is removed by the publishing: the agent that stands in it is closed first
+    @route_close_agent_in(at, s.rt.worktree)
+    ro done = publish_push(s.rt.worktree, @workdir, s.rt.branch)
+    if done.status != "done" {
+        @route_publish_fail(at, done.text)
+        return
+    }
+    mut me = @sessions[at]
+    me.rt.job = ""
+    me.rt.unmerged = 0
+    @sessions[at] = me
+    @rt_state(at, "done", "")
+    @rt_note(at, "▸ задача ${s.rt.number} влита в main и запушена. Основная копия: ${done.main_note}")
+    @route_broadcast(at, false)
+}
+
+// ----- the pump -----
+
+/// The modes of work at every pump: the steps, the reviews, the observer of the progress files (every 2 s).
+fn Hub mut @route_pump() Proc Detach Time -> () {
+    mut at = 0
+    while at < @sessions.len() {
+        ro s = @sessions[at]
+        if s.rt.awaiting || s.rt.running {
+            if s.engine.step_number() >= 0 { @route_tick(at) }
+        }
+        at += 1
+    }
+    if @reviews.len() > 0 { @route_pump_reviews() }
+    if now_millis() - @route_obs >= OBSERVE_MS {
+        @route_obs = now_millis()
+        mut k = 0
+        while k < @sessions.len() {
+            @route_observe(k)
+            k += 1
+        }
+    }
+}

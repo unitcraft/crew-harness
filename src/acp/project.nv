@@ -640,6 +640,13 @@ fn page_input_of(e Incoming, turn str) -> Option[PageInput] {
                 ro value = object_input(e)?
                 return with_turn("images_skipped", value, turn)
             }
+            // a line of the hub about the mode of work (task 192q: "subtask 2: new", the block of the independent review) is shown as a piece of text of the turn
+            if e.name == "route_note" || e.name == "route_review" {
+                ro value = object_input(e)?
+                mut o = turn_object(turn)
+                put(o, "text", JsonValue.str(text_field(value, "text") ?? ""))
+                return page_input("agent_chunk", JsonValue.object(o))
+            }
             if e.name == "cancel" { return turn_only("cancel", turn) }
             if e.name == "permission_decision" {
                 ro value = object_input(e)?

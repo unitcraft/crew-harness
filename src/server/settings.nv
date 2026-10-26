@@ -6,6 +6,8 @@
 //   <data_dir>/<session>/acp.jsonl), ask_form (true by default: the agents may ask the owner a question with a choice; see src/acp/README.md,
 //   "Questions of the agent"), ask_timeout_seconds (1800: how long the tool `ask_user_question` waits for the owner), agents[].ask (native, mcp, off), stt {url, language} (the local whisper server the front sends the voice to: `/api/stt`),
 //   max_image_bytes (the largest picture of a message, 10 MB by default; env CREW_SERVER_MAX_IMAGE_BYTES)
+//   routes_dir ("doc/routes": the files of the modes of work, task 192q), route_reviewer_order (["codex","claude","kimi","opencode"]: the families of the independent reviewer),
+//   route_task_limit (12 subtasks) and route_task_messages (40 messages): over them the page is told to suggest a new task, route_fix_attempts (2: tries of the agent to resolve a conflict), route_worktree_ask (true: a subtask whose files overlap with another asks the owner for a tree of its own for route_overlap_seconds = 30, then takes it)
 // The environment is over the file, key by key:
 //   CREW_SERVER_PORT, CREW_SERVER_STORE, CREW_SERVER_DATA_DIR, CREW_SERVER_AGENT (the command of the one agent "opencode",
 //   words separated by spaces), CREW_SERVER_WORKDIR, CREW_SERVER_WEB_DIR, CREW_SERVER_ACP_TRACE (true/false), CREW_SERVER_ASK_FORM (true/false), CREW_SERVER_ASK_TIMEOUT_SECONDS, CREW_SERVER_STT_URL, CREW_SERVER_STT_LANGUAGE, CREW_SERVER_IDLE_SECONDS, CREW_SERVER_HUB (the command
@@ -45,7 +47,14 @@ export type ServerSettings {
     ask_timeout_ms int,
     stt_url str,
     stt_language str,
-    max_image_bytes int
+    max_image_bytes int,
+    routes_dir str,
+    route_reviewer_order []str,
+    route_task_limit int,
+    route_task_messages int,
+    route_fix_attempts int,
+    route_worktree_ask bool,
+    route_overlap_seconds int
 }
 
 fn st_text(o JsonObject, key str, fallback str) -> Result[str, str] {
@@ -210,6 +219,16 @@ export fn parse_server_settings(text str) -> Result[ServerSettings, str] {
         None => ()
     }
     st_stt_check(stt_url, stt_language)?
+    ro routes_dir = st_text(o, "routes_dir", "doc/routes")?
+    ro route_reviewer_order = match o.get("route_reviewer_order") {
+        Some(a) => st_words(a, "route_reviewer_order")?
+        None => ["codex", "claude", "kimi", "opencode"]
+    }
+    ro route_task_limit = st_number(o, "route_task_limit", 12)?
+    ro route_task_messages = st_number(o, "route_task_messages", 40)?
+    ro route_fix_attempts = st_number(o, "route_fix_attempts", 2)?
+    ro route_worktree_ask = st_flag(o, "route_worktree_ask", true)?
+    ro route_overlap_seconds = st_number(o, "route_overlap_seconds", 30)?
     mut hub_program = "target/crew-hub.exe"
     mut hub_args = []str.new()
     match o.get("hub") {
@@ -223,7 +242,7 @@ export fn parse_server_settings(text str) -> Result[ServerSettings, str] {
         }
         None => ()
     }
-    Ok(ServerSettings { port, data_dir, store, pg, agents, idle_term_ms: idle_seconds * 1000, workdir, web_dir, hub_program, hub_args, acp_trace, ask_form, ask_timeout_ms: ask_seconds * 1000, stt_url, stt_language, max_image_bytes })
+    Ok(ServerSettings { port, data_dir, store, pg, agents, idle_term_ms: idle_seconds * 1000, workdir, web_dir, hub_program, hub_args, acp_trace, ask_form, ask_timeout_ms: ask_seconds * 1000, stt_url, stt_language, max_image_bytes, routes_dir, route_reviewer_order, route_task_limit, route_task_messages, route_fix_attempts, route_worktree_ask, route_overlap_seconds })
 }
 
 fn st_env(key str) Os -> Option[str] {
@@ -345,7 +364,14 @@ export fn server_settings(file str) Os Fs -> Result[ServerSettings, str] {
         ask_timeout_ms,
         stt_url,
         stt_language,
-        max_image_bytes
+        max_image_bytes,
+        routes_dir: st_env("CREW_SERVER_ROUTES_DIR") ?? base.routes_dir,
+        route_reviewer_order: base.route_reviewer_order,
+        route_task_limit: base.route_task_limit,
+        route_task_messages: base.route_task_messages,
+        route_fix_attempts: base.route_fix_attempts,
+        route_worktree_ask: base.route_worktree_ask,
+        route_overlap_seconds: base.route_overlap_seconds
     }
     if merged.store != "files" && merged.store != "pg" { return Err("the store must be files or pg") }
     if merged.port < 1 || merged.port > 65535 { return Err("the port must be 1 to 65535") }
