@@ -55,7 +55,14 @@ export type AskSetup { form bool, mcp_url str, mcp_token str, hint str }
 /// Nothing offered: the agent is asked nothing and gets no tool.
 export fn no_ask() -> AskSetup => { form: false, mcp_url: "", mcp_token: "", hint: "" }
 
-type AcpSet { rpc int, setting str, value str }
+type AcpSet { rpc int, setting str, value str, owner bool }
+
+/// AcpPreset: a choice of the owner (task 192t): `setting` is `mode`, `model` or `effort`, `value` the id the agent offered. The hub keeps them in the
+/// journal and hands them to every agent it starts for the session (`set_presets`); the client asks the agent for them once `session/new` is answered.
+export type AcpPreset { setting str, value str }
+
+/// AcpDrop: a preset the agent did not take because it does not offer the value (any more): what was wanted, and the id the agent holds instead.
+export type AcpDrop { setting str, value str, used str }
 
 type AcpInboxItem { seq int, event Incoming }
 
@@ -93,7 +100,10 @@ export type AcpClient {
     trace AcpTrace,
     images_ok bool,
     attached []AcpImage,
-    prelude str
+    prelude str,
+    presets []AcpPreset,
+    settled []AcpPreset,
+    dropped []AcpDrop
 }
 
 const STDERR_KEEP = 4000
@@ -342,7 +352,7 @@ export fn open_client_full(config AcpConfig, trace_path str, trace_limit int, as
                 config, link, phase: "initializing", next_rpc: 0, init_rpc: -1, new_rpc: -1, prompt_rpc: -1,
                 session: "", agent: "", model_name: "", modes: JsonValue.null(), models: JsonValue.null(), choices_cfg: JsonValue.null(), mode_now: "", model_now: "", sets: []AcpSet.new(), queue: []AcpQueued.new(), active: "", permissions: []AcpPending.new(), ask, asks: []AcpAsk.new(), mcp_http: false, hint_due: false,
                 ready, taken: []AcpInboxItem.new(), next_seq: next, stderr: "", exit_code: -2, last_error: "", trace: trace_open(trace_path, trace_limit),
-                images_ok: false, attached: []AcpImage.new(), prelude: ""
+                images_ok: false, attached: []AcpImage.new(), prelude: "", presets: []AcpPreset.new(), settled: []AcpPreset.new(), dropped: []AcpDrop.new()
             }
             client.init_rpc = client.next_id()
             client.say(rpc_request_line(client.init_rpc, "initialize", initialize_params(ask.form)))
@@ -469,6 +479,7 @@ fn AcpClient mut @on_result(id JsonValue, result JsonValue) -> () {
             Some(session) => {
                 @session = session
                 @phase = "ready"
+                @apply_presets()
             }
             None => @fail_handshake("session/new answered without a sessionId")
         }
@@ -577,6 +588,8 @@ fn AcpClient mut @settle_set(key str, result JsonValue) -> bool {
             if done.setting == "model" { @model_now = done.value }
         }
     }
+    // a choice of the owner that the agent took is told to the hub, which keeps it (the ones the client made itself are not)
+    if done.owner { @settled.push(AcpPreset { setting: done.setting, value: done.value }) }
     @push_options()
     true
 }
@@ -595,13 +608,16 @@ fn AcpClient mut @fail_set(key str, why str) -> bool {
 
 /// The owner chose `value` for `setting` (`mode`, `model` or `effort`): the agent is asked, by the method it supports. False - the
 /// agent has not offered that value (or the session is not ready): nothing is sent. The new choice arrives as an event `agent_model`.
-export fn AcpClient mut @select_option(setting str, value str) -> bool {
+export fn AcpClient mut @select_option(setting str, value str) -> bool => @send_set(setting, value, true)
+
+// The request for a choice; `owner` - it is a choice the owner made just now (the hub keeps it), not one asked again after a start.
+fn AcpClient mut @send_set(setting str, value str, owner bool) -> bool {
     if @phase != "ready" { return false }
     match setting_call(setting, value, @modes, @models, @choices_cfg) {
         None => false
         Some(call) => {
             ro id = @next_id()
-            @sets.push(AcpSet { rpc: id, setting, value })
+            @sets.push(AcpSet { rpc: id, setting, value, owner })
             mut o = JsonObject.new()
             put(o, "sessionId", JsonValue.str(@session))
             if call.method == "session/set_config_option" {
@@ -616,6 +632,49 @@ export fn AcpClient mut @select_option(setting str, value str) -> bool {
             true
         }
     }
+}
+
+// The id that is chosen now for `setting`, in the summary of the agent ("" - none).
+fn AcpClient @current_of(setting str) -> str {
+    match Json.parse(@options_json()) {
+        Ok(value) => field_text(value, if setting == "model" { "model_id" } else { setting }) ?? ""
+        Err(e) => ""
+    }
+}
+
+// The choices of the owner kept for this session come back to the new agent: each one that differs from what the agent holds is asked for,
+// one the agent does not offer is dropped (the hub tells the owner).
+fn AcpClient mut @apply_presets() -> () {
+    ro list = @presets
+    @presets = []AcpPreset.new()
+    for p in list {
+        if @current_of(p.setting) == p.value { continue }
+        if !@send_set(p.setting, p.value, false) {
+            @dropped.push(AcpDrop { setting: p.setting, value: p.value, used: @current_of(p.setting) })
+        }
+    }
+}
+
+/// The choices of the owner for the agent that is just started (before `session/new` is answered); see `AcpPreset`.
+export fn AcpClient mut @set_presets(list []AcpPreset) -> () {
+    @presets = list
+}
+
+/// How many requests for a choice wait for the agent's answer.
+export fn AcpClient @sets_pending() -> int => @sets.len()
+
+/// The choices of the owner that the agent took since the last call (the hub writes them to the journal).
+export fn AcpClient mut @take_settled() -> []AcpPreset {
+    ro out = @settled
+    @settled = []AcpPreset.new()
+    out
+}
+
+/// The presets the agent does not offer, since the last call.
+export fn AcpClient mut @take_dropped() -> []AcpDrop {
+    ro out = @dropped
+    @dropped = []AcpDrop.new()
+    out
 }
 
 /// The choices now as the JSON object of the page event `session_model` (see `options_summary`).

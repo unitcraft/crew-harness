@@ -29,7 +29,9 @@ export fn signals_given_by_code() -> []CodeSignal => [
     cs("route_task", "input", "src/server/routes_hub.nv: Hub.rt_task_op (the task and its subtasks, trees, state)", "op and its fields (JSON text)", false),
     cs("route_step", "input", "src/server/routes_hub.nv: Hub.rt_step (the state of a step of the mode)", "n, state (JSON text)", false),
     cs("route_note", "input", "src/server/routes_hub.nv: Hub.rt_note (a line of the hub in the feed)", "text (JSON text)", false),
-    cs("route_review", "input", "src/server/routes_hub.nv: Hub.route_review_finish (the block of the independent review in the feed)", "family, step, text (JSON text)", false)
+    cs("route_review", "input", "src/server/routes_hub.nv: Hub.route_review_finish (the block of the independent review in the feed)", "family, step, text (JSON text)", false),
+    cs("setting_chosen", "input", "src/server/hub.nv: Hub.watch_agent (the agent took a choice of the owner)", "agent, setting, value, at (JSON text)", false),
+    cs("setting_dropped", "input", "src/server/hub.nv: Hub.watch_agent (the agent does not offer a saved choice any more)", "agent, setting, value, used (JSON text)", false)
 ]
 
 /// The signals that come from the agent (the client of ACP) and from the engine (the term).
