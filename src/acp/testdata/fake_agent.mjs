@@ -3,6 +3,7 @@
 // `--ask`: the agent says in its capabilities that it takes an HTTP MCP server (mcpCapabilities.http) and keeps the servers of session/new.
 // Answers `initialize` and `session/new`; what a `session/prompt` does depends on the first word of the prompt text:
 //   (anything else)  an echo in three chunks, then end_turn
+//   pwd              a chunk with the working folder of the process (the folder the agent was started in)
 //   tools            unknown update, tool_call, tool_call_update, plan, usage_update, thought, a chunk, end_turn
 //   permission       a tool_call, then session/request_permission; the chunk tells what the client decided
 //   fs               asks the client for fs/read_text_file and terminal/create; the chunk tells the error codes
@@ -98,6 +99,10 @@ async function prompt(id, params) {
     case "foreign-model": {
       update({ sessionUpdate: "config_option_update", configOptions: [{ id: "model", category: "model", type: "select", currentValue: "intruder", options: [{ value: "intruder", name: "Foreign Model" }] }] }, "foreign-session");
       chunk("foreign event ignored");
+      return respond(id, { stopReason: "end_turn" });
+    }
+    case "pwd": {
+      chunk("cwd: " + process.cwd());
       return respond(id, { stopReason: "end_turn" });
     }
     case "tools": {

@@ -64,6 +64,8 @@ fn kit_data_dir(name str) -> str {
 
 fn kit_settings(store str, name str, idle_ms int, pg PgConfig) -> ServerSettings {
     ro data_dir = kit_data_dir(name)
+    // the folder of the sessions is a plain folder, not a repository: in a repository the modes of work open a task with a tree of its own (task 192q)
+    ro work = write_file("${data_dir}/work/.keep", "")
     mut agents = []AgentSpec.new()
     agents.push(kit_agent("opencode", "--ok", "${data_dir}/stream-active"))
     agents.push(kit_agent("broken", "--auth-error", ""))
@@ -71,7 +73,7 @@ fn kit_settings(store str, name str, idle_ms int, pg PgConfig) -> ServerSettings
     agents.push(kit_agent("pictures", "--images", ""))
     ServerSettings {
         port: 8099, data_dir, store, pg, agents, idle_term_ms: idle_ms,
-        workdir: kit_repo_root().display(), web_dir: "src/web", machines_dir: tree_machines_dir(), hub_program: "", hub_args: []str.new(), acp_trace: false, ask_form: true, ask_timeout_ms: 1800000,
+        workdir: "${data_dir}/work", web_dir: "src/web", machines_dir: tree_machines_dir(), hub_program: "", hub_args: []str.new(), acp_trace: false, ask_form: true, ask_timeout_ms: 1800000,
         stt_url: "http://127.0.0.1:8178/inference", stt_language: "auto", max_image_bytes: 10485760,
         routes_dir: "doc/routes", route_reviewer_order: ["second"], route_task_limit: 12, route_task_messages: 40, route_fix_attempts: 2, route_worktree_ask: true, route_overlap_seconds: 30
     }
@@ -311,8 +313,18 @@ fn Rig @lines_in_mode(conn int, mode int) -> []str {
     out
 }
 
-/// The lines of the sessions one page has been told, in order (a message with an array is taken apart; the lines of the catalog are not among them).
-export fn Rig @lines_for(conn int) -> []str => @lines_in_mode(conn, 0)
+/// The lines of the sessions one page has been told, in order (a message with an array is taken apart; the lines of the catalog are not among
+/// them), without `route_state` (it is not a part of the story of the session).
+export fn Rig @lines_for(conn int) -> []str {
+    mut out = []str.new()
+    for line in @lines_in_mode(conn, 0) {
+        if line_field(line, "kind") != "route_state" { out.push(line) }
+    }
+    out
+}
+
+/// The same with the lines `route_state` (the mode of work, task 192q).
+export fn Rig @all_lines_for(conn int) -> []str => @lines_in_mode(conn, 0)
 
 /// The lines of the catalog of the families one page has been told, in order.
 export fn Rig @catalog_for(conn int) -> []str => @lines_in_mode(conn, 1)
