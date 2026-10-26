@@ -75,7 +75,13 @@ function callClient(method, params) {
 
 async function prompt(id, params) {
   const first = params.prompt && params.prompt[0];
-  const text = first && first.type === "text" ? first.text : "";
+  let text = first && first.type === "text" ? first.text : "";
+  // a note of the hub about the tool of questions comes before the first prompt: "[crew] ...", a blank line, the text of the owner
+  let hinted = false;
+  if (text.startsWith("[crew]") && text.includes("\n\n")) {
+    hinted = true;
+    text = text.slice(text.indexOf("\n\n") + 2);
+  }
   const word = text.split(" ")[0];
   switch (word) {
     case "model-change": {
@@ -114,6 +120,9 @@ async function prompt(id, params) {
       chunk("permission: " + told);
       return respond(id, { stopReason: told === "cancelled" ? "cancelled" : "end_turn" });
     }
+    case "hintseen":
+      chunk("hint: " + (hinted ? "yes" : "no"));
+      return respond(id, { stopReason: "end_turn" });
     case "ask":
     case "ask2": {
       if (!(clientCaps && clientCaps.elicitation && clientCaps.elicitation.form)) {

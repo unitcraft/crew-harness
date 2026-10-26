@@ -1,0 +1,277 @@
+// ask_mcp.nv - the MCP server of the questions of the hub (task 192i): the tool `ask_user_question` for the agents that have no tool of their own.
+//
+// Why: the four agents of the product ask the owner by their own tool (`elicitation/create`, see src/server/README.md, "Questions of the agent").
+// An agent that has none can be given this one: the hub starts a small MCP server on 127.0.0.1 and hands it over in `session/new`
+// (`mcpServers`, only when the agent says `mcpCapabilities.http`). The part below is pure functions: what the server answers to a JSON-RPC message
+// (`mcp_handle`) and what the agent is told for the answer of the owner (`ask_result_text`). The sockets are in `ask_mcp_server.nv`.
+//
+// What it speaks (the Streamable HTTP transport of MCP, the part that is needed): one JSON-RPC message in the body of a `POST`, one JSON answer in the
+// body of the reply (no stream); `initialize`, `ping`, `tools/list` and `tools/call` of the tool `ask_user_question`; a notification gets `202`.
+module crew_harness.server
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+/// McpOut: what the server does with one message. `kind`: `reply` (answer at once with `text`, the JSON of the answer), `none` (a notification: nothing to
+/// answer), `ask` (a call of the tool that waits for the owner: `id` is the JSON of the id of the call, `questions` the JSON of the questions, checked and
+/// written in the form of the page).
+export type McpOut { kind str, text str, id str, questions str }
+
+/// The name of the tool.
+export const ASK_TOOL = "ask_user_question"
+
+const MCP_PROTOCOL = "2025-03-26"
+
+fn mput(mut o JsonObject, key str, value JsonValue) -> () {
+    ro replaced = o.insert(key, value)
+}
+
+fn mget(v JsonValue, key str) -> Option[JsonValue] {
+    ro o = v.object()?
+    o.get(key)
+}
+
+fn mtext_of(v JsonValue, key str) -> str {
+    match mget(v, key) {
+        Some(x) => x.str() ?? ""
+        None => ""
+    }
+}
+
+fn mparse(text str) -> JsonValue {
+    match Json.parse(text) {
+        Ok(v) => v
+        Err(e) => panic("a constant that is not JSON: ${text}")
+    }
+}
+
+fn mout(kind str, text str) -> McpOut => { kind, text, id: "", questions: "" }
+
+fn rpc_ok(id JsonValue, result JsonValue) -> str {
+    mut o = JsonObject.new()
+    mput(o, "jsonrpc", JsonValue.str("2.0"))
+    mput(o, "id", id)
+    mput(o, "result", result)
+    JsonValue.object(o).to_str()
+}
+
+/// The answer of the server for a JSON-RPC error.
+export fn mcp_error_reply(id JsonValue, code int, message str) -> str {
+    mut e = JsonObject.new()
+    mput(e, "code", JsonValue.int(code))
+    mput(e, "message", JsonValue.str(message))
+    mut o = JsonObject.new()
+    mput(o, "jsonrpc", JsonValue.str("2.0"))
+    mput(o, "id", id)
+    mput(o, "error", JsonValue.object(e))
+    JsonValue.object(o).to_str()
+}
+
+/// The answer to a call of the tool: a text; `is_error` marks a result that is the failure of the tool (the agent reads it and goes on).
+export fn mcp_text_reply(id JsonValue, text str, is_error bool) -> str {
+    mut block = JsonObject.new()
+    mput(block, "type", JsonValue.str("text"))
+    mput(block, "text", JsonValue.str(text))
+    mut result = JsonObject.new()
+    mput(result, "content", JsonValue.array([JsonValue.object(block)]))
+    mput(result, "isError", JsonValue.bool(is_error))
+    rpc_ok(id, JsonValue.object(result))
+}
+
+fn tool_json() -> JsonValue {
+    mparse("{\"name\":\"ask_user_question\",\"description\":\"Ask the user a question with a choice of options and wait for the answer. Use it whenever you need to clarify something or to choose between variants - do not write the question as plain text. Several questions may be asked at once. The result is the text of each question with the answer of the user, or a note that the user skipped it.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"questions\":{\"type\":\"array\",\"minItems\":1,\"description\":\"The questions to ask.\",\"items\":{\"type\":\"object\",\"properties\":{\"question\":{\"type\":\"string\",\"description\":\"The text of the question.\"},\"header\":{\"type\":\"string\",\"description\":\"A short title of the question (a few words).\"},\"multiSelect\":{\"type\":\"boolean\",\"description\":\"True if the user may choose several options.\"},\"options\":{\"type\":\"array\",\"description\":\"The options to choose from.\",\"items\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"The text of the option.\"},\"description\":{\"type\":\"string\",\"description\":\"What the option means.\"}},\"required\":[\"label\"]}}},\"required\":[\"question\",\"options\"]}}},\"required\":[\"questions\"]}}")
+}
+
+fn initialize_reply(id JsonValue, params JsonValue) -> str {
+    ro asked = mtext_of(params, "protocolVersion")
+    ro known = asked == "2025-03-26" || asked == "2025-06-18" || asked == "2024-11-05"
+    mut caps = JsonObject.new()
+    mut tools = JsonObject.new()
+    mput(tools, "listChanged", JsonValue.bool(false))
+    mput(caps, "tools", JsonValue.object(tools))
+    mut info = JsonObject.new()
+    mput(info, "name", JsonValue.str("crew"))
+    mput(info, "version", JsonValue.str("0.1.0"))
+    mut result = JsonObject.new()
+    mput(result, "protocolVersion", JsonValue.str(if known { asked } else { MCP_PROTOCOL }))
+    mput(result, "capabilities", JsonValue.object(caps))
+    mput(result, "serverInfo", JsonValue.object(info))
+    rpc_ok(id, JsonValue.object(result))
+}
+
+// One option of the page from an option of the agent: a text, or an object with a `label`; None - it is none of them.
+fn option_of(item JsonValue) -> Option[JsonValue] {
+    mut o = JsonObject.new()
+    match item.str() {
+        Some(label) => {
+            if label.byte_len() == 0 { return None }
+            mput(o, "label", JsonValue.str(label))
+            mput(o, "description", JsonValue.str(""))
+            return Some(JsonValue.object(o))
+        }
+        None => ()
+    }
+    ro label = mtext_of(item, "label")
+    if label.byte_len() == 0 { return None }
+    mput(o, "label", JsonValue.str(label))
+    mput(o, "description", JsonValue.str(mtext_of(item, "description")))
+    Some(JsonValue.object(o))
+}
+
+// The questions of the arguments of a call in the form of the page, or the reason they are not good.
+fn questions_of(arguments JsonValue) -> Result[JsonValue, str] {
+    ro list = match mget(arguments, "questions") {
+        Some(l) => match l.array() {
+            Some(items) => items
+            None => return Err("ask_user_question: the argument questions must be a list")
+        }
+        None => return Err("ask_user_question: the argument questions is missing")
+    }
+    if list.len() == 0 { return Err("ask_user_question: the list questions is empty") }
+    if list.len() > 8 { return Err("ask_user_question: at most 8 questions at once") }
+    mut out = []JsonValue.new()
+    for item in list {
+        ro text = mtext_of(item, "question")
+        if text.byte_len() == 0 { return Err("ask_user_question: every question needs the text in question") }
+        mut options = []JsonValue.new()
+        match mget(item, "options") {
+            Some(l) => match l.array() {
+                Some(entries) => {
+                    for entry in entries {
+                        match option_of(entry) {
+                            Some(option) => options.push(option)
+                            None => return Err("ask_user_question: every option needs a label (question: ${text})")
+                        }
+                    }
+                }
+                None => return Err("ask_user_question: options must be a list (question: ${text})")
+            }
+            None => ()
+        }
+        mut q = JsonObject.new()
+        mput(q, "question", JsonValue.str(text))
+        mput(q, "header", JsonValue.str(mtext_of(item, "header")))
+        mput(q, "multiSelect", JsonValue.bool((match mget(item, "multiSelect") {
+            Some(f) => f.bool() ?? false
+            None => false
+        })))
+        mput(q, "options", JsonValue.array(options))
+        out.push(JsonValue.object(q))
+    }
+    Ok(JsonValue.array(out))
+}
+
+/// What the server does with the body of one `POST`.
+export fn mcp_handle(body str) -> McpOut {
+    ro message = match Json.parse(body) {
+        Ok(v) => v
+        Err(e) => return mout("reply", mcp_error_reply(JsonValue.null(), -32700, "parse error"))
+    }
+    ro method = mtext_of(message, "method")
+    ro has_id = match mget(message, "id") {
+        Some(i) => !i.is_null()
+        None => false
+    }
+    if !has_id {
+        // a notification (`notifications/initialized`, `notifications/cancelled`): nothing to answer
+        return mout("none", "")
+    }
+    ro id = match mget(message, "id") {
+        Some(i) => i
+        None => JsonValue.null()
+    }
+    ro params = match mget(message, "params") {
+        Some(p) => p
+        None => JsonValue.null()
+    }
+    if method == "initialize" { return mout("reply", initialize_reply(id, params)) }
+    if method == "ping" { return mout("reply", rpc_ok(id, JsonValue.object(JsonObject.new()))) }
+    if method == "tools/list" {
+        mut result = JsonObject.new()
+        mput(result, "tools", JsonValue.array([tool_json()]))
+        return mout("reply", rpc_ok(id, JsonValue.object(result)))
+    }
+    if method == "tools/call" {
+        if mtext_of(params, "name") != ASK_TOOL {
+            return mout("reply", mcp_text_reply(id, "unknown tool: ${mtext_of(params, "name")}; the only tool is ${ASK_TOOL}", true))
+        }
+        ro arguments = match mget(params, "arguments") {
+            Some(a) => a
+            None => JsonValue.null()
+        }
+        match questions_of(arguments) {
+            Err(reason) => return mout("reply", mcp_text_reply(id, reason, true))
+            Ok(questions) => return { kind: "ask", text: "", id: id.to_str(), questions: questions.to_str() }
+        }
+    }
+    mout("reply", mcp_error_reply(id, -32601, "method not found: ${method}"))
+}
+
+fn answer_entry(answer JsonValue, index int) -> JsonValue {
+    match mget(answer, "answers") {
+        Some(list) => match list.array() {
+            Some(items) => {
+                mut at = 0
+                for item in items {
+                    ro named = match mget(item, "index") {
+                        Some(n) => n.int() ?? at
+                        None => at
+                    }
+                    if named == index { return item }
+                    at += 1
+                }
+                JsonValue.null()
+            }
+            None => JsonValue.null()
+        }
+        None => JsonValue.null()
+    }
+}
+
+fn chosen_labels(entry JsonValue) -> []str {
+    mut out = []str.new()
+    match mget(entry, "selected") {
+        Some(list) => match list.array() {
+            Some(items) => {
+                for item in items {
+                    match item.str() {
+                        Some(s) => out.push(s)
+                        None => ()
+                    }
+                }
+            }
+            None => ()
+        }
+        None => ()
+    }
+    out
+}
+
+/// The text the agent gets for the answer of the owner (`{request, skipped, answers:[{index, selected:[label], other}]}`) to the questions it asked.
+export fn ask_result_text(questions JsonValue, answer JsonValue) -> str {
+    ro list = match questions.array() {
+        Some(items) => items
+        None => []JsonValue.new()
+    }
+    ro skipped_word = if list.len() > 1 { "Пользователь пропустил вопросы." } else { "Пользователь пропустил вопрос." }
+    match mget(answer, "skipped") {
+        Some(flag) => { if flag.bool() ?? false { return skipped_word } }
+        None => ()
+    }
+    mut parts = []str.new()
+    mut anything = false
+    mut index = 0
+    for q in list {
+        ro entry = answer_entry(answer, index)
+        ro labels = chosen_labels(entry)
+        ro other = mtext_of(entry, "other").trim_ascii()
+        mut reply = labels.join(", ")
+        if other.byte_len() > 0 {
+            reply = if reply.byte_len() > 0 { "${reply}; свой ответ: ${other}" } else { "свой ответ: ${other}" }
+        }
+        if reply.byte_len() > 0 { anything = true } else { reply = "(не выбран)" }
+        parts.push("Вопрос: ${mtext_of(q, "question")}\nОтвет: ${reply}")
+        index += 1
+    }
+    if !anything { return skipped_word }
+    parts.join("\n\n")
+}

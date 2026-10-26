@@ -449,7 +449,7 @@ test "agent: cancel answers open permissions cancelled" {
 // ----- the questions of the agent (task 192i) -----
 
 fn start_asking(extra []str, form bool) Proc Detach Time -> AcpClient {
-    ro setup AskSetup = { form, mcp_url: "", mcp_token: "" }
+    ro setup AskSetup = { form, mcp_url: "", mcp_token: "", hint: "" }
     match open_client_asking(fake_config(extra), "", 0, setup) {
         Ok(c) => c
         Err(e) => panic("cannot start the fake agent: ${e}")
@@ -558,7 +558,7 @@ test "agent: a cancel of the turn cancels the open question and tells the page" 
 }
 
 test "agent: the server of questions goes to session/new only to an agent that takes an HTTP MCP server" {
-    ro setup AskSetup = { form: true, mcp_url: "http://127.0.0.1:1/mcp/t1", mcp_token: "tok" }
+    ro setup AskSetup = { form: true, mcp_url: "http://127.0.0.1:1/mcp/t1", mcp_token: "tok", hint: "[crew] use ask_user_question" }
     mut with_http = match open_client_asking(fake_config(["--ask"]), "", 0, setup) {
         Ok(c) => c
         Err(e) => panic("cannot start the fake agent: ${e}")
@@ -569,8 +569,22 @@ test "agent: the server of questions goes to session/new only to an agent that t
         // the fake agent reaches the address (nobody listens there): it got the server in session/new, the call itself fails
         assert(!text_of(events).contains("no-server"))
         assert(with_http.takes_mcp_http())
+        // the note about the tool went before that first prompt, and only before it
+        Link.send(req("agent-2", "hintseen"))
+        ro second = collect_turn(10000)
+        assert(text_of(second) == "hint: no")
     }
     with_http.close()
+    mut hinted = match open_client_asking(fake_config(["--ask"]), "", 0, setup) {
+        Ok(c) => c
+        Err(e) => panic("cannot start the fake agent: ${e}")
+    }
+    with Link = acp_link(hinted) {
+        Link.send(req("agent-1", "hintseen"))
+        ro first = collect_turn(10000)
+        assert(text_of(first) == "hint: yes")
+    }
+    hinted.close()
     mut without = match open_client_asking(fake_config([]), "", 0, setup) {
         Ok(c) => c
         Err(e) => panic("cannot start the fake agent: ${e}")
@@ -583,6 +597,10 @@ test "agent: the server of questions goes to session/new only to an agent that t
         ro notes = with_name(events, "acp_note")
         assert(notes.len() == 1)
         assert(notes[0].input.contains("does not take an HTTP MCP server"))
+        // no server, no note: the agent is not told about a tool it does not have
+        Link.send(req("agent-2", "hintseen"))
+        ro second = collect_turn(10000)
+        assert(text_of(second) == "hint: no")
     }
     without.close()
 }

@@ -8,7 +8,7 @@
 //   max_image_bytes (the largest picture of a message, 10 MB by default; env CREW_SERVER_MAX_IMAGE_BYTES)
 // The environment is over the file, key by key:
 //   CREW_SERVER_PORT, CREW_SERVER_STORE, CREW_SERVER_DATA_DIR, CREW_SERVER_AGENT (the command of the one agent "opencode",
-//   words separated by spaces), CREW_SERVER_WORKDIR, CREW_SERVER_WEB_DIR, CREW_SERVER_ACP_TRACE (true/false), CREW_SERVER_ASK_FORM (true/false), CREW_SERVER_ASK_TIMEOUT_SECONDS, CREW_SERVER_STT_URL, CREW_SERVER_STT_LANGUAGE, CREW_SERVER_IDLE_SECONDS, CREW_SERVER_HUB (the command
+//   words separated by spaces), CREW_SERVER_WORKDIR, CREW_SERVER_WEB_DIR, CREW_SERVER_MACHINES_DIR, CREW_SERVER_ACP_TRACE (true/false), CREW_SERVER_ASK_FORM (true/false), CREW_SERVER_ASK_TIMEOUT_SECONDS, CREW_SERVER_STT_URL, CREW_SERVER_STT_LANGUAGE, CREW_SERVER_IDLE_SECONDS, CREW_SERVER_HUB (the command
 //   that starts the hub, words separated by spaces) and the CREW_PG_* variables of `crew_harness.pgconf`.
 // The file is named by the argument or, when that is empty, by CREW_SERVER_CONFIG. The password lives in the environment or in a
 // file outside the repository; it is in no error and no description.

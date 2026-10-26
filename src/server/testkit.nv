@@ -81,6 +81,25 @@ fn kit_no_pg() -> PgConfig => { host: "127.0.0.1", port: 5432, database: "crew",
 /// The settings of a hub over files in a folder of its own, with the fake agent and the idle term of a turn.
 export fn kit_files(name str, idle_ms int) -> ServerSettings => kit_settings("files", name, idle_ms, kit_no_pg())
 
+/// The settings of a hub over files whose agent `opencode` takes the MCP tool of the questions (`ask: mcp`) and says it can use an HTTP server (`--ask` of the fake agent).
+export fn kit_files_mcp(name str, idle_ms int, ask_timeout_ms int) -> ServerSettings {
+    mut settings = kit_files(name, idle_ms)
+    mut agents = []AgentSpec.new()
+    for a in settings.agents {
+        if a.id == "opencode" {
+            mut args = []str.new()
+            for word in a.args { args.push(word) }
+            args.push("--ask")
+            agents.push(AgentSpec { id: a.id, label: a.label, program: a.program, args, ask: "mcp" })
+        } else {
+            agents.push(a)
+        }
+    }
+    settings.agents = agents
+    settings.ask_timeout_ms = ask_timeout_ms
+    settings
+}
+
 /// The settings of a hub over PostgreSQL (the connection of the test database), the inbox files in a folder of its own.
 export fn kit_pg(name str, idle_ms int, pg PgConfig) -> ServerSettings => kit_settings("pg", name, idle_ms, pg)
 
@@ -558,6 +577,73 @@ export fn scenario_question(settings ServerSettings) Proc Detach Time Net Fs Os 
     c.expect(rig.hub.takes_message("s-ask"), "the session is open after the cancel")
     rig.run(300)
     c.expect(kit_with(rig.lines_for(1), "\"kind\":\"question_resolved\"") == 3, "each question is settled once")
+    rig.shut()
+    c.report()
+}
+
+/// The agent asks through the MCP tool of the hub (task 192i): the tool is handed over in `session/new`, the call waits for the owner, the answer is the text of the
+/// tool; a skip and a cancelled turn are told to the agent, the page takes the form away each time.
+export fn scenario_question_mcp(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    c.expect(rig.hub.mcp_address("s-mcp").starts_with("http://127.0.0.1:"), "the MCP server listens on the loopback")
+    c.expect(rig.hub.mcp_token().byte_len() >= 32, "the token is long")
+    rig.attach(1)
+    rig.page(1, "session_created", "s-mcp", "{\"name\":\"MCP\",\"agent\":\"opencode\"}")
+    rig.page(1, "user_message", "s-mcp", "{\"turn\":\"t1\",\"text\":\"askmcp go\"}")
+    c.expect(rig.until("\"kind\":\"question_request\"", 20000), "the question of the tool is shown")
+    ro asked = first_of(rig.lines_for(1), "question_request", 0)
+    ro request = line_input(asked, "request")
+    c.expect(request.starts_with("mcp-"), "the key of the question")
+    c.expect(asked.contains("Какой формат?") && asked.contains("YAML"), "the question has its text and its options")
+    c.expect(!rig.hub.takes_message("s-mcp"), "the turn waits for the owner")
+    rig.page(1, "question_answer", "s-mcp", "{\"request\":\"${request}\",\"skipped\":false,\"answers\":[{\"index\":0,\"selected\":[\"YAML\"],\"other\":\"\"}]}")
+    c.expect(rig.until(KIT_DONE, 20000), "the turn ends after the answer")
+    ro lines = rig.lines_for(1)
+    c.expect(kit_with(lines, "ask_user_question") >= 1 && kit_with(lines, "YAML") >= 2, "the agent saw the tool and got the choice")
+    c.expect(kit_with(lines, "\"kind\":\"question_resolved\"") == 1, "the page is told the question is settled")
+    // skipped
+    rig.page(1, "user_message", "s-mcp", "{\"turn\":\"t2\",\"text\":\"askmcp again\"}")
+    c.expect(rig.until("\"kind\":\"question_request\"", 20000), "the second question is shown")
+    mut second = ""
+    mut seen = 0
+    for line in rig.lines_for(1) {
+        if line_field(line, "kind") == "question_request" {
+            seen += 1
+            if seen == 2 { second = line_input(line, "request") }
+        }
+    }
+    c.expect(second.starts_with("mcp-") && second != request, "the second question has a key of its own")
+    rig.page(1, "question_answer", "s-mcp", "{\"request\":\"${second}\",\"skipped\":true}")
+    c.expect(rig.until(KIT_DONE, 20000), "the second turn ends")
+    c.expect(kit_with(rig.lines_for(1), "пропустил") == 1, "the agent was told: skipped")
+    // an answer nobody asked for changes nothing
+    ro before = rig.lines_for(1).len()
+    rig.page(1, "question_answer", "s-mcp", "{\"request\":\"mcp-999\",\"skipped\":true}")
+    rig.run(150)
+    c.expect(rig.lines_for(1).len() == before, "an answer nobody asked for is not shown")
+    // a cancel takes the form away
+    rig.page(1, "user_message", "s-mcp", "{\"turn\":\"t3\",\"text\":\"askmcp third\"}")
+    c.expect(rig.until("\"kind\":\"question_request\"", 20000), "the third question is shown")
+    rig.page(1, "cancel", "s-mcp", "{}")
+    c.expect(rig.until("\"kind\":\"question_resolved\"", 5000), "a cancelled turn settles the question")
+    c.expect(rig.until("\"kind\":\"cancel\"", 5000), "the cancel is shown")
+    c.expect(rig.hub.takes_message("s-mcp"), "the session is open after the cancel")
+    rig.shut()
+    c.report()
+}
+
+/// A question of the tool that nobody answers in time: the agent is told the term passed and the page takes the form away.
+export fn scenario_question_mcp_timeout(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-mcpt", "{\"name\":\"MCP term\",\"agent\":\"opencode\"}")
+    rig.page(1, "user_message", "s-mcpt", "{\"turn\":\"t1\",\"text\":\"askmcp go\"}")
+    c.expect(rig.until("\"kind\":\"question_request\"", 20000), "the question is shown")
+    c.expect(rig.until("\"kind\":\"question_resolved\"", 20000), "the term passed: the form is taken away")
+    c.expect(rig.until(KIT_DONE, 20000), "the turn goes on and ends")
+    c.expect(kit_with(rig.lines_for(1), "таймаут ожидания ответа") == 1, "the agent was told: the term passed")
     rig.shut()
     c.report()
 }

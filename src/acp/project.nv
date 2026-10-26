@@ -615,6 +615,11 @@ fn page_input_of(e Incoming, turn str) -> Option[PageInput] {
                 ro value = object_input(e)?
                 return page_input("permission_decision", value)
             }
+            // a question of the tool of the hub (task 192i): it is the hub's own event, not the agent's
+            if e.name == "question_request" {
+                ro value = object_input(e)?
+                return question_input(value, turn)
+            }
             // the answer of the owner to a question of the agent (task 192i): the page only needs to know that it is settled
             if e.name == "question_answer" {
                 ro value = object_input(e)?
