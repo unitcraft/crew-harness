@@ -1,14 +1,16 @@
 // boot-guard.js — страж запуска (задача 192). Обычный скрипт, не модуль: грузится первым и живёт, даже если модули
 // страницы не загрузились или упали при старте. Любая ошибка запуска (исключение, необработанный отказ промиса, модуль,
-// который не разобрался или не нашёлся, страница, что не заявила «запущена» за BOOT_WAIT_MS) показывается видимым блоком
+// который не разобрался или не нашёлся) показывается видимым красным блоком
 // «Ошибка запуска: …» с кнопкой «Сбросить локальные данные и перезагрузить», а не пустым экраном.
+// Долгий старт (страница не заявила «запущена» за BOOT_WAIT_MS, 20 с) — не ошибка: нейтральная строка с кнопкой «Подождать».
 // Только то, что умеют старые Chromium: без ?., ??, let над var не обязательно, стили — через CSSOM (CSP запрещает style="").
 (function crewBootGuard(global) {
-  var BOOT_WAIT_MS = 5000;
+  var BOOT_WAIT_MS = 20000;
   var OUR_KEY = /^crew-/;
   var RETRY_KEY = 'crew-boot-retry';
   var RETRY_MS = 1000;
   var shown = false;
+  var slow = null;
 
   function clearOurStorage() {
     ['localStorage', 'sessionStorage'].forEach(function (name) {
@@ -50,6 +52,30 @@
     doc.body.appendChild(box);
   }
 
+  // Долгий старт — не ошибка: нейтральная строка с кнопкой «Подождать», без красного блока и без role=alert
+  function showSlow() {
+    var doc = global.document;
+    if (shown || slow || !doc || !doc.body) return;
+    var box = doc.createElement('div');
+    box.id = 'boot-slow';
+    var s = box.style;
+    s.position = 'fixed'; s.left = '0'; s.right = '0'; s.top = '0'; s.zIndex = '2147483646';
+    s.padding = '12px 16px'; s.background = '#f1f1f1'; s.color = '#333'; s.font = '14px/1.4 system-ui, sans-serif';
+    var text = doc.createElement('span');
+    text.textContent = 'Страница запускается дольше обычного\u2026 ';
+    var button = doc.createElement('button');
+    button.type = 'button';
+    button.textContent = 'Подождать';
+    button.style.marginLeft = '8px';
+    button.addEventListener('click', function () {
+      if (box.parentNode) box.parentNode.removeChild(box);
+    });
+    box.appendChild(text);
+    box.appendChild(button);
+    doc.body.appendChild(box);
+    slow = box;
+  }
+
   function messageOf(value) {
     if (value && value.message) return value.message;
     return String(value);
@@ -81,6 +107,6 @@
   // страница объявляет себя запущенной атрибутом data-booted (app.js): нет его за срок — значит, модуль не стартовал
   global.setTimeout(function () {
     var root = global.document && global.document.documentElement;
-    if (root && root.getAttribute('data-booted') !== '1') show('страница не запустилась за ' + (BOOT_WAIT_MS / 1000) + ' с (проверьте консоль браузера)');
+    if (root && root.getAttribute('data-booted') !== '1') showSlow();
   }, BOOT_WAIT_MS);
 }(typeof window !== 'undefined' ? window : globalThis));

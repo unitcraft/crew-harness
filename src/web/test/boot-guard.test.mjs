@@ -55,13 +55,23 @@ test('window error и unhandledrejection попадают в тот же бло�
   assert.match(textOf(b.body.children[0]), /отказ промиса/);
 });
 
-test('страница не объявила «запущена» за срок: блок; объявила — тишина', () => {
+test('страница не объявила «запущена» за 20 с: нейтральная строка «запускается дольше обычного» с кнопкой «Подождать», не красный блок; объявила — тишина', () => {
   const quiet = boot({ booted: true });
   quiet.timers[0].fn();
   assert.equal(quiet.body.children.length, 0);
   const loud = boot({ booted: false });
+  assert.equal(loud.timers[0].ms, 20000);
   loud.timers[0].fn();
-  assert.match(textOf(loud.body.children[0]), /не запустилась/);
+  const block = loud.body.children[0];
+  assert.equal(block.id, 'boot-slow');
+  assert.match(textOf(block), /Страница запускается дольше обычного/);
+  assert.notEqual(block.attrs.role, 'alert');
+  assert.ok(!/Ошибка запуска/.test(textOf(block)));
+  assert.match(textOf(block), /Подождать/);
+  // красный блок настоящей ошибки по-прежнему появляется поверх
+  loud.win.__crewBootError('настоящая ошибка');
+  assert.equal(loud.body.children.length, 2);
+  assert.match(textOf(loud.body.children[1]), /Ошибка запуска: настоящая ошибка/);
 });
 
 test('кнопка сброса чистит только наши ключи (crew-…) и перезагружает страницу', () => {
@@ -124,4 +134,12 @@ test('не загрузилась картинка или стили — не о
   assert.equal(a.body.children.length, 0);
   a.handlers.error({ target: a.win, message: 'boom' });
   assert.match(textOf(a.body.children[0]), /boom/);
+});
+
+test('app.js ставит data-booted сразу при старте, до ожидания списка агентов и соединения', () => {
+  const src = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
+  const start = src.indexOf('async function start() {');
+  const flag = src.indexOf("setAttribute('data-booted', '1')", start);
+  const firstAwait = src.indexOf('await ', start);
+  assert.ok(flag > start && flag < firstAwait, 'признак ставится раньше первого await');
 });

@@ -166,6 +166,8 @@ function reportError(e) {
 
 const picked = chooseMode(location.search, location.protocol, location.host);
 async function start() {
+  // каркас страницы уже в index.html, модули загружены и выполняются: старт состоялся, а ожидание списка агентов и соединения — не повод для тревоги
+  document.documentElement.setAttribute('data-booted', '1');
   // mock.js (заготовленный журнал) грузится ТОЛЬКО в режиме ?mock=1: реальной странице он не нужен, и сбой его загрузки её не роняет.
   let mock = null;
   let agents = [];
