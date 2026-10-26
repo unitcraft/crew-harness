@@ -78,7 +78,7 @@ export fn mcp_text_reply(id JsonValue, text str, is_error bool) -> str {
 }
 
 fn tool_json() -> JsonValue {
-    mparse("{\"name\":\"ask_user_question\",\"description\":\"Ask the user a question with a choice of options and wait for the answer. Use it whenever you need to clarify something or to choose between variants - do not write the question as plain text. Several questions may be asked at once. The result is the text of each question with the answer of the user, or a note that the user skipped it.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"questions\":{\"type\":\"array\",\"minItems\":1,\"description\":\"The questions to ask.\",\"items\":{\"type\":\"object\",\"properties\":{\"question\":{\"type\":\"string\",\"description\":\"The text of the question.\"},\"header\":{\"type\":\"string\",\"description\":\"A short title of the question (a few words).\"},\"multiSelect\":{\"type\":\"boolean\",\"description\":\"True if the user may choose several options.\"},\"options\":{\"type\":\"array\",\"description\":\"The options to choose from.\",\"items\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"The text of the option.\"},\"description\":{\"type\":\"string\",\"description\":\"What the option means.\"}},\"required\":[\"label\"]}}},\"required\":[\"question\",\"options\"]}}},\"required\":[\"questions\"]}}")
+    mparse("{\"name\":\"ask_user_question\",\"description\":\"Ask the user a question with a choice of options and wait for the answer. Use it whenever you need to ask the user to clarify something or to choose between variants - do not write the question as plain text. Give one question in the arguments themselves (question or title, options) or several in questions. The result is the text of each question with the answer of the user, or a note that the user skipped it.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"question\":{\"type\":\"string\",\"description\":\"The text of the question (when one question is asked).\"},\"title\":{\"type\":\"string\",\"description\":\"A short title; also taken as the text of the question when question is not given.\"},\"header\":{\"type\":\"string\",\"description\":\"A short title of the question (a few words), optional.\"},\"multiSelect\":{\"type\":\"boolean\",\"description\":\"True if the user may choose several options.\"},\"options\":{\"type\":\"array\",\"description\":\"The options to choose from: strings, or objects with label and description.\",\"items\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"}}}]}},\"questions\":{\"type\":\"array\",\"description\":\"Several questions at once; each has the same fields as above.\",\"items\":{\"type\":\"object\",\"properties\":{\"question\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"header\":{\"type\":\"string\"},\"multiSelect\":{\"type\":\"boolean\"},\"options\":{\"type\":\"array\",\"items\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"}}}]}}}}}}}}")
 }
 
 fn initialize_reply(id JsonValue, params JsonValue) -> str {
@@ -110,28 +110,40 @@ fn option_of(item JsonValue) -> Option[JsonValue] {
         }
         None => ()
     }
-    ro label = mtext_of(item, "label")
+    mut label = mtext_of(item, "label")
+    if label.byte_len() == 0 { label = mtext_of(item, "title") }
+    if label.byte_len() == 0 { label = mtext_of(item, "text") }
+    if label.byte_len() == 0 { label = mtext_of(item, "value") }
     if label.byte_len() == 0 { return None }
     mput(o, "label", JsonValue.str(label))
     mput(o, "description", JsonValue.str(mtext_of(item, "description")))
     Some(JsonValue.object(o))
 }
 
-// The questions of the arguments of a call in the form of the page, or the reason they are not good.
+// The questions of the arguments of a call in the form of the page, or the reason they are not good. Tolerant: `questions` is a list, or the question is in the
+// arguments themselves; the text is `question` or `title`; options are strings or objects; whatever else is given is ignored, not refused.
 fn questions_of(arguments JsonValue) -> Result[JsonValue, str] {
-    ro list = match mget(arguments, "questions") {
+    mut list = []JsonValue.new()
+    match mget(arguments, "questions") {
         Some(l) => match l.array() {
-            Some(items) => items
-            None => return Err("ask_user_question: the argument questions must be a list")
+            Some(items) => { for x in items { list.push(x) } }
+            None => ()
         }
-        None => return Err("ask_user_question: the argument questions is missing")
+        None => ()
     }
-    if list.len() == 0 { return Err("ask_user_question: the list questions is empty") }
+    if list.len() == 0 && (mtext_of(arguments, "question").byte_len() > 0 || mtext_of(arguments, "title").byte_len() > 0 || mtext_of(arguments, "header").byte_len() > 0) {
+        list.push(arguments)
+    }
+    if list.len() == 0 { return Err("ask_user_question: give a question (question or title, options) or a list questions") }
     if list.len() > 8 { return Err("ask_user_question: at most 8 questions at once") }
     mut out = []JsonValue.new()
     for item in list {
-        ro text = mtext_of(item, "question")
-        if text.byte_len() == 0 { return Err("ask_user_question: every question needs the text in question") }
+        mut text = mtext_of(item, "question")
+        mut header = mtext_of(item, "header")
+        if text.byte_len() == 0 { text = mtext_of(item, "title") }
+        if text.byte_len() == 0 { text = header }
+        if text.byte_len() == 0 { return Err("ask_user_question: every question needs the text in question (or title)") }
+        if header == text { header = "" }
         mut options = []JsonValue.new()
         match mget(item, "options") {
             Some(l) => match l.array() {
@@ -139,17 +151,17 @@ fn questions_of(arguments JsonValue) -> Result[JsonValue, str] {
                     for entry in entries {
                         match option_of(entry) {
                             Some(option) => options.push(option)
-                            None => return Err("ask_user_question: every option needs a label (question: ${text})")
+                            None => ()
                         }
                     }
                 }
-                None => return Err("ask_user_question: options must be a list (question: ${text})")
+                None => ()
             }
             None => ()
         }
         mut q = JsonObject.new()
         mput(q, "question", JsonValue.str(text))
-        mput(q, "header", JsonValue.str(mtext_of(item, "header")))
+        mput(q, "header", JsonValue.str(header))
         mput(q, "multiSelect", JsonValue.bool((match mget(item, "multiSelect") {
             Some(f) => f.bool() ?? false
             None => false

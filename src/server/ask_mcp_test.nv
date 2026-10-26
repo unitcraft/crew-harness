@@ -70,6 +70,8 @@ test "mcp: tools/list names the tool and describes its arguments" {
     ro schema = mkey(tool, "inputSchema")
     assert(mtext(schema, "type") == "object")
     assert(mkey(mkey(schema, "properties"), "questions").is_object())
+    assert(mkey(mkey(schema, "properties"), "title").is_object())
+    assert(mkey(schema, "required").is_null())
 }
 
 test "mcp: a call with good arguments waits for the owner" {
@@ -87,9 +89,23 @@ test "mcp: a call with no questions or an option with no label is an error the a
     ro result = mkey(mj(none.text), "result")
     assert(mkey(result, "isError").bool() == Some(true))
     assert(mtext(mfirst(mkey(result, "content")), "text").contains("questions"))
-    ro bad = mcp_handle(call_text("{\"questions\":[{\"question\":\"q\",\"options\":[{\"description\":\"d\"}]}]}"))
+    ro bad = mcp_handle(call_text("{\"questions\":[{\"options\":[\"a\"]}]}"))
     assert(bad.kind == "reply")
     assert(mkey(mkey(mj(bad.text), "result"), "isError").bool() == Some(true))
+}
+
+test "mcp: one question in the arguments themselves, with a title instead of question, options of both forms, and extra fields, is accepted" {
+    ro out = mcp_handle(call_text("{\"title\":\"Какой цвет?\",\"options\":[\"синий\",{\"label\":\"красный\",\"description\":\"тёплый\"},{\"title\":\"зелёный\"},{\"x\":1}],\"extra\":true}"))
+    assert(out.kind == "ask")
+    ro q = mfirst(mj(out.questions))
+    assert(mtext(q, "question") == "Какой цвет?")
+    assert(mtext(q, "header") == "")
+    ro options = mkey(q, "options")
+    assert((options.array() ?? []JsonValue.new()).len() == 3)
+    assert(mtext(mfirst(options), "label") == "синий")
+    ro both = mcp_handle(call_text("{\"question\":\"Что?\",\"header\":\"Кратко\",\"options\":[\"a\"]}"))
+    assert(both.kind == "ask")
+    assert(mtext(mfirst(mj(both.questions)), "header") == "Кратко")
 }
 
 test "mcp: a question may be asked with the options given as plain strings" {

@@ -231,6 +231,8 @@ fn Hub mut @route_on_message(at int, text str) Proc Detach Time -> str {
     for sub in s.rt.subs {
         if sub.n == last && (sub.done || sub.merged) { marked = true }
     }
+    // A mode without steps keeps no journal of messages: a later message neither adds a subtask nor writes `message.N.md` (the agent recognises real work, task 192).
+    if prog.total == 0 && s.rt.force == "" { return "" }
     if subtask_extends(s.rt.force, last > 0, prog.total, prog.done, marked) {
         ro appended = append_file("${s.rt.task_dir}/message.${last}.md", message_addition_text(text, now_millis()))
         mut o = JsonObject.new()
