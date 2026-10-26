@@ -14,15 +14,6 @@ fn kit_slashes(path str) -> str {
     raw.to_str_lossy()
 }
 
-fn kit_file_text(path str) -> str {
-    with Fs = real_fs() {
-        match read_text(Path.from_bytes(path.bytes())) {
-            Ok(t) => t
-            Err(e) => ""
-        }
-    }
-}
-
 fn kit_json_object(text str) -> JsonObject {
     match Json.parse(text) {
         Ok(v) => match v.object() {
@@ -80,8 +71,8 @@ export fn scenario_project(settings ServerSettings) Proc Detach Time Net Fs Os -
     ro created = first_of(rig.lines_for(1), "session_created", 0)
     c.expect(line_input(created, "project_id") == id, "the page line names the project")
     c.expect(line_input(created, "folder") == folder, "the page line names the folder of the project")
-    ro journal = kit_file_text("${settings.data_dir}/s-proj.journal")
-    ro snapshot = kit_file_text("${settings.data_dir}/s-proj.snapshot")
+    ro journal = kit_file_text(kit_session_file(settings, "s-proj", "journal"))
+    ro snapshot = kit_file_text(kit_session_file(settings, "s-proj", "snapshot"))
     c.expect(journal.contains(id), "the journal keeps the id of the project")
     c.expect(journal.byte_len() > 0 && snapshot.byte_len() > 0, "the files of the session are there")
     c.expect(!journal.contains("zq-top-secret-9") && !snapshot.contains("zq-top-secret-9"), "no value of a variable that the agent was not asked for is in the journal or the snapshot")

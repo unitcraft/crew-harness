@@ -60,6 +60,9 @@ type Dialog {
 type McpPending { key str, call int, session str, questions JsonValue, reply ChanTx[str] }
 
 /// Hub: the sessions, the pages, the output not yet taken, the log.
+/// A choice of the owner (model, effort, mode) made while the agent of the session was not running: it waits until the agent is ready.
+type PendingChoice { trace str, setting str, value str }
+
 export type Hub {
     settings ServerSettings,
     machine AlulaMachine,
@@ -74,7 +77,8 @@ export type Hub {
     mcp_serial int,
     catalog JsonObject,
     catalog_dirty bool,
-    catalog_saved_at int
+    catalog_saved_at int,
+    choices []PendingChoice
 }
 
 // ----- small helpers -----
@@ -594,7 +598,7 @@ export fn start_hub_from(settings ServerSettings, table_text str) Proc Detach Ti
     }
     ro machine = hub_machine_from(table_text, settings.idle_term_ms)?
     mut hub = Hub {
-        settings, machine, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0, mcps: []McpServer.new(), mcp_pending: []McpPending.new(), mcp_serial: 0, catalog: JsonObject.new(), catalog_dirty: false, catalog_saved_at: 0
+        settings, machine, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0, mcps: []McpServer.new(), mcp_pending: []McpPending.new(), mcp_serial: 0, catalog: JsonObject.new(), catalog_dirty: false, catalog_saved_at: 0, choices: []PendingChoice.new()
     }
     if hub.wants_mcp() { ro started = hub.start_mcp() }
     ro pg = settings.store == "pg"
@@ -1074,10 +1078,32 @@ fn Hub mut @choose(trace str, setting str, value str) Proc Detach Time -> () {
     ro at = @find(trace)
     if at < 0 { return }
     mut s = @sessions[at]
-    if s.clients.len() == 0 { return }
+    // an agent that is not running (a session after a restart, or an idle one): start it, the choice waits until it is ready
+    if s.clients.len() == 0 || s.clients[0].phase() != "ready" {
+        ro reason = @ensure_client(at)
+        if reason.byte_len() > 0 {
+            @tell_error(0, trace, s.engine.step_number(), "", "the agent cannot be started: ${reason}")
+            return
+        }
+        @choices.push(PendingChoice { trace, setting, value })
+        return
+    }
     if !s.clients[0].select_option(setting, value) {
         @say_log("a choice for ${trace} that the agent did not offer: ${setting} = ${value}")
     }
+}
+
+// The choices that waited for the agent of this session are made now (it is ready).
+fn Hub mut @apply_choices(mut s Dialog) -> () {
+    mut rest = []PendingChoice.new()
+    for c in @choices {
+        if c.trace != s.id {
+            rest.push(c)
+        } else if !s.clients[0].select_option(c.setting, c.value) {
+            @say_log("a choice for ${s.id} that the agent did not offer: ${c.setting} = ${c.value}")
+        }
+    }
+    @choices = rest
 }
 
 /// A page said something: an event in the format of the page (`session_created`, `user_message`, `cancel`, `permission_decision`, `question_answer`).
@@ -1132,6 +1158,7 @@ fn Hub mut @watch_agent(at int) Time -> () {
     if phase == "ready" {
         s.announced = true
         @say_log("the agent of ${s.id} is ready: ${s.clients[0].agent_name()}")
+        @apply_choices(s)
         if !s.model_announced {
             s.model_announced = true
             accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("agent_model", s.clients[0].options()))
