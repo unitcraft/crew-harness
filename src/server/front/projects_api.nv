@@ -1,0 +1,175 @@
+// projects_api.nv - the routes of the projects of the control panel (task 192m):
+//   GET    /api/projects          the list: id, name, folders, env_keys (the NAMES of the variables, never the values)
+//   GET    /api/projects/<id>     the whole project with the text of `env`
+//   POST   /api/projects          {name, folders, env} -> 201 {"id"}
+//   PUT    /api/projects/<id>     the same body replaces all the fields -> 200
+//   DELETE /api/projects/<id>     -> 200 (the sessions made in the project stay)
+//   GET    /api/fs/list?path=     the folders of a path (only folders); no path: the roots and the recent folders
+//   GET    /api/fs/git?path=      {"is_repo", "branch"}
+// Every route answers a foreign `Origin` with 403, as `/api/stt` does. The projects are in `<data_dir>/projects.json` (src/projects/store.nv);
+// the front writes the file, the hub reads it when a session of a project is made. An error is `{"error":"<reason>"}`.
+// ORACLE-WORKAROUND(25): the module is declared `module server.front` (without the package prefix) and imported as `crew_harness.server.front`: a module two folders under the source root cannot be declared with the full path; declare it with the prefix when item 25 is fixed
+module server.front
+
+import crew_harness.projects.{Project, StoreFail, Listing, GitState, projects_load, projects_get, projects_create, projects_replace, projects_delete, projects_list_json, project_json, recent_folders, normalize_folder_path, list_folders, list_roots, git_state}
+import polaris.{ServerRequest, ServerResponse}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+import std.text
+
+fn api_error(status int, reason str) -> ServerResponse => json_reply(status, stt_error_json(reason))
+
+fn api_fail(f StoreFail) -> ServerResponse => api_error(f.status, f.message)
+
+// The body of a request as a JSON object; the reason (a text for the owner) when it is not one.
+fn api_body(req ServerRequest) -> Result[JsonObject, str] {
+    ro text = match req.body_bytes().to_str() {
+        Ok(t) => t
+        Err(e) => return Err("тело запроса должно быть текстом UTF-8")
+    }
+    ro value = match Json.parse(text) {
+        Ok(v) => v
+        Err(e) => return Err("тело запроса должно быть JSON")
+    }
+    match value.object() {
+        Some(o) => Ok(o)
+        None => Err("тело запроса должно быть JSON-объектом {name, folders, env}")
+    }
+}
+
+fn api_put(mut o JsonObject, key str, value JsonValue) -> () {
+    ro replaced = o.insert(key, value)
+}
+
+fn projects_list_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
+    fn(req ServerRequest) -> ServerResponse {
+        if !origin_allowed(req, port) { return api_error(403, "origin not allowed") }
+        match projects_load(data_dir) {
+            Ok(list) => json_reply(200, projects_list_json(list))
+            Err(f) => api_fail(f)
+        }
+    }
+}
+
+fn projects_get_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
+    fn(req ServerRequest) -> ServerResponse {
+        if !origin_allowed(req, port) { return api_error(403, "origin not allowed") }
+        match projects_get(data_dir, req.param("id") ?? "") {
+            Ok(p) => json_reply(200, project_json(p).to_str())
+            Err(f) => api_fail(f)
+        }
+    }
+}
+
+fn projects_post_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
+    fn(req ServerRequest) -> ServerResponse {
+        if !origin_allowed(req, port) { return api_error(403, "origin not allowed") }
+        match api_body(req) {
+            Err(reason) => api_error(400, reason)
+            Ok(body) => match projects_create(data_dir, body) {
+                Ok(id) => {
+                    mut o = JsonObject.new()
+                    api_put(o, "id", JsonValue.str(id))
+                    json_reply(201, JsonValue.object(o).to_str())
+                }
+                Err(f) => api_fail(f)
+            }
+        }
+    }
+}
+
+fn projects_put_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
+    fn(req ServerRequest) -> ServerResponse {
+        if !origin_allowed(req, port) { return api_error(403, "origin not allowed") }
+        match api_body(req) {
+            Err(reason) => api_error(400, reason)
+            Ok(body) => match projects_replace(data_dir, req.param("id") ?? "", body) {
+                Ok(done) => json_reply(200, "{\"ok\":true}")
+                Err(f) => api_fail(f)
+            }
+        }
+    }
+}
+
+fn projects_delete_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
+    fn(req ServerRequest) -> ServerResponse {
+        if !origin_allowed(req, port) { return api_error(403, "origin not allowed") }
+        match projects_delete(data_dir, req.param("id") ?? "") {
+            Ok(done) => json_reply(200, "{\"ok\":true}")
+            Err(f) => api_fail(f)
+        }
+    }
+}
+
+// ----- the choice of a folder -----
+
+fn entry_json(name str) -> JsonValue {
+    mut o = JsonObject.new()
+    api_put(o, "name", JsonValue.str(name))
+    api_put(o, "dir", JsonValue.bool(true))
+    JsonValue.object(o)
+}
+
+fn strings_json(items []str) -> JsonValue {
+    mut rows = []JsonValue.new()
+    for item in items { rows.push(JsonValue.str(item)) }
+    JsonValue.array(rows)
+}
+
+// The folders that were used in the projects, newest first (a projects file that cannot be read gives none).
+fn recent_of(data_dir str) -> []str {
+    match projects_load(data_dir) {
+        Ok(list) => recent_folders(list, 10)
+        Err(f) => []str.new()
+    }
+}
+
+/// The answer for a path: `{"path","parent","entries":[{"name","dir":true}],"truncated","recent"}`; no path - the roots as the entries.
+fn fs_list_json(listing Listing, recent []str) -> str {
+    mut rows = []JsonValue.new()
+    for name in listing.names { rows.push(entry_json(name)) }
+    mut o = JsonObject.new()
+    api_put(o, "path", JsonValue.str(listing.path))
+    api_put(o, "parent", if listing.has_parent { JsonValue.str(listing.parent) } else { JsonValue.null() })
+    api_put(o, "entries", JsonValue.array(rows))
+    api_put(o, "truncated", JsonValue.bool(listing.cut))
+    api_put(o, "recent", strings_json(recent))
+    JsonValue.object(o).to_str()
+}
+
+fn fs_roots_json(recent []str) -> str {
+    mut rows = []JsonValue.new()
+    for root in list_roots() { rows.push(entry_json(root)) }
+    mut o = JsonObject.new()
+    api_put(o, "path", JsonValue.str(""))
+    api_put(o, "parent", JsonValue.null())
+    api_put(o, "entries", JsonValue.array(rows))
+    api_put(o, "truncated", JsonValue.bool(false))
+    api_put(o, "recent", strings_json(recent))
+    JsonValue.object(o).to_str()
+}
+
+fn fs_list_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
+    fn(req ServerRequest) -> ServerResponse {
+        if !origin_allowed(req, port) { return api_error(403, "origin not allowed") }
+        ro asked = (req.query_param("path") ?? "").trim_ascii()
+        if asked.byte_len() == 0 { return json_reply(200, fs_roots_json(recent_of(data_dir))) }
+        match normalize_folder_path(asked) {
+            Err(reason) => api_error(400, reason)
+            Ok(path) => match list_folders(path) {
+                Ok(listing) => json_reply(200, fs_list_json(listing, recent_of(data_dir)))
+                Err(reason) => api_error(404, reason)
+            }
+        }
+    }
+}
+
+fn fs_git_route(port int) -> fn(ServerRequest) -> ServerResponse {
+    fn(req ServerRequest) -> ServerResponse {
+        if !origin_allowed(req, port) { return api_error(403, "origin not allowed") }
+        ro state = git_state(req.query_param("path") ?? "")
+        mut o = JsonObject.new()
+        api_put(o, "is_repo", JsonValue.bool(state.is_repo))
+        api_put(o, "branch", JsonValue.str(state.branch))
+        json_reply(200, JsonValue.object(o).to_str())
+    }
+}

@@ -20,10 +20,11 @@
 // ORACLE-WORKAROUND(17): everything crosses by channels (`Inbound`, `AgentLink`): an `AtomicInt` put into a record is a COPY of the variable, so a counter set by a fiber is never seen through the record; a shared counter in a record would do when item 17 is fixed
 module crew_harness.acp
 
+import crew_harness.projects.{EnvEntry}
 import std.concurrency.nvchan.{Chan, ChanTx, ChanRx}
 import std.fs.{Path}
 import std.io.{write_all}
-import std.os.{Command, Child, ChildStdin, ChildStdout, ChildStderr, Stdio, Signal, Tree}
+import std.os.{Os, real_os, vars, has_env, Command, Child, ChildStdin, ChildStdout, ChildStderr, Stdio, Signal, Tree}
 
 /// Inbound: what the fibers around the process tell the program.
 ///  - kind "line": a line of the stdout (`text`);
@@ -192,7 +193,7 @@ fn watch_child(consume child Child, kill ChanRx[int], inb ChanTx[Inbound], out C
 
 // The body of the keeper fiber: start the process, tell the starter how it went ("" - well, else the reason), then keep the
 // fibers around it in one scope until all of them are over.
-fn keep_link(program str, args []str, dir str, inbound ChanTx[Inbound], outbound ChanRx[str], outbound_end ChanTx[str], killing ChanRx[int], started ChanTx[str]) Proc Time -> () {
+fn keep_link(program str, args []str, dir str, env []EnvEntry, inbound ChanTx[Inbound], outbound ChanRx[str], outbound_end ChanTx[str], killing ChanRx[int], started ChanTx[str]) Proc Time -> () {
     mut command = Command.new(program)
     // ORACLE-WORKAROUND(16): the setters change the command in place and return it; the result is dropped, because assigning it back (`command = command.arg(a)`) does not compile (a pointer assigned to a value); chain the setters when item 16 is fixed
     for a in args { command.arg(a) }
@@ -200,6 +201,8 @@ fn keep_link(program str, args []str, dir str, inbound ChanTx[Inbound], outbound
     command.stdout(Stdio.Piped)
     command.stderr(Stdio.Piped)
     command.tree(Tree.Group)
+    // the variables of the project over the environment of this process (the same name: the project wins); the values are secrets and are never logged
+    for pair in env { command.env(pair.key, pair.value) }
     if dir.byte_len() > 0 { command.dir(Path.from_bytes(dir.bytes())) }
     match command.start() {
         Err(e) => {
@@ -226,12 +229,40 @@ fn keep_link(program str, args []str, dir str, inbound ChanTx[Inbound], outbound
 
 /// Start the agent: `program` with `args`, in the folder `dir` ("" - the folder of this process). The process, its pipes
 /// and the fibers around them are the link; a program that cannot be started is an `Err` with the reason.
-export fn connect(program str, args []str, dir str) Proc Detach Time -> Result[AgentLink, str] {
+export fn connect(program str, args []str, dir str) Proc Detach Time -> Result[AgentLink, str] => connect_env(program, args, dir, []EnvEntry.new())
+
+// The environment of this process with `extra` over it. A process started with variables of its own gets exactly that block (the runtime does not
+// add the rest: no PATH, no profile folders), so the block is made whole here. A name of `extra` replaces the same name; on Windows names are the
+// same in any case. Without `extra` nothing is built: the process then inherits the environment as it is.
+fn merged_env(extra []EnvEntry) -> []EnvEntry {
+    if extra.len() == 0 { return []EnvEntry.new() }
+    ro mine = with Os = real_os() { vars() }
+    ro windows = with Os = real_os() { has_env("SystemRoot") || has_env("SYSTEMROOT") }
+    mut out = []EnvEntry.new()
+    for v in mine {
+        ro name = v.key()
+        // the names that begin with "=" are the per-drive folders of Windows, they are not for a block of ours
+        if name.byte_len() > 0 && !name.starts_with("=") {
+            mut replaced = false
+            for e in extra {
+                if e.key == name || (windows && e.key.to_ascii_lower() == name.to_ascii_lower()) { replaced = true }
+            }
+            if !replaced { out.push(EnvEntry { key: name, value: v.value() }) }
+        }
+    }
+    for e in extra { out.push(e) }
+    out
+}
+
+/// The same with environment variables for the process (task 192m): the environment of this process and over it `env`, a name that
+/// comes in both is the one of `env`. The values reach the process only through its environment block: not the command line, not a file.
+export fn connect_env(program str, args []str, dir str, env []EnvEntry) Proc Detach Time -> Result[AgentLink, str] {
     ro inbound = Chan[Inbound].new(2048)
     ro outbound = Chan[str].new(2048)
     ro killing = Chan[int].new(4)
     ro started = Chan[str].new(1)
-    detach { keep_link(program, args, dir, inbound.tx, outbound.rx, outbound.tx, killing.rx, started.tx) }
+    ro block = merged_env(env)
+    detach { keep_link(program, args, dir, block, inbound.tx, outbound.rx, outbound.tx, killing.rx, started.tx) }
     match started.rx.recv() {
         Some(reason) => {
             if reason.byte_len() > 0 { return Err(reason) }

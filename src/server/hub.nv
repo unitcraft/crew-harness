@@ -20,7 +20,8 @@ module crew_harness.server
 import alula.engine.{Engine, Incoming, EventKind, Journal, Store, Link, PartyRequest, start_engine, resume_engine, decode_snapshot}
 import crew_harness.product_machines.{find_machines_dir, load_product_machines}
 import alula.machine_run.{AlulaMachine, AlulaState}
-import crew_harness.acp.{AcpConfig, AcpClient, AcpImage, AskSetup, no_ask, open_client_asking, acp_link, page_event, TRACE_LIMIT}
+import crew_harness.acp.{AcpConfig, AcpClient, AcpImage, AskSetup, no_ask, open_client_full, acp_link, page_event, TRACE_LIMIT}
+import crew_harness.projects.{EnvEntry, projects_get, parse_dotenv, normalize_folder_path, project_has_folder, valid_project_id}
 import crew_harness.storage.{open_data_dir, file_journal, file_store, list_sessions, valid_session_name, session_file_made, migrate_flat_sessions, image_ext, decode_image, save_image, find_image}
 import crew_harness.pgstore.{PgWorld, pg_journal, pg_store}
 import crew_harness.pgdb.{pg_list}
@@ -48,7 +49,9 @@ type Dialog {
     announced bool,
     model_announced bool,
     started_at int,
-    slow_told bool
+    slow_told bool,
+    folder str,
+    project_id str
 }
 
 // A call of the tool `ask_user_question` (task 192i) that waits for the owner: the key the page answers by, the call of the MCP server, the session, the
@@ -226,12 +229,14 @@ fn line_of(mut s Dialog, e Incoming) -> Option[str] {
     page_event(shown, s.turn)
 }
 
-fn meta_text(name str, agent str, folder str, project str) -> str {
+fn meta_text(name str, agent str, folder str, project str, project_id str) -> str {
     mut o = JsonObject.new()
     jput(o, "name", JsonValue.str(name))
     jput(o, "agent", JsonValue.str(agent))
     jput(o, "folder", JsonValue.str(folder))
     if project.byte_len() > 0 { jput(o, "project", JsonValue.str(project)) }
+    // the id of the project of the control panel (task 192m): only the id is kept in the journal, never the variables
+    if project_id.byte_len() > 0 { jput(o, "project_id", JsonValue.str(project_id)) }
     JsonValue.object(o).to_str()
 }
 
@@ -334,7 +339,7 @@ fn Hub @trace_path_of(s Dialog) -> str {
     }
 }
 
-fn Hub @open_config(s Dialog) -> Option[AcpConfig] => @open_config_for(s.agent, s.id)
+fn Hub @open_config(s Dialog) -> Option[AcpConfig] => @open_config_for(s.agent, s.id, s.folder)
 
 // What the agent of this session is offered for its questions (task 192i): nothing when the setting `ask_form` is off or the agent is `off`; the form
 // (its own tool of questions) when it is `native`; the MCP tool of the hub, and no form, when it is `mcp`.
@@ -395,16 +400,63 @@ export fn Hub @mcp_address(id str) -> str => @mcp_url_for(id)
 /// The token of the MCP server of the questions ("" - it is not running).
 export fn Hub @mcp_token() -> str => @mcp_token_value()
 
-fn Hub @open_config_for(agent str, id str) -> Option[AcpConfig] {
+// The folder an agent works in: the folder of the project chosen for the session, else the working folder of the server.
+fn Hub @cwd_of(folder str) -> str => if folder.byte_len() > 0 { folder } else { @workdir }
+
+fn Hub @open_config_for(agent str, id str, folder str) -> Option[AcpConfig] {
     match @settings.agent(agent) {
         Some(spec) => {
             ro inbox = match session_file_made(@settings.data_dir, id, "inbox") {
                 Some(p) => p.display()
                 None => ""
             }
-            Some(acp_config_of(spec.program, spec.args, @workdir, inbox))
+            Some(acp_config_of(spec.program, spec.args, @cwd_of(folder), inbox))
         }
         None => None
+    }
+}
+
+/// Launch: the folder an agent of a session works in ("" - the working folder of the server) and the variables of its project.
+type Launch { folder str, env []EnvEntry }
+
+// The folder and the variables of a project for a new session: the folder is the one asked for (it must belong to the project)
+// or the first one of the project. `Err` says in words why the session cannot be made; no value of a variable is in a reason.
+fn Hub @launch_for(project_id str, folder str) -> Result[Launch, str] {
+    if project_id.byte_len() == 0 { return Ok(Launch { folder: "", env: []EnvEntry.new() }) }
+    if !valid_project_id(project_id) { return Err("the project was not found") }
+    ro project = match projects_get(@settings.data_dir, project_id) {
+        Ok(p) => p
+        Err(f) => return Err(if f.status == 404 { "the project was not found" } else { "the projects cannot be read" })
+    }
+    mut chosen = ""
+    if folder.byte_len() == 0 {
+        if project.folders.len() > 0 { chosen = project.folders[0].path }
+    } else {
+        ro normal = match normalize_folder_path(folder) {
+            Ok(p) => p
+            Err(reason) => return Err("the folder is wrong")
+        }
+        if !project_has_folder(project, normal) { return Err("the folder is not in the project") }
+        chosen = normal
+    }
+    ro parsed = match parse_dotenv(project.env) {
+        Ok(entries) => entries
+        Err(reason) => return Err("the variables of the project: ${reason}")
+    }
+    Ok(Launch { folder: chosen, env: parsed })
+}
+
+// The variables for the agent of a session that runs (again): read from the file of the projects each time, so a change of the
+// project reaches the next start. A project that is gone (or a file that cannot be read) gives no variables: the session goes on
+// in its folder, and the log says so (without a value).
+fn Hub mut @env_of(s Dialog) -> []EnvEntry {
+    if s.project_id.byte_len() == 0 { return []EnvEntry.new() }
+    match @launch_for(s.project_id, s.folder) {
+        Ok(launch) => launch.env
+        Err(reason) => {
+            @say_log("the session ${s.id} starts without the variables of its project: ${reason}")
+            []EnvEntry.new()
+        }
     }
 }
 
@@ -419,7 +471,7 @@ fn Hub mut @ensure_client(at int) Proc Detach Time -> str {
     }
     match @open_config(s) {
         None => "the agent ${s.agent} is not configured"
-        Some(config) => match open_client_asking(config, @trace_path_of(s), TRACE_LIMIT, @ask_for(s.agent, s.id)) {
+        Some(config) => match open_client_full(config, @trace_path_of(s), TRACE_LIMIT, @ask_for(s.agent, s.id), @env_of(s)) {
             Ok(client) => {
                 s.clients.push(client)
                 s.announced = false
@@ -503,7 +555,7 @@ fn Hub mut @resume_session(id str) Proc Detach Time -> () {
     match resume_stored(pg, root, world, @machine, id) {
         None => @say_log("the session ${id} cannot be resumed: no usable snapshot")
         Some(engine) => {
-            mut s = Dialog { id, name: id, agent: "", engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false }
+            mut s = Dialog { id, name: id, agent: "", engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false, folder: "", project_id: "" }
             mut saw_created = false
             for e in history_in(pg, root, s) {
                 if e.name == "session_created" && e.kind == EventKind.Input && !saw_created {
@@ -512,6 +564,11 @@ fn Hub mut @resume_session(id str) Proc Detach Time -> () {
                         Some(meta) => {
                             s.name = if jtext(meta, "name").byte_len() > 0 { jtext(meta, "name") } else { id }
                             s.agent = jtext(meta, "agent")
+                            // a session of a project goes on in the folder it was made for; one without a project, in the working folder
+                            if jtext(meta, "project_id").byte_len() > 0 {
+                                s.project_id = jtext(meta, "project_id")
+                                s.folder = jtext(meta, "folder")
+                            }
                         }
                         None => ()
                     }
@@ -545,6 +602,7 @@ fn Hub mut @create(conn int, trace str, input JsonObject) Proc Detach Time -> ()
     ro name = if jtext(input, "name").byte_len() > 0 { jtext(input, "name") } else { trace }
     ro agent = jtext(input, "agent")
     ro project = jtext(input, "project")
+    ro project_id = jtext(input, "project_id")
     if !valid_session_name(trace) {
         @send(conn, event_line("srv-new", trace, 0, "session_created", created_input(name, agent, @workdir), now_millis()))
         @tell_error(conn, trace, 1, "", "the session name is not valid: letters, digits, dot, dash and underscore")
@@ -557,12 +615,21 @@ fn Hub mut @create(conn int, trace str, input JsonObject) Proc Detach Time -> ()
             @tell_error(conn, trace, 1, "", "unknown agent: ${agent}")
         }
         Some(spec) => {
+            // the project of the control panel (task 192m): its folder is the folder of the agent, its variables reach the process of the agent
+            ro launch = match @launch_for(project_id, jtext(input, "folder")) {
+                Ok(l) => l
+                Err(reason) => {
+                    @send(conn, event_line("srv-new", trace, 0, "session_created", created_input(name, agent, @workdir), now_millis()))
+                    @tell_error(conn, trace, 1, "", "the session cannot be made: ${reason}")
+                    return
+                }
+            }
             ro pg = @settings.store == "pg"
             ro root = @settings.data_dir
             mut world = PgWorld.open(@settings.pg, trace)
             ro engine = begin_session_engine(pg, root, world, @machine, trace)
-            mut s = Dialog { id: trace, name, agent, engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false }
-            accept_in(pg, root, s, Incoming.signal("session_created", meta_text(name, agent, @workdir, project)))
+            mut s = Dialog { id: trace, name, agent, engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false, folder: launch.folder, project_id }
+            accept_in(pg, root, s, Incoming.signal("session_created", meta_text(name, agent, @cwd_of(launch.folder), project, project_id)))
             @add_session(s)
             ro at = @sessions.len() - 1
             @drain(at)
@@ -897,14 +964,14 @@ fn Hub mut @switch_agent(trace str, agent str) Proc Detach Time -> () {
         @tell_error(0, trace, s.engine.step_number(), "", "the turn is still open: the agent is not changed, try again in a moment")
         return
     }
-    ro config = match @open_config_for(agent, s.id) {
+    ro config = match @open_config_for(agent, s.id, s.folder) {
         Some(c) => c
         None => {
             @tell_error(0, trace, s.engine.step_number(), "", "the agent ${agent} is not configured")
             return
         }
     }
-    match open_client_asking(config, @trace_path_of(s), TRACE_LIMIT, @ask_for(agent, s.id)) {
+    match open_client_full(config, @trace_path_of(s), TRACE_LIMIT, @ask_for(agent, s.id), @env_of(s)) {
         Err(reason) => {
             @say_log("the agent of ${trace} cannot be changed to ${agent}: ${reason}")
             @tell_error(0, trace, s.engine.step_number(), "", "the agent ${agent} cannot be started: ${reason}; the session stays with ${s.agent}")

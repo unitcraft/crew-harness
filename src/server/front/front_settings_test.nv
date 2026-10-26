@@ -26,13 +26,14 @@ test "front settings: no file and no environment means the defaults" {
             assert(s.web_dir == "src/web")
             assert(s.hub_program == "target/crew-hub.exe")
             assert(s.hub_args.len() == 0)
+            assert(s.data_dir == "crew-data")
         }
         Err(e) => assert(false)
     }
 }
 
 test "front settings: the keys of a file, the environment over them" {
-    ro path = front_file("front.json", "{\"port\":8123,\"web_dir\":\"web\",\"hub\":{\"program\":\"h.exe\",\"args\":[\"x\"]},\"agents\":[{\"id\":\"opencode\",\"label\":\"OpenCode\",\"program\":\"private.exe\",\"args\":[\"acp\"]},{\"id\":\"kimi\",\"label\":\"Kimi Code\",\"program\":\"kimi.cmd\",\"args\":[\"acp\"]}],\"store\":\"pg\"}")
+    ro path = front_file("front.json", "{\"port\":8123,\"web_dir\":\"web\",\"hub\":{\"program\":\"h.exe\",\"args\":[\"x\"]},\"agents\":[{\"id\":\"opencode\",\"label\":\"OpenCode\",\"program\":\"private.exe\",\"args\":[\"acp\"]},{\"id\":\"kimi\",\"label\":\"Kimi Code\",\"program\":\"kimi.cmd\",\"args\":[\"acp\"]}],\"store\":\"pg\",\"data_dir\":\"d-file\"}")
     mut none = MockOs.new()
     match with Os = mock_os(none), Fs = real_fs() { front_settings(path.display()) } {
         Ok(s) => {
@@ -43,6 +44,7 @@ test "front settings: the keys of a file, the environment over them" {
             assert(s.agents.len() == 2)
             assert(s.agents[0].id == "opencode" && s.agents[0].label == "OpenCode")
             assert(s.agents[1].id == "kimi" && s.agents[1].label == "Kimi Code")
+            assert(s.data_dir == "d-file")
         }
         Err(e) => assert(false)
     }
@@ -51,6 +53,7 @@ test "front settings: the keys of a file, the environment over them" {
     state.put_env("CREW_SERVER_WEB_DIR", "elsewhere")
     state.put_env("CREW_SERVER_HUB", "other.exe a b")
     state.put_env("CREW_SERVER_AGENT", "override-agent acp")
+    state.put_env("CREW_SERVER_DATA_DIR", "d-env")
     match with Os = mock_os(state), Fs = real_fs() { front_settings(path.display()) } {
         Ok(s) => {
             assert(s.port == 9002)
@@ -58,6 +61,7 @@ test "front settings: the keys of a file, the environment over them" {
             assert(s.hub_program == "other.exe")
             assert(s.hub_args.len() == 2 && s.hub_args[1] == "b")
             assert(s.agents.len() == 1 && s.agents[0].id == "opencode")
+            assert(s.data_dir == "d-env")
         }
         Err(e) => assert(false)
     }

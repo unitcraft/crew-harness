@@ -1,0 +1,345 @@
+// store.nv - the projects of the control panel (task 192m): a name, the folders and the environment variables for the agents.
+//
+// The file is `<data_dir>/projects.json`, one object `{"version":1,"projects":[{id,name,folders:[{path,branch,worktree}],env}]}`.
+// It is replaced as a whole (a temporary file in the same folder, then a rename: `write_atomic`), so a reader never sees half of it.
+// `env` is the text in the `.env` format (see dotenv.nv). THE VALUES ARE KEPT IN THE FILE AS PLAIN TEXT (the machine of the owner is
+// the only reader); they are never put into a log, a journal, a trace or the list of the projects (the list holds the names only).
+// The front writes the file (it has the HTTP routes), the hub only reads it when a session is made with a project.
+// This module holds `std` only, so that both programs (the front with Polaris, the hub with the PostgreSQL driver) can import it.
+module crew_harness.projects
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+import std.fs.{Fs, real_fs, Path, read_text, write_atomic, try_exists, create_dir_all}
+import std.prelude.effects.{real_random}
+import std.text
+
+/// Folder: a folder of a project; `branch` "" - none; `worktree` - the sessions work in a work tree of their own.
+export type Folder { path str, branch str, worktree bool }
+
+/// Project: the id is made by the server; `env` is the text of the `.env` format.
+export type Project { id str, name str, folders []Folder, env str }
+
+/// StoreFail: why an operation was refused: the HTTP status (400 a wrong body, 404 no such project, 500 the file) and the text for the owner.
+export type StoreFail { status int, message str }
+
+const NAME_MAX = 200
+const FOLDERS_MAX = 32
+const PATH_MAX = 1024
+const BRANCH_MAX = 200
+
+fn fail(status int, message str) -> StoreFail => { status, message }
+
+// ----- the id -----
+
+/// Is this text an id of a project: 6 to 32 lowercase letters and digits?
+export fn valid_project_id(id str) -> bool {
+    ro raw = id.bytes()
+    if raw.len() < 6 || raw.len() > 32 { return false }
+    for b in raw {
+        ro c = b as int
+        if !((c >= 97 && c <= 122) || (c >= 48 && c <= 57)) { return false }
+    }
+    true
+}
+
+fn hex_digit(v int) -> str {
+    ro digits = "0123456789abcdef"
+    digits[v..v + 1]
+}
+
+/// A new id: 12 hex digits of the system randomness.
+export fn new_project_id() -> str {
+    ro bytes = with Random = real_random() { Random.bytes(6) }
+    consume sb = StringBuilder.new()
+    for b in bytes {
+        ro v = b as int
+        sb.append(hex_digit(v / 16))
+        sb.append(hex_digit(v % 16))
+    }
+    sb.into_str()
+}
+
+// ----- the paths -----
+
+/// A path of a folder in the form the panel uses: `/` between the names, no trailing `/` (but `C:/` and `/` stay), absolute, no `..`.
+export fn normalize_folder_path(path str) -> Result[str, str] {
+    ro trimmed = path.trim_ascii()
+    if trimmed.byte_len() == 0 { return Err("путь папки пуст") }
+    if trimmed.byte_len() > PATH_MAX { return Err("путь папки длиннее ${PATH_MAX} байт") }
+    mut raw = []u8.new()
+    for b in trimmed.bytes() {
+        ro c = b as int
+        if c < 32 || c == 127 { return Err("в пути папки есть управляющий символ") }
+        raw.push(if c == 92 { 47 as u8 } else { b })
+    }
+    ro text = raw.to_str_lossy()
+    for part in text.split("/") {
+        if part == ".." { return Err("в пути папки есть «..»") }
+    }
+    ro drive = raw.len() >= 3 && (((raw[0] as int) >= 65 && (raw[0] as int) <= 90) || ((raw[0] as int) >= 97 && (raw[0] as int) <= 122)) && (raw[1] as int) == 58 && (raw[2] as int) == 47
+    ro rooted = (raw[0] as int) == 47
+    if !drive && !rooted { return Err("путь папки должен быть абсолютным") }
+    mut end = raw.len()
+    ro keep = if drive { 3 } else { 1 }
+    while end > keep && (raw[end - 1] as int) == 47 { end -= 1 }
+    Ok(raw[..end].to_str_lossy())
+}
+
+// ----- the JSON -----
+
+fn jput(mut o JsonObject, key str, value JsonValue) -> () {
+    ro replaced = o.insert(key, value)
+}
+
+fn jstr(o JsonObject, key str) -> Option[str] {
+    match o.get(key) {
+        Some(v) => v.str()
+        None => None
+    }
+}
+
+fn folder_of(v JsonValue) -> Result[Folder, str] {
+    ro o = match v.object() {
+        Some(x) => x
+        None => return Err("папка проекта должна быть объектом {path, branch, worktree}")
+    }
+    ro raw_path = match jstr(o, "path") {
+        Some(p) => p
+        None => return Err("у папки нет «path»")
+    }
+    ro path = normalize_folder_path(raw_path)?
+    ro branch = (jstr(o, "branch") ?? "").trim_ascii()
+    if branch.byte_len() > BRANCH_MAX { return Err("имя ветки длиннее ${BRANCH_MAX} байт") }
+    for b in branch.bytes() {
+        if (b as int) < 32 { return Err("в имени ветки есть управляющий символ") }
+    }
+    ro worktree = match o.get("worktree") {
+        Some(w) => w.bool() ?? false
+        None => false
+    }
+    Ok(Folder { path, branch, worktree })
+}
+
+/// The project of a JSON object `{name, folders, env}` under the id `id`; the reason is a text for the owner.
+export fn project_from_json(o JsonObject, id str) -> Result[Project, str] {
+    ro name = (jstr(o, "name") ?? "").trim_ascii()
+    if name.byte_len() == 0 { return Err("у проекта нет имени") }
+    if name.byte_len() > NAME_MAX { return Err("имя проекта длиннее ${NAME_MAX} байт") }
+    for b in name.bytes() {
+        if (b as int) < 32 { return Err("в имени проекта есть управляющий символ") }
+    }
+    mut folders = []Folder.new()
+    match o.get("folders") {
+        Some(list) => {
+            ro items = match list.array() {
+                Some(a) => a
+                None => return Err("«folders» должно быть списком")
+            }
+            if items.len() > FOLDERS_MAX { return Err("папок больше ${FOLDERS_MAX}") }
+            for item in items { folders.push(folder_of(item)?) }
+        }
+        None => ()
+    }
+    ro env = match o.get("env") {
+        Some(e) => match e.str() {
+            Some(s) => s
+            None => return Err("«env» должно быть текстом в формате .env")
+        }
+        None => ""
+    }
+    // the text must parse: a mistake is told with the number of the line (and the value is not in the answer)
+    ro parsed = parse_dotenv(env)?
+    Ok(Project { id, name, folders, env })
+}
+
+fn folder_json(f Folder) -> JsonValue {
+    mut o = JsonObject.new()
+    jput(o, "path", JsonValue.str(f.path))
+    if f.branch.byte_len() > 0 { jput(o, "branch", JsonValue.str(f.branch)) }
+    jput(o, "worktree", JsonValue.bool(f.worktree))
+    JsonValue.object(o)
+}
+
+fn folders_json(p Project) -> JsonValue {
+    mut rows = []JsonValue.new()
+    for f in p.folders { rows.push(folder_json(f)) }
+    JsonValue.array(rows)
+}
+
+/// The full project as an object (with the text of `env`).
+export fn project_json(p Project) -> JsonValue {
+    mut o = JsonObject.new()
+    jput(o, "id", JsonValue.str(p.id))
+    jput(o, "name", JsonValue.str(p.name))
+    jput(o, "folders", folders_json(p))
+    jput(o, "env", JsonValue.str(p.env))
+    JsonValue.object(o)
+}
+
+/// The project for the list: the NAMES of the variables, never the values.
+export fn project_summary_json(p Project) -> JsonValue {
+    mut o = JsonObject.new()
+    jput(o, "id", JsonValue.str(p.id))
+    jput(o, "name", JsonValue.str(p.name))
+    jput(o, "folders", folders_json(p))
+    mut keys = []JsonValue.new()
+    for k in dotenv_keys(p.env) { keys.push(JsonValue.str(k)) }
+    jput(o, "env_keys", JsonValue.array(keys))
+    JsonValue.object(o)
+}
+
+/// `{"projects":[...]}` - the answer of the list.
+export fn projects_list_json(list []Project) -> str {
+    mut rows = []JsonValue.new()
+    for p in list { rows.push(project_summary_json(p)) }
+    mut o = JsonObject.new()
+    jput(o, "projects", JsonValue.array(rows))
+    JsonValue.object(o).to_str()
+}
+
+// ----- the file -----
+
+fn file_path(root str) -> Path => Path.from_bytes(root.bytes()).join("projects.json")
+
+/// The projects of the file; a file that is not there is an empty list; a file that is broken is `Err` with the reason.
+export fn projects_load(root str) -> Result[[]Project, StoreFail] {
+    mut list = []Project.new()
+    with Fs = real_fs() {
+        ro there = match try_exists(file_path(root)) {
+            Ok(b) => b
+            Err(e) => false
+        }
+        if !there { return Ok(list) }
+        ro text = match read_text(file_path(root)) {
+            Ok(t) => t
+            Err(e) => return Err(fail(500, "projects.json не читается"))
+        }
+        ro value = match Json.parse(text) {
+            Ok(v) => v
+            Err(e) => return Err(fail(500, "projects.json не разбирается как JSON"))
+        }
+        ro top = match value.object() {
+            Some(o) => o
+            None => return Err(fail(500, "projects.json: ожидался объект"))
+        }
+        ro items = match top.get("projects") {
+            Some(v) => v.array() ?? []JsonValue.new()
+            None => []JsonValue.new()
+        }
+        for item in items {
+            ro o = match item.object() {
+                Some(x) => x
+                None => return Err(fail(500, "projects.json: проект не объект"))
+            }
+            ro id = jstr(o, "id") ?? ""
+            if !valid_project_id(id) { return Err(fail(500, "projects.json: неверный id проекта")) }
+            match project_from_json(o, id) {
+                Ok(p) => list.push(p)
+                Err(reason) => return Err(fail(500, "projects.json: проект ${id}: ${reason}"))
+            }
+        }
+    }
+    Ok(list)
+}
+
+/// Replace the file with these projects, as a whole.
+export fn projects_save(root str, list []Project) -> Result[(), StoreFail] {
+    mut rows = []JsonValue.new()
+    for p in list { rows.push(project_json(p)) }
+    mut o = JsonObject.new()
+    jput(o, "version", JsonValue.int(1))
+    jput(o, "projects", JsonValue.array(rows))
+    ro text = JsonValue.object(o).to_str()
+    with Fs = real_fs() {
+        match create_dir_all(Path.from_bytes(root.bytes())) {
+            Ok(done) => ()
+            Err(e) => return Err(fail(500, "папка данных не создаётся"))
+        }
+        match write_atomic(file_path(root), text.bytes()) {
+            Ok(done) => Ok(())
+            Err(e) => Err(fail(500, "projects.json не записывается"))
+        }
+    }
+}
+
+fn index_of(list []Project, id str) -> int {
+    mut at = 0
+    while at < list.len() {
+        if list[at].id == id { return at }
+        at += 1
+    }
+    -1
+}
+
+/// One project by its id.
+export fn projects_get(root str, id str) -> Result[Project, StoreFail] {
+    if !valid_project_id(id) { return Err(fail(404, "проекта нет")) }
+    ro list = projects_load(root)?
+    ro at = index_of(list, id)
+    if at < 0 { return Err(fail(404, "проекта нет")) }
+    Ok(list[at])
+}
+
+/// Make a project of the body `{name, folders, env}`; gives its new id.
+export fn projects_create(root str, body JsonObject) -> Result[str, StoreFail] {
+    mut list = projects_load(root)?
+    mut id = new_project_id()
+    while index_of(list, id) >= 0 { id = new_project_id() }
+    ro project = match project_from_json(body, id) {
+        Ok(p) => p
+        Err(reason) => return Err(fail(400, reason))
+    }
+    list.push(project)
+    projects_save(root, list)?
+    Ok(id)
+}
+
+/// Replace all the fields of a project by the body.
+export fn projects_replace(root str, id str, body JsonObject) -> Result[(), StoreFail] {
+    if !valid_project_id(id) { return Err(fail(404, "проекта нет")) }
+    mut list = projects_load(root)?
+    ro at = index_of(list, id)
+    if at < 0 { return Err(fail(404, "проекта нет")) }
+    ro project = match project_from_json(body, id) {
+        Ok(p) => p
+        Err(reason) => return Err(fail(400, reason))
+    }
+    list[at] = project
+    projects_save(root, list)
+}
+
+/// Remove a project (the sessions that were made in it stay).
+export fn projects_delete(root str, id str) -> Result[(), StoreFail] {
+    if !valid_project_id(id) { return Err(fail(404, "проекта нет")) }
+    ro list = projects_load(root)?
+    ro at = index_of(list, id)
+    if at < 0 { return Err(fail(404, "проекта нет")) }
+    mut rest = []Project.new()
+    mut k = 0
+    while k < list.len() {
+        if k != at { rest.push(list[k]) }
+        k += 1
+    }
+    projects_save(root, rest)
+}
+
+/// The folders of the projects, the newest project first, without repeats: what the panel offers as "recent".
+export fn recent_folders(list []Project, limit int) -> []str {
+    mut out = []str.new()
+    mut k = list.len() - 1
+    while k >= 0 && out.len() < limit {
+        for f in list[k].folders {
+            if out.len() < limit && !out.contains(f.path) { out.push(f.path) }
+        }
+        k -= 1
+    }
+    out
+}
+
+/// Does the project own this folder (the path as the panel writes it)?
+export fn project_has_folder(p Project, path str) -> bool {
+    for f in p.folders {
+        if f.path == path { return true }
+    }
+    false
+}

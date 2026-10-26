@@ -1,0 +1,164 @@
+// dotenv.nv - the environment of a project, in the format of a `.env` file (task 192m).
+//
+// A text of lines `KEY=VALUE`:
+//   - empty lines and lines that begin with `#` are skipped; `export KEY=VALUE` is the same as `KEY=VALUE`;
+//   - blanks around `=` are allowed; a name is letters, digits and `_`, not beginning with a digit;
+//   - a value in double quotes may span lines and has the escapes `\n`, `\r`, `\t`, `\"`, `\\` (any other `\` stays as it is);
+//   - a value in single quotes is taken as it is, and may span lines too;
+//   - a value without quotes ends at the end of the line; a `#` after a blank starts a comment there; blanks at the ends are cut;
+//   - a name that comes twice keeps the last value.
+// A mistake is `Err("строка N: ...")` with the number of the line where the entry begins (the text is shown to the owner as it is).
+// The values are secrets: nothing in this module logs them, and no error holds a value.
+module crew_harness.projects
+
+import std.text
+
+/// EnvEntry: one variable of the environment of a project.
+export type EnvEntry { key str, value str }
+
+/// The most the text of the environment may hold (bytes), and the most variables.
+export const ENV_MAX_BYTES = 65536
+export const ENV_MAX_KEYS = 256
+
+fn de_blank(c int) -> bool => c == 32 || c == 9
+fn de_key_start(c int) -> bool => (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95
+fn de_key_char(c int) -> bool => de_key_start(c) || (c >= 48 && c <= 57)
+
+// Does `raw` hold the word `export` at `at`, followed by a blank?
+fn de_export_at(raw []u8, at int) -> bool {
+    ro word = "export".bytes()
+    if at + word.len() + 1 > raw.len() { return false }
+    mut k = 0
+    while k < word.len() {
+        if raw[at + k] != word[k] { return false }
+        k += 1
+    }
+    de_blank(raw[at + word.len()] as int)
+}
+
+fn de_has_nul(value []u8) -> bool {
+    for b in value {
+        if (b as int) == 0 { return true }
+    }
+    false
+}
+
+/// The variables of a text in the `.env` format, in the order of their first appearance.
+export fn parse_dotenv(text str) -> Result[[]EnvEntry, str] {
+    ro raw = text.bytes()
+    ro n = raw.len()
+    if n > ENV_MAX_BYTES { return Err("текст переменных длиннее 64 КиБ") }
+    mut entries = []EnvEntry.new()
+    mut i = 0
+    mut line = 1
+    while i < n {
+        ro c = raw[i] as int
+        if c == 10 {
+            line += 1
+            i += 1
+        } else if c == 13 || de_blank(c) {
+            i += 1
+        } else if c == 35 {
+            while i < n && (raw[i] as int) != 10 { i += 1 }
+        } else {
+            ro begin = line
+            if de_export_at(raw, i) {
+                i += 6
+                while i < n && de_blank(raw[i] as int) { i += 1 }
+            }
+            if i >= n || !de_key_start(raw[i] as int) {
+                return Err("строка ${begin}: имя переменной начинается с буквы или «_»")
+            }
+            ro key_from = i
+            while i < n && de_key_char(raw[i] as int) { i += 1 }
+            ro key = raw[key_from..i].to_str_lossy()
+            while i < n && de_blank(raw[i] as int) { i += 1 }
+            if i >= n || (raw[i] as int) != 61 {
+                return Err("строка ${begin}: после имени «${key}» ожидается «=»")
+            }
+            i += 1
+            while i < n && de_blank(raw[i] as int) { i += 1 }
+            mut value = []u8.new()
+            if i < n && ((raw[i] as int) == 34 || (raw[i] as int) == 39) {
+                ro quote = raw[i] as int
+                i += 1
+                mut closed = false
+                while i < n && !closed {
+                    ro d = raw[i] as int
+                    if d == quote {
+                        closed = true
+                        i += 1
+                    } else if quote == 34 && d == 92 && i + 1 < n && de_escape(raw[i + 1] as int) >= 0 {
+                        value.push(de_escape(raw[i + 1] as int) as u8)
+                        i += 2
+                    } else if d == 13 && i + 1 < n && (raw[i + 1] as int) == 10 {
+                        i += 1
+                    } else {
+                        if d == 10 { line += 1 }
+                        value.push(raw[i])
+                        i += 1
+                    }
+                }
+                if !closed { return Err("строка ${begin}: не закрыта кавычка у значения «${key}»") }
+                while i < n && de_blank(raw[i] as int) { i += 1 }
+                if i < n && (raw[i] as int) == 35 {
+                    while i < n && (raw[i] as int) != 10 { i += 1 }
+                } else if i < n && (raw[i] as int) != 10 && (raw[i] as int) != 13 {
+                    return Err("строка ${line}: после закрывающей кавычки значения «${key}» лишний текст")
+                }
+            } else {
+                mut end = i
+                mut cut = false
+                while end < n && (raw[end] as int) != 10 && !cut {
+                    if (raw[end] as int) == 35 && (end == i || de_blank(raw[end - 1] as int)) {
+                        cut = true
+                    } else {
+                        end += 1
+                    }
+                }
+                mut last = end
+                while last > i && (de_blank(raw[last - 1] as int) || (raw[last - 1] as int) == 13) { last -= 1 }
+                value.append(raw[i..last])
+                i = end
+                while i < n && (raw[i] as int) != 10 { i += 1 }
+            }
+            if de_has_nul(value) { return Err("строка ${begin}: в значении «${key}» нулевой байт") }
+            mut replaced = false
+            mut at = 0
+            while at < entries.len() {
+                if entries[at].key == key {
+                    entries[at] = EnvEntry { key, value: value.to_str_lossy() }
+                    replaced = true
+                }
+                at += 1
+            }
+            if !replaced {
+                if entries.len() >= ENV_MAX_KEYS { return Err("строка ${begin}: переменных больше ${ENV_MAX_KEYS}") }
+                entries.push(EnvEntry { key, value: value.to_str_lossy() })
+            }
+        }
+    }
+    Ok(entries)
+}
+
+// The byte that `\<c>` stands for in a double-quoted value; -1 - `\<c>` is not an escape.
+fn de_escape(c int) -> int {
+    if c == 110 { return 10 }
+    if c == 114 { return 13 }
+    if c == 116 { return 9 }
+    if c == 34 { return 34 }
+    if c == 92 { return 92 }
+    -1
+}
+
+/// The names of the variables of a text (nothing for a text that does not parse: it cannot have been saved).
+export fn dotenv_keys(text str) -> []str {
+    mut keys = []str.new()
+    match parse_dotenv(text) {
+        Ok(entries) => {
+            for e in entries { keys.push(e.key) }
+        }
+        Err(reason) => ()
+    }
+    keys
+}

@@ -16,7 +16,7 @@
 module server.front
 
 import crew_harness.acp.{AgentLink, connect}
-import polaris.{Router, ServerRequest, ServerResponse, WebSocketUpgrade, StatusCode, HttpError}
+import polaris.{Router, MethodRouter, ServerRequest, ServerResponse, WebSocketUpgrade, StatusCode, HttpError}
 import polaris.static.{Static, serve_path}
 import polaris.ws.{Frame, OpCode, frame_len_hint}
 import polaris.net.{ServerPolicy}
@@ -476,6 +476,18 @@ fn build_router(web_dir str, port int, hub_tx ChanTx[str], reg_tx ChanTx[Reg], a
     ro r4b = router.get("/api/stt/status", stt_status_route(stt_mgr, stt_asks, stt_model))?
     ro r4c = router.post("/api/session-image/{id}", image_put_route(data_dir, image_limit, port))?
     ro r4d = router.get("/api/session-image/{id}/{n}", image_get_route(data_dir))?
+    // the projects of the control panel and the choice of a folder (task 192m)
+    mut all_projects = MethodRouter.new()
+    all_projects.get(projects_list_route(data_dir, port))
+    all_projects.post(projects_post_route(data_dir, port))
+    ro r4m = router.route("/api/projects", all_projects)?
+    mut one_project = MethodRouter.new()
+    one_project.get(projects_get_route(data_dir, port))
+    one_project.put(projects_put_route(data_dir, port))
+    one_project.delete(projects_delete_route(data_dir, port))
+    ro r4n = router.route("/api/projects/{id}", one_project)?
+    ro r4h = router.get("/api/fs/list", fs_list_route(data_dir, port))?
+    ro r4i = router.get("/api/fs/git", fs_git_route(port))?
     ro r5 = router.get("/{*path}", files_route(web_dir))?
     Ok(router)
 }

@@ -1,0 +1,129 @@
+// testkit_project.nv - the scenario of the projects of the control panel (task 192m): a session made with `project_id` and `folder` works in the
+// folder of the project and its agent gets the variables of the project; the journal keeps only the id; a wrong project is refused;
+// the project goes on after a restart of the hub. Like the other scenarios it returns "" when everything was as it must be.
+module crew_harness.server
+
+import crew_harness.projects.{projects_create}
+import std.encoding.json.{Json, JsonObject}
+import std.fs.{Fs, real_fs, Path, read_text, create_dir_all, try_exists}
+import std.os.{Os, real_os, env}
+
+fn kit_slashes(path str) -> str {
+    mut raw = []u8.new()
+    for b in path.bytes() { raw.push(if (b as int) == 92 { 47 as u8 } else { b }) }
+    raw.to_str_lossy()
+}
+
+fn kit_file_text(path str) -> str {
+    with Fs = real_fs() {
+        match read_text(Path.from_bytes(path.bytes())) {
+            Ok(t) => t
+            Err(e) => ""
+        }
+    }
+}
+
+fn kit_json_object(text str) -> JsonObject {
+    match Json.parse(text) {
+        Ok(v) => match v.object() {
+            Some(o) => o
+            None => panic("not an object: ${text}")
+        }
+        Err(e) => panic("not JSON: ${text}")
+    }
+}
+
+// The answer to the LAST message of the owner in the session `trace` ("" - none).
+fn kit_last_answer(all []str, trace str) -> str {
+    mut lines = []str.new()
+    for line in all {
+        if line_field(line, "trace") == trace { lines.push(line) }
+    }
+    mut last = ""
+    for line in lines {
+        if line_field(line, "kind") == "user_message" { last = line_input(line, "turn") }
+    }
+    answer_of(lines, last)
+}
+
+/// A session of a project: the folder, the variables (over the ones of the hub), the journal without the values, a wrong project, a restart.
+export fn scenario_project(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    ro folder = kit_slashes("${settings.data_dir}-work/work dir")
+    ro other = kit_slashes("${settings.data_dir}-work/other")
+    with Fs = real_fs() {
+        ro made = create_dir_all(Path.from_bytes(folder.bytes()))
+    }
+    // two variables of the hub: one that the project overrides, one that it leaves alone
+    with Os = real_os() {
+        ro set1 = env("CREW_192M_BASE", "from-hub")
+        ro set2 = env("CREW_192M_KEEP", "kept-from-hub")
+    }
+    ro body = "{\"name\":\"P\",\"folders\":[{\"path\":\"${folder}\"}],\"env\":\"FOO=bar baz\\nCREW_192M_BASE=from-project\\nexport QUOTED=\\\"a \\\\\\\"b\\\\\\\" # c\\\"\\nSECRET_TOKEN=zq-top-secret-9\\n\"}"
+    ro id = match projects_create(settings.data_dir, kit_json_object(body)) {
+        Ok(i) => i
+        Err(f) => panic("the project cannot be made: ${f.message}")
+    }
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-proj", "{\"name\":\"В проекте\",\"agent\":\"opencode\",\"project_id\":\"${id}\",\"folder\":\"${folder}\"}")
+    rig.page(1, "user_message", "s-proj", "{\"turn\":\"t1\",\"text\":\"env FOO CREW_192M_BASE CREW_192M_KEEP QUOTED NOPE_192M\"}")
+    c.expect(rig.until(KIT_DONE, 20000), "the first turn ends")
+    ro told = kit_last_answer(rig.lines_for(1), "s-proj")
+    c.expect(told == "env FOO=[bar baz]; CREW_192M_BASE=[from-project]; CREW_192M_KEEP=[kept-from-hub]; QUOTED=[a \"b\" # c]; NOPE_192M=<unset>", "the agent sees the variables of the project over the ones of the hub: ${told}")
+    rig.forget()
+    rig.page(1, "user_message", "s-proj", "{\"turn\":\"t2\",\"text\":\"cwd\"}")
+    c.expect(rig.until(KIT_DONE, 20000), "the second turn ends")
+    c.expect(kit_last_answer(rig.lines_for(1), "s-proj").ends_with("/work dir"), "the agent works in the folder of the project: ${kit_last_answer(rig.lines_for(1), "s-proj")}")
+
+    // the page is told the folder and the id of the project; the journal and the snapshot hold the id and no value
+    ro created = first_of(rig.lines_for(1), "session_created", 0)
+    c.expect(line_input(created, "project_id") == id, "the page line names the project")
+    c.expect(line_input(created, "folder") == folder, "the page line names the folder of the project")
+    ro journal = kit_file_text("${settings.data_dir}/s-proj.journal")
+    ro snapshot = kit_file_text("${settings.data_dir}/s-proj.snapshot")
+    c.expect(journal.contains(id), "the journal keeps the id of the project")
+    c.expect(journal.byte_len() > 0 && snapshot.byte_len() > 0, "the files of the session are there")
+    c.expect(!journal.contains("zq-top-secret-9") && !snapshot.contains("zq-top-secret-9"), "no value of a variable that the agent was not asked for is in the journal or the snapshot")
+    c.expect(kit_with(rig.lines_for(1), "zq-top-secret-9") == 0, "no value of a variable is told to the page")
+    for entry in rig.hub.take_log() {
+        c.expect(!entry.contains("zq-top-secret-9") && !entry.contains("bar baz"), "no value is in the log of the hub")
+    }
+
+    // a project that is not there, and a folder that is not the project's: the session is not made
+    rig.forget()
+    rig.page(1, "session_created", "s-nop", "{\"name\":\"X\",\"agent\":\"opencode\",\"project_id\":\"nosuchproject\"}")
+    c.expect(rig.until("the project was not found", 5000), "a project that is not there is refused")
+    rig.page(1, "session_created", "s-nof", "{\"name\":\"X\",\"agent\":\"opencode\",\"project_id\":\"${id}\",\"folder\":\"${other}\"}")
+    c.expect(rig.until("the folder is not in the project", 5000), "a folder that is not in the project is refused")
+    c.expect(rig.hub.session_ids().len() == 1, "the refused sessions are not made")
+
+    // no folder asked for: the first folder of the project
+    rig.forget()
+    rig.page(1, "session_created", "s-first", "{\"name\":\"F\",\"agent\":\"opencode\",\"project_id\":\"${id}\"}")
+    rig.page(1, "user_message", "s-first", "{\"turn\":\"tf\",\"text\":\"cwd\"}")
+    c.expect(rig.until(KIT_DONE, 20000), "a session without a folder asked for is answered")
+    ro first_answer = kit_last_answer(rig.lines_for(1), "s-first")
+    c.expect(first_answer.ends_with("/work dir"), "the first folder of the project is the folder of the agent: ${first_answer}")
+
+    // a session without a project is as it was: the working folder of the hub, nobody's variables
+    rig.forget()
+    rig.page(1, "session_created", "s-plain", "{\"name\":\"N\",\"agent\":\"opencode\"}")
+    rig.page(1, "user_message", "s-plain", "{\"turn\":\"tp\",\"text\":\"env FOO CREW_192M_BASE\"}")
+    c.expect(rig.until(KIT_DONE, 20000), "a session without a project is answered")
+    ro plain = kit_last_answer(rig.lines_for(1), "s-plain")
+    c.expect(plain == "env FOO=<unset>; CREW_192M_BASE=[from-hub]", "a session without a project gets the variables of the hub only: ${plain}")
+    rig.shut()
+
+    // the hub starts again: the session goes on in its folder with its variables
+    mut again = rig_open(settings)
+    again.attach(7)
+    again.forget()
+    again.page(7, "user_message", "s-proj", "{\"turn\":\"t3\",\"text\":\"env FOO\"}")
+    c.expect(again.until(KIT_DONE, 20000), "the turn after the restart ends")
+    ro lines = again.lines_for(7)
+    ro after = kit_last_answer(lines, "s-proj")
+    c.expect(after == "env FOO=[bar baz]", "the variables of the project reach the agent after the restart: ${after}")
+    again.shut()
+    c.report()
+}
