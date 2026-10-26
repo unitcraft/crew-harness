@@ -19,6 +19,8 @@
 //   caps             a chunk with the clientCapabilities that came with initialize
 //   env NAME...      a chunk with the values of the named environment variables of the agent process (`env FOO=[bar baz]; X=<unset>`, `<unset>` when none)
 //   cwd              a chunk with the working folder of the agent process
+//   mode             a chunk with the choices this agent process holds now: "mode: <id> model: <id> effort: <id>" (task 192t: the owner's choices
+//                    arrive by session/set_mode and session/set_config_option; a new process starts with the defaults again)
 //   cancelcount      a chunk with the number of session/cancel notifications received so far
 //   ask              asks the client a question by `elicitation/create` (a form, as claude-agent-acp writes it) when the client said at initialize
 //                    that it shows forms; the chunk tells the answer ("ask: no-form" when it did not). Two questions with `ask2`.
@@ -43,6 +45,21 @@ const takesImages = args.includes("--images");
 const noSession = args.includes("--no-session");
 const authError = args.includes("--auth-error");
 const askFlag = args.includes("--ask");
+// `--no-yolo`: the list of modes has no "yolo" (an agent that changed its list)
+const noYolo = args.includes("--no-yolo");
+// the choices of the owner live in the process only, as with a real agent
+const choice = { mode: "default", model: "fake-model", effort: "medium" };
+function modeList() {
+  const list = [{ id: "default", name: "Default", description: "Asks before changes" }, { id: "plan", name: "Plan", description: "Plans first" }];
+  if (!noYolo) list.push({ id: "yolo", name: "Yolo", description: "No questions" });
+  return list;
+}
+function configOptions() {
+  return [
+    { id: "model", category: "model", type: "select", currentValue: choice.model, options: [{ value: "fake-model", name: "Fake Model" }, { value: "fake-model-b", name: "Fake Model B" }] },
+    { id: "effort", category: "thought_level", type: "select", currentValue: choice.effort, options: [{ value: "low", name: "Low" }, { value: "medium", name: "Medium" }, { value: "high", name: "High" }] },
+  ];
+}
 let mcpServers = [];
 const streamMarkerArg = args.find((arg) => arg.startsWith("--stream-marker="));
 const streamMarker = streamMarkerArg ? streamMarkerArg.slice("--stream-marker=".length) : "";
@@ -146,6 +163,9 @@ async function prompt(id, params) {
       chunk("permission: " + told);
       return respond(id, { stopReason: told === "cancelled" ? "cancelled" : "end_turn" });
     }
+    case "mode":
+      chunk("mode: " + choice.mode + " model: " + choice.model + " effort: " + choice.effort);
+      return respond(id, { stopReason: "end_turn" });
     case "hintseen":
       chunk("hint: " + (hinted ? "yes" : "no"));
       return respond(id, { stopReason: "end_turn" });
@@ -341,9 +361,18 @@ function handle(line) {
     case "session/new":
       if (noSession) return;
       mcpServers = (msg.params && msg.params.mcpServers) || [];
-      return respond(msg.id, { sessionId: SESSION, modes: { currentModeId: "default", availableModes: [{ id: "default", name: "Default", description: "Asks before changes" }, { id: "plan", name: "Plan", description: "Plans first" }] }, configOptions: [{ id: "model", category: "model", type: "select", currentValue: "fake-model", options: [{ value: "fake-model", name: "Fake Model" }] }] });
+      return respond(msg.id, { sessionId: SESSION, modes: { currentModeId: choice.mode, availableModes: modeList() }, configOptions: configOptions() });
     case "session/set_mode":
+      if (!modeList().some((m) => m.id === (msg.params && msg.params.modeId))) return write({ jsonrpc: "2.0", id: msg.id, error: { code: -32602, message: "unknown mode" } });
+      choice.mode = msg.params.modeId;
+      update({ sessionUpdate: "current_mode_update", currentModeId: choice.mode });
       return respond(msg.id, {});
+    case "session/set_config_option": {
+      const id = msg.params && msg.params.configId;
+      if (id !== "model" && id !== "effort") return write({ jsonrpc: "2.0", id: msg.id, error: { code: -32602, message: "unknown option" } });
+      choice[id] = msg.params.value;
+      return respond(msg.id, { configOptions: configOptions() });
+    }
     case "session/prompt":
       if (!msg.params || msg.params.sessionId !== SESSION) {
         return write({ jsonrpc: "2.0", id: msg.id, error: { code: -32602, message: "unknown session" } });
