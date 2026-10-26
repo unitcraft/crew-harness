@@ -5,6 +5,7 @@
 #     пуша или запроса на слияние (commit-range.sh и guard-commit-message.py --ci); задание selftests -
 #     все самотесты, «доказательство красного» и прогон на пустом корне. Любой красный вердикт - красный прогон,
 #     «пропущено» у обязательного стража в CI тоже красный.
+# Задание web-tests - тесты страницы пульта (node --test, без браузера и сети).
 # Не проверяет: тесты плагина (их гоняют по одному локально, AGENTS.md п.9) и защиту ветки main
 #     (её настраивает scripts/github-setup.sh).
 # Правило: AGENTS.md п.8, п.15; ADR-0006.
@@ -73,3 +74,13 @@ jobs:
         run: sh scripts/guards/prove-red.sh
       - name: Empty root and skeleton
         run: sh scripts/guards/probe-empty-root.sh
+
+  web-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Web page tests (no browser, no network, no npm packages)
+        run: node --test "src/web/test/*.test.mjs"
