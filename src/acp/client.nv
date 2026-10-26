@@ -328,7 +328,7 @@ export fn open_client_asking(config AcpConfig, trace_path str, trace_limit int, 
             }
             mut client = AcpClient {
                 config, link, phase: "initializing", next_rpc: 0, init_rpc: -1, new_rpc: -1, prompt_rpc: -1,
-                session: "", agent: "", model_name: "", modes: JsonValue.null(), models: JsonValue.null(), choices_cfg: JsonValue.null(), mode_now: "", model_now: "", sets: []AcpSet.new(), queue: []AcpQueued.new(), active: "", permissions: []AcpPending.new(), ask, asks: []AcpAsk.new(), mcp_http: false,
+                session: "", agent: "", model_name: "", modes: JsonValue.null(), models: JsonValue.null(), choices_cfg: JsonValue.null(), mode_now: "", model_now: "", sets: []AcpSet.new(), queue: []AcpQueued.new(), active: "", permissions: []AcpPending.new(), ask, asks: []AcpAsk.new(), mcp_http: false, hint_due: false,
                 ready, taken: []AcpInboxItem.new(), next_seq: next, stderr: "", exit_code: -2, last_error: "", trace: trace_open(trace_path, trace_limit),
                 images_ok: false, attached: []AcpImage.new()
             }
