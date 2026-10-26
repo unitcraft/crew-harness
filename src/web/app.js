@@ -6,7 +6,7 @@
 // Здесь живёт лишь то, чего в потоке нет по природе: какая сессия открыта на экране.
 
 import {
-  initialModel, reduce, makeEvent, nextStep, normalizeTheme, nextTheme, THEME_KEY,
+  initialModel, reduce, makeEvent, nextStep, normalizeTheme, nextTheme, THEME_KEY, beginSwitch, undoSwitch,
 } from './state.js';
 import { t } from './strings.js';
 import { createView } from './view.js';
@@ -189,7 +189,13 @@ const handlers = {
     send('cancel', trace, nextStep(model, trace), open ? { turn: open.turn } : {});
   },
   onSwitchAgent(trace, agent) {
-    send('session_agent', trace, nextStep(model, trace), { agent });
+    // Страница не ждёт сервера: сразу показывает значения новой семьи (каталог), а не остатки прежней (задача 192o).
+    model = beginSwitch(model, trace, agent);
+    render();
+    if (!send('session_agent', trace, nextStep(model, trace), { agent })) {
+      model = undoSwitch(model, trace);
+      render();
+    }
   },
   onChoose(trace, setting, value) {
     send('session_setting', trace, nextStep(model, trace), { setting, value });

@@ -25,8 +25,9 @@ const base = () => [
   ev('user_message', { turn: 't1', text: 'сделай' }, { step: 1 }),
 ];
 
-test('виды событий: девять прежних, шесть рабочих, два для картинок и три вида вопросов', () => {
+test('виды событий: девять прежних, шесть рабочих, картинки, вопросы и каталог семьи', () => {
   assert.deepEqual([...st.KINDS].sort(), [
+    'agent_catalog',
     'agent_chunk',
     'agent_done',
     'agent_refused',
