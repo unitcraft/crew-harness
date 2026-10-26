@@ -629,7 +629,7 @@ export fn route_view_text(rt RouteSession, titles []str, progress []Progress, su
         jput(t, "unmerged_commits", JsonValue.int(rt.unmerged))
         jput(t, "needs_owner", JsonValue.bool(rt.tnote.byte_len() > 0))
         jput(t, "note", JsonValue.str(rt.tnote))
-        jput(t, "finish", rt.worktree.byte_len() > 0 && rt.tstate != "done")
+        jput(t, "finish", JsonValue.bool(rt.worktree.byte_len() > 0 && rt.tstate != "done"))
         jput(t, "finish_options", if rt.tstate == "finishing" { finish_options() } else { JsonValue.null() })
         mut files = []JsonValue.new()
         for d in rt.diff {
