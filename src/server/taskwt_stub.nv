@@ -49,7 +49,8 @@ export fn task_branch_names(main_copy str) Proc -> []str {
 
 /// A tree for the task `folder` ("007-name"): branch `task/<folder>` from `origin/main` (from the current branch when there is no origin), the tree next to the main copy.
 export fn task_tree_create(main_copy str, folder str) Proc -> TwTree {
-    ro base = if git_run(main_copy, ["rev-parse", "--verify", "--quiet", "origin/main"]).ok { "origin/main" } else { "HEAD" }
+    ro current = git_run(main_copy, ["branch", "--show-current"])
+    ro base = if git_run(main_copy, ["rev-parse", "--verify", "--quiet", "origin/main"]).ok { "origin/main" } else if current.ok && current.text.byte_len() > 0 { current.text } else { "HEAD" }
     ro branch = "task/${folder}"
     ro path = tw_tree_path(main_copy, folder, "")
     ro r = git_run(main_copy, ["worktree", "add", "-b", branch, path, base])
@@ -58,7 +59,7 @@ export fn task_tree_create(main_copy str, folder str) Proc -> TwTree {
 
 /// Remove the tree and the branch of a task that has nothing to lose (no commits that are not merged, a clean tree).
 export fn task_tree_remove(main_copy str, tree str, branch str) Proc -> GitOut {
-    ro r = git_run(main_copy, ["worktree", "remove", tree])
+    ro r = git_run(main_copy, ["worktree", "remove", "--force", tree])
     if !r.ok { return r }
     git_run(main_copy, ["branch", "-d", branch])
 }
@@ -147,6 +148,18 @@ export fn diff_stat(tree str, base str) Proc -> str {
 export fn is_clean(tree str) Proc -> bool {
     ro r = git_run(tree, ["status", "--porcelain"])
     r.ok && r.text.byte_len() == 0
+}
+
+/// The lines of `git status --porcelain` of the tree (what is changed and not committed).
+export fn tree_changes(tree str) Proc -> []str {
+    mut out = []str.new()
+    ro r = git_run(tree, ["status", "--porcelain"])
+    if r.ok {
+        for line in r.text.lines() {
+            if line.trim_ascii().byte_len() > 0 { out.push(line) }
+        }
+    }
+    out
 }
 
 /// The words for the agent that must resolve the conflicts in `files` (`kind`: "merge" of a subtask or "rebase" on `origin/main`).

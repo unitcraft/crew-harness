@@ -939,6 +939,14 @@ fn Hub mut @route_resolve_again(at int, n int, files []str) Proc Detach Time -> 
 
 // ----- finishing and publishing -----
 
+// Are there changes in the tree of the task that are not committed? The files of the task itself (`doc/tasks/<task>/`) do not count: the hub writes them.
+fn Hub @route_dirty(s Dialog) Proc -> bool {
+    for line in tree_changes(s.rt.worktree) {
+        if !line.contains("doc/tasks/${s.rt.task_id}/") { return true }
+    }
+    false
+}
+
 fn Hub mut @route_new_task(trace str) Proc Detach Time -> () {
     ro at = @find(trace)
     if at < 0 { return }
@@ -950,8 +958,7 @@ fn Hub mut @route_new_task(trace str) Proc Detach Time -> () {
     }
     if s.rt.worktree.byte_len() > 0 && s.rt.tstate != "done" {
         ro count = unmerged_count(s.rt.worktree, s.rt.base)
-        ro clean = is_clean(s.rt.worktree)
-        if count > 0 || !clean {
+        if count > 0 || @route_dirty(s) {
             // work in the tree is not dropped quietly: the owner chooses (the steps of the finishing, "keep")
             mut me = @sessions[at]
             me.rt.unmerged = count
