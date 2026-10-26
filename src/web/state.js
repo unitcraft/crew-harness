@@ -26,6 +26,8 @@ export const KINDS = Object.freeze([
   'usage_update', 'tool_call', 'tool_call_update', 'output_file', 'file_diff',
   'background_task', 'background_task_update',
   'session_model', 'agent_switched',
+  // задача 192t: выбранное владельцем значение больше недоступно у агента — строка в ленте
+  'setting_dropped',
   // задача 192: картинки сообщения и «агент не принимает изображения»
   'message_images', 'images_skipped',
   // форма вопросов агента (задача 192): вопрос, ответ владельца (эхо сервера), снятие вопроса
@@ -239,6 +241,13 @@ function apply(session, event) {
         modelStep: Math.max(session.modelStep, event.step),
         messages: [...session.messages, { role: 'switch', key, from: str(input.from), to: str(input.to), shown, total, cut: input.cut === 1 }],
       };
+    }
+    case 'setting_dropped': {
+      // выбор владельца (режим, модель, усилие) не применён: агент больше его не предлагает (задача 192t)
+      const key = `sd:${event.id}`;
+      if (session.messages.some((m) => m.key === key)) return session;
+      const setting = ['mode', 'model', 'effort'].includes(input.setting) ? input.setting : 'mode';
+      return { ...session, messages: [...session.messages, { role: 'dropped', key, setting, value: str(input.value), used: str(input.used) }] };
     }
     case 'message_images': {
       // журнал кладёт запись о картинках прямо перед сообщением, к которому они относятся

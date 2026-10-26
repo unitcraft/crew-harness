@@ -48,6 +48,7 @@ test('виды событий: девять прежних, шесть рабо�
     'route_state',
     'session_created',
     'session_model',
+    'setting_dropped',
     'tool_call',
     'tool_call_update',
     'turn_usage',
