@@ -19,17 +19,18 @@ const css = fs.readFileSync(new URL('../app.css', import.meta.url), 'utf8');
 
 const steps = (...states) => states.map((state, i) => ({ n: i + 1, title: `шаг ${i + 1}`, state }));
 
-test('три режима по порядку, у каждого название и описание из strings.js; по умолчанию интерактивный', () => {
-  assert.deepEqual(ROUTES.map((r) => r.id), ['interactive', 'fast', 'full']);
+test('четыре режима по порядку, у каждого название и описание из strings.js; по умолчанию интерактивный', () => {
+  assert.deepEqual(ROUTES.map((r) => r.id), ['interactive', 'fast', 'full', 'planning']);
   assert.equal(DEFAULT_ROUTE, 'interactive');
   assert.equal(routeName('interactive'), 'Интерактивный');
   assert.equal(routeName('fast'), 'Быстрая задача');
   assert.equal(routeName('full'), 'Полный путь');
+  assert.equal(routeName('planning'), 'Планирование');
   for (const r of ROUTES) {
     assert.ok(S[r.nameKey] && S[r.descKey], r.id);
     assert.ok(!routeDescription(r.id).includes('\n'), 'описание в одну строку');
   }
-  assert.deepEqual(ROUTES.map((r) => r.hasSteps), [false, true, true]);
+  assert.deepEqual(ROUTES.map((r) => r.hasSteps), [false, true, true, true]);
 });
 
 test('normalizeRoute: неизвестное значение — интерактивный', () => {
@@ -391,9 +392,14 @@ test('карточки: «Закончить задачу» пока шаги н
   assert.deepEqual(diffTotals(null), { files: 0, added: 0, removed: 0 });
 });
 
-test('новые сигналы: публикация, оставить, параллельно, выбор дерева', () => {
-  assert.deepEqual(routeSignal.publish(), { kind: 'route_publish', input: {} });
-  assert.deepEqual(routeSignal.keep(), { kind: 'route_keep', input: {} });
+test('новые сигналы: слить, тесты, удалить дерево, Worktree, параллельно, выбор дерева; «оставить» и «публикации» нет', () => {
+  assert.deepEqual(routeSignal.merge(), { kind: 'route_merge', input: {} });
+  assert.deepEqual(routeSignal.testsRun(), { kind: 'route_tests_run', input: {} });
+  assert.deepEqual(routeSignal.treeDrop(true), { kind: 'route_tree_drop', input: { force: true } });
+  assert.deepEqual(routeSignal.treeDrop(), { kind: 'route_tree_drop', input: { force: false } });
+  assert.deepEqual(routeSignal.worktree(false), { kind: 'session_worktree', input: { on: false } });
+  assert.equal(routeSignal.keep, undefined);
+  assert.equal(routeSignal.publish, undefined);
   assert.deepEqual(routeSignal.subtaskParallel(2, true), { kind: 'route_subtask_parallel', input: { n: 2, on: true } });
   assert.deepEqual(routeSignal.subtaskParallel(2, 'да'), { kind: 'route_subtask_parallel', input: { n: 2, on: false } });
   assert.deepEqual(routeSignal.subtaskChoose(2, 'shared'), { kind: 'route_subtask_choose', input: { n: 2, tree: 'shared' } });
@@ -416,7 +422,7 @@ test('журнал-заготовка: s1 — пересечение 2 с 1; s2 
   assert.match(subs[5].ownerText, /Конфликт/);
 });
 
-test('заглушка: «Закончить» — быстрый маршрут и прогон ведут задачу finishing → ready; затем «Влить» или «Оставить»', () => {
+test('заглушка: «Закончить» — быстрый маршрут и прогон ведут задачу finishing → ready; затем «Слить в main»', () => {
   let t = 9_000_000;
   const server = createMockServer({ now: () => t });
   let model = INITIAL_JOURNAL.reduce(reduce, initialModel());
@@ -442,10 +448,8 @@ test('заглушка: «Закончить» — быстрый маршрут
   assert.ok(run.length >= 5);
   assert.equal(task().state, 'ready');
   assert.ok(task().diff.files.length > 0);
-  send('route_keep', {});
-  assert.equal(task().state, 'kept');
-  assert.equal(mergeLabel(task()).kind, 'unmerged');
-  send('route_publish', {});
+  assert.equal(mergeLabel(task()).kind, 'ready');
+  send('route_merge', {});
   assert.deepEqual([task().state, task().unmergedCommits, mergeLabel(task())], ['done', 0, null]);
 });
 
@@ -460,13 +464,16 @@ test('заглушка: «параллельно» и выбор дерева п
 });
 
 test('проводка: карточки над полем, метка в списке, напоминание при открытии, обратный отсчёт 30 с', () => {
-  for (const name of ['onRouteFinish', 'onRouteKeep', 'onRoutePublish', 'onRouteSubtaskParallel', 'onRouteSubtaskChoose', 'onNotice']) {
+  for (const name of ['onRouteFinish', 'onRouteMerge', 'onRouteTestsRun', 'onRouteTreeDrop', 'onRouteSubtaskParallel', 'onRouteSubtaskChoose', 'onNotice']) {
     assert.match(app, new RegExp(`${name}\\(`), name);
   }
-  for (const name of ['onRouteFinish', 'onRouteKeep', 'onRoutePublish', 'onRouteSubtaskParallel', 'onRouteSubtaskChoose']) assert.match(view, new RegExp(`handlers\\.${name}\\(`), name);
+  for (const name of ['onRouteFinish', 'onRouteMerge', 'onRouteTestsRun', 'onRouteTreeDrop', 'onRouteSubtaskParallel', 'onRouteSubtaskChoose']) assert.match(view, new RegExp(`handlers\\.${name}\\(`), name);
   assert.match(view, /'data-card': 'finish'/);
   assert.match(view, /'data-card': 'ready'/);
   assert.match(view, /'data-card': 'overlap'/);
+  assert.match(view, /'data-card': 'stale'/);
+  assert.doesNotMatch(view, /onRouteKeep|onRoutePublish/);
+  assert.doesNotMatch(app, /onRouteKeep|onRoutePublish|routeSignal\.(keep|publish)/);
   assert.match(view, /class: 'session-merge'/);
   assert.match(view, /\[data-until\]/);
   assert.match(view, /handlers\.onNotice/);
@@ -487,7 +494,7 @@ test('заглушка: пропуск шага отмечает его проп
 test('проводка: чип режима первым в строке статуса, aria-label «Режим работы», без шеврона; меню вверх слева; страница шлёт сигналы', () => {
   assert.equal(S['route.label'], 'Режим работы');
   assert.match(view, /const routeButton = h\(doc, 'button', \{[^}]*'aria-label': t\('route\.label'\)/);
-  assert.match(view, /class: 'composer-status', 'data-empty': 'true' \}, routeButton, h\(doc, 'span', \{ class: 'grow' \}\), statusGroup/);
+  assert.match(view, /class: 'composer-status', 'data-empty': 'true' \}, projectButton, worktreeButton, routeButton, h\(doc, 'span', \{ class: 'grow' \}\), statusGroup/);
   assert.doesNotMatch(view, /routeButton\.replaceChildren\([^;]*icon\(/, 'шеврона у чипа нет');
   assert.match(view, /menu\.dataset\.side = 'left'/);
   assert.match(css, /\.menu\[data-side="left"\] \{ left: 0; \}/);

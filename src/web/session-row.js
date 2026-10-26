@@ -10,10 +10,11 @@
 import { t } from './strings.js';
 import { h, icon } from './dom.js';
 import { moveInOrder } from './lists.js';
+import { commitsText } from './routes.js';
 
 /**
  * @param doc  document
- * @param deps { handlers, projects() — список проектов страницы или null, confirm(text) — Promise<boolean>, linkFor(id) — ссылка на сессию, render() }
+ * @param deps { handlers, projects() — список проектов страницы или null, confirm(text, {ok, cancel}) — Promise<boolean>, linkFor(id) — ссылка на сессию, render() }
  *   handlers: onPin(id, pinned), onUnread(id, on), onRename(id, name), onCopy(text), onMoveSession(id, projectId), onDeleteSession(id),
  *   onReorderSessions(ids), onReorderProjects(ids)
  */
@@ -54,7 +55,15 @@ export function createSideKit(doc, deps) {
   function askDelete(session) {
     menu = null;
     render();
-    confirm(t('session.delete_confirm', { name: session.name })).then((yes) => { if (yes) handlers.onDeleteSession(session.id); });
+    confirm(t('session.delete_confirm', { name: session.name })).then((yes) => {
+      if (!yes) return;
+      // ветка и дерево задачи живут, пока есть сессия; не влитую работу не теряем молча: владелец выбирает
+      const task = session.routeState && session.routeState.task;
+      const work = task && task.worktree ? task.unmergedCommits : 0;
+      if (!work) { handlers.onDeleteSession(session.id); return; }
+      confirm(t('session.delete_work', { commits: commitsText(work) }), { ok: t('session.delete_all'), cancel: t('session.delete_keep') })
+        .then((all) => handlers.onDeleteSession(session.id, all ? 'drop' : 'keep'));
+    });
   }
 
   /** Меню открытой сессии (или null, если открыто не у неё). ctx: { pinned, unread }. */

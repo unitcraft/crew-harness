@@ -15,7 +15,7 @@ import { createQueue } from './queue.js';
 import { uploadImages, messageInput } from './attachments.js';
 import { chooseMode, createTransport, parseAgentRegistry } from './transport.js';
 import { createProjectsApi } from './projects-api.js';
-import { routeSignal } from './routes.js';
+import { routeSignal, normalizeRoute } from './routes.js';
 
 const FLASH_MS = 4000;
 const TICK_MS = 1000;
@@ -183,7 +183,7 @@ const handlers = {
   },
   onUnread(trace, on) { ui.unread = { ...ui.unread, [trace]: on }; saveUnread(ui.unread); render(); },
   onMoveSession(trace, projectId) { send('session_move', trace, nextStep(model, trace), { project_id: projectId }); },
-  onDeleteSession(trace) { send('session_delete', trace, nextStep(model, trace), {}); },
+  onDeleteSession(trace, branch = '') { send('session_delete', trace, nextStep(model, trace), branch ? { branch } : {}); },
   onReorderSessions(ids) { if (ids.length > 0) send('session_reorder', ids[0], nextStep(model, ids[0]), { ids }); },
   // порядок проектов: страница показывает его сразу, сервер запоминает для всех страниц
   async onReorderProjects(ids) {
@@ -251,7 +251,7 @@ const handlers = {
     const draft = model.sessions[trace];
     if (draft && draft.draft) {
       // первое сообщение черновика: сначала создаётся сессия (проект, папка, агент), потом уходит сообщение
-      const input = { name: nameFromText(text) || t('sessions.new_name_placeholder'), agent: draft.agent };
+      const input = { name: nameFromText(text) || t('sessions.new_name_placeholder'), agent: draft.agent, route: normalizeRoute(draft.route), worktree: draft.worktree !== false };
       if (draft.projectId) {
         input.project = draft.project;
         input.project_id = draft.projectId;
@@ -297,7 +297,13 @@ const handlers = {
     return send('question_answer', trace, nextStep(model, trace), answer);
   },
   // Режимы работы по методике (задача 192p): сигналы серверу; состояние вернётся событием route_state.
-  onRoute(trace, route) { send(...signal(trace, routeSignal.set(route))); },
+  onRoute(trace, route) {
+    // черновик новой сессии: режим выбирается на странице и уходит с первым сообщением
+    if (model.sessions[trace] && model.sessions[trace].draft) { model = patchDraft(model, trace, { route: normalizeRoute(route) }); render(); return; }
+    send(...signal(trace, routeSignal.set(route)));
+  },
+  onDraftWorktree(trace, on) { model = patchDraft(model, trace, { worktree: on === true }); render(); },
+  onWorktree(trace, on) { send(...signal(trace, routeSignal.worktree(on))); },
   onRouteRun(trace) { send(...signal(trace, routeSignal.run())); },
   onRouteSkip(trace, step) { send(...signal(trace, routeSignal.skip(step))); },
   onRouteStop(trace) { send(...signal(trace, routeSignal.stop())); },
@@ -306,8 +312,10 @@ const handlers = {
   onRouteSubtaskWorktree(trace, n) { send(...signal(trace, routeSignal.subtaskWorktree(n))); },
   onRouteSubtaskDone(trace, n) { send(...signal(trace, routeSignal.subtaskDone(n))); },
   onRouteNewTask(trace) { send(...signal(trace, routeSignal.newTask())); },
-  onRoutePublish(trace) { send(...signal(trace, routeSignal.publish())); },
-  onRouteKeep(trace) { send(...signal(trace, routeSignal.keep())); },
+  // «Слить в main» — слово владельца на push в origin/main (хаб сам коммитит оставленное агентом одним коммитом, тесты не гоняет)
+  onRouteMerge(trace) { send(...signal(trace, routeSignal.merge())); },
+  onRouteTestsRun(trace) { send(...signal(trace, routeSignal.testsRun())); },
+  onRouteTreeDrop(trace, force) { send(...signal(trace, routeSignal.treeDrop(force))); },
   onRouteSubtaskParallel(trace, n, on) { send(...signal(trace, routeSignal.subtaskParallel(n, on))); },
   onRouteSubtaskChoose(trace, n, tree) { send(...signal(trace, routeSignal.subtaskChoose(n, tree))); },
   // «Закончить задачу»: переключить режим и сразу прогнать шаги окончания — два сигнала подряд, шаг события у каждого свой

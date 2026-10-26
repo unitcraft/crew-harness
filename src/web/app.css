@@ -1223,9 +1223,31 @@ input[aria-invalid="true"] { border-color: var(--danger); }
 .title.is-editing .title-text { visibility: hidden; }
 .title-input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; padding: 0 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2); box-shadow: none; color: inherit; font: inherit; letter-spacing: inherit; outline: none; }
 .title-input[hidden] { display: none; }
-.title[hidden], .draft-bar[hidden], .sub[hidden] { display: none; }
-.draft-bar { display: flex; gap: 8px; align-items: center; min-width: 0; }
-.draft-project, .draft-folder { width: auto; max-width: 100%; min-height: 32px; padding: 4px 10px; border-radius: 8px; font-size: 15px; font-weight: 600; }
+.title[hidden], .sub[hidden] { display: none; }
+.draft-folder { width: auto; max-width: 100%; min-height: 32px; padding: 4px 10px; border-radius: 8px; font-size: 14px; }
+/* Новая сессия: проект выбирается списком посреди пустого чата, под полем строка проект · Worktree · режим */
+.project-picker { align-self: center; margin: auto; width: min(400px, 100%); display: flex; flex-direction: column; padding: 6px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-soft); }
+.project-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 6px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+.project-row:hover, .project-row:focus-visible { background: var(--hover); outline: none; }
+.project-row[aria-selected="true"] { background: color-mix(in srgb, var(--fg) 5%, transparent); }
+.project-icon { width: 16px; height: 16px; flex: none; color: var(--fg-muted); }
+.project-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-check { width: 16px; height: 16px; flex: none; display: inline-flex; color: var(--fg); }
+.project-folder { padding: 6px 10px 4px; border-top: 1px solid var(--border); margin-top: 4px; }
+.project-chip, .worktree-chip { gap: 6px; max-width: 40%; overflow: hidden; white-space: nowrap; }
+.project-chip > span { overflow: hidden; text-overflow: ellipsis; }
+.worktree-chip { color: var(--fg-muted); }
+.worktree-chip[aria-pressed="true"] { color: var(--fg); background: color-mix(in srgb, var(--fg) 7%, transparent); }
+.worktree-chip:disabled { cursor: default; opacity: .8; }
+.worktree-chip .icon { width: 14px; height: 14px; }
+/* Закрытие задачи и тесты */
+.route-merge { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.route-merge-note { color: var(--fg-muted); font-size: 11px; line-height: 1.2; }
+.route-tests { flex-basis: 100%; display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+.route-tests-line, .rsub-tests { margin: 0; font-size: 12px; color: var(--fg-muted); overflow-wrap: anywhere; }
+.route-tests-line[data-state="green"], .rsub-tests[data-state="green"] { color: var(--ok); }
+.route-tests-line[data-state="red"], .rsub-tests[data-state="red"] { color: var(--danger); }
+.route-tests-line[data-state="outdated"], .rsub-tests[data-state="outdated"] { color: var(--warn); }
 .group[data-project="true"] .group-head { background: color-mix(in srgb, var(--fg) 4%, transparent); border-radius: 8px; }
 .group[data-project="true"] .group-head h3 { color: var(--fg); font-weight: 700; }
 .group-icon { width: 15px; height: 15px; margin-right: 6px; align-self: center; color: var(--fg-muted); }

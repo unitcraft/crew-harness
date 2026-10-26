@@ -36,7 +36,7 @@ import {
 import {
   ROUTES, STEP_ICON, STEP_STATE_KEY, SUBTASK_STATE_KEY, routeName, routeDescription, counterText, stepToSkip, showStrip, stripActions,
   subtaskPercent, subtaskProgressText, INTERACTIVE_STATE, NOTE_KEY, taskHeading, subtaskActions, hasSubtaskActions, bannerCount, subtaskCountText,
-  mergeLabel, diffTotals, finishPrompt, readyPrompt, overlapPrompt, commitsText, filesText,
+  mergeLabel, diffTotals, finishPrompt, readyPrompt, overlapPrompt, commitsText, filesText, branchTestsText, mainTestsText, testsRunnable, stalePrompt,
 } from './routes.js';
 
 const NEAR_BOTTOM_PX = 48;
@@ -164,7 +164,7 @@ export function createView(doc, refs, deps) {
   const sideKit = createSideKit(doc, {
     handlers,
     projects: () => projectsList,
-    confirm: (text) => projectsUi.confirm({ title: t('session.delete_title'), text, ok: t('session.delete_ok'), cancel: t('session.delete_cancel') }),
+    confirm: (text, words = {}) => projectsUi.confirm({ title: t('session.delete_title'), text, ok: words.ok || t('session.delete_ok'), cancel: words.cancel || t('session.delete_cancel') }),
     linkFor: (id) => {
       const loc = win && win.location;
       return `${loc ? loc.origin + loc.pathname : ''}#s=${encodeURIComponent(id)}`;
@@ -345,32 +345,40 @@ export function createView(doc, refs, deps) {
   });
   titleInput.addEventListener('blur', () => finishRename(true));
   // черновик новой сессии: вместо названия — выбор проекта (и папки, если их несколько)
-  const draftProject = h(doc, 'select', { class: 'draft-project', 'aria-label': t('chat.draft_project') });
+  // Выбор проекта новой сессии — списком посреди пустого чата (значок папки, галочка у выбранного) и кнопкой в строке под полем.
   const draftFolder = h(doc, 'select', { class: 'draft-folder', 'aria-label': t('chat.draft_folder'), hidden: true });
-  const draftBar = h(doc, 'div', { class: 'draft-bar', hidden: true }, draftProject, draftFolder);
-  draftProject.addEventListener('change', () => { if (currentTrace) handlers.onDraftProject(currentTrace, draftProject.value); });
   draftFolder.addEventListener('change', () => { if (currentTrace) handlers.onDraftFolder(currentTrace, draftFolder.value); });
+  const projectPicker = h(doc, 'div', { class: 'project-picker', role: 'listbox', 'aria-label': t('chat.draft_project') });
   let draftSig = '';
-  function syncDraftBar(session) {
+  function projectRow({ id, name, checked }) {
+    const row = h(doc, 'button', { type: 'button', class: 'project-row', role: 'option', 'aria-selected': checked ? 'true' : 'false', 'data-project': id },
+      icon(doc, 'i-folder', 'project-icon'),
+      h(doc, 'span', { class: 'project-name', text: name }),
+      h(doc, 'span', { class: 'project-check' }, checked ? icon(doc, 'i-check') : false));
+    row.addEventListener('click', () => { if (currentTrace) handlers.onDraftProject(currentTrace, id); });
+    return row;
+  }
+  function syncProjectPicker(session) {
     const list = projectsList ?? [];
     const project = list.find((p) => p.id === session.projectId);
     const many = Boolean(project) && project.folders.length > 1;
     const sig = JSON.stringify([list.map((p) => [p.id, p.name]), session.projectId, many ? project.folders.map((f) => f.path) : [], session.folder]);
-    if (sig !== draftSig) {
-      draftSig = sig;
-      draftProject.replaceChildren(h(doc, 'option', { value: '', text: t('sessions.no_project') }), ...list.map((p) => h(doc, 'option', { value: p.id, text: p.name })));
-      draftProject.value = list.some((p) => p.id === session.projectId) ? session.projectId : '';
-      draftFolder.hidden = !many;
-      draftFolder.replaceChildren(...(many ? project.folders.map((f) => h(doc, 'option', { value: f.path, text: f.path })) : []));
-      if (many) draftFolder.value = session.folder;
-    }
+    if (sig === draftSig && projectPicker.parentNode) return;
+    draftSig = sig;
+    draftFolder.hidden = !many;
+    draftFolder.replaceChildren(...(many ? project.folders.map((f) => h(doc, 'option', { value: f.path, text: f.path })) : []));
+    if (many) draftFolder.value = session.folder;
+    projectPicker.replaceChildren(
+      projectRow({ id: '', name: t('chat.project_none'), checked: !project }),
+      ...list.map((p) => projectRow({ id: p.id, name: p.name, checked: Boolean(project) && p.id === project.id })),
+      many ? h(doc, 'div', { class: 'project-folder' }, draftFolder) : false);
   }
   const agentText = h(doc, 'span', { class: 'agent-name' });
   const modelText = h(doc, 'span', { class: 'session-model-slot', 'data-session-model': '' });
   const stateBadge = h(doc, 'span', { class: 'badge' });
   const placeText = h(doc, 'span', { class: 'place muted', title: t('session.place'), hidden: true });
   const subRow = h(doc, 'div', { class: 'sub' }, agentText, modelText, stateBadge, placeText);
-  const titleBlock = h(doc, 'div', { class: 'title-block', hidden: true }, title, draftBar, subRow);
+  const titleBlock = h(doc, 'div', { class: 'title-block', hidden: true }, title, subRow);
   const railButton = h(doc, 'button', { type: 'button', class: 'icon-btn', 'aria-label': t('rail.toggle'), title: t('rail.toggle'), 'aria-pressed': 'true' }, icon(doc, 'i-panel'));
   const topbar = h(doc, 'header', { class: 'topbar' }, backButton, titleBlock, railButton);
 
@@ -611,11 +619,20 @@ export function createView(doc, refs, deps) {
   const effortButton = h(doc, 'button', { type: 'button', class: 'status-btn', hidden: true, title: t('menu.effort'), 'aria-label': t('menu.effort'), 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
   // Режим работы по методике (задача 192p): слева в строке статуса, плоский текст без шеврона.
   const routeButton = h(doc, 'button', { type: 'button', class: 'status-btn route-chip', hidden: true, title: t('route.label'), 'aria-label': t('route.label'), 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
+  // Под полем новой сессии: проект · Worktree · режим · агент · модель · усилие (как «New session»).
+  const projectButton = h(doc, 'button', { type: 'button', class: 'status-btn project-chip', hidden: true, title: t('chat.project_pick'), 'aria-label': t('chat.project_pick'), 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
+  const worktreeButton = h(doc, 'button', { type: 'button', class: 'status-btn worktree-chip', hidden: true, 'aria-pressed': 'true', title: t('route.worktree_on') },
+    icon(doc, 'i-branch'), h(doc, 'span', { text: t('route.worktree') }));
+  worktreeButton.addEventListener('click', () => {
+    if (worktreeButton.disabled || !currentTrace) return;
+    const on = worktreeButton.getAttribute('aria-pressed') !== 'true';
+    if (worktreeButton.dataset.draft === 'true') handlers.onDraftWorktree(currentTrace, on); else handlers.onWorktree(currentTrace, on);
+  });
   const spinner = h(doc, 'span', { class: 'spinner', role: 'img', 'aria-label': t('composer.working'), hidden: true });
   const menu = h(doc, 'div', { class: 'menu', role: 'menu', hidden: true });
   // Одна группа чипов у правого края: семья, режим, модель и усилие; за ней кольцо контекста и спиннер (задача 192).
   const statusGroup = h(doc, 'div', { class: 'status-group' }, familyButton, modeButton, statusModel, modelButton, effortButton);
-  const status = h(doc, 'div', { class: 'composer-status', 'data-empty': 'true' }, routeButton, h(doc, 'span', { class: 'grow' }), statusGroup, ringBox, spinner, menu);
+  const status = h(doc, 'div', { class: 'composer-status', 'data-empty': 'true' }, projectButton, worktreeButton, routeButton, h(doc, 'span', { class: 'grow' }), statusGroup, ringBox, spinner, menu);
 
   // Меню выбора режима, модели и усилия (задача 192): показывает только то, что агент отдал по ACP.
   const MENU_MODELS = 4;
@@ -640,6 +657,7 @@ export function createView(doc, refs, deps) {
     effortButton.setAttribute('aria-expanded', 'false');
     familyButton.setAttribute('aria-expanded', 'false');
     routeButton.setAttribute('aria-expanded', 'false');
+    projectButton.setAttribute('aria-expanded', 'false');
   }
 
   function choose(setting, value) {
@@ -665,6 +683,18 @@ export function createView(doc, refs, deps) {
         name: agentLabel(a.id), checked: a.id === currentAgent, number: i < 9 ? i + 1 : 0,
         onPick: () => { if (currentTrace && a.id !== currentAgent) handlers.onSwitchAgent(currentTrace, a.id); closeMenu(); },
       })));
+      menu.hidden = false;
+      return;
+    }
+    if (menuKind === 'project') {
+      menuSearch.hidden = true;
+      menu.dataset.side = 'left';
+      const draft = currentTrace ? current.session : null;
+      const list = projectsList ?? [];
+      const picked = draft ? list.find((p) => p.id === draft.projectId) : null;
+      menuList.append(h(doc, 'div', { class: 'menu-head', text: t('chat.project_pick') }),
+        menuRow({ name: t('chat.project_none'), checked: !picked, onPick: () => { if (currentTrace) handlers.onDraftProject(currentTrace, ''); closeMenu(); } }),
+        ...list.map((p) => menuRow({ name: p.name, checked: Boolean(picked) && p.id === picked.id, onPick: () => { if (currentTrace) handlers.onDraftProject(currentTrace, p.id); closeMenu(); } })));
       menu.hidden = false;
       return;
     }
@@ -728,6 +758,7 @@ export function createView(doc, refs, deps) {
     menuSig = kind === 'route' ? currentRoute : JSON.stringify(options);
     familyButton.setAttribute('aria-expanded', kind === 'agent' ? 'true' : 'false');
     routeButton.setAttribute('aria-expanded', kind === 'route' ? 'true' : 'false');
+    projectButton.setAttribute('aria-expanded', kind === 'project' ? 'true' : 'false');
     modeButton.setAttribute('aria-expanded', kind === 'mode' ? 'true' : 'false');
     modelButton.setAttribute('aria-expanded', kind === 'model' || kind === 'more' ? 'true' : 'false');
     effortButton.setAttribute('aria-expanded', kind === 'effort' ? 'true' : 'false');
@@ -756,6 +787,7 @@ export function createView(doc, refs, deps) {
   const toggleMenu = (kind) => { if (menuKind) closeMenu(); else openMenu(kind); };
   familyButton.addEventListener('click', () => toggleMenu('agent'));
   routeButton.addEventListener('click', () => toggleMenu('route'));
+  projectButton.addEventListener('click', () => toggleMenu('project'));
   modeButton.addEventListener('click', () => toggleMenu('mode'));
   modelButton.addEventListener('click', () => toggleMenu('model'));
   effortButton.addEventListener('click', () => toggleMenu('effort'));
@@ -837,6 +869,7 @@ export function createView(doc, refs, deps) {
 
   // Карточки задачи над полем (задача 192p): «Закончить задачу», «Задача готова», пересечение подзадач.
   const routeCards = h(doc, 'div', { class: 'route-cards', hidden: true });
+  const staleKept = new Set(); // «сессия:задача», у которых владелец нажал «Оставить» на устаревшей сессии
   const overlapSeen = new Map(); // «сессия:задача:N:M» -> когда выберется «Отдельное дерево» (мс страницы)
   let cardsSig = '';
   const numberOf = (task) => task.number || task.id;
@@ -853,7 +886,8 @@ export function createView(doc, refs, deps) {
       if (!overlapSeen.has(key)) overlapSeen.set(key, now() + overlap.seconds * 1000);
       deadline = overlapSeen.get(key);
     }
-    const sig = JSON.stringify([session.id, task && [task.id, task.number, task.branch, task.state, task.unmergedCommits, task.diff], finish, ready, overlap, showDiff, deadline]);
+    const stale = stalePrompt(task) && !staleKept.has(`${session.id}:${task.id}`);
+    const sig = JSON.stringify([session.id, task && [task.id, task.number, task.branch, task.state, task.unmergedCommits, task.diff, task.tests, task.testsRunning, task.stale, task.idleDays], finish, ready, overlap, showDiff, deadline, stale]);
     if (sig === cardsSig) return;
     cardsSig = sig;
     const cards = [];
@@ -862,13 +896,35 @@ export function createView(doc, refs, deps) {
       b.addEventListener('click', run);
       return b;
     };
+    // тесты не блокируют слияние, но видны: у ветки задачи и у main, с кнопкой «Прогнать тесты»
+    const testsBlock = () => {
+      const when = now();
+      return h(doc, 'div', { class: 'route-tests' },
+        h(doc, 'p', { class: 'route-tests-line', 'data-state': task.tests.branch.state, text: branchTestsText(task.tests.branch, when) }),
+        h(doc, 'p', { class: 'route-tests-line', 'data-state': task.tests.main.state, text: mainTestsText(task.tests.main, when) }),
+        task.testsRunning ? h(doc, 'p', { class: 'route-tests-line muted', text: t('route.tests_running') }) : false,
+        testsRunnable(task) ? button(t('route.tests_run'), '', () => handlers.onRouteTestsRun(session.id)) : false);
+    };
     if (finish) {
       cards.push(h(doc, 'section', { class: 'route-card', 'data-card': 'finish' },
         h(doc, 'strong', { class: 'route-card-title', text: t('route.finish_title', { number: numberOf(task) }) }),
+        testsBlock(),
         h(doc, 'div', { class: 'route-actions' },
-          button(t('route.finish_fast'), 'primary', () => handlers.onRouteFinish(session.id, 'fast')),
-          button(t('route.finish_full'), '', () => handlers.onRouteFinish(session.id, 'full')),
-          button(t('route.finish_keep'), '', () => handlers.onRouteKeep(session.id)))));
+          h(doc, 'span', { class: 'route-merge' },
+            button(t('route.finish_merge'), 'primary', () => handlers.onRouteMerge(session.id)),
+            h(doc, 'small', { class: 'route-merge-note', text: t('route.finish_merge_note') })),
+          button(t('route.finish_fast'), '', () => handlers.onRouteFinish(session.id, 'fast')),
+          button(t('route.finish_full'), '', () => handlers.onRouteFinish(session.id, 'full')))));
+    }
+    if (stale) {
+      const work = task.unmergedCommits > 0;
+      cards.push(h(doc, 'section', { class: 'route-card', 'data-card': 'stale' },
+        h(doc, 'strong', { class: 'route-card-title', text: t('route.stale_title', { days: task.idleDays }) }),
+        h(doc, 'span', { class: 'route-card-text', text: t('route.stale_ask', { number: numberOf(task) }) }),
+        work ? h(doc, 'span', { class: 'route-card-text', text: t('route.stale_work', { commits: commitsText(task.unmergedCommits) }) }) : false,
+        h(doc, 'div', { class: 'route-actions' },
+          work ? button(t('route.stale_drop_work'), 'danger', () => handlers.onRouteTreeDrop(session.id, true)) : button(t('route.stale_drop'), 'danger', () => handlers.onRouteTreeDrop(session.id, false)),
+          button(t('route.stale_keep'), '', () => { staleKept.add(`${session.id}:${task.id}`); cardsSig = ''; renderTaskCards(current.session); }))));
     }
     if (ready) {
       const totals = diffTotals(task.diff);
@@ -883,10 +939,12 @@ export function createView(doc, refs, deps) {
       cards.push(h(doc, 'section', { class: 'route-card', 'data-card': 'ready' },
         h(doc, 'strong', { class: 'route-card-title', text: t('route.ready_title', { number: numberOf(task) }) }),
         h(doc, 'span', { class: 'route-card-text', text: summary }),
+        testsBlock(),
         showDiff ? h(doc, 'ul', { class: 'route-diff' }, ...files) : false,
         h(doc, 'div', { class: 'route-actions' },
-          button(t('route.ready_publish'), 'dark', () => handlers.onRoutePublish(session.id)),
-          button(t('route.finish_keep'), '', () => handlers.onRouteKeep(session.id)),
+          h(doc, 'span', { class: 'route-merge' },
+            button(t('route.ready_publish'), 'dark', () => handlers.onRouteMerge(session.id)),
+            h(doc, 'small', { class: 'route-merge-note', text: t('route.finish_merge_note') })),
           button(showDiff ? t('route.ready_hide') : t('route.ready_show'), '', () => {
             if (open.has(diffKey)) open.delete(diffKey); else open.add(diffKey);
             cardsSig = '';
@@ -1358,8 +1416,6 @@ export function createView(doc, refs, deps) {
     }
     title.hidden = Boolean(session.draft);
     subRow.hidden = Boolean(session.draft);
-    draftBar.hidden = !session.draft;
-    if (session.draft) syncDraftBar(session);
     if (!renaming) titleText.textContent = session.name;
     const taskInfo = sessionTask(session);
     taskNo.hidden = !taskInfo;
@@ -1387,6 +1443,20 @@ export function createView(doc, refs, deps) {
     currentRoute = session.route || INTERACTIVE_STATE.route;
     routeButton.hidden = false;
     routeButton.replaceChildren(h(doc, 'span', { text: routeName(currentRoute) }));
+    // проект и Worktree: у черновика — выбор; у открытой сессии без дерева — переключатель на следующую задачу
+    const knownProject = (projectsList ?? []).find((p) => p.id === session.projectId);
+    projectButton.hidden = !session.draft;
+    if (session.draft) {
+      projectButton.replaceChildren(icon(doc, 'i-folder'), h(doc, 'span', { text: knownProject ? knownProject.name : t('chat.project_none') }));
+    }
+    const task = session.routeState && session.routeState.task;
+    const hasTree = Boolean(task && task.worktree);
+    const treeOn = session.draft ? session.worktree !== false : (session.routeState ? session.routeState.useTree !== false : true);
+    worktreeButton.hidden = false;
+    worktreeButton.dataset.draft = String(Boolean(session.draft));
+    worktreeButton.setAttribute('aria-pressed', String(treeOn || hasTree));
+    worktreeButton.disabled = hasTree;
+    worktreeButton.title = hasTree ? t('route.worktree_locked') : (treeOn ? t('route.worktree_on') : t('route.worktree_off'));
     routeButton.title = `${t('route.label')}: ${routeDescription(currentRoute)}`;
     familyButton.hidden = agents.length < 2;
     familyButton.replaceChildren(h(doc, 'span', { text: agentLabel(shown.agent) }));
@@ -1406,11 +1476,13 @@ export function createView(doc, refs, deps) {
     statusModel.hidden = hasModels;
     statusModel.textContent = shown.model || (shown.loading ? t('session.loading') : '');
     spinner.hidden = !busy;
-    status.dataset.empty = String(routeButton.hidden && familyButton.hidden && !statusModel.textContent && !busy && !hasModes && !hasModels && !hasEfforts && !session.usage);
+    status.dataset.empty = String(routeButton.hidden && worktreeButton.hidden && projectButton.hidden && familyButton.hidden && !statusModel.textContent && !busy && !hasModes && !hasModels && !hasEfforts && !session.usage);
     if (menuKind === 'agent') renderMenu();
     else if (menuKind === 'route') {
       if (menuSig !== currentRoute) renderMenu();
       menuSig = currentRoute;
+    } else if (menuKind === 'project') {
+      if (!session.draft) closeMenu();
     } else if (menuKind && ((menuKind === 'mode' && !hasModes) || (menuKind === 'effort' && !hasEfforts) || ((menuKind === 'model' || menuKind === 'more') && !hasModels))) closeMenu();
     else if (menuKind) {
       const sig = JSON.stringify(options);
@@ -1434,9 +1506,13 @@ export function createView(doc, refs, deps) {
       items.push({ type: 'queued', key: `queued:${index}:${q.text.length}:${q.text.slice(0, 24)}`, text: q.text, images: q.images ?? [], index });
     });
     if (items.length === 0) {
-      if (!emptyChat.parentNode) thread.replaceChildren(emptyChat);
-    } else if (emptyChat.parentNode) {
-      emptyChat.remove();
+      if (session.draft) {
+        syncProjectPicker(session);
+        if (!projectPicker.parentNode) thread.replaceChildren(projectPicker);
+      } else if (!emptyChat.parentNode) thread.replaceChildren(emptyChat);
+    } else {
+      if (emptyChat.parentNode) emptyChat.remove();
+      if (projectPicker.parentNode) projectPicker.remove();
     }
     let created = 0;
     const alive = new Set();
@@ -1618,6 +1694,12 @@ export function createView(doc, refs, deps) {
       more && subMenu === key ? subtaskMenu(s.id, sub) : false);
   }
 
+  function panelTestsButton(s) {
+    const b = h(doc, 'button', { type: 'button', class: 'link-btn', text: t('route.tests_run') });
+    b.addEventListener('click', () => handlers.onRouteTestsRun(s.id));
+    return b;
+  }
+
   function subtasksCard(s) {
     const task = s.routeState && s.routeState.task;
     if (!task) return false;
@@ -1629,6 +1711,11 @@ export function createView(doc, refs, deps) {
       label ? h(doc, 'p', { class: 'rsub-label', 'data-kind': label.kind, text: label.text }) : false,
       task.branch ? h(doc, 'p', { class: 'rsub-task', text: t('route.task_branch', { branch: task.branch }) }) : false,
       task.worktree ? h(doc, 'p', { class: 'rsub-task', text: t('route.task_tree', { worktree: task.worktree }) }) : false,
+      task.worktree ? h(doc, 'p', { class: 'rsub-tests', 'data-state': task.tests.branch.state, text: branchTestsText(task.tests.branch, now()) }) : false,
+      task.worktree ? h(doc, 'p', { class: 'rsub-tests', 'data-state': task.tests.main.state, text: mainTestsText(task.tests.main, now()) }) : false,
+      task.worktree && testsRunnable(task) ? panelTestsButton(s) : false,
+      task.worktree && task.testsRunning ? h(doc, 'p', { class: 'rsub-tests muted', text: t('route.tests_running') }) : false,
+      task.stale ? h(doc, 'p', { class: 'rsub-label', 'data-kind': 'unmerged', text: t('route.stale_title', { days: task.idleDays }) }) : false,
       task.subtasks.length === 0 ? h(doc, 'p', { class: 'muted', text: t('route.sub_none') }) : list,
       newTask);
   }

@@ -1,7 +1,8 @@
 // routes.js — режимы работы по методике (задача 192p): чистый модуль без DOM и часов.
 //
-// Три режима: «Интерактивный» (по умолчанию: задачи пишутся и делаются по супербыстрому пути, шагов нет),
-// «Быстрая задача» и «Полный путь» (у обоих есть шаги, которые можно прогнать после реализации).
+// Четыре режима: «Интерактивный» (по умолчанию: задачи пишутся и делаются по супербыстрому пути, шагов нет),
+// «Быстрая задача» и «Полный путь» (у обоих есть шаги, которые можно прогнать после реализации) и «Планирование»
+// (агент не делает задачу, а доводит до готовности задание: шаги есть, дерева нет).
 // Сервер присылает событие route_state { route, steps, running, task }; страница отдаёт сигналы
 // session_route / route_run / route_skip / route_stop. Здесь — только модель состояния, счёт «N из M»
 // и сборка сигналов; рисует view.js, тексты берутся из strings.js.
@@ -16,11 +17,12 @@ export const ROUTES = Object.freeze([
   Object.freeze({ id: 'interactive', nameKey: 'route.interactive', descKey: 'route.interactive_desc', hasSteps: false }),
   Object.freeze({ id: 'fast', nameKey: 'route.fast', descKey: 'route.fast_desc', hasSteps: true }),
   Object.freeze({ id: 'full', nameKey: 'route.full', descKey: 'route.full_desc', hasSteps: true }),
+  Object.freeze({ id: 'planning', nameKey: 'route.planning', descKey: 'route.planning_desc', hasSteps: true }),
 ]);
 
 export const STEP_STATES = Object.freeze(['pending', 'running', 'done', 'skipped']);
 export const SUBTASK_STATES = Object.freeze(['planned', 'running', 'done']);
-export const TASK_STATES = Object.freeze(['active', 'finishing', 'ready', 'done', 'kept']);
+export const TASK_STATES = Object.freeze(['active', 'finishing', 'ready', 'done']);
 
 export const STEP_STATE_KEY = Object.freeze({
   pending: 'route.step_pending', running: 'route.step_running', done: 'route.step_done', skipped: 'route.step_skipped',
@@ -102,6 +104,26 @@ function parseOverlap(raw) {
   };
 }
 
+const TESTS_STATES = Object.freeze(['never', 'outdated', 'green', 'red']);
+
+function parseTestsRun(raw) {
+  const r = isObject(raw) ? raw : {};
+  return {
+    state: TESTS_STATES.includes(r.state) ? r.state : 'never',
+    result: r.result === 'green' || r.result === 'red' ? r.result : '',
+    commit: str(r.commit),
+    head: str(r.head),
+    at: Number.isFinite(r.at) && r.at > 0 ? r.at : 0,
+    command: str(r.command),
+    source: str(r.source),
+  };
+}
+
+function parseTests(raw) {
+  const r = isObject(raw) ? raw : {};
+  return { branch: parseTestsRun(r.branch), main: parseTestsRun(r.main) };
+}
+
 function parseTask(raw) {
   if (!isObject(raw)) return null;
   const subtasks = Array.isArray(raw.subtasks) ? raw.subtasks.filter(isObject).map(parseSubtask) : [];
@@ -116,6 +138,10 @@ function parseTask(raw) {
     state: TASK_STATES.includes(raw.state) ? raw.state : 'active',
     unmergedCommits: num(raw.unmerged_commits),
     finish: Boolean(raw.finish),
+    stale: raw.stale === true,
+    idleDays: num(raw.idle_days),
+    tests: parseTests(raw.tests),
+    testsRunning: raw.tests_running === true,
     diff: parseDiff(raw.diff),
     overlap: parseOverlap(raw.overlap),
   };
@@ -125,13 +151,14 @@ function parseTask(raw) {
 export function parseRouteState(input) {
   const src = isObject(input) ? input : {};
   const route = normalizeRoute(src.route);
-  if (!routeInfo(route).hasSteps) return { route, steps: [], running: false, task: parseTask(src.task) };
+  const useTree = src.use_tree !== false;
+  if (!routeInfo(route).hasSteps) return { route, steps: [], running: false, useTree, task: parseTask(src.task) };
   const steps = (Array.isArray(src.steps) ? src.steps : []).filter(isObject).map((s, i) => ({
     n: Number.isInteger(s.n) ? s.n : i + 1,
     title: str(s.title),
     state: STEP_STATES.includes(s.state) ? s.state : 'pending',
   }));
-  return { route, steps, running: src.running === true, task: parseTask(src.task) };
+  return { route, steps, running: src.running === true, useTree, task: parseTask(src.task) };
 }
 
 export const INTERACTIVE_STATE = Object.freeze(parseRouteState({ route: DEFAULT_ROUTE }));
@@ -264,6 +291,39 @@ export function diffTotals(diff) {
 
 /** Карточка «Закончить задачу»: сервер просит закончить (finish), шаги окончания ещё не пошли и задача не готова. */
 export const finishPrompt = (task) => Boolean(task) && task.finish && task.state !== 'finishing' && task.state !== 'ready';
+/** Время словами: «только что», «5 мин назад», «3 ч назад», «4 дн. назад». `now` — часы страницы, мс. */
+export function agoText(at, now) {
+  const min = Math.max(0, Math.floor((now - at) / 60000));
+  if (min < 1) return t('route.ago_now');
+  if (min < 60) return t('route.ago_min', { n: min });
+  if (min < 60 * 48) return t('route.ago_hour', { n: Math.floor(min / 60) });
+  return t('route.ago_day', { n: Math.floor(min / 1440) });
+}
+const shortSha = (sha) => (sha ? sha.slice(0, 7) : '');
+
+/** Строка о тестах ветки: зелёные / красные / не гонялись / не на этом коммите; когда и на каком коммите. */
+export function branchTestsText(run, now) {
+  if (run.state === 'never') return t('route.tests_branch', { state: t('route.tests_never') });
+  const when = t('route.tests_when', { ago: agoText(run.at, now), commit: shortSha(run.commit) });
+  if (run.state === 'outdated') {
+    const result = t(run.result === 'red' ? 'route.tests_red' : 'route.tests_green');
+    return `${t('route.tests_branch', { state: t('route.tests_outdated', { result }) })} · ${when} · ${t('route.tests_head', { commit: shortSha(run.head) })}`;
+  }
+  return `${t('route.tests_branch', { state: t(run.state === 'green' ? 'route.tests_green' : 'route.tests_red') })} (${when})`;
+}
+
+/** Строка о main: последний прогон CI GitHub, иначе «CI: нет данных». */
+export function mainTestsText(run, now) {
+  if (run.state !== 'green' && run.state !== 'red') return t('route.tests_main_none');
+  return `${t('route.tests_main', { state: t(run.state === 'green' ? 'route.tests_green' : 'route.tests_red') })} (CI, ${t('route.tests_when', { ago: agoText(run.at, now), commit: shortSha(run.commit) })})`;
+}
+
+/** Кнопка «Прогнать тесты»: у задачи есть дерево, прогон не идёт и на вершине ветки нет зелёного. */
+export const testsRunnable = (task) => Boolean(task) && Boolean(task.worktree) && !task.testsRunning && task.tests.branch.state !== 'green';
+
+/** Карточка устаревшей сессии: хаб ничего не удаляет сам, страница спрашивает. */
+export const stalePrompt = (task) => Boolean(task) && task.stale && Boolean(task.worktree);
+
 /** Карточка «Задача готова»: шаги окончания пройдены, слово за владельцем. */
 export const readyPrompt = (task) => Boolean(task) && task.state === 'ready';
 /** Карточка пересечения подзадач; без неё нет вопроса. */
@@ -280,8 +340,10 @@ export const routeSignal = Object.freeze({
   subtaskWorktree: (n) => ({ kind: 'route_subtask_worktree', input: { n } }),
   subtaskDone: (n) => ({ kind: 'route_subtask_done', input: { n } }),
   newTask: () => ({ kind: 'route_new_task', input: {} }),
-  publish: () => ({ kind: 'route_publish', input: {} }),
-  keep: () => ({ kind: 'route_keep', input: {} }),
+  merge: () => ({ kind: 'route_merge', input: {} }),
+  testsRun: () => ({ kind: 'route_tests_run', input: {} }),
+  treeDrop: (force) => ({ kind: 'route_tree_drop', input: { force: force === true } }),
+  worktree: (on) => ({ kind: 'session_worktree', input: { on: on === true } }),
   subtaskParallel: (n, on) => ({ kind: 'route_subtask_parallel', input: { n, on: on === true } }),
   subtaskChoose: (n, tree) => ({ kind: 'route_subtask_choose', input: { n, tree: tree === 'shared' ? 'shared' : 'own' } }),
 });

@@ -38,6 +38,7 @@ const MOCK_OPTIONS = {
 
 // Режимы работы по методике (задача 192p): что «сервер» присылает в route_state. Названия шагов и подзадач — данные потока.
 const FULL_STEPS = ['Постановка', 'План', 'Реализация', 'Тесты', 'Независимая проверка', 'Отчёт', 'Запись в журнал'];
+const PLANNING_STEPS = ['Интервью', 'Формулировка задания', 'Независимая проверка формулировки', 'Итог'];
 const FAST_STEPS = ['Постановка', 'Реализация', 'Независимая проверка', 'Запись в журнал'];
 const ROUTE_STEP_MS = 1200;
 const subItems = (texts, done) => texts.map((text, i) => ({ text, done: i < done }));
@@ -122,6 +123,7 @@ const TASK_020 = Object.freeze({
   state: 'active',
   unmerged_commits: 3,
   finish: true,
+  tests: { branch: { state: 'outdated', result: 'green', commit: '9f8e7d6c', head: 'a1b2c3d4', at: BASE - 40 * 60000, command: 'шаг «Тесты и стражи»' }, main: { state: 'green', result: 'green', commit: '5a4b3c2d', at: BASE - 3 * 60 * MIN, source: 'ci' } },
   subtasks: Object.freeze([{ n: 1, title: 'Прогнать стражи по индексу', state: 'done', done: 2, total: 2, items: subItems(['стражи', 'отчёт'], 2) }]),
 });
 
@@ -136,7 +138,7 @@ export function finishPhase(task, working) {
 /** Состояние режима для route_state: steps — названия, finished — сколько шагов уже готово (следующий выполняется, если active). */
 export function routeStateInput(route, { finished = 0, running = false, active = false, task } = {}) {
   if (route === 'interactive') return { route, steps: [], running: false, task: task ?? null };
-  const titles = route === 'fast' ? FAST_STEPS : FULL_STEPS;
+  const titles = route === 'fast' ? FAST_STEPS : (route === 'planning' ? PLANNING_STEPS : FULL_STEPS);
   const steps = titles.map((title, i) => ({
     n: i + 1, title, state: i < finished ? 'done' : (i === finished && active ? 'running' : 'pending'),
   }));
@@ -145,7 +147,7 @@ export function routeStateInput(route, { finished = 0, running = false, active =
 
 const TASK_SIGNALS = [
   'route_subtask_new', 'route_subtask_same', 'route_subtask_worktree', 'route_subtask_done', 'route_new_task',
-  'route_publish', 'route_keep', 'route_subtask_parallel', 'route_subtask_choose',
+  'route_merge', 'route_publish', 'route_tests_run', 'route_tree_drop', 'route_subtask_parallel', 'route_subtask_choose',
 ];
 
 /** Что «сервер» делает с задачей по сигналу подзадачи (сигналы route_subtask_* и route_new_task). Исходная задача не меняется. */
@@ -165,10 +167,12 @@ export function editTask(task, kind, input = {}) {
   } else if (kind === 'route_subtask_done') {
     const sub = subs.find((x) => x.n === input.n);
     if (sub) Object.assign(sub, { state: 'done', done: sub.total, merged: true });
-  } else if (kind === 'route_publish') {
+  } else if (kind === 'route_merge' || kind === 'route_publish') {
     return { ...task, state: 'done', unmerged_commits: 0, finish: false, subtasks: subs.map((x) => ({ ...x, merged: true })) };
-  } else if (kind === 'route_keep') {
-    return { ...task, state: 'kept', finish: false };
+  } else if (kind === 'route_tests_run') {
+    return { ...task, tests: { ...(task.tests || {}), branch: { state: 'green', result: 'green', commit: 'a1b2c3d4', head: 'a1b2c3d4', at: Date.now(), command: 'прогон по кнопке' } } };
+  } else if (kind === 'route_tree_drop') {
+    return { ...task, worktree: '', branch: '', stale: false };
   } else if (kind === 'route_subtask_parallel') {
     const sub = subs.find((x) => x.n === input.n);
     if (sub) sub.parallel = input.on === true;

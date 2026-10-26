@@ -618,7 +618,8 @@ export function addDraft(model, { id, agent, projectId = '', project = '', folde
   });
   const session = next.sessions[id];
   if (!session) return model;
-  return { ...next, sessions: { ...next.sessions, [id]: { ...session, draft: true } } };
+  // режим по умолчанию у человека — «Интерактивный»; Worktree включён: задача получит дерево и ветку
+  return { ...next, sessions: { ...next.sessions, [id]: { ...session, draft: true, route: INTERACTIVE_STATE.route, worktree: true } } };
 }
 
 /** Убрать все черновики (кроме `keep`). */
