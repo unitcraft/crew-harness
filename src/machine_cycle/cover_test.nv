@@ -95,6 +95,9 @@ fn state_word(name str) -> str {
 }
 
 fn file_of_row(row str) -> str {
+    // 0.9.1 splits the human stop from Pause's own halt reason.
+    if row == "end:Halted#3" { return "cycle-pause-2.alula.test.json" }
+    if row == "end:Halted#4" { return "cycle-end-halted-3.alula.test.json" }
     ro body = row.replace("end:", "")
     match body.find("#") {
         Some(at) => "cycle-${state_word(body[..at])}-${body[(at + 1)..]}.alula.test.json"
@@ -104,8 +107,8 @@ fn file_of_row(row str) -> str {
 
 test "cv rows counted" {
     ro rows = all_rows()
-    // 71 rows of the states of the methodology, 4 of the pause, 6 common events, 5 rows of the ends
-    assert(rows.len() == 86)
+    // 71 rows of the states of the methodology, 4 of the pause, 6 common events, 6 rows of the ends
+    assert(rows.len() == 87)
     for dead in dead_rows() { assert(rows.contains(dead)) }
     assert(dead_rows().len() == 13)
 }

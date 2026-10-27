@@ -15,10 +15,11 @@ test "cs pilot loads" {
     match load_machine(report.json, methodology_registry()) {
         Ok(def) => {
             assert(def.name == "agent_step")
-            assert(def.states.len() == 14)
-            assert(def.common.len() == 6)
-            assert(def.parties.len() == 3)
-            assert(def.data.len() == 21)
+            // The package's pilot fixture no longer connects Pause (0.9.1).
+            assert(def.states.len() == 13)
+            assert(def.common.len() == 0)
+            assert(def.parties.len() == 2)
+            assert(def.data.len() == 17)
             assert(def.definitions.len() == 16)
             assert(def.error_end == "Errored")
             assert(def.end_rows.len() == 13)

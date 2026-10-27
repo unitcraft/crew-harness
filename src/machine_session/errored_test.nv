@@ -79,7 +79,7 @@ test "er the end writes the transition and the data" {
         }
     }
     // Alula 2.26: the data of the engine first (the library `контракт`), then the data of the library «Пауза»
-    assert(data.starts_with("call_request_id=up-1; open_requests=[]; previous=none; session=s1; launch_source=; launch_pass=none;"))
+    assert(data.starts_with("call_request_id=up-1; open_requests=[]; previous=none; reason=none; session=s1; launch_source=; launch_pass=none;"))
     // the counters of the parties, made by the loader, after the data of the machine
     assert(data.contains("; summary={}; findings={}; task_dir=/t; repo_dir=/r; delivery_mode=files"))
     assert(data.ends_with("; step_attempt=0; gatekeeper_attempt=0; enhanced_attempt=0"))

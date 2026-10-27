@@ -124,12 +124,9 @@ test "v213 convert ru en ru" {
     for name in ["dialog.alula.md", "chat.alula.md"] {
         ro text = text_of_file(table_files(), name)
         ro en = run_with(["convert", "/m/${name}", "--language", "en"], one("/m/${name}", text))
-        if en.code != 0 { panic("convert ${name}: ${en.err}") }
-        // Alula 2.26 (task 240): the chat machines connect the library of the cancel; on the package 0.9.0 the English file keeps the path of its Russian file (task 239,
-        // `connects_library`) and is not taken back
+        // 0.9.1 refuses conversion without an English twin of the product library.
         assert(connects_library(text))
-        assert(en.out.contains("- File: libs/call_cancel.alula.md"))
-        ro back = run_with(["convert", "/m/b.alula.md", "--language", "ru"], one("/m/b.alula.md", en.out))
-        assert(back.code != 0)
+        assert(en.code != 0)
+        assert(en.err.contains("libs/call_cancel.en.alula.md"))
     }
 }

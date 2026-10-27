@@ -79,6 +79,9 @@ fn kebab(name str) -> str {
 }
 
 fn file_of_row(row str) -> str {
+    // 0.9.1 splits the human stop from Pause's own halt reason.
+    if row == "end:Halted#6" { return "runner-pause-2.alula.test.json" }
+    if row == "end:Halted#7" { return "runner-halted-6.alula.test.json" }
     ro body = row.replace("end:", "")
     match body.find("#") {
         Some(at) => "runner-${kebab(body[..at])}-${body[(at + 1)..]}.alula.test.json"
@@ -88,8 +91,8 @@ fn file_of_row(row str) -> str {
 
 test "cv rows counted" {
     ro rows = all_rows()
-    // 232 rows of the states of the methodology (the row "иначе" of PhaseSwitch is not written) and of the verdict fork, 4 of the pause, 6 common events, 8 rows of the ends
-    assert(rows.len() == 250)
+    // 232 rows of the states of the methodology (the row "иначе" of PhaseSwitch is not written) and of the verdict fork, 4 of the pause, 6 common events, 9 rows of the ends
+    assert(rows.len() == 251)
     for dead in dead_rows() { assert(rows.contains(dead)) }
     assert(dead_rows().len() == 21)
 }

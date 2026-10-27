@@ -40,7 +40,7 @@ test "cc loads" {
     assert(def.states.len() == 23)
     assert(def.common.len() == 6)
     assert(def.parties.len() == 4)
-    assert(def.end_rows.len() == 5)
+    assert(def.end_rows.len() == 6)
     assert(def.primitives.len() == 1)
     assert(def.primitives[0].name == "stop_agent_group")
     assert(def.request_limit.len() == 1)
@@ -114,7 +114,7 @@ test "cc summary" {
     assert(text.contains("  Levels (fork): 7 rows"))
     assert(text.contains("  Pause (appeal): 4 rows"))
     assert(text.contains("common events: 6 rows"))
-    assert(text.contains("ends: 5 rows"))
+    assert(text.contains("ends: 6 rows"))
 }
 
 test "cc header" {

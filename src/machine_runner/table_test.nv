@@ -39,7 +39,7 @@ test "tr loads" {
     assert(def.states.len() == 76)
     assert(def.common.len() == 6)
     assert(def.parties.len() == 4)
-    assert(def.end_rows.len() == 8)
+    assert(def.end_rows.len() == 9)
     assert(def.primitives.len() == 30)
     assert(def.request_limit.len() == 1)
     // Alula 2.26 (AL-140): «Пауза» is a library, the one connection of the runner
@@ -109,7 +109,7 @@ test "tr summary" {
     assert(text.contains("  ReviewVerdict (fork): 19 rows"))
     assert(text.contains("  Pause (appeal): 4 rows"))
     assert(text.contains("common events: 6 rows"))
-    assert(text.contains("ends: 8 rows"))
+    assert(text.contains("ends: 9 rows"))
 }
 
 test "tr header" {

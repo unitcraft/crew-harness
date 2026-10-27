@@ -267,14 +267,14 @@ test "st the input" {
 test "st the data in the order of the table" {
     ro def = session_def()
     ro names = data_names(def)
-    // Alula 2.26: the data of the engine first (the library `контракт`), then the data of the library «Пауза», then the data of the machine
-    assert(names[0] == "call_request_id" && names[1] == "open_requests" && names[2] == "previous")
-    assert(names[3] == "session")
+    // Alula 2.26: the data of the engine first (the library `контракт`), then the data of the library «Пауза» (0.9.1: `предыдущее` and `причина`), then the data of the machine
+    assert(names[0] == "call_request_id" && names[1] == "open_requests" && names[2] == "previous" && names[3] == "reason")
+    assert(names[4] == "session")
     assert(names.contains("launch_source") && names.contains("launch_pass") && names.contains("phase") && names.contains("route"))
     assert(names.contains("source_list") && names.contains("delivery_short") && names.contains("agent_reply") && names.contains("result"))
     assert(names.contains("summary") && names.contains("findings") && names.contains("task_dir") && names.contains("repo_dir") && names.contains("delivery_mode"))
     assert(names.contains("step_attempt") && names.contains("gatekeeper_attempt") && names.contains("enhanced_attempt"))
-    assert(names.len() == 22)
+    assert(names.len() == 23)
     assert(find_data(def, "stop_reason") >= 0)
 }
 
@@ -290,10 +290,11 @@ test "st the counters do not decrease" {
 test "st the ends" {
     ro def = session_def()
     ro halted = state_named(def, "Halted")
-    assert(halted.reads == ["stop_reason"])
+    // «Пауза» 0.9.1 does not write the stop: the entry reads its reason (`Пауза.причина`) and takes the codes of the Pause off the set by the row `Кроме`
+    assert(halted.reads == ["reason", "stop_reason"])
     assert(halted.except_field == "stop_reason")
-    assert(halted.except_values == [""])
-    assert(halted.entry.len() == 2)
+    assert(halted.except_values == ["", "pause_halt", "cancel_request"])
+    assert(halted.entry.len() == 4)
     ro errored = state_named(def, "Errored")
     assert(errored.reads_all)
     assert(errored.entry.len() == 3)

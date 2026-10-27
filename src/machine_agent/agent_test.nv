@@ -40,7 +40,7 @@ test "ag loads" {
             assert(def.states.len() == 14)
             assert(def.common.len() == 6)
             assert(def.parties.len() == 3)
-            assert(def.data.len() == 21)
+            assert(def.data.len() == 22)
             assert(def.definitions.len() == 16)
             assert(def.end_rows.len() == 13)
             assert(def.primitives.len() == 2)

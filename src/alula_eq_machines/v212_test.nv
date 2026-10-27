@@ -58,7 +58,9 @@ test "v212 render writes 2.26" {
     assert(made.code == 0)
     assert(made.out.contains("- format: 2.26\n"))
     ro en = run_with(["render", "/m/dialog.alula.json", "--language", "en"], one("/m/dialog.alula.json", text_of_file(machine_files(), "dialog.alula.json")))
-    assert(en.out.contains("- format: 2.26\n"))
+    // The product library has no English twin: 0.9.1 refuses to invent one.
+    assert(en.code != 0)
+    assert(en.err.contains("libs/call_cancel.en.alula.md"))
 }
 
 test "v212 json of 2.11 is refused" {
@@ -81,7 +83,7 @@ test "v212 the connection of the library in english" {
     ro made = run_with(["render", "/m/dialog_steps.alula.json", "--language", "en"], one("/m/dialog_steps.alula.json", text_of_file(machine_files(), "dialog_steps.alula.json")))
     assert(made.code == 0)
     assert(made.out.contains("## Includes\n"))
-    assert(made.out.contains("- File: libs/pause.alula.md\n- Hash: "))
+    assert(made.out.contains("- File: libs/pause.en.alula.md\n- Hash: "))
     assert(!made.out.contains("Pause(halt_signal: "))
 }
 
