@@ -67,8 +67,14 @@ export function createSideKit(doc, deps) {
       // ветка и дерево задачи живут, пока есть сессия; не влитую работу не теряем молча: владелец выбирает
       const task = session.routeState && session.routeState.task;
       const work = task && task.worktree ? task.unmergedCommits : 0;
-      if (!work) { handlers.onDeleteSession(session.id); return; }
-      confirm(t('session.delete_work', { commits: commitsText(work) }), { ok: t('session.delete_all'), cancel: t('session.delete_keep') })
+      // задача 192.4: у работы без задачи свои ветка и дерево wip/<имя>: не влитая работа или изменённые файлы — тот же вопрос
+      const where = session.routeState && !task ? session.routeState.where : null;
+      const wip = where && where.kind === 'wip' && where.work ? where : null;
+      if (!work && !wip) { handlers.onDeleteSession(session.id); return; }
+      const ask = wip
+        ? t('session.delete_wip', { branch: wip.branch, what: wip.unmergedCommits > 0 ? commitsText(wip.unmergedCommits) : t('session.delete_wip_dirty') })
+        : t('session.delete_work', { commits: commitsText(work) });
+      confirm(ask, { ok: t('session.delete_all'), cancel: t('session.delete_keep') })
         .then((all) => handlers.onDeleteSession(session.id, all ? 'drop' : 'keep'));
     });
   }

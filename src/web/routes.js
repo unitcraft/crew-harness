@@ -189,18 +189,56 @@ export function parseKids(src) {
   };
 }
 
+/**
+ * Задача 192.4: где работает агент, пока у сессии нет задачи. kind: 'wip' (дерево своей ветки wip/<имя>) или 'folder' (папка проекта на её текущей ветке).
+ * Хаб шлёт where { kind, branch, worktree, unmerged_commits, work, idle_days, stale }; у сессии с задачей поля нет (там ветка задачи).
+ */
+export function parseWhere(raw) {
+  if (!isObject(raw)) return null;
+  return {
+    kind: raw.kind === 'wip' ? 'wip' : 'folder',
+    branch: str(raw.branch),
+    worktree: str(raw.worktree),
+    unmergedCommits: num(raw.unmerged_commits),
+    work: raw.work === true,
+    idleDays: num(raw.idle_days),
+    stale: raw.stale === true,
+  };
+}
+
+/**
+ * Подпись под полем: где идёт работа. Черновик: Worktree включён — «в своей ветке wip/… (создастся с первым сообщением)», выключен — «прямо в папке проекта».
+ * Открытая сессия: задача с веткой — «в ветке task/…»; wip — «в ветке wip/…»; без дерева — «прямо в main» или «прямо в ветке X» (текущая ветка папки проекта).
+ */
+export function whereText(session) {
+  if (!session) return '';
+  if (session.draft) return session.worktree === false ? t('where.draft_folder') : t('where.draft_tree');
+  const rs = session.routeState;
+  if (!rs) return '';
+  const task = rs.task;
+  if (task && task.worktree) return task.branch ? t('where.branch', { branch: task.branch }) : '';
+  const w = rs.where;
+  if (!w) return '';
+  if (w.kind === 'wip') return w.branch ? t('where.branch', { branch: w.branch }) : '';
+  if (!w.branch) return '';
+  return w.branch === 'main' ? t('where.main') : t('where.folder_branch', { branch: w.branch });
+}
+
+/** Карточка тихого дерева wip (30 дней без дела): хаб ничего не удаляет сам, страница спрашивает. */
+export const wipStalePrompt = (rs) => Boolean(rs) && !rs.task && Boolean(rs.where) && rs.where.kind === 'wip' && rs.where.stale;
+
 /** Вычистить payload route_state: неверное отбрасывается; у режима interactive шагов нет, а задача (если сессия в git) остаётся. */
 export function parseRouteState(input) {
   const src = isObject(input) ? input : {};
   const route = normalizeRoute(src.route);
   const useTree = src.use_tree !== false;
-  if (!routeInfo(route).hasSteps) return { route, stepless: true, steps: [], running: false, useTree, task: parseTask(src.task), crew: parseCrewTask(src), kids: parseKids(src) };
+  if (!routeInfo(route).hasSteps) return { route, stepless: true, steps: [], running: false, useTree, task: parseTask(src.task), where: parseWhere(src.where), crew: parseCrewTask(src), kids: parseKids(src) };
   const steps = (Array.isArray(src.steps) ? src.steps : []).filter(isObject).map((s, i) => ({
     n: Number.isInteger(s.n) ? s.n : i + 1,
     title: str(s.title),
     state: STEP_STATES.includes(s.state) ? s.state : 'pending',
   }));
-  return { route, stepless: false, steps, running: src.running === true, useTree, task: parseTask(src.task), crew: parseCrewTask(src), kids: parseKids(src) };
+  return { route, stepless: false, steps, running: src.running === true, useTree, task: parseTask(src.task), where: parseWhere(src.where), crew: parseCrewTask(src), kids: parseKids(src) };
 }
 
 export const INTERACTIVE_STATE = Object.freeze(parseRouteState({ route: DEFAULT_ROUTE }));

@@ -6,7 +6,7 @@ import {
   ROUTES, DEFAULT_ROUTE, INTERACTIVE_STATE, STEP_ICON, STEP_STATE_KEY, normalizeRoute, routeName, routeDescription, parseRouteState,
   stepCounter, counterText, stepToSkip, showStrip, stripActions, subtaskPercent, subtaskProgressText, routeSignal,
   subtaskCountText, showSubtasks, taskHeading, subtaskActions, hasSubtaskActions, bannerCount, subtaskNotes,
-  commitsText, filesText, mergeLabel, diffTotals, finishPrompt, readyPrompt, overlapPrompt,
+  commitsText, filesText, mergeLabel, diffTotals, finishPrompt, readyPrompt, overlapPrompt, parseWhere, whereText, wipStalePrompt,
 } from '../routes.js';
 import { S } from '../strings.js';
 import { initialModel, reduce, KINDS, makeEvent, nextStep } from '../state.js';
@@ -494,7 +494,7 @@ test('заглушка: пропуск шага отмечает его проп
 test('проводка: чип режима первым в строке статуса, aria-label «Режим работы», без шеврона; меню вверх слева; страница шлёт сигналы', () => {
   assert.equal(S['route.label'], 'Режим работы');
   assert.match(view, /const routeButton = h\(doc, 'button', \{[^}]*'aria-label': t\('route\.label'\)/);
-  assert.match(view, /class: 'composer-status', 'data-empty': 'true' \}, projectButton, worktreeButton, routeButton, h\(doc, 'span', \{ class: 'grow' \}\), statusGroup/);
+  assert.match(view, /class: 'composer-status', 'data-empty': 'true' \}, projectButton, worktreeButton, whereNote, routeButton, h\(doc, 'span', \{ class: 'grow' \}\), statusGroup/);
   assert.doesNotMatch(view, /routeButton\.replaceChildren\([^;]*icon\(/, 'шеврона у чипа нет');
   assert.match(view, /menu\.dataset\.side = 'left'/);
   assert.match(css, /\.menu\[data-side="left"\] \{ left: 0; \}/);
@@ -541,4 +541,38 @@ test('режим без шагов: подзадач в интерфейсе н�
   const card = view.slice(view.indexOf('function subtasksCard'), view.indexOf('// Вкладки правой колонки'));
   assert.doesNotMatch(card, /parallel|route\.messages/, 'ни «параллельно», ни журнала сообщений');
   assert.match(card, /withSubs && task\.subtasks\.length > 0 \? list : false/);
+});
+
+test('задача 192.4: подпись, где идёт работа — прямо в main, прямо в ветке папки, своя ветка wip/…, ветка задачи, черновик', () => {
+  const rs = (raw) => parseRouteState({ route: 'interactive', ...raw });
+  const sess = (routeState, extra = {}) => ({ draft: false, routeState, ...extra });
+  assert.equal(whereText(sess(rs({ where: { kind: 'folder', branch: 'main' } }))), 'работа идёт прямо в main');
+  assert.equal(whereText(sess(rs({ where: { kind: 'folder', branch: 'feature/x' } }))), 'работа идёт прямо в ветке feature/x папки проекта');
+  assert.equal(whereText(sess(rs({ where: { kind: 'folder', branch: '' } }))), '', 'папка не репозиторий или отсоединённая голова: подписи нет');
+  assert.equal(whereText(sess(rs({ where: { kind: 'wip', branch: 'wip/ab12', worktree: '/w/repo-wip-ab12' } }))), 'работа идёт в ветке wip/ab12');
+  assert.equal(whereText(sess(rs({ task: { id: '007-x', branch: 'task/007-x', worktree: '/w/t' } }))), 'работа идёт в ветке task/007-x');
+  assert.equal(whereText({ draft: true, worktree: false }), 'работа пойдёт прямо в папке проекта, без отдельной ветки');
+  assert.match(whereText({ draft: true }), /wip/);
+  assert.equal(whereText(null), '');
+  assert.equal(whereText(sess(null)), '');
+});
+
+test('задача 192.4: where из route_state вычищается; карточка устаревшей wip-ветки — только у wip без задачи', () => {
+  assert.equal(parseWhere(undefined), null);
+  assert.deepEqual(parseWhere({ kind: 'wip', branch: 'wip/a', worktree: 'W', unmerged_commits: 2, work: true, idle_days: 31, stale: true }),
+    { kind: 'wip', branch: 'wip/a', worktree: 'W', unmergedCommits: 2, work: true, idleDays: 31, stale: true });
+  assert.equal(parseWhere({ kind: 'junk' }).kind, 'folder');
+  const stale = parseRouteState({ route: 'interactive', where: { kind: 'wip', branch: 'wip/a', stale: true } });
+  assert.equal(wipStalePrompt(stale), true);
+  assert.equal(wipStalePrompt(parseRouteState({ route: 'interactive', where: { kind: 'wip', branch: 'wip/a', stale: false } })), false);
+  assert.equal(wipStalePrompt(parseRouteState({ route: 'interactive', where: { kind: 'folder', branch: 'main', stale: true } })), false);
+  assert.equal(wipStalePrompt(null), false);
+  assert.equal(parseRouteState({ route: 'fast' }).where, null);
+});
+
+test('задача 192.4: подпись и карточка wip подключены в view.js и стили есть', () => {
+  assert.match(view, /whereNote/);
+  assert.match(view, /whereText\(session\)/);
+  assert.match(view, /wipStalePrompt/);
+  assert.match(css, /\.where-note/);
 });

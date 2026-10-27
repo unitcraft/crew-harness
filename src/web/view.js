@@ -39,7 +39,7 @@ import {
 import {
   ROUTES, STEP_ICON, STEP_STATE_KEY, SUBTASK_STATE_KEY, routeName, routeDescription, counterText, stepToSkip, showStrip, stripActions,
   subtaskPercent, subtaskProgressText, showSubtasks, INTERACTIVE_STATE, NOTE_KEY, taskHeading, subtaskActions, hasSubtaskActions, bannerCount, subtaskCountText,
-  mergeLabel, diffTotals, finishPrompt, readyPrompt, overlapPrompt, commitsText, filesText, branchTestsText, mainTestsText, testsRunnable, stalePrompt,
+  mergeLabel, diffTotals, finishPrompt, readyPrompt, overlapPrompt, commitsText, filesText, branchTestsText, mainTestsText, testsRunnable, stalePrompt, whereText, wipStalePrompt,
 } from './routes.js';
 
 const NEAR_BOTTOM_PX = 40;
@@ -649,11 +649,13 @@ export function createView(doc, refs, deps) {
     const on = worktreeButton.getAttribute('aria-pressed') !== 'true';
     if (worktreeButton.dataset.draft === 'true') handlers.onDraftWorktree(currentTrace, on); else handlers.onWorktree(currentTrace, on);
   });
+  // Задача 192.4: где идёт работа (main, ветка папки проекта или своя ветка wip/задачи)
+  const whereNote = h(doc, 'span', { class: 'where-note', hidden: true });
   const spinner = h(doc, 'span', { class: 'spinner', role: 'img', 'aria-label': t('composer.working'), hidden: true });
   const menu = h(doc, 'div', { class: 'menu', role: 'menu', hidden: true });
   // Одна группа чипов у правого края: семья, режим, модель и усилие; за ней кольцо контекста и спиннер (задача 192).
   const statusGroup = h(doc, 'div', { class: 'status-group' }, familyButton, modeButton, statusModel, modelButton, effortButton);
-  const status = h(doc, 'div', { class: 'composer-status', 'data-empty': 'true' }, projectButton, worktreeButton, routeButton, h(doc, 'span', { class: 'grow' }), statusGroup, ringBox, spinner, menu);
+  const status = h(doc, 'div', { class: 'composer-status', 'data-empty': 'true' }, projectButton, worktreeButton, whereNote, routeButton, h(doc, 'span', { class: 'grow' }), statusGroup, ringBox, spinner, menu);
 
   // Меню выбора режима, модели и усилия (задача 192): показывает только то, что агент отдал по ACP.
   const MENU_MODELS = 4;
@@ -911,7 +913,7 @@ export function createView(doc, refs, deps) {
     const kids = (session.routeState && session.routeState.kids) || { block: [], child: null };
     const held = kids.block;
     const toParent = Boolean(kids.child) && kids.child.target === 'parent';
-    const sig = JSON.stringify([session.id, task && [task.id, task.number, task.branch, task.state, task.unmergedCommits, task.diff, task.tests, task.testsRunning, task.stale, task.idleDays], finish, ready, overlap, showDiff, deadline, stale, held, toParent]);
+    const sig = JSON.stringify([session.id, task && [task.id, task.number, task.branch, task.state, task.unmergedCommits, task.diff, task.tests, task.testsRunning, task.stale, task.idleDays], finish, ready, overlap, showDiff, deadline, stale, held, toParent, wipStalePrompt(session.routeState) && !staleKept.has(`${session.id}:wip`) && session.routeState.where]);
     if (sig === cardsSig) return;
     cardsSig = sig;
     const cards = [];
@@ -950,6 +952,17 @@ export function createView(doc, refs, deps) {
         h(doc, 'div', { class: 'route-actions' },
           work ? button(t('route.stale_drop_work'), 'danger', () => handlers.onRouteTreeDrop(session.id, true)) : button(t('route.stale_drop'), 'danger', () => handlers.onRouteTreeDrop(session.id, false)),
           button(t('route.stale_keep'), '', () => { staleKept.add(`${session.id}:${task.id}`); cardsSig = ''; renderTaskCards(current.session); }))));
+    }
+    const wipRs = session.routeState;
+    if (wipStalePrompt(wipRs) && !staleKept.has(`${session.id}:wip`)) {
+      const w = wipRs.where;
+      cards.push(h(doc, 'section', { class: 'route-card', 'data-card': 'stale' },
+        h(doc, 'strong', { class: 'route-card-title', text: t('where.stale_title', { branch: w.branch, days: w.idleDays }) }),
+        h(doc, 'span', { class: 'route-card-text', text: t('where.stale_ask') }),
+        w.work ? h(doc, 'span', { class: 'route-card-text', text: t('route.stale_work', { commits: w.unmergedCommits > 0 ? commitsText(w.unmergedCommits) : t('session.delete_wip_dirty') }) }) : false,
+        h(doc, 'div', { class: 'route-actions' },
+          w.work ? button(t('route.stale_drop_work'), 'danger', () => handlers.onRouteTreeDrop(session.id, true)) : button(t('route.stale_drop'), 'danger', () => handlers.onRouteTreeDrop(session.id, false)),
+          button(t('route.stale_keep'), '', () => { staleKept.add(`${session.id}:wip`); cardsSig = ''; renderTaskCards(current.session); }))));
     }
     if (ready) {
       const totals = diffTotals(task.diff);
@@ -1512,7 +1525,7 @@ export function createView(doc, refs, deps) {
       projectButton.replaceChildren(icon(doc, 'i-folder'), h(doc, 'span', { text: knownProject ? knownProject.name : t('chat.project_none') }));
     }
     const task = session.routeState && session.routeState.task;
-    const hasTree = Boolean(task && task.worktree);
+    const hasTree = Boolean((task && task.worktree) || (session.routeState && session.routeState.where && session.routeState.where.kind === 'wip'));
     const treeOn = session.draft ? session.worktree !== false : (session.routeState ? session.routeState.useTree !== false : true);
     worktreeButton.hidden = false;
     worktreeButton.dataset.draft = String(Boolean(session.draft));
@@ -1520,6 +1533,10 @@ export function createView(doc, refs, deps) {
     worktreeButton.disabled = hasTree;
     worktreeButton.title = hasTree ? t('route.worktree_locked') : (treeOn ? t('route.worktree_on') : t('route.worktree_off'));
     routeButton.title = `${t('route.label')}: ${routeDescription(currentRoute)}`;
+    const where = whereText(session);
+    whereNote.hidden = !where;
+    whereNote.textContent = where;
+    whereNote.title = where;
     familyButton.hidden = agents.length < 2;
     familyButton.replaceChildren(h(doc, 'span', { text: agentLabel(shown.agent) }));
     const hasModes = Boolean(options && options.modes.length > 0);

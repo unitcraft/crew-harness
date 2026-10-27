@@ -1244,6 +1244,7 @@ input[aria-invalid="true"] { border-color: var(--danger); }
 .project-chip, .worktree-chip { gap: 6px; max-width: 40%; overflow: hidden; white-space: nowrap; }
 .project-chip > span { overflow: hidden; text-overflow: ellipsis; }
 .worktree-chip { color: var(--fg-muted); }
+.where-note { color: var(--fg-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .worktree-chip[aria-pressed="true"] { color: var(--fg); background: color-mix(in srgb, var(--fg) 7%, transparent); }
 .worktree-chip:disabled { cursor: default; opacity: .8; }
 .worktree-chip .icon { width: 14px; height: 14px; }
