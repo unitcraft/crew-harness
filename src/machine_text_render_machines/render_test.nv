@@ -7,7 +7,7 @@ import alula.machine.{text_of_file}
 import alula.machine_agent.{methodology_text, methodology_en_text}
 import alula.machine_text_eq.{case_text}
 import alula.machine_text.{render_machine, render_machine_with, render, translate_report_with, render_type_in, render_expression_in, render_actions_in}
-import crew_harness.machines.{agent_step_table_text, chat_table_text, table_files, library_files, connects_library}
+import crew_harness.machines.{agent_step_table_text, chat_table_text, table_files, library_files, connects_library, part_mended}
 
 fn chat_json() -> str => machine_json("chat.alula.json")
 
@@ -79,7 +79,8 @@ test "rn circle ru chat" {
 
 test "rn circle chat table" {
     // md -> JSON -> md -> JSON on the chat machine written by hand in Russian
-    ro first = translate_report_with(chat_table_text(), library_files()).json
+    // the checked translation: the tree carries the reads of the states that the check derives (AL-138)
+    ro first = json_of(chat_table_text())
     assert(circle(first, "ru") == "")
     assert(circle(first, "en") == "")
 }
@@ -87,13 +88,15 @@ test "rn circle chat table" {
 test "rn ru to en to ru chat" {
     // Alula 2.26 (task 240): the chat connects the library of the cancel `libs/call_cancel.alula.md`; on the package 0.9.0 such a machine does not go through the English file (task 239,
     // `connects_library`): the English text keeps the Russian file and is refused, the Russian circle stays
-    ro first = translate_report_with(chat_table_text(), library_files()).json
+    // the checked translation: the tree carries the reads of the states that the check derives (AL-138)
+    ro first = json_of(chat_table_text())
     assert(connects_library(first))
     ro english = render(first, "en")
     assert(english.contains("- File: libs/call_cancel.alula.md"))
     assert(json_of(english).starts_with("ERROR "))
     ro russian = render(first, "ru")
-    ro third = json_of(russian)
+    // the generator of 0.9.0 writes the part in the form before 2.26 (`part_mended`)
+    ro third = json_of(part_mended(russian))
     assert(same_tree(first, third) == "")
     assert(render(third, "ru") == russian)
 }

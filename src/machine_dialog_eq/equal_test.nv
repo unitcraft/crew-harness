@@ -308,13 +308,16 @@ test "de many turns on the machine alone" {
         ro opened = pair_diff(table, p)
         if opened != "" { panic("turn ${turn}, the message: ${opened}") }
         assert(table.state_name(p.table_state) == "Awaiting")
-        p = step_pair(table, p, chunk_event("agent-1", "r${turn}"))
+        // the events of a turn answer the request of that turn: since Alula 2.26 the open requests are data of the machine (the library `контракт`), and the machine itself drops an answer
+        // to a closed request, which the machine on Nova leaves to the engine
+        ro request = "agent-${turn + 1}"
+        p = step_pair(table, p, chunk_event(request, "r${turn}"))
         assert(pair_diff(table, p) == "")
-        if turn == 0 { p = step_pair(table, p, done_event("agent-1")) }
-        if turn == 1 { p = step_pair(table, p, refused_event("agent-1", "ModelRefused")) }
-        if turn == 2 { p = step_pair(table, p, timeout_event("agent-1")) }
+        if turn == 0 { p = step_pair(table, p, done_event(request)) }
+        if turn == 1 { p = step_pair(table, p, refused_event(request, "ModelRefused")) }
+        if turn == 2 { p = step_pair(table, p, timeout_event(request)) }
         if turn == 3 { p = step_pair(table, p, signal_event("cancel_request")) }
-        if turn == 4 { p = step_pair(table, p, done_event("agent-1")) }
+        if turn == 4 { p = step_pair(table, p, done_event(request)) }
         assert(pair_diff(table, p) == "")
         assert(table.state_name(p.table_state) == "Idle")
         turn += 1

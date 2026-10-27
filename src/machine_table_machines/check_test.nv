@@ -27,8 +27,9 @@ test "red read outside" {
     assert(says(text, "the datum stop is read but is not in the Input of the state (rule 11)"))
     assert(first_issue(text).starts_with("$.states[0].rows[0].actions[0].value"))
     assert(says(tiny().replace("\"reads\":[\"n\"],\"rows\"", "\"reads\":[],\"rows\""), "the datum n is read but is not in the Input"))
-    assert(says(chat_with("\"reads\": [ \"reply\" ]", "\"reads\": []"), "the datum reply is read"))
-    assert(says(chat_with("\"silence\": { \"op\": \"name\", \"name\": \"IDLE_TERM\" }", "\"silence\": { \"op\": \"name\", \"name\": \"stop_text\" }"), "stop_text is read"))
+    // Alula 2.26 (AL-138): the reads of a state are derived by the check, a tree of 2.26 that names fewer of them is not refused for that; the idle term reads the names of the request only
+    assert(ok_text(chat_with("\"reads\": [ \"reply\" ]", "\"reads\": []")))
+    assert(says(chat_with("\"silence\": { \"op\": \"name\", \"name\": \"IDLE_TERM\" }", "\"silence\": { \"op\": \"name\", \"name\": \"stop_text\" }"), "the idle term reads stop_text"))
 }
 
 test "red write outside" {
@@ -37,7 +38,9 @@ test "red write outside" {
     ro mech = tiny_rows("{\"n\":1,\"event\":{\"kind\":\"signal\",\"name\":\"go\"},\"actions\":[${jassign("u_attempt", jl("1"))}],\"to\":\"Decide\"},{\"n\":2,\"event\":{\"kind\":\"signal\",\"name\":\"halt\"},\"actions\":[${jassign("stop", jl(jstr("a")))}],\"to\":\"Stopped\"}")
     assert(says(mech, "written by mechanics, not by rows"))
     assert(says(chat_with("\"target\": \"user\"", "\"target\": \"nobody\""), "nobody is not a datum"))
-    assert(says(chat_with("\"target\": \"user\"", "\"target\": \"agent_attempt\""), "written by mechanics"))
+    // Alula 2.26: the counter of a party and the data of the engine of the contract are written by the engine only
+    assert(says(chat_with("\"target\": \"user\"", "\"target\": \"agent_attempt\""), "written by the engine only"))
+    assert(says(chat_with("\"target\": \"user\"", "\"target\": \"open_requests\""), "written by the engine only"))
 }
 
 test "events vs signals" {
