@@ -1,0 +1,340 @@
+// crew_task.nv - task 192.2: the agent recognises the real work (the tool `crew_task`), the owner confirms it; the pure part.
+//
+// The owner's rule (2026-10-27): the messages of the owner are NOT a journal. A `message.N.md` is written when the agent recognises a real piece of work on the files of the project and the owner
+// confirms it (a card in the feed with the buttons, or the code word). The agent may also say that the work belongs to a task that is already there (`extend`). Nothing is created by the hub on its own.
+//
+// What is here (no disk, no sockets): the proposal of the agent (`Proposal`, from the arguments of the tool), the description of the tool, the code word, the memory of the answers
+// "this is not a task", the rules "does it overlap with a running subtask / is the limit reached", the text of the file of the subtask, the marker line of an agent that has no tools, the view for the page.
+// The hub side (the tool call, the answers of the page, the queue) is `crew_task_hub.nv`.
+module crew_harness.server
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+/// The name of the tool.
+export const CREW_TASK_TOOL = "crew_task"
+
+/// Proposal: what the agent recognised and the owner has not answered yet. `state`: `open` (confirm or refuse), `overlap` (the files overlap with a running subtask: wait or go in parallel),
+/// `limit` (the limit of the tasks in work is reached: over the limit or into the queue). `how` is the choice at the overlap ("wait", "parallel"), `over` the word "over the limit".
+/// `source` is the message of the owner the proposal is about, `images` the pictures of that message (paths and names).
+export type Proposal {
+    id int,
+    kind str,
+    title str,
+    summary str,
+    extends int,
+    touches []str,
+    confidence str,
+    source str,
+    images []str,
+    image_names []str,
+    state str,
+    how str,
+    over bool,
+    with_n int,
+    with_files []str,
+    unknown bool,
+    listed bool,
+    choice str,
+    note str
+}
+
+/// A proposal that is just made: open, no choices.
+export fn proposal_new(kind str, title str, summary str, extends int, touches []str, confidence str) -> Proposal => {
+    id: 0, kind, title, summary, extends, touches, confidence, source: "", images: []str.new(), image_names: []str.new(),
+    state: "open", how: "", over: false, with_n: 0, with_files: []str.new(), unknown: false, listed: false, choice: "", note: ""
+}
+
+/// A copy of a proposal (the lists are shared, they are only read).
+export fn proposal_copy(p Proposal) -> Proposal => {
+    id: p.id, kind: p.kind, title: p.title, summary: p.summary, extends: p.extends, touches: p.touches, confidence: p.confidence, source: p.source,
+    images: p.images, image_names: p.image_names, state: p.state, how: p.how, over: p.over, with_n: p.with_n, with_files: p.with_files, unknown: p.unknown,
+    listed: p.listed, choice: p.choice, note: p.note
+}
+
+/// The proposal as an item of a list of the agent.
+export fn proposal_listed(p Proposal, note str) -> Proposal {
+    mut q = proposal_copy(p)
+    q.listed = true
+    q.note = note
+    q
+}
+
+// ----- the words of the owner -----
+
+const FOLD = "А:а Б:б В:в Г:г Д:д Е:е Ё:е Ж:ж З:з И:и Й:й К:к Л:л М:м Н:н О:о П:п Р:р С:с Т:т У:у Ф:ф Х:х Ц:ц Ч:ч Ш:ш Щ:щ Ъ:ъ Ы:ы Ь:ь Э:э Ю:ю Я:я ё:е й:й"
+const EDGE = ".,!?;:«»\"'()-–— \t\r\n"
+
+fn ct_fold_char(c str) -> str {
+    for pair in FOLD.split(" ") {
+        if pair.until(":") == c { return pair.after(":") }
+    }
+    c.to_ascii_lower()
+}
+
+/// The text in lower case (the Cyrillic too; `ё` is `е`) without the punctuation and the blanks at both ends: the form two words are compared in.
+export fn word_key(text str) -> str {
+    mut chars = []str.new()
+    for c in text.chars() { chars.push(ct_fold_char("${c}")) }
+    mut from = 0
+    while from < chars.len() && EDGE.contains(chars[from]) { from += 1 }
+    mut to = chars.len()
+    while to > from && EDGE.contains(chars[to - 1]) { to -= 1 }
+    mut out = []str.new()
+    mut i = from
+    while i < to {
+        out.push(chars[i])
+        i += 1
+    }
+    joined(out, "")
+}
+
+/// Is the message of the owner just the code word (`route_confirm_word`, `route_over_limit_word`)? An empty word is never matched.
+export fn is_code_word(text str, word str) -> bool {
+    ro key = word_key(word)
+    if key.byte_len() == 0 { return false }
+    word_key(text) == key
+}
+
+// ----- the tool -----
+
+/// The description of the tool for `tools/list`.
+export fn crew_task_tool_json() -> JsonValue {
+    ro text = "{\"name\":\"crew_task\",\"description\":\"Call it when the message of the user is REAL WORK on the files of the project (code, documents, tests, settings): something is to be changed, written or built. Do NOT call it for a question, a talk, an explanation, a look at the code or a one-word answer. The hub then shows the user a card and the user confirms (new task) or refuses; do not touch the files until the hub tells the decision. If the work belongs to a task that is already in the list of the tasks of the session, say kind=extend and its number in extends. Call it once per piece of work, at the very beginning, before the first change of a file.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"new\",\"extend\"],\"description\":\"new - a new piece of work; extend - the work belongs to an existing task of the list.\"},\"title\":{\"type\":\"string\",\"description\":\"A short title of the work (up to 60 characters).\"},\"summary\":{\"type\":\"string\",\"description\":\"What is to be done, in a few lines: it becomes the text of message.N.md.\"},\"extends\":{\"type\":\"integer\",\"description\":\"For kind=extend: the number of the task of the list.\"},\"touches\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"The files and folders the work will change (paths in the project).\"},\"confidence\":{\"type\":\"string\",\"enum\":[\"high\",\"medium\",\"low\"],\"description\":\"How sure you are that it is real work and not a talk.\"}},\"required\":[\"kind\",\"title\",\"summary\"]}}"
+    mparse(text)
+}
+
+fn ct_int(v JsonValue) -> int {
+    match v.int() {
+        Some(n) => n
+        None => match v.str() {
+            Some(t) => match t.trim_ascii().to_int() {
+                Ok(n) => n
+                Err(e) => 0
+            }
+            None => 0
+        }
+    }
+}
+
+/// The proposal from the arguments of a call of the tool, or the reason it is not good (the agent reads it and goes on).
+export fn proposal_of_arguments(arguments JsonValue) -> Result[Proposal, str] {
+    ro kind_raw = mtext_of(arguments, "kind").trim_ascii()
+    ro kind = if kind_raw == "extend" { "extend" } else { "new" }
+    ro title = mtext_of(arguments, "title").trim_ascii()
+    if title.byte_len() == 0 { return Err("crew_task: the argument title is missing") }
+    ro summary_raw = mtext_of(arguments, "summary").trim_ascii()
+    ro summary = if summary_raw.byte_len() == 0 { title } else { summary_raw }
+    mut extends = 0
+    match mget(arguments, "extends") {
+        Some(v) => { extends = ct_int(v) }
+        None => ()
+    }
+    mut touches = []str.new()
+    match mget(arguments, "touches") {
+        Some(list) => match list.array() {
+            Some(items) => {
+                for item in items {
+                    match item.str() {
+                        Some(path) => { if path.trim_ascii().byte_len() > 0 { touches.push(path.trim_ascii()) } }
+                        None => ()
+                    }
+                }
+            }
+            None => ()
+        }
+        None => ()
+    }
+    Ok(proposal_new(kind, title, summary, extends, touches, mtext_of(arguments, "confidence")))
+}
+
+fn ct_strings(items []str) -> JsonValue {
+    mut out = []JsonValue.new()
+    for x in items { out.push(JsonValue.str(x)) }
+    JsonValue.array(out)
+}
+
+/// The proposal in the form it travels from the MCP server to the hub (the arguments of the tool, checked).
+export fn proposal_arguments_text(p Proposal) -> str {
+    mut o = JsonObject.new()
+    mput(o, "kind", JsonValue.str(p.kind))
+    mput(o, "title", JsonValue.str(p.title))
+    mput(o, "summary", JsonValue.str(p.summary))
+    mput(o, "extends", JsonValue.int(p.extends))
+    mput(o, "touches", ct_strings(p.touches))
+    mput(o, "confidence", JsonValue.str(p.confidence))
+    JsonValue.object(o).to_str()
+}
+
+/// The proposal from the text above (the hub side); a text that is not good gives the reason.
+export fn proposal_of_text(text str) -> Result[Proposal, str] {
+    match Json.parse(text) {
+        Ok(v) => proposal_of_arguments(v)
+        Err(e) => Err("crew_task: the arguments are not JSON")
+    }
+}
+
+/// The tool the agent is told about in a prompt, for an agent that has no tools: the marker line `[[crew_task]] {json}` in its answer is the same call.
+export fn proposal_of_marker(answer str) -> Option[Proposal] {
+    for line in answer.lines() {
+        ro t = line.trim_ascii()
+        if t.starts_with("[[crew_task]]") {
+            match proposal_of_text(t["[[crew_task]]".byte_len()..].trim_ascii()) {
+                Ok(p) => return Some(p)
+                Err(e) => ()
+            }
+        }
+    }
+    None
+}
+
+// ----- the rules -----
+
+/// The words the agent is given as the answer of the tool when the card is shown.
+export const SHOWN_TEXT = "Предложение задачи показано владельцу карточкой. Файлы проекта пока не меняй: закончи ход одной короткой строкой (что понял), решение владельца хаб пришлёт следующим сообщением и ты продолжишь."
+
+/// The answer of the tool for a work the owner already refused.
+export const REFUSED_TEXT = "Владелец уже ответил, что это не задача: не предлагай её снова, отвечай как обычно."
+
+/// The answer of the tool when the mode takes no proposals.
+export const NOT_NEEDED_TEXT = "В этом режиме задача ведётся без предложений: crew_task не нужен, продолжай."
+
+fn ct_same_title(a str, b str) -> bool => word_key(a) == word_key(b)
+
+/// Was a work with this title refused by the owner (a card "this is not a task")?
+export fn was_refused(dismissed []str, title str) -> bool {
+    ro key = word_key(title)
+    for d in dismissed { if d == key { return true } }
+    false
+}
+
+/// Is there a card of the same work (the same title) already?
+export fn has_proposal(props []Proposal, title str) -> bool {
+    for p in props { if ct_same_title(p.title, title) { return true } }
+    false
+}
+
+/// The index of the last card that waits for the answer (-1 - none).
+export fn last_open(props []Proposal) -> int {
+    mut at = props.len() - 1
+    while at >= 0 && props[at].listed { at -= 1 }
+    at
+}
+
+/// The index of the card with this id, -1 - none.
+export fn proposal_at(props []Proposal, id int) -> int {
+    mut at = 0
+    for p in props {
+        if p.id == id { return at }
+        at += 1
+    }
+    -1
+}
+
+/// The subtasks that are in work now (the ones that neither are done nor wait): the number `n` and the files each says it touches.
+export type RunSub { n int, touches []str }
+
+/// The files two works share (by files and by folders), and whether it is unknown (the new work names no files while something else is running).
+export type Clash { with_n int, files []str, unknown bool }
+
+/// The clash of a new work with the running subtasks: none (`with_n` 0), the first overlap, or "unknown" when the proposal names no files and something is running.
+export fn clash_of(touches []str, running []RunSub) -> Clash {
+    if running.len() == 0 { return Clash { with_n: 0, files: []str.new(), unknown: false } }
+    if touches.len() == 0 { return Clash { with_n: running[0].n, files: []str.new(), unknown: true } }
+    for r in running {
+        ro shared = tk_overlap(touches, r.touches)
+        if shared.len() > 0 { return Clash { with_n: r.n, files: shared, unknown: false } }
+    }
+    Clash { with_n: 0, files: []str.new(), unknown: false }
+}
+
+/// Is the limit of the tasks in work reached? A limit of 0 is off.
+export fn limit_reached(active int, limit int) -> bool => limit > 0 && active >= limit
+
+// ----- the file of a subtask -----
+
+/// The text of `message.N.md` of a new subtask: the summary of the agent, then the message of the owner it is about.
+export fn crew_message_text(n int, summary str, source str, ms int) -> str {
+    mut text = summary.trim_ascii()
+    if source.trim_ascii().byte_len() > 0 && source.trim_ascii() != text {
+        text = "${text}\n\n## Сообщение владельца\n\n${source.trim_ascii()}"
+    }
+    message_file_text(n, text, ms)
+}
+
+/// The addition to `message.K.md` when the work extends a subtask: the summary and the message of the owner, with the date.
+export fn crew_addition_text(summary str, source str, ms int) -> str {
+    mut text = summary.trim_ascii()
+    if source.trim_ascii().byte_len() > 0 && source.trim_ascii() != text {
+        text = "${text}\n\n> ${source.trim_ascii().replace("\n", "\n> ")}"
+    }
+    message_addition_text(text, ms)
+}
+
+// ----- what the agent is told -----
+
+/// SubLine: a subtask of the session for the list the agent gets (the number, the title, the state).
+export type SubLine { n int, title str, state str, waits int }
+
+/// The short list of the tasks of the session for the hidden note before the message of the owner ("" - there are none). The agent uses it to say that a work belongs to a task that is there.
+export fn tasks_hint(task_shown str, lines []SubLine) -> str {
+    if lines.len() == 0 { return "" }
+    mut rows = []str.new()
+    for l in lines {
+        ro state = if l.waits > 0 { "ждёт подзадачу ${l.waits}" } else { l.state }
+        rows.push("${l.n}. «${l.title}» (${state}) — ${task_shown}/message.${l.n}.md")
+    }
+    "[crew] Задачи этой сессии (для crew_task: kind=extend, extends=<номер>, если работа относится к одной из них):\n${joined(rows, "\n")}"
+}
+
+/// The note for the agent after the owner answered the card.
+export fn decision_note(what str, n int, title str, shown str) -> str {
+    if what == "new" { return "[crew] Владелец подтвердил задачу «${title}»: подзадача ${n}, папка ${shown}. Постановка — ${shown}/message.${n}.md (в нём краткое изложение и сообщение владельца, картинки в images/). Прочитай её и выполни работу в рабочем каталоге; в конце коротко скажи, что сделано." }
+    if what == "extend" { return "[crew] Владелец подтвердил: работа дополняет подзадачу ${n} «${title}». Новое — в конце ${shown}/message.${n}.md, раздел «Дополнение». Прочитай его и продолжай в рабочем каталоге." }
+    if what == "queued" { return "[crew] Подзадача ${n} «${title}» ждёт очереди и стартует сама; пока ничего по ней не делай." }
+    "[crew] Владелец ответил, что это не задача: никаких файлов задачи не заводи. Сделай, о чём просили, как обычная правка или ответ, и коротко скажи итог."
+}
+
+// ----- the view for the page -----
+
+fn ct_proposal_view(p Proposal, extends_title str) -> JsonValue {
+    mut o = JsonObject.new()
+    mput(o, "id", JsonValue.int(p.id))
+    mput(o, "kind", JsonValue.str(p.kind))
+    mput(o, "title", JsonValue.str(p.title))
+    mput(o, "summary", JsonValue.str(p.summary))
+    mput(o, "extends", JsonValue.int(p.extends))
+    mput(o, "extends_title", JsonValue.str(extends_title))
+    mput(o, "touches", ct_strings(p.touches))
+    mput(o, "confidence", JsonValue.str(p.confidence))
+    mput(o, "state", JsonValue.str(p.state))
+    mput(o, "with_n", JsonValue.int(p.with_n))
+    mput(o, "with_files", ct_strings(p.with_files))
+    mput(o, "unknown", JsonValue.bool(p.unknown))
+    mput(o, "listed", JsonValue.bool(p.listed))
+    mput(o, "choice", JsonValue.str(p.choice))
+    mput(o, "note", JsonValue.str(p.note))
+    JsonValue.object(o)
+}
+
+/// What the page needs for the cards and the panel, added to the state of the mode: `proposals`, `active` (the subtasks in work), `max_active` (the limit, 0 - none), the two code words.
+export fn crew_view_extend(base str, props []Proposal, subs []SubLine, active int, max_active int, confirm_word str, over_word str) -> str {
+    mut o = match Json.parse(base) {
+        Ok(v) => v.object() ?? JsonObject.new()
+        Err(e) => JsonObject.new()
+    }
+    mut cards = []JsonValue.new()
+    for p in props {
+        mut shown = ""
+        for l in subs { if p.kind == "extend" && l.n == p.extends { shown = l.title } }
+        cards.push(ct_proposal_view(p, shown))
+    }
+    mput(o, "proposals", JsonValue.array(cards))
+    mut candidates = 0
+    for p in props { if p.listed && p.choice == "discuss" { candidates += 1 } }
+    mput(o, "candidates", JsonValue.int(candidates))
+    mput(o, "active", JsonValue.int(active))
+    mput(o, "max_active", JsonValue.int(max_active))
+    mput(o, "confirm_word", JsonValue.str(confirm_word))
+    mput(o, "over_word", JsonValue.str(over_word))
+    JsonValue.object(o).to_str()
+}

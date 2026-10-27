@@ -484,7 +484,23 @@ fn Hub @open_config(s Dialog) -> Option[AcpConfig] => @open_config_for(s.agent, 
 
 // What the agent of this session is offered for its questions (task 192i): nothing when the setting `ask_form` is off or the agent is `off`; the form
 // (its own tool of questions) when it is `native`; the MCP tool of the hub, and no form, when it is `mcp`.
-fn Hub @ask_for(agent str, id str) -> AskSetup {
+fn Hub @ask_for(agent str, id str) -> AskSetup => @ask_with_tasks(@ask_base(agent, id), id)
+
+// Task 192.2: the tools of the recognition of the tasks go to every agent that takes an HTTP MCP server: `crew_task_list` always (the button), `crew_task` when `route_auto_propose`.
+fn Hub @ask_with_tasks(base AskSetup, id str) -> AskSetup {
+    if !@settings.route_tool || @mcps.len() == 0 { return AskSetup { form: base.form, mcp_url: base.mcp_url, mcp_token: base.mcp_token, hint: base.hint } }
+    ro auto = @settings.route_auto_propose
+    if base.mcp_url.byte_len() > 0 {
+        return AskSetup { form: base.form, mcp_url: @mcp_url_tools(id, if auto { "all" } else { "asklist" }), mcp_token: base.mcp_token, hint: if auto { "${base.hint} ${TASK_HINT}" } else { base.hint } }
+    }
+    AskSetup { form: base.form, mcp_url: @mcp_url_tools(id, if auto { "task" } else { "list" }), mcp_token: @mcp_token_value(), hint: if auto { TASK_HINT } else { "" } }
+}
+
+fn Hub @mcp_url_tools(id str, tools str) -> str => if tools == "all" { @mcp_url_for(id) } else { "${@mcp_url_for(id)}/${tools}" }
+
+const TASK_HINT = "[crew] Когда замечаешь реальную работу над файлами проекта (не вопрос и не беседу), вызови инструмент crew_task (сервер crew) до первой правки файла."
+
+fn Hub @ask_base(agent str, id str) -> AskSetup {
     if !@settings.ask_form { return no_ask() }
     match @settings.agent(agent) {
         Some(spec) => {
@@ -511,6 +527,7 @@ fn Hub @mcp_token_value() -> str {
 }
 
 fn Hub @wants_mcp() -> bool {
+    if @settings.route_tool { return true }
     if !@settings.ask_form { return false }
     for a in @settings.agents {
         if a.ask == "mcp" { return true }
@@ -928,6 +945,8 @@ fn Hub mut @say(trace str, text str, items []JsonValue) Proc Detach Time -> () {
         return
     }
     if text.byte_len() == 0 && items.len() == 0 { return }
+    // task 192.2: the code word answers the last card of a proposal of a task and is not sent to the agent
+    if items.len() == 0 && @ct_word(at, text) { return }
     if !@takes_message_at(at) {
         @say_log("a message to ${trace} while a turn is open: ignored")
         return
@@ -957,6 +976,7 @@ fn Hub mut @say(trace str, text str, items []JsonValue) Proc Detach Time -> () {
         s.clients[0].attach_images(prepared.files)
         @route_save_images(at, prepared.files)
     }
+    @ct_remember(at, text, prepared.files)
     ro prelude = @route_message_prelude(at)
     if prelude.byte_len() > 0 { s.clients[0].set_prelude(prelude) }
     feed_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("user_message", text))
@@ -1084,6 +1104,14 @@ fn Hub mut @mcp_withdraw(trace str) Proc Detach Time -> () {
 
 // A message of the MCP server: a call of the tool opens a question on the page of its session; a call whose term passed takes it away.
 fn Hub mut @mcp_message(msg McpMsg) Proc Detach Time -> () {
+    if msg.kind == "task" {
+        @ct_tool_call(msg)
+        return
+    }
+    if msg.kind == "tasklist" {
+        @ct_list_call(msg)
+        return
+    }
     if msg.kind == "gone" {
         match @mcp_take_call(msg.call) {
             Some(pending) => {
@@ -1453,6 +1481,12 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
         @route_worktree(trace, jflag(input, "on"))
     } else if kind == "route_diff" {
         @route_diff(trace)
+    } else if kind == "route_prop" {
+        @ct_answer(trace, jint(input, "id"), jtext(input, "action"))
+    } else if kind == "route_recognize" {
+        @ct_recognize(trace)
+    } else if kind == "route_quick" {
+        @ct_quick(trace, jtext(input, "text"))
     } else {
         @say_log("a message of the kind ${kind} from page ${conn}: ignored")
     }

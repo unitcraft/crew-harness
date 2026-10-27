@@ -89,7 +89,7 @@ fn Hub @route_state_text(at int) -> str {
         progress.push(parse_progress(read_file("${s.rt.task_dir}/progress.${sub.n}.md") ?? ""))
     }
     ro suggest = task_too_big(s.rt.subs.len(), s.rt.messages, @settings.route_task_limit, @settings.route_task_messages)
-    route_view_text(s.rt, @route_titles(doc), progress, suggest, now_millis(), s.rt.extra)
+    @ct_view(at, route_view_text(s.rt, @route_titles(doc), progress, suggest, now_millis(), s.rt.extra))
 }
 
 fn Hub mut @route_line(conn int, id str, input str) Time -> () {
@@ -171,7 +171,7 @@ fn Hub @route_make_task(session str, route str, text str, use_tree bool) Proc ->
     ro repo = tk_is_repo(base)
     // a tree is made when the session wants one (the switch "Worktree") and the mode is not the planning (it writes the task and touches no code: the tree comes later)
     ro want_tree = repo && use_tree && route != "planning"
-    if route == "interactive" && !want_tree { return no_task() }
+    // task 192.2: the mode "interactive" makes a task only for a confirmed proposal (`crew_task`, `crew_task_list`), see crew_task_hub.nv
     ro tasks_here = want_tree && dir_there("${base}/doc/tasks")
     mut names = []str.new()
     if repo {
@@ -207,6 +207,8 @@ fn Hub mut @route_write_sub(at int, n int, text str) Proc Detach Time -> () {
 // Returns the line for the feed ("subtask 2: new"), "" when the mode keeps no task.
 fn Hub mut @route_on_message(at int, text str) Proc Detach Time -> str {
     ro s0 = @sessions[at]
+    // task 192.2: the mode "interactive" makes nothing by itself: a task appears when the owner confirms what the agent recognised (a button, the code word)
+    if s0.rt.route == "interactive" { return "" }
     if !s0.rt.task_open || s0.rt.task_closed {
         ro made = @route_make_task(s0.id, s0.rt.route, text, s0.rt.use_tree)
         if !made.ok { return "" }
@@ -264,12 +266,17 @@ fn Hub mut @route_sync_cwd(at int) Time -> () {
 fn Hub mut @route_message_prelude(at int) Proc -> str {
     mut s = @sessions[at]
     ro hint = @route_files_hint_of(s)
-    if s.rt.route == "interactive" { return hint }
     ro doc = @route_doc(s.rt.route)
     ro text = route_prelude(doc, !s.rt.told, s.rt.task_shown, s.rt.last_sub(), "")
     s.rt.told = true
     @sessions[at] = s
-    if hint.byte_len() == 0 { text } else if text.byte_len() == 0 { hint } else { "${text}\n\n${hint}" }
+    // task 192.2: the list of the tasks of the session, so that the agent can say that a work belongs to one of them
+    ro tasks = tasks_hint(s.rt.task_shown, @ct_lines(s))
+    mut parts = []str.new()
+    if text.byte_len() > 0 { parts.push(text) }
+    if hint.byte_len() > 0 { parts.push(hint) }
+    if tasks.byte_len() > 0 { parts.push(tasks) }
+    joined(parts, "\n\n")
 }
 
 // The note about a planned task and its pictures ("" when there is nothing to say).
@@ -1340,6 +1347,7 @@ fn Hub mut @route_pump() Proc Detach Time -> () {
         if s.rt.awaiting || s.rt.running {
             if s.engine.step_number() >= 0 { @route_tick(at) }
         }
+        @ct_pump(at)
         at += 1
     }
     if @reviews.len() > 0 { @route_pump_reviews() }

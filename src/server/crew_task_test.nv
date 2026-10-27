@@ -1,0 +1,303 @@
+// crew_task_test.nv - task 192.2: the pure part of `crew_task`: the code word, the arguments of the tools, the quick answer to the list, the clash of the files, the limit,
+// the files of a subtask, the view for the page, and the tool calls over `mcp_handle_for`.
+module crew_harness.server
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+fn ctj(text str) -> JsonValue {
+    match Json.parse(text) {
+        Ok(v) => v
+        Err(e) => panic("bad json in a test: ${text}")
+    }
+}
+
+fn ct_get(v JsonValue, key str) -> JsonValue {
+    match v.object() {
+        Some(o) => match o.get(key) {
+            Some(x) => x
+            None => JsonValue.null()
+        }
+        None => JsonValue.null()
+    }
+}
+
+fn ct_items(v JsonValue) -> []JsonValue {
+    match v.array() {
+        Some(items) => items
+        None => []JsonValue.new()
+    }
+}
+
+fn ct_args() -> str => "{\"kind\":\"new\",\"title\":\"Кнопка выхода\",\"summary\":\"Добавить кнопку выхода\",\"touches\":[\"src/web/view.js\",\"src/web/app.css\"],\"confidence\":\"high\"}"
+
+test "crew_task: the code word is found in lower case, with punctuation and the Cyrillic case" {
+    assert(is_code_word("задача", "задача"))
+    assert(is_code_word("  Задача! ", "задача"))
+    assert(is_code_word("«ЗАДАЧА»", "Задача"))
+    assert(is_code_word("Сверх.", "сверх"))
+    assert(!is_code_word("задача номер два", "задача"))
+    assert(!is_code_word("задача", ""))
+    assert(!is_code_word("", "задача"))
+}
+
+test "crew_task: the arguments of the tool become a proposal, a bad call gives the reason" {
+    match proposal_of_arguments(ctj(ct_args())) {
+        Ok(p) => {
+            assert(p.kind == "new")
+            assert(p.title == "Кнопка выхода")
+            assert(p.touches.len() == 2)
+            assert(p.state == "open")
+            assert(!p.listed)
+        }
+        Err(e) => panic(e)
+    }
+    match proposal_of_arguments(ctj("{\"kind\":\"extend\",\"title\":\"t\",\"summary\":\"s\",\"extends\":\"2\"}")) {
+        Ok(p) => {
+            assert(p.kind == "extend")
+            assert(p.extends == 2)
+        }
+        Err(e) => panic(e)
+    }
+    match proposal_of_arguments(ctj("{\"kind\":\"new\",\"summary\":\"s\"}")) {
+        Ok(p) => panic("a proposal without a title")
+        Err(e) => assert(e.contains("title"))
+    }
+}
+
+test "crew_task: the proposal goes through its text and through the marker line" {
+    match proposal_of_arguments(ctj(ct_args())) {
+        Ok(p) => {
+            match proposal_of_text(proposal_arguments_text(p)) {
+                Ok(q) => {
+                    assert(q.title == p.title)
+                    assert(q.touches.len() == 2)
+                }
+                Err(e) => panic(e)
+            }
+        }
+        Err(e) => panic(e)
+    }
+    match proposal_of_marker("Понял.\n[[crew_task]] ${ct_args()}\nготово") {
+        Some(p) => assert(p.title == "Кнопка выхода")
+        None => panic("the marker is not read")
+    }
+    assert(proposal_of_marker("просто текст").is_none())
+}
+
+test "crew_task: the tools are listed by the path of the session" {
+    ro all = mcp_handle_for("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}", "all")
+    ro names_all = ct_items(ct_get(ct_get(ctj(all.text), "result"), "tools"))
+    assert(names_all.len() == 3)
+    ro only = mcp_handle_for("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}", "list")
+    ro names_list = ct_items(ct_get(ct_get(ctj(only.text), "result"), "tools"))
+    assert(names_list.len() == 1)
+    assert(ct_get(names_list[0], "name").str() == Some("crew_task_list"))
+    ro asked = mcp_handle_for("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}", "asklist")
+    assert(ct_items(ct_get(ct_get(ctj(asked.text), "result"), "tools")).len() == 2)
+    ro auto = mcp_handle_for("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}", "task")
+    assert(ct_items(ct_get(ct_get(ctj(auto.text), "result"), "tools")).len() == 2)
+}
+
+test "crew_task: a call of crew_task is a task message with the checked arguments, a call of the wrong tool for the path is refused" {
+    ro call = "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"crew_task\",\"arguments\":${ct_args()}}}"
+    ro out = mcp_handle_for(call, "task")
+    assert(out.kind == "task")
+    assert(out.questions.contains("Кнопка выхода"))
+    ro refused = mcp_handle_for(call, "list")
+    assert(refused.kind == "reply")
+    assert(ct_get(ct_get(ctj(refused.text), "result"), "isError").bool() == Some(true))
+    ro bad = mcp_handle_for("{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"crew_task\",\"arguments\":{}}}", "all")
+    assert(bad.kind == "reply")
+}
+
+fn ct_list_args() -> str => "{\"tasks\":[{\"id\":1,\"kind\":\"new\",\"title\":\"Кнопка\",\"summary\":\"сделать кнопку\",\"touches\":[\"src/web/view.js\"],\"note\":\"обсуждали\"},{\"id\":2,\"kind\":\"extend\",\"title\":\"Тест\",\"summary\":\"добавить тест\",\"extends\":1}]}"
+
+test "crew_task_list: the call gives the items, an empty list is allowed, a wrong item rejects the call" {
+    ro call = "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"crew_task_list\",\"arguments\":${ct_list_args()}}}"
+    ro out = mcp_handle_for(call, "list")
+    assert(out.kind == "tasklist")
+    match proposals_of_list_text(out.questions) {
+        Ok(items) => {
+            assert(items.len() == 2)
+            ro first = items[0]
+            ro second = items[1]
+            assert(first.listed)
+            assert(first.note == "обсуждали")
+            assert(second.kind == "extend")
+            assert(second.extends == 1)
+        }
+        Err(e) => panic(e)
+    }
+    match proposals_of_list(ctj("{\"tasks\":[]}")) {
+        Ok(items) => assert(items.len() == 0)
+        Err(e) => panic(e)
+    }
+    match proposals_of_list(ctj("{\"tasks\":[{\"summary\":\"x\"}]}")) {
+        Ok(items) => panic("an item without a title")
+        Err(e) => assert(e.contains("title"))
+    }
+    match proposals_of_list(ctj("{}")) {
+        Ok(items) => panic("no tasks")
+        Err(e) => assert(e.contains("tasks"))
+    }
+    match proposals_of_marker("[[crew_task_list]] ${ct_list_args()}") {
+        Some(items) => assert(items.len() == 2)
+        None => panic("the marker of the list is not read")
+    }
+}
+
+fn ct_quick_ok(text str, count int) -> []Choice {
+    match parse_quick(text, count) {
+        Ok(c) => c
+        Err(e) => panic("not understood: ${text}: ${e}")
+    }
+}
+
+fn ct_action_of(choices []Choice, n int) -> str {
+    for c in choices { if c.n == n { return c.action } }
+    "none"
+}
+
+test "quick answer: the example of the owner" {
+    ro c = ct_quick_ok("1, 2, 4 — в работу, 3 — продолжить обсуждение, 5 — забыть", 5)
+    assert(c.len() == 5)
+    assert(ct_action_of(c, 1) == "work")
+    assert(ct_action_of(c, 2) == "work")
+    assert(ct_action_of(c, 4) == "work")
+    assert(ct_action_of(c, 3) == "discuss")
+    assert(ct_action_of(c, 5) == "forget")
+}
+
+test "quick answer: semicolons, ranges, English words, other order" {
+    ro c = ct_quick_ok("1-3 work; 4 discuss; 5 forget", 5)
+    assert(ct_action_of(c, 1) == "work")
+    assert(ct_action_of(c, 3) == "work")
+    assert(ct_action_of(c, 4) == "discuss")
+    assert(ct_action_of(c, 5) == "forget")
+    ro d = ct_quick_ok("1 и 2 в работу\n3 забыть", 3)
+    assert(d.len() == 3)
+    assert(ct_action_of(d, 3) == "forget")
+    ro e = ct_quick_ok("2 – обсудить дальше", 3)
+    assert(e.len() == 1)
+    assert(ct_action_of(e, 2) == "discuss")
+}
+
+test "quick answer: what is not understood applies nothing and says the format" {
+    match parse_quick("1, 2 что-нибудь", 3) {
+        Ok(c) => panic("understood a nonsense")
+        Err(e) => assert(e.contains("Формат"))
+    }
+    match parse_quick("7 в работу", 3) {
+        Ok(c) => panic("an item that is not there")
+        Err(e) => assert(e.contains("7"))
+    }
+    match parse_quick("1, 2", 3) {
+        Ok(c) => panic("numbers without a decision")
+        Err(e) => assert(e.contains("Формат"))
+    }
+    match parse_quick("", 3) {
+        Ok(c) => panic("an empty answer")
+        Err(e) => assert(e.contains("Формат"))
+    }
+}
+
+test "crew_task: files of two works overlap by file and by folder; no files while something runs is unknown; no clash with nothing running" {
+    ro running = [RunSub { n: 1, touches: ["src/web/view.js"] }, RunSub { n: 2, touches: ["doc/"] }]
+    ro none = clash_of(["src/server/hub.nv"], running)
+    assert(none.with_n == 0)
+    ro same = clash_of(["src/web/view.js"], running)
+    assert(same.with_n == 1)
+    assert(same.files.len() == 1)
+    ro folder = clash_of(["doc/routes/fast.md"], running)
+    assert(folder.with_n == 2)
+    ro unknown = clash_of([]str.new(), running)
+    assert(unknown.with_n == 1)
+    assert(unknown.unknown)
+    ro empty = clash_of(["a.txt"], []RunSub.new())
+    assert(empty.with_n == 0)
+    assert(!limit_reached(2, 3))
+    assert(limit_reached(3, 3))
+    assert(!limit_reached(9, 0))
+}
+
+test "crew_task: the refused titles are remembered and the cards are found" {
+    ro refused = [word_key("Кнопка выхода")]
+    assert(was_refused(refused, "кнопка выхода!"))
+    assert(!was_refused(refused, "другое"))
+    mut p = proposal_new("new", "Кнопка", "s", 0, []str.new(), "")
+    p.id = 4
+    ro props = [p]
+    assert(has_proposal(props, "кнопка"))
+    assert(proposal_at(props, 4) == 0)
+    assert(proposal_at(props, 5) == -1)
+    assert(last_open(props) == 0)
+    mut q = proposal_new("new", "Из списка", "s", 0, []str.new(), "")
+    q.id = 5
+    q.listed = true
+    assert(last_open([p, q]) == 0)
+    assert(last_open([q]) == -1)
+}
+
+test "crew_task: the file of a subtask holds the summary and the message of the owner, an addition holds the date" {
+    ro text = crew_message_text(2, "Сделать кнопку", "давай сделаем кнопку выхода", 0)
+    assert(text.contains("# Сообщение 2"))
+    assert(text.contains("Сделать кнопку"))
+    assert(text.contains("## Сообщение владельца"))
+    assert(text.contains("давай сделаем кнопку выхода"))
+    ro same = crew_message_text(1, "Один и тот же текст", "Один и тот же текст", 0)
+    assert(!same.contains("## Сообщение владельца"))
+    ro add = crew_addition_text("Ещё тест", "и тест", 0)
+    assert(add.contains("## Дополнение"))
+    assert(add.contains("Ещё тест"))
+}
+
+test "crew_task: the hint lists the tasks, the request names the candidates" {
+    ro hint = tasks_hint("doc/tasks/001-x", [SubLine { n: 1, title: "Кнопка", state: "идёт", waits: 0 }, SubLine { n: 2, title: "Тест", state: "ждёт", waits: 1 }])
+    assert(hint.contains("1. «Кнопка» (идёт)"))
+    assert(hint.contains("ждёт подзадачу 1"))
+    assert(hint.contains("doc/tasks/001-x/message.2.md"))
+    assert(tasks_hint("x", []SubLine.new()) == "")
+    ro req = recognize_request(hint, ["- «Кандидат»"])
+    assert(req.contains("crew_task_list"))
+    assert(req.contains("Кандидат"))
+}
+
+test "crew_task: the view holds the cards, the numbers and the words" {
+    mut p = proposal_new("extend", "Тест", "s", 1, ["a.txt"], "high")
+    p.id = 3
+    p.state = "overlap"
+    p.with_n = 1
+    mut q = proposal_new("new", "Из списка", "s", 0, []str.new(), "")
+    q.id = 4
+    q.listed = true
+    q.choice = "discuss"
+    ro text = crew_view_extend("{\"route\":\"interactive\"}", [p, q], [SubLine { n: 1, title: "Кнопка", state: "идёт", waits: 0 }], 2, 3, "задача", "сверх")
+    ro v = ctj(text)
+    assert(ct_get(v, "route").str() == Some("interactive"))
+    assert(ct_get(v, "active").int() == Some(2))
+    assert(ct_get(v, "max_active").int() == Some(3))
+    assert(ct_get(v, "confirm_word").str() == Some("задача"))
+    assert(ct_get(v, "over_word").str() == Some("сверх"))
+    assert(ct_get(v, "candidates").int() == Some(1))
+    ro cards = ct_items(ct_get(v, "proposals"))
+    assert(cards.len() == 2)
+    assert(ct_get(cards[0], "extends_title").str() == Some("Кнопка"))
+    assert(ct_get(cards[0], "state").str() == Some("overlap"))
+    assert(ct_get(cards[1], "listed").bool() == Some(true))
+}
+
+test "crew_task: the journal rebuilds the subtasks with their files, the wait and the start" {
+    mut rt = route_session_new()
+    rt.apply("route_task", "{\"op\":\"open\",\"id\":\"001-x\",\"number\":\"001\",\"dir\":\"d\",\"shown\":\"s\",\"title\":\"Кнопка\",\"touches\":\"src/a.js\\nsrc/b.js\"}")
+    assert(rt.subs.len() == 1)
+    assert(rt.subs[0].touches.len() == 2)
+    rt.apply("route_task", "{\"op\":\"subtask\",\"n\":2,\"title\":\"Второе\",\"touches\":\"src/a.js\",\"waits\":1,\"queued\":0}")
+    assert(rt.subs[1].waits == 1)
+    ro waiting = ctj(route_view_text(rt, []str.new(), [Progress { done: 0, total: 0, items: []ProgressItem.new() }, Progress { done: 0, total: 0, items: []ProgressItem.new() }], false, 0, task_extra_none()))
+    ro subs = ct_items(ct_get(ct_get(waiting, "task"), "subtasks"))
+    assert(ct_get(subs[1], "state").str() == Some("waits"))
+    assert(ct_get(subs[1], "waits_for").int() == Some(1))
+    rt.apply("route_task", "{\"op\":\"sub_start\",\"n\":2}")
+    assert(rt.subs[1].waits == 0)
+    assert(!rt.subs[1].queued)
+}

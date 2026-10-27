@@ -134,11 +134,26 @@ fn read_request(mut conn TcpStream) Net -> Option[HttpRequest] {
     Some(HttpRequest { method: parsed.method, path: parsed.path, auth: parsed.auth, origin: parsed.origin, length: parsed.length, body })
 }
 
-// The session of a path `/mcp/<session>` ("" - none); None - the path is not ours.
+// The session of a path `/mcp/<session>` ("" - none); None - the path is not ours. A path `/mcp/<session>/task` is the same session with the tool `crew_task` only (task 192.2).
 fn session_of(path str) -> Option[str] {
     if path == "/mcp" || path == "/mcp/" { return Some("") }
     if path.starts_with("/mcp/") { return Some(path[5..]) }
     None
+}
+
+// The tools of a path: "task" for `.../task`, else "all"; the session without the suffix.
+fn tools_of_session(session str) -> str {
+    if session.ends_with("/task") { return "task" }
+    if session.ends_with("/list") { return "list" }
+    if session.ends_with("/asklist") { return "asklist" }
+    "all"
+}
+
+fn session_plain(session str) -> str {
+    if session.ends_with("/task") { return session[..session.byte_len() - 5] }
+    if session.ends_with("/list") { return session[..session.byte_len() - 5] }
+    if session.ends_with("/asklist") { return session[..session.byte_len() - 8] }
+    session
 }
 
 // The answer of the hub to a call: "ok:<text>" is the text of the tool, "err:<text>" is a failure of the tool.
@@ -178,17 +193,20 @@ fn answer_request(request HttpRequest, token str, timeout_ms int, call int, inbo
         None => return http_answer(404, "{\"error\":\"not found\"}")
     }
     if request.method != "POST" { return http_answer(405, "{\"error\":\"POST only\"}") }
-    ro out = mcp_handle(request.body)
+    ro out = mcp_handle_for(request.body, tools_of_session(session))
+    ro session_name = session_plain(session)
     if out.kind == "none" { return "HTTP/1.1 202 Accepted\r\nContent-Length: 0\r\nConnection: close\r\n\r\n" }
     if out.kind == "reply" { return http_answer(200, out.text) }
     // a call of the tool: the hub is told and the owner is waited for
     ro answers = Chan[str].new(1)
-    ro told = inbox.send(McpMsg { kind: "ask", call, session, text: out.questions, reply: answers.tx })
+    ro told = inbox.send(McpMsg { kind: out.kind, call, session: session_name, text: out.questions, reply: answers.tx })
     ro id = id_of(out.id)
-    match await_answer(answers.rx, timeout_ms) {
+    // a proposal of a task is answered at once by the hub (the owner is not waited for): a short term
+    ro wait_ms = if out.kind == "task" || out.kind == "tasklist" { 20000 } else { timeout_ms }
+    match await_answer(answers.rx, wait_ms) {
         Some(answer) => http_answer(200, mcp_text_reply(id, reply_text(answer), is_failure(answer)))
         None => {
-            ro gone = inbox.send(McpMsg { kind: "gone", call, session, text: "", reply: answers.tx })
+            ro gone = inbox.send(McpMsg { kind: "gone", call, session: session_name, text: "", reply: answers.tx })
             http_answer(200, mcp_text_reply(id, "таймаут ожидания ответа", true))
         }
     }

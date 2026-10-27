@@ -76,7 +76,8 @@ fn kit_settings(store str, name str, idle_ms int, pg PgConfig) -> ServerSettings
         port: 8099, data_dir, store, pg, agents, idle_term_ms: idle_ms,
         workdir: "${data_dir}/work", web_dir: "src/web", machines_dir: tree_machines_dir(), hub_program: "", hub_args: []str.new(), acp_trace: false, ask_form: true, ask_timeout_ms: 1800000,
         stt_url: "http://127.0.0.1:8178/inference", stt_language: "auto", max_image_bytes: 10485760,
-        routes_dir: "doc/routes", route_reviewer_order: ["second"], route_task_limit: 12, route_task_messages: 40, route_fix_attempts: 2, route_worktree_ask: true, route_overlap_seconds: 30, route_keep_days: 30
+        routes_dir: "doc/routes", route_reviewer_order: ["second"], route_task_limit: 12, route_task_messages: 40, route_fix_attempts: 2, route_worktree_ask: true, route_overlap_seconds: 30, route_keep_days: 30,
+        route_confirm_word: "задача", route_over_limit_word: "сверх", route_max_active: 3, route_tool: true, route_auto_propose: false
     }
 }
 
@@ -878,7 +879,8 @@ fn kit_without_yolo(settings ServerSettings) -> ServerSettings {
         workdir: settings.workdir, web_dir: settings.web_dir, hub_program: settings.hub_program, hub_args: settings.hub_args, acp_trace: settings.acp_trace,
         ask_form: settings.ask_form, ask_timeout_ms: settings.ask_timeout_ms, stt_url: settings.stt_url, stt_language: settings.stt_language,
         max_image_bytes: settings.max_image_bytes, routes_dir: settings.routes_dir, route_reviewer_order: settings.route_reviewer_order, route_task_limit: settings.route_task_limit,
-        route_task_messages: settings.route_task_messages, route_fix_attempts: settings.route_fix_attempts, route_worktree_ask: settings.route_worktree_ask, route_overlap_seconds: settings.route_overlap_seconds, route_keep_days: settings.route_keep_days
+        route_task_messages: settings.route_task_messages, route_fix_attempts: settings.route_fix_attempts, route_worktree_ask: settings.route_worktree_ask, route_overlap_seconds: settings.route_overlap_seconds, route_keep_days: settings.route_keep_days,
+        route_confirm_word: settings.route_confirm_word, route_over_limit_word: settings.route_over_limit_word, route_max_active: settings.route_max_active, route_tool: settings.route_tool, route_auto_propose: settings.route_auto_propose
     }
 }
 

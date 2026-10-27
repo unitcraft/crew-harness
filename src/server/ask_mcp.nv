@@ -172,8 +172,20 @@ fn questions_of(arguments JsonValue) -> Result[JsonValue, str] {
     Ok(JsonValue.array(out))
 }
 
-/// What the server does with the body of one `POST`.
-export fn mcp_handle(body str) -> McpOut {
+/// What the server does with the body of one `POST` (the tool of the questions only: the old form).
+export fn mcp_handle(body str) -> McpOut => mcp_handle_for(body, "ask")
+
+/// The tools of the server for a session: "ask" (the questions), "task" (`crew_task`, task 192.2), "all" (both).
+fn tools_of(tools str) -> []JsonValue {
+    mut out = []JsonValue.new()
+    if tools == "ask" || tools == "all" || tools == "asklist" { out.push(tool_json()) }
+    if tools == "task" || tools == "all" { out.push(crew_task_tool_json()) }
+    if tools != "ask" { out.push(crew_task_list_tool_json()) }
+    out
+}
+
+/// What the server does with the body of one `POST`, for the tools of the session (`tools`: "ask", "task" or "all"). A call of `crew_task` is `task` (the checked arguments in `questions`).
+export fn mcp_handle_for(body str, tools str) -> McpOut {
     ro message = match Json.parse(body) {
         Ok(v) => v
         Err(e) => return mout("reply", mcp_error_reply(JsonValue.null(), -32700, "parse error"))
@@ -199,16 +211,28 @@ export fn mcp_handle(body str) -> McpOut {
     if method == "ping" { return mout("reply", rpc_ok(id, JsonValue.object(JsonObject.new()))) }
     if method == "tools/list" {
         mut result = JsonObject.new()
-        mput(result, "tools", JsonValue.array([tool_json()]))
+        mput(result, "tools", JsonValue.array(tools_of(tools)))
         return mout("reply", rpc_ok(id, JsonValue.object(result)))
     }
     if method == "tools/call" {
-        if mtext_of(params, "name") != ASK_TOOL {
-            return mout("reply", mcp_text_reply(id, "unknown tool: ${mtext_of(params, "name")}; the only tool is ${ASK_TOOL}", true))
-        }
         ro arguments = match mget(params, "arguments") {
             Some(a) => a
             None => JsonValue.null()
+        }
+        if mtext_of(params, "name") == CREW_TASK_LIST_TOOL && tools != "ask" {
+            match proposals_of_list(arguments) {
+                Err(reason) => return mout("reply", mcp_text_reply(id, reason, true))
+                Ok(items) => return { kind: "tasklist", text: "", id: id.to_str(), questions: proposals_list_text(items) }
+            }
+        }
+        if mtext_of(params, "name") == CREW_TASK_TOOL && (tools == "task" || tools == "all") {
+            match proposal_of_arguments(arguments) {
+                Err(reason) => return mout("reply", mcp_text_reply(id, reason, true))
+                Ok(p) => return { kind: "task", text: "", id: id.to_str(), questions: proposal_arguments_text(p) }
+            }
+        }
+        if mtext_of(params, "name") != ASK_TOOL || tools == "task" || tools == "list" {
+            return mout("reply", mcp_text_reply(id, "unknown tool: ${mtext_of(params, "name")}", true))
         }
         match questions_of(arguments) {
             Err(reason) => return mout("reply", mcp_text_reply(id, reason, true))

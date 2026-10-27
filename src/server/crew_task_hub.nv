@@ -1,0 +1,482 @@
+// crew_task_hub.nv - task 192.2: the hub side of `crew_task` (the pure part is `crew_task.nv`).
+//
+// The agent calls the tool (or writes the marker line); the hub shows a card (`route_state.proposals`) and creates NOTHING by itself. The owner answers with a button (`route_prop {id, action}`) or with the
+// code word in an ordinary message (the word is not sent to the agent). "new" makes the task (the first work of a session) or a subtask (`message.N.md` with the summary of the agent and the
+// message of the owner, `images/`); "extend" adds the summary to `message.K.md` with the date; "dismiss" takes the card away and remembers the title. A new subtask whose files overlap with a running one waits for
+// it (or goes on in a tree of its own, by the word of the owner); over the limit of the tasks in work (`route_max_active`) it asks for the word "over" or waits in the queue; the queue starts by itself.
+// The agent is told the decision by a service turn (`kick`) after the card is answered: it does not touch the files before.
+module crew_harness.server
+
+import crew_harness.acp.{AcpImage}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+// The subtasks of the session as lines for the agent and the page.
+fn Hub @ct_lines(s Dialog) -> []SubLine {
+    mut out = []SubLine.new()
+    for sub in s.rt.subs {
+        ro state = if sub.merged { "слита" } else if sub.done { "готово" } else if sub.waits > 0 || sub.queued { "ждёт" } else { "идёт" }
+        out.push(SubLine { n: sub.n, title: sub.title, state, waits: sub.waits })
+    }
+    out
+}
+
+// The subtasks that are in work now (not done, not waiting); a task that is ready, finishing or done has none.
+fn Hub @ct_running(s Dialog) -> []RunSub {
+    mut out = []RunSub.new()
+    if !s.rt.task_open || s.rt.task_closed || s.rt.tstate != "active" { return out }
+    for sub in s.rt.subs {
+        if !sub.done && !sub.merged && sub.waits == 0 && !sub.queued { out.push(RunSub { n: sub.n, touches: sub.touches }) }
+    }
+    out
+}
+
+/// The state of the mode for the page with the cards and the numbers of the tasks in work (called from `route_state_text`).
+fn Hub @ct_view(at int, base str) -> str {
+    ro s = @sessions[at]
+    crew_view_extend(base, s.rt.props, @ct_lines(s), @ct_running(s).len(), @settings.route_max_active, @settings.route_confirm_word, @settings.route_over_limit_word)
+}
+
+// The message of the owner and its pictures, kept for the card that the agent may propose in this turn.
+fn Hub mut @ct_remember(at int, text str, files []AcpImage) -> () {
+    mut s = @sessions[at]
+    s.rt.last_msg = text
+    mut paths = []str.new()
+    mut names = []str.new()
+    for f in files {
+        paths.push(f.path)
+        names.push(f.name)
+    }
+    s.rt.last_imgs = paths
+    s.rt.last_names = names
+    @sessions[at] = s
+}
+
+fn Hub mut @ct_store(at int, p Proposal) -> () {
+    mut s = @sessions[at]
+    ro k = proposal_at(s.rt.props, p.id)
+    if k >= 0 { s.rt.props[k] = p }
+    @sessions[at] = s
+}
+
+// The card is taken away; `refuse` - the title is remembered, the agent will not propose it again.
+fn Hub mut @ct_drop(at int, id int, refuse bool) -> () {
+    mut s = @sessions[at]
+    mut rest = []Proposal.new()
+    for p in s.rt.props {
+        if p.id == id {
+            if refuse { s.rt.dismissed.push(word_key(p.title)) }
+        } else {
+            rest.push(p)
+        }
+    }
+    s.rt.props = rest
+    @sessions[at] = s
+}
+
+// A note to the agent for the next service turn.
+fn Hub mut @ct_kick(at int, note str) -> () {
+    mut s = @sessions[at]
+    s.rt.kick = if s.rt.kick.byte_len() == 0 { note } else { "${s.rt.kick}\n\n${note}" }
+    @sessions[at] = s
+}
+
+// ----- the call of the tool -----
+
+fn Hub mut @ct_offer(at int, p0 Proposal) Proc Detach Time -> str {
+    mut p = proposal_copy(p0)
+    ro s = @sessions[at]
+    if s.rt.route == "planning" { return NOT_NEEDED_TEXT }
+    if was_refused(s.rt.dismissed, p.title) { return REFUSED_TEXT }
+    if has_proposal(s.rt.props, p.title) { return SHOWN_TEXT }
+    if p.kind == "extend" {
+        mut found = false
+        for sub in s.rt.subs { if sub.n == p.extends { found = true } }
+        if !found {
+            p.kind = "new"
+            p.extends = 0
+        }
+    }
+    mut me = @sessions[at]
+    me.rt.prop_serial += 1
+    p.id = me.rt.prop_serial
+    p.source = me.rt.last_msg
+    p.images = me.rt.last_imgs
+    p.image_names = me.rt.last_names
+    me.rt.props.push(p)
+    @sessions[at] = me
+    @say_log("crew_task of ${s.id}: ${p.kind} «${p.title}»")
+    @route_broadcast(at, true)
+    SHOWN_TEXT
+}
+
+/// A call of the tool `crew_task` (a message of the MCP server of kind `task`): the card is shown, the agent gets the answer at once.
+fn Hub mut @ct_tool_call(msg McpMsg) Proc Detach Time -> () {
+    ro at = @find(msg.session)
+    if at < 0 {
+        ro told = msg.reply.send("err:the session ${msg.session} is not known to the hub")
+        return
+    }
+    match proposal_of_text(msg.text) {
+        Err(reason) => {
+            ro told = msg.reply.send("err:${reason}")
+        }
+        Ok(p) => {
+            ro text = @ct_offer(at, p)
+            ro told = msg.reply.send("ok:${text}")
+        }
+    }
+}
+
+// The marker line of an agent that has no tools: when its turn is over the last answer is looked at once.
+fn Hub mut @ct_marker(at int) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    if s.turn == s.rt.marker_turn || s.turn.byte_len() == 0 { return }
+    mut me = @sessions[at]
+    me.rt.marker_turn = s.turn
+    @sessions[at] = me
+    ro answer = answer_of(s.lines, s.turn)
+    match proposals_of_marker(answer) {
+        Some(items) => {
+            ro added = @ct_list_offer(at, items)
+            @route_broadcast(at, true)
+        }
+        None => ()
+    }
+    match proposal_of_marker(answer) {
+        Some(p) => { ro text = @ct_offer(at, p) }
+        None => ()
+    }
+}
+
+// ----- the answers of the owner -----
+
+fn Hub mut @ct_note(at int, text str) Proc Detach Time -> () {
+    @rt_note(at, text)
+}
+
+fn Hub @ct_has_steps(s Dialog) -> bool => @route_doc(s.rt.route).steps.len() > 0
+
+// The task or the subtask is made. `how`: "" (nothing in the way), "wait" (after subtask `with_n`), "parallel" (a tree of its own); `queued`: waits for a place under the limit.
+fn Hub mut @ct_create(at int, p Proposal, how str, queued bool) Proc Detach Time -> () {
+    ro s0 = @sessions[at]
+    ro running = @ct_running(s0)
+    ro waits = if how == "wait" { p.with_n } else { 0 }
+    ro touched = joined(p.touches, "\n")
+    mut n = 1
+    mut fresh = false
+    if !s0.rt.task_open || s0.rt.task_closed {
+        fresh = true
+        ro made = @route_make_task(s0.id, s0.rt.route, p.title, s0.rt.use_tree)
+        if !made.ok {
+            @tell_error(0, s0.id, s0.engine.step_number(), "", "задача не создана: нет места для её папки")
+            return
+        }
+        mut o = JsonObject.new()
+        js(o, "id", made.id)
+        js(o, "number", made.number)
+        js(o, "dir", made.dir)
+        js(o, "shown", made.shown)
+        js(o, "branch", made.branch)
+        js(o, "worktree", made.worktree)
+        js(o, "base", made.base)
+        js(o, "title", subtask_title(p.title))
+        js(o, "touches", touched)
+        @rt_task_op(at, "open", o)
+    } else {
+        if s0.rt.tstate != "active" { @rt_state(at, "active", "") }
+        n = s0.rt.last_sub() + 1
+        mut o = JsonObject.new()
+        ji(o, "n", n)
+        js(o, "title", subtask_title(p.title))
+        js(o, "touches", touched)
+        ji(o, "waits", waits)
+        ji(o, "queued", if queued { 1 } else { 0 })
+        @rt_task_op(at, "subtask", o)
+    }
+    ro s = @sessions[at]
+    ro doc = @route_doc(s.rt.route)
+    ro wrote = write_file("${s.rt.task_dir}/message.${n}.md", crew_message_text(n, p.summary, p.source, now_millis()))
+    ro made_progress = write_file("${s.rt.task_dir}/progress.${n}.md", progress_template(n, doc.steps))
+    if !wrote || !made_progress { @say_log("the files of the subtask ${n} of ${s.id} cannot be written in ${s.rt.task_dir}") }
+    mut files = []AcpImage.new()
+    mut k = 0
+    while k < p.images.len() {
+        files.push(AcpImage { path: p.images[k], mime: "", name: if k < p.image_names.len() { p.image_names[k] } else { "image" } })
+        k += 1
+    }
+    @route_save_images(at, files)
+    @ct_drop(at, p.id, false)
+    if waits > 0 || queued {
+        @ct_note(at, if waits > 0 { "▸ подзадача ${n} «${p.title}» ждёт подзадачу ${waits}" } else { "▸ подзадача ${n} «${p.title}» в очереди: в работе уже ${running.len()}" })
+        @ct_kick(at, decision_note("queued", n, p.title, s.rt.task_shown))
+        @route_broadcast(at, true)
+        return
+    }
+    // two works at once: the new one gets a tree of its own (when the task has one)
+    if !fresh && (how == "parallel" || running.len() > 0) && s.rt.worktree.byte_len() > 0 { @route_subtree(at, n) }
+    @ct_note(at, "▸ ${if fresh { "задача ${s.rt.number}" } else { "подзадача ${n}" }} «${p.title}» начата")
+    if !@ct_has_steps(s) { @ct_kick(at, decision_note("new", n, p.title, s.rt.task_shown)) }
+    @route_broadcast(at, true)
+}
+
+// The work extends subtask `n`: the summary is added to its file with the date.
+fn Hub mut @ct_extend(at int, p Proposal, n int) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    mut title = ""
+    for sub in s.rt.subs { if sub.n == n { title = sub.title } }
+    if !s.rt.task_open || title.byte_len() == 0 {
+        @ct_drop(at, p.id, false)
+        return
+    }
+    if s.rt.tstate != "active" { @rt_state(at, "active", "") }
+    ro added = append_file("${s.rt.task_dir}/message.${n}.md", crew_addition_text(p.summary, p.source, now_millis()))
+    mut o = JsonObject.new()
+    ji(o, "n", n)
+    @rt_task_op(at, "extend", o)
+    @ct_drop(at, p.id, false)
+    @ct_note(at, "▸ подзадача ${n} «${title}» дополнена (message.${n}.md)")
+    if !@ct_has_steps(s) { @ct_kick(at, decision_note("extend", n, title, s.rt.task_shown)) }
+    @route_broadcast(at, true)
+}
+
+// The card says "new": the files of the other works and the limit are looked at before anything is made.
+fn Hub mut @ct_try(at int, p0 Proposal, how str, over bool, queue bool) Proc Detach Time -> () {
+    mut p = proposal_copy(p0)
+    ro s = @sessions[at]
+    ro running = @ct_running(s)
+    if how == "" {
+        ro clash = clash_of(p.touches, running)
+        if clash.with_n > 0 {
+            p.state = "overlap"
+            p.with_n = clash.with_n
+            p.with_files = clash.files
+            p.unknown = clash.unknown
+            @ct_store(at, p)
+            @route_broadcast(at, true)
+            return
+        }
+    }
+    if how != "wait" && !queue && !over && limit_reached(running.len(), @settings.route_max_active) {
+        p.state = "limit"
+        p.how = how
+        @ct_store(at, p)
+        @route_broadcast(at, true)
+        return
+    }
+    @ct_create(at, p, how, queue)
+}
+
+fn Hub mut @ct_do(at int, p Proposal, action str) Proc Detach Time -> () {
+    if action == "discuss" {
+        mut q = proposal_copy(p)
+        q.choice = "discuss"
+        @ct_store(at, q)
+        @route_broadcast(at, true)
+        return
+    }
+    if action == "forget" || (action == "dismiss" && p.listed) {
+        @ct_drop(at, p.id, true)
+        @ct_note(at, "▸ «${p.title}» забыто")
+        @route_broadcast(at, true)
+        return
+    }
+    if action == "dismiss" {
+        @ct_drop(at, p.id, true)
+        @ct_note(at, "▸ «${p.title}»: это не задача")
+        @ct_kick(at, decision_note("no", 0, p.title, ""))
+        @route_broadcast(at, true)
+        return
+    }
+    if action == "extend" {
+        if p.extends > 0 { @ct_extend(at, p, p.extends) }
+        return
+    }
+    if action == "start" { @ct_try(at, p, "", false, false) }
+    if action == "wait" { @ct_try(at, p, "wait", false, false) }
+    if action == "parallel" { @ct_try(at, p, "parallel", false, false) }
+    if action == "over" { @ct_try(at, p, p.how, true, false) }
+    if action == "queue" { @ct_try(at, p, p.how, false, true) }
+}
+
+/// The signal of the page `route_prop {id, action}`: a button of a card.
+fn Hub mut @ct_answer(trace str, id int, action str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    ro k = proposal_at(@sessions[at].rt.props, id)
+    if k < 0 { return }
+    @ct_do(at, @sessions[at].rt.props[k], action)
+}
+
+/// The owner wrote the code word instead of pressing a button: it answers the last card and is not sent to the agent. false - the message is an ordinary one.
+fn Hub mut @ct_word(at int, text str) Proc Detach Time -> bool {
+    ro s = @sessions[at]
+    if s.rt.props.len() == 0 { return false }
+    // the over-limit word answers the last card that stopped at the limit (a row of the list too)
+    if is_code_word(text, @settings.route_over_limit_word) {
+        mut k = s.rt.props.len() - 1
+        while k >= 0 {
+            if s.rt.props[k].state == "limit" {
+                @ct_do(at, s.rt.props[k], "over")
+                return true
+            }
+            k -= 1
+        }
+    }
+    ro single = last_open(s.rt.props)
+    if single < 0 { return false }
+    ro p = s.rt.props[single]
+    if is_code_word(text, @settings.route_confirm_word) {
+        mut action = "queue"
+        if p.state == "open" { action = if p.kind == "extend" { "extend" } else { "start" } }
+        if p.state == "overlap" { action = "wait" }
+        @ct_do(at, p, action)
+        return true
+    }
+    false
+}
+
+// ----- the queue and the service turns -----
+
+// A waiting subtask starts when the one it waits for is done and the limit allows; one start for each look.
+fn Hub mut @ct_queue(at int) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    if !s.rt.task_open || s.rt.task_closed || s.rt.tstate != "active" { return }
+    ro running = @ct_running(s)
+    if limit_reached(running.len(), @settings.route_max_active) { return }
+    for sub in s.rt.subs {
+        if (sub.waits > 0 || sub.queued) && !sub.done && !sub.merged {
+            mut free = true
+            if sub.waits > 0 {
+                for other in s.rt.subs { if other.n == sub.waits && !other.done && !other.merged { free = false } }
+            }
+            if free {
+                mut o = JsonObject.new()
+                ji(o, "n", sub.n)
+                @rt_task_op(at, "sub_start", o)
+                if running.len() > 0 && s.rt.worktree.byte_len() > 0 { @route_subtree(at, sub.n) }
+                @ct_note(at, "▸ подзадача ${sub.n} «${sub.title}» начата: место освободилось")
+                if !@ct_has_steps(s) { @ct_kick(at, decision_note("new", sub.n, sub.title, s.rt.task_shown)) }
+                @route_broadcast(at, true)
+                return
+            }
+        }
+    }
+}
+
+/// At every pump of the modes: the queue starts, the marker of an agent without tools is read, the note of the decision goes to the agent as a service turn when the agent is free.
+fn Hub mut @ct_pump(at int) Proc Detach Time -> () {
+    @ct_queue(at)
+    ro s = @sessions[at]
+    if s.rt.running || s.rt.awaiting || s.rt.reviewing || s.rt.job.byte_len() > 0 { return }
+    if !@takes_message_at(at) { return }
+    @ct_marker(at)
+    ro me = @sessions[at]
+    if me.rt.kick.byte_len() == 0 { return }
+    mut d = @sessions[at]
+    ro note = d.rt.kick
+    d.rt.kick = ""
+    @sessions[at] = d
+    ro prelude = @route_message_prelude(at)
+    ro text = if prelude.byte_len() > 0 { "${prelude}\n\n${note}" } else { note }
+    ro reason = @route_agent_turn(at, "Решение по задаче", text)
+    if reason.byte_len() > 0 {
+        @tell_error(0, me.id, me.engine.step_number(), "", "решение по задаче не передано агенту: ${reason}")
+    }
+}
+
+// ----- the recognition by the button -----
+
+fn Hub mut @ct_list_offer(at int, items []Proposal) Proc Detach Time -> int {
+    mut me = @sessions[at]
+    // the items the owner did not answer are replaced by the new list; the ones kept for the discussion stay
+    mut kept = []Proposal.new()
+    for q in me.rt.props {
+        if !q.listed || q.choice == "discuss" { kept.push(q) }
+    }
+    me.rt.props = kept
+    @sessions[at] = me
+    mut added = 0
+    for p0 in items {
+        mut p = proposal_copy(p0)
+        if was_refused(@sessions[at].rt.dismissed, p.title) { continue }
+        if has_proposal(@sessions[at].rt.props, p.title) { continue }
+        if p.kind == "extend" {
+            mut found = false
+            for sub in @sessions[at].rt.subs { if sub.n == p.extends { found = true } }
+            if !found {
+                p.kind = "new"
+                p.extends = 0
+            }
+        }
+        mut cur = @sessions[at]
+        cur.rt.prop_serial += 1
+        p.id = cur.rt.prop_serial
+        cur.rt.props.push(p)
+        @sessions[at] = cur
+        added += 1
+    }
+    added
+}
+
+/// A call of `crew_task_list`: the card with the list is shown, the agent gets the answer at once.
+fn Hub mut @ct_list_call(msg McpMsg) Proc Detach Time -> () {
+    ro at = @find(msg.session)
+    if at < 0 {
+        ro told = msg.reply.send("err:the session ${msg.session} is not known to the hub")
+        return
+    }
+    match proposals_of_list_text(msg.text) {
+        Err(reason) => {
+            ro told = msg.reply.send("err:${reason}")
+        }
+        Ok(items) => {
+            ro added = @ct_list_offer(at, items)
+            if added == 0 { @ct_note(at, "▸ агент не нашёл новых задач") }
+            @route_broadcast(at, true)
+            ro told = msg.reply.send("ok:Список показан владельцу (пунктов: ${added}). Файлы не меняй; закончи ход одной короткой строкой.")
+        }
+    }
+}
+
+/// The button "Распознать задачи": the agent is asked (a hidden note) to list the works of the talk.
+fn Hub mut @ct_recognize(trace str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    ro s = @sessions[at]
+    if s.rt.running || s.rt.job.byte_len() > 0 || !@takes_message_at(at) {
+        @tell_error(0, trace, s.engine.step_number(), "", "агент ещё отвечает: распознать задачи можно между ходами")
+        return
+    }
+    mut cands = []str.new()
+    for p in s.rt.props {
+        if p.listed && p.choice == "discuss" { cands.push("- «${p.title}»") }
+    }
+    ro request = recognize_request(tasks_hint(s.rt.task_shown, @ct_lines(s)), cands)
+    ro reason = @route_agent_turn(at, "Распознать задачи", request)
+    if reason.byte_len() > 0 { @tell_error(0, trace, s.engine.step_number(), "", "распознавание не начато: ${reason}") }
+}
+
+/// The quick answer of the owner to the list ("1, 2, 4 — в работу; 3 — обсудить; 5 — забыть").
+fn Hub mut @ct_quick(trace str, text str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    mut ids = []int.new()
+    for p in @sessions[at].rt.props { if p.listed { ids.push(p.id) } }
+    match parse_quick(text, ids.len()) {
+        Err(reason) => {
+            @ct_note(at, "▸ ${reason}")
+        }
+        Ok(choices) => {
+            for c in choices {
+                ro k = proposal_at(@sessions[at].rt.props, ids[c.n - 1])
+                if k >= 0 {
+                    ro p = @sessions[at].rt.props[k]
+                    mut action = "discuss"
+                    if c.action == "work" { action = if p.kind == "extend" && p.extends > 0 { "extend" } else { "start" } }
+                    if c.action == "forget" { action = "forget" }
+                    @ct_do(at, p, action)
+                }
+            }
+        }
+    }
+}

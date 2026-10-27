@@ -1,0 +1,178 @@
+// crew_task_list.nv - task 192.2: the recognition of the tasks by the button "Распознать задачи" (the main way); the pure part.
+//
+// The owner talks with the agent, then presses the button. The hub asks the agent (a hidden note) to look through the talk and list the real works that were discussed and are not in the tasks yet:
+// the agent calls `crew_task_list`. The list becomes one card in the feed: a row for each work with the buttons "В работу", "Обсудить дальше", "Забыть", and a field for a quick answer
+// ("1, 2, 4 — в работу; 3 — обсудить дальше; 5 — забыть"). This file: the tool, the arguments, the parser of the quick answer, the text of the request to the agent.
+module crew_harness.server
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+/// The name of the tool.
+export const CREW_TASK_LIST_TOOL = "crew_task_list"
+
+/// The description of the tool for `tools/list`.
+export fn crew_task_list_tool_json() -> JsonValue {
+    ro text = "{\"name\":\"crew_task_list\",\"description\":\"Call it ONLY when the hub asked you to recognise the tasks (a note that starts with [crew] Распознай задачи). Give the list of the real works on the files of the project (code, documents, tests, settings) that were discussed in this conversation and are not in the tasks of the session yet. A question, a talk or an explanation is not a work. One item for one work; if a work belongs to a task of the session, kind=extend and the number in extends. An empty list is allowed: nothing was found.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"tasks\":{\"type\":\"array\",\"description\":\"The recognised works.\",\"items\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"integer\",\"description\":\"The number in this list, from 1.\"},\"kind\":{\"type\":\"string\",\"enum\":[\"new\",\"extend\"]},\"title\":{\"type\":\"string\",\"description\":\"A short title (up to 60 characters).\"},\"summary\":{\"type\":\"string\",\"description\":\"What is to be done, in a few lines: it becomes the text of message.N.md.\"},\"extends\":{\"type\":\"integer\",\"description\":\"For kind=extend: the number of the task of the session.\"},\"touches\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"The files and folders the work will change.\"},\"note\":{\"type\":\"string\",\"description\":\"One line: why it is a work, or what is still unclear.\"}},\"required\":[\"title\",\"summary\"]}}},\"required\":[\"tasks\"]}}"
+    mparse(text)
+}
+
+/// The proposals of the arguments of a call of `crew_task_list`, or the reason they are not good. An item that is not good is a reason for the whole call (the agent reads it and calls again).
+export fn proposals_of_list(arguments JsonValue) -> Result[[]Proposal, str] {
+    mut out = []Proposal.new()
+    match mget(arguments, "tasks") {
+        Some(list) => match list.array() {
+            Some(items) => {
+                if items.len() > 20 { return Err("crew_task_list: at most 20 tasks at once") }
+                for item in items {
+                    match proposal_of_arguments(item) {
+                        Ok(p) => {
+                            out.push(proposal_listed(p, mtext_of(item, "note")))
+                        }
+                        Err(reason) => return Err(reason.replace("crew_task:", "crew_task_list: an item:"))
+                    }
+                }
+            }
+            None => return Err("crew_task_list: the argument tasks must be a list")
+        }
+        None => return Err("crew_task_list: the argument tasks is missing")
+    }
+    Ok(out)
+}
+
+/// The list in the form it travels from the MCP server to the hub: a JSON array of the arguments of the items.
+export fn proposals_list_text(items []Proposal) -> str {
+    mut out = []JsonValue.new()
+    for p in items {
+        ro v = match Json.parse(proposal_arguments_text(p)) {
+            Ok(x) => x
+            Err(e) => JsonValue.null()
+        }
+        mut o = v.object() ?? JsonObject.new()
+        mput(o, "note", JsonValue.str(p.note))
+        out.push(JsonValue.object(o))
+    }
+    mut wrap = JsonObject.new()
+    mput(wrap, "tasks", JsonValue.array(out))
+    JsonValue.object(wrap).to_str()
+}
+
+/// The list from its text (the hub side).
+export fn proposals_of_list_text(text str) -> Result[[]Proposal, str] {
+    match Json.parse(text) {
+        Ok(v) => proposals_of_list(v)
+        Err(e) => Err("crew_task_list: the arguments are not JSON")
+    }
+}
+
+/// The marker line of an agent that has no tools: `[[crew_task_list]] {"tasks":[...]}`.
+export fn proposals_of_marker(answer str) -> Option[[]Proposal] {
+    for line in answer.lines() {
+        ro t = line.trim_ascii()
+        if t.starts_with("[[crew_task_list]]") {
+            match proposals_of_list_text(t["[[crew_task_list]]".byte_len()..].trim_ascii()) {
+                Ok(items) => return Some(items)
+                Err(e) => ()
+            }
+        }
+    }
+    None
+}
+
+/// The hidden note with which the hub asks the agent to recognise the tasks. `candidates` are the lines of the works that are being discussed already (not to be repeated), `known` the tasks of the session.
+export fn recognize_request(known str, candidates []str) -> str {
+    mut parts = []str.new()
+    parts.push("[crew] Распознай задачи. Просмотри весь этот разговор и перечисли реальные работы над файлами проекта (код, документы, тесты, настройки), которые обсуждались и ещё не оформлены задачами. Вызови инструмент crew_task_list (сервер crew) один раз со списком: у каждой работы title, summary (что сделать, для message.N.md), touches (файлы и папки), note (одна строка). Вопросы, беседа и объяснения — не работы. Если работа относится к уже существующей задаче сессии — kind=extend и её номер в extends. Файлы проекта не меняй. Если инструмента нет, напиши в конце ответа одну строку [[crew_task_list]] {\"tasks\":[...]} с теми же полями.")
+    if known.byte_len() > 0 { parts.push(known) }
+    if candidates.len() > 0 { parts.push("[crew] Эти работы уже в списке кандидатов (не повторяй их):\n${joined(candidates, "\n")}") }
+    joined(parts, "\n\n")
+}
+
+// ----- the quick answer -----
+
+/// Choice: what the owner said of item `n` of the list: `work` (в работу), `discuss` (обсудить дальше), `forget` (забыть).
+export type Choice { n int, action str }
+
+fn ql_action(word str) -> str {
+    for w in ["работу", "работа", "работе", "делай", "делать", "начать", "старт", "go", "do", "work", "start", "yes", "да"] { if word == w { return "work" } }
+    for w in ["обсудить", "обсуждение", "обсуждать", "дальше", "позже", "потом", "discuss", "later", "keep", "talk"] { if word == w { return "discuss" } }
+    for w in ["забыть", "забудь", "забыто", "нет", "не", "forget", "drop", "skip", "no", "remove"] { if word == w { return "forget" } }
+    ""
+}
+
+fn ql_skip(word str) -> bool {
+    for w in ["в", "и", "to", "on", "in", "as", "and", "the", "это", "пункт", "пункты", "задачу", "item", "items", "продолжить", "continue"] { if word == w { return true } }
+    word.byte_len() == 0
+}
+
+// The numbers of a token: "3", "1-3" (a range), [] - it is not a number.
+fn ql_numbers(token str) -> []int {
+    mut out = []int.new()
+    mut cut = -1
+    mut at = 0
+    for c in token.chars() {
+        ro s = "${c}"
+        if (s == "-" || s == "–") && at > 0 { cut = at }
+        at += 1
+    }
+    if cut < 0 {
+        match token.to_int() {
+            Ok(n) => out.push(n)
+            Err(e) => ()
+        }
+        return out
+    }
+    ro dash = if token.contains("–") { "–" } else { "-" }
+    ro left = token.until(dash)
+    ro right = token.after(dash)
+    match left.to_int() {
+        Ok(a) => match right.to_int() {
+            Ok(b) => {
+                if b >= a && b - a < 50 {
+                    mut k = a
+                    while k <= b {
+                        out.push(k)
+                        k += 1
+                    }
+                }
+            }
+            Err(e) => ()
+        }
+        Err(e) => ()
+    }
+    out
+}
+
+/// The format of the quick answer, for the hint on a mistake.
+export const QUICK_FORMAT = "Формат: «1, 2, 4 — в работу; 3 — обсудить дальше; 5 — забыть» (номера через запятую или диапазоном 1-3; слова: в работу / обсудить / забыть, по-английски work / discuss / forget)."
+
+/// The quick answer ("1, 2, 4 — в работу, 3 — продолжить обсуждение, 5 — забыть") as the choices; or the reason it was not understood (then nothing is applied). `count` is the number of items in the list.
+export fn parse_quick(text str, count int) -> Result[[]Choice, str] {
+    mut out = []Choice.new()
+    mut pending = []int.new()
+    ro cleaned = text.replace(",", " ").replace(";", " ").replace(".", " ").replace("\n", " ")
+    for raw in cleaned.split_ascii_whitespace() {
+        ro word = word_key(raw)
+        if word.byte_len() == 0 { continue }
+        ro nums = ql_numbers(word)
+        if nums.len() > 0 {
+            for n in nums {
+                if n < 1 || n > count { return Err("В списке нет пункта ${n}. ${QUICK_FORMAT}") }
+                pending.push(n)
+            }
+            continue
+        }
+        ro action = ql_action(word)
+        if action.byte_len() > 0 {
+            if pending.len() > 0 {
+                for n in pending { out.push(Choice { n, action }) }
+                pending = []int.new()
+            }
+            continue
+        }
+        if ql_skip(word) { continue }
+        return Err("Не понял «${raw}». ${QUICK_FORMAT}")
+    }
+    if pending.len() > 0 { return Err("Для пункта ${pending[0]} не сказано, что делать. ${QUICK_FORMAT}") }
+    if out.len() == 0 { return Err("Нет ни одного номера с решением. ${QUICK_FORMAT}") }
+    Ok(out)
+}

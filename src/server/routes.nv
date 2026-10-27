@@ -316,7 +316,8 @@ export fn route_files_hint(task_shown str, n int, has_assignment bool, has_image
 // ----- the state of a session -----
 
 /// SubRec: a subtask of the task. `worktree` is its own tree ("" - none or removed after the merge); `conflict` - why it is not merged.
-export type SubRec { n int, title str, branch str, worktree str, merged bool, done bool, conflict str, side bool }
+/// Task 192.2: `touches` are the files the agent said the work changes, `waits` the subtask this one waits for (0 - none), `queued` - it waits for a place under the limit of the tasks in work.
+export type SubRec { n int, title str, branch str, worktree str, merged bool, done bool, conflict str, side bool, touches []str, waits int, queued bool }
 
 /// DiffRec: a changed file of the tree of the task against its base.
 export type DiffRec { path str, added int, removed int }
@@ -365,14 +366,32 @@ export type RouteSession {
     ov_files []str,
     ov_until int,
     asked []int,
-    conflict_files []str
+    conflict_files []str,
+    props []Proposal,
+    prop_serial int,
+    dismissed []str,
+    last_msg str,
+    last_imgs []str,
+    last_names []str,
+    kick str,
+    marker_turn str
 }
 
 export fn route_session_new() -> RouteSession => {
     route: "interactive", told: false, states: []str.new(), running: false, current: -1, awaiting: false, reviewing: false,
     task_open: false, task_closed: false, task_id: "", number: "", task_dir: "", task_shown: "", branch: "", worktree: "", title: "",
     messages: 0, subs: []SubRec.new(), merged_into: 0, force: "", last_state: "", last_check: 0, cwd_now: "", base: "", tstate: "active", tnote: "", unmerged: 0, unmerged_at: 0,
-    job: "", attempt: 0, use_tree: true, active_at: 0, extra: task_extra_none(), testing: false, dirty: false, ci_at: 0, diff: []DiffRec.new(), ov_n: 0, ov_with: 0, ov_files: []str.new(), ov_until: 0, asked: []int.new(), conflict_files: []str.new()
+    job: "", attempt: 0, use_tree: true, active_at: 0, extra: task_extra_none(), testing: false, dirty: false, ci_at: 0, diff: []DiffRec.new(), ov_n: 0, ov_with: 0, ov_files: []str.new(), ov_until: 0, asked: []int.new(), conflict_files: []str.new(),
+    props: []Proposal.new(), prop_serial: 0, dismissed: []str.new(), last_msg: "", last_imgs: []str.new(), last_names: []str.new(), kick: "", marker_turn: ""
+}
+
+// The lines of a text (the files a subtask touches are kept one in a line).
+fn rt_lines(text str) -> []str {
+    mut out = []str.new()
+    for l in text.lines() {
+        if l.trim_ascii().byte_len() > 0 { out.push(l.trim_ascii()) }
+    }
+    out
 }
 
 fn rj_object(text str) -> JsonObject {
@@ -485,6 +504,10 @@ fn RouteSession mut @change_sub(n int, f str, value str, flag bool) -> () {
         s.conflict = ""
     }
     if f == "done" { s.done = true }
+    if f == "start" {
+        s.waits = 0
+        s.queued = false
+    }
     if f == "parallel" { s.side = flag }
     @subs[at] = s
 }
@@ -530,14 +553,14 @@ export fn RouteSession mut @apply(name str, text str) -> () {
         @base = jtext(o, "base")
         @title = jtext(o, "title")
         @messages = 1
-        @subs.push(SubRec { n: 1, title: if jtext(o, "sub_title").byte_len() > 0 { jtext(o, "sub_title") } else { @title }, branch: "", worktree: "", merged: false, done: false, conflict: "", side: false })
+        @subs.push(SubRec { n: 1, title: if jtext(o, "sub_title").byte_len() > 0 { jtext(o, "sub_title") } else { @title }, branch: "", worktree: "", merged: false, done: false, conflict: "", side: false, touches: rt_lines(jtext(o, "touches")), waits: 0, queued: false })
     } else if op == "subtask" {
         ro n = rj_int(o, "n")
-        @subs.push(SubRec { n, title: jtext(o, "title"), branch: "", worktree: "", merged: false, done: false, conflict: "", side: false })
+        @subs.push(SubRec { n, title: jtext(o, "title"), branch: "", worktree: "", merged: false, done: false, conflict: "", side: false, touches: rt_lines(jtext(o, "touches")), waits: rj_int(o, "waits"), queued: rj_int(o, "queued") == 1 })
         @messages += 1
         @merged_into = 0
         @force = ""
-        @states = []str.new()
+        if rj_int(o, "waits") == 0 && rj_int(o, "queued") == 0 { @states = []str.new() }
     } else if op == "extend" {
         @messages += 1
         @merged_into = rj_int(o, "n")
@@ -577,6 +600,8 @@ export fn RouteSession mut @apply(name str, text str) -> () {
         @change_sub(rj_int(o, "n"), "merged", "", true)
     } else if op == "sub_done" {
         @change_sub(rj_int(o, "n"), "done", "", true)
+    } else if op == "sub_start" {
+        @change_sub(rj_int(o, "n"), "start", "", false)
     }
 }
 
@@ -591,7 +616,7 @@ fn rv_item(i ProgressItem) -> JsonValue {
 
 fn rv_sub(s SubRec, p Progress, last bool, merged_into int, merging bool) -> JsonValue {
     ro complete = p.total > 0 && p.done == p.total
-    ro state = if s.merged || s.done || complete { "done" } else if merging { "merging" } else if last { "running" } else { "planned" }
+    ro state = if s.merged || s.done || complete { "done" } else if s.waits > 0 || s.queued { "waits" } else if merging { "merging" } else if last { "running" } else { "planned" }
     mut items = []JsonValue.new()
     for i in p.items { items.push(rv_item(i)) }
     mut o = JsonObject.new()
@@ -610,6 +635,11 @@ fn rv_sub(s SubRec, p Progress, last bool, merged_into int, merging bool) -> Jso
     jput(o, "needs_owner_text", JsonValue.str(s.conflict))
     jput(o, "merging", JsonValue.bool(merging))
     jput(o, "parallel", JsonValue.bool(s.side))
+    jput(o, "waits_for", JsonValue.int(s.waits))
+    jput(o, "queued", JsonValue.bool(s.queued))
+    mut touched = []JsonValue.new()
+    for f in s.touches { touched.push(JsonValue.str(f)) }
+    jput(o, "touches", JsonValue.array(touched))
     jput(o, "merged_into", if last && merged_into == s.n { JsonValue.str("${s.n}") } else { JsonValue.null() })
     JsonValue.object(o)
 }
