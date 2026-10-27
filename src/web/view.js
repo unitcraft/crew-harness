@@ -25,6 +25,7 @@ import { canSend } from './attachments.js';
 import { createAttachUi } from './attach-ui.js';
 import { createViewer } from './viewer-ui.js';
 import { createMachinesPanel } from './machines-ui.js';
+import { createCrewTaskUi } from './crew-task-ui.js';
 import { labelOf } from './labels-ru.js';
 import {
   createForm, selectOption, setOtherText, setCursor, moveCursor, setActive, isAnswered, nextUnanswered, canSubmit,
@@ -965,7 +966,8 @@ export function createView(doc, refs, deps) {
     routeCards.hidden = cards.length === 0;
   }
 
-  const routeOver = h(doc, 'div', { class: 'route-over' }, routeCards, routeBanner, routeStrip);
+  const crewUi = createCrewTaskUi(doc, handlers);
+  const routeOver = h(doc, 'div', { class: 'route-over' }, crewUi.el, routeCards, routeBanner, routeStrip);
 
   // форма вопросов агента (задача 192): элемент ленты сообщений, под сообщением владельца; прокручивается вместе с лентой
   const askCard = h(doc, 'div', { class: 'ask', role: 'dialog', hidden: true });
@@ -1528,6 +1530,7 @@ export function createView(doc, refs, deps) {
     renderRouteStrip(session);
     renderRouteBanner(session);
     renderTaskCards(session);
+    crewUi.render(session);
 
     const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight <= NEAR_BOTTOM_PX;
     const items = timeline(session);
@@ -1782,7 +1785,7 @@ export function createView(doc, refs, deps) {
     }
     const queued = handlers.queuedItems ? handlers.queuedItems(session.id) : [];
     const sig = JSON.stringify([railTab, railTab === 'machines' ? machinesPanel.signature(session, queued) : '', session.id, session.project, session.folder, session.branch, session.agent, session.usage, session.outputs,
-      session.tasks.map((x) => [x.id, x.title, x.status, x.started, x.finishedAt]), session.routeState && session.routeState.task,
+      session.tasks.map((x) => [x.id, x.title, x.status, x.started, x.finishedAt]), session.routeState && session.routeState.task, session.routeState && session.routeState.crew,
       [...open].filter((k) => k.startsWith('more:') || k.startsWith('sub:') || k === 'ctx-closed'), subMenu]);
     if (sig === railSig) return;
     railSig = sig;
@@ -1793,7 +1796,7 @@ export function createView(doc, refs, deps) {
     }
     const cards = railTab === 'machines'
       ? machinesPanel.render(session, queued)
-      : [envCard(session), subtasksCard(session), contextCard(session), outputsCard(session), tasksCard(session)].filter(Boolean);
+      : [envCard(session), crewUi.panel(session), subtasksCard(session), contextCard(session), outputsCard(session), tasksCard(session)].filter(Boolean);
     refs.rail.replaceChildren(railTabs, ...cards);
   }
 

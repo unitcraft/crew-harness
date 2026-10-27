@@ -1292,3 +1292,16 @@ input[aria-invalid="true"] { border-color: var(--danger); }
 .mach-body, .mach-kids, .mach-node, .mach-journal, .mach-jrow { min-width: 0; }
 .mach-note { flex-basis: 100%; overflow-wrap: anywhere; word-break: break-word; }
 .mach-leaf .mach-val { min-width: 0; word-break: break-word; }
+
+/* ---- распознавание задач (задача 192.2) */
+.crew-over { display: flex; flex-direction: column; gap: 6px; }
+.crew-over[hidden] { display: none; }
+.crew-bar { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; font-size: 13px; }
+.crew-list, .crew-single { align-items: stretch; flex-direction: column; }
+.crew-rows { margin: 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.crew-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.crew-row-text { flex: 1; min-width: 200px; overflow-wrap: anywhere; }
+.crew-row-summary { flex-basis: 100%; font-size: 12px; }
+.crew-row-problem { flex-basis: 100%; color: var(--fg-muted); font-size: 12px; }
+.crew-quick-row { display: flex; gap: 6px; }
+.crew-quick { flex: 1; min-height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--fg); font: inherit; font-size: 13px; }

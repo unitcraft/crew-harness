@@ -8,6 +8,7 @@
 // и сборка сигналов; рисует view.js, тексты берутся из strings.js.
 
 import { t } from './strings.js';
+import { parseCrewTask } from './crew-task.js';
 
 export const DEFAULT_ROUTE = 'interactive';
 export const DEFAULT_OVERLAP_SECONDS = 30;
@@ -154,13 +155,13 @@ export function parseRouteState(input) {
   const src = isObject(input) ? input : {};
   const route = normalizeRoute(src.route);
   const useTree = src.use_tree !== false;
-  if (!routeInfo(route).hasSteps) return { route, stepless: true, steps: [], running: false, useTree, task: parseTask(src.task) };
+  if (!routeInfo(route).hasSteps) return { route, stepless: true, steps: [], running: false, useTree, task: parseTask(src.task), crew: parseCrewTask(src) };
   const steps = (Array.isArray(src.steps) ? src.steps : []).filter(isObject).map((s, i) => ({
     n: Number.isInteger(s.n) ? s.n : i + 1,
     title: str(s.title),
     state: STEP_STATES.includes(s.state) ? s.state : 'pending',
   }));
-  return { route, stepless: false, steps, running: src.running === true, useTree, task: parseTask(src.task) };
+  return { route, stepless: false, steps, running: src.running === true, useTree, task: parseTask(src.task), crew: parseCrewTask(src) };
 }
 
 export const INTERACTIVE_STATE = Object.freeze(parseRouteState({ route: DEFAULT_ROUTE }));

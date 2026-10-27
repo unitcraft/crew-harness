@@ -16,6 +16,7 @@ import { uploadImages, messageInput } from './attachments.js';
 import { chooseMode, createTransport, parseAgentRegistry } from './transport.js';
 import { createProjectsApi } from './projects-api.js';
 import { routeSignal, normalizeRoute } from './routes.js';
+import { crewSignal } from './crew-task.js';
 
 const FLASH_MS = 4000;
 const TICK_MS = 1000;
@@ -319,6 +320,10 @@ const handlers = {
   onRouteTestsRun(trace) { send(...signal(trace, routeSignal.testsRun())); },
   onRouteTreeDrop(trace, force) { send(...signal(trace, routeSignal.treeDrop(force))); },
   onRouteSubtaskParallel(trace, n, on) { send(...signal(trace, routeSignal.subtaskParallel(n, on))); },
+  // Распознавание задач (задача 192.2): кнопка «Распознать задачи», кнопки карточек, быстрый ответ
+  onCrewRecognize(trace) { send(...signal(trace, crewSignal.recognize())); },
+  onCrewProp(trace, id, action) { send(...signal(trace, crewSignal.prop(id, action))); },
+  onCrewQuick(trace, text) { send(...signal(trace, crewSignal.quick(text))); },
   onRouteSubtaskChoose(trace, n, tree) { send(...signal(trace, routeSignal.subtaskChoose(n, tree))); },
   // «Закончить задачу»: переключить режим и сразу прогнать шаги окончания — два сигнала подряд, шаг события у каждого свой
   onRouteFinish(trace, route) {
