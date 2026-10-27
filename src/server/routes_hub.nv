@@ -277,6 +277,14 @@ fn Hub mut @route_sync_cwd(at int) Time -> () {
     }
 }
 
+// The short reminder of the main before every MESSAGE of the owner (not before the service turns of the hub): the mode, the step now, where the task and the branch are, when to call the tools.
+fn Hub @route_reminder_of(at int) -> str {
+    ro s = @sessions[at]
+    ro doc = @route_doc(s.rt.route)
+    ro step_title = if s.rt.current >= 0 && s.rt.current < doc.steps.len() { doc.steps[s.rt.current].title } else { "" }
+    route_reminder(s.rt.route, step_title, s.rt.task_shown, s.rt.branch)
+}
+
 // The hidden note before the message of the owner: "" in the mode "interactive".
 fn Hub mut @route_message_prelude(at int) Proc -> str {
     mut s = @sessions[at]
@@ -288,9 +296,6 @@ fn Hub mut @route_message_prelude(at int) Proc -> str {
     // task 192.2: the list of the tasks of the session, so that the agent can say that a work belongs to one of them
     ro tasks = tasks_hint(s.rt.task_dir, @ct_lines(s))
     mut parts = []str.new()
-    // the short reminder of the main goes before every message (the rules of the tools are in their descriptions too)
-    ro step_title = if s.rt.current >= 0 && s.rt.current < doc.steps.len() { doc.steps[s.rt.current].title } else { "" }
-    parts.push(route_reminder(s.rt.route, step_title, s.rt.task_shown, s.rt.branch))
     if text.byte_len() > 0 {
         parts.push(text)
         @hint_add(at, "инструкция режима", text)

@@ -339,7 +339,7 @@ export type CtxRec { ms int, before int, after int }
 export fn route_reminder(route str, step_title str, task_shown str, branch str) -> str {
     ro step = if step_title.byte_len() > 0 { step_title } else { "нет" }
     ro place = if task_shown.byte_len() > 0 { "задача в ${task_shown}${if branch.byte_len() > 0 { ", ветка ${branch}" } else { "" }}" } else { "задачи ещё нет" }
-    "[crew] Напоминание: режим «${route}», шаг: ${step}; ${place}.\n[crew] crew_task — один раз в начале реальной работы над файлами, до первой правки; crew_task_list — только когда хаб попросил «Распознай задачи»; вопрос или беседа — не работа, файлы задачи сам не заводи."
+    "[crew] Напоминание: режим «${route}», шаг: ${step}; ${place}.\n[crew] crew_task — раз в начале реальной работы над файлами, до первой правки; crew_task_list — только по просьбе хаба; вопрос или беседа — не работа; файлы задачи сам не заводи."
 }
 
 /// DiffRec: a changed file of the tree of the task against its base.

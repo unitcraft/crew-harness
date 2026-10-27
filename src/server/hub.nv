@@ -1002,7 +1002,9 @@ fn Hub mut @say(trace str, text str, items []JsonValue) Proc Detach Time -> () {
         @route_save_images(at, prepared.files)
     }
     @ct_remember(at, text, prepared.files)
-    ro prelude = @route_message_prelude(at)
+    ro prelude0 = @route_message_prelude(at)
+    ro reminder = @route_reminder_of(at)
+    ro prelude = if prelude0.byte_len() > 0 { "${reminder}\n\n${prelude0}" } else { reminder }
     if prelude.byte_len() > 0 { s.clients[0].set_prelude(prelude) }
     feed_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("user_message", text))
     s.clients[0].attach_images([]AcpImage.new())
