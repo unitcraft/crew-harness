@@ -127,7 +127,7 @@
           "agent_step-1"
         ],
         "data": {
-          "stop_reason": "cancel_request"
+          "reason": {"$variant": "PauseReason", "name": "Cancelled"}
         },
         "journal": [
           {

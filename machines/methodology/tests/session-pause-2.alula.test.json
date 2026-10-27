@@ -146,7 +146,7 @@
           "in failure"
         ],
         "data": {
-          "stop_reason": "pause_halt",
+          "reason": {"$variant": "PauseReason", "name": "Halted"},
           "previous": "Session"
         }
       },

@@ -143,7 +143,7 @@
         "outcome": "refusal:StoppedByHuman",
         "open": [],
         "data": {
-          "stop_reason": "pause_halt"
+          "reason": {"$variant": "PauseReason", "name": "Halted"}
         }
       },
       "also": {

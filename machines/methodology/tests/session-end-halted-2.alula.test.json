@@ -96,7 +96,7 @@
         "state": "Halted",
         "outcome": "refusal:StoppedByHuman",
         "data": {
-          "stop_reason": "pause_halt"
+          "reason": {"$variant": "PauseReason", "name": "Halted"}
         },
         "journal": [
           {

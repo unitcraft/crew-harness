@@ -30,16 +30,12 @@
     }
   ],
   "signals": [
-    { "name": "human_stop", "fields": [ { "name": "human_word", "type": "text" }, { "name": "author", "type": "text" }, { "name": "source", "type": "text" } ] },
-    { "name": "parent_stop", "fields": [ { "name": "id", "type": "text" } ] },
-    { "name": "cancel_request", "fields": [ { "name": "id", "type": "text" } ] },
-    { "name": "parent_continue", "fields": [ { "name": "id", "type": "text" } ] },
-    { "name": "parent_halt", "fields": [ { "name": "id", "type": "text" } ] }
+    { "name": "cancel_request", "fields": [ { "name": "id", "type": "text" } ] }
   ],
   "includes": [
     {
       "name": "call_cancel", "hash": "495ae0d10a58", "file": "libs/call_cancel.alula.md", "heading": "Отмена запроса",
-      "brings": { "common_events": 1, "signals": [ "human_stop", "parent_stop", "cancel_request", "parent_continue", "parent_halt" ] }
+      "brings": { "common_events": 1, "signals": [ "cancel_request" ] }
     }
   ],
   "initial": "Idle",

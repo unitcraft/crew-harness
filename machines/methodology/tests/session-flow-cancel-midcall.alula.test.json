@@ -130,7 +130,7 @@
           "in failure"
         ],
         "data": {
-          "stop_reason": "cancel_request",
+          "reason": {"$variant": "PauseReason", "name": "Cancelled"},
           "open_requests": []
         }
       },
